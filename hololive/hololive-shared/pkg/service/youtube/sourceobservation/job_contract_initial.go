@@ -36,11 +36,26 @@ func initialSubjectJobContracts() StaticJobContracts {
 			[]contract.ObservationKind{contract.KindLiveSnapshot},
 			nil,
 		),
+		// 채널 /live 확인은 방송 탭 snapshot과 lease·재시도 슬롯을 공유하지 않는 별도 exact-subject job이다.
+		mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_live_check"): mustJobContract(
+			mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_live_check"),
+			JobClassSubject, JobMembershipExactSubject, "",
+			[]contract.ObservationKind{contract.KindChannelLiveCheck},
+			[]contract.ObservationKind{contract.KindChannelLiveCheck},
+			nil,
+		),
 		mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_metadata"): mustJobContract(
 			mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_metadata"),
 			JobClassSubject, JobMembershipExactSubject, "",
 			[]contract.ObservationKind{contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto},
 			[]contract.ObservationKind{contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto},
+			nil,
+		),
+		mustJobID(contract.ProviderYouTubeJS, "youtubejs_video_live"): mustJobContract(
+			mustJobID(contract.ProviderYouTubeJS, "youtubejs_video_live"),
+			JobClassSubject, JobMembershipExactSubject, "",
+			[]contract.ObservationKind{contract.KindVideoLiveCheck},
+			[]contract.ObservationKind{contract.KindVideoLiveCheck},
 			nil,
 		),
 	}

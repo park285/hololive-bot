@@ -48,7 +48,6 @@ type Config struct {
 	Environment  string
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath     string
-	Scraper              ScraperConfig
 	Webhook              WebhookConfig
 	WorkerPool           WorkerPoolConfig
 	APIWorkerProfile     *APIWorkerProfile
@@ -109,46 +108,62 @@ func newKakaoConfig(rooms []string, enabled bool, mode string) KakaoConfig {
 	return KakaoConfig{Rooms: rooms, ACLEnabled: enabled, ACLMode: mode}
 }
 
-func loadIngestionConfig(communityShortsBigBangCutoverAt time.Time) IngestionConfig {
-	return IngestionConfig{
-		PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
-		CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
+func loadIngestionConfig() (IngestionConfig, error) {
+	photoSyncEnabled, err := sharedenv.BoolE("PHOTO_SYNC_ENABLED", true)
+	if err != nil {
+		return IngestionConfig{}, fmt.Errorf("load ingestion config: %w", err)
 	}
+
+	return IngestionConfig{PhotoSyncEnabled: photoSyncEnabled}, nil
 }
 
 func loadCORSConfig(
 	corsAllowedOrigins []string,
 	corsMissingInProduction bool,
 	options LoadOptions,
-) CORSConfig {
+) (CORSConfig, error) {
+	enforce, err := sharedenv.BoolE("CORS_ENFORCE", options.CORSDefaultEnforce)
+	if err != nil {
+		return CORSConfig{}, fmt.Errorf("load CORS config: %w", err)
+	}
+
 	return CORSConfig{
 		AllowedOrigins:      corsAllowedOrigins,
-		Enforce:             sharedenv.Bool("CORS_ENFORCE", options.CORSDefaultEnforce),
+		Enforce:             enforce,
 		MissingInProduction: corsMissingInProduction,
-	}
+	}, nil
 }
 
-func loadServicesConfig() ServicesConfig {
+func loadServicesConfig() (ServicesConfig, error) {
+	if err := rejectRetiredServicesEnv(); err != nil {
+		return ServicesConfig{}, fmt.Errorf("reject retired services env: %w", err)
+	}
+
 	return ServicesConfig{
-		LLMSchedulerHealthURL: sharedenv.StringAny(
-			"SERVICES_LLM_SCHEDULER_HEALTH_URL",
-			"SERVICES_LLM_SERVER_HEALTH_URL",
-		),
+		LLMSchedulerHealthURL:   sharedenv.String("SERVICES_LLM_SCHEDULER_HEALTH_URL", ""),
 		GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
 		GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
-	}
+	}, nil
 }
 
-func loadIrisConfig(webhookToken, botToken string) IrisConfig {
-	return IrisConfig{
+func loadIrisConfig(webhookToken, botToken string) (IrisConfig, error) {
+	var env load.StrictEnv
+
+	config := IrisConfig{
 		BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
 		BaseURLFile:               sharedenv.String("IRIS_BASE_URL_FILE", ""),
 		WebhookToken:              webhookToken,
 		BotToken:                  botToken,
-		HTTPTimeout:               time.Duration(sharedenv.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
-		HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
-		HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
+		HTTPTimeout:               env.Seconds("IRIS_HTTP_TIMEOUT_SECONDS", 10*time.Second),
+		HTTPDialTimeout:           env.Seconds("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3*time.Second),
+		HTTPResponseHeaderTimeout: env.Seconds("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5*time.Second),
 	}
+
+	if err := env.Err(); err != nil {
+		return IrisConfig{}, fmt.Errorf("load iris config: %w", err)
+	}
+
+	return config, nil
 }
 
 func loadKakaoConfig() (*KakaoConfig, error) {
@@ -162,8 +177,12 @@ func loadKakaoConfig() (*KakaoConfig, error) {
 		return nil, fmt.Errorf("load kakao ACL mode: %w", err)
 	}
 
+	// KAKAO_ROOMS는 ACL 첫 초기화 seed이고 항목은 정확한 signed i64 chatID여야 한다(acl.NewACLService가 검증).
+	// 예전 방 이름 기본값은 chatID 단일 식별에서 어떤 방과도 매칭되지 않는 whitelist 행이 되므로 두지 않고,
+	// 값이 없으면 validate*RequiredConfig의 "KAKAO_ROOMS is required"로 기동을 거절한다
+	// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
 	return &KakaoConfig{
-		Rooms:      load.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
+		Rooms:      load.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "")),
 		ACLEnabled: enabled,
 		ACLMode:    mode,
 	}, nil
@@ -208,61 +227,103 @@ func loadKakaoACLMode() (string, error) {
 	}
 }
 
-func LoadLoggingConfig() LoggingConfig {
-	return LoggingConfig{
+func LoadLoggingConfig() (LoggingConfig, error) {
+	var env load.StrictEnv
+
+	config := LoggingConfig{
 		Level:      sharedenv.String("LOG_LEVEL", "info"),
 		Dir:        sharedenv.String("LOG_DIR", ""),
-		MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 5),
-		MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
-		MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
-		Compress:   sharedenv.Bool("LOG_COMPRESS", true),
+		MaxSizeMB:  env.Int("LOG_MAX_SIZE_MB", 5),
+		MaxBackups: env.Int("LOG_MAX_BACKUPS", 5),
+		MaxAgeDays: env.Int("LOG_MAX_AGE_DAYS", 30),
+		Compress:   env.Bool("LOG_COMPRESS", true),
 	}
+
+	if err := env.Err(); err != nil {
+		return LoggingConfig{}, fmt.Errorf("load logging config: %w", err)
+	}
+
+	return config, nil
 }
 
-func loadBotConfig() BotConfig {
-	return BotConfig{
+const (
+	seeMoreFoldEnv     = "BOT_SEE_MORE_FOLD"
+	seeMoreFoldDefault = true
+)
+
+// LoadSeeMoreFold는 bot·llm plane이 공유하는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
+// 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다(PLN-20260926-stack-audit-refactoring T10).
+func LoadSeeMoreFold() (bool, error) {
+	var env load.StrictEnv
+
+	fold := env.Bool(seeMoreFoldEnv, seeMoreFoldDefault)
+	if err := env.Err(); err != nil {
+		return false, fmt.Errorf("load see-more fold: %w", err)
+	}
+
+	return fold, nil
+}
+
+func loadBotConfig() (BotConfig, error) {
+	var env load.StrictEnv
+
+	config := BotConfig{
 		Prefix:                sharedenv.String("BOT_PREFIX", "!"),
 		SelfUser:              sharedenv.String("BOT_SELF_USER", "iris"),
 		MentionPrefix:         sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		CalendarImageCacheDir: sharedenv.String("BOT_CALENDAR_IMAGE_CACHE_DIR", "data/calendar-cache"),
-		CalendarEntryCacheTTL: time.Duration(sharedenv.Int("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 86400)) * time.Second,
-		SeeMoreFold:           sharedenv.Bool("BOT_SEE_MORE_FOLD", false),
-		MarkdownReplies:       sharedenv.Bool("BOT_MARKDOWN_REPLIES", false),
+		CalendarEntryCacheTTL: env.Seconds("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 24*time.Hour),
+		SeeMoreFold:           env.Bool(seeMoreFoldEnv, seeMoreFoldDefault),
+		MarkdownReplies:       env.Bool("BOT_MARKDOWN_REPLIES", false),
 	}
+
+	if err := env.Err(); err != nil {
+		return BotConfig{}, fmt.Errorf("load bot config: %w", err)
+	}
+
+	return config, nil
 }
 
-func loadHolodexConfig() HolodexConfig {
+func loadHolodexConfig() (HolodexConfig, error) {
+	apiKey, err := load.HolodexAPIKey()
+	if err != nil {
+		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
+	}
+
 	d := DefaultHolodexOperationalConfig()
 
-	return HolodexConfig{
+	var env load.StrictEnv
+
+	config := HolodexConfig{
 		BaseURL:           sharedenv.String("HOLODEX_BASE_URL", d.BaseURL),
-		APIKey:            load.HolodexAPIKey(),
-		Timeout:           time.Duration(sharedenv.Int("HOLODEX_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
-		PerAttemptTimeout: time.Duration(sharedenv.Int("HOLODEX_PER_ATTEMPT_TIMEOUT_SECONDS", int(d.PerAttemptTimeout/time.Second))) * time.Second,
-		MaxRetryAttempts:  sharedenv.Int("HOLODEX_MAX_RETRY_ATTEMPTS", d.MaxRetryAttempts),
+		APIKey:            apiKey,
+		Timeout:           env.Seconds("HOLODEX_TIMEOUT_SECONDS", d.Timeout),
+		PerAttemptTimeout: env.Seconds("HOLODEX_PER_ATTEMPT_TIMEOUT_SECONDS", d.PerAttemptTimeout),
+		MaxRetryAttempts:  env.Int("HOLODEX_MAX_RETRY_ATTEMPTS", d.MaxRetryAttempts),
 		Transport: HolodexTransportConfig{
-			MaxConnsPerHost:     sharedenv.Int("HOLODEX_MAX_CONNS_PER_HOST", d.Transport.MaxConnsPerHost),
-			MaxIdleConnsPerHost: sharedenv.Int("HOLODEX_MAX_IDLE_CONNS_PER_HOST", d.Transport.MaxIdleConnsPerHost),
-			IdleConnTimeout:     time.Duration(sharedenv.Int("HOLODEX_IDLE_CONN_TIMEOUT_SECONDS", int(d.Transport.IdleConnTimeout/time.Second))) * time.Second,
+			MaxConnsPerHost:     env.Int("HOLODEX_MAX_CONNS_PER_HOST", d.Transport.MaxConnsPerHost),
+			MaxIdleConnsPerHost: env.Int("HOLODEX_MAX_IDLE_CONNS_PER_HOST", d.Transport.MaxIdleConnsPerHost),
+			IdleConnTimeout:     env.Seconds("HOLODEX_IDLE_CONN_TIMEOUT_SECONDS", d.Transport.IdleConnTimeout),
 		},
 		Concurrency: HolodexConcurrencyConfig{
-			MaxConcurrentRequests: sharedenv.Int("HOLODEX_MAX_CONCURRENT_REQUESTS", d.Concurrency.MaxConcurrentRequests),
-			OrgAllParallelism:     sharedenv.Int("HOLODEX_ORG_ALL_PARALLELISM", d.Concurrency.OrgAllParallelism),
-			RequestDelay:          time.Duration(sharedenv.Int("HOLODEX_REQUEST_DELAY_MS", int(d.Concurrency.RequestDelay/time.Millisecond))) * time.Millisecond,
+			MaxConcurrentRequests: env.Int("HOLODEX_MAX_CONCURRENT_REQUESTS", d.Concurrency.MaxConcurrentRequests),
+			OrgAllParallelism:     env.Int("HOLODEX_ORG_ALL_PARALLELISM", d.Concurrency.OrgAllParallelism),
+			RequestDelay:          env.Millis("HOLODEX_REQUEST_DELAY_MS", d.Concurrency.RequestDelay),
 		},
 		DistributedRateLimit: DistributedRateLimitConfig{
-			Enabled:    sharedenv.Bool("HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED", d.DistributedRateLimit.Enabled),
-			Limit:      sharedenv.Int("HOLODEX_DISTRIBUTED_RATELIMIT_LIMIT", d.DistributedRateLimit.Limit),
-			Window:     time.Duration(sharedenv.Int("HOLODEX_DISTRIBUTED_RATELIMIT_WINDOW_MS", int(d.DistributedRateLimit.Window/time.Millisecond))) * time.Millisecond,
+			Enabled:    env.Bool("HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED", d.DistributedRateLimit.Enabled),
+			Limit:      env.Int("HOLODEX_DISTRIBUTED_RATELIMIT_LIMIT", d.DistributedRateLimit.Limit),
+			Window:     env.Millis("HOLODEX_DISTRIBUTED_RATELIMIT_WINDOW_MS", d.DistributedRateLimit.Window),
 			KeyPrefix:  sharedenv.String("HOLODEX_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.DistributedRateLimit.KeyPrefix),
 			BucketBase: sharedenv.String("HOLODEX_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.DistributedRateLimit.BucketBase),
 		},
-		LiveStatusFallback: HolodexLiveStatusFallbackConfig{
-			MaxPerCycle:     sharedenv.Int("HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE", d.LiveStatusFallback.MaxPerCycle),
-			WallClockBudget: time.Duration(sharedenv.Int("HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS", int(d.LiveStatusFallback.WallClockBudget/time.Second))) * time.Second,
-			DeadlineMargin:  time.Duration(sharedenv.Int("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS", int(d.LiveStatusFallback.DeadlineMargin/time.Millisecond))) * time.Millisecond,
-		},
 	}
+
+	if err := env.Err(); err != nil {
+		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
+	}
+
+	return config, nil
 }
 
 func loadYouTubeConfig() (YouTubeConfig, error) {
@@ -270,37 +331,58 @@ func loadYouTubeConfig() (YouTubeConfig, error) {
 		return YouTubeConfig{}, fmt.Errorf("reject retired youtube producer env: %w", err)
 	}
 
-	d := DefaultYouTubeOperationalConfig()
-	interval := time.Duration(sharedenv.Int("YOUTUBE_REQUEST_INTERVAL_SECONDS", int(d.RequestInterval/time.Second))) * time.Second
+	if err := rejectRetiredYouTubeConfigEnv(); err != nil {
+		return YouTubeConfig{}, fmt.Errorf("reject retired youtube config env: %w", err)
+	}
 
-	return YouTubeConfig{
-		CacheExpiration:      time.Duration(sharedenv.Int("YOUTUBE_CACHE_EXPIRATION_SECONDS", int(d.CacheExpiration/time.Second))) * time.Second,
-		MaxPageBodyBytes:     int64(sharedenv.Int("YOUTUBE_MAX_PAGE_BODY_BYTES", int(d.MaxPageBodyBytes))),
-		ScraperHTTPTimeout:   time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", int(d.ScraperHTTPTimeout/time.Second))) * time.Second,
-		ScraperDialTimeout:   time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", int(d.ScraperDialTimeout/time.Second))) * time.Second,
-		ScraperHeaderTimeout: time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", int(d.ScraperHeaderTimeout/time.Second))) * time.Second,
-		ScraperPhaseTimeout:  time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS", int(d.ScraperPhaseTimeout/time.Second))) * time.Second,
-		CacheSaveTimeout:     time.Duration(sharedenv.Int("YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS", int(d.CacheSaveTimeout/time.Second))) * time.Second,
-		CommunityMissingTTL:  time.Duration(sharedenv.Int("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", int(d.CommunityMissingTTL/time.Second))) * time.Second,
-		VideoRSSBackoffTTL:   time.Duration(sharedenv.Int("YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS", int(d.VideoRSSBackoffTTL/time.Second))) * time.Second,
+	d := DefaultYouTubeOperationalConfig()
+
+	var env load.StrictEnv
+
+	interval := env.Seconds("YOUTUBE_REQUEST_INTERVAL_SECONDS", d.RequestInterval)
+	config := YouTubeConfig{
+		MaxPageBodyBytes:     env.Int64("YOUTUBE_MAX_PAGE_BODY_BYTES", d.MaxPageBodyBytes),
+		ScraperHTTPTimeout:   env.Seconds("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", d.ScraperHTTPTimeout),
+		ScraperDialTimeout:   env.Seconds("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", d.ScraperDialTimeout),
+		ScraperHeaderTimeout: env.Seconds("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", d.ScraperHeaderTimeout),
+		ScraperPhaseTimeout:  env.Seconds("YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS", d.ScraperPhaseTimeout),
+		CacheSaveTimeout:     env.Seconds("YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS", d.CacheSaveTimeout),
+		CommunityMissingTTL:  env.Seconds("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", d.CommunityMissingTTL),
 		RequestInterval:      interval,
 		DistributedRateLimit: DistributedRateLimitConfig{
-			Enabled:    sharedenv.Bool("YOUTUBE_DISTRIBUTED_RATELIMIT_ENABLED", d.DistributedRateLimit.Enabled),
-			Limit:      sharedenv.Int("YOUTUBE_DISTRIBUTED_RATELIMIT_LIMIT", d.DistributedRateLimit.Limit),
+			Enabled:    env.Bool("YOUTUBE_DISTRIBUTED_RATELIMIT_ENABLED", d.DistributedRateLimit.Enabled),
+			Limit:      env.Int("YOUTUBE_DISTRIBUTED_RATELIMIT_LIMIT", d.DistributedRateLimit.Limit),
 			Window:     interval,
 			KeyPrefix:  sharedenv.String("YOUTUBE_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.DistributedRateLimit.KeyPrefix),
 			BucketBase: sharedenv.String("YOUTUBE_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.DistributedRateLimit.BucketBase),
 		},
-	}, nil
+	}
+
+	if err := env.Err(); err != nil {
+		return YouTubeConfig{}, fmt.Errorf("load youtube config: %w", err)
+	}
+
+	return config, nil
 }
 
-func loadOfficialScheduleConfig() OfficialScheduleConfig {
+func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
+	if err := rejectRetiredOfficialScheduleEnv(); err != nil {
+		return OfficialScheduleConfig{}, fmt.Errorf("reject retired official schedule env: %w", err)
+	}
+
 	d := DefaultOfficialScheduleConfig()
 
-	return OfficialScheduleConfig{
+	var env load.StrictEnv
+
+	config := OfficialScheduleConfig{
 		BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", d.BaseURL),
-		Timeout:      time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
-		CacheExpiry:  time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", int(d.CacheExpiry/time.Second))) * time.Second,
-		PageCacheTTL: time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", int(d.PageCacheTTL/time.Second))) * time.Second,
+		Timeout:      env.Seconds("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", d.Timeout),
+		PageCacheTTL: env.Seconds("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", d.PageCacheTTL),
 	}
+
+	if err := env.Err(); err != nil {
+		return OfficialScheduleConfig{}, fmt.Errorf("load official schedule config: %w", err)
+	}
+
+	return config, nil
 }

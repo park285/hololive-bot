@@ -119,21 +119,20 @@ func newPostDeliveryTimelineTimes(publishedAt time.Time) postDeliveryTimelineTim
 	}
 }
 
-func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatencyTimelineMetrics(t *testing.T) {
+func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByOutboxIDs_BuildsLatencyTimelineMetrics(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	times := newPostDeliveryTimelineTimes(time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC))
-	windowStart := times.publishedAt.Add(-30 * time.Minute)
 	outboxRow := seedPostDeliveryTimelineOutbox(t, db, times)
 
 	require.NoError(t, insertDeliveryTestRows(db, postDeliveryTimelineBufferRows(outboxRow, times)).Error)
 
 	repository := telemetry.NewRepository(db)
 
-	rows, err := repository.ListPostDeliveryTimelinesSince(ctx, windowStart)
+	rows, err := repository.ListPostDeliveryTimelinesByOutboxIDs(ctx, []int64{outboxRow.ID})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 
@@ -508,62 +507,4 @@ func indexPostLatencyClassificationEvidence(items []timeline.PostLatencyClassifi
 	}
 
 	return indexed
-}
-
-func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWindow_AppliesUpperBound(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	publishedAt := time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
-	detectedAt := publishedAt.Add(2 * time.Minute)
-	eventAt := detectedAt.Add(1 * time.Minute)
-
-	outboxRow := timelineTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_window",
-		ContentID:     "post-window",
-		Payload:       `{"post_id":"post-window"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: eventAt,
-		CreatedAt:     detectedAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &outboxRow).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &timelineTestTrackingModel{
-		Kind:              string(domain.OutboxKindCommunityPost),
-		ContentID:         outboxRow.ContentID,
-		ChannelID:         outboxRow.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        detectedAt,
-		CreatedAt:         detectedAt,
-		UpdatedAt:         eventAt,
-	}).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &timelineTestBufferModel{
-		DeliveryID:     7001,
-		AttemptOrdinal: 1,
-		OutboxID:       outboxRow.ID,
-		ChannelID:      outboxRow.ChannelID,
-		ContentID:      outboxRow.ContentID,
-		PostID:         outboxRow.ContentID,
-		RoomID:         "room-window",
-		AlarmType:      string(domain.AlarmTypeCommunity),
-		DedupeKey:      "youtube-notification:COMMUNITY_POST:post-window",
-		DeliveryPath:   "youtube_outbox_dispatcher",
-		DeliveryMode:   deliveryModeGrouped,
-		SendResult:     sendResultSuccess,
-		EventAt:        eventAt,
-		NextAttemptAt:  eventAt,
-	}).Error)
-
-	repository := telemetry.NewRepository(db)
-	insideRows, err := repository.ListPostDeliveryTimelinesWithinPublishedWindow(ctx, publishedAt.Add(-time.Minute), publishedAt.Add(time.Minute))
-	require.NoError(t, err)
-	require.Len(t, insideRows, 1)
-	require.Equal(t, outboxRow.ContentID, insideRows[0].ContentID)
-
-	outsideRows, err := repository.ListPostDeliveryTimelinesWithinPublishedWindow(ctx, publishedAt.Add(10*time.Minute), publishedAt.Add(20*time.Minute))
-	require.NoError(t, err)
-	require.Empty(t, outsideRows)
 }

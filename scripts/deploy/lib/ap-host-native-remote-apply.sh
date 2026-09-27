@@ -16,7 +16,6 @@ host_env="/etc/hololive-bot/youtube-collector-host.env"
 unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
 unit="hololive-youtube-collector@${service}.service"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
-producer_state_file="$releases_root/first-cutover-producer.state"
 swapfile="/swapfile"
 
 normalize_runtime_payload_permissions() {
@@ -106,11 +105,6 @@ old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
 fi
-if [[ -z "$old_target" ]]; then
-  write_retired_producer_runtime_state "$service" > "$payload/first-cutover-producer.state"
-  validate_retired_producer_runtime_state "$payload/first-cutover-producer.state" "$service"
-  sudo -n install -m 0644 -o root -g root "$payload/first-cutover-producer.state" "$producer_state_file"
-fi
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
 sudo -n rm -rf "$release_dir"
@@ -150,13 +144,27 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
   sudo -n ln -sfn "$old_target" "$previous_link"
 fi
 
+stop_collector_unit_and_require_inactive() {
+  command -v systemctl >/dev/null 2>&1 || return 0
+  systemctl cat "$unit" >/dev/null 2>&1 || return 0
+  echo "[CUTOVER] Stopping collector unit: ${unit}"
+  sudo -n systemctl disable --now "$unit" >/dev/null
+  if systemctl is-active --quiet "$unit" 2>/dev/null; then
+    echo "collector unit still active: $unit" >&2
+    return 1
+  fi
+}
+
+# 실패하면 이전 collector release로 되돌린다. 이전 release가 없는 첫 설치는 반쯤 구성된 unit을 지우고 실패로 끝낸다.
+# 퇴역 producer의 첫 cutover 상태를 기록·복원하던 경로는 T18(2026-09-26)에서 모든 host-native AP의 current·previous가
+# collector release이고 producer unit이 0개임을 확인해 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling).
 restore_native_after_failed_cutover() {
   local status="$?"
   local restore_status=0
   trap - ERR
   if ! (
     set -e
-    stop_named_units_and_require_inactive "$unit"
+    stop_collector_unit_and_require_inactive
     if [[ -n "$old_target" && -d "$old_target" ]]; then
       rollback_contract_dir="$old_target/rollback-contract"
       sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
@@ -167,7 +175,6 @@ restore_native_after_failed_cutover() {
     else
       sudo -n rm -f "$current_link" "$host_env" "$unit_file"
       sudo -n systemctl daemon-reload
-      restore_retired_producer_runtime "$producer_state_file" "$service"
     fi
   ); then
     restore_status=1
@@ -185,7 +192,6 @@ sudo -n ln -sfn "$release_dir" "$current_link"
 
 sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
-stop_retired_producer_runtime "$service"
 sudo -n systemctl enable --now "$unit"
 sudo -n systemctl restart "$unit"
 

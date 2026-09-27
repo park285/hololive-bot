@@ -41,12 +41,6 @@ const (
 	AlarmChannelRegistryKey           = "alarm:channel_registry"
 	AlarmChannelRegistryVersionKey    = "alarm:channel_registry:version"
 	AlarmSubscriberCacheEmptyKey      = "alarm:subscriber_cache_empty"
-	ChzzkChannelMapKey                = "alarm:chzzk_channels"
-	ChzzkChannelMapEmptyKey           = "alarm:chzzk_channels_empty"
-	TwitchLoginMapKey                 = "alarm:twitch_logins"
-	TwitchLoginMapEmptyKey            = "alarm:twitch_logins_empty"
-	TwitchChannelLoginMapKey          = "alarm:twitch_channel_logins"
-	TwitchChannelLoginMapEmptyKey     = "alarm:twitch_channel_logins_empty"
 	NextStreamKeyPrefix               = "alarm:next_stream:"
 	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
 	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
@@ -55,9 +49,6 @@ const (
 	MemberNameKey                     = "alarm:member_names"
 	RoomNamesCacheKey                 = "alarm:room_names"
 	UserNamesCacheKey                 = "alarm:user_names"
-	DispatchQueueKey                  = "alarm:dispatch:queue"
-	DispatchRetryQueueKey             = "alarm:dispatch:retry"
-	DispatchDLQKey                    = "alarm:dispatch:dlq"
 
 	NotifiedKeyPrefix                  = "notified:"
 	NotifyClaimKeyPrefix               = "notified:claim:"
@@ -74,8 +65,13 @@ func BuildRoomAlarmKey(roomID string) string {
 	return AlarmKeyPrefix + roomID
 }
 
+// IsReservedAlarmKey는 alarm: 접두사를 쓰지만 방 구독이 아닌 현행 키를 가린다. 퇴역한 Chzzk/Twitch 매핑 6개와 Redis
+// dispatch queue 3개의 예약 항목·상수는 stack-audit 2026-09-26 T11(holo-alarm-reserved-retired-valkey-keys)에서 지웠다.
+// 퇴역 dispatch queue 키에는 ':'가 들어 있어 IsRoomAlarmKey가 원래 방 키로 보지 않는다(T18 2026-09-26 0건). 운영
+// Valkey에 남아 있던 세 키(alarm:chzzk_channels_empty, alarm:twitch_channel_logins, alarm:twitch_logins)는 이 release
+// 배포 전에 hololive-bot-ops가 1회 삭제한다. 삭제 전에 배포되면 RebuildSubscriberCacheFromRepository가 그 키를 고아 방
+// 키로 보고 지운다.
 func IsReservedAlarmKey(key string) bool {
-	// 퇴역한 매핑 키가 운영 캐시에 남아 있어도 방별 구독으로 읽지 않는다.
 	switch strings.TrimSpace(key) {
 	case AlarmRegistryKey,
 		AlarmChannelRegistryKey,
@@ -83,16 +79,7 @@ func IsReservedAlarmKey(key string) bool {
 		AlarmSubscriberCacheEmptyKey,
 		MemberNameKey,
 		RoomNamesCacheKey,
-		UserNamesCacheKey,
-		DispatchQueueKey,
-		DispatchRetryQueueKey,
-		DispatchDLQKey,
-		ChzzkChannelMapKey,
-		ChzzkChannelMapEmptyKey,
-		TwitchLoginMapKey,
-		TwitchLoginMapEmptyKey,
-		TwitchChannelLoginMapKey,
-		TwitchChannelLoginMapEmptyKey:
+		UserNamesCacheKey:
 		return true
 	default:
 		return false

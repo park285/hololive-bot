@@ -14,9 +14,8 @@ fail() {
 fixture="${TEST_TMP_DIR}/fixture"
 shared_queries="${fixture}/hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries"
 store_queries="${fixture}/hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries"
-backfill_queries="${fixture}/hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/queries"
 worker_other="${fixture}/hololive/hololive-alarm-worker/internal/other"
-mkdir -p "${shared_queries}" "${store_queries}" "${backfill_queries}" "${worker_other}"
+mkdir -p "${shared_queries}" "${store_queries}" "${worker_other}"
 
 cat >"${shared_queries}/repository_batch_writes_0001_01.sql" <<'EOF'
 INSERT INTO youtube_notification_outbox (kind, content_id)
@@ -27,9 +26,6 @@ ON CONFLICT (kind, content_id) DO NOTHING
 EOF
 cat >"${store_queries}/canonical.sql" <<'EOF'
 UPDATE youtube_notification_delivery SET status = 'SENDING' WHERE id = $1;
-EOF
-cat >"${backfill_queries}/bounded.sql" <<'EOF'
-INSERT INTO youtube_notification_delivery_ledger_state (singleton) VALUES (TRUE);
 EOF
 
 ROOT_DIR="${fixture}" "${CHECKER}" >"${TEST_TMP_DIR}/clean.out" 2>&1 \

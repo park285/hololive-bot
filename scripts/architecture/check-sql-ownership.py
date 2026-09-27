@@ -7,10 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCAN_ROOTS = (
-    ROOT / "hololive",
-    ROOT / "admin-dashboard" / "backend",
-)
+# 퇴역 admin-dashboard BFF(admin-dashboard/backend)는 저장소에 없으므로 scan 대상에서 뺐다(stack-audit 2026-09-26 T19).
+SCAN_ROOTS = (ROOT / "hololive",)
 EXCLUDED_DIRS = {
     ".git",
     ".tmp",

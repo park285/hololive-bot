@@ -130,8 +130,21 @@ func (f *fakeMemberEpochAuthority) setCurrentError(err error) {
 	f.mu.Unlock()
 }
 
+// withTestEpochAuthority는 분산 캐시를 쓰는 테스트 Cache에 건강한 fake epoch authority를 주입한다. 분산 캐시가 있으면
+// epoch authority가 필수라는 불변식(configureEpoch)을 직접 구성한 테스트 Cache에서도 지킨다.
+func withTestEpochAuthority(c *Cache) *Cache {
+	c.epoch = &fakeMemberEpochAuthority{epoch: 1}
+	c.authorityEpoch.Store(1)
+	c.authorityHealthy.Store(true)
+
+	return c
+}
+
+// newEpochTestCache는 epoch 조정 경로를 검증한다. 운영 구성에서 epoch authority는 분산 캐시와 짝이므로(configureEpoch)
+// lenient 분산 캐시 client를 함께 둔다.
 func newEpochTestCache(authority memberEpochAuthority) *Cache {
 	c := &Cache{
+		cache:                  cachemocks.NewLenientClient(),
 		epoch:                  authority,
 		epochReconcileInterval: 5 * time.Millisecond,
 		logger:                 slog.New(slog.DiscardHandler),

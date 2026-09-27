@@ -23,11 +23,11 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	"github.com/kapu/hololive-shared/pkg/repository"
+	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 func buildAdminHandler(
-	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *scraperHolodexFoundation,
 	alarmMode *alarmModeComponents,
@@ -35,6 +35,7 @@ func buildAdminHandler(
 	irisRoomClient server.IrisRoomLister,
 	ytStack *providers.YouTubeStack,
 	communityShortsOpsRepository server.YouTubeCommunityShortsOpsRepository,
+	settingsService settingssvc.ReadWriter,
 	settingsApplier sharedsettings.SettingsApplier,
 	systemCollector *system.Collector,
 	templateAdmin *template.AdminService,
@@ -62,7 +63,7 @@ func buildAdminHandler(
 			SystemStats: systemCollector,
 		},
 		Settings: server.SettingsDeps{
-			Settings: sharedmodules.BuildSettingsService(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
+			Settings: settingsService,
 			Applier:  settingsApplier,
 		},
 		Template: server.TemplateDeps{
@@ -78,7 +79,10 @@ func buildAdminHandler(
 	})
 }
 
-func buildAdminAPIBotRoomLister(appConfig *settings.Config, logger *slog.Logger) server.IrisRoomLister {
+// buildAdminAPIBotRoomLister는 bot 내부 URL이 설정된 경우에만 joined-rooms client를 만든다. 설정된 URL로 client를
+// 만들지 못하면(허용되지 않은 URL, HOLOLIVE_INTERNAL_H3_* 누락 포함) 경고 뒤 endpoint를 끄지 않고 오류로 기동을
+// 실패시킨다(stack audit 2026-09-26).
+func buildAdminAPIBotRoomLister(appConfig *settings.Config, logger *slog.Logger) (server.IrisRoomLister, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -86,24 +90,22 @@ func buildAdminAPIBotRoomLister(appConfig *settings.Config, logger *slog.Logger)
 	if appConfig == nil {
 		logger.Warn("admin api bot room client unavailable; config is nil")
 
-		return nil
+		return nil, nil //nolint:nilnil // 설정이 없으면 joined-rooms endpoint를 끄는 계약값이며 오류가 아니다.
 	}
 
 	botURL := strings.TrimSpace(appConfig.BotInternalURL)
 	if botURL == "" {
 		logger.Warn("admin api bot room client unavailable; joined-rooms endpoint disabled")
 
-		return nil
+		return nil, nil //nolint:nilnil // bot 내부 URL 미설정은 joined-rooms endpoint를 끄는 계약값이며 오류가 아니다.
 	}
 
-	client, err := botroomsclient.NewClient(botURL, appConfig.Server.APIKey, logger)
+	client, err := botroomsclient.NewClient(botURL, appConfig.Server.APIKey)
 	if err != nil {
-		logger.Warn("admin api bot room client unavailable; invalid bot internal url", slog.Any("error", err))
-
-		return nil
+		return nil, fmt.Errorf("build admin api bot room client: %w", err)
 	}
 
-	return client
+	return client, nil
 }
 
 func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {

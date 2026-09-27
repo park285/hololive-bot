@@ -24,7 +24,6 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmListEntry) string {
@@ -32,8 +31,12 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 	for idx, alarm := range alarms {
 		processed[idx] = alarmListEntryView{
 			MemberName: alarm.MemberName,
-			TypesLabel: f.formatAlarmTypesLabel(ctx, alarm.AlarmTypes),
 			NextStream: f.buildNextStreamInfoView(ctx, summarizeNextStreamInfo(alarm.NextStream)),
+		}
+
+		// 기본값인 전체 알림을 항목마다 반복하지 않고, 종류를 제한한 알람만 라벨을 붙인다.
+		if !isAllAlarmTypes(alarm.AlarmTypes) {
+			processed[idx].TypesLabel = f.formatAlarmTypesLabel(ctx, alarm.AlarmTypes)
 		}
 	}
 
@@ -45,7 +48,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmList, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)
@@ -56,7 +59,7 @@ func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) s
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmCleared, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

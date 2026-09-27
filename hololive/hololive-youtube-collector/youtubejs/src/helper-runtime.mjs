@@ -1,9 +1,7 @@
 // @ts-check
-import { createFetchTransport, redactedProxyURL } from "./fetch-transport.mjs";
+import { createFetchTransport } from "./fetch-transport.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 import { rpcErrorResult } from "./rpc-validation.mjs";
-
-export { redactedProxyURL };
 
 export const RuntimeState = Object.freeze({
   UNCONFIGURED: "UNCONFIGURED",
@@ -33,13 +31,14 @@ export class HelperHTTPError extends Error {
 
 /**
  * @param {{
- *   createTransport?: (proxy: { enabled: boolean, url: string }) => Promise<{
+ *   createTransport?: () => Promise<{
  *     fetch: import("./upstream-feeds.d.ts").InnertubeFetch,
- *     close: () => Promise<void>,
- *     agentCount: number,
+ *     singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch,
  *   }>,
- *   createFetchers?: (fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch) => import("./contracts.d.ts").FetcherSet,
- *   transportCloseTimeoutMs?: number,
+ *   createFetchers?: (
+ *     fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+ *     singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+ *   ) => import("./contracts.d.ts").FetcherSet,
  * }} [options]
  */
 export function createHelperRuntime(options = {}) {
@@ -49,13 +48,14 @@ export function createHelperRuntime(options = {}) {
 export class HelperRuntime {
   /**
    * @param {{
-   *   createTransport?: (proxy: { enabled: boolean, url: string }) => Promise<{
+   *   createTransport?: () => Promise<{
    *     fetch: import("./upstream-feeds.d.ts").InnertubeFetch,
-   *     close: () => Promise<void>,
-   *     agentCount: number,
+   *     singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch,
    *   }>,
-   *   createFetchers?: (fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch) => import("./contracts.d.ts").FetcherSet,
-   *   transportCloseTimeoutMs?: number,
+   *   createFetchers?: (
+   *     fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+   *     singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+   *   ) => import("./contracts.d.ts").FetcherSet,
    * }} [options]
    */
   constructor(options = {}) {
@@ -65,16 +65,13 @@ export class HelperRuntime {
     this.maxInflight = 0;
     this.requestBodyBytes = defaultRequestBodyBytes;
     this.responseBodyBytes = 1 << 20;
-    this.proxyEnabled = false;
     this.fetchers = null;
-    this.transport = null;
     this.fingerprint = "";
     /** @type {Promise<{ status: number, body: unknown }> | null} */
     this.bootstrapPromise = null;
     this.bootstrapAttemptFingerprint = "";
-    this.agentCount = 0;
     this.createTransport = options.createTransport ??
-      ((proxy) => createBootstrapTransport(proxy, options.transportCloseTimeoutMs));
+      (async () => createFetchTransport({ currentSignal: currentRequestSignal }));
     this.createFetchers = options.createFetchers;
     /** @type {(() => void) | undefined} */
     this.onStopped = undefined;
@@ -92,7 +89,6 @@ export class HelperRuntime {
       state: this.state,
       inflight: this.inflight,
       max_inflight: this.maxInflight,
-      proxy_enabled: this.proxyEnabled,
     };
   }
 
@@ -165,7 +161,6 @@ export class HelperRuntime {
   /**
    * @param {{
    *   protocol_version: number,
-   *   proxy: { enabled: boolean, url: string },
    *   limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number },
    * }} parsed
    * @param {string} nextFingerprint
@@ -173,17 +168,17 @@ export class HelperRuntime {
    */
   async initializeBootstrap(parsed, nextFingerprint) {
     try {
-      const transport = await this.createTransport(parsed.proxy);
-      this.transport = transport;
+      const transport = await this.createTransport();
       const fetchers = this.createFetchers
-        ? this.createFetchers(/** @type {import("./upstream-feeds.d.ts").InnertubeFetch} */ (transport.fetch))
+        ? this.createFetchers(
+          /** @type {import("./upstream-feeds.d.ts").InnertubeFetch} */ (transport.fetch),
+          /** @type {import("./upstream-feeds.d.ts").InnertubeFetch} */ (transport.singleAttemptFetch),
+        )
         : null;
       this.fetchers = fetchers;
-      this.agentCount = transport.agentCount;
       this.requestBodyBytes = parsed.limits.request_body_bytes;
       this.responseBodyBytes = parsed.limits.response_body_bytes;
       this.maxInflight = parsed.limits.max_inflight;
-      this.proxyEnabled = parsed.proxy.enabled;
       this.fingerprint = nextFingerprint;
       this.state = RuntimeState.READY;
       return { status: 200, body: this.bootstrapResponse() };
@@ -201,7 +196,6 @@ export class HelperRuntime {
     return {
       protocol_version: 1,
       state: this.state,
-      proxy_enabled: this.proxyEnabled,
       request_body_bytes: this.requestBodyBytes,
       response_body_bytes: this.responseBodyBytes,
       max_inflight: this.maxInflight,
@@ -238,44 +232,18 @@ export class HelperRuntime {
   }
 
   async closeResources() {
-    const transport = this.transport;
     const fetchers = this.fetchers;
-    this.transport = null;
     this.fetchers = null;
-    const errors = [];
     if (fetchers && typeof fetchers.close === "function") {
-      try {
-        await fetchers.close();
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    if (transport) {
-      try {
-        await transport.close();
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    if (errors.length > 0) {
-      throw new AggregateError(errors, "helper resource close failed");
+      await fetchers.close();
     }
   }
-}
-
-/**
- * @param {{ enabled: boolean, url: string }} proxy
- * @param {number} [closeTimeoutMs]
- */
-export async function createBootstrapTransport(proxy, closeTimeoutMs) {
-  return createFetchTransport({ proxy, currentSignal: currentRequestSignal, closeTimeoutMs });
 }
 
 /**
  * @param {string} rawBody
  * @returns {{
  *   protocol_version: number,
- *   proxy: { enabled: boolean, url: string },
  *   limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number },
  * }}
  */
@@ -289,26 +257,9 @@ export function parseBootstrapRequest(rawBody) {
   if (!isRecord(value)) {
     throw new HelperHTTPError(400, "invalid_request", "request must be a JSON object");
   }
-  assertExactKeys(value, ["protocol_version", "proxy", "limits"], []);
+  assertExactKeys(value, ["protocol_version", "limits"], []);
   if (value.protocol_version !== 1) {
     throw new HelperHTTPError(409, "helper_protocol_mismatch", "protocol version mismatch");
-  }
-  if (!isRecord(value.proxy)) {
-    throw new HelperHTTPError(400, "invalid_request", "proxy must be an object");
-  }
-  assertExactKeys(value.proxy, ["enabled"], ["url"]);
-  if (typeof value.proxy.enabled !== "boolean") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy.enabled must be boolean");
-  }
-  const proxyURL = optionalProxyURL(value.proxy);
-  if (!value.proxy.enabled && proxyURL !== "") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url must be empty when disabled");
-  }
-  if (value.proxy.enabled && proxyURL === "") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url is required when enabled");
-  }
-  if (value.proxy.enabled) {
-    assertProxyURL(proxyURL);
   }
   if (!isRecord(value.limits)) {
     throw new HelperHTTPError(400, "invalid_request", "limits must be an object");
@@ -316,7 +267,6 @@ export function parseBootstrapRequest(rawBody) {
   assertExactKeys(value.limits, ["request_body_bytes", "response_body_bytes", "max_inflight"], []);
   return {
     protocol_version: 1,
-    proxy: { enabled: value.proxy.enabled, url: proxyURL },
     limits: {
       request_body_bytes: positiveInt(value.limits, "request_body_bytes"),
       response_body_bytes: positiveInt(value.limits, "response_body_bytes"),
@@ -347,63 +297,14 @@ export function assertExactKeys(record, required, optional) {
 /**
  * @param {{
  *   protocol_version: number,
- *   proxy: { enabled: boolean, url: string },
  *   limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number },
  * }} config
  */
 function bootstrapFingerprint(config) {
   return JSON.stringify({
     protocol_version: config.protocol_version,
-    proxy: {
-      enabled: config.proxy.enabled,
-      url: normalizeProxyURL(config.proxy.url),
-    },
     limits: config.limits,
   });
-}
-
-/** @param {string} raw */
-function normalizeProxyURL(raw) {
-  if (raw === "") {
-    return "";
-  }
-  const parsed = new URL(raw);
-  const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
-  const path = parsed.pathname === "/" ? "" : parsed.pathname;
-  return `${parsed.protocol}//${parsed.username}:${parsed.password}@${parsed.hostname.toLowerCase()}:${port}${path}`;
-}
-
-/** @param {string} raw */
-function assertProxyURL(raw) {
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url is invalid");
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url is invalid");
-  }
-  if (parsed.hostname === "") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url is invalid");
-  }
-  if (parsed.search !== "" || parsed.hash !== "") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url is invalid");
-  }
-  if (parsed.pathname !== "" && parsed.pathname !== "/") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url is invalid");
-  }
-}
-
-/** @param {Record<string, unknown>} proxy */
-function optionalProxyURL(proxy) {
-  if (proxy.url === undefined) {
-    return "";
-  }
-  if (typeof proxy.url !== "string") {
-    throw new HelperHTTPError(400, "invalid_request", "proxy url is invalid");
-  }
-  return proxy.url.trim();
 }
 
 /**
@@ -435,11 +336,5 @@ function isRecord(value) {
 
 /** @param {unknown} error */
 function errorMessage(error) {
-  const raw = error instanceof Error ? error.message : "helper error";
-  return redactProxyUserinfo(raw);
-}
-
-/** @param {string} text */
-function redactProxyUserinfo(text) {
-  return text.replace(/\/\/[^/\s@]+:[^/\s@]+@/g, "//redacted@");
+  return error instanceof Error ? error.message : "helper error";
 }

@@ -66,12 +66,13 @@ TABLE alarm_dispatch_deliveries
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN dispatch_group_key text
   COLUMN send_unit_id bigint
+  CONSTRAINT alarm_dispatch_deliveries_active_send_unit_check CHECK (((send_unit_id IS NOT NULL) OR (status <> ALL (ARRAY['pending'::text, 'retry'::text, 'leased'::text, 'sending'::text]))))
   CONSTRAINT alarm_dispatch_deliveries_attempt_check CHECK ((attempt_count >= 0))
   CONSTRAINT alarm_dispatch_deliveries_dedupe_key_check CHECK (((length(dedupe_key) > 0) AND (length(dedupe_key) <= 768)))
   CONSTRAINT alarm_dispatch_deliveries_dispatch_group_key_check CHECK (((dispatch_group_key IS NULL) OR ((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768))))
   CONSTRAINT alarm_dispatch_deliveries_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
   CONSTRAINT alarm_dispatch_deliveries_send_unit_pair_check CHECK (((dispatch_group_key IS NULL) = (send_unit_id IS NULL)))
-  CONSTRAINT alarm_dispatch_deliveries_status_check CHECK ((status = ANY (ARRAY['shadowed'::text, 'pending'::text, 'retry'::text, 'leased'::text, 'sending'::text, 'sent'::text, 'dlq'::text, 'quarantined'::text, 'cancelled'::text])))
+  CONSTRAINT alarm_dispatch_deliveries_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'retry'::text, 'leased'::text, 'sending'::text, 'sent'::text, 'dlq'::text, 'quarantined'::text, 'cancelled'::text])))
   CONSTRAINT chk_alarm_dispatch_deliveries_last_error_size CHECK ((octet_length(last_error) <= 8192))
   CONSTRAINT chk_alarm_dispatch_deliveries_state_shape CHECK ((((status <> 'leased'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL))) AND ((status <> 'sending'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL) AND (sending_started_at IS NOT NULL))) AND ((status <> 'sent'::text) OR (sent_at IS NOT NULL)) AND ((status <> 'dlq'::text) OR (dlq_at IS NOT NULL)) AND ((status <> 'quarantined'::text) OR (quarantined_at IS NOT NULL)) AND ((status <> 'cancelled'::text) OR (cancelled_at IS NOT NULL))))
   CONSTRAINT alarm_dispatch_deliveries_event_id_fkey FOREIGN KEY (event_id) REFERENCES alarm_dispatch_events(id) ON DELETE RESTRICT
@@ -493,7 +494,7 @@ TABLE observation_contract_generations
   COLUMN current_generation bigint NOT NULL
   COLUMN updated_by text NOT NULL
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_observation_contract_provider_vocab CHECK ((provider = ANY (ARRAY['holodex'::text, 'youtubejs'::text, 'hololive_official'::text])))
   CONSTRAINT chk_observation_contract_updated_by CHECK (((length(updated_by) >= 1) AND (length(updated_by) <= 128)))
   CONSTRAINT observation_contract_generations_current_generation_check CHECK ((current_generation > 0))
@@ -583,7 +584,7 @@ TABLE source_observation_consumer_offsets
   COLUMN last_processed_at timestamp with time zone
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_source_observation_consumer_offset_bounds CHECK (((length(consumer_name) >= 1) AND (length(consumer_name) <= 128)))
-  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT source_observation_consumer_offsets_last_processed_id_check CHECK ((last_processed_id >= 0))
   CONSTRAINT source_observation_consumer_offsets_pkey PRIMARY KEY (consumer_name, observation_kind)
 
@@ -611,7 +612,6 @@ TABLE source_observation_queue
   CONSTRAINT source_observation_queue_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_source_observation_queue_claim ON public.source_observation_queue USING btree (available_at, observation_id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_source_observation_queue_lease_recovery ON public.source_observation_queue USING btree (lease_expires_at, observation_id) WHERE (status = 'PROCESSING'::text)
-  INDEX CREATE INDEX idx_source_observation_queue_terminal_retention ON public.source_observation_queue USING btree (status, updated_at, observation_id) WHERE (status = ANY (ARRAY['PROCESSED'::text, 'DEAD_LETTER'::text]))
 
 TABLE source_observation_replay_epoch
   COLUMN singleton boolean NOT NULL DEFAULT true
@@ -697,10 +697,7 @@ TABLE source_observations
   CONSTRAINT fk_source_observation_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_observations_pkey PRIMARY KEY (id)
   CONSTRAINT uq_source_observation_identity UNIQUE (provider, observation_kind, subject_key, observation_key, schema_version, contract_generation)
-  INDEX CREATE INDEX idx_source_observations_kind_id ON public.source_observations USING btree (observation_kind, id)
   INDEX CREATE INDEX idx_source_observations_kind_received_id ON public.source_observations USING btree (observation_kind, received_at, id)
-  INDEX CREATE INDEX idx_source_observations_received ON public.source_observations USING btree (received_at, id)
-  INDEX CREATE INDEX idx_source_observations_subject_time ON public.source_observations USING btree (observation_kind, subject_key, scheduled_for DESC, id DESC)
 
 TABLE source_reconciliation_conflicts
   COLUMN id bigint NOT NULL DEFAULT nextval('source_reconciliation_conflicts_id_seq'::regclass)
@@ -778,6 +775,31 @@ TABLE youtube_channel_latest_stats
   COLUMN time timestamp with time zone NOT NULL
   COLUMN updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
   CONSTRAINT youtube_channel_latest_stats_pkey PRIMARY KEY (channel_id)
+
+TABLE youtube_channel_live_checks
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN outcome text NOT NULL
+  COLUMN selected_video_id character varying(20)
+  COLUMN channel_identity_confirmed boolean NOT NULL
+  COLUMN unknown_reason text
+  COLUMN observation_id bigint
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_channel_live_checks_effective_clock CHECK ((effective_at = scheduled_for))
+  CONSTRAINT chk_youtube_channel_live_checks_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_youtube_channel_live_checks_identity CHECK ((((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64)) AND ((selected_video_id IS NULL) OR ((length((selected_video_id)::text) >= 1) AND (length((selected_video_id)::text) <= 20)))))
+  CONSTRAINT chk_youtube_channel_live_checks_outcome_shape CHECK ((((outcome = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((outcome = 'UNKNOWN'::text) OR channel_identity_confirmed) AND ((outcome <> 'CHANNEL_PAGE'::text) OR (selected_video_id IS NULL)) AND ((outcome <> ALL (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text])) OR (selected_video_id IS NOT NULL)) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT channel_identity_confirmed))))
+  CONSTRAINT chk_youtube_channel_live_checks_outcome_vocab CHECK ((outcome = ANY (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text, 'CHANNEL_PAGE'::text, 'UNKNOWN'::text])))
+  CONSTRAINT chk_youtube_channel_live_checks_provider CHECK ((provider = 'youtubejs'::text))
+  CONSTRAINT chk_youtube_channel_live_checks_unknown_reason_vocab CHECK (((unknown_reason IS NULL) OR (unknown_reason = ANY (ARRAY['identity_missing'::text, 'identity_mismatch'::text, 'contradictory_fields'::text, 'structure_unrecognized'::text, 'not_waiting_state'::text, 'login_required_unclassified'::text, 'error_unclassified'::text, 'request_failed'::text]))))
+  CONSTRAINT fk_youtube_channel_live_checks_observation FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_channel_live_checks_pkey PRIMARY KEY (channel_id)
+  CONSTRAINT uq_youtube_channel_live_checks_observation UNIQUE (observation_id)
 
 TABLE youtube_channel_photo_heads
   COLUMN channel_id text NOT NULL
@@ -965,7 +987,6 @@ TABLE youtube_collection_job_leases
   CONSTRAINT youtube_collection_job_leases_pkey PRIMARY KEY (job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_due ON public.youtube_collection_job_leases USING btree (slot_state, next_due_at, retry_not_before, lease_expires_at, job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_projection_generation ON public.youtube_collection_job_leases USING btree (projection_generation, job_key)
-  TRIGGER CREATE TRIGGER youtube_collection_job_lease_failure_diagnostics_backfill BEFORE UPDATE OF slot_state, last_error_code, last_failure_code, last_failure_class, last_failure_detail, last_failure_at ON youtube_collection_job_leases FOR EACH ROW EXECUTE FUNCTION populate_youtube_collection_job_lease_failure_diagnostics()
 
 TABLE youtube_collection_projection_generations
   COLUMN generation bigint NOT NULL GENERATED ALWAYS AS IDENTITY
@@ -1002,7 +1023,7 @@ TABLE youtube_collection_targets
   COLUMN enabled boolean NOT NULL
   COLUMN valid_until timestamp with time zone NOT NULL
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_youtube_collection_target_subject CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256)))
   CONSTRAINT youtube_collection_targets_poll_interval_ms_check CHECK (((poll_interval_ms >= 1000) AND (poll_interval_ms <= 86400000)))
   CONSTRAINT youtube_collection_targets_priority_check CHECK (((priority >= 0) AND (priority <= 100)))
@@ -1157,7 +1178,7 @@ TABLE youtube_live_absence_slots
   CONSTRAINT chk_youtube_live_absence_slots_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (jsonb_typeof((coverage -> 'requested_channel_ids'::text)) = 'array'::text)))
   CONSTRAINT youtube_live_absence_slots_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_channels ON public.youtube_live_absence_slots USING gin (((coverage -> 'requested_channel_ids'::text)))
-  INDEX CREATE INDEX idx_youtube_live_absence_slots_live_time ON public.youtube_live_absence_slots USING btree (effective_at DESC) WHERE (((coverage -> 'filters'::text) -> 'statuses'::text) ? 'LIVE'::text)
+  INDEX CREATE INDEX idx_youtube_live_absence_slots_scheduled_for ON public.youtube_live_absence_slots USING btree (scheduled_for)
 
 TABLE youtube_live_pending_ends
   COLUMN video_id text NOT NULL
@@ -1460,6 +1481,33 @@ TABLE youtube_stream_stats
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT youtube_stream_stats_pkey PRIMARY KEY (video_id)
 
+TABLE youtube_video_availability
+  COLUMN video_id character varying(20) NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN identity_confirmed boolean NOT NULL
+  COLUMN availability text NOT NULL
+  COLUMN method text NOT NULL
+  COLUMN unknown_reason text
+  COLUMN observation_id bigint
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_video_availability_availability_vocab CHECK ((availability = ANY (ARRAY['PUBLIC'::text, 'MEMBERS_ONLY'::text, 'PUBLIC_UNAVAILABLE'::text, 'UNKNOWN'::text])))
+  CONSTRAINT chk_youtube_video_availability_effective_clock CHECK ((effective_at = scheduled_for))
+  CONSTRAINT chk_youtube_video_availability_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_youtube_video_availability_identity CHECK ((((length((video_id)::text) >= 1) AND (length((video_id)::text) <= 20)) AND ((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64))))
+  CONSTRAINT chk_youtube_video_availability_method_vocab CHECK ((method = ANY (ARRAY['player_public'::text, 'player_members_only'::text, 'player_private'::text, 'unknown'::text])))
+  CONSTRAINT chk_youtube_video_availability_provider CHECK ((provider = 'youtubejs'::text))
+  CONSTRAINT chk_youtube_video_availability_shape CHECK (((((availability = 'PUBLIC'::text) AND (method = 'player_public'::text)) OR ((availability = 'MEMBERS_ONLY'::text) AND (method = 'player_members_only'::text)) OR ((availability = 'PUBLIC_UNAVAILABLE'::text) AND (method = 'player_private'::text)) OR ((availability = 'UNKNOWN'::text) AND (method = 'unknown'::text))) AND ((availability = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((availability = 'UNKNOWN'::text) OR identity_confirmed) AND ((unknown_reason IS DISTINCT FROM 'availability_unclassified'::text) OR identity_confirmed) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT identity_confirmed))))
+  CONSTRAINT chk_youtube_video_availability_unknown_reason_vocab CHECK (((unknown_reason IS NULL) OR (unknown_reason = ANY (ARRAY['identity_missing'::text, 'identity_mismatch'::text, 'contradictory_fields'::text, 'structure_unrecognized'::text, 'not_waiting_state'::text, 'login_required_unclassified'::text, 'error_unclassified'::text, 'request_failed'::text, 'availability_unclassified'::text]))))
+  CONSTRAINT fk_youtube_video_availability_observation FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_video_availability_pkey PRIMARY KEY (video_id)
+  CONSTRAINT uq_youtube_video_availability_observation UNIQUE (observation_id)
+
 TABLE youtube_videos
   COLUMN video_id character varying(20) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
@@ -1571,14 +1619,12 @@ FUNCTION lock_youtube_collection_projection(requested_generation bigint) RETURNS
 
 FUNCTION notification_template_row_version() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF (NEW.body, NEW.template_key, NEW.channel_id, NEW.id)\n        IS DISTINCT FROM (OLD.body, OLD.template_key, OLD.channel_id, OLD.id) THEN\n        NEW.row_version := OLD.row_version + 1;\n    ELSE\n        NEW.row_version := OLD.row_version;\n    END IF;\n    RETURN NEW;\nEND;\n"
 
-FUNCTION populate_youtube_collection_job_lease_failure_diagnostics() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF OLD.slot_state = 'DEFERRED'\n        AND OLD.last_error_code IS NOT NULL\n        AND OLD.last_error_code <> 'shutdown_release'\n        AND OLD.last_failure_code IS NULL\n        AND OLD.last_failure_class IS NULL\n        AND OLD.last_failure_detail IS NULL\n        AND OLD.last_failure_at IS NULL\n    THEN\n        NEW.last_failure_code := OLD.last_error_code;\n        NEW.last_failure_class := 'legacy_collector';\n        NEW.last_failure_detail := 'legacy_collector';\n        NEW.last_failure_at := OLD.updated_at;\n    ELSIF OLD.slot_state = 'ACTIVE'\n        AND NEW.slot_state = 'DEFERRED'\n        AND NEW.last_error_code IS NOT NULL\n        AND NEW.last_error_code <> 'shutdown_release'\n        AND OLD.last_failure_code IS NOT DISTINCT FROM NEW.last_failure_code\n        AND OLD.last_failure_class IS NOT DISTINCT FROM NEW.last_failure_class\n        AND OLD.last_failure_detail IS NOT DISTINCT FROM NEW.last_failure_detail\n        AND OLD.last_failure_at IS NOT DISTINCT FROM NEW.last_failure_at\n    THEN\n        NEW.last_failure_code := NEW.last_error_code;\n        NEW.last_failure_class := 'legacy_collector';\n        NEW.last_failure_detail := 'legacy_collector';\n        NEW.last_failure_at := clock_timestamp();\n    END IF;\n    RETURN NEW;\nEND\n"
-
 FUNCTION reject_bot_reply_outbox_replay_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_replay_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION reject_bot_reply_outbox_resolution_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_resolution_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION scrub_bot_command_execution_terminal_summary() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.result_summary := NEW.status;\n    RETURN NEW;\nEND\n"
 
-FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"
+FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF NEW.payload IS DISTINCT FROM '{}'::jsonb THEN\n        RAISE WARNING 'bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger; a writer that does not clear payload is running';\n    END IF;\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"
 
 FUNCTION youtube_schedule_collabo_talent_names_valid(names text[]) RETURNS boolean LANGUAGE sql VOLATILITY i SECURITY_DEFINER false LEAKPROOF false PARALLEL s CONFIG search_path=pg_catalog BODY "\n    SELECT COALESCE(pg_catalog.array_ndims(names), 1) = 1\n       AND COALESCE(pg_catalog.array_lower(names, 1), 1) = 1\n       AND pg_catalog.cardinality(names) <= 32\n       AND NOT EXISTS (\n           SELECT 1\n           FROM pg_catalog.unnest(names) AS name\n           WHERE name IS NULL\n              OR pg_catalog.octet_length(name) < 1\n              OR pg_catalog.octet_length(name) > 256\n       );\n"

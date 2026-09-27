@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const testReplyRequestID = "r-1"
@@ -342,16 +341,6 @@ func TestWithThreadIDAndFromContext(t *testing.T) {
 		assert.Equal(t, "t-1", id)
 	})
 
-	t.Run("nil context returns false", func(t *testing.T) {
-		t.Parallel()
-
-		var nilCtx context.Context
-
-		id, ok := ThreadIDFromContext(nilCtx)
-		assert.False(t, ok)
-		assert.Empty(t, id)
-	})
-
 	t.Run("missing value returns false", func(t *testing.T) {
 		t.Parallel()
 
@@ -381,16 +370,6 @@ func TestWithReplyIdentityAndFromContext(t *testing.T) {
 		id, ok := ReplyIdentityFromContext(ctx)
 		require.True(t, ok)
 		assert.Equal(t, "user-1", id)
-	})
-
-	t.Run("nil context returns false", func(t *testing.T) {
-		t.Parallel()
-
-		var nilCtx context.Context
-
-		id, ok := ReplyIdentityFromContext(nilCtx)
-		assert.False(t, ok)
-		assert.Empty(t, id)
 	})
 }
 
@@ -1567,26 +1546,25 @@ func TestCommandTransportSendError(t *testing.T) {
 		err := tr.SendError(ctx, "room", "some_key")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send error message")
-		assert.Contains(t, err.Error(), "iris client is not configured")
 	})
 
-	t.Run("nil formatter sends fallback sentinel", func(t *testing.T) {
+	// 코드 대체 문구가 없으므로 formatter나 문구가 없으면 빈 메시지를 보내지 않고 실패한다.
+	t.Run("nil formatter fails without sending", func(t *testing.T) {
 		t.Parallel()
 
 		c := &stubBotClient{}
-		require.NoError(t, tr(c).SendError(ctx, "room", "any_key"))
-		assert.Equal(t, "room", c.lastRoom)
-		assert.Equal(t, messagestrings.FallbackSentinel, c.lastMessage)
+		require.Error(t, tr(c).SendError(ctx, "room", "any_key"))
+		assert.Empty(t, c.lastMessage)
 	})
 
-	t.Run("formatter without strings resolves unknown key to sentinel", func(t *testing.T) {
+	t.Run("formatter without strings fails without sending", func(t *testing.T) {
 		t.Parallel()
 
 		c := &stubBotClient{}
 		formatter := messageformatter.NewResponseFormatter("!", nil)
 		transport := NewCommandTransport(c, formatter)
-		require.NoError(t, transport.SendError(ctx, "room", "totally_unknown_key"))
-		assert.Equal(t, messagestrings.FallbackSentinel, c.lastMessage)
+		require.Error(t, transport.SendError(ctx, "room", "totally_unknown_key"))
+		assert.Empty(t, c.lastMessage)
 	})
 }
 

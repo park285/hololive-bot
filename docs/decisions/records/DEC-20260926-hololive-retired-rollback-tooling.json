@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-retired-rollback-tooling",
+  "title": "퇴역 runtime 복원 절차와 끝난 전환 도구를 삭제한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자가 권장안대로 확정했다. 5→3 긴급 rollback(docs/current/runbooks/rollback.md:76-158, 35dcf0f8^ compose로 퇴역 split runtime 재생성)과 epoch-1 rollback 창을 공식 종료한다. 같은 runbook이 durable migration 123~136 뒤에는 옛 runtime이 backlog를 소비하지 못한다고 적고 있어 이 절차는 이미 실행할 수 없다. 관련 runbook 절과 매 중앙 배포마다 퇴역 runtime 컨테이너 12종을 정리하는 removed-runtimes 가드, epoch-1/R1 복구 도구(preflight-114-restore, repair_message_contract_074_082, epoch1 소스 사본과 source contract 검사), epoch-2 baseline 생성기(--check-existing 검사만 남김), 운영에서 끝난 YouTube delivery ledger backfill 명령과 패키지·Dockerfile 빌드 줄·runbook 절차, admin-dashboard 퇴역 잔재(퇴역 가드 스크립트와 stale 검사 경로; bigbang 증거 문서는 hololive-bot 문서 governance의 archive disposition을 따름), Dockerfile이 빌드하지 않는 보조 cmd(warm_member_cache, test_db_integration)를 삭제한다. ledger backfill의 ensureReady gate는 production completed_at을 재확인한 뒤 migration이 보장하는 불변식으로 대체한다. 선행 증거는 T18에서 hololive-bot-ops·stack-platform-ops로 확인하는 운영 migration ledger(001·182 적용, epoch-1 파일명 행 0), ledger_state singleton의 completed_at, 중앙 호스트의 퇴역 컨테이너 0건, 보존 이미지·컨테이너 목록이다. removed-runtimes 가드는 컨테이너 0건 상태로 한 release를 배포한 뒤 삭제한다. 근거는 iris-stack의 2026-09-26 감사와 fade-out 재조사(docs/agent-workflows/evidence/2026-09-26-stack-audit/의 iris-audit.md, fadeout-recheck.md, fadeout-candidates.tsv의 dec 열)이고 PLN-20260926-stack-audit-refactoring T19에서 수행한다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

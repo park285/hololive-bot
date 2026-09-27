@@ -30,7 +30,7 @@
 ### 핵심 데이터 흐름 (Core Flow)
 
 * 인바운드 메시지 처리: `Iris Core -> hololive-api (bot plane) -> Command/Service -> PostgreSQL & Valkey`
-* 실시간 알림 발송: `alarm-worker -> Valkey (alarm:dispatch:queue) -> alarm-worker egress -> Iris Core -> 카카오톡`
+* 실시간 알림 발송: `alarm-worker -> PostgreSQL dispatch outbox (Valkey wakeup) -> alarm-worker egress -> Iris Core -> 카카오톡`
 * LLM 뉴스 분석 연계: `hololive-api` admin/bot plane 내장 클라이언트 -> `hololive-api` (llm plane) 내부 API
 * 유튜브 신작 감지: `youtube-collector -> source_observations -> hololive-api YouTube plane -> alarm-worker`
 

@@ -3,6 +3,7 @@
 - 작성일: 2026-08-31 KST
 - 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
 - 상위 계약: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)
+- 현재 상태(2026-09-26): 아래 fixed-high-water backfill은 운영에서 완료됐습니다. backfill 명령(`youtube-delivery-ledger-backfill`)과 alarm-worker `TransitionStore`가 전이마다 completion marker를 읽던 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠고, 완료 전제는 migration `226_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 확인합니다. `youtube_notification_delivery_ledger_state` 행은 완료 기록으로 남고 runtime은 읽지 않습니다. backfill·completion gate 절은 설계 근거로만 읽습니다.
 
 ## 목적
 

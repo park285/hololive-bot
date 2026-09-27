@@ -43,14 +43,15 @@ const (
 
 type mockFormatter struct {
 	message string
+	err     error
 }
 
-func (m *mockFormatter) FormatMajorEventWeeklySummary(_ context.Context, _ []domain.MajorEvent, _ string) string {
-	return m.message
+func (m *mockFormatter) FormatMajorEventWeeklySummary(_ context.Context, _ []domain.MajorEvent, _ string) (string, error) {
+	return m.message, m.err
 }
 
-func (m *mockFormatter) FormatMajorEventMonthlySummary(_ context.Context, _ []domain.MajorEvent, _ string) string {
-	return m.message
+func (m *mockFormatter) FormatMajorEventMonthlySummary(_ context.Context, _ []domain.MajorEvent, _ string) (string, error) {
+	return m.message, m.err
 }
 
 func TestWeekKeyFromGetWeekRange(t *testing.T) {
@@ -514,4 +515,35 @@ func newMajorEventPromptGuardForSchedulerTest() *promptguard.Guard {
 	}
 
 	return guard
+}
+
+// 본문 렌더에 실패하면 구독 방에 대체 문구를 보내지 않고 이벤트도 표시하지 않아 다음 주기에 다시 시도한다.
+func TestSendWeeklyNotification_FormatFailure_DoesNotEnqueueOrMark(t *testing.T) {
+	repository := &mockEventRepository{
+		rooms:  testRooms(testRoomID1, testRoomID2),
+		events: testEvents(1),
+	}
+	outbox := newMockOutboxRepository()
+	locker := &mockNotificationLocker{acquireAcquired: true}
+	scheduler := NewScheduler(
+		repository,
+		&mockFormatter{err: errors.New("template render failed")},
+		nil,
+		locker,
+		outbox,
+		testLogger(),
+		WithGuards(newMajorEventPromptGuardForSchedulerTest(), outputguard.NewGuard()),
+	)
+
+	if err := scheduler.SendWeeklyNotification(t.Context()); err == nil {
+		t.Fatal("SendWeeklyNotification() error = nil, want format failure")
+	}
+
+	if len(outbox.enqueuedItems) != 0 {
+		t.Fatalf("enqueued items = %d, want 0", len(outbox.enqueuedItems))
+	}
+
+	if repository.markedWeekly {
+		t.Fatal("events must stay unmarked after a format failure")
+	}
 }

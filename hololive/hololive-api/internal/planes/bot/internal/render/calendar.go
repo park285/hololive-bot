@@ -2,7 +2,6 @@ package render
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -64,10 +63,6 @@ func NewCalendarCardRenderer(options ...CalendarCardRendererOption) *CalendarCar
 }
 
 func (r *CalendarCardRenderer) RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
-	if ctx == nil {
-		return nil, errors.New("calendar render context is nil")
-	}
-
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("calendar render request: %w", err)
 	}
@@ -379,34 +374,36 @@ func entryDisplayName(ctx context.Context, m *calendarMetrics, member *domain.Me
 	return member.Name
 }
 
-func (m *calendarMetrics) calStr(ctx context.Context, key, fallback string) string {
-	return m.strings.GetOrContext(ctx, messagestrings.NamespaceCalendar, key, fallback)
+// 기념일 카드 문구는 message_strings calendar namespace(DB 정본)에서만 읽는다. 기동 때 bot plane 검증이 key를
+// 보장하므로 코드 대체 문구를 두지 않는다(DEC-20260926-hololive-message-strings-startup-validation).
+func (m *calendarMetrics) calStr(key messagestrings.Key) string {
+	return m.strings.Text(key)
 }
 
-func (m *calendarMetrics) headerText(ctx context.Context, year, month int) string {
-	return fmt.Sprintf(m.calStr(ctx, "header_month", "%d년 %d월 기념일"), year, month)
+func (m *calendarMetrics) headerText(_ context.Context, year, month int) string {
+	return fmt.Sprintf(m.calStr(messagestrings.CalendarHeaderMonth), year, month)
 }
 
-func (m *calendarMetrics) summaryText(ctx context.Context, total, birthday, anniversary int) string {
-	return fmt.Sprintf(m.calStr(ctx, "summary", "총 %d건 · 생일 %d · 데뷔주년 %d"), total, birthday, anniversary)
+func (m *calendarMetrics) summaryText(_ context.Context, total, birthday, anniversary int) string {
+	return fmt.Sprintf(m.calStr(messagestrings.CalendarSummary), total, birthday, anniversary)
 }
 
-func (m *calendarMetrics) emptyText(ctx context.Context) string {
-	return m.calStr(ctx, "empty", "등록된 기념일이 없습니다.")
+func (m *calendarMetrics) emptyText(_ context.Context) string {
+	return m.calStr(messagestrings.CalendarEmpty)
 }
 
-func (m *calendarMetrics) dayText(ctx context.Context, month, day int) string {
-	return fmt.Sprintf(m.calStr(ctx, "day", "%d월 %d일"), month, day)
+func (m *calendarMetrics) dayText(_ context.Context, month, day int) string {
+	return fmt.Sprintf(m.calStr(messagestrings.CalendarDay), month, day)
 }
 
-func (m *calendarMetrics) badgeBirthday(ctx context.Context) string {
-	return m.calStr(ctx, "badge_birthday", "생일")
+func (m *calendarMetrics) badgeBirthday(_ context.Context) string {
+	return m.calStr(messagestrings.CalendarBadgeBirthday)
 }
 
-func (m *calendarMetrics) anniversaryBadge(ctx context.Context, ordinal int) string {
-	return fmt.Sprintf(m.calStr(ctx, "badge_anniversary", "데뷔 %d주년"), ordinal)
+func (m *calendarMetrics) anniversaryBadge(_ context.Context, ordinal int) string {
+	return fmt.Sprintf(m.calStr(messagestrings.CalendarBadgeAnniversary), ordinal)
 }
 
-func (m *calendarMetrics) unknownName(ctx context.Context) string {
-	return m.calStr(ctx, "unknown", "알 수 없음")
+func (m *calendarMetrics) unknownName(_ context.Context) string {
+	return m.calStr(messagestrings.CalendarUnknown)
 }

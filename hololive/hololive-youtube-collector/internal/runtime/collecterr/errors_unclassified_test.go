@@ -32,6 +32,8 @@ func TestIsUnclassifiedSeparatesDefaultBucketFromExplicitClass(t *testing.T) {
 		{name: "WithRetry keeps classified base", err: WithRetry(Wrap(Internal, ClassInternal, errors.New("invariant")), hint), want: false},
 		{name: "WithRetry with invalid hint keeps unclassified base", err: WithRetry(FromContext(errors.New("read body")), RetryHint{}), want: true},
 		{name: "wrapped unclassified", err: errors.Join(errors.New("outer"), FromContext(errors.New("read body"))), want: true},
+		{name: "invalid failure tuple", err: New(Failed, ClassTimeout, "impossible"), want: true},
+		{name: "WithRetry keeps invalid failure tuple unclassified", err: WithRetry(New(Failed, ClassTimeout, "impossible"), hint), want: true},
 	}
 
 	for _, test := range tests {

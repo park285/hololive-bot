@@ -1,0 +1,10 @@
+{
+  "staticcheck_version": "v0.8.1",
+  "staticcheck_release": "2026.2.1",
+  "staticcheck_sum": "h1:+JKf3xJ1ni4CwrhVg4/pqsfPGP6vNAXcKbMXJodYx3w=",
+  "staticcheck_zip_sha256": "410e057522dee2a971ba94e598f36a5542a839829650fd9c65313da7c536a8c7",
+  "tools_version": "v0.44.1-0.20260420230617-19499e7caabc",
+  "tools_sum": "h1:vSv/HN1q9eoPD7lMyJYVJ/GPYnqtqu6adMxUmrxOB78=",
+  "tools_zip_sha256": "de02aee967e0900d7f2de648789cd320eafedde5f08762973bb36178e4cbfd94",
+  "go_version": "go1.27.1"
+}

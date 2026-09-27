@@ -150,14 +150,11 @@ func BasePayload(base health.Response, status string) map[string]any {
 	}
 }
 
+// RequestContext는 gin 요청의 context를, 요청이 없으면 fallback을 돌려준다. 요청 context는 net/http가 nil 없이 돌려준다.
 func RequestContext(fallback context.Context, c *gin.Context) context.Context {
-	if c != nil && c.Request != nil && c.Request.Context() != nil {
+	if c != nil && c.Request != nil {
 		return c.Request.Context()
 	}
 
-	if fallback != nil {
-		return fallback
-	}
-
-	return context.Background()
+	return fallback
 }

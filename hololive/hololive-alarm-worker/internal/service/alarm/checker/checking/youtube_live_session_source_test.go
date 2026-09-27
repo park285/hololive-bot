@@ -358,12 +358,19 @@ func insertAlarmDispatchEvents(t *testing.T, pool liveSessionPool, events []test
 func insertAlarmDispatchDeliveries(t *testing.T, pool liveSessionPool, deliveries []testAlarmDispatchDelivery) {
 	t.Helper()
 
+	// 활성 delivery는 저장된 send unit이 있어야 하므로(migration 223) 운영 행과 같이 delivery마다 send unit을 둔다.
 	for index, delivery := range deliveries {
 		_, err := pool.Exec(t.Context(), `
-			INSERT INTO alarm_dispatch_deliveries(
-				event_id, room_id, dedupe_key, status, sent_at, created_at, updated_at
+			WITH unit AS (
+				INSERT INTO alarm_dispatch_send_units(unit_key, dispatch_group_key, room_id, client_request_id)
+				VALUES (encode(sha256(convert_to($3::text, 'UTF8')), 'hex'), 'group:' || $3::text, $2::text, 'test-unit:' || $3::text)
+				RETURNING id, dispatch_group_key
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $6)
+			INSERT INTO alarm_dispatch_deliveries(
+				event_id, room_id, dedupe_key, dispatch_group_key, send_unit_id, status, sent_at, created_at, updated_at
+			)
+			SELECT $1, $2::text, $3::text, unit.dispatch_group_key, unit.id, $4, $5, $6, $6
+			FROM unit
 		`,
 			delivery.EventID,
 			delivery.RoomID,

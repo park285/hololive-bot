@@ -12,7 +12,6 @@ import (
 
 type YouTubeStackParams struct {
 	YouTubeConfig   settings.YouTubeConfig
-	ScraperConfig   settings.ScraperConfig
 	CacheService    cache.Client
 	SharedRateLimit *ratelimiter.RateLimiter
 	Logger          *slog.Logger
@@ -25,7 +24,6 @@ func BuildYouTubeStack(ctx context.Context, params *YouTubeStackParams) *provide
 
 	return BuildYouTubeAPIStack(ctx, &YouTubeAPIStackParams{
 		YouTubeConfig:   params.YouTubeConfig,
-		ScraperConfig:   params.ScraperConfig,
 		CacheService:    params.CacheService,
 		SharedRateLimit: params.SharedRateLimit,
 		Logger:          params.Logger,

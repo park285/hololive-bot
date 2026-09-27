@@ -35,8 +35,6 @@ import (
 
 type stubYouTubeService struct{}
 
-func (s *stubYouTubeService) SetScraperProxyEnabled(enabled bool) bool { return enabled }
-func (s *stubYouTubeService) ScraperProxyEnabled() bool                { return false }
 func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return map[string]*youtube.ChannelStats{}, nil
 }
@@ -98,32 +96,20 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 	t.Run("nil infra", func(t *testing.T) {
 		view := buildBotConfigSubscriberRuntimeDependencies(nil)
-		if view.YouTubeService != nil || view.HolodexService != nil || view.AlarmCRUD != nil {
+		if view.AlarmCRUD != nil || view.ACL != nil {
 			t.Fatal("nil infra must yield zero-value config subscriber runtime dependency view")
 		}
 	})
 
 	t.Run("maps runtime fields", func(t *testing.T) {
-		youtubeService := &stubYouTubeService{}
-		holodexService := &holodexprovider.Service{}
-
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
 		infra := &appbootstrap.BotInfrastructure{
-			Deps:           &orchestration.Dependencies{Service: youtubeService},
-			HolodexService: holodexService,
-			AlarmCRUD:      alarmCRUD,
+			Deps:      &orchestration.Dependencies{},
+			AlarmCRUD: alarmCRUD,
 		}
 
 		view := buildBotConfigSubscriberRuntimeDependencies(infra)
-		if view.YouTubeService != youtubeService {
-			t.Fatal("youtube service mapping mismatch")
-		}
-
-		if view.HolodexService != holodexService {
-			t.Fatal("holodex service mapping mismatch")
-		}
-
 		if view.AlarmCRUD != alarmCRUD {
 			t.Fatal("alarm CRUD mapping mismatch")
 		}
@@ -166,7 +152,7 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 			t.Fatal("config subscriber view mapping mismatch")
 		}
 
-		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD || views.configSubscriberRuntime.HolodexService != holodexService {
+		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD {
 			t.Fatal("config subscriber runtime view mapping mismatch")
 		}
 	})

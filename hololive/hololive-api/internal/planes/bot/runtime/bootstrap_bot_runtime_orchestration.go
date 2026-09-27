@@ -91,7 +91,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
 
-	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
+	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, logger)
 
 	readyProbe := newBotReadyProbe(infra)
 
@@ -109,13 +109,12 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 
 	metricsServer, pprofServer := buildBotOptionalServers(ctx, appConfig)
 
-	return assembleBotRuntime(appConfig, logger, infra, botBot, configSubscriber, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
+	return assembleBotRuntime(appConfig, logger, botBot, configSubscriber, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
 }
 
 func assembleBotRuntime(
 	appConfig *settings.Config,
 	logger *slog.Logger,
-	infra *appbootstrap.BotInfrastructure,
 	botBot *orchestration.Bot,
 	configSubscriber *configsub.Subscriber,
 	h3Server *http3.Server,
@@ -129,7 +128,6 @@ func assembleBotRuntime(
 		Logger:               logger,
 		Bot:                  botBot,
 		ConfigSubscriber:     configSubscriber,
-		AlarmService:         infra.AlarmService,
 		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
 		ShortLinkServer:      appbootstrap.BuildShortLinkServer(appConfig.Server.ShortLinkAddr),

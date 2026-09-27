@@ -53,6 +53,8 @@ case "$status" in
   cancelled) timestamp_column="cancelled_at" ;;
 esac
 
+# picked CTE는 행을 잠그지 않으므로, 바깥 DELETE가 status와 보존 시각을 다시 검사해야
+# 잠금 대기 중 requeue로 commit된 행을 건너뜁니다(worker의 0348_04와 같은 재검사).
 psql "$DATABASE_URL" \
   -v ON_ERROR_STOP=1 \
   -v status="$status" \
@@ -82,6 +84,13 @@ WITH picked AS (
 DELETE FROM alarm_dispatch_deliveries d
 USING picked
 WHERE d.id = picked.id
+  AND d.status = :'status'
+  AND CASE :'timestamp_column'
+        WHEN 'sent_at' THEN d.sent_at
+        WHEN 'dlq_at' THEN d.dlq_at
+        WHEN 'quarantined_at' THEN d.quarantined_at
+        WHEN 'cancelled_at' THEN d.cancelled_at
+      END < NOW() - (:'retention_days'::INT * INTERVAL '1 day')
 RETURNING d.id;
 SQL
 

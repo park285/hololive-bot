@@ -11,15 +11,19 @@
 
 ## Execute
 
-호스트에서 `psql`을 사용할 수 있으면 아래 절차를 그대로 실행합니다. compose 운영 기준 Postgres는 `localhost:5433`, 기본 읽기 계정은 `HOLOLIVE_DB_USER`입니다.
+DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
+`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. `hololive-osaka`의
+`holo-postgres`에 컨테이너 socket으로 접속하고, 조회 전에 read-only guard를 먼저 증명합니다.
+비밀 env 파일을 셸에 source하거나 `PGPASSWORD`를 쓰지 않습니다.
 
 ```bash
-set -a
-source "${HOLOLIVE_BOT_ENV_FILE:-/etc/stack-secrets/hololive-bot/env}"
-set +a
+# 1. read-only guard 증명: 결과가 정확히 `on`이 아니면 중단합니다.
+ssh 100.100.1.8 \
+  'sudo docker exec -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1 -At -c "show transaction_read_only"'
 
-PGPASSWORD="$DB_PASSWORD" \
-psql -h localhost -p 5433 -U "${HOLOLIVE_DB_USER:-hololive_runtime}" -d hololive <<'SQL'
+# 2. 같은 guard로 조회합니다. SQL을 표준 입력으로 넘기므로 docker exec에 -i를 씁니다.
+ssh 100.100.1.8 \
+  'sudo docker exec -i -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1' <<'SQL'
 SELECT
     track.kind AS outbox_kind,
     CASE track.kind

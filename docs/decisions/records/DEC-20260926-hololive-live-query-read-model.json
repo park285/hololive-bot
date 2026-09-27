@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260926-hololive-live-query-read-model",
   "title": "방송 조회를 확정 상태와 명시적 coverage로 분리하고 기존 durable evidence 재사용을 우선한다",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "verified",
   "scope": [
     "hololive-bot"

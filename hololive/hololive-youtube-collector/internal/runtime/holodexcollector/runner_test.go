@@ -113,6 +113,18 @@ func TestRunnerIgnoresViewerCountsForLiveAndSchedule(t *testing.T) {
 	}
 }
 
+// live_snapshot generation 1 payload 경로는 지웠다(계획 T11 C6). DB current generation이 1이면 구성 오류로 끝난다.
+func TestRunnerRejectsRetiredLiveGenerationOne(t *testing.T) {
+	t.Parallel()
+
+	input := holodexInputWithLiveGeneration(t, "holodex_live", []string{channelA, channelB}, 1)
+
+	_, err := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(t.Context(), input)
+	if err == nil || collecterr.CodeOf(err) != collecterr.Configuration {
+		t.Fatalf("Collect(generation 1) error = %v, want configuration error", err)
+	}
+}
+
 func TestRunnerPublishesLiveMetadataWithGenerationTwo(t *testing.T) {
 	t.Parallel()
 
@@ -398,7 +410,7 @@ func holodexInput(tb testing.TB, requested []string) *collectutil.RunInput {
 func holodexInputFor(tb testing.TB, jobKind string, requested []string) *collectutil.RunInput {
 	tb.Helper()
 
-	return holodexInputWithLiveGeneration(tb, jobKind, requested, 1)
+	return holodexInputWithLiveGeneration(tb, jobKind, requested, contract.LiveSnapshotMetadataContractGeneration)
 }
 
 func holodexInputWithLiveGeneration(

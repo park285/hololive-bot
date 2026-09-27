@@ -13,10 +13,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
-	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, group); handled {
+// renderAlarmDispatchGroup는 그룹을 최종 텍스트로 렌더링한다. 접기는 여러 항목 묶음에만 적용하며
+// 단일 알림·축하·X 스페이스·사전 렌더된 다이제스트는 전문을 유지한다.
+func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, seeMoreFold bool, group alarmDispatchGroup) (string, error) {
+	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, seeMoreFold, group); handled {
 		if err != nil {
 			return message, fmt.Errorf("render alarm dispatch group source: %w", err)
 		}
@@ -38,10 +41,14 @@ func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, 
 		return out, fmt.Errorf("render alarm dispatch notification group: %w", err)
 	}
 
+	if seeMoreFold {
+		return util.FoldForSeeMore(out, util.KakaoSeeMoreThreshold), nil
+	}
+
 	return out, nil
 }
 
-func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (message string, handled bool, err error) {
+func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, seeMoreFold bool, group alarmDispatchGroup) (message string, handled bool, err error) {
 	if len(group.envelopes) == 0 {
 		return "", false, nil
 	}
@@ -71,7 +78,7 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 		domain.AlarmDispatchSourceKindYouTubeOutbox: {
 			action: "render alarm dispatch youtube outbox",
 			run: func() (string, error) {
-				return renderAlarmDispatchYouTubeOutbox(ctx, renderer, messageStrings, envelope)
+				return renderAlarmDispatchYouTubeOutbox(ctx, renderer, messageStrings, seeMoreFold, envelope)
 			},
 		},
 		domain.AlarmDispatchSourceKindDeliveryDigest: {
@@ -101,12 +108,12 @@ func renderAlarmDispatchDeliveryDigest(envelope *domain.AlarmQueueEnvelope) (str
 	return envelope.DeliveryDigest.PreRenderedMessage, nil
 }
 
-func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) (string, error) {
+func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, seeMoreFold bool, envelope *domain.AlarmQueueEnvelope) (string, error) {
 	if envelope.YouTubeOutbox == nil {
 		return "", errors.New("render youtube outbox dispatch: payload is nil")
 	}
 
-	out, err := youtubedispatch.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
+	out, err := youtubedispatch.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, seeMoreFold, envelope.YouTubeOutbox)
 	if err != nil {
 		return out, fmt.Errorf("format youtube outbox payload: %w", err)
 	}
@@ -133,28 +140,39 @@ type alarmDispatchGroupView struct {
 	Entries      []alarmDispatchItemView
 }
 
-func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification, groupMinutesUntil int) alarmDispatchItemView {
+func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification, groupMinutesUntil int) (alarmDispatchItemView, error) {
 	starting := notification.IsStarting()
+
+	collabMembers, err := formatAlarmDispatchCollabMembers(members, notification.Stream)
+	if err != nil {
+		return alarmDispatchItemView{}, err
+	}
 
 	return alarmDispatchItemView{
 		MemberName:      resolveAlarmDispatchMemberName(ctx, store, notification),
 		Title:           resolveAlarmDispatchTitle(ctx, store, notification),
 		URL:             resolveAlarmDispatchURL(notification),
-		CollabMembers:   formatAlarmDispatchCollabMembers(members, notification.Stream),
+		CollabMembers:   collabMembers,
 		ScheduleMessage: strings.TrimSpace(notification.ScheduleChangeMessage),
 		MinutesUntil:    notification.MinutesUntil,
 		IsStarting:      starting,
 		IsScheduled:     !starting && groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil,
 		IsPremiere:      notification.Stream != nil && notification.Stream.IsPremiere,
-	}
+	}, nil
 }
 
-func formatAlarmDispatchCollabMembers(members domain.MemberDataProvider, stream *domain.Stream) string {
+// 콜라보 표시명에 필요한 멤버를 적재하지 못하면 이름을 빼고 보내지 않고 렌더 실패로 돌려준다(발송 전 실패로 재시도).
+func formatAlarmDispatchCollabMembers(members domain.MemberDataProvider, stream *domain.Stream) (string, error) {
 	if stream == nil {
-		return ""
+		return "", nil
 	}
 
-	return officialidentity.Format(officialidentity.DisplayNames(members, stream.CollaboTalentNames, stream.ChannelID))
+	names, err := officialidentity.DisplayNames(members, stream.CollaboTalentNames, stream.ChannelID)
+	if err != nil {
+		return "", fmt.Errorf("format collab members: %w", err)
+	}
+
+	return officialidentity.Format(names), nil
 }
 
 func alarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
@@ -185,7 +203,7 @@ func alarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
 	return true
 }
 
-func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) alarmDispatchGroupView {
+func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (alarmDispatchGroupView, error) {
 	return buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortlinkservice.YouTubeBuilder{})
 }
 
@@ -195,10 +213,13 @@ func buildAlarmDispatchGroupViewWithShortLinks(
 	members domain.MemberDataProvider,
 	group alarmDispatchGroup,
 	shortLinks shortlinkservice.YouTubeBuilder,
-) alarmDispatchGroupView {
+) (alarmDispatchGroupView, error) {
 	entries := make([]alarmDispatchItemView, 0, len(group.notifications))
 	for i := range group.notifications {
-		entry := buildAlarmDispatchItemView(ctx, store, members, &group.notifications[i], group.minutesUntil)
+		entry, err := buildAlarmDispatchItemView(ctx, store, members, &group.notifications[i], group.minutesUntil)
+		if err != nil {
+			return alarmDispatchGroupView{}, err
+		}
 
 		entry.URL = resolveAlarmDispatchGroupURL(&group.notifications[i], shortLinks)
 		entries = append(entries, entry)
@@ -209,7 +230,7 @@ func buildAlarmDispatchGroupViewWithShortLinks(
 		IsStarting:   alarmDispatchGroupAllStarting(group),
 		AllPremiere:  alarmDispatchGroupAllPremiere(group),
 		Entries:      entries,
-	}
+	}, nil
 }
 
 func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
@@ -218,11 +239,16 @@ func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *templat
 		return "", fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
 	}
 
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortLinks)
+	if err != nil {
+		return "", fmt.Errorf("render alarm dispatch notification group: %w", err)
+	}
+
 	message, err := renderer.Render(
 		ctx,
 		domain.TemplateKeyAlarmDispatchNotificationGroup,
 		"",
-		buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortLinks),
+		view,
 	)
 	if err != nil {
 		return "", fmt.Errorf("render alarm dispatch notification group: %w", err)
@@ -232,7 +258,10 @@ func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *templat
 }
 
 func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification) (string, error) {
-	view := buildAlarmDispatchItemView(ctx, store, members, notification, -1)
+	view, err := buildAlarmDispatchItemView(ctx, store, members, notification, -1)
+	if err != nil {
+		return "", fmt.Errorf("render alarm dispatch notification: %w", err)
+	}
 
 	message, err := renderer.Render(ctx, domain.TemplateKeyAlarmDispatchNotification, "", view)
 	if err != nil {
@@ -242,7 +271,7 @@ func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Ren
 	return message, nil
 }
 
-func resolveAlarmDispatchMemberName(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {
+func resolveAlarmDispatchMemberName(_ context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {
 	var name string
 
 	if notification.Channel != nil && strings.TrimSpace(notification.Channel.Name) != "" {
@@ -250,11 +279,11 @@ func resolveAlarmDispatchMemberName(ctx context.Context, store *messagestrings.S
 	} else if notification.Stream != nil && strings.TrimSpace(notification.Stream.ChannelName) != "" {
 		name = strings.TrimSpace(notification.Stream.ChannelName)
 	} else {
-		name = alarmDispatchMessageString(ctx, store, "alarm_unknown_member", "알 수 없는 멤버")
+		name = store.Text(messagestrings.MiscAlarmUnknownMember)
 	}
 
 	stream := notification.Stream
-	if stream == nil || stream.IsChzzkOnly || stream.IsTwitchOnly {
+	if stream == nil {
 		return name
 	}
 
@@ -266,24 +295,16 @@ func resolveAlarmDispatchMemberName(ctx context.Context, store *messagestrings.S
 	return mekparkhost.DisplayName(channelID, stream.Title, name)
 }
 
-func resolveAlarmDispatchTitle(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {
+func resolveAlarmDispatchTitle(_ context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {
 	if notification.Stream == nil {
-		return alarmDispatchMessageString(ctx, store, "alarm_no_stream", "방송 정보 없음")
+		return store.Text(messagestrings.MiscAlarmNoStream)
 	}
 
 	if title := strings.TrimSpace(notification.Stream.Title); title != "" {
 		return title
 	}
 
-	return alarmDispatchMessageString(ctx, store, "alarm_no_title", "제목 없음")
-}
-
-func alarmDispatchMessageString(ctx context.Context, store *messagestrings.Store, key, fallback string) string {
-	if value := store.GetContext(ctx, messagestrings.NamespaceMisc, key); value != "" {
-		return value
-	}
-
-	return fallback
+	return store.Text(messagestrings.MiscAlarmNoTitle)
 }
 
 func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
@@ -292,7 +313,7 @@ func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
 	}
 
 	stream := notification.Stream
-	if stream.IsChzzkOnly || stream.IsTwitchOnly || !stream.HasYouTubeInfo() {
+	if !stream.HasYouTubeInfo() {
 		return ""
 	}
 

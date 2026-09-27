@@ -104,7 +104,7 @@ func (mm *Matcher) buildSnapshot(ctx context.Context) (*matcherSnapshot, error) 
 		return snapshot, nil
 	}
 
-	members, err := domain.LoadAllMembers(provider)
+	members, err := provider.LoadAllMembers()
 	if err != nil {
 		return nil, fmt.Errorf("get all members: %w", err)
 	}

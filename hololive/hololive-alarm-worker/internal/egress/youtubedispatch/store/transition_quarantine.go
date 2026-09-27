@@ -23,10 +23,6 @@ type QuarantineResult struct {
 }
 
 func (s *TransitionStore) QuarantineStaleLogicalGroups(ctx context.Context, limit int) (QuarantineResult, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return QuarantineResult{ApplyResult: newApplyResult(ApplyIndeterminate, nil)}, fmt.Errorf("quarantine stale logical groups: %w", err)
-	}
-
 	if limit <= 0 {
 		return QuarantineResult{ApplyResult: newApplyResult(ApplyConflict, nil)}, errors.New("quarantine stale logical groups: limit must be positive")
 	}
@@ -146,7 +142,7 @@ func (s *TransitionStore) quarantineStaleTx(
 		return QuarantineResult{}, nil, nil, fmt.Errorf("quarantine logical groups: resolve candidates: %w", err)
 	}
 
-	result, transitions, writes, err := buildQuarantineChanges(resolved, transitionRowIDSet(candidates), at, cutoff)
+	result, transitions, writes, attempts, err := buildQuarantineChanges(resolved, transitionRowIDSet(candidates), at, cutoff)
 	if err != nil {
 		return QuarantineResult{}, transitions, writes, fmt.Errorf("quarantine logical groups: build changes: %w", err)
 	}
@@ -160,6 +156,11 @@ func (s *TransitionStore) quarantineStaleTx(
 
 	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusQuarantined, writes); err != nil {
 		return result, transitions, writes, fmt.Errorf("quarantine logical groups: record ledger: %w", err)
+	}
+
+	// 결과 불명으로 격리한 owner 시도는 공백으로 두지 않고 같은 트랜잭션에서 outcome_unknown으로 기록한다.
+	if err := recordAttemptTelemetry(ctx, tx, deliveryModeStaleSweep, attempts, at); err != nil {
+		return result, transitions, writes, fmt.Errorf("quarantine logical groups: record telemetry: %w", err)
 	}
 
 	result.ApplyResult = newApplyResult(ApplyApplied, touched)
@@ -182,11 +183,12 @@ func buildQuarantineChanges(
 	candidateIDs map[int64]struct{},
 	at time.Time,
 	cutoff time.Time,
-) (QuarantineResult, []rowTransition, []LedgerWrite, error) {
+) (QuarantineResult, []rowTransition, []LedgerWrite, []deliveryAttempt, error) {
 	var (
 		result      QuarantineResult
 		transitions []rowTransition
 		writes      []LedgerWrite
+		attempts    []deliveryAttempt
 	)
 
 	for i := range resolved.resolutions {
@@ -194,7 +196,7 @@ func buildQuarantineChanges(
 			resolved.resolutions[i], resolved, candidateIDs, at, cutoff,
 		)
 		if err != nil {
-			return result, transitions, writes, fmt.Errorf("quarantine logical groups: resolution %d: %w", i, err)
+			return result, transitions, writes, attempts, fmt.Errorf("quarantine logical groups: resolution %d: %w", i, err)
 		}
 
 		transitions = append(transitions, change.transitions...)
@@ -203,18 +205,24 @@ func buildQuarantineChanges(
 			writes = append(writes, *change.write)
 		}
 
+		if change.attempt != nil {
+			attempts = append(attempts, *change.attempt)
+		}
+
 		if change.blocked != nil {
 			result.Blocked = append(result.Blocked, *change.blocked)
 		}
 	}
 
-	return result, transitions, writes, nil
+	return result, transitions, writes, attempts, nil
 }
 
 type quarantineResolutionChange struct {
 	transitions []rowTransition
 	write       *LedgerWrite
-	blocked     *BlockedLogicalGroup
+	// attempt는 격리한 in-flight owner의 결과 불명 시도다. fulfilled 전파는 시도가 아니라 비워 둔다.
+	attempt *deliveryAttempt
+	blocked *BlockedLogicalGroup
 }
 
 func quarantineResolution(
@@ -279,9 +287,19 @@ func quarantineInFlightResolution(
 		transitions = append(transitions, quarantineTransition(row))
 	}
 
-	write := &LedgerWrite{Key: resolution.Key(), ObservedAt: at, SourceDeliveryID: owner.DeliveryID}
+	ownerRow, err := transitionRowFromSnapshot(owner, rowsByID)
+	if err != nil {
+		return quarantineResolutionChange{}, fmt.Errorf("quarantine logical groups: owner row: %w", err)
+	}
 
-	return quarantineResolutionChange{transitions: transitions, write: write}, nil
+	write := &LedgerWrite{Key: resolution.Key(), ObservedAt: at, SourceDeliveryID: owner.DeliveryID}
+	attempt := &deliveryAttempt{
+		group:  startedLogicalGroup{key: resolution.Key(), ownerBefore: ownerRow, ownerAfter: ownerRow},
+		result: attemptResultOutcomeUnknown,
+		reason: staleSendingOutcomeUnknownReason,
+	}
+
+	return quarantineResolutionChange{transitions: transitions, write: write, attempt: attempt}, nil
 }
 
 func quarantineFulfilledResolution(

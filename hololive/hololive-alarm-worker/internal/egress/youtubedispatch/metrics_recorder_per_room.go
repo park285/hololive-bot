@@ -25,7 +25,6 @@ func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 	)
 
 	failedAt := time.Now()
-	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", "format message", nil)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "format message")
 	mr.recordDeliveryFailure(result, mu, "format message", row.ID, row.OutboxID)
 }
@@ -68,7 +67,6 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 		slog.String("room_id", row.RoomID),
 		dedupeKeyLogAttrForOutboxes([]domain.YouTubeNotificationOutbox{*outbox}),
 		slog.Any("error", err))
-	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", "dedupe key", err)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "dedupe key")
 	mr.recordDeliveryFailure(result, mu, "dedupe key", row.ID, row.OutboxID)
 }
@@ -97,13 +95,11 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 		slog.String("room_id", row.RoomID),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
-	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", reason, sendErr)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", reason)
 	mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, row.ID, row.OutboxID, deliveryRetryAfter(sendErr))
 }
 
 func (mr *MetricsRecorder) recordPerRoomSuccess(
-	ctx context.Context,
 	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
@@ -119,7 +115,6 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 		slog.Int64("outbox_id", row.OutboxID),
 		slog.String("room_id", row.RoomID),
 		dedupeKeyLogAttr(sendReq.dedupeKeys))
-	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, sentAt, "per_room", "success", "", nil)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, "per_room", "success", "")
 
 	mu.Lock()

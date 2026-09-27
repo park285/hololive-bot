@@ -53,20 +53,10 @@ func TestNewMemberServiceAdapter_PreservesCancellation(t *testing.T) {
 	}
 }
 
-func TestNewMemberServiceAdapter_NilContextUsesBackground(t *testing.T) {
-	var nilCtx context.Context
-
-	adapter := NewMemberServiceAdapter(nilCtx, nil, nil)
+func TestNewMemberServiceAdapter_NilLoggerIsReplaced(t *testing.T) {
+	adapter := NewMemberServiceAdapter(t.Context(), nil, nil)
 	if adapter == nil {
 		t.Fatal("adapter is nil")
-	}
-
-	if adapter.ctx == nil {
-		t.Fatal("adapter ctx is nil")
-	}
-
-	if err := adapter.ctx.Err(); err != nil {
-		t.Fatalf("adapter ctx err = %v, want nil", err)
 	}
 
 	if adapter.logger == nil {
@@ -90,13 +80,9 @@ func TestServiceAdapter_WithContext_UsesProvidedContext(t *testing.T) {
 	}
 }
 
-func TestServiceAdapter_LoadAllMembers_ExplicitlyReturnsErrorWhileLegacyGetterReturnsNil(t *testing.T) {
+// 전체 멤버 적재 실패는 빈 결과가 아니라 오류다(DEC-20260926-hololive-source-fallbacks-retirement).
+func TestServiceAdapter_LoadAllMembers_ReturnsError(t *testing.T) {
 	adapter := NewMemberServiceAdapter(t.Context(), &Cache{}, testAdapterLogger())
-
-	members := adapter.GetAllMembers()
-	if members != nil {
-		t.Fatalf("GetAllMembers() = %+v, want nil", members)
-	}
 
 	_, err := adapter.LoadAllMembers()
 	if err == nil {

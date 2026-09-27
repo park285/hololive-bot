@@ -191,7 +191,7 @@ func UniqueStrings(values []string) []string {
 	return unique
 }
 
-func persistSentDeliveryTracking(
+func markSentDeliveryTracking(
 	ctx context.Context,
 	tx dbx.Querier,
 	trackingMarks []observation.AlarmSentMark,
@@ -200,6 +200,16 @@ func persistSentDeliveryTracking(
 		return fmt.Errorf("update tracking rows: %w", err)
 	}
 
+	return nil
+}
+
+// persistSentTrackingLatencyClassifications는 같은 CompleteSent 트랜잭션이 기록한 성공 시도 telemetry까지 포함해 분류를
+// 저장한다. 그래서 commit 뒤 분류를 다시 저장하던 AuditLogger 경로는 DEC-20260926-hololive-delivery-telemetry-single-path로 삭제했다.
+func persistSentTrackingLatencyClassifications(
+	ctx context.Context,
+	tx dbx.Querier,
+	trackingMarks []observation.AlarmSentMark,
+) error {
 	if len(trackingMarks) == 0 {
 		return nil
 	}

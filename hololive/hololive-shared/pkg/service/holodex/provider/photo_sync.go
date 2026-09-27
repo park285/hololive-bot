@@ -212,7 +212,7 @@ func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]strin
 	return photoMap, nil
 }
 
-func (ps *PhotoSyncService) updateMemberPhotos(ctx context.Context, channelIDs []string, photoMap map[string]string) (result0, result1 int) {
+func (ps *PhotoSyncService) updateMemberPhotos(ctx context.Context, channelIDs []string, photoMap map[string]string) (int, int) {
 	successCount := 0
 	failCount := 0
 

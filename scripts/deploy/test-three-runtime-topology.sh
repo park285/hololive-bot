@@ -6,8 +6,6 @@ PROD_FILE="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 ACTIVE_COMPOSE_FILES=(
     "${PROD_FILE}"
     "${ROOT_DIR}/deploy/compose/docker-compose.live-compat.yml"
-    "${ROOT_DIR}/deploy/compose/docker-compose.main-ap.yml"
-    "${ROOT_DIR}/deploy/compose/docker-compose.main-ap.live-compat.yml"
     "${ROOT_DIR}/deploy/compose/docker-compose.osaka.yml"
     "${ROOT_DIR}/deploy/compose/docker-compose.osaka2.yml"
     "${ROOT_DIR}/deploy/compose/docker-compose.seoul.yml"
@@ -56,6 +54,7 @@ for expected in hololive-api hololive-alarm-worker youtube-collector; do
 done
 pass "production Compose defines all three application runtimes"
 
+# 이하 퇴역 서비스·컨테이너·alias·Dockerfile 검사는 재도입 방지 영구 계약이다. 퇴역 가드가 아니므로 제거 조건이 없다.
 for removed in hololive-bot hololive-admin-api llm-scheduler admin-dashboard; do
     for file in "${ACTIVE_COMPOSE_FILES[@]}"; do
         if list_services "${file}" | grep -Fxq "${removed}"; then

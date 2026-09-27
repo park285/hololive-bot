@@ -22,9 +22,9 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 type memberNewsRunNowStub struct {
@@ -162,6 +162,7 @@ func TestBuildAdminAPIHTTPRuntimeCleansUpInfraOnRouterFailure(t *testing.T) {
 		infra,
 		nil,
 		&server.Handler{},
+		infra.Cleanup,
 		slog.New(slog.DiscardHandler),
 	)
 	if err == nil {
@@ -184,7 +185,7 @@ func TestBuildAdminAPIHTTPRuntimeCleansUpInfraOnRouterFailure(t *testing.T) {
 func TestBotSettingsApplierMemberNewsRunNowPaths(t *testing.T) {
 	t.Parallel()
 
-	base := sharedsettings.NewLocalSettingsApplier(nil, nil, nil, nil)
+	base := sharedsettings.NewLocalSettingsApplier(nil)
 
 	unconfigured := newBotSettingsApplier(base, nil, nil)
 	unconfiguredResult := unconfigured.ApplyMemberNewsWeeklyRunNow(t.Context())
@@ -233,12 +234,14 @@ func TestBotSettingsApplierMemberNewsRunNowPaths(t *testing.T) {
 func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
 	t.Parallel()
 
-	foundation := &scraperHolodexFoundation{}
 	alarmMode := &alarmModeComponents{}
-	ytStack := &providers.YouTubeStack{}
 	logger := slog.New(slog.DiscardHandler)
 
-	applier, triggerClient := buildAdminAPISettingsApplier(&settings.Config{}, foundation, alarmMode, ytStack, logger)
+	applier, triggerClient, err := buildAdminAPISettingsApplier(&settings.Config{}, alarmMode, logger)
+	if err != nil {
+		t.Fatalf("buildAdminAPISettingsApplier() error = %v", err)
+	}
+
 	if applier == nil {
 		t.Fatal("buildAdminAPISettingsApplier() returned nil applier")
 	}
@@ -252,10 +255,14 @@ func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
 		t.Fatalf("empty URL member news result = %+v", result)
 	}
 
-	applier, triggerClient = buildAdminAPISettingsApplier(&settings.Config{
+	applier, triggerClient, err = buildAdminAPISettingsApplier(&settings.Config{
 		LLMSchedulerURL: "http://127.0.0.1:1",
 		Server:          settings.ServerConfig{APIKey: testAPIKey},
-	}, foundation, alarmMode, ytStack, logger)
+	}, alarmMode, logger)
+	if err != nil {
+		t.Fatalf("buildAdminAPISettingsApplier() with URL error = %v", err)
+	}
+
 	if applier == nil {
 		t.Fatal("buildAdminAPISettingsApplier() returned nil applier with URL")
 	}
@@ -275,13 +282,19 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	}
 	infra := &sharedmodules.InfraModule{
 		Postgres: &databasemocks.Client{},
+		// /api/holo rate limit은 cache가 없으면 기동 오류다(fail-closed).
+		Cache: sharedtestutil.NewTestCacheService(t.Context(), t),
 	}
 	foundation := &scraperHolodexFoundation{}
 	alarmMode := &alarmModeComponents{}
-	settingsApplier := sharedsettings.NewLocalSettingsApplier(nil, nil, nil, nil)
+	settingsApplier := sharedsettings.NewLocalSettingsApplier(nil)
+
+	settingsService, err := sharedmodules.BuildSettingsService(filepath.Join(t.TempDir(), "settings.json"), nil, logger)
+	if err != nil {
+		t.Fatalf("BuildSettingsService() error = %v", err)
+	}
 
 	handler := buildAdminHandler(
-		appConfig,
 		infra,
 		foundation,
 		alarmMode,
@@ -289,6 +302,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		settingsService,
 		settingsApplier,
 		buildAdminAPISystemCollector(appConfig),
 		nil,
@@ -347,5 +361,24 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 
 	if err := runtime.ShutdownHTTPServer(t.Context()); err != nil {
 		t.Fatalf("ShutdownHTTPServer() error = %v", err)
+	}
+}
+
+// 설정된 bot 내부 URL로 joined-rooms client를 만들지 못하면 endpoint를 조용히 끄지 않고 기동 오류다. 내부 H3 env는
+// https URL에 필요하다(stack audit 2026-09-26).
+func TestBuildAdminAPIBotRoomListerFailsWithoutInternalH3Env(t *testing.T) {
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+
+	logger := slog.New(slog.DiscardHandler)
+
+	lister, err := buildAdminAPIBotRoomLister(&settings.Config{BotInternalURL: "https://127.0.0.1:30001"}, logger)
+	if err == nil || lister != nil {
+		t.Fatalf("buildAdminAPIBotRoomLister(https) = (%v, %v), want missing internal H3 env error", lister, err)
+	}
+
+	lister, err = buildAdminAPIBotRoomLister(&settings.Config{}, logger)
+	if err != nil || lister != nil {
+		t.Fatalf("buildAdminAPIBotRoomLister(unset) = (%v, %v), want disabled without error", lister, err)
 	}
 }

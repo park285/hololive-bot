@@ -128,7 +128,11 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 		return emptyDigest(normalizedPeriod), nil
 	}
 
-	digest := s.summarizeRoomDigest(ctx, roomID, normalizedPeriod, members, filtered)
+	digest, err := s.summarizeRoomDigest(ctx, roomID, normalizedPeriod, members, filtered)
+	if err != nil {
+		return nil, fmt.Errorf("summarize room digest: %w", err)
+	}
+
 	normalizeDigest(digest, normalizedPeriod, len(filtered))
 
 	return digest, nil
@@ -162,13 +166,12 @@ func emptyDigest(period model.Period) *model.Digest {
 	}
 }
 
-func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate) *model.Digest {
+// summarizeRoomDigest는 결정적 fallback digest를 만드는 유일한 곳이다. 요약기(summarizer)는 실패를 오류로만 알리고,
+// 여기서 사유를 bounded enum으로 분류해 result_type과 함께 metric과 로그에 남긴다(stack audit B5).
+// 호출자 context가 끝났으면 fallback digest를 만들지 않고 취소를 돌려준다.
+func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate) (*model.Digest, error) {
 	if s.summarizer == nil {
-		digest := newssummarizer.BuildDeterministicFallback(period, filtered)
-
-		digest.TotalCount = len(filtered)
-
-		return digest
+		return s.fallbackDigest(roomID, period, filtered, digestFallbackReasonLLMDisabled, nil), nil
 	}
 
 	digest, err := s.summarizer.Summarize(ctx, &model.SummarizeInput{
@@ -179,18 +182,50 @@ func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period
 		Candidates:  filtered,
 	})
 	if err != nil {
-		s.logger.Warn("Member news summarize failed, using deterministic fallback",
-			slog.String("room_id", roomID),
-			slog.String("period", string(period)),
-			slog.String("error", err.Error()),
-		)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("summarize member news: %w", errors.Join(err, ctxErr))
+		}
 
-		digest = newssummarizer.BuildDeterministicFallback(period, filtered)
+		return s.fallbackDigest(roomID, period, filtered, digestFallbackReasonFor(err), err), nil
 	}
 
 	if digest == nil || len(digest.TopItems) == 0 {
-		digest = newssummarizer.BuildDeterministicFallback(period, filtered)
+		return s.fallbackDigest(roomID, period, filtered, digestFallbackReasonEmptyResult, nil), nil
 	}
+
+	observeDigestResult(digest.ResultType, digestFallbackReasonNone)
+
+	return digest, nil
+}
+
+func digestFallbackReasonFor(err error) string {
+	switch {
+	case errors.Is(err, newssummarizer.ErrLLMUnavailable):
+		return digestFallbackReasonLLMDisabled
+	case errors.Is(err, newssummarizer.ErrNoValidatedItems):
+		return digestFallbackReasonValidationEmpty
+	default:
+		return digestFallbackReasonSummarizerError
+	}
+}
+
+func (s *Service) fallbackDigest(roomID string, period model.Period, filtered []model.FilteredCandidate, reason string, cause error) *model.Digest {
+	digest := newssummarizer.BuildDeterministicFallback(period, filtered)
+
+	digest.TotalCount = len(filtered)
+	observeDigestResult(digest.ResultType, reason)
+
+	attrs := []any{
+		slog.String("room_id", roomID),
+		slog.String("period", string(period)),
+		slog.String("reason", reason),
+	}
+
+	if cause != nil {
+		attrs = append(attrs, slog.String("error", cause.Error()))
+	}
+
+	s.logger.Warn("Member news digest uses deterministic fallback", attrs...)
 
 	return digest
 }

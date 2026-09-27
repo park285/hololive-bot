@@ -114,33 +114,26 @@ test("RequestInit abort is not misclassified as parent request cancellation", as
   const rpcController = new AbortController();
   const initController = new AbortController();
   initController.abort(new Error(secret));
-  const transport = await createFetchTransport({
-    proxy: { enabled: false },
-    currentSignal: () => currentRequestSignal(),
-  });
-  try {
-    const result = await runWithRequestContext(
-      { requestId: "live-rpc", signal: rpcController.signal },
-      () => handleRpcRequest(
-        JSON.stringify({
-          protocol_version: 1,
-          channel_id: "UC_TEST",
-          max_success_response_bytes: 1048576,
-        }),
-        communityEndpoint,
-        async () => {
-          await transport.fetch("http://127.0.0.1/", { signal: initController.signal });
-          return {};
-        },
-      ),
-    );
-    assert.equal(result.status, 500);
-    assert.equal(result.body.error.code, "helper_internal_invariant");
-    assert.equal(JSON.stringify(result.body).includes(secret), false);
-    assert.equal(rpcController.signal.aborted, false);
-  } finally {
-    await transport.close();
-  }
+  const transport = createFetchTransport({ currentSignal: () => currentRequestSignal() });
+  const result = await runWithRequestContext(
+    { requestId: "live-rpc", signal: rpcController.signal },
+    () => handleRpcRequest(
+      JSON.stringify({
+        protocol_version: 1,
+        channel_id: "UC_TEST",
+        max_success_response_bytes: 1048576,
+      }),
+      communityEndpoint,
+      async () => {
+        await transport.fetch("http://127.0.0.1/", { signal: initController.signal });
+        return {};
+      },
+    ),
+  );
+  assert.equal(result.status, 500);
+  assert.equal(result.body.error.code, "helper_internal_invariant");
+  assert.equal(JSON.stringify(result.body).includes(secret), false);
+  assert.equal(rpcController.signal.aborted, false);
 });
 
 test("untyped errors fail-close instead of becoming transient collection failures", () => {

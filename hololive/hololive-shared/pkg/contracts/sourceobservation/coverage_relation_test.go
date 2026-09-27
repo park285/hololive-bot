@@ -88,6 +88,12 @@ func TestAbsenceCapabilityForKind(t *testing.T) {
 	if AbsenceCapabilityFor(KindSchedule) != AbsencePositiveOnly {
 		t.Fatal("schedule_snapshot remains POSITIVE_ONLY")
 	}
+
+	for _, kind := range []ObservationKind{KindChannelLiveCheck, KindVideoLiveCheck} {
+		if AbsenceCapabilityFor(kind) != AbsencePositiveOnly {
+			t.Fatalf("%s must stay POSITIVE_ONLY", kind)
+		}
+	}
 }
 
 func TestLiveCoverageCoversChannel(t *testing.T) {

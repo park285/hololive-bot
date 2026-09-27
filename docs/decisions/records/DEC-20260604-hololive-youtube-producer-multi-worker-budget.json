@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260604-hololive-youtube-producer-multi-worker-budget",
   "title": "youtube producer multi-worker: source별 BudgetProfile과 GlobalBudgetLimiter, claim/budget skip 사유 분리, AP당 worker 2 유지, phase별 독립 rollback 플래그",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"
@@ -19,8 +19,8 @@
   ],
   "evidence": [],
   "implementation": [
-    "hololive/hololive-shared/pkg/service/youtube/poller/runtime/budget.go",
-    "hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go"
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-shared/pkg/service/youtube/poller/runtime/budget.go",
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go"
   ],
   "supersedes": []
 }

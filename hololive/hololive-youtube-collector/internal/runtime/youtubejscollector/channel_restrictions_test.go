@@ -32,7 +32,7 @@ func TestChannelLiveRunnerPublishesRestrictedSchedulesAsPartial(t *testing.T) {
 				VideoID: "restricted-video", ChannelID: restrictedTestChannelID, Reason: "access_restricted",
 			}}
 
-			input := youtubeInput(t, restrictedTestChannelID, "youtubejs_channel_live", contract.KindLiveSnapshot)
+			input := channelLiveInput(t)
 
 			result, err := NewChannelLiveRunner(&channelFake{result: response}).Collect(t.Context(), input)
 			if err != nil {
@@ -112,7 +112,7 @@ func TestChannelRunnerRejectsInvalidUnavailableSessions(t *testing.T) {
 			testCase.change(&response)
 
 			result, err := NewChannelLiveRunner(&channelFake{result: response}).Collect(t.Context(),
-				youtubeInput(t, restrictedTestChannelID, "youtubejs_channel_live", contract.KindLiveSnapshot))
+				channelLiveInput(t))
 			if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !result.IsZero() {
 				t.Fatalf("invalid unresolved identity was published: result=%#v err=%v", result, err)
 			}

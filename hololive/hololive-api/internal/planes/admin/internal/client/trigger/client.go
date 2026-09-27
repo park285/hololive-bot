@@ -40,16 +40,21 @@ type Client struct {
 	logger     *slog.Logger
 }
 
-// NewClient는 trigger 클라이언트를 생성한다.
-func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
+// NewClient는 trigger 클라이언트를 생성한다. Scheduler URL이 https이고 H3 transport를 구성하지 못하면 오류다.
+func NewClient(schedulerURL, apiKey string, logger *slog.Logger) (*Client, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	return &Client{
-		httpClient: internalhttp.NewJSONClient(schedulerURL, apiKey, 30*time.Second, logger),
-		logger:     logger,
+	httpClient, err := internalhttp.NewJSONClient(schedulerURL, apiKey, 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("configure llm scheduler trigger transport: %w", err)
 	}
+
+	return &Client{
+		httpClient: httpClient,
+		logger:     logger,
+	}, nil
 }
 
 // SendWeeklyNotification은 주간 major event 알림 트리거를 호출한다.

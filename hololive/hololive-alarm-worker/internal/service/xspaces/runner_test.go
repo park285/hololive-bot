@@ -35,7 +35,7 @@ func (p ledgerPublisher) PublishDispatchBatch(ctx context.Context, envelopes []d
 		envelopes[i].Version = 1
 	}
 
-	result, err := p.repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes, Status: dispatchoutbox.StatusPending})
+	result, err := p.repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes})
 	if err != nil {
 		return result, fmt.Errorf("insert test dispatch: %w", err)
 	}

@@ -472,6 +472,14 @@ func TestHandleRunErrorPromotesOnlyClassifiedFatalErrors(t *testing.T) {
 			wantClass: collecterr.ClassInternal,
 		},
 		{
+			// 계약 밖 tuple은 호출 코드 결함이지만 기본 class로 수리하지 않고 미분류 Internal로 닫아 지연 처리한다.
+			name:      "invalid failure tuple from caller",
+			err:       collecterr.New(collecterr.Failed, collecterr.ClassTimeout, "impossible tuple"),
+			wantFatal: false,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
 			name:      "classified helper protocol mismatch",
 			err:       collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "helper protocol mismatch"),
 			wantFatal: true,

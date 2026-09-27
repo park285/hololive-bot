@@ -337,8 +337,11 @@ func (c *Cache) markEpochUncertain(reason string, err error) {
 	}
 }
 
+// 분산 캐시가 있으면 epoch authority가 필수다(configureEpoch가 authority 없이 만들지 않는다). 분산 캐시가 없는 메모리 전용
+// 구성(cacheService 없이 만든 Cache)에는 조정할 authority가 없으므로 우회하지 않는다. 예전에 epoch가 없을 때
+// 구형(접두사 없는) member:* keyspace를 쓰던 분기는 지웠다(stack-audit 2026-09-26 T11 holo-member-cache-epochless-keyspace).
 func (c *Cache) cacheBypassRequired(operation string) bool {
-	if c == nil || c.epoch == nil || c.authorityHealthy.Load() {
+	if !c.cacheEnabled() || c.authorityHealthy.Load() {
 		return false
 	}
 
@@ -348,19 +351,15 @@ func (c *Cache) cacheBypassRequired(operation string) bool {
 }
 
 func (c *Cache) distributedCacheUsable() bool {
-	return c.cacheEnabled() && (c.epoch == nil || c.authorityHealthy.Load())
+	return c.cacheEnabled() && c.authorityHealthy.Load()
 }
 
-func (c *Cache) epochDataKey(legacyKey string) string {
-	if c.epoch == nil {
-		return legacyKey
-	}
-
-	return memberEpochDataPrefix + strconv.FormatUint(c.authorityEpoch.Load(), 10) + ":" + legacyKey
+func (c *Cache) epochDataKey(key string) string {
+	return memberEpochDataPrefix + strconv.FormatUint(c.authorityEpoch.Load(), 10) + ":" + key
 }
 
 func (c *Cache) confirmEpochAfterLoad(ctx context.Context, generation uint64) error {
-	if c.epoch == nil {
+	if !c.cacheEnabled() {
 		return nil
 	}
 

@@ -24,6 +24,26 @@ func TestLoadKakaoConfigDefaultsWhenACLVariablesAreUnset(t *testing.T) {
 	}
 }
 
+// KAKAO_ROOMS는 ACL 첫 초기화 seed다. 방 이름 기본값은 chatID 단일 식별에서 어떤 방과도 매칭되지 않는
+// 죽은 whitelist 행이 되므로, 값이 없으면 채우지 않고 필수값 검증이 기동 실패로 드러낸다.
+func TestLoadKakaoConfigHasNoRoomDefault(t *testing.T) {
+	unsetEnvForTest(t, "KAKAO_ROOMS")
+
+	config, err := loadKakaoConfig()
+	if err != nil {
+		t.Fatalf("loadKakaoConfig() error = %v", err)
+	}
+
+	if len(config.Rooms) != 0 {
+		t.Fatalf("loadKakaoConfig() Rooms = %q, want no default seed", config.Rooms)
+	}
+
+	cfg := &Config{Kakao: KakaoConfig{Rooms: config.Rooms}}
+	if err := cfg.validateAdminAPIRequiredConfig(); err == nil || err.Error() != "KAKAO_ROOMS is required" {
+		t.Fatalf("validateAdminAPIRequiredConfig() error = %v, want KAKAO_ROOMS is required", err)
+	}
+}
+
 func TestLoadKakaoConfigRejectsPresentInvalidACLVariables(t *testing.T) {
 	tests := []struct {
 		name      string

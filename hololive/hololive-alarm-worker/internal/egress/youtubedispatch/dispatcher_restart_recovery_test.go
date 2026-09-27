@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -238,7 +239,7 @@ func runRestartAlreadySentCase(t *testing.T, tc restartAlreadySentCase, fixedSen
 
 func seedRestartAlreadySentFixture(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	tc restartAlreadySentCase,
 ) (domain.YouTubeNotificationOutbox, domain.YouTubeNotificationDelivery, string) {
 	t.Helper()

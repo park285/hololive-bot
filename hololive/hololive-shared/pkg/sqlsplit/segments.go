@@ -70,11 +70,11 @@ func (p *segmentParser) add(stmt string) error {
 
 	switch control {
 	case txControlBegin:
-		return errors.Join(p.addBegin())
+		return p.addBegin()
 	case txControlCommit:
-		return errors.Join(p.addCommit())
+		return p.addCommit()
 	case txControlNone:
-		return errors.Join(p.addStatement(stmt))
+		return p.addStatement(stmt)
 	}
 
 	return nil
@@ -184,19 +184,19 @@ func classifyTxWords(words []string) (txControl, error) {
 	case "BEGIN":
 		out, err := classifyTxWordsTail(txControlBegin, words)
 
-		return out, errors.Join(err)
+		return out, err
 	case "START":
 		out, err := classifyStartTxWords(words)
 
-		return out, errors.Join(err)
+		return out, err
 	case "COMMIT", "END":
 		out, err := classifyTxWordsTail(txControlCommit, words)
 
-		return out, errors.Join(err)
+		return out, err
 	default:
 		err := classifyNonControlWord(words[0])
 
-		return txControlNone, errors.Join(err)
+		return txControlNone, err
 	}
 }
 

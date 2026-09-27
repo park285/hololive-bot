@@ -51,7 +51,9 @@ func LoadRuntime() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load hololive-api llm plane: %w", err)
 	}
 
-	configurePlanes(botConfig, adminConfig, llmConfig)
+	if err = configurePlanes(botConfig, adminConfig, llmConfig); err != nil {
+		return nil, fmt.Errorf("configure hololive-api planes: %w", err)
+	}
 
 	youtubeConfig, err := loadYouTubePlaneConfig()
 	if err != nil {
@@ -89,8 +91,10 @@ func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *se
 	config.ShutdownTimeout = time.Duration(observation.ShutdownTimeoutMS) * time.Millisecond
 }
 
-func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSchedulerConfig) {
-	adminPort := sharedenv.Int("HOLOLIVE_ADMIN_API_PORT", defaultAdminAPIPort)
+func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSchedulerConfig) error {
+	var env load.StrictEnv
+
+	adminPort := env.Int("HOLOLIVE_ADMIN_API_PORT", defaultAdminAPIPort)
 
 	adminConfig.Server.Port = adminPort
 	adminConfig.Server.HTTPTransports = load.CommaSeparated(sharedenv.String("HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS", "h3"))
@@ -99,10 +103,10 @@ func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSche
 	adminConfig.Server.H3KeyFile = botConfig.Server.H3KeyFile
 	adminConfig.Server.MetricsAddr = ""
 	adminConfig.Server.PprofAddr = ""
-	adminConfig.Postgres.PoolMinConns = sharedenv.Int("ADMIN_API_POSTGRES_POOL_MIN_CONNS", 1)
-	adminConfig.Postgres.PoolMaxConns = sharedenv.Int("ADMIN_API_POSTGRES_POOL_MAX_CONNS", 4)
+	adminConfig.Postgres.PoolMinConns = env.Int("ADMIN_API_POSTGRES_POOL_MIN_CONNS", 1)
+	adminConfig.Postgres.PoolMaxConns = env.Int("ADMIN_API_POSTGRES_POOL_MAX_CONNS", 4)
 
-	llmPort := sharedenv.Int("LLM_SCHEDULER_PORT", defaultLLMPort)
+	llmPort := env.Int("LLM_SCHEDULER_PORT", defaultLLMPort)
 
 	llmConfig.Server.Port = llmPort
 	llmConfig.Server.HTTPTransports = load.CommaSeparated(sharedenv.String("HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS", "h3"))
@@ -111,14 +115,19 @@ func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSche
 	llmConfig.Server.H3KeyFile = botConfig.Server.H3KeyFile
 	llmConfig.Server.MetricsAddr = ""
 	llmConfig.Server.PprofAddr = ""
-	llmConfig.Postgres.PoolMinConns = sharedenv.Int("LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS", 1)
-	llmConfig.Postgres.PoolMaxConns = sharedenv.Int("LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS", 4)
+	llmConfig.Postgres.PoolMinConns = env.Int("LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS", 1)
+	llmConfig.Postgres.PoolMaxConns = env.Int("LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS", 4)
 
-	botPort := sharedenv.Int("SERVER_PORT", defaultBotPort)
+	botPort := env.Int("SERVER_PORT", defaultBotPort)
 
 	botConfig.Server.Port = botPort
-	botConfig.Postgres.PoolMinConns = sharedenv.Int("BOT_POSTGRES_POOL_MIN_CONNS", 1)
-	botConfig.Postgres.PoolMaxConns = sharedenv.Int("BOT_POSTGRES_POOL_MAX_CONNS", 4)
+	botConfig.Postgres.PoolMinConns = env.Int("BOT_POSTGRES_POOL_MIN_CONNS", 1)
+	botConfig.Postgres.PoolMaxConns = env.Int("BOT_POSTGRES_POOL_MAX_CONNS", 4)
+
+	// 포트 파싱이 실패하면 아래 loopback URL이 기본 포트로 만들어지므로, URL을 조립하기 전에 멈춘다.
+	if err := env.Err(); err != nil {
+		return err
+	}
 
 	if strings.TrimSpace(adminConfig.BotInternalURL) == "" {
 		adminConfig.BotInternalURL = fmt.Sprintf("https://127.0.0.1:%d", botPort)
@@ -135,6 +144,8 @@ func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSche
 
 	botConfig.AlarmServiceURL = alarmURL
 	adminConfig.AlarmServiceURL = alarmURL
+
+	return nil
 }
 
 func (c *RuntimeConfig) Validate() error {

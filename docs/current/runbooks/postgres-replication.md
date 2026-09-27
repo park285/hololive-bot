@@ -96,13 +96,39 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
 | primary `pg_hba.conf` | `deploy/compose/postgres/pg_hba.conf`. `hostssl replication hololive_replicator <standby-ip>/32`가 필요합니다. `host all all all`은 `replication` 유사 데이터베이스를 매치하지 않습니다. |
 | primary 복제 역할 | `hololive_replicator`. init-db가 `HOLOLIVE_REPLICATOR_PASSWORD`가 있을 때만 만듭니다. |
 | failover DB 권한 | `hololive_replicator`에 `hololive` CONNECT와 `pg_catalog.pg_promote(boolean, integer)` EXECUTE만 부여합니다. OS controller에 admin/superuser 자격을 주지 않습니다. |
-| primary 복제 슬롯 | `iris_seoul_standby` physical slot. standby가 오래 끊기면 슬롯이 WAL을 보존해 primary 디스크가 찰 수 있습니다. |
+| primary 복제 슬롯 | `iris_seoul_standby` physical slot. standby가 오래 끊기면 슬롯이 WAL을 보존해 primary 디스크가 찰 수 있습니다. 재활성 전에 아래 [slot WAL 보존 상한](#reactivation-prerequisite-slot-wal-retention-bound)을 먼저 갖춥니다. |
 | standby 자격 | `/etc/stack-secrets/hololive-bot/postgres/pgpass` (`0600 999:999`). PostgreSQL 컨테이너는 스택 공통 uid 999로 실행되므로 그 uid가 읽을 수 있어야 합니다. |
 | standby CA | `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`. `primary_conninfo`와 controller probe가 `sslmode=verify-full`을 사용합니다. |
 | host client | PGDG `postgresql-client-18`의 canonical `/usr/lib/postgresql/18/bin/psql`. `/usr/bin/psql`의 `pg_wrapper` symlink는 trusted-path 검사에서 거부합니다. controller는 Docker socket 또는 `docker` 그룹을 사용하지 않습니다. |
 | failover env | `/etc/stack-secrets/hololive-bot/postgres-failover.env` (`0600 root:root`). systemd `LoadCredential`이 전용 사용자에게 read-only 사본을 전달하고 allowlist launcher가 해석합니다. |
 | fencing backend | 구 primary가 절대로 writer로 재등장하지 않게 하는 외부 증명입니다. SSH reference hook은 호스트가 reachable할 때만 유효합니다. 전원/호스트 상실까지 자동 처리하려면 hypervisor/cloud/PDU 같은 out-of-band fence hook이 필요합니다. |
 | route backend | Tailscale Service `svc:hololive-postgres`, client endpoint `hololive-postgres.tail742dd8.ts.net:5433`. old primary drain 뒤 새 primary의 tailnet IP/port를 광고하고 stable endpoint가 read/write인지 검증합니다. |
+
+## Reactivation prerequisite: slot WAL retention bound
+
+현재 slot은 0개라 이 위험은 없습니다. HA 재활성을 다시 승인할 때는 아래 세 가지를 재활성 변경에
+함께 넣고, 갖추지 못하면 slot을 만들지 않습니다. 지금 compose에는 이 상한을 넣지 않습니다. 적용은
+재활성 변경과 함께 hololive-bot-ops가 수행합니다.
+
+1. **WAL 보존 상한:** `docker-compose.prod.yml`과 `docker-compose.standby.yml`의 PostgreSQL
+   command 모두에 `-c max_slot_wal_keep_size=<값>`을 둡니다. 승격하면 standby compose가 primary가
+   되므로 한쪽에만 두지 않습니다. 설정이 없으면 PostgreSQL 기본값 `-1`(무제한)이 적용되어 standby가
+   끊긴 동안 slot이 WAL을 계속 보존합니다. 값은 재활성 시점의 primary 여유 디스크와 WAL 생성 속도를
+   실측해 다시 산정합니다(예: 여유의 약 1/3, 15GB 안팎). 상한이 없으면 단절이 며칠만 이어져도
+   primary 디스크가 찰 수 있습니다(2026-09 기록 기준 추정 약 3–5일, Osaka 여유 46GiB는 09-26 실측).
+   compose `-c` 값은 postmaster command line이므로 바꾸려면 `holo-postgres`를 재생성해야 합니다.
+2. **slot 생성 단계:** 2026-09-08에 slot을 제거했으므로 `pg_basebackup -S`만으로는 slot이 없어
+   실패합니다. 아래 Bootstrap처럼 `-C`(`--create-slot`)를 함께 써서 base backup과 같은 실행에서
+   slot을 만듭니다. 같은 이름의 slot이 이미 있으면 `-C`가 실패하므로, 남은 slot을 확인한 뒤
+   진행합니다.
+3. **slot 지표 경보:** postgres_exporter의 replication slot 지표(`wal_status`, `safe_wal_size`)로
+   Prometheus alert를 둡니다. 지표 이름과 collector 활성 여부는 당시 exporter 버전에서 확인합니다.
+   경보 규칙은 stack-platform-ops observability가 소유합니다. nightly 수집은 감시 수단으로 쓰지
+   않습니다.
+
+상한을 넘으면 slot이 invalidated(`wal_status=lost`)되고 standby는 더는 따라잡을 수 없습니다. 이때는
+새 `pg_basebackup`으로 재시딩합니다. primary 디스크를 지키려고 의도한 trade-off입니다. PG18의
+`idle_replication_slot_timeout`은 시간 기준 보조안으로만 검토하고, 1차 방어는 크기 상한으로 둡니다.
 
 ## Reactivation reference: Stable database endpoint
 
@@ -179,6 +205,7 @@ primary 준비가 끝난 뒤 standby 호스트에서 실행합니다.
 docker volume create hololive-bot_holo-pg-standby-data
 
 # 2. base backup. -R은 사용하지 않습니다. primary_conninfo 소유자는 Compose입니다.
+#    -C는 slot을 이 실행에서 만듭니다(현재 slot 0개). 먼저 slot WAL 보존 상한을 갖춥니다.
 docker run --rm \
   -v hololive-bot_holo-pg-standby-data:/var/lib/postgresql \
   -v /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro \
@@ -190,7 +217,7 @@ docker run --rm \
   --entrypoint pg_basebackup \
   postgres:18.6-alpine \
   -h 100.100.1.8 -p 5433 -U hololive_replicator \
-  -D /var/lib/postgresql/pgdata -X stream -S iris_seoul_standby -P -v
+  -D /var/lib/postgresql/pgdata -X stream -C -S iris_seoul_standby -P -v
 
 # 3. standby signal
 docker run --rm -v hololive-bot_holo-pg-standby-data:/v --user 999:999 \
@@ -505,7 +532,7 @@ unfence한 뒤에만 정상 Compose lifecycle을 재개합니다.
 |---|---|---|
 | `no pg_hba.conf entry for replication connection` | primary에 standby IP replication 규칙 없음 | `deploy/compose/postgres/pg_hba.conf` 배포 후 `holo-postgres` 재생성. `hba_file`은 postmaster 설정입니다. |
 | `hostssl` 규칙이 보이지 않음 | 서버 `ssl=off` | `ssl=on` 조건에서 `pg_hba_file_rules`를 확인합니다. |
-| primary 디스크 증가 | standby 단절 중 physical slot이 WAL 보존 | standby 복구 또는 승인 후 slot 제거. |
+| primary 디스크 증가 | standby 단절 중 physical slot이 WAL 보존 | standby 복구 또는 승인 후 slot 제거. `max_slot_wal_keep_size` 상한이 있으면 초과 시 slot이 invalidated되므로 새 base backup으로 재시딩합니다. |
 | standby 기동 거부 `max_connections` | standby 설정이 primary보다 작음 | primary 이상으로 맞춥니다. |
 | `could not read password file` | pgpass 소유자가 uid 999가 아님 | `0600 999:999`로 sync합니다. |
 | local probe `100.100.1.5:5434 connection refused` | standby를 `--env-file` 없이 생성해 안전 기본값인 `127.0.0.1:5434`에만 publish함 | 데이터 볼륨을 유지하고 위 기동 명령으로 standby만 재생성한 뒤 `docker inspect`의 host binding과 `primary_healthy`를 확인합니다. |

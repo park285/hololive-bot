@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/require"
 
@@ -339,7 +340,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogObjectStringField(t, classification, "reason_code", string(timeline.PostLatencyReasonCodeJobFailure))
 }
 
-func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestDB, sender *finalResultTestSender, config *dispatchstate.Config) (*Dispatcher, *bytes.Buffer) {
+func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *pgxpool.Pool, sender *finalResultTestSender, config *dispatchstate.Config) (*Dispatcher, *bytes.Buffer) {
 	t.Helper()
 
 	logBuffer := &bytes.Buffer{}

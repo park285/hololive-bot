@@ -177,14 +177,11 @@ services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"
 PROD_COMPOSE_FILE="deploy/compose/docker-compose.prod.yml"
-PROD_COMPOSE_LEGACY_FILE="docker-compose.prod.yml"
-AP_COMPOSE_LEGACY_FILE="$(basename "$AP_COMPOSE_FILE")"
 
 change_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
 rollback_image_tag="hololive-youtube-collector:rollback-$change_id"
 rollback_tag_prune_offset="$((AP_ROLLBACK_TAG_KEEP + 1))"
-producer_state_file="$backup_dir/retired-producer-runtime.state"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
@@ -198,14 +195,10 @@ if sudo -n docker image inspect '$IMAGE_REF' >/dev/null 2>&1; then
     sudo -n docker rmi \"hololive-youtube-collector:\$stale_rollback_tag\" >/dev/null 2>&1 || true
   done
 fi
+# compose 파일은 deploy/compose 아래 한 경로만 읽는다. repo 루트 사본으로 내려가던 폴백은 T18(2026-09-26)에서
+# compose AP 루트에 docker-compose*.yml이 없음을 확인해 지웠다(stack-audit T11 holo-ap-legacy-compose-path-fallback).
 prod_prechange_file='$PROD_COMPOSE_FILE'
-if [[ ! -r \"\$prod_prechange_file\" && -r '$PROD_COMPOSE_LEGACY_FILE' ]]; then
-  prod_prechange_file='$PROD_COMPOSE_LEGACY_FILE'
-fi
 ap_prechange_file='$AP_COMPOSE_FILE'
-if [[ ! -r \"\$ap_prechange_file\" && -r '$AP_COMPOSE_LEGACY_FILE' ]]; then
-  ap_prechange_file='$AP_COMPOSE_LEGACY_FILE'
-fi
 test -r \"\$prod_prechange_file\"
 test -r \"\$ap_prechange_file\"
 mkdir -p \"\$(dirname '$backup_dir/$PROD_COMPOSE_FILE.prechange')\" \"\$(dirname '$backup_dir/$AP_COMPOSE_FILE.prechange')\"
@@ -248,38 +241,63 @@ change_started_at="$(
   remote 'date -u +%Y-%m-%dT%H:%M:%SZ'
 )"
 
-remote "set -euo pipefail
-cd ~/hololive-bot
-. scripts/deploy/lib/retired-producer-cutover.sh
-write_retired_producer_runtime_state > '$producer_state_file'
-validate_retired_producer_runtime_state '$producer_state_file'"
+# rollback 기준점은 ap-rollback.sh와 같은 파일(rollback-image-tag)로 판정하고, trap을 걸기 전에 값을 확정한다.
+rollback_available="$(
+  remote "cd ~/hololive-bot && if [[ -r '$backup_dir/rollback-image-tag' ]]; then printf '%s\n' true; else printf '%s\n' false; fi"
+)"
+case "$rollback_available" in
+  true|false) ;;
+  *)
+    echo "unexpected rollback-image-tag probe result for $AP_NAME: $rollback_available" >&2
+    exit 1
+    ;;
+esac
 
+# 기준점이 있는 재배포가 실패하면 collector를 배포된 상태로 두고 ap-rollback.sh로 되돌리게 한다. 기준점 없이 멈추면
+# AP에 collector가 하나도 남지 않기 때문이다(stack-audit T05). 기준점이 없는 첫 배포가 실패하면 되돌릴 이전 collector가
+# 없으므로 검증에 실패한 새 collector를 멈추고 비활성을 확인한 뒤 fix-forward한다. 이 정지는 퇴역 producer 복원과 무관하게
+# 유지한다. 퇴역 producer의 첫 cutover 상태를 기록·복원하던 경로는 T18(2026-09-26)에서 모든 AP의 current·previous가
+# collector release이고 producer unit·컨테이너가 0개임을 확인해 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling).
 cutover_armed=true
-restore_retired_producer_after_failed_cutover() {
+handle_failed_collector_deploy() {
   local status="$?"
-  local restore_status=0
+  local stop_status=0
   trap - ERR
-  if [[ "${cutover_armed:-false}" == "true" ]]; then
-    set +e
-    remote "set -euo pipefail
+  if [[ "${cutover_armed:-false}" != "true" ]]; then
+    exit "$status"
+  fi
+  if [[ "$rollback_available" == "true" ]]; then
+    echo "AP collector deploy failed after cutover; collector left as deployed. Roll back with BACKUP_DIR='$backup_dir' ./scripts/deploy/ap-rollback.sh $AP_NAME --apply" >&2
+    exit "$status"
+  fi
+  set +e
+  remote "set -euo pipefail
 cd ~/hololive-bot
-. scripts/deploy/lib/retired-producer-cutover.sh
-stop_named_containers_and_require_inactive $containers_list
-restore_retired_producer_runtime '$producer_state_file'"
-    restore_status="$?"
-    set -e
-    if [[ "$restore_status" -ne 0 ]]; then
-      echo "AP collector cutover failed and the recorded producer runtime could not be restored" >&2
-    fi
+for container in $containers_list; do
+  active=\$(docker ps -q --filter \"name=^\${container}\$\")
+  if [[ -n \"\$active\" ]]; then
+    echo \"[CUTOVER] Stopping failed first-deploy collector container: \${container}\"
+    docker stop \"\$container\" >/dev/null
+  fi
+  active=\$(docker ps -q --filter \"name=^\${container}\$\")
+  if [[ -n \"\$active\" ]]; then
+    echo \"collector container still active: \${container}\" >&2
+    exit 1
+  fi
+done"
+  stop_status="$?"
+  set -e
+  if [[ "$stop_status" -ne 0 ]]; then
+    echo "AP collector first deploy failed and the new collector could not be confirmed stopped on $AP_NAME ($containers_list); stop it before fixing forward" >&2
+  else
+    echo "AP collector first deploy failed; new collector stopped. $AP_NAME has no recorded rollback-image-tag, so fix forward" >&2
   fi
   exit "$status"
 }
-trap restore_retired_producer_after_failed_cutover ERR
+trap handle_failed_collector_deploy ERR
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-. scripts/deploy/lib/retired-producer-cutover.sh
-stop_retired_producer_runtime
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
 echo change_started_at='$change_started_at'"

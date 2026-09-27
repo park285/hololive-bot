@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
 const (
@@ -162,7 +161,17 @@ func newAlarmWorkerRuntime(
 		HTTPServers:          parts.servers,
 		AlarmService:         foundation.AlarmService,
 		WorkerObservability:  parts.workerState,
-		Managed:              lifecycle.NewManaged(infra.Cleanup),
+		Managed:              lifecycle.NewManaged(stopHolodexRetriesBeforeCleanup(foundation.HolodexService, infra.Cleanup)),
+	}
+}
+
+// stopHolodexRetriesBeforeCleanup은 Holodex 캐시 워밍 재시도를 멈춘 뒤 infra를 닫는다.
+// 재시도는 예약한 요청 ctx의 취소와 분리되어 scheduler의 Stop만 끝낼 수 있다(holodexprovider retry_scheduler).
+// Valkey·PG infra를 먼저 닫으면 대기 중이거나 실행 중인 재시도가 닫힌 client를 쓴다.
+func stopHolodexRetriesBeforeCleanup(holodex interface{ Stop() }, cleanup func()) func() {
+	return func() {
+		holodex.Stop()
+		cleanup()
 	}
 }
 
@@ -230,16 +239,30 @@ func buildAlarmWorkerHTTPRuntime(
 		return nil, alarmWorkerBackgroundRunners{}, "router", fmt.Errorf("runtime router: %w", err)
 	}
 
-	publishConfig := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
+	publishConfig, err := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
+	if err != nil {
+		return nil, alarmWorkerBackgroundRunners{}, "publish config", err
+	}
+
 	xSpaces := buildXSpacesRunner(infra, foundation, publishConfig, logger)
 
 	if xSpaces.err != nil {
 		return nil, alarmWorkerBackgroundRunners{}, "X spaces", xSpaces.err
 	}
 
+	celebrationRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
+	if celebrationRunner.err != nil {
+		return nil, alarmWorkerBackgroundRunners{}, "celebration runner", celebrationRunner.err
+	}
+
+	birthdayStreamRunner := buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger)
+	if birthdayStreamRunner.err != nil {
+		return nil, alarmWorkerBackgroundRunners{}, "birthday stream runner", birthdayStreamRunner.err
+	}
+
 	runners = alarmWorkerBackgroundRunners{
-		celebration:    buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger),
-		birthdayStream: buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger),
+		celebration:    celebrationRunner.scheduler,
+		birthdayStream: birthdayStreamRunner.scheduler,
 		xSpaces:        xSpaces.scheduler,
 	}
 
@@ -330,7 +353,10 @@ func buildRuntimeScheduler(
 		return nil, errors.New("validate runtime scheduler inputs: alarm worker profile is required")
 	}
 
-	publishConfig := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
+	publishConfig, err := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
+	if err != nil {
+		return nil, err
+	}
 
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(alarmscheduler.Dependencies{
 		Cache:          infra.Cache,
@@ -373,30 +399,20 @@ func buildAlarmFoundation(
 ) (*alarmFoundation, error) {
 	memberData := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 
-	sharedRL, err := providers.ProvideYouTubeRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
+	holodexService, err := buildAlarmHolodexService(appConfig, infra, memberData, logger)
 	if err != nil {
-		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
-	}
-
-	scraperService := providers.ProvideScraperServiceWithOfficialSchedule(
-		infra.Cache,
-		memberData,
-		scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL},
-		sharedRL,
-		logger,
-		appConfig.OfficialScheduleRuntime(),
-	)
-
-	holodexService, err := providers.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide holodex service: %w", err)
+		return nil, err
 	}
 
 	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
 	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
 
-	alarmService, err := alarmservice.NewAlarmService(infra.Cache, holodexService, memberData, alarmRepository, logger, resolved)
+	resolved, err := sharedmodules.ResolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, logger)
+	if err != nil {
+		return nil, fmt.Errorf("resolve alarm target minutes: %w", err)
+	}
+
+	alarmService, err := alarmservice.NewAlarmService(infra.Cache, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}
@@ -410,6 +426,37 @@ func buildAlarmFoundation(
 	}, nil
 }
 
+// buildAlarmHolodexService는 runtime이 읽은 YouTube·Holodex 설정으로 스크레이퍼와 Holodex 서비스를 만든다.
+func buildAlarmHolodexService(
+	appConfig *settings.Config,
+	infra *sharedmodules.InfraModule,
+	memberData domain.MemberDataProvider,
+	logger *slog.Logger,
+) (*holodexprovider.Service, error) {
+	sharedRL, err := providers.ProvideYouTubeRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
+	}
+
+	scraperService, err := providers.ProvideScraperServiceWithOfficialSchedule(
+		memberData,
+		appConfig.YouTube,
+		sharedRL,
+		logger,
+		appConfig.OfficialScheduleRuntime(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("provide scraper service: %w", err)
+	}
+
+	holodexService, err := providers.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide holodex service: %w", err)
+	}
+
+	return holodexService, nil
+}
+
 func warmAlarmService(ctx context.Context, alarmService *alarmservice.AlarmService, logger *slog.Logger) {
 	if err := alarmService.WarmCacheFromDB(ctx); err != nil {
 		logger.Warn("Failed to warm alarm cache from DB", slog.Any("error", err))
@@ -418,9 +465,15 @@ func warmAlarmService(ctx context.Context, alarmService *alarmservice.AlarmServi
 	}
 }
 
-func loadAlarmDispatchPublishConfig(profile *settings.AlarmWorkerProfile) queue.PublishConfig {
+// 잘못된 batch 한도를 기본값 1000으로 바꾸지 않고 기동 오류로 드러낸다(holo-alarm-worker-envconfig-silent-defaults).
+func loadAlarmDispatchPublishConfig(profile *settings.AlarmWorkerProfile) (queue.PublishConfig, error) {
+	maxDeliveries, err := envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
+	if err != nil {
+		return queue.PublishConfig{}, fmt.Errorf("alarm dispatch publish config: %w", err)
+	}
+
 	return queue.PublishConfig{
 		WakeupEnabled:         profile.AlarmDispatch.WakeupEnabled,
-		MaxDeliveriesPerBatch: envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
-	}
+		MaxDeliveriesPerBatch: maxDeliveries,
+	}, nil
 }

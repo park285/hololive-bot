@@ -18,15 +18,13 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 type testMemberDataProvider struct {
 	members []*domain.Member
 }
 
-func (p testMemberDataProvider) GetAllMembers() []*domain.Member { return p.members }
+func (p testMemberDataProvider) LoadAllMembers() ([]*domain.Member, error) { return p.members, nil }
 
 func (p testMemberDataProvider) FindMemberByChannelID(string) *domain.Member { return nil }
 
@@ -82,9 +80,14 @@ func newOfficialScheduleTestService(
 	t.Cleanup(server.Close)
 
 	logger := slog.New(slog.DiscardHandler)
-	service := newTestServiceWithHTTPClient(server.Client(), logger, server.URL, nil)
+	service := newTestServiceWithHTTPClient(t, server.Client(), logger, server.URL)
 
-	service.identityIndex = buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: members})
+	index, err := buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: members})
+	if err != nil {
+		t.Fatalf("buildOfficialScheduleIdentityIndex() error = %v", err)
+	}
+
+	service.identityIndex = index
 
 	return service
 }
@@ -187,12 +190,16 @@ func assertOfficialScheduleStreams(t *testing.T, streams []*domain.Stream) {
 }
 
 func TestOfficialScheduleIdentityRequiresOneDistinctChannel(t *testing.T) {
-	index := buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: []*domain.Member{
+	index, err := buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: []*domain.Member{
 		{Name: "Shared", ChannelID: "channel-1", Aliases: &domain.Aliases{Ko: []string{"공유"}}},
 		{Name: "Shared", ChannelID: "channel-2"},
 		{Name: "Duplicate Same ID", ChannelID: "channel-3", Aliases: &domain.Aliases{Ja: []string{"同じ"}}},
 		{Name: "Duplicate Same ID Again", ChannelID: "channel-3", Aliases: &domain.Aliases{Ja: []string{"同じ"}}},
 	}})
+	if err != nil {
+		t.Fatalf("buildOfficialScheduleIdentityIndex() error = %v", err)
+	}
+
 	if got := index.Resolve("Shared"); got != "" {
 		t.Fatalf("ambiguous identity resolved to %q", got)
 	}
@@ -395,68 +402,6 @@ func TestOfficialScheduleFetchDeduplicatesConcurrentRequestsAndClonesCache(t *te
 
 	if got := requests.Load(); got != 2 {
 		t.Fatalf("request count after expiry = %d, want 2", got)
-	}
-}
-
-func TestFetchChannelUsesOfficialAPIOnlyAfterYouTubeFailure(t *testing.T) {
-	var requests atomic.Int32
-
-	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		writeJSON(t, writer, `{"dateGroupList":[{"videoList":[{
-			"datetime":"2026/08/13 12:00:00",
-			"url":"https://www.youtube.com/watch?v=fallback",
-			"name":"Member",
-			"title":"Fallback"
-		}]}]}`)
-	}), []*domain.Member{{Name: "Member", ChannelID: "channel-1"}})
-
-	service.nowFunc = func() time.Time { return time.Date(2026, time.August, 13, 0, 0, 0, 0, officialScheduleJST) }
-	service.youtubeClient = testYouTubeClient{fetchUpcoming: func(context.Context, string) ([]*parser.UpcomingEvent, error) {
-		return nil, context.DeadlineExceeded
-	}}
-	service.cache = &cachemocks.Client{
-		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) { return nil, false },
-		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
-	}
-
-	streams, err := service.FetchChannel(t.Context(), "channel-1", 24, false)
-	if err != nil {
-		t.Fatalf("FetchChannel() error = %v", err)
-	}
-
-	if len(streams) != 1 || streams[0].ID != "fallback" {
-		t.Fatalf("streams = %#v", streams)
-	}
-
-	if got := requests.Load(); got != 1 {
-		t.Fatalf("official API requests = %d, want 1", got)
-	}
-}
-
-func TestFetchChannelDoesNotUseOfficialAPIAfterYouTubeSuccessEmpty(t *testing.T) {
-	var requests atomic.Int32
-
-	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		writeJSON(t, writer, `{"dateGroupList":[]}`)
-	}), nil)
-
-	service.youtubeClient = testYouTubeClient{fetchUpcoming: func(context.Context, string) ([]*parser.UpcomingEvent, error) {
-		return []*parser.UpcomingEvent{}, nil
-	}}
-	service.cache = &cachemocks.Client{
-		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) { return nil, false },
-		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
-	}
-
-	streams, err := service.FetchChannel(t.Context(), "channel-1", 24, false)
-	if err != nil {
-		t.Fatalf("FetchChannel() error = %v", err)
-	}
-
-	if len(streams) != 0 || requests.Load() != 0 {
-		t.Fatalf("streams=%d official requests=%d", len(streams), requests.Load())
 	}
 }
 

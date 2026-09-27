@@ -12,10 +12,11 @@ func TestCelebrationDispatchPayload_Identity(t *testing.T) {
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthday,
+		MemberID:  testCelebrationMemberID,
 		ChannelID: testChannelID,
 		Date:      testCelebrationDate,
 	}
-	want := "birthday:UC_test:2026-05-26"
+	want := "birthday:member-101:2026-05-26"
 
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
@@ -27,10 +28,11 @@ func TestCelebrationDispatchPayload_IdentityAnniversary(t *testing.T) {
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindAnniversary,
+		MemberID:  testCelebrationMemberID,
 		ChannelID: "UC_ch",
 		Date:      "2026-09-01",
 	}
-	want := "anniversary:UC_ch:2026-09-01"
+	want := "anniversary:member-101:2026-09-01"
 
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
@@ -42,11 +44,12 @@ func TestCelebrationDispatchPayload_IdentityBirthdayStream(t *testing.T) {
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthdayStream,
+		MemberID:  testCelebrationMemberID,
 		ChannelID: testChannelID,
 		Date:      "2026-07-10",
 		VideoID:   "vid123",
 	}
-	want := "birthday_stream:UC_test:2026-07-10:vid123"
+	want := "birthday_stream:member-101:2026-07-10:vid123"
 
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
@@ -58,11 +61,12 @@ func TestCelebrationDispatchPayload_IdentityBirthdayIgnoresVideoID(t *testing.T)
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthday,
+		MemberID:  testCelebrationMemberID,
 		ChannelID: testChannelID,
 		Date:      testCelebrationDate,
 		VideoID:   "vid123",
 	}
-	want := "birthday:UC_test:2026-05-26"
+	want := "birthday:member-101:2026-05-26"
 
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
@@ -74,11 +78,12 @@ func TestCelebrationDispatchPayload_IdentityBirthdayStreamTrimsVideoID(t *testin
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthdayStream,
+		MemberID:  testCelebrationMemberID,
 		ChannelID: testChannelID,
 		Date:      "2026-07-10",
 		VideoID:   " vid123 ",
 	}
-	want := "birthday_stream:UC_test:2026-07-10:vid123"
+	want := "birthday_stream:member-101:2026-07-10:vid123"
 
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
@@ -90,10 +95,11 @@ func TestCelebrationDispatchPayload_IdentityBirthdayStreamEmptyVideoID(t *testin
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthdayStream,
+		MemberID:  testCelebrationMemberID,
 		ChannelID: testChannelID,
 		Date:      "2026-07-10",
 	}
-	want := "birthday_stream:UC_test:2026-07-10"
+	want := "birthday_stream:member-101:2026-07-10"
 
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
@@ -108,6 +114,17 @@ func TestCelebrationDispatchPayload_IdentityUsesStableMemberID(t *testing.T) {
 
 	if first.Identity() == second.Identity() {
 		t.Fatalf("shared-channel member identities collide: %q", first.Identity())
+	}
+}
+
+func TestCelebrationDispatchPayload_IdentityIgnoresChannelID(t *testing.T) {
+	t.Parallel()
+
+	first := &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: testCelebrationMemberID, ChannelID: "UC_old", Date: testCelebrationDate}
+	second := &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: testCelebrationMemberID, ChannelID: "UC_new", Date: testCelebrationDate}
+
+	if first.Identity() != second.Identity() {
+		t.Fatalf("channel change altered member identity: %q != %q", first.Identity(), second.Identity())
 	}
 }
 
@@ -165,6 +182,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
+			MemberID:   testCelebrationMemberID,
 			MemberName: "Test Member",
 			ChannelID:  testChannelID,
 			Photo:      "https://example.com/photo.jpg",
@@ -191,7 +209,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 		t.Fatalf("source_kind = %v, want %q", raw["source_kind"], domain.AlarmDispatchSourceKindCelebration)
 	}
 
-	assertCelebrationMemberIDOmitted(t, raw["celebration"])
+	assertCelebrationMemberIDPresent(t, raw["celebration"])
 
 	var decoded domain.AlarmQueueEnvelope
 
@@ -207,24 +225,12 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 		t.Fatal("Celebration = nil")
 	}
 
-	if decoded.Celebration.Kind != domain.CelebrationKindBirthday {
-		t.Fatalf("Kind = %q, want %q", decoded.Celebration.Kind, domain.CelebrationKindBirthday)
-	}
-
-	if decoded.Celebration.Date != testCelebrationDate {
-		t.Fatalf("Date = %q, want %q", decoded.Celebration.Date, testCelebrationDate)
-	}
-
-	if decoded.Celebration.MemberName != "Test Member" {
-		t.Fatalf("MemberName = %q, want %q", decoded.Celebration.MemberName, "Test Member")
-	}
-
-	if decoded.Celebration.Ordinal != 2 {
-		t.Fatalf("Ordinal = %d, want 2", decoded.Celebration.Ordinal)
+	if *decoded.Celebration != *envelope.Celebration {
+		t.Fatalf("Celebration = %+v, want %+v", *decoded.Celebration, *envelope.Celebration)
 	}
 }
 
-func assertCelebrationMemberIDOmitted(t *testing.T, value any) {
+func assertCelebrationMemberIDPresent(t *testing.T, value any) {
 	t.Helper()
 
 	celebration, ok := value.(map[string]any)
@@ -232,8 +238,8 @@ func assertCelebrationMemberIDOmitted(t *testing.T, value any) {
 		t.Fatalf("celebration = %T, want object", value)
 	}
 
-	if _, ok := celebration["member_id"]; ok {
-		t.Fatal("zero member_id must be omitted from JSON")
+	if _, ok := celebration["member_id"]; !ok {
+		t.Fatal("member_id must be serialized")
 	}
 }
 
@@ -248,6 +254,7 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_Celebration(t *testing.T) 
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
+			MemberID:   testCelebrationMemberID,
 			MemberName: "Test",
 			ChannelID:  testChannelID,
 			Date:       testCelebrationDate,
@@ -285,11 +292,22 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_Celebration(t *testing.T) 
 
 	noDate.Celebration = &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthday,
+		MemberID:  testCelebrationMemberID,
 		ChannelID: testChannelID,
 	}
 
 	if err := noDate.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for empty date")
+	}
+
+	noMember := valid
+	noMemberPayload := *valid.Celebration
+
+	noMemberPayload.MemberID = 0
+	noMember.Celebration = &noMemberPayload
+
+	if err := noMember.ValidateCanonicalDispatch(); err == nil {
+		t.Fatal("ValidateCanonicalDispatch() = nil, want error for missing member id")
 	}
 }
 
@@ -304,6 +322,7 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_BirthdayStream(t *testing.
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthdayStream,
+			MemberID:   testCelebrationMemberID,
 			MemberName: "Test",
 			ChannelID:  testChannelID,
 			Date:       "2026-07-10",

@@ -54,7 +54,7 @@ func TestNewH3ServerLoadsTLSConfig(t *testing.T) {
 	}
 }
 
-func writeH3LocalhostCertificate(t *testing.T) (value0, value1 string) {
+func writeH3LocalhostCertificate(t *testing.T) (string, string) {
 	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

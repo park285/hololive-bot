@@ -256,17 +256,6 @@ func normalizePostLatencyPeriod(period PostLatencyPeriod, index int) (PostLatenc
 	}, nil
 }
 
-func EarliestPostLatencyPeriodStart(periods []PostLatencyPeriod) time.Time {
-	earliest := periods[0].StartAt
-	for i := 1; i < len(periods); i++ {
-		if periods[i].StartAt.Before(earliest) {
-			earliest = periods[i].StartAt
-		}
-	}
-
-	return earliest
-}
-
 func PostLatencyObservedAt(post *PostSendCount) (time.Time, error) {
 	if post.ActualPublishedAt != nil {
 		return post.ActualPublishedAt.UTC(), nil

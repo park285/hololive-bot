@@ -69,9 +69,3 @@ var ValkeyConfig = struct {
 	BlockingPoolSize:  100,
 	PipelineMultiplex: 4,
 }
-
-var RedisKeys = struct {
-	AlarmMemberNames string
-}{
-	AlarmMemberNames: "alarm:member_names",
-}

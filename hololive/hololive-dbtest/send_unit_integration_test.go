@@ -1,12 +1,14 @@
 package dbtest
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -21,7 +23,6 @@ func TestAlarmDispatchSendUnitFirstInsertIsAtomic(t *testing.T) {
 
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: []domain.AlarmQueueEnvelope{envelope},
-		Status:    dispatchoutbox.StatusPending,
 	})
 
 	require.NoError(t, err)
@@ -45,7 +46,6 @@ func TestAlarmDispatchSendUnitConcurrentClaimKeepsGroupAtomic(t *testing.T) {
 	}
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: envelopes,
-		Status:    dispatchoutbox.StatusPending,
 	})
 	require.NoError(t, err)
 	require.Equal(t, len(envelopes), result.InsertedDeliveries)
@@ -115,7 +115,6 @@ func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: envelopes,
-		Status:    dispatchoutbox.StatusPending,
 	})
 	require.NoError(t, err)
 	require.Equal(t, len(envelopes), result.InsertedDeliveries)
@@ -126,14 +125,11 @@ func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 	require.Len(t, claimed, 3)
 }
 
-func TestAlarmDispatchClaimDrainsLegacyBeforeSendUnits(t *testing.T) {
+// 저장된 send unit 없는 migration 141 이전 delivery를 먼저 claim하던 legacy_head는 지웠다(stack-audit 2026-09-26 T17, T18에서
+// 활성 NULL 행 0건 확인). 이제 claim이 읽지 않는 활성 NULL 행이 조용히 멈추지 않도록 migration 223의 CHECK가 쓰기 시점에 거절한다.
+// 종단 NULL 행(T18 기준 sent·취소 상태 437건)은 retention 소거까지 유효하고, 수동 requeue로 활성 상태로 되돌리는 것은 거절된다.
+func TestAlarmDispatchDeliveriesRequirePersistedSendUnitWhileActive(t *testing.T) {
 	pool := NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
-	_, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{sendUnitTestEnvelope("room-unit", "stream-unit")},
-		Status:    dispatchoutbox.StatusPending,
-	})
-	require.NoError(t, err)
 
 	var eventID int64
 
@@ -143,82 +139,54 @@ func TestAlarmDispatchClaimDrainsLegacyBeforeSendUnits(t *testing.T) {
 		) VALUES ($1, repeat('a', 64), 'LIVE', 'legacy-channel', 'legacy-stream', 'legacy', '{}'::jsonb)
 		RETURNING id`, "legacy-event-"+fmt.Sprint(time.Now().UnixNano())).Scan(&eventID))
 
-	var legacyID int64
+	for _, status := range []string{"pending", "retry"} {
+		_, err := pool.Exec(t.Context(), `
+			INSERT INTO alarm_dispatch_deliveries (event_id, room_id, dedupe_key, status, next_attempt_at)
+			VALUES ($1, 'room-legacy', $2, $3, NOW() - INTERVAL '1 minute')`,
+			eventID, "legacy-active-"+status, status)
+		requireActiveSendUnitViolation(t, err)
+	}
+
+	var terminalID int64
 
 	require.NoError(t, pool.QueryRow(t.Context(), `
-		INSERT INTO alarm_dispatch_deliveries (event_id, room_id, dedupe_key, status, next_attempt_at)
-		VALUES ($1, 'room-legacy', $2, 'pending', NOW() - INTERVAL '1 minute')
-		RETURNING id`, eventID, "legacy-dedupe-"+fmt.Sprint(time.Now().UnixNano())).Scan(&legacyID))
+		INSERT INTO alarm_dispatch_deliveries (event_id, room_id, dedupe_key, status, dlq_at)
+		VALUES ($1, 'room-legacy', 'legacy-terminal-dlq', 'dlq', NOW())
+		RETURNING id`, eventID).Scan(&terminalID))
 
-	claimed, err := repository.ClaimDue(t.Context(), "worker-legacy", 10, time.Minute)
-
-	require.NoError(t, err)
-	require.Len(t, claimed, 1)
-	require.Equal(t, legacyID, claimed[0].ID)
-	require.Zero(t, claimed[0].SendUnitID)
+	_, err := pool.Exec(t.Context(), `
+		UPDATE alarm_dispatch_deliveries
+		SET status = 'retry', next_attempt_at = NOW()
+		WHERE id = $1`, terminalID)
+	requireActiveSendUnitViolation(t, err)
 }
 
-func TestAlarmDispatchShadowDoesNotAllocateSendUnit(t *testing.T) {
+func requireActiveSendUnitViolation(t *testing.T, err error) {
+	t.Helper()
+
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	require.True(t, ok, "want active send unit check violation, got %v", err)
+	require.Equal(t, "23514", pgErr.Code)
+	require.Equal(t, "alarm_dispatch_deliveries_active_send_unit_check", pgErr.ConstraintName)
+}
+
+// migration 225가 v3 handoff의 비교 전용 shadowed 상태를 CHECK에서 뺐다(DEC-20260926-hololive-outbox-v3-convergence).
+// 쓰기 경로가 다시 shadowed를 기록하면 DB가 거절해야 한다.
+func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {
 	pool := NewPool(t)
 	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{sendUnitTestEnvelope("room-shadow", "stream-shadow")},
-		Status:    dispatchoutbox.StatusShadowed,
+		Envelopes: []domain.AlarmQueueEnvelope{sendUnitTestEnvelope("room-status", "stream-status")},
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InsertedDeliveries)
 
-	var (
-		unitCount            int
-		groupKey, sendUnitID any
-	)
+	_, err = pool.Exec(t.Context(), `UPDATE alarm_dispatch_deliveries SET status = 'shadowed'`)
 
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_send_units").Scan(&unitCount))
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT dispatch_group_key, send_unit_id FROM alarm_dispatch_deliveries").Scan(&groupKey, &sendUnitID))
-	require.Zero(t, unitCount)
-	require.Nil(t, groupKey)
-	require.Nil(t, sendUnitID)
-}
-
-func TestAlarmDispatchShadowPromotesToPendingOnCutover(t *testing.T) {
-	pool := NewPool(t)
-	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
-	envelope := sendUnitTestEnvelope("room-shadow-cutover", "stream-shadow-cutover")
-	shadow, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{envelope},
-		Status:    dispatchoutbox.StatusShadowed,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 1, shadow.InsertedDeliveries)
-
-	cutover, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
-		Envelopes: []domain.AlarmQueueEnvelope{envelope, envelope},
-		Status:    dispatchoutbox.StatusPending,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 1, cutover.InsertedDeliveries)
-	require.Equal(t, 1, cutover.DuplicateDeliveries)
-
-	var (
-		status          string
-		sendUnitID      int64
-		clientRequestID string
-	)
-
-	require.NoError(t, pool.QueryRow(t.Context(), `
-		SELECT d.status, d.send_unit_id, u.client_request_id
-		FROM alarm_dispatch_deliveries d
-		JOIN alarm_dispatch_send_units u ON u.id = d.send_unit_id
-	`).Scan(&status, &sendUnitID, &clientRequestID))
-	require.Equal(t, string(dispatchoutbox.StatusPending), status)
-	require.Positive(t, sendUnitID)
-	require.NotEmpty(t, clientRequestID)
-
-	claimed, err := repository.ClaimDue(t.Context(), "worker-shadow-cutover", 10, time.Minute)
-	require.NoError(t, err)
-	require.Len(t, claimed, 1)
-	require.Equal(t, sendUnitID, claimed[0].SendUnitID)
-	require.Equal(t, clientRequestID, claimed[0].ClientRequestID)
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	require.True(t, ok, "want status check violation, got %v", err)
+	require.Equal(t, "23514", pgErr.Code)
+	require.Equal(t, "alarm_dispatch_deliveries_status_check", pgErr.ConstraintName)
 }
 
 func sendUnitTestEnvelope(roomID, streamID string) domain.AlarmQueueEnvelope {

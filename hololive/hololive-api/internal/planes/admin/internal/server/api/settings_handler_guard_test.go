@@ -33,7 +33,7 @@ func newGuardTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 func TestSettingsHandler_Guards(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	settingsService := settingssvc.NewSettingsService(
+	settingsService := mustNewTestSettingsService(t,
 		filepath.Join(t.TempDir(), "settings.json"),
 		settingssvc.Settings{},
 		newDiscardLogger(),

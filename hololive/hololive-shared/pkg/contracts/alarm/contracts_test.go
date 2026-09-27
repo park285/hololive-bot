@@ -34,18 +34,6 @@ import (
 func TestAlarmQueueContractConstants(t *testing.T) {
 	t.Parallel()
 
-	if keyspkg.DispatchQueueKey != "alarm:dispatch:queue" {
-		t.Fatalf("DispatchQueueKey = %q", keyspkg.DispatchQueueKey)
-	}
-
-	if keyspkg.DispatchRetryQueueKey != "alarm:dispatch:retry" {
-		t.Fatalf("DispatchRetryQueueKey = %q", keyspkg.DispatchRetryQueueKey)
-	}
-
-	if keyspkg.DispatchDLQKey != "alarm:dispatch:dlq" {
-		t.Fatalf("DispatchDLQKey = %q", keyspkg.DispatchDLQKey)
-	}
-
 	if keyspkg.NotifyClaimKeyPrefix != "notified:claim:" {
 		t.Fatalf("NotifyClaimKeyPrefix = %q", keyspkg.NotifyClaimKeyPrefix)
 	}
@@ -295,43 +283,6 @@ func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
 
 	if retry.NextVisibleAt != "2026-02-25T13:00:30Z" {
 		t.Fatalf("next_visible_at = %q, want 2026-02-25T13:00:30Z", retry.NextVisibleAt)
-	}
-}
-
-// version-0(legacy)는 domain unmarshal 레이어에서 거부되지 않고 파싱된다.
-// 한편 consumer 수용 분기(parseEnvelope의 case 0)는 queue 패키지 테스트가 담당한다.
-func TestAlarmQueueEnvelopeVersionZeroParsesAtDomainLayer(t *testing.T) {
-	t.Parallel()
-
-	versionZeroJSON := `{
-		"notification": {
-			"room_id": "room-legacy",
-			"channel": null,
-			"stream": null,
-			"minutes_until": 10,
-			"users": ["user-a"]
-		},
-		"claim_keys": ["notified:claim:room-legacy"],
-		"enqueued_at": "2026-02-25T13:00:00Z",
-		"version": 0
-	}`
-
-	var env domain.AlarmQueueEnvelope
-
-	if err := jsonv2.Unmarshal([]byte(versionZeroJSON), &env); err != nil {
-		t.Fatalf("unmarshal version-0 envelope: %v", err)
-	}
-
-	if env.Version != 0 {
-		t.Fatalf("Version = %d, want 0", env.Version)
-	}
-
-	if env.Notification.RoomID != "room-legacy" {
-		t.Fatalf("RoomID = %q, want room-legacy", env.Notification.RoomID)
-	}
-
-	if len(env.ClaimKeys) != 1 {
-		t.Fatalf("ClaimKeys len = %d, want 1", len(env.ClaimKeys))
 	}
 }
 

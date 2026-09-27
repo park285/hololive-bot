@@ -92,7 +92,7 @@ func (s *testStateStore) Del(_ context.Context, key string) error {
 
 func TestCommunityMissingState(t *testing.T) {
 	ctx := t.Context()
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 
 	require.False(t, client.isCommunityMissing(ctx, "UC_TEST"))
 
@@ -107,38 +107,21 @@ func TestCommunityMissingState(t *testing.T) {
 	require.False(t, client.isCommunityMissing(ctx, "UC_TEST"))
 }
 
-func TestVideoRSSBackoffState(t *testing.T) {
-	ctx := t.Context()
-	client := NewClient()
-
-	require.False(t, client.isVideoRSSBackoff(ctx, "UC_TEST"))
-
-	client.markVideoRSSBackoff(ctx, "UC_TEST")
-	require.True(t, client.isVideoRSSBackoff(ctx, "UC_TEST"))
-
-	client.clearVideoRSSBackoff(ctx, "UC_TEST")
-	require.False(t, client.isVideoRSSBackoff(ctx, "UC_TEST"))
-}
-
 func TestStateStorePersistsAcrossClientInstances(t *testing.T) {
 	ctx := t.Context()
 	store := newTestStateStore()
 
-	clientA := NewClient(WithStateStore(store))
+	clientA := NewClient(testYouTubeConfig(), WithStateStore(store))
 	clientA.markCommunityMissing(ctx, "UC_TEST")
-	clientA.markVideoRSSBackoff(ctx, "UC_TEST")
-	require.Greater(t, ytDefaults.CommunityMissingTTL, time.Duration(0))
-	require.Greater(t, ytDefaults.VideoRSSBackoffTTL, time.Duration(0))
-	require.Len(t, store.data, 2)
+	require.Greater(t, testYouTubeConfig().CommunityMissingTTL, time.Duration(0))
+	require.Len(t, store.data, 1)
 	require.Contains(t, store.data, clientA.communityMissingStateKey("UC_TEST"))
-	require.Contains(t, store.data, clientA.videoRSSBackoffStateKey("UC_TEST"))
 
-	clientB := NewClient(WithStateStore(store))
+	clientB := NewClient(testYouTubeConfig(), WithStateStore(store))
 
 	var communityMarker bool
 
 	require.NoError(t, store.Get(ctx, clientB.communityMissingStateKey("UC_TEST"), &communityMarker))
 	require.True(t, communityMarker)
 	require.True(t, clientB.isCommunityMissing(ctx, "UC_TEST"))
-	require.True(t, clientB.isVideoRSSBackoff(ctx, "UC_TEST"))
 }

@@ -58,8 +58,17 @@ type AlarmDispatchWorkerSettings struct {
 }
 
 type NotificationDeliveryWorkerSettings struct {
-	BatchSize                   int   `json:"batch_size"`
-	MaxRetries                  int   `json:"max_retries"`
+	BatchSize  int `json:"batch_size"`
+	MaxRetries int `json:"max_retries"`
+	// LockTimeoutMS는 퇴역 값이다. lease 이전(locked_by NULL) 행을 회수하던 FetchAndLock lockTimeout과 readiness 표본
+	// 인자에만 쓰였고, 그 경로를 stack-audit 2026-09-26(PLN-20260926-stack-audit-refactoring T11
+	// holo-delivery-outbox-legacy-lock-fence, T18 잔존 0건)에서 지워 어떤 코드도 읽지 않으며 양수 검증도 하지 않는다.
+	// workercontract.DecodeWorkerSettings가 profile 키 집합과 이 struct 필드의 정확한 일치를 요구하므로, 운영 profile에
+	// 키가 있는 동안 필드만 먼저 지우면 alarm-worker 기동이 실패한다.
+	// 제거 조건과 담당: hololive-bot-ops가 stack-secrets의 alarm-worker worker profile(/run/hololive-bot/worker-profiles/
+	// alarm-worker.json의 원천)에서 notification_delivery.lock_timeout_ms를 지우고, hololive-bot 코드 변경이 이 필드와
+	// testdata fixture 키를 같은 rollout에서 지워 운영 profile의 키가 0건이 되면 삭제한다.
+	// 재검토 기한: remove_after = "2026-12-31".
 	LockTimeoutMS               int64 `json:"lock_timeout_ms"`
 	PollIntervalMS              int64 `json:"poll_interval_ms"`
 	RetryBackoffMS              int64 `json:"retry_backoff_ms"`
@@ -71,6 +80,10 @@ type NotificationDeliveryWorkerSettings struct {
 	StaleSendingSweepLimit      int   `json:"stale_sending_sweep_limit"`
 }
 
+// YouTubeDeliveryWorkerSettings의 telemetry_backfill_batch는 delivery 테이블 역산 backfill과 함께 삭제했다
+// (DEC-20260926-hololive-delivery-telemetry-single-path). DecodeWorkerSettings가 profile 키와 필드의 정확한 일치를
+// 요구하므로, 운영 alarm-worker profile에서 이 키를 지우는 작업은 이 필드를 지운 alarm-worker 배포와 같은 유지보수
+// 단계에서 한다.
 type YouTubeDeliveryWorkerSettings struct {
 	BatchSize                   int   `json:"batch_size"`
 	LockTimeoutMS               int64 `json:"lock_timeout_ms"`
@@ -87,7 +100,6 @@ type YouTubeDeliveryWorkerSettings struct {
 	SubscriberLookupParallelism int   `json:"subscriber_lookup_parallelism"`
 	AggregateSyncIntervalMS     int64 `json:"aggregate_sync_interval_ms"`
 	TelemetryPollIntervalMS     int64 `json:"telemetry_poll_interval_ms"`
-	TelemetryBackfillBatch      int   `json:"telemetry_backfill_batch"`
 	TelemetryFlushBatch         int   `json:"telemetry_flush_batch"`
 	TelemetryRetryBackoffMS     int64 `json:"telemetry_retry_backoff_ms"`
 	TelemetryRetentionMS        int64 `json:"telemetry_retention_ms"`

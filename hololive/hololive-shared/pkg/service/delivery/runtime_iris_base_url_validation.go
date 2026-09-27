@@ -21,7 +21,6 @@ const (
 	appEnvKey                               = "APP_ENV"
 	appEnvProduction                        = "production"
 	irisBaseURLAllowedHostsEnv              = "IRIS_BASE_URL_ALLOWED_HOSTS"
-	irisBaseURLFileSkipStatChecksEnv        = "IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS"
 	irisH3ServerNameEnv                     = "IRIS_H3_SERVER_NAME"
 	runtimeIrisBaseURLFileMaxAllowedPerms   = 0o644
 	runtimeIrisBaseURLFileWorldWritablePerm = 0o002
@@ -339,7 +338,7 @@ func validateRuntimeIrisBaseURLFileParentPath(path string) error {
 	return nil
 }
 
-func runtimeIrisBaseURLParentPathStart(parent string) (value0, value1 string) {
+func runtimeIrisBaseURLParentPathStart(parent string) (start, remainder string) {
 	volume := filepath.VolumeName(parent)
 	rest := strings.TrimPrefix(parent, volume)
 	separator := string(os.PathSeparator)

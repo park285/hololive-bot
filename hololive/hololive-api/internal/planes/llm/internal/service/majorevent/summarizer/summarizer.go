@@ -23,12 +23,14 @@ package summarizer
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
@@ -100,7 +102,7 @@ func normalizeConsensusConfig(config SummarizerConsensusConfig) SummarizerConsen
 	return config
 }
 
-// llm이 nil이면 Summarize()는 항상 빈 문자열을 반환합니다.
+// llm이 nil이면 요약이 비활성이고 Summarize()는 빈 문자열과 nil 오류를 반환합니다.
 func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.WebSearcher, logger *slog.Logger, opts ...SummarizerOption) *EventSummarizer {
 	s := &EventSummarizer{
 		llm:      llm,
@@ -122,35 +124,36 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.We
 	return s
 }
 
-// LLM 비활성 또는 실패 시 빈 문자열을 반환합니다 (호출부에서 fallback 처리).
-func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
-	return s.SummarizeResult(ctx, events, summaryType, periodKey).Text
+// Summarize는 LLM 요약 본문을 돌려준다. LLM이 비활성(nil)이거나 이벤트가 없으면 빈 문자열과 nil 오류이고, formatter는
+// 이벤트 목록만 보낸다(설정된 모드). 활성 LLM의 요약 실패·빈 결과·외부 내용 guard 실패는 오류로 돌려주며, 빈 요약으로 바꿔
+// 이벤트 목록만 보내지 않는다(DEC-20260926-hololive-source-fallbacks-retirement).
+func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) (string, error) {
+	result, err := s.SummarizeResult(ctx, events, summaryType, periodKey)
+	if err != nil {
+		return "", err
+	}
+
+	return result.Text, nil
 }
 
-func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) SummaryResult {
+func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) (SummaryResult, error) {
 	if s.llm == nil || len(events) == 0 {
-		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
+		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}, nil
 	}
 
 	cacheKey := s.summaryCacheKey(events, summaryType, periodKey)
 	if cached, ok := s.cachedSummaryResult(ctx, cacheKey, summaryType, periodKey); ok {
-		return cached
+		return cached, nil
 	}
 
 	searchContext, err := s.runDualSearch(ctx, summaryType, periodKey)
 	if err != nil {
-		s.logger.Error("Major event external content guard unavailable", slog.String("error", err.Error()))
-
-		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
+		return SummaryResult{}, fmt.Errorf("summarize %s major events: external content guard: %w", summaryType, err)
 	}
 
 	resp, err := s.buildSummaryResponse(ctx, events, summaryType, periodKey, searchContext)
 	if err != nil {
-		s.logger.Error("LLM 요약 실패 (fallback 사용)",
-			slog.String("type", string(summaryType)),
-			slog.String("error", err.Error()))
-
-		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
+		return SummaryResult{}, fmt.Errorf("summarize %s major events: %w", summaryType, err)
 	}
 
 	resp.DiscoveredEvents = filterTrustedDiscoveredEvents(resp.DiscoveredEvents)
@@ -158,10 +161,7 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 
 	result := assembleSummaryText(resp)
 	if result == "" {
-		s.logger.Warn("LLM 요약 결과가 비어있음",
-			slog.String("type", string(summaryType)))
-
-		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
+		return SummaryResult{}, fmt.Errorf("summarize %s major events: %w", summaryType, errEmptyMajorEventSummary)
 	}
 
 	result = s.reviewFinalSummaryOutput(ctx, events, summaryType, periodKey, resp, result)
@@ -171,8 +171,12 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 	return SummaryResult{
 		Text:       result,
 		ResultType: sharedmodel.SummaryResultPrimary,
-	}
+	}, nil
 }
+
+// errEmptyMajorEventSummary는 LLM이 응답했지만 조립할 요약 본문이 없는 경우다. 빈 요약은 이벤트 목록 대체 경로로
+// 흘리지 않고 요약 실패로 드러낸다.
+var errEmptyMajorEventSummary = errors.New("llm summary is empty")
 
 func (s *EventSummarizer) summaryCacheKey(events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
 	cacheKey, err := buildSummaryCacheKey(events, summaryType, periodKey)
@@ -363,6 +367,11 @@ func (s *EventSummarizer) buildSummaryResponse(
 	summaryType SummaryType,
 	periodKey, searchContext string,
 ) (*summaryResponse, error) {
+	invariantPrompt, err := getInvariantPrompt()
+	if err != nil {
+		return nil, fmt.Errorf("get invariant prompt: %w", err)
+	}
+
 	sysPrompt, err := getSystemPrompt(summaryType)
 	if err != nil {
 		return nil, fmt.Errorf("get system prompt: %w", err)
@@ -371,7 +380,7 @@ func (s *EventSummarizer) buildSummaryResponse(
 	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext)
 	schema := summaryResponseSchema()
 
-	rawJSON, err := s.llm.GenerateJSON(ctx, sysPrompt, userPrompt, schema)
+	rawJSON, err := s.llm.GenerateJSON(ctx, openaipreset.PromptLayers{Invariant: invariantPrompt, Developer: sysPrompt, User: userPrompt}, schema)
 	if err != nil {
 		return nil, fmt.Errorf("generate summary json: %w", err)
 	}

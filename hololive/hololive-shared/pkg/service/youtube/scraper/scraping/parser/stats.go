@@ -38,16 +38,6 @@ func ParseChannelStatsFromInitialData(data *gjson.Result, channelID string) *Cha
 	return stats
 }
 
-func ParseChannelSnippetFromInitialData(data *gjson.Result) *ChannelSnippet {
-	avatarSources := data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.image.decoratedAvatarViewModel.avatar.avatarViewModel.image.sources")
-	bannerSources := data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.banner.imageBannerViewModel.image.sources")
-
-	return &ChannelSnippet{
-		Avatar: ParseThumbnailSources(&avatarSources),
-		Banner: ParseThumbnailSources(&bannerSources),
-	}
-}
-
 func ParseChannelHandle(data *gjson.Result) string {
 	handle := data.Get("contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.endpoint.browseEndpoint.canonicalBaseUrl").String()
 	if handle != "" && handle[0] == '/' {
@@ -95,7 +85,7 @@ func ParseShortNumber(text string) int64 {
 	return int64(val * float64(multiplier))
 }
 
-func shortNumberBaseAndMultiplier(text string) (result1 string, result2 int64) {
+func shortNumberBaseAndMultiplier(text string) (string, int64) {
 	units := []struct {
 		suffix     string
 		multiplier int64

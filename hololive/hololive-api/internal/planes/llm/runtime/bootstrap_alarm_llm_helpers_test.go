@@ -21,6 +21,7 @@
 package runtime
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,30 +33,69 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
-	t.Run("env override", func(t *testing.T) {
-		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "/tmp/custom-allowlist.json")
-		assert.Equal(t, "/tmp/custom-allowlist.json", resolveMemberNewsXAllowlistPath())
-	})
-
-	t.Run("fallback empty when file missing", func(t *testing.T) {
+// X allowlist 경로는 MEMBER_NEWS_X_ALLOWLIST_PATH 하나로만 받는다. 설정했는데 읽지 못하면 빈 allowlist로
+// 내려가지 않고 기동을 실패시킨다(stack audit B5).
+func TestInitMemberNewsSourceValidator(t *testing.T) {
+	t.Run("unset path runs without x allowlist", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "")
 
-		t.Chdir(t.TempDir())
-
-		assert.Empty(t, resolveMemberNewsXAllowlistPath())
+		validator, err := initMemberNewsSourceValidator(nil, testRuntimeLogger())
+		require.NoError(t, err)
+		require.NotNil(t, validator)
 	})
 
-	t.Run("env trim", func(t *testing.T) {
-		tmp := filepath.Join(t.TempDir(), "allowlist.json")
-		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "  "+tmp+"  ")
-		assert.Equal(t, "  "+tmp+"  ", resolveMemberNewsXAllowlistPath())
+	t.Run("configured missing file fails", func(t *testing.T) {
+		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", filepath.Join(t.TempDir(), "missing.json"))
+
+		_, err := initMemberNewsSourceValidator(nil, testRuntimeLogger())
+		require.Error(t, err)
 	})
+
+	t.Run("working directory candidates are not searched", func(t *testing.T) {
+		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "")
+
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "configs"), 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "configs", "hololive_official_x_accounts.json"), []byte("not json"), 0o600))
+		t.Chdir(dir)
+
+		_, err := initMemberNewsSourceValidator(nil, testRuntimeLogger())
+		require.NoError(t, err, "a file in ./configs must not be picked up implicitly")
+	})
+
+	t.Run("configured path is trimmed", func(t *testing.T) {
+		allowlist := filepath.Join(t.TempDir(), "allowlist.json")
+		require.NoError(t, os.WriteFile(allowlist, []byte(`["hololivetv"]`), 0o600))
+		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "  "+allowlist+"  ")
+
+		_, err := initMemberNewsSourceValidator(nil, testRuntimeLogger())
+		require.NoError(t, err)
+	})
+}
+
+// provider가 켜져 있는데 client를 만들지 못하면 member news를 조용히 결정적 digest로 줄이지 않고 기동을 실패시킨다.
+func TestInitMemberNewsServiceFailsWhenEnabledLLMClientCannotInitialize(t *testing.T) {
+	t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "")
+
+	_, err := initMemberNewsService(
+		t.Context(),
+		cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: ""}),
+		&settings.LLMConfig{MemberNewsModel: "test-model"},
+		settings.ExaConfig{},
+		nil,
+		nil,
+		nil,
+		&llmGuards{},
+		testRuntimeLogger(),
+	)
+	require.Error(t, err)
 }
 
 func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 	t.Run("basic config without consensus", func(t *testing.T) {
-		service := initMemberNewsService(
+		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "")
+
+		service, err := initMemberNewsService(
 			t.Context(),
 			cliproxyProvider(settings.CliproxyConfig{}),
 			&settings.LLMConfig{},
@@ -66,10 +106,13 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			&llmGuards{},
 			testRuntimeLogger(),
 		)
+		require.NoError(t, err)
 		require.NotNil(t, service)
 	})
 
 	t.Run("consensus config enabled", func(t *testing.T) {
+		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "")
+
 		apiKey := strings.Join([]string{"dummy", "api", "key"}, "-")
 		cliproxyConfig := cliproxyProvider(settings.CliproxyConfig{
 			Enabled:         true,
@@ -90,7 +133,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			},
 		}
 
-		service := initMemberNewsService(
+		service, err := initMemberNewsService(
 			t.Context(),
 			cliproxyConfig,
 			llmConfig,
@@ -101,6 +144,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			&llmGuards{},
 			testRuntimeLogger(),
 		)
+		require.NoError(t, err)
 		require.NotNil(t, service)
 	})
 }

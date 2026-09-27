@@ -49,7 +49,7 @@ func newMemberSubscriptionCommand(t *testing.T, recorder *memberAlarmRecorder, s
 	logger := slog.New(slog.DiscardHandler)
 	deps := &handlercore.Dependencies{
 		Alarm:       recorder,
-		Matcher:     matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, logger),
+		Matcher:     matcher.NewMatcher(memberProvider, nil, nil, logger),
 		Formatter:   formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: send,
 		SendError: func(_ context.Context, _, message string) error {

@@ -156,12 +156,13 @@ func TestAlarmDispatchGroupKeyCelebration(t *testing.T) {
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:      domain.CelebrationKindBirthday,
+			MemberID:  101,
 			ChannelID: testCelebrationChannelID,
 		},
 	}
 
 	got := alarmDispatchGroupKey(&envelope)
-	assert.Equal(t, "room-1|celebration|birthday|UC_test", got)
+	assert.Equal(t, "room-1|celebration|birthday|member-101", got)
 }
 
 func TestAlarmDispatchGroupKeyCelebrationPerMember(t *testing.T) {
@@ -170,15 +171,15 @@ func TestAlarmDispatchGroupKeyCelebrationPerMember(t *testing.T) {
 	member1 := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: "UC_a"},
+		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: 101, ChannelID: "UC_a"},
 	}
 	member2 := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: "UC_b"},
+		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: 202, ChannelID: "UC_b"},
 	}
 
-	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{member1, member2})
+	groups := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{member1, member2})
 	assert.Len(t, groups, 2)
 }
 
@@ -190,13 +191,14 @@ func TestAlarmDispatchGroupKeyCelebrationBirthdayStreamVideoID(t *testing.T) {
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:      domain.CelebrationKindBirthdayStream,
+			MemberID:  101,
 			ChannelID: testCelebrationChannelID,
 			VideoID:   "video-1",
 		},
 	}
 
 	got := alarmDispatchGroupKey(&envelope)
-	assert.Equal(t, "room-1|celebration|birthday_stream|UC_test|video-1", got)
+	assert.Equal(t, "room-1|celebration|birthday_stream|member-101|video-1", got)
 }
 
 func TestAlarmDispatchGroupKeyCelebrationPerVideo(t *testing.T) {
@@ -214,30 +216,10 @@ func TestAlarmDispatchGroupKeyCelebrationPerVideo(t *testing.T) {
 		}
 	}
 
-	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{frame("video-1"), frame("video-2"), frame("video-1")})
+	groups := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{frame("video-1"), frame("video-2"), frame("video-1")})
 	require.Len(t, groups, 2)
 	assert.Len(t, groups[0].envelopes, 2)
 	assert.Len(t, groups[1].envelopes, 1)
-}
-
-func TestAlarmDispatchKaringGroupKeyCelebrationDelegates(t *testing.T) {
-	t.Parallel()
-
-	envelope := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
-		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: testCelebrationChannelID},
-	}
-
-	assert.Equal(t, alarmDispatchGroupKey(&envelope), alarmDispatchKaringGroupKey(&envelope))
-
-	envelope.Celebration = &domain.CelebrationDispatchPayload{
-		Kind:      domain.CelebrationKindBirthdayStream,
-		ChannelID: testCelebrationChannelID,
-		VideoID:   "video-1",
-	}
-
-	assert.Equal(t, alarmDispatchGroupKey(&envelope), alarmDispatchKaringGroupKey(&envelope))
 }
 
 func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
@@ -258,7 +240,7 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -267,7 +249,6 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 	require.Len(t, sender.messages, 1)
 	assert.Contains(t, sender.messages[0], "🎂 Test Member 생일 축하합니다!")
 	assert.Contains(t, sender.messages[0], "https://youtube.com/channel/UC_test")
-	assert.Empty(t, sender.karingRequests)
 }
 
 func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
@@ -288,7 +269,7 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	}
 
-	msg, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", group)
+	msg, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", false, group)
 	require.NoError(t, err)
 	assert.Equal(t, "🎉 토키노 소라 데뷔 7주년 축하합니다!\nhttps://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg", msg)
 }

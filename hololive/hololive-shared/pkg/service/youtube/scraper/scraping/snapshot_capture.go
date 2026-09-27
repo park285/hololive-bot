@@ -8,11 +8,9 @@ import (
 	"time"
 )
 
+// captureSnapshot은 정책·간격 검사를 통과한 snapshot만 저장한다. 간격 검사를 건너뛰던 browser 진단 호출자는
+// browser snapshot 경로와 함께 지웠다(stack-audit 2026-09-26 T11 C2).
 func (c *Client) captureSnapshot(ctx context.Context, snapshot *Snapshot) {
-	c.captureSnapshotWithInterval(ctx, snapshot, true)
-}
-
-func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot *Snapshot, checkInterval bool) {
 	policy := c.snapshotPolicy
 	if !c.shouldCaptureSnapshot(snapshot, policy) {
 		return
@@ -24,7 +22,7 @@ func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot *Snap
 		return
 	}
 
-	if checkInterval && !c.allowSnapshotInterval(ctx, snapshot, policy.MinInterval) {
+	if !c.allowSnapshotInterval(ctx, snapshot, policy.MinInterval) {
 		return
 	}
 
@@ -81,10 +79,6 @@ func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot *Snapshot, 
 	}
 
 	return true
-}
-
-func (c *Client) reserveSnapshotInterval(ctx context.Context, snapshot *Snapshot) bool {
-	return c.allowSnapshotInterval(ctx, snapshot, c.snapshotPolicy.MinInterval)
 }
 
 func snapshotIntervalStateKey(snapshot *Snapshot) string {

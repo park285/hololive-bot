@@ -16,12 +16,15 @@ func TestNewServiceWithOfficialScheduleUsesInjectedConfig(t *testing.T) {
 		OfficialSchedule: settings.OfficialScheduleConfig{
 			BaseURL:      "https://schedule.injected.example",
 			Timeout:      5 * time.Second,
-			CacheExpiry:  time.Minute,
 			PageCacheTTL: time.Second,
 		},
 		MaxResponseBodyBytes: 2048,
 	}
-	service := NewServiceWithOfficialSchedule(nil, nil, nil, slog.New(slog.DiscardHandler), official)
+
+	service, err := NewServiceWithOfficialSchedule(nil, nil, slog.New(slog.DiscardHandler), official)
+	if err != nil {
+		t.Fatalf("NewServiceWithOfficialSchedule() error = %v", err)
+	}
 
 	if got := service.officialSchedule.BaseURL; got != "https://schedule.injected.example" {
 		t.Fatalf("BaseURL = %q, want injected origin", got)

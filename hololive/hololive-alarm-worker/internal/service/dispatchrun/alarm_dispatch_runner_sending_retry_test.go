@@ -12,15 +12,16 @@ import (
 )
 
 func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
-	karingErr := &iris.HTTPError{StatusCode: 502, URL: testKaringContentListPath}
+	sendErr := &iris.HTTPError{StatusCode: 502, URL: testIrisReplyPath}
 
 	consumer := &alarmDispatchRunnerTestConsumer{
 		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 	}
-	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
+	sender := &alarmDispatchRunnerTestSender{messageErr: sendErr}
 	runner := Runner{
 		consumer: consumer,
 		sender:   sender,
+		renderer: newAlarmDispatchTestRenderer(t),
 		maxBatch: 10,
 	}
 
@@ -39,15 +40,16 @@ func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures
 }
 
 func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
-	karingErr := &iris.HTTPError{StatusCode: 503}
+	sendErr := &iris.HTTPError{StatusCode: 503}
 
 	consumer := &alarmDispatchRunnerTestConsumer{
 		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 	}
-	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
+	sender := &alarmDispatchRunnerTestSender{messageErr: sendErr}
 	runner := Runner{
 		consumer: consumer,
 		sender:   sender,
+		renderer: newAlarmDispatchTestRenderer(t),
 		maxBatch: 10,
 	}
 

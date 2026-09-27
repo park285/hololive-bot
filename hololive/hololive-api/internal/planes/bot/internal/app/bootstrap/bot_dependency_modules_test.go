@@ -29,7 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
-const testRoomA = "room-a"
+// ACL seed(KAKAO_ROOMS)는 chatID만 받으므로 fixture도 signed i64 문자열이다.
+const testRoomA = "1001"
 
 func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t *testing.T) {
 	t.Parallel()
@@ -311,14 +312,6 @@ func (s *stubBotIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, e
 }
 
 type stubYouTubeService struct{}
-
-func (s *stubYouTubeService) SetScraperProxyEnabled(bool) bool {
-	return true
-}
-
-func (s *stubYouTubeService) ScraperProxyEnabled() bool {
-	return true
-}
 
 func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return map[string]*youtube.ChannelStats{}, nil

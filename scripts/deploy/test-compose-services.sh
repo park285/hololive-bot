@@ -63,6 +63,7 @@ expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
 expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
 expect_eq "$(compose_service_resolve_build_target youtube-collector-c)" "youtube-collector" "build alias youtube-collector-c"
+# resolver가 퇴역 runtime 이름을 거절하는 검사는 재도입 방지 영구 계약이다. 퇴역 가드가 아니므로 제거 조건이 없다.
 expect_fail "standalone web build removed" compose_service_resolve_build_target admin-dashboard
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "build target rejects retired runtime ${removed}" compose_service_resolve_build_target "${removed}"
@@ -153,10 +154,6 @@ pass "ap active-active syncs every Compose helper"
 grep -qx 'scripts/deploy/ap-collector-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs collector preflight"
 pass "ap active-active syncs collector preflight"
 grep -q 'ap-collector-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs collector preflight"
-grep -Fq 'stop_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap collector cutover stops leftover youtube-producer"
-grep -Fq 'restore_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback restores the recorded youtube-producer state"
-grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback stops collector before restoring producer"
-grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap failed cutover stops collector before restoring producer"
 pass "ap active-active deploy runs collector preflight"
 
 for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
@@ -183,8 +180,8 @@ bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
     || fail "ap deploy propagates the validated Compose release version"
 bash "${ROOT_DIR}/scripts/deploy/lib/youtubejs-node-version_test.sh" \
     || fail "AP deploy enforces the YouTube.js Node engine contract"
-bash "${ROOT_DIR}/scripts/deploy/lib/retired-producer-cutover_test.sh" \
-    || fail "AP cutover restores only the recorded producer runtime state"
+bash "${ROOT_DIR}/scripts/deploy/ap-deploy-cutover-failure_test.sh" \
+    || fail "AP deploy leaves a failed collector cutover for the recorded collector rollback"
 bash "${ROOT_DIR}/scripts/deploy/source-revision-provenance_test.sh" \
     || fail "image builds and cutovers preserve exact source revision provenance"
 for ap_runtime_script in scripts/deploy/ap-collector-preflight.sh scripts/deploy/ap-completion-check.sh; do
@@ -308,8 +305,10 @@ grep -Fq "cp \"\$ap_backup_file\" \"\$ap_preflight_file\"" "${rollback_capture}"
     || fail "seoul rollback preflight stages the AP backup"
 grep -Fq "./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet" "${rollback_capture}" \
     || fail "seoul rollback preflight validates the staged compose pair"
-grep -Fq "if [[ -r 'backups/seoul-collector-fixture/rollback-image-tag' ]]" "${rollback_capture}" \
+grep -Fq "if [[ ! -r 'backups/seoul-collector-fixture/rollback-image-tag' ]]" "${rollback_capture}" \
     || fail "seoul rollback preflight inspects the preserved image tag artifact"
+grep -Fq "backup has no rollback-image-tag" "${rollback_capture}" \
+    || fail "seoul rollback preflight refuses a backup without a preserved collector image"
 grep -Fq 'sudo -n docker image inspect "$rollback_image_tag"' "${rollback_capture}" \
     || fail "seoul rollback preflight verifies the preserved image exists"
 grep -Fq 'up -d --no-build --no-deps' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" \

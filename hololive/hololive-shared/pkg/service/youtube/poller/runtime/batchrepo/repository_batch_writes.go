@@ -229,7 +229,6 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 		return nil
 	}
 
-	kind := notifications[0].Kind
 	args := make([]any, 0, len(notifications)*8)
 
 	var sb strings.Builder
@@ -242,15 +241,9 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 
 	sb.WriteString(mustSQL("repository_batch_writes_0244_06.sql"))
 
-	rowsAffected, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...)
-	if err != nil {
-		observeOutboxInsert(kind, "error", int64(len(notifications)))
-
+	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), err)
 	}
-
-	observeOutboxInsert(kind, "success", rowsAffected)
-	observeOutboxInsert(kind, "conflict", int64(len(notifications))-rowsAffected)
 
 	return nil
 }

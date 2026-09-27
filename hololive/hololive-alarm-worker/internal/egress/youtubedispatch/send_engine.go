@@ -2,7 +2,6 @@ package youtubedispatch
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -19,51 +17,20 @@ type SendEngine struct {
 	formatter       *MessageFormatter
 	logger          *slog.Logger
 	config          dispatchstate.Config
-	karingMu        contextMutex
 	claims          ClaimResolver
 	auditLogger     *AuditLogger
 	metricsRecorder *MetricsRecorder
 	transition      deliveryTransition
-	handoffMode     handoff.Mode
-	handoff         YouTubeOutboxHandoff
 }
 
+// deliveryTransition의 실패·완료 전이는 같은 트랜잭션 안에서 시도 telemetry도 기록한다. 호출자는 발송 방식만 넘긴다
+// (DEC-20260926-hololive-delivery-telemetry-single-path).
 type deliveryTransition interface {
 	PrepareClaimed(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) (store.PrepareClaimsResult, error)
 	BeginSending(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) (store.StartedOperation, store.ApplyResult, error)
-	ApplyPreparedFailure(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) (store.ApplyResult, error)
-	ApplyStartedFailure(context.Context, store.StartedOperation, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) (store.ApplyResult, error)
-	CompleteSent(context.Context, store.StartedOperation, []dispatchstate.ClaimToken) (store.ApplyResult, error)
-}
-
-type contextMutex chan struct{}
-
-func newContextMutex() contextMutex {
-	mu := make(contextMutex, 1)
-	mu <- struct{}{}
-
-	return mu
-}
-
-func (m contextMutex) Lock() {
-	<-m
-}
-
-func (m contextMutex) LockContext(ctx context.Context) error {
-	select {
-	case <-m:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("lock context mutex: %w", ctx.Err())
-	}
-}
-
-func (m contextMutex) Unlock() {
-	select {
-	case m <- struct{}{}:
-	default:
-		panic("contextMutex: unlock of unlocked mutex")
-	}
+	ApplyPreparedFailure(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration, store.DeliveryMode) (store.ApplyResult, error)
+	ApplyStartedFailure(context.Context, store.StartedOperation, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration, store.DeliveryMode) (store.ApplyResult, error)
+	CompleteSent(context.Context, store.StartedOperation, []dispatchstate.ClaimToken, store.DeliveryMode) (store.ApplyResult, error)
 }
 
 func newSendEngine(
@@ -89,7 +56,6 @@ func newSendEngine(
 		formatter:       formatter,
 		logger:          logger,
 		config:          *config,
-		karingMu:        newContextMutex(),
 		claims:          claims,
 		auditLogger:     auditLogger,
 		metricsRecorder: metricsRecorder,

@@ -42,11 +42,10 @@ worker_noncanonical_hits="$(
   rg -n -i -U "${mutation_pattern}" "${alarm_worker}" \
     -g '*.go' -g '*.sql' -g '!*_test.go' \
     -g '!**/internal/egress/youtubedispatch/store/queries/**' \
-    -g '!**/internal/egress/youtubedispatch/backfill/queries/**' \
     || true
 )"
 report_hits \
-  "alarm-worker lifecycle SQL stays in the canonical store or bounded backfill" \
+  "alarm-worker lifecycle SQL stays in the canonical store" \
   "${worker_noncanonical_hits}"
 
 legacy_import_hits="$(

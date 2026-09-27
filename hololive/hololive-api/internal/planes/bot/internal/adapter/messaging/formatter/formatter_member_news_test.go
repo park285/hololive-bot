@@ -28,7 +28,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -81,12 +80,12 @@ func TestFormatMemberNewsDigest_LocalizesCategoryLabel(t *testing.T) {
 }
 
 func TestFormatMemberNewsDigest_RenderFailFallback(t *testing.T) {
-	formatter := NewResponseFormatter("!", nil)
+	formatter := NewResponseFormatter("!", nil, WithMessageStrings(setupFormatterTestStore(t)))
 	digest := &membernewscontracts.Digest{Headline: "뉴스"}
 
 	output := formatter.FormatMemberNewsDigest(t.Context(), digest)
 
-	expected := messagestrings.FallbackSentinel
+	expected := renderFailureMessage
 	if output != expected {
 		t.Fatalf("expected %q, got %q", expected, output)
 	}

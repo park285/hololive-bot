@@ -24,6 +24,7 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -33,9 +34,11 @@ import (
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
 
+// Settings는 관리 화면이 바꾸는 알림 설정이다. 예전의 scraper proxy 토글(scraperProxyEnabled)은
+// DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 기본 json/v2 decode는 모르는 멤버를 무시하므로 예전 파일에
+// 남은 scraperProxyEnabled는 읽지 않고, 다음 Update가 파일을 두 값만으로 다시 쓴다(T18 2026-09-26: 운영 settings 파일 없음).
 type Settings struct {
 	AlarmAdvanceMinutes int   `json:"alarmAdvanceMinutes"`
-	ScraperProxyEnabled bool  `json:"scraperProxyEnabled"`
 	TargetMinutes       []int `json:"targetMinutes,omitempty"`
 }
 
@@ -48,7 +51,6 @@ type Service struct {
 
 type settingsDisk struct {
 	AlarmAdvanceMinutes *int  `json:"alarmAdvanceMinutes,omitempty"`
-	ScraperProxyEnabled *bool `json:"scraperProxyEnabled,omitempty"`
 	TargetMinutes       []int `json:"targetMinutes,omitempty"`
 }
 
@@ -73,7 +75,9 @@ func ensureParentDir(filePath string) error {
 	return nil
 }
 
-func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger) *Service {
+// NewSettingsService는 저장된 settings 파일을 읽어 기본값 위에 적용한다. 파일이 없으면 기본값을 쓰고, 읽기·decode 실패나
+// 계약에 맞지 않는 파일은 기본값으로 대신하지 않고 오류로 돌려 기동을 멈춘다(ReadFile).
+func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger) (*Service, error) {
 	if defaults.AlarmAdvanceMinutes <= 0 {
 		defaults.AlarmAdvanceMinutes = 5
 	}
@@ -83,7 +87,6 @@ func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger)
 		logger:   logger,
 		cache: &Settings{
 			AlarmAdvanceMinutes: defaults.AlarmAdvanceMinutes,
-			ScraperProxyEnabled: defaults.ScraperProxyEnabled,
 			TargetMinutes:       sharedchecker.NewTargetMinutePolicyFromConfigured(defaults.TargetMinutes).Clone(),
 		},
 	}
@@ -92,75 +95,60 @@ func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger)
 		s.logger.Warn("Failed to ensure settings directory", slog.Any("error", err))
 	}
 
-	s.load()
+	stored, found, err := ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("new settings service: %w", err)
+	}
 
-	return s
+	if found {
+		s.cache = &stored
+	}
+
+	return s, nil
 }
 
-func (s *Service) load() {
-	f, err := os.Open(s.filePath)
+// ReadFile은 저장된 settings 파일의 유일한 파서다(hololive-api settings 서비스와 alarm-worker 기동이 함께 쓴다). 파일이 없으면
+// found=false를 돌려준다. 읽기·decode 실패, 양수 alarmAdvanceMinutes가 없거나 양수 targetMinutes가 없는 파일은 오류다.
+// 예전에 targetMinutes 없이 alarmAdvanceMinutes만 있는 구형 형식을 기본 알림 시점으로 해석하던 경로와, 정규화 결과가
+// 저장값과 다를 때 파일을 다시 쓰던 자가 치유는 T18(2026-09-26)에서 운영 settings 파일이 없음을 확인해 지웠다(stack-audit
+// 2026-09-26 T11 holo-settings-file-legacy-format-and-dual-reader). Update가 쓰는 파일은 항상 두 값을 담는다.
+func ReadFile(filePath string) (stored Settings, found bool, err error) {
+	// #nosec G304 -- filePath는 운영 설정의 SettingsFilePath에서만 유도된다.
+	file, err := os.Open(filePath)
 	if err != nil {
-		return // 파일이 없으면 기본값 사용함
+		if errors.Is(err, fs.ErrNotExist) {
+			return Settings{}, false, nil
+		}
+
+		return Settings{}, false, fmt.Errorf("open settings file: %w", err)
 	}
 
 	defer func() {
-		if closeErr := f.Close(); closeErr != nil && s.logger != nil {
-			s.logger.Warn("Failed to close settings file", slog.String("error", closeErr.Error()))
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close settings file: %w", closeErr)
 		}
 	}()
 
 	var disk settingsDisk
 
-	if err := jsonv2.UnmarshalRead(f, &disk); err != nil {
-		if s.logger != nil {
-			s.logger.Warn("Failed to decode settings file, using defaults", slog.String("error", err.Error()))
-		}
-
-		return
+	if err := jsonv2.UnmarshalRead(file, &disk); err != nil {
+		return Settings{}, false, fmt.Errorf("decode settings file: %w", err)
 	}
 
-	s.applyDiskSettings(disk)
-}
-
-func (s *Service) applyDiskSettings(disk settingsDisk) {
-	if disk.AlarmAdvanceMinutes != nil && *disk.AlarmAdvanceMinutes > 0 {
-		s.cache.AlarmAdvanceMinutes = *disk.AlarmAdvanceMinutes
+	if disk.AlarmAdvanceMinutes == nil || *disk.AlarmAdvanceMinutes <= 0 {
+		return Settings{}, false, errors.New("settings file has no positive alarmAdvanceMinutes")
 	}
 
-	if disk.ScraperProxyEnabled != nil {
-		s.cache.ScraperProxyEnabled = *disk.ScraperProxyEnabled
+	if !slices.ContainsFunc(disk.TargetMinutes, func(minute int) bool { return minute > 0 }) {
+		return Settings{}, false, errors.New("settings file has no positive targetMinutes; the alarmAdvanceMinutes-only format is unsupported")
 	}
 
-	s.applyDiskTargetMinutes(disk.TargetMinutes)
-}
-
-func (s *Service) applyDiskTargetMinutes(targetMinutes []int) {
-	if len(targetMinutes) == 0 {
-		return
+	stored = Settings{
+		AlarmAdvanceMinutes: *disk.AlarmAdvanceMinutes,
+		TargetMinutes:       sharedchecker.NewTargetMinutePolicy(disk.TargetMinutes).Clone(),
 	}
 
-	resolved := sharedchecker.NewTargetMinutePolicyFromPersisted(s.cache.AlarmAdvanceMinutes, targetMinutes).Clone()
-
-	s.cache.TargetMinutes = cloneTargetMinutes(resolved)
-
-	if slices.Equal(resolved, targetMinutes) {
-		return
-	}
-
-	s.logHealedTargetMinutes(targetMinutes, resolved)
-	s.persistHealedSettings()
-}
-
-func (s *Service) logHealedTargetMinutes(from, to []int) {
-	if s.logger != nil {
-		s.logger.Info("Healing persisted target minutes", slog.Any("from", from), slog.Any("to", to))
-	}
-}
-
-func (s *Service) persistHealedSettings() {
-	if err := s.persistCache(); err != nil && s.logger != nil {
-		s.logger.Warn("Failed to persist healed settings", slog.String("error", err.Error()))
-	}
+	return stored, true, nil
 }
 
 func (s *Service) Get() Settings {
@@ -169,7 +157,6 @@ func (s *Service) Get() Settings {
 
 	return Settings{
 		AlarmAdvanceMinutes: s.cache.AlarmAdvanceMinutes,
-		ScraperProxyEnabled: s.cache.ScraperProxyEnabled,
 		TargetMinutes:       cloneTargetMinutes(s.cache.TargetMinutes),
 	}
 }
@@ -190,7 +177,6 @@ func (s *Service) Update(newSettings Settings) error {
 
 	s.cache = &Settings{
 		AlarmAdvanceMinutes: newSettings.AlarmAdvanceMinutes,
-		ScraperProxyEnabled: newSettings.ScraperProxyEnabled,
 		TargetMinutes:       resolvedTargets,
 	}
 

@@ -67,7 +67,7 @@ type BotConfig struct {
 	MentionPrefix         string // 멘션 기반 명령어 접두사 (예: @카푸봇)
 	CalendarImageCacheDir string
 	CalendarEntryCacheTTL time.Duration
-	SeeMoreFold           bool
+	SeeMoreFold           bool // 긴 목록을 머리 문단과 '전체보기'로 접는다. 기본 true, false는 운영 차단 스위치
 	MarkdownReplies       bool
 }
 
@@ -91,7 +91,6 @@ type WebhookConfig struct {
 	MaxBodyBytes   int64
 	DedupTTL       time.Duration
 	DedupTimeout   time.Duration
-	RequireHMAC    bool
 }
 
 type WorkerPoolConfig struct {

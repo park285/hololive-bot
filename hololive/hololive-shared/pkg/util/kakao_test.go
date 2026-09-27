@@ -28,20 +28,13 @@ import (
 func TestFoldForSeeMore(t *testing.T) {
 	t.Parallel()
 
+	padding := strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding)
 	longRest := strings.Repeat("가", 300)
 	multi := "헤더 라인\n" + longRest
 
 	folded := FoldForSeeMore(multi, KakaoSeeMoreThreshold)
-	if !strings.HasPrefix(folded, "헤더 라인\n") {
-		t.Fatalf("first line not preserved: %q", folded[:30])
-	}
-
-	if got := strings.Count(folded, KakaoZeroWidthSpace); got != KakaoSeeMorePadding {
-		t.Errorf("padding count = %d, want %d", got, KakaoSeeMorePadding)
-	}
-
-	if !strings.HasSuffix(folded, longRest) {
-		t.Error("body after padding not preserved")
+	if folded != "헤더 라인"+padding+"\n"+longRest {
+		t.Fatalf("first line fold changed: %q", folded[:30])
 	}
 
 	if again := FoldForSeeMore(folded, KakaoSeeMoreThreshold); again != folded {
@@ -65,5 +58,58 @@ func TestFoldForSeeMore(t *testing.T) {
 	blankRest := strings.Repeat("가", 300) + "\n   "
 	if got := FoldForSeeMore(blankRest, KakaoSeeMoreThreshold); got != blankRest {
 		t.Error("공백 본문 입력이 변형됨")
+	}
+}
+
+func TestFoldForSeeMoreKeepsHeadParagraph(t *testing.T) {
+	t.Parallel()
+
+	padding := strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding)
+	body := "1 · 채널\n" + strings.Repeat("긴 제목 ", 60)
+
+	tests := []struct {
+		name string
+		head string
+		sep  string
+	}{
+		{name: "title only", head: "🔔 설정된 알람 · 16개", sep: "\n\n"},
+		{name: "count on second line", head: "📅 채널 일정\n7일 이내 · 5개", sep: "\n\n"},
+		{name: "max lines", head: "방송 이력 3건\n멤버: 미코\n타입: 노래\n일부 결과만 표시했습니다.", sep: "\n\n"},
+		{name: "space-only blank line", head: "📅 예정 방송 · 3개\n24시간 이내", sep: "\n  \n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			text := tt.head + tt.sep + body
+
+			got := FoldForSeeMore(text, KakaoSeeMoreThreshold)
+			if want := tt.head + padding + tt.sep + body; got != want {
+				t.Fatalf("head paragraph not kept: %q", got[:min(len(got), 80)])
+			}
+
+			if strings.ReplaceAll(got, KakaoZeroWidthSpace, "") != text {
+				t.Error("visible text changed")
+			}
+		})
+	}
+}
+
+func TestFoldForSeeMoreFallsBackToFirstLineForLongHead(t *testing.T) {
+	t.Parallel()
+
+	padding := strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding)
+	lines := make([]string, KakaoSeeMoreHeadMaxLines+1)
+
+	for i := range lines {
+		lines[i] = "머리 줄"
+	}
+
+	rest := strings.Join(lines[1:], "\n") + "\n\n" + strings.Repeat("본문 ", 120)
+	text := lines[0] + "\n" + rest
+
+	if got := FoldForSeeMore(text, KakaoSeeMoreThreshold); got != lines[0]+padding+"\n"+rest {
+		t.Fatalf("head over limit must fold after first line: %q", got[:min(len(got), 80)])
 	}
 }

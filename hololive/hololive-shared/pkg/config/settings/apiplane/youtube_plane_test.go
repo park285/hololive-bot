@@ -282,6 +282,8 @@ func setYouTubePlaneRetentionOverrideEnv(t *testing.T) {
 	t.Setenv("YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS", "34")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS", "35")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS", "36")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS", "37")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS", "38")
 	t.Setenv("YOUTUBE_PLANE_REPLAY_ENABLED", "true")
 	t.Setenv("YOUTUBE_PLANE_REPLAY_INTERVAL_SECONDS", "45")
 	t.Setenv("YOUTUBE_PLANE_REPLAY_BATCH_SIZE", "8")
@@ -323,6 +325,10 @@ func assertRetentionOverrideEvidenceAges(t *testing.T, retention YouTubePlaneRet
 		retention.ChannelPhotoAge != 35*24*time.Hour ||
 		retention.ScheduleSnapshotAge != 36*24*time.Hour {
 		t.Fatalf("remaining evidence ages = %#v", retention)
+	}
+
+	if retention.ChannelLiveCheckAge != 37*24*time.Hour || retention.VideoLiveCheckAge != 38*24*time.Hour {
+		t.Fatalf("live check evidence ages = %s %s", retention.ChannelLiveCheckAge, retention.VideoLiveCheckAge)
 	}
 }
 
@@ -397,6 +403,62 @@ func TestYouTubePlaneProductionRetentionRequiresApprovedBoundedPolicy(t *testing
 
 	if err := cfg.validateProductionRetention(load.EnvironmentProduction); err != nil {
 		t.Fatalf("approved production retention policy: %v", err)
+	}
+
+	for key, disable := range map[string]func(*YouTubePlaneRetentionConfig){
+		"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS": func(r *YouTubePlaneRetentionConfig) { r.ChannelLiveCheckAge = 0 },
+		"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS":   func(r *YouTubePlaneRetentionConfig) { r.VideoLiveCheckAge = 0 },
+	} {
+		unbounded := cfg
+		disable(&unbounded.Retention)
+
+		if err := unbounded.validateProductionRetention(load.EnvironmentProduction); err == nil || !strings.Contains(err.Error(), key) {
+			t.Fatalf("disabled %s production retention error = %v", key, err)
+		}
+	}
+}
+
+func TestYouTubePlaneLiveCheckRetentionBounds(t *testing.T) {
+	t.Parallel()
+
+	defaults := DefaultYouTubePlaneConfig().Retention
+	if defaults.ChannelLiveCheckAge != 7*24*time.Hour || defaults.VideoLiveCheckAge != 7*24*time.Hour {
+		t.Fatalf("live check retention defaults = %s %s, want 7d", defaults.ChannelLiveCheckAge, defaults.VideoLiveCheckAge)
+	}
+
+	for name, set := range map[string]func(*YouTubePlaneRetentionConfig, time.Duration){
+		"channel live check": func(r *YouTubePlaneRetentionConfig, age time.Duration) { r.ChannelLiveCheckAge = age },
+		"video live check":   func(r *YouTubePlaneRetentionConfig, age time.Duration) { r.VideoLiveCheckAge = age },
+	} {
+		for _, age := range []time.Duration{-24 * time.Hour, 3651 * 24 * time.Hour} {
+			cfg := DefaultYouTubePlaneConfig()
+			set(&cfg.Retention, age)
+
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), name) {
+				t.Fatalf("%s retention %s error = %v", name, age, err)
+			}
+		}
+
+		cfg := DefaultYouTubePlaneConfig()
+		set(&cfg.Retention, 3650*24*time.Hour)
+
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("%s retention at upper bound: %v", name, err)
+		}
+	}
+}
+
+func TestYouTubePlaneReplayAuditMustCoverLiveCheckRetention(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultYouTubePlaneConfig()
+
+	cfg.Retention.Enabled = true
+	cfg.Retention.ReplayAuditAge = cfg.Retention.LiveSnapshotAge
+	cfg.Retention.VideoLiveCheckAge = cfg.Retention.LiveSnapshotAge + 24*time.Hour
+
+	if err := cfg.validateRetention(); err == nil || !strings.Contains(err.Error(), "replay audit retention") {
+		t.Fatalf("replay audit shorter than video live check retention error = %v", err)
 	}
 }
 

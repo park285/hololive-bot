@@ -30,7 +30,7 @@ import (
 )
 
 // 반환된 slice/map은 캐시가 보유한 불변 스냅샷을 그대로 공유한다. 호출자는 수정하면 안 된다.
-func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) (result0 []string, result1 map[string]string, err error) {
+func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
 	state := h.ensureState()
 	if snapshot, ok := state.cachedMemberIndexSnapshot(time.Now()); ok {
 		return snapshot.channelIDs, snapshot.channelNames, nil
@@ -102,7 +102,7 @@ func (h *StreamHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, 
 	return members, nil
 }
 
-func BuildActiveMemberIndex(members []*domain.Member) (result0 []string, result1 map[string]string) {
+func BuildActiveMemberIndex(members []*domain.Member) ([]string, map[string]string) {
 	channelIDs := make([]string, 0, len(members))
 	channelToName := make(map[string]string, len(members))
 

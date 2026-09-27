@@ -20,10 +20,6 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 		return errors.New("runtime scheduler is nil")
 	}
 
-	if ctx == nil {
-		return errors.New("runtime scheduler context is nil")
-	}
-
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-youtube", func() error {

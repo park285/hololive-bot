@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
 const (
@@ -46,7 +45,6 @@ var (
 
 func NewAlarmService(
 	cacheClient cache.Client,
-	holodexService *holodexprovider.Service,
 	memberData domain.MemberDataProvider,
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
@@ -60,7 +58,8 @@ func NewAlarmService(
 		logger = slog.Default()
 	}
 
-	initAlarmMetrics()
+	// 첫 관측을 기다리지 않고 서비스 생성 시점에 alarm metric을 등록한다.
+	alarmMetrics()
 
 	targetPolicy := sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(advanceMinutes))
 
@@ -72,7 +71,6 @@ func NewAlarmService(
 
 	service := &AlarmService{
 		cache:           cacheClient,
-		holodex:         holodexService,
 		memberData:      memberData,
 		alarmRepository: alarmRepository,
 		alarmWriter:     writer,

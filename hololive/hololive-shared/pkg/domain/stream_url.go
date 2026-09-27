@@ -20,10 +20,6 @@
 
 package domain
 
-func ChzzkLiveURL(channelID string) string {
-	return "https://chzzk.naver.com/live/" + channelID
-}
-
 func YouTubeWatchURL(videoID string) string {
 	return "https://youtube.com/watch?v=" + videoID
 }

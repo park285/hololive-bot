@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-blocked-body-no-snapshot-fallback",
+  "title": "blocked body signature는 snapshot 재fetch 없이 channel-source failure로 기록하고 전역 cooldown으로 직결하지 않는다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자가 승인한 PLN-20260926-stack-audit-refactoring T11 C2(proxy·browser fetch 경로 삭제, 근거는 iris-stack docs/agent-workflows/evidence/2026-09-26-stack-audit/non-iris-audit.md C2가 가리킨 client_http.go의 blocked body browser fallback)에 따라 DEC-20260630-hololive-blocked-body-signature-source-classification의 snapshot fallback 조항만 바꾼다. 바뀐 조항: body signature가 suspicious이면 browser_snapshot fetcher로 1회 다시 가져오던 경로를 없애고, 대체 fetch 없이 ErrBlockedBodySignature로 channel-source failure(suspicious_blocked_body)를 기록한다. 이 경로는 WithBrowserSnapshotFetcher의 production 호출자가 없어 운영에서 도달하지 않았고, T11에서 browser_snapshot_fetcher.go·browser_diagnostic.go·internal/browserfetcher·SCRAPER_FETCHER_ENGINE 선택과 hololive_youtube_scraper_fetch_fallback_total metric을 함께 삭제했다. 유지하는 조항: final URL이 blocked이면 ErrBlockedResponse로 재시도·parser 없이 현재 hard-block 정책을 유지한다. body signature가 suspicious인지는 도메인 고정 시그니처로만 판정하고, suspicious이면 channel-source failure로 기록하며 global hard cooldown은 만들지 않는다. ErrBlockedBodySignature sentinel(client_http.go validateSuccessfulFetchBody, failure.go FailureReasonBlockedBody)이 이를 구현한다. 원 요약(DEC-20260630): final URL이 blocked이면 ErrBlockedResponse로 재시도·parser 없이 현재 hard-block 정책을 유지한다. body signature가 suspicious이면 generic-content 오탐 guard를 통과했는지 확인하고 browser_snapshot fetcher가 있으면 snapshot fallback을 1회 시도해 성공 시 그 body를 쓰며, fallback도 suspicious이면 channel-source failure로 기록하고 global hard cooldown은 만들지 않는다. ErrBlockedBodySignature sentinel이 이를 구현한다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/service/youtube/scraper/scraping/client_http.go",
+    "hololive/hololive-shared/pkg/service/youtube/scraper/scraping/failure.go"
+  ],
+  "supersedes": [
+    "DEC-20260630-hololive-blocked-body-signature-source-classification"
+  ]
+}

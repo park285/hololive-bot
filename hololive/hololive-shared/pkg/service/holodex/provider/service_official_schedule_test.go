@@ -16,7 +16,6 @@ import (
 	apiclient "github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 func writeOfficialScheduleResponse(t *testing.T, writer http.ResponseWriter, format string, args ...any) {
@@ -47,7 +46,6 @@ func TestGetLiveStreamsByOrgDoesNotUseOfficialSchedule(t *testing.T) {
 		officialServer.Client(),
 		slog.New(slog.DiscardHandler),
 		officialServer.URL,
-		nil,
 	)
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
@@ -99,7 +97,6 @@ func TestGetUpcomingStreamsByOrgUsesOfficialScheduleAPIOnlyOnPrimaryFailure(t *t
 		officialServer.Client(),
 		slog.New(slog.DiscardHandler),
 		officialServer.URL,
-		nil,
 	)
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
@@ -134,7 +131,6 @@ func TestGetUpcomingStreamsByOrgDoesNotFallbackOnSuccessEmpty(t *testing.T) {
 		officialServer.Client(),
 		slog.New(slog.DiscardHandler),
 		officialServer.URL,
-		nil,
 	)
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
@@ -166,7 +162,6 @@ func TestGetUpcomingStreamsByOrgReturnsErrorWhenBothSourcesFail(t *testing.T) {
 		officialServer.Client(),
 		slog.New(slog.DiscardHandler),
 		officialServer.URL,
-		nil,
 	)
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
@@ -180,101 +175,8 @@ func TestGetUpcomingStreamsByOrgReturnsErrorWhenBothSourcesFail(t *testing.T) {
 	}
 }
 
-func TestGetChannelScheduleUsesYouTubeBeforeOfficialAPI(t *testing.T) {
-	var officialRequests atomic.Int32
-
-	officialServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		officialRequests.Add(1)
-		http.Error(writer, "unexpected official schedule request", http.StatusInternalServerError)
-	}))
-	t.Cleanup(officialServer.Close)
-
-	requester := retryableHolodexFailureRequester("channel_schedule")
-	scraperService := newScraperServiceForTest(
-		officialServer.Client(),
-		slog.New(slog.DiscardHandler),
-		officialServer.URL,
-		func(context.Context, string) ([]*parser.UpcomingEvent, error) {
-			return []*parser.UpcomingEvent{{
-				VideoID: "youtube-schedule",
-				Title:   "From YouTube",
-				Status:  "UPCOMING",
-			}}, nil
-		},
-	)
-	service := newServiceForFallbackTestWithScraper(requester, scraperService)
-
-	streams, err := service.GetChannelSchedule(t.Context(), testChannelID, 24, false)
-	if err != nil {
-		t.Fatalf("GetChannelSchedule() error = %v", err)
-	}
-
-	if len(streams) != 1 || streams[0].ID != "youtube-schedule" || streams[0].Status != domain.StreamStatusUpcoming {
-		t.Fatalf("streams = %#v", streams)
-	}
-
-	if got := officialRequests.Load(); got != 0 {
-		t.Fatalf("official schedule requests = %d, want 0", got)
-	}
-}
-
-func TestGetChannelScheduleUsesOfficialScheduleAPIAfterYouTubeFailure(t *testing.T) {
-	var officialRequests atomic.Int32
-
-	future := time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)).Add(time.Hour).Format("2006/01/02 15:04:05")
-	officialServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		officialRequests.Add(1)
-
-		if request.Method != http.MethodGet || request.URL.Path != "/api/list/2" {
-			http.Error(writer, "unexpected official schedule request", http.StatusNotFound)
-
-			return
-		}
-
-		writer.Header().Set("Content-Type", "application/json")
-		writeOfficialScheduleResponse(t, writer, `{"dateGroupList":[{"videoList":[
-			{"datetime":%q,"url":"https://www.youtube.com/watch?v=keep-me","name":"Keep","title":"Keep"},
-			{"datetime":%q,"url":"https://www.youtube.com/watch?v=drop-me","name":"Drop","title":"Drop"}
-		]}]}`, future, future)
-	}))
-	t.Cleanup(officialServer.Close)
-
-	requester := retryableHolodexFailureRequester("channel_schedule")
-	scraperService := newScraperServiceForTest(
-		officialServer.Client(),
-		slog.New(slog.DiscardHandler),
-		officialServer.URL,
-		func(context.Context, string) ([]*parser.UpcomingEvent, error) {
-			return nil, context.DeadlineExceeded
-		},
-		&domain.Member{Name: "Keep", ChannelID: testChannelID},
-		&domain.Member{Name: "Drop", ChannelID: "channel-2"},
-	)
-	service := newServiceForFallbackTestWithScraper(requester, scraperService)
-
-	streams, err := service.GetChannelSchedule(t.Context(), testChannelID, 24, false)
-	if err != nil {
-		t.Fatalf("GetChannelSchedule() error = %v", err)
-	}
-
-	if len(streams) != 1 || streams[0].ID != "keep-me" || streams[0].ChannelID != testChannelID || streams[0].Status != domain.StreamStatusUpcoming {
-		t.Fatalf("streams = %#v", streams)
-	}
-
-	if streams[0].StartActual != nil {
-		t.Fatalf("official schedule row leaked live truth: %#v", streams[0])
-	}
-
-	if got := officialRequests.Load(); got != 1 {
-		t.Fatalf("official schedule requests = %d, want 1", got)
-	}
-}
-
 func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
-	var (
-		officialRequests atomic.Int32
-		youtubeCalls     atomic.Int32
-	)
+	var officialRequests atomic.Int32
 
 	officialServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		officialRequests.Add(1)
@@ -290,11 +192,6 @@ func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
 		officialServer.Client(),
 		slog.New(slog.DiscardHandler),
 		officialServer.URL,
-		func(context.Context, string) ([]*parser.UpcomingEvent, error) {
-			youtubeCalls.Add(1)
-
-			return nil, errors.New("youtube must not run on holodex success-empty")
-		},
 	)
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
@@ -303,16 +200,16 @@ func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
 		t.Fatalf("GetChannelSchedule() error = %v", err)
 	}
 
-	if len(streams) != 0 || officialRequests.Load() != 0 || youtubeCalls.Load() != 0 {
-		t.Fatalf("streams=%d official=%d youtube=%d", len(streams), officialRequests.Load(), youtubeCalls.Load())
+	if len(streams) != 0 || officialRequests.Load() != 0 {
+		t.Fatalf("streams=%d official=%d", len(streams), officialRequests.Load())
 	}
 }
 
-func TestGetChannelsLiveStatusDoesNotUseOfficialSchedule(t *testing.T) {
-	var (
-		officialRequests atomic.Int32
-		youtubeCalls     atomic.Int32
-	)
+// live-status는 Holodex /users/live 하나만 원천으로 쓴다. YouTube scraper 2차 경로는
+// DEC-20260926-hololive-live-status-scraper-fallback-removal로 삭제됐고, 실패는 alarm-worker가
+// persisted live session으로 판단하도록 그대로 돌려준다.
+func TestGetChannelsLiveStatusDoesNotUseAnySecondarySource(t *testing.T) {
+	var officialRequests atomic.Int32
 
 	officialServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		officialRequests.Add(1)
@@ -325,11 +222,6 @@ func TestGetChannelsLiveStatusDoesNotUseOfficialSchedule(t *testing.T) {
 		officialServer.Client(),
 		slog.New(slog.DiscardHandler),
 		officialServer.URL,
-		func(context.Context, string) ([]*parser.UpcomingEvent, error) {
-			youtubeCalls.Add(1)
-
-			return nil, errors.New("youtube live fallback failed")
-		},
 	)
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
@@ -344,10 +236,6 @@ func TestGetChannelsLiveStatusDoesNotUseOfficialSchedule(t *testing.T) {
 
 	if got := officialRequests.Load(); got != 0 {
 		t.Fatalf("official schedule requests = %d, want 0", got)
-	}
-
-	if got := youtubeCalls.Load(); got != 1 {
-		t.Fatalf("youtube live fallback calls = %d, want 1", got)
 	}
 }
 

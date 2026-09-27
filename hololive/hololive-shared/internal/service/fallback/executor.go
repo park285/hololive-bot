@@ -22,7 +22,6 @@ package fallback
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
@@ -53,154 +52,24 @@ func (p Policy) ShouldRun(primaryResults, failedTargets int) bool {
 	}
 }
 
-// 현재는 제한 병렬성과 성공 callback만 공통화하고, 호출자는 후속 fallback 실행을 직접 담당한다.
-// OnSuccess는 Parallelism > 1일 때 동시 호출될 수 있으므로, 호출자 측에서 필요한 동기화를 해야 한다.
-type FetchPlan[K, V any] struct {
-	Targets     []K
+// FetchPlan은 primary 단계의 target 조회를 제한 병렬로 실행한다. 후속 fallback 실행 여부는 호출자가 결과를 보고 정한다.
+type FetchPlan[K any] struct {
 	Parallelism int
-	Fetch       func(context.Context, K) (V, error)
-	OnSuccess   func(K, V)
 }
 
-type Summary[K any] struct {
-	SuccessCount  int
-	FailedCount   int
-	FailedTargets []K
-}
-
-func (s Summary[K]) HasFailures() bool {
-	return s.FailedCount > 0
-}
-
-func (s Summary[K]) AllFailed(totalTargets int) bool {
-	return totalTargets > 0 && s.SuccessCount == 0 && s.FailedCount == totalTargets
-}
-
-// 개별 key 실패는 전체 실행을 중단하지 않고 후속 fallback 후보로 남긴다.
-func (plan FetchPlan[K, V]) Execute(ctx context.Context) Summary[K] {
-	if len(plan.Targets) == 0 {
-		return Summary[K]{FailedTargets: []K{}}
-	}
-
-	failed := make([]bool, len(plan.Targets))
-
-	var successCount int
-
-	if plan.Parallelism <= 1 {
-		successCount = plan.executeSequential(ctx, failed)
-	} else {
-		successCount = plan.executeParallel(ctx, failed)
-	}
-
-	return summarizeFailures(plan.Targets, failed, successCount)
-}
-
-func (plan FetchPlan[K, V]) executeSequential(ctx context.Context, failed []bool) int {
-	successCount := 0
-
-	for i := range plan.Targets {
-		value, err := plan.Fetch(ctx, plan.Targets[i])
-		if err != nil {
-			failed[i] = true
-			continue
-		}
-
-		successCount++
-
-		if plan.OnSuccess != nil {
-			plan.OnSuccess(plan.Targets[i], value)
-		}
-	}
-
-	return successCount
-}
-
-type parallelResult struct {
-	mu           sync.Mutex
-	failed       []bool
-	successCount int
-}
-
-func (r *parallelResult) markFailed(index int) {
-	r.mu.Lock()
-
-	r.failed[index] = true
-	r.mu.Unlock()
-}
-
-func (r *parallelResult) markSuccess() {
-	r.mu.Lock()
-
-	r.successCount++
-	r.mu.Unlock()
-}
-
-func (plan FetchPlan[K, V]) fetchParallelTarget(ctx context.Context, key K, result *parallelResult) error {
-	value, err := plan.Fetch(ctx, key)
-	if err != nil {
-		return fmt.Errorf("fetch: %w", err)
-	}
-
-	if plan.OnSuccess != nil {
-		plan.OnSuccess(key, value)
-	}
-
-	result.markSuccess()
-
-	return nil
-}
-
-// 개별 key 실패를 goroutine 안에서 흡수한다. 만약 errgroup처럼 첫 실패로 ctx를 취소하면
-// 아직 실행 중인 다른 target까지 중단되어 fallback 후보 집계가 어긋난다.
-func (plan FetchPlan[K, V]) executeParallel(ctx context.Context, failed []bool) int {
-	limiter := make(chan struct{}, plan.Parallelism)
-	result := parallelResult{failed: failed}
-
-	var wg sync.WaitGroup
-
-	for i := range plan.Targets {
-		key := plan.Targets[i]
-
-		limiter <- struct{}{}
-
-		wg.Go(func() {
-			defer func() { <-limiter }()
-
-			if err := panicguard.RunE(nil, panicguard.BackgroundTask, "fallback-fetch", func() error {
-				return plan.fetchParallelTarget(ctx, key, &result)
-			}); err != nil {
-				result.markFailed(i)
-			}
-		})
-	}
-
-	wg.Wait()
-
-	return result.successCount
-}
-
-func summarizeFailures[K any](targets []K, failed []bool, successCount int) Summary[K] {
-	summary := Summary[K]{
-		SuccessCount:  successCount,
-		FailedTargets: make([]K, 0, len(targets)),
-	}
-	for i := range targets {
-		if !failed[i] {
-			continue
-		}
-
-		summary.FailedCount++
-
-		summary.FailedTargets = append(summary.FailedTargets, targets[i])
-	}
-
-	return summary
-}
-
+// PrimaryResult는 primary 단계 결과다. Failed는 context가 살아 있는 동안 실패한 target만 담는다.
+// 호출자 context가 끝나 시작하지 못했거나 끝난 뒤 실패한 target은 Canceled에 따로 담는다. 호출자 취소를 실패로 세면
+// 취소된 요청이 fallback·재시도·실패 metric을 일으키기 때문이다. 호출자가 직접 건 단계 timeout이 원인이라면
+// Canceled를 실패로 다룰지는 호출자가 정한다.
 type PrimaryResult[K any] struct {
 	Attempted int
 	Succeeded int
 	Failed    []K
+	Canceled  []K
+}
+
+func (r PrimaryResult[K]) WasCanceled() bool {
+	return len(r.Canceled) > 0
 }
 
 func (r PrimaryResult[K]) HasFailures() bool {
@@ -211,22 +80,93 @@ func (r PrimaryResult[K]) AllFailed() bool {
 	return r.Attempted > 0 && r.Succeeded == 0 && len(r.Failed) == r.Attempted
 }
 
-func (plan FetchPlan[K, _]) RunPrimary(
-	ctx context.Context,
-	keys []K,
-	run func(context.Context, K) error,
-) PrimaryResult[K] {
-	summary := FetchPlan[K, struct{}]{
-		Targets:     keys,
-		Parallelism: plan.Parallelism,
-		Fetch: func(fetchCtx context.Context, key K) (struct{}, error) {
-			return struct{}{}, run(fetchCtx, key)
-		},
-	}.Execute(ctx)
+type targetOutcome uint8
 
-	return PrimaryResult[K]{
-		Attempted: len(keys),
-		Succeeded: summary.SuccessCount,
-		Failed:    summary.FailedTargets,
+const (
+	targetSucceeded targetOutcome = iota
+	targetFailed
+	targetCanceled
+)
+
+// RunPrimary는 개별 target 실패가 나머지 target 실행을 멈추지 않게 모든 target을 시도한다.
+// 호출자 context가 이미 끝났으면 남은 target은 시작하지 않고 Canceled에 담는다.
+func (plan FetchPlan[K]) RunPrimary(ctx context.Context, keys []K, run func(context.Context, K) error) PrimaryResult[K] {
+	outcomes := make([]targetOutcome, len(keys))
+
+	if plan.Parallelism <= 1 {
+		for i, key := range keys {
+			outcomes[i] = runTarget(ctx, key, run)
+		}
+	} else {
+		plan.runParallel(ctx, keys, run, outcomes)
 	}
+
+	return summarizeOutcomes(keys, outcomes)
+}
+
+// 각 goroutine은 자기 index 칸에만 결과를 쓰므로 outcomes에 별도 잠금이 필요 없다(wg.Wait가 쓰기를 발행한다).
+// 첫 실패가 다른 target을 멈추지 않도록 공유 cancel을 만들지 않는다.
+func (plan FetchPlan[K]) runParallel(ctx context.Context, keys []K, run func(context.Context, K) error, outcomes []targetOutcome) {
+	limiter := make(chan struct{}, plan.Parallelism)
+
+	var wg sync.WaitGroup
+
+	for i, key := range keys {
+		limiter <- struct{}{}
+
+		wg.Go(func() {
+			defer func() { <-limiter }()
+
+			var outcome targetOutcome
+
+			// panic은 target 실패로 센다. panicguard가 복구 사실을 로그로 남긴다.
+			if err := panicguard.RunE(nil, panicguard.BackgroundTask, "fallback-fetch", func() error {
+				outcome = runTarget(ctx, key, run)
+
+				return nil
+			}); err != nil {
+				outcome = targetFailed
+			}
+
+			outcomes[i] = outcome
+		})
+	}
+
+	wg.Wait()
+}
+
+func runTarget[K any](ctx context.Context, key K, run func(context.Context, K) error) targetOutcome {
+	if ctx.Err() != nil {
+		return targetCanceled
+	}
+
+	if err := run(ctx, key); err != nil {
+		if ctx.Err() != nil {
+			return targetCanceled
+		}
+
+		return targetFailed
+	}
+
+	return targetSucceeded
+}
+
+func summarizeOutcomes[K any](keys []K, outcomes []targetOutcome) PrimaryResult[K] {
+	result := PrimaryResult[K]{
+		Attempted: len(keys),
+		Failed:    make([]K, 0, len(keys)),
+	}
+
+	for i, outcome := range outcomes {
+		switch outcome {
+		case targetSucceeded:
+			result.Succeeded++
+		case targetFailed:
+			result.Failed = append(result.Failed, keys[i])
+		case targetCanceled:
+			result.Canceled = append(result.Canceled, keys[i])
+		}
+	}
+
+	return result
 }

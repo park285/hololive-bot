@@ -29,10 +29,14 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-var errSelectedLLMProviderDisabled = errors.New("selected LLM provider is disabled")
+// errSelectedLLMProviderDisabled와 errConsensusLLMDisabled는 기능이 설정으로 꺼져 있음을 알리는 sentinel이다.
+// 초기화 실패와 구분해야 기능 활성 시의 실패만 기동 실패로 올릴 수 있다(stack audit B5).
+var (
+	errSelectedLLMProviderDisabled = errors.New("selected LLM provider is disabled")
+	errConsensusLLMDisabled        = errors.New("consensus LLM is disabled")
+)
 
 type selectedLLMProvider struct {
 	name           string
@@ -57,17 +61,14 @@ type consensusClientSpec struct {
 	schemaName     string
 	temperature    float64
 	chatCompletion bool
-	incompleteWarn string
 	successMessage string
 	preset         bool
 }
 
-func ProvideLLMCostTracker(cacheClient cache.Client, monthlyCeiling int64, logger *slog.Logger) llm.CostTracker {
-	if tracker := llm.NewValkeyCostCeiling(cacheClient, monthlyCeiling, logger); tracker != nil {
-		return tracker
-	}
-
-	return nil
+// ProvideLLMCostTracker는 토큰 사용량을 항상 메트릭으로 기록하는 recorder를 돌려준다.
+// 월 상한과 Valkey 월 카운터는 DEC-20260926-hololive-llm-token-ceiling-retirement로 퇴역했다.
+func ProvideLLMCostTracker() llm.CostTracker {
+	return llm.NewTokenMetricsRecorder()
 }
 
 func ProvideMajorEventLLMClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
@@ -91,7 +92,9 @@ func ProvideMajorEventLLMClient(provider settings.LLMProviderConfig, tracker llm
 	return client
 }
 
-func ProvideMemberNewsLLMClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+// ProvideMemberNewsLLMClient는 member news 요약 client를 만든다. 선택한 provider가 꺼져 있으면
+// errSelectedLLMProviderDisabled를 감싼 오류로 기능 비활성을 알리고, 그 밖의 초기화 실패는 기동 실패 대상 오류다.
+func ProvideMemberNewsLLMClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
@@ -103,10 +106,12 @@ func ProvideMemberNewsLLMClient(provider settings.LLMProviderConfig, llmConfig *
 		chatCompletions: true,
 		preset:          true,
 	})
-	if err != nil {
-		logProviderInitializationError(logger, "Member news LLM", err)
+	if errors.Is(err, errSelectedLLMProviderDisabled) {
+		logger.Info("Member news LLM disabled")
+	}
 
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("initialize member news LLM client: %w", err)
 	}
 
 	logger.Info("Member news LLM enabled",
@@ -116,26 +121,32 @@ func ProvideMemberNewsLLMClient(provider settings.LLMProviderConfig, llmConfig *
 		slog.Float64("temperature", llmConfig.MemberNewsTemperature),
 	)
 
-	return client
+	return client, nil
 }
 
-func ProvideMemberNewsReviewerClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+// ProvideMemberNewsReviewerClient는 consensus가 켜져 있을 때만 reviewer client를 만든다. 설정으로 consensus나
+// provider가 꺼져 있으면 비활성 sentinel을 감싼 오류를, 그 밖의 초기화 실패는 기동 실패 대상 오류를 돌려준다.
+func ProvideMemberNewsReviewerClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
 
 	model := cmp.Or(llmConfig.MemberNews.ReviewerModel, llmConfig.MemberNewsModel)
 
-	return buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
+	client, err := buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
 		enabled:        llmConfig.MemberNews.Enabled,
 		model:          model,
 		schemaName:     "member_news_review",
 		temperature:    0.1,
 		chatCompletion: true,
-		incompleteWarn: "Consensus reviewer LLM configuration incomplete, skipping",
 		successMessage: "Consensus reviewer LLM enabled",
 		preset:         true,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize member news consensus reviewer: %w", err)
+	}
+
+	return client, nil
 }
 
 func ProvideMajorEventReviewerClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
@@ -143,14 +154,20 @@ func ProvideMajorEventReviewerClient(provider settings.LLMProviderConfig, llmCon
 		llmConfig = &settings.LLMConfig{}
 	}
 
-	return buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
+	client, err := buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
 		enabled:        llmConfig.MajorEvent.Enabled,
 		model:          llmConfig.MajorEvent.ReviewerModel,
 		schemaName:     "event_summary_review",
-		incompleteWarn: "Major event consensus reviewer LLM configuration incomplete, skipping",
 		successMessage: "Major event consensus reviewer LLM enabled",
 		preset:         true,
 	})
+	if err != nil {
+		logConsensusInitializationWarning(logger, "Major event consensus reviewer LLM configuration incomplete, skipping", provider, err)
+
+		return nil
+	}
+
+	return client
 }
 
 func ProvideMajorEventAdjudicatorClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
@@ -158,37 +175,51 @@ func ProvideMajorEventAdjudicatorClient(provider settings.LLMProviderConfig, llm
 		llmConfig = &settings.LLMConfig{}
 	}
 
-	return buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
+	client, err := buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
 		enabled:        llmConfig.MajorEvent.Enabled,
 		model:          llmConfig.MajorEvent.AdjudicatorModel,
 		schemaName:     "event_summary",
-		incompleteWarn: "Major event consensus adjudicator LLM configuration incomplete, skipping",
 		successMessage: "Major event consensus adjudicator LLM enabled",
 	})
+	if err != nil {
+		logConsensusInitializationWarning(logger, "Major event consensus adjudicator LLM configuration incomplete, skipping", provider, err)
+
+		return nil
+	}
+
+	return client
 }
 
-func ProvideMemberNewsAdjudicatorClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
+// ProvideMemberNewsAdjudicatorClient는 consensus가 켜져 있을 때만 adjudicator client를 만든다. 오류 계약은
+// ProvideMemberNewsReviewerClient와 같다.
+func ProvideMemberNewsAdjudicatorClient(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llm.CostTracker, logger *slog.Logger) (llm.Client, error) {
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
 
 	model := cmp.Or(llmConfig.MemberNews.AdjudicatorModel, llmConfig.MemberNewsModel)
 
-	return buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
+	client, err := buildConsensusLLMClient(provider, tracker, logger, consensusClientSpec{
 		enabled:        llmConfig.MemberNews.Enabled,
 		model:          model,
 		schemaName:     "member_news_summary",
 		temperature:    llmConfig.MemberNewsTemperature,
 		chatCompletion: true,
-		incompleteWarn: "Consensus adjudicator LLM configuration incomplete, skipping",
 		successMessage: "Consensus adjudicator LLM enabled",
 		preset:         true,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize member news consensus adjudicator: %w", err)
+	}
+
+	return client, nil
 }
 
-func buildConsensusLLMClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec consensusClientSpec) llm.Client {
+// buildConsensusLLMClient는 consensus나 provider가 꺼져 있으면 비활성 sentinel을 감싼 오류를 돌려준다.
+// 오류를 기동 실패로 올릴지는 기능별 호출자가 정한다.
+func buildConsensusLLMClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec consensusClientSpec) (llm.Client, error) {
 	if !spec.enabled {
-		return nil
+		return nil, errConsensusLLMDisabled
 	}
 
 	client, model, _, err := buildProviderClient(provider, tracker, logger, providerClientSpec{
@@ -200,16 +231,7 @@ func buildConsensusLLMClient(provider settings.LLMProviderConfig, tracker llm.Co
 		preset:          spec.preset,
 	})
 	if err != nil {
-		if errors.Is(err, errSelectedLLMProviderDisabled) {
-			return nil
-		}
-
-		logger.Warn(spec.incompleteWarn,
-			slog.String("provider", normalizedProviderName(provider.Name)),
-			slog.Any("error", err),
-		)
-
-		return nil
+		return nil, fmt.Errorf("build consensus provider client: %w", err)
 	}
 
 	logger.Info(spec.successMessage,
@@ -217,7 +239,23 @@ func buildConsensusLLMClient(provider settings.LLMProviderConfig, tracker llm.Co
 		slog.String("model", model),
 	)
 
-	return client
+	return client, nil
+}
+
+func isLLMFeatureDisabled(err error) bool {
+	return errors.Is(err, errSelectedLLMProviderDisabled) || errors.Is(err, errConsensusLLMDisabled)
+}
+
+// major event consensus는 B5 범위 밖이라 기존대로 초기화 실패를 경고로 남기고 consensus 없이 진행한다.
+func logConsensusInitializationWarning(logger *slog.Logger, message string, provider settings.LLMProviderConfig, err error) {
+	if isLLMFeatureDisabled(err) {
+		return
+	}
+
+	logger.Warn(message,
+		slog.String("provider", normalizedProviderName(provider.Name)),
+		slog.Any("error", err),
+	)
 }
 
 func buildProviderClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec providerClientSpec) (llm.Client, string, bool, error) {

@@ -26,37 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestChzzkLiveURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		channelID string
-		want      string
-	}{
-		{
-			name:      "channelID 있음",
-			channelID: "abc123",
-			want:      "https://chzzk.naver.com/live/abc123",
-		},
-		{
-			name:      "빈 channelID는 passthrough",
-			channelID: "",
-			want:      "https://chzzk.naver.com/live/",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := domain.ChzzkLiveURL(tt.channelID); got != tt.want {
-				t.Errorf("ChzzkLiveURL(%q) = %q, want %q", tt.channelID, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestYouTubeWatchURL(t *testing.T) {
 	t.Parallel()
 

@@ -74,9 +74,12 @@ ensure_pinned_go_tool() {
     printf '%s\n' "${bin}"
 }
 
+# PATH/GOBIN의 무패치 staticcheck는 generic method fact를 다른 method에 붙여 거짓 SA1019를 낸다.
+# staticcheck-facts profile이 고정 x/tools objectpath 패치와 source/export 경계 fixture를 검증한다.
 ensure_staticcheck() {
-    ensure_pinned_go_tool staticcheck "honnef.co/go/tools/cmd/staticcheck" \
-        "${STATICCHECK_VERSION}" "staticcheck ${STATICCHECK_VERSION}"
+    local tooling_dir
+    tooling_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || return 1
+    STATICCHECK_VERSION="${STATICCHECK_VERSION}" bash "${tooling_dir}/staticcheck-facts/build.sh"
 }
 
 ensure_govulncheck() {

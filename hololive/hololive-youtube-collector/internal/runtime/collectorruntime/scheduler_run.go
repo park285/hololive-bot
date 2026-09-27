@@ -98,6 +98,10 @@ func (e *collectionExecutor) runAcquired(ctx context.Context, registration Regis
 	e.workerTotals.RecordAttempt(collectionAttemptOutcome(err))
 	e.metrics.ObserveAttempt(spec.Provider, spec.CollectionJobKind, attemptResult(err), time.Since(started))
 
+	if errors.Is(err, collecterr.ErrInvalidFailureTuple) {
+		e.metrics.ObserveInvalidFailureTuple(spec.Provider, spec.CollectionJobKind)
+	}
+
 	if e.handleLeaseRunOutcome(runResult, spec, &proof) {
 		return
 	}

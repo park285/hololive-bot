@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -166,7 +167,9 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 		args = appendTelemetryRowArgs(args, &rows[i])
 	}
 
-	sb.WriteString(mustSQL("repository_0152_02.sql"))
+	// (delivery_id, attempt_ordinal) 중복을 건너뛰던 ON CONFLICT DO NOTHING은 지웠다. 시도는 lifecycle 전이 트랜잭션이 한
+	// 번만 기록하므로 중복은 결함이고, unique 위반으로 드러나 그 트랜잭션을 rollback한다
+	// (DEC-20260926-hololive-delivery-telemetry-single-path).
 
 	if _, err := r.db.Exec(ctx, sb.String(), args...); err != nil {
 		return fmt.Errorf("enqueue delivery telemetry: %w", err)
@@ -197,28 +200,8 @@ func appendTelemetryRowArgs(args []any, row *domain.YouTubeNotificationDeliveryT
 		row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.LockedAt, row.LoggedAt, row.Error)
 }
 
-func deliveryTelemetrySelectColumns() string {
-	return `id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
-		actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
-		dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
-		attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error`
-}
-
-func (r *Repository) queryTelemetryRows(ctx context.Context, action, query string, args ...any) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
-	rows, err := r.db.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", action, err)
-	}
-	defer rows.Close()
-
-	items, err := pgx.CollectRows(rows, scanTelemetryRow)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", action, err)
-	}
-
-	return items, nil
-}
-
+// FetchAndLockPending은 기록할 telemetry 행을 골라 lease(locked_at)를 한 문장으로 획득한다.
+// 만료(lockTimeout)가 지난 lease의 행은 다시 획득할 수 있고, 다른 인스턴스가 잡은 행은 건너뛴다.
 func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	if batchSize <= 0 {
 		return nil, nil
@@ -227,69 +210,30 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 	now := time.Now().UTC()
 	lockExpiry := now.Add(-lockTimeout)
 
-	candidates, err := r.queryTelemetryRows(ctx, "fetch pending delivery telemetry", mustSQL("repository_0208_03.sql")+deliveryTelemetrySelectColumns()+`
-		FROM youtube_notification_delivery_telemetry
-		WHERE logged_at IS NULL
-		  AND next_attempt_at <= $1
-		  AND (locked_at IS NULL OR locked_at < $2)
-		ORDER BY event_at ASC
-		LIMIT $3
-	`, now, lockExpiry, batchSize)
+	rows, err := r.db.Query(ctx, mustSQL("repository_fetch_lock_pending.sql"), now, lockExpiry, batchSize)
 	if err != nil {
-		return nil, fmt.Errorf("query telemetry rows: %w", err)
+		return nil, fmt.Errorf("fetch and lock pending delivery telemetry: %w", err)
 	}
 
-	if len(candidates) == 0 {
+	locked, err := pgx.CollectRows(rows, scanTelemetryRow)
+	if err != nil {
+		return nil, fmt.Errorf("fetch and lock pending delivery telemetry: collect rows: %w", err)
+	}
+
+	if len(locked) == 0 {
 		return nil, nil
 	}
 
-	candidateIDs := make([]int64, 0, len(candidates))
-	for i := range candidates {
-		candidateIDs = append(candidateIDs, candidates[i].ID)
-	}
-
-	slices.Sort(candidateIDs)
-
-	err = r.lockPendingTelemetryRows(ctx, candidateIDs, now, lockExpiry)
-	if err != nil {
-		return nil, fmt.Errorf("lock pending telemetry rows: %w", err)
-	}
-
-	reloadArgs := deliverysql.AppendDeliveryInt64Args(nil, candidateIDs)
-
-	reloadArgs = append(reloadArgs, now)
-
-	locked, err := r.queryTelemetryRows(ctx, "reload locked delivery telemetry rows", mustSQL("repository_0237_04.sql")+deliveryTelemetrySelectColumns()+`
-		FROM youtube_notification_delivery_telemetry
-		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
-		  AND locked_at = ?
-		ORDER BY event_at ASC
-	`, reloadArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("query telemetry rows: %w", err)
-	}
+	// UPDATE ... RETURNING은 순서를 보장하지 않으므로 기록 순서를 (event_at, id)로 되돌린다.
+	slices.SortFunc(locked, func(a, b domain.YouTubeNotificationDeliveryTelemetry) int {
+		return cmp.Or(a.EventAt.Compare(b.EventAt), cmp.Compare(a.ID, b.ID))
+	})
 
 	if err := r.refreshLockedRows(ctx, locked); err != nil {
 		return nil, fmt.Errorf("refresh locked rows: %w", err)
 	}
 
 	return locked, nil
-}
-
-func (r *Repository) lockPendingTelemetryRows(ctx context.Context, candidateIDs []int64, now, lockExpiry time.Time) error {
-	lockArgs := []any{now}
-
-	lockArgs = deliverysql.AppendDeliveryInt64Args(lockArgs, candidateIDs)
-	lockArgs = append(lockArgs, lockExpiry)
-
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "lock delivery telemetry rows", mustSQL("repository_0258_05.sql")+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
-		  AND logged_at IS NULL
-		  AND (locked_at IS NULL OR locked_at < ?)
-	`, lockArgs...); err != nil {
-		return fmt.Errorf("lock delivery telemetry rows: %w", err)
-	}
-
-	return nil
 }
 
 func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {

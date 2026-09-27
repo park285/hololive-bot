@@ -19,7 +19,6 @@ cd "${REPO_ROOT}"
 export GIT_OPTIONAL_LOCKS=0
 . "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
-. "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/admin-bind.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/health-gate.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/postgres-capacity.sh"
@@ -377,17 +376,15 @@ else
     verify_build_services
     validate_built_runtime_config_for_deploy
 
-    echo "[CUTOVER] Replacing retired runtimes with the three-runtime topology"
+    echo "[CUTOVER] Starting the three-runtime topology"
     COMPOSE_FILE_ARGS=("${COMPOSE_FILES[@]}")
     echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID:-1000}:${HOLOLIVE_APP_GID:-1000}"
     if ! cutover_bind_mount_preflight "${REPO_ROOT}"; then
         echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
         exit 1
     fi
-    removed_runtime_cleanup_before_cutover
     cutover_capture_restart_baseline hololive-api hololive-alarm-worker
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --no-build
-    removed_runtime_assert_absent
 
     echo "[VERIFY] Compose service state"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" ps

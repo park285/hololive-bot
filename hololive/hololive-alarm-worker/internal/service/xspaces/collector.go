@@ -8,12 +8,28 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
-const invalidResponseCode = "invalid_response"
+const (
+	invalidResponseCode = "invalid_response"
+	collectorFailedCode = "collector_failed"
+	// Go가 helper 결과 문서를 받지 못하고 종료 상태만 관측한 실패 단계다.
+	helperOutputStage = "helper_output"
+)
+
+var (
+	// 실패 위치로 helper가 보고할 수 있는 단계다. 예외 원문 대신 단계로 원인 범위를 좁힌다.
+	helperStages = []string{"input", "library", "app_shell", "transaction", "collect"}
+	// JavaScript 내장 오류 종류이며 collector_failed에만 붙는다. 그 밖의 이름은 helper가 other로 보낸다.
+	helperErrorNames = []string{"Error", "TypeError", "SyntaxError", "RangeError", "ReferenceError", "AbortError", "TimeoutError", "other"}
+	nodeErrorCode    = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+)
 
 // Observation은 helper가 확인한 직접 개설 스페이스다. 방·채널 정보는 worker가 결정한다.
 type Observation struct {
@@ -23,17 +39,43 @@ type Observation struct {
 	StartedAt time.Time `json:"started_at"`
 }
 
-// CollectionError는 secret이 없는 고정 오류 코드, 재조회 간격과 숫자 HTTP 진단만 전달한다.
+// CollectionError는 secret이 없는 고정 오류 코드, 재조회 간격, 실패 위치와 숫자 HTTP 진단만 전달한다.
+// 진단 필드는 로그 전용이며 세션 상태에는 Code만 기록한다.
 type CollectionError struct {
 	Code       string
 	Cooldown   time.Duration
 	HTTPStatus int
 	APICodes   []int
+	// Stage는 helper가 실패한 단계이며, helper 출력을 해석하지 못하면 helper_output이다.
+	Stage string
+	// ErrorName·ErrorCode는 collector_failed의 내장 오류 종류와 Node 오류 코드다.
+	ErrorName string
+	ErrorCode string
+	// Process는 helper_output에서 Go가 관측한 실행 결과다(예: exit status 1, signal: killed).
+	Process string
 }
 
-// Error는 upstream 원문 대신 검증된 숫자 진단만 포함한 로그 메시지를 반환한다.
+// Error는 upstream·예외 원문 대신 검증된 진단만 포함한 로그 메시지를 반환한다.
 func (e *CollectionError) Error() string {
-	return fmt.Sprintf("X spaces collection: %s (http_status=%d api_codes=%v)", e.Code, e.HTTPStatus, e.APICodes)
+	var diagnostics strings.Builder
+
+	if e.Stage != "" {
+		fmt.Fprintf(&diagnostics, "stage=%s ", e.Stage)
+	}
+
+	if e.ErrorName != "" {
+		fmt.Fprintf(&diagnostics, "error_name=%s ", e.ErrorName)
+	}
+
+	if e.ErrorCode != "" {
+		fmt.Fprintf(&diagnostics, "error_code=%s ", e.ErrorCode)
+	}
+
+	if e.Process != "" {
+		fmt.Fprintf(&diagnostics, "process=%q ", e.Process)
+	}
+
+	return fmt.Sprintf("X spaces collection: %s (%shttp_status=%d api_codes=%v)", e.Code, diagnostics.String(), e.HTTPStatus, e.APICodes)
 }
 
 // ProcessCollector는 단발 Node helper의 stdin으로만 인증 값을 전달한다.
@@ -45,6 +87,9 @@ type boundedOutput struct{ bytes.Buffer }
 type collectionResult struct {
 	Spaces          *[]Observation `json:"spaces"`
 	Error           string         `json:"error"`
+	Stage           string         `json:"stage"`
+	ErrorName       string         `json:"error_name"`
+	ErrorCode       string         `json:"error_code"`
 	CooldownSeconds int            `json:"cooldown_seconds"`
 	HTTPStatus      int            `json:"http_status"`
 	APICodes        []int          `json:"api_codes"`
@@ -106,7 +151,7 @@ func decodeCollectionOutput(output []byte, runErr error) ([]Observation, error) 
 	var result collectionResult
 
 	if err := jsonv2.Unmarshal(output, &result, jsonv2.RejectUnknownMembers(true)); err != nil {
-		return nil, &CollectionError{Code: "collector_failed"}
+		return nil, helperOutputFailure(runErr)
 	}
 
 	if result.Error != "" {
@@ -114,14 +159,30 @@ func decodeCollectionOutput(output []byte, runErr error) ([]Observation, error) 
 	}
 
 	if runErr != nil || result.Spaces == nil || len(*result.Spaces) > 100 {
-		return nil, &CollectionError{Code: "collector_failed"}
+		return nil, helperOutputFailure(runErr)
 	}
 
 	return *result.Spaces, nil
 }
 
+// 결과 문서가 없거나 해석되지 않으면 Go가 관측한 실행 결과만 남긴다. 표준 오류 원문은 인증 정보를 포함할 수 있어 읽지 않는다.
+// Go exec 오류 문자열은 종료 상태·실행 실패만 담고 stdin 내용을 담지 않으므로 그대로 남긴다.
+func helperOutputFailure(runErr error) *CollectionError {
+	process := "exit status 0"
+
+	if runErr != nil {
+		process = runErr.Error()
+	}
+
+	return &CollectionError{Code: collectorFailedCode, Stage: helperOutputStage, Process: process}
+}
+
 func (r collectionResult) failure() error {
 	if !sessions.ValidErrorCode(r.Error) || r.Error == "authentication_pending" {
+		return &CollectionError{Code: invalidResponseCode}
+	}
+
+	if !slices.Contains(helperStages, r.Stage) || !r.validErrorKind() {
 		return &CollectionError{Code: invalidResponseCode}
 	}
 
@@ -143,7 +204,19 @@ func (r collectionResult) failure() error {
 		}
 	}
 
-	return &CollectionError{Code: r.Error, Cooldown: time.Duration(r.CooldownSeconds) * time.Second, HTTPStatus: r.HTTPStatus, APICodes: r.APICodes}
+	return &CollectionError{
+		Code: r.Error, Cooldown: time.Duration(r.CooldownSeconds) * time.Second, HTTPStatus: r.HTTPStatus, APICodes: r.APICodes,
+		Stage: r.Stage, ErrorName: r.ErrorName, ErrorCode: r.ErrorCode,
+	}
+}
+
+// validErrorKind는 분류되지 않은 예외(collector_failed)에만 오류 종류를 허용한다.
+func (r collectionResult) validErrorKind() bool {
+	if r.Error != collectorFailedCode {
+		return r.ErrorName == "" && r.ErrorCode == ""
+	}
+
+	return slices.Contains(helperErrorNames, r.ErrorName) && (r.ErrorCode == "" || nodeErrorCode.MatchString(r.ErrorCode))
 }
 
 func collectionFailure(err error) (string, time.Duration) {
@@ -151,7 +224,7 @@ func collectionFailure(err error) (string, time.Duration) {
 		return failure.Code, failure.Cooldown
 	}
 
-	return "collector_failed", 0
+	return collectorFailedCode, 0
 }
 
 // Collector는 모의 응답과 실제 helper가 공유하는 읽기 전용 수집 경계다.

@@ -84,6 +84,7 @@ func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 		Password:      postgresConfig.Password,
 		Database:      postgresConfig.Database,
 		SSLMode:       postgresConfig.SSLMode,
+		SSLRootCert:   postgresConfig.SSLRootCert,
 		QueryExecMode: postgresConfig.QueryExecMode,
 		PoolMinConns:  postgresConfig.PoolMinConns,
 		PoolMaxConns:  postgresConfig.PoolMaxConns,
@@ -113,21 +114,6 @@ type ManagedIrisClient interface {
 
 // ProvideIrisClient - Iris 발송 클라이언트 생성.
 func ProvideIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (ManagedIrisClient, error) {
-	out, err := provideRuntimeIrisClient(irisConfig, logger, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("provide runtime iris client: %w", err)
-	}
-
-	return out, nil
-}
-
-// IrisKaringClient는 managed Iris 수명주기에 Karing 전송 계약을 더합니다.
-type IrisKaringClient interface {
-	ManagedIrisClient
-	iris.KaringClient
-}
-
-func ProvideIrisKaringClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (IrisKaringClient, error) {
 	out, err := provideRuntimeIrisClient(irisConfig, logger, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("provide runtime iris client: %w", err)

@@ -27,6 +27,7 @@ import (
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/app/http"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
@@ -45,7 +46,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		},
 	}
 
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, sharedtestutil.NewTestCacheService(ctx, t))
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}

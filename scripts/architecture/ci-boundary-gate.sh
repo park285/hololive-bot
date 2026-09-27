@@ -119,7 +119,7 @@ bash "${ROOT_DIR}/scripts/deploy/test-postgres18-runtime-contract.sh"
 "${ROOT_DIR}/scripts/architecture/check-topology-parity_test.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh"
 "${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh"
-"${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh"
+"${ROOT_DIR}/scripts/deploy/test-compose-up-flow.sh"
 "${ROOT_DIR}/scripts/logs/test-remote-sync-main-logs.sh"
 bash "${ROOT_DIR}/scripts/ops/postgres-failover_test.sh"
 echo

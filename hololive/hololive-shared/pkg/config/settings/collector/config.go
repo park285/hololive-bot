@@ -8,8 +8,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 const (
@@ -19,6 +17,13 @@ const (
 	youtubeCollectorMaxPages                = 100
 	youtubeCollectorMaxSuccessResponseBytes = 1 << 20
 	youtubeCollectorMinSuccessResponseBytes = 1
+
+	// 아래는 collector 기본값이다. 이전에는 퇴역 producer 시대의 settings.DefaultScraperWorkerCount와
+	// DefaultScraperSchedulerConfig(오류 backoff 30초~5분)에서 빌려 왔는데, 그 설정 구획을 지우면서 값만 이곳으로 옮겼다
+	// (DEC-20260926-hololive-legacy-env-config-retirement).
+	youtubeCollectorDefaultWorkerCount  = 4
+	youtubeCollectorDefaultRetryFloor   = 30 * time.Second
+	youtubeCollectorDefaultRetryCeiling = 5 * time.Minute
 )
 
 var youtubeCollectorInstanceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
@@ -56,8 +61,7 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	workers := settings.DefaultScraperWorkerCount()
-	retry := settings.DefaultScraperSchedulerConfig()
+	workers := youtubeCollectorDefaultWorkerCount
 	queueCapacity := workers * 4
 	acquisitionBatch := min(queueCapacity, youtubeCollectorMaxAcquisitionBatch)
 
@@ -76,8 +80,8 @@ func DefaultConfig() Config {
 		PublishTimeout:           5 * time.Second,
 		ReadinessTimeout:         2 * time.Second,
 		HelperHealthTimeout:      time.Second,
-		RetryMin:                 retry.ErrorBackoffMin,
-		RetryMax:                 retry.ErrorBackoffMax,
+		RetryMin:                 youtubeCollectorDefaultRetryFloor,
+		RetryMax:                 youtubeCollectorDefaultRetryCeiling,
 		ReleaseJitterMin:         100 * time.Millisecond,
 		ReleaseJitterMax:         time.Second,
 		HolodexMaxInflight:       workers,

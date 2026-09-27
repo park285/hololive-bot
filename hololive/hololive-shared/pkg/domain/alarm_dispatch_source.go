@@ -99,14 +99,12 @@ func (p *DeliveryDigestDispatchPayload) ContentIdentity() string {
 }
 
 type YouTubeOutboxDispatchPayload struct {
-	OutboxIDs          []int64             `json:"outbox_ids"`
-	Kind               OutboxKind          `json:"kind"`
-	AlarmType          AlarmType           `json:"alarm_type"`
-	ChannelID          string              `json:"channel_id"`
-	MemberName         string              `json:"member_name,omitempty"`
-	Items              []YouTubeOutboxItem `json:"items"`
-	RenderTemplateKey  TemplateKey         `json:"render_template_key,omitempty"`
-	PreRenderedMessage string              `json:"pre_rendered_message,omitempty"`
+	OutboxIDs  []int64             `json:"outbox_ids"`
+	Kind       OutboxKind          `json:"kind"`
+	AlarmType  AlarmType           `json:"alarm_type"`
+	ChannelID  string              `json:"channel_id"`
+	MemberName string              `json:"member_name,omitempty"`
+	Items      []YouTubeOutboxItem `json:"items"`
 }
 
 type YouTubeOutboxItem struct {
@@ -143,10 +141,6 @@ func validateYouTubeOutboxHeader(p *YouTubeOutboxDispatchPayload) error {
 		return fmt.Errorf("youtube outbox dispatch payload alarm type %q does not match kind %q (want %q)", p.AlarmType, p.Kind, want)
 	}
 
-	if hasTemplateAndPreRenderedMessage(p) {
-		return errors.New("youtube outbox dispatch payload cannot set both render template key and pre-rendered message")
-	}
-
 	return nil
 }
 
@@ -164,10 +158,6 @@ func validateYouTubeOutboxAlarmHeader(alarmType AlarmType, channelID string) err
 	}
 
 	return nil
-}
-
-func hasTemplateAndPreRenderedMessage(p *YouTubeOutboxDispatchPayload) bool {
-	return strings.TrimSpace(string(p.RenderTemplateKey)) != "" && strings.TrimSpace(p.PreRenderedMessage) != ""
 }
 
 func validateYouTubeOutboxItems(items []YouTubeOutboxItem) error {
@@ -338,6 +328,10 @@ func (e *AlarmQueueEnvelope) validateCelebrationDispatch() error {
 
 	if e.Celebration == nil {
 		return errors.New("canonical alarm dispatch: celebration payload is nil")
+	}
+
+	if e.Celebration.MemberID <= 0 {
+		return fmt.Errorf("canonical alarm dispatch: celebration member id must be positive, got %d", e.Celebration.MemberID)
 	}
 
 	if e.Celebration.Date == "" {

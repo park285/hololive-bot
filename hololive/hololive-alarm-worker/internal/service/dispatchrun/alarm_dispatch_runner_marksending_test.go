@@ -41,30 +41,6 @@ func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt
 	assert.Empty(t, consumer.markDispatched)
 }
 
-func TestAlarmDispatchRunnerCompensatesKaringMarkSendingFailureWithSendingRetry(t *testing.T) {
-	consumer := &alarmDispatchRunnerTestConsumer{
-		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
-		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
-	}
-	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{
-		consumer: consumer,
-		sender:   sender,
-		maxBatch: 10,
-	}
-
-	processed, err := runner.runOnce(t.Context())
-
-	require.NoError(t, err)
-	assert.True(t, processed)
-	assert.Empty(t, sender.karingRequests, "karing 요청은 발송되면 안 된다")
-	require.Len(t, consumer.preSendRequeued, 1)
-	assert.Equal(t, 0, consumer.preSendRequeued[0].Retry.Attempt)
-	assert.Empty(t, consumer.scheduledSendingRetry)
-	assert.Empty(t, consumer.scheduledRetry)
-	assert.Empty(t, consumer.markDispatched)
-}
-
 func TestAlarmDispatchRunnerMarkSendingFailureDoesNotExhaustExistingAttempt(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: 2})
 

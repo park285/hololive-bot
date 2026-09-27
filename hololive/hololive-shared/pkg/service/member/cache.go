@@ -89,7 +89,6 @@ type memoryMember struct {
 
 // 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
 func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.KeyValueCache, logger *slog.Logger, config CacheConfig) (*Cache, error) {
-	ctx = memberCacheContext(ctx)
 	config = normalizeMemberCacheConfig(config)
 
 	mc := newMemberCache(repository, cacheService, logger, config)
@@ -105,16 +104,8 @@ func NewMemberCache(ctx context.Context, repository *Repository, cacheService ca
 	return mc, nil
 }
 
-func memberCacheContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-
-	return ctx
-}
-
 func memberEpochRuntimeContext(ctx context.Context) context.Context {
-	return context.WithoutCancel(memberCacheContext(ctx))
+	return context.WithoutCancel(ctx)
 }
 
 func normalizeMemberCacheConfig(config CacheConfig) CacheConfig {

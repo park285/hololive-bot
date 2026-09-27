@@ -21,44 +21,20 @@
 package botruntime
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
-	t.Run("alarm repository", func(t *testing.T) {
-		repository := appbootstrap.ProvideAlarmRepository(&dbmocks.Client{}, logger)
-		require.NotNil(t, repository)
-	})
-
-	t.Run("alarm service", func(t *testing.T) {
-		service, err := appbootstrap.ProvideAlarmService(
-			[]int{10, 3},
-			cachemocks.NewStrictClient(),
-			nil,
-			&stubMemberDataProvider{},
-			&alarm.Repository{},
-			logger,
-		)
-		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, service.Close(context.WithoutCancel(t.Context()))) })
-		require.NotNil(t, service)
-		assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
-	})
-
 	t.Run("member matcher", func(t *testing.T) {
-		matcher := appbootstrap.ProvideMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
+		matcher := appbootstrap.ProvideMatcher(&stubMemberDataProvider{}, cachemocks.NewStrictClient(), logger)
 		require.NotNil(t, matcher)
 	})
 }

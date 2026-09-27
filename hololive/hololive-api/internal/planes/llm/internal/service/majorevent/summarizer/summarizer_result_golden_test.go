@@ -17,7 +17,7 @@ func TestEventSummarizer_Summarize_WeeklyMatchesGolden(t *testing.T) {
 
 	assertSummaryGolden(t,
 		"weekly_summary_result.golden.txt",
-		summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15"),
+		mustSummarize(t, summarizer, events, SummaryTypeWeekly, "2026-02-15"),
 	)
 }
 
@@ -31,8 +31,19 @@ func TestEventSummarizer_Summarize_MonthlyMatchesGolden(t *testing.T) {
 
 	assertSummaryGolden(t,
 		"monthly_summary_result.golden.txt",
-		summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03"),
+		mustSummarize(t, summarizer, events, SummaryTypeMonthly, "2026-03"),
 	)
+}
+
+func mustSummarize(t *testing.T, summarizer *EventSummarizer, events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
+	t.Helper()
+
+	text, err := summarizer.Summarize(t.Context(), events, summaryType, periodKey)
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
+
+	return text
 }
 
 func assertSummaryGolden(t *testing.T, name, text string) {

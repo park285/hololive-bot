@@ -22,22 +22,19 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
-func TestRuntimeClaimsLiveViewerAndScheduleKinds(t *testing.T) {
+func TestRuntimeClaimsEverySupportedObservationKind(t *testing.T) {
 	t.Parallel()
 
-	got := make(map[contract.ObservationKind]bool, 9)
+	got := make(map[contract.ObservationKind]bool)
 
 	for _, kind := range youtubePlaneClaimKinds() {
 		got[kind] = true
 	}
 
-	for _, kind := range []contract.ObservationKind{
-		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
-		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindSchedule,
-		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
-	} {
-		if !got[kind] {
-			t.Fatalf("missing claim kind %s", kind)
+	// 수집 계약이 지원하는 kind를 claim하지 않으면 관측이 queue에 남아 canonical에 반영되지 않는다.
+	for version := range sourceobservation.InitialSupportedContracts() {
+		if !got[version.Kind] {
+			t.Fatalf("missing claim kind %s", version.Kind)
 		}
 	}
 }
@@ -751,5 +748,9 @@ func (emptyRosterReader) NotificationChannelIDs(context.Context, dbx.Tx) ([]stri
 }
 
 func (emptyRosterReader) OperationalChannelIDs(context.Context, dbx.Tx) ([]string, error) {
+	return nil, nil
+}
+
+func (emptyRosterReader) StaleLiveVideos(context.Context, dbx.Tx, targetprojection.StaleLiveVideoQuery) ([]targetprojection.StaleLiveVideo, error) {
 	return nil, nil
 }

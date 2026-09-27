@@ -31,12 +31,12 @@ func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
 
 	second.ClaimKeys = []string{"claim:new"}
 
-	_, firstDelivery, err := buildLedgerRows(&first, StatusPending)
+	_, firstDelivery, err := buildLedgerRows(&first)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(first) error = %v", err)
 	}
 
-	_, secondDelivery, err := buildLedgerRows(&second, StatusPending)
+	_, secondDelivery, err := buildLedgerRows(&second)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(second) error = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestBuildLedgerRows_DefaultsEmptyAlarmTypeToLive(t *testing.T) {
 		Version: 1,
 	}
 
-	event, _, err := buildLedgerRows(&envelope, StatusPending)
+	event, _, err := buildLedgerRows(&envelope)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}

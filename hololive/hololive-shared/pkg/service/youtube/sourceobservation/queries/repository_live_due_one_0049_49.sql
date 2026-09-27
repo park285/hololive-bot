@@ -1,4 +1,5 @@
-SELECT video_id
+SELECT video_id,
+       NOW() AS db_now
 FROM youtube_live_reconciliation_heads
 WHERE next_end_check_at IS NOT NULL
   AND next_end_check_at <= NOW()

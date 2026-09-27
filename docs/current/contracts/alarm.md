@@ -2,7 +2,7 @@
 
 ## Summary
 
-Alarm domain currently has HTTP JSON APIs, the Valkey dispatch queue, generic notification delivery outbox egress, and the YouTube notification outbox egress path owned by `alarm-worker`.
+Alarm domain currently has HTTP JSON APIs, the PostgreSQL alarm dispatch outbox, generic notification delivery outbox egress, and the YouTube notification outbox egress path owned by `alarm-worker`.
 
 X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한다. 기존 `LIVE` 구독을 사용하되 YouTube stream payload와 섞지 않는다. 이벤트 키는 `x-space:start:<space-id>`, delivery는 기존 방별 키이며 최초 관측 스냅샷을 사용해 제목 변경에 따른 payload 충돌을 막는다. 발송은 기존 텍스트 egress와 receipt·미상 결과 계약을 따른다. [인증·관측·보존 경계](../services/x-spaces.md).
 
@@ -19,39 +19,41 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 - HTTP compatibility provider: `hololive-api` admin plane still registers the same route set during the migration window so existing callers can roll forward without a hard cutover.
 - Domain owner: `alarm-worker`.
 - Ownership decision: `alarm-worker` is the target owner; `hololive-api` admin-plane compatibility registration must be removed after bot/admin clients are cut over. See `../../design/alarm-http-provider-ownership.md`.
-- Queue service: `alarm-worker`
+- Dispatch outbox service: `alarm-worker`
 - Modules: `hololive-api`, `hololive-alarm-worker`, `hololive-shared`
 
 ## Consumers
 
 - HTTP consumers: `hololive-api` (bot + admin-plane facade paths)
-- Queue consumer: `alarm-worker`.
-- `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 `alarmread.Reader`(`GetAllChannelIDs`, `LoadAll`)로만 읽습니다. `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 collector/API YouTube plane에 직접 주입하지 않으며, `check-repository-ownership.sh`가 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
-- Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery, YouTube outbox handoff
+- Dispatch outbox consumer: `alarm-worker` (`dispatchoutbox.Consumer`).
+- `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 다음 경로로 직접 읽습니다.
+  - YouTube plane: `internal/planes/youtube/runtime/queries/notification_channel_ids.sql`을 projection transaction 안에서 실행합니다. `members` JOIN으로 졸업 멤버를 제외하고 `MaxInputChannelCount+1`로 상한을 둡니다.
+  - llm plane membernews: `repository_query_0080_03.sql`이 방별 구독 멤버 이름을 읽습니다.
+  - bot/admin plane은 `alarm.http`를 사용합니다. 통합 API의 `apiplane.RuntimeConfig.Validate`가 빈 `ALARM_INTERNAL_URL`을 거부하므로, bootstrap에 남은 `AlarmServiceURL` 미설정 시 in-process `pkg/service/alarm.Repository` 주입 분기는 정상 기동에서 도달할 수 없고 운영 직접 읽기 계약에 포함하지 않습니다.
+  - `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 youtube-collector와 YouTube plane에는 주입하지 않습니다. `check-repository-ownership.sh`는 youtube-collector의 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
+- Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery
 
 ## Transport
 
 - HTTP JSON for `/internal/alarm/*`
-- Valkey list/sorted set/list for dispatch queue, delayed retry, DLQ
+- PostgreSQL dispatch outbox (`alarm_dispatch_events`, `alarm_dispatch_deliveries`) for pending, retry, DLQ, quarantine, and terminal state. A payload-free Valkey wakeup list (`alarm:dispatch:wakeup`) only shortens polling; see [Valkey ephemeral contract](valkey_ephemeral_contract.md).
+- The retired Redis dispatch queue keys (`alarm:dispatch:queue`, `alarm:dispatch:retry`, `alarm:dispatch:dlq`) have no reader or writer. Their reserved constants were removed in stack-audit 2026-09-26 T11.
 
-### Iris admission and Karing chunk completion
+### Iris Markdown admission
 
-Markdown and Karing admission both retain the exact Iris request ID and poll its
-reply status. Only `handoff_completed` succeeds; confirmed failure and an unknown
-or timed-out outcome retain their distinct failure/claim semantics.
+Markdown admission retains the exact Iris request ID and polls its reply status.
+Only `handoff_completed` succeeds; confirmed failure (`ErrReplyHandoffFailed`) and
+an unknown or timed-out outcome (`ErrReplyHandoffOutcomeUnknown`) retain their
+distinct failure/claim semantics.
 
-YouTube Karing egress plans at most four items per provider call before entering
-`SENDING`. Each plan owns an exact outbox/delivery/claim subset and completes that
-subset independently. A later chunk failure never retries or quarantines a
-completed chunk. An unknown attempted chunk remains `SENDING`; unattempted chunks
-return through the existing prepared retry transition after durable confirmation.
-The sender does not split or loop over requests.
-
-The request ID binds the room, persisted source payloads, sorted outbox IDs, and a
-stable ordinal (the first persisted outbox ID). Removing earlier completed chunks
-does not renumber that ordinal or change a retry ID. Display-only member-cache
-changes do not alter the source identity. Rollout must preserve unknown claims;
-do not reset delivery state when changing this request-ID derivation.
+Alarm-worker does not send Karing templates
+(`DEC-20260926-hololive-karing-egress-disposition`, superseding
+`DEC-20260904-hololive-karing-regular-chat-egress`). The Karing chunk planner,
+per-chunk request IDs, and the `karing.kakaolink` contract were removed with it.
+Alarm dispatch sends each persisted send unit as one text message with its stored
+`client_request_id`; an ambiguous post-send failure retries with that same ID for
+every source kind. Past Karing `SENDING`/`outcome_unknown` rows keep the existing
+quarantine and stale-sweeper contract (T18 2026-09-26: 0 non-terminal rows).
 
 Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
 microsecond precision). Event detection, creation and next-attempt timestamps do
@@ -73,11 +75,11 @@ the stored target list is absent/empty under the existing settings contract.
 | Field | Value |
 |---|---|
 | HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/next-stream/:id`, `/settings`, `/room-name`, `/user-name`, `/keys` |
-| Queue keys | `alarm:dispatch:queue`, `alarm:dispatch:retry`, `alarm:dispatch:dlq` |
-| Method | mixed HTTP methods; Valkey `LPUSH`, `BRPOP`, `ZADD`, delayed drain script |
-| Version | HTTP unversioned; queue `QueueEnvelopeVersionV1 = 1`, consumer accepts `0` and `1` |
+| Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
+| Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
+| Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |
 | Contract package | `hololive/hololive-shared/pkg/contracts/alarm`; HTTP DTOs remain under `hololive/hololive-shared/pkg/service/alarm` |
-| Queue fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
+| Envelope fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
 
 ## Request
 
@@ -129,6 +131,24 @@ HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service
 함께 전환해야 한다. 196 이후에는 이전 `(room_id, channel_id)` upsert를 실행할 수 없다.
 운영 전환 조건과 검증은 [변경 보고서](../../review/unit-b-member-subscriptions-20260906.md)에 있다.
 
+### 멤버 표시명 예외 계약
+
+`DEC-20260926-hololive-source-fallbacks-retirement`는 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꾸고,
+알림 멤버 표시명 폴백 하나만 예외로 남겼다. members에 등록되지 않았거나 한국어 표시명이 빈 채널을 알림에
+표시하기 위한 것이다.
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | `members`의 `short_korean_name`·`korean_name`이 모두 비었거나 채널 행이 없음 |
+| 순서 | members(`short_korean_name`→`korean_name`) → 같은 채널의 최신 비어 있지 않은 `alarms.member_name`(host 구독 제외, 채널당 1행) → alarm cache 기록 때 호출자 값 → 표시 단계 `misc/vtuber_fallback` 문구(종단) |
+| 한도 | 표시 전용. 식별·dedup·라우팅에 쓰지 않고 외부 호출·재시도가 없음 |
+| Telemetry | `hololive_alarm_member_name_fallback_channels`(cache warm·rebuild 때 `alarms.member_name`으로 채운 채널 수), `hololive_alarm_member_name_caller_fallback_total`(alarm cache 기록 때 호출자 값을 쓴 횟수) |
+| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`, `pkg/service/notification/alarmservice`) |
+| 제거 조건 | 두 지표가 0으로 유지되고 구독 채널 전부가 members 한국어 표시명을 가질 때 폴백 단계를 지운다. 재검토 기한 2026-12-31 |
+
+코드 근거는 `alarm.Repository.GetMemberName` 주석(`memberDisplayNameExceptionContract`)과
+`queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
+
 ## Response
 
 ```go
@@ -140,7 +160,7 @@ type APIResponse struct {
 }
 ```
 
-Queue success has no response body; delivery outcome is represented by queue movement, retry metadata, claim release, and dispatcher logs/metrics.
+Dispatch publish has no response body; delivery outcome is represented by delivery row state, retry metadata, claim release, and dispatcher logs/metrics.
 
 ## Error codes
 
@@ -157,21 +177,21 @@ Queue success has no response body; delivery outcome is represented by queue mov
 | `set_room_name_failed` | 500 | provider room name update failed | retry/manual diagnosis |
 | `set_user_name_failed` | 500 | provider user name update failed | retry/manual diagnosis |
 | `get_all_alarm_keys_failed` | 500 | provider key listing failed | retry/manual diagnosis |
-| unsupported queue version | n/a | queue consumer rejects payload | preserve raw payload to DLQ; not accepted for delivery |
-| Invalid JSON | n/a | payload cannot parse | preserve raw payload to DLQ |
+| unsupported envelope version | n/a | publisher rejects the batch before insert | fix the producer; nothing is stored |
+| Invalid stored payload | n/a | consumer cannot decode the event payload or delivery context | delivery moves to `dlq` with the decode error |
 
 ## Timeout and retry policy
 
 - HTTP client timeout: 10 seconds for alarm client.
-- Queue drain: first item blocks up to consumer block timeout, then drains batches.
-- Retry queue: delayed retry uses `alarm:dispatch:retry` sorted set and retry metadata (`attempt`, `retry_after_ms`, `next_visible_at`, `last_error`, optional `last_error_code`).
+- Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
+- Retry: a failed delivery returns to `retry` with `next_attempt_at`; the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
 - `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, or the recovery codes `lease_expired`, `stale_sending`, and `lease_released`. Existing consumers may ignore this optional field.
-- DLQ: invalid raw payloads and moved envelopes are preserved in `alarm:dispatch:dlq`.
+- DLQ and quarantine are delivery states (`dlq`, `quarantined`) in `alarm_dispatch_deliveries`; the event payload stays in `alarm_dispatch_events`. Replay uses the audited requeue in [admin dispatch operations](../runbooks/admin-dispatch-operations.md).
 
 ## Compatibility policy
 
-- Queue consumers must retain dual-read behavior when introducing a new envelope version.
-- Raw payload preservation must remain in place before changing DLQ tooling.
+- A new envelope version requires the dispatch consumer to decode both versions before any producer emits it; the publisher currently accepts only `QueueEnvelopeVersionV1`.
+- Stored event payloads of `dlq`/`quarantined` deliveries must stay intact before changing replay tooling.
 - HTTP provider migration must keep `hololive-api` admin-plane compatibility registration until the `hololive-api` bot/admin and dashboard paths are explicitly cut over to the `alarm-worker` provider.
 - The two staged providers must register the same `/internal/alarm/*` route set and reuse the same shared handler implementation.
 - compatibility facade 제거는 다음 조건을 모두 만족하는 별도 변경에서만 수행합니다: bot/admin/dashboard caller inventory가 alarm-worker endpoint로 수렴하고, `hololive-api`의 alarm route registration과 facade-only imports가 0건이며, alarm HTTP contract test와 architecture gate가 최종 tree에서 통과해야 합니다. 이 조건 전에는 route나 shared DTO를 선제 삭제하지 않습니다.
@@ -179,8 +199,9 @@ Queue success has no response body; delivery outcome is represented by queue mov
 ## Tests
 
 - Contract constants: `hololive/hololive-shared/pkg/contracts/alarm/contracts_test.go`
-- Queue fixtures: `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json`
-- Queue behavior: `hololive/hololive-shared/pkg/service/alarm/queue/queue_test.go`
+- Envelope fixtures: `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json`
+- Publish validation: `hololive/hololive-shared/pkg/service/alarm/queue/queue_test.go`
+- Dispatch outbox: `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/*_test.go`
 - HTTP handler/client: `hololive/hololive-shared/pkg/service/alarm/api_test.go`, `client_test.go`
 - Shared alarm route registrar: `hololive/hololive-shared/pkg/service/alarm/routes_test.go`
 - Member subscription HTTP roundtrip: `hololive/hololive-shared/pkg/service/alarm/member_subscription_api_test.go`

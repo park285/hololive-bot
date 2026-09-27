@@ -33,7 +33,6 @@ import (
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const serviceNameIris = "iris"
@@ -440,11 +439,17 @@ func liveMediaRequestOptions(ctx context.Context, opts []iris.SendOption) (clien
 	return clientRequestID, append(next, opts...)
 }
 
+// SendError는 message_strings error namespace 문구로 응답한다. 응답 formatter가 없으면 코드 대체 문구를 보내지 않고
+// 조립 결함으로 오류를 돌려준다(DEC-20260926-hololive-message-strings-startup-validation).
 func (t *CommandTransport) SendError(ctx context.Context, room, key string) error {
-	message := messagestrings.FallbackSentinel
+	if t == nil || t.formatter == nil {
+		return errors.New("send error message: response formatter is not configured")
+	}
 
-	if t != nil && t.formatter != nil {
-		message = t.formatter.ResolveError(ctx, key)
+	message := t.formatter.ResolveError(ctx, key)
+	if message == "" {
+		// 기동 검증을 거친 messaging.Err* key에서는 일어나지 않는다. 빈 문구를 보내지 않고 조립 결함으로 드러낸다.
+		return fmt.Errorf("send error message: message_strings error/%s has no text", key)
 	}
 
 	if err := t.SendMessage(ctx, room, message); err != nil {

@@ -7,6 +7,7 @@
 - Logical ledger: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
 - Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)
 - 구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
+- Ledger backfill 현재 상태(2026-09-26): 운영 완료. backfill 명령과 writer·cleanup의 completion marker 확인은 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠고 migration `226_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 완료를 확인합니다. 아래 backfill·completion 조항은 설계 근거입니다.
 
 ## 규범 용어
 
@@ -52,6 +53,8 @@ Community/Shorts:
 ```
 
 Community/Shorts의 `canonical_post_id`는 claim, telemetry, sibling 조회가 같은 resolver를 사용해야 합니다. Payload와 `content_id` 해석을 package별로 복제해서는 안 됩니다.
+
+현재 상태: 시도 telemetry의 `post_id`는 전이 트랜잭션이 검증한 logical key(`contentid.ResolveDeliveryKey`)이고 sibling 조회도 같은 resolver를 씁니다. alarm-worker claim의 alarm state 조회 키와 attempt started·`outbox_final_result` 감사 로그의 `post_id`는 아직 `telemetry.ResolveTelemetryPostID`(canonical_post_id → content_id → video_id/post_id 순 폴백)입니다. 전이에 도달한 행은 canonical_post_id가 있고 content_id와 일치하므로, poller가 만드는 payload(prefix가 붙은 canonical_post_id)에서는 두 값이 같습니다. prefix 없는 과거 payload에서는 telemetry 쪽만 정규화된 logical key가 됩니다. claim 경로의 폴백 제거는 canonical_post_id 없는 잔존 행 수 확인(감사 행 `holo-youtube-telemetry-post-id-fallback`) 뒤에 합니다.
 
 `(outbox_id, room_id)` unique index는 physical duplicate만 막습니다. Community/Shorts에서는 서로 다른 outbox/content ID가 같은 canonical post를 표현할 수 있고, 모든 kind에서 cleanup 뒤 같은 content의 outbox ID가 달라질 수 있으므로 logical duplicate 방어를 대체하지 않습니다.
 

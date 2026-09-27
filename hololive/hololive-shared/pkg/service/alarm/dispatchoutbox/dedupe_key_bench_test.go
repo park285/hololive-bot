@@ -7,7 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func benchPreparedDedupeInput() preparedDedupeInput {
+func benchPreparedDedupeInput() DedupeInput {
 	startScheduled := time.Date(2026, time.June, 12, 12, 0, 0, 0, time.UTC)
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -33,9 +33,9 @@ func benchPreparedDedupeInput() preparedDedupeInput {
 			}},
 		},
 	}
-	input := prepareEnvelopeDedupeInput(&envelope)
+	input := EnvelopeDedupeInput(&envelope)
 
-	input.input.SourceOutboxKind = ""
+	input.SourceOutboxKind = ""
 
 	return input
 }
@@ -44,7 +44,7 @@ func TestBuildDedupeKeyAllocationBudget(t *testing.T) {
 	input := benchPreparedDedupeInput()
 
 	dedupeAllocs := testing.AllocsPerRun(100, func() {
-		if key := buildDedupeKey(input.input.RoomID, input.eventKey()); key == "" {
+		if key := BuildDedupeKey(&input); key == "" {
 			t.Fatal("BuildDedupeKey returned empty key")
 		}
 	})
@@ -53,7 +53,7 @@ func TestBuildDedupeKeyAllocationBudget(t *testing.T) {
 	}
 
 	eventAllocs := testing.AllocsPerRun(100, func() {
-		if key := input.eventKey(); key == "" {
+		if key := BuildEventKey(&input); key == "" {
 			t.Fatal("BuildEventKey returned empty key")
 		}
 	})
@@ -68,7 +68,7 @@ func BenchmarkBuildDedupeKey(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if key := buildDedupeKey(input.input.RoomID, input.eventKey()); key == "" {
+		if key := BuildDedupeKey(&input); key == "" {
 			b.Fatal("BuildDedupeKey returned empty key")
 		}
 	}
@@ -80,7 +80,7 @@ func BenchmarkBuildEventKey(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if key := input.eventKey(); key == "" {
+		if key := BuildEventKey(&input); key == "" {
 			b.Fatal("BuildEventKey returned empty key")
 		}
 	}

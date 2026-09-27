@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type helpTemplateData struct {
@@ -58,7 +57,7 @@ func (f *ResponseFormatter) FormatHelpContent(ctx context.Context) (HelpContent,
 func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
 	content, err := f.FormatHelpContent(ctx)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return content.TextFallback

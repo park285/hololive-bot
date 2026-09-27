@@ -35,13 +35,6 @@ func (r *AdminAPIRuntime) Shutdown(ctx context.Context) error {
 	if err := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:             r.Logger,
 		ShutdownHTTPServer: r.ShutdownHTTPServer,
-		ShutdownAlarmServices: func(ctx context.Context) error {
-			if r.AlarmService == nil {
-				return nil
-			}
-
-			return r.AlarmService.Close(ctx)
-		},
 	}); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
 	}

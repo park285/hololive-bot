@@ -195,6 +195,25 @@ func (i *RunInput) Generation(kind contract.ObservationKind) (int64, error) {
 	return out, nil
 }
 
+// RequireLiveSnapshotMetadataGeneration은 live_snapshot current generation이 collector가 만드는 generation 2(세션
+// 메타데이터 포함)인지 확인한다. 예전 generation 1 payload 경로는 계획 T11 C6(stack-audit 2026-09-26)에서 지웠으므로 다른
+// generation은 조용히 다른 형식으로 내보내지 않고 구성 오류로 드러낸다.
+func (i *RunInput) RequireLiveSnapshotMetadataGeneration() error {
+	generation, err := i.Generation(contract.KindLiveSnapshot)
+	if err != nil {
+		return fmt.Errorf("live snapshot generation: %w", err)
+	}
+
+	if generation != contract.LiveSnapshotMetadataContractGeneration {
+		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, fmt.Sprintf(
+			"live snapshot contract generation %d is unsupported; collector emits generation %d",
+			generation, contract.LiveSnapshotMetadataContractGeneration,
+		))
+	}
+
+	return nil
+}
+
 func (i *RunInput) Allows(kind contract.ObservationKind, subject string) (bool, error) {
 	if i == nil || !kind.Valid() || subject == "" {
 		return false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection target lookup is invalid")

@@ -94,12 +94,12 @@ func (tp *TelemetryProcessor) cleanup(ctx context.Context) {
 	}
 }
 
+// processDeliveryTelemetry는 lifecycle 전이 트랜잭션이 기록한 시도 행만 로그로 내보낸다. 이전에 delivery 테이블을 역산해 버퍼를
+// 채우던 backfill은 DEC-20260926-hololive-delivery-telemetry-single-path로 삭제했다.
 func (tp *TelemetryProcessor) processDeliveryTelemetry(ctx context.Context) {
 	if tp == nil || tp.telemetry == nil {
 		return
 	}
-
-	tp.backfillDeliveryTelemetry(ctx)
 
 	rows, ok := tp.fetchDeliveryTelemetryRows(ctx)
 	if !ok || len(rows) == 0 {
@@ -109,20 +109,6 @@ func (tp *TelemetryProcessor) processDeliveryTelemetry(ctx context.Context) {
 	classificationsByOutboxID := tp.loadDeliveryTelemetryClassificationsForRows(ctx, rows)
 	loggedIDs, failedIDs := tp.emitDeliveryTelemetryRows(rows, classificationsByOutboxID)
 	tp.markDeliveryTelemetryResults(ctx, loggedIDs, failedIDs)
-}
-
-func (tp *TelemetryProcessor) backfillDeliveryTelemetry(ctx context.Context) {
-	if _, err := tp.telemetry.BackfillFromDelivery(ctx, tp.config.TelemetryBackfillBatch, tp.deliveryTelemetryBackfillSince()); err != nil {
-		tp.logger.Warn("Failed to backfill delivery telemetry", slog.Any("error", err))
-	}
-}
-
-func (tp *TelemetryProcessor) deliveryTelemetryBackfillSince() time.Time {
-	if tp.config.TelemetryRetention <= 0 {
-		return time.Time{}
-	}
-
-	return time.Now().UTC().Add(-tp.config.TelemetryRetention)
 }
 
 func (tp *TelemetryProcessor) fetchDeliveryTelemetryRows(ctx context.Context) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {

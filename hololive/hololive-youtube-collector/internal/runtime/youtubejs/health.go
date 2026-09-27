@@ -59,10 +59,6 @@ func (h *Helper) Healthy(ctx context.Context) error {
 func (h *Helper) bootstrapReady(ctx context.Context, cfg *Config) error {
 	status, body, raw, err := h.postBootstrap(ctx, BootstrapRequest{
 		ProtocolVersion: ProtocolVersion,
-		Proxy: BootstrapProxy{
-			Enabled: cfg.Proxy.Enabled,
-			URL:     cfg.Proxy.URL,
-		},
 		Limits: BootstrapLimits{
 			RequestBodyBytes:  cfg.RequestBodyLimit,
 			ResponseBodyBytes: cfg.ResponseBodyLimit,
@@ -236,10 +232,6 @@ func validateBootstrapResponse(body BootstrapResponse, cfg *Config) error {
 
 	if body.RequestBodyBytes != cfg.RequestBodyLimit || body.ResponseBodyBytes != cfg.ResponseBodyLimit || body.MaxInflight != cfg.MaxInflight {
 		return collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "youtube.js helper bootstrap limits mismatch")
-	}
-
-	if body.ProxyEnabled != cfg.Proxy.Enabled {
-		return collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "youtube.js helper bootstrap proxy mismatch")
 	}
 
 	return nil

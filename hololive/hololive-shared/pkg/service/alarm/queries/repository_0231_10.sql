@@ -22,7 +22,8 @@
 			ORDER BY channel_id, id ASC
 		)
 		SELECT c.channel_id,
-		       COALESCE(NULLIF(m.member_name, ''), a.member_name, '') AS member_name
+		       COALESCE(NULLIF(m.member_name, ''), a.member_name, '') AS member_name,
+		       NULLIF(m.member_name, '') IS NULL AS from_alarm_record
 		FROM alarm_channels c
 		LEFT JOIN latest_alarm_names a ON a.channel_id = c.channel_id
 		LEFT JOIN member_display_names m ON m.channel_id = c.channel_id

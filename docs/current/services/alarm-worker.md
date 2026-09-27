@@ -24,8 +24,10 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Generic `notification_delivery_outbox` consume/send path for major event/member news notification rows
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send under the `youtube_delivery` profile executor
-- v1 YouTube outbox의 optional `shadow|cutover` v3 handoff; claim owner는 기존 dispatcher로 유지
+- v1 YouTube outbox는 v3 ledger로 넘기지 않고 `youtube_delivery` dispatcher가 direct egress까지 소유 (`DEC-20260926-hololive-outbox-v3-convergence`로 `shadow|cutover` handoff 삭제)
 - Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room.
+
+긴 여러 항목 알림(쇼츠·영상·커뮤니티 묶음, 여러 방송 알람)은 `BOT_SEE_MORE_FOLD`(기본 true)에 따라 공통 머리 문단 전체보기 정책으로 렌더합니다. 단일 알림·상태·오류는 제외하고, 사용자 지정 본문/채널 override 저장값과 펼친 가시 문자는 보존합니다. 설정은 bot·llm과 같은 `settings.LoadSeeMoreFold`를 사용하되 실제 렌더 경로에 명시적으로 전달합니다.
 
 ## Provides
 
@@ -61,8 +63,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - `NOTIFICATION_SCHEDULER_ROLE=worker` in the current deployment; the production validator accepts `worker|off`, and Compose pins `worker` so the single instance always runs the alarm checker/scheduler
 - A single running instance: proactive egress exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims plus the Compose `container_name`/fixed host port, not from a Valkey lease
 - `STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profiles/alarm-worker.json`
-- production profile executors `alarm_dispatch`, `notification_delivery`, and `youtube_delivery` enabled
-- `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=off` until an approved shadow/cutover procedure is executed
+- production profile executors `alarm_dispatch`, `notification_delivery`, and `youtube_delivery` enabled; v1 `youtube_delivery` and v2 `notification_delivery` are canonical direct-egress pipelines, not v3 handoff sources (`DEC-20260926-hololive-outbox-v3-convergence`)
+- no `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` or `DELIVERY_OUTBOX_V3_HANDOFF_MODE` key in the runtime env; the retired guard rejects the key even with an empty value
 - Alarm timing/config env
 - `BIRTHDAY_STREAM_RUNNER_ENABLED=true` only after the birthday stream template is present and full-roster producer discovery has been verified
 
@@ -76,7 +78,7 @@ Runtime은 scheduler·egress·celebration·birthday stream·설정 subscriber를
 
 부모 종료에 따른 순수 context 오류만 정상 종료로 처리합니다. 취소와 실제 오류가 함께 반환되면 오류 채널 또는 ERROR 로그에 원인을 남기며, 종료 중 소비되지 않는 오류 채널 때문에 작업이 멈추지 않도록 합니다.
 
-Karing은 전역 전송 슬롯 획득을 `BeginSending` 전에 끝내며, admission과 실제 sender·handoff polling은 각각 기존 `DeliverySendTimeout` 한도를 사용합니다. 부모의 전체 기한은 계속 적용됩니다. admission 실패는 sender 호출이 없다는 증거로 기존 retryable 전이를 사용하고, 실제 호출 뒤의 불명확한 결과는 SENDING을 보존합니다.
+Alarm-worker는 Karing template을 보내지 않습니다(`DEC-20260926-hololive-karing-egress-disposition`). Karing 전역 전송 슬롯과 chunk planner는 Karing 경로와 함께 삭제했습니다. Markdown 발송의 불명확한 handoff 결과는 SENDING(YouTube outbox) 또는 quarantine(alarm dispatch)으로 보존합니다.
 
 Alarm dispatch payload/전달 문맥 복원 실패와 event 누락은 PostgreSQL worker fence 및 rows-affected 검증으로 DLQ 전이가 확인된 뒤 해당 delivery의 dedup 키를 해제합니다. 전이 실패·정상 전달·retry·결과 불명에서는 이 해제를 수행하지 않습니다.
 
@@ -88,7 +90,7 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 - Health: `https://127.0.0.1:30007/health`
 - Ready: `https://127.0.0.1:30007/ready`; authenticated `/diagnostics/workers` reports profile match, executors, and real queue snapshots.
 - Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority.
-- Metrics: `hololive_youtube_outbox_v3_handoff_total`, `hololive_delivery_outbox_v3_handoff_total`, alarm-dispatch backlog/retention metrics
+- Metrics: alarm-dispatch backlog/retention metrics (the v3 handoff metrics were removed with the handoff)
 
 ## Related documents
 

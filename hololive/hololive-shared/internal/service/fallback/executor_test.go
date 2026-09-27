@@ -24,8 +24,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"slices"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -82,81 +80,27 @@ func TestPolicyShouldRun(t *testing.T) {
 	}
 }
 
-func TestExecuteCollectsSuccessesAndFailures(t *testing.T) {
+func TestRunPrimaryCountsRecoveredPanicAsFailure(t *testing.T) {
 	t.Parallel()
 
-	var (
-		successes []int
-		mu        sync.Mutex
-	)
+	result := FetchPlan[int]{Parallelism: 2}.RunPrimary(t.Context(), []int{1, 2}, func(_ context.Context, target int) error {
+		if target == 2 {
+			panic("fetch panic")
+		}
 
-	summary := FetchPlan[int, string]{
-		Targets:     []int{1, 2, 3},
-		Parallelism: 2,
-		Fetch: func(_ context.Context, target int) (string, error) {
-			if target == 2 {
-				return "", errors.New("fail")
-			}
+		return nil
+	})
 
-			return "ok", nil
-		},
-		OnSuccess: func(target int, _ string) {
-			mu.Lock()
-
-			successes = append(successes, target)
-			mu.Unlock()
-		},
-	}.Execute(t.Context())
-
-	slices.Sort(successes)
-	slices.Sort(summary.FailedTargets)
-
-	if summary.SuccessCount != 2 {
-		t.Fatalf("SuccessCount = %d, want 2", summary.SuccessCount)
+	if result.Succeeded != 1 {
+		t.Fatalf("Succeeded = %d, want 1", result.Succeeded)
 	}
 
-	if summary.FailedCount != 1 {
-		t.Fatalf("FailedCount = %d, want 1", summary.FailedCount)
-	}
-
-	if !reflect.DeepEqual(successes, []int{1, 3}) {
-		t.Fatalf("successes = %#v, want [1 3]", successes)
-	}
-
-	if !reflect.DeepEqual(summary.FailedTargets, []int{2}) {
-		t.Fatalf("FailedTargets = %#v, want [2]", summary.FailedTargets)
+	if !reflect.DeepEqual(result.Failed, []int{2}) {
+		t.Fatalf("Failed = %#v, want [2]", result.Failed)
 	}
 }
 
-func TestExecuteCountsRecoveredPanicAsFailure(t *testing.T) {
-	t.Parallel()
-
-	summary := FetchPlan[int, string]{
-		Targets:     []int{1, 2},
-		Parallelism: 2,
-		Fetch: func(_ context.Context, target int) (string, error) {
-			if target == 2 {
-				panic("fetch panic")
-			}
-
-			return "ok", nil
-		},
-	}.Execute(t.Context())
-
-	if summary.SuccessCount != 1 {
-		t.Fatalf("SuccessCount = %d, want 1", summary.SuccessCount)
-	}
-
-	if summary.FailedCount != 1 {
-		t.Fatalf("FailedCount = %d, want 1", summary.FailedCount)
-	}
-
-	if !reflect.DeepEqual(summary.FailedTargets, []int{2}) {
-		t.Fatalf("FailedTargets = %#v, want [2]", summary.FailedTargets)
-	}
-}
-
-func TestExecuteRespectsParallelismLimit(t *testing.T) {
+func TestRunPrimaryRespectsParallelismLimit(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -164,28 +108,24 @@ func TestExecuteRespectsParallelismLimit(t *testing.T) {
 		maxInFlight atomic.Int32
 	)
 
-	summary := FetchPlan[int, string]{
-		Targets:     []int{1, 2, 3, 4, 5, 6},
-		Parallelism: 2,
-		Fetch: func(_ context.Context, _ int) (string, error) {
-			current := inFlight.Add(1)
+	result := FetchPlan[int]{Parallelism: 2}.RunPrimary(t.Context(), []int{1, 2, 3, 4, 5, 6}, func(_ context.Context, _ int) error {
+		current := inFlight.Add(1)
 
-			for {
-				previous := maxInFlight.Load()
-				if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
-					break
-				}
+		for {
+			previous := maxInFlight.Load()
+			if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
+				break
 			}
+		}
 
-			time.Sleep(10 * time.Millisecond)
-			inFlight.Add(-1)
+		time.Sleep(10 * time.Millisecond)
+		inFlight.Add(-1)
 
-			return "ok", nil
-		},
-	}.Execute(t.Context())
+		return nil
+	})
 
-	if summary.SuccessCount != 6 {
-		t.Fatalf("SuccessCount = %d, want 6", summary.SuccessCount)
+	if result.Succeeded != 6 {
+		t.Fatalf("Succeeded = %d, want 6", result.Succeeded)
 	}
 
 	if observedMax := maxInFlight.Load(); observedMax > 2 {
@@ -196,7 +136,7 @@ func TestExecuteRespectsParallelismLimit(t *testing.T) {
 func TestRunPrimaryCollectsFailuresInOriginalOrder(t *testing.T) {
 	t.Parallel()
 
-	result := FetchPlan[string, struct{}]{Parallelism: 2}.RunPrimary(t.Context(), []string{"a", "b", "c"}, func(_ context.Context, key string) error {
+	result := FetchPlan[string]{Parallelism: 2}.RunPrimary(t.Context(), []string{"a", "b", "c"}, func(_ context.Context, key string) error {
 		if key == "b" {
 			return errors.New("boom")
 		}
@@ -222,5 +162,27 @@ func TestRunPrimaryCollectsFailuresInOriginalOrder(t *testing.T) {
 
 	if result.AllFailed() {
 		t.Fatal("AllFailed() = true, want false")
+	}
+}
+
+// 호출자 취소는 target 실패가 아니다. 실패로 세면 취소된 요청이 fallback·재시도·실패 metric을 일으킨다.
+func TestRunPrimaryDoesNotCountCancellationAsFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	for _, parallelism := range []int{1, 2} {
+		result := FetchPlan[string]{Parallelism: parallelism}.RunPrimary(ctx, []string{"a", "b"}, func(runCtx context.Context, _ string) error {
+			return runCtx.Err()
+		})
+
+		if len(result.Failed) != 0 {
+			t.Fatalf("parallelism=%d Failed = %#v, want none for canceled context", parallelism, result.Failed)
+		}
+
+		if !reflect.DeepEqual(result.Canceled, []string{"a", "b"}) {
+			t.Fatalf("parallelism=%d Canceled = %#v, want [a b]", parallelism, result.Canceled)
+		}
 	}
 }

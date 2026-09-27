@@ -72,7 +72,7 @@ func TestMarkSendingChecksLeaseAtDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, err := repository.FetchAndLock(ctx, testWorkerA, 1, testLockTTL, 100*time.Millisecond)
+	items, err := repository.FetchAndLock(ctx, testWorkerA, 1, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("fetch and lock: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestMarkSentRecordsDatabaseExecutionTime(t *testing.T) {
 	resultCh := make(chan result, 1)
 
 	go func() {
-		ok, markErr := repository.MarkSent(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time)
+		ok, markErr := repository.MarkSent(ctx, items[0].ID, testWorkerA)
 		resultCh <- result{ok: ok, err: markErr}
 	}()
 
@@ -220,7 +220,7 @@ func TestMarkFailedSchedulesRetryFromDatabaseExecutionTime(t *testing.T) {
 	resultCh := make(chan result, 1)
 
 	go func() {
-		ok, markErr := repository.MarkFailed(ctx, items[0].ID, testWorkerA, items[0].LockedAt.Time, 3, time.Second, "retry")
+		ok, markErr := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 3, time.Second, "retry")
 		resultCh <- result{ok: ok, err: markErr}
 	}()
 
@@ -260,7 +260,7 @@ func TestFetchAndLockRoundsPositiveSubMillisecondLeaseUp(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	items, err := repository.FetchAndLock(ctx, testWorkerA, 1, testLockTTL, 500*time.Microsecond)
+	items, err := repository.FetchAndLock(ctx, testWorkerA, 1, 500*time.Microsecond)
 	if err != nil {
 		t.Fatalf("fetch and lock: %v", err)
 	}

@@ -22,92 +22,26 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 		return nil, fmt.Errorf("find tracking by identity: %w", err)
 	}
 
-	candidates, err := trackingIdentityCandidates(normalizedKind, normalizedContentID)
-	if err != nil {
-		return nil, fmt.Errorf("find tracking by identity: candidates: %w", err)
-	}
-
-	preferredContentID, err := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+	canonicalContentID, err := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
 	if err != nil {
 		return nil, fmt.Errorf("find tracking by identity: canonical identity: %w", err)
 	}
 
-	records, err := r.findByIdentityRecords(ctx, normalizedKind, preferredContentID, candidates)
-	if err != nil {
-		return nil, fmt.Errorf("find by identity records: %w", err)
-	}
-
-	return preferTrackingIdentityRecord(records, preferredContentID), nil
-}
-
-func (r *identityRepository) findByIdentityRecords(
-	ctx context.Context,
-	normalizedKind domain.OutboxKind,
-	preferredContentID string,
-	candidates []string,
-) ([]domain.YouTubeContentAlarmTracking, error) {
-	if len(candidates) == 0 {
-		return nil, nil
-	}
-
-	values, args := buildIdentityLookupValues(normalizedKind, preferredContentID, candidates)
-
+	// 행은 기본 키 (kind, canonical_content_id) 하나로 찾는다. raw content_id를 후보로 함께 찾던 분기는 T18(2026-09-26)에서
+	// content_id와 canonical_content_id가 다른 행이 0건임을 확인해 지웠다(stack-audit T11 holo-tracking-raw-content-id-candidates).
 	var records []domain.YouTubeContentAlarmTracking
 
-	query := `
-		WITH input(kind, preferred_content_id, candidate_content_id) AS (
-			VALUES ` + values + mustSQL("repository_identity_0049_01.sql")
-
-	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row", query, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row",
+		mustSQL("repository_identity_0049_01.sql"), normalizedKind, canonicalContentID); err != nil {
 		return nil, fmt.Errorf("select SQL: %w", err)
 	}
 
-	return records, nil
-}
-
-func buildIdentityLookupValues(
-	normalizedKind domain.OutboxKind,
-	preferredContentID string,
-	candidates []string,
-) (query string, args []any) {
-	args = make([]any, 0, len(candidates)*3)
-
-	var values strings.Builder
-
-	for i := range candidates {
-		if i > 0 {
-			values.WriteByte(',')
-		}
-
-		values.WriteString("(?, ?, ?)")
-
-		args = append(args, normalizedKind, preferredContentID, candidates[i])
-	}
-
-	return values.String(), args
-}
-
-func preferTrackingIdentityRecord(
-	records []domain.YouTubeContentAlarmTracking,
-	preferredContentID string,
-) *domain.YouTubeContentAlarmTracking {
 	if len(records) == 0 {
-		return nil
+		//nolint:nilnil // 미존재는 오류가 아니며 alarm-worker 호출자 3곳이 tracking == nil로 분기한다(alarm_state_repository.go와 같은 계약). sentinel 오류로 바꾸려면 호출자를 함께 고쳐야 한다.
+		return nil, nil
 	}
 
-	for i := range records {
-		if strings.TrimSpace(records[i].ContentID) == preferredContentID {
-			return &records[i]
-		}
-	}
-
-	for i := range records {
-		if strings.TrimSpace(records[i].CanonicalContentID) == preferredContentID {
-			return &records[i]
-		}
-	}
-
-	return &records[0]
+	return &records[0], nil
 }
 
 func (r *identityRepository) Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error {
@@ -190,7 +124,7 @@ func buildTrackingUpsertQuery(
 	latencyMillisExpr string,
 	latencyExceededExpr string,
 	deliveryStatusExpr string,
-) (result1 string, result2 []any) {
+) (string, []any) {
 	args := make([]any, 0, len(normalized)*12)
 
 	var sb strings.Builder

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	analytics "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
@@ -59,7 +60,8 @@ func newChannelPostSummaryTimes(now time.Time) channelPostSummaryTimes {
 	}
 }
 
-func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_AggregatesPerChannel(t *testing.T) {
+// 관리 API와 같은 경로(ListPostSendCountsSince 결과를 analytics로 집계)로 채널별 요약을 검증한다.
+func TestDeliveryTelemetryRepository_ChannelPostDeliverySummariesFromPostSendCounts_AggregatesPerChannel(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -77,7 +79,10 @@ func TestDeliveryTelemetryRepository_ListChannelPostDeliverySummariesSince_Aggre
 
 	repository := telemetry.NewRepository(db)
 
-	summaries, err := repository.ListChannelPostDeliverySummariesSince(ctx, windowStart)
+	posts, err := repository.ListPostSendCountsSince(ctx, windowStart)
+	require.NoError(t, err)
+
+	summaries, err := analytics.BuildChannelPostDeliverySummaries(posts)
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)
 

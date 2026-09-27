@@ -73,7 +73,7 @@ func sampleDigest() membernewscontracts.Digest {
 func TestGenerateRoomDigestRejectsNilHTTPResponse(t *testing.T) {
 	t.Parallel()
 
-	c := membernews.New("https://example.com", testAPIKey)
+	c := newTestClient(t, "http://example.com")
 
 	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -94,7 +94,7 @@ func TestGenerateRoomDigestRejectsNilHTTPResponse(t *testing.T) {
 func TestGenerateRoomDigestRejectsNilResponseBody(t *testing.T) {
 	t.Parallel()
 
-	c := membernews.New("https://example.com", testAPIKey)
+	c := newTestClient(t, "http://example.com")
 
 	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -120,7 +120,7 @@ func TestGenerateRoomDigestRejectsNilResponseBody(t *testing.T) {
 func TestHandleRoomDigestNotFoundClosesReadableBody(t *testing.T) {
 	t.Parallel()
 
-	c := membernews.New("https://example.com", testAPIKey)
+	c := newTestClient(t, "http://example.com")
 
 	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -218,7 +218,7 @@ func assertMemberNewsDigest(t *testing.T, tc *memberNewsDigestCase) {
 	t.Helper()
 
 	if tc.roomID == "" {
-		c := membernews.New("http://localhost:0", testAPIKey)
+		c := newTestClient(t, "http://localhost:0")
 		got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
 		assertMemberNewsDigestResult(t, got, err, tc.wantNilDigest, tc.wantErr, tc.wantSentinel)
 
@@ -233,7 +233,7 @@ func assertMemberNewsDigest(t *testing.T, tc *memberNewsDigestCase) {
 		}
 	})
 
-	c := membernews.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL)
 	got, err := c.GenerateRoomDigest(t.Context(), tc.roomID, tc.period)
 	assertMemberNewsDigestResult(t, got, err, tc.wantNilDigest, tc.wantErr, tc.wantSentinel)
 }
@@ -308,7 +308,7 @@ func assertMemberNewsSubscribe(t *testing.T, tc *memberNewsSubscribeCase) {
 	t.Helper()
 
 	if tc.roomID == "" {
-		c := membernews.New("http://localhost:0", testAPIKey)
+		c := newTestClient(t, "http://localhost:0")
 		assertMemberNewsErr(t, "SubscribeRoom", c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
 
 		return
@@ -318,7 +318,7 @@ func assertMemberNewsSubscribe(t *testing.T, tc *memberNewsSubscribeCase) {
 		assertMemberNewsRequest(t, r, http.MethodPost, membernewscontracts.SubscriptionsPath)
 	})
 
-	c := membernews.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL)
 	assertMemberNewsErr(t, "SubscribeRoom", c.SubscribeRoom(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
 }
 
@@ -395,7 +395,7 @@ func assertMemberNewsUnsubscribe(t *testing.T, tc *memberNewsUnsubscribeCase) {
 	t.Helper()
 
 	if tc.roomID == "" {
-		c := membernews.New("http://localhost:0", testAPIKey)
+		c := newTestClient(t, "http://localhost:0")
 		assertMemberNewsErr(t, "UnsubscribeRoom", c.UnsubscribeRoom(t.Context(), tc.roomID), tc.wantErr)
 
 		return
@@ -405,7 +405,7 @@ func assertMemberNewsUnsubscribe(t *testing.T, tc *memberNewsUnsubscribeCase) {
 		assertMemberNewsRequest(t, r, http.MethodDelete, membernewscontracts.SubscriptionsPath+"/"+tc.roomID)
 	})
 
-	c := membernews.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL)
 	assertMemberNewsErr(t, "UnsubscribeRoom", c.UnsubscribeRoom(t.Context(), tc.roomID), tc.wantErr)
 }
 
@@ -467,7 +467,7 @@ func assertMemberNewsIsSubscribed(t *testing.T, tc *memberNewsIsSubscribedCase) 
 	t.Helper()
 
 	if tc.roomID == "" {
-		c := membernews.New("http://localhost:0", testAPIKey)
+		c := newTestClient(t, "http://localhost:0")
 		got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
 		assertMemberNewsBoolResult(t, "IsRoomSubscribed", got, err, tc.wantResult, tc.wantErr)
 
@@ -478,7 +478,7 @@ func assertMemberNewsIsSubscribed(t *testing.T, tc *memberNewsIsSubscribedCase) 
 		assertMemberNewsRequest(t, r, http.MethodGet, membernewscontracts.SubscriptionsPath+"/"+tc.roomID)
 	})
 
-	c := membernews.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL)
 	got, err := c.IsRoomSubscribed(t.Context(), tc.roomID)
 	assertMemberNewsBoolResult(t, "IsRoomSubscribed", got, err, tc.wantResult, tc.wantErr)
 }
@@ -543,10 +543,33 @@ func TestIsNoSubscribedMembers_WrappedSentinel(t *testing.T) {
 	// GenerateRoomDigest가 반환하는 실제 sentinel 에러도 감지해야 합니다
 	srv := testutil.NewJSONTestServer(t, http.StatusNotFound, map[string]string{"error": "no_subscribed_members"}, nil)
 
-	c := membernews.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL)
 	_, err := c.GenerateRoomDigest(t.Context(), "room-1", membernewscontracts.PeriodWeekly)
 
 	if !membernews.IsNoSubscribedMembers(err) {
 		t.Errorf("GenerateRoomDigest()가 반환한 에러에서 IsNoSubscribedMembers() = false, want true; err = %v", err)
+	}
+}
+
+func newTestClient(t *testing.T, baseURL string) *membernews.Client {
+	t.Helper()
+
+	client, err := membernews.New(baseURL, testAPIKey)
+	if err != nil {
+		t.Fatalf("New(%q) error = %v", baseURL, err)
+	}
+
+	return client
+}
+
+// https llm-scheduler URL은 H3 전용 내부 서버다. HOLOLIVE_INTERNAL_H3_* 가 없으면 TCP client로 내려가지 않고
+// 오류다(stack audit 2026-09-26).
+func TestNewRequiresInternalH3EnvForHTTPS(t *testing.T) {
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+
+	client, err := membernews.New("https://127.0.0.1:30003", testAPIKey)
+	if err == nil || client != nil {
+		t.Fatalf("New(https) = (%v, %v), want missing internal H3 env error", client, err)
 	}
 }

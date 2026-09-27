@@ -32,39 +32,31 @@ import (
 	"time"
 
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
-	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 const FetchPageMaxAttempts = 3
 
 type FetchPolicy struct {
-	MaxAttempts       int
+	MaxAttempts int
+	// PerAttemptTimeout이 0이면 Client가 주입받은 ScraperHTTPTimeout(YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS)으로
+	// 각 시도를 상한한다. 양수이면 그 값이 호출별 정적 상한이다.
 	PerAttemptTimeout time.Duration
 	BaseDelay         time.Duration
 	Jitter            time.Duration
 	MaxDelay          time.Duration
-	AdmissionBlocking bool
 }
 
-func defaultFetchPerAttemptTimeout(fallback time.Duration) time.Duration {
-	if ytDefaults.ScraperHTTPTimeout > 0 {
-		return ytDefaults.ScraperHTTPTimeout
-	}
-
-	return fallback
-}
-
+// DefaultFetchPolicy와 HighFrequencyChannelFetchPolicy는 시도별 timeout을
+// 비워 runtime 설정을 따른다. 코드 기본값으로 시도를 자르면 설정을 올린 값이 조용히 무시된다(stack audit A3).
 var (
 	DefaultFetchPolicy = FetchPolicy{
-		MaxAttempts:       FetchPageMaxAttempts,
-		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
-		BaseDelay:         2 * time.Second,
-		Jitter:            1500 * time.Millisecond,
-		MaxDelay:          10 * time.Second,
+		MaxAttempts: FetchPageMaxAttempts,
+		BaseDelay:   2 * time.Second,
+		Jitter:      1500 * time.Millisecond,
+		MaxDelay:    10 * time.Second,
 	}
 	HighFrequencyChannelFetchPolicy = FetchPolicy{
-		MaxAttempts:       1,
-		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
+		MaxAttempts: 1,
 	}
 	MetadataResolveFetchPolicy = FetchPolicy{
 		MaxAttempts:       1,
@@ -73,11 +65,6 @@ var (
 	RSSFetchPolicy = FetchPolicy{
 		MaxAttempts:       1,
 		PerAttemptTimeout: 10 * time.Second,
-	}
-	LiveStatusFallbackFetchPolicy = FetchPolicy{
-		MaxAttempts:       1,
-		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
-		AdmissionBlocking: true,
 	}
 )
 
@@ -184,10 +171,6 @@ func extractHTTPRetryAfter(err error) time.Duration {
 func isRetryableStatusError(err error) bool {
 	statusCode, ok := extractHTTPStatusCode(err)
 	return ok && isRetryableStatusCode(statusCode)
-}
-
-func isRetryableVideoPageError(err error) bool {
-	return isRetryableFetchPageError(err) || parser.IsParserDriftError(err)
 }
 
 func isRetryableFetchPageError(err error) bool {

@@ -51,8 +51,8 @@ type TracingConfig struct {
 
 // LoadTracingConfig: collectorInstanceID는 youtube-collector 런타임에서만 쓰인다.
 func LoadTracingConfig(runtime TracingRuntime, collectorInstanceID string) (TracingConfig, error) {
-	if err := rejectRetiredOTLPEndpointEnv(); err != nil {
-		return TracingConfig{}, fmt.Errorf("reject retired OTLP endpoint env: %w", err)
+	if err := rejectStandardOTLPEndpointEnv(); err != nil {
+		return TracingConfig{}, fmt.Errorf("reject standard OTLP endpoint env: %w", err)
 	}
 
 	enabledEnv, err := tracingEnabledEnv(runtime, collectorInstanceID)
@@ -92,10 +92,15 @@ func LoadTracingConfig(runtime TracingRuntime, collectorInstanceID string) (Trac
 	return config, nil
 }
 
-func rejectRetiredOTLPEndpointEnv() error {
-	for _, retiredEnv := range []string{load.OTLPEndpointEnv, load.OTLPTracesEndpointEnv} {
-		if strings.TrimSpace(sharedenv.String(retiredEnv, "")) != "" {
-			return fmt.Errorf("%s is no longer supported; use %s", retiredEnv, load.HololiveOTLPGRPCEndpointEnv)
+// rejectStandardOTLPEndpointEnv는 퇴역 가드가 아니라 영구 계약이다(DEC-20260926-hololive-legacy-env-config-retirement).
+// OpenTelemetry 표준 endpoint env는 URL 문법을 자동 적용하므로 Hololive runtime은 gRPC host:port 형식의
+// HOLOLIVE_OTLP_GRPC_ENDPOINT 하나만 읽고 표준 이름은 받지 않는다(도입 eabc150b9). 표준 이름이라 운영에서 사라질
+// 날이 오지 않으므로 제거 조건과 재검토 기한을 두지 않는다. 판정은 OTel 명세가 빈 값을 미설정으로 다루는 것에
+// 맞춰 non-empty로 한다(프로젝트 퇴역 키의 존재 기준과 다른 이유).
+func rejectStandardOTLPEndpointEnv() error {
+	for _, standardEnv := range []string{load.OTLPEndpointEnv, load.OTLPTracesEndpointEnv} {
+		if strings.TrimSpace(sharedenv.String(standardEnv, "")) != "" {
+			return fmt.Errorf("%s is not accepted by Hololive runtimes; use %s", standardEnv, load.HololiveOTLPGRPCEndpointEnv)
 		}
 	}
 
@@ -111,7 +116,7 @@ func tracingEnabledEnv(runtime TracingRuntime, collectorInstanceID string) (stri
 	case TracingRuntimeYouTubeCollector:
 		out, err := youtubeCollectorTracingEnabledResult(collectorInstanceID)
 
-		return out, errors.Join(err)
+		return out, err
 	default:
 		return "", fmt.Errorf("unsupported tracing runtime %d", runtime)
 	}

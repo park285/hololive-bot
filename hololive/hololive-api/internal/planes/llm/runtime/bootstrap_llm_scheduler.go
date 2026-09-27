@@ -252,10 +252,17 @@ func buildLLMSchedulerComponents(
 	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger, schedulerConfig.Bot.SeeMoreFold)
 
-	formatter.store = messagestrings.NewStore(postgresService.GetPool(), logger)
+	formatter.store, err = loadLLMMessageStrings(ctx, postgresService, logger)
+	if err != nil {
+		return nil, fmt.Errorf("load llm message strings: %w", err)
+	}
 
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
-	memberNewsService := initMemberNewsService(ctx, schedulerConfig.SelectedLLMProvider(), &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
+
+	memberNewsService, err := initMemberNewsService(ctx, schedulerConfig.SelectedLLMProvider(), &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
+	if err != nil {
+		return nil, fmt.Errorf("init member news service: %w", err)
+	}
 
 	deliveryModule, err := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
 	if err != nil {
@@ -446,4 +453,23 @@ func (r *LLMSchedulerRuntime) Close() {
 	}
 
 	r.Managed.Close()
+}
+
+// loadLLMMessageStrings는 llm plane formatter가 쓰는 message_strings를 기동 때 적재하고 뉴스 분류 namespace를
+// 검증한다. 실패하면 기동을 실패시킨다(DEC-20260926-hololive-message-strings-startup-validation).
+func loadLLMMessageStrings(ctx context.Context, postgresService database.Client, logger *slog.Logger) (*messagestrings.Store, error) {
+	store := messagestrings.NewStore(postgresService.GetPool(), logger)
+	if err := store.Load(ctx); err != nil {
+		return nil, fmt.Errorf("load message strings: %w", err)
+	}
+
+	if err := store.Validate(llmMessageStringRequirements()); err != nil {
+		return nil, fmt.Errorf("validate message strings: %w", err)
+	}
+
+	return store, nil
+}
+
+func llmMessageStringRequirements() messagestrings.Requirements {
+	return messagestrings.Requirements{Namespaces: []string{messagestrings.NamespaceNewsCat}}
 }

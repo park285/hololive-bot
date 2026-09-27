@@ -3,6 +3,7 @@ package youtubejs
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -18,11 +19,6 @@ const (
 	StateFaulted      = "FAULTED"
 )
 
-type BootstrapProxy struct {
-	Enabled bool   `json:"enabled"`
-	URL     string `json:"url,omitempty"`
-}
-
 type BootstrapLimits struct {
 	RequestBodyBytes  int64 `json:"request_body_bytes"`
 	ResponseBodyBytes int64 `json:"response_body_bytes"`
@@ -31,14 +27,12 @@ type BootstrapLimits struct {
 
 type BootstrapRequest struct {
 	ProtocolVersion int16           `json:"protocol_version"`
-	Proxy           BootstrapProxy  `json:"proxy"`
 	Limits          BootstrapLimits `json:"limits"`
 }
 
 type BootstrapResponse struct {
 	ProtocolVersion   int16  `json:"protocol_version"`
 	State             string `json:"state"`
-	ProxyEnabled      bool   `json:"proxy_enabled"`
 	RequestBodyBytes  int64  `json:"request_body_bytes"`
 	ResponseBodyBytes int64  `json:"response_body_bytes"`
 	MaxInflight       int    `json:"max_inflight"`
@@ -49,7 +43,6 @@ type HealthResponse struct {
 	State           string `json:"state"`
 	Inflight        int    `json:"inflight"`
 	MaxInflight     int    `json:"max_inflight"`
-	ProxyEnabled    bool   `json:"proxy_enabled"`
 }
 
 type ProtocolMeta struct {
@@ -226,7 +219,7 @@ type CommunityResult struct {
 }
 
 func (r *CommunityResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
-func (r *CommunityResult) pagination() Pagination         { return r.Pagination }
+func (r *CommunityResult) validateSuccess() error         { return r.Validate() }
 
 type ContentRequest struct {
 	ProtocolVersion         int16  `json:"protocol_version"`
@@ -255,7 +248,7 @@ type ContentResult struct {
 }
 
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
-func (r *ContentResult) pagination() Pagination         { return r.Pagination }
+func (r *ContentResult) validateSuccess() error         { return r.Validate() }
 
 // ChannelRequest는 동일 bundle의 helper에 live 또는 metadata 수집만 요청합니다.
 type ChannelRequest struct {
@@ -318,4 +311,136 @@ type ChannelResult struct {
 }
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
-func (r *ChannelResult) pagination() Pagination         { return r.Pagination }
+func (r *ChannelResult) validateSuccess() error         { return r.Validate() }
+
+// MaxLiveCheckResponseBytes는 평탄한 확인 결과 하나의 성공 응답 상한입니다.
+// 확인 RPC는 목록 RPC의 응답 예산을 물려받지 않고 이 값 이하로 요청합니다.
+const MaxLiveCheckResponseBytes = 4 << 10
+
+// ChannelLiveCheckRequest는 채널 /live 주소 해석 확인 하나를 요청합니다.
+type ChannelLiveCheckRequest struct {
+	ProtocolVersion         int16  `json:"protocol_version"`
+	ChannelID               string `json:"channel_id"`
+	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
+}
+
+// ChannelLiveCheckResult는 pagination 없는 채널 확인 결과입니다. 수집기가 typed coverage를 붙입니다.
+type ChannelLiveCheckResult struct {
+	ProtocolMeta
+
+	ChannelID                string                           `json:"channel_id"`
+	Outcome                  contract.ChannelLiveCheckOutcome `json:"outcome"`
+	SelectedVideoID          string                           `json:"selected_video_id,omitempty"`
+	ChannelIdentityConfirmed bool                             `json:"channel_identity_confirmed"`
+	UnknownReason            contract.LiveCheckUnknownReason  `json:"unknown_reason,omitempty"`
+}
+
+func (r *ChannelLiveCheckResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
+
+// validateSuccess는 결과 어휘와 UNKNOWN 사유의 존재 조건만 검사합니다.
+// 요청 subject 대조와 세부 판정 모순은 호출자와 공유 envelope 계약이 소유합니다.
+func (r *ChannelLiveCheckResult) validateSuccess() error {
+	if strings.TrimSpace(r.ChannelID) == "" {
+		return errors.New("validate channel live check: channel_id is empty")
+	}
+
+	if !r.Outcome.Valid() {
+		return fmt.Errorf("validate channel live check: outcome %q is invalid", r.Outcome)
+	}
+
+	if (r.Outcome == contract.ChannelLiveCheckUnknown) != (r.UnknownReason != "") {
+		return errors.New("validate channel live check: unknown_reason must be present only for UNKNOWN")
+	}
+
+	if r.UnknownReason != "" && !channelLiveCheckReason(r.UnknownReason) {
+		return fmt.Errorf("validate channel live check: unknown_reason %q is invalid", r.UnknownReason)
+	}
+
+	return nil
+}
+
+// VideoLiveCheckRequest는 영상 player 확인 하나를 요청합니다.
+type VideoLiveCheckRequest struct {
+	ProtocolVersion         int16  `json:"protocol_version"`
+	VideoID                 string `json:"video_id"`
+	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
+}
+
+// VideoLiveCheckResult는 pagination 없는 영상 확인 결과입니다. 원시 boolean이 없으면 nil로 남습니다.
+type VideoLiveCheckResult struct {
+	ProtocolMeta
+
+	VideoID                 string                           `json:"video_id"`
+	ChannelID               string                           `json:"channel_id,omitempty"`
+	IdentityConfirmed       bool                             `json:"identity_confirmed"`
+	IsLive                  *bool                            `json:"is_live,omitempty"`
+	IsLiveNow               *bool                            `json:"is_live_now,omitempty"`
+	IsUpcoming              *bool                            `json:"is_upcoming,omitempty"`
+	IsLiveContent           *bool                            `json:"is_live_content,omitempty"`
+	IsPrivate               *bool                            `json:"is_private,omitempty"`
+	HasLiveBroadcastDetails *bool                            `json:"has_live_broadcast_details,omitempty"`
+	StartedAt               *time.Time                       `json:"started_at,omitempty"`
+	EndedAt                 *time.Time                       `json:"ended_at,omitempty"`
+	Availability            contract.VideoAvailability       `json:"availability"`
+	Method                  contract.VideoAvailabilityMethod `json:"method"`
+	UnknownReason           contract.LiveCheckUnknownReason  `json:"unknown_reason,omitempty"`
+}
+
+func (r *VideoLiveCheckResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
+
+// validateSuccess는 가용성·판정 방법·UNKNOWN 사유의 어휘와 대응만 검사합니다.
+// 판정 방법은 availability가 UNKNOWN일 때만 unknown이며 UNKNOWN 사유도 그때만 존재합니다.
+func (r *VideoLiveCheckResult) validateSuccess() error {
+	if strings.TrimSpace(r.VideoID) == "" {
+		return errors.New("validate video live check: video_id is empty")
+	}
+
+	method, ok := videoAvailabilityMethods[r.Availability]
+	if !ok {
+		return fmt.Errorf("validate video live check: availability %q is invalid", r.Availability)
+	}
+
+	if r.Method != method {
+		return fmt.Errorf("validate video live check: availability %s requires method %q", r.Availability, method)
+	}
+
+	if (r.Availability == contract.VideoAvailabilityUnknown) != (r.UnknownReason != "") {
+		return errors.New("validate video live check: unknown_reason must be present only for UNKNOWN availability")
+	}
+
+	if r.UnknownReason != "" && !videoLiveCheckReason(r.UnknownReason) {
+		return fmt.Errorf("validate video live check: unknown_reason %q is invalid", r.UnknownReason)
+	}
+
+	return nil
+}
+
+var videoAvailabilityMethods = map[contract.VideoAvailability]contract.VideoAvailabilityMethod{
+	contract.VideoAvailabilityPublic:            contract.VideoAvailabilityMethodPlayerPublic,
+	contract.VideoAvailabilityMembersOnly:       contract.VideoAvailabilityMethodPlayerMembersOnly,
+	contract.VideoAvailabilityPublicUnavailable: contract.VideoAvailabilityMethodPlayerPrivate,
+	contract.VideoAvailabilityUnknown:           contract.VideoAvailabilityMethodUnknown,
+}
+
+func channelLiveCheckReason(reason contract.LiveCheckUnknownReason) bool {
+	// 가용성만 미상인 사유는 영상 확인 전용이다.
+	return reason != contract.LiveCheckReasonAvailabilityUnclassified && liveCheckReason(reason)
+}
+
+func videoLiveCheckReason(reason contract.LiveCheckUnknownReason) bool {
+	// not_waiting_state는 채널 /live 예정 연결 판정 전용이다.
+	return reason != contract.LiveCheckReasonNotWaitingState && liveCheckReason(reason)
+}
+
+func liveCheckReason(reason contract.LiveCheckUnknownReason) bool {
+	switch reason {
+	case contract.LiveCheckReasonIdentityMissing, contract.LiveCheckReasonIdentityMismatch,
+		contract.LiveCheckReasonContradictoryFields, contract.LiveCheckReasonStructureUnrecognized,
+		contract.LiveCheckReasonNotWaitingState, contract.LiveCheckReasonLoginRequiredUnclassified,
+		contract.LiveCheckReasonErrorUnclassified, contract.LiveCheckReasonRequestFailed,
+		contract.LiveCheckReasonAvailabilityUnclassified:
+		return true
+	default:
+		return false
+	}
+}

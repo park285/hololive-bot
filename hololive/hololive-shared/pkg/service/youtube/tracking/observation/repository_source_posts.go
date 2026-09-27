@@ -66,7 +66,7 @@ func normalizeSourcePostsBatch(
 func buildSourcePostsBatchUpsert(
 	normalized []*domain.YouTubeCommunityShortsSourcePost,
 	now time.Time,
-) (result1 string, result2 []any) {
+) (string, []any) {
 	args := make([]any, 0, len(normalized)*7)
 
 	var sb strings.Builder

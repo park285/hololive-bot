@@ -33,14 +33,6 @@ func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *te
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	if _, err := pool.Exec(ctx, `
-		UPDATE observation_contract_generations
-		SET current_generation = $1
-		WHERE provider = 'youtubejs' AND observation_kind = 'live_snapshot'
-	`, contract.LiveSnapshotMetadataContractGeneration); err != nil {
-		t.Fatalf("bump live snapshot contract: %v", err)
-	}
-
 	metadata := liveSession(testVideoID, "UPCOMING")
 	scheduledAt := time.Date(2026, time.September, 1, 11, 0, 0, 0, time.UTC)
 
@@ -430,7 +422,7 @@ func newLiveTestConsumer(pool *pgxpool.Pool, repo *Repository, grace time.Durati
 func liveClaimOptions() ClaimOptions {
 	return ClaimOptions{
 		ConsumerName:  "youtube-live-processor",
-		LeaseOwner:    "api-a",
+		LeaseOwner:    testAPILeaseOwner,
 		Kinds:         []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindSchedule},
 		Limit:         10,
 		LeaseDuration: 30 * time.Second,
@@ -444,7 +436,7 @@ func liveSession(videoID, status string) contract.LiveSessionV1 {
 func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...contract.LiveSessionV1) *contract.Envelope {
 	t.Helper()
 
-	return liveSnapshotEnvelopeAtGeneration(t, proof, 1, sessions...)
+	return liveSnapshotEnvelopeAtGeneration(t, proof, contract.LiveSnapshotMetadataContractGeneration, sessions...)
 }
 
 func liveSnapshotEnvelopeAtGeneration(
@@ -528,7 +520,7 @@ func publishConsumeLiveFromProvider(
 ) int64 {
 	t.Helper()
 
-	envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, proof, 1, provider, subjectKey, sessions...)
+	envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, proof, contract.LiveSnapshotMetadataContractGeneration, provider, subjectKey, sessions...)
 
 	published, err := repo.PublishBatch(ctx, publishInput(envelope))
 	if err != nil {
@@ -553,7 +545,7 @@ func publishConsumeLive(
 ) contract.LeaseProof {
 	t.Helper()
 
-	return publishConsumeLiveAtGeneration(ctx, t, pool, repo, consumer, proof, 1, sessions...)
+	return publishConsumeLiveAtGeneration(ctx, t, pool, repo, consumer, proof, contract.LiveSnapshotMetadataContractGeneration, sessions...)
 }
 
 func publishConsumeLiveAtGeneration(

@@ -32,8 +32,6 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/testutil"
@@ -45,10 +43,14 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	return testutil.NewTestCacheServiceWithMini(t.Context(), t)
 }
 
+// retiredRedisDispatchQueueKey는 퇴역한 Redis dispatch queue 키다. 상수는 지웠고(stack-audit 2026-09-26 T11), 발행 경로가
+// 그 키에 다시 쓰지 않는지만 확인한다.
+const retiredRedisDispatchQueueKey = "alarm:dispatch:queue"
+
 func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
 	t.Helper()
 
-	return queueItemsByKeyOrEmpty(t, mini, alarmkeys.DispatchQueueKey)
+	return queueItemsByKeyOrEmpty(t, mini, retiredRedisDispatchQueueKey)
 }
 
 func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string) []string {
@@ -87,7 +89,6 @@ func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
 	require.Equal(t, 1, repository.insertBatchCalls)
-	assert.Equal(t, dispatchoutbox.StatusPending, repository.lastBatchInput.Status)
 	require.Len(t, repository.lastBatchInput.Envelopes, 1)
 
 	envelope := repository.lastBatchInput.Envelopes[0]
@@ -130,11 +131,10 @@ func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *tes
 		},
 		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
 		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs:         []int64{1},
-			Kind:              domain.OutboxKindNewShort,
-			AlarmType:         domain.AlarmTypeShorts,
-			ChannelID:         "UC_test",
-			RenderTemplateKey: domain.TemplateKeyOutboxShorts,
+			OutboxIDs: []int64{1},
+			Kind:      domain.OutboxKindNewShort,
+			AlarmType: domain.AlarmTypeShorts,
+			ChannelID: "UC_test",
 			Items: []domain.YouTubeOutboxItem{{
 				OutboxID:  1,
 				ContentID: "short:abc",
@@ -148,4 +148,33 @@ func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *tes
 	result, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.RequestedDeliveries)
+}
+
+// 발행자는 버전이 없는 envelope을 V1으로 채우지 않는다. 모든 생산자가 버전을 명시하므로 0은 검증 오류다
+// (stack-audit 2026-09-26 T11 holo-alarm-publisher-version-zero-default).
+func TestPublisherPublishDispatchBatchRejectsMissingEnvelopeVersion(t *testing.T) {
+	t.Parallel()
+
+	outbox := &fakeOutboxRepository{}
+	publisher := NewPublisher(cachemocks.NewStrictClient(), sharedlogging.NewTestLogger(), WithWakeupEnabled(false), WithOutbox(outbox))
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeShorts, RoomID: "room-versionless"},
+		SourceKind:   domain.AlarmDispatchSourceKindYouTubeOutbox,
+		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+			OutboxIDs: []int64{1},
+			Kind:      domain.OutboxKindNewShort,
+			AlarmType: domain.AlarmTypeShorts,
+			ChannelID: "UC_test",
+			Items: []domain.YouTubeOutboxItem{{
+				OutboxID:  1,
+				ContentID: "short:abc",
+				Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
+			}},
+		},
+		ClaimKeys: []string{"youtube-notification:NEW_SHORT:short:abc:room-versionless"},
+	}
+
+	_, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "envelope version 0 is unsupported")
 }

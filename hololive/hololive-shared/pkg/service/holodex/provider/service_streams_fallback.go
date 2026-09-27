@@ -46,30 +46,59 @@ func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamF
 	state := newStreamFetchState()
 	targetOrgs := streamTargetOrgs(plan.resolvedOrg)
 	primary := h.runStreamPrimaryFetches(ctx, plan, targetOrgs, state)
-	fallback.ObservePrimaryPhase("holodex", plan.operation, len(targetOrgs), primary.Succeeded, len(primary.Failed))
+	fallback.ObservePrimary("holodex", plan.operation, primary)
+
+	// 호출자 취소는 원천 실패가 아니다. fallback·재시도·캐시 없이 취소를 그대로 돌려준다.
+	if primary.WasCanceled() {
+		return nil, fmt.Errorf("fetch streams: %w", context.Cause(ctx))
+	}
+
 	h.scheduleStreamRetryIfNeeded(ctx, plan, primary)
 
-	if streams := state.streams(); len(streams) > 0 {
+	if !primary.HasFailures() {
+		// 모든 org가 성공한 결과만 캐시한다. 성공한 빈 목록도 정상 결과다.
+		streams := state.streams()
 		cacheStreamsByOrg(ctx, plan, streams)
 
 		return streams, nil
 	}
 
-	if !primary.HasFailures() {
-		cacheStreamsByOrg(ctx, plan, nil)
-
-		return nil, nil
+	if primary.Succeeded > 0 {
+		// 부분 성공은 성공으로 숨기지 않고 캐시하지도 않는다. 호출자가 PartialStreamsError로 판단한다.
+		return state.streams(), &PartialStreamsError{
+			Operation:  plan.operation,
+			FailedOrgs: primary.Failed,
+			Err:        state.primaryError(plan),
+		}
 	}
 
-	out, err := h.resolveEmptyPrimary(ctx, plan, primary, state)
+	out, err := h.resolveFailedPrimary(ctx, plan, primary, state)
 	if err != nil {
-		return out, fmt.Errorf("resolve empty primary: %w", err)
+		return out, fmt.Errorf("resolve failed primary: %w", err)
 	}
 
 	return out, nil
 }
 
-func (h *Service) resolveEmptyPrimary(
+// PartialStreamsError는 org=all처럼 여러 org를 조회할 때 일부 org만 성공했음을 알린다. 함께 돌려주는 stream 목록은
+// 성공한 org의 결과뿐이며 캐시되지 않는다. FailedOrgs는 실패한 org 이름이다.
+type PartialStreamsError struct {
+	Operation  string
+	FailedOrgs []string
+	Err        error
+}
+
+func (e *PartialStreamsError) Error() string {
+	return fmt.Sprintf("holodex %s partial result: failed orgs %v: %v", e.Operation, e.FailedOrgs, e.Err)
+}
+
+func (e *PartialStreamsError) Unwrap() error {
+	return e.Err
+}
+
+// resolveFailedPrimary는 모든 org가 실패했을 때만 지원되는 공식 일정 fallback을 한 번 시도한다.
+// 공식 일정 fallback이 stream을 하나 이상 찾았을 때만 성공으로 캐시하고, 빈 결과나 미지원이면 primary 오류를 유지한다.
+func (h *Service) resolveFailedPrimary(
 	ctx context.Context,
 	plan *streamFetchPlan,
 	primary fallback.PrimaryResult[string],
@@ -80,8 +109,11 @@ func (h *Service) resolveEmptyPrimary(
 		return nil, errors.Join(state.primaryError(plan), fmt.Errorf("official schedule fallback: %w", err))
 	}
 
-	if secondary.Outcome != "skipped" && secondary.Outcome != "blocked" {
-		return state.streams(), nil
+	if secondary.Outcome == "hit" {
+		streams := state.streams()
+		cacheStreamsByOrg(ctx, plan, streams)
+
+		return streams, nil
 	}
 
 	return nil, state.primaryError(plan)
@@ -105,7 +137,7 @@ func (h *Service) runStreamPrimaryFetches(
 	targetOrgs []string,
 	state *streamFetchState,
 ) fallback.PrimaryResult[string] {
-	return fallback.FetchPlan[string, struct{}]{
+	return fallback.FetchPlan[string]{
 		Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg, h.concurrency.OrgAllParallelism),
 	}.RunPrimary(ctx, targetOrgs, func(fetchCtx context.Context, targetOrg string) error {
 		return h.fetchAndStoreStreamsForOrg(fetchCtx, targetOrg, plan, state)
@@ -274,7 +306,6 @@ func (h *Service) runOfficialScheduleFallbackFetch(
 	}
 
 	streams = limitStreamList(streams)
-	cacheStreamsByOrg(ctx, plan, streams)
 	state.replaceStreams(streams)
 
 	return fallback.SecondaryResult{Items: len(streams), Successes: 1}, nil

@@ -55,12 +55,13 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 
 		service := NewService(client, []int{10}, logger)
 		_, acquired, err := service.TryClaimNotification(t.Context(), nonCanonicalRoomID, "stream-1", scheduled, 10)
-		require.NoError(t, err)
+		require.Error(t, err)
 		require.False(t, acquired)
 
-		record := sink.String()
-		require.NotEmpty(t, record)
-		assert.NotContains(t, record, nonCanonicalRoomID,
+		// 호출자가 이 오류를 그대로 로그에 남기므로 오류 문구에도 room 원문이 없어야 한다.
+		assert.NotContains(t, err.Error(), nonCanonicalRoomID,
+			"claim key에 보간된 room 식별자가 그대로 오류 값으로 나가면 안 된다")
+		assert.NotContains(t, sink.String(), nonCanonicalRoomID,
 			"claim key에 보간된 room 식별자가 그대로 로그 값으로 나가면 안 된다")
 	})
 

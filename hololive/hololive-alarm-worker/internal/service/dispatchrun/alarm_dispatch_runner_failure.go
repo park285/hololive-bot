@@ -43,7 +43,7 @@ func (r *Runner) finalizeDispatchFailure(
 	if routeErr != nil {
 		resolved, done, err := r.resolveFailureRoute(ctx, retryEnvelopes, dlqEnvelopes, requeueFn, routeErr)
 		if err != nil {
-			return errors.Join(err)
+			return err
 		}
 
 		if done {
@@ -54,7 +54,7 @@ func (r *Runner) finalizeDispatchFailure(
 	}
 
 	if err := r.completeFailureFinalization(ctx, releasable, routeErr); err != nil {
-		return errors.Join(err)
+		return err
 	}
 
 	return nil
@@ -70,7 +70,7 @@ func (r *Runner) resolveFailureRoute(
 	unapplied, partial := unappliedFailureRoutingIDs(routeErr)
 	if !partial {
 		if err := r.preserveAfterPersistenceFailure(ctx, combineEnvelopes(retryEnvelopes, dlqEnvelopes), requeueFn, routeErr); err != nil {
-			return nil, false, errors.Join(err)
+			return nil, false, err
 		}
 
 		return nil, true, nil
@@ -107,16 +107,14 @@ func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []doma
 func (r *Runner) persistPostSendingFailure(ctx context.Context, group alarmDispatchGroup, cause error) error {
 	envelopes := group.envelopes
 
-	if errors.Is(cause, egress.ErrKaringOutcomeUnknown) {
+	// Markdown handoff 결과 불명은 Iris가 이미 접수한 뒤라 재시도하지 않고 quarantine으로 보존한다.
+	if errors.Is(cause, egress.ErrReplyHandoffOutcomeUnknown) {
 		return r.quarantinePostSendingFailure(ctx, envelopes, cause)
 	}
 
-	// Room facts는 다음 drain에서 바뀔 수 있고 선택된 path는 영속되지 않는다. ambiguous 발송을
-	// 재드레인하면 text와 Karing 사이에서 payload와 ClientRequestID가 함께 바뀔 수 있다.
-	if group.egressRoomScoped && isAlarmDispatchAmbiguousPostSendFailure(cause) {
-		return r.quarantinePostSendingFailure(ctx, envelopes, cause)
-	}
-
+	// 방 유형에 따라 Karing과 Text 사이에서 경로가 바뀌던 시절에는 방 기준 그룹의 ambiguous 실패를 quarantine했다.
+	// Karing 경로를 삭제해(DEC-20260926-hololive-karing-egress-disposition) 모든 그룹이 같은 Text 경로와 저장된 send-unit
+	// client_request_id로 다시 나가므로, 아래 재시도 판정을 source와 무관하게 적용한다.
 	if alarmDispatchPostSendFailureIsRetryable(cause, len(envelopes)) ||
 		(hasPersistedClientRequestID(envelopes) && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
 		if err := r.persistSendingRetry(ctx, envelopes, cause); err != nil {
@@ -139,8 +137,9 @@ func (r *Runner) quarantinePostSendingFailure(ctx context.Context, envelopes []d
 	return nil
 }
 
+// 재시도 허가는 Text 경로가 실제로 보낸 ID(alarmDispatchClientRequestID)가 저장된 send-unit ID일 때만 참이다.
 func hasPersistedClientRequestID(envelopes []domain.AlarmQueueEnvelope) bool {
-	return persistedAlarmDispatchClientRequestID(alarmDispatchGroup{envelopes: envelopes}) != ""
+	return persistedAlarmDispatchClientRequestIDFromEnvelopes(envelopes) != ""
 }
 
 func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
@@ -165,8 +164,7 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 }
 
 // TransportError/DeadlineExceeded는 응답을 한 번도 받지 못한 경우라 첫 발송이 이미
-// admission됐을 수 있다. Room-scoped path는 호출 전에 quarantine하고, 남은 고정 path에서도
-// ambiguous 원인은 solo 재그룹핑으로 ID가 그대로 재생산되는 단건 그룹에만 재시도를 허용한다.
+// admission됐을 수 있다. 저장된 send-unit ID가 없으면 ambiguous 원인은 단건 그룹에만 재시도를 허용한다.
 // 429/502/503은 미수용이 확정된 응답이라 그룹 크기와 무관하게 재시도한다.
 func alarmDispatchPostSendFailureIsRetryable(cause error, envelopeCount int) bool {
 	if isAlarmDispatchNotAdmittedRetryableFailure(cause) {
@@ -193,7 +191,7 @@ func isAlarmDispatchAmbiguousPostSendFailure(cause error) bool {
 		return false
 	}
 
-	if errors.Is(cause, egress.ErrKaringOutcomeUnknown) {
+	if errors.Is(cause, egress.ErrReplyHandoffOutcomeUnknown) {
 		return false
 	}
 

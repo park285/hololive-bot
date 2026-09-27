@@ -15,7 +15,7 @@ var ErrEventPayloadConflict = errors.New("dispatch event payload conflict")
 
 // InsertPending은 pending delivery를 저장한다. Payload 충돌은 audit만 기록하고 기존 record를 반환하지 않는다.
 func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
-	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}, Status: StatusPending})
+	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}})
 	if err != nil {
 		return nil, "", fmt.Errorf("insert batch: %w", err)
 	}
@@ -47,12 +47,7 @@ func insertDuplicateResult(status Status) InsertResult {
 		return DuplicateTerminal
 	}
 
-	switch status {
-	case StatusShadowed, StatusPending, StatusLeased, StatusRetry, StatusSending, StatusSent, StatusDLQ, StatusQuarantined, StatusCancelled:
-		return DuplicateActive
-	default:
-		return DuplicateActive
-	}
+	return DuplicateActive
 }
 
 // InsertBatch는 정상 entry와 collision audit을 함께 commit한다. 충돌 entry는 delivery를 만들지 않으며
@@ -62,21 +57,12 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 		return PublishBatchResult{}, errors.New("insert dispatch ledger batch: postgres pool is nil")
 	}
 
-	status := input.Status
-	if status == "" {
-		status = StatusPending
-	}
-
-	if status != StatusPending && status != StatusShadowed {
-		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: unsupported status %q", status)
-	}
-
 	result := PublishBatchResult{RequestedDeliveries: len(input.Envelopes)}
 	if len(input.Envelopes) == 0 {
 		return result, nil
 	}
 
-	eventRows, deliveries, preflightCollisions, err := prepareInsertBatchRows(input.Envelopes, status, &result)
+	eventRows, deliveries, preflightCollisions, err := prepareInsertBatchRows(input.Envelopes, &result)
 	if err != nil {
 		return result, fmt.Errorf("prepare insert batch rows: %w", err)
 	}

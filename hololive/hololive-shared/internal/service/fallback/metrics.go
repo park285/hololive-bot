@@ -53,9 +53,10 @@ func initFallbackMetrics() {
 	})
 }
 
-func ObservePrimaryPhase(service, operation string, attempted, succeeded, failed int) {
+// ObservePrimary는 primary 단계 결과를 한 번 기록한다. 호출자 취소는 실패가 아니라 canceled로 센다.
+func ObservePrimary[K any](service, operation string, result PrimaryResult[K]) {
 	initFallbackMetrics()
-	fallbackPrimaryTotal.WithLabelValues(service, operation, primaryOutcome(attempted, succeeded, failed)).Inc()
+	fallbackPrimaryTotal.WithLabelValues(service, operation, primaryOutcome(result.Attempted, result.Succeeded, len(result.Failed), len(result.Canceled))).Inc()
 }
 
 func ObserveExecution(service, operation string, trigger Trigger, outcome string) {
@@ -63,9 +64,13 @@ func ObserveExecution(service, operation string, trigger Trigger, outcome string
 	fallbackExecutionTotal.WithLabelValues(service, operation, normalizeTrigger(trigger), outcome).Inc()
 }
 
-func primaryOutcome(attempted, succeeded, failed int) string {
+func primaryOutcome(attempted, succeeded, failed, canceled int) string {
 	if attempted == 0 {
 		return "skipped"
+	}
+
+	if canceled > 0 {
+		return "canceled"
 	}
 
 	return attemptedPrimaryOutcome(succeeded, failed)

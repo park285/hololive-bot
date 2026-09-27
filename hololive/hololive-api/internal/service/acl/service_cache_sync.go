@@ -22,8 +22,8 @@ package acl
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync/atomic"
 
@@ -87,64 +87,28 @@ func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms
 	return nil
 }
 
+// renameRoomsKey는 SAdd로 채운 tempKey를 RENAME 한 번으로 target에 원자 교체한다.
+// 원시 valkey client가 없으면 오류다. 대상 key를 Del→SAdd로 바꾸는 비원자 경로는 reader에게 빈 집합을 보여 주므로 두지 않는다.
+// 필드 renameRoomsKeyFunc는 교체 실패를 주입하는 테스트 훅이다.
 func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms []string) error {
 	if s.renameRoomsKeyFunc != nil {
-		if err := s.renameRoomsKeyCustom(ctx, tempKey, key, rooms); err != nil {
-			return fmt.Errorf("rename rooms key custom: %w", err)
+		if err := s.renameRoomsKeyFunc(ctx, tempKey, key, rooms); err != nil {
+			return fmt.Errorf("custom rename %s from %s: %w", key, tempKey, err)
 		}
 
 		return nil
 	}
 
-	client, builder, ok := s.rawCacheEvalClient()
-	if !ok {
-		if err := s.renameRoomsKeyFallback(ctx, tempKey, key, rooms); err != nil {
-			return fmt.Errorf("rename rooms key fallback: %w", err)
-		}
-
-		return nil
+	client := s.cache.GetClient()
+	if client == nil {
+		return errors.New("raw valkey client unavailable for atomic rename")
 	}
 
-	if err := s.renameRoomsKeyNative(ctx, client, builder, tempKey, key); err != nil {
+	if err := s.renameRoomsKeyNative(ctx, client, s.cache.B(), tempKey, key); err != nil {
 		return fmt.Errorf("rename rooms key native: %w", err)
 	}
 
 	return nil
-}
-
-func (s *Service) renameRoomsKeyCustom(ctx context.Context, tempKey, key string, rooms []string) error {
-	if err := s.renameRoomsKeyFunc(ctx, tempKey, key, rooms); err != nil {
-		return fmt.Errorf("custom rename %s from %s: %w", key, tempKey, err)
-	}
-
-	return nil
-}
-
-// raw client이 없어 RENAME을 쓸 수 없는 형상(테스트 double 등) 전용 경로다.
-// Del→SAdd 사이에 조회하는 reader는 빈 집합을 볼 수 있다.
-func (s *Service) renameRoomsKeyFallback(ctx context.Context, tempKey, key string, rooms []string) error {
-	defer s.discardRoomsTempKey(ctx, tempKey)
-
-	if err := s.cache.Del(ctx, key); err != nil {
-		return fmt.Errorf("fallback clear %s: %w", key, err)
-	}
-
-	if len(rooms) == 0 {
-		return nil
-	}
-
-	if _, err := s.cache.SAdd(ctx, key, rooms); err != nil {
-		return fmt.Errorf("fallback write %s: %w", key, err)
-	}
-
-	return nil
-}
-
-// fallback은 tempKey를 소비하지 않으므로, 남겨두면 sync마다 새 temp key가 무한히 쌓인다.
-func (s *Service) discardRoomsTempKey(ctx context.Context, tempKey string) {
-	if err := s.cache.Del(context.WithoutCancel(ctx), tempKey); err != nil && s.logger != nil {
-		s.logger.Warn("discard acl rooms temp key failed", slog.Any("error", err))
-	}
 }
 
 func (s *Service) renameRoomsKeyNative(ctx context.Context, client valkey.Client, builder valkey.Builder, tempKey, key string) error {
@@ -155,25 +119,4 @@ func (s *Service) renameRoomsKeyNative(ctx context.Context, client valkey.Client
 	}
 
 	return nil
-}
-
-func (s *Service) rawCacheEvalClient() (_ valkey.Client, _ valkey.Builder, ok bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			ok = false
-
-			if s.logger != nil {
-				s.logger.Warn("raw valkey eval client unavailable", slog.Any("panic", r))
-			}
-		}
-	}()
-
-	client := s.cache.GetClient()
-	builder := s.cache.B()
-
-	if client == nil {
-		return nil, valkey.Builder{}, false
-	}
-
-	return client, builder, true
 }

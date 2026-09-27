@@ -191,6 +191,11 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) error {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 
+	message, err := s.monthlyNotificationMessage(ctx, domainEvents, monthKey)
+	if err != nil {
+		return fmt.Errorf("execute monthly notification: format message: %w", err)
+	}
+
 	shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
 		outboxRepository: s.outboxRepository,
 		outputGuard:      s.outputGuard,
@@ -198,7 +203,7 @@ func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c mon
 		rooms:            c.rooms,
 		kind:             domain.DeliveryKindMajorEventMonthly,
 		periodKey:        monthKey,
-		message:          s.monthlyNotificationMessage(ctx, domainEvents, monthKey),
+		message:          message,
 		eventCount:       len(c.events),
 		enqueueLogMsg:    "Monthly notification enqueue result",
 		deferLogMsg:      "Partial room enqueue failure, deferring monthly event marking",
@@ -218,14 +223,25 @@ func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c mon
 	return nil
 }
 
-func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, events []domain.MajorEvent, monthKey string) string {
+func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, events []domain.MajorEvent, monthKey string) (string, error) {
 	var llmSummary string
 
+	// 요약 실패는 이벤트 목록만 보내는 대체 경로로 바꾸지 않고 오류로 돌려준다. 이벤트는 미표시로 남는다.
 	if s.summarizer != nil {
-		llmSummary = s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeMonthly, monthKey)
+		summary, err := s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeMonthly, monthKey)
+		if err != nil {
+			return "", fmt.Errorf("summarize monthly events: %w", err)
+		}
+
+		llmSummary = summary
 	}
 
-	return s.formatter.FormatMajorEventMonthlySummary(ctx, events, llmSummary)
+	message, err := s.formatter.FormatMajorEventMonthlySummary(ctx, events, llmSummary)
+	if err != nil {
+		return "", fmt.Errorf("format monthly summary: %w", err)
+	}
+
+	return message, nil
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {

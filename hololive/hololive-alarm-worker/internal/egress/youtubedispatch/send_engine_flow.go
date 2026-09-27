@@ -166,7 +166,7 @@ func deliverySendOutcomeUnknown(err error) bool {
 		return false
 	}
 
-	if errors.Is(err, egress.ErrKaringOutcomeUnknown) {
+	if errors.Is(err, egress.ErrReplyHandoffOutcomeUnknown) {
 		return true
 	}
 

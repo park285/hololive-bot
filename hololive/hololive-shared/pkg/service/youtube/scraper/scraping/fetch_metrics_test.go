@@ -21,10 +21,9 @@ func TestFetchPageOnceRecordsFetcherSuccessMetrics(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
-		WithFetcherEngine(FetcherEngineNetHTTP),
 	)
 
 	before := testutil.ToFloat64(scraperFetchRequestsTotal.WithLabelValues("nethttp", "success", "none", "200"))
@@ -42,10 +41,9 @@ func TestFetchPageOnceRecordsFetcherFailureMetrics(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
-		WithFetcherEngine(FetcherEngineNetHTTP),
 	)
 
 	before := testutil.ToFloat64(scraperFetchRequestsTotal.WithLabelValues("nethttp", "error", "rate_limited", "429"))

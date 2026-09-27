@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createHelperRuntime, parseBootstrapRequest, redactedProxyURL, RuntimeState } from "./helper-runtime.mjs";
+import { createHelperRuntime, parseBootstrapRequest, RuntimeState } from "./helper-runtime.mjs";
 import { stubFetchers } from "./real-fetchers.mjs";
 
 const validBootstrap = {
   protocol_version: 1,
-  proxy: { enabled: false },
   limits: {
     request_body_bytes: 65536,
     response_body_bytes: 1048576,
@@ -23,7 +22,7 @@ test("first bootstrap becomes READY and echoes limits", async () => {
   const runtime = createHelperRuntime({
     createTransport: async () => {
       created += 1;
-      return { fetch: globalThis.fetch, async close() {}, agentCount: 0 };
+      return { fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch };
     },
     createFetchers: () => stubFetchers,
   });
@@ -32,7 +31,6 @@ test("first bootstrap becomes READY and echoes limits", async () => {
   assert.deepEqual(result.body, {
     protocol_version: 1,
     state: RuntimeState.READY,
-    proxy_enabled: false,
     request_body_bytes: 65536,
     response_body_bytes: 1048576,
     max_inflight: 2,
@@ -46,7 +44,7 @@ test("equal bootstrap replay is idempotent and keeps one transport", async () =>
   const runtime = createHelperRuntime({
     createTransport: async () => {
       created += 1;
-      return { fetch: globalThis.fetch, async close() {}, agentCount: 0 };
+      return { fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch };
     },
     createFetchers: () => stubFetchers,
   });
@@ -67,7 +65,7 @@ test("concurrent equal bootstrap shares one transport", async () => {
     createTransport: async () => {
       created += 1;
       await blocked;
-      return { fetch: globalThis.fetch, async close() {}, agentCount: 0 };
+      return { fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch };
     },
     createFetchers: () => stubFetchers,
   });
@@ -89,7 +87,7 @@ test("concurrent conflicting bootstrap cannot replace pending config", async () 
   const runtime = createHelperRuntime({
     createTransport: async () => {
       await blocked;
-      return { fetch: globalThis.fetch, async close() {}, agentCount: 0 };
+      return { fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch };
     },
     createFetchers: () => stubFetchers,
   });
@@ -105,7 +103,7 @@ test("concurrent conflicting bootstrap cannot replace pending config", async () 
 
 test("conflicting bootstrap replay keeps the original config", async () => {
   const runtime = createHelperRuntime({
-    createTransport: async () => ({ fetch: globalThis.fetch, async close() {}, agentCount: 0 }),
+    createTransport: async () => ({ fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch }),
     createFetchers: () => stubFetchers,
   });
   await runtime.handleBootstrap(bootstrapBody());
@@ -140,7 +138,7 @@ test("protocol version mismatch is 409", async () => {
 
 test("collection admission rejects before READY and over cap", async () => {
   const runtime = createHelperRuntime({
-    createTransport: async () => ({ fetch: globalThis.fetch, async close() {}, agentCount: 0 }),
+    createTransport: async () => ({ fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch }),
     createFetchers: () => stubFetchers,
   });
   assert.equal(runtime.refuseCollection()?.body.error.code, "helper_not_ready");
@@ -155,74 +153,29 @@ test("collection admission rejects before READY and over cap", async () => {
   assert.equal(runtime.refuseCollection(), null);
 });
 
-test("parseBootstrapRequest rejects unknown fields and secret-bearing errors", () => {
+test("parseBootstrapRequest rejects unknown fields", () => {
   assert.throws(
     () => parseBootstrapRequest(JSON.stringify({
       protocol_version: 1,
-      proxy: { enabled: true, url: "http://user:super-secret@proxy.test:8080" },
       limits: { request_body_bytes: 1, response_body_bytes: 1, max_inflight: 1 },
       fingerprint: "nope",
     })),
-    /unknown field/,
+    /unknown field: fingerprint/,
   );
-  try {
-    parseBootstrapRequest(JSON.stringify({
+  assert.throws(
+    () => parseBootstrapRequest(JSON.stringify({
       protocol_version: 1,
-      proxy: { enabled: true, url: "http://user:super-secret@proxy.test:8080/admin" },
+      proxy: { enabled: false },
       limits: { request_body_bytes: 1, response_body_bytes: 1, max_inflight: 1 },
-    }));
-    assert.fail("expected invalid proxy path");
-  } catch (error) {
-    assert.match(String(error.message), /proxy url is invalid/);
-    assert.doesNotMatch(String(error.message), /super-secret/);
-  }
+    })),
+    /unknown field: proxy/,
+  );
 });
 
-test("failed bootstrap redacts proxy userinfo", async () => {
-  const secret = "super-secret";
-  const runtime = createHelperRuntime({
-    createTransport: async (proxy) => {
-      throw new Error(`ProxyAgent(${proxy.url})`);
-    },
-  });
-  const result = await runtime.handleBootstrap(JSON.stringify({
-    protocol_version: 1,
-    proxy: { enabled: true, url: `http://user:${secret}@proxy.test:8080` },
-    limits: { request_body_bytes: 65536, response_body_bytes: 1048576, max_inflight: 1 },
-  }));
-  assert.equal(result.status, 500);
-  assert.doesNotMatch(JSON.stringify(result.body), new RegExp(secret));
-  assert.equal(redactedProxyURL(`http://user:${secret}@proxy.test:8080`), "http://proxy.test:8080");
-});
-
-test("failed bootstrap closes a transport created before fetcher construction", async () => {
-  let closed = 0;
-  const runtime = createHelperRuntime({
-    createTransport: async () => ({
-      fetch: globalThis.fetch,
-      async close() { closed += 1; },
-      agentCount: 1,
-    }),
-    createFetchers: () => {
-      throw new Error("fetcher construction failed");
-    },
-  });
-  const result = await runtime.handleBootstrap(bootstrapBody());
-  assert.equal(result.status, 500);
-  assert.equal(runtime.state, RuntimeState.FAULTED);
-  assert.equal(closed, 1);
-});
-
-test("drain close failure faults runtime and closes every resource", async () => {
+test("drain close failure faults runtime", async () => {
   const closed = [];
   const runtime = createHelperRuntime({
-    createTransport: async () => ({
-      fetch: globalThis.fetch,
-      async close() {
-        closed.push("transport");
-      },
-      agentCount: 0,
-    }),
+    createTransport: async () => ({ fetch: globalThis.fetch, singleAttemptFetch: globalThis.fetch }),
     createFetchers: () => ({
       ...stubFetchers,
       async close() {
@@ -238,7 +191,7 @@ test("drain close failure faults runtime and closes every resource", async () =>
   await runtime.handleBootstrap(bootstrapBody());
   runtime.beginDrain();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(closed, ["fetchers", "transport"]);
+  assert.deepEqual(closed, ["fetchers"]);
   assert.equal(runtime.state, RuntimeState.FAULTED);
   assert.equal(stopped, 0);
   assert.equal(faulted, 1);

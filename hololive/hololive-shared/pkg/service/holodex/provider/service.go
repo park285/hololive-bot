@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
@@ -40,11 +39,6 @@ type Service struct {
 	concurrency  settings.HolodexConcurrencyConfig
 
 	streamCacheFills streamCacheFillGate
-
-	liveFallbackMu      sync.Mutex
-	liveFallbackCursors map[liveFallbackSetKey]liveFallbackCursorState
-	liveFallbackClock   uint64
-	liveStatusFallback  settings.HolodexLiveStatusFallbackConfig
 }
 
 func NewHolodexService(baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
@@ -60,9 +54,7 @@ func NewHolodexService(baseURL, apiKey string, cacheClient cache.Client, scraper
 
 func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {
 	if holodexCfg == nil {
-		cfg := settings.DefaultHolodexOperationalConfig()
-
-		holodexCfg = &cfg
+		return nil, errors.New("holodex config is nil")
 	}
 
 	if strings.TrimSpace(apiKey) == "" {
@@ -91,58 +83,18 @@ func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, ap
 
 	requester := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter, holodexCfg)
 	service := &Service{
-		requester:          requester,
-		scraper:            scraperService,
-		logger:             logger,
-		cacheManager:       NewCacheManager(cacheClient, logger),
-		mapper:             streammapping.NewStreamMapper(logger),
-		filter:             streammapping.NewStreamFilter(logger),
-		concurrency:        holodexCfg.Concurrency,
-		liveStatusFallback: holodexCfg.LiveStatusFallback,
+		requester:    requester,
+		scraper:      scraperService,
+		logger:       logger,
+		cacheManager: NewCacheManager(cacheClient, logger),
+		mapper:       streammapping.NewStreamMapper(logger),
+		filter:       streammapping.NewStreamFilter(logger),
+		concurrency:  holodexCfg.Concurrency,
 	}
 
 	service.retry = newRetryScheduler(constants.RetrySchedulerConfig.Delay, constants.RetrySchedulerConfig.Timeout, constants.RetrySchedulerConfig.MaxSize, logger)
 
 	return service, nil
-}
-
-func (h *Service) effectiveLiveStatusFallbackConfig() settings.HolodexLiveStatusFallbackConfig {
-	d := settings.DefaultHolodexOperationalConfig().LiveStatusFallback
-
-	if h == nil {
-		return d
-	}
-
-	cfg := h.liveStatusFallback
-	if cfg.MaxPerCycle <= 0 {
-		cfg.MaxPerCycle = d.MaxPerCycle
-	}
-
-	if cfg.WallClockBudget <= 0 {
-		cfg.WallClockBudget = d.WallClockBudget
-	}
-
-	if cfg.DeadlineMargin < 0 {
-		cfg.DeadlineMargin = d.DeadlineMargin
-	}
-
-	return cfg
-}
-
-func (h *Service) SetScraperProxyEnabled(enabled bool) bool {
-	if h.scraper == nil {
-		return false
-	}
-
-	return h.scraper.SetYouTubeProxyEnabled(enabled)
-}
-
-func (h *Service) ScraperProxyEnabled() bool {
-	if h.scraper == nil {
-		return false
-	}
-
-	return h.scraper.YouTubeProxyEnabled()
 }
 
 func (h *Service) Stop() {

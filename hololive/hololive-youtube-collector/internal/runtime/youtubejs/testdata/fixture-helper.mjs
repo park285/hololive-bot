@@ -26,25 +26,15 @@ if (args.mode === "ignore-term") {
 const server = createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
     if (args.mode === "reject-bootstrap") {
-      writeJSON(res, 503, healthBody("UNCONFIGURED", 0, false));
+      writeJSON(res, 503, healthBody("UNCONFIGURED", 0));
       return;
     }
-    writeJSON(res, 200, healthBody("READY", 4, false));
+    writeJSON(res, 200, healthBody("READY", 4));
     return;
   }
   if (req.method === "POST" && req.url === "/v1/bootstrap") {
-    if (args.mode === "reject-bootstrap" || args.mode === "leak-proxy") {
-      consume(req, (raw) => {
-        const parsed = parseJSON(raw);
-        const proxyURL = isRecord(parsed.proxy) && typeof parsed.proxy.url === "string" ? parsed.proxy.url : "";
-        if (args.mode === "leak-proxy") {
-          writeJSON(res, 500, {
-            error: `bootstrap failed for ${proxyURL}`,
-            error_code: "helper_internal_invariant",
-            error_class: "Error",
-          });
-          return;
-        }
+    if (args.mode === "reject-bootstrap") {
+      consume(req, () => {
         writeJSON(res, 409, {
           error: "protocol mismatch",
           error_code: "helper_protocol_mismatch",
@@ -59,7 +49,6 @@ const server = createServer((req, res) => {
       writeJSON(res, 200, {
         protocol_version: 1,
         state: "READY",
-        proxy_enabled: Boolean(isRecord(parsed.proxy) && parsed.proxy.enabled),
         request_body_bytes: numberOr(limits.request_body_bytes, 65536),
         response_body_bytes: numberOr(limits.response_body_bytes, 1048576),
         max_inflight: numberOr(limits.max_inflight, 4),
@@ -83,13 +72,12 @@ await new Promise((resolve, reject) => {
   });
 });
 
-function healthBody(state, maxInflight, proxyEnabled) {
+function healthBody(state, maxInflight) {
   return {
     protocol_version: 1,
     state,
     inflight: 0,
     max_inflight: maxInflight,
-    proxy_enabled: proxyEnabled,
   };
 }
 

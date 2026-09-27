@@ -8,7 +8,6 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh"
-. "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/admin-bind.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
@@ -297,10 +296,6 @@ if target_requires_db_migration; then
     run_db_migration_before_cutover
 fi
 
-if [[ "${TARGET}" == "hololive-api" || -z "${TARGET}" ]]; then
-    removed_runtime_cleanup_before_cutover
-fi
-
 if [[ -n "${TARGET}" ]]; then
     cutover_capture_restart_baseline "${TARGET}"
     echo "[UP] ${TARGET}"
@@ -310,7 +305,6 @@ if [[ -n "${TARGET}" ]]; then
     fi
     up_args+=("${TARGET}")
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" "${up_args[@]}"
-    if [[ "${TARGET}" == "hololive-api" ]]; then removed_runtime_assert_absent; fi
     echo "[PS] ${TARGET}"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps "${TARGET}"
     if ! cutover_health_gate "${TARGET}"; then
@@ -324,7 +318,6 @@ else
     cutover_capture_restart_baseline hololive-api hololive-alarm-worker youtube-collector
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
-    removed_runtime_assert_absent
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
     if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector; then

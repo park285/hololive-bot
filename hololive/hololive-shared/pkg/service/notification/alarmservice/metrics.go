@@ -28,53 +28,67 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-var (
-	alarmMetricsInitOnce sync.Once
+// alarmMetricSet은 alarm service가 기록하는 Prometheus 수집기 묶음이다. 수집기는 alarmMetrics의 첫 호출에서만
+// 만들어지고 등록되므로, 초기화되지 않은 수집기를 읽는 경로가 없다.
+type alarmMetricSet struct {
+	serviceOperationDuration *prometheus.HistogramVec
+	cacheRebuildTotal        *prometheus.CounterVec
+	cacheRebuildDuration     *prometheus.HistogramVec
+	cacheRebuildLoaded       *prometheus.GaugeVec
+	memberNameCallerFallback prometheus.Counter
+}
 
-	alarmServiceOperationDuration *prometheus.HistogramVec
-	alarmCacheRebuildTotal        *prometheus.CounterVec
-	alarmCacheRebuildDuration     *prometheus.HistogramVec
-	alarmCacheRebuildLoaded       *prometheus.GaugeVec
-)
+// alarmMetrics는 첫 호출에서 수집기를 기본 registerer에 등록한다. 등록이 panic하면 이후 호출도 같은 값으로
+// panic하므로, 반쯤 초기화된 수집기가 관측 경로에 노출되지 않는다.
+var alarmMetrics = sync.OnceValue(newAlarmMetricSet)
 
-func initAlarmMetrics() {
-	alarmMetricsInitOnce.Do(func() {
-		alarmServiceOperationDuration = promauto.NewHistogramVec(
+func newAlarmMetricSet() *alarmMetricSet {
+	return &alarmMetricSet{
+		serviceOperationDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "hololive_alarm_service_operation_duration_seconds",
 				Help:    "Alarm service operation duration in seconds by operation and result.",
 				Buckets: prometheus.DefBuckets,
 			},
 			[]string{"operation", "result"},
-		)
-		alarmCacheRebuildTotal = promauto.NewCounterVec(
+		),
+		cacheRebuildTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_cache_rebuild_total",
 				Help: "Alarm cache rebuild attempts by operation and result.",
 			},
 			[]string{"operation", "result"},
-		)
-		alarmCacheRebuildDuration = promauto.NewHistogramVec(
+		),
+		cacheRebuildDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "hololive_alarm_cache_rebuild_duration_seconds",
 				Help:    "Alarm cache rebuild duration in seconds by operation and result.",
 				Buckets: prometheus.DefBuckets,
 			},
 			[]string{"operation", "result"},
-		)
-		alarmCacheRebuildLoaded = promauto.NewGaugeVec(
+		),
+		cacheRebuildLoaded: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "hololive_alarm_cache_rebuild_loaded",
 				Help: "Last successful alarm cache rebuild loaded counts by operation and resource.",
 			},
 			[]string{"operation", "resource"},
-		)
-	})
+		),
+		memberNameCallerFallback: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_member_name_caller_fallback_total",
+				Help: "Alarm cache writes that used the caller member name because member data had no display name.",
+			},
+		),
+	}
+}
+
+func observeAlarmMemberNameCallerFallback() {
+	alarmMetrics().memberNameCallerFallback.Inc()
 }
 
 func observeAlarmServiceOperation(operation string, startedAt time.Time, err error) {
-	initAlarmMetrics()
-	alarmServiceOperationDuration.WithLabelValues(operation, alarmOperationResult(err)).Observe(time.Since(startedAt).Seconds())
+	alarmMetrics().serviceOperationDuration.WithLabelValues(operation, alarmOperationResult(err)).Observe(time.Since(startedAt).Seconds())
 }
 
 func alarmOperationResult(err error) string {
@@ -86,18 +100,16 @@ func alarmOperationResult(err error) string {
 }
 
 func observeAlarmCacheRebuild(operation string, err error) {
-	initAlarmMetrics()
-	alarmCacheRebuildTotal.WithLabelValues(operation, alarmOperationResult(err)).Inc()
+	alarmMetrics().cacheRebuildTotal.WithLabelValues(operation, alarmOperationResult(err)).Inc()
 }
 
 func observeAlarmCacheRebuildDuration(operation string, startedAt time.Time, err error) {
-	initAlarmMetrics()
-	alarmCacheRebuildDuration.WithLabelValues(operation, alarmOperationResult(err)).Observe(time.Since(startedAt).Seconds())
+	alarmMetrics().cacheRebuildDuration.WithLabelValues(operation, alarmOperationResult(err)).Observe(time.Since(startedAt).Seconds())
 }
 
 func observeAlarmCacheRebuildLoaded(operation string, alarmsLoaded, roomsLoaded, channelsLoaded int) {
-	initAlarmMetrics()
-	alarmCacheRebuildLoaded.WithLabelValues(operation, "alarms").Set(float64(alarmsLoaded))
-	alarmCacheRebuildLoaded.WithLabelValues(operation, "rooms").Set(float64(roomsLoaded))
-	alarmCacheRebuildLoaded.WithLabelValues(operation, "channels").Set(float64(channelsLoaded))
+	loaded := alarmMetrics().cacheRebuildLoaded
+	loaded.WithLabelValues(operation, "alarms").Set(float64(alarmsLoaded))
+	loaded.WithLabelValues(operation, "rooms").Set(float64(roomsLoaded))
+	loaded.WithLabelValues(operation, "channels").Set(float64(channelsLoaded))
 }

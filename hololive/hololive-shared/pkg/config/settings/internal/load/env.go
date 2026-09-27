@@ -60,8 +60,13 @@ func CommaSeparated(value string) []string {
 	return result
 }
 
-func HolodexAPIKey() string {
-	return sharedenv.StringAny("HOLODEX_API_KEY", "HOLODEX_API_KEY_1")
+// HolodexAPIKey는 정본 HOLODEX_API_KEY 하나만 읽는다. 퇴역한 HOLODEX_API_KEY_1이 env에 있으면 오류다.
+func HolodexAPIKey() (string, error) {
+	if err := rejectRetiredHolodexAPIKeyAliasEnv(); err != nil {
+		return "", err
+	}
+
+	return sharedenv.String("HOLODEX_API_KEY", ""), nil
 }
 
 // RequiredPositiveIntEnv: 값이 있으면 양의 정수여야 하고, 없으면 fallback을 쓴다.

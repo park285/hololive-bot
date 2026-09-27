@@ -43,7 +43,7 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 		}
 	}
 
-	resolvedPolicy := resolveFetchPolicy(policy...)
+	resolvedPolicy := c.resolveFetchPolicy(policy...)
 
 	var result string
 
@@ -60,7 +60,7 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 }
 
 func (c *Client) fetchPageAttempt(ctx context.Context, pageURL string, policy FetchPolicy, result *string) error {
-	if err := c.fetchPagePreflight(ctx, pageURL, policy); err != nil {
+	if err := c.fetchPagePreflight(ctx, pageURL); err != nil {
 		return fmt.Errorf("fetch page preflight: %w", err)
 	}
 
@@ -81,8 +81,12 @@ func (c *Client) fetchPageAttempt(ctx context.Context, pageURL string, policy Fe
 	return fmt.Errorf("fetch page once: %w", err)
 }
 
-func resolveFetchPolicy(policy ...FetchPolicy) FetchPolicy {
+// resolveFetchPolicy는 호출자 정책을 DefaultFetchPolicy 위에 덮어쓴다. 시도별 timeout을 정하지 않은
+// 정책은 Client가 주입받은 ScraperHTTPTimeout을 쓴다.
+func (c *Client) resolveFetchPolicy(policy ...FetchPolicy) FetchPolicy {
 	resolved := DefaultFetchPolicy
+
+	resolved.PerAttemptTimeout = c.config.ScraperHTTPTimeout
 
 	if len(policy) == 0 {
 		return resolved
@@ -108,8 +112,6 @@ func resolveFetchPolicy(policy ...FetchPolicy) FetchPolicy {
 	if override.MaxDelay > 0 {
 		resolved.MaxDelay = override.MaxDelay
 	}
-
-	resolved.AdmissionBlocking = override.AdmissionBlocking
 
 	return resolved
 }

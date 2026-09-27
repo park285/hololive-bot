@@ -104,7 +104,7 @@ func TestChannelHealthStoreDefaultPolicyEnforcesCooldown(t *testing.T) {
 func TestClientDefaultChannelHealthPolicyEnforcesCooldown(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC)
-	client := NewClient(WithStateStore(newChannelHealthTestStore()))
+	client := NewClient(testYouTubeConfig(), WithStateStore(newChannelHealthTestStore()))
 
 	delay := client.channelHealth.RecordFailure(ctx, "UC_TEST", FailureDetail{Reason: FailureReasonParserDrift, Source: FailureSourceHTML}, now)
 	wait, skip := client.channelHealth.ShouldSkip(ctx, "UC_TEST", FailureSourceHTML, now.Add(time.Minute))
@@ -172,7 +172,7 @@ func TestChannelHealthStoreSuccessClearsCooldown(t *testing.T) {
 
 func TestRecordParserDriftReturnsRetryDelayOnFirstFailure(t *testing.T) {
 	ctx := t.Context()
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithStateStore(newChannelHealthTestStore()),
 		WithChannelHealthPolicy(&ChannelHealthPolicy{
 			Enforce:         true,

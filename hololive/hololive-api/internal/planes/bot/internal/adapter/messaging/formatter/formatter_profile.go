@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 // CMD_PROFILE 사용자 템플릿의 기존 필드 계약은 유지한다. 소개문 필드는 항상 비어 있다.
@@ -53,17 +52,17 @@ type profileSocialLink struct {
 // FormatMemberInfo는 DB에 등록된 기본 정보만 표시한다. 미등록 날짜·링크는 생략하며 외부 조회를 수행하지 않는다.
 func (f *ResponseFormatter) FormatMemberInfo(ctx context.Context, member *domain.Member) string {
 	if member == nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	data := memberInfoTemplateData(member)
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdProfile, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func memberInfoTemplateData(member *domain.Member) profileTemplateData {
@@ -101,10 +100,6 @@ func memberInfoTemplateData(member *domain.Member) profileTemplateData {
 
 	if member.ChannelID != "" {
 		data.SocialLinks = append(data.SocialLinks, profileSocialLink{Label: "YouTube", URL: "https://www.youtube.com/channel/" + url.PathEscape(member.ChannelID)})
-	}
-
-	if member.ChzzkChannelID != "" {
-		data.SocialLinks = append(data.SocialLinks, profileSocialLink{Label: "치지직", URL: member.GetChzzkLiveURL()})
 	}
 
 	return data

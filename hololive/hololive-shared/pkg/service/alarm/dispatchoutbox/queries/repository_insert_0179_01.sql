@@ -8,8 +8,7 @@ WITH input AS (
 		delivery_context JSONB,
 		dispatch_group_key TEXT,
 		send_unit_key TEXT,
-		client_request_id TEXT,
-		status TEXT
+		client_request_id TEXT
 	)
 ), unit_input AS (
 	SELECT DISTINCT send_unit_key, dispatch_group_key, room_id, client_request_id

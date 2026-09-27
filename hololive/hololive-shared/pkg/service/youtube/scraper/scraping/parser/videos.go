@@ -111,7 +111,7 @@ func isVideosTabTitle(title string) bool {
 	return ok
 }
 
-func FindVideosTabContent(tabs *gjson.Result) (result1 gjson.Result, result2 []string) {
+func FindVideosTabContent(tabs *gjson.Result) (gjson.Result, []string) {
 	var (
 		videosContent  gjson.Result
 		foundTabTitles []string
@@ -398,7 +398,7 @@ func firstOtherText(texts []string, excludeIdx int) string {
 	return ""
 }
 
-func FallbackPickMetadata(texts []string) (result1 int64, result2 string) {
+func FallbackPickMetadata(texts []string) (int64, string) {
 	var viewText, publishedText string
 
 	if len(texts) > 0 {

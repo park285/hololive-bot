@@ -45,7 +45,7 @@ func TestAliasReadDoesNotBlockSnapshotInvalidation(t *testing.T) {
 		entered: make(chan struct{}), release: make(chan struct{}),
 		member: domain.Member{ID: 1, Name: "Alias"},
 	}
-	cache := &Cache{cache: remote}
+	cache := withTestEpochAuthority(&Cache{cache: remote})
 	cache.snapshotGeneration.Store(1)
 	cache.allMembersSnapshot.Store(&allMembersState{
 		members: []*domain.Member{&remote.member}, generation: 1, hasSuccessful: true,

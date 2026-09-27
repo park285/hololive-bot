@@ -36,9 +36,23 @@ func TestFormatHelp_SeeMoreFoldToggle(t *testing.T) {
 	})
 
 	folded := NewResponseFormatter("!", renderer, WithSeeMoreFold(true)).FormatHelp(t.Context())
-	assert.True(t, strings.HasPrefix(folded, "도움말 헤더\n"))
+	assert.True(t, strings.HasPrefix(folded, "도움말 헤더\u200b"), "padding must follow the head line")
 	assert.Contains(t, folded, "\u200b")
 
 	plain := NewResponseFormatter("!", renderer).FormatHelp(t.Context())
+	assert.NotContains(t, plain, "\u200b")
+}
+
+func TestFormatMemberInfo_SeeMoreFoldKeepsProfileHead(t *testing.T) {
+	longBody := "👤 {{index .Names 0}}\n별칭: 미코치\n\n" + strings.Repeat("프로필 상세 행입니다\n", 40)
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdProfile: longBody,
+	})
+	member := &domain.Member{NameKo: "사쿠라 미코"}
+
+	folded := NewResponseFormatter("!", renderer, WithSeeMoreFold(true)).FormatMemberInfo(t.Context(), member)
+	assert.True(t, strings.HasPrefix(folded, "👤 사쿠라 미코\n별칭: 미코치\u200b"), "profile head paragraph must stay above the fold")
+
+	plain := NewResponseFormatter("!", renderer).FormatMemberInfo(t.Context(), member)
 	assert.NotContains(t, plain, "\u200b")
 }

@@ -88,9 +88,14 @@ func TestERR006WrapWithRetryNormalizePreserveErrorChain(t *testing.T) {
 func TestERR007RejectsImpossibleCodeClassRetryDiagnosticTuple(t *testing.T) {
 	t.Parallel()
 
+	// 알려진 code라도 계약 밖 class는 기본 class로 고치지 않고 Internal로 닫으며 원래 tuple을 원인에 남긴다.
 	err := New(Failed, ClassTimeout, "impossible")
-	if CodeOf(err) != Failed || ClassOf(err) != ClassTransient {
-		t.Fatalf("known code with impossible class = %s/%s", CodeOf(err), ClassOf(err))
+	if CodeOf(err) != Internal || ClassOf(err) != ClassInternal {
+		t.Fatalf("known code with impossible class = %s/%s, want fail-closed internal", CodeOf(err), ClassOf(err))
+	}
+
+	if !strings.Contains(err.Error(), "invalid collection failure tuple collection_failed/TIMEOUT") {
+		t.Fatalf("impossible tuple error = %q, want original tuple preserved", err.Error())
 	}
 
 	unknown := New(ErrorCode("not_a_real_code"), ClassTransient, "unknown")
@@ -214,8 +219,8 @@ func TestERR015NewWriterRejectsLegacyHelperClassNames(t *testing.T) {
 	t.Parallel()
 
 	err := New(Failed, FailureClass("InnertubeError"), "innertube down")
-	if CodeOf(err) != Failed || ClassOf(err) != ClassTransient {
-		t.Fatalf("legacy class normalization = %s/%s", CodeOf(err), ClassOf(err))
+	if CodeOf(err) != Internal || ClassOf(err) != ClassInternal {
+		t.Fatalf("legacy helper class = %s/%s, want fail-closed internal", CodeOf(err), ClassOf(err))
 	}
 
 	if _, diagErr := contract.NewFailureDiagnostic(Failed, FailureClass("InnertubeError"), "innertube down"); diagErr == nil {
@@ -223,24 +228,21 @@ func TestERR015NewWriterRejectsLegacyHelperClassNames(t *testing.T) {
 	}
 }
 
-func TestERR015bKnownCodeLegacyClassKeepsClosedCode(t *testing.T) {
+func TestERR015bKnownCodeLegacyClassFailsClosed(t *testing.T) {
 	t.Parallel()
 
+	// 구 helper class 이름을 code 기본 class로 수리하던 경로는 지웠다. 알려진 code라도 durable 진단은 Internal이다.
 	parser := New(ParserDrift, FailureClass("RpcResponseError"), "parser drift")
-	if CodeOf(parser) != ParserDrift || ClassOf(parser) != ClassDataContract {
-		t.Fatalf("parser_drift+RpcResponseError = %s/%s", CodeOf(parser), ClassOf(parser))
+	if CodeOf(parser) != Internal || ClassOf(parser) != ClassInternal {
+		t.Fatalf("parser_drift+RpcResponseError = %s/%s, want fail-closed internal", CodeOf(parser), ClassOf(parser))
 	}
 
-	if DiagnosticOf(parser).Code() != ParserDrift || DiagnosticOf(parser).Class() != ClassDataContract {
+	if DiagnosticOf(parser).Code() != Internal || DiagnosticOf(parser).Class() != ClassInternal {
 		t.Fatalf("DiagnosticOf parser = %s/%s", DiagnosticOf(parser).Code(), DiagnosticOf(parser).Class())
 	}
 
 	failed := New(Failed, FailureClass("InnertubeError"), "innertube down")
-	if CodeOf(failed) != Failed || ClassOf(failed) != ClassTransient {
-		t.Fatalf("collection_failed+InnertubeError = %s/%s", CodeOf(failed), ClassOf(failed))
-	}
-
-	if DiagnosticOf(failed).Code() != Failed || DiagnosticOf(failed).Class() != ClassTransient {
+	if DiagnosticOf(failed).Code() != Internal || DiagnosticOf(failed).Class() != ClassInternal {
 		t.Fatalf("DiagnosticOf failed = %s/%s", DiagnosticOf(failed).Code(), DiagnosticOf(failed).Class())
 	}
 

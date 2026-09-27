@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/schedule"
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
@@ -20,27 +17,11 @@ func lockScheduleSubject(ctx context.Context, tx dbx.Tx, groupKey string) error 
 	return nil
 }
 
-func loadScheduleState(ctx context.Context, tx dbx.Tx, groupKey string, items []schedule.Item) (schedule.State, error) {
-	state := schedule.State{Items: map[string]schedule.Item{}, Sessions: map[string]schedule.Session{}}
-
-	rows, err := tx.Query(ctx, mustSQL("repository_schedule_items_0058_58.sql"), groupKey)
-	if err != nil {
-		return schedule.State{}, fmt.Errorf("load schedule items: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		item, err := scanScheduleItem(rows)
-		if err != nil {
-			return schedule.State{}, fmt.Errorf("scan schedule item: %w", err)
-		}
-
-		state.Items[schedule.ItemIdentity(item.Provider, &item)] = item
-	}
-
-	if err := rows.Err(); err != nil {
-		return schedule.State{}, fmt.Errorf("load schedule items: %w", err)
-	}
+// loadScheduleState는 reducer가 읽는 live session만 적재한다. 누적 schedule item은 reducer가 읽지 않고,
+// youtube_schedule_items의 유일한 writer인 schedule consumer는 lockScheduleSubject advisory lock으로
+// 이미 직렬화되므로 item 행을 읽거나 잠그지 않는다.
+func loadScheduleState(ctx context.Context, tx dbx.Tx, items []schedule.Item) (schedule.State, error) {
+	state := schedule.State{Sessions: map[string]schedule.Session{}}
 
 	if err := loadScheduleSessions(ctx, tx, &state, items); err != nil {
 		return schedule.State{}, fmt.Errorf("load schedule sessions: %w", err)
@@ -85,25 +66,6 @@ func scheduleVideoIDs(items []schedule.Item) []string {
 	}
 
 	return videoIDs
-}
-
-func scanScheduleItem(rows pgx.Rows) (schedule.Item, error) {
-	var (
-		item     schedule.Item
-		provider string
-	)
-
-	if err := rows.Scan(
-		&item.GroupKey, &provider, &item.ExternalID, &item.VideoID, &item.ChannelID,
-		&item.Title, &item.ScheduledAt, &item.EndedAt, &item.IsLive, &item.CollaboTalentNames,
-	); err != nil {
-		return schedule.Item{}, fmt.Errorf("scan schedule item: %w", err)
-	}
-
-	item.Provider = contract.Provider(provider)
-	item.CollaboTalentNames = persistedCollaboTalentNames(item.CollaboTalentNames)
-
-	return item, nil
 }
 
 func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation *Observation, decision *schedule.Decision) error {

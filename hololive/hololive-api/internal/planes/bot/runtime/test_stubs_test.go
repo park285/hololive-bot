@@ -49,7 +49,7 @@ func (s *stubMemberDataProvider) FindMemberByChannelID(string) *domain.Member { 
 func (s *stubMemberDataProvider) FindMemberByName(string) *domain.Member      { return nil }
 func (s *stubMemberDataProvider) FindMemberByAlias(string) *domain.Member     { return nil }
 func (s *stubMemberDataProvider) GetChannelIDs() []string                     { return nil }
-func (s *stubMemberDataProvider) GetAllMembers() []*domain.Member             { return nil }
+func (s *stubMemberDataProvider) LoadAllMembers() ([]*domain.Member, error)   { return nil, nil }
 func (s *stubMemberDataProvider) WithContext(context.Context) domain.MemberDataProvider {
 	return s
 }

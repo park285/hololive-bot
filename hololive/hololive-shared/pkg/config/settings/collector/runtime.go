@@ -3,7 +3,6 @@ package collector
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -26,7 +25,6 @@ type RuntimeConfig struct {
 	RuntimeOwnership RuntimeOwnershipConfig
 	WorkerProfile    *settings.YouTubeCollectorWorkerProfile
 	Collector        Config
-	Proxy            ProxyConfig
 	Holodex          HolodexConfig
 	OfficialSchedule OfficialScheduleConfig
 }
@@ -35,11 +33,6 @@ type RuntimeOwnershipConfig struct {
 	RuntimeAllowed         bool
 	PhotoSyncEnabled       bool
 	NotificationEgressRole string
-}
-
-type ProxyConfig struct {
-	Enabled bool
-	URL     string
 }
 
 type HolodexConfig struct {
@@ -75,6 +68,10 @@ func LoadRuntime() (*RuntimeConfig, error) {
 }
 
 func buildRuntimeConfig() (*RuntimeConfig, error) {
+	if err := rejectRetiredCollectorEnv(); err != nil {
+		return nil, fmt.Errorf("reject retired collector env: %w", err)
+	}
+
 	workerProfile, err := LoadWorkerProfile()
 	if err != nil {
 		return nil, fmt.Errorf("load youtube collector worker profile: %w", err)
@@ -95,24 +92,30 @@ func buildRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load collector runtime ownership config: %w", err)
 	}
 
-	proxy, err := loadProxyConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load collector proxy config: %w", err)
+	// 아래 공통 구획 다섯 개는 모두 읽은 뒤 오류를 합쳐 잘못된 env를 한 번의 기동 실패로 보인다.
+	// 그 앞의 worker profile·collector·tracing·ownership 로더는 첫 오류에서 반환한다.
+	server, serverErr := settings.LoadServerConfigWithAPIKey(sharedenv.String("METRICS_API_KEY", ""))
+	logging, loggingErr := settings.LoadLoggingConfig()
+	postgres, postgresErr := settings.LoadPostgresConfig()
+	holodex, holodexErr := loadHolodexConfig()
+	officialSchedule, officialScheduleErr := loadOfficialScheduleConfig()
+
+	if err := errors.Join(serverErr, loggingErr, postgresErr, holodexErr, officialScheduleErr); err != nil {
+		return nil, fmt.Errorf("load youtube collector env: %w", err)
 	}
 
 	config := &RuntimeConfig{
 		Environment:      load.AppEnvironment(),
 		Version:          sharedenv.String("APP_VERSION", "1.1.0-go"),
-		Server:           settings.LoadServerConfigWithAPIKey(sharedenv.String("METRICS_API_KEY", "")),
-		Logging:          settings.LoadLoggingConfig(),
+		Server:           server,
+		Logging:          logging,
 		Tracing:          tracingConfig,
-		Postgres:         settings.LoadPostgresConfig(),
+		Postgres:         postgres,
 		RuntimeOwnership: ownership,
 		WorkerProfile:    workerProfile,
 		Collector:        collector,
-		Proxy:            proxy,
-		Holodex:          loadHolodexConfig(),
-		OfficialSchedule: loadOfficialScheduleConfig(),
+		Holodex:          holodex,
+		OfficialSchedule: officialSchedule,
 	}
 	applyWorkerProfile(config)
 
@@ -137,39 +140,38 @@ func loadRuntimeOwnershipConfig() (RuntimeOwnershipConfig, error) {
 	}, nil
 }
 
-func loadProxyConfig() (ProxyConfig, error) {
-	enabled, err := sharedenv.BoolE("SCRAPER_PROXY_ENABLED", false)
+func loadHolodexConfig() (HolodexConfig, error) {
+	apiKey, err := load.HolodexAPIKey()
 	if err != nil {
-		return ProxyConfig{}, fmt.Errorf("read bool env: %w", err)
+		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
 	}
 
-	return ProxyConfig{
-		Enabled: enabled,
-		URL:     strings.TrimSpace(sharedenv.String("SCRAPER_PROXY_URL", "")),
+	defaults := settings.DefaultHolodexOperationalConfig()
+
+	timeout, err := load.StrictDurationUnitEnv("HOLODEX_TIMEOUT_SECONDS", defaults.Timeout, time.Second)
+	if err != nil {
+		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
+	}
+
+	return HolodexConfig{
+		BaseURL:   sharedenv.String("HOLODEX_BASE_URL", defaults.BaseURL),
+		APIKey:    apiKey,
+		Transport: ProviderTransportConfig{Timeout: timeout},
 	}, nil
 }
 
-func loadHolodexConfig() HolodexConfig {
-	defaults := settings.DefaultHolodexOperationalConfig()
-
-	return HolodexConfig{
-		BaseURL: sharedenv.String("HOLODEX_BASE_URL", defaults.BaseURL),
-		APIKey:  load.HolodexAPIKey(),
-		Transport: ProviderTransportConfig{
-			Timeout: time.Duration(sharedenv.Int("HOLODEX_TIMEOUT_SECONDS", int(defaults.Timeout/time.Second))) * time.Second,
-		},
-	}
-}
-
-func loadOfficialScheduleConfig() OfficialScheduleConfig {
+func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 	defaults := settings.DefaultOfficialScheduleConfig()
 
-	return OfficialScheduleConfig{
-		BaseURL: sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", defaults.BaseURL),
-		Transport: ProviderTransportConfig{
-			Timeout: time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(defaults.Timeout/time.Second))) * time.Second,
-		},
+	timeout, err := load.StrictDurationUnitEnv("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", defaults.Timeout, time.Second)
+	if err != nil {
+		return OfficialScheduleConfig{}, fmt.Errorf("load official schedule config: %w", err)
 	}
+
+	return OfficialScheduleConfig{
+		BaseURL:   sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", defaults.BaseURL),
+		Transport: ProviderTransportConfig{Timeout: timeout},
+	}, nil
 }
 
 func (c *RuntimeConfig) Validate() error {
@@ -193,16 +195,12 @@ func (c *RuntimeConfig) Validate() error {
 		return fmt.Errorf("validate ownership: %w", err)
 	}
 
-	return errors.Join(c.validateRuntimeDependencies())
+	return c.validateRuntimeDependencies()
 }
 
 func (c *RuntimeConfig) validateRuntimeDependencies() error {
 	if err := c.validatePostgres(); err != nil {
 		return fmt.Errorf("validate postgres: %w", err)
-	}
-
-	if err := c.Proxy.Validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
 	}
 
 	if err := c.validateProviders(); err != nil {
@@ -389,80 +387,6 @@ func applyWorkerProfile(config *RuntimeConfig) {
 	config.Collector.HolodexMaxInflight = collection.HolodexMaxInflight
 	config.Collector.OfficialMaxInflight = collection.OfficialMaxInflight
 	config.Collector.YouTubeJSMaxInflight = collection.YouTubeJSMaxInflight
-}
-
-func (c ProxyConfig) Validate() error {
-	if !c.Enabled {
-		if c.URL == "" {
-			return nil
-		}
-
-		return fmt.Errorf("SCRAPER_PROXY_URL must be empty when SCRAPER_PROXY_ENABLED=false (got %s)", redactedProxyURL(c.URL))
-	}
-
-	if c.URL == "" {
-		return errors.New("SCRAPER_PROXY_URL is required when SCRAPER_PROXY_ENABLED=true")
-	}
-
-	if err := validateCollectorProxyURL(c.URL); err != nil {
-		return fmt.Errorf("validate collector proxy URL: %w", err)
-	}
-
-	return nil
-}
-
-func validateCollectorProxyURL(raw string) error {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed == nil {
-		return errors.New("SCRAPER_PROXY_URL is invalid")
-	}
-
-	if err := validateCollectorProxyEndpoint(parsed, raw); err != nil {
-		return fmt.Errorf("validate collector proxy endpoint: %w", err)
-	}
-
-	if err := validateCollectorProxyResource(parsed, raw); err != nil {
-		return fmt.Errorf("validate collector proxy resource: %w", err)
-	}
-
-	return nil
-}
-
-func validateCollectorProxyEndpoint(parsed *url.URL, raw string) error {
-	if parsed.Scheme != load.SchemeHTTP && parsed.Scheme != load.SchemeHTTPS {
-		return fmt.Errorf("SCRAPER_PROXY_URL scheme must be http or https (got %s)", redactedProxyURL(raw))
-	}
-
-	if strings.TrimSpace(parsed.Host) == "" {
-		return fmt.Errorf("SCRAPER_PROXY_URL host must be non-empty (got %s)", redactedProxyURL(raw))
-	}
-
-	return nil
-}
-
-func validateCollectorProxyResource(parsed *url.URL, raw string) error {
-	if parsed.Path != "" && parsed.Path != "/" {
-		return fmt.Errorf("SCRAPER_PROXY_URL path must be empty or / (got %s)", redactedProxyURL(raw))
-	}
-
-	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return fmt.Errorf("SCRAPER_PROXY_URL must not contain query or fragment (got %s)", redactedProxyURL(raw))
-	}
-
-	return nil
-}
-
-func redactedProxyURL(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed == nil {
-		return "<invalid-proxy-url>"
-	}
-
-	if parsed.User != nil {
-		parsed.User = url.User("redacted")
-	}
-
-	return parsed.String()
 }
 
 func validateReadablePostgresSSLRootCert(path string) error {

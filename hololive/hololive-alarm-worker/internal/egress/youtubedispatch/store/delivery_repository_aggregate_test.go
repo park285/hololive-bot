@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -209,4 +210,54 @@ func TestUpdateOutboxAggregateStatuses_UnchangedStatusIsNoOpWrite(t *testing.T) 
 		"SELECT xmin FROM youtube_notification_outbox WHERE id = $1", outboxID).Scan(&xminAfter))
 	require.Equal(t, xminBefore, xminAfter,
 		"IS DISTINCT FROM 가드: 상태가 같으면 새 row version(dead tuple)을 만들지 않아야 한다")
+}
+
+// legacyAggregateSyncCandidateSQL은 EXISTS/NOT EXISTS 전환 이전의 GROUP BY/HAVING 후보 선택을
+// 동등성 기준으로 보존합니다. 후보 집합, 오름차순, LIMIT 경계가 같아야 합니다.
+const legacyAggregateSyncCandidateSQL = `
+	SELECT d.outbox_id
+	FROM youtube_notification_delivery d
+	JOIN youtube_notification_outbox o ON o.id = d.outbox_id
+	WHERE o.status = $1
+	GROUP BY d.outbox_id
+	HAVING SUM(CASE WHEN d.status IN ($2, $3) THEN 1 ELSE 0 END) = 0
+	ORDER BY d.outbox_id ASC
+	LIMIT $4`
+
+func TestFindPendingOutboxIDsForAggregateSync_MatchesGroupedCandidateSet(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
+
+	allSent := seedAggregateOutbox(ctx, t, pool, "agg-sync-all-sent", domain.OutboxStatusPending,
+		[]domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusSent})
+	seedAggregateOutbox(ctx, t, pool, "agg-sync-pending-child", domain.OutboxStatusPending,
+		[]domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusPending})
+
+	failedAndQuarantined := seedAggregateOutbox(ctx, t, pool, "agg-sync-failed-quarantined", domain.OutboxStatusPending,
+		[]domain.OutboxStatus{domain.OutboxStatusFailed, DeliveryStatusQuarantined})
+	seedAggregateOutbox(ctx, t, pool, "agg-sync-no-child", domain.OutboxStatusPending, nil)
+	seedAggregateOutbox(ctx, t, pool, "agg-sync-sent-outbox", domain.OutboxStatusSent,
+		[]domain.OutboxStatus{domain.OutboxStatusSent})
+	seedAggregateOutbox(ctx, t, pool, "agg-sync-sending-child", domain.OutboxStatusPending,
+		[]domain.OutboxStatus{domain.OutboxStatusFailed, DeliveryStatusSending})
+
+	allFailed := seedAggregateOutbox(ctx, t, pool, "agg-sync-all-failed", domain.OutboxStatusPending,
+		[]domain.OutboxStatus{domain.OutboxStatusFailed})
+
+	want := []int64{allSent, failedAndQuarantined, allFailed}
+
+	for batchSize := 1; batchSize <= len(want)+1; batchSize++ {
+		got, err := repository.FindPendingOutboxIDsForAggregateSync(ctx, batchSize)
+		require.NoError(t, err)
+		require.Equal(t, want[:min(batchSize, len(want))], got, "batch size %d", batchSize)
+
+		rows, err := pool.Query(ctx, legacyAggregateSyncCandidateSQL,
+			domain.OutboxStatusPending, domain.OutboxStatusPending, DeliveryStatusSending, batchSize)
+		require.NoError(t, err)
+
+		legacy, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+		require.NoError(t, err)
+		require.Equal(t, legacy, got, "batch size %d must match the grouped candidate set", batchSize)
+	}
 }

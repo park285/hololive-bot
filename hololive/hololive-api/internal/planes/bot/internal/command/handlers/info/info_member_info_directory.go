@@ -33,7 +33,11 @@ import (
 )
 
 func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	message, errorMessage := c.memberDirectoryMessage(ctx)
+	message, errorMessage, err := c.memberDirectoryMessage(ctx)
+	if err != nil {
+		return fmt.Errorf("render member directory: %w", err)
+	}
+
 	if errorMessage != "" {
 		if err := c.Deps().SendError(ctx, cmdCtx.Room, errorMessage); err != nil {
 			return fmt.Errorf("send error: %w", err)
@@ -49,27 +53,33 @@ func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *d
 	return nil
 }
 
-func (c *MemberInfoCommand) memberDirectoryMessage(ctx context.Context) (string, string) {
-	provider := c.Deps().MembersData.WithContext(ctx)
-	activeMembers := c.filterActiveMembers(provider.GetAllMembers())
+// memberDirectoryMessage는 멤버 목록 응답을 만든다. 멤버 적재 실패는 "멤버 정보 없음" 응답으로 바꾸지 않고 오류로 돌려준다
+// (DEC-20260926-hololive-source-fallbacks-retirement).
+func (c *MemberInfoCommand) memberDirectoryMessage(ctx context.Context) (string, string, error) {
+	members, err := c.Deps().MembersData.WithContext(ctx).LoadAllMembers()
+	if err != nil {
+		return "", "", fmt.Errorf("load member directory: %w", err)
+	}
+
+	activeMembers := c.filterActiveMembers(members)
 
 	if len(activeMembers) == 0 {
-		return "", messaging.ErrNoMemberInfoFound
+		return "", messaging.ErrNoMemberInfoFound, nil
 	}
 
 	groupEntries := c.buildGroupEntries(activeMembers)
 	if len(groupEntries) == 0 {
-		return "", messaging.ErrNoMemberInfoFound
+		return "", messaging.ErrNoMemberInfoFound, nil
 	}
 
 	ordered := c.sortGroupsByPreference(groupEntries)
 	message := c.Deps().Formatter.MemberDirectory(ctx, ordered, len(activeMembers))
 
 	if stringutil.TrimSpace(message) == "" {
-		return "", messaging.ErrCannotDisplayMemberInfo
+		return "", messaging.ErrCannotDisplayMemberInfo, nil
 	}
 
-	return message, ""
+	return message, "", nil
 }
 
 func (c *MemberInfoCommand) filterActiveMembers(members []*domain.Member) []*domain.Member {

@@ -35,11 +35,11 @@ func (r *Repository) LoadTargetSnapshot(
 	case sourceobservation.JobMembershipExactSubject:
 		out, err := r.loadExactSnapshotResult(ctx, proof.ProjectionGeneration, spec.SubjectKey, requested, kindValues, maxRosterRows)
 
-		return out, errors.Join(err)
+		return out, err
 	case sourceobservation.JobMembershipCurrentProjection:
 		out, err := r.loadProjectionSnapshotResult(ctx, proof.ProjectionGeneration, requested, kindValues, maxRosterRows)
 
-		return out, errors.Join(err)
+		return out, err
 	default:
 		return TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("target snapshot membership is invalid"))
 	}

@@ -1,5 +1,9 @@
 # Admin Dashboard Docs
 
+> Historical document. Do not use as the current source of truth. 퇴역한 admin-dashboard BFF의 설계·bigbang 전환 기록이며,
+> 아래 `backend/`·`frontend/` 경로는 이 저장소에 없다. 현재 관리자 웹은 Iris Admin이 소유하고 운영 절차는
+> `docs/current/runbooks/admin-dashboard.md`를 따른다(stack-audit 2026-09-26 T19, `DEC-20260926-hololive-retired-rollback-tooling`).
+
 관리자 UI와 Go BFF는 같은 contract generation으로 빌드하고 함께 전환합니다. 현재 작업과 출시 여부는 `DEC-20260909-hololive-admin-bigbang-replacement` 및 연결된 PLN이 소유합니다.
 
 ## 현재 구조

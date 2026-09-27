@@ -20,7 +20,6 @@ esac
 . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
 . "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
-RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
 REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 COLLECTOR_WRAPPER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-collector-wrapper.sh"
 READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
@@ -77,7 +76,6 @@ write_host_env() {
     printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"
     printf 'HOLOLIVE_H3_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_H3_KEY_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.key\n'
-    printf 'HOLOLIVE_H3_SERVER_NAME=127.0.0.1\n'
     printf 'HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1\n'
     printf 'HOLOLIVE_METRICS_ADDR=%s:30096\n' "$AP_SSH_HOST"
@@ -159,7 +157,6 @@ REMOTE
 
 {
   cat "$NODE_VERSION_LIB"
-  cat "$RETIRED_PRODUCER_LIB"
   cat "$READINESS_LIB"
   cat "$REMOTE_APPLY_LIB"
 } | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB"

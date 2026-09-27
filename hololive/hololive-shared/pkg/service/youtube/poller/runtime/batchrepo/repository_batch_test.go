@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -137,9 +136,6 @@ func TestPgxBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t *
 	repository := NewBatchRepository(db)
 	ctx := t.Context()
 
-	videoSuccessBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success"))
-	videoConflictBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "conflict"))
-	shortSuccessBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewShort), "success"))
 	notifications := []*domain.YouTubeNotificationOutbox{
 		{
 			Kind:      domain.OutboxKindNewVideo,
@@ -181,9 +177,17 @@ func TestPgxBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t *
 
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
 	require.EqualValues(t, 2, outboxCount)
-	require.InDelta(t, videoSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success")), 0)
-	require.InDelta(t, videoConflictBefore, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "conflict")), 0)
-	require.InDelta(t, shortSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewShort), "success")), 0)
+
+	var outbox []domain.YouTubeNotificationOutbox
+
+	require.NoError(t, db.Find(&outbox).Error)
+
+	kinds := make([]domain.OutboxKind, 0, len(outbox))
+	for _, row := range outbox {
+		kinds = append(kinds, row.Kind)
+	}
+
+	require.ElementsMatch(t, []domain.OutboxKind{domain.OutboxKindNewVideo, domain.OutboxKindNewShort}, kinds)
 }
 
 func TestPgxBatchRepositoryPersistVideosConcurrentOutboxInsertIsIdempotent(t *testing.T) {
@@ -516,6 +520,81 @@ func TestPgxBatchRepositoryPersistCommunityPostsPreservesExistingPublishedAt(t *
 	require.EqualValues(t, 3, post.CommentCount)
 }
 
+type communityPostRowVersion struct {
+	ctid        string
+	lastSeenAt  time.Time
+	publishedAt *time.Time
+	likeCount   int64
+}
+
+const reobservedCommunityPostID = "post-reobserved"
+
+func readReobservedCommunityPostRowVersion(t *testing.T, db *batchTestDB) communityPostRowVersion {
+	t.Helper()
+
+	var version communityPostRowVersion
+
+	require.NoError(t, db.Pool.QueryRow(t.Context(), `
+		SELECT ctid::text, last_seen_at, published_at, like_count
+		FROM youtube_community_posts
+		WHERE post_id = $1
+	`, reobservedCommunityPostID).Scan(&version.ctid, &version.lastSeenAt, &version.publishedAt, &version.likeCount))
+
+	return version
+}
+
+// 불변 재관측은 기존 행 버전을 그대로 두고, 카운터 변화나 published_at 보강이 있을 때만 새 행 버전을 쓴다.
+func TestPgxBatchRepositoryPersistCommunityPostsSkipsUnchangedReobservation(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	repository := NewBatchRepository(db)
+	ctx := t.Context()
+	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
+	observe := func(publishedAt *time.Time, likeCount int64) {
+		t.Helper()
+
+		require.NoError(t, persistCommunityPosts(ctx, repository, []*domain.YouTubeCommunityPost{{
+			PostID:        reobservedCommunityPostID,
+			ChannelID:     testChannelID,
+			AuthorName:    testAuthorName,
+			ContentText:   testContentText,
+			PublishedText: testPublishedText,
+			PublishedAt:   publishedAt,
+			LikeCount:     likeCount,
+			CommentCount:  2,
+		}}, nil, &domain.YouTubeContentWatermark{
+			ChannelID:     testChannelID,
+			WatermarkType: domain.WatermarkTypeCommunityPost,
+			Initialized:   true,
+			LastContentID: reobservedCommunityPostID,
+		}))
+	}
+
+	observe(nil, 10)
+
+	first := readReobservedCommunityPostRowVersion(t, db)
+
+	observe(nil, 10)
+	require.Equal(t, first, readReobservedCommunityPostRowVersion(t, db), "unchanged reobservation must not write a new row version")
+
+	observe(&publishedAt, 10)
+
+	enriched := readReobservedCommunityPostRowVersion(t, db)
+	require.NotEqual(t, first.ctid, enriched.ctid)
+	require.NotNil(t, enriched.publishedAt)
+	require.Equal(t, publishedAt, enriched.publishedAt.UTC())
+
+	observe(&publishedAt, 11)
+
+	counted := readReobservedCommunityPostRowVersion(t, db)
+	require.NotEqual(t, enriched.ctid, counted.ctid)
+	require.EqualValues(t, 11, counted.likeCount)
+	require.True(t, counted.lastSeenAt.After(first.lastSeenAt))
+}
+
 func TestPgxBatchRepositoryPersistCommunityPostsUpsertsAlarmState(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
@@ -656,25 +735,26 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 	return duplicatePollClaimCase{
 		name:      "short",
 		kind:      domain.OutboxKindNewShort,
-		postID:    "short:video-duplicate",
-		contentID: testDuplicateVideoID,
+		postID:    testDuplicateShortContentID,
+		contentID: testDuplicateShortContentID,
 		seed: func(t *testing.T, db *batchTestDB, publishedAt, detectedAt, authorizedAt time.Time) {
 			t.Helper()
 
+			// 운영의 NEW_SHORT 행은 모두 canonical content_id다(T18 2026-09-26 raw 형식 0건).
 			video := duplicatePollShortVideo(publishedAt)
 			require.NoError(t, db.Create(&domain.YouTubeNotificationOutbox{
 				Kind:          domain.OutboxKindNewShort,
 				ChannelID:     testChannelID,
-				ContentID:     testDuplicateVideoID,
-				Payload:       buildShortNotificationPayload(video, testDuplicateVideoID),
+				ContentID:     testDuplicateShortContentID,
+				Payload:       buildShortNotificationPayload(video, testDuplicateShortContentID),
 				Status:        domain.OutboxStatusPending,
 				NextAttemptAt: authorizedAt,
 				CreatedAt:     authorizedAt,
 			}).Error)
 			require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
 				Kind:              domain.OutboxKindNewShort,
-				PostID:            "short:video-duplicate",
-				ContentID:         testDuplicateVideoID,
+				PostID:            testDuplicateShortContentID,
+				ContentID:         testDuplicateShortContentID,
 				ChannelID:         testChannelID,
 				ActualPublishedAt: &publishedAt,
 				DetectedAt:        detectedAt,
@@ -690,12 +770,12 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 			return repository.PersistVideos(ctx, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
 				Kind:      domain.OutboxKindNewShort,
 				ChannelID: testChannelID,
-				ContentID: "short:video-duplicate",
-				Payload:   buildShortNotificationPayload(video, "short:video-duplicate"),
+				ContentID: testDuplicateShortContentID,
+				Payload:   buildShortNotificationPayload(video, testDuplicateShortContentID),
 				Status:    domain.OutboxStatusPending,
 			}}, []*domain.YouTubeContentAlarmTracking{{
 				Kind:              domain.OutboxKindNewShort,
-				ContentID:         "short:video-duplicate",
+				ContentID:         testDuplicateShortContentID,
 				ChannelID:         testChannelID,
 				ActualPublishedAt: &publishedAt,
 				DetectedAt:        detectedAt.Add(time.Minute),

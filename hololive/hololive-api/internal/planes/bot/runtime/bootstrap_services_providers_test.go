@@ -21,10 +21,8 @@
 package botruntime
 
 import (
-	"context"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -33,8 +31,8 @@ import (
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	dbtest "github.com/kapu/hololive-dbtest"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
@@ -46,15 +44,10 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 	dbClient := &dbmocks.Client{
 		GetPoolFunc: func() *pgxpool.Pool { return pool },
 	}
-	cache := &cachemocks.Client{
-		SetFunc: func(context.Context, string, any, time.Duration) error { return nil },
-		DelFunc: func(context.Context, string) error { return nil },
-		SAddFunc: func(context.Context, string, []string) (int64, error) {
-			return 1, nil
-		},
-	}
+	// ACL rooms 동기화는 RENAME으로 원자 교체하므로 raw valkey client가 있는 miniredis cache를 쓴다.
+	cache := sharedtestutil.NewTestCacheService(t.Context(), t)
 
-	service, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cache, logger)
+	service, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"1001", "1002"}, dbClient, cache, logger)
 	require.NoError(t, err)
 	require.NotNil(t, service)
 	assert.True(t, service.IsReady())

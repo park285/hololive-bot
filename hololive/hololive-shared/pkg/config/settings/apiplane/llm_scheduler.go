@@ -48,42 +48,51 @@ type LLMSchedulerConfig struct {
 	Version     string
 }
 
-func LoadLLMScheduler() (*LLMSchedulerConfig, error) {
-	out, err := loadLLMSchedulerValidated((*LLMSchedulerConfig).validate)
-	if err != nil {
-		return nil, fmt.Errorf("load LLM scheduler validated: %w", err)
-	}
-
-	return out, nil
-}
-
 // LoadLLMSchedulerRuntime: llm-scheduler는 compose 보안 계약상 nonEgress라
 // Iris egress 토큰을 받을 수 없으므로 Iris 입력 필수 검증을 면제합니다.
 func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
-	out, err := loadLLMSchedulerValidated((*LLMSchedulerConfig).validateRuntime)
-	if err != nil {
-		return nil, fmt.Errorf("load LLM scheduler validated: %w", err)
-	}
-
-	return out, nil
-}
-
-func loadLLMSchedulerValidated(validate func(*LLMSchedulerConfig) error) (*LLMSchedulerConfig, error) {
 	if err := load.DotEnv(); err != nil {
 		return nil, fmt.Errorf("load dot env: %w", err)
 	}
 
-	config := buildLLMSchedulerConfig()
-	if err := validate(config); err != nil {
+	if err := settings.RejectRetiredLLMEnv(); err != nil {
+		return nil, fmt.Errorf("reject retired LLM env: %w", err)
+	}
+
+	// DELIVERY_OUTBOX_V3_HANDOFF_MODE를 읽던 llm plane의 delivery module도 이 로더를 거친다.
+	if err := settings.RejectRetiredOutboxV3HandoffEnv(); err != nil {
+		return nil, fmt.Errorf("reject retired outbox v3 handoff env: %w", err)
+	}
+
+	config, err := buildLLMSchedulerConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build llm scheduler config: %w", err)
+	}
+
+	if err := config.validateRuntime(); err != nil {
 		return nil, fmt.Errorf("llm scheduler config validation failed: %w", err)
 	}
 
 	return config, nil
 }
 
-func buildLLMSchedulerConfig() *LLMSchedulerConfig {
+// buildLLMSchedulerConfig는 모든 구획을 읽은 뒤 오류를 합쳐 돌려준다. 오류가 하나라도 있으면 만든 설정은 버린다.
+func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
 	webhookToken, botToken, _, _ := settings.LoadRuntimeTokensAndCORS()
-	port := sharedenv.Int("LLM_SCHEDULER_PORT", 30003)
+
+	port, portErr := sharedenv.IntE("LLM_SCHEDULER_PORT", 30003)
+	valkey, valkeyErr := settings.LoadValkeyConfig()
+	postgres, postgresErr := settings.LoadPostgresConfig()
+	logging, loggingErr := settings.LoadLoggingConfig()
+	cliproxy, cliproxyErr := settings.LoadCliproxyConfig()
+	gemini, geminiErr := settings.LoadGeminiConfig()
+	llm, llmErr := settings.LoadLLMConfig()
+	exa, exaErr := settings.LoadExaConfig()
+	seeMoreFold, seeMoreFoldErr := settings.LoadSeeMoreFold()
+
+	if err := errors.Join(portErr, valkeyErr, postgresErr, loggingErr, cliproxyErr, geminiErr, llmErr, exaErr, seeMoreFoldErr); err != nil {
+		return nil, fmt.Errorf("load llm scheduler env: %w", err)
+	}
 
 	return &LLMSchedulerConfig{
 		Server: settings.ServerConfig{
@@ -101,49 +110,22 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 			WebhookToken: webhookToken,
 			BotToken:     botToken,
 		},
-		Valkey:   settings.LoadValkeyConfig(),
-		Postgres: settings.LoadPostgresConfig(),
-		Logging:  settings.LoadLoggingConfig(),
+		Valkey:   valkey,
+		Postgres: postgres,
+		Logging:  logging,
 		Bot: settings.BotConfig{
-			Prefix:   sharedenv.String("BOT_PREFIX", "!"),
-			SelfUser: sharedenv.String("BOT_SELF_USER", "iris"),
+			Prefix:      sharedenv.String("BOT_PREFIX", "!"),
+			SelfUser:    sharedenv.String("BOT_SELF_USER", "iris"),
+			SeeMoreFold: seeMoreFold,
 		},
 		Environment: load.AppEnvironment(),
 		LLMProvider: strings.ToLower(strings.TrimSpace(sharedenv.String("LLM_PROVIDER", settings.LLMProviderCliproxy))),
-		Cliproxy:    settings.LoadCliproxyConfig(),
-		Gemini:      settings.LoadGeminiConfig(),
-		LLM:         settings.LoadLLMConfig(),
-		Exa:         settings.LoadExaConfig(),
+		Cliproxy:    cliproxy,
+		Gemini:      gemini,
+		LLM:         llm,
+		Exa:         exa,
 		Version:     sharedenv.String("APP_VERSION", "1.0.0-llm-scheduler"),
-	}
-}
-
-func (c *LLMSchedulerConfig) validate() error {
-	if err := c.validateServerBasics(); err != nil {
-		return fmt.Errorf("validate server basics: %w", err)
-	}
-
-	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
-		return errors.New("IRIS_WEBHOOK_TOKEN is required")
-	}
-
-	if strings.TrimSpace(c.Iris.BotToken) == "" {
-		return errors.New("IRIS_BOT_TOKEN is required")
-	}
-
-	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
-		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
-	}
-
-	if err := validateLLMProvider(c.SelectedLLMProvider()); err != nil {
-		return fmt.Errorf("validate LLM provider: %w", err)
-	}
-
-	if err := load.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
-		return fmt.Errorf("validate postgres SSL mode: %w", err)
-	}
-
-	return nil
+	}, nil
 }
 
 func (c *LLMSchedulerConfig) validateRuntime() error {

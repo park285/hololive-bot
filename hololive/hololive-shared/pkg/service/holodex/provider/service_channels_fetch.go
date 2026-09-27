@@ -23,7 +23,6 @@ package holodexprovider
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -34,6 +33,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// GetChannel은 Holodex /channels/{id} 하나만 원천으로 쓴다. 실패는 그대로 돌려주고, YouTube scraper로 만든 부분
+// Channel로 보충하거나 캐시하지 않는다(DEC-20260926-hololive-source-fallbacks-retirement).
 func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Channel, error) {
 	if cached, found := h.cacheManager.GetChannel(ctx, channelID); found {
 		return cached, nil
@@ -42,23 +43,6 @@ func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Cha
 	channel, err := h.fetchChannelDirect(ctx, channelID)
 	if err == nil {
 		return channel, nil
-	}
-
-	if h.shouldUseFallback(ctx, err) {
-		h.logger.Warn("Using scraper fallback for channel",
-			slog.String("channel_id", channelID),
-			slog.Any("error", err),
-		)
-
-		channel, fallbackErr := h.getChannelFromScraper(ctx, channelID)
-		if fallbackErr == nil {
-			return channel, nil
-		}
-
-		return nil, fmt.Errorf(
-			"get channel: primary and scraper fallback failed: %w",
-			errors.Join(err, fallbackErr),
-		)
 	}
 
 	if logErr := sharedlog.LogAndWrapError(ctx, h.logger, "get channel", err, slog.String("channel_id", channelID)); logErr != nil {
@@ -85,43 +69,3 @@ func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*do
 
 	return channel, nil
 }
-
-// getChannelFromScraper: YouTube 스크래퍼를 사용하여 채널 정보를 조회합니다. (Holodex 폴백).
-func (h *Service) getChannelFromScraper(ctx context.Context, channelID string) (*domain.Channel, error) {
-	if h.scraper == nil {
-		return nil, errors.New("scraper fallback not configured")
-	}
-
-	stats, err := h.scraper.GetChannelStats(ctx, channelID)
-	if err != nil {
-		h.logger.Warn("Scraper fallback also failed for channel",
-			slog.String("channel", channelID),
-			slog.Any("error", err))
-
-		return nil, fmt.Errorf("get channel stats from scraper: %w", err)
-	}
-
-	subCount := int(stats.SubscriberCount)
-	channel := &domain.Channel{
-		ID:              channelID,
-		SubscriberCount: &subCount,
-	}
-
-	snippet, snippetErr := h.scraper.GetChannelSnippet(ctx, channelID)
-	if snippetErr == nil && snippet != nil {
-		if len(snippet.Avatar) > 0 {
-			channel.Photo = &snippet.Avatar[len(snippet.Avatar)-1].URL
-		}
-	}
-
-	h.cacheManager.SetChannel(ctx, channelID, channel)
-
-	h.logger.Info("Channel fetched via scraper fallback",
-		slog.String("channel", channelID),
-		slog.Int64("subscribers", stats.SubscriberCount))
-
-	return channel, nil
-}
-
-// 캐시를 우선 조회하고, 캐시 미스된 채널은 /channels 리스트 API로 한 번에 조회합니다.
-// 기존 N+1 개별 호출 패턴을 단일 호출로 최적화하여 rate limit 부담을 대폭 감소시킵니다.

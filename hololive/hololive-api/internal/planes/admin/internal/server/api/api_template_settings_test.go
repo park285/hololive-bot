@@ -37,13 +37,6 @@ type stubSettingsApplier struct {
 	memberNewsApplied bool
 }
 
-func (s *stubSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) sharedsettings.ScraperProxyApplyResult {
-	return sharedsettings.ScraperProxyApplyResult{
-		Requested: enabled,
-		Reason:    "test",
-	}
-}
-
 func (s *stubSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
 	return sharedsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
@@ -56,11 +49,8 @@ func (s *stubSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) sha
 	return sharedsettings.MemberNewsWeeklyRunNowResult{Applied: true, Source: "test"}
 }
 
-func (s *stubSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedsettings.ScraperProxyRuntimeStateResult {
-	return sharedsettings.ScraperProxyRuntimeStateResult{
-		Requested: requested,
-		Reason:    "test",
-	}
+func (s *stubSettingsApplier) SettingsRuntimeState() sharedsettings.SettingsRuntimeStateResult {
+	return sharedsettings.SettingsRuntimeStateResult{AlarmTargetMinutes: []int{5}}
 }
 
 const (
@@ -149,9 +139,8 @@ func settingsInvalidJSONBranches(t *testing.T) {
 
 func settingsGetAndUpdateSuccess(t *testing.T) {
 	applier := &stubSettingsApplier{}
-	settingsService := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
+	settingsService := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
 		AlarmAdvanceMinutes: 5,
-		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 
 	handler := &SettingsAPIHandler{Handler: &Handler{
@@ -170,7 +159,7 @@ func settingsGetAndUpdateSuccess(t *testing.T) {
 	}{
 		{"GetLogs", http.MethodGet, "/api/holo/settings/logs", nil, handler.GetLogs},
 		{"GetSettings", http.MethodGet, settingsPath, nil, handler.GetSettings},
-		{"UpdateSettings", http.MethodPatch, settingsPath, []byte(`{"alarmAdvanceMinutes":7,"scraperProxyEnabled":true}`), handler.UpdateSettings},
+		{"UpdateSettings", http.MethodPatch, settingsPath, []byte(`{"alarmAdvanceMinutes":7}`), handler.UpdateSettings},
 		{"UpdateLLMSettings", http.MethodPatch, settingsLLMPath, []byte(`{"memberNewsWeeklyRunNow":true}`), handler.UpdateLLMSettings},
 	}
 

@@ -137,7 +137,7 @@ func loadPersistedOutboxSentState(
 
 func buildPersistedSentStateMaps(
 	outboxRows []persistedOutboxSentStateRow,
-) (result1 map[string]time.Time, result2 map[int64]string, result3 []int64) {
+) (map[string]time.Time, map[int64]string, []int64) {
 	sentAtByIdentity := make(map[string]time.Time, len(outboxRows))
 	identityByOutboxID := make(map[int64]string, len(outboxRows))
 	outboxIDs := make([]int64, 0, len(outboxRows))

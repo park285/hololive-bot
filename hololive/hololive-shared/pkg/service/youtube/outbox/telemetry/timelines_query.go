@@ -5,63 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
-
-func (r *Repository) ListPostDeliveryTimelinesSince(ctx context.Context, since time.Time) ([]timeline.PostDeliveryTimeline, error) {
-	if r == nil || r.db == nil {
-		return nil, errors.New("list post delivery timelines since: db is nil")
-	}
-
-	if since.IsZero() {
-		return nil, errors.New("list post delivery timelines since: since is empty")
-	}
-
-	sinceUTC := since.UTC()
-
-	rows, err := r.listPostDeliveryTimelines(ctx, &sinceUTC, nil, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list post delivery timelines since: %w", err)
-	}
-
-	return rows, nil
-}
-
-func (r *Repository) ListPostDeliveryTimelinesWithinPublishedWindow(
-	ctx context.Context,
-	windowStart time.Time,
-	windowEnd time.Time,
-) ([]timeline.PostDeliveryTimeline, error) {
-	if r == nil || r.db == nil {
-		return nil, errors.New("list post delivery timelines within published window: db is nil")
-	}
-
-	if windowStart.IsZero() {
-		return nil, errors.New("list post delivery timelines within published window: window start is empty")
-	}
-
-	if windowEnd.IsZero() {
-		return nil, errors.New("list post delivery timelines within published window: window end is empty")
-	}
-
-	startUTC := windowStart.UTC()
-	endUTC := windowEnd.UTC()
-
-	if !startUTC.Before(endUTC) {
-		return nil, errors.New("list post delivery timelines within published window: window start must be before window end")
-	}
-
-	rows, err := r.listPostDeliveryTimelines(ctx, &startUTC, &endUTC, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list post delivery timelines within published window: %w", err)
-	}
-
-	return rows, nil
-}
 
 func (r *Repository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, outboxIDs []int64) ([]timeline.PostDeliveryTimeline, error) {
 	if r == nil || r.db == nil {
@@ -73,7 +21,7 @@ func (r *Repository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, o
 		return []timeline.PostDeliveryTimeline{}, nil
 	}
 
-	rows, err := r.listPostDeliveryTimelines(ctx, nil, nil, uniqueIDs, nil)
+	rows, err := r.listPostDeliveryTimelines(ctx, uniqueIDs, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by outbox ids: %w", err)
 	}
@@ -98,7 +46,7 @@ func (r *Repository) ListPostDeliveryTimelinesByTrackingIdentities(
 		return []timeline.PostDeliveryTimeline{}, nil
 	}
 
-	rows, err := r.listPostDeliveryTimelines(ctx, nil, nil, nil, normalized)
+	rows, err := r.listPostDeliveryTimelines(ctx, nil, normalized)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by tracking identities: %w", err)
 	}
@@ -108,14 +56,12 @@ func (r *Repository) ListPostDeliveryTimelinesByTrackingIdentities(
 
 func (r *Repository) listPostDeliveryTimelines(
 	ctx context.Context,
-	windowStart *time.Time,
-	windowEnd *time.Time,
 	outboxIDs []int64,
 	identities []timeline.PostTrackingIdentity,
 ) ([]timeline.PostDeliveryTimeline, error) {
 	var scanned []postDeliveryTimelineScanRow
 
-	query, args := postDeliveryTimelineQuery(windowStart, windowEnd, outboxIDs, identities)
+	query, args := postDeliveryTimelineQuery(outboxIDs, identities)
 
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
@@ -124,42 +70,14 @@ func (r *Repository) listPostDeliveryTimelines(
 	return buildPostDeliveryTimelinesFromScanRows(scanned), nil
 }
 
-func postDeliveryTimelineQuery(
-	windowStart *time.Time,
-	windowEnd *time.Time,
-	outboxIDs []int64,
-	identities []timeline.PostTrackingIdentity,
-) (string, []any) {
+func postDeliveryTimelineQuery(outboxIDs []int64, identities []timeline.PostTrackingIdentity) (string, []any) {
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	query := mustSQL("timelines_query_0107_01.sql") + postDeliveryTimelineSelect() + `
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
-	`
-	args := make([]any, 0)
-
-	if windowStart != nil {
-		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?"
-
-		args = append(args, windowStart.UTC())
-	} else {
-		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id"
-	}
-
-	query += " WHERE " + deliverysql.DeliveryInClause("track.kind", len(postKinds))
-
-	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
-
-	if windowStart != nil {
-		query += " AND COALESCE(track.actual_published_at, track.detected_at) >= ?"
-
-		args = append(args, windowStart.UTC())
-	}
-
-	if windowEnd != nil {
-		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
-
-		args = append(args, windowEnd.UTC())
-	}
+		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id
+		WHERE ` + deliverysql.DeliveryInClause("track.kind", len(postKinds))
+	args := deliverysql.AppendDeliveryOutboxKindArgs(nil, postKinds...)
 
 	if len(outboxIDs) > 0 {
 		query += " AND " + deliverysql.DeliveryInClause("o.id", len(outboxIDs))
@@ -240,7 +158,7 @@ func postDeliveryTimelineTrackGroupColumns() []string {
 	}
 }
 
-func postTrackingIdentityWhere(identities []timeline.PostTrackingIdentity) (result1 string, result2 []any) {
+func postTrackingIdentityWhere(identities []timeline.PostTrackingIdentity) (string, []any) {
 	clauses := make([]string, 0, len(identities))
 	args := make([]any, 0, len(identities)*2)
 

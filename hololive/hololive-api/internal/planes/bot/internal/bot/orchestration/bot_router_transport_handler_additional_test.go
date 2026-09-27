@@ -220,6 +220,21 @@ func (c *testIrisClient) Decrypt(_ context.Context, data string) (string, error)
 	return data, nil
 }
 
+// 시드 message_strings 문구. 코드 대체 문구가 없으므로 응답 문구는 DB 정본에서만 나온다.
+const (
+	seedUnknownCommandMessage    = "❌ 알 수 없는 명령입니다.\n!도움말에서 사용 가능한 명령을 확인할 수 있습니다."
+	seedCommandProcessingMessage = "❌ 명령 처리 중 오류가 발생했습니다."
+)
+
+func loadSeededBotMessageStrings(t *testing.T) *messagestrings.Store {
+	t.Helper()
+
+	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler)) //nolint:contextcheck,nolintlint // dbtest 전용 pool 생성자라 t.Cleanup으로 자체 lifecycle을 관리하며 prod ctx 경로와 무관하다.
+	require.NoError(t, store.Load(t.Context()))
+
+	return store
+}
+
 func newBotTestLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
@@ -237,36 +252,6 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "command registry is not initialized")
-	})
-
-	t.Run("unknown command sends fallback", func(t *testing.T) {
-		t.Parallel()
-
-		var gotRoom, gotMessage string
-
-		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(_ context.Context, room, message string) error {
-			gotRoom = room
-			gotMessage = message
-
-			return nil
-		}, nil, nil)
-
-		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
-		require.NoError(t, err)
-		assert.Equal(t, testRoomID, gotRoom)
-		assert.Equal(t, messagestrings.FallbackSentinel, gotMessage)
-	})
-
-	t.Run("unknown command fallback send failure", func(t *testing.T) {
-		t.Parallel()
-
-		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error {
-			return errors.New("send failed")
-		}, nil, nil)
-
-		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to send unknown command message")
 	})
 
 	t.Run("command execution failure", func(t *testing.T) {
@@ -295,6 +280,59 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 		assert.Equal(t, orchcmd.CommandKeyAlarm, key)
 		assert.Equal(t, "add", params["action"])
 		assert.Equal(t, "miko", params["member"])
+	})
+}
+
+// 알 수 없는 명령 응답은 message_strings(DB 정본)의 unknown_command 문구다. 코드 대체 문구가 없으므로
+// 문구를 적재하지 않은 router는 빈 메시지를 보내지 않고 실패한다.
+func TestCommandRouterUnknownCommandMessage(t *testing.T) {
+	t.Parallel()
+
+	cmdCtx := domain.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
+
+	t.Run("unknown command sends seeded message", func(t *testing.T) {
+		t.Parallel()
+
+		var gotRoom, gotMessage string
+
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(_ context.Context, room, message string) error {
+			gotRoom = room
+			gotMessage = message
+
+			return nil
+		}, loadSeededBotMessageStrings(t), nil)
+
+		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
+		require.NoError(t, err)
+		assert.Equal(t, testRoomID, gotRoom)
+		assert.Equal(t, seedUnknownCommandMessage, gotMessage)
+	})
+
+	t.Run("unknown command without loaded strings fails without sending", func(t *testing.T) {
+		t.Parallel()
+
+		sent := false
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error {
+			sent = true
+
+			return nil
+		}, nil, nil)
+
+		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
+		require.Error(t, err)
+		assert.False(t, sent, "empty unknown command message must not be sent")
+	})
+
+	t.Run("unknown command fallback send failure", func(t *testing.T) {
+		t.Parallel()
+
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error {
+			return errors.New("send failed")
+		}, loadSeededBotMessageStrings(t), nil)
+
+		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to send unknown command message")
 	})
 }
 
@@ -438,20 +476,20 @@ func TestCommandTransportSendErrorMethods(t *testing.T) {
 		require.NoError(t, transport.SendError(ctx, "room", messaging.ErrAlarmAddFailed))
 		assert.Equal(t, "room", client.lastMessageRoom)
 
-		want := store.GetContext(ctx, messagestrings.NamespaceError, "alarm_add_failed")
+		want, _ := store.Lookup(messagestrings.NamespaceError, "alarm_add_failed")
 		require.NotEmpty(t, want)
 		assert.Equal(t, want, client.lastMessage)
 	})
 
-	t.Run("send error fails closed to sentinel on unknown key", func(t *testing.T) {
+	t.Run("send error fails closed on unknown key without sending", func(t *testing.T) {
 		t.Parallel()
 
 		client := &testIrisClient{}
 		formatter := messageformatter.NewResponseFormatter("!", nil)
 		transport := bottransport.NewCommandTransport(client, formatter)
 
-		require.NoError(t, transport.SendError(ctx, "room", "totally_unknown_key"))
-		assert.Equal(t, messagestrings.FallbackSentinel, client.lastMessage)
+		require.Error(t, transport.SendError(ctx, "room", "totally_unknown_key"))
+		assert.Empty(t, client.lastMessage)
 	})
 }
 
@@ -498,12 +536,14 @@ func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 	logger := newBotTestLogger()
 	msgCh := make(chan sentMessage, 1)
 	irisClient := &testIrisClient{messageCh: msgCh}
+	messageStrings := loadSeededBotMessageStrings(t)
 	b := &Bot{
 		logger:          logger,
 		commandRegistry: command.NewRegistry(),
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
-		formatter:       messageformatter.NewResponseFormatter("!", nil),
+		formatter:       messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(messageStrings)),
+		messageStrings:  messageStrings,
 	}
 
 	commandExecutor := b.ensureCommandExecutor()
@@ -518,7 +558,7 @@ func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 	require.NotNil(t, transport)
 	assert.Same(t, transport, b.ensureTransport())
 
-	// 알 수 없는 command 경로: fallback 메시지가 전송돼야 한다
+	// 알 수 없는 command 경로: message_strings의 unknown_command 문구가 전송돼야 한다
 	sender := testSenderName
 	require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
@@ -534,7 +574,7 @@ func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 	select {
 	case msg := <-msgCh:
 		assert.Equal(t, testRoomID, msg.room)
-		assert.Equal(t, messagestrings.FallbackSentinel, msg.message)
+		assert.Equal(t, seedUnknownCommandMessage, msg.message)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive message in time")
 	}
@@ -560,7 +600,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		commandRegistry: registry,
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
-		formatter:       messageformatter.NewResponseFormatter("!", nil),
+		formatter:       messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(loadSeededBotMessageStrings(t))),
 	}
 
 	sender := testSenderName
@@ -579,7 +619,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	select {
 	case msg := <-msgCh:
 		assert.Equal(t, testRoomID, msg.room)
-		assert.Equal(t, messagestrings.FallbackSentinel, msg.message)
+		assert.Equal(t, seedCommandProcessingMessage, msg.message)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive message in time")
 	}

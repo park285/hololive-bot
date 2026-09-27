@@ -9,8 +9,9 @@ import (
 
 type Status string
 
+// shadowed(비교 전용 행)는 v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence). DB CHECK에서도
+// migration 225가 뺀다.
 const (
-	StatusShadowed    Status = "shadowed"
 	StatusPending     Status = "pending"
 	StatusLeased      Status = "leased"
 	StatusRetry       Status = "retry"
@@ -77,9 +78,9 @@ type EventRecord struct {
 	UpdatedAt            time.Time
 }
 
+// PublishBatchInput의 delivery는 항상 pending으로 저장한다.
 type PublishBatchInput struct {
 	Envelopes []domain.AlarmQueueEnvelope
-	Status    Status
 }
 
 type PublishBatchResult struct {

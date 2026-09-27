@@ -19,6 +19,8 @@ const (
 	workerLifecycleStoreImport = "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 )
 
+// 영구 계약(재도입 방지): lifecycle store는 alarm-worker 내부에만 있고 legacy shared store 디렉터리와 import는 다시 생기지
+// 않는다. 퇴역 가드가 아니므로 제거 조건이 없다(stack-audit 2026-09-26 T17 분류).
 func TestLifecycleStoreIsAlarmWorkerInternal(t *testing.T) {
 	t.Parallel()
 

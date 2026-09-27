@@ -20,6 +20,7 @@ const (
 	MaxCollectionLatency = 24 * time.Hour
 	maxErrorCodeBytes    = 128
 	maxErrorTextBytes    = 2048
+	maxClaimKinds        = 11
 )
 
 var (
@@ -55,17 +56,18 @@ func (s StaticSupportedContracts) Supports(version ContractVersion) bool {
 func InitialSupportedContracts() StaticSupportedContracts {
 	result := make(StaticSupportedContracts)
 
+	// live_snapshot은 generation 2만 지원한다. generation 1 항목은 decoder와 함께 지웠다(계획 T11 C6, stack-audit 2026-09-26).
 	for _, version := range []ContractVersion{
 		{contract.ProviderYouTubeJS, contract.KindCommunityPage, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindVideoList, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindShortsList, 1, 1},
-		{contract.ProviderYouTubeJS, contract.KindLiveSnapshot, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindLiveSnapshot, 1, contract.LiveSnapshotMetadataContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindViewerSample, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelStats, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelProfile, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelPhoto, 1, 1},
-		{contract.ProviderHolodex, contract.KindLiveSnapshot, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindChannelLiveCheck, 1, contract.LiveCheckContractGeneration},
+		{contract.ProviderYouTubeJS, contract.KindVideoLiveCheck, 1, contract.LiveCheckContractGeneration},
 		{contract.ProviderHolodex, contract.KindLiveSnapshot, 1, contract.LiveSnapshotMetadataContractGeneration},
 		{contract.ProviderHolodex, contract.KindViewerSample, 1, 1},
 		{contract.ProviderHolodex, contract.KindSchedule, 1, 1},
@@ -305,8 +307,8 @@ func (o ClaimOptions) validate() error {
 }
 
 func validateClaimKinds(kinds []contract.ObservationKind) error {
-	if len(kinds) == 0 || len(kinds) > 9 {
-		return errors.New("validate source observation claim: kind count must be between 1 and 9")
+	if len(kinds) == 0 || len(kinds) > maxClaimKinds {
+		return fmt.Errorf("validate source observation claim: kind count must be between 1 and %d", maxClaimKinds)
 	}
 
 	seen := make(map[contract.ObservationKind]struct{}, len(kinds))

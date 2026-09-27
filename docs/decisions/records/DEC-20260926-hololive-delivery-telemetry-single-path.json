@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-delivery-telemetry-single-path",
+  "title": "YouTube delivery telemetry는 lifecycle 전이 트랜잭션 안의 단일 기록으로 만들고 delivery 테이블 역산 backfill을 삭제한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자가 측정 없이 권장안대로 확정했다. outbox v3 묶음(DEC-20260926-hololive-outbox-v3-convergence)에서 분리한 항목이다. delivery telemetry는 commit 뒤 metrics recorder 계층의 직접 enqueue(운영에서 도달하는 per_room 4곳, grouped 3곳)와 delivery 테이블을 역산하는 backfill(hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/backfill.go)이 병존한다. 직접 enqueue 위치에는 넘길 트랜잭션이 없어 원자성을 그대로 확보할 수 없고, backfill은 follower SENT와 전파 전이까지 성공·실패 행으로 만들고 감사 로그를 두 번 남겨 runbook의 게시물-룸당 1건 판정을 오염시킨다. 확정: TransitionStore가 CompleteSent·ApplyStartedFailure·ApplyPreparedFailure의 전이 트랜잭션 안에서 rowTransition과 검증된 LogicalKey로 시도 telemetry를 기록하는 단일 경로로 하고, 호출자는 delivery_mode(per_room 또는 grouped)와 표시용 failure_reason만 넘긴다. AuditLogger의 prepare·enqueue·direct_fallback 경로, commit 뒤 classification 재저장, backfill과 그 profile 키(telemetry_backfill_batch)를 삭제한다. 기록 대상은 owner의 provider 성공·실패와 prepared failure 전체(message_missing, pre_send_claim 포함)이고, follower·fulfilled·전파 전이는 시도가 아니라 기록하지 않는다. outcome unknown 시도는 DEC-20260731-reply-outcome-unknown-fail-closed에 따라 공백으로 두지 않고 quarantine 트랜잭션 안에서 unknown 계열 send_result로 기록한다. failure_reason은 lifecycle Reason 코드 어휘를 쓴다. grouped 발송이 permanent로 실패해 개별 발송으로 넘어간 grouped 시도는 전이가 없어 기록되지 않는 알려진 공백이며, 이어지는 개별 발송 시도는 기록된다. 시도 식별자의 revive 충돌은 구현에서 정하고, schema migration이 필요하면 dbtest golden을 갱신하고 운영 DB 적용을 hololive-bot-ops로 한다. telemetry INSERT 실패가 CompleteSent rollback과 SENDING→QUARANTINED를 부를 수 있다는 fail-closed 비용을 계약 문서에 적는다. 순서: outbox v3 handoff와 Karing dead branch 삭제(DEC-20260926-hololive-karing-egress-disposition)와 T11의 post_id canonical 단일화를 먼저 하거나 같은 변경에 묶는다. profile 키 제거는 엄격 디코더 때문에 alarm-worker 배포와 lockstep으로 한다. T18의 'backfill 삽입 건수 = direct 누락 빈도' 전제는 틀렸다: recovered 행에는 direct가 원래 만들지 않는 행이 섞인다. 근거는 iris-stack의 2026-09-26 fade-out 재조사와 T18 결과(docs/agent-workflows/evidence/2026-09-26-stack-audit/)이고 PLN-20260926-stack-audit-refactoring T19에서 수행한다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

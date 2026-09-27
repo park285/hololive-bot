@@ -155,17 +155,18 @@ func (r *Runner) channelEnvelopes(input *collectutil.RunInput, job sourceobserva
 
 func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, job sourceobservation.JobContract, envelopes []contract.Envelope, channelID string, sessions []parsedLive) ([]contract.Envelope, error) {
 	if job.Emits(contract.KindLiveSnapshot) {
-		liveGeneration, err := input.Generation(contract.KindLiveSnapshot)
-		if err != nil {
-			return nil, fmt.Errorf("live snapshot generation: %w", err)
+		if err := input.RequireLiveSnapshotMetadataGeneration(); err != nil {
+			return nil, fmt.Errorf("require live snapshot metadata generation: %w", err)
 		}
+
+		var err error
 
 		envelopes, err = r.appendChannelKind(
 			input,
 			envelopes,
 			contract.KindLiveSnapshot,
 			channelID,
-			livePayload(channelID, sessions, liveGeneration == contract.LiveSnapshotMetadataContractGeneration),
+			livePayload(channelID, sessions),
 			true,
 		)
 		if err != nil {

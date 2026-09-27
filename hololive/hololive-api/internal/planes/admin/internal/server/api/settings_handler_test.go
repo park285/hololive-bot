@@ -5,6 +5,7 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -18,10 +19,6 @@ import (
 
 type testSettingsApplier struct{}
 
-func (testSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) sharedsettings.ScraperProxyApplyResult {
-	return sharedsettings.ScraperProxyApplyResult{Requested: enabled}
-}
-
 func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
 	return sharedsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
@@ -34,8 +31,8 @@ func (testSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) shared
 	return sharedsettings.MemberNewsWeeklyRunNowResult{Applied: true}
 }
 
-func (testSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedsettings.ScraperProxyRuntimeStateResult {
-	return sharedsettings.ScraperProxyRuntimeStateResult{Requested: requested}
+func (testSettingsApplier) SettingsRuntimeState() sharedsettings.SettingsRuntimeStateResult {
+	return sharedsettings.SettingsRuntimeStateResult{}
 }
 
 type testActivityLogger struct{}
@@ -43,15 +40,8 @@ type testActivityLogger struct{}
 func (testActivityLogger) Log(string, string, map[string]any) {}
 
 type recordingConfigPublisher struct {
-	scraperCalls []bool
-	alarmCalls   []int
-	failScraper  error
-	failAlarm    error
-}
-
-func (p *recordingConfigPublisher) PublishScraperProxy(_ context.Context, enabled bool) error {
-	p.scraperCalls = append(p.scraperCalls, enabled)
-	return p.failScraper
+	alarmCalls []int
+	failAlarm  error
 }
 
 func (p *recordingConfigPublisher) PublishAlarmAdvanceMinutes(_ context.Context, minutes int) error {
@@ -87,9 +77,8 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	settingsService := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
+	settingsService := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 		AlarmAdvanceMinutes: 5,
-		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 	publisher := &recordingConfigPublisher{}
 
@@ -101,15 +90,11 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 		SettingsApplier: testSettingsApplier{},
 	}
 
-	ctx, rec := newSettingsTestContext(t, []byte(`{"alarmAdvanceMinutes":7,"scraperProxyEnabled":true}`))
+	ctx, rec := newSettingsTestContext(t, []byte(`{"alarmAdvanceMinutes":7}`))
 	handler.UpdateSettings(ctx)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	if len(publisher.scraperCalls) != 1 || !publisher.scraperCalls[0] {
-		t.Fatalf("scraper publish calls=%v", publisher.scraperCalls)
 	}
 
 	if len(publisher.alarmCalls) != 1 || publisher.alarmCalls[0] != 7 {
@@ -127,8 +112,9 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 		t.Fatalf("runtime payload missing: %#v", payload["runtime"])
 	}
 
-	if got := runtime["config_publish_scraper_proxy"]; got != true {
-		t.Fatalf("config_publish_scraper_proxy=%v want=true", got)
+	// 퇴역한 scraper proxy 발행 결과 키는 다시 나오지 않는다(DEC-20260926-hololive-legacy-env-config-retirement).
+	if _, exists := runtime["config_publish_scraper_proxy"]; exists {
+		t.Fatalf("retired config_publish_scraper_proxy key present: %#v", runtime)
 	}
 
 	if got := runtime["config_publish_alarm_advance_minutes"]; got != true {
@@ -140,13 +126,11 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	settingsService := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
+	settingsService := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 		AlarmAdvanceMinutes: 5,
-		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 	publisher := &recordingConfigPublisher{
-		failScraper: errors.New("scraper publish failed"),
-		failAlarm:   errors.New("alarm publish failed"),
+		failAlarm: errors.New("alarm publish failed"),
 	}
 
 	handler := &SettingsHandler{
@@ -157,7 +141,7 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 		SettingsApplier: testSettingsApplier{},
 	}
 
-	ctx, rec := newSettingsTestContext(t, []byte(`{"alarmAdvanceMinutes":9,"scraperProxyEnabled":true}`))
+	ctx, rec := newSettingsTestContext(t, []byte(`{"alarmAdvanceMinutes":9}`))
 	handler.UpdateSettings(ctx)
 
 	if rec.Code != http.StatusOK {
@@ -171,10 +155,6 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 		t.Fatalf("runtime payload missing: %#v", payload["runtime"])
 	}
 
-	if got := runtime["config_publish_scraper_proxy"]; got != false {
-		t.Fatalf("config_publish_scraper_proxy=%v want=false", got)
-	}
-
 	if got := runtime["config_publish_alarm_advance_minutes"]; got != false {
 		t.Fatalf("config_publish_alarm_advance_minutes=%v want=false", got)
 	}
@@ -184,9 +164,8 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	settingsService := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
+	settingsService := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
 		AlarmAdvanceMinutes: 5,
-		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 	publisher := &recordingConfigPublisher{}
 
@@ -205,11 +184,22 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 
-	if len(publisher.alarmCalls) != 0 || len(publisher.scraperCalls) != 0 {
-		t.Fatalf("invalid settings must not publish config updates: alarm=%v scraper=%v", publisher.alarmCalls, publisher.scraperCalls)
+	if len(publisher.alarmCalls) != 0 {
+		t.Fatalf("invalid settings must not publish config updates: alarm=%v", publisher.alarmCalls)
 	}
 
 	if got := settingsService.Get().AlarmAdvanceMinutes; got != 5 {
 		t.Fatalf("AlarmAdvanceMinutes=%d want unchanged 5", got)
 	}
+}
+
+func mustNewTestSettingsService(t *testing.T, filePath string, defaults settingssvc.Settings, logger *slog.Logger) *settingssvc.Service {
+	t.Helper()
+
+	service, err := settingssvc.NewSettingsService(filePath, defaults, logger)
+	if err != nil {
+		t.Fatalf("NewSettingsService() error = %v", err)
+	}
+
+	return service
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -178,7 +179,7 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 
 func assertRecoveryInputFixtureRows(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	fixture recoveryInputFixture,
 	spec recoveryInputFixtureSpec,
 ) {
@@ -226,7 +227,7 @@ func assertRecoveryInputFixtureRows(
 
 func assertRecoveryInputFixtureTracking(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	fixture recoveryInputFixture,
 	spec recoveryInputFixtureSpec,
 ) {
@@ -274,7 +275,7 @@ func assertRecoveryInputFixtureTracking(
 
 func assertCommunityShortsPostSent(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	item domain.YouTubeNotificationOutbox,
 	deliveryID int64,
 	postID string,
@@ -313,7 +314,7 @@ func assertCommunityShortsSentAt(t *testing.T, snapshot communityShortsSentSnaps
 	assert.Equal(t, deliverySentAt, snapshot.state.AlarmSentAt.UTC())
 }
 
-func newRecoveryInputFixtureDB(t *testing.T, _ string) *deliveryTestDB {
+func newRecoveryInputFixtureDB(t *testing.T, _ string) *pgxpool.Pool {
 	t.Helper()
 
 	db := newDeliveryPool(t)
@@ -321,7 +322,7 @@ func newRecoveryInputFixtureDB(t *testing.T, _ string) *deliveryTestDB {
 	return db
 }
 
-func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, spec *recoveryInputFixtureSpec) recoveryInputFixture {
+func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *pgxpool.Pool, spec *recoveryInputFixtureSpec) recoveryInputFixture {
 	t.Helper()
 
 	sentItem, pendingItem, servedItem := seedRecoveryInputFixtureOutboxes(t, db, spec)
@@ -346,7 +347,7 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 
 func seedRecoveryInputFixtureOutboxes(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	spec *recoveryInputFixtureSpec,
 ) (sent, pending, served domain.YouTubeNotificationOutbox) {
 	t.Helper()
@@ -400,7 +401,7 @@ func seedRecoveryInputFixtureOutboxes(
 
 func seedRecoveryInputFixtureTracking(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	spec *recoveryInputFixtureSpec,
 	sentPostID, pendingPostID string,
 ) {
@@ -451,7 +452,7 @@ func seedRecoveryInputFixtureTracking(
 
 func seedRecoveryInputFixtureDeliveries(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	spec *recoveryInputFixtureSpec,
 	sentOutboxID, pendingOutboxID, servedOutboxID int64,
 ) (sent, pending, served domain.YouTubeNotificationDelivery) {

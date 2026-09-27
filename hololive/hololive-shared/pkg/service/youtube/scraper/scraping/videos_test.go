@@ -55,7 +55,7 @@ func TestParseVideosFromInitialData_Normal(t *testing.T) {
 
 	data := gjson.ParseBytes(jsonBytes)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "UC1DCedRgGHBdm81E1llLhOQ",
 		10,
 		client.parseVideoRenderer,
@@ -76,7 +76,7 @@ func TestParseVideosFromInitialData_Empty(t *testing.T) {
 
 	data := gjson.ParseBytes(jsonBytes)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -90,7 +90,7 @@ func TestParseVideosFromInitialData_NoTab(t *testing.T) {
 	jsonStr := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"홈"}}]}}}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -104,7 +104,7 @@ func TestParseVideosFromInitialData_NoTabsStructure(t *testing.T) {
 	jsonStr := `{"contents":{"someOtherRenderer":{}}}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -118,7 +118,7 @@ func TestParseVideosFromInitialData_PartialInitialData(t *testing.T) {
 	jsonStr := `{"responseContext":{"webResponseContextExtensionData":{"ytConfigData":{"visitorData":"test"}}}}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -151,7 +151,7 @@ func TestParseVideosFromInitialData_FallbackExtractVideoRenderer(t *testing.T) {
 	}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -169,7 +169,7 @@ func TestParseVideosFromInitialData_EndpointDetection(t *testing.T) {
 	]}}}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -184,7 +184,7 @@ func TestParseVideosFromInitialData_ChannelNotExist(t *testing.T) {
 	jsonStr := `{"alerts":[{"alertRenderer":{"type":"ERROR","text":{"simpleText":"This channel does not exist."}}}]}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -199,7 +199,7 @@ func TestParseVideosFromInitialData_ChannelTerminated(t *testing.T) {
 	jsonStr := `{"alerts":[{"alertRenderer":{"type":"ERROR","text":{"simpleText":"This channel has been terminated."}}}]}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -217,7 +217,7 @@ func TestParseVideosFromInitialData_ChannelNotFoundInSecondErrorAlert(t *testing
 	]}`
 	data := gjson.Parse(jsonStr)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "test-channel",
 		10,
 		client.parseVideoRenderer,
@@ -357,7 +357,7 @@ func TestParseVideosFromInitialData_LockupViewModel(t *testing.T) {
 		}
 	}`)
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	videos, err := parseVideosFromInitialData(&data, "UC_TEST", 10, client.parseVideoRenderer)
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
@@ -394,7 +394,7 @@ func TestGetWatchLiveMetadata(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := NewClient(
+			client := NewClient(testYouTubeConfig(),
 				WithRateLimiter(ratelimiter.New(0)),
 				WithHTTPClient(&http.Client{
 					Timeout: 5 * time.Second,
@@ -431,7 +431,7 @@ func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 		rssCalls        atomic.Int32
 	)
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
@@ -474,55 +474,4 @@ func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 	require.Empty(t, videos)
 	assert.Equal(t, int32(1), videosPageCalls.Load())
 	assert.Equal(t, int32(0), rssCalls.Load())
-}
-
-func TestGetRecentVideos_ReturnsErrorWhenHTMLAndRSSFail(t *testing.T) {
-	var (
-		videosPageCalls atomic.Int32
-		rssCalls        atomic.Int32
-	)
-
-	client := NewClient(
-		WithRateLimiter(ratelimiter.New(0)),
-		WithHTTPClient(&http.Client{
-			Timeout: 5 * time.Second,
-			Transport: videosRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-				var body string
-
-				switch {
-				case strings.HasSuffix(req.URL.Path, "/videos"):
-					videosPageCalls.Add(1)
-
-					body = "<html><body>missing initial data</body></html>"
-				case strings.HasSuffix(req.URL.Path, "/feeds/videos.xml"):
-					rssCalls.Add(1)
-
-					body = "<feed><entry"
-				default:
-					return &http.Response{
-						StatusCode: http.StatusNotFound,
-						Body:       io.NopCloser(strings.NewReader("not found")),
-						Header:     make(http.Header),
-						Request:    req,
-					}, nil
-				}
-
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(body)),
-					Header:     make(http.Header),
-					Request:    req,
-				}, nil
-			}),
-		}),
-	)
-
-	videos, err := client.GetRecentVideos(t.Context(), "UC_TEST", 10)
-	require.Error(t, err)
-	require.Nil(t, videos)
-	require.ErrorIs(t, err, parser.ErrParserDrift)
-	assert.Contains(t, err.Error(), "recent_videos parser drift at extract_yt_initial_data")
-	assert.Contains(t, err.Error(), "recent_videos_rss parser drift at parse_rss_feed")
-	assert.Equal(t, int32(1), videosPageCalls.Load())
-	assert.Equal(t, int32(1), rssCalls.Load())
 }

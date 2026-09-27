@@ -21,6 +21,7 @@
 package providers
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -30,27 +31,8 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
-// ProvideHolodexService - Holodex API 서비스 생성.
-func ProvideHolodexService(
-	baseURL string,
-	apiKey string,
-	cacheClient cache.Client,
-	scraperService *htmlscraper.Service,
-	logger *slog.Logger,
-) (*holodexprovider.Service, error) {
-	holodexCfg := settings.DefaultHolodexOperationalConfig()
-
-	holodexCfg.BaseURL = baseURL
-	holodexCfg.APIKey = apiKey
-
-	out, err := ProvideHolodexServiceWithConfig(&holodexCfg, cacheClient, scraperService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide holodex service with config: %w", err)
-	}
-
-	return out, nil
-}
-
+// ProvideHolodexServiceWithConfig는 runtime이 읽은 Holodex 설정(appConfig.Holodex)으로 서비스를 만든다.
+// 설정이 없으면 코드 기본값으로 대신하지 않고 오류를 돌려준다.
 func ProvideHolodexServiceWithConfig(
 	holodexCfg *settings.HolodexConfig,
 	cacheClient cache.Client,
@@ -58,9 +40,7 @@ func ProvideHolodexServiceWithConfig(
 	logger *slog.Logger,
 ) (*holodexprovider.Service, error) {
 	if holodexCfg == nil {
-		cfg := settings.DefaultHolodexOperationalConfig()
-
-		holodexCfg = &cfg
+		return nil, errors.New("holodex config is nil")
 	}
 
 	service, err := holodexprovider.NewHolodexServiceWithConfig(holodexCfg, holodexCfg.BaseURL, holodexCfg.APIKey, cacheClient, scraperService, logger)

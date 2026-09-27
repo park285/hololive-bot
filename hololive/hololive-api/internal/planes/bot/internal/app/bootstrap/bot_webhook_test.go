@@ -93,7 +93,7 @@ func TestBuildDurableBotWebhookHandlerWiresPrometheusMetrics(t *testing.T) {
 	assertDefaultWebhookCounterAtLeast(t, "hololive_bot_webhook_signature_v3_validated_total", 1)
 }
 
-func TestBuildDurableBotWebhookHandlerRequiresHMACWhenConfigured(t *testing.T) {
+func TestBuildDurableBotWebhookHandlerRequiresHMAC(t *testing.T) {
 	const token = "test-token"
 
 	t.Setenv("IRIS_WEBHOOK_TOKEN", token)
@@ -104,8 +104,6 @@ func TestBuildDurableBotWebhookHandlerRequiresHMACWhenConfigured(t *testing.T) {
 	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
 
 	appConfig := testDurableWebhookConfig()
-
-	appConfig.Webhook.RequireHMAC = true
 
 	handler, err := BuildDurableBotWebhookHandler(
 		appConfig,

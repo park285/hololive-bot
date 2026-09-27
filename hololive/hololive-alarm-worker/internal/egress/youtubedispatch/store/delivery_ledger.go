@@ -11,8 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
-const LedgerSchemaVersion = 1
-
 // LedgerStatus is the monotonic terminal status stored for a logical delivery.
 type LedgerStatus string
 

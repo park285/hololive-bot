@@ -28,14 +28,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
-func (f *ResponseFormatter) formatAlarmTypesLabel(ctx context.Context, types domain.AlarmTypes) string {
-	if len(types) == 0 || len(types) == len(domain.AllAlarmTypes) {
-		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceAlarmType, "ALL")
+func isAllAlarmTypes(types domain.AlarmTypes) bool {
+	return len(types) == 0 || len(types) == len(domain.AllAlarmTypes)
+}
+
+func (f *ResponseFormatter) formatAlarmTypesLabel(_ context.Context, types domain.AlarmTypes) string {
+	if isAllAlarmTypes(types) {
+		return f.messageStrings.Text(messagestrings.AlarmTypeAll)
 	}
 
 	names := make([]string, len(types))
 	for i, t := range types {
-		names[i] = f.messageStrings.GetContext(ctx, messagestrings.NamespaceAlarmType, t.String())
+		names[i], _ = f.messageStrings.Lookup(messagestrings.NamespaceAlarmType, t.String())
 	}
 
 	return strings.Join(names, "+")
@@ -74,7 +78,7 @@ func (f *ResponseFormatter) FormatAmbiguousMembers(ctx context.Context, candidat
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAmbiguousMember, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

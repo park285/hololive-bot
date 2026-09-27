@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260512-hololive-alarm-http-provider-ownership",
   "title": "alarm.http provider는 단계적으로 alarm-worker가 소유하고 admin-api는 compatibility provider로만 남긴다",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"

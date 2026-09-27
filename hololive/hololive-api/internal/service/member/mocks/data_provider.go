@@ -31,7 +31,7 @@ type DataProvider struct {
 	FindMemberByNameFunc      func(name string) *domain.Member
 	FindMemberByAliasFunc     func(alias string) *domain.Member
 	GetChannelIDsFunc         func() []string
-	GetAllMembersFunc         func() []*domain.Member
+	LoadAllMembersFunc        func() ([]*domain.Member, error)
 	WithContextFunc           func(ctx context.Context) domain.MemberDataProvider
 	FindMembersByNameFunc     func(name string) []*domain.Member
 	FindMembersByAliasFunc    func(alias string) []*domain.Member
@@ -71,12 +71,12 @@ func (m *DataProvider) GetChannelIDs() []string {
 	return nil
 }
 
-func (m *DataProvider) GetAllMembers() []*domain.Member {
-	if m.GetAllMembersFunc != nil {
-		return m.GetAllMembersFunc()
+func (m *DataProvider) LoadAllMembers() ([]*domain.Member, error) {
+	if m.LoadAllMembersFunc != nil {
+		return m.LoadAllMembersFunc()
 	}
 
-	return nil
+	return nil, nil
 }
 
 func (m *DataProvider) WithContext(ctx context.Context) domain.MemberDataProvider {

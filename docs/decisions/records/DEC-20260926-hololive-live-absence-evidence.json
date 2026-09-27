@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-live-absence-evidence",
+  "title": "!라이브의 방송 없음 안내는 공개 방송 /live 확인과 영상별 확인을 근거로 하고 보존 종료 증거는 채널 차단에서 분리한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자 최종 결정(D1~D6)에 따른다. !라이브는 확정 방송(공개·멤버 한정·최초공개)을 표시하고, 판정 근거가 갖춰진 빈 결과만 '현재 방송 중인 멤버가 없습니다.'로 범위 설명 없이 안내하며, 확인이 끝나지 않은 빈 결과는 '현재 방송 상태를 확인할 수 없습니다.'로 남긴다. 방송 탭·Holodex 목록의 누락과 absence slot은 채널 부재 근거로 쓰지 않는다. 채널 부재 근거는 innertube /live 주소 해석이 요청 채널의 예정 영상(대기 상태) 또는 정상 채널 페이지로 연결된 신선한 결과이며 공개 실시간 방송에만 해당한다. 이 증거는 LiveQuery만 쓰고 종료 reducer에 넣지 않는다(/live가 진행 중인 멤버 한정 LIVE를 고르지 않은 반례를 기록). 신선한 positive가 없는 추적 LIVE는 player로 identity와 종료 시각을 확인해 해당 영상의 명시적 종료(PARTIAL, absence slot 없음)로 canonical에 반영하고 표시 전용 상태를 만들지 않는다. 가용성(공개·멤버 한정·공개 불가·UNKNOWN)은 확인 시각·근거와 함께 canonical 사실로 기록하고 LOGIN_REQUIRED나 ERROR만으로 공개 불가를 확정하지 않는다. 종료 시각 없는 공개 불가 LIVE는 ENDED로 바꾸지 않으며 근거가 만료되면 후보 제외를 유지하지 않는다. 세션·head 없는 EXPLICIT_END pending과 session=ENDED(head 부재·head=LIVE 불일치 포함)는 채널 차단에서 제외하되 pending 보존과 불일치 진단은 유지하고, session=LIVE인데 head가 없으면 계속 차단한다. 활성 등록 Hololive 조회 대상, 기존 bot pool과 1초 예산, freshness min(5분, 2×poll interval+30초), 명령 경로 원천 무호출은 대체한 결정에서 이어받는다. 기각한 대안: 표시에서만 종료를 덮는 상태, 보존 pending 삭제, 세션 없는 pending의 5분 경합 시간창, 레거시 head 전량 보강, 방송 탭·Holodex coverage 표기 수정, Data API search. 부재 기반 자동 종료 개편, Holodex 증거 우선순위, CONFLICT_KEEP 점검, pending 쓰기 최적화, session=ENDED/head=LIVE 17건 복구는 이 결정의 범위가 아니다.",
+  "sources": [
+    "docs/current/plans/2026-09-26-live-absence-evidence.md#결정 범위"
+  ],
+  "evidence": [
+    "docs/current/plans/2026-09-26-live-absence-evidence.md",
+    "docs/review/live-absence-evidence-20260926.md"
+  ],
+  "implementation": [
+    "hololive/hololive-api/internal/planes/bot/internal/service/livequery/queries/snapshot.sql",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_check_consumer.go",
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/live_check.go",
+    "hololive/hololive-api/scripts/migrations/218_live_absence_evidence_contract.sql",
+    "hololive/hololive-api/scripts/migrations/220_live_query_confirmed_empty_message.sql",
+    "docs/current/runbooks/youtube-collector.md"
+  ],
+  "supersedes": [
+    "DEC-20260926-hololive-live-query-read-model"
+  ],
+  "review": {
+    "trigger": "/live가 진행 중인 공개 방송을 고르지 않는 반례가 확인되거나, 로봇 확인과 비공개를 구조적으로 구분하지 못하는 응답이 늘거나, 운영 비교 관측에서 빈 결과 안내가 확정 방송과 충돌할 때"
+  }
+}

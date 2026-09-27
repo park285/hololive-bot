@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -53,24 +56,50 @@ func TestLiveCommand_YouTubeQueryFailureIsNotEmpty(t *testing.T) {
 	}
 }
 
-func TestLiveCommand_RetiredProviderMetadataDoesNotRequireRosterLookup(t *testing.T) {
-	deps, _, message := liveCardTestDeps(t, []*domain.Member{{ChannelID: testYouTubeChannelID, Name: testMemberAqua, ChzzkChannelID: "retired-channel", TwitchUserID: "retired-login"}})
+func TestLiveCommand_LogsBlockingAndNonblockingDiagnostics(t *testing.T) {
+	for _, status := range []livequery.Status{livequery.Partial, livequery.Complete} {
+		t.Run(string(status), func(t *testing.T) {
+			deps, _, _ := liveCardTestDeps(t, []*domain.Member{{ChannelID: testYouTubeChannelID, Name: testMemberAqua}})
 
-	deps.LiveQuery = &liveQueryStub{result: livequery.Result{Status: livequery.Complete}}
-	// 전체 조회는 플랫폼 매핑을 위한 별도 roster 로더를 필요로 하지 않는다.
-	deps.MembersData = nil
+			var logs bytes.Buffer
 
-	deps.SendError = func(context.Context, string, string) error {
-		t.Fatal("unexpected query error")
+			deps.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
 
-		return nil
-	}
+			reason := livequery.Covered
 
-	if err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
-		t.Fatal(err)
-	}
+			if status == livequery.Partial {
+				reason = livequery.Inconsistent
+			}
 
-	if *message != deps.Formatter.FormatLiveStreams(t.Context(), nil) {
-		t.Fatalf("unexpected empty YouTube response: %q", *message)
+			deps.LiveQuery = &liveQueryStub{result: livequery.Result{
+				Status: status,
+				Items:  []livequery.Item{{VideoID: "video-x", ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"}},
+				Channels: []livequery.Channel{
+					{ChannelID: "ch-x", Reason: livequery.Covered, Diagnostics: livequery.Diagnostics{RetainedOrphanEnds: 1}},
+					{ChannelID: "ch-y", Reason: reason, Diagnostics: livequery.Diagnostics{RetainedOrphanEnds: 2, EndedPendingEnds: 4, EndedHeadMismatches: 1}},
+				},
+			}}
+			if err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
+				t.Fatal(err)
+			}
+
+			var record struct {
+				Status      livequery.Status         `json:"status"`
+				Reasons     map[livequery.Reason]int `json:"reasons"`
+				Diagnostics livequery.Diagnostics    `json:"nonblocking_diagnostics"`
+			}
+
+			if err := jsonv2.Unmarshal(logs.Bytes(), &record); err != nil {
+				t.Fatal(err)
+			}
+
+			if record.Status != status || record.Diagnostics != (livequery.Diagnostics{RetainedOrphanEnds: 3, EndedPendingEnds: 4, EndedHeadMismatches: 1}) {
+				t.Fatalf("diagnostic result = %+v", record)
+			}
+
+			if status == livequery.Partial && record.Reasons[livequery.Inconsistent] != 1 || status == livequery.Complete && record.Reasons[livequery.Covered] != 2 {
+				t.Fatalf("blocking reasons = %+v", record.Reasons)
+			}
+		})
 	}
 }

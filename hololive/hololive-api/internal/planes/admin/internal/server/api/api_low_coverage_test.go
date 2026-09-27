@@ -332,6 +332,14 @@ func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 	})
 
+	t.Run("add room rejects non chat ID", func(t *testing.T) {
+		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte(`{"room":"홀로라이브 알림방"}`))
+		handler.AddRoom(ctx)
+
+		assertErrorResponse(t, rec, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)")
+	})
+
 	t.Run("remove room bad json", func(t *testing.T) {
 		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/rooms", []byte("{"))

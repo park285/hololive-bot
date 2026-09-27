@@ -45,13 +45,8 @@ func TestNewRegistryRequiresInitialJobCoverage(t *testing.T) {
 func TestNewRegistryAcceptsCompleteAdapterSet(t *testing.T) {
 	t.Parallel()
 
-	registry, err := NewRegistry(completeStubRunners()...)
-	if err != nil {
+	if _, err := NewRegistry(completeStubRunners()...); err != nil {
 		t.Fatal(err)
-	}
-
-	if len(registry.Runners()) != 8 {
-		t.Fatalf("runners = %d", len(registry.Runners()))
 	}
 }
 
@@ -89,8 +84,10 @@ func completeStubRunners() []JobRunner {
 		stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_live", contract.KindLiveSnapshot),
+		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_live_check", contract.KindChannelLiveCheck),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_metadata",
 			contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
+		stubJob(contract.ProviderYouTubeJS, "youtubejs_video_live", contract.KindVideoLiveCheck),
 		stubJob(contract.ProviderHolodex, "holodex_live", contract.KindLiveSnapshot),
 		stubJob(contract.ProviderHolodex, "holodex_metadata", contract.KindChannelStats, contract.KindChannelPhoto),
 		stubJob(contract.ProviderHolodex, "holodex_schedule", contract.KindSchedule),

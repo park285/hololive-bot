@@ -77,16 +77,7 @@ REMOTE
 echo
 echo "== Recent youtube-collector signals =="
 for container in "${AP_CONTAINERS[@]}"; do
-  signals "$container" 'Cache store connected|postgres_pool_connected|job_claim|Photo sync service started|Photo sync completed|ERR|pre-send claim|ingestion_lease_lost|panic|permission denied'
+  # AP에는 youtube-collector만 돈다. alarm-worker egress 신호, photo sync·pre-send claim 신호, split-host 볼륨 진단은
+  # 중앙 전용이거나 퇴역한 경로라 지웠다(stack-audit 2026-09-26 T11 holo-ap-status-stale-probes).
+  signals "$container" 'Cache store connected|postgres_pool_connected|job_claim|ERR|panic|permission denied'
 done
-
-echo
-echo "== Recent alarm-worker egress signals =="
-signals hololive-alarm-worker 'YouTube outbox dispatcher started by alarm-worker|Outbox dispatcher started|Outbox per-room enqueue completed|Outbox per-room dispatch completed|ERR|panic|permission denied'
-
-echo
-echo "== Unused split-host volumes =="
-ap_remote_bash <<'REMOTE'
-set -euo pipefail
-docker volume ls --format "{{.Name}}" | grep "^hololive-bot_" || true
-REMOTE

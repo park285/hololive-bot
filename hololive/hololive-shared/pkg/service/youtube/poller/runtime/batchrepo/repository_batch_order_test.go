@@ -52,36 +52,6 @@ func TestBuildCommunityShortsAlarmStatesReturnsSortedRows(t *testing.T) {
 	}, actualKeys)
 }
 
-func TestCollectShortIdentityAliasesReturnsSortedSlices(t *testing.T) {
-	t.Parallel()
-
-	canonicalIDs, aliases := collectShortIdentityAliases(
-		[]*domain.YouTubeNotificationOutbox{
-			{Kind: domain.OutboxKindNewShort, ContentID: "video-b"},
-			{Kind: domain.OutboxKindNewShort, ContentID: "video-a"},
-			{Kind: domain.OutboxKindCommunityPost, ContentID: "post-c"},
-		},
-		[]*domain.YouTubeContentAlarmTracking{
-			{Kind: domain.OutboxKindCommunityPost, ContentID: "post-a"},
-			{Kind: domain.OutboxKindNewShort, ContentID: "video-a"},
-			{Kind: domain.OutboxKindCommunityPost, ContentID: "post-c"},
-		},
-	)
-
-	require.Equal(t, append([]string(nil), canonicalIDs...), sortedCopy(canonicalIDs))
-	require.Equal(t, append([]string(nil), aliases...), sortedCopy(aliases))
-	require.Equal(t, []string{
-		normalizeContentID(domain.OutboxKindNewShort, "video-a"),
-		normalizeContentID(domain.OutboxKindNewShort, "video-b"),
-	}, canonicalIDs)
-	require.Equal(t, []string{
-		normalizeContentID(domain.OutboxKindNewShort, "video-a"),
-		normalizeContentID(domain.OutboxKindNewShort, "video-b"),
-		normalizeShortVideoResourceID("video-a"),
-		normalizeShortVideoResourceID("video-b"),
-	}, aliases)
-}
-
 func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {
 	t.Parallel()
 
@@ -111,11 +81,4 @@ func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {
 	require.JSONEq(t, `{"kind":"first"}`, chunks[0][0].Payload)
 	require.Len(t, chunks[1], 1)
 	require.Equal(t, domain.OutboxKindNewShort, chunks[1][0].Kind)
-}
-
-func sortedCopy(values []string) []string {
-	cloned := append([]string(nil), values...)
-	slices.Sort(cloned)
-
-	return cloned
 }

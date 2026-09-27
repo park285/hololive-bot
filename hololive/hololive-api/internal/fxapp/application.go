@@ -77,10 +77,6 @@ func New(
 }
 
 func newApplication(ctx context.Context, params applicationParams) (*Application, error) {
-	if ctx == nil {
-		return nil, errors.New("build context must not be nil")
-	}
-
 	if params.config == nil {
 		return nil, errors.New("hololive-api config must not be nil")
 	}

@@ -67,11 +67,7 @@ type Service struct {
 	loginDummyHash []byte
 }
 
-func NewService(ctx context.Context, db *pgxpool.Pool, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
-	if ctx == nil {
-		return nil, errors.New("ctx must not be nil")
-	}
-
+func NewService(db *pgxpool.Pool, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
 	if db == nil {
 		return nil, errors.New("db must not be nil")
 	}

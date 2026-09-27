@@ -1,76 +1,44 @@
 package dispatchrun
 
 import (
-	"cmp"
-	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type alarmDispatchGroup struct {
-	roomID           string
-	minutesUntil     int
-	envelopes        []domain.AlarmQueueEnvelope
-	notifications    []domain.AlarmNotification
-	egressPath       alarmDispatchEgressPath
-	egressErr        error
-	egressRoomScoped bool
+	roomID        string
+	minutesUntil  int
+	envelopes     []domain.AlarmQueueEnvelope
+	notifications []domain.AlarmNotification
+	// envelopeErr는 발송할 수 없는 봉투(퇴역 제공자, 대상 없음, 미지원 source)의 사유다. 이런 봉투는 발송 전 실패로 라우팅한다.
+	envelopeErr error
 }
 
-type regularChatResolver interface {
-	RegularChat(ctx context.Context, roomID string) bool
-}
-
-type alarmDispatchRoomEligibilitySnapshot struct {
-	rooms         regularChatResolver
-	regularByRoom map[string]bool
-}
-
-func newAlarmDispatchRoomEligibilitySnapshot(rooms regularChatResolver) *alarmDispatchRoomEligibilitySnapshot {
-	return &alarmDispatchRoomEligibilitySnapshot{
-		rooms:         rooms,
-		regularByRoom: make(map[string]bool),
-	}
-}
-
-func (s *alarmDispatchRoomEligibilitySnapshot) RegularChat(ctx context.Context, roomID string) bool {
-	if regular, ok := s.regularByRoom[roomID]; ok {
-		return regular
-	}
-
-	regular := s.rooms != nil && s.rooms.RegularChat(ctx, roomID)
-
-	s.regularByRoom[roomID] = regular
-
-	return regular
-}
-
-func groupAlarmDispatchEnvelopesForDelivery(
-	ctx context.Context,
-	rooms regularChatResolver,
-	envelopes []domain.AlarmQueueEnvelope,
-) []alarmDispatchGroup {
+// alarm dispatch는 모든 봉투를 Text 경로(오픈채팅은 sender가 Markdown으로 보냄)로 보낸다. 방 유형에 따라 Karing template을
+// 고르던 분기와 Karing chunk 분할은 DEC-20260926-hololive-karing-egress-disposition에 따라 삭제했다.
+func groupAlarmDispatchEnvelopesForDelivery(envelopes []domain.AlarmQueueEnvelope) []alarmDispatchGroup {
 	grouped := make([]alarmDispatchGroup, 0, len(envelopes))
 	index := map[string]int{}
-	roomEligibility := newAlarmDispatchRoomEligibilitySnapshot(rooms)
 
 	for i := range envelopes {
 		envelope := &envelopes[i]
-		path, roomScoped, pathErr := alarmDispatchEnvelopeEgressPath(ctx, roomEligibility, envelope)
-		key := fmt.Sprintf("%d|%s", path, alarmDispatchRegroupKey(envelope, func(current *domain.AlarmQueueEnvelope) string {
-			return alarmDispatchDeliveryGroupKey(current, path, pathErr)
-		}))
-		groupIndex, ok := index[key]
+		envelopeErr := alarmDispatchEnvelopeError(envelope)
+		key := alarmDispatchRegroupKey(envelope, func(current *domain.AlarmQueueEnvelope) string {
+			return alarmDispatchDeliveryGroupKey(current, envelopeErr)
+		})
 
+		// 발송할 수 없는 봉투는 같은 send unit의 발송 가능한 봉투와 섞이지 않게 별도 그룹으로 둔다.
+		if envelopeErr != nil {
+			key = "invalid|" + key
+		}
+
+		groupIndex, ok := index[key]
 		if !ok {
 			group := newAlarmDispatchGroup(envelope)
 
-			group.egressPath = path
-			group.egressErr = pathErr
-			group.egressRoomScoped = roomScoped
+			group.envelopeErr = envelopeErr
 			index[key] = len(grouped)
 			grouped = append(grouped, group)
 
@@ -78,30 +46,13 @@ func groupAlarmDispatchEnvelopesForDelivery(
 		}
 
 		appendAlarmDispatchEnvelope(&grouped[groupIndex], envelope)
-
-		grouped[groupIndex].egressRoomScoped = grouped[groupIndex].egressRoomScoped || roomScoped
 	}
 
-	split := make([]alarmDispatchGroup, 0, len(grouped))
-
-	for i := range grouped {
-		if grouped[i].egressErr != nil || grouped[i].egressPath != alarmDispatchEgressKaring {
-			split = append(split, grouped[i])
-			continue
-		}
-
-		split = append(split, splitAlarmDispatchKaringGroup(grouped[i])...)
-	}
-
-	return split
+	return grouped
 }
 
-func alarmDispatchDeliveryGroupKey(
-	envelope *domain.AlarmQueueEnvelope,
-	path alarmDispatchEgressPath,
-	pathErr error,
-) string {
-	if pathErr != nil || path == alarmDispatchEgressUnresolved {
+func alarmDispatchDeliveryGroupKey(envelope *domain.AlarmQueueEnvelope, envelopeErr error) string {
+	if envelopeErr != nil {
 		var outboxID int64
 
 		if envelope != nil {
@@ -111,58 +62,7 @@ func alarmDispatchDeliveryGroupKey(
 		return fmt.Sprintf("%s|invalid|%d", alarmDispatchGroupKey(envelope), outboxID)
 	}
 
-	if path == alarmDispatchEgressText {
-		return alarmDispatchGroupKey(envelope)
-	}
-
-	return alarmDispatchKaringGroupKey(envelope)
-}
-
-// 한 그룹이 여러 chunk로 나뉘면 앞 chunk만 전송된 뒤 뒤 chunk가 502로 실패하는 부분 성공이 가능하고,
-// 그 실패는 not-admitted라 envelopeCount와 무관하게 재시도되어 전체를 retry-solo로 재그룹한다 —
-// 이미 전송된 item이 다른 ClientRequestID로 다시 나간다. 그래서 chunk 경계에서 미리 잘라 둔다.
-func splitAlarmDispatchKaringGroup(group alarmDispatchGroup) []alarmDispatchGroup {
-	if len(group.envelopes) <= alarmDispatchKaringMaxItemsPerRequest ||
-		len(group.envelopes) != len(group.notifications) {
-		return []alarmDispatchGroup{group}
-	}
-
-	order := make([]int, len(group.envelopes))
-	for i := range order {
-		order[i] = i
-	}
-
-	// buildAlarmDispatchKaringContentListRequests와 같은 정렬이어야 분할 결과가 기존 chunk 경계와
-	// 일치하고, 드레인 순서가 ClientRequestID에 새지 않는다.
-	slices.SortStableFunc(order, func(left, right int) int {
-		return cmp.Compare(
-			alarmDispatchNotificationKaringItemIdentity(group, left),
-			alarmDispatchNotificationKaringItemIdentity(group, right),
-		)
-	})
-
-	groups := make([]alarmDispatchGroup, 0, (len(order)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)
-	for start := 0; start < len(order); start += alarmDispatchKaringMaxItemsPerRequest {
-		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(order))
-		sub := alarmDispatchGroup{
-			roomID:           group.roomID,
-			minutesUntil:     group.minutesUntil,
-			egressPath:       group.egressPath,
-			egressErr:        group.egressErr,
-			egressRoomScoped: group.egressRoomScoped,
-		}
-
-		for _, index := range order[start:end] {
-			envelope := group.envelopes[index]
-
-			sub.envelopes = append(sub.envelopes, envelope)
-			sub.notifications = append(sub.notifications, group.notifications[index])
-		}
-
-		groups = append(groups, sub)
-	}
-
-	return groups
+	return alarmDispatchGroupKey(envelope)
 }
 
 func groupAlarmDispatchEnvelopesByKey(
@@ -190,15 +90,12 @@ func groupAlarmDispatchEnvelopesByKey(
 	return groups
 }
 
-// 재드레인 봉투가 신규 봉투와 병합되면 그룹 구성이 바뀌어 ClientRequestID가 다르게 재파생되고,
-// 이미 admission된 첫 발송이 dedup에 접히지 않아 중복 발화한다 — 재시도 봉투는 항상 solo 그룹.
+// 저장된 send unit이 발송 경계다. 저장된 send unit이 없는 봉투는 keyFunc로 묶이지만 Text 경로는 저장된 client_request_id가
+// 없으면 발송하지 않는다(errAlarmDispatchSendUnitIdentityMissing). 파생 ID를 고정하려고 재시도 봉투를 solo로 떼던
+// 분기는 파생 ID와 함께 지웠다(stack-audit 2026-09-26 T17).
 func alarmDispatchRegroupKey(envelope *domain.AlarmQueueEnvelope, keyFunc func(*domain.AlarmQueueEnvelope) string) string {
 	if envelope != nil && envelope.SendUnitID > 0 {
 		return fmt.Sprintf("send-unit|%d", envelope.SendUnitID)
-	}
-
-	if envelope != nil && envelope.Retry != nil && envelope.Retry.Attempt > 0 {
-		return fmt.Sprintf("retry-solo|%d", envelope.DispatchOutboxID)
 	}
 
 	return keyFunc(envelope)
@@ -271,15 +168,10 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 }
 
 func alarmDispatchCelebrationGroupKey(envelope *domain.AlarmQueueEnvelope) string {
-	memberIdentity := envelope.Celebration.ChannelID
-	if envelope.Celebration.MemberID > 0 {
-		memberIdentity = fmt.Sprintf("member-%d", envelope.Celebration.MemberID)
-	}
-
-	key := fmt.Sprintf("%s|celebration|%s|%s",
+	key := fmt.Sprintf("%s|celebration|%s|member-%d",
 		envelope.Notification.RoomID,
 		envelope.Celebration.Kind,
-		memberIdentity,
+		envelope.Celebration.MemberID,
 	)
 	if envelope.Celebration.VideoID != "" {
 		key += "|" + envelope.Celebration.VideoID
@@ -297,137 +189,74 @@ func alarmDispatchTimeGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 	return fmt.Sprintf("%s|minutes|%d", envelope.Notification.RoomID, envelope.Notification.MinutesUntil)
 }
 
-func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
+func alarmDispatchEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
 	if envelope == nil {
-		return ""
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
-		return alarmDispatchGroupKey(envelope)
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
-		return alarmDispatchGroupKey(envelope)
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
-		return alarmDispatchGroupKey(envelope)
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
-		return alarmDispatchGroupKey(envelope)
-	}
-
-	phase := "prelive"
-
-	if envelope.Notification.IsStarting() {
-		phase = "starting"
-	}
-
-	return fmt.Sprintf(
-		"%s|karing|%s|%s|minutes|%d",
-		envelope.Notification.RoomID,
-		envelope.Notification.AlarmType,
-		phase,
-		envelope.Notification.MinutesUntil,
-	)
-}
-
-type alarmDispatchEgressPath uint8
-
-const (
-	alarmDispatchEgressUnresolved alarmDispatchEgressPath = iota
-	alarmDispatchEgressKaring
-	alarmDispatchEgressText
-)
-
-func alarmDispatchEnvelopeEgressPath(
-	ctx context.Context,
-	rooms regularChatResolver,
-	envelope *domain.AlarmQueueEnvelope,
-) (alarmDispatchEgressPath, bool, error) {
-	if envelope == nil {
-		return alarmDispatchEgressUnresolved, false, errors.New("alarm dispatch envelope is nil")
+		return errors.New("alarm dispatch envelope is nil")
 	}
 
 	switch envelope.SourceKind {
 	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindDeliveryDigest, domain.AlarmDispatchSourceKindXSpace:
-		return alarmDispatchEgressText, false, nil
+		return nil
 	case domain.AlarmDispatchSourceKindYouTubeOutbox:
-		return alarmDispatchYouTubeOutboxEgressPath(ctx, rooms, envelope)
+		return alarmDispatchYouTubeOutboxEnvelopeError(envelope)
 	case "":
-		return alarmDispatchStreamEgressPath(ctx, rooms, envelope)
+		return alarmDispatchStreamEnvelopeError(envelope)
 	default:
-		return alarmDispatchEgressUnresolved, false, fmt.Errorf("alarm dispatch source kind %q has no egress path", envelope.SourceKind)
+		return fmt.Errorf("alarm dispatch source kind %q has no egress path", envelope.SourceKind)
 	}
 }
 
-func alarmDispatchYouTubeOutboxEgressPath(
-	ctx context.Context,
-	rooms regularChatResolver,
-	envelope *domain.AlarmQueueEnvelope,
-) (alarmDispatchEgressPath, bool, error) {
+func alarmDispatchYouTubeOutboxEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
 	if envelope.YouTubeOutbox == nil {
-		return alarmDispatchEgressUnresolved, false, errors.New("youtube outbox dispatch payload is nil")
+		return errors.New("youtube outbox dispatch payload is nil")
 	}
 
 	switch envelope.YouTubeOutbox.Kind {
-	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost:
-		return alarmDispatchRoomEgressPath(ctx, rooms, envelope.Notification.RoomID), true, nil
-	case domain.OutboxKindMilestone:
-		return alarmDispatchEgressText, false, nil
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost, domain.OutboxKindMilestone:
+		return nil
 	default:
-		return alarmDispatchEgressUnresolved, false, fmt.Errorf("youtube outbox kind %q has no egress path", envelope.YouTubeOutbox.Kind)
+		return fmt.Errorf("youtube outbox kind %q has no egress path", envelope.YouTubeOutbox.Kind)
 	}
 }
 
-func alarmDispatchStreamEgressPath(
-	ctx context.Context,
-	rooms regularChatResolver,
-	envelope *domain.AlarmQueueEnvelope,
-) (alarmDispatchEgressPath, bool, error) {
+// errAlarmDispatchRetiredStreamProvider는 Twitch/Chzzk 단독 방송을 담은 보관 v3 envelope의 드레인 종단이다.
+// DEC-20260926-youtube-only-stream-providers(e65119bc1)로 비유튜브 제공자를 퇴역했고, 이 봉투는 발송하지 않고 기존
+// 발송 전 실패 경로(재시도 한도 뒤 DLQ)로 보낸다. 렌더러의 같은 분기는 이 가드 뒤라 도달하지 않아 지웠다(stack-audit
+// 2026-09-26 T17). 드레인 표시는 runner의 error 로그와 DLQ last_error다.
+// 제거 조건: authoritative DB에서 alarm_dispatch_events.payload의 notification.stream.is_twitch_only 또는
+// is_chzzk_only가 true이면서 pending·retry·leased·sending delivery가 있는 event가 0건이고, 해당 event가 dispatch
+// retention(기본 90일)으로 소멸한 뒤 이 가드, domain.Stream의 Twitch/Chzzk 필드(외부 Stream API 계약 확인 포함)를 지운다.
+// 재검토 기한: remove_after = "2026-12-31".
+var errAlarmDispatchRetiredStreamProvider = errors.New("non-YouTube stream provider is retired")
+
+func alarmDispatchStreamEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
 	stream := envelope.Notification.Stream
 	if stream == nil {
-		return alarmDispatchEgressUnresolved, false, errors.New("alarm notification stream is nil")
+		return errors.New("alarm notification stream is nil")
 	}
 
-	// 보관된 구형 envelope를 YouTube 알림으로 오인해 발송하지 않는다.
+	// 보관된 구형 envelope를 YouTube 알림으로 오인해 발송하지 않는다(드레인 종단).
 	if stream.IsTwitchOnly || stream.IsChzzkOnly {
-		return alarmDispatchEgressUnresolved, false, errors.New("non-YouTube stream provider is no longer supported")
+		return errAlarmDispatchRetiredStreamProvider
 	}
 
 	if !stream.HasYouTubeInfo() {
-		return alarmDispatchEgressUnresolved, false, errors.New("alarm notification has no YouTube target")
+		return errors.New("alarm notification has no YouTube target")
 	}
 
-	return alarmDispatchRoomEgressPath(ctx, rooms, envelope.Notification.RoomID), true, nil
+	return nil
 }
 
-func alarmDispatchRoomEgressPath(ctx context.Context, rooms regularChatResolver, roomID string) alarmDispatchEgressPath {
-	if rooms != nil && rooms.RegularChat(ctx, roomID) {
-		return alarmDispatchEgressKaring
-	}
-
-	return alarmDispatchEgressText
-}
-
-func alarmDispatchGroupEgressPath(group alarmDispatchGroup) (alarmDispatchEgressPath, error) {
-	if group.egressErr != nil {
-		return group.egressPath, group.egressErr
+func alarmDispatchGroupError(group alarmDispatchGroup) error {
+	if group.envelopeErr != nil {
+		return group.envelopeErr
 	}
 
 	if len(group.envelopes) == 0 {
-		return alarmDispatchEgressUnresolved, errors.New("alarm dispatch group is empty")
+		return errors.New("alarm dispatch group is empty")
 	}
 
-	switch group.egressPath {
-	case alarmDispatchEgressKaring, alarmDispatchEgressText:
-		return group.egressPath, nil
-	case alarmDispatchEgressUnresolved:
-		return alarmDispatchEgressUnresolved, errors.New("alarm dispatch group egress path is unresolved")
-	default:
-		return alarmDispatchEgressUnresolved, errors.New("alarm dispatch group egress path is unresolved")
-	}
+	return nil
 }
 
 func minAlarmDispatchMinutes(current, next int) int {

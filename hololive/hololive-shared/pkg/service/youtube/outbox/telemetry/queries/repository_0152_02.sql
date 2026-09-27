@@ -1,1 +1,0 @@
- ON CONFLICT (delivery_id, attempt_ordinal) DO NOTHING

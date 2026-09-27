@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
@@ -38,14 +39,15 @@ func (s *stubScraper) GetChannelStats(_ context.Context, channelID string) (*par
 	return nil, fmt.Errorf("stub: no stats for %s", channelID)
 }
 
-func (s *stubScraper) SetProxyEnabled(bool) bool { return false }
-func (s *stubScraper) ProxyEnabled() bool        { return false }
-
 func newScraperPathService(s scraperClient) *serviceImpl {
+	defaults := settings.DefaultYouTubeOperationalConfig()
+
 	return &serviceImpl{
-		scraper:       s,
-		logger:        slog.New(slog.DiscardHandler),
-		channelToName: make(map[string]string),
+		scraper:             s,
+		logger:              slog.New(slog.DiscardHandler),
+		channelToName:       make(map[string]string),
+		cacheSaveTimeout:    defaults.CacheSaveTimeout,
+		scraperPhaseTimeout: defaults.ScraperPhaseTimeout,
 	}
 }
 

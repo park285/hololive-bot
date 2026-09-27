@@ -35,7 +35,6 @@ type deliveryInsert struct {
 	DispatchGroupKey string
 	SendUnitKey      string
 	ClientRequestID  string
-	Status           Status
 }
 
 type eventBatchRow struct {
@@ -57,10 +56,9 @@ type deliveryBatchRow struct {
 	DispatchGroupKey string         `json:"dispatch_group_key"`
 	SendUnitKey      string         `json:"send_unit_key"`
 	ClientRequestID  string         `json:"client_request_id"`
-	Status           string         `json:"status"`
 }
 
-func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (result0 map[string]int64, result1 int, err error) {
+func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[string]int64, int, error) {
 	eventIDs := make(map[string]int64, len(events))
 	if len(events) == 0 {
 		return eventIDs, 0, nil
@@ -81,7 +79,7 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (result0
 	return eventIDs, inserted, nil
 }
 
-func buildEventBatchRows(events []eventInsert) (result0 []eventBatchRow, result1 map[string]string) {
+func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, map[string]string) {
 	rows := make([]eventBatchRow, 0, len(events))
 	expectedHashes := make(map[string]string, len(events))
 
@@ -101,7 +99,7 @@ func buildEventBatchRows(events []eventInsert) (result0 []eventBatchRow, result1
 	return rows, expectedHashes
 }
 
-func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (result0 map[string]int64, result1 int, err error) {
+func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (map[string]int64, int, error) {
 	rows, err := tx.Query(ctx, mustSQL("repository_insert_0092_01.sql"), jsonbRecordsetParam(raw))
 	if err != nil {
 		return nil, 0, fmt.Errorf("insert dispatch events: %w", err)
@@ -193,7 +191,6 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 			DispatchGroupKey: delivery.DispatchGroupKey,
 			SendUnitKey:      delivery.SendUnitKey,
 			ClientRequestID:  delivery.ClientRequestID,
-			Status:           string(delivery.Status),
 		})
 	}
 
@@ -209,7 +206,7 @@ func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected, 
 	return selected, inserted, nil
 }
 
-func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status, result *PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, error) {
+func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, result *PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, error) {
 	events := make(map[string]eventInsert, len(envelopes))
 	deliveries := make([]deliveryInsert, 0, len(envelopes))
 	seenDeliveries := make(map[string]struct{}, len(envelopes))
@@ -217,7 +214,7 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 	var collisions []eventCollision
 
 	for i := range envelopes {
-		collision, err := appendPreparedBatchRow(&envelopes[i], status, events, &deliveries, seenDeliveries, result)
+		collision, err := appendPreparedBatchRow(&envelopes[i], events, &deliveries, seenDeliveries, result)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("append prepared batch row: %w", err)
 		}
@@ -237,13 +234,12 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 
 func appendPreparedBatchRow(
 	envelope *domain.AlarmQueueEnvelope,
-	status Status,
 	events map[string]eventInsert,
 	deliveries *[]deliveryInsert,
 	seenDeliveries map[string]struct{},
 	result *PublishBatchResult,
 ) (*eventCollision, error) {
-	event, delivery, err := buildLedgerRows(envelope, status)
+	event, delivery, err := buildLedgerRows(envelope)
 	if err != nil {
 		return nil, fmt.Errorf("build ledger rows: %w", err)
 	}
@@ -382,9 +378,7 @@ func prepareBatchDeliveriesForInsert(
 	}
 
 	// 거절한 entry는 정상 delivery의 분할 경계나 멱등성 ID에도 영향을 주지 않는다.
-	if len(deliveries) > 0 && deliveries[0].Status == StatusPending {
-		assignSendUnits(deliveries)
-	}
+	assignSendUnits(deliveries)
 
 	return collisions, deliveries, nil
 }

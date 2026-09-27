@@ -33,7 +33,7 @@ func TestClientGetRoomsSuccess(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client, err := NewClient(server.URL, "secret", nil)
+	client, err := NewClient(server.URL, "secret")
 	if err != nil {
 		t.Fatalf("NewClient(%q) error = %v", server.URL, err)
 	}
@@ -64,7 +64,7 @@ func TestClientGetRoomsNon2xx(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client, err := NewClient(server.URL, "", nil)
+	client, err := NewClient(server.URL, "")
 	if err != nil {
 		t.Fatalf("NewClient(%q) error = %v", server.URL, err)
 	}
@@ -95,7 +95,7 @@ func TestNewClientRejectsUnsafeBaseURL(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			t.Parallel()
 
-			client, err := NewClient(raw, "", nil)
+			client, err := NewClient(raw, "")
 			if err == nil {
 				t.Fatalf("NewClient(%q) error = nil, want rejection", raw)
 			}
@@ -120,14 +120,35 @@ func TestNewClientAllowsConfiguredInternalHosts(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			t.Parallel()
 
-			client, err := NewClient(raw, "", nil)
+			// https transport 구성은 HOLOLIVE_INTERNAL_H3_* env가 필요하므로 여기서는 URL 정책만 확인한다.
+			validated, err := validateInternalBotRoomsBaseURL(raw)
 			if err != nil {
-				t.Fatalf("NewClient(%q) error = %v", raw, err)
+				t.Fatalf("validateInternalBotRoomsBaseURL(%q) error = %v", raw, err)
 			}
 
-			if client == nil {
-				t.Fatalf("NewClient(%q) client = nil", raw)
+			if validated == "" {
+				t.Fatalf("validateInternalBotRoomsBaseURL(%q) = empty", raw)
 			}
 		})
+	}
+}
+
+// https bot 내부 URL은 H3 전용 서버다. HOLOLIVE_INTERNAL_H3_* 가 없으면 TCP client로 내려가지 않고 오류다
+// (stack audit 2026-09-26).
+func TestNewClientRequiresInternalH3EnvForHTTPS(t *testing.T) {
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+
+	client, err := NewClient("https://127.0.0.1:30001", "")
+	if err == nil || client != nil {
+		t.Fatalf("NewClient(https) = (%v, %v), want missing internal H3 env error", client, err)
+	}
+
+	if !strings.Contains(err.Error(), "HOLOLIVE_INTERNAL_H3_CA_CERT_FILE") {
+		t.Fatalf("error = %q, want missing HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", err)
+	}
+
+	if client, err := NewClient("http://localhost:30001", ""); err != nil || client == nil {
+		t.Fatalf("NewClient(http) = (%v, %v), want plain internal client", client, err)
 	}
 }

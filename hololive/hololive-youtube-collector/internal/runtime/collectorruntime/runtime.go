@@ -46,7 +46,7 @@ func Build(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger
 	if !collectorProfileEnabled(appConfig.WorkerProfile) {
 		out, err := buildDisabledRuntime(ctx, appConfig, logger)
 		if err != nil {
-			return nil, errors.Join(err)
+			return nil, err
 		}
 
 		return out, nil

@@ -81,7 +81,7 @@ func TestNew(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			c := majorevent.New(tc.inputURL, tc.inputAPIKey)
+			c := newTestClient(t, tc.inputURL, tc.inputAPIKey)
 			if c == nil {
 				t.Fatal("New() returned nil")
 			}
@@ -102,7 +102,7 @@ func TestNew(t *testing.T) {
 
 			// 실제로 URL 주입 검증은 New() 결과 클라이언트로 직접 요청 수행 불가이므로
 			// 대신 재생성 후 검증
-			freshClient := majorevent.New(tc.inputURL, tc.inputAPIKey)
+			freshClient := newTestClient(t, tc.inputURL, tc.inputAPIKey)
 			if freshClient == nil {
 				t.Fatal("재생성된 New() returned nil")
 			}
@@ -128,7 +128,7 @@ func TestNew_URLTrimming(t *testing.T) {
 	defer srv.Close()
 
 	// 후행 슬래시 포함 URL로 클라이언트 생성
-	c := majorevent.New(srv.URL+"/", testAPIKey)
+	c := newTestClient(t, srv.URL+"/", testAPIKey)
 
 	_, err := c.IsSubscribed(t.Context(), "room-1")
 	if err != nil {
@@ -212,7 +212,7 @@ func assertMajorEventIsSubscribed(t *testing.T, tc *majorEventIsSubscribedCase) 
 	t.Helper()
 
 	if tc.roomID == "" {
-		c := majorevent.New("http://localhost:0", testAPIKey)
+		c := newTestClient(t, "http://localhost:0", testAPIKey)
 		got, err := c.IsSubscribed(t.Context(), tc.roomID)
 		assertMajorEventBoolResult(t, "IsSubscribed", got, err, tc.wantResult, tc.wantErr)
 
@@ -223,7 +223,7 @@ func assertMajorEventIsSubscribed(t *testing.T, tc *majorEventIsSubscribedCase) 
 		assertMajorEventRequest(t, r, http.MethodGet, majoreventcontracts.SubscriptionsPath+"/"+tc.roomID)
 	})
 
-	c := majorevent.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL, testAPIKey)
 	got, err := c.IsSubscribed(t.Context(), tc.roomID)
 	assertMajorEventBoolResult(t, "IsSubscribed", got, err, tc.wantResult, tc.wantErr)
 }
@@ -317,7 +317,7 @@ func assertMajorEventSubscribe(t *testing.T, tc *majorEventSubscribeCase) {
 	t.Helper()
 
 	if tc.roomID == "" {
-		c := majorevent.New("http://localhost:0", testAPIKey)
+		c := newTestClient(t, "http://localhost:0", testAPIKey)
 		assertMajorEventErr(t, "Subscribe", c.Subscribe(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
 
 		return
@@ -331,7 +331,7 @@ func assertMajorEventSubscribe(t *testing.T, tc *majorEventSubscribeCase) {
 		}
 	})
 
-	c := majorevent.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL, testAPIKey)
 	assertMajorEventErr(t, "Subscribe", c.Subscribe(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
 }
 
@@ -392,7 +392,7 @@ func assertMajorEventUnsubscribe(t *testing.T, tc *majorEventUnsubscribeCase) {
 	t.Helper()
 
 	if tc.roomID == "" {
-		c := majorevent.New("http://localhost:0", testAPIKey)
+		c := newTestClient(t, "http://localhost:0", testAPIKey)
 		assertMajorEventErr(t, "Unsubscribe", c.Unsubscribe(t.Context(), tc.roomID), tc.wantErr)
 
 		return
@@ -402,6 +402,29 @@ func assertMajorEventUnsubscribe(t *testing.T, tc *majorEventUnsubscribeCase) {
 		assertMajorEventRequest(t, r, http.MethodDelete, majoreventcontracts.SubscriptionsPath+"/"+tc.roomID)
 	})
 
-	c := majorevent.New(srv.URL, testAPIKey)
+	c := newTestClient(t, srv.URL, testAPIKey)
 	assertMajorEventErr(t, "Unsubscribe", c.Unsubscribe(t.Context(), tc.roomID), tc.wantErr)
+}
+
+func newTestClient(t *testing.T, baseURL, apiKey string) *majorevent.Client {
+	t.Helper()
+
+	client, err := majorevent.New(baseURL, apiKey)
+	if err != nil {
+		t.Fatalf("New(%q) error = %v", baseURL, err)
+	}
+
+	return client
+}
+
+// https llm-scheduler URL은 H3 전용 내부 서버다. HOLOLIVE_INTERNAL_H3_* 가 없으면 TCP client로 내려가지 않고
+// 오류다(stack audit 2026-09-26).
+func TestNewRequiresInternalH3EnvForHTTPS(t *testing.T) {
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+
+	client, err := majorevent.New("https://127.0.0.1:30003", testAPIKey)
+	if err == nil || client != nil {
+		t.Fatalf("New(https) = (%v, %v), want missing internal H3 env error", client, err)
+	}
 }

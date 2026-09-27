@@ -31,6 +31,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,12 +139,17 @@ func TestGeminiClientGenerateJSONSendsNativeInteractionContract(t *testing.T) {
 
 	client := mustNewGeminiClient(t, server.URL, WithReasoningEffort(testReasoningLevelHigh), WithWebSearch(true), WithCostTracker(tracker))
 
-	got, err := client.GenerateJSON(t.Context(), "system contract", "user request", testObjectSchema())
+	got, err := client.GenerateJSON(t.Context(), openaipreset.PromptLayers{
+		Invariant: "invariant contract",
+		Developer: "developer contract",
+		User:      "user request",
+	}, testObjectSchema())
 	require.NoError(t, err)
 	assert.Equal(t, `{"ok":true}`, got)
 	assert.Equal(t, "gemini-3.7-flash", captured.Model)
 	assert.Equal(t, "user request", captured.Input)
-	assert.Equal(t, "system contract", captured.SystemInstruction)
+	// Gemini는 두 지시 계층을 고정 순서·라벨의 단일 system instruction으로 받는다.
+	assert.Equal(t, "[APPLICATION INVARIANTS]\ninvariant contract\n\n[DEVELOPER INSTRUCTIONS]\ndeveloper contract", captured.SystemInstruction)
 	assert.Equal(t, testReasoningLevelHigh, captured.GenerationConfig.ThinkingLevel)
 	assert.Equal(t, false, rawRequest["store"])
 	require.Len(t, captured.Tools, 1)
@@ -169,7 +175,7 @@ func TestGeminiClientGenerateJSONOmitsSearchWhenDisabled(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	client := mustNewGeminiClient(t, server.URL, WithWebSearch(false))
-	if _, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema()); err != nil {
+	if _, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema()); err != nil {
 		t.Fatalf("GenerateJSON() error = %v", err)
 	}
 
@@ -186,7 +192,7 @@ func TestGeminiClientGenerateJSONRejectsNonCompletedInteraction(t *testing.T) {
 
 	client := mustNewGeminiClient(t, server.URL)
 
-	_, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema())
+	_, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema())
 	if err == nil || !strings.Contains(err.Error(), "interaction_not_completed") {
 		t.Fatalf("GenerateJSON() error = %v", err)
 	}
@@ -203,7 +209,7 @@ func TestGeminiClientGenerateJSONRedactsHTTPErrorBody(t *testing.T) {
 
 	client := mustNewGeminiClient(t, server.URL)
 
-	_, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema())
+	_, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema())
 	if err == nil {
 		t.Fatal("GenerateJSON() error = nil")
 	}
@@ -232,7 +238,7 @@ func TestGeminiClientGenerateJSONRejectsMalformedOrEmptyOutput(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			client := mustNewGeminiClient(t, server.URL)
-			if _, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema()); err == nil {
+			if _, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema()); err == nil {
 				t.Fatal("GenerateJSON() error = nil")
 			}
 		})
@@ -244,7 +250,7 @@ func TestGeminiClientGenerateJSONHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	if _, err := client.GenerateJSON(ctx, "system", "user", testObjectSchema()); err == nil {
+	if _, err := client.GenerateJSON(ctx, testPromptLayers(), testObjectSchema()); err == nil {
 		t.Fatal("GenerateJSON() error = nil")
 	}
 }

@@ -20,7 +20,8 @@ patterns=(
   'github\.com/go-gorm'
 )
 
-targets=(go.mod hololive admin-dashboard scripts internal)
+# 퇴역 admin-dashboard BFF의 Go 소스는 없으므로 검사 대상에서 뺐다(stack-audit 2026-09-26 T19, DEC-20260926-hololive-retired-rollback-tooling).
+targets=(go.mod hololive scripts internal)
 while IFS= read -r root_go; do
   targets+=("${root_go}")
 done < <(find . -maxdepth 1 -type f -name '*.go' -print)

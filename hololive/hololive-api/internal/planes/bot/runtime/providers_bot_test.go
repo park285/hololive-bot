@@ -47,8 +47,6 @@ import (
 
 type mockYouTubeService struct{}
 
-func (s *mockYouTubeService) SetScraperProxyEnabled(bool) bool { return false }
-func (s *mockYouTubeService) ScraperProxyEnabled() bool        { return false }
 func (s *mockYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return map[string]*youtube.ChannelStats{}, nil
 }

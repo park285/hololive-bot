@@ -57,17 +57,12 @@ var verbatimKeyPrefixes = []string{
 	"alarm:channel_registry:version",
 	"alarm:channel_subscribers:",
 	"alarm:channel_subscribers_empty:",
-	"alarm:chzzk_channels",
-	"alarm:chzzk_channels_empty",
 	"alarm:dispatch:",
 	"alarm:member_names",
 	"alarm:next_stream:",
 	"alarm:registry",
 	"alarm:room_names",
 	"alarm:subscriber_cache_empty",
-	"alarm:twitch_channel_logins",
-	"alarm:twitch_channel_logins_empty",
-	"alarm:twitch_logins",
 	"alarm:user_names",
 }
 

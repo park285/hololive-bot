@@ -132,17 +132,6 @@ func TestAllowEnforcesLimit(t *testing.T) {
 	}
 }
 
-func TestMemberIDIncludesInstanceID(t *testing.T) {
-	t.Setenv("INSTANCE_ID", "worker-a")
-
-	limiter := newTestLimiter(t)
-
-	member := limiter.memberID(123)
-	if member != "123:worker-a:1" {
-		t.Fatalf("memberID() = %q, want %q", member, "123:worker-a:1")
-	}
-}
-
 func TestAllowAfterWindowExpires(t *testing.T) {
 	limiter := newTestLimiter(t)
 	ctx := t.Context()

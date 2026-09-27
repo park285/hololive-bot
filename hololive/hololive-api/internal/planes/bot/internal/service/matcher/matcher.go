@@ -30,7 +30,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
 const orgHololive = "Hololive"
@@ -79,7 +78,6 @@ type ChannelSelector interface {
 type Matcher struct {
 	membersData           domain.MemberDataProvider
 	cache                 cache.Client
-	holodex               *holodexprovider.Service
 	selector              ChannelSelector
 	logger                *slog.Logger
 	matchCache            map[string]*MatchCacheEntry
@@ -93,17 +91,14 @@ type Matcher struct {
 }
 
 func NewMatcher(
-	ctx context.Context,
 	membersData domain.MemberDataProvider,
 	cacheClient cache.Client,
-	holodexService *holodexprovider.Service,
 	selector ChannelSelector,
 	logger *slog.Logger,
 ) *Matcher {
 	mm := &Matcher{
 		membersData:           membersData,
 		cache:                 cacheClient,
-		holodex:               holodexService,
 		selector:              selector,
 		logger:                logger,
 		matchCache:            make(map[string]*MatchCacheEntry),
@@ -112,16 +107,8 @@ func NewMatcher(
 		snapshotTTL:           1 * time.Minute,
 	}
 
-	provider := mm.providerWithContext(ctx)
-	memberCount := 0
-
-	if provider != nil {
-		memberCount = len(provider.GetAllMembers())
-	}
-
-	logger.Info("Matcher initialized",
-		slog.Int("members", memberCount),
-	)
+	// 멤버 수 로그를 위해 생성 시 전체 멤버를 적재하던 호출은 뺐다. 멤버는 snapshot이 LoadAllMembers로 적재하고 실패를 돌려준다.
+	logger.Info("Matcher initialized")
 
 	return mm
 }
@@ -129,10 +116,6 @@ func NewMatcher(
 func (mm *Matcher) providerWithContext(ctx context.Context) domain.MemberDataProvider {
 	if mm == nil || mm.membersData == nil {
 		return nil
-	}
-
-	if ctx == nil {
-		return mm.membersData
 	}
 
 	return mm.membersData.WithContext(ctx)

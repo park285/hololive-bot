@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-alarm-http-provider-ownership-v2",
+  "title": "alarm.http provider는 alarm-worker 하나가 소유하고 hololive-api는 그 provider의 client로만 쓴다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자가 확정한 DEC-20260926-hololive-legacy-env-config-retirement가 현재 코드와 맞지 않는 DEC-20260512-hololive-alarm-http-provider-ownership의 정정 레코드를 PLN-20260926-stack-audit-refactoring T19에서 코드 확인과 함께 만들도록 정했다. 바뀐 조항: 단계적 이전과 'admin-api는 compatibility provider로만 남긴다'는 조항을 닫는다. alarm-worker가 shared route registrar(sharedalarm.NewInternalRouteRegistrar, hololive-alarm-worker/internal/app/workerapp/build_runtime.go)로 /internal/alarm/* provider route set을 등록하는 유일한 provider이고, hololive-api bot·admin plane은 provider를 두지 않고 sharedalarm.NewClientWithAPIKeyStrict로 그 provider를 호출하는 client다(admin/app/build_runtime_foundation.go, bot/internal/app/bootstrap/services_alarm.go). in-process AlarmService 분기는 T05에서 지웠고, ALARM_INTERNAL_URL이 비거나 잘못되면 apiplane.LoadRuntime 검증과 plane 조립이 기동 실패로 끝난다(대체 provider나 in-process 폴백 없음). 유지하는 조항: /internal/alarm 경로 문자열은 shared contracts 패키지(hololive-shared/pkg/contracts/alarm/contracts.go BasePath)만 소유하고, bot·admin 배포가 provider 가용성을 흔들지 않도록 provider는 alarm domain owner(alarm-worker)와 같은 process에 둔다. 원 요약(DEC-20260512): alarm-worker가 shared alarm route registrar로 /internal/alarm/* provider route set을 등록하고 admin-api는 compatibility provider로 남기는 staged migration이다. 2026-06-26 hololive-api 통합 계획이 같은 방향(alarm domain owner와 같은 process, bot/admin 배포가 provider 가용성을 흔들지 않음)을 확정했고, 2026-08-23 기준 hololive-api 코드에서는 /internal/alarm 경로 문자열이 확인되지 않으며 shared contracts 패키지만 경로를 소유한다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/contracts/alarm/contracts.go",
+    "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "hololive/hololive-api/internal/planes/admin/app/build_runtime_foundation.go",
+    "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/services_alarm.go"
+  ],
+  "supersedes": [
+    "DEC-20260512-hololive-alarm-http-provider-ownership"
+  ]
+}

@@ -67,12 +67,12 @@ func (m *mockDigestService) ListSubscribedRooms(_ context.Context) ([]model.Subs
 
 type mockFormatter struct{}
 
-func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Digest) string {
+func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Digest) (string, error) {
 	if digest == nil {
-		return ""
+		return "", nil
 	}
 
-	return digest.Headline
+	return digest.Headline, nil
 }
 
 // mockNotificationLocker: delivery.NotificationLocker 구현.

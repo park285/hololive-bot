@@ -35,10 +35,6 @@ type fanoutOutboxState struct {
 }
 
 func (s *TransitionStore) ClaimOutboxesForFanout(ctx context.Context, batchSize int) ([]domain.YouTubeNotificationOutbox, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return nil, fmt.Errorf("claim outboxes for fanout: %w", err)
-	}
-
 	if batchSize <= 0 {
 		return nil, errors.New("claim outboxes for fanout: batch size must be positive")
 	}
@@ -73,10 +69,6 @@ func (s *TransitionStore) MaterializeFanout(
 	outbox domain.YouTubeNotificationOutbox,
 	roomIDs []string,
 ) (FanoutResult, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return FanoutResult{ApplyResult: newApplyResult(ApplyIndeterminate, nil)}, fmt.Errorf("materialize fanout: %w", err)
-	}
-
 	if outbox.ID <= 0 || outbox.LockedAt == nil {
 		return FanoutResult{ApplyResult: newApplyResult(ApplyConflict, nil)}, errors.New("materialize fanout: exact outbox lock is absent")
 	}
@@ -187,10 +179,6 @@ func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 	freshnessWindow time.Duration,
 	limit int,
 ) (ApplyResult, int, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), 0, fmt.Errorf("revive failed fanout outboxes: %w", err)
-	}
-
 	if freshnessWindow <= 0 || limit <= 0 {
 		return newApplyResult(ApplyConflict, nil), 0, errors.New("revive failed fanout outboxes: invalid bounds")
 	}
@@ -225,10 +213,6 @@ func (s *TransitionStore) ApplyFanoutFailure(
 	outbox domain.YouTubeNotificationOutbox,
 	reason string,
 ) (ApplyResult, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("apply fanout failure: %w", err)
-	}
-
 	if outbox.ID <= 0 || outbox.LockedAt == nil || outbox.AttemptCount < 0 {
 		return newApplyResult(ApplyConflict, nil), errors.New("apply fanout failure: exact outbox fence is invalid")
 	}

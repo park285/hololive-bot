@@ -2,6 +2,7 @@ package dispatchoutbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,30 +18,19 @@ var claimKeyPrefixes = [...]string{
 }
 
 // ClaimKeyReleaser는 Consumer가 dedup claim 키를 삭제할 때 의존하는 narrow interface다.
-// 이 interface는 cache.Client(god interface)가 그대로 만족한다. 주입값이 nil이면 ReleaseClaimKeys는 no-op로
-// 동작해 기존 PG 모드 동작(삭제 없이 TTL 만료 의존)을 보존한다.
+// 이 interface는 cache.Client(god interface)가 그대로 만족한다. NewConsumer의 필수 인자다.
 type ClaimKeyReleaser interface {
 	DelMany(ctx context.Context, keys []string) (int64, error)
-}
-
-// WithClaimKeyReleaser는 PG 모드 dispatch consumer가 DLQ/drop 종료 후 dedup claim 키를
-// 실제로 삭제하도록 Valkey releaser를 주입한다. 주입하지 않으면 ReleaseClaimKeys는
-// no-op로 남아 claim 키는 NotificationSent TTL 만료로만 정리된다.
-func WithClaimKeyReleaser(releaser ClaimKeyReleaser) ConsumerOption {
-	return func(c *Consumer) {
-		if releaser != nil {
-			c.claimReleaser = releaser
-		}
-	}
 }
 
 // ReleaseClaimKeys는 미발송이 확정된 DLQ/drop delivery의 dedup claim 키를 삭제합니다.
 // Consumer의 payload 거절 경로와 alarm_dispatch_runner는 worker 소유권을 검증한
 // DLQ 전이가 성공한 뒤에만 호출합니다. 성공·retry·전송 결과 불명에는 호출하지 않습니다.
-// 주입된 releaser가 없으면 no-op로 남아 기존 PG 모드 동작(TTL 만료 의존)을 보존한다.
+// 주입된 releaser가 없을 때 삭제 없이 TTL 만료에 기대던 no-op 경로는 지웠다(stack-audit 2026-09-26 T11). 구성 누락은
+// 오류로 돌려주어, 미발송 delivery의 dedup 키가 남아 재발송을 막는 상태를 조용히 만들지 않는다.
 func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
 	if c == nil || c.claimReleaser == nil {
-		return nil
+		return errors.New("release claim keys: claim key releaser is not configured")
 	}
 
 	filtered := make([]string, 0, len(claimKeys))

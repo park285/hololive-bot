@@ -55,28 +55,24 @@ func TestIsRoomAllowed_ACLDisabled(t *testing.T) {
 	service := newTestService(false, ACLModeWhitelist, []string{"room-A"}, nil)
 
 	tests := []struct {
-		name     string
-		roomName string
-		chatID   string
-		want     bool
+		name   string
+		chatID string
+		want   bool
 	}{
 		{
-			name:     "목록에 없는 방도 허용",
-			roomName: "room-unknown",
-			chatID:   "",
-			want:     true,
+			name:   "목록에 없는 방도 허용",
+			chatID: "room-unknown",
+			want:   true,
 		},
 		{
-			name:     "빈 roomName/chatID도 허용",
-			roomName: "",
-			chatID:   "",
-			want:     true,
+			name:   "빈 chatID도 허용",
+			chatID: "",
+			want:   true,
 		},
 		{
-			name:     "목록에 있는 방도 허용",
-			roomName: "room-A",
-			chatID:   "",
-			want:     true,
+			name:   "목록에 있는 방도 허용",
+			chatID: "room-A",
+			want:   true,
 		},
 	}
 
@@ -84,9 +80,9 @@ func TestIsRoomAllowed_ACLDisabled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := service.IsRoomAllowed(tc.roomName, tc.chatID)
+			got := service.IsRoomAllowed(tc.chatID)
 			if got != tc.want {
-				t.Errorf("IsRoomAllowed(%q, %q) = %v, want %v", tc.roomName, tc.chatID, got, tc.want)
+				t.Errorf("IsRoomAllowed(%q) = %v, want %v", tc.chatID, got, tc.want)
 			}
 		})
 	}
@@ -95,55 +91,37 @@ func TestIsRoomAllowed_ACLDisabled(t *testing.T) {
 func TestIsRoomAllowed_WhitelistMode(t *testing.T) {
 	t.Parallel()
 
-	service := newTestService(true, ACLModeWhitelist, []string{"room-alpha", "chat-beta"}, nil)
+	service := newTestService(true, ACLModeWhitelist, []string{"chat-alpha", "chat-beta"}, nil)
 
 	tests := []struct {
-		name     string
-		roomName string
-		chatID   string
-		want     bool
+		name   string
+		chatID string
+		want   bool
 	}{
 		{
-			name:     "roomName으로 화이트리스트 매칭 성공",
-			roomName: "room-alpha",
-			chatID:   "",
-			want:     true,
+			name:   "chatID로 화이트리스트 매칭 성공",
+			chatID: "chat-beta",
+			want:   true,
 		},
 		{
-			name:     "chatID로 화이트리스트 매칭 성공",
-			roomName: "",
-			chatID:   "chat-beta",
-			want:     true,
+			name:   "앞뒤 공백은 TrimSpace 후 매칭",
+			chatID: "  chat-alpha  ",
+			want:   true,
 		},
 		{
-			name:     "chatID 우선 매칭 (chatID가 있으면 roomName보다 먼저 확인)",
-			roomName: "not-in-list",
-			chatID:   "chat-beta",
-			want:     true,
+			name:   "화이트리스트에 없는 chatID 거부",
+			chatID: "chat-y",
+			want:   false,
 		},
 		{
-			name:     "화이트리스트에 없는 방 거부",
-			roomName: "room-unknown",
-			chatID:   "",
-			want:     false,
+			name:   "빈 chatID는 거부",
+			chatID: "",
+			want:   false,
 		},
 		{
-			name:     "양쪽 모두 화이트리스트에 없으면 거부",
-			roomName: testRoomX,
-			chatID:   "chat-y",
-			want:     false,
-		},
-		{
-			name:     "빈 roomName/chatID는 거부",
-			roomName: "",
-			chatID:   "",
-			want:     false,
-		},
-		{
-			name:     "공백만 있는 roomName은 TrimSpace 후 빈 문자열이므로 거부",
-			roomName: "   ",
-			chatID:   "   ",
-			want:     false,
+			name:   "공백만 있는 chatID는 TrimSpace 후 빈 문자열이므로 거부",
+			chatID: "   ",
+			want:   false,
 		},
 	}
 
@@ -151,9 +129,9 @@ func TestIsRoomAllowed_WhitelistMode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := service.IsRoomAllowed(tc.roomName, tc.chatID)
+			got := service.IsRoomAllowed(tc.chatID)
 			if got != tc.want {
-				t.Errorf("IsRoomAllowed(%q, %q) = %v, want %v", tc.roomName, tc.chatID, got, tc.want)
+				t.Errorf("IsRoomAllowed(%q) = %v, want %v", tc.chatID, got, tc.want)
 			}
 		})
 	}
@@ -165,40 +143,24 @@ func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 	service := newTestService(true, ACLModeBlacklist, nil, []string{testBlockedRoom, "blocked-chat"})
 
 	tests := []struct {
-		name     string
-		roomName string
-		chatID   string
-		want     bool
+		name   string
+		chatID string
+		want   bool
 	}{
 		{
-			name:     "블랙리스트에 없는 방은 허용",
-			roomName: "allowed-room",
-			chatID:   "",
-			want:     true,
+			name:   "블랙리스트에 없는 chatID는 허용",
+			chatID: "allowed-chat",
+			want:   true,
 		},
 		{
-			name:     "블랙리스트에 있는 방은 차단 (roomName)",
-			roomName: testBlockedRoom,
-			chatID:   "",
-			want:     false,
+			name:   "블랙리스트에 있는 chatID는 차단",
+			chatID: "blocked-chat",
+			want:   false,
 		},
 		{
-			name:     "블랙리스트에 있는 방은 차단 (chatID)",
-			roomName: "",
-			chatID:   "blocked-chat",
-			want:     false,
-		},
-		{
-			name:     "chatID가 블랙리스트에 있으면 차단 (roomName은 무관)",
-			roomName: "safe-room",
-			chatID:   "blocked-chat",
-			want:     false,
-		},
-		{
-			name:     "빈 roomName/chatID이면 블랙리스트 매칭 없으므로 허용",
-			roomName: "",
-			chatID:   "",
-			want:     true,
+			name:   "빈 chatID이면 블랙리스트 매칭 없으므로 허용",
+			chatID: "",
+			want:   true,
 		},
 	}
 
@@ -206,11 +168,27 @@ func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := service.IsRoomAllowed(tc.roomName, tc.chatID)
+			got := service.IsRoomAllowed(tc.chatID)
 			if got != tc.want {
-				t.Errorf("IsRoomAllowed(%q, %q) = %v, want %v", tc.roomName, tc.chatID, got, tc.want)
+				t.Errorf("IsRoomAllowed(%q) = %v, want %v", tc.chatID, got, tc.want)
 			}
 		})
+	}
+}
+
+// 방 이름으로 등록된 과거 값은 다른 chatID의 방을 허용하거나 차단하지 않는다
+// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
+func TestIsRoomAllowed_RoomNameEntryDoesNotMatchChatID(t *testing.T) {
+	t.Parallel()
+
+	whitelist := newTestService(true, ACLModeWhitelist, []string{"테스트방"}, nil)
+	if whitelist.IsRoomAllowed("1234567890") {
+		t.Error("화이트리스트의 방 이름 항목이 다른 chatID를 허용하면 안 됨")
+	}
+
+	blacklist := newTestService(true, ACLModeBlacklist, nil, []string{"차단방"})
+	if !blacklist.IsRoomAllowed("1234567890") {
+		t.Error("블랙리스트의 방 이름 항목이 다른 chatID를 차단하면 안 됨")
 	}
 }
 
@@ -220,7 +198,7 @@ func TestIsRoomAllowed_EmptyWhitelist(t *testing.T) {
 	// ACL 활성화 + 화이트리스트 비어있음 → 모든 방 거부
 	service := newTestService(true, ACLModeWhitelist, []string{}, nil)
 
-	got := service.IsRoomAllowed("any-room", "any-chat")
+	got := service.IsRoomAllowed("any-chat")
 	if got {
 		t.Error("화이트리스트가 비어있을 때 IsRoomAllowed는 false여야 함")
 	}
@@ -232,7 +210,7 @@ func TestIsRoomAllowed_EmptyBlacklist(t *testing.T) {
 	// ACL 활성화 + 블랙리스트 비어있음 → 모든 방 허용
 	service := newTestService(true, ACLModeBlacklist, nil, []string{})
 
-	got := service.IsRoomAllowed("any-room", "any-chat")
+	got := service.IsRoomAllowed("any-chat")
 	if !got {
 		t.Error("블랙리스트가 비어있을 때 IsRoomAllowed는 true여야 함")
 	}
@@ -245,11 +223,11 @@ func TestIsRoomAllowed_DualLists_Independent(t *testing.T) {
 	service := newTestService(true, ACLModeWhitelist, []string{"allowed-only"}, []string{"blocked-only"})
 
 	// 화이트리스트 모드: allowed-only만 허용, blocked-only는 화이트리스트에 없으므로 거부
-	if !service.IsRoomAllowed("allowed-only", "") {
+	if !service.IsRoomAllowed("allowed-only") {
 		t.Error("화이트리스트 모드에서 화이트리스트에 있는 방은 허용되어야 함")
 	}
 
-	if service.IsRoomAllowed("blocked-only", "") {
+	if service.IsRoomAllowed("blocked-only") {
 		t.Error("화이트리스트 모드에서 화이트리스트에 없는 방은 거부되어야 함")
 	}
 
@@ -260,11 +238,11 @@ func TestIsRoomAllowed_DualLists_Independent(t *testing.T) {
 	service.mu.Unlock()
 
 	// 블랙리스트 모드: blocked-only는 차단, allowed-only는 블랙리스트에 없으므로 허용
-	if service.IsRoomAllowed("blocked-only", "") {
+	if service.IsRoomAllowed("blocked-only") {
 		t.Error("블랙리스트 모드에서 블랙리스트에 있는 방은 차단되어야 함")
 	}
 
-	if !service.IsRoomAllowed("allowed-only", "") {
+	if !service.IsRoomAllowed("allowed-only") {
 		t.Error("블랙리스트 모드에서 블랙리스트에 없는 방은 허용되어야 함")
 	}
 }
@@ -413,7 +391,7 @@ func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 
 	for range goroutines {
 		wg.Go(func() {
-			_ = service.IsRoomAllowed("room-concurrent", "")
+			_ = service.IsRoomAllowed("room-concurrent")
 		})
 	}
 

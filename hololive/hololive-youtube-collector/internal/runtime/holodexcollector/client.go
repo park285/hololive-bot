@@ -2,7 +2,6 @@ package holodexcollector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -68,7 +67,7 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), http.NoBody)
 	if err != nil {
-		return nil, errors.Join(c.redactedBuildRequestError(err))
+		return nil, c.redactedBuildRequestError(err)
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -77,7 +76,7 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 
 	resp, err := c.http.Do(req) //nolint:bodyclose // 응답 본문은 공통 bounded reader가 모든 경로에서 닫는다.
 	if err != nil {
-		return nil, errors.Join(c.mappedRequestError(err))
+		return nil, c.mappedRequestError(err)
 	}
 
 	body, err := providerhttp.ReadProviderJSONDocument(ctx, resp, c.policy, contract.ProviderHolodex)

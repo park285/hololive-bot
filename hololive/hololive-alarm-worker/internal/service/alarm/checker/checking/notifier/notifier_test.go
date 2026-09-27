@@ -234,10 +234,6 @@ func assertPublishQueueOutboxState(t *testing.T, result SendResult, outbox *noti
 	if got := len(outbox.lastBatchInput.Envelopes); got != 1 {
 		t.Fatalf("expected one published envelope, got %d", got)
 	}
-
-	if outbox.lastBatchInput.Status != dispatchoutbox.StatusPending {
-		t.Fatalf("expected pending outbox status, got %q", outbox.lastBatchInput.Status)
-	}
 }
 
 func assertNotifiedHashCache(t *testing.T, cacheClient cache.Client, streamID string) {
@@ -318,7 +314,6 @@ func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 
 	require.Equal(t, 1, outbox.insertBatchCalls)
 	assert.Len(t, outbox.lastBatchInput.Envelopes, 2)
-	assert.Equal(t, dispatchoutbox.StatusPending, outbox.lastBatchInput.Status)
 
 	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
 		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
@@ -569,7 +564,6 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 	assert.Equal(t, SendResult{Sent: 1}, result)
 	require.Equal(t, 1, outbox.insertBatchCalls)
 	require.Len(t, outbox.lastBatchInput.Envelopes, 1)
-	assert.Equal(t, dispatchoutbox.StatusPending, outbox.lastBatchInput.Status)
 
 	envelope := outbox.lastBatchInput.Envelopes[0]
 	assert.Equal(t, contractsalarm.QueueEnvelopeVersionV1, envelope.Version)
@@ -655,13 +649,17 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 	assert.True(t, secondClaimed)
 }
 
+// retiredRedisDispatchQueueKey는 퇴역한 Redis dispatch queue 키다. 상수는 지웠고(stack-audit 2026-09-26 T11), notifier가
+// 그 키에 다시 쓰지 않는지만 확인한다.
+const retiredRedisDispatchQueueKey = "alarm:dispatch:queue"
+
 func readDispatchQueueSize(t *testing.T, cacheClient cache.Client) int64 {
 	t.Helper()
 
 	client := cacheClient.GetClient()
 	require.NotNil(t, client)
 
-	resp := client.Do(t.Context(), cacheClient.B().Llen().Key(alarmkeys.DispatchQueueKey).Build())
+	resp := client.Do(t.Context(), cacheClient.B().Llen().Key(retiredRedisDispatchQueueKey).Build())
 
 	size, err := resp.AsInt64()
 	if err != nil {

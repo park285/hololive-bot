@@ -22,18 +22,12 @@ package settings
 
 import "testing"
 
-func TestLocalSettingsApplier_ScraperProxyRuntimeState_NilScheduler(t *testing.T) {
+func TestLocalSettingsApplier_SettingsRuntimeState_NilAlarm(t *testing.T) {
 	t.Parallel()
 
-	applier := NewLocalSettingsApplier(nil, nil, nil, nil)
+	runtime := NewLocalSettingsApplier(nil).SettingsRuntimeState()
 
-	runtime := applier.ScraperProxyRuntimeState(true)
-
-	if runtime.SchedulerEnabled != nil {
-		t.Fatalf("runtime.SchedulerEnabled = %#v, want nil", runtime.SchedulerEnabled)
-	}
-
-	if runtime.SchedulerKnown != nil {
-		t.Fatalf("runtime.SchedulerKnown = %#v, want nil", runtime.SchedulerKnown)
+	if got := runtime.AsMap(); len(got) != 0 {
+		t.Fatalf("SettingsRuntimeState().AsMap() = %#v, want empty without alarm service", got)
 	}
 }

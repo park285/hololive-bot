@@ -8,7 +8,6 @@ import (
 	"math"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -27,7 +26,6 @@ type TransitionStore struct {
 	db     deliverysql.DeliveryDB
 	logger *slog.Logger
 	config TransitionConfig
-	ready  atomic.Bool
 
 	// afterCommit is a package-private fault-injection hook. It runs only after
 	// PostgreSQL accepted COMMIT and lets tests exercise response-loss read-back.
@@ -67,35 +65,7 @@ func NewTransitionStore(db any, logger *slog.Logger, config TransitionConfig) (*
 	return &TransitionStore{db: deliveryDB, logger: logger, config: config}, nil
 }
 
-func (s *TransitionStore) ensureReady(ctx context.Context) error {
-	if s == nil || s.db == nil {
-		return errors.New("transition store: db is nil")
-	}
-
-	if s.ready.Load() {
-		return nil
-	}
-
-	var ready bool
-
-	if err := s.db.QueryRow(ctx, mustSQL("transition_ready.sql"), LedgerSchemaVersion).Scan(&ready); err != nil {
-		return fmt.Errorf("transition store: load ledger completion: %w", err)
-	}
-
-	if !ready {
-		return errors.New("transition store: ledger backfill is not complete")
-	}
-
-	s.ready.Store(true)
-
-	return nil
-}
-
 func (s *TransitionStore) ClaimPending(ctx context.Context, batchSize int) ([]domain.YouTubeNotificationDelivery, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return nil, fmt.Errorf("claim pending: %w", err)
-	}
-
 	if batchSize <= 0 {
 		return nil, errors.New("claim pending: batch size must be positive")
 	}

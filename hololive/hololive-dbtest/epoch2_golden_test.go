@@ -18,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 	"github.com/pmezard/go-difflib/difflib"
 
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
@@ -150,7 +151,7 @@ func applyEpoch2Cutoff(t *testing.T, pool *pgxpool.Pool, roles epoch2Roles) {
 		return
 	}
 
-	entries, err := readManifest(filepath.Join(dir, manifestFileName))
+	entries, err := dbmigrate.Manifest(os.DirFS(dir))
 	if err != nil {
 		t.Fatalf("read epoch-2 source manifest: %v", err)
 	}

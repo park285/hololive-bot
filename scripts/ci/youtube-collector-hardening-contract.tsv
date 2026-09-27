@@ -1,5 +1,4 @@
 # rule_id	enabled	owner_pr	path_glob	polarity	regex	min	max	allowlist
-HC-002	true	PR-03	hololive/hololive-youtube-collector/youtubejs/src/fetch-transport.mjs	required	new ProxyAgent	1	1	-
 HC-009	true	PR-00	scripts/build/build-youtube-collector-go.sh	required	-pgo=off	1	2	-
 HC-009	true	PR-00	scripts/build/build-youtube-collector-go.sh	forbidden	-tags	0	0	-
 HC-009	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	required	build-youtube-collector-go\.sh	1	1	-

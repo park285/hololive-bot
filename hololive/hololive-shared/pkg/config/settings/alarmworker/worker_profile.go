@@ -59,6 +59,8 @@ func validateWorkerProfile(profile *settings.AlarmWorkerProfile) error {
 	return nil
 }
 
+// notification_delivery.lock_timeout_ms는 읽는 코드가 없어 검증하지 않는다. 퇴역 사유와 제거 조건은
+// settings.NotificationDeliveryWorkerSettings.LockTimeoutMS 주석에 있다.
 func positiveValueProblems(profile *settings.AlarmWorkerProfile) []string {
 	return load.PositiveValueProblems(map[string]int64{
 		"alarm_dispatch.lease_ms":                               profile.AlarmDispatch.LeaseMS,
@@ -67,7 +69,6 @@ func positiveValueProblems(profile *settings.AlarmWorkerProfile) []string {
 		"alarm_dispatch.poll_interval_ms":                       profile.AlarmDispatch.PollIntervalMS,
 		"alarm_dispatch.idle_backoff_min_ms":                    profile.AlarmDispatch.IdleBackoffMinMS,
 		"alarm_dispatch.idle_backoff_max_ms":                    profile.AlarmDispatch.IdleBackoffMaxMS,
-		"notification_delivery.lock_timeout_ms":                 profile.NotificationDelivery.LockTimeoutMS,
 		"notification_delivery.poll_interval_ms":                profile.NotificationDelivery.PollIntervalMS,
 		"notification_delivery.retry_backoff_ms":                profile.NotificationDelivery.RetryBackoffMS,
 		"notification_delivery.cleanup_after_ms":                profile.NotificationDelivery.CleanupAfterMS,
@@ -100,7 +101,6 @@ func positiveIntProblems(profile *settings.AlarmWorkerProfile) []string {
 		"youtube_delivery.batch_size":                     profile.YouTubeDelivery.BatchSize,
 		"youtube_delivery.max_retries":                    profile.YouTubeDelivery.MaxRetries,
 		"youtube_delivery.subscriber_lookup_parallelism":  profile.YouTubeDelivery.SubscriberLookupParallelism,
-		"youtube_delivery.telemetry_backfill_batch":       profile.YouTubeDelivery.TelemetryBackfillBatch,
 		"youtube_delivery.telemetry_flush_batch":          profile.YouTubeDelivery.TelemetryFlushBatch,
 	})
 }

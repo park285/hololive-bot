@@ -19,11 +19,17 @@ type Client struct {
 	subscriptionclient.Client
 }
 
-func New(baseURL, apiKey string) *Client {
-	return &Client{
-		HTTPClient:        internalhttp.NewJSONClient(baseURL, apiKey, 60*time.Second, nil),
-		SubscriptionsPath: membernewscontracts.SubscriptionsPath,
+// New는 llm-scheduler member news client를 만든다. URL이 https이고 H3 transport를 구성하지 못하면 오류다.
+func New(baseURL, apiKey string) (*Client, error) {
+	httpClient, err := internalhttp.NewJSONClient(baseURL, apiKey, 60*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("configure member news client transport: %w", err)
 	}
+
+	return &Client{
+		HTTPClient:        httpClient,
+		SubscriptionsPath: membernewscontracts.SubscriptionsPath,
+	}, nil
 }
 
 type digestRequest struct {

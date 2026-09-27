@@ -45,17 +45,6 @@ func NewPublisher(client valkey.Client) *Publisher {
 	}
 }
 
-// PublishScraperProxy는 scraper proxy 설정 변경을 발행합니다.
-func (p *Publisher) PublishScraperProxy(ctx context.Context, enabled bool) error {
-	if err := p.publish(ctx, contractssettings.UpdateTypeScraperProxy, contractssettings.ScraperProxyPayloadV1{
-		Enabled: enabled,
-	}); err != nil {
-		return fmt.Errorf("publish: %w", err)
-	}
-
-	return nil
-}
-
 // PublishAlarmAdvanceMinutes는 alarm advance minutes 변경을 발행합니다.
 func (p *Publisher) PublishAlarmAdvanceMinutes(ctx context.Context, minutes int) error {
 	if err := p.publish(ctx, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{

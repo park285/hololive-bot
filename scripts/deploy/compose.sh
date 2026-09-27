@@ -8,7 +8,6 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-paths.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh"
-. "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
@@ -232,7 +231,15 @@ case "${x_spaces_value}" in
     *) echo "[ERROR] HOLOLIVE_X_SPACES_ENABLED must be 0 or 1" >&2; exit 1 ;;
 esac
 
-if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_LOGIN_ENABLED"; then
+# 퇴역 가드(도입 4d81838a4, T17 형식 보강 stack-audit 2026-09-26): X Spaces 로그인 흐름은 기본 경로라 이 opt-in 키는
+# 동작을 고르지 않는다. 값과 무관하게 존재만으로(빈 값 포함, compose env 파일과 호출 프로세스 env 모두) 거절한다.
+# 이 스크립트는 AP 배포·rollback·완료 검사에서도 COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env로 불린다.
+# 제거 조건: 중앙 /etc/stack-secrets/hololive-bot/compose.env(T18 2026-09-26 0건 확인), AP 호스트의
+# /etc/stack-secrets/hololive-bot/ap-compose.env(T18 미확인), 두 파일의 stack-secrets master 사본, 이 스크립트를 부르는
+# systemd unit·wrapper의 export에 키가 0건이고, 그 상태로 이 가드가 든 release가 중앙과 AP 호스트에 모두 배포된 뒤 이 블록과
+# x-spaces-overlay_test.sh의 login_setting 루프를 함께 삭제한다. 재검토 기한: 2026-12-31.
+if [[ -n "${HOLOLIVE_X_SPACES_LOGIN_ENABLED+set}" ]] \
+    || compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_LOGIN_ENABLED"; then
     echo "[ERROR] HOLOLIVE_X_SPACES_LOGIN_ENABLED is retired; remove it from the host environment" >&2
     exit 1
 fi
@@ -326,11 +333,9 @@ if [[ "${compose_invokes_up}" == true ]]; then
 
     bind_preflight_required=false
     public_ingress_preflight_required=false
-    removed_runtime_cleanup_required=false
     gate_targets=()
     if [[ ${#up_service_targets[@]} -eq 0 ]]; then
         bind_preflight_required=true
-        removed_runtime_cleanup_required=true
         collector_disabled=false
         for file in "${compose_files[@]}"; do
             if [[ "${file##*/}" == "docker-compose.youtube-collector-disabled.yml" ]]; then
@@ -354,9 +359,6 @@ if [[ "${compose_invokes_up}" == true ]]; then
             if cutover_service_uses_app_writable_bind_mount "${service}"; then
                 bind_preflight_required=true
                 gate_targets+=("${service}")
-            fi
-            if [[ "${service}" == "hololive-api" ]]; then
-                removed_runtime_cleanup_required=true
             fi
             if [[ "${service}" == "admin-dashboard-ingress" ]]; then
                 public_ingress_preflight_required=true
@@ -386,7 +388,7 @@ if [[ "${compose_invokes_up}" == true ]]; then
         fi
     fi
 
-    if [[ "${bind_preflight_required}" == true || "${removed_runtime_cleanup_required}" == true || ${#gate_targets[@]} -gt 0 ]]; then
+    if [[ "${bind_preflight_required}" == true || ${#gate_targets[@]} -gt 0 ]]; then
         COMPOSE_FILE_ARGS=("${compose_prefix[@]}")
         if [[ "${bind_preflight_required}" == true ]]; then
             echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
@@ -395,19 +397,12 @@ if [[ "${compose_invokes_up}" == true ]]; then
                 exit 1
             fi
         fi
-        if [[ "${removed_runtime_cleanup_required}" == true ]]; then
-            removed_runtime_cleanup_before_cutover
-        fi
         if [[ ${#gate_targets[@]} -gt 0 ]]; then
             cutover_capture_restart_baseline "${gate_targets[@]}"
         fi
     fi
 
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"
-
-    if [[ "${removed_runtime_cleanup_required}" == true ]]; then
-        removed_runtime_assert_absent
-    fi
 
     if [[ ${#gate_targets[@]} -gt 0 ]] && ! cutover_health_gate "${gate_targets[@]}"; then
         echo "[ERROR] health gate failed after cutover up" >&2

@@ -5,87 +5,6 @@ import (
 	"testing"
 )
 
-func TestValidateScraperActiveActiveConfig_EnabledEmptyNamespace(t *testing.T) {
-	t.Parallel()
-
-	err := validateScraperActiveActiveConfig(ScraperActiveActiveConfig{
-		Enabled:   true,
-		Namespace: "",
-	})
-	if err == nil {
-		t.Fatal("expected error for enabled active-active with empty namespace")
-	}
-
-	if !strings.Contains(err.Error(), "YOUTUBE_PRODUCER_LEASE_NAMESPACE") {
-		t.Fatalf("error = %q, want YOUTUBE_PRODUCER_LEASE_NAMESPACE mention", err.Error())
-	}
-}
-
-func TestValidateScraperActiveActiveConfig_Disabled(t *testing.T) {
-	t.Parallel()
-
-	err := validateScraperActiveActiveConfig(ScraperActiveActiveConfig{
-		Enabled:   false,
-		Namespace: "",
-	})
-	if err != nil {
-		t.Fatalf("expected nil for disabled active-active, got %v", err)
-	}
-}
-
-func TestValidateScraperSchedulerConfig_PartialZero(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		config ScraperSchedulerConfig
-		errSub string
-	}{
-		{
-			name: "negative poll timeout",
-			config: ScraperSchedulerConfig{
-				PollTimeout:     -1,
-				ErrorBackoffMin: 1,
-				ErrorBackoffMax: 2,
-			},
-			errSub: "POLL_TIMEOUT",
-		},
-		{
-			name: "negative backoff min",
-			config: ScraperSchedulerConfig{
-				PollTimeout:     1,
-				ErrorBackoffMin: -1,
-				ErrorBackoffMax: 2,
-			},
-			errSub: "BACKOFF_MIN",
-		},
-		{
-			name: "negative backoff max",
-			config: ScraperSchedulerConfig{
-				PollTimeout:     1,
-				ErrorBackoffMin: 1,
-				ErrorBackoffMax: -1,
-			},
-			errSub: "BACKOFF_MAX",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := validateScraperSchedulerConfig(tt.config)
-			if err == nil {
-				t.Fatalf("expected error for %s", tt.name)
-			}
-
-			if !strings.Contains(err.Error(), tt.errSub) {
-				t.Fatalf("error = %q, want substring %q", err.Error(), tt.errSub)
-			}
-		})
-	}
-}
-
 func TestServerTransportEnabled_EmptyTransports_DefaultH3(t *testing.T) {
 	t.Parallel()
 
@@ -222,7 +141,6 @@ func TestLoadAdminAPIRuntime_DefaultEnforcesCORSOrigins_05c4a5ef(t *testing.T) {
 func TestLoadAdminAPIRuntime_RequiresHolodexKey(t *testing.T) {
 	setAdminAPIRuntimeEnv(t)
 	t.Setenv("HOLODEX_API_KEY", "")
-	t.Setenv("HOLODEX_API_KEY_1", "")
 
 	_, err := LoadAdminAPIRuntime()
 	if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {

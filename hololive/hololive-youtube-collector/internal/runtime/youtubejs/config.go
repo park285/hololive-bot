@@ -3,7 +3,6 @@ package youtubejs
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,11 +31,6 @@ const (
 	defaultHelperBodyLimit = DefaultResponseBodyLimit
 )
 
-type ProxyConfig struct {
-	Enabled bool
-	URL     string
-}
-
 type Config struct {
 	NodePath          string
 	ScriptPath        string
@@ -48,7 +42,6 @@ type Config struct {
 	RequestBodyLimit  int64
 	ResponseBodyLimit int64
 	MaxInflight       int
-	Proxy             ProxyConfig
 	Limiter           *ratelimiter.RateLimiter
 	extraArgs         []string
 }
@@ -101,8 +94,6 @@ func applyConfigDefaults(cfg *Config) {
 	if cfg.ResponseBodyLimit <= 0 {
 		cfg.ResponseBodyLimit = DefaultResponseBodyLimit
 	}
-
-	cfg.Proxy.URL = strings.TrimSpace(cfg.Proxy.URL)
 }
 
 func validateResolvedConfig(cfg *Config) error {
@@ -126,51 +117,7 @@ func validateResolvedConfig(cfg *Config) error {
 		return fmt.Errorf("validate runtime base dir: %w", err)
 	}
 
-	if err := validateProxy(cfg.Proxy); err != nil {
-		return fmt.Errorf("validate proxy: %w", err)
-	}
-
 	return nil
-}
-
-func validateProxy(proxy ProxyConfig) error {
-	if !proxy.Enabled {
-		if err := validateDisabledProxy(proxy.URL); err != nil {
-			return fmt.Errorf("validate disabled proxy: %w", err)
-		}
-
-		return nil
-	}
-
-	if proxy.URL == "" {
-		return errors.New("start youtube.js helper: proxy url is required when proxy is enabled")
-	}
-
-	parsed, err := url.Parse(proxy.URL)
-	if err != nil {
-		return errors.New("start youtube.js helper: proxy url is invalid")
-	}
-
-	if !validProxyURL(parsed) {
-		return errors.New("start youtube.js helper: proxy url is invalid")
-	}
-
-	return nil
-}
-
-func validateDisabledProxy(proxyURL string) error {
-	if proxyURL != "" {
-		return errors.New("start youtube.js helper: proxy url must be empty when proxy is disabled")
-	}
-
-	return nil
-}
-
-func validProxyURL(parsed *url.URL) bool {
-	validScheme := parsed.Scheme == "http" || parsed.Scheme == "https"
-	validLocation := strings.TrimSpace(parsed.Host) != "" && (parsed.Path == "" || parsed.Path == "/")
-
-	return validScheme && validLocation && parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
 func validateRuntimeBaseDir(path string) error {

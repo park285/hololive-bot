@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -110,6 +111,18 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 		}
 
 		return nil
+	}
+
+	diagnostics := result.DiagnosticCounts()
+	if result.Status != livequery.Complete || diagnostics != (livequery.Diagnostics{}) {
+		// D1/D2 보존 증거는 조회를 막지 않지만 불일치 조사를 위해 기존 운영 로그에 남긴다.
+		c.Deps().Logger.InfoContext(ctx, "live query incomplete",
+			slog.String("status", string(result.Status)),
+			slog.Any("reasons", result.ReasonCounts()),
+			slog.Any("nonblocking_diagnostics", diagnostics),
+			slog.Int("items", len(result.Items)),
+			slog.Time("as_of", result.AsOf),
+		)
 	}
 
 	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.LiveQuery(ctx, result, request.MemberName)); err != nil {

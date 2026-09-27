@@ -146,56 +146,6 @@ func normalizeIdentity(kind domain.OutboxKind, contentID string) (domain.OutboxK
 	}
 }
 
-func trackingIdentityCandidates(kind domain.OutboxKind, contentID string) ([]string, error) {
-	normalizedContentID := strings.TrimSpace(contentID)
-
-	canonicalContentID, err := canonicalTrackingIdentity(kind, normalizedContentID)
-	if err != nil {
-		return nil, fmt.Errorf("canonical tracking identity: %w", err)
-	}
-
-	switch kind {
-	case domain.OutboxKindNewShort:
-		rawContentID, err := ytcontentid.NormalizeShortVideoID(normalizedContentID)
-
-		candidates, err := trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
-		if err != nil {
-			return nil, fmt.Errorf("build short tracking identity candidates: %w", err)
-		}
-
-		return candidates, nil
-	case domain.OutboxKindCommunityPost:
-		rawContentID, err := ytcontentid.NormalizeCommunityPostID(normalizedContentID)
-
-		candidates, err := trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
-		if err != nil {
-			return nil, fmt.Errorf("build community tracking identity candidates: %w", err)
-		}
-
-		return candidates, nil
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
-		return []string{canonicalContentID}, nil
-	default:
-		return nil, fmt.Errorf("tracking identity candidates: unsupported kind %s", kind)
-	}
-}
-
-func trackingIdentityCandidatePair(canonicalContentID, rawContentID string, err error) ([]string, error) {
-	if err != nil {
-		return nil, fmt.Errorf("normalize raw tracking identity: %w", err)
-	}
-
-	if strings.TrimSpace(rawContentID) == "" {
-		return nil, errors.New("normalize raw tracking identity: result is empty")
-	}
-
-	if canonicalContentID == rawContentID {
-		return []string{canonicalContentID}, nil
-	}
-
-	return []string{canonicalContentID, rawContentID}, nil
-}
-
 func canonicalTrackingIdentity(kind domain.OutboxKind, contentID string) (string, error) {
 	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, contentID)
 	if err != nil {

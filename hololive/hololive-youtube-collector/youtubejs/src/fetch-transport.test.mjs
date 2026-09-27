@@ -1,18 +1,14 @@
 import assert from "node:assert/strict";
-import { createServer, request as httpRequest } from "node:http";
-import { connect } from "node:net";
+import { createServer } from "node:http";
 import test from "node:test";
 
 import { createFetchTransport } from "./fetch-transport.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { rpcErrorResultFor } from "./rpc-validation.mjs";
 
-test("PXY-001 PXY-002 PXY-003 PXY-004 PXY-005 preserve effective Request semantics through local sockets", async () => {
-  const fixture = await proxyFixture();
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: fixture.proxyURL },
-    currentSignal: () => undefined,
-  });
+test("effective Request semantics reach the origin through local sockets", async () => {
+  const fixture = await originFixture();
+  const transport = createFetchTransport({ currentSignal: () => undefined });
   try {
     const first = await transport.fetch(`${fixture.originURL}/get`, {
       headers: { "x-case": "url" },
@@ -71,28 +67,18 @@ test("PXY-001 PXY-002 PXY-003 PXY-004 PXY-005 preserve effective Request semanti
     assert.equal(fixture.requests[0].headers["x-case"], "url");
     assert.equal(fixture.requests[1].headers["x-case"], "native");
     assert.equal(fixture.requests[2].headers["x-case"], "override");
-    assert.equal(fixture.proxyRequests, 5);
   } finally {
-    await transport.close();
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      assert.equal(fixture.activeProxyConnections, 0);
-    } finally {
-      await fixture.close();
-    }
+    await fixture.close();
   }
 });
 
-test("PXY RequestInit abort keeps child-abort provenance while request context stays live", async () => {
+test("RequestInit abort keeps child-abort provenance while request context stays live", async () => {
   const secret = "secret-init-abort-reason";
   const rpcController = new AbortController();
   const initController = new AbortController();
   initController.abort(new Error(secret));
-  const fixture = await proxyFixture();
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: fixture.proxyURL },
-    currentSignal: () => rpcController.signal,
-  });
+  const fixture = await originFixture();
+  const transport = createFetchTransport({ currentSignal: () => rpcController.signal });
   try {
     const result = await runWithRequestContext(
       { requestId: "live-rpc", signal: rpcController.signal },
@@ -113,19 +99,15 @@ test("PXY RequestInit abort keeps child-abort provenance while request context s
     assert.equal(rpcController.signal.aborted, false);
     assert.equal(fixture.requests.length, 0);
   } finally {
-    await transport.close();
     await fixture.close();
   }
 });
 
-test("PXY-006 an already-aborted request does not reach the origin", async () => {
-  const fixture = await proxyFixture();
+test("an already-aborted request does not reach the origin", async () => {
+  const fixture = await originFixture();
   const controller = new AbortController();
   controller.abort();
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: fixture.proxyURL },
-    currentSignal: () => controller.signal,
-  });
+  const transport = createFetchTransport({ currentSignal: () => controller.signal });
   try {
     await assert.rejects(
       transport.fetch(`${fixture.originURL}/aborted`),
@@ -133,376 +115,245 @@ test("PXY-006 an already-aborted request does not reach the origin", async () =>
     );
     assert.equal(fixture.requests.length, 0);
   } finally {
-    await transport.close();
     await fixture.close();
   }
 });
 
-test("known transport errors remain explicitly transient", async () => {
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
+test("known transport errors remain explicitly transient", async (t) => {
   const failure = new TypeError("fetch failed", { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) });
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
-    currentSignal: () => undefined,
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async () => { throw failure; },
-    }),
-  });
-  try {
-    await assert.rejects(
-      transport.fetch("http://origin.test/"),
-      (error) => error.code === "collection_failed" && error.failureClass === "TRANSIENT",
-    );
-  } finally {
-    await transport.close();
-  }
+  t.mock.method(globalThis, "fetch", async () => { throw failure; });
+  const transport = createFetchTransport({ currentSignal: () => undefined });
+  await assert.rejects(
+    transport.fetch("http://origin.test/"),
+    (error) => error.code === "collection_failed" && error.failureClass === "TRANSIENT",
+  );
 });
 
-test("safe Innertube HTTP 500 is retried once with the same request body", async () => {
+test("safe Innertube HTTP 500 is retried once with the same request body", async (t) => {
   const events = [];
   const bodies = [];
   let calls = 0;
   let canceled = 0;
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
+  t.mock.method(globalThis, "fetch", async (request) => {
+    calls += 1;
+    bodies.push(await request.text());
+    if (calls === 1) {
+      return new Response(new ReadableStream({
+        cancel() {
+          canceled += 1;
+        },
+      }), { status: 500 });
+    }
+    return new Response("ok", { status: 200 });
+  });
+  const transport = createFetchTransport({
     currentSignal: () => undefined,
     retryDelayMs: 0,
     observeRetry: (event) => events.push(event),
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async (_url, init) => {
-        calls += 1;
-        bodies.push(await new Response(init.body).text());
-        if (calls === 1) {
-          return new Response(new ReadableStream({
-            cancel() {
-              canceled += 1;
-            },
-          }), { status: 500 });
-        }
-        return new Response("ok", { status: 200 });
-      },
-    }),
   });
-  try {
-    const response = await transport.fetch("https://www.youtube.com/youtubei/v1/browse?prettyPrint=false", {
-      method: "POST",
-      body: JSON.stringify({ browseId: "UC-test" }),
-    });
-    assert.equal(await response.text(), "ok");
-    assert.equal(calls, 2);
-    assert.deepEqual(bodies, [
-      JSON.stringify({ browseId: "UC-test" }),
-      JSON.stringify({ browseId: "UC-test" }),
-    ]);
-    assert.equal(canceled, 1);
-    assert.deepEqual(events, [{
-      endpoint: "browse",
-      reason: "http_status",
-      statusCode: 500,
-      delayMs: 0,
-      attempt: 2,
-      maxAttempts: 2,
-    }]);
-  } finally {
-    await transport.close();
-  }
+  const response = await transport.fetch("https://www.youtube.com/youtubei/v1/browse?prettyPrint=false", {
+    method: "POST",
+    body: JSON.stringify({ browseId: "UC-test" }),
+  });
+  assert.equal(await response.text(), "ok");
+  assert.equal(calls, 2);
+  assert.deepEqual(bodies, [
+    JSON.stringify({ browseId: "UC-test" }),
+    JSON.stringify({ browseId: "UC-test" }),
+  ]);
+  assert.equal(canceled, 1);
+  assert.deepEqual(events, [{
+    endpoint: "browse",
+    reason: "http_status",
+    statusCode: 500,
+    delayMs: 0,
+    attempt: 2,
+    maxAttempts: 2,
+  }]);
 });
 
-test("safe Innertube transient network failure is retried once", async () => {
+test("safe Innertube transient network failure is retried once", async (t) => {
   const events = [];
   let calls = 0;
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
   const failure = new TypeError("fetch failed", {
     cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }),
   });
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    if (calls === 1) throw failure;
+    return new Response("ok");
+  });
+  const transport = createFetchTransport({
     currentSignal: () => undefined,
     retryDelayMs: 0,
     observeRetry: (event) => events.push(event),
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async () => {
-        calls += 1;
-        if (calls === 1) throw failure;
-        return new Response("ok");
-      },
-    }),
   });
-  try {
-    const response = await transport.fetch("https://www.youtube.com/youtubei/v1/player", {
-      method: "POST",
-      body: "{}",
-    });
-    assert.equal(await response.text(), "ok");
-    assert.equal(calls, 2);
-    assert.deepEqual(events, [{
-      endpoint: "player",
-      reason: "network",
-      delayMs: 0,
-      attempt: 2,
-      maxAttempts: 2,
-    }]);
-  } finally {
-    await transport.close();
-  }
+  const response = await transport.fetch("https://www.youtube.com/youtubei/v1/player", {
+    method: "POST",
+    body: "{}",
+  });
+  assert.equal(await response.text(), "ok");
+  assert.equal(calls, 2);
+  assert.deepEqual(events, [{
+    endpoint: "player",
+    reason: "network",
+    delayMs: 0,
+    attempt: 2,
+    maxAttempts: 2,
+  }]);
 });
 
-test("unsafe Innertube endpoint is never retried", async () => {
+test("unsafe Innertube endpoint is never retried", async (t) => {
   let calls = 0;
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return new Response("failed", { status: 500 });
+  });
+  const transport = createFetchTransport({
     currentSignal: () => undefined,
     retryDelayMs: 0,
     observeRetry: () => assert.fail("unsafe endpoint scheduled a retry"),
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async () => {
-        calls += 1;
-        return new Response("failed", { status: 500 });
-      },
-    }),
   });
-  try {
+  await assert.rejects(
+    transport.fetch("https://www.youtube.com/youtubei/v1/log_event", {
+      method: "POST",
+      body: "{}",
+    }),
+    (error) => error.code === "collection_failed",
+  );
+  assert.equal(calls, 1);
+});
+
+test("upstream 429 reaches RPC cooldown without retry or response-body disclosure", async (t) => {
+  let calls = 0;
+  let canceled = 0;
+  const events = [];
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("private upstream response"));
+      },
+      cancel() { canceled += 1; },
+    }), { status: 429 });
+  });
+  const transport = createFetchTransport({
+    currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: (event) => events.push(event),
+  });
+  await assert.rejects(
+    transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
+      method: "POST", body: "{}",
+    }),
+    (error) => {
+      const result = rpcErrorResultFor(error);
+      assert.equal(result.status, 429);
+      assert.equal(result.body.error.code, "cooldown");
+      assert.equal(result.body.error.class, "COOLDOWN");
+      assert.deepEqual(result.body.error.retry, { kind: "default" });
+      assert.equal(JSON.stringify(result).includes("private upstream response"), false);
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+  assert.equal(canceled, 1);
+  assert.deepEqual(events, []);
+});
+
+test("non-transient 5xx statuses are never retried", async (t) => {
+  const statuses = [501, 502, 504];
+  const events = [];
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    const status = statuses[calls];
+    calls += 1;
+    return new Response("failed", { status });
+  });
+  const transport = createFetchTransport({
+    currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: (event) => events.push(event),
+  });
+  for (const status of statuses) {
+    const before = calls;
     await assert.rejects(
-      transport.fetch("https://www.youtube.com/youtubei/v1/log_event", {
+      transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
         method: "POST",
         body: "{}",
       }),
       (error) => error.code === "collection_failed",
     );
-    assert.equal(calls, 1);
-  } finally {
-    await transport.close();
+    assert.equal(calls, before + 1, `HTTP ${status} must not retry`);
   }
+  assert.equal(calls, statuses.length);
+  assert.deepEqual(events, []);
 });
 
-test("upstream 429 reaches RPC cooldown without retry or response-body disclosure", async (t) => {
-  for (const enabled of [false, true]) {
-    await t.test(`proxy enabled=${enabled}`, async (t) => {
-      let calls = 0;
-      let canceled = 0;
-      const events = [];
-      const fetch = async () => {
-        calls += 1;
-        return new Response(new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("private upstream response"));
-          },
-          cancel() { canceled += 1; },
-        }), { status: 429 });
-      };
-      class ProxyAgent {
-        async close() {}
-        destroy() {}
-      }
-      t.mock.method(globalThis, "fetch", fetch);
-      const transport = await createFetchTransport({
-        proxy: enabled ? { enabled, url: "http://proxy.test:8080" } : { enabled },
-        currentSignal: () => undefined,
-        retryDelayMs: 0,
-        observeRetry: (event) => events.push(event),
-        loadUndici: async () => ({ ProxyAgent, fetch }),
-      });
-      try {
-        await assert.rejects(
-          transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
-            method: "POST", body: "{}",
-          }),
-          (error) => {
-            const result = rpcErrorResultFor(error);
-            assert.equal(result.status, 429);
-            assert.equal(result.body.error.code, "cooldown");
-            assert.equal(result.body.error.class, "COOLDOWN");
-            assert.deepEqual(result.body.error.retry, { kind: "default" });
-            assert.equal(JSON.stringify(result).includes("private upstream response"), false);
-            return true;
-          },
-        );
-        assert.equal(calls, 1);
-        assert.equal(canceled, 1);
-        assert.deepEqual(events, []);
-      } finally {
-        await transport.close();
-      }
-    });
-  }
-});
-
-test("non-transient 5xx statuses are never retried", async () => {
-  const statuses = [501, 502, 504];
-  const events = [];
-  let calls = 0;
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
-    currentSignal: () => undefined,
-    retryDelayMs: 0,
-    observeRetry: (event) => events.push(event),
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async () => {
-        const status = statuses[calls];
-        calls += 1;
-        return new Response("failed", { status });
-      },
-    }),
-  });
-  try {
-    for (const status of statuses) {
-      const before = calls;
-      await assert.rejects(
-        transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
-          method: "POST",
-          body: "{}",
-        }),
-        (error) => error.code === "collection_failed",
-      );
-      assert.equal(calls, before + 1, `HTTP ${status} must not retry`);
-    }
-    assert.equal(calls, statuses.length);
-    assert.deepEqual(events, []);
-  } finally {
-    await transport.close();
-  }
-});
-
-test("retry exhaustion preserves the typed transient failure", async () => {
+test("retry exhaustion preserves the typed transient failure", async (t) => {
   let canceled = 0;
   let calls = 0;
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
-    currentSignal: () => undefined,
-    retryDelayMs: 0,
-    observeRetry: () => {},
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async () => {
-        calls += 1;
-        return new Response(new ReadableStream({
-          cancel() {
-            canceled += 1;
-          },
-        }), { status: 500 });
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return new Response(new ReadableStream({
+      cancel() {
+        canceled += 1;
       },
-    }),
+    }), { status: 500 });
   });
-  try {
-    let failure;
-    try {
-      await transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" });
-    } catch (error) {
-      failure = error;
-    }
-    assert.equal(failure?.code, "collection_failed");
-    assert.equal(failure?.failureClass, "TRANSIENT");
-    assert.equal(calls, 2);
-    assert.equal(canceled, 2);
-    const result = rpcErrorResultFor(failure);
-    assert.equal(result.status, 502);
-    assert.equal(result.body.error.code, "collection_failed");
-    assert.equal(result.body.error.class, "TRANSIENT");
-  } finally {
-    await transport.close();
-  }
-});
-
-test("direct upstream HTTP 500 follows the same typed failure path", async () => {
-  const originalFetch = globalThis.fetch;
-  let canceled = 0;
-  globalThis.fetch = async () => new Response(new ReadableStream({
-    cancel() {
-      canceled += 1;
-    },
-  }), { status: 500 });
-  const transport = await createFetchTransport({
-    proxy: { enabled: false },
+  const transport = createFetchTransport({
     currentSignal: () => undefined,
     retryDelayMs: 0,
     observeRetry: () => {},
   });
+  let failure;
   try {
-    await assert.rejects(
-      transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" }),
-      (error) => error.code === "collection_failed" && error.failureClass === "TRANSIENT",
-    );
-    assert.equal(canceled, 2);
-  } finally {
-    globalThis.fetch = originalFetch;
-    await transport.close();
+    await transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" });
+  } catch (error) {
+    failure = error;
   }
+  assert.equal(failure?.code, "collection_failed");
+  assert.equal(failure?.failureClass, "TRANSIENT");
+  assert.equal(calls, 2);
+  assert.equal(canceled, 2);
+  const result = rpcErrorResultFor(failure);
+  assert.equal(result.status, 502);
+  assert.equal(result.body.error.code, "collection_failed");
+  assert.equal(result.body.error.class, "TRANSIENT");
 });
 
-test("request cancellation stops a scheduled retry before the second attempt", async () => {
+test("request cancellation stops a scheduled retry before the second attempt", async (t) => {
   const controller = new AbortController();
   let scheduled;
   let calls = 0;
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return new Response("failed", { status: 500 });
+  });
+  const transport = createFetchTransport({
     currentSignal: () => controller.signal,
     observeRetry: (event) => {
       scheduled = event;
       controller.abort();
     },
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async () => {
-        calls += 1;
-        return new Response("failed", { status: 500 });
-      },
-    }),
   });
-  try {
-    await assert.rejects(
-      transport.fetch("https://www.youtube.com/youtubei/v1/next", {
-        method: "POST",
-        body: "{}",
-      }),
-      (error) => error.code === "collection_canceled",
-    );
-    assert.equal(calls, 1);
-    assert.equal(scheduled.endpoint, "next");
-    assert.equal(scheduled.attempt, 2);
-    assert.ok(scheduled.delayMs >= 100 && scheduled.delayMs <= 300);
-  } finally {
-    await transport.close();
-  }
+  await assert.rejects(
+    transport.fetch("https://www.youtube.com/youtubei/v1/next", {
+      method: "POST",
+      body: "{}",
+    }),
+    (error) => error.code === "collection_canceled",
+  );
+  assert.equal(calls, 1);
+  assert.equal(scheduled.endpoint, "next");
+  assert.equal(scheduled.attempt, 2);
+  assert.ok(scheduled.delayMs >= 100 && scheduled.delayMs <= 300);
 });
 
-test("PXY-007 request-scoped cancellation affects only one of twenty requests", async () => {
-  const fixture = await proxyFixture();
+test("request-scoped cancellation affects only one of twenty requests", async () => {
+  const fixture = await originFixture();
   let signal;
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: fixture.proxyURL },
-    currentSignal: () => signal,
-  });
+  const transport = createFetchTransport({ currentSignal: () => signal });
   try {
     const requests = Array.from({ length: 20 }, (_, index) => {
       const controller = new AbortController();
@@ -518,70 +369,12 @@ test("PXY-007 request-scoped cancellation affects only one of twenty requests", 
     assert.equal(results.filter((result) => result.status === "rejected").length, 1);
     assert.equal(results.filter((result) => result.status === "fulfilled").length, 19);
   } finally {
-    await transport.close();
     await fixture.close();
   }
 });
 
-test("PXY-008 PXY-009 bootstrap constructs one agent and close is idempotent", async () => {
-  let constructed = 0;
-  let closed = 0;
-  class ProxyAgent {
-    constructor() {
-      constructed += 1;
-    }
-    async close() {
-      closed += 1;
-    }
-    destroy() {}
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
-    currentSignal: () => undefined,
-    loadUndici: async () => ({ ProxyAgent, fetch: async () => new Response() }),
-  });
-  assert.equal(constructed, 1);
-  await Promise.all([transport.close(), transport.close()]);
-  assert.equal(closed, 1);
-});
-
-test("PXY-009 close rejection destroys exactly once and PXY-010 redacts credentials", async () => {
-  let destroyed = 0;
-  class ProxyAgent {
-    async close() {
-      throw new Error("close failed");
-    }
-    destroy() {
-      destroyed += 1;
-    }
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://user:password@proxy.test:8080" },
-    currentSignal: () => undefined,
-    loadUndici: async () => ({ ProxyAgent, fetch: async () => new Response() }),
-  });
-  await assert.rejects(transport.close(), /close failed/);
-  await assert.rejects(transport.close(), /close failed/);
-  assert.equal(destroyed, 1);
-
-  const secret = "super-secret-password";
-  await assert.rejects(
-    createFetchTransport({
-      proxy: { enabled: true, url: `http://user:${secret}@proxy.test:8080/path` },
-      currentSignal: () => undefined,
-    }),
-    (error) => {
-      assert.doesNotMatch(String(error), new RegExp(secret));
-      return true;
-    },
-  );
-});
-
 test("locked request bodies fail as helper_internal_invariant", async () => {
-  const transport = await createFetchTransport({
-    proxy: { enabled: false },
-    currentSignal: () => undefined,
-  });
+  const transport = createFetchTransport({ currentSignal: () => undefined });
   const request = new Request("http://127.0.0.1/locked", {
     method: "POST",
     body: "body",
@@ -594,32 +387,10 @@ test("locked request bodies fail as helper_internal_invariant", async () => {
     );
   } finally {
     reader.releaseLock();
-    await transport.close();
   }
 });
 
-test("PXY-009 close timeout destroys exactly once", async () => {
-  let destroyed = 0;
-  class ProxyAgent {
-    close() {
-      return new Promise(() => {});
-    }
-    destroy() {
-      destroyed += 1;
-    }
-  }
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
-    currentSignal: () => undefined,
-    closeTimeoutMs: 5,
-    loadUndici: async () => ({ ProxyAgent, fetch: async () => new Response() }),
-  });
-  await assert.rejects(transport.close(), /timed out/);
-  await assert.rejects(transport.close(), /timed out/);
-  assert.equal(destroyed, 1);
-});
-
-async function proxyFixture() {
+async function originFixture() {
   const requests = [];
   const origin = createServer((req, res) => {
     const chunks = [];
@@ -640,67 +411,15 @@ async function proxyFixture() {
     });
   });
   await listen(origin);
-  let connects = 0;
-  let proxyRequests = 0;
-  const tunnels = new Set();
-  const proxySockets = new Set();
-  const proxy = createServer((req, res) => {
-    proxyRequests += 1;
-    const upstream = httpRequest(req.url, {
-      method: req.method,
-      headers: req.headers,
-    }, (upstreamResponse) => {
-      res.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
-      upstreamResponse.pipe(res);
-    });
-    upstream.on("error", (error) => res.destroy(error));
-    req.pipe(upstream);
-  });
-  proxy.on("connection", (socket) => {
-    proxySockets.add(socket);
-    socket.on("close", () => proxySockets.delete(socket));
-  });
-  proxy.on("connect", (req, client, firstPacket) => {
-    connects += 1;
-    const [host, port] = String(req.url).split(":");
-    const upstream = connect(Number(port), host, () => {
-      tunnels.add(client);
-      tunnels.add(upstream);
-      client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-      if (firstPacket.length > 0) {
-        upstream.write(firstPacket);
-      }
-      client.pipe(upstream);
-      upstream.pipe(client);
-    });
-    client.on("close", () => tunnels.delete(client));
-    upstream.on("close", () => tunnels.delete(upstream));
-    upstream.on("error", () => client.destroy());
-  });
-  await listen(proxy);
   const originAddress = origin.address();
-  const proxyAddress = proxy.address();
-  if (originAddress == null || typeof originAddress === "string" || proxyAddress == null || typeof proxyAddress === "string") {
+  if (originAddress == null || typeof originAddress === "string") {
     throw new Error("fixture address missing");
   }
   return {
     requests,
-    get connects() {
-      return connects;
-    },
-    get proxyRequests() {
-      return proxyRequests;
-    },
-    get activeProxyConnections() {
-      return proxySockets.size;
-    },
     originURL: `http://127.0.0.1:${originAddress.port}`,
-    proxyURL: `http://127.0.0.1:${proxyAddress.port}`,
     async close() {
-      for (const tunnel of tunnels) {
-        tunnel.destroy();
-      }
-      await Promise.all([close(origin), close(proxy)]);
+      await close(origin);
     },
   };
 }

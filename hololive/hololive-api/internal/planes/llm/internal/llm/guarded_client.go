@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
@@ -20,29 +21,30 @@ func NewGuardedClient(client Client, guard *outputguard.Guard) *GuardedClient {
 	return &GuardedClient{client: client, guard: guard}
 }
 
-func (c *GuardedClient) GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
+func (c *GuardedClient) GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error) {
 	if c == nil || c.client == nil {
 		return "", errors.New("generate guarded json: llm client is unavailable")
 	}
 
-	text, err := c.client.GenerateJSON(ctx, systemPrompt, userPrompt, schema)
+	text, err := c.client.GenerateJSON(ctx, prompts, schema)
 	if err != nil {
 		return "", fmt.Errorf("generate JSON: %w", err)
 	}
 
-	if err := c.validateGeneratedJSON(systemPrompt, text); err != nil {
+	// 지시 계층(invariant·developer)만 유출 보호 대상이다. user 계층은 입력 데이터라 보호하지 않는다.
+	if err := c.validateGeneratedJSON([]string{prompts.Invariant, prompts.Developer}, text); err != nil {
 		return "", fmt.Errorf("validate generated JSON: %w", err)
 	}
 
 	return text, nil
 }
 
-func (c *GuardedClient) validateGeneratedJSON(systemPrompt, text string) error {
+func (c *GuardedClient) validateGeneratedJSON(instructionPrompts []string, text string) error {
 	if c.guard == nil {
 		return fmt.Errorf("validate generated json: %w", guardrail.ErrOutputGuardUnavailable)
 	}
 
-	if err := validateBoundGeneratedOutput(c.guard, systemPrompt, text); err != nil {
+	if err := validateBoundGeneratedOutput(c.guard, instructionPrompts, text); err != nil {
 		return fmt.Errorf("validate bound generated output: %w", err)
 	}
 
@@ -59,8 +61,8 @@ func (c *GuardedClient) validateGeneratedJSON(systemPrompt, text string) error {
 	return nil
 }
 
-func validateBoundGeneratedOutput(guard *outputguard.Guard, systemPrompt, text string) error {
-	bound, err := guard.Bind([]string{systemPrompt})
+func validateBoundGeneratedOutput(guard *outputguard.Guard, instructionPrompts []string, text string) error {
+	bound, err := guard.Bind(instructionPrompts)
 	if err != nil {
 		return fmt.Errorf("bind generated output guard: %w", err)
 	}

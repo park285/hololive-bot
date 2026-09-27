@@ -27,7 +27,6 @@
 - `contracts/majorevent.md`
 - `contracts/trigger.md`
 - `contracts/alarm.md`
-- `contracts/karing-kakaolink.md`
 - `contracts/settings.md`
 - `contracts/iris-boundary.md`
 

@@ -70,7 +70,7 @@ func shutdownContext(ctx context.Context, timeout time.Duration) (context.Contex
 		timeout = defaultShutdownTimeout
 	}
 
-	if ctx == nil || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return context.WithTimeout(context.Background(), timeout)
 	}
 

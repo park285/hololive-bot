@@ -83,7 +83,7 @@ func buildAlarmStateUpsertQuery(
 	finalAuthorizedExpr string,
 	finalAlarmSentExpr string,
 	deliveryStatusExpr string,
-) (result1 string, result2 []any) {
+) (string, []any) {
 	args := make([]any, 0, len(normalized)*11)
 
 	var sb strings.Builder

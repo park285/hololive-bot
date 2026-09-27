@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const cmdCalendarBody = `{{if eq .Count 0}}📅 {{.Year}}년 {{.Month}}월 등록된 기념일이 없습니다.{{else}}📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}})
@@ -125,9 +124,9 @@ func TestCelebrationCalendar(t *testing.T) {
 func TestCelebrationCalendar_Fallback(t *testing.T) {
 	t.Parallel()
 
-	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
+	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}), WithMessageStrings(setupFormatterTestStore(t)))
 
 	assert.Equal(t,
-		messagestrings.FallbackSentinel,
+		renderFailureMessage,
 		formatter.CelebrationCalendar(t.Context(), 6, 2026, nil))
 }

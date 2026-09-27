@@ -19,13 +19,14 @@ type lifecycleTestSender struct {
 	calls atomic.Int32
 }
 
-func TestLifecycleProviderFailureTreatsKaringStatusFailureAsKnown(t *testing.T) {
+// Markdown handoff 실패 확정은 전송 불명이 아니라 알려진 영구 실패다.
+func TestLifecycleProviderFailureTreatsReplyHandoffFailureAsKnown(t *testing.T) {
 	t.Parallel()
 
-	kind, reason, retryAfter := lifecycleProviderFailure(egress.ErrKaringStatusFailed, lifecycleReasonKaring)
+	kind, reason, retryAfter := lifecycleProviderFailure(egress.ErrReplyHandoffFailed)
 
-	if kind != ytlifecycle.FailurePermanent || reason != lifecycleReasonKaring || retryAfter != 0 {
-		t.Fatalf("lifecycleProviderFailure() = %v, %q, %s; want permanent, %q, 0", kind, reason, retryAfter, lifecycleReasonKaring)
+	if kind != ytlifecycle.FailurePermanent || reason != lifecycleReasonUnknownError || retryAfter != 0 {
+		t.Fatalf("lifecycleProviderFailure() = %v, %q, %s; want permanent, %q, 0", kind, reason, retryAfter, lifecycleReasonUnknownError)
 	}
 }
 
@@ -42,6 +43,24 @@ type lifecycleTransitionSpy struct {
 	completeCalls       atomic.Int32
 	complete            store.ApplyResult
 	completeErr         error
+
+	modesMu sync.Mutex
+	modes   []string
+}
+
+// recordMode는 전이 호출이 TransitionStore에 넘긴 발송 방식을 "operation:mode" 형태로 모은다.
+func (s *lifecycleTransitionSpy) recordMode(operation string, mode store.DeliveryMode) {
+	s.modesMu.Lock()
+	defer s.modesMu.Unlock()
+
+	s.modes = append(s.modes, operation+":"+string(mode))
+}
+
+func (s *lifecycleTransitionSpy) recordedModes() []string {
+	s.modesMu.Lock()
+	defer s.modesMu.Unlock()
+
+	return append([]string(nil), s.modes...)
 }
 
 func (s *lifecycleTransitionSpy) PrepareClaimed(
@@ -67,34 +86,41 @@ func (s *lifecycleTransitionSpy) BeginSending(
 }
 
 func (s *lifecycleTransitionSpy) ApplyPreparedFailure(
-	context.Context,
-	[]domain.YouTubeNotificationDelivery,
-	map[int64]domain.YouTubeNotificationOutbox,
-	ytlifecycle.FailureKind,
-	ytlifecycle.Reason,
-	time.Duration,
+	_ context.Context,
+	_ []domain.YouTubeNotificationDelivery,
+	_ map[int64]domain.YouTubeNotificationOutbox,
+	_ ytlifecycle.FailureKind,
+	_ ytlifecycle.Reason,
+	_ time.Duration,
+	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
+	s.recordMode("prepared_failure", mode)
+
 	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
 
 func (s *lifecycleTransitionSpy) ApplyStartedFailure(
-	context.Context,
-	store.StartedOperation,
-	ytlifecycle.FailureKind,
-	ytlifecycle.Reason,
-	time.Duration,
+	_ context.Context,
+	_ store.StartedOperation,
+	_ ytlifecycle.FailureKind,
+	_ ytlifecycle.Reason,
+	_ time.Duration,
+	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
 	s.startedFailureCalls.Add(1)
+	s.recordMode("started_failure", mode)
 
 	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
 
 func (s *lifecycleTransitionSpy) CompleteSent(
-	context.Context,
-	store.StartedOperation,
-	[]dispatchstate.ClaimToken,
+	_ context.Context,
+	_ store.StartedOperation,
+	_ []dispatchstate.ClaimToken,
+	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
 	s.completeCalls.Add(1)
+	s.recordMode("complete_sent", mode)
 
 	return s.complete, s.completeErr
 }

@@ -3,6 +3,7 @@ package alarmservice
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
@@ -26,8 +27,19 @@ func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (st
 	return out, nil
 }
 
+// resolveCacheMemberName은 멤버 데이터 표시명을 우선하고, 없으면 호출자 값(알람 등록 때 member_name)을 쓴다. 이 단계는
+// alarm.Repository의 memberDisplayNameExceptionContract 예외 계약에 속하며 hololive_alarm_member_name_caller_fallback_total로 센다.
 func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID, fallback string) string {
-	return as.cacheState.ResolveCacheMemberName(ctx, channelID, fallback)
+	if name := as.cacheState.ResolveMemberDataName(ctx, channelID); name != "" {
+		return name
+	}
+
+	name := strings.TrimSpace(fallback)
+	if name != "" {
+		observeAlarmMemberNameCallerFallback()
+	}
+
+	return name
 }
 
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -127,7 +128,7 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 	require.Contains(t, roomsByChannel["UCfallback-error"][domain.AlarmTypeCommunity], "room-db")
 }
 
-func newDispatcherSubscriberLookupTestDB(t *testing.T) *deliveryTestDB {
+func newDispatcherSubscriberLookupTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	db := newDeliveryPool(t)

@@ -39,6 +39,9 @@ func (r *payloadCleanupRecorder) DelMany(_ context.Context, keys []string) (int6
 	return int64(len(keys)), nil
 }
 
+// minimalEnvelopePayload는 decode를 통과하는 가장 작은 저장 payload다. 저장 payload의 notification.alarm_type은 필수다.
+const minimalEnvelopePayload = `{"notification":{"alarm_type":"LIVE"}}`
+
 func TestConsumerRejectsPayloadBeforeReleasingClaims(t *testing.T) {
 	t.Parallel()
 
@@ -47,7 +50,7 @@ func TestConsumerRejectsPayloadBeforeReleasingClaims(t *testing.T) {
 		record Record
 	}{
 		{name: "invalid JSON", record: Record{Payload: []byte("{")}},
-		{name: "invalid delivery context", record: Record{Payload: []byte("{}"), DeliveryContext: []byte("{")}},
+		{name: "invalid delivery context", record: Record{Payload: []byte(minimalEnvelopePayload), DeliveryContext: []byte("{")}},
 		{name: "missing event", record: Record{EventID: 1}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
@@ -89,7 +92,7 @@ func checkPayloadCleanup(t *testing.T, record Record, failure string) {
 		recorder.releaseErr = wantErr
 	}
 
-	consumer := NewConsumer(recorder, slog.New(slog.DiscardHandler), WithClaimKeyReleaser(recorder))
+	consumer := mustNewConsumer(t, recorder, recorder, slog.New(slog.DiscardHandler))
 	envelopes, err := consumer.DrainBatch(t.Context(), 1)
 
 	if !errors.Is(err, wantErr) || len(envelopes) != 0 {
@@ -108,13 +111,13 @@ func checkPayloadCleanup(t *testing.T, record Record, failure string) {
 func TestConsumerAcceptsPayloadWithoutReleasingClaims(t *testing.T) {
 	t.Parallel()
 
-	record := &Record{ID: 9, Payload: []byte("{}"), ClaimKeys: []string{"notified:claim:room-2:stream-1:100:live"}}
+	record := &Record{ID: 9, Payload: []byte(minimalEnvelopePayload), ClaimKeys: []string{"notified:claim:room-2:stream-1:100:live"}}
 	recorder := &payloadCleanupRecorder{consumerTestRepository: &consumerTestRepository{
 		claimDueFunc: func(context.Context, string, int, time.Duration) ([]*Record, error) {
 			return []*Record{record}, nil
 		},
 	}}
-	consumer := NewConsumer(recorder, slog.New(slog.DiscardHandler), WithClaimKeyReleaser(recorder))
+	consumer := mustNewConsumer(t, recorder, recorder, slog.New(slog.DiscardHandler))
 	envelopes, err := consumer.DrainBatch(t.Context(), 1)
 
 	if err != nil || len(envelopes) != 1 || len(recorder.operations) != 0 {

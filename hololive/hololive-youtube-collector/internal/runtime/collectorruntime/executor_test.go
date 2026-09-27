@@ -132,6 +132,50 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 	}
 }
 
+// 계약 밖 failure tuple은 기본 class로 수리하지 않는다. 미분류 Internal로 지연 처리하고 위반 counter로만 드러낸다
+// (stack-audit 2026-09-26 T11 holo-collector-failure-class-repair).
+func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
+	var fatal []error
+
+	runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
+
+	runner.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
+		return collectutil.CollectResult{}, collecterr.New(collecterr.Failed, collecterr.ClassTimeout, "impossible tuple")
+	}
+
+	executor, spec := newExecutorFixture(t, runner, &fatal)
+	metrics := prometheus.NewPedanticRegistry()
+
+	executor.metrics = NewMetrics(metrics)
+
+	lease, err := executor.acquireLease(t.Context(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	counted := &countedTerminalLease{Lease: lease}
+	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
+	executor.runAcquired(t.Context(), registration, spec, counted)
+
+	if counted.defers != 1 || counted.completes != 0 {
+		t.Fatalf("terminal calls defer=%d complete=%d, want 1/0", counted.defers, counted.completes)
+	}
+
+	if len(fatal) != 0 {
+		t.Fatalf("invalid failure tuple was promoted to fatal: %v", fatal)
+	}
+
+	labels := map[string]string{labelProvider: string(spec.Provider), labelKind: spec.CollectionJobKind}
+	if got := metricValue(t, metrics, "youtube_collection_invalid_failure_tuple_total", labels); got != 1 {
+		t.Fatalf("invalid failure tuple violations = %v, want 1", got)
+	}
+
+	labels["result"] = resultFailed
+	if got := metricValue(t, metrics, "youtube_collection_attempts_total", labels); got != 1 {
+		t.Fatalf("failed attempts = %v, want 1", got)
+	}
+}
+
 func TestCollectDeadlinePreservesClassifiedRunnerFailure(t *testing.T) {
 	for _, cause := range []error{
 		collecterr.New(collecterr.Internal, collecterr.ClassInternal, "runner invariant"),

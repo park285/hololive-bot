@@ -60,11 +60,6 @@ compose_service_redeploy_usage_lines() { :; }
 compose_service_resolve_build_target() { printf '%s\n' "$1"; }
 compose_service_build_targets_text() { :; }
 EOF
-cat >"${repo}/scripts/deploy/lib/removed-runtimes.sh" <<'EOF'
-#!/usr/bin/env bash
-removed_runtime_cleanup_before_cutover() { :; }
-removed_runtime_assert_absent() { :; }
-EOF
 cat >"${repo}/scripts/deploy/lib/health-gate.sh" <<'EOF'
 #!/usr/bin/env bash
 cutover_service_uses_app_writable_bind_mount() { return 1; }

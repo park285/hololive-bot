@@ -9,6 +9,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
+func loadSeededCalendarStore(t *testing.T) *messagestrings.Store {
+	t.Helper()
+
+	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
+	if err := store.Load(t.Context()); err != nil {
+		t.Fatalf("load message_strings: %v", err)
+	}
+
+	return store
+}
+
 type calendarStringCase struct {
 	name string
 	got  func(context.Context, *calendarMetrics) string
@@ -27,15 +38,15 @@ func calendarStringCases() []calendarStringCase {
 	}
 }
 
-func TestCalendarStrings_NilStoreFallbackByteEqual(t *testing.T) {
+// 코드 대체 문구는 없다. 문구 store가 없으면 문구는 비어 있고, 운영에서는 bot plane 기동 검증이 calendar key를
+// 보장한다(DEC-20260926-hololive-message-strings-startup-validation).
+func TestCalendarStrings_NoCodeFallbackWithoutStore(t *testing.T) {
 	t.Parallel()
 
 	m := newCalendarMetrics(1)
 
-	for _, c := range calendarStringCases() {
-		if got := c.got(t.Context(), &m); got != c.want {
-			t.Errorf("%s nil-store = %q, want %q", c.name, got, c.want)
-		}
+	if got := m.emptyText(t.Context()); got != "" {
+		t.Fatalf("emptyText without store = %q, want empty (no code fallback)", got)
 	}
 }
 
@@ -56,28 +67,27 @@ func TestCalendarStrings_SeededStoreByteEqual(t *testing.T) {
 	}
 }
 
-func TestCalendarStrings_SeededRowsMatchFallbackLiterals(t *testing.T) {
+func TestCalendarStrings_SeededRowsMatchExpectedText(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
 	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load message_strings: %v", err)
 	}
 
 	cases := []struct {
-		key      string
-		fallback string
+		key  messagestrings.Key
+		want string
 	}{
-		{"header_month", "%d년 %d월 기념일"},
-		{"summary", "총 %d건 · 생일 %d · 데뷔주년 %d"},
-		{"empty", "등록된 기념일이 없습니다."},
-		{"day", "%d월 %d일"},
-		{"badge_birthday", "생일"},
-		{"badge_anniversary", "데뷔 %d주년"},
-		{"unknown", "알 수 없음"},
+		{messagestrings.CalendarHeaderMonth, "%d년 %d월 기념일"},
+		{messagestrings.CalendarSummary, "총 %d건 · 생일 %d · 데뷔주년 %d"},
+		{messagestrings.CalendarEmpty, "등록된 기념일이 없습니다."},
+		{messagestrings.CalendarDay, "%d월 %d일"},
+		{messagestrings.CalendarBadgeBirthday, "생일"},
+		{messagestrings.CalendarBadgeAnniversary, "데뷔 %d주년"},
+		{messagestrings.CalendarUnknown, "알 수 없음"},
 	}
 	for _, c := range cases {
-		got := store.GetContext(t.Context(), messagestrings.NamespaceCalendar, c.key)
-		if got != c.fallback {
-			t.Errorf("seeded calendar/%s = %q, want %q (must match code fallback byte-for-byte)", c.key, got, c.fallback)
+		if got := store.Text(c.key); got != c.want {
+			t.Errorf("seeded %s = %q, want %q", c.key, got, c.want)
 		}
 	}
 }

@@ -24,12 +24,25 @@ func newAlarmDispatchTestRenderer(t *testing.T) *template.Renderer {
 	return template.NewRenderer(dbtest.NewPool(t), slog.Default())
 }
 
+// newAlarmDispatchTestMessageStrings는 시드 message_strings를 적재한 store다. 코드 대체 문구가 없으므로 알림
+// 문구와 placeholder는 DB 정본에서만 나온다(DEC-20260926-hololive-message-strings-startup-validation).
+func newAlarmDispatchTestMessageStrings(t *testing.T) *messagestrings.Store {
+	t.Helper()
+
+	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
+	require.NoError(t, store.Load(t.Context()))
+
+	return store
+}
+
 func newAlarmDispatchTestRendering(t *testing.T) (*template.Renderer, *messagestrings.Store) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
+	store := messagestrings.NewStore(pool, slog.Default())
+	require.NoError(t, store.Load(t.Context()))
 
-	return template.NewRenderer(pool, slog.Default()), messagestrings.NewStore(pool, slog.Default())
+	return template.NewRenderer(pool, slog.Default()), store
 }
 
 func goldenAlarmDispatchMember(n *domain.AlarmNotification) string {
@@ -97,7 +110,7 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, title)
 	}
 
-	if collabMembers := formatAlarmDispatchCollabMembers(nil, n.Stream); collabMembers != "" {
+	if collabMembers, err := formatAlarmDispatchCollabMembers(nil, n.Stream); err == nil && collabMembers != "" {
 		fmt.Fprintf(&b, "\n콜라보: %s", util.MarkdownNeutralize(collabMembers))
 	}
 
@@ -156,11 +169,13 @@ func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
 	}
 
 	for i := range group.notifications {
-		if i > 0 {
-			b.WriteString("\n\n──────────")
+		if i == 0 {
+			b.WriteString("\n\n")
+		} else {
+			b.WriteString("\n──────────\n")
 		}
 
-		fmt.Fprintf(&b, "\n\n%d · ", i+1)
+		fmt.Fprintf(&b, "%d · ", i+1)
 		b.WriteString(goldenAlarmDispatchItem(&group.notifications[i], group.minutesUntil))
 	}
 
@@ -194,22 +209,25 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 
 	regular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("regular", "Regular Title"))
 
-	item := buildAlarmDispatchItemView(t.Context(), nil, nil, &premiere, 5)
+	item, err := buildAlarmDispatchItemView(t.Context(), nil, nil, &premiere, 5)
+	require.NoError(t, err)
 	assert.True(t, item.IsPremiere)
 
-	allPremiere := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
+	allPremiere, err := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, premiere},
 	})
+	require.NoError(t, err)
 	assert.True(t, allPremiere.AllPremiere)
 	require.Len(t, allPremiere.Entries, 2)
 	assert.True(t, allPremiere.Entries[0].IsPremiere)
 	assert.True(t, allPremiere.Entries[1].IsPremiere)
 
-	mixed := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
+	mixed, err := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, regular},
 	})
+	require.NoError(t, err)
 	assert.False(t, mixed.AllPremiere)
 	require.Len(t, mixed.Entries, 2)
 	assert.True(t, mixed.Entries[0].IsPremiere)
@@ -428,9 +446,9 @@ func TestRenderAlarmDispatchPlaceholderResolvesFromMessageStrings(t *testing.T) 
 	_, store := newAlarmDispatchTestRendering(t)
 
 	require.NoError(t, store.Load(t.Context()))
-	assert.Equal(t, "알 수 없는 멤버", store.Get(messagestrings.NamespaceMisc, "alarm_unknown_member"))
-	assert.Equal(t, "제목 없음", store.Get(messagestrings.NamespaceMisc, "alarm_no_title"))
-	assert.Equal(t, "방송 정보 없음", store.Get(messagestrings.NamespaceMisc, "alarm_no_stream"))
+	assert.Equal(t, "알 수 없는 멤버", store.Text(messagestrings.MiscAlarmUnknownMember))
+	assert.Equal(t, "제목 없음", store.Text(messagestrings.MiscAlarmNoTitle))
+	assert.Equal(t, "방송 정보 없음", store.Text(messagestrings.MiscAlarmNoStream))
 }
 
 func TestRenderAlarmDispatchNotificationIncludesCollabMembers(t *testing.T) {
@@ -447,7 +465,7 @@ func TestRenderAlarmDispatchNotificationIncludesCollabMembers(t *testing.T) {
 
 type collabTestMembers struct{}
 
-func (m collabTestMembers) GetAllMembers() []*domain.Member {
+func collabTestMemberList() []*domain.Member {
 	return []*domain.Member{
 		{
 			Name:            "Hoshimachi Suisei",
@@ -458,8 +476,12 @@ func (m collabTestMembers) GetAllMembers() []*domain.Member {
 	}
 }
 
-func (m collabTestMembers) FindMemberByChannelID(channelID string) *domain.Member {
-	for _, member := range m.GetAllMembers() {
+func (collabTestMembers) LoadAllMembers() ([]*domain.Member, error) {
+	return collabTestMemberList(), nil
+}
+
+func (collabTestMembers) FindMemberByChannelID(channelID string) *domain.Member {
+	for _, member := range collabTestMemberList() {
 		if member.ChannelID == channelID {
 			return member
 		}

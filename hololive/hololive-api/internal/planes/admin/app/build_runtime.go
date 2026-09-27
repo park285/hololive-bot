@@ -16,9 +16,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
@@ -31,11 +29,10 @@ type scraperHolodexFoundation struct {
 
 type alarmModeComponents struct {
 	AlarmCRUD        domain.AlarmCRUD
-	AlarmService     *alarmservice.AlarmService
 	MemberDataSource domain.MemberDataProvider
 }
 
-func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
+func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*AdminAPIRuntime, error) {
 	ctx, appConfig, err := normalizeAdminAPIRuntimeInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize admin API runtime inputs: %w", err)
@@ -53,47 +50,19 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logge
 		return nil, fmt.Errorf("build admin api runtime: foundation: %w", err)
 	}
 
-	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
-
-	alarmMode, err := buildAlarmModeComponents(ctx, appConfig, infra.Cache, foundation.HolodexService, foundation.MemberServiceAdapter, alarmRepository, logger)
+	alarmMode, err := buildAlarmModeComponents(appConfig, foundation.MemberServiceAdapter, logger)
 	if err != nil {
 		infra.Cleanup()
 
 		return nil, fmt.Errorf("build admin api runtime: alarm mode: %w", err)
 	}
 
-	runtimeOwnsAlarmService := false
-
-	defer func() {
-		retErr = closeUnownedAdminAlarmService(ctx, alarmMode.AlarmService, runtimeOwnsAlarmService, retErr)
-	}()
-
 	runtime, err := buildAdminAPIRuntimeAfterAlarmMode(ctx, appConfig, infra, foundation, alarmMode, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin API runtime after alarm mode: %w", err)
 	}
 
-	runtime.AlarmService = alarmMode.AlarmService
-	runtimeOwnsAlarmService = true
-
 	return runtime, nil
-}
-
-func closeUnownedAdminAlarmService(
-	ctx context.Context,
-	alarmService *alarmservice.AlarmService,
-	runtimeOwnsAlarmService bool,
-	buildErr error,
-) error {
-	if runtimeOwnsAlarmService || alarmService == nil {
-		return buildErr
-	}
-
-	if err := alarmService.Close(ctx); err != nil {
-		return errors.Join(buildErr, fmt.Errorf("build admin api runtime: close alarm service: %w", err))
-	}
-
-	return buildErr
 }
 
 func normalizeAdminAPIRuntimeInputs(
@@ -131,21 +100,34 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 	ytStack := buildAdminAPIYouTubeStack(ctx, appConfig, infra, foundation, logger)
 	templateAdmin := buildAdminAPITemplateAdmin(infra, logger)
 
-	authService, err := buildAdminAPIAuthService(ctx, appConfig, infra, logger)
+	authService, err := buildAdminAPIAuthService(appConfig, infra, logger)
 	if err != nil {
 		infra.Cleanup()
 
 		return nil, fmt.Errorf("build admin api runtime: auth service: %w", err)
 	}
 
-	settingsApplier, majorEventTriggerClient := buildAdminAPISettingsApplier(appConfig, foundation, alarmMode, ytStack, logger)
+	adminSettings, err := buildAdminAPISettings(appConfig, alarmMode, logger)
+	if err != nil {
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin api runtime: settings: %w", err)
+	}
+
 	systemCollector := buildAdminAPISystemCollector(appConfig)
 	communityShortsOpsRepository := buildAdminAPICommunityShortsOpsRepository(infra)
-	irisRoomClient := buildAdminAPIBotRoomLister(appConfig, logger)
+
+	irisRoomClient, err := buildAdminAPIBotRoomLister(appConfig, logger)
+	if err != nil {
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin api runtime: bot room client: %w", err)
+	}
+
 	handler := buildAdminHandler(
-		appConfig, infra, foundation, alarmMode, aclService, irisRoomClient, ytStack,
-		communityShortsOpsRepository, settingsApplier, systemCollector,
-		templateAdmin, majorEventTriggerClient, logger,
+		infra, foundation, alarmMode, aclService, irisRoomClient, ytStack,
+		communityShortsOpsRepository, adminSettings.service, adminSettings.applier, systemCollector,
+		templateAdmin, adminSettings.triggerClient, logger,
 	)
 	xSpaceSessions, err := xspaces.LoadStore(infra.Postgres.GetPool())
 
@@ -157,7 +139,9 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 
 	handler.SetXSpaceSessions(xSpaceSessions)
 
-	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, logger)
+	runtimeCleanup := stopHolodexRetriesBeforeCleanup(foundation.HolodexService, infra.Cleanup)
+
+	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, runtimeCleanup, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin APIHTTP runtime: %w", err)
 	}
@@ -175,6 +159,7 @@ func buildAdminAPIHTTPRuntime(
 	infra *sharedmodules.InfraModule,
 	authService *authsvc.Service,
 	handler *server.Handler,
+	runtimeCleanup func(),
 	logger *slog.Logger,
 ) (*AdminAPIRuntime, error) {
 	router, err := buildAdminAPIRouter(ctx, appConfig, infra, authService, handler, logger)
@@ -184,7 +169,7 @@ func buildAdminAPIHTTPRuntime(
 		return nil, fmt.Errorf("build admin api runtime: provide api router: %w", err)
 	}
 
-	runtime, err := newAdminAPIRuntime(ctx, appConfig, logger, router, infra.Cleanup)
+	runtime, err := newAdminAPIRuntime(ctx, appConfig, logger, router, runtimeCleanup)
 	if err != nil {
 		infra.Cleanup()
 
@@ -192,6 +177,16 @@ func buildAdminAPIHTTPRuntime(
 	}
 
 	return runtime, nil
+}
+
+// stopHolodexRetriesBeforeCleanup은 Holodex 캐시 워밍 재시도를 멈춘 뒤 infra를 닫는다.
+// 재시도는 예약한 요청 ctx의 취소와 분리되어 scheduler의 Stop만 끝낼 수 있다(holodexprovider retry_scheduler).
+// Valkey·PG infra를 먼저 닫으면 대기 중이거나 실행 중인 재시도가 닫힌 client를 쓴다.
+func stopHolodexRetriesBeforeCleanup(holodex interface{ Stop() }, cleanup func()) func() {
+	return func() {
+		holodex.Stop()
+		cleanup()
+	}
 }
 
 func newAdminAPIRuntime(

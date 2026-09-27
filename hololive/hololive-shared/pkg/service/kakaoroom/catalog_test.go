@@ -17,7 +17,7 @@ func (s stubLister) GetRooms(context.Context) ([]Facts, error) {
 	return s.rooms, s.err
 }
 
-func TestCatalogObserveOpenAndRegular(t *testing.T) {
+func TestCatalogObserveOpenAndNonOpen(t *testing.T) {
 	t.Parallel()
 
 	c := New(nil, nil, nil)
@@ -31,14 +31,6 @@ func TestCatalogObserveOpenAndRegular(t *testing.T) {
 
 	if c.OpenChat(ctx, "2") {
 		t.Fatal("regular room should not use markdown")
-	}
-
-	if c.RegularChat(ctx, "1") {
-		t.Fatal("open room must not be classified as regular")
-	}
-
-	if !c.RegularChat(ctx, "2") {
-		t.Fatal("known non-open room should be classified as regular")
 	}
 }
 
@@ -70,10 +62,6 @@ func TestCatalogUnknownRoomIsPlain(t *testing.T) {
 	if c.OpenChat(t.Context(), "missing") {
 		t.Fatal("unknown room must be plain")
 	}
-
-	if c.RegularChat(t.Context(), "missing") {
-		t.Fatal("unknown room must not be classified as regular")
-	}
 }
 
 func TestCatalogIrisErrorIsPlain(t *testing.T) {
@@ -82,10 +70,6 @@ func TestCatalogIrisErrorIsPlain(t *testing.T) {
 	c := New(nil, stubLister{err: errors.New("iris down")}, nil)
 	if c.OpenChat(t.Context(), "1") {
 		t.Fatal("iris failure must be plain")
-	}
-
-	if c.RegularChat(t.Context(), "1") {
-		t.Fatal("iris failure must not be classified as regular")
 	}
 }
 
@@ -127,10 +111,6 @@ func TestCatalogDBErrorDoesNotUseIrisFallback(t *testing.T) {
 
 	if c.OpenChat(t.Context(), "1") {
 		t.Fatal("database error must not treat iris rooms as found")
-	}
-
-	if c.RegularChat(t.Context(), "1") {
-		t.Fatal("database error must not classify the room as regular")
 	}
 }
 

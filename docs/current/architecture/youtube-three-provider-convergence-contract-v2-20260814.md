@@ -203,6 +203,51 @@ const (
 
 한 kind를 두 provider가 동시에 지원해도 reducer는 provider 이름을 tie-breaker로 사용하지 않는다.
 
+### 3.4 `!라이브` 채널·영상 확인 관측 (2026-09-26)
+
+`DEC-20260926-hololive-live-absence-evidence`가 다음 추가 계약을 소유한다. 방송 탭·Holodex 목록과 absence slot은 LiveQuery의 채널 부재 근거가 아니다. 기존 absence 기반 종료 reducer 정책 자체는 변경하지 않는다.
+
+| 항목 | 채널 확인 | 영상 확인 |
+|---|---|---|
+| provider / kind | `youtubejs` / `channel_live_check` | `youtubejs` / `video_live_check` |
+| schema / generation | `1` / `1` (기존 kind 세대 불변) | `1` / `1` |
+| subject / typed coverage | 채널 ID / `{channel_id}` | 영상 ID / `{video_id}` |
+| job | `youtubejs_channel_live_check` (`channel_live_check` 전용 독립 lease) | `youtubejs_video_live` |
+| RPC | `/v1/channel_live_check` | `/v1/video_live_check` |
+| 대상 | 활성 operational roster의 채널 | 해당 roster의 canonical LIVE 중 head의 LIVE positive effective/seen 시각이 신선하지 않은 영상 |
+| 재확인 | 모든 결과 2분, 기존 live_snapshot cadence와 동일 | PUBLIC·MEMBERS_ONLY·PUBLIC_UNAVAILABLE·UNKNOWN 모두 2분; 종료 또는 신선한 positive 확보 후 다음 projection에서 제외 |
+| 만료 | `min(5분, 2×poll_interval+30초)` | 동일; 기본 270초 |
+| 물리 요청 상한 | resolve_url 1회 + 선택 영상 player 최대 1회 | player 1회 |
+| completeness / continuity | 알려진 결과 COMPLETE, UNKNOWN은 UNKNOWN / NOT_APPLICABLE | 알려진 결과 PARTIAL, UNKNOWN은 UNKNOWN / NOT_APPLICABLE |
+| absence 권한 | POSITIVE_ONLY; reducer 호출 금지 | POSITIVE_ONLY; absence slot 생성 금지 |
+
+새 확인 RPC는 전용 단일 시도 transport를 사용한다. 기존 feed·schedule transport의 재시도 정책은 바꾸지 않는다. HTML, 추가 browse, 다른 provider, 자동 재시도로 판정을 보완하지 않는다. 채널 RPC와 기존 live_snapshot fetch는 독립적으로 성공·실패를 기록한다. 한쪽의 실패가 다른 쪽의 유효 관측을 버리거나 completeness를 승격시키지 않는다. 새 확인의 요청 실패도 해당 subject의 UNKNOWN(`request_failed`)으로 관측하여, 이전 공개 불가 판정을 재확인 실패 뒤 계속 적용하지 않는다. 취소·lease 상실 때는 기존 publish fence를 우회하지 않는다.
+
+`DEC-20260927-live-check-slot-isolation`에 따라 `youtubejs_channel_live`는 `live_snapshot`만 발행한다. 채널 확인은 별도 job key·lease·scheduled_for로 COMPLETE/DEFERRED를 진행한다. 방송 탭의 같은-slot 재시도가 성공한 확인의 다음 2분 슬롯을 막거나 이미 발행한 확인을 다시 요청하게 하지 않는다. 같은 `channel_live_check`를 두 job에서 발행하는 호환 경로는 없다.
+
+#### 원시 사실과 payload
+
+- `ChannelLiveCheckV1`: `channel_id`, `outcome` (`LIVE_VIDEO`, `UPCOMING_VIDEO`, `CHANNEL_PAGE`, `UNKNOWN`), 선택된 `selected_video_id`(선택 시), `channel_identity_confirmed`, `unknown_reason`(UNKNOWN일 때), `coverage`.
+- `VideoLiveCheckV1`: 요청 `video_id`, 응답 `channel_id`(없으면 생략), `identity_confirmed`, optional boolean `is_live`, `is_live_now`, `is_upcoming`, `is_live_content`, `is_private`, `has_live_broadcast_details`, optional RFC3339 `started_at`, `ended_at`, `availability` (`PUBLIC`, `MEMBERS_ONLY`, `PUBLIC_UNAVAILABLE`, `UNKNOWN`), `method` (`player_public`, `player_members_only`, `player_private`, `unknown`), `unknown_reason`, `coverage`. absent와 false를 합치지 않는다.
+- UNKNOWN 사유 어휘: `identity_missing`, `identity_mismatch`, `contradictory_fields`, `structure_unrecognized`, `not_waiting_state`, `login_required_unclassified`, `error_unclassified`, `request_failed`, 영상 가용성만 불명확한 `availability_unclassified`. 서로 다른 판정 단계의 실패는 첫 실패 사유로 기록한다.
+- 순서는 identity → boolean·시각 사실 → 모순 → 가용성이다. video ID는 요청 subject와 일치하고 channel ID가 있어야 identity가 확인된다. consumer는 다시 canonical session의 channel ID와 대조한다. 미확인·불일치 관측은 수명 상태를 바꾸지 않는다.
+- `/navigation/resolve_url`의 정상 `endpoint`가 `WEB_PAGE_TYPE_CHANNEL`이며 `browseEndpoint.browseId`가 요청 채널과 같을 때만 CHANNEL_PAGE다. watch endpoint는 player의 영상·채널 identity를 확인한다. `isUpcoming=true`, `isLiveNow=false`, LIVE가 아님, 유효한 시작 예정 시각과 `LIVE_STREAM_OFFLINE`/offline slate의 대기 상태가 확인될 때만 UPCOMING_VIDEO다. LIVE 사실이면 LIVE_VIDEO, 그 외는 UNKNOWN이다. 음성은 CHANNEL_PAGE와 UPCOMING_VIDEO뿐이다. LIVE_VIDEO 자체를 reducer로 보내지 않는다.
+- player의 `isLive=true` 또는 `isLiveNow=true`는 현재 LIVE 사실이다. 둘이 명시적으로 반대이거나, LIVE와 upcoming/종료 시각이 공존하거나, 종료가 시작보다 이르거나 관측 시각보다 미래면 UNKNOWN이다. `isLive` 생략과 `isLiveNow=false`, 유효한 `endTimestamp`는 종료 근거다. `isLiveContent=false`와 liveBroadcastDetails의 공존은 최초공개이며 일반 업로드로 버리지 않는다.
+- `UNPLAYABLE`은 LIVE·종료 모두에서 관측되므로 상태 코드로 수명/가용성을 정하지 않는다. 정확한 identity와 구조화된 `playerLegacyDesktopYpcOfferRenderer`는 MEMBERS_ONLY다. 이 renderer와 LOGIN_REQUIRED/ERROR 제한이 없고 원시 `isPrivate=false`가 확인되면 PUBLIC이다. 정확한 identity와 원시 boolean `isPrivate=true`가 확인된 경우만 PUBLIC_UNAVAILABLE(`player_private`)를 수용한다. 이는 pinned parser의 `!!isPrivate`가 아니라 원시 필드 검사다. 익명 응답에서 true의 도달 가능성은 별도 실측 대상이며, 필드가 없는 비공개·삭제 응답을 이 분류로 승격하지 않는다.
+- `LOGIN_REQUIRED`, `ERROR`, `messages`, 일반 error renderer와 번역된 reason 문자열만으로 PUBLIC_UNAVAILABLE을 만들지 않는다. 로봇 확인·identity 부재·미지 구조는 UNKNOWN이다. PUBLIC_UNAVAILABLE은 LIVE로 승격하거나 ENDED로 바꾸는 근거가 아니다. 확인된 현재 LIVE 또는 identity가 맞고 유효한 ended_at만 기존 positive/명시적 종료 경로로 들어간다. 가용성 필드만 없는 `availability_unclassified`는 이미 확인된 수명 사실을 버리지 않으며, 그 밖의 UNKNOWN 사유는 수명 전이를 허용하지 않는다.
+
+#### canonical·query·retention 경계
+
+- `youtube_channel_live_checks`: 채널별 최신 `outcome`, 선택 영상, identity, UNKNOWN 사유와 observation ID/hash, scheduled/effective/observed/received 시각을 보존한다. `youtube_video_availability`: 영상별 canonical 채널, availability/method/UNKNOWN 사유와 같은 provenance·시각을 보존한다. 두 테이블은 `(effective_at, observation_id)`가 더 새로운 관측만 반영한다. UNKNOWN도 이전 판정을 대체한다. 원시 evidence FK는 `ON DELETE SET NULL`이며 hash/시각은 남는다.
+- 새 kind는 source_event_at을 허용하지 않으며 EffectiveAt은 scheduled_for다. 종료 시각은 payload의 ended_at으로만 전달한다. video consumer는 해당 영상 상태만 lock/load하고, 유효한 종료 시각이 있을 때만 PARTIAL explicit-end를 전달한다. 기존 grace·LastLivePositiveAt/SeenAt·pending 보존 조건을 유지한다. 채널 확인, 해석 불가 UNKNOWN, 수명 사실 없는 공개 불가 관측에서는 Reduce/finalizer/pending을 호출하지 않는다.
+- LiveQuery는 유효 projection과 채널 확인 target을 확인하고 scheduled/effective/observed/received 시각 모두 freshness 범위 안의 음성 결과만 coverage로 쓴다. 영상 공개 불가도 같은 시각 경계이며 head·session identity가 정상인 오래된 LIVE만 제외한다. 신선한 positive는 가용성·채널 음성보다 우선한다. 공개 불가 근거 만료나 새 UNKNOWN은 다시 차단한다. session=LIVE/head 없음은 계속 차단한다.
+- D1(세션·head 모두 없는 EXPLICIT_END), D2(session=ENDED)는 비차단 진단이다. pending을 삭제하지 않으며 ended/head 불일치와 고아 종료 개수를 `live query incomplete` 운영 로그에 남긴다. ENDED pending의 채널과 canonical session 채널이 다르면 각 관련 조회 채널의 `ended_pending_ends`에 남기고 같은 채널이면 한 번만 센다. 채널 간 합계는 관련 채널별 집계이며 고유 pending 행 수가 아니다. 사용자 문구에는 진단·범위 설명을 붙이지 않는다.
+- projection은 기존 5초 refresh·원자 generation 교체를 유지한다. stale 영상 선택의 freshness 기준은 해당 SQL의 DB `statement_timestamp()`이며 API가 refresh 전에 캡처한 시각이나 transaction 시작 시각이 아니다. 영상 확인 대상은 stale 전환 뒤 다음 성공 refresh에서 생성하고 종료 뒤 다음 성공 refresh에서 제거한다. 전역 generation 전환으로 폐기되는 in-flight 수집은 기존 fencing 결과이며 새 retry를 만들지 않는다. stale 재진입은 기존 2분 cadence로 확인한다.
+- 새 두 kind의 evidence retention 기본값은 각각 7일이다. `YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS`, `YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS`로 기존 positive-age/승인 검증을 적용한다. 74채널·2분이면 채널 관측은 하루 53,280건, 7일 372,960건이다. 운영 저장 비용은 payload/index를 포함해 릴리스 때 확인한다. canonical 최신값은 evidence 삭제와 별개다.
+- migration은 contract/target/consumer-offset kind CHECK, 두 generation 행, canonical 테이블·FK 인덱스·runtime 최소 DML grant를 추가한다. scraper에는 canonical 권한을 주지 않는다. API의 supported set·claim kinds·retention을 먼저 준비하고 migration/API → collector fleet 순으로 전환한다. 기존 live_snapshot 세대와 decoder는 바꾸지 않는다. migration 211의 LIVE coverage 부분 인덱스는 LiveQuery 전환 및 다른 소비자 부재 확인 뒤 별도 CONCURRENTLY drop migration으로 제거한다.
+
+검증 표본과 해석 한계는 `docs/review/live-absence-evidence-20260926.md`에 기록한다. 공개 불가 판정이 불가능한 private/deleted stale LIVE는 UNKNOWN으로 남으며, 빈 결과를 확정하지 않는다. 실제 배포·migration 적용·fleet 반영·운영 비교 관측은 별도 승인 사항이다.
+
 ## 4. Observation envelope v2
 
 ### 4.1 Go contract
@@ -720,6 +765,8 @@ WHERE job_key = $1
     )
   AND (owner_instance IS NULL OR lease_expires_at <= NOW())
 RETURNING job_key,
+          provider,
+          job_class,
           collection_job_kind,
           subject_key,
           owner_instance,
@@ -733,6 +780,7 @@ RETURNING job_key,
 
 새 job row 생성과 acquisition을 같은 helper가 소유할 수 있지만, concurrent `INSERT ... ON CONFLICT` 뒤에는 반드시 row lock과 epoch increment를 거쳐야 한다.
 acquisition transaction은 UPDATE 전에 current projection과 이 job이 대표하는 target 집합의 enable/validity를 검증한다. caller가 전달한 `$3`만 신뢰해 stale generation을 lease row에 기록하지 않는다.
+acquire는 같은 row를 다시 읽지 않고 이 UPDATE의 RETURNING `provider`, `job_class`, `collection_job_kind`, `subject_key`로 job identity를 검증한다. 요청한 job spec과 다르면 `ErrInvalidJob`으로 transaction을 롤백한다.
 
 #### Missed-slot coalescing
 
@@ -858,7 +906,7 @@ type SupportedContractSet interface {
 - `topic_id`
 - `thumbnail_url`
 
-generation `1` decoder는 이 필드를 unknown member로 계속 거부한다. generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. API의 supported set은 두 generation을 동시에 유지하고 collector는 DB의 provider/kind별 current generation이 `2`일 때만 새 필드를 발행한다.
+generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. 위 4단계 cleanup은 끝났다(2026-09-26 T18에서 current generation `2`·미처리 generation `1` 관측 0건 확인, stack-audit 2026-09-26 T11 C6). API의 supported set은 generation `2`만 담고 generation `1` 관측은 `unsupported_contract`로 처리하며, collector는 current generation이 `2`가 아니면 구성 오류로 수집을 끝낸다. migration `221`은 빈 DB의 `live_snapshot` seed를 generation `2`로 맞춘다.
 
 ### 9.2 Collection checkpoint
 
@@ -1229,6 +1277,14 @@ CREATE INDEX CONCURRENTLY idx_source_observation_replay_pending
     WHERE status = 'PENDING';
 ```
 
+2026-09-26 운영 통계와 현재 SQL 소비자 대조 결과, `idx_source_observation_queue_terminal_retention`,
+`idx_source_observations_subject_time`, `idx_source_observations_received`,
+`idx_source_observations_kind_id`는 운영 조회가 선택하지 않았습니다. 2026-08-23 통계 초기화 이후
+각각 2·98·64·3회만 scan됐고 마지막 사용은 수동 조회였습니다. migration `213`–`216`에서 하나씩
+`DROP INDEX CONCURRENTLY`로 제거합니다. 보존 삭제는 `idx_source_observations_kind_received_id`를,
+shorts claim은 활성 queue partial index를 사용합니다. 현재 live slot 재조회를 위한
+`idx_youtube_live_absence_slots_scheduled_for`는 migration `212`가 추가합니다.
+
 ### 9.8 Grants
 
 `hololive_scraper` 최소 권한은 다음과 같다.
@@ -1322,6 +1378,8 @@ return PublishBatchResult{}, fmt.Errorf("publish source observation batch: verif
 ### 11.1 Claim
 
 API worker는 `FOR UPDATE SKIP LOCKED`로 bounded batch를 claim한다. attempts exhausted item을 candidate LIMIT 안에서 분류하되, permanent quarantine가 valid item을 굶기지 않도록 claim query 또는 claim loop가 다음 batch로 즉시 진행할 수 있어야 한다.
+
+claim 후보는 `(available_at, observation_id)` 순서다. PENDING과 lease가 만료된 PROCESSING을 상태별 가지로 나누고, 각 가지는 상위 LIMIT개만 `FOR UPDATE SKIP LOCKED`로 잠근다. 두 가지를 합친 뒤 다시 상위 LIMIT개만 claim하므로 선택 결과는 단일 정렬과 같다. PENDING 가지는 `(available_at, observation_id)` partial index 순서로 LIMIT개까지만 읽으므로 PENDING backlog가 커져도 후보 선택이 backlog 전체를 정렬하지 않는다. 만료 PROCESSING 가지는 그 순서의 index가 없어 lease 만료 partial index로 만료 행을 모두 읽고 `(available_at, observation_id)`로 정렬한 뒤 LIMIT한다. 만료 행은 lease를 잡고 finalize하지 못한 행뿐이므로 PENDING backlog가 아니라 그런 claim 수(claim 1회당 최대 LIMIT개)에 비례한다. 한 claim은 최대 2×LIMIT행을 잠근다. 선택되지 않은 최대 LIMIT개 행도 claim transaction이 끝날 때(commit 또는 probe rollback)까지 잠겨 있으며, 그동안 다른 claimer는 이를 건너뛴다.
 
 claim SQL은 `observation_contract_generations.current_generation`과 불일치한다는 이유만으로 row를 quarantine하지 않는다. consumer의 `SupportedContractSet`에 없는 version만 item 처리 단계에서 `unsupported_contract`로 `DEAD_LETTER` 처리한다.
 
@@ -1627,21 +1685,21 @@ end evidence가 먼저 도착하고 grace만 남은 경우, 이후 observation�
 API YouTube plane은 다음 contract의 bounded finalizer를 소유한다.
 
 ```sql
-SELECT video_id
+SELECT video_id,
+       NOW() AS db_now
 FROM youtube_live_reconciliation_heads
 WHERE next_end_check_at IS NOT NULL
   AND next_end_check_at <= NOW()
 ORDER BY next_end_check_at, video_id
-LIMIT $1
-FOR UPDATE SKIP LOCKED;
+LIMIT 1;
 ```
 
-각 row는 별도 transaction에서 다음을 수행한다.
+finalizer는 tick마다 최대 batch size번 transaction을 연다. 각 transaction은 위 조회로 due row 하나를 고르고, 같은 transaction에서 다음을 수행한다. due 조회는 head를 잠그지 않는다. 1단계에서 consumer와 같은 session→head→evidence 순서로 잠근 뒤 due 조건을 다시 확인한다.
 
 1. current live head와 candidate observation을 lock한다.
 2. candidate 이후 더 최신 positive가 없는지 다시 확인한다.
 3. typed explicit end/cancel 또는 서로 다른 slot의 scoped absence 2개 조건을 다시 확인한다.
-4. DB `NOW()`가 grace를 지났는지 확인한다.
+4. due 조회가 함께 반환한 DB `NOW()`(transaction 시작 시각이라 잠금 대기 뒤에도 같은 값)가 grace를 지났는지 확인한다. 별도 `SELECT NOW()` 왕복은 두지 않는다.
 5. 조건이 유지되면 canonical `ENDED`, notification intent, reconciliation head update를 한 transaction에서 commit한다.
 6. 조건이 깨지면 candidate와 `next_end_check_at`을 clear하거나 다음 안전 시각으로 이동한다.
 
@@ -1892,7 +1950,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 
 ### 15.2.1 YouTube.js raw metadata ownership
 
-Collector 로컬 adapter가 raw `/player`의 `videoDetails.videoId`, `isLive`, `isUpcoming`, `isLiveContent`와 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp` 해석을 소유한다. live schedule 보강과 content-owned premiere 판정은 같은 adapter와 sanitized fixture를 사용한다. `youtubei.js@18.0.0`은 Innertube session, request context, browse/transport와 범용 parser 기반층으로 유지하며 upstream 전체 source를 복사하지 않는다.
+Collector 로컬 adapter가 raw `/player`의 영상·채널 identity, `isLive`, `isLiveNow`, `isUpcoming`, `isLiveContent`, `isPrivate`, liveBroadcastDetails의 시작·종료 시각 해석을 소유한다. 기존 live schedule/content premiere 경로는 `live-metadata.mjs`의 입장 규칙을 유지하고, §3.4의 채널·영상 확인은 `live-check.mjs`가 UNKNOWN·가용성·종료 사실을 구분한다. `youtubei.js@18.1.0`은 Innertube session, request context, browse/transport와 범용 parser 기반층으로 유지하며 upstream 전체 source를 복사하지 않는다.
 
 Dependency upgrade 때는 upstream release note와 로컬 사용 surface만 검토하고 raw fixture, 전체 helper test와 typecheck를 통과시킨다. 사용 field의 parser 변경만 로컬 adapter에 선택적으로 반영한다. raw Actions 접근 제거로 incident 수정이 막히거나 adapter 밖 upstream parser 지연이 독립적으로 두 번 확인되기 전에는 전체 fork나 더 넓은 vendoring을 검토하지 않는다.
 
@@ -1912,6 +1970,7 @@ youtube_collection_freshness_seconds{provider,kind}
 youtube_collection_completeness_total{provider,kind,completeness,continuity}
 youtube_collection_lease_acquire_total{provider,kind,result}
 youtube_collection_lease_lost_total{provider,kind,phase}
+youtube_collection_invalid_failure_tuple_total{provider,kind}
 youtube_observation_publish_total{provider,kind,outcome}
 youtube_observation_collision_total{provider,kind}
 youtube_observation_clock_skew_total{provider,kind,direction}

@@ -28,7 +28,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -52,14 +51,14 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 
 	rendered, err := f.render(ctx, templateKey, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
 }
 
 func alarmNotificationURLText(stream *domain.Stream) string {
-	if stream.IsChzzkOnly || stream.IsTwitchOnly || !stream.HasYouTubeInfo() {
+	if !stream.HasYouTubeInfo() {
 		return ""
 	}
 
@@ -118,7 +117,7 @@ func (f *ResponseFormatter) AlarmNotificationGroup(ctx context.Context, minutesU
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmNotificationGroup, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/require"
 
@@ -54,7 +55,7 @@ func (s *claimGateTestSender) allMessages() []string {
 	return cloned
 }
 
-func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config *dispatchstate.Config) (result1 *Dispatcher, result2 *deliveryTestDB) {
+func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, config *dispatchstate.Config) (*Dispatcher, *pgxpool.Pool) {
 	t.Helper()
 
 	if config.BatchSize <= 0 {
@@ -98,7 +99,7 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 	return dispatcher, db
 }
 
-func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *claimGateTestSender, config *dispatchstate.Config) *Dispatcher {
+func newClaimGateTestDispatcherWithDB(t *testing.T, db *pgxpool.Pool, sender *claimGateTestSender, config *dispatchstate.Config) *Dispatcher {
 	t.Helper()
 
 	if config.BatchSize <= 0 {
@@ -140,7 +141,7 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *
 	return dispatcher
 }
 
-func newSharedClaimGateTestDB(t *testing.T, maxOpenConns int) *deliveryTestDB {
+func newSharedClaimGateTestDB(t *testing.T, maxOpenConns int) *pgxpool.Pool {
 	t.Helper()
 
 	_ = maxOpenConns
@@ -202,7 +203,7 @@ func newShortClaimGateFixture(now time.Time, suffix string) (domain.YouTubeNotif
 	return delivery, outbox, postID
 }
 
-func insertSentSiblingDelivery(t *testing.T, db *deliveryTestDB, outbox *domain.YouTubeNotificationOutbox, roomID string, sentAt time.Time) {
+func insertSentSiblingDelivery(t *testing.T, db *pgxpool.Pool, outbox *domain.YouTubeNotificationOutbox, roomID string, sentAt time.Time) {
 	t.Helper()
 
 	sibling := domain.YouTubeNotificationOutbox{
@@ -681,7 +682,7 @@ func TestDispatchDeliveryRowsSendsAlreadySentPostToRoomWithoutSentRow(t *testing
 	require.Equal(t, alarmSentAt, state.AlarmSentAt.UTC())
 }
 
-func newTwoRoomClaimGateOutbox(t *testing.T, db *deliveryTestDB, suffix string, now time.Time) (outbox domain.YouTubeNotificationOutbox, postID string) {
+func newTwoRoomClaimGateOutbox(t *testing.T, db *pgxpool.Pool, suffix string, now time.Time) (outbox domain.YouTubeNotificationOutbox, postID string) {
 	t.Helper()
 
 	contentID := "post-" + suffix
@@ -708,7 +709,7 @@ func newTwoRoomClaimGateOutbox(t *testing.T, db *deliveryTestDB, suffix string, 
 	return outbox, postID
 }
 
-func loadClaimGateDeliveryRow(t *testing.T, db *deliveryTestDB, id int64) deliveryTestDeliveryModel {
+func loadClaimGateDeliveryRow(t *testing.T, db *pgxpool.Pool, id int64) deliveryTestDeliveryModel {
 	t.Helper()
 
 	var row deliveryTestDeliveryModel

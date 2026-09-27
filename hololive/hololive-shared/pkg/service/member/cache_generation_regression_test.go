@@ -95,10 +95,10 @@ func TestCachePointLookup_RejectsPriorSnapshotValkeyEntries(t *testing.T) {
 		return nil
 	}
 
-	c := &Cache{
+	c := withTestEpochAuthority(&Cache{
 		cache:  cacheClient,
 		logger: slog.New(slog.DiscardHandler),
-	}
+	})
 
 	if got := c.loadNameFromDistributedCache(t.Context(), testMemberNameOld, 0); got == nil || got.Name != testMemberNameOld {
 		t.Fatalf("cold point lookup = %+v, want existing Valkey behavior", got)

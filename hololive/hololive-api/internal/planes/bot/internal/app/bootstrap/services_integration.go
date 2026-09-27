@@ -35,7 +35,10 @@ func InitCoreIntegrationServices(
 		return nil, fmt.Errorf("provide ACL service: %w", err)
 	}
 
-	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(appConfig, logger)
+	majorEventRepository, memberNewsService, err := ResolveLLMSchedulerClients(appConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("resolve LLM scheduler clients: %w", err)
+	}
 
 	return &CoreIntegrationServices{
 		ACLService:           aclService,

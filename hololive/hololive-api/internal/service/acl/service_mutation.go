@@ -105,11 +105,15 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	return nil
 }
 
-// AddRoom 현재 활성 모드의 목록에 방 추가.
+// AddRoom 현재 활성 모드의 목록에 방 추가. 새 등록값은 chatID만 받는다(ErrInvalidRoomChatID).
 func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	room = stringutil.TrimSpace(room)
 	if room == "" {
 		return false, nil
+	}
+
+	if err := validateRoomChatID(room); err != nil {
+		return false, err
 	}
 
 	s.mu.Lock()
@@ -152,7 +156,7 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	return true, nil
 }
 
-// RemoveRoom 현재 활성 모드의 목록에서 방 제거.
+// RemoveRoom 현재 활성 모드의 목록에서 방 제거. 이미 저장된 비-chatID 값도 치울 수 있어야 하므로 형식은 보지 않는다.
 func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	room = stringutil.TrimSpace(room)
 	if room == "" {

@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
 type alarmWriter interface {
@@ -42,7 +41,6 @@ type alarmWriter interface {
 
 type AlarmService struct {
 	cache           cache.Client
-	holodex         *holodexprovider.Service
 	memberData      domain.MemberDataProvider
 	alarmRepository *alarm.Repository
 	alarmWriter     alarmWriter

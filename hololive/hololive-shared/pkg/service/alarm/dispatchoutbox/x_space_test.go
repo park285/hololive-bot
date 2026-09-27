@@ -20,10 +20,10 @@ func TestXSpaceEventAndRoomDeliveryIdentities(t *testing.T) {
 
 	second.Notification.RoomID = "room-b"
 
-	eventA, deliveryA, err := buildLedgerRows(&first, StatusPending)
+	eventA, deliveryA, err := buildLedgerRows(&first)
 	require.NoError(t, err)
 
-	eventB, deliveryB, err := buildLedgerRows(&second, StatusPending)
+	eventB, deliveryB, err := buildLedgerRows(&second)
 	require.NoError(t, err)
 	require.Equal(t, "x-space:start:1abc", eventA.EventKey)
 	require.Equal(t, eventA.Payload, eventB.Payload)

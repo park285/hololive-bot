@@ -101,7 +101,7 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	}
 }
 
-func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (result0 []byte, ok1 bool, err error) {
+func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events map[int64]EventRecord) ([]byte, bool, error) {
 	if record.EventID <= 0 {
 		return record.Payload, true, nil
 	}

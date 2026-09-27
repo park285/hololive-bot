@@ -290,7 +290,7 @@ func TestSeedTemplates_OutboxVideoGroupNumbersRenderedItems(t *testing.T) {
 		},
 	})
 
-	want := "🔔 사쿠라 미코 새 영상 · 3개\n\n1 · 제목1\nhttps://youtu.be/v1\n\n──────────\n\n2 · 제목2\nhttps://youtu.be/v2\n\n전체 3개 중 2개 표시"
+	want := "🔔 사쿠라 미코 새 영상 · 3개\n\n1 · 제목1\nhttps://youtu.be/v1\n──────────\n2 · 제목2\nhttps://youtu.be/v2\n\n전체 3개 중 2개 표시"
 	if out != want {
 		t.Errorf("OUTBOX_VIDEO_GROUP: skip 항목 뒤 번호가 연속되지 않음\n got=%q\nwant=%q", out, want)
 	}

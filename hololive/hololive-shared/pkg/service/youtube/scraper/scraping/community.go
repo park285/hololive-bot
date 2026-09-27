@@ -100,7 +100,7 @@ func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) 
 	if err != nil {
 		missing, fetchErr := c.handleCommunityPageFetchError(ctx, channelID, err)
 
-		return "", missing, errors.Join(fetchErr)
+		return "", missing, fetchErr
 	}
 
 	if strings.TrimSpace(html) == "" {
