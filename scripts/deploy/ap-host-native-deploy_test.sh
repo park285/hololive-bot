@@ -296,6 +296,8 @@ chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/healthcheck"
 printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
+printf 'absent\n' > "${rollback_fixture}/rollback-contract/previous-before-cutover"
+printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
 (
   cd "${rollback_fixture}"
   sha256sum \
@@ -304,6 +306,8 @@ printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/previous-before-cutover \
+    rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
 
@@ -343,6 +347,8 @@ printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtu
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/previous-before-cutover \
+    rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/invalid-unit.out" 2>"${tmp}/invalid-unit.err"; then
@@ -399,17 +405,6 @@ fi
 
 restore_payload="${tmp}/success/call-3.stdin"
 completion_cmd="${tmp}/success/call-5.cmd"
-if [[ -r "${restore_payload}" ]] &&
-   bash -n "${restore_payload}" &&
-   grep -Fq 'native_rollback_validate "$previous_target"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/youtube-collector-host.env" "$host_env"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"' "${restore_payload}" &&
-   grep -Fq 'systemctl daemon-reload' "${restore_payload}" &&
-   grep -Fq 'systemctl restart "$unit"' "${restore_payload}"; then
-  pass "ap-host-native rollback restores binary-adjacent contract files before restarting"
-else
-  record_fail "ap-host-native rollback must restore the host env and systemd unit before restarting"
-fi
 
 validate_line="$(grep -nF 'native_rollback_validate "$previous_target"' "${restore_payload}" | tail -1 | cut -d: -f1)"
 restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"

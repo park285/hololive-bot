@@ -39,11 +39,9 @@ hololive/hololive-shared/pkg/config/settings/config_youtube_producer_retired_tes
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime_test.go
 scripts/architecture/check-youtube-producer-retirement.sh
 scripts/architecture/ci-boundary-gate.sh
-scripts/deploy/ap-deploy-version_test.sh
 scripts/deploy/ap-rsync-files.txt
 scripts/deploy/lib/removed-runtimes.sh
 scripts/deploy/lib/retired-producer-cutover.sh
 scripts/deploy/lib/retired-producer-cutover_test.sh
 scripts/deploy/test-compose-env.sh
 scripts/deploy/test-compose-h3-contract.sh
-scripts/deploy/test-compose-services.sh

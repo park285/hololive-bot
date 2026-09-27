@@ -55,6 +55,7 @@ deploy_service_image_ref() {
         youtube-collector|youtube-collector-c|youtube-collector-a|youtube-collector-b|youtube-collector-d)
             printf '%s\n' hololive-youtube-collector:prod
             ;;
+        youtube-po-c|youtube-po-b) printf '%s\n' hololive-youtube-po-sandbox:prod ;;
         *)
             echo "[ERROR] No source-built image mapping for service: $1" >&2
             return 1

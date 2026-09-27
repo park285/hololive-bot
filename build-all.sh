@@ -337,8 +337,11 @@ export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION REVISION
 
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
     BUILD_REVISION_SERVICES=("${TARGET_SERVICES[@]}")
+    if [[ " ${BUILD_REVISION_SERVICES[*]} " == *" youtube-collector "* ]]; then
+        BUILD_REVISION_SERVICES+=(youtube-po-c)
+    fi
 else
-    BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector holo-postgres deunhealth)
+    BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector youtube-po-c holo-postgres deunhealth)
 fi
 
 validate_runtime_config_for_deploy
@@ -356,8 +359,8 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" config --quiet
 
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
-    echo "[BUILD] Targets: ${TARGET_SERVICES[*]}"
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build "${TARGET_SERVICES[@]}"
+    echo "[BUILD] Targets: ${BUILD_REVISION_SERVICES[*]}"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build "${BUILD_REVISION_SERVICES[@]}"
     if [[ "${REVISION}" != unknown ]]; then
         verify_build_services
     fi
@@ -386,6 +389,8 @@ else
     fi
     removed_runtime_cleanup_before_cutover
     cutover_capture_restart_baseline hololive-api hololive-alarm-worker
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --no-build --no-deps youtube-po-c
+    verify_live_revision youtube-po-c
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --no-build
     removed_runtime_assert_absent
 
@@ -396,6 +401,7 @@ else
         exit 1
     fi
     verify_live_revision hololive-api
+    verify_live_revision youtube-po-c
     verify_live_revision hololive-alarm-worker
     echo "[DONE] Build and deployment complete"
 fi

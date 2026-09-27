@@ -1,4 +1,6 @@
 import type { ChannelLiveCheckResult, VideoLiveCheckResult } from "./contracts.d.ts";
+import type { Innertube } from "youtubei.js";
+import type { ProofController } from "./proof-controller.mjs";
 
 export type ChannelLiveCheckObservation = Omit<ChannelLiveCheckResult, "protocol_version">;
 export type VideoLiveCheckObservation = Omit<VideoLiveCheckResult, "protocol_version">;
@@ -10,16 +12,18 @@ export class LiveCheckRequestError extends Error {
   constructor(message: string, options?: { cause?: unknown });
 }
 
-export function createLiveCheckInnertube(options?: { fetchImpl?: unknown }): Promise<unknown>;
+export function createLiveCheckInnertube(options?: { fetchImpl?: unknown }): Promise<Innertube>;
 export function fetchChannelLiveCheck(
   innertube: unknown,
   channelId: string,
   clock?: () => number,
+  proof?: ProofController,
 ): Promise<ChannelLiveCheckObservation>;
 export function fetchVideoLiveCheck(
   innertube: unknown,
   videoId: string,
   clock?: () => number,
+  proof?: ProofController,
 ): Promise<VideoLiveCheckObservation>;
 export function classifyResolvedChannel(
   raw: unknown,

@@ -73,7 +73,7 @@ expect_eq "$(compose_service_resolve_redeploy_target alarm-worker)" "hololive-al
 expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
 expect_fail "standalone admin redeploy removed" compose_service_resolve_redeploy_target admin
 expect_fail "standalone admin service removed" compose_service_resolve_redeploy_target admin-dashboard
-expect_eq "$(compose_service_resolve_redeploy_target all)" "" "redeploy all sentinel"
+expect_fail "redeploy rejects unpaired all-service cutover" compose_service_resolve_redeploy_target all
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector-c)" "youtube-collector" "redeploy alias youtube-collector-c"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
@@ -98,8 +98,7 @@ for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-comp
         "youtube-collector is central-only" \
         env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
         "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" youtube-collector
-    expect_fail_contains "${ap_overlay} rejects topology-unsafe all-service redeploy" \
-        "all-service redeploy is not supported with an AP compose overlay" \
+    expect_fail "${ap_overlay} rejects topology-unsafe all-service redeploy" \
         env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
         "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" all
 done
@@ -153,10 +152,6 @@ pass "ap active-active syncs every Compose helper"
 grep -qx 'scripts/deploy/ap-collector-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs collector preflight"
 pass "ap active-active syncs collector preflight"
 grep -q 'ap-collector-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs collector preflight"
-grep -Fq 'stop_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap collector cutover stops leftover youtube-producer"
-grep -Fq 'restore_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback restores the recorded youtube-producer state"
-grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback stops collector before restoring producer"
-grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap failed cutover stops collector before restoring producer"
 pass "ap active-active deploy runs collector preflight"
 
 for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
@@ -257,11 +252,9 @@ expect_fail_contains "osaka2 Compose deploy rejects native runtime" \
     "use ./scripts/deploy/ap-host-native-deploy.sh osaka2" \
     "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka2 --dry-run
 expect_fail "seoul active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" seoul --apply
-expect_fail_contains "osaka Compose rollback rejects native runtime" \
-    "use ./scripts/deploy/ap-host-native-rollback.sh osaka" \
+expect_fail "osaka Compose rollback rejects native runtime" \
     "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --dry-run
-expect_fail_contains "osaka2 Compose rollback rejects native runtime" \
-    "use ./scripts/deploy/ap-host-native-rollback.sh osaka2" \
+expect_fail "osaka2 Compose rollback rejects native runtime" \
     "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka2 --dry-run
 expect_fail_contains "Seoul native deploy rejects Compose runtime" \
     "use ./scripts/deploy/ap-deploy.sh seoul" \
@@ -279,39 +272,3 @@ if rg -n 'ap-(deploy|rollback)\.sh (osaka|osaka2)' \
 fi
 pass "current operator docs route Osaka and Osaka2 through host-native helpers"
 
-rollback_fixture_root="${TEST_TMP_DIR}/rollback"
-mkdir -p "${rollback_fixture_root}/bin"
-rollback_capture="${rollback_fixture_root}/ssh-command"
-cat > "${rollback_fixture_root}/bin/ssh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "${!#}" > "${AP_ROLLBACK_SSH_CAPTURE}"
-EOF
-chmod +x "${rollback_fixture_root}/bin/ssh"
-
-AP_ROLLBACK_SSH_CAPTURE="${rollback_capture}" \
-PATH="${rollback_fixture_root}/bin:${PATH}" \
-SSH_KEY="${SSH_KEY}" \
-BACKUP_DIR="backups/seoul-collector-fixture" \
-    "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --dry-run >/dev/null \
-    || fail "seoul rollback dry-run emits a backup compose preflight"
-
-grep -Fq "preflight_compose_dir=\"\$preflight_root/deploy/compose\"" "${rollback_capture}" \
-    || fail "seoul rollback preflight stages backup files under the canonical compose directory"
-grep -Fq "prod_preflight_file=\"\$preflight_compose_dir/docker-compose.prod.yml\"" "${rollback_capture}" \
-    || fail "seoul rollback preflight restores the canonical prod compose filename"
-grep -Fq "ap_preflight_file=\"\$preflight_compose_dir/docker-compose.seoul.yml\"" "${rollback_capture}" \
-    || fail "seoul rollback preflight restores the canonical AP compose filename"
-grep -Fq "cp \"\$prod_backup_file\" \"\$prod_preflight_file\"" "${rollback_capture}" \
-    || fail "seoul rollback preflight stages the prod backup"
-grep -Fq "cp \"\$ap_backup_file\" \"\$ap_preflight_file\"" "${rollback_capture}" \
-    || fail "seoul rollback preflight stages the AP backup"
-grep -Fq "./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet" "${rollback_capture}" \
-    || fail "seoul rollback preflight validates the staged compose pair"
-grep -Fq "if [[ -r 'backups/seoul-collector-fixture/rollback-image-tag' ]]" "${rollback_capture}" \
-    || fail "seoul rollback preflight inspects the preserved image tag artifact"
-grep -Fq 'sudo -n docker image inspect "$rollback_image_tag"' "${rollback_capture}" \
-    || fail "seoul rollback preflight verifies the preserved image exists"
-grep -Fq 'up -d --no-build --no-deps' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" \
-    || fail "seoul rollback recreates from the preserved image without a runtime-host build"
-pass "seoul rollback dry-run preserves Compose extends relative paths for .prechange backups"

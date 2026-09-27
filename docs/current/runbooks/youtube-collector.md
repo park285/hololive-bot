@@ -161,6 +161,24 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 `youtubei.js@18.1.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
 
+## Isolated PO Token lifecycle
+
+`DEC-20260927-hololive-egress-po-production`에 따라 정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 24.1.3` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Compose issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
+
+- IPC는 `/run/hololive-youtube-po/worker.sock`만 사용합니다. private protocol 1의 순서는 `session`(UA/JSDOM prepare) → WAA Create → `challenge`(snapshot) → GenerateIT → `activate` → 영상별 `mint`입니다. worker 초기화 완료 전에 challenge를 요청하지 않습니다. collector와 issuer는 반드시 같은 full source SHA로 전환합니다.
+- 한 발급 cycle의 외부 요청은 Create/GenerateIT와 필요한 interpreter GET을 합해 최대 3회, 총 15초, 응답별 decoded 512KiB입니다. helper마다 single-flight이며 발급 시작 간격은 최소 300초입니다. 개별 broker 연산은 admission·IO를 합해 8초로 제한합니다.
+- IPC 요청은 JSON escaping과 envelope를 포함한 **전체 1MiB** 상한을 별도로 적용합니다. 개별 upstream 응답이 512KiB 이내여도 합친 직렬화 값이 이 상한을 넘으면 `broker_request_size`로 발급을 중단합니다. 한도를 늘리거나 해당 cycle을 재시도하지 않습니다.
+- nonempty 정상 integrity token과 양의 provider TTL만 허용합니다. monotonic 유효 시간은 provider TTL과 12시간 중 작은 값에서 30초를 뺀 값입니다. 갱신 여유는 최대 5분 또는 TTL의 20%이며 최소 발급 간격을 유지합니다. 각 player에 해당 video ID로 새로 mint하고 header·WEB context·sandbox navigator·GenerateIT의 UA를 일치시킵니다.
+- 준비 실패·만료·worker 장애에는 stale/cold-start/fallback token을 쓰지 않습니다. 기존 단일 무토큰 player를 그대로 수행하며 재시도나 UNKNOWN의 음성 확정은 추가하지 않습니다. 채널 확인의 resolve 1회+player 최대 1회, 영상 확인의 player 1회 상한도 유지합니다.
+- helper UDS의 `GET /health`에서 `proof.state`, `bootstrap_attempts`, `bootstrap_successes`, `upstream_requests`, `minted_total`, `attached_total`, 안전한 `last_error`를 확인합니다. 앱 `/ready` 성공은 PO 준비 완료나 provider 가용성 보장이 아닙니다. token/program/snapshot/visitor data나 원시 worker stderr는 로그·파일에 남기지 않습니다.
+
+빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. 중앙의 `compose-redeploy-service.sh youtube-collector`와 `youtube-po-c`도 같은 paired cutover로 연결됩니다. 이 스크립트의 포괄적 `all` 전환은 지원하지 않습니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
+
+issuer를 먼저 기동·검증한 뒤 collector만 `--no-build --no-deps`로 교체합니다. b의 소스는 별도 후보 디렉터리에 전송·대조한 뒤 승격하며, 실패 시 snapshot이 이전 파일 내용·mode·symlink·파일 부재까지 복원합니다. rollback은 이전 VERSION/실행 파일과 collector+issuer image/rootfs를 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
+
+비정상 generation/늦은 응답/취소는 해당 연산의 실제 admission 단계에 따라 처리합니다. 작업 시작 전 취소는 다른 호출의 준비된 세대를 폐기하지 않으며, 실제 worker 연산 중 실패는 전체 VM을 종료합니다. provider TTL 필드, 고정 시계 경계 시험, 실제 장시간 만료·갱신 관측은 서로 다른 증거입니다.
+
+
 ## Logs
 
 ```bash

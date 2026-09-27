@@ -1239,6 +1239,7 @@ github.com/kapu/hololive-shared/pkg/testutil -> github.com/kapu/hololive-shared/
 github.com/kapu/hololive-shared/pkg/testutil -> github.com/kapu/hololive-shared/internal/testutil/cacheclient
 github.com/kapu/hololive-shared/pkg/testutil -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/util -> github.com/park285/shared-go/v2/pkg/stringutil
+github.com/kapu/hololive-youtube-collector/cmd/po-broker -> github.com/kapu/hololive-youtube-collector/internal/runtime/pobroker
 github.com/kapu/hololive-youtube-collector/cmd/runtime/healthcheck -> github.com/park285/shared-go/v2/pkg/healthprobe
 github.com/kapu/hololive-youtube-collector/cmd/runtime/youtube-collector -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-youtube-collector/cmd/runtime/youtube-collector -> github.com/kapu/hololive-shared/pkg/config/settings/collector

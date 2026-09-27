@@ -4,6 +4,8 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 ROLLBACK_CHECK_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh"
+RELEASE_PATH_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
+PO_ROLLBACK_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
 RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
 
 case "$MODE" in
@@ -36,7 +38,9 @@ service="${AP_SERVICES[0]}"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   {
+    cat "$RELEASE_PATH_LIB"
     cat "$ROLLBACK_CHECK_LIB"
+    cat "$PO_ROLLBACK_LIB"
     cat "$RETIRED_PRODUCER_LIB"
     cat <<'REMOTE'
 set -euo pipefail
@@ -79,7 +83,9 @@ REMOTE
 )"
 
 {
+  cat "$RELEASE_PATH_LIB"
   cat "$ROLLBACK_CHECK_LIB"
+  cat "$PO_ROLLBACK_LIB"
   cat "$RETIRED_PRODUCER_LIB"
   cat <<'REMOTE'
 set -euo pipefail
@@ -96,15 +102,22 @@ producer_state_file="/opt/hololive-bot/youtube-collector/releases/first-cutover-
 
 if [[ -n "$previous_target" && -d "$previous_target" ]]; then
   native_rollback_validate "$previous_target"
+  stop_named_units_and_require_inactive "$unit"
   sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
   sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
   sudo -n ln -sfn "$previous_target" "$current"
+  native_previous_link_restore /opt/hololive-bot/youtube-collector/releases "$previous" "$rollback_contract_dir/previous-before-cutover"
+  po_restore_previous "$previous_target"
   sudo -n systemd-analyze verify "$unit_file"
   sudo -n systemctl daemon-reload
-  sudo -n systemctl restart "$unit"
+  sudo -n systemctl enable --now "$unit"
 else
   validate_retired_producer_runtime_state "$producer_state_file" "$service"
   stop_named_units_and_require_inactive "$unit"
+  po_restore_previous ""
+  sudo -n rm -f "$current" "$host_env" "$unit_file"
+  sudo -n rm -f "$previous"
+  sudo -n systemctl daemon-reload
   restore_retired_producer_runtime "$producer_state_file" "$service"
 fi
 echo "rollback_started_at=$rollback_started_at"

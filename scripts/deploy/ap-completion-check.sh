@@ -6,6 +6,7 @@ CHANGE_STARTED_AT="${CHANGE_STARTED_AT:-}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
 READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
+PO_NATIVE_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
@@ -36,6 +37,7 @@ run_native_completion_check() {
   {
     cat "$NODE_VERSION_LIB"
     cat "$READINESS_LIB"
+    cat "$PO_NATIVE_LIB"
     cat <<'REMOTE'
 set -euo pipefail
 service="$1"
@@ -53,6 +55,12 @@ sudo -n test -x "$current_link/bin/healthcheck"
 sudo -n test -f "$current_link/youtubejs/src/server.mjs"
 require_node_version node
 
+po_validate_release "$current_link"
+systemctl is-active --quiet hololive-youtube-po.socket
+systemctl is-active --quiet hololive-youtube-po.service
+sudo -n -u hololive "$current_link/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock
+python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert (m["source_revision"],m["version"],m["go"]["goarch"]) == (open(sys.argv[2]).read().strip(),open(sys.argv[3]).read().strip(),"amd64")' \
+  "$current_link/manifest.json" "$current_link/po-sandbox/revision" "$current_link/po-sandbox/version"
 systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
 sub_state="$(systemctl show "$unit" -p SubState --value)"
@@ -124,6 +132,22 @@ bash scripts/deploy/lib/require-quic-udp-buffer.sh '$AP_REQUIRED_UDP_BUFFER_BYTE
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
+. scripts/deploy/lib/po-sandbox-image.sh
+po_manifest=backups/po-sandbox-current-b.json
+test -r \"\$po_manifest\"
+po_revision=\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"source_revision\"])' \"\$po_manifest\")
+[[ \"\$po_revision\" =~ ^[0-9a-f]{40}\$ ]]
+po_verify_image hololive-youtube-po-sandbox:prod \"\$po_manifest\" \"\$po_revision\" arm64 backups/po-sandbox-current-b.image-id
+[[ \$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' hololive-youtube-po-b) == \"\$po_revision\" ]]
+po_version=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' hololive-youtube-po-sandbox:prod)
+[[ \"\$po_version\" == \$(cat hololive/hololive-api/VERSION) ]]
+[[ \$(docker inspect -f '{{.Image}}' hololive-youtube-po-b) == \$(sudo -n docker image inspect -f '{{.Id}}' hololive-youtube-po-sandbox:prod) ]]
+[[ \$(docker inspect -f '{{.HostConfig.NetworkMode}}' hololive-youtube-po-b) == none ]]
+[[ \$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' hololive-youtube-po-b) == true ]]
+[[ \$(docker inspect -f '{{.Config.User}}' hololive-youtube-po-b) == '65532:1000' ]]
+socket_mount=\$(docker inspect -f '{{range .Mounts}}{{if eq .Destination \"/run/hololive-youtube-po\"}}{{.Source}}{{end}}{{end}}' hololive-youtube-po-b)
+[[ \$(sudo -n stat -c '%u:%g %a' \"\$socket_mount\") == '65532:1000 770' ]]
+docker exec hololive-youtube-po-b /app/bin/po-broker --healthcheck --socket /run/hololive-youtube-po/worker.sock
 sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
 
 for container in $containers_list; do
@@ -132,6 +156,8 @@ for container in $containers_list; do
   node_version_supported \"\$node_version\"
   status=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \"\$container\")
   [[ \"\$status\" == healthy ]]
+  [[ \$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"\$container\") == \"\$po_revision\" ]]
+  [[ \$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' \"\$container\") == \"\$po_version\" ]]
 done
 
 ports=($ports_list)
@@ -146,6 +172,8 @@ done
 
 if [[ -n '$CHANGE_STARTED_AT' ]]; then
   since_epoch=\$(date -u -d '$CHANGE_STARTED_AT' +%s)
+  po_started=\$(docker inspect -f '{{.State.StartedAt}}' hololive-youtube-po-b)
+  [[ \$(date -u -d \"\$po_started\" +%s) -ge \"\$since_epoch\" ]]
   for container in $containers_list; do
     started_at=\$(docker inspect -f '{{.State.StartedAt}}' \"\$container\")
     started_epoch=\$(date -u -d \"\$started_at\" +%s)

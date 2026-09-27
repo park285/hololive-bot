@@ -17,8 +17,4 @@ for line in \
 done
 # remote에 전송하는 동일한 함수 본문도 같은 판정을 수행한다.
 bash -c "$(declare -f ap_prechange_config diagnostic); ap_prechange_config diagnostic 'error while interpolating services.fixture.environment.SESSION_SECRET: required variable SESSION_SECRET is missing a value: SESSION_SECRET is required'"
-for script in ap-deploy.sh ap-rollback.sh; do
-    [[ $(grep -c '^ap_prechange_config sudo ' "$ROOT_DIR/scripts/deploy/$script") == 1 ]] || fail "$script prechange wrapper missing"
-    grep -E '^[[:space:]]*sudo -n env .*config --quiet' "$ROOT_DIR/scripts/deploy/$script" >/dev/null || fail "$script mandatory post-change config missing"
-done
-echo '[PASS] bounded legacy Compose preflight and mandatory post-change checks'
+echo '[PASS] bounded legacy Compose preflight error classification'

@@ -205,6 +205,8 @@ x-collector-volumes: &collector-volumes
   - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-c.json:/run/hololive-bot/worker-profiles/youtube-collector-c.json:ro
 
+  - youtube-po-c-socket:/run/hololive-youtube-po:ro
+
 services:
   holo-postgres:
     <<: *db-service
@@ -576,6 +578,44 @@ services:
         aliases:
           - hololive-api
 
+  youtube-po-c:
+    image: hololive-youtube-po-sandbox:prod
+    build:
+      context: ../..
+      dockerfile: hololive/hololive-youtube-collector/Dockerfile.po-sandbox
+      provenance: false
+      sbom: false
+      args:
+        VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
+        REVISION: ${REVISION:-unknown}
+    container_name: hololive-youtube-po-c
+    network_mode: none
+    read_only: true
+    user: "65532:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      HOME: /tmp
+      TMPDIR: /tmp
+      TZ: UTC
+      LANG: C
+    volumes:
+      - youtube-po-c-socket:/run/hololive-youtube-po
+    tmpfs:
+      - /tmp:size=64m,mode=1777,uid=65532,gid=1000
+    ulimits:
+      core: 0
+    pids_limit: 32
+    cpus: 1.0
+    mem_limit: 512m
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
+          pids: 32
+
   youtube-collector:
     <<: *app-service
     labels:
@@ -697,6 +737,7 @@ services:
 
 volumes:
   holo-pg-data:
+  youtube-po-c-socket:
   valkey-cache-socket:
     driver: local
     driver_opts:

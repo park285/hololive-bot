@@ -95,12 +95,14 @@ export class HelperRuntime {
   }
 
   healthBody() {
+    const proof = this.fetchers?.proofStatus?.();
     return {
       protocol_version: 1,
       state: this.state,
       inflight: this.inflight,
       max_inflight: this.maxInflight,
       proxy_enabled: this.proxyEnabled,
+      ...(proof === undefined ? {} : { proof }),
     };
   }
 

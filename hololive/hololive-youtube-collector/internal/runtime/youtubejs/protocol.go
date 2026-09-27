@@ -46,11 +46,26 @@ type BootstrapResponse struct {
 }
 
 type HealthResponse struct {
-	ProtocolVersion int16  `json:"protocol_version"`
-	State           string `json:"state"`
-	Inflight        int    `json:"inflight"`
-	MaxInflight     int    `json:"max_inflight"`
-	ProxyEnabled    bool   `json:"proxy_enabled"`
+	ProtocolVersion int16        `json:"protocol_version"`
+	State           string       `json:"state"`
+	Inflight        int          `json:"inflight"`
+	MaxInflight     int          `json:"max_inflight"`
+	ProxyEnabled    bool         `json:"proxy_enabled"`
+	Proof           *ProofStatus `json:"proof,omitempty"`
+}
+
+// ProofStatus는 발급 상태 진단이며 방송 상태나 helper readiness의 증거가 아닙니다.
+type ProofStatus struct {
+	State              string `json:"state"`
+	Generation         string `json:"generation,omitempty"`
+	ExpiresAt          string `json:"expires_at,omitempty"`
+	NextAttemptAt      string `json:"next_attempt_at,omitempty"`
+	LastError          string `json:"last_error,omitempty"`
+	BootstrapAttempts  uint64 `json:"bootstrap_attempts"`
+	BootstrapSuccesses uint64 `json:"bootstrap_successes"`
+	UpstreamRequests   uint64 `json:"upstream_requests"`
+	MintedTotal        uint64 `json:"minted_total"`
+	AttachedTotal      uint64 `json:"attached_total"`
 }
 
 type ProtocolMeta struct {

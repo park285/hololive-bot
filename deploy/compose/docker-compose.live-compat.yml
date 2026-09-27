@@ -140,6 +140,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-c.json:/run/hololive-bot/worker-profiles/youtube-collector-c.json:ro
+      - youtube-po-c-socket:/run/hololive-youtube-po:ro
     networks:
       observability-traces: {}
 

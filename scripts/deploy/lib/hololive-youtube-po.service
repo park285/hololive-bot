@@ -1,0 +1,49 @@
+[Unit]
+Description=Networkless Hololive YouTube PO issuer
+Requires=hololive-youtube-po.socket
+After=hololive-youtube-po.socket
+StartLimitIntervalSec=60
+StartLimitBurst=20
+
+[Service]
+Type=simple
+DynamicUser=yes
+RootDirectory=/opt/hololive-bot/youtube-collector/current/po-sandbox/rootfs
+ExecStart=/app/bin/po-broker --listen-fd 3
+Environment=HOME=/tmp TMPDIR=/tmp TZ=UTC LANG=C
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectSystem=strict
+RestrictNamespaces=yes
+ProtectHome=yes
+ReadOnlyPaths=/
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @module @raw-io @reboot @swap @debug @obsolete @privileged
+SystemCallFilter=~ptrace process_vm_writev process_vm_readv unshare setns clone3
+LimitCORE=0
+UMask=0077
+MemoryMax=512M
+TasksMax=32
+CPUQuota=100%
+Restart=always
+RestartSec=1s
+KillMode=control-group
+TimeoutStopSec=5s
+
+[Install]
+WantedBy=multi-user.target
