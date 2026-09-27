@@ -170,7 +170,7 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 - IPC 요청은 JSON escaping과 envelope를 포함한 **전체 1MiB** 상한을 별도로 적용합니다. 개별 upstream 응답이 512KiB 이내여도 합친 직렬화 값이 이 상한을 넘으면 `broker_request_size`로 발급을 중단합니다. 한도를 늘리거나 해당 cycle을 재시도하지 않습니다.
 - nonempty 정상 integrity token과 양의 provider TTL만 허용합니다. monotonic 유효 시간은 provider TTL과 12시간 중 작은 값에서 30초를 뺀 값입니다. 갱신 여유는 최대 5분 또는 TTL의 20%이며 최소 발급 간격을 유지합니다. 각 player에 해당 video ID로 새로 mint하고 header·WEB context·sandbox navigator·GenerateIT의 UA를 일치시킵니다.
 - 준비 실패·만료·worker 장애에는 stale/cold-start/fallback token을 쓰지 않습니다. 기존 단일 무토큰 player를 그대로 수행하며 재시도나 UNKNOWN의 음성 확정은 추가하지 않습니다. 채널 확인의 resolve 1회+player 최대 1회, 영상 확인의 player 1회 상한도 유지합니다.
-- helper UDS의 `GET /health`에서 `proof.state`, `bootstrap_attempts`, `bootstrap_successes`, `upstream_requests`, `minted_total`, `attached_total`, 안전한 `last_error`를 확인합니다. 앱 `/ready` 성공은 PO 준비 완료나 provider 가용성 보장이 아닙니다. token/program/snapshot/visitor data나 원시 worker stderr는 로그·파일에 남기지 않습니다.
+- helper UDS의 `GET /health`에서 `proof.state`, `bootstrap_attempts`, `bootstrap_successes`, `upstream_requests`, `minted_total`, `attached_total`을 확인합니다. `last_error`는 최초 발급·mint 실패를 보존하고, 후속 정리 실패는 별도의 `cleanup_error`에 안전한 오류 코드로 남깁니다. 새 발급 cycle은 두 오류를 초기화합니다. 앱 `/ready` 성공은 PO 준비 완료나 provider 가용성 보장이 아닙니다. token/program/snapshot/visitor data나 원시 worker stderr는 로그·파일에 남기지 않습니다.
 
 빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. 중앙의 `compose-redeploy-service.sh youtube-collector`와 `youtube-po-c`도 같은 paired cutover로 연결됩니다. 이 스크립트의 포괄적 `all` 전환은 지원하지 않습니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
 

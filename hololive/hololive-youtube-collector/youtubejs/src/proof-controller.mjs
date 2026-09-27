@@ -47,6 +47,7 @@ export class ProofController {
     /** @type {import("./contracts.d.ts").ProofState} */
     this.state = "COLD";
     this.lastError = "";
+    this.cleanupError = "";
     this.nextAttempt = 0;
     this.nextAttemptWall = 0;
     this.bootstrapAttempts = 0;
@@ -62,6 +63,7 @@ export class ProofController {
       state: this.session && this.clock() >= this.session.deadline ? "EXPIRED" : this.state,
       ...(this.session ? { generation: this.session.generation, expires_at: this.session.expiresAt } : {}),
       ...(this.lastError ? { last_error: this.lastError } : {}),
+      ...(this.cleanupError ? { cleanup_error: this.cleanupError } : {}),
       ...(this.nextAttemptWall ? { next_attempt_at: new Date(this.nextAttemptWall).toISOString() } : {}),
       bootstrap_attempts: this.bootstrapAttempts,
       bootstrap_successes: this.bootstrapSuccesses,
@@ -115,6 +117,7 @@ export class ProofController {
     this.session = undefined;
     this.state = "WARMING";
     this.lastError = "";
+    this.cleanupError = "";
     this.nextAttempt = now + minimumAttemptInterval;
     this.nextAttemptWall = this.wallClock() + minimumAttemptInterval;
     this.bootstrapAttempts += 1;
@@ -220,7 +223,7 @@ export class ProofController {
     } catch (error) {
       // 손실된 reset 응답을 재전송하지 않습니다. 다음 발급은 freshGeneration으로 교체를 입증합니다.
       if (!(error instanceof ProofError) || !["broker_unavailable", "broker_generation_mismatch"].includes(error.code)) {
-        this.lastError = "broker_cleanup_failed";
+        this.cleanupError = safeCode(error);
       }
     }
   }

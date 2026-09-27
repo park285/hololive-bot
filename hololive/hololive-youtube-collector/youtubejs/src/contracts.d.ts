@@ -50,6 +50,7 @@ export interface ProofStatus {
   expires_at?: string;
   next_attempt_at?: string;
   last_error?: string;
+  cleanup_error?: string;
   bootstrap_attempts: number;
   bootstrap_successes: number;
   upstream_requests: number;

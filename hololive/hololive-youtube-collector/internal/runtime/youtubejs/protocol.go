@@ -61,6 +61,7 @@ type ProofStatus struct {
 	ExpiresAt          string `json:"expires_at,omitempty"`
 	NextAttemptAt      string `json:"next_attempt_at,omitempty"`
 	LastError          string `json:"last_error,omitempty"`
+	CleanupError       string `json:"cleanup_error,omitempty"`
 	BootstrapAttempts  uint64 `json:"bootstrap_attempts"`
 	BootstrapSuccesses uint64 `json:"bootstrap_successes"`
 	UpstreamRequests   uint64 `json:"upstream_requests"`

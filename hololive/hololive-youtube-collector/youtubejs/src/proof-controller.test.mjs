@@ -96,6 +96,29 @@ test("failed preparation retires its generation without upstream requests", asyn
   assert.equal(f.controller.status().last_error, "broker_worker_failed");
 });
 
+test("cleanup failure preserves the issuance cause until a new generation succeeds", async (t) => {
+  let fail = true;
+  const f = fixture(t, {
+    broker: {
+      async prepare() { if (fail) throw new ProofError("broker_worker_timeout"); },
+      async retire() { if (fail) throw new ProofError("broker_worker_failed"); },
+    },
+  });
+  await f.player();
+  await tick();
+  assert.equal(f.controller.status().last_error, "broker_worker_timeout");
+  assert.equal(f.controller.status().cleanup_error, "broker_worker_failed");
+  assert.equal(f.controller.status().state, "UNAVAILABLE");
+  assert.deepEqual(f.requests, []);
+  fail = false;
+  f.advance(300_000);
+  await warm(f);
+  await f.player();
+  assert.equal(f.controller.status().last_error, undefined);
+  assert.equal(f.controller.status().cleanup_error, undefined);
+  assert.deepEqual(f.sent, [false, false, true]);
+});
+
 test("canceled preparation retires its generation without upstream requests", async (t) => {
   const preparing = Promise.withResolvers();
   const f = fixture(t, {
