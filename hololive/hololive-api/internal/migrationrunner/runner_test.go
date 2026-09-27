@@ -522,7 +522,7 @@ func TestCurrentSchemaSupportsLegacyTerminalWriter(t *testing.T) {
 	assertLegacyTerminalWriterCompatible(t, pool, "legacy-dead", "dead")
 }
 
-// 호환 scrub은 조용히 고치지 않고 이전 writer가 돌고 있다는 WARNING을 남긴다(222). 현재 writer처럼 같은 UPDATE에서
+// 호환 scrub은 조용히 고치지 않고 이전 writer가 돌고 있다는 WARNING을 남긴다(223). 현재 writer처럼 같은 UPDATE에서
 // payload를 비우면 경고하지 않는다.
 func TestTerminalPayloadScrubTriggerWarnsOnLegacyWriter(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)

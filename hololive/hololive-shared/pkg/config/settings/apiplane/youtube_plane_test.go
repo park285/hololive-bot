@@ -271,6 +271,7 @@ func setYouTubePlaneRetentionOverrideEnv(t *testing.T) {
 	t.Setenv("YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", "21")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", "180")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS", "61")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", "39")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", "8")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", "45")
 	t.Setenv("YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS", "31")
@@ -302,6 +303,10 @@ func assertRetentionOverrideAuditAges(t *testing.T, retention YouTubePlaneRetent
 
 	if retention.ApplicationAuditGrace != 61*24*time.Hour || retention.CheckpointHistoryAge != 8*24*time.Hour {
 		t.Fatalf("dependent retention ages = %s %s", retention.ApplicationAuditGrace, retention.CheckpointHistoryAge)
+	}
+
+	if retention.LiveAbsenceSlotAge != 39*24*time.Hour {
+		t.Fatalf("live absence slot age = %s", retention.LiveAbsenceSlotAge)
 	}
 
 	if retention.ProjectionRetiredAge != 45*24*time.Hour {
@@ -408,6 +413,7 @@ func TestYouTubePlaneProductionRetentionRequiresApprovedBoundedPolicy(t *testing
 	for key, disable := range map[string]func(*YouTubePlaneRetentionConfig){
 		"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS": func(r *YouTubePlaneRetentionConfig) { r.ChannelLiveCheckAge = 0 },
 		"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS":   func(r *YouTubePlaneRetentionConfig) { r.VideoLiveCheckAge = 0 },
+		"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS": func(r *YouTubePlaneRetentionConfig) { r.LiveAbsenceSlotAge = 0 },
 	} {
 		unbounded := cfg
 		disable(&unbounded.Retention)
@@ -470,6 +476,10 @@ func TestYouTubePlaneRetentionDefaultsBoundDependentTables(t *testing.T) {
 
 	if cfg.ApplicationAuditGrace != 60*24*time.Hour {
 		t.Fatalf("application audit grace = %s, want 60d", cfg.ApplicationAuditGrace)
+	}
+
+	if cfg.LiveAbsenceSlotAge != 30*24*time.Hour {
+		t.Fatalf("live absence slot age = %s, want 30d", cfg.LiveAbsenceSlotAge)
 	}
 
 	if cfg.CheckpointHistoryAge != 7*24*time.Hour {

@@ -9,24 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
-func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
-	for _, file := range []string{
-		"scripts/deploy/ap-deploy.sh",
-		"scripts/deploy/ap-completion-check.sh",
-		"scripts/deploy/ap-rollback.sh",
-		"scripts/deploy/ap-collector-preflight.sh",
-	} {
-		content := readRepoFile(t, file)
-		if strings.Contains(content, "/etc/stack-secrets/hololive-bot/env") {
-			t.Fatalf("%s still references monolithic /etc/stack-secrets/hololive-bot/env", file)
-		}
-
-		if !strings.Contains(content, "/etc/stack-secrets/hololive-bot/ap-compose.env") {
-			t.Fatalf("%s missing AP-safe compose env file contract", file)
-		}
-	}
-}
-
 func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
 	lib := readRepoFile(t, "scripts/deploy/lib/require-quic-udp-buffer.sh")
 

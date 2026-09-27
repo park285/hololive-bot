@@ -38,6 +38,18 @@ services:
         limits:
           memory: 768m
 
+  youtube-po-c:
+    profiles: !override ["central-only"]
+
+  youtube-po-b:
+    extends:
+      file: docker-compose.prod.yml
+      service: youtube-po-c
+    profiles: ["oracle"]
+    container_name: hololive-youtube-po-b
+    volumes: !override
+      - youtube-po-b-socket:/run/hololive-youtube-po
+
   youtube-collector-b:
     extends:
       file: docker-compose.prod.yml
@@ -71,6 +83,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-b.json:/run/hololive-bot/worker-profiles/youtube-collector-b.json:ro
+      - youtube-po-b-socket:/run/hololive-youtube-po:ro
     healthcheck:
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30015/ready"]
     logging: *seoul-ap-logging
@@ -78,3 +91,6 @@ services:
       resources:
         limits:
           memory: 768m
+
+volumes:
+  youtube-po-b-socket:

@@ -3,6 +3,8 @@ import { createInnertube, fetchCommunityFeed } from "./fetch-community.mjs";
 import { fetchContentFeed } from "./fetch-content.mjs";
 import { fetchChannelFeed } from "./fetch-channel.mjs";
 import { createLiveCheckInnertube, fetchChannelLiveCheck, fetchVideoLiveCheck } from "./live-check.mjs";
+import { ProofController } from "./proof-controller.mjs";
+import { ProofError } from "./proof-broker.mjs";
 
 /** @typedef {import("./contracts.d.ts").FetcherSet} FetcherSet */
 /** @typedef {import("./upstream-feeds.d.ts").InnertubeFetch} InnertubeFetch */
@@ -23,8 +25,10 @@ export function createRealFetchers(options = {}) {
   const initLiveCheckInnertube = options.createLiveCheckInnertubeImpl ?? createLiveCheckInnertube;
   /** @type {Promise<unknown> | undefined} */
   let innertubePromise;
-  /** @type {Promise<unknown> | undefined} */
+  /** @type {Promise<import("youtubei.js").Innertube> | undefined} */
   let liveCheckInnertubePromise;
+  /** @type {ProofController | undefined} */
+  let proof;
 
   async function innertubeClient() {
     if (innertubePromise == null) {
@@ -39,7 +43,15 @@ export function createRealFetchers(options = {}) {
   // 라이브 확인은 기존 수집 Innertube의 재시도 transport를 공유하지 않고, 단일 시도 transport에 묶인 별도 인스턴스를 씁니다.
   async function liveCheckInnertubeClient() {
     if (liveCheckInnertubePromise == null) {
-      liveCheckInnertubePromise = initLiveCheckInnertube({ fetchImpl: singleAttemptFetchImpl }).catch((err) => {
+      liveCheckInnertubePromise = initLiveCheckInnertube({ fetchImpl: singleAttemptFetchImpl }).then((client) => {
+        const userAgent = client.session.user_agent;
+        if (typeof userAgent !== "string" || userAgent !== client.session.context.client.userAgent) {
+          throw new ProofError("proof_ua_mismatch");
+        }
+        if (typeof singleAttemptFetchImpl !== "function") throw new ProofError("proof_configuration");
+        proof = new ProofController({ fetchImpl: singleAttemptFetchImpl, userAgent });
+        return client;
+      }).catch((err) => {
         liveCheckInnertubePromise = undefined;
         throw err;
       });
@@ -70,12 +82,13 @@ export function createRealFetchers(options = {}) {
       });
     },
     async fetchChannelLiveCheck(fetchOptions) {
-      return fetchChannelLiveCheck(await liveCheckInnertubeClient(), fetchOptions.channelId);
+      return fetchChannelLiveCheck(await liveCheckInnertubeClient(), fetchOptions.channelId, Date.now, proof);
     },
     async fetchVideoLiveCheck(fetchOptions) {
-      return fetchVideoLiveCheck(await liveCheckInnertubeClient(), fetchOptions.videoId);
+      return fetchVideoLiveCheck(await liveCheckInnertubeClient(), fetchOptions.videoId, Date.now, proof);
     },
-    async close() {},
+    proofStatus() { return proof?.status(); },
+    async close() { await proof?.close(); },
   };
 }
 

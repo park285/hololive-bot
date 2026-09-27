@@ -204,6 +204,8 @@ x-collector-volumes: &collector-volumes
   - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-c.json:/run/hololive-bot/worker-profiles/youtube-collector-c.json:ro
 
+  - youtube-po-c-socket:/run/hololive-youtube-po:ro
+
 services:
   holo-postgres:
     <<: *db-service
@@ -505,6 +507,7 @@ services:
       YOUTUBE_PLANE_RETENTION_COLLISION_DAYS: ${YOUTUBE_PLANE_RETENTION_COLLISION_DAYS:-0}
       YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS: ${YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS:-0}
       YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS: ${YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS:-60}
+      YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS: ${YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS:-30}
       YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS: ${YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS:-7}
       YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS: ${YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS:-0}
       YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS: ${YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS:-0}
@@ -576,6 +579,44 @@ services:
       hololive-net:
         aliases:
           - hololive-api
+
+  youtube-po-c:
+    image: hololive-youtube-po-sandbox:prod
+    build:
+      context: ../..
+      dockerfile: hololive/hololive-youtube-collector/Dockerfile.po-sandbox
+      provenance: false
+      sbom: false
+      args:
+        VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
+        REVISION: ${REVISION:-unknown}
+    container_name: hololive-youtube-po-c
+    network_mode: none
+    read_only: true
+    user: "65532:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      HOME: /tmp
+      TMPDIR: /tmp
+      TZ: UTC
+      LANG: C
+    volumes:
+      - youtube-po-c-socket:/run/hololive-youtube-po
+    tmpfs:
+      - /tmp:size=64m,mode=1777,uid=65532,gid=1000
+    ulimits:
+      core: 0
+    pids_limit: 32
+    cpus: 1.0
+    mem_limit: 512m
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
+          pids: 32
 
   youtube-collector:
     <<: *app-service
@@ -697,6 +738,7 @@ services:
 
 volumes:
   holo-pg-data:
+  youtube-po-c-socket:
   valkey-cache-socket:
     driver: local
     driver_opts:

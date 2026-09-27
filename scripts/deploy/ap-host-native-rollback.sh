@@ -4,6 +4,8 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 ROLLBACK_CHECK_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh"
+RELEASE_PATH_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
+PO_ROLLBACK_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
 
 case "$MODE" in
   --dry-run|--apply) ;;
@@ -38,7 +40,9 @@ service="${AP_SERVICES[0]}"
 # 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling). previous가 없으면 되돌릴 대상이 없으므로 거절한다.
 if [[ "$MODE" == "--dry-run" ]]; then
   {
+    cat "$RELEASE_PATH_LIB"
     cat "$ROLLBACK_CHECK_LIB"
+    cat "$PO_ROLLBACK_LIB"
     cat <<'REMOTE'
 set -euo pipefail
 service="$1"
@@ -67,7 +71,9 @@ REMOTE
 )"
 
 {
+  cat "$RELEASE_PATH_LIB"
   cat "$ROLLBACK_CHECK_LIB"
+  cat "$PO_ROLLBACK_LIB"
   cat <<'REMOTE'
 set -euo pipefail
 service="$1"
@@ -85,15 +91,30 @@ if [[ -z "$previous_target" || ! -d "$previous_target" ]]; then
   exit 1
 fi
 native_rollback_validate "$previous_target"
+# 이전 collector와 issuer를 같은 release로 되돌리기 전에 현재 collector를 멈추고 비활성을 확인한다.
+if systemctl cat "$unit" >/dev/null 2>&1; then
+  sudo -n systemctl disable --now "$unit" >/dev/null
+fi
+if systemctl is-active --quiet "$unit" 2>/dev/null; then
+  echo "collector unit still active: $unit" >&2
+  exit 1
+fi
 sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
 sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
 sudo -n ln -sfn "$previous_target" "$current"
+native_previous_link_restore /opt/hololive-bot/youtube-collector/releases "$previous" "$rollback_contract_dir/previous-before-cutover"
+po_restore_previous "$previous_target"
 sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
-sudo -n systemctl restart "$unit"
+sudo -n systemctl enable --now "$unit"
 echo "rollback_started_at=$rollback_started_at"
 REMOTE
 } | ap_remote_bash "$service" "$rollback_started_at"
 
-CHANGE_STARTED_AT="$rollback_started_at" \
+po_expected_presence="$(ap_remote_bash <<'REMOTE'
+set -euo pipefail
+sudo -n cat /opt/hololive-bot/youtube-collector/current/rollback-contract/po-unit-presence
+REMOTE
+)"
+PO_EXPECTED_PRESENCE="$po_expected_presence" CHANGE_STARTED_AT="$rollback_started_at" \
   "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

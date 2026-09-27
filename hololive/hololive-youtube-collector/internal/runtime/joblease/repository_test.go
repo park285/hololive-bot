@@ -614,7 +614,7 @@ func assertRetainedDiagnostics(t *testing.T, row, deferred leaseDiagnostics) {
 	}
 }
 
-// 177/189의 legacy_collector backfill 트리거는 221에서 지웠다(stack-audit 2026-09-26 T17). 이제 typed failure 없이
+// 177/189의 legacy_collector backfill 트리거는 222에서 지웠다(stack-audit 2026-09-26 T17). 이제 typed failure 없이
 // DEFERRED로 바꾸는 이전 collector 형태의 갱신은 더 이상 진단을 합성하지 않고 기존 typed 진단을 그대로 둔다.
 func TestLegacyShapedDeferNoLongerSynthesizesDiagnostics(t *testing.T) {
 	pool := dbtest.NewPool(t)

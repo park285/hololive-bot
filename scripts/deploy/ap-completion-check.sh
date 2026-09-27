@@ -3,9 +3,11 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 CHANGE_STARTED_AT="${CHANGE_STARTED_AT:-}"
+PO_EXPECTED_PRESENCE="${PO_EXPECTED_PRESENCE:-present}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
 READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
+PO_NATIVE_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
@@ -18,6 +20,10 @@ if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
   echo "AP_REQUIRED_UDP_BUFFER_BYTES must be an integer" >&2
   exit 2
 fi
+case "$PO_EXPECTED_PRESENCE" in
+  present|absent) ;;
+  *) echo 'PO_EXPECTED_PRESENCE must be present or absent' >&2; exit 2 ;;
+esac
 
 remote() {
   "${AP_SSH[@]}" "$@"
@@ -36,11 +42,13 @@ run_native_completion_check() {
   {
     cat "$NODE_VERSION_LIB"
     cat "$READINESS_LIB"
+    cat "$PO_NATIVE_LIB"
     cat <<'REMOTE'
 set -euo pipefail
 service="$1"
 port="$2"
 change_started_at="$3"
+po_expected_presence="$4"
 unit="hololive-youtube-collector@${service}.service"
 current_link="/opt/hololive-bot/youtube-collector/current"
 
@@ -53,6 +61,20 @@ sudo -n test -x "$current_link/bin/healthcheck"
 sudo -n test -f "$current_link/youtubejs/src/server.mjs"
 require_node_version node
 
+if [[ "$po_expected_presence" == present ]]; then
+  po_validate_release "$current_link"
+  systemctl is-active --quiet hololive-youtube-po.socket
+  systemctl is-active --quiet hololive-youtube-po.service
+  po_wait_ready "$current_link"
+  python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert (m["source_revision"],m["version"],m["go"]["goarch"]) == (open(sys.argv[2]).read().strip(),open(sys.argv[3]).read().strip(),"amd64")' \
+    "$current_link/manifest.json" "$current_link/po-sandbox/revision" "$current_link/po-sandbox/version"
+else
+  [[ "$(sudo -n cat "$current_link/rollback-contract/po-unit-presence")" == absent ]]
+  sudo -n test ! -e /etc/systemd/system/hololive-youtube-po.service
+  sudo -n test ! -e /etc/systemd/system/hololive-youtube-po.socket
+  [[ "$(systemctl show hololive-youtube-po.service -p LoadState --value)" == not-found ]]
+  [[ "$(systemctl show hololive-youtube-po.socket -p LoadState --value)" == not-found ]]
+fi
 systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
 sub_state="$(systemctl show "$unit" -p SubState --value)"
@@ -75,16 +97,18 @@ fi
 sudo -n grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/youtube-collector-host.env
 sudo -n grep -qx 'POSTGRES_USER=hololive_scraper' /etc/hololive-bot/youtube-collector-host.env
 
+collector_readiness_fetch() {
+  systemctl is-active --quiet "$unit" || return 1
+  sudo -n -u hololive env \
+    HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
+    HEALTHCHECK_SERVER_NAME=127.0.0.1 \
+    "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
+}
+ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
   "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health" >/dev/null
-ready="$(
-  sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
-  HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-  "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
-)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
 
@@ -104,13 +128,14 @@ fi
 
 echo 'collector AP completion check passed'
 REMOTE
-  } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT"
+  } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT" "$PO_EXPECTED_PRESENCE"
 }
 
 if [[ "${AP_RUNTIME_MODE:-compose}" == "native" ]]; then
   run_native_completion_check
   exit 0
 fi
+[[ "$PO_EXPECTED_PRESENCE" == present ]] || { echo 'issuer absence completion is only supported for recorded native rollback' >&2; exit 2; }
 
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
@@ -124,6 +149,22 @@ bash scripts/deploy/lib/require-quic-udp-buffer.sh '$AP_REQUIRED_UDP_BUFFER_BYTE
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
+. scripts/deploy/lib/po-sandbox-image.sh
+po_manifest=backups/po-sandbox-current-b.json
+test -r \"\$po_manifest\"
+po_revision=\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"source_revision\"])' \"\$po_manifest\")
+[[ \"\$po_revision\" =~ ^[0-9a-f]{40}\$ ]]
+po_verify_image hololive-youtube-po-sandbox:prod \"\$po_manifest\" \"\$po_revision\" arm64 backups/po-sandbox-current-b.image-id
+[[ \$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' hololive-youtube-po-b) == \"\$po_revision\" ]]
+po_version=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' hololive-youtube-po-sandbox:prod)
+[[ \"\$po_version\" == \$(cat hololive/hololive-api/VERSION) ]]
+[[ \$(docker inspect -f '{{.Image}}' hololive-youtube-po-b) == \$(sudo -n docker image inspect -f '{{.Id}}' hololive-youtube-po-sandbox:prod) ]]
+[[ \$(docker inspect -f '{{.HostConfig.NetworkMode}}' hololive-youtube-po-b) == none ]]
+[[ \$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' hololive-youtube-po-b) == true ]]
+[[ \$(docker inspect -f '{{.Config.User}}' hololive-youtube-po-b) == '65532:1000' ]]
+socket_mount=\$(docker inspect -f '{{range .Mounts}}{{if eq .Destination \"/run/hololive-youtube-po\"}}{{.Source}}{{end}}{{end}}' hololive-youtube-po-b)
+[[ \$(sudo -n stat -c '%u:%g %a' \"\$socket_mount\") == '65532:1000 770' ]]
+docker exec hololive-youtube-po-b /app/bin/po-broker --healthcheck --socket /run/hololive-youtube-po/worker.sock
 sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
 
 for container in $containers_list; do
@@ -132,6 +173,8 @@ for container in $containers_list; do
   node_version_supported \"\$node_version\"
   status=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \"\$container\")
   [[ \"\$status\" == healthy ]]
+  [[ \$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"\$container\") == \"\$po_revision\" ]]
+  [[ \$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' \"\$container\") == \"\$po_version\" ]]
 done
 
 ports=($ports_list)
@@ -146,6 +189,8 @@ done
 
 if [[ -n '$CHANGE_STARTED_AT' ]]; then
   since_epoch=\$(date -u -d '$CHANGE_STARTED_AT' +%s)
+  po_started=\$(docker inspect -f '{{.State.StartedAt}}' hololive-youtube-po-b)
+  [[ \$(date -u -d \"\$po_started\" +%s) -ge \"\$since_epoch\" ]]
   for container in $containers_list; do
     started_at=\$(docker inspect -f '{{.State.StartedAt}}' \"\$container\")
     started_epoch=\$(date -u -d \"\$started_at\" +%s)

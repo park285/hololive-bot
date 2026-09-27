@@ -22,6 +22,7 @@ func defaultYouTubePlaneRetentionConfig() YouTubePlaneRetentionConfig {
 		Interval:              120 * time.Second,
 		BatchSize:             youtubePlaneRetentionMaxBatchSize,
 		ApplicationAuditGrace: 60 * youtubePlaneRetentionDay,
+		LiveAbsenceSlotAge:    30 * youtubePlaneRetentionDay,
 		CheckpointHistoryAge:  7 * youtubePlaneRetentionDay,
 		ChannelStatsAge:       180 * youtubePlaneRetentionDay,
 		LiveSnapshotAge:       365 * youtubePlaneRetentionDay,
@@ -121,6 +122,14 @@ func loadYouTubePlaneRetentionSupportAges(config *YouTubePlaneConfig, defaults *
 	if config.Retention.ApplicationAuditGrace, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS",
 		defaults.ApplicationAuditGrace,
+		youtubePlaneRetentionDay,
+	); err != nil {
+		return fmt.Errorf("strict duration unit env: %w", err)
+	}
+
+	if config.Retention.LiveAbsenceSlotAge, err = load.StrictDurationUnitEnv(
+		"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS",
+		defaults.LiveAbsenceSlotAge,
 		youtubePlaneRetentionDay,
 	); err != nil {
 		return fmt.Errorf("strict duration unit env: %w", err)
@@ -345,6 +354,7 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 		{"collision", cfg.CollisionAge},
 		{"replay audit", cfg.ReplayAuditAge},
 		{"application audit grace", cfg.ApplicationAuditGrace},
+		{"live absence slots", cfg.LiveAbsenceSlotAge},
 		{"checkpoint history", cfg.CheckpointHistoryAge},
 		{"retired projection", cfg.ProjectionRetiredAge},
 		{"community page", cfg.CommunityPageAge},
@@ -424,6 +434,7 @@ func (c *YouTubePlaneConfig) validateProductionRetention(environment string) err
 		{"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", c.Retention.CollisionAge},
 		{"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", c.Retention.ReplayAuditAge},
 		{"YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS", c.Retention.ApplicationAuditGrace},
+		{"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", c.Retention.LiveAbsenceSlotAge},
 		{"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", c.Retention.CheckpointHistoryAge},
 		{"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", c.Retention.ProjectionRetiredAge},
 		{"YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS", c.Retention.CommunityPageAge},

@@ -160,6 +160,29 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 `youtubei.js@18.1.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
 
+## Isolated PO Token lifecycle
+
+`DEC-20260927-hololive-egress-po-production`에 따라 정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 24.1.3` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Compose issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
+
+- issuer는 요청을 받기 전에 같은 격리 worker에서 신뢰된 SDK import를 완료하고 `loaded` 확인을 기다립니다. 이 기동 준비 단계의 별도 상한은 30초이며, 실패하면 worker와 listener를 종료합니다. HTTP health 성공은 이 준비가 끝난 뒤에만 가능하고 UA/JSDOM 준비·외부 interpreter 실행은 이후 요청이 소유합니다. native 배포/복원은 Compose와 동일한 30회/2초 간격의 health 관측 후 collector를 시작하며, native 완료 검사도 같은 bounded 준비 대기를 사용합니다. 이 관측은 PO 발급이나 upstream 요청을 만들지 않습니다.
+- IPC는 `/run/hololive-youtube-po/worker.sock`만 사용합니다. private protocol 1의 순서는 `session`(UA/JSDOM prepare) → WAA Create → `challenge`(snapshot) → GenerateIT → `activate` → 영상별 `mint`입니다. worker 초기화 완료 전에 challenge를 요청하지 않습니다. collector와 issuer는 반드시 같은 full source SHA로 전환합니다.
+- helper는 최초·교체 세대의 IDLE/SDK 준비를 최대 40초 기다립니다. 이는 worker 기동 30초와 이전 세대 종료·서비스 재시작 여유를 포함하며 외부 요청을 만들지 않습니다. 준비 완료 뒤 `session/prepare`부터 발급 전체에 15초를 적용합니다. 외부 요청은 Create/GenerateIT와 필요한 interpreter GET을 합해 최대 3회, 응답별 decoded 512KiB입니다. helper마다 single-flight이며 준비를 포함한 시도 시작 간격은 최소 300초입니다. 개별 broker 연산은 admission·IO를 합해 8초로 제한합니다.
+- IPC 요청은 JSON escaping과 envelope를 포함한 **전체 1MiB** 상한을 별도로 적용합니다. 개별 upstream 응답이 512KiB 이내여도 합친 직렬화 값이 이 상한을 넘으면 `broker_request_size`로 발급을 중단합니다. 한도를 늘리거나 해당 cycle을 재시도하지 않습니다.
+- nonempty 정상 integrity token과 양의 provider TTL만 허용합니다. monotonic 유효 시간은 provider TTL과 12시간 중 작은 값에서 30초를 뺀 값입니다. 갱신 여유는 최대 5분 또는 TTL의 20%이며 최소 발급 간격을 유지합니다. 각 player에 해당 video ID로 새로 mint하고 header·WEB context·sandbox navigator·GenerateIT의 UA를 일치시킵니다.
+- 준비 실패·만료·worker 장애에는 stale/cold-start/fallback token을 쓰지 않습니다. 기존 단일 무토큰 player를 그대로 수행하며 재시도나 UNKNOWN의 음성 확정은 추가하지 않습니다. 채널 확인의 resolve 1회+player 최대 1회, 영상 확인의 player 1회 상한도 유지합니다.
+- helper UDS의 `GET /health`에서 `proof.state`, `bootstrap_attempts`, `bootstrap_successes`, `upstream_requests`, `minted_total`, `attached_total`을 확인합니다. `last_error`는 최초 발급·mint 실패를 보존하고, 후속 정리 실패는 별도의 `cleanup_error`에 안전한 오류 코드로 남깁니다. 새 발급 cycle은 두 오류를 초기화합니다. 앱 `/ready` 성공은 PO 준비 완료나 provider 가용성 보장이 아닙니다. token/program/snapshot/visitor data나 원시 worker stderr는 로그·파일에 남기지 않습니다.
+
+빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. 중앙의 `compose-redeploy-service.sh youtube-collector`와 `youtube-po-c`도 같은 paired cutover로 연결됩니다. 이 스크립트의 포괄적 `all` 전환은 지원하지 않습니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
+
+issuer를 먼저 기동·검증한 뒤 collector만 `--no-build --no-deps`로 교체합니다. b의 소스는 별도 후보 디렉터리에 전송·대조한 뒤 승격하며, 실패 시 snapshot이 이전 파일 내용·mode·symlink·파일 부재까지 복원합니다. rollback은 이전 VERSION/실행 파일과 collector+issuer image/rootfs를 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
+
+native issuer의 `RootDirectory`는 패키징 때 불변 release 경로로 확정합니다. systemd 249에서는 같은 rootfs라도 symlink 경유 시 226/NAMESPACE가 발생하고 실제 경로는 기동되는 것을 관측했으므로 `current` symlink를 쓰지 않습니다. 설치 unit은 변경 없이 보존하며, `systemd-analyze verify`가 RootDirectory를 고려하지 않는 실행 파일 검사에는 실제 rootfs 실행 경로로 해석한 임시 검사용 사본을 사용합니다. 실제 실행 파일 부재·unit 오류는 계속 차단합니다. verifier가 RootDirectory를 직접 해석하도록 바뀌면 이 검사용 경로 변환을 제거합니다.
+
+Compose의 `image-id` 근거는 검증한 단일 이미지 archive에 묶인 Docker identity 집합입니다. containerd store의 manifest digest와 classic store의 config digest를 최대 두 줄로 기록하고, manifest→config 결합도 검증합니다. 같은 daemon의 rollback snapshot은 실제 ID 한 줄을 기록합니다. 수신측은 이 집합에 없는 ID를 거부하며 full SHA·architecture·version·archive hash와 실행 중 image 일치 검사를 계속 적용합니다. 서울 classic store와 kapu/중앙 containerd store의 표현 차이만 처리하며 임의 image 대체나 검증 생략은 없습니다.
+
+비정상 generation/늦은 응답/취소는 해당 연산의 실제 admission 단계에 따라 처리합니다. 작업 시작 전 취소는 다른 호출의 준비된 세대를 폐기하지 않으며, 실제 worker 연산 중 실패는 전체 VM을 종료합니다. provider TTL 필드, 고정 시계 경계 시험, 실제 장시간 만료·갱신 관측은 서로 다른 증거입니다.
+
+
 ## Logs
 
 ```bash
@@ -223,7 +246,7 @@ service and runbook contract
 ```
 
 - 이전 `hololive-youtube-collector:rollback-<UTC timestamp>` tag가 있으면 [`rollback.md`](rollback.md#runtime-rollback)의 revision 확인·`prod` 재승격 절차를 사용한 뒤 collector만 무빌드 재생성합니다. Compose overlay와 host-native generator는 같은 revision tree를 써야 합니다.
-- AP rollback 기준점은 Compose AP 백업의 `rollback-image-tag`와 `deploy/compose` 경로 prechange 사본, host-native AP의 `previous` collector release 하나입니다. 기준점이 없는 호스트는 되돌릴 이전 collector가 없으므로 `ap-rollback.sh`·`ap-host-native-rollback.sh`가 거절하고 fix-forward합니다. Compose AP 배포가 cutover 뒤 검증에 실패하면, 기준점이 있을 때는 collector를 배포된 상태로 두고 `ap-rollback.sh` 실행을 안내합니다. 기준점이 없는 첫 배포는 새 collector 컨테이너를 멈추고 비활성을 확인한 뒤 fix-forward를 안내합니다. host-native AP는 unit을 멈추고 `previous` release로 자동 복원합니다. 퇴역 producer 첫 cutover 상태를 기록·복원하던 경로와 repo 루트 compose 경로 폴백은 삭제했습니다(stack-audit 2026-09-26 T11).
+- AP rollback 기준점은 Compose AP 백업의 `rollback-image-tag`와 `deploy/compose` 경로 prechange 사본, host-native AP의 `previous` collector release 하나입니다. 기준점이 없는 호스트는 되돌릴 이전 collector가 없으므로 `ap-rollback.sh`·`ap-host-native-rollback.sh`가 거절하고 fix-forward합니다. Compose AP 배포가 cutover 뒤 검증에 실패하면, 기준점이 있을 때는 `ap-rollback.sh`가 이전 collector와 issuer를 함께 자동 복원합니다. 기준점이 없는 첫 배포는 새 collector와 issuer 컨테이너를 멈추고 비활성을 확인한 뒤 fix-forward를 안내합니다. host-native AP는 unit을 멈추고 `previous` release와 그 issuer로 자동 복원합니다. 퇴역 producer 첫 cutover 상태를 기록·복원하던 경로와 repo 루트 compose 경로 폴백은 삭제했습니다(stack-audit 2026-09-26 T11).
 
 ```bash
 export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env

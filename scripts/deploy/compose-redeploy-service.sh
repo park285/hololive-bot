@@ -62,7 +62,7 @@ contains_ap_compose_file() {
 }
 
 usage() {
-    echo "Usage: $0 <service|all>"
+    echo "Usage: $0 <service>"
     echo
     echo "Supported services:"
     compose_service_redeploy_usage_lines
@@ -70,7 +70,7 @@ usage() {
 
 target_requires_db_migration() {
     case "${TARGET}" in
-        hololive-api|hololive-alarm-worker|youtube-collector|"")
+        hololive-api|hololive-alarm-worker)
             return 0
             ;;
         *)
@@ -104,16 +104,12 @@ resolve_revision_services() {
     LIVE_REVISION_SERVICES=()
 
     case "${TARGET}" in
-        hololive-api|hololive-alarm-worker|youtube-collector)
+        hololive-api|hololive-alarm-worker)
             BUILT_REVISION_SERVICES=("${TARGET}")
             LIVE_REVISION_SERVICES=("${TARGET}")
             ;;
         hololive-db-migrate)
             BUILT_REVISION_SERVICES=(hololive-db-migrate)
-            ;;
-        "")
-            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector)
-            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector)
             ;;
     esac
 }
@@ -168,21 +164,18 @@ if ! TARGET="$(compose_service_resolve_redeploy_target "${SERVICE}")"; then
     exit 1
 fi
 
-if contains_ap_compose_file && [[ "${TARGET}" == "youtube-collector" ]]; then
+if contains_ap_compose_file && [[ "${TARGET}" == "youtube-collector" || "${TARGET}" == "youtube-po-c" ]]; then
     echo "[ERROR] youtube-collector is central-only and cannot be redeployed with an AP compose overlay" >&2
     exit 1
 fi
 
-if contains_ap_compose_file && [[ -z "${TARGET}" ]]; then
-    echo "[ERROR] all-service redeploy is not supported with an AP compose overlay; use the host-specific AP deploy entrypoint" >&2
-    exit 1
+
+# collector와 issuer는 어느 쪽 이름으로 요청해도 같은 검증·스냅샷·복원 경로를 사용합니다.
+if [[ "${TARGET}" == youtube-collector || "${TARGET}" == youtube-po-c ]]; then
+    exec "${ROOT_DIR}/scripts/deploy/po-central-cutover.sh" deploy
 fi
 
-if [[ -n "${TARGET}" ]]; then
-    fence_compose_args=(up --no-deps "${TARGET}")
-else
-    fence_compose_args=(up)
-fi
+fence_compose_args=(up --no-deps "${TARGET}")
 if ! assert_kapu_alarm_worker_start_allowed "$(hostname -s)" 0 "${fence_compose_args[@]}"; then
     exit 1
 fi
@@ -217,12 +210,6 @@ elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
     exit 1
 fi
 
-if [[ -z "${TARGET}" ]] \
-   && ! contains_ap_compose_file \
-   && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]]; then
-    echo "[ERROR] Central all-service deploy cannot enable the AP-only oracle profile" >&2
-    exit 1
-fi
 
 if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then
     exit 1
@@ -237,7 +224,7 @@ postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
 REVISION_ENABLED=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate|"")
+    hololive-api|hololive-alarm-worker|hololive-db-migrate)
         REVISION_ENABLED=true
         REVISION="$(deploy_source_revision "${ROOT_DIR}")"
         export REVISION
@@ -262,29 +249,21 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 build_target=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate)
-        build_target=true
-        ;;
-    "")
+    hololive-api|hololive-alarm-worker|hololive-db-migrate)
         build_target=true
         ;;
 esac
 
 if [[ "${build_target}" == true ]]; then
-    if [[ -n "${TARGET}" ]]; then
-        echo "[BUILD] ${TARGET}"
-        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build "${TARGET}"
-    else
-        echo "[BUILD] all buildable services"
-        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build
-    fi
+    echo "[BUILD] ${BUILT_REVISION_SERVICES[*]}"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build "${BUILT_REVISION_SERVICES[@]}"
 fi
 
 if [[ "${REVISION_ENABLED}" == true ]]; then
     verify_built_image_revisions
 fi
 
-if [[ -z "${TARGET}" ]] || cutover_service_uses_app_writable_bind_mount "${TARGET}"; then
+if cutover_service_uses_app_writable_bind_mount "${TARGET}"; then
     echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
     if ! cutover_bind_mount_preflight "${ROOT_DIR}"; then
         echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
@@ -296,35 +275,20 @@ if target_requires_db_migration; then
     run_db_migration_before_cutover
 fi
 
-if [[ -n "${TARGET}" ]]; then
-    cutover_capture_restart_baseline "${TARGET}"
-    echo "[UP] ${TARGET}"
-    up_args=(up -d --no-deps)
-    if [[ "${build_target}" == true ]]; then
-        up_args+=(--no-build)
-    fi
-    up_args+=("${TARGET}")
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" "${up_args[@]}"
-    echo "[PS] ${TARGET}"
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps "${TARGET}"
-    if ! cutover_health_gate "${TARGET}"; then
-        echo "[ERROR] ${TARGET} failed health gate after redeploy" >&2
-        exit 1
-    fi
-    if [[ "${REVISION_ENABLED}" == true ]]; then
-        verify_cutover_image_revisions
-    fi
-else
-    cutover_capture_restart_baseline hololive-api hololive-alarm-worker youtube-collector
-    echo "[UP] all services"
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
-    echo "[PS] all services"
-    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
-    if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector; then
-        echo "[ERROR] health gate failed after all-service redeploy" >&2
-        exit 1
-    fi
-    if [[ "${REVISION_ENABLED}" == true ]]; then
-        verify_cutover_image_revisions
-    fi
+cutover_capture_restart_baseline "${TARGET}"
+echo "[UP] ${TARGET}"
+up_args=(up -d --no-deps)
+if [[ "${build_target}" == true ]]; then
+    up_args+=(--no-build)
+fi
+up_args+=("${TARGET}")
+"${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" "${up_args[@]}"
+echo "[PS] ${TARGET}"
+"${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps "${TARGET}"
+if ! cutover_health_gate "${TARGET}"; then
+    echo "[ERROR] ${TARGET} failed health gate after redeploy" >&2
+    exit 1
+fi
+if [[ "${REVISION_ENABLED}" == true ]]; then
+    verify_cutover_image_revisions
 fi

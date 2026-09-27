@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1.24.0@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89
+ARG GO_VERSION=1.27.1
+ARG ALPINE_VERSION=3.24
+ARG NODE_VERSION=24
+
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS package-build
+WORKDIR /app/po-sandbox
+COPY hololive/hololive-youtube-collector/po-sandbox/package.json hololive/hololive-youtube-collector/po-sandbox/package-lock.json ./
+RUN corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+COPY hololive/hololive-youtube-collector/po-sandbox/src ./src
+RUN rm -f ./src/*.test.mjs
+
+FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS node-runtime
+
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS broker-build
+ARG TARGETOS
+ARG TARGETARCH
+ARG REVISION=unknown
+ARG VERSION
+RUN if [ "${REVISION}" != "unknown" ]; then test "${#REVISION}" -eq 40 && case "${REVISION}" in *[!0-9a-f]*) exit 1;; esac; fi
+WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-collector
+COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ../hololive-dbtest/
+COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ../hololive-shared/
+COPY hololive/hololive-youtube-collector/go.mod hololive/hololive-youtube-collector/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY hololive/hololive-shared ../hololive-shared
+COPY hololive/hololive-youtube-collector ./
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    GOWORK=off CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH}" \
+    go build -trimpath -buildvcs=false -ldflags="-s -w -X main.revision=${REVISION} -X main.version=${VERSION}" \
+    -o /po-broker ./cmd/po-broker
+# systemd의 격리 mountpoint를 미리 넣어 기동 뒤에도 rootfs manifest를 보존한다.
+RUN mkdir -p /issuer/rootfs/run/hololive-youtube-po /issuer/rootfs/tmp /issuer/rootfs/root /issuer/rootfs/var/tmp && \
+    chmod 0770 /issuer/rootfs/run/hololive-youtube-po && chmod 1777 /issuer/rootfs/tmp && \
+    printf 'issuer:x:65532:1000:issuer:/tmp:/sbin/nologin\n' >/issuer/passwd && \
+    printf 'issuer:x:1000:\n' >/issuer/group
+
+FROM scratch
+ARG REVISION=unknown
+ARG VERSION
+LABEL org.opencontainers.image.title="hololive-youtube-po-sandbox" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.source="https://github.com/park285/hololive-bot"
+COPY --from=broker-build --link /issuer/passwd /etc/passwd
+COPY --from=broker-build --link /issuer/group /etc/group
+COPY --from=node-runtime --link /lib/ld-musl-*.so.1 /lib/
+COPY --from=node-runtime --link /usr/lib/libgcc_s.so.1 /usr/lib/
+COPY --from=node-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
+COPY --from=node-runtime --link /usr/local/bin/node /usr/local/bin/node
+COPY --from=broker-build --link --chmod=0755 /po-broker /app/bin/po-broker
+COPY --from=package-build --link /app/po-sandbox /app/po-sandbox
+# 부모를 복사해 디렉터리 권한과 /tmp sticky bit를 그대로 보존한다.
+COPY --from=broker-build --link --chown=65532:1000 /issuer/rootfs/ /
+USER 65532:1000
+ENV HOME=/tmp TMPDIR=/tmp TZ=UTC LANG=C
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/app/bin/po-broker", "--healthcheck", "--socket", "/run/hololive-youtube-po/worker.sock"]
+ENTRYPOINT ["/app/bin/po-broker", "--socket", "/run/hololive-youtube-po/worker.sock"]

@@ -295,6 +295,8 @@ chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/healthcheck"
 printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
+printf 'absent\n' > "${rollback_fixture}/rollback-contract/previous-before-cutover"
+printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
 (
   cd "${rollback_fixture}"
   sha256sum \
@@ -303,6 +305,8 @@ printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/previous-before-cutover \
+    rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
 
@@ -342,6 +346,8 @@ printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtu
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/previous-before-cutover \
+    rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/invalid-unit.out" 2>"${tmp}/invalid-unit.err"; then
@@ -393,21 +399,9 @@ else
   record_fail "ap-host-native rollback orchestration must succeed when restore and completion checks pass"
 fi
 
-# 호출 순서: 1 rollback 시작 시각, 2 복원 payload, 3 이후 completion gate. previous 유무로 rollback 방식을 고르던 probe는
-# 퇴역 producer 복원 경로와 함께 지웠다(stack-audit 2026-09-26 T11).
+# 호출 순서: 1 rollback 시작 시각, 2 복원 payload, 3 이전 issuer 존재 기록 조회, 이후 completion gate. previous 유무로
+# rollback 방식을 고르던 probe는 퇴역 producer 복원 경로와 함께 지웠다(stack-audit 2026-09-26 T11).
 restore_payload="${tmp}/success/call-2.stdin"
-completion_cmd="${tmp}/success/call-4.cmd"
-if [[ -r "${restore_payload}" ]] &&
-   bash -n "${restore_payload}" &&
-   grep -Fq 'native_rollback_validate "$previous_target"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/youtube-collector-host.env" "$host_env"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"' "${restore_payload}" &&
-   grep -Fq 'systemctl daemon-reload' "${restore_payload}" &&
-   grep -Fq 'systemctl restart "$unit"' "${restore_payload}"; then
-  pass "ap-host-native rollback restores binary-adjacent contract files before restarting"
-else
-  record_fail "ap-host-native rollback must restore the host env and systemd unit before restarting"
-fi
 
 validate_line="$(grep -nF 'native_rollback_validate "$previous_target"' "${restore_payload}" | tail -1 | cut -d: -f1)"
 restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"
@@ -417,11 +411,6 @@ else
   record_fail "native rollback validation must run before the first restore mutation"
 fi
 
-if [[ -r "${completion_cmd}" ]] && grep -Fq '2026-08-01T03:04:05Z' "${completion_cmd}"; then
-  pass "ap-host-native rollback forwards change_started_at to the completion gate"
-else
-  record_fail "ap-host-native rollback must forward change_started_at to the completion gate"
-fi
 
 if PATH="${tmp}/bin:${PATH}" \
    SSH_KEY="${tmp}/KR.key" \

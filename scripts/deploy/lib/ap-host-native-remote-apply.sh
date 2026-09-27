@@ -7,6 +7,8 @@ port="$4"
 change_started_at="$5"
 required_udp_buffer="$6"
 swapfile_size_mib="$7"
+EXPECTED_REVISION="$8"
+[[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'full native release revision required' >&2; exit 1; }
 payload="$HOME/$payload_name"
 release_path_lib="$payload/bin/ap-host-native-release-path.sh"
 releases_root="/opt/hololive-bot/youtube-collector/releases"
@@ -15,6 +17,7 @@ previous_link="/opt/hololive-bot/youtube-collector/previous"
 host_env="/etc/hololive-bot/youtube-collector-host.env"
 unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
 unit="hololive-youtube-collector@${service}.service"
+po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 swapfile="/swapfile"
 
@@ -30,9 +33,7 @@ normalize_runtime_payload_permissions() {
 }
 
 test -r "$release_path_lib"
-# 검증한 release payload 내부의 동적 경로만 source합니다.
-# shellcheck disable=SC1090
-. "$release_path_lib"
+test -r "$po_apply_lib"
 
 if ! getent group opc >/dev/null; then
   sudo -n groupadd --system opc
@@ -105,6 +106,25 @@ old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
 fi
+old_previous_target=""
+if [[ -L "$previous_link" ]]; then
+  old_previous_target="$(readlink -f "$previous_link" || true)"
+elif [[ -e "$previous_link" ]]; then
+  echo 'previous release pointer is not a symlink' >&2
+  exit 1
+fi
+if [[ -n "$old_previous_target" && ( "$old_previous_target" != "$releases_root/"* || ! -d "$old_previous_target" ) ]]; then
+  echo 'previous release pointer is not an existing immutable release' >&2
+  exit 1
+fi
+if [[ -z "$old_target" && ( -e "$po_unit_file" || -e "$po_socket_file" ) ]]; then
+  echo 'unmanaged issuer units exist before initial install' >&2
+  exit 1
+fi
+if [[ -z "$old_target" && -n "$old_previous_target" ]]; then
+  echo 'refusing initial native install with stale previous release pointer' >&2
+  exit 1
+fi
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
 sudo -n rm -rf "$release_dir"
@@ -112,6 +132,13 @@ sudo -n mkdir -p "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R -P root:root "$release_dir"
 normalize_runtime_payload_permissions "$release_dir"
+[[ "$(cat "$release_dir/po-sandbox/revision")" == "${EXPECTED_REVISION:?expected native source SHA missing}" ]]
+po_install_root="$release_dir/po-sandbox/rootfs"
+sudo -n mkdir -p "$po_install_root"
+(cd "$release_dir/po-sandbox" && sudo -n sha256sum --check --strict rootfs.tar.sha256)
+sudo -n tar -xf "$release_dir/po-sandbox/rootfs.tar" -C "$po_install_root" --no-same-owner --same-permissions
+sudo -n chown -R -P root:root "$po_install_root"
+po_validate_release "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-collector-wrapper"
 sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$worker_profile" \
   "$release_dir/bin/youtube-collector" --check-worker-profile
@@ -125,6 +152,9 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
   sudo -n test -f "$old_target/youtubejs/src/server.mjs"
   rollback_contract_dir="$old_target/rollback-contract"
   sudo -n install -d -m 0755 -o root -g root "$rollback_contract_dir"
+  po_snapshot_previous "$old_target"
+  printf '%s\n' "${old_previous_target:-absent}" | sudo -n tee "$rollback_contract_dir/previous-before-cutover" >/dev/null
+  sudo -n chmod 0644 "$rollback_contract_dir/previous-before-cutover"
   sudo -n install -m 0640 -o root -g root "$host_env" "$rollback_contract_dir/youtube-collector-host.env"
   sudo -n install -m 0644 -o root -g root "$unit_file" "$rollback_contract_dir/hololive-youtube-collector@.service"
   sudo -n sh -c '
@@ -138,6 +168,11 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
         rollback-contract/youtube-collector-host.env \
         rollback-contract/hololive-youtube-collector@.service
       find youtubejs/src -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+      sha256sum rollback-contract/po-unit-presence
+      sha256sum rollback-contract/previous-before-cutover
+      if test -f rollback-contract/hololive-youtube-po.service; then
+        sha256sum rollback-contract/hololive-youtube-po.service rollback-contract/hololive-youtube-po.socket
+      fi
     } > rollback-contract/SHA256SUMS
     chmod 0644 rollback-contract/SHA256SUMS
   ' sh "$old_target"
@@ -170,9 +205,12 @@ restore_native_after_failed_cutover() {
       sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
       sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
       sudo -n ln -sfn "$old_target" "$current_link"
+      native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
+      po_restore_previous "$old_target"
       sudo -n systemctl daemon-reload
       sudo -n systemctl enable --now "$unit"
     else
+      po_restore_previous ""
       sudo -n rm -f "$current_link" "$host_env" "$unit_file"
       sudo -n systemctl daemon-reload
     fi
@@ -185,11 +223,19 @@ restore_native_after_failed_cutover() {
   exit "$status"
 }
 trap restore_native_after_failed_cutover ERR
+stop_collector_unit_and_require_inactive
+if sudo -n systemctl is-active --quiet "$po_service"; then
+  sudo -n systemctl stop "$po_service"
+fi
+if sudo -n systemctl is-active --quiet "$po_socket"; then
+  sudo -n systemctl stop "$po_socket"
+fi
 
 sudo -n install -m 0640 -o root -g root "$payload/youtube-collector-host.env" "$host_env"
 sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-collector@.service" "$unit_file"
 sudo -n ln -sfn "$release_dir" "$current_link"
 
+po_install_release "$release_dir" "$EXPECTED_REVISION"
 sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
 sudo -n systemctl enable --now "$unit"
