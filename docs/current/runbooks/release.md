@@ -12,6 +12,13 @@ Runtime, document, and contract changes의 release checklist입니다.
 artifact 버전이며 독립 build가 필요하면 서로 달라질 수 있습니다. 저장소 tag는 root
 `VERSION`이 가리키는 전체 source snapshot에만 붙입니다.
 
+collector·PO image도 `hololive/hololive-api/VERSION`을 쓰므로 API를 재빌드하지 않는 collector·PO
+릴리스에서도 이 파일이 올라갈 수 있습니다. 이때 hololive-api image는 이전 build로 남지만, 중앙에서 이후
+전체 `compose up`(재부팅 때의 `systemd-compose-up.sh` 포함)이 돌면 `compose.sh`가 이 파일 값을
+`HOLO_API_VERSION`으로 내보내 hololive-api를 `APP_VERSION=<repo 릴리스>`로 재생성합니다. API가 보고하는
+`APP_VERSION`은 repo 릴리스와 같아지지만 image의 revision·version label은 이전 build를 가리킵니다. API
+source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, API 산출물 판정은 image label로 합니다.
+
 릴리즈할 때는 다음 순서를 지킵니다.
 
 1. 루트 `VERSION`을 변경하고 각 runtime artifact를 함께 릴리즈한다면 해당 runtime의

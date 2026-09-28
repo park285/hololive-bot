@@ -125,9 +125,18 @@ func exitReporter(w io.Writer, generation string) func(pobroker.ExitReason) {
 // 다시 보내 종료 방식과 상태를 signal 처리 도입 전과 같게 둡니다. 퇴역이 이미 시작됐으면
 // signal 대신 처음 표시된 퇴역 원인을 기록합니다. 반환한 함수를 부른 뒤의 signal은 곧바로
 // 기본 처리로 가고, 그 전에 받은 signal도 같은 방식으로 종료합니다.
+// 상속받은 무시(SIG_IGN)는 Go runtime이 존중하는 SIGINT에만 해당하므로 그때 SIGINT를 감시하지
+// 않습니다. Notify가 무시를 풀면 받은 SIGINT로 원인 줄만 남기고 종료하지 못한 채, 감시가 끝난 뒤의
+// SIGTERM까지 삼키기 때문입니다. SIGTERM은 상속 상태와 관계없이 항상 감시하고 종료합니다.
 func watchTermination(report func(pobroker.ExitReason), retired func() pobroker.ExitReason) (stop func()) {
+	watched := []os.Signal{syscall.SIGTERM}
+
+	if !signal.Ignored(syscall.SIGINT) {
+		watched = append(watched, syscall.SIGINT)
+	}
+
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(signals, watched...)
 
 	go func() {
 		received := <-signals
@@ -143,7 +152,8 @@ func watchTermination(report func(pobroker.ExitReason), retired func() pobroker.
 		}
 
 		report(reason)
-		signal.Reset(sig)
+		// 두 signal 모두 감시 전 처리로 되돌려, 이 goroutine이 끝난 뒤 도착한 signal을 삼키지 않습니다.
+		signal.Reset(syscall.SIGTERM, syscall.SIGINT)
 
 		// 자기 프로세스로의 signal은 실패하지 않습니다. 실패해도 종료 요청을 삼키지 않습니다.
 		if err := syscall.Kill(os.Getpid(), sig); err != nil {
@@ -279,8 +289,10 @@ func check(path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	// keep-alive를 끄면 서버가 응답 직후 먼저 연결을 닫습니다. 켜 두면 client가 body를 읽은 뒤
+	// CloseIdleConnections로 먼저 닫고 서버는 EOF를 본 뒤 닫습니다.
 	transport := &http.Transport{
-		DisableKeepAlives: true, Proxy: nil,
+		Proxy: nil,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", path)
 		},

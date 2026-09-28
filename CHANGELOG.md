@@ -8,6 +8,16 @@
 
 ## 미출시
 
+## v6.0.2 - 2026-09-28
+
+- `po-broker` HTTP `IdleTimeout`을 2초에서 30초로 늘립니다. helper Agent는 유휴 socket을 계속 약 1초에 닫습니다. v6.0.1에서는 Node event loop가 1초 넘게 멈추면 서버가 이미 닫은 유휴 socket을 helper가 재사용해 EPIPE가 `broker_unavailable`로 끝나고 발급 세션을 버렸습니다(v6.0.0에는 없던 실패). 이제 수 초의 stall에도 client가 먼저 닫습니다. 비용은 유휴 연결 최대 1개이고, 퇴역 때의 `server.Close`는 유휴 연결도 즉시 닫습니다. 이전 2초를 넘긴 유휴 연결을 재사용하는 회귀 테스트를 추가했습니다.
+- `po-broker --healthcheck`(Docker HEALTHCHECK)가 keep-alive를 끄지 않습니다. 이전에는 `Connection: close` 때문에 서버가 응답 직후 먼저 닫았습니다. 이제 client가 body를 읽고 먼저 닫으며 서버는 EOF를 본 뒤 닫습니다(strace로 순서 확인).
+- `po-broker`는 기동 때 SIGINT를 상속 무시(SIG_IGN)했으면 SIGINT를 감시하지 않습니다(Go runtime은 상속 SIG_IGN을 SIGINT·SIGHUP에만 존중하므로 SIGTERM은 항상 감시·종료합니다). signal을 처리할 때는 SIGTERM·SIGINT를 모두 기본 처리로 되돌린 뒤 다시 보냅니다. 비대화형 shell의 background 실행처럼 SIGINT를 무시한 채 시작하면, v6.0.1은 SIGINT에 거짓 `reason=signal` 줄을 남긴 채 살아 있고 이후 SIGTERM을 삼켜 SIGKILL(137)로만 끝났습니다. 이제 SIGINT는 계속 무시되고, SIGTERM은 원인 줄 하나를 남기고 143으로 종료합니다. systemd·Docker 기동은 signal을 기본 처리로 두므로 운영 동작은 같습니다.
+- native 실패 복원(`restore_native_after_failed_cutover`)이 `if ! ( set -e; … )` 안에서 set -e가 무시되어, 복원 단계가 실패해도 계속 진행하고 `could not be restored` 경고를 내지 않던 기존 결함을 고칩니다. 이제 첫 실패에서 멈추고 경고를 남기며, 종료 상태는 그대로 원래 cutover 실패 상태입니다. 배포 테스트는 cutover 최상위 정지 단계, 실패 복원 경로, 수동 rollback이 원격에 보내는 payload 각각에서 PO socket을 collector `disable --now`보다 먼저 멈추는지 가짜 systemctl로 검사합니다. 복원 단계 실패도 검사하며, 호출부를 바꾸는 변이는 모두 이 검사에서 실패합니다.
+- 문서를 바로잡습니다. `worker_failed`는 요청이 직렬 슬롯을 쥔 동안의 종료이고, `worker_exited`는 직렬 슬롯이 비어 있을 때의 종료입니다. v6.0.1의 "worker IO 중 종료"보다 범위가 넓습니다. 종료 줄은 SIGTERM·SIGINT, 퇴역, listener·기동 실패에만 남고 SIGHUP·SIGQUIT·panic·SIGKILL에는 남지 않습니다. 커널 경쟁의 남은 창도 적었습니다. worker 사망 경로는 µs, `session_closed`·`lease_expired`·`worker_timeout`은 수 ms reap 간격이고, bootstrap 실패 뒤 `retireOwned` DELETE가 반복되는 대표 트리거입니다. native 산출물 version은 `HOLO_BOT_VERSION=<ver>`로 넘겨야 합니다(없으면 short SHA). API image를 재빌드하지 않아도 이후 중앙 전체 `compose up`은 API `APP_VERSION`을 repo 릴리스로 바꾸고, image label은 이전 build로 남습니다. v6.0.1의 "collector 기동도 `enable` 뒤 `restart` 한 번으로 줄였습니다"는 사실과 다릅니다. 이전 `enable --now`도 멈춘 collector를 한 번 기동했으므로, 이 변경은 기동을 `enable` + `restart`로 명시한 것일 뿐 횟수는 같습니다.
+- PO를 먼저 멈춘 cutover 창에서 이전 collector의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않습니다. 그래서 cutover journal 오류 검사가 거짓 실패하지 않으며, 검사 범위는 바꾸지 않았습니다.
+- collector·PO 산출물 버전은 `6.0.2`입니다(루트 `VERSION`, `hololive/hololive-api/VERSION`). API는 코드 변경이 없어 재배포하지 않고, alarm-worker는 `5.0.0`을 유지합니다. retry·fallback은 추가하지 않았고 DB migration·운영 설정·공개 API는 바꾸지 않습니다.
+
 ## v6.0.1 - 2026-09-28
 
 - `po-broker`는 종료할 때 stderr에 `po-broker exit reason=<reason> generation=<uuid>` 한 줄만 남깁니다. `reason`은 실제 퇴역 호출 지점에서 정한 고정 어휘입니다. `session_closed`(DELETE /v1/session), `lease_expired`(lease 타이머·요청 시점 만료), `worker_failed`(요청의 worker IO 중 종료 포함), `worker_timeout`, `request_aborted`(worker IO 중 요청 연결 끊김), `response_failed`, `worker_exited`(worker IO 요청이 없는 동안 기동을 마친 worker의 자체 종료), `startup_failed`, `listener_failed`, `signal`(퇴역 전 SIGTERM·SIGINT)이 있습니다. 여러 경로가 동시에 퇴역을 요청해도 처음 표시된 원인만 남고, 퇴역 중 받은 signal은 먼저 표시된 원인을 남깁니다. token·payload·요청 본문·worker 출력은 기록하지 않습니다. exit code는 그대로이고, signal 종료는 원인을 기록한 뒤 같은 signal을 기본 처리로 다시 보내 종료 상태(예: 143)를 유지합니다. 그동안 로그 없이 exit 0으로 끝나던 issuer 재시작도 이제 원인별로 구분됩니다.

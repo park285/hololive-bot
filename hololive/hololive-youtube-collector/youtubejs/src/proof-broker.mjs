@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 const socketPath = "/run/hololive-youtube-po/worker.sock";
 const responseLimit = 64 * 1024;
 const requestLimit = 1024 * 1024;
-// po-broker의 IdleTimeout(2초)보다 짧아야 유휴 연결을 서버가 아닌 client가 먼저 닫습니다.
+// po-broker의 IdleTimeout(30초)보다 훨씬 짧아, event loop가 수 초 멈춰도 유휴 연결을 서버가 아닌 client가 먼저 닫습니다.
 const idleSocketTimeoutMs = 1_000;
 const brokerStates = new Set(["IDLE", "STARTING", "AWAITING_CHALLENGE", "AWAITING_INTEGRITY", "READY"]);
 const brokerErrors = new Set([

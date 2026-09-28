@@ -214,9 +214,11 @@ stop_native_units_and_require_inactive() {
 # collector release이고 producer unit이 0개임을 확인해 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling).
 restore_native_after_failed_cutover() {
   local status="$?"
-  local restore_status=0
+  local restore_status
   trap - ERR
-  if ! (
+  # if/!/&&/|| 조건 안의 subshell은 set -e를 무시해 실패한 복원 단계를 지나친다. 조건 밖에서 실행해 첫 실패에서 멈추고 상태를 받는다.
+  set +e
+  (
     set -e
     stop_native_units_and_require_inactive
     if [[ -n "$old_target" && -d "$old_target" ]]; then
@@ -233,9 +235,9 @@ restore_native_after_failed_cutover() {
       sudo -n rm -f "$current_link" "$host_env" "$unit_file"
       sudo -n systemctl daemon-reload
     fi
-  ); then
-    restore_status=1
-  fi
+  )
+  restore_status="$?"
+  set -e
   if [[ "$restore_status" -ne 0 ]]; then
     echo "host-native collector cutover failed and the recorded runtime could not be restored" >&2
   fi

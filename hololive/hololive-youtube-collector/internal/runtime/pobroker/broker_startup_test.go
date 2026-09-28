@@ -150,32 +150,7 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 // 정상 응답 뒤에는 서버가 연결을 닫지 않고, 퇴역하면 유휴 keep-alive 연결도
 // IdleTimeout을 기다리지 않고 즉시 닫혀 Serve가 반환해야 합니다.
 func TestServeKeepsConnectionsUntilRetirementClosesThem(t *testing.T) {
-	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
-	broker := New("revision", fakeNode(t, "keepalive-node", script), "unused")
-	socket := filepath.Join(t.TempDir(), "worker.sock")
-
-	var config net.ListenConfig
-
-	listener, err := config.Listen(t.Context(), "unix", socket)
-	require.NoError(t, err)
-
-	done := make(chan error, 1)
-
-	go func() {
-		done <- broker.Serve(listener)
-
-		close(done)
-	}()
-
-	t.Cleanup(func() {
-		broker.retire(ExitSignal)
-
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("broker did not finish retirement")
-		}
-	})
+	broker, socket, done := serveKeepAliveBroker(t)
 
 	active := dialBroker(t, socket)
 	idle := dialBroker(t, socket)
@@ -191,7 +166,7 @@ func TestServeKeepsConnectionsUntilRetirementClosesThem(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, roundTrip(t, active, http.MethodDelete, "/v1/session", string(body)))
 
-	// 서버 IdleTimeout(2초)보다 먼저 닫혀야 퇴역이 닫은 것입니다.
+	// 서버 IdleTimeout보다 훨씬 먼저 닫혀야 퇴역이 닫은 것입니다.
 	require.NoError(t, idle.conn.SetReadDeadline(idleSince.Add(time.Second)))
 
 	_, err = idle.reader.ReadByte()
@@ -205,6 +180,52 @@ func TestServeKeepsConnectionsUntilRetirementClosesThem(t *testing.T) {
 	}
 
 	require.Equal(t, ExitSessionClosed, broker.ExitReason())
+}
+
+// client(youtubejs/src/proof-broker.mjs)는 유휴 연결을 1초 뒤 닫지만 Node event loop가 멈추면 그보다
+// 늦게 재사용할 수 있습니다. 이전 서버 IdleTimeout(2초)을 넘긴 유휴 연결도 서버가 닫지 않아야 합니다.
+func TestServeKeepsIdleConnectionPastClientStallWindow(t *testing.T) {
+	_, socket, _ := serveKeepAliveBroker(t)
+	conn := dialBroker(t, socket)
+
+	require.Equal(t, http.StatusOK, roundTrip(t, conn, http.MethodGet, "/health", ""))
+	time.Sleep(2500 * time.Millisecond)
+	require.Equal(t, http.StatusOK, roundTrip(t, conn, http.MethodGet, "/health", ""))
+}
+
+// serveKeepAliveBroker는 loaded 뒤 대기하는 가짜 worker로 broker를 띄우고, 테스트 끝에 퇴역시켜 Serve 반환을 확인합니다.
+func serveKeepAliveBroker(t *testing.T) (broker *Broker, socket string, done <-chan error) {
+	t.Helper()
+
+	const script = "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
+
+	broker = New("revision", fakeNode(t, "keepalive-node", script), "unused")
+	socket = filepath.Join(t.TempDir(), "worker.sock")
+
+	var config net.ListenConfig
+
+	listener, err := config.Listen(t.Context(), "unix", socket)
+	require.NoError(t, err)
+
+	served := make(chan error, 1)
+
+	go func() {
+		served <- broker.Serve(listener)
+
+		close(served)
+	}()
+
+	t.Cleanup(func() {
+		broker.retire(ExitSignal)
+
+		select {
+		case <-served:
+		case <-time.After(5 * time.Second):
+			t.Error("broker did not finish retirement")
+		}
+	})
+
+	return broker, socket, served
 }
 
 type brokerConn struct {
