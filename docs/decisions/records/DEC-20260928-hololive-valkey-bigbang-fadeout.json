@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260928-hololive-valkey-bigbang-fadeout",
+  "title": "Hololive의 확정한 Valkey 중복 기능을 한 패치에서 완전히 fadeout한다",
+  "decision_status": "proposed",
+  "delivery_status": "unknown",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-28",
+  "summary": "사용자가 필요한 Valkey 유지 목적 아래 완전 fadeout 빅뱅 패치를 전제로 재감사를 요청했습니다. membernews room mirror와 hololive:members 중복 기능을 하나의 source revision에서 reader/writer/interface/exported backend method/mock/helper/script/env/구 옵션까지 제거하는 안입니다. 구 경로 선택 switch·deprecated wrapper·no-op API·중간 writer 유지 릴리스를 두지 않습니다. 세션·nonce·공유 limiter·epoch·Pub/Sub·wakeup·API/LLM cache·ACL mirror·alarm 표시 이름은 명시적으로 유지합니다. API·worker 및 관련 관리 파일은 coordinated cutover로 전환하고 rollback은 새 코드의 호환 분기가 아닌 사전 검증한 이전 release set의 복원 또는 forward fix입니다. 개인정보 마스킹·negative regression·폐기 명세의 정확한 literal은 실행 경로 잔재와 구분합니다. 현재 권한은 재감사·문서 작성까지이며 source/CLI 계약 삭제와 실제 운영 반영은 검토된 구현·배포 범위를 별도로 확정해야 합니다.",
+  "sources": ["docs/current/plans/2026-09-28-valkey-dependency-reduction.md#Execution capsule"],
+  "evidence": ["docs/review/2026-09-28-valkey-bigbang-fadeout-audit.md", "docs/review/2026-09-28-alarm-membernews-valkey-audit.md"],
+  "implementation": [],
+  "supersedes": [],
+  "review": {"trigger": "제거 집합·외부 consumer·공개 source/CLI 계약 또는 실제 drain/cutover 조건을 확정할 때 재검토합니다."}
+}

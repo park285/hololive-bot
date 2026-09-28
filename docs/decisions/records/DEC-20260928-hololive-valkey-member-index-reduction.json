@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260928-hololive-valkey-member-index-reduction",
+  "title": "Hololive 멤버 검색과 YouTube 표시 이름의 중복 Valkey 인덱스를 제거한다",
+  "decision_status": "withdrawn",
+  "delivery_status": "not_applicable",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-28",
+  "summary": "처음에는 멤버 중복 인덱스만 제거하는 범위로 진행했으나, 사용자가 홀로봇 전체에서 필수가 아닌 Valkey 의존을 제거하는 방향을 명확히 하고 구현 전에 플랜만 작성하도록 지시했습니다. 이 좁은 실행 범위는 철회하며 PLN-20260928-valkey-member-index-reduction은 cancelled입니다. 이번 작업에서 수정했던 코드 5개 파일은 원복했고 해당 scoped diff가 비어 있음을 확인했습니다. 전체 범위의 기술 제안은 별도 draft 플랜에서 검토합니다.",
+  "sources": ["docs/current/plans/2026-09-28-valkey-member-index-reduction.md#Execution capsule"],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {"trigger": "멤버 정본 또는 외부 cache API의 소유 범위 변경 시 재검토한다."}
+}

@@ -2,10 +2,16 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 70건: proposed 0, accepted 49, rejected 0, withdrawn 2, superseded 19
+레코드 76건: proposed 1, accepted 51, rejected 0, withdrawn 5, superseded 19
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260928-hololive-selective-valkey-retention](records/DEC-20260928-hololive-selective-valkey-retention.json) | Hololive는 필요한 Valkey 공유 상태와 캐시를 유지하고 중복 연결을 선택적으로 줄인다 | withdrawn | unknown | hololive-bot | 2026-09-28 | trigger | - | [2026-09-28-valkey-bigbang-fadeout-audit.md](../review/2026-09-28-valkey-bigbang-fadeout-audit.md) |
+| [DEC-20260928-hololive-valkey-bigbang-fadeout](records/DEC-20260928-hololive-valkey-bigbang-fadeout.json) | Hololive의 확정한 Valkey 중복 기능을 한 패치에서 완전히 fadeout한다 | proposed | unknown | hololive-bot | 2026-09-28 | trigger | - | [2026-09-28-valkey-dependency-reduction.md](../current/plans/2026-09-28-valkey-dependency-reduction.md) |
+| [DEC-20260928-hololive-valkey-member-index-reduction](records/DEC-20260928-hololive-valkey-member-index-reduction.json) | Hololive 멤버 검색과 YouTube 표시 이름의 중복 Valkey 인덱스를 제거한다 | withdrawn | not_applicable | hololive-bot | 2026-09-28 | trigger | - | [2026-09-28-valkey-member-index-reduction.md](../current/plans/2026-09-28-valkey-member-index-reduction.md) |
+| [DEC-20260928-hololive-valkey-reduction-scope](records/DEC-20260928-hololive-valkey-reduction-scope.json) | Hololive의 비필수 Valkey 의존을 제거하고 잔여 공유 상태의 필요성을 검증한다 | withdrawn | unknown | hololive-bot | 2026-09-28 | trigger | - | [2026-09-28-valkey-selective-retention-review.md](../review/2026-09-28-valkey-selective-retention-review.md) |
+| [DEC-20260928-terminal-live-head-alignment](records/DEC-20260928-terminal-live-head-alignment.json) | 이미 종료된 정본 세션의 과거 LIVE 대조 상태만 일치시킨다 | accepted | verified | hololive-bot | 2026-09-28 | - | - | [2026-09-28-terminal-live-head-repair.md](../current/plans/2026-09-28-terminal-live-head-repair.md) |
+| [DEC-20260928-youtube-retention-capacity](records/DEC-20260928-youtube-retention-capacity.json) | Hololive YouTube 관측과 적용 이력 보존을 용량 예산에 맞춰 단축한다 | accepted | implemented | hololive-bot | 2026-09-28 | trigger | - | [2026-09-28-youtube-retention-capacity.md](../current/plans/2026-09-28-youtube-retention-capacity.md) |
 | [DEC-20260927-hololive-streams-partial-failure-fail-closed](records/DEC-20260927-hololive-streams-partial-failure-fail-closed.json) | Stream HTTP API의 org=all 부분 실패는 부분 목록 대신 오류로 드러내고 부분 응답 필드는 추가하지 않는다 | accepted | implemented | hololive-bot | 2026-09-27 | - | - | - |
 | [DEC-20260927-live-check-slot-isolation](records/DEC-20260927-live-check-slot-isolation.json) | 채널 live 확인은 별도 job 슬롯으로 진행하고 stale 영상은 DB 조회 시각으로 판정한다 | accepted | verified | hololive-bot | 2026-09-27 | trigger | - | [2026-09-27-live-check-slot-isolation.md](../current/plans/2026-09-27-live-check-slot-isolation.md) |
 | [DEC-20260926-hololive-alarm-http-provider-ownership-v2](records/DEC-20260926-hololive-alarm-http-provider-ownership-v2.json) | alarm.http provider는 alarm-worker 하나가 소유하고 hololive-api는 그 provider의 client로만 쓴다 | accepted | implemented | hololive-bot | 2026-09-26 | - | supersedes DEC-20260512-hololive-alarm-http-provider-ownership | - |

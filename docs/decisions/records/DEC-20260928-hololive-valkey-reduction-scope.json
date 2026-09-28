@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260928-hololive-valkey-reduction-scope",
+  "title": "Hololive의 비필수 Valkey 의존을 제거하고 잔여 공유 상태의 필요성을 검증한다",
+  "decision_status": "withdrawn",
+  "delivery_status": "unknown",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-28",
+  "summary": "사용자가 요구한 방향은 홀로봇에서 필수가 아닌 Valkey 의존 제거이며 현재 권한은 플랜 작성까지입니다. 제안 순서는 중복 인덱스·읽히지 않는 쓰기 제거, 조회 캐시의 제한된 메모리 캐시 전환, PostgreSQL 기반 설정·구독·알림 조율 통합, 세션·nonce·공유 rate limit의 대체 가능성 검증입니다. 공유 상태가 필요하다는 이유만으로 Valkey 자체가 필수라고 간주하지 않습니다. 대체안의 원자성·재시작·성능·회수 보장이 검증되기 전에는 기존 보호 기능을 유지하고, 실패한 대체안에 한해 구체적인 측정 근거와 재검토 조건을 갖춘 잔여 항목을 제안합니다. 구현·마이그레이션 적용·배포·출판은 이 draft로 승인되지 않습니다.",
+  "sources": ["docs/review/2026-09-28-valkey-selective-retention-review.md#검토한 이전 제안"],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {"trigger": "사용자의 플랜 검토와 단계별 대체안 검증 결과로 실행 범위를 확정할 때 재검토합니다."}
+}
