@@ -1,7 +1,6 @@
-# hololive-bot 역사·핸드오프·런북·계약 디렉터리. 계약 문서의 timeout/retry/compatibility 규칙과 런북 원칙은 그 문서가 정본이고, 분할 핸드오프의 설계 결정과 settlement·OpenBao·host migration 기록은 종결된 역사다.
+# hololive-bot 역사·핸드오프·계약 디렉터리. 계약 문서의 timeout/retry/compatibility 규칙은 그 문서가 정본이고, 분할 핸드오프의 설계 결정과 settlement·OpenBao·host migration 기록은 종결된 역사다.
 docs/history/
 docs/handoff/
-docs/runbook_execution/
 docs/current/contracts/
 
 # hololive-bot 2026-05-22 hololive-shared 본거지 분석(종결). 이후 소유권은 DEC-20260727-hololive-shared-public-path-retired와 DEC-20260719-hololive-alias-facade-retention이 다룬다.

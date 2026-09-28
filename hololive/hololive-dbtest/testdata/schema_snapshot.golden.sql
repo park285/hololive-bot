@@ -66,12 +66,13 @@ TABLE alarm_dispatch_deliveries
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN dispatch_group_key text
   COLUMN send_unit_id bigint
+  CONSTRAINT alarm_dispatch_deliveries_active_send_unit_check CHECK (((send_unit_id IS NOT NULL) OR (status <> ALL (ARRAY['pending'::text, 'retry'::text, 'leased'::text, 'sending'::text]))))
   CONSTRAINT alarm_dispatch_deliveries_attempt_check CHECK ((attempt_count >= 0))
   CONSTRAINT alarm_dispatch_deliveries_dedupe_key_check CHECK (((length(dedupe_key) > 0) AND (length(dedupe_key) <= 768)))
   CONSTRAINT alarm_dispatch_deliveries_dispatch_group_key_check CHECK (((dispatch_group_key IS NULL) OR ((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768))))
   CONSTRAINT alarm_dispatch_deliveries_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
   CONSTRAINT alarm_dispatch_deliveries_send_unit_pair_check CHECK (((dispatch_group_key IS NULL) = (send_unit_id IS NULL)))
-  CONSTRAINT alarm_dispatch_deliveries_status_check CHECK ((status = ANY (ARRAY['shadowed'::text, 'pending'::text, 'retry'::text, 'leased'::text, 'sending'::text, 'sent'::text, 'dlq'::text, 'quarantined'::text, 'cancelled'::text])))
+  CONSTRAINT alarm_dispatch_deliveries_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'retry'::text, 'leased'::text, 'sending'::text, 'sent'::text, 'dlq'::text, 'quarantined'::text, 'cancelled'::text])))
   CONSTRAINT chk_alarm_dispatch_deliveries_last_error_size CHECK ((octet_length(last_error) <= 8192))
   CONSTRAINT chk_alarm_dispatch_deliveries_state_shape CHECK ((((status <> 'leased'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL))) AND ((status <> 'sending'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL) AND (sending_started_at IS NOT NULL))) AND ((status <> 'sent'::text) OR (sent_at IS NOT NULL)) AND ((status <> 'dlq'::text) OR (dlq_at IS NOT NULL)) AND ((status <> 'quarantined'::text) OR (quarantined_at IS NOT NULL)) AND ((status <> 'cancelled'::text) OR (cancelled_at IS NOT NULL))))
   CONSTRAINT alarm_dispatch_deliveries_event_id_fkey FOREIGN KEY (event_id) REFERENCES alarm_dispatch_events(id) ON DELETE RESTRICT
@@ -986,7 +987,6 @@ TABLE youtube_collection_job_leases
   CONSTRAINT youtube_collection_job_leases_pkey PRIMARY KEY (job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_due ON public.youtube_collection_job_leases USING btree (slot_state, next_due_at, retry_not_before, lease_expires_at, job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_projection_generation ON public.youtube_collection_job_leases USING btree (projection_generation, job_key)
-  TRIGGER CREATE TRIGGER youtube_collection_job_lease_failure_diagnostics_backfill BEFORE UPDATE OF slot_state, last_error_code, last_failure_code, last_failure_class, last_failure_detail, last_failure_at ON youtube_collection_job_leases FOR EACH ROW EXECUTE FUNCTION populate_youtube_collection_job_lease_failure_diagnostics()
 
 TABLE youtube_collection_projection_generations
   COLUMN generation bigint NOT NULL GENERATED ALWAYS AS IDENTITY
@@ -1621,14 +1621,12 @@ FUNCTION lock_youtube_collection_projection(requested_generation bigint) RETURNS
 
 FUNCTION notification_template_row_version() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF (NEW.body, NEW.template_key, NEW.channel_id, NEW.id)\n        IS DISTINCT FROM (OLD.body, OLD.template_key, OLD.channel_id, OLD.id) THEN\n        NEW.row_version := OLD.row_version + 1;\n    ELSE\n        NEW.row_version := OLD.row_version;\n    END IF;\n    RETURN NEW;\nEND;\n"
 
-FUNCTION populate_youtube_collection_job_lease_failure_diagnostics() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF OLD.slot_state = 'DEFERRED'\n        AND OLD.last_error_code IS NOT NULL\n        AND OLD.last_error_code <> 'shutdown_release'\n        AND OLD.last_failure_code IS NULL\n        AND OLD.last_failure_class IS NULL\n        AND OLD.last_failure_detail IS NULL\n        AND OLD.last_failure_at IS NULL\n    THEN\n        NEW.last_failure_code := OLD.last_error_code;\n        NEW.last_failure_class := 'legacy_collector';\n        NEW.last_failure_detail := 'legacy_collector';\n        NEW.last_failure_at := OLD.updated_at;\n    ELSIF OLD.slot_state = 'ACTIVE'\n        AND NEW.slot_state = 'DEFERRED'\n        AND NEW.last_error_code IS NOT NULL\n        AND NEW.last_error_code <> 'shutdown_release'\n        AND OLD.last_failure_code IS NOT DISTINCT FROM NEW.last_failure_code\n        AND OLD.last_failure_class IS NOT DISTINCT FROM NEW.last_failure_class\n        AND OLD.last_failure_detail IS NOT DISTINCT FROM NEW.last_failure_detail\n        AND OLD.last_failure_at IS NOT DISTINCT FROM NEW.last_failure_at\n    THEN\n        NEW.last_failure_code := NEW.last_error_code;\n        NEW.last_failure_class := 'legacy_collector';\n        NEW.last_failure_detail := 'legacy_collector';\n        NEW.last_failure_at := clock_timestamp();\n    END IF;\n    RETURN NEW;\nEND\n"
-
 FUNCTION reject_bot_reply_outbox_replay_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_replay_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION reject_bot_reply_outbox_resolution_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_resolution_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION scrub_bot_command_execution_terminal_summary() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.result_summary := NEW.status;\n    RETURN NEW;\nEND\n"
 
-FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"
+FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF NEW.payload IS DISTINCT FROM '{}'::jsonb THEN\n        RAISE WARNING 'bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger; a writer that does not clear payload is running';\n    END IF;\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"
 
 FUNCTION youtube_schedule_collabo_talent_names_valid(names text[]) RETURNS boolean LANGUAGE sql VOLATILITY i SECURITY_DEFINER false LEAKPROOF false PARALLEL s CONFIG search_path=pg_catalog BODY "\n    SELECT COALESCE(pg_catalog.array_ndims(names), 1) = 1\n       AND COALESCE(pg_catalog.array_lower(names, 1), 1) = 1\n       AND pg_catalog.cardinality(names) <= 32\n       AND NOT EXISTS (\n           SELECT 1\n           FROM pg_catalog.unnest(names) AS name\n           WHERE name IS NULL\n              OR pg_catalog.octet_length(name) < 1\n              OR pg_catalog.octet_length(name) > 256\n       );\n"

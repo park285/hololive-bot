@@ -57,12 +57,24 @@ credential_case "explicit password wins" "hololive_scraper|hololive|explicit" \
   POSTGRES_USER=hololive_scraper POSTGRES_PASSWORD=explicit HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime
 credential_case "runtime role uses database credential" "other|hololive|runtime" \
   POSTGRES_USER=other HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime DB_PASSWORD=legacy
-credential_case "legacy database fallback" "other|hololive|legacy" \
+# 역할별 비밀번호가 없으면 다른 역할이나 admin(DB_PASSWORD) 비밀번호로 내려가지 않고 실행 전에 실패한다.
+credential_rejected_case() {
+  local name="$1"
+  shift
+  if env -i PATH="$PATH" "$@" "$COLLECTOR_WRAPPER" "$credential_probe" >/dev/null 2>&1; then
+    fail "collector wrapper must reject unresolved role credential: $name"
+  fi
+  pass "collector wrapper rejects unresolved role credential: $name"
+}
+
+credential_rejected_case "admin database password is not a role credential" \
   POSTGRES_USER=other DB_PASSWORD=legacy
-credential_case "missing password preserves empty value" "hololive_scraper|hololive|" \
+credential_rejected_case "scraper role does not borrow runtime credential" \
+  POSTGRES_USER=hololive_scraper HOLOLIVE_DB_PASSWORD=runtime DB_PASSWORD=legacy
+credential_rejected_case "missing scraper password" \
   POSTGRES_USER=hololive_scraper
 
-if env -i PATH="$PATH" "$COLLECTOR_WRAPPER" "$credential_failure"; then
+if env -i PATH="$PATH" HOLOLIVE_SCRAPER_PASSWORD=scraper "$COLLECTOR_WRAPPER" "$credential_failure"; then
   fail "collector wrapper must preserve target command failure"
 else
   failure_status="$?"

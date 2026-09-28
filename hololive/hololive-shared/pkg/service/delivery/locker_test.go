@@ -81,10 +81,15 @@ func testLogger() *slog.Logger {
 	return sharedlogging.NewTestLogger()
 }
 
-func TestNewLocker_NilCache_ReturnsNoop(t *testing.T) {
-	locker := NewLocker(nil, testLogger())
-	if _, ok := locker.(noopNotificationLocker); !ok {
-		t.Fatalf("expected noopNotificationLocker, got %T", locker)
+// cache가 없을 때 dedup을 끈 noop locker로 내려가던 폴백을 지웠다. 생성 오류로 드러나야 한다.
+func TestNewLocker_NilCache_ReturnsError(t *testing.T) {
+	locker, err := NewLocker(nil, testLogger())
+	if err == nil {
+		t.Fatalf("NewLocker(nil) error = nil, locker = %T; want construction error", locker)
+	}
+
+	if locker != nil {
+		t.Fatalf("NewLocker(nil) locker = %T, want nil", locker)
 	}
 }
 
@@ -94,7 +99,7 @@ func TestTryAcquire_Success(t *testing.T) {
 			return true, nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	token, acquired, err := locker.TryAcquire(t.Context(), "lock:test", time.Minute)
 	if err != nil {
@@ -116,7 +121,7 @@ func TestTryAcquire_AlreadyHeld(t *testing.T) {
 			return false, nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	_, acquired, err := locker.TryAcquire(t.Context(), "lock:held", time.Minute)
 	if err != nil {
@@ -128,25 +133,25 @@ func TestTryAcquire_AlreadyHeld(t *testing.T) {
 	}
 }
 
-func TestTryAcquire_ValkeyError_GracefulDegradation(t *testing.T) {
+// Valkey 오류를 경고만 남기고 lock 없이 진행하던 폴백을 지웠다(stack-audit 2026-09-26 T19
+// holo-delivery-valkey-locker-warn-proceed). 오류가 호출자에게 돌아가 digest 실행이 실패로 남아야 한다.
+var errLockCacheDown = errors.New("connection refused")
+
+func TestTryAcquire_ValkeyError_ReturnsError(t *testing.T) {
 	cache := &mockLockCache{
 		setNXFn: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
-			return false, errors.New("connection refused")
+			return false, errLockCacheDown
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	token, acquired, err := locker.TryAcquire(t.Context(), "lock:fail", time.Minute)
-	if err != nil {
-		t.Fatalf("expected no error on degradation, got: %v", err)
+	if !errors.Is(err, errLockCacheDown) {
+		t.Fatalf("TryAcquire() error = %v, want wrapped cache error", err)
 	}
 
-	if !acquired {
-		t.Fatal("expected acquired=true on degradation")
-	}
-
-	if token == "" {
-		t.Fatal("expected non-empty token")
+	if acquired || token != "" {
+		t.Fatalf("TryAcquire() = (%q, %v), want no lock on cache error", token, acquired)
 	}
 }
 
@@ -161,7 +166,7 @@ func TestRelease_CASMatch(t *testing.T) {
 			return true, nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	err := locker.Release(t.Context(), "lock:release", "my-token")
 	if err != nil {
@@ -183,7 +188,7 @@ func TestRelease_CASMismatch(t *testing.T) {
 			return false, nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	err := locker.Release(t.Context(), "lock:mismatch", "wrong-token")
 	if err != nil {
@@ -191,17 +196,17 @@ func TestRelease_CASMismatch(t *testing.T) {
 	}
 }
 
-func TestRelease_CASError_NoErrorReturned(t *testing.T) {
+func TestRelease_CASError_ReturnsError(t *testing.T) {
 	cache := &mockLockCache{
 		compareAndDeleteFn: func(_ context.Context, _, _ string) (bool, error) {
-			return false, errors.New("redis down")
+			return false, errLockCacheDown
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	err := locker.Release(t.Context(), "lock:error", "token")
-	if err != nil {
-		t.Fatalf("expected nil error on CAS failure, got: %v", err)
+	if !errors.Is(err, errLockCacheDown) {
+		t.Fatalf("Release() error = %v, want wrapped cache error", err)
 	}
 }
 
@@ -211,7 +216,7 @@ func TestClaimRoom_Success(t *testing.T) {
 			return true, nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	acquired, err := locker.ClaimRoom(t.Context(), "claim:room1", time.Hour)
 	if err != nil {
@@ -229,7 +234,7 @@ func TestClaimRoom_AlreadyClaimed(t *testing.T) {
 			return false, nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	acquired, err := locker.ClaimRoom(t.Context(), "claim:room1", time.Hour)
 	if err != nil {
@@ -241,21 +246,21 @@ func TestClaimRoom_AlreadyClaimed(t *testing.T) {
 	}
 }
 
-func TestClaimRoom_ValkeyError_GracefulDegradation(t *testing.T) {
+func TestClaimRoom_ValkeyError_ReturnsError(t *testing.T) {
 	cache := &mockLockCache{
 		setNXFn: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
-			return false, errors.New("connection refused")
+			return false, errLockCacheDown
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	acquired, err := locker.ClaimRoom(t.Context(), "claim:fail", time.Hour)
-	if err != nil {
-		t.Fatalf("expected no error on degradation, got: %v", err)
+	if !errors.Is(err, errLockCacheDown) {
+		t.Fatalf("ClaimRoom() error = %v, want wrapped cache error", err)
 	}
 
-	if !acquired {
-		t.Fatal("expected acquired=true on degradation")
+	if acquired {
+		t.Fatal("ClaimRoom() acquired = true, want false on cache error")
 	}
 }
 
@@ -268,7 +273,7 @@ func TestReleaseRoomClaims_Success(t *testing.T) {
 			return int64(len(keys)), nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	err := locker.ReleaseRoomClaims(t.Context(), []string{"claim:a", "claim:b"})
 	if err != nil {
@@ -280,6 +285,20 @@ func TestReleaseRoomClaims_Success(t *testing.T) {
 	}
 }
 
+func TestReleaseRoomClaims_DelManyError_ReturnsError(t *testing.T) {
+	cache := &mockLockCache{
+		delManyFn: func(_ context.Context, _ []string) (int64, error) {
+			return 0, errLockCacheDown
+		},
+	}
+	locker := mustNewLocker(t, cache)
+
+	err := locker.ReleaseRoomClaims(t.Context(), []string{"claim:a", "claim:b"})
+	if !errors.Is(err, errLockCacheDown) {
+		t.Fatalf("ReleaseRoomClaims() error = %v, want wrapped cache error", err)
+	}
+}
+
 func TestReleaseRoomClaims_EmptyKeys_NoOp(t *testing.T) {
 	called := false
 	cache := &mockLockCache{
@@ -288,7 +307,7 @@ func TestReleaseRoomClaims_EmptyKeys_NoOp(t *testing.T) {
 			return 0, nil
 		},
 	}
-	locker := NewLocker(cache, testLogger())
+	locker := mustNewLocker(t, cache)
 
 	err := locker.ReleaseRoomClaims(t.Context(), []string{})
 	if err != nil {
@@ -300,40 +319,13 @@ func TestReleaseRoomClaims_EmptyKeys_NoOp(t *testing.T) {
 	}
 }
 
-func TestNoop_TryAcquire_AlwaysTrue(t *testing.T) {
-	locker := NewLocker(nil, testLogger())
+func mustNewLocker(t *testing.T, cache lockCache) NotificationLocker {
+	t.Helper()
 
-	_, acquired, err := locker.TryAcquire(t.Context(), "any", time.Minute)
+	locker, err := NewLocker(cache, testLogger())
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("NewLocker() error = %v", err)
 	}
 
-	if !acquired {
-		t.Fatal("expected noop to always acquire")
-	}
-}
-
-func TestNoop_ClaimRoom_AlwaysTrue(t *testing.T) {
-	locker := NewLocker(nil, testLogger())
-
-	acquired, err := locker.ClaimRoom(t.Context(), "any", time.Hour)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !acquired {
-		t.Fatal("expected noop to always claim")
-	}
-}
-
-func TestNoop_Release_ReleaseRoomClaims_NoOp(t *testing.T) {
-	locker := NewLocker(nil, testLogger())
-
-	if err := locker.Release(t.Context(), "key", "token"); err != nil {
-		t.Fatalf("noop Release should not error: %v", err)
-	}
-
-	if err := locker.ReleaseRoomClaims(t.Context(), []string{"a", "b"}); err != nil {
-		t.Fatalf("noop ReleaseRoomClaims should not error: %v", err)
-	}
+	return locker
 }

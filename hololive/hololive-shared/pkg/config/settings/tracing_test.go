@@ -35,20 +35,21 @@ func clearTracingEnv(t *testing.T) {
 	settingstest.ClearTracingEnv(t)
 }
 
-func TestLoadTracingConfigRejectsRetiredStandardEndpoint(t *testing.T) {
-	for _, retiredEnv := range []string{load.OTLPEndpointEnv, load.OTLPTracesEndpointEnv} {
+// 표준 OTel endpoint env 거부는 영구 계약이다. 빈 값은 OTel 명세상 미설정이라 통과한다.
+func TestLoadTracingConfigRejectsStandardOTLPEndpoint(t *testing.T) {
+	for _, standardEnv := range []string{load.OTLPEndpointEnv, load.OTLPTracesEndpointEnv} {
 		for _, includeCanonical := range []bool{false, true} {
 			clearTracingEnv(t)
 			t.Setenv(load.TracingHololiveAPIEnabledEnv, "true")
-			t.Setenv(retiredEnv, "otel-collector:4317")
+			t.Setenv(standardEnv, "otel-collector:4317")
 
 			if includeCanonical {
 				t.Setenv(load.HololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 			}
 
 			_, err := LoadTracingConfig(TracingRuntimeHololiveAPI, "")
-			if err == nil || !strings.Contains(err.Error(), retiredEnv+" is no longer supported") {
-				t.Fatalf("LoadTracingConfig() error = %v, want retired standard endpoint rejection", err)
+			if err == nil || !strings.Contains(err.Error(), standardEnv+" is not accepted by Hololive runtimes") {
+				t.Fatalf("LoadTracingConfig() error = %v, want standard endpoint rejection", err)
 			}
 		}
 	}

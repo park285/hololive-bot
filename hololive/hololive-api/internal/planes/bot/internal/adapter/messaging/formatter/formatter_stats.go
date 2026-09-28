@@ -24,7 +24,6 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -41,7 +40,7 @@ func (f *ResponseFormatter) FormatSubscriberCount(ctx context.Context, memberNam
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdStatsCount, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

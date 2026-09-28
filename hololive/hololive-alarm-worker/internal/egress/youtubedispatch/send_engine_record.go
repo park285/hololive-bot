@@ -59,7 +59,6 @@ func (d *SendEngine) recordPerRoomSendFailure(
 }
 
 func (d *SendEngine) recordPerRoomSuccess(
-	ctx context.Context,
 	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
@@ -68,7 +67,7 @@ func (d *SendEngine) recordPerRoomSuccess(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordPerRoomSuccess(ctx, row, rows, outboxes, sendReq, claimTokens, result, mu)
+	d.metricsRecorder.recordPerRoomSuccess(row, rows, outboxes, sendReq, claimTokens, result, mu)
 }
 
 func (d *SendEngine) recordDeliveryFailure(
@@ -108,7 +107,6 @@ func (d *SendEngine) recordGroupedSendFailure(
 }
 
 func (d *SendEngine) recordGroupedSuccess(
-	ctx context.Context,
 	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
@@ -117,5 +115,5 @@ func (d *SendEngine) recordGroupedSuccess(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordGroupedSuccess(ctx, group, validRows, validOutboxes, sendReq, claimTokens, result, mu)
+	d.metricsRecorder.recordGroupedSuccess(group, validRows, validOutboxes, sendReq, claimTokens, result, mu)
 }

@@ -123,8 +123,9 @@ type Summarizer interface {
 	Summarize(ctx context.Context, input *SummarizeInput) (*Digest, error)
 }
 
+// DigestFormatter의 렌더 실패는 오류다. 호출자는 실패한 방을 enqueue하지 않고 실패로 센다.
 type DigestFormatter interface {
-	FormatMemberNewsDigest(ctx context.Context, digest *Digest) string
+	FormatMemberNewsDigest(ctx context.Context, digest *Digest) (string, error)
 }
 
 type DigestService interface {

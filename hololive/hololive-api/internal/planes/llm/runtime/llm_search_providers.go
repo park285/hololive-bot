@@ -54,7 +54,7 @@ func provideExaSearcher(exaConfig settings.ExaConfig, logger *slog.Logger) share
 }
 
 func buildMajorEventSummarizer(exaConfig *apiplane.LLMSchedulerConfig, cacheClient cache.Client, guards *llmGuards, logger *slog.Logger) *mesummarizer.EventSummarizer {
-	costTracker := ProvideLLMCostTracker(cacheClient, exaConfig.LLM.MonthlyTokenCeiling, logger)
+	costTracker := ProvideLLMCostTracker()
 	provider := exaConfig.SelectedLLMProvider()
 	majorEventLLMClient := guardLLMClient(ProvideMajorEventLLMClient(provider, costTracker, logger), guards)
 	majorEventReviewer := guardLLMClient(ProvideMajorEventReviewerClient(provider, &exaConfig.LLM, costTracker, logger), guards)

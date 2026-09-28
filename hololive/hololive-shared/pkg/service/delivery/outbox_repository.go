@@ -34,7 +34,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/retry"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -51,11 +50,11 @@ type outboxBatchRow struct {
 	Payload   outboxPayload             `json:"payload"`
 }
 
+// OutboxRepository는 v2 notification_delivery_outbox의 정본 저장소다. 예전에 v3 ledger로 넘기던 handoff(off/shadow/cutover)는
+// DEC-20260926-hololive-outbox-v3-convergence로 삭제했고, 적재는 이 테이블 하나로만 한다.
 type OutboxRepository struct {
-	pool              *pgxpool.Pool
-	logger            *slog.Logger
-	dispatchMode      handoff.Mode
-	dispatchPublisher DispatchPublisher
+	pool   *pgxpool.Pool
+	logger *slog.Logger
 }
 
 const deliveryStatusSending domain.DeliveryOutboxStatus = "SENDING"
@@ -80,26 +79,20 @@ type OutboxItem struct {
 	Message   string
 }
 
-func NewOutboxRepository(postgres database.Client, logger *slog.Logger, opts ...RepositoryOption) *OutboxRepository {
+func NewOutboxRepository(postgres database.Client, logger *slog.Logger) *OutboxRepository {
 	if postgres == nil {
-		return NewOutboxRepositoryFromPool(nil, logger, opts...)
+		return NewOutboxRepositoryFromPool(nil, logger)
 	}
 
-	return NewOutboxRepositoryFromPool(postgres.GetPool(), logger, opts...)
+	return NewOutboxRepositoryFromPool(postgres.GetPool(), logger)
 }
 
-func NewOutboxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger, opts ...RepositoryOption) *OutboxRepository {
+func NewOutboxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *OutboxRepository {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	repository := &OutboxRepository{pool: pool, logger: logger, dispatchMode: handoff.ModeOff}
-
-	for _, opt := range opts {
-		opt(repository)
-	}
-
-	return repository
+	return &OutboxRepository{pool: pool, logger: logger}
 }
 
 func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
@@ -122,22 +115,6 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 		return nil
 	}
 
-	if handled, err := r.enqueueWithDispatchHandoff(ctx, items); handled {
-		if err != nil {
-			return fmt.Errorf("enqueue with dispatch handoff: %w", err)
-		}
-
-		return nil
-	}
-
-	if err := r.enqueueLegacyBatch(ctx, items); err != nil {
-		return fmt.Errorf("enqueue legacy batch: %w", err)
-	}
-
-	return nil
-}
-
-func (r *OutboxRepository) enqueueLegacyBatch(ctx context.Context, items []OutboxItem) error {
 	if err := r.ensurePool(); err != nil {
 		return fmt.Errorf("ensure pool: %w", err)
 	}
@@ -167,7 +144,10 @@ func (r *OutboxRepository) enqueueLegacyBatch(ctx context.Context, items []Outbo
 	return nil
 }
 
-func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+// FetchAndLock은 lease가 없거나 만료된 PENDING 행만 claim한다. 임대 도입 이전 행(locked_by·lock_expires_at NULL)을
+// lockTimeout으로 회수하던 분기는 T18(2026-09-26)에서 그런 행 0건을 확인해 지웠다(stack-audit 2026-09-26 T11).
+// 현재 writer는 locked_at·locked_by·lock_expires_at을 항상 함께 쓰고 함께 비운다.
+func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 	if err := r.ensurePool(); err != nil {
 		return nil, fmt.Errorf("ensure pool: %w", err)
 	}
@@ -175,7 +155,6 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, ba
 	query := mustSQL("outbox_repository_0129_03.sql")
 
 	rows, err := r.pool.Query(ctx, query,
-		positiveDurationMilliseconds(lockTimeout),
 		batchSize,
 		workerID,
 		positiveDurationMilliseconds(lease),
@@ -210,14 +189,14 @@ func (r *OutboxRepository) MarkSending(ctx context.Context, id int64, workerID s
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error) {
+func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, workerID string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	tag, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0189_05.sql"),
-		domain.DeliveryStatusSent, id, domain.DeliveryStatusPending, deliveryStatusSending, workerID, lockedAt,
+		domain.DeliveryStatusSent, id, domain.DeliveryStatusPending, deliveryStatusSending, workerID,
 	)
 	if err != nil {
 		return false, fmt.Errorf("exec: %w", err)
@@ -226,7 +205,7 @@ func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, workerID stri
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
+func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, fmt.Errorf("ensure pool: %w", err)
 	}
@@ -235,7 +214,7 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID st
 
 	tag, err := r.pool.Exec(ctx, query,
 		errMsg, maxRetries, durationMilliseconds(backoff), id,
-		domain.DeliveryStatusPending, deliveryStatusSending, workerID, lockedAt,
+		domain.DeliveryStatusPending, deliveryStatusSending, workerID,
 	)
 	if err != nil {
 		return false, fmt.Errorf("exec: %w", err)

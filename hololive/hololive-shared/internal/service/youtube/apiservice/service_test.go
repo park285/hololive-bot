@@ -3,8 +3,9 @@ package apiservice
 import (
 	"log/slog"
 	"testing"
+	"time"
 
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 const (
@@ -104,7 +105,7 @@ func TestStoreChannelNameMap_LastWriteWinsOnChannelCollision(t *testing.T) {
 func TestNew_ReturnsUsableServiceWithNilCache(t *testing.T) {
 	t.Parallel()
 
-	svc, err := New(t.Context(), nil, scraper.ProxyConfig{}, nil, discardLogger())
+	svc, err := New(t.Context(), nil, settings.DefaultYouTubeOperationalConfig(), nil, discardLogger())
 	if err != nil {
 		t.Fatalf("New() unexpected error: %v", err)
 	}
@@ -123,55 +124,26 @@ func TestNew_ReturnsUsableServiceWithNilCache(t *testing.T) {
 	}
 }
 
-func TestScraperProxyToggle_DefaultClientHasNoProxy(t *testing.T) {
+// runtime 설정의 cache 저장·scraper phase timeout이 서비스에 그대로 들어가야 한다(stack audit A3).
+func TestNew_UsesInjectedYouTubeTimeouts(t *testing.T) {
 	t.Parallel()
 
-	ys := &serviceImpl{
-		logger:        discardLogger(),
-		scraper:       scraper.NewClient(scraper.WithProxy(scraper.ProxyConfig{})),
-		channelToName: make(map[string]string),
+	cfg := settings.DefaultYouTubeOperationalConfig()
+
+	cfg.CacheSaveTimeout = 2 * time.Second
+	cfg.ScraperPhaseTimeout = 9 * time.Second
+
+	svc, err := New(t.Context(), nil, cfg, nil, discardLogger())
+	if err != nil {
+		t.Fatalf("New() unexpected error: %v", err)
 	}
 
-	if ys.ScraperProxyEnabled() {
-		t.Fatal("ProxyEnabled() = true on a client built without a proxy, want false")
+	ys, ok := svc.(*serviceImpl)
+	if !ok {
+		t.Fatalf("New() returned %T, want *serviceImpl", svc)
 	}
 
-	if ys.SetScraperProxyEnabled(true) {
-		t.Fatal("SetScraperProxyEnabled(true) = true without a configured proxy client, want false")
-	}
-
-	if ys.ScraperProxyEnabled() {
-		t.Fatal("ProxyEnabled() = true after failed enable, want false")
-	}
-
-	if !ys.SetScraperProxyEnabled(false) {
-		t.Fatal("SetScraperProxyEnabled(false) = false, want true (direct client available)")
-	}
-
-	if ys.ScraperProxyEnabled() {
-		t.Fatal("ProxyEnabled() = true after disabling, want false")
-	}
-}
-
-func TestScraperProxyToggle_NilReceiverSafe(t *testing.T) {
-	t.Parallel()
-
-	var nilSvc *serviceImpl
-
-	if nilSvc.SetScraperProxyEnabled(true) {
-		t.Fatal("SetScraperProxyEnabled on nil receiver = true, want false")
-	}
-
-	if nilSvc.ScraperProxyEnabled() {
-		t.Fatal("ScraperProxyEnabled on nil receiver = true, want false")
-	}
-
-	noScraper := &serviceImpl{logger: discardLogger()}
-	if noScraper.SetScraperProxyEnabled(true) {
-		t.Fatal("SetScraperProxyEnabled with nil scraper = true, want false")
-	}
-
-	if noScraper.ScraperProxyEnabled() {
-		t.Fatal("ScraperProxyEnabled with nil scraper = true, want false")
+	if ys.cacheSaveTimeout != 2*time.Second || ys.scraperPhaseTimeout != 9*time.Second {
+		t.Fatalf("timeouts = (%s, %s), want (2s, 9s)", ys.cacheSaveTimeout, ys.scraperPhaseTimeout)
 	}
 }

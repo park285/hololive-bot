@@ -34,7 +34,7 @@ func TestFetchMemberPhotoBlocksHTTPLoopback(t *testing.T) {
 
 	photoURL := "http://127.0.0.1/avatar=s88-c"
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -90,7 +90,7 @@ func TestFetchMemberPhotoBlocksUnsafeURLsBeforeRoundTrip(t *testing.T) {
 			withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 			photos := make(map[string]image.Image)
-			fetchMemberPhoto(domain.CalendarEntry{
+			fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 				Member: &domain.Member{Photo: tt.photoURL},
 			}, photos)
 
@@ -191,7 +191,7 @@ func TestFetchMemberPhotoBlocksRedirectToPrivateHost(t *testing.T) {
 
 	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -222,7 +222,7 @@ func TestFetchMemberPhotoBlocksRedirectWithUserinfo(t *testing.T) {
 
 	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -253,7 +253,7 @@ func TestFetchMemberPhotoBlocksRedirectToNon443Port(t *testing.T) {
 
 	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -293,7 +293,7 @@ func TestFetchMemberPhotoBlocksThirdRedirect(t *testing.T) {
 
 	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -333,7 +333,7 @@ func TestFetchMemberPhotoBlocksAllowlistedHostResolvingToBlockedIPs(t *testing.T
 
 			photoURL := testAvatarURL
 			photos := make(map[string]image.Image)
-			fetchMemberPhoto(domain.CalendarEntry{
+			fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 				Member: &domain.Member{Photo: photoURL},
 			}, photos)
 
@@ -358,7 +358,7 @@ func TestFetchMemberPhotoBlocksWrongContentType(t *testing.T) {
 
 	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -378,7 +378,7 @@ func TestFetchMemberPhotoBlocksOversizedBody(t *testing.T) {
 
 	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -397,7 +397,7 @@ func TestFetchMemberPhotoAcceptsAllowlistedHTTPSPNG(t *testing.T) {
 
 	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 

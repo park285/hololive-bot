@@ -2,7 +2,6 @@ package format
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -30,20 +29,16 @@ func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payl
 		return "", fmt.Errorf("format youtube outbox payload: %w", err)
 	}
 
-	if msg := strings.TrimSpace(payload.PreRenderedMessage); msg != "" {
-		return msg, nil
-	}
-
 	memberName := strings.TrimSpace(payload.MemberName)
 	if memberName == "" {
-		memberName = mf.MessageStrings.VTuberFallbackContext(ctx)
+		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 	}
 
 	items := notificationOutboxItemsFromDispatchPayload(payload)
 	if len(items) == 1 {
 		out, itemErr := mf.formatSingleOutboxItem(ctx, memberName, &items[0])
 
-		return out, errors.Join(itemErr)
+		return out, itemErr
 	}
 
 	out, err := mf.FormatGroupedMessage(ctx, memberName, payload.ChannelID, payload.Kind, items)

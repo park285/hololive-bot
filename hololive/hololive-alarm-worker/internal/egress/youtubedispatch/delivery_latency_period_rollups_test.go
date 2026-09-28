@@ -189,7 +189,8 @@ func TestBuildPostLatencyPeriodSummaries_ComputesDiscreteP95LatencyMillis(t *tes
 	require.Equal(t, int64(20), *summaries[0].MaxLatencyMillis)
 }
 
-func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPostResults(t *testing.T) {
+// 관리 API와 같은 경로(창 시작 이후 ListPostSendCountsSince 결과를 기간별로 집계)로 저장된 게시물 결과를 검증한다.
+func TestDeliveryTelemetryRepository_PostLatencyPeriodSummariesFromPostSendCounts_UsesStoredPostResults(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -200,7 +201,10 @@ func TestDeliveryTelemetryRepository_ListPostLatencyPeriodSummaries_UsesStoredPo
 
 	repository := telemetry.NewRepository(db)
 
-	summaries, err := repository.ListPostLatencyPeriodSummaries(ctx, []analytics.PostLatencyPeriod{
+	posts, err := repository.ListPostSendCountsSince(ctx, now.Add(-24*time.Hour))
+	require.NoError(t, err)
+
+	summaries, err := analytics.BuildPostLatencyPeriodSummaries(posts, []analytics.PostLatencyPeriod{
 		{Label: "last_hour", StartAt: now.Add(-time.Hour), EndAt: now},
 		{Label: "last_day", StartAt: now.Add(-24 * time.Hour), EndAt: now},
 	})

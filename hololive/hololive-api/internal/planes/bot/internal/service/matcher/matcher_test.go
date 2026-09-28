@@ -96,8 +96,8 @@ func (p *stubMemberProvider) GetChannelIDs() []string {
 	return ids
 }
 
-func (p *stubMemberProvider) GetAllMembers() []*domain.Member {
-	return p.members
+func (p *stubMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+	return p.members, nil
 }
 
 func (p *stubMemberProvider) WithContext(_ context.Context) domain.MemberDataProvider {
@@ -154,19 +154,6 @@ func TestCandidateFromDynamic(t *testing.T) {
 	}
 }
 
-func TestTryPartialStaticMatch(t *testing.T) {
-	logger := slog.New(slog.DiscardHandler)
-	provider := newStubMemberProvider([]*domain.Member{
-		{ChannelID: testChannelID1, Name: "Test Name"},
-	})
-	mm := &Matcher{logger: logger}
-
-	candidate := mm.tryPartialStaticMatch(provider, "test")
-	if candidate == nil || candidate.channelID != testChannelID1 {
-		t.Fatalf("expected partial match, got: %+v", candidate)
-	}
-}
-
 func TestMaybeCleanupMatchCache(t *testing.T) {
 	now := time.Now()
 	mm := &Matcher{
@@ -189,25 +176,31 @@ func TestMaybeCleanupMatchCache(t *testing.T) {
 	}
 }
 
-func TestFinalizeCandidateFallback(t *testing.T) {
+// roster 후보가 채널명 정본이다. 후보명을 EnglishName으로 복제하던 표시 폴백은 없다.
+func TestFinalizeCandidateBuildsRosterChannel(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	mm := &Matcher{logger: logger}
 
-	channel := mm.finalizeCandidate(t.Context(), &matchCandidate{
+	channel := mm.finalizeCandidate(&matchCandidate{
 		channelID:  testChannelID1,
 		memberName: "name",
+		org:        orgHololive,
 		source:     "source",
 	})
 
-	if channel == nil || channel.ID != testChannelID1 {
+	if channel == nil || channel.ID != testChannelID1 || channel.Name != "name" {
 		t.Fatalf("unexpected channel: %+v", channel)
 	}
 
-	if channel.EnglishName == nil || *channel.EnglishName != "name" {
-		t.Fatalf("unexpected english name: %+v", channel.EnglishName)
+	if channel.EnglishName != nil {
+		t.Fatalf("english name = %q, want nil", *channel.EnglishName)
 	}
 
-	channel = mm.finalizeCandidate(t.Context(), nil)
+	if channel.Org == nil || *channel.Org != orgHololive {
+		t.Fatalf("org = %v, want %q", channel.Org, orgHololive)
+	}
+
+	channel = mm.finalizeCandidate(nil)
 	if channel != nil {
 		t.Fatalf("expected nil candidate result, got: %+v", channel)
 	}

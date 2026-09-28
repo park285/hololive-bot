@@ -7,6 +7,7 @@
 - Logical ledger: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
 - Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)
 - 구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
+- Ledger backfill 현재 상태(2026-09-26): 운영 완료. backfill 명령과 writer·cleanup의 completion marker 확인은 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠고 migration `227_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 완료를 확인합니다. 아래 backfill·completion 조항은 설계 근거입니다.
 
 ## 규범 용어
 
@@ -52,6 +53,10 @@ Community/Shorts:
 ```
 
 Community/Shorts의 `canonical_post_id`는 claim, telemetry, sibling 조회가 같은 resolver를 사용해야 합니다. Payload와 `content_id` 해석을 package별로 복제해서는 안 됩니다.
+
+현재 상태: 모든 소비자가 `contentid.ResolveDeliveryLogicalID`(room 없는 logical ID, `contentid.ResolveDeliveryKey`의 앞 단계) 하나를 씁니다. 시도 telemetry의 `post_id`는 전이 트랜잭션이 검증한 logical key이고, alarm-worker claim의 alarm state 조회 키·claim identity·같은 방 SENT sibling 판정은 같은 resolver 결과를 쓰며 누락·파싱 실패·불일치는 오류(claim은 retry later)로 드러냅니다. attempt started·claim 이슈·`outbox_final_result` 감사 로그의 `post_id`는 `telemetry.PostIDLogValue`가 같은 resolver 값을 쓰고, invalid identity는 대체 ID 없이 `invalid:<kind>:<reason>` 라벨로 남깁니다. telemetry 버퍼 적재는 `post_id`를 `content_id`로 채우지 않고 빈 값을 오류로 거절합니다. NEW_VIDEO·LIVE_STREAM·MILESTONE은 payload `canonical_post_id`를 보지 않고 `content_id`만 씁니다. 과거의 `canonical_post_id → content_id → video_id/post_id` 폴백(감사 행 `holo-youtube-telemetry-post-id-fallback`)은 삭제했습니다. 삭제 전 운영 DB 읽기 전용 측정: COMMUNITY_POST 23건·NEW_SHORT 36건 모두 canonical_post_id가 있고 문자열 타입이었습니다(NEW_VIDEO 3건은 canonical_post_id가 없지만 content_id 계약이라 영향 없음).
+
+같은 감사 행의 빈 `delivery_path` 대체도 제거했습니다. 기록 주체는 `CommunityShortsDeliveryPath`를 명시하며 버퍼 적재는 빈 경로를 batch 전체의 오류로 반환합니다. 방출 로그는 저장된 경로를 trim해서 쓰되 비어 있는 과거 값을 정상 경로로 꾸미지 않습니다. 삭제 전 guarded 운영 조회에서 telemetry 9행의 빈 `post_id`·빈 `delivery_path`는 각각 0건이었으므로 과거 row 호환 변환은 하지 않습니다. 기존 non-empty 값의 trim은 유지합니다.
 
 `(outbox_id, room_id)` unique index는 physical duplicate만 막습니다. Community/Shorts에서는 서로 다른 outbox/content ID가 같은 canonical post를 표현할 수 있고, 모든 kind에서 cleanup 뒤 같은 content의 outbox ID가 달라질 수 있으므로 logical duplicate 방어를 대체하지 않습니다.
 

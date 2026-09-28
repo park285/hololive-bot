@@ -90,6 +90,8 @@ func (*seeMoreFoldConsumer) Reset() {}
 
 func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
 	return domain.AlarmQueueEnvelope{
+		SendUnitID:      1,
+		ClientRequestID: "hololive-alarm:0123456789abcdef0123456789abcdef",
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    roomID,
@@ -115,10 +117,6 @@ func (*seeMoreFoldIrisClient) SendMarkdown(context.Context, string, string, ...i
 	return nil, errors.New("markdown lane is not configured")
 }
 
-func (*seeMoreFoldIrisClient) SendKaringContentList(context.Context, iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
-	return nil, errors.New("karing lane is not configured")
-}
-
 func (*seeMoreFoldIrisClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
 	return nil, errors.New("reply status is not used by the text lane")
 }
@@ -136,7 +134,11 @@ func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]stri
 		require.NoError(t, err, "seed channel override %s", key)
 	}
 
-	return template.NewRenderer(pool, logger), messagestrings.NewStore(pool, logger)
+	store := messagestrings.NewStore(pool, logger)
+	require.NoError(t, store.Load(t.Context()))
+	require.NoError(t, store.Validate(messagestrings.AlarmWorkerEgressRequirements()))
+
+	return template.NewRenderer(pool, logger), store
 }
 
 // runSeeMoreFoldFinalPayload는 실제 DB template와 Runner 렌더링을 거쳐 Iris 텍스트 lane에 넘어간 최종 문자열을 반환한다.

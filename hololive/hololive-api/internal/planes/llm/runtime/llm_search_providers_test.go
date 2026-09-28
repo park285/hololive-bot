@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,7 +36,7 @@ import (
 
 type fakeMajorEventLLMClient struct{}
 
-func (fakeMajorEventLLMClient) GenerateJSON(context.Context, string, string, map[string]any) (string, error) {
+func (fakeMajorEventLLMClient) GenerateJSON(context.Context, openaipreset.PromptLayers, map[string]any) (string, error) {
 	return "", nil
 }
 
@@ -87,7 +88,8 @@ func TestProvideEventSummarizer_Default(t *testing.T) {
 	)
 	require.NotNil(t, summarizer)
 
-	got := summarizer.Summarize(t.Context(), nil, mesummarizer.SummaryTypeWeekly, "2026-W10")
+	got, err := summarizer.Summarize(t.Context(), nil, mesummarizer.SummaryTypeWeekly, "2026-W10")
+	require.NoError(t, err)
 	assert.Empty(t, got)
 }
 
@@ -116,6 +118,7 @@ func TestProvideEventSummarizer_ConsensusEnabled(t *testing.T) {
 	require.NotNil(t, summarizer)
 
 	events := []domain.MajorEvent{}
-	got := summarizer.Summarize(t.Context(), events, mesummarizer.SummaryTypeWeekly, "2026-W10")
+	got, err := summarizer.Summarize(t.Context(), events, mesummarizer.SummaryTypeWeekly, "2026-W10")
+	require.NoError(t, err)
 	assert.Empty(t, got)
 }

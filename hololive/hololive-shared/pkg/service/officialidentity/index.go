@@ -1,6 +1,7 @@
 package officialidentity
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -11,14 +12,21 @@ import (
 
 type Index map[string][]string
 
-func Build(membersData domain.MemberDataProvider) Index {
+// Build는 멤버 데이터에서 공식 표기명→채널 색인을 만든다. 멤버 적재 실패는 빈 색인으로 바꾸지 않고 오류로 돌려준다
+// (DEC-20260926-hololive-source-fallbacks-retirement). 멤버 데이터 없이 구성한 호출자(membersData nil)는 빈 색인이다.
+func Build(membersData domain.MemberDataProvider) (Index, error) {
 	candidates := make(map[string]map[string]struct{})
 
 	if membersData == nil {
-		return Index{}
+		return Index{}, nil
 	}
 
-	for _, member := range membersData.GetAllMembers() {
+	members, err := membersData.LoadAllMembers()
+	if err != nil {
+		return nil, fmt.Errorf("build official identity index: %w", err)
+	}
+
+	for _, member := range members {
 		addMemberCandidates(candidates, member)
 	}
 
@@ -34,7 +42,7 @@ func Build(membersData domain.MemberDataProvider) Index {
 		index[name] = resolved
 	}
 
-	return index
+	return index, nil
 }
 
 func (index Index) Resolve(name string) string {
@@ -46,8 +54,16 @@ func (index Index) Resolve(name string) string {
 	return channelIDs[0]
 }
 
-func DisplayNames(membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) []string {
-	index := Build(membersData)
+// DisplayNames는 공식 표기명 목록을 표시명으로 바꾼다. 이름이 없으면 멤버를 적재하지 않는다.
+func DisplayNames(membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) ([]string, error) {
+	if len(officialNames) == 0 {
+		return nil, nil
+	}
+
+	index, err := Build(membersData)
+	if err != nil {
+		return nil, fmt.Errorf("display names: %w", err)
+	}
 
 	hostChannelID = strings.TrimSpace(hostChannelID)
 
@@ -68,7 +84,7 @@ func DisplayNames(membersData domain.MemberDataProvider, officialNames []string,
 		out = append(out, label)
 	}
 
-	return out
+	return out, nil
 }
 
 func Format(names []string) string {

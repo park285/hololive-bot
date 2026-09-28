@@ -36,29 +36,11 @@ import (
 	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 )
 
+// currentPageFetcher는 net/http fetcher 하나만 돌려준다. 차단 시그니처 본문을 browser snapshot으로 다시 가져오던
+// 경로와 SCRAPER_FETCHER_ENGINE 선택은 production 호출자 없이 남아 있어 지웠다(stack-audit 2026-09-26 T11 C2).
+// 차단·동의 페이지 응답은 대체 fetch 없이 그대로 오류로 드러난다.
 func (c *Client) currentPageFetcher() pageFetcher {
-	fetcher, _ := c.currentPageFetcherWithEngine()
-	return fetcher
-}
-
-func (c *Client) currentPageFetcherWithEngine() (pageFetcher, FetcherEngine) {
-	netHTTPFetcher := netHTTPPageFetcher{client: c}
-	switch normalizeFetcherEngine(c.fetcherEngine) {
-	case FetcherEngineNetHTTP:
-		return netHTTPFetcher, FetcherEngineNetHTTP
-	case FetcherEngineBrowserSnapshot:
-		return c.browserSnapshotPageFetcher(netHTTPFetcher)
-	default:
-		return netHTTPFetcher, FetcherEngineNetHTTP
-	}
-}
-
-func (c *Client) browserSnapshotPageFetcher(fallback pageFetcher) (pageFetcher, FetcherEngine) {
-	if c.browserSnapshotFetcher != nil {
-		return c.browserSnapshotFetcher, FetcherEngineBrowserSnapshot
-	}
-
-	return fallback, FetcherEngineNetHTTP
+	return netHTTPPageFetcher{client: c}
 }
 
 func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string, err error) {
@@ -70,18 +52,15 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string
 	snap := c.uaProvider.Headers(ctx)
 	applyScraperHeaders(req, snap)
 
-	fetcher, engine := c.currentPageFetcherWithEngine()
 	started := time.Now()
 	statusCode := 0
 
 	defer func() {
-		observeScraperFetch(engine, statusCode, err, time.Since(started))
+		observeScraperFetch(statusCode, err, time.Since(started))
 	}()
 
-	resp, err := fetcher.FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
+	resp, err := c.currentPageFetcher().FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
 	if err != nil {
-		c.observeProxyTransportFailure(err)
-
 		return "", fmt.Errorf("fetch page: %w", err)
 	}
 
@@ -91,87 +70,21 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string
 		return "", fmt.Errorf("handle fetch status: %w", statusErr)
 	}
 
-	bodyBytes, finalEngine, finalStatusCode, err := c.validatedFetchBody(ctx, req, engine, pageURL, resp)
-
-	engine = finalEngine
-	statusCode = finalStatusCode
-
-	if err != nil {
-		return "", fmt.Errorf("validated fetch body: %w", err)
-	}
-
-	c.recordFetchSuccess()
-
-	return string(bodyBytes), nil
-}
-
-func (c *Client) validatedFetchBody(
-	ctx context.Context,
-	req *http.Request,
-	engine FetcherEngine,
-	pageURL string,
-	resp pageFetchResponse,
-) (body []byte, finalEngine FetcherEngine, finalStatusCode int, err error) {
 	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
-		fallbackResp, fallbackUsed, fallbackErr := c.fetchBlockedBodyBrowserSnapshotFallback(ctx, req, engine, pageURL, err)
-		if !fallbackUsed {
-			return nil, engine, resp.StatusCode, fmt.Errorf("validate successful fetch body: %w", err)
-		}
-
-		if fallbackErr != nil {
-			return nil, engine, resp.StatusCode, fmt.Errorf("fetch blocked body browser snapshot fallback: %w", fallbackErr)
-		}
-
-		return fallbackResp.Body, FetcherEngineBrowserSnapshot, fallbackResp.StatusCode, nil
+		return "", fmt.Errorf("validate successful fetch body: %w", err)
 	}
 
-	return resp.Body, engine, resp.StatusCode, nil
+	c.backoffState.RecordSuccess()
+
+	return string(resp.Body), nil
 }
 
-func (c *Client) fetchBlockedBodyBrowserSnapshotFallback(
-	ctx context.Context,
-	req *http.Request,
-	engine FetcherEngine,
-	pageURL string,
-	cause error,
-) (pageFetchResponse, bool, error) {
-	if !errors.Is(cause, ErrBlockedBodySignature) || c == nil || c.browserSnapshotFetcher == nil || normalizeFetcherEngine(engine) == FetcherEngineBrowserSnapshot {
-		return pageFetchResponse{}, false, nil
-	}
-
-	observeScraperFetchFallback(engine, FetcherEngineBrowserSnapshot, cause)
-
-	resp, err := c.browserSnapshotFetcher.FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header.Clone()})
-	if err != nil {
-		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
-	}
-
-	if err := c.handleFetchStatus(pageURL, resp); err != nil {
-		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
-	}
-
-	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
-		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
-	}
-
-	return resp, true, nil
-}
-
-func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string, policy ...FetchPolicy) error {
+func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string) error {
 	if cooldownRemaining := c.backoffState.HardCooldownRemaining(); cooldownRemaining > 0 {
 		return fmt.Errorf("in cooldown for %v: %w", cooldownRemaining.Round(time.Second), ErrRateLimited)
 	}
 
-	resolvedPolicy := resolveFetchPolicy(policy...)
-	bucket := distributedBucketFromURL(pageURL)
-
-	if resolvedPolicy.AdmissionBlocking {
-		if err := c.rateLimiter.WaitWithBucket(ctx, bucket); err != nil {
-			return fmt.Errorf("rate limiter wait admission failed: %w", err)
-		}
-
-		return nil
-	}
+	bucket := distributedBucketFromURL(c.config.DistributedRateLimit.BucketBase, pageURL)
 
 	decision, err := c.rateLimiter.TryReserveWithBucket(ctx, bucket)
 	if err != nil {
@@ -183,31 +96,6 @@ func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string, policy 
 	}
 
 	return nil
-}
-
-func (c *Client) recordFetchSuccess() {
-	c.backoffState.RecordSuccess()
-
-	if c.ProxyEnabled() {
-		c.proxyHealth.RecordSuccess()
-	}
-}
-
-func (c *Client) observeProxyTransportFailure(err error) {
-	if c == nil || c.proxyHealth == nil {
-		return
-	}
-
-	if !c.ProxyEnabled() || !isRetryableTransportError(err) {
-		return
-	}
-
-	if c.proxyHealth.RecordTransportFailure() {
-		slog.Warn("scraper proxy disabled after consecutive transport failures, falling back to direct",
-			"threshold", c.proxyFallbackPolicy.MaxConsecutiveFailures,
-			"error", err)
-		c.SetProxyEnabled(false)
-	}
 }
 
 func (c *Client) handleFetchStatus(pageURL string, resp pageFetchResponse) error {

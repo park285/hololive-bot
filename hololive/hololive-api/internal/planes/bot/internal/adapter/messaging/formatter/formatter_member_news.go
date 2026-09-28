@@ -41,21 +41,21 @@ type memberNewsSubscriptionTemplateData struct {
 	IsSubscribed bool
 }
 
-func (f *ResponseFormatter) memberNewsNotify(ctx context.Context, key string) string {
+func (f *ResponseFormatter) memberNewsNotify(key messagestrings.Key) string {
 	if f == nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
-	return f.messageStrings.GetContext(ctx, messagestrings.NamespaceNotify, key)
+	return f.messageStrings.Text(key)
 }
 
 func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernewscontracts.Digest) string {
 	if digest == nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	if f == nil || f.renderer == nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	data := memberNewsDigestTemplateData{
@@ -67,7 +67,7 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsDigest, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)
@@ -75,12 +75,12 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 
 func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(ctx, "member_news_no_members")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNoMembers)
 	}
 
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNoMembers, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(ctx, "member_news_no_members")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNoMembers)
 	}
 
 	return message
@@ -88,12 +88,12 @@ func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) strin
 
 func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(ctx, "member_news_subscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsSubscribed)
 	}
 
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsSubscribed, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(ctx, "member_news_subscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsSubscribed)
 	}
 
 	return message
@@ -101,12 +101,12 @@ func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) stri
 
 func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(ctx, "member_news_already_subscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsAlreadySubscribed)
 	}
 
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsAlreadySub, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(ctx, "member_news_already_subscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsAlreadySubscribed)
 	}
 
 	return message
@@ -114,12 +114,12 @@ func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Contex
 
 func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(ctx, "member_news_unsubscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsUnsubscribed)
 	}
 
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsUnsubscribed, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(ctx, "member_news_unsubscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsUnsubscribed)
 	}
 
 	return message
@@ -127,12 +127,12 @@ func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) st
 
 func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
-		return f.memberNewsNotify(ctx, "member_news_not_subscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNotSubscribed)
 	}
 
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNotSub, memberNewsSubscriptionTemplateData{Prefix: f.prefix})
 	if err != nil {
-		return f.memberNewsNotify(ctx, "member_news_not_subscribed")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsNotSubscribed)
 	}
 
 	return message
@@ -154,12 +154,12 @@ func (f *ResponseFormatter) FormatMemberNewsStatus(ctx context.Context, isSubscr
 	return message
 }
 
-func (f *ResponseFormatter) memberNewsStatusFallback(ctx context.Context, isSubscribed bool) string {
+func (f *ResponseFormatter) memberNewsStatusFallback(_ context.Context, isSubscribed bool) string {
 	if isSubscribed {
-		return f.memberNewsNotify(ctx, "member_news_status_on")
+		return f.memberNewsNotify(messagestrings.NotifyMemberNewsStatusOn)
 	}
 
-	return f.memberNewsNotify(ctx, "member_news_status_off")
+	return f.memberNewsNotify(messagestrings.NotifyMemberNewsStatusOff)
 }
 
 func (f *ResponseFormatter) localizeMemberNewsItems(ctx context.Context, items []membernewscontracts.SummaryItem) []membernewscontracts.SummaryItem {
@@ -177,8 +177,8 @@ func (f *ResponseFormatter) localizeMemberNewsItems(ctx context.Context, items [
 	return localized
 }
 
-func (f *ResponseFormatter) memberNewsCategoryLabel(ctx context.Context, raw string) string {
-	if label := f.messageStrings.GetContext(ctx, messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); label != "" {
+func (f *ResponseFormatter) memberNewsCategoryLabel(_ context.Context, raw string) string {
+	if label, ok := f.messageStrings.Lookup(messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); ok {
 		return label
 	}
 

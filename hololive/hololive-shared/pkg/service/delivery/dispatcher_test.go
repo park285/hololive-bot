@@ -41,18 +41,18 @@ const testRoomID = "room-1"
 
 // mockDeliveryRepository: deliveryRepository mock 구현.
 type mockDeliveryRepository struct {
-	fetchAndLockFn           func(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	fetchAndLockFn           func(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
 	markSendingFn            func(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
-	markSentFn               func(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
-	markFailedFn             func(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	markSentFn               func(ctx context.Context, id int64, workerID string) (bool, error)
+	markFailedFn             func(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	quarantineStaleSendingFn func(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
 	countByStatusFn          func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	cleanupFn                func(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
-func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 	if m.fetchAndLockFn != nil {
-		out, err := m.fetchAndLockFn(ctx, workerID, batchSize, lockTimeout, lease)
+		out, err := m.fetchAndLockFn(ctx, workerID, batchSize, lease)
 		if err != nil {
 			return out, fmt.Errorf("fetch and lock fn: %w", err)
 		}
@@ -76,9 +76,9 @@ func (m *mockDeliveryRepository) MarkSending(ctx context.Context, id int64, work
 	return true, nil
 }
 
-func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error) {
+func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerID string) (bool, error) {
 	if m.markSentFn != nil {
-		out, err := m.markSentFn(ctx, id, workerID, lockedAt)
+		out, err := m.markSentFn(ctx, id, workerID)
 		if err != nil {
 			return out, fmt.Errorf("mark sent fn: %w", err)
 		}
@@ -89,9 +89,9 @@ func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerI
 	return true, nil
 }
 
-func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
+func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if m.markFailedFn != nil {
-		out, err := m.markFailedFn(ctx, id, workerID, lockedAt, maxRetries, backoff, errMsg)
+		out, err := m.markFailedFn(ctx, id, workerID, maxRetries, backoff, errMsg)
 		if err != nil {
 			return out, fmt.Errorf("mark failed fn: %w", err)
 		}
@@ -200,7 +200,7 @@ func TestProcessItemPassesStableClientRequestID(t *testing.T) {
 		},
 	}
 	repository := &mockDeliveryRepository{}
-	dispatcher := NewDispatcher(repository, sender, dispatcherLogger(), &DispatcherConfig{})
+	dispatcher := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &DispatcherConfig{})
 	item := &domain.NotificationDeliveryOutbox{
 		ID:        42,
 		Kind:      domain.DeliveryKindMemberNewsWeekly,
@@ -242,13 +242,13 @@ func TestProcessOnce_E2E(t *testing.T) {
 	)
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 1, RoomID: "room-a", Payload: makePayload(t, "hello-a")},
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, id int64, _ string, _ time.Time) (bool, error) {
+		markSentFn: func(_ context.Context, id int64, _ string) (bool, error) {
 			mu.Lock()
 			defer mu.Unlock()
 
@@ -277,7 +277,7 @@ func TestProcessOnce_E2E(t *testing.T) {
 
 	defaultCfg := DefaultDispatcherConfig()
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), &defaultCfg)
+	d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
 
 	if len(sentIDs) != 2 {
@@ -296,12 +296,12 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 	)
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 10, RoomID: "room-x", Payload: "invalid-json{{{"},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ string, _ time.Time, _ int, _ time.Duration, errMsg string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _ int, _ time.Duration, errMsg string) (bool, error) {
 			failedID = id
 			failedMsg = errMsg
 
@@ -319,7 +319,7 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 
 	defaultCfg := DefaultDispatcherConfig()
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), &defaultCfg)
+	d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
 
 	if failedID != 10 {
@@ -335,12 +335,12 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 	var failedID int64
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 20, RoomID: "room-y", Payload: makePayload(t, "hello")},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ string, _ time.Time, _ int, _ time.Duration, _ string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _ int, _ time.Duration, _ string) (bool, error) {
 			failedID = id
 			return true, nil
 		},
@@ -360,7 +360,7 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 
 	defaultCfg := DefaultDispatcherConfig()
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), &defaultCfg)
+	d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
 
 	if failedID != 20 {
@@ -379,11 +379,11 @@ func TestProcessItem_MarkSendingFenceSkipsSend(t *testing.T) {
 		markSendingFn: func(_ context.Context, _ int64, _ string, _ time.Duration) (bool, error) {
 			return false, nil
 		},
-		markSentFn: func(_ context.Context, _ int64, _ string, _ time.Time) (bool, error) {
+		markSentFn: func(_ context.Context, _ int64, _ string) (bool, error) {
 			markSentCalled = true
 			return true, nil
 		},
-		markFailedFn: func(_ context.Context, _ int64, _ string, _ time.Time, _ int, _ time.Duration, _ string) (bool, error) {
+		markFailedFn: func(_ context.Context, _ int64, _ string, _ int, _ time.Duration, _ string) (bool, error) {
 			markFailedCalled = true
 			return true, nil
 		},
@@ -394,7 +394,7 @@ func TestProcessItem_MarkSendingFenceSkipsSend(t *testing.T) {
 			return nil
 		},
 	}
-	dispatcher := NewDispatcher(repository, sender, dispatcherLogger(), &DispatcherConfig{})
+	dispatcher := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &DispatcherConfig{})
 	item := &domain.NotificationDeliveryOutbox{ID: 42, RoomID: testRoomID, Payload: makePayload(t, "hello")}
 
 	dispatcher.processItem(t.Context(), item)
@@ -432,7 +432,7 @@ func TestProcessOnce_QuarantinesStaleSendingBeforeFetch(t *testing.T) {
 
 			return 1, nil
 		},
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			fetchCalls.Add(1)
 
 			return nil, nil
@@ -441,7 +441,7 @@ func TestProcessOnce_QuarantinesStaleSendingBeforeFetch(t *testing.T) {
 
 	defaultCfg := DefaultDispatcherConfig()
 
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), &defaultCfg)
+	d := mustNewDispatcher(t, repository, &mockSender{}, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
 
 	if quarantineCalls.Load() != 1 {
@@ -458,7 +458,7 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 		var fetchCount atomic.Int32
 
 		repository := &mockDeliveryRepository{
-			fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+			fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 				fetchCount.Add(1)
 
 				return nil, nil
@@ -472,7 +472,7 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 		config.PollInterval = 10 * time.Millisecond
 
 		ctx, cancel := context.WithCancel(t.Context())
-		d := NewDispatcher(repository, sender, dispatcherLogger(), &config)
+		d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &config)
 		d.Start(ctx)
 
 		// 초기 실행 + ticker 몇 회 대기
@@ -510,7 +510,7 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 	)
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			switch fetchCount.Add(1) {
 			case 1:
 				closeFirstFetch.Do(func() {
@@ -531,7 +531,7 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 	config.PollInterval = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(t.Context())
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), &config)
+	d := mustNewDispatcher(t, repository, &mockSender{}, dispatcherLogger(), &config)
 	done := make(chan struct{})
 
 	go func() {
@@ -571,7 +571,7 @@ func TestDispatcher_RunDoesNotWarnWhenContextCanceled(t *testing.T) {
 	config.PollInterval = time.Hour
 
 	ctx, cancel := context.WithCancel(t.Context())
-	d := NewDispatcher(&mockDeliveryRepository{}, &mockSender{}, logger, &config)
+	d := mustNewDispatcher(t, &mockDeliveryRepository{}, &mockSender{}, logger, &config)
 	done := make(chan struct{})
 
 	go func() {
@@ -600,7 +600,7 @@ func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
 	var closeFirstFetch sync.Once
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			fetchCount.Add(1)
 			closeFirstFetch.Do(func() {
 				close(firstFetch)
@@ -617,7 +617,7 @@ func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	d := NewDispatcher(repository, &mockSender{}, dispatcherLogger(), &config)
+	d := mustNewDispatcher(t, repository, &mockSender{}, dispatcherLogger(), &config)
 	d.Start(ctx)
 
 	select {
@@ -642,7 +642,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 	)
 
 	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
 				{ID: 1, RoomID: "room-a", Payload: makePayload(t, "hello-a")},
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
@@ -650,7 +650,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 				{ID: 4, RoomID: "room-d", Payload: makePayload(t, "hello-d")},
 			}, nil
 		},
-		markSentFn: func(_ context.Context, _ int64, _ string, _ time.Time) (bool, error) {
+		markSentFn: func(_ context.Context, _ int64, _ string) (bool, error) {
 			sentCount.Add(1)
 
 			return true, nil
@@ -685,7 +685,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 
 	config.MaxConcurrent = 2
 
-	d := NewDispatcher(repository, sender, dispatcherLogger(), &config)
+	d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &config)
 	d.processOnce(t.Context())
 
 	if sentCount.Load() != 4 {
@@ -727,7 +727,7 @@ func TestProcessBatchPreservesOrderWithinRoom(t *testing.T) {
 
 		return nil
 	}}
-	dispatcher := NewDispatcher(&mockDeliveryRepository{}, sender, dispatcherLogger(), &DispatcherConfig{MaxConcurrent: 2})
+	dispatcher := mustNewDispatcher(t, &mockDeliveryRepository{}, sender, dispatcherLogger(), &DispatcherConfig{MaxConcurrent: 2})
 	items := []domain.NotificationDeliveryOutbox{
 		{ID: 1, RoomID: "room-a", Payload: makePayload(t, "first")},
 		{ID: 2, RoomID: "room-a", Payload: makePayload(t, "second")},

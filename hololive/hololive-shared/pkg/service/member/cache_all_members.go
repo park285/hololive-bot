@@ -226,7 +226,7 @@ func (c *Cache) reloadAllMembersSnapshot(
 	if members, ready, err := c.snapshotResultAt(current, time.Now()); ready {
 		out, snapshotErr := completedAllMembersSnapshot(members, err)
 
-		return out, errors.Join(snapshotErr)
+		return out, snapshotErr
 	}
 
 	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)

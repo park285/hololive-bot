@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
@@ -232,7 +233,7 @@ type mockSummarizer struct {
 	callCount    int
 }
 
-func (m *mockSummarizer) GenerateJSON(_ context.Context, _, _ string, _ map[string]any) (string, error) {
+func (m *mockSummarizer) GenerateJSON(_ context.Context, _ openaipreset.PromptLayers, _ map[string]any) (string, error) {
 	m.callCount++
 	return m.jsonResponse, m.err
 }
@@ -244,7 +245,11 @@ func TestEventSummarizer_Summarize_StructuredOutput(t *testing.T) {
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: testLinkFes}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	if result == "" {
 		t.Fatal("expected non-empty result")
@@ -263,7 +268,11 @@ func TestEventSummarizer_SummarizeResult_Primary(t *testing.T) {
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: testLinkFes}}
-	result := summarizer.SummarizeResult(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+
+	result, err := summarizer.SummarizeResult(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+	if err != nil {
+		t.Fatalf("SummarizeResult() error = %v", err)
+	}
 
 	if result.ResultType != sharedmodel.SummaryResultPrimary {
 		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultPrimary)
@@ -294,7 +303,11 @@ func TestEventSummarizer_Summarize_FinalOutputReviewApplied(t *testing.T) {
 	)
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Hoshimachi Suisei Live \"SuperNova: REBOOT\""}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	assertContains(t, result, "[리뷰 완료]")
 	assertContains(t, result, "Hoshimachi Suisei Live")
@@ -309,7 +322,10 @@ func TestEventSummarizer_Summarize_CacheHitSkipsSearchAndLLM(t *testing.T) {
 	}
 	summarizer := NewEventSummarizer(llm, cache, searcher, testLogger())
 
-	result := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "cached"}}, SummaryTypeWeekly, "2026-03-02")
+	result, err := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "cached"}}, SummaryTypeWeekly, "2026-03-02")
+	if err != nil {
+		t.Fatalf("SummarizeResult() error = %v", err)
+	}
 
 	if result.Text != "cached summary" {
 		t.Fatalf("Text = %q, want cached summary", result.Text)
@@ -346,7 +362,10 @@ func TestEventSummarizer_Summarize_SingleHighlightRunsFinalReview(t *testing.T) 
 		}),
 	)
 
-	result := summarizer.Summarize(t.Context(), []domain.MajorEvent{{ID: 1, Title: "Simple Event"}}, SummaryTypeWeekly, "2026-02-15")
+	result, err := summarizer.Summarize(t.Context(), []domain.MajorEvent{{ID: 1, Title: "Simple Event"}}, SummaryTypeWeekly, "2026-02-15")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	if reviewer.callCount != 1 {
 		t.Fatalf("reviewer callCount = %d, want 1", reviewer.callCount)
@@ -356,25 +375,30 @@ func TestEventSummarizer_Summarize_SingleHighlightRunsFinalReview(t *testing.T) 
 	assertContains(t, result, "Simple Event")
 }
 
-func TestEventSummarizer_Summarize_InvalidJSON_ReturnsEmpty(t *testing.T) {
+// 요약 실패는 빈 요약이 아니라 오류다(DEC-20260926-hololive-source-fallbacks-retirement).
+func TestEventSummarizer_Summarize_InvalidJSON_ReturnsError(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "not json"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1, Title: "test"}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+	if err == nil {
+		t.Fatalf("Summarize() = %q, nil error; want invalid JSON error", result)
+	}
 
 	if result != "" {
-		t.Errorf("expected empty on invalid JSON, got %q", result)
+		t.Errorf("expected empty text on invalid JSON, got %q", result)
 	}
 }
 
-func TestEventSummarizer_SummarizeResult_InvalidJSON_IsEmpty(t *testing.T) {
+func TestEventSummarizer_SummarizeResult_InvalidJSON_ReturnsError(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "not json"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
-	result := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "test"}}, SummaryTypeWeekly, "2026-02-15")
-	if result.ResultType != sharedmodel.SummaryResultEmpty {
-		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultEmpty)
+	result, err := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "test"}}, SummaryTypeWeekly, "2026-02-15")
+	if err == nil {
+		t.Fatalf("SummarizeResult() = %#v, nil error; want invalid JSON error", result)
 	}
 
 	if result.Text != "" {
@@ -382,15 +406,15 @@ func TestEventSummarizer_SummarizeResult_InvalidJSON_IsEmpty(t *testing.T) {
 	}
 }
 
-func TestEventSummarizer_Summarize_EmptyHighlights_ReturnsEmpty(t *testing.T) {
+func TestEventSummarizer_Summarize_EmptyHighlights_ReturnsError(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: `{"highlights":[]}`}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1, Title: "test"}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
 
-	if result != "" {
-		t.Errorf("expected empty on empty highlights, got %q", result)
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
+	if !errors.Is(err, errEmptyMajorEventSummary) {
+		t.Fatalf("Summarize() = (%q, %v), want empty summary error", result, err)
 	}
 }
 
@@ -398,7 +422,11 @@ func TestEventSummarizer_Summarize_NilLLM_ReturnsEmpty(t *testing.T) {
 	summarizer := NewEventSummarizer(nil, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "key")
+
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "key")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	if result != "" {
 		t.Errorf("expected empty for nil LLM, got %q", result)
@@ -408,7 +436,11 @@ func TestEventSummarizer_Summarize_NilLLM_ReturnsEmpty(t *testing.T) {
 func TestEventSummarizer_SummarizeResult_NilLLM_IsEmpty(t *testing.T) {
 	summarizer := NewEventSummarizer(nil, nil, nil, testLogger())
 
-	result := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1}}, SummaryTypeWeekly, "key")
+	result, err := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1}}, SummaryTypeWeekly, "key")
+	if err != nil {
+		t.Fatalf("SummarizeResult() error = %v", err)
+	}
+
 	if result.ResultType != sharedmodel.SummaryResultEmpty {
 		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultEmpty)
 	}
@@ -418,7 +450,11 @@ func TestEventSummarizer_Summarize_NoEvents_ReturnsEmpty(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "should not be called"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
-	result := summarizer.Summarize(t.Context(), nil, SummaryTypeWeekly, "key")
+	result, err := summarizer.Summarize(t.Context(), nil, SummaryTypeWeekly, "key")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
+
 	if result != "" {
 		t.Errorf("expected empty for nil events, got %q", result)
 	}
@@ -483,25 +519,6 @@ func TestAssembleSummaryText_NoOngoingSectionWhenEmpty(t *testing.T) {
 		OngoingEvents: []ongoingEvent{},
 	}
 	result := assembleSummaryText(resp)
-	assertNotContains(t, result, "[기간 행사]")
-}
-
-func TestEventSummarizer_Summarize_OldOngoingNoteIgnored(t *testing.T) {
-	// 구형 응답의 ongoing_note는 더 이상 텍스트 조립에 반영하지 않는다.
-	llmJSON := `{"highlights":[{"name":"Event A","date":"3/1(토)","members":"","note":"테스트","link":""}],"ongoing_note":"카페 (~2/28) 진행 중","discovered_events":[]}`
-
-	mock := &mockSummarizer{jsonResponse: llmJSON}
-	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
-
-	events := []domain.MajorEvent{{ID: 1, Title: testEventNameA}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
-
-	if result == "" {
-		t.Fatal("expected non-empty result")
-	}
-
-	assertContains(t, result, testEventNameA)
-	assertNotContains(t, result, "카페 (~2/28) 진행 중")
 	assertNotContains(t, result, "[기간 행사]")
 }
 
@@ -762,7 +779,9 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 		summarizer := NewEventSummarizer(mock, cache, nil, testLogger())
 
 		events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
-		summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+		if _, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01"); err != nil {
+			t.Fatalf("Summarize() error = %v", err)
+		}
 
 		if !strings.Contains(cache.setKey, promptVersion) {
 			t.Errorf("cache set key %q should contain promptVersion %q", cache.setKey, promptVersion)
@@ -775,7 +794,9 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 		summarizer := NewEventSummarizer(mock, cache, nil, testLogger())
 
 		events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
-		summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+		if _, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01"); err != nil {
+			t.Fatalf("Summarize() error = %v", err)
+		}
 
 		if !strings.Contains(cache.getKey, promptVersion) {
 			t.Errorf("cache get key %q should contain promptVersion %q", cache.getKey, promptVersion)
@@ -789,7 +810,11 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 		summarizer := NewEventSummarizer(mock, cache, nil, testLogger())
 
 		events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
-		result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+
+		result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+		if err != nil {
+			t.Fatalf("Summarize() error = %v", err)
+		}
 
 		// LLM이 호출되어야 함 (캐시 miss이므로)
 		if result == "" {
@@ -954,7 +979,11 @@ func TestSummarize_KRSearchFailure_GracefulDegradation(t *testing.T) {
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Test Event"}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	if result == "" {
 		t.Fatal("expected non-empty result when KR search fails but primary succeeds")
@@ -974,7 +1003,11 @@ func TestSummarize_PrimarySearchFailure_UsesKRResults(t *testing.T) {
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Test Event"}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	if result == "" {
 		t.Fatal("expected non-empty result when primary search fails but KR succeeds")
@@ -1011,7 +1044,11 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	if result == "" {
 		t.Fatal("expected non-empty result")

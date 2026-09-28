@@ -18,7 +18,7 @@ func TestGetShorts_DoesNotEagerlyEnrichPublishedAtFromRSS(t *testing.T) {
 	shortsHTML := "<script>var ytInitialData = " + shortsJSON + ";</script>"
 	rssCalls := 0
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,

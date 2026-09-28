@@ -53,29 +53,21 @@ export MIGRATIONS_DIR="${TEST_TMP_DIR}/migrations"
 export SECRETS_DIR="${TEST_TMP_DIR}/secrets"
 export MOCK_DOCKER_LOG="${TEST_TMP_DIR}/docker.log"
 
-if DB_MAINTENANCE_OUTPUT_FILE=relative.sql \
-  "${ROOT_DIR}/scripts/runtime/db-maintenance-exec.sh" true >"${TEST_TMP_DIR}/relative.out" 2>&1; then
-  fail "relative rollback output path was accepted"
-fi
-grep -Fq 'must be an absolute path' "${TEST_TMP_DIR}/relative.out" \
-  || fail "relative path rejection was not explicit"
-
-existing="${TEST_TMP_DIR}/output/existing.sql"
-: >"${existing}"
-if DB_MAINTENANCE_OUTPUT_FILE="${existing}" \
-  "${ROOT_DIR}/scripts/runtime/db-maintenance-exec.sh" true >"${TEST_TMP_DIR}/existing.out" 2>&1; then
-  fail "existing rollback output file was accepted"
-fi
-grep -Fq 'must be a new file' "${TEST_TMP_DIR}/existing.out" \
-  || fail "existing path rejection was not explicit"
-
-output="${TEST_TMP_DIR}/output/rollback.sql"
-DB_MAINTENANCE_OUTPUT_FILE="${output}" \
+# rollback artifact 출력 마운트(DB_MAINTENANCE_OUTPUT_FILE)는 유일한 사용처였던 preflight-114-restore.sh와 함께
+# 지웠다(DEC-20260926-hololive-retired-rollback-tooling, stack-audit 2026-09-26 T19). 남은 계약은 읽기 전용 마운트뿐이다.
+DB_MAINTENANCE_OUTPUT_FILE="${TEST_TMP_DIR}/output/rollback.sql" \
   "${ROOT_DIR}/scripts/runtime/db-maintenance-exec.sh" true
 
-[[ -f "${output}" ]] || fail "rollback output file was not created"
-[[ "$(stat -c '%a' -- "${output}")" == "600" ]] || fail "rollback output file mode is not 0600"
-grep -Fq -- "-v ${output}:/maintenance-output/rollback.sql:rw" "${MOCK_DOCKER_LOG}" \
-  || fail "rollback output was not mounted as the exact precreated file"
+[[ ! -e "${TEST_TMP_DIR}/output/rollback.sql" ]] || fail "retired rollback output file was created"
+grep -Fq -- "-v ${MIGRATIONS_DIR}:/migrations:ro" "${MOCK_DOCKER_LOG}" \
+  || fail "migrations were not mounted read-only"
+grep -Fq -- "-v ${SECRETS_DIR}/postgres:/run/hololive-bot/postgres:ro" "${MOCK_DOCKER_LOG}" \
+  || fail "postgres service files were not mounted read-only"
+if grep -Fq -- "/maintenance-output" "${MOCK_DOCKER_LOG}"; then
+  fail "retired rollback output mount is still present"
+fi
+if grep -Eq -- '-v [^ ]+:rw' "${MOCK_DOCKER_LOG}"; then
+  fail "maintenance container received a writable host mount"
+fi
 
-echo "[PASS] db maintenance rollback output is explicit, new, mode 0600, and file-mounted"
+echo "[PASS] db maintenance container mounts only read-only inputs"

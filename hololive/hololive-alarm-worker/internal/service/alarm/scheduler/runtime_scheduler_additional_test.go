@@ -141,18 +141,6 @@ func TestAlarmCacheRecoveryInterval(t *testing.T) {
 	assert.Equal(t, time.Minute, alarmCacheRecoveryInterval)
 }
 
-func TestRuntimeSchedulerStart_NilContext(t *testing.T) {
-	t.Parallel()
-
-	s := &RuntimeScheduler{
-		logger: testSchedulerLogger(),
-	}
-
-	var nilCtx context.Context
-
-	require.Error(t, s.Start(nilCtx))
-}
-
 func TestRuntimeSchedulerRunIterations(t *testing.T) {
 	t.Parallel()
 
@@ -231,7 +219,7 @@ func testYouTubeIterationSyncsTargetMinutes(t *testing.T) {
 func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 	t.Parallel()
 
-	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, testSchedulerLogger(), []int{5, 3, 1})
 	require.NoError(t, err)
 
 	youtubeUpdater := &targetMinutesUpdaterStub{}

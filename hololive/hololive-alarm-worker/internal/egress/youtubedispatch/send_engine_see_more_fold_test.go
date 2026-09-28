@@ -36,10 +36,6 @@ func (*seeMoreFoldEgressClient) SendMarkdown(context.Context, string, string, ..
 	return nil, errors.New("markdown lane is not configured")
 }
 
-func (*seeMoreFoldEgressClient) SendKaringContentList(context.Context, iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
-	return nil, errors.New("karing lane is not configured")
-}
-
 func (*seeMoreFoldEgressClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
 	return nil, errors.New("reply status is not used by the text lane")
 }

@@ -326,9 +326,8 @@ func lockSessionProvisioning() (func() error, error) {
 // dropDatabase는 격리 데이터베이스를 제거한다(cleanup 경로). 실패해도 진행하는 best-effort
 // 경로지만, 에러를 반환하여 호출자가 visible하게 보고할 수 있게 한다.
 //
-// 우선 DROP DATABASE ... WITH (FORCE)(PG 13+)로 잔여 연결까지 끊고 제거한다. FORCE가
-// 실패하면(PG<13 syntax 미지원 또는 그 외) 잔여 연결을 pg_terminate_backend로 정리한 뒤
-// 일반 DROP DATABASE를 시도한다.
+// 테스트 서버는 PostgreSQL 18이므로 WITH (FORCE)만 사용하고 원래 오류를 보존한다.
+// PG<13용 재시도는 같은 만료 context를 사용해 최초 실패를 가릴 수 있다.
 func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -339,22 +338,8 @@ func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 	}
 	defer pool.Close()
 
-	if _, forceErr := pool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", quoteIdent(dbName))); forceErr == nil {
-		return nil
-	}
-
-	// FORCE 미지원/실패 fallback: 잔여 연결을 끊고 일반 DROP을 시도한다.
-	if _, termErr := pool.Exec(ctx,
-		`SELECT pg_terminate_backend(pid)
-		 FROM pg_stat_activity
-		 WHERE datname = $1 AND pid <> pg_backend_pid()`,
-		dbName,
-	); termErr != nil {
-		return fmt.Errorf("terminate backends on %s: %w", dbName, termErr)
-	}
-
-	if _, dropErr := pool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", quoteIdent(dbName))); dropErr != nil {
-		return fmt.Errorf("drop database %s: %w", dbName, dropErr)
+	if _, dropErr := pool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", quoteIdent(dbName))); dropErr != nil {
+		return fmt.Errorf("drop database %s with force: %w", dbName, dropErr)
 	}
 
 	return nil

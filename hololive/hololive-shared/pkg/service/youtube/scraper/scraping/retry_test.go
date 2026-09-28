@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -98,50 +97,6 @@ func TestIsTimeoutFailureNestedTypedNil(t *testing.T) {
 	})
 }
 
-type stubDialer struct {
-	delay time.Duration
-	conn  net.Conn
-	err   error
-}
-
-func (d *stubDialer) Dial(_, _ string) (net.Conn, error) {
-	if d.delay > 0 {
-		time.Sleep(d.delay)
-	}
-
-	if d.err != nil {
-		return nil, d.err
-	}
-
-	return d.conn, nil
-}
-
-type trackingConn struct {
-	net.Conn
-
-	closeCh   chan struct{}
-	closeOnce sync.Once
-}
-
-func newTrackingConn(conn net.Conn) *trackingConn {
-	return &trackingConn{
-		Conn:    conn,
-		closeCh: make(chan struct{}),
-	}
-}
-
-func (c *trackingConn) Close() error {
-	c.closeOnce.Do(func() {
-		close(c.closeCh)
-	})
-
-	if err := c.Conn.Close(); err != nil {
-		return fmt.Errorf("close: %w", err)
-	}
-
-	return nil
-}
-
 type retry5xxCase struct {
 	name           string
 	statusSequence []int
@@ -205,7 +160,7 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := NewClient(
+			client := NewClient(testYouTubeConfig(),
 				WithHTTPClient(server.Client()),
 				WithRateLimiter(ratelimiter.New(0)),
 				WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -240,7 +195,7 @@ func TestNetHTTPPageFetcher_StatusBodyAndHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -262,7 +217,7 @@ func TestFetchPage_NoRetryOn429(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -287,7 +242,7 @@ func TestFetchPage_NoRetryOn403(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -316,7 +271,7 @@ func TestFetchPage_NoRetryOn4xx(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := NewClient(
+			client := NewClient(testYouTubeConfig(),
 				WithHTTPClient(server.Client()),
 				WithRateLimiter(ratelimiter.New(0)),
 				WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -339,7 +294,7 @@ func TestGetShorts_UsesSingleAttemptHighFrequencyPolicy(t *testing.T) {
 	shortsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Shorts","content":{"richGridRenderer":{"contents":[]}}}}]}}}`
 	shortsHTML := "<script>var ytInitialData = " + shortsJSON + ";</script>"
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				assert.Equal(t, "/channel/UC_TEST/shorts", req.URL.Path)
@@ -441,7 +396,7 @@ func TestFetchPage_TransportRetryClassification(t *testing.T) {
 				Timeout: 2 * time.Second,
 			}
 
-			client := NewClient(
+			client := NewClient(testYouTubeConfig(),
 				WithHTTPClient(httpClient),
 				WithRateLimiter(ratelimiter.New(0)),
 				WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -471,99 +426,6 @@ func TestFetchPage_TransportRetryClassification(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.expectErrContain)
 			}
 		})
-	}
-}
-
-func TestClient_SetProxyEnabled_NoProxyConfigured(t *testing.T) {
-	client := NewClient(
-		WithRateLimiter(ratelimiter.New(0)),
-		WithUAProvider(ua.NewStaticProvider("test-agent")),
-		WithProxy(ProxyConfig{Enabled: false, URL: ""}),
-	)
-
-	applied := client.SetProxyEnabled(true)
-	assert.False(t, applied)
-	assert.False(t, client.ProxyEnabled())
-}
-
-func TestClient_SetProxyEnabled_CustomHTTPClient_NoOp(t *testing.T) {
-	httpClient := &http.Client{
-		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("<html>ytInitialData = {};</html>")),
-			}, nil
-		}),
-		Timeout: 2 * time.Second,
-	}
-
-	client := NewClient(
-		WithHTTPClient(httpClient),
-		WithRateLimiter(ratelimiter.New(0)),
-		WithUAProvider(ua.NewStaticProvider("test-agent")),
-		WithProxy(ProxyConfig{Enabled: true, URL: "socks5://proxy.internal:1080"}),
-	)
-
-	applied := client.SetProxyEnabled(false)
-	assert.False(t, applied)
-	assert.False(t, client.ProxyEnabled())
-}
-
-func TestDialSOCKS5WithContextFallback_CancelClosesConn(t *testing.T) {
-	clientSide, peerSide := net.Pipe()
-	tracking := newTrackingConn(clientSide)
-
-	t.Cleanup(func() {
-		mustClose(t, tracking)
-		mustClose(t, peerSide)
-	})
-
-	dialer := &stubDialer{
-		delay: 50 * time.Millisecond,
-		conn:  tracking,
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
-	defer cancel()
-
-	conn, err := dialSOCKS5WithContextFallback(ctx, dialer, "tcp", "example.com:443")
-	require.Error(t, err)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Nil(t, conn)
-
-	select {
-	case <-tracking.closeCh:
-	case <-time.After(300 * time.Millisecond):
-		t.Fatal("expected dial fallback to close connection on context cancel")
-	}
-}
-
-func TestDialSOCKS5WithContextFallback_SuccessKeepsConnOpen(t *testing.T) {
-	clientSide, peerSide := net.Pipe()
-	tracking := newTrackingConn(clientSide)
-
-	t.Cleanup(func() {
-		mustClose(t, tracking)
-		mustClose(t, peerSide)
-	})
-
-	dialer := &stubDialer{
-		delay: 5 * time.Millisecond,
-		conn:  tracking,
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
-
-	conn, err := dialSOCKS5WithContextFallback(ctx, dialer, "tcp", "example.com:443")
-	require.NoError(t, err)
-	require.NotNil(t, conn)
-
-	select {
-	case <-tracking.closeCh:
-		t.Fatal("connection should remain open on successful dial")
-	default:
 	}
 }
 
@@ -723,7 +585,7 @@ func TestFetchPage_504RetryNotBlockedByTransientCooldown(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -745,7 +607,7 @@ func TestFetchPageOnce_HardCooldownOnly(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -887,9 +749,9 @@ func TestRateLimiter_ConcurrentCancelStress(t *testing.T) {
 func TestSharedRL_PointerIdentity(t *testing.T) {
 	rl := ratelimiter.New(3 * time.Second)
 
-	c1 := NewClient(WithRateLimiter(rl), WithUAProvider(ua.NewStaticProvider("a")))
-	c2 := NewClient(WithRateLimiter(rl), WithUAProvider(ua.NewStaticProvider("b")))
-	c3 := NewClient(WithRateLimiter(rl), WithUAProvider(ua.NewStaticProvider("c")))
+	c1 := NewClient(testYouTubeConfig(), WithRateLimiter(rl), WithUAProvider(ua.NewStaticProvider("a")))
+	c2 := NewClient(testYouTubeConfig(), WithRateLimiter(rl), WithUAProvider(ua.NewStaticProvider("b")))
+	c3 := NewClient(testYouTubeConfig(), WithRateLimiter(rl), WithUAProvider(ua.NewStaticProvider("c")))
 
 	require.Same(t, c1.rateLimiter, c2.rateLimiter, "c1 and c2 should share same RateLimiter")
 	require.Same(t, c2.rateLimiter, c3.rateLimiter, "c2 and c3 should share same RateLimiter")
@@ -906,7 +768,7 @@ func TestFetchPage_ConcurrentTransientErrors_NoAmplification(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -948,7 +810,7 @@ func TestFetchPage_ContextCancel_NoTransientRecord(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -982,7 +844,7 @@ func TestFetchPageOnce_Headers(t *testing.T) {
 	chromeUA := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/141.0.0.0 Safari/537.36"
 	// StaticProvider는 CH를 생성하지 않으므로, RotatingProvider 대신 직접 snap을 검증할 수 없음
 	// 대신 StaticProvider로 기본 헤더만 검증
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider(chromeUA)),
@@ -1025,7 +887,7 @@ func TestFetchPageOnce_ClientHintsHeaders(t *testing.T) {
 		Accept:          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 	}
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(&fixedSnapshotProvider{snap: snap}),
@@ -1081,7 +943,7 @@ func TestFetchPage_RateLimitUsesRetryAfterCooldown(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(server.Client()),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),

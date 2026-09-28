@@ -1,15 +1,19 @@
 package migrationrunner
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
@@ -518,6 +522,71 @@ func TestCurrentSchemaSupportsLegacyTerminalWriter(t *testing.T) {
 	assertLegacyTerminalWriterCompatible(t, pool, "legacy-dead", "dead")
 }
 
+// 호환 scrub은 조용히 고치지 않고 이전 writer가 돌고 있다는 WARNING을 남긴다(223). 현재 writer처럼 같은 UPDATE에서
+// payload를 비우면 경고하지 않는다.
+func TestTerminalPayloadScrubTriggerWarnsOnLegacyWriter(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	runMigrations(t, pool, migrations.FS, "")
+
+	config := pool.Config().ConnConfig.Copy()
+
+	var (
+		mu       sync.Mutex
+		warnings []string
+	)
+
+	config.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if notice.Severity == "WARNING" {
+			warnings = append(warnings, notice.Message)
+		}
+	}
+
+	conn, err := pgx.ConnectConfig(t.Context(), config)
+	if err != nil {
+		t.Fatalf("connect notice listener: %v", err)
+	}
+
+	t.Cleanup(func() {
+		if closeErr := conn.Close(context.WithoutCancel(t.Context())); closeErr != nil {
+			t.Errorf("close notice listener: %v", closeErr)
+		}
+	})
+
+	for _, messageID := range []string{"current-writer", "legacy-writer"} {
+		if _, err := conn.Exec(t.Context(), `
+			INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload)
+			VALUES ($1, 'room', 'room', '{"message":"retained"}'::jsonb)`, messageID); err != nil {
+			t.Fatalf("insert %s: %v", messageID, err)
+		}
+	}
+
+	if _, err := conn.Exec(t.Context(), `UPDATE bot_webhook_inbox SET status = 'succeeded', payload = '{}'::jsonb WHERE message_id = 'current-writer'`); err != nil {
+		t.Fatalf("current writer update: %v", err)
+	}
+
+	snapshot := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return slices.Clone(warnings)
+	}
+
+	if current := snapshot(); len(current) != 0 {
+		t.Fatalf("current writer produced scrub warnings %q, want none", current)
+	}
+
+	if _, err := conn.Exec(t.Context(), `UPDATE bot_webhook_inbox SET status = 'succeeded' WHERE message_id = 'legacy-writer'`); err != nil {
+		t.Fatalf("legacy writer update: %v", err)
+	}
+
+	if legacy := snapshot(); len(legacy) != 1 || !strings.Contains(legacy[0], "compatibility trigger") {
+		t.Fatalf("legacy writer warnings = %q, want one compatibility trigger warning", legacy)
+	}
+}
+
 func TestBeginWrappedFileWithConcurrentlyIsRejected(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
@@ -843,10 +912,8 @@ func TestRealManifestCheckpointedAt140WithoutBaselineChecksumRefuses(t *testing.
 		t.Fatalf("remove pre-R2 baseline checksum fixture: %v", err)
 	}
 
-	prefillEpoch2LegacyContract(t, pool)
-
 	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
-	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" is recorded in schema_migrations but its checksum is missing") {
+	if err == nil || !strings.Contains(err.Error(), "epoch baseline "+epoch2Baseline+" is recorded without its checksum") {
 		t.Fatalf("Run() error = %v, want pre-R2 baseline without checksum to be refused now that backfill is retired", err)
 	}
 
@@ -866,7 +933,6 @@ func TestRealManifestPartialAt160AppliesOnlyRemainingSuffix(t *testing.T) {
 	}
 
 	runMigrations(t, pool, partialFS, "")
-	prefillEpoch2LegacyContract(t, pool)
 
 	entries := manifestEntries(t)
 
@@ -880,11 +946,11 @@ func TestRealManifestPartialAt160AppliesOnlyRemainingSuffix(t *testing.T) {
 	}
 
 	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", true)
-	assertMigrationRecorded(t, pool, epoch2LegacyLedgerCleanup, true)
-	assertLegacyLedgerCleared(t, pool)
 }
 
-func TestRealManifestCurrentBeforeCleanupRemovesLegacyResidue(t *testing.T) {
+// epoch-1 ledger 잔재를 182가 같은 실행에서 지우도록 허용하던 창은 닫혔다(DEC-20260926-hololive-retired-rollback-tooling).
+// 182 적용 전 DB라도 잔재가 있으면 SQL을 실행하기 전에 거부한다.
+func TestRealManifestLegacyResidueBeforeCleanupRefuses(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	entries := manifestEntries(t)
 	cleanupIndex := slices.Index(entries, epoch2LegacyLedgerCleanup)
@@ -896,22 +962,12 @@ func TestRealManifestCurrentBeforeCleanupRemovesLegacyResidue(t *testing.T) {
 	runMigrations(t, pool, realManifestThrough(t, entries[cleanupIndex-1]), "")
 	prefillEpoch2LegacyContract(t, pool)
 
-	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
-	if err != nil {
-		t.Fatalf("Run() error = %v, want pending cleanup to be tolerated and applied", err)
+	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if err == nil || !strings.Contains(err.Error(), "entries outside the current manifest") {
+		t.Fatalf("Run() error = %v, want epoch-1 ledger residue to be refused before the cleanup runs", err)
 	}
 
-	if result.Applied != len(entries)-cleanupIndex || result.Skipped != cleanupIndex || result.Total != len(entries) {
-		t.Fatalf("result = %+v, want applied=%d skipped=%d total=%d", result, len(entries)-cleanupIndex, cleanupIndex, len(entries))
-	}
-
-	assertMigrationRecorded(t, pool, epoch2LegacyLedgerCleanup, true)
-	assertLegacyLedgerCleared(t, pool)
-
-	result = runMigrations(t, pool, migrations.FS, "")
-	if result.Applied != 0 || result.Skipped != len(entries) || result.Total != len(entries) {
-		t.Fatalf("second result = %+v, want applied=0 skipped=%d total=%d", result, len(entries), len(entries))
-	}
+	assertMigrationRecorded(t, pool, epoch2LegacyLedgerCleanup, false)
 }
 
 func TestRealManifestLegacyResidueAfterCleanupRefuses(t *testing.T) {
@@ -920,7 +976,7 @@ func TestRealManifestLegacyResidueAfterCleanupRefuses(t *testing.T) {
 	prefillEpoch2LegacyContract(t, pool)
 
 	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
-	if err == nil || !strings.Contains(err.Error(), "after "+epoch2LegacyLedgerCleanup+" was applied") {
+	if err == nil || !strings.Contains(err.Error(), "entries outside the current manifest") {
 		t.Fatalf("Run() error = %v, want unknown residue after the cleanup to be refused", err)
 	}
 }
@@ -941,7 +997,8 @@ func TestRealManifestEditedBaselineFailsChecksum(t *testing.T) {
 	}
 }
 
-func TestR1RollbackIgnoresR2LedgerResidue(t *testing.T) {
+// epoch-1(R1) manifest로 epoch-2 ledger를 가진 DB를 다시 적용하는 rollback 창은 닫혔다. 잔재로 보고 거부한다.
+func TestR1RollbackManifestRefusesR2LedgerResidue(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	legacyFS := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 legacy.sql\n002 checkpoint.sql\n")},
@@ -961,13 +1018,9 @@ func TestR1RollbackIgnoresR2LedgerResidue(t *testing.T) {
 		}
 	}
 
-	result, err := Run(t.Context(), pool, legacyFS, Config{})
-	if err != nil {
-		t.Fatalf("R1 rollback Run() error = %v", err)
-	}
-
-	if result.Applied != 0 || result.Skipped != 2 || result.Total != 2 {
-		t.Fatalf("rollback result = %+v, want applied=0 skipped=2 total=2", result)
+	_, err := Run(t.Context(), pool, legacyFS, Config{})
+	if err == nil || !strings.Contains(err.Error(), "entries outside the current manifest") {
+		t.Fatalf("R1 rollback Run() error = %v, want R2 ledger residue to be refused", err)
 	}
 
 	assertTablePresent(t, pool, "rollback_legacy_state")
@@ -1006,21 +1059,22 @@ func TestLedgerResidueWithoutEpochBaselineRefuses(t *testing.T) {
 		t.Fatal("Run() error = nil, want refusal on ledger residue without recorded epoch baseline")
 	}
 
-	if !strings.Contains(err.Error(), "epoch baseline") {
-		t.Fatalf("Run() error = %v, want epoch-baseline refusal", err)
+	if !strings.Contains(err.Error(), "entries outside the current manifest") {
+		t.Fatalf("Run() error = %v, want ledger residue refusal", err)
 	}
 
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 
 	_, err = Run(t.Context(), pool, epochFS, Config{BaselineThrough: "001_schema_epoch2_baseline.sql"})
-	if err == nil || !strings.Contains(err.Error(), "epoch baseline") {
+	if err == nil || !strings.Contains(err.Error(), "entries outside the current manifest") {
 		t.Fatalf("Run() with BaselineThrough error = %v, want residue refusal to resist the watermark knob", err)
 	}
 
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
 
-func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
+// epoch-1 checkpoint가 baseline을 미리 기록한 DB도 manifest 밖 잔재가 있으면 거부한다(checkpoint 경로 종료).
+func TestLedgerResidueWithChecksummedEpochBaselineRefuses(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
 	const testBaseline = "001_schema_test_baseline.sql"
@@ -1050,13 +1104,9 @@ func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
 		t.Fatalf("record epoch baseline checksum: %v", err)
 	}
 
-	result, err := Run(t.Context(), pool, epochFS, Config{})
-	if err != nil {
-		t.Fatalf("Run() error = %v, want checkpointed DB to proceed", err)
-	}
-
-	if result.Applied != 0 || result.Skipped != 1 || result.Total != 1 {
-		t.Fatalf("result = %+v, want applied=0 skipped=1 total=1", result)
+	_, err := Run(t.Context(), pool, epochFS, Config{})
+	if err == nil || !strings.Contains(err.Error(), "entries outside the current manifest") {
+		t.Fatalf("Run() error = %v, want checkpointed DB with ledger residue to be refused", err)
 	}
 
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
@@ -1068,12 +1118,15 @@ func TestEpoch2LegacyResidueWithoutBaselineChecksumRefuses(t *testing.T) {
 	prefillLedger(t, pool, []string{epoch2Baseline})
 
 	_, err := Run(t.Context(), pool, epoch2BaselineProbeFS(), Config{})
-	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" is recorded in schema_migrations but its checksum is missing") {
-		t.Fatalf("Run() error = %v, want checkpointed ledger without baseline checksum to be refused", err)
+	if err == nil || !strings.Contains(err.Error(), "entries outside the current manifest") {
+		t.Fatalf("Run() error = %v, want epoch-2 legacy ledger residue to be refused", err)
 	}
 
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
+
+// 182는 manifest에 남은 epoch-1 ledger 정리 migration이다. 러너는 더 이상 이 이름으로 분기하지 않고 테스트만 참조한다.
+const epoch2LegacyLedgerCleanup = "182_epoch2_legacy_ledger_cleanup.sql"
 
 func epoch2BaselineProbeFS() fstest.MapFS {
 	return fstest.MapFS{
@@ -1133,29 +1186,6 @@ func prefillEpoch2LegacyContract(t *testing.T, pool *pgxpool.Pool) {
 	}
 
 	prefillLedger(t, pool, names)
-}
-
-func assertLegacyLedgerCleared(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	fixture := legacyLedgerFixture(t)
-	names := make([]string, len(fixture))
-
-	for index, entry := range fixture {
-		names[index] = entry.name
-	}
-
-	var ledgered, checksummed int
-
-	if err := pool.QueryRow(t.Context(), `SELECT
-		(SELECT count(*) FROM schema_migrations WHERE filename = ANY($1)),
-		(SELECT count(*) FROM schema_migration_checksums WHERE filename = ANY($1))`, names).Scan(&ledgered, &checksummed); err != nil {
-		t.Fatalf("count legacy ledger residue: %v", err)
-	}
-
-	if ledgered != 0 || checksummed != 0 {
-		t.Fatalf("legacy ledger residue = %d ledger rows / %d checksum rows, want 0 / 0", ledgered, checksummed)
-	}
 }
 
 func TestEpochLedgerWithoutResidueProceeds(t *testing.T) {

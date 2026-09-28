@@ -36,6 +36,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 )
 
 func mustNewClient(t *testing.T, baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
@@ -61,7 +62,7 @@ func TestNewClientDoesNotFallbackToChatCompletionsOnUnsupportedResponses(t *test
 
 	client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler), WithWebSearch(false))
 
-	_, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema())
+	_, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema())
 	if err == nil {
 		t.Fatal("GenerateJSON() error = nil, want Responses failure without Chat Completions fallback")
 	}
@@ -342,7 +343,11 @@ func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
 	}
 	schema := testObjectSchema()
 
-	got, err := client.GenerateJSON(t.Context(), "system", "user", schema)
+	got, err := client.GenerateJSON(t.Context(), openaipreset.PromptLayers{
+		Invariant: "invariant rules",
+		Developer: "developer rules",
+		User:      testWireUserInput,
+	}, schema)
 	if err != nil {
 		t.Fatalf("GenerateJSON() error = %v", err)
 	}
@@ -353,6 +358,10 @@ func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
 
 	if !generator.called {
 		t.Fatal("shared generator was not called")
+	}
+
+	if generator.req.InvariantPrompt != "invariant rules" || generator.req.DeveloperPrompt != "developer rules" || generator.req.UserPrompt != testWireUserInput {
+		t.Fatalf("request layers = invariant:%q developer:%q user:%q", generator.req.InvariantPrompt, generator.req.DeveloperPrompt, generator.req.UserPrompt)
 	}
 
 	if len(tracker.tokens) == 0 || tracker.tokens[0] != 9 || tracker.models[0] != "gpt-returned" {
@@ -371,7 +380,7 @@ func TestOpenAIClientGenerateJSON_PreservesGemini37FlashHigh(t *testing.T) {
 		logger:          slog.New(slog.DiscardHandler),
 	}
 
-	if _, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema()); err != nil {
+	if _, err := client.GenerateJSON(t.Context(), testPromptLayers(), testObjectSchema()); err != nil {
 		t.Fatalf("GenerateJSON() error = %v", err)
 	}
 

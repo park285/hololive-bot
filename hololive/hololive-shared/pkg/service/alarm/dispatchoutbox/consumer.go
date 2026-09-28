@@ -66,14 +66,16 @@ func WithRecoveryBatchSize(size int) ConsumerOption {
 	}
 }
 
-func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOption) *Consumer {
+// NewConsumer는 WithWorkerID가 없으면 "dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면
+// 다른 이름으로 바꾸지 않고 생성 오류다(DEC-20260926-hololive-legacy-env-config-retirement).
+func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *slog.Logger, opts ...ConsumerOption) (*Consumer, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	consumer := &Consumer{
 		repository:        repository,
-		workerID:          util.InstanceID("dispatcher"),
+		claimReleaser:     claimReleaser,
 		lease:             60 * time.Second,
 		recoveryBatchSize: 100,
 		recoveryInterval:  30 * time.Second,
@@ -85,7 +87,16 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 		opt(consumer)
 	}
 
-	// 그룹 발송(karing 최대 13회 순차 HTTP)이 lease를 초과할 수 있어, threshold가
+	if consumer.workerID == "" {
+		workerID, err := util.InstanceID("dispatcher")
+		if err != nil {
+			return nil, fmt.Errorf("new dispatch outbox consumer: %w", err)
+		}
+
+		consumer.workerID = workerID
+	}
+
+	// 그룹 발송(Markdown handoff 상태 polling 포함)이 lease를 초과할 수 있어, threshold가
 	// lease와 같으면 진행 중인 발송을 quarantine으로 회수해 버린다.
 	if consumer.quarantineThreshold <= 0 {
 		consumer.quarantineThreshold = 3 * consumer.lease
@@ -95,7 +106,7 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 		consumer.quarantineThreshold = consumer.lease
 	}
 
-	return consumer
+	return consumer, nil
 }
 
 // DrainBatch는 만료 claim을 복구하고 최대 maxItems개 delivery를 claim해 발송 입력을 복원합니다.

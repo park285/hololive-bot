@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"fmt"
 	"time"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
@@ -29,7 +30,6 @@ type HolodexConcurrencyConfig struct {
 type OfficialScheduleConfig struct {
 	BaseURL      string
 	Timeout      time.Duration
-	CacheExpiry  time.Duration
 	PageCacheTTL time.Duration
 }
 
@@ -61,17 +61,11 @@ func DefaultHolodexOperationalConfig() HolodexConfig {
 			KeyPrefix:  "ratelimit:sliding",
 			BucketBase: "holodex:api",
 		},
-		LiveStatusFallback: HolodexLiveStatusFallbackConfig{
-			MaxPerCycle:     4,
-			WallClockBudget: 12 * time.Second,
-			DeadlineMargin:  500 * time.Millisecond,
-		},
 	}
 }
 
 func DefaultYouTubeOperationalConfig() YouTubeConfig {
 	return YouTubeConfig{
-		CacheExpiration:      2 * time.Hour,
 		MaxPageBodyBytes:     8 << 20,
 		ScraperHTTPTimeout:   15 * time.Second,
 		ScraperDialTimeout:   5 * time.Second,
@@ -79,8 +73,9 @@ func DefaultYouTubeOperationalConfig() YouTubeConfig {
 		ScraperPhaseTimeout:  45 * time.Second,
 		CacheSaveTimeout:     5 * time.Second,
 		CommunityMissingTTL:  24 * time.Hour,
-		VideoRSSBackoffTTL:   6 * time.Hour,
 		RequestInterval:      3 * time.Second,
+		// BucketBase의 youtube:producer는 퇴역 producer 이름이지만 운영 Valkey bucket 식별자라 전환 계획 없이 바꾸지
+		// 않는다(유지 사유와 변경 조건은 scraping/state_manager.go의 키 접두사 주석, stack-audit 2026-09-26 C9).
 		DistributedRateLimit: DistributedRateLimitConfig{
 			Enabled:    true,
 			Limit:      1,
@@ -95,30 +90,39 @@ func DefaultOfficialScheduleConfig() OfficialScheduleConfig {
 	return OfficialScheduleConfig{
 		BaseURL:      "https://schedule.hololive.tv",
 		Timeout:      15 * time.Second,
-		CacheExpiry:  30 * time.Minute,
 		PageCacheTTL: 15 * time.Second,
 	}
 }
 
-func LoadOfficialScheduleRuntimeConfig() OfficialScheduleRuntimeConfig {
-	defaults := DefaultOfficialScheduleConfig()
+func LoadOfficialScheduleRuntimeConfig() (OfficialScheduleRuntimeConfig, error) {
+	officialSchedule, err := loadOfficialScheduleConfig()
+	if err != nil {
+		return OfficialScheduleRuntimeConfig{}, err
+	}
+
+	maxResponseBodyBytes, err := loadMaxResponseBodyBytes()
+	if err != nil {
+		return OfficialScheduleRuntimeConfig{}, err
+	}
 
 	return OfficialScheduleRuntimeConfig{
-		OfficialSchedule: OfficialScheduleConfig{
-			BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", defaults.BaseURL),
-			Timeout:      time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(defaults.Timeout/time.Second))) * time.Second,
-			CacheExpiry:  time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", int(defaults.CacheExpiry/time.Second))) * time.Second,
-			PageCacheTTL: time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", int(defaults.PageCacheTTL/time.Second))) * time.Second,
-		},
-		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
-	}
+		OfficialSchedule:     officialSchedule,
+		MaxResponseBodyBytes: maxResponseBodyBytes,
+	}, nil
 }
 
-func (c *Config) OfficialScheduleRuntime() OfficialScheduleRuntimeConfig {
-	if c == nil {
-		return LoadOfficialScheduleRuntimeConfig()
+func loadMaxResponseBodyBytes() (int64, error) {
+	maxBytes, err := sharedenv.Int64E("MAX_RESPONSE_BODY_BYTES", DefaultMaxResponseBodyBytes)
+	if err != nil {
+		return 0, fmt.Errorf("load max response body bytes: %w", err)
 	}
 
+	return maxBytes, nil
+}
+
+// OfficialScheduleRuntime은 이미 적재한 설정에서 공식 일정 runtime 값을 꺼낸다. 설정이 nil이면 env를 다시 읽던
+// 분기는 파싱 오류를 돌려줄 수 없어 지웠다(stack audit B4). 모든 호출자는 적재한 *Config로 부른다.
+func (c *Config) OfficialScheduleRuntime() OfficialScheduleRuntimeConfig {
 	return OfficialScheduleRuntimeConfig{
 		OfficialSchedule:     c.OfficialSchedule,
 		MaxResponseBodyBytes: c.MaxResponseBodyBytes,

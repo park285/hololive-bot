@@ -198,7 +198,7 @@ func TestGetLiveStreamsByOrg_ReturnsErrorAndSkipsCacheWhenAllSourcesFail(t *test
 	}))
 	t.Cleanup(scraperServer.Close)
 
-	scraperService := newScraperServiceForTest(scraperServer.Client(), slog.Default(), scraperServer.URL, nil)
+	scraperService := newScraperServiceForTest(scraperServer.Client(), slog.Default(), scraperServer.URL)
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
 	streams, err := service.GetLiveStreamsByOrg(t.Context(), constants.HolodexAPIParams.OrgHololive)

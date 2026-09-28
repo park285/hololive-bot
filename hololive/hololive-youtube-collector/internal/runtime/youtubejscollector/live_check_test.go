@@ -26,7 +26,7 @@ func TestChannelLiveJobsEmitOnlyOwnKind(t *testing.T) {
 
 	loadJSON(t, "channel.json", &fake.result)
 
-	snapshot, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t, 1))
+	snapshot, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestChannelLiveRunnerDoesNotPublishFailedSnapshot(t *testing.T) {
 
 	fake := &channelFake{err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "channel tab timeout")}
 
-	result, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t, 1))
+	result, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t))
 	if err == nil || collecterr.ClassOf(err) != collecterr.ClassTimeout || !result.IsZero() || fake.checkCalls != 0 {
 		t.Fatalf("failed snapshot result=%#v err=%v check calls=%d", result, err, fake.checkCalls)
 	}

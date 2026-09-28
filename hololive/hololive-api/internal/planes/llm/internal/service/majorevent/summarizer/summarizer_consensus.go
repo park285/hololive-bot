@@ -27,6 +27,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -134,8 +136,10 @@ func (s *EventSummarizer) reviewSummary(
 
 	raw, err := s.reviewer.GenerateJSON(
 		ctx,
-		reviewSummarySystemPrompt(),
-		buildReviewSummaryUserPrompt(events, summaryType, periodKey, string(primaryJSON)),
+		openaipreset.PromptLayers{
+			Developer: reviewSummarySystemPrompt(),
+			User:      buildReviewSummaryUserPrompt(events, summaryType, periodKey, string(primaryJSON)),
+		},
 		reviewSummarySchema(),
 	)
 	if err != nil {
@@ -168,8 +172,10 @@ func (s *EventSummarizer) adjudicateSummary(
 
 	raw, err := s.adjudicator.GenerateJSON(
 		ctx,
-		adjudicateSummarySystemPrompt(),
-		buildAdjudicateSummaryUserPrompt(events, summaryType, periodKey, searchContext, string(primaryJSON), string(verdictJSON)),
+		openaipreset.PromptLayers{
+			Developer: adjudicateSummarySystemPrompt(),
+			User:      buildAdjudicateSummaryUserPrompt(events, summaryType, periodKey, searchContext, string(primaryJSON), string(verdictJSON)),
+		},
 		summaryResponseSchema(),
 	)
 	if err != nil {
@@ -207,8 +213,10 @@ func (s *EventSummarizer) runFinalOutputReview(
 
 	raw, err := s.reviewer.GenerateJSON(
 		reviewCtx,
-		finalOutputReviewSystemPrompt(),
-		buildFinalOutputReviewUserPrompt(events, summaryType, periodKey, trimmed),
+		openaipreset.PromptLayers{
+			Developer: finalOutputReviewSystemPrompt(),
+			User:      buildFinalOutputReviewUserPrompt(events, summaryType, periodKey, trimmed),
+		},
 		finalOutputReviewSchema(),
 	)
 	if err != nil {

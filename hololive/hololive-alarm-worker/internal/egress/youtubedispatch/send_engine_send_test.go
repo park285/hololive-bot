@@ -1239,7 +1239,9 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsResult(t *testing.T)
 	}
 }
 
-func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAudit(t *testing.T) {
+// 시도 telemetry는 TransitionStore가 전이 트랜잭션 안에서 한 번 기록한다(DEC-20260926-hololive-delivery-telemetry-single-path).
+// 발송 경로는 발송 방식만 넘기고, commit 뒤 직접 audit 로그나 telemetry enqueue를 남기지 않는다.
+func TestDispatchDeliveryRows_PerRoomSuccessPassesPerRoomModeToTransition(t *testing.T) {
 	t.Parallel()
 
 	sender := &testSender{failRoom: map[string]bool{}}
@@ -1256,56 +1258,21 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAudit(t *testing.
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
-	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)
-	if len(entries) != 1 {
-		t.Fatalf("audit entry count = %d, want 1", len(entries))
+	spy, ok := d.send.transition.(*lifecycleTransitionSpy)
+	if !ok {
+		t.Fatalf("transition = %T, want *lifecycleTransitionSpy", d.send.transition)
 	}
 
-	assertSendLogStringField(t, entries[0], deliveryAuditContentIDLogField, testShortOne)
-	assertSendLogStringField(t, entries[0], deliveryAuditPostIDLogField, "short:"+testShortOne)
-	assertSendLogStringField(t, entries[0], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
-	assertSendLogStringField(t, entries[0], deliveryAuditSendResultLogField, sendResultSuccess)
-	assertSendLogStringField(t, entries[0], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entries[0], deliveryAuditModeLogField, deliveryModePerRoom)
-	assertSendLogStringField(t, entries[0], deliveryDedupeKeyLogField, testDedupeKeyShortOne)
-	assertSendLogStringField(t, entries[0], logschema.FieldRoomID, testRoom1)
-	assertSendLogSentAtField(t, entries[0])
-}
-
-func TestDispatchDeliveryRows_AuditUsesDetectionPostIDFieldSchema(t *testing.T) {
-	t.Parallel()
-
-	sender := &testSender{failRoom: map[string]bool{}}
-	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
-
-	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {
-			ID:        1,
-			ChannelID: testChannelCh1,
-			Kind:      domain.OutboxKindCommunityPost,
-			ContentID: "post-canonical",
-			Payload:   `{"canonical_post_id":"post-canonical","post_id":"post-resource","content_text":"커뮤니티"}`,
-		},
-	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
-
-	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
-
-	if len(result.SuccessDeliveryIDs) != 1 {
-		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
+	if got := spy.recordedModes(); !sameStrings(got, []string{"complete_sent:" + deliveryModePerRoom}) {
+		t.Fatalf("transition modes = %#v, want complete_sent:%s", got, deliveryModePerRoom)
 	}
 
-	entry := findLogEntryByMessage(t, logBuffer, deliveryAuditLogMessage)
-	if _, exists := entry[logschema.FieldPostID]; !exists {
-		t.Fatalf("audit log missing %q field: %#v", logschema.FieldPostID, entry)
-	}
-
-	if got := entry[logschema.FieldPostID]; got != "post-canonical" {
-		t.Fatalf("audit post_id = %#v, want %q", got, "post-canonical")
+	if entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage); len(entries) != 0 {
+		t.Fatalf("send-time audit entry count = %d, want 0 (telemetry is emitted from the persisted buffer)", len(entries))
 	}
 }
 
-func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.T) {
+func TestDispatchDeliveryRows_GroupedFailurePassesGroupedModeToTransition(t *testing.T) {
 	t.Parallel()
 
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxCommunityGroup, "{{range .Items}}{{.ContentText}} {{.URL}}\n{{end}}")
@@ -1327,34 +1294,17 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
-	entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage)
-	if len(entries) != 2 {
-		t.Fatalf("audit entry count = %d, want 2", len(entries))
+	spy, ok := d.send.transition.(*lifecycleTransitionSpy)
+	if !ok {
+		t.Fatalf("transition = %T, want *lifecycleTransitionSpy", d.send.transition)
 	}
 
-	contentIDs := make([]string, 0, len(entries))
-	postIDs := make([]string, 0, len(entries))
-
-	for i := range entries {
-		assertSendLogStringField(t, entries[i], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-		assertSendLogStringField(t, entries[i], deliveryAuditSendResultLogField, sendResultFailure)
-		assertSendLogStringField(t, entries[i], deliveryAuditFailureReasonLogField, deliveryReasonRateLimited)
-		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-		assertSendLogStringField(t, entries[i], deliveryAuditModeLogField, deliveryModeGrouped)
-		assertSendLogSentAtField(t, entries[i])
-
-		contentID := readSendLogStringField(t, entries[i], deliveryAuditContentIDLogField)
-
-		contentIDs = append(contentIDs, contentID)
-		postIDs = append(postIDs, readSendLogStringField(t, entries[i], deliveryAuditPostIDLogField))
+	if got := spy.recordedModes(); !sameStrings(got, []string{"started_failure:" + deliveryModeGrouped}) {
+		t.Fatalf("transition modes = %#v, want started_failure:%s", got, deliveryModeGrouped)
 	}
 
-	if !sameStrings(contentIDs, []string{testPostOne, testPostTwo}) {
-		t.Fatalf("audit content IDs = %#v", contentIDs)
-	}
-
-	if !sameStrings(postIDs, []string{"community:" + testPostOne, "community:" + testPostTwo}) {
-		t.Fatalf("audit post IDs = %#v", postIDs)
+	if entries := findAllSendLogEntriesByMessage(t, logBuffer, deliveryAuditLogMessage); len(entries) != 0 {
+		t.Fatalf("send-time audit entry count = %d, want 0 (telemetry is emitted from the persisted buffer)", len(entries))
 	}
 }
 
@@ -1825,7 +1775,7 @@ func newOutcomeUnknownTestEngine(sender messagedelivery.MessageSender, renderer 
 	logger := slog.New(slog.DiscardHandler)
 	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
 	spy := &outcomeUnknownClaimSpy{}
-	auditLogger := newAuditLogger(nil, nil, logger, cfg, nil)
+	auditLogger := newAuditLogger(nil, nil, logger, cfg)
 	formatter := newMessageFormatter(renderer, cachemocks.NewLenientClient(), logger, nil, false)
 	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger, spy), &lifecycleTransitionSpy{})
 

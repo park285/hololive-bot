@@ -33,7 +33,7 @@ Iris의 플랫폼 secret master/manifest를 거쳐 전달하며 여기에서 중
 운영 변경은 승인된 효과에 한정하며, 기존 native generation·공개 ingress 설정·Osaka deploy snapshot과
 secret 복구 자료를 보존합니다. DB migration이나 봇 재시작은 이 웹 전환만으로 실행하지 않습니다.
 
-`public-pr-frontend-gate.sh`는 독립 웹/전용 credential·Docker proxy 부재와 shortlink ingress 보존을 검사합니다.
+`public-pr-frontend-gate.sh`는 웹 전용 credential·env 부재, 공유 `docker-proxy` 사용과 shortlink ingress 보존을 검사합니다. 퇴역 `admin-dashboard` 경로·서비스·전용 proxy 부재 가드는 T19(DEC-20260926-hololive-retired-rollback-tooling)에서 지웠고, 재도입은 `test-three-runtime-topology.sh` 정적 gate가 막습니다.
 루트 local-ci/pre-push 및 Compose/실제 Nginx 검사를 마친 뒤 로컬 빌드 산출물만 호스트에 전송합니다.
 공통 인증 조회·SSR·권한 거절·logout/PWA와 기존 봇·단축 링크 상태를 확인하고 임시 조회 계정은 정확한 ID로 폐기합니다.
 실제 AI 호출·메시지/푸시 발송·iOS 실기기 검증을 자동 smoke에 포함하지 않습니다.

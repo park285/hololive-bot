@@ -42,7 +42,7 @@ func TestLogin_UnknownEmailRunsBcryptComparison(t *testing.T) {
 
 	cfg.BcryptCost = 12
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), cfg)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), cfg)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

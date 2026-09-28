@@ -571,10 +571,10 @@ func TestService_OldStringNotifiedDataFailsClosed(t *testing.T) {
 	state.setRawString(key, string(oldJSON))
 
 	_, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
-	require.ErrorContains(t, err, "notified data has non-hash type")
+	require.ErrorContains(t, err, "WRONGTYPE")
 
 	err = service.MarkAsNotified(t.Context(), streamID, start, 3)
-	require.ErrorContains(t, err, "notified data has non-hash type")
+	require.ErrorContains(t, err, "WRONGTYPE")
 
 	state.mu.Lock()
 
@@ -712,7 +712,7 @@ func TestService_WasUpcomingEventNotifiedRecently_MalformedNotifiedAtTreatedAsNo
 	assert.False(t, recent)
 }
 
-func TestService_TryClaimNotification_SetNXFailureDoesNotAcquire(t *testing.T) {
+func TestService_TryClaimNotification_SetNXFailureReturnsError(t *testing.T) {
 	cacheMock := &cachemocks.Client{
 		SetNXFunc: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
 			return false, errors.New("valkey outage")
@@ -725,8 +725,9 @@ func TestService_TryClaimNotification_SetNXFailureDoesNotAcquire(t *testing.T) {
 
 	start := time.Date(2026, time.March, 4, 12, 0, 0, 0, time.UTC)
 
+	// 저장소 오류는 "이미 선점됨"(skip)과 구분되는 실패여야 한다. 호출자는 이를 sendOutcomeFailed로 기록한다.
 	key, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "valkey outage")
 	assert.False(t, acquired)
 	assert.NotEmpty(t, key)
 }
@@ -776,7 +777,8 @@ func TestService_TryClaimPair_BothAcquired(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
-	a1, a2 := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	a1, a2, err := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	require.NoError(t, err)
 	assert.True(t, a1)
 	assert.True(t, a2)
 }
@@ -790,7 +792,8 @@ func TestService_TryClaimPair_Key1AcquiredKey2Exists(t *testing.T) {
 	state.setNX["pair:k2"] = state.now().Add(10 * time.Minute)
 	state.mu.Unlock()
 
-	a1, a2 := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	a1, a2, err := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	require.NoError(t, err)
 	assert.True(t, a1)
 	assert.False(t, a2)
 }
@@ -804,7 +807,8 @@ func TestService_TryClaimPair_Key1ContendedNeverTouchesKey2(t *testing.T) {
 	state.setNX["pair:k1"] = state.now().Add(10 * time.Minute)
 	state.mu.Unlock()
 
-	a1, a2 := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	a1, a2, err := service.TryClaimPair(t.Context(), "pair:k1", "pair:k2", 5*time.Minute)
+	require.NoError(t, err)
 	assert.False(t, a1)
 	assert.False(t, a2)
 
@@ -815,7 +819,7 @@ func TestService_TryClaimPair_Key1ContendedNeverTouchesKey2(t *testing.T) {
 	assert.False(t, key2Claimed, "key1 패자가 key2를 선점하면 승자 0명 race가 재발한다")
 }
 
-func TestService_TryClaimPair_SetNXErrorDoesNotAcquire(t *testing.T) {
+func TestService_TryClaimPair_SetNXErrorReturnsError(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 
 	cacheMock.SetNXFunc = func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
@@ -824,12 +828,13 @@ func TestService_TryClaimPair_SetNXErrorDoesNotAcquire(t *testing.T) {
 
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
-	a1, a2 := service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
+	a1, a2, err := service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
+	require.ErrorContains(t, err, "pipeline broken")
 	assert.False(t, a1)
 	assert.False(t, a2)
 }
 
-func TestService_TryClaimPair_Key2ErrorDoesNotAcquireKey2(t *testing.T) {
+func TestService_TryClaimPair_Key2ErrorReturnsErrorWithKey1Acquired(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	baseSetNX := cacheMock.SetNXFunc
 
@@ -843,7 +848,9 @@ func TestService_TryClaimPair_Key2ErrorDoesNotAcquireKey2(t *testing.T) {
 
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
-	a1, a2 := service.TryClaimPair(t.Context(), "pk:k1", "pk:k2", 5*time.Minute)
+	// key1은 이미 선점됐으므로 호출자가 release할 수 있게 acquired1=true를 함께 돌려준다.
+	a1, a2, err := service.TryClaimPair(t.Context(), "pk:k1", "pk:k2", 5*time.Minute)
+	require.ErrorContains(t, err, "key2 error")
 	assert.True(t, a1)
 	assert.False(t, a2)
 }

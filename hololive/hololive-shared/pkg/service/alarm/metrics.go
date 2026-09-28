@@ -13,6 +13,7 @@ var (
 	alarmSubscriberDBFallbackTotal           *prometheus.CounterVec
 	alarmSubscriberDBSingleflightSharedTotal prometheus.Counter
 	alarmSubscriberCacheErrorTotal           *prometheus.CounterVec
+	alarmMemberNameFallbackChannels          prometheus.Gauge
 )
 
 func ensureAlarmMetrics() {
@@ -29,6 +30,10 @@ func ensureAlarmMetrics() {
 			Name: "hololive_alarm_subscriber_cache_error_total",
 			Help: "subscriber lookup best-effort cache write errors",
 		}, []string{"operation"})
+		alarmMemberNameFallbackChannels = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "hololive_alarm_member_name_fallback_channels",
+			Help: "alarm channels whose display name came from the latest alarms.member_name because members has no Korean display name (last member-name load)",
+		})
 	})
 }
 
@@ -54,6 +59,16 @@ func observeAlarmSubscriberDBSingleflightShared() {
 	}
 
 	alarmSubscriberDBSingleflightSharedTotal.Inc()
+}
+
+func observeAlarmMemberNameFallbackChannels(count int) {
+	ensureAlarmMetrics()
+
+	if alarmMemberNameFallbackChannels == nil {
+		return
+	}
+
+	alarmMemberNameFallbackChannels.Set(float64(count))
 }
 
 func observeAlarmSubscriberCacheError(operation string) {

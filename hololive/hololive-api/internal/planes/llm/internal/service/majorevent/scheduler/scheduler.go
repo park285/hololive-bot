@@ -61,9 +61,10 @@ func GetWeekRange(now time.Time) (start, end time.Time) {
 	return monday, sundayEnd
 }
 
+// Formatter의 렌더 실패는 오류다. 스케줄러는 실패한 본문을 enqueue하지 않고 이벤트를 미표시로 남긴다.
 type Formatter interface {
-	FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string
-	FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string
+	FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (string, error)
+	FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (string, error)
 }
 
 type EventRepository interface {
@@ -230,6 +231,11 @@ func (s *Scheduler) weeklyNotificationInputs(
 func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) error {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 
+	message, err := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
+	if err != nil {
+		return fmt.Errorf("execute weekly notification: format message: %w", err)
+	}
+
 	shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
 		outboxRepository: s.outboxRepository,
 		outputGuard:      s.outputGuard,
@@ -237,7 +243,7 @@ func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyColle
 		rooms:            c.rooms,
 		kind:             domain.DeliveryKindMajorEventWeekly,
 		periodKey:        weekKey,
-		message:          s.weeklyNotificationMessage(ctx, domainEvents, weekKey),
+		message:          message,
 		eventCount:       len(c.events),
 		enqueueLogMsg:    "Weekly notification enqueue result",
 		deferLogMsg:      "Partial room enqueue failure, deferring event marking",
@@ -269,14 +275,25 @@ func toDomainEventsAndIDs(events []*domain.MajorEvent) (domainEvents []domain.Ma
 	return domainEvents, eventIDs
 }
 
-func (s *Scheduler) weeklyNotificationMessage(ctx context.Context, events []domain.MajorEvent, weekKey string) string {
+func (s *Scheduler) weeklyNotificationMessage(ctx context.Context, events []domain.MajorEvent, weekKey string) (string, error) {
 	var llmSummary string
 
+	// 요약 실패는 이벤트 목록만 보내는 대체 경로로 바꾸지 않고 오류로 돌려준다. 이벤트는 미표시로 남는다.
 	if s.summarizer != nil {
-		llmSummary = s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeWeekly, weekKey)
+		summary, err := s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeWeekly, weekKey)
+		if err != nil {
+			return "", fmt.Errorf("summarize weekly events: %w", err)
+		}
+
+		llmSummary = summary
 	}
 
-	return s.formatter.FormatMajorEventWeeklySummary(ctx, events, llmSummary)
+	message, err := s.formatter.FormatMajorEventWeeklySummary(ctx, events, llmSummary)
+	if err != nil {
+		return "", fmt.Errorf("format weekly summary: %w", err)
+	}
+
+	return message, nil
 }
 
 func roomTargets(rooms []*domain.EventRoomSubscription) []roomTarget {

@@ -8,10 +8,22 @@
 - 최근 조회의 기준 시각은 `youtube_notification_delivery_telemetry.actual_published_at` 이며, 값이 없으면 `detected_at`, 둘 다 없으면 `event_at` 으로 대체합니다.
 - 결과는 발송 시도 로그 단위이며, 성공/실패 시도와 재시도 흔적이 모두 유지됩니다.
 
+## Telemetry 기록 계약
+
+`DEC-20260926-hololive-delivery-telemetry-single-path`에 따라 시도 telemetry는 alarm-worker `TransitionStore`가 lifecycle 전이 트랜잭션(`CompleteSent`, 실패 전이, stale SENDING 격리) 안에서 owner 시도 하나당 한 행만 기록합니다. commit 뒤 직접 enqueue, `direct_fallback` 로그, delivery 테이블을 역산하던 backfill(`delivery_mode = recovered`)은 삭제했습니다.
+
+- 기록 대상은 owner의 provider 성공·실패와 prepared failure 전체(`message_missing`, `pre_send_claim` 포함)입니다. follower·fulfilled·전파 전이는 시도가 아니라 기록하지 않습니다.
+- 결과 불명 시도는 공백으로 두지 않고 stale SENDING 격리 트랜잭션이 `send_result = outcome_unknown`, `delivery_mode = stale_sweep`, `failure_reason = stale_sending_outcome_unknown`으로 기록합니다.
+- `failure_reason`은 lifecycle Reason 코드 어휘(`provider_rate_limited`, `provider_transport`, `format_message` 등)를 씁니다.
+- `attempt_ordinal`은 telemetry 버퍼에 남은 delivery별 최대 순번 다음 값과 claim 시점 `attempt_count + 1`(attempt started 로그의 값) 중 큰 값입니다. revive가 `attempt_count`를 0으로 되돌려도 버퍼에 남은 순번 뒤로 이어지므로 revive 뒤에는 `attempt_count + 1`보다 클 수 있고, telemetry processor가 retention(기본 24h, profile `youtube_delivery.telemetry_retention_ms`)이 지난 방출 행을 지운 뒤에도 `attempt_count`가 하한이라 되돌아가지 않습니다. 한계: 버퍼 행이 retention으로 지워진 뒤 revive된 delivery는 두 값이 모두 초기화되어 1부터 다시 셉니다. 그래서 같은 `(delivery_id, attempt_ordinal)` 감사 로그가 retention보다 긴 간격을 두고 두 번 나올 수 있으며, 이때는 `sent_at`으로 시도를 구분합니다. 버퍼에 남은 행과 같은 `(delivery_id, attempt_ordinal)`이 다시 들어오면 조용히 건너뛰지 않고 오류로 전이 트랜잭션을 rollback합니다.
+- `post_id`는 content_id와 payload `canonical_post_id`가 일치함을 검증한 logical key(`short:…`, `community:…`)입니다.
+- 알려진 공백: grouped 발송이 permanent로 실패해 개별 발송으로 넘어간 경우 그 grouped 시도는 전이가 없어 기록되지 않습니다. 이어지는 개별 발송 시도는 `per_room`으로 기록됩니다.
+- fail-closed 비용: telemetry INSERT가 실패하면 전이 트랜잭션 전체가 rollback됩니다. `CompleteSent`가 이렇게 실패하면 provider가 이미 받은 발송이 SENDING으로 남고 stale sweep이 QUARANTINED로 격리합니다. 재발송하지 않고 결과 불명으로 드러나며, 운영자는 해당 delivery를 전송 증거로 검토합니다.
+
 ## Canonical Validation Log
 
 - 운영 검증의 기준 원시 로그는 `message="YouTube community/shorts delivery audit"` 구조화 로그입니다.
-- `telemetry_source = persistent_buffer` 또는 `direct_fallback` 는 시도 단위 감사 로그입니다. 내부 버퍼 flush 성공 여부만 다르고 필드 의미는 같습니다.
+- `telemetry_source = persistent_buffer` 는 시도 단위 감사 로그입니다. 위 기록 계약대로 전이 트랜잭션이 저장한 행만 flush해 방출합니다.
 - `telemetry_source = outbox_final_result` 는 게시물 단위 최종 결과 로그입니다. 이 라인에서 `latency_classification.*` 로 2분 SLA 판정과 내부/외부 지연 분류를 읽습니다.
 - `message="YouTube community/shorts delivery result"` 와 `message="YouTube community/shorts delivery attempt started"` 는 보조 근거입니다. 합격 판정과 중복/누락 판단은 `delivery audit` 로그를 우선 사용합니다.
 - 이 runbook의 조회 결과에서 `event_at` 컬럼은 원시 로그의 `sent_at` 를 정규화해 보여 주는 값입니다.
@@ -36,13 +48,13 @@
 | `outbox_id` | 게시물 fan-out의 상위 outbox 식별자입니다. 게시물 단위 최종 결과와 연결할 때 사용합니다. | `integer(int64)` | `98123` |
 | `dedupe_key` | 중복 방지 키입니다. 같은 게시물이 같은 dedupe key로만 발송되는지 확인합니다. | `string` | `youtube-notification:COMMUNITY_POST:UgkxExampleCanonicalPostId12345` |
 | `attempt_ordinal` | 해당 `delivery_id` 의 몇 번째 시도인지 나타냅니다. 재시도 누적과 최종 성공 이전 실패 이력을 읽을 때 필요합니다. | `integer` | `1` |
-| `send_result` | 해당 로그가 성공인지 실패인지 나타냅니다. 성공 로그는 게시물-룸 조합당 정확히 1건이어야 합니다. | `string enum` | `success` |
+| `send_result` | 해당 시도의 결과입니다(`success`, `failure`, `outcome_unknown`). 성공 로그는 게시물-룸 조합당 정확히 1건이어야 합니다. | `string enum` | `success` |
 | `delivery_path` | 실제 발송 경로입니다. 운영 목표값은 신규 경로 `youtube_outbox_dispatcher` 하나입니다. | `string` | `youtube_outbox_dispatcher` |
-| `delivery_mode` | 발송 모드입니다. grouped fan-out, 복구 backfill, 최종 결과 로그를 구분합니다. | `string enum` | `grouped` |
+| `delivery_mode` | 발송 모드입니다. `per_room`, `grouped`, 결과 불명 격리 `stale_sweep`, 최종 결과 로그 `final_result`를 구분합니다. | `string enum` | `grouped` |
 | `actual_published_at` | 실제 유튜브 게시 시각입니다. 내부 지연 2분 계산의 시작점입니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:10Z` |
 | `detected_at` | 스크래퍼가 게시물을 최초 감지한 시각입니다. 외부 수집 지연과 내부 지연을 분리할 때 사용합니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:42Z` |
 | `sent_at` | 해당 감사 로그가 가리키는 발송 완료 또는 실패 시점입니다. 이 runbook의 조회 결과에서는 `event_at` 로 표시됩니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
-| `failure_reason` | 실패 시도일 때의 축약 원인입니다. 실패 후 재시도/최종 성공 여부를 해석할 때 사용합니다. 성공 로그에서는 비어 있을 수 있습니다. | `string` | `send message` |
+| `failure_reason` | 실패 시도일 때의 lifecycle Reason 코드입니다. 실패 후 재시도/최종 성공 여부를 해석할 때 사용합니다. 성공 로그에서는 비어 있습니다. | `string` | `provider_rate_limited` |
 
 ### 2. 2분 SLA 판정 필드
 
@@ -124,16 +136,22 @@ standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `yout
 
 ## Fallback SQL
 
-compose 운영 기준 Postgres는 `localhost:5433` 입니다.
+1차 경로는 위 alarm-worker 구조화 로그입니다. 로그로 판단할 수 없을 때만 DB를 조회합니다.
+DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
+`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. `hololive-osaka`의
+`holo-postgres`에 컨테이너 socket으로 접속하고, 조회 전에 read-only guard를 먼저 증명합니다.
+비밀 env 파일을 셸에 source하거나 `PGPASSWORD`를 쓰지 않습니다.
 
 최근 구간 조회:
 
 ```bash
-set -a
-source "${HOLOLIVE_BOT_ENV_FILE:-/etc/stack-secrets/hololive-bot/env}"
-set +a
+# 1. read-only guard 증명: 결과가 정확히 `on`이 아니면 중단합니다.
+ssh 100.100.1.8 \
+  'sudo docker exec -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1 -At -c "show transaction_read_only"'
 
-PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5433 -U "${HOLOLIVE_DB_USER:-hololive_runtime}" -d hololive <<'SQL'
+# 2. 같은 guard로 조회합니다. SQL을 표준 입력으로 넘기므로 docker exec에 -i를 씁니다.
+ssh 100.100.1.8 \
+  'sudo docker exec -i -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1' <<'SQL'
 SELECT
     alarm_type,
     channel_id,

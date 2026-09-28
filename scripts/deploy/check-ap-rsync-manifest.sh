@@ -42,6 +42,13 @@ required_context_files=(
   hololive/hololive-dbtest/go.mod
   hololive/hololive-dbtest/go.sum
   scripts/build/build-youtube-collector-go.sh
+  hololive/hololive-youtube-collector/Dockerfile.po-sandbox
+  hololive/hololive-youtube-collector/po-sandbox/package.json
+  hololive/hololive-youtube-collector/po-sandbox/package-lock.json
+  hololive/hololive-youtube-collector/po-sandbox/src/worker.mjs
+  scripts/build/po-sandbox-manifest.py
+  scripts/deploy/lib/po-sandbox-image.sh
+  scripts/deploy/lib/po-ap-rollback-remote.sh
 )
 for path in "${required_context_files[@]}"; do
   if ! grep -qxF "$path" "$MANIFEST"; then
@@ -56,7 +63,7 @@ if [[ ! -d "$SHARED_GO_DIR" ]]; then
   exit 1
 fi
 SHARED_GO_DIR="$(cd "$SHARED_GO_DIR" && pwd)"
-build_targets=(./cmd/runtime/youtube-collector ./cmd/runtime/healthcheck)
+build_targets=(./cmd/runtime/youtube-collector ./cmd/runtime/healthcheck ./cmd/po-broker)
 if ! dependencies="$(cd "$ROOT_DIR/hololive/hololive-youtube-collector" &&
   GOWORK=off "$GO_CMD" list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}")"; then
   echo "[FAIL] Go dependency enumeration failed: $GO_CMD list -deps (GOWORK=off)" >&2

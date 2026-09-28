@@ -19,13 +19,12 @@ import (
 )
 
 const (
-	alarmDispatchRetentionMaxLimit   = 10000
-	alarmDispatchRetentionLockKey    = 781512042
-	alarmDispatchShadowRetentionDays = 14
+	alarmDispatchRetentionMaxLimit = 10000
+	alarmDispatchRetentionLockKey  = 781512042
 )
 
+// shadowed 행 retention은 v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence, migration 226).
 var alarmDispatchTerminalTimestampColumns = map[dispatchoutbox.Status]string{
-	dispatchoutbox.StatusShadowed:    "created_at",
 	dispatchoutbox.StatusSent:        "sent_at",
 	dispatchoutbox.StatusDLQ:         "dlq_at",
 	dispatchoutbox.StatusQuarantined: "quarantined_at",
@@ -239,7 +238,6 @@ func (r *alarmDispatchMaintenanceRunner) observeBacklog(ctx context.Context, sto
 
 func (r *alarmDispatchMaintenanceRunner) retentionTargets() []alarmDispatchRetentionTarget {
 	return []alarmDispatchRetentionTarget{
-		{status: dispatchoutbox.StatusShadowed, retentionDays: alarmDispatchShadowRetentionDays},
 		{status: dispatchoutbox.StatusSent, retentionDays: r.effectiveDays(r.sentDays, 90)},
 		{status: dispatchoutbox.StatusDLQ, retentionDays: r.effectiveDays(r.dlqDays, 180)},
 		{status: dispatchoutbox.StatusQuarantined, retentionDays: r.effectiveDays(r.quarantinedDays, 180)},
@@ -444,7 +442,9 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 		return 0, fmt.Errorf("unsupported alarm dispatch retention status: %s", status)
 	}
 
-	query := fmt.Sprintf(mustSQL("alarm_dispatch_maintenance_0348_04.sql"), column, column)
+	// picked CTE는 행을 잠그지 않고 EvalPlanQual 때 다시 계산되지 않습니다. 바깥 DELETE가 status와
+	// 보존 시각을 다시 검사해야 대기 중에 requeue로 commit된 행을 최신 버전 기준으로 건너뜁니다.
+	query := fmt.Sprintf(mustSQL("alarm_dispatch_maintenance_0348_04.sql"), column, column, column)
 
 	tag, err := s.db.Exec(ctx, query, string(status), retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {

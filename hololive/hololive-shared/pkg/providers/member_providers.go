@@ -112,10 +112,7 @@ func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache,
 	return member.NewMemberServiceAdapter(ctx, memberCache, logger)
 }
 
+// 어댑터는 build ctx의 값을 보존하되 build 취소와 분리된 ctx를 보관한다.
 func memberAdapterContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-
 	return context.WithoutCancel(ctx)
 }

@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 )
 
 func (s *Service) readNotifiedData(ctx context.Context, key string) (NotifiedData, bool, error) {
@@ -37,12 +36,9 @@ func (s *Service) readNotifiedData(ctx context.Context, key string) (NotifiedDat
 }
 
 func (s *Service) loadNotifiedData(ctx context.Context, key string) (NotifiedData, bool, error) {
+	// 구형 string 형상(WRONGTYPE)도 다른 저장소 오류와 같은 실패 경로다. 오류 문자열로 분류하지 않는다.
 	fields, err := s.readNotifiedHashFields(ctx, key)
 	if err != nil {
-		if isWrongTypeError(err) {
-			return NotifiedData{}, false, fmt.Errorf("notified data has non-hash type: %w", err)
-		}
-
 		return NotifiedData{}, false, fmt.Errorf("load notified data: %w", err)
 	}
 
@@ -80,8 +76,4 @@ func parseNotifiedHash(fields map[string]string) NotifiedData {
 		StartScheduled: startScheduled,
 		SentAt:         sentAt,
 	}
-}
-
-func isWrongTypeError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "WRONGTYPE")
 }

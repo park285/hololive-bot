@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
@@ -203,7 +204,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 
 func seedRouteAuditOutboxRows(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	expectedTargets map[routeAuditTarget][]string,
 ) []domain.YouTubeNotificationOutbox {
 	t.Helper()
@@ -228,7 +229,7 @@ func seedRouteAuditOutboxRows(
 
 func assertRouteAuditPersistedRows(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	items []domain.YouTubeNotificationOutbox,
 	expectedTargets map[routeAuditTarget][]string,
 ) {

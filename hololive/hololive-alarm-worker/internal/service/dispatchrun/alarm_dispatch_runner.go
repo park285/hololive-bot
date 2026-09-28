@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -43,10 +42,10 @@ type IdleWaiter interface {
 	Reset()
 }
 
+// Sender는 alarm dispatch가 쓰는 Text 발송 계약이다. 오픈채팅의 Markdown 선택은 sender가 방 유형으로 정한다.
+// Karing template은 보내지 않는다(DEC-20260926-hololive-karing-egress-disposition).
 type Sender interface {
-	regularChatResolver
 	SendMessage(ctx context.Context, roomID, message string) error
-	SendKaringContentList(ctx context.Context, roomID string, req *iris.KaringContentListRequest) error
 }
 
 type clientRequestSender interface {
@@ -133,7 +132,7 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 
 	defer cancel()
 
-	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForDelivery(attemptCtx, r.sender, envelopes))
+	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForDelivery(envelopes))
 	r.workerTotals.RecordAttempt(dispatchAttemptOutcome(err))
 
 	if err != nil {
@@ -239,8 +238,14 @@ func (r *Runner) routePostSendingFailure(ctx context.Context, group alarmDispatc
 }
 
 func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
-	path, err := alarmDispatchGroupEgressPath(group)
-	if err != nil {
+	if err := alarmDispatchGroupError(group); err != nil {
+		if errors.Is(err, errAlarmDispatchRetiredStreamProvider) && r.logger != nil {
+			// 드레인 표시: 퇴역 제공자 봉투가 아직 남아 있다는 신호다. 제거 조건 확인 때 이 로그가 0건이어야 한다.
+			r.logger.Error("alarm dispatch drained a retired stream provider envelope",
+				slog.String("room_id", group.roomID),
+				slog.Int("envelopes", len(group.envelopes)))
+		}
+
 		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
 			return fmt.Errorf("route invalid egress group: %w", routeErr)
 		}
@@ -248,22 +253,31 @@ func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) er
 		return nil
 	}
 
-	if path == alarmDispatchEgressText {
-		if err := r.dispatchMessageGroup(ctx, group); err != nil {
-			return fmt.Errorf("dispatch message group: %w", err)
-		}
-
-		return nil
-	}
-
-	if err := r.dispatchKaringContentListGroup(ctx, group); err != nil {
-		return fmt.Errorf("dispatch karing content list group: %w", err)
+	if err := r.dispatchMessageGroup(ctx, group); err != nil {
+		return fmt.Errorf("dispatch message group: %w", err)
 	}
 
 	return nil
 }
 
 func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
+	clientRequestID, err := alarmDispatchClientRequestID(group)
+	if err != nil {
+		// 드레인 종단이 아니라 위반 표시다. 운영에서 보이면 저장된 send-unit 식별자가 비었거나 섞인 그룹이 claim됐다는 뜻이다.
+		if r.logger != nil {
+			r.logger.Error("alarm dispatch group lacks a persisted send unit; not sending",
+				slog.String("room_id", group.roomID),
+				slog.Int("envelopes", len(group.envelopes)),
+				slog.Any("error", err))
+		}
+
+		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
+			return fmt.Errorf("route missing send unit identity: %w", routeErr)
+		}
+
+		return nil
+	}
+
 	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, r.shortLinkBaseURL, r.seeMoreFold, group)
 	if err != nil {
 		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
@@ -273,14 +287,14 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 		return nil
 	}
 
-	if err := r.dispatchRenderedMessageGroup(ctx, group, message); err != nil {
+	if err := r.dispatchRenderedMessageGroup(ctx, group, message, clientRequestID); err != nil {
 		return fmt.Errorf("dispatch rendered message group: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Runner) dispatchRenderedMessageGroup(ctx context.Context, group alarmDispatchGroup, message string) error {
+func (r *Runner) dispatchRenderedMessageGroup(ctx context.Context, group alarmDispatchGroup, message, clientRequestID string) error {
 	// markSending은 실패를 영속화까지 마치면 err 없이 proceed=false를 돌려준다. nil을 감싸면
 	// 정상적인 발송 중단이 루프 오류로 바뀐다.
 	if proceed, markErr := r.markSending(ctx, group.envelopes); !proceed {
@@ -291,7 +305,7 @@ func (r *Runner) dispatchRenderedMessageGroup(ctx context.Context, group alarmDi
 		return nil
 	}
 
-	if sendErr := sendAlarmDispatchMessage(ctx, r.sender, group, message); sendErr != nil {
+	if sendErr := sendAlarmDispatchMessage(ctx, r.sender, group, message, clientRequestID); sendErr != nil {
 		if routeErr := r.routePostSendingFailure(ctx, group, sendErr); routeErr != nil {
 			return fmt.Errorf("route post sending failure: %w", routeErr)
 		}
@@ -306,9 +320,9 @@ func (r *Runner) dispatchRenderedMessageGroup(ctx context.Context, group alarmDi
 	return nil
 }
 
-func sendAlarmDispatchMessage(ctx context.Context, sender Sender, group alarmDispatchGroup, message string) error {
+func sendAlarmDispatchMessage(ctx context.Context, sender Sender, group alarmDispatchGroup, message, clientRequestID string) error {
 	if idSender, ok := sender.(clientRequestSender); ok {
-		if err := idSender.SendMessageWithClientRequestID(ctx, group.roomID, message, alarmDispatchClientRequestID(group, 0, len(group.envelopes))); err != nil {
+		if err := idSender.SendMessageWithClientRequestID(ctx, group.roomID, message, clientRequestID); err != nil {
 			return fmt.Errorf("send message with client request ID: %w", err)
 		}
 
@@ -320,62 +334,4 @@ func sendAlarmDispatchMessage(ctx context.Context, sender Sender, group alarmDis
 	}
 
 	return nil
-}
-
-func (r *Runner) dispatchKaringContentListGroup(ctx context.Context, group alarmDispatchGroup) error {
-	requests, err := buildAlarmDispatchKaringContentListRequests(ctx, r.messageStrings, group)
-	if err != nil {
-		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
-			return fmt.Errorf("route pre send failure: %w", routeErr)
-		}
-
-		return nil
-	}
-
-	if err := r.dispatchKaringRequests(ctx, group, requests); err != nil {
-		return fmt.Errorf("dispatch karing requests: %w", err)
-	}
-
-	return nil
-}
-
-func (r *Runner) dispatchKaringRequests(ctx context.Context, group alarmDispatchGroup, requests []iris.KaringContentListRequest) error {
-	// markSending은 실패를 영속화까지 마치면 err 없이 proceed=false를 돌려준다. nil을 감싸면
-	// 정상적인 발송 중단이 루프 오류로 바뀐다.
-	if proceed, markErr := r.markSending(ctx, group.envelopes); !proceed {
-		if markErr != nil {
-			return fmt.Errorf("mark alarm dispatch sending: %w", markErr)
-		}
-
-		return nil
-	}
-
-	sent, err := r.sendKaringRequests(ctx, group, requests)
-	if err != nil {
-		return fmt.Errorf("send karing requests: %w", err)
-	}
-
-	if !sent {
-		return nil
-	}
-
-	if err := r.markDispatched(ctx, group.envelopes); err != nil {
-		return fmt.Errorf("mark dispatched: %w", err)
-	}
-
-	return nil
-}
-
-func (r *Runner) sendKaringRequests(ctx context.Context, group alarmDispatchGroup, requests []iris.KaringContentListRequest) (bool, error) {
-	for i := range requests {
-		if sendErr := r.sender.SendKaringContentList(ctx, group.roomID, &requests[i]); sendErr != nil {
-			if routeErr := r.routePostSendingFailure(ctx, group, sendErr); routeErr != nil {
-				return false, fmt.Errorf("route post sending failure: %w", routeErr)
-			}
-
-			return false, nil
-		}
-	}
-
-	return true, nil
 }

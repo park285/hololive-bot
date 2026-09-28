@@ -45,7 +45,7 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 
 	client, verifyWrites := sharedChannelRecordingClient(t)
 
-	cache := newMemberCache(repo, client, slog.New(slog.DiscardHandler), CacheConfig{WarmUpChunkSize: 1, WarmUpMaxGoroutines: 4, ValkeyTTL: time.Minute})
+	cache := withTestEpochAuthority(newMemberCache(repo, client, slog.New(slog.DiscardHandler), CacheConfig{WarmUpChunkSize: 1, WarmUpMaxGoroutines: 4, ValkeyTTL: time.Minute}))
 
 	if err := cache.WarmUpCache(ctx); err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestColdChannelLookupRejectsCachedIndividual(t *testing.T) {
 		return nil
 	}
 
-	cache := newMemberCache(repo, client, slog.New(slog.DiscardHandler), CacheConfig{ValkeyTTL: time.Minute})
+	cache := withTestEpochAuthority(newMemberCache(repo, client, slog.New(slog.DiscardHandler), CacheConfig{ValkeyTTL: time.Minute}))
 
 	got, err := cache.GetByChannelID(t.Context(), sharedReviewChannel)
 	if err != nil {

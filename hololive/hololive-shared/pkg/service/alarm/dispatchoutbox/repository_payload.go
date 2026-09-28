@@ -32,13 +32,18 @@ type eventPayloadNotification struct {
 	ScheduleChangePreviousStart string           `json:"schedule_change_previous_start,omitempty"`
 }
 
-func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventInsert, deliveryInsert, error) {
+func buildLedgerRows(envelope *domain.AlarmQueueEnvelope) (eventInsert, deliveryInsert, error) {
 	if err := envelope.ValidateCanonicalDispatch(); err != nil {
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch ledger rows: validate envelope: %w", err)
 	}
 
-	preparedInput := prepareEnvelopeDedupeInput(envelope)
-	input := &preparedInput.input
+	dedupeInput := EnvelopeDedupeInput(envelope)
+	input := &dedupeInput
+
+	if err := validateSourceIdentity(input); err != nil {
+		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch ledger rows: %w", err)
+	}
+
 	alarmType := input.AlarmType
 
 	if alarmType == "" {
@@ -47,7 +52,7 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 		envelope.Notification.AlarmType = alarmType
 	}
 
-	eventKey := preparedInput.eventKey()
+	eventKey := BuildEventKey(input)
 	dedupeKey := buildDedupeKey(input.RoomID, eventKey)
 
 	payload, err := marshalEventPayload(envelope)
@@ -66,7 +71,7 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch delivery context: %w", err)
 	}
 
-	event, delivery := assembleLedgerRows(envelope, input, status, alarmType, eventKey, dedupeKey, payload, hash, deliveryContext)
+	event, delivery := assembleLedgerRows(envelope, input, alarmType, eventKey, dedupeKey, payload, hash, deliveryContext)
 
 	return event, delivery, nil
 }
@@ -74,18 +79,13 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 func assembleLedgerRows(
 	envelope *domain.AlarmQueueEnvelope,
 	input *DedupeInput,
-	status Status,
 	alarmType domain.AlarmType,
 	eventKey, dedupeKey string,
 	payload []byte,
 	hash [sha256.Size]byte,
 	deliveryContext []byte,
 ) (eventInsert, deliveryInsert) {
-	dispatchGroupKey := ""
-
-	if status == StatusPending {
-		dispatchGroupKey = BuildDispatchGroupKeyFromEnvelope(envelope)
-	}
+	dispatchGroupKey := BuildDispatchGroupKeyFromEnvelope(envelope)
 
 	event := eventInsert{
 		EventKey:    eventKey,
@@ -104,7 +104,6 @@ func assembleLedgerRows(
 		ClaimKeys:        envelope.ClaimKeys,
 		DeliveryContext:  deliveryContext,
 		DispatchGroupKey: dispatchGroupKey,
-		Status:           status,
 	}
 
 	return event, delivery

@@ -25,16 +25,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-const (
-	rateLimitFailOpenReasonNoCache     = "no_cache"
-	rateLimitFailOpenReasonInitFailed  = "init_failed"
-	rateLimitFailOpenReasonCheckFailed = "check_failed"
-)
-
-var apiRateLimitFailOpenTotal = promauto.NewCounterVec(
+// apiRateLimitCheckFailuresTotal은 rate limit 판정 실패로 요청을 503으로 거절한 횟수다(fail-closed).
+var apiRateLimitCheckFailuresTotal = promauto.NewCounter(
 	prometheus.CounterOpts{
-		Name: "hololive_admin_rate_limit_fail_open_total",
-		Help: "Number of admin holo API rate limiter fail-open events grouped by reason.",
+		Name: "hololive_admin_rate_limit_check_failures_total",
+		Help: "Number of admin holo API requests rejected with 503 because the rate limiter check failed.",
 	},
-	[]string{"reason"},
 )

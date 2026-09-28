@@ -4,8 +4,6 @@ import (
 	jsonv2 "encoding/json/v2"
 	"strings"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
@@ -22,16 +20,13 @@ const (
 
 	testDuplicatePostID  = "post-duplicate"
 	testDuplicateVideoID = "video-duplicate"
+	// NEW_SHORT canonical content_id(testDuplicateVideoID 기준).
+	testDuplicateShortContentID = "short:video-duplicate"
 
 	testAuthorName    = "author"
 	testContentText   = "hello"
 	testPublishedText = "1 hour ago"
 )
-
-var outboxInsertTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "youtube_poller_outbox_insert_total_test",
-	Help: "test-only outbox insert counter",
-}, []string{"kind", "result"})
 
 type shortNotificationPayload struct {
 	domain.YouTubeVideo
@@ -43,14 +38,6 @@ type communityNotificationPayload struct {
 	domain.YouTubeCommunityPost
 
 	CanonicalPostID string `json:"canonical_post_id"`
-}
-
-func init() {
-	ObserveOutboxInsert = func(kind domain.OutboxKind, result string, count int64) {
-		if count > 0 {
-			outboxInsertTotal.WithLabelValues(string(kind), result).Add(float64(count))
-		}
-	}
 }
 
 func buildShortNotificationPayload(video *domain.YouTubeVideo, canonicalPostID string) string {

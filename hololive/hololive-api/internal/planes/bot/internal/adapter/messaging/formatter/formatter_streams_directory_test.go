@@ -31,7 +31,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
@@ -84,10 +83,10 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	assert.Equal(t, "라이브 목록 0개", emptyLive)
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
-	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, messagestrings.FallbackSentinel, formatLiveStreams(t.Context(), errorFormatter, streams))
-	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.UpcomingStreams(t.Context(), streams, 12))
-	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
+	errorFormatter := NewResponseFormatter("!", errorRenderer, WithMessageStrings(setupFormatterTestStore(t)))
+	assert.Equal(t, renderFailureMessage, formatLiveStreams(t.Context(), errorFormatter, streams))
+	assert.Equal(t, renderFailureMessage, errorFormatter.UpcomingStreams(t.Context(), streams, 12))
+	assert.Equal(t, renderFailureMessage, errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
 }
 
 func TestStreamListFormattersCapRenderedViews(t *testing.T) {
@@ -220,8 +219,8 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 	assert.Equal(t, "멤버 목록", emptyMessage)
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
-	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.MemberDirectory(t.Context(), groups, 1))
+	errorFormatter := NewResponseFormatter("!", errorRenderer, WithMessageStrings(setupFormatterTestStore(t)))
+	assert.Equal(t, renderFailureMessage, errorFormatter.MemberDirectory(t.Context(), groups, 1))
 }
 
 func TestFormatChannelName_IndependentsOrg(t *testing.T) {
@@ -273,7 +272,7 @@ func TestFormatChannelName_IndependentsOrg(t *testing.T) {
 func formatLiveStreams(ctx context.Context, f *ResponseFormatter, streams []*domain.Stream) string {
 	rendered, ok := f.renderLiveStreams(ctx, streams)
 	if !ok {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)

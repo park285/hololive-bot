@@ -35,15 +35,15 @@ func validateCanonicalJSONStringValue(value reflect.Value, depth int) error {
 func validateCanonicalJSONKind(value reflect.Value, depth int) error {
 	kind := value.Kind()
 	if kind == reflect.Interface || kind == reflect.Pointer {
-		return errors.Join(validateCanonicalJSONIndirectKind(value, depth))
+		return validateCanonicalJSONIndirectKind(value, depth)
 	}
 
 	if kind == reflect.String {
-		return errors.Join(validateCanonicalJSONStringValueKind(value))
+		return validateCanonicalJSONStringValueKind(value)
 	}
 
 	if kind == reflect.Struct {
-		return errors.Join(validateCanonicalJSONStructKind(value, depth))
+		return validateCanonicalJSONStructKind(value, depth)
 	}
 
 	if err := validateCanonicalJSONCollection(value, depth); err != nil {

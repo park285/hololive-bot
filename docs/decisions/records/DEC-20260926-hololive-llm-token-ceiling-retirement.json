@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-llm-token-ceiling-retirement",
+  "title": "LLM 월 토큰 상한과 Valkey 월 카운터를 제거하고 토큰 메트릭은 항상 기록한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "사용자가 2026-09-26 확정했다. 도입 커밋 3978c301b는 차단 없이 경고만 남기는 초기 관측 목적을 명시했고, DEC-20260613-llm-gateway-deferred는 중앙 비용·rate 통제가 필요하다는 독립 증거가 없다고 판단했다. 현재 기본값 0이면 tracker가 nil이 되어 토큰 메트릭까지 꺼지며, Prometheus counter는 수집 단계에서 프로세스를 합산하므로 Valkey 월 카운터(llm:cost:tokens:YYYY-MM)가 필요 없다. llm/cost_ceiling.go와 월 key 기록, Valkey 오류를 삼키는 경로, hololive_llm_cost_ceiling_exceeded_total을 제거하고 CostTracker는 항상 non-nil 메트릭 recorder로 둔다. hololive_llm_cost_tokens_total 이름은 대시보드 연속성을 위해 유지한다. 차단을 넣으면 member news fallback digest와 major event 요약 누락으로 이어지므로 차단은 도입하지 않는다. LLM_MONTHLY_TOKEN_CEILING은 퇴역 가드로 거절한다. env가 남은 호스트는 기동에 실패하므로 hololive-bot-ops로 호스트 env에서 키를 먼저 제거한 뒤 배포한다. 근거는 iris-stack의 2026-09-26 비-Iris 감사 결과(docs/agent-workflows/evidence/2026-09-26-stack-audit/non-iris-audit.md B8)이고 실행은 PLN-20260926-stack-audit-refactoring T09가 맡는다.",
+  "sources": [],
+  "evidence": [
+    "hololive/hololive-shared/pkg/config/settings/config_llm_retired_env_test.go",
+    "hololive/hololive-api/internal/planes/llm/internal/llm/cost_tracker_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-shared/pkg/config/settings/config_llm_retired_env.go",
+    "hololive/hololive-api/internal/planes/llm/internal/llm/cost_tracker.go",
+    "hololive-bot@8a4f0b70430461eae3855e2b43e75e7547681174"
+  ],
+  "supersedes": []
+}

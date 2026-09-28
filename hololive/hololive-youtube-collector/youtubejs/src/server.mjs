@@ -53,14 +53,13 @@ export function createHelperServer(overrides = {}) {
       ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }),
       ...overrides,
     }),
-    transportCloseTimeoutMs: 3_000,
   });
   return attachHelperServer(runtime, 30_000);
 }
 
 /**
  * @param {string} socketPath
- * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, transportCloseTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
+ * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
  * @returns {Promise<import("node:http").Server>}
  */
 export async function listenUnix(socketPath, options = {}) {
@@ -76,7 +75,6 @@ export async function listenUnix(socketPath, options = {}) {
       }
       return { ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }), ...opts.fetchers };
     },
-    transportCloseTimeoutMs: opts.transportCloseTimeoutMs,
   });
   const server = attachHelperServer(runtime, opts.requestReadTimeoutMs);
   applyServerLimits(server, opts.requestReadTimeoutMs, 0);
@@ -385,14 +383,13 @@ function disarmPipeUnlink(server) {
 }
 
 /**
- * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, transportCloseTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
+ * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
  */
 function normalizeListenOptions(options) {
   if (options && typeof options === "object" && "fetchCommunity" in options) {
     return {
       stub: false,
       requestReadTimeoutMs: 30_000,
-      transportCloseTimeoutMs: 3_000,
       fetchers: options,
       manageProcess: false,
     };
@@ -403,9 +400,6 @@ function normalizeListenOptions(options) {
     requestReadTimeoutMs: "requestReadTimeoutMs" in record && typeof record.requestReadTimeoutMs === "number"
       ? record.requestReadTimeoutMs
       : 30_000,
-    transportCloseTimeoutMs: "transportCloseTimeoutMs" in record && typeof record.transportCloseTimeoutMs === "number"
-      ? record.transportCloseTimeoutMs
-      : 3_000,
     fetchers: "fetchers" in record && record.fetchers ? record.fetchers : {},
     manageProcess: Boolean("manageProcess" in record && record.manageProcess),
   };
@@ -418,7 +412,6 @@ function parseArgs(argv) {
     stub: false,
     protocolVersion: 1,
     requestReadTimeoutMs: 30_000,
-    transportCloseTimeoutMs: 3_000,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -437,11 +430,6 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === "--shutdown-timeout-ms") {
-      args.transportCloseTimeoutMs = Number(argv[i + 1] ?? 3_000);
-      i += 1;
-      continue;
-    }
     if (arg === "--stub") {
       args.stub = true;
     }
@@ -456,15 +444,10 @@ if (isMain) {
     process.stderr.write("unsupported protocol version\n");
     process.exit(1);
   }
-  if (!Number.isSafeInteger(args.transportCloseTimeoutMs) || args.transportCloseTimeoutMs <= 0) {
-    process.stderr.write("invalid shutdown timeout\n");
-    process.exit(1);
-  }
   process.umask(0o077);
   await listenUnix(args.socket, {
     stub: args.stub,
     requestReadTimeoutMs: args.requestReadTimeoutMs,
-    transportCloseTimeoutMs: args.transportCloseTimeoutMs,
     manageProcess: true,
   });
 }

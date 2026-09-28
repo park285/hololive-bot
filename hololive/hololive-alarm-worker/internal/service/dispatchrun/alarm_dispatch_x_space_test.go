@@ -24,9 +24,7 @@ func TestXSpaceRenderingAndIsolation(t *testing.T) {
 	require.True(t, handled)
 	require.Equal(t, "🔴 소라 스페이스 시작\n\u200b이야기\nhttps://x.com/i/spaces/1abc", message)
 
-	path, _, err := alarmDispatchEnvelopeEgressPath(t.Context(), nil, &envelope)
-	require.NoError(t, err)
-	require.Equal(t, alarmDispatchEgressText, path)
+	require.NoError(t, alarmDispatchEnvelopeError(&envelope))
 
 	other := envelope
 
@@ -48,14 +46,13 @@ func TestXSpaceDispatchUsesTextAndRecordsCompletion(t *testing.T) {
 	}
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 	require.NoError(t, err)
 	require.True(t, processed)
 	require.Equal(t, testAlarmRoomID, sender.roomID)
 	require.Equal(t, []string{"🔴 소라 스페이스 시작\n\u200b이야기\nhttps://x.com/i/spaces/1abc"}, sender.messages)
-	require.Empty(t, sender.karingRequests)
 	require.Len(t, consumer.markSending, 1)
 	require.Len(t, consumer.markDispatched, 1)
 	require.Empty(t, consumer.scheduledRetry)

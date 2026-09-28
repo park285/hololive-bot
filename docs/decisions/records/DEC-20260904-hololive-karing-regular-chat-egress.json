@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260904-hololive-karing-regular-chat-egress",
   "title": "Hololive Karing 알림은 확인된 일반채팅에만 사용한다",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"
@@ -17,7 +17,7 @@
     "hololive/hololive-shared/pkg/service/kakaoroom/catalog.go",
     "hololive/hololive-alarm-worker/internal/egress/iris_sender.go",
     "hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go",
-    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/send_engine_karing.go",
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-alarm-worker/internal/egress/youtubedispatch/send_engine_karing.go",
     "hololive/hololive-alarm-worker/internal/app/workerapp/build_egress.go",
     "hololive/hololive-shared/pkg/config/settings/alarmworker/retired_notification_egress.go",
     "deploy/compose/docker-compose.prod.yml"

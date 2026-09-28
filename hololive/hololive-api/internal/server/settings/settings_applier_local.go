@@ -24,66 +24,17 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
-// localSettingsApplier: Bot 프로세스 내 직접 설정 적용 (in-process).
+// localSettingsApplier: admin plane 프로세스 내 직접 설정 적용 (in-process).
 type localSettingsApplier struct {
-	youtube             youtube.Service
-	holodex             *holodexprovider.Service
-	scraperProxyToggler *scheduler.Scheduler
-	alarm               domain.AlarmCRUD
+	alarm domain.AlarmCRUD
 }
 
 var _ SettingsApplier = (*localSettingsApplier)(nil)
 
-func NewLocalSettingsApplier(
-	youtubeService youtube.Service,
-	holodexService *holodexprovider.Service,
-	scraperProxyToggler *scheduler.Scheduler,
-	alarm domain.AlarmCRUD,
-) SettingsApplier {
-	return &localSettingsApplier{
-		youtube:             youtubeService,
-		holodex:             holodexService,
-		scraperProxyToggler: scraperProxyToggler,
-		alarm:               alarm,
-	}
-}
-
-func (a *localSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) ScraperProxyApplyResult {
-	runtime := ScraperProxyApplyResult{
-		Requested: enabled,
-	}
-
-	if a.youtube != nil {
-		applied := a.youtube.SetScraperProxyEnabled(enabled)
-		youtubeEnabled := a.youtube.ScraperProxyEnabled()
-
-		runtime.YoutubeApplied = &applied
-		runtime.YoutubeEnabled = &youtubeEnabled
-	}
-
-	if a.holodex != nil {
-		applied := a.holodex.SetScraperProxyEnabled(enabled)
-		holodexEnabled := a.holodex.ScraperProxyEnabled()
-
-		runtime.HolodexApplied = &applied
-		runtime.HolodexEnabled = &holodexEnabled
-	}
-
-	if a.scraperProxyToggler != nil {
-		applied := a.scraperProxyToggler.SetProxyEnabled(enabled)
-		schedulerEnabled, known := a.scraperProxyToggler.ProxyEnabled()
-
-		runtime.SchedulerPollersApplied = &applied
-		runtime.SchedulerEnabled = &schedulerEnabled
-		runtime.SchedulerKnown = &known
-	}
-
-	return runtime
+func NewLocalSettingsApplier(alarm domain.AlarmCRUD) SettingsApplier {
+	return &localSettingsApplier{alarm: alarm}
 }
 
 func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) AlarmAdvanceMinutesApplyResult {
@@ -113,33 +64,10 @@ func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) Me
 	}
 }
 
-func (a *localSettingsApplier) ScraperProxyRuntimeState(requested bool) ScraperProxyRuntimeStateResult {
-	runtime := ScraperProxyRuntimeStateResult{
-		Requested: requested,
+func (a *localSettingsApplier) SettingsRuntimeState() SettingsRuntimeStateResult {
+	if a.alarm == nil {
+		return SettingsRuntimeStateResult{}
 	}
 
-	if a.youtube != nil {
-		youtubeEnabled := a.youtube.ScraperProxyEnabled()
-
-		runtime.YoutubeEnabled = &youtubeEnabled
-	}
-
-	if a.holodex != nil {
-		holodexEnabled := a.holodex.ScraperProxyEnabled()
-
-		runtime.HolodexEnabled = &holodexEnabled
-	}
-
-	if a.scraperProxyToggler != nil {
-		schedulerEnabled, known := a.scraperProxyToggler.ProxyEnabled()
-
-		runtime.SchedulerEnabled = &schedulerEnabled
-		runtime.SchedulerKnown = &known
-	}
-
-	if a.alarm != nil {
-		runtime.AlarmTargetMinutes = a.alarm.GetTargetMinutes()
-	}
-
-	return runtime
+	return SettingsRuntimeStateResult{AlarmTargetMinutes: a.alarm.GetTargetMinutes()}
 }

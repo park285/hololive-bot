@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -14,7 +15,7 @@ import (
 	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
-func openTelemetryLoopTestDB(t *testing.T) *deliveryTestDB {
+func openTelemetryLoopTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	return newDeliveryPool(t)
@@ -33,6 +34,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 		OutboxID:       801,
 		ChannelID:      "UC_loop",
 		ContentID:      "short-loop",
+		PostID:         "short:short-loop",
 		RoomID:         "room-loop",
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      "youtube-notification:NEW_SHORT:short-loop",
@@ -72,6 +74,7 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 		OutboxID:       802,
 		ChannelID:      "UC_loop_bg",
 		ContentID:      "short-loop-bg",
+		PostID:         "short:short-loop-bg",
 		RoomID:         "room-loop-bg",
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      "youtube-notification:NEW_SHORT:short-loop-bg",
@@ -186,6 +189,7 @@ func telemetryLoopTestRow(deliveryID, outboxID int64, contentID, roomID string) 
 		OutboxID:       outboxID,
 		ChannelID:      "UC_loop",
 		ContentID:      contentID,
+		PostID:         "short:" + contentID,
 		RoomID:         roomID,
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      fmt.Sprintf("youtube-notification:NEW_SHORT:%s", contentID),
@@ -197,7 +201,7 @@ func telemetryLoopTestRow(deliveryID, outboxID int64, contentID, roomID string) 
 	}
 }
 
-func telemetryLoopRowLogged(t *testing.T, db *deliveryTestDB, deliveryID int64) bool {
+func telemetryLoopRowLogged(t *testing.T, db *pgxpool.Pool, deliveryID int64) bool {
 	t.Helper()
 
 	var row deliveryTelemetryTestBufferModel

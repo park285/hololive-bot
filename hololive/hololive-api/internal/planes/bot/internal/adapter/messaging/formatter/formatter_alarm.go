@@ -103,7 +103,7 @@ func (f *ResponseFormatter) alarmChannelName(ctx context.Context, notification *
 		return ""
 	}
 
-	if stream := notification.Stream; stream != nil && !stream.IsChzzkOnly && !stream.IsTwitchOnly {
+	if stream := notification.Stream; stream != nil {
 		channelID := stream.ChannelID
 		if channelID == "" && notification.Channel != nil {
 			channelID = notification.Channel.ID
@@ -152,7 +152,7 @@ func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName str
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmAdded, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -166,7 +166,7 @@ func (f *ResponseFormatter) FormatAlarmRemoved(ctx context.Context, memberName s
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmRemoved, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -228,7 +228,7 @@ func (f *ResponseFormatter) populateUpcomingNextStreamView(ctx context.Context, 
 	return true
 }
 
-func (f *ResponseFormatter) formatUpcomingTimeDetail(ctx context.Context, timeLeft time.Duration) string {
+func (f *ResponseFormatter) formatUpcomingTimeDetail(_ context.Context, timeLeft time.Duration) string {
 	if timeLeft <= 0 {
 		return ""
 	}
@@ -238,10 +238,10 @@ func (f *ResponseFormatter) formatUpcomingTimeDetail(ctx context.Context, timeLe
 
 	switch {
 	case hoursLeft >= 24:
-		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "relative_days", "%d일 후"), hoursLeft/24)
+		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtRelativeDays), hoursLeft/24)
 	case hoursLeft > 0:
-		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "relative_hours_minutes", "%d시간 %d분 후"), hoursLeft, minutesLeft)
+		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtRelativeHoursMinutes), hoursLeft, minutesLeft)
 	default:
-		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "relative_minutes", "%d분 후"), int(timeLeft.Minutes()))
+		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtRelativeMinutes), int(timeLeft.Minutes()))
 	}
 }

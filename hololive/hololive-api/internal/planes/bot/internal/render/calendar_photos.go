@@ -42,10 +42,6 @@ type calendarPhotoFetchResult struct {
 }
 
 func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
-	if parent == nil {
-		return calendarPhotoFetchResult{}, errors.New("calendar photo context is nil")
-	}
-
 	budgetCtx, cancel := context.WithTimeout(parent, photoFetchBudget)
 
 	defer cancel()
@@ -155,10 +151,6 @@ func (s *calendarPhotoFetchState) markUncacheable() {
 	s.cachePolicy.diskCacheable = false
 }
 
-func fetchMemberPhoto(e domain.CalendarEntry, photos map[string]image.Image) {
-	fetchMemberPhotoWithContext(context.Background(), e, photos)
-}
-
 func fetchMemberPhotoWithContext(ctx context.Context, e domain.CalendarEntry, photos map[string]image.Image) bool {
 	if e.Member == nil || e.Member.Photo == "" {
 		return true
@@ -183,18 +175,6 @@ func fetchMemberPhotoWithContext(ctx context.Context, e domain.CalendarEntry, ph
 	photos[e.Member.Photo] = img
 
 	return true
-}
-
-func fetchImage(url string) (image.Image, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), calendarPhotoRequestTimeout)
-	defer cancel()
-
-	out, err := fetchImageWithContext(ctx, url)
-	if err != nil {
-		return nil, fmt.Errorf("fetch image with context: %w", err)
-	}
-
-	return out, nil
 }
 
 func fetchImageWithContext(ctx context.Context, url string) (image.Image, error) {

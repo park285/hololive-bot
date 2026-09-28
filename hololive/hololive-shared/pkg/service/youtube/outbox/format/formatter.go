@@ -73,9 +73,9 @@ func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouT
 			slog.String("channel_id", item.ChannelID),
 			slog.Any("error", err))
 
-		memberName = mf.MessageStrings.VTuberFallbackContext(ctx)
+		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 	} else if memberName == "" {
-		memberName = mf.MessageStrings.VTuberFallbackContext(ctx)
+		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 	}
 
 	data, err := mf.BuildTemplateData(memberName, item)
@@ -130,11 +130,11 @@ func (mf *MessageFormatter) BuildTemplateData(memberName string, item *domain.Yo
 func populateTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
-		return errors.Join(populateVideoTemplateData(data, item))
+		return populateVideoTemplateData(data, item)
 	case domain.OutboxKindCommunityPost:
-		return errors.Join(populateCommunityTemplateData(data, item.Payload))
+		return populateCommunityTemplateData(data, item.Payload)
 	case domain.OutboxKindMilestone:
-		return errors.Join(populateMilestoneTemplateData(data, item.Payload))
+		return populateMilestoneTemplateData(data, item.Payload)
 	default:
 		return nil
 	}

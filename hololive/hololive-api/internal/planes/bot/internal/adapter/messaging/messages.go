@@ -20,7 +20,9 @@
 
 package messaging
 
-// 값은 사용자-facing 문구가 아니라 message_strings(error ns) 조회 key. SendError가 해석+sentinel 폴백.
+// 값은 사용자-facing 문구가 아니라 message_strings(error ns) 조회 key다. SendError가 해석하며 코드 대체 문구는
+// 없다. 기동 때 bot plane 검증이 ErrorMessageKeys 전체의 값을 확인한다
+// (DEC-20260926-hololive-message-strings-startup-validation).
 const (
 	ErrMemberProfileLoadFailed  = "member_profile_load_failed"
 	ErrMemberProfileBuildFailed = "member_profile_build_failed"
@@ -67,3 +69,22 @@ const (
 	ErrIrisConnectionFailed    = "iris_connection_failed"
 	ErrCommandProcessingFailed = "command_processing_failed"
 )
+
+// ErrorMessageKeys는 SendError로 보낼 수 있는 error namespace key 전체다. 상수를 추가하면 이 목록에도 넣는다.
+func ErrorMessageKeys() []string {
+	return []string{
+		ErrMemberProfileLoadFailed, ErrMemberProfileBuildFailed, ErrNoMemberInfoFound, ErrCannotDisplayMemberInfo,
+		ErrGraduatedMemberBlocked,
+		ErrAlarmServiceNotInitialized, ErrAlarmAddFailed, ErrAlarmRemoveFailed, ErrAlarmListFailed, ErrAlarmClearFailed,
+		ErrAlarmNeedMemberNameAdd, ErrAlarmNeedMemberNameRemove, ErrInvalidAlarmUsage,
+		ErrLiveStreamQueryFailed, ErrUpcomingStreamQueryFailed, ErrScheduleQueryFailed, ErrScheduleNeedMemberName,
+		ErrUnknownStatsPeriod, ErrStatsQueryFailed, MsgNoStatsData,
+		ErrSubscriberNeedMemberName, ErrSubscriberQueryFailed, MsgNoSubscriberData,
+		ErrCalendarQueryFailed,
+		ErrMajorEventServiceNotInitialized, ErrMajorEventStatusCheckFailed, ErrMajorEventSubscribeFailed,
+		ErrMajorEventUnsubscribeFailed,
+		ErrMemberNewsServiceNotInitialized, ErrMemberNewsQueryFailed, ErrMemberNewsSubscriptionFailed,
+		ErrUnknownCommand, ErrExternalAPICallFailed, ErrCacheConnectionFailed, ErrIrisConnectionFailed,
+		ErrCommandProcessingFailed,
+	}
+}

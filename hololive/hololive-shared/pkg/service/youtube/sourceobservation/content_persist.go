@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/content"
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
@@ -18,6 +17,7 @@ func persistContentDecision(
 	tx dbx.Tx,
 	writer CanonicalWriter,
 	observation *Observation,
+	loaded *content.State,
 	decision *content.Decision,
 ) error {
 	if writer == nil {
@@ -33,7 +33,7 @@ func persistContentDecision(
 		return fmt.Errorf("persist content field updates: %w", err)
 	}
 
-	if err := persistContentClocks(ctx, tx, observation.ObservationKind, decision.Clocks); err != nil {
+	if err := persistContentClocks(ctx, tx, loaded.Videos, decision.Clocks); err != nil {
 		return fmt.Errorf("persist content clocks: %w", err)
 	}
 
@@ -139,20 +139,6 @@ func persistContentFieldUpdates(ctx context.Context, tx dbx.Tx, updates []conten
 	return nil
 }
 
-func persistContentClocks(ctx context.Context, tx dbx.Tx, kind contract.ObservationKind, clocks []content.EntityState) error {
-	for i := range clocks {
-		if clocks[i].LastPositiveValueSHA256 == "" {
-			continue
-		}
-
-		if err := upsertContentClock(ctx, tx, kind, &clocks[i]); err != nil {
-			return fmt.Errorf("upsert content clock: %w", err)
-		}
-	}
-
-	return nil
-}
-
 func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observation, slot *content.AbsenceSlot) error {
 	if slot == nil {
 		return nil
@@ -198,20 +184,16 @@ func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation
 
 func persistContentConflicts(ctx context.Context, tx dbx.Tx, observation *Observation, conflicts []content.Conflict) error {
 	for i := range conflicts {
-		if _, err := tx.Exec(
+		if err := persistReconcileConflict(
 			ctx,
-			mustSQL("repository_content_conflict_insert_0042_42.sql"),
-			observation.ID,
-			observation.Provider,
-			observation.ObservationKind,
-			observation.SubjectKey,
-			observation.ObservationKey,
-			observation.EvidenceSHA256,
+			tx,
+			observation,
+			"youtube_video",
 			conflicts[i].VideoID,
 			conflicts[i].FieldName,
-			observation.EffectiveAt,
 			conflicts[i].ExistingValueSHA256,
 			conflicts[i].AttemptedValueSHA256,
+			"KEEP_EXISTING",
 		); err != nil {
 			return fmt.Errorf("insert content reconciliation conflict: %w", err)
 		}

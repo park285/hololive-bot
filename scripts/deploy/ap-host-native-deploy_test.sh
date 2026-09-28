@@ -41,9 +41,16 @@ elif (
   elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
        ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
     record_fail "generated host env must use the direct Osaka PostgreSQL endpoint"
+  elif grep -Eq '^(HOLOLIVE_H3_SERVER_NAME|HOLODEX_API_KEY_1)=' "${generated_env}"; then
+    # 내부 H3 client는 HOLOLIVE_INTERNAL_H3_*만 읽고 HOLODEX_API_KEY_1은 퇴역 가드가 거절한다(stack audit T10).
+    record_fail "generated host env must not emit retired alias keys"
+  elif ! grep -Eq '^HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=.+' "${generated_env}" ||
+       ! grep -Eq '^HOLOLIVE_INTERNAL_H3_SERVER_NAME=.+' "${generated_env}"; then
+    record_fail "generated host env must emit both dedicated internal H3 client keys"
   else
     pass "generated host env contents have 0 CACHE lines"
     pass "generated host env contents have 0 SETTINGS_DIR lines"
+    pass "generated host env emits only canonical internal H3 and Holodex key names"
   fi
 else
   record_fail "ap-host-native write_host_env did not produce generated env contents"
@@ -155,17 +162,11 @@ else
   record_fail "ap-host-native deploy must preserve the installed host env and systemd unit"
 fi
 
-if grep -Fq 'write_retired_producer_runtime_state "$service"' "${REMOTE_APPLY}" &&
-   grep -Fq 'stop_retired_producer_runtime "$service"' "${REMOTE_APPLY}"; then
-  pass "ap-host-native deploy records and stops the prior producer runtime before enabling collector"
+# 퇴역 producer의 첫 cutover 상태 기록·복원은 삭제했다(stack-audit 2026-09-26 T11).
+if grep -Eq 'retired_producer|first-cutover-producer|RETIRED_PRODUCER_LIB' "${REMOTE_APPLY}" "${ROLLBACK}" "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh"; then
+  record_fail "ap-host-native deploy and rollback must not keep the retired producer cutover path"
 else
-  record_fail "ap-host-native deploy must record and stop the prior producer runtime"
-fi
-
-if grep -Fq 'install -m 0644 -o root -g root "$payload/first-cutover-producer.state" "$producer_state_file"' "${REMOTE_APPLY}"; then
-  pass "ap-host-native first-cutover state is immutable and readable by rollback orchestration"
-else
-  record_fail "ap-host-native first-cutover state must remain readable by rollback orchestration"
+  pass "ap-host-native deploy and rollback carry no retired producer cutover path"
 fi
 
 if grep -Fq 'collector_readiness_poll 90 2 collector_readiness_fetch' "${REMOTE_APPLY}" &&
@@ -178,17 +179,15 @@ fi
 
 bash "${ROOT_DIR}/scripts/deploy/ap-host-native-collector-wrapper_test.sh"
 
-if grep -Fq 'validate_retired_producer_runtime_state "$producer_state_file" "$service"' "${ROLLBACK}" &&
-   grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${ROLLBACK}" &&
-   grep -Fq 'restore_retired_producer_runtime "$producer_state_file" "$service"' "${ROLLBACK}"; then
-  pass "ap-host-native rollback restores the recorded producer runtime on first cutover"
+if grep -Fq 'no previous collector release to roll back to; fix forward' "${ROLLBACK}"; then
+  pass "ap-host-native rollback refuses hosts without a previous collector release"
 else
-  record_fail "ap-host-native rollback must stop collector then restore the recorded producer runtime"
+  record_fail "ap-host-native rollback must refuse hosts without a previous collector release"
 fi
-if grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${REMOTE_APPLY}"; then
-  pass "ap-host-native failed cutover stops collector before restoring producer"
+if grep -Fq 'stop_collector_unit_and_require_inactive' "${REMOTE_APPLY}"; then
+  pass "ap-host-native failed cutover stops the collector before restoring the previous release"
 else
-  record_fail "ap-host-native failed cutover must stop collector before restoring producer"
+  record_fail "ap-host-native failed cutover must stop the collector before restoring the previous release"
 fi
 
 capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
@@ -296,6 +295,8 @@ chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/healthcheck"
 printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
+printf 'absent\n' > "${rollback_fixture}/rollback-contract/previous-before-cutover"
+printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
 (
   cd "${rollback_fixture}"
   sha256sum \
@@ -304,6 +305,8 @@ printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/previous-before-cutover \
+    rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
 
@@ -343,6 +346,8 @@ printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtu
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/previous-before-cutover \
+    rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/invalid-unit.out" 2>"${tmp}/invalid-unit.err"; then
@@ -372,9 +377,6 @@ printf '%s\n' "${!#}" > "${capture_dir}/call-${call}.cmd"
 payload="$(cat)"
 printf '%s\n' "${payload}" > "${capture_dir}/call-${call}.stdin"
 
-if grep -Fq "printf '%s\\n' collector" <<<"${payload}"; then
-  printf 'collector\n'
-fi
 if grep -Fq 'date -u +%Y-%m-%dT%H:%M:%SZ' <<<"${payload}"; then
   printf '2026-08-01T03:04:05Z\n'
 fi
@@ -397,19 +399,9 @@ else
   record_fail "ap-host-native rollback orchestration must succeed when restore and completion checks pass"
 fi
 
-restore_payload="${tmp}/success/call-3.stdin"
-completion_cmd="${tmp}/success/call-5.cmd"
-if [[ -r "${restore_payload}" ]] &&
-   bash -n "${restore_payload}" &&
-   grep -Fq 'native_rollback_validate "$previous_target"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/youtube-collector-host.env" "$host_env"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"' "${restore_payload}" &&
-   grep -Fq 'systemctl daemon-reload' "${restore_payload}" &&
-   grep -Fq 'systemctl restart "$unit"' "${restore_payload}"; then
-  pass "ap-host-native rollback restores binary-adjacent contract files before restarting"
-else
-  record_fail "ap-host-native rollback must restore the host env and systemd unit before restarting"
-fi
+# 호출 순서: 1 rollback 시작 시각, 2 복원 payload, 3 이전 issuer 존재 기록 조회, 이후 completion gate. previous 유무로
+# rollback 방식을 고르던 probe는 퇴역 producer 복원 경로와 함께 지웠다(stack-audit 2026-09-26 T11).
+restore_payload="${tmp}/success/call-2.stdin"
 
 validate_line="$(grep -nF 'native_rollback_validate "$previous_target"' "${restore_payload}" | tail -1 | cut -d: -f1)"
 restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"
@@ -419,11 +411,6 @@ else
   record_fail "native rollback validation must run before the first restore mutation"
 fi
 
-if [[ -r "${completion_cmd}" ]] && grep -Fq '2026-08-01T03:04:05Z' "${completion_cmd}"; then
-  pass "ap-host-native rollback forwards change_started_at to the completion gate"
-else
-  record_fail "ap-host-native rollback must forward change_started_at to the completion gate"
-fi
 
 if PATH="${tmp}/bin:${PATH}" \
    SSH_KEY="${tmp}/KR.key" \

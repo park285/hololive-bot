@@ -30,7 +30,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const seedBodyMajorEventWeeklySummary = `📅 이번 주 행사 ({{.Count}})
@@ -104,7 +103,8 @@ func TestFormatMajorEventWeeklySummary_EmptyEvents(t *testing.T) {
 	t.Parallel()
 
 	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
-	got := formatter.FormatMajorEventWeeklySummary(t.Context(), nil, "")
+	got, err := formatter.FormatMajorEventWeeklySummary(t.Context(), nil, "")
+	require.NoError(t, err)
 	assert.Empty(t, got)
 }
 
@@ -123,7 +123,8 @@ func TestFormatMajorEventWeeklySummary_NoSeeMorePadding(t *testing.T) {
 		{Title: "Holo Fes"},
 	}
 
-	got := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
+	got, err := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
+	require.NoError(t, err)
 	assert.Contains(t, got, "📅 이번 주 행사 (2)")
 	assert.Contains(t, got, "1. Holo Expo")
 	assert.Contains(t, got, "2. Holo Fes")
@@ -141,28 +142,32 @@ func TestFormatMajorEventWeeklySummary_UsesLLMSummaryWithoutFallbackList(t *test
 	formatter := newLLMSchedulerFormatter("!", renderer, nil, false)
 
 	events := []domain.MajorEvent{{Title: "A"}}
-	got := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "요약 본문")
+	got, err := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "요약 본문")
+	require.NoError(t, err)
 	assert.Contains(t, got, "📅 이번 주 행사 (1)")
 	assert.Contains(t, got, "요약 본문")
 	assert.NotContains(t, got, "1. A")
 }
 
-func TestFormatMajorEventMonthlySummary_RenderFailFallback(t *testing.T) {
+// 예약 알림 렌더 실패는 코드 대체 문구를 구독 방에 보내지 않고 오류로 돌려준다.
+func TestFormatMajorEventMonthlySummary_RenderFailReturnsError(t *testing.T) {
 	t.Parallel()
 
 	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	events := []domain.MajorEvent{{Title: "A"}}
-	got := formatter.FormatMajorEventMonthlySummary(t.Context(), events, "")
-	assert.Equal(t, messagestrings.FallbackSentinel, got)
+	got, err := formatter.FormatMajorEventMonthlySummary(t.Context(), events, "")
+	require.Error(t, err)
+	assert.Empty(t, got)
 }
 
-func TestFormatMajorEventWeeklySummary_RenderFailFallback(t *testing.T) {
+func TestFormatMajorEventWeeklySummary_RenderFailReturnsError(t *testing.T) {
 	t.Parallel()
 
 	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
 	events := []domain.MajorEvent{{Title: "A"}}
-	got := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
-	assert.Equal(t, messagestrings.FallbackSentinel, got)
+	got, err := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
+	require.Error(t, err)
+	assert.Empty(t, got)
 }
 
 func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
@@ -177,8 +182,12 @@ func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
 	events := []domain.MajorEvent{{Title: "A"}, {Title: "B"}}
 
 	for _, llmSummary := range []string{"", "요약 본문"} {
-		weekly := formatter.FormatMajorEventWeeklySummary(t.Context(), events, llmSummary)
-		monthly := formatter.FormatMajorEventMonthlySummary(t.Context(), events, llmSummary)
+		weekly, weeklyErr := formatter.FormatMajorEventWeeklySummary(t.Context(), events, llmSummary)
+		require.NoError(t, weeklyErr)
+
+		monthly, monthlyErr := formatter.FormatMajorEventMonthlySummary(t.Context(), events, llmSummary)
+		require.NoError(t, monthlyErr)
+
 		normalizedWeekly := strings.Replace(weekly, "이번 주 행사", "이번 달 행사", 1)
 		assert.Equal(t, normalizedWeekly, monthly, "weekly/monthly must be identical modulo header word (llmSummary=%q)", llmSummary)
 	}
@@ -236,8 +245,9 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 		t.Parallel()
 
 		formatter := newLLMSchedulerFormatter("!", nil, nil, false)
-		got := formatter.FormatMemberNewsDigest(t.Context(), nil)
-		assert.Equal(t, messagestrings.FallbackSentinel, got)
+		got, err := formatter.FormatMemberNewsDigest(t.Context(), nil)
+		require.Error(t, err)
+		assert.Empty(t, got)
 	})
 
 	t.Run("localize categories", func(t *testing.T) {
@@ -260,7 +270,8 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 			},
 		}
 
-		got := formatter.FormatMemberNewsDigest(t.Context(), digest)
+		got, err := formatter.FormatMemberNewsDigest(t.Context(), digest)
+		require.NoError(t, err)
 		assert.Contains(t, got, "이번주 뉴스")
 		assert.Contains(t, got, "· 콜라보")
 		assert.Contains(t, got, "· 기타")

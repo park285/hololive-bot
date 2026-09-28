@@ -22,7 +22,6 @@ package alarmservice
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -41,7 +40,7 @@ func (as *AlarmService) removeAlarmFromCache(
 
 	removedRoomChannel, err := as.removeRoomAlarmMember(ctx, alarmKey, channelID, removeRoomChannel)
 	if err != nil {
-		return false, errors.Join(err)
+		return false, err
 	}
 
 	registryKey := as.getRegistryKey(roomID)

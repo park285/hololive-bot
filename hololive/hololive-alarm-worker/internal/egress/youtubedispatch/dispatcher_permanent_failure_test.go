@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -152,7 +153,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	assertAuthSentinelRowsFailed(t, db, outbox.ID, delivery.ID)
 }
 
-func seedAuthSentinelFailureRows(t *testing.T, db *deliveryTestDB) (deliveryTestOutboxModel, deliveryTestDeliveryModel) {
+func seedAuthSentinelFailureRows(t *testing.T, db *pgxpool.Pool) (deliveryTestOutboxModel, deliveryTestDeliveryModel) {
 	t.Helper()
 
 	now := time.Now()
@@ -186,7 +187,7 @@ func seedAuthSentinelFailureRows(t *testing.T, db *deliveryTestDB) (deliveryTest
 	return outbox, delivery
 }
 
-func assertAuthSentinelRowsFailed(t *testing.T, db *deliveryTestDB, outboxID, deliveryID int64) {
+func assertAuthSentinelRowsFailed(t *testing.T, db *pgxpool.Pool, outboxID, deliveryID int64) {
 	t.Helper()
 
 	var updatedDelivery deliveryTestDeliveryModel

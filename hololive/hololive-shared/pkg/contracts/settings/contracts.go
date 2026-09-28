@@ -34,8 +34,9 @@ const (
 	ConfigUpdateVersionV1 uint8 = 1
 )
 
+// scraper proxy 토글(scraper_proxy)은 DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 그 type이 오면 수신자는
+// 모르는 type으로 경고만 남긴다.
 const (
-	UpdateTypeScraperProxy        = "scraper_proxy"
 	UpdateTypeAlarmAdvanceMinutes = "alarm_advance_minutes"
 	UpdateTypeMemberNewsRunNow    = "membernews_weekly_run_now"
 	UpdateTypeACL                 = "acl"
@@ -44,10 +45,6 @@ const (
 type ConfigUpdateV1 struct {
 	Type    string         `json:"type"`
 	Payload jsontext.Value `json:"payload"`
-}
-
-type ScraperProxyPayloadV1 struct {
-	Enabled bool `json:"enabled"`
 }
 
 type AlarmAdvanceMinutesPayloadV1 struct {

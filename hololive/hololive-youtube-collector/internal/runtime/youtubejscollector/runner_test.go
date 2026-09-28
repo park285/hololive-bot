@@ -226,7 +226,7 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 
 	fake := &channelFake{result: result}
 
-	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t, 1))
+	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestChannelLiveRunnerPublishesMetadataWithGenerationTwo(t *testing.T) {
 
 	loadJSON(t, "channel.json", &result)
 
-	input := channelLiveInput(t, contract.LiveSnapshotMetadataContractGeneration)
+	input := channelLiveInput(t)
 
 	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), input)
 	if err != nil {
@@ -288,6 +288,23 @@ func TestChannelLiveRunnerPublishesMetadataWithGenerationTwo(t *testing.T) {
 	}
 }
 
+// live_snapshot generation 1 payload 경로는 지웠다(계획 T11 C6). DB current generation이 1이면 다른 형식으로 내보내지 않고
+// 구성 오류로 끝난다.
+func TestChannelLiveRunnerRejectsRetiredLiveGenerationOne(t *testing.T) {
+	t.Parallel()
+
+	var result youtubejs.ChannelResult
+
+	loadJSON(t, "channel.json", &result)
+
+	input := youtubeInputWithLiveGeneration(t, "UC_TEST", "youtubejs_channel_live", 1, contract.KindLiveSnapshot)
+
+	_, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), input)
+	if err == nil || collecterr.CodeOf(err) != collecterr.Configuration {
+		t.Fatalf("Collect(generation 1) error = %v, want configuration error", err)
+	}
+}
+
 func TestChannelLiveRunnerRejectsIncompleteUpcomingWithoutOutput(t *testing.T) {
 	t.Parallel()
 
@@ -297,7 +314,7 @@ func TestChannelLiveRunnerRejectsIncompleteUpcomingWithoutOutput(t *testing.T) {
 
 	result.LiveSessions[0].ScheduledAt = nil
 
-	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t, 1))
+	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t))
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
@@ -337,7 +354,7 @@ func TestChannelRunnersSkipMissingLiveTabButKeepMetadata(t *testing.T) {
 
 	fake := &channelFake{result: result}
 
-	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t, 1))
+	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +487,7 @@ func TestChannelRunnerRejectsMismatchedLiveIdentity(t *testing.T) {
 
 	result.LiveSessions[0].ChannelID = "UC_OTHER"
 
-	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t, 1))
+	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t))
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
@@ -539,7 +556,7 @@ func mustCollectCommunity(t *testing.T, result *youtubejs.CommunityResult) contr
 func youtubeInput(tb testing.TB, subject, jobKind string, kinds ...contract.ObservationKind) *collectutil.RunInput {
 	tb.Helper()
 
-	return youtubeInputWithLiveGeneration(tb, subject, jobKind, 1, kinds...)
+	return youtubeInputWithLiveGeneration(tb, subject, jobKind, contract.LiveSnapshotMetadataContractGeneration, kinds...)
 }
 
 func youtubeInputWithLiveGeneration(
@@ -592,11 +609,12 @@ func youtubeInputWithLiveGeneration(
 	return &input
 }
 
-func channelLiveInput(tb testing.TB, liveGeneration int64) *collectutil.RunInput {
+// channelLiveInput은 collector가 유일하게 만드는 live_snapshot generation 2 입력이다(generation 1 경로는 계획 T11 C6에서 삭제).
+func channelLiveInput(tb testing.TB) *collectutil.RunInput {
 	tb.Helper()
 
-	return youtubeInputWithLiveGeneration(tb, restrictedTestChannelID, "youtubejs_channel_live", liveGeneration,
-		contract.KindLiveSnapshot)
+	return youtubeInputWithLiveGeneration(tb, restrictedTestChannelID, "youtubejs_channel_live",
+		contract.LiveSnapshotMetadataContractGeneration, contract.KindLiveSnapshot)
 }
 
 func withEnabled(tb testing.TB, input *collectutil.RunInput, enabled map[contract.ObservationKind][]string) *collectutil.RunInput {

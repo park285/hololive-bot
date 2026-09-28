@@ -20,7 +20,7 @@ ARG NODE_VERSION=24
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS youtubejs-build
 WORKDIR /app/youtubejs
 COPY hololive/hololive-youtube-collector/youtubejs/package.json hololive/hololive-youtube-collector/youtubejs/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm corepack npm ci --omit=dev --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 COPY hololive/hololive-youtube-collector/youtubejs/src ./src
 RUN rm -f ./src/*.test.mjs
 

@@ -69,7 +69,7 @@ cmd_start() {
   local timeout_sec="${CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS:-45}"
   local old_pid=""
   local running_pids=""
-  local required_vars="IRIS_BASE_URL HOLODEX_API_KEY_1 CACHE_HOST"
+  local required_vars="IRIS_BASE_URL HOLODEX_API_KEY CACHE_HOST"
   local var=""
   local value=""
   local log_size=0

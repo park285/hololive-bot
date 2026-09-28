@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -54,7 +55,12 @@ func run() error {
 		return fmt.Errorf("bootstrap scraper role: %w", bootstrapErr)
 	}
 
-	pool, err := pgxpool.New(ctx, postgresConnString())
+	connString, err := postgresConnString()
+	if err != nil {
+		return fmt.Errorf("postgres conn string: %w", err)
+	}
+
+	pool, err := pgxpool.New(ctx, connString)
 	if err != nil {
 		return fmt.Errorf("open postgres pool: %w", err)
 	}
@@ -82,21 +88,28 @@ func run() error {
 	return nil
 }
 
-func postgresConnString() string {
-	parts := []string{
+// postgresConnString은 migrator 접속 문자열을 만든다. PGPASSWORD(compose의 HOLOLIVE_MIGRATOR_PASSWORD)는 필수다.
+// 예전에 compose가 admin DB_PASSWORD로 채우던 폴백을 지웠으므로, 비어 있으면 비밀번호 없는 접속을 시도하지 않고
+// 원인을 알 수 있게 바로 실패한다(stack audit 2026-09-26).
+func postgresConnString() (string, error) {
+	password := os.Getenv("PGPASSWORD")
+	if strings.TrimSpace(password) == "" {
+		return "", errors.New("PGPASSWORD (HOLOLIVE_MIGRATOR_PASSWORD) is required")
+	}
+
+	sslParts := sslConnParts()
+	parts := make([]string, 0, 5+len(sslParts))
+
+	parts = append(parts,
 		connPart("host", envDefault("PGHOST", "postgres")),
 		connPart("port", envDefault("PGPORT", "5432")),
 		connPart("dbname", envDefault("PGDATABASE", "hololive")),
 		connPart("user", envDefault("PGUSER", "hololive_migrator")),
-	}
+		connPart("password", password),
+	)
+	parts = append(parts, sslParts...)
 
-	if password := os.Getenv("PGPASSWORD"); password != "" {
-		parts = append(parts, connPart("password", password))
-	}
-
-	parts = append(parts, sslConnParts()...)
-
-	return strings.Join(parts, " ")
+	return strings.Join(parts, " "), nil
 }
 
 func sslConnParts() []string {

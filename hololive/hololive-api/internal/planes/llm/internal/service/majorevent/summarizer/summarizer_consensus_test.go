@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -236,7 +238,7 @@ type deadlineCapturingSummarizer struct {
 	deadline     time.Time
 }
 
-func (m *deadlineCapturingSummarizer) GenerateJSON(ctx context.Context, _, _ string, _ map[string]any) (string, error) {
+func (m *deadlineCapturingSummarizer) GenerateJSON(ctx context.Context, _ openaipreset.PromptLayers, _ map[string]any) (string, error) {
 	m.callCount++
 
 	deadline, ok := ctx.Deadline()

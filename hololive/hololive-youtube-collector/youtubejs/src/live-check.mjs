@@ -48,7 +48,7 @@ export async function createLiveCheckInnertube({ fetchImpl } = {}) {
  * `/channel/{id}/live`를 resolve_url 1회로 해석하고, 영상으로 연결되면 해당 영상 player를 최대 1회 조회합니다.
  * HTML·browse 보완이나 재시도는 하지 않습니다.
  */
-export async function fetchChannelLiveCheck(innertube, channelId, clock = Date.now) {
+export async function fetchChannelLiveCheck(innertube, channelId, clock = Date.now, proof = undefined) {
   assertInnertube(innertube);
   const resolved = await executeRaw(innertube, "/navigation/resolve_url", {
     url: `https://www.youtube.com/channel/${encodeURIComponent(channelId)}/live`,
@@ -61,7 +61,7 @@ export async function fetchChannelLiveCheck(innertube, channelId, clock = Date.n
   if (target.kind !== "watch") {
     return target.result;
   }
-  const player = await executeRaw(innertube, "/player", playerPayload(target.videoId));
+  const player = await executePlayer(innertube, target.videoId, proof);
   if (player.ok === false) {
     return unknownChannel(channelId, target.videoId, player.reason, false);
   }
@@ -69,9 +69,9 @@ export async function fetchChannelLiveCheck(innertube, channelId, clock = Date.n
 }
 
 /** 요청 영상 player를 1회 조회해 영상 확인 사실을 만듭니다. */
-export async function fetchVideoLiveCheck(innertube, videoId, clock = Date.now) {
+export async function fetchVideoLiveCheck(innertube, videoId, clock = Date.now, proof = undefined) {
   assertInnertube(innertube);
-  const player = await executeRaw(innertube, "/player", playerPayload(videoId));
+  const player = await executePlayer(innertube, videoId, proof);
   if (player.ok === false) {
     return unknownVideo(videoId, player.reason);
   }
@@ -422,6 +422,14 @@ function classifyResolvedEndpoint(raw, channelId) {
 
 function playerPayload(videoId) {
   return { videoId, racyCheckOk: true, contentCheckOk: true, parse: false };
+}
+
+function executePlayer(innertube, videoId, proof) {
+  const send = (token) => executeRaw(innertube, "/player", {
+    ...playerPayload(videoId),
+    ...(token === undefined ? {} : { serviceIntegrityDimensions: { poToken: token } }),
+  });
+  return proof === undefined ? send(undefined) : proof.runPlayer(videoId, send, currentRequestSignal());
 }
 
 /**

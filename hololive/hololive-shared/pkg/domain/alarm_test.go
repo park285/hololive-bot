@@ -22,6 +22,7 @@ package domain_test
 
 import (
 	jsonv2 "encoding/json/v2"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 	envelope := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 123,
 		Notification: domain.AlarmNotification{
+			AlarmType:    domain.AlarmTypeLive,
 			RoomID:       "room1",
 			MinutesUntil: 5,
 			Users:        []string{"user1"},
@@ -107,11 +109,10 @@ func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
 		},
 		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
 		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs:         []int64{101},
-			Kind:              domain.OutboxKindNewShort,
-			AlarmType:         domain.AlarmTypeShorts,
-			ChannelID:         testChannelID,
-			RenderTemplateKey: domain.TemplateKeyOutboxShorts,
+			OutboxIDs: []int64{101},
+			Kind:      domain.OutboxKindNewShort,
+			AlarmType: domain.AlarmTypeShorts,
+			ChannelID: testChannelID,
 			Items: []domain.YouTubeOutboxItem{{
 				OutboxID:  101,
 				ContentID: "short:abc",
@@ -161,12 +162,13 @@ func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
 	}
 }
 
-func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
+func TestAlarmQueueEnvelope_WireFormatDecode(t *testing.T) {
 	t.Parallel()
 
-	// Rust serde에서 생성하는 JSON 형식
-	rustJSON := `{
+	// 저장 payload의 snake_case wire 형식. 퇴역한 Rust producer의 alarm_type 없는 형식은 더 이상 받지 않는다.
+	wireJSON := `{
 		"notification": {
+			"alarm_type": "LIVE",
 			"room_id": "room42",
 			"channel": null,
 			"stream": null,
@@ -180,8 +182,8 @@ func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
 
 	var env domain.AlarmQueueEnvelope
 
-	if err := jsonv2.Unmarshal([]byte(rustJSON), &env); err != nil {
-		t.Fatalf("Rust JSON 역직렬화 실패: %v", err)
+	if err := jsonv2.Unmarshal([]byte(wireJSON), &env); err != nil {
+		t.Fatalf("wire JSON 역직렬화 실패: %v", err)
 	}
 
 	if env.Notification.RoomID != "room42" {
@@ -330,5 +332,31 @@ func TestAlarmTypesValueStaysString(t *testing.T) {
 		if _, ok := value.(string); !ok {
 			t.Fatalf("%s: Value() = %T, want string — exec 모드에서 []byte는 bytea(\\x hex)로 인코딩되어 alarm_type[] 파싱이 깨진다", name, value)
 		}
+	}
+}
+
+// 저장 payload의 notification.alarm_type 누락을 Live로 채우던 decode 기본값은 T18(2026-09-26)에서 alarm_dispatch_events
+// 1034건 중 누락 0건을 확인해 지웠다(stack-audit T11 holo-alarm-envelope-empty-type-defaults-live). 누락은 decode 오류다.
+func TestAlarmQueueEnvelope_UnmarshalRejectsMissingAlarmType(t *testing.T) {
+	t.Parallel()
+
+	for name, payload := range map[string]string{
+		"missing": `{"dispatch_outbox_id":1,"notification":{"room_id":"room-1"},"version":1}`,
+		"empty":   `{"dispatch_outbox_id":1,"notification":{"alarm_type":"","room_id":"room-1"},"version":1}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var envelope domain.AlarmQueueEnvelope
+
+			err := jsonv2.Unmarshal([]byte(payload), &envelope)
+			if err == nil {
+				t.Fatalf("Unmarshal() error = nil, alarm type = %q; want missing alarm_type rejected", envelope.Notification.AlarmType)
+			}
+
+			if !strings.Contains(err.Error(), "alarm_type") {
+				t.Fatalf("Unmarshal() error = %v, want alarm_type in message", err)
+			}
+		})
 	}
 }

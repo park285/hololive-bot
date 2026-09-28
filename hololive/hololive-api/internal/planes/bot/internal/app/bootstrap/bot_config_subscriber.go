@@ -4,47 +4,25 @@ import (
 	"context"
 	"log/slog"
 
-	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 func BuildBotConfigSubscriber(
 	ctx context.Context,
 	deps BotConfigSubscriberDependencies,
 	runtimeDeps BotConfigSubscriberRuntimeDependencies,
-	scraperScheduler *scheduler.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
+	// scraper_proxy 갱신은 DEC-20260926-hololive-legacy-env-config-retirement로 퇴역해 처리기가 없다.
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
-		ScraperProxy:        buildScraperProxyHandler(deps, runtimeDeps, scraperScheduler, logger),
 		ACL:                 buildACLReloadHandler(ctx, runtimeDeps, logger),
 		AlarmAdvanceMinutes: buildAlarmAdvanceMinutesHandler(ctx, deps, runtimeDeps, logger),
 	})
 
 	return configsub.New(deps.Cache.GetClient(), applyFn, logger)
-}
-
-func buildScraperProxyHandler(
-	deps BotConfigSubscriberDependencies,
-	runtimeDeps BotConfigSubscriberRuntimeDependencies,
-	scraperScheduler *scheduler.Scheduler,
-	logger *slog.Logger,
-) func(contractssettings.ScraperProxyPayloadV1) {
-	return func(payload contractssettings.ScraperProxyPayloadV1) {
-		sharedsettings.ApplyScraperProxyToggle(payload.Enabled, runtimeDeps.YouTubeService, runtimeDeps.HolodexService, scraperScheduler, logger)
-
-		current := deps.Settings.Get()
-
-		current.ScraperProxyEnabled = payload.Enabled
-
-		if err := deps.Settings.Update(current); err != nil {
-			logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
-		}
-	}
 }
 
 func buildACLReloadHandler(
@@ -93,7 +71,7 @@ func buildAlarmAdvanceMinutesHandler(
 
 		cancel()
 
-		// 원격 alarm client는 실패 시 빈 슬라이스를 돌려주고, 로컬 AlarmService는 항상 1개 이상을 돌려준다.
+		// alarm-worker client는 실패 시 빈 슬라이스를 돌려준다. 빈 결과는 설정 영속화를 건너뛴다.
 		if len(targets) == 0 {
 			logger.Warn("Skipped persisting alarm_advance_minutes: alarm update returned no targets",
 				slog.Int("minutes", payload.Minutes),

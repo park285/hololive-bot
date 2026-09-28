@@ -48,8 +48,8 @@ func (mf *MessageFormatter) inner() *format.MessageFormatter {
 	return &format.MessageFormatter{}
 }
 
-func (mf *MessageFormatter) vtuberFallback(ctx context.Context) string {
-	return mf.inner().MessageStrings.VTuberFallbackContext(ctx)
+func (mf *MessageFormatter) vtuberFallback(_ context.Context) string {
+	return mf.inner().MessageStrings.Text(messagestrings.MiscVTuberFallback)
 }
 
 func (mf *MessageFormatter) formatMessage(ctx context.Context, item *domain.YouTubeNotificationOutbox) (string, error) {

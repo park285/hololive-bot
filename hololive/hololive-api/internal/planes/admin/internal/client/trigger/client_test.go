@@ -43,7 +43,7 @@ func TestClientSendWeeklyNotificationSuccess(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL+"/", "", nil)
+	client := newTestClient(t, srv.URL+"/", "")
 	if err := client.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestClientSendMonthlyNotificationConflict(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL, "", nil)
+	client := newTestClient(t, srv.URL, "")
 
 	err := client.SendMonthlyNotification(t.Context())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
@@ -82,7 +82,7 @@ func TestClientSendMemberNewsWeeklyNon2xx(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL, "", nil)
+	client := newTestClient(t, srv.URL, "")
 
 	err := client.SendMemberNewsWeekly(t.Context())
 	if err == nil {
@@ -110,7 +110,7 @@ func TestClientSendMemberNewsWeeklySuccess(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL, "", nil)
+	client := newTestClient(t, srv.URL, "")
 	if err := client.SendMemberNewsWeekly(t.Context()); err != nil {
 		t.Fatalf("SendMemberNewsWeekly() error = %v", err)
 	}
@@ -134,12 +134,35 @@ func TestClientSendWeeklyNotificationWithAPIKey(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL, apiKey, nil)
+	client := newTestClient(t, srv.URL, apiKey)
 	if err := client.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 
 	if gotHeader != apiKey {
 		t.Fatalf("%s header = %q, want %q", commoncontracts.APIKeyHeader, gotHeader, apiKey)
+	}
+}
+
+func newTestClient(t *testing.T, schedulerURL, apiKey string) *Client {
+	t.Helper()
+
+	client, err := NewClient(schedulerURL, apiKey, nil)
+	if err != nil {
+		t.Fatalf("NewClient(%q) error = %v", schedulerURL, err)
+	}
+
+	return client
+}
+
+// https scheduler URL은 H3 전용 내부 서버다. HOLOLIVE_INTERNAL_H3_* 가 없으면 TCP client로 내려가지 않고 오류다
+// (stack audit 2026-09-26).
+func TestNewClientRequiresInternalH3EnvForHTTPS(t *testing.T) {
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+
+	client, err := NewClient("https://127.0.0.1:30003", "", nil)
+	if err == nil || client != nil {
+		t.Fatalf("NewClient(https) = (%v, %v), want missing internal H3 env error", client, err)
 	}
 }

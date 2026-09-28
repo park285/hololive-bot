@@ -22,6 +22,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -148,6 +149,13 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	added, err := h.acl.AddRoom(ctx, req.Room)
+	if errors.Is(err, acl.ErrInvalidRoomChatID) {
+		// 방 이름 같은 비-chatID 값은 저장해도 어떤 방에도 적용되지 않으므로 입력 오류로 돌려준다.
+		sharedserver.RespondError(c, 400, "room must be a chat ID (signed 64-bit integer)", nil)
+
+		return
+	}
+
 	if err != nil {
 		h.safeLogger().Error("Failed to add room", slog.String("room", req.Room), slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to add room", nil)

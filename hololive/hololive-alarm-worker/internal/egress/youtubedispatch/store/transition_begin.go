@@ -24,10 +24,6 @@ func (s *TransitionStore) BeginSending(
 		return StartedOperation{}, newApplyResult(ApplyConflict, nil), errors.New("begin sending: rows are empty")
 	}
 
-	if err := s.ensureReady(ctx); err != nil {
-		return StartedOperation{}, newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("begin sending: %w", err)
-	}
-
 	startedAt, err := lifecycle.CanonicalTime(time.Now())
 	if err != nil {
 		return StartedOperation{}, newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("begin sending: started at: %w", err)

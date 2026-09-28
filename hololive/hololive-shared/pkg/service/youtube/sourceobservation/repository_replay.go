@@ -111,7 +111,7 @@ func (r *Repository) processNextReplayTx(ctx context.Context, tx dbx.Tx) (bool, 
 	if observationID <= 0 {
 		rejectErr := rejectMissingReplay(ctx, tx, requestID)
 
-		return true, errors.Join(rejectErr)
+		return true, rejectErr
 	}
 
 	observation, err := loadReplayObservation(ctx, tx, observationID)
@@ -119,7 +119,7 @@ func (r *Repository) processNextReplayTx(ctx context.Context, tx dbx.Tx) (bool, 
 		if errors.Is(err, errReplayObservationMissing) {
 			rejectErr := rejectMissingReplay(ctx, tx, requestID)
 
-			return true, errors.Join(rejectErr)
+			return true, rejectErr
 		}
 
 		return false, fmt.Errorf("reject replay: %w", err)
@@ -164,7 +164,7 @@ func (r *Repository) applyReplayDecision(
 	if reason := replayRejectionReason(r.supported.Supports(version), observation.epochRejected, queue); reason != "" {
 		out, rejectErr := rejectReplayResult(ctx, tx, result, reason)
 
-		return out, errors.Join(rejectErr)
+		return out, rejectErr
 	}
 
 	result, activated, err := activateReplayDecision(ctx, tx, result, observationID, queue.replayCount+1)
@@ -227,7 +227,7 @@ func activateReplayDecision(ctx context.Context, tx dbx.Tx, result ReplayResult,
 	if errors.Is(err, pgx.ErrNoRows) {
 		out, rejectErr := rejectReplayResult(ctx, tx, result, "queue_state_changed")
 
-		return out, false, errors.Join(rejectErr)
+		return out, false, rejectErr
 	}
 
 	return ReplayResult{}, false, fmt.Errorf("activate replay queue: %w", err)

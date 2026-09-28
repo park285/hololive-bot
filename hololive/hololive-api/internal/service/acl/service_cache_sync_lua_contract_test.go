@@ -1,9 +1,13 @@
 package acl
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/valkey-io/valkey-go"
+
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -46,5 +50,41 @@ func TestACLRoomsTempKeyPreservesExistingHashTag(t *testing.T) {
 	tempKey := aclRoomsTempKey("acl:{rooms}")
 	if !strings.HasPrefix(tempKey, "acl:{rooms}:tmp:") {
 		t.Fatalf("temp key = %q, want existing hash tag preserved", tempKey)
+	}
+}
+
+// raw client가 없는 형상에서 target key를 Del→SAdd로 바꾸는 비원자 경로는 없다. 조회자가 빈 집합을 보는 창을
+// 만들지 않도록 오류를 돌려주고 기존 target을 그대로 둔다.
+func TestSyncRoomsToValkeyWithoutRawClientFailsWithoutTouchingTarget(t *testing.T) {
+	ctx := t.Context()
+
+	var targetWrites []string
+
+	cacheClient := &cachemocks.Client{
+		DelFunc: func(_ context.Context, key string) error {
+			if key == aclWhitelistRoomsKey {
+				targetWrites = append(targetWrites, "del")
+			}
+
+			return nil
+		},
+		SAddFunc: func(_ context.Context, key string, members []string) (int64, error) {
+			if key == aclWhitelistRoomsKey {
+				targetWrites = append(targetWrites, "sadd")
+			}
+
+			return int64(len(members)), nil
+		},
+		GetClientFunc: func() valkey.Client { return nil },
+		BFunc:         func() valkey.Builder { return valkey.Builder{} },
+	}
+	service := &Service{cache: cacheClient}
+
+	if err := service.syncRoomsToValkeyAtomic(ctx, aclWhitelistRoomsKey, []string{testRoomA}); err == nil {
+		t.Fatal("sync without raw valkey client must fail")
+	}
+
+	if len(targetWrites) != 0 {
+		t.Fatalf("target key writes = %v, want none", targetWrites)
 	}
 }

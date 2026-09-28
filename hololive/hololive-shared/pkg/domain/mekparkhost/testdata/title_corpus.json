@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-11",
+  "captured_at": "2026-09-26",
   "source": "hololive youtube_live_sessions + youtube_videos minus session-overlapping video_ids",
   "channel_ids": {
     "unit-b": "UC3OH5FKQ3qtl4uRme_vZTgA",
@@ -3103,9 +3103,82 @@
       "reviewed_at": "2026-09-11",
       "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
       "kind": "solo"
+    },
+    {
+      "video_id": "0NQSP6kSifc",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【BOMBANANA!】🐣メン限ひなみ視点🐣焦るとすぐ聞か猿になっちゃいます🙉☁\ufe0f #ACHRORA #ACHRORAコラボ",
+      "source": "live_session",
+      "event_time": "2026-09-26T09:31:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-26",
+      "label_basis": "멤버 한정 개인 시점 표기(メン限+이름+視点) 검토.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "f0XPNLIewJM",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【BOMBANANA!】🖤メン限さやな視点🖤今日は名前、間違えません😉 #ACHRORA #ACHRORAコラボ",
+      "source": "live_session",
+      "event_time": "2026-09-26T09:31:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-26",
+      "label_basis": "멤버 한정 개인 시점 표기(メン限+이름+視点) 검토.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "Eg4oGw409DA",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【BOMBANANA!】🖤メン限さやな視点🖤猿になっても強いです😉 #ACHRORA #ACHRORAコラボ",
+      "source": "live_session",
+      "event_time": "2026-09-16T09:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-26",
+      "label_basis": "멤버 한정 개인 시점 표기(メン限+이름+視点) 검토.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "21_tEwWriv8",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【BOMBANANA!】🐳メン限りらら視点🐳あくろらの絆見せつけます💪 #ACHRORA #ACHRORAコラボ",
+      "source": "live_session",
+      "event_time": "2026-09-16T09:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-26",
+      "label_basis": "멤버 한정 개인 시점 표기(メン限+이름+視点) 검토.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "WABiewDiAYU",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【BOMBANANA!】活動開始から3か月‼\ufe0f友情崩壊の危機…⁉\ufe0f🙈🙊🙉#ACHRORA #ACHRORAコラボ【#9月のあくろら観測会議】",
+      "source": "live_session",
+      "event_time": "2026-09-26T09:31:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [],
+      "guests": [],
+      "reviewed_at": "2026-09-26",
+      "label_basis": "단체 태그와 기획명뿐이며 개인 태그·성명·시점 표기가 없어 개인 식별을 보류한다.",
+      "kind": "unspecified"
     }
   ],
-  "reviewed_at": "2026-09-11",
+  "reviewed_at": "2026-09-26",
   "label_basis": "Title evidence only; not independently video-verified training ground truth.",
   "initial_captured_at": "2026-08-28"
 }

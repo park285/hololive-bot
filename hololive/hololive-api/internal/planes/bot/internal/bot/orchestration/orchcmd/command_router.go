@@ -29,6 +29,7 @@ import (
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -115,7 +116,12 @@ func (r *CommandRouter) executeRegisteredCommand(
 		warnAttrs := append(append([]slog.Attr{}, attrs...), sharedlog.SinceMS(started))
 		sharedlog.Warn(ctx, r.logger, EventBotCommandUnknown, "unknown command", warnAttrs...)
 
-		unknownMessage := r.messageStrings.GetOrContext(ctx, messagestrings.NamespaceError, "unknown_command", messagestrings.FallbackSentinel)
+		unknownMessage := r.messageStrings.Text(messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: messaging.ErrUnknownCommand})
+		if unknownMessage == "" {
+			// bot plane 기동 검증이 error/unknown_command를 보장한다. 빈 문구를 보내지 않고 조립 결함으로 드러낸다.
+			return registeredCommandResult{handled: true, err: errors.New("unknown command message is not loaded")}
+		}
+
 		if sendErr := r.sendMessage(ctx, cmdCtx.Room, unknownMessage); sendErr != nil {
 			return registeredCommandResult{handled: true, err: fmt.Errorf("failed to send unknown command message: %w", sendErr)}
 		}

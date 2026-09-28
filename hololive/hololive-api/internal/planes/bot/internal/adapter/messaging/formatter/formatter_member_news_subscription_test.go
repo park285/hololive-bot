@@ -61,16 +61,16 @@ func TestFormatMemberNewsSubscriptionMessages_Fallback(t *testing.T) {
 	store := setupFormatterTestStore(t)
 	formatter := NewResponseFormatter("!", nil, WithMessageStrings(store))
 
-	noMembers := store.Get(messagestrings.NamespaceNotify, "member_news_no_members")
+	noMembers := store.Text(messagestrings.NotifyMemberNewsNoMembers)
 	require.NotEmpty(t, noMembers)
 
 	assert.Equal(t, noMembers, formatter.FormatMemberNewsNoMembers(ctx))
-	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_subscribed"), formatter.FormatMemberNewsSubscribed(ctx))
-	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_already_subscribed"), formatter.FormatMemberNewsAlreadySubscribed(ctx))
-	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_unsubscribed"), formatter.FormatMemberNewsUnsubscribed(ctx))
-	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_not_subscribed"), formatter.FormatMemberNewsNotSubscribed(ctx))
-	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_status_on"), formatter.FormatMemberNewsStatus(ctx, true))
-	assert.Equal(t, store.Get(messagestrings.NamespaceNotify, "member_news_status_off"), formatter.FormatMemberNewsStatus(ctx, false))
+	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsSubscribed), formatter.FormatMemberNewsSubscribed(ctx))
+	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsAlreadySubscribed), formatter.FormatMemberNewsAlreadySubscribed(ctx))
+	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsUnsubscribed), formatter.FormatMemberNewsUnsubscribed(ctx))
+	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsNotSubscribed), formatter.FormatMemberNewsNotSubscribed(ctx))
+	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsStatusOn), formatter.FormatMemberNewsStatus(ctx, true))
+	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsStatusOff), formatter.FormatMemberNewsStatus(ctx, false))
 }
 
 func TestMemberNewsLocalizationHelpers(t *testing.T) {

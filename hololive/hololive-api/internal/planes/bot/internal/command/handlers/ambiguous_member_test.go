@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -65,7 +64,7 @@ func ambiguousMembersFixture() []*domain.Member {
 
 func newAmbiguousMatcher() *matcher.Matcher {
 	provider := newContextAwareMemberProvider(ambiguousMembersFixture())
-	return matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler))
+	return matcher.NewMatcher(provider, nil, nil, slog.New(slog.DiscardHandler))
 }
 
 // alarm은 이미 동명이인 응답을 보내므로 목표 메시지의 기준점이다.
@@ -77,7 +76,7 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) str
 	deps := &handlercore.Dependencies{
 		Alarm:     &alarmListViewerStub{},
 		Matcher:   matcherService,
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		Formatter: newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			captured = message
 			return nil
@@ -111,7 +110,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 	deps := &handlercore.Dependencies{
 		LiveQuery: &liveQueryStub{},
 		Matcher:   newAmbiguousMatcher(),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		Formatter: newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			gotMessage = message
 			return nil
@@ -142,7 +141,7 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 	deps := &handlercore.Dependencies{
 		Holodex:   &scheduleStreamProviderStub{},
 		Matcher:   newAmbiguousMatcher(),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		Formatter: newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			gotMessage = message
 			return nil
@@ -173,7 +172,7 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 	deps := &handlercore.Dependencies{
 		Holodex:   &upcomingStreamProviderStub{},
 		Matcher:   newAmbiguousMatcher(),
-		Formatter: formatter.NewResponseFormatter("!", nil),
+		Formatter: newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			gotMessage = message
 			return nil
@@ -205,7 +204,7 @@ func TestSubscriberCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *te
 		Holodex:     &subscriberHolodexStub{subscriberCount: 12345},
 		Matcher:     newAmbiguousMatcher(),
 		MembersData: newContextAwareMemberProvider(ambiguousMembersFixture()),
-		Formatter:   formatter.NewResponseFormatter("!", nil),
+		Formatter:   newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			gotMessage = message
 			return nil

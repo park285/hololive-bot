@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v2/iris"
-	envutil "github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
@@ -20,8 +19,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -43,7 +40,7 @@ func buildNotificationEgress(
 		return nil, errors.New("postgres is required")
 	}
 
-	irisClient, err := providers.ProvideIrisKaringClient(
+	irisClient, err := providers.ProvideIrisClient(
 		&appConfig.Iris,
 		logger,
 		iris.WithBaseURL(appConfig.Iris.BaseURL),
@@ -56,7 +53,12 @@ func buildNotificationEgress(
 	rooms := kakaoroom.New(infra.Postgres.GetPool(), kakaoroom.NewIrisLister(irisClient), logger)
 	irisSender := buildNotificationSender(irisClient, appConfig.Bot.MarkdownReplies, rooms)
 
-	runners, err := buildEgressRunners(ctx, appConfig, infra, irisSender, logger, workerState)
+	messageStrings, err := loadEgressMessageStrings(ctx, infra, logger)
+	if err != nil {
+		return nil, fmt.Errorf("load egress message strings: %w", err)
+	}
+
+	runners, err := buildEgressRunners(ctx, appConfig, infra, irisSender, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("build egress runners: %w", err)
 	}
@@ -65,7 +67,8 @@ func buildNotificationEgress(
 }
 
 func buildNotificationSender(client egress.IrisClient, markdownReplies bool, rooms egress.OpenChat) *egress.IrisMessageSender {
-	// runtime 알림은 오픈채팅 Markdown만 방 정본을 사용하며, 일반채팅 resolver를 연결하지 않아 Karing eligibility를 노출하지 않습니다.
+	// 방 정본은 오픈채팅 Markdown 판정에만 쓴다. alarm-worker는 Karing template을 보내지 않는다
+	// (DEC-20260926-hololive-karing-egress-disposition).
 	return egress.NewIrisMessageSender(
 		client,
 		egress.WithMarkdownReplies(markdownReplies),
@@ -78,10 +81,11 @@ func buildEgressRunners(
 	appConfig *alarmworker.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
-	runners, err := appendAlarmDispatchRunner(ctx, nil, appConfig.Config, infra, irisSender, logger, workerState)
+	runners, err := appendAlarmDispatchRunner(ctx, nil, appConfig.Config, infra, irisSender, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append alarm dispatch runner: %w", err)
 	}
@@ -91,15 +95,9 @@ func buildEgressRunners(
 		Scheduler: dispatchrun.NewMaintenanceRunner(infra, appConfig.DispatchRetention, logger),
 	})
 
-	mode, youtubeEnabled, err := youtubeOutboxHandoffActivation(appConfig.Config, logger)
-	if err != nil {
-		return nil, fmt.Errorf("resolve youtube outbox handoff activation: %w", err)
-	}
-
-	if youtubeEnabled {
-		sender := buildYouTubeOutboxSender(irisSender, alarmDispatchMessageStrings(infra, logger))
-
-		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig.Config, infra, sender, logger, workerState, mode)
+	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다(DEC-20260926-hololive-outbox-v3-convergence).
+	if alarmWorkerExecutorEnabled(appConfig.Config, "youtube_delivery") {
+		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig.Config, infra, irisSender, messageStrings, logger, workerState)
 		if buildErr != nil {
 			return nil, fmt.Errorf("build youtube outbox dispatcher: %w", buildErr)
 		}
@@ -108,6 +106,8 @@ func buildEgressRunners(
 			Name:      "youtube-outbox",
 			Scheduler: workerState.wrap("youtube_delivery", dispatcher),
 		})
+	} else {
+		logWorkerDisabled(logger, "YouTube outbox dispatcher disabled")
 	}
 
 	runners, err = appendNotificationDeliveryRunner(runners, appConfig.Config, infra, irisSender, logger, workerState)
@@ -124,6 +124,7 @@ func appendAlarmDispatchRunner(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
+	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
@@ -133,7 +134,7 @@ func appendAlarmDispatchRunner(
 		return runners, nil
 	}
 
-	runner, err := buildAlarmDispatchRunner(ctx, appConfig, infra, irisSender, logger, workerState)
+	runner, err := buildAlarmDispatchRunner(ctx, appConfig, infra, irisSender, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("build alarm dispatch runner: %w", err)
 	}
@@ -194,19 +195,24 @@ func buildDeliveryOutboxDispatcher(
 	profile := appConfig.AlarmWorkerProfile.NotificationDelivery
 	dispatcherConfig := delivery.DispatcherConfig{
 		BatchSize: profile.BatchSize, MaxConcurrent: worker.Executor.ConfiguredWorkers,
-		MaxRetries: profile.MaxRetries, LockTimeout: durationMS(profile.LockTimeoutMS),
-		PollInterval: durationMS(profile.PollIntervalMS), RetryBackoff: durationMS(profile.RetryBackoffMS),
+		MaxRetries: profile.MaxRetries, PollInterval: durationMS(profile.PollIntervalMS),
+		RetryBackoff: durationMS(profile.RetryBackoffMS),
 		CleanupAfter: durationMS(profile.CleanupAfterMS), CleanupInterval: durationMS(profile.CleanupIntervalMS),
 		CleanupEnabled: profile.CleanupEnabled, StaleSendingAfter: durationMS(profile.StaleSendingAfterMS),
 		StaleSendingSweepInterval: durationMS(profile.StaleSendingSweepIntervalMS),
 		StaleSendingSweepLimit:    profile.StaleSendingSweepLimit,
 	}
-	dispatcher := delivery.NewDispatcher(
+
+	dispatcher, err := delivery.NewDispatcher(
 		delivery.NewOutboxRepository(infra.Postgres, logger),
 		sender,
 		logger,
 		&dispatcherConfig,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
+	}
+
 	dispatcher.SetWorkerInstrumentation(workerState.trackers["notification_delivery"], workerState.totals["notification_delivery"])
 
 	return workerruntime.NewDeliveryOutboxDispatcherRunner(dispatcher, logger), nil
@@ -217,6 +223,7 @@ func buildAlarmDispatchRunner(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	sender dispatchrun.Sender,
+	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) (workerruntime.Scheduler, error) {
@@ -232,7 +239,11 @@ func buildAlarmDispatchRunner(
 		return nil, errors.New("postgres is required")
 	}
 
-	consumer := newAlarmDispatchConsumer(appConfig, infra, logger)
+	consumer, err := newAlarmDispatchConsumer(appConfig, infra, logger)
+	if err != nil {
+		return nil, fmt.Errorf("new alarm dispatch consumer: %w", err)
+	}
+
 	config := alarmDispatchRunnerConfig(appConfig)
 
 	config.WorkerTracker = workerState.trackers["alarm_dispatch"]
@@ -256,26 +267,31 @@ func buildAlarmDispatchRunner(
 		consumer,
 		sender,
 		template.NewRenderer(infra.Postgres.GetPool(), logger),
-		alarmDispatchMessageStrings(infra, logger),
+		messageStrings,
 		wakeupWaiter,
 		config,
 		logger,
 	), nil
 }
 
-func newAlarmDispatchConsumer(appConfig *settings.Config, infra *sharedmodules.InfraModule, logger *slog.Logger) *dispatchoutbox.Consumer {
+func newAlarmDispatchConsumer(appConfig *settings.Config, infra *sharedmodules.InfraModule, logger *slog.Logger) (*dispatchoutbox.Consumer, error) {
 	profile := appConfig.AlarmWorkerProfile.AlarmDispatch
 	lease := durationMS(profile.LeaseMS)
 
-	return dispatchoutbox.NewConsumer(
+	consumer, err := dispatchoutbox.NewConsumer(
 		dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
+		infra.Cache,
 		logger,
 		dispatchoutbox.WithLease(lease),
 		dispatchoutbox.WithQuarantineThreshold(durationMS(profile.QuarantineThresholdMS)),
 		dispatchoutbox.WithRecoveryInterval(durationMS(profile.RecoveryIntervalMS)),
 		dispatchoutbox.WithRecoveryBatchSize(profile.RecoveryBatchSize),
-		dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("new dispatch outbox consumer: %w", err)
+	}
+
+	return consumer, nil
 }
 
 func alarmDispatchRunnerConfig(appConfig *settings.Config) dispatchrun.RunnerConfig {
@@ -291,92 +307,57 @@ func alarmDispatchRunnerConfig(appConfig *settings.Config) dispatchrun.RunnerCon
 	}
 }
 
-func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.Logger) *messagestrings.Store {
+// loadEgressMessageStrings는 알림 발송 runner들이 함께 쓰는 message_strings를 기동 때 한 번 적재하고
+// 발송 계약 key를 검증한다. 실패하면 기동을 실패시킨다(DEC-20260926-hololive-message-strings-startup-validation).
+func loadEgressMessageStrings(ctx context.Context, infra *sharedmodules.InfraModule, logger *slog.Logger) (*messagestrings.Store, error) {
 	if infra == nil || infra.Postgres == nil {
-		return nil
+		return nil, errors.New("postgres is required")
 	}
 
 	pool := infra.Postgres.GetPool()
 	if pool == nil {
-		return nil
+		return nil, errors.New("postgres pool is required")
 	}
 
-	return messagestrings.NewStore(pool, logger)
-}
+	store := messagestrings.NewStore(pool, logger)
+	if err := store.Load(ctx); err != nil {
+		return nil, fmt.Errorf("load message strings: %w", err)
+	}
 
-func buildYouTubeOutboxSender(irisSender *egress.IrisMessageSender, messageStrings *messagestrings.Store) delivery.MessageSender {
-	return dispatchrun.NewYouTubeOutboxKaringSender(irisSender, messageStrings)
+	if err := store.Validate(messagestrings.AlarmWorkerEgressRequirements()); err != nil {
+		return nil, fmt.Errorf("validate message strings: %w", err)
+	}
+
+	return store, nil
 }
 
 func buildYouTubeOutboxDispatcher(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
+	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
-	mode handoff.Mode,
 ) (workerruntime.Scheduler, error) {
 	if infra == nil || infra.Postgres == nil {
 		return nil, errors.New("postgres is required")
 	}
 
-	dispatcher, err := newYouTubeOutboxDispatcher(appConfig, infra, sender, logger)
+	dispatcher, err := newYouTubeOutboxDispatcher(appConfig, infra, sender, messageStrings, logger)
 	if err != nil {
 		return nil, fmt.Errorf("create youtube outbox dispatcher: %w", err)
 	}
 
 	dispatcher.SetWorkerInstrumentation(workerState.trackers["youtube_delivery"], workerState.totals["youtube_delivery"])
 
-	if err := configureYouTubeOutboxDispatcher(dispatcher, infra, logger, mode); err != nil {
-		return nil, fmt.Errorf("configure youtube outbox dispatcher: %w", err)
-	}
-
 	return workerruntime.NewYouTubeOutboxDispatcherRunner(dispatcher, logger), nil
-}
-
-func youtubeOutboxHandoffActivation(appConfig *settings.Config, logger *slog.Logger) (handoff.Mode, bool, error) {
-	mode, err := parseYouTubeOutboxHandoffMode()
-	if err != nil {
-		return mode, false, fmt.Errorf("parse youtube outbox handoff mode: %w", err)
-	}
-
-	enabled, err := youtubeOutboxDispatcherEnabled(appConfig, mode, logger)
-	if err != nil {
-		return mode, false, fmt.Errorf("youtube outbox dispatcher enabled: %w", err)
-	}
-
-	return mode, enabled, nil
-}
-
-func parseYouTubeOutboxHandoffMode() (handoff.Mode, error) {
-	out, err := handoff.ParseMode(envutil.String("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "off"))
-	if err != nil {
-		return out, fmt.Errorf("parse mode: %w", err)
-	}
-
-	return out, nil
-}
-
-func youtubeOutboxDispatcherEnabled(appConfig *settings.Config, mode handoff.Mode, logger *slog.Logger) (bool, error) {
-	if appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"].Executor.Enabled {
-		return true, nil
-	}
-
-	if mode != handoff.ModeOff {
-		return false, fmt.Errorf("youtube outbox v3 handoff mode %q requires youtube_delivery executor.enabled=true", mode)
-	}
-
-	if logger != nil {
-		logger.Info("YouTube outbox dispatcher disabled")
-	}
-
-	return false, nil
 }
 
 func newYouTubeOutboxDispatcher(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
+	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 ) (*youtubedispatch.Dispatcher, error) {
 	if appConfig == nil {
@@ -398,14 +379,14 @@ func newYouTubeOutboxDispatcher(
 		ClaimFreshnessWindow: durationMS(profile.ClaimFreshnessWindowMS), DeliveryParallelism: worker.Executor.ConfiguredWorkers,
 		DeliverySendTimeout: durationMS(profile.DeliverySendTimeoutMS), SubscriberLookupParallelism: profile.SubscriberLookupParallelism,
 		AggregateSyncInterval: durationMS(profile.AggregateSyncIntervalMS), TelemetryPollInterval: durationMS(profile.TelemetryPollIntervalMS),
-		TelemetryBackfillBatch: profile.TelemetryBackfillBatch, TelemetryFlushBatch: profile.TelemetryFlushBatch,
+		TelemetryFlushBatch:   profile.TelemetryFlushBatch,
 		TelemetryRetryBackoff: durationMS(profile.TelemetryRetryBackoffMS), TelemetryRetention: durationMS(profile.TelemetryRetentionMS),
 	}
 	pool := infra.Postgres.GetPool()
 
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: pool, Cache: infra.Cache, Sender: sender, SeeMoreFold: appConfig.Bot.SeeMoreFold,
-		Renderer: template.NewRenderer(pool, logger), MessageStrings: messagestrings.NewStore(pool, logger),
+		Renderer: template.NewRenderer(pool, logger), MessageStrings: messageStrings,
 	}, logger, &dispatchConfig)
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube outbox dispatcher dependencies: %w", err)
@@ -416,27 +397,4 @@ func newYouTubeOutboxDispatcher(
 
 func durationMS(milliseconds int64) time.Duration {
 	return time.Duration(milliseconds) * time.Millisecond
-}
-
-func configureYouTubeOutboxDispatcher(
-	dispatcher *youtubedispatch.Dispatcher,
-	infra *sharedmodules.InfraModule,
-	logger *slog.Logger,
-	mode handoff.Mode,
-) error {
-	if mode == handoff.ModeOff {
-		return nil
-	}
-
-	publisher := queue.NewPublisher(
-		infra.Cache,
-		logger,
-		queue.WithOutbox(dispatchoutbox.NewPgxRepository(infra.Postgres, logger)),
-	)
-
-	if err := dispatcher.ConfigureHandoff(mode, youtubeOutboxDispatchPublisher{publisher: publisher}); err != nil {
-		return fmt.Errorf("configure handoff: %w", err)
-	}
-
-	return nil
 }

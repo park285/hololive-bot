@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,7 +36,7 @@ import (
 )
 
 // reviveTestClaimManager는 정규화된 canonical lifecycle 구성을 사용합니다.
-func reviveTestClaimManager(t *testing.T, db *deliveryTestDB) *ClaimManager {
+func reviveTestClaimManager(t *testing.T, db *pgxpool.Pool) *ClaimManager {
 	t.Helper()
 
 	return newDispatcherForTest(t,
@@ -92,7 +93,7 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 	assert.Zero(t, failedDelivery.AttemptCount)
 }
 
-func seedReviveStaleFailedOutboxFixture(t *testing.T, db *deliveryTestDB) reviveStaleFixture {
+func seedReviveStaleFailedOutboxFixture(t *testing.T, db *pgxpool.Pool) reviveStaleFixture {
 	t.Helper()
 
 	now := time.Now().UTC()
@@ -142,7 +143,7 @@ func seedReviveStaleFailedOutboxFixture(t *testing.T, db *deliveryTestDB) revive
 	}
 }
 
-func assertReviveOutboxStatuses(t *testing.T, db *deliveryTestDB, fixture reviveStaleFixture) {
+func assertReviveOutboxStatuses(t *testing.T, db *pgxpool.Pool, fixture reviveStaleFixture) {
 	t.Helper()
 
 	assertReviveOutboxProjectedPending(t, db, fixture.freshVideoID, fixture.oldNextAttempt, "freshVideo")
@@ -155,7 +156,7 @@ func assertReviveOutboxStatuses(t *testing.T, db *deliveryTestDB, fixture revive
 	assertReviveOutboxStillFailed(t, db, fixture.lockedVideoID, "lockedVideo")
 }
 
-func assertReviveOutboxRevived(t *testing.T, db *deliveryTestDB, id int64, oldNextAttempt time.Time, label string) {
+func assertReviveOutboxRevived(t *testing.T, db *pgxpool.Pool, id int64, oldNextAttempt time.Time, label string) {
 	t.Helper()
 
 	var row domain.YouTubeNotificationOutbox
@@ -168,7 +169,7 @@ func assertReviveOutboxRevived(t *testing.T, db *deliveryTestDB, id int64, oldNe
 	assert.Nil(t, row.LockedAt)
 }
 
-func assertReviveOutboxProjectedPending(t *testing.T, db *deliveryTestDB, id int64, oldNextAttempt time.Time, label string) {
+func assertReviveOutboxProjectedPending(t *testing.T, db *pgxpool.Pool, id int64, oldNextAttempt time.Time, label string) {
 	t.Helper()
 
 	var row domain.YouTubeNotificationOutbox
@@ -180,7 +181,7 @@ func assertReviveOutboxProjectedPending(t *testing.T, db *deliveryTestDB, id int
 	assert.Nil(t, row.LockedAt)
 }
 
-func assertReviveOutboxStillFailed(t *testing.T, db *deliveryTestDB, id int64, label string) {
+func assertReviveOutboxStillFailed(t *testing.T, db *pgxpool.Pool, id int64, label string) {
 	t.Helper()
 
 	var row domain.YouTubeNotificationOutbox
@@ -260,7 +261,7 @@ type communityShortReviveFixture struct {
 	oldNextAttempt time.Time
 }
 
-func seedCommunityShortReviveFixture(t *testing.T, db *deliveryTestDB) communityShortReviveFixture {
+func seedCommunityShortReviveFixture(t *testing.T, db *pgxpool.Pool) communityShortReviveFixture {
 	t.Helper()
 
 	now := time.Now().UTC()
@@ -288,7 +289,7 @@ func seedCommunityShortReviveFixture(t *testing.T, db *deliveryTestDB) community
 
 func insertFailedReviveOutbox(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	kind domain.OutboxKind,
 	contentID string,
 	createdAt time.Time,
@@ -318,7 +319,7 @@ func insertFailedReviveOutbox(
 
 func assertCommunityShortReviveFixture(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	fixture communityShortReviveFixture,
 ) {
 	t.Helper()

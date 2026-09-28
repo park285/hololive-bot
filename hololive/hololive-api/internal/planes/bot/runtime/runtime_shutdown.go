@@ -49,13 +49,6 @@ func (r *BotRuntime) Shutdown(ctx context.Context) error {
 		Logger:              r.Logger,
 		ShutdownHTTPServer:  r.ShutdownHTTPServer,
 		WebhookHandlerClose: func() error { return r.shutdownWebhookAndDurability(ctx) },
-		ShutdownAlarmServices: func(ctx context.Context) error {
-			if r.AlarmService == nil {
-				return nil
-			}
-
-			return r.AlarmService.Close(ctx)
-		},
 		ShutdownBot: func(ctx context.Context) error {
 			if r.Bot == nil {
 				return nil

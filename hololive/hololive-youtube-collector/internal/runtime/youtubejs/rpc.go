@@ -281,14 +281,14 @@ func decodeHelperResponse(resp *http.Response, limit int64, response any) error 
 	}
 
 	if int64(len(payload)) > bodyLimit {
-		return errors.Join(oversizedHelperResponseResult(resp.StatusCode))
+		return oversizedHelperResponseResult(resp.StatusCode)
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		return errors.Join(decodeHelperSuccessResult(payload, response))
+		return decodeHelperSuccessResult(payload, response)
 	}
 
-	return errors.Join(helperStatusErrorResult(resp.StatusCode, payload))
+	return helperStatusErrorResult(resp.StatusCode, payload)
 }
 
 func oversizedHelperResponseResult(status int) error {
@@ -361,7 +361,7 @@ type helperSuccess interface {
 
 func decodeHelperSuccess(payload []byte, response any) error {
 	if err := strictDecode(payload, response); err != nil {
-		return errors.Join(protocolMismatchError(fmt.Errorf("decode youtube.js helper success response: %w", err)))
+		return protocolMismatchError(fmt.Errorf("decode youtube.js helper success response: %w", err))
 	}
 
 	success, ok := response.(helperSuccess)
@@ -370,11 +370,11 @@ func decodeHelperSuccess(payload []byte, response any) error {
 	}
 
 	if success.protocolMetadata().ProtocolVersion != ProtocolVersion {
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper success protocol version mismatch")))
+		return protocolMismatchError(errors.New("youtube.js helper success protocol version mismatch"))
 	}
 
 	if err := success.validateSuccess(); err != nil {
-		return errors.Join(protocolMismatchError(err))
+		return protocolMismatchError(err)
 	}
 
 	return nil

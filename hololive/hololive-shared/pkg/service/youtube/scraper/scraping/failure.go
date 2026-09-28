@@ -38,10 +38,9 @@ const (
 type FailureSource string
 
 const (
-	FailureSourceHTML            FailureSource = "html"
-	FailureSourceRSS             FailureSource = "rss"
-	FailureSourceAPI             FailureSource = "api"
-	FailureSourceBrowserSnapshot FailureSource = "browser_snapshot"
+	FailureSourceHTML FailureSource = "html"
+	FailureSourceRSS  FailureSource = "rss"
+	FailureSourceAPI  FailureSource = "api"
 )
 
 type FailureDetail struct {

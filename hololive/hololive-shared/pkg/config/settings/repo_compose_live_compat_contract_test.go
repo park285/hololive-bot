@@ -238,8 +238,9 @@ func assertLiveCompatRenderedRuntimeConfig(t *testing.T, cfg renderedCompose) {
 			t.Fatalf("%s IRIS_BASE_URL_FILE = %q, want /app/runtime-config/iris_base_url", service, env["IRIS_BASE_URL_FILE"])
 		}
 
-		if env["IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS"] != "true" {
-			t.Fatalf("%s IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS = %q, want true", service, env["IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS"])
+		// stat 검사 우회 플래그는 퇴역했다(settings.config_iris_retired_env.go). overlay가 다시 주입하면 기동이 실패한다.
+		if value, ok := env["IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS"]; ok {
+			t.Fatalf("%s must not receive retired IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS (got %q)", service, value)
 		}
 
 		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
@@ -248,18 +249,18 @@ func assertLiveCompatRenderedRuntimeConfig(t *testing.T, cfg renderedCompose) {
 	}
 }
 
-func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T) {
-	assertMainAPLiveCompatOverlayText(t)
+// 중앙 youtube-collector-c는 prod.yml의 youtube-collector이고 live-compat.yml이 포트·볼륨을 소유한다. 이를 재선언만 하던
+// 빈 main-ap overlay 2종은 지웠다(stack-audit 2026-09-26 T11 holo-main-ap-empty-overlays).
+func TestRepoComposeLiveCompatOverlayRendersCentralCollector(t *testing.T) {
+	assertLiveCompatCollectorEnvFileText(t)
 
 	cfg := renderComposeConfig(t,
 		composeProdFile,
 		composeLiveCompatFile,
-		"deploy/compose/docker-compose.main-ap.yml",
-		"deploy/compose/docker-compose.main-ap.live-compat.yml",
 	)
 
-	assertMainAPLiveCompatRenderedEgressAllowedHosts(t, cfg)
-	assertMainAPLiveCompatRenderedProducer(t, cfg)
+	assertLiveCompatRenderedEgressAllowedHosts(t, cfg)
+	assertLiveCompatRenderedCollector(t, cfg)
 	assertCollectorRenderedWithoutValkey(t, cfg, load.RuntimeYouTubeCollector) // CFG-007
 	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, load.RuntimeYouTubeCollector)
 }
@@ -299,7 +300,7 @@ func TestCFG010ExactRevisionRollbackDocs(t *testing.T) {
 	}
 }
 
-func assertMainAPLiveCompatOverlayText(t *testing.T) {
+func assertLiveCompatCollectorEnvFileText(t *testing.T) {
 	t.Helper()
 
 	prod := readRepoFile(t, composeProdFile)
@@ -311,7 +312,7 @@ func assertMainAPLiveCompatOverlayText(t *testing.T) {
 	}
 }
 
-func assertMainAPLiveCompatRenderedEgressAllowedHosts(t *testing.T, cfg renderedCompose) {
+func assertLiveCompatRenderedEgressAllowedHosts(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker} {
@@ -322,7 +323,7 @@ func assertMainAPLiveCompatRenderedEgressAllowedHosts(t *testing.T, cfg rendered
 	}
 }
 
-func assertMainAPLiveCompatRenderedProducer(t *testing.T, cfg renderedCompose) {
+func assertLiveCompatRenderedCollector(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	env := composeEnvironment(t, cfg, load.RuntimeYouTubeCollector)
@@ -348,16 +349,14 @@ func assertMainAPLiveCompatRenderedProducer(t *testing.T, cfg renderedCompose) {
 		t.Fatal("youtube-collector must not receive admin API_SECRET_KEY under live overlay")
 	}
 
-	for _, key := range []string{"METRICS_API_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
+	for _, key := range []string{"METRICS_API_KEY", "HOLODEX_API_KEY"} {
 		if _, ok := env[key]; !ok {
 			t.Fatalf("youtube-collector missing scoped %s mapping", key)
 		}
 	}
 
-	for _, key := range []string{"HOLODEX_API_KEY_2", "SCRAPER_PROXY_ENABLED", "YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "YOUTUBE_ENABLE_QUOTA_BUILDING"} {
-		if _, ok := env[key]; !ok {
-			t.Fatalf("youtube-collector missing producer env_file key %s", key)
-		}
+	if _, ok := env["HOLODEX_API_KEY_1"]; ok {
+		t.Fatal("youtube-collector must not receive retired HOLODEX_API_KEY_1 under live overlay")
 	}
 
 	targets := strings.Join(composeVolumeTargets(t, cfg, load.RuntimeYouTubeCollector), "\n")

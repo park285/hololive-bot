@@ -41,3 +41,22 @@ func TestEnvBool(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgresConnStringRequiresMigratorPassword(t *testing.T) {
+	t.Setenv("PGPASSWORD", "")
+
+	if _, err := postgresConnString(); err == nil || !strings.Contains(err.Error(), "PGPASSWORD") {
+		t.Fatalf("postgresConnString() error = %v, want missing PGPASSWORD", err)
+	}
+
+	t.Setenv("PGPASSWORD", "migrator-secret")
+
+	connString, err := postgresConnString()
+	if err != nil {
+		t.Fatalf("postgresConnString() error = %v", err)
+	}
+
+	if !strings.Contains(connString, "password='migrator-secret'") {
+		t.Fatalf("postgresConnString() = %q, want migrator password", connString)
+	}
+}

@@ -25,6 +25,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -35,25 +37,20 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 
 	defaults := Settings{
 		AlarmAdvanceMinutes: 5,
-		ScraperProxyEnabled: true,
 	}
-	service := NewSettingsService(filePath, defaults, logger)
+	service := mustNewSettingsService(t, filePath, defaults, logger)
 	got := service.Get()
 
 	if got.AlarmAdvanceMinutes != 5 {
 		t.Fatalf("expected default 5, got %d", got.AlarmAdvanceMinutes)
 	}
 
-	if !got.ScraperProxyEnabled {
-		t.Fatal("expected default scraper proxy enabled true, got false")
-	}
-
-	updated := Settings{AlarmAdvanceMinutes: 12, ScraperProxyEnabled: false}
+	updated := Settings{AlarmAdvanceMinutes: 12}
 	if err := service.Update(updated); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
 
-	reloaded := NewSettingsService(filePath, defaults, logger)
+	reloaded := mustNewSettingsService(t, filePath, defaults, logger)
 
 	got = reloaded.Get()
 
@@ -61,8 +58,27 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 		t.Fatalf("expected persisted 12, got %d", got.AlarmAdvanceMinutes)
 	}
 
-	if got.ScraperProxyEnabled {
-		t.Fatal("expected persisted scraper proxy enabled false, got true")
+	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+
+	// scraper proxy 토글은 퇴역했으므로 저장 파일에 다시 쓰지 않는다(DEC-20260926-hololive-legacy-env-config-retirement).
+	if strings.Contains(string(raw), "scraperProxyEnabled") {
+		t.Fatalf("persisted settings still carry the retired scraperProxyEnabled key: %s", raw)
+	}
+}
+
+// 퇴역 전 파일에 남은 scraperProxyEnabled는 json/v2 기본 decode가 모르는 멤버로 무시하고, 나머지 값은 그대로 읽는다.
+func TestSettingsService_ReadsFileWithRetiredScraperProxyKey(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":true,"targetMinutes":[5,1]}`), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	got := mustNewSettingsService(t, filePath, Settings{}, slog.New(slog.DiscardHandler)).Get()
+	if got.AlarmAdvanceMinutes != 5 || !slices.Equal(got.TargetMinutes, []int{5, 1}) {
+		t.Fatalf("settings = %+v, want alarmAdvanceMinutes=5 targetMinutes=[5 1]", got)
 	}
 }
 
@@ -73,19 +89,16 @@ func TestSettingsService_PreservesTargetMinutesOnReload(t *testing.T) {
 
 	defaults := Settings{
 		AlarmAdvanceMinutes: 30,
-		ScraperProxyEnabled: false,
 		TargetMinutes:       []int{30, 15, 5, 1},
 	}
-	service := NewSettingsService(filePath, defaults, logger)
+	service := mustNewSettingsService(t, filePath, defaults, logger)
 	current := service.Get()
-
-	current.ScraperProxyEnabled = true
 
 	if err := service.Update(current); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
 
-	reloaded := NewSettingsService(filePath, Settings{}, logger)
+	reloaded := mustNewSettingsService(t, filePath, Settings{}, logger)
 	got := reloaded.Get()
 	want := []int{30, 15, 5, 1}
 
@@ -105,11 +118,11 @@ func TestSettingsService_PreservesExplicitStoredTargetMinutesOnReload(t *testing
 	filePath := filepath.Join(dir, "settings.json")
 	logger := slog.New(slog.DiscardHandler)
 
-	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
+	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"targetMinutes":[5,1]}`), 0o600); err != nil {
 		t.Fatalf("write settings: %v", err)
 	}
 
-	reloaded := NewSettingsService(filePath, Settings{}, logger)
+	reloaded := mustNewSettingsService(t, filePath, Settings{}, logger)
 	got := reloaded.Get()
 	want := []int{5, 1}
 
@@ -129,12 +142,12 @@ func TestSettingsService_DoesNotRewriteExplicitTargetMinutesOnReload(t *testing.
 	filePath := filepath.Join(dir, "settings.json")
 	logger := slog.New(slog.DiscardHandler)
 
-	original := `{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`
+	original := `{"alarmAdvanceMinutes":5,"targetMinutes":[5,1]}`
 	if err := os.WriteFile(filePath, []byte(original), 0o600); err != nil {
 		t.Fatalf("write settings: %v", err)
 	}
 
-	_ = NewSettingsService(filePath, Settings{}, logger)
+	_ = mustNewSettingsService(t, filePath, Settings{}, logger)
 
 	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
 	if err != nil {
@@ -149,9 +162,9 @@ func TestSettingsService_DoesNotRewriteExplicitTargetMinutesOnReload(t *testing.
 func TestSettingsService_UpdateLeavesNoTempFileBehind(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	service := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
+	service := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
 
-	if err := service.Update(Settings{AlarmAdvanceMinutes: 7, ScraperProxyEnabled: true}); err != nil {
+	if err := service.Update(Settings{AlarmAdvanceMinutes: 7}); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
@@ -166,9 +179,9 @@ func TestSettingsService_UpdateLeavesNoTempFileBehind(t *testing.T) {
 		}
 	}
 
-	reloaded := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
-	if got := reloaded.Get(); got.AlarmAdvanceMinutes != 7 || !got.ScraperProxyEnabled {
-		t.Fatalf("reloaded settings = %+v, want AlarmAdvanceMinutes=7 ScraperProxyEnabled=true", got)
+	reloaded := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
+	if got := reloaded.Get(); got.AlarmAdvanceMinutes != 7 {
+		t.Fatalf("reloaded settings = %+v, want AlarmAdvanceMinutes=7", got)
 	}
 }
 
@@ -179,7 +192,7 @@ func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOn
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	service := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
+	service := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
 
 	if err := service.Update(Settings{AlarmAdvanceMinutes: 9}); err != nil {
 		t.Fatalf("seed Update() error = %v", err)
@@ -200,8 +213,66 @@ func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOn
 		t.Fatal("Update() error = nil, want failure on a read-only directory")
 	}
 
-	reloaded := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
+	reloaded := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
 	if got := reloaded.Get().AlarmAdvanceMinutes; got != 9 {
 		t.Fatalf("persisted AlarmAdvanceMinutes = %d, want the pre-failure value 9", got)
 	}
+}
+
+// 저장 파일은 settings.ReadFile 하나가 해석한다. 구형 형식(targetMinutes 없음)이나 읽을 수 없는 파일을 기본값으로 대신하지
+// 않고 기동 오류로 드러낸다(stack-audit 2026-09-26 T11 holo-settings-file-legacy-format-and-dual-reader).
+func TestSettingsService_RejectsUnsupportedStoredFile(t *testing.T) {
+	for name, content := range map[string]string{
+		"legacy advance-only format": `{"alarmAdvanceMinutes":1}`,
+		"missing advance minute":     `{"targetMinutes":[5,1]}`,
+		"non-positive targets only":  `{"alarmAdvanceMinutes":5,"targetMinutes":[0,-1]}`,
+		"undecodable":                `{"alarmAdvanceMinutes":`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			filePath := filepath.Join(t.TempDir(), "settings.json")
+			if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+				t.Fatalf("write settings: %v", err)
+			}
+
+			if service, err := NewSettingsService(filePath, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler)); err == nil {
+				t.Fatalf("NewSettingsService() = %+v, nil; want error", service.Get())
+			}
+		})
+	}
+}
+
+// 정규화 결과가 저장값과 달라도 파일을 다시 쓰지 않는다. 다음 Update가 정규화된 값을 기록한다.
+func TestSettingsService_DoesNotRewriteNonCanonicalTargetMinutes(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+	original := `{"alarmAdvanceMinutes":5,"targetMinutes":[1,5,5]}`
+
+	if err := os.WriteFile(filePath, []byte(original), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	service := mustNewSettingsService(t, filePath, Settings{}, slog.New(slog.DiscardHandler))
+	if got := service.Get().TargetMinutes; !slices.Equal(got, []int{5, 1}) {
+		t.Fatalf("TargetMinutes = %v, want normalized [5 1]", got)
+	}
+
+	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+
+	if string(raw) != original {
+		t.Fatalf("settings file rewritten on load: %q", string(raw))
+	}
+}
+
+func mustNewSettingsService(t *testing.T, filePath string, defaults Settings, logger *slog.Logger) *Service {
+	t.Helper()
+
+	service, err := NewSettingsService(filePath, defaults, logger)
+	if err != nil {
+		t.Fatalf("NewSettingsService() error = %v", err)
+	}
+
+	return service
 }

@@ -14,16 +14,16 @@ func helperStatusError(status int, payload []byte) error {
 	var decoded RPCErrorBody
 
 	if err := strictDecode(payload, &decoded); err != nil {
-		return errors.Join(protocolMismatchError(fmt.Errorf("decode youtube.js helper error response: %w", err)))
+		return protocolMismatchError(fmt.Errorf("decode youtube.js helper error response: %w", err))
 	}
 
 	if decoded.ProtocolVersion != ProtocolVersion {
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper error protocol version mismatch")))
+		return protocolMismatchError(errors.New("youtube.js helper error protocol version mismatch"))
 	}
 
 	mapped, ok := mapHelperFailure(status, &decoded.Error)
 	if !ok {
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper status/body tuple mismatch")))
+		return protocolMismatchError(errors.New("youtube.js helper status/body tuple mismatch"))
 	}
 
 	base := collecterr.New(mapped.code, mapped.class, "youtube.js helper: "+boundedFailureMessage(decoded.Error.Message))
@@ -104,13 +104,13 @@ func validRetryKind(code RPCErrorCode, kind RPCRetryKind) bool {
 func applyHelperRetry(base error, retry RPCRetryHint) error {
 	switch retry.Kind {
 	case "default":
-		return errors.Join(applyDefaultRetryResult(base, retry))
+		return applyDefaultRetryResult(base, retry)
 	case "after":
-		return errors.Join(applyAfterRetryResult(base, retry))
+		return applyAfterRetryResult(base, retry)
 	case "at":
-		return errors.Join(applyAtRetryResult(base, retry))
+		return applyAtRetryResult(base, retry)
 	default:
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper retry kind is unknown")))
+		return protocolMismatchError(errors.New("youtube.js helper retry kind is unknown"))
 	}
 }
 
@@ -140,7 +140,7 @@ func applyAtRetryResult(base error, retry RPCRetryHint) error {
 
 func applyDefaultRetry(base error, retry RPCRetryHint) error {
 	if retry.AfterMS != 0 || retry.At != "" {
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper default retry carries a payload")))
+		return protocolMismatchError(errors.New("youtube.js helper default retry carries a payload"))
 	}
 
 	return base
@@ -148,12 +148,12 @@ func applyDefaultRetry(base error, retry RPCRetryHint) error {
 
 func applyAfterRetry(base error, retry RPCRetryHint) error {
 	if retry.AfterMS <= 0 || retry.At != "" {
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper after retry is invalid")))
+		return protocolMismatchError(errors.New("youtube.js helper after retry is invalid"))
 	}
 
 	hint, err := collecterr.NewRetryAfterHint(time.Duration(retry.AfterMS) * time.Millisecond)
 	if err != nil {
-		return errors.Join(protocolMismatchError(err))
+		return protocolMismatchError(err)
 	}
 
 	if err := collecterr.WithRetry(base, hint); err != nil {
@@ -165,17 +165,17 @@ func applyAfterRetry(base error, retry RPCRetryHint) error {
 
 func applyAtRetry(base error, retry RPCRetryHint) error {
 	if retry.AfterMS != 0 || retry.At == "" {
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper at retry is invalid")))
+		return protocolMismatchError(errors.New("youtube.js helper at retry is invalid"))
 	}
 
 	at, err := time.Parse(time.RFC3339, retry.At)
 	if err != nil {
-		return errors.Join(protocolMismatchError(fmt.Errorf("youtube.js helper at retry is invalid: %w", err)))
+		return protocolMismatchError(fmt.Errorf("youtube.js helper at retry is invalid: %w", err))
 	}
 
 	hint, err := collecterr.NewRetryAtHint(at)
 	if err != nil {
-		return errors.Join(protocolMismatchError(err))
+		return protocolMismatchError(err)
 	}
 
 	if err := collecterr.WithRetry(base, hint); err != nil {

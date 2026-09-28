@@ -13,7 +13,7 @@ for f in "${GO_CONTRACT_FILE}" "${GO_KEYS_FILE}"; do
   fi
 done
 
-# dispatch/claim 키의 리터럴 SSOT는 keys.go이고 envelope version은 contracts.go가 직접 소유한다.
+# claim 키의 리터럴 SSOT는 keys.go이고 envelope version은 contracts.go가 직접 소유한다.
 # top-level typed const와 const block을 모두 읽되 심볼명을 값으로 오인하지 않도록 기대값과 정확히 비교한다.
 extract_go_string_const() {
   local file="$1"
@@ -55,24 +55,18 @@ assert_equals() {
   fi
 }
 
-go_queue="$(extract_go_string_const "${GO_KEYS_FILE}" "DispatchQueueKey")"
-go_retry_queue="$(extract_go_string_const "${GO_KEYS_FILE}" "DispatchRetryQueueKey")"
-go_dlq="$(extract_go_string_const "${GO_KEYS_FILE}" "DispatchDLQKey")"
+# 퇴역한 Redis dispatch queue 키(alarm:dispatch:queue/retry/dlq)의 리터럴 고정은 지웠다. 발송은 PostgreSQL
+# dispatch outbox가 소유하고 T18(2026-09-26)에서 운영 Valkey의 alarm:dispatch:* 키가 0건이었다(stack-audit T11
+# holo-retired-redis-dispatch-queue-tooling). keys.go의 세 상수는 읽기 제외 필터로만 남아 있다.
 go_claim="$(extract_go_string_const "${GO_KEYS_FILE}" "NotifyClaimKeyPrefix")"
 go_logical_claim="$(extract_go_string_const "${GO_KEYS_FILE}" "NotifyLogicalClaimKeyPrefix")"
 go_envelope_version="$(extract_go_numeric_const "${GO_CONTRACT_FILE}" "QueueEnvelopeVersionV1")"
 
-assert_equals "DispatchQueueKey" "${go_queue}" "alarm:dispatch:queue"
-assert_equals "DispatchRetryQueueKey" "${go_retry_queue}" "alarm:dispatch:retry"
-assert_equals "DispatchDLQKey" "${go_dlq}" "alarm:dispatch:dlq"
 assert_equals "NotifyClaimKeyPrefix" "${go_claim}" "notified:claim:"
 assert_equals "NotifyLogicalClaimKeyPrefix" "${go_logical_claim}" "notified:claim:event:"
 assert_equals "QueueEnvelopeVersionV1" "${go_envelope_version}" "1"
 
 echo "OK: Go alarm contract constants are valid"
-echo " - DispatchQueueKey: ${go_queue}"
-echo " - DispatchRetryQueueKey: ${go_retry_queue}"
-echo " - DispatchDLQKey: ${go_dlq}"
 echo " - NotifyClaimKeyPrefix: ${go_claim}"
 echo " - NotifyLogicalClaimKeyPrefix: ${go_logical_claim}"
 echo " - QueueEnvelopeVersionV1: ${go_envelope_version}"

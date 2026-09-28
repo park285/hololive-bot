@@ -155,26 +155,6 @@ func TestERR007RejectsImpossibleCodeClassDiagnosticTuple(t *testing.T) {
 	}
 }
 
-func TestDefaultFailureClassUsesUniqueOrSection53Default(t *testing.T) {
-	t.Parallel()
-
-	if class, ok := DefaultFailureClass(ErrorParserDrift); !ok || class != ClassDataContract {
-		t.Fatalf("parser_drift default = %s ok=%t", class, ok)
-	}
-
-	if class, ok := DefaultFailureClass(ErrorCollectionFailed); !ok || class != ClassTransient {
-		t.Fatalf("collection_failed default = %s ok=%t", class, ok)
-	}
-
-	if class, ok := DefaultFailureClass(ErrorPublishRejected); !ok || class != ClassTransient {
-		t.Fatalf("publish_rejected default = %s ok=%t", class, ok)
-	}
-
-	if _, ok := DefaultFailureClass("not_a_real_code"); ok {
-		t.Fatal("unknown code must not have a default class")
-	}
-}
-
 func TestERR015NewWriterRejectsLegacyAndImplementationClassNames(t *testing.T) {
 	t.Parallel()
 

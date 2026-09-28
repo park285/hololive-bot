@@ -46,3 +46,16 @@ native_release_dir_resolve() {
 
   printf '%s\n' "$release_dir"
 }
+
+native_previous_link_restore() {
+  local releases_root="$1" previous_link="$2" snapshot="$3" target
+  target="$(sudo -n cat "$snapshot")" || return 1
+  if [[ "$target" == absent ]]; then
+    sudo -n rm -f "$previous_link"
+  elif [[ "$target" == "$releases_root/"* && -d "$target" && ! -L "$target" ]]; then
+    sudo -n ln -sfn "$target" "$previous_link"
+  else
+    echo 'previous native release pointer snapshot is invalid' >&2
+    return 1
+  fi
+}

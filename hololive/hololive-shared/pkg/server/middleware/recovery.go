@@ -75,16 +75,11 @@ func logRecoveredPanic(ctx context.Context, logger *slog.Logger, c *gin.Context,
 	sharedlog.Error(panicLogContext(ctx, c), logger, "http.request.panic_recovered", "", attrs...)
 }
 
+// 요청 context는 net/http가 nil 없이 돌려준다. 요청이 없을 때만 middleware를 만든 ctx를 쓴다.
 func panicLogContext(ctx context.Context, c *gin.Context) context.Context {
 	if c != nil && c.Request != nil {
-		if reqCtx := c.Request.Context(); reqCtx != nil {
-			return reqCtx
-		}
+		return c.Request.Context()
 	}
 
-	if ctx != nil {
-		return ctx
-	}
-
-	return context.Background()
+	return ctx
 }

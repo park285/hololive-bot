@@ -1,0 +1,22 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+)
+
+var stackStaticcheckVersion, stackToolsVersion, stackFactsProfile string
+
+// init은 lintcmd flag 해석 전에 고정 profile로 만든 binary의 출처만 출력한다.
+func init() {
+	if len(os.Args) != 2 || os.Args[1] != "-stack-profile-version" {
+		return
+	}
+	if stackStaticcheckVersion == "" || stackToolsVersion == "" || stackFactsProfile == "" {
+		fmt.Fprintln(os.Stderr, "staticcheck facts build identity is missing")
+		os.Exit(1)
+	}
+	fmt.Printf("%s %s %s %s\n", stackStaticcheckVersion, stackToolsVersion, stackFactsProfile, runtime.Version())
+	os.Exit(0)
+}

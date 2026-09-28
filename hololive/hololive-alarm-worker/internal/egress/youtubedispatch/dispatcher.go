@@ -23,7 +23,6 @@ package youtubedispatch
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -35,7 +34,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 )
 
 var outboxCleanupLoopInterval = 1 * time.Hour
@@ -63,21 +61,6 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 
 	d.workerTracker = tracker
 	d.workerTotals = totals
-}
-
-func (d *Dispatcher) ConfigureHandoff(mode handoff.Mode, publisher YouTubeOutboxHandoff) error {
-	if d == nil || d.send == nil {
-		return errors.New("configure youtube outbox handoff: dispatcher is nil")
-	}
-
-	if mode != handoff.ModeOff && publisher == nil {
-		return fmt.Errorf("configure youtube outbox handoff: publisher is required for mode %q", mode)
-	}
-
-	d.send.handoffMode = mode
-	d.send.handoff = publisher
-
-	return nil
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {

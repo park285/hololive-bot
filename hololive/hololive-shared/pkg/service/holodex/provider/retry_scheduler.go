@@ -43,6 +43,9 @@ type retryScheduler struct {
 	delay   time.Duration
 	timeout time.Duration
 	logger  *slog.Logger
+	// stopCh는 예약된 재시도의 취소 수명을 소유한다. 재시도는 예약한 요청이 끝난 뒤 실행되므로
+	// 요청 ctx 취소와 분리하고, stop()이 닫는 stopCh만 실행 중인 재시도를 취소한다.
+	stopCh chan struct{}
 }
 
 func newRetryScheduler(delay, timeout time.Duration, maxSize int, logger *slog.Logger) *retryScheduler {
@@ -52,6 +55,7 @@ func newRetryScheduler(delay, timeout time.Duration, maxSize int, logger *slog.L
 		delay:   delay,
 		timeout: timeout,
 		logger:  logger,
+		stopCh:  make(chan struct{}),
 	}
 }
 
@@ -77,8 +81,11 @@ func (s *retryScheduler) schedule(ctx context.Context, key string, fn func(ctx c
 		key: key,
 	}
 
+	// 요청 ctx의 값(trace 등)은 유지하고 취소만 끊는다. 취소는 scheduler의 stopCh가 소유한다.
+	detachedCtx := context.WithoutCancel(ctx)
+
 	task.timer = time.AfterFunc(s.delay, func() {
-		s.execute(ctx, task.key, fn)
+		s.execute(detachedCtx, task.key, fn)
 	})
 	s.pending[key] = task
 
@@ -105,6 +112,15 @@ func (s *retryScheduler) execute(parentCtx context.Context, key string, fn func(
 
 	defer cancel()
 
+	// fn이 반환하면 defer cancel()이 ctx를 끝내므로 감시 goroutine은 항상 종료된다.
+	go func() {
+		select {
+		case <-s.stopCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	s.logger.Info("캐시 워밍 재시도 실행", slog.String("key", key))
 	fn(ctx)
 }
@@ -120,6 +136,8 @@ func (s *retryScheduler) stop() {
 	}
 
 	s.stopped = true
+	close(s.stopCh)
+
 	for _, task := range s.pending {
 		if task.timer != nil {
 			task.timer.Stop()
@@ -140,10 +158,6 @@ func (s *retryScheduler) pendingCount() int {
 }
 
 func isRetryContext(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-
 	isRetry, ok := ctx.Value(retryContextKey{}).(bool)
 
 	return ok && isRetry

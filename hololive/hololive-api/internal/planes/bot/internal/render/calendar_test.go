@@ -346,7 +346,7 @@ func TestFetchMemberPhotoRequestsHighResolutionThumbnail(t *testing.T) {
 
 	photos := make(map[string]image.Image)
 	photoURL := testAvatarURL
-	fetchMemberPhoto(domain.CalendarEntry{
+	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
 
@@ -369,13 +369,13 @@ func TestFetchImageAcceptsLargeThumbnailPayload(t *testing.T) {
 		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	})))
 
-	img, err := fetchImage("https://yt3.googleusercontent.com/avatar=s1024-c")
+	img, err := fetchImageWithContext(t.Context(), "https://yt3.googleusercontent.com/avatar=s1024-c")
 	if err != nil {
-		t.Fatalf("fetchImage() error = %v", err)
+		t.Fatalf("fetchImageWithContext() error = %v", err)
 	}
 
 	if img == nil {
-		t.Fatal("fetchImage() returned nil image")
+		t.Fatal("fetchImageWithContext() returned nil image")
 	}
 
 	if img.Bounds().Dx() == 0 || img.Bounds().Dy() == 0 {
@@ -544,6 +544,9 @@ func TestEntryDisplayName(t *testing.T) {
 	}
 
 	m := newCalendarMetrics(1)
+
+	// 이름 없는 멤버의 표시값은 message_strings calendar/unknown(DB 정본)이다.
+	m.strings = loadSeededCalendarStore(t)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

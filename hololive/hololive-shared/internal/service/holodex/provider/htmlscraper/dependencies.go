@@ -7,28 +7,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
+// YouTube 채널 일정·통계·snippet 조회는 Holodex 채널·일정 조회의 보조 원천이었다. 그 폴백을
+// DEC-20260926-hololive-source-fallbacks-retirement로 삭제해 이 facade는 호출하지 않는다.
 type youTubeVideoClient interface {
-	GetUpcomingEvents(context.Context, string) ([]*parser.UpcomingEvent, error)
-	GetUpcomingEventsWaitAdmission(context.Context, string) ([]*parser.UpcomingEvent, error)
 	GetRecentVideos(context.Context, string, int) ([]*parser.Video, error)
 	GetPopularVideos(context.Context, string, int) ([]*parser.Video, error)
 }
 
-type youTubeChannelClient interface {
-	GetChannelStats(context.Context, string) (*parser.ChannelStats, error)
-	GetChannelSnippet(context.Context, string) (*parser.ChannelSnippet, error)
-}
-
-type youTubeProxyController interface {
-	SetProxyEnabled(bool) bool
-	ProxyEnabled() bool
-}
-
-// YouTubeClient는 htmlscraper facade가 사용하는 YouTube 조회·proxy 제어 계약이다.
+// YouTubeClient는 htmlscraper facade가 사용하는 YouTube 조회 계약이다. Scraper proxy 토글은
+// DEC-20260926-hololive-legacy-env-config-retirement로 지웠다.
 type YouTubeClient interface {
 	youTubeVideoClient
-	youTubeChannelClient
-	youTubeProxyController
 }
 
 // ServiceDependencies는 Service가 직접 호출하는 외부 client를 담는다.

@@ -38,9 +38,9 @@ func newAlarmWorkerRegistryState(profile *settings.AlarmWorkerProfile, pool *pgx
 
 	state.samplers["alarm_dispatch"] = newPostgresQueueSampler(pool, alarmDispatchReadySnapshotSQL)
 
-	lockTimeout := time.Duration(profile.NotificationDelivery.LockTimeoutMS) * time.Millisecond
-
-	state.samplers["notification_delivery"] = newPostgresQueueSampler(pool, notificationDeliveryReadySnapshotSQL, lockTimeout.Milliseconds())
+	// notification_delivery.lock_timeout_ms는 lease 이전 행 회수에만 쓰였다. 그 분기를 지워 readiness 표본도 claim과 같은
+	// lease 기준만 본다(stack-audit 2026-09-26 T11 holo-delivery-outbox-legacy-lock-fence).
+	state.samplers["notification_delivery"] = newPostgresQueueSampler(pool, notificationDeliveryReadySnapshotSQL)
 
 	youtubeLockTimeout := time.Duration(profile.YouTubeDelivery.LockTimeoutMS) * time.Millisecond
 

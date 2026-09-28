@@ -765,6 +765,8 @@ WHERE job_key = $1
     )
   AND (owner_instance IS NULL OR lease_expires_at <= NOW())
 RETURNING job_key,
+          provider,
+          job_class,
           collection_job_kind,
           subject_key,
           owner_instance,
@@ -778,6 +780,7 @@ RETURNING job_key,
 
 새 job row 생성과 acquisition을 같은 helper가 소유할 수 있지만, concurrent `INSERT ... ON CONFLICT` 뒤에는 반드시 row lock과 epoch increment를 거쳐야 한다.
 acquisition transaction은 UPDATE 전에 current projection과 이 job이 대표하는 target 집합의 enable/validity를 검증한다. caller가 전달한 `$3`만 신뢰해 stale generation을 lease row에 기록하지 않는다.
+acquire는 같은 row를 다시 읽지 않고 이 UPDATE의 RETURNING `provider`, `job_class`, `collection_job_kind`, `subject_key`로 job identity를 검증한다. 요청한 job spec과 다르면 `ErrInvalidJob`으로 transaction을 롤백한다.
 
 #### Missed-slot coalescing
 
@@ -903,7 +906,7 @@ type SupportedContractSet interface {
 - `topic_id`
 - `thumbnail_url`
 
-generation `1` decoder는 이 필드를 unknown member로 계속 거부한다. generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. API의 supported set은 두 generation을 동시에 유지하고 collector는 DB의 provider/kind별 current generation이 `2`일 때만 새 필드를 발행한다.
+generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. 위 4단계 cleanup은 끝났다(2026-09-26 T18에서 current generation `2`·미처리 generation `1` 관측 0건 확인, stack-audit 2026-09-26 T11 C6). API의 supported set은 generation `2`만 담고 generation `1` 관측은 `unsupported_contract`로 처리하며, collector는 current generation이 `2`가 아니면 구성 오류로 수집을 끝낸다. migration `225`는 빈 DB의 `live_snapshot` seed를 generation `2`로 맞춘다.
 
 ### 9.2 Collection checkpoint
 
@@ -1376,6 +1379,8 @@ return PublishBatchResult{}, fmt.Errorf("publish source observation batch: verif
 
 API worker는 `FOR UPDATE SKIP LOCKED`로 bounded batch를 claim한다. attempts exhausted item을 candidate LIMIT 안에서 분류하되, permanent quarantine가 valid item을 굶기지 않도록 claim query 또는 claim loop가 다음 batch로 즉시 진행할 수 있어야 한다.
 
+claim 후보는 `(available_at, observation_id)` 순서다. PENDING과 lease가 만료된 PROCESSING을 상태별 가지로 나누고, 각 가지는 상위 LIMIT개만 `FOR UPDATE SKIP LOCKED`로 잠근다. 두 가지를 합친 뒤 다시 상위 LIMIT개만 claim하므로 선택 결과는 단일 정렬과 같다. PENDING 가지는 `(available_at, observation_id)` partial index 순서로 LIMIT개까지만 읽으므로 PENDING backlog가 커져도 후보 선택이 backlog 전체를 정렬하지 않는다. 만료 PROCESSING 가지는 그 순서의 index가 없어 lease 만료 partial index로 만료 행을 모두 읽고 `(available_at, observation_id)`로 정렬한 뒤 LIMIT한다. 만료 행은 lease를 잡고 finalize하지 못한 행뿐이므로 PENDING backlog가 아니라 그런 claim 수(claim 1회당 최대 LIMIT개)에 비례한다. 한 claim은 최대 2×LIMIT행을 잠근다. 선택되지 않은 최대 LIMIT개 행도 claim transaction이 끝날 때(commit 또는 probe rollback)까지 잠겨 있으며, 그동안 다른 claimer는 이를 건너뛴다.
+
 claim SQL은 `observation_contract_generations.current_generation`과 불일치한다는 이유만으로 row를 quarantine하지 않는다. consumer의 `SupportedContractSet`에 없는 version만 item 처리 단계에서 `unsupported_contract`로 `DEAD_LETTER` 처리한다.
 
 ```go
@@ -1680,21 +1685,21 @@ end evidence가 먼저 도착하고 grace만 남은 경우, 이후 observation�
 API YouTube plane은 다음 contract의 bounded finalizer를 소유한다.
 
 ```sql
-SELECT video_id
+SELECT video_id,
+       NOW() AS db_now
 FROM youtube_live_reconciliation_heads
 WHERE next_end_check_at IS NOT NULL
   AND next_end_check_at <= NOW()
 ORDER BY next_end_check_at, video_id
-LIMIT $1
-FOR UPDATE SKIP LOCKED;
+LIMIT 1;
 ```
 
-각 row는 별도 transaction에서 다음을 수행한다.
+finalizer는 tick마다 최대 batch size번 transaction을 연다. 각 transaction은 위 조회로 due row 하나를 고르고, 같은 transaction에서 다음을 수행한다. due 조회는 head를 잠그지 않는다. 1단계에서 consumer와 같은 session→head→evidence 순서로 잠근 뒤 due 조건을 다시 확인한다.
 
 1. current live head와 candidate observation을 lock한다.
 2. candidate 이후 더 최신 positive가 없는지 다시 확인한다.
 3. typed explicit end/cancel 또는 서로 다른 slot의 scoped absence 2개 조건을 다시 확인한다.
-4. DB `NOW()`가 grace를 지났는지 확인한다.
+4. due 조회가 함께 반환한 DB `NOW()`(transaction 시작 시각이라 잠금 대기 뒤에도 같은 값)가 grace를 지났는지 확인한다. 별도 `SELECT NOW()` 왕복은 두지 않는다.
 5. 조건이 유지되면 canonical `ENDED`, notification intent, reconciliation head update를 한 transaction에서 commit한다.
 6. 조건이 깨지면 candidate와 `next_end_check_at`을 clear하거나 다음 안전 시각으로 이동한다.
 
@@ -1965,6 +1970,7 @@ youtube_collection_freshness_seconds{provider,kind}
 youtube_collection_completeness_total{provider,kind,completeness,continuity}
 youtube_collection_lease_acquire_total{provider,kind,result}
 youtube_collection_lease_lost_total{provider,kind,phase}
+youtube_collection_invalid_failure_tuple_total{provider,kind}
 youtube_observation_publish_total{provider,kind,outcome}
 youtube_observation_collision_total{provider,kind}
 youtube_observation_clock_skew_total{provider,kind,direction}

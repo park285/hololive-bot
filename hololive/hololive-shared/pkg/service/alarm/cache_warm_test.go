@@ -501,8 +501,7 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 
 	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"), []string{"UC_ORPHAN"})
 	require.NoError(t, err)
-	require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.DispatchQueueKey, "queue-marker", 0))
-	require.NoError(t, cacheClient.Set(ctx, "alarm:chzzk_channels", "mapping-marker", 0))
+	require.NoError(t, cacheClient.Set(ctx, "alarm:dispatch:wakeup:guard", "wakeup-marker", 0))
 	require.NoError(t, cacheClient.Set(ctx, "alarm:next_stream:UC_KEEP", "stream-marker", 0))
 
 	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
@@ -513,13 +512,9 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 	require.NoError(t, err)
 	assert.Empty(t, orphanRoomChannels)
 
-	dispatchQueueExists, err := cacheClient.Exists(ctx, sharedalarmkeys.DispatchQueueKey)
+	wakeupGuardExists, err := cacheClient.Exists(ctx, "alarm:dispatch:wakeup:guard")
 	require.NoError(t, err)
-	assert.True(t, dispatchQueueExists)
-
-	chzzkMapExists, err := cacheClient.Exists(ctx, "alarm:chzzk_channels")
-	require.NoError(t, err)
-	assert.True(t, chzzkMapExists)
+	assert.True(t, wakeupGuardExists)
 
 	nextStreamExists, err := cacheClient.Exists(ctx, "alarm:next_stream:UC_KEEP")
 	require.NoError(t, err)

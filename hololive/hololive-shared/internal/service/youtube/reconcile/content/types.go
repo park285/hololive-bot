@@ -76,8 +76,10 @@ type State struct {
 	Initialized        bool
 	LastContentID      string
 	EarliestCompleteAt *time.Time
-	Videos             map[string]EntityState
-	AbsenceSlots       []AbsenceSlot
+	// Videos는 reducer가 읽는 영상(이번 관측의 영상과 clock 보유 영상)만 담는다.
+	Videos map[string]EntityState
+	// AbsenceSlots는 현재 slot과 이번 관측보다 늦은 slot만 scheduled_for 순으로 담는다.
+	AbsenceSlots []AbsenceSlot
 }
 
 type NotificationIntent struct {

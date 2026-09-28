@@ -78,19 +78,22 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-func (f *llmSchedulerFormatter) renderOrError(ctx context.Context, key domain.TemplateKey, data any, warnMsg string) string {
+// renderNotification은 예약 알림 본문을 렌더한다. 렌더에 실패하면 코드 대체 문구를 구독 방에 보내지 않고
+// 오류를 돌려준다. 호출자는 enqueue하지 않고 알림을 미표시로 남겨 다음 주기에 다시 시도한다
+// (DEC-20260926-hololive-message-strings-startup-validation).
+func (f *llmSchedulerFormatter) renderNotification(ctx context.Context, key domain.TemplateKey, data any, failureMsg string) (string, error) {
 	rendered, err := f.render(ctx, key, data)
 	if err != nil {
-		f.logger.Warn(warnMsg, slog.Any("error", err))
+		f.logger.Warn(failureMsg, slog.Any("error", err))
 
-		return messagestrings.FallbackSentinel
+		return "", fmt.Errorf("%s: %w", failureMsg, err)
 	}
 
 	if f.seeMoreFold {
-		return util.FoldForSeeMore(rendered, util.KakaoSeeMoreThreshold)
+		return util.FoldForSeeMore(rendered, util.KakaoSeeMoreThreshold), nil
 	}
 
-	return rendered
+	return rendered, nil
 }
 
 type majorEventSummaryData struct {
@@ -99,17 +102,17 @@ type majorEventSummaryData struct {
 	LLMSummary string
 }
 
-func (f *llmSchedulerFormatter) FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
+func (f *llmSchedulerFormatter) FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (string, error) {
 	return f.formatMajorEventSummary(ctx, domain.TemplateKeyCmdMajorEventWeeklySummary, events, llmSummary)
 }
 
-func (f *llmSchedulerFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
+func (f *llmSchedulerFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) (string, error) {
 	return f.formatMajorEventSummary(ctx, domain.TemplateKeyCmdMajorEventMonthlySummary, events, llmSummary)
 }
 
-func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key domain.TemplateKey, events []domain.MajorEvent, llmSummary string) string {
+func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key domain.TemplateKey, events []domain.MajorEvent, llmSummary string) (string, error) {
 	if len(events) == 0 {
-		return ""
+		return "", nil
 	}
 
 	normalizedSummary := strings.TrimSpace(llmSummary)
@@ -126,7 +129,7 @@ func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key
 		LLMSummary: normalizedSummary,
 	}
 
-	return f.renderOrError(ctx, key, data, majorEventSummaryWarnMsg(key))
+	return f.renderNotification(ctx, key, data, majorEventSummaryWarnMsg(key))
 }
 
 func majorEventSummaryWarnMsg(key domain.TemplateKey) string {
@@ -152,9 +155,9 @@ type memberNewsDigestTemplateData struct {
 	TotalCount  int
 }
 
-func (f *llmSchedulerFormatter) FormatMemberNewsDigest(ctx context.Context, digest *model.Digest) string {
+func (f *llmSchedulerFormatter) FormatMemberNewsDigest(ctx context.Context, digest *model.Digest) (string, error) {
 	if digest == nil {
-		return messagestrings.FallbackSentinel
+		return "", errors.New("format member news digest: digest is nil")
 	}
 
 	data := memberNewsDigestTemplateData{
@@ -164,7 +167,7 @@ func (f *llmSchedulerFormatter) FormatMemberNewsDigest(ctx context.Context, dige
 		TotalCount:  digest.TotalCount,
 	}
 
-	return f.renderOrError(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed")
+	return f.renderNotification(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed")
 }
 
 func (f *llmSchedulerFormatter) localizeMemberNewsItems(ctx context.Context, items []model.SummaryItem) []model.SummaryItem {
@@ -182,8 +185,8 @@ func (f *llmSchedulerFormatter) localizeMemberNewsItems(ctx context.Context, ite
 	return localized
 }
 
-func (f *llmSchedulerFormatter) memberNewsCategoryLabel(ctx context.Context, raw string) string {
-	if label := f.store.GetContext(ctx, messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); label != "" {
+func (f *llmSchedulerFormatter) memberNewsCategoryLabel(_ context.Context, raw string) string {
+	if label, ok := f.store.Lookup(messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); ok {
 		return label
 	}
 

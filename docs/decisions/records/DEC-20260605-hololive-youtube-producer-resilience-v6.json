@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260605-hololive-youtube-producer-resilience-v6",
   "title": "youtube producer resilience v6/v6.1: JobRunGuard와 GlobalBudgetLimiter 역할 분리, Holodex live는 global batch, 200 consent/challenge 페이지는 blocked response, source cooldown은 AP 전체 hard failure에만",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"
@@ -15,7 +15,7 @@
   ],
   "evidence": [],
   "implementation": [
-    "hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go",
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go",
     "hololive/hololive-shared/pkg/service/youtube/scraper/scraping/client_http.go"
   ],
   "supersedes": []

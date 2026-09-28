@@ -240,42 +240,19 @@ if baseline.rstrip().splitlines()[-1] != "COMMIT;":
     raise SystemExit("FAIL: epoch-2 baseline must end with COMMIT;")
 PY
 
-for retired_runner in apply-all.sh bootstrap-and-apply.sh; do
-  retired_output="$(
-    env PGPASSWORD=unused \
-      POSTGRES_ADMIN_PASSWORD=unused \
-      MIGRATIONS_DIR="${MIGRATIONS_DIR}" \
-      MIGRATION_MANIFEST="${MANIFEST}" \
-    /bin/sh "${MIGRATIONS_DIR}/${retired_runner}" 2>&1
-  )" && {
-    echo "FAIL: ${retired_runner} must refuse epoch-2 manifests" >&2
-    exit 1
-  }
-  if [[ "${retired_output}" != *"disabled for epoch-2 manifests"* ]]; then
-    echo "FAIL: ${retired_runner} epoch-2 refusal is missing or ambiguous" >&2
-    exit 1
-  fi
-done
-
-# 과거 브랜치 병행으로 이미 존재하는 번호 충돌(045/051/053)만 예외 — 신규 충돌은 차단한다.
-grandfathered_dup_prefixes="045 051 053"
+# epoch-1 번호 충돌(045/051/053)과 레시피 도입 전 파일 예외 목록은 그 파일들이 epoch-2 baseline으로 접혀 활성 디렉터리에
+# 없어서 지웠다(stack-audit 2026-09-26 T11 holo-migration-manifest-dead-grandfather-lists). 모든 활성 파일에 규칙을 적용한다.
 dup_prefixes="$(printf '%s\n' "${sql_files[@]}" | sed -E 's/^([0-9]+).*/\1/' | sort | uniq -d)"
 for prefix in ${dup_prefixes}; do
-  if [[ " ${grandfathered_dup_prefixes} " != *" ${prefix} "* ]]; then
-    echo "FAIL: duplicate migration number prefix ${prefix} (새 파일은 마지막 번호+1을 사용)" >&2
-    exit 1
-  fi
+  echo "FAIL: duplicate migration number prefix ${prefix} (새 파일은 마지막 번호+1을 사용)" >&2
+  exit 1
 done
 
 # 무방비 SET NOT NULL은 ACCESS EXCLUSIVE 락을 쥔 채 전 행을 스캔한다.
 # 유효한 CHECK가 선재하면 PG가 스캔을 생략하므로, NOT VALID → VALIDATE CONSTRAINT 레시피를
-# 같은 파일에서 강제한다 (레시피: scripts/migrations/CONVENTIONS.md). 아래는 레시피 도입 전 파일들.
-grandfathered_set_not_null="016-add-multi-group-support.sql 022-add-auth-acl-major-event-tables.sql 034_add_major_event_link_check_columns.sql 045_add_delivery_path_to_youtube_delivery_telemetry.sql 047_add_post_id_to_youtube_delivery_telemetry.sql 050_add_observation_window_to_youtube_delivery_telemetry.sql 053_add_canonical_content_identity_to_youtube_content_alarm_tracking.sql 069_normalize_youtube_delivery_telemetry_observation_runtime.sql"
+# 같은 파일에서 강제한다 (레시피: scripts/migrations/CONVENTIONS.md).
 for file in "${sql_files[@]}"; do
   if grep -qE 'SET[[:space:]]+NOT[[:space:]]+NULL' "${MIGRATIONS_DIR}/${file}"; then
-    if [[ " ${grandfathered_set_not_null} " == *" ${file} "* ]]; then
-      continue
-    fi
     if ! grep -q 'NOT VALID' "${MIGRATIONS_DIR}/${file}" || ! grep -q 'VALIDATE CONSTRAINT' "${MIGRATIONS_DIR}/${file}"; then
       echo "FAIL: ${file} 에 무방비 SET NOT NULL — NOT VALID CHECK + VALIDATE CONSTRAINT 선행 필요 (CONVENTIONS.md 참고)" >&2
       exit 1
@@ -299,7 +276,6 @@ for file in "${sql_files[@]}"; do
   fi
 done
 
-grandfathered_concurrently_multi="060_add_alarm_dispatch_events_live_stream_index.sql 061_add_youtube_live_first_seen_guardrail.sql 067_align_claim_index_due_first.sql 086_add_sending_stale_indexes.sql 095_cleanup_redundant_indexes.sql 096_sql_integrity_retention_followups.sql 097_integrity_and_type_unification.sql"
 for file in "${sql_files[@]}"; do
   path="${MIGRATIONS_DIR}/${file}"
   if ! grep -qiE '\bCONCURRENTLY\b' "${path}"; then
@@ -309,16 +285,14 @@ for file in "${sql_files[@]}"; do
   if [[ "${statement_count}" == "1" ]]; then
     continue
   fi
-  if [[ " ${grandfathered_concurrently_multi} " == *" ${file} "* ]]; then
-    continue
-  fi
   echo "FAIL: ${file} uses CONCURRENTLY with ${statement_count} SQL statements; keep CONCURRENTLY migrations single-statement" >&2
   exit 1
 done
 
+# epoch-2 baseline은 위에서 한 top-level 트랜잭션임을 검증했고 빈 DB에만 적용되므로 CONCURRENTLY를 쓸 수 없다.
+# 번호 기준(<140) 예외 대신 baseline 파일만 명시적으로 뺀다.
 for file in "${sql_files[@]}"; do
-  prefix="${file%%_*}"
-  if [[ ! "${prefix}" =~ ^[0-9]+$ ]] || (( 10#${prefix} < 140 )); then
+  if [[ "${file}" == "${EPOCH2_BASELINE}" ]]; then
     continue
   fi
   if sed 's/--.*$//' "${MIGRATIONS_DIR}/${file}" | grep -qiE '^[[:space:]]*CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]+(IF[[:space:]]+NOT[[:space:]]+EXISTS[[:space:]]+)?' &&

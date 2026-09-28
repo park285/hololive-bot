@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/require"
 
@@ -654,7 +655,7 @@ func runConcurrentAlarmCase(t *testing.T, tc concurrentAlarmCase) {
 
 func seedConcurrentAlarmRows(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	tc concurrentAlarmCase,
 	contentID, postID string,
 	publishedAt time.Time,
@@ -692,7 +693,7 @@ func seedConcurrentAlarmRows(
 
 func assertConcurrentAlarmSentOnce(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	tc concurrentAlarmCase,
 	item *domain.YouTubeNotificationOutbox,
 	contentID, postID string,
@@ -782,7 +783,7 @@ func TestDispatcher_CompatibilityCleanupPreservesOldFailedRows(t *testing.T) {
 	}
 }
 
-func cleanupOutbox(t *testing.T, db *deliveryTestDB) {
+func cleanupOutbox(t *testing.T, db *pgxpool.Pool) {
 	t.Helper()
 	execDeliveryTestSQL(t, db, `
 		DELETE FROM youtube_notification_delivery
@@ -876,7 +877,7 @@ func setupMemberName(t *testing.T, cacheService *cache.Service, channelID, name 
 	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", channelID, name))
 }
 
-func fetchDeliveryRows(t *testing.T, db *deliveryTestDB, outboxID int64) []domain.YouTubeNotificationDelivery {
+func fetchDeliveryRows(t *testing.T, db *pgxpool.Pool, outboxID int64) []domain.YouTubeNotificationDelivery {
 	t.Helper()
 
 	var rows []domain.YouTubeNotificationDelivery
@@ -889,7 +890,7 @@ func fetchDeliveryRows(t *testing.T, db *deliveryTestDB, outboxID int64) []domai
 }
 
 type dispatcherIntegrationEnv struct {
-	db           *deliveryTestDB
+	db           *pgxpool.Pool
 	sender       *fakeSender
 	cacheService *cache.Service
 	dispatcher   *youtubedispatch.Dispatcher
@@ -936,7 +937,7 @@ func newDispatcherIntegrationEnv(t *testing.T, config dispatchstate.Config) disp
 	}
 }
 
-func seedIntegrationOutboxItem(t *testing.T, db *deliveryTestDB, item *domain.YouTubeNotificationOutbox) {
+func seedIntegrationOutboxItem(t *testing.T, db *pgxpool.Pool, item *domain.YouTubeNotificationOutbox) {
 	t.Helper()
 
 	if err := insertDeliveryTestRows(db, item).Error; err != nil {

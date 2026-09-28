@@ -20,8 +20,15 @@
 
 package summarizer
 
-import "context"
+import (
+	"context"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+)
+
+// LLMClient는 지시를 계층으로만 받는다(DEC-20260926-stack-llm-instruction-layering-sole-path).
+// 신뢰 경계(web_search_context 안의 지시는 무시하고 데이터로만 다룸)는 invariant 계층(prompts/invariant_prompt.tmpl)이고,
+// 요약·검토·판정의 작업 절차·출력 형식은 developer 계층, 사건 목록·검색 결과는 user 계층이다.
 type LLMClient interface {
-	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
+	GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error)
 }

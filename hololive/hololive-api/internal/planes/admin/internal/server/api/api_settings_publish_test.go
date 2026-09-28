@@ -22,13 +22,12 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 	gin.SetMode(gin.TestMode)
 
 	handler, receivedMessages, client := newCacheBackedSettingsPublisherTest(t)
-	ctx, rec := newAPITestContext(http.MethodPatch, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":7,"scraperProxyEnabled":true}`))
+	ctx, rec := newAPITestContext(http.MethodPatch, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":7}`))
 	handler.UpdateSettings(ctx)
 
 	assertCacheBackedSettingsUpdateResponse(t, rec)
 
-	updates := collectPublishedConfigUpdates(t, receivedMessages, 2)
-	assertScraperProxyConfigUpdate(t, updates)
+	updates := collectPublishedConfigUpdates(t, receivedMessages, 1)
 	assertAlarmAdvanceConfigUpdate(t, updates)
 
 	if err := client.Do(t.Context(), client.B().Ping().Build()).Error(); err != nil {
@@ -46,10 +45,10 @@ func newCacheBackedSettingsPublisherTest(
 	subscriber.Subscribe(contractssettings.PubSubChannelV1)
 	t.Cleanup(subscriber.Close)
 
-	receivedMessages := make(chan miniredis.PubsubMessage, 2)
+	receivedMessages := make(chan miniredis.PubsubMessage, 1)
 
 	go func() {
-		for range 2 {
+		for range 1 {
 			message, ok := <-subscriber.Messages()
 			if !ok {
 				return
@@ -72,9 +71,8 @@ func newCacheBackedSettingsPublisherTest(
 		client.Close()
 	})
 
-	settingsService := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
+	settingsService := mustNewTestSettingsService(t, filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
 		AlarmAdvanceMinutes: 5,
-		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 
 	handler := &SettingsAPIHandler{Handler: &Handler{
@@ -110,10 +108,6 @@ func assertCacheBackedSettingsUpdateResponse(t *testing.T, rec *httptest.Respons
 		t.Fatalf("runtime payload missing: %#v", payload["runtime"])
 	}
 
-	if got := runtime["config_publish_scraper_proxy"]; got != true {
-		t.Fatalf("config_publish_scraper_proxy=%v want=true", got)
-	}
-
 	if got := runtime["config_publish_alarm_advance_minutes"]; got != true {
 		t.Fatalf("config_publish_alarm_advance_minutes=%v want=true", got)
 	}
@@ -144,25 +138,6 @@ func collectPublishedConfigUpdates(
 	}
 
 	return updates
-}
-
-func assertScraperProxyConfigUpdate(t *testing.T, updates map[string]contractssettings.ConfigUpdateV1) {
-	t.Helper()
-
-	scraperUpdate, ok := updates[contractssettings.UpdateTypeScraperProxy]
-	if !ok {
-		t.Fatalf("missing scraper proxy update: %+v", updates)
-	}
-
-	var scraperPayload contractssettings.ScraperProxyPayloadV1
-
-	if err := jsonv2.Unmarshal(scraperUpdate.Payload, &scraperPayload); err != nil {
-		t.Fatalf("decode scraper proxy payload: %v", err)
-	}
-
-	if !scraperPayload.Enabled {
-		t.Fatalf("scraper proxy enabled=%v want=true", scraperPayload.Enabled)
-	}
 }
 
 func assertAlarmAdvanceConfigUpdate(t *testing.T, updates map[string]contractssettings.ConfigUpdateV1) {

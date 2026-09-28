@@ -15,6 +15,7 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
@@ -26,7 +27,7 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 		slog.New(slog.DiscardHandler),
 		(&server.Handler{}).DomainHandlers(),
 		&server.AuthHandler{},
-		nil,
+		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
@@ -272,18 +273,9 @@ func TestProvideAPIRouterRejectsEmptyAdminAllowedIPsOnlyInProduction(t *testing.
 func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	router := gin.New()
-	router.Use(apiRateLimitMiddleware(nil, nil))
-	router.GET("/limited", func(c *gin.Context) {
-		c.Status(http.StatusTeapot)
-	})
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/limited", http.NoBody)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusTeapot {
-		t.Fatalf("nil cache rate limit status = %d, want %d", rec.Code, http.StatusTeapot)
+	// cache가 없으면 통과시키는 middleware 대신 기동 오류다(fail-closed).
+	if handler, err := apiRateLimitMiddleware(nil, nil); err == nil || handler != nil {
+		t.Fatalf("apiRateLimitMiddleware(nil) = (%v, %v), want startup error", handler != nil, err)
 	}
 
 	abortRouter := gin.New()
@@ -319,7 +311,7 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 		nil,
 		(&server.Handler{}).DomainHandlers(),
 		&server.AuthHandler{},
-		nil,
+		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
@@ -353,7 +345,7 @@ func provideTestAPIRouter(t *testing.T, cfg *settings.Config) (*gin.Engine, erro
 		slog.New(slog.DiscardHandler),
 		(&server.Handler{}).DomainHandlers(),
 		&server.AuthHandler{},
-		nil,
+		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("provide API router: %w", err)

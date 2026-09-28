@@ -123,8 +123,14 @@ func TestScannedRootsCoverReachablePrivacylogServices(t *testing.T) {
 		}
 	}
 
-	// Chzzk/Twitch 두 제공자 퇴역을 반영한다. 실제 의존성 탐색과 모든 log/taint 검사는 유지한다.
-	const minimumServicePackages = 34
+	// Chzzk/Twitch 두 제공자 퇴역과, stack-audit T05의 bot plane in-process AlarmService 분기 삭제로
+	// 도달하지 않게 된 notification/alarmservice·alarm/dedup 두 패키지, stack-audit T11 C2에서 삭제한
+	// youtube/scraper/internal/browserfetcher 패키지, stack-audit T19에서 v3 handoff와 함께 삭제한
+	// alarm/handoff 패키지, 같은 T19에서 scraper proxy 토글과 퇴역 producer scheduler·budget 코드를 지워 bot plane이
+	// 더 이상 닿지 않는 youtube/poller/runtime{,/scheduler,/batchrepo}·youtube/tracking/observation·
+	// youtube/alarmtiming·youtube/contentid 여섯 패키지를 반영한다.
+	// 실제 의존성 탐색과 모든 log/taint 검사는 유지한다.
+	const minimumServicePackages = 24
 
 	if count < minimumServicePackages {
 		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least %d", count, minimumServicePackages)

@@ -145,8 +145,8 @@ func (p *contextAwareMemberProvider) GetChannelIDs() []string {
 	return ids
 }
 
-func (p *contextAwareMemberProvider) GetAllMembers() []*domain.Member {
-	return p.members
+func (p *contextAwareMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+	return p.members, nil
 }
 
 func (p *contextAwareMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
@@ -314,7 +314,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	alarm := &alarmAddRecorder{}
 	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
-		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
@@ -357,7 +357,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	sendMessageCalled := false
 	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
-		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			sendMessageCalled = true

@@ -203,11 +203,6 @@ func CompletesWithErrorCodes() []CollectionErrorCode {
 	return cloneCodes(completesWithErrorCodes)
 }
 
-func DefaultFailureClass(code CollectionErrorCode) (FailureClass, bool) {
-	class, ok := defaultFailureClassByCode[code]
-	return class, ok
-}
-
 func validateFailureDetail(detail string) error {
 	if !utf8.ValidString(detail) {
 		return errors.New("validate failure diagnostic: detail is not valid UTF-8")
@@ -382,39 +377,10 @@ var (
 		ClassSuperseded,
 		ClassInternal,
 	})
-	collectionErrorCodeSet    = setFromCodes(allCollectionErrorCodes)
-	failureClassSet           = setFromClasses(allFailureClasses)
-	deferableCodeSet          = setFromCodes(deferableCollectionErrorCodes)
-	releasableCodeSet         = setFromCodes(releasableCollectionErrorCodes)
-	completeErrorCodeSet      = setFromCodes(completesWithErrorCodes)
-	durableTupleSet           = setFromTuples(allDurableFailureTuples)
-	defaultFailureClassByCode = buildDefaultFailureClass(allDurableFailureTuples)
+	collectionErrorCodeSet = setFromCodes(allCollectionErrorCodes)
+	failureClassSet        = setFromClasses(allFailureClasses)
+	deferableCodeSet       = setFromCodes(deferableCollectionErrorCodes)
+	releasableCodeSet      = setFromCodes(releasableCollectionErrorCodes)
+	completeErrorCodeSet   = setFromCodes(completesWithErrorCodes)
+	durableTupleSet        = setFromTuples(allDurableFailureTuples)
 )
-
-func buildDefaultFailureClass(tuples []FailureTuple) map[CollectionErrorCode]FailureClass {
-	byCode := make(map[CollectionErrorCode][]FailureClass, len(tuples))
-	for _, tuple := range tuples {
-		byCode[tuple.Code] = append(byCode[tuple.Code], tuple.Class)
-	}
-
-	out := make(map[CollectionErrorCode]FailureClass, len(byCode))
-	for code, classes := range byCode {
-		if class, ok := defaultFailureClass(code, classes); ok {
-			out[code] = class
-		}
-	}
-
-	return out
-}
-
-func defaultFailureClass(code CollectionErrorCode, classes []FailureClass) (FailureClass, bool) {
-	if len(classes) == 1 {
-		return classes[0], true
-	}
-
-	if code == ErrorCollectionFailed || code == ErrorPublishRejected {
-		return ClassTransient, true
-	}
-
-	return "", false
-}

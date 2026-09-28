@@ -68,7 +68,7 @@ Community/shorts 수집 evidence는 `youtube-collector` observation, canonical c
 ## 근거 코드
 
 - 신규 경로 상수: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/classifiers.go`
-- 실제 경로 조회: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/path_usage.go`
+- 실제 경로 조회: `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md`의 SQL (저장소 코드에는 경로별 조회 메서드가 없음)
 - 게시물별 발송 집계: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/post_send_counts.go`
 - 최종 egress owner: `alarm-worker`
 

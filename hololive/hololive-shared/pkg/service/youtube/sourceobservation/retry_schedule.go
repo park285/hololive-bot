@@ -82,9 +82,9 @@ func (s RetrySchedule) At() time.Time           { return s.at }
 func (s RetrySchedule) Validate() error {
 	switch s.kind {
 	case RetryScheduleDelay:
-		return errors.Join(s.validateDelaySchedule())
+		return s.validateDelaySchedule()
 	case RetryScheduleAt:
-		return errors.Join(s.validateAtSchedule())
+		return s.validateAtSchedule()
 	default:
 		return fmt.Errorf("validate retry schedule: unknown kind %q", s.kind)
 	}

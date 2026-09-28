@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,22 +10,29 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// bootstrapScraperRole은 bootstrap-and-apply.sh의 role bootstrap 블록을 Go로 옮긴 것이다.
+// bootstrapScraperRole은 삭제된 셸 러너 bootstrap-and-apply.sh의 role bootstrap 블록을 Go로 옮긴 것이다.
 // 배포 이미지(hololive-api:prod)가 distroless라 shell/psql이 없어 shell wrapper를
 // 재사용할 수 없으므로 pgx로 직접 수행한다.
 //
 // POSTGRES_ADMIN_PASSWORD가 명시되지 않으면 순수 migrate(롤백) 경로로 보고 bootstrap을
 // 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로 admin 접속을 시도해 순수
 // migrate가 깨지기 때문이다. 참고로 compose는 POSTGRES_ADMIN_PASSWORD를 항상 설정한다.
+//
+// 역할 bootstrap을 할 때 HOLOLIVE_SCRAPER_PASSWORD는 필수다. 비어 있을 때 admin 비밀번호로 scraper role을 매 실행
+// ALTER하던 폴백은 역할 분리를 깨므로 두지 않는다(stack audit 2026-09-26, T18에서 운영 env에 키 확인).
 func bootstrapScraperRole(ctx context.Context) error {
 	adminPassword := os.Getenv("POSTGRES_ADMIN_PASSWORD")
 	if strings.TrimSpace(adminPassword) == "" {
 		return nil
 	}
 
+	scraperPassword := os.Getenv("HOLOLIVE_SCRAPER_PASSWORD")
+	if strings.TrimSpace(scraperPassword) == "" {
+		return errors.New("HOLOLIVE_SCRAPER_PASSWORD is required for scraper role bootstrap")
+	}
+
 	adminUser := envDefault("POSTGRES_ADMIN_USER", "postgres_admin")
 	scraperUser := envDefault("HOLOLIVE_SCRAPER_USER", "hololive_scraper")
-	scraperPassword := envDefault("HOLOLIVE_SCRAPER_PASSWORD", adminPassword)
 	database := envDefault("PGDATABASE", "hololive")
 
 	if err := ensureScraperRole(ctx, adminConnString("postgres", adminUser, adminPassword), scraperUser, scraperPassword, database); err != nil {

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260630-hololive-blocked-body-signature-source-classification",
   "title": "blocked body signature는 전역 cooldown으로 직결하지 않고 source-level suspicious/blocked 분류로 승격하며 snapshot fallback 1회 뒤 channel-source failure로 기록한다",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"

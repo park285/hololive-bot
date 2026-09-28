@@ -15,16 +15,16 @@
   "evidence": [
     "iris-stack@283f57013d38a59a2863ee0cbc9cf5a8cc2896be:docs/agent-workflows/evidence/2026-09-01-youtube-replay-epoch-production-rollout/rollout.md",
     "hololive/hololive-api/cmd/source-observation-replay-epoch/main_test.go",
-    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/backfill_test.go",
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/backfill_test.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_epoch_test.go",
     "hololive/hololive-dbtest/migrations_p1_test.go",
-    "internal/workspace/entrypoint_contract_test.go",
+    "hololive-bot@eab17a288b8880a103abbaf0c2dd32bda1f103d5:internal/workspace/entrypoint_contract_test.go",
     "scripts/deploy/check-ap-rsync-manifest_test.sh"
   ],
   "implementation": [
     "hololive/hololive-api/scripts/migrations/191_source_observation_replay_epoch.sql",
     "hololive/hololive-api/cmd/source-observation-replay-epoch/main.go",
-    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/state.go",
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/state.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_epoch.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_claim_0012_12.sql",
     "docs/current/runbooks/hololive-api.md"

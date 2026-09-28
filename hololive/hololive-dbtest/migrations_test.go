@@ -27,11 +27,12 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 )
 
 func TestApplyMigrationsRollsBackBeginWrappedFileOnFailure(t *testing.T) {
 	dir := t.TempDir()
-	writeMigrationFixture(t, dir, manifestFileName, "001 001_tx.sql\n")
+	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "001 001_tx.sql\n")
 	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE tx_atomic_probe(id integer);\nSELECT 1/0;\nCOMMIT;\n")
 	t.Setenv(migrationsDirEnv, dir)
 
@@ -55,7 +56,7 @@ func TestApplyMigrationsRollsBackBeginWrappedFileOnFailure(t *testing.T) {
 
 func TestApplyMigrationsAppliesBeginWrappedFileWithTrailingAutocommit(t *testing.T) {
 	dir := t.TempDir()
-	writeMigrationFixture(t, dir, manifestFileName, "001 001_tx.sql\n")
+	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "001 001_tx.sql\n")
 	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE tx_inside_ran(id integer);\nCOMMIT;\nCREATE TABLE tx_after_ran(id integer);\n")
 	t.Setenv(migrationsDirEnv, dir)
 
@@ -81,7 +82,7 @@ func TestApplyMigrationsAppliesBeginWrappedFileWithTrailingAutocommit(t *testing
 
 func TestApplyMigrationsCanRerunAfterTrailingAutocommitFailure(t *testing.T) {
 	dir := t.TempDir()
-	writeMigrationFixture(t, dir, manifestFileName, "001 001_tx.sql\n")
+	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "001 001_tx.sql\n")
 	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE dbtest_committed_probe(id integer);\nCOMMIT;\nSELECT 1 FROM dbtest_missing_probe;\n")
 	t.Setenv(migrationsDirEnv, dir)
 
@@ -103,6 +104,49 @@ func TestApplyMigrationsCanRerunAfterTrailingAutocommitFailure(t *testing.T) {
 
 	assertMigrationTablePresent(ctx, t, pool, "dbtest_committed_probe")
 	assertMigrationTablePresent(ctx, t, pool, "dbtest_tail_ran")
+}
+
+// dbtest는 러너와 같은 manifest 파서를 써야 한다. 예전 자체 파서는 마지막 필드만 파일명으로 읽어
+// 러너가 거부하는 manifest도 적용 목록으로 받아들였다.
+func TestMigrationFingerprintRejectsManifestTheRunnerRejects(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		manifest string
+	}{
+		{name: "필드 초과", manifest: "001 extra 001_a.sql\n"},
+		{name: "순서 중복", manifest: "001 001_a.sql\n001 002_b.sql\n"},
+		{name: "순서 역전", manifest: "002 001_a.sql\n001 002_b.sql\n"},
+		{name: "파일명 중복", manifest: "001 001_a.sql\n002 001_a.sql\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeMigrationFixture(t, dir, dbmigrate.ManifestName, tc.manifest)
+			writeMigrationFixture(t, dir, "001_a.sql", "SELECT 1;\n")
+			writeMigrationFixture(t, dir, "002_b.sql", "SELECT 1;\n")
+			t.Setenv(migrationsDirEnv, dir)
+
+			if fingerprint, err := migrationFingerprint(); err == nil {
+				t.Fatalf("migrationFingerprint() = %q, want manifest parse error", fingerprint)
+			}
+		})
+	}
+}
+
+func TestMigrationFingerprintAcceptsRunnerManifest(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "# comment\n001 001_a.sql\n\n002 002_b.sql\n")
+	writeMigrationFixture(t, dir, "001_a.sql", "SELECT 1;\n")
+	writeMigrationFixture(t, dir, "002_b.sql", "SELECT 2;\n")
+	t.Setenv(migrationsDirEnv, dir)
+
+	fingerprint, err := migrationFingerprint()
+	if err != nil {
+		t.Fatalf("migrationFingerprint() error = %v", err)
+	}
+
+	if len(fingerprint) != 64 {
+		t.Fatalf("migrationFingerprint() = %q, want sha256 hex", fingerprint)
+	}
 }
 
 func assertMigrationTablePresent(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) {

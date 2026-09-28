@@ -5,7 +5,9 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
-"${root}/scripts/ci/check-postgres-capacity.sh" >/dev/null
+"${root}/scripts/ci/check-postgres-capacity.sh" >"${tmp}/out"
+# reserve는 superuser 예약 3을 뺀 비슈퍼유저 여유다: 60 - 3 - 55 = 2.
+grep -q 'max=60 superuser_reserved=3 allocated=55 reserve=2' "${tmp}/out"
 cp "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/policy.tsv"
 sed -i '/^youtube-collector|/d' "${tmp}/policy.tsv"
 if "${root}/scripts/ci/check-postgres-capacity.sh" "${root}/deploy/compose/docker-compose.prod.yml" "${tmp}/policy.tsv" >"${tmp}/out" 2>&1; then
@@ -24,6 +26,24 @@ if "${root}/scripts/ci/check-postgres-capacity.sh" "${tmp}/compose.yml" "${tmp}/
 fi
 grep -q 'connection budget exhausted' "${tmp}/out"
 
+cp "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/no-superuser-policy.tsv"
+sed -i '/^@superuser-reserved|/d' "${tmp}/no-superuser-policy.tsv"
+if "${root}/scripts/ci/check-postgres-capacity.sh" "${root}/deploy/compose/docker-compose.prod.yml" "${tmp}/no-superuser-policy.tsv" >"${tmp}/out" 2>&1; then
+	echo "capacity gate accepted a policy without the superuser reservation pin" >&2
+	exit 1
+fi
+grep -q 'policy must pin exactly one @superuser-reserved' "${tmp}/out"
+
+# compose가 superuser 예약을 바꾸면 policy pin과 어긋나므로 거부해야 한다.
+cp "${root}/deploy/compose/docker-compose.prod.yml" "${tmp}/superuser-compose.yml"
+sed -i 's/^\(\s*\)- "max_connections=60"$/&\n\1- "-c"\n\1- "superuser_reserved_connections=5"/' "${tmp}/superuser-compose.yml"
+grep -q 'superuser_reserved_connections=5' "${tmp}/superuser-compose.yml"
+if "${root}/scripts/ci/check-postgres-capacity.sh" "${tmp}/superuser-compose.yml" "${root}/scripts/ci/postgres-capacity-policy.tsv" >"${tmp}/out" 2>&1; then
+	echo "capacity gate accepted a compose superuser reservation that differs from the policy pin" >&2
+	exit 1
+fi
+grep -q 'holo-postgres superuser_reserved_connections=\[5\], want \[3\]' "${tmp}/out"
+
 cat >"${tmp}/safe.env" <<'ENV'
 BOT_POSTGRES_POOL_MAX_CONNS=3
 YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=8
@@ -33,12 +53,12 @@ ENV
   "${root}/scripts/ci/postgres-capacity-policy.tsv" \
   "${tmp}/safe.env" >"${tmp}/out"
 grep -q "source=target-env:${tmp}/safe.env" "${tmp}/out"
-grep -q 'allocated=54 reserve=6' "${tmp}/out"
+grep -q 'allocated=54 reserve=3' "${tmp}/out"
 "${root}/scripts/ci/check-postgres-capacity.sh" \
   "${root}/deploy/compose/docker-compose.prod.yml" \
   "${root}/scripts/ci/postgres-capacity-policy.tsv" \
   "${tmp}/safe.env" --target-env-only >"${tmp}/out"
-grep -q 'allocated=54 reserve=6' "${tmp}/out"
+grep -q 'allocated=54 reserve=3' "${tmp}/out"
 
 : >"${tmp}/default.env"
 if "${root}/scripts/ci/check-postgres-capacity.sh" \
@@ -49,7 +69,7 @@ if "${root}/scripts/ci/check-postgres-capacity.sh" \
 	echo "capacity gate accepted producer scale 2 above the server budget" >&2
 	exit 1
 fi
-grep -q 'max=60 allocated=63 reserve=-3' "${tmp}/out"
+grep -q 'max=60 superuser_reserved=3 allocated=63 reserve=-6' "${tmp}/out"
 
 for invalid_scale in \
   '--scale=youtube-collector' \
@@ -133,8 +153,46 @@ if "${root}/scripts/ci/check-postgres-capacity.sh" \
 fi
 grep -q 'connection budget exhausted' "${tmp}/out"
 
+# superuser 예약이 늘면 같은 할당에서도 비슈퍼유저 여유가 하한 아래로 내려간다.
+cp "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/superuser4-policy.tsv"
+sed -i 's/^@superuser-reserved|3$/@superuser-reserved|4/' "${tmp}/superuser4-policy.tsv"
+if "${root}/scripts/ci/check-postgres-capacity.sh" \
+  "${root}/deploy/compose/docker-compose.prod.yml" \
+  "${tmp}/superuser4-policy.tsv" \
+  "${tmp}/default.env" --target-env-only >"${tmp}/out" 2>&1; then
+	echo "capacity gate ignored the superuser reservation when computing reserve" >&2
+	exit 1
+fi
+grep -q 'max=60 superuser_reserved=4 allocated=55 reserve=1, want reserve >= 2' "${tmp}/out"
+
 source "${root}/scripts/deploy/lib/postgres-capacity.sh"
 postgres_capacity_assert_policy_target "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/default.env" >"${tmp}/shell-out"
-grep -q 'allocated=55 reserve=5' "${tmp}/shell-out"
+grep -q 'max=60 superuser_reserved=3 allocated=55 reserve=2' "${tmp}/shell-out"
+if postgres_capacity_assert_policy_target "${tmp}/superuser4-policy.tsv" "${tmp}/default.env" >"${tmp}/shell-out" 2>&1; then
+	echo "deployment capacity preflight ignored the superuser reservation when computing reserve" >&2
+	exit 1
+fi
+grep -q 'max=60 superuser_reserved=4 allocated=55 reserve=1, want reserve >= 2' "${tmp}/shell-out"
+if postgres_capacity_assert_policy_target "${tmp}/no-superuser-policy.tsv" "${tmp}/default.env" >"${tmp}/shell-out" 2>&1; then
+	echo "deployment capacity preflight accepted a policy without the superuser reservation pin" >&2
+	exit 1
+fi
+grep -q 'policy must pin exactly one @superuser-reserved' "${tmp}/shell-out"
+# 앞자리 0은 bash 산술에서 8진수가 되므로 두 gate 모두 형식 오류로 거부한다.
+cp "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/leading-zero-policy.tsv"
+sed -i 's/^@superuser-reserved|3$/@superuser-reserved|03/' "${tmp}/leading-zero-policy.tsv"
+if postgres_capacity_assert_policy_target "${tmp}/leading-zero-policy.tsv" "${tmp}/default.env" >"${tmp}/shell-out" 2>&1; then
+	echo "deployment capacity preflight accepted a zero-padded superuser reservation" >&2
+	exit 1
+fi
+grep -q 'policy has an invalid @superuser-reserved' "${tmp}/shell-out"
+if "${root}/scripts/ci/check-postgres-capacity.sh" \
+  "${root}/deploy/compose/docker-compose.prod.yml" \
+  "${tmp}/leading-zero-policy.tsv" \
+  "${tmp}/default.env" --target-env-only >"${tmp}/out" 2>&1; then
+	echo "capacity gate accepted a zero-padded superuser reservation" >&2
+	exit 1
+fi
+grep -q 'policy has an invalid @superuser-reserved' "${tmp}/out"
 
 echo "ok: PostgreSQL capacity gate rejects unsafe and heterogeneous target overrides"

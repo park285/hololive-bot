@@ -249,7 +249,8 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 	}, nil
 }
 
-func (s *Service) allocateSessionToken(ctx context.Context, payload string) (value0, value1 string, err error) {
+// allocateSessionToken은 원문 session token과 저장 key에 쓰는 그 SHA-256 hash를 돌려준다.
+func (s *Service) allocateSessionToken(ctx context.Context, payload string) (string, string, error) {
 	for range 3 {
 		raw, err := generateToken(sessionTokenPrefix, 32)
 		if err != nil {

@@ -2,7 +2,7 @@
 
 ## Summary
 
-확인된 일반채팅의 지원 알림은 Karing을 사용하고, 오픈채팅과 미확인 방의 기존 grouped message path는 YouTube 원본 URL 대신 짧은 고정 목적지 URL을 사용할 수 있습니다. `hololive-api` bot plane은 정상 사용자를 YouTube로 리다이렉트하고 KakaoTalk 링크 스크랩 요청은 리다이렉트 전에 거부하여 자동 섬네일 수집을 차단합니다.
+alarm-worker의 grouped message path는 방 유형과 무관하게 YouTube 원본 URL 대신 짧은 고정 목적지 URL을 사용할 수 있습니다(alarm-worker는 Karing template을 보내지 않습니다, `DEC-20260926-hololive-karing-egress-disposition`). `hololive-api` bot plane은 정상 사용자를 YouTube로 리다이렉트하고 KakaoTalk 링크 스크랩 요청은 리다이렉트 전에 거부하여 자동 섬네일 수집을 차단합니다.
 
 ## Contract ID
 
@@ -46,13 +46,12 @@
 
 ## Alarm Rendering
 
-`ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`인 경우 두 개 이상의 message-path alarm notification 그룹에서 YouTube URL을 해당 origin의 `/l/<videoID>`로 바꿉니다. 확인된 일반채팅의 Karing-compatible 알림은 이 renderer를 거치지 않고, 오픈채팅과 미확인 방은 기존 grouped message 경로에서 short link를 사용할 수 있습니다.
+`ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`인 경우 두 개 이상의 message-path alarm notification 그룹에서 YouTube URL을 해당 origin의 `/l/<videoID>`로 바꿉니다. 방 유형과 무관하게 모든 방송 알림이 이 grouped message 경로를 씁니다.
 
 - 활성 값은 `https://short.holoshi.com`이며 trailing slash 하나는 같은 origin으로 정규화합니다.
 - 빈 값은 기능을 비활성화하고 기존 YouTube 원본 URL을 유지합니다.
 - 단일 알림, Twitch-only, Chzzk-only, celebration과 YouTube outbox source renderer는 기존 링크를 유지합니다.
 - Integrated 알림은 message path에서 YouTube 부분만 단축하고 Chzzk 보조 링크를 유지합니다.
-- Room-specific Karing과 short link는 서로 다른 전송 경로에 적용되므로 같은 runtime 설정에서 공존합니다.
 
 ## Deployment
 

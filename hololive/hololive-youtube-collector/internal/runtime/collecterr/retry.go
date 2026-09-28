@@ -53,11 +53,11 @@ func (h RetryHint) At() time.Time        { return h.at }
 func (h RetryHint) Validate() error {
 	switch h.kind {
 	case RetryDefault:
-		return errors.Join(h.validateDefaultHint())
+		return h.validateDefaultHint()
 	case RetryAfter:
-		return errors.Join(h.validateAfterHint())
+		return h.validateAfterHint()
 	case RetryAt:
-		return errors.Join(h.validateAtHint())
+		return h.validateAtHint()
 	default:
 		return fmt.Errorf("validate retry hint: unknown kind %q", h.kind)
 	}

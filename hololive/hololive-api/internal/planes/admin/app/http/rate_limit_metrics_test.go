@@ -47,34 +47,21 @@ func (unusedLowLevelCache) Builder() valkey.Builder { return valkey.Builder{} }
 
 func (unusedLowLevelCache) B() valkey.Builder { return valkey.Builder{} }
 
-func TestAPIRateLimitMiddlewareFailOpenNoCacheCountsWithoutPanic(t *testing.T) {
+// rate limit이 켜져 있는데 cache가 없으면 통과시키는 대신 기동 오류다.
+func TestAPIRateLimitMiddlewareRejectsMissingCache(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	before := testutil.ToFloat64(apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonNoCache))
-
-	logger := slog.New(slog.DiscardHandler)
-	first := apiRateLimitMiddleware(nil, logger)
-	second := apiRateLimitMiddleware(nil, logger)
-
-	if first == nil || second == nil {
-		t.Fatal("apiRateLimitMiddleware returned nil handler")
+	handler, err := apiRateLimitMiddleware(nil, slog.New(slog.DiscardHandler))
+	if err == nil {
+		t.Fatal("apiRateLimitMiddleware(nil) error = nil, want startup error")
 	}
 
-	if got := testutil.ToFloat64(apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonNoCache)); got-before != 2 {
-		t.Fatalf("no_cache fail-open delta = %v, want 2", got-before)
-	}
-
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-
-	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/members", http.NoBody)
-	first(c)
-
-	if c.IsAborted() {
-		t.Fatal("no-cache fail-open middleware must not abort the request")
+	if handler != nil {
+		t.Fatal("apiRateLimitMiddleware(nil) returned a handler")
 	}
 }
 
-func TestAPIRateLimitHandlerFailOpenOnCheckError(t *testing.T) {
+func TestAPIRateLimitHandlerCountsCheckFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	limiter, err := ratelimit.NewSlidingWindowLimiter(unusedLowLevelCache{}, "test:holo:ip", slog.New(slog.DiscardHandler))
@@ -89,25 +76,16 @@ func TestAPIRateLimitHandlerFailOpenOnCheckError(t *testing.T) {
 		logger:  slog.New(slog.DiscardHandler),
 	}
 
-	before := testutil.ToFloat64(apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonCheckFailed))
+	before := testutil.ToFloat64(apiRateLimitCheckFailuresTotal)
 
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 
 	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/members", http.NoBody)
 	c.Request.RemoteAddr = "203.0.113.7:1234"
 
 	handler.Handle(c)
 
-	if got := testutil.ToFloat64(apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonCheckFailed)); got-before != 1 {
-		t.Fatalf("check_failed fail-open delta = %v, want 1", got-before)
-	}
-
-	if c.IsAborted() {
-		t.Fatal("check-failed fail-open must not abort the request")
-	}
-
-	if rec.Code == http.StatusTooManyRequests {
-		t.Fatalf("check-failed fail-open must not return 429, got %d", rec.Code)
+	if got := testutil.ToFloat64(apiRateLimitCheckFailuresTotal); got-before != 1 {
+		t.Fatalf("check failure delta = %v, want 1", got-before)
 	}
 }

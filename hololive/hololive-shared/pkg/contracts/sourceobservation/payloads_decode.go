@@ -124,16 +124,11 @@ func decodeShortsListPayload(raw []byte, input payloadDecodeInput) (payload, cov
 	return value, value.Coverage, nil
 }
 
+// decodeLiveSnapshotPayload는 세션 메타데이터를 담는 contract generation 2만 받는다. 이전 generation 1(identity/status/time만)
+// decoder는 runbook 제거 조건(youtube-collector.md "Live metadata contract", 활성화 4단계: generation 1 queue가 비고
+// replay 필요가 없음)이 T18(2026-09-26)에서 current generation 2·미처리 generation 1 관측 0건으로 충족되어 지웠다(계획
+// T11 C6, stack-audit 2026-09-26 holo-sourceobservation-live-snapshot-gen1). 남은 generation 1 관측은 unsupported로 드러난다.
 func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
-	if input.contractGeneration == 1 {
-		legacyPayload, legacyCoverage, err := decodeLiveSnapshotGeneration1(raw, input.subjectKey)
-		if err != nil {
-			return nil, nil, fmt.Errorf("decode live snapshot generation one: %w", err)
-		}
-
-		return legacyPayload, legacyCoverage, nil
-	}
-
 	if input.contractGeneration != LiveSnapshotMetadataContractGeneration {
 		return nil, nil, fmt.Errorf("unsupported live snapshot contract generation %d", input.contractGeneration)
 	}
@@ -148,62 +143,6 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 	}
 
 	return value, value.Coverage, nil
-}
-
-type liveSessionGeneration1 struct {
-	VideoID     string     `json:"video_id"`
-	ChannelID   string     `json:"channel_id"`
-	Status      string     `json:"status"`
-	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	EndedAt     *time.Time `json:"ended_at,omitempty"`
-}
-
-type liveSnapshotGeneration1 struct {
-	Sessions []liveSessionGeneration1 `json:"sessions"`
-	Coverage GlobalChannelCoverageV1  `json:"coverage"`
-}
-
-func decodeLiveSnapshotGeneration1(raw []byte, subjectKey string) (payload, coverage any, err error) {
-	legacy := liveSnapshotGeneration1{}
-	if err := decodeStrictJSON(raw, &legacy); err != nil {
-		return nil, nil, fmt.Errorf("decode live snapshot payload: %w", err)
-	}
-
-	value := LiveSnapshotV1{
-		Sessions: make([]LiveSessionV1, len(legacy.Sessions)),
-		Coverage: legacy.Coverage,
-	}
-	for i := range legacy.Sessions {
-		value.Sessions[i] = LiveSessionV1{
-			VideoID:     legacy.Sessions[i].VideoID,
-			ChannelID:   legacy.Sessions[i].ChannelID,
-			Status:      legacy.Sessions[i].Status,
-			ScheduledAt: legacy.Sessions[i].ScheduledAt,
-			StartedAt:   legacy.Sessions[i].StartedAt,
-			EndedAt:     legacy.Sessions[i].EndedAt,
-		}
-	}
-
-	if err := value.normalizeAndValidate(subjectKey); err != nil {
-		return nil, nil, fmt.Errorf("normalize and validate: %w", err)
-	}
-
-	legacy.Coverage = value.Coverage
-	legacy.Sessions = make([]liveSessionGeneration1, len(value.Sessions))
-
-	for i := range value.Sessions {
-		legacy.Sessions[i] = liveSessionGeneration1{
-			VideoID:     value.Sessions[i].VideoID,
-			ChannelID:   value.Sessions[i].ChannelID,
-			Status:      value.Sessions[i].Status,
-			ScheduledAt: value.Sessions[i].ScheduledAt,
-			StartedAt:   value.Sessions[i].StartedAt,
-			EndedAt:     value.Sessions[i].EndedAt,
-		}
-	}
-
-	return legacy, legacy.Coverage, nil
 }
 
 func decodeViewerSamplePayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {

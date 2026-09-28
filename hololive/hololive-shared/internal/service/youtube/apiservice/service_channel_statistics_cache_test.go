@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
@@ -39,9 +40,6 @@ func (s *countingScraper) GetChannelStats(_ context.Context, channelID string) (
 
 	return s.stats[channelID], nil
 }
-
-func (s *countingScraper) SetProxyEnabled(bool) bool { return false }
-func (s *countingScraper) ProxyEnabled() bool        { return false }
 
 func (s *countingScraper) callCount(channelID string) int {
 	s.mu.Lock()
@@ -92,11 +90,15 @@ func newFakeStatsCache() (client *mocks.Client, writeCount func() int) {
 }
 
 func newCachedStatsService(scraper *countingScraper, cacheClient *mocks.Client) *serviceImpl {
+	defaults := settings.DefaultYouTubeOperationalConfig()
+
 	return &serviceImpl{
-		scraper:       scraper,
-		cache:         cacheClient,
-		logger:        slog.New(slog.DiscardHandler),
-		channelToName: make(map[string]string),
+		scraper:             scraper,
+		cache:               cacheClient,
+		logger:              slog.New(slog.DiscardHandler),
+		channelToName:       make(map[string]string),
+		cacheSaveTimeout:    defaults.CacheSaveTimeout,
+		scraperPhaseTimeout: defaults.ScraperPhaseTimeout,
 	}
 }
 

@@ -21,193 +21,26 @@
 package batchrepo
 
 import (
-	"context"
-	"fmt"
-	"slices"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *PgxBatchRepository) resolveShortPersistedContentIDs(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking) error {
-	canonicalIDs, aliases := collectShortIdentityAliases(notifications, trackingRows)
-	if len(canonicalIDs) == 0 {
-		return nil
-	}
-
-	resolvedByCanonical, err := loadResolvedShortContentIDs(ctx, tx, aliases, canonicalIDs)
-	if err != nil {
-		return fmt.Errorf("load resolved short content IDs: %w", err)
-	}
-
-	applyResolvedShortContentIDs(notifications, trackingRows, resolvedByCanonical)
-
-	return nil
-}
-
-type shortIdentityRow struct {
-	ContentID string `db:"content_id"`
-}
-
-func collectShortIdentityAliases(
+// canonicalizeShortContentIDs는 NEW_SHORT outbox·tracking 행의 content_id를 'short:' canonical 형식으로 맞춘다.
+// 이전에는 같은 영상의 raw 형식(접두사 없는) 기존 행을 두 테이블에서 찾아 그 content_id를 재사용했다. T18(2026-09-26)에서
+// youtube_notification_outbox와 youtube_content_alarm_tracking의 raw 형식 NEW_SHORT 행이 0건임을 확인해 그 조회를
+// 지웠다(stack-audit T11 holo-batchrepo-short-raw-identity-alias). 정규화할 수 없는 값은 이전처럼 공백만 걷어 두고,
+// 판정은 저장 전 검증과 DB 제약이 맡는다.
+func canonicalizeShortContentIDs(
 	notifications []*domain.YouTubeNotificationOutbox,
 	trackingRows []*domain.YouTubeContentAlarmTracking,
-) (result1, result2 []string) {
-	canonicalIDs := make([]string, 0, len(notifications)+len(trackingRows))
-	aliasSet := make(map[string]struct{}, (len(notifications)+len(trackingRows))*2)
-
-	canonicalIDs = collectNotificationShortIdentityAliases(notifications, aliasSet, canonicalIDs)
-	canonicalIDs = collectTrackingShortIdentityAliases(trackingRows, aliasSet, canonicalIDs)
-	slices.Sort(canonicalIDs)
-
-	aliases := make([]string, 0, len(aliasSet))
-	for alias := range aliasSet {
-		aliases = append(aliases, alias)
-	}
-
-	slices.Sort(aliases)
-
-	return canonicalIDs, aliases
-}
-
-func collectNotificationShortIdentityAliases(
-	notifications []*domain.YouTubeNotificationOutbox,
-	aliasSet map[string]struct{},
-	canonicalIDs []string,
-) []string {
-	for i := range notifications {
-		if notifications[i] != nil {
-			canonicalIDs = addShortIdentityAliases(notifications[i].Kind, notifications[i].ContentID, aliasSet, canonicalIDs)
-		}
-	}
-
-	return canonicalIDs
-}
-
-func collectTrackingShortIdentityAliases(
-	trackingRows []*domain.YouTubeContentAlarmTracking,
-	aliasSet map[string]struct{},
-	canonicalIDs []string,
-) []string {
-	for i := range trackingRows {
-		if trackingRows[i] != nil {
-			canonicalIDs = addShortIdentityAliases(trackingRows[i].Kind, trackingRows[i].ContentID, aliasSet, canonicalIDs)
-		}
-	}
-
-	return canonicalIDs
-}
-
-func addShortIdentityAliases(
-	kind domain.OutboxKind,
-	contentID string,
-	aliasSet map[string]struct{},
-	canonicalIDs []string,
-) []string {
-	if kind != domain.OutboxKindNewShort {
-		return canonicalIDs
-	}
-
-	canonicalID := normalizeContentID(kind, contentID)
-	if canonicalID == "" {
-		return canonicalIDs
-	}
-
-	if _, exists := aliasSet[canonicalID]; !exists {
-		canonicalIDs = append(canonicalIDs, canonicalID)
-	}
-
-	aliasSet[canonicalID] = struct{}{}
-
-	if rawID := normalizeShortVideoResourceID(contentID); rawID != "" {
-		aliasSet[rawID] = struct{}{}
-	}
-
-	return canonicalIDs
-}
-
-func loadResolvedShortContentIDs(
-	ctx context.Context,
-	tx batchDB,
-	aliases []string,
-	canonicalIDs []string,
-) (map[string]string, error) {
-	resolvedByCanonical := make(map[string]string, len(canonicalIDs))
-	if err := mergeResolvedShortContentIDs(ctx, tx, "youtube_notification_outbox", aliases, resolvedByCanonical, "load existing short outbox identities"); err != nil {
-		return nil, fmt.Errorf("merge resolved short content IDs: %w", err)
-	}
-
-	if err := mergeResolvedShortContentIDs(ctx, tx, "youtube_content_alarm_tracking", aliases, resolvedByCanonical, "load existing short tracking identities"); err != nil {
-		return nil, fmt.Errorf("merge resolved short content IDs: %w", err)
-	}
-
-	return resolvedByCanonical, nil
-}
-
-func mergeResolvedShortContentIDs(
-	ctx context.Context,
-	tx batchDB,
-	table string,
-	aliases []string,
-	resolvedByCanonical map[string]string,
-	action string,
-) error {
-	if len(aliases) == 0 {
-		return nil
-	}
-
-	var rows []shortIdentityRow
-
-	args := make([]any, 0, 1+len(aliases))
-
-	args = append(args, domain.OutboxKindNewShort)
-	args = append(args, dbx.AnyArgs(aliases)...)
-
-	if err := dbx.SelectSQL(ctx, tx, &rows, action, mustSQL("repository_batch_short_identity_0150_01.sql")+table+`
-		WHERE kind = ?
-		  AND content_id IN (`+dbx.InPlaceholders(len(aliases))+`)`, args...); err != nil {
-		return fmt.Errorf("%s: %w", action, err)
-	}
-
-	for i := range rows {
-		recordResolvedShortContentID(resolvedByCanonical, strings.TrimSpace(rows[i].ContentID))
-	}
-
-	return nil
-}
-
-func recordResolvedShortContentID(resolvedByCanonical map[string]string, contentID string) {
-	canonicalID := normalizeContentID(domain.OutboxKindNewShort, contentID)
-	if canonicalID == "" {
-		return
-	}
-
-	if existing := resolvedByCanonical[canonicalID]; existing == canonicalID {
-		return
-	}
-
-	if contentID == canonicalID {
-		resolvedByCanonical[canonicalID] = canonicalID
-		return
-	}
-
-	if _, exists := resolvedByCanonical[canonicalID]; !exists {
-		resolvedByCanonical[canonicalID] = contentID
-	}
-}
-
-func applyResolvedShortContentIDs(
-	notifications []*domain.YouTubeNotificationOutbox,
-	trackingRows []*domain.YouTubeContentAlarmTracking,
-	resolvedByCanonical map[string]string,
 ) {
 	for i := range notifications {
 		if notifications[i] == nil || notifications[i].Kind != domain.OutboxKindNewShort {
 			continue
 		}
 
-		notifications[i].ContentID = resolveShortPersistedContentID(notifications[i].ContentID, resolvedByCanonical)
+		notifications[i].ContentID = canonicalShortContentID(notifications[i].ContentID)
 	}
 
 	for i := range trackingRows {
@@ -215,19 +48,14 @@ func applyResolvedShortContentIDs(
 			continue
 		}
 
-		trackingRows[i].ContentID = resolveShortPersistedContentID(trackingRows[i].ContentID, resolvedByCanonical)
+		trackingRows[i].ContentID = canonicalShortContentID(trackingRows[i].ContentID)
 	}
 }
 
-func resolveShortPersistedContentID(contentID string, resolvedByCanonical map[string]string) string {
-	canonicalID := normalizeContentID(domain.OutboxKindNewShort, contentID)
-	if canonicalID == "" {
-		return strings.TrimSpace(contentID)
+func canonicalShortContentID(contentID string) string {
+	if canonicalID := normalizeContentID(domain.OutboxKindNewShort, contentID); canonicalID != "" {
+		return canonicalID
 	}
 
-	if resolved := resolvedByCanonical[canonicalID]; resolved != "" {
-		return resolved
-	}
-
-	return canonicalID
+	return strings.TrimSpace(contentID)
 }

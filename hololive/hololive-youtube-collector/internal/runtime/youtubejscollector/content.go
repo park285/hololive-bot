@@ -2,7 +2,6 @@ package youtubejscollector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -74,7 +73,7 @@ func (r *ContentRunner) collectAllowedKinds(
 		if err != nil {
 			out, partialErr := partialContentResultForError(ctx, envelopes, started, item.kind, err)
 
-			return out, errors.Join(partialErr)
+			return out, partialErr
 		}
 
 		if envelope != nil {
@@ -190,7 +189,7 @@ func (r *ContentRunner) fetchKind(
 
 	out, envelopeErr := r.contentEnvelope(input, &result, observationKind, tab, generation, completeness, continuity)
 	if envelopeErr != nil {
-		return nil, errors.Join(envelopeErr)
+		return nil, envelopeErr
 	}
 
 	return out, nil

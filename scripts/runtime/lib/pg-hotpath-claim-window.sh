@@ -33,8 +33,7 @@ start_claims AS MATERIALIZED (
     CROSS JOIN pg_stat_statements statements
     CROSS JOIN LATERAL (
         SELECT
-            statements.query ~* 'WITH[[:space:]]+legacy_head[[:space:]]+AS[[:space:]]*[(]'
-            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+AS[[:space:]]*[(]'
@@ -46,7 +45,7 @@ start_claims AS MATERIALIZED (
             AND statements.query ~* 'd[.]claim_keys'
             AND statements.query ~* 'd[.]delivery_context'
             AND statements.query ~* 'FROM[[:space:]]+updated'
-            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+u[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
             statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
@@ -100,8 +99,7 @@ finish_claims AS MATERIALIZED (
     CROSS JOIN pg_stat_statements statements
     CROSS JOIN LATERAL (
         SELECT
-            statements.query ~* 'WITH[[:space:]]+legacy_head[[:space:]]+AS[[:space:]]*[(]'
-            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+AS[[:space:]]*[(]'
@@ -113,7 +111,7 @@ finish_claims AS MATERIALIZED (
             AND statements.query ~* 'd[.]claim_keys'
             AND statements.query ~* 'd[.]delivery_context'
             AND statements.query ~* 'FROM[[:space:]]+updated'
-            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+u[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
             statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
@@ -311,8 +309,7 @@ claim_query_matches_target() {
   fi
 
   if query_matches_all_patterns "${normalized_query}" \
-        'with[[:space:]]+legacy_head[[:space:]]+as[[:space:]]*[(]' \
-        '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
+        'with[[:space:]]+due_window[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+as[[:space:]]*[(]' \
@@ -324,7 +321,7 @@ claim_query_matches_target() {
         'd[.]claim_keys' \
         'd[.]delivery_context' \
         'from[[:space:]]+updated' \
-        'for[[:space:]]+update[[:space:]]+skip[[:space:]]+locked'; then
+        'for[[:space:]]+update[[:space:]]+of[[:space:]]+u[[:space:]]+skip[[:space:]]+locked'; then
     is_alarm=true
   fi
   if query_matches_all_patterns "${normalized_query}" \

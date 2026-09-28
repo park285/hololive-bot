@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-outbox-v3-convergence",
+  "title": "outbox v1·v2를 정본 파이프라인으로 두고 v3 handoff 코드를 삭제한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자가 동의한 사전 규칙과 같은 날 T18 운영 증거로 확정했다. 증거: 중앙 호스트 hololive-api의 DELIVERY_OUTBOX_V3_HANDOFF_MODE와 alarm-worker의 YOUTUBE_OUTBOX_V3_HANDOFF_MODE가 모두 off이고(compose 기본값, env 파일에 키 없음), alarm_dispatch_deliveries에 shadowed 행이 없으며, notification_delivery_outbox는 SENT 3건뿐이다(iris-stack docs/agent-workflows/evidence/2026-09-26-stack-audit/t18-ops-evidence.md). 규칙대로 두 mode가 모두 off이므로 v1 YouTube 알림과 v2 digest의 direct egress를 정본 파이프라인으로 인정하고 v3 handoff 코드 전체(mode env, shadow 분기, PublishShadow, shadowed 상태와 maintenance 대상, handoff metric)를 삭제한다. mode env는 존재 기준 퇴역 가드와 제거 조건으로 막고, DB CHECK의 shadowed 값은 migration으로 뺀다. alarmworker/ownership.go:33-46의 3-executor 강제는 v1·v2 executor를 정본으로 두는 형태로 맞춘다. delivery telemetry 경로는 DEC-20260926-hololive-delivery-telemetry-single-path가 따로 정한다. 참고: youtube_notification_delivery에 2026-05-17 생성, next_attempt_at 2099로 밀린 PENDING 5건과 FAILED 2건이 남아 있어 v1 정리와 별개로 운영 확인이 필요하다. PLN-20260926-stack-audit-refactoring T19에서 수행한다.",
+  "sources": [],
+  "evidence": [
+    "hololive/hololive-shared/pkg/config/settings/config_outbox_v3_handoff_retired_env_test.go",
+    "hololive/hololive-shared/pkg/config/settings/alarmworker/ownership_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-shared/pkg/config/settings/config_outbox_v3_handoff_retired_env.go",
+    "hololive/hololive-shared/pkg/config/settings/alarmworker/ownership.go",
+    "hololive/hololive-api/scripts/migrations/226_alarm_dispatch_status_drop_shadowed.sql",
+    "hololive-bot@8a4f0b70430461eae3855e2b43e75e7547681174"
+  ],
+  "supersedes": []
+}

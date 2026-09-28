@@ -186,9 +186,71 @@ WHERE stats.schemaname = 'public'
     'source_collection_checkpoints',
     'source_observation_queue',
     'source_observations',
-    'youtube_collection_job_leases'
+    'youtube_collection_job_leases',
+    'source_observation_applications',
+    'youtube_collection_targets',
+    'youtube_collection_target_reasons',
+    'youtube_live_sessions',
+    'youtube_live_pending_ends',
+    'youtube_content_evidence_clocks',
+    'youtube_community_posts',
+    'youtube_content_alarm_tracking',
+    'bot_reply_outbox'
 )
 ORDER BY stats.n_dead_tup DESC, stats.n_tup_upd DESC, stats.relname;
+
+-- table 절의 크기는 TOAST 바이트를 포함하지만 pg_stat_user_tables는 pg_toast를 제외하므로
+-- TOAST dead tuple과 VACUUM 이력은 이 절에서만 보인다. toast.* reloption은 heap이 아니라
+-- TOAST relation의 pg_class.reloptions에 저장된다. TOAST relation이 없는 테이블은 행이 없다.
+SELECT
+    'toast' AS section,
+    stats.schemaname,
+    stats.relname,
+    toast.relname AS toast_relname,
+    pg_size_pretty(pg_total_relation_size(toast.relid)) AS toast_total_size,
+    toast.n_live_tup,
+    toast.n_dead_tup,
+    COALESCE(
+        ROUND(
+            100.0 * toast.n_dead_tup
+            / NULLIF(toast.n_live_tup + toast.n_dead_tup, 0),
+            2
+        ),
+        0
+    ) AS dead_tuple_pct,
+    toast.n_tup_ins,
+    toast.n_tup_del,
+    toast.n_ins_since_vacuum,
+    toast.vacuum_count,
+    toast.autovacuum_count,
+    toast.last_vacuum,
+    toast.last_autovacuum,
+    toast_relation.reloptions AS toast_reloptions
+FROM pg_stat_user_tables AS stats
+JOIN pg_class AS relation ON relation.oid = stats.relid
+JOIN pg_stat_all_tables AS toast ON toast.relid = relation.reltoastrelid
+JOIN pg_class AS toast_relation ON toast_relation.oid = toast.relid
+WHERE stats.schemaname = 'public'
+  AND stats.relname IN (
+    'alarm_dispatch_deliveries',
+    'alarm_dispatch_send_units',
+    'youtube_notification_outbox',
+    'youtube_notification_delivery',
+    'source_collection_checkpoints',
+    'source_observation_queue',
+    'source_observations',
+    'youtube_collection_job_leases',
+    'source_observation_applications',
+    'youtube_collection_targets',
+    'youtube_collection_target_reasons',
+    'youtube_live_sessions',
+    'youtube_live_pending_ends',
+    'youtube_content_evidence_clocks',
+    'youtube_community_posts',
+    'youtube_content_alarm_tracking',
+    'bot_reply_outbox'
+)
+ORDER BY toast.n_dead_tup DESC, stats.relname;
 
 SELECT
     'index' AS section,
@@ -210,7 +272,16 @@ WHERE indexes.schemaname = 'public'
     'source_collection_checkpoints',
     'source_observation_queue',
     'source_observations',
-    'youtube_collection_job_leases'
+    'youtube_collection_job_leases',
+    'source_observation_applications',
+    'youtube_collection_targets',
+    'youtube_collection_target_reasons',
+    'youtube_live_sessions',
+    'youtube_live_pending_ends',
+    'youtube_content_evidence_clocks',
+    'youtube_community_posts',
+    'youtube_content_alarm_tracking',
+    'bot_reply_outbox'
 )
 ORDER BY indexes.relname, indexes.idx_scan, indexes.indexrelname;
 
@@ -245,22 +316,12 @@ alarm_claim_sql() {
 BEGIN;
 SET LOCAL statement_timeout = '5s';
 EXPLAIN (ANALYZE, BUFFERS)
-WITH legacy_head AS (
-    SELECT d.id
-    FROM alarm_dispatch_deliveries d
-    WHERE d.send_unit_id IS NULL
-      AND d.status IN ('pending', 'retry')
-      AND d.next_attempt_at <= NOW()
-    ORDER BY d.next_attempt_at ASC, d.id ASC
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED
-), due_window AS MATERIALIZED (
+WITH due_window AS MATERIALIZED (
     SELECT d.send_unit_id, d.next_attempt_at, d.id AS delivery_id
     FROM alarm_dispatch_deliveries d
     WHERE d.send_unit_id IS NOT NULL
       AND d.status IN ('pending', 'retry')
       AND d.next_attempt_at <= NOW()
-      AND NOT EXISTS (SELECT 1 FROM legacy_head)
     ORDER BY d.next_attempt_at ASC, d.id ASC
     LIMIT 500
 ), unit_candidates AS (
@@ -297,8 +358,6 @@ WITH legacy_head AS (
     WHERE d.send_unit_id IN (SELECT id FROM next_units)
       AND d.status IN ('pending', 'retry')
       AND d.next_attempt_at <= NOW()
-    UNION ALL
-    SELECT id FROM legacy_head
 ), updated AS (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'leased',

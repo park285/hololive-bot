@@ -14,10 +14,6 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 	current := state.clone()
 	workingEvidence := evidence.clone()
 
-	if current.Items == nil {
-		current.Items = map[string]Item{}
-	}
-
 	if current.Sessions == nil {
 		current.Sessions = map[string]Session{}
 	}
@@ -34,7 +30,6 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 
 		key := ItemIdentity(workingEvidence.Provider, item)
 
-		current.Items[key] = *item
 		items = append(items, *item)
 		applications = append(applications, Application{
 			EntityKind: "youtube_schedule_item", EntityKey: key, Decision: "APPLIED",

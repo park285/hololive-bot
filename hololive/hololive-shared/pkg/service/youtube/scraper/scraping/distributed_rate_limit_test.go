@@ -90,7 +90,7 @@ func TestRateLimiter_WaitWithBucket_DistributedDeniedWithoutRetryAfter(t *testin
 }
 
 func TestDistributedBucketFromURL(t *testing.T) {
-	got := distributedBucketFromURL("https://www.youtube.com/channel/UC123/videos")
+	got := distributedBucketFromURL(testYouTubeConfig().DistributedRateLimit.BucketBase, "https://www.youtube.com/channel/UC123/videos")
 	want := "youtube:producer:channel:UC123:videos"
 
 	if got != want {

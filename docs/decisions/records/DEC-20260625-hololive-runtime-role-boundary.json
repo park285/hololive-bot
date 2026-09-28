@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260625-hololive-runtime-role-boundary",
   "title": "hololive runtime 소유권 분리를 config 검증으로 강제한다: runtime별 loader를 두고 bot·admin-api·llm-scheduler·youtube-producer는 proactive egress 소유와 dispatcher 활성화를 거부한다",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"

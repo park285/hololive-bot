@@ -9,24 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
-func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
-	for _, file := range []string{
-		"scripts/deploy/ap-deploy.sh",
-		"scripts/deploy/ap-completion-check.sh",
-		"scripts/deploy/ap-rollback.sh",
-		"scripts/deploy/ap-collector-preflight.sh",
-	} {
-		content := readRepoFile(t, file)
-		if strings.Contains(content, "/etc/stack-secrets/hololive-bot/env") {
-			t.Fatalf("%s still references monolithic /etc/stack-secrets/hololive-bot/env", file)
-		}
-
-		if !strings.Contains(content, "/etc/stack-secrets/hololive-bot/ap-compose.env") {
-			t.Fatalf("%s missing AP-safe compose env file contract", file)
-		}
-	}
-}
-
 func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
 	lib := readRepoFile(t, "scripts/deploy/lib/require-quic-udp-buffer.sh")
 
@@ -57,7 +39,8 @@ func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
 }
 
 // accepted-risk ledger는 verify-full 전환으로 종료되었다. 문서가 다시 생기거나
-// compose 어디든 POSTGRES_SSLMODE_ALLOW_INSECURE가 재등장하면 회귀다.
+// compose 어디든 POSTGRES_SSLMODE_ALLOW_INSECURE가 재등장하면 회귀다. 이 검사와 render 검사의 같은 단언은
+// 퇴역 가드가 아니라 재도입 방지 영구 계약이므로 제거 조건이 없다(stack-audit 2026-09-26 T17 분류).
 func TestRepoPostgresSSLModeInsecureDowngradeIsRetired(t *testing.T) {
 	root := repoRootFromConfigTest(t)
 	ledgerPath := filepath.Join(root, "docs", "current", "security", "accepted-risk-ap-postgres-sslmode.md")
@@ -105,16 +88,6 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 				composeLiveCompatFile,
 			},
 			services: []string{serviceHololiveAPI, serviceAlarmWorker, load.RuntimeYouTubeCollector},
-		},
-		{
-			name: "main-ap live-compat",
-			files: []string{
-				composeProdFile,
-				composeLiveCompatFile,
-				"deploy/compose/docker-compose.main-ap.yml",
-				"deploy/compose/docker-compose.main-ap.live-compat.yml",
-			},
-			services: []string{load.RuntimeYouTubeCollector},
 		},
 	}
 
@@ -230,15 +203,6 @@ func TestRepoComposeNoStackRendersWeakPostgresSSLMode(t *testing.T) {
 		{
 			name:  "live-compat",
 			files: []string{composeProdFile, composeLiveCompatFile},
-		},
-		{
-			name: "main-ap live-compat",
-			files: []string{
-				composeProdFile,
-				composeLiveCompatFile,
-				"deploy/compose/docker-compose.main-ap.yml",
-				"deploy/compose/docker-compose.main-ap.live-compat.yml",
-			},
 		},
 	}
 

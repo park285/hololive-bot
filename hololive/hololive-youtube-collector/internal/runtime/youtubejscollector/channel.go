@@ -2,7 +2,6 @@ package youtubejscollector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -56,7 +55,7 @@ func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput
 	if !enabled[contract.KindChannelStats] && !enabled[contract.KindChannelProfile] && !enabled[contract.KindChannelPhoto] {
 		out, completeErr := completeEmptyCollection(started)
 
-		return out, errors.Join(completeErr)
+		return out, completeErr
 	}
 
 	result, completeness, continuity, err := fetchChannelPage(ctx, r.client, input, channelKindMetadata)

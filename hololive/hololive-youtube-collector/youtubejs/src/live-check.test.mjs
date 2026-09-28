@@ -142,46 +142,31 @@ test("non-JSON success bodies are UNKNOWN structure observations", async () => {
   assert.equal(channel.calls.length, 1);
 });
 
-test("single-attempt transport shares the proxy agent and cancellation without retrying", async () => {
-  const dispatchers = [];
+test("single-attempt transport shares cancellation without retrying", async (t) => {
   let calls = 0;
   const events = [];
-  class ProxyAgent {
-    async close() {}
-    destroy() {}
-  }
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return new Response("unavailable", { status: 503 });
+  });
   const controller = new AbortController();
-  const transport = await createFetchTransport({
-    proxy: { enabled: true, url: "http://proxy.test:8080" },
+  const transport = createFetchTransport({
     currentSignal: () => controller.signal,
     retryDelayMs: 0,
     observeRetry: (event) => events.push(event),
-    loadUndici: async () => ({
-      ProxyAgent,
-      fetch: async (_url, init) => {
-        calls += 1;
-        dispatchers.push(init.dispatcher);
-        return new Response("unavailable", { status: 503 });
-      },
-    }),
   });
-  try {
-    const player = () => ["https://www.youtube.com/youtubei/v1/player", { method: "POST", body: "{}" }];
-    await assert.rejects(transport.singleAttemptFetch(...player()), (error) => error.code === "collection_failed");
-    assert.equal(calls, 1);
-    assert.deepEqual(events, []);
+  const player = () => ["https://www.youtube.com/youtubei/v1/player", { method: "POST", body: "{}" }];
+  await assert.rejects(transport.singleAttemptFetch(...player()), (error) => error.code === "collection_failed");
+  assert.equal(calls, 1);
+  assert.deepEqual(events, []);
 
-    await assert.rejects(transport.fetch(...player()), (error) => error.code === "collection_failed");
-    assert.equal(calls, 3, "legacy endpoints keep their single retry");
-    assert.equal(events.length, 1);
-    assert.equal(new Set(dispatchers).size, 1);
+  await assert.rejects(transport.fetch(...player()), (error) => error.code === "collection_failed");
+  assert.equal(calls, 3, "legacy endpoints keep their single retry");
+  assert.equal(events.length, 1);
 
-    controller.abort();
-    await assert.rejects(transport.singleAttemptFetch(...player()), (error) => error.code === "collection_canceled");
-    assert.equal(calls, 3);
-  } finally {
-    await transport.close();
-  }
+  controller.abort();
+  await assert.rejects(transport.singleAttemptFetch(...player()), (error) => error.code === "collection_canceled");
+  assert.equal(calls, 3);
 });
 
 test("live check RPC boundary enforces exact subjects and flat results", async () => {
@@ -302,8 +287,7 @@ test("single-attempt checks do not follow redirects into an extra upstream reque
     server.closeAllConnections();
     server.close(resolve);
   }));
-  const transport = await createFetchTransport({ proxy: { enabled: false }, currentSignal: () => undefined });
-  t.after(() => transport.close());
+  const transport = createFetchTransport({ currentSignal: () => undefined });
   const url = `http://127.0.0.1:${server.address().port}/player`;
   await assert.rejects(transport.singleAttemptFetch(url, { method: "POST", body: "{}" }), TypeError);
   assert.deepEqual(paths, ["/player"]);

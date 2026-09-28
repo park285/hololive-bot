@@ -2,6 +2,7 @@ package schedulerkit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -18,10 +19,6 @@ type DigestScheduler struct {
 func NewDigestScheduler(locker delivery.NotificationLocker, logger *slog.Logger) *DigestScheduler {
 	if logger == nil {
 		logger = slog.Default()
-	}
-
-	if locker == nil {
-		locker = delivery.NewLocker(nil, logger)
 	}
 
 	return &DigestScheduler{
@@ -71,6 +68,11 @@ type DigestOp[C any] struct {
 }
 
 func (d *DigestScheduler) RunDigest[C any](ctx context.Context, op DigestOp[C]) error {
+	// locker가 없으면 lock 없이 진행하지 않는다. nil일 때 끼워 넣던 noop locker는 중복 발송 방지를 조용히 껐다.
+	if d.Locker == nil {
+		return errors.New("run digest: notification locker is not configured")
+	}
+
 	token, acquired, err := d.Locker.TryAcquire(ctx, op.LockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)

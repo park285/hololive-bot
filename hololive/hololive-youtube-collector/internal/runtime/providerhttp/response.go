@@ -51,10 +51,6 @@ func ReadProviderJSONDocument(
 		err = cleanupProviderResponse(ctx, resp.Body, policy.MaxDrainBytes, err)
 	}()
 
-	if ctx == nil {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "provider response context is nil")
-	}
-
 	if validationErr := policy.validate(); validationErr != nil {
 		return nil, fmt.Errorf("validate: %w", validationErr)
 	}
@@ -76,7 +72,7 @@ func ReadProviderJSONDocument(
 }
 
 func cleanupProviderResponse(ctx context.Context, body io.ReadCloser, maxDrainBytes int64, primary error) error {
-	if ctx != nil && ctx.Err() == nil && maxDrainBytes > 0 {
+	if ctx.Err() == nil && maxDrainBytes > 0 {
 		drainErr := drainBounded(ctx, body, maxDrainBytes)
 		if drainErr != nil {
 			primary = joinResponseError(primary, collecterr.FromContext(fmt.Errorf("drain provider response: %w", drainErr)))

@@ -7,11 +7,6 @@ export type RuntimeState =
   | "STOPPED"
   | "FAULTED";
 
-export interface BootstrapProxy {
-  enabled: boolean;
-  url?: string;
-}
-
 export interface BootstrapLimits {
   request_body_bytes: number;
   response_body_bytes: number;
@@ -20,14 +15,12 @@ export interface BootstrapLimits {
 
 export interface BootstrapRequest {
   protocol_version: number;
-  proxy: BootstrapProxy;
   limits: BootstrapLimits;
 }
 
 export interface BootstrapResponse {
   protocol_version: number;
   state: RuntimeState;
-  proxy_enabled: boolean;
   request_body_bytes: number;
   response_body_bytes: number;
   max_inflight: number;
@@ -38,7 +31,23 @@ export interface HealthResponse {
   state: RuntimeState;
   inflight: number;
   max_inflight: number;
-  proxy_enabled: boolean;
+  proof?: ProofStatus;
+}
+
+export type ProofState = "COLD" | "WARMING" | "READY" | "EXPIRED" | "UNAVAILABLE" | "STOPPED";
+
+export interface ProofStatus {
+  state: ProofState;
+  generation?: string;
+  expires_at?: string;
+  next_attempt_at?: string;
+  last_error?: string;
+  cleanup_error?: string;
+  bootstrap_attempts: number;
+  bootstrap_successes: number;
+  upstream_requests: number;
+  minted_total: number;
+  attached_total: number;
 }
 
 export type Continuity = "CONTIGUOUS" | "GAP_UNRESOLVED" | "NOT_APPLICABLE";
@@ -138,6 +147,7 @@ export interface FetcherSet {
   fetchChannel: ChannelFetcher;
   fetchChannelLiveCheck: ChannelLiveCheckFetcher;
   fetchVideoLiveCheck: VideoLiveCheckFetcher;
+  proofStatus?: () => ProofStatus | undefined;
   close?: () => Awaitable<void>;
 }
 

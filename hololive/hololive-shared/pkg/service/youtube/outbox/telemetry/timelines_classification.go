@@ -7,31 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
-
-func (r *Repository) PersistPostLatencyClassificationsByOutboxIDs(ctx context.Context, outboxIDs []int64) error {
-	if r == nil || r.db == nil {
-		return errors.New("persist post latency classifications by outbox ids: db is nil")
-	}
-
-	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
-	if len(uniqueIDs) == 0 {
-		return nil
-	}
-
-	rows, err := r.ListPostDeliveryTimelinesByOutboxIDs(ctx, uniqueIDs)
-	if err != nil {
-		return fmt.Errorf("persist post latency classifications by outbox ids: %w", err)
-	}
-
-	if err := r.persistPostLatencyClassifications(ctx, rows); err != nil {
-		return fmt.Errorf("persist post latency classifications by outbox ids: %w", err)
-	}
-
-	return nil
-}
 
 func (r *Repository) PersistPostLatencyClassificationsByIdentities(
 	ctx context.Context,
@@ -122,7 +99,7 @@ func (r *Repository) updatePostLatencyClassification(
 
 func normalizedPostLatencyClassificationPersistenceValues(
 	row *timeline.PostDeliveryTimeline,
-) (result1 timeline.PostLatencyClassificationStatus, result2 timeline.PostDelaySource, result3 timeline.PostInternalDelayCause) {
+) (timeline.PostLatencyClassificationStatus, timeline.PostDelaySource, timeline.PostInternalDelayCause) {
 	status := row.LatencyClassification.Status
 	if status == "" {
 		status = timeline.PostLatencyClassificationStatusInsufficientEvidence

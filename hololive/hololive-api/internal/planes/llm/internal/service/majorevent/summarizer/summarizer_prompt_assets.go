@@ -21,6 +21,7 @@ var promptAssetFiles = []string{
 	"graduated_members.json",
 	"prompts/domain_context_part1.tmpl",
 	"prompts/domain_context_part2.tmpl",
+	"prompts/invariant_prompt.tmpl",
 	"prompts/monthly_system_prompt.tmpl",
 	"prompts/weekly_system_prompt.tmpl",
 }
@@ -52,13 +53,18 @@ const (
 	SummaryTypeMonthly SummaryType = "monthly"
 )
 
+// promptsResult의 invariant는 web_search_context를 데이터로만 다루라는 신뢰 경계이고, weekly·monthly는
+// 작업 절차·출력 형식이다. 둘을 한 developer 문자열로 합치지 않고 PromptLayers의 Invariant·Developer로
+// 따로 보낸다(DEC-20260926-stack-llm-instruction-layering-sole-path, 2026-07-11 canonical purpose model).
 type promptsResult struct {
-	weekly  string
-	monthly string
-	err     error
+	invariant string
+	weekly    string
+	monthly   string
+	err       error
 }
 
 type promptTemplates struct {
+	invariant          string
 	domainContextPart1 string
 	domainContextPart2 string
 	weekly             *template.Template
@@ -87,6 +93,8 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 
 	domainContext := templates.domainContextPart1 + buildMemberFilterSection() + "\n\n" + templates.domainContextPart2
 
+	r.invariant = templates.invariant
+
 	r.weekly, err = renderPromptTemplate(templates.weekly, domainContext)
 	if err != nil {
 		r.err = err
@@ -103,6 +111,11 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 })
 
 func loadPromptTemplates() (promptTemplates, error) {
+	invariant, err := readPromptAssetString("prompts/invariant_prompt.tmpl")
+	if err != nil {
+		return promptTemplates{}, fmt.Errorf("read prompt asset string: %w", err)
+	}
+
 	domainContextPart1, err := readPromptAssetString("prompts/domain_context_part1.tmpl")
 	if err != nil {
 		return promptTemplates{}, fmt.Errorf("read prompt asset string: %w", err)
@@ -134,6 +147,7 @@ func loadPromptTemplates() (promptTemplates, error) {
 	}
 
 	return promptTemplates{
+		invariant:          invariant,
 		domainContextPart1: domainContextPart1,
 		domainContextPart2: domainContextPart2,
 		weekly:             weekly,
@@ -281,6 +295,16 @@ func getDomainContext() string {
 	}
 
 	return templates.domainContextPart1 + buildMemberFilterSection() + "\n\n" + templates.domainContextPart2
+}
+
+// getInvariantPrompt는 요약 생성 요청의 invariant 계층(신뢰 경계)을 돌려준다.
+func getInvariantPrompt() (string, error) {
+	r := initPrompts()
+	if r.err != nil {
+		return "", fmt.Errorf("invariant prompt init: %w", r.err)
+	}
+
+	return r.invariant, nil
 }
 
 func getSystemPrompt(summaryType SummaryType) (string, error) {

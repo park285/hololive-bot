@@ -61,12 +61,6 @@ func TestMekParkStreamDisplayPreservesUnrelatedStreams(t *testing.T) {
 	}
 	require.Equal(t, "유닛 B", f.formatChannelName(t.Context(), stream))
 
-	stream.Title = "#玲銘ミラ"
-	stream.IsTwitchOnly = true
-	require.Equal(t, "유닛 B", f.formatChannelName(t.Context(), stream))
-	require.Equal(t, "유닛 B", f.alarmChannelName(t.Context(), &domain.AlarmNotification{Stream: stream}))
-
-	stream.IsTwitchOnly = false
 	stream.ChannelID = "UC_other"
 	stream.ChannelName = "다른 채널"
 	require.Equal(t, "다른 채널", f.formatChannelName(t.Context(), stream))

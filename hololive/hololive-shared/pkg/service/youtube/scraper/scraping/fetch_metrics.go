@@ -14,8 +14,11 @@ var (
 
 	scraperFetchRequestsTotal *prometheus.CounterVec
 	scraperFetchDuration      *prometheus.HistogramVec
-	scraperFetchFallbackTotal *prometheus.CounterVec
 )
+
+// scraperFetchEngineLabel은 fetch metric의 engine 라벨 값이다. 대체 엔진(browser snapshot)과 fetcher fallback을 지워
+// net/http 하나만 남았지만, 기존 series와 dashboard 질의를 끊지 않도록 라벨 이름과 값을 그대로 둔다.
+const scraperFetchEngineLabel = "nethttp"
 
 func ensureScraperFetchMetrics() {
 	scraperFetchMetricsOnce.Do(func() {
@@ -28,10 +31,6 @@ func ensureScraperFetchMetrics() {
 			Help:    "YouTube scraper fetch request duration by fetcher engine",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"engine", "outcome", "reason"})
-		scraperFetchFallbackTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "hololive_youtube_scraper_fetch_fallback_total",
-			Help: "YouTube scraper fetcher fallback outcomes",
-		}, []string{"from_engine", "to_engine", "reason"})
 	})
 }
 
@@ -39,27 +38,15 @@ func init() {
 	ensureScraperFetchMetrics()
 }
 
-func observeScraperFetch(engine FetcherEngine, statusCode int, err error, elapsed time.Duration) {
+func observeScraperFetch(statusCode int, err error, elapsed time.Duration) {
 	ensureScraperFetchMetrics()
 
 	outcome, reason := fetchMetricOutcome(err)
-	engineLabel := fetcherEngineMetricLabel(engine)
-	scraperFetchRequestsTotal.WithLabelValues(engineLabel, outcome, reason, fetchStatusCodeLabel(statusCode)).Inc()
-	scraperFetchDuration.WithLabelValues(engineLabel, outcome, reason).Observe(elapsed.Seconds())
+	scraperFetchRequestsTotal.WithLabelValues(scraperFetchEngineLabel, outcome, reason, fetchStatusCodeLabel(statusCode)).Inc()
+	scraperFetchDuration.WithLabelValues(scraperFetchEngineLabel, outcome, reason).Observe(elapsed.Seconds())
 }
 
-func observeScraperFetchFallback(fromEngine, toEngine FetcherEngine, err error) {
-	ensureScraperFetchMetrics()
-
-	_, reason := fetchMetricOutcome(err)
-	scraperFetchFallbackTotal.WithLabelValues(
-		fetcherEngineMetricLabel(fromEngine),
-		fetcherEngineMetricLabel(toEngine),
-		reason,
-	).Inc()
-}
-
-func fetchMetricOutcome(err error) (result1, result2 string) {
+func fetchMetricOutcome(err error) (outcome, reason string) {
 	if err == nil {
 		return "success", string(FailureReasonNone)
 	}
@@ -75,8 +62,4 @@ func fetchStatusCodeLabel(statusCode int) string {
 	}
 
 	return strconv.Itoa(statusCode)
-}
-
-func fetcherEngineMetricLabel(engine FetcherEngine) string {
-	return string(normalizeFetcherEngine(engine))
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
+func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) ([]byte, bool, error) {
 	if status == http.StatusTooManyRequests {
 		done, rateLimitErr := c.handleRateLimitedResponse(status, reqURL, attempt, maxAttempts)
 		if rateLimitErr != nil {

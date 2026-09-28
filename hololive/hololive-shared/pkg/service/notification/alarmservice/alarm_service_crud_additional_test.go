@@ -44,7 +44,6 @@ func TestNewAlarmServiceAndClose(t *testing.T) {
 		cacheClient,
 		nil,
 		nil,
-		nil,
 		newDiscardAlarmLogger(),
 		[]int{10, 3, 1, 3},
 	)

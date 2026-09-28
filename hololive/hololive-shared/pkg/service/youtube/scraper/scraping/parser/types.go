@@ -47,25 +47,10 @@ type ChannelStats struct {
 	Handle          string `json:"handle"`
 }
 
-type ChannelSnippet struct {
-	Avatar []Thumbnail `json:"avatar"`
-	Banner []Thumbnail `json:"banner"`
-}
-
 type Thumbnail struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
-}
-
-type UpcomingEvent struct {
-	VideoID       string      `json:"videoId"`
-	Title         string      `json:"title"`
-	Thumbnail     []Thumbnail `json:"thumbnail"`
-	Status        string      `json:"status"`
-	StartTime     *int64      `json:"startTime,omitempty"`
-	ViewCountText string      `json:"viewCountText"`
-	ChannelTitle  string      `json:"channelTitle"`
 }
 
 type Video struct {

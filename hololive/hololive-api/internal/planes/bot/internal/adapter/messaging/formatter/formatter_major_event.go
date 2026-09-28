@@ -26,7 +26,6 @@ import (
 
 	templateview "github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type majorEventWeeklySummaryData struct {
@@ -75,7 +74,7 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventWeeklySummary, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)
@@ -102,7 +101,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventMonthlySummary, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)
@@ -119,7 +118,7 @@ func (f *ResponseFormatter) FormatMajorEventSubscribed(ctx context.Context) stri
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventSubscribed, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -128,7 +127,7 @@ func (f *ResponseFormatter) FormatMajorEventSubscribed(ctx context.Context) stri
 func (f *ResponseFormatter) FormatMajorEventUnsubscribed(ctx context.Context) string {
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUnsubscribed, majorEventSubscribedData{})
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -137,7 +136,7 @@ func (f *ResponseFormatter) FormatMajorEventUnsubscribed(ctx context.Context) st
 func (f *ResponseFormatter) FormatMajorEventAlreadySubscribed(ctx context.Context) string {
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventAlreadySub, majorEventSubscribedData{})
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -148,7 +147,7 @@ func (f *ResponseFormatter) FormatMajorEventNotSubscribed(ctx context.Context) s
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventNotSub, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -162,7 +161,7 @@ func (f *ResponseFormatter) FormatMajorEventStatus(ctx context.Context, isSubscr
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventStatus, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -175,7 +174,7 @@ func (f *ResponseFormatter) FormatMajorEventUsage(ctx context.Context) string {
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventUsage, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

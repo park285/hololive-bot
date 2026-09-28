@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 )
 
@@ -79,7 +78,6 @@ func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, processed)
 	assert.Equal(t, 1, outbox.insertBatchCalls)
-	assert.Equal(t, dispatchoutbox.StatusPending, outbox.lastBatchInput.Status)
 	assert.Zero(t, readDispatchQueueSize(t, cache))
 
 	alreadyNotified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-success", start, 10)

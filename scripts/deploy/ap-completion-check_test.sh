@@ -28,6 +28,17 @@ mkdir -p "$fixture_root/scripts/deploy/lib" "$fixture_root/scripts/deploy/ap-hos
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host.sh" "$fixture_root/scripts/deploy/lib/ap-host.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scripts/deploy/lib/youtubejs-node-version.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-collector-readiness.sh" "$fixture_root/scripts/deploy/lib/ap-collector-readiness.sh"
+cp "$ROOT_DIR/scripts/deploy/lib/ap-host-native-po.sh" "$fixture_root/scripts/deploy/lib/ap-host-native-po.sh"
+# 기존 collector readiness 사례는 issuer 도입 전 release로의 명시적 rollback을 검증한다.
+export PO_EXPECTED_PRESENCE=absent
+# 원격 fake의 재시도 횟수는 그대로 실행하고 대기만 기록해 실제 6분 경과에 의존하지 않는다.
+export FAKE_DELAY_LOG="$tmp/delays"
+cat > "$fakebin/sleep" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "${FAKE_DELAY_LOG:?}"
+EOF
+chmod +x "$fakebin/sleep"
 cat > "$fixture_root/scripts/deploy/lib/require-quic-udp-buffer.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -82,6 +93,10 @@ case "${1:-}" in
   grep)
     exit 0
     ;;
+  cat)
+    [[ "$2" == /opt/hololive-bot/youtube-collector/current/rollback-contract/po-unit-presence ]] || exit 1
+    printf 'absent\n'
+    ;;
   env)
     shift
     while (($# > 0)); do
@@ -116,11 +131,12 @@ if [[ "${1:-}" == "show" ]]; then
   prop=""
   for arg in "$@"; do
     case "$arg" in
-      ActiveState|SubState|NRestarts|ActiveEnterTimestamp|EnvironmentFiles) prop="$arg" ;;
+      ActiveState|SubState|NRestarts|ActiveEnterTimestamp|EnvironmentFiles|LoadState) prop="$arg" ;;
     esac
   done
   case "$prop" in
     ActiveState) echo active ;;
+    LoadState) echo not-found ;;
     SubState) echo running ;;
     NRestarts) echo 0 ;;
     ActiveEnterTimestamp) echo "Tue 2026-06-30 08:14:12 UTC" ;;
@@ -147,19 +163,16 @@ LOG
 EOF
 chmod +x "$fakebin/journalctl"
 
-output="$(
-  PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
-    CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
-    "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka
-)"
-grep -Fq 'AP QUIC UDP buffers ok on osaka' <<<"$output" || fail "native completion check runs remote UDP buffer verification"
-grep -Fq '"status":"ready"' <<<"$output" || fail "native completion check verifies ready endpoint"
-grep -Fq '"helper":"ok"' <<<"$output" || fail "native completion check verifies helper health"
-grep -Fq '"first_success":true' <<<"$output" || fail "native completion check verifies first success"
-grep -Fq '"handoff_status":"PROCESSED"' <<<"$output" || fail "native completion check verifies API handoff"
-grep -Fq 'collector AP completion check passed' <<<"$output" || fail "native completion check reports completion"
-if grep -Fq 'cd ~/hololive-bot' <<<"$output"; then
-  fail "native completion check must not require remote compose checkout"
+if ! PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
+  CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
+  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka > "$tmp/completion.out" 2>&1; then
+  fail 'a ready collector with a recorded issuer-absent rollback must pass completion'
+fi
+
+if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
+  PO_EXPECTED_PRESENCE=present CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
+  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka > "$tmp/missing-issuer.out" 2>&1; then
+  fail 'collector readiness must not substitute for a missing expected issuer release'
 fi
 
 if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
@@ -223,18 +236,5 @@ for invalid_payload in "${invalid_readiness_payloads[@]}"; do
 done
 pass "collector readiness validator rejects malformed and missing required fields"
 
-COMPLETION="${ROOT_DIR}/scripts/deploy/ap-completion-check.sh"
-native_completion="$(awk '/^run_native_completion_check\(\) \{/,/^}$/' "${COMPLETION}")"
-if grep -Fq '/etc/stack-secrets/hololive-bot/ap-compose.env' <<<"${native_completion}"; then
-  fail "native completion check must not require the shared AP Compose env"
-fi
-grep -Fq '/etc/stack-secrets/hololive-bot/youtube-collector.env' <<<"${native_completion}" ||
-  fail "native completion check must retain the collector-scoped secret env prerequisite"
-pass "native completion check excludes ap-compose.env and preserves collector-scoped env"
-
-if grep -Eq 'SETTINGS_DIR=|/var/lib/hololive-bot/youtube-collector/settings' "${COMPLETION}"; then
-  fail "ap-completion-check must not require unused collector SETTINGS_DIR"
-fi
-pass "ap-completion-check does not require unused collector SETTINGS_DIR"
 
 pass "ap-completion-check supports host-native APs"

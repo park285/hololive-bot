@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
@@ -9,18 +10,30 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+// ResolveLLMSchedulerClients는 LLM_SCHEDULER_INTERNAL_URL이 설정된 경우에만 major event·member news client를 만든다.
+// URL이 설정됐는데 client를 만들지 못하면(HOLOLIVE_INTERNAL_H3_* 누락 포함) 명령을 조용히 끄지 않고 오류를 돌려
+// bot plane 기동을 실패시킨다(stack audit 2026-09-26).
 func ResolveLLMSchedulerClients(
 	appConfig *settings.Config,
 	logger *slog.Logger,
-) (majorEventRepository handlercore.MajorEventRepository, memberNewsService handlercore.MemberNewsService) {
+) (handlercore.MajorEventRepository, handlercore.MemberNewsService, error) {
 	if appConfig.LLMSchedulerURL == "" {
 		logger.Warn("LLM scheduler URL not configured; majorevent/membernews commands disabled",
 			slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"),
 		)
 
-		return nil, nil
+		return nil, nil, nil //nolint:nilnil // scheduler URL 미설정은 major event·member news 명령을 끄는 계약값이며 오류가 아니다.
 	}
 
-	return majorevent.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey),
-		membernews.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
+	majorEventClient, err := majorevent.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("major event client: %w", err)
+	}
+
+	memberNewsClient, err := membernews.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("member news client: %w", err)
+	}
+
+	return majorEventClient, memberNewsClient, nil
 }

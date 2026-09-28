@@ -127,7 +127,7 @@ func summarizeTerminalCommunityShortsOutbox(
 	return result
 }
 
-func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotificationDelivery) (result1, result2 int, result3 string) {
+func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotificationDelivery) (int, int, string) {
 	reasons := make([]string, 0)
 	seenReasons := make(map[string]struct{}, len(deliveries))
 	successfulRoomCount := 0
@@ -152,7 +152,7 @@ func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotif
 	return successfulRoomCount, failedRoomCount, ""
 }
 
-func terminalCommunityShortsDeliveryStatusCounts(status domain.OutboxStatus) (result1, result2 int) {
+func terminalCommunityShortsDeliveryStatusCounts(status domain.OutboxStatus) (sent, failed int) {
 	switch status {
 	case domain.OutboxStatusSent:
 		return 1, 0

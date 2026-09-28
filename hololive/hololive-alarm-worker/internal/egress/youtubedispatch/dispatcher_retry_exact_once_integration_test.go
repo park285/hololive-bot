@@ -110,11 +110,49 @@ func runRetryExactOnceCase(t *testing.T, tc retryFinalizeOnceTestCase) {
 	require.Len(t, messages, 1)
 	assert.Contains(t, messages[0], tc.roomID+":")
 	assert.Contains(t, messages[0], tc.expectedMessageMarker)
+
+	assertRetryExactOnceAttemptTelemetry(t, db, delivery.ID, postID)
+}
+
+// 두 시도(rate limit 실패, 재시도 성공)는 각 lifecycle 전이 트랜잭션이 한 행씩 기록한다
+// (DEC-20260926-hololive-delivery-telemetry-single-path). 실패 사유는 lifecycle Reason 어휘를 쓴다.
+func assertRetryExactOnceAttemptTelemetry(t *testing.T, db *pgxpool.Pool, deliveryID int64, postID string) {
+	t.Helper()
+
+	queryRows, err := db.Query(t.Context(), `
+		SELECT attempt_ordinal, post_id, delivery_mode, send_result, COALESCE(failure_reason, '')
+		FROM youtube_notification_delivery_telemetry
+		WHERE delivery_id = $1
+		ORDER BY attempt_ordinal
+	`, deliveryID)
+	require.NoError(t, err)
+
+	defer queryRows.Close()
+
+	var got []string
+
+	for queryRows.Next() {
+		var (
+			ordinal                            int
+			rowPostID, mode, result, reasonTag string
+		)
+
+		require.NoError(t, queryRows.Scan(&ordinal, &rowPostID, &mode, &result, &reasonTag))
+		assert.Equal(t, postID, rowPostID)
+
+		got = append(got, fmt.Sprintf("%d:%s:%s:%s", ordinal, mode, result, reasonTag))
+	}
+
+	require.NoError(t, queryRows.Err())
+	assert.Equal(t, []string{
+		"1:" + deliveryModePerRoom + ":" + sendResultFailure + ":" + string(lifecycleReasonRateLimited),
+		"2:" + deliveryModePerRoom + ":" + sendResultSuccess + ":",
+	}, got)
 }
 
 func seedRetryExactOnceFixture(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	tc retryFinalizeOnceTestCase,
 ) (domain.YouTubeNotificationOutbox, domain.YouTubeNotificationDelivery, string) {
 	t.Helper()
@@ -154,7 +192,7 @@ func seedRetryExactOnceFixture(
 
 func assertRetryExactOnceFirstAttemptDeferred(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	item domain.YouTubeNotificationOutbox,
 	deliveryID int64,
 	postID string,

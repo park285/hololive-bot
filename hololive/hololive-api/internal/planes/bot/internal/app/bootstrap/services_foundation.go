@@ -8,41 +8,35 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
+// bot plane도 runtime이 읽은 YouTube·Holodex 설정을 그대로 쓴다. 코드 기본값 provider 변형을 쓰면
+// YOUTUBE_*·HOLODEX_* 운영 설정이 이 plane에서만 조용히 무시된다.
 func InitScraperHolodexFoundation(
 	ctx context.Context,
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*ScraperHolodexFoundation, error) {
-	holodexAPIKey := appConfig.Holodex.APIKey
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 
-	scraperProxyConfig := providersScraperProxyConfig(appConfig)
-
-	sharedRL, err := providers.ProvideYouTubeRateLimiter(infra.Cache, logger)
+	sharedRL, err := providers.ProvideYouTubeRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
 
-	scraperService := providers.ProvideScraperServiceWithOfficialSchedule(
-		infra.Cache,
+	scraperService, err := providers.ProvideScraperServiceWithOfficialSchedule(
 		memberServiceAdapter,
-		scraperProxyConfig,
+		appConfig.YouTube,
 		sharedRL,
 		logger,
 		appConfig.OfficialScheduleRuntime(),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("provide scraper service: %w", err)
+	}
 
-	holodexService, err := providers.ProvideHolodexService(
-		appConfig.Holodex.BaseURL,
-		holodexAPIKey,
-		infra.Cache,
-		scraperService,
-		logger,
-	)
+	holodexService, err := providers.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
@@ -52,8 +46,4 @@ func InitScraperHolodexFoundation(
 		MemberServiceAdapter: memberServiceAdapter,
 		SharedRL:             sharedRL,
 	}, nil
-}
-
-func providersScraperProxyConfig(appConfig *settings.Config) scraper.ProxyConfig {
-	return scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL}
 }

@@ -22,20 +22,16 @@ package messagestrings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// FallbackSentinel은 message_strings/notification_templates 로딩 자체가 실패하는 최후의
-// 경우에만 쓰는, 유일하게 허용된 하드코딩 사용자-facing 문자열이다. 메시지 "콘텐츠"가 아니라
-// DB 장애 sentinel이다(에러 문구마저 DB에 있어, DB가 죽으면 보여줄 문구도 못 읽는 chicken-egg 방어).
-const FallbackSentinel = "요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
 
 const (
 	NamespaceOrg         = "org"
@@ -50,107 +46,127 @@ const (
 	NamespaceProfileCard = "profilecard"
 	NamespaceRankCard    = "rankcard"
 	NamespaceTimeFmt     = "timefmt"
-	NamespaceKaring      = "karing"
-)
-
-const (
-	lazyLoadRetryInterval = 30 * time.Second
-	lazyLoadTimeout       = 5 * time.Second
 )
 
 type queryRunner interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
+// Store는 message_strings(DB 정본)를 기동 때 한 번 적재해 두고 조회한다.
+// DEC-20260926-hololive-message-strings-startup-validation: 운영 중 쓰기 경로와 재적재 호출자가 없으므로
+// 조회 시 lazy 재적재와 코드 대체 문구를 두지 않는다. 각 runtime은 기동 때 Load와 Validate를 호출하고,
+// 실패하면 기동에 실패한다.
 type Store struct {
-	pool        queryRunner
-	logger      *slog.Logger
-	mu          sync.RWMutex
-	cache       map[string]map[string]string
-	loaded      bool
-	reloadMu    sync.Mutex
-	nextRetryAt time.Time
-	loadTimeout time.Duration
+	pool   queryRunner
+	logger *slog.Logger
+	mu     sync.RWMutex
+	cache  map[string]map[string]string
+	loaded bool
 }
 
 func NewStore(pool *pgxpool.Pool, logger *slog.Logger) *Store {
 	initMetrics()
 
-	return &Store{pool: pool, logger: logger, loadTimeout: lazyLoadTimeout}
+	return &Store{pool: pool, logger: logger}
 }
 
+// Load는 message_strings 전체를 적재한다. 실패하면 이전 적재 상태를 바꾸지 않고 오류를 돌려준다.
 func (s *Store) Load(ctx context.Context) error {
 	if s == nil {
-		return nil
+		return errors.New("message strings store is nil")
 	}
 
-	if err := s.reload(ctx); err != nil {
-		return fmt.Errorf("reload: %w", err)
+	if err := s.load(ctx); err != nil {
+		observeLoadFailure()
+
+		return fmt.Errorf("load message strings: %w", err)
 	}
 
 	return nil
 }
 
-func (s *Store) Get(namespace, key string) string {
-	return s.GetContext(context.Background(), namespace, key)
+// Requirements는 runtime이 기동 때 확인할 message_strings 계약이다. Keys는 값이 비어 있지 않아야 하고,
+// Namespaces는 동적 key로 조회하는 namespace라 적어도 한 행이 있어야 한다.
+type Requirements struct {
+	Keys       []Key
+	Namespaces []string
 }
 
-func (s *Store) GetContext(ctx context.Context, namespace, key string) string {
+// Validate는 적재된 값이 요구 key와 namespace를 모두 갖췄는지 확인한다. 누락을 모두 모아 한 오류로 돌려준다.
+func (s *Store) Validate(requirements Requirements) error {
 	if s == nil {
-		return ""
+		return errors.New("message strings store is nil")
 	}
 
-	s.ensureLoaded(ctx)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if !s.loaded {
+		return errors.New("message strings are not loaded")
+	}
+
+	var missing []string
+
+	for _, key := range requirements.Keys {
+		if strings.TrimSpace(s.cache[key.Namespace][key.Name]) == "" {
+			missing = append(missing, key.String())
+		}
+	}
+
+	for _, namespace := range requirements.Namespaces {
+		if len(s.cache[namespace]) == 0 {
+			missing = append(missing, namespace+"/*")
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("message strings missing required entries: %s", strings.Join(missing, ", "))
+	}
+
+	return nil
+}
+
+// Text는 기동 검증을 거친 key의 값을 돌려준다. 값이 없으면 빈 문자열과 함께 lookup metric을 남긴다.
+// 검증된 key에서는 일어나지 않으므로 metric이 오르면 검증 목록 누락이나 Load 누락 같은 조립 결함이다.
+func (s *Store) Text(key Key) string {
+	value, _ := s.Lookup(key.Namespace, key.Name)
+
+	return value
+}
+
+// Lookup은 동적 key(조직명, 뉴스 분류, 알람 종류 등)를 조회한다. 없으면 ("", false)이며 호출자가 원문을 쓴다.
+func (s *Store) Lookup(namespace, key string) (string, bool) {
+	if s == nil {
+		observeLookupMiss(lookupMissReasonUnloaded, namespace)
+
+		return "", false
+	}
 
 	s.mu.RLock()
 
 	loaded := s.loaded
-
-	var value string
-
-	if values, ok := s.cache[namespace]; ok {
-		value = values[key]
-	}
-
+	value := s.cache[namespace][key]
 	s.mu.RUnlock()
 
 	if value != "" {
-		return value
+		return value, true
 	}
 
-	reason := fallbackReasonMissing
+	reason := lookupMissReasonMissing
 
 	if !loaded {
-		reason = fallbackReasonUnloaded
+		reason = lookupMissReasonUnloaded
 	}
 
-	observeLookupFallback(reason, namespace)
+	observeLookupMiss(reason, namespace)
 
-	return ""
-}
-
-func (s *Store) GetOrContext(ctx context.Context, namespace, key, fallback string) string {
-	if v := s.GetContext(ctx, namespace, key); v != "" {
-		return v
-	}
-
-	return fallback
-}
-
-func (s *Store) VTuberFallbackContext(ctx context.Context) string {
-	if v := s.GetContext(ctx, NamespaceMisc, "vtuber_fallback"); v != "" {
-		return v
-	}
-
-	return "VTuber"
+	return "", false
 }
 
 func (s *Store) GetMap(namespace string) map[string]string {
 	if s == nil {
 		return nil
 	}
-
-	s.ensureLoaded(context.Background())
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -164,71 +180,6 @@ func (s *Store) GetMap(namespace string) map[string]string {
 	maps.Copy(out, src)
 
 	return out
-}
-
-func (s *Store) Invalidate() {
-	s.mu.Lock()
-
-	s.loaded = false
-	s.cache = nil
-	s.nextRetryAt = time.Time{}
-	s.mu.Unlock()
-}
-
-func (s *Store) ensureLoaded(ctx context.Context) {
-	s.mu.RLock()
-
-	loaded := s.loaded
-	s.mu.RUnlock()
-
-	if loaded {
-		return
-	}
-
-	s.reloadMu.Lock()
-	defer s.reloadMu.Unlock()
-
-	s.mu.RLock()
-
-	loaded = s.loaded
-
-	retryAt := s.nextRetryAt
-	s.mu.RUnlock()
-
-	if loaded {
-		return
-	}
-
-	if !retryAt.IsZero() && time.Now().Before(retryAt) {
-		return
-	}
-
-	timeout := s.loadTimeout
-	if timeout <= 0 {
-		timeout = lazyLoadTimeout
-	}
-
-	loadCtx, cancel := context.WithTimeout(ctx, timeout)
-
-	defer cancel()
-
-	if err := s.reload(loadCtx); err != nil {
-		s.mu.Lock()
-
-		s.nextRetryAt = time.Now().Add(lazyLoadRetryInterval)
-		s.mu.Unlock()
-		s.warn(ctx, "messagestrings: lazy load failed", "error", err)
-	}
-}
-
-func (s *Store) reload(ctx context.Context) error {
-	if err := s.load(ctx); err != nil {
-		observeLoadFailure()
-
-		return fmt.Errorf("load: %w", err)
-	}
-
-	return nil
 }
 
 func (s *Store) load(ctx context.Context) error {
@@ -264,14 +215,7 @@ func (s *Store) load(ctx context.Context) error {
 
 	s.cache = next
 	s.loaded = true
-	s.nextRetryAt = time.Time{}
 	s.mu.Unlock()
 
 	return nil
-}
-
-func (s *Store) warn(ctx context.Context, msg string, args ...any) {
-	if s.logger != nil {
-		s.logger.WarnContext(ctx, msg, args...)
-	}
 }

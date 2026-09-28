@@ -30,10 +30,6 @@ func TestValidateOfficialScheduleConfig(t *testing.T) {
 			config.Timeout = 0
 			return DefaultMaxResponseBodyBytes
 		}, wantFail: true},
-		{name: "zero cache expiry", mutate: func(config *OfficialScheduleConfig) int64 {
-			config.CacheExpiry = 0
-			return DefaultMaxResponseBodyBytes
-		}, wantFail: true},
 		{name: "negative page cache TTL", mutate: func(config *OfficialScheduleConfig) int64 {
 			config.PageCacheTTL = -time.Second
 			return DefaultMaxResponseBodyBytes
@@ -59,21 +55,20 @@ func TestValidateOfficialScheduleConfig(t *testing.T) {
 func TestLoadOfficialScheduleRuntimeConfig(t *testing.T) {
 	t.Setenv("OFFICIAL_SCHEDULE_BASE_URL", "https://schedule.example")
 	t.Setenv("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", "7")
-	t.Setenv("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", "600")
 	t.Setenv("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", "9")
 	t.Setenv("MAX_RESPONSE_BODY_BYTES", "12345")
 
-	config := LoadOfficialScheduleRuntimeConfig()
+	config, err := LoadOfficialScheduleRuntimeConfig()
+	if err != nil {
+		t.Fatalf("LoadOfficialScheduleRuntimeConfig() error = %v", err)
+	}
+
 	if config.OfficialSchedule.BaseURL != "https://schedule.example" {
 		t.Fatalf("BaseURL = %q", config.OfficialSchedule.BaseURL)
 	}
 
 	if config.OfficialSchedule.Timeout != 7*time.Second {
 		t.Fatalf("Timeout = %s", config.OfficialSchedule.Timeout)
-	}
-
-	if config.OfficialSchedule.CacheExpiry != 10*time.Minute {
-		t.Fatalf("CacheExpiry = %s", config.OfficialSchedule.CacheExpiry)
 	}
 
 	if config.OfficialSchedule.PageCacheTTL != 9*time.Second {
@@ -90,7 +85,6 @@ func TestConfigOfficialScheduleRuntimeUsesLoadedFields(t *testing.T) {
 		OfficialSchedule: OfficialScheduleConfig{
 			BaseURL:      "https://schedule.from-config.example",
 			Timeout:      3 * time.Second,
-			CacheExpiry:  2 * time.Minute,
 			PageCacheTTL: 4 * time.Second,
 		},
 		MaxResponseBodyBytes: 8192,

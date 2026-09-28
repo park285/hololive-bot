@@ -30,6 +30,12 @@
 | selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
+## Compose 재생성 주의
+
+R-12의 `log_autovacuum_min_duration=10s`는 `holo-postgres`의 compose `command` 변경입니다. 변경된 compose를 사용하는 전체 `up`이나 의존성을 시작하는 명령은 DB 컨테이너를 재생성할 수 있으며, DB 중단·재연결을 포함한 별도 운영 승인이 필요합니다.
+
+특히 `compose-redeploy-service.sh hololive-api`도 앱의 최종 `up -d --no-deps` 전에 `run --rm hololive-db-migrate`를 실행합니다. 이 선행 명령에는 `--no-deps`가 없고 migrator는 `holo-postgres`에 의존하므로, 앱만 지정했다고 DB 재생성이 배제되는 것은 아닙니다. DB 재생성 승인이 없다면 이 compose 변경을 포함한 배포를 시작하지 않습니다. SQL 최적화 wave의 로컬 코드 승인은 R-12의 운영 활성화 승인이 아닙니다.
+
 ## Source observation replay epoch activation
 
 Migration 191과 epoch-aware `hololive-api`/`hololive-alarm-worker` image를 epoch 부재 상태로 먼저 배포하고 normal health, source observation 처리, delivery compatibility writer를 관찰합니다. 이 단계에서는 historical coverage가 성립하지 않으며 ledger completion one-shot을 실행하지 않습니다.
@@ -54,7 +60,7 @@ export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
 4. 출력의 `activated=true`와 non-zero `cutoff_received_at`을 확인합니다. 재실행에서 `activated=false`이면 기존 cutoff와 attribution이 그대로인지 확인하며 새 epoch로 간주하지 않습니다.
 5. 같은 epoch-aware `hololive-api`를 `--no-build --no-deps`로 시작하고 health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
-6. Active epoch의 exact `cutoff_received_at`만 delivery ledger backfill의 `--legacy-coverage-start-at`에 사용할 수 있습니다. Backfill과 completion marker는 별도 production data-write 승인이 필요합니다.
+6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. 완료 전제는 migration `227_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 확인하며, 미완료 state가 있거나 backfill 없이 delivery 행이 있는 DB에서는 migration이 실패합니다.
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
 
@@ -129,7 +135,7 @@ docker exec holo-postgres psql -U postgres_admin -d hololive -c \
 ```
 
 - **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/llm 3 plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin/llm 각 max 4, 합 최대 12)으로 추적합니다.
-- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector AP 4×8=32 + migrator 1 = 55, `max_connections=60` 대비 reserve 5로 고정합니다.
+- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector AP 4×8=32 + migrator 1 = 55로 셉니다. reserve는 `max_connections=60`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 57 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 2이고 gate 하한도 2입니다. 이 2개를 policy에 없는 비슈퍼유저 접속(exporter·backup 역할이 비슈퍼유저인 경우, 수동 도구)이 나눠 쓰므로, 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. compose가 `superuser_reserved_connections`를 바꾸면 `--verify-compose`가 policy pin과 불일치로 거부합니다.
 
 ### Valkey latency / slowlog
 
@@ -182,6 +188,7 @@ Mitigation:
 - Use `LLM_PROVIDER=gemini` for Gemini native `google_search`; routing Gemini through CLIProxy does not satisfy the MajorEvent search-call contract.
 - The native Gemini path uses the beta Interactions API and fails closed on non-`completed`, malformed, empty, or non-JSON output. Use `LLM_PROVIDER=cliproxy` with the retained CLIProxy settings for rollback.
 - For `409`, wait for the active run to finish; investigate a stuck scheduler if the conflict persists.
+- A scheduled major event digest whose summary fails (LLM error, empty result, or external-content guard failure) is not enqueued and is not retried automatically; the only trace is a `Failed to send weekly notification` / `Failed to send monthly notification` error log. The next scheduled run uses the next week or month key, so re-run `/internal/trigger/majorevent-weekly` or `/internal/trigger/majorevent-monthly` within the same KST week or month after fixing the cause (`DEC-20260926-hololive-source-fallbacks-retirement`).
 
 Rollback:
 - Roll back the plane/contract/config change that introduced failures.
@@ -227,27 +234,26 @@ sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-a
 Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. Migration 133/134 trigger와 terminal writer가 inbox payload와 command 진단을 terminal 전이에서 즉시 scrub합니다. 주기 maintenance는 scrub scan을 반복하지 않고 retention 대상만 찾으며, terminal ledger는 Iris admission retention(7일)보다 긴 8일 뒤 batch 삭제합니다. `manual_review`와 그 replay audit은 판단·처리 이력을 위해 해당 outbox row의 retention 동안 함께 보존합니다.
 
 Migration 133은 runtime cutover 전에 terminal payload scrub trigger를 먼저 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate합니다. 따라서 이전 runtime의 `inbox_complete` writer가 migration 적용 중이나 cutover 전에 `status`만 `succeeded`로 변경해도 trigger가 `payload`를 `{}`로 scrub하며 CHECK에 거부되지 않습니다.
-이 호환 trigger는 모든 legacy writer가 제거됐음을 확인한 뒤에만 별도 migration으로 제거합니다.
+이 호환 trigger는 드레인 종단입니다. 현재 terminal writer(`inbox_complete.sql`, `inbox_abandon.sql`, `inbox_release.sql`, `inbox_reclaim_expired.sql`)는 같은 UPDATE에서 `payload`를
+`{}`로 쓰므로, migration 223 이후 trigger가 비어 있지 않은 payload를 scrub하면 PostgreSQL WARNING
+`bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger`를 남깁니다(stack-audit 2026-09-26 T17).
+제거 조건은 두 가지입니다. ① 중앙 호스트의 이미지와 보존 이미지·rollback 대상 목록에 migration 133 이전 writer
+이미지(terminal 전이에서 payload를 비우지 않는 hololive-api 또는 퇴역 bot runtime)가 0개임을 hololive-bot-ops로 대조합니다.
+② 중앙 `holo-postgres` 로그에서 위 WARNING이 30일 동안 0건입니다. 두 조건을 확인하면 새 migration으로 trigger와
+`scrub_bot_webhook_inbox_terminal_payload()`를 지우고 `chk_bot_webhook_inbox_terminal_payload_scrubbed` CHECK만 남깁니다.
+방어층으로 계속 두려면 그 결정을 기록합니다. T18(2026-09-26)은 ①을 측정하지 못했습니다. 재검토 기한: 2026-12-31.
 
 Migration 125 이후 runtime은 `bot_webhook_heads`와 `ordering_key` advisory lock을 함께 사용합니다. Schema rollback은 이전 runtime으로 먼저 전환해 writer를 quiesce한 뒤에만 `bot_webhook_heads`/`available_at`을 제거해야 하며, 현재 runtime이 쓰는 동안 migration 125~136을 되돌리면 안 됩니다.
 
-Epoch-1/R1 artifact로 rollback한 뒤 migration `114_drop_unused_indexes.sql`을 다시 적용해야 하는 경우에는 read-only preflight로 rollback artifact를 먼저 생성해야 합니다. 인덱스 목록은 checksum으로 고정된 `manual/epoch1_recovery_sources/114_drop_unused_indexes.sql`을 사용합니다.
+Epoch-1/R1 artifact로 되돌린 뒤 migration 114를 다시 적용하던 preflight(`preflight-114-restore.sh`)와 074~082 message contract repair 도구는 `DEC-20260926-hololive-retired-rollback-tooling`으로 epoch-1 rollback 창을 닫으며 지웠습니다. T18(2026-09-26)에서 운영 `schema_migrations`에 `001_schema_epoch2_baseline`·`182_epoch2_legacy_ledger_cleanup`이 기록되고 epoch-1 파일명 행이 0건이며 epoch-1 이미지가 보존되지 않음을 확인했습니다.
 
-libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
+DB maintenance 명령(아래 `db-maintenance-exec.sh`로 실행하는 migration·preflight SQL, 예: [Rollback](#rollback)의 durable preflight)은 libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
 
 > 중앙 런타임 호스트에는 `psql`이 없습니다. `scripts/runtime/db-maintenance-exec.sh`가
 > PostgreSQL 이미지를 일회성으로 띄워 `/migrations`와 `stack-secrets`의 service/pgpass·CA를
 > read-only로 마운트하고 그 안에서 명령을 실행합니다. libpq service 정본은
 > `/etc/stack-secrets/hololive-bot/postgres/{pg_service.conf,pgpass}`(둘 다 `0600 root:root`)이며
 > `hololive_migrator`로 `verify-full` 접속합니다. 이 스크립트를 중앙 런타임 호스트에서 실행하십시오.
-
-```bash
-sudo -n env DB_MAINTENANCE_OUTPUT_FILE=/var/tmp/migration-114-rollback.sql \
-  ./scripts/runtime/db-maintenance-exec.sh \
-  bash /migrations/preflight-114-restore.sh /maintenance-output/rollback.sql
-```
-
-preflight가 `MISSING`을 보고하면 migration을 적용하지 않습니다. 출력 host 파일은 기존 파일을 덮어쓰지 않으며 `0600`으로 생성됩니다. 생성 artifact는 `BEGIN`/`COMMIT`, `CREATE INDEX IF NOT EXISTS`, 조건부 constraint 복원을 포함해 실패 후 재실행할 수 있습니다. Artifact 실행은 별도 rollback 승인이 필요합니다.
 
 ### 4. Fx lifecycle startup or shutdown fails
 

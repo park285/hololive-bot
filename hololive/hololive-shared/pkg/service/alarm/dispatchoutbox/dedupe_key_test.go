@@ -29,7 +29,7 @@ func TestBuildEventKeyUsesHashFormWhenOverLimit(t *testing.T) {
 		t.Fatalf("BuildEventKey = %q, want event_sha: prefix when over limit", got)
 	}
 
-	raw := buildRawEventKey(&input, "")
+	raw := buildRawEventKey(&input)
 	sum := sha256.Sum256([]byte(raw))
 	want := fmt.Sprintf("event_sha:%s", hex.EncodeToString(sum[:]))
 
@@ -48,8 +48,8 @@ func TestBuildEventKeyShortKeyUnchanged(t *testing.T) {
 	}
 	got := BuildEventKey(&input)
 
-	if got != buildRawEventKey(&input, "") {
-		t.Fatalf("short key altered: %q != raw %q", got, buildRawEventKey(&input, ""))
+	if got != buildRawEventKey(&input) {
+		t.Fatalf("short key altered: %q != raw %q", got, buildRawEventKey(&input))
 	}
 
 	if strings.HasPrefix(got, "event_sha:") {
@@ -139,12 +139,12 @@ func TestLiveCatchupEventKeySeparatesPreliveAndIgnoresScheduleDrift(t *testing.T
 		StartActual:    &actualStart,
 	}
 
-	preliveInput := prepareEnvelopeDedupeInput(&prelive)
-	catchupInput := prepareEnvelopeDedupeInput(&catchup)
-	driftedInput := prepareEnvelopeDedupeInput(&driftedCatchup)
-	preliveEvent := preliveInput.eventKey()
-	catchupEvent := catchupInput.eventKey()
-	driftedEvent := driftedInput.eventKey()
+	preliveInput := EnvelopeDedupeInput(&prelive)
+	catchupInput := EnvelopeDedupeInput(&catchup)
+	driftedInput := EnvelopeDedupeInput(&driftedCatchup)
+	preliveEvent := BuildEventKey(&preliveInput)
+	catchupEvent := BuildEventKey(&catchupInput)
+	driftedEvent := BuildEventKey(&driftedInput)
 
 	if preliveEvent == catchupEvent {
 		t.Fatalf("prelive and catchup event keys collide: %q", preliveEvent)
@@ -159,7 +159,7 @@ func TestLiveCatchupEventKeySeparatesPreliveAndIgnoresScheduleDrift(t *testing.T
 		t.Fatalf("catchup event key = %q, want %q", catchupEvent, want)
 	}
 
-	event, _, err := buildLedgerRows(&catchup, StatusPending)
+	event, _, err := buildLedgerRows(&catchup)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}
@@ -213,7 +213,7 @@ func TestBuildLedgerRowsEventKeyIgnoresRoomSpecificClaimKeys(t *testing.T) {
 		Version:   1,
 	}
 
-	event1, delivery1, err := buildLedgerRows(&firstEnvelope, StatusPending)
+	event1, delivery1, err := buildLedgerRows(&firstEnvelope)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room1 error = %v", err)
 	}
@@ -231,7 +231,7 @@ func TestBuildLedgerRowsEventKeyIgnoresRoomSpecificClaimKeys(t *testing.T) {
 		Version:   1,
 	}
 
-	event2, delivery2, err := buildLedgerRows(&secondEnvelope, StatusPending)
+	event2, delivery2, err := buildLedgerRows(&secondEnvelope)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room2 error = %v", err)
 	}
@@ -268,12 +268,12 @@ func TestBuildLedgerRowsEventPayloadHashIgnoresEnqueuedAt(t *testing.T) {
 
 	second.EnqueuedAt = "2026-05-12T00:00:05Z"
 
-	event1, _, err := buildLedgerRows(&first, StatusPending)
+	event1, _, err := buildLedgerRows(&first)
 	if err != nil {
 		t.Fatalf("buildLedgerRows first error = %v", err)
 	}
 
-	event2, _, err := buildLedgerRows(&second, StatusPending)
+	event2, _, err := buildLedgerRows(&second)
 	if err != nil {
 		t.Fatalf("buildLedgerRows second error = %v", err)
 	}
@@ -295,11 +295,10 @@ func TestBuildLedgerRowsYouTubeOutboxUsesSourceIdentity(t *testing.T) {
 		},
 		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
 		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs:         []int64{10, 11},
-			Kind:              domain.OutboxKindCommunityPost,
-			AlarmType:         domain.AlarmTypeCommunity,
-			ChannelID:         testYouTubeChannelID,
-			RenderTemplateKey: domain.TemplateKeyOutboxCommunityGroup,
+			OutboxIDs: []int64{10, 11},
+			Kind:      domain.OutboxKindCommunityPost,
+			AlarmType: domain.AlarmTypeCommunity,
+			ChannelID: testYouTubeChannelID,
 			Items: []domain.YouTubeOutboxItem{
 				{OutboxID: 11, ContentID: "post-b", Payload: `{"post_id":"post-b","content_text":"b"}`},
 				{OutboxID: 10, ContentID: "post-a", Payload: `{"post_id":"post-a","content_text":"a"}`},
@@ -312,7 +311,7 @@ func TestBuildLedgerRowsYouTubeOutboxUsesSourceIdentity(t *testing.T) {
 		Version: 1,
 	}
 
-	event, delivery, err := buildLedgerRows(&envelope, StatusPending)
+	event, delivery, err := buildLedgerRows(&envelope)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}
@@ -404,20 +403,5 @@ func TestBuildEventKeyStaysBoundedForMaximumYouTubeIdentitySet(t *testing.T) {
 
 	if !strings.Contains(key, ":sha256:") {
 		t.Fatalf("BuildEventKey = %q, want canonical hashed identity", key)
-	}
-}
-
-func TestBuildEventKeyBoundsLegacyRawYouTubeSourceIdentity(t *testing.T) {
-	key := BuildEventKey(&DedupeInput{
-		SourceKind:       domain.AlarmDispatchSourceKindYouTubeOutbox,
-		SourceOutboxKind: domain.OutboxKindNewVideo,
-		SourceIdentity:   strings.Repeat("legacy,", 1000),
-	})
-	if len(key) > eventKeyMaxLength {
-		t.Fatalf("BuildEventKey length = %d, want <= %d", len(key), eventKeyMaxLength)
-	}
-
-	if !strings.Contains(key, ":sha256:") {
-		t.Fatalf("BuildEventKey = %q, want bounded source hash", key)
 	}
 }

@@ -132,14 +132,6 @@ func AppendDeliveryOutboxStatusArgs(args []any, values ...domain.OutboxStatus) [
 	return args
 }
 
-func AppendDeliveryAlarmTypeArgs(args []any, values ...domain.AlarmType) []any {
-	for _, value := range values {
-		args = append(args, string(value))
-	}
-
-	return args
-}
-
 func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) error) error {
 	if db == nil {
 		return errors.New("db is nil")

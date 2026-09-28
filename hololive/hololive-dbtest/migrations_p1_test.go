@@ -575,7 +575,6 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 
 	queryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-shared", "pkg", "service", "youtube", "sourceobservation", "queries"))
-	backfillQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-alarm-worker", "internal", "egress", "youtubedispatch", "backfill", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 	checks := map[string][]observationRoleQuery{
 		roles.scraper: {
@@ -586,7 +585,6 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		roles.runtime: {
 			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
 			{name: "repository_replay_epoch_load_0086_86.sql"},
-			{name: "replay_epoch_load.sql", dir: backfillQueryDir},
 			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_pending_ends.sql", args: []any{[]string{}}},
@@ -606,7 +604,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 func runObservationRoleQueries(
 	t *testing.T,
 	pool *pgxpool.Pool,
-	role, roleSQLPath, defaultQueryDir string,
+	role, roleSQLPath, queryDir string,
 	queries []observationRoleQuery,
 ) {
 	t.Helper()
@@ -616,11 +614,6 @@ func runObservationRoleQueries(
 	querySQL := make([]string, len(queries))
 
 	for i, check := range queries {
-		queryDir := check.dir
-		if queryDir == "" {
-			queryDir = defaultQueryDir
-		}
-
 		querySQL[i] = readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
 	}
 
@@ -792,9 +785,6 @@ func assertScheduleCollaboConstraintAccess(t *testing.T, pool *pgxpool.Pool, rol
 type observationRoleQuery struct {
 	name string
 	args []any
-	// dir이 비면 sourceobservation queries 디렉터리를 쓴다. 다른 모듈이 같은 테이블을
-	// 같은 role로 읽는 쿼리 자산도 이 검사가 함께 돌아야 권한 회귀를 잡는다.
-	dir string
 }
 
 func readObservationRoleSQL(t *testing.T, path string, replacements map[string]string) string {

@@ -88,7 +88,7 @@ func (c *Service) BatchHGet(ctx context.Context, key string, fields []string) (m
 	return values, nil
 }
 
-func (c *Service) batchHGetValue(key string, result valkey.ValkeyResult) (value0 string, ok1 bool, err error) {
+func (c *Service) batchHGetValue(key string, result valkey.ValkeyResult) (string, bool, error) {
 	if callErr := result.Error(); callErr != nil {
 		if util.IsValkeyNil(callErr) {
 			return "", false, nil

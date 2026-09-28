@@ -18,12 +18,17 @@ func (s *TransitionStore) ApplyStartedFailure(
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
+	mode DeliveryMode,
 ) (ApplyResult, error) {
 	if !operation.Valid() {
 		return newApplyResult(ApplyConflict, nil), errors.New("apply started failure: invalid operation")
 	}
 
-	result, err := s.applyFailure(ctx, "apply started failure", operation, kind, reason, retryAfter)
+	if err := mode.validateCallerMode(); err != nil {
+		return newApplyResult(ApplyConflict, nil), fmt.Errorf("apply started failure: %w", err)
+	}
+
+	result, err := s.applyFailure(ctx, "apply started failure", operation, kind, reason, retryAfter, mode)
 	if err != nil {
 		return result, fmt.Errorf("apply started failure: %w", err)
 	}
@@ -36,8 +41,9 @@ func (s *TransitionStore) ScheduleKnownRetry(
 	operation StartedOperation,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
+	mode DeliveryMode,
 ) (ApplyResult, error) {
-	result, err := s.ApplyStartedFailure(ctx, operation, lifecycle.FailureRetryable, reason, retryAfter)
+	result, err := s.ApplyStartedFailure(ctx, operation, lifecycle.FailureRetryable, reason, retryAfter, mode)
 	if err != nil {
 		return result, fmt.Errorf("schedule known retry: %w", err)
 	}
@@ -49,8 +55,9 @@ func (s *TransitionStore) CompleteFailed(
 	ctx context.Context,
 	operation StartedOperation,
 	reason lifecycle.Reason,
+	mode DeliveryMode,
 ) (ApplyResult, error) {
-	result, err := s.ApplyStartedFailure(ctx, operation, lifecycle.FailurePermanent, reason, 0)
+	result, err := s.ApplyStartedFailure(ctx, operation, lifecycle.FailurePermanent, reason, 0, mode)
 	if err != nil {
 		return result, fmt.Errorf("complete failed: %w", err)
 	}
@@ -65,13 +72,14 @@ func (s *TransitionStore) ApplyPreparedFailure(
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
+	mode DeliveryMode,
 ) (ApplyResult, error) {
 	if len(rows) == 0 {
 		return newApplyResult(ApplyConflict, nil), errors.New("apply prepared failure: rows are empty")
 	}
 
-	if err := s.ensureReady(ctx); err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("apply prepared failure: %w", err)
+	if err := mode.validateCallerMode(); err != nil {
+		return newApplyResult(ApplyConflict, nil), fmt.Errorf("apply prepared failure: %w", err)
 	}
 
 	at, err := lifecycle.CanonicalTime(time.Now())
@@ -99,7 +107,7 @@ func (s *TransitionStore) ApplyPreparedFailure(
 		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("apply prepared failure: load envelope: %w", err)
 	}
 
-	result, err := s.applyFailure(ctx, "apply prepared failure", operation, kind, reason, retryAfter)
+	result, err := s.applyFailure(ctx, "apply prepared failure", operation, kind, reason, retryAfter, mode)
 	if err != nil {
 		return result, fmt.Errorf("apply prepared failure: apply transition: %w", err)
 	}
@@ -175,15 +183,19 @@ func (s *TransitionStore) applyFailure(
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
+	mode DeliveryMode,
 ) (ApplyResult, error) {
-	transitions, rules, errorOutcome, err := s.prepareFailureTransitions(
-		ctx, operationName, operation, kind, reason, retryAfter,
+	transitions, rules, at, errorOutcome, err := s.prepareFailureTransitions(
+		operationName, operation, kind, reason, retryAfter,
 	)
 	if err != nil {
 		return newApplyResult(errorOutcome, nil), fmt.Errorf("%s: prepare transition: %w", operationName, err)
 	}
 
-	result, err := s.applyFailureTransitions(ctx, operationName, transitions, rules)
+	// 실패 전이는 owner의 provider 실패와 prepared failure(message_missing, pre_send_claim 포함)를 모두 시도로 기록한다.
+	attempts := ownerAttempts(operation.groups, attemptResultFailure, reason)
+
+	result, err := s.applyFailureTransitions(ctx, operationName, transitions, rules, attempts, mode, at)
 	if err != nil {
 		return result, fmt.Errorf("%s: apply transition: %w", operationName, err)
 	}
@@ -192,39 +204,34 @@ func (s *TransitionStore) applyFailure(
 }
 
 func (s *TransitionStore) prepareFailureTransitions(
-	ctx context.Context,
 	operationName string,
 	operation StartedOperation,
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
-) ([]rowTransition, []lifecycle.RuleID, ApplyOutcome, error) {
+) ([]rowTransition, []lifecycle.RuleID, time.Time, ApplyOutcome, error) {
 	if kind == lifecycle.FailureOutcomeUnknown {
-		return nil, nil, ApplyIndeterminate, errors.New("apply failure: outcome unknown has no transition")
-	}
-
-	if err := s.ensureReady(ctx); err != nil {
-		return nil, nil, ApplyIndeterminate, fmt.Errorf("%s: %w", operationName, err)
+		return nil, nil, time.Time{}, ApplyIndeterminate, errors.New("apply failure: outcome unknown has no transition")
 	}
 
 	at, err := lifecycle.CanonicalTime(time.Now())
 	if err != nil {
-		return nil, nil, ApplyIndeterminate, fmt.Errorf("%s: at: %w", operationName, err)
+		return nil, nil, time.Time{}, ApplyIndeterminate, fmt.Errorf("%s: at: %w", operationName, err)
 	}
 
 	policy, err := lifecycle.NewRetryPolicy(s.config.MaxRetries, s.config.RetryBackoff)
 	if err != nil {
-		return nil, nil, ApplyIndeterminate, fmt.Errorf("%s: retry policy: %w", operationName, err)
+		return nil, nil, time.Time{}, ApplyIndeterminate, fmt.Errorf("%s: retry policy: %w", operationName, err)
 	}
 
 	transitions, rules, err := buildFailureTransitions(operationName, operation, policy, kind, reason, at, retryAfter)
 	if err != nil {
-		return nil, nil, ApplyConflict, fmt.Errorf("%s: build transitions: %w", operationName, err)
+		return nil, nil, time.Time{}, ApplyConflict, fmt.Errorf("%s: build transitions: %w", operationName, err)
 	}
 
 	sortTransitionsByID(transitions)
 
-	return transitions, rules, ApplyApplied, nil
+	return transitions, rules, at, ApplyApplied, nil
 }
 
 func (s *TransitionStore) applyFailureTransitions(
@@ -232,6 +239,9 @@ func (s *TransitionStore) applyFailureTransitions(
 	operationName string,
 	transitions []rowTransition,
 	rules []lifecycle.RuleID,
+	attempts []deliveryAttempt,
+	mode DeliveryMode,
+	at time.Time,
 ) (ApplyResult, error) {
 	var priorAdjudication CommitAdjudication
 
@@ -244,6 +254,10 @@ func (s *TransitionStore) applyFailureTransitions(
 			touched, err = applyRowTransitions(ctx, tx, operationName, transitions)
 			if err != nil {
 				return fmt.Errorf("%s: apply rows: %w", operationName, err)
+			}
+
+			if err := recordAttemptTelemetry(ctx, tx, mode, attempts, at); err != nil {
+				return fmt.Errorf("%s: record telemetry: %w", operationName, err)
 			}
 
 			return nil

@@ -27,7 +27,7 @@ import (
 )
 
 func (c *Cache) InvalidateAll(ctx context.Context) error {
-	if c.epoch != nil {
+	if c.cacheEnabled() {
 		if err := c.invalidateCoordinated(ctx); err != nil {
 			return fmt.Errorf("invalidate coordinated: %w", err)
 		}

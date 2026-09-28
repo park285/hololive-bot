@@ -146,81 +146,8 @@ func (deliveryTelemetryTestAlarmTrackingModel) TableName() string {
 	return testTableContentAlarmTracking
 }
 
-func TestDeliveryTelemetryRepository_BackfillAndFlush(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	delivery, sentAt, alarmLatencyMillis := seedBackfillTelemetryFixture(t, db)
-
-	repository := telemetry.NewRepository(db)
-
-	inserted, err := repository.BackfillFromDelivery(ctx, 10, time.Time{})
-	require.NoError(t, err)
-	require.Equal(t, 1, inserted)
-
-	pending, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
-	require.NoError(t, err)
-	require.Len(t, pending, 1)
-	require.Equal(t, delivery.ID, pending[0].DeliveryID)
-	require.Equal(t, 1, pending[0].AttemptOrdinal)
-	require.Equal(t, sendResultSuccess, pending[0].SendResult)
-	require.Equal(t, string(domain.AlarmTypeCommunity), string(pending[0].AlarmType))
-	require.Equal(t, telemetry.CommunityShortsDeliveryPath, pending[0].DeliveryPath)
-	require.Equal(t, "post-backfill", pending[0].PostID)
-	require.Nil(t, pending[0].AttemptStartedAt)
-	require.NotNil(t, pending[0].AttemptFinishedAt)
-	require.Equal(t, sentAt, pending[0].AttemptFinishedAt.UTC())
-	require.NotNil(t, pending[0].AlarmSentAt)
-	require.Equal(t, sentAt, pending[0].AlarmSentAt.UTC())
-	require.NotNil(t, pending[0].AlarmLatencyMillis)
-	require.Equal(t, alarmLatencyMillis, *pending[0].AlarmLatencyMillis)
-
-	require.NoError(t, repository.MarkLoggedBatch(ctx, []int64{pending[0].ID}))
-
-	var saved deliveryTelemetryTestBufferModel
-
-	require.NoError(t, firstDeliveryTestRow(db, &saved, pending[0].ID).Error)
-	require.NotNil(t, saved.LoggedAt)
-	require.Equal(t, "post-backfill", saved.PostID)
-}
-
-func TestDeliveryTelemetryRepository_BackfillFromDelivery_ExecModeEncodesEnumFilters(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	sentAt := time.Now().UTC().Add(-30 * time.Second).Truncate(time.Microsecond)
-	outbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_backfill_exec",
-		ContentID:     "post-backfill-exec",
-		Payload:       `{"post_id":"post-backfill-exec","content_text":"hello"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: sentAt,
-		SentAt:        &sentAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &outbox).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestDeliveryModel{
-		OutboxID:      outbox.ID,
-		RoomID:        "room-backfill-exec",
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: sentAt,
-		CreatedAt:     sentAt,
-		SentAt:        &sentAt,
-	}).Error)
-
-	repository := telemetry.NewRepository(newDeliveryExecModePool(t, db))
-	inserted, err := repository.BackfillFromDelivery(ctx, 10, time.Time{})
-	require.NoError(t, err)
-	require.Equal(t, 1, inserted)
-}
-
-func TestDeliveryTelemetryRepository_EnqueueDedupesByDeliveryAttempt(t *testing.T) {
+// 시도 식별자 중복은 조용히 건너뛰지 않고 오류다. TransitionStore가 전이 트랜잭션 안에서 순번을 매겨 한 번만 기록한다.
+func TestDeliveryTelemetryRepository_EnqueueRejectsDuplicateDeliveryAttempt(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -233,6 +160,7 @@ func TestDeliveryTelemetryRepository_EnqueueDedupesByDeliveryAttempt(t *testing.
 		OutboxID:       201,
 		ChannelID:      "UC_dedupe",
 		ContentID:      testShortOne,
+		PostID:         "short:" + testShortOne,
 		RoomID:         testRoomOne,
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      testDedupeKeyShortOne,
@@ -243,82 +171,12 @@ func TestDeliveryTelemetryRepository_EnqueueDedupesByDeliveryAttempt(t *testing.
 	}
 
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
+	require.Error(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
 
 	var count int64
 
 	require.NoError(t, countDeliveryTestRowsWhere(db, &deliveryTelemetryTestBufferModel{}, &count, "").Error)
 	require.Equal(t, int64(1), count)
-
-	var saved deliveryTelemetryTestBufferModel
-
-	require.NoError(t, firstDeliveryTestRow(db, &saved).Error)
-	require.Equal(t, testShortOne, saved.PostID)
-}
-
-func TestDeliveryTelemetryRepository_BackfillFromDelivery_AppliesRetentionCutoff(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	now := time.Now().UTC()
-	oldSentAt := now.Add(-25 * time.Hour)
-	recentSentAt := now.Add(-2 * time.Hour)
-
-	oldOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_old",
-		ContentID:     "post-old",
-		Payload:       `{"post_id":"post-old","content_text":"old"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: oldSentAt,
-		SentAt:        &oldSentAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &oldOutbox).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestDeliveryModel{
-		OutboxID:      oldOutbox.ID,
-		RoomID:        testRoomOld,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: oldSentAt,
-		CreatedAt:     oldSentAt,
-		SentAt:        &oldSentAt,
-	}).Error)
-
-	recentOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindNewShort),
-		ChannelID:     "UC_recent",
-		ContentID:     "short-recent",
-		Payload:       `{"video_id":"short-recent","title":"recent"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: recentSentAt,
-		SentAt:        &recentSentAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &recentOutbox).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestDeliveryModel{
-		OutboxID:      recentOutbox.ID,
-		RoomID:        "room-recent",
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: recentSentAt,
-		CreatedAt:     recentSentAt,
-		SentAt:        &recentSentAt,
-	}).Error)
-
-	repository := telemetry.NewRepository(db)
-	inserted, err := repository.BackfillFromDelivery(ctx, 10, now.Add(-24*time.Hour))
-	require.NoError(t, err)
-	require.Equal(t, 1, inserted)
-
-	var rows []deliveryTelemetryTestBufferModel
-
-	require.NoError(t, findDeliveryTestRowsOrdered(db, &rows, "content_id ASC").Error)
-	require.Len(t, rows, 1)
-	require.Equal(t, "short-recent", rows[0].ContentID)
-	require.Equal(t, "short-recent", rows[0].PostID)
 }
 
 func TestDispatcher_Cleanup_RemovesOnlyLoggedTelemetryOlderThanRetention(t *testing.T) {
@@ -410,12 +268,13 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 		AlarmLatencyExceeded: &alarmLatencyExceeded,
 	}).Error)
 
+	enqueueEmittedShortAttempt(t, db, &outbox, &delivery, sentAt)
+
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{
-		LockTimeout:            time.Minute,
-		TelemetryBackfillBatch: 10,
-		TelemetryFlushBatch:    10,
+		LockTimeout:         time.Minute,
+		TelemetryFlushBatch: 10,
 	})
 
 	dispatcher.telemetry.processDeliveryTelemetry(ctx)
@@ -435,6 +294,34 @@ func TestDispatcher_ProcessDeliveryTelemetry_EmitsBufferedAuditLogs(t *testing.T
 	require.Contains(t, logBuffer.String(), "\"delay_source\":")
 }
 
+// enqueueEmittedShortAttempt는 TransitionStore가 CompleteSent 트랜잭션 안에서 기록하는 성공 시도 행을 넣는다.
+// 이제 delivery 테이블을 역산하던 backfill은 없으므로 flush 대상은 명시적으로 기록된 시도 행뿐이다.
+func enqueueEmittedShortAttempt(
+	t *testing.T,
+	db *pgxpool.Pool,
+	outbox *deliveryTelemetryTestOutboxModel,
+	delivery *deliveryTelemetryTestDeliveryModel,
+	sentAt time.Time,
+) {
+	t.Helper()
+
+	require.NoError(t, telemetry.NewRepository(db).Enqueue(t.Context(), []domain.YouTubeNotificationDeliveryTelemetry{{
+		DeliveryID:     delivery.ID,
+		AttemptOrdinal: 1,
+		OutboxID:       outbox.ID,
+		ChannelID:      outbox.ChannelID,
+		ContentID:      outbox.ContentID,
+		PostID:         "short-emit",
+		RoomID:         delivery.RoomID,
+		AlarmType:      domain.AlarmTypeShorts,
+		DedupeKey:      "youtube-notification:NEW_SHORT:short-emit",
+		DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+		DeliveryMode:   deliveryModePerRoom,
+		SendResult:     sendResultSuccess,
+		EventAt:        sentAt,
+	}}))
+}
+
 func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 	t.Parallel()
 
@@ -449,6 +336,7 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 		OutboxID:       601,
 		ChannelID:      "UC_retry",
 		ContentID:      "post-retry",
+		PostID:         "community:post-retry",
 		RoomID:         "room-retry",
 		AlarmType:      domain.AlarmTypeCommunity,
 		DedupeKey:      "youtube-notification:COMMUNITY_POST:post-retry",
@@ -471,7 +359,6 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, again, 1)
 	require.Equal(t, locked[0].ID, again[0].ID)
-	require.Equal(t, "post-retry", again[0].PostID)
 	require.NoError(t, repository.MarkLoggedBatch(ctx, []int64{again[0].ID}))
 }
 
@@ -530,49 +417,4 @@ func cleanupRetentionTelemetryRows(now, oldLoggedAt, recentLoggedAt time.Time) [
 			NextAttemptAt:  now,
 		},
 	}
-}
-
-func seedBackfillTelemetryFixture(t *testing.T, db *pgxpool.Pool) (deliveryTelemetryTestDeliveryModel, time.Time, int64) {
-	t.Helper()
-
-	sentAt := time.Now().UTC().Add(-30 * time.Second).Truncate(time.Microsecond)
-	outbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_backfill",
-		ContentID:     "post-backfill",
-		Payload:       `{"post_id":"post-backfill","content_text":"hello"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: sentAt,
-		SentAt:        &sentAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &outbox).Error)
-
-	delivery := deliveryTelemetryTestDeliveryModel{
-		OutboxID:      outbox.ID,
-		RoomID:        "room-backfill",
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: sentAt,
-		CreatedAt:     sentAt,
-		SentAt:        &sentAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
-
-	actualPublishedAt := sentAt.Add(-2 * time.Minute)
-	detectedAt := sentAt.Add(-1 * time.Minute)
-	alarmLatencyMillis := int64(sentAt.Sub(actualPublishedAt) / time.Millisecond)
-	alarmLatencyExceeded := false
-	require.NoError(t, insertDeliveryTestRows(db, &deliveryTelemetryTestAlarmTrackingModel{
-		Kind:                 string(domain.OutboxKindCommunityPost),
-		ContentID:            outbox.ContentID,
-		ChannelID:            outbox.ChannelID,
-		ActualPublishedAt:    &actualPublishedAt,
-		DetectedAt:           detectedAt,
-		AlarmSentAt:          &sentAt,
-		AlarmLatencyMillis:   &alarmLatencyMillis,
-		AlarmLatencyExceeded: &alarmLatencyExceeded,
-	}).Error)
-
-	return delivery, sentAt, alarmLatencyMillis
 }

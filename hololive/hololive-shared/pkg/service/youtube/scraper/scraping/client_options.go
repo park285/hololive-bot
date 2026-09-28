@@ -22,39 +22,32 @@ package scraping
 
 import (
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	backoff "github.com/kapu/hololive-shared/internal/service/youtube/scraper/scraping/backoff"
 	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type Client struct {
-	httpClient             *http.Client // 테스트/특수 경로용 고정 클라이언트
-	directHTTPClient       *http.Client
-	proxyHTTPClient        *http.Client
-	directTransport        *http.Transport
-	proxyTransport         *http.Transport
-	activeHTTPClient       atomic.Pointer[http.Client]
-	proxyEnabled           atomic.Bool
-	uaProvider             ua.Provider
-	rateLimiter            *ratelimiter.RateLimiter
-	backoffState           *backoff.BackoffState
-	proxyConfig            ProxyConfig
-	stateStore             stateStore
-	fetcherEngine          FetcherEngine
-	channelHealthPolicy    ChannelHealthPolicy
-	channelHealthDisabled  bool
-	channelHealth          *ChannelHealthStore
-	snapshotSink           SnapshotSink
-	snapshotPolicy         SnapshotPolicy
-	browserSnapshotFetcher *BrowserSnapshotFetcher
-	proxyFallbackPolicy    ProxyFallbackPolicy
-	proxyHealth            *proxyHealthTracker
+	httpClient            *http.Client    // WithHTTPClient로 주입했거나 initHTTPClients가 만든 직접 연결 client
+	transport             *http.Transport // initHTTPClients가 만든 transport. 주입 client면 nil이다.
+	uaProvider            ua.Provider
+	rateLimiter           *ratelimiter.RateLimiter
+	backoffState          *backoff.BackoffState
+	stateStore            stateStore
+	channelHealthPolicy   ChannelHealthPolicy
+	channelHealthDisabled bool
+	channelHealth         *ChannelHealthStore
+	snapshotSink          SnapshotSink
+	snapshotPolicy        SnapshotPolicy
 
 	communityMissing *cacheState
-	videoRSSBackoff  *cacheState
+
+	// config는 runtime이 읽은 YouTube scraper 설정이다. HTTP timeout, 응답 본문 상한, 상태 TTL,
+	// 분산 rate limit bucket 접두사의 유일한 출처다.
+	config settings.YouTubeConfig
 }
 
 type ClientOption func(*Client)
@@ -80,12 +73,6 @@ func WithRateLimiter(rl *ratelimiter.RateLimiter) ClientOption {
 func WithStateStore(store stateStore) ClientOption {
 	return func(c *Client) {
 		c.stateStore = store
-	}
-}
-
-func WithFetcherEngine(engine FetcherEngine) ClientOption {
-	return func(c *Client) {
-		c.fetcherEngine = normalizeFetcherEngine(engine)
 	}
 }
 
@@ -117,34 +104,21 @@ func WithSnapshotPolicy(policy SnapshotPolicy) ClientOption {
 	}
 }
 
-func WithBrowserSnapshotFetcher(fetcher *BrowserSnapshotFetcher) ClientOption {
-	return func(c *Client) {
-		c.browserSnapshotFetcher = fetcher
-	}
-}
-
-func WithProxyFallbackPolicy(policy ProxyFallbackPolicy) ClientOption {
-	return func(c *Client) {
-		c.proxyFallbackPolicy = policy
-	}
-}
-
-func NewClient(opts ...ClientOption) *Client {
+// NewClient는 runtime 설정(settings.Config.YouTube)을 필수로 받는다. 패키지 기본값으로 대신하면
+// YOUTUBE_SCRAPER_* 같은 운영 설정이 조용히 무시된다.
+func NewClient(config settings.YouTubeConfig, opts ...ClientOption) *Client {
 	c := &Client{
+		config:              config,
 		uaProvider:          ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
 		rateLimiter:         ratelimiter.New(3 * time.Second),
 		backoffState:        backoff.NewBackoffState(),
-		fetcherEngine:       FetcherEngineNetHTTP,
 		channelHealthPolicy: DefaultChannelHealthPolicy(),
 		snapshotPolicy:      DefaultSnapshotPolicy(),
 	}
 
-	// 옵션 적용 (프록시 설정 포함)
 	for _, opt := range opts {
 		opt(c)
 	}
-
-	c.proxyHealth = newProxyHealthTracker(c.proxyFallbackPolicy)
 
 	// stateStore 주입 후 cacheState 초기화
 	c.initStateManagers()

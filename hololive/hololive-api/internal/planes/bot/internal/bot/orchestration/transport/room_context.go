@@ -15,10 +15,6 @@ type roomChat struct {
 }
 
 func WithRoomChat(ctx context.Context, roomType, roomLinkID string) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	roomType = strings.TrimSpace(roomType)
 	roomLinkID = strings.TrimSpace(roomLinkID)
 
@@ -30,10 +26,6 @@ func WithRoomChat(ctx context.Context, roomType, roomLinkID string) context.Cont
 }
 
 func RoomChatFromContext(ctx context.Context) (roomType, roomLinkID string, ok bool) {
-	if ctx == nil {
-		return "", "", false
-	}
-
 	value, exists := ctx.Value(roomChatContextKey{}).(roomChat)
 	if !exists {
 		return "", "", false

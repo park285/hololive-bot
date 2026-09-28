@@ -22,6 +22,7 @@ package apphttp
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -92,7 +93,12 @@ func registerAPIRoutes(
 	holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
 	if constants.APIRateLimitConfig.Enabled {
-		holoAPI.Use(apiRateLimitMiddleware(cacheClient, logger))
+		rateLimit, err := apiRateLimitMiddleware(cacheClient, logger)
+		if err != nil {
+			return fmt.Errorf("register /api/holo rate limit: %w", err)
+		}
+
+		holoAPI.Use(rateLimit)
 	}
 
 	registerMemberRoutes(holoAPI, domains.Member)
@@ -107,24 +113,21 @@ func registerAPIRoutes(
 	return nil
 }
 
-func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) gin.HandlerFunc {
+// apiRateLimitMiddleware는 /api/holo의 IP rate limit을 만든다. Rate limit이 켜져 있으면 cache 없음과 limiter 초기화
+// 실패는 기동 오류다. 판정 실패는 요청을 통과시키지 않고 503으로 거절한다(fail-closed,
+// DEC-20260926-hololive-source-fallbacks-retirement). 예전 fail-open 경로와 hololive_admin_rate_limit_fail_open_total은 지웠다.
+func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) (gin.HandlerFunc, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	if cacheClient == nil {
-		logger.Warn("api_rate_limit_disabled_no_cache")
-		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonNoCache).Inc()
-
-		return func(c *gin.Context) { c.Next() }
+		return nil, errors.New("api rate limit requires a cache client")
 	}
 
 	limiter, err := ratelimit.NewSlidingWindowLimiter(cacheClient, "api:holo:ip", logger)
 	if err != nil {
-		logger.Error("api_rate_limit_init_failed", slog.String("error", err.Error()))
-		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonInitFailed).Inc()
-
-		return func(c *gin.Context) { c.Next() }
+		return nil, fmt.Errorf("init api rate limiter: %w", err)
 	}
 
 	limit := constants.APIRateLimitConfig.Limit
@@ -137,7 +140,7 @@ func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) gin.H
 		logger:  logger,
 	}
 
-	return handler.Handle
+	return handler.Handle, nil
 }
 
 func (h apiRateLimitHandler) Handle(c *gin.Context) {
@@ -151,8 +154,9 @@ func (h apiRateLimitHandler) Handle(c *gin.Context) {
 	decision, err := h.limiter.Allow(c.Request.Context(), ip, h.limit, h.window)
 	if err != nil {
 		h.logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.String("error", err.Error()))
-		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonCheckFailed).Inc()
-		c.Next()
+		apiRateLimitCheckFailuresTotal.Inc()
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "rate limit unavailable", nil)
+		c.Abort()
 
 		return
 	}

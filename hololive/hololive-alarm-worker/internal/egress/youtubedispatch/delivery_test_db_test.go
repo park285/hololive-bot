@@ -11,7 +11,6 @@ import (
 	"unicode"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -26,28 +25,10 @@ type deliveryTestSQLResult struct {
 	RowsAffected int64
 }
 
-// deliveryTestDB는 과거 fluent ORM식 shim 타입을 대체하기 위한 호환 alias입니다.
-// 메서드는 의도적으로 두지 않습니다. 테스트는 newDeliveryPool + 명시 helper를 사용합니다.
-type deliveryTestDB = pgxpool.Pool
-
 func newDeliveryPool(tb testing.TB) *pgxpool.Pool {
 	tb.Helper()
 
-	pool := dbtest.NewPool(tb)
-
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	if _, err := pool.Exec(tb.Context(), `
-		INSERT INTO youtube_notification_delivery_ledger_state (
-			singleton, schema_version, delivery_high_water_id, outbox_high_water_id,
-			delivery_cursor_id, delivery_verify_cursor_id, outbox_cursor_id,
-			legacy_coverage_start_at, coverage_verified_at, started_at, completed_at, updated_at
-		) VALUES (true, $1, 0, 0, 0, 0, 0, $2, $2, $2, $2, $2)
-		ON CONFLICT (singleton) DO NOTHING
-	`, store.LedgerSchemaVersion, now); err != nil {
-		tb.Fatalf("delivery test db: seed completed ledger state: %v", err)
-	}
-
-	return pool
+	return dbtest.NewPool(tb)
 }
 
 func TestDeliveryPoolKeepsOutboxForeignKey(t *testing.T) {
@@ -74,20 +55,6 @@ func TestDeliveryPoolKeepsOutboxForeignKey(t *testing.T) {
 		(outbox_id, room_id, status, attempt_count, next_attempt_at, created_at)
 		VALUES (-1, 'missing-parent', 'PENDING', 0, now(), now())`)
 	require.ErrorContains(t, err, "youtube_notification_delivery_outbox_id_fkey")
-}
-
-func newDeliveryExecModePool(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
-	t.Helper()
-
-	cfg := pool.Config()
-
-	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
-
-	execPool, err := pgxpool.NewWithConfig(t.Context(), cfg)
-	require.NoError(t, err)
-	t.Cleanup(execPool.Close)
-
-	return execPool
 }
 
 func insertDeliveryTestRows(pool *pgxpool.Pool, value any) deliveryTestSQLResult {

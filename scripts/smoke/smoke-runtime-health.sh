@@ -53,12 +53,6 @@ run_check() {
         "")
           compose_exec "" -f "${ROOT_DIR}/deploy/compose/docker-compose.prod.yml" exec -T "${service}" ./bin/healthcheck "${url}" >/dev/null
           ;;
-        main-ap)
-          compose_exec main-ap \
-            -f "${ROOT_DIR}/deploy/compose/docker-compose.prod.yml" \
-            -f "${ROOT_DIR}/deploy/compose/docker-compose.main-ap.yml" \
-            exec -T "${service}" ./bin/healthcheck "${url}" >/dev/null
-          ;;
         *)
           echo "unsupported compose healthcheck mode: ${mode}" >&2
           return 2

@@ -157,7 +157,7 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 		return nil, false, snapshot.dynamicLoadErr
 	}
 
-	channel := mm.finalizeCandidate(ctx, mm.resolveSnapshotCandidate(snapshot, queryNorm))
+	channel := mm.finalizeCandidate(mm.resolveSnapshotCandidate(snapshot, queryNorm))
 	if channel == nil {
 		mm.logger.Debug("No match found in internal data",
 			slog.String("query_token", privacylog.Pseudonym(queryNorm)),
@@ -165,15 +165,6 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 	}
 
 	return channel, channel != nil, nil
-}
-
-func (mm *Matcher) GetAllMembers(ctx context.Context) []*domain.Member {
-	provider := mm.providerWithContext(ctx)
-	if provider == nil {
-		return nil
-	}
-
-	return provider.GetAllMembers()
 }
 
 func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) *domain.Member {

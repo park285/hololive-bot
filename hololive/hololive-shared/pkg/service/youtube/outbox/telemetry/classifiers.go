@@ -21,15 +21,6 @@ func DedupeKeyLogValue(outbox *domain.YouTubeNotificationOutbox) string {
 	)
 }
 
-func NormalizeCommunityShortsDeliveryPath(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return CommunityShortsDeliveryPath
-	}
-
-	return trimmed
-}
-
 func IsCommunityShortsDeliveryAuditKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:

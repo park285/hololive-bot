@@ -1,3 +1,0 @@
-# 메인 호스트 youtube-collector-c는 prod.yml의 youtube-collector가 소유한다.
-# 이 overlay는 central default up와 같은 collector identity를 재선언하지 않는다.
-services: {}

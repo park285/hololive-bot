@@ -12,13 +12,14 @@ import (
 
 func newReloadTestService(store *fakeACLStore, cacheClient *cachemocks.Client) *Service {
 	return &Service{
-		store:          store,
-		cache:          cacheClient,
-		logger:         slog.New(slog.DiscardHandler),
-		enabled:        true,
-		mode:           ACLModeWhitelist,
-		whitelistRooms: make(map[string]struct{}),
-		blacklistRooms: make(map[string]struct{}),
+		store:              store,
+		cache:              cacheClient,
+		logger:             slog.New(slog.DiscardHandler),
+		enabled:            true,
+		mode:               ACLModeWhitelist,
+		whitelistRooms:     make(map[string]struct{}),
+		blacklistRooms:     make(map[string]struct{}),
+		renameRoomsKeyFunc: renameRoomsKeyThroughMock(cacheClient),
 	}
 }
 
@@ -42,11 +43,11 @@ func TestReloadPropagatesAnotherInstanceRoomAddition(t *testing.T) {
 	adminSide := newReloadTestService(store, newReloadTestCache())
 	botSide := newReloadTestService(store, newReloadTestCache())
 
-	if botSide.IsRoomAllowed("", "room-new") {
+	if botSide.IsRoomAllowed("3001") {
 		t.Fatal("room must start disallowed on the bot-side instance")
 	}
 
-	added, err := adminSide.AddRoom(t.Context(), "room-new")
+	added, err := adminSide.AddRoom(t.Context(), "3001")
 	if err != nil {
 		t.Fatalf("AddRoom error: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestReloadPropagatesAnotherInstanceRoomAddition(t *testing.T) {
 		t.Fatal("AddRoom should report the room as added")
 	}
 
-	if botSide.IsRoomAllowed("", "room-new") {
+	if botSide.IsRoomAllowed("3001") {
 		t.Fatal("bot-side instance must not observe the change before reload")
 	}
 
@@ -63,7 +64,7 @@ func TestReloadPropagatesAnotherInstanceRoomAddition(t *testing.T) {
 		t.Fatalf("Reload error: %v", err)
 	}
 
-	if !botSide.IsRoomAllowed("", "room-new") {
+	if !botSide.IsRoomAllowed("3001") {
 		t.Fatal("bot-side instance must observe the room after reload")
 	}
 }
@@ -82,7 +83,7 @@ func TestReloadPropagatesRoomRemovalAndSettings(t *testing.T) {
 		t.Fatalf("initial Reload error: %v", err)
 	}
 
-	if !botSide.IsRoomAllowed("", "room-old") {
+	if !botSide.IsRoomAllowed("room-old") {
 		t.Fatal("seeded room must be allowed after the first reload")
 	}
 
@@ -197,7 +198,7 @@ func TestReloadRejectsUnparsableMode(t *testing.T) {
 		t.Fatal("Reload must fail on an unparsable mode")
 	}
 
-	if !service.IsRoomAllowed("", "room-keep") {
+	if !service.IsRoomAllowed("room-keep") {
 		t.Fatal("failed reload must leave the previous room set intact")
 	}
 }

@@ -60,10 +60,6 @@ func safeLLMProviderError(err error) error {
 		return providerErr
 	}
 
-	if strings.HasPrefix(err.Error(), "llm provider request failed") {
-		return errors.New(sharedllm.RedactDiagnostic(err.Error(), 1024))
-	}
-
 	if errors.Is(err, errOpenAIRefusalOutput) || errors.Is(err, sharedllm.ErrOpenAIRefusalOutput) {
 		return safeProviderError{errType: "openai_refusal_output"}
 	}

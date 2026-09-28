@@ -198,7 +198,7 @@ func validatePublishedBirthdayStreamEvent(eventKey string, envelope *domain.Alar
 		return fmt.Errorf("birthday stream runner: event %q is not a birthday stream", eventKey)
 	}
 
-	expectedKey := birthdayStreamEventKey(payload.ChannelID, payload.Date, payload.VideoID, payload.MemberID)
+	expectedKey := birthdayStreamEventKey(payload.MemberID, payload.Date, payload.VideoID)
 	if expectedKey != eventKey {
 		return fmt.Errorf("birthday stream runner: event key mismatch: got %q, payload resolves to %q", eventKey, expectedKey)
 	}

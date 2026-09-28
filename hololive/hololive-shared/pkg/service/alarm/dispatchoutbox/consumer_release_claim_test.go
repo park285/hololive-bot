@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -43,7 +44,7 @@ func TestReleaseClaimKeysDeletesPrefixedKeysWhenReleaserSet(t *testing.T) {
 	t.Parallel()
 
 	releaser := &fakeClaimKeyReleaser{}
-	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
+	consumer := mustNewConsumer(t, &consumerTestRepository{}, releaser, slog.Default())
 
 	err := consumer.ReleaseClaimKeys(t.Context(), []string{
 		" notified:claim:room-1:stream-1:100:live ",
@@ -80,7 +81,7 @@ func TestReleaseClaimKeysSkipsNonPrefixedKeys(t *testing.T) {
 	t.Parallel()
 
 	releaser := &fakeClaimKeyReleaser{}
-	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
+	consumer := mustNewConsumer(t, &consumerTestRepository{}, releaser, slog.Default())
 
 	err := consumer.ReleaseClaimKeys(t.Context(), []string{
 		"alarm:dispatch:claim:room-1:stream-1",
@@ -97,16 +98,18 @@ func TestReleaseClaimKeysSkipsNonPrefixedKeys(t *testing.T) {
 	}
 }
 
-func TestReleaseClaimKeysIsNoOpWhenReleaserNil(t *testing.T) {
+// releaser가 없을 때 조용히 no-op로 TTL 만료에 기대던 이중 경로는 지웠다(stack-audit 2026-09-26 T11
+// holo-dispatch-claim-releaser-optional-noop). 구성 누락은 해제 실패로 드러나야 한다.
+func TestReleaseClaimKeysRejectsMissingReleaser(t *testing.T) {
 	t.Parallel()
 
-	consumer := NewConsumer(&consumerTestRepository{}, slog.Default())
+	consumer := mustNewConsumer(t, &consumerTestRepository{}, nil, slog.Default())
 
 	err := consumer.ReleaseClaimKeys(t.Context(), []string{
 		"notified:claim:room-1:stream-1:100:live",
 	})
-	if err != nil {
-		t.Fatalf("ReleaseClaimKeys() error = %v, want nil no-op when releaser absent", err)
+	if err == nil || !strings.Contains(err.Error(), "claim key releaser is not configured") {
+		t.Fatalf("ReleaseClaimKeys() error = %v, want missing releaser error", err)
 	}
 }
 
@@ -114,7 +117,7 @@ func TestReleaseClaimKeysEmptyInputDoesNotCallReleaser(t *testing.T) {
 	t.Parallel()
 
 	releaser := &fakeClaimKeyReleaser{}
-	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
+	consumer := mustNewConsumer(t, &consumerTestRepository{}, releaser, slog.Default())
 
 	if err := consumer.ReleaseClaimKeys(t.Context(), nil); err != nil {
 		t.Fatalf("ReleaseClaimKeys(nil) error = %v", err)
@@ -134,7 +137,7 @@ func TestReleaseClaimKeysWrapsReleaserError(t *testing.T) {
 
 	sentinel := errors.New("valkey down")
 	releaser := &fakeClaimKeyReleaser{err: sentinel}
-	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
+	consumer := mustNewConsumer(t, &consumerTestRepository{}, releaser, slog.Default())
 
 	err := consumer.ReleaseClaimKeys(t.Context(), []string{"notified:claim:room-1:stream-1:100:live"})
 	if err == nil {

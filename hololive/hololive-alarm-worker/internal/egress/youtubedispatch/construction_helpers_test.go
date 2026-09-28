@@ -63,7 +63,10 @@ func newDispatcherWithDepsForTest(
 	}
 
 	deps.DB = db
+
+	// 운영 기동과 같이 message_strings를 한 번 적재해 둔다. 조회 시 lazy 적재는 없다.
 	deps.MessageStrings = messagestrings.NewStore(db, logger)
+	require.NoError(tb, deps.MessageStrings.Load(tb.Context()))
 
 	if deps.Renderer == nil {
 		deps.Renderer = template.NewRenderer(db, logger)

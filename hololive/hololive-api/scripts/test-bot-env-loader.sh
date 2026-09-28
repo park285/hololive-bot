@@ -28,7 +28,7 @@ chmod +x "${fixture_module}/scripts/bot.sh"
 
 cat > "${fixture_module}/.env" <<EOF
 IRIS_BASE_URL=http://127.0.0.1:3000
-HOLODEX_API_KEY_1=test-key
+HOLODEX_API_KEY=test-key
 CACHE_HOST=127.0.0.1
 POISON=\$(touch ${poison_file})
 EOF

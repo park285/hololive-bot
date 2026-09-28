@@ -30,6 +30,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -180,7 +182,12 @@ func generateSummaryResponse(
 	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext...)
 	t.Logf("\n=== User Prompt ===\n%s\n=== END ===", userPrompt)
 
-	rawJSON, err := client.GenerateJSON(t.Context(), sysPrompt, userPrompt, summaryResponseSchema())
+	invariantPrompt, err := getInvariantPrompt()
+	if err != nil {
+		t.Fatalf("getInvariantPrompt 실패: %v", err)
+	}
+
+	rawJSON, err := client.GenerateJSON(t.Context(), openaipreset.PromptLayers{Invariant: invariantPrompt, Developer: sysPrompt, User: userPrompt}, summaryResponseSchema())
 	if err != nil {
 		t.Fatalf("GenerateJSON 실패: %v", err)
 	}
@@ -321,7 +328,10 @@ func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 	summarizer := NewEventSummarizer(client, nil, nil, testLogger())
 	events := mar2026Events()
 
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03")
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	t.Logf("Model: %s", model)
 	t.Logf("\n=== 월간 요약 결과 (%s) ===\n%s\n=== END ===", model, result)
@@ -376,7 +386,10 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 
 	t.Logf("Model: %s (Responses API + web_search)", model)
 
-	result := summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03")
+	result, err := summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03")
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
 
 	t.Logf("\n=== 월간 요약 결과 (%s + web_search) ===\n%s\n=== END ===", model, result)
 

@@ -91,12 +91,12 @@ func (r *Repository) acquireTx(
 		return contract.LeaseProof{}, fmt.Errorf("insert acquire job row: %w", insertErr)
 	}
 
-	proof, err := acquireLeaseProof(ctx, tx, spec, owner, generation, r.config.LeaseTTL)
+	proof, identity, err := acquireLeaseProof(ctx, tx, spec, owner, generation, r.config.LeaseTTL)
 	if err != nil {
 		return contract.LeaseProof{}, fmt.Errorf("acquire lease proof: %w", err)
 	}
 
-	if err := verifyAcquireJobIdentity(ctx, tx, spec); err != nil {
+	if err := verifyAcquireJobIdentity(spec, &proof, identity); err != nil {
 		return contract.LeaseProof{}, fmt.Errorf("verify acquire job identity: %w", err)
 	}
 
@@ -176,23 +176,18 @@ func insertAcquireJobRow(ctx context.Context, tx dbx.Tx, spec *JobSpec, generati
 	return nil
 }
 
-// 0144_07은 job_key만 qual로 쓰는 무가드 FOR UPDATE다. 자기 방어적인 0144_08 UPDATE가 성공해
-// 행 배타 락을 이미 쥔 뒤에만 호출해야 다른 트랜잭션의 행 락 뒤로 직렬화되지 않는다.
-func verifyAcquireJobIdentity(ctx context.Context, tx dbx.Tx, spec *JobSpec) error {
-	var (
-		storedProvider string
-		storedClass    string
-		storedKind     string
-		storedSubject  string
-	)
+// acquiredJobIdentity는 0144_08 UPDATE가 잠근 행 버전의 식별자를 RETURNING으로 받은 값이다.
+type acquiredJobIdentity struct {
+	provider   string
+	class      string
+	subjectKey string
+}
 
-	err := tx.QueryRow(ctx, mustSQL("repository_lease_lock_0144_07.sql"), spec.JobKey).
-		Scan(&storedProvider, &storedClass, &storedKind, &storedSubject)
-	if err != nil {
-		return fmt.Errorf("acquire collection job lease: lock job row: %w", err)
-	}
-
-	if storedProvider != string(spec.Provider) || storedClass != spec.Class || storedKind != spec.CollectionJobKind || storedSubject != spec.SubjectKey {
+// 같은 트랜잭션이 방금 갱신·잠근 행 버전을 다시 읽지 않고 RETURNING 값으로 식별자를 비교한다.
+// 이 job_key가 다른 identity에 묶여 있으면 ErrInvalidJob을 반환해 epoch 증가를 포함한 트랜잭션 전체를 되돌린다.
+func verifyAcquireJobIdentity(spec *JobSpec, proof *contract.LeaseProof, identity acquiredJobIdentity) error {
+	if identity.provider != string(spec.Provider) || identity.class != spec.Class ||
+		proof.CollectionJobKind != spec.CollectionJobKind || identity.subjectKey != spec.SubjectKey {
 		return fmt.Errorf("acquire collection job lease: %w: job key is bound to another identity", ErrInvalidJob)
 	}
 
@@ -206,8 +201,11 @@ func acquireLeaseProof(
 	owner string,
 	generation int64,
 	leaseTTL time.Duration,
-) (contract.LeaseProof, error) {
-	var proof contract.LeaseProof
+) (contract.LeaseProof, acquiredJobIdentity, error) {
+	var (
+		proof    contract.LeaseProof
+		identity acquiredJobIdentity
+	)
 
 	err := tx.QueryRow(
 		ctx,
@@ -218,21 +216,21 @@ func acquireLeaseProof(
 		spec.PollInterval.Milliseconds(),
 		leaseTTL.Milliseconds(),
 	).Scan(
-		&proof.JobKey, &proof.CollectionJobKind, &proof.OwnerInstance,
-		&proof.FenceEpoch, &proof.ProjectionGeneration, &proof.ScheduledFor,
+		&proof.JobKey, &identity.provider, &identity.class, &proof.CollectionJobKind, &identity.subjectKey,
+		&proof.OwnerInstance, &proof.FenceEpoch, &proof.ProjectionGeneration, &proof.ScheduledFor,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return contract.LeaseProof{}, ErrNotAcquired
+		return contract.LeaseProof{}, acquiredJobIdentity{}, ErrNotAcquired
 	}
 
 	if err != nil {
-		return contract.LeaseProof{}, fmt.Errorf("acquire collection job lease: update job row: %w", err)
+		return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: update job row: %w", err)
 	}
 
 	proof.ScheduledFor = proof.ScheduledFor.UTC()
 
-	return proof, nil
+	return proof, identity, nil
 }
 
 type JobLease struct {
@@ -339,28 +337,11 @@ func releaseLeaseTx(
 	reason ReleaseReason,
 	delay time.Duration,
 ) error {
-	var (
-		failureCode, failureClass, failureDetail *string
-		failureAt                                *time.Time
-	)
-
-	err := tx.QueryRow(
-		ctx,
-		mustSQL("repository_lease_failure_lock_0144_14.sql"),
-		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
-	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
-	}
-
-	if err != nil {
-		return fmt.Errorf("release collection job lease: lock job row: %w", err)
-	}
-
+	// release는 last_failure_*를 건드리지 않는다. 177 trigger가 DEFERRED release를 legacy_collector로 덮어쓰던 때는 잠근
+	// 사전 값을 되돌렸지만, migration 222가 trigger를 지워 복원 단계도 함께 지웠다(stack-audit 2026-09-26 T17).
 	var jobKey string
 
-	err = tx.QueryRow(
+	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_lease_release_0144_10.sql"),
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
@@ -373,17 +354,6 @@ func releaseLeaseTx(
 
 	if err != nil {
 		return fmt.Errorf("release collection job lease: %w", err)
-	}
-
-	// 177 trigger가 renew DEFERRED를 legacy_collector로 덮어쓰므로 잠근 사전 값을 되돌린다.
-	err = tx.QueryRow(ctx, mustSQL("repository_lease_release_restore_0144_13.sql"),
-		jobKey, failureCode, failureClass, failureDetail, failureAt).Scan(&jobKey)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
-	}
-
-	if err != nil {
-		return fmt.Errorf("release collection job lease: restore failure history: %w", err)
 	}
 
 	return nil

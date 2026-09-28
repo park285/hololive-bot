@@ -24,7 +24,10 @@ WHERE job_key = $1
   )
   AND (owner_instance IS NULL OR lease_expires_at <= clock_timestamp())
 RETURNING job_key,
+          provider,
+          job_class,
           collection_job_kind,
+          subject_key,
           owner_instance,
           fence_epoch,
           projection_generation,

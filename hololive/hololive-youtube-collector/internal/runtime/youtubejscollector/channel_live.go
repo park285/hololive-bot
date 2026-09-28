@@ -80,16 +80,12 @@ func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *col
 		return nil, nil
 	}
 
-	generation, err := input.Generation(contract.KindLiveSnapshot)
-	if err != nil {
-		return nil, fmt.Errorf("live snapshot generation: %w", err)
+	// collector는 generation 2(세션 메타데이터)만 만든다. generation 1 경로는 계획 T11 C6에서 지웠다.
+	if generationErr := input.RequireLiveSnapshotMetadataGeneration(); generationErr != nil {
+		return nil, fmt.Errorf("require live snapshot metadata generation: %w", generationErr)
 	}
 
-	payload := liveSnapshotPayload(
-		input.Spec().SubjectKey,
-		result.LiveSessions,
-		generation == contract.LiveSnapshotMetadataContractGeneration,
-	)
+	payload := liveSnapshotPayload(input.Spec().SubjectKey, result.LiveSessions)
 
 	envelope, err := subjectEnvelope(input, contract.KindLiveSnapshot, completeness, continuity, payload)
 	if err != nil {

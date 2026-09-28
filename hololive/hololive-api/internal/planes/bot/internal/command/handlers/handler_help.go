@@ -28,7 +28,6 @@ import (
 
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 var errHelpImageUnavailable = errors.New("help image capability is unavailable")
@@ -62,18 +61,14 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
-	fallback := messagestrings.FallbackSentinel
+	// 도움말 내용을 만들지 못하면 코드 대체 문구를 보내지 않고 오류를 돌려준다. bot의 공통 오류 경로가
+	// message_strings의 명령 실패 문구로 응답한다(DEC-20260926-hololive-message-strings-startup-validation).
 	content, contentErr := c.deps.Formatter.FormatHelpContent(ctx)
-
-	var imageErr error
-
 	if contentErr != nil {
-		imageErr = fmt.Errorf("format help content: %w", contentErr)
-	} else {
-		fallback = content.TextFallback
-		imageErr = c.sendHelpImages(ctx, cmdCtx.Room)
+		return fmt.Errorf("format help content: %w", contentErr)
 	}
 
+	imageErr := c.sendHelpImages(ctx, cmdCtx.Room)
 	if imageErr == nil {
 		return nil
 	}
@@ -84,7 +79,7 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		return nil
 	}
 
-	if err := c.deps.SendMessage(ctx, cmdCtx.Room, fallback); err != nil {
+	if err := c.deps.SendMessage(ctx, cmdCtx.Room, content.TextFallback); err != nil {
 		return errors.Join(imageErr, fmt.Errorf("send help text fallback: %w", err))
 	}
 

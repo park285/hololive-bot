@@ -123,7 +123,7 @@ func (ys *serviceImpl) storeChannelStatistics(ctx context.Context, stats map[str
 		return
 	}
 
-	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ytDefaults.CacheSaveTimeout)
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ys.cacheSaveTimeout)
 	defer cancel()
 
 	for channelID, channelStats := range stats {
@@ -144,11 +144,11 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 
 	scraperCtx, scraperCancel := context.WithTimeout(
 		context.WithoutCancel(ctx),
-		ytDefaults.ScraperPhaseTimeout,
+		ys.scraperPhaseTimeout,
 	)
 	defer scraperCancel()
 
-	primary := fallback.FetchPlan[string, struct{}]{Parallelism: 5}.RunPrimary(scraperCtx, channelIDs, func(gctx context.Context, channelID string) error {
+	primary := fallback.FetchPlan[string]{Parallelism: 5}.RunPrimary(scraperCtx, channelIDs, func(gctx context.Context, channelID string) error {
 		stats, err := ys.scrapeSingleChannelStatistics(gctx, channelID)
 		if err != nil {
 			return fmt.Errorf("scrape single channel statistics: %w", err)
@@ -161,7 +161,11 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 
 		return nil
 	})
-	fallback.ObservePrimaryPhase("youtube", "channel_statistics", len(channelIDs), primary.Succeeded, len(primary.Failed))
+	// scraperCtx는 호출자 취소와 분리된 단계 예산이다(context.WithoutCancel). 여기서 Canceled는 호출자 취소가 아니라
+	// 예산 소진으로 못 끝낸 채널이므로 결과와 metric 모두 실패로 센다. outcome="canceled"는 호출자 취소에만 쓴다.
+	primary.Failed = slices.Concat(primary.Failed, primary.Canceled)
+	primary.Canceled = nil
+	fallback.ObservePrimary("youtube", "channel_statistics", primary)
 
 	result.failedIDs = primary.Failed
 	result.scraped = primary.Succeeded

@@ -1,20 +1,16 @@
 
 WITH input AS (
-	SELECT kind, content_id, canonical_content_id, raw_content_id, alarm_sent_at, authorized_at
+	SELECT kind, canonical_content_id, alarm_sent_at, authorized_at
 	FROM unnest(
 		$1::text[],
 		$2::text[],
-		$3::text[],
-		$4::text[],
-		$5::timestamptz[],
-		$6::timestamptz[]
-	) AS t(kind, content_id, canonical_content_id, raw_content_id, alarm_sent_at, authorized_at)
+		$3::timestamptz[],
+		$4::timestamptz[]
+	) AS t(kind, canonical_content_id, alarm_sent_at, authorized_at)
 ), deduped_input AS (
 	SELECT DISTINCT ON (kind, canonical_content_id)
 		kind,
-		content_id,
 		canonical_content_id,
-		raw_content_id,
 		alarm_sent_at,
 		authorized_at
 	FROM input
@@ -35,21 +31,14 @@ WITH input AS (
 	        ELSE FALSE
 	    END,
 	    delivery_status = 'SENT',
-	    updated_at = $7
+	    updated_at = $5
 	FROM deduped_input AS i
 	WHERE t.kind = i.kind
-	  AND (
-		t.canonical_content_id = i.canonical_content_id
-		OR t.content_id = i.content_id
-		OR t.content_id = i.raw_content_id
-	  )
+	  AND t.canonical_content_id = i.canonical_content_id
 	  AND (t.alarm_sent_at IS NULL OR t.alarm_sent_at > i.alarm_sent_at)
 	RETURNING
 		t.kind,
-		CASE
-			WHEN t.canonical_content_id <> '' THEN t.canonical_content_id
-			ELSE i.canonical_content_id
-		END AS post_id,
+		t.canonical_content_id AS post_id,
 		t.content_id,
 		t.channel_id,
 		t.actual_published_at,
@@ -60,7 +49,7 @@ WITH input AS (
 	SET authorized_at = NULL,
 	    alarm_sent_at = i.alarm_sent_at,
 	    delivery_status = 'SENT',
-	    updated_at = $7
+	    updated_at = $5
 	FROM deduped_input AS i
 	WHERE s.kind = i.kind
 	  AND s.post_id = i.canonical_content_id
@@ -87,10 +76,7 @@ WITH input AS (
 	), alarm_state_insert_candidates AS (
 		SELECT DISTINCT ON (t.kind, post_id)
 			t.kind,
-		CASE
-			WHEN t.canonical_content_id <> '' THEN t.canonical_content_id
-			ELSE i.canonical_content_id
-		END AS post_id,
+		t.canonical_content_id AS post_id,
 		t.content_id,
 		t.channel_id,
 		t.actual_published_at,
@@ -102,11 +88,7 @@ WITH input AS (
 	FROM deduped_input AS i
 	JOIN youtube_content_alarm_tracking AS t
 	  ON t.kind = i.kind
-	 AND (
-		t.canonical_content_id = i.canonical_content_id
-		OR t.content_id = i.content_id
-		OR t.content_id = i.raw_content_id
-	 )
+	 AND t.canonical_content_id = i.canonical_content_id
 		WHERE i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 		ORDER BY t.kind, post_id, alarm_sent_at ASC
 	), existing_state_updated AS (
@@ -117,7 +99,7 @@ WITH input AS (
 		        ELSE s.alarm_sent_at
 		    END,
 		    delivery_status = 'SENT',
-		    updated_at = $7
+		    updated_at = $5
 	FROM deduped_input AS i
 	WHERE s.kind = i.kind
 	  AND s.post_id = i.canonical_content_id
@@ -160,8 +142,8 @@ WITH input AS (
 		NULL,
 		t.alarm_sent_at,
 		'SENT',
-		$7,
-		$7
+		$5,
+		$5
 	FROM alarm_state_insert_candidates AS t
 		WHERE NOT EXISTS (
 			SELECT 1
@@ -178,7 +160,7 @@ WITH input AS (
 	    END,
 	    delivery_status = 'SENT',
 	    authorized_at = NULL,
-	    updated_at = $7
+	    updated_at = $5
 	RETURNING kind, post_id
 )
 SELECT

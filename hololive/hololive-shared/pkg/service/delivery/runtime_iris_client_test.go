@@ -368,11 +368,6 @@ func runtimeIrisBaseURLFileShapeCases() []runtimeIrisBaseURLFileCase {
 
 func runtimeIrisBaseURLFileStatCases() []runtimeIrisBaseURLFileCase {
 	strictEnv := map[string]string{appEnvKey: appEnvProduction, irisH3ServerNameEnv: testIrisHost}
-	skipStatEnv := map[string]string{
-		appEnvKey:                        appEnvProduction,
-		irisH3ServerNameEnv:              testIrisHost,
-		irisBaseURLFileSkipStatChecksEnv: "true",
-	}
 
 	return []runtimeIrisBaseURLFileCase{
 		{
@@ -397,20 +392,6 @@ func runtimeIrisBaseURLFileStatCases() []runtimeIrisBaseURLFileCase {
 			wantErrContains: "permission",
 		},
 		{
-			name:        "accepts world writable file when stat checks are skipped",
-			fileContent: testIrisBaseURLWithSlash,
-			fileMode:    0o666,
-			env:         skipStatEnv,
-			wantBaseURL: testIrisBaseURL,
-		},
-		{
-			name:             "accepts symlink parent when stat checks are skipped",
-			fileContent:      testIrisBaseURLWithSlash,
-			useSymlinkParent: true,
-			env:              skipStatEnv,
-			wantBaseURL:      testIrisBaseURL,
-		},
-		{
 			name:            "uses fallback when file override path is empty",
 			fileContent:     "https://attacker.example:3001/",
 			disableFilePath: true,
@@ -426,7 +407,6 @@ func setRuntimeIrisBaseURLEnv(t *testing.T, env map[string]string) {
 	for _, key := range []string{
 		appEnvKey,
 		irisBaseURLAllowedHostsEnv,
-		irisBaseURLFileSkipStatChecksEnv,
 		irisH3ServerNameEnv,
 		"IRIS_TRANSPORT",
 	} {
@@ -587,53 +567,14 @@ func TestRuntimeIrisClient_ResolveBaseURLFileRejectsUncleanSymlinkTraversalInPro
 	}
 
 	uncleanPath := strings.Join([]string{linkParent, "..", "target", "iris_base_url"}, string(os.PathSeparator))
-	tests := []struct {
-		name            string
-		skipStatChecks  string
-		wantBaseURL     string
-		wantErrContains string
-	}{
-		{
-			name:            "strict rejects unclean symlink traversal",
-			wantErrContains: "clean",
-		},
-		{
-			name:           "skip stat accepts normalized path",
-			skipStatChecks: "true",
-			wantBaseURL:    testIrisBaseURL,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			assertUncleanSymlinkTraversalResolution(t, uncleanPath, tc.skipStatChecks, tc.wantBaseURL, tc.wantErrContains)
-		})
-	}
-}
-
-func assertUncleanSymlinkTraversalResolution(t *testing.T, uncleanPath, skipStatChecks, wantBaseURL, wantErrContains string) {
-	t.Helper()
-
+	// production은 stat 검사를 건너뛸 수 없어 정리되지 않은 symlink 경로를 항상 거절한다.
 	t.Setenv(appEnvKey, appEnvProduction)
 	t.Setenv(irisH3ServerNameEnv, testIrisHost)
-	t.Setenv(irisBaseURLFileSkipStatChecksEnv, skipStatChecks)
 
 	client := NewRuntimeIrisClient("http://fallback.example", testBotToken, uncleanPath, nil)
-	got, err := client.resolver.resolve()
+	_, err := client.resolver.resolve()
 
-	if wantErrContains != "" {
-		assertRuntimeIrisBaseURLResolveError(t, err, wantErrContains)
-
-		return
-	}
-
-	if err != nil {
-		t.Fatalf("resolve() error = %v, want nil", err)
-	}
-
-	if got != wantBaseURL {
-		t.Fatalf("resolve() = %q, want %q", got, wantBaseURL)
-	}
+	assertRuntimeIrisBaseURLResolveError(t, err, "clean")
 }
 
 type runtimeIrisReplyCounter struct {
@@ -836,76 +777,6 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 
 	if resp == nil || resp.RequestID != "reply-123" || resp.Delivery != "queued" {
 		t.Fatalf("response = %+v, want queued reply-123", resp)
-	}
-}
-
-func TestRuntimeIrisClient_SendKaringContentList_ForwardsRequest(t *testing.T) {
-	t.Setenv("IRIS_TRANSPORT", "http1")
-
-	var (
-		gotPath    string
-		gotRequest iris.KaringContentListRequest
-	)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		if r.Header.Get(iris.HeaderIrisSignature) == "" {
-			t.Fatal("missing iris signature")
-		}
-
-		if err := jsonv2.UnmarshalRead(r.Body, &gotRequest); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-
-		itemCount := 1
-		if err := jsonv2.MarshalWrite(w, iris.KaringDryRunResponse{
-			OK:         true,
-			DryRun:     true,
-			TemplateID: 133220,
-			ItemCount:  &itemCount,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-
-	defer server.Close()
-
-	client := NewRuntimeIrisClient(
-		server.URL,
-		testBotToken,
-		"",
-		nil,
-		iris.WithHTTPClient(server.Client()),
-		iris.WithTransport("http1"),
-	)
-
-	resp, err := client.SendKaringContentList(t.Context(), iris.KaringContentListRequest{
-		Items: []iris.KaringContentItem{{
-			Title:  "test stream",
-			URL:    "https://www.youtube.com/watch?v=video000001",
-			Status: iris.KaringStreamStatusUpcoming,
-		}},
-		ExtraArgs: iris.KaringTemplateArgs{"time_left": "10 minutes"},
-		DryRun:    true,
-	})
-	if err != nil {
-		t.Fatalf("SendKaringContentList() error = %v", err)
-	}
-
-	if gotPath != iris.PathKaringContentList {
-		t.Fatalf("path = %q, want %q", gotPath, iris.PathKaringContentList)
-	}
-
-	if len(gotRequest.Items) != 1 || gotRequest.Items[0].Status != iris.KaringStreamStatusUpcoming {
-		t.Fatalf("Items = %+v", gotRequest.Items)
-	}
-
-	if gotRequest.ExtraArgs["time_left"] != "10 minutes" {
-		t.Fatalf("ExtraArgs[time_left] = %q, want 10 minutes", gotRequest.ExtraArgs["time_left"])
-	}
-
-	if resp == nil || !resp.OK || resp.ItemCount == nil || *resp.ItemCount != 1 {
-		t.Fatalf("response = %+v, want item count 1", resp)
 	}
 }
 

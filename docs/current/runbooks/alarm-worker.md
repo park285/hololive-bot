@@ -31,7 +31,6 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `SERVER_PORT` | HTTP health port | yes |
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
-| `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` | `off`, `shadow`, `cutover`; v1 delivery rows를 v3 ledger로 넘기는 모드 | no; default `off` |
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 카카오 네이티브 Markdown 전송 여부; 기본값 `false`. 명령 응답과 알림에 공통 적용 | no |
 | `BOT_SEE_MORE_FOLD` | 긴 여러 항목 알림을 머리 문단과 전체보기로 접음; 기본 `true`. 단일 알림·짧은 메시지 제외 | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
@@ -41,9 +40,11 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
+`ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`·`BIRTHDAY_STREAM_*_MS`(양의 밀리초)는 값이 없거나 비어 있으면 기본값을 씁니다. 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. celebration·birthday stream 키는 해당 runner가 켜졌을 때만 읽습니다.
+
 ## Notification egress
 
-Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kakaoformat.Render` 변환 렌더러로 전송합니다. 카카오톡 자체 Markdown 렌더링에 의존하지 않도록 운영 설정도 `BOT_MARKDOWN_REPLIES=false`로 맞춥니다. 기존 환경에 명시한 `true`는 기본값 변경보다 우선하므로 배포 시 확인해야 합니다. 일반채팅 resolver는 runtime sender에 연결하지 않아 Karing eligibility는 비활성화합니다.
+Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kakaoformat.Render` 변환 렌더러로 전송합니다. 카카오톡 자체 Markdown 렌더링에 의존하지 않도록 운영 설정도 `BOT_MARKDOWN_REPLIES=false`로 맞춥니다. 기존 환경에 명시한 `true`는 기본값 변경보다 우선하므로 배포 시 확인해야 합니다. Alarm-worker는 Karing template을 보내지 않습니다(`DEC-20260926-hololive-karing-egress-disposition`, `DEC-20260904-hololive-karing-regular-chat-egress` 대체).
 
 | Room / notification | Egress |
 |---|---|
@@ -51,13 +52,13 @@ Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kaka
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=true` | Markdown 원문 (`[title](url)` 링크 유지) |
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=false` | `kakaoformat.Render` 일반 텍스트 |
 | 방 유형 미확인 | 일반 텍스트 |
-| Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용; Karing 비활성 |
+| Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
 
-일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown 전용 resolver는 오픈채팅 여부만 제공하며 일반채팅 eligibility를 노출하지 않습니다. Karing 구현과 handoff 검증 코드는 남아 있지만 runtime 알림 경로에서는 선택되지 않습니다.
+일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown resolver는 오픈채팅 여부만 제공합니다. Karing 선택 분기, chunk planner, Karing sender는 삭제했고, Markdown lane이 쓰는 handoff 확인(`ErrReplyHandoffOutcomeUnknown`, `ErrReplyHandoffFailed`)만 남아 있습니다. `scripts/architecture/ci-notification-egress-gate.sh`는 alarm-worker Go 코드에 Karing SDK 호출이 다시 들어오면 실패합니다.
 
 긴 쇼츠·영상·커뮤니티 묶음 및 여러 방송 알람 텍스트는 `BOT_SEE_MORE_FOLD`를 따라 머리 문단 끝에 공통 ZWSP 패딩을 넣습니다. 단일 알림·상태·오류·celebration은 그대로 유지합니다. `kakaoformat.Render` 뒤에도 패딩과 모든 항목·URL이 보존되어야 합니다. 사용자 지정 template/채널 override는 저장값을 바꾸지 않고 렌더 결과만 같은 목록 정책으로 접습니다. 변경 배포 때 API뿐 아니라 실제 알림 렌더 소유자인 alarm-worker의 설정과 바이너리도 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
-이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다.
+이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다. T18(2026-09-26)에서 v1·v3 원장의 Karing 비종단 행이 0건임을 확인했습니다.
 
 `YOUTUBE_OUTBOX_KARING_ENABLED`와 `ALARM_DISPATCH_KARING_ENABLED`는 퇴역했습니다. 값이 비어 있어도 runtime file에 key가 존재하면 startup이 실패합니다. `ALARM_SHORT_LINK_BASE_URL`은 기존 grouped message path를 위해 유지되며, `hololive-api`의 `127.0.0.1:30101` listener와 중앙·Seoul ingress도 계속 유지합니다.
 
@@ -89,21 +90,11 @@ Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-buil
 
 격리 현황은 Grafana Bot Drilldown에서 확인한다. 잔여 건수 경보는 전송 증거 검토를 위한 알림이며 자동 재발송·삭제 권한을 부여하지 않는다. 기존 보존 기간과 처분 계약을 유지한다.
 
-- `hololive_youtube_outbox_v3_handoff_total{mode,result}`: v1→v3 handoff delivery row 수.
-- `hololive_delivery_outbox_v3_handoff_total{mode,result}`: v2→v3 handoff delivery row 수.
+## Outbox 파이프라인 소유
 
-## Outbox v3 handoff
+v1 YouTube 알림(`youtube_delivery`, `youtube_notification_delivery`)과 v2 digest(`notification_delivery`, `notification_delivery_outbox`)는 v3 alarm-dispatch ledger로 넘기지 않는 정본 파이프라인이고 각 executor가 direct egress를 소유합니다(`DEC-20260926-hololive-outbox-v3-convergence`). v3 handoff(`off`/`shadow`/`cutover`), 비교 전용 `shadowed` 상태, handoff metric은 삭제했습니다.
 
-`shadow`는 v3에 `shadowed` row를 기록한 뒤 기존 v1/v2 direct egress를 유지합니다. Shadow write 실패는 기존 발송을 막지 않으며 위 metric의 `result="failure"`와 로그로 드러납니다. `cutover`는 v3 `pending` 저장 성공을 legacy outbox의 완료 기준으로 사용하고 외부 발송은 alarm-dispatch consumer만 수행합니다.
-
-운영 전환은 다음 조건을 모두 확인한 뒤 별도 승인으로 진행합니다.
-
-1. migration 141~143이 적용되고 `alarm_dispatch.executor.enabled=true`인 profile이 배포되어 있습니다.
-2. `shadow` 기간 동안 handoff failure가 0이고 legacy 대상 수와 v3 `shadowed` 대상 수가 일치합니다.
-3. v1은 `youtube_delivery.executor.enabled=true`를 유지한 채 `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=cutover`로 바꿉니다. 이 executor가 claim과 handoff를 함께 소유합니다.
-4. v2는 producer인 hololive-api에서 `DELIVERY_OUTBOX_V3_HANDOFF_MODE=cutover`를 설정하고, 기존 `notification_delivery_outbox` backlog가 0이 된 뒤 승인된 새 profile에서만 `notification_delivery.executor.enabled=false`로 전환합니다.
-
-Rollback 시 새 producer handoff mode를 먼저 `off`로 되돌립니다. 이미 v3 `pending`/`sending`인 delivery가 있으면 legacy direct egress를 다시 켜기 전에 drain 또는 명시적 quarantine 여부를 판단해야 중복 발송을 피할 수 있습니다.
+`YOUTUBE_OUTBOX_V3_HANDOFF_MODE`와 `DELIVERY_OUTBOX_V3_HANDOFF_MODE`는 퇴역 키입니다. 빈 값이라도 env에 있으면 alarm-worker와 hololive-api가 기동을 거절합니다. 제거 조건과 재검토 기한은 `hololive/hololive-shared/pkg/config/settings/config_outbox_v3_handoff_retired_env.go`가 소유합니다.
 
 ## Common failure modes
 
@@ -180,11 +171,11 @@ Mitigation:
 Rollback:
 - `ALARM_SHORT_LINK_BASE_URL`을 비우고 alarm-worker를 재기동합니다. 이미 발송된 URL을 위해 listener와 양쪽 ingress는 유지합니다.
 
-### 4. Karing admission 이후 delivery가 완료되지 않음
+### 4. Markdown admission 이후 delivery가 완료되지 않음
 
 Symptoms:
-- Iris `/karing/content-list`는 `202 Accepted`를 반환했지만 alarm delivery가 `sent`로 전이되지 않습니다.
-- 로그에 Karing handoff failure 또는 outcome unknown이 있고 alarm dispatch는 quarantine되거나 YouTube delivery가 `SENDING`에 남습니다.
+- Iris Markdown 발송은 `202 Accepted`를 반환했지만 alarm delivery가 `sent`로 전이되지 않습니다.
+- 로그에 reply handoff failure 또는 outcome unknown이 있고 alarm dispatch는 quarantine되거나 YouTube delivery가 `SENDING`에 남습니다.
 
 Diagnosis:
 - Raw `requestId`를 로그나 응답에 복사하지 않고 bounded alarm-worker/Iris 로그에서 status state와 오류 class만 확인합니다.
@@ -193,11 +184,11 @@ Diagnosis:
 
 Mitigation:
 - Iris reply delivery worker와 Kakao bridge를 먼저 복구합니다.
-- Outcome unknown인 alarm을 Karing 또는 일반 텍스트로 재발송하지 않습니다. YouTube `SENDING` row는 기존 stale sweeper 계약에 맡깁니다.
-- 퇴역 환경변수로 plain-text 경로를 다시 켜거나 startup guard를 우회하지 않습니다.
+- Outcome unknown인 alarm을 일반 텍스트로 재발송하지 않습니다. YouTube `SENDING` row는 기존 stale sweeper 계약에 맡깁니다.
+- 퇴역 환경변수로 다른 경로를 다시 켜거나 startup guard를 우회하지 않습니다.
 
 Rollback:
-- Karing post 뒤 결과가 불명확한 delivery가 있으면 이전 alarm-worker image를 시작하지 않습니다. Exact pending/sending 범위와 prior artifact의 egress 차이를 제시하고 별도 승인을 받습니다.
+- Markdown post 뒤 결과가 불명확한 delivery가 있으면 이전 alarm-worker image를 시작하지 않습니다. Exact pending/sending 범위와 prior artifact의 egress 차이를 제시하고 별도 승인을 받습니다.
 
 ### 5. 생일축하는 갔지만 생일 방송 알람이 생성되지 않음
 
@@ -267,12 +258,15 @@ Rollback:
   설정을 유지한 채 이전 image만 재기동하는 rollback은 지원하지 않습니다.
 - paired rollback이 준비되지 않았거나 send-unit schema 호환성이 확인되지 않으면 이전
   image로 전환하지 않고 current revision을 fix-forward합니다.
+- delivery telemetry 단일 경로(`DEC-20260926-hololive-delivery-telemetry-single-path`) 이전
+  image로 되돌리려면 운영 profile에 `youtube_delivery.telemetry_backfill_batch`를 다시 넣고
+  같은 유지보수 단계에서 image를 전환합니다. exact-key 디코더라 키가 없으면 이전 image가
+  기동하지 않습니다(`rollback.md`).
 - Preserve and inspect `alarm:dispatch:*` queues before replaying or deleting queue data.
 
 ## Related contracts
 
 - `../contracts/alarm.md`
-- `../contracts/karing-kakaolink.md`
 - `../contracts/shortlink.md`
 - `../contracts/settings.md`
 - `../QUEUE_AND_PUBSUB_CONTRACTS.md`

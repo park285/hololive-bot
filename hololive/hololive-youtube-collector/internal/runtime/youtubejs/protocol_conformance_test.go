@@ -24,7 +24,6 @@ func TestGoProtocolJSONTagsMatchContractsDTS(t *testing.T) {
 		value any
 	}{
 		{"Pagination", Pagination{}},
-		{"BootstrapProxy", BootstrapProxy{}},
 		{"BootstrapLimits", BootstrapLimits{}},
 		{"BootstrapRequest", BootstrapRequest{}},
 		{"BootstrapResponse", BootstrapResponse{}},

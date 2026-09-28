@@ -54,7 +54,9 @@ type ruleSet struct {
 	Units   map[string]unitRule `json:"units"`
 	Members []memberRule        `json:"members"`
 	Roles   []string            `json:"roles"`
-	Pairs   []pairRule          `json:"pairs"`
+	// 이름+역할 토큰에 바로 붙어도 단어 경계로 인정하는 접두어다.
+	RolePrefixes []string   `json:"role_prefixes"`
+	Pairs        []pairRule `json:"pairs"`
 }
 
 //go:embed rules.json
@@ -98,7 +100,7 @@ func Identify(channelID, title string) Result {
 
 	for i := range rules.Members {
 		member := &rules.Members[i]
-		evidence, series, explicit := member.evidence(title, rules.Roles)
+		evidence, series, explicit := member.evidence(title, rules.Roles, rules.RolePrefixes)
 
 		evidence = append(evidence, pairs[member.ID]...)
 		explicit = explicit || len(pairs[member.ID]) > 0
@@ -157,10 +159,10 @@ func (m memberRule) isHost(unit, primary string) bool {
 	return m.Unit == unit && (primary == "" || primary == m.ID)
 }
 
-func (m memberRule) evidence(title string, roles []string) (tokens []string, series, explicit bool) {
+func (m memberRule) evidence(title string, roles, rolePrefixes []string) (tokens []string, series, explicit bool) {
 	if strings.Contains(title, m.FullName) {
 		tokens = append(tokens, m.FullName)
-		explicit = containsStructuredToken(title, "#"+m.FullName, true)
+		explicit = containsStructuredToken(title, "#"+m.FullName, true, nil)
 	}
 
 	for _, tag := range m.Tags {
@@ -180,7 +182,8 @@ func (m memberRule) evidence(title string, roles []string) (tokens []string, ser
 
 	for _, role := range roles {
 		token := m.GivenName + role
-		if containsStructuredToken(title, token, true) {
+		// 「メン限ひなみ視点」처럼 멤버 한정 접두어가 붙은 개인 시점도 같은 역할 근거로 인정한다.
+		if containsStructuredToken(title, token, true, rolePrefixes) {
 			tokens = append(tokens, token)
 			explicit = true
 		}
@@ -208,7 +211,7 @@ func (r ruleSet) pairEvidence(title string) map[string][]string {
 			}
 
 			token := left.FullName + "×" + right.FullName
-			if containsStructuredToken(title, token, false) {
+			if containsStructuredToken(title, token, false, nil) {
 				evidence[left.ID] = append(evidence[left.ID], token)
 				evidence[right.ID] = append(evidence[right.ID], token)
 			}
@@ -217,7 +220,7 @@ func (r ruleSet) pairEvidence(title string) map[string][]string {
 
 	for _, pair := range r.Pairs {
 		token := r.member(pair.Left).GivenName + "×" + r.member(pair.Right).GivenName
-		if containsStructuredToken(title, token, true) {
+		if containsStructuredToken(title, token, true, nil) {
 			evidence[pair.Left] = append(evidence[pair.Left], token)
 			evidence[pair.Right] = append(evidence[pair.Right], token)
 		}
@@ -240,23 +243,53 @@ func normalizeTitle(title string) string {
 	return hashSpace.ReplaceAllString(title, "#")
 }
 
-func containsStructuredToken(title, token string, allowPossessiveSuffix bool) bool {
-	for {
-		before, after, found := strings.Cut(title, token)
-		if !found {
+func containsStructuredToken(title, token string, allowPossessiveSuffix bool, allowedPrefixes []string) bool {
+	// 앞선 일치를 거부한 뒤에도 원래 제목의 앞 문맥으로 경계를 판단한다.
+	// 제목을 잘라 내면 「…ミラの枠メン限ミラの枠」의 접두어 앞 문자가 사라져 경계로 오인된다.
+	for offset := 0; ; {
+		i := strings.Index(title[offset:], token)
+		if i < 0 {
 			return false
 		}
 
-		left, _ := utf8.DecodeLastRuneInString(before)
-		right, _ := utf8.DecodeRuneInString(after)
+		start := offset + i
+		end := start + len(token)
+
+		right, _ := utf8.DecodeRuneInString(title[end:])
 		// 「りらら×ミラの…」는 이름 쌍이며 「りらら×ミラクル」처럼 뒤가 이어진 단어는 제외한다.
-		if !unicode.IsLetter(left) && !unicode.IsNumber(left) &&
-			(!unicode.IsLetter(right) && !unicode.IsNumber(right) || allowPossessiveSuffix && right == 'の') {
+		if hasLeftBoundary(title[:start], allowedPrefixes) && (!isWordRune(right) || allowPossessiveSuffix && right == 'の') {
 			return true
 		}
 
-		title = after
+		offset = end
 	}
+}
+
+// hasLeftBoundary는 토큰 앞이 단어 경계인지 확인한다.
+// 허용 접두어는 접두어 앞이 경계일 때만 인정해 「カメラのミラの枠」 같은 단어 중간 일치를 계속 제외한다.
+func hasLeftBoundary(before string, allowedPrefixes []string) bool {
+	left, _ := utf8.DecodeLastRuneInString(before)
+	if !isWordRune(left) {
+		return true
+	}
+
+	for _, prefix := range allowedPrefixes {
+		rest, found := strings.CutSuffix(before, prefix)
+		if !found {
+			continue
+		}
+
+		left, _ = utf8.DecodeLastRuneInString(rest)
+		if !isWordRune(left) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsNumber(r)
 }
 
 // Label은 확인된 진행자와 게스트의 표시를 반환하며, 진행자가 불명확하면 빈 문자열을 반환한다.

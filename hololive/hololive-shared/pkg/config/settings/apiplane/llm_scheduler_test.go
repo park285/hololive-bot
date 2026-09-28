@@ -12,7 +12,11 @@ func TestLoadCliproxyConfigRequiresExplicitBaseURL(t *testing.T) {
 	t.Setenv("CLIPROXY_API_KEY", "test-key")
 	t.Setenv("CLIPROXY_BASE_URL", "")
 
-	cfg := settings.LoadCliproxyConfig()
+	cfg, err := settings.LoadCliproxyConfig()
+	if err != nil {
+		t.Fatalf("LoadCliproxyConfig() error = %v", err)
+	}
+
 	if cfg.BaseURL != "" {
 		t.Fatalf("BaseURL = %q, want empty without explicit CLIPROXY_BASE_URL", cfg.BaseURL)
 	}
@@ -24,7 +28,11 @@ func TestLoadLLMProviderConfigDefaultsToCliproxy(t *testing.T) {
 	t.Setenv("GEMINI_MODEL", "")
 	t.Setenv("GEMINI_THINKING_LEVEL", "")
 
-	cfg := buildLLMSchedulerConfig()
+	cfg, err := buildLLMSchedulerConfig()
+	if err != nil {
+		t.Fatalf("buildLLMSchedulerConfig() error = %v", err)
+	}
+
 	if cfg.LLMProvider != settings.LLMProviderCliproxy {
 		t.Fatalf("LLMProvider = %q, want %q", cfg.LLMProvider, settings.LLMProviderCliproxy)
 	}
@@ -39,16 +47,23 @@ func TestLoadLLMProviderConfigDefaultsToCliproxy(t *testing.T) {
 }
 
 func TestBuildLLMSchedulerConfigSharesSeeMoreFoldSwitch(t *testing.T) {
-	t.Setenv("BOT_SEE_MORE_FOLD", "")
+	for _, tc := range []struct {
+		value string
+		want  bool
+	}{
+		{value: "", want: true},
+		{value: "false", want: false},
+	} {
+		t.Setenv("BOT_SEE_MORE_FOLD", tc.value)
 
-	if !buildLLMSchedulerConfig().Bot.SeeMoreFold {
-		t.Fatal("llm plane must fold long digests by default like the bot plane")
-	}
+		cfg, err := buildLLMSchedulerConfig()
+		if err != nil {
+			t.Fatalf("buildLLMSchedulerConfig() with BOT_SEE_MORE_FOLD=%q error = %v", tc.value, err)
+		}
 
-	t.Setenv("BOT_SEE_MORE_FOLD", "false")
-
-	if buildLLMSchedulerConfig().Bot.SeeMoreFold {
-		t.Fatal("BOT_SEE_MORE_FOLD=false must disable llm plane folding")
+		if cfg.Bot.SeeMoreFold != tc.want {
+			t.Fatalf("BOT_SEE_MORE_FOLD=%q: llm plane SeeMoreFold = %t, want %t like the bot plane", tc.value, cfg.Bot.SeeMoreFold, tc.want)
+		}
 	}
 }
 
@@ -77,7 +92,11 @@ func TestLoadLLMProviderConfigGeminiExplicit(t *testing.T) {
 	t.Setenv("GEMINI_MODEL", "gemini-3.7-flash")
 	t.Setenv("GEMINI_THINKING_LEVEL", "high")
 
-	cfg := buildLLMSchedulerConfig()
+	cfg, err := buildLLMSchedulerConfig()
+	if err != nil {
+		t.Fatalf("buildLLMSchedulerConfig() error = %v", err)
+	}
+
 	if cfg.LLMProvider != settings.LLMProviderGemini {
 		t.Fatalf("LLMProvider = %q, want %q", cfg.LLMProvider, settings.LLMProviderGemini)
 	}
@@ -129,7 +148,11 @@ func TestLoadCliproxyConfigUsesExplicitBaseURL(t *testing.T) {
 
 	t.Setenv("CLIPROXY_BASE_URL", endpoint)
 
-	cfg := settings.LoadCliproxyConfig()
+	cfg, err := settings.LoadCliproxyConfig()
+	if err != nil {
+		t.Fatalf("LoadCliproxyConfig() error = %v", err)
+	}
+
 	if cfg.BaseURL != endpoint {
 		t.Fatalf("BaseURL = %q, want %q", cfg.BaseURL, endpoint)
 	}

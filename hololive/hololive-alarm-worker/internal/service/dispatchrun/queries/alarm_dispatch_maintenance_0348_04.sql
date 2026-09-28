@@ -10,3 +10,5 @@ WITH picked AS (
 DELETE FROM alarm_dispatch_deliveries d
 USING picked
 WHERE d.id = picked.id
+  AND d.status = $1
+  AND d.%s < NOW() - ($2::int * INTERVAL '1 day')

@@ -60,9 +60,6 @@ type LLMConfig struct {
 	MemberNewsModel       string
 	MemberNewsTemperature float64
 
-	// MonthlyTokenCeiling: 월 누적 토큰 임계(0=비활성). 초과 시 경고 로깅만(차단 없음).
-	MonthlyTokenCeiling int64
-
 	MemberNews ConsensusLLMConfig
 	MajorEvent ConsensusLLMConfig
 }

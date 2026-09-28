@@ -21,6 +21,8 @@
 package scheduler
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
@@ -49,6 +51,28 @@ func TestProcessDigestForRoomFailsClosedWithoutOutputGuard(t *testing.T) {
 	outbox := newMockOutboxRepository()
 
 	result := processDigestForRoom(t.Context(), service, mockFormatter{}, outbox, nil, nil, model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", testRoomID, "empty")
+
+	if result.Failed != 1 || result.Sent != 0 {
+		t.Fatalf("process result = %+v, want failed=1 sent=0", result)
+	}
+
+	if len(outbox.enqueuedItems) != 0 {
+		t.Fatalf("enqueued items = %d, want 0", len(outbox.enqueuedItems))
+	}
+}
+
+type failingDigestFormatter struct{}
+
+func (failingDigestFormatter) FormatMemberNewsDigest(context.Context, *model.Digest) (string, error) {
+	return "", errors.New("template render failed")
+}
+
+// digest 렌더 실패는 대체 문구 없이 그 방의 실패로 센다.
+func TestProcessDigestForRoomCountsFormatFailureWithoutEnqueue(t *testing.T) {
+	service := &mockDigestService{digests: map[string]*model.Digest{testRoomID: {Headline: "정상 알림"}}}
+	outbox := newMockOutboxRepository()
+
+	result := processDigestForRoom(t.Context(), service, failingDigestFormatter{}, outbox, nil, outputguard.NewGuard(), model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", testRoomID, "empty")
 
 	if result.Failed != 1 || result.Sent != 0 {
 		t.Fatalf("process result = %+v, want failed=1 sent=0", result)

@@ -35,29 +35,6 @@ func newDiscardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-func TestNewApplyFn_ScraperProxy(t *testing.T) {
-	called := false
-
-	var got contractssettings.ScraperProxyPayloadV1
-
-	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
-		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
-			called = true
-			got = payload
-		},
-	})
-
-	payload, err := jsonv2.Marshal(contractssettings.ScraperProxyPayloadV1{Enabled: true})
-	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
-	}
-
-	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeScraperProxy, Payload: payload})
-
-	assert.True(t, called)
-	assert.Equal(t, contractssettings.ScraperProxyPayloadV1{Enabled: true}, got)
-}
-
 func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 	called := false
 
@@ -84,14 +61,14 @@ func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 func TestNewApplyFn_DecodeErrorDoesNotInvokeHandler(t *testing.T) {
 	called := false
 	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
-		ScraperProxy: func(_ contractssettings.ScraperProxyPayloadV1) {
+		AlarmAdvanceMinutes: func(_ contractssettings.AlarmAdvanceMinutesPayloadV1) {
 			called = true
 		},
 	})
 
 	applyFn(contractssettings.ConfigUpdateV1{
-		Type:    contractssettings.UpdateTypeScraperProxy,
-		Payload: []byte(`{"enabled":"not-bool"}`),
+		Type:    contractssettings.UpdateTypeAlarmAdvanceMinutes,
+		Payload: []byte(`{"minutes":"not-int"}`),
 	})
 
 	assert.False(t, called)
@@ -161,4 +138,18 @@ func TestNewApplyFn_ACLWithoutHandlerDoesNotFallThroughToUnknown(t *testing.T) {
 	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL, Payload: payload})
 
 	assert.False(t, unknownCalled, "a known type with no handler must not be reported as unknown")
+}
+
+// scraper_proxy는 DEC-20260926-hololive-legacy-env-config-retirement로 퇴역한 type이다. 적용할 곳이 없으므로
+// 조용히 성공한 것처럼 처리하지 않고 모르는 type으로 드러낸다.
+func TestNewApplyFn_RetiredScraperProxyIsUnknown(t *testing.T) {
+	var unknownType string
+
+	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
+		Unknown: func(updateType string) { unknownType = updateType },
+	})
+
+	applyFn(contractssettings.ConfigUpdateV1{Type: "scraper_proxy", Payload: []byte(`{"enabled":true}`)})
+
+	assert.Equal(t, "scraper_proxy", unknownType)
 }

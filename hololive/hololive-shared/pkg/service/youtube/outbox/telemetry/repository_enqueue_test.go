@@ -182,7 +182,10 @@ func TestEnqueuePreparedChunkBoundaries(t *testing.T) {
 	}
 }
 
-func TestEnqueuePreparedSkipsDuplicateWithinSingleBatch(t *testing.T) {
+// 시도 식별자(delivery_id, attempt_ordinal)는 lifecycle 전이 트랜잭션이 한 번만 기록한다
+// (DEC-20260926-hololive-delivery-telemetry-single-path). 중복을 조용히 건너뛰던 ON CONFLICT DO NOTHING은 지웠고,
+// 중복은 오류로 드러나 전이 트랜잭션을 rollback해야 한다.
+func TestEnqueuePreparedRejectsDuplicateAttemptWithinBatch(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()
 
@@ -192,8 +195,8 @@ func TestEnqueuePreparedSkipsDuplicateWithinSingleBatch(t *testing.T) {
 		makeEnqueueTestRow(outboxID, 302, 1),
 	}
 
-	if err := repo.EnqueuePrepared(ctx, rows); err != nil {
-		t.Fatalf("EnqueuePrepared(duplicate within batch) error = %v", err)
+	if err := repo.EnqueuePrepared(ctx, rows); err == nil {
+		t.Fatal("EnqueuePrepared(duplicate within batch) error = nil, want unique violation")
 	}
 
 	var count int
@@ -202,8 +205,8 @@ func TestEnqueuePreparedSkipsDuplicateWithinSingleBatch(t *testing.T) {
 		t.Fatalf("count telemetry rows: %v", err)
 	}
 
-	if count != 2 {
-		t.Fatalf("persisted rows with intra-batch duplicate = %d, want 2", count)
+	if count != 0 {
+		t.Fatalf("persisted rows with intra-batch duplicate = %d, want 0 (chunk rolled back)", count)
 	}
 }
 
@@ -266,7 +269,7 @@ func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
 	}
 }
 
-func TestEnqueuePreparedSkipsConflictsWithinBatch(t *testing.T) {
+func TestEnqueuePreparedRejectsExistingAttemptIdentity(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()
 
@@ -282,8 +285,8 @@ func TestEnqueuePreparedSkipsConflictsWithinBatch(t *testing.T) {
 		makeEnqueueTestRow(outboxID, 201, 1),
 		makeEnqueueTestRow(outboxID, 203, 1),
 	}
-	if err := repo.EnqueuePrepared(ctx, second); err != nil {
-		t.Fatalf("EnqueuePrepared(second) error = %v", err)
+	if err := repo.EnqueuePrepared(ctx, second); err == nil {
+		t.Fatal("EnqueuePrepared(existing attempt identity) error = nil, want unique violation")
 	}
 
 	var count int
@@ -292,7 +295,7 @@ func TestEnqueuePreparedSkipsConflictsWithinBatch(t *testing.T) {
 		t.Fatalf("count telemetry rows: %v", err)
 	}
 
-	if count != 3 {
-		t.Fatalf("persisted rows after duplicate batch = %d, want 3", count)
+	if count != 2 {
+		t.Fatalf("persisted rows after duplicate batch = %d, want 2", count)
 	}
 }

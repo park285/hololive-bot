@@ -257,6 +257,7 @@ run_fingerprint() {
     'scripts/architecture/check-file-loc.sh' \
     'docs/architecture/file-loc-thresholds.txt' \
     'scripts/ci/*.sh' \
+    'scripts/ci/staticcheck-facts/*' \
     'scripts/ci/pre-push-gate-profile-v1.json' | LC_ALL=C sort -u)
   if (( ${#profile_inputs[@]} == 0 )); then
     echo "pre-push fingerprint unavailable: no profile inputs" >&2
@@ -322,6 +323,7 @@ run_reusable_phase() {
   run_self_test scripts/ci/local-ci-nilaway_test.sh \
     scripts/ci/local-ci-nilaway.sh scripts/ci/local-ci.sh scripts/ci/nilaway-inputs.sh \
     scripts/ci/go-tooling.sh go.mod go.sum
+  run_self_test scripts/ci/staticcheck-facts/build_test.sh scripts/ci/staticcheck-facts
   run_self_test scripts/ci/race-parallel-guard_test.sh scripts/ci/local-ci.sh
   run_self_test scripts/refactor/grep-sensitive-logs_test.sh scripts/refactor/grep-sensitive-logs.sh
   run_self_test scripts/refactor/test-validate-no-admin-touch.sh \
@@ -344,8 +346,7 @@ run_reusable_phase() {
     scripts/deploy/check-ap-rsync-manifest.sh scripts/deploy/ap-rsync-files.txt
   run_self_test scripts/deploy/lib/ap-prechange-config_test.sh \
     scripts/deploy/lib/ap-prechange-config.sh scripts/deploy/ap-deploy.sh scripts/deploy/ap-rollback.sh
-  run_self_test scripts/deploy/test-removed-runtimes.sh \
-    scripts/deploy/lib/removed-runtimes.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh build-all.sh
+  run_self_test scripts/deploy/test-compose-up-flow.sh scripts/deploy/compose.sh
   run_self_test scripts/architecture/shared-go-workspace_test.sh \
     scripts/architecture/check-shared-go-boundary.sh scripts/architecture/check-shared-go-packages.sh \
     scripts/architecture/export-go-workspace-import-graph.sh scripts/architecture/check-error-contracts.sh \
@@ -353,16 +354,12 @@ run_reusable_phase() {
     scripts/architecture/check-internal-route-hardcoding.sh
   run_self_test scripts/ci/check-postgres-capacity_test.sh \
     scripts/ci/check-postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
-    deploy/compose/docker-compose.prod.yml
+    scripts/deploy/lib/postgres-capacity.sh deploy/compose/docker-compose.prod.yml
   run_self_test scripts/deploy/test-postgres-capacity-entrypoints.sh \
     scripts/ci/check-postgres-capacity.sh scripts/deploy/compose-redeploy-service.sh \
     scripts/deploy/compose.sh scripts/deploy/lib/postgres-capacity.sh deploy/compose/docker-compose.prod.yml
-  run_self_test hololive/hololive-api/scripts/migrations/preflight-114-restore_test.sh \
-    hololive/hololive-api/scripts/migrations/preflight-114-restore.sh
   run_self_test hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback_test.sh \
     hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh
-  run_self_test hololive/hololive-api/scripts/migrations/manual/repair_message_contract_074_082_test.sh \
-    hololive/hololive-api/scripts/migrations/manual/repair_message_contract_074_082.sh
   run_self_test scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
   run_self_test scripts/logs/test-stream-mirror-retention.sh scripts/logs/lib/stream.sh
   run_self_test scripts/deploy/verify-exec-tree-ownership_test.sh scripts/deploy/verify-exec-tree-ownership.sh

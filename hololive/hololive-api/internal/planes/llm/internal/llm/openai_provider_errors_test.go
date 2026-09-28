@@ -73,6 +73,16 @@ func TestSafeLLMProviderError(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, "llm provider request failed status_code=429 code=rate_limit api_type=rate_limit_error param=messages error_type=apierror.Error", err.Error())
 	})
+
+	// 분류는 오류 타입으로만 한다. 문구가 안전한 진단처럼 보여도 타입이 없으면 원문을 옮기지 않는다.
+	t.Run("untyped error with safe-looking prefix is classified by type", func(t *testing.T) {
+		t.Parallel()
+
+		err := safeLLMProviderError(errors.New("llm provider request failed upstream_detail=raw"))
+
+		require.Error(t, err)
+		assert.Equal(t, "llm provider request failed error_type=errors.errorString", err.Error())
+	})
 }
 
 func TestLLMProviderErrorAttrs(t *testing.T) {

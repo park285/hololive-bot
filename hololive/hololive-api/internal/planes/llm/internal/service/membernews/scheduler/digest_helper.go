@@ -69,7 +69,16 @@ func processDigestForRoom(
 		return digestGenerationFailure(logger, roomID, period, err)
 	}
 
-	message := renderDigestMessage(ctx, fmtr, digest, emptyHeader)
+	message, err := renderDigestMessage(ctx, fmtr, digest, emptyHeader)
+	if err != nil {
+		logger.Error("Member news digest render failed",
+			slog.String("room_id", roomID),
+			slog.String("period", string(period)),
+			slog.String("error", err.Error()))
+
+		return failedRoomResult(roomID)
+	}
+
 	if result, blocked := blockedMemberNewsMessage(outputGuard, logger, roomID, period, message); blocked {
 		return result
 	}
@@ -250,20 +259,24 @@ func logDigestResult(logger *slog.Logger, config *digestDispatchConfig, result d
 	)
 }
 
-func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest, emptyHeader string) string {
+func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest, emptyHeader string) (string, error) {
 	if digest == nil {
-		return emptyHeader + "\n- 표시할 항목이 없습니다."
+		return emptyHeader + "\n- 표시할 항목이 없습니다.", nil
 	}
 
 	if fmtr != nil {
-		formatted := fmtr.FormatMemberNewsDigest(ctx, digest)
+		formatted, err := fmtr.FormatMemberNewsDigest(ctx, digest)
+		if err != nil {
+			return "", fmt.Errorf("format member news digest: %w", err)
+		}
+
 		if strings.TrimSpace(formatted) != "" {
-			return formatted
+			return formatted, nil
 		}
 	}
 
 	if len(digest.TopItems) == 0 {
-		return digest.Headline + "\n- 표시할 항목이 없습니다."
+		return digest.Headline + "\n- 표시할 항목이 없습니다.", nil
 	}
 
 	lines := make([]string, 0, 2+len(digest.TopItems))
@@ -278,5 +291,5 @@ func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest
 		lines = append(lines, digest.MoreSummary)
 	}
 
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), nil
 }

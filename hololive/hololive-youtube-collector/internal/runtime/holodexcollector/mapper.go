@@ -229,7 +229,7 @@ func httpsURL(raw string) (string, bool) {
 	return parsed.String(), true
 }
 
-func livePayload(channelID string, sessions []parsedLive, includeMetadata bool) contract.LiveSnapshotV1 {
+func livePayload(channelID string, sessions []parsedLive) contract.LiveSnapshotV1 {
 	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
 	statuses := make([]string, 0, 4)
 	seen := make(map[string]struct{}, 4)
@@ -244,13 +244,11 @@ func livePayload(channelID string, sessions []parsedLive, includeMetadata bool) 
 			ScheduledAt: session.scheduled,
 			StartedAt:   session.started,
 			EndedAt:     session.ended,
+			Title:       strings.TrimSpace(session.row.Title),
+			TopicID:     strings.TrimSpace(session.row.TopicID),
 		}
 
-		if includeMetadata {
-			item.Title = strings.TrimSpace(session.row.Title)
-			item.TopicID = strings.TrimSpace(session.row.TopicID)
-			item.ThumbnailURL, _ = httpsURL(session.row.Thumbnail)
-		}
+		item.ThumbnailURL, _ = httpsURL(session.row.Thumbnail)
 
 		mapped = append(mapped, item)
 

@@ -35,7 +35,7 @@ import (
 
 func partitionGroupedDeliveries(
 	group *deliveryGroup,
-) (result1 []domain.YouTubeNotificationDelivery, result2 []domain.YouTubeNotificationOutbox, result3 []domain.YouTubeNotificationDelivery) {
+) ([]domain.YouTubeNotificationDelivery, []domain.YouTubeNotificationOutbox, []domain.YouTubeNotificationDelivery) {
 	validRows := make([]domain.YouTubeNotificationDelivery, 0, len(group.rows))
 	validOutboxes := make([]domain.YouTubeNotificationOutbox, 0, len(group.outboxes))
 	invalidRows := make([]domain.YouTubeNotificationDelivery, 0)

@@ -26,10 +26,6 @@ func TestBuildEventKeyAuthorityHeadGoldens(t *testing.T) {
 }
 
 func youtubeAuthorityKeyCases() []authorityKeyCase {
-	return append(youtubeCanonicalAuthorityKeyCases(), youtubeFallbackAuthorityKeyCases()...)
-}
-
-func youtubeCanonicalAuthorityKeyCases() []authorityKeyCase {
 	canonical := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 	return []authorityKeyCase{
@@ -38,31 +34,6 @@ func youtubeCanonicalAuthorityKeyCases() []authorityKeyCase {
 			input:     youtubeAuthorityInput(canonical),
 			wantEvent: "youtube-outbox:NEW_VIDEO:" + canonical,
 		},
-		{
-			name:      "canonical youtube identity with whitespace",
-			input:     youtubeAuthorityInput(" \t" + canonical + "\n "),
-			wantEvent: "youtube-outbox:NEW_VIDEO:" + canonical,
-		},
-	}
-}
-
-func youtubeFallbackAuthorityKeyCases() []authorityKeyCase {
-	return []authorityKeyCase{
-		fallbackAuthorityKeyCase("legacy youtube identity", "post-a,post-b", "141aa311b7bd2dc73e43d1486ae02876e9c714ffaedbf157ee9ad00578eb9ae8"),
-		fallbackAuthorityKeyCase("uppercase youtube prefix", "SHA256:"+strings.Repeat("a", 64), "05c25fcf33981a4c3d965a84ae356d1b094cc20fffd5e80b1f1bbaf68b1b3299"),
-		fallbackAuthorityKeyCase("uppercase youtube hex", "sha256:"+strings.Repeat("A", 64), "f3d38b0e0b53b4c2312ba4a21b12d57a08c67beb17c84c02b1d3e9d97a8b93c2"),
-		fallbackAuthorityKeyCase("malformed youtube suffix", "sha256:"+strings.Repeat("a", 63)+"g", "863f15abedf3b72109214de7dde8a851beba2aace53804c0435b9afc03c52d2f"),
-		fallbackAuthorityKeyCase("short youtube hash", "sha256:abc", "67e9bc3cfd2163c2978358dfe00d2f912cd4ee0c99f077c3583b39b48aebb124"),
-		fallbackAuthorityKeyCase("whitespace only youtube identity", " \t\n", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-		fallbackAuthorityKeyCase("large legacy youtube identity", strings.Repeat("legacy,", 1000), "7c317fe45e7dd1262f3061ae2d663a19b6840e725e9ef1c444d95929af53b755"),
-	}
-}
-
-func fallbackAuthorityKeyCase(name, identity, digest string) authorityKeyCase {
-	return authorityKeyCase{
-		name:      name,
-		input:     youtubeAuthorityInput(identity),
-		wantEvent: "youtube-outbox:NEW_VIDEO:sha256:" + digest,
 	}
 }
 
@@ -146,75 +117,25 @@ func assertAuthorityKeyPair(t *testing.T, input *DedupeInput, wantEvent string) 
 	}
 }
 
-func TestEnvelopePreparedYouTubeIdentityMatchesUntrustedFallback(t *testing.T) {
+// 저장 경로의 YouTube 식별자는 envelope payload의 정규 식별자 그대로 key가 된다.
+func TestEnvelopeYouTubeIdentityUsesCanonicalPayloadIdentity(t *testing.T) {
 	envelope := authorityYouTubeEnvelope()
-	prepared := prepareEnvelopeDedupeInput(&envelope)
-	untrusted := prepared.input
-	preparedEventKey := prepared.eventKey()
+	input := EnvelopeDedupeInput(&envelope)
+	wantEvent := "youtube-outbox:COMMUNITY_POST:" + envelope.YouTubeOutbox.Identity()
 
-	if got, want := preparedEventKey, BuildEventKey(&untrusted); got != want {
-		t.Fatalf("prepared event key = %q, untrusted event key = %q", got, want)
+	if got := BuildEventKey(&input); got != wantEvent {
+		t.Fatalf("envelope event key = %q, want %q", got, wantEvent)
 	}
 
-	if got, want := buildDedupeKey(prepared.input.RoomID, preparedEventKey), BuildDedupeKey(&untrusted); got != want {
-		t.Fatalf("prepared dedupe key = %q, untrusted dedupe key = %q", got, want)
-	}
-}
-
-func TestEnvelopePreparedYouTubeIdentityMutationFallsBack(t *testing.T) {
-	tests := []struct {
-		name         string
-		identity     string
-		wantIdentity string
-	}{
-		{
-			name:         "uppercase prefix",
-			identity:     "SHA256:" + strings.Repeat("a", 64),
-			wantIdentity: "sha256:05c25fcf33981a4c3d965a84ae356d1b094cc20fffd5e80b1f1bbaf68b1b3299",
-		},
-		{
-			name:         "malformed suffix",
-			identity:     "sha256:" + strings.Repeat("a", 63) + "g",
-			wantIdentity: "sha256:863f15abedf3b72109214de7dde8a851beba2aace53804c0435b9afc03c52d2f",
-		},
-		{
-			name:         "empty after trim",
-			identity:     " \t\n",
-			wantIdentity: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			envelope := authorityYouTubeEnvelope()
-			prepared := prepareEnvelopeDedupeInput(&envelope)
-
-			prepared.input.SourceIdentity = tt.identity
-
-			wantEvent := "youtube-outbox:COMMUNITY_POST:" + tt.wantIdentity
-			assertPreparedAuthorityKeyPair(t, &prepared, wantEvent)
-		})
-	}
-}
-
-func assertPreparedAuthorityKeyPair(t *testing.T, input *preparedDedupeInput, wantEvent string) {
-	t.Helper()
-
-	eventKey := input.eventKey()
-	if eventKey != wantEvent {
-		t.Fatalf("prepared event key = %q, want %q", eventKey, wantEvent)
-	}
-
-	wantDedupe := "v2:room:" + input.input.RoomID + ":event:" + wantEvent
-	if got := buildDedupeKey(input.input.RoomID, eventKey); got != wantDedupe {
-		t.Fatalf("prepared dedupe key = %q, want %q", got, wantDedupe)
+	if got, want := BuildDedupeKeyFromEnvelope(&envelope), "v2:room:"+input.RoomID+":event:"+wantEvent; got != want {
+		t.Fatalf("envelope dedupe key = %q, want %q", got, want)
 	}
 }
 
 func TestBuildLedgerRowsYouTubeOutboxPersistsLiteralKeys(t *testing.T) {
 	envelope := authorityYouTubeEnvelope()
 
-	event, delivery, err := buildLedgerRows(&envelope, StatusPending)
+	event, delivery, err := buildLedgerRows(&envelope)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}
@@ -239,6 +160,40 @@ func TestBuildLedgerRowsYouTubeOutboxPersistsLiteralKeys(t *testing.T) {
 	}
 }
 
+// 비정규 YouTube source identity는 해시로 감싸 받지 않고 저장 전에 거절한다(stack-audit 2026-09-26 T11
+// holo-dispatch-raw-youtube-identity-hash). 다른 source kind의 식별자 형식은 이 검사 대상이 아니다.
+func TestValidateSourceIdentityRejectsNonCanonicalYouTubeIdentity(t *testing.T) {
+	canonical := "sha256:" + strings.Repeat("0123456789abcdef", 4)
+
+	canonicalInput := youtubeAuthorityInput(canonical)
+	if err := validateSourceIdentity(&canonicalInput); err != nil {
+		t.Fatalf("canonical identity rejected: %v", err)
+	}
+
+	for name, identity := range map[string]string{
+		"legacy raw":          "post-a,post-b",
+		"empty":               "",
+		"padded canonical":    " " + canonical,
+		"uppercase prefix":    "SHA256:" + strings.Repeat("a", 64),
+		"uppercase hex":       "sha256:" + strings.Repeat("A", 64),
+		"malformed suffix":    "sha256:" + strings.Repeat("a", 63) + "g",
+		"short hash":          "sha256:abc",
+		"multibyte in digest": "sha256:" + strings.Repeat("a", 61) + "가",
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := youtubeAuthorityInput(identity)
+			if err := validateSourceIdentity(&input); err == nil {
+				t.Fatalf("validateSourceIdentity(%q) = nil, want error", identity)
+			}
+		})
+	}
+
+	celebration := &DedupeInput{SourceKind: domain.AlarmDispatchSourceKindCelebration, SourceIdentity: "birthday:42:2026-09-27"}
+	if err := validateSourceIdentity(celebration); err != nil {
+		t.Fatalf("non-youtube identity rejected: %v", err)
+	}
+}
+
 func authorityYouTubeEnvelope() domain.AlarmQueueEnvelope {
 	return domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -247,11 +202,10 @@ func authorityYouTubeEnvelope() domain.AlarmQueueEnvelope {
 		},
 		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
 		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs:         []int64{10, 11},
-			Kind:              domain.OutboxKindCommunityPost,
-			AlarmType:         domain.AlarmTypeCommunity,
-			ChannelID:         testYouTubeChannelID,
-			RenderTemplateKey: domain.TemplateKeyOutboxCommunityGroup,
+			OutboxIDs: []int64{10, 11},
+			Kind:      domain.OutboxKindCommunityPost,
+			AlarmType: domain.AlarmTypeCommunity,
+			ChannelID: testYouTubeChannelID,
 			Items: []domain.YouTubeOutboxItem{
 				{OutboxID: 11, ContentID: "post-b", Payload: `{"post_id":"post-b","content_text":"b"}`},
 				{OutboxID: 10, ContentID: "post-a", Payload: `{"post_id":"post-a","content_text":"a"}`},

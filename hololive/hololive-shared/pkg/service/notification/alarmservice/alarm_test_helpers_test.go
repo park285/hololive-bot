@@ -77,7 +77,7 @@ func (m *mockMemberDataProvider) FindMemberByAlias(_ string) *domain.Member { re
 
 func (m *mockMemberDataProvider) GetChannelIDs() []string { return []string{} }
 
-func (m *mockMemberDataProvider) GetAllMembers() []*domain.Member { return m.members }
+func (m *mockMemberDataProvider) LoadAllMembers() ([]*domain.Member, error) { return m.members, nil }
 
 func (m *mockMemberDataProvider) WithContext(_ context.Context) domain.MemberDataProvider { return m }
 

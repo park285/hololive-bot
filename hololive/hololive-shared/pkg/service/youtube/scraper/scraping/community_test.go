@@ -63,7 +63,7 @@ func TestGetCommunityPosts_404TreatAsEmpty(t *testing.T) {
 		}),
 	}
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(httpClient),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -91,7 +91,7 @@ func TestGetCommunityPosts_404DoesNotRecordHTMLCooldown(t *testing.T) {
 		}),
 	}
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(httpClient),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -121,7 +121,7 @@ func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *t
 		}),
 	}
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(httpClient),
 		WithRateLimiter(ratelimiter.New(time.Hour)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),

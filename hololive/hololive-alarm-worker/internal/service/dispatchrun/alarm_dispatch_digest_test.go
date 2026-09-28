@@ -21,14 +21,13 @@ func TestAlarmDispatchRunnerSendsPreRenderedDeliveryDigest(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
 	require.NoError(t, err)
 	require.True(t, processed)
 	require.Equal(t, []string{"주간 멤버 뉴스"}, sender.messages)
-	require.Empty(t, sender.karingRequests)
 	require.Len(t, consumer.markDispatched, 1)
 }
 
@@ -53,7 +52,7 @@ func TestDeliveryDigestGroupingAndRenderingUsesContentIdentity(t *testing.T) {
 		PreRenderedMessage: "주간 멤버 뉴스 B",
 	}
 
-	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{first, second})
+	groups := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{first, second})
 	require.Len(t, groups, 2)
 
 	renderer, messageStrings := newAlarmDispatchTestRendering(t)

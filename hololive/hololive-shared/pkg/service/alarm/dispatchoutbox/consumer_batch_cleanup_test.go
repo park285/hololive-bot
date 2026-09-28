@@ -61,13 +61,13 @@ type batchCleanupTestCase struct {
 
 func batchCleanupRecords(valid bool) []*Record {
 	records := []*Record{
-		{ID: 1, Status: StatusLeased, Payload: []byte("{}"), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-before"}},
+		{ID: 1, Status: StatusLeased, Payload: []byte(minimalEnvelopePayload), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-before"}},
 		{ID: 2, Status: StatusLeased, Payload: []byte("{"), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:invalid"}},
-		{ID: 3, Status: StatusLeased, Payload: []byte("{}"), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-after"}},
+		{ID: 3, Status: StatusLeased, Payload: []byte(minimalEnvelopePayload), AttemptCount: 4, SendUnitID: 77, ClaimKeys: []string{"notified:claim:valid-after"}},
 	}
 
 	if valid {
-		records[1].Payload = []byte("{}")
+		records[1].Payload = []byte(minimalEnvelopePayload)
 	}
 
 	return records
@@ -180,7 +180,7 @@ func TestConsumerDrainBatchFailedBatchCleanup(t *testing.T) {
 
 			releaser := &fakeClaimKeyReleaser{err: tt.keyErr}
 
-			consumer := NewConsumer(repo, nil, WithWorkerID("batch-owner"), WithClaimKeyReleaser(releaser))
+			consumer := mustNewConsumer(t, repo, releaser, nil, WithWorkerID("batch-owner"))
 
 			ctx, cancel := context.WithCancel(t.Context())
 
