@@ -250,17 +250,11 @@ sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-a
 
 `discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 replay artifact와 144시간 cutoff를 사용합니다.
 
-Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. Migration 133/134 trigger와 terminal writer가 inbox payload와 command 진단을 terminal 전이에서 즉시 scrub합니다. 주기 maintenance는 scrub scan을 반복하지 않고 retention 대상만 찾으며, terminal ledger는 Iris admission retention(7일)보다 긴 8일 뒤 batch 삭제합니다. `manual_review`와 그 replay audit은 판단·처리 이력을 위해 해당 outbox row의 retention 동안 함께 보존합니다.
+Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. Migration 133은 inbox terminal payload scrub과 CHECK를 도입했고, 현재 inbox writer는 terminal 전이에서 payload를 직접 비웁니다(호환 trigger는 230에서 폐기). Migration 134의 command terminal summary trigger는 그대로 유지합니다. 주기 maintenance는 scrub scan을 반복하지 않고 retention 대상만 찾으며, terminal ledger는 Iris admission retention(7일)보다 긴 8일 뒤 batch 삭제합니다. `manual_review`와 그 replay audit은 판단·처리 이력을 위해 해당 outbox row의 retention 동안 함께 보존합니다.
 
-Migration 133은 runtime cutover 전에 terminal payload scrub trigger를 먼저 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate합니다. 따라서 이전 runtime의 `inbox_complete` writer가 migration 적용 중이나 cutover 전에 `status`만 `succeeded`로 변경해도 trigger가 `payload`를 `{}`로 scrub하며 CHECK에 거부되지 않습니다.
-이 호환 trigger는 드레인 종단입니다. 현재 terminal writer(`inbox_complete.sql`, `inbox_abandon.sql`, `inbox_release.sql`, `inbox_reclaim_expired.sql`)는 같은 UPDATE에서 `payload`를
-`{}`로 쓰므로, migration 223 이후 trigger가 비어 있지 않은 payload를 scrub하면 PostgreSQL WARNING
-`bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger`를 남깁니다(stack-audit 2026-09-26 T17).
-제거 조건은 두 가지입니다. ① 중앙 호스트의 이미지와 보존 이미지·rollback 대상 목록에 migration 133 이전 writer
-이미지(terminal 전이에서 payload를 비우지 않는 hololive-api 또는 퇴역 bot runtime)가 0개임을 hololive-bot-ops로 대조합니다.
-② 중앙 `holo-postgres` 로그에서 위 WARNING이 30일 동안 0건입니다. 두 조건을 확인하면 새 migration으로 trigger와
-`scrub_bot_webhook_inbox_terminal_payload()`를 지우고 `chk_bot_webhook_inbox_terminal_payload_scrubbed` CHECK만 남깁니다.
-방어층으로 계속 두려면 그 결정을 기록합니다. T18(2026-09-26)은 ①을 측정하지 못했습니다. 재검토 기한: 2026-12-31.
+Migration 133은 과거 runtime cutover 전에 terminal payload scrub trigger를 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate했습니다. Migration 223은 trigger가 구 status-only writer를 만날 때 WARNING을 남기도록 했습니다. 2026-09-28 읽기 전용 검증에서는 중앙 API 이미지 21개(서로 다른 revision 20개)와 문서화된 rollback 이미지 2개가 모두 terminal payload를 직접 비우는 네 writer(`inbox_complete.sql`, `inbox_abandon.sql`, `inbox_release.sql`, `inbox_reclaim_expired.sql`)를 포함했습니다. 이 증거는 이미지 label을 source revision에 대응시킨 것이며 바이너리 역공학이나 장기 로그 관측은 아닙니다. Migration 230은 이 지원 집합을 전제로 호환 `bot_webhook_inbox_terminal_payload_scrub` trigger와 `scrub_bot_webhook_inbox_terminal_payload()` 함수만 원자적으로 지웁니다. 검증된 `chk_bot_webhook_inbox_terminal_payload_scrubbed` CHECK는 유지합니다. 구 status-only writer는 이제 CHECK에 거절됩니다. 네 현행 writer는 terminal 전이에서 `{}`를 직접 쓰고 retry에서는 payload를 보존해야 합니다.
+
+Migration 230은 적용 전 catalog에서 정확한 trigger/function 관계와 CHECK 정의·검증 상태를 확인합니다. 누락·변형·추가 의존성·락 실패는 적용을 중단하고 DROP을 롤백합니다. 지원 중인 두 rollback 이미지는 같은 CHECK를 직접 만족하므로 바이너리 rollback에 trigger 재설치는 필요하지 않습니다. Schema를 되돌려야 하면 다음 번호의 forward migration으로 처리하거나 ledger와 schema가 함께 일치하는 전체 복원만 별도로 검토합니다. 230 적용 기록을 둔 채 수동으로 백업 DDL만 재설치하면 runner가 230을 skip하는 schema drift가 되므로 정상 rollback 절차가 아닙니다.
 
 Migration 125 이후 runtime은 `bot_webhook_heads`와 `ordering_key` advisory lock을 함께 사용합니다. Schema rollback은 이전 runtime으로 먼저 전환해 writer를 quiesce한 뒤에만 `bot_webhook_heads`/`available_at`을 제거해야 하며, 현재 runtime이 쓰는 동안 migration 125~136을 되돌리면 안 됩니다.
 
