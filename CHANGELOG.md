@@ -9,6 +9,7 @@
 ## 미출시
 
 - 이미지 빌드가 checkout의 umask에 따라 파일 모드가 달라지던 결함을 고칩니다. v7.0.0 배포에서 umask 077 checkout으로 빌드한 PO issuer 이미지의 `/app/po-sandbox` 파일이 600이라 uid 65532가 `worker.mjs`를 열지 못했고(EACCES) 중앙 쌍이 자동 rollback됐습니다. alarm-worker 이미지에도 600 파일이 들어갔습니다. PO issuer·collector·alarm-worker Dockerfile은 이미지에 실리는 Node 트리(`package.json`·`package-lock.json`·`src`)를 `COPY --chmod=u=rwX,go=rX`로 복사해 파일 644·디렉터리 755로 맞춥니다. 소유자와 umask 022 checkout의 산출물은 그대로입니다. `scripts/build/image-runtime-tree-permissions_test.sh`가 umask 077 checkout을 재현해 세 build stage를 빌드하고 runtime uid로 트리 전체를 읽는지 확인하며, pre-push 게이트는 이 Dockerfile들이 바뀔 때 이를 실행합니다(docker 필요, kapu 전용).
+- 정기 보안 workflow의 NilAway가 v7.0.0 LIVE 구독 복구 테스트 stub의 `QueryRow`가 `nil` row를 돌려주는 것을 잠재 nil panic으로 거절하던 문제를 고칩니다. stub은 이제 `Scan`에서 같은 조회 실패를 돌려주는 row를 반환합니다. 운영 코드와 산출물은 바뀌지 않습니다.
 
 ## v7.0.0 - 2026-09-29
 
