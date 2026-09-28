@@ -294,6 +294,9 @@ Fx v1.24.0은 `hololive-api` 한 바이너리의 process signal과 `Start`/`Wait
 ## Rollback
 
 - Use `docs/current/runbooks/rollback.md`.
+- migration 231~233 적용 뒤 v6.0.x image로 되돌릴 때는 교체 직전에 `auth:sess:*`를 모두 `UNLINK`해 관리자
+  재로그인을 강제하고, `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 TTL로 둡니다. image만 `--no-deps`로
+  교체하고 구 `hololive-db-migrate`는 실행하지 않습니다(`rollback.md`의 Valkey 2차 축소 절).
 - Durable runtime cutover 이후 기본 복구 전략은 현재 image의 fix-forward입니다. 이전 image는 durable queue를 소비하지 않으므로 backlog가 남아 있으면 재배포하지 않습니다.
 - 이전 `hololive-api` image/config가 반드시 필요하면 Iris webhook ingress를 먼저 quiesce하고 현재 durable runtime으로 queue를 drain한 뒤 아래 preflight가 성공해야 합니다. 하나라도 0이 아니면 현재 image를 유지하고 roll forward합니다.
 

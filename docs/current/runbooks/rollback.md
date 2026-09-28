@@ -86,6 +86,32 @@ Runtime service names:
 
 `hololive-api`가 durable bot admission migration 123~136을 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 
+### Valkey 2차 축소(migration 231~233) 이후 rollback
+
+migration 231(`auth_users.session_generation`)·232(`alarm_room_display_names`)·233(알람 템플릿 다음 방송 분기 제거)을
+적용한 뒤 v6.0.x image로 되돌릴 때의 규칙입니다. 전체 절차와 근거는
+[Valkey 축소 계획](../plans/2026-09-28-valkey-dependency-reduction.md#2차-rollback-규칙migration-231233-적용-뒤)에 있습니다.
+
+- image만 되돌립니다. 두 서비스의 rollback tag를 `:prod`로 되돌린 뒤 아래 명령으로만 교체합니다.
+
+  ```bash
+  sudo -n ./scripts/deploy/compose.sh \
+    -f deploy/compose/docker-compose.prod.yml \
+    -f deploy/compose/docker-compose.live-compat.yml \
+    up -d --no-build --no-deps hololive-alarm-worker hololive-api
+  ```
+
+- 구 image의 `hololive-db-migrate`는 절대 실행하지 않습니다. 구 runner는 manifest 밖 ledger 행(092~094)을 이유로
+  실패하고, `--no-deps` 없는 `up`은 이 실패 때문에 API·worker·collector 기동까지 막습니다. schema는 되돌리지
+  않습니다(구 SQL은 열을 명시하고 새 열은 DEFAULT가 있으며, 233 본문은 구 코드에서도 같은 출력을 냅니다).
+- 교체 직전에 `SCAN 0 MATCH auth:sess:* COUNT 1000`을 반복하며 `UNLINK`해 모든 관리자 세션을 끊고 재로그인시킵니다.
+  새 코드가 발급한 세션은 `auth:user_sessions:*` 인덱스에 없어 구 reset이 폐기하지 못하고, 구 코드는
+  `session_generation`을 비교하지 않아 새 코드에서 reset으로 무효화된 세션을 다시 받아들입니다. 세션 key는 사용자별로
+  거를 수 없으므로 `session_generation > 0` 사용자만 고르는 대신 전체를 지웁니다. 값은 로그에 남기지 않습니다.
+- `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 지우지 않고 TTL(8일)로 만료시킵니다.
+- rollback 기간에도 Console 방 이름 변경 동결을 유지합니다. 구 worker의 rename은 Valkey `alarm:room_names`에만
+  남으므로, 동결을 풀었다면 재전진 전에 계획의 관리자 방 별칭 이관 절차를 다시 수행합니다.
+
 ## Contract Rollback
 
 - HTTP contract rollback must preserve route constants expected by deployed consumers.

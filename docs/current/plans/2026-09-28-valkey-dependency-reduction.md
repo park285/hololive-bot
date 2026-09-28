@@ -150,19 +150,64 @@ rollback하면 runtime은 구 설계로 돌아간 것이므로 이번 fadeout의
 
 1차 폐기 대상은 `membernews:rooms`, `membernews:room_names`, `hololive:members`, 그리고 소유가 확인된 구 `hololive:members:ready` sentinel입니다. 이들은 TTL 자동 회수를 보장하지 않습니다. namespace 전체 삭제나 `FLUSH*`를 사용하지 않습니다. 세션·nonce·member epoch·alarm 채널 registry·구독 index·`alarm:member_names`는 유지합니다.
 
-2차 폐기 대상 중 TTL이 없어 자동 회수되지 않는 key는 아래와 같습니다. `alarm:user_names`는 Kakao user ID→닉네임, `alarm:room_names`는 방 제목을 평문으로 담으므로 우선 회수합니다. `alarm:{roomID}`는 이름을 열거할 수 없으므로 반드시 `SMEMBERS alarm:registry`로 방 ID를 먼저 읽은 뒤 방 key를 지우고 마지막에 registry를 지웁니다. `alarm:*` 패턴 삭제는 유지 key(`alarm:channel_registry`, `alarm:channel_subscribers*`, `alarm:member_names`, `alarm:subscriber_cache_empty`, `alarm:dispatch:wakeup*`)까지 지우므로 금지합니다. 회수 도구는 room/user 식별자를 로그에 남기지 않습니다.
+### 2차 전환: 관리자 방 별칭 이관
 
-| key | TTL | 비고 |
-|---|---|---|
-| `alarm:{roomID}` (registry의 방 ID별) | 없음 | registry를 먼저 읽음 |
-| `alarm:registry` | 없음 | 방 key 삭제 뒤 |
-| `alarm:room_names`, `alarm:user_names` | 없음 | 평문 식별자·이름 |
-| `alarm:channel_registry:version` | 없음 | |
-| `acl:settings`, `acl:mode`, `acl:rooms:whitelist`, `acl:rooms:blacklist` | 없음 | ACL mirror |
-| `auth:user_sessions:{userID}` | 8일 | 자동 만료, 회수 선택 |
-| `member-cache:v2:data:*` | 30분 | 자동 만료 |
-| `youtube:channel_stats:*`, `search_channels:*`, `channels_live_status_*` | 5분·10분·30초 | 자동 만료 |
-| `hololive_channels`, `channels_live_status`(접미사 없음), `admin:channel_stats*` | 코드상 writer 없음 | 존재하면 회수 |
+base(`12d78df8a`)의 관리자 방 이름은 Valkey hash `alarm:room_names`에만 있었고 migration 232는 빈 `alarm_room_display_names`만 만듭니다. 구 worker는 기동·rebuild 때 이 hash를 PG `alarms.room_name`으로 다시 채웠으므로, hash에서 어떤 `alarms.room_name`과도 다른 값이 마지막 기동 이후 지정된 관리자 별칭입니다. 이 값을 이관하기 전에는 hash를 지우지 않습니다.
+
+1. C0부터 수용(C5)까지 Console의 방 이름 변경(`POST /api/holo/names/room`)을 동결하고 관리자에게 공지합니다. 전환 창에 구 worker로 들어온 rename은 Valkey에만 기록되어 사라집니다.
+2. 구 worker를 정지하기 직전(C3 직전)에 `HGETALL alarm:room_names`를 root 전용 경로의 권한 600 파일로 export합니다. 값은 방 제목 평문이므로 stdout·로그·티켓에 남기지 않고 건수만 기록합니다.
+3. migration 232 적용(C4의 db-migrate) 뒤, 같은 psql 세션에서 export를 임시 테이블로 읽어 PG와 비교하고 차이 나는 값만 넣습니다. 건수만 확인합니다.
+
+```sql
+CREATE TEMP TABLE room_name_export (room_id text PRIMARY KEY, room_name text NOT NULL);
+-- \copy room_name_export FROM '<export.csv>' WITH (FORMAT csv)
+INSERT INTO alarm_room_display_names (room_id, display_name)
+SELECT e.room_id, btrim(e.room_name)
+FROM room_name_export AS e
+WHERE btrim(e.room_name) <> ''
+  AND char_length(e.room_id) <= 100
+  AND char_length(btrim(e.room_name)) <= 255
+  AND EXISTS (SELECT 1 FROM alarms AS a WHERE a.room_id = e.room_id)
+  AND NOT EXISTS (
+      SELECT 1 FROM alarms AS a
+      WHERE a.room_id = e.room_id AND btrim(a.room_name) = btrim(e.room_name)
+  )
+ON CONFLICT (room_id) DO NOTHING;
+```
+
+4. 관리 목록(`GET /internal/alarm/keys`)에서 이관한 방 수를 확인한 뒤에만 아래 순서대로 `alarm:room_names`를 회수합니다. 별칭을 포기하기로 하면 그 결정을 기록하고 export 파일을 폐기한 뒤 회수합니다. export 파일은 수용이 끝나면 삭제합니다.
+
+### 2차 rollback 규칙(migration 231~233 적용 뒤)
+
+- 되돌리는 것은 image뿐입니다. 보존한 rollback tag를 `:prod`로 되돌리고 `up -d --no-build --no-deps hololive-alarm-worker hololive-api`로만 교체합니다.
+- 231~233 적용 뒤에는 구 image의 `hololive-db-migrate`를 절대 실행하지 않습니다. 구 runner는 manifest 밖 ledger 행(092~094)을 이유로 거절하고, `--no-deps` 없는 `up`은 이 실패 때문에 API·worker·collector 기동까지 막습니다. schema는 되돌리지 않습니다. 구 SQL은 열을 명시하고 새 열은 DEFAULT가 있으며, 233의 템플릿 본문은 구 코드의 빈 `NextStream`과 같은 출력을 냅니다.
+- rollback 직전에 `SCAN 0 MATCH auth:sess:* COUNT 1000` 반복과 `UNLINK`로 세션 key를 모두 지워 재로그인시킵니다. 새 코드가 발급한 세션은 `auth:user_sessions:*` 인덱스에 없어 구 reset이 폐기하지 못하고, 구 코드는 `session_generation`을 비교하지 않으므로 새 코드에서 reset으로 무효화된 세션이 되살아납니다. 세션 key는 사용자별로 걸러낼 수 없으므로 `session_generation > 0`인 사용자만 골라 지우는 대신 전체를 지웁니다.
+- `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 회수하지 않고 TTL(8일)로 만료시킵니다. 구 reset의 폐기 대상 목록이기 때문입니다.
+- rollback 기간에도 방 이름 변경 동결을 유지합니다. 구 worker의 rename은 Valkey에만 남으므로, 동결을 풀었다면 재전진 전에 위 이관 절차를 다시 수행합니다.
+
+### 2차 폐기 key 회수
+
+> **금지**: `alarm:*`, `membernews:*`, `notified:*`, `youtube:producer:*` 패턴 삭제와 `FLUSHDB`/`FLUSHALL`을 쓰지 않습니다. `alarm:*`에는 유지 key(`alarm:channel_registry`, `alarm:channel_subscribers*`, `alarm:member_names`, `alarm:subscriber_cache_empty`, `alarm:dispatch:wakeup*`)가, `membernews:*`에는 주간·월간 실행 잠금이, `notified:*`에는 활성 dedup claim이, `youtube:producer:*`에는 활성 분산 rate-limit bucket(`BucketBase` `youtube:producer`)이 있습니다. 회수 대상은 아래의 정확한 key 또는 family로만 지정하고, 회수 도구는 room·user 식별자와 값을 로그에 남기지 않습니다.
+
+회수 순서는 표의 위에서 아래입니다. `alarm:user_names`(Kakao user ID→닉네임 평문)를 먼저 지우고, `alarm:room_names`는 별칭 이관(위 절차 4)이 끝난 뒤에만 지웁니다.
+
+방 key `alarm:{roomID}`는 두 경로로 열거해 합칩니다. 첫째 `SMEMBERS alarm:registry`(크면 `SSCAN`), 둘째 읽기 전용 `SCAN 0 MATCH alarm:* COUNT 1000 TYPE set` 반복입니다. 두 결과 모두 key 이름이 `^alarm:-?[0-9]+$`와 맞고 `TYPE`이 `set`인 것만 대상으로 합니다. 유지 key 이름(`alarm:channel_registry`, `alarm:subscriber_cache_empty`, `alarm:member_names`, `alarm:registry`, `alarm:room_names`, `alarm:user_names`)이나 `:`를 포함하는 registry 원소는 건너뛰고 건수만 기록합니다. registry만 evict되고 방 key가 고아로 남은 경우를 SCAN이 잡습니다. 방 key를 `UNLINK`한 뒤 `alarm:registry`를 지우고, 같은 SCAN을 다시 돌려 대상 0건을 확인합니다.
+
+| 순서 | key | TTL | 회수 방법·비고 |
+|---|---|---|---|
+| 1 | `alarm:user_names` | 없음 | 즉시 `DEL`. 평문 닉네임 |
+| 2 | `alarm:{roomID}` → `alarm:registry` | 없음 | 위 두 경로 열거, 방 key 뒤 registry |
+| 3 | `alarm:channel_registry:version` | 없음 | `DEL` |
+| 4 | `acl:settings`, `acl:mode`, `acl:rooms:whitelist`, `acl:rooms:blacklist` | 없음 | ACL mirror, `DEL` |
+| 5 | `{acl:rooms:whitelist}:tmp:*`, `{acl:rooms:blacklist}:tmp:*` | 없음 | 구 ACL 원자 교체의 임시 set. SADD와 RENAME 사이에 프로세스가 죽으면 남음. family별 `SCAN MATCH` 후 `UNLINK` |
+| 6 | `alarm:next_stream:*` | 없음 | writer는 이관 시점부터 없었고 reader는 이번 브랜치에서 제거(migration 233). `SCAN MATCH` 건수 확인(예상 0) 후 `UNLINK` |
+| 7 | `youtube:producer:community-missing:*`, `youtube:producer:channel-health:*`, `youtube:producer:snapshot-interval:*` | 24시간·24시간·간격 | 구 producer state store는 production에 주입된 적이 없어 예상 0. family별 정확한 `SCAN MATCH`만 사용 |
+| 8 | `alarm:room_names` | 없음 | 별칭 export·backfill 확인 뒤 `DEL`. 평문 방 제목 |
+| — | `auth:user_sessions:{userID}` | 8일 | rollback 창이 닫힌 뒤에만 회수, 그 전에는 TTL 만료 |
+| — | `member-cache:v2:data:*` | 30분 | 자동 만료 |
+| — | `youtube:channel_stats:*`, `search_channels:*`, `channels_live_status_*` | 5분·10분·30초 | 자동 만료 |
+| — | `hololive_channels`, `channels_live_status`(접미사 없음) | 20분·5분 | 구 코드에 호출자 없는 setter만 있었음. 예상 0, 있어도 TTL로 소멸 |
+| — | `admin:channel_stats`, `admin:channel_stats:refresh_lock` | 잠금 5분 | 존재하면 `DEL` |
 
 특히 `membernews:*` 전체 삭제는 유지할 주간·월간 실행 잠금까지 지우므로 금지합니다. 정리 명세와 key별 I/O 검증은 폐기 대상의 정확한 이름으로 제한합니다.
 
@@ -458,9 +503,14 @@ B07의 수정 전 실패는 삭제된 초기화가 hash를 DEL/HSET하고 colon 
 | 죽은 코드·캐시 | apiservice·채널 통계 캐시·전용 env 퇴역 가드, producer state store, Holodex 무효 캐시, cache API 축소, dead claim·locker·AlarmDispatchState, `GetChannelStats` | production 호출 0 또는 hit≈0 |
 | 문서 | 잠금 fail-closed 정정(감사 N03, 리뷰 R08, 이 계획), settings·QUEUE·DEPLOYMENT·alarm·member-cache runbook 계약 갱신, 폐기 key 회수 표 | 코드와 문서 불일치 |
 
-### next_stream 리뷰 결론(미결정)
+### next_stream 결론: 삭제(2차 후속)
 
-`alarm:next_stream:*`는 이 저장소 이관 시점(`1da02d2cb`, 2026-03-01)부터 writer가 없습니다. 당시 Rust scraper crate(`keys.rs`, `841526aee`에서 삭제)도 key 상수만 있었습니다. 그래서 `!알람 추가`의 '다음 방송'과 `!알람 목록`의 방송 중 표시는 한 번도 나간 적이 없고 운영에서 이를 알릴 신호도 없습니다. 권고는 삭제(사용자 출력 변화 0, route·오류 코드·템플릿 분기·admin 미리보기 샘플 정리, 템플릿 migration 필요)이고, 필요하면 PG `youtube_live_sessions` 기반으로 별도 재구현합니다. 결정은 사용자에게 남았습니다.
+`alarm:next_stream:*`는 이 저장소 이관 시점(`1da02d2cb`, 2026-03-01)부터 writer가 없습니다. 당시 Rust scraper crate(`keys.rs`, `841526aee`에서 삭제)도 key 상수만 있었습니다. 그래서 `!알람 추가`의 '다음 방송'과 `!알람 목록`의 방송 중 표시는 한 번도 나간 적이 없고 운영에서 이를 알릴 신호도 없습니다. iris-console·chat-bot-go-kakao·twentyq-bot·tools·deploy·iris-bridge·Iris에서 `/next-stream` route와 `NextStream` 소비자를 검색한 결과 0건이었습니다. 이중 경로를 두지 않는 원칙에 따라 reader 전체를 지웠습니다: alarmcache `GetNextStreamInfo`·batch HGETALL, `AlarmStateManager.GetNextStreamInfo`, worker `GET /internal/alarm/next-stream/:id`와 `get_next_stream_info_failed`, client, `domain.NextStreamInfo`, formatter의 다음 방송 view와 전용 상대 시간 문자열 필수 key(`timefmt/relative_*`), 템플릿 미리보기 샘플. migration 233은 알람 추가·목록 표준 본문(전역과 같은 본문의 채널 override)에서 다음 방송 분기를 지우며, 새 본문의 출력은 빈 `NextStream`일 때의 기존 출력과 같습니다. 다른 본문이 `NextStream`을 참조하면 233은 한 transaction 안에서 적용 전체를 거절합니다. 배포 전 `SELECT template_key, channel_id FROM notification_templates WHERE template_key IN ('CMD_ALARM_ADDED','CMD_ALARM_LIST') AND body LIKE '%NextStream%'`로 표준 외 본문이 없는지 확인합니다. 구 API는 `/next-stream` 404를 이미 Debug 로그 후 빈 값으로 처리하므로 전환 창의 혼합 버전도 출력이 같습니다. 필요하면 PG `youtube_live_sessions` 기반으로 별도 재구현합니다.
+
+### 리뷰 후속(VkRuntime·VkDbOps)
+
+- 방 이름 설정 요청의 저장 폭 초과(room_id 100자, 이름 255자)를 PG 오류 500 대신 400으로 거절합니다(worker `invalid_request_body`, 관리자 API `invalid request body`).
+- 관리자 방 별칭 이관, 2차 rollback 규칙, 폐기 key 회수 순서·금지 패턴을 위 "복구와 data residue"에 반영했습니다.
 
 ### 검증
 
@@ -476,4 +526,4 @@ B07의 수정 전 실패는 삭제된 초기화가 hash를 DEL/HSET하고 colon 
 - Iris Console(별도 저장소)의 `POST /api/holo/names/user` 호출 제거와 방 이름 공백=해제 의미 반영.
 - member epoch ABA: Valkey 재시작 후 재생성된 epoch가 우연히 프로세스의 마지막 값과 같으면 snapshot TTL(5분)까지 이전 snapshot을 쓸 수 있습니다(runbook 기록).
 - 단일 채널 구독 조회 경로(`resolveChannelSubscribersFromDB`)는 여전히 set을 warm하므로 같은 경합이 남아 있습니다(범위 밖).
-- 배포는 migration 231·232 적용과 API·alarm-worker 동시 교체가 필요하고, 폐기 key 회수는 위 표 순서로 별도 승인이 필요합니다.
+- 배포는 migration 231~233 적용과 API·alarm-worker 동시 교체가 필요하고, 관리자 방 별칭 이관과 폐기 key 회수는 위 절차 순서로 별도 승인이 필요합니다.
