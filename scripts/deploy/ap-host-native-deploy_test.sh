@@ -184,21 +184,36 @@ if grep -Fq 'no previous collector release to roll back to; fix forward' "${ROLL
 else
   record_fail "ap-host-native rollback must refuse hosts without a previous collector release"
 fi
-stop_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
+native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
+# cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
+cutover_stop_step="$(awk '/^trap restore_native_after_failed_cutover ERR$/ { on = 1 } on && /^sudo -n install / { exit } on' "${REMOTE_APPLY}")"
 stop_fixture="$(mktemp -d)"
 # 가짜 systemctl은 active unit을 파일로 두고 호출을 기록한다. socket stop은 Requires=처럼 service도 멈춘다.
-# collector_sticks가 있으면 disable --now 뒤에도 collector가 active로 남는다.
-run_native_stop() (
-  local state="$1"
+# collector_sticks가 있으면 disable --now 뒤에도 collector가 active로 남는다. sudo는 systemctl만 실행하고
+# 나머지 host 변경(install/ln/rm)은 기록만 한다. po_restore_fails가 있으면 이전 PO 복원이 실패한다.
+run_native_units() (
+  local state="$1" script="$2"
   po_service=hololive-youtube-po.service
   po_socket=hololive-youtube-po.socket
   unit=hololive-youtube-collector@youtube-collector-a.service
-  sudo() { [[ "${1:-}" != "-n" ]] || shift; "$@"; }
+  old_target="${state}/old-release"
+  # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 경로다.
+  host_env="${state}/host.env" unit_file="${state}/unit" current_link="${state}/current"
+  releases_root="${state}/releases" previous_link="${state}/previous"
+  mkdir -p "${old_target}"
+  sudo() {
+    [[ "${1:-}" != "-n" ]] || shift
+    if [[ "$1" == systemctl ]]; then
+      "$@"
+    else
+      printf 'sudo %s\n' "$*" >>"${state}/calls"
+    fi
+  }
   systemctl() {
     local target
     printf '%s\n' "$*" >>"${state}/calls"
     case "$1" in
-      cat) return 0 ;;
+      cat | daemon-reload | enable) return 0 ;;
       is-active) [[ -e "${state}/active/${*: -1}" ]] ;;
       stop | disable)
         [[ "$1" == stop ]] || shift
@@ -212,9 +227,22 @@ run_native_stop() (
       *) return 1 ;;
     esac
   }
-  eval "${stop_units_fns}"
-  stop_native_units_and_require_inactive
+  native_previous_link_restore() { printf 'native_previous_link_restore\n' >>"${state}/calls"; }
+  po_restore_previous() {
+    printf 'po_restore_previous %s\n' "$*" >>"${state}/calls"
+    [[ ! -e "${state}/po_restore_fails" ]]
+  }
+  eval "${native_units_fns}"
+  eval "${script}"
 )
+run_native_stop() { run_native_units "$1" stop_native_units_and_require_inactive; }
+# 원격 script처럼 set -e가 살아 있도록 조건(if/!/&&/||) 밖에서 실행하고 종료 상태를 native_rc에 남긴다.
+run_native_case() {
+  set +e
+  run_native_units "$1" "$2" >"$1/stdout" 2>"$1/stderr"
+  native_rc=$?
+  set -e
+}
 stop_case() {
   local state="${stop_fixture}/$1" unit_name
   shift
@@ -224,16 +252,31 @@ stop_case() {
   done
   printf '%s\n' "${state}"
 }
+running_units=(hololive-youtube-po.socket hololive-youtube-po.service hololive-youtube-collector@youtube-collector-a.service)
+stops_po_before_collector() {
+  local po_stop_line collector_stop_line
+  po_stop_line="$(grep -nFx 'stop hololive-youtube-po.socket' "$1/calls" | head -1 | cut -d: -f1)"
+  collector_stop_line="$(grep -nFx 'disable --now hololive-youtube-collector@youtube-collector-a.service' "$1/calls" | head -1 | cut -d: -f1)"
+  [[ -n "${po_stop_line}" && -n "${collector_stop_line}" ]] && (( po_stop_line < collector_stop_line ))
+}
 
-running_state="$(stop_case running hololive-youtube-po.socket hololive-youtube-po.service hololive-youtube-collector@youtube-collector-a.service)"
+running_state="$(stop_case running "${running_units[@]}")"
 if run_native_stop "${running_state}" >/dev/null &&
    [[ -z "$(ls -A "${running_state}/active")" ]] &&
-   po_stop_line="$(grep -nFx 'stop hololive-youtube-po.socket' "${running_state}/calls" | cut -d: -f1)" &&
-   collector_stop_line="$(grep -nFx 'disable --now hololive-youtube-collector@youtube-collector-a.service' "${running_state}/calls" | cut -d: -f1)" &&
-   (( po_stop_line < collector_stop_line )); then
+   stops_po_before_collector "${running_state}"; then
   pass "ap-host-native cutover stops the PO issuer before the collector can retire its generation"
 else
   record_fail "ap-host-native cutover must stop the PO issuer before the collector"
+fi
+
+cutover_state="$(stop_case cutover "${running_units[@]}")"
+run_native_case "${cutover_state}" "set -Eeuo pipefail; ${cutover_stop_step}"
+if [[ -n "${cutover_stop_step}" ]] && (( native_rc == 0 )) &&
+   [[ -z "$(ls -A "${cutover_state}/active")" ]] &&
+   stops_po_before_collector "${cutover_state}"; then
+  pass "ap-host-native cutover top-level step stops the PO issuer before the collector"
+else
+  record_fail "ap-host-native cutover top-level step must stop the PO issuer before the collector"
 fi
 
 first_install_state="$(stop_case first-install hololive-youtube-collector@youtube-collector-a.service)"
@@ -245,14 +288,39 @@ else
   record_fail "ap-host-native cutover must tolerate absent PO units and still stop the collector"
 fi
 
-stuck_state="$(stop_case stuck hololive-youtube-po.socket hololive-youtube-po.service hololive-youtube-collector@youtube-collector-a.service)"
+stuck_state="$(stop_case stuck "${running_units[@]}")"
 touch "${stuck_state}/collector_sticks"
 if run_native_stop "${stuck_state}" >/dev/null 2>&1; then
   record_fail "ap-host-native cutover must fail while the collector stays active"
 else
   pass "ap-host-native cutover fails closed while the collector stays active"
 fi
-rm -rf "${stop_fixture}"
+
+# 실패한 cutover는 ERR trap으로 복원하고 원래 실패 상태(여기서는 false의 1)로 끝난다.
+failed_cutover='set -Eeuo pipefail; trap restore_native_after_failed_cutover ERR; false'
+restore_warning='could not be restored'
+restore_state="$(stop_case restore "${running_units[@]}")"
+run_native_case "${restore_state}" "${failed_cutover}"
+if (( native_rc == 1 )) &&
+   ! grep -qF "${restore_warning}" "${restore_state}/stderr" &&
+   [[ -z "$(ls -A "${restore_state}/active")" ]] &&
+   stops_po_before_collector "${restore_state}" &&
+   grep -qFx 'enable --now hololive-youtube-collector@youtube-collector-a.service' "${restore_state}/calls"; then
+  pass "ap-host-native failed-cutover restore stops the PO issuer before the collector"
+else
+  record_fail "ap-host-native failed-cutover restore must stop the PO issuer before the collector and restore the previous release"
+fi
+
+restore_fail_state="$(stop_case restore-fails "${running_units[@]}")"
+touch "${restore_fail_state}/po_restore_fails"
+run_native_case "${restore_fail_state}" "${failed_cutover}"
+if (( native_rc == 1 )) &&
+   grep -qF "${restore_warning}" "${restore_fail_state}/stderr" &&
+   ! grep -qF 'enable --now' "${restore_fail_state}/calls"; then
+  pass "ap-host-native failed-cutover restore stops at the first failed step and reports it"
+else
+  record_fail "ap-host-native failed-cutover restore must stop at a failed step, warn, and keep the cutover status"
+fi
 
 capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
 install_line="$(grep -nF '"$payload/youtube-collector-host.env" "$host_env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
@@ -474,6 +542,19 @@ if [[ -n "${validate_line}" && -n "${restore_line}" ]] && (( validate_line < res
 else
   record_fail "native rollback validation must run before the first restore mutation"
 fi
+
+# 수동 rollback이 원격에 보낸 payload에서 검증 뒤 첫 복원 변경 전까지의 정지 단계를 같은 가짜 systemctl로 실행한다.
+rollback_stop_step="$(awk '/^native_rollback_validate "[$]previous_target"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"
+rollback_state="$(stop_case rollback "${running_units[@]}")"
+run_native_case "${rollback_state}" "set -euo pipefail; ${rollback_stop_step}"
+if [[ -n "${rollback_stop_step}" ]] && (( native_rc == 0 )) &&
+   [[ -z "$(ls -A "${rollback_state}/active")" ]] &&
+   stops_po_before_collector "${rollback_state}"; then
+  pass "ap-host-native rollback stops the PO issuer before the collector"
+else
+  record_fail "ap-host-native rollback must stop the PO issuer before the collector"
+fi
+rm -rf "${stop_fixture}"
 
 
 if PATH="${tmp}/bin:${PATH}" \

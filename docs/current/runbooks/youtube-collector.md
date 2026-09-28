@@ -174,6 +174,8 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_PLAN_ID=<승인된 활성 실행 PLN> PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. 중앙의 `compose-redeploy-service.sh youtube-collector`와 `youtube-po-c`도 같은 paired cutover로 연결되며 같은 env가 필요합니다. `PO_META_ROOT`는 해당 PLN을 소유한 meta checkout입니다. 완료된 최초 PO 도입 계획을 재활성화하거나 gate를 생략하지 않습니다. 이 스크립트의 포괄적 `all` 전환은 지원하지 않습니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
 
+native a/d 산출물(collector binary와 issuer rootfs의 `po-broker --version`·`po-sandbox/version`)의 version은 `HOLO_BOT_VERSION`입니다. 값이 없으면 `ap-host-native-deploy.sh`가 12자리 short SHA를 씁니다. 릴리스 배포는 `HOLO_BOT_VERSION="$(xargs <hololive/hololive-api/VERSION)" scripts/deploy/ap-host-native-deploy.sh <ap-host> --apply`처럼 Compose image와 같은 version을 명시합니다.
+
 중앙 paired deploy는 Compose가 해석한 collector·migrator의 DB host/port/database 일치를 먼저 확인합니다. 해당 migrator의 접속·TLS 설정과 읽기 전용 CA mount, network를 쓰는 일회성 PostgreSQL client로 운영 ledger의 `222_drop_youtube_job_lease_legacy_failure_trigger.sql` checksum과 read-only guard `on`을 확인합니다. 로컬 `holo-postgres` socket의 ledger로 외부 DB override를 대신 검증하지 않습니다. client는 로컬에 이미 있는 PostgreSQL image만 사용하며 종료 시 자신이 생성한 container·volume을 제거합니다. 적용 부재·checksum 불일치·조회 실패면 기존 서비스 container·source를 바꾸지 않습니다. 검증된 중앙 `hololive-db-migrate`를 먼저 실행한 뒤 collector를 배포합니다.
 
 issuer를 먼저 기동·검증한 뒤 collector만 `--no-build --no-deps`로 교체합니다. b의 소스는 별도 후보 디렉터리에 전송·대조한 뒤 승격하며, 실패 시 snapshot이 이전 파일 내용·mode·symlink·파일 부재까지 복원합니다. rollback은 이전 VERSION/실행 파일과 collector+issuer image/rootfs를 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
@@ -196,7 +198,7 @@ Compose의 `image-id` 근거는 검증한 단일 이미지 archive에 묶인 Doc
 
 native의 `Restart=always`(`RestartSec=1s`)와 Compose의 `restart: unless-stopped`가 exit 0 뒤 새 generation으로 다시 기동합니다. 따라서 Docker `RestartCount`와 systemd `NRestarts`는 generation 교체 횟수이며 실패 횟수가 아닙니다. 0이 아니라는 이유만으로 incident로 판정하지 않고, 카운터를 지우려고 container를 재생성하지 않습니다. 비 0 exit와 OOM은 계속 실패입니다.
 
-v6.0.1 collector·PO 산출물(`hololive/hololive-api/VERSION` 6.0.1)부터 `po-broker`는 종료할 때 `po-broker exit reason=<reason> generation=<id>` 한 줄을 남깁니다(`docker logs <container>`, `journalctl -u hololive-youtube-po.service`). `reason`은 퇴역·종료 사유의 고정 어휘이며 정확한 목록은 `po-broker` 코드가 소유합니다. 이 줄에는 token·payload·worker stderr가 없습니다. v6.0.0 이하 issuer는 종료 사유를 남기지 않으므로 exit 상태와 collector 종료 시각을 대조합니다.
+v6.0.1 collector·PO 산출물부터 `po-broker`는 종료할 때 `po-broker exit reason=<reason> generation=<id>` 한 줄을 남깁니다(`docker logs <container>`, `journalctl -u hololive-youtube-po.service`). Compose는 image version 6.0.1 이상, native는 `HOLO_BOT_VERSION` 6.0.1 이상이거나 short SHA 산출물이면 revision `12d78df8a` 이후인지로 판별합니다. `reason`은 퇴역·종료 사유의 고정 어휘이며 정확한 목록은 `po-broker` 코드가 소유합니다. `worker_failed`는 요청이 직렬 슬롯을 쥔 동안의 worker 종료(worker IO 전후의 검증·상태 응답 중 포함), `worker_exited`는 직렬 슬롯이 비어 있을 때의 종료입니다. 이 줄에는 token·payload·worker stderr가 없습니다. 기록 대상은 SIGTERM·SIGINT 종료, 퇴역, listener·기동 실패뿐입니다. SIGHUP·SIGQUIT·panic·SIGKILL 종료와 signal 감시 설치 전(기동 직후 수 µs)의 종료는 줄이 없으므로 exit 상태로 판정합니다. v6.0.2부터 기동 때 상속한 무시(SIG_IGN) signal은 감시하지 않아 계속 무시됩니다. v6.0.0 이하 issuer는 종료 사유를 남기지 않으므로 exit 상태와 collector 종료 시각을 대조합니다.
 
 issuer rollout 수용 기준은 `RestartCount=0`/`NRestarts=0`이 아니라 아래 항목을 모두 만족하는 것입니다.
 
@@ -213,7 +215,7 @@ Docker는 자동 재시작 때 `State.ExitCode`와 `State.OOMKilled`를 초기�
 
 Compose b/c의 paired cutover(`ap-deploy.sh`, `po-central-remote.sh`)는 issuer를 먼저 force-recreate하고 healthy를 확인한 뒤 collector를 교체합니다. issuer가 실패하면 이전 collector를 그대로 두기 위한 순서이므로 유지합니다. 그 사이 이전 collector가 새 issuer의 generation을 잡으면 SIGTERM 종료에서 그 generation을 퇴역시키므로, 새 issuer는 이전 collector 종료 시각에 exit 0과 재시작 1회를 보일 수 있습니다. 이 1회는 예상된 교체입니다. 이 밖의 교체는 exit reason 줄로 사유를 확인합니다.
 
-native a/d cutover와 실패 복원(`ap-host-native-remote-apply.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 이후 issuer health를 확인하고 collector를 한 번 기동합니다.
+native a/d cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다.
 
 ## Logs
 
@@ -273,7 +275,8 @@ Diagnosis:
 - `sudo docker top <container>`와 `/proc/<pid>/attr/current`로 helper·issuer의 AppArmor label을 확인합니다.
 
 Mitigation:
-- v6.0.1 collector·PO 산출물부터 broker HTTP 연결은 keep-alive를 쓰고, client가 server idle timeout보다 먼저 idle 연결을 닫습니다. 요청마다 새 연결을 열고 server가 곧바로 닫던 경쟁 창을 줄이지만 근본 수정은 아닙니다.
+- v6.0.1 collector·PO 산출물부터 broker HTTP 연결은 keep-alive를 쓰고, client가 유휴 연결을 약 1초 뒤 먼저 닫습니다. v6.0.2부터 broker `IdleTimeout`은 30초라 Node event loop가 수 초 멈춰도 서버가 먼저 닫은 socket을 재사용하지 않고, `po-broker --healthcheck`도 keep-alive로 client가 먼저 닫습니다. 요청마다 새 연결을 열고 server가 곧바로 닫던 경쟁 창을 줄이지만 근본 수정은 아닙니다.
+- 남은 창은 새 연결의 첫 응답이 퇴역·오류 응답이라 응답 직후 `server.Close`가 따르는 경우입니다. worker가 이미 죽은 경로(`worker_failed`, watchdog)는 응답과 close 간격이 µs 수준으로 v6.0.0과 같습니다. `session_closed`·`lease_expired`·`worker_timeout`은 worker SIGKILL부터 reap까지의 수 ms(측정: 30MB 약 6ms, 300MB 약 22ms) 간격입니다. 반복되는 대표 트리거는 bootstrap 실패 뒤 helper `retireOwned`의 `DELETE /v1/session`입니다.
 - 근본 수정은 changelog에 위 커밋 제목이 있는 Ubuntu `linux-oracle` 빌드(또는 stable v6.18.40 / v7.1.5 이상 기반)를 설치하고 재부팅하는 것입니다. 업그레이드 전에 `apt-get changelog linux-modules-<version>-oracle | grep -F 'apparmor: fix race in unix socket mediation when peer_path is used'`로 포함 여부를 확인합니다. 7.0.0-1011은 stable v6.18.39 / v7.1.4까지만 반영해 이 수정이 없으므로 교체 대상이 아닙니다.
 - AppArmor profile을 완화하거나 unconfined로 바꾸지 않습니다. hololive-osaka 재부팅은 중앙 DB·API를 함께 멈추므로 승인된 유지보수 창에서 수행합니다.
 
