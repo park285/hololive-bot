@@ -26,14 +26,19 @@ func TestEnqueueRejectsMissingCanonicalIdentityFields(t *testing.T) {
 
 			repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 			valid := makeEnqueueTestRow(outboxID, 101, 1)
+
 			valid.PostID = "community:content-1"
+
 			invalid := makeEnqueueTestRow(outboxID, 102, 1)
+
 			invalid.PostID = tc.postID
 			invalid.DeliveryPath = tc.deliveryPath
+
 			err := repo.Enqueue(t.Context(), []domain.YouTubeNotificationDeliveryTelemetry{valid, invalid})
 			require.Error(t, err)
 
 			var count int
+
 			require.NoError(t, counting.inner.QueryRow(t.Context(), `SELECT COUNT(*) FROM youtube_notification_delivery_telemetry`).Scan(&count))
 			require.Zero(t, count, "invalid canonical identity must reject the whole batch")
 		})

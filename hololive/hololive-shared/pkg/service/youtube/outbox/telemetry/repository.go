@@ -60,6 +60,7 @@ func (r *Repository) PrepareRows(
 		if row.PostID == "" {
 			return nil, fmt.Errorf("delivery %d attempt %d: post_id is empty", row.DeliveryID, row.AttemptOrdinal)
 		}
+
 		if row.DeliveryPath == "" {
 			return nil, fmt.Errorf("delivery %d attempt %d: delivery_path is empty", row.DeliveryID, row.AttemptOrdinal)
 		}

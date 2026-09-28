@@ -192,6 +192,7 @@ func assertRecoveryInputFixtureRows(
 	require.Equal(t, spec.pendingContentID, fixture.pendingOutbox.ContentID)
 	require.NotEqual(t, fixture.sentOutbox.ID, fixture.servedOutbox.ID)
 	require.NotEqual(t, fixture.sentOutbox.ContentID, fixture.servedOutbox.ContentID)
+
 	servedPostID, err := ytcontentid.ResolveDeliveryLogicalID(fixture.servedOutbox.Kind, fixture.servedOutbox.ContentID, fixture.servedOutbox.Payload)
 	require.NoError(t, err)
 	require.Equal(t, fixture.sentPostID, servedPostID)

@@ -824,7 +824,7 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefers
 	require.Zero(t, sender.messageCount())
 }
 
-// claim identity(alarm state 조회 키)는 canonical logical ID다. canonical_post_id 누락·파싱 실패·불일치 행은
+// Claim identity(alarm state 조회 키)는 canonical logical ID다. canonical_post_id 누락·파싱 실패·불일치 행은
 // content_id나 payload 리소스 ID로 대체한 키를 만들지 않고 오류로 드러난다.
 func TestDeliveryClaimIdentityForOutboxRequiresCanonicalIdentity(t *testing.T) {
 	t.Parallel()

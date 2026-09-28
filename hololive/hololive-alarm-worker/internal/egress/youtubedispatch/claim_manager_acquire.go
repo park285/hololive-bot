@@ -28,6 +28,7 @@ func (d *ClaimManager) tryClaimDelivery(
 	repository := observation.NewRepositoryContext(ctx, d.db)
 	// lease 시각은 event/schedule metadata와 분리한다. 과거·미래 재시도 시각으로 lock 수명을 바꾸면 안 된다.
 	claimAt := time.Now().UTC().Truncate(time.Microsecond)
+
 	postID, err := ytcontentid.ResolveDeliveryLogicalID(outbox.Kind, outbox.ContentID, outbox.Payload)
 	if err != nil {
 		return claimResult{decision: deliveryClaimDecisionRetryLater}, fmt.Errorf("resolve post id: %w", err)

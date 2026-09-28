@@ -19,6 +19,7 @@ func PostIDLogValue(kind domain.OutboxKind, contentID, payload string) string {
 	}
 
 	reason := "invalid_identity"
+
 	if identityErr, ok := errors.AsType[*contentid.Error](err); ok {
 		reason = string(identityErr.Reason)
 	}
