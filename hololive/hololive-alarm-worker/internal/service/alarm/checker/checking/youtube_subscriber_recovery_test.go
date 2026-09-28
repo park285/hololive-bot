@@ -42,7 +42,14 @@ func (failingSubscriberDB) Query(context.Context, string, ...any) (pgx.Rows, err
 }
 
 func (failingSubscriberDB) QueryRow(context.Context, string, ...any) pgx.Row {
-	return nil
+	return failingSubscriberRow{}
+}
+
+// failingSubscriberRow는 nil 대신 반환되어 Scan에서 같은 조회 실패를 돌려준다.
+type failingSubscriberRow struct{}
+
+func (failingSubscriberRow) Scan(...any) error {
+	return errSubscriberDBUnavailable
 }
 
 func newSubscriberRecoveryChecker(t *testing.T, subscriptionDB dbx.Querier) (*YouTubeChecker, cache.Client) {
