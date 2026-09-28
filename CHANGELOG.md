@@ -8,6 +8,10 @@
 
 ## 미출시
 
+- 중복 Valkey 기능 두 가지를 한 패치에서 제거합니다(빅뱅 fadeout, `docs/current/plans/2026-09-28-valkey-dependency-reduction.md`). ① 멤버 뉴스 구독 방 미러(`membernews:rooms`·`membernews:room_names`): repository의 cache 의존·write-through·`WarmupCacheFromDB`·`Service.WarmupSubscriptionCache`를 지우고 `NewRepository(postgres)`로 줄였습니다. 기동 시 `ListSubscribedRooms`를 1회 조회해 실패하면 경고만 남깁니다. ② 멤버 hash(`hololive:members`): `cache.MemberCache`와 `InitializeMemberDatabase`·`GetAllMembers`·`GetMemberChannelIDWithOrg`·`GetMemberChannelIDs`, mock field, 기동 초기화, matcher의 동적 hash 후보 경로를 지웠습니다. `NewMatcher`·`ProvideMatcher`는 cache 인자를 받지 않습니다. hash field 형식 오류나 DEL/HSET 실패로 기동이 실패하던 경로도 함께 사라집니다.
+- YouTube 채널 표시 이름은 member source의 `LoadAllMembers` 1회 결과에서 공유 채널마다 최소 영속 ID 멤버의 `Name`을 씁니다(`member.ChannelRepresentatives`로 승격한 기존 규칙). 대표의 `Name`이 비었으면 기존 채널 제목 fallback을 유지하고, 로드 실패는 경고 뒤 계속합니다. `apiservice.New`와 `YouTubeAPIStackParams`·`YouTubeStackParams`는 `MemberData`를 받습니다.
+- `hololive-api/scripts/bot.sh`에서 멤버 hash 대기·상태 출력과 `--no-ready-wait`, `CORE_MEMBER_HASH_SOFT_MIN_COUNT`, `CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS`를 지웠습니다. 제거한 옵션은 알 수 없는 인자로 거절합니다. 유지 기능(member epoch/L2, 뉴스 주간·월간 잠금, 통계 cache, 알림 이름 cache, readiness)은 바꾸지 않습니다. 운영에 남은 폐기 key는 자동 만료되지 않으며 회수는 별도 승인 작업입니다.
+
 ## v6.0.2 - 2026-09-28
 
 - `po-broker` HTTP `IdleTimeout`을 2초에서 30초로 늘립니다. helper Agent는 유휴 socket을 계속 약 1초에 닫습니다. v6.0.1에서는 Node event loop가 1초 넘게 멈추면 서버가 이미 닫은 유휴 socket을 helper가 재사용해 EPIPE가 `broker_unavailable`로 끝나고 발급 세션을 버렸습니다(v6.0.0에는 없던 실패). 이제 수 초의 stall에도 client가 먼저 닫습니다. 비용은 유휴 연결 최대 1개이고, 퇴역 때의 `server.Close`는 유휴 연결도 즉시 닫습니다. 이전 2초를 넘긴 유휴 연결을 재사용하는 회귀 테스트를 추가했습니다.

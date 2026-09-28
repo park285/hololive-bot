@@ -1,12 +1,10 @@
 package matcher
 
 import (
-	"context"
 	"runtime"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func newBenchMatcher(tb testing.TB) *Matcher {
@@ -16,11 +14,7 @@ func newBenchMatcher(tb testing.TB) *Matcher {
 		{ChannelID: "UC-ch1", Name: "sora"},
 		{ChannelID: "UC-ch2", Name: "miko"},
 	})
-	mm := NewMatcher(provider, &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		},
-	}, nil, newMatcherTestLogger())
+	mm := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	if _, _, err := mm.FindBestMatch(tb.Context(), "sora"); err != nil {
 		tb.Fatalf("warmup FindBestMatch: %v", err)

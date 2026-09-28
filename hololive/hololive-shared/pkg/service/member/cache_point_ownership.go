@@ -139,7 +139,7 @@ type memberPointIndex struct {
 func buildMemberPointIndex(members []*domain.Member) *memberPointIndex {
 	index := &memberPointIndex{
 		byID:            make(map[int][]*domain.Member, len(members)),
-		representatives: channelRepresentatives(members),
+		representatives: ChannelRepresentatives(members),
 	}
 	for _, member := range members {
 		if member == nil || member.ID <= 0 {

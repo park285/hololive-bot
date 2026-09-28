@@ -6,10 +6,10 @@
 
 **Goal:** 필요한 Valkey 기능을 유지하고, 두 중복 기능의 구 코드·연결·설정 소비를 하나의 완결된 패치에서 제거한다.
 **Context:** 제거 집합은 membernews room mirror와 hololive:members이다. 이전 B1/B2 중간 writer 릴리스와 exported 구 API 보존안은 폐기한다.
-**Constraints:** 현재는 재감사·플랜만 작성한다. 새 코드에 dual path·호환 shim·no-op API를 남기지 않는다. 보호용 Valkey와 PG durable state는 보존한다.
-**Evidence:** `docs/review/2026-09-28-valkey-bigbang-fadeout-audit.md`, `docs/review/2026-09-28-alarm-membernews-valkey-audit.md`, 앞선 리뷰와 코드·테스트·runbook. 실행·운영 검증은 미수행이다.
+**Constraints:** 사용자가 D1/D2 전체 구현, 공개 backend Go API·hash 전용 CLI/env 폐기, YouTube 공유 channel 대표 이름 정규화를 승인했다. 운영 전환·key 회수·Git publication은 승인 범위가 아니다. 패치는 dual path·호환 shim·no-op API 없이 보호용 Valkey와 PG durable state를 보존한다.
+**Evidence:** `docs/review/2026-09-28-valkey-bigbang-fadeout-audit.md`, `docs/review/2026-09-28-alarm-membernews-valkey-audit.md`, 앞선 리뷰와 코드·테스트·runbook. 과거 감사는 정적 근거이며, 준비 확인과 구현 검증은 아래 기록에서 구분한다. 운영 검증은 미수행이다.
 **Success:** 제거 기능의 활성 생산·소비·선택 경로가 0이고, 유지 기능 회귀와 전체 모듈 검증이 통과한다. runtime 전환·data residue 회수는 별도 증거로 기록한다.
-**Output:** 빅뱅 패치 명세·감사 보고·proposed DEC. 후속 구현은 한 revision과 대응하는 검증 근거로 제출한다.
+**Output:** 한 worktree revision의 D1/D2 source fadeout(S)과 대응 검증 근거. R/D는 별도 승인 작업이다.
 
 ## 이번 개정과 범위
 
@@ -21,7 +21,7 @@
 
 **패치는 하나입니다.** reader만 바꿔 배포하고 writer는 다음 릴리스에 지우는 B1/B2는 사용하지 않습니다. 구현 중 의존 순서에 따른 편집·테스트는 가능하지만 최종 merge/build 대상에는 아래 제거 집합이 모두 포함되어야 합니다. 일부만 완료하고 빅뱅 fadeout 완료라고 표시하지 않습니다. 범위를 줄여야 한다면 사유와 제거 집합부터 다시 확정합니다.
 
-2026-09-28 HEAD `3be7229b060b`와 dirty 작업 트리를 읽었습니다. 운영 artifact는 이후 clean reviewed revision으로 준비해야 합니다. 이전 T11~T17/AC11~AC18/V11~V16은 단계적 패킷 의미였으므로 새 작업에는 T31 이후의 marker를 사용합니다. 기록·코드 수정 이력과 실제 완료를 혼동하지 않습니다.
+과거 감사는 2026-09-28 HEAD `3be7229b060b`와 당시 dirty 작업 트리 기준이며, 이번 구현 준비는 `a03eb83f9bdf38a451c86aa9627d2df008bcffbf` 기준입니다. 아래 준비 기록의 현재 코드 교정을 우선합니다. 운영 artifact는 이후 clean reviewed revision으로 준비해야 합니다. 이전 T11~T17/AC11~AC18/V11~V16은 단계적 패킷 의미였으므로 새 작업에는 T31 이후의 marker를 사용합니다. 기록·코드 수정 이력과 실제 완료를 혼동하지 않습니다.
 
 ## 제거 집합과 유지 집합
 
@@ -31,7 +31,7 @@
 | D2 | `hololive:members` 중복 hash와 이를 읽는 readiness/조회 기능 | runtime reader/writer·backend API/interface/mock·동적 matcher helper·전용 CLI/env가 없음 |
 | K1 | 세션·reset·임시 계정·서명 nonce·공유 rate limit | 기존 Valkey와 TTL·원자성·실패 계약 유지 |
 | K2 | member epoch/L2, 설정·ACL Pub/Sub, alarm wakeup, 뉴스 주간·월간 실행 잠금 | 기존 조율 및 복구 계약 유지. `membernews:lock:weekly:*`·`monthly:*` 보존 |
-| K3 | API/LLM 결과 cache·월간 경고 누계·알림 index/사전 claim | 현재 역할 유지. 측정 없이 메모리/PG로 전환하지 않음 |
+| K3 | API/LLM 결과 cache·알림 index/사전 claim | 현재 역할 유지. 측정 없이 메모리/PG로 전환하지 않음. 토큰 관측은 이미 Valkey와 분리된 현재 metrics 경로 유지 |
 | K4 | ACL 값 mirror, `alarm:member_names` | 이번 제거 집합에서 제외하고 그대로 유지 |
 | K5 | Valkey server/client/config/auth/socket/readiness, PG ledger | 계속 필요한 공용 인프라와 영속 정본 보존 |
 
@@ -43,11 +43,11 @@ PG는 dispatch pending/retry/lease/sending/terminal의 정본입니다. 이 패�
 
 뉴스 정기 수신 방은 `member_news_subscriptions`, 관심 멤버는 `alarms LEFT JOIN members`, 소식 후보는 `major_events`의 PG 조회입니다. 수동 뉴스 생성은 정기 구독 여부를 선행 검사하지 않습니다. 관심 멤버 SQL은 LIVE 타입만 고르지 않으며 이름 우선순위·이름 기준 DISTINCT를 보존합니다. 뉴스 구독 해지는 알람 등록이나 이미 enqueue된 메시지를 취소하지 않습니다.
 
-뉴스 잠금은 15분 TTL과 token 비교 해제이며 Valkey 오류 시 실행을 계속합니다. 알람 사전 claim은 Valkey 오류 시 확보 실패로 해당 준비 건을 건너뜁니다. 서로 다른 실패 의미를 통일하거나 cache=nil로 잠금을 비활성화하지 않습니다. `llm:cost:tokens:*`는 경고용 누계이며 호출을 차단하는 예산 한도가 아닙니다.
+뉴스 잠금은 15분 TTL과 token 비교 해제이며 Valkey 오류 시 실행을 계속합니다. 알람 사전 claim은 Valkey 오류 시 확보 실패로 해당 준비 건을 건너뜁니다. 서로 다른 실패 의미를 통일하거나 cache=nil로 잠금을 비활성화하지 않습니다. 현재 HEAD의 `ProvideLLMCostTracker()`는 cache 인자 없는 `NewTokenMetricsRecorder()`이며, 월 상한·`llm:cost:tokens:*` 카운터는 이미 퇴역했습니다. 과거 감사 N07의 경고용 누계를 복원하지 않습니다.
 
 뉴스 enqueue는 기존 handoff 설정에 따라 `notification_delivery_outbox` 또는 alarm dispatch ledger를 사용합니다. 실제 운영값은 미확인이며 이번에 mode/default/executor를 바꾸지 않습니다. 같은 기간이라도 dispatch digest의 본문 hash가 바뀌면 identity가 달라질 수 있으므로 잠금 제거를 PG dedup만으로 정당화하지 않습니다. 스케줄러의 `Sent`는 enqueue 성공이며 실제 발송 결과는 worker에서 검증합니다.
 
-알람 표시 이름·index·wakeup·토큰 누계는 현재 유지하되 영구적인 Valkey 필수성으로 판정하지 않습니다. 추후 축소에는 이름 의미·모든 reader·DB 부하·polling 지연·공유 관측 대체 근거가 필요합니다. 상세 근거와 실패 행렬은 N01~N09를 따릅니다.
+알람 표시 이름·index·wakeup은 현재 유지하되 영구적인 Valkey 필수성으로 판정하지 않습니다. 추후 축소에는 이름 의미·모든 reader·DB 부하·polling 지연·공유 관측 대체 근거가 필요합니다. 상세 근거와 실패 행렬은 N01~N09를 참고하되, 토큰 관측은 위 현재 코드 계약을 따릅니다.
 
 ## 완전 제거 명세
 
@@ -55,13 +55,13 @@ PG는 dispatch pending/retry/lease/sending/terminal의 정본입니다. 이 패�
 
 | 항목 | 정확한 제거·교체 대상 | 남겨야 할 경계 |
 |---|---|---|
-| D1 repository | `api/.../membernews/repository.go`의 mirror 상수·cache 필드/constructor 인자, `repository_cache.go`의 clear/load/write-through, `repository_mutation.go` 호출 | PG query·정렬·idempotency·오류 |
-| D1 startup API | `Service.WarmupSubscriptionCache`, 해당 repository `WarmupCacheFromDB`, bootstrap의 구 호출과 API guard 테스트 | bootstrap에서 기존 `ListSubscribedRooms` 1회와 warning-only 확인을 직접 사용. 같은 함수의 LLM cost tracker cache는 유지 |
+| D1 repository | `api/.../membernews/repository.go`의 mirror 상수·cache 및 mirror 전용 log 필드/constructor 인자, `repository_cache.go`의 clear/load/write-through, `repository_mutation.go` 호출 | PG query·정렬·idempotency·오류. 생성자는 `NewRepository(postgres)`로 축소 |
+| D1 startup API | `Service.WarmupSubscriptionCache`, 해당 repository `WarmupCacheFromDB`, bootstrap의 구 호출과 API guard 테스트. `initMemberNewsService`의 mirror 전용 cache 인자와 caller 4곳 | 기존 `ListSubscribedRooms` 1회와 warning-only 확인. cache 비의존 토큰 metrics 유지. scheduler 상위의 epoch/L2·뉴스 잠금·결과 cache·readiness 연결은 보존 |
 | D2 producer | `shared/pkg/providers/member_providers.go`의 `initializeMemberDatabaseFromSnapshot`·`initializeMemberDatabase`와 호출·전용 snapshot interface | 실제 `member.Cache` 생성·epoch/L2 warmup·cleanup |
 | D2 backend | `shared/pkg/service/cache/member.go`, `member_cache.go`의 `cache.MemberCache`, `Service.InitializeMemberDatabase/GetAllMembers/GetMemberChannelIDWithOrg/GetMemberChannelIDs`와 전용 helper | 정상 멤버 domain/repository·adapter API는 유지 |
 | D2 interface | `cache.DomainCache`의 `MemberCache` embedding | `StreamCache`와 공용 `cache.Client`의 KV/hash/set/CAS/connection/low-level 기능 |
 | D2 mock | `cache/mocks/client.go`의 member 전용 function field/assertion과 `client_domain.go`의 해당 methods | stream·CAS 등 유지 기능 mock. 파일 전체를 지우지 않음 |
-| D2 matcher | `dynamicLoadErr`, `storeDynamicSnapshotMembers`, `snapshotEntryFromDynamic`, `splitMemberKey`, `tryExactValkeyMatch`, `tryPartialValkeyMatch`, `loadDynamicMembers`, `candidateFromDynamic`, `preferHololiveCandidate`와 전용 branch | 정상 snapshot·별칭·조직·후보 우선순위·1분 TTL·별도 표시 이름 fallback |
+| D2 matcher | `dynamicLoadErr`, `storeDynamicSnapshotMembers`, `snapshotEntryFromDynamic`, `splitMemberKey`, `tryExactValkeyMatch`, `tryPartialValkeyMatch`, `loadDynamicMembers`, `candidateFromDynamic`, `preferHololiveCandidate`와 전용 branch. `Matcher.cache`, `NewMatcher`/`ProvideMatcher`의 cache 인자와 모든 caller | 정상 snapshot·별칭·조직·후보 우선순위·1분 TTL·현재 roster 기반 표시 이름. 과거 Valkey 알림 이름 fallback은 이미 퇴역했으므로 복원하지 않음 |
 | D2 YouTube | `apiservice.loadChannelNameMap/storeChannelNameMap/memberNameFromCacheKey`의 구 hash 해석을 기존 멤버 source 기반 초기화로 교체 | 통계 결과 cache·shared rate limiter와 오류 시 service 유지 |
 | D2 wiring | `YouTubeAPIStackParams`, `YouTubeStackParams`, 두 builder, bot/admin bootstrap의 멤버 source 연결 | 두 builder 간 전달 누락 방지. 공용 cache 인자를 일괄 제거하지 않음 |
 | D2 tests | cache `member_cache_test.go`, `service_test.go`의 member 부분, mock tests, provider 초기화 test, matcher additional/failure/benchmark의 구 field 사용 | 실제 별칭·조직·오류·할당량 회귀는 새 fixture에서 보존 |
@@ -71,7 +71,7 @@ PG는 dispatch pending/retry/lease/sending/terminal의 정본입니다. 이 패�
 
 helper는 실제 호출 관계를 다시 확인해 해당 제거 기능만 소유할 때 삭제합니다. `GetAllMembers` 같은 일반 이름을 저장소 전체에서 삭제하지 않습니다. `member.Cache`, `domain.MemberDataProvider`, 정상 repository/matcher/member mock의 같은 이름은 K 집합입니다.
 
-실제 `api/internal/planes/bot/cmd/warm_member_cache`와 `bootstrap_core_tools.go`는 member epoch/L2를 다루므로 유지하고 compile을 검증합니다. deprecated 이름을 빈 구현으로 남기거나 새 이름 wrapper가 구 구현에 다시 접근하는 구조는 허용하지 않습니다.
+과거 명세의 `api/internal/planes/bot/cmd/warm_member_cache`와 `bootstrap_core_tools.go`는 현재 checkout의 `hololive/` 아래에 없습니다. 존재하지 않는 도구의 복원·compile을 요구하지 않습니다. 실제 K2 검증 대상은 `member.Cache`와 API bot/admin/llm·worker의 provider/adapter 경로입니다. deprecated 이름을 빈 구현으로 남기거나 새 이름 wrapper가 구 구현에 다시 접근하는 구조는 허용하지 않습니다.
 
 ## source·CLI 계약 변경
 
@@ -89,17 +89,20 @@ hash 개수 기반 readiness는 제거합니다. 기존 process-start 확인을 
 |---|---|---|
 | membernews mutation/list | 기존 PG repository | SQL·오류·정렬·idempotency 동일. 성공 뒤 mirror 명령 없음 |
 | membernews startup | 기존 Service의 `ListSubscribedRooms` 1회 | 실패하면 경고 후 service 반환. fatal startup으로 승격하지 않음 |
+| member provider startup | 정상 member.Cache 생성·epoch/L2만 유지 | D2 hash field 형식 검사 및 DEL/HSET 실패가 provider 오류로 전파되던 전용 fatal 경로는 제거. 공용 Valkey 연결·readiness 장애 처리는 유지 |
 | matcher snapshot | 기존 error-aware `domain.LoadAllMembers` | provider 실패는 오류. hash-only 후보·구 hash 오류 branch는 존재하지 않음 |
 | matcher query | 현재 snapshot index와 match-result cache | alias/org/partial 규칙과 TTL 유지. provider 성공+구 hash 장애는 provider 결과 사용 |
 | YouTube 이름 초기화 | 같은 shared 멤버 source의 snapshot | 오류는 경고 후 기존 fallback 유지. 반복적인 채널별 PG 조회로 바꾸지 않음 |
 | 공유 channel 표시 이름 | 최소 영속 member ID의 `Name` | 기존 shared representative와 정렬. 기존 map 덮어쓰기는 비결정적이므로 의도된 정규화로 검증 |
 | scripts | hash와 무관한 기존 process/dependency 상태 | 가짜 멤버 개수 0·항상-ready 출력·구 flag alias 없음 |
 
-shared channel의 대표 이름 정규화는 `Name`에 한정합니다. 알림의 한국어 단축명 정책이나 matcher의 첫 후보 선택 규칙을 동시에 바꾸지 않습니다. 영속 ID가 있는 실제 데이터 형상으로 fixture를 만들고 동명 동조직·다른 조직·colon·nil/빈 channel도 검증합니다.
+shared channel의 대표 이름 정규화는 `Name`에 한정합니다. 알림의 한국어 단축명 정책이나 matcher의 첫 후보 선택 규칙을 동시에 바꾸지 않습니다. 영속 ID가 있는 실제 데이터 형상으로 fixture를 만들고 동명 동조직·다른 조직·colon·nil/빈 channel도 검증합니다. 대표 계산은 기존 `member.channelRepresentatives`를 공개 helper `member.ChannelRepresentatives`로 승격하고 기존 내부 호출도 같은 함수로 옮기는 안으로 정합니다. `LoadAllMembers` 1회 결과에 이 규칙을 적용하며, `ORDER BY english_name`의 첫 행 선택·규칙 복제·채널별 N+1 조회를 하지 않습니다. 최소 ID 대표의 `Name`이 비면 차순위 멤버를 고르지 않고 기존 `resolveChannelTitle`의 fallbackTitle 동작을 유지합니다.
 
 provider에 없는 hash-only 행을 새 설계에 fallback으로 합치지 않습니다. 실제로 지원해야 하는 외부 writer가 확인되면 canonical source 계약을 먼저 확정하고 패치 승인을 보류합니다. 정상 PG source가 같은 경우, 폐기 hash가 없든 오래됐든 임의 값이 있든 새 결과가 같아야 합니다.
 
-멤버 provider는 여전히 epoch/L2를 사용할 수 있고 matcher의 별도 이름 fallback, YouTube 통계·LLM cost tracker도 Valkey에 남습니다. 검증 double은 제거 key/capability만 차단해야 합니다. source 변경으로 인해 retention·rate-limit·auth failure mode를 바꾸지 않습니다.
+멤버 provider의 epoch/L2와 YouTube 통계는 Valkey에 남습니다. matcher의 cache 인자는 D2 전용이므로 제거하되 alarm service의 별도 이름 cache와 혼동하지 않습니다. 토큰 관측은 현재 cache 비의존 metrics를 유지합니다. 검증 double은 제거 key/capability만 차단해야 합니다. source 변경으로 인해 retention·rate-limit·auth failure mode를 바꾸지 않습니다.
+
+위 startup 실패 조건 축소는 `member_providers.go:57-59`와 `cache/member_cache.go:35-63`의 정적 호출 관계에서 확인한 의도된 변화이며, 아직 실패 주입으로 재현한 결과는 아닙니다. B07/B08 검증에 colon 이름과 제거 key 쓰기 실패가 정상 provider 초기화를 막지 않는 사례를 포함합니다. 이를 Valkey 전체 장애에서도 runtime이 기동한다는 의미로 확대하지 않습니다.
 
 ## 잔재 판정과 허용되는 literal
 
@@ -110,7 +113,7 @@ provider에 없는 hash-only 행을 새 설계에 fallback으로 합치지 않�
 | production 구현·constructor·구 interface·deprecated shim·unused old method | 금지 | 다시 구 기능을 실행할 수 있거나 의미 없는 계약을 남김 |
 | runtime mock·구 backend 동작을 성공시키는 fixture | 금지 | 구 기능을 계속 구현하며 재도입을 숨길 수 있음 |
 | 정상 domain/provider의 동명 method | 유지 | 별개의 실제 기능. 타입·package·receiver로 판정 |
-| `pkg/privacylog/cachekey.go`의 `membernews:room_names` field 마스킹과 해당 보안 test | 유지 | 과거 key나 generic 로그 입력의 식별자 보호. 값 저장·조회 기능 아님 |
+| `pkg/privacylog/cachekey.go`의 `membernews:room_names` field 마스킹과 해당 보안 test, `cachekey_test.go`의 `hololive:members` 입력 | 유지 | 과거 key나 generic 로그 입력의 식별자 보호. 값 저장·조회 기능 아님 |
 | 삭제 key 접근을 감지하는 negative regression fixture | 허용 | 실행 금지의 증거. 구 동작의 성공 테스트가 아님 |
 | 이 plan·감사·과거 기록·폐기 key manifest | 허용 | 변경 기록 및 통제된 운영 정리에 필요 |
 | 현재 운영 문서의 구 사용 방법 | 수정 | 새 지원 절차로 고치되 과거 이력과 구분 |
@@ -161,11 +164,11 @@ T31~T36은 하나의 patch를 만드는 내부 순서입니다. task별 별도 l
 
 ### T32 membernews mirror 기능 완전 종료
 
-의존: T31. repository cache 의존·mirror helper·구 warmup service/repository method·호출·전용 테스트를 같은 패치에서 제거합니다. bootstrap은 기존 ListSubscribedRooms로 warning-only 확인을 보존합니다. LLM cost tracker의 cache 전달은 남깁니다. AC32, V32에 연결합니다.
+의존: T31. repository cache 의존·mirror 전용 log 필드/인자·helper·구 warmup service/repository method·호출·전용 테스트를 같은 패치에서 제거합니다. bootstrap은 기존 ListSubscribedRooms로 warning-only 확인을 보존합니다. `initMemberNewsService`의 불필요해지는 cache 인자와 runtime caller 1곳·test caller 3곳을 함께 제거하며, cache 비의존 `ProvideLLMCostTracker()`와 상위 scheduler의 필요한 cache 연결은 유지합니다. AC32, V32에 연결합니다.
 
 ### T33 멤버 hash 기능과 공용 API 완전 종료
 
-의존: T31. reader를 기존 멤버 source로 연결하고 initializer·backend interface·embedding·method·mock·동적 matcher branch를 모두 제거합니다. 두 YouTube stack builder와 bot/admin source 전달을 함께 수정합니다. API/worker 및 warm_member_cache 도구의 정상 epoch/L2 기능을 유지합니다. AC33, V33에 연결합니다.
+의존: T31. reader를 기존 멤버 source로 연결하고 initializer·backend interface·embedding·method·mock·동적 matcher branch 및 matcher의 전용 cache 인자를 모두 제거합니다. `ProvideMemberCache`의 hash 초기화 전용 nil-cache 분기도 함께 종료합니다. 두 YouTube stack builder와 bot/admin source 전달을 함께 수정합니다. API bot/admin/llm·worker의 정상 epoch/L2 기능을 유지하며, 존재하지 않는 warm_member_cache 도구는 복원하지 않습니다. AC33, V33에 연결합니다.
 
 ### T34 script와 관련 테스트 정리
 
@@ -191,7 +194,7 @@ D1/D2의 소유자·producer/consumer·exported source API·CLI·예외 literal�
 
 ### AC32 구독 동작과 startup 경계
 
-PG SQL·idempotency·목록 순서·오류 의미가 유지되고 D1 key I/O는 0입니다. 구 warmup method와 repository cache 주입은 남지 않습니다. startup DB 오류는 warning-only이며 LLM cost tracking은 유지됩니다.
+PG SQL·idempotency·목록 순서·오류 의미가 유지되고 D1 key I/O는 0입니다. 구 warmup method와 repository cache 주입은 남지 않습니다. startup DB 오류는 warning-only이며 cache 비의존 토큰 metrics는 유지됩니다.
 
 뉴스 정기 구독과 알람 멤버의 네 조합, 수동 조회, 빈 digest·멤버 없음 구분을 유지합니다. SQL 의미와 다른 기존 fake를 근거로 동일성을 주장하지 않습니다.
 
@@ -207,7 +210,7 @@ PG SQL·idempotency·목록 순서·오류 의미가 유지되고 D1 key I/O는 
 
 세션·nonce·limiter·member epoch·Pub/Sub·wakeup·API/LLM cache·ACL/alarm 이름·PG terminal ownership은 기존 경로를 유지합니다. 구 코드 테스트를 지운 것을 회귀 검증으로 대신하지 않습니다. 제거 key만 차단한 fixture에서도 새 기능과 유지 기능이 함께 작동해야 합니다.
 
-뉴스 주간·월간 실행 잠금과 알람 사전 claim의 상이한 장애 동작, 기존 delivery mode별 enqueue와 worker 소유권도 보존합니다. 관측용 토큰 누계를 엄격한 호출 제한으로 바꾸지 않습니다.
+뉴스 주간·월간 실행 잠금과 알람 사전 claim의 상이한 장애 동작, 기존 delivery mode별 enqueue와 worker 소유권도 보존합니다. 토큰 metrics를 엄격한 호출 제한으로 바꾸거나 퇴역한 Valkey 월 카운터를 복원하지 않습니다.
 
 ### AC36 단일 패치 검증 완료
 
@@ -219,14 +222,14 @@ S/R/D를 구분하고 C0~C6 결과를 해당 권한과 증거로 기록합니다
 
 ## 회귀 명세
 
-아래는 향후 구현 검증입니다. 이번 감사에서 테스트를 실행한 증거가 아닙니다.
+아래는 후속 구현 검증입니다. 준비 기록의 기존 코드 확인을 이 수용 기준의 통과 증거로 사용하지 않습니다.
 
 | ID | 시나리오 | 기대 결과 |
 |---|---|---|
 | B01 | 구독·재구독·해지·없는 방 | 기존 PG 결과·정렬·idempotency, D1 명령 0 |
 | B02 | PG Exec/Query/Scan 오류·caller 취소 | 기존 오류 전파, 성공/빈 목록으로 대체 없음 |
 | B03 | startup 빈 목록/여러 목록/DB 실패 | List 조회 1회, cache warmup 없음, 오류는 warning-only |
-| B04 | membernews bootstrap | repository는 cache 불필요, cost tracker는 기존 cache 사용 |
+| B04 | membernews bootstrap | repository·initMemberNewsService의 mirror 전용 cache 인자 없음. 토큰 metrics는 cache 없이 유지하고 상위 scheduler의 잠금·결과 cache는 보존 |
 | B05 | exact/partial·별칭·동명 다른 조직 | matcher 결과·후보 규칙 보존, D2 조회 없음 |
 | B06 | provider 최초 실패 뒤 성공 | 실패 결과를 negative match/snapshot으로 고정하지 않음 |
 | B07 | 폐기 hash 부재/오래된 값/잘못된 값/의도적 접근 실패 | 같은 PG source이면 새 결과 동일, 해당 key 명령 0 |
@@ -235,7 +238,7 @@ S/R/D를 구분하고 C0~C6 결과를 해당 권한과 증거로 기록합니다
 | B10 | member epoch 변경·TTL·reload 경합 | 기존 epoch 회귀 통과, TTL 임의 변경 없음 |
 | B11 | 구 CLI 옵션과 제거 env | flag는 unknown으로 실패, 구 env alias/readiness poll 없음 |
 | B12 | literal env의 command substitution 입력 | 새 invocation이 env 검증에서 거부, 구 flag 오류를 성공 근거로 삼지 않음 |
-| B13 | stats cache·alarm-name fallback·LLM cost tracker | 필요한 Valkey 호출은 유지, cache nil 일괄 주입 없음 |
+| B13 | stats cache·alarm service의 이름 cache·토큰 metrics | 앞의 두 기능에 필요한 Valkey 호출과 cache 비의존 토큰 관측 유지. matcher의 퇴역한 이름 fallback 복원 및 cache nil 일괄 주입 없음 |
 | B14 | 공용 cache mock·alarm durability 연결 | compile 및 기존 영속 상태 회귀 통과, member backend field 없음 |
 | B15 | key별 privacy log 입력 | 유지된 민감 field 마스킹 작동. literal 잔존을 구 기능으로 오인하지 않음 |
 | B16 | release set 일부 시작 실패/old writer 재등장 | traffic 개방 중지, 완료 판정 실패, 정해진 복구만 수행 |
@@ -248,7 +251,7 @@ S/R/D를 구분하고 C0~C6 결과를 해당 권한과 증거로 기록합니다
 | B23 | delivery off/shadow/cutover와 같은 기간의 다른 본문 | 기존 enqueue 대상·identity·terminal 상태 보존, 양쪽 backlog 확인 |
 | B24 | 알람 추가 PG 성공 뒤 cache 실패 | PG 저장과 반환 오류·재구성 결과를 구분, 뉴스 mirror 실패와 동일시하지 않음 |
 | B25 | 알람 이름의 등록/warmup·host 구독·provider 실패 | 기존 producer·한국어 표시·fallback 보존, D2 제거를 이름 통일로 확대하지 않음 |
-| B26 | 월간 토큰 누계 초과/Valkey 오류 | 기존 경고·비차단 동작, 필요한 cache 연결 보존 |
+| B26 | LLM 사용량 기록과 퇴역 설정 경계 | 현재 토큰 metrics·비차단 동작 및 퇴역 env 거부 유지. 월 상한·Valkey 월 카운터를 다시 도입하지 않음 |
 | B27 | 뉴스 해지 전후 대상 수집·이미 enqueue된 메시지 | 다음 수집에서 제외, 기존 backlog 자동 취소 기능을 추가하지 않음 |
 
 B16~B18은 먼저 격리 또는 fake process/artifact로 검증하고 실제 운영 결과는 승인된 cutover에서만 기록합니다. 구 runtime의 `sending`을 단순 retry로 되돌리거나 실제 메시지를 임의 발송하는 테스트를 하지 않습니다.
@@ -271,7 +274,7 @@ rg -n -- '--no-ready-wait' hololive scripts deploy
 
 `go test ./hololive/hololive-api/internal/planes/llm/internal/service/membernews/... ./hololive/hololive-api/internal/planes/llm/runtime/...`
 
-B01~B04/B19~B21/B26/B27을 기존 fake pool과 대상 key만 거부하는 cache spy로 검증합니다. repository_pgx_test의 이름만으로 실제 PG 통합을 실행했다고 주장하지 않습니다. N08에서 join 검증 공백과 fake의 빈 문자열 처리 차이를 확인했으므로 B20은 기존 dbtest harness에 해당 SQL을 실행하는 좁은 격리 PG 회귀를 추가합니다. 정본 SQL을 임의 수정하지 않고 fake를 실제 의미에 맞춥니다. LLM/Exa/Iris 외부 호출은 fake를 사용합니다.
+B01~B04/B19~B21/B27은 기존 fake pool과, cache를 유지하는 상위 경계에서 대상 key만 거부하는 spy로 검증합니다. repository와 initMemberNewsService에는 cache spy를 다시 주입하지 않습니다. B26은 기존 토큰 metrics·퇴역 설정 회귀로 검증합니다. repository_pgx_test의 이름만으로 실제 PG 통합을 실행했다고 주장하지 않습니다. N08의 join 검증 공백과 fake의 빈 문자열 처리 차이는 현재도 존재하므로, B20은 `membernews` 패키지의 `_test.go`에서 기존 `dbtest.NewPool(t)`로 실제 SQL을 실행합니다. 정본 SQL을 임의 수정하지 않고 fake를 실제 의미에 맞춥니다. LLM/Exa/Iris 외부 호출은 fake를 사용합니다.
 
 `go test ./hololive/hololive-api/internal/planes/llm/internal/schedulerkit/... ./hololive/hololive-api/internal/planes/llm/internal/llm/... ./hololive/hololive-shared/pkg/service/delivery/... ./hololive/hololive-shared/pkg/service/alarm/...`
 
@@ -279,7 +282,7 @@ B01~B04/B19~B21/B26/B27을 기존 fake pool과 대상 key만 거부하는 cache 
 
 ### V33 cache API와 멤버 소비자 검증
 
-`go test ./hololive/hololive-shared/pkg/service/cache/... ./hololive/hololive-shared/pkg/providers/... ./hololive/hololive-shared/internal/service/youtube/apiservice/... ./hololive/hololive-shared/pkg/service/notification/alarmservice/... ./hololive/hololive-api/internal/planes/bot/internal/service/matcher/... ./hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/... ./hololive/hololive-api/internal/planes/admin/app/... ./hololive/hololive-alarm-worker/internal/app/workerapp/...`
+`go test ./hololive/hololive-shared/pkg/service/cache/... ./hololive/hololive-shared/pkg/providers/... ./hololive/hololive-shared/internal/service/youtube/apiservice/... ./hololive/hololive-shared/pkg/service/notification/alarmservice/... ./hololive/hololive-api/internal/planes/bot/internal/service/matcher/... ./hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/... ./hololive/hololive-api/internal/planes/bot/internal/command/handlers/... ./hololive/hololive-api/internal/planes/bot/runtime/... ./hololive/hololive-api/internal/planes/admin/app/... ./hololive/hololive-alarm-worker/internal/app/workerapp/...`
 
 `go test -race ./hololive/hololive-shared/pkg/service/member/... ./hololive/hololive-api/internal/planes/bot/internal/service/matcher/... ./hololive/hololive-shared/internal/service/youtube/apiservice/...`
 
@@ -299,7 +302,7 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 
 `go test ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/... ./hololive/hololive-dbtest/...`
 
-`go test . -run TestRuntimeSplitStandaloneModulesContract`
+`go test -mod=readonly -count=1 ./internal/workspace -run '^TestRuntimeSplitStandaloneModulesContract$'`
 
 `./scripts/ci/local-ci.sh`
 
@@ -307,7 +310,7 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 
 ### V36 변경·artifact·전환 검토
 
-`git diff --check`, `./scripts/architecture/ci-boundary-gate.sh`와 실제 변경한 계약/서비스 문서의 project-map·contract-map·runbook coverage 검사를 수행합니다. DEC/plan은 stack root의 `bash tools/checks/check-decision-catalog.sh check --submodules`로 검증합니다.
+`git diff --check`, `./scripts/architecture/ci-boundary-gate.sh`와 실제 변경한 계약/서비스 문서의 project-map·contract-map·runbook coverage 검사를 수행합니다. [현재 계획 규칙](../../../../docs/agent-workflows/README.md)에 따라 DEC/PLN 등록·lifecycle·폐기된 카탈로그 검사기는 실행 조건이 아닙니다. 기존 애플리케이션 계약·필수 코드 게이트·사용자 승인 경계는 그대로 유지합니다.
 
 필요한 이미지 build는 `./build-all.sh --build-only --no-bump` 등 기존 build-only 경로로 준비하며 운영 artifact는 clean reviewed full SHA·대상 architecture·image ID를 고정합니다. 출판 승인 시 `scripts/ci/pre-push-gate.sh`가 별도 필수입니다. cutover는 owning ops의 필요한 정적 배포 계약과 no-build 절차를 적용하며, 이 문서 때문에 전체 stack/runtime을 재배포하지 않습니다.
 
@@ -318,6 +321,109 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 1. source/CLI 계약 삭제와 이름 정규화, 외부 consumer 확인을 포함한 **전체 D1/D2 패치 범위**의 검토가 필요합니다. 발견한 consumer를 조용히 예외 처리하거나 no-op을 남기지 않습니다.
 2. C0~C5의 실제 host/process 목록·downtime·quiesce·supervisor·artifact set·rollback preflight는 운영 준비에서 확정합니다. 준비가 없으면 mixed fleet를 허용하는 식으로 전환 방식을 약화하지 않습니다.
 3. cleanup 권한·정확한 key 소유·수용 기간은 별도입니다. 운영 데이터 회수 미실행을 코드/런타임 구현 실패와 혼동하지 않습니다.
-4. 현재는 감사·문서 작성만 승인됐습니다. 신규 DEC는 proposed이며 등록된 실행 PLN은 없습니다. accepted governing DEC 확정 뒤 lifecycle을 만들고 실행 직전 gate와 사용자 권한을 각각 확인합니다.
+4. 공개 backend Go API·hash 전용 CLI/env 폐기와 공유 channel 이름 정규화를 포함한 D1/D2 구현은 사용자 승인에 따라 아래 구현 기록의 worktree에서 수행했습니다. DEC/PLN 상태나 lifecycle 등록을 승인 대용 또는 추가 실행 게이트로 사용하지 않습니다.
 
 이전 selective-retention 제안의 필요한 Valkey 유지 방향은 보존하되 단계적 전달안은 철회했습니다. 후속 실행자는 이 문서의 새로운 marker와 빅뱅 감사의 제거 명세를 사용합니다. 이전 패킷 일부의 테스트 결과를 새 전체 patch의 완료 근거로 승계하지 않습니다.
+
+## 2026-09-28 구현 준비 기록
+
+### 기준과 현재 판정
+
+- 기준 HEAD: `a03eb83f9bdf38a451c86aa9627d2df008bcffbf`. 앞선 감사의 `3be7229b060b`와 구분합니다. 이 절은 구현 전 준비 시점의 기록이며, 구현 결과는 아래 구현 기록을 따릅니다.
+- 시작 시 기존 미커밋 파일 5개를 확인했습니다: `workerapp/worker_registry.go`, `settings/alarmworker/worker_profile.go`, `worker_profile_test.go`, `settings/stack_worker_profile_types.go`, `settings/testdata/stack-worker-profile-alarm-worker.json`. 모두 보존하며 현재 checkout을 clean release source로 간주하지 않습니다.
+- 환경: kapu, Go `go1.27.1 linux/amd64`, Docker client/server `29.8.1`. 로컬 `go.work`의 shared-go·iris-client-go 및 다섯 hololive 모듈을 사용합니다. 의존성·toolchain·go.work 갱신은 하지 않았습니다.
+- 준비 시점에는 T31 로컬 consumer 조사까지만 진행했습니다. T32~T35 구현과 검증은 아래 구현 기록에 있습니다. T37 운영 topology 조사는 미착수이며 **R/D는 미완료**입니다. key 존재·크기·실제 배포 상태는 조회하지 않았습니다.
+
+### 현재 코드에 맞춘 구현 인계
+
+아래 `api`, `shared`, `worker`는 앞의 모듈 약칭과 같습니다. 과거 감사는 덮어쓰지 않으며 현재 코드와 다른 전제는 이 계획의 명세·수용 기준에서 교정했습니다.
+
+| 대상 | 현재 확인과 구현 인계 |
+|---|---|
+| D1 생성자·startup | `api/.../membernews/repository.go`, `repository_cache.go`, `repository_mutation.go`, `service.go` 및 `runtime/bootstrap_alarm.go`. mirror 전용 cache/log 제거 후 `NewRepository(postgres)`로 축소. `initMemberNewsService` caller는 `bootstrap_llm_scheduler.go` 1곳과 `bootstrap_alarm_llm_helpers_test.go` 3곳 |
+| D1 토큰 전제 교정 | `runtime/llm_providers_local.go:68-72`는 cache 없는 metrics recorder. `shared/pkg/config/settings/config_llm_retired_env.go:8-18`은 월 상한·Valkey 월 카운터 퇴역 계약. B04/B13/B26을 현재 계약으로 교정했으며 구 카운터를 되살리지 않음 |
+| D1 SQL 회귀 공백 | `repository_test.go` fake는 빈 이름 재구독 시 기존 이름을 보존하지만 `queries/repository_mutation_0033_01.sql`의 COALESCE는 non-null 빈 문자열로 덮어씀. SQL은 유지하고 fake를 교정. `repository_pgx_test.go`는 실제 join 테스트가 아니므로 B20을 `membernews` 내부의 `dbtest.NewPool(t)` 격리 PG 회귀로 추가 |
+| D2 producer·backend·mock | `shared/pkg/providers/member_providers.go`, `pkg/service/cache/{member.go,member_cache.go,interface.go}`, `cache/mocks/{client.go,client_domain.go}` 및 대응 테스트. `alarm_service_durability_test.go`의 member mock 연결만 제거하고 durability 회귀 유지 |
+| D2 matcher 추가 caller | `matcher` 구현·테스트·benchmark 외에 `providers_alarm_consumers.go`, `services_alarm_stack.go`, `runtime/providers_single_consumer_test.go`, bot command/handler 테스트의 모든 `NewMatcher` 호출 갱신. `matcher_candidate.go:135-137`에서 확인한 퇴역 이름 fallback을 복원하지 않음 |
+| D2 YouTube source | `shared/pkg/providers/modules/{youtube_api_stack.go,youtube_stack.go}`, bot `services_alarm_stack.go`, admin `build_runtime_youtube.go`에 기존 member adapter 전달. 통계 cache 인자는 유지. `BuildYouTubeStack`은 checkout 내 caller가 없지만 이번 준비에서 삭제를 추가하지 않으며 기존 계획대로 source 전달을 갱신 |
+| D2 대표 이름 | `member/channel_representative.go:7-26`의 최소 ID 규칙을 한 helper로 재사용. 영속 ID fixture와 빈 Name의 기존 title fallback 검증. shared member 내부 caller와 epoch/point-index 회귀도 승격 변경 범위에 포함 |
+| K2 실제 검증 경로 | bot/admin/worker의 `BuildInfraModule`뿐 아니라 llm `bootstrap_llm_scheduler.go`의 `ProvideMemberCache`도 현재 writer. initializer 제거 후 네 경로의 epoch/L2 유지 검증. 과거 warmup 도구 경로는 현 checkout에 없음 |
+| script·privacy | `bot.sh`의 start/restart/help/status에서 hash/env/flag를 함께 제거. env-loader fixture는 새 invocation으로 실제 literal 검증에 도달. `privacylog/cachekey.go`의 D1 마스킹 및 `cachekey_test.go`의 D1/D2 입력은 보존 |
+
+인접 `shared-go`, `iris-client-go`, `twentyq-bot`에서 hololive import·D2 전용 symbol/key/env/flag의 텍스트 검색은 0건이었습니다. `scripts`·`deploy`의 D1 key/warmup 검색도 0건입니다. 이는 설치된 script·비공개 외부 Go consumer·문자열 조합 호출까지 부재를 증명하지 않습니다. 조사에서는 텍스트 검색과 코드 읽기를 사용했으며, 구현 시 공개 symbol의 타입 참조 분석과 전체 module compile을 생략하지 않습니다.
+
+### 이번에 실제 수행한 확인
+
+모두 kapu의 현재 작업 트리에서 실행했습니다. 기존 동작의 baseline이며 D1/D2 제거 완료나 새 B01~B27 통과 증거는 아닙니다.
+
+| 명령·범위 | 결과 |
+|---|---|
+| `hostname`, `go version`, `go env GOWORK GOTOOLCHAIN GOOS GOARCH`, `docker version` | 위 환경 확인, exit 0 |
+| `go list -mod=readonly`로 membernews/runtime/cache/providers/apiservice/matcher/dbtest 조회 | 13 package 해석, exit 0. compile/test의 대체 아님 |
+| 아래 focused baseline 명령 | 12 package 모두 `ok`, exit 0 |
+| `go test -mod=readonly -count=1 -v ./internal/workspace -run '^TestRuntimeSplitStandaloneModulesContract$'` | 이름 지정 테스트의 실제 실행·PASS 확인, exit 0. 종전 `go test .`는 테스트 소유 package가 아니므로 V35·README 교정 |
+| `bash hololive/hololive-api/scripts/bot.sh help` | 실행 성공 및 현행 구 옵션 노출 확인. start/stop/status·실제 runtime 호출 없음 |
+| `bash -n hololive/hololive-api/scripts/bot.sh` | exit 0 |
+| `bash hololive/hololive-api/scripts/test-bot-env-loader.sh` | 격리 fixture의 command substitution 거부 PASS, exit 0. 아직 구 옵션을 쓰는 baseline |
+| `bash scripts/architecture/check-project-map.sh` | toolchain parity·module inventory·문서 참조 PASS, exit 0 |
+
+```bash
+env -u TEST_DATABASE_URL -u TEST_DATABASE_OWNER_TOKEN -u ALLOW_EXTERNAL_TEST_DB \
+  go test -mod=readonly -count=1 \
+  ./hololive/hololive-api/internal/planes/llm/internal/service/membernews/... \
+  ./hololive/hololive-shared/pkg/service/cache/... \
+  ./hololive/hololive-shared/pkg/providers/... \
+  ./hololive/hololive-shared/internal/service/youtube/apiservice/... \
+  ./hololive/hololive-api/internal/planes/bot/internal/service/matcher/... \
+  ./hololive/hololive-shared/pkg/privacylog/...
+```
+
+준비 시점 미실행 항목(구현 뒤 결과는 아래 구현 기록): 새 B20 실제 PG join 회귀, 전체 영향 module test/build, runtime bootstrap 전체 suite, NilAway/race·local-ci·Stage 3/prerequisites, architecture 전체 gate, image build, 운영 수용.
+
+## 2026-09-28 구현 기록
+
+### 위치와 상태
+
+- worktree: `~/work/holo-cache-fadeout-20260928/hololive-bot`, branch `refactor/valkey-bigbang-fadeout-20260928`, base `a03eb83f9bdf`. 커밋 전 미커밋 상태이며 Git publication·운영 반영은 하지 않았습니다.
+- sibling `shared-go`·`iris-client-go` worktree는 go.mod pin(`v2.8.0`)과 같은 `36d47654f2c0`·`b23933c3179c`로 고정했습니다. 두 저장소 main(v2.9 이후·v3 module)을 쓰면 import graph 산출물이 이번 변경과 무관하게 달라집니다.
+- **S(source fadeout): 로컬 검증 완료. R(runtime cutover)·D(key 회수): 미착수.** T37 운영 topology 조사도 미착수입니다.
+
+### 반영 내용
+
+- D1: `repository_cache.go` 삭제, `NewRepository(postgres)`, `WarmupSubscriptionCache` 삭제, `initMemberNewsService` cache 인자와 caller 4곳 정리, 기동 시 `ListSubscribedRooms` 1회 warning-only. fake Exec를 실제 COALESCE 의미로 교정했습니다.
+- D2: `cache/member.go`·`member_cache.go`·`member_cache_test.go` 삭제, `DomainCache` embedding·mock field/method·provider 초기화 제거, matcher 동적 hash 경로·`Matcher.cache`·`NewMatcher`/`ProvideMatcher` cache 인자 제거, `matcher_cache_failure_test.go` 삭제. `member.ChannelRepresentatives` 승격, `apiservice.New`와 두 YouTube stack params에 `MemberData` 추가, bot·admin wiring 연결.
+- script: `bot.sh`의 hash 대기·상태·`--no-ready-wait`·`CORE_MEMBER_HASH_SOFT_*` 제거. env-loader fixture는 `start`로 literal env 거부에 도달하며, 제거 옵션이 start/restart 모두에서 unknown argument로 거절되는지도 검사합니다.
+- 부수 정리: `scripts/deploy/ap-rsync-files.txt`의 삭제 파일 2줄 제거, `artifacts/architecture/go-workspace-import-graph.txt`를 실제 import 변화로 재생성, standalone 계약 명령을 README·V35에서 교정했습니다.
+
+### 새·이관 회귀
+
+| 회귀 | 근거 |
+|---|---|
+| B20 실제 PG | `membernews/repository_postgres_test.go`: 비-LIVE 알람, 이름 우선순위, members 미존재 channel, DISTINCT, 방 격리, 빈/공백 이름 재구독 덮어쓰기, created_at 순서, 해지. testcontainers PG에서 실행 |
+| B06·B05 | matcher provider fixture: 오류 전파 후 재시도 성공(비고정), Hololive 후보 우선, 동명 다른 조직 모호성, alias·partial, allocation budget 유지 |
+| B07 | `providers/member_providers_test.go`: 폐기 hash에 임의 값이 있어도 PG 결과만 사용하고 hash를 삭제·변경하지 않음. colon 이름도 기동을 막지 않음(miniredis + testcontainers PG) |
+| B08·B09·B13 | `apiservice/service_test.go`: 최소 ID 대표(입력 순서 무관), 동명 다른 조직, colon, nil·빈 channel, 빈 대표 Name의 fallbackTitle, 로드 실패 nonfatal. strict cache mock으로 이름 초기화의 cache 명령 0회 확인 |
+| B11·B12 | `test-bot-env-loader.sh` |
+
+B07의 수정 전 실패는 삭제된 초기화가 hash를 DEL/HSET하고 colon field를 거절하던 코드에서 추론한 것이며, 수정 전 코드로 재실행하지 않았습니다.
+
+### 실행한 검증
+
+| 명령 | 결과 |
+|---|---|
+| 제거 symbol·key·env·flag 검색(`hololive`, `scripts`, `deploy`) | 실행 경로 0. 남은 literal은 `privacylog/cachekey.go`·`cachekey_test.go`와 env-loader의 거절 검사뿐 |
+| `go build`·`go vet` 다섯 모듈 | exit 0 |
+| 다섯 모듈 전체 `go test -count=1` | youtube-collector `youtubejs` helper 테스트만 새 worktree의 npm 의존성 미설치로 실패. 다른 패키지는 모두 ok. local-ci의 `npm ci` 뒤 해당 테스트는 통과 |
+| `bash -n bot.sh`, `test-bot-env-loader.sh`, `bot.sh help` | exit 0, 새 usage 확인 |
+| `go test ./internal/workspace -run '^TestRuntimeSplitStandaloneModulesContract$'` | ok |
+| `./scripts/ci/local-ci.sh` | **exit 0**: architecture gate, gofmt, go fix, tidy, vet, staticcheck, golangci-lint(0 issues), NilAway, build, PGO, collector gate, AP rsync manifest, PostgreSQL capacity, perf budget, 전체 Go test, race test. integration-tag 테스트는 기본값대로 skip |
+| 독립 reviewer 1차 | 정확성 판정 correct. 지적한 계획 기록 불일치와 removed-key fixture 부재를 이 기록과 B07·strict cache 회귀로 반영 |
+| 독립 reviewer 2차(최종 diff) | correct, 차단 결함 없음. 14개 package `-race` 통과, import graph 재생성 byte-identical 확인. P3 1건(env-loader의 인자 거절 선행 assertion이 실패할 수 없음)은 stderr의 loader 거절 부재 검사로 고쳤고 fixture·shellcheck 재통과 |
+
+미실행: `scripts/ci/pre-push-gate.sh`(publication 시 필수), `./build-all.sh --build-only --no-bump` image build, `RUN_INTEGRATION_TESTS=true` 통합 테스트, 운영 C0~C6.
+
+### 남은 작업
+
+1. 커밋과 main 통합 여부를 결정해야 합니다. main checkout에는 이 작업과 별개인 대규모 미커밋 변경이 있고, `services_alarm_stack.go`·command handler 테스트 등 일부 파일이 겹치므로 통합 때 충돌을 해소해야 합니다.
+2. 외부 설치 자동화·비공개 Go consumer의 부재는 증명하지 않았습니다. 발견되면 publication을 멈추고 같은 변경 집합에서 처리합니다.
+3. 배포는 API·alarm-worker 동시 교체(C0~C5), 폐기 key 회수는 정확한 key 이름으로 별도 승인(C6)이 필요합니다.

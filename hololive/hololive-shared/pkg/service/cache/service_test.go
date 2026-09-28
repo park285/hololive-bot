@@ -327,25 +327,6 @@ func TestCacheServiceExpireCeilsSubSecondTTL(t *testing.T) {
 	}
 }
 
-func TestMemberCacheOperations(t *testing.T) {
-	service, _ := newTestCacheService(t)
-	ctx := t.Context()
-
-	members := map[string]string{"member:Hololive": "channel"}
-	if err := service.InitializeMemberDatabase(ctx, members); err != nil {
-		t.Fatalf("initialize failed: %v", err)
-	}
-
-	all, err := service.GetAllMembers(ctx)
-	if err != nil {
-		t.Fatalf("get all failed: %v", err)
-	}
-
-	if all["member:Hololive"] != "channel" {
-		t.Fatalf("unexpected members: %+v", all)
-	}
-}
-
 func TestStreamCacheOperations(t *testing.T) {
 	service, _ := newTestCacheService(t)
 	ctx := t.Context()

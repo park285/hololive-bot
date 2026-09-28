@@ -377,7 +377,7 @@ func (c *Cache) replaceMemberSnapshotIndexes(members []*domain.Member, generatio
 		c.byName.Store(member.Name, &memoryMember{member: member, generation: nextGeneration})
 	}
 
-	for channelID, member := range channelRepresentatives(members) {
+	for channelID, member := range ChannelRepresentatives(members) {
 		c.byChannelID.Store(channelID, &memoryMember{member: member, generation: nextGeneration})
 	}
 }

@@ -27,14 +27,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("member matcher", func(t *testing.T) {
-		matcher := appbootstrap.ProvideMatcher(&stubMemberDataProvider{}, cachemocks.NewStrictClient(), logger)
+		matcher := appbootstrap.ProvideMatcher(&stubMemberDataProvider{}, logger)
 		require.NotNil(t, matcher)
 	})
 }

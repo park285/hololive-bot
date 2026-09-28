@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func newMatcherTestLogger() *slog.Logger {
@@ -42,11 +41,7 @@ func TestNewMatcher_Defaults(t *testing.T) {
 
 	provider := newStubMemberProvider([]*domain.Member{{ChannelID: testChannelID1, Name: "m1"}})
 
-	matcher := NewMatcher(provider, &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		},
-	}, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	require.NotNil(t, matcher)
 	assert.Equal(t, provider, matcher.membersData)
@@ -156,69 +151,13 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 
 	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: testChannelID1, Name: "m1"}})
 
-	matcher := NewMatcher(provider, &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		},
-	}, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 	reqCtx := context.WithValue(t.Context(), matcherTestContextKey{}, "request")
 
 	member := matcher.GetMemberByChannelID(reqCtx, testChannelID1)
 	require.NotNil(t, member)
 	require.NotEmpty(t, *provider.ctxCalls)
 	assert.Equal(t, reqCtx, (*provider.ctxCalls)[len(*provider.ctxCalls)-1])
-}
-
-func TestTryExactValkeyMatch_PrefersHololiveCandidate(t *testing.T) {
-	t.Parallel()
-
-	provider := newStubMemberProvider([]*domain.Member{
-		{ChannelID: "ch-niji", Name: testMemberAqua, Org: "Nijisanji"},
-		{ChannelID: testChannelHolo, Name: testMemberAqua, Org: orgHololive},
-	})
-	matcher := &Matcher{logger: newMatcherTestLogger()}
-
-	candidate := matcher.tryExactValkeyMatch(provider, testMemberAqua, map[string]string{
-		"aqua_main": "ch-niji",
-		"AQUA":      testChannelHolo,
-	})
-
-	require.NotNil(t, candidate)
-	assert.Equal(t, testChannelHolo, candidate.channelID)
-	assert.Equal(t, testMemberAqua, candidate.memberName)
-	assert.Equal(t, "valkey-exact", candidate.source)
-}
-
-func TestTryExactValkeyMatchRejectsEmptyChannelCandidate(t *testing.T) {
-	t.Parallel()
-
-	provider := newStubMemberProvider([]*domain.Member{
-		{ChannelID: testChannelID1, Name: testMemberAqua, Org: "Nijisanji"},
-	})
-	matcher := &Matcher{logger: newMatcherTestLogger()}
-	candidate := matcher.tryExactValkeyMatch(provider, testMemberAqua, map[string]string{
-		"aqua": "",
-		"AQUA": testChannelID1,
-	})
-	require.NotNil(t, candidate)
-	assert.Equal(t, testChannelID1, candidate.channelID)
-	assert.Equal(t, "valkey-exact", candidate.source)
-}
-
-func TestTryPartialValkeyMatch(t *testing.T) {
-	t.Parallel()
-
-	provider := newStubMemberProvider([]*domain.Member{
-		{ChannelID: "ch-sui", Name: "Hoshimachi Suisei", Aliases: &domain.Aliases{Ko: []string{"스이", "호시마치"}}},
-	})
-	matcher := &Matcher{logger: newMatcherTestLogger()}
-
-	partialValkey := matcher.tryPartialValkeyMatch(provider, "hoshi", map[string]string{
-		"Hoshimachi Suisei": "ch-sui",
-	})
-	require.NotNil(t, partialValkey)
-	assert.Equal(t, "ch-sui", partialValkey.channelID)
-	assert.Equal(t, "valkey-partial", partialValkey.source)
 }
 
 func TestFinalizeCandidate_EmptyChannelID(t *testing.T) {
@@ -233,35 +172,31 @@ func TestFinalizeCandidate_EmptyChannelID(t *testing.T) {
 	assert.Nil(t, channel)
 }
 
-func TestLoadDynamicMembers_ErrorFallback(t *testing.T) {
+func TestFindBestMatch_PrefersHololiveOnDuplicateExactName(t *testing.T) {
 	t.Parallel()
 
-	matcher := &Matcher{
-		logger: newMatcherTestLogger(),
-		cache: &cachemocks.Client{
-			GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-				return nil, errors.New("cache down")
-			},
-		},
-	}
+	provider := newStubMemberProvider([]*domain.Member{
+		{ChannelID: "ch-niji", Name: testMemberAqua, Org: "Nijisanji"},
+		{ChannelID: testChannelHolo, Name: testMemberAqua, Org: orgHololive},
+	})
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
-	members := matcher.loadDynamicMembers(t.Context())
-	require.NotNil(t, members)
-	assert.Empty(t, members)
+	channel, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, channel)
+	assert.Equal(t, testChannelHolo, channel.ID)
+	require.NotNil(t, channel.Org)
+	assert.Equal(t, orgHololive, *channel.Org)
 }
 
-func TestFindBestMatch_UsesDynamicStrategyAndCache(t *testing.T) {
+func TestFindBestMatch_CachesResultWithoutReloadingProvider(t *testing.T) {
 	t.Parallel()
 
-	provider := newStubMemberProvider(nil)
-	cacheCalls := 0
-	cache := &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			cacheCalls++
-			return map[string]string{testMemberAqua: "ch-aqua"}, nil
-		},
-	}
-	matcher := NewMatcher(provider, cache, nil, newMatcherTestLogger())
+	provider := newErrorAwareMemberProvider([]*domain.Member{
+		{ChannelID: "ch-aqua", Name: testMemberAqua, Org: orgHololive},
+	}, 0, nil)
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	first, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.NoError(t, err)
@@ -275,25 +210,17 @@ func TestFindBestMatch_UsesDynamicStrategyAndCache(t *testing.T) {
 	require.True(t, found)
 	require.NotNil(t, second)
 	assert.Equal(t, "ch-aqua", second.ID)
-	assert.Equal(t, 1, cacheCalls)
+	assert.Equal(t, 1, provider.loadCalls)
 }
 
 func TestFindBestMatch_UsesSnapshotAcrossDifferentQueries(t *testing.T) {
 	t.Parallel()
 
-	provider := newStubMemberProvider(nil)
-	cacheCalls := 0
-	cache := &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			cacheCalls++
-
-			return map[string]string{
-				"Aqua:Hololive":   "ch-aqua",
-				"Marine:Hololive": "ch-marine",
-			}, nil
-		},
-	}
-	matcher := NewMatcher(provider, cache, nil, newMatcherTestLogger())
+	provider := newErrorAwareMemberProvider([]*domain.Member{
+		{ChannelID: "ch-aqua", Name: testMemberAqua, Org: orgHololive},
+		{ChannelID: "ch-marine", Name: "Marine", Org: orgHololive},
+	}, 0, nil)
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	first, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.NoError(t, err)
@@ -307,33 +234,29 @@ func TestFindBestMatch_UsesSnapshotAcrossDifferentQueries(t *testing.T) {
 	require.NotNil(t, second)
 	assert.Equal(t, "ch-marine", second.ID)
 
-	assert.Equal(t, 1, cacheCalls)
+	assert.Equal(t, 1, provider.loadCalls)
 }
 
 func TestFindBestMatch_ProviderLoadErrorIsNotCached(t *testing.T) {
 	t.Parallel()
 
+	loadErr := errors.New("member repo down")
 	provider := newErrorAwareMemberProvider([]*domain.Member{
 		{ChannelID: "ch-aqua", Name: testMemberAqua},
-	}, 1, errors.New("member repo down"))
-	cache := &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		},
-	}
-	matcher := NewMatcher(provider, cache, nil, newMatcherTestLogger())
+	}, 1, loadErr)
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
-	require.Error(t, err)
+	require.ErrorIs(t, err, loadErr)
 	assert.False(t, found)
 	assert.Nil(t, channel)
-	assert.Contains(t, err.Error(), "get all members")
 
 	channel, found, err = matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.NoError(t, err)
 	require.True(t, found)
 	require.NotNil(t, channel)
 	assert.Equal(t, "ch-aqua", channel.ID)
+	assert.Equal(t, 2, provider.loadCalls)
 }
 
 func TestFindBestMatch_UsesSnapshotAliasIndex(t *testing.T) {
@@ -346,11 +269,7 @@ func TestFindBestMatch_UsesSnapshotAliasIndex(t *testing.T) {
 		NameKo:    "토키노 소라",
 		Aliases:   &domain.Aliases{Ja: []string{"そらちゃん"}},
 	}})
-	matcher := NewMatcher(provider, &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		},
-	}, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), "そらちゃん")
 	require.NoError(t, err)
@@ -379,11 +298,7 @@ func TestFindBestMatch_PrefersAliasExactBeforeNameExact(t *testing.T) {
 			Aliases:   &domain.Aliases{Ja: []string{"Suisei"}},
 		},
 	})
-	matcher := NewMatcher(provider, &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{}, nil
-		},
-	}, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), "Suisei")
 	require.NoError(t, err)
@@ -392,30 +307,19 @@ func TestFindBestMatch_PrefersAliasExactBeforeNameExact(t *testing.T) {
 	assert.Equal(t, "ch-alias", channel.ID)
 }
 
-func TestFindBestMatchWithCandidates_DynamicLoadErrorIsNotSticky(t *testing.T) {
+func TestFindBestMatchWithCandidates_ProviderLoadErrorIsNotSticky(t *testing.T) {
 	t.Parallel()
 
-	provider := newStubMemberProvider(nil)
-	cacheCalls := 0
-	cache := &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			cacheCalls++
-			if cacheCalls == 1 {
-				return nil, errors.New("temporary cache error")
-			}
-
-			return map[string]string{
-				"Aqua:Hololive": testChannelHolo,
-			}, nil
-		},
-	}
-	matcher := NewMatcher(provider, cache, nil, newMatcherTestLogger())
+	loadErr := errors.New("temporary member repo error")
+	provider := newErrorAwareMemberProvider([]*domain.Member{
+		{ChannelID: testChannelHolo, Name: testMemberAqua, Org: orgHololive},
+	}, 1, loadErr)
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), testMemberAqua)
-	require.Error(t, err)
+	require.ErrorIs(t, err, loadErr)
 	assert.False(t, found)
 	assert.Nil(t, channel)
-	assert.Contains(t, err.Error(), "get all members")
 
 	channel, found, err = matcher.FindBestMatchWithCandidates(t.Context(), testMemberAqua)
 	require.NoError(t, err)
@@ -427,15 +331,11 @@ func TestFindBestMatchWithCandidates_DynamicLoadErrorIsNotSticky(t *testing.T) {
 func TestFindBestMatchWithCandidates_AmbiguousAndOrgFilter(t *testing.T) {
 	t.Parallel()
 
-	cache := &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{
-				"Aqua:Hololive":  testChannelHolo,
-				"Aqua:Nijisanji": "ch-niji",
-			}, nil
-		},
-	}
-	matcher := NewMatcher(newStubMemberProvider(nil), cache, nil, newMatcherTestLogger())
+	provider := newStubMemberProvider([]*domain.Member{
+		{ChannelID: testChannelHolo, Name: testMemberAqua, Org: orgHololive},
+		{ChannelID: "ch-niji", Name: testMemberAqua, Org: "Nijisanji"},
+	})
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), testMemberAqua)
 	require.Error(t, err)
@@ -486,31 +386,22 @@ func TestFindBestMatchWithCandidates_FallbackAndErrors(t *testing.T) {
 		Aliases:   &domain.Aliases{Ja: []string{"Sora"}},
 	}})
 
-	t.Run("cache error", func(t *testing.T) {
+	t.Run("provider error", func(t *testing.T) {
 		t.Parallel()
 
-		matcher := NewMatcher(provider, &cachemocks.Client{
-			GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-				return nil, errors.New("cache error")
-			},
-		}, nil, newMatcherTestLogger())
+		loadErr := errors.New("member repo error")
+		matcher := NewMatcher(newErrorAwareMemberProvider(nil, 1, loadErr), nil, newMatcherTestLogger())
 
 		channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), "Sora")
-		require.Error(t, err)
+		require.ErrorIs(t, err, loadErr)
 		assert.False(t, found)
 		assert.Nil(t, channel)
-		assert.Contains(t, err.Error(), "get all members")
 	})
 
 	t.Run("fallback to FindBestMatch", func(t *testing.T) {
 		t.Parallel()
 
-		cache := &cachemocks.Client{
-			GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-				return map[string]string{}, nil
-			},
-		}
-		matcher := NewMatcher(provider, cache, nil, newMatcherTestLogger())
+		matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 		channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), "Sora")
 		require.NoError(t, err)

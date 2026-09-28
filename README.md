@@ -70,7 +70,7 @@ go test ../shared-go/... \
   ./hololive/hololive-youtube-collector/...
 ```
 
-* 독립 모듈 규격 검사: `go test . -run TestRuntimeSplitStandaloneModulesContract`
+* 독립 모듈 규격 검사: `go test -mod=readonly -count=1 ./internal/workspace -run '^TestRuntimeSplitStandaloneModulesContract$'`
 * 아키텍처 가드레일 정적 검사:
   ```bash
   ./scripts/architecture/check-project-map.sh

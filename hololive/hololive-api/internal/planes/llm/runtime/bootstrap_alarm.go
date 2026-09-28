@@ -37,7 +37,6 @@ import (
 	mnsummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -49,7 +48,6 @@ func initMemberNewsService(
 	llmConfig *settings.LLMConfig,
 	exaConfig settings.ExaConfig,
 	postgres database.Client,
-	cacheClient cache.Client,
 	membersData domain.MemberDataProvider, guards *llmGuards,
 	logger *slog.Logger,
 ) (*membernews.Service, error) {
@@ -67,7 +65,7 @@ func initMemberNewsService(
 		return nil, fmt.Errorf("init member news source validator: %w", err)
 	}
 
-	repository := membernews.NewRepository(postgres, cacheClient, logger)
+	repository := membernews.NewRepository(postgres)
 	llmClient := guardLLMClient(clients.summary, guards)
 	reviewer := guardLLMClient(clients.reviewer, guards)
 	adjudicator := guardLLMClient(clients.adjudicator, guards)
@@ -108,8 +106,9 @@ func initMemberNewsService(
 	}
 
 	service := membernews.NewService(repository, summarizer, validator, membersData, logger, membernews.WithPromptGuard(promptGuard))
-	if warmErr := service.WarmupSubscriptionCache(ctx); warmErr != nil {
-		logger.Warn("Member news subscription warmup failed", slog.String("error", warmErr.Error()))
+	// 구독 목록 조회는 기동 확인용이다. DB 일시 오류로 기동을 막지 않도록 경고만 남긴다.
+	if _, err := service.ListSubscribedRooms(ctx); err != nil {
+		logger.Warn("Member news subscription check failed", slog.String("error", err.Error()))
 	}
 
 	return service, nil

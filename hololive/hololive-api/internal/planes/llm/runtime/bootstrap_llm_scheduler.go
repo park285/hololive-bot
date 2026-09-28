@@ -259,7 +259,7 @@ func buildLLMSchedulerComponents(
 
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
 
-	memberNewsService, err := initMemberNewsService(ctx, schedulerConfig.SelectedLLMProvider(), &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
+	memberNewsService, err := initMemberNewsService(ctx, schedulerConfig.SelectedLLMProvider(), &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, memberDataProvider, guards, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init member news service: %w", err)
 	}

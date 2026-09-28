@@ -70,15 +70,6 @@ func TestClientReadMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 		t.Fatal("Exists() = true, want false")
 	}
 
-	allMembers, err := client.GetAllMembers(t.Context())
-	if err != nil {
-		t.Fatalf("GetAllMembers() error = %v, want nil", err)
-	}
-
-	if allMembers != nil {
-		t.Fatalf("GetAllMembers() = %v, want nil", allMembers)
-	}
-
 	streams, found := client.GetStreams(t.Context(), "streams")
 	if found {
 		t.Fatal("GetStreams() found = true, want false")
@@ -109,7 +100,7 @@ func TestClientLowLevelMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 	}
 }
 
-func TestClientScriptAndMemberMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
+func TestClientScriptAndStreamMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 	client := NewLenientClient()
 
 	if deleted, err := client.CompareAndDelete(t.Context(), "k", "v"); err != nil || deleted {
@@ -118,10 +109,6 @@ func TestClientScriptAndMemberMethodsDefaultToZeroValuesWhenLenient(t *testing.T
 
 	if expired, err := client.CompareAndExpire(t.Context(), "k", "v", time.Second); err != nil || expired {
 		t.Fatalf("CompareAndExpire() = (%v, %v), want (false, nil)", expired, err)
-	}
-
-	if err := client.InitializeMemberDatabase(t.Context(), map[string]string{"mio": "ch"}); err != nil {
-		t.Fatalf("InitializeMemberDatabase() error = %v, want nil", err)
 	}
 
 	client.SetStreams(t.Context(), "streams", nil, time.Second)

@@ -106,8 +106,6 @@ func newLenientAlarmCacheMock(
 	cacheMock.CompareAndExpireFunc = cacheClient.CompareAndExpire
 	cacheMock.GetStreamsFunc = cacheClient.GetStreams
 	cacheMock.SetStreamsFunc = cacheClient.SetStreams
-	cacheMock.InitializeMemberDatabaseFunc = cacheClient.InitializeMemberDatabase
-	cacheMock.GetAllMembersFunc = cacheClient.GetAllMembers
 	cacheMock.CloseFunc = cacheClient.Close
 	cacheMock.IsConnectedFunc = cacheClient.IsConnected
 	cacheMock.WaitUntilReadyFunc = cacheClient.WaitUntilReady

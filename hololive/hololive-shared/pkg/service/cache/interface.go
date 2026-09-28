@@ -42,7 +42,6 @@ type DataCache interface {
 
 type DomainCache interface {
 	StreamCache
-	MemberCache
 }
 
 type Client interface {

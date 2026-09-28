@@ -86,7 +86,7 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -184,7 +184,7 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
@@ -217,7 +217,7 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   &scheduleStreamProviderStub{},
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true
@@ -257,7 +257,7 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message

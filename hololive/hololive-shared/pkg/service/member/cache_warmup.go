@@ -50,7 +50,7 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 		return fmt.Errorf("failed to load all members: %w", errAllMembersGenerationChanged)
 	}
 
-	representatives := channelRepresentatives(members)
+	representatives := ChannelRepresentatives(members)
 	chunkSize := c.warmUpChunkSize
 	chunks := chunkMembers(members, chunkSize)
 

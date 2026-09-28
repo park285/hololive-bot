@@ -38,14 +38,11 @@ func InitAlarmYouTubeStack(
 		return nil, fmt.Errorf("init alarm mode components: %w", err)
 	}
 
-	memberMatcher := ProvideMatcher(
-		alarmMode.MemberDataSource,
-		infra.Cache,
-		logger,
-	)
+	memberMatcher := ProvideMatcher(alarmMode.MemberDataSource, logger)
 	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   appConfig.YouTube,
 		CacheService:    infra.Cache,
+		MemberData:      alarmMode.MemberDataSource,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})

@@ -48,61 +48,7 @@ func ProvideMemberCache(
 		return nil, fmt.Errorf("build member cache: %w", err)
 	}
 
-	if cacheClient == nil {
-		logger.Warn("Cache service is nil; member database init skipped")
-
-		return memberCache, nil
-	}
-
-	if err := initializeMemberDatabaseFromSnapshot(ctx, memberCache, cacheClient, logger); err != nil {
-		return nil, fmt.Errorf("initialize member database from snapshot: %w", err)
-	}
-
 	return memberCache, nil
-}
-
-type allMembersSnapshot interface {
-	AllMembers(ctx context.Context) ([]*domain.Member, error)
-}
-
-func initializeMemberDatabaseFromSnapshot(
-	ctx context.Context,
-	memberCache allMembersSnapshot,
-	cacheClient cache.Client,
-	logger *slog.Logger,
-) error {
-	members, err := memberCache.AllMembers(ctx)
-	if err != nil {
-		logger.Warn("Failed to reuse members for member database init; initialization skipped", slog.Any("error", err))
-
-		return nil
-	}
-
-	if err := initializeMemberDatabase(ctx, members, cacheClient); err != nil {
-		return fmt.Errorf("initialize member database: %w", err)
-	}
-
-	return nil
-}
-
-func initializeMemberDatabase(
-	ctx context.Context,
-	members []*domain.Member,
-	cacheClient cache.Client,
-) error {
-	memberMap := make(map[string]string, len(members))
-	for _, m := range members {
-		if m != nil && m.ChannelID != "" {
-			// name:org 형식으로 캐시 키 생성 (동명이인 지원)
-			memberMap[m.Name+":"+m.GetOrg()] = m.ChannelID
-		}
-	}
-
-	if err := cacheClient.InitializeMemberDatabase(ctx, memberMap); err != nil {
-		return fmt.Errorf("failed to initialize member database: %w", err)
-	}
-
-	return nil
 }
 
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성.

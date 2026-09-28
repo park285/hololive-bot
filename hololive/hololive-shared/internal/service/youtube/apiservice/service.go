@@ -23,12 +23,13 @@ package apiservice
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	youtube "github.com/kapu/hololive-shared/pkg/service/youtube"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -55,6 +56,7 @@ type serviceImpl struct {
 func New(
 	ctx context.Context,
 	cacheClient cache.Client,
+	memberData domain.MemberDataProvider,
 	youtubeConfig settings.YouTubeConfig,
 	sharedRL *ratelimiter.RateLimiter,
 	logger *slog.Logger,
@@ -68,9 +70,8 @@ func New(
 		scraperPhaseTimeout: youtubeConfig.ScraperPhaseTimeout,
 	}
 
-	// 캐시에서 채널 ID -> 멤버 이름 맵 초기화
-	if cacheClient != nil {
-		ys.loadChannelNameMap(ctx)
+	if memberData != nil {
+		ys.loadChannelNameMap(ctx, memberData)
 	}
 
 	logger.Info("YouTube scraper service initialized")
@@ -78,15 +79,12 @@ func New(
 	return ys, nil
 }
 
-// loadChannelNameMap: 캐시에서 멤버 정보를 읽어 channelID -> memberName 맵을 구성.
-func (ys *serviceImpl) loadChannelNameMap(ctx context.Context) {
-	if ys.cache == nil {
-		return
-	}
-
-	memberMap, err := ys.cache.GetAllMembers(ctx)
+// loadChannelNameMap: 멤버 source 1회 조회 결과로 channelID -> 대표 멤버 이름 맵을 구성한다.
+// 이름은 부가 정보이므로 조회 실패는 경고만 남기고 service 생성을 막지 않는다.
+func (ys *serviceImpl) loadChannelNameMap(ctx context.Context, memberData domain.MemberDataProvider) {
+	members, err := memberData.WithContext(ctx).LoadAllMembers()
 	if err != nil {
-		ys.logger.Warn("Failed to load member map for channel names", slog.Any("error", err))
+		ys.logger.Warn("Failed to load members for channel names", slog.Any("error", err))
 
 		return
 	}
@@ -94,28 +92,16 @@ func (ys *serviceImpl) loadChannelNameMap(ctx context.Context) {
 	ys.channelMu.Lock()
 	defer ys.channelMu.Unlock()
 
-	ys.storeChannelNameMap(memberMap)
-
-	ys.logger.Debug("Channel name map loaded", slog.Int("count", len(ys.channelToName)))
-}
-
-func (ys *serviceImpl) storeChannelNameMap(memberMap map[string]string) {
-	for key, channelID := range memberMap {
-		if channelID == "" {
+	for channelID, representative := range member.ChannelRepresentatives(members) {
+		// 대표 이름이 비면 차순위 멤버로 대체하지 않고 resolveChannelTitle의 fallbackTitle을 쓴다.
+		if representative.Name == "" {
 			continue
 		}
 
-		ys.channelToName[channelID] = memberNameFromCacheKey(key)
-	}
-}
-
-func memberNameFromCacheKey(key string) string {
-	name, _, found := strings.CutLast(key, ":")
-	if found && name != "" {
-		return name
+		ys.channelToName[channelID] = representative.Name
 	}
 
-	return key
+	ys.logger.Debug("Channel name map loaded", slog.Int("count", len(ys.channelToName)))
 }
 
 // getChannelName: channelID로 멤버 이름 조회 (없으면 빈 문자열).

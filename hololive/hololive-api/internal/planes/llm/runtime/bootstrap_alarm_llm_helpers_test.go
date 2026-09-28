@@ -84,7 +84,6 @@ func TestInitMemberNewsServiceFailsWhenEnabledLLMClientCannotInitialize(t *testi
 		settings.ExaConfig{},
 		nil,
 		nil,
-		nil,
 		&llmGuards{},
 		testRuntimeLogger(),
 	)
@@ -100,7 +99,6 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			cliproxyProvider(settings.CliproxyConfig{}),
 			&settings.LLMConfig{},
 			settings.ExaConfig{},
-			nil,
 			nil,
 			nil,
 			&llmGuards{},
@@ -138,7 +136,6 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			cliproxyConfig,
 			llmConfig,
 			settings.ExaConfig{},
-			nil,
 			nil,
 			nil,
 			&llmGuards{},

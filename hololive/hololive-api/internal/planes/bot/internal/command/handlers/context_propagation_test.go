@@ -157,7 +157,7 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 		Name:      testMemberAqua,
 	})
 
-	matcherService := matcher.NewMatcher(provider, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(provider, nil, newCommandTestLogger())
 
 	deps := &handlercore.Dependencies{
 		Matcher:   matcherService,
@@ -186,7 +186,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		IsGraduated: true,
 		Org:         "Hololive",
 	})
-	matcherService := matcher.NewMatcher(provider, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(provider, nil, newCommandTestLogger())
 
 	var (
 		sendErrorState trackedContextState
@@ -231,7 +231,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		Name:      testMemberAqua,
 	})
 
-	matcherService := matcher.NewMatcher(provider, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(provider, nil, newCommandTestLogger())
 	// NewMatcher는 생성 로그의 멤버 수를 base ctx로 읽는다. 명령 실행 구간의 ctx만 검사한다.
 	provider.state.reset()
 

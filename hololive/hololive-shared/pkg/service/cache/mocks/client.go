@@ -75,9 +75,6 @@ type Client struct {
 
 	GetStreamsFunc func(ctx context.Context, key string) ([]*domain.Stream, bool)
 	SetStreamsFunc func(ctx context.Context, key string, streams []*domain.Stream, ttl time.Duration)
-
-	InitializeMemberDatabaseFunc func(ctx context.Context, memberData map[string]string) error
-	GetAllMembersFunc            func(ctx context.Context) (map[string]string, error)
 }
 
 var (
@@ -87,7 +84,6 @@ var (
 	_ cache.HashCache         = (*Client)(nil)
 	_ cache.ScriptCache       = (*Client)(nil)
 	_ cache.StreamCache       = (*Client)(nil)
-	_ cache.MemberCache       = (*Client)(nil)
 	_ cache.ConnectionManager = (*Client)(nil)
 	_ cache.LowLevelCache     = (*Client)(nil)
 )

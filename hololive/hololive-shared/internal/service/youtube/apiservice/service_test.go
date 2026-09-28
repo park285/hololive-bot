@@ -1,111 +1,160 @@
 package apiservice
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 const (
 	testChannelID1    = "UC1"
 	testChannelID2    = "UC2"
 	testFallbackTitle = "@fallback"
+	testOrgHololive   = "Hololive"
 )
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-func TestMemberNameFromCacheKey(t *testing.T) {
-	t.Parallel()
+type channelNameMembers struct {
+	members   []*domain.Member
+	err       error
+	loadCalls *atomic.Int32
+}
 
-	tests := []struct {
-		name string
-		key  string
-		want string
-	}{
-		{name: "strips trailing colon segment", key: "ときのそら:UC123", want: "ときのそら"},
-		{name: "keeps only first segment before last colon", key: "name:type:UC123", want: "name:type"},
-		{name: "no colon returns key unchanged", key: "PlainName", want: "PlainName"},
-		{name: "leading colon returns key unchanged", key: ":onlysuffix", want: ":onlysuffix"},
-		{name: "empty key returns empty", key: "", want: ""},
+func (m channelNameMembers) LoadAllMembers() ([]*domain.Member, error) {
+	m.loadCalls.Add(1)
+
+	return m.members, m.err
+}
+
+func (channelNameMembers) FindMemberByChannelID(string) *domain.Member             { return nil }
+func (channelNameMembers) FindMemberByName(string) *domain.Member                  { return nil }
+func (channelNameMembers) FindMemberByAlias(string) *domain.Member                 { return nil }
+func (channelNameMembers) FindMembersByName(string) []*domain.Member               { return nil }
+func (channelNameMembers) FindMembersByAlias(string) []*domain.Member              { return nil }
+func (channelNameMembers) GetChannelIDs() []string                                 { return nil }
+func (m channelNameMembers) WithContext(context.Context) domain.MemberDataProvider { return m }
+
+func newChannelNameService(t *testing.T, members []*domain.Member, loadErr error) (*serviceImpl, int32) {
+	t.Helper()
+
+	provider := channelNameMembers{members: members, err: loadErr, loadCalls: &atomic.Int32{}}
+
+	// strict cache는 설정하지 않은 명령마다 panic한다. 통계 cache를 유지한 채로 채널 이름 초기화가
+	// 퇴역한 hololive:members를 포함해 어떤 cache 명령도 보내지 않음을 함께 검증한다.
+	svc, err := New(t.Context(), cachemocks.NewStrictClient(), provider, settings.DefaultYouTubeOperationalConfig(), nil, discardLogger())
+	if err != nil {
+		t.Fatalf("New() unexpected error: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	ys, ok := svc.(*serviceImpl)
+	if !ok {
+		t.Fatalf("New() returned %T, want *serviceImpl", svc)
+	}
 
-			got := memberNameFromCacheKey(tt.key)
-			if got != tt.want {
-				t.Fatalf("memberNameFromCacheKey(%q) = %q, want %q", tt.key, got, tt.want)
-			}
-		})
+	return ys, provider.loadCalls.Load()
+}
+
+// 공유 channel은 입력 순서와 무관하게 최소 영속 ID 멤버의 Name을 쓴다.
+func TestNew_SharedChannelUsesLowestIDRepresentativeName(t *testing.T) {
+	t.Parallel()
+
+	first := &domain.Member{ID: 3, Name: "Later", ChannelID: "UC_shared", Org: testOrgHololive}
+	representative := &domain.Member{ID: 1, Name: "Earliest", ChannelID: "UC_shared", Org: testOrgHololive}
+	third := &domain.Member{ID: 2, Name: "Middle", ChannelID: "UC_shared", Org: testOrgHololive}
+
+	orders := [][]*domain.Member{
+		{first, representative, third},
+		{third, first, representative},
+		{representative, third, first},
+	}
+	for _, members := range orders {
+		ys, _ := newChannelNameService(t, members, nil)
+
+		if got := ys.resolveChannelTitle("UC_shared", testFallbackTitle); got != "Earliest" {
+			t.Fatalf("resolveChannelTitle(UC_shared) = %q, want Earliest (order %v)", got, []int{members[0].ID, members[1].ID, members[2].ID})
+		}
 	}
 }
 
-func TestStoreChannelNameMap(t *testing.T) {
+// 조직이 다른 동명 멤버와 colon이 든 이름도 channel별로 그대로 보존한다.
+func TestNew_ChannelNamesKeepSameNameAcrossOrgsAndColon(t *testing.T) {
 	t.Parallel()
 
-	ys := &serviceImpl{
-		logger:        discardLogger(),
-		channelToName: make(map[string]string),
+	ys, calls := newChannelNameService(t, []*domain.Member{
+		{ID: 10, Name: "Sora", ChannelID: testChannelID1, Org: testOrgHololive},
+		{ID: 11, Name: "Sora", ChannelID: testChannelID2, Org: "Nijisanji"},
+		{ID: 12, Name: "name:with:colon", ChannelID: "UC_colon", Org: testOrgHololive},
+	}, nil)
+
+	if calls != 1 {
+		t.Fatalf("LoadAllMembers() calls = %d, want 1", calls)
 	}
 
-	ys.storeChannelNameMap(map[string]string{
-		"ときのそら:meta": "UC_sora",
-		"AZKi:meta":  "UC_azki",
-		"empty:meta": "",
-		"NoColon":    "UC_nocolon",
-	})
-
-	tests := []struct {
-		channelID string
-		want      string
-	}{
-		{channelID: "UC_sora", want: "ときのそら"},
-		{channelID: "UC_azki", want: "AZKi"},
-		{channelID: "UC_nocolon", want: "NoColon"},
-	}
-	for _, tt := range tests {
-		if got := ys.getChannelName(tt.channelID); got != tt.want {
-			t.Fatalf("getChannelName(%q) = %q, want %q", tt.channelID, got, tt.want)
+	want := map[string]string{testChannelID1: "Sora", testChannelID2: "Sora", "UC_colon": "name:with:colon"}
+	for channelID, name := range want {
+		if got := ys.resolveChannelTitle(channelID, testFallbackTitle); got != name {
+			t.Fatalf("resolveChannelTitle(%q) = %q, want %q", channelID, got, name)
 		}
 	}
 
-	if _, ok := ys.channelToName["empty:meta"]; ok {
-		t.Fatal("blank channelID must not be stored under any key")
-	}
-
-	if got := ys.getChannelName(""); got != "" {
-		t.Fatalf("empty channelID lookup = %q, want empty (blank values are skipped)", got)
-	}
-
-	if len(ys.channelToName) != 3 {
-		t.Fatalf("channelToName has %d entries, want 3 (blank value skipped)", len(ys.channelToName))
+	if len(ys.channelToName) != len(want) {
+		t.Fatalf("channelToName = %v, want %d entries", ys.channelToName, len(want))
 	}
 }
 
-func TestStoreChannelNameMap_LastWriteWinsOnChannelCollision(t *testing.T) {
+// nil 멤버·빈 channel은 무시하고, 대표 Name이 비면 차순위로 바꾸지 않고 fallbackTitle을 쓴다.
+func TestNew_ChannelNamesSkipInvalidMembersAndBlankRepresentative(t *testing.T) {
 	t.Parallel()
 
-	ys := &serviceImpl{
-		logger:        discardLogger(),
-		channelToName: make(map[string]string),
+	ys, _ := newChannelNameService(t, []*domain.Member{
+		nil,
+		{ID: 1, Name: "NoChannel", ChannelID: ""},
+		{ID: 2, Name: "", ChannelID: "UC_blank"},
+		{ID: 3, Name: "Runner-up", ChannelID: "UC_blank"},
+	}, nil)
+
+	if len(ys.channelToName) != 0 {
+		t.Fatalf("channelToName = %v, want empty", ys.channelToName)
 	}
 
-	ys.storeChannelNameMap(map[string]string{"OnlyKey:meta": "UC_shared"})
-
-	if got := ys.getChannelName("UC_shared"); got != "OnlyKey" {
-		t.Fatalf("getChannelName = %q, want %q", got, "OnlyKey")
+	if got := ys.resolveChannelTitle("UC_blank", testFallbackTitle); got != testFallbackTitle {
+		t.Fatalf("resolveChannelTitle(UC_blank) = %q, want fallback %q", got, testFallbackTitle)
 	}
 }
 
-func TestNew_ReturnsUsableServiceWithNilCache(t *testing.T) {
+// 멤버 source 오류는 service 생성을 막지 않고 재시도 없이 빈 이름 맵으로 남는다.
+func TestNew_MemberLoadFailureIsNonfatal(t *testing.T) {
 	t.Parallel()
 
-	svc, err := New(t.Context(), nil, settings.DefaultYouTubeOperationalConfig(), nil, discardLogger())
+	ys, calls := newChannelNameService(t, []*domain.Member{{ID: 1, Name: "Ignored", ChannelID: testChannelID1}}, errors.New("database unavailable"))
+
+	if calls != 1 {
+		t.Fatalf("LoadAllMembers() calls = %d, want 1", calls)
+	}
+
+	if len(ys.channelToName) != 0 {
+		t.Fatalf("channelToName = %v, want empty after load failure", ys.channelToName)
+	}
+
+	if got := ys.resolveChannelTitle(testChannelID1, testFallbackTitle); got != testFallbackTitle {
+		t.Fatalf("resolveChannelTitle() = %q, want fallback %q", got, testFallbackTitle)
+	}
+}
+
+func TestNew_ReturnsUsableServiceWithoutCacheOrMembers(t *testing.T) {
+	t.Parallel()
+
+	svc, err := New(t.Context(), nil, nil, settings.DefaultYouTubeOperationalConfig(), nil, discardLogger())
 	if err != nil {
 		t.Fatalf("New() unexpected error: %v", err)
 	}
@@ -133,7 +182,7 @@ func TestNew_UsesInjectedYouTubeTimeouts(t *testing.T) {
 	cfg.CacheSaveTimeout = 2 * time.Second
 	cfg.ScraperPhaseTimeout = 9 * time.Second
 
-	svc, err := New(t.Context(), nil, cfg, nil, discardLogger())
+	svc, err := New(t.Context(), nil, nil, cfg, nil, discardLogger())
 	if err != nil {
 		t.Fatalf("New() unexpected error: %v", err)
 	}

@@ -269,8 +269,6 @@ hololive/hololive-shared/pkg/service/cache/hash.go
 hololive/hololive-shared/pkg/service/cache/interface.go
 hololive/hololive-shared/pkg/service/cache/kv.go
 hololive/hololive-shared/pkg/service/cache/lowlevel.go
-hololive/hololive-shared/pkg/service/cache/member.go
-hololive/hololive-shared/pkg/service/cache/member_cache.go
 hololive/hololive-shared/pkg/service/cache/script.go
 hololive/hololive-shared/pkg/service/cache/service.go
 hololive/hololive-shared/pkg/service/cache/service_connection.go
