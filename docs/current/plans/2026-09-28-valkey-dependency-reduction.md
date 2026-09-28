@@ -30,12 +30,12 @@
 | D1 | `membernews:rooms`, `membernews:room_names` mirror | repository writer·warmup·전용 cache 의존·전용 API/테스트·상수가 없음 |
 | D2 | `hololive:members` 중복 hash와 이를 읽는 readiness/조회 기능 | runtime reader/writer·backend API/interface/mock·동적 matcher helper·전용 CLI/env가 없음 |
 | K1 | 세션·reset·임시 계정·서명 nonce·공유 rate limit | 기존 Valkey와 TTL·원자성·실패 계약 유지 |
-| K2 | member epoch/L2, 설정·ACL Pub/Sub, alarm wakeup, 뉴스 주간·월간 실행 잠금 | 기존 조율 및 복구 계약 유지. `membernews:lock:weekly:*`·`monthly:*` 보존 |
-| K3 | API/LLM 결과 cache·알림 index/사전 claim | 현재 역할 유지. 측정 없이 메모리/PG로 전환하지 않음. 토큰 관측은 이미 Valkey와 분리된 현재 metrics 경로 유지 |
-| K4 | ACL 값 mirror, `alarm:member_names` | 이번 제거 집합에서 제외하고 그대로 유지 |
+| K2 | member epoch(변경 신호), alarm wakeup, 뉴스 주간·월간 실행 잠금 | 기존 조율 및 복구 계약 유지. `membernews:lock:weekly:*`·`monthly:*` 보존. member L2 data와 설정·ACL Pub/Sub은 2차 패치에서 제거(아래 2차 축소 기록) |
+| K3 | API/LLM 결과 cache·알림 채널 registry·구독 index/사전 claim | 현재 역할 유지. 측정 없이 메모리/PG로 전환하지 않음. 토큰 관측은 이미 Valkey와 분리된 현재 metrics 경로 유지. 방 index·이름 hash와 효과 없는 결과 cache는 2차 패치에서 제거 |
+| K4 | `alarm:member_names` | 이번 제거 집합에서 제외하고 그대로 유지. ACL 값 mirror는 2차 패치에서 in-process 통지와 함께 제거 |
 | K5 | Valkey server/client/config/auth/socket/readiness, PG ledger | 계속 필요한 공용 인프라와 영속 정본 보존 |
 
-K4는 이름만 바꾼 임시 호환 경로가 아닙니다. ACL mirror 제거는 지속적인 Valkey 장애에서 rollback되던 권한 변경을 PG 성공+통지 실패로 바꾸고, 알림 이름은 `ShortKoreanName → NameKo → Name`과 구독 fallback 등 별도 의미를 가집니다. 이 설계·검증이 해결되지 않은 상태에서 빅뱅이라는 이유로 포함하지 않습니다.
+K4는 이름만 바꾼 임시 호환 경로가 아닙니다. 알림 이름은 `ShortKoreanName → NameKo → Name`과 구독 fallback 등 별도 의미를 가지므로 유지합니다. ACL mirror는 1차 fadeout 당시 "지속적인 Valkey 장애에서 rollback되던 권한 변경이 PG 성공+통지 실패로 바뀐다"는 이유로 보류했으나, 2차 패치에서 ACL 변경 통지를 같은 프로세스 in-process 전파로 바꿔 통지 유실을 없앤 뒤 제거했습니다. 남은 실패(봇 plane의 PG 재읽기 실패)는 PG 커밋 뒤 관리 응답 `500 acl_bot_resync_failed`로 드러나고, 같은 요청 재시도가 PG 쓰기 없이 재동기화합니다(`contracts/settings.md`).
 
 PG는 dispatch pending/retry/lease/sending/terminal의 정본입니다. 이 패치는 outbox identity·retry·quarantine·unknown-send·schema를 변경하지 않습니다. Valkey 자체가 없어도 홀로봇 전체가 실행된다는 목표는 두지 않습니다.
 
@@ -43,7 +43,7 @@ PG는 dispatch pending/retry/lease/sending/terminal의 정본입니다. 이 패�
 
 뉴스 정기 수신 방은 `member_news_subscriptions`, 관심 멤버는 `alarms LEFT JOIN members`, 소식 후보는 `major_events`의 PG 조회입니다. 수동 뉴스 생성은 정기 구독 여부를 선행 검사하지 않습니다. 관심 멤버 SQL은 LIVE 타입만 고르지 않으며 이름 우선순위·이름 기준 DISTINCT를 보존합니다. 뉴스 구독 해지는 알람 등록이나 이미 enqueue된 메시지를 취소하지 않습니다.
 
-뉴스 잠금은 15분 TTL과 token 비교 해제이며 Valkey 오류 시 실행을 계속합니다. 알람 사전 claim은 Valkey 오류 시 확보 실패로 해당 준비 건을 건너뜁니다. 서로 다른 실패 의미를 통일하거나 cache=nil로 잠금을 비활성화하지 않습니다. 현재 HEAD의 `ProvideLLMCostTracker()`는 cache 인자 없는 `NewTokenMetricsRecorder()`이며, 월 상한·`llm:cost:tokens:*` 카운터는 이미 퇴역했습니다. 과거 감사 N07의 경고용 누계를 복원하지 않습니다.
+뉴스 잠금은 15분 TTL과 token 비교 해제이며, Valkey 오류 시 오류를 돌려줘 실행하지 않습니다(fail-closed, 다음 주기 재시도). 알람 사전 claim도 Valkey 오류를 skip과 구분해 해당 준비 건을 실패로 기록합니다. 두 경로를 cache=nil로 비활성화하지 않습니다. 현재 HEAD의 `ProvideLLMCostTracker()`는 cache 인자 없는 `NewTokenMetricsRecorder()`이며, 월 상한·`llm:cost:tokens:*` 카운터는 이미 퇴역했습니다. 과거 감사 N07의 경고용 누계를 복원하지 않습니다.
 
 뉴스 enqueue는 기존 handoff 설정에 따라 `notification_delivery_outbox` 또는 alarm dispatch ledger를 사용합니다. 실제 운영값은 미확인이며 이번에 mode/default/executor를 바꾸지 않습니다. 같은 기간이라도 dispatch digest의 본문 hash가 바뀌면 identity가 달라질 수 있으므로 잠금 제거를 PG dedup만으로 정당화하지 않습니다. 스케줄러의 `Sent`는 enqueue 성공이며 실제 발송 결과는 worker에서 검증합니다.
 
@@ -148,7 +148,21 @@ quiesce·supervisor 제어·traffic 재개·실제 메시지 smoke·key 삭제�
 
 rollback하면 runtime은 구 설계로 돌아간 것이므로 이번 fadeout의 운영 완료 판정을 철회합니다. 새 source에는 여전히 구 경로를 넣지 않습니다. 이전 artifact는 운영 수용 기간 동안 복구용으로 보존하며, 보존 자체가 새 artifact의 실행 경로 잔재는 아닙니다.
 
-폐기 대상은 `membernews:rooms`, `membernews:room_names`, `hololive:members`, 그리고 소유가 확인된 구 `hololive:members:ready` sentinel입니다. 이들은 TTL 자동 회수를 보장하지 않습니다. namespace 전체 삭제나 `FLUSH*`를 사용하지 않습니다. 세션·nonce·member epoch/L2·alarm 이름/index는 유지합니다.
+1차 폐기 대상은 `membernews:rooms`, `membernews:room_names`, `hololive:members`, 그리고 소유가 확인된 구 `hololive:members:ready` sentinel입니다. 이들은 TTL 자동 회수를 보장하지 않습니다. namespace 전체 삭제나 `FLUSH*`를 사용하지 않습니다. 세션·nonce·member epoch·alarm 채널 registry·구독 index·`alarm:member_names`는 유지합니다.
+
+2차 폐기 대상 중 TTL이 없어 자동 회수되지 않는 key는 아래와 같습니다. `alarm:user_names`는 Kakao user ID→닉네임, `alarm:room_names`는 방 제목을 평문으로 담으므로 우선 회수합니다. `alarm:{roomID}`는 이름을 열거할 수 없으므로 반드시 `SMEMBERS alarm:registry`로 방 ID를 먼저 읽은 뒤 방 key를 지우고 마지막에 registry를 지웁니다. `alarm:*` 패턴 삭제는 유지 key(`alarm:channel_registry`, `alarm:channel_subscribers*`, `alarm:member_names`, `alarm:subscriber_cache_empty`, `alarm:dispatch:wakeup*`)까지 지우므로 금지합니다. 회수 도구는 room/user 식별자를 로그에 남기지 않습니다.
+
+| key | TTL | 비고 |
+|---|---|---|
+| `alarm:{roomID}` (registry의 방 ID별) | 없음 | registry를 먼저 읽음 |
+| `alarm:registry` | 없음 | 방 key 삭제 뒤 |
+| `alarm:room_names`, `alarm:user_names` | 없음 | 평문 식별자·이름 |
+| `alarm:channel_registry:version` | 없음 | |
+| `acl:settings`, `acl:mode`, `acl:rooms:whitelist`, `acl:rooms:blacklist` | 없음 | ACL mirror |
+| `auth:user_sessions:{userID}` | 8일 | 자동 만료, 회수 선택 |
+| `member-cache:v2:data:*` | 30분 | 자동 만료 |
+| `youtube:channel_stats:*`, `search_channels:*`, `channels_live_status_*` | 5분·10분·30초 | 자동 만료 |
+| `hololive_channels`, `channels_live_status`(접미사 없음), `admin:channel_stats*` | 코드상 writer 없음 | 존재하면 회수 |
 
 특히 `membernews:*` 전체 삭제는 유지할 주간·월간 실행 잠금까지 지우므로 금지합니다. 정리 명세와 key별 I/O 검증은 폐기 대상의 정확한 이름으로 제한합니다.
 
@@ -247,7 +261,7 @@ S/R/D를 구분하고 C0~C6 결과를 해당 권한과 증거로 기록합니다
 | B19 | 뉴스 정기 구독 유무 × 알람 멤버 유무 | N01 네 조합 보존, 수동 조회에 뉴스 구독 조건 추가 없음 |
 | B20 | alarms/members join·알람 타입·이름 중복·빈 이름 재구독 | 실제 PG SQL 기준 결과 보존, fake와 SQL의 빈 문자열 차이 해소 |
 | B21 | 뉴스 주간·월간 잠금 성공/경쟁/Valkey 오류 | 기존 key·TTL·해제·skip/진행 의미 보존, nil로 비활성화 없음 |
-| B22 | 알람 사전 claim의 Valkey 오류 | 준비 건 skip 유지, 뉴스 locker의 fail-open과 혼동 없음 |
+| B22 | 알람 사전 claim의 Valkey 오류 | 해당 준비 건을 실패로 기록(skip과 구분). 뉴스 locker도 오류 시 실행하지 않는 fail-closed |
 | B23 | delivery off/shadow/cutover와 같은 기간의 다른 본문 | 기존 enqueue 대상·identity·terminal 상태 보존, 양쪽 backlog 확인 |
 | B24 | 알람 추가 PG 성공 뒤 cache 실패 | PG 저장과 반환 오류·재구성 결과를 구분, 뉴스 mirror 실패와 동일시하지 않음 |
 | B25 | 알람 이름의 등록/warmup·host 구독·provider 실패 | 기존 producer·한국어 표시·fallback 보존, D2 제거를 이름 통일로 확대하지 않음 |
@@ -424,6 +438,42 @@ B07의 수정 전 실패는 삭제된 초기화가 hash를 DEL/HSET하고 colon 
 
 ### 남은 작업
 
-1. 커밋과 main 통합 여부를 결정해야 합니다. main checkout에는 이 작업과 별개인 대규모 미커밋 변경이 있고, `services_alarm_stack.go`·command handler 테스트 등 일부 파일이 겹치므로 통합 때 충돌을 해소해야 합니다.
+1. 1차 커밋 `3a28ea2`는 브랜치에 있고 main 통합은 main checkout의 별개 미커밋 작업 때문에 보류 중입니다. 겹치는 파일은 3-way 병합 시험에서 import graph 산출물만 충돌했습니다.
 2. 외부 설치 자동화·비공개 Go consumer의 부재는 증명하지 않았습니다. 발견되면 publication을 멈추고 같은 변경 집합에서 처리합니다.
 3. 배포는 API·alarm-worker 동시 교체(C0~C5), 폐기 key 회수는 정확한 key 이름으로 별도 승인(C6)이 필요합니다.
+
+## 2026-09-28 2차 축소 기록
+
+같은 worktree·브랜치에서 1차 커밋 위에 이어서 구현했습니다. 사용자 결정: 세션 세대 컬럼, 관리자 방 이름 우선·PG 저장, apiservice 삭제, names/user API 삭제, YouTube producer state store 삭제. next_stream은 리뷰만 했습니다.
+
+### 반영 내용
+
+| 영역 | 변경 | 근거 |
+|---|---|---|
+| P1 LIVE 구독 누락 | checker가 set 비어 있고 empty marker가 없으면 batch PG 조회로 확정(read-through, set 미warm) | TTL 없는 set의 allkeys-lfu eviction 시 알림이 조용히 빠짐 |
+| P1 reset 후 세션 | migration 231 `auth_users.session_generation`, reset이 같은 문장에서 +1, Me·Refresh가 비교, `auth:user_sessions` 삭제 | 인덱스 eviction·폐기 실패 warn·Refresh 경합 |
+| P1 방 이름 유실 | migration 232 `alarm_room_display_names`·`alarms.room_name_updated_at`, 관리 목록 PG 전환, 방 index·이름 hash·version key·names/user API 삭제 | 관리자 이름이 Valkey에만 있어 rebuild·재등록 때 사라짐 |
+| ACL·설정 | `acl:*` mirror와 `config:update` Pub/Sub 삭제, bot plane은 직렬화된 in-process reload, 실패는 500 `acl_bot_resync_failed`와 재시도 수렴, alarm_advance 단일 HTTP 경로 | mirror reader 0이면서 Valkey 장애가 ACL 변경을 막음, worker 3중 적용 |
+| member cache | L2 data 삭제, epoch를 ≠ 변경 신호로 | L2 hit도 snapshot 객체만 반환, Valkey 재시작 뒤 영구 PG 우회 |
+| 죽은 코드·캐시 | apiservice·채널 통계 캐시·전용 env 퇴역 가드, producer state store, Holodex 무효 캐시, cache API 축소, dead claim·locker·AlarmDispatchState, `GetChannelStats` | production 호출 0 또는 hit≈0 |
+| 문서 | 잠금 fail-closed 정정(감사 N03, 리뷰 R08, 이 계획), settings·QUEUE·DEPLOYMENT·alarm·member-cache runbook 계약 갱신, 폐기 key 회수 표 | 코드와 문서 불일치 |
+
+### next_stream 리뷰 결론(미결정)
+
+`alarm:next_stream:*`는 이 저장소 이관 시점(`1da02d2cb`, 2026-03-01)부터 writer가 없습니다. 당시 Rust scraper crate(`keys.rs`, `841526aee`에서 삭제)도 key 상수만 있었습니다. 그래서 `!알람 추가`의 '다음 방송'과 `!알람 목록`의 방송 중 표시는 한 번도 나간 적이 없고 운영에서 이를 알릴 신호도 없습니다. 권고는 삭제(사용자 출력 변화 0, route·오류 코드·템플릿 분기·admin 미리보기 샘플 정리, 템플릿 migration 필요)이고, 필요하면 PG `youtube_live_sessions` 기반으로 별도 재구현합니다. 결정은 사용자에게 남았습니다.
+
+### 검증
+
+| 명령·검증 | 결과 |
+|---|---|
+| 각 구현 unit의 대상 패키지 `go vet`·`go test -race -count=1`(PG는 testcontainers 실제 실행) | 통과. 수정 전 실패 확인: LIVE 복구(0→1 알림), 세션 세대 비교 강제 통과 시 3개 실패, ACL reloadMu 제거 시 3/3 실패, Kakao 이름 정렬을 created_at으로 되돌리면 실패 |
+| schema golden 재생성 | `alarm_room_display_names`, `alarms.room_name_updated_at`, `auth_users.session_generation`만 추가 |
+| `./scripts/ci/local-ci.sh` | **exit 0**(architecture gate, lint 0 issues, NilAway, build, 전체 test·race). integration-tag 테스트는 기본값대로 skip |
+| 독립 리뷰 | 알림·플랫폼·보안 3개. 반영: ACL follower reload 직렬화(P2)와 실패 가시화, 폐기 key 회수 표(P2), Kakao 이름 정렬, LIVE fallback의 SADD 경합, 죽은 admin Valkey 필드·`GetChannelStats`·문서 잔재 |
+
+### 남은 작업·한계
+
+- Iris Console(별도 저장소)의 `POST /api/holo/names/user` 호출 제거와 방 이름 공백=해제 의미 반영.
+- member epoch ABA: Valkey 재시작 후 재생성된 epoch가 우연히 프로세스의 마지막 값과 같으면 snapshot TTL(5분)까지 이전 snapshot을 쓸 수 있습니다(runbook 기록).
+- 단일 채널 구독 조회 경로(`resolveChannelSubscribersFromDB`)는 여전히 set을 warm하므로 같은 경합이 남아 있습니다(범위 밖).
+- 배포는 migration 231·232 적용과 API·alarm-worker 동시 교체가 필요하고, 폐기 key 회수는 위 표 순서로 별도 승인이 필요합니다.

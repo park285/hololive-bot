@@ -40,28 +40,6 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 		return nil, errAlarmRecordNotFound
 	}
 
-	if as.alarmRepository != nil {
-		record, err := as.findAlarmRecordForMutationFromRepository(ctx, roomID, channelID, hostID)
-		if err != nil {
-			return nil, fmt.Errorf("find alarm record for mutation from repository: %w", err)
-		}
-
-		return record, nil
-	}
-
-	if hostID != "" {
-		return nil, errors.New("member subscription requires alarm repository")
-	}
-
-	record, err := as.findAlarmRecordForMutationFromCache(ctx, roomID, channelID)
-	if err != nil {
-		return nil, fmt.Errorf("find alarm record for mutation from cache: %w", err)
-	}
-
-	return record, nil
-}
-
-func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID, channelID, hostID string) (*domain.Alarm, error) {
 	alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepository, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find room alarms: %w", err)
@@ -80,70 +58,10 @@ func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Con
 	return nil, errAlarmRecordNotFound
 }
 
-func (as *AlarmService) findAlarmRecordForMutationFromCache(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
-	exists, err := as.cache.SIsMember(ctx, as.getAlarmKey(roomID), channelID)
-	if err != nil {
-		return nil, fmt.Errorf("check room alarm membership: %w", err)
-	}
-
-	if !exists {
-		return nil, errAlarmRecordNotFound
-	}
-
-	registryKey := as.getRegistryKey(roomID)
-
-	currentTypes, err := as.currentCachedAlarmTypes(ctx, channelID, registryKey)
-	if err != nil {
-		return nil, fmt.Errorf("current cached alarm types: %w", err)
-	}
-
-	return &domain.Alarm{
-		RoomID:     roomID,
-		ChannelID:  channelID,
-		AlarmTypes: currentTypes,
-	}, nil
-}
-
-func (as *AlarmService) currentCachedAlarmTypes(ctx context.Context, channelID, registryKey string) (domain.AlarmTypes, error) {
-	currentTypes := make(domain.AlarmTypes, 0, len(domain.AllAlarmTypes))
-	for _, alarmType := range domain.AllAlarmTypes {
-		subscriberKey := as.channelSubscribersKeyByType(channelID, alarmType)
-
-		isSubscriber, err := as.cache.SIsMember(ctx, subscriberKey, registryKey)
-		if err != nil {
-			return nil, fmt.Errorf("check subscriber type %s: %w", alarmType, err)
-		}
-
-		if isSubscriber {
-			currentTypes = append(currentTypes, alarmType)
-		}
-	}
-
-	if len(currentTypes) == 0 {
-		currentTypes = append(domain.AlarmTypes(nil), domain.DefaultAlarmTypes...)
-	}
-
-	return currentTypes, nil
-}
-
 func (as *AlarmService) loadRoomAlarmsForMutation(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	if as.alarmRepository != nil {
-		alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepository, roomID)
-		if err != nil {
-			return nil, fmt.Errorf("find room alarms: %w", err)
-		}
-
-		return alarms, nil
-	}
-
-	channelIDs, err := as.GetRoomAlarms(ctx, roomID)
+	alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepository, roomID)
 	if err != nil {
-		return nil, fmt.Errorf("get room alarms: %w", err)
-	}
-
-	alarms := make([]*domain.Alarm, 0, len(channelIDs))
-	for _, channelID := range channelIDs {
-		alarms = append(alarms, &domain.Alarm{RoomID: roomID, ChannelID: channelID})
+		return nil, fmt.Errorf("find room alarms: %w", err)
 	}
 
 	return alarms, nil

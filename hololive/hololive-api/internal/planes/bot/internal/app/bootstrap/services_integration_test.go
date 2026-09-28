@@ -21,7 +21,6 @@
 package bootstrap
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 
@@ -76,11 +75,8 @@ func TestInitCoreIntegrationServicesRejectsInvalidACLMode(t *testing.T) {
 func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.WithValue(t.Context(), bootstrapTestContextKey{}, "integration-context")
-	cacheClient, observedCalls := newACLCacheSyncMock(t, "integration-context")
-
 	services, err := InitCoreIntegrationServices(
-		ctx,
+		t.Context(),
 		&settings.Config{
 			Kakao: settings.KakaoConfig{
 				ACLEnabled: true,
@@ -90,7 +86,6 @@ func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 			Server: settings.ServerConfig{APIKey: "test-api-key"},
 		},
 		&sharedmodules.InfraModule{
-			Cache:    cacheClient,
 			Postgres: newACLPostgresMock(t),
 		},
 		slog.New(slog.DiscardHandler),
@@ -100,5 +95,4 @@ func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 	require.NotNil(t, services)
 	assert.NotNil(t, services.ACLService)
 	assert.Empty(t, services.CommandBuilders)
-	assert.Positive(t, observedCalls.Load())
 }

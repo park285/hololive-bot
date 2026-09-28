@@ -30,7 +30,6 @@ func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
 		"GET " + contractsalarm.BasePath + contractsalarm.NextStreamRoute,
 		"PUT " + contractsalarm.BasePath + contractsalarm.SettingsRoute,
 		"PUT " + contractsalarm.BasePath + contractsalarm.RoomNameRoute,
-		"PUT " + contractsalarm.BasePath + contractsalarm.UserNameRoute,
 		"GET " + contractsalarm.BasePath + contractsalarm.KeysRoute,
 	}
 	assert.ElementsMatch(t, expected, routeKeys(router.Routes()))
@@ -101,10 +100,6 @@ func (fakeAlarmCRUD) WarmCacheFromDB(context.Context) error {
 }
 
 func (fakeAlarmCRUD) SetRoomName(context.Context, string, string) error {
-	return nil
-}
-
-func (fakeAlarmCRUD) SetUserName(context.Context, string, string) error {
 	return nil
 }
 

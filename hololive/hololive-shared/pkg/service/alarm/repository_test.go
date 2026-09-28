@@ -125,6 +125,57 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 	}
 }
 
+// 방 이름 대표값은 created_at이 아니라 room_name이 마지막으로 바뀐 행을 따른다. 먼저 만든 구독에 upsert로 새 이름이
+// 들어오면 나중에 만든 구독의 옛 이름에 가려지면 안 되고, 같은 이름으로 재등록한 구독이 대표값을 되가져가도 안 된다.
+func TestListAlarmEntriesUsesMostRecentlyChangedKakaoRoomName(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	repository := &Repository{pool: dbtest.NewPool(t)}
+	roomID := "room-renamed"
+
+	add := func(channelID, roomName string, alarmTypes domain.AlarmTypes) {
+		t.Helper()
+
+		if err := repository.Add(ctx, &domain.Alarm{
+			RoomID:     roomID,
+			UserID:     "user-renamed",
+			ChannelID:  channelID,
+			RoomName:   roomName,
+			AlarmTypes: alarmTypes,
+		}); err != nil {
+			t.Fatalf("Add(%s, %q) error = %v", channelID, roomName, err)
+		}
+	}
+
+	requireRoomName := func(want string) {
+		t.Helper()
+
+		entries, err := repository.ListAlarmEntries(ctx)
+		if err != nil {
+			t.Fatalf("ListAlarmEntries() error = %v", err)
+		}
+
+		if len(entries) != 2 {
+			t.Fatalf("entries = %d, want 2", len(entries))
+		}
+
+		for _, entry := range entries {
+			if entry.RoomName != want {
+				t.Fatalf("entry %s/%s room name = %q, want %q", entry.RoomID, entry.ChannelID, entry.RoomName, want)
+			}
+		}
+	}
+
+	add("UC_room_name_a", "옛 방", domain.AlarmTypes{domain.AlarmTypeLive})
+	add("UC_room_name_b", "옛 방", domain.AlarmTypes{domain.AlarmTypeLive})
+	add("UC_room_name_a", "새 방", domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts})
+	requireRoomName("새 방")
+
+	add("UC_room_name_b", "옛 방", domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts})
+	requireRoomName("새 방")
+}
+
 func insertAlarmForTypeQuery(t *testing.T, db *pgxpool.Pool, roomID, channelID string, alarmTypes domain.AlarmTypes, createdAt time.Time) {
 	t.Helper()
 

@@ -22,23 +22,20 @@ package alarmservice
 
 import (
 	"context"
-	stdErrors "errors"
 	"fmt"
-
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// GetRoomAlarms는 방이 구독한 채널 ID를 중복 없이 돌려준다. 같은 채널의 UNIT B 멤버 구독 행은 채널 하나로 합친다.
 func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
-	alarmKey := as.getAlarmKey(roomID)
-
-	channelIDs, err := as.cache.SMembers(ctx, alarmKey)
+	alarms, err := as.GetRoomAlarmsWithTypes(ctx, roomID)
 	if err != nil {
-		if logErr := sharedlogging.LogAndWrapError(ctx, as.logger, "get room alarms", err); logErr != nil {
-			return []string{}, fmt.Errorf("log and wrap error: %w", logErr)
-		}
+		return nil, fmt.Errorf("get room alarms: %w", err)
+	}
 
+	channelIDs := uniqueAlarmChannelIDs(alarms)
+	if channelIDs == nil {
 		return []string{}, nil
 	}
 
@@ -46,10 +43,6 @@ func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]str
 }
 
 func (as *AlarmService) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	if as.alarmRepository == nil {
-		return nil, stdErrors.New("alarm repository not configured")
-	}
-
 	alarms, err := as.alarmRepository.FindByRoom(ctx, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find room alarms: %w", err)

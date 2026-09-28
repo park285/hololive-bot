@@ -19,10 +19,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
-const (
-	searchChannelsCacheKeyPrefix = "search_channels:"
-	usersLivePath                = "/users/live"
-)
+const usersLivePath = "/users/live"
 
 var ErrInvalidStreamOrg = errors.New("invalid stream org parameter")
 

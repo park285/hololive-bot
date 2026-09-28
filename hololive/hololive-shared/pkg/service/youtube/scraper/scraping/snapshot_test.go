@@ -39,7 +39,6 @@ func TestSnapshotPolicyAllowsOnlyConfiguredReason(t *testing.T) {
 func TestRecordParserDriftCapturesSnapshotWhenEnabled(t *testing.T) {
 	sink := &captureSink{}
 	client := NewClient(testYouTubeConfig(),
-		WithStateStore(newTestStateStore()),
 		WithSnapshotSink(sink),
 		WithSnapshotPolicy(SnapshotPolicy{
 			Enabled:      true,

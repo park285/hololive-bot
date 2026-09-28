@@ -1,31 +1,10 @@
 package app
 
 import (
-	"context"
-	"log/slog"
-
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
-
-func buildAdminAPIYouTubeStack(
-	ctx context.Context,
-	appConfig *settings.Config,
-	infra *sharedmodules.InfraModule,
-	foundation *scraperHolodexFoundation,
-	logger *slog.Logger,
-) *providers.YouTubeStack {
-	return sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
-		YouTubeConfig:   appConfig.YouTube,
-		CacheService:    infra.Cache,
-		MemberData:      foundation.MemberServiceAdapter,
-		SharedRateLimit: foundation.SharedRL,
-		Logger:          logger,
-	})
-}
 
 func buildAdminAPICommunityShortsOpsRepository(infra *sharedmodules.InfraModule) server.YouTubeCommunityShortsOpsRepository {
 	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {

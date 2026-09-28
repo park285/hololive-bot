@@ -22,7 +22,6 @@ package cache
 
 import (
 	"context"
-	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net"
@@ -33,7 +32,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/testredis"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const testPayloadValue = "value"
@@ -127,27 +125,20 @@ func TestCacheServiceSetGetAndExists(t *testing.T) {
 	}
 }
 
-func TestCacheServiceMSetMGetDel(t *testing.T) {
+func TestCacheServiceSetGetDelMany(t *testing.T) {
 	service, _ := newTestCacheService(t)
 	ctx := t.Context()
 
-	pairs := map[string]any{
-		"a": testPayload{Name: "A"},
-		"b": testPayload{Name: "B"},
-	}
-	if err := service.MSet(ctx, pairs, 0); err != nil {
-		t.Fatalf("mset failed: %v", err)
-	}
-
-	values, err := service.MGet(ctx, []string{"a", "b"})
-	if err != nil {
-		t.Fatalf("mget failed: %v", err)
+	for key, payload := range map[string]testPayload{"a": {Name: "A"}, "b": {Name: "B"}} {
+		if err := service.Set(ctx, key, payload, 0); err != nil {
+			t.Fatalf("set %s failed: %v", key, err)
+		}
 	}
 
 	var decoded testPayload
 
-	if unmarshalErr := jsonv2.Unmarshal([]byte(values["a"]), &decoded); unmarshalErr != nil {
-		t.Fatalf("decode failed: %v", unmarshalErr)
+	if getErr := service.Get(ctx, "a", &decoded); getErr != nil {
+		t.Fatalf("get failed: %v", getErr)
 	}
 
 	if decoded.Name != "A" {
@@ -215,28 +206,6 @@ func TestCacheServiceBatchHGetReturnsExistingFields(t *testing.T) {
 	}
 }
 
-func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
-	service, _ := newTestCacheService(t)
-	ctx := t.Context()
-
-	err := service.MSet(ctx, map[string]any{
-		"good": testPayload{Name: "A"},
-		"bad":  make(chan int),
-	}, time.Minute)
-	if err == nil {
-		t.Fatal("expected marshal error from mset")
-	}
-
-	exists, existsErr := service.Exists(ctx, "good")
-	if existsErr != nil {
-		t.Fatalf("exists failed: %v", existsErr)
-	}
-
-	if exists {
-		t.Fatal("expected mset to avoid partial writes on marshal failure")
-	}
-}
-
 func TestCacheServiceSetCeilsSubSecondTTL(t *testing.T) {
 	service, mini := newTestCacheService(t)
 	ctx := t.Context()
@@ -269,38 +238,6 @@ func TestCacheServiceSetCeilsSubSecondTTL(t *testing.T) {
 	}
 }
 
-func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
-	service, mini := newTestCacheService(t)
-	ctx := t.Context()
-
-	requireNoError(t, service.MSet(ctx, map[string]any{
-		"ttl:mset:a": testPayload{Name: "A"},
-		"ttl:mset:b": testPayload{Name: "B"},
-	}, 500*time.Millisecond))
-
-	mini.FastForward(900 * time.Millisecond)
-
-	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
-		exists, err := service.Exists(ctx, key)
-		requireNoError(t, err)
-
-		if !exists {
-			t.Fatalf("%s expired too early; expected ceil-rounded ttl", key)
-		}
-	}
-
-	mini.FastForward(200 * time.Millisecond)
-
-	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
-		exists, err := service.Exists(ctx, key)
-		requireNoError(t, err)
-
-		if exists {
-			t.Fatalf("expected %s to expire after rounded ttl elapsed", key)
-		}
-	}
-}
-
 func TestCacheServiceExpireCeilsSubSecondTTL(t *testing.T) {
 	service, mini := newTestCacheService(t)
 	ctx := t.Context()
@@ -324,24 +261,6 @@ func TestCacheServiceExpireCeilsSubSecondTTL(t *testing.T) {
 
 	if exists {
 		t.Fatal("expected key to expire after rounded ttl elapsed")
-	}
-}
-
-func TestStreamCacheOperations(t *testing.T) {
-	service, _ := newTestCacheService(t)
-	ctx := t.Context()
-
-	streams := []*domain.Stream{{ID: "stream-1"}}
-	service.SetStreams(ctx, "streams:key", streams, time.Minute)
-
-	got, found := service.GetStreams(ctx, "streams:key")
-	if !found || len(got) != 1 || got[0].ID != "stream-1" {
-		t.Fatalf("unexpected streams: %+v, found=%v", got, found)
-	}
-
-	_, found = service.GetStreams(ctx, "streams:missing")
-	if found {
-		t.Fatal("expected missing streams to return false")
 	}
 }
 

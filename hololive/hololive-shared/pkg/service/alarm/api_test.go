@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -51,7 +52,6 @@ type mockAlarmCRUD struct {
 	updateAlarmAdvanceMinutesFn func(minutes int) []int
 	getTargetMinutesFn          func() []int
 	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
-	setUserNameFn               func(ctx context.Context, userID, userName string) error
 	getAllAlarmKeysFn           func(ctx context.Context) ([]*domain.AlarmEntry, error)
 	warmCacheFromDBFn           func(ctx context.Context) error
 }
@@ -139,14 +139,6 @@ func (m *mockAlarmCRUD) GetTargetMinutes() []int {
 func (m *mockAlarmCRUD) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	if err := m.setRoomNameFn(ctx, roomID, roomName); err != nil {
 		return fmt.Errorf("set room name fn: %w", err)
-	}
-
-	return nil
-}
-
-func (m *mockAlarmCRUD) SetUserName(ctx context.Context, userID, userName string) error {
-	if err := m.setUserNameFn(ctx, userID, userName); err != nil {
-		return fmt.Errorf("set user name fn: %w", err)
 	}
 
 	return nil
@@ -594,6 +586,42 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
 			}
+		})
+	}
+}
+
+// room_name 필드는 필수지만 빈 값은 관리자 지정 이름 해제 요청이라 서비스까지 그대로 전달해야 한다.
+func TestSetRoomNameForwardsBlankNameAsClearAndRejectsMissingName(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCalls  []string
+	}{
+		{name: "이름 지정", body: `{"room_id":"` + testRoomID + `","room_name":"관리 방"}`, wantStatus: http.StatusOK, wantCalls: []string{"관리 방"}},
+		{name: "빈 이름은 해제", body: `{"room_id":"` + testRoomID + `","room_name":""}`, wantStatus: http.StatusOK, wantCalls: []string{""}},
+		{name: "room_name 누락", body: `{"room_id":"` + testRoomID + `"}`, wantStatus: http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls []string
+
+			mock := &mockAlarmCRUD{setRoomNameFn: func(_ context.Context, roomID, roomName string) error {
+				assert.Equal(t, testRoomID, roomID)
+
+				calls = append(calls, roomName)
+
+				return nil
+			}}
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/internal/alarm/room-name", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			newTestHandler(t, mock).ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Equal(t, tt.wantCalls, calls)
 		})
 	}
 }

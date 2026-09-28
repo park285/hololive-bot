@@ -40,11 +40,6 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,
-		RunConfigSubscriber: func(ctx context.Context) {
-			if r.ConfigSubscriber != nil {
-				r.ConfigSubscriber.Run(ctx)
-			}
-		},
 		StartBot: func(ctx context.Context) error {
 			if r.Bot == nil {
 				return nil

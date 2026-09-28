@@ -39,23 +39,6 @@ func newIntegrationClient(t *testing.T) *Client {
 	return NewClient(testYouTubeConfig())
 }
 
-func TestGetChannelStats_Integration(t *testing.T) {
-	client := newIntegrationClient(t)
-	ctx := context.Background()
-
-	// Pekora 채널 (UC1DCedRgGHBdm81E1llLhOQ)
-	stats, err := client.GetChannelStats(ctx, "UC1DCedRgGHBdm81E1llLhOQ")
-	require.NoError(t, err)
-
-	assert.Equal(t, "UC1DCedRgGHBdm81E1llLhOQ", stats.ChannelID)
-	assert.Greater(t, stats.SubscriberCount, int64(2_000_000)) // 2M+
-	assert.Greater(t, stats.ViewCount, int64(1_000_000_000))   // 1B+
-	assert.Greater(t, stats.VideoCount, int64(2_000))          // 2000+
-	assert.Equal(t, "Japan", stats.Country)
-
-	t.Logf("Channel Stats: %+v", stats)
-}
-
 func TestGetShorts_Integration(t *testing.T) {
 	client := newIntegrationClient(t)
 	ctx := context.Background()

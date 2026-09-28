@@ -1150,6 +1150,8 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort2, []string{"r3"})
 	require.NoError(t, err)
 
+	require.NoError(t, cache.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("unknown", domain.AlarmTypeLive), "1", time.Minute))
+
 	tests := map[string]struct {
 		channelIDs []string
 		wantLen    int
@@ -1164,7 +1166,7 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, tc.channelIDs)
+			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, nil, tc.channelIDs)
 			require.NoError(t, loadErr)
 			assert.Len(t, got, tc.wantLen)
 		})

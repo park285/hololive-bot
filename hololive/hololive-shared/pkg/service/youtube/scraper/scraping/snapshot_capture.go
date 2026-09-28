@@ -2,14 +2,12 @@ package scraping
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 )
 
-// captureSnapshot은 정책·간격 검사를 통과한 snapshot만 저장한다. 간격 검사를 건너뛰던 browser 진단 호출자는
-// browser snapshot 경로와 함께 지웠다(stack-audit 2026-09-26 T11 C2).
+// captureSnapshot은 정책 검사를 통과한 snapshot만 저장한다. 최소 간격 marker(youtube:producer:snapshot-interval:*)는
+// 운영에서 store가 주입된 적이 없어 적용되지 않았으므로 지웠다(Valkey 책임 축소 A12).
 func (c *Client) captureSnapshot(ctx context.Context, snapshot *Snapshot) {
 	policy := c.snapshotPolicy
 	if !c.shouldCaptureSnapshot(snapshot, policy) {
@@ -19,10 +17,6 @@ func (c *Client) captureSnapshot(ctx context.Context, snapshot *Snapshot) {
 	normalizeSnapshotPayload(snapshot, policy)
 
 	if len(snapshot.Body) == 0 {
-		return
-	}
-
-	if !c.allowSnapshotInterval(ctx, snapshot, policy.MinInterval) {
 		return
 	}
 
@@ -59,32 +53,4 @@ func (c *Client) shouldCaptureSnapshot(snapshot *Snapshot, policy SnapshotPolicy
 	}
 
 	return policy.allows(snapshot.Reason)
-}
-
-func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot *Snapshot, interval time.Duration) bool {
-	if interval <= 0 || c == nil || c.stateStore == nil {
-		return true
-	}
-
-	key := snapshotIntervalStateKey(snapshot)
-
-	var marker bool
-
-	if err := c.stateStore.Get(ctx, key, &marker); err == nil && marker {
-		return false
-	}
-
-	if err := c.stateStore.Set(ctx, key, true, interval); err != nil {
-		slog.Warn("failed to persist youtube producer snapshot interval marker", "key", key, "error", err)
-	}
-
-	return true
-}
-
-func snapshotIntervalStateKey(snapshot *Snapshot) string {
-	return fmt.Sprintf("youtube:producer:snapshot-interval:%s:%s:%s:%s",
-		strings.TrimSpace(snapshot.Operation),
-		strings.TrimSpace(snapshot.ChannelID),
-		strings.TrimSpace(snapshot.Stage),
-		strings.TrimSpace(string(snapshot.Reason)))
 }

@@ -119,12 +119,11 @@ func TestCreateSession_Success(t *testing.T) {
 	config := DefaultConfig()
 
 	config.SessionTTL = 30 * time.Minute
-	config.UserSessionsTTL = 2 * time.Hour
 
 	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
 	require.NoError(t, err)
 
-	session, err := service.createSession(t.Context(), "user-123")
+	session, err := service.createSession(t.Context(), "user-123", 0)
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	assert.NotEmpty(t, session.Token)
@@ -133,32 +132,26 @@ func TestCreateSession_Success(t *testing.T) {
 	assert.True(t, session.ExpiresAt.After(time.Now().UTC()))
 }
 
-func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
+func TestCreateSession_StoresJSONSessionDataWithGeneration(t *testing.T) {
 	cache := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
 
 	config.SessionTTL = 30 * time.Minute
-	config.UserSessionsTTL = 2 * time.Hour
 
 	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
 	require.NoError(t, err)
 
-	session, err := service.createSession(t.Context(), "user-123")
+	session, err := service.createSession(t.Context(), "user-123", 7)
 	require.NoError(t, err)
-
-	sessionHash := sha256Hex(session.Token)
 
 	var stored sessionData
 
-	require.NoError(t, cache.Get(t.Context(), sessionKeyPrefix+sessionHash, &stored))
+	require.NoError(t, cache.Get(t.Context(), sessionKeyPrefix+sha256Hex(session.Token), &stored))
 	assert.Equal(t, "user-123", stored.UserID)
+	assert.Equal(t, int64(7), stored.SessionGeneration)
 	assert.WithinDuration(t, session.ExpiresAt, stored.ExpiresAt, time.Second)
 	assert.False(t, stored.CreatedAt.IsZero())
-
-	userSessions, err := cache.SMembers(t.Context(), userSessionsKeyPrefix+"user-123")
-	require.NoError(t, err)
-	assert.Contains(t, userSessions, sessionHash)
 }
 
 func TestCreateSession_NoCacheService(t *testing.T) {
@@ -166,7 +159,7 @@ func TestCreateSession_NoCacheService(t *testing.T) {
 	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	_, err = service.createSession(t.Context(), "user-123")
+	_, err = service.createSession(t.Context(), "user-123", 0)
 	require.Error(t, err)
 	assertAuthCode(t, err, CodeInternal)
 }
@@ -177,7 +170,7 @@ func TestCreateSession_EmptyUserID(t *testing.T) {
 	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	_, err = service.createSession(t.Context(), "")
+	_, err = service.createSession(t.Context(), "", 0)
 	require.Error(t, err)
 	assertAuthCode(t, err, CodeInternal)
 }
@@ -188,10 +181,10 @@ func TestCreateSession_UniqueSessions(t *testing.T) {
 	service, err := NewService(newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	s1, err := service.createSession(t.Context(), "user-123")
+	s1, err := service.createSession(t.Context(), "user-123", 0)
 	require.NoError(t, err)
 
-	s2, err := service.createSession(t.Context(), "user-123")
+	s2, err := service.createSession(t.Context(), "user-123", 0)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, s1.Token, s2.Token, "동일 사용자여도 세션 토큰이 달라야 함")

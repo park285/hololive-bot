@@ -30,11 +30,6 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-const (
-	channelStatsCacheWorkers   = sharedserver.DefaultChannelStatsCacheWorkers
-	channelStatsRefreshWorkers = sharedserver.DefaultChannelStatsRefreshWorkers
-)
-
 func (h *StreamHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 	var api *Handler
 
@@ -53,8 +48,6 @@ func (h *StreamHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 
 	if api != nil {
 		handler.Holodex = api.holodex
-		handler.YouTube = api.youtube
-		handler.ValkeyCache = api.valkeyCache
 		handler.MemberRepository = api.repository
 		handler.MemberIndexLoader = api.memberIndexLoader
 	}

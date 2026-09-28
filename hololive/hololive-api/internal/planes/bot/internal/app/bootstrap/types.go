@@ -17,14 +17,12 @@ import (
 	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type BotInfrastructure struct {
@@ -49,7 +47,6 @@ type AlarmModeComponents struct {
 type ScraperHolodexFoundation struct {
 	HolodexService       *holodexprovider.Service
 	MemberServiceAdapter domain.MemberDataProvider
-	SharedRL             *ratelimiter.RateLimiter
 }
 
 type CoreIntegrationServices struct {
@@ -88,7 +85,6 @@ type BotStreamModule struct {
 	Holodex     *holodexprovider.Service
 	Alarm       domain.AlarmCRUD
 	MemberMatch *matcher.Matcher
-	YTStack     *providers.YouTubeStack
 }
 
 type BotSupportModule struct {
@@ -114,14 +110,4 @@ type BotDependencyModules struct {
 
 type BotWebhookRuntimeDependencies struct {
 	Cache cache.Client
-}
-
-type BotConfigSubscriberDependencies struct {
-	Cache    cache.Client
-	Settings settings.ReadWriter
-}
-
-type BotConfigSubscriberRuntimeDependencies struct {
-	AlarmCRUD domain.AlarmCRUD
-	ACL       *acl.Service
 }

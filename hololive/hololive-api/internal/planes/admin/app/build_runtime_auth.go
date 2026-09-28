@@ -25,7 +25,6 @@ func buildAdminAPIACLService(
 	aclService, err := acl.NewACLService(
 		ctx,
 		infra.Postgres,
-		infra.Cache,
 		logger,
 		appConfig.Kakao.ACLEnabled,
 		defaultMode,

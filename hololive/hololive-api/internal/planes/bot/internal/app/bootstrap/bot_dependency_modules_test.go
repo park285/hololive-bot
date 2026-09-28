@@ -21,12 +21,10 @@ import (
 	settingsmocks "github.com/kapu/hololive-api/internal/service/settings/mocks"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
 // ACL seed(KAKAO_ROOMS)는 chatID만 받으므로 fixture도 signed i64 문자열이다.
@@ -52,7 +50,6 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 			return nil
 		},
 	}
-	youTubeService := &stubYouTubeService{}
 	commandBuilders := []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
 
 	appConfig := &configsettings.Config{
@@ -81,7 +78,6 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 				AlarmCRUD:        alarmCRUD,
 				MemberDataSource: memberData,
 			},
-			YouTubeStack:    &sharedproviders.YouTubeStack{Service: youTubeService},
 			ActivityLogger:  activityLogger,
 			SettingsService: settingsService,
 		},
@@ -98,7 +94,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	assertBotDependencyModulesWireRuntimeObjects(t, &modules, cacheClient, postgres, memberData, alarmCRUD, irisClient, messageAdapter, formatter)
 
 	deps := ProvideBotDependencies(&modules)
-	assertBotDependenciesWireRuntimeObjects(t, deps, cacheClient, postgres, memberData, alarmCRUD, youTubeService, activityLogger, settingsService)
+	assertBotDependenciesWireRuntimeObjects(t, deps, cacheClient, postgres, memberData, alarmCRUD, activityLogger, settingsService)
 }
 
 func assertBotDependencyModulesWireRuntimeObjects(
@@ -176,7 +172,6 @@ func assertBotDependenciesWireRuntimeObjects(
 	postgres *databasemocks.Client,
 	memberData *membermocks.DataProvider,
 	alarmCRUD *stubAlarmCRUD,
-	youTubeService *stubYouTubeService,
 	activityLogger *activity.Logger,
 	settingsService *settingsmocks.ReadWriter,
 ) {
@@ -206,10 +201,6 @@ func assertBotDependenciesWireRuntimeObjects(
 		t.Fatal("Dependencies.Alarm did not preserve the module alarm CRUD provider")
 	}
 
-	if deps.Service != youtube.Service(youTubeService) {
-		t.Fatal("Dependencies.Service did not preserve the YouTube service from the stack")
-	}
-
 	if deps.Activity != activityLogger {
 		t.Fatal("Dependencies.Activity did not preserve the activity logger")
 	}
@@ -225,33 +216,10 @@ func assertBotDependenciesWireRuntimeObjects(
 	assertCommandBuilderPointers(t, deps.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
-func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
-	t.Parallel()
-
-	deps := ProvideBotDependencies(&BotDependencyModules{
-		Stream: BotStreamModule{YTStack: nil},
-	})
-	if deps.Service != nil {
-		t.Fatalf("Service = %T, want nil for disabled YouTube stack", deps.Service)
-	}
-}
-
-func TestPersistedTargetMinutesKeepsConfiguredTargetsBeforeRuntimeFallback(t *testing.T) {
-	t.Parallel()
-
-	if got := PersistedTargetMinutes(15, []int{3, 15, 3, 0}); !slices.Equal(got, []int{15, 3}) {
-		t.Fatalf("PersistedTargetMinutes configured = %v, want [15 3]", got)
-	}
-
-	if got := PersistedTargetMinutes(15, nil); !slices.Equal(got, []int{15, 3, 1}) {
-		t.Fatalf("PersistedTargetMinutes fallback = %v, want [15 3 1]", got)
-	}
-}
-
 func TestProvideACLServiceWrapsInitializationError(t *testing.T) {
 	t.Parallel()
 
-	_, err := ProvideACLService(t.Context(), true, "whitelist", []string{testRoomA}, nil, cachemocks.NewLenientClient(), slog.New(slog.DiscardHandler))
+	_, err := ProvideACLService(t.Context(), true, "whitelist", []string{testRoomA}, nil, slog.New(slog.DiscardHandler))
 	if err == nil {
 		t.Fatal("ProvideACLService() error = nil, want initialization error")
 	}
@@ -311,16 +279,6 @@ func (s *stubBotIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, e
 	return &iris.RoomListResponse{}, nil
 }
 
-type stubYouTubeService struct{}
-
-func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
-	return map[string]*youtube.ChannelStats{}, nil
-}
-
-func (s *stubYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
-	return nil, nil
-}
-
 type stubAlarmCRUD struct {
 	targetMinutes []int
 }
@@ -367,10 +325,6 @@ func (s *stubAlarmCRUD) GetTargetMinutes() []int {
 }
 
 func (s *stubAlarmCRUD) SetRoomName(context.Context, string, string) error {
-	return nil
-}
-
-func (s *stubAlarmCRUD) SetUserName(context.Context, string, string) error {
 	return nil
 }
 

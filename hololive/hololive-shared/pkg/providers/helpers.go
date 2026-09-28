@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
@@ -36,10 +35,7 @@ func buildMemberCache(
 	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
-	memberCache, err := member.NewMemberCache(ctx, repository, cacheClient, logger, member.CacheConfig{
-		WarmUp:    true,
-		ValkeyTTL: constants.MemberCacheDefaults.ValkeyTTL,
-	})
+	memberCache, err := member.NewMemberCache(ctx, repository, cacheClient, logger, member.CacheConfig{WarmUp: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create member cache: %w", err)
 	}

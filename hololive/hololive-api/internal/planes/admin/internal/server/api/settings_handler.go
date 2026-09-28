@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
@@ -49,19 +50,14 @@ type SettingsActivityLogger interface {
 
 type SettingsReadRecentLogsFunc func(limit int) (any, error)
 
-type ConfigPublisher interface {
-	PublishAlarmAdvanceMinutes(ctx context.Context, minutes int) error
-}
-
 type SettingsHandler struct {
 	sharedsettings.SettingsApplier
 
-	Logger          *slog.Logger
-	Alarm           domain.AlarmCRUD
-	Activity        SettingsActivityLogger
-	ReadRecentLogs  SettingsReadRecentLogsFunc
-	Settings        settingssvc.ReadWriter
-	ConfigPublisher ConfigPublisher
+	Logger         *slog.Logger
+	Alarm          domain.AlarmCRUD
+	Activity       SettingsActivityLogger
+	ReadRecentLogs SettingsReadRecentLogsFunc
+	Settings       settingssvc.ReadWriter
 }
 
 // updateSettingsRequest의 scraperProxyEnabled 필드는 DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 소비자인
@@ -123,10 +119,12 @@ func (h *SettingsHandler) requireApplier(c *gin.Context) bool {
 	return true
 }
 
+// SetRoomName은 관리자 지정 방 이름을 저장한다. 요청 필드 roomName은 필수이고, 공백뿐인 값은 지정을 해제해 관리 목록이
+// Kakao 방 이름으로 돌아가게 한다.
 func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	var req struct {
-		RoomID   string `json:"roomId" binding:"required"`
-		RoomName string `json:"roomName" binding:"required,min=1"`
+		RoomID   string  `json:"roomId" binding:"required"`
+		RoomName *string `json:"roomName" binding:"required"`
 	}
 
 	if err := bindJSON(c, &req); err != nil {
@@ -143,59 +141,33 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	if err := h.Alarm.SetRoomName(ctx, req.RoomID, req.RoomName); err != nil {
+	roomName := strings.TrimSpace(*req.RoomName)
+	if err := h.Alarm.SetRoomName(ctx, req.RoomID, roomName); err != nil {
 		h.safeLogger().Error("Failed to set room name", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to set room name", nil)
 
 		return
 	}
 
+	if roomName == "" {
+		h.safeLogger().Info("Room name cleared", slog.String("room_id", req.RoomID))
+		h.logActivity("name_update", "Room name cleared: "+req.RoomID, map[string]any{"room_id": req.RoomID})
+		ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room name cleared"})
+
+		return
+	}
+
 	h.safeLogger().Info("Room name set",
 		slog.String("room_id", req.RoomID),
-		slog.String("room_name", req.RoomName),
+		slog.String("room_name", roomName),
 	)
 
-	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", req.RoomID, req.RoomName), map[string]any{
+	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", req.RoomID, roomName), map[string]any{
 		"room_id":   req.RoomID,
-		"room_name": req.RoomName,
+		"room_name": roomName,
 	})
 
 	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room name set successfully"})
-}
-
-func (h *SettingsHandler) SetUserName(c *gin.Context) {
-	var req struct {
-		UserID   string `json:"userId" binding:"required"`
-		UserName string `json:"userName" binding:"required,min=1"`
-	}
-
-	if err := bindJSON(c, &req); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
-
-		return
-	}
-
-	if !h.requireAlarm(c) {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
-	defer cancel()
-
-	if err := h.Alarm.SetUserName(ctx, req.UserID, req.UserName); err != nil {
-		h.safeLogger().Error("Failed to set user name", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to set user name", nil)
-
-		return
-	}
-
-	h.safeLogger().Info("User name set",
-		slog.String("user_id", req.UserID),
-		slog.String("user_name", req.UserName),
-	)
-
-	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "User name set successfully"})
 }
 
 func (h *SettingsHandler) GetLogs(c *gin.Context) {
@@ -247,7 +219,6 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	runtime := h.applySettingsRuntime(c.Request.Context(), current, alarmAdvanceUpdated)
-	h.publishUpdateResult(c.Request.Context(), runtime, req.AlarmAdvanceMinutes)
 	h.logSettingsUpdate(current, runtime)
 
 	ginjson.Respond(c, 200, settingsUpdateResponse{Status: "ok", Message: "Settings updated", Settings: current, Runtime: runtime})
@@ -307,22 +278,6 @@ func (h *SettingsHandler) logSettingsUpdate(current settingssvc.Settings, runtim
 		"alarm_advance_minutes": current.AlarmAdvanceMinutes,
 		"runtime_status":        runtime,
 	})
-}
-
-func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[string]any, alarmAdvanceMinutes *int) {
-	if h.ConfigPublisher == nil {
-		return
-	}
-
-	if alarmAdvanceMinutes != nil {
-		if err := h.ConfigPublisher.PublishAlarmAdvanceMinutes(ctx, *alarmAdvanceMinutes); err != nil {
-			runtime["config_publish_alarm_advance_minutes"] = false
-			runtime["config_publish_alarm_advance_minutes_error"] = fmt.Sprint(err)
-			h.safeLogger().Warn("Failed to publish alarm advance minutes update", slog.Any("error", err))
-		} else {
-			runtime["config_publish_alarm_advance_minutes"] = true
-		}
-	}
 }
 
 func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {

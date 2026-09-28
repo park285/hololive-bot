@@ -38,10 +38,7 @@ const (
 	alarmPersistTaskTimeout  = alarmServiceCloseTimeout
 )
 
-var (
-	_ domain.AlarmCRUD          = (*AlarmService)(nil)
-	_ domain.AlarmDispatchState = (*AlarmService)(nil)
-)
+var _ domain.AlarmCRUD = (*AlarmService)(nil)
 
 func NewAlarmService(
 	cacheClient cache.Client,
@@ -54,6 +51,11 @@ func NewAlarmService(
 		return nil, errors.New("new alarm service: cache client is nil")
 	}
 
+	// PG가 구독·방 이름의 원천이다. repository 없이 Valkey만으로 조회·변경하던 경로는 없앴다.
+	if alarmRepository == nil {
+		return nil, errors.New("new alarm service: alarm repository is nil")
+	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -63,17 +65,11 @@ func NewAlarmService(
 
 	targetPolicy := sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(advanceMinutes))
 
-	var writer alarmWriter
-
-	if alarmRepository != nil {
-		writer = alarmRepository
-	}
-
 	service := &AlarmService{
 		cache:           cacheClient,
 		memberData:      memberData,
 		alarmRepository: alarmRepository,
-		alarmWriter:     writer,
+		alarmWriter:     alarmRepository,
 		logger:          logger,
 		targetPolicy:    targetPolicy,
 	}

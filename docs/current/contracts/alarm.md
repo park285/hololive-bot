@@ -66,6 +66,15 @@ remain eligible. Rejected entries do not affect send-unit boundaries or request
 IDs. `InsertBatch` exposes `HashConflictEvents`; `InsertPending` returns
 `ErrEventPayloadConflict` and no existing record for a conflicting single input.
 
+`PUT /room-name` stores the admin-assigned room display name in PostgreSQL
+`alarm_room_display_names` (migration 232). `room_name` is required; a blank value
+clears the admin name. `GET /keys` builds the admin list from PostgreSQL `alarms`,
+one entry per distinct `(room_id, channel_id)` (UNIT B host rows collapse into one),
+and resolves `roomName` as admin name, then the non-empty `alarms.room_name` most recently
+changed by upsert (`room_name_updated_at`, then `id`),
+then the room ID. Alarm re-registration and subscriber cache rebuild never change the
+admin name. The user-name API was removed; `alarms.user_name` is still stored.
+
 Persisted target minutes are explicit policy. `[5, 1]` remains `[5, 1]`, and a
 persisted single target is not expanded. Runtime defaults are generated only when
 the stored target list is absent/empty under the existing settings contract.
@@ -74,7 +83,7 @@ the stored target list is absent/empty under the existing settings contract.
 
 | Field | Value |
 |---|---|
-| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/next-stream/:id`, `/settings`, `/room-name`, `/user-name`, `/keys` |
+| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/next-stream/:id`, `/settings`, `/room-name`, `/keys` |
 | Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
 | Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
 | Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |
@@ -127,6 +136,12 @@ HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service
 공동 진행자는 합집합이며 방 ID는 중복을 제거한다. 외부 유닛의 게스트를 UNIT B 진행자로
 취급하지 않는다. 구독 DB 오류나 손상된 outbox payload는 이 fail-open의 대상이 아니다.
 
+`alarm-worker` YouTube checker의 채널별 LIVE 구독 방은 `alarm:channel_subscribers:{channel}` set을 먼저 읽는다.
+set이 비어 있으면 `alarm:channel_subscribers_empty:LIVE:{channel}` marker(30초)가 있는 채널만 구독 0으로 본다.
+marker가 없는 채널은 set 유실(eviction 등)로 보고 해당 주기의 미확정 채널을 한 번의 DB 조회로 확정한 뒤,
+구독이 있으면 이번 주기의 대상으로만 쓰고 set을 다시 채우지 않으며(조회와 SADD 사이 구독 해지 경합 방지), 없으면 marker를 기록한다(`alarm.ResolveUncachedChannelSubscribersByType`). 유실된 set은 다음 rebuild나 구독 변경이 채울 때까지 주기마다 batch DB 조회 1회로 확정한다.
+set 조회 오류와 이 DB 조회 오류는 해당 check 주기 오류로 반환하며, 확정하지 못한 채널을 구독 0으로 기록하지 않는다.
+
 신규 구독을 허용하기 전에 migration 194–196, 양쪽 HTTP provider, worker의 대상 선정 코드를
 함께 전환해야 한다. 196 이후에는 이전 `(room_id, channel_id)` upsert를 실행할 수 없다.
 운영 전환 조건과 검증은 [변경 보고서](../../review/unit-b-member-subscriptions-20260906.md)에 있다.
@@ -175,7 +190,6 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 | `clear_room_alarms_failed` | 500 | provider clear failed | retry/manual diagnosis |
 | `get_next_stream_info_failed` | 500 | provider query failed | retry/manual diagnosis |
 | `set_room_name_failed` | 500 | provider room name update failed | retry/manual diagnosis |
-| `set_user_name_failed` | 500 | provider user name update failed | retry/manual diagnosis |
 | `get_all_alarm_keys_failed` | 500 | provider key listing failed | retry/manual diagnosis |
 | unsupported envelope version | n/a | publisher rejects the batch before insert | fix the producer; nothing is stored |
 | Invalid stored payload | n/a | consumer cannot decode the event payload or delivery context | delivery moves to `dlq` with the decode error |

@@ -35,7 +35,6 @@ import (
 type mockLockCache struct {
 	setNXFn            func(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	compareAndDeleteFn func(ctx context.Context, key, expectedValue string) (bool, error)
-	delManyFn          func(ctx context.Context, keys []string) (int64, error)
 }
 
 func (m *mockLockCache) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
@@ -62,19 +61,6 @@ func (m *mockLockCache) CompareAndDelete(ctx context.Context, key, expectedValue
 	}
 
 	return true, nil
-}
-
-func (m *mockLockCache) DelMany(ctx context.Context, keys []string) (int64, error) {
-	if m.delManyFn != nil {
-		out, err := m.delManyFn(ctx, keys)
-		if err != nil {
-			return out, fmt.Errorf("del many fn: %w", err)
-		}
-
-		return out, nil
-	}
-
-	return int64(len(keys)), nil
 }
 
 func testLogger() *slog.Logger {
@@ -207,115 +193,6 @@ func TestRelease_CASError_ReturnsError(t *testing.T) {
 	err := locker.Release(t.Context(), "lock:error", "token")
 	if !errors.Is(err, errLockCacheDown) {
 		t.Fatalf("Release() error = %v, want wrapped cache error", err)
-	}
-}
-
-func TestClaimRoom_Success(t *testing.T) {
-	cache := &mockLockCache{
-		setNXFn: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
-			return true, nil
-		},
-	}
-	locker := mustNewLocker(t, cache)
-
-	acquired, err := locker.ClaimRoom(t.Context(), "claim:room1", time.Hour)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !acquired {
-		t.Fatal("expected acquired=true")
-	}
-}
-
-func TestClaimRoom_AlreadyClaimed(t *testing.T) {
-	cache := &mockLockCache{
-		setNXFn: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
-			return false, nil
-		},
-	}
-	locker := mustNewLocker(t, cache)
-
-	acquired, err := locker.ClaimRoom(t.Context(), "claim:room1", time.Hour)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if acquired {
-		t.Fatal("expected acquired=false")
-	}
-}
-
-func TestClaimRoom_ValkeyError_ReturnsError(t *testing.T) {
-	cache := &mockLockCache{
-		setNXFn: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
-			return false, errLockCacheDown
-		},
-	}
-	locker := mustNewLocker(t, cache)
-
-	acquired, err := locker.ClaimRoom(t.Context(), "claim:fail", time.Hour)
-	if !errors.Is(err, errLockCacheDown) {
-		t.Fatalf("ClaimRoom() error = %v, want wrapped cache error", err)
-	}
-
-	if acquired {
-		t.Fatal("ClaimRoom() acquired = true, want false on cache error")
-	}
-}
-
-func TestReleaseRoomClaims_Success(t *testing.T) {
-	var deletedKeys []string
-
-	cache := &mockLockCache{
-		delManyFn: func(_ context.Context, keys []string) (int64, error) {
-			deletedKeys = keys
-			return int64(len(keys)), nil
-		},
-	}
-	locker := mustNewLocker(t, cache)
-
-	err := locker.ReleaseRoomClaims(t.Context(), []string{"claim:a", "claim:b"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(deletedKeys) != 2 {
-		t.Fatalf("expected 2 keys deleted, got %d", len(deletedKeys))
-	}
-}
-
-func TestReleaseRoomClaims_DelManyError_ReturnsError(t *testing.T) {
-	cache := &mockLockCache{
-		delManyFn: func(_ context.Context, _ []string) (int64, error) {
-			return 0, errLockCacheDown
-		},
-	}
-	locker := mustNewLocker(t, cache)
-
-	err := locker.ReleaseRoomClaims(t.Context(), []string{"claim:a", "claim:b"})
-	if !errors.Is(err, errLockCacheDown) {
-		t.Fatalf("ReleaseRoomClaims() error = %v, want wrapped cache error", err)
-	}
-}
-
-func TestReleaseRoomClaims_EmptyKeys_NoOp(t *testing.T) {
-	called := false
-	cache := &mockLockCache{
-		delManyFn: func(_ context.Context, _ []string) (int64, error) {
-			called = true
-			return 0, nil
-		},
-	}
-	locker := mustNewLocker(t, cache)
-
-	err := locker.ReleaseRoomClaims(t.Context(), []string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if called {
-		t.Fatal("expected DelMany not to be called for empty keys")
 	}
 }
 

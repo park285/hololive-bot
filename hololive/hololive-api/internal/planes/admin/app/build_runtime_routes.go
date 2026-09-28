@@ -19,7 +19,6 @@ import (
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	"github.com/kapu/hololive-shared/pkg/repository"
@@ -33,7 +32,6 @@ func buildAdminHandler(
 	alarmMode *alarmModeComponents,
 	aclService *acl.Service,
 	irisRoomClient server.IrisRoomLister,
-	ytStack *providers.YouTubeStack,
 	communityShortsOpsRepository server.YouTubeCommunityShortsOpsRepository,
 	settingsService settingssvc.ReadWriter,
 	settingsApplier sharedsettings.SettingsApplier,
@@ -52,9 +50,7 @@ func buildAdminHandler(
 			Cache:      infra.MemberCache,
 		},
 		Stream: server.StreamDeps{
-			Holodex:     foundation.HolodexService,
-			YouTube:     ytStack.GetService(),
-			ValkeyCache: infra.Cache,
+			Holodex: foundation.HolodexService,
 		},
 		Stats: server.StatsDeps{
 			Alarm:       alarmMode.AlarmCRUD,

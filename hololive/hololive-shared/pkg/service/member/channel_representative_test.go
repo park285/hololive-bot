@@ -1,16 +1,11 @@
 package member
 
 import (
-	"context"
 	"errors"
 	"log/slog"
-	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 const sharedReviewChannel = "UC-shared-owner"
@@ -43,9 +38,7 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 	repo, owner := seedSharedReviewMembers(t)
 	ctx := t.Context()
 
-	client, verifyWrites := sharedChannelRecordingClient(t)
-
-	cache := withTestEpochAuthority(newMemberCache(repo, client, slog.New(slog.DiscardHandler), CacheConfig{WarmUpChunkSize: 1, WarmUpMaxGoroutines: 4, ValkeyTTL: time.Minute}))
+	cache := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
 
 	if err := cache.WarmUpCache(ctx); err != nil {
 		t.Fatal(err)
@@ -67,66 +60,6 @@ func TestSharedChannelRepresentativeSurvivesIndividualLookups(t *testing.T) {
 
 	if got.ID != owner.ID || got.ShortKoreanName != "홀로아나" {
 		t.Fatalf("channel/alarm identity changed: %+v", got)
-	}
-
-	verifyWrites(owner.ID)
-}
-
-func sharedChannelRecordingClient(t *testing.T) (*cachemocks.Client, func(int)) {
-	t.Helper()
-
-	var (
-		mu     sync.Mutex
-		writes []int
-	)
-
-	client := cachemocks.NewLenientClient()
-	record := func(key string, value any) {
-		if !strings.HasSuffix(key, memberChannelKeyPrefix+sharedReviewChannel) {
-			return
-		}
-
-		member, ok := value.(*domain.Member)
-		if !ok {
-			t.Errorf("unexpected cached type %T", value)
-
-			return
-		}
-
-		mu.Lock()
-
-		writes = append(writes, member.ID)
-		mu.Unlock()
-	}
-
-	client.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
-		record(key, value)
-
-		return nil
-	}
-	client.MSetFunc = func(_ context.Context, pairs map[string]any, _ time.Duration) error {
-		for key, value := range pairs {
-			record(key, value)
-		}
-
-		return nil
-	}
-
-	return client, func(ownerID int) {
-		t.Helper()
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		if len(writes) == 0 {
-			t.Fatal("channel cache was not populated")
-		}
-
-		for _, id := range writes {
-			if id != ownerID {
-				t.Errorf("distributed channel ID=%d want=%d", id, ownerID)
-			}
-		}
 	}
 }
 
@@ -152,35 +85,132 @@ func TestPhotoQueriesUseTheChannelRepresentative(t *testing.T) {
 	}
 }
 
-func TestColdChannelLookupRejectsCachedIndividual(t *testing.T) {
+// snapshot 없이 개인 멤버를 이름·별칭으로 먼저 조회해도 공유 채널 index는 SQL 채널 대표만 채운다.
+func TestColdIndividualLookupsDoNotClaimSharedChannel(t *testing.T) {
 	repo, owner := seedSharedReviewMembers(t)
+	ctx := t.Context()
 
-	person, err := repo.FindByName(t.Context(), "A Person")
-	if err != nil {
-		t.Fatal(err)
+	cache := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
+
+	if person, err := cache.GetByName(ctx, "A Person"); err != nil || person.Name != "A Person" {
+		t.Fatalf("GetByName() = %+v, %v", person, err)
 	}
 
-	client := cachemocks.NewLenientClient()
-
-	client.GetFunc = func(_ context.Context, _ string, destination any) error {
-		target, ok := destination.(*domain.Member)
-		if !ok {
-			return errors.New("unexpected destination")
-		}
-
-		*target = *person
-
-		return nil
+	if person, err := cache.FindByAlias(ctx, "개인"); err != nil || person.Name != "A Person" {
+		t.Fatalf("FindByAlias() = %+v, %v", person, err)
 	}
 
-	cache := withTestEpochAuthority(newMemberCache(repo, client, slog.New(slog.DiscardHandler), CacheConfig{ValkeyTTL: time.Minute}))
-
-	got, err := cache.GetByChannelID(t.Context(), sharedReviewChannel)
+	got, err := cache.GetByChannelID(ctx, sharedReviewChannel)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if got.ID != owner.ID {
-		t.Fatalf("unverified cached individual accepted: %+v", got)
+		t.Fatalf("channel lookup = %+v, want representative %d", got, owner.ID)
 	}
+}
+
+// pointLookupExpectations는 repository가 돌려준 조회 결과를 cache 조회와 비교할 기준으로 담는다.
+type pointLookupExpectations struct {
+	aliases     []string
+	channels    []string
+	wantAlias   map[string]int
+	wantChannel map[string]int
+}
+
+func newPointLookupExpectations(t *testing.T, repo *Repository, aliases, channels []string) *pointLookupExpectations {
+	t.Helper()
+
+	ctx := t.Context()
+	expectations := &pointLookupExpectations{
+		aliases:     aliases,
+		channels:    channels,
+		wantAlias:   make(map[string]int, len(aliases)),
+		wantChannel: make(map[string]int, len(channels)),
+	}
+
+	for _, alias := range aliases {
+		want, err := repo.FindByAlias(ctx, alias)
+		if err != nil {
+			t.Fatalf("repository alias %q: %v", alias, err)
+		}
+
+		expectations.wantAlias[alias] = want.ID
+	}
+
+	for _, channelID := range channels {
+		want, err := repo.FindByChannelID(ctx, channelID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expectations.wantChannel[channelID] = want.ID
+	}
+
+	return expectations
+}
+
+func (e *pointLookupExpectations) assert(t *testing.T, label string, cache *Cache) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	for _, alias := range e.aliases {
+		got, err := cache.FindByAlias(ctx, alias)
+		if err != nil || got.ID != e.wantAlias[alias] {
+			t.Fatalf("%s FindByAlias(%q) = %+v, %v; want ID %d", label, alias, got, err, e.wantAlias[alias])
+		}
+	}
+
+	for _, channelID := range e.channels {
+		got, err := cache.GetByChannelID(ctx, channelID)
+		if err != nil || got.ID != e.wantChannel[channelID] {
+			t.Fatalf("%s GetByChannelID(%q) = %+v, %v; want ID %d", label, channelID, got, err, e.wantChannel[channelID])
+		}
+	}
+
+	got, err := cache.GetByName(ctx, "Twin Name")
+	if err != nil || got.Name != "Twin Name" {
+		t.Fatalf("%s GetByName(Twin Name) = %+v, %v", label, got, err)
+	}
+
+	if _, err := cache.FindByAlias(ctx, "없는별칭"); !errors.Is(err, ErrMemberNotFound) {
+		t.Fatalf("%s FindByAlias(missing) error = %v, want ErrMemberNotFound", label, err)
+	}
+}
+
+// 채널·이름·별칭 조회는 snapshot 적재 전(PostgreSQL)과 적재 후(프로세스 snapshot)에 같은 멤버를 돌려준다. Warm 조회는
+// members 행을 지운 뒤에 수행해 snapshot에서 응답했음을 확인한다.
+func TestPointLookupsMatchRepositoryWithAndWithoutSnapshot(t *testing.T) {
+	repo, _ := seedSharedReviewMembers(t)
+	ctx := t.Context()
+
+	_, err := repo.pool.Exec(ctx, `INSERT INTO members(slug,channel_id,english_name,korean_name,org,sync_source,aliases)
+ VALUES ('dup-holo','UC-dup-holo','Twin Name','쌍둥이','Hololive','manual','{"ko":["쌍둥"],"ja":[]}'),
+ ('dup-other','UC-dup-other','Twin Name','쌍둥이','Nijisanji','manual','{"ko":["쌍둥"],"ja":["ツイン"]}')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectations := newPointLookupExpectations(t, repo,
+		[]string{"개인", "a person", "HOLOAN OWNER", "쌍둥", "쌍둥이", "twin name", "ツイン"},
+		[]string{sharedReviewChannel, "UC-dup-holo", "UC-dup-other"},
+	)
+
+	if expectations.wantAlias["쌍둥"] == expectations.wantAlias["ツイン"] {
+		t.Fatal("fixture must resolve the shared alias and the org-specific alias to different members")
+	}
+
+	expectations.assert(t, "cold", withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{})))
+
+	warm := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
+	if err := warm.WarmUpCache(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := repo.pool.Exec(ctx, `DELETE FROM members`); err != nil {
+		t.Fatal(err)
+	}
+
+	expectations.assert(t, "warm", warm)
 }

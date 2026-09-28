@@ -38,7 +38,6 @@ import (
 const (
 	memberEpochAuthorityKey = "coord:member-cache:v2:epoch"
 	memberEpochChannel      = "coord:member-cache:v2:epoch-notify"
-	memberEpochDataPrefix   = "member-cache:v2:data:"
 	memberEpochVersion      = 2
 	maxMemberEpoch          = uint64(math.MaxInt64 - 1)
 	epochOperationTimeout   = 5 * time.Second
@@ -277,27 +276,14 @@ func (c *Cache) reconcileEpoch(ctx context.Context, reason string) error {
 		return fmt.Errorf("current: %w", err)
 	}
 
-	if err := c.acceptEpoch(epoch, reason); err != nil {
-		return fmt.Errorf("accept epoch: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Cache) acceptEpoch(epoch uint64, reason string) error {
-	previous := c.authorityEpoch.Load()
-	if previous != 0 && epoch < previous {
-		err := fmt.Errorf("member cache epoch regressed from %d to %d", previous, epoch)
-		c.markEpochUncertain(reason, err)
-
-		return err
-	}
-
 	c.applyEpoch(epoch, reason)
 
 	return nil
 }
 
+// applyEpoch는 authority 값이 마지막으로 본 값과 다르면(크든 작든) 로컬 snapshot을 무효화한다. Valkey에는 멤버 데이터가
+// 없으므로 epoch는 순서가 아니라 변경 신호다. Valkey 재시작으로 key가 1로 다시 만들어진 회귀도 변경으로 받아들여
+// snapshot을 새로 적재하고, 재시작 전까지 PostgreSQL 직접 조회로 고정되지 않게 한다.
 func (c *Cache) applyEpoch(epoch uint64, reason string) {
 	c.snapshotMu.Lock()
 
@@ -337,11 +323,10 @@ func (c *Cache) markEpochUncertain(reason string, err error) {
 	}
 }
 
-// 분산 캐시가 있으면 epoch authority가 필수다(configureEpoch가 authority 없이 만들지 않는다). 분산 캐시가 없는 메모리 전용
-// 구성(cacheService 없이 만든 Cache)에는 조정할 authority가 없으므로 우회하지 않는다. 예전에 epoch가 없을 때
-// 구형(접두사 없는) member:* keyspace를 쓰던 분기는 지웠다(stack-audit 2026-09-26 T11 holo-member-cache-epochless-keyspace).
+// Epoch 조정 구성에서 authority가 불확실하면 PostgreSQL을 직접 읽는다. Epoch authority가 없는 프로세스 로컬 구성
+// (epochStore 없이 만든 Cache)에는 조정할 authority가 없으므로 우회하지 않는다.
 func (c *Cache) cacheBypassRequired(operation string) bool {
-	if !c.cacheEnabled() || c.authorityHealthy.Load() {
+	if !c.epochCoordinated() || c.authorityHealthy.Load() {
 		return false
 	}
 
@@ -350,16 +335,8 @@ func (c *Cache) cacheBypassRequired(operation string) bool {
 	return true
 }
 
-func (c *Cache) distributedCacheUsable() bool {
-	return c.cacheEnabled() && c.authorityHealthy.Load()
-}
-
-func (c *Cache) epochDataKey(key string) string {
-	return memberEpochDataPrefix + strconv.FormatUint(c.authorityEpoch.Load(), 10) + ":" + key
-}
-
 func (c *Cache) confirmEpochAfterLoad(ctx context.Context, generation uint64) error {
-	if !c.cacheEnabled() {
+	if !c.epochCoordinated() {
 		return nil
 	}
 
@@ -374,9 +351,7 @@ func (c *Cache) confirmEpochAfterLoad(ctx context.Context, generation uint64) er
 	}
 
 	if epoch != c.authorityEpoch.Load() {
-		if err := c.acceptEpoch(epoch, "publish"); err != nil {
-			return errAllMembersGenerationChanged
-		}
+		c.applyEpoch(epoch, "publish")
 
 		return errAllMembersGenerationChanged
 	}

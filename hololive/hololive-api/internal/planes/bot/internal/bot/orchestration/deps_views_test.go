@@ -168,9 +168,5 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	assertMessagingDepsMapping(t, f)
 	assertDataDepsMapping(t, f)
 
-	if stream := f.deps.streamDeps(); stream.service != nil {
-		t.Fatal("streamDeps service mapping mismatch")
-	}
-
 	assertFeatureDepsMapping(t, f)
 }

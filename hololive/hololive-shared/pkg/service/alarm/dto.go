@@ -50,14 +50,10 @@ type UpdateAdvanceMinutesRequest struct {
 	Minutes int `json:"minutes" binding:"required,min=1"`
 }
 
+// SetRoomNameRequest의 room_name은 필드 자체는 필수이고, 공백뿐인 값은 관리자 지정 이름 해제를 뜻한다.
 type SetRoomNameRequest struct {
-	RoomID   string `json:"room_id" binding:"required"`
-	RoomName string `json:"room_name" binding:"required"`
-}
-
-type SetUserNameRequest struct {
-	UserID   string `json:"user_id" binding:"required"`
-	UserName string `json:"user_name" binding:"required"`
+	RoomID   string  `json:"room_id" binding:"required"`
+	RoomName *string `json:"room_name" binding:"required"`
 }
 
 type APIResponse struct {

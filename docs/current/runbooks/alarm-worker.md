@@ -143,10 +143,11 @@ Diagnosis:
 ```
 
 Mitigation:
-- Verify `config:update` subscriber wiring and perform source-of-truth refresh if available.
+- Check the admin settings response `runtime.alarm_applied`/`alarm_reason`; the only apply path is `hololive-api` → `PUT /internal/alarm/settings` (no Pub/Sub re-apply).
+- Re-submit the setting once alarm-worker is reachable, or restart alarm-worker (it restores target minutes from `settings.json`).
 
 Rollback:
-- Roll back settings publisher/consumer change.
+- Roll back the `hololive-api` settings apply change.
 
 ### 3. Grouped short links do not suppress previews
 

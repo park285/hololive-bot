@@ -115,17 +115,16 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 	require.NoError(t, err)
 
 	start := time.Date(2026, time.May, 24, 10, 10, 0, 0, time.UTC)
-	firstClaimKey, firstClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-partial-1", "stream-partial-1", start, 10)
-	require.NoError(t, err)
-	require.True(t, firstClaimed)
-
-	secondClaimKey, secondClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-partial-2", "stream-partial-2", start, 10)
-	require.NoError(t, err)
-	require.True(t, secondClaimed)
-
 	items := []claimedSend{
-		newNotifierPublishTestItem("room-partial-1", "stream-partial-1", "channel-partial", start, 10, []string{firstClaimKey}),
-		newNotifierPublishTestItem("room-partial-2", "stream-partial-2", "channel-partial", start, 10, []string{secondClaimKey}),
+		newNotifierPublishTestItem("room-partial-1", "stream-partial-1", "channel-partial", start, 10, nil),
+		newNotifierPublishTestItem("room-partial-2", "stream-partial-2", "channel-partial", start, 10, nil),
+	}
+
+	for i := range items {
+		claimKey, claimed := claimNotificationPair(t, notifier, items[i].payload)
+		require.True(t, claimed)
+
+		items[i].claimKeys = []string{claimKey}
 	}
 
 	processed, err := notifier.publishBatchAndMark(t.Context(), items)
@@ -134,12 +133,10 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 	require.ErrorContains(t, err, "publish queue batch")
 	assert.Equal(t, 2, outbox.insertBatchCalls)
 
-	_, firstClaimedAgain, err := dedupService.TryClaimNotification(t.Context(), "room-partial-1", "stream-partial-1", start, 10)
-	require.NoError(t, err)
+	_, firstClaimedAgain := claimNotificationPair(t, notifier, items[0].payload)
 	assert.False(t, firstClaimedAgain)
 
-	_, secondClaimedAgain, err := dedupService.TryClaimNotification(t.Context(), "room-partial-2", "stream-partial-2", start, 10)
-	require.NoError(t, err)
+	_, secondClaimedAgain := claimNotificationPair(t, notifier, items[1].payload)
 	assert.True(t, secondClaimedAgain)
 
 	firstNotified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-partial-1", start, 10)

@@ -18,8 +18,6 @@ type YouTubeConfig struct {
 	ScraperHTTPTimeout   time.Duration
 	ScraperDialTimeout   time.Duration
 	ScraperHeaderTimeout time.Duration
-	ScraperPhaseTimeout  time.Duration
-	CacheSaveTimeout     time.Duration
 	CommunityMissingTTL  time.Duration
 	RequestInterval      time.Duration
 	DistributedRateLimit DistributedRateLimitConfig

@@ -43,6 +43,16 @@ func TestSearchChannels_UsesPaginatedHololiveChannelListCache(t *testing.T) {
 		t.Fatalf("SearchChannels(member 01) = %+v, want channel-01 only", secondResult)
 	}
 
+	// query별 결과 캐시 없이도 같은 query는 같은 결과를 내고, 목록 캐시 덕분에 upstream 목록을 다시 받지 않는다.
+	repeatResult, err := service.SearchChannels(t.Context(), "AQUA")
+	if err != nil {
+		t.Fatalf("SearchChannels(AQUA) error = %v", err)
+	}
+
+	if !reflect.DeepEqual(repeatResult, firstResult) {
+		t.Fatalf("SearchChannels(AQUA) = %+v, want same result as first search %+v", repeatResult, firstResult)
+	}
+
 	gotOffsets := recorder.snapshot()
 
 	wantOffsets := []string{"0", fmt.Sprintf("%d", constants.HolodexAPIParams.DefaultChannelLimit)}

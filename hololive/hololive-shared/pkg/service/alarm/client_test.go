@@ -161,12 +161,6 @@ func newRoundTripAlarmMock(t *testing.T) *mockAlarmCRUD {
 
 		return nil
 	}
-	mock.setUserNameFn = func(_ context.Context, userID, userName string) error {
-		assert.Equal(t, "user1", userID)
-		assert.Equal(t, "User One", userName)
-
-		return nil
-	}
 	mock.getAllAlarmKeysFn = func(context.Context) ([]*domain.AlarmEntry, error) {
 		return []*domain.AlarmEntry{{RoomID: testRoomID, ChannelID: testClientChannelID}}, nil
 	}
@@ -215,7 +209,6 @@ func TestClientRoundTripWithRealHandlerEnvelope(t *testing.T) {
 	assert.Equal(t, []int{10, 5, 1}, client.GetTargetMinutes())
 
 	require.NoError(t, client.SetRoomName(t.Context(), testRoomID, "Room One"))
-	require.NoError(t, client.SetUserName(t.Context(), "user1", "User One"))
 
 	keys, err := client.GetAllAlarmKeys(t.Context())
 	require.NoError(t, err)
@@ -293,7 +286,7 @@ func TestClientPutNoDataIgnoresDataAndSurfacesEnvelopeFailure(t *testing.T) {
 	}))
 	t.Cleanup(failing.Close)
 
-	err := NewClient(failing.URL, nil).SetUserName(t.Context(), "user1", "User One")
+	err := NewClient(failing.URL, nil).SetRoomName(t.Context(), testRoomID, "Room One")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rename failed")
 }
@@ -310,7 +303,6 @@ func completeAlarmMock() *mockAlarmCRUD {
 		updateAlarmAdvanceMinutesFn: func(int) []int { return nil },
 		getTargetMinutesFn:          func() []int { return nil },
 		setRoomNameFn:               func(context.Context, string, string) error { return nil },
-		setUserNameFn:               func(context.Context, string, string) error { return nil },
 		getAllAlarmKeysFn:           func(context.Context) ([]*domain.AlarmEntry, error) { return nil, nil },
 		warmCacheFromDBFn:           func(context.Context) error { return nil },
 	}

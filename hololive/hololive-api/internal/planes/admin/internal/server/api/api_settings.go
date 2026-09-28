@@ -22,19 +22,11 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
 	if h == nil || h.Handler == nil {
 		return &SettingsHandler{}
-	}
-
-	var publisher ConfigPublisher
-
-	if h.valkeyCache != nil {
-		publisher = configsub.NewPublisher(h.valkeyCache.GetClient())
 	}
 
 	var readRecentLogs SettingsReadRecentLogsFunc
@@ -49,7 +41,6 @@ func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
 		Logger:          h.logger,
 		Alarm:           h.alarm,
 		Activity:        h.activity,
-		ConfigPublisher: publisher,
 		ReadRecentLogs:  readRecentLogs,
 		Settings:        h.settings,
 		SettingsApplier: h.settingsApplier,
@@ -58,10 +49,6 @@ func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
 
 func (h *SettingsAPIHandler) SetRoomName(c *gin.Context) {
 	h.settingsHandler().SetRoomName(c)
-}
-
-func (h *SettingsAPIHandler) SetUserName(c *gin.Context) {
-	h.settingsHandler().SetUserName(c)
 }
 
 func (h *SettingsAPIHandler) GetLogs(c *gin.Context) {

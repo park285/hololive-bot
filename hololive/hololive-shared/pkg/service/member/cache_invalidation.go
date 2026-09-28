@@ -27,7 +27,7 @@ import (
 )
 
 func (c *Cache) InvalidateAll(ctx context.Context) error {
-	if c.cacheEnabled() {
+	if c.epochCoordinated() {
 		if err := c.invalidateCoordinated(ctx); err != nil {
 			return fmt.Errorf("invalidate coordinated: %w", err)
 		}
@@ -79,9 +79,7 @@ func (c *Cache) advanceEpoch(ctx context.Context) (uint64, error) {
 		return 0, fmt.Errorf("advance member cache epoch: %w", err)
 	}
 
-	if err := c.acceptEpoch(epoch, epochReconcileMutation); err != nil {
-		return 0, fmt.Errorf("accept epoch: %w", err)
-	}
+	c.applyEpoch(epoch, epochReconcileMutation)
 
 	return epoch, nil
 }

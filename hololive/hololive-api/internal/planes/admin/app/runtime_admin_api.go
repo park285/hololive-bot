@@ -25,6 +25,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -39,6 +40,9 @@ type AdminAPIRuntime struct {
 	ServerAddr  string
 	HTTPServers *sharedserver.RuntimeHTTPServers
 	PhotoSync   *holodexprovider.PhotoSyncService
+
+	// ACL은 관리 API가 변경하는 인스턴스다. 같은 프로세스의 봇 plane이 Follow로 추종한다.
+	ACL *acl.Service
 }
 
 // Close는 nil outer runtime에서도 안전하며 등록된 자원 정리를 한 번만 실행한다.

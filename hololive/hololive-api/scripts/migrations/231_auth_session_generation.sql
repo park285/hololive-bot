@@ -1,0 +1,12 @@
+-- admin auth 세션 폐기를 PG 세션 세대로 보장한다. 비밀번호 reset은 password_hash 갱신과 같은 UPDATE 문장에서
+-- session_generation을 +1하고, Valkey 세션 payload는 발급 당시 세대를 담는다. Me·Refresh는 PG 현재 세대와 비교해
+-- 다르면 세션을 지우고 거부한다. 이 세대가 Valkey auth:user_sessions:* 인덱스 family(SADD/SMEMBERS 기반 일괄 폐기)를
+-- 대체하므로 인덱스 evict·폐기 실패·Refresh 경합이 있어도 reset 이전 세션은 살아남지 않는다.
+--
+-- 비용: PG 11+에서 휘발성 없는 상수 DEFAULT를 가진 ADD COLUMN은 기존 행을 다시 쓰지 않는 메타데이터 전용
+-- 변경이다(pg_attribute.attmissingval에 0을 기록). NOT NULL도 상수 DEFAULT가 모든 기존 행을 채우므로 전 행 스캔이
+-- 없다. ACCESS EXCLUSIVE 락은 카탈로그 갱신 동안만 순간적으로 잡힌다(PG18 동일).
+-- 기존 세션 payload에 세대 필드가 없으면 코드가 0으로 해석하며, 이 DEFAULT와 같은 값이라 reset 전까지는 유효하고
+-- 첫 reset 이후 무효로 수렴한다.
+-- IF NOT EXISTS로 재적용해도 아무것도 바꾸지 않는다.
+ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS session_generation BIGINT NOT NULL DEFAULT 0;

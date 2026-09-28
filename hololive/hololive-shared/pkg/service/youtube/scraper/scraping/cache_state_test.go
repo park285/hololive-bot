@@ -21,107 +21,24 @@
 package scraping
 
 import (
-	"context"
-	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-type testStateStore struct {
-	mu   sync.Mutex
-	data map[string]stateEntry
-}
-
-type stateEntry struct {
-	value bool
-	until time.Time
-}
-
-func newTestStateStore() *testStateStore {
-	return &testStateStore{
-		data: make(map[string]stateEntry),
-	}
-}
-
-func (s *testStateStore) Get(_ context.Context, key string, dest any) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	entry, ok := s.data[key]
-	if !ok || time.Now().After(entry.until) {
-		delete(s.data, key)
-
-		return nil
-	}
-
-	if out, ok := dest.(*bool); ok {
-		*out = entry.value
-	}
-
-	return nil
-}
-
-func (s *testStateStore) Set(_ context.Context, key string, value any, ttl time.Duration) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	v, ok := value.(bool)
-	if !ok {
-		return fmt.Errorf("state value has type %T, want bool", value)
-	}
-
-	s.data[key] = stateEntry{
-		value: v,
-		until: time.Now().Add(ttl),
-	}
-
-	return nil
-}
-
-func (s *testStateStore) Del(_ context.Context, key string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.data, key)
-
-	return nil
-}
-
 func TestCommunityMissingState(t *testing.T) {
-	ctx := t.Context()
 	client := NewClient(testYouTubeConfig())
 
-	require.False(t, client.isCommunityMissing(ctx, "UC_TEST"))
+	require.False(t, client.isCommunityMissing("UC_TEST"))
 
-	client.markCommunityMissing(ctx, "UC_TEST")
-	require.True(t, client.isCommunityMissing(ctx, "UC_TEST"))
+	client.markCommunityMissing("UC_TEST")
+	require.True(t, client.isCommunityMissing("UC_TEST"))
 
 	client.communityMissing.mu.Lock()
 
 	client.communityMissing.until["UC_TEST"] = time.Now().Add(-time.Second)
 	client.communityMissing.mu.Unlock()
 
-	require.False(t, client.isCommunityMissing(ctx, "UC_TEST"))
-}
-
-func TestStateStorePersistsAcrossClientInstances(t *testing.T) {
-	ctx := t.Context()
-	store := newTestStateStore()
-
-	clientA := NewClient(testYouTubeConfig(), WithStateStore(store))
-	clientA.markCommunityMissing(ctx, "UC_TEST")
-	require.Greater(t, testYouTubeConfig().CommunityMissingTTL, time.Duration(0))
-	require.Len(t, store.data, 1)
-	require.Contains(t, store.data, clientA.communityMissingStateKey("UC_TEST"))
-
-	clientB := NewClient(testYouTubeConfig(), WithStateStore(store))
-
-	var communityMarker bool
-
-	require.NoError(t, store.Get(ctx, clientB.communityMissingStateKey("UC_TEST"), &communityMarker))
-	require.True(t, communityMarker)
-	require.True(t, clientB.isCommunityMissing(ctx, "UC_TEST"))
+	require.False(t, client.isCommunityMissing("UC_TEST"))
 }

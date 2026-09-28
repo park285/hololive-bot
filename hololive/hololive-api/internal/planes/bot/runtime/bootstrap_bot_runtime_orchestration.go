@@ -32,10 +32,10 @@ import (
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 func newBotReadyProbe(infra *appbootstrap.BotInfrastructure) *sharedreadiness.Probe {
@@ -91,8 +91,6 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
 
-	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, logger)
-
 	readyProbe := newBotReadyProbe(infra)
 
 	var (
@@ -109,14 +107,14 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 
 	metricsServer, pprofServer := buildBotOptionalServers(ctx, appConfig)
 
-	return assembleBotRuntime(appConfig, logger, botBot, configSubscriber, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
+	return assembleBotRuntime(appConfig, logger, botBot, runtimeViews.botDeps.ACL, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
 }
 
 func assembleBotRuntime(
 	appConfig *settings.Config,
 	logger *slog.Logger,
 	botBot *orchestration.Bot,
-	configSubscriber *configsub.Subscriber,
+	aclService *acl.Service,
 	h3Server *http3.Server,
 	h3CertReloadStart func(context.Context),
 	metricsServer, pprofServer *http.Server,
@@ -127,7 +125,7 @@ func assembleBotRuntime(
 		Config:               appConfig,
 		Logger:               logger,
 		Bot:                  botBot,
-		ConfigSubscriber:     configSubscriber,
+		ACL:                  aclService,
 		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
 		ShortLinkServer:      appbootstrap.BuildShortLinkServer(appConfig.Server.ShortLinkAddr),

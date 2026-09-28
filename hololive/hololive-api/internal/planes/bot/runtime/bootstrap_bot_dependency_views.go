@@ -26,10 +26,8 @@ import (
 )
 
 type botRuntimeDependencyViews struct {
-	botDeps                 *orchestration.Dependencies
-	webhook                 appbootstrap.BotWebhookRuntimeDependencies
-	configSubscriber        appbootstrap.BotConfigSubscriberDependencies
-	configSubscriberRuntime appbootstrap.BotConfigSubscriberRuntimeDependencies
+	botDeps *orchestration.Dependencies
+	webhook appbootstrap.BotWebhookRuntimeDependencies
 }
 
 func buildBotWebhookRuntimeDependencies(deps *orchestration.Dependencies) appbootstrap.BotWebhookRuntimeDependencies {
@@ -40,37 +38,13 @@ func buildBotWebhookRuntimeDependencies(deps *orchestration.Dependencies) appboo
 	return appbootstrap.BotWebhookRuntimeDependencies{Cache: deps.Cache}
 }
 
-func buildBotConfigSubscriberDependencies(deps *orchestration.Dependencies) appbootstrap.BotConfigSubscriberDependencies {
-	if deps == nil {
-		return appbootstrap.BotConfigSubscriberDependencies{}
-	}
-
-	return appbootstrap.BotConfigSubscriberDependencies{
-		Cache:    deps.Cache,
-		Settings: deps.Settings,
-	}
-}
-
-func buildBotConfigSubscriberRuntimeDependencies(infra *appbootstrap.BotInfrastructure) appbootstrap.BotConfigSubscriberRuntimeDependencies {
-	if infra == nil || infra.Deps == nil {
-		return appbootstrap.BotConfigSubscriberRuntimeDependencies{}
-	}
-
-	return appbootstrap.BotConfigSubscriberRuntimeDependencies{
-		AlarmCRUD: infra.AlarmCRUD,
-		ACL:       infra.Deps.ACL,
-	}
-}
-
 func buildBotRuntimeDependencyViews(infra *appbootstrap.BotInfrastructure) botRuntimeDependencyViews {
 	if infra == nil {
 		return botRuntimeDependencyViews{}
 	}
 
 	return botRuntimeDependencyViews{
-		botDeps:                 infra.Deps,
-		webhook:                 buildBotWebhookRuntimeDependencies(infra.Deps),
-		configSubscriber:        buildBotConfigSubscriberDependencies(infra.Deps),
-		configSubscriberRuntime: buildBotConfigSubscriberRuntimeDependencies(infra),
+		botDeps: infra.Deps,
+		webhook: buildBotWebhookRuntimeDependencies(infra.Deps),
 	}
 }

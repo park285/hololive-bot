@@ -1,7 +1,6 @@
 package alarmcache
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 	"slices"
@@ -23,111 +22,6 @@ const (
 func newPureState() *State {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	return NewState(nil, nil, logger)
-}
-
-func TestNormalizeScheduledMinute(t *testing.T) {
-	t.Parallel()
-
-	in := time.Date(2026, time.June, 10, 12, 34, 56, 789, time.UTC)
-	got := NormalizeScheduledMinute(in)
-	want := time.Date(2026, time.June, 10, 12, 34, 0, 0, time.UTC)
-	require.True(t, got.Equal(want), "got %s want %s", got, want)
-}
-
-func TestNotifiedMinuteKey(t *testing.T) {
-	t.Parallel()
-
-	scheduled := time.Date(2026, time.June, 10, 12, 34, 56, 0, time.UTC)
-	normalizedUnix := time.Date(2026, time.June, 10, 12, 34, 0, 0, time.UTC).Unix()
-
-	tests := []struct {
-		name         string
-		streamID     string
-		minutesUntil int
-		want         string
-	}{
-		{
-			name:         "trimmed stream id",
-			streamID:     "  vid42  ",
-			minutesUntil: 5,
-			want:         fmt.Sprintf("%svid42:%d:%d", sharedalarmkeys.NotifiedKeyPrefix, normalizedUnix, 5),
-		},
-		{
-			name:         "empty stream id",
-			streamID:     "",
-			minutesUntil: 30,
-			want:         fmt.Sprintf("%s:%d:%d", sharedalarmkeys.NotifiedKeyPrefix, normalizedUnix, 30),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tt.want, NotifiedMinuteKey(tt.streamID, scheduled, tt.minutesUntil))
-		})
-	}
-}
-
-func TestBuildUpcomingEventKey(t *testing.T) {
-	t.Parallel()
-
-	state := newPureState()
-	scheduled := time.Date(2026, time.June, 10, 12, 34, 56, 0, time.UTC)
-	scheduledUnix := time.Date(2026, time.June, 10, 12, 34, 0, 0, time.UTC).Unix()
-	fingerprint := sharedalarmkeys.BuildTitleFingerprint("My Title", "vid1")
-
-	got := state.BuildUpcomingEventKey("room1", "UC_alpha", "vid1", "My Title", scheduled)
-	want := fmt.Sprintf("%sroom1:UC_alpha:%d:%s", sharedalarmkeys.UpcomingEventKeyPrefix, scheduledUnix, fingerprint)
-	require.Equal(t, want, got)
-}
-
-func TestResolveStreamChannelID(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		stream   *domain.Stream
-		fallback string
-		want     string
-	}{
-		{
-			name:     "nil stream uses fallback",
-			stream:   nil,
-			fallback: fallbackChannelID,
-			want:     fallbackChannelID,
-		},
-		{
-			name:     "stream channel id wins",
-			stream:   &domain.Stream{ChannelID: " UC_direct "},
-			fallback: fallbackChannelID,
-			want:     "UC_direct",
-		},
-		{
-			name:     "nested channel id used when direct blank",
-			stream:   &domain.Stream{ChannelID: "   ", Channel: &domain.Channel{ID: " UC_nested "}},
-			fallback: fallbackChannelID,
-			want:     "UC_nested",
-		},
-		{
-			name:     "fallback when both blank",
-			stream:   &domain.Stream{ChannelID: "  ", Channel: &domain.Channel{ID: "  "}},
-			fallback: fallbackChannelID,
-			want:     fallbackChannelID,
-		},
-		{
-			name:     "fallback when channel nil and direct blank",
-			stream:   &domain.Stream{ChannelID: ""},
-			fallback: fallbackChannelID,
-			want:     fallbackChannelID,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tt.want, ResolveStreamChannelID(tt.stream, tt.fallback))
-		})
-	}
 }
 
 func TestFirstMemberName(t *testing.T) {

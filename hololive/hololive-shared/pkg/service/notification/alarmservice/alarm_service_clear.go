@@ -41,19 +41,14 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 
 	channelIDs := uniqueAlarmChannelIDs(alarmRecords)
 
-	removed, err := as.clearRoomAlarmsCacheMutation(ctx, roomID, channelIDs)
-	if err != nil {
+	if err := as.clearRoomAlarmsCacheMutation(ctx, roomID, channelIDs); err != nil {
 		opErr = err
 		return 0, fmt.Errorf("clear room alarms cache mutation: %w", err)
 	}
 
 	as.afterClearRoomAlarms(ctx, roomID, channelIDs)
 
-	if as.alarmRepository != nil {
-		return len(alarmRecords), nil
-	}
-
-	return removed, nil
+	return len(alarmRecords), nil
 }
 
 func (as *AlarmService) deleteRoomAlarmsBeforeCacheClear(ctx context.Context, roomID string) error {
@@ -68,27 +63,28 @@ func (as *AlarmService) deleteRoomAlarmsBeforeCacheClear(ctx context.Context, ro
 	return nil
 }
 
-func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID string, channelIDs []string) (int, error) {
-	removed, err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs)
-	if err != nil {
+func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID string, channelIDs []string) error {
+	if err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
+
 		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr); err != nil {
-			return 0, fmt.Errorf("log and wrap error: %w", err)
+			return fmt.Errorf("log and wrap error: %w", err)
 		}
 
-		return 0, nil
+		return nil
 	}
 
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
+
 		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr); err != nil {
-			return 0, fmt.Errorf("log and wrap error: %w", err)
+			return fmt.Errorf("log and wrap error: %w", err)
 		}
 
-		return 0, nil
+		return nil
 	}
 
-	return removed, nil
+	return nil
 }
 
 func (as *AlarmService) afterClearRoomAlarms(ctx context.Context, roomID string, channelIDs []string) {

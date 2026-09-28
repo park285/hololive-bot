@@ -49,16 +49,13 @@ type fakeACLStore struct {
 	settings map[string]string
 	rooms    map[roomKey]struct{}
 
-	// hook: 연산 직전 호출. 에러 반환 시 연산 실패. afterCreateRoom/afterDeleteRoom은
-	// 성공적 변경 직후 호출되어 mode 전환 등 부작용 재현에 쓰인다.
+	// hook: 연산 직전 호출. 에러 반환 시 연산 실패.
 	getSettingHook    func(key string) error
 	createSettingHook func(key, value string) error
 	upsertHook        func(key, value string) error
 	listRoomsHook     func() error
 	createRoomHook    func(roomID, listType string) error
-	afterCreateRoom   func(roomID, listType string)
 	deleteRoomHook    func(roomID, listType string) error
-	afterDeleteRoom   func(roomID, listType string)
 }
 
 type roomKey struct {
@@ -167,10 +164,6 @@ func (f *fakeACLStore) CreateRoom(_ context.Context, roomID, listType string) er
 	f.rooms[key] = struct{}{}
 	f.mu.Unlock()
 
-	if f.afterCreateRoom != nil {
-		f.afterCreateRoom(roomID, listType)
-	}
-
 	return nil
 }
 
@@ -185,21 +178,7 @@ func (f *fakeACLStore) DeleteRoom(_ context.Context, roomID, listType string) er
 	delete(f.rooms, roomKey{roomID: roomID, listType: listType})
 	f.mu.Unlock()
 
-	if f.afterDeleteRoom != nil {
-		f.afterDeleteRoom(roomID, listType)
-	}
-
 	return nil
-}
-
-// hasRoom은 fake 저장소에 (roomID, listType) 방 행이 남아 있는지 잠금 아래에서 확인한다.
-func (f *fakeACLStore) hasRoom(roomID, listType string) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	_, ok := f.rooms[roomKey{roomID: roomID, listType: listType}]
-
-	return ok
 }
 
 func (f *fakeACLStore) settingValue(key string) string {

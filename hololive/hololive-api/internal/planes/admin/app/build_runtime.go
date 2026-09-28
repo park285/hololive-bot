@@ -18,13 +18,11 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type scraperHolodexFoundation struct {
 	HolodexService       *holodexprovider.Service
 	MemberServiceAdapter domain.MemberDataProvider
-	SharedRL             *ratelimiter.RateLimiter
 }
 
 type alarmModeComponents struct {
@@ -97,7 +95,6 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 		return nil, fmt.Errorf("build admin api runtime: acl service: %w", err)
 	}
 
-	ytStack := buildAdminAPIYouTubeStack(ctx, appConfig, infra, foundation, logger)
 	templateAdmin := buildAdminAPITemplateAdmin(infra, logger)
 
 	authService, err := buildAdminAPIAuthService(appConfig, infra, logger)
@@ -125,7 +122,7 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 	}
 
 	handler := buildAdminHandler(
-		infra, foundation, alarmMode, aclService, irisRoomClient, ytStack,
+		infra, foundation, alarmMode, aclService, irisRoomClient,
 		communityShortsOpsRepository, adminSettings.service, adminSettings.applier, systemCollector,
 		templateAdmin, adminSettings.triggerClient, logger,
 	)
@@ -145,6 +142,8 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 	if err != nil {
 		return nil, fmt.Errorf("build admin APIHTTP runtime: %w", err)
 	}
+
+	runtime.ACL = aclService
 
 	if appConfig.Ingestion.PhotoSyncEnabled {
 		runtime.PhotoSync = holodexprovider.NewPhotoSyncService(foundation.HolodexService, infra.MemberRepository, logger)

@@ -82,7 +82,6 @@ func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal.GET(contractsalarm.NextStreamRoute, h.GetNextStreamInfo)
 	internal.PUT(contractsalarm.SettingsRoute, h.UpdateAlarmAdvanceMinutes)
 	internal.PUT(contractsalarm.RoomNameRoute, h.SetRoomName)
-	internal.PUT(contractsalarm.UserNameRoute, h.SetUserName)
 	internal.GET(contractsalarm.KeysRoute, h.GetAllAlarmKeys)
 }
 
@@ -282,30 +281,9 @@ func (h *Handler) SetRoomName(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	if err := h.alarm.SetRoomName(ctx, req.RoomID, req.RoomName); err != nil {
+	if err := h.alarm.SetRoomName(ctx, req.RoomID, *req.RoomName); err != nil {
 		h.logger.Error("방 이름 설정 실패", privacylog.RoomIDAttr(req.RoomID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("set_room_name_failed", "set room name failed"))
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true})
-}
-
-func (h *Handler) SetUserName(c *gin.Context) {
-	var req SetUserNameRequest
-
-	if err := decodeAlarmRequest(c, &req); err != nil {
-		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
-
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	if err := h.alarm.SetUserName(ctx, req.UserID, req.UserName); err != nil {
-		h.logger.Error("사용자 이름 설정 실패", slog.String("user_id", req.UserID), slog.Any("error", err))
-		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("set_user_name_failed", "set user name failed"))
 
 		return
 	}

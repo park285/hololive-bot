@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
@@ -19,15 +17,12 @@ import (
 type AlarmYouTubeStackComponents struct {
 	AlarmMode       *AlarmModeComponents
 	Matcher         *matcher.Matcher
-	YouTubeStack    *sharedproviders.YouTubeStack
 	ActivityLogger  *activity.Logger
 	SettingsService settings.ReadWriter
 }
 
 func InitAlarmYouTubeStack(
-	ctx context.Context,
 	appConfig *configsettings.Config,
-	infra *sharedmodules.InfraModule,
 	foundation *ScraperHolodexFoundation,
 	_ iris.Sender,
 	_ *messageformatter.ResponseFormatter,
@@ -39,13 +34,6 @@ func InitAlarmYouTubeStack(
 	}
 
 	memberMatcher := ProvideMatcher(alarmMode.MemberDataSource, logger)
-	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
-		YouTubeConfig:   appConfig.YouTube,
-		CacheService:    infra.Cache,
-		MemberData:      alarmMode.MemberDataSource,
-		SharedRateLimit: foundation.SharedRL,
-		Logger:          logger,
-	})
 
 	settingsService, err := sharedmodules.BuildSettingsService(
 		appConfig.SettingsFilePath,
@@ -59,7 +47,6 @@ func InitAlarmYouTubeStack(
 	return &AlarmYouTubeStackComponents{
 		AlarmMode:       alarmMode,
 		Matcher:         memberMatcher,
-		YouTubeStack:    apiStack,
 		ActivityLogger:  ProvideActivityLogger(logger),
 		SettingsService: settingsService,
 	}, nil

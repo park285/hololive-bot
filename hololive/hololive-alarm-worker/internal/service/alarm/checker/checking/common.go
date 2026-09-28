@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -33,7 +34,9 @@ import (
 	"github.com/valkey-io/valkey-go"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -267,9 +270,11 @@ func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (message, p
 // 조회 실패가 아니라 경로 전환 신호이므로 호출자는 이 오류를 밖으로 전파하지 않는다.
 var ErrBatchedSubscriberRoomsUnavailable = errors.New("batched subscriber rooms unavailable")
 
+// LoadSubscriberRoomsByChannel은 채널별 LIVE 구독 방을 반환한다. 구독자가 있는 채널만 결과 map에 담는다.
 func LoadSubscriberRoomsByChannel(
 	ctx context.Context,
 	cacheClient cache.Client,
+	subscriptionDB dbx.Querier,
 	channelIDs []string,
 ) (map[string][]string, error) {
 	uniqueChannelIDs := UniqueStrings(channelIDs)
@@ -277,6 +282,39 @@ func LoadSubscriberRoomsByChannel(
 		return map[string][]string{}, nil
 	}
 
+	result, err := loadCachedSubscriberRoomsByChannel(ctx, cacheClient, uniqueChannelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load subscriber rooms by channel: load cache: %w", err)
+	}
+
+	uncachedChannelIDs := make([]string, 0, len(uniqueChannelIDs))
+	for _, channelID := range uniqueChannelIDs {
+		if len(result[channelID]) == 0 {
+			uncachedChannelIDs = append(uncachedChannelIDs, channelID)
+		}
+	}
+
+	if len(uncachedChannelIDs) == 0 {
+		return result, nil
+	}
+
+	// TTL 없는 구독 set은 eviction으로 사라질 수 있어 빈 set을 구독 0으로 단정하면 LIVE 알림이 조용히 빠진다.
+	// empty marker가 없는 채널은 이번 cycle에만 DB로 확정하고 set은 다시 채우지 않는다(read-through).
+	recovered, err := sharedalarm.ResolveUncachedChannelSubscribersByType(ctx, cacheClient, subscriptionDB, uncachedChannelIDs, domain.AlarmTypeLive)
+	if err != nil {
+		return nil, fmt.Errorf("load subscriber rooms by channel: resolve uncached channels: %w", err)
+	}
+
+	maps.Copy(result, recovered)
+
+	return result, nil
+}
+
+func loadCachedSubscriberRoomsByChannel(
+	ctx context.Context,
+	cacheClient cache.Client,
+	uniqueChannelIDs []string,
+) (map[string][]string, error) {
 	result, err := TryLoadSubscriberRoomsByChannelBatched(ctx, cacheClient, uniqueChannelIDs)
 	if err == nil {
 		return result, nil

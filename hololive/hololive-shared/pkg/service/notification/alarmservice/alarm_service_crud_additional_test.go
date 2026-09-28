@@ -40,10 +40,13 @@ func TestNewAlarmServiceAndClose(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 
+	_, err := NewAlarmService(cacheClient, nil, nil, newDiscardAlarmLogger(), []int{10, 3, 1, 3})
+	require.ErrorContains(t, err, "alarm repository is nil")
+
 	service, err := NewAlarmService(
 		cacheClient,
 		nil,
-		nil,
+		&sharedalarm.Repository{},
 		newDiscardAlarmLogger(),
 		[]int{10, 3, 1, 3},
 	)
@@ -93,19 +96,6 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	roomAlarms, err := as.GetRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{testChannelID}, roomAlarms)
-
-	roomName, err := as.cache.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, testRoomID)
-	require.NoError(t, err)
-	assert.Equal(t, "메인방", roomName)
-
-	userName, err := as.cache.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, testUserID)
-	require.NoError(t, err)
-	assert.Equal(t, "관리자", userName)
-
-	// repo가 없는 상태에서 타입 포함 조회는 오류여야 한다.
-	_, err = as.GetRoomAlarmsWithTypes(ctx, testRoomID)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "alarm repository not configured")
 
 	removed, err := as.RemoveAlarm(ctx, testRoomID, testChannelID, nil)
 	require.NoError(t, err)
@@ -160,10 +150,6 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, alarms)
 
-	registryRooms, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
-	require.NoError(t, err)
-	assert.NotContains(t, registryRooms, testRoomID)
-
 	channelRegistry, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.Empty(t, channelRegistry)
@@ -171,8 +157,6 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 
 func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 	as := newTestAlarmService(t)
-
-	as.alarmRepository = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 	rebuildCalled := false
@@ -196,8 +180,6 @@ func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 
 func TestWarmCacheFromDBSerializesCacheMutations(t *testing.T) {
 	as := newTestAlarmService(t)
-
-	as.alarmRepository = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 	rebuildStarted := make(chan struct{})
@@ -228,7 +210,8 @@ func TestWarmCacheFromDBSerializesCacheMutations(t *testing.T) {
 	go func() {
 		close(mutationStarted)
 
-		mutationDone <- as.SetRoomName(t.Context(), "serialized-room", "Serialized Room")
+		_, err := as.ClearRoomAlarms(t.Context(), "serialized-room")
+		mutationDone <- err
 	}()
 
 	<-mutationStarted
@@ -246,8 +229,6 @@ func TestWarmCacheFromDBSerializesCacheMutations(t *testing.T) {
 
 func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 	as := newTestAlarmService(t)
-
-	as.alarmRepository = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 
@@ -274,8 +255,6 @@ func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 
 func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
 	as := newTestAlarmService(t)
-
-	as.alarmRepository = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 
@@ -365,7 +344,7 @@ func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {
 	assert.True(t, removed)
 
 	registryKey := as.getRegistryKey("room-type-2")
-	roomStillSubscribed, err := as.cache.SIsMember(ctx, as.getAlarmKey("room-type-2"), "ch-type-2")
+	roomChannels, err := as.GetRoomAlarms(ctx, "room-type-2")
 	require.NoError(t, err)
 
 	liveSubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeLive), registryKey)
@@ -374,7 +353,7 @@ func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {
 	communitySubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeCommunity), registryKey)
 	require.NoError(t, err)
 
-	assert.True(t, roomStillSubscribed)
+	assert.Equal(t, []string{"ch-type-2"}, roomChannels)
 	assert.False(t, liveSubscribed)
 	assert.True(t, communitySubscribed)
 }

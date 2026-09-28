@@ -176,6 +176,13 @@ TABLE alarm_dispatch_send_units
   CONSTRAINT alarm_dispatch_send_units_client_request_id_key UNIQUE (client_request_id)
   CONSTRAINT alarm_dispatch_send_units_unit_key_key UNIQUE (unit_key)
 
+TABLE alarm_room_display_names
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN display_name character varying(255) NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_alarm_room_display_names_display_name_nonblank CHECK ((btrim((display_name)::text) <> ''::text))
+  CONSTRAINT alarm_room_display_names_pkey PRIMARY KEY (room_id)
+
 TABLE alarms
   COLUMN id integer NOT NULL DEFAULT nextval('alarms_id_seq'::regclass)
   COLUMN room_id character varying(100) NOT NULL
@@ -187,6 +194,7 @@ TABLE alarms
   COLUMN created_at timestamp with time zone DEFAULT now()
   COLUMN alarm_types alarm_type[] NOT NULL DEFAULT ARRAY['LIVE'::alarm_type]
   COLUMN host_id text NOT NULL DEFAULT ''::text
+  COLUMN room_name_updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_alarms_host_id_vocab CHECK (((host_id = ''::text) OR (((channel_id)::text = 'UC3OH5FKQ3qtl4uRme_vZTgA'::text) AND (host_id = ANY (ARRAY['kiyosumi-lyra'::text, 'reimei-mira'::text, 'yoinagi-neon'::text])))))
   CONSTRAINT alarms_pkey PRIMARY KEY (id)
   INDEX CREATE INDEX idx_alarms_alarm_types_gin ON public.alarms USING gin (alarm_types)
@@ -213,6 +221,7 @@ TABLE auth_users
   COLUMN avatar_url text
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+  COLUMN session_generation bigint NOT NULL DEFAULT 0
   CONSTRAINT auth_users_pkey PRIMARY KEY (id)
   CONSTRAINT auth_users_email_key UNIQUE (email)
 

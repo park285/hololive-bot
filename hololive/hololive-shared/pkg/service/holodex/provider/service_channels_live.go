@@ -29,99 +29,21 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"time"
 
 	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[string]*domain.Channel, error) {
-	if len(channelIDs) == 0 {
-		return make(map[string]*domain.Channel), nil
-	}
-
-	result, missedIDs := h.collectCachedChannels(ctx, channelIDs)
-	h.logGetChannelsCacheStatus(channelIDs, result, missedIDs)
-
-	if len(missedIDs) == 0 {
-		return result, nil
-	}
-
-	// 목록 API 실패는 개별 조회로 보충하지 않고 그대로 돌려준다(DEC-20260926-hololive-source-fallbacks-retirement).
-	allChannels, err := h.fetchHololiveChannelList(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get channels batch list: %w", err)
-	}
-
-	h.addMissedChannelsFromList(ctx, result, missedIDs, allChannels)
-
-	h.logger.Info("GetChannels batch complete (optimized)",
-		slog.Int("requested", len(channelIDs)),
-		slog.Int("returned", len(result)),
-		slog.Int("from_list_api", len(result)-len(channelIDs)+len(missedIDs)),
-	)
-
-	return result, nil
-}
-
-func (h *Service) collectCachedChannels(ctx context.Context, channelIDs []string) (map[string]*domain.Channel, []string) {
-	result := make(map[string]*domain.Channel, len(channelIDs))
-
-	var missedIDs []string
-
-	for _, id := range channelIDs {
-		if cached, found := h.cacheManager.GetChannel(ctx, id); found {
-			result[id] = cached
-			continue
-		}
-
-		missedIDs = append(missedIDs, id)
-	}
-
-	return result, missedIDs
-}
-
-func (h *Service) logGetChannelsCacheStatus(channelIDs []string, result map[string]*domain.Channel, missedIDs []string) {
-	h.logger.Debug("GetChannels cache status",
-		slog.Int("total", len(channelIDs)),
-		slog.Int("cache_hits", len(result)),
-		slog.Int("cache_misses", len(missedIDs)),
-	)
-}
-
-func (h *Service) addMissedChannelsFromList(ctx context.Context, result map[string]*domain.Channel, missedIDs []string, allChannels []*domain.Channel) {
-	missedSet := stringSet(missedIDs)
-
-	for _, ch := range allChannels {
-		if missedSet[ch.ID] {
-			result[ch.ID] = ch
-			h.cacheManager.SetChannel(ctx, ch.ID, ch)
-		}
-	}
-}
-
-func stringSet(values []string) map[string]bool {
-	set := make(map[string]bool, len(values))
-	for _, value := range values {
-		set[value] = true
-	}
-
-	return set
-}
-
 // GetChannelsLiveStatus는 Holodex /users/live 한 번으로 채널들의 live+upcoming stream을 돌려준다.
 // 조직·상태·정렬(org/status/sort) 필터는 적용하지 않는다. 사용 시나리오: 알림 체크, 대시보드 상태 표시 등 빠른 상태 확인.
-// 원천 실패는 오류로 그대로 돌려준다. YouTube scraper 2차 경로는
+// 결과는 캐시하지 않는다(요청 채널 집합별 30초 캐시는 적중이 거의 없어 Valkey 책임 축소 A10에서 지웠다).
+// 호출마다 Holodex requester의 기존 rate limiter를 거쳐 upstream을 조회한다. 원천 실패는 오류로 그대로 돌려준다. YouTube scraper 2차 경로는
 // DEC-20260926-hololive-live-status-scraper-fallback-removal로 삭제했고, alarm-worker는 이 오류를 받으면
 // persisted live session으로 판단한다.
 func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
 	if len(channelIDs) == 0 {
 		return []*domain.Stream{}, nil
-	}
-
-	if cached, found := h.cacheManager.GetChannelsLiveStatusStreams(ctx, channelIDs); found {
-		return cached, nil
 	}
 
 	params := url.Values{}
@@ -137,15 +59,15 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 		return nil, fmt.Errorf("get channels live status: %w", err)
 	}
 
-	streams, err := h.mapAndCacheChannelsLiveStatus(ctx, channelIDs, body)
+	streams, err := h.mapChannelsLiveStatus(channelIDs, body)
 	if err != nil {
-		return nil, fmt.Errorf("map and cache channels live status: %w", err)
+		return nil, fmt.Errorf("map channels live status: %w", err)
 	}
 
 	return streams, nil
 }
 
-func (h *Service) mapAndCacheChannelsLiveStatus(ctx context.Context, channelIDs []string, body []byte) ([]*domain.Stream, error) {
+func (h *Service) mapChannelsLiveStatus(channelIDs []string, body []byte) ([]*domain.Stream, error) {
 	var rawStreams []streammapping.StreamRaw
 
 	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
@@ -157,7 +79,6 @@ func (h *Service) mapAndCacheChannelsLiveStatus(ctx context.Context, channelIDs 
 
 	filtered := h.filter.FilterHololiveStreams(streams)
 
-	h.cacheManager.SetChannelsLiveStatusStreams(ctx, channelIDs, filtered, 30*time.Second)
 	h.logger.Debug("GetChannelsLiveStatus completed",
 		slog.Int("requested_channels", len(channelIDs)),
 		slog.Int("streams_found", len(filtered)),

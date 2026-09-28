@@ -41,7 +41,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
 // BotIrisClient는 bot orchestration이 발송과 room catalog 구성에 사용하는 Iris 계약입니다.
@@ -70,7 +69,6 @@ type Dependencies struct {
 	Alarm                 domain.AlarmCRUD
 	Matcher               *matcher.Matcher
 	MembersData           domain.MemberDataProvider
-	Service               youtube.Service
 	Activity              *activity.Logger
 	Settings              settings.ReadWriter
 	ACL                   *acl.Service
@@ -108,7 +106,6 @@ type streamDependencies struct {
 	alarm       domain.AlarmCRUD
 	matcher     *matcher.Matcher
 	membersData domain.MemberDataProvider
-	service     youtube.Service
 }
 
 type supportDependencies struct {
@@ -175,7 +172,6 @@ func (d *Dependencies) streamDeps() streamDependencies {
 		alarm:       d.Alarm,
 		matcher:     d.Matcher,
 		membersData: d.MembersData,
-		service:     d.Service,
 	}
 }
 

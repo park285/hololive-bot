@@ -2,7 +2,7 @@
 
 ## Scope
 
-Alarm dispatch outbox와 settings/config Pub/Sub의 current contract를 기록합니다.
+Alarm dispatch outbox의 current contract와 Pub/Sub 전달 의미를 기록합니다. settings Pub/Sub은 제거됐습니다.
 
 ## Alarm Dispatch Outbox
 
@@ -60,38 +60,11 @@ X 스페이스 시작 알림은 `source_kind=x_space`와 전용 `x_space` payloa
 새 이벤트를 만들지 않습니다. 다른 스페이스 및 YouTube 알림과 묶지 않고
 텍스트 경로로 처리합니다. 신규 발송 재시도 경로는 없습니다.
 
-## Settings Pub/Sub
+## Settings Changes (No Pub/Sub)
 
-| Field | Value |
-|---|---|
-| Channel | `config:update` |
-| Contract package | `hololive/hololive-shared/pkg/contracts/settings` |
-| Version constant | `ConfigUpdateVersionV1 = 1` |
-| Payload version field | none |
-
-Current message:
-
-```go
-type ConfigUpdateV1 struct {
-    Type    string          `json:"type"`
-    Payload json.RawMessage `json:"payload"`
-}
-```
-
-Known update types:
-
-- `alarm_advance_minutes`
-- `membernews_weekly_run_now`
-- `acl`
-
-`scraper_proxy` was retired with the scraper proxy (DEC-20260926-hololive-legacy-env-config-retirement); subscribers now treat it as an unknown type.
-
-Subscriber behavior:
-
-- Invalid JSON is logged and ignored.
-- Empty `type` is logged and ignored.
-- Unknown `type` is logged unless an `Unknown` handler is configured.
-- Type-specific payload decode failure is logged and ignored.
+The settings Pub/Sub channel `config:update` and its message types were removed (2026-09-28). Settings changes use the
+admin settings API and a single apply path; ACL changes propagate inside the `hololive-api` process. See
+`contracts/settings.md`.
 
 ## Pub/Sub Delivery Semantics
 
@@ -99,7 +72,7 @@ Valkey Pub/Sub does not provide durable replay for missed messages. Runtime star
 
 Pub/Sub is not durable command transport. Events that need acknowledgement, retry, replay, or auditability must use an internal HTTP contract or a durable queue.
 
-Command-like events that require acknowledgement, retry, or auditability should use documented internal trigger APIs instead of Pub/Sub. This document does not change the current `membernews_weekly_run_now` event.
+Command-like events that require acknowledgement, retry, or auditability should use documented internal trigger APIs instead of Pub/Sub.
 
 ## Validation
 

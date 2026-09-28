@@ -21,7 +21,6 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx := context.WithValue(t.Context(), lifecycleContextKey{}, "parent")
 	alarmCtxCh := make(chan context.Context, 1)
-	configCtxCh := make(chan context.Context, 1)
 	botCtxCh := make(chan context.Context, 1)
 	cancelCh := make(chan context.CancelFunc, 1)
 	order := make([]string, 0, 2)
@@ -32,9 +31,6 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 		StartAlarmScheduler: func(ctx context.Context) error {
 			alarmCtxCh <- ctx
 			return nil
-		},
-		RunConfigSubscriber: func(ctx context.Context) {
-			configCtxCh <- ctx
 		},
 		StartBot: func(ctx context.Context) error {
 			botCtxCh <- ctx
@@ -58,11 +54,9 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 
 	cancelAlarm := receiveLifecycleTestValue(t, cancelCh)
 	alarmCtx := receiveLifecycleTestValue(t, alarmCtxCh)
-	configCtx := receiveLifecycleTestValue(t, configCtxCh)
 	botCtx := receiveLifecycleTestValue(t, botCtxCh)
 
 	assert.Equal(t, "parent", alarmCtx.Value(lifecycleContextKey{}))
-	assert.Equal(t, "parent", configCtx.Value(lifecycleContextKey{}))
 	assert.Equal(t, "parent", botCtx.Value(lifecycleContextKey{}))
 
 	cancelAlarm()

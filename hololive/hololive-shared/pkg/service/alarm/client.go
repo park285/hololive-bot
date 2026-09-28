@@ -95,11 +95,6 @@ type setRoomNameReq struct {
 	RoomName string `json:"room_name"`
 }
 
-type setUserNameReq struct {
-	UserID   string `json:"user_id"`
-	UserName string `json:"user_name"`
-}
-
 type updateAdvanceMinutesReq struct {
 	Minutes int `json:"minutes"`
 }
@@ -287,15 +282,6 @@ func (c *Client) GetTargetMinutes() []int {
 func (c *Client) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	body := setRoomNameReq{RoomID: roomID, RoomName: roomName}
 	if err := c.putNoData(ctx, contractsalarm.RoomNamePath, body); err != nil {
-		return fmt.Errorf("put no data: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Client) SetUserName(ctx context.Context, userID, userName string) error {
-	body := setUserNameReq{UserID: userID, UserName: userName}
-	if err := c.putNoData(ctx, contractsalarm.UserNamePath, body); err != nil {
 		return fmt.Errorf("put no data: %w", err)
 	}
 

@@ -12,6 +12,6 @@ docs/current/DEPLOYMENT_BASELINE.md||docker-compose.prod.yml|Docker Compose|Runt
 docs/current/SERVICE_OWNERSHIP.md||Service Ownership|bot|youtube-collector
 docs/current/CONTRACT_MAP.md||Contract Map|membernews|iris-boundary
 docs/current/ERROR_CONTRACT.md||Error Contract|Client Interpretation Rules|notification_in_progress
-docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md||Queue And Pub/Sub Contracts|alarm:dispatch:queue|config:update
+docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md||Queue And Pub/Sub Contracts|alarm:dispatch:queue|Pub/Sub Delivery Semantics
 docs/current/runbooks/README.md||Current Runbooks|hololive-api.md|rollback.md
 docs/current/architecture/ci-gates.md||CI Gates|check-contract-map.sh|check-error-contracts.sh

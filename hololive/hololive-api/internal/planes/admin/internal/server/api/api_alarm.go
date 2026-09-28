@@ -51,7 +51,7 @@ func (h *AlarmHandler) GetAlarms(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	// 모든 알림 레지스트리 키 조회
+	// 관리 목록은 alarm-worker가 PG에서 (방, 채널) 단위로 만든다.
 	alarmKeys, err := h.alarm.GetAllAlarmKeys(ctx)
 	if err != nil {
 		h.safeLogger().Error("Failed to get alarm keys", slog.Any("error", err))

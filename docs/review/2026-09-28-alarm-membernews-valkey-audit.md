@@ -61,18 +61,20 @@ flowchart TD
 
 따라서 D1은 정상 구독·해지마다 대상 Valkey 명령 2개, 초기화마다 2~4개의 명령을 없앱니다. 이미 PG에서 읽으므로 대체 캐시나 새 PG 조회를 추가할 이유가 없습니다. latency·메모리 절감의 운영 수치는 측정하지 않았습니다.
 
-## N03 높은 우선순위 — 뉴스 실행 잠금과 알람 사전 claim의 실패 의미가 반대
+## N03 높은 우선순위 — 뉴스 실행 잠금과 알람 사전 claim의 실패 의미
 
 근거: [주간 scheduler](../../hololive/hololive-api/internal/planes/llm/internal/service/membernews/scheduler/scheduler.go), [월간 scheduler](../../hololive/hololive-api/internal/planes/llm/internal/service/membernews/scheduler/monthly_scheduler.go), [DigestScheduler](../../hololive/hololive-api/internal/planes/llm/internal/schedulerkit/digest_scheduler.go), [delivery locker](../../hololive/hololive-shared/pkg/service/delivery/locker.go), [알람 claim](../../hololive/hololive-shared/pkg/service/alarm/dedup/service.go), [notifier 준비](../../hololive/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier/notifier_resolve.go).
 
+> 2026-09-28 정정: 최초 감사는 뉴스 잠금을 Valkey 오류 시 `acquired=true`로 계속 실행하고, 알람 claim은 오류 시 skip한다고 적었습니다. 당시 코드도 이미 달랐습니다. `locker.TryAcquire`(locker.go:69-85)와 `RunDigest`(digest_scheduler.go:70-79)는 오류를 돌려줘 실행하지 않고(stack-audit T19에서 graceful degradation 제거), `dedup.tryClaimKey`(dedup/service.go:77-92)는 오류를 "이미 선점됨"과 구분해 실패(sendOutcomeFailed)로 기록합니다. 아래 표는 정정한 현재 동작입니다.
+
 | 항목 | 정상 경쟁 | Valkey 오류 | 역할 |
 |---|---|---|---|
-| 뉴스 `membernews:lock:weekly:*`·`monthly:*` | 이미 잠겼으면 실행 skip | acquired=true로 계속 실행 | 같은 기간의 동시 요약 작업 억제 |
-| 알람 `notified:claim:*` 계열의 사전 claim | 확보하지 못하면 해당 준비 건 skip | false로 반환해 해당 준비 건 skip | PG publish 전 중복 준비 억제 |
+| 뉴스 `membernews:lock:weekly:*`·`monthly:*` | 이미 잠겼으면 실행 skip | 오류 반환, 실행하지 않고 다음 주기에 재시도(fail-closed) | 같은 기간의 동시 요약 작업 억제 |
+| 알람 `notified:claim:*` 계열의 사전 claim | 확보하지 못하면 해당 준비 건 skip | 오류 반환, 해당 준비 건을 실패로 기록(skip과 구분) | PG publish 전 중복 준비 억제 |
 
 뉴스 잠금 TTL은 현재 15분이며 token 비교로 해제합니다. 완료 뒤 잠금은 제거되고 TTL 연장 경로는 확인되지 않습니다. 따라서 기간 전체를 한 번만 실행시키거나 임의로 긴 LLM 작업의 단독 실행을 보장하는 장치는 아닙니다. 정상 잠금도 이미 수행된 LLM 비용을 영속적으로 중복 제거하지 않습니다.
 
-잠금 제거·항상 nil 주입은 정상 상황의 동시 생성까지 허용합니다. `NewLocker(nil)`의 기존 no-op이 있다는 이유로 이를 새 정상 경로로 채택하지 않습니다. 기존 fail-open 동작의 강화·삭제는 이번 미러 fadeout과 분리합니다. 반대로 알람 사전 claim 오류 시 publish까지 도달하지 않는 경로가 있으므로, PG ledger가 존재한다는 이유만으로 신규 알람 생성도 Valkey 장애와 무관하다고 주장하지 않습니다.
+잠금 제거·항상 nil 주입은 정상 상황의 동시 생성까지 허용합니다. 현재 `NewLocker(nil)`은 오류를 반환하므로 no-op 잠금 경로도 없습니다. 두 경로 모두 Valkey 장애 동안 해당 작업이 실패로 드러나므로, PG ledger가 존재한다는 이유만으로 신규 알람 생성·뉴스 실행이 Valkey 장애와 무관하다고 주장하지 않습니다.
 
 ## N04 높은 우선순위 — 뉴스의 PG 발송 경로는 설정별로 확인
 

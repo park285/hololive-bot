@@ -36,14 +36,11 @@ import (
 type lockCache interface {
 	SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error)
-	DelMany(ctx context.Context, keys []string) (int64, error)
 }
 
 type NotificationLocker interface {
 	TryAcquire(ctx context.Context, lockKey string, ttl time.Duration) (token string, acquired bool, err error)
 	Release(ctx context.Context, lockKey, token string) error
-	ClaimRoom(ctx context.Context, claimKey string, ttl time.Duration) (acquired bool, err error)
-	ReleaseRoomClaims(ctx context.Context, claimKeys []string) error
 }
 
 // NewLocker는 Valkey 기반 locker만 만든다. 캐시가 없으면 dedup을 끈 채 진행하던 noop locker로 내려가지 않고 생성
@@ -101,27 +98,6 @@ func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token s
 	if !deleted {
 		l.logger.Debug("Lock owned by another instance, skipping release",
 			privacylog.CacheKeyAttr(lockKey))
-	}
-
-	return nil
-}
-
-func (l *valkeyNotificationLocker) ClaimRoom(ctx context.Context, claimKey string, ttl time.Duration) (bool, error) {
-	acquired, err := l.cache.SetNX(ctx, claimKey, "1", ttl)
-	if err != nil {
-		return false, fmt.Errorf("claim notification room: set nx: %w", err)
-	}
-
-	return acquired, nil
-}
-
-func (l *valkeyNotificationLocker) ReleaseRoomClaims(ctx context.Context, claimKeys []string) error {
-	if len(claimKeys) == 0 {
-		return nil
-	}
-
-	if _, err := l.cache.DelMany(ctx, claimKeys); err != nil {
-		return fmt.Errorf("release notification room claims: del many (count=%d): %w", len(claimKeys), err)
 	}
 
 	return nil

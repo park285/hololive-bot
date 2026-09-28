@@ -5,14 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 const memberSubscriptionChannel = "UC3OH5FKQ3qtl4uRme_vZTgA"
@@ -23,10 +20,7 @@ func newMemberSubscriptionService(t *testing.T) *AlarmService {
 	t.Helper()
 
 	as := newTestAlarmService(t)
-	pool := dbtest.NewPool(t)
-	repo := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, as.logger)
 
-	as.alarmRepository, as.alarmWriter = repo, repo
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{{ChannelID: memberSubscriptionChannel, Name: "유닛 B"}}}
 
 	return as
@@ -136,7 +130,7 @@ func TestMemberSubscriptionsKeepOtherRoomChoicesAndCache(t *testing.T) {
 func TestMemberSubscriptionsRejectUnavailableOrInvalidTargets(t *testing.T) {
 	as := newTestAlarmService(t)
 
-	for _, hostID := range []string{memberSubscriptionMiraID, "not-a-member", " "} {
+	for _, hostID := range []string{"not-a-member", " "} {
 		added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
 			RoomID: testRoomID, ChannelID: memberSubscriptionChannel, HostID: hostID,
 		})

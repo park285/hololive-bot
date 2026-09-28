@@ -50,6 +50,14 @@ func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, min
 	}
 
 	targetMinutes := a.alarm.UpdateAlarmAdvanceMinutes(ctx, minutes)
+	// alarm-worker HTTP client는 PUT 실패 시 빈 목록을 돌려준다. 이 호출이 worker에 닿는 유일한 적용
+	// 경로이므로(config:update Pub/Sub 재적용 없음) 실패를 적용 성공으로 보고하지 않는다.
+	if len(targetMinutes) == 0 {
+		runtime.AlarmApplied = false
+		runtime.AlarmReason = "alarm worker did not apply alarm advance minutes"
+
+		return runtime
+	}
 
 	runtime.AlarmApplied = true
 	runtime.AlarmTargetMinutes = targetMinutes

@@ -22,144 +22,68 @@ package alarmservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-
-	"github.com/valkey-io/valkey-go"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-const alarmRoomMembershipBatchSize = 100
-
+// GetAllAlarmKeys는 관리 목록을 PG에서 만든다. 방·채널 쌍마다 한 항목이며, 방 이름은 관리자 지정 이름 → Kakao 방 이름
+// → 방 ID 순으로 정한다. 멤버 표시명만 subscriber cache의 member name hash에서 읽고, 그 조회 실패는 이름 없이 목록을 낸다.
 func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
-	registryKeys, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	entries, err := as.alarmRepository.ListAlarmEntries(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get alarm registry: %w", err)
+		return nil, fmt.Errorf("list alarm entries: %w", err)
 	}
 
-	// 이름 맵 미리 로드
-	roomNamesMap, err := as.cache.HGetAll(ctx, sharedalarmkeys.RoomNamesCacheKey)
-	if err != nil {
-		if as.logger != nil {
-			as.logger.Warn("failed to load cached room names", slog.Any("error", err))
-		}
-
-		roomNamesMap = map[string]string{}
+	if len(entries) == 0 {
+		return []*domain.AlarmEntry{}, nil
 	}
 
-	roomIDs, roomChannels := as.loadRoomAlarmChannels(ctx, registryKeys)
-	alarms, channelIDsForNames := collectAlarmEntries(roomIDs, roomChannels, roomNamesMap)
-
-	memberNames, err := as.getMemberNamesBatch(ctx, channelIDsForNames)
-	if err != nil {
-		if as.logger != nil {
-			as.logger.Warn("failed to load member names", slog.Any("error", err))
+	channelIDs := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.RoomName == "" {
+			entry.RoomName = entry.RoomID
 		}
+
+		channelIDs = append(channelIDs, entry.ChannelID)
+	}
+
+	memberNames, err := as.getMemberNamesBatch(ctx, channelIDs)
+	if err != nil {
+		as.logger.Warn("failed to load member names", slog.Any("error", err))
 
 		memberNames = map[string]string{}
 	}
 
-	for _, alarm := range alarms {
-		alarm.MemberName = memberNames[alarm.ChannelID]
+	for _, entry := range entries {
+		entry.MemberName = memberNames[entry.ChannelID]
 	}
 
-	return alarms, nil
+	return entries, nil
 }
 
-func (as *AlarmService) loadRoomAlarmChannels(ctx context.Context, registryKeys []string) ([]string, [][]string) {
-	roomIDs := make([]string, 0, len(registryKeys))
-	for _, roomID := range registryKeys {
-		if roomID == "" {
-			continue
-		}
-
-		roomIDs = append(roomIDs, roomID)
+// SetRoomName은 관리자 지정 방 이름을 PG에 저장한다. 공백뿐인 이름은 지정을 해제해 관리 목록이 Kakao 방 이름으로 돌아간다.
+func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string) error {
+	roomID = strings.TrimSpace(roomID)
+	if roomID == "" {
+		return errors.New("set room name: room id is required")
 	}
 
-	roomChannels := make([][]string, len(roomIDs))
-	if len(roomIDs) == 0 {
-		return roomIDs, roomChannels
-	}
-
-	builder := as.cache.B()
-
-	for batchStart := 0; batchStart < len(roomIDs); batchStart += alarmRoomMembershipBatchSize {
-		batchEnd := min(batchStart+alarmRoomMembershipBatchSize, len(roomIDs))
-		commands := make([]valkey.Completed, batchEnd-batchStart)
-
-		for index, roomID := range roomIDs[batchStart:batchEnd] {
-			commands[index] = builder.Smembers().Key(as.getAlarmKey(roomID)).Build()
-		}
-
-		results := as.cache.DoMulti(ctx, commands...)
-		for index, result := range results {
-			if index >= len(commands) {
-				break
-			}
-
-			channelIDs, err := result.AsStrSlice()
-			if err != nil {
-				continue
-			}
-
-			roomChannels[batchStart+index] = channelIDs
-		}
-	}
-
-	return roomIDs, roomChannels
-}
-
-func collectAlarmEntries(
-	roomIDs []string,
-	roomChannels [][]string,
-	roomNamesMap map[string]string,
-) ([]*domain.AlarmEntry, []string) {
-	alarms := make([]*domain.AlarmEntry, 0)
-	channelIDsForNames := make([]string, 0)
-
-	for index, roomID := range roomIDs {
-		channelIDs := roomChannels[index]
-		roomAlarms := buildRoomAlarmEntries(roomID, roomNamesMap[roomID], channelIDs)
-
-		channelIDsForNames = append(channelIDsForNames, channelIDs...)
-		alarms = append(alarms, roomAlarms...)
-	}
-
-	return alarms, channelIDsForNames
-}
-
-func buildRoomAlarmEntries(roomID, roomName string, channelIDs []string) []*domain.AlarmEntry {
+	roomName = strings.TrimSpace(roomName)
 	if roomName == "" {
-		roomName = roomID
-	}
-
-	alarms := make([]*domain.AlarmEntry, 0, len(channelIDs))
-	for _, channelID := range channelIDs {
-		alarms = append(alarms, &domain.AlarmEntry{
-			RoomID:    roomID,
-			RoomName:  roomName,
-			ChannelID: channelID,
-		})
-	}
-
-	return alarms
-}
-
-func (as *AlarmService) GetDistinctRooms(ctx context.Context) ([]string, error) {
-	// 방 기반: registry key = roomID (추가 파싱 불필요)
-	registryKeys, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get alarm registry: %w", err)
-	}
-
-	rooms := make([]string, 0, len(registryKeys))
-	for _, roomID := range registryKeys {
-		if roomID != "" {
-			rooms = append(rooms, roomID)
+		if err := as.alarmRepository.DeleteRoomDisplayName(ctx, roomID); err != nil {
+			return fmt.Errorf("clear room name: %w", err)
 		}
+
+		return nil
 	}
 
-	return rooms, nil
+	if err := as.alarmRepository.SetRoomDisplayName(ctx, roomID, roomName); err != nil {
+		return fmt.Errorf("set room name: %w", err)
+	}
+
+	return nil
 }

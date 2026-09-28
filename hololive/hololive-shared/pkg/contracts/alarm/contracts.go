@@ -33,7 +33,6 @@ const (
 	NextStreamRoute = "/next-stream/:id"
 	SettingsRoute   = "/settings"
 	RoomNameRoute   = "/room-name"
-	UserNameRoute   = "/user-name"
 	KeysRoute       = "/keys"
 
 	AddPath      = BasePath + AddRoute
@@ -41,7 +40,6 @@ const (
 	ClearPath    = BasePath + ClearRoute
 	SettingsPath = BasePath + SettingsRoute
 	RoomNamePath = BasePath + RoomNameRoute
-	UserNamePath = BasePath + UserNameRoute
 	KeysPath     = BasePath + KeysRoute
 )
 

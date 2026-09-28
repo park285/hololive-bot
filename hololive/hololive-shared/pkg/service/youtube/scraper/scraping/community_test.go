@@ -80,37 +80,8 @@ func TestGetCommunityPosts_404TreatAsEmpty(t *testing.T) {
 	require.Equal(t, int32(1), attempts.Load(), "community missing cache should skip second network call")
 }
 
-func TestGetCommunityPosts_404DoesNotRecordHTMLCooldown(t *testing.T) {
-	httpClient := &http.Client{
-		Transport: communityRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusNotFound,
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("")),
-			}, nil
-		}),
-	}
-
-	client := NewClient(testYouTubeConfig(),
-		WithHTTPClient(httpClient),
-		WithRateLimiter(ratelimiter.New(0)),
-		WithUAProvider(ua.NewStaticProvider("test-agent")),
-		WithStateStore(newChannelHealthTestStore()),
-		WithChannelHealthPolicy(&ChannelHealthPolicy{
-			HTTPStatusBase: time.Hour,
-			HTTPStatusMax:  time.Hour,
-		}),
-	)
-
-	posts, err := client.GetCommunityPosts(t.Context(), "UC_TEST", 5)
-	require.NoError(t, err)
-	require.Empty(t, posts)
-
-	wait, skip := client.channelHealth.ShouldSkip(t.Context(), "UC_TEST", FailureSourceHTML, time.Now())
-	require.False(t, skip, "community /posts 404 should not cooldown the shared HTML source; wait=%s", wait)
-}
-
-func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *testing.T) {
+// admission 대기(defer) 오류는 community missing으로 오인하지 않고 호출자에게 그대로 전달한다.
+func TestFetchCommunityPostsPage_AdmissionDeferredSurfacesDeferredError(t *testing.T) {
 	httpClient := &http.Client{
 		Transport: communityRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return &http.Response{
@@ -125,12 +96,6 @@ func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *t
 		WithHTTPClient(httpClient),
 		WithRateLimiter(ratelimiter.New(time.Hour)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
-		WithStateStore(newChannelHealthTestStore()),
-		WithChannelHealthPolicy(&ChannelHealthPolicy{
-			Enforce:     true,
-			TimeoutBase: time.Hour,
-			TimeoutMax:  time.Hour,
-		}),
 	)
 
 	html, missing, err := client.fetchCommunityPostsPage(t.Context(), "UC_TEST")
@@ -141,12 +106,11 @@ func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *t
 	errCtx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
 
-	_, _, err = client.fetchCommunityPostsPage(errCtx, "UC_TEST")
+	_, missing, err = client.fetchCommunityPostsPage(errCtx, "UC_TEST")
 	require.Error(t, err)
 	require.True(t, youtubeadmission.IsDeferred(err), "err = %v", err)
-
-	wait, skip := client.channelHealth.ShouldSkip(t.Context(), "UC_TEST", FailureSourceHTML, time.Now())
-	require.False(t, skip, "admission defer should not cooldown the shared HTML source; wait=%s", wait)
+	require.False(t, missing)
+	require.False(t, client.isCommunityMissing("UC_TEST"))
 }
 
 func TestExtractCommunityPostsContentFallsBackToRendererType(t *testing.T) {

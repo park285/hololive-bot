@@ -25,14 +25,15 @@ import (
 	"log/slog"
 	"os"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/require"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -89,39 +90,26 @@ func (m *mockMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member {
 	return []*domain.Member{}
 }
 
+// newTestAlarmService는 격리된 PG(dbtest)와 miniredis를 쓰는 서비스를 만든다. PG가 구독·방 이름의 원천이다.
 func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 
 	ctx := t.Context()
 	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	pool := dbtest.NewPool(t)
+	repository := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
 
 	service := &AlarmService{
-		cache:        cacheClient,
-		logger:       logger,
-		targetPolicy: sharedchecker.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
+		cache:           cacheClient,
+		alarmRepository: repository,
+		alarmWriter:     repository,
+		logger:          logger,
+		targetPolicy:    sharedchecker.NewTargetMinutePolicyFromConfigured([]int{30, 15, 5, 1}),
 	}
 	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
 
 	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
 
 	return service
-}
-
-func requireUpcomingEventMarker(ctx context.Context, t *testing.T, as *AlarmService, roomID, channelID string, stream *domain.Stream) {
-	t.Helper()
-
-	require.NotNil(t, stream, "stream must not be nil")
-	require.NotNil(t, stream.StartScheduled, "stream.StartScheduled must not be nil")
-
-	key := as.buildUpcomingEventKey(roomID, channelID, stream.ID, stream.Title, *stream.StartScheduled)
-
-	var data dedup.UpcomingEventNotifiedData
-
-	require.NoError(t, as.cache.Get(ctx, key, &data))
-	require.NotEmpty(t, data.NotifiedAt, "upcoming event marker missing at key %s", key)
-
-	notifiedAt, err := time.Parse(time.RFC3339, data.NotifiedAt)
-	require.NoError(t, err)
-	require.WithinDuration(t, time.Now().UTC(), notifiedAt, time.Minute)
 }

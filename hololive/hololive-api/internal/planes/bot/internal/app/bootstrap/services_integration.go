@@ -28,7 +28,6 @@ func InitCoreIntegrationServices(
 		defaultMode,
 		appConfig.Kakao.Rooms,
 		infra.Postgres,
-		infra.Cache,
 		logger,
 	)
 	if err != nil {

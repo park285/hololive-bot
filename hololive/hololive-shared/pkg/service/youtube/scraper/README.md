@@ -13,31 +13,7 @@ PHP 기반 [YouTube-operational-API](https://github.com/Benjamin-Loison/YouTube-
 
 ## 구현된 기능
 
-### 1. `GetChannelStats(ctx, channelID)` → `*ChannelStats`
-
-채널 통계 정보 조회 (YouTube `/about` 페이지에서 추출)
-
-| 필드 | 타입 | 설명 | 예시 |
-|------|------|------|------|
-| `ChannelID` | `string` | 채널 ID | `UC1DCedRgGHBdm81E1llLhOQ` |
-| `SubscriberCount` | `int64` | 구독자 수 | `2760000` |
-| `ViewCount` | `int64` | 총 조회수 | `1056229686` |
-| `VideoCount` | `int64` | 비디오 수 | `2429` |
-| `JoinedDate` | `int64` | 가입일 (Unix timestamp) | `1562025600` |
-| `Description` | `string` | 채널 설명 | `"こんぺこ！..."` |
-| `Country` | `string` | 국가 | `"Japan"` |
-| `Handle` | `string` | 채널 핸들 | `"@usadapekora"` |
-
-**JSON 경로** (YouTube 2025 구조):
-```
-onResponseReceivedEndpoints.0.showEngagementPanelEndpoint.engagementPanel
-  .engagementPanelSectionListRenderer.content.sectionListRenderer.contents.0
-  .itemSectionRenderer.contents.0.aboutChannelRenderer.metadata.aboutChannelViewModel
-```
-
----
-
-### 2. `GetRecentVideos(ctx, channelID, maxResults)` → `[]*Video`
+### 1. `GetRecentVideos(ctx, channelID, maxResults)` → `[]*Video`
 
 채널 `/videos` 탭 HTML에서 최근 영상 목록을 추출합니다. 원천은 이 HTML 하나이며, 조회·파싱 실패나 parser drift는
 RSS 결과나 빈 성공으로 바꾸지 않고 오류로 돌려줍니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
@@ -55,10 +31,6 @@ import scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scra
 
 // runtime이 읽은 appConfig.YouTube를 넘긴다. HTTP timeout, 본문 상한, 상태 TTL, bucket 접두사가 여기서 온다.
 client := scraper.NewClient(appConfig.YouTube, scraper.WithRateLimiter(sharedRL))
-
-// 채널 통계 조회
-stats, err := client.GetChannelStats(ctx, "UC1DCedRgGHBdm81E1llLhOQ")
-fmt.Printf("구독자: %d\n", stats.SubscriberCount)
 
 // 최근 영상 조회(HTML 단일 원천, 실패는 오류)
 videos, err := client.GetRecentVideos(ctx, "UCJFZiqLMntJufDCHc6bQixg", 10)
@@ -85,11 +57,9 @@ go test -tags=integration -v ./pkg/service/youtube/scraper/...
 
 | 함수 | 입력 예시 | 출력 |
 |------|----------|------|
-| `parseSubscriberCount` | `"2.76M subscribers"` | `2760000` |
 | `parseShortNumber` | `"1.5K"`, `"2.76M"`, `"1B"` | `1500`, `2760000`, `1000000000` |
 | `parseViewCount` | `"1,056,229,686 views"` | `1056229686` |
 | `parseVideoCount` | `"2,429 videos"` | `2429` |
-| `parseJoinedDate` | `"Joined Jul 2, 2019"` | `1562025600` (Unix) |
 
 ---
 
@@ -107,19 +77,17 @@ go test -tags=integration -v ./pkg/service/youtube/scraper/...
 ```
 scraper/
 ├── client.go      # HTTP 클라이언트 (Client 구조체, fetchPage)
-├── channel.go     # GetChannelStats
 ├── videos.go      # GetRecentVideos, GetPopularVideos
 ├── yt_initial_data.go # ytInitialData root package wrapper
 ├── internal/initialdata/ # ytInitialData 추출/후보 점수화
 ├── alerts.go      # alertRenderer 처리
-├── stats_parser.go # 채널 통계 파서
+├── stats_parser.go # 숫자 파싱 헬퍼
 ├── recent_videos_parser.go # recent videos 파서
 ├── community.go   # GetCommunityPosts
 ├── playlists.go   # GetPlaylists
 ├── shorts.go      # GetShorts
-├── types.go       # 타입 정의 (ChannelStats, Video, CommunityPost, Playlist, Short)
+├── types.go       # 타입 정의 (Video, CommunityPost, Playlist, Short)
 ├── parser_test.go # ytInitialData/숫자 파싱 테스트
-├── stats_parser_test.go # 채널 통계 파서 테스트
 ├── recent_videos_parser_test.go # bounded scan 회귀 테스트
 ├── client_test.go # 통합 테스트 (실제 YouTube 호출, -tags=integration)
 └── README.md      # 이 문서
@@ -129,16 +97,6 @@ scraper/
 ---
 
 ## 서비스 통합
-
-### YouTube Service 통합 (`internal/service/youtube/service.go`)
-
-채널 통계 조회 시 스크래퍼를 우선 사용하여 API quota를 절약합니다.
-
-```go
-// GetChannelStatistics 호출 시:
-// 1. 병렬 스크래핑 (채널당 1회 HTTP 요청)
-// 2. 스크래핑 실패 채널만 YouTube Data API로 폴백
-```
 
 ### Holodex 조회와의 관계
 
@@ -161,5 +119,3 @@ Holodex 채널·채널 일정·live-status 조회는 이 scraper를 보조 원�
 
 - [YouTube-operational-API (PHP 원본)](https://github.com/Benjamin-Loison/YouTube-operational-API)
 - [gjson 문서](https://github.com/tidwall/gjson)
-- YouTube 페이지 구조 분석 (2026-01-19 기준):
-  - `aboutChannelViewModel`: 구독자 수, 조회수, 비디오 수

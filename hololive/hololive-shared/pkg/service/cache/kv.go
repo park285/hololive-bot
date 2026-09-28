@@ -34,9 +34,7 @@ type KeyValueReader interface {
 
 type KeyValueWriter interface {
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
-	MSet(ctx context.Context, pairs map[string]any, ttl time.Duration) error
 	SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
-	SetNXMulti(ctx context.Context, entries []SetNXEntry) ([]SetNXResult, error)
 }
 
 type KeyValueLifecycle interface {

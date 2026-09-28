@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -44,6 +45,8 @@ func debugSink() (*bytes.Buffer, *slog.Logger) {
 
 func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 	scheduled := time.Unix(1785499200, 0).UTC()
+	notifyKey := keys.BuildNotifyClaimKey(nonCanonicalRoomID, "stream-1", scheduled, "target")
+	logicalKey := keys.BuildLogicalEventClaimKey(nonCanonicalRoomID, "UC_TEST", "stream-1", "title", scheduled, "target")
 
 	t.Run("setnx outage path", func(t *testing.T) {
 		sink, logger := debugSink()
@@ -54,7 +57,7 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 		}
 
 		service := NewService(client, []int{10}, logger)
-		_, acquired, err := service.TryClaimNotification(t.Context(), nonCanonicalRoomID, "stream-1", scheduled, 10)
+		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, time.Minute)
 		require.Error(t, err)
 		require.False(t, acquired)
 
@@ -74,7 +77,7 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 		}
 
 		service := NewService(client, []int{10}, logger)
-		_, acquired, err := service.TryClaimNotification(t.Context(), nonCanonicalRoomID, "stream-1", scheduled, 10)
+		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, time.Minute)
 		require.NoError(t, err)
 		require.True(t, acquired)
 

@@ -31,17 +31,13 @@ import (
 )
 
 type Client struct {
-	httpClient            *http.Client    // WithHTTPClient로 주입했거나 initHTTPClients가 만든 직접 연결 client
-	transport             *http.Transport // initHTTPClients가 만든 transport. 주입 client면 nil이다.
-	uaProvider            ua.Provider
-	rateLimiter           *ratelimiter.RateLimiter
-	backoffState          *backoff.BackoffState
-	stateStore            stateStore
-	channelHealthPolicy   ChannelHealthPolicy
-	channelHealthDisabled bool
-	channelHealth         *ChannelHealthStore
-	snapshotSink          SnapshotSink
-	snapshotPolicy        SnapshotPolicy
+	httpClient     *http.Client    // WithHTTPClient로 주입했거나 initHTTPClients가 만든 직접 연결 client
+	transport      *http.Transport // initHTTPClients가 만든 transport. 주입 client면 nil이다.
+	uaProvider     ua.Provider
+	rateLimiter    *ratelimiter.RateLimiter
+	backoffState   *backoff.BackoffState
+	snapshotSink   SnapshotSink
+	snapshotPolicy SnapshotPolicy
 
 	communityMissing *cacheState
 
@@ -70,28 +66,6 @@ func WithRateLimiter(rl *ratelimiter.RateLimiter) ClientOption {
 	}
 }
 
-func WithStateStore(store stateStore) ClientOption {
-	return func(c *Client) {
-		c.stateStore = store
-	}
-}
-
-func WithChannelHealthPolicy(policy *ChannelHealthPolicy) ClientOption {
-	return func(c *Client) {
-		if policy == nil {
-			return
-		}
-
-		c.channelHealthPolicy = *policy
-	}
-}
-
-func WithChannelHealthDisabled() ClientOption {
-	return func(c *Client) {
-		c.channelHealthDisabled = true
-	}
-}
-
 func WithSnapshotSink(sink SnapshotSink) ClientOption {
 	return func(c *Client) {
 		c.snapshotSink = sink
@@ -108,20 +82,18 @@ func WithSnapshotPolicy(policy SnapshotPolicy) ClientOption {
 // YOUTUBE_SCRAPER_* 같은 운영 설정이 조용히 무시된다.
 func NewClient(config settings.YouTubeConfig, opts ...ClientOption) *Client {
 	c := &Client{
-		config:              config,
-		uaProvider:          ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
-		rateLimiter:         ratelimiter.New(3 * time.Second),
-		backoffState:        backoff.NewBackoffState(),
-		channelHealthPolicy: DefaultChannelHealthPolicy(),
-		snapshotPolicy:      DefaultSnapshotPolicy(),
+		config:           config,
+		uaProvider:       ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
+		rateLimiter:      ratelimiter.New(3 * time.Second),
+		backoffState:     backoff.NewBackoffState(),
+		snapshotPolicy:   DefaultSnapshotPolicy(),
+		communityMissing: newCacheState(config.CommunityMissingTTL),
 	}
 
 	for _, opt := range opts {
 		opt(c)
 	}
 
-	// stateStore 주입 후 cacheState 초기화
-	c.initStateManagers()
 	c.initHTTPClients()
 
 	return c

@@ -24,7 +24,6 @@ import (
 	"context"
 	stdErrors "errors"
 	"fmt"
-	"time"
 
 	"github.com/valkey-io/valkey-go"
 
@@ -34,15 +33,15 @@ import (
 
 // 캐시 갱신은 의도적으로 비원자(sequential)다: alarm 키들은 hash tag가 없어 단일
 // EVAL이 Cluster에서 cross-slot이 되고, 중간 실패의 부분 상태는 호출부의 repository
-// rebuild와 마지막 version 키 갱신(reader 재구성 트리거)이 흡수한다.
-func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (int64, error) {
+// rebuild가 흡수한다.
+func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) error {
 	if record == nil {
-		return 0, stdErrors.New("alarm is nil")
+		return stdErrors.New("alarm is nil")
 	}
 
 	alarmTypes, err := normalizeAlarmTypesStrict(record.AlarmTypes, domain.DefaultAlarmTypes)
 	if err != nil {
-		return 0, fmt.Errorf("normalize alarm types strict: %w", err)
+		return fmt.Errorf("normalize alarm types strict: %w", err)
 	}
 
 	cacheRecord := *record
@@ -54,44 +53,32 @@ func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (i
 
 	cacheRecord.MemberName = as.resolveCacheMemberName(ctx, cacheRecord.ChannelID, cacheRecord.MemberName)
 
-	out, err := as.cacheAlarmSequential(ctx, &cacheRecord)
-	if err != nil {
-		return out, stdErrors.Join(err)
+	if err := as.cacheAlarmSequential(ctx, &cacheRecord); err != nil {
+		return fmt.Errorf("cache alarm sequential: %w", err)
 	}
 
-	return out, nil
+	return nil
 }
 
-func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain.Alarm) (int64, error) {
-	alarmKey := as.getAlarmKey(record.RoomID)
-
-	added, err := as.cache.SAdd(ctx, alarmKey, []string{record.ChannelID})
-	if err != nil {
-		return 0, fmt.Errorf("add room alarm: %w", err)
-	}
-
+func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain.Alarm) error {
 	registryKey := as.getRegistryKey(record.RoomID)
-	if _, err := as.cache.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{registryKey}); err != nil {
-		return 0, fmt.Errorf("add room registry: %w", err)
-	}
-
 	if err := as.cacheAlarmSubscribersSequential(ctx, record, registryKey); err != nil {
-		return 0, fmt.Errorf("cache alarm subscribers sequential: %w", err)
+		return fmt.Errorf("cache alarm subscribers sequential: %w", err)
 	}
 
 	if _, err := as.cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
-		return 0, fmt.Errorf("add channel registry: %w", err)
+		return fmt.Errorf("add channel registry: %w", err)
 	}
 
-	if err := as.cacheAlarmMetadataSequential(ctx, record); err != nil {
-		return 0, fmt.Errorf("cache alarm metadata sequential: %w", err)
+	if err := as.CacheMemberName(ctx, record.ChannelID, record.MemberName); err != nil {
+		return fmt.Errorf("cache member name: %w", err)
 	}
 
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
-		return 0, fmt.Errorf("mark alarm cache changed: %w", err)
+		return fmt.Errorf("mark alarm cache changed: %w", err)
 	}
 
-	return added, nil
+	return nil
 }
 
 func (as *AlarmService) cacheAlarmSubscribersSequential(ctx context.Context, record *domain.Alarm, registryKey string) error {
@@ -118,33 +105,10 @@ func (as *AlarmService) cacheAlarmSubscribersSequential(ctx context.Context, rec
 	return nil
 }
 
-func (as *AlarmService) cacheAlarmMetadataSequential(ctx context.Context, record *domain.Alarm) error {
-	if err := as.CacheMemberName(ctx, record.ChannelID, record.MemberName); err != nil {
-		return fmt.Errorf("cache member name: %w", err)
-	}
-
-	if record.RoomName != "" {
-		if err := as.cache.HSet(ctx, sharedalarmkeys.RoomNamesCacheKey, record.RoomID, record.RoomName); err != nil {
-			return fmt.Errorf("cache room name: %w", err)
-		}
-	}
-
-	if record.UserName != "" && record.UserID != "" {
-		if err := as.cache.HSet(ctx, sharedalarmkeys.UserNamesCacheKey, record.UserID, record.UserName); err != nil {
-			return fmt.Errorf("cache user name: %w", err)
-		}
-	}
-
-	return nil
-}
-
+// markAlarmCacheChanged는 구독 변경 뒤 빈 cache 표식을 지워 target 조회가 subscriber set을 다시 읽게 한다.
 func (as *AlarmService) markAlarmCacheChanged(ctx context.Context) error {
 	if err := as.cache.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
 		return fmt.Errorf("clear empty subscriber cache marker: %w", err)
-	}
-
-	if err := as.cache.Set(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0); err != nil {
-		return fmt.Errorf("set channel registry version: %w", err)
 	}
 
 	return nil

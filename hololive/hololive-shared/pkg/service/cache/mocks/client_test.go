@@ -69,15 +69,6 @@ func TestClientReadMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 	if exists {
 		t.Fatal("Exists() = true, want false")
 	}
-
-	streams, found := client.GetStreams(t.Context(), "streams")
-	if found {
-		t.Fatal("GetStreams() found = true, want false")
-	}
-
-	if streams != nil {
-		t.Fatalf("GetStreams() = %v, want nil", streams)
-	}
 }
 
 func TestClientLowLevelMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
@@ -100,18 +91,12 @@ func TestClientLowLevelMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 	}
 }
 
-func TestClientScriptAndStreamMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
+func TestClientScriptMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 	client := NewLenientClient()
 
 	if deleted, err := client.CompareAndDelete(t.Context(), "k", "v"); err != nil || deleted {
 		t.Fatalf("CompareAndDelete() = (%v, %v), want (false, nil)", deleted, err)
 	}
-
-	if expired, err := client.CompareAndExpire(t.Context(), "k", "v", time.Second); err != nil || expired {
-		t.Fatalf("CompareAndExpire() = (%v, %v), want (false, nil)", expired, err)
-	}
-
-	client.SetStreams(t.Context(), "streams", nil, time.Second)
 }
 
 func TestClientReadMethodsPanicWhenStrict(t *testing.T) {
@@ -146,10 +131,6 @@ func TestClientWriteMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 
 	if err := client.Set(t.Context(), "k", "v", time.Second); err != nil {
 		t.Fatalf("Set() error = %v, want nil", err)
-	}
-
-	if err := client.MSet(t.Context(), map[string]any{"k": "v"}, time.Second); err != nil {
-		t.Fatalf("MSet() error = %v, want nil", err)
 	}
 
 	if err := client.Del(t.Context(), "k"); err != nil {

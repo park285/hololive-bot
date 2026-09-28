@@ -36,17 +36,6 @@ type VideoMetadata struct {
 	Replay      ReplayStatus
 }
 
-type ChannelStats struct {
-	ChannelID       string `json:"channelId"`
-	SubscriberCount int64  `json:"subscriberCount"`
-	ViewCount       int64  `json:"viewCount"`
-	VideoCount      int64  `json:"videoCount"`
-	JoinedDate      int64  `json:"joinedDate"`
-	Description     string `json:"description"`
-	Country         string `json:"country"`
-	Handle          string `json:"handle"`
-}
-
 type Thumbnail struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width"`

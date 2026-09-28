@@ -16,7 +16,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
@@ -164,10 +163,12 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 		{RoomID: "room-live-only", ChannelID: "UC_LIVE_ONLY", MemberName: "Live", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}
 
-	summary, err := sharedalarm.WarmSubscriberCacheFromAlarms(ctx, cache, alarms)
-	require.NoError(t, err)
-	require.Equal(t, len(alarms), summary.AlarmCount)
-	require.Equal(t, 3, summary.ChannelCount)
+	// subscriber cache rebuild가 쓰는 타입별 구독 set을 그대로 채운다.
+	for _, alarm := range alarms {
+		for _, alarmType := range alarm.AlarmTypes {
+			cacheStore.addSetMembers(sharedalarmkeys.BuildChannelSubscriberKey(alarm.ChannelID, alarmType), []string{alarm.RoomID})
+		}
+	}
 
 	expectedTargets := collectRouteAuditTargets(alarms)
 	require.Len(t, expectedTargets, 4)

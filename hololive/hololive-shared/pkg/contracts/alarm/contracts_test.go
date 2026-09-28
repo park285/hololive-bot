@@ -82,10 +82,6 @@ func TestAlarmHTTPRouteContracts(t *testing.T) {
 		t.Fatalf("RoomNamePath = %q, want /internal/alarm/room-name", contractsalarm.RoomNamePath)
 	}
 
-	if contractsalarm.UserNamePath != "/internal/alarm/user-name" {
-		t.Fatalf("UserNamePath = %q, want /internal/alarm/user-name", contractsalarm.UserNamePath)
-	}
-
 	if contractsalarm.KeysPath != "/internal/alarm/keys" {
 		t.Fatalf("KeysPath = %q, want /internal/alarm/keys", contractsalarm.KeysPath)
 	}

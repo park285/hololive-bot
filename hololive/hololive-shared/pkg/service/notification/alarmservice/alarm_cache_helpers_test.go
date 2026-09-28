@@ -21,17 +21,13 @@
 package alarmservice
 
 import (
-	"fmt"
 	"maps"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
@@ -137,105 +133,6 @@ func TestBuildTitleFingerprint_FullWidthEquivalence(t *testing.T) {
 	if fpA != fpB {
 		t.Errorf("alarm_cache fingerprints differ for half/full-width: %q != %q", fpA, fpB)
 	}
-}
-
-func TestResolveStreamChannelID(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		stream    *domain.Stream
-		fallback  string
-		wantValue string
-	}{
-		{
-			name:      "nil stream",
-			stream:    nil,
-			fallback:  testFallbackChannelID,
-			wantValue: testFallbackChannelID,
-		},
-		{
-			name:      "stream channel id has priority",
-			stream:    &domain.Stream{ChannelID: "stream-id", Channel: &domain.Channel{ID: "channel-id"}},
-			fallback:  testFallbackChannelID,
-			wantValue: "stream-id",
-		},
-		{
-			name:      "falls back to stream channel object",
-			stream:    &domain.Stream{Channel: &domain.Channel{ID: "channel-id"}},
-			fallback:  testFallbackChannelID,
-			wantValue: "channel-id",
-		},
-		{
-			name:      "falls back to default",
-			stream:    &domain.Stream{},
-			fallback:  testFallbackChannelID,
-			wantValue: testFallbackChannelID,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := resolveStreamChannelID(tt.stream, tt.fallback); got != tt.wantValue {
-				t.Fatalf("resolveStreamChannelID() = %q, want %q", got, tt.wantValue)
-			}
-		})
-	}
-}
-
-func TestBuildUpcomingEventKey(t *testing.T) {
-	t.Parallel()
-
-	as := &AlarmService{}
-
-	as.cacheState = alarmcache.NewState(nil, nil, nil)
-
-	start := time.Date(2026, time.March, 2, 10, 30, 59, 0, time.UTC)
-	key := as.buildUpcomingEventKey(testAltRoomID, "channel1", "stream1", "Title", start)
-
-	parts := strings.Split(key, ":")
-	if len(parts) < 7 {
-		t.Fatalf("unexpected key format: %q", key)
-	}
-
-	if !strings.HasPrefix(key, sharedalarmkeys.UpcomingEventKeyPrefix+"room1:channel1:") {
-		t.Fatalf("unexpected prefix: %q", key)
-	}
-
-	wantUnix := normalizeScheduledMinute(start).Unix()
-	if got := parts[len(parts)-2]; got != fmt.Sprintf("%d", wantUnix) {
-		t.Fatalf("scheduled minute unix mismatch: got=%s want=%d", got, wantUnix)
-	}
-
-	if gotFingerprint := parts[len(parts)-1]; gotFingerprint != sharedalarmkeys.BuildTitleFingerprint("Title", "stream1") {
-		t.Fatalf("unexpected fingerprint: got=%s want=%s", gotFingerprint, sharedalarmkeys.BuildTitleFingerprint("Title", "stream1"))
-	}
-}
-
-func TestMarkUpcomingEventNotifiedWritesMarker(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-	start := time.Now().UTC().Add(30 * time.Minute)
-
-	stream := &domain.Stream{
-		ID:             "stream1",
-		Title:          "테스트 방송",
-		StartScheduled: &start,
-	}
-
-	require.NoError(t, as.MarkUpcomingEventNotified(ctx, testAltRoomID, "channel1", stream))
-	requireUpcomingEventMarker(ctx, t, as, testAltRoomID, "channel1", stream)
-
-	otherRoomKey := as.buildUpcomingEventKey("other-room", "channel1", stream.ID, stream.Title, *stream.StartScheduled)
-	otherRoomExists, err := as.cache.Exists(ctx, otherRoomKey)
-	require.NoError(t, err)
-	assert.False(t, otherRoomExists)
-
-	require.NoError(t, as.MarkUpcomingEventNotified(ctx, testAltRoomID, "channel1", nil))
 }
 
 type nextStreamInfoCase struct {
@@ -411,15 +308,4 @@ func TestBuildAlarmListViews(t *testing.T) {
 
 	assert.Equal(t, "ch-3", entries[2].MemberName)
 	assert.Nil(t, entries[2].NextStream)
-}
-
-func TestNormalizeScheduledMinute(t *testing.T) {
-	t.Parallel()
-
-	input := time.Date(2026, time.March, 2, 5, 4, 59, 123, time.UTC)
-
-	want := time.Date(2026, time.March, 2, 5, 4, 0, 0, time.UTC)
-	if got := normalizeScheduledMinute(input); !reflect.DeepEqual(got, want) {
-		t.Fatalf("normalizeScheduledMinute() = %v, want %v", got, want)
-	}
 }

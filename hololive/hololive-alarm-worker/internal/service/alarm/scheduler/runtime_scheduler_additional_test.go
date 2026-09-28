@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
@@ -219,7 +220,7 @@ func testYouTubeIterationSyncsTargetMinutes(t *testing.T) {
 func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 	t.Parallel()
 
-	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, &sharedalarm.Repository{}, testSchedulerLogger(), []int{5, 3, 1})
 	require.NoError(t, err)
 
 	youtubeUpdater := &targetMinutesUpdaterStub{}

@@ -25,98 +25,28 @@ import (
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-func (as *AlarmService) removeAlarmFromCache(
-	ctx context.Context,
-	roomID string,
-	channelID string,
-	alarmTypes domain.AlarmTypes,
-	removeRoomChannel bool,
-) (bool, error) {
-	alarmKey := as.getAlarmKey(roomID)
-
-	removedRoomChannel, err := as.removeRoomAlarmMember(ctx, alarmKey, channelID, removeRoomChannel)
-	if err != nil {
-		return false, err
-	}
-
-	registryKey := as.getRegistryKey(roomID)
-	if err := as.removeChannelSubscribers(ctx, channelID, registryKey, alarmTypes); err != nil {
-		return false, fmt.Errorf("remove channel subscribers: %w", err)
+func (as *AlarmService) removeAlarmFromCache(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) error {
+	if err := as.removeChannelSubscribers(ctx, channelID, as.getRegistryKey(roomID), alarmTypes); err != nil {
+		return fmt.Errorf("remove channel subscribers: %w", err)
 	}
 
 	if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil {
-		return false, fmt.Errorf("cleanup channel registry if empty: %w", err)
-	}
-
-	if err := as.cleanupRoomRegistryAfterRemoval(ctx, roomID, alarmKey, registryKey, removeRoomChannel); err != nil {
-		return false, fmt.Errorf("cleanup room registry after removal: %w", err)
-	}
-
-	return removedRoomChannel > 0 || len(alarmTypes) > 0, nil
-}
-
-func (as *AlarmService) removeRoomAlarmMember(ctx context.Context, alarmKey, channelID string, removeRoomChannel bool) (int64, error) {
-	if !removeRoomChannel {
-		return 0, nil
-	}
-
-	removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
-	if err != nil {
-		return 0, fmt.Errorf("remove room alarm: %w", err)
-	}
-
-	return removed, nil
-}
-
-func (as *AlarmService) cleanupRoomRegistryAfterRemoval(ctx context.Context, roomID, alarmKey, registryKey string, removeRoomChannel bool) error {
-	if !removeRoomChannel {
-		return nil
-	}
-
-	remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
-	if err != nil {
-		return fmt.Errorf("read remaining room alarms: %w", err)
-	}
-
-	if len(remainingAlarms) > 0 {
-		return nil
-	}
-
-	if _, err := as.cache.SRem(ctx, sharedalarmkeys.AlarmRegistryKey, []string{registryKey}); err != nil {
-		return fmt.Errorf("remove room registry: %w", err)
-	}
-
-	if as.logger != nil {
-		as.logger.Info("Room removed from registry (no alarms left)", privacylog.RoomIDAttr(roomID))
+		return fmt.Errorf("cleanup channel registry if empty: %w", err)
 	}
 
 	return nil
 }
 
-func (as *AlarmService) clearRoomAlarmsFromCache(ctx context.Context, roomID string, channelIDs []string) (int, error) {
+func (as *AlarmService) clearRoomAlarmsFromCache(ctx context.Context, roomID string, channelIDs []string) error {
 	if len(channelIDs) == 0 {
-		return 0, nil
+		return nil
 	}
 
-	alarmKey := as.getAlarmKey(roomID)
-
-	removed, err := as.cache.SRem(ctx, alarmKey, channelIDs)
-	if err != nil {
-		return 0, fmt.Errorf("remove room alarms: %w", err)
+	if err := as.clearChannelSubscribersPipeline(ctx, channelIDs, as.getRegistryKey(roomID)); err != nil {
+		return fmt.Errorf("clear channel subscribers pipeline: %w", err)
 	}
 
-	registryKey := as.getRegistryKey(roomID)
-	if err := as.clearChannelSubscribersPipeline(ctx, channelIDs, registryKey); err != nil {
-		return 0, fmt.Errorf("clear channel subscribers pipeline: %w", err)
-	}
-
-	if _, err := as.cache.SRem(ctx, sharedalarmkeys.AlarmRegistryKey, []string{registryKey}); err != nil {
-		return 0, fmt.Errorf("remove room registry: %w", err)
-	}
-
-	return int(removed), nil
+	return nil
 }

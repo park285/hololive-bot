@@ -33,8 +33,13 @@ import (
 
 	"github.com/kapu/hololive-api/internal/service/acl"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
+
+// aclBotResyncFailedCode는 같은 프로세스의 봇 plane ACL 재동기화(PG reload)가 실패했음을 뜻하는 안정 오류 코드다
+// (acl.ErrACLPropagation). 요청한 변경은 PostgreSQL에 저장됐을 수도 있고(첫 요청), 이미 같은 상태라 쓰기 없이
+// 재동기화만 시도했을 수도 있다(재시도·중복 요청). 같은 요청을 다시 보내면 PG 쓰기 없이 재동기화를 다시 시도하고
+// 원래 결과(200 no-op/404/409)를 돌려준다.
+const aclBotResyncFailedCode = "acl_bot_resync_failed"
 
 type setACLRequest struct {
 	Enabled *bool   `json:"enabled"`
@@ -156,9 +161,13 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 		return
 	}
 
+	if added {
+		// 봇 plane 적용이 실패해도 PG에는 커밋됐으므로 활동 로그는 남긴다(재시도는 409라 다시 남지 않는다).
+		h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
+	}
+
 	if err != nil {
-		h.safeLogger().Error("Failed to add room", slog.String("room", req.Room), slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to add room", nil)
+		h.respondACLMutationError(ctx, c, err, "Failed to add room", slog.String("room", req.Room))
 
 		return
 	}
@@ -169,11 +178,7 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 		return
 	}
 
-	h.publishACLChange(ctx, "room_add", req.Room, "")
-
 	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
-
-	h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
 func (h *RoomHandler) RemoveRoom(c *gin.Context) {
@@ -195,9 +200,13 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	removed, err := h.acl.RemoveRoom(ctx, req.Room)
+	if removed {
+		// AddRoom과 같다: PG 커밋 뒤 봇 plane 적용 실패여도 활동 로그는 남긴다.
+		h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
+	}
+
 	if err != nil {
-		h.safeLogger().Error("Failed to remove room", slog.String("room", req.Room), slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to remove room", nil)
+		h.respondACLMutationError(ctx, c, err, "Failed to remove room", slog.String("room", req.Room))
 
 		return
 	}
@@ -208,11 +217,25 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
-	h.publishACLChange(ctx, "room_remove", req.Room, "")
-
 	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
+}
 
-	h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
+// respondACLMutationError는 ACL mutation 오류를 500으로 응답한다. 봇 plane 재동기화 실패는 저장 실패와 구분되는
+// aclBotResyncFailedCode로 알려, 호출자가 같은 요청 재시도로 수렴시키게 한다.
+func (h *RoomHandler) respondACLMutationError(ctx context.Context, c *gin.Context, err error, failMessage string, attrs ...slog.Attr) {
+	attrs = append(attrs, slog.Any("error", err))
+
+	if errors.Is(err, acl.ErrACLPropagation) {
+		h.safeLogger().LogAttrs(ctx, slog.LevelError, "ACL bot-plane resync failed", attrs...)
+		sharedserver.RespondError(c, 500, aclBotResyncFailedCode, gin.H{
+			"message": "the bot has not applied the current ACL (the requested change may already be saved); retry the same request",
+		})
+
+		return
+	}
+
+	h.safeLogger().LogAttrs(ctx, slog.LevelError, failMessage, attrs...)
+	sharedserver.RespondError(c, 500, failMessage, nil)
 }
 
 func (h *RoomHandler) SetACL(c *gin.Context) {
@@ -229,25 +252,7 @@ func (h *RoomHandler) SetACL(c *gin.Context) {
 		return
 	}
 
-	_, mode, _ := h.acl.GetACLStatus()
-	h.publishACLChange(c.Request.Context(), "acl_update", "", string(mode))
-
 	h.respondSetACL(c)
-}
-
-// 발행 실패는 요청을 실패시키지 않는다 — DB 반영은 이미 끝났고, 통지를 놓친 복제본은
-// 다음 기동 때 DB에서 다시 읽어 수렴한다.
-func (h *RoomHandler) publishACLChange(ctx context.Context, reason, room, mode string) {
-	if h.valkeyCache == nil {
-		return
-	}
-
-	if err := configsub.NewPublisher(h.valkeyCache.GetClient()).PublishACL(ctx, reason, room, mode); err != nil {
-		h.safeLogger().Warn("Failed to publish ACL change",
-			slog.String("reason", reason),
-			slog.Any("error", err),
-		)
-	}
 }
 
 func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
@@ -277,11 +282,27 @@ func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 		return false
 	}
 
-	if !h.setACLEnabled(ctx, c, req.Enabled) {
-		return false
+	beforeEnabled, beforeMode, _ := h.acl.GetACLStatus()
+
+	if h.setACLEnabled(ctx, c, req.Enabled) && h.setACLMode(ctx, c, req.Mode, mode) {
+		return true
 	}
 
-	return h.setACLMode(ctx, c, req.Mode, mode)
+	// 오류 응답을 보낸 뒤에도 이미 커밋된 부분(예: enabled만 저장되고 mode 저장·재동기화 실패)은 감사 기록에 남긴다.
+	// 호출자가 재시도하지 않으면 이 변경의 activity가 남지 않기 때문이다.
+	h.logCommittedACLChange(beforeEnabled, beforeMode)
+
+	return false
+}
+
+func (h *RoomHandler) logCommittedACLChange(beforeEnabled bool, beforeMode acl.ACLMode) {
+	enabled, mode, _ := h.acl.GetACLStatus()
+	if enabled == beforeEnabled && mode == beforeMode {
+		return
+	}
+
+	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s (bot resync or later step failed)", enabled, mode),
+		map[string]any{"enabled": enabled, "mode": string(mode), "partial": true})
 }
 
 func (h *RoomHandler) parseACLMode(c *gin.Context, rawMode *string) (acl.ACLMode, bool) {
@@ -306,8 +327,7 @@ func (h *RoomHandler) setACLEnabled(ctx context.Context, c *gin.Context, enabled
 	}
 
 	if err := h.acl.SetEnabled(ctx, *enabled); err != nil {
-		h.safeLogger().Error("Failed to set ACL enabled", slog.Bool("enabled", *enabled), slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to set ACL enabled", nil)
+		h.respondACLMutationError(ctx, c, err, "Failed to set ACL enabled", slog.Bool("enabled", *enabled))
 
 		return false
 	}
@@ -321,8 +341,7 @@ func (h *RoomHandler) setACLMode(ctx context.Context, c *gin.Context, rawMode *s
 	}
 
 	if err := h.acl.SetMode(ctx, mode); err != nil {
-		h.safeLogger().Error("Failed to set ACL mode", slog.String("mode", *rawMode), slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to set ACL mode", nil)
+		h.respondACLMutationError(ctx, c, err, "Failed to set ACL mode", slog.String("mode", *rawMode))
 
 		return false
 	}

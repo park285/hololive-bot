@@ -16,8 +16,8 @@ const (
 	privacyRoomID     = "상대방닉네임 님과의 대화"
 	privacyStreamID   = "dQw4w9WgXcQ"
 	privacyClaimKey   = "notified:claim:" + privacyRoomID + ":" + privacyStreamID + ":1785499200:10m"
-	privacyRoomKey    = "alarm:" + privacyRoomID
-	privacyRoomHash   = "alarm:room_names"
+	privacyRoomKey    = "notified:schedule:index:" + privacyRoomID + ":" + privacyStreamID + ":1785499200"
+	privacyRoomHash   = "membernews:room_names"
 	privacyOutageWait = 2 * time.Second
 )
 
@@ -81,7 +81,7 @@ func TestCacheOutageLogsNeverCarryRoomPlaintext(t *testing.T) {
 		t.Errorf("room plaintext reached the log sink:\n%s", records)
 	}
 
-	for _, want := range []string{"notified:claim:", "alarm:", privacyStreamID, privacyRoomHash} {
+	for _, want := range []string{"notified:claim:", "notified:schedule:index:", privacyStreamID, privacyRoomHash} {
 		if !strings.Contains(records, want) {
 			t.Errorf("log records lost the diagnostic fragment %q:\n%s", want, records)
 		}

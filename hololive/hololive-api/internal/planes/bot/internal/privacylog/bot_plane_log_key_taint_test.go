@@ -33,7 +33,7 @@ func TestIdentifierBearingKeysNeverReachLogAttrValues(t *testing.T) {
 	sources := parseScannedRoots(t, fileSet)
 	taint := analyzeKeyTaint(sources)
 
-	for _, seed := range []string{"BuildNotifyClaimKey", "BuildUpcomingEventKey", "BuildRoomAlarmKey"} {
+	for _, seed := range []string{"BuildNotifyClaimKey", "BuildUpcomingEventKey", "BuildLogicalEventClaimKey"} {
 		if !hasCallableNamed(taint.builders, seed) {
 			t.Fatalf("%q was not recognized as an identifier-bearing key builder; "+
 				"the analysis is not reading the keys package", seed)

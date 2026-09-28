@@ -27,7 +27,6 @@ var CacheTTL = struct {
 	UpcomingStreams  time.Duration
 	ChannelSchedule  time.Duration
 	ChannelInfo      time.Duration
-	ChannelSearch    time.Duration
 	NextStreamInfo   time.Duration
 	NotificationSent time.Duration
 }{
@@ -35,21 +34,14 @@ var CacheTTL = struct {
 	UpcomingStreams:  5 * time.Minute,  // 5분 - 예정 스트림 목록
 	ChannelSchedule:  5 * time.Minute,  // 5분 - 채널 스케줄
 	ChannelInfo:      20 * time.Minute, // 20분 - 채널 정보
-	ChannelSearch:    10 * time.Minute, // 10분 - 채널 검색 결과
 	NextStreamInfo:   60 * time.Minute, // 1시간 - 다음 방송 정보
 	NotificationSent: 24 * time.Hour,   // 24시간 - 알림 발송 기록
 }
 
 var MemberCacheDefaults = struct {
-	ValkeyTTL              time.Duration
 	EpochReconcileInterval time.Duration
-	WarmUpChunkSize        int
-	WarmUpMaxGoroutines    int
 }{
-	ValkeyTTL:              30 * time.Minute,
 	EpochReconcileInterval: 15 * time.Second,
-	WarmUpChunkSize:        50,
-	WarmUpMaxGoroutines:    10,
 }
 
 var WebSocketConfig = struct {

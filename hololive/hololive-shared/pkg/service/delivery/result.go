@@ -41,9 +41,5 @@ func (r *SendResult) Merge(child SendResult) {
 	}
 }
 
-// 분산 락 / Room별 delivery claim TTL.
-const (
-	DefaultExecutionLockTTL = 15 * time.Minute
-	WeeklyDeliveryClaimTTL  = 8 * 24 * time.Hour  // 다음 주 새 weekKey 전까지 유효
-	MonthlyDeliveryClaimTTL = 35 * 24 * time.Hour // 월간 재시도 기간 커버
-)
+// DefaultExecutionLockTTL은 digest 실행 분산 락 TTL이다.
+const DefaultExecutionLockTTL = 15 * time.Minute

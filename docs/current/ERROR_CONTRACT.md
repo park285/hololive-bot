@@ -59,6 +59,7 @@ Alarm shared API는 legacy `success` envelope에 additive `error` field를 함�
 - `contracts/membernews.md` documents `no_subscribed_members`.
 - `contracts/trigger.md` documents `notification_in_progress`.
 - `contracts/alarm.md` documents current alarm envelope errors.
+- `contracts/settings.md` documents `acl_bot_resync_failed` (bot-plane ACL resync failed; the change may already be saved).
 - `hololive-shared/pkg/contracts/common.ErrorResponse` documents the common additive wire shape.
 
 ## Validation

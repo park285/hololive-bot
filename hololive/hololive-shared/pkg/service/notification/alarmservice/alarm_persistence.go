@@ -47,7 +47,7 @@ type alarmTypesUpdater interface {
 }
 
 func (as *AlarmService) persistAlarm(ctx context.Context, alarm *domain.Alarm) error {
-	if as.alarmWriter == nil || alarm == nil {
+	if alarm == nil {
 		return nil
 	}
 
@@ -70,7 +70,7 @@ func (as *AlarmService) persistAlarm(ctx context.Context, alarm *domain.Alarm) e
 }
 
 func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alarm) error {
-	if as.alarmWriter == nil || alarm == nil {
+	if alarm == nil {
 		return nil
 	}
 
@@ -129,10 +129,6 @@ func upsertAlarmTypeUpdate(ctx context.Context, writer alarmUpsertWriter, alarm 
 }
 
 func (as *AlarmService) deleteAlarm(ctx context.Context, roomID, channelID, hostID string) error {
-	if as.alarmWriter == nil {
-		return nil
-	}
-
 	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
@@ -152,10 +148,6 @@ func (as *AlarmService) deleteAlarm(ctx context.Context, roomID, channelID, host
 }
 
 func (as *AlarmService) deleteRoomAlarms(ctx context.Context, roomID string) error {
-	if as.alarmWriter == nil {
-		return nil
-	}
-
 	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
@@ -191,11 +183,6 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 		}
 	}()
 
-	if as.alarmRepository == nil {
-		rebuildErr = mutationErr
-		return mutationErr
-	}
-
 	var err error
 
 	summary, err = rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepository)
@@ -213,12 +200,6 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 	as.cacheMutationMu.Lock()
 	defer as.cacheMutationMu.Unlock()
-
-	if as.alarmRepository == nil {
-		as.logger.Info("Alarm repository not configured, skipping cache warming")
-
-		return nil
-	}
 
 	startedAt := time.Now()
 

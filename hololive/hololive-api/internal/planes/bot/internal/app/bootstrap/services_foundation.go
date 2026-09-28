@@ -44,6 +44,5 @@ func InitScraperHolodexFoundation(
 	return &ScraperHolodexFoundation{
 		HolodexService:       holodexService,
 		MemberServiceAdapter: memberServiceAdapter,
-		SharedRL:             sharedRL,
 	}, nil
 }

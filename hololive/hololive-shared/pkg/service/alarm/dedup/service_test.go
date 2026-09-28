@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -288,69 +289,77 @@ func (s *mockDedupCacheState) setRawString(key, value string) {
 	s.strings[key] = value
 }
 
-func TestService_TryClaimNotification_ClaimKeyCategoryAndSchedulePolicy(t *testing.T) {
+// notificationPairKeys는 alarm-worker notifier와 같은 규칙으로 notify/logical claim key를 만든다.
+func notificationPairKeys(service *Service, roomID, channelID string, stream *domain.Stream, minutesUntil int) (notifyKey, logicalKey string) {
+	category := keys.NotificationCategory(service.TargetMinutesSnapshot(), minutesUntil)
+
+	return keys.BuildNotifyClaimKey(roomID, stream.ID, *stream.StartScheduled, category),
+		keys.BuildLogicalEventClaimKey(roomID, channelID, stream.ID, stream.Title, *stream.StartScheduled, category)
+}
+
+func TestService_TryClaimPair_NotificationKeyCategoryAndSchedulePolicy(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 9, 15, 5, 0, time.UTC)
+	claim := func(scheduled time.Time, minutesUntil int) (string, bool) {
+		t.Helper()
 
-	keyTarget, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
-	require.NoError(t, err)
+		stream := &domain.Stream{ID: "vid1", Title: "테스트 방송", StartScheduled: &scheduled}
+		notifyKey, logicalKey := notificationPairKeys(service, "room1", "UC_TEST", stream, minutesUntil)
+
+		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, constants.CacheTTL.NotificationSent)
+		require.NoError(t, err)
+
+		return notifyKey, acquired
+	}
+
+	keyTarget, acquired := claim(start, 5)
 	assert.True(t, acquired)
 	assert.Equal(t, keys.BuildNotifyClaimKey("room1", "vid1", start, "target"), keyTarget)
 
-	keyTargetAgain, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 3)
-	require.NoError(t, err)
-	assert.False(t, acquired)
+	keyTargetAgain, acquired := claim(start, 3)
+	assert.False(t, acquired, "target minutes share one category")
 	assert.Equal(t, keyTarget, keyTargetAgain)
 
-	keySameMinute, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start.Add(30*time.Second), 5)
-	require.NoError(t, err)
-	assert.False(t, acquired)
+	keySameMinute, acquired := claim(start.Add(30*time.Second), 5)
+	assert.False(t, acquired, "schedule is normalized to the minute")
 	assert.Equal(t, keyTarget, keySameMinute)
 
-	keyNonTarget, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 10)
-	require.NoError(t, err)
+	keyNonTarget, acquired := claim(start, 10)
 	assert.True(t, acquired)
 	assert.Equal(t, keys.BuildNotifyClaimKey("room1", "vid1", start, "10"), keyNonTarget)
-	assert.NotEqual(t, keyTarget, keyNonTarget)
 
-	keyDifferentSchedule, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start.Add(time.Minute), 5)
-	require.NoError(t, err)
+	keyDifferentSchedule, acquired := claim(start.Add(time.Minute), 5)
 	assert.True(t, acquired)
 	assert.NotEqual(t, keyTarget, keyDifferentSchedule)
 }
 
-func TestService_TryClaimLogicalEventAndScheduleTransition(t *testing.T) {
+// 같은 채널·제목·일정의 방송이 다른 video ID로 다시 올라오면 notify key는 새로 잡혀도 logical key가 중복을 막는다.
+func TestService_TryClaimPair_LogicalEventBlocksReuploadedStream(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	start := time.Date(2026, time.March, 4, 9, 30, 0, 0, time.UTC)
-	stream := &domain.Stream{
-		ID:             "stream1",
-		Title:          "테스트 방송",
-		StartScheduled: &start,
-	}
+	original := &domain.Stream{ID: "stream1", Title: "테스트 방송", StartScheduled: &start}
+	reuploaded := &domain.Stream{ID: "stream2", Title: "테스트 방송", StartScheduled: &start}
 
-	logicalKey, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_TEST", stream, 5)
-	require.NoError(t, err)
-	assert.True(t, acquired)
-	assert.Equal(t, keys.BuildLogicalEventClaimKey("room1", "UC_TEST", stream.ID, stream.Title, start, "target"), logicalKey)
+	notifyKey, logicalKey := notificationPairKeys(service, "room1", "UC_TEST", original, 5)
+	assert.Equal(t, keys.BuildLogicalEventClaimKey("room1", "UC_TEST", original.ID, original.Title, start, "target"), logicalKey)
 
-	logicalKeyAgain, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_TEST", stream, 3)
+	notifyClaimed, logicalClaimed, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, constants.CacheTTL.NotificationSent)
 	require.NoError(t, err)
-	assert.False(t, acquired)
-	assert.Equal(t, logicalKey, logicalKeyAgain)
+	assert.True(t, notifyClaimed)
+	assert.True(t, logicalClaimed)
 
-	transitionKey, acquired, err := service.TryClaimScheduleTransition(t.Context(), stream.ID, start, start.Add(30*time.Minute))
-	require.NoError(t, err)
-	assert.True(t, acquired)
-	assert.Equal(t, keys.BuildScheduleTransitionKey(stream.ID, start, start.Add(30*time.Minute)), transitionKey)
+	reNotifyKey, reLogicalKey := notificationPairKeys(service, "room1", "UC_TEST", reuploaded, 3)
+	assert.NotEqual(t, notifyKey, reNotifyKey)
+	assert.Equal(t, logicalKey, reLogicalKey)
 
-	transitionKeyAgain, acquired, err := service.TryClaimScheduleTransition(t.Context(), stream.ID, start, start.Add(30*time.Minute))
+	notifyClaimed, logicalClaimed, err = service.TryClaimPair(t.Context(), reNotifyKey, reLogicalKey, constants.CacheTTL.NotificationSent)
 	require.NoError(t, err)
-	assert.False(t, acquired)
-	assert.Equal(t, transitionKey, transitionKeyAgain)
+	assert.True(t, notifyClaimed)
+	assert.False(t, logicalClaimed)
 }
 
 func TestService_DetectScheduleChange(t *testing.T) {
@@ -712,26 +721,6 @@ func TestService_WasUpcomingEventNotifiedRecently_MalformedNotifiedAtTreatedAsNo
 	assert.False(t, recent)
 }
 
-func TestService_TryClaimNotification_SetNXFailureReturnsError(t *testing.T) {
-	cacheMock := &cachemocks.Client{
-		SetNXFunc: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
-			return false, errors.New("valkey outage")
-		},
-		DelManyFunc: func(_ context.Context, keys []string) (int64, error) {
-			return int64(len(keys)), nil
-		},
-	}
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	start := time.Date(2026, time.March, 4, 12, 0, 0, 0, time.UTC)
-
-	// 저장소 오류는 "이미 선점됨"(skip)과 구분되는 실패여야 한다. 호출자는 이를 sendOutcomeFailed로 기록한다.
-	key, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
-	require.ErrorContains(t, err, "valkey outage")
-	assert.False(t, acquired)
-	assert.NotEmpty(t, key)
-}
-
 func TestService_ReleaseClaims_WrapsDelManyError(t *testing.T) {
 	expectedErr := errors.New("forced delmany failure")
 	cacheMock := &cachemocks.Client{
@@ -746,31 +735,6 @@ func TestService_ReleaseClaims_WrapsDelManyError(t *testing.T) {
 	require.ErrorContains(t, err, "release claims: del many keys")
 
 	assert.ErrorIs(t, err, expectedErr)
-}
-
-func TestService_TryClaimNotification_ZeroTime(t *testing.T) {
-	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
-	key, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", time.Time{}, 5)
-	require.NoError(t, err)
-	assert.Empty(t, key)
-	assert.False(t, acquired)
-}
-
-func TestService_TryClaimLogicalEvent_NilSchedule(t *testing.T) {
-	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
-	stream := &domain.Stream{ID: "vid1", Title: "test"}
-	key, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_A", stream, 5)
-	require.NoError(t, err)
-	assert.Empty(t, key)
-	assert.False(t, acquired)
-}
-
-func TestService_TryClaimLogicalEvent_NilStream(t *testing.T) {
-	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
-	key, acquired, err := service.TryClaimLogicalEvent(t.Context(), "room1", "UC_A", nil, 5)
-	require.NoError(t, err)
-	assert.Empty(t, key)
-	assert.False(t, acquired)
 }
 
 func TestService_TryClaimPair_BothAcquired(t *testing.T) {

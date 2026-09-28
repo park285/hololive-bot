@@ -25,14 +25,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
-
-	"github.com/park285/shared-go/v2/pkg/panicguard"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 병렬 처리를 통해 대량의 데이터도 빠르게 처리한다.
+// WarmUpCache는 전체 멤버 snapshot을 적재해 채널·이름·별칭 point 조회가 PostgreSQL 없이 응답하도록 한다.
 func (c *Cache) WarmUpCache(ctx context.Context) error {
 	if c == nil {
 		return errors.New("member cache is nil")
@@ -45,112 +40,9 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 		return fmt.Errorf("failed to load all members: %w", err)
 	}
 
-	warmupGeneration, ok := c.snapshotGenerationForMembers(members)
-	if !ok {
-		return fmt.Errorf("failed to load all members: %w", errAllMembersGenerationChanged)
-	}
-
-	representatives := ChannelRepresentatives(members)
-	chunkSize := c.warmUpChunkSize
-	chunks := chunkMembers(members, chunkSize)
-
-	maxWorkers := max(1, c.warmUpMaxGoroutines)
-	semaphore := make(chan struct{}, maxWorkers)
-
-	var wg sync.WaitGroup
-
-	for _, chunk := range chunks {
-		wg.Go(func() {
-			panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-warmup", func() {
-				semaphore <- struct{}{}
-
-				defer func() { <-semaphore }()
-
-				c.cacheChunk(ctx, chunk, warmupGeneration, representatives)
-			})
-		})
-	}
-
-	wg.Wait()
-
 	if c.logger != nil {
-		c.logger.Info("Member cache warmed up",
-			slog.Int("total_members", len(members)),
-			slog.Int("chunks", len(chunks)),
-		)
+		c.logger.Info("Member cache warmed up", slog.Int("total_members", len(members)))
 	}
 
 	return nil
-}
-
-func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, generation uint64, representatives map[string]*domain.Member) {
-	if len(members) == 0 {
-		return
-	}
-
-	if !c.distributedCacheUsable() {
-		return
-	}
-
-	pairs := make(map[string]any, len(members)*2)
-
-	for _, member := range members {
-		if member.ChannelID != "" {
-			channelKey := c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
-
-			pairs[channelKey] = representatives[member.ChannelID]
-		}
-
-		nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)
-
-		pairs[nameKey] = member
-	}
-
-	c.snapshotMu.RLock()
-
-	if c.snapshotGeneration.Load() != generation {
-		c.snapshotMu.RUnlock()
-
-		return
-	}
-
-	c.snapshotMu.RUnlock()
-
-	if err := c.cache.MSet(ctx, pairs, c.cacheTTL); err != nil {
-		if c.logger != nil {
-			c.logger.Warn("Failed to batch cache members",
-				slog.Int("count", len(members)),
-				slog.Any("error", err))
-		}
-	}
-}
-
-func (c *Cache) snapshotGenerationForMembers(members []*domain.Member) (uint64, bool) {
-	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
-
-	snap := c.allMembersSnapshot.Load()
-	if !snapshotSuccessful(snap) || len(snap.members) != len(members) {
-		return 0, false
-	}
-
-	for i := range members {
-		if snap.members[i] != members[i] {
-			return 0, false
-		}
-	}
-
-	return c.snapshotGeneration.Load(), true
-}
-
-func chunkMembers(members []*domain.Member, chunkSize int) [][]*domain.Member {
-	var chunks [][]*domain.Member
-
-	for i := 0; i < len(members); i += chunkSize {
-		end := min(i+chunkSize, len(members))
-
-		chunks = append(chunks, members[i:end])
-	}
-
-	return chunks
 }

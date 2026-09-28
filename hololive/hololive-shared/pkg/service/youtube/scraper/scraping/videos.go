@@ -39,7 +39,7 @@ func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResul
 }
 
 func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID string, maxResults int) ([]*parser.Video, error) {
-	html, err := c.fetchChannelSourcePage(ctx, "recent_videos", channelID, pageURL, FailureSourceHTML)
+	html, err := c.fetchChannelSourcePage(ctx, "recent_videos", pageURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch channel source page: %w", err)
 	}
@@ -48,11 +48,7 @@ func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID
 	if err != nil {
 		logStructureWarning("recent_videos", channelID, "ytInitialData extraction failed", "error", err)
 
-		if driftErr := c.recordParserDrift(ctx, "recent_videos", "extract_yt_initial_data", channelID, pageURL, FailureSourceHTML, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, fmt.Errorf("extract yt initial data: %w", err)
+		return nil, c.recordParserDrift(ctx, "recent_videos", "extract_yt_initial_data", channelID, pageURL, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -61,14 +57,8 @@ func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID
 	if err != nil {
 		logStructureWarning("recent_videos", channelID, "failed to parse initial data", "error", err)
 
-		if driftErr := c.recordParserDrift(ctx, "recent_videos", "parse_initial_data", channelID, pageURL, FailureSourceHTML, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, fmt.Errorf("parse initial data: %w", err)
+		return nil, c.recordParserDrift(ctx, "recent_videos", "parse_initial_data", channelID, pageURL, FailureSourceHTML, html, err)
 	}
-
-	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 
 	return videos, nil
 }
@@ -80,21 +70,15 @@ func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, m
 
 	rssURL := fmt.Sprintf("https://www.youtube.com/feeds/videos.xml?channel_id=%s", channelID)
 
-	html, err := c.fetchChannelSourcePage(ctx, "recent_videos_rss", channelID, rssURL, FailureSourceRSS, policy...)
+	html, err := c.fetchChannelSourcePage(ctx, "recent_videos_rss", rssURL, policy...)
 	if err != nil {
 		return nil, fmt.Errorf("fetch channel source page: %w", err)
 	}
 
 	videos, err := parseVideosFromRSSFeed(html, channelID, maxResults)
 	if err != nil {
-		if driftErr := c.recordParserDrift(ctx, "recent_videos_rss", "parse_rss_feed", channelID, rssURL, FailureSourceRSS, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, nil
+		return nil, c.recordParserDrift(ctx, "recent_videos_rss", "parse_rss_feed", channelID, rssURL, FailureSourceRSS, html, err)
 	}
-
-	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceRSS)
 
 	return videos, nil
 }
@@ -122,8 +106,8 @@ func (c *Client) GetRecentVideoPublishedTimes(ctx context.Context, channelID str
 	return publishedAtByID, nil
 }
 
-func (c *Client) GetVideoPublishedAt(ctx context.Context, channelID, videoID string) (*time.Time, error) {
-	html, err := c.getVideoWatchHTML(ctx, channelID, videoID)
+func (c *Client) GetVideoPublishedAt(ctx context.Context, videoID string) (*time.Time, error) {
+	html, err := c.getVideoWatchHTML(ctx, videoID)
 	if err != nil {
 		return nil, fmt.Errorf("get video watch HTML: %w", err)
 	}
@@ -136,8 +120,8 @@ func (c *Client) GetVideoPublishedAt(ctx context.Context, channelID, videoID str
 	return publishedAt, nil
 }
 
-func (c *Client) GetVideoMetadata(ctx context.Context, channelID, videoID string) (parser.VideoMetadata, error) {
-	html, err := c.getVideoWatchHTML(ctx, channelID, videoID)
+func (c *Client) GetVideoMetadata(ctx context.Context, videoID string) (parser.VideoMetadata, error) {
+	html, err := c.getVideoWatchHTML(ctx, videoID)
 	if err != nil {
 		return parser.VideoMetadata{}, fmt.Errorf("get video watch HTML: %w", err)
 	}
@@ -150,8 +134,8 @@ func (c *Client) GetVideoMetadata(ctx context.Context, channelID, videoID string
 	return metadata, nil
 }
 
-func (c *Client) GetWatchLiveMetadata(ctx context.Context, channelID, videoID string) (parser.WatchLiveMetadata, error) {
-	html, err := c.getVideoWatchHTML(ctx, channelID, videoID)
+func (c *Client) GetWatchLiveMetadata(ctx context.Context, videoID string) (parser.WatchLiveMetadata, error) {
+	html, err := c.getVideoWatchHTML(ctx, videoID)
 	if err != nil {
 		return parser.WatchLiveMetadata{}, fmt.Errorf("get video watch HTML: %w", err)
 	}
@@ -159,11 +143,7 @@ func (c *Client) GetWatchLiveMetadata(ctx context.Context, channelID, videoID st
 	return parser.ExtractWatchLiveMetadata(html), nil
 }
 
-func (c *Client) getVideoWatchHTML(ctx context.Context, channelID, videoID string) (string, error) {
-	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
-		return "", fmt.Errorf("video watch page %s: %w", videoID, err)
-	}
-
+func (c *Client) getVideoWatchHTML(ctx context.Context, videoID string) (string, error) {
 	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
 
 	html, err := c.fetchPage(ctx, url, MetadataResolveFetchPolicy)
@@ -177,18 +157,14 @@ func (c *Client) getVideoWatchHTML(ctx context.Context, channelID, videoID strin
 func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 
-	html, err := c.fetchChannelSourcePage(ctx, "popular_videos", channelID, url, FailureSourceHTML)
+	html, err := c.fetchChannelSourcePage(ctx, "popular_videos", url)
 	if err != nil {
 		return nil, fmt.Errorf("fetch channel source page: %w", err)
 	}
 
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
-		if driftErr := c.recordParserDrift(ctx, "popular_videos", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, nil
+		return nil, c.recordParserDrift(ctx, "popular_videos", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -198,7 +174,6 @@ func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResu
 
 	popularItems := findPopularGridVideoRenderers(&data)
 	videos := c.parsePopularGridVideos(popularItems, channelID, maxResults)
-	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 
 	return videos, nil
 }

@@ -111,10 +111,6 @@ func (s *stubAlarmCRUDForServer) SetRoomName(context.Context, string, string) er
 	return nil
 }
 
-func (s *stubAlarmCRUDForServer) SetUserName(context.Context, string, string) error {
-	return nil
-}
-
 func (s *stubAlarmCRUDForServer) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	if s.getAllAlarmKeys == nil {
 		return nil, nil

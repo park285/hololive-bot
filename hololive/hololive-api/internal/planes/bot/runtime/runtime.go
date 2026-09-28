@@ -32,8 +32,8 @@ import (
 	"github.com/quic-go/quic-go/http3"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 type BotRuntime struct {
@@ -44,7 +44,8 @@ type BotRuntime struct {
 
 	Bot *orchestration.Bot
 
-	ConfigSubscriber *configsub.Subscriber
+	// ACL은 봇 판정 인스턴스다. 같은 프로세스의 관리 plane 변경은 Follow로 받는다.
+	ACL *acl.Service
 
 	ServerAddr      string
 	H3Server        *http3.Server

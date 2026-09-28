@@ -29,10 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	sharedserver "github.com/kapu/hololive-api/internal/server/settings"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
 type trackingSettingsApplier struct {
@@ -65,16 +62,6 @@ type trackingMemberNewsRunNowTrigger struct {
 func (t *trackingMemberNewsRunNowTrigger) SendMemberNewsWeekly(context.Context) error {
 	t.called++
 	return t.err
-}
-
-type trackingYouTubeService struct{}
-
-func (s *trackingYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
-	return map[string]*youtube.ChannelStats{}, nil
-}
-
-func (s *trackingYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
-	return nil, nil
 }
 
 func testAppLogger() *slog.Logger {
@@ -168,21 +155,7 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 	})
 }
 
-func TestYouTubeStackAndSchedulerAccessors_Defaults(t *testing.T) {
-	t.Parallel()
-
-	var stack *providers.YouTubeStack
-
-	assert.Nil(t, stack.GetService())
-
-	service := &trackingYouTubeService{}
-	ytStack := &providers.YouTubeStack{Service: service}
-	assert.Same(t, service, ytStack.GetService())
-	assert.Nil(t, (*orchestration.Dependencies)(nil))
-}
-
 var (
 	_ sharedserver.SettingsApplier  = (*trackingSettingsApplier)(nil)
 	_ memberNewsWeeklyRunNowTrigger = (*trackingMemberNewsRunNowTrigger)(nil)
-	_ youtube.Service               = (*trackingYouTubeService)(nil)
 )

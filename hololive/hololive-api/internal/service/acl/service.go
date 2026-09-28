@@ -31,7 +31,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -152,12 +151,6 @@ func normalizeRoomList(input []string) []string {
 }
 
 const (
-	// Valkey 캐시 키.
-	aclSettingsKey       = "acl:settings"
-	aclModeKey           = "acl:mode"
-	aclWhitelistRoomsKey = "acl:rooms:whitelist"
-	aclBlacklistRoomsKey = "acl:rooms:blacklist"
-
 	// DB 설정 키.
 	dbKeyEnabled = "enabled"
 	dbKeyMode    = "mode"
@@ -173,13 +166,18 @@ type Room struct {
 	ListType string `db:"list_type"`
 }
 
-// PostgreSQL을 영구 저장소로 사용하고, 성능을 위해 인메모리 및 Valkey 캐시를 활용한다.
+// PostgreSQL을 영구 저장소로 사용하고, 판정은 인메모리 스냅샷으로 한다.
 type Service struct {
 	store  aclStore
-	cache  cache.Client
 	logger *slog.Logger
 
-	renameRoomsKeyFunc func(ctx context.Context, tempKey, key string, rooms []string) error
+	// changeListeners는 mutation이 PG에 반영된 직후 동기 호출된다(Follow 참고).
+	// 오류는 mutation 호출자에게 ErrACLPropagation으로 전달된다.
+	changeListeners []func(context.Context) error
+
+	// reloadMu는 Reload의 PG 읽기~메모리 적용 전체를 직렬화한다. 겹친 두 Reload가 서로 다른
+	// 시점의 스냅샷을 순서 없이 적용하면, 먼저 읽은 오래된 스냅샷이 나중에 덮어써 최신 커밋을 잃는다.
+	reloadMu sync.Mutex
 
 	// 메모리 캐시 (빠른 조회용)
 	mu             sync.RWMutex
@@ -197,7 +195,7 @@ func (s *Service) IsReady() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.store != nil && s.cache != nil && s.logger != nil &&
+	return s.store != nil && s.logger != nil &&
 		s.whitelistRooms != nil && s.blacklistRooms != nil
 }
 
@@ -205,7 +203,6 @@ func (s *Service) IsReady() bool {
 func NewACLService(
 	ctx context.Context,
 	postgres database.Client,
-	cacheClient cache.Client,
 	logger *slog.Logger,
 	defaultEnabled bool,
 	defaultMode ACLMode,
@@ -220,10 +217,6 @@ func NewACLService(
 		return nil, fmt.Errorf("acl store from client: %w", err)
 	}
 
-	if cacheClient == nil {
-		return nil, errors.New("cache service is nil")
-	}
-
 	normalizedMode, err := normalizeACLModeStrict(defaultMode)
 	if err != nil {
 		return nil, fmt.Errorf("normalize ACL mode strict: %w", err)
@@ -236,7 +229,6 @@ func NewACLService(
 
 	service := &Service{
 		store:          store,
-		cache:          cacheClient,
 		logger:         logger,
 		enabled:        defaultEnabled,
 		mode:           normalizedMode,
@@ -244,7 +236,7 @@ func NewACLService(
 		blacklistRooms: make(map[string]struct{}),
 	}
 
-	// 시작 시 로드 (PostgreSQL → 메모리/Valkey)
+	// 시작 시 로드 (PostgreSQL → 메모리)
 	if err := service.loadFromDatabase(ctx, defaultEnabled, normalizedMode, normalizedRooms); err != nil {
 		return nil, fmt.Errorf("load ACL from database: %w", err)
 	}
