@@ -664,6 +664,7 @@ hololive/hololive-youtube-collector/po-sandbox/package.json
 hololive/hololive-youtube-collector/po-sandbox/package-lock.json
 hololive/hololive-youtube-collector/po-sandbox/src/worker.mjs
 hololive/hololive-youtube-collector/internal/runtime/pobroker/broker.go
+hololive/hololive-youtube-collector/internal/runtime/pobroker/retirement.go
 hololive/hololive-youtube-collector/internal/runtime/pobroker/worker.go
 hololive/hololive-youtube-collector/internal/runtime/collecterr/errors.go
 hololive/hololive-youtube-collector/internal/runtime/collecterr/httpstatus.go
