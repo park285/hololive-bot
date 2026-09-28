@@ -84,7 +84,7 @@ func claimedInboxForScrubRetirement(t *testing.T) (*pgxpool.Pool, *InboxReposito
 	repo := NewInboxRepository(pool)
 	message := InboxMessage{
 		MessageID:   testMessageID,
-		RoomID:      "room-1",
+		RoomID:      testDurableRoomID,
 		OrderingKey: "room:room-1",
 		Payload:     []byte(retiredScrubPayload),
 	}

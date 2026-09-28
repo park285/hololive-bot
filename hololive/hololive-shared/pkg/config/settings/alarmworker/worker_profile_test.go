@@ -39,6 +39,7 @@ func TestLoadWorkerProfileRejectsRetiredNotificationLockTimeout(t *testing.T) {
 
 	const existing = `"max_retries": 3,
         "poll_interval_ms": 30000`
+
 	const retired = `"max_retries": 3,
         "lock_timeout_ms": 300000,
         "poll_interval_ms": 30000`

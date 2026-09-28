@@ -82,6 +82,7 @@ func TestLedgerBackfillStateDroppedAfterCompletion(t *testing.T) {
 	var stateExists, ledgerExists bool
 
 	pool := NewPool(t)
+
 	dir, err := resolveMigrationsDir()
 	if err != nil {
 		t.Fatal(err)
