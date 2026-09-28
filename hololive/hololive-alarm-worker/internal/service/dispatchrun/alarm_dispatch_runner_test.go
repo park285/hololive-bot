@@ -1111,7 +1111,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 	group := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{regularRooms: map[string]bool{}}, []domain.AlarmQueueEnvelope{first, second})[0]
 
-	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
+	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", false, group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 1분 전 · 2개\n\n"+

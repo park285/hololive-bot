@@ -17,14 +17,18 @@ const (
 )
 
 func defaultYouTubePlaneRetentionConfig() YouTubePlaneRetentionConfig {
+	// 채널·영상 확인 원시 evidence는 7일 보존한다. canonical 최신값은 evidence 삭제와 별개다.
 	return YouTubePlaneRetentionConfig{
 		Interval:              120 * time.Second,
 		BatchSize:             youtubePlaneRetentionMaxBatchSize,
 		ApplicationAuditGrace: 60 * youtubePlaneRetentionDay,
+		LiveAbsenceSlotAge:    30 * youtubePlaneRetentionDay,
 		CheckpointHistoryAge:  7 * youtubePlaneRetentionDay,
 		ChannelStatsAge:       180 * youtubePlaneRetentionDay,
 		LiveSnapshotAge:       365 * youtubePlaneRetentionDay,
 		ViewerSampleAge:       30 * youtubePlaneRetentionDay,
+		ChannelLiveCheckAge:   7 * youtubePlaneRetentionDay,
+		VideoLiveCheckAge:     7 * youtubePlaneRetentionDay,
 	}
 }
 
@@ -123,6 +127,14 @@ func loadYouTubePlaneRetentionSupportAges(config *YouTubePlaneConfig, defaults *
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
+	if config.Retention.LiveAbsenceSlotAge, err = load.StrictDurationUnitEnv(
+		"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS",
+		defaults.LiveAbsenceSlotAge,
+		youtubePlaneRetentionDay,
+	); err != nil {
+		return fmt.Errorf("strict duration unit env: %w", err)
+	}
+
 	if config.Retention.CheckpointHistoryAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS",
 		defaults.CheckpointHistoryAge,
@@ -153,6 +165,32 @@ func loadYouTubePlaneEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubeP
 
 	if err := loadYouTubePlaneChannelEvidenceAges(config, defaults); err != nil {
 		return fmt.Errorf("load youtube plane channel evidence ages: %w", err)
+	}
+
+	if err := loadYouTubePlaneLiveCheckEvidenceAges(config, defaults); err != nil {
+		return fmt.Errorf("load youtube plane live check evidence ages: %w", err)
+	}
+
+	return nil
+}
+
+func loadYouTubePlaneLiveCheckEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
+	var err error
+
+	if config.Retention.ChannelLiveCheckAge, err = load.StrictDurationUnitEnv(
+		"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS",
+		defaults.ChannelLiveCheckAge,
+		youtubePlaneRetentionDay,
+	); err != nil {
+		return fmt.Errorf("strict duration unit env: %w", err)
+	}
+
+	if config.Retention.VideoLiveCheckAge, err = load.StrictDurationUnitEnv(
+		"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS",
+		defaults.VideoLiveCheckAge,
+		youtubePlaneRetentionDay,
+	); err != nil {
+		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
 	return nil
@@ -316,6 +354,7 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 		{"collision", cfg.CollisionAge},
 		{"replay audit", cfg.ReplayAuditAge},
 		{"application audit grace", cfg.ApplicationAuditGrace},
+		{"live absence slots", cfg.LiveAbsenceSlotAge},
 		{"checkpoint history", cfg.CheckpointHistoryAge},
 		{"retired projection", cfg.ProjectionRetiredAge},
 		{"community page", cfg.CommunityPageAge},
@@ -327,6 +366,8 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 		{"channel profile", cfg.ChannelProfileAge},
 		{"channel photo", cfg.ChannelPhotoAge},
 		{"schedule snapshot", cfg.ScheduleSnapshotAge},
+		{"channel live check", cfg.ChannelLiveCheckAge},
+		{"video live check", cfg.VideoLiveCheckAge},
 	}
 	for _, item := range ages {
 		if err := validateRetentionAge(item.name, item.age); err != nil {
@@ -348,6 +389,8 @@ func maxEvidenceRetentionAge(cfg *YouTubePlaneRetentionConfig) time.Duration {
 		cfg.ChannelProfileAge,
 		cfg.ChannelPhotoAge,
 		cfg.ScheduleSnapshotAge,
+		cfg.ChannelLiveCheckAge,
+		cfg.VideoLiveCheckAge,
 	}
 
 	var maxAge time.Duration
@@ -391,6 +434,7 @@ func (c *YouTubePlaneConfig) validateProductionRetention(environment string) err
 		{"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", c.Retention.CollisionAge},
 		{"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", c.Retention.ReplayAuditAge},
 		{"YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS", c.Retention.ApplicationAuditGrace},
+		{"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", c.Retention.LiveAbsenceSlotAge},
 		{"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", c.Retention.CheckpointHistoryAge},
 		{"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", c.Retention.ProjectionRetiredAge},
 		{"YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS", c.Retention.CommunityPageAge},
@@ -402,6 +446,8 @@ func (c *YouTubePlaneConfig) validateProductionRetention(environment string) err
 		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS", c.Retention.ChannelProfileAge},
 		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS", c.Retention.ChannelPhotoAge},
 		{"YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS", c.Retention.ScheduleSnapshotAge},
+		{"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS", c.Retention.ChannelLiveCheckAge},
+		{"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS", c.Retention.VideoLiveCheckAge},
 	}
 	for _, item := range ages {
 		if item.age <= 0 {

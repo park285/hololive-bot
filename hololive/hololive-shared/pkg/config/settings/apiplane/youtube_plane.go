@@ -25,6 +25,7 @@ type YouTubePlaneRetentionConfig struct {
 	CollisionAge          time.Duration
 	ReplayAuditAge        time.Duration
 	ApplicationAuditGrace time.Duration
+	LiveAbsenceSlotAge    time.Duration
 	CheckpointHistoryAge  time.Duration
 	ProjectionRetiredAge  time.Duration
 	CommunityPageAge      time.Duration
@@ -36,6 +37,8 @@ type YouTubePlaneRetentionConfig struct {
 	ChannelProfileAge     time.Duration
 	ChannelPhotoAge       time.Duration
 	ScheduleSnapshotAge   time.Duration
+	ChannelLiveCheckAge   time.Duration
+	VideoLiveCheckAge     time.Duration
 }
 
 type YouTubePlaneReplayConfig struct {

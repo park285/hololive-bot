@@ -36,6 +36,7 @@ export async function createFetchTransport(options) {
   if (!options.proxy.enabled) {
     return {
       fetch: effectiveFetch(options.currentSignal, undefined, undefined, retryOptions),
+      singleAttemptFetch: effectiveFetch(options.currentSignal, undefined, undefined, null),
       async close() {},
       agentCount: 0,
     };
@@ -58,6 +59,8 @@ export async function createFetchTransport(options) {
   let destroyed = false;
   return {
     fetch: effectiveFetch(options.currentSignal, undici.fetch, proxyAgent, retryOptions),
+    // 라이브 확인 RPC는 물리 요청 상한을 지키도록 같은 proxy agent·요청 취소 신호를 쓰되 재시도하지 않습니다.
+    singleAttemptFetch: effectiveFetch(options.currentSignal, undici.fetch, proxyAgent, null),
     close() {
       closePromise ??= closeProxyAgent(proxyAgent, options.closeTimeoutMs, () => {
         if (!destroyed) {
@@ -83,6 +86,8 @@ function effectiveFetch(currentSignal, proxyFetch, proxyAgent, retryOptions) {
     let effective;
     try {
       effective = new globalThis.Request(input, init);
+      // 자동 redirect도 추가 물리 요청이므로 새 확인의 단일 시도 경로에서는 허용하지 않습니다.
+      if (retryOptions == null) effective = new globalThis.Request(effective, { redirect: "error" });
     } catch (error) {
       throw new FetchTransportError(
         "helper_protocol_mismatch",
@@ -98,7 +103,7 @@ function effectiveFetch(currentSignal, proxyFetch, proxyAgent, retryOptions) {
     if (combinedSignal.aborted) {
       throw abortError(requestSignal, effective.signal);
     }
-    const retry = retryRequest(effective);
+    const retry = retryOptions == null ? { endpoint: "", request: null } : retryRequest(effective);
     let request = effective;
     let retryAttempted = false;
     while (true) {

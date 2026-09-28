@@ -282,7 +282,7 @@ func startChannelPersistPolicy(
 func channelClaimOptions() ClaimOptions {
 	return ClaimOptions{
 		ConsumerName:  "youtube-channel-processor",
-		LeaseOwner:    "api-a",
+		LeaseOwner:    testAPILeaseOwner,
 		Kinds:         []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto},
 		Limit:         10,
 		LeaseDuration: 30 * time.Second,

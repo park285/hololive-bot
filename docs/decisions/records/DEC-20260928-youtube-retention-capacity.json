@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260928-youtube-retention-capacity",
+  "title": "Hololive YouTube 관측과 적용 이력 보존을 용량 예산에 맞춰 단축한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-28",
+  "summary": "사용자는 DB 증설 불가, 보관 데이터 축소 허용과 종료 증거 테이블의 보존 코드 적용을 요청했다. live_snapshot, community_page, video_list, shorts_list 원본은 30일에서 14일, schedule_snapshot은 90일에서 30일, application audit grace는 60일에서 14일, retired projection은 30일을 유지한다. 7일 시험에서 기존 generation 정리가 10초 제한을 반복 초과하여 운영 값을 되돌렸고 원본·적용 이력의 단축은 유지한다. replay audit 365일과 나머지 evidence 보존값은 유지하며 retention interval 120초와 batch 1000을 우선 유지한다. 원본 삭제의 queue·pending replay·live-head 보호, 적용 이력의 orphan 조건을 지킨다. youtube_live_absence_slots는 30일 보존으로 상한을 만들고 과거 positive 재처리는 그 기간 밖의 slot을 이용할 수 없음을 계약에 명시한다. 2026-09-08의 30일 원본·60일 추가 감사 보존 선택은 이후 사용자 자원 제약 요청에 따라 이 범위에서 변경한다. APPLIED 이력은 단순 no-op가 아닌 실제 적용 기록이며 community window 조회가 일부 application 이력을 사용하므로 무조건 쓰기 생략은 하지 않고 사용처·절감량을 별도 검토한다. WAL·dead tuple·디스크 관측으로 interval 변경 여부를 별도 결정한다.",
+  "sources": [
+    "docs/current/plans/2026-09-28-youtube-retention-capacity.md#Execution capsule"
+  ],
+  "evidence": [
+    "docs/review/2026-09-28-youtube-retention-capacity.md",
+    "docs/review/2026-09-28-youtube-retention-rollout.md"
+  ],
+  "implementation": [
+    "deploy/compose/docker-compose.prod.yml",
+    "hololive/hololive-api/internal/planes/youtube/runtime/supervisor_retention.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_retention.go",
+    "hololive/hololive-api/scripts/migrations/221_live_absence_slot_retention.sql",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_live_absence_slots.sql"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "유입량이 삭제 처리량을 넘거나 호스트 여유 공간이 감소하거나 projection 정리 timeout이 재발하거나 재처리·조사에 14일 이상 raw evidence가 필요한 사례가 확인될 때"
+  }
+}

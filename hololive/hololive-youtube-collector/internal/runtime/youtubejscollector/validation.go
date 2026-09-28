@@ -17,7 +17,7 @@ func validateUnavailableLiveSessions(channelID, kind string, result *youtubejs.C
 		return nil
 	}
 
-	if kind != "live" || result.MissingTab || len(unavailable) > maxUnavailableLiveSessions {
+	if kind != channelKindLive || result.MissingTab || len(unavailable) > maxUnavailableLiveSessions {
 		return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js unavailable live sessions are outside the collection scope")
 	}
 

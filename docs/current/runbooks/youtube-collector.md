@@ -66,6 +66,22 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 
 DB generation 전환은 일반 collector 배포에 포함하지 않으며 별도 운영 승인이 필요합니다. API-first 순서를 지키지 않으면 새 payload가 구 API의 strict decoder에서 거부됩니다.
 
+## Live absence evidence activation
+
+`DEC-20260926-hololive-live-absence-evidence`의 로컬 준비 산출물은 migration 218(새 kind·가용성/채널 확인 저장소), 219(구 LIVE coverage 부분 인덱스 제거), 220(표준 Count 0 문구)입니다. 아직 운영 적용·배포·fleet 활성화 승인이 아닙니다.
+
+1. 승인된 릴리스 계획에서 기존 API reader와 collector의 drain/교체 창을 정합니다. 218의 저장소와 두 새 kind decoder/claim/target을 갖춘 API를 collector보다 먼저 준비합니다. `live_snapshot` 기존 generation은 변경하지 않고 새 kind만 generation 1로 시작합니다.
+2. 219는 구 LiveQuery가 더 이상 211 인덱스를 쓰지 않는 전환 시점에 적용합니다. 전체 manifest를 한 번에 적용하려면 구 API reader를 중단한 승인된 교체 창에서 migration → 새 API 순서를 지킵니다. 실행 중 구 API에서 인덱스를 먼저 지워 1초 예산을 훼손하지 않습니다. 212의 scheduled_for 인덱스는 유지합니다.
+3. API의 두 kind consume, 5초 target refresh, stale LIVE 영상 target과 freshness clock을 확인한 뒤 새 Go binary와 helper를 같은 bundle로 collector fleet에 반영합니다. `channel_live_check` target이 없는 상태에서 새 channel job을 먼저 활성화하면 exact-subject acquisition이 실패합니다.
+4. 새 evidence retention 기본값은 각 7일입니다. `YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS`, `YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS`는 API 설정이며 기존 production positive-age/승인 검증을 따릅니다. 74채널·2분이면 채널 확인은 하루 53,280건입니다. 운영 storage/WAL·재수집 부하와 generation 전환으로 폐기되는 in-flight를 비교합니다.
+
+`DEC-20260927-live-check-slot-isolation`의 분리 job 계약은 공유-job collector와 혼합 실행하지 않습니다. 기존 공유-job collector를 먼저 drain/중지하고 API의 snapshot-only `youtubejs_channel_live` 및 check-only `youtubejs_channel_live_check` 계약을 반영한 뒤 새 collector를 시작합니다. 미배포 로컬 준비물에는 추가 schema migration이 필요하지 않습니다. 이미 공유-job 버전을 사용한 환경이라면 마지막 채널 확인 슬롯과 겹치는 최초 독립 슬롯의 duplicate/collision 가능성을 전환 계획에서 확인하고, 다음 독립 cadence의 새 관측까지 coverage를 검증합니다. 기존 관측·lease·pending을 임의 삭제하지 않습니다. 롤백도 양쪽 collector를 동시에 발행시키지 않도록 같은 drain 경계를 지킵니다.
+
+롤백은 새 collector의 발행을 먼저 멈추고 새 kind 큐·재처리 요구를 확인합니다. 새 decoder가 필요한 backlog가 있으면 해당 API decoder를 유지하며, 새 canonical/evidence/pending을 삭제하지 않습니다. 219 적용 뒤 구 API로 돌아가려면 구 query의 인덱스 재준비까지 승인된 롤백 절차에 포함해야 합니다. 220은 사용자 지정 본문과 채널 override, 멤버 지정 안내를 건드리지 않습니다.
+
+운영 비교 관측은 별도 승인 뒤 수행합니다: 멤버 한정 LIVE와 음성 /live의 공존, 동시 방송·최초공개 표시, 로봇/비공개/삭제 UNKNOWN 수와 stale LIVE 차단, 유효 endTimestamp와 canonical ended_at 일치, 가용성 만료·재확인 실패 뒤 차단 복원, target 생성/제거 지연과 1초 query 예산. `isPrivate=true`를 포함하는 익명 응답과 실제 로봇 응답은 로컬 실측을 완료했다고 간주하지 않습니다.
+
+
 ## Key environment variables
 
 | Env | Purpose | Required |
@@ -100,7 +116,7 @@ Worker count, local queue capacity, acquisition cadence/batch, lease/renew/clean
 - `youtubejs_rpc_phase_duration_seconds{operation,phase,outcome}`: `rate_limit` 대기와 `helper` 수행·응답 해석을 분리한 histogram. helper 내부의 외부 응답·파싱 시간은 합산입니다. operation은 community/content/channel/unknown, outcome은 success/timeout/canceled/error입니다.
 - `youtubejs_rpc_phase_in_flight{operation,phase}`와 `youtubejs_rpc_request_interval_seconds`: 현재 기다리는 호출, 수행 중인 호출과 설정된 호출 간격입니다. helper phase count는 제한을 통과한 RPC 시도 수입니다.
 - `youtube_collection_duration_seconds`: 15/30/60/120/300초 버킷까지 포함합니다. 기존 10초 상한을 넘는 content job의 p95를 10초로 해석하지 않습니다. 롤링 배포 중에는 AP별 histogram을 확인하고 모든 AP가 같은 버킷으로 전환되기 전 fleet 합산 quantile을 해석하지 않습니다.
-- API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target을 community/content/channel-live/channel-metadata 네 작업으로 묶어 집계합니다. `targets`, `stale_targets`(완료 시각이 poll interval보다 오래됨), `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. 미완료를 완료 경과 0초로 해석하지 않습니다. due에는 AP 로컬 큐에 들어오지 않은 대상과 만료 lease도 포함됩니다. 없던 lease의 due 기준은 현재 target의 created_at입니다. 퇴역 viewer 작업의 과거 lease·지표는 현재 수요에 포함하지 않습니다.
+- API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target을 community/content/channel-live/channel-live-check/channel-metadata/video-live 여섯 작업으로 묶어 집계합니다. 채널 확인과 방송 탭은 각자의 완료·due 시각을 사용합니다. `targets`, `stale_targets`(완료 시각이 poll interval보다 오래됨), `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. 미완료를 완료 경과 0초로 해석하지 않습니다. due에는 AP 로컬 큐에 들어오지 않은 대상과 만료 lease도 포함됩니다. 없던 lease의 due 기준은 현재 target의 created_at입니다. 퇴역 viewer 작업의 과거 lease·지표는 현재 수요에 포함하지 않습니다.
 - `hololive_youtube_collection_live_states{state}`와 `live_state_review_targets{reason}`는 현재 유효한 `live_snapshot` 채널 대상에 속한 서로 다른 영상 중 head 또는 서비스 상태가 LIVE/UPCOMING인 집합을 진단합니다. 상태는 head 기준이며 missing/그 밖의 상태는 other입니다. 양방향 상태 불일치를 포함하고, 채널 식별자가 없는 head-only 항목과 양쪽 모두 종료된 이력은 제외합니다. state_mismatch, scheduled_before_now, scheduled_overdue_7d는 겹칠 수 있으며 종료 증거가 아닙니다.
 
 API 집계는 기존 claim 관측 경로에서 최대 30초마다, DB admission을 포함해 1초 예산으로 실행합니다. 실패·유효 projection 부재는 `hololive_youtube_collection_snapshot_success=0`이며 이전 숫자와 마지막 성공 시각을 보존합니다. 성공 지표가 1이고 마지막 성공이 120초 이내일 때만 대상 숫자를 현재값으로 사용합니다. 기존 `youtube_collection_freshness_seconds`는 해당 provider/kind 중 마지막 성공 하나의 경과이며 전체 대상의 신선도를 보장하지 않습니다.
@@ -123,7 +139,7 @@ Collector loader와 Compose는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR
 
 HTTP `429`는 fetch transport에서 응답 body를 폐기한 뒤 기존 `cooldown/COOLDOWN` RPC로 전달합니다. youtubei.js가 status 없는 `InnertubeError`로 바꾸어 내부 치명 오류로 오분류하지 않도록 합니다. 즉시 재전송은 없으며 기존 collection profile의 default same-slot defer를 사용합니다. 응답 body나 URL을 오류 메시지에 넣지 않습니다. Provider rate limit 자체의 해소나 성공 관측을 뜻하지 않습니다.
 
-YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player}`의 `POST`만 읽기 전용 재전송 대상으로 봅니다. 알려진 transient network code 또는 HTTP `500`, `503`이 발생하면 `100`~`300ms` jitter 뒤 정확히 한 번 재시도하므로 총 시도 수는 최대 2회입니다. 재생할 수 없는 request body, 다른 host/path/method, HTTP `429`, `501`, `502`, `504`와 그 밖의 status, parser/protocol failure에는 transport retry를 적용하지 않습니다. 두 번째 시도 실패는 기존 typed failure와 scheduler defer 계약을 그대로 사용하고 complete-empty나 alternate provider로 바꾸지 않습니다.
+기존 feed의 YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player}`의 `POST`만 읽기 전용 재전송 대상으로 봅니다. 알려진 transient network code 또는 HTTP `500`, `503`이 발생하면 `100`~`300ms` jitter 뒤 정확히 한 번 재시도하므로 총 시도 수는 최대 2회입니다. 재생할 수 없는 request body, 다른 host/path/method, HTTP `429`, `501`, `502`, `504`와 그 밖의 status, parser/protocol failure에는 transport retry를 적용하지 않습니다. 새 channel/video live check RPC는 이 정책을 사용하지 않고 단일 시도·redirect 거부 transport를 사용합니다. 기존 feed의 두 번째 시도 실패는 typed failure와 scheduler defer 계약을 유지합니다.
 
 각 추가 시도는 `youtubejs_upstream_retry_scheduled` INFO event에 endpoint, trigger, delay, attempt를 기록합니다. 같은 시간대의 `YouTube collection job failed` WARN이 없으면 transport 안에서 복구된 것이며, WARN이 이어지면 bounded retry가 소진된 것입니다. 배포 후 24시간 동안 exhausted `collection_failed` 비율이 감소하지 않거나 `429`, request timeout, upstream request volume이 증가하면 이 정책을 재검토합니다.
 
@@ -143,7 +159,7 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 32개 후보 초과, identity/schema/time drift, 미지의 UNPLAYABLE 또는 위 접근 제한에 해당하지 않는 시각 부재는 terminal `parser_drift`입니다. 해당 collection은 observation과 checkpoint를 저장하지 않습니다. `youtube_collection_attempts_total`과 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
 
-`youtubei.js@18.0.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, 전체 helper test, typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
+`youtubei.js@18.1.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
 
 ## Logs
 

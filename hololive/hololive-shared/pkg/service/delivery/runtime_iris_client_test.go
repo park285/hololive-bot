@@ -839,12 +839,12 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 	}
 }
 
-func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
+func TestRuntimeIrisClient_SendKaringContentList_ForwardsRequest(t *testing.T) {
 	t.Setenv("IRIS_TRANSPORT", "http1")
 
 	var (
 		gotPath    string
-		gotRequest iris.KaringHololiveRequest
+		gotRequest iris.KaringContentListRequest
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -857,12 +857,12 @@ func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 
-		streamCount := 1
+		itemCount := 1
 		if err := jsonv2.MarshalWrite(w, iris.KaringDryRunResponse{
-			OK:          true,
-			DryRun:      true,
-			TemplateID:  133220,
-			StreamCount: &streamCount,
+			OK:         true,
+			DryRun:     true,
+			TemplateID: 133220,
+			ItemCount:  &itemCount,
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -875,13 +875,12 @@ func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
 		testBotToken,
 		"",
 		nil,
-		iris.WithBotControlToken("bot-control-secret"),
 		iris.WithHTTPClient(server.Client()),
 		iris.WithTransport("http1"),
 	)
 
-	resp, err := client.SendKaringHololive(t.Context(), iris.KaringHololiveRequest{
-		Streams: []iris.KaringContentItem{{
+	resp, err := client.SendKaringContentList(t.Context(), iris.KaringContentListRequest{
+		Items: []iris.KaringContentItem{{
 			Title:  "test stream",
 			URL:    "https://www.youtube.com/watch?v=video000001",
 			Status: iris.KaringStreamStatusUpcoming,
@@ -890,23 +889,23 @@ func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
 		DryRun:    true,
 	})
 	if err != nil {
-		t.Fatalf("SendKaringHololive() error = %v", err)
+		t.Fatalf("SendKaringContentList() error = %v", err)
 	}
 
-	if gotPath != iris.PathKaringHololive {
-		t.Fatalf("path = %q, want %q", gotPath, iris.PathKaringHololive)
+	if gotPath != iris.PathKaringContentList {
+		t.Fatalf("path = %q, want %q", gotPath, iris.PathKaringContentList)
 	}
 
-	if len(gotRequest.Streams) != 1 || gotRequest.Streams[0].Status != iris.KaringStreamStatusUpcoming {
-		t.Fatalf("Streams = %+v", gotRequest.Streams)
+	if len(gotRequest.Items) != 1 || gotRequest.Items[0].Status != iris.KaringStreamStatusUpcoming {
+		t.Fatalf("Items = %+v", gotRequest.Items)
 	}
 
 	if gotRequest.ExtraArgs["time_left"] != "10 minutes" {
 		t.Fatalf("ExtraArgs[time_left] = %q, want 10 minutes", gotRequest.ExtraArgs["time_left"])
 	}
 
-	if resp == nil || !resp.OK || resp.StreamCount == nil || *resp.StreamCount != 1 {
-		t.Fatalf("response = %+v, want stream count 1", resp)
+	if resp == nil || !resp.OK || resp.ItemCount == nil || *resp.ItemCount != 1 {
+		t.Fatalf("response = %+v, want item count 1", resp)
 	}
 }
 

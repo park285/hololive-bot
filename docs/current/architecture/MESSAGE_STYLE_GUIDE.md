@@ -80,11 +80,15 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 ## 8. '전체보기' 접기(fold) 정책
 
 - `util.FoldForSeeMore(text, KakaoSeeMoreThreshold)` — 임계(250 rune) 이하 no-op. 초과 시 머리 문단(첫 빈 줄 앞의 줄, 최대 `KakaoSeeMoreHeadMaxLines`=4줄)의 마지막 줄 끝에 ZWSP×`KakaoSeeMorePadding`을 붙여 KakaoTalk이 머리 문단 + '전체보기'로 접게 한다. 4줄 안에 빈 줄이 없으면 첫 줄만 남긴다. 펼친 화면의 가시 문자는 원문과 같다.
-- 운영 기본값은 접기 ON(`BOT_SEE_MORE_FOLD` 기본 `true`)이다. `false`는 bot·llm plane 접기를 함께 끄는 운영 스위치다.
+- 운영 기본값은 접기 ON(`BOT_SEE_MORE_FOLD` 기본 `true`)이다. bot·llm plane과 alarm-worker의 목록 렌더 경로가 같은 설정을 읽으며 `false`는 해당 프로세스의 접기를 끄는 운영 스위치다.
 - fold-in (긴 목록·다이제스트): `FormatHelp`(이미지 실패 시 텍스트), `LiveQuery`(`!라이브`, 표시 한도 안내는 머리 문단), `UpcomingStreams`, `ChannelSchedule`, `FormatAlarmList`, `MemberDirectory`, `FormatMemberInfo`(`!정보`), `FormatMemberNewsDigest`, `CelebrationCalendar`(이미지 실패 시 텍스트), `FormatMajorEventWeeklySummary`, `FormatMajorEventMonthlySummary`, `BroadcastHistory` — llm plane 동명 3곳(weekly/monthly/digest)은 bot과 fold parity를 유지한다.
+- 2026-09-27 사용자 요청으로 긴 여러 항목 알림도 fold-in에 포함한다: `OUTBOX_VIDEO_GROUP`, `OUTBOX_SHORTS_GROUP`, `OUTBOX_COMMUNITY_GROUP` 및 여러 방송을 묶은 알람 텍스트. 명령 목록과 동일한 helper·임계·머리 문단·패딩을 사용한다. 일반 전송층에서 모든 메시지를 무조건 접지 않는다.
 - 헤더 보조 행(개수·기간·표시 한도·일부 결과 안내)은 머리 문단 안에 두어 접힌 화면에서도 보이게 한다.
-- fold-out (전문이 즉시 보여야 함): 상태·확인·에러 단문, 알림 푸시 전문(CMD_ALARM_NOTIFICATION*, ALARM_DISPATCH_*, OUTBOX_*, CELEBRATION_*, karing 카드).
+- fold-out (전문이 즉시 보여야 함): 상태·확인·에러 단문, 단일 알림, celebration과 karing 카드. 여러 항목 묶음 알림은 위 fold-in 규칙을 적용한다. 임계 이하·한 줄 메시지는 기존 helper의 no-op 규칙을 유지한다.
 - 명령 응답은 일반 방에서 `kakaoformat.Render`를 거친다. 이 변환은 연속 ZWSP 패딩을 보존한다(shared-go `TestRenderNeutralizedTextKeepsMarkdownCodeURLsAndFoldPadding`).
+- 사용자 지정 template/채널 override의 저장 본문과 펼친 가시 문자를 변경하지 않는다. 이미 접힌 본문에는 패딩을 중복 삽입하지 않는다. 로컬 검증은 실제 template→최종 text payload에서 수행하며 카카오톡 클라이언트의 접힌 화면은 별도 승인된 테스트 방 수신으로 확인한다.
+
+`!라이브`의 확인 완료 빈 결과는 '현재 방송 중인 멤버가 없습니다.' 한 문장입니다. 미확인 빈 결과는 '현재 방송 상태를 확인할 수 없습니다.'이며 두 결과를 바꾸어 쓰지 않습니다. 공개 방송 범위 설명·조회 미완료 채널·기준 시각은 붙이지 않고 운영 로그로 남깁니다. 멤버 지정 조회는 기존 `CMD_MEMBER_NOT_LIVE`를 유지합니다. migration 220은 217 표준 전역 본문만 바꾸고 사용자 지정 본문·채널 override를 보존합니다.
 
 ## 9. 에러·알림 단문 규칙
 

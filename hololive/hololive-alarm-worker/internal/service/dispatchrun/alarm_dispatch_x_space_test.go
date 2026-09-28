@@ -19,7 +19,7 @@ func TestXSpaceRenderingAndIsolation(t *testing.T) {
 		Notification: domain.AlarmNotification{RoomID: "room-a", AlarmType: domain.AlarmTypeLive},
 		XSpace:       &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: "UCtest", MemberName: "소라", Title: "이야기", StartedAt: time.Now().UTC()},
 	}
-	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), newAlarmDispatchTestRenderer(t), nil, false, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Equal(t, "🔴 소라 스페이스 시작\n\u200b이야기\nhttps://x.com/i/spaces/1abc", message)
@@ -36,7 +36,7 @@ func TestXSpaceRenderingAndIsolation(t *testing.T) {
 	require.NotEqual(t, alarmDispatchGroupKey(&envelope), alarmDispatchGroupKey(&domain.AlarmQueueEnvelope{Notification: envelope.Notification}))
 
 	envelope.XSpace.SpaceID = "bad/path"
-	_, _, err = renderAlarmDispatchGroupSource(t.Context(), nil, nil, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
+	_, _, err = renderAlarmDispatchGroupSource(t.Context(), nil, nil, false, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
 	require.Error(t, err)
 }
 
@@ -76,7 +76,7 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 				Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeLive},
 				XSpace:       payload,
 			}
-			message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, nil, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
+			message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, nil, false, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
 			require.NoError(t, err)
 			require.True(t, handled)
 
@@ -102,7 +102,7 @@ func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 	require.NoError(t, err)
 
 	group := alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}}
-	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, group)
+	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, false, group)
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Equal(t, "소라: https://x.com/i/spaces/1abc", message)
@@ -110,7 +110,7 @@ func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 	_, err = pool.Exec(t.Context(), `DELETE FROM notification_templates WHERE template_key = $1`, domain.TemplateKeyXSpaceStarted)
 	require.NoError(t, err)
 
-	message, handled, err = renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, group)
+	message, handled, err = renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, false, group)
 	require.ErrorIs(t, err, template.ErrTemplateNotFound)
 	require.True(t, handled)
 	require.Empty(t, message)

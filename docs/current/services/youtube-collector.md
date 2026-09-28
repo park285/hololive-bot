@@ -23,6 +23,15 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 - DB job lease/fence and `PublishBatch` (checkpoint + observation insert)
 - Collector DB role `hololive_scraper`
 
+## 라이브 채널·영상 확인
+
+`DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 canonical LIVE의 신선한 positive가 없을 때 projection이 만드는 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check` 경로입니다. 두 새 kind는 youtubejs 전용 schema 1/generation 1이며 기존 live_snapshot 세대는 바꾸지 않습니다.
+
+기본 cadence는 2분, evidence freshness는 270초입니다. 채널 확인은 resolve_url 1회와 선택 영상 player 최대 1회, 영상 확인은 player 1회이며 초기화용 config 조회·HTML·browse 보완·transport retry·자동 redirect를 사용하지 않습니다. 기존 목록 실패로 인한 job-level PARTIAL/defer는 아래 Atomic publish 계약을 유지하며, 새 확인의 UNKNOWN 자체를 추가 재시도의 이유로 삼지 않습니다.
+
+원시 영상·채널 identity, isLive/isLiveNow와 시작·종료 시각을 먼저 판정합니다. UNPLAYABLE은 LIVE/종료 모두에 올 수 있습니다. 회원 offer renderer는 MEMBERS_ONLY, 명시적인 isPrivate=false는 PUBLIC, identity와 isPrivate=true가 함께 확인된 경우만 PUBLIC_UNAVAILABLE입니다. LOGIN_REQUIRED·ERROR·messages·번역 문구만으로 공개 불가를 추정하지 않습니다. 모순·해석 불가와 요청/응답 계약 실패는 UNKNOWN으로 기록하여 과거 음성을 유지하지 않습니다. 취소·lease 상실·설정/내부 불변식 오류는 publish하지 않습니다. Collector는 canonical 테이블에 접근하거나 종료를 직접 적용하지 않습니다.
+
+
 ## 시청자 수 전용 수집
 
 `DEC-20260925-hololive-viewer-collection-retirement`에 따라 신규 `viewer_sample`을 수집하지 않습니다. YouTube.js의 `youtubejs_viewer` 작업과 `/v1/viewer` RPC를 제거했으며, `holodex_live`는 `live_snapshot`만 발행합니다. Holodex의 기존 `/live` 조회와 방송 상태·일정·채널 메타데이터는 유지합니다. 응답에 포함된 시청자 수를 표본으로 만드는 비용은 별개이므로 더 이상 viewer envelope·checkpoint·queue를 생성하지 않습니다.

@@ -1826,7 +1826,7 @@ func newOutcomeUnknownTestEngine(sender messagedelivery.MessageSender, renderer 
 	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
 	spy := &outcomeUnknownClaimSpy{}
 	auditLogger := newAuditLogger(nil, nil, logger, cfg, nil)
-	formatter := newMessageFormatter(renderer, cachemocks.NewLenientClient(), logger, nil)
+	formatter := newMessageFormatter(renderer, cachemocks.NewLenientClient(), logger, nil, false)
 	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger, spy), &lifecycleTransitionSpy{})
 
 	return engine, spy

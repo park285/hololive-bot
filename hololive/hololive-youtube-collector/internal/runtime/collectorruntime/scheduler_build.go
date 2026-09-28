@@ -164,7 +164,9 @@ func collectorRunners(infra *collectorInfrastructure) []JobRunner {
 		youtubejscollector.NewCommunityRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewContentRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewChannelLiveRunner(infra.youtubejsRPC),
+		youtubejscollector.NewChannelLiveCheckRunner(infra.youtubejsRPC),
 		youtubejscollector.NewChannelMetadataRunner(infra.youtubejsRPC),
+		youtubejscollector.NewVideoLiveCheckRunner(infra.youtubejsRPC),
 		holodexcollector.NewLiveRunner(infra.holodex),
 		holodexcollector.NewMetadataRunner(infra.holodex),
 		holodexcollector.NewScheduleRunner(infra.holodex),
@@ -205,11 +207,7 @@ func executionProfileInputs(
 	rateInterval time.Duration,
 	inflight int,
 ) {
-	maxCalls = 1
-
-	if string(id.Kind) == "youtubejs_content" {
-		maxCalls = 2
-	}
+	maxCalls = jobMaxUpstreamCalls(id)
 
 	requestTimeout = cfg.YouTubeJSRequestTimeout
 	rateInterval = cfg.RequestInterval

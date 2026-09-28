@@ -1,20 +1,24 @@
-WITH mapping(kind, observation_kinds, rpc_calls) AS (
+-- rpc_per_kind: 활성 kind마다 helper RPC를 따로 보내는 job(content 목록 2종)이다.
+-- 나머지 job은 bundle 한 번에 RPC 1회를 보낸다. 방송 탭 snapshot과 채널 /live 확인은 별도 job·슬롯이다.
+WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
     VALUES
-        ('youtubejs_channel_live', ARRAY['live_snapshot'], 1),
-        ('community_collect', ARRAY['community_page'], 1),
-        ('youtubejs_content', ARRAY['video_list', 'shorts_list'], 2),
-        ('youtubejs_channel_metadata', ARRAY['channel_stats', 'channel_profile', 'channel_photo'], 1)
+        ('youtubejs_channel_live', ARRAY['live_snapshot'], FALSE),
+        ('youtubejs_channel_live_check', ARRAY['channel_live_check'], FALSE),
+        ('youtubejs_video_live', ARRAY['video_live_check'], FALSE),
+        ('community_collect', ARRAY['community_page'], FALSE),
+        ('youtubejs_content', ARRAY['video_list', 'shorts_list'], TRUE),
+        ('youtubejs_channel_metadata', ARRAY['channel_stats', 'channel_profile', 'channel_photo'], FALSE)
 ), current_projection AS (
     SELECT generation FROM youtube_collection_projection_generations
     WHERE status = 'CURRENT' AND valid_until > statement_timestamp()
 ), targets AS (
-    SELECT m.kind, CASE WHEN m.kind = 'youtubejs_content' THEN COUNT(t.observation_kind) ELSE m.rpc_calls END AS rpc_calls, t.subject_key,
+    SELECT m.kind, CASE WHEN m.rpc_per_kind THEN COUNT(t.observation_kind) ELSE 1 END AS rpc_calls, t.subject_key,
            MIN(t.poll_interval_ms) AS interval_ms, MIN(t.created_at) AS created_at
     FROM mapping m
     JOIN youtube_collection_targets t ON t.observation_kind = ANY(m.observation_kinds)
     JOIN current_projection g ON g.generation = t.projection_generation
     WHERE t.enabled AND t.valid_until > statement_timestamp()
-    GROUP BY m.kind, m.rpc_calls, t.subject_key
+    GROUP BY m.kind, m.rpc_per_kind, t.subject_key
 ), samples AS (
     SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, l.last_completed_at,
            CASE

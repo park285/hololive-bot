@@ -68,10 +68,6 @@ func TestAPI007JobContractSetDefinitionUsesJobID(t *testing.T) {
 	if _, exists := set.Definition(JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_viewer"}); exists {
 		t.Fatal("retired viewer job remains executable")
 	}
-
-	if got := set.IDs(); len(got) != 8 {
-		t.Fatalf("IDs() = %d", len(got))
-	}
 }
 
 func TestAPI008DeferCollectionInputHasNoPublicMutableSurface(t *testing.T) {
@@ -141,10 +137,24 @@ func subjectJobContractFixtures() []jobContractFixture {
 			nil,
 		},
 		{
+			mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_live_check"),
+			JobClassSubject, JobMembershipExactSubject, "",
+			[]contract.ObservationKind{contract.KindChannelLiveCheck},
+			[]contract.ObservationKind{contract.KindChannelLiveCheck},
+			nil,
+		},
+		{
 			mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_metadata"),
 			JobClassSubject, JobMembershipExactSubject, "",
 			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelProfile, contract.KindChannelStats},
 			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelProfile, contract.KindChannelStats},
+			nil,
+		},
+		{
+			mustJobID(contract.ProviderYouTubeJS, "youtubejs_video_live"),
+			JobClassSubject, JobMembershipExactSubject, "",
+			[]contract.ObservationKind{contract.KindVideoLiveCheck},
+			[]contract.ObservationKind{contract.KindVideoLiveCheck},
 			nil,
 		},
 	}

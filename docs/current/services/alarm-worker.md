@@ -27,6 +27,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - v1 YouTube outbox의 optional `shadow|cutover` v3 handoff; claim owner는 기존 dispatcher로 유지
 - Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room.
 
+긴 여러 항목 알림(쇼츠·영상·커뮤니티 묶음, 여러 방송 알람)은 `BOT_SEE_MORE_FOLD`(기본 true)에 따라 공통 머리 문단 전체보기 정책으로 렌더합니다. 단일 알림·상태·오류는 제외하고, 사용자 지정 본문/채널 override 저장값과 펼친 가시 문자는 보존합니다. 설정은 bot·llm과 같은 `settings.LoadSeeMoreFold`를 사용하되 실제 렌더 경로에 명시적으로 전달합니다.
+
 ## Provides
 
 | Contract | Type | Path/Event/Queue | Consumers |

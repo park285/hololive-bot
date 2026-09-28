@@ -41,6 +41,10 @@ func TestGoProtocolJSONTagsMatchContractsDTS(t *testing.T) {
 		{"ChannelProfileItem", ChannelProfileItem{}},
 		{"ChannelPhotoVariant", ChannelPhotoVariant{}},
 		{"ChannelResult", ChannelResult{}},
+		{"ChannelLiveCheckRequest", ChannelLiveCheckRequest{}},
+		{"ChannelLiveCheckResult", ChannelLiveCheckResult{}},
+		{"VideoLiveCheckRequest", VideoLiveCheckRequest{}},
+		{"VideoLiveCheckResult", VideoLiveCheckResult{}},
 	}
 
 	for _, test := range cases {

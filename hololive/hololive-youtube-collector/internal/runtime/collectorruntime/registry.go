@@ -176,13 +176,7 @@ func NewRegistry(runners ...JobRunner) (*Registry, error) {
 			continue
 		}
 
-		maxCalls := 1
-
-		if string(runner.JobID().Kind) == "youtubejs_content" {
-			maxCalls = 2
-		}
-
-		profile, err := NewExecutionProfile(maxCalls, time.Second, 0, 1, time.Second, 0)
+		profile, err := NewExecutionProfile(jobMaxUpstreamCalls(runner.JobID()), time.Second, 0, 1, time.Second, 0)
 		if err != nil {
 			return nil, fmt.Errorf("execution profile: %w", err)
 		}
@@ -196,6 +190,17 @@ func NewRegistry(runners ...JobRunner) (*Registry, error) {
 	}
 
 	return out, nil
+}
+
+// jobMaxUpstreamCalls는 job 실행 한 번이 보내는 helper RPC 수의 상한입니다.
+// 목록 두 종류를 수집하는 content만 두 RPC를 보냅니다. 방송 탭 snapshot·채널 확인·영상 확인은 각자 RPC 1회입니다.
+func jobMaxUpstreamCalls(id sourceobservation.JobID) int {
+	switch string(id.Kind) {
+	case "youtubejs_content":
+		return 2
+	default:
+		return 1
+	}
 }
 
 func NewRegistryWithProfiles(profiles map[sourceobservation.JobID]ExecutionProfile, runners ...JobRunner) (*Registry, error) {

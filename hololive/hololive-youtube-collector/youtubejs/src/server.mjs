@@ -8,18 +8,22 @@ import { emptyCommunityPage } from "./fetch-community.mjs";
 import { createHelperRuntime, RuntimeState } from "./helper-runtime.mjs";
 import { createRealFetchers, stubFetchers } from "./real-fetchers.mjs";
 import {
+  handleChannelLiveCheckRequest,
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
+  handleVideoLiveCheckRequest,
 } from "./rpc-boundary.mjs";
 import { rpcErrorResult, rpcErrorResultFor } from "./rpc-validation.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { encodeResponseBody } from "./response-encoding.mjs";
 
 export {
+  handleChannelLiveCheckRequest,
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
+  handleVideoLiveCheckRequest,
   RuntimeState,
 };
 
@@ -45,7 +49,10 @@ class RequestTimeoutError extends Error {}
  */
 export function createHelperServer(overrides = {}) {
   const runtime = createHelperRuntime({
-    createFetchers: (fetchImpl) => ({ ...createRealFetchers({ fetchImpl }), ...overrides }),
+    createFetchers: (fetchImpl, singleAttemptFetchImpl) => ({
+      ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }),
+      ...overrides,
+    }),
     transportCloseTimeoutMs: 3_000,
   });
   return attachHelperServer(runtime, 30_000);
@@ -63,11 +70,11 @@ export async function listenUnix(socketPath, options = {}) {
   process.umask(0o077);
   const opts = normalizeListenOptions(options);
   const runtime = createHelperRuntime({
-    createFetchers: (fetchImpl) => {
+    createFetchers: (fetchImpl, singleAttemptFetchImpl) => {
       if (opts.stub) {
         return stubFetchers;
       }
-      return { ...createRealFetchers({ fetchImpl }), ...opts.fetchers };
+      return { ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }), ...opts.fetchers };
     },
     transportCloseTimeoutMs: opts.transportCloseTimeoutMs,
   });
@@ -194,7 +201,9 @@ function isCollectionPath(req) {
   return req.method === "POST" && (
     req.url === "/v1/community" ||
     req.url === "/v1/content" ||
-    req.url === "/v1/channel"
+    req.url === "/v1/channel" ||
+    req.url === "/v1/channel_live_check" ||
+    req.url === "/v1/video_live_check"
   );
 }
 
@@ -213,6 +222,12 @@ async function dispatchCollection(url, raw, fetchers, maximumSuccessResponseByte
   }
   if (url === "/v1/content") {
     return handleContentRequest(raw, fetchers.fetchContent, maximumSuccessResponseBytes);
+  }
+  if (url === "/v1/channel_live_check") {
+    return handleChannelLiveCheckRequest(raw, fetchers.fetchChannelLiveCheck, maximumSuccessResponseBytes);
+  }
+  if (url === "/v1/video_live_check") {
+    return handleVideoLiveCheckRequest(raw, fetchers.fetchVideoLiveCheck, maximumSuccessResponseBytes);
   }
   return handleChannelRequest(raw, fetchers.fetchChannel, maximumSuccessResponseBytes);
 }

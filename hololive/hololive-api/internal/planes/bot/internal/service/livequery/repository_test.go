@@ -21,9 +21,10 @@ func queryFixture(tb testing.TB) (*Repository, *pgxpool.Pool) {
  INSERT INTO members(slug,channel_id,english_name,org,sync_source) VALUES('live-query', 'UC_live_query','Query Member','Hololive','manual');
  UPDATE youtube_collection_projection_generations SET status='RETIRED' WHERE status='CURRENT';
  INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
- VALUES('CURRENT',1,repeat('a',64),now()+interval '1 hour',now());
+ VALUES('CURRENT',2,repeat('a',64),now()+interval '1 hour',now());
  INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
- SELECT generation,'UC_live_query','live_snapshot',20,120000,true,valid_until FROM youtube_collection_projection_generations WHERE status='CURRENT';`)
+ SELECT generation,'UC_live_query',kind,20,120000,true,valid_until FROM youtube_collection_projection_generations
+ CROSS JOIN (VALUES('live_snapshot'),('channel_live_check')) kinds(kind) WHERE status='CURRENT';`)
 
 	return &Repository{db: pool}, pool
 }
@@ -37,9 +38,10 @@ func execFixture(tb testing.TB, pool *pgxpool.Pool, sql string) {
 
 func addCoverage(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	execFixture(t, pool, `INSERT INTO youtube_live_absence_slots(observation_id,scheduled_for,evidence_sha256,effective_at,received_at,scope_sha256,coverage)
- VALUES(900001,now()-interval '30 seconds',repeat('b',64),now()-interval '30 seconds',now()-interval '29 seconds',repeat('c',64),
- '{"requested_channel_ids":["UC_live_query"],"filters":{"statuses":["LIVE","UPCOMING"]}}');`)
+	execFixture(t, pool, `INSERT INTO youtube_channel_live_checks
+ (channel_id,provider,outcome,channel_identity_confirmed,evidence_sha256,scheduled_for,effective_at,observed_at,received_at)
+ VALUES('UC_live_query','youtubejs','CHANNEL_PAGE',true,repeat('b',64),now()-interval '30 seconds',
+ now()-interval '30 seconds',now()-interval '29 seconds',now()-interval '29 seconds');`)
 }
 
 func addLive(t *testing.T, pool *pgxpool.Pool) {
@@ -50,40 +52,50 @@ func addLive(t *testing.T, pool *pgxpool.Pool) {
  VALUES('livequery01','LIVE',now()-interval '30 seconds',now()-interval '29 seconds');`)
 }
 
-func TestRepositoryEvidenceBoundaries(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		live   bool
-		sql    string
-		status Status
-		reason Reason
-		items  int
-	}{
-		{name: "consumed complete empty without raw rows", status: Complete, reason: Covered},
-		{name: "fresh canonical live", live: true, status: Complete, reason: Covered, items: 1},
-		{name: "positive without full coverage", live: true, sql: `DELETE FROM youtube_live_absence_slots`, status: Partial, reason: Incomplete, items: 1},
-		{name: "upcoming only is not live coverage", sql: `UPDATE youtube_live_absence_slots SET coverage=jsonb_set(coverage,'{filters,statuses}','["UPCOMING"]')`, status: Unavailable, reason: Incomplete},
-		{name: "uncollected", sql: `DELETE FROM youtube_collection_targets`, status: Unavailable, reason: Uncollected},
-		{name: "expired projection", sql: `UPDATE youtube_collection_projection_generations SET valid_until=now()-interval '1 second'`, status: Unavailable, reason: InvalidProjection},
-		{name: "metadata cannot renew positive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},
-		{name: "missing head", live: true, sql: `DELETE FROM youtube_live_reconciliation_heads`, status: Unavailable, reason: Inconsistent},
-		{name: "pending head without session", live: true, sql: `DELETE FROM youtube_live_sessions;
+var repositoryEvidenceCases = []struct {
+	name        string
+	live        bool
+	sql         string
+	status      Status
+	reason      Reason
+	items       int
+	diagnostics Diagnostics
+}{
+	{name: "verified channel page without raw rows", status: Complete, reason: Covered},
+	{name: "fresh canonical live", live: true, status: Complete, reason: Covered, items: 1},
+	{name: "positive without channel confirmation", live: true, sql: `DELETE FROM youtube_channel_live_checks`, status: Partial, reason: Incomplete, items: 1},
+	{name: "positive without check target", live: true, sql: `DELETE FROM youtube_collection_targets WHERE observation_kind='channel_live_check'`, status: Partial, reason: Uncollected, items: 1},
+	{name: "selected live needs positive confirmation", sql: `UPDATE youtube_channel_live_checks SET outcome='LIVE_VIDEO',selected_video_id='selected01'`, status: Unavailable, reason: Incomplete},
+	{name: "unknown replaces a negative", sql: `UPDATE youtube_channel_live_checks SET outcome='UNKNOWN',unknown_reason='request_failed',channel_identity_confirmed=false`, status: Unavailable, reason: Incomplete},
+	{name: "absence slot cannot cover a channel", sql: `DELETE FROM youtube_channel_live_checks;
+ INSERT INTO youtube_live_absence_slots(observation_id,scheduled_for,evidence_sha256,effective_at,received_at,scope_sha256,coverage)
+ VALUES(900001,now(),repeat('b',64),now(),now(),repeat('c',64),'{"requested_channel_ids":["UC_live_query"],"filters":{"statuses":["LIVE"]}}')`, status: Unavailable, reason: Incomplete},
+	{name: "uncollected", sql: `DELETE FROM youtube_collection_targets`, status: Unavailable, reason: Uncollected},
+	{name: "expired projection", sql: `UPDATE youtube_collection_projection_generations SET valid_until=now()-interval '1 second'`, status: Unavailable, reason: InvalidProjection},
+	{name: "metadata cannot renew positive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},
+	{name: "missing head", live: true, sql: `DELETE FROM youtube_live_reconciliation_heads`, status: Unavailable, reason: Inconsistent},
+	{name: "pending head without session", live: true, sql: `DELETE FROM youtube_live_sessions;
  INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
  VALUES('livequery01','UC_live_query','EXPLICIT_END',900002,now(),now(),now(),true,true)`, status: Unavailable, reason: Inconsistent},
-		{name: "ended session live head", live: true, sql: `UPDATE youtube_live_sessions SET status='ENDED'`, status: Unavailable, reason: Inconsistent},
-		{name: "future positive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now()+interval '1 minute'`, status: Unavailable, reason: InvalidClock},
-		{name: "future receive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_seen_at=now()+interval '1 minute'`, status: Unavailable, reason: InvalidClock},
-		{name: "future start", live: true, sql: `UPDATE youtube_live_sessions SET started_at=now()+interval '1 minute'`, status: Unavailable, reason: InvalidClock},
-		{name: "nullable actual start", live: true, sql: `UPDATE youtube_live_sessions SET started_at=NULL`, status: Complete, reason: Covered, items: 1},
-		{name: "old coverage replay", sql: `UPDATE youtube_live_absence_slots SET effective_at=now()-interval '6 minutes',received_at=now()`, status: Unavailable, reason: Incomplete},
-		{name: "future coverage", sql: `UPDATE youtube_live_absence_slots SET effective_at=now()+interval '1 minute'`, status: Unavailable, reason: Incomplete},
-		{name: "future coverage receipt", sql: `UPDATE youtube_live_absence_slots SET received_at=now()+interval '1 minute'`, status: Unavailable, reason: Incomplete},
-		{name: "old collection slot", sql: `UPDATE youtube_live_absence_slots SET scheduled_for=now()-interval '6 minutes'`, status: Unavailable, reason: Incomplete},
-		{name: "pending end even after grace", live: true, sql: `INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
+	{name: "ended session live head", live: true, sql: `UPDATE youtube_live_sessions SET status='ENDED'`, status: Complete, reason: Covered, diagnostics: Diagnostics{EndedHeadMismatches: 1}},
+	{name: "future positive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now()+interval '1 minute'`, status: Unavailable, reason: InvalidClock},
+	{name: "future receive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_seen_at=now()+interval '1 minute'`, status: Unavailable, reason: InvalidClock},
+	{name: "future start", live: true, sql: `UPDATE youtube_live_sessions SET started_at=now()+interval '1 minute'`, status: Unavailable, reason: InvalidClock},
+	{name: "nullable actual start", live: true, sql: `UPDATE youtube_live_sessions SET started_at=NULL`, status: Complete, reason: Covered, items: 1},
+	{name: "old coverage replay", sql: `UPDATE youtube_channel_live_checks SET effective_at=now()-interval '6 minutes',scheduled_for=now()-interval '6 minutes',received_at=now()`, status: Unavailable, reason: Incomplete},
+	{name: "future coverage", sql: `UPDATE youtube_channel_live_checks SET effective_at=now()+interval '1 minute',scheduled_for=now()+interval '1 minute'`, status: Unavailable, reason: Incomplete},
+	{name: "future coverage receipt", sql: `UPDATE youtube_channel_live_checks SET received_at=now()+interval '1 minute'`, status: Unavailable, reason: Incomplete},
+	{name: "future checked fact", sql: `UPDATE youtube_channel_live_checks SET observed_at=now()+interval '1 minute'`, status: Unavailable, reason: Incomplete},
+	{name: "old checked fact", sql: `UPDATE youtube_channel_live_checks SET observed_at=now()-interval '6 minutes'`, status: Unavailable, reason: Incomplete},
+	{name: "old receipt", sql: `UPDATE youtube_channel_live_checks SET received_at=now()-interval '6 minutes'`, status: Unavailable, reason: Incomplete},
+	{name: "pending end even after grace", live: true, sql: `INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
  VALUES('livequery01','UC_live_query','EXPLICIT_END',900002,now(),now(),now(),true,true)`, status: Unavailable, reason: ConfirmingEnd},
-		{name: "end before first positive", sql: `INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
- VALUES('earlyquery','UC_live_query','EXPLICIT_END',900003,now(),now(),now(),true,true)`, status: Unavailable, reason: ConfirmingEnd},
-	} {
+	{name: "end before first positive", sql: `INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
+ VALUES('earlyquery','UC_live_query','EXPLICIT_END',900003,now(),now(),now(),true,true)`, status: Complete, reason: Covered, diagnostics: Diagnostics{RetainedOrphanEnds: 1}},
+}
+
+func TestRepositoryEvidenceBoundaries(t *testing.T) {
+	for _, tc := range repositoryEvidenceCases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo, pool := queryFixture(t)
 			addCoverage(t, pool)
@@ -102,6 +114,7 @@ func TestRepositoryEvidenceBoundaries(t *testing.T) {
 			require.Len(t, result.Channels, 1)
 			require.Equal(t, tc.reason, result.Channels[0].Reason)
 			require.Len(t, result.Items, tc.items)
+			require.Equal(t, tc.diagnostics, result.DiagnosticCounts())
 			require.False(t, result.AsOf.IsZero())
 
 			if tc.name == "nullable actual start" {
@@ -126,7 +139,7 @@ func TestRepositoryReadsCommittedStateAndCoverageTogether(t *testing.T) {
 
 	_, err = tx.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title) VALUES('atomicquery','UC_live_query','LIVE','Atomic stream');
 INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at) VALUES('atomicquery','LIVE',now(),now());
-UPDATE youtube_live_absence_slots SET effective_at=now(),received_at=now(),scheduled_for=now();`)
+UPDATE youtube_channel_live_checks SET effective_at=now(),received_at=now(),scheduled_for=now(),observed_at=now();`)
 	require.NoError(t, err)
 
 	before, err := repo.Query(t.Context(), Request{Scope: All, Limit: 1})
@@ -212,7 +225,7 @@ func TestRepositoryDeadlineIncludesLockWait(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tx.Rollback(context.WithoutCancel(t.Context()))) })
 
-	_, err = tx.Exec(t.Context(), "LOCK TABLE youtube_live_absence_slots IN ACCESS EXCLUSIVE MODE")
+	_, err = tx.Exec(t.Context(), "LOCK TABLE youtube_channel_live_checks IN ACCESS EXCLUSIVE MODE")
 	require.NoError(t, err)
 
 	started := time.Now()
@@ -242,4 +255,75 @@ SELECT video_id,'LIVE',now(),now() FROM youtube_live_sessions WHERE channel_id='
 	require.NoError(t, err)
 	require.Len(t, result.Items, MaxItems)
 	require.False(t, result.Truncated)
+}
+
+func TestRepositoryAvailabilityEvidenceBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		sql    string
+		status Status
+		reason Reason
+		items  int
+	}{
+		{name: "fresh unavailable excludes stale live", status: Complete, reason: Covered},
+		{name: "fresh positive wins", sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now(),last_live_positive_seen_at=now()`, status: Complete, reason: Covered, items: 1},
+		{name: "expired unavailable blocks again", sql: `UPDATE youtube_video_availability SET effective_at=now()-interval '6 minutes',scheduled_for=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},
+		{name: "failed recheck blocks again", sql: `UPDATE youtube_video_availability SET availability='UNKNOWN',method='unknown',unknown_reason='request_failed',identity_confirmed=false`, status: Unavailable, reason: Stale},
+		{name: "wrong channel cannot exclude", sql: `UPDATE youtube_video_availability SET channel_id='UC_other'`, status: Unavailable, reason: Stale},
+		{name: "missing head remains blocking", sql: `DELETE FROM youtube_live_reconciliation_heads`, status: Unavailable, reason: Inconsistent},
+		{name: "missing video target cannot exclude", sql: `DELETE FROM youtube_collection_targets WHERE observation_kind='video_live_check'`, status: Unavailable, reason: Stale},
+		{name: "stale observed clock cannot exclude", sql: `UPDATE youtube_video_availability SET observed_at=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},
+		{name: "future receipt cannot exclude", sql: `UPDATE youtube_video_availability SET received_at=now()+interval '1 minute'`, status: Unavailable, reason: Stale},
+		{name: "unavailable pending is retained without blocking", sql: `INSERT INTO youtube_live_pending_ends
+ (video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
+ VALUES('livequery01','UC_live_query','EXPLICIT_END',900003,now(),now(),now(),true,true)`, status: Complete, reason: Covered},
+		{name: "pending identity mismatch still blocks", sql: `INSERT INTO youtube_live_pending_ends
+ (video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
+ VALUES('livequery01','UC_other','EXPLICIT_END',900003,now(),now(),now(),true,true)`, status: Unavailable, reason: Inconsistent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, pool := queryFixture(t)
+			addCoverage(t, pool)
+			addLive(t, pool)
+			execFixture(t, pool, `UPDATE youtube_live_reconciliation_heads
+ SET last_live_positive_at=now()-interval '6 minutes',last_live_positive_seen_at=now()-interval '6 minutes';
+ INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
+ SELECT generation,'livequery01','video_live_check',20,120000,true,valid_until FROM youtube_collection_projection_generations WHERE status='CURRENT';
+ INSERT INTO youtube_video_availability(video_id,channel_id,provider,identity_confirmed,availability,method,evidence_sha256,scheduled_for,effective_at,observed_at,received_at)
+ VALUES('livequery01','UC_live_query','youtubejs',true,'PUBLIC_UNAVAILABLE','player_private',repeat('d',64),
+ now()-interval '30 seconds',now()-interval '30 seconds',now()-interval '29 seconds',now()-interval '29 seconds');`)
+
+			if tc.sql != "" {
+				execFixture(t, pool, tc.sql)
+			}
+
+			for _, request := range []Request{{Scope: All, Limit: MaxItems}, {Scope: Member, ChannelID: "UC_live_query", Limit: MaxItems}} {
+				result, err := repo.Query(t.Context(), request)
+				require.NoError(t, err)
+				require.Equal(t, tc.status, result.Status)
+				require.Equal(t, tc.reason, result.Channels[0].Reason)
+				require.Len(t, result.Items, tc.items)
+			}
+		})
+	}
+}
+
+func seedCrossChannelPending(t *testing.T, pool *pgxpool.Pool, otherOrg, sessionChannel, sessionStatus string) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `INSERT INTO members(slug,channel_id,english_name,org,sync_source)
+ VALUES('live-query-other','UC_other_query','Other Member',$1,'manual')`, otherOrg)
+	require.NoError(t, err)
+	execFixture(t, pool, `INSERT INTO youtube_collection_targets SELECT projection_generation,'UC_other_query',observation_kind,priority,poll_interval_ms,enabled,valid_until,created_at FROM youtube_collection_targets WHERE subject_key='UC_live_query';
+ INSERT INTO youtube_channel_live_checks(channel_id,provider,outcome,channel_identity_confirmed,evidence_sha256,scheduled_for,effective_at,observed_at,received_at)
+ SELECT 'UC_other_query',provider,outcome,channel_identity_confirmed,evidence_sha256,scheduled_for,effective_at,observed_at,received_at FROM youtube_channel_live_checks WHERE channel_id='UC_live_query'`)
+
+	_, err = pool.Exec(t.Context(), `UPDATE youtube_live_sessions SET channel_id=$1,status=$2 WHERE video_id='livequery01'`, sessionChannel, sessionStatus)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `UPDATE youtube_live_reconciliation_heads SET status=$1 WHERE video_id='livequery01'`, sessionStatus)
+	require.NoError(t, err)
+	execFixture(t, pool, `INSERT INTO youtube_live_pending_ends
+ (video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
+ VALUES('livequery01','UC_live_query','EXPLICIT_END',900002,now(),now(),now(),true,true)`)
 }

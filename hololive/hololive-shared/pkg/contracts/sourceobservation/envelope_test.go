@@ -17,6 +17,7 @@ func TestProviderAndObservationKindVocabulary(t *testing.T) {
 	for _, kind := range []ObservationKind{
 		KindCommunityPage, KindVideoList, KindShortsList, KindLiveSnapshot,
 		KindViewerSample, KindChannelStats, KindChannelProfile, KindChannelPhoto, KindSchedule,
+		KindChannelLiveCheck, KindVideoLiveCheck,
 	} {
 		if !kind.Valid() {
 			t.Fatalf("kind %q is invalid", kind)

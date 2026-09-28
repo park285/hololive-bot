@@ -44,13 +44,25 @@ func newDispatcherForTest(
 ) *Dispatcher {
 	tb.Helper()
 
+	return newDispatcherWithDepsForTest(tb, db, Dependencies{Cache: cacheClient, Sender: sender, Renderer: renderer}, logger, config)
+}
+
+// newDispatcherWithDepsForTest는 db가 nil이면 실제 seed DB와 단위 claim/transition 대역으로 dispatcher를 만든다.
+func newDispatcherWithDepsForTest(
+	tb testing.TB,
+	db *pgxpool.Pool,
+	deps Dependencies,
+	logger *slog.Logger,
+	config *dispatchstate.Config,
+) *Dispatcher {
+	tb.Helper()
+
 	unitTransition := db == nil
 	if unitTransition {
 		db = newDeliveryPool(tb)
 	}
 
-	deps := Dependencies{DB: db, Cache: cacheClient, Sender: sender, Renderer: renderer}
-
+	deps.DB = db
 	deps.MessageStrings = messagestrings.NewStore(db, logger)
 
 	if deps.Renderer == nil {
