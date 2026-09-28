@@ -184,9 +184,9 @@ if grep -Fq 'no previous collector release to roll back to; fix forward' "${ROLL
 else
   record_fail "ap-host-native rollback must refuse hosts without a previous collector release"
 fi
-native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
+native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
 # cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
-cutover_stop_step="$(awk '/^trap restore_native_after_failed_cutover ERR$/ { on = 1 } on && /^sudo -n install / { exit } on' "${REMOTE_APPLY}")"
+cutover_stop_step="$(awk '/^arm_native_cutover_restore$/ { on = 1 } on && /^sudo -n install / { exit } on' "${REMOTE_APPLY}")"
 stop_fixture="$(mktemp -d)"
 trap 'rm -rf "${stop_fixture}"' EXIT
 # 가짜 systemctl은 active unit을 파일로 두고 호출을 기록한다. socket stop은 Requires=처럼 service도 멈춘다.
@@ -298,7 +298,7 @@ else
 fi
 
 # 실패한 cutover는 ERR trap으로 복원하고 원래 실패 상태(여기서는 false의 1)로 끝난다.
-failed_cutover='set -Eeuo pipefail; trap restore_native_after_failed_cutover ERR; false'
+failed_cutover='set -Eeuo pipefail; arm_native_cutover_restore; false'
 restore_warning='could not be restored'
 restore_state="$(stop_case restore "${running_units[@]}")"
 run_native_case "${restore_state}" "${failed_cutover}"
@@ -321,6 +321,18 @@ if (( native_rc == 1 )) &&
   pass "ap-host-native failed-cutover restore stops at the first failed step and reports it"
 else
   record_fail "ap-host-native failed-cutover restore must stop at a failed step, warn, and keep the cutover status"
+fi
+
+# set -E로 ERR trap이 명령 치환에도 상속된다. 치환 안의 실패도 복원은 cutover shell에서 한 번만 하고 원래 상태로 끝난다.
+substitution_state="$(stop_case restore-substitution "${running_units[@]}")"
+run_native_case "${substitution_state}" 'set -Eeuo pipefail; arm_native_cutover_restore; ready="$(false)"; printf "%s\n" "${ready}"'
+if (( native_rc == 1 )) &&
+   ! grep -qF "${restore_warning}" "${substitution_state}/stderr" &&
+   [[ "$(grep -cFx 'enable --now hololive-youtube-collector@youtube-collector-a.service' "${substitution_state}/calls")" == 1 ]] &&
+   [[ "$(grep -cFx 'po_restore_previous '"${substitution_state}/old-release" "${substitution_state}/calls")" == 1 ]]; then
+  pass "ap-host-native failed-cutover restore runs once when a command substitution fails"
+else
+  record_fail "ap-host-native failed-cutover restore must run exactly once when a command substitution fails"
 fi
 
 capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"

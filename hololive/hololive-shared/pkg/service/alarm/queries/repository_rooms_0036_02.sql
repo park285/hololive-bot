@@ -7,6 +7,7 @@ kakao_room_names AS (
 	FROM alarms
 	WHERE room_name IS NOT NULL
 	  AND btrim(room_name) <> ''
+	  AND room_name <> room_id
 	ORDER BY room_id, room_name_updated_at DESC, id DESC
 )
 SELECT p.room_id,

@@ -36,7 +36,8 @@ func (r *Repository) GetAllDistinctRoomIDs(ctx context.Context) ([]string, error
 // ListAlarmEntries는 관리 목록용으로 방·채널 쌍을 하나씩 돌려준다. UNIT B 멤버 구독처럼 같은 채널에 host 행이 여럿이어도
 // (room_id, channel_id)는 한 번만 나온다. RoomName은 관리자 지정 이름(alarm_room_display_names)을 우선하고, 없으면
 // 그 방에서 room_name이 가장 최근에 바뀐(room_name_updated_at) 비어 있지 않은 alarms.room_name(Kakao 방 이름)이며,
-// 둘 다 없으면 빈 문자열이다. MemberName은 채우지 않는다.
+// 둘 다 없으면 빈 문자열이다. 방 ID와 같은 room_name은 Kakao 이름을 모를 때 저장된 자리표시자라 대표값에서 뺀다.
+// MemberName은 채우지 않는다.
 func (r *Repository) ListAlarmEntries(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	rows, err := r.pool.Query(ctx, mustSQL("repository_rooms_0036_02.sql"))
 	if err != nil {

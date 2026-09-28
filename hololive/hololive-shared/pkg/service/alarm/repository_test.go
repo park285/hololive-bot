@@ -176,6 +176,106 @@ func TestListAlarmEntriesUsesMostRecentlyChangedKakaoRoomName(t *testing.T) {
 	requireRoomName("새 방")
 }
 
+// Iris webhook에는 방 제목이 없어 bot은 방 ID를 RoomName으로 넘긴다. 운영 alarms에는 이렇게 room_name = room_id인
+// 행이 실제 Kakao 이름 행보다 나중에 바뀐 것으로 섞여 있다. 대표값은 관리자 이름 → Kakao 이름 → 방 ID이고,
+// 방 ID 자리표시자는 Kakao 이름을 가리지 못하며 재등록 upsert도 저장된 Kakao 이름을 방 ID로 덮어쓰지 못한다.
+func TestListAlarmEntriesPrefersKakaoRoomNameOverRoomIDPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repository := &Repository{pool: pool}
+	baseTime := time.Date(2026, time.September, 1, 9, 0, 0, 0, time.UTC)
+
+	// 옛 버전이 남긴 혼합 행: 실제 이름 행이 먼저, 방 ID 자리표시자 행이 더 최근 room_name_updated_at·더 큰 id로 들어 있다.
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO alarms (room_id, user_id, channel_id, room_name, alarm_types, room_name_updated_at)
+		VALUES
+			('room-mixed', 'user-1', 'UC_mixed_a', '홀로 방', ARRAY['LIVE']::alarm_type[], $1),
+			('room-mixed', 'user-1', 'UC_mixed_b', '홀로 방', ARRAY['LIVE']::alarm_type[], $1),
+			('room-mixed', 'user-1', 'UC_mixed_c', 'room-mixed', ARRAY['LIVE']::alarm_type[], $2),
+			('room-id-only', 'user-2', 'UC_id_only', 'room-id-only', ARRAY['LIVE']::alarm_type[], $2),
+			('room-aliased', 'user-3', 'UC_aliased', 'Kakao 방', ARRAY['LIVE']::alarm_type[], $1)
+	`, baseTime, baseTime.Add(time.Hour)); err != nil {
+		t.Fatalf("insert mixed room-name alarms: %v", err)
+	}
+
+	if err := repository.SetRoomDisplayName(ctx, "room-aliased", "관리자 이름"); err != nil {
+		t.Fatalf("SetRoomDisplayName() error = %v", err)
+	}
+
+	// bot 경로 재등록과 새 채널 등록은 방 ID를 이름으로 넘긴다.
+	addWithRoomIDName := func(channelID string) {
+		t.Helper()
+
+		if err := repository.Add(ctx, &domain.Alarm{
+			RoomID:     "room-mixed",
+			UserID:     "user-1",
+			ChannelID:  channelID,
+			RoomName:   "room-mixed",
+			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts},
+		}); err != nil {
+			t.Fatalf("Add(%s) error = %v", channelID, err)
+		}
+	}
+
+	addWithRoomIDName("UC_mixed_a")
+	addWithRoomIDName("UC_mixed_d")
+
+	requireStoredRoomName(t, pool, "UC_mixed_a", "홀로 방", baseTime)
+	requireStoredRoomName(t, pool, "UC_mixed_d", "", time.Time{})
+	requireListedRoomNames(t, repository, 6, map[string]string{
+		"room-mixed":   "홀로 방",
+		"room-id-only": "",
+		"room-aliased": "관리자 이름",
+	})
+}
+
+// requireStoredRoomName은 room-mixed 방의 채널 행에 저장된 room_name을 확인한다. 기대 시각이 0이 아니면
+// room_name_updated_at도 그대로여야 한다.
+func requireStoredRoomName(t *testing.T, pool *pgxpool.Pool, channelID, wantName string, wantUpdatedAt time.Time) {
+	t.Helper()
+
+	var (
+		name      string
+		updatedAt time.Time
+	)
+
+	if err := pool.QueryRow(t.Context(), `
+		SELECT COALESCE(room_name, ''), room_name_updated_at FROM alarms WHERE room_id = 'room-mixed' AND channel_id = $1
+	`, channelID).Scan(&name, &updatedAt); err != nil {
+		t.Fatalf("select alarm %s: %v", channelID, err)
+	}
+
+	if name != wantName || (!wantUpdatedAt.IsZero() && !updatedAt.Equal(wantUpdatedAt)) {
+		t.Fatalf("alarm %s room name = %q updated %s, want %q updated %s", channelID, name, updatedAt, wantName, wantUpdatedAt)
+	}
+}
+
+func requireListedRoomNames(t *testing.T, repository *Repository, wantPairs int, want map[string]string) {
+	t.Helper()
+
+	entries, err := repository.ListAlarmEntries(t.Context())
+	if err != nil {
+		t.Fatalf("ListAlarmEntries() error = %v", err)
+	}
+
+	if len(entries) != wantPairs {
+		t.Fatalf("entries = %d, want %d room-channel pairs", len(entries), wantPairs)
+	}
+
+	for _, entry := range entries {
+		wantName, ok := want[entry.RoomID]
+		if !ok {
+			t.Fatalf("unexpected entry %s/%s", entry.RoomID, entry.ChannelID)
+		}
+
+		if entry.RoomName != wantName {
+			t.Fatalf("entry %s/%s room name = %q, want %q", entry.RoomID, entry.ChannelID, entry.RoomName, wantName)
+		}
+	}
+}
+
 func insertAlarmForTypeQuery(t *testing.T, db *pgxpool.Pool, roomID, channelID string, alarmTypes domain.AlarmTypes, createdAt time.Time) {
 	t.Helper()
 

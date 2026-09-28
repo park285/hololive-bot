@@ -21,6 +21,8 @@ type RuntimeHTTPServers struct {
 	H3      *http3.Server
 	Metrics *http.Server
 	Pprof   *http.Server
+
+	h3Requests *h3RequestDrain
 }
 
 func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerConfig, handler http.Handler, operation string,
@@ -34,12 +36,15 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	servers := &RuntimeHTTPServers{}
 
 	if serverConfig.TransportEnabled("h3") {
-		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), handler, serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
+		drain := &h3RequestDrain{}
+
+		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), drain.wrap(handler), serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
 		if err != nil {
 			return nil, fmt.Errorf("H3 server: %w", err)
 		}
 
 		servers.H3 = h3Server
+		servers.h3Requests = drain
 	}
 
 	if metricsAddr := strings.TrimSpace(serverConfig.MetricsAddr); metricsAddr != "" {
@@ -101,7 +106,7 @@ func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	err := ShutdownH3Server(ctx, s.H3)
+	err := shutdownH3Server(ctx, s.H3, s.h3Requests)
 	if s.Metrics != nil {
 		err = errors.Join(err, runtimehttpserver.Shutdown(ctx, s.Metrics, "metrics server shutdown failed"))
 	}
@@ -119,18 +124,6 @@ func StartH3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error
 	}
 
 	runtimehttpserver.StartServerWithPrefix(server, "HTTP/3 server error", logger, errCh)
-}
-
-func ShutdownH3Server(ctx context.Context, server *http3.Server) error {
-	if server == nil {
-		return nil
-	}
-
-	if err := runtimehttpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed"); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
-	}
-
-	return nil
 }
 
 func runtimeH3Addr(serverConfig *settings.ServerConfig) string {

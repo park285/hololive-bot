@@ -20,10 +20,12 @@ ARG NODE_VERSION=24
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS youtubejs-build
 WORKDIR /app/youtubejs
 # checkout umask와 무관하게 runtime uid가 읽도록 context 파일 모드를 정규화한다.
-COPY --chmod=u=rwX,go=rX hololive/hololive-youtube-collector/youtubejs/package.json hololive/hololive-youtube-collector/youtubejs/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
-COPY --chmod=u=rwX,go=rX hololive/hololive-youtube-collector/youtubejs/src ./src
-RUN rm -f ./src/*.test.mjs
+# 기호 COPY --chmod는 BuildKit 전용이라 CONTAINER_CLI=podman(buildah)에서도 같은 결과가 나오도록 RUN chmod로 맞춘다.
+COPY hololive/hololive-youtube-collector/youtubejs/package.json hololive/hololive-youtube-collector/youtubejs/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm chmod u=rwX,go=rX package.json package-lock.json && \
+    corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+COPY hololive/hololive-youtube-collector/youtubejs/src ./src
+RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
 # Keep build-time npm execution native, but source the shipped Node binary and libraries from the
 # target platform. This makes x86_64-hosted linux/arm64 release builds architecture-correct.

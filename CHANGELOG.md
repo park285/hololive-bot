@@ -8,8 +8,16 @@
 
 ## 미출시
 
-- 이미지 빌드가 checkout의 umask에 따라 파일 모드가 달라지던 결함을 고칩니다. v7.0.0 배포에서 umask 077 checkout으로 빌드한 PO issuer 이미지의 `/app/po-sandbox` 파일이 600이라 uid 65532가 `worker.mjs`를 열지 못했고(EACCES) 중앙 쌍이 자동 rollback됐습니다. alarm-worker 이미지에도 600 파일이 들어갔습니다. PO issuer·collector·alarm-worker Dockerfile은 이미지에 실리는 Node 트리(`package.json`·`package-lock.json`·`src`)를 `COPY --chmod=u=rwX,go=rX`로 복사해 파일 644·디렉터리 755로 맞춥니다. 소유자와 umask 022 checkout의 산출물은 그대로입니다. `scripts/build/image-runtime-tree-permissions_test.sh`가 umask 077 checkout을 재현해 세 build stage를 빌드하고 runtime uid로 트리 전체를 읽는지 확인하며, pre-push 게이트는 이 Dockerfile들이 바뀔 때 이를 실행합니다(docker 필요, kapu 전용).
+## v7.0.1 - 2026-09-29
+
+- 이미지 빌드가 checkout의 umask에 따라 파일 모드가 달라지던 결함을 고칩니다. v7.0.0 배포에서 umask 077 checkout으로 빌드한 PO issuer 이미지의 `/app/po-sandbox` 파일이 600이라 uid 65532가 `worker.mjs`를 열지 못했고(EACCES) 중앙 쌍이 자동 rollback됐습니다. alarm-worker 이미지에도 600 파일이 들어갔습니다. PO issuer·collector·alarm-worker Dockerfile은 이미지에 실리는 Node 트리(`package.json`·`package-lock.json`·`src`)를 복사한 뒤 Node build stage에서 `chmod u=rwX,go=rX`로 파일 644·디렉터리 755로 맞춥니다. 기호 `COPY --chmod`는 BuildKit 전용이라 `CONTAINER_CLI=podman`(buildah)에서도 같은 결과가 나오도록 `RUN chmod`를 씁니다. 소유자와 umask 022 checkout의 산출물(모드·소유자·크기·내용)은 그대로입니다. `scripts/build/image-runtime-tree-permissions_test.sh`가 umask 077 checkout을 재현해 세 build stage를 빌드하고 runtime uid로 트리 전체를 읽는지 확인하며, pre-push 게이트는 이 Dockerfile들이 바뀔 때 이를 실행합니다(docker 필요, kapu 전용).
 - 정기 보안 workflow의 NilAway가 v7.0.0 LIVE 구독 복구 테스트 stub의 `QueryRow`가 `nil` row를 돌려주는 것을 잠재 nil panic으로 거절하던 문제를 고칩니다. stub은 이제 `Scan`에서 같은 조회 실패를 돌려주는 row를 반환합니다. 운영 코드와 산출물은 바뀌지 않습니다.
+- 정상 SIGTERM 정지가 exit 1로 끝나던 결함을 고칩니다. v7.0.0 cutover에서 hololive-api와 alarm-worker를 함께 멈추자 먼저 끝난 API의 HTTP/3 연결이 CONNECTION_CLOSE 없이 남았고, quic-go `Shutdown`은 GOAWAY 뒤 client가 연결을 닫기를 기다려 QUIC idle timeout(60s)이 종료 시한(10s)보다 길어 `HTTP/3 server shutdown failed: context deadline exceeded`로 실패했습니다. 발송 중인 작업은 없었습니다. `RuntimeHTTPServers`(alarm-worker·admin·llm·collector)는 H3 handler에서 실행 중인 요청을 세고, 종료 시한에 실행 중인 요청이 없으면 남은 idle 연결을 닫고 성공합니다. 시한에 요청이 실행 중이면 지금처럼 종료 실패입니다. 시한 전에는 client가 응답을 받고 연결을 닫을 때까지 그대로 기다립니다.
+- 관리 알림 목록의 방 이름이 Kakao 방 이름 대신 방 ID로 보이던 결함을 고칩니다. Iris webhook은 방 제목을 싣지 않아 bot은 방 ID를 `RoomName`으로 넘기고, 재등록 upsert가 저장된 Kakao 방 이름과 `room_name_updated_at`을 방 ID로 덮어써 대표값이 됐습니다. 알림 저장은 방 ID와 같은 이름을 빈 이름으로 저장해 기존 Kakao 이름을 보존하고, 대표값 선택은 `room_name = room_id` 행을 뺍니다. 표시 순서는 관리자 이름 → Kakao 방 이름 → 방 ID 그대로입니다. 운영 DB의 기존 행은 바꾸지 않습니다.
+- host-native collector cutover의 실패 복원이 한 번의 실패에 두 번 돌던 결함을 고칩니다. `set -E`로 ERR trap이 명령 치환에도 상속돼 `ready="$(collector_readiness_poll …)"` 같은 치환 안의 실패가 subshell과 부모에서 각각 `restore_native_after_failed_cutover`를 불렀습니다. 복원은 trap을 건 shell에서만 실행하고 subshell은 원래 상태로 끝납니다.
+- `hololive_alarm_subscriber_db_fallback_total`의 `result`(`hit`·`miss`·`error`) series를 기동 때 0으로 만들어 첫 관측 전에도 보이게 합니다.
+- `scripts/ci/python-runner.sh`를 iris-bridge 정본과 맞춥니다. 인자를 해석기 조회 전에 검사해 `--`만 주거나 `--print-interpreter` 뒤에 인자가 있거나 모드가 없으면 usage와 exit 2로 끝나고, `.python-version`은 symlink가 아닌 정규 파일에 정확히 한 줄(`3.14.7` + 개행)만 허용합니다.
+- `scripts/ci/check-recurring-security-scan-contract.sh`의 production bake 검사가 target 하나만 attestation을 요청해도 통과하던 것을, PO issuer(rootfs tar로 export해 attestation을 실을 수 없음)를 뺀 모든 target이 최대 provenance와 SBOM을 요청하는지로 좁힙니다. Compose 5.5.1 `build --print`가 항상 내는 `No services to build` 경고(출력 전용 경로라 빌드한 이미지가 없음)만 거르고 나머지 stderr는 보입니다.
 
 ## v7.0.0 - 2026-09-29
 
