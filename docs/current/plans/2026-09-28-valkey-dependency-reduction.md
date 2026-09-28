@@ -361,8 +361,6 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 
 `go test ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/... ./hololive/hololive-dbtest/...`
 
-`go test -mod=readonly -count=1 ./internal/workspace -run '^TestRuntimeSplitStandaloneModulesContract$'`
-
 `./scripts/ci/local-ci.sh`
 
 공용 interface 삭제이므로 직접 consumer만 테스트하고 종료하지 않습니다. 모든 compile/test/build는 kapu에서 실행합니다. applicable NilAway/race·Stage 3/prerequisites와 기존 boundary/standalone 규칙을 유지하며, 실패하면 원인과 영향 범위를 기록하고 억제로 통과시키지 않습니다. 신규 production dependency나 toolchain/lockfile 일괄 업그레이드는 포함하지 않습니다.

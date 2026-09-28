@@ -55,75 +55,114 @@ if ! jq -e -f scripts/ci/disabled-bake-attestations.jq "$tmp_dir/security-scan-b
   fail "disposable local-image scan builds must not request unsupported attestations"
 fi
 
+# 최종 이미지 스캔은 발견 시 실패하고 어떤 억제도 두지 않는다. 정책 배열과, 실제 스캐너가
+# 가짜 trivy에 넘긴 인자를 같은 규칙으로 검사한다.
+. scripts/ci/final-image-scan-policy.sh
+check_trivy_args() {
+  local label="$1" arg key value
+  shift
+  local -A count=() seen=()
+  local -a positional=()
+  while (($#)); do
+    arg="$1"
+    shift
+    [[ "$arg" != *trivyignore* ]] || fail "$label: trivyignore input is not allowed: $arg"
+    if [[ "$arg" != --* ]]; then
+      positional+=("$arg")
+      continue
+    fi
+    key="${arg%%=*}"
+    if [[ "$arg" == *=* ]]; then
+      value="${arg#*=}"
+    else
+      case "$key" in
+        --config | --ignorefile | --exit-code | --scanners | --severity | --format | --output | --image-src | --platform)
+          (($#)) || fail "$label: $key has no value"
+          value="$1"
+          shift
+          ;;
+        *) value=true ;;
+      esac
+    fi
+    case "$key" in
+      --config | --ignorefile | --ignore-unfixed | --exit-code | --no-progress | --scanners | --severity | --format | --output | --image-src | --platform) ;;
+      *) fail "$label: flag outside the no-suppression allowlist: $arg" ;;
+    esac
+    count[$key]=$((${count[$key]:-0} + 1))
+    seen[$key]="$value"
+  done
+  for key in "${!count[@]}"; do
+    [[ "${count[$key]}" == 1 ]] || fail "$label: $key must appear exactly once"
+  done
+  [[ "${seen[--config]-}" == /dev/null ]] || fail "$label: --config must be /dev/null"
+  [[ "${seen[--ignorefile]-}" == /dev/null ]] || fail "$label: --ignorefile must be /dev/null"
+  [[ "${seen[--ignore-unfixed]-}" == false ]] || fail "$label: --ignore-unfixed=false is required"
+  [[ "${seen[--exit-code]-}" == 1 ]] || fail "$label: --exit-code 1 is required"
+  [[ "${seen[--scanners]-}" == vuln ]] || fail "$label: --scanners vuln is required"
+  [[ "${seen[--severity]-}" == UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL ]] ||
+    fail "$label: every severity must be reported"
+  [[ "${positional[0]-}" == image ]] || fail "$label: trivy subcommand must be image"
+  scanned_positional=("${positional[@]:1}")
+  scanned_image_src="${seen[--image-src]-}"
+  scanned_platform="${seen[--platform]-}"
+}
+check_trivy_args "final-image-scan-policy.sh" "${FINAL_IMAGE_TRIVY_ARGS[@]}"
+((${#scanned_positional[@]} == 0)) || fail "policy args must not name an image"
+
+stub_bin="$tmp_dir/stub-bin"
+mkdir -p "$stub_bin" "$tmp_dir/trivy-calls" "$tmp_dir/scan-tmp"
+cat >"$stub_bin/trivy" <<'SH'
+#!/usr/bin/env bash
+set -eu
+if [[ "$*" == --version ]]; then echo "Version: $STUB_TRIVY_VERSION"; exit 0; fi
+call="$STUB_TRIVY_CALLS/$(find "$STUB_TRIVY_CALLS" -name '*.args' | wc -l).args"
+printf '%s\0' "$@" >"$call"
+env | grep '^TRIVY_' >"${call%.args}.env" || true
+while (($#)) && [[ "$1" != --output ]]; do shift; done
+echo '{"SchemaVersion":2,"Results":[{"Target":"stub","Type":"alpine"}]}' >"$2"
+SH
+cat >"$stub_bin/docker" <<'SH'
+#!/usr/bin/env bash
+set -eu
+[[ "$1 $2" == "image inspect" ]] || exit 2
+if [[ "$4" == *Architecture* ]]; then echo linux/arm64; else echo "sha256:$(printf '0%.0s' {1..64})"; fi
+SH
+printf '%s\n' '#!/usr/bin/env bash' 'echo govulncheck@v1.8.0' >"$stub_bin/govulncheck"
+chmod +x "$stub_bin"/*
+remote_image="$(grep -m1 '^remote|' scripts/ci/final-image-scan-manifest.txt)"
+local_image="$(grep -m1 '^local|' scripts/ci/final-image-scan-manifest.txt)"
+printf '%s\n' "$remote_image" "$local_image" >"$tmp_dir/stub-manifest"
+# env -i: 호출 환경의 TRIVY_* 가 아니라 스캐너 자신이 넘기는 설정만 관찰한다.
+env -i PATH="$stub_bin:$PATH" HOME="$tmp_dir" TMPDIR="$tmp_dir/scan-tmp" \
+  STUB_TRIVY_VERSION="$FINAL_IMAGE_TRIVY_VERSION" STUB_TRIVY_CALLS="$tmp_dir/trivy-calls" \
+  bash scripts/ci/run-final-image-scan.sh "$tmp_dir/stub-manifest" >"$tmp_dir/scan.log" 2>&1 ||
+  fail "final-image scanner failed against a clean stub report: $(cat "$tmp_dir/scan.log")"
+expected=("remote|remote|${remote_image##*|}" "docker|local|sha256:$(printf '0%.0s' {1..64})")
+[[ "$(find "$tmp_dir/trivy-calls" -name '*.args' | wc -l)" == 2 ]] ||
+  fail "final-image scanner must invoke trivy once per manifest image"
+for index in 0 1; do
+  [[ ! -s "$tmp_dir/trivy-calls/$index.env" ]] ||
+    fail "final-image scanner must not configure trivy through TRIVY_* environment"
+  mapfile -d '' -t scanned_args <"$tmp_dir/trivy-calls/$index.args"
+  check_trivy_args "run-final-image-scan.sh call $index" "${scanned_args[@]}"
+  IFS='|' read -r want_src want_source want_image <<<"${expected[index]}"
+  [[ "$scanned_image_src" == "$want_src" && "$scanned_platform" == linux/arm64 ]] ||
+    fail "$want_source images must be scanned from $want_src for linux/arm64"
+  [[ "${scanned_positional[*]}" == "$want_image" ]] ||
+    fail "$want_source scan must target exactly $want_image, got: ${scanned_positional[*]}"
+done
+
 workflow=.github/workflows/security.yml
-for required in \
-  'bash scripts/ci/check-recurring-security-scan-contract.sh' \
-  'bash scripts/ci/run-npm-audit.sh' \
-  'bash scripts/ci/test-infra-images.sh' \
-  './build-all.sh --no-bump --build-only --security-scan --skip-local-ci' \
-  'bash scripts/ci/run-final-image-scan.sh' \
-  'DOCKER_DEFAULT_PLATFORM: linux/arm64' \
-  'TRIVY_VERSION: "0.74.0"' \
-  'TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a' \
-  'DOCKER_COMPOSE_VERSION: v5.5.1' \
-  'DOCKER_COMPOSE_LINUX_X86_64_SHA256: db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576' \
-  'https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64' \
-  'https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz' \
-  'sha256sum --check -'; do
-  grep -Fq "$required" "$workflow" || fail "security workflow is missing: $required"
-done
-
-grep -Fq 'corepack "$npm_package_manager" audit --package-lock-only --audit-level=high' scripts/ci/run-npm-audit.sh ||
-  fail "npm audit must use the exact integrity-bound packageManager"
-
-scanner=scripts/ci/run-final-image-scan.sh
-grep -Fq -- '--config /dev/null --ignorefile /dev/null --ignore-unfixed=false --exit-code 1' "$scanner" ||
-  fail "final-image scanning must fail on findings without vulnerability exceptions"
-grep -Fq -- '--severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"' "$scanner" ||
-  fail "final-image scanning must retain every vulnerability severity"
-for required in '-mode=extract' '-mode=binary -scan=package -format=openvex' 'check-go-image-vex.jq' 'pkgSymbols' 'sha256sum'; do
-  grep -Fq -- "$required" "$scanner" || fail "Go image finding proof is missing: $required"
-done
-grep -Fq 'vulnerable_code_not_present' scripts/ci/check-go-image-vex.jq ||
-  fail "Go module findings require package absence, not a reachability exception"
-if grep -Eq -- 'trivyignore-|exception_target|--skip-files|--skip-dirs|--ignore-policy' "$scanner"; then
-  fail "final-image scanning must not suppress package or vulnerability findings"
+if grep -Eq '^[[:space:]-]*uses:[[:space:]]*aquasecurity/' "$workflow"; then
+  fail "security workflow must install the hash-pinned Trivy release, not an aquasecurity action"
 fi
-grep -Fq 'scan_args+=(--image-src remote --platform "$platform")' "$scanner" ||
-  fail "exact external images must be scanned from the registry for their declared platform"
-grep -Fq "actual_platform=\"\$(docker image inspect --format '{{.Os}}/{{.Architecture}}' \"\$image\")\"" "$scanner" ||
-  fail "locally built images must be verified as the declared production platform"
-
-[[ "$(grep -Fc 'DOCKER_COMPOSE_VERSION: v5.5.1' "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must install the exact Docker Compose release"
-# Python 부트스트랩은 저장소 composite action 이 소유하고, subdirectory checkout(path: hololive-bot)을
-# 쓰는 두 job 은 그 action 을 checkout 경로로 호출한다. action 사본 parity 와 핀 값은 iris-stack 이 본다.
-python_runtime_action=.github/actions/python-runtime/action.yml
-[[ "$(grep -Fc 'uses: ./hololive-bot/.github/actions/python-runtime' "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must bootstrap Python through the repository python-runtime action"
-[[ "$(grep -Fc '          working-directory: hololive-bot' "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must point the python-runtime action at the hololive-bot checkout"
-if grep -Fq -e 'actions/setup-python@' -e 'uv==0.12.18' -e 'python-runner.sh --print-interpreter' "$workflow"; then
-  fail "recurring scan jobs must not inline the Python bootstrap"
+trivy_step="$(awk '/^      - name: Install exact Trivy$/ { f = 1; print; next } f && /^      - name:/ { f = 0 } f' "$workflow")"
+grep -Fxq "          TRIVY_VERSION: \"$FINAL_IMAGE_TRIVY_VERSION\"" <<<"$trivy_step" ||
+  fail "security workflow must install Trivy $FINAL_IMAGE_TRIVY_VERSION required by the scanner"
+# shellcheck disable=SC2016 # workflow의 셸 식을 글자 그대로 찾는다.
+if ! grep -Eq '^          TRIVY_LINUX_AMD64_SHA256: [0-9a-f]{64}$' <<<"$trivy_step" ||
+  ! grep -Fq '"${TRIVY_LINUX_AMD64_SHA256}" "${archive}" | sha256sum --check -' <<<"$trivy_step"; then
+  fail "security workflow must verify the Trivy archive against a pinned sha256"
 fi
-grep -Fq 'python-version-file: ${{ inputs.working-directory }}/.python-version' "$python_runtime_action" ||
-  fail "python-runtime action must install the exact Python runtime from the checkout .python-version"
-grep -Fq 'run: bash "${{ github.action_path }}/install-uv.sh"' "$python_runtime_action" ||
-  fail "python-runtime action must use the hash-verified uv installer"
-# 설치기 전체 byte와 release hash는 workflow CI owner 검사와 스택 parity 검사가 검증한다.
-bash scripts/ci/python-runner.sh -- scripts/ci/check-workflow-ci-owner.py
-grep -Fq 'interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"' "$python_runtime_action" ||
-  fail "python-runtime action must initialize the exact Python interpreter"
-grep -Fq "CI_PYTHON_BIN=%s" "$python_runtime_action" ||
-  fail "python-runtime action must export the exact Python interpreter"
-grep -Fq "CI_PYTHON_RUNTIME_ROOT=%s" "$python_runtime_action" ||
-  fail "python-runtime action must export the Python runtime root"
-
-if grep -Fq 'uses: aquasecurity/' "$workflow"; then
-  fail "security workflow must not use actions blocked by the repository allowlist"
-fi
-
-[[ "$(grep -Fc "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" "$workflow")" -eq 4 ]] ||
-  fail "all four final image install/setup/build/scan steps must be restricted to scheduled or explicit dispatch runs"
 
 echo "recurring npm and final-image security scan contract passed"

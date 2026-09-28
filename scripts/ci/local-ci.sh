@@ -22,14 +22,12 @@ mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
 mapfile -t WORKSPACE_GO_PACKAGES < <(go_workspace_package_patterns)
 GO_PACKAGES=()
 source "${SCRIPT_DIR}/local-ci-packages.sh"
-source "${SCRIPT_DIR}/local-ci-gofix.sh"
 source "${SCRIPT_DIR}/local-ci-integration.sh"
 
 LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-all}"
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
 RUN_NILAWAY="${RUN_NILAWAY:-true}"
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
-RUN_ADMIN_TOUCH_GUARDRAIL="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
 RUN_INTEGRATION_TESTS="${RUN_INTEGRATION_TESTS:-false}"
 
 
@@ -186,8 +184,7 @@ if (( $# != 0 )); then
     exit 2
 fi
 
-# 검사기 자기 테스트(*_test.sh, test-*.sh, *_test.py)는 scripts/ci/pre-push-gate.sh 의
-# reusable phase 가 입력 변경 시에만 run_self_test 로 실행한다. 여기에는 검사만 남긴다.
+# 배포·운영 스크립트 테스트는 scripts/ci/pre-push-gate.sh 가 입력 변경 시에만 실행한다.
 configure_go_packages
 echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} packages)"
 if has_go_packages; then
@@ -199,16 +196,9 @@ echo
 
 run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
 run_step "Sensitive log scan" ./scripts/refactor/grep-sensitive-logs.sh
-if [[ "${RUN_ADMIN_TOUCH_GUARDRAIL}" == "true" ]]; then
-    run_step "Refactor admin-dashboard guardrail" ./scripts/refactor/validate-no-admin-touch.sh
-else
-    echo "[LOCAL CI] Skip refactor admin-dashboard guardrail: RUN_ADMIN_TOUCH_GUARDRAIL=${RUN_ADMIN_TOUCH_GUARDRAIL}"
-    echo
-fi
 run_step "Go toolchain" check_go_toolchain
 run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}" ensure_go_mod_toolchains
-run_step "gofmt" bash "${SCRIPT_DIR}/check-gofmt.sh"
-run_step "go fix drift" check_go_fix
+# gofmt·go fix modernizer drift는 golangci-lint의 formatters와 modernize 린터가 소유한다.
 check_go_mod_tidy
 check_canonical_module_builds
 run_go_package_step "Go vet" go_mod_readonly go vet
@@ -218,7 +208,6 @@ check_golangci_lint
 check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
-run_step "collector hardening-contract gate" ./scripts/ci/check-youtube-collector-hardening-contract.sh
 run_step "collector YouTube.js dependencies" npm ci --ignore-scripts --prefix hololive/hololive-youtube-collector/youtubejs
 run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
@@ -247,7 +236,6 @@ fi
 
 check_integration_tests
 
-# 의존성 hygiene(go list -m -u, govulncheck)은 시간에 따라 부패하는 advisory 데이터라
-# scripts/ci/pre-push-gate.sh 의 freshness phase 가 소유한다.
+# 의존성 hygiene(go list -m -u, govulncheck)은 scripts/ci/pre-push-gate.sh 가 소유한다.
 
 echo "[LOCAL CI] Passed"

@@ -3,7 +3,7 @@ set -euo pipefail
 [[ $# == 0 ]] || { echo 'usage: build.sh' >&2; exit 2; }
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd "$root"
-inputs=(build.sh build_test.sh files/append_result.go.in files/capacity_guard.go.in
+inputs=(build.sh files/append_result.go.in files/capacity_guard.go.in
   files/http-good.go.in files/http-other.go.in files/http-pointer.go.in files/http-unchecked.go.in
   files/stack_model_version.go.in files/stack_models.go.in files/stack_models_test.go.in models.patch profile.json)
 for file in SHA256SUMS "${inputs[@]}"; do

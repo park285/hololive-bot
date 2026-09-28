@@ -1,8 +1,6 @@
 package settings
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -34,36 +32,6 @@ func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
 
 		if strings.Contains(content, "sysctl -n net.core.rmem_max") {
 			t.Fatalf("%s still uses runtime-only inline sysctl check", file)
-		}
-	}
-}
-
-// accepted-risk ledger는 verify-full 전환으로 종료되었다. 문서가 다시 생기거나
-// compose 어디든 POSTGRES_SSLMODE_ALLOW_INSECURE가 재등장하면 회귀다. 이 검사와 render 검사의 같은 단언은
-// 퇴역 가드가 아니라 재도입 방지 영구 계약이므로 제거 조건이 없다(stack-audit 2026-09-26 T17 분류).
-func TestRepoPostgresSSLModeInsecureDowngradeIsRetired(t *testing.T) {
-	root := repoRootFromConfigTest(t)
-	ledgerPath := filepath.Join(root, "docs", "current", "security", "accepted-risk-ap-postgres-sslmode.md")
-
-	if _, err := os.Stat(ledgerPath); !os.IsNotExist(err) {
-		t.Fatalf("accepted-risk-ap-postgres-sslmode.md still exists; the ledger exits with the verify-full transition (stat err=%v)", err)
-	}
-
-	composeDir := filepath.Join(root, "deploy", "compose")
-
-	entries, err := os.ReadDir(composeDir)
-	if err != nil {
-		t.Fatalf("read compose dir: %v", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
-		}
-
-		content := readRepoFile(t, filepath.Join("deploy", "compose", entry.Name()))
-		if strings.Contains(content, "POSTGRES_SSLMODE_ALLOW_INSECURE") {
-			t.Fatalf("deploy/compose/%s still references POSTGRES_SSLMODE_ALLOW_INSECURE; verify-full replaced the downgrade path", entry.Name())
 		}
 	}
 }

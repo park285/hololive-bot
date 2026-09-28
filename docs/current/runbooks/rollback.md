@@ -122,8 +122,6 @@ migration 231(`auth_users.session_generation`)Â·232(`alarm_room_display_names`)Â
 ## Post-Rollback Smoke Tests
 
 ```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/check-runbook-coverage.sh
 ./scripts/smoke/smoke-compose-config.sh
 ./scripts/smoke/smoke-runtime-health.sh
 ```

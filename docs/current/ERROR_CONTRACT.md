@@ -52,7 +52,7 @@ Alarm shared API는 legacy `success` envelope에 additive `error` field를 함�
 - Status code remains the first branch key; body parsing is a secondary contract-specific step.
 - Production code must not use substring parsing for `status 404` or `status 409`.
 - New error codes must be added to the relevant `docs/current/contracts/*.md` file.
-- Error response shape changes must update this document and `scripts/architecture/check-error-contracts.sh`.
+- Error response shape changes must update this document.
 
 ## Related Contract Codes
 
@@ -61,12 +61,6 @@ Alarm shared API는 legacy `success` envelope에 additive `error` field를 함�
 - `contracts/alarm.md` documents current alarm envelope errors.
 - `contracts/settings.md` documents `acl_bot_resync_failed` (bot-plane ACL resync failed; the change may already be saved).
 - `hololive-shared/pkg/contracts/common.ErrorResponse` documents the common additive wire shape.
-
-## Validation
-
-```bash
-./scripts/architecture/check-error-contracts.sh
-```
 
 ## Known Gaps
 

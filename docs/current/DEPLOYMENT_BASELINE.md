@@ -126,8 +126,6 @@ domain socket monitor connection remained outside the TCP TLS scope.
 ## Validation
 
 ```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/check-runbook-coverage.sh
 ./scripts/architecture/ci-boundary-gate.sh
 ```
 

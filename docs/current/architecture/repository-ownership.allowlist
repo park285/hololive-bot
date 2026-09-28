@@ -1,3 +1,5 @@
+# 문서 전용 표입니다. 어떤 게이트도 이 파일을 읽지 않습니다. 실제 table 접근은
+# scripts/architecture/check-sql-ownership.sh, module import는 check-repository-ownership.sh가 검증합니다.
 # data_area|owner|writers|readers
 x_space_session|owner=hololive-api|writers=hololive-api,hololive-alarm-worker|readers=hololive-api,hololive-alarm-worker
 x_space_starts|owner=alarm-worker|writers=hololive-alarm-worker|readers=hololive-alarm-worker

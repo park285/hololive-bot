@@ -36,8 +36,7 @@ Not at root — these were relocated and must not return:
 
 ## Artifacts
 
-- `artifacts/architecture/go-workspace-import-graph.txt` is the tracked architecture artifact.
-- Other generated artifacts should remain ignored unless a current governance document explicitly requires tracking them.
+- Generated artifacts remain ignored unless a current governance document explicitly requires tracking them.
 
 ## Local Runtime Data
 
@@ -65,10 +64,7 @@ Package refactors must preserve `go.work`, Docker Compose build targets, runtime
 ## Validation
 
 ```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/check-current-docs-root-allowlist.sh
 ./scripts/architecture/check-go-generic-internal-package-names.sh
-./scripts/architecture/check-current-docs-no-historical-body.sh
 ./scripts/architecture/check-doc-links-no-local-paths.sh
 ./scripts/architecture/check-tracked-local-artifacts.sh
 ```

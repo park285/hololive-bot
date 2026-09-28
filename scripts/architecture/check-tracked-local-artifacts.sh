@@ -38,7 +38,6 @@ is_allowed_exception() {
     scripts/ci/staticcheck-facts/objectpath.patch)
       return 0
       ;;
-    artifacts/architecture/go-workspace-import-graph.txt|\
     logs/.gitkeep|\
     runtime-config/.gitkeep|\
     runtime-config/README.md|\

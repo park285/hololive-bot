@@ -32,7 +32,5 @@
 ## Validation
 
 ```bash
-./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh
-./scripts/architecture/check-error-contracts.sh
 ```

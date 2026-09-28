@@ -40,14 +40,8 @@ LLM이 `hololive-bot` 문서/계약 작업을 수행할 때 지켜야 하는 cur
 ## Required Validation
 
 ```bash
-./scripts/architecture/check-project-map.sh
 ./scripts/architecture/check-doc-links-no-local-paths.sh
-./scripts/architecture/check-current-docs-no-historical-body.sh
-./scripts/architecture/check-current-docs-no-historical.sh
-./scripts/architecture/check-runbook-coverage.sh
-./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh
-./scripts/architecture/check-error-contracts.sh
 ```
 
 ## Completion Rule

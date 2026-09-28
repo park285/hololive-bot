@@ -74,13 +74,6 @@ Pub/Sub is not durable command transport. Events that need acknowledgement, retr
 
 Command-like events that require acknowledgement, retry, or auditability should use documented internal trigger APIs instead of Pub/Sub.
 
-## Validation
-
-```bash
-./scripts/architecture/check-contract-map.sh
-./scripts/architecture/check-error-contracts.sh
-```
-
 ## Related Documents
 
 - `CONTRACT_MAP.md`

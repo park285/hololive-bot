@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"io/fs"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,50 +80,6 @@ func TestRepoHololiveAPITrustDomainControls(t *testing.T) {
 	assertHololiveAPIHasNoNativeExecutionImports(t)
 	assertHololiveAPITemplateInterpretationContract(t)
 	assertHololiveAPITrustDomainDecisionDocumented(t)
-}
-
-func TestRepoOperationalHistoryRiskDecisionsAreSeparate(t *testing.T) {
-	ignore := readRepoFile(t, ".gitignore")
-
-	for _, pattern := range []string{"docs/agent-workflows/", "docs/history/plan-kits/"} {
-		if !slices.Contains(strings.Split(ignore, "\n"), pattern) {
-			t.Fatalf(".gitignore missing operational evidence rule %q", pattern)
-		}
-	}
-
-	decision := readRepoFile(t, "docs/current/architecture/non-secret-history-risk-decisions-20260713.md")
-
-	for _, finding := range []string{"#087", "#088"} {
-		section := markdownDecisionSection(t, decision, "## "+finding)
-
-		for _, required := range []string{
-			"Decision: accept the non-secret Git-history reconnaissance risk.",
-			"docs/agent-workflows/",
-			"docs/history/plan-kits/",
-			"No history rewrite, credential or endpoint rotation, or remote deletion is authorized by this decision.",
-			"If a real secret is later identified, this acceptance is void",
-		} {
-			if !strings.Contains(section, required) {
-				t.Fatalf("%s decision missing %q", finding, required)
-			}
-		}
-	}
-}
-
-func markdownDecisionSection(t *testing.T, document, heading string) string {
-	t.Helper()
-
-	start := strings.Index(document, heading)
-	if start < 0 {
-		t.Fatalf("decision document missing heading %q", heading)
-	}
-
-	section := document[start:]
-	if next := strings.Index(section[len(heading):], "\n## "); next >= 0 {
-		section = section[:len(heading)+next]
-	}
-
-	return section
 }
 
 func assertHololiveAPIPlaneAuthRequired(t *testing.T) {

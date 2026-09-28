@@ -59,9 +59,6 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 - Keep runtime binary and Docker Compose service entries aligned with `deploy/compose/docker-compose.prod.yml`.
 - Keep service docs and runbook links valid for all 3 runtime rows.
 - Keep contract docs aligned with `hololive/hololive-shared/pkg/contracts/*`.
-- Run `./scripts/architecture/check-project-map.sh` after changing `go.work`, module inventory, or repo-root docs references.
-- Run `./scripts/architecture/check-runbook-coverage.sh` after changing runtime docs or runbook links.
-- Run `./scripts/architecture/check-contract-map.sh` after changing contract docs or `hololive-shared/pkg/contracts/*`.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-collector AP fleet). `hololive-api` hosts the bot/admin/llm planes in one process on ports 30001/30003/30006.
 - Central host default `docker compose up -d` starts `hololive-api` + `hololive-alarm-worker` + `youtube-collector` (fleet member `c` on port 30025). AP overlays pin the unsuffixed central collector to profile `central-only` and start `youtube-collector-a/b/d` on that host.

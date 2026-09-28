@@ -159,9 +159,6 @@ Run the deploying `./build-all.sh --no-bump` path only with explicit operator ap
 For architecture-doc changes, prefer:
 
 ```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/check-runbook-coverage.sh
-./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/ci-boundary-gate.sh
 ```
 

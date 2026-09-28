@@ -7,7 +7,7 @@
 
 - `./scripts/ci/local-ci.sh`
 
-기본 gate는 architecture gates, Go toolchain pin, `go work sync` drift, `gofmt`, `go fix` drift, `go mod tidy -diff`, `go vet`, `staticcheck`, stage-3 `golangci-lint`, NilAway, `go build`, PGO-off production policy, `go test -count=1`, race detector, `govulncheck`를 포함합니다. PostgreSQL integration test는 `TEST_DATABASE_URL`이 설정된 경우 추가 실행합니다.
+기본 gate는 architecture gates, Go toolchain pin, `go work sync` drift, `go mod tidy -diff`, `go vet`, `staticcheck`, stage-3 `golangci-lint`(formatter·modernize 포함), NilAway, `go build`, PGO-off production policy, `go test -count=1`, race detector, `govulncheck`를 포함합니다. PostgreSQL integration test는 `TEST_DATABASE_URL`이 설정된 경우 추가 실행합니다.
 
 `staticcheck`는 `scripts/ci/staticcheck-facts/build.sh`가 검증·빌드한 binary만 씁니다. 인자 없이 실행하면 stdout에 binary 경로만 출력하고, 입력 manifest(`SHA256SUMS`)·module sum·zip hash·`-stack-profile-version` 신원이 어긋나면 재빌드 없이 실패합니다. 고정 x/tools objectpath 패치의 원인과 제거 조건은 `CHANGELOG.md`에 있습니다.
 
@@ -20,14 +20,10 @@ PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니
   - `check-shared-go-packages.sh`
   - `check-go-compat-adapters.sh`
   - `check-go-generic-internal-package-names.sh`
-  - `export-go-workspace-import-graph.sh`
-  - `check-current-docs-root-allowlist.sh`
   - `check-go-toolchain-parity.sh`
   - `check-go-alarm-contracts.sh`
   - `check-go-trigger-route-hardcoding.sh`
-  - `../ci/check-structure.sh`
   - `check-deprecated-deadline.sh`
-  - `check-release-governance-assets.sh`
 
 ## 3. deploy/
 Docker Compose 운영 재배포 스크립트입니다.
@@ -102,7 +98,6 @@ route hook을 모두 준비한 뒤 apply drop-in을 설치해야 합니다. 운�
 리팩터링 보조 가드 스크립트입니다.
 
 - `./scripts/refactor/grep-sensitive-logs.sh`
-- `./scripts/refactor/validate-no-admin-touch.sh`
 
 ## 11. systemd/
 호스트 배포용 systemd unit 정본입니다.

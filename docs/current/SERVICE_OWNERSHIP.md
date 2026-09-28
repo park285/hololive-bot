@@ -35,7 +35,5 @@ YouTube dispatcher와 poller 구현처럼 단일 owner로 확정된 코드는 �
 ## Validation
 
 ```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/check-runbook-coverage.sh
 go test ./hololive/hololive-shared/pkg/config/settings/... -run 'Runtime|NonEgress|AdminAPI'
 ```

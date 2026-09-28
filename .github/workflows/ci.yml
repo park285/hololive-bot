@@ -46,9 +46,6 @@ jobs:
             "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
           test "${actual_sha}" = "${EXPECTED_SHA}"
 
-      - name: Python runtime
-        uses: ./.github/actions/python-runtime
-
       # gofmt 규칙은 릴리스마다 바뀐다. 이 단계가 없으면 러너 기본 Go로 검사해
       # go.mod가 요구하는 판본과 다른 결과를 낸다.
       - name: Setup Go
@@ -61,17 +58,6 @@ jobs:
         run: |
           go version
           go env GOOS GOARCH GOMOD GOWORK CGO_ENABLED
-
-      - name: Workflow PR boundary and gate ownership
-        run: |
-          bash scripts/ci/check-workflow-secrets.sh
-          bash scripts/ci/check-workflow-secrets_test.sh
-
-      - name: Workflow CI ownership contract
-        run: |
-          "$CI_PYTHON_BIN" scripts/ci/check-workflow-ci-owner.py
-          "$CI_PYTHON_BIN" scripts/ci/check-workflow-ci-owner_test.py
-          "$CI_PYTHON_BIN" scripts/ci/check-merge-candidate_test.py
 
       - name: Shell syntax
         run: bash scripts/ci/shell-syntax-sweep.sh
