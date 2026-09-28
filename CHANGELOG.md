@@ -8,6 +8,13 @@
 
 ## 미출시
 
+## v5.0.1 - 2026-09-28
+
+- DB pool이 `POSTGRES_SSLROOTCERT`를 pgxdb `Config.SSLRootCert`로 직접 넘기는 v5.0.0 배포 뒤의 lockstep 릴리스입니다. API·alarm-worker·shared·collector·DB 테스트 모듈과 정기 보안 검사의 sibling checkout을 `shared-go/v2 v2.8.0`(`36d47654f2c0`)과 `iris-client-go/v2 v2.8.0`(`b23933c3179c`)으로 함께 고정합니다. shared-go v2.8.0이 지운 pgxdb env 폴백과 호환 API는 v5.0.0에서 이미 대체 경로로 옮겨 이 고정에 필요한 코드 변경은 없고, 다른 의존성 버전도 바꾸지 않습니다.
+- 운영 산출물은 API·collector `5.0.1`, alarm worker `4.0.1`로 식별합니다. DB migration·런타임 설정·공개 API는 변경하지 않습니다.
+- T11의 Community/Shorts `post_id` 단일화를 마무리합니다. claim과 telemetry가 같은 canonical logical ID 검증을 사용하고, 누락·파싱 실패·불일치를 `content_id`·payload 리소스 ID로 대체하지 않습니다. 잘못된 claim ID는 오류로, 로그 ID는 원문을 포함하지 않는 `invalid:<kind>:<reason>`으로 드러냅니다. telemetry batch의 빈 post ID는 INSERT 전에 전체 batch를 거절하며, NEW_VIDEO·LIVE·MILESTONE의 content ID 계약은 유지합니다. 운영 canonical ID 존재 확인과 실제 PostgreSQL의 수정 전 실패·수정 후 거절 회귀, canonical consumer smoke를 거쳤습니다. 새 retry·fallback은 추가하지 않습니다.
+- telemetry의 빈 `delivery_path`도 enrichment·INSERT 전에 전체 batch를 거절합니다. 빈 값을 `youtube_outbox_dispatcher`로 보충하던 경로를 없애고, 전이 기록자는 정본 상수를 직접 쓰며 방출 로그는 저장된 경로를 trim할 뿐 대체하지 않습니다.
+
 ## v5.0.0 - 2026-09-28
 
 - API·alarm-worker·shared·collector·DB 테스트 모듈의 `iris-client-go/v2`를 게시된 `v2.7.0`으로 고정합니다. 정본 Karing wire 이름과 결과 불명 오류 보존, 서버 퇴역 사전 이관 계약을 같은 SDK 버전으로 검증합니다.

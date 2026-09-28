@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type recoveryInputFixtureSpec struct {
@@ -193,7 +192,9 @@ func assertRecoveryInputFixtureRows(
 	require.Equal(t, spec.pendingContentID, fixture.pendingOutbox.ContentID)
 	require.NotEqual(t, fixture.sentOutbox.ID, fixture.servedOutbox.ID)
 	require.NotEqual(t, fixture.sentOutbox.ContentID, fixture.servedOutbox.ContentID)
-	require.Equal(t, fixture.sentPostID, telemetry.ResolveTelemetryPostID(fixture.servedOutbox.Kind, fixture.servedOutbox.ContentID, fixture.servedOutbox.Payload))
+	servedPostID, err := ytcontentid.ResolveDeliveryLogicalID(fixture.servedOutbox.Kind, fixture.servedOutbox.ContentID, fixture.servedOutbox.Payload)
+	require.NoError(t, err)
+	require.Equal(t, fixture.sentPostID, servedPostID)
 
 	var servedOutbox deliveryTestOutboxModel
 
@@ -373,11 +374,12 @@ func seedRecoveryInputFixtureOutboxes(
 		CreatedAt:     spec.pendingDetectedAt,
 	}
 	// idx_yno_kind_content·idx_ynd_outbox_room 유니크 인덱스 때문에 같은 (kind, content_id)나
-	// 같은 (outbox_id, room_id)로는 SENT 행을 둘 수 없어, canonical_post_id만 같은 재등록 outbox로 만든다.
+	// 같은 (outbox_id, room_id)로는 SENT 행을 둘 수 없어, content_id를 prefix 붙은 canonical 표기로 쓴 재등록 outbox로 만든다.
+	// content_id 문자열은 다르지만 payload canonical_post_id와 같은 logical ID로 정규화되므로 유효한 식별자다.
 	served = domain.YouTubeNotificationOutbox{
 		Kind:          spec.kind,
 		ChannelID:     spec.channelID,
-		ContentID:     spec.sentContentID + "-served",
+		ContentID:     mustCanonicalDeliveryPostID(spec.kind, spec.sentContentID),
 		Payload:       spec.sentPayload,
 		Status:        domain.OutboxStatusSent,
 		AttemptCount:  1,

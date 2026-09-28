@@ -62,7 +62,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 
 	attemptStartedAt = attemptStartedAt.UTC()
 
-	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(telemetry.CommunityShortsDeliveryPath)
+	deliveryPath := telemetry.CommunityShortsDeliveryPath
 	limitedRows := rows[:limit]
 	limitedOutboxes := outboxes[:limit]
 
@@ -77,7 +77,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 			slog.Int64(logschema.FieldOutboxID, outbox.ID),
 			slog.String(logschema.FieldRoomID, limitedRows[i].RoomID),
 			slog.String(logschema.FieldChannelID, outbox.ChannelID),
-			slog.String(deliveryAuditPostIDLogField, telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
+			slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
 			slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 			slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 			slog.Time(deliveryAttemptStartedAtLogField, attemptStartedAt),
@@ -108,7 +108,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 
 	sentAt = sentAt.UTC()
 
-	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(telemetry.CommunityShortsDeliveryPath)
+	deliveryPath := telemetry.CommunityShortsDeliveryPath
 	summary := summarizeCommunityShortsDeliveryResult(rows[:limit], outboxes[:limit])
 
 	if summary.alarmCount == 0 {
@@ -242,12 +242,12 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 	attrs := []any{
 		slog.Int64(logschema.FieldOutboxID, result.OutboxID),
 		slog.String(logschema.FieldChannelID, result.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, telemetry.ResolveTelemetryPostID(result.Kind, result.ContentID, result.Payload)),
+		slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(result.Kind, result.ContentID, result.Payload)),
 		slog.String(deliveryAuditContentIDLogField, result.ContentID),
 		slog.String(deliveryAuditAlarmTypeLogField, string(result.Kind.ToAlarmType())),
 		slog.Time(deliveryAuditSentAtLogField, eventAt),
 		slog.String(deliveryAuditSendResultLogField, sendResult),
-		slog.String(deliveryAuditPathLogField, telemetry.NormalizeCommunityShortsDeliveryPath(telemetry.CommunityShortsDeliveryPath)),
+		slog.String(deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath),
 		slog.String(deliveryAuditModeLogField, logschema.DeliveryModeFinalResult),
 		slog.String(deliveryDedupeKeyLogField, telemetry.DedupeKeyLogValue(&outbox)),
 		slog.String(logschema.FieldTelemetrySource, logschema.TelemetrySourceOutboxFinalResult),

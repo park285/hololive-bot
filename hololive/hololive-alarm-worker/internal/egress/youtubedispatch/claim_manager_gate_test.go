@@ -823,3 +823,74 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefers
 	require.True(t, persisted.NextAttemptAt.After(now))
 	require.Zero(t, sender.messageCount())
 }
+
+// claim identity(alarm state 조회 키)는 canonical logical ID다. canonical_post_id 누락·파싱 실패·불일치 행은
+// content_id나 payload 리소스 ID로 대체한 키를 만들지 않고 오류로 드러난다.
+func TestDeliveryClaimIdentityForOutboxRequiresCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	valid := []struct {
+		name   string
+		outbox domain.YouTubeNotificationOutbox
+		postID string
+	}{
+		{
+			name: "short",
+			outbox: domain.YouTubeNotificationOutbox{
+				Kind: domain.OutboxKindNewShort, ContentID: "short-a",
+				Payload: `{"canonical_post_id":"short:short-a","video_id":"short-a"}`,
+			},
+			postID: "short:short-a",
+		},
+		{
+			name: "community content id alias",
+			outbox: domain.YouTubeNotificationOutbox{
+				Kind: domain.OutboxKindCommunityPost, ContentID: "community:post-a",
+				Payload: `{"canonical_post_id":"community:post-a","post_id":"post-a"}`,
+			},
+			postID: "community:post-a",
+		},
+	}
+	for _, tc := range valid {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			identity, err := deliveryClaimIdentityForOutbox(&tc.outbox)
+			require.NoError(t, err)
+			require.Equal(t, store.DeliveryClaimIdentityKey(tc.outbox.Kind, tc.postID), identity)
+		})
+	}
+
+	invalid := []struct {
+		name   string
+		outbox domain.YouTubeNotificationOutbox
+	}{
+		{
+			name:   "short missing canonical",
+			outbox: domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewShort, ContentID: "short-a", Payload: `{"video_id":"short-a"}`},
+		},
+		{
+			name:   "community missing canonical",
+			outbox: domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindCommunityPost, ContentID: "post-a", Payload: `{"post_id":"post-a"}`},
+		},
+		{
+			name:   "malformed payload",
+			outbox: domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindCommunityPost, ContentID: "post-a", Payload: `{broken`},
+		},
+		{
+			name: "canonical mismatch",
+			outbox: domain.YouTubeNotificationOutbox{
+				Kind: domain.OutboxKindNewShort, ContentID: "short-a", Payload: `{"canonical_post_id":"short:short-b"}`,
+			},
+		},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			identity, err := deliveryClaimIdentityForOutbox(&tc.outbox)
+			require.Error(t, err)
+			require.Empty(t, identity)
+		})
+	}
+}

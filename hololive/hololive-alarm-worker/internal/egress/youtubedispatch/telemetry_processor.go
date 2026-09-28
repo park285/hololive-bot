@@ -28,7 +28,7 @@ func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificatio
 		slog.String(deliveryAuditAlarmTypeLogField, string(row.AlarmType)),
 		slog.Time(deliveryAuditSentAtLogField, row.EventAt.UTC()),
 		slog.String(deliveryAuditSendResultLogField, row.SendResult),
-		slog.String(deliveryAuditPathLogField, telemetry.NormalizeCommunityShortsDeliveryPath(row.DeliveryPath)),
+		slog.String(deliveryAuditPathLogField, strings.TrimSpace(row.DeliveryPath)),
 		slog.String(deliveryAuditModeLogField, row.DeliveryMode),
 		slog.String(deliveryDedupeKeyLogField, row.DedupeKey),
 		slog.Int(logschema.FieldAttemptOrdinal, row.AttemptOrdinal),
@@ -198,8 +198,6 @@ func (tp *TelemetryProcessor) emitDeliveryTelemetry(
 	if strings.TrimSpace(row.RoomID) == "" {
 		return errors.New("delivery telemetry room id is empty")
 	}
-
-	telemetry.ApplyTelemetryPostID(row)
 
 	attrs := buildDeliveryAuditLogAttrsWithClassification(row, classification)
 

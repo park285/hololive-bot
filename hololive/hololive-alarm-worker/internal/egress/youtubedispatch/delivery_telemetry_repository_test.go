@@ -160,6 +160,7 @@ func TestDeliveryTelemetryRepository_EnqueueRejectsDuplicateDeliveryAttempt(t *t
 		OutboxID:       201,
 		ChannelID:      "UC_dedupe",
 		ContentID:      testShortOne,
+		PostID:         "short:" + testShortOne,
 		RoomID:         testRoomOne,
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      testDedupeKeyShortOne,
@@ -176,11 +177,6 @@ func TestDeliveryTelemetryRepository_EnqueueRejectsDuplicateDeliveryAttempt(t *t
 
 	require.NoError(t, countDeliveryTestRowsWhere(db, &deliveryTelemetryTestBufferModel{}, &count, "").Error)
 	require.Equal(t, int64(1), count)
-
-	var saved deliveryTelemetryTestBufferModel
-
-	require.NoError(t, firstDeliveryTestRow(db, &saved).Error)
-	require.Equal(t, testShortOne, saved.PostID)
 }
 
 func TestDispatcher_Cleanup_RemovesOnlyLoggedTelemetryOlderThanRetention(t *testing.T) {
@@ -340,6 +336,7 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 		OutboxID:       601,
 		ChannelID:      "UC_retry",
 		ContentID:      "post-retry",
+		PostID:         "community:post-retry",
 		RoomID:         "room-retry",
 		AlarmType:      domain.AlarmTypeCommunity,
 		DedupeKey:      "youtube-notification:COMMUNITY_POST:post-retry",
@@ -362,7 +359,6 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, again, 1)
 	require.Equal(t, locked[0].ID, again[0].ID)
-	require.Equal(t, "post-retry", again[0].PostID)
 	require.NoError(t, repository.MarkLoggedBatch(ctx, []int64{again[0].ID}))
 }
 

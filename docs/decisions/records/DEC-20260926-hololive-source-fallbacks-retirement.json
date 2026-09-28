@@ -3,14 +3,22 @@
   "id": "DEC-20260926-hololive-source-fallbacks-retirement",
   "title": "계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꾸고 멤버 표시명 폴백만 예외 계약으로 남긴다",
   "decision_status": "accepted",
-  "delivery_status": "planned",
+  "delivery_status": "verified",
   "scope": [
     "hololive-bot"
   ],
   "decided_at": "2026-09-26",
   "summary": "2026-09-26 사용자가 권장안대로 확정했다. DEC-20260926-hololive-live-status-scraper-fallback-removal 밖에 계약과 근거가 없는 폴백이 남아 있다: Holodex GetChannel의 YouTube scraper 폴백과 부분 Channel 캐시, GetChannels 목록→개별 조회 폴백, GetChannelSchedule의 scraper 폴백과 캐시, GetRecentVideos의 RSS 폴백과 빈 성공, 알림 멤버 표시명의 members→alarms.member_name→호출자 값 폴백, matcher의 채널명 폴백, major event 요약 실패의 빈 결과, /api/holo rate limit fail-open, MemberDataProvider.GetAllMembers의 오류 흡수와 선택적 loader 병존. 부분 결과 캐시와 빈 성공 반환은 즉시 금지한다. 나머지는 기본적으로 오류를 그대로 반환하는 단일 경로로 바꾸고, MemberDataProvider는 error-aware LoadAllMembers 하나로 옮긴다. 예외는 알림 멤버 표시명 폴백 하나로, members 미등록 채널을 표시하기 위한 것이므로 삭제하지 않고 trigger·한도·telemetry·owner·제거 조건을 적은 예외 계약으로 남긴다. T18에서 hololive-bot-ops로 확인한 fallback 로그 빈도가 다른 항목도 예외 계약이 필요함을 보이면 그 항목만 사용자 확인을 받아 예외로 기록한다. 근거는 iris-stack의 2026-09-26 감사와 fade-out 재조사(docs/agent-workflows/evidence/2026-09-26-stack-audit/의 iris-audit.md, fadeout-recheck.md, fadeout-candidates.tsv의 dec 열)이고 PLN-20260926-stack-audit-refactoring T19에서 수행한다.",
   "sources": [],
-  "evidence": [],
-  "implementation": [],
+  "evidence": [
+    "hololive/hololive-shared/pkg/config/settings/config_official_schedule_retired_env_test.go",
+    "hololive/hololive-shared/pkg/config/settings/config_youtube_retired_env_test.go"
+  ],
+  "implementation": [
+    "docs/current/contracts/alarm.md",
+    "hololive/hololive-shared/pkg/config/settings/config_official_schedule_retired_env.go",
+    "hololive/hololive-shared/pkg/config/settings/config_youtube_retired_env.go",
+    "hololive-bot@8a4f0b70430461eae3855e2b43e75e7547681174"
+  ],
   "supersedes": []
 }

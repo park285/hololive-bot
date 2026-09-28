@@ -228,7 +228,7 @@ func deliveryClaimLogAttrs(
 		slog.Int64(logschema.FieldOutboxID, outbox.ID),
 		slog.String(logschema.FieldRoomID, row.RoomID),
 		slog.String(logschema.FieldChannelID, outbox.ChannelID),
-		slog.String(deliveryAuditPostIDLogField, telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
+		slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
 		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 		slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 	)

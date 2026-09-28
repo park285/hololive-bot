@@ -8,48 +8,34 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestResolveTelemetryPostID_PrefersPayloadIdentity(t *testing.T) {
+func TestEnqueueRejectsMissingCanonicalIdentityFields(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name      string
-		kind      domain.OutboxKind
-		contentID string
-		payload   string
-		want      string
+	for _, tc := range []struct {
+		name         string
+		postID       string
+		deliveryPath string
 	}{
-		{
-			name:    "short canonical post id",
-			kind:    domain.OutboxKindNewShort,
-			payload: `{"canonical_post_id":"short-canonical","video_id":"short-resource"}`,
-			want:    "short-canonical",
-		},
-		{
-			name:    "community post id fallback",
-			kind:    domain.OutboxKindCommunityPost,
-			payload: `{"post_id":"community-post"}`,
-			want:    "community-post",
-		},
-		{
-			name:      "content id beats non canonical payload id",
-			kind:      domain.OutboxKindNewShort,
-			contentID: "tracked-short",
-			payload:   `{"video_id":"payload-short"}`,
-			want:      "tracked-short",
-		},
-		{
-			name:      "content id fallback",
-			kind:      domain.OutboxKindCommunityPost,
-			contentID: "tracked-post",
-			payload:   `{}`,
-			want:      "tracked-post",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		{name: "missing post id", deliveryPath: CommunityShortsDeliveryPath},
+		{name: "blank post id", postID: " \t\n", deliveryPath: CommunityShortsDeliveryPath},
+		{name: "missing delivery path", postID: "community:content-1"},
+		{name: "blank delivery path", postID: "community:content-1", deliveryPath: " \t\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, ResolveTelemetryPostID(tt.kind, tt.contentID, tt.payload))
+
+			repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
+			valid := makeEnqueueTestRow(outboxID, 101, 1)
+			valid.PostID = "community:content-1"
+			invalid := makeEnqueueTestRow(outboxID, 102, 1)
+			invalid.PostID = tc.postID
+			invalid.DeliveryPath = tc.deliveryPath
+			err := repo.Enqueue(t.Context(), []domain.YouTubeNotificationDeliveryTelemetry{valid, invalid})
+			require.Error(t, err)
+
+			var count int
+			require.NoError(t, counting.inner.QueryRow(t.Context(), `SELECT COUNT(*) FROM youtube_notification_delivery_telemetry`).Scan(&count))
+			require.Zero(t, count, "invalid canonical identity must reject the whole batch")
 		})
 	}
 }

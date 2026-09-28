@@ -51,9 +51,20 @@ func (r *Repository) PrepareRows(
 	now := time.Now().UTC()
 
 	for i := range rows {
-		if row, ok := prepareDeliveryTelemetryRow(&rows[i], now); ok {
-			normalized = append(normalized, row)
+		row, ok := prepareDeliveryTelemetryRow(&rows[i], now)
+		if !ok {
+			continue
 		}
+
+		// post_id는 기록 주체(TransitionStore)가 검증한 logical key다. content_id로 채우지 않고 누락을 오류로 드러낸다.
+		if row.PostID == "" {
+			return nil, fmt.Errorf("delivery %d attempt %d: post_id is empty", row.DeliveryID, row.AttemptOrdinal)
+		}
+		if row.DeliveryPath == "" {
+			return nil, fmt.Errorf("delivery %d attempt %d: delivery_path is empty", row.DeliveryID, row.AttemptOrdinal)
+		}
+
+		normalized = append(normalized, row)
 	}
 
 	if len(normalized) == 0 {
@@ -120,8 +131,9 @@ func applyDeliveryTelemetryDefaults(row *domain.YouTubeNotificationDeliveryTelem
 		row.NextAttemptAt = now
 	}
 
-	row.DeliveryPath = NormalizeCommunityShortsDeliveryPath(row.DeliveryPath)
-	ApplyTelemetryPostID(row)
+	row.ContentID = strings.TrimSpace(row.ContentID)
+	row.PostID = strings.TrimSpace(row.PostID)
+	row.DeliveryPath = strings.TrimSpace(row.DeliveryPath)
 }
 
 const (
