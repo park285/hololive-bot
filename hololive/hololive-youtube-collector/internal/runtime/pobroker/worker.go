@@ -60,6 +60,7 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 	// 요청이 worker IO(직렬 슬롯)를 쥔 중의 종료는 그 요청 경로와 같은 worker_failed로 기록합니다.
 	go func() {
 		<-worker.done
+
 		select {
 		case b.serial <- struct{}{}:
 			b.retire(ExitWorkerExited)
