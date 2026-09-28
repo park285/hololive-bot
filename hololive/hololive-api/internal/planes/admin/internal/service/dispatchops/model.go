@@ -29,11 +29,8 @@ var (
 	ErrUnavailable = errors.New("dispatch operations unavailable")
 )
 
-// statuses는 조회 필터로 받는 상태다. 비교 전용 shadowed 행은 v3 handoff 삭제(DEC-20260926-hololive-outbox-v3-convergence)와
-// migration 226으로 더 이상 존재하지 않아 항상 빈 목록을 돌려준다. 그래도 iris-console의 DispatchStatus enum
-// (contracts/hololive/openapi.json, DispatchPage 필터)이 이 값을 보낼 수 있어 입력으로만 남긴다. 제거 조건: iris-console이
-// enum과 필터에서 shadowed를 뺀 release가 배포된 뒤 이 값과 문서의 필터 목록을 함께 지운다. 재검토 기한: 2026-12-31.
-var statuses = [...]string{"shadowed", "pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"} //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
+// statuses는 조회 필터로 받는 상태입니다.
+var statuses = [...]string{"pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"} //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
 
 // Delivery는 본문과 전송용 내부 식별자를 제외한 발송 상태입니다. Bigint는 문자열로 유지합니다.
 type Delivery struct {

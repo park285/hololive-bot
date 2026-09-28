@@ -28,10 +28,9 @@ gateway 허용 목록 우회 경로는 사용하지 않습니다.
 
 목록 query는 `status`, `roomId`, `channelId`, `beforeId`만 허용합니다.
 상태 생략 시 `dlq`와 `quarantined`를 함께 조회합니다. 단일 상태는
-`shadowed`, `pending`, `retry`, `leased`, `sending`, `sent`, `dlq`,
-`quarantined`, `cancelled` 중 하나입니다. `shadowed` 행은 v3 handoff 삭제와 migration 226으로
-더 이상 존재하지 않아 항상 빈 목록입니다. iris-console `DispatchStatus` enum이 이 값을 아직 보내므로
-입력으로만 남기며, iris-console이 값을 뺀 뒤 이 API에서도 삭제합니다. 채팅방과 채널은 정확히 일치하는 값을 사용합니다.
+`pending`, `retry`, `leased`, `sending`, `sent`, `dlq`, `quarantined`, `cancelled` 중 하나입니다.
+iris-console에서 퇴역 필터 제거를 배포한 뒤 `shadowed` 입력도 제거했습니다.
+채팅방과 채널은 정확히 일치하는 값을 사용합니다.
 명시적인 빈 query, 알 수 없는 query 및 중복 query는 400입니다.
 
 목록과 감사 이력은 최대 50건을 ID 내림차순으로 반환합니다. `nextBeforeId`가 비어 있지
