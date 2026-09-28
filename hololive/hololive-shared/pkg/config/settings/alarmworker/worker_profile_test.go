@@ -2,7 +2,6 @@ package alarmworker
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,15 +42,25 @@ func TestLoadWorkerProfileRejectsRetiredNotificationLockTimeout(t *testing.T) {
 	const retired = `"max_retries": 3,
         "lock_timeout_ms": 300000,
         "poll_interval_ms": 30000`
+
 	if strings.Count(string(raw), existing) != 1 {
 		t.Fatal("notification_delivery fixture settings changed")
 	}
 
-	profileFile := filepath.Join(t.TempDir(), "alarm-worker.json")
-	if err := os.WriteFile(profileFile, []byte(strings.Replace(string(raw), existing, retired, 1)), 0o600); err != nil {
+	profileFile, err := os.CreateTemp(t.TempDir(), "alarm-worker-*.json")
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(workercontract.ProfileFileEnv, profileFile)
+
+	if _, err := profileFile.WriteString(strings.Replace(string(raw), existing, retired, 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := profileFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv(workercontract.ProfileFileEnv, profileFile.Name())
 
 	if _, err := LoadWorkerProfile(); err == nil || !strings.Contains(err.Error(), "notification_delivery") || !strings.Contains(err.Error(), "lock_timeout_ms") {
 		t.Fatalf("LoadWorkerProfile() error = %v, want retired notification_delivery.lock_timeout_ms rejected", err)

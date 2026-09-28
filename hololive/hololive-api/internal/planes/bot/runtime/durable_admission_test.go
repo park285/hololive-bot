@@ -34,15 +34,19 @@ const (
 // v2가 inbox에 저장한 이중 필드는 v3 decode에서 거절된다. 전환 전 active inbox 드레인이 필요하다.
 func TestStoredWebhookPayloadV3ShapeRequiresActiveInboxDrain(t *testing.T) {
 	var message webhook.Message
+
 	legacy := []byte(`{"msg":"!help","room":"room-1","json":{"message":"!help","chat_id":"room-1","message_id":"m-1"}}`)
+
 	if err := jsonv2.Unmarshal(legacy, &message); err == nil || !strings.Contains(err.Error(), "retired MessageJSON field message") {
 		t.Fatalf("legacy stored payload decode = %v, want retired-field rejection", err)
 	}
 
 	canonical := []byte(`{"msg":"!help","room":"room-1","json":{"message_id":"m-1"}}`)
+
 	if err := jsonv2.Unmarshal(canonical, &message); err != nil {
 		t.Fatalf("v3 stored payload decode: %v", err)
 	}
+
 	if message.Room != testRoomID || message.JSON == nil || message.JSON.MessageID != "m-1" {
 		t.Fatalf("v3 stored payload = %#v, want room and message identity", message)
 	}

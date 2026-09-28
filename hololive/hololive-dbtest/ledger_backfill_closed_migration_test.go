@@ -86,6 +86,7 @@ func TestLedgerBackfillStateDroppedAfterCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := applyMigrationFile(t.Context(), pool, dir, ledgerBackfillStateDropMigration); err != nil {
 		t.Fatalf("recorded 229 reapply: %v", err)
 	}
@@ -94,6 +95,7 @@ func TestLedgerBackfillStateDroppedAfterCompletion(t *testing.T) {
 		to_regclass('youtube_notification_delivery_ledger') IS NOT NULL`).Scan(&stateExists, &ledgerExists); err != nil {
 		t.Fatal(err)
 	}
+
 	if stateExists || !ledgerExists {
 		t.Fatalf("state exists=%t, logical ledger exists=%t; want false,true", stateExists, ledgerExists)
 	}
@@ -123,26 +125,23 @@ func createProductionMigrationLedgerFixture(t *testing.T, pool *pgxpool.Pool) {
 	if err != nil {
 		t.Fatalf("create production migration ledger fixture: %v", err)
 	}
+
 	_, err = pool.Exec(t.Context(), `INSERT INTO public.schema_migrations (filename) VALUES ($1)`, ledgerBackfillClosedMigration)
 	if err != nil {
 		t.Fatalf("record 227 fixture: %v", err)
 	}
 }
 
-// 229는 227 과거 기록뿐 아니라 현재 state를 잠금 아래 재검증하고, DROP 실패 시 전체를 되돌린다.
-func TestLedgerBackfillStateDropRequiresCurrentCompletion(t *testing.T) {
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		t.Fatal(err)
-	}
+type ledgerBackfillStateDropCase struct {
+	name      string
+	setup     string
+	fixture   bool
+	remove227 bool
+	wantErr   string
+}
 
-	cases := []struct {
-		name      string
-		setup     string
-		fixture   bool
-		remove227 bool
-		wantErr   string
-	}{
+func ledgerBackfillStateDropCases() []ledgerBackfillStateDropCase {
+	return []ledgerBackfillStateDropCase{
 		{name: "unknown missing table", wantErr: "absent without 229 receipt"},
 		{name: "fresh empty bootstrap", fixture: true},
 		{name: "completed singleton", fixture: true, setup: strings.Replace(insertRetiredLedgerState, "%s", "now()", 1)},
@@ -153,54 +152,68 @@ func TestLedgerBackfillStateDropRequiresCurrentCompletion(t *testing.T) {
 		{name: "missing singleton with data", fixture: true, setup: `INSERT INTO youtube_notification_outbox (kind, channel_id, content_id, payload)
 			VALUES ('NEW_VIDEO', 'UC0000000000000000000000', 'video-229', '{}'::jsonb)`, wantErr: "no singleton"},
 	}
+}
 
-	for _, tc := range cases {
+// 229는 227 과거 기록뿐 아니라 현재 state를 잠금 아래 재검증하고, DROP 실패 시 전체를 되돌린다.
+func TestLedgerBackfillStateDropRequiresCurrentCompletion(t *testing.T) {
+	dir, err := resolveMigrationsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range ledgerBackfillStateDropCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			var exists bool
-
-			pool := NewPool(t)
-			ctx := t.Context()
-
-			if _, err := pool.Exec(ctx, `DELETE FROM hololive_dbtest_internal.schema_migrations
-				WHERE filename = $1`, ledgerBackfillStateDropMigration); err != nil {
-				t.Fatal(err)
-			}
-
-			if tc.remove227 {
-				if _, err := pool.Exec(ctx, `DELETE FROM hololive_dbtest_internal.schema_migrations
-					WHERE filename = $1`, ledgerBackfillClosedMigration); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			if tc.fixture {
-				createRetiredLedgerStateFixture(t, pool)
-			}
-
-			if tc.setup != "" {
-				if _, err := pool.Exec(ctx, tc.setup); err != nil {
-					t.Fatalf("setup: %v", err)
-				}
-			}
-
-			err := applyMigrationFile(ctx, pool, dir, ledgerBackfillStateDropMigration)
-
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatal(err)
-				}
-			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("229 error = %v, want %q", err, tc.wantErr)
-			}
-
-			if err := pool.QueryRow(ctx, `SELECT to_regclass('youtube_notification_delivery_ledger_state') IS NOT NULL`).Scan(&exists); err != nil {
-				t.Fatal(err)
-			}
-
-			if exists != (tc.fixture && tc.wantErr != "") {
-				t.Fatalf("state remains = %t, want %t", exists, tc.fixture && tc.wantErr != "")
-			}
+			runLedgerBackfillStateDropCase(t, dir, tc)
 		})
+	}
+}
+
+func runLedgerBackfillStateDropCase(t *testing.T, dir string, tc ledgerBackfillStateDropCase) {
+	t.Helper()
+
+	var exists bool
+
+	pool := NewPool(t)
+	ctx := t.Context()
+
+	if _, execErr := pool.Exec(ctx, `DELETE FROM hololive_dbtest_internal.schema_migrations
+		WHERE filename = $1`, ledgerBackfillStateDropMigration); execErr != nil {
+		t.Fatal(execErr)
+	}
+
+	if tc.remove227 {
+		if _, execErr := pool.Exec(ctx, `DELETE FROM hololive_dbtest_internal.schema_migrations
+			WHERE filename = $1`, ledgerBackfillClosedMigration); execErr != nil {
+			t.Fatal(execErr)
+		}
+	}
+
+	if tc.fixture {
+		createRetiredLedgerStateFixture(t, pool)
+	}
+
+	if tc.setup != "" {
+		if _, execErr := pool.Exec(ctx, tc.setup); execErr != nil {
+			t.Fatalf("setup: %v", execErr)
+		}
+	}
+
+	applyErr := applyMigrationFile(ctx, pool, dir, ledgerBackfillStateDropMigration)
+
+	if tc.wantErr == "" {
+		if applyErr != nil {
+			t.Fatal(applyErr)
+		}
+	} else if applyErr == nil || !strings.Contains(applyErr.Error(), tc.wantErr) {
+		t.Fatalf("229 error = %v, want %q", applyErr, tc.wantErr)
+	}
+
+	if queryErr := pool.QueryRow(ctx, `SELECT to_regclass('youtube_notification_delivery_ledger_state') IS NOT NULL`).Scan(&exists); queryErr != nil {
+		t.Fatal(queryErr)
+	}
+
+	if exists != (tc.fixture && tc.wantErr != "") {
+		t.Fatalf("state remains = %t, want %t", exists, tc.fixture && tc.wantErr != "")
 	}
 }
 
@@ -217,14 +230,16 @@ func TestLedgerBackfillStateDropRollsBackOnDependency(t *testing.T) {
 
 	createProductionMigrationLedgerFixture(t, pool)
 	createRetiredLedgerStateFixture(t, pool)
-	if _, err := pool.Exec(ctx, strings.Replace(insertRetiredLedgerState, "%s", "now()", 1)); err != nil {
-		t.Fatal(err)
+
+	if _, execErr := pool.Exec(ctx, strings.Replace(insertRetiredLedgerState, "%s", "now()", 1)); execErr != nil {
+		t.Fatal(execErr)
 	}
 
-	if _, err := pool.Exec(ctx, `CREATE VIEW retained_ledger_state_dependency AS
-		SELECT schema_version FROM youtube_notification_delivery_ledger_state`); err != nil {
-		t.Fatal(err)
+	if _, execErr := pool.Exec(ctx, `CREATE VIEW retained_ledger_state_dependency AS
+		SELECT schema_version FROM youtube_notification_delivery_ledger_state`); execErr != nil {
+		t.Fatal(execErr)
 	}
+
 	err = applyMigrationFile(ctx, pool, dir, ledgerBackfillStateDropMigration)
 	if err == nil || !strings.Contains(err.Error(), "depend on it") {
 		t.Fatalf("dependent DROP error = %v, want dependency refusal", err)
@@ -255,6 +270,7 @@ func TestLedgerBackfillStateDropRecordsReceiptWithDrop(t *testing.T) {
 
 	createProductionMigrationLedgerFixture(t, pool)
 	createRetiredLedgerStateFixture(t, pool)
+
 	if _, err := pool.Exec(ctx, strings.Replace(insertRetiredLedgerState, "%s", "now()", 1)); err != nil {
 		t.Fatal(err)
 	}
@@ -272,6 +288,7 @@ func TestLedgerBackfillStateDropRecordsReceiptWithDrop(t *testing.T) {
 	if stateExists || !receiptExists {
 		t.Fatalf("state=%t receipt=%t, want false,true", stateExists, receiptExists)
 	}
+
 	if err := applyMigrationFile(ctx, pool, dir, ledgerBackfillStateDropMigration); err != nil {
 		t.Fatalf("reapply recorded 229: %v", err)
 	}
