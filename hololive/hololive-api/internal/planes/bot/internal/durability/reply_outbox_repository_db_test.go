@@ -42,7 +42,7 @@ func newReplyOutboxEntry(identity string, ordinal uint64, payload string) *Reply
 		MessageID:       identity,
 		Phase:           transport.ReplyPhase,
 		Ordinal:         ordinal,
-		RoomID:          "room-1",
+		RoomID:          testDurableRoomID,
 		Payload:         []byte(payload),
 		ClientRequestID: transport.ReplyClientRequestID(identity, ordinal),
 	}

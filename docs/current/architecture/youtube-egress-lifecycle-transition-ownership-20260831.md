@@ -4,6 +4,7 @@
 - 결정 ID: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
 - 대상 런타임: `hololive-alarm-worker`
 - 결정 상태 정본: [`docs/decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json`](../../decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json)
+- 현재 구현(2026-09-28): 아래 backfill 설계에서 사용한 `youtube_notification_delivery_ledger_state`는 완료 검증 migration 227·229 뒤 폐기합니다. 영속 logical ledger는 유지합니다.
 
 ## 목적
 

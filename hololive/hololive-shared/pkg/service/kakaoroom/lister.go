@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v3/iris"
 )
 
 type IrisRooms interface {

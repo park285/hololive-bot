@@ -24,20 +24,13 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 func resolveRoom(message *webhook.Message) (chatID, roomName string) {
-	chatID = message.Room
-	if !privacylog.IsCanonicalRoomID(message.Room) && message.JSON != nil {
-		chatID = message.JSON.ChatID
-	}
-
-	roomName = message.Room
-
-	return chatID, roomName
+	return message.Room, message.Room
 }
 
 // chatID가 canonical room id가 아니면 로그에서 방 제목으로 새어 나가므로, 로그 경계에는

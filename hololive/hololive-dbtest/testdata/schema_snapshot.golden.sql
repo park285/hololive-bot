@@ -41,6 +41,28 @@ TABLE alarm_dispatch_admin_actions
   CONSTRAINT alarm_dispatch_admin_actions_pkey PRIMARY KEY (id)
   INDEX CREATE INDEX idx_alarm_dispatch_admin_actions_delivery ON public.alarm_dispatch_admin_actions USING btree (delivery_id)
 
+TABLE alarm_dispatch_closeout_receipts
+  COLUMN receipt_id uuid NOT NULL
+  COLUMN send_unit_id bigint NOT NULL
+  COLUMN addressed_delivery_id bigint NOT NULL
+  COLUMN target_ids bigint[] NOT NULL
+  COLUMN target_revisions jsonb NOT NULL
+  COLUMN status_metadata jsonb NOT NULL
+  COLUMN original_sha256 text NOT NULL
+  COLUMN operator_id text NOT NULL
+  COLUMN reason text NOT NULL
+  COLUMN disposition text NOT NULL DEFAULT 'closed_without_replay'::text
+  COLUMN recorded_at timestamp with time zone NOT NULL DEFAULT clock_timestamp()
+  CONSTRAINT alarm_dispatch_closeout_receipts_digest_check CHECK ((original_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT alarm_dispatch_closeout_receipts_disposition_check CHECK ((disposition = 'closed_without_replay'::text))
+  CONSTRAINT alarm_dispatch_closeout_receipts_operator_check CHECK ((((length(operator_id) >= 1) AND (length(operator_id) <= 128)) AND (operator_id = btrim(operator_id)) AND (operator_id !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT alarm_dispatch_closeout_receipts_reason_check CHECK ((((length(reason) >= 1) AND (length(reason) <= 1024)) AND (reason = btrim(reason)) AND (reason !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT alarm_dispatch_closeout_receipts_targets_check CHECK ((((cardinality(target_ids) >= 1) AND (cardinality(target_ids) <= 100)) AND (jsonb_array_length(target_revisions) = cardinality(target_ids)) AND (jsonb_array_length(status_metadata) = cardinality(target_ids))))
+  CONSTRAINT alarm_dispatch_closeout_receipts_pkey PRIMARY KEY (receipt_id)
+  CONSTRAINT alarm_dispatch_closeout_receipts_send_unit_id_key UNIQUE (send_unit_id)
+  TRIGGER CREATE TRIGGER alarm_dispatch_closeout_receipts_immutable BEFORE DELETE OR UPDATE ON alarm_dispatch_closeout_receipts FOR EACH ROW EXECUTE FUNCTION reject_alarm_dispatch_closeout_receipt_change()
+  TRIGGER CREATE TRIGGER alarm_dispatch_closeout_receipts_no_truncate BEFORE TRUNCATE ON alarm_dispatch_closeout_receipts FOR EACH STATEMENT EXECUTE FUNCTION reject_alarm_dispatch_closeout_receipt_change()
+
 TABLE alarm_dispatch_deliveries
   OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN id bigint NOT NULL DEFAULT nextval('alarm_dispatch_deliveries_id_seq'::regclass)
@@ -338,7 +360,6 @@ TABLE bot_webhook_inbox
   INDEX CREATE INDEX idx_bot_webhook_inbox_lease_expiry ON public.bot_webhook_inbox USING btree (lease_until, id) WHERE (status = 'processing'::text)
   INDEX CREATE INDEX idx_bot_webhook_inbox_ordering_partition ON public.bot_webhook_inbox USING btree (ordering_key, id) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]))
   INDEX CREATE INDEX idx_bot_webhook_inbox_terminal_updated ON public.bot_webhook_inbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['dead'::text, 'succeeded'::text]))
-  TRIGGER CREATE TRIGGER bot_webhook_inbox_terminal_payload_scrub BEFORE INSERT OR UPDATE OF status, payload ON bot_webhook_inbox FOR EACH ROW WHEN (new.status = ANY (ARRAY['dead'::text, 'succeeded'::text])) EXECUTE FUNCTION scrub_bot_webhook_inbox_terminal_payload()
 
 TABLE kakao_rooms
   COLUMN room_id character varying(100) NOT NULL
@@ -1351,26 +1372,6 @@ TABLE youtube_notification_delivery_ledger
   CONSTRAINT chk_youtube_notification_delivery_ledger_time_order CHECK (((updated_at >= first_recorded_at) AND ((sent_at IS NULL) OR (sent_at >= first_recorded_at)) AND ((quarantined_at IS NULL) OR (quarantined_at >= first_recorded_at))))
   CONSTRAINT youtube_notification_delivery_ledger_pkey PRIMARY KEY (kind, logical_id, room_id)
 
-TABLE youtube_notification_delivery_ledger_state
-  COLUMN singleton boolean NOT NULL DEFAULT true
-  COLUMN schema_version integer NOT NULL
-  COLUMN delivery_high_water_id bigint NOT NULL
-  COLUMN outbox_high_water_id bigint NOT NULL
-  COLUMN delivery_cursor_id bigint NOT NULL DEFAULT 0
-  COLUMN delivery_verify_cursor_id bigint NOT NULL DEFAULT 0
-  COLUMN outbox_cursor_id bigint NOT NULL DEFAULT 0
-  COLUMN legacy_coverage_start_at timestamp with time zone
-  COLUMN coverage_verified_at timestamp with time zone
-  COLUMN started_at timestamp with time zone NOT NULL
-  COLUMN completed_at timestamp with time zone
-  COLUMN updated_at timestamp with time zone NOT NULL
-  CONSTRAINT chk_youtube_notification_delivery_ledger_state_completion CHECK (((completed_at IS NULL) OR ((delivery_cursor_id = delivery_high_water_id) AND (delivery_verify_cursor_id = delivery_high_water_id) AND (outbox_cursor_id = outbox_high_water_id) AND (legacy_coverage_start_at IS NOT NULL) AND (coverage_verified_at IS NOT NULL))))
-  CONSTRAINT chk_youtube_notification_delivery_ledger_state_cursors CHECK (((delivery_high_water_id >= 0) AND (outbox_high_water_id >= 0) AND ((delivery_cursor_id >= 0) AND (delivery_cursor_id <= delivery_high_water_id)) AND ((delivery_verify_cursor_id >= 0) AND (delivery_verify_cursor_id <= delivery_high_water_id)) AND ((outbox_cursor_id >= 0) AND (outbox_cursor_id <= outbox_high_water_id))))
-  CONSTRAINT chk_youtube_notification_delivery_ledger_state_singleton CHECK (singleton)
-  CONSTRAINT chk_youtube_notification_delivery_ledger_state_time_order CHECK (((updated_at >= started_at) AND (((legacy_coverage_start_at IS NULL) AND (coverage_verified_at IS NULL)) OR ((legacy_coverage_start_at IS NOT NULL) AND (coverage_verified_at IS NOT NULL) AND (legacy_coverage_start_at <= coverage_verified_at) AND (coverage_verified_at <= updated_at))) AND ((completed_at IS NULL) OR ((completed_at >= coverage_verified_at) AND (completed_at <= updated_at)))))
-  CONSTRAINT chk_youtube_notification_delivery_ledger_state_version CHECK ((schema_version > 0))
-  CONSTRAINT youtube_notification_delivery_ledger_state_pkey PRIMARY KEY (singleton)
-
 TABLE youtube_notification_delivery_telemetry
   OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN id bigint NOT NULL DEFAULT nextval('youtube_notification_delivery_telemetry_id_seq'::regclass)
@@ -1593,6 +1594,8 @@ SEQUENCE youtube_notification_outbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 
 
 SEQUENCE youtube_stats_changes_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY youtube_stats_changes.id
 
+FUNCTION alarm_dispatch_closeout_snapshot(p_delivery_id bigint) RETURNS TABLE(send_unit_id bigint, target_ids bigint[], target_revisions jsonb, status_metadata jsonb, original_sha256 text, member_count bigint) LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\n    WITH target AS (\n        SELECT d.send_unit_id FROM public.alarm_dispatch_deliveries d WHERE d.id = p_delivery_id\n    ), members AS (\n        SELECT d.id, d.updated_at, d.status, d.attempt_count, d.last_error_code,\n               d.quarantined_at, d.sent_at, d.cancelled_at,\n               to_jsonb(d) AS delivery_facts, to_jsonb(e) AS event_facts,\n               to_jsonb(u) AS unit_facts\n        FROM public.alarm_dispatch_deliveries d\n        JOIN target t ON d.send_unit_id = t.send_unit_id\n        JOIN public.alarm_dispatch_events e ON e.id = d.event_id\n        JOIN public.alarm_dispatch_send_units u ON u.id = d.send_unit_id\n        ORDER BY d.id LIMIT 101\n    ), aggregate AS (\n        SELECT count(id) AS member_count,\n               array_agg(id ORDER BY id) AS target_ids,\n               jsonb_agg(jsonb_build_object('id', id::text, 'updatedAt', updated_at) ORDER BY id) AS target_revisions,\n               jsonb_agg(jsonb_build_object(\n                   'id', id::text, 'status', status, 'attemptCount', attempt_count,\n                   'lastErrorCode', CASE\n                       WHEN last_error_code ~ '^[A-Za-z0-9_.:-]{1,128}$' THEN last_error_code\n                       WHEN last_error_code = '' THEN '' ELSE 'unclassified' END,\n                   'updatedAt', updated_at,\n                   'quarantinedAt', quarantined_at, 'sentAt', sent_at, 'cancelledAt', cancelled_at\n               ) ORDER BY id) AS status_metadata,\n               jsonb_agg(jsonb_build_object(\n                   'delivery', delivery_facts,\n                   'event', event_facts, 'sendUnit', unit_facts\n               ) ORDER BY id) AS original_facts\n        FROM members m\n    )\n    SELECT (SELECT t.send_unit_id FROM target t), a.target_ids, a.target_revisions,\n           a.status_metadata, encode(sha256(convert_to(a.original_facts::text, 'UTF8')), 'hex'),\n           a.member_count\n    FROM aggregate a\n    WHERE a.member_count > 0\n"
+
 FUNCTION append_bot_reply_outbox_replay_claim_audit() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    granted_actor TEXT;\n    granted_reason TEXT;\nBEGIN\n    IF NEW.status = 'submitting'\n        AND OLD.status <> 'submitting'\n        AND NEW.operator_replay_grants > 0\n    THEN\n        SELECT actor, reason\n        INTO granted_actor, granted_reason\n        FROM public.bot_reply_outbox_replay_audit\n        WHERE outbox_id = NEW.id\n          AND grant_number = NEW.operator_replay_grants\n          AND event_type = 'granted';\n\n        IF NOT FOUND THEN\n            RAISE EXCEPTION 'manual replay grant audit is missing for outbox %, grant %',\n                NEW.id, NEW.operator_replay_grants\n                USING ERRCODE = '23514';\n        END IF;\n\n        INSERT INTO public.bot_reply_outbox_replay_audit (\n            outbox_id, grant_number, event_type, actor, reason\n        ) VALUES (\n            NEW.id, NEW.operator_replay_grants, 'replayed', granted_actor, granted_reason\n        )\n        ON CONFLICT (outbox_id, grant_number, event_type) DO NOTHING;\n    END IF;\n\n    RETURN NEW;\nEND\n"
 
 FUNCTION delete_retired_youtube_collection_job_leases(requested_cutoff timestamp with time zone, requested_limit integer) RETURNS TABLE(deleted_job_key text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    WITH candidate AS (\n        SELECT lease.job_key\n        FROM public.youtube_collection_job_leases AS lease\n        JOIN public.youtube_collection_projection_generations AS generation\n          ON generation.generation = lease.projection_generation\n        WHERE generation.status = 'RETIRED'\n          AND generation.valid_until < requested_cutoff\n          AND (\n              lease.slot_state <> 'ACTIVE'\n              OR lease.lease_expires_at < clock_timestamp()\n          )\n        ORDER BY generation.generation, lease.job_key\n        LIMIT CASE\n            WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n            ELSE 0\n        END\n        FOR UPDATE OF lease SKIP LOCKED\n    )\n    DELETE FROM public.youtube_collection_job_leases AS lease\n    USING candidate\n    WHERE lease.job_key = candidate.job_key\n    RETURNING lease.job_key\n"
@@ -1621,12 +1624,14 @@ FUNCTION lock_youtube_collection_projection(requested_generation bigint) RETURNS
 
 FUNCTION notification_template_row_version() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF (NEW.body, NEW.template_key, NEW.channel_id, NEW.id)\n        IS DISTINCT FROM (OLD.body, OLD.template_key, OLD.channel_id, OLD.id) THEN\n        NEW.row_version := OLD.row_version + 1;\n    ELSE\n        NEW.row_version := OLD.row_version;\n    END IF;\n    RETURN NEW;\nEND;\n"
 
+FUNCTION record_alarm_dispatch_closeout(p_receipt_id uuid, p_addressed_delivery_id bigint, p_expected_target_ids bigint[], p_expected_sha256 text, p_operator_id text, p_reason text) RETURNS void LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nDECLARE\n    unit_id bigint;\n    locked_count integer;\n    snapshot record;\nBEGIN\n    IF current_setting('transaction_isolation') <> 'serializable' THEN\n        RAISE EXCEPTION 'alarm dispatch closeout requires serializable transaction';\n    END IF;\n    IF p_receipt_id IS NULL OR p_addressed_delivery_id IS NULL OR p_addressed_delivery_id <= 0\n       OR p_expected_target_ids IS NULL OR cardinality(p_expected_target_ids) NOT BETWEEN 1 AND 100\n       OR p_expected_sha256 IS NULL OR p_expected_sha256 !~ '^[0-9a-f]{64}$'\n       OR p_operator_id IS NULL OR length(btrim(p_operator_id)) NOT BETWEEN 1 AND 128\n       OR p_operator_id <> btrim(p_operator_id) OR p_operator_id ~ '[[:cntrl:]]'\n       OR p_reason IS NULL OR length(btrim(p_reason)) NOT BETWEEN 1 AND 1024\n       OR p_reason <> btrim(p_reason) OR p_reason ~ '[[:cntrl:]]' THEN\n        RAISE EXCEPTION 'invalid alarm dispatch closeout request';\n    END IF;\n    IF array_position(p_expected_target_ids, p_addressed_delivery_id) IS NULL THEN\n        RAISE EXCEPTION 'addressed delivery missing from reviewed targets';\n    END IF;\n\n    -- 대상과 전체 send unit을 requeue와 같은 순서로 잠그고, 잠금 대기 뒤 재조회한다.\n    SELECT d.send_unit_id INTO unit_id\n    FROM public.alarm_dispatch_deliveries d WHERE d.id = p_addressed_delivery_id FOR UPDATE;\n    IF NOT FOUND OR unit_id IS NULL THEN\n        RAISE EXCEPTION 'addressed delivery or send unit missing';\n    END IF;\n    PERFORM d.id FROM public.alarm_dispatch_deliveries d\n    WHERE d.send_unit_id = unit_id ORDER BY d.id LIMIT 101 FOR UPDATE OF d;\n    GET DIAGNOSTICS locked_count = ROW_COUNT;\n    SELECT s.send_unit_id, s.target_ids, s.target_revisions, s.status_metadata,\n           s.original_sha256, s.member_count INTO snapshot\n    FROM public.alarm_dispatch_closeout_snapshot(p_addressed_delivery_id) AS s;\n    IF NOT FOUND OR snapshot.send_unit_id <> unit_id OR snapshot.member_count <> locked_count\n       OR snapshot.member_count > 100\n       OR snapshot.target_ids IS DISTINCT FROM p_expected_target_ids\n       OR snapshot.original_sha256 IS DISTINCT FROM p_expected_sha256 THEN\n        RAISE EXCEPTION 'reviewed closeout snapshot changed';\n    END IF;\n    IF EXISTS (\n        SELECT 1 FROM public.alarm_dispatch_deliveries d\n        WHERE d.id = ANY(snapshot.target_ids)\n          AND (d.status <> 'quarantined' OR d.sent_at IS NOT NULL OR d.cancelled_at IS NOT NULL)\n    ) THEN\n        RAISE EXCEPTION 'closeout requires only quarantined, unsent targets';\n    END IF;\n    IF EXISTS (SELECT 1 FROM public.alarm_dispatch_closeout_receipts r WHERE r.send_unit_id = unit_id) THEN\n        RAISE EXCEPTION 'send unit already has a closeout receipt';\n    END IF;\n    INSERT INTO public.alarm_dispatch_closeout_receipts (\n        receipt_id, send_unit_id, addressed_delivery_id, target_ids,\n        target_revisions, status_metadata, original_sha256, operator_id, reason\n    ) VALUES (\n        p_receipt_id, unit_id, p_addressed_delivery_id, snapshot.target_ids,\n        snapshot.target_revisions, snapshot.status_metadata, snapshot.original_sha256,\n        p_operator_id, p_reason\n    );\nEND\n"
+
+FUNCTION reject_alarm_dispatch_closeout_receipt_change() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    RAISE EXCEPTION 'alarm dispatch closeout receipts are append-only';\nEND\n"
+
 FUNCTION reject_bot_reply_outbox_replay_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_replay_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION reject_bot_reply_outbox_resolution_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_resolution_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION scrub_bot_command_execution_terminal_summary() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.result_summary := NEW.status;\n    RETURN NEW;\nEND\n"
-
-FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF NEW.payload IS DISTINCT FROM '{}'::jsonb THEN\n        RAISE WARNING 'bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger; a writer that does not clear payload is running';\n    END IF;\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"
 
 FUNCTION youtube_schedule_collabo_talent_names_valid(names text[]) RETURNS boolean LANGUAGE sql VOLATILITY i SECURITY_DEFINER false LEAKPROOF false PARALLEL s CONFIG search_path=pg_catalog BODY "\n    SELECT COALESCE(pg_catalog.array_ndims(names), 1) = 1\n       AND COALESCE(pg_catalog.array_lower(names, 1), 1) = 1\n       AND pg_catalog.cardinality(names) <= 32\n       AND NOT EXISTS (\n           SELECT 1\n           FROM pg_catalog.unnest(names) AS name\n           WHERE name IS NULL\n              OR pg_catalog.octet_length(name) < 1\n              OR pg_catalog.octet_length(name) > 256\n       );\n"

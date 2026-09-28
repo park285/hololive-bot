@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

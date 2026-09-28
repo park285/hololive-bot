@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -295,11 +295,10 @@ func TestMessageIngressCommandReceivedLogKeepsEventWithoutContentOrNickname(t *t
 	sender := "닉네임-" + privacySentinel
 	message := &webhook.Message{
 		Msg:    "!member 검색어-" + privacySentinel,
-		Room:   "룸이름-" + privacySentinel,
+		Room:   "123456789",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
 			UserID: testUserID,
-			ChatID: "123456789",
 		},
 	}
 
@@ -334,11 +333,10 @@ func TestMessageIngressUnknownCommandLogKeepsEventWithoutContentOrNickname(t *te
 	sender := "닉네임-" + privacySentinel
 	message := &webhook.Message{
 		Msg:    "!없는명령-" + privacySentinel,
-		Room:   "룸이름-" + privacySentinel,
+		Room:   "123456789",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
 			UserID: testUserID,
-			ChatID: "123456789",
 		},
 	}
 
@@ -367,11 +365,10 @@ func TestMessageIngressSelfSenderLogOmitsNickname(t *testing.T) {
 
 	message := &webhook.Message{
 		Msg:    "!member 검색어-" + privacySentinel,
-		Room:   "룸이름-" + privacySentinel,
+		Room:   "123456789",
 		Sender: &selfSender,
 		JSON: &webhook.MessageJSON{
 			UserID: testUserID,
-			ChatID: "123456789",
 		},
 	}
 

@@ -1,19 +1,15 @@
 package migrationrunner
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"testing/fstest"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
@@ -513,78 +509,27 @@ func TestBeginWrappedFileTrailingAutocommitFailureCanBeRerun(t *testing.T) {
 	assertLedger(t, pool, []string{txSQL})
 }
 
-func TestCurrentSchemaSupportsLegacyTerminalWriter(t *testing.T) {
+func TestCurrentSchemaRejectsLegacyTerminalWriterWithoutScrubTrigger(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	runMigrations(t, pool, migrations.FS, "")
+
 	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
-	assertTerminalPayloadScrubTrigger(t, pool)
-	assertLegacyTerminalWriterCompatible(t, pool, "legacy-succeeded", "succeeded")
-	assertLegacyTerminalWriterCompatible(t, pool, "legacy-dead", "dead")
+	assertTerminalPayloadScrubObjects(t, pool, false)
+	assertLegacyTerminalWriterRejected(t, pool, "legacy-succeeded", "succeeded")
+	assertLegacyTerminalWriterRejected(t, pool, "legacy-dead", "dead")
 }
 
-// 호환 scrub은 조용히 고치지 않고 이전 writer가 돌고 있다는 WARNING을 남긴다(223). 현재 writer처럼 같은 UPDATE에서
-// payload를 비우면 경고하지 않는다.
-func TestTerminalPayloadScrubTriggerWarnsOnLegacyWriter(t *testing.T) {
+func TestScrubTriggerRetirementPreservesTerminalCheck(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+	runMigrations(t, pool, realManifestThrough(t, "229_drop_youtube_delivery_ledger_backfill_state.sql"), "")
+
+	assertTerminalPayloadScrubObjects(t, pool, true)
+	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
+
 	runMigrations(t, pool, migrations.FS, "")
 
-	config := pool.Config().ConnConfig.Copy()
-
-	var (
-		mu       sync.Mutex
-		warnings []string
-	)
-
-	config.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		if notice.Severity == "WARNING" {
-			warnings = append(warnings, notice.Message)
-		}
-	}
-
-	conn, err := pgx.ConnectConfig(t.Context(), config)
-	if err != nil {
-		t.Fatalf("connect notice listener: %v", err)
-	}
-
-	t.Cleanup(func() {
-		if closeErr := conn.Close(context.WithoutCancel(t.Context())); closeErr != nil {
-			t.Errorf("close notice listener: %v", closeErr)
-		}
-	})
-
-	for _, messageID := range []string{"current-writer", "legacy-writer"} {
-		if _, err := conn.Exec(t.Context(), `
-			INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload)
-			VALUES ($1, 'room', 'room', '{"message":"retained"}'::jsonb)`, messageID); err != nil {
-			t.Fatalf("insert %s: %v", messageID, err)
-		}
-	}
-
-	if _, err := conn.Exec(t.Context(), `UPDATE bot_webhook_inbox SET status = 'succeeded', payload = '{}'::jsonb WHERE message_id = 'current-writer'`); err != nil {
-		t.Fatalf("current writer update: %v", err)
-	}
-
-	snapshot := func() []string {
-		mu.Lock()
-		defer mu.Unlock()
-
-		return slices.Clone(warnings)
-	}
-
-	if current := snapshot(); len(current) != 0 {
-		t.Fatalf("current writer produced scrub warnings %q, want none", current)
-	}
-
-	if _, err := conn.Exec(t.Context(), `UPDATE bot_webhook_inbox SET status = 'succeeded' WHERE message_id = 'legacy-writer'`); err != nil {
-		t.Fatalf("legacy writer update: %v", err)
-	}
-
-	if legacy := snapshot(); len(legacy) != 1 || !strings.Contains(legacy[0], "compatibility trigger") {
-		t.Fatalf("legacy writer warnings = %q, want one compatibility trigger warning", legacy)
-	}
+	assertTerminalPayloadScrubObjects(t, pool, false)
+	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
 }
 
 func TestBeginWrappedFileWithConcurrentlyIsRejected(t *testing.T) {
@@ -687,7 +632,7 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	assertTablePresent(t, pool, "members")
 	assertTablePresent(t, pool, "alarms")
 	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
-	assertTerminalPayloadScrubTrigger(t, pool)
+	assertTerminalPayloadScrubObjects(t, pool, false)
 
 	result, err = Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
 	if err != nil {
@@ -1367,10 +1312,10 @@ func assertConstraintValidated(t *testing.T, pool *pgxpool.Pool, table, constrai
 	}
 }
 
-func assertTerminalPayloadScrubTrigger(t *testing.T, pool *pgxpool.Pool) {
+func assertTerminalPayloadScrubObjects(t *testing.T, pool *pgxpool.Pool, want bool) {
 	t.Helper()
 
-	var exists bool
+	var triggerExists, functionExists bool
 
 	err := pool.QueryRow(t.Context(), `
 		SELECT EXISTS (
@@ -1383,13 +1328,14 @@ func assertTerminalPayloadScrubTrigger(t *testing.T, pool *pgxpool.Pool) {
 			  AND t.tgenabled = 'O'
 			  AND t.tgqual IS NOT NULL
 			  AND p.proname = 'scrub_bot_webhook_inbox_terminal_payload'
-		)`).Scan(&exists)
+		), to_regprocedure('public.scrub_bot_webhook_inbox_terminal_payload()') IS NOT NULL`).
+		Scan(&triggerExists, &functionExists)
 	if err != nil {
-		t.Fatalf("query terminal payload scrub trigger: %v", err)
+		t.Fatalf("query terminal payload scrub objects: %v", err)
 	}
 
-	if !exists {
-		t.Fatal("terminal payload scrub trigger is not installed and enabled")
+	if triggerExists != want || functionExists != want {
+		t.Fatalf("terminal payload scrub trigger=%t function=%t, want both %t", triggerExists, functionExists, want)
 	}
 }
 
@@ -1407,7 +1353,7 @@ func assertInboxPayload(t *testing.T, pool *pgxpool.Pool, messageID, want string
 	}
 }
 
-func assertLegacyTerminalWriterCompatible(t *testing.T, pool *pgxpool.Pool, messageID, status string) {
+func assertLegacyTerminalWriterRejected(t *testing.T, pool *pgxpool.Pool, messageID, status string) {
 	t.Helper()
 
 	if _, err := pool.Exec(t.Context(), `
@@ -1427,10 +1373,14 @@ func assertLegacyTerminalWriterCompatible(t *testing.T, pool *pgxpool.Pool, mess
 	}
 
 	if _, err := pool.Exec(t.Context(), updateSQL, status, messageID); err != nil {
-		t.Fatalf("legacy writer %s update: %v", status, err)
+		if !strings.Contains(err.Error(), "chk_bot_webhook_inbox_terminal_payload_scrubbed") {
+			t.Fatalf("legacy writer %s update error = %v, want terminal payload CHECK", status, err)
+		}
+	} else {
+		t.Fatalf("legacy writer %s update unexpectedly succeeded", status)
 	}
 
-	assertInboxPayload(t, pool, messageID, "{}")
+	assertInboxPayload(t, pool, messageID, `{"message": "retained"}`)
 }
 
 func assertTablePresent(t *testing.T, pool *pgxpool.Pool, name string) {

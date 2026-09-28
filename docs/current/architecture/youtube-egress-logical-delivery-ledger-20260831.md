@@ -3,7 +3,7 @@
 - 작성일: 2026-08-31 KST
 - 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
 - 상위 계약: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)
-- 현재 상태(2026-09-26): 아래 fixed-high-water backfill은 운영에서 완료됐습니다. backfill 명령(`youtube-delivery-ledger-backfill`)과 alarm-worker `TransitionStore`가 전이마다 completion marker를 읽던 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠고, 완료 전제는 migration `227_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 확인합니다. `youtube_notification_delivery_ledger_state` 행은 완료 기록으로 남고 runtime은 읽지 않습니다. backfill·completion gate 절은 설계 근거로만 읽습니다.
+- 현재 상태(2026-09-28): 아래 fixed-high-water backfill은 운영에서 완료됐습니다. backfill 명령(`youtube-delivery-ledger-backfill`)과 alarm-worker `TransitionStore`의 completion marker gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. migration 227은 적용 시점의 완료 전제를, migration 229는 잠금 아래 현재 singleton 완료 상태를 다시 확인하고 일회성 `youtube_notification_delivery_ledger_state`를 폐기합니다. 아래 backfill·completion gate 절은 설계 근거로만 읽습니다.
 
 ## 목적
 
@@ -11,7 +11,7 @@ Full outbox/delivery row의 cleanup 수명과 logical delivery 중복 방지 수
 
 현재 cleanup은 terminal outbox를 삭제하며 기준 시각으로 `COALESCE(sent_at, created_at)`을 사용합니다. `FAILED`에는 terminal 진입 시각이 없으므로 오래 대기한 outbox가 늦게 실패하면 즉시 삭제될 수 있습니다. Outbox가 삭제되면 cascade로 delivery row도 사라져 same-room fulfillment와 outcome-unknown evidence를 다시 확인할 수 없습니다.
 
-Full payload/outbox/delivery를 무기한 보존하지 않고, one-row-per-logical-delivery terminal evidence와 backfill completion state만 장기 보존합니다.
+Full payload/outbox/delivery를 무기한 보존하지 않고, one-row-per-logical-delivery terminal evidence를 장기 보존합니다. 당시 backfill completion state는 migration 229에서 현재 완료를 재검증한 뒤 폐기합니다.
 
 ## 결정
 

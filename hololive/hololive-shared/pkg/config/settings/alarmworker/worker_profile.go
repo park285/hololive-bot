@@ -59,8 +59,6 @@ func validateWorkerProfile(profile *settings.AlarmWorkerProfile) error {
 	return nil
 }
 
-// notification_delivery.lock_timeout_ms는 읽는 코드가 없어 검증하지 않는다. 퇴역 사유와 제거 조건은
-// settings.NotificationDeliveryWorkerSettings.LockTimeoutMS 주석에 있다.
 func positiveValueProblems(profile *settings.AlarmWorkerProfile) []string {
 	return load.PositiveValueProblems(map[string]int64{
 		"alarm_dispatch.lease_ms":                               profile.AlarmDispatch.LeaseMS,

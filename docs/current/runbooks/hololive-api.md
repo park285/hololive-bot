@@ -30,6 +30,25 @@
 | selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
+## iris-client-go v3 전환 전 webhook inbox 드레인
+
+구 SDK는 `durableAdmitter`가 저장한 `bot_webhook_inbox.payload`에 상위 `msg`·`room`과 중첩 `json.message`·`json.chat_id`를 함께 적었습니다. v3 `MessageJSON` decoder는 두 중첩 필드를 거절합니다. v3 runtime이 구 `pending`·`retry`·`processing` 행을 claim하면 `processInboxClaim`의 decode 실패 경로가 그 행을 `dead`로 종료하고 payload를 scrub하므로, 명령이 처리되지 않은 채 원본이 사라질 수 있습니다. 구 payload를 자동 변환하거나 fallback decode하지 않습니다.
+
+v3 API image를 시작하기 전에 Iris webhook ingress와 구 API의 신규 admission을 quiesce하고, 구 API가 이미 받은 inbox를 기존 runtime으로 드레인합니다. 아래 read-only 집계에서 active 행이 **모두 0**임을 확인하고, 구 API의 재입력이 멈춘 상태에서 한 번 더 확인합니다. `legacy_shape_count`는 저장 형식의 증거이며 active 0을 대신하지 않습니다. 미완료·만료 lease가 남으면 기존 runtime에서 소유권·명령 결과를 조사하고 전환을 보류합니다. `dead`·`succeeded` 행은 `{}`로 scrub된 종단 기록이므로 이 드레인 대상이 아닙니다.
+
+```sql
+SELECT status, count(*) AS active_count,
+       count(*) FILTER (
+           WHERE COALESCE(payload -> 'json', payload -> 'JSON', '{}'::jsonb)
+                 ?| ARRAY['message', 'chat_id']
+       ) AS legacy_shape_count
+FROM bot_webhook_inbox
+WHERE status IN ('pending', 'retry', 'processing')
+GROUP BY status ORDER BY status;
+```
+
+새 이미지의 signed webhook은 body `messageId`와 `X-Iris-Message-Id`가 일치해야 합니다. 이전 API image로 돌아가야 할 때도 ingress를 먼저 quiesce하고 v3에서 저장한 active inbox를 드레인한 뒤 해당 image의 payload 해석과 외부 부수 효과를 확인합니다. 처리 중 행을 삭제·재큐잉·임의 형식 변경해 드레인을 건너뛰지 않습니다.
+
 ## Compose 재생성 주의
 
 R-12의 `log_autovacuum_min_duration=10s`는 `holo-postgres`의 compose `command` 변경입니다. 변경된 compose를 사용하는 전체 `up`이나 의존성을 시작하는 명령은 DB 컨테이너를 재생성할 수 있으며, DB 중단·재연결을 포함한 별도 운영 승인이 필요합니다.
@@ -60,7 +79,7 @@ export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
 4. 출력의 `activated=true`와 non-zero `cutoff_received_at`을 확인합니다. 재실행에서 `activated=false`이면 기존 cutoff와 attribution이 그대로인지 확인하며 새 epoch로 간주하지 않습니다.
 5. 같은 epoch-aware `hololive-api`를 `--no-build --no-deps`로 시작하고 health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
-6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. 완료 전제는 migration `227_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 확인하며, 미완료 state가 있거나 backfill 없이 delivery 행이 있는 DB에서는 migration이 실패합니다.
+6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. Migration 227은 적용 시점에 완료 전제를 검사합니다. 적용 전 singleton 원본·복구 SQL을 보존한 뒤 migration 229는 227 적용 기록과 현재 singleton 완료 상태를 잠금 아래 다시 검사하고, state DROP과 229 적용 기록을 한 transaction으로 커밋합니다. 229 적용 기록 없이 table이 사라진 상태는 자동 복구하지 않습니다. Runner의 별도 checksum 기록이 연결 단절로 빠지면 다음 실행은 실패하므로 적용 기록과 checksum을 조사한 뒤 복구합니다.
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
 
@@ -231,17 +250,11 @@ sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-a
 
 `discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 replay artifact와 144시간 cutoff를 사용합니다.
 
-Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. Migration 133/134 trigger와 terminal writer가 inbox payload와 command 진단을 terminal 전이에서 즉시 scrub합니다. 주기 maintenance는 scrub scan을 반복하지 않고 retention 대상만 찾으며, terminal ledger는 Iris admission retention(7일)보다 긴 8일 뒤 batch 삭제합니다. `manual_review`와 그 replay audit은 판단·처리 이력을 위해 해당 outbox row의 retention 동안 함께 보존합니다.
+Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. Migration 133은 inbox terminal payload scrub과 CHECK를 도입했고, 현재 inbox writer는 terminal 전이에서 payload를 직접 비웁니다(호환 trigger는 230에서 폐기). Migration 134의 command terminal summary trigger는 그대로 유지합니다. 주기 maintenance는 scrub scan을 반복하지 않고 retention 대상만 찾으며, terminal ledger는 Iris admission retention(7일)보다 긴 8일 뒤 batch 삭제합니다. `manual_review`와 그 replay audit은 판단·처리 이력을 위해 해당 outbox row의 retention 동안 함께 보존합니다.
 
-Migration 133은 runtime cutover 전에 terminal payload scrub trigger를 먼저 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate합니다. 따라서 이전 runtime의 `inbox_complete` writer가 migration 적용 중이나 cutover 전에 `status`만 `succeeded`로 변경해도 trigger가 `payload`를 `{}`로 scrub하며 CHECK에 거부되지 않습니다.
-이 호환 trigger는 드레인 종단입니다. 현재 terminal writer(`inbox_complete.sql`, `inbox_abandon.sql`, `inbox_release.sql`, `inbox_reclaim_expired.sql`)는 같은 UPDATE에서 `payload`를
-`{}`로 쓰므로, migration 223 이후 trigger가 비어 있지 않은 payload를 scrub하면 PostgreSQL WARNING
-`bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger`를 남깁니다(stack-audit 2026-09-26 T17).
-제거 조건은 두 가지입니다. ① 중앙 호스트의 이미지와 보존 이미지·rollback 대상 목록에 migration 133 이전 writer
-이미지(terminal 전이에서 payload를 비우지 않는 hololive-api 또는 퇴역 bot runtime)가 0개임을 hololive-bot-ops로 대조합니다.
-② 중앙 `holo-postgres` 로그에서 위 WARNING이 30일 동안 0건입니다. 두 조건을 확인하면 새 migration으로 trigger와
-`scrub_bot_webhook_inbox_terminal_payload()`를 지우고 `chk_bot_webhook_inbox_terminal_payload_scrubbed` CHECK만 남깁니다.
-방어층으로 계속 두려면 그 결정을 기록합니다. T18(2026-09-26)은 ①을 측정하지 못했습니다. 재검토 기한: 2026-12-31.
+Migration 133은 과거 runtime cutover 전에 terminal payload scrub trigger를 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate했습니다. Migration 223은 trigger가 구 status-only writer를 만날 때 WARNING을 남기도록 했습니다. 2026-09-28 읽기 전용 검증에서는 중앙 API 이미지 21개(서로 다른 revision 20개)와 문서화된 rollback 이미지 2개가 모두 terminal payload를 직접 비우는 네 writer(`inbox_complete.sql`, `inbox_abandon.sql`, `inbox_release.sql`, `inbox_reclaim_expired.sql`)를 포함했습니다. 이 증거는 이미지 label을 source revision에 대응시킨 것이며 바이너리 역공학이나 장기 로그 관측은 아닙니다. Migration 230은 이 지원 집합을 전제로 호환 `bot_webhook_inbox_terminal_payload_scrub` trigger와 `scrub_bot_webhook_inbox_terminal_payload()` 함수만 원자적으로 지웁니다. 검증된 `chk_bot_webhook_inbox_terminal_payload_scrubbed` CHECK는 유지합니다. 구 status-only writer는 이제 CHECK에 거절됩니다. 네 현행 writer는 terminal 전이에서 `{}`를 직접 쓰고 retry에서는 payload를 보존해야 합니다.
+
+Migration 230은 적용 전 catalog에서 정확한 trigger/function 관계와 CHECK 정의·검증 상태를 확인합니다. 누락·변형·추가 의존성·락 실패는 적용을 중단하고 DROP을 롤백합니다. 지원 중인 두 rollback 이미지는 같은 CHECK를 직접 만족하므로 바이너리 rollback에 trigger 재설치는 필요하지 않습니다. Schema를 되돌려야 하면 다음 번호의 forward migration으로 처리하거나 ledger와 schema가 함께 일치하는 전체 복원만 별도로 검토합니다. 230 적용 기록을 둔 채 수동으로 백업 DDL만 재설치하면 runner가 230을 skip하는 schema drift가 되므로 정상 rollback 절차가 아닙니다.
 
 Migration 125 이후 runtime은 `bot_webhook_heads`와 `ordering_key` advisory lock을 함께 사용합니다. Schema rollback은 이전 runtime으로 먼저 전환해 writer를 quiesce한 뒤에만 `bot_webhook_heads`/`available_at`을 제거해야 하며, 현재 runtime이 쓰는 동안 migration 125~136을 되돌리면 안 됩니다.
 

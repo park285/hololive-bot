@@ -35,6 +35,7 @@ import (
 const (
 	durabilityTestLease = 30 * time.Second
 
+	testDurableRoomID = "room-1"
 	testClaimToken    = "token-a"
 	testMessageID     = "message:m-1"
 	testOperatorEmail = "operator@example.com"
@@ -73,7 +74,7 @@ func TestInboxRepository(t *testing.T) {
 
 	message := InboxMessage{
 		MessageID:   testMessageID,
-		RoomID:      "room-1",
+		RoomID:      testDurableRoomID,
 		OrderingKey: "room:room-1",
 		Payload:     []byte(`{"body":"first"}`),
 	}
@@ -278,7 +279,7 @@ func assertInboxRejectsInvalidArguments(
 ) {
 	t.Helper()
 
-	_, err := repo.Admit(ctx, InboxMessage{RoomID: "room-1", OrderingKey: "k", Payload: []byte(`{}`)})
+	_, err := repo.Admit(ctx, InboxMessage{RoomID: testDurableRoomID, OrderingKey: "k", Payload: []byte(`{}`)})
 	require.ErrorIs(t, err, ErrInvalidArgument)
 
 	_, err = repo.Claim(ctx, testClaimToken, 0)
@@ -293,7 +294,7 @@ func TestInboxRepositoryWithoutPool(t *testing.T) {
 
 	_, err := repo.Admit(t.Context(), InboxMessage{
 		MessageID:   testMessageID,
-		RoomID:      "room-1",
+		RoomID:      testDurableRoomID,
 		OrderingKey: "room:room-1",
 		Payload:     []byte(`{}`),
 	})
