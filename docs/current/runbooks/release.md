@@ -105,6 +105,8 @@ recreate 시작 시각을 기록해 두고, 대상 컨테이너의 `StartedAt`�
 health가 `healthy`, `RestartCount=0`, 실행 중 이미지의 revision이 검토된 SHA와
 일치하는지 확인합니다. 건강한 컨테이너가 다른 이미지 ID로 돌고 있으면 실패한
 rollout입니다. 롤백 태그와 직전 배포 트리는 수용될 때까지 보존합니다.
+PO issuer(`youtube-po-b`, `youtube-po-c`, native `hololive-youtube-po.service`)의 재시작 카운트는
+generation 교체 횟수이므로 `RestartCount=0` 대신 [youtube-collector 런북의 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)을 따릅니다.
 
 > 배포 스크립트는 기존 host-network Postgres 런타임에서 live-compat overlay 없이
 > 배포하려는 경로를 fail-closed로 거부한다. live-compat overlay는 이제

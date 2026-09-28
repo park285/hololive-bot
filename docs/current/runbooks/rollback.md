@@ -38,6 +38,7 @@ sudo -n ./scripts/deploy/compose.sh \
 
 rollback 후에는 대상 container의 `StartedAt`, health, `RestartCount`, image revision을
 확인하고 rollback tag와 실패한 release image를 원인 분석이 끝날 때까지 보존합니다.
+PO issuer는 `RestartCount` 대신 [youtube-collector 런북의 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)으로 판정합니다.
 
 `hololive-alarm-worker`를 Stack Worker Contract v1 이전 image로 되돌리는 것은 단일
 image rollback이 아닙니다. 해당 image와 함께 보존한 repository revision, profile,

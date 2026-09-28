@@ -8,6 +8,13 @@
 
 ## 미출시
 
+## v6.0.1 - 2026-09-28
+
+- `po-broker`는 종료할 때 stderr에 `po-broker exit reason=<reason> generation=<uuid>` 한 줄만 남깁니다. `reason`은 실제 퇴역 호출 지점에서 정한 고정 어휘입니다. `session_closed`(DELETE /v1/session), `lease_expired`(lease 타이머·요청 시점 만료), `worker_failed`(요청의 worker IO 중 종료 포함), `worker_timeout`, `request_aborted`(worker IO 중 요청 연결 끊김), `response_failed`, `worker_exited`(worker IO 요청이 없는 동안 기동을 마친 worker의 자체 종료), `startup_failed`, `listener_failed`, `signal`(퇴역 전 SIGTERM·SIGINT)이 있습니다. 여러 경로가 동시에 퇴역을 요청해도 처음 표시된 원인만 남고, 퇴역 중 받은 signal은 먼저 표시된 원인을 남깁니다. token·payload·요청 본문·worker 출력은 기록하지 않습니다. exit code는 그대로이고, signal 종료는 원인을 기록한 뒤 같은 signal을 기본 처리로 다시 보내 종료 상태(예: 143)를 유지합니다. 그동안 로그 없이 exit 0으로 끝나던 issuer 재시작도 이제 원인별로 구분됩니다.
+- AppArmor af_unix 미디에이션 경쟁(upstream `b1aea2c19607`, 현재 Ubuntu linux-oracle 빌드 미포함)으로 생긴 커널 Oops(`unix_fs_perm+0xd0`)를 완화합니다. broker는 응답마다 keep-alive를 끄고 연결을 닫았고, 이 close가 youtubejs helper의 새 연결 첫 read와 겹치는 창에서 Oops가 났습니다. 이제 broker HTTP keep-alive를 켜서 정상 응답 뒤에는 서버가 연결을 닫지 않습니다. helper의 `ProofBrokerClient` Agent는 `timeout: 1000`으로 유휴 socket을 broker `IdleTimeout`(2초)보다 먼저 닫습니다. 그래서 유휴 연결은 client가 끝내고, 서버가 닫는 중인 socket에 요청을 보내는 재사용 경쟁도 생기지 않습니다. 퇴역 시에는 `server.Close`가 유휴·진행 중 연결을 즉시 닫으므로 프로세스도 바로 종료합니다. generation·lease·operationLimit·header/body 한도 검사는 요청마다 그대로 적용합니다. retry·fallback은 추가하지 않았습니다. 근본 수정은 커널 교체이며, 퇴역·오류 응답 직후의 새 연결 첫 read 창은 남아 있습니다.
+- native AP(`collector-a`·`collector-d`) cutover·실패 복원·수동 rollback은 PO socket·service를 collector보다 먼저 멈춥니다. collector의 종료 generation 반납이 살아 있는 broker를 퇴역시켜 `Restart=always`가 곧 멈출 issuer를 다시 띄우던 재시작을 없앴고, collector 기동도 `enable` 뒤 `restart` 한 번으로 줄였습니다. 운영 runbook은 issuer의 Docker `RestartCount`·systemd `NRestarts`를 generation 교체 횟수로 정의하고 종료 코드·OOM·health·generation 일치로 합격을 판정합니다. Compose issuer-first cutover의 1회 issuer 재시작은 예상 동작으로 문서화했습니다.
+- collector·PO 산출물 버전은 `6.0.1`입니다. collector·PO image는 `hololive/hololive-api/VERSION`을 씁니다. 같은 파일을 쓰는 API는 코드 변경이 없어 재배포하지 않고 `6.0.0` 산출물을 유지하며, alarm-worker도 `5.0.0`을 유지합니다. DB migration·운영 설정·공개 API는 바꾸지 않습니다.
+
 ## v6.0.0 - 2026-09-28
 
 - `iris-client-go/v3 v3.0.2`으로 API·alarm-worker·shared·collector·DB 테스트 모듈을 함께 이관합니다. 웹훅 본문·방은 `Message.Msg`·`Message.Room`에서 읽고, 서명된 요청은 body `messageId`를 헤더와 일치시킵니다. API·alarm-worker 산출물 버전은 각각 `6.0.0`·`5.0.0`입니다.

@@ -195,6 +195,20 @@ stop_collector_unit_and_require_inactive() {
   fi
 }
 
+# PO issuer를 collector보다 먼저 멈춘다. collector는 종료하면서 소유 generation을 DELETE로 반납하는데, broker가 살아
+# 있으면 retire 뒤 exit 0하고 Restart=always(RestartSec=1s)로 다시 떠서 곧바로 이 스크립트에 다시 멈춰진다.
+# broker가 먼저 멈추면 그 DELETE는 broker_unavailable로 끝나고 collector는 재전송 없이 무시한다(proof-controller.mjs retireOwned).
+# socket을 먼저 멈춰 service가 Requires=로 같은 transaction에서 멈추게 하고, 그 사이 socket activation이 service를 다시 띄우지 못하게 한다.
+stop_native_units_and_require_inactive() {
+  if sudo -n systemctl is-active --quiet "$po_socket"; then
+    sudo -n systemctl stop "$po_socket"
+  fi
+  if sudo -n systemctl is-active --quiet "$po_service"; then
+    sudo -n systemctl stop "$po_service"
+  fi
+  stop_collector_unit_and_require_inactive
+}
+
 # 실패하면 이전 collector release로 되돌린다. 이전 release가 없는 첫 설치는 반쯤 구성된 unit을 지우고 실패로 끝낸다.
 # 퇴역 producer의 첫 cutover 상태를 기록·복원하던 경로는 T18(2026-09-26)에서 모든 host-native AP의 current·previous가
 # collector release이고 producer unit이 0개임을 확인해 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling).
@@ -204,7 +218,7 @@ restore_native_after_failed_cutover() {
   trap - ERR
   if ! (
     set -e
-    stop_collector_unit_and_require_inactive
+    stop_native_units_and_require_inactive
     if [[ -n "$old_target" && -d "$old_target" ]]; then
       rollback_contract_dir="$old_target/rollback-contract"
       sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
@@ -228,13 +242,7 @@ restore_native_after_failed_cutover() {
   exit "$status"
 }
 trap restore_native_after_failed_cutover ERR
-stop_collector_unit_and_require_inactive
-if sudo -n systemctl is-active --quiet "$po_service"; then
-  sudo -n systemctl stop "$po_service"
-fi
-if sudo -n systemctl is-active --quiet "$po_socket"; then
-  sudo -n systemctl stop "$po_socket"
-fi
+stop_native_units_and_require_inactive
 
 sudo -n install -m 0640 -o root -g root "$payload/youtube-collector-host.env" "$host_env"
 sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-collector@.service" "$unit_file"
@@ -243,7 +251,7 @@ sudo -n ln -sfn "$release_dir" "$current_link"
 po_install_release "$release_dir" "$EXPECTED_REVISION"
 sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
-sudo -n systemctl enable --now "$unit"
+sudo -n systemctl enable "$unit"
 sudo -n systemctl restart "$unit"
 
 since_epoch="$(date -u -d "$change_started_at" +%s)"

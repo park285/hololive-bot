@@ -91,7 +91,14 @@ if [[ -z "$previous_target" || ! -d "$previous_target" ]]; then
   exit 1
 fi
 native_rollback_validate "$previous_target"
-# 이전 collector와 issuer를 같은 release로 되돌리기 전에 현재 collector를 멈추고 비활성을 확인한다.
+# 이전 collector와 issuer를 같은 release로 되돌리기 전에 현재 issuer와 collector를 멈추고 비활성을 확인한다.
+# cutover와 같이 issuer를 먼저 멈춰 collector의 종료 generation 반납이 broker 재시작을 만들지 않게 한다.
+if sudo -n systemctl is-active --quiet "$po_socket"; then
+  sudo -n systemctl stop "$po_socket"
+fi
+if sudo -n systemctl is-active --quiet "$po_service"; then
+  sudo -n systemctl stop "$po_service"
+fi
 if systemctl cat "$unit" >/dev/null 2>&1; then
   sudo -n systemctl disable --now "$unit" >/dev/null
 fi

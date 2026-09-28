@@ -5,6 +5,8 @@ import { setTimeout as delay } from "node:timers/promises";
 const socketPath = "/run/hololive-youtube-po/worker.sock";
 const responseLimit = 64 * 1024;
 const requestLimit = 1024 * 1024;
+// po-broker의 IdleTimeout(2초)보다 짧아야 유휴 연결을 서버가 아닌 client가 먼저 닫습니다.
+const idleSocketTimeoutMs = 1_000;
 const brokerStates = new Set(["IDLE", "STARTING", "AWAITING_CHALLENGE", "AWAITING_INTEGRITY", "READY"]);
 const brokerErrors = new Set([
   "invalid_request", "generation_mismatch", "invalid_state", "expired", "busy", "worker_failed", "worker_timeout",
@@ -25,7 +27,11 @@ export class ProofBrokerClient {
   /** @param {{ socket?: string }} [options] */
   constructor(options = {}) {
     this.socket = options.socket ?? socketPath;
-    this.agent = new Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 1 });
+    // keep-alive 연결을 재사용해 서버가 응답 직후 닫는 연결의 첫 read(AppArmor unix 미디에이션
+    // 경쟁, upstream b1aea2c19607 미적용 커널의 Oops 경로)를 만들지 않습니다. Agent timeout은
+    // 유휴(free) socket만 파기하고 진행 중 요청은 끊지 않으므로, 유휴 연결은 서버 IdleTimeout 전에
+    // client가 닫아 서버가 닫는 socket에 요청을 보내는 재사용 경쟁도 피합니다.
+    this.agent = new Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 1, timeout: idleSocketTimeoutMs });
   }
 
   /** @param {AbortSignal} signal */

@@ -6,10 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProofBrokerClient } from "./proof-broker.mjs";
 
-async function brokerServer(t, handler) {
+/** @param {(server: import("node:http").Server) => void} [configure] */
+async function brokerServer(t, handler, configure = () => {}) {
   const directory = await mkdtemp(join(tmpdir(), "proof-client-"));
   const socket = join(directory, "worker.sock");
   const server = createServer(handler);
+  configure(server);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(socket, resolve);
@@ -141,4 +143,53 @@ test("closing the owned transport terminates an unfinished mint", async (t) => {
   await admitted.promise;
   client.close();
   await rejected;
+});
+
+/** @param {import("node:http").ServerResponse} res */
+function healthResponse(res) {
+  res.setHeader("content-type", "application/json");
+  res.end(JSON.stringify({ protocol_version: 1, generation: "generation", state: "IDLE", revision: "revision" }));
+}
+
+// po-broker(Go net/http)는 Keep-Alive timeout 힌트를 보내지 않고 IdleTimeout 2초 뒤에야 닫습니다.
+// 서버 쪽 idle 종료를 끄면 제한 시간 안의 종료는 모두 client가 시작한 것입니다.
+const brokerIdleTimeoutMs = 2_000;
+
+test("sequential exchanges share one connection that the client closes before the broker idle timeout", async (t) => {
+  /** @type {{ clientEnded: boolean, closed: Promise<number> }[]} */
+  const connections = [];
+  const client = await brokerServer(t, (req, res) => {
+    req.resume();
+    healthResponse(res);
+  }, (server) => {
+    server.keepAliveTimeout = 0;
+    server.on("connection", (socket) => {
+      const connection = { clientEnded: false, closed: new Promise((resolve) => socket.once("close", () => resolve(performance.now()))) };
+      socket.once("end", () => { connection.clientEnded = true; });
+      connections.push(connection);
+    });
+  });
+  const signal = new AbortController().signal;
+  for (let i = 0; i < 3; i += 1) await client.exchange("GET", "/health", undefined, signal);
+  const idleSince = performance.now();
+  assert.equal(connections.length, 1);
+
+  const closedAt = await Promise.race([
+    connections[0].closed,
+    new Promise((resolve) => setTimeout(resolve, brokerIdleTimeoutMs, undefined)),
+  ]);
+  assert.ok(typeof closedAt === "number" && closedAt - idleSince < brokerIdleTimeoutMs, "idle socket outlived the broker idle timeout");
+  assert.equal(connections[0].clientEnded, true);
+});
+
+test("an exchange slower than the idle socket timeout still completes", async (t) => {
+  /** @type {NodeJS.Timeout | undefined} */
+  let timer;
+  t.after(() => clearTimeout(timer));
+  const client = await brokerServer(t, (req, res) => {
+    req.resume();
+    timer = setTimeout(() => healthResponse(res), 1_500);
+  }, (server) => { server.keepAliveTimeout = 0; });
+  const health = await client.exchange("GET", "/health", undefined, new AbortController().signal);
+  assert.equal(health.generation, "generation");
 });

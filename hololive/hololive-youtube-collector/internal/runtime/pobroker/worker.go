@@ -47,8 +47,6 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 	b.worker = worker
 	b.mu.Unlock()
 
-	go func() { <-worker.done; b.retire() }()
-
 	var loaded struct {
 		Type string `json:"type"`
 	}
@@ -56,6 +54,21 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 	if err := worker.exchange(ctx, nil, &loaded); err != nil || loaded.Type != "loaded" {
 		return errors.Join(errWorker, err)
 	}
+
+	// 기동 중 종료는 exchange가 실패로 돌려주어 Serve가 startup_failed로 퇴역시킵니다.
+	// 감시는 loaded 뒤에 시작해 기동 실패의 퇴역 원인을 worker_exited와 경합시키지 않습니다.
+	// 요청이 worker IO(직렬 슬롯)를 쥔 중의 종료는 그 요청 경로와 같은 worker_failed로 기록합니다.
+	go func() {
+		<-worker.done
+
+		select {
+		case b.serial <- struct{}{}:
+			b.retire(ExitWorkerExited)
+			<-b.serial
+		default:
+			b.retire(ExitWorkerFailed)
+		}
+	}()
 
 	return nil
 }
