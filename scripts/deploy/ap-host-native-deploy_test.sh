@@ -188,6 +188,7 @@ native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$
 # cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
 cutover_stop_step="$(awk '/^trap restore_native_after_failed_cutover ERR$/ { on = 1 } on && /^sudo -n install / { exit } on' "${REMOTE_APPLY}")"
 stop_fixture="$(mktemp -d)"
+trap 'rm -rf "${stop_fixture}"' EXIT
 # 가짜 systemctl은 active unit을 파일로 두고 호출을 기록한다. socket stop은 Requires=처럼 service도 멈춘다.
 # collector_sticks가 있으면 disable --now 뒤에도 collector가 active로 남는다. sudo는 systemctl만 실행하고
 # 나머지 host 변경(install/ln/rm)은 기록만 한다. po_restore_fails가 있으면 이전 PO 복원이 실패한다.
@@ -349,7 +350,7 @@ fi
 
 tmp="$(mktemp -d)"
 cleanup() {
-  rm -rf "${tmp}"
+  rm -rf "${tmp}" "${stop_fixture}"
 }
 trap cleanup EXIT
 mkdir -p "${tmp}/bin" "${tmp}/success" "${tmp}/failure"

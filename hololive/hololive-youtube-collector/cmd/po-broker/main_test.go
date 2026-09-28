@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"syscall"
 	"testing"
 	"time"
@@ -68,7 +69,7 @@ func TestWatchTerminationRecordsAndExitsBySignal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.script == plain && signal.Ignored(syscall.SIGINT) {
+			if tt.script == plain && slices.Contains(tt.send, syscall.SIGINT) && signal.Ignored(syscall.SIGINT) {
 				t.Skip("test process inherited an ignored SIGINT, so the helper cannot receive it")
 			}
 

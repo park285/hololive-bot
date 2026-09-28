@@ -215,7 +215,7 @@ Docker는 자동 재시작 때 `State.ExitCode`와 `State.OOMKilled`를 초기�
 
 Compose b/c의 paired cutover(`ap-deploy.sh`, `po-central-remote.sh`)는 issuer를 먼저 force-recreate하고 healthy를 확인한 뒤 collector를 교체합니다. issuer가 실패하면 이전 collector를 그대로 두기 위한 순서이므로 유지합니다. 그 사이 이전 collector가 새 issuer의 generation을 잡으면 SIGTERM 종료에서 그 generation을 퇴역시키므로, 새 issuer는 이전 collector 종료 시각에 exit 0과 재시작 1회를 보일 수 있습니다. 이 1회는 예상된 교체입니다. 이 밖의 교체는 exit reason 줄로 사유를 확인합니다.
 
-native a/d cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다.
+native a/d cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다. 이 경고 뒤에는 issuer가 멈춰 있고 collector unit이 disabled일 수 있으므로, 원인을 해소한 뒤 `scripts/deploy/ap-host-native-rollback.sh <ap> --apply`로 `previous` release와 그 issuer를 다시 적용하고 완료 검사를 확인합니다.
 
 ## Logs
 

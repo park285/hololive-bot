@@ -125,19 +125,14 @@ func exitReporter(w io.Writer, generation string) func(pobroker.ExitReason) {
 // 다시 보내 종료 방식과 상태를 signal 처리 도입 전과 같게 둡니다. 퇴역이 이미 시작됐으면
 // signal 대신 처음 표시된 퇴역 원인을 기록합니다. 반환한 함수를 부른 뒤의 signal은 곧바로
 // 기본 처리로 가고, 그 전에 받은 signal도 같은 방식으로 종료합니다.
-// 상속받은 무시(SIG_IGN) signal은 감시하지 않습니다. Notify가 무시를 풀면 받은 signal로 원인
-// 줄만 남기고 종료하지 못한 채, 감시가 끝난 뒤의 다른 signal까지 삼키기 때문입니다.
+// 상속받은 무시(SIG_IGN)는 Go runtime이 존중하는 SIGINT에만 해당하므로 그때 SIGINT를 감시하지
+// 않습니다. Notify가 무시를 풀면 받은 SIGINT로 원인 줄만 남기고 종료하지 못한 채, 감시가 끝난 뒤의
+// SIGTERM까지 삼키기 때문입니다. SIGTERM은 상속 상태와 관계없이 항상 감시하고 종료합니다.
 func watchTermination(report func(pobroker.ExitReason), retired func() pobroker.ExitReason) (stop func()) {
-	var watched []os.Signal
+	watched := []os.Signal{syscall.SIGTERM}
 
-	for _, sig := range []os.Signal{syscall.SIGTERM, syscall.SIGINT} {
-		if !signal.Ignored(sig) {
-			watched = append(watched, sig)
-		}
-	}
-
-	if len(watched) == 0 {
-		return func() {}
+	if !signal.Ignored(syscall.SIGINT) {
+		watched = append(watched, syscall.SIGINT)
 	}
 
 	signals := make(chan os.Signal, 1)
