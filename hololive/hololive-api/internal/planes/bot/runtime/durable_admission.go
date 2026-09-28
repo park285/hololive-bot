@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"go.opentelemetry.io/otel/attribute"
@@ -82,10 +82,7 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error 
 		trace.SpanFromContext(ctx).SetAttributes(attribute.String("iris.message_id", id))
 	}
 
-	roomID := strings.TrimSpace(msg.JSON.ChatID)
-	if roomID == "" {
-		roomID = strings.TrimSpace(msg.Room)
-	}
+	roomID := strings.TrimSpace(msg.Room)
 
 	payload, err := jsonv2.Marshal(msg)
 	if err != nil {

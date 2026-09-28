@@ -29,7 +29,7 @@ import (
 	"strconv"
 	"strings"
 
-	iris "github.com/park285/iris-client-go/v2/iris"
+	iris "github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/irisdurable"
 )
 

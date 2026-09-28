@@ -8,6 +8,13 @@
 
 ## 미출시
 
+## v6.0.0 - 2026-09-28
+
+- `iris-client-go/v3 v3.0.2`으로 API·alarm-worker·shared·collector·DB 테스트 모듈을 함께 이관합니다. 웹훅 본문·방은 `Message.Msg`·`Message.Room`에서 읽고, 서명된 요청은 body `messageId`를 헤더와 일치시킵니다. API·alarm-worker 산출물 버전은 각각 `6.0.0`·`5.0.0`입니다.
+- migration 228은 검토한 격리 send unit의 `closed_without_replay` 감사 영수증을 추가합니다. 정확한 전체 대상 ID·revision·상태 메타데이터와 원본 전체 SHA-256 digest를 저장하고, payload·본문·오류 원문과 원본 delivery 상태는 복사하거나 바꾸지 않습니다. maintenance 작업은 직렬화 트랜잭션에서 잠금·digest를 재검사하고 send unit당 한 건만 기록하며, 결과 불명은 receipt 조회로 판정합니다. 정상 retention은 그대로 적용됩니다.
+- migration 229는 227 적용 기록과 현재 singleton의 완료·버전·cursor를 잠금 아래 다시 확인한 뒤 일회성 `youtube_notification_delivery_ledger_state`를 제거하고 229 적용 기록을 같은 transaction에 씁니다. 빈 DB는 원본 outbox·delivery·logical ledger가 모두 비어 있을 때만 허용하고, 기록 없는 table 부재는 거절합니다. 적용 전 운영 singleton을 복구용으로 보존하며 logical delivery ledger는 유지합니다.
+- 사용하지 않는 alarm-worker profile의 `notification_delivery.lock_timeout_ms`를 exact-key 설정과 fixture에서 제거합니다. 운영 profile에서도 같은 rollout 전에 키를 지워야 새 decoder가 기동하며, 실제 delivery lease·retry 동작은 기존 정본을 따릅니다.
+
 - native PO 배포 fragment가 앞서 적재한 helper의 service/socket/unit 입력을 명시적으로 요구합니다. helper 없이 실행하면 payload·호스트 변경 전에 실패하며 값의 단일 소유자는 그대로입니다. readiness 관측 loop는 미사용 변수를 `_`로 명시하고 기존 30회·2초 상한을 유지합니다. meta ShellCheck 경고를 억제하지 않고 해소했으며 application binary·운영 설정·프로토콜은 바꾸지 않습니다.
 
 ## v5.0.1 - 2026-09-28

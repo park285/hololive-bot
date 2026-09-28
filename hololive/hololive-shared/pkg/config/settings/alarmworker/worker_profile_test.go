@@ -1,8 +1,12 @@
 package alarmworker
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
 )
@@ -28,20 +32,38 @@ func TestLoadWorkerProfileRejectsWrongRole(t *testing.T) {
 	}
 }
 
-// notification_delivery.lock_timeout_ms는 lease 이전 행 회수에만 쓰였고 그 경로를 지운 뒤 읽는 코드가 없다. 키는 exact-key
-// profile 계약 때문에 남지만 값은 기동을 막지 않는다(stack-audit 2026-09-26 T11 holo-delivery-outbox-legacy-lock-fence).
-func TestValidateWorkerProfileIgnoresRetiredNotificationLockTimeout(t *testing.T) {
+func TestLoadWorkerProfileRejectsRetiredNotificationLockTimeout(t *testing.T) {
+	raw, err := os.ReadFile(settingstest.ProfileFixture(t, "stack-worker-profile-alarm-worker.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const existing = `"max_retries": 3,
+        "poll_interval_ms": 30000`
+	const retired = `"max_retries": 3,
+        "lock_timeout_ms": 300000,
+        "poll_interval_ms": 30000`
+	if strings.Count(string(raw), existing) != 1 {
+		t.Fatal("notification_delivery fixture settings changed")
+	}
+
+	profileFile := filepath.Join(t.TempDir(), "alarm-worker.json")
+	if err := os.WriteFile(profileFile, []byte(strings.Replace(string(raw), existing, retired, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(workercontract.ProfileFileEnv, profileFile)
+
+	if _, err := LoadWorkerProfile(); err == nil || !strings.Contains(err.Error(), "notification_delivery") || !strings.Contains(err.Error(), "lock_timeout_ms") {
+		t.Fatalf("LoadWorkerProfile() error = %v, want retired notification_delivery.lock_timeout_ms rejected", err)
+	}
+}
+
+func TestValidateWorkerProfileRequiresYouTubeLockTimeout(t *testing.T) {
 	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
 
 	profile, err := LoadWorkerProfile()
 	if err != nil {
 		t.Fatalf("LoadWorkerProfile() error = %v", err)
-	}
-
-	profile.NotificationDelivery.LockTimeoutMS = 0
-
-	if err := validateWorkerProfile(profile); err != nil {
-		t.Fatalf("validateWorkerProfile() error = %v, want retired lock timeout ignored", err)
 	}
 
 	profile.YouTubeDelivery.LockTimeoutMS = 0

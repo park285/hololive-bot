@@ -29,8 +29,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/health"
 

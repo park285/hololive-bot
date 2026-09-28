@@ -40,7 +40,6 @@
       "settings": {
         "batch_size": 50,
         "max_retries": 3,
-        "lock_timeout_ms": 300000,
         "poll_interval_ms": 30000,
         "retry_backoff_ms": 60000,
         "cleanup_after_ms": 604800000,

@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v2/webhook"
-	"github.com/park285/iris-client-go/v2/webhooksign"
+	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/iris-client-go/v3/webhooksign"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,7 +61,7 @@ func TestBuildDurableBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *te
 		t,
 		token,
 		messageID,
-		`{"text":"hello","room":"room-1","sender":"tester","userId":"user-1"}`,
+		`{"messageId":"message-id-malformed-first","text":"hello","room":"room-1","sender":"tester","userId":"user-1"}`,
 	)
 	validResponse := httptest.NewRecorder()
 	handler.ServeHTTP(validResponse, validRequest)
@@ -118,7 +118,7 @@ func TestBuildDurableBotWebhookHandlerRequiresHMAC(t *testing.T) {
 		t.Context(),
 		token,
 		"message-id-require-hmac",
-		`{"text":"hello","room":"room-1","sender":"tester","userId":"user-1"}`,
+		`{"messageId":"message-id-require-hmac","text":"hello","room":"room-1","sender":"tester","userId":"user-1"}`,
 	)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)

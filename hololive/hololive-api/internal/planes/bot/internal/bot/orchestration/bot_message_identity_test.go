@@ -27,7 +27,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -106,7 +106,7 @@ func TestProcessMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 		Msg:    "!help",
 		Room:   "12345",
 		Sender: &sender,
-		JSON:   &webhook.MessageJSON{UserID: testUserID, ChatID: "12345", ChatLogID: "c-1"},
+		JSON:   &webhook.MessageJSON{UserID: testUserID, ChatLogID: "c-1"},
 	}))
 
 	assert.Zero(t, executed.calls.Load(), "command must not run without a canonical message id")

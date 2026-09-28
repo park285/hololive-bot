@@ -25,7 +25,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -79,11 +79,10 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 	sender := "사용자"
 	msg := &webhook.Message{
 		Msg:    "!help",
-		Room:   "홀로라이브",
+		Room:   "chat-123",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
 			UserID: testUserID,
-			ChatID: "chat-123",
 		},
 	}
 
@@ -100,8 +99,8 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 		t.Fatalf("chat id = %q, want %q", envelope.ChatID, "chat-123")
 	}
 
-	if envelope.RoomName != "홀로라이브" {
-		t.Fatalf("room name = %q, want %q", envelope.RoomName, "홀로라이브")
+	if envelope.RoomName != "chat-123" {
+		t.Fatalf("room name = %q, want %q", envelope.RoomName, "chat-123")
 	}
 
 	if envelope.UserID != testUserID {
@@ -142,11 +141,10 @@ func TestMessageIngressPrepare_ObservesRoomChat(t *testing.T) {
 	sender := "사용자"
 	envelope, ok := ingress.Prepare(t.Context(), &webhook.Message{
 		Msg:    "!help",
-		Room:   "room-title",
+		Room:   testMaxUint64RoomID,
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
 			UserID:     testUserID,
-			ChatID:     testMaxUint64RoomID,
 			RoomType:   " MultiChat ",
 			RoomLinkID: "",
 		},
@@ -179,8 +177,8 @@ func TestMessageIngressAcceptsHasNoRoomObservationSideEffect(t *testing.T) {
 
 	if !ingress.Accepts(t.Context(), &webhook.Message{
 		Msg:  "!help",
-		Room: "room-title",
-		JSON: &webhook.MessageJSON{ChatID: testMaxUint64RoomID},
+		Room: testMaxUint64RoomID,
+		JSON: &webhook.MessageJSON{},
 	}) {
 		t.Fatal("expected command to pass the admission filter")
 	}
@@ -190,12 +188,12 @@ func TestMessageIngressAcceptsHasNoRoomObservationSideEffect(t *testing.T) {
 	}
 }
 
-func TestResolveRoom_NumericRoomPrefersRoomID(t *testing.T) {
+func TestResolveRoom_UsesTopLevelRoom(t *testing.T) {
 	t.Parallel()
 
 	message := &webhook.Message{
 		Room: "123456",
-		JSON: &webhook.MessageJSON{ChatID: "json-chat-id"},
+		JSON: &webhook.MessageJSON{},
 	}
 
 	chatID, roomName := resolveRoom(message)

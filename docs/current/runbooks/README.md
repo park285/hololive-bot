@@ -14,6 +14,7 @@
 ## Infra And Release
 
 - `dlq-replay.md` - alarm dispatch DLQ 확인/재처리 기준
+- `alarm-dispatch-quarantine-closeout.md` - 검토한 격리 send unit의 재발송 없는 종료 영수증
 - `release.md` - release checklist
 - `rollback.md` - rollback 기준
 - `postgres-replication.md` - Osaka single-primary 운영 기준과 명시적 재승인 뒤 사용하는 Seoul physical standby/failover 재구축 참고 절차

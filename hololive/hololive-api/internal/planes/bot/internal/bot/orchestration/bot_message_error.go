@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v3/iris"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )

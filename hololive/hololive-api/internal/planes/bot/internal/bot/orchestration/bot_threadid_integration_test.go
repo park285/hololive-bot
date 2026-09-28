@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -161,11 +161,10 @@ func handleHelpMessage(t *testing.T, b *Bot, messageID string) {
 	sender := testSenderName
 	require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
-		Room:   "room-name",
+		Room:   testRoomID,
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
 			UserID:    testUserID,
-			ChatID:    testRoomID,
 			MessageID: messageID,
 			ThreadID:  &threadID,
 		},

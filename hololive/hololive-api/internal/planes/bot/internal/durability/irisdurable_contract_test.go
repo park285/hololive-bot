@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/irisdurable"
 	"github.com/park285/shared-go/v2/pkg/irisdurable/contracttest"
 	"github.com/park285/shared-go/v2/pkg/workercontract"

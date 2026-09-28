@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v3/iris"
 )
 
 func TestRuntimeIrisClientCloseRejectsSendAfterClose(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"

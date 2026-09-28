@@ -30,6 +30,25 @@
 | selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
+## iris-client-go v3 전환 전 webhook inbox 드레인
+
+구 SDK는 `durableAdmitter`가 저장한 `bot_webhook_inbox.payload`에 상위 `msg`·`room`과 중첩 `json.message`·`json.chat_id`를 함께 적었습니다. v3 `MessageJSON` decoder는 두 중첩 필드를 거절합니다. v3 runtime이 구 `pending`·`retry`·`processing` 행을 claim하면 `processInboxClaim`의 decode 실패 경로가 그 행을 `dead`로 종료하고 payload를 scrub하므로, 명령이 처리되지 않은 채 원본이 사라질 수 있습니다. 구 payload를 자동 변환하거나 fallback decode하지 않습니다.
+
+v3 API image를 시작하기 전에 Iris webhook ingress와 구 API의 신규 admission을 quiesce하고, 구 API가 이미 받은 inbox를 기존 runtime으로 드레인합니다. 아래 read-only 집계에서 active 행이 **모두 0**임을 확인하고, 구 API의 재입력이 멈춘 상태에서 한 번 더 확인합니다. `legacy_shape_count`는 저장 형식의 증거이며 active 0을 대신하지 않습니다. 미완료·만료 lease가 남으면 기존 runtime에서 소유권·명령 결과를 조사하고 전환을 보류합니다. `dead`·`succeeded` 행은 `{}`로 scrub된 종단 기록이므로 이 드레인 대상이 아닙니다.
+
+```sql
+SELECT status, count(*) AS active_count,
+       count(*) FILTER (
+           WHERE COALESCE(payload -> 'json', payload -> 'JSON', '{}'::jsonb)
+                 ?| ARRAY['message', 'chat_id']
+       ) AS legacy_shape_count
+FROM bot_webhook_inbox
+WHERE status IN ('pending', 'retry', 'processing')
+GROUP BY status ORDER BY status;
+```
+
+새 이미지의 signed webhook은 body `messageId`와 `X-Iris-Message-Id`가 일치해야 합니다. 이전 API image로 돌아가야 할 때도 ingress를 먼저 quiesce하고 v3에서 저장한 active inbox를 드레인한 뒤 해당 image의 payload 해석과 외부 부수 효과를 확인합니다. 처리 중 행을 삭제·재큐잉·임의 형식 변경해 드레인을 건너뛰지 않습니다.
+
 ## Compose 재생성 주의
 
 R-12의 `log_autovacuum_min_duration=10s`는 `holo-postgres`의 compose `command` 변경입니다. 변경된 compose를 사용하는 전체 `up`이나 의존성을 시작하는 명령은 DB 컨테이너를 재생성할 수 있으며, DB 중단·재연결을 포함한 별도 운영 승인이 필요합니다.
@@ -60,7 +79,7 @@ export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
 4. 출력의 `activated=true`와 non-zero `cutoff_received_at`을 확인합니다. 재실행에서 `activated=false`이면 기존 cutoff와 attribution이 그대로인지 확인하며 새 epoch로 간주하지 않습니다.
 5. 같은 epoch-aware `hololive-api`를 `--no-build --no-deps`로 시작하고 health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
-6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. 완료 전제는 migration `227_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 확인하며, 미완료 state가 있거나 backfill 없이 delivery 행이 있는 DB에서는 migration이 실패합니다.
+6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. Migration 227은 적용 시점에 완료 전제를 검사합니다. 적용 전 singleton 원본·복구 SQL을 보존한 뒤 migration 229는 227 적용 기록과 현재 singleton 완료 상태를 잠금 아래 다시 검사하고, state DROP과 229 적용 기록을 한 transaction으로 커밋합니다. 229 적용 기록 없이 table이 사라진 상태는 자동 복구하지 않습니다. Runner의 별도 checksum 기록이 연결 단절로 빠지면 다음 실행은 실패하므로 적용 기록과 checksum을 조사한 뒤 복구합니다.
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
 

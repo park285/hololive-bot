@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -57,9 +57,9 @@ func TestBotProcessMessageRejectsUnknownIngressUserForExpensiveCommand(t *testin
 	sender := testSenderName
 	message := &webhook.Message{
 		Msg:    "!방송이력",
-		Room:   "room-name",
+		Room:   testRoomID,
 		Sender: &sender,
-		JSON:   &webhook.MessageJSON{ChatID: testRoomID, MessageID: "m-1"},
+		JSON:   &webhook.MessageJSON{MessageID: "m-1"},
 	}
 
 	err := b.ProcessMessage(t.Context(), message)

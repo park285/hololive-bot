@@ -15,8 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -30,6 +30,23 @@ const (
 	testRoomID      = "room-1"
 	testOrderingKey = "room:" + testRoomID
 )
+
+// v2가 inbox에 저장한 이중 필드는 v3 decode에서 거절된다. 전환 전 active inbox 드레인이 필요하다.
+func TestStoredWebhookPayloadV3ShapeRequiresActiveInboxDrain(t *testing.T) {
+	var message webhook.Message
+	legacy := []byte(`{"msg":"!help","room":"room-1","json":{"message":"!help","chat_id":"room-1","message_id":"m-1"}}`)
+	if err := jsonv2.Unmarshal(legacy, &message); err == nil || !strings.Contains(err.Error(), "retired MessageJSON field message") {
+		t.Fatalf("legacy stored payload decode = %v, want retired-field rejection", err)
+	}
+
+	canonical := []byte(`{"msg":"!help","room":"room-1","json":{"message_id":"m-1"}}`)
+	if err := jsonv2.Unmarshal(canonical, &message); err != nil {
+		t.Fatalf("v3 stored payload decode: %v", err)
+	}
+	if message.Room != testRoomID || message.JSON == nil || message.JSON.MessageID != "m-1" {
+		t.Fatalf("v3 stored payload = %#v, want room and message identity", message)
+	}
+}
 
 type durableMessageProcessorFunc func(context.Context, *webhook.Message) error
 
@@ -356,8 +373,8 @@ func TestRunClaimHeartbeatShutdownDoesNotCancelCommand(t *testing.T) {
 func claimDeadlineInboxMessage(t *testing.T, inbox *durability.InboxRepository) *durability.InboxClaim {
 	t.Helper()
 
-	msg := webhook.Message{Msg: "!help", Room: "room", JSON: &webhook.MessageJSON{
-		MessageID: "deadline-message", ChatID: testRoomID,
+	msg := webhook.Message{Msg: "!help", Room: testRoomID, JSON: &webhook.MessageJSON{
+		MessageID: "deadline-message",
 	}}
 
 	payload, err := jsonv2.Marshal(msg)
@@ -657,8 +674,8 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msg := webhook.Message{Msg: "!bad", Room: "room", JSON: &webhook.MessageJSON{
-		MessageID: "failed-message", ChatID: testRoomID,
+	msg := webhook.Message{Msg: "!bad", Room: testRoomID, JSON: &webhook.MessageJSON{
+		MessageID: "failed-message",
 	}}
 
 	payload, err := jsonv2.Marshal(msg)
@@ -983,7 +1000,7 @@ func TestAdmitMessageLogsValidationConstraintOnFailure(t *testing.T) {
 	}
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
-		JSON: &webhook.MessageJSON{MessageID: "message:missing-room", Message: "hello"},
+		Msg: "hello", JSON: &webhook.MessageJSON{MessageID: "message:missing-room"},
 	})
 	if err == nil {
 		t.Fatal("admission must fail when the room id is missing")
@@ -1003,7 +1020,7 @@ func TestAdmitMessageWithoutLoggerReturnsErrorWithoutPanic(t *testing.T) {
 	admitter := durableAdmitter{inbox: durability.NewInboxRepository(nil)}
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
-		JSON: &webhook.MessageJSON{MessageID: "message:no-logger", ChatID: testRoomID},
+		Room: testRoomID, JSON: &webhook.MessageJSON{MessageID: "message:no-logger"},
 	})
 	if err == nil {
 		t.Fatal("admission must fail when the pool is not configured")
@@ -1019,7 +1036,7 @@ func TestAdmitMessageDoesNotPersistRejectedIngress(t *testing.T) {
 	}
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
-		JSON: &webhook.MessageJSON{MessageID: "message:blocked", ChatID: testRoomID},
+		Room: testRoomID, JSON: &webhook.MessageJSON{MessageID: "message:blocked"},
 	})
 	if err != nil {
 		t.Fatalf("rejected admission returned error: %v", err)
@@ -1054,7 +1071,7 @@ func TestAdmitMessageRejectsWithoutOptionalCounters(t *testing.T) {
 	}
 
 	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
-		JSON: &webhook.MessageJSON{MessageID: "message:blocked", ChatID: testRoomID},
+		Room: testRoomID, JSON: &webhook.MessageJSON{MessageID: "message:blocked"},
 	})
 	if err != nil {
 		t.Fatalf("rejected admission returned error: %v", err)
