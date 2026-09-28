@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+maintenance_dir=$(cd "$script_dir/../maintenance" && pwd)
 work=$(mktemp -d)
 name="iris-terminal-head-test-$$"
 cid=
@@ -41,7 +42,7 @@ UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-18' 
 UPDATE youtube_live_reconciliation_heads SET updated_at='2026-09-01' WHERE video_id='recent';
 UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='EXPLICIT_END',end_candidate_observation_id=1,next_end_check_at='2026-08-16' WHERE video_id='candidate';
 SQL
-psql_test <"$script_dir/preview-terminal-live-heads.sql" >"$work/preview.json"
+psql_test <"$maintenance_dir/preview-terminal-live-heads.sql" >"$work/preview.json"
 read -r count digest < <(python3 - "$work/preview.json" <<'PY'
 import json,sys
 d=json.load(open(sys.argv[1]));assert d['count']==2
@@ -51,31 +52,31 @@ PY
 )
 baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")
 if psql_test -v expected_count=2 -v expected_digest=00000000000000000000000000000000 \
-  <"$script_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
+  <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'stale digest was accepted' >&2; exit 1
 fi
 test "$baseline" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")"
 if psql_test -v expected_count=1 -v expected_digest="$digest" \
-  <"$script_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
+  <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'wrong count was accepted' >&2; exit 1
 fi
 # 스냅샷 이후 새 positive가 도착하면 같은 대상 ID라도 전체 거절한다.
 psql_test -c "UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-20' WHERE video_id='a'"
 if psql_test -v expected_count="$count" -v expected_digest="$digest" \
-  <"$script_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
+  <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'new positive was overwritten' >&2; exit 1
 fi
 test "$(psql_test -c "SELECT count(*) FROM youtube_live_reconciliation_heads WHERE status='ENDED'")" = 0
 psql_test -c "UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-15' WHERE video_id='a'"
 protected=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(p) ORDER BY video_id)::text) FROM youtube_live_sessions p")
 others=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h WHERE video_id NOT IN('a','b')")
-psql_test -v expected_count="$count" -v expected_digest="$digest" <"$script_dir/reconcile-terminal-live-heads.sql" >"$work/applied"
+psql_test -v expected_count="$count" -v expected_digest="$digest" <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/applied"
 test "$(psql_test -c "SELECT count(*) FROM youtube_live_reconciliation_heads WHERE status='ENDED' AND ended_at='2026-08-16' AND end_reason IS NULL AND sentinel->>'evidence'='preserve'")" = 2
 test "$protected" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(p) ORDER BY video_id)::text) FROM youtube_live_sessions p")"
 test "$others" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h WHERE video_id NOT IN('a','b')")"
 test "$(psql_test -c "SELECT status FROM alarm_dispatch_deliveries WHERE id=1")" = quarantined
 if psql_test -v expected_count="$count" -v expected_digest="$digest" \
-  <"$script_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
+  <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'already applied snapshot was accepted' >&2; exit 1
 fi
 echo 'PASS: exact repair, stale/count/new-positive refusal, canonical/non-target/dispatch preservation'

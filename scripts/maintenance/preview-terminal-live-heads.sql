@@ -17,7 +17,7 @@ WITH candidates AS (
     ORDER BY h.video_id
     LIMIT 101
 ), snapshot AS (
-    SELECT count(*) AS row_count,
+    SELECT count(video_id) AS row_count,
            COALESCE(jsonb_agg(snapshot ORDER BY video_id), '[]'::jsonb) AS rows
     FROM candidates
 )

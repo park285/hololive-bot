@@ -16,8 +16,8 @@
     "docs/review/2026-09-28-terminal-live-head-repair.md"
   ],
   "implementation": [
-    "scripts/runtime/preview-terminal-live-heads.sql",
-    "scripts/runtime/reconcile-terminal-live-heads.sql",
+    "scripts/maintenance/preview-terminal-live-heads.sql",
+    "scripts/maintenance/reconcile-terminal-live-heads.sql",
     "scripts/runtime/test-terminal-live-head-repair.sh"
   ],
   "supersedes": []

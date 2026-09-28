@@ -65,7 +65,7 @@ BEGIN
     UPDATE terminal_head_repair t SET original_head = to_jsonb(h), canonical_end = p.ended_at
     FROM public.youtube_live_sessions p JOIN public.youtube_live_reconciliation_heads h USING (video_id)
     WHERE t.video_id = h.video_id;
-    SELECT count(*), md5(COALESCE(jsonb_agg(jsonb_build_object(
+    SELECT count(h.video_id), md5(COALESCE(jsonb_agg(jsonb_build_object(
         'head', to_jsonb(h), 'canonical_end', p.ended_at) ORDER BY h.video_id), '[]'::jsonb)::text)
     INTO actual_count, actual_digest
     FROM terminal_head_repair t
@@ -79,7 +79,7 @@ BEGIN
       AND h.end_candidate_kind IS NULL AND h.end_candidate_observation_id IS NULL
       AND h.next_end_check_at IS NULL;
     IF actual_count <> expected_count
-       OR (SELECT count(*) FROM terminal_head_repair) <> expected_count
+       OR (SELECT count(video_id) FROM terminal_head_repair) <> expected_count
        OR actual_digest <> current_setting('iris.live_head_repair.expected_digest') THEN
         RAISE EXCEPTION 'terminal head snapshot changed; no rows repaired';
     END IF;
@@ -97,7 +97,7 @@ BEGIN
         RAISE EXCEPTION 'terminal head repair postcondition failed';
     END IF;
 END $$;
-SELECT jsonb_build_object('updated_count', count(*), 'after_digest', md5(jsonb_agg(
+SELECT jsonb_build_object('updated_count', count(h.video_id), 'after_digest', md5(jsonb_agg(
     to_jsonb(h) ORDER BY h.video_id)::text))
 FROM terminal_head_repair t JOIN public.youtube_live_reconciliation_heads h USING (video_id);
 COMMIT;
