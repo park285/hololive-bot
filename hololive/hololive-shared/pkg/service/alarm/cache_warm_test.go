@@ -327,7 +327,6 @@ func TestRebuildSubscriberCacheFromRepository_PreservesNonSubscriberAlarmKeys(t 
 	}, nil, nil, nil)
 
 	require.NoError(t, cacheClient.Set(ctx, "alarm:dispatch:wakeup:guard", "wakeup-marker", 0))
-	require.NoError(t, cacheClient.Set(ctx, "alarm:next_stream:UC_KEEP", "stream-marker", 0))
 
 	_, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.NoError(t, err)
@@ -335,10 +334,6 @@ func TestRebuildSubscriberCacheFromRepository_PreservesNonSubscriberAlarmKeys(t 
 	wakeupGuardExists, err := cacheClient.Exists(ctx, "alarm:dispatch:wakeup:guard")
 	require.NoError(t, err)
 	assert.True(t, wakeupGuardExists)
-
-	nextStreamExists, err := cacheClient.Exists(ctx, "alarm:next_stream:UC_KEEP")
-	require.NoError(t, err)
-	assert.True(t, nextStreamExists)
 }
 
 type countingWarmCacheClient struct {

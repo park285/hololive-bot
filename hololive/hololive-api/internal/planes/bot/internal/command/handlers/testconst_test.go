@@ -2,10 +2,7 @@ package handlers
 
 import "errors"
 
-var (
-	errTestStubNoChannel    = errors.New("stub stream provider has no channel data")
-	errTestStubNoNextStream = errors.New("stub alarm service has no next stream info")
-)
+var errTestStubNoChannel = errors.New("stub stream provider has no channel data")
 
 const (
 	testRoomID       = "room-1"

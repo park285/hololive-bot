@@ -1,28 +1,12 @@
 package alarmcache
 
 import (
-	"log/slog"
-	"os"
-	"slices"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
-
-const (
-	fallbackChannelID   = "UC_fallback"
-	statusField         = "status"
-	startScheduledField = "start_scheduled"
-)
-
-func newPureState() *State {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	return NewState(nil, nil, logger)
-}
 
 func TestFirstMemberName(t *testing.T) {
 	t.Parallel()
@@ -43,140 +27,6 @@ func TestFirstMemberName(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, FirstMemberName(tt.candidates...))
 		})
-	}
-}
-
-func TestParseNextStreamInfo(t *testing.T) {
-	t.Parallel()
-
-	state := newPureState()
-	scheduledStr := "2026-06-10T12:34:56Z"
-	scheduledTime, err := time.Parse(time.RFC3339, scheduledStr)
-	require.NoError(t, err)
-
-	tests := slices.Concat(
-		parseNextStreamInfoNilCases(scheduledStr),
-		parseNextStreamInfoValueCases(scheduledStr, scheduledTime),
-	)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			tt.assertFn(t, state.ParseNextStreamInfo("UC_alpha", tt.data))
-		})
-	}
-}
-
-type parseNextStreamCase struct {
-	name     string
-	data     map[string]string
-	assertFn func(t *testing.T, info *domain.NextStreamInfo)
-}
-
-func requireNilNextStreamInfo(t *testing.T, info *domain.NextStreamInfo) {
-	t.Helper()
-
-	require.Nil(t, info)
-}
-
-func parseNextStreamInfoNilCases(scheduledStr string) []parseNextStreamCase {
-	return []parseNextStreamCase{
-		{
-			name:     "empty data returns nil",
-			data:     map[string]string{},
-			assertFn: requireNilNextStreamInfo,
-		},
-		{
-			name:     "invalid status returns nil",
-			data:     map[string]string{statusField: "garbage"},
-			assertFn: requireNilNextStreamInfo,
-		},
-		{
-			name: "malformed start time returns nil",
-			data: map[string]string{
-				statusField:         "live",
-				startScheduledField: "not-a-time",
-			},
-			assertFn: requireNilNextStreamInfo,
-		},
-		{
-			name: "upcoming missing title returns nil",
-			data: map[string]string{
-				statusField:         "upcoming",
-				"video_id":          "vid9",
-				startScheduledField: scheduledStr,
-			},
-			assertFn: requireNilNextStreamInfo,
-		},
-		{
-			name: "upcoming missing start returns nil",
-			data: map[string]string{
-				statusField: "upcoming",
-				"video_id":  "vid9",
-				"title":     "Stream",
-			},
-			assertFn: requireNilNextStreamInfo,
-		},
-		{
-			name: "upcoming missing video id returns nil",
-			data: map[string]string{
-				statusField:         "upcoming",
-				"title":             "Stream",
-				startScheduledField: scheduledStr,
-			},
-			assertFn: requireNilNextStreamInfo,
-		},
-	}
-}
-
-func parseNextStreamInfoValueCases(scheduledStr string, scheduledTime time.Time) []parseNextStreamCase {
-	return []parseNextStreamCase{
-		{
-			name: "no_upcoming without start parses",
-			data: map[string]string{statusField: "no_upcoming"},
-			assertFn: func(t *testing.T, info *domain.NextStreamInfo) {
-				t.Helper()
-
-				require.NotNil(t, info)
-				require.Equal(t, domain.NextStreamStatusNoUpcoming, info.Status)
-				require.Nil(t, info.StartScheduled)
-			},
-		},
-		{
-			name: "live with trimmed fields",
-			data: map[string]string{
-				statusField:         "live",
-				"video_id":          " vid1 ",
-				"title":             " Hello ",
-				startScheduledField: " " + scheduledStr + " ",
-			},
-			assertFn: func(t *testing.T, info *domain.NextStreamInfo) {
-				t.Helper()
-
-				require.NotNil(t, info)
-				require.Equal(t, domain.NextStreamStatusLive, info.Status)
-				require.Equal(t, "vid1", info.VideoID)
-				require.Equal(t, "Hello", info.Title)
-				require.NotNil(t, info.StartScheduled)
-				require.True(t, info.StartScheduled.Equal(scheduledTime))
-			},
-		},
-		{
-			name: "complete upcoming returns info",
-			data: map[string]string{
-				statusField:         "upcoming",
-				"video_id":          "vid9",
-				"title":             "Stream",
-				startScheduledField: scheduledStr,
-			},
-			assertFn: func(t *testing.T, info *domain.NextStreamInfo) {
-				t.Helper()
-
-				require.NotNil(t, info)
-				require.Equal(t, domain.NextStreamStatusUpcoming, info.Status)
-				require.NotNil(t, info.StartScheduled)
-			},
-		},
 	}
 }
 

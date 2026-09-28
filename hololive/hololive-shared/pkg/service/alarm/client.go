@@ -233,22 +233,6 @@ func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error
 	return resp.Deleted, nil
 }
 
-// GetNextStreamInfo는 provider에 next-stream payload가 없으면 nil을 반환한다.
-func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	info, err := c.getJSON[*domain.NextStreamInfo](ctx, contractsalarm.NextStreamPath(channelID))
-	if err != nil {
-		return nil, err
-	}
-
-	var valid *domain.NextStreamInfo
-
-	if info != nil && info.Status.IsValid() {
-		valid = info
-	}
-
-	return valid, nil
-}
-
 func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int {
 	body := updateAdvanceMinutesReq{Minutes: minutes}
 

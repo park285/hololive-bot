@@ -23,27 +23,21 @@ package formatter
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type AlarmListEntry struct {
 	MemberName string
 	AlarmTypes domain.AlarmTypes
-	NextStream *domain.NextStreamInfo
 }
 
 type alarmAddedTemplateData struct {
 	MemberName string
 	Added      bool
-	NextStream *nextStreamInfoView
 	Prefix     string
 }
 
@@ -61,16 +55,6 @@ type alarmListTemplateData struct {
 type alarmListEntryView struct {
 	MemberName string
 	TypesLabel string
-	NextStream *nextStreamInfoView
-}
-
-type nextStreamInfoView struct {
-	Status       string
-	Title        string
-	URL          string
-	ScheduledKST string
-	TimeDetail   string
-	StartingSoon bool
 }
 
 type alarmClearedTemplateData struct {
@@ -142,11 +126,10 @@ func (f *ResponseFormatter) alarmChannelNameWithOrg(ctx context.Context, name st
 	return fmt.Sprintf("[%s] %s", displayOrg, name)
 }
 
-func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName string, added bool, nextStreamInfo *domain.NextStreamInfo) string {
+func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName string, added bool) string {
 	data := alarmAddedTemplateData{
 		MemberName: memberName,
 		Added:      added,
-		NextStream: f.buildNextStreamInfoView(ctx, nextStreamInfo),
 		Prefix:     f.prefix,
 	}
 
@@ -170,78 +153,4 @@ func (f *ResponseFormatter) FormatAlarmRemoved(ctx context.Context, memberName s
 	}
 
 	return rendered
-}
-
-const youtubeWatchURLPrefix = "https://youtube.com/watch?v="
-
-func summarizeNextStreamInfo(info *domain.NextStreamInfo) *domain.NextStreamInfo {
-	if info == nil || !info.Status.IsLive() {
-		return nil
-	}
-
-	return info
-}
-
-func (f *ResponseFormatter) buildNextStreamInfoView(ctx context.Context, info *domain.NextStreamInfo) *nextStreamInfoView {
-	if info == nil || !info.Status.IsValid() {
-		return nil
-	}
-
-	view := &nextStreamInfoView{
-		Status: info.Status.String(),
-	}
-
-	if title := stringutil.TrimSpace(info.Title); title != "" {
-		view.Title = stringutil.TruncateString(title, constants.StringLimits.NextStreamTitle)
-	}
-
-	if videoID := stringutil.TrimSpace(info.VideoID); videoID != "" {
-		view.URL = youtubeWatchURLPrefix + videoID
-	}
-
-	if info.Status.IsUpcoming() {
-		if !f.populateUpcomingNextStreamView(ctx, view, info) {
-			return nil
-		}
-	}
-
-	return view
-}
-
-func (f *ResponseFormatter) populateUpcomingNextStreamView(ctx context.Context, view *nextStreamInfoView, info *domain.NextStreamInfo) bool {
-	if info.StartScheduled == nil || view.URL == "" {
-		return false
-	}
-
-	scheduled := *info.StartScheduled
-
-	view.ScheduledKST = util.FormatKST(scheduled, "01/02 15:04")
-
-	timeLeft := time.Until(scheduled)
-	if timeLeft <= 0 {
-		view.StartingSoon = true
-		return true
-	}
-
-	view.TimeDetail = f.formatUpcomingTimeDetail(ctx, timeLeft)
-
-	return true
-}
-
-func (f *ResponseFormatter) formatUpcomingTimeDetail(_ context.Context, timeLeft time.Duration) string {
-	if timeLeft <= 0 {
-		return ""
-	}
-
-	hoursLeft := int(timeLeft.Hours())
-	minutesLeft := int(timeLeft.Minutes()) % 60
-
-	switch {
-	case hoursLeft >= 24:
-		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtRelativeDays), hoursLeft/24)
-	case hoursLeft > 0:
-		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtRelativeHoursMinutes), hoursLeft, minutesLeft)
-	default:
-		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtRelativeMinutes), int(timeLeft.Minutes()))
-	}
 }

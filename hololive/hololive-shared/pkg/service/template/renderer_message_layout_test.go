@@ -23,7 +23,7 @@ func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
 		domain.TemplateKeyAlarmDispatchNotification, domain.TemplateKeyAlarmDispatchNotificationGroup,
 		domain.TemplateKeyOutboxCommunity, domain.TemplateKeyOutboxCommunityGroup,
 		domain.TemplateKeyCmdMajorEventWeeklySummary, domain.TemplateKeyCmdMajorEventMonthlySummary,
-		domain.TemplateKeyCmdMemberNewsDigest, domain.TemplateKeyCmdAlarmList, domain.TemplateKeyCmdAlarmAdded,
+		domain.TemplateKeyCmdMemberNewsDigest,
 	}
 
 	for _, key := range keys {
@@ -57,7 +57,6 @@ func literalTitleData(title, url string) map[string]any {
 		"CollabMembers": "", "ScheduleMessage": "",
 		"ContentText": title, "Link": url, "DateStr": "미정", "Members": "",
 		"Member": testMixedMemberName, "DateText": "미정", "Category": "노래", "Summary": "", "SourceURL": url,
-		"TypesLabel": "라이브", fieldNextStream: liveNextStreamSample(title, url),
 	}
 
 	return map[string]any{
@@ -70,7 +69,6 @@ func literalTitleData(title, url string) map[string]any {
 		"IsUpcomingPremiere": false, "MinutesUntilPremiere": 0, fieldMinutesUntil: 0, "IsScheduled": false, "CollabMembers": "",
 		"ContentText": title, "LLMSummary": "", "Events": []map[string]any{entry},
 		"Headline": "뉴스", "TopItems": []map[string]any{entry}, "MoreSummary": "",
-		"Alarms": []map[string]any{entry}, "Prefix": "!", "Added": true, fieldNextStream: liveNextStreamSample(title, url),
 	}
 }
 
@@ -111,7 +109,7 @@ func TestSeedTemplates_EmptyStatesDoNotInventEntries(t *testing.T) {
 		{domain.TemplateKeyCmdMemberNewsDigest, map[string]any{"Headline": " ", "TopItems": []any{}}, "📰 멤버 뉴스\n표시할 뉴스가 없습니다."},
 		{domain.TemplateKeyCmdCalendar, map[string]any{fieldCount: 0, "Year": 2026, "Month": 9}, "📅 2026년 9월 등록된 기념일이 없습니다."},
 		{domain.TemplateKeyCmdAlarmAdded, map[string]any{"Added": false, fieldMemberName: "미코"}, "ℹ️ 미코 알람이 이미 설정되어 있습니다."},
-		{domain.TemplateKeyCmdAlarmAdded, map[string]any{"Added": true, fieldMemberName: "미코", fieldNextStream: map[string]any{"Status": "none"}}, "✅ 미코 알람을 설정했습니다.\n방송 시작 5분 전에 알립니다."},
+		{domain.TemplateKeyCmdAlarmAdded, map[string]any{"Added": true, fieldMemberName: "미코"}, "✅ 미코 알람을 설정했습니다.\n방송 시작 5분 전에 알립니다."},
 		{domain.TemplateKeyCmdMemberDirectory, map[string]any{"Total": 1, "Groups": []map[string]any{
 			{"GroupName": "그룹", "Members": []map[string]any{
 				{"Primary": "", "Secondary": "", "ShowBoth": false},

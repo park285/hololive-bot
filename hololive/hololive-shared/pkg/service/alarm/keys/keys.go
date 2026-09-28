@@ -38,7 +38,6 @@ import (
 const (
 	AlarmChannelRegistryKey           = "alarm:channel_registry"
 	AlarmSubscriberCacheEmptyKey      = "alarm:subscriber_cache_empty"
-	NextStreamKeyPrefix               = "alarm:next_stream:"
 	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
 	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
 	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"

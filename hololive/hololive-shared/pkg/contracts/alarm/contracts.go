@@ -30,15 +30,14 @@ import (
 const (
 	BasePath = "/internal/alarm"
 
-	AddRoute        = "/add"
-	RemoveRoute     = "/remove"
-	RoomRoute       = "/room/:id"
-	RoomViewRoute   = "/room/:id/view"
-	ClearRoute      = "/clear"
-	NextStreamRoute = "/next-stream/:id"
-	SettingsRoute   = "/settings"
-	RoomNameRoute   = "/room-name"
-	KeysRoute       = "/keys"
+	AddRoute      = "/add"
+	RemoveRoute   = "/remove"
+	RoomRoute     = "/room/:id"
+	RoomViewRoute = "/room/:id/view"
+	ClearRoute    = "/clear"
+	SettingsRoute = "/settings"
+	RoomNameRoute = "/room-name"
+	KeysRoute     = "/keys"
 
 	AddPath      = BasePath + AddRoute
 	RemovePath   = BasePath + RemoveRoute
@@ -89,8 +88,4 @@ func RoomAlarmsPath(roomID string) string {
 
 func RoomAlarmsViewPath(roomID string) string {
 	return BasePath + "/room/" + url.PathEscape(roomID) + "/view"
-}
-
-func NextStreamPath(channelID string) string {
-	return BasePath + "/next-stream/" + url.PathEscape(channelID)
 }

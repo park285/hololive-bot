@@ -86,10 +86,6 @@ func (testAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) {
 	return 0, nil
 }
 
-func (testAlarmCRUD) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return &domain.NextStreamInfo{}, nil
-}
-
 func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return []int{5} }
 func (testAlarmCRUD) GetTargetMinutes() []int                              { return []int{5} }
 func (testAlarmCRUD) SetRoomName(context.Context, string, string) error    { return nil }

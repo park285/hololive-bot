@@ -251,17 +251,7 @@ func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *domain.Comm
 		return nil
 	}
 
-	nextStreamInfo, err := c.Deps().Alarm.GetNextStreamInfo(ctx, channel.ChannelID)
-	if err != nil {
-		c.Deps().Logger.Debug("Failed to get next stream info", slog.Any("error", err))
-	}
-
-	if channel.HostID != "" && (!alarmTypes.Contains(domain.AlarmTypeLive) ||
-		nextStreamInfo != nil && !mekparkhost.Identify(channel.ChannelID, nextStreamInfo.Title).MatchesSubscription(channel.HostID)) {
-		nextStreamInfo = nil
-	}
-
-	message := c.Deps().Formatter.FormatAlarmAdded(ctx, channel.Name, added, nextStreamInfo)
+	message := c.Deps().Formatter.FormatAlarmAdded(ctx, channel.Name, added)
 
 	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
 		return fmt.Errorf("send message: %w", err)
@@ -417,7 +407,6 @@ func (c *AlarmCommand) handleList(ctx context.Context, cmdCtx *domain.CommandCon
 		alarmInfos = append(alarmInfos, formatter.AlarmListEntry{
 			MemberName: entry.MemberName,
 			AlarmTypes: entry.AlarmTypes,
-			NextStream: entry.NextStream,
 		})
 	}
 

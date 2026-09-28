@@ -86,14 +86,12 @@ var StringLimits = struct {
 	EmbedFieldName   int
 	EmbedFieldValue  int
 	StreamTitle      int
-	NextStreamTitle  int
 }{
 	EmbedTitle:       256,
 	EmbedDescription: 4096,
 	EmbedFieldName:   256,
 	EmbedFieldValue:  1024,
 	StreamTitle:      100,
-	NextStreamTitle:  40,
 }
 
 var MQConfig = struct {

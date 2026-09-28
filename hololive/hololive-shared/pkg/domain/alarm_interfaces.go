@@ -43,13 +43,12 @@ type AlarmEntry struct {
 	MemberName string `json:"memberName"`
 }
 
-// AlarmListView는 채팅방에서 구독한 대상과 알림 종류, 대상에 맞는 다음 방송을 표시한다.
+// AlarmListView는 채팅방에서 구독한 대상과 알림 종류를 표시한다.
 type AlarmListView struct {
 	ChannelID  string
 	HostID     string `json:",omitempty"`
 	MemberName string
 	AlarmTypes AlarmTypes
-	NextStream *NextStreamInfo
 }
 
 type AlarmWriter interface {
@@ -79,7 +78,6 @@ type AlarmCache interface {
 }
 
 type AlarmStateManager interface {
-	GetNextStreamInfo(ctx context.Context, channelID string) (*NextStreamInfo, error)
 	UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int
 	GetTargetMinutes() []int
 }

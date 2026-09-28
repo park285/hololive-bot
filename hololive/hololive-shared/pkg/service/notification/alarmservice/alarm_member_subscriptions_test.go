@@ -189,21 +189,16 @@ func TestMemberSubscriptionRemovalRebuildsCacheAfterRefreshFailure(t *testing.T)
 	require.Equal(t, []string{testRoomID}, liveRooms)
 }
 
-func TestMemberSubscriptionViewDoesNotUseAnotherMembersNextStream(t *testing.T) {
+func TestMemberSubscriptionViewNamesEachSubscribedMember(t *testing.T) {
 	alarms := []*domain.Alarm{
 		{ChannelID: memberSubscriptionChannel, HostID: memberSubscriptionMiraID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 		{ChannelID: memberSubscriptionChannel, HostID: "yoinagi-neon", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
-		{ChannelID: memberSubscriptionChannel, HostID: "yoinagi-neon", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
 		{ChannelID: memberSubscriptionChannel, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 		{ChannelID: "other-channel", MemberName: "페코라", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}
-	next := &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, Title: "#宵凪ネオン"}
-	views := buildAlarmListViews(alarms, map[string]string{memberSubscriptionChannel: "유닛 B"}, map[string]*domain.NextStreamInfo{memberSubscriptionChannel: next})
+	views := buildAlarmListViews(alarms, map[string]string{memberSubscriptionChannel: "유닛 B"})
 	require.Equal(t, "미라[유닛b]", views[0].MemberName)
-	require.Nil(t, views[0].NextStream)
 	require.Equal(t, "네온[유닛b]", views[1].MemberName)
-	require.Same(t, next, views[1].NextStream)
-	require.Nil(t, views[2].NextStream)
-	require.Equal(t, "유닛 B", views[3].MemberName)
-	require.Equal(t, "페코라", views[4].MemberName)
+	require.Equal(t, "유닛 B", views[2].MemberName)
+	require.Equal(t, "페코라", views[3].MemberName)
 }

@@ -95,10 +95,6 @@ func (s *stubAlarmCRUDForServer) ClearRoomAlarms(context.Context, string) (int, 
 	return 0, nil
 }
 
-func (s *stubAlarmCRUDForServer) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return &domain.NextStreamInfo{}, nil
-}
-
 func (s *stubAlarmCRUDForServer) UpdateAlarmAdvanceMinutes(context.Context, int) []int {
 	return nil
 }

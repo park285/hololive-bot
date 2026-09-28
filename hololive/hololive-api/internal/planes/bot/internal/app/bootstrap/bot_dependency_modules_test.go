@@ -311,10 +311,6 @@ func (s *stubAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) {
 	return 0, nil
 }
 
-func (s *stubAlarmCRUD) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return &domain.NextStreamInfo{}, nil
-}
-
 func (s *stubAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
 	s.targetMinutes = []int{minutes}
 	return append([]int(nil), s.targetMinutes...)

@@ -29,10 +29,7 @@ import (
 func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmListEntry) string {
 	processed := make([]alarmListEntryView, len(alarms))
 	for idx, alarm := range alarms {
-		processed[idx] = alarmListEntryView{
-			MemberName: alarm.MemberName,
-			NextStream: f.buildNextStreamInfoView(ctx, summarizeNextStreamInfo(alarm.NextStream)),
-		}
+		processed[idx] = alarmListEntryView{MemberName: alarm.MemberName}
 
 		// 기본값인 전체 알림을 항목마다 반복하지 않고, 종류를 제한한 알람만 라벨을 붙인다.
 		if !isAllAlarmTypes(alarm.AlarmTypes) {

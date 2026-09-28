@@ -21,9 +21,7 @@
 package alarmservice
 
 import (
-	"maps"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -135,141 +133,22 @@ func TestBuildTitleFingerprint_FullWidthEquivalence(t *testing.T) {
 	}
 }
 
-type nextStreamInfoCase struct {
-	name   string
-	seed   map[string]any
-	assert func(t *testing.T, got *domain.NextStreamInfo, err error)
-}
-
-func assertNoNextStreamInfo(t *testing.T, got *domain.NextStreamInfo, err error) {
-	t.Helper()
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got != nil {
-		t.Fatalf("expected nil info, got %#v", got)
-	}
-}
-
-func assertUpcomingNextStreamInfo(t *testing.T, got *domain.NextStreamInfo, err error) {
-	t.Helper()
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got == nil {
-		t.Fatal("expected info, got nil")
-	}
-
-	if got.Status != domain.NextStreamStatusUpcoming || got.VideoID != "v1" || got.Title != "테스트" {
-		t.Fatalf("unexpected info: %#v", got)
-	}
-
-	if got.StartScheduled == nil || got.StartScheduled.Format(time.RFC3339) != "2026-03-02T00:00:00Z" {
-		t.Fatalf("unexpected scheduled time: %#v", got.StartScheduled)
-	}
-}
-
-func TestGetNextStreamInfo(t *testing.T) {
-	t.Parallel()
-
-	tests := []nextStreamInfoCase{
-		{
-			name:   "missing cache returns nil",
-			seed:   nil,
-			assert: assertNoNextStreamInfo,
-		},
-		{
-			name:   "invalid status ignored",
-			seed:   map[string]any{testNextStreamStatusField: "broken", "video_id": "v1", "title": "t1"},
-			assert: assertNoNextStreamInfo,
-		},
-		{
-			name:   "upcoming requires complete fields",
-			seed:   map[string]any{testNextStreamStatusField: "upcoming", "video_id": "v1"},
-			assert: assertNoNextStreamInfo,
-		},
-		{
-			name: "upcoming complete fields",
-			seed: map[string]any{
-				testNextStreamStatusField: "upcoming",
-				"video_id":                "v1",
-				"title":                   "테스트",
-				"start_scheduled":         "2026-03-02T00:00:00Z",
-			},
-			assert: assertUpcomingNextStreamInfo,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			as := newTestAlarmService(t)
-			ctx := t.Context()
-			channelID := "UC_test"
-			key := sharedalarmkeys.NextStreamKeyPrefix + channelID
-
-			if err := as.cache.Del(ctx, key); err != nil {
-				t.Fatalf("cache delete failed: %v", err)
-			}
-
-			if len(tt.seed) > 0 {
-				fields := make(map[string]any, len(tt.seed))
-				maps.Copy(fields, tt.seed)
-
-				if err := as.cache.HMSet(ctx, key, fields); err != nil {
-					t.Fatalf("cache HMSet failed: %v", err)
-				}
-			}
-
-			got, err := as.GetNextStreamInfo(ctx, channelID)
-			tt.assert(t, got, err)
-		})
-	}
-}
-
-func TestGetNextStreamInfosBatch(t *testing.T) {
+func TestGetMemberNamesBatch(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
 	ctx := t.Context()
 
-	require.NoError(t, as.cache.HMSet(ctx, sharedalarmkeys.NextStreamKeyPrefix+"UC_ok", map[string]any{
-		testNextStreamStatusField: "upcoming",
-		"video_id":                "vid-ok",
-		"title":                   "배치 방송",
-		"start_scheduled":         "2026-03-06T00:00:00Z",
-	}))
-	require.NoError(t, as.cache.HMSet(ctx, sharedalarmkeys.NextStreamKeyPrefix+"UC_invalid", map[string]any{
-		testNextStreamStatusField: "broken",
-	}))
 	require.NoError(t, as.cache.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_ok", "미코"))
 
 	names, err := as.getMemberNamesBatch(ctx, []string{"UC_ok", "UC_missing"})
 	require.NoError(t, err)
 	assert.Equal(t, "미코", names["UC_ok"])
 	assert.Empty(t, names["UC_missing"])
-
-	infos, err := as.getNextStreamInfosBatch(ctx, []string{"UC_ok", "UC_invalid", "UC_missing"})
-	require.NoError(t, err)
-	require.NotNil(t, infos["UC_ok"])
-	assert.Equal(t, "vid-ok", infos["UC_ok"].VideoID)
-	assert.Nil(t, infos["UC_invalid"])
-	assert.Nil(t, infos["UC_missing"])
 }
 
 func TestBuildAlarmListViews(t *testing.T) {
 	t.Parallel()
-
-	nextStream := &domain.NextStreamInfo{
-		Status:  domain.NextStreamStatusUpcoming,
-		Title:   "테스트 방송",
-		VideoID: "vid1",
-	}
 
 	entries := buildAlarmListViews(
 		[]*domain.Alarm{
@@ -293,19 +172,13 @@ func TestBuildAlarmListViews(t *testing.T) {
 			testChannelID:      "캐시 이름",
 			testOtherChannelID: " ",
 		},
-		map[string]*domain.NextStreamInfo{
-			testChannelID: nextStream,
-		},
 	)
 
 	require.Len(t, entries, 3)
 	assert.Equal(t, "캐시 이름", entries[0].MemberName)
-	assert.Equal(t, nextStream, entries[0].NextStream)
 	assert.Equal(t, testChannelID, entries[0].ChannelID)
 
 	assert.Equal(t, testOtherChannelID, entries[1].MemberName)
-	assert.Nil(t, entries[1].NextStream)
 
 	assert.Equal(t, "ch-3", entries[2].MemberName)
-	assert.Nil(t, entries[2].NextStream)
 }

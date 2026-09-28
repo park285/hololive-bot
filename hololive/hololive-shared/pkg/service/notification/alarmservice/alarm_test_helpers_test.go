@@ -50,11 +50,10 @@ const (
 	testUCChannelID    = "UC_TEST"
 	testAlphaChannelID = "UC_alpha"
 
-	testMetricLabelOperation  = "operation"
-	testMetricLabelResult     = "result"
-	testWarmOperation         = "warm"
-	testNextStreamStatusField = "status"
-	testFallbackChannelID     = "default"
+	testMetricLabelOperation = "operation"
+	testMetricLabelResult    = "result"
+	testWarmOperation        = "warm"
+	testFallbackChannelID    = "default"
 )
 
 // mockMemberDataProvider: 테스트용 멤버 데이터 프로바이더.

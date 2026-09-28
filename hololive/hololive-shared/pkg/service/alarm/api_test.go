@@ -31,7 +31,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -50,7 +49,6 @@ type mockAlarmCRUD struct {
 	getRoomAlarmsWithTypesFn    func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
 	listRoomAlarmsViewFn        func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
 	clearRoomAlarmsFn           func(ctx context.Context, roomID string) (int, error)
-	getNextStreamInfoFn         func(ctx context.Context, channelID string) (*domain.NextStreamInfo, error)
 	updateAlarmAdvanceMinutesFn func(minutes int) []int
 	getTargetMinutesFn          func() []int
 	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
@@ -116,15 +114,6 @@ func (m *mockAlarmCRUD) ClearRoomAlarms(ctx context.Context, roomID string) (int
 	out, err := m.clearRoomAlarmsFn(ctx, roomID)
 	if err != nil {
 		return out, fmt.Errorf("clear room alarms fn: %w", err)
-	}
-
-	return out, nil
-}
-
-func (m *mockAlarmCRUD) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	out, err := m.getNextStreamInfoFn(ctx, channelID)
-	if err != nil {
-		return nil, fmt.Errorf("get next stream info fn: %w", err)
 	}
 
 	return out, nil
@@ -458,73 +447,6 @@ func TestClearRoomAlarms(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/alarm/clear", jsonBody(t, tt.body))
 			req.Header.Set("Content-Type", "application/json")
-			r.ServeHTTP(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
-			}
-
-			resp := decodeResponse(t, rec.Body)
-			if resp.Success != tt.wantOK {
-				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
-			}
-		})
-	}
-}
-
-func TestGetNextStreamInfo(t *testing.T) {
-	sched := time.Now().Add(time.Hour)
-
-	tests := []struct {
-		name       string
-		channelID  string
-		mockFn     func(ctx context.Context, channelID string) (*domain.NextStreamInfo, error)
-		wantStatus int
-		wantOK     bool
-	}{
-		{
-			name:      "성공",
-			channelID: testChannelID,
-			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
-				return &domain.NextStreamInfo{
-					Status:         domain.NextStreamStatusUpcoming,
-					VideoID:        "vid1",
-					Title:          "테스트 방송",
-					StartScheduled: &sched,
-				}, nil
-			},
-			wantStatus: http.StatusOK,
-			wantOK:     true,
-		},
-		{
-			name:      "예정 방송 없음 (nil 반환)",
-			channelID: "ch2",
-			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
-				var missing *domain.NextStreamInfo
-
-				return missing, nil
-			},
-			wantStatus: http.StatusOK,
-			wantOK:     true,
-		},
-		{
-			name:      "서비스 에러",
-			channelID: "ch3",
-			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
-				return nil, errors.New("holodex timeout")
-			},
-			wantStatus: http.StatusInternalServerError,
-			wantOK:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockAlarmCRUD{getNextStreamInfoFn: tt.mockFn}
-			r := newTestHandler(t, mock)
-
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/next-stream/"+tt.channelID, http.NoBody)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {

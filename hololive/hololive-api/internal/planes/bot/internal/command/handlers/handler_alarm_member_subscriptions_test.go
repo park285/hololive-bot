@@ -38,10 +38,6 @@ func (r *memberAlarmRecorder) RemoveHostAlarm(_ context.Context, roomID, channel
 	return true, nil
 }
 
-func (*memberAlarmRecorder) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, Title: "#宵凪ネオン"}, nil
-}
-
 func newMemberSubscriptionCommand(t *testing.T, recorder *memberAlarmRecorder, send func(context.Context, string, string) error) *alarmcmd.AlarmCommand {
 	t.Helper()
 
@@ -91,8 +87,6 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 		require.Equal(t, commandUnitBChannel, added.ChannelID)
 		require.Empty(t, added.UserID)
 	}
-
-	require.NotContains(t, sent[0], "#宵凪ネオン")
 
 	for _, name := range []string{"미라", "유닛 B"} {
 		require.NoError(t, command.Execute(t.Context(), cmdCtx, map[string]any{"action": "remove", "member": name}))

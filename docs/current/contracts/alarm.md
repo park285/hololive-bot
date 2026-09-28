@@ -87,7 +87,7 @@ the stored target list is absent/empty under the existing settings contract.
 
 | Field | Value |
 |---|---|
-| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/next-stream/:id`, `/settings`, `/room-name`, `/keys` |
+| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id`, `/room/:id/view`, `/clear`, `/settings`, `/room-name`, `/keys` |
 | Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
 | Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
 | Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |
@@ -192,7 +192,6 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 | `get_room_alarms_failed` | 500 | provider query failed | retry/manual diagnosis |
 | `get_room_alarms_view_failed` | 500 | provider view query failed | retry/manual diagnosis |
 | `clear_room_alarms_failed` | 500 | provider clear failed | retry/manual diagnosis |
-| `get_next_stream_info_failed` | 500 | provider query failed | retry/manual diagnosis |
 | `set_room_name_failed` | 500 | provider room name update failed | retry/manual diagnosis |
 | `get_all_alarm_keys_failed` | 500 | provider key listing failed | retry/manual diagnosis |
 | unsupported envelope version | n/a | publisher rejects the batch before insert | fix the producer; nothing is stored |

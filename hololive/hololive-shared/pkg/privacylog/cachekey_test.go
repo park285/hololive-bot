@@ -112,7 +112,6 @@ func TestRedactCacheKeyLeavesIdentifierFreeKeysIntact(t *testing.T) {
 		"alarm:member_names",
 		"alarm:dispatch:wakeup",
 		"alarm:dispatch:wakeup:guard",
-		"alarm:next_stream:" + channelID,
 		"alarm:channel_subscribers:" + channelID,
 		"alarm:channel_subscribers:COMMUNITY:" + channelID,
 		"alarm:channel_subscribers_empty:SHORTS:" + channelID,

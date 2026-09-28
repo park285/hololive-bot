@@ -79,7 +79,6 @@ func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal.GET(contractsalarm.RoomRoute, h.GetRoomAlarmsWithTypes)
 	internal.GET(contractsalarm.RoomViewRoute, h.GetRoomAlarmsView)
 	internal.POST(contractsalarm.ClearRoute, h.ClearRoomAlarms)
-	internal.GET(contractsalarm.NextStreamRoute, h.GetNextStreamInfo)
 	internal.PUT(contractsalarm.SettingsRoute, h.UpdateAlarmAdvanceMinutes)
 	internal.PUT(contractsalarm.RoomNameRoute, h.SetRoomName)
 	internal.GET(contractsalarm.KeysRoute, h.GetAllAlarmKeys)
@@ -234,27 +233,6 @@ func (h *Handler) ClearRoomAlarms(c *gin.Context) {
 	}
 
 	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"deleted": count}})
-}
-
-func (h *Handler) GetNextStreamInfo(c *gin.Context) {
-	channelID := c.Param("id")
-	ctx := c.Request.Context()
-
-	info, err := h.alarm.GetNextStreamInfo(ctx, channelID)
-	if err != nil {
-		h.logger.Error("다음 방송 정보 조회 실패", slog.String("channel_id", channelID), slog.Any("error", err))
-		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_next_stream_info_failed", "get next stream info failed"))
-
-		return
-	}
-
-	if info == nil {
-		ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: nil})
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: info})
 }
 
 func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
