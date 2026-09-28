@@ -9,6 +9,11 @@ required_udp_buffer="$6"
 swapfile_size_mib="$7"
 EXPECTED_REVISION="$8"
 [[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'full native release revision required' >&2; exit 1; }
+# The preceding ap-host-native-po.sh fragment owns these values.
+po_service="${po_service:?PO helper fragment must be loaded}"
+po_socket="${po_socket:?PO helper fragment must be loaded}"
+po_unit_file="${po_unit_file:?PO helper fragment must be loaded}"
+po_socket_file="${po_socket_file:?PO helper fragment must be loaded}"
 payload="$HOME/$payload_name"
 release_path_lib="$payload/bin/ap-host-native-release-path.sh"
 releases_root="/opt/hololive-bot/youtube-collector/releases"

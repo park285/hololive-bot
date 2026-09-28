@@ -6,10 +6,10 @@ po_unit_file=/etc/systemd/system/hololive-youtube-po.service
 po_socket_file=/etc/systemd/system/hololive-youtube-po.socket
 
 po_wait_ready() {
-  local release="$1" attempt
+  local release="$1" _
   # health는 SDK import가 끝난 worker를 보장한다. 이 조회는 발급하지 않으며
   # Compose issuer와 같은 30회/2초 간격 내에서만 준비 상태를 관찰한다.
-  for attempt in {1..30}; do
+  for _ in {1..30}; do
     if sudo -n -u hololive "$release/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock; then
       return 0
     fi
