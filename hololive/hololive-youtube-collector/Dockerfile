@@ -19,9 +19,10 @@ ARG NODE_VERSION=24
 
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS youtubejs-build
 WORKDIR /app/youtubejs
-COPY hololive/hololive-youtube-collector/youtubejs/package.json hololive/hololive-youtube-collector/youtubejs/package-lock.json ./
+# checkout umask와 무관하게 runtime uid가 읽도록 context 파일 모드를 정규화한다.
+COPY --chmod=u=rwX,go=rX hololive/hololive-youtube-collector/youtubejs/package.json hololive/hololive-youtube-collector/youtubejs/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
-COPY hololive/hololive-youtube-collector/youtubejs/src ./src
+COPY --chmod=u=rwX,go=rX hololive/hololive-youtube-collector/youtubejs/src ./src
 RUN rm -f ./src/*.test.mjs
 
 # Keep build-time npm execution native, but source the shipped Node binary and libraries from the
