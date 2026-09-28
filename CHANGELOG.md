@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- native PO 배포 fragment가 앞서 적재한 helper의 service/socket/unit 입력을 명시적으로 요구합니다. helper 없이 실행하면 payload·호스트 변경 전에 실패하며 값의 단일 소유자는 그대로입니다. readiness 관측 loop는 미사용 변수를 `_`로 명시하고 기존 30회·2초 상한을 유지합니다. meta ShellCheck 경고를 억제하지 않고 해소했으며 application binary·운영 설정·프로토콜은 바꾸지 않습니다.
+
 ## v5.0.1 - 2026-09-28
 
 - DB pool이 `POSTGRES_SSLROOTCERT`를 pgxdb `Config.SSLRootCert`로 직접 넘기는 v5.0.0 배포 뒤의 lockstep 릴리스입니다. API·alarm-worker·shared·collector·DB 테스트 모듈과 정기 보안 검사의 sibling checkout을 `shared-go/v2 v2.8.0`(`36d47654f2c0`)과 `iris-client-go/v2 v2.8.0`(`b23933c3179c`)으로 함께 고정합니다. shared-go v2.8.0이 지운 pgxdb env 폴백과 호환 API는 v5.0.0에서 이미 대체 경로로 옮겨 이 고정에 필요한 코드 변경은 없고, 다른 의존성 버전도 바꾸지 않습니다.
