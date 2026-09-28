@@ -92,40 +92,53 @@ type notificationPayloadIdentity struct {
 // ResolveDeliveryKey derives a logical key from an outbox row and validates
 // Community/Shorts payload identity before any provider call.
 func ResolveDeliveryKey(kind domain.OutboxKind, contentID, payload, roomID string) (LogicalKey, error) {
-	if kind != domain.OutboxKindNewShort && kind != domain.OutboxKindCommunityPost {
-		key, err := ResolveLogicalKey(kind, contentID, roomID)
-		if err != nil {
-			return LogicalKey{}, fmt.Errorf("resolve delivery key: %w", err)
-		}
-
-		return key, nil
-	}
-
-	payloadIdentity, err := parseNotificationPayloadIdentity(kind, payload)
+	logicalID, err := ResolveDeliveryLogicalID(kind, contentID, payload)
 	if err != nil {
-		return LogicalKey{}, fmt.Errorf("resolve delivery payload identity: %w", err)
+		return LogicalKey{}, fmt.Errorf("resolve delivery key: %w", err)
 	}
 
-	contentLogicalID, err := ForOutboxKind(kind, contentID)
-	if err != nil {
-		return LogicalKey{}, fmt.Errorf("resolve outbox content id: %w", err)
-	}
-
-	canonicalPostID, err := ForOutboxKind(kind, payloadIdentity.CanonicalPostID)
-	if err != nil {
-		return LogicalKey{}, fmt.Errorf("resolve payload canonical post id: %w", err)
-	}
-
-	if contentLogicalID != canonicalPostID {
-		return LogicalKey{}, &Error{Kind: kind, Field: "payload identity", Reason: ErrorReasonMismatch}
-	}
-
-	key, err := ResolveLogicalKey(kind, canonicalPostID, roomID)
+	key, err := ResolveLogicalKey(kind, logicalID, roomID)
 	if err != nil {
 		return LogicalKey{}, fmt.Errorf("resolve canonical delivery key: %w", err)
 	}
 
 	return key, nil
+}
+
+// ResolveDeliveryLogicalID returns the room-independent canonical logical ID of
+// an outbox row. Community/Shorts use only the payload canonical_post_id, which
+// must be present and match content_id; other kinds use content_id. There is no
+// fallback to payload resource IDs: a missing or malformed identity is an error.
+func ResolveDeliveryLogicalID(kind domain.OutboxKind, contentID, payload string) (string, error) {
+	if kind != domain.OutboxKindNewShort && kind != domain.OutboxKindCommunityPost {
+		logicalID, err := ForOutboxKind(kind, contentID)
+		if err != nil {
+			return "", fmt.Errorf("resolve outbox content id: %w", err)
+		}
+
+		return logicalID, nil
+	}
+
+	payloadIdentity, err := parseNotificationPayloadIdentity(kind, payload)
+	if err != nil {
+		return "", fmt.Errorf("resolve delivery payload identity: %w", err)
+	}
+
+	contentLogicalID, err := ForOutboxKind(kind, contentID)
+	if err != nil {
+		return "", fmt.Errorf("resolve outbox content id: %w", err)
+	}
+
+	canonicalPostID, err := ForOutboxKind(kind, payloadIdentity.CanonicalPostID)
+	if err != nil {
+		return "", fmt.Errorf("resolve payload canonical post id: %w", err)
+	}
+
+	if contentLogicalID != canonicalPostID {
+		return "", &Error{Kind: kind, Field: "payload identity", Reason: ErrorReasonMismatch}
+	}
+
+	return canonicalPostID, nil
 }
 
 func parseNotificationPayloadIdentity(kind domain.OutboxKind, payload string) (notificationPayloadIdentity, error) {

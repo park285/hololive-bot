@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 // delivery telemetry는 lifecycle 전이 트랜잭션 안에서 owner 시도 하나당 한 행만 기록한다
@@ -38,11 +37,8 @@ func TestTransitionApplyPreparedFailureRecordsOwnerAttemptTelemetry(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 
-	// 전이에 도달한 행은 payload canonical_post_id가 있고 content_id와 일치하므로, logical key는 claim 경로가 아직 쓰는
-	// ResolveTelemetryPostID의 첫 후보(canonical_post_id)와 같은 값이다.
-	postID := telemetry.ResolveTelemetryPostID(domain.OutboxKindNewShort, "short-telemetry-prepared",
-		transitionShortTelemetryPayload("short-telemetry-prepared"))
-	require.Equal(t, "short:short-telemetry-prepared", postID)
+	// post_id는 claim 경로와 같은 canonical logical ID(contentid.ResolveDeliveryLogicalID)다.
+	postID := "short:short-telemetry-prepared"
 
 	// owner와 follower는 서로 다른 delivery이므로, owner 한 행뿐인 정확한 목록은 follower가 기록하지 않았음을 뜻한다.
 	require.NotEqual(t, followerID, ownerID)

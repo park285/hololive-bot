@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
@@ -28,10 +28,10 @@ func (d *ClaimManager) tryClaimDelivery(
 	repository := observation.NewRepositoryContext(ctx, d.db)
 	// lease 시각은 event/schedule metadata와 분리한다. 과거·미래 재시도 시각으로 lock 수명을 바꾸면 안 된다.
 	claimAt := time.Now().UTC().Truncate(time.Microsecond)
-	postID := strings.TrimSpace(telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
 
-	if postID == "" {
-		return claimResult{decision: deliveryClaimDecisionRetryLater}, errors.New("resolve post id: empty")
+	postID, err := ytcontentid.ResolveDeliveryLogicalID(outbox.Kind, outbox.ContentID, outbox.Payload)
+	if err != nil {
+		return claimResult{decision: deliveryClaimDecisionRetryLater}, fmt.Errorf("resolve post id: %w", err)
 	}
 
 	state, err := repository.FindAlarmStateByPostID(ctx, outbox.Kind, postID)
@@ -82,9 +82,9 @@ func deliveryClaimIdentityForOutbox(outbox *domain.YouTubeNotificationOutbox) (s
 		return "", nil
 	}
 
-	postID := strings.TrimSpace(telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
-	if postID == "" {
-		return "", errors.New("resolve post id: empty")
+	postID, err := ytcontentid.ResolveDeliveryLogicalID(outbox.Kind, outbox.ContentID, outbox.Payload)
+	if err != nil {
+		return "", fmt.Errorf("resolve post id: %w", err)
 	}
 
 	return store.DeliveryClaimIdentityKey(outbox.Kind, postID), nil
@@ -117,9 +117,9 @@ func (d *ClaimManager) roomAlreadyReceivedPost(
 		return false, nil
 	}
 
-	postID := strings.TrimSpace(telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
-	if postID == "" {
-		return false, errors.New("resolve post id: empty")
+	postID, err := ytcontentid.ResolveDeliveryLogicalID(outbox.Kind, outbox.ContentID, outbox.Payload)
+	if err != nil {
+		return false, fmt.Errorf("resolve post id: %w", err)
 	}
 
 	rows, err := d.db.Query(ctx, mustSQL("dispatcher_claim_acquire_0131_01.sql"), string(outbox.Kind), outbox.ContentID, postID, row.RoomID, string(domain.OutboxStatusSent), row.ID)
@@ -144,7 +144,12 @@ func sentSiblingRowsContainPost(rows pgx.Rows, kind domain.OutboxKind, postID st
 			return false, fmt.Errorf("scan sent sibling delivery for room: %w", err)
 		}
 
-		if strings.TrimSpace(telemetry.ResolveTelemetryPostID(kind, contentID, payload)) == postID {
+		siblingPostID, err := ytcontentid.ResolveDeliveryLogicalID(kind, contentID, payload)
+		if err != nil {
+			return false, fmt.Errorf("resolve sent sibling post id: %w", err)
+		}
+
+		if siblingPostID == postID {
 			return true, nil
 		}
 	}
