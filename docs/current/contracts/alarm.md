@@ -68,7 +68,11 @@ IDs. `InsertBatch` exposes `HashConflictEvents`; `InsertPending` returns
 
 `PUT /room-name` stores the admin-assigned room display name in PostgreSQL
 `alarm_room_display_names` (migration 232). `room_name` is required; a blank value
-clears the admin name. `GET /keys` builds the admin list from PostgreSQL `alarms`,
+clears the admin name. Both fields are trimmed; a blank `room_id`, a `room_id` over 100
+characters, or a `room_name` over 255 characters (rune count, matching the PG varchar
+widths) is rejected with 400 `invalid_request_body` before storage. The admin API
+`POST /api/holo/names/room` applies the same bounds and answers 400 without calling the worker.
+`GET /keys` builds the admin list from PostgreSQL `alarms`,
 one entry per distinct `(room_id, channel_id)` (UNIT B host rows collapse into one),
 and resolves `roomName` as admin name, then the non-empty `alarms.room_name` most recently
 changed by upsert (`room_name_updated_at`, then `id`),

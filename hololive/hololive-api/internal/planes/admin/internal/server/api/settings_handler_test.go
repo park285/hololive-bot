@@ -9,11 +9,13 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -46,8 +48,8 @@ type roomNameRecordingAlarm struct {
 	calls []string
 }
 
-func (a *roomNameRecordingAlarm) SetRoomName(_ context.Context, _, roomName string) error {
-	a.calls = append(a.calls, roomName)
+func (a *roomNameRecordingAlarm) SetRoomName(_ context.Context, roomID, roomName string) error {
+	a.calls = append(a.calls, roomID+"|"+roomName)
 
 	return nil
 }
@@ -103,10 +105,14 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 	}
 }
 
-// roomName 필드는 필수지만 공백뿐인 값은 관리자 지정 이름 해제 요청이다.
-func TestSettingsHandler_SetRoomName_BlankNameClearsAndMissingNameIsRejected(t *testing.T) {
+// roomName 필드는 필수지만 공백뿐인 값은 관리자 지정 이름 해제 요청이다. 저장 폭(room_id 100자, 이름 255자)을
+// 넘는 요청은 worker를 부르지 않고 400으로 거절한다.
+func TestSettingsHandler_SetRoomName_BlankNameClearsBoundsAndMissingNameIsRejected(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
+
+	maxRoomID := strings.Repeat("r", contractsalarm.MaxRoomIDLength)
+	maxRoomName := strings.Repeat("가", contractsalarm.MaxRoomNameLength)
 
 	tests := []struct {
 		name        string
@@ -115,8 +121,12 @@ func TestSettingsHandler_SetRoomName_BlankNameClearsAndMissingNameIsRejected(t *
 		wantCalls   []string
 		wantMessage string
 	}{
-		{name: "set", body: `{"roomId":"room-1","roomName":" 관리 방 "}`, wantStatus: http.StatusOK, wantCalls: []string{"관리 방"}, wantMessage: "Room name set successfully"},
-		{name: "blank clears", body: `{"roomId":"room-1","roomName":"  "}`, wantStatus: http.StatusOK, wantCalls: []string{""}, wantMessage: "Room name cleared"},
+		{name: "set", body: `{"roomId":" room-1 ","roomName":" 관리 방 "}`, wantStatus: http.StatusOK, wantCalls: []string{"room-1|관리 방"}, wantMessage: "Room name set successfully"},
+		{name: "blank clears", body: `{"roomId":"room-1","roomName":"  "}`, wantStatus: http.StatusOK, wantCalls: []string{"room-1|"}, wantMessage: "Room name cleared"},
+		{name: "bounds accepted", body: `{"roomId":"` + maxRoomID + `","roomName":"` + maxRoomName + `"}`, wantStatus: http.StatusOK, wantCalls: []string{maxRoomID + "|" + maxRoomName}, wantMessage: "Room name set successfully"},
+		{name: "name over 255", body: `{"roomId":"room-1","roomName":"` + maxRoomName + `가"}`, wantStatus: http.StatusBadRequest},
+		{name: "room id over 100", body: `{"roomId":"` + maxRoomID + `r","roomName":"관리 방"}`, wantStatus: http.StatusBadRequest},
+		{name: "blank room id", body: `{"roomId":"  ","roomName":"관리 방"}`, wantStatus: http.StatusBadRequest},
 		{name: "missing name", body: `{"roomId":"room-1"}`, wantStatus: http.StatusBadRequest},
 	}
 

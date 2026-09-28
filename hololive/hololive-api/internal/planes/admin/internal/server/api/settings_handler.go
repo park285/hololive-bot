@@ -6,13 +6,13 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -120,7 +120,7 @@ func (h *SettingsHandler) requireApplier(c *gin.Context) bool {
 }
 
 // SetRoomName은 관리자 지정 방 이름을 저장한다. 요청 필드 roomName은 필수이고, 공백뿐인 값은 지정을 해제해 관리 목록이
-// Kakao 방 이름으로 돌아가게 한다.
+// Kakao 방 이름으로 돌아가게 한다. 저장 폭(room_id 100자, 이름 255자)을 넘으면 worker 호출 전에 400으로 거절한다.
 func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	var req struct {
 		RoomID   string  `json:"roomId" binding:"required"`
@@ -134,6 +134,14 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 		return
 	}
 
+	roomID, roomName, err := contractsalarm.NormalizeRoomName(req.RoomID, *req.RoomName)
+	if err != nil {
+		h.safeLogger().Warn("Invalid room name request", slog.Any("error", err))
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
+
+		return
+	}
+
 	if !h.requireAlarm(c) {
 		return
 	}
@@ -141,8 +149,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	roomName := strings.TrimSpace(*req.RoomName)
-	if err := h.Alarm.SetRoomName(ctx, req.RoomID, roomName); err != nil {
+	if err := h.Alarm.SetRoomName(ctx, roomID, roomName); err != nil {
 		h.safeLogger().Error("Failed to set room name", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to set room name", nil)
 
@@ -150,20 +157,20 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	}
 
 	if roomName == "" {
-		h.safeLogger().Info("Room name cleared", slog.String("room_id", req.RoomID))
-		h.logActivity("name_update", "Room name cleared: "+req.RoomID, map[string]any{"room_id": req.RoomID})
+		h.safeLogger().Info("Room name cleared", slog.String("room_id", roomID))
+		h.logActivity("name_update", "Room name cleared: "+roomID, map[string]any{"room_id": roomID})
 		ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room name cleared"})
 
 		return
 	}
 
 	h.safeLogger().Info("Room name set",
-		slog.String("room_id", req.RoomID),
+		slog.String("room_id", roomID),
 		slog.String("room_name", roomName),
 	)
 
-	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", req.RoomID, roomName), map[string]any{
-		"room_id":   req.RoomID,
+	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", roomID, roomName), map[string]any{
+		"room_id":   roomID,
 		"room_name": roomName,
 	})
 

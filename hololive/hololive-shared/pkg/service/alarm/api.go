@@ -279,10 +279,17 @@ func (h *Handler) SetRoomName(c *gin.Context) {
 		return
 	}
 
+	roomID, roomName, err := contractsalarm.NormalizeRoomName(req.RoomID, *req.RoomName)
+	if err != nil {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
 	ctx := c.Request.Context()
 
-	if err := h.alarm.SetRoomName(ctx, req.RoomID, *req.RoomName); err != nil {
-		h.logger.Error("방 이름 설정 실패", privacylog.RoomIDAttr(req.RoomID), slog.Any("error", err))
+	if err := h.alarm.SetRoomName(ctx, roomID, roomName); err != nil {
+		h.logger.Error("방 이름 설정 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("set_room_name_failed", "set room name failed"))
 
 		return

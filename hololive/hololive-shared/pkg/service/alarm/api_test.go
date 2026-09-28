@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -591,15 +593,23 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 }
 
 // room_name 필드는 필수지만 빈 값은 관리자 지정 이름 해제 요청이라 서비스까지 그대로 전달해야 한다.
-func TestSetRoomNameForwardsBlankNameAsClearAndRejectsMissingName(t *testing.T) {
+// 앞뒤 공백은 제거해 넘기고, PG 저장 폭(room_id 100자, 이름 255자)을 넘는 요청은 서비스 호출 없이 400으로 거절한다.
+func TestSetRoomNameNormalizesBoundsAndForwardsBlankNameAsClear(t *testing.T) {
+	maxRoomID := strings.Repeat("r", contractsalarm.MaxRoomIDLength)
+	maxRoomName := strings.Repeat("가", contractsalarm.MaxRoomNameLength)
+
 	tests := []struct {
 		name       string
 		body       string
 		wantStatus int
 		wantCalls  []string
 	}{
-		{name: "이름 지정", body: `{"room_id":"` + testRoomID + `","room_name":"관리 방"}`, wantStatus: http.StatusOK, wantCalls: []string{"관리 방"}},
-		{name: "빈 이름은 해제", body: `{"room_id":"` + testRoomID + `","room_name":""}`, wantStatus: http.StatusOK, wantCalls: []string{""}},
+		{name: "이름 지정은 공백 제거", body: `{"room_id":" ` + testRoomID + ` ","room_name":" 관리 방 "}`, wantStatus: http.StatusOK, wantCalls: []string{testRoomID + "|관리 방"}},
+		{name: "빈 이름은 해제", body: `{"room_id":"` + testRoomID + `","room_name":"  "}`, wantStatus: http.StatusOK, wantCalls: []string{testRoomID + "|"}},
+		{name: "경계 폭은 허용", body: `{"room_id":"` + maxRoomID + `","room_name":" ` + maxRoomName + ` "}`, wantStatus: http.StatusOK, wantCalls: []string{maxRoomID + "|" + maxRoomName}},
+		{name: "이름 256자 거절", body: `{"room_id":"` + testRoomID + `","room_name":"` + maxRoomName + `가"}`, wantStatus: http.StatusBadRequest},
+		{name: "room_id 101자 거절", body: `{"room_id":"` + maxRoomID + `r","room_name":"관리 방"}`, wantStatus: http.StatusBadRequest},
+		{name: "공백 room_id 거절", body: `{"room_id":"  ","room_name":"관리 방"}`, wantStatus: http.StatusBadRequest},
 		{name: "room_name 누락", body: `{"room_id":"` + testRoomID + `"}`, wantStatus: http.StatusBadRequest},
 	}
 
@@ -608,9 +618,7 @@ func TestSetRoomNameForwardsBlankNameAsClearAndRejectsMissingName(t *testing.T) 
 			var calls []string
 
 			mock := &mockAlarmCRUD{setRoomNameFn: func(_ context.Context, roomID, roomName string) error {
-				assert.Equal(t, testRoomID, roomID)
-
-				calls = append(calls, roomName)
+				calls = append(calls, roomID+"|"+roomName)
 
 				return nil
 			}}
@@ -622,6 +630,10 @@ func TestSetRoomNameForwardsBlankNameAsClearAndRejectsMissingName(t *testing.T) 
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 			assert.Equal(t, tt.wantCalls, calls)
+
+			if tt.wantStatus == http.StatusBadRequest {
+				assert.Equal(t, "invalid_request_body", decodeResponse(t, rec.Body).Error)
+			}
 		})
 	}
 }
