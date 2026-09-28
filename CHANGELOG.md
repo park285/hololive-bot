@@ -18,6 +18,7 @@
 - `hololive_alarm_subscriber_db_fallback_total`의 `result`(`hit`·`miss`·`error`) series를 기동 때 0으로 만들어 첫 관측 전에도 보이게 합니다.
 - `scripts/ci/python-runner.sh`를 iris-bridge 정본과 맞춥니다. 인자를 해석기 조회 전에 검사해 `--`만 주거나 `--print-interpreter` 뒤에 인자가 있거나 모드가 없으면 usage와 exit 2로 끝나고, `.python-version`은 symlink가 아닌 정규 파일에 정확히 한 줄(`3.14.7` + 개행)만 허용합니다.
 - `scripts/ci/check-recurring-security-scan-contract.sh`의 production bake 검사가 target 하나만 attestation을 요청해도 통과하던 것을, PO issuer(rootfs tar로 export해 attestation을 실을 수 없음)를 뺀 모든 target이 최대 provenance와 SBOM을 요청하는지로 좁힙니다. Compose 5.5.1 `build --print`가 항상 내는 `No services to build` 경고(출력 전용 경로라 빌드한 이미지가 없음)만 거르고 나머지 stderr는 보입니다.
+- 모든 Go 모듈의 `github.com/park285/iris-client-go/v3`를 v3.0.3(`d79fccefd`)으로 올립니다. webhook in-memory scheduler가 dispatcher 스케줄링 지연을 queue full 503으로 오거절하던 SDK 결함 수정이 들어옵니다. 운영 소비자의 durable admitter 경로는 영향이 없습니다. 보안 workflow의 sibling checkout도 같은 커밋을 가리킵니다.
 
 ## v7.0.0 - 2026-09-29
 
