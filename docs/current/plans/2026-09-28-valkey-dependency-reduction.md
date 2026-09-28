@@ -129,14 +129,15 @@ provider에 없는 hash-only 행을 새 설계에 fallback으로 합치지 않�
 | 순서 | 준비·판정 | 중단 조건 |
 |---|---|---|
 | C0 범위 고정 | API·alarm-worker·설치된 관련 CLI/script·구 one-shot writer 목록, host별 artifact ID, config/profile·이전 release set을 확정. 실제 delivery handoff mode·양쪽 executor 상태 포함 | consumer/writer·복구 target·source/CLI 영향이 미해결 |
-| C1 사전 준비 | clean reviewed full SHA 하나로 kapu에서 API/worker와 필요한 관리 파일 build/검증. remote에 준비만 하고 시작하지 않음. 아래 migration 233 사전 점검 쿼리 0건 확인 | wrong arch, SHA 혼합, 누락 image, unrelated dirty work 포함, 233 사전 점검 결과가 0건이 아님 |
+| C1 사전 준비 | clean reviewed full SHA 하나로 kapu에서 API/worker와 필요한 관리 파일 build/검증. remote에 준비만 하고 시작하지 않음. 아래 migration 233 사전 점검 쿼리 0건 확인. 중앙 `compose.env`·`bot.env`·`alarm-worker.env`와 stack-secrets master 사본에 기동 거절 env key(`config_youtube_retired_env.go`의 `YOUTUBE_CACHE_EXPIRATION_SECONDS`·`YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS`·`YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS`·`YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS`, `config_youtube_producer_retired.go`의 `YOUTUBE_PRODUCER_*`)가 0건인지 hololive-bot-ops로 확인. key 이름만 세고 값은 출력하지 않음(예: `sudo grep -cE '^[[:space:]]*(export[[:space:]]+)?(YOUTUBE_CACHE_EXPIRATION_SECONDS\|YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS\|YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS\|YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS\|YOUTUBE_PRODUCER_[A-Z0-9_]+)=' <env 파일>`) | wrong arch, SHA 혼합, 누락 image, unrelated dirty work 포함, 233 사전 점검 결과가 0건이 아님, 거절 env key가 1건 이상(존재만으로 C4의 API·worker 기동이 실패하므로 제거 뒤 재확인) |
 | C2 quiesce/drain | 승인된 traffic/producer를 잠시 제어하고 현재 runtime의 inbox/outbox·active lease·sending 상태를 해당 runbook 기준으로 정리. 뉴스 생성 작업과 `notification_delivery_outbox`·dispatch ledger 잔여 backlog 포함 | drain 실패, unknown-send 처리 미정, 유효한 rollback preflight 미확보 |
 | C3 구 runtime 종료 | 관련 구 API/worker·one-shot writer가 종료됐고 supervisor/autoheal이 구 artifact를 재시작하지 않음을 확인 | 구 프로세스·writer 재출현 또는 확인 불가 |
 | C4 일괄 release 적용 | 동일 SHA의 API·worker와 관련 script/config를 준비된 artifact로 순서 있게 시작. 외부 traffic은 아직 개방하지 않음 | 부분 시작 실패, 기존 release와 혼합, readiness 실패 |
 | C5 수용 | image SHA+ID, PG/Valkey readiness, 검색·통계·구독·유지 기능 smoke와 제거 key I/O 부재를 확인한 뒤 승인 범위로 traffic 재개 | health만 정상이고 revision 또는 기능 검증이 불일치 |
+| C5b collector·PO 교체 | C5 수용 뒤 같은 SHA의 7.0.0 collector·PO를 네 쌍(중앙 c, AP b·a·d)에 한 쌍씩 기존 paired 절차로 교체. c는 `po-central-cutover.sh deploy`(issuer-first), b는 `ap-deploy.sh seoul --apply`(issuer-first), a·d는 `HOLO_BOT_VERSION=7.0.0 ap-host-native-deploy.sh osaka\|osaka2 --apply`([youtube-collector runbook](../runbooks/youtube-collector.md#isolated-po-token-lifecycle)). 판정: c는 `po-central-cutover.sh check <이번 deploy의 po-c backup 경로>`와 compose `/ready`, AP는 `ap-completion-check.sh seoul\|osaka\|osaka2`가 exit 0이고 issuer·collector의 revision이 같은 SHA, version이 7.0.0이며 issuer 재시작은 runbook의 issuer 수용 기준 안 | 한 쌍이라도 판정 실패면 다음 쌍으로 넘어가지 않고 그 쌍을 해당 절차의 rollback으로 되돌림 |
 | C6 데이터 회수 | 아래 별도 조건을 충족한 폐기 key만 정리하고 재생성 여부 관측 | 활성 reader/writer 또는 소유 미확인, cleanup 승인 없음 |
 
-Compose 명령 하나를 원자적 transaction으로 취급하지 않습니다. cutover 실패 시 남은 구 runtime을 임의로 켜 mixed 운영하지 않습니다. collector는 이미 Valkey를 요구하지 않으므로 이 기능 제거만으로 AP fleet의 배포·중단까지 자동 확장하지 않습니다. 기존 API drain을 위해 upstream 제어가 실제 필요하면 그 범위만 별도 승인·runbook으로 정합니다.
+Compose 명령 하나를 원자적 transaction으로 취급하지 않습니다. cutover 실패 시 남은 구 runtime을 임의로 켜 mixed 운영하지 않습니다. 이 "mixed 불허" 규칙은 API·alarm-worker에 적용합니다. collector·PO는 Valkey를 요구하지 않고 6.0.2 collector가 7.0.0 API·worker와 섞여도 기능이 깨지지 않으므로 C4~C5에서는 6.0.2로 두고, C5b에서 네 쌍 모두를 같은 7.0.0 SHA로 올립니다. 7.0.0 collector는 scraping·member cache·holodex provider 변경을 담은 실제 산출물이고, `po-central-remote.sh check`와 `ap-completion-check.sh`는 image version을 트리의 `hololive-api/VERSION`(7.0.0)과 비교하므로 C5b 전에는 이 두 검사가 version 불일치로 실패합니다. 기존 API drain을 위해 upstream 제어가 실제 필요하면 그 범위만 별도 승인·runbook으로 정합니다.
 
 quiesce·supervisor 제어·traffic 재개·실제 메시지 smoke·key 삭제는 모두 운영 영향이 있으므로 현재 요청으로 실행하지 않습니다. 배포 승인과 Git publication은 별개입니다.
 
@@ -170,7 +171,7 @@ WHERE template_key IN ('CMD_ALARM_ADDED', 'CMD_ALARM_LIST')
 
 base(`12d78df8a`)의 관리자 방 이름은 Valkey hash `alarm:room_names`에만 있었고 migration 232는 빈 `alarm_room_display_names`만 만듭니다. 구 worker는 기동·rebuild 때 이 hash를 PG `alarms.room_name`으로 다시 채웠으므로, hash에서 어떤 `alarms.room_name`과도 다른 값이 마지막 기동 이후 지정된 관리자 별칭입니다. 이 값을 이관하기 전에는 hash를 지우지 않습니다.
 
-1. C0부터 수용(C5)까지 Console의 방 이름 변경(`POST /api/holo/names/room`)을 동결하고 관리자에게 공지합니다. 전환 창에 구 worker로 들어온 rename은 Valkey에만 기록되어 사라집니다.
+1. C0부터 Iris Console 배포까지 Console의 방 이름 변경(`POST /api/holo/names/room`)을 동결하고 관리자에게 공지합니다. Console은 Hololive v7.0.0의 C5 수용 뒤에 배포합니다(이전 Hololive는 빈 이름 해제를 400으로 거절). 전환 창에 구 worker로 들어온 rename은 Valkey에만 기록되어 사라집니다.
 2. 구 worker를 정지하기 직전(C3 직전)에 `alarm:room_names`를 root 전용 경로의 권한 600 CSV로 export합니다. 값은 방 제목 평문이므로 stdout·로그·티켓에 남기지 않고 건수만 기록합니다. 아래 명령은 Valkey Lua `cjson`으로 hash를 JSON 배열로 받고 Python `csv.writer`가 쉼표·따옴표·줄바꿈을 quoting하므로 `\copy ... (FORMAT csv)`가 그대로 읽습니다. 출력은 건수 한 줄이고, Valkey가 오류를 돌려주면 JSON 해석이 실패해 파일을 만들지 않습니다.
 
 ```bash
@@ -225,6 +226,8 @@ ON CONFLICT (room_id) DO NOTHING;
 
 - 되돌리는 것은 image뿐입니다. 보존한 rollback tag를 `:prod`로 되돌리고 `up -d --no-build --no-deps hololive-alarm-worker hololive-api`로만 교체합니다.
 - 231~233 적용 뒤에는 구 image의 `hololive-db-migrate`를 절대 실행하지 않습니다. 구 runner는 manifest 밖 ledger 행(092~094)을 이유로 거절하고, `--no-deps` 없는 `up`은 이 실패 때문에 API·worker·collector 기동까지 막습니다. schema는 되돌리지 않습니다. 구 SQL은 열을 명시하고 새 열은 DEFAULT가 있으며, 233의 템플릿 본문은 구 코드의 빈 `NextStream`과 같은 출력을 냅니다.
+- `hololive-db-migrate`도 `hololive-api:prod` image를 쓰므로 retag 순간부터 migrate는 구 runner입니다. 재부팅 때 `hololive-compose.service`가 실행하는 `systemd-compose-up.sh`는 `up -d --no-build`를 `--no-deps` 없이 돌려 이 구 runner를 실행하고, API·worker·중앙 collector가 기동하지 못합니다. rollback 창에는 중앙 host를 재부팅하지 않고, retag 전에 현재 7.0.0 `:prod`를 `<service>:v7.0.0`으로 보존하고 `sudo systemctl disable hololive-compose.service`로 부팅 자동 실행을 끕니다. 이미 막혔다면 보존한 7.0.0 image를 `:prod`로 되돌리고 새 runner의 `run --rm hololive-db-migrate`(적용 없이 exit 0) 뒤 `enable --now`로 재전진합니다(명령은 `rollback.md`).
+- image만 되돌린 동안 hololive-api는 트리 `VERSION`에서 온 `APP_VERSION=7.0.0`을 보고합니다. 판정은 image revision·version label로 합니다.
 - rollback 직전에 `SCAN 0 MATCH auth:sess:* COUNT 1000` 반복과 `UNLINK`로 세션 key를 모두 지워 재로그인시킵니다. 새 코드가 발급한 세션은 `auth:user_sessions:*` 인덱스에 없어 구 reset이 폐기하지 못하고, 구 코드는 `session_generation`을 비교하지 않으므로 새 코드에서 reset으로 무효화된 세션이 되살아납니다. 세션 key는 사용자별로 걸러낼 수 없으므로 `session_generation > 0`인 사용자만 골라 지우는 대신 전체를 지웁니다.
 - `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 회수하지 않고 TTL(8일)로 만료시킵니다. 구 reset의 폐기 대상 목록이기 때문입니다.
 - rollback 기간에도 방 이름 변경 동결을 유지합니다. 구 worker의 rename은 Valkey에만 남으므로, 동결을 풀었다면 재전진 전에 위 이관 절차를 다시 수행합니다.
@@ -414,7 +417,7 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 
 ### V36 변경·artifact·전환 검토
 
-`git diff --check`, `./scripts/architecture/ci-boundary-gate.sh`와 실제 변경한 계약/서비스 문서의 project-map·contract-map·runbook coverage 검사를 수행합니다. [현재 계획 규칙](../../../../docs/agent-workflows/README.md)에 따라 DEC/PLN 등록·lifecycle·폐기된 카탈로그 검사기는 실행 조건이 아닙니다. 기존 애플리케이션 계약·필수 코드 게이트·사용자 승인 경계는 그대로 유지합니다.
+`git diff --check`와 `./scripts/architecture/ci-boundary-gate.sh`를 수행합니다. [현재 계획 규칙](../../../../docs/agent-workflows/README.md)에 따라 DEC/PLN 등록·lifecycle·폐기된 카탈로그 검사기는 실행 조건이 아닙니다. 기존 애플리케이션 계약·필수 코드 게이트·사용자 승인 경계는 그대로 유지합니다.
 
 필요한 이미지 build는 `./build-all.sh --build-only --no-bump` 등 기존 build-only 경로로 준비하며 운영 artifact는 clean reviewed full SHA·대상 architecture·image ID를 고정합니다. 출판 승인 시 `scripts/ci/pre-push-gate.sh`가 별도 필수입니다. cutover는 owning ops의 필요한 정적 배포 계약과 no-build 절차를 적용하며, 이 문서 때문에 전체 stack/runtime을 재배포하지 않습니다.
 
@@ -423,7 +426,7 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 ## 실행 전 미결 조건과 인계
 
 1. source/CLI 계약 삭제와 이름 정규화, 외부 consumer 확인을 포함한 **전체 D1/D2 패치 범위**의 검토가 필요합니다. 발견한 consumer를 조용히 예외 처리하거나 no-op을 남기지 않습니다.
-2. C0~C5의 실제 host/process 목록·downtime·quiesce·supervisor·artifact set·rollback preflight는 운영 준비에서 확정합니다. 준비가 없으면 mixed fleet를 허용하는 식으로 전환 방식을 약화하지 않습니다.
+2. C0~C5의 실제 host/process 목록·downtime·quiesce·supervisor·artifact set·rollback preflight는 운영 준비에서 확정합니다. 준비가 없으면 API·alarm-worker의 mixed fleet를 허용하는 식으로 전환 방식을 약화하지 않습니다. collector·PO는 C5b에서 같은 SHA로 올립니다.
 3. cleanup 권한·정확한 key 소유·수용 기간은 별도입니다. 운영 데이터 회수 미실행을 코드/런타임 구현 실패와 혼동하지 않습니다.
 4. 공개 backend Go API·hash 전용 CLI/env 폐기와 공유 channel 이름 정규화를 포함한 D1/D2 구현은 사용자 승인에 따라 아래 구현 기록의 worktree에서 수행했습니다. DEC/PLN 상태나 lifecycle 등록을 승인 대용 또는 추가 실행 게이트로 사용하지 않습니다.
 
@@ -568,7 +571,7 @@ B07의 수정 전 실패는 삭제된 초기화가 hash를 DEL/HSET하고 colon 
 
 ### 남은 작업·한계
 
-- Iris Console(별도 저장소)의 `POST /api/holo/names/user` 호출 제거와 방 이름 공백=해제 의미 반영.
+- Iris Console(별도 저장소)의 `POST /api/holo/names/user` 호출 제거와 방 이름 공백=해제 의미 반영. 이전 Hololive는 빈 이름 해제를 400으로 거절하므로 Hololive v7.0.0 배포와 C5 수용이 먼저이고 Console은 그 뒤에 배포합니다. Console 방 이름 변경 동결은 Console 배포까지 유지합니다.
 - member epoch ABA: Valkey 재시작 후 재생성된 epoch가 우연히 프로세스의 마지막 값과 같으면 snapshot TTL(5분)까지 이전 snapshot을 쓸 수 있습니다(runbook 기록).
 - 단일 채널 구독 조회 경로(`resolveChannelSubscribersFromDB`)는 여전히 set을 warm하므로 같은 경합이 남아 있습니다(범위 밖).
 - 배포는 migration 231~233 적용과 API·alarm-worker 동시 교체가 필요하고, 관리자 방 별칭 이관과 폐기 key 회수는 위 절차 순서로 별도 승인이 필요합니다.

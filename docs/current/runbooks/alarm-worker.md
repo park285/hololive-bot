@@ -257,6 +257,9 @@ Rollback:
 - migration 231~233 적용 뒤의 rollback은 image만 되돌리고 `--no-deps`로 `hololive-alarm-worker`·`hololive-api`를
   함께 교체하며 구 `hololive-db-migrate`를 실행하지 않습니다(`rollback.md`의 Valkey 2차 축소 절). 구 worker는 관리자
   방 이름을 Valkey `alarm:room_names`에만 쓰므로 rollback 기간에도 Console 방 이름 변경 동결을 유지합니다.
+  retag하면 `hololive-db-migrate`(`hololive-api:prod`)도 구 runner가 되므로, rollback 창에는 중앙 host를 재부팅하지
+  않고 `hololive-compose.service`를 disable합니다. 재부팅의 `systemd-compose-up.sh`는 `--no-deps` 없는 `up`이라 구
+  runner가 거절되고 API·worker·중앙 collector가 기동하지 못합니다. 이때 복구는 7.0.0 image로 재전진입니다(`rollback.md`).
 - 관리자 방 별칭 이관(`HGETALL alarm:room_names` export → migration 232 뒤 차이 값만 `alarm_room_display_names`에
   `ON CONFLICT DO NOTHING`)과 폐기 key 회수 순서는
   [Valkey 축소 계획](../plans/2026-09-28-valkey-dependency-reduction.md#2차-전환-관리자-방-별칭-이관)을 따릅니다.
