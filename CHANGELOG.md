@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- 이미지 빌드가 checkout의 umask에 따라 파일 모드가 달라지던 결함을 고칩니다. v7.0.0 배포에서 umask 077 checkout으로 빌드한 PO issuer 이미지의 `/app/po-sandbox` 파일이 600이라 uid 65532가 `worker.mjs`를 열지 못했고(EACCES) 중앙 쌍이 자동 rollback됐습니다. alarm-worker 이미지에도 600 파일이 들어갔습니다. PO issuer·collector·alarm-worker Dockerfile은 이미지에 실리는 Node 트리(`package.json`·`package-lock.json`·`src`)를 `COPY --chmod=u=rwX,go=rX`로 복사해 파일 644·디렉터리 755로 맞춥니다. 소유자와 umask 022 checkout의 산출물은 그대로입니다. `scripts/build/image-runtime-tree-permissions_test.sh`가 umask 077 checkout을 재현해 세 build stage를 빌드하고 runtime uid로 트리 전체를 읽는지 확인하며, pre-push 게이트는 이 Dockerfile들이 바뀔 때 이를 실행합니다(docker 필요, kapu 전용).
+
 ## v7.0.0 - 2026-09-29
 
 - 중복 Valkey 기능 두 가지를 한 패치에서 제거합니다(빅뱅 fadeout, `docs/current/plans/2026-09-28-valkey-dependency-reduction.md`). ① 멤버 뉴스 구독 방 미러(`membernews:rooms`·`membernews:room_names`): repository의 cache 의존·write-through·`WarmupCacheFromDB`·`Service.WarmupSubscriptionCache`를 지우고 `NewRepository(postgres)`로 줄였습니다. 기동 시 `ListSubscribedRooms`를 1회 조회해 실패하면 경고만 남깁니다. ② 멤버 hash(`hololive:members`): `cache.MemberCache`와 `InitializeMemberDatabase`·`GetAllMembers`·`GetMemberChannelIDWithOrg`·`GetMemberChannelIDs`, mock field, 기동 초기화, matcher의 동적 hash 후보 경로를 지웠습니다. `NewMatcher`·`ProvideMatcher`는 cache 인자를 받지 않습니다. hash field 형식 오류나 DEL/HSET 실패로 기동이 실패하던 경로도 함께 사라집니다.

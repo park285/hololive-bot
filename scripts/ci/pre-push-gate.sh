@@ -164,6 +164,9 @@ run_content_gates() {
   run_if_changed scripts/build/build-youtube-collector-go_test.sh \
     scripts/build/build-youtube-collector-go.sh scripts/build/check-youtube-collector-go-artifact.sh \
     scripts/ci/public-pr-go-gate.sh scripts/ci/python-runtime.sh hololive/hololive-youtube-collector/Makefile
+  run_if_changed scripts/build/image-runtime-tree-permissions_test.sh \
+    hololive/hololive-youtube-collector/Dockerfile.po-sandbox hololive/hololive-youtube-collector/Dockerfile \
+    hololive/hololive-alarm-worker/Dockerfile
   run_if_changed scripts/deploy/lib/ap-prechange-config_test.sh \
     scripts/deploy/lib/ap-prechange-config.sh scripts/deploy/ap-deploy.sh scripts/deploy/ap-rollback.sh
   run_if_changed scripts/deploy/test-postgres-capacity-entrypoints.sh \

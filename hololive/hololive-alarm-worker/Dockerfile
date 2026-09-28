@@ -19,9 +19,10 @@ ARG NODE_VERSION=24
 
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS xspaces-build
 WORKDIR /app/xspaces
-COPY hololive/hololive-alarm-worker/xspaces/package.json hololive/hololive-alarm-worker/xspaces/package-lock.json ./
+# checkout umask와 무관하게 runtime uid가 읽도록 context 파일 모드를 정규화한다.
+COPY --chmod=u=rwX,go=rX hololive/hololive-alarm-worker/xspaces/package.json hololive/hololive-alarm-worker/xspaces/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-COPY hololive/hololive-alarm-worker/xspaces/src ./src
+COPY --chmod=u=rwX,go=rX hololive/hololive-alarm-worker/xspaces/src ./src
 RUN rm -f ./src/*.test.mjs
 
 FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS xspaces-runtime
