@@ -33,18 +33,14 @@ import (
 func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*parser.Short, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
 
-	html, err := c.fetchChannelSourcePage(ctx, "shorts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
+	html, err := c.fetchChannelSourcePage(ctx, "shorts", url, HighFrequencyChannelFetchPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("fetch channel source page: %w", err)
 	}
 
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
-		if driftErr := c.recordParserDrift(ctx, "shorts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, nil
+		return nil, c.recordParserDrift(ctx, "shorts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -54,7 +50,6 @@ func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int
 
 	shortItems := extractShortsLockupViewModels(&data)
 	shorts := c.parseShortsLockupViewModels(shortItems, maxResults)
-	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 
 	return shorts, nil
 }

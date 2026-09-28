@@ -31,7 +31,6 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -44,7 +43,7 @@ var (
 
 // 2025년 8월 YouTube URL 변경: /community → /posts.
 func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxResults int) ([]*parser.CommunityPost, error) {
-	if c.isCommunityMissing(ctx, channelID) {
+	if c.isCommunityMissing(channelID) {
 		return []*parser.CommunityPost{}, nil
 	}
 
@@ -57,7 +56,7 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 		return []*parser.CommunityPost{}, nil
 	}
 
-	c.clearCommunityMissing(ctx, channelID)
+	c.clearCommunityMissing(channelID)
 
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
@@ -65,79 +64,58 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 
 		url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
 
-		if driftErr := c.recordParserDrift(ctx, "community_posts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, nil
+		return nil, c.recordParserDrift(ctx, "community_posts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
-	if err := c.checkCommunityPostAlerts(ctx, channelID, &data); err != nil {
+	if err := c.checkCommunityPostAlerts(channelID, &data); err != nil {
 		return nil, fmt.Errorf("check community post alerts: %w", err)
 	}
 
 	postsContent := extractCommunityPostsContent(&data)
 	if !postsContent.Exists() {
-		c.markCommunityMissing(ctx, channelID)
+		c.markCommunityMissing(channelID)
 
 		return nil, nil
 	}
 
 	posts := c.parseCommunityPosts(&postsContent, maxResults)
-	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 
 	return posts, nil
 }
 
 func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) (html string, missing bool, err error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
-	if admissionErr := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); admissionErr != nil {
-		return "", false, fmt.Errorf("ensure channel source allowed: %w", admissionErr)
-	}
 
 	html, err = c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
 	if err != nil {
-		missing, fetchErr := c.handleCommunityPageFetchError(ctx, channelID, err)
+		missing, fetchErr := c.handleCommunityPageFetchError(channelID, err)
 
 		return "", missing, fetchErr
 	}
 
 	if strings.TrimSpace(html) == "" {
-		err := fmt.Errorf("community_posts empty response from %s", url)
-		if failureErr := c.channelSourceFailure(ctx, channelID, FailureSourceHTML, err); failureErr != nil {
-			return "", false, fmt.Errorf("%w", failureErr)
-		}
-
-		return "", false, nil
+		return "", false, fmt.Errorf("community_posts empty response from %s", url)
 	}
 
 	return html, false, nil
 }
 
-func (c *Client) handleCommunityPageFetchError(ctx context.Context, channelID string, cause error) (bool, error) {
+func (c *Client) handleCommunityPageFetchError(channelID string, cause error) (bool, error) {
 	if statusCode, ok := extractHTTPStatusCode(cause); ok && statusCode == http.StatusNotFound {
-		c.markCommunityMissing(ctx, channelID)
+		c.markCommunityMissing(channelID)
 		slog.Info("community posts endpoint missing; channel temporarily skipped", "channel_id", channelID)
 
 		return true, nil
 	}
 
-	if youtubeadmission.IsDeferred(cause) {
-		return false, fmt.Errorf("fetch page: %w", cause)
-	}
-
-	if err := c.channelSourceFailure(ctx, channelID, FailureSourceHTML, cause); err != nil {
-		return false, fmt.Errorf("%w", err)
-	}
-
-	return false, nil
+	return false, fmt.Errorf("fetch page: %w", cause)
 }
 
-func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string, data *gjson.Result) error {
+func (c *Client) checkCommunityPostAlerts(channelID string, data *gjson.Result) error {
 	if err := checkAlerts(data); err != nil {
 		if errors.Is(err, ErrChannelNotFound) {
-			c.markCommunityMissing(ctx, channelID)
+			c.markCommunityMissing(channelID)
 		}
 
 		return fmt.Errorf("check alerts: %w", err)

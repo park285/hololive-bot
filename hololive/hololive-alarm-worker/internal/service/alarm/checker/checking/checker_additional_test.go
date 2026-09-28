@@ -230,7 +230,10 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		_, err := cacheClient.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{testRoomShort1, testRoomShort2})
 		require.NoError(t, err)
 
-		result, err := LoadSubscriberRoomsByChannel(ctx, cacheClient, []string{testChIDShort1, testChIDShort1, testChIDShort2})
+		// 구독 0이 확정된 채널은 empty marker로 표시되어 DB 없이도 결과에서 빠진다.
+		require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(testChIDShort2, domain.AlarmTypeLive), "1", time.Minute))
+
+		result, err := LoadSubscriberRoomsByChannel(ctx, cacheClient, nil, []string{testChIDShort1, testChIDShort1, testChIDShort2})
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		assert.ElementsMatch(t, []string{testRoomShort1, testRoomShort2}, result[testChIDShort1])
@@ -239,7 +242,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {
 		t.Parallel()
 
-		result, err := LoadSubscriberRoomsByChannel(t.Context(), cachemocks.NewStrictClient(), nil)
+		result, err := LoadSubscriberRoomsByChannel(t.Context(), cachemocks.NewStrictClient(), nil, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
@@ -252,7 +255,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 				return nil, errors.New("smembers failed")
 			},
 		}
-		_, err := LoadSubscriberRoomsByChannel(t.Context(), mockCache, []string{testChIDShort1})
+		_, err := LoadSubscriberRoomsByChannel(t.Context(), mockCache, nil, []string{testChIDShort1})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "smembers channel ch1")
 	})
@@ -270,7 +273,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		_, err = countingCache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort2, []string{"room3"})
 		require.NoError(t, err)
 
-		result, err := LoadSubscriberRoomsByChannel(ctx, countingCache, []string{testChIDShort1, testChIDShort2, testChIDShort1})
+		result, err := LoadSubscriberRoomsByChannel(ctx, countingCache, nil, []string{testChIDShort1, testChIDShort2, testChIDShort1})
 		require.NoError(t, err)
 		require.Len(t, result, 2)
 		assert.ElementsMatch(t, []string{testRoomShort1, testRoomShort2}, result[testChIDShort1])

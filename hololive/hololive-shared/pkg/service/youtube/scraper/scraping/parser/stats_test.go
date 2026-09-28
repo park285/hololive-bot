@@ -2,76 +2,13 @@ package parser
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
 
-const aboutChannelData = `{
-	"onResponseReceivedEndpoints":[{"showEngagementPanelEndpoint":{"engagementPanel":{"engagementPanelSectionListRenderer":{"content":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"aboutChannelRenderer":{"metadata":{"aboutChannelViewModel":{
-		"subscriberCountText":"2.76M subscribers",
-		"viewCountText":"1,056,229,686 views",
-		"videoCountText":"2,429 videos",
-		"joinedDateText":{"content":"Joined Jul 2, 2019"},
-		"description":"rabbit hole",
-		"country":"Japan"
-	}}}}]}}]}}}}}}],
-	"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/@pekora"}}}}]}}
-}`
-
 const garbageInput = "garbage"
-
-func TestParseChannelStatsFromInitialData_HappyPath(t *testing.T) {
-	stats := ParseChannelStatsFromInitialData(parseGJSONResultPtr(aboutChannelData), "UC_X")
-	require.NotNil(t, stats)
-	assert.Equal(t, "UC_X", stats.ChannelID)
-	assert.Equal(t, int64(2_760_000), stats.SubscriberCount)
-	assert.Equal(t, int64(1_056_229_686), stats.ViewCount)
-	assert.Equal(t, int64(2429), stats.VideoCount)
-	assert.Equal(t, time.Date(2019, time.July, 2, 0, 0, 0, 0, time.UTC).Unix(), stats.JoinedDate)
-	assert.Equal(t, "rabbit hole", stats.Description)
-	assert.Equal(t, "Japan", stats.Country)
-	assert.Equal(t, "@pekora", stats.Handle)
-}
-
-func TestParseChannelStatsFromInitialData_EmptyInput(t *testing.T) {
-	stats := ParseChannelStatsFromInitialData(parseGJSONResultPtr(`{}`), "UC_X")
-	require.NotNil(t, stats)
-	assert.Equal(t, "UC_X", stats.ChannelID)
-	assert.Equal(t, int64(0), stats.SubscriberCount)
-	assert.Equal(t, int64(0), stats.ViewCount)
-	assert.Equal(t, int64(0), stats.VideoCount)
-	assert.Equal(t, int64(0), stats.JoinedDate)
-	assert.Empty(t, stats.Description)
-	assert.Empty(t, stats.Handle)
-}
-
-func TestParseChannelStatsFromInitialData_GarbageInput(t *testing.T) {
-	stats := ParseChannelStatsFromInitialData(parseGJSONResultPtr(`{"random":"junk"}`), "UC_X")
-	require.NotNil(t, stats)
-	assert.Equal(t, int64(0), stats.SubscriberCount)
-	assert.Empty(t, stats.Handle)
-}
-
-func TestParseChannelHandle(t *testing.T) {
-	tests := []struct {
-		name string
-		json string
-		want string
-	}{
-		{"leading slash stripped", `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/@pekora"}}}}]}}}`, "@pekora"},
-		{"no leading slash kept", `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"plainhandle"}}}}]}}}`, "plainhandle"},
-		{"bare slash stripped to empty", `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/"}}}}]}}}`, ""},
-		{"empty input", `{}`, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, ParseChannelHandle(parseGJSONResultPtr(tt.json)))
-		})
-	}
-}
 
 func TestParseThumbnailSources(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
@@ -126,24 +63,6 @@ func TestParseShortNumber(t *testing.T) {
 	}
 }
 
-func TestParseSubscriberCount(t *testing.T) {
-	tests := []struct {
-		text string
-		want int64
-	}{
-		{"2.76M subscribers", 2_760_000},
-		{"1 subscriber", 1},
-		{"100 subscribers", 100},
-		{garbageInput, 0},
-		{"", 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.text, func(t *testing.T) {
-			assert.Equal(t, tt.want, ParseSubscriberCount(tt.text))
-		})
-	}
-}
-
 func TestParseViewCount(t *testing.T) {
 	tests := []struct {
 		name string
@@ -186,27 +105,6 @@ func TestParseVideoCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.text, func(t *testing.T) {
 			assert.Equal(t, tt.want, ParseVideoCount(tt.text))
-		})
-	}
-}
-
-func TestParseJoinedDate(t *testing.T) {
-	tests := []struct {
-		name string
-		text string
-		want int64
-	}{
-		{"joined prefix jan abbrev", "Joined Jul 2, 2019", time.Date(2019, time.July, 2, 0, 0, 0, 0, time.UTC).Unix()},
-		{"full month name", "January 2, 2020", time.Date(2020, time.January, 2, 0, 0, 0, 0, time.UTC).Unix()},
-		{"day-month-year", "2 Jan 2021", time.Date(2021, time.January, 2, 0, 0, 0, 0, time.UTC).Unix()},
-		{"iso date", "2022-03-04", time.Date(2022, time.March, 4, 0, 0, 0, 0, time.UTC).Unix()},
-		{"empty", "", 0},
-		{"joined garbage", "Joined garbage", 0},
-		{"plain garbage", garbageInput, 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, ParseJoinedDate(tt.text))
 		})
 	}
 }

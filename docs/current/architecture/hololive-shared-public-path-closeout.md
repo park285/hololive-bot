@@ -20,9 +20,6 @@
 ```bash
 bash scripts/architecture/check-repository-ownership.sh
 bash scripts/architecture/ci-notification-egress-gate.sh
-bash scripts/architecture/check-project-map.sh
-bash scripts/architecture/check-contract-map.sh
-bash scripts/architecture/check-runbook-coverage.sh
 ```
 
 다섯 명령과 수정한 shell script의 `bash -n`, 관련 경로의 `git diff --check`가 모두 통과했습니다. 관련 current 문서와 gate의 역할 구분이 일치하며, 이 변경은 runtime, schema, queue, retry, fallback, deploy 또는 production data를 변경하지 않습니다.

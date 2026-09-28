@@ -22,14 +22,12 @@ package alarmservice
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestAddAlarm_CacheWrite(t *testing.T) {
@@ -54,13 +52,9 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, added)
 
-	channels, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmKeyPrefix+testAltRoomID)
+	subscribers, err := as.GetChannelSubscribersByType(ctx, testUCChannelID, domain.AlarmTypeLive)
 	require.NoError(t, err)
-	assert.Contains(t, channels, testUCChannelID)
-
-	registry, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
-	require.NoError(t, err)
-	assert.Contains(t, registry, testAltRoomID)
+	assert.Equal(t, []string{testAltRoomID}, subscribers)
 
 	channelReg, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
@@ -167,9 +161,13 @@ func TestRemoveAlarm_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, removed)
 
-	channels, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmKeyPrefix+testAltRoomID)
+	channels, err := as.GetRoomAlarms(ctx, testAltRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, channels)
+
+	subscribers, err := as.GetChannelSubscribersByType(ctx, testUCChannelID, domain.AlarmTypeLive)
+	require.NoError(t, err)
+	assert.Empty(t, subscribers)
 }
 
 func TestRemoveAlarm_NotFound(t *testing.T) {
@@ -244,9 +242,9 @@ func TestClearRoomAlarms_ClearsAll(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, channels)
 
-	registry, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	subscribers, err := as.GetChannelSubscribersByType(ctx, "UC_A", domain.AlarmTypeLive)
 	require.NoError(t, err)
-	assert.NotContains(t, registry, testAltRoomID)
+	assert.Empty(t, subscribers)
 }
 
 func TestClearRoomAlarms_EmptyRoom(t *testing.T) {
@@ -258,39 +256,6 @@ func TestClearRoomAlarms_EmptyRoom(t *testing.T) {
 	cleared, err := as.ClearRoomAlarms(ctx, "room_empty")
 	require.NoError(t, err)
 	assert.Equal(t, 0, cleared)
-}
-
-func TestMarkAsNotified_SetsFlag(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	start := time.Now().UTC().Truncate(time.Minute)
-	err := as.MarkAsNotified(ctx, "stream1", start, 5)
-	require.NoError(t, err)
-
-	assert.True(t, as.WasNotified(ctx, "stream1", start, 5))
-}
-
-func TestMarkAsNotified_ScheduleIdentityUsesSeparateMarkers(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	start1 := time.Date(2026, time.March, 2, 10, 0, 0, 0, time.UTC)
-	start2 := time.Date(2026, time.March, 2, 11, 0, 0, 0, time.UTC)
-
-	err := as.MarkAsNotified(ctx, "stream1", start1, 5)
-	require.NoError(t, err)
-
-	err = as.MarkAsNotified(ctx, "stream1", start2, 3)
-	require.NoError(t, err)
-
-	assert.True(t, as.WasNotified(ctx, "stream1", start1, 5))
-	assert.True(t, as.WasNotified(ctx, "stream1", start2, 3))
-	assert.False(t, as.WasNotified(ctx, "stream1", start2, 5))
 }
 
 func TestGetTargetMinutes_Default(t *testing.T) {
@@ -328,34 +293,6 @@ func TestCacheMemberName_RoundTrip(t *testing.T) {
 	assert.Equal(t, "페코라", name)
 }
 
-func TestSetRoomName(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	err := as.SetRoomName(ctx, testAltRoomID, "테스트 방")
-	require.NoError(t, err)
-
-	name, err := as.cache.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, testAltRoomID)
-	require.NoError(t, err)
-	assert.Equal(t, "테스트 방", name)
-}
-
-func TestSetUserName(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	err := as.SetUserName(ctx, "user1", "테스트 사용자")
-	require.NoError(t, err)
-
-	name, err := as.cache.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, "user1")
-	require.NoError(t, err)
-	assert.Equal(t, "테스트 사용자", name)
-}
-
 func TestGetAllAlarmKeys(t *testing.T) {
 	t.Parallel()
 
@@ -375,78 +312,4 @@ func TestGetAllAlarmKeys(t *testing.T) {
 	entries, err := as.GetAllAlarmKeys(ctx)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(entries), 1)
-}
-
-func TestAddAlarmClearsSubscriberCacheEmptyMarkerAndBumpsChannelRegistryVersion(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-	require.NoError(t, as.cache.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
-
-	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:    testRoomID,
-		UserID:    testUserID,
-		ChannelID: testUCChannelID,
-		AlarmTypes: domain.AlarmTypes{
-			domain.AlarmTypeLive,
-		},
-	})
-	require.NoError(t, err)
-	require.True(t, added)
-
-	emptyMarkerExists, err := as.cache.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
-	require.NoError(t, err)
-	assert.False(t, emptyMarkerExists)
-
-	var version int64
-
-	require.NoError(t, as.cache.Get(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, &version))
-	assert.Positive(t, version)
-}
-
-func TestGetDistinctRooms(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-
-	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-
-	ctx := t.Context()
-
-	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: testAltRoomID, ChannelID: "UC_A"})
-	require.NoError(t, err)
-
-	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "room2", ChannelID: "UC_B"})
-	require.NoError(t, err)
-
-	rooms, err := as.GetDistinctRooms(ctx)
-	require.NoError(t, err)
-	assert.Len(t, rooms, 2)
-}
-
-func TestAlarmServiceClose(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	cache := sharedtestutil.NewTestCacheService(ctx, t)
-
-	service, err := NewAlarmService(cache, nil, nil, nil, []int{5, 3, 1})
-	require.NoError(t, err)
-
-	err = service.Close(ctx)
-	require.NoError(t, err)
-
-	err = service.Close(ctx)
-	require.NoError(t, err)
-}
-
-func TestWarmCacheFromDB_NilRepository(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	err := as.WarmCacheFromDB(ctx)
-	assert.NoError(t, err)
 }

@@ -28,7 +28,6 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -38,7 +37,6 @@ type Client struct {
 	GetFunc       func(ctx context.Context, key string, dest any) error
 	GetStringFunc func(ctx context.Context, key string) (string, bool, error)
 	SetFunc       func(ctx context.Context, key string, value any, ttl time.Duration) error
-	MSetFunc      func(ctx context.Context, pairs map[string]any, ttl time.Duration) error
 	DelFunc       func(ctx context.Context, key string) error
 	DelManyFunc   func(ctx context.Context, keys []string) (int64, error)
 	ScanKeysFunc  func(ctx context.Context, pattern string, batchSize int64) ([]string, error)
@@ -68,16 +66,7 @@ type Client struct {
 	BuilderFunc   func() valkey.Builder
 	BFunc         func() valkey.Builder
 
-	SetNXMultiFunc func(ctx context.Context, entries []cache.SetNXEntry) ([]cache.SetNXResult, error)
-
 	CompareAndDeleteFunc func(ctx context.Context, key, expectedValue string) (bool, error)
-	CompareAndExpireFunc func(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error)
-
-	GetStreamsFunc func(ctx context.Context, key string) ([]*domain.Stream, bool)
-	SetStreamsFunc func(ctx context.Context, key string, streams []*domain.Stream, ttl time.Duration)
-
-	InitializeMemberDatabaseFunc func(ctx context.Context, memberData map[string]string) error
-	GetAllMembersFunc            func(ctx context.Context) (map[string]string, error)
 }
 
 var (
@@ -86,8 +75,6 @@ var (
 	_ cache.SetCache          = (*Client)(nil)
 	_ cache.HashCache         = (*Client)(nil)
 	_ cache.ScriptCache       = (*Client)(nil)
-	_ cache.StreamCache       = (*Client)(nil)
-	_ cache.MemberCache       = (*Client)(nil)
 	_ cache.ConnectionManager = (*Client)(nil)
 	_ cache.LowLevelCache     = (*Client)(nil)
 )
@@ -147,20 +134,6 @@ func (m *Client) Set(ctx context.Context, key string, value any, ttl time.Durati
 	}
 
 	m.panicIfUnset("SetFunc")
-
-	return nil
-}
-
-func (m *Client) MSet(ctx context.Context, pairs map[string]any, ttl time.Duration) error {
-	if m.MSetFunc != nil {
-		if err := m.MSetFunc(ctx, pairs, ttl); err != nil {
-			return fmt.Errorf("m set func: %w", err)
-		}
-
-		return nil
-	}
-
-	m.panicIfUnset("MSetFunc")
 
 	return nil
 }
@@ -480,21 +453,6 @@ func (m *Client) B() valkey.Builder {
 	return valkey.Builder{}
 }
 
-func (m *Client) SetNXMulti(ctx context.Context, entries []cache.SetNXEntry) ([]cache.SetNXResult, error) {
-	if m.SetNXMultiFunc != nil {
-		out, err := m.SetNXMultiFunc(ctx, entries)
-		if err != nil {
-			return out, fmt.Errorf("set NX multi func: %w", err)
-		}
-
-		return out, nil
-	}
-
-	m.panicIfUnset("SetNXMultiFunc")
-
-	return nil, nil
-}
-
 func (m *Client) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {
 	if m.CompareAndDeleteFunc != nil {
 		out, err := m.CompareAndDeleteFunc(ctx, key, expectedValue)
@@ -506,21 +464,6 @@ func (m *Client) CompareAndDelete(ctx context.Context, key, expectedValue string
 	}
 
 	m.panicIfUnset("CompareAndDeleteFunc")
-
-	return false, nil
-}
-
-func (m *Client) CompareAndExpire(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error) {
-	if m.CompareAndExpireFunc != nil {
-		out, err := m.CompareAndExpireFunc(ctx, key, expectedValue, ttl)
-		if err != nil {
-			return out, fmt.Errorf("compare and expire func: %w", err)
-		}
-
-		return out, nil
-	}
-
-	m.panicIfUnset("CompareAndExpireFunc")
 
 	return false, nil
 }

@@ -2,69 +2,27 @@ package member
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestPointIndexMatchesIdentityScan(t *testing.T) {
+func TestPointIndexKeepsSmallestIDChannelRepresentative(t *testing.T) {
 	members := []*domain.Member{
 		nil,
 		{ID: 2, ChannelID: "shared", Name: "Second"},
 		{ID: 1, ChannelID: "shared", Name: "First"},
 		{ID: 3, ChannelID: "persisted", Name: "Persisted"},
-		{ID: 1, ChannelID: "other", Name: "Duplicate identity"},
 	}
 	index := buildMemberPointIndex(members)
-
-	for _, cached := range append(members[1:], &domain.Member{ID: 99}) {
-		var want []*domain.Member
-
-		for _, current := range members {
-			if current != nil && samePointMemberIdentity(current, cached) {
-				want = append(want, current)
-			}
-		}
-
-		got := index.byID[cached.ID]
-		if len(got) != len(want) {
-			t.Fatalf("id=%d: got %d want %d", cached.ID, len(got), len(want))
-		}
-
-		for i := range got {
-			if got[i] != want[i] {
-				t.Fatal("identity bucket changed original member order")
-			}
-		}
-	}
 
 	if index.representatives["shared"] != members[2] {
 		t.Fatal("shared channel must preserve the smallest persistent ID representative")
 	}
-}
 
-// ID 없는 멤버를 채널·이름으로 대신 식별하던 호환 체인을 지웠다. 같은 채널·이름이라도 ID가 없으면 인덱싱하지 않고
-// 소유를 인정하지 않는다.
-func TestPointIndexRejectsMembersWithoutID(t *testing.T) {
-	persisted := &domain.Member{ID: 3, ChannelID: "legacy", Name: "Persisted"}
-	withoutID := &domain.Member{ChannelID: "legacy", Name: "Persisted"}
-	index := buildMemberPointIndex([]*domain.Member{persisted, withoutID})
-
-	if got := index.byID[0]; len(got) != 0 {
-		t.Fatalf("members without ID must not be indexed, got %d", len(got))
-	}
-
-	if samePointMemberIdentity(persisted, withoutID) || samePointMemberIdentity(withoutID, withoutID) {
-		t.Fatal("channel or name must not stand in for a missing member ID")
-	}
-
-	cache := &Cache{}
-	cache.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{persisted, withoutID}, generation: 1, hasSuccessful: true})
-
-	if cache.snapshotOwnedNameMemberLocked("Persisted", withoutID, 1) != nil {
-		t.Fatal("cached member without ID must not be owned by the snapshot")
+	if index.representatives["persisted"] != members[3] {
+		t.Fatal("single-member channel must be its own representative")
 	}
 }
 
@@ -91,50 +49,52 @@ func TestPointIndexConcurrentInitialization(t *testing.T) {
 	}
 }
 
-func TestPointOwnershipStillChecksGenerationAndAlias(t *testing.T) {
-	member := &domain.Member{ID: 1, Name: "Sigma", NameJa: "Σ", Aliases: &domain.Aliases{Ko: []string{"ExactAlias"}}}
+// snapshot 별칭 조회는 repository_query_0064_03.sql과 같은 규칙을 따른다: 공식 이름은 대소문자 무시, 명시 별칭은
+// 정확히 일치, 여러 명이 맞으면 가장 작은 ID.
+func TestSnapshotAliasLookupFollowsRepositoryRules(t *testing.T) {
+	sigma := &domain.Member{ID: 5, Name: "Sigma", NameJa: "Σ", Aliases: &domain.Aliases{Ko: []string{"ExactAlias", "공유"}}}
+	other := &domain.Member{ID: 3, Name: "Other", Aliases: &domain.Aliases{Ja: []string{"공유"}}}
 	cache := &Cache{}
-	cache.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{member}, generation: 7, hasSuccessful: true})
+	cache.snapshotGeneration.Store(7)
+	cache.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{sigma, other}, generation: 7, hasSuccessful: true})
 
-	if cache.snapshotOwnedAliasMemberLocked("σ", member, 7) != member {
-		t.Fatal("official name EqualFold matching changed")
+	cases := []struct {
+		alias string
+		want  *domain.Member
+	}{
+		{alias: "σ", want: sigma},
+		{alias: "SIGMA", want: sigma},
+		{alias: "ExactAlias", want: sigma},
+		{alias: "exactalias", want: nil},
+		{alias: "공유", want: other},
+		{alias: "missing", want: nil},
 	}
 
-	if cache.snapshotOwnedAliasMemberLocked("exactalias", member, 7) != nil {
-		t.Fatal("explicit alias must remain case-sensitive")
-	}
+	for _, tc := range cases {
+		// snapshot miss는 PostgreSQL로 넘어가므로 여기서는 snapshot 판정만 본다.
+		if tc.want == nil {
+			if got, generation := cache.findAliasInSnapshot(tc.alias); got != nil || generation != 7 {
+				t.Fatalf("snapshot alias %q = %+v@%d, want miss in generation 7", tc.alias, got, generation)
+			}
 
-	if cache.snapshotOwnedAliasMemberLocked("ExactAlias", member, 6) != nil {
-		t.Fatal("old generations must be rejected")
-	}
+			continue
+		}
 
-	if cache.snapshotOwnedNameMemberLocked("Other", member, 7) != nil {
-		t.Fatal("identity lookup must still validate the requested name")
+		got, err := cache.FindByAlias(t.Context(), tc.alias)
+		if err != nil || got != tc.want {
+			t.Fatalf("FindByAlias(%q) = %+v, %v; want %+v", tc.alias, got, err, tc.want)
+		}
 	}
 }
 
-func BenchmarkPointOwnershipIndex(b *testing.B) {
-	for _, n := range []int{256, 1024, 4096} {
-		members := make([]*domain.Member, n)
-		for i := range members {
-			members[i] = &domain.Member{ID: i + 1, ChannelID: fmt.Sprintf("UC-%d", i), Name: fmt.Sprintf("Member-%d", i)}
-		}
+func TestSnapshotAliasLookupIgnoresSnapshotFromOtherGeneration(t *testing.T) {
+	member := &domain.Member{ID: 1, Name: "Sigma"}
+	cache := &Cache{}
+	cache.snapshotGeneration.Store(7)
+	cache.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{member}, generation: 6, hasSuccessful: true})
 
-		cache := &Cache{}
-		snapshot := &allMembersState{members: members, generation: 1, hasSuccessful: true}
-		snapshot.pointLookup()
-		cache.allMembersSnapshot.Store(snapshot)
-
-		cached := members[n-1]
-		b.Run(fmt.Sprintf("members-%d", n), func(b *testing.B) {
-			b.ReportAllocs()
-
-			for b.Loop() {
-				if cache.snapshotOwnedNameMemberLocked(cached.Name, cached, 1) != cached {
-					b.Fatal("unexpected owner")
-				}
-			}
-		})
+	if got, _ := cache.findAliasInSnapshot("Sigma"); got != nil {
+		t.Fatalf("alias served from generation 6 snapshot in generation 7: %+v", got)
 	}
 }
 

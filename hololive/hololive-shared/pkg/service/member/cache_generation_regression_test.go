@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func TestCacheAllMembers_InvalidateDuringFailedReloadDoesNotReturnOldSnapshot(t *testing.T) {
@@ -74,38 +73,23 @@ func TestCacheAllMembers_InvalidateDuringFailedReloadDoesNotReturnOldSnapshot(t 
 	}
 }
 
-func TestCachePointLookup_RejectsPriorSnapshotValkeyEntries(t *testing.T) {
-	stale := domain.Member{
+// snapshot을 교체하면 이전 snapshot의 이름·별칭은 더 이상 메모리에서 응답하지 않고, 채널은 새 대표를 가리킨다.
+func TestCachePointLookup_SnapshotReplacementDropsPriorEntries(t *testing.T) {
+	stale := &domain.Member{
 		ID:        1,
 		ChannelID: "same-channel",
 		Name:      testMemberNameOld,
 		Aliases:   &domain.Aliases{Ko: []string{"OldAlias"}},
 	}
 	current := &domain.Member{ID: 1, ChannelID: "same-channel", Name: testMemberNameNew}
-	cacheClient := cachemocks.NewLenientClient()
+	c := withTestEpochAuthority(&Cache{logger: slog.New(slog.DiscardHandler)})
 
-	cacheClient.GetFunc = func(_ context.Context, _ string, dest any) error {
-		member, ok := dest.(*domain.Member)
-		if !ok {
-			return errors.New("cache destination is not a member")
-		}
-
-		*member = stale
-
-		return nil
-	}
-
-	c := withTestEpochAuthority(&Cache{
-		cache:  cacheClient,
-		logger: slog.New(slog.DiscardHandler),
-	})
-
-	if got := c.loadNameFromDistributedCache(t.Context(), testMemberNameOld, 0); got == nil || got.Name != testMemberNameOld {
-		t.Fatalf("cold point lookup = %+v, want existing Valkey behavior", got)
-	}
-
-	if !c.storeAllMembersSnapshot(nil, 0, []*domain.Member{&stale}) {
+	if !c.storeAllMembersSnapshot(nil, 0, []*domain.Member{stale}) {
 		t.Fatal("initial snapshot was not published")
+	}
+
+	if got, _ := c.findAliasInSnapshot("OldAlias"); got != stale {
+		t.Fatalf("initial alias lookup = %+v, want %+v", got, stale)
 	}
 
 	previous, generation := c.allMembersView()
@@ -113,21 +97,15 @@ func TestCachePointLookup_RejectsPriorSnapshotValkeyEntries(t *testing.T) {
 		t.Fatal("replacement snapshot was not published")
 	}
 
-	_, generation = c.allMembersView()
-
-	if got := c.loadNameFromDistributedCache(t.Context(), testMemberNameOld, generation); got != nil {
+	if got, ok := c.loadNameFromMemory(testMemberNameOld); ok {
 		t.Fatalf("stale name lookup = %+v, want miss", got)
 	}
 
-	if _, ok := c.byName.Load(testMemberNameOld); ok {
-		t.Fatal("stale name was re-pinned in the current generation")
+	if got, ok := c.loadChannelFromMemory("same-channel"); !ok || got != current {
+		t.Fatalf("channel lookup = %+v, want current member %+v", got, current)
 	}
 
-	if got := c.loadChannelFromDistributedCache(t.Context(), "same-channel", generation); got != current {
-		t.Fatalf("channel lookup = %+v, want canonical current member %+v", got, current)
-	}
-
-	if got := c.getAliasFromCache(t.Context(), "OldAlias", generation); got != nil {
+	if got, _ := c.findAliasInSnapshot("OldAlias"); got != nil {
 		t.Fatalf("removed alias lookup = %+v, want miss", got)
 	}
 }

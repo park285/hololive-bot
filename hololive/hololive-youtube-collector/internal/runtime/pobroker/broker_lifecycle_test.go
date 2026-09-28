@@ -155,9 +155,10 @@ func TestSessionCloseRecordsExitReason(t *testing.T) {
 // 먼저 퇴역을 표시한 원인만 남아야 합니다.
 func TestFirstRetirementReasonWinsUnderConcurrentRetire(t *testing.T) {
 	broker := New("revision", "unused", "unused")
-	broker.mu.Lock()
-	broker.setLeaseLocked(Ready, time.Now().Add(-time.Second))
-	broker.mu.Unlock()
+	// 만료된 lease를 타이머 없이 둡니다. setLeaseLocked는 지난 deadline이면 곧바로 발화하는 타이머를 걸어,
+	// 첫 퇴역 표시보다 lease_expired가 먼저 기록될 수 있습니다. 타이머 경합은 아래 expireLease 호출이 맡습니다.
+	// 아직 다른 goroutine이 없으므로 잠금 없이 씁니다.
+	broker.state, broker.expires = Ready, time.Now().Add(-time.Second)
 
 	broker.retireAfterResponse(httptest.NewRecorder(), ExitSessionClosed)
 

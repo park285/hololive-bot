@@ -68,10 +68,9 @@ func (f *fakeMemberNewsPool) Exec(_ context.Context, sql string, args ...any) er
 			return fmt.Errorf("room_name arg type = %T", args[1])
 		}
 
+		// 실제 SQL은 COALESCE(EXCLUDED.room_name, 기존값)이라 non-null 빈 문자열도 기존 이름을 덮어쓴다.
 		if existing, ok := f.subscription[roomID]; ok {
-			if strings.TrimSpace(roomName) != "" {
-				existing.roomName = roomName
-			}
+			existing.roomName = roomName
 
 			return nil
 		}

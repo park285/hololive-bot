@@ -23,7 +23,6 @@ package acl
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
@@ -54,27 +53,7 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 		}
 	}
 
-	s.syncLoadedACLToValkey(ctx)
-
 	return nil
-}
-
-func (s *Service) syncLoadedACLToValkey(ctx context.Context) {
-	if err := s.syncSettingsToValkey(ctx); err != nil {
-		s.logger.Warn("Failed to sync ACL settings to cache", slog.Any("error", err))
-	}
-
-	if err := s.syncModeToValkey(ctx); err != nil {
-		s.logger.Warn("Failed to sync ACL mode to cache", slog.Any("error", err))
-	}
-
-	if err := s.syncRoomsToValkey(ctx, ACLModeWhitelist); err != nil {
-		s.logger.Warn("Failed to sync ACL rooms to cache", slog.String("mode", string(ACLModeWhitelist)), slog.Any("error", err))
-	}
-
-	if err := s.syncRoomsToValkey(ctx, ACLModeBlacklist); err != nil {
-		s.logger.Warn("Failed to sync ACL rooms to cache", slog.String("mode", string(ACLModeBlacklist)), slog.Any("error", err))
-	}
 }
 
 func (s *Service) loadEnabledSetting(ctx context.Context, defaultEnabled bool) (bool, error) {
@@ -212,65 +191,6 @@ func (s *Service) initializeDefaultRooms(ctx context.Context, defaultRooms []str
 		}
 
 		targetRooms[room] = struct{}{}
-	}
-
-	return nil
-}
-
-// syncRoomsToValkey: 메모리 → Valkey SET 동기화 (전체 교체).
-func (s *Service) syncRoomsToValkey(ctx context.Context, mode ACLMode) error {
-	s.mu.RLock()
-
-	var (
-		source map[string]struct{}
-		key    string
-	)
-
-	if mode == ACLModeBlacklist {
-		source = s.blacklistRooms
-		key = aclBlacklistRoomsKey
-	} else {
-		source = s.whitelistRooms
-		key = aclWhitelistRoomsKey
-	}
-
-	rooms := make([]string, 0, len(source))
-	for r := range source {
-		rooms = append(rooms, r)
-	}
-
-	s.mu.RUnlock()
-
-	if err := s.syncRoomsToValkeyAtomic(ctx, key, rooms); err != nil {
-		return fmt.Errorf("sync rooms to cache for mode %s: %w", mode, err)
-	}
-
-	return nil
-}
-
-// syncSettingsToValkey: ACL enabled 상태를 Valkey에 동기화합니다.
-func (s *Service) syncSettingsToValkey(ctx context.Context) error {
-	s.mu.RLock()
-
-	enabled := s.enabled
-	s.mu.RUnlock()
-
-	if err := s.cache.Set(ctx, aclSettingsKey, fmt.Sprintf("%t", enabled), 0); err != nil {
-		return fmt.Errorf("set %s: %w", aclSettingsKey, err)
-	}
-
-	return nil
-}
-
-// syncModeToValkey: ACL mode를 Valkey에 동기화합니다.
-func (s *Service) syncModeToValkey(ctx context.Context) error {
-	s.mu.RLock()
-
-	mode := s.mode
-	s.mu.RUnlock()
-
-	if err := s.cache.Set(ctx, aclModeKey, string(mode), 0); err != nil {
-		return fmt.Errorf("set %s: %w", aclModeKey, err)
 	}
 
 	return nil

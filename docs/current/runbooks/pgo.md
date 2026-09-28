@@ -39,6 +39,5 @@ metadata를 추가하거나 Compose override를 복원하지 않습니다.
 ## 검증
 
 ```bash
-bash scripts/ci/check-pgo-default_test.sh
 bash scripts/ci/check-pgo-default.sh
 ```

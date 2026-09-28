@@ -292,15 +292,3 @@ func (s *Service) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRo
 
 	return rooms, nil
 }
-
-func (s *Service) WarmupSubscriptionCache(ctx context.Context) error {
-	if s == nil || s.repository == nil {
-		return errors.New("membernews repository is nil")
-	}
-
-	if err := s.repository.WarmupCacheFromDB(ctx); err != nil {
-		return fmt.Errorf("warmup subscription cache: %w", err)
-	}
-
-	return nil
-}

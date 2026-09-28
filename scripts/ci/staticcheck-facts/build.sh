@@ -5,7 +5,7 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd "$root"
 # 제거 조건: upstream x/tools objectpath가 generic method 순서를 source와 export data에서 같게 만들고,
 # 이 profile의 source/export 경계 fixture가 무패치 staticcheck로도 통과하면 이 profile을 삭제한다.
-inputs=(build.sh build_test.sh files/deprecation-api.go.in files/deprecation-deprecated.go.in
+inputs=(build.sh files/deprecation-api.go.in files/deprecation-deprecated.go.in
   files/deprecation-healthy.go.in files/objectpath_order_test.go.in files/stack_profile_version.go.in
   files/upstream-protobuf-pkg.go.in
   objectpath.patch profile.json)

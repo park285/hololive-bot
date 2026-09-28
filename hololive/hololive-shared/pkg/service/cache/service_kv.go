@@ -66,34 +66,6 @@ func (c *Service) GetString(ctx context.Context, key string) (string, bool, erro
 	return value, true, nil
 }
 
-// MGet 배치 조회 (파이프라이닝 활용).
-func (c *Service) MGet(ctx context.Context, keys []string) (map[string]string, error) {
-	if len(keys) == 0 {
-		return make(map[string]string), nil
-	}
-
-	resp := c.client.Do(ctx, c.client.B().Mget().Key(keys...).Build())
-	if resp.Error() != nil {
-		c.logger.Error("Cache mget failed", slog.Int("keys", len(keys)), slog.Any("error", resp.Error()))
-
-		return nil, NewCacheError("mget", fmt.Sprintf("%d keys", len(keys)), resp.Error())
-	}
-
-	values, err := resp.AsStrSlice()
-	if err != nil {
-		return nil, NewCacheError("mget", "", err)
-	}
-
-	result := make(map[string]string, len(keys))
-	for i, key := range keys {
-		if i < len(values) && values[i] != "" {
-			result[key] = values[i]
-		}
-	}
-
-	return result, nil
-}
-
 func ttlSecondsCeil(ttl time.Duration) (int64, error) {
 	if ttl < 0 {
 		return 0, errors.New("ttl must not be negative")
@@ -137,62 +109,6 @@ func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Durat
 	}
 
 	return nil
-}
-
-// MSet 배치 저장 (파이프라이닝 활용).
-func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Duration) error {
-	if len(pairs) == 0 {
-		return nil
-	}
-
-	cmds, err := c.msetCommands(pairs, ttl)
-	if err != nil {
-		return fmt.Errorf("mset commands: %w", err)
-	}
-
-	for _, resp := range c.client.DoMulti(ctx, cmds...) {
-		if resp.Error() != nil {
-			c.logger.Error("MSet command failed", slog.Any("error", resp.Error()))
-
-			return NewCacheError("mset", "", resp.Error())
-		}
-	}
-
-	return nil
-}
-
-func (c *Service) msetCommands(pairs map[string]any, ttl time.Duration) ([]valkey.Completed, error) {
-	cmds := make([]valkey.Completed, 0, len(pairs))
-	for key, value := range pairs {
-		cmd, err := c.msetCommand(key, value, ttl)
-		if err != nil {
-			return nil, fmt.Errorf("mset command: %w", err)
-		}
-
-		cmds = append(cmds, cmd)
-	}
-
-	return cmds, nil
-}
-
-func (c *Service) msetCommand(key string, value any, ttl time.Duration) (valkey.Completed, error) {
-	jsonData, err := jsonv2.Marshal(value)
-	if err != nil {
-		c.logger.Error("Failed to marshal value for MSet", privacylog.CacheKeyAttr(key), slog.Any("error", err))
-
-		return valkey.Completed{}, NewCacheError("mset", key, err)
-	}
-
-	if ttl > 0 {
-		ttlSeconds, err := ttlSecondsCeil(ttl)
-		if err != nil {
-			return valkey.Completed{}, NewCacheError("mset", key, err)
-		}
-
-		return c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(ttlSeconds).Build(), nil
-	}
-
-	return c.client.B().Set().Key(key).Value(string(jsonData)).Build(), nil
 }
 
 func (c *Service) Del(ctx context.Context, key string) error {
@@ -332,63 +248,4 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 	}
 
 	return true, nil
-}
-
-func (c *Service) SetNXMulti(ctx context.Context, entries []SetNXEntry) ([]SetNXResult, error) {
-	if len(entries) == 0 {
-		return nil, nil
-	}
-
-	cmds, err := c.buildSetNXCmds(entries)
-	if err != nil {
-		return nil, fmt.Errorf("build set NX cmds: %w", err)
-	}
-
-	responses := c.client.DoMulti(ctx, cmds...)
-	results := make([]SetNXResult, len(entries))
-
-	for i, resp := range responses {
-		results[i] = parseSetNXResponse(entries[i].Key, resp)
-	}
-
-	return results, nil
-}
-
-func (c *Service) buildSetNXCmds(entries []SetNXEntry) ([]valkey.Completed, error) {
-	cmds := make([]valkey.Completed, 0, len(entries))
-	for _, e := range entries {
-		cmd, err := c.buildSetNXCmd(e)
-		if err != nil {
-			return nil, fmt.Errorf("build set NX cmd: %w", err)
-		}
-
-		cmds = append(cmds, cmd)
-	}
-
-	return cmds, nil
-}
-
-func (c *Service) buildSetNXCmd(e SetNXEntry) (valkey.Completed, error) {
-	if e.TTL <= 0 {
-		return c.client.B().Set().Key(e.Key).Value(e.Value).Nx().Build(), nil
-	}
-
-	ttlSeconds, err := ttlSecondsCeil(e.TTL)
-	if err != nil {
-		return valkey.Completed{}, NewCacheError("setnx_multi", e.Key, err)
-	}
-
-	return c.client.B().Set().Key(e.Key).Value(e.Value).Nx().ExSeconds(ttlSeconds).Build(), nil
-}
-
-func parseSetNXResponse(key string, resp valkey.ValkeyResult) SetNXResult {
-	if util.IsValkeyNil(resp.Error()) {
-		return SetNXResult{Key: key, Acquired: false}
-	}
-
-	if resp.Error() != nil {
-		return SetNXResult{Key: key, Err: resp.Error()}
-	}
-
-	return SetNXResult{Key: key, Acquired: true}
 }

@@ -29,7 +29,6 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 const orgHololive = "Hololive"
@@ -57,12 +56,11 @@ type snapshotEntry struct {
 }
 
 type matcherSnapshot struct {
-	builtAt        time.Time
-	exactNames     map[string][]*snapshotEntry
-	exactAliases   map[string][]*snapshotEntry
-	tokenIndex     map[string][]*snapshotEntry
-	entries        []*snapshotEntry
-	dynamicLoadErr error
+	builtAt      time.Time
+	exactNames   map[string][]*snapshotEntry
+	exactAliases map[string][]*snapshotEntry
+	tokenIndex   map[string][]*snapshotEntry
+	entries      []*snapshotEntry
 }
 
 type snapshotMatchStrategy struct {
@@ -77,7 +75,6 @@ type ChannelSelector interface {
 // 다양한 매칭 전략(정확 일치, 부분 일치, 별명 검색 등)을 순차적으로 시도한다.
 type Matcher struct {
 	membersData           domain.MemberDataProvider
-	cache                 cache.Client
 	selector              ChannelSelector
 	logger                *slog.Logger
 	matchCache            map[string]*MatchCacheEntry
@@ -92,13 +89,11 @@ type Matcher struct {
 
 func NewMatcher(
 	membersData domain.MemberDataProvider,
-	cacheClient cache.Client,
 	selector ChannelSelector,
 	logger *slog.Logger,
 ) *Matcher {
 	mm := &Matcher{
 		membersData:           membersData,
-		cache:                 cacheClient,
 		selector:              selector,
 		logger:                logger,
 		matchCache:            make(map[string]*MatchCacheEntry),

@@ -345,8 +345,6 @@ func loadYouTubeConfig() (YouTubeConfig, error) {
 		ScraperHTTPTimeout:   env.Seconds("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", d.ScraperHTTPTimeout),
 		ScraperDialTimeout:   env.Seconds("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", d.ScraperDialTimeout),
 		ScraperHeaderTimeout: env.Seconds("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", d.ScraperHeaderTimeout),
-		ScraperPhaseTimeout:  env.Seconds("YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS", d.ScraperPhaseTimeout),
-		CacheSaveTimeout:     env.Seconds("YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS", d.CacheSaveTimeout),
 		CommunityMissingTTL:  env.Seconds("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", d.CommunityMissingTTL),
 		RequestInterval:      interval,
 		DistributedRateLimit: DistributedRateLimitConfig{

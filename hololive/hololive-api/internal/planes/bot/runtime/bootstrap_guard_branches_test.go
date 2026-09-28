@@ -37,7 +37,6 @@ import (
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -143,7 +142,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	memberCache := &member.Cache{}
 	memberData := &stubMemberDataProvider{}
 	matcherService := &matcher.Matcher{}
-	ytStack := &providers.YouTubeStack{}
 	activityLogger := &activity.Logger{}
 	settingsService := &settings.Service{}
 	aclService := &acl.Service{}
@@ -162,7 +160,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 		&appbootstrap.AlarmYouTubeStackComponents{
 			AlarmMode:       &appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, MemberDataSource: memberData},
 			Matcher:         matcherService,
-			YouTubeStack:    ytStack,
 			ActivityLogger:  activityLogger,
 			SettingsService: settingsService,
 		},
@@ -187,7 +184,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	assert.Same(t, memberCache, modules.Data.MemberCache)
 	assert.Same(t, memberData, modules.Data.MembersData)
 	assert.Same(t, matcherService, modules.Stream.MemberMatch)
-	assert.Same(t, ytStack, modules.Stream.YTStack)
 	assert.Same(t, activityLogger, modules.Support.ActivityLogger)
 	assert.Same(t, settingsService, modules.Support.Settings)
 	assert.Same(t, aclService, modules.Support.ACL)

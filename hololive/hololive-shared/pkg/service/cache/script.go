@@ -20,12 +20,8 @@
 
 package cache
 
-import (
-	"context"
-	"time"
-)
+import "context"
 
 type ScriptCache interface {
 	CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error)
-	CompareAndExpire(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error)
 }

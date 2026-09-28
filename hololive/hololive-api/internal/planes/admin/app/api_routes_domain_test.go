@@ -66,6 +66,27 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	}
 }
 
+// 사용자 이름 지정 API는 alarm:user_names hash와 함께 삭제했다. 인증을 통과한 요청도 등록된 경로가 없어 404가 된다.
+func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
+	ctx := t.Context()
+	apiHandler := &server.Handler{}
+	appConfig := &settings.Config{
+		Server: settings.ServerConfig{APIKey: testAPIKey},
+		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
+	}
+
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), apiHandler.DomainHandlers(), &server.AuthHandler{}, sharedtestutil.NewTestCacheService(ctx, t))
+	if err != nil {
+		t.Fatalf("ProvideAPIRouter() error = %v", err)
+	}
+
+	for _, route := range router.Routes() {
+		if route.Path == "/api/holo/names/user" {
+			t.Fatalf("removed route re-registered: %s %s", route.Method, route.Path)
+		}
+	}
+}
+
 func expectedAdminAPIDomainRoutes() map[string][]string {
 	return map[string][]string{
 		"oauth": {
@@ -114,7 +135,6 @@ func expectedAdminAPIDomainRoutes() map[string][]string {
 			"POST /api/holo/settings",
 			"POST /api/holo/settings/llm",
 			"POST /api/holo/names/room",
-			"POST /api/holo/names/user",
 		},
 		"template": {
 			"GET /api/holo/templates",

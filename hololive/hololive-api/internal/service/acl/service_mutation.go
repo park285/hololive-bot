@@ -2,7 +2,6 @@ package acl
 
 import (
 	"context"
-	stdErrors "errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -29,6 +28,8 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 }
 
 // SetEnabled ACL 활성화/비활성화.
+// 같은 값이면 PG에 쓰지 않고 추종 인스턴스만 재동기화한다 — 앞선 요청이 ErrACLPropagation으로
+// 끝났을 때 같은 요청 재시도로 수렴시키기 위해서다. 추종 실패는 ErrACLPropagation으로 돌려준다.
 func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.mu.RLock()
 
@@ -36,7 +37,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.mu.RUnlock()
 
 	if current == enabled {
-		return nil
+		return s.notifyChange(ctx)
 	}
 
 	if err := s.store.UpsertSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", enabled)); err != nil {
@@ -48,23 +49,14 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.enabled = enabled
 	s.mu.Unlock()
 
-	if err := s.syncSettingsToValkey(ctx); err != nil {
-		rollbackErr := s.rollbackEnabledState(ctx, current)
-
-		return stdErrors.Join(
-			fmt.Errorf("sync acl settings to cache: %w", err),
-			wrapACLRollbackError("rollback acl enabled", rollbackErr),
-		)
-	}
-
 	s.logger.Info("ACL enabled status updated",
 		slog.Bool("enabled", enabled),
 	)
 
-	return nil
+	return s.notifyChange(ctx)
 }
 
-// SetMode ACL 모드 변경 (whitelist ↔ blacklist).
+// SetMode ACL 모드 변경 (whitelist ↔ blacklist). 같은 값 재요청과 추종 실패는 SetEnabled와 같다.
 func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	normalizedMode, err := normalizeACLModeStrict(mode)
 	if err != nil {
@@ -77,7 +69,7 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	s.mu.RUnlock()
 
 	if current == normalizedMode {
-		return nil
+		return s.notifyChange(ctx)
 	}
 
 	if err := s.store.UpsertSetting(ctx, dbKeyMode, string(normalizedMode)); err != nil {
@@ -86,26 +78,19 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 
 	s.mu.Lock()
 
-	s.mode = mode
+	s.mode = normalizedMode
 	s.mu.Unlock()
-
-	if err := s.syncModeToValkey(ctx); err != nil {
-		rollbackErr := s.rollbackModeState(ctx, current)
-
-		return stdErrors.Join(
-			fmt.Errorf("sync acl mode to cache: %w", err),
-			wrapACLRollbackError("rollback acl mode", rollbackErr),
-		)
-	}
 
 	s.logger.Info("ACL mode updated",
 		slog.String("mode", string(normalizedMode)),
 	)
 
-	return nil
+	return s.notifyChange(ctx)
 }
 
 // AddRoom 현재 활성 모드의 목록에 방 추가. 새 등록값은 chatID만 받는다(ErrInvalidRoomChatID).
+// 이미 있으면 PG에 쓰지 않고 추종 인스턴스만 재동기화한 뒤 false를 돌려준다(재시도 수렴 경로).
+// 추종 실패는 added 값과 함께 ErrACLPropagation으로 돌려준다 — added=true면 PG에는 이미 커밋됐다.
 func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	room = stringutil.TrimSpace(room)
 	if room == "" {
@@ -125,7 +110,7 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	if _, exists := targetRooms[room]; exists {
 		s.mu.Unlock()
 
-		return false, nil
+		return false, s.notifyChange(ctx)
 	}
 
 	targetRooms[room] = struct{}{}
@@ -139,24 +124,16 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 		return false, fmt.Errorf("failed to add room to database: %w", err)
 	}
 
-	if _, err := s.cache.SAdd(ctx, s.valkeyKeyForMode(mode), []string{room}); err != nil {
-		rollbackErr := s.rollbackAddedRoom(ctx, mode, room, listType)
-
-		return false, stdErrors.Join(
-			fmt.Errorf("sync acl room add to cache: %w", err),
-			wrapACLRollbackError("rollback acl room add", rollbackErr),
-		)
-	}
-
 	s.logger.Info("Room added to ACL list",
 		slog.String("room", room),
 		slog.String("list_type", listType),
 	)
 
-	return true, nil
+	return true, s.notifyChange(ctx)
 }
 
 // RemoveRoom 현재 활성 모드의 목록에서 방 제거. 이미 저장된 비-chatID 값도 치울 수 있어야 하므로 형식은 보지 않는다.
+// 없으면 PG에 쓰지 않고 추종 인스턴스만 재동기화한 뒤 false를 돌려준다. 추종 실패는 AddRoom과 같다.
 func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	room = stringutil.TrimSpace(room)
 	if room == "" {
@@ -172,7 +149,7 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	if _, exists := targetRooms[room]; !exists {
 		s.mu.Unlock()
 
-		return false, nil
+		return false, s.notifyChange(ctx)
 	}
 
 	delete(targetRooms, room)
@@ -187,86 +164,10 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 		return false, fmt.Errorf("failed to remove room from database: %w", err)
 	}
 
-	if _, err := s.cache.SRem(ctx, s.valkeyKeyForMode(mode), []string{room}); err != nil {
-		rollbackErr := s.rollbackRemovedRoom(ctx, mode, room, listType)
-
-		return false, stdErrors.Join(
-			fmt.Errorf("sync acl room removal to cache: %w", err),
-			wrapACLRollbackError("rollback acl room removal", rollbackErr),
-		)
-	}
-
 	s.logger.Info("Room removed from ACL list",
 		slog.String("room", room),
 		slog.String("list_type", listType),
 	)
 
-	return true, nil
-}
-
-func (s *Service) valkeyKeyForMode(mode ACLMode) string {
-	if mode == ACLModeBlacklist {
-		return aclBlacklistRoomsKey
-	}
-
-	return aclWhitelistRoomsKey
-}
-
-func (s *Service) rollbackEnabledState(ctx context.Context, enabled bool) error {
-	if err := s.store.UpsertSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", enabled)); err != nil {
-		return fmt.Errorf("restore enabled setting: %w", err)
-	}
-
-	s.mu.Lock()
-
-	s.enabled = enabled
-	s.mu.Unlock()
-
-	return nil
-}
-
-func (s *Service) rollbackModeState(ctx context.Context, mode ACLMode) error {
-	if err := s.store.UpsertSetting(ctx, dbKeyMode, string(mode)); err != nil {
-		return fmt.Errorf("restore mode setting: %w", err)
-	}
-
-	s.mu.Lock()
-
-	s.mode = mode
-	s.mu.Unlock()
-
-	return nil
-}
-
-func (s *Service) rollbackAddedRoom(ctx context.Context, mode ACLMode, room, listType string) error {
-	if err := s.store.DeleteRoom(ctx, room, listType); err != nil {
-		return fmt.Errorf("delete added room from database: %w", err)
-	}
-
-	s.mu.Lock()
-	delete(s.roomsMapForMode(mode), room)
-	s.mu.Unlock()
-
-	return nil
-}
-
-func (s *Service) rollbackRemovedRoom(ctx context.Context, mode ACLMode, room, listType string) error {
-	if err := s.store.CreateRoom(ctx, room, listType); err != nil {
-		return fmt.Errorf("recreate removed room in database: %w", err)
-	}
-
-	s.mu.Lock()
-
-	s.roomsMapForMode(mode)[room] = struct{}{}
-	s.mu.Unlock()
-
-	return nil
-}
-
-func wrapACLRollbackError(action string, err error) error {
-	if err == nil {
-		return nil
-	}
-
-	return fmt.Errorf("%s: %w", action, err)
+	return true, s.notifyChange(ctx)
 }

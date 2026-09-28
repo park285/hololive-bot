@@ -40,14 +40,6 @@ func (s *stubLocker) Release(_ context.Context, lockKey, _ string) error {
 	return nil
 }
 
-func (s *stubLocker) ClaimRoom(_ context.Context, _ string, _ time.Duration) (bool, error) {
-	return true, nil
-}
-
-func (s *stubLocker) ReleaseRoomClaims(_ context.Context, _ []string) error {
-	return nil
-}
-
 func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }

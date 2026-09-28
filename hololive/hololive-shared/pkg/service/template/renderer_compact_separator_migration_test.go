@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	fieldStatus               = "Status"
 	fieldTypesLabel           = "TypesLabel"
 	fieldPrefix               = "Prefix"
 	compactSeparatorMigration = "217_template_compact_separators.sql"
@@ -70,26 +69,16 @@ func TestCompactAlarmListKeepsSimpleAlarmsOnOneLine(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	body := seedBody(t, pool, domain.TemplateKeyCmdAlarmList)
 
-	got := renderOptimizationTemplate(t, body, templateFuncs, compactAlarmList(6, []map[string]any{
-		compactAlarm("미오", "", nil),
-		compactAlarm("비비", "방송+쇼츠", nil),
-		compactAlarm("이로하", "", compactNextStream("upcoming", "마인크래프트", "https://youtu.be/upcoming123", "22:00", "2시간 후")),
-		compactAlarm("스이세이", "", compactNextStream("ended", "지난 방송", "https://youtu.be/ended123", "", "")),
-		compactAlarm("라덴", "", compactNextStream("live", "노래", "https://youtu.be/live123", "", "")),
-		compactAlarm("리글로스", "", nil),
+	got := renderOptimizationTemplate(t, body, templateFuncs, compactAlarmList(3, []map[string]any{
+		compactAlarm("미오", ""),
+		compactAlarm("비비", "방송+쇼츠"),
+		compactAlarm("리글로스", ""),
 	}))
 
-	want := "🔔 설정된 알람 · 6개\n\n" +
+	want := "🔔 설정된 알람 · 3개\n\n" +
 		"1 · 미오\n" +
 		"2 · 비비 (방송+쇼츠)\n" +
-		"──────────\n" +
-		"3 · 이로하\n⏰ 22:00 (2시간 후)\n\u200b마인크래프트\nhttps://youtu.be/upcoming123\n" +
-		"──────────\n" +
-		"4 · 스이세이\n" +
-		"──────────\n" +
-		"5 · 라덴\n🔴 방송 중\n\u200b노래\nhttps://youtu.be/live123\n" +
-		"──────────\n" +
-		"6 · 리글로스"
+		"3 · 리글로스"
 	if got != want {
 		t.Fatalf("compact alarm list mismatch:\ngot =%q\nwant=%q", got, want)
 	}
@@ -100,21 +89,8 @@ func TestCompactAlarmListKeepsSimpleAlarmsOnOneLine(t *testing.T) {
 	}
 }
 
-func compactNextStream(status, title, url, scheduled, detail string) map[string]any {
-	return map[string]any{
-		fieldStatus: status, fieldTitle: title, fieldURL: url,
-		fieldScheduledKST: scheduled, "TimeDetail": detail, "StartingSoon": false,
-	}
-}
-
-func compactAlarm(name, types string, next map[string]any) map[string]any {
-	entry := map[string]any{fieldMemberName: name, fieldTypesLabel: types, fieldNextStream: nil}
-
-	if next != nil {
-		entry[fieldNextStream] = next
-	}
-
-	return entry
+func compactAlarm(name, types string) map[string]any {
+	return map[string]any{fieldMemberName: name, fieldTypesLabel: types}
 }
 
 func compactAlarmList(count int, alarms []map[string]any) map[string]any {

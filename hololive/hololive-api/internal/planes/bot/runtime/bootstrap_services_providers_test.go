@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-api/internal/service/acl"
 	dbtest "github.com/kapu/hololive-dbtest"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
@@ -44,10 +43,7 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 	dbClient := &dbmocks.Client{
 		GetPoolFunc: func() *pgxpool.Pool { return pool },
 	}
-	// ACL rooms 동기화는 RENAME으로 원자 교체하므로 raw valkey client가 있는 miniredis cache를 쓴다.
-	cache := sharedtestutil.NewTestCacheService(t.Context(), t)
-
-	service, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"1001", "1002"}, dbClient, cache, logger)
+	service, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"1001", "1002"}, dbClient, logger)
 	require.NoError(t, err)
 	require.NotNil(t, service)
 	assert.True(t, service.IsReady())

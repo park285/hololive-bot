@@ -67,7 +67,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 
 	ApplyMemberNamesToStreams(streamsByChannel, memberNames)
 
-	subscriberMap, err = LoadSubscriberRoomsByChannel(ctx, c.cacheClient, dueChannels)
+	subscriberMap, err = LoadSubscriberRoomsByChannel(ctx, c.cacheClient, c.subscriptionDB, dueChannels)
 	if err != nil {
 		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
 	}

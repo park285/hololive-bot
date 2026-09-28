@@ -32,6 +32,8 @@ type userModel struct {
 	AvatarURL    *string   `db:"avatar_url"`
 	CreatedAt    time.Time `db:"created_at"`
 	UpdatedAt    time.Time `db:"updated_at"`
+	// SessionGeneration은 비밀번호 reset마다 +1되는 세션 세대다. 세션 payload의 세대와 다르면 세션은 무효다.
+	SessionGeneration int64 `db:"session_generation"`
 }
 
 type passwordResetTokenModel struct {

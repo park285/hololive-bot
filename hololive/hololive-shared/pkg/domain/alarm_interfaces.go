@@ -22,7 +22,6 @@ package domain
 
 import (
 	"context"
-	"time"
 )
 
 // AddAlarmRequest는 채팅방의 구독 대상을 지정하며 빈 HostID는 전체 채널을 뜻한다.
@@ -44,13 +43,12 @@ type AlarmEntry struct {
 	MemberName string `json:"memberName"`
 }
 
-// AlarmListView는 채팅방에서 구독한 대상과 알림 종류, 대상에 맞는 다음 방송을 표시한다.
+// AlarmListView는 채팅방에서 구독한 대상과 알림 종류를 표시한다.
 type AlarmListView struct {
 	ChannelID  string
 	HostID     string `json:",omitempty"`
 	MemberName string
 	AlarmTypes AlarmTypes
-	NextStream *NextStreamInfo
 }
 
 type AlarmWriter interface {
@@ -75,12 +73,11 @@ type AlarmRepository interface {
 
 type AlarmCache interface {
 	WarmCacheFromDB(ctx context.Context) error
+	// SetRoomName은 관리자 지정 방 이름을 저장하며, 공백뿐인 이름은 지정을 해제해 Kakao 방 이름으로 되돌린다.
 	SetRoomName(ctx context.Context, roomID, roomName string) error
-	SetUserName(ctx context.Context, userID, userName string) error
 }
 
 type AlarmStateManager interface {
-	GetNextStreamInfo(ctx context.Context, channelID string) (*NextStreamInfo, error)
 	UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int
 	GetTargetMinutes() []int
 }
@@ -89,11 +86,4 @@ type AlarmCRUD interface {
 	AlarmRepository
 	AlarmCache
 	AlarmStateManager
-}
-
-type AlarmDispatchState interface {
-	MarkAsNotified(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) error
-	MarkUpcomingEventNotified(ctx context.Context, roomID, channelID string, stream *Stream) error
-	// GetDistinctRooms: 마일스톤 알람 발송 대상 방 ID 목록 조회
-	GetDistinctRooms(ctx context.Context) ([]string, error)
 }

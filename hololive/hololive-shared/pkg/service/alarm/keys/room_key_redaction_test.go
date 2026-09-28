@@ -28,9 +28,6 @@ func roomBearingKeyBuilders() map[string]func() string {
 	rescheduled := scheduled.Add(time.Hour)
 
 	return map[string]func() string{
-		"BuildRoomAlarmKey": func() string {
-			return BuildRoomAlarmKey(redactionRoomID)
-		},
 		"BuildNotifyClaimKey": func() string {
 			return BuildNotifyClaimKey(redactionRoomID, redactionStreamID, scheduled, redactionCategory)
 		},

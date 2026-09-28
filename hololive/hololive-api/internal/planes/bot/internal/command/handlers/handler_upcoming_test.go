@@ -187,7 +187,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -227,7 +227,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: newSeededTestFormatter(t),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -265,7 +265,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
@@ -298,7 +298,7 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   &upcomingStreamProviderStub{},
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true

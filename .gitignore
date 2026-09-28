@@ -95,9 +95,6 @@ tmp/
 backup/
 backups/
 artifacts/*
-!artifacts/architecture/
-artifacts/architecture/*
-!artifacts/architecture/go-workspace-import-graph.txt
 
 # Compressed archives
 *.tar.gz

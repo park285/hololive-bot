@@ -3,139 +3,42 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-GO_GRAPH_OUT="${1:-${ROOT_DIR}/artifacts/architecture/go-workspace-import-graph.txt}"
 
-echo "[CI] Architecture boundary gate start"
-echo
+step() {
+  echo "[architecture] $1"
+  shift
+  "$@"
+  echo
+}
 
-echo "[CI] Run M0 gate"
-echo "[M0] shared-go boundary check"
-"${SCRIPT_DIR}/check-shared-go-boundary.sh"
-echo
+step "shared-go boundary" "${SCRIPT_DIR}/check-shared-go-boundary.sh"
+step "shared-go package allowlist" "${SCRIPT_DIR}/check-shared-go-packages.sh"
+step "generic Go internal package names" "${SCRIPT_DIR}/check-go-generic-internal-package-names.sh"
+step "tracked local artifacts" "${SCRIPT_DIR}/check-tracked-local-artifacts.sh"
+step "Go alarm contract values" "${SCRIPT_DIR}/check-go-alarm-contracts.sh"
+step "Go trigger route hardcoding" "${SCRIPT_DIR}/check-go-trigger-route-hardcoding.sh"
+step "internal route hardcoding" "${SCRIPT_DIR}/check-internal-route-hardcoding.sh"
+step "migration manifest" "${SCRIPT_DIR}/check-migration-manifest.sh"
+step "SQL ownership" "${SCRIPT_DIR}/check-sql-ownership.sh"
+step "DB access policy" "${SCRIPT_DIR}/check-db-access-policy.sh"
+step "markdown local paths" "${SCRIPT_DIR}/check-doc-links-no-local-paths.sh"
+step "runtime import boundaries" "${SCRIPT_DIR}/check-repository-ownership.sh"
+step "notification egress ownership" "${SCRIPT_DIR}/ci-notification-egress-gate.sh"
+step "topology consumer parity" bash "${SCRIPT_DIR}/check-topology-parity.sh"
 
-echo "[M0] shared-go package allowlist check"
-"${SCRIPT_DIR}/check-shared-go-packages.sh"
-echo
+step "shell syntax" bash "${ROOT_DIR}/scripts/ci/shell-syntax-sweep.sh"
+step "compose env" "${ROOT_DIR}/scripts/deploy/test-compose-env.sh"
+step "health gate" "${ROOT_DIR}/scripts/deploy/lib/health-gate_test.sh"
+step "compose security defaults" "${ROOT_DIR}/scripts/deploy/test-compose-security-defaults.sh"
+step "PostgreSQL 18 runtime" bash "${ROOT_DIR}/scripts/deploy/test-postgres18-runtime-contract.sh"
+step "compose services" "${ROOT_DIR}/scripts/deploy/test-compose-services.sh"
+step "three-runtime topology" "${ROOT_DIR}/scripts/deploy/test-three-runtime-topology.sh"
+step "compose H3" "${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh"
+step "live-compat cert mounts" "${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh"
+step "compose up flow" "${ROOT_DIR}/scripts/deploy/test-compose-up-flow.sh"
+step "remote log sync" "${ROOT_DIR}/scripts/logs/test-remote-sync-main-logs.sh"
+step "PostgreSQL failover" bash "${ROOT_DIR}/scripts/ops/postgres-failover_test.sh"
 
-echo "[M0] generic Go internal package name check"
-"${SCRIPT_DIR}/check-go-generic-internal-package-names.sh"
-echo
+step "deprecated removal deadlines" "${SCRIPT_DIR}/check-deprecated-deadline.sh"
 
-echo "[M0] cross-cutting boundary guardrail tests"
-"${SCRIPT_DIR}/check-crosscutting-guardrails_test.sh"
-echo
-
-echo "[M0] cross-cutting boundary guardrail check"
-"${SCRIPT_DIR}/check-crosscutting-guardrails.sh"
-echo
-
-echo "[M0] tracked local artifact check"
-"${SCRIPT_DIR}/check-tracked-local-artifacts.sh"
-echo
-
-echo "[M0] go workspace import graph export"
-"${SCRIPT_DIR}/export-go-workspace-import-graph.sh" "${GO_GRAPH_OUT}"
-echo
-
-echo "[M0] project map consistency check"
-"${SCRIPT_DIR}/check-project-map.sh"
-echo
-
-echo "[CI] Run M1 contract gate"
-echo "[M1] Go alarm contract sanity check"
-"${SCRIPT_DIR}/check-go-alarm-contracts.sh"
-echo
-
-echo "[M1] Go trigger route hardcoding check"
-"${SCRIPT_DIR}/check-go-trigger-route-hardcoding.sh"
-echo
-
-echo "[M1] migration manifest check"
-"${SCRIPT_DIR}/check-migration-manifest.sh"
-echo
-
-echo "[M1] SQL ownership check"
-"${SCRIPT_DIR}/check-sql-ownership.sh"
-echo
-
-echo "[M1] DB access policy check"
-"${SCRIPT_DIR}/check-db-access-policy.sh"
-echo
-
-echo "[CI] Run M2 document contract gate"
-echo "[M2] current docs historical body check"
-"${SCRIPT_DIR}/check-current-docs-no-historical-body.sh"
-"${SCRIPT_DIR}/check-current-docs-no-historical-body_test.sh"
-echo
-
-echo "[M2] current docs root allowlist check"
-"${SCRIPT_DIR}/check-current-docs-root-allowlist.sh"
-echo
-
-echo "[M2] markdown local path check"
-"${SCRIPT_DIR}/check-doc-links-no-local-paths.sh"
-echo
-
-echo "[M2] legacy docs plan-kit location check"
-"${SCRIPT_DIR}/check-docs-plan-kit-location.sh"
-echo
-
-echo "[M2] runtime runbook coverage check"
-"${SCRIPT_DIR}/check-runbook-coverage.sh"
-echo
-
-echo "[M2] contract map coverage check"
-"${SCRIPT_DIR}/check-contract-map.sh"
-echo
-
-echo "[M2] internal route hardcoding check"
-"${SCRIPT_DIR}/check-internal-route-hardcoding.sh"
-echo
-
-echo "[M2] repository ownership boundary check"
-"${SCRIPT_DIR}/check-repository-ownership.sh"
-echo
-
-echo "[M2] youtube-producer retirement check"
-"${SCRIPT_DIR}/check-youtube-producer-retirement.sh"
-echo
-
-echo "[M2] notification egress ownership check"
-"${SCRIPT_DIR}/ci-notification-egress-gate.sh"
-echo
-
-echo "[M2] error contract coverage check"
-"${SCRIPT_DIR}/check-error-contracts.sh"
-echo
-
-echo "[CI] Run M4 compose env helper gate"
-bash "${ROOT_DIR}/scripts/ci/shell-syntax-sweep.sh"
-"${ROOT_DIR}/scripts/deploy/test-compose-env.sh"
-"${ROOT_DIR}/scripts/deploy/lib/health-gate_test.sh"
-"${ROOT_DIR}/scripts/deploy/test-compose-security-defaults.sh"
-bash "${ROOT_DIR}/scripts/deploy/test-postgres18-runtime-contract.sh"
-"${ROOT_DIR}/scripts/deploy/test-compose-services.sh"
-"${ROOT_DIR}/scripts/deploy/test-three-runtime-topology.sh"
-"${ROOT_DIR}/scripts/architecture/check-topology-parity_test.sh"
-"${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh"
-"${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh"
-"${ROOT_DIR}/scripts/deploy/test-compose-up-flow.sh"
-"${ROOT_DIR}/scripts/logs/test-remote-sync-main-logs.sh"
-bash "${ROOT_DIR}/scripts/ops/postgres-failover_test.sh"
-echo
-
-echo "[CI] Run M4 hard structure gate"
-bash "${ROOT_DIR}/scripts/ci/check-structure.sh" --mode hard --format text
-echo
-
-echo "[CI] Run M6 deprecated deadline gate"
-echo "[M6] Deprecated removal deadline gate"
-"${SCRIPT_DIR}/check-deprecated-deadline.sh"
-bash "${SCRIPT_DIR}/check-deprecated-deadline-self-test.sh"
-echo
-
-echo "[M6] Release governance assets gate"
-"${SCRIPT_DIR}/check-release-governance-assets.sh"
-echo
-
-echo "[CI] Architecture boundary gate passed"
+echo "[architecture] passed"

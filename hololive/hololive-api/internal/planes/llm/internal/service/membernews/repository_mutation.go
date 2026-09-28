@@ -37,8 +37,6 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 		return fmt.Errorf("subscribe member news: %w", err)
 	}
 
-	r.writeThroughSubscribe(ctx, roomID, roomName)
-
 	return nil
 }
 
@@ -51,8 +49,6 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	if err := r.pool.Exec(ctx, query, roomID); err != nil {
 		return fmt.Errorf("unsubscribe member news: %w", err)
 	}
-
-	r.writeThroughUnsubscribe(ctx, roomID)
 
 	return nil
 }

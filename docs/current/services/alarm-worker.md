@@ -45,8 +45,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 |---|---|---|
 | PostgreSQL | alarm/member/channel state and notification delivery outbox | alarm evaluation, alarm HTTP CRUD/query, or generic notification delivery fails |
 | PostgreSQL YouTube outbox | claim, render, per-room delivery, and final send state | YouTube notification dispatch pauses |
-| Valkey | queue, cache, Pub/Sub | dispatch publishing and config updates fail |
-| Settings Pub/Sub | config update handling | runtime settings may become stale |
+| Valkey | dispatch wakeup, cache, member epoch Pub/Sub | dispatch wakeup and cache coordination degrade |
+| `settings.json` + `PUT /internal/alarm/settings` | alarm advance minutes restore at startup and runtime apply from `hololive-api` | a failed apply keeps the previous target minutes until re-apply or restart |
 
 ## Must not own
 

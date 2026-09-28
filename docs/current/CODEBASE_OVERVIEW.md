@@ -96,7 +96,7 @@ The `hololive-api` llm plane owns major event and member-news scheduling. Other 
 runtime services
   -> shared config loader
   -> PostgreSQL and Valkey
-  -> settings Pub/Sub / alarm queues / runtime cache
+  -> member epoch Pub/Sub / alarm wakeup / runtime cache
 ```
 
 `youtube-collector` scheduling uses PostgreSQL leases. It does not join this Valkey Pub/Sub or cache path.
@@ -159,9 +159,6 @@ Run the deploying `./build-all.sh --no-bump` path only with explicit operator ap
 For architecture-doc changes, prefer:
 
 ```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/check-runbook-coverage.sh
-./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/ci-boundary-gate.sh
 ```
 

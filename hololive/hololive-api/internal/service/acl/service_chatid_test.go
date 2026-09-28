@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	dbtest "github.com/kapu/hololive-dbtest"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
@@ -17,7 +17,7 @@ func TestAddRoomRejectsNonChatIDRegistration(t *testing.T) {
 
 	for _, room := range []string{"홀로라이브 알림방", "room-a", "+123", "0123", "-0", "12 3", "9223372036854775808"} {
 		store := newFakeACLStore()
-		service := newACLServiceFromFakeStore(t, store, cachemocks.NewLenientClient(), true)
+		service := newACLServiceFromFakeStore(t, store, true)
 
 		added, err := service.AddRoom(t.Context(), room)
 		if err == nil || added {
@@ -39,7 +39,7 @@ func TestAddRoomAcceptsCanonicalChatID(t *testing.T) {
 
 	for _, room := range []string{"18398338829933617", "-4567", "0", "9223372036854775807", " 42 "} {
 		store := newFakeACLStore()
-		service := newACLServiceFromFakeStore(t, store, cachemocks.NewLenientClient(), true)
+		service := newACLServiceFromFakeStore(t, store, true)
 
 		added, err := service.AddRoom(t.Context(), room)
 		if err != nil || !added {
@@ -51,10 +51,10 @@ func TestAddRoomAcceptsCanonicalChatID(t *testing.T) {
 // KAKAO_ROOMS seed도 같은 계약이다. 방 이름이 들어 있으면 첫 초기화 전에 기동을 거절하고
 // acl_settings·acl_rooms에 아무것도 쓰지 않는다.
 func TestNewACLServiceRejectsNonChatIDDefaultRooms(t *testing.T) {
-	pool, cacheMock, _ := newACLServiceWithPgx(t)
+	pool := dbtest.NewPool(t)
 	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 
-	service, err := NewACLService(t.Context(), dbClient, cacheMock, slog.New(slog.DiscardHandler), true, ACLModeWhitelist,
+	service, err := NewACLService(t.Context(), dbClient, slog.New(slog.DiscardHandler), true, ACLModeWhitelist,
 		[]string{"홀로라이브 알림방", "18398338829933617"})
 	if err == nil || service != nil {
 		t.Fatalf("NewACLService() = (%v, %v), want invalid default room error", service, err)

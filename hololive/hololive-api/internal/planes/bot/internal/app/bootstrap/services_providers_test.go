@@ -21,11 +21,8 @@
 package bootstrap
 
 import (
-	"context"
 	"log/slog"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -33,13 +30,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/service/acl"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/providers"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
-
-type bootstrapTestContextKey struct{}
 
 func TestProvideACLServiceWrapsInitializationErrorForNilPostgres(t *testing.T) {
 	t.Parallel()
@@ -50,7 +42,6 @@ func TestProvideACLServiceWrapsInitializationErrorForNilPostgres(t *testing.T) {
 		acl.ACLModeWhitelist,
 		[]string{testRoomA},
 		nil,
-		cachemocks.NewLenientClient(),
 		slog.New(slog.DiscardHandler),
 	)
 
@@ -58,27 +49,6 @@ func TestProvideACLServiceWrapsInitializationErrorForNilPostgres(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "failed to create ACL service")
 	assert.ErrorContains(t, err, "postgres service is nil")
-}
-
-func TestProvideACLServicePropagatesContextToInitialCacheSync(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.WithValue(t.Context(), bootstrapTestContextKey{}, "acl-context")
-	cacheClient, observedCalls := newACLCacheSyncMock(t, "acl-context")
-
-	service, err := ProvideACLService(
-		ctx,
-		true,
-		acl.ACLModeWhitelist,
-		[]string{testRoomA},
-		newACLPostgresMock(t),
-		cacheClient,
-		slog.New(slog.DiscardHandler),
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, service)
-	assert.Positive(t, observedCalls.Load())
 }
 
 func TestProvideActivityLoggerReturnsLogger(t *testing.T) {
@@ -93,38 +63,6 @@ func TestProvideActivityLoggerReturnsLogger(t *testing.T) {
 	assert.Empty(t, logs)
 }
 
-func TestProvideBotDependenciesMapsOptionalYouTubeStack(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil stack leaves YouTube dependencies nil", func(t *testing.T) {
-		t.Parallel()
-
-		deps := ProvideBotDependencies(&BotDependencyModules{
-			Stream: BotStreamModule{YTStack: nil},
-		})
-
-		require.NotNil(t, deps)
-		assert.Nil(t, deps.Service)
-	})
-
-	t.Run("populated stack wires YouTube dependencies", func(t *testing.T) {
-		t.Parallel()
-
-		youTubeService := &stubYouTubeService{}
-
-		deps := ProvideBotDependencies(&BotDependencyModules{
-			Stream: BotStreamModule{
-				YTStack: &providers.YouTubeStack{
-					Service: youTubeService,
-				},
-			},
-		})
-
-		require.NotNil(t, deps)
-		assert.Same(t, youTubeService, deps.Service)
-	})
-}
-
 func newACLPostgresMock(t *testing.T) *databasemocks.Client {
 	t.Helper()
 
@@ -133,40 +71,4 @@ func newACLPostgresMock(t *testing.T) *databasemocks.Client {
 	return &databasemocks.Client{
 		GetPoolFunc: func() *pgxpool.Pool { return pool },
 	}
-}
-
-func newACLCacheSyncMock(t *testing.T, wantContextValue string) (*cachemocks.Client, *atomic.Int64) {
-	t.Helper()
-
-	var observedCalls atomic.Int64
-
-	recordContext := func(ctx context.Context) {
-		assert.Equal(t, wantContextValue, ctx.Value(bootstrapTestContextKey{}))
-		observedCalls.Add(1)
-	}
-
-	// ACL rooms 동기화는 RENAME으로 원자 교체하므로 raw valkey client가 필요하다. 호출 context만 기록하고
-	// 실제 연산은 miniredis 기반 cache에 위임한다(비원자 Del→SAdd 경로는 없다).
-	backing := sharedtestutil.NewTestCacheService(t.Context(), t)
-	cacheClient := &cachemocks.Client{
-		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
-			recordContext(ctx)
-
-			return backing.Set(ctx, key, value, ttl)
-		},
-		DelFunc: func(ctx context.Context, key string) error {
-			recordContext(ctx)
-
-			return backing.Del(ctx, key)
-		},
-		SAddFunc: func(ctx context.Context, key string, members []string) (int64, error) {
-			recordContext(ctx)
-
-			return backing.SAdd(ctx, key, members)
-		},
-		GetClientFunc: backing.GetClient,
-		BFunc:         backing.B,
-	}
-
-	return cacheClient, &observedCalls
 }

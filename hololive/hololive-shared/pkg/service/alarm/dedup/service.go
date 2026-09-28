@@ -91,12 +91,8 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 	return acquired, nil
 }
 
-func (s *Service) targetMinutesSnapshot() []int {
-	return s.targetPolicySnapshot().Clone()
-}
-
 func (s *Service) TargetMinutesSnapshot() []int {
-	return s.targetMinutesSnapshot()
+	return s.targetPolicySnapshot().Clone()
 }
 
 func (s *Service) targetPolicySnapshot() sharedchecker.TargetMinutePolicy {

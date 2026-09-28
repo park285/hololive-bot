@@ -265,41 +265,6 @@ func TestRepoComposeLiveCompatOverlayRendersCentralCollector(t *testing.T) {
 	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, load.RuntimeYouTubeCollector)
 }
 
-func TestCFG010ExactRevisionRollbackDocs(t *testing.T) {
-	t.Parallel()
-
-	collectorRunbook := readRepoFile(t, "docs/current/runbooks/youtube-collector.md")
-
-	for _, token := range []string{
-		"collector Go binary/image",
-		"bundled Node helper/package-lock",
-		"Compose base and AP overlays",
-		"host-native env generator/wrapper",
-		"Schema/data rollback is none",
-		"rollback.md",
-	} {
-		if !strings.Contains(collectorRunbook, token) {
-			t.Fatalf("youtube-collector runbook missing CFG-010 rollback unit %q", token)
-		}
-	}
-
-	if strings.Contains(collectorRunbook, "Valkey") {
-		t.Fatal("youtube-collector runbook must point at rollback.md instead of restating Valkey topology")
-	}
-
-	rollback := readRepoFile(t, "docs/current/runbooks/rollback.md")
-
-	for _, token := range []string{
-		"Binary-only Valkey rollback",
-		"exact repository revision",
-		"youtube-collector.md#rollback",
-	} {
-		if !strings.Contains(rollback, token) {
-			t.Fatalf("rollback.md missing CFG-010 Valkey topology unit %q", token)
-		}
-	}
-}
-
 func assertLiveCompatCollectorEnvFileText(t *testing.T) {
 	t.Helper()
 

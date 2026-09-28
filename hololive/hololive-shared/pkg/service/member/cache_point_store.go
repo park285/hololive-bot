@@ -21,97 +21,22 @@
 package member
 
 import (
-	"context"
-	"log/slog"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generation uint64, alias string, channelLookup bool) {
+// cacheMember는 PostgreSQL point 조회 결과를 조회 시점 generation의 프로세스 메모리 index에만 넣는다.
+func (c *Cache) cacheMember(member *domain.Member, generation uint64, channelLookup bool) {
 	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
 
 	if c.snapshotGeneration.Load() != generation {
-		c.snapshotMu.RUnlock()
-
 		return
 	}
 
-	channelMember := c.channelMemberForPointLocked(member, generation, channelLookup)
-	c.storePointMemberInMemoryLocked(member, generation)
+	c.byName.Store(member.Name, &memoryMember{member: member, generation: generation})
 
+	channelMember := c.channelMemberForPointLocked(member, generation, channelLookup)
 	if channelMember != nil && channelMember.ChannelID != "" {
 		c.byChannelID.Store(channelMember.ChannelID, &memoryMember{member: channelMember, generation: generation})
 	}
-
-	if !c.distributedCacheUsable() {
-		c.snapshotMu.RUnlock()
-
-		return
-	}
-
-	channelKey := ""
-
-	if channelMember != nil && channelMember.ChannelID != "" {
-		channelKey = c.epochDataKey(memberChannelKeyPrefix + channelMember.ChannelID)
-	}
-
-	nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)
-	aliasKey := ""
-
-	if alias != "" {
-		aliasKey = c.epochDataKey(memberAliasKeyPrefix + alias)
-	}
-
-	c.snapshotMu.RUnlock()
-
-	if channelMember != nil {
-		c.cacheMemberByChannelID(ctx, channelKey, channelMember)
-	}
-
-	c.cacheMemberByName(ctx, nameKey, member)
-	c.cacheMemberByAlias(ctx, aliasKey, member, alias)
-}
-
-func (c *Cache) cacheMemberByChannelID(ctx context.Context, channelKey string, member *domain.Member) {
-	if channelKey == "" {
-		return
-	}
-
-	if err := c.cache.Set(ctx, channelKey, member, c.cacheTTL); err != nil {
-		if c.logger != nil {
-			c.logger.Warn("Failed to cache member by channel ID",
-				slog.String("channel_id", member.ChannelID),
-				slog.Any("error", err),
-			)
-		}
-	}
-}
-
-func (c *Cache) cacheMemberByName(ctx context.Context, nameKey string, member *domain.Member) {
-	if err := c.cache.Set(ctx, nameKey, member, c.cacheTTL); err != nil {
-		if c.logger != nil {
-			c.logger.Warn("Failed to cache member by name",
-				slog.String("member", member.Name),
-				slog.Any("error", err),
-			)
-		}
-	}
-}
-
-func (c *Cache) cacheMemberByAlias(ctx context.Context, aliasKey string, member *domain.Member, alias string) {
-	if aliasKey == "" {
-		return
-	}
-
-	if err := c.cache.Set(ctx, aliasKey, member, c.cacheTTL); err != nil && c.logger != nil {
-		c.logger.Warn("Failed to cache member alias",
-			slog.String("alias", alias),
-			slog.Any("error", err))
-	}
-}
-
-func (c *Cache) storePointMemberInMemoryLocked(member *domain.Member, generation uint64) {
-	entry := &memoryMember{member: member, generation: generation}
-
-	c.byName.Store(member.Name, entry)
 }

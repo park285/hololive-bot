@@ -95,11 +95,6 @@ type setRoomNameReq struct {
 	RoomName string `json:"room_name"`
 }
 
-type setUserNameReq struct {
-	UserID   string `json:"user_id"`
-	UserName string `json:"user_name"`
-}
-
 type updateAdvanceMinutesReq struct {
 	Minutes int `json:"minutes"`
 }
@@ -238,22 +233,6 @@ func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error
 	return resp.Deleted, nil
 }
 
-// GetNextStreamInfo는 provider에 next-stream payload가 없으면 nil을 반환한다.
-func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	info, err := c.getJSON[*domain.NextStreamInfo](ctx, contractsalarm.NextStreamPath(channelID))
-	if err != nil {
-		return nil, err
-	}
-
-	var valid *domain.NextStreamInfo
-
-	if info != nil && info.Status.IsValid() {
-		valid = info
-	}
-
-	return valid, nil
-}
-
 func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int {
 	body := updateAdvanceMinutesReq{Minutes: minutes}
 
@@ -287,15 +266,6 @@ func (c *Client) GetTargetMinutes() []int {
 func (c *Client) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	body := setRoomNameReq{RoomID: roomID, RoomName: roomName}
 	if err := c.putNoData(ctx, contractsalarm.RoomNamePath, body); err != nil {
-		return fmt.Errorf("put no data: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Client) SetUserName(ctx context.Context, userID, userName string) error {
-	body := setUserNameReq{UserID: userID, UserName: userName}
-	if err := c.putNoData(ctx, contractsalarm.UserNamePath, body); err != nil {
 		return fmt.Errorf("put no data: %w", err)
 	}
 

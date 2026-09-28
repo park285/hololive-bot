@@ -81,6 +81,9 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiplane.RuntimeConfig, logg
 		return apiPlanes{}, fmt.Errorf("build bot plane: %w", err)
 	}
 
+	// 관리 plane이 바꾼 ACL을 같은 요청 안에서 봇 plane 판정에 반영한다(프로세스 내부 통지).
+	bot.ACL.Follow(admin.ACL)
+
 	planes := apiPlanes{bot: bot, admin: admin, llm: llm}
 	youtubeResult := buildOptionalYouTubePlane(ctx, appConfig, logger)
 

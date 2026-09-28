@@ -36,66 +36,23 @@ import (
 
 // Valkey 키 접두사(alarmservice alarm_types.go 별칭과 1:1 대응).
 const (
-	AlarmKeyPrefix                    = "alarm:"
-	AlarmRegistryKey                  = "alarm:registry"
 	AlarmChannelRegistryKey           = "alarm:channel_registry"
-	AlarmChannelRegistryVersionKey    = "alarm:channel_registry:version"
 	AlarmSubscriberCacheEmptyKey      = "alarm:subscriber_cache_empty"
-	NextStreamKeyPrefix               = "alarm:next_stream:"
 	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
 	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
 	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
 	ChannelSubscribersEmptyKeyPrefix  = "alarm:channel_subscribers_empty:"
 	MemberNameKey                     = "alarm:member_names"
-	RoomNamesCacheKey                 = "alarm:room_names"
-	UserNamesCacheKey                 = "alarm:user_names"
 
 	NotifiedKeyPrefix                  = "notified:"
 	NotifyClaimKeyPrefix               = "notified:claim:"
 	NotifyLogicalClaimKeyPrefix        = "notified:claim:event:"
 	UpcomingEventKeyPrefix             = "notified:upcoming:event:"
-	ScheduleTransitionKeyPrefix        = "notified:schedule:transition:"
 	RoomScheduleTransitionKeyPrefix    = "notified:schedule:transition:room:"
 	LogicalScheduleIndexKeyPrefix      = "notified:schedule:index:"
 	LogicalScheduleTransitionKeyPrefix = "notified:schedule:transition:event:"
 	NotificationCategoryLiveCatchup    = "live_catchup"
 )
-
-func BuildRoomAlarmKey(roomID string) string {
-	return AlarmKeyPrefix + roomID
-}
-
-// IsReservedAlarmKey는 alarm: 접두사를 쓰지만 방 구독이 아닌 현행 키를 가린다. 퇴역한 Chzzk/Twitch 매핑 6개와 Redis
-// dispatch queue 3개의 예약 항목·상수는 stack-audit 2026-09-26 T11(holo-alarm-reserved-retired-valkey-keys)에서 지웠다.
-// 퇴역 dispatch queue 키에는 ':'가 들어 있어 IsRoomAlarmKey가 원래 방 키로 보지 않는다(T18 2026-09-26 0건). 운영
-// Valkey에 남아 있던 세 키(alarm:chzzk_channels_empty, alarm:twitch_channel_logins, alarm:twitch_logins)는 이 release
-// 배포 전에 hololive-bot-ops가 1회 삭제한다. 삭제 전에 배포되면 RebuildSubscriberCacheFromRepository가 그 키를 고아 방
-// 키로 보고 지운다.
-func IsReservedAlarmKey(key string) bool {
-	switch strings.TrimSpace(key) {
-	case AlarmRegistryKey,
-		AlarmChannelRegistryKey,
-		AlarmChannelRegistryVersionKey,
-		AlarmSubscriberCacheEmptyKey,
-		MemberNameKey,
-		RoomNamesCacheKey,
-		UserNamesCacheKey:
-		return true
-	default:
-		return false
-	}
-}
-
-func IsRoomAlarmKey(key string) bool {
-	trimmed := strings.TrimSpace(key)
-	if trimmed == "" || !strings.HasPrefix(trimmed, AlarmKeyPrefix) || IsReservedAlarmKey(trimmed) {
-		return false
-	}
-
-	suffix := strings.TrimPrefix(trimmed, AlarmKeyPrefix)
-
-	return suffix != "" && !strings.Contains(suffix, ":")
-}
 
 type ChannelContentAlarmTargetKeys struct {
 	ChannelID               string `json:"channel_id"`
@@ -234,14 +191,6 @@ func BuildUpcomingEventKey(roomID, channelID, streamID, title string, startSched
 	titleFP := BuildTitleFingerprint(title, streamID)
 
 	return fmt.Sprintf("%s%s:%s:%d:%s", UpcomingEventKeyPrefix, roomID, channelID, scheduleUnix, titleFP)
-}
-
-// "notified:schedule:transition:{streamID}:{oldUnix}:{newUnix}".
-func BuildScheduleTransitionKey(streamID string, oldScheduled, newScheduled time.Time) string {
-	oldUnix := NormalizeScheduledMinute(oldScheduled).Unix()
-	newUnix := NormalizeScheduledMinute(newScheduled).Unix()
-
-	return fmt.Sprintf("%s%s:%d:%d", ScheduleTransitionKeyPrefix, streamID, oldUnix, newUnix)
 }
 
 // "notified:schedule:transition:room:{roomID}:{streamID}:{oldUnix}:{newUnix}".

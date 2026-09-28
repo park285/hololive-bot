@@ -65,22 +65,6 @@ func (s *State) GetChannelSubscribersByType(ctx context.Context, channelID strin
 	return subscribers, nil
 }
 
-func (s *State) SetRoomName(ctx context.Context, roomID, roomName string) error {
-	if err := s.Cache.HSet(ctx, sharedalarmkeys.RoomNamesCacheKey, roomID, roomName); err != nil {
-		return fmt.Errorf("set room name: %w", err)
-	}
-
-	return nil
-}
-
-func (s *State) SetUserName(ctx context.Context, userID, userName string) error {
-	if err := s.Cache.HSet(ctx, sharedalarmkeys.UserNamesCacheKey, userID, userName); err != nil {
-		return fmt.Errorf("set user name: %w", err)
-	}
-
-	return nil
-}
-
 func (s *State) GetMemberNamesBatch(ctx context.Context, channelIDs []string) (map[string]string, error) {
 	if len(channelIDs) == 0 {
 		return map[string]string{}, nil

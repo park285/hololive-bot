@@ -21,12 +21,10 @@
 package formatter
 
 import (
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -35,9 +33,9 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	t.Parallel()
 
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdAlarmAdded:        "ADD {{.MemberName}} {{.Added}} {{if .NextStream}}{{.NextStream.Status}}{{end}} {{.Prefix}}",
+		domain.TemplateKeyCmdAlarmAdded:        "ADD {{.MemberName}} {{.Added}} {{.Prefix}}",
 		domain.TemplateKeyCmdAlarmRemoved:      "REMOVE {{.MemberName}} {{.Removed}}",
-		domain.TemplateKeyCmdAlarmList:         "알람 목록\n{{range .Alarms}}{{.MemberName}}|{{.TypesLabel}}{{if .NextStream}}|{{.NextStream.Status}}{{end}}\n{{end}}",
+		domain.TemplateKeyCmdAlarmList:         "알람 목록\n{{range .Alarms}}{{.MemberName}}|{{.TypesLabel}}\n{{end}}",
 		domain.TemplateKeyCmdAlarmCleared:      "CLEAR {{.Count}}",
 		domain.TemplateKeyCmdAlarmNotification: "NOTIFY {{.ChannelName}} {{.ScheduledTimeKST}} {{.URL}}",
 		domain.TemplateKeyCmdAlarmLiveStarted:  "LIVE {{.ChannelName}} {{.ScheduledTimeKST}} {{.URL}}",
@@ -46,25 +44,16 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 
 	now := time.Now().Add(2 * time.Hour)
-	nextUpcoming := &domain.NextStreamInfo{
-		Status:         domain.NextStreamStatusUpcoming,
-		VideoID:        "abc123",
-		Title:          "다음 방송",
-		StartScheduled: &now,
-	}
-	added := formatter.FormatAlarmAdded(t.Context(), "미코", true, nextUpcoming)
-	assert.Contains(t, added, "ADD 미코 true")
-	assert.Contains(t, added, "upcoming")
+	added := formatter.FormatAlarmAdded(t.Context(), "미코", true)
+	assert.Equal(t, "ADD 미코 true !", added)
 
 	removed := formatter.FormatAlarmRemoved(t.Context(), "미코", true)
 	assert.Equal(t, "REMOVE 미코 true", removed)
 
 	list := formatter.FormatAlarmList(t.Context(), []AlarmListEntry{
-		{MemberName: "미코", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeCommunity}, NextStream: &domain.NextStreamInfo{Status: domain.NextStreamStatusLive, VideoID: "live123", Title: "라이브"}},
+		{MemberName: "미코", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeCommunity}},
 	})
-	assert.Contains(t, list, "알람 목록")
-	assert.Contains(t, list, "미코|방송+커뮤니티|live")
-	assert.NotContains(t, list, "\u200b")
+	assert.Equal(t, "알람 목록\n미코|방송+커뮤니티", list)
 
 	emptyList := formatter.FormatAlarmList(t.Context(), nil)
 	assert.Equal(t, "알람 목록", emptyList)
@@ -107,7 +96,7 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}), WithMessageStrings(setupFormatterTestStore(t)))
-	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
+	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmAdded(t.Context(), "미코", true))
 	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmRemoved(t.Context(), "미코", true))
 	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
 	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmCleared(t.Context(), 1))
@@ -115,30 +104,6 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 
 	fallbackLive := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 0, Channel: &domain.Channel{Name: "미코"}, Stream: &domain.Stream{ID: "yt", Title: "제목", ChannelName: "미코"}})
 	assert.Equal(t, renderFailureMessage, fallbackLive)
-
-	assert.Nil(t, summarizeNextStreamInfo(nil))
-	assert.Nil(t, summarizeNextStreamInfo(&domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming}))
-	require.NotNil(t, summarizeNextStreamInfo(&domain.NextStreamInfo{Status: domain.NextStreamStatusLive}))
-
-	assert.Nil(t, formatter.buildNextStreamInfoView(t.Context(), nil))
-	assert.Nil(t, formatter.buildNextStreamInfoView(t.Context(), &domain.NextStreamInfo{Status: "invalid"}))
-
-	future := time.Now().Add(90 * time.Minute)
-	view := formatter.buildNextStreamInfoView(t.Context(), &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, VideoID: "v1", Title: strings.Repeat("A", 10), StartScheduled: &future})
-	require.NotNil(t, view)
-	assert.Equal(t, "upcoming", view.Status)
-	assert.NotEmpty(t, view.ScheduledKST)
-	assert.NotEmpty(t, view.TimeDetail)
-
-	past := time.Now().Add(-2 * time.Minute)
-	soon := formatter.buildNextStreamInfoView(t.Context(), &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, VideoID: "v2", Title: "soon", StartScheduled: &past})
-	require.NotNil(t, soon)
-	assert.True(t, soon.StartingSoon)
-
-	assert.Empty(t, formatter.formatUpcomingTimeDetail(t.Context(), -time.Minute))
-	assert.Equal(t, "30분 후", formatter.formatUpcomingTimeDetail(t.Context(), 30*time.Minute))
-	assert.Equal(t, "2시간 0분 후", formatter.formatUpcomingTimeDetail(t.Context(), 2*time.Hour))
-	assert.Equal(t, "1일 후", formatter.formatUpcomingTimeDetail(t.Context(), 26*time.Hour))
 
 	assert.Equal(t, "전체", formatter.formatAlarmTypesLabel(t.Context(), nil))
 	assert.Equal(t, "전체", formatter.formatAlarmTypesLabel(t.Context(), domain.AlarmTypes(domain.AllAlarmTypes)))

@@ -33,29 +33,6 @@ const (
 	testChannelID            = "channel-1"
 )
 
-func TestBuildSearchChannelsCacheKey_NormalizesEquivalentQueries(t *testing.T) {
-	t.Parallel()
-
-	first := buildSearchChannelsCacheKey("  Aqua ")
-	second := buildSearchChannelsCacheKey("aqua")
-
-	if first != second {
-		t.Fatalf("buildSearchChannelsCacheKey equivalent queries mismatch: %q vs %q", first, second)
-	}
-
-	if first == searchChannelsCacheKeyPrefix+"empty" {
-		t.Fatalf("buildSearchChannelsCacheKey(%q) returned empty key", "Aqua")
-	}
-}
-
-func TestBuildSearchChannelsCacheKey_UsesEmptySuffixForBlankQuery(t *testing.T) {
-	t.Parallel()
-
-	if got := buildSearchChannelsCacheKey("   "); got != searchChannelsCacheKeyPrefix+"empty" {
-		t.Fatalf("buildSearchChannelsCacheKey(blank) = %q, want %q", got, searchChannelsCacheKeyPrefix+"empty")
-	}
-}
-
 func TestSearchQueryAttrPseudonymizesRawQuery(t *testing.T) {
 	t.Parallel()
 

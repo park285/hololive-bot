@@ -205,7 +205,7 @@ func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
-		Matcher:          matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:          matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = message
 			return nil

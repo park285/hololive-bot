@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -18,40 +17,6 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
-
-// admin plane의 YouTube rate limiter는 runtime 설정(YOUTUBE_REQUEST_INTERVAL_SECONDS 등)을 따라야 한다.
-func TestBuildScraperHolodexFoundationUsesRuntimeYouTubeConfig(t *testing.T) {
-	t.Parallel()
-
-	appConfig := &settings.Config{
-		YouTube: settings.DefaultYouTubeOperationalConfig(),
-		Holodex: settings.DefaultHolodexOperationalConfig(),
-	}
-
-	appConfig.YouTube.RequestInterval = 7 * time.Second
-	appConfig.YouTube.DistributedRateLimit.Enabled = false
-	appConfig.Holodex.APIKey = testAPIKey
-	appConfig.Holodex.DistributedRateLimit.Enabled = false
-
-	foundation, err := buildScraperHolodexFoundation(
-		t.Context(),
-		appConfig,
-		&sharedmodules.InfraModule{Cache: cachemocks.NewLenientClient(), MemberCache: newFoundationTestMemberCache(t)},
-		slog.New(slog.DiscardHandler),
-	)
-	require.NoError(t, err)
-	t.Cleanup(foundation.HolodexService.Stop)
-
-	first, err := foundation.SharedRL.TryReserve(t.Context())
-	require.NoError(t, err)
-	require.True(t, first.Allowed)
-
-	second, err := foundation.SharedRL.TryReserve(t.Context())
-	require.NoError(t, err)
-	assert.False(t, second.Allowed)
-	assert.InDelta(t, float64(7*time.Second), float64(second.RetryAfter), float64(time.Second),
-		"rate limiter interval must come from appConfig.YouTube.RequestInterval")
-}
 
 // alarm provider URL이 없으면 in-process AlarmService로 대신하지 않고 기동을 실패시킨다.
 func TestBuildAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {

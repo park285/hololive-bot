@@ -29,12 +29,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -47,11 +49,9 @@ type mockAlarmCRUD struct {
 	getRoomAlarmsWithTypesFn    func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
 	listRoomAlarmsViewFn        func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
 	clearRoomAlarmsFn           func(ctx context.Context, roomID string) (int, error)
-	getNextStreamInfoFn         func(ctx context.Context, channelID string) (*domain.NextStreamInfo, error)
 	updateAlarmAdvanceMinutesFn func(minutes int) []int
 	getTargetMinutesFn          func() []int
 	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
-	setUserNameFn               func(ctx context.Context, userID, userName string) error
 	getAllAlarmKeysFn           func(ctx context.Context) ([]*domain.AlarmEntry, error)
 	warmCacheFromDBFn           func(ctx context.Context) error
 }
@@ -119,15 +119,6 @@ func (m *mockAlarmCRUD) ClearRoomAlarms(ctx context.Context, roomID string) (int
 	return out, nil
 }
 
-func (m *mockAlarmCRUD) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	out, err := m.getNextStreamInfoFn(ctx, channelID)
-	if err != nil {
-		return nil, fmt.Errorf("get next stream info fn: %w", err)
-	}
-
-	return out, nil
-}
-
 func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
 	return m.updateAlarmAdvanceMinutesFn(minutes)
 }
@@ -139,14 +130,6 @@ func (m *mockAlarmCRUD) GetTargetMinutes() []int {
 func (m *mockAlarmCRUD) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	if err := m.setRoomNameFn(ctx, roomID, roomName); err != nil {
 		return fmt.Errorf("set room name fn: %w", err)
-	}
-
-	return nil
-}
-
-func (m *mockAlarmCRUD) SetUserName(ctx context.Context, userID, userName string) error {
-	if err := m.setUserNameFn(ctx, userID, userName); err != nil {
-		return fmt.Errorf("set user name fn: %w", err)
 	}
 
 	return nil
@@ -478,73 +461,6 @@ func TestClearRoomAlarms(t *testing.T) {
 	}
 }
 
-func TestGetNextStreamInfo(t *testing.T) {
-	sched := time.Now().Add(time.Hour)
-
-	tests := []struct {
-		name       string
-		channelID  string
-		mockFn     func(ctx context.Context, channelID string) (*domain.NextStreamInfo, error)
-		wantStatus int
-		wantOK     bool
-	}{
-		{
-			name:      "성공",
-			channelID: testChannelID,
-			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
-				return &domain.NextStreamInfo{
-					Status:         domain.NextStreamStatusUpcoming,
-					VideoID:        "vid1",
-					Title:          "테스트 방송",
-					StartScheduled: &sched,
-				}, nil
-			},
-			wantStatus: http.StatusOK,
-			wantOK:     true,
-		},
-		{
-			name:      "예정 방송 없음 (nil 반환)",
-			channelID: "ch2",
-			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
-				var missing *domain.NextStreamInfo
-
-				return missing, nil
-			},
-			wantStatus: http.StatusOK,
-			wantOK:     true,
-		},
-		{
-			name:      "서비스 에러",
-			channelID: "ch3",
-			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
-				return nil, errors.New("holodex timeout")
-			},
-			wantStatus: http.StatusInternalServerError,
-			wantOK:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockAlarmCRUD{getNextStreamInfoFn: tt.mockFn}
-			r := newTestHandler(t, mock)
-
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/next-stream/"+tt.channelID, http.NoBody)
-			r.ServeHTTP(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
-			}
-
-			resp := decodeResponse(t, rec.Body)
-			if resp.Success != tt.wantOK {
-				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
-			}
-		})
-	}
-}
-
 func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -593,6 +509,52 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}
+
+// room_name 필드는 필수지만 빈 값은 관리자 지정 이름 해제 요청이라 서비스까지 그대로 전달해야 한다.
+// 앞뒤 공백은 제거해 넘기고, PG 저장 폭(room_id 100자, 이름 255자)을 넘는 요청은 서비스 호출 없이 400으로 거절한다.
+func TestSetRoomNameNormalizesBoundsAndForwardsBlankNameAsClear(t *testing.T) {
+	maxRoomID := strings.Repeat("r", contractsalarm.MaxRoomIDLength)
+	maxRoomName := strings.Repeat("가", contractsalarm.MaxRoomNameLength)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCalls  []string
+	}{
+		{name: "이름 지정은 공백 제거", body: `{"room_id":" ` + testRoomID + ` ","room_name":" 관리 방 "}`, wantStatus: http.StatusOK, wantCalls: []string{testRoomID + "|관리 방"}},
+		{name: "빈 이름은 해제", body: `{"room_id":"` + testRoomID + `","room_name":"  "}`, wantStatus: http.StatusOK, wantCalls: []string{testRoomID + "|"}},
+		{name: "경계 폭은 허용", body: `{"room_id":"` + maxRoomID + `","room_name":" ` + maxRoomName + ` "}`, wantStatus: http.StatusOK, wantCalls: []string{maxRoomID + "|" + maxRoomName}},
+		{name: "이름 256자 거절", body: `{"room_id":"` + testRoomID + `","room_name":"` + maxRoomName + `가"}`, wantStatus: http.StatusBadRequest},
+		{name: "room_id 101자 거절", body: `{"room_id":"` + maxRoomID + `r","room_name":"관리 방"}`, wantStatus: http.StatusBadRequest},
+		{name: "공백 room_id 거절", body: `{"room_id":"  ","room_name":"관리 방"}`, wantStatus: http.StatusBadRequest},
+		{name: "room_name 누락", body: `{"room_id":"` + testRoomID + `"}`, wantStatus: http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls []string
+
+			mock := &mockAlarmCRUD{setRoomNameFn: func(_ context.Context, roomID, roomName string) error {
+				calls = append(calls, roomID+"|"+roomName)
+
+				return nil
+			}}
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/internal/alarm/room-name", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			newTestHandler(t, mock).ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Equal(t, tt.wantCalls, calls)
+
+			if tt.wantStatus == http.StatusBadRequest {
+				assert.Equal(t, "invalid_request_body", decodeResponse(t, rec.Body).Error)
 			}
 		})
 	}

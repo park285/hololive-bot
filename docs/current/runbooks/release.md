@@ -143,20 +143,13 @@ Current Go runtime services:
 
 ```bash
 ./scripts/architecture/ci-boundary-gate.sh
-go test . -run TestRuntimeSplitStandaloneModulesContract
 ```
 
 For contract/document changes:
 
 ```bash
-./scripts/architecture/check-current-docs-no-historical.sh
-./scripts/architecture/check-current-docs-no-historical-body.sh
 ./scripts/architecture/check-doc-links-no-local-paths.sh
-./scripts/architecture/check-runbook-coverage.sh
-./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh
-./scripts/architecture/check-error-contracts.sh
-./scripts/architecture/check-release-governance-assets.sh
 ```
 
 ## PostgreSQL hot path plan gate

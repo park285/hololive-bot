@@ -52,6 +52,7 @@ type YouTubeChecker struct {
 	tierScheduler       *tier.TieredScheduler
 	dedupService        *dedup.Service
 	persistedLiveSource YouTubeLiveSessionSource
+	subscriptionDB      dbx.Querier
 	lookupSubscribers   func(context.Context, string, string, domain.AlarmType) ([]string, error)
 	targetPolicy        sharedchecker.TargetMinutePolicy
 	targetMinutesMu     sync.RWMutex
@@ -88,7 +89,7 @@ func NewYouTubeChecker(
 }
 
 // NewYouTubeCheckerWithPersistedLiveSource는 저장된 방송 근거와 구독 DB를 사용하는 체커를 생성한다.
-// 구독 DB인 subscriptionDB가 없으면 UNIT B 멤버별 대상 선정은 오류로 처리한다.
+// 구독 DB인 subscriptionDB가 없으면 UNIT B 멤버별 대상 선정과 구독 cache가 비어 있는 채널의 구독 확정은 오류로 처리한다.
 func NewYouTubeCheckerWithPersistedLiveSource(
 	cacheClient cache.Client,
 	holodexService *holodexprovider.Service,
@@ -128,6 +129,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		tierScheduler:       tierScheduler,
 		dedupService:        dedupService,
 		persistedLiveSource: persistedLiveSource,
+		subscriptionDB:      subscriptionDB,
 		lookupSubscribers: func(ctx context.Context, channelID, title string, alarmType domain.AlarmType) ([]string, error) {
 			return sharedalarm.ResolveEventSubscribers(ctx, cacheClient, subscriptionDB, channelID, title, alarmType)
 		},

@@ -26,7 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
@@ -120,7 +119,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		servers.Metrics = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey, workerState.registry)
 	}
 
-	runtime = newAlarmWorkerRuntime(ctx, appConfig.Config, logger, infra, foundation, alarmWorkerRuntimeParts{
+	runtime = newAlarmWorkerRuntime(appConfig.Config, logger, infra, foundation, alarmWorkerRuntimeParts{
 		scheduler:          schedulerResult.scheduler,
 		notificationEgress: notificationEgress,
 		servers:            servers,
@@ -141,7 +140,6 @@ type alarmWorkerRuntimeParts struct {
 }
 
 func newAlarmWorkerRuntime(
-	ctx context.Context,
 	appConfig *settings.Config,
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
@@ -156,7 +154,6 @@ func newAlarmWorkerRuntime(
 		CelebrationRunner:    parts.backgroundRunners.celebration,
 		BirthdayStreamRunner: parts.backgroundRunners.birthdayStream,
 		XSpacesRunner:        parts.backgroundRunners.xSpaces,
-		ConfigSubscriber:     BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmService, logger),
 		ServerAddr:           parts.servers.Addr(),
 		HTTPServers:          parts.servers,
 		AlarmService:         foundation.AlarmService,
@@ -290,25 +287,6 @@ func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness
 		sharedreadiness.PostgresCheck(postgres),
 		sharedreadiness.ValkeyCheck(cacheClient),
 	)
-}
-
-// BuildAlarmWorkerConfigSubscriber는 build 취소와 분리된 관리 요청 상한으로 설정을 적용합니다.
-// 생성 시 구독은 시작하지 않으며 런타임이 Run의 취소와 종료 대기를 소유합니다.
-func BuildAlarmWorkerConfigSubscriber(
-	ctx context.Context,
-	cacheClient cache.Client,
-	alarmCRUD domain.AlarmCRUD,
-	logger *slog.Logger,
-) *configsub.Subscriber {
-	if cacheClient == nil || alarmCRUD == nil {
-		return nil
-	}
-
-	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
-		AlarmAdvanceMinutes: buildAlarmAdvanceMinutesHandler(ctx, alarmCRUD, logger),
-	})
-
-	return configsub.New(cacheClient.GetClient(), applyFn, logger)
 }
 
 func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {

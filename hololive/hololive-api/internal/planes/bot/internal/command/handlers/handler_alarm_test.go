@@ -25,7 +25,6 @@ import (
 	"log/slog"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -65,13 +64,9 @@ func (s *alarmListViewerStub) GetRoomAlarmsWithTypes(context.Context, string) ([
 
 func (s *alarmListViewerStub) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
 
-func (s *alarmListViewerStub) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return nil, errTestStubNoNextStream
-}
 func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
 func (s *alarmListViewerStub) GetTargetMinutes() []int                              { return nil }
 func (s *alarmListViewerStub) SetRoomName(context.Context, string, string) error    { return nil }
-func (s *alarmListViewerStub) SetUserName(context.Context, string, string) error    { return nil }
 func (s *alarmListViewerStub) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return nil, nil
 }
@@ -200,17 +195,11 @@ func (s *alarmAddRecorder) ListRoomAlarmsView(context.Context, string) ([]domain
 
 func (s *alarmAddRecorder) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
 
-func (s *alarmAddRecorder) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return nil, errTestStubNoNextStream
-}
-
 func (s *alarmAddRecorder) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
 
 func (s *alarmAddRecorder) GetTargetMinutes() []int { return nil }
 
 func (s *alarmAddRecorder) SetRoomName(context.Context, string, string) error { return nil }
-
-func (s *alarmAddRecorder) SetUserName(context.Context, string, string) error { return nil }
 
 func (s *alarmAddRecorder) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return nil, nil
@@ -267,12 +256,6 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 				ChannelID:  "ch-1",
 				MemberName: "미코",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
-				NextStream: &domain.NextStreamInfo{
-					Status:         domain.NextStreamStatusUpcoming,
-					Title:          "테스트 방송",
-					VideoID:        "vid1",
-					StartScheduled: new(time.Date(2026, time.March, 6, 12, 0, 0, 0, time.UTC)),
-				},
 			},
 		},
 	}
@@ -314,7 +297,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	alarm := &alarmAddRecorder{}
 	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
@@ -357,7 +340,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	sendMessageCalled := false
 	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
-		Matcher:   matcher.NewMatcher(memberProvider, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:   matcher.NewMatcher(memberProvider, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			sendMessageCalled = true

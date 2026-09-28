@@ -158,6 +158,119 @@ func resolveChannelSubscribersFromDB(
 	return subscribers, nil
 }
 
+// ResolveUncachedChannelSubscribersByType는 구독 cache set이 비어 있던 채널들의 구독자를 확정한다.
+// TTL 없는 set이 eviction으로 사라지면 빈 set과 구분되지 않으므로, empty marker가 있는 채널만 진짜 구독 0으로 보고
+// 나머지는 한 번의 DB 조회로 확정한다. 구독자가 있는 채널만 결과 map에 담는다.
+//
+// Checker 경로의 read-through라 PG 결과는 이번 호출에만 쓰고 subscriber set을 다시 채우지 않는다. 조회 뒤 SADD하면
+// 그 사이 커밋된 구독 해지의 SREM보다 늦게 도착해 해지된 방이 set에 되살아날 수 있기 때문이다. 대가로 다른 쓰기 경로
+// (구독 변경 동기화·전체 rebuild)가 set을 다시 채울 때까지 evict된 채널은 매 cycle 이 batch PG 조회 1회를 다시 치른다.
+// 구독 0 채널의 empty marker 기록은 유지한다.
+func ResolveUncachedChannelSubscribersByType(
+	ctx context.Context,
+	cacheClient cache.Client,
+	db dbx.Querier,
+	channelIDs []string,
+	alarmType domain.AlarmType,
+) (map[string][]string, error) {
+	pending, err := filterKnownEmptySubscriberChannels(ctx, cacheClient, channelIDs, alarmType, db == nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve uncached channel subscribers: %w", err)
+	}
+
+	result := make(map[string][]string, len(pending))
+	if len(pending) == 0 {
+		return result, nil
+	}
+
+	alarmsByChannel, err := loadChannelSubscriberAlarmsByChannels(ctx, db, pending, alarmType)
+	if err != nil {
+		observeAlarmSubscriberDBFallback("error")
+
+		return nil, fmt.Errorf("resolve uncached channel subscribers: %w", err)
+	}
+
+	for _, channelID := range pending {
+		alarms := alarmsByChannel[channelID]
+
+		subscribers := extractSubscriberIDsByType(alarms, alarmType)
+		if len(subscribers) == 0 {
+			observeAlarmSubscriberDBFallback("miss")
+			markEmptyChannelSubscriberCache(ctx, cacheClient, channelID, alarmType)
+
+			continue
+		}
+
+		observeAlarmSubscriberDBFallback("hit")
+
+		result[channelID] = subscribers
+	}
+
+	return result, nil
+}
+
+// filterKnownEmptySubscriberChannels는 empty marker로 구독 0이 확정된 채널을 빼고 DB 확인이 필요한 채널만 남긴다.
+func filterKnownEmptySubscriberChannels(
+	ctx context.Context,
+	cacheClient cache.Client,
+	channelIDs []string,
+	alarmType domain.AlarmType,
+	requireCacheSuccess bool,
+) ([]string, error) {
+	pending := make([]string, 0, len(channelIDs))
+	seen := make(map[string]struct{}, len(channelIDs))
+
+	for _, channelID := range channelIDs {
+		normalizedChannelID := strings.TrimSpace(channelID)
+		if normalizedChannelID == "" {
+			continue
+		}
+
+		if _, exists := seen[normalizedChannelID]; exists {
+			continue
+		}
+
+		seen[normalizedChannelID] = struct{}{}
+
+		if cacheClient != nil {
+			knownEmpty, err := resolveKnownEmptySubscriberCache(ctx, cacheClient, normalizedChannelID, alarmType, requireCacheSuccess)
+			if err != nil {
+				return nil, fmt.Errorf("filter known empty subscriber channels: %w", err)
+			}
+
+			if knownEmpty {
+				continue
+			}
+		}
+
+		pending = append(pending, normalizedChannelID)
+	}
+
+	return pending, nil
+}
+
+func loadChannelSubscriberAlarmsByChannels(
+	ctx context.Context,
+	db dbx.Querier,
+	channelIDs []string,
+	alarmType domain.AlarmType,
+) (map[string][]*domain.Alarm, error) {
+	if db == nil {
+		return nil, errors.New("load channel subscriber alarms by channels: database is nil")
+	}
+
+	if !domain.AlarmTypes(domain.AllAlarmTypes).Contains(alarmType) {
+		return map[string][]*domain.Alarm{}, nil
+	}
+
+	out, err := newRepositoryWithQuerier(db).loadChannelSubscriberAlarmsByChannels(ctx, channelIDs, alarmType)
+	if err != nil {
+		return nil, fmt.Errorf("load channel subscriber alarms by channels: %w", err)
+	}
+
+	return out, nil
+}
+
 func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
 	if db == nil {
 		return nil, errors.New("load channel subscriber alarms: database is nil")

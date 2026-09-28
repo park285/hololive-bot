@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func TestCacheAllMembers_SharedLoadHasOwnedDeadline(t *testing.T) {
@@ -189,9 +188,7 @@ func TestCacheWarmUp_UsesBoundedCanonicalSnapshotOnce(t *testing.T) {
 	)
 
 	c := &Cache{
-		logger:              slog.New(slog.DiscardHandler),
-		warmUpChunkSize:     1,
-		warmUpMaxGoroutines: 1,
+		logger: slog.New(slog.DiscardHandler),
 		loadAllMembers: func(ctx context.Context) ([]*domain.Member, error) {
 			calls.Add(1)
 
@@ -233,62 +230,23 @@ func TestCacheWarmUp_UsesBoundedCanonicalSnapshotOnce(t *testing.T) {
 	}
 }
 
-func TestCachePointLookup_DoesNotBlockSnapshotRefresh(t *testing.T) {
-	lookupStarted := make(chan struct{})
-	releaseLookup := make(chan struct{})
-	cacheClient := cachemocks.NewLenientClient()
+// PostgreSQL point 조회는 잠금 밖에서 끝나므로, 그 사이 snapshot이 교체되면 이전 generation 결과를 메모리에 넣지 않는다.
+func TestCachePointLookup_PriorGenerationResultIsNotCached(t *testing.T) {
+	c := withTestEpochAuthority(&Cache{logger: slog.New(slog.DiscardHandler)})
 
-	cacheClient.GetFunc = func(_ context.Context, _ string, dest any) error {
-		close(lookupStarted)
-		<-releaseLookup
-
-		member, ok := dest.(*domain.Member)
-		if !ok {
-			return errors.New("cache destination is not a member")
-		}
-
-		*member = domain.Member{ChannelID: "stale-channel", Name: "Stale"}
-
-		return nil
+	_, lookupGeneration := c.allMembersView()
+	if !c.storeAllMembersSnapshot(nil, lookupGeneration, []*domain.Member{{ID: 2, ChannelID: "fresh-channel", Name: "Fresh"}}) {
+		t.Fatal("snapshot refresh was not published")
 	}
 
-	c := withTestEpochAuthority(&Cache{
-		cache:  cacheClient,
-		logger: slog.New(slog.DiscardHandler),
-	})
+	c.cacheMember(&domain.Member{ID: 1, ChannelID: "stale-channel", Name: "Stale"}, lookupGeneration, true)
 
-	lookupDone := make(chan *domain.Member, 1)
-
-	go func() {
-		lookupDone <- c.loadNameFromDistributedCache(t.Context(), "Stale", 0)
-	}()
-
-	<-lookupStarted
-
-	_, generation := c.allMembersView()
-	refreshDone := make(chan bool, 1)
-
-	go func() {
-		refreshDone <- c.storeAllMembersSnapshot(nil, generation, []*domain.Member{{ChannelID: "fresh-channel", Name: "Fresh"}})
-	}()
-
-	select {
-	case refreshed := <-refreshDone:
-		if !refreshed {
-			t.Fatal("snapshot refresh was not published")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("snapshot refresh blocked on distributed cache I/O")
+	if _, ok := c.loadNameFromMemory("Stale"); ok {
+		t.Fatal("point lookup from the prior generation republished a stale name")
 	}
 
-	close(releaseLookup)
-
-	if member := <-lookupDone; member != nil {
-		t.Fatalf("stale lookup result = %+v, want nil", member)
-	}
-
-	if _, ok := c.byName.Load("Stale"); ok {
-		t.Fatal("point lookup from the prior generation republished a stale name key")
+	if _, ok := c.loadChannelFromMemory("stale-channel"); ok {
+		t.Fatal("point lookup from the prior generation republished a stale channel")
 	}
 }
 

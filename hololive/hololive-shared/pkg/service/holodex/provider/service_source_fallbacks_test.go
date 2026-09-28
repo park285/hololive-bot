@@ -1,13 +1,10 @@
 package holodexprovider
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -36,42 +33,6 @@ func TestGetChannel_ReturnsRetryableHolodexErrorWithoutScraperFallback(t *testin
 
 	if cached, found := service.cacheManager.GetChannel(t.Context(), testChannelID); found {
 		t.Fatalf("GetChannel() cached %#v after a source error, want no cache entry", cached)
-	}
-}
-
-func TestGetChannels_ReturnsRetryableListErrorWithoutIndividualFallback(t *testing.T) {
-	var individualRequests atomic.Int32
-
-	requester := &MockRequester{DoRequestFunc: func(_ context.Context, _, path string, _ url.Values) ([]byte, error) {
-		if strings.HasPrefix(path, "/channels/") {
-			individualRequests.Add(1)
-
-			return []byte(`{"id":"c1","name":"c1"}`), nil
-		}
-
-		return nil, &apiclient.APIError{
-			Operation:  "list_channels",
-			StatusCode: http.StatusServiceUnavailable,
-			Err:        errors.New("upstream unavailable"),
-		}
-	}}
-	service := newServiceForFallbackTest(requester)
-
-	got, err := service.GetChannels(t.Context(), []string{"c1", "c2"})
-	if err == nil {
-		t.Fatalf("GetChannels() error = nil, got = %#v; want list error", got)
-	}
-
-	if !strings.Contains(err.Error(), "get channels batch list") {
-		t.Fatalf("GetChannels() error = %v, want list error context", err)
-	}
-
-	if len(got) != 0 {
-		t.Fatalf("GetChannels() len = %d, want 0", len(got))
-	}
-
-	if requests := individualRequests.Load(); requests != 0 {
-		t.Fatalf("individual channel requests = %d, want 0", requests)
 	}
 }
 

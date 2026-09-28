@@ -32,11 +32,6 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		return false, fmt.Errorf("normalize add alarm request: %w", err)
 	}
 
-	if normalizedReq.HostID != "" && as.alarmRepository == nil {
-		opErr = errors.New("member subscription requires alarm repository")
-		return false, opErr
-	}
-
 	requestedTypes, err := normalizeAlarmTypesStrict(normalizedReq.AlarmTypes, domain.DefaultAlarmTypes)
 	if err != nil {
 		opErr = err
@@ -58,30 +53,29 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		return false, fmt.Errorf("persist add alarm mutation: %w", persistErr)
 	}
 
-	added, err := as.cacheAddAlarmMutation(ctx, &mutation)
-	if err != nil {
+	if err := as.cacheAddAlarmMutation(ctx, &mutation); err != nil {
 		opErr = err
 		return false, fmt.Errorf("cache add alarm mutation: %w", err)
 	}
 
 	as.logAlarmAdded(normalizedReq, mutation.newlyAddedTypes)
 
-	return added > 0 || mutation.existing || mekparkhost.SupportsSubscriptions(normalizedReq.ChannelID), nil
+	return true, nil
 }
 
-func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) (int64, error) {
-	added, err := as.cacheAlarm(ctx, &mutation.cacheRecord)
+func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) error {
+	err := as.cacheAlarm(ctx, &mutation.cacheRecord)
 	if err == nil {
-		return added, nil
+		return nil
 	}
 
 	opErr := as.rebuildAlarmCacheFromRepository(ctx, "add", fmt.Errorf("add alarm: %w", err))
 
 	if err := sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild add cache from repository", opErr); err != nil {
-		return 0, fmt.Errorf("log and wrap error: %w", err)
+		return fmt.Errorf("log and wrap error: %w", err)
 	}
 
-	return 0, nil
+	return nil
 }
 
 func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequest, error) {

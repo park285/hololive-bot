@@ -82,14 +82,6 @@ func (m *mockNotificationLocker) Release(_ context.Context, lockKey, _ string) e
 	return nil
 }
 
-func (m *mockNotificationLocker) ClaimRoom(_ context.Context, _ string, _ time.Duration) (bool, error) {
-	return true, nil
-}
-
-func (m *mockNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string) error {
-	return nil
-}
-
 var testLogger = sharedlogging.NewLogger
 
 func TestEnqueueToRooms_AllSuccess(t *testing.T) {

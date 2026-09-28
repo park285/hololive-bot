@@ -22,8 +22,6 @@ package holodexprovider
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -39,10 +37,9 @@ import (
 
 func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.Channel, error) {
 	query = stringutil.TrimSpace(query)
-	if cached, found := h.cacheManager.GetSearchChannels(ctx, query); found {
-		return cached, nil
-	}
 
+	// 검색 결과를 query별로 다시 캐시하지 않는다. 목록은 hololive_channel_list 캐시를 거치므로
+	// 매 요청마다 그 목록을 필터링해도 upstream 호출은 늘지 않는다(Valkey 책임 축소 A10).
 	channels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
 		if logErr := sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, searchQueryAttr(query)); logErr != nil {
@@ -61,24 +58,11 @@ func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.C
 
 	h.logger.Debug("After HOLOSTARS filter", slog.Int("count", len(filtered)))
 
-	h.cacheManager.SetSearchChannels(ctx, query, filtered)
-
 	return filtered, nil
 }
 
 func searchQueryAttr(query string) slog.Attr {
 	return slog.String("query_token", privacylog.Pseudonym(query))
-}
-
-func buildSearchChannelsCacheKey(query string) string {
-	normalized := stringutil.Normalize(query)
-	if normalized == "" {
-		return searchChannelsCacheKeyPrefix + "empty"
-	}
-
-	sum := sha256.Sum256([]byte(normalized))
-
-	return searchChannelsCacheKeyPrefix + hex.EncodeToString(sum[:])
 }
 
 func filterChannelsByQuery(channels []*domain.Channel, query string, filter *streammapping.StreamFilter) []*domain.Channel {

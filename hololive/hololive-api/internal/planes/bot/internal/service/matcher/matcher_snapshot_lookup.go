@@ -29,15 +29,6 @@ func appendSnapshotEntry(target map[string][]*snapshotEntry, key string, entry *
 	target[key] = append(target[key], entry)
 }
 
-func splitMemberKey(key string) (name, org string) {
-	name, org, found := strings.CutLast(key, ":")
-	if !found || name == "" {
-		return key, ""
-	}
-
-	return name, org
-}
-
 func snapshotTokens(nameNorm string, aliasNorms []string) []string {
 	values := make([]string, 0, 1+len(aliasNorms))
 

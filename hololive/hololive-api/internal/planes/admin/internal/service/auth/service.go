@@ -43,7 +43,6 @@ const (
 	resetTokenPrefix   = "reset_"
 
 	sessionKeyPrefix        = "auth:sess:"
-	userSessionsKeyPrefix   = "auth:user_sessions:"
 	loginRateLimitKeyPrefix = "auth:rl:login:"
 	resetReqRateLimitPrefix = "auth:rl:reset_req:"
 	loginFailKeyPrefix      = "auth:login_fail:"
@@ -163,7 +162,7 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 
 	s.onLoginSucceeded(ctx, email)
 
-	session, err := s.createSession(ctx, user.ID)
+	session, err := s.createSession(ctx, user.ID, user.SessionGeneration)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create session: %w", err)
 	}
@@ -248,6 +247,7 @@ func scanUser(row rowScanner) (userModel, error) {
 		&user.AvatarURL,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.SessionGeneration,
 	)
 	if err != nil {
 		return user, fmt.Errorf("scan user row: %w", err)

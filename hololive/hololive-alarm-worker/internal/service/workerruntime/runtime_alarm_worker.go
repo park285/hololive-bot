@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 type Scheduler interface {
@@ -49,7 +48,6 @@ type AlarmWorkerRuntime struct {
 	CelebrationRunner    Scheduler
 	BirthdayStreamRunner Scheduler
 	XSpacesRunner        Scheduler
-	ConfigSubscriber     *configsub.Subscriber
 	ServerAddr           string
 	HTTPServers          *sharedserver.RuntimeHTTPServers
 	AlarmService         interface{ Close(context.Context) error }

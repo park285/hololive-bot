@@ -99,9 +99,12 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 	}
 	notification := domain.NewAlarmNotification("room1", stream.Channel, stream, 5, []string{}, "")
 
-	if _, claimed, claimErr := dedupService.TryClaimNotification(t.Context(), "room1", stream.ID, start, 5); claimErr != nil {
-		t.Fatalf("TryClaimNotification() error = %v", claimErr)
-	} else if !claimed {
+	if _, claimed := claimNotificationPair(t, notifier, &sendInput{
+		notification:   notification,
+		streamID:       stream.ID,
+		channelID:      stream.ChannelID,
+		startScheduled: start,
+	}); !claimed {
 		t.Fatal("expected pre-claim to succeed")
 	}
 
@@ -640,13 +643,19 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 	assert.Equal(t, SendResult{Sent: 1, Failed: 1}, result)
 	assert.Equal(t, 2, outbox.insertBatchCalls)
 
-	_, firstClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-pg-partial-1", stream.ID, start, 10)
-	require.NoError(t, err)
-	assert.False(t, firstClaimed)
+	claimAgain := func(notification *domain.AlarmNotification) bool {
+		_, claimed := claimNotificationPair(t, notifier, &sendInput{
+			notification:   notification,
+			streamID:       stream.ID,
+			channelID:      stream.ChannelID,
+			startScheduled: start,
+		})
 
-	_, secondClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-pg-partial-2", stream.ID, start, 10)
-	require.NoError(t, err)
-	assert.True(t, secondClaimed)
+		return claimed
+	}
+
+	assert.False(t, claimAgain(notifications[0]))
+	assert.True(t, claimAgain(notifications[1]))
 }
 
 // retiredRedisDispatchQueueKey는 퇴역한 Redis dispatch queue 키다. 상수는 지웠고(stack-audit 2026-09-26 T11), notifier가

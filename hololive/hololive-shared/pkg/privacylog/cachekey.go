@@ -49,26 +49,9 @@ var identifierKeyRules = []identifierKeyRule{
 	{prefix: "notified:upcoming:event:", keepTrailing: 3},
 	{prefix: "notified:claim:event:", keepTrailing: 4},
 	{prefix: "notified:claim:", keepTrailing: 3},
-	{prefix: "alarm:", keepTrailing: 0},
-}
-
-var verbatimKeyPrefixes = []string{
-	"alarm:channel_registry",
-	"alarm:channel_registry:version",
-	"alarm:channel_subscribers:",
-	"alarm:channel_subscribers_empty:",
-	"alarm:dispatch:",
-	"alarm:member_names",
-	"alarm:next_stream:",
-	"alarm:registry",
-	"alarm:room_names",
-	"alarm:subscriber_cache_empty",
-	"alarm:user_names",
 }
 
 var identifierFieldKeys = map[string]struct{}{
-	"alarm:room_names":      {},
-	"alarm:user_names":      {},
 	"membernews:room_names": {},
 }
 
@@ -81,7 +64,7 @@ func CacheFieldAttr(key, field string) slog.Attr {
 }
 
 func RedactCacheKey(key string) string {
-	rule, redacted := matchIdentifierKeyRule(key)
+	rule, redacted := longestIdentifierKeyRule(key)
 	if !redacted {
 		return key
 	}
@@ -95,15 +78,6 @@ func RedactCacheField(key, field string) string {
 	}
 
 	return IdentifierToken(field)
-}
-
-func matchIdentifierKeyRule(key string) (identifierKeyRule, bool) {
-	matched, found := longestIdentifierKeyRule(key)
-	if !found || hasVerbatimKeyPrefix(key, len(matched.prefix)) {
-		return identifierKeyRule{}, false
-	}
-
-	return matched, true
 }
 
 func longestIdentifierKeyRule(key string) (identifierKeyRule, bool) {
@@ -120,22 +94,7 @@ func longestIdentifierKeyRule(key string) (identifierKeyRule, bool) {
 	return matched, found
 }
 
-func hasVerbatimKeyPrefix(key string, longerThan int) bool {
-	for _, prefix := range verbatimKeyPrefixes {
-		family := strings.HasSuffix(prefix, segmentSeparator)
-		if len(prefix) > longerThan && (key == prefix || family && strings.HasPrefix(key, prefix)) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func pseudonymizeLeadingSegments(remainder string, keepTrailing int) string {
-	if keepTrailing <= 0 {
-		return IdentifierToken(remainder)
-	}
-
 	segments := strings.Split(remainder, segmentSeparator)
 	if len(segments) <= keepTrailing {
 		return IdentifierToken(remainder)

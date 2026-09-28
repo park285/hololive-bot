@@ -21,7 +21,6 @@
 package botruntime
 
 import (
-	"context"
 	"testing"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
@@ -30,18 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
-
-type stubYouTubeService struct{}
-
-func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
-	return map[string]*youtube.ChannelStats{}, nil
-}
-
-func (s *stubYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
-	return nil, nil
-}
 
 type stubSettingsReadWriter struct{}
 
@@ -69,53 +57,6 @@ func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {
 	})
 }
 
-func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
-	t.Run("nil dependencies", func(t *testing.T) {
-		view := buildBotConfigSubscriberDependencies(nil)
-		if view.Cache != nil || view.Settings != nil {
-			t.Fatal("nil deps must yield zero-value config subscriber view")
-		}
-	})
-
-	t.Run("maps settings and cache", func(t *testing.T) {
-		cacheService := &cache.Service{}
-		settingsService := &stubSettingsReadWriter{}
-		deps := &orchestration.Dependencies{Cache: cacheService, Settings: settingsService}
-		view := buildBotConfigSubscriberDependencies(deps)
-
-		if view.Cache != cacheService {
-			t.Fatal("cache mapping mismatch")
-		}
-
-		if view.Settings != settingsService {
-			t.Fatal("settings mapping mismatch")
-		}
-	})
-}
-
-func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
-	t.Run("nil infra", func(t *testing.T) {
-		view := buildBotConfigSubscriberRuntimeDependencies(nil)
-		if view.AlarmCRUD != nil || view.ACL != nil {
-			t.Fatal("nil infra must yield zero-value config subscriber runtime dependency view")
-		}
-	})
-
-	t.Run("maps runtime fields", func(t *testing.T) {
-		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
-
-		infra := &appbootstrap.BotInfrastructure{
-			Deps:      &orchestration.Dependencies{},
-			AlarmCRUD: alarmCRUD,
-		}
-
-		view := buildBotConfigSubscriberRuntimeDependencies(infra)
-		if view.AlarmCRUD != alarmCRUD {
-			t.Fatal("alarm CRUD mapping mismatch")
-		}
-	})
-}
-
 func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 	t.Run("nil infra", func(t *testing.T) {
 		views := buildBotRuntimeDependencyViews(nil)
@@ -123,7 +64,7 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 			t.Fatal("nil infra must yield nil bot deps")
 		}
 
-		if views.webhook.Cache != nil || views.configSubscriber.Cache != nil || views.configSubscriberRuntime.AlarmCRUD != nil {
+		if views.webhook.Cache != nil {
 			t.Fatal("nil infra must yield zero-value runtime dependency views")
 		}
 	})
@@ -131,12 +72,11 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 	t.Run("maps composed runtime views", func(t *testing.T) {
 		cacheService := &cache.Service{}
 		settingsService := &stubSettingsReadWriter{}
-		youtubeService := &stubYouTubeService{}
 		holodexService := &holodexprovider.Service{}
 
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
-		deps := &orchestration.Dependencies{Cache: cacheService, Settings: settingsService, Service: youtubeService}
+		deps := &orchestration.Dependencies{Cache: cacheService, Settings: settingsService}
 		infra := &appbootstrap.BotInfrastructure{Deps: deps, AlarmCRUD: alarmCRUD, HolodexService: holodexService}
 
 		views := buildBotRuntimeDependencyViews(infra)
@@ -147,18 +87,7 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		if views.webhook.Cache != cacheService {
 			t.Fatal("webhook view mapping mismatch")
 		}
-
-		if views.configSubscriber.Cache != cacheService || views.configSubscriber.Settings != settingsService {
-			t.Fatal("config subscriber view mapping mismatch")
-		}
-
-		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD {
-			t.Fatal("config subscriber runtime view mapping mismatch")
-		}
 	})
 }
 
-var (
-	_ youtube.Service     = (*stubYouTubeService)(nil)
-	_ settings.ReadWriter = (*stubSettingsReadWriter)(nil)
-)
+var _ settings.ReadWriter = (*stubSettingsReadWriter)(nil)

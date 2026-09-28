@@ -412,7 +412,7 @@ func TestGetWatchLiveMetadata(t *testing.T) {
 				}),
 			)
 
-			metadata, err := client.GetWatchLiveMetadata(t.Context(), "channel-id", "video-id")
+			metadata, err := client.GetWatchLiveMetadata(t.Context(), "video-id")
 			require.NoError(t, err)
 			assert.Equal(t, test.want, metadata.LiveContent)
 		})

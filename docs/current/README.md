@@ -11,7 +11,7 @@
 - `CONTRACT_MAP.md` - 내부 HTTP/Queue/PubSub/external boundary 계약 지도
 - `CONTRACT_MANIFEST.txt` - contract ID/provider/consumer/package/doc 검증 manifest
 - `ERROR_CONTRACT.md` - 내부 API error response와 client 해석 규칙
-- `QUEUE_AND_PUBSUB_CONTRACTS.md` - alarm queue와 settings Pub/Sub 계약
+- `QUEUE_AND_PUBSUB_CONTRACTS.md` - alarm dispatch outbox(PostgreSQL)·Valkey wakeup 계약과 Pub/Sub 전달 의미 (settings Pub/Sub 제거, ACL은 in-process 전파)
 
 ## Services
 

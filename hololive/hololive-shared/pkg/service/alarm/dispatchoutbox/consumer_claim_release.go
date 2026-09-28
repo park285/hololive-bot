@@ -14,7 +14,8 @@ import (
 // 다른 키가 잘못 해제되는 것을 막는다.
 var claimKeyPrefixes = [...]string{
 	keyspkg.NotifyClaimKeyPrefix,
-	keyspkg.ScheduleTransitionKeyPrefix,
+	keyspkg.RoomScheduleTransitionKeyPrefix,
+	keyspkg.LogicalScheduleTransitionKeyPrefix,
 }
 
 // ClaimKeyReleaser는 Consumer가 dedup claim 키를 삭제할 때 의존하는 narrow interface다.

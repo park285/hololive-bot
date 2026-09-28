@@ -18,7 +18,7 @@
 | `youtube.outbox.egress` | `hololive-api` | `alarm-worker` | PostgreSQL outbox table | `youtube_notification_outbox` rows; alarm-worker owns claim, render, per-room delivery, and final send state | `hololive/hololive-shared/pkg/service/youtube/outbox` | table schema | outbox dispatcher tests | `contracts/alarm.md` |
 | `alarm.state.read` | `alarm-worker` (data owner) | `hololive-api` | PostgreSQL table read | `alarms` direct reads: YouTube plane `notification_channel_ids.sql` (projection tx, `members` JOIN, graduated excluded, `LIMIT`); llm plane membernews `repository_query_0080_03.sql`. Bot/admin planes use `alarm.http`; runtime validation requires `ALARM_INTERNAL_URL`, so the unset-URL in-process branch is unreachable at normal startup | `hololive/hololive-api/internal/planes/youtube/runtime` (`notification_channel_ids.sql`); llm plane membernews SQL | SQL asset, unversioned | YouTube runtime `TestRuntimeSQLAssetsLoad`; `check-repository-ownership.sh` (youtube-collector import ban) | `contracts/alarm.md` |
 | `shortlink.youtube` | `hololive-api` | browsers, KakaoTalk scraper, `alarm-worker` grouped message renderer | External HTTPS redirect | `GET`, `HEAD` `/l/:videoID` | `hololive/hololive-shared/pkg/contracts/shortlink` | route constants, unversioned | route, origin, scraper rejection, render tests | `contracts/shortlink.md` |
-| `settings.update` | `hololive-api` current publisher through admin-plane settings update paths | `hololive-api`, `alarm-worker` | Valkey Pub/Sub | `config:update` | `hololive/hololive-shared/pkg/contracts/settings` | `ConfigUpdateVersionV1 = 1`; message has no `version` field | settings/configsub tests | `contracts/settings.md` |
+| `settings.update` | `hololive-api` admin-plane settings API | `iris-console` (admin caller), `alarm-worker` (`PUT /internal/alarm/settings` apply, `settings.json` startup restore) | HTTP JSON + shared settings file; no Pub/Sub | `POST /api/holo/settings`, `POST /api/holo/settings/llm`, `settings.json` | `hololive/hololive-shared/pkg/contracts/settings` (response key only) | unversioned | admin settings apply-once test | `contracts/settings.md` |
 | `iris.webhook` | Iris / Redroid | `hololive-api`, `alarm-worker` | External HTTP/H3 boundary | webhook/reply/send paths 검토 필요 | external boundary, no in-repo contract package | external | router/transport tests 검토 필요 | `contracts/iris-boundary.md` |
 
 ## Contract Change Rule
@@ -32,7 +32,5 @@
 ## Validation
 
 ```bash
-./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh
-./scripts/architecture/check-error-contracts.sh
 ```

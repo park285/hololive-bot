@@ -3,49 +3,9 @@ package parser
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/tidwall/gjson"
 )
-
-const aboutChannelViewModelPath = "onResponseReceivedEndpoints.0.showEngagementPanelEndpoint.engagementPanel.engagementPanelSectionListRenderer.content.sectionListRenderer.contents.0.itemSectionRenderer.contents.0.aboutChannelRenderer.metadata.aboutChannelViewModel"
-
-func ParseChannelStatsFromInitialData(data *gjson.Result, channelID string) *ChannelStats {
-	stats := &ChannelStats{
-		ChannelID: channelID,
-	}
-
-	subscriberText := data.Get(aboutChannelViewModelPath + ".subscriberCountText").String()
-
-	stats.SubscriberCount = ParseSubscriberCount(subscriberText)
-
-	viewCountText := data.Get(aboutChannelViewModelPath + ".viewCountText").String()
-
-	stats.ViewCount = ParseViewCount(viewCountText)
-
-	videoCountText := data.Get(aboutChannelViewModelPath + ".videoCountText").String()
-
-	stats.VideoCount = ParseVideoCount(videoCountText)
-
-	joinedText := data.Get(aboutChannelViewModelPath + ".joinedDateText.content").String()
-
-	stats.JoinedDate = ParseJoinedDate(joinedText)
-
-	stats.Description = data.Get(aboutChannelViewModelPath + ".description").String()
-	stats.Country = data.Get(aboutChannelViewModelPath + ".country").String()
-	stats.Handle = ParseChannelHandle(data)
-
-	return stats
-}
-
-func ParseChannelHandle(data *gjson.Result) string {
-	handle := data.Get("contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.endpoint.browseEndpoint.canonicalBaseUrl").String()
-	if handle != "" && handle[0] == '/' {
-		return handle[1:]
-	}
-
-	return handle
-}
 
 func ParseThumbnailSources(sources *gjson.Result) []Thumbnail {
 	thumbnails := make([]Thumbnail, 0)
@@ -103,13 +63,6 @@ func shortNumberBaseAndMultiplier(text string) (string, int64) {
 	return text, 1
 }
 
-func ParseSubscriberCount(text string) int64 {
-	text = strings.TrimSuffix(text, " subscribers")
-	text = strings.TrimSuffix(text, " subscriber")
-
-	return ParseShortNumber(text)
-}
-
 func ParseViewCount(text string) int64 {
 	text = strings.TrimSpace(text)
 	text = strings.TrimSuffix(text, " views")
@@ -164,26 +117,4 @@ func ParseVideoCount(text string) int64 {
 	}
 
 	return val
-}
-
-func ParseJoinedDate(text string) int64 {
-	text = strings.TrimPrefix(text, "Joined ")
-	if text == "" {
-		return 0
-	}
-
-	formats := []string{
-		"Jan 2, 2006",
-		"January 2, 2006",
-		"2 Jan 2006",
-		time.DateOnly,
-	}
-
-	for _, format := range formats {
-		if t, err := time.Parse(format, text); err == nil {
-			return t.Unix()
-		}
-	}
-
-	return 0
 }

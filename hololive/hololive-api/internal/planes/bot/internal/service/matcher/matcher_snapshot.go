@@ -68,12 +68,10 @@ func (mm *Matcher) rebuildSnapshot(ctx context.Context) (*matcherSnapshot, error
 		return nil, fmt.Errorf("build snapshot: %w", err)
 	}
 
-	if built.dynamicLoadErr == nil {
-		mm.snapshotMu.Lock()
+	mm.snapshotMu.Lock()
 
-		mm.snapshot = built
-		mm.snapshotMu.Unlock()
-	}
+	mm.snapshot = built
+	mm.snapshotMu.Unlock()
 
 	return built, nil
 }
@@ -111,7 +109,6 @@ func (mm *Matcher) buildSnapshot(ctx context.Context) (*matcherSnapshot, error) 
 
 	entriesByChannel := make(map[string]*snapshotEntry)
 	mm.storeSnapshotMembers(snapshot, entriesByChannel, members)
-	mm.storeDynamicSnapshotMembers(ctx, provider, snapshot, entriesByChannel)
 
 	return snapshot, nil
 }
@@ -123,32 +120,6 @@ func (mm *Matcher) storeSnapshotMembers(
 ) {
 	for _, member := range members {
 		entry := mm.snapshotEntryFromMember(member)
-		if entry == nil {
-			continue
-		}
-
-		mm.storeSnapshotEntry(snapshot, entriesByChannel, entry)
-	}
-}
-
-func (mm *Matcher) storeDynamicSnapshotMembers(
-	ctx context.Context,
-	provider domain.MemberDataProvider,
-	snapshot *matcherSnapshot,
-	entriesByChannel map[string]*snapshotEntry,
-) {
-	if mm.cache == nil {
-		return
-	}
-
-	dynamicMembers, err := mm.cache.GetAllMembers(ctx)
-	if err != nil {
-		snapshot.dynamicLoadErr = fmt.Errorf("get all members: %w", err)
-		return
-	}
-
-	for key, channelID := range dynamicMembers {
-		entry := mm.snapshotEntryFromDynamic(provider, key, channelID)
 		if entry == nil {
 			continue
 		}
@@ -187,24 +158,6 @@ func (mm *Matcher) snapshotEntryFromMember(member *domain.Member) *snapshotEntry
 	}
 
 	return entry
-}
-
-func (mm *Matcher) snapshotEntryFromDynamic(provider domain.MemberDataProvider, key, channelID string) *snapshotEntry {
-	name, org := splitMemberKey(key)
-
-	candidate := mm.candidateFromDynamic(provider, name, channelID, "snapshot-dynamic")
-	if candidate == nil {
-		return nil
-	}
-
-	if candidate.org == "" {
-		candidate.org = org
-	}
-
-	return &snapshotEntry{
-		candidate: candidate,
-		nameNorm:  normalizeMatcherTerm(name),
-	}
 }
 
 func (mm *Matcher) storeSnapshotEntry(

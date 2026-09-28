@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -18,13 +17,11 @@ func ProvideACLService(
 	kakaoACLMode acl.ACLMode,
 	kakaoRooms []string,
 	postgres database.Client,
-	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*acl.Service, error) {
 	service, err := acl.NewACLService(
 		ctx,
 		postgres,
-		cacheClient,
 		logger,
 		kakaoACLEnabled,
 		kakaoACLMode,
@@ -46,8 +43,6 @@ func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Depend
 		return nil
 	}
 
-	youTubeService := modules.Stream.YTStack.GetService()
-
 	return &orchestration.Dependencies{
 		BotSelfUser:           modules.Core.BotSelfUser,
 		IrisBaseURL:           modules.Core.IrisBaseURL,
@@ -68,7 +63,6 @@ func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Depend
 		Alarm:                 modules.Stream.Alarm,
 		Matcher:               modules.Stream.MemberMatch,
 		MembersData:           modules.Data.MembersData,
-		Service:               youTubeService,
 		Activity:              modules.Support.ActivityLogger,
 		Settings:              modules.Support.Settings,
 		ACL:                   modules.Support.ACL,

@@ -20,41 +20,6 @@
 
 package settings
 
-import (
-	"encoding/json/jsontext"
-)
-
-const (
-	// PubSubChannelV1: 설정 변경 Pub/Sub 채널 이름 (SSOT).
-	PubSubChannelV1 = "config:update"
-)
-
-const (
-	// ConfigUpdateVersionV1: 설정 업데이트 메시지 버전 (payload 내에 version 필드가 포함되지는 않음).
-	ConfigUpdateVersionV1 uint8 = 1
-)
-
-// scraper proxy 토글(scraper_proxy)은 DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 그 type이 오면 수신자는
-// 모르는 type으로 경고만 남긴다.
-const (
-	UpdateTypeAlarmAdvanceMinutes = "alarm_advance_minutes"
-	UpdateTypeMemberNewsRunNow    = "membernews_weekly_run_now"
-	UpdateTypeACL                 = "acl"
-)
-
-type ConfigUpdateV1 struct {
-	Type    string         `json:"type"`
-	Payload jsontext.Value `json:"payload"`
-}
-
-type AlarmAdvanceMinutesPayloadV1 struct {
-	Minutes int `json:"minutes"`
-}
-
-// 수신자는 payload가 아니라 DB에서 ACL 전체를 다시 읽는다 — 이 필드들은 진단용이며,
-// 그래야 메시지 유실·순서 뒤바뀜이 있어도 최종 상태가 DB와 어긋나지 않는다.
-type ACLPayloadV1 struct {
-	Reason string `json:"reason,omitempty"`
-	Room   string `json:"room,omitempty"`
-	Mode   string `json:"mode,omitempty"`
-}
+// UpdateTypeMemberNewsRunNow는 관리 API POST /api/holo/settings/llm 응답 runtime 맵과 활동 로그 details의
+// key다. 설정 변경 Pub/Sub(config:update)과 그 type 상수는 제거됐고, 이 값은 응답·활동 로그 key로만 남는다.
+const UpdateTypeMemberNewsRunNow = "membernews_weekly_run_now"

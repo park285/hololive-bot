@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -35,7 +34,7 @@ func BuildBotDependencyModules(
 		Core:      buildBotCoreModule(appConfig, logger),
 		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter, messageStrings, appConfig.Bot.MarkdownReplies),
 		Data:      buildBotDataModule(infra, alarmYouTubeStack.AlarmMode),
-		Stream:    buildBotStreamModule(alarmYouTubeStack.AlarmMode, foundation.HolodexService, alarmYouTubeStack.Matcher, alarmYouTubeStack.YouTubeStack),
+		Stream:    buildBotStreamModule(alarmYouTubeStack.AlarmMode, foundation.HolodexService, alarmYouTubeStack.Matcher),
 		Support:   buildBotSupportModule(alarmYouTubeStack.ActivityLogger, alarmYouTubeStack.SettingsService, integrationServices.ACLService),
 		Feature:   buildBotFeatureModule(integrationServices.MajorEventRepository, integrationServices.MemberNewsService, integrationServices.CommandBuilders),
 	}
@@ -85,13 +84,11 @@ func buildBotStreamModule(
 	alarmMode *AlarmModeComponents,
 	holodexService *holodexprovider.Service,
 	memberMatcher *matcher.Matcher,
-	youTubeStack *providers.YouTubeStack,
 ) BotStreamModule {
 	return BotStreamModule{
 		Holodex:     holodexService,
 		Alarm:       alarmMode.AlarmCRUD,
 		MemberMatch: memberMatcher,
-		YTStack:     youTubeStack,
 	}
 }
 

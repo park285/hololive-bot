@@ -47,12 +47,18 @@ func TestDisplayLineMigrationPreservesAllSeedOutput(t *testing.T) {
 			current := seedBody(t, pool, key)
 			previous := current
 
+			data := sampledata.GetTemplateSampleData(key)
+
 			if pair, changed := pairs[key]; changed {
 				previous = pair.oldBody
 				current = pair.newBody
+
+				// 208 본문의 알람 추가·목록은 233 이전 계약대로 NextStream 키를 요구한다.
+				if sample, ok := data.(map[string]any); ok {
+					data = withNilNextStream(sample)
+				}
 			}
 
-			data := sampledata.GetTemplateSampleData(key)
 			before := renderOptimizationTemplate(t, previous, previousFuncs, data)
 			after := renderOptimizationTemplate(t, current, templateFuncs, data)
 

@@ -3,14 +3,12 @@ package holodexprovider
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
+	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestGetChannelsLiveStatus_FillsIndieOrgWhenUsersLiveOmitsIt(t *testing.T) {
@@ -219,33 +217,49 @@ func TestGetChannelsLiveStatus_AppliesIndieOrgOverride(t *testing.T) {
 	}
 }
 
-func TestCacheManager_GetChannelsLiveStatusStreams_OrderIndependentKeys(t *testing.T) {
+// live status는 요청 채널 집합별로 캐시하지 않으므로 같은 채널을 연달아 조회해도 매번 upstream 상태를 반영한다.
+func TestGetChannelsLiveStatus_ReflectsUpstreamChangeOnConsecutiveCalls(t *testing.T) {
 	t.Parallel()
 
-	cacheManager := NewCacheManager(
-		newInMemoryCacheClient(),
-		slog.New(slog.DiscardHandler),
-	)
-	expected := []*domain.Stream{
-		{ID: testVideoID},
+	var calls atomic.Int32
+
+	mockReq := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, path string, _ url.Values) ([]byte, error) {
+			if path != usersLivePath {
+				return nil, fmt.Errorf("unexpected path: %s", path)
+			}
+
+			if calls.Add(1) == 1 {
+				return []byte(`[]`), nil
+			}
+
+			return fmt.Appendf(nil, `[{"id":"%s","title":"live","channel_id":"%s","status":"live",
+				"channel":{"id":"%s","name":"member","org":"%s"}}]`,
+				testVideoID, testChannelID, testChannelID, constants.HolodexAPIParams.OrgHololive), nil
+		},
 	}
 
-	cacheManager.SetChannelsLiveStatusStreams(t.Context(), []string{"UC_B", "UC_A"}, expected, time.Minute)
+	service := newServiceForFallbackTest(mockReq)
 
-	got, found := cacheManager.GetChannelsLiveStatusStreams(t.Context(), []string{"UC_A", "UC_B"})
-	if !found {
-		t.Fatal("GetChannelsLiveStatusStreams() found = false, want true")
+	first, err := service.GetChannelsLiveStatus(t.Context(), []string{testChannelID})
+	if err != nil {
+		t.Fatalf("first GetChannelsLiveStatus() error = %v", err)
 	}
 
-	if len(got) != len(expected) {
-		t.Fatalf("len(got) = %d, want %d", len(got), len(expected))
+	if len(first) != 0 {
+		t.Fatalf("first GetChannelsLiveStatus() len = %d, want 0", len(first))
 	}
 
-	if got[0] == nil {
-		t.Fatal("got[0] = nil, want stream")
+	second, err := service.GetChannelsLiveStatus(t.Context(), []string{testChannelID})
+	if err != nil {
+		t.Fatalf("second GetChannelsLiveStatus() error = %v", err)
 	}
 
-	if got[0].ID != expected[0].ID {
-		t.Fatalf("got[0].ID = %q, want %q", got[0].ID, expected[0].ID)
+	if len(second) != 1 || second[0].ID != testVideoID {
+		t.Fatalf("second GetChannelsLiveStatus() = %+v, want live stream %q", second, testVideoID)
+	}
+
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("upstream calls = %d, want 2", got)
 	}
 }

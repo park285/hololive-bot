@@ -135,25 +135,6 @@ func TestCandidateFromMember(t *testing.T) {
 	}
 }
 
-func TestCandidateFromDynamic(t *testing.T) {
-	logger := slog.New(slog.DiscardHandler)
-	provider := newStubMemberProvider([]*domain.Member{
-		{ChannelID: testChannelID1, Name: "member"},
-	})
-
-	mm := &Matcher{logger: logger}
-
-	candidate := mm.candidateFromDynamic(provider, "display", testChannelID1, "source")
-	if candidate == nil || candidate.memberName != "member" {
-		t.Fatalf("expected provider member, got: %+v", candidate)
-	}
-
-	candidate = mm.candidateFromDynamic(nil, "", "ch3", "source")
-	if candidate == nil || candidate.memberName != "ch3" {
-		t.Fatalf("expected channel id fallback, got: %+v", candidate)
-	}
-}
-
 func TestMaybeCleanupMatchCache(t *testing.T) {
 	now := time.Now()
 	mm := &Matcher{

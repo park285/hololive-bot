@@ -6,6 +6,7 @@ root_dir="$(git rev-parse --show-toplevel)"
 [[ "$#" -le 1 ]] || { echo "usage: $0 [manifest]" >&2; exit 2; }
 manifest="${1:-$root_dir/scripts/ci/final-image-scan-manifest.txt}"
 . "$root_dir/scripts/ci/go-tooling.sh"
+. "$root_dir/scripts/ci/final-image-scan-policy.sh"
 GOVULNCHECK_VERSION=v1.8.0
 govulncheck_bin="$(ensure_govulncheck)"
 report_dir="$(mktemp -d "${TMPDIR:-/tmp}/hololive-image-scan.XXXXXX")"
@@ -14,8 +15,8 @@ trap 'if [[ -n "$container_id" ]]; then docker rm "$container_id" >/dev/null; fi
 echo "final image scan evidence: $report_dir"
 image_index=0
 
-if [[ "$(trivy --version | sed -n 's/^Version: //p')" != "0.74.0" ]]; then
-  echo "final image scan requires Trivy 0.74.0" >&2
+if [[ "$(trivy --version | sed -n 's/^Version: //p')" != "$FINAL_IMAGE_TRIVY_VERSION" ]]; then
+  echo "final image scan requires Trivy $FINAL_IMAGE_TRIVY_VERSION" >&2
   exit 1
 fi
 
@@ -25,7 +26,7 @@ while IFS='|' read -r source platform image; do
     echo "incomplete final image scan manifest entry" >&2
     exit 1
   }
-  scan_args=(image --config /dev/null --ignorefile /dev/null --ignore-unfixed=false --exit-code 1 --no-progress --scanners vuln --severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL")
+  scan_args=("${FINAL_IMAGE_TRIVY_ARGS[@]}")
   [[ "$platform" == linux/arm64 ]] || {
     echo "unsupported final image scan platform: $platform" >&2
     exit 1

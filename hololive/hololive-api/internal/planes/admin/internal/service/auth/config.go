@@ -33,8 +33,6 @@ type Config struct {
 	LoginFailWindow   time.Duration
 	LoginLockDuration time.Duration
 
-	UserSessionsTTL time.Duration
-
 	// BcryptCost: 비밀번호 해시 비용 인자. 안전 기본값은 12.
 	// bcrypt 허용 범위(MinCost~MaxCost) 밖이면 NewService가 DefaultBcryptCost로 보정한다.
 	BcryptCost int
@@ -44,17 +42,14 @@ type Config struct {
 const DefaultBcryptCost = 12
 
 func DefaultConfig() Config {
-	sessionTTL := 7 * 24 * time.Hour
-
 	return Config{
-		SessionTTL:                             sessionTTL,
+		SessionTTL:                             7 * 24 * time.Hour,
 		ResetTokenTTL:                          60 * time.Minute,
 		LoginRateLimitPerMinute:                30,
 		PasswordResetRequestRateLimitPerMinute: 10,
 		LoginFailLimit:                         5,
 		LoginFailWindow:                        15 * time.Minute,
 		LoginLockDuration:                      15 * time.Minute,
-		UserSessionsTTL:                        sessionTTL + (24 * time.Hour),
 		BcryptCost:                             DefaultBcryptCost,
 	}
 }

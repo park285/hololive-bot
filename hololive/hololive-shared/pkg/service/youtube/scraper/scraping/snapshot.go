@@ -31,7 +31,6 @@ type SnapshotSink interface {
 type SnapshotPolicy struct {
 	Enabled        bool
 	MaxBodyBytes   int
-	MinInterval    time.Duration
 	AllowedReasons map[FailureReason]bool
 }
 
@@ -39,7 +38,6 @@ func DefaultSnapshotPolicy() SnapshotPolicy {
 	return SnapshotPolicy{
 		Enabled:      false,
 		MaxBodyBytes: 512 << 10,
-		MinInterval:  30 * time.Minute,
 		AllowedReasons: map[FailureReason]bool{
 			FailureReasonParserDrift:   true,
 			FailureReasonEmptyResponse: true,

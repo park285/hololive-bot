@@ -36,24 +36,12 @@ import (
 	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
-
-type mockYouTubeService struct{}
-
-func (s *mockYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
-	return map[string]*youtube.ChannelStats{}, nil
-}
-
-func (s *mockYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
-	return nil, nil
-}
 
 type stubMajorEventRepository struct{}
 
@@ -93,7 +81,6 @@ type botWiringFixture struct {
 	memberCache      *member.Cache
 	holodex          *holodexprovider.Service
 	memberMatch      *matcher.Matcher
-	youtube          youtube.Service
 	activity         *activity.Logger
 	settings         *settings.Service
 	acl              *acl.Service
@@ -118,7 +105,6 @@ func newBotWiringFixture() *botWiringFixture {
 		memberCache:      &member.Cache{},
 		holodex:          &holodexprovider.Service{},
 		memberMatch:      &matcher.Matcher{},
-		youtube:          &mockYouTubeService{},
 		activity:         &activity.Logger{},
 		settings:         &settings.Service{},
 		acl:              &acl.Service{},
@@ -152,7 +138,6 @@ func (f *botWiringFixture) modules() *appbootstrap.BotDependencyModules {
 			Holodex:     f.holodex,
 			Alarm:       nil,
 			MemberMatch: f.memberMatch,
-			YTStack:     &providers.YouTubeStack{Service: f.youtube},
 		},
 		Support: appbootstrap.BotSupportModule{
 			ActivityLogger: f.activity,
@@ -176,7 +161,6 @@ func (f *botWiringFixture) checks(deps *orchestration.Dependencies) []botWiringC
 		{name: "MemberRepository", ok: deps.MemberRepository == f.memberRepository},
 		{name: "MemberCache", ok: deps.MemberCache == f.memberCache},
 		{name: "Holodex", ok: deps.Holodex == f.holodex},
-		{name: "YouTubeService", ok: deps.Service == f.youtube},
 		{name: "Activity", ok: deps.Activity == f.activity},
 		{name: "Settings", ok: deps.Settings == f.settings},
 		{name: "ACL", ok: deps.ACL == f.acl},
@@ -204,20 +188,5 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 		if !check.ok {
 			t.Fatalf("%s wiring mismatch", check.name)
 		}
-	}
-}
-
-func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
-	t.Parallel()
-
-	deps := appbootstrap.ProvideBotDependencies(&appbootstrap.BotDependencyModules{
-		Stream: appbootstrap.BotStreamModule{YTStack: nil},
-	})
-	if deps == nil {
-		t.Fatal("ProvideBotDependencies() returned nil")
-	}
-
-	if deps.Service != nil {
-		t.Fatal("Service must be nil when ytStack is nil")
 	}
 }

@@ -37,7 +37,7 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | majorevent | HTTP JSON | `/internal/majorevent/*` | `hololive-api` (bot plane) |
 | trigger | HTTP JSON | `/internal/trigger/*` | `hololive-api` (admin plane) |
 | Admin HTTP API | HTTP JSON | 검토 필요 | `admin-dashboard` |
-| settings.update | Valkey Pub/Sub | `config:update` | `hololive-api`, `alarm-worker` |
+| settings.update | HTTP JSON + `settings.json` | `POST /api/holo/settings`, `POST /api/holo/settings/llm` | `iris-console`, `alarm-worker` |
 | alarm HTTP compatibility | HTTP JSON | `/internal/alarm/*` | migration callers (target owner is `alarm-worker`) |
 
 ## Consumes
@@ -45,7 +45,7 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | Dependency | Purpose | Failure impact |
 |---|---|---|
 | PostgreSQL | command/domain/admin data, subscriptions, summaries, outbox | command/admin/scheduling failures, stale reads |
-| Valkey | cache/config/session/coordination/PubSub | degraded command, admin, and cache behavior |
+| Valkey | cache/session/coordination/member epoch PubSub | degraded command, admin, and cache behavior |
 | Iris | KakaoTalk ingress/reply automation | webhook/reply delivery failure |
 | cliproxy/LLM | external summary generation where configured | summary generation degradation |
 | Alarm API | alarm CRUD/query | alarm commands and admin operations fail |

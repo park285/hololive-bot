@@ -251,7 +251,6 @@ func addTemplateCommandAlarmSamples(data map[domain.TemplateKey]any) {
 		fieldMemberName: sampleMemberMiko,
 		"Added":         true,
 		fieldPrefix:     "!",
-		"NextStream":    templateNextStreamSample(),
 	}
 	data[domain.TemplateKeyCmdAlarmRemoved] = map[string]any{
 		fieldEmoji:      map[string]string{fieldBell: "🔕"},
@@ -291,18 +290,6 @@ func templateAlarmListItem() map[string]any {
 	return map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		"TypesLabel":    "라이브, 쇼츠",
-		"NextStream":    templateNextStreamSample(),
-	}
-}
-
-func templateNextStreamSample() map[string]any {
-	return map[string]any{
-		"Status":       string(domain.NextStreamStatusUpcoming),
-		fieldTitle:     "마인크래프트",
-		fieldURL:       "https://youtu.be/upcoming123",
-		"ScheduledKST": "22:00",
-		"TimeDetail":   "2시간 후",
-		"StartingSoon": false,
 	}
 }
 

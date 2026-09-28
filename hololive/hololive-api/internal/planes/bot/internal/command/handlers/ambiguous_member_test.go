@@ -64,7 +64,7 @@ func ambiguousMembersFixture() []*domain.Member {
 
 func newAmbiguousMatcher() *matcher.Matcher {
 	provider := newContextAwareMemberProvider(ambiguousMembersFixture())
-	return matcher.NewMatcher(provider, nil, nil, slog.New(slog.DiscardHandler))
+	return matcher.NewMatcher(provider, nil, slog.New(slog.DiscardHandler))
 }
 
 // alarm은 이미 동명이인 응답을 보내므로 목표 메시지의 기준점이다.

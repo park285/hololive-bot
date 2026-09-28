@@ -72,7 +72,7 @@
 
 ### R08 높은 우선순위 — PG ledger 존재만으로 claim·억제 의미의 동등성을 추정
 
-**근거:** [dedupe_key.go](../../hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/dedupe_key.go)는 source kind·schedule/category별 event identity를 구성합니다. [outbox_grouper_live_suppression.go](../../hololive/hololive-alarm-worker/internal/egress/youtubedispatch/outbox_grouper_live_suppression.go)는 upcoming marker의 `NotifiedAt`과 15분 창을 읽어 catch-up을 억제합니다. [locker.go](../../hololive/hololive-shared/pkg/service/delivery/locker.go)는 Valkey 오류 시 락 없이 진행하는 경로가 있습니다.
+**근거:** [dedupe_key.go](../../hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/dedupe_key.go)는 source kind·schedule/category별 event identity를 구성합니다. [outbox_grouper_live_suppression.go](../../hololive/hololive-alarm-worker/internal/egress/youtubedispatch/outbox_grouper_live_suppression.go)는 upcoming marker의 `NotifiedAt`과 15분 창을 읽어 catch-up을 억제합니다. [locker.go](../../hololive/hololive-shared/pkg/service/delivery/locker.go)는 Valkey 오류를 호출자에게 돌려주며 digest는 실행하지 않습니다(2026-09-28 정정: 최초 리뷰의 "락 없이 진행하는 경로"는 stack-audit T19에서 이미 제거됨).
 
 **영향:** terminal delivery dedupe와 사전 처리량 억제·일정 전이·시간 창 기반 알림 억제는 같은 판단이 아닙니다. 반대로 Valkey 락을 발송 정확성의 최종 보장으로 설명하는 것도 코드와 맞지 않습니다.
 

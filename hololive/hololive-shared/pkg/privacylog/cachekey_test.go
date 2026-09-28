@@ -27,12 +27,6 @@ type redactCacheKeyCase struct {
 func redactCacheKeyCases() []redactCacheKeyCase {
 	return []redactCacheKeyCase{
 		{
-			name:    "room alarm key",
-			key:     "alarm:" + plainRoom,
-			prefix:  "alarm:",
-			hasRoom: plainRoom,
-		},
-		{
 			name:    "notify claim key",
 			key:     strings.Join([]string{"notified:claim:" + plainRoom, streamID, scheduleUnix, notifyCategory}, ":"),
 			prefix:  "notified:claim:",
@@ -113,16 +107,11 @@ func TestRedactCacheKeyLeavesIdentifierFreeKeysIntact(t *testing.T) {
 	t.Parallel()
 
 	keys := []string{
-		"alarm:registry",
 		"alarm:channel_registry",
-		"alarm:channel_registry:version",
 		"alarm:subscriber_cache_empty",
 		"alarm:member_names",
-		"alarm:room_names",
-		"alarm:user_names",
 		"alarm:dispatch:wakeup",
 		"alarm:dispatch:wakeup:guard",
-		"alarm:next_stream:" + channelID,
 		"alarm:channel_subscribers:" + channelID,
 		"alarm:channel_subscribers:COMMUNITY:" + channelID,
 		"alarm:channel_subscribers_empty:SHORTS:" + channelID,
@@ -149,10 +138,6 @@ func TestRedactCacheKeyLeavesIdentifierFreeKeysIntact(t *testing.T) {
 func TestRedactCacheKeyKeepsCanonicalRoomIDReadable(t *testing.T) {
 	t.Parallel()
 
-	if got, want := RedactCacheKey("alarm:"+canonicalRoom), "alarm:"+canonicalRoom; got != want {
-		t.Errorf("RedactCacheKey(%q) = %q, want %q", "alarm:"+canonicalRoom, got, want)
-	}
-
 	claim := strings.Join([]string{"notified:claim:" + canonicalRoom, streamID, scheduleUnix, notifyCategory}, ":")
 	if got := RedactCacheKey(claim); got != claim {
 		t.Errorf("RedactCacheKey(%q) = %q, want the canonical key unchanged", claim, got)
@@ -166,7 +151,6 @@ func TestRedactCacheKeyFailsClosedOnTruncatedKeys(t *testing.T) {
 		"notified:claim:" + plainRoom,
 		"notified:claim:" + plainRoom + ":" + streamID,
 		"notified:upcoming:event:" + plainRoom + ":" + channelID,
-		"alarm:",
 	} {
 		got := RedactCacheKey(key)
 		if strings.Contains(got, plainRoom) {
@@ -175,21 +159,10 @@ func TestRedactCacheKeyFailsClosedOnTruncatedKeys(t *testing.T) {
 	}
 }
 
-func TestRedactCacheKeyDoesNotTreatStaticKeyPrefixAsRoomAllowlist(t *testing.T) {
-	t.Parallel()
-
-	for _, room := range []string{"registry: private room", "member_names: private room", "twitch_logins: private room"} {
-		key := "alarm:" + room
-		if got := RedactCacheKey(key); got == key || strings.Contains(got, room) {
-			t.Fatalf("RedactCacheKey(%q) = %q, room-shaped suffix was not redacted", key, got)
-		}
-	}
-}
-
 func TestRedactCacheFieldOnlyTouchesIdentifierKeyedHashes(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []string{"alarm:room_names", "alarm:user_names", "membernews:room_names"} {
+	for _, key := range []string{"membernews:room_names"} {
 		got := RedactCacheField(key, plainRoom)
 		if strings.Contains(got, plainRoom) {
 			t.Errorf("RedactCacheField(%q, room) = %q, plaintext survived", key, got)
@@ -214,12 +187,14 @@ func TestRedactCacheFieldOnlyTouchesIdentifierKeyedHashes(t *testing.T) {
 func TestCacheAttrsKeepTheirWireNames(t *testing.T) {
 	t.Parallel()
 
-	keyAttr := CacheKeyAttr("alarm:" + plainRoom)
-	if keyAttr.Key != KeyCacheKey || keyAttr.Value.String() != RedactCacheKey("alarm:"+plainRoom) {
+	claim := strings.Join([]string{"notified:claim:" + plainRoom, streamID, scheduleUnix, notifyCategory}, ":")
+
+	keyAttr := CacheKeyAttr(claim)
+	if keyAttr.Key != KeyCacheKey || keyAttr.Value.String() != RedactCacheKey(claim) {
 		t.Errorf("CacheKeyAttr = %v, want key %q carrying the redacted value", keyAttr, KeyCacheKey)
 	}
 
-	fieldAttr := CacheFieldAttr("alarm:room_names", plainRoom)
+	fieldAttr := CacheFieldAttr("membernews:room_names", plainRoom)
 	if fieldAttr.Key != KeyCacheField || strings.Contains(fieldAttr.Value.String(), plainRoom) {
 		t.Errorf("CacheFieldAttr = %v, want key %q carrying the redacted value", fieldAttr, KeyCacheField)
 	}
@@ -229,7 +204,9 @@ func TestRedactedKeysCorrelateWithRoomIDAttr(t *testing.T) {
 	t.Parallel()
 
 	want := RoomIDAttr(plainRoom).Value.String()
-	got := strings.TrimPrefix(RedactCacheKey("alarm:"+plainRoom), "alarm:")
+	tail := ":" + strings.Join([]string{streamID, scheduleUnix, notifyCategory}, ":")
+	claim := "notified:claim:" + plainRoom + tail
+	got := strings.TrimSuffix(strings.TrimPrefix(RedactCacheKey(claim), "notified:claim:"), tail)
 
 	if got != want {
 		t.Errorf("cache key token = %q, room_id token = %q; the two must correlate within a process", got, want)

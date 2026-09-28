@@ -13,7 +13,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `alarm.http` - alarm internal HTTP JSON
 - `alarm.dispatch` - alarm dispatch Valkey queue/retry/DLQ
 - `shortlink.youtube` - public fixed-target YouTube redirect with KakaoTalk scraper rejection
-- `settings.update` - settings/config update Valkey Pub/Sub
+- `settings.update` - admin settings API, single apply path to alarm-worker (no Pub/Sub)
 - `iris.webhook` - Iris external webhook/send boundary
 
 ## Contract Documents
@@ -23,7 +23,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `trigger.md` - manual notification trigger HTTP JSON
 - `alarm.md` - alarm HTTP API and alarm dispatch queue
 - `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and grouped message rendering contract
-- `settings.md` - settings/config update Pub/Sub
+- `settings.md` - admin settings API and alarm advance apply path
 - `iris-boundary.md` - Iris external boundary
 - `schedule-hololive-tv-api.md` - Official Schedule API request, mapping, fallback ownership, live non-goal, cache, and observability contract
 
@@ -45,4 +45,3 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - Additive fields are compatible when consumers ignore unknown fields.
 - Removing or renaming fields requires a documented compatibility window.
 - Queue envelope version changes require dual-read or migration guidance.
-- Pub/Sub currently has `ConfigUpdateVersionV1` as a code constant but no payload `version`; adding one is a contract change.

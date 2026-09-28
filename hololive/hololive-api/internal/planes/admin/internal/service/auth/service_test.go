@@ -41,21 +41,22 @@ import (
 type failingCacheClient struct {
 	cache.Client
 
-	failSAddKey   string
-	failSAddErr   error
-	failExpireKey string
-	failExpireErr error
-	failDelKeys   map[string]error
-	failDelMany   error
-	failSRemKey   string
-	failSRemErr   error
-	nilDoMulti    bool
+	nilDoMulti bool
 	// casKeyConflict가 지정되면 해당 키의 CompareAndDelete가 (false, nil)을 반환해
 	// 동시 회전(다른 요청이 먼저 claim)을 시뮬레이션한다.
 	casKeyConflict string
+	// beforeCompareAndDelete가 지정되면 CompareAndDelete 직전에 한 번 실행된다.
+	// Refresh의 세대 확인과 claim 사이에 끼어드는 비밀번호 reset을 결정적으로 재현한다.
+	beforeCompareAndDelete func()
 }
 
 func (c *failingCacheClient) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {
+	if hook := c.beforeCompareAndDelete; hook != nil {
+		c.beforeCompareAndDelete = nil
+
+		hook()
+	}
+
 	if c.casKeyConflict != "" && key == c.casKeyConflict {
 		return false, nil
 	}
@@ -63,69 +64,6 @@ func (c *failingCacheClient) CompareAndDelete(ctx context.Context, key, expected
 	out, err := c.Client.CompareAndDelete(ctx, key, expectedValue)
 	if err != nil {
 		return out, fmt.Errorf("compare and delete: %w", err)
-	}
-
-	return out, nil
-}
-
-func (c *failingCacheClient) SAdd(ctx context.Context, key string, members []string) (int64, error) {
-	if c.failSAddErr != nil && key == c.failSAddKey {
-		return 0, c.failSAddErr
-	}
-
-	out, err := c.Client.SAdd(ctx, key, members)
-	if err != nil {
-		return out, fmt.Errorf("s add: %w", err)
-	}
-
-	return out, nil
-}
-
-func (c *failingCacheClient) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	if c.failExpireErr != nil && key == c.failExpireKey {
-		return c.failExpireErr
-	}
-
-	if err := c.Client.Expire(ctx, key, ttl); err != nil {
-		return fmt.Errorf("expire: %w", err)
-	}
-
-	return nil
-}
-
-func (c *failingCacheClient) Del(ctx context.Context, key string) error {
-	if err, ok := c.failDelKeys[key]; ok {
-		return err
-	}
-
-	if err := c.Client.Del(ctx, key); err != nil {
-		return fmt.Errorf("del: %w", err)
-	}
-
-	return nil
-}
-
-func (c *failingCacheClient) DelMany(ctx context.Context, keys []string) (int64, error) {
-	if c.failDelMany != nil {
-		return 0, c.failDelMany
-	}
-
-	out, err := c.Client.DelMany(ctx, keys)
-	if err != nil {
-		return out, fmt.Errorf("del many: %w", err)
-	}
-
-	return out, nil
-}
-
-func (c *failingCacheClient) SRem(ctx context.Context, key string, members []string) (int64, error) {
-	if c.failSRemErr != nil && key == c.failSRemKey {
-		return 0, c.failSRemErr
-	}
-
-	out, err := c.Client.SRem(ctx, key, members)
-	if err != nil {
-		return out, fmt.Errorf("s rem: %w", err)
 	}
 
 	return out, nil
@@ -186,7 +124,6 @@ func TestLogin_SessionFlow(t *testing.T) {
 	config := DefaultConfig()
 
 	config.SessionTTL = 30 * time.Minute
-	config.UserSessionsTTL = 2 * time.Hour
 
 	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
@@ -368,7 +305,7 @@ func TestMe_ReturnsUnauthorizedWhenSessionUserIsMissing(t *testing.T) {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	session, err := service.createSession(t.Context(), "missing-user")
+	session, err := service.createSession(t.Context(), "missing-user", 0)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -545,7 +482,7 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 	timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
-	_, err = service.applyPasswordReset(timeoutCtx, reset.TokenHash, "new-hash", time.Now().UTC())
+	err = service.applyPasswordReset(timeoutCtx, reset.TokenHash, "new-hash", time.Now().UTC())
 	if err == nil {
 		t.Fatal("expected applyPasswordReset to fail")
 	}
@@ -593,8 +530,14 @@ func TestResetPassword_ConsumesTokenExactlyOnceUnderConcurrency(t *testing.T) {
 		assertAuthCode(t, err, CodeInvalidInput)
 	}
 
-	if _, _, err := service.Login(ctx, "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
+	_, user, err := service.Login(ctx, "user@example.com", "NewPassw0rd1", "127.0.0.1")
+	if err != nil {
 		t.Fatalf("expected login with the winning new password: %v", err)
+	}
+
+	// 토큰 claim에 실패한 reset은 비밀번호 UPDATE에 닿지 않으므로 세대는 성공한 reset 한 번만큼만 증가한다.
+	if got := storedSessionGeneration(t, service, user.ID); got != 1 {
+		t.Fatalf("session generation after concurrent resets: got=%d want=1", got)
 	}
 }
 
@@ -668,74 +611,6 @@ func runConcurrentPasswordResets(
 	return successes, failures
 }
 
-func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
-	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t.Context(), t)
-
-	userID := "user-1"
-	cacheClient := &failingCacheClient{
-		Client:      baseCache,
-		failSAddKey: userSessionsKeyPrefix + userID,
-		failSAddErr: stdErrors.New("sadd failed"),
-		failDelKeys: map[string]error{},
-	}
-
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	_, err = service.createSession(t.Context(), userID)
-	if err == nil {
-		t.Fatal("expected createSession error")
-	}
-
-	assertAuthCode(t, err, CodeInternal)
-
-	sessionKeys, err := baseCache.ScanKeys(t.Context(), sessionKeyPrefix+"*", 10)
-	if err != nil {
-		t.Fatalf("scan session keys: %v", err)
-	}
-
-	if len(sessionKeys) != 0 {
-		t.Fatalf("expected no session keys after rollback, got=%v", sessionKeys)
-	}
-}
-
-func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
-	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t.Context(), t)
-
-	userID := "user-1"
-	cacheClient := &failingCacheClient{
-		Client:        baseCache,
-		failExpireKey: userSessionsKeyPrefix + userID,
-		failExpireErr: stdErrors.New("expire failed"),
-		failDelKeys:   map[string]error{},
-	}
-
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	_, err = service.createSession(t.Context(), userID)
-	if err == nil {
-		t.Fatal("expected createSession error")
-	}
-
-	assertAuthCode(t, err, CodeInternal)
-
-	sessionKeys, err := baseCache.ScanKeys(t.Context(), sessionKeyPrefix+"*", 10)
-	if err != nil {
-		t.Fatalf("scan session keys: %v", err)
-	}
-
-	if len(sessionKeys) != 0 {
-		t.Fatalf("expected no session keys after rollback, got=%v", sessionKeys)
-	}
-}
-
 // CAS 회전에서 old session claim이 실패하면(동시 회전) 새 세션을 만들지 않고
 // CodeUnauthorized를 반환해야 한다. 기존 old session 키는 다른 요청이 소유하므로 건드리지 않는다.
 func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
@@ -778,111 +653,6 @@ func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 
 	if len(sessionKeys) != 1 || sessionKeys[0] != oldKey {
 		t.Fatalf("expected only old session key to remain (no new session), got=%v", sessionKeys)
-	}
-}
-
-func TestRefresh_KeepsNewSessionWhenOldIndexRemovalFails(t *testing.T) {
-	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t.Context(), t)
-
-	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
-	if err != nil {
-		t.Fatalf("register failed: %v", err)
-	}
-
-	session, user, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("login failed: %v", err)
-	}
-
-	oldHash := sha256Hex(session.Token)
-	oldKey := sessionKeyPrefix + oldHash
-
-	service.cacheClient = &failingCacheClient{
-		Client:      baseCache,
-		failSRemKey: userSessionsKeyPrefix + user.ID,
-		failSRemErr: stdErrors.New("remove old session index failed"),
-	}
-
-	newSession, err := service.Refresh(t.Context(), session.Token)
-	if err != nil {
-		t.Fatalf("refresh should succeed when old session key is removed: %v", err)
-	}
-
-	if newSession == nil || newSession.Token == "" {
-		t.Fatal("expected new session")
-	}
-
-	exists, err := baseCache.Exists(t.Context(), oldKey)
-	if err != nil {
-		t.Fatalf("check old session key: %v", err)
-	}
-
-	if exists {
-		t.Fatal("expected old session key to be deleted")
-	}
-
-	newKey := sessionKeyPrefix + sha256Hex(newSession.Token)
-
-	exists, err = baseCache.Exists(t.Context(), newKey)
-	if err != nil {
-		t.Fatalf("check new session key: %v", err)
-	}
-
-	if !exists {
-		t.Fatal("expected new session key to remain")
-	}
-
-	if _, err := service.Me(t.Context(), newSession.Token); err != nil {
-		t.Fatalf("expected new session token to be valid: %v", err)
-	}
-}
-
-func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) {
-	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t.Context(), t)
-
-	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
-	if err != nil {
-		t.Fatalf("register failed: %v", err)
-	}
-
-	session, _, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("login failed: %v", err)
-	}
-
-	resetToken, err := service.RequestPasswordReset(t.Context(), "user@example.com", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("request password reset failed: %v", err)
-	}
-
-	service.cacheClient = &failingCacheClient{
-		Client:      baseCache,
-		failDelMany: stdErrors.New("delete sessions failed"),
-	}
-
-	err = service.ResetPassword(t.Context(), resetToken, "NewPassw0rd1")
-	if err != nil {
-		t.Fatalf("reset password should succeed after password commit: %v", err)
-	}
-
-	if _, err := service.Me(t.Context(), session.Token); err != nil {
-		t.Fatalf("expected existing session to remain when revocation fails: %v", err)
-	}
-
-	if _, _, err := service.Login(t.Context(), "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
-		t.Fatalf("expected login with new password to succeed: %v", err)
 	}
 }
 

@@ -21,9 +21,19 @@ import (
 // holo-youtube-recent-videos-rss-fallback). 제거 조건은 위와 같다: 중앙 compose.env·bot.env·alarm-worker.env와 그
 // stack-secrets master 사본, 실행 중 프로세스 env에 이 키가 0건임을 hololive-bot-ops로 확인하고 이 가드가 든 release가
 // 배포된 뒤 이 항목과 테스트를 삭제한다. 재검토 기한: remove_after = "2026-12-31".
+//
+// YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS와 YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS는 YouTube apiservice(채널 통계
+// youtube:channel_stats:* 캐시 저장 timeout과 scraper 단계 timeout)만 소비했다. Valkey 책임 축소 A11/A13에서
+// 호출자가 없던 apiservice와 youtube.Service를 지워 값이 아무것도 제어하지 않으므로 같은 방식으로 존재만으로 거절한다.
+// Shared rate limiter와 scraping client는 두 값을 읽지 않는다. 도입 리비전: Valkey 책임 축소 2차 A11/A13
+// (refactor/valkey-bigbang-fadeout-20260928). 제거 조건은 위와 같다: 중앙 compose.env·bot.env·alarm-worker.env와 그
+// stack-secrets master 사본, 실행 중 프로세스 env에 두 키가 0건임을 hololive-bot-ops로 확인하고 이 가드가 든 release가
+// 배포된 뒤 이 항목을 삭제한다. 재검토 기한: remove_after = "2026-12-31".
 var retiredYouTubeConfigEnvKeys = []string{
 	"YOUTUBE_CACHE_EXPIRATION_SECONDS",
 	"YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS",
+	"YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS",
+	"YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS",
 }
 
 func rejectRetiredYouTubeConfigEnv() error {

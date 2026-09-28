@@ -20,11 +20,7 @@
 
 package scraping
 
-import (
-	"log/slog"
-
-	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-)
+import "log/slog"
 
 func logStructureWarning(surface, channelID, detail string, attrs ...any) {
 	baseAttrs := make([]any, 0, 6+len(attrs))
@@ -36,18 +32,4 @@ func logStructureWarning(surface, channelID, detail string, attrs ...any) {
 	)
 	baseAttrs = append(baseAttrs, attrs...)
 	slog.Warn("YouTube producer structure signal", baseAttrs...)
-}
-
-func looksEmptyChannelStats(stats *parser.ChannelStats) bool {
-	if stats == nil {
-		return true
-	}
-
-	return stats.SubscriberCount == 0 &&
-		stats.ViewCount == 0 &&
-		stats.VideoCount == 0 &&
-		stats.JoinedDate == 0 &&
-		stats.Description == "" &&
-		stats.Country == "" &&
-		stats.Handle == ""
 }

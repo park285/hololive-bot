@@ -46,11 +46,26 @@ esac
 EOF
 chmod +x "${fakebin}/podman"
 
-if PATH="${fakebin}:${PATH}" CONTAINER_CLI=podman "${fixture_module}/scripts/bot.sh" start --no-ready-wait >/tmp/bot-env-loader-test.out 2>/tmp/bot-env-loader-test.err; then
+run_bot() {
+  PATH="${fakebin}:${PATH}" CONTAINER_CLI=podman "${fixture_module}/scripts/bot.sh" "$@" >"${TMP_DIR}/out" 2>"${TMP_DIR}/err"
+}
+
+if run_bot start; then
   fail "bot start should stop before dependency checks for invalid literal env"
 fi
 
 [[ ! -e "${poison_file}" ]] || fail ".env command substitution was executed"
-grep -q "command substitution" /tmp/bot-env-loader-test.err || fail "expected command substitution rejection"
+grep -q "command substitution" "${TMP_DIR}/err" || fail "expected command substitution rejection"
 
 pass "bot env loader treats .env as literal data"
+
+for command in start restart; do
+  if run_bot "${command}" --no-ready-wait; then
+    fail "bot ${command} should reject removed --no-ready-wait option"
+  fi
+  grep -q "Unknown argument: --no-ready-wait" "${TMP_DIR}/out" || fail "expected ${command} unknown argument rejection"
+  # .env loader가 먼저 돌았다면 command substitution 거절이 stderr에 남는다. 인자 거절이 그보다 앞서야 한다.
+  ! grep -q "command substitution" "${TMP_DIR}/err" || fail ".env was loaded before ${command} argument rejection"
+done
+
+pass "bot start/restart reject removed --no-ready-wait option"

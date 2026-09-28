@@ -20,34 +20,14 @@
 
 package cache
 
-import "time"
-
-type SetNXEntry struct {
-	Key   string
-	Value string
-	TTL   time.Duration
-}
-
-type SetNXResult struct {
-	Key      string
-	Acquired bool
-	Err      error
-}
-
 type DataCache interface {
 	KeyValueCache
 	SetCache
 	HashCache
 }
 
-type DomainCache interface {
-	StreamCache
-	MemberCache
-}
-
 type Client interface {
 	DataCache
-	DomainCache
 	ScriptCache
 	ConnectionManager
 	LowLevelCache

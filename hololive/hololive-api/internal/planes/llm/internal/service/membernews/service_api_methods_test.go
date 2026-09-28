@@ -59,8 +59,4 @@ func TestService_SubscriptionMethodGuards(t *testing.T) {
 	if _, err := service.ListSubscribedRooms(ctx); err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
 		t.Fatalf("ListSubscribedRooms guard mismatch: %v", err)
 	}
-
-	if err := service.WarmupSubscriptionCache(ctx); err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
-		t.Fatalf("WarmupSubscriptionCache guard mismatch: %v", err)
-	}
 }

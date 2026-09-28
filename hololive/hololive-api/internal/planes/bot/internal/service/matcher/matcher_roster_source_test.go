@@ -1,14 +1,12 @@
 package matcher
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 const rosterTestMemberName = "Hoshimachi Suisei"
@@ -19,12 +17,7 @@ func TestFindBestMatchUsesRosterNameWithoutCachedNameFallback(t *testing.T) {
 	t.Parallel()
 
 	provider := newStubMemberProvider([]*domain.Member{{ChannelID: "ch-sui", Name: rosterTestMemberName, Org: orgHololive}})
-	cache := &cachemocks.Client{
-		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
-			return map[string]string{rosterTestMemberName: "ch-sui"}, nil
-		},
-	}
-	matcher := NewMatcher(provider, cache, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), "hoshimachi")
 	require.NoError(t, err)

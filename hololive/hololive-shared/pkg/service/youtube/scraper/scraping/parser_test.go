@@ -31,28 +31,6 @@ import (
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 )
 
-func TestParseSubscriberCount(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected int64
-	}{
-		{"2.76M subscribers", 2_760_000},
-		{"1.5K subscribers", 1_500},
-		{"1,234,567 subscribers", 1_234_567},
-		{"500 subscribers", 500},
-		{"1 subscriber", 1},
-		{"No subscribers", 0},
-		{"", 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := parseSubscriberCount(tt.input)
-			assert.Equal(t, tt.expected, result, "input: %s", tt.input)
-		})
-	}
-}
-
 func TestParseShortNumber(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -112,28 +90,6 @@ func TestParseVideoCount(t *testing.T) {
 		t.Run(tt.input, func(t *testing.T) {
 			result := parseVideoCount(tt.input)
 			assert.Equal(t, tt.expected, result, "input: %s", tt.input)
-		})
-	}
-}
-
-func TestParseJoinedDate(t *testing.T) {
-	tests := []struct {
-		input   string
-		notZero bool
-	}{
-		{"Joined Jul 2, 2019", true},
-		{"Joined January 15, 2020", true},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := parseJoinedDate(tt.input)
-			if tt.notZero {
-				assert.NotEqual(t, int64(0), result, "input: %s", tt.input)
-			} else {
-				assert.Equal(t, int64(0), result, "input: %s", tt.input)
-			}
 		})
 	}
 }

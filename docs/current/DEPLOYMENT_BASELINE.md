@@ -97,7 +97,7 @@ timeline을 그대로 재기동하지 않습니다.
 |---|---|---|
 | Iris / Redroid KakaoTalk automation | `hololive-api`, `alarm-worker` | `contracts/iris-boundary.md` |
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-api/scripts/migrations` |
-| Valkey | cache, alarm queue, config Pub/Sub | `QUEUE_AND_PUBSUB_CONTRACTS.md` |
+| Valkey | cache, sessions/rate limit, alarm dispatch wakeup, member epoch Pub/Sub, job locks (no settings/ACL Pub/Sub) | `contracts/valkey_ephemeral_contract.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api` where configured | 검토 필요 |
 
 ## PostgreSQL TLS Baseline
@@ -126,8 +126,6 @@ domain socket monitor connection remained outside the TCP TLS scope.
 ## Validation
 
 ```bash
-./scripts/architecture/check-project-map.sh
-./scripts/architecture/check-runbook-coverage.sh
 ./scripts/architecture/ci-boundary-gate.sh
 ```
 

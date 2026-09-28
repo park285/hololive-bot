@@ -128,9 +128,11 @@ func TestScannedRootsCoverReachablePrivacylogServices(t *testing.T) {
 	// youtube/scraper/internal/browserfetcher 패키지, stack-audit T19에서 v3 handoff와 함께 삭제한
 	// alarm/handoff 패키지, 같은 T19에서 scraper proxy 토글과 퇴역 producer scheduler·budget 코드를 지워 bot plane이
 	// 더 이상 닿지 않는 youtube/poller/runtime{,/scheduler,/batchrepo}·youtube/tracking/observation·
-	// youtube/alarmtiming·youtube/contentid 여섯 패키지를 반영한다.
+	// youtube/alarmtiming·youtube/contentid 여섯 패키지와, Valkey 책임 축소 A11/A13에서 호출자 없는
+	// youtube.Service 인터페이스와 함께 삭제한 youtube 루트 패키지, Valkey 책임 축소 B7-B9에서 config:update
+	// Pub/Sub과 함께 삭제한 configsub 패키지를 반영한다.
 	// 실제 의존성 탐색과 모든 log/taint 검사는 유지한다.
-	const minimumServicePackages = 24
+	const minimumServicePackages = 22
 
 	if count < minimumServicePackages {
 		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least %d", count, minimumServicePackages)

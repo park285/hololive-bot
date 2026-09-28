@@ -9,5 +9,5 @@ alarm.dispatch|alarm-worker|alarm-worker|postgres_table+valkey_wakeup|alarm_disp
 youtube.outbox.egress|hololive-api|alarm-worker|postgres_table|youtube_notification_outbox|hololive/hololive-shared/pkg/service/youtube/outbox|docs/current/contracts/alarm.md
 alarm.state.read|alarm-worker|hololive-api|postgres_table|alarms|hololive/hololive-api/internal/planes/youtube/runtime|docs/current/contracts/alarm.md
 shortlink.youtube|hololive-api|external,alarm-worker|external_https_redirect|GET,HEAD /l/:videoID|hololive/hololive-shared/pkg/contracts/shortlink|docs/current/contracts/shortlink.md
-settings.update|hololive-api|hololive-api,alarm-worker|valkey_pubsub|config:update|hololive/hololive-shared/pkg/contracts/settings|docs/current/contracts/settings.md
+settings.update|hololive-api|iris-console,alarm-worker|http_json+settings_file|/api/holo/settings;/api/holo/settings/llm;settings.json|hololive/hololive-shared/pkg/contracts/settings|docs/current/contracts/settings.md
 iris.webhook|iris|hololive-api,alarm-worker|external_http_h3|webhook/reply/send|external|docs/current/contracts/iris-boundary.md

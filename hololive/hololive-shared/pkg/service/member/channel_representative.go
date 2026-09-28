@@ -2,9 +2,10 @@ package member
 
 import "github.com/kapu/hololive-shared/pkg/domain"
 
+// ChannelRepresentatives는 channel ID별 대표 멤버를 돌려준다. 빈 channel ID와 nil 멤버는 제외한다.
 // 채널 대표는 최초 등록된 영속 ID의 행이다. 이름·별칭 조회 순서로 대표가 바뀌면 안 된다.
-// SQL 채널 조회의 ORDER BY id와 같은 규칙을 메모리 및 분산 캐시에 적용한다.
-func channelRepresentatives(members []*domain.Member) map[string]*domain.Member {
+// SQL 채널 조회의 ORDER BY id와 같은 규칙을 메모리·분산 캐시와 YouTube 채널 이름에 적용한다.
+func ChannelRepresentatives(members []*domain.Member) map[string]*domain.Member {
 	result := make(map[string]*domain.Member)
 
 	for _, candidate := range members {

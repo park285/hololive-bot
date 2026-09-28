@@ -85,7 +85,7 @@ func buildBotInfrastructureServices(
 		return nil, fmt.Errorf("init scraper holodex foundation: %w", err)
 	}
 
-	alarmYouTubeStack, err := InitAlarmYouTubeStack(ctx, appConfig, infra, foundation, irisClient, formatter, logger)
+	alarmYouTubeStack, err := InitAlarmYouTubeStack(appConfig, foundation, irisClient, formatter, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm youtube stack: %w", err)
 	}

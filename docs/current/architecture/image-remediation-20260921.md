@@ -8,7 +8,7 @@ Trivy의 Go 모듈 버전 보고만으로는 같은 모듈 안의 미포함 패�
 
 scanner는 로컬 태그를 불변 image ID로 고정하고, Trivy가 보고한 바이너리를 실행하지 않고 추출한다. 고정 govulncheck v1.8.0의 `-mode=binary -scan=package -format=openvex`로 각 바이너리의 증거를 생성한다. 모든 Go 보고의 advisory ID 또는 공식 alias와 정확한 module/version PURL이 `not_affected / vulnerable_code_not_present`에 대응해야만 모듈 단위 과잉 판정으로 분류한다. 패키지가 포함됐으나 호출되지 않는다는 `vulnerable_code_not_in_execute_path`는 허용하지 않는다. 모르는 advisory, 누락된 증거, 잘못된 아키텍처, 실제 취약 패키지와 분석 오류는 차단한다.
 
-수동 CVE allowlist나 저장된 VEX 입력을 받지 않는다. 원시 Trivy finding을 삭제하거나 심각도를 제외하지 않으며, 매 실행마다 새 evidence 디렉터리에 image/target identity, 바이너리 SHA-256, 추출 심볼, 생성된 VEX와 원본 보고를 보존한다. 출력의 `Go package-absence verified`는 해당 패키지가 실제 artifact에 없다는 뜻이며 원본 Trivy finding 수가 0이라는 뜻은 아니다. `scripts/ci/run-final-image-scan_test.sh`가 이 구분과 실패 경계를 검사한다.
+수동 CVE allowlist나 저장된 VEX 입력을 받지 않는다. 원시 Trivy finding을 삭제하거나 심각도를 제외하지 않으며, 매 실행마다 새 evidence 디렉터리에 image/target identity, 바이너리 SHA-256, 추출 심볼, 생성된 VEX와 원본 보고를 보존한다. 출력의 `Go package-absence verified`는 해당 패키지가 실제 artifact에 없다는 뜻이며 원본 Trivy finding 수가 0이라는 뜻은 아니다.
 
 ## 소유 경로
 

@@ -38,21 +38,18 @@ import (
 )
 
 const (
-	memberChannelKeyPrefix = "member:channel:"
-	memberNameKeyPrefix    = "member:name:"
-	memberAliasKeyPrefix   = "member:alias:"
-	allChannelIDsKey       = "channel_ids"
-	allMembersSnapshotKey  = "all_members"
+	allChannelIDsKey      = "channel_ids"
+	allMembersSnapshotKey = "all_members"
 )
 
-// DB 부하를 줄이고 빠른 조회를 지원하며, 워밍업(Warm-up) 기능을 제공합니다.
+// Cache는 PostgreSQL members를 프로세스 안 snapshot과 point index로 캐시한다. Valkey에는 멤버 데이터를 두지 않고,
+// durable epoch(coord:member-cache:v2:epoch)와 그 통지 채널만 써서 다른 프로세스의 snapshot 무효화를 조정한다.
 type Cache struct {
 	repository *Repository
-	cache      cache.KeyValueCache
 	logger     *slog.Logger
 
-	byChannelID sync.Map // map[string]*domain.Member
-	byName      sync.Map // map[string]*domain.Member
+	byChannelID sync.Map // map[string]*memoryMember
+	byName      sync.Map // map[string]*memoryMember
 	allMembers  sync.Map // []string (channel IDs)
 
 	snapshotMu             sync.RWMutex
@@ -66,20 +63,11 @@ type Cache struct {
 	authorityEpoch         atomic.Uint64
 	authorityHealthy       atomic.Bool
 	epochReconcileInterval time.Duration
-
-	cacheTTL time.Duration
-	warmup   bool
-
-	warmUpChunkSize     int
-	warmUpMaxGoroutines int
 }
 
 type CacheConfig struct {
-	ValkeyTTL              time.Duration
 	EpochReconcileInterval time.Duration
 	WarmUp                 bool // 시작 시 전체 멤버를 메모리에 로드
-	WarmUpChunkSize        int
-	WarmUpMaxGoroutines    int
 }
 
 type memoryMember struct {
@@ -87,13 +75,13 @@ type memoryMember struct {
 	generation uint64
 }
 
-// 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
-func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.KeyValueCache, logger *slog.Logger, config CacheConfig) (*Cache, error) {
+// epochStore가 nil이면 epoch 조정 없는 프로세스 로컬 캐시가 된다. 설정에 따라 생성 시점에 snapshot을 미리 적재한다.
+func NewMemberCache(ctx context.Context, repository *Repository, epochStore cache.LowLevelCache, logger *slog.Logger, config CacheConfig) (*Cache, error) {
 	config = normalizeMemberCacheConfig(config)
 
-	mc := newMemberCache(repository, cacheService, logger, config)
+	mc := newMemberCache(repository, logger, config)
 
-	if err := mc.configureEpoch(ctx, cacheService); err != nil {
+	if err := mc.configureEpoch(ctx, epochStore); err != nil {
 		return nil, fmt.Errorf("configure epoch: %w", err)
 	}
 
@@ -109,18 +97,6 @@ func memberEpochRuntimeContext(ctx context.Context) context.Context {
 }
 
 func normalizeMemberCacheConfig(config CacheConfig) CacheConfig {
-	if config.ValkeyTTL == 0 {
-		config.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
-	}
-
-	if config.WarmUpChunkSize == 0 {
-		config.WarmUpChunkSize = constants.MemberCacheDefaults.WarmUpChunkSize
-	}
-
-	if config.WarmUpMaxGoroutines == 0 {
-		config.WarmUpMaxGoroutines = constants.MemberCacheDefaults.WarmUpMaxGoroutines
-	}
-
 	if config.EpochReconcileInterval == 0 {
 		config.EpochReconcileInterval = constants.MemberCacheDefaults.EpochReconcileInterval
 	}
@@ -128,32 +104,26 @@ func normalizeMemberCacheConfig(config CacheConfig) CacheConfig {
 	return config
 }
 
-func newMemberCache(repository *Repository, cacheService cache.KeyValueCache, logger *slog.Logger, config CacheConfig) *Cache {
+func newMemberCache(repository *Repository, logger *slog.Logger, config CacheConfig) *Cache {
 	return &Cache{
 		repository:             repository,
-		cache:                  cacheService,
 		logger:                 logger,
-		cacheTTL:               config.ValkeyTTL,
-		warmup:                 config.WarmUp,
 		snapshotTTL:            allMembersSnapshotTTL,
 		epochReconcileInterval: config.EpochReconcileInterval,
-
-		warmUpChunkSize:     config.WarmUpChunkSize,
-		warmUpMaxGoroutines: config.WarmUpMaxGoroutines,
 	}
 }
 
-func (c *Cache) configureEpoch(ctx context.Context, cacheService cache.KeyValueCache) error {
-	if cacheService == nil {
+func (c *Cache) configureEpoch(ctx context.Context, epochStore cache.LowLevelCache) error {
+	if epochStore == nil {
 		return nil
 	}
 
-	lowLevel, ok := cacheService.(cache.LowLevelCache)
-	if !ok || lowLevel.GetClient() == nil {
+	client := epochStore.GetClient()
+	if client == nil {
 		return errors.New("member cache requires low-level Valkey access for epoch coordination")
 	}
 
-	c.epoch = newValkeyMemberEpochAuthority(lowLevel.GetClient())
+	c.epoch = newValkeyMemberEpochAuthority(client)
 	if err := c.reconcileEpoch(ctx, epochReconcileStartup); err != nil && c.logger != nil {
 		c.logger.Warn("member cache epoch unavailable at startup; cache bypass enabled", slog.Any("error", err))
 	}
@@ -171,8 +141,9 @@ func (c *Cache) warmUpAtStartup(ctx context.Context) {
 	}
 }
 
-func (c *Cache) cacheEnabled() bool {
-	return c != nil && c.cache != nil
+// epochCoordinated는 epoch authority로 다른 프로세스와 무효화를 조정하는 구성인지 알려 준다.
+func (c *Cache) epochCoordinated() bool {
+	return c != nil && c.epoch != nil
 }
 
 func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
@@ -190,9 +161,6 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 	}
 
 	generation := c.currentSnapshotGeneration()
-	if member := c.loadChannelFromDistributedCache(ctx, channelID, generation); member != nil {
-		return member, nil
-	}
 
 	dbMember, err := c.repository.FindByChannelID(ctx, channelID)
 	if err != nil {
@@ -200,7 +168,7 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 	}
 
 	if dbMember != nil {
-		c.cacheMember(ctx, dbMember, generation, "", true)
+		c.cacheMember(dbMember, generation, true)
 	}
 
 	return dbMember, nil
@@ -221,9 +189,6 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 	}
 
 	generation := c.currentSnapshotGeneration()
-	if member := c.loadNameFromDistributedCache(ctx, name, generation); member != nil {
-		return member, nil
-	}
 
 	dbMember, err := c.repository.FindByName(ctx, name)
 	if err != nil {
@@ -231,7 +196,7 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 	}
 
 	if dbMember != nil {
-		c.cacheMember(ctx, dbMember, generation, "", false)
+		c.cacheMember(dbMember, generation, false)
 	}
 
 	return dbMember, nil
@@ -273,65 +238,8 @@ func (c *Cache) loadNameFromMemory(name string) (*domain.Member, bool) {
 	return nil, false
 }
 
-func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID string, generation uint64) *domain.Member {
-	if !c.distributedCacheUsable() {
-		return nil
-	}
-
-	cacheKey := c.epochDataKey(memberChannelKeyPrefix + channelID)
-
-	var member domain.Member
-
-	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
-		return nil
-	}
-
-	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
-
-	if c.snapshotGeneration.Load() != generation {
-		return nil
-	}
-
-	owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
-	if owned != nil {
-		c.storePointMemberInMemoryLocked(owned, generation)
-		c.byChannelID.Store(channelID, &memoryMember{member: owned, generation: generation})
-	}
-
-	return owned
-}
-
-func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string, generation uint64) *domain.Member {
-	if !c.distributedCacheUsable() {
-		return nil
-	}
-
-	cacheKey := c.epochDataKey(memberNameKeyPrefix + name)
-
-	var member domain.Member
-
-	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
-		return nil
-	}
-
-	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
-
-	if c.snapshotGeneration.Load() != generation {
-		return nil
-	}
-
-	owned := c.snapshotOwnedNameMemberLocked(name, &member, generation)
-	if owned != nil {
-		c.storePointMemberInMemoryLocked(owned, generation)
-	}
-
-	return owned
-}
-
-// 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.
-
+// FindByAlias는 게시된 snapshot에서 별칭을 먼저 찾는다. Snapshot이 없거나 snapshot에 없는 별칭은 예전 L2 miss와 같이
+// PostgreSQL을 조회한다(epoch 무효화 없이 바뀐 행도 곧바로 보이도록 음성 결과는 캐시하지 않는다).
 func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
 	if c.cacheBypassRequired("alias") {
 		out, err := c.repository.FindByAlias(ctx, alias)
@@ -342,8 +250,8 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 		return out, nil
 	}
 
-	generation := c.currentSnapshotGeneration()
-	if member := c.getAliasFromCache(ctx, alias, generation); member != nil {
+	member, generation := c.findAliasInSnapshot(alias)
+	if member != nil {
 		return member, nil
 	}
 
@@ -353,39 +261,24 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 	}
 
 	if dbMember != nil {
-		c.cacheMember(ctx, dbMember, generation, alias, false)
+		c.cacheMember(dbMember, generation, false)
 	}
 
 	return dbMember, nil
 }
 
-func (c *Cache) getAliasFromCache(ctx context.Context, alias string, generation uint64) *domain.Member {
-	if !c.distributedCacheUsable() {
-		return nil
-	}
-
-	cacheKey := c.epochDataKey(memberAliasKeyPrefix + alias)
-
-	var member domain.Member
-
-	// 원격 I/O가 snapshot 교체/epoch 무효화를 막지 않도록 잠금 밖에서 읽는다.
-	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
-		return nil
-	}
-
+func (c *Cache) findAliasInSnapshot(alias string) (*domain.Member, uint64) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
 
-	if c.snapshotGeneration.Load() != generation {
-		return nil
+	generation := c.snapshotGeneration.Load()
+
+	snap := c.allMembersSnapshot.Load()
+	if !snapshotSuccessful(snap) || snap.generation != generation {
+		return nil, generation
 	}
 
-	owned := c.snapshotOwnedAliasMemberLocked(alias, &member, generation)
-	if owned != nil {
-		c.storePointMemberInMemoryLocked(owned, generation)
-	}
-
-	return owned
+	return snap.aliasOwner(alias), generation
 }
 
 func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {

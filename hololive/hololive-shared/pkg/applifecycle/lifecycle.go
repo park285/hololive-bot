@@ -37,7 +37,6 @@ type StartHooks struct {
 	Logger                  *slog.Logger
 	ServerAddr              string
 	StartAlarmScheduler     func(ctx context.Context) error
-	RunConfigSubscriber     func(ctx context.Context)
 	StartBot                func(ctx context.Context) error
 	StartH3CertReload       func(ctx context.Context)
 	StartHTTPServer         func(errCh chan<- error)
@@ -55,16 +54,6 @@ type ShutdownHooks struct {
 
 func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	startAlarmScheduler(ctx, errCh, hooks)
-
-	if hooks.RunConfigSubscriber != nil {
-		go func() {
-			panicguard.Run(hooks.Logger, panicguard.BackgroundTask, "config-subscriber", func() {
-				hooks.RunConfigSubscriber(ctx)
-			})
-		}()
-
-		logInfo(hooks.Logger, "Config subscriber started")
-	}
 
 	startBot(ctx, errCh, hooks.Logger, hooks.StartBot)
 

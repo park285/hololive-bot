@@ -76,9 +76,6 @@ func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) erro
 		{Name: "birthday-stream", Scheduler: r.BirthdayStreamRunner},
 		{Name: "x-spaces", Scheduler: r.XSpacesRunner},
 	}
-	if r.ConfigSubscriber != nil {
-		runners = append(runners, NamedScheduler{Name: "config-subscriber", Scheduler: configSubscriberRunner{r.ConfigSubscriber}})
-	}
 
 	return runNamedSchedulers(ctx, r.Logger, "alarm-worker-", runners)
 }

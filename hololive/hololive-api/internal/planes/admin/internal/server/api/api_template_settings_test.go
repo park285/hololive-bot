@@ -124,7 +124,6 @@ func settingsInvalidJSONBranches(t *testing.T) {
 		invoke gin.HandlerFunc
 	}{
 		{http.MethodPost, "/api/holo/settings/room-name", handler.SetRoomName},
-		{http.MethodPost, "/api/holo/settings/user-name", handler.SetUserName},
 		{http.MethodPatch, settingsPath, handler.UpdateSettings},
 		{http.MethodPatch, settingsLLMPath, handler.UpdateLLMSettings},
 	}

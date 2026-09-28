@@ -34,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/valkey-io/valkey-go"
 
@@ -41,7 +42,6 @@ import (
 	"github.com/kapu/hololive-shared/internal/testutil"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 type fakeMemberEpochAuthority struct {
@@ -140,11 +140,9 @@ func withTestEpochAuthority(c *Cache) *Cache {
 	return c
 }
 
-// newEpochTestCache는 epoch 조정 경로를 검증한다. 운영 구성에서 epoch authority는 분산 캐시와 짝이므로(configureEpoch)
-// lenient 분산 캐시 client를 함께 둔다.
+// newEpochTestCache는 epoch 조정 경로를 검증한다.
 func newEpochTestCache(authority memberEpochAuthority) *Cache {
 	c := &Cache{
-		cache:                  cachemocks.NewLenientClient(),
 		epoch:                  authority,
 		epochReconcileInterval: 5 * time.Millisecond,
 		logger:                 slog.New(slog.DiscardHandler),
@@ -392,22 +390,39 @@ func TestCacheEpoch_UnavailableBypassesStaleSnapshot(t *testing.T) {
 	}
 }
 
-func TestCacheEpoch_RegressionFailsClosed(t *testing.T) {
-	authority := &fakeMemberEpochAuthority{epoch: 4}
+// Valkey 재시작으로 epoch key가 1로 다시 만들어지면 값이 작아져도 변경으로 받아들인다. Snapshot은 버리지만 cache는
+// 계속 켜져 있어 다음 조회가 새 snapshot을 적재한다(PostgreSQL 영구 우회 없음).
+func TestCacheEpoch_RegressionInvalidatesAndKeepsCacheEnabled(t *testing.T) {
+	authority := &fakeMemberEpochAuthority{epoch: 1}
 	c := newEpochTestCache(authority)
 	c.authorityEpoch.Store(5)
 	c.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{{Name: "Stale"}}, loadedAt: time.Now(), hasSuccessful: true})
 
-	if err := c.reconcileEpoch(t.Context(), epochReconcilePeriodic); err == nil {
-		t.Fatal("reconcileEpoch() accepted a regressed authority")
+	var loads atomic.Int64
+
+	c.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
+		loads.Add(1)
+
+		return []*domain.Member{{Name: "Database"}}, nil
 	}
 
-	if c.authorityHealthy.Load() {
-		t.Fatal("regressed authority left cache enabled")
+	if err := c.reconcileEpoch(t.Context(), epochReconcilePeriodic); err != nil {
+		t.Fatalf("reconcileEpoch() error = %v", err)
 	}
 
-	if c.allMembersSnapshot.Load() != nil {
-		t.Fatal("regressed authority retained stale snapshot")
+	if !c.authorityHealthy.Load() || c.authorityEpoch.Load() != 1 {
+		t.Fatalf("authority healthy=%v epoch=%d, want healthy epoch 1", c.authorityHealthy.Load(), c.authorityEpoch.Load())
+	}
+
+	for range 2 {
+		got, err := c.AllMembers(t.Context())
+		if err != nil || len(got) != 1 || got[0].Name != "Database" {
+			t.Fatalf("AllMembers() = %+v, %v; want reloaded Database snapshot", got, err)
+		}
+	}
+
+	if loads.Load() != 1 {
+		t.Fatalf("loader calls = %d, want one snapshot load then cache hits", loads.Load())
 	}
 }
 
@@ -425,50 +440,33 @@ func TestCacheEpoch_CorruptNotificationUsesAuthority(t *testing.T) {
 	}
 }
 
-func TestCacheEpoch_PointLookupsNeverReadPriorEpochKeys(t *testing.T) {
-	cacheClient := cachemocks.NewLenientClient()
-
-	var keys []string
-
-	cacheClient.GetFunc = func(_ context.Context, key string, _ any) error {
-		keys = append(keys, key)
-		return errors.New("miss")
-	}
-
-	c := newEpochTestCache(&fakeMemberEpochAuthority{epoch: 2})
-
-	c.cache = cacheClient
-	c.authorityEpoch.Store(2)
-
-	if got := c.loadChannelFromDistributedCache(t.Context(), "renamed-channel", 0); got != nil {
-		t.Fatalf("channel lookup = %+v, want miss", got)
-	}
-
-	if got := c.loadNameFromDistributedCache(t.Context(), "DeletedName", 0); got != nil {
-		t.Fatalf("name lookup = %+v, want miss", got)
-	}
-
-	if got := c.getAliasFromCache(t.Context(), "RemovedAlias", 0); got != nil {
-		t.Fatalf("alias lookup = %+v, want miss", got)
-	}
-
-	want := []string{
-		memberEpochDataPrefix + "2:" + memberChannelKeyPrefix + "renamed-channel",
-		memberEpochDataPrefix + "2:" + memberNameKeyPrefix + "DeletedName",
-		memberEpochDataPrefix + "2:" + memberAliasKeyPrefix + "RemovedAlias",
-	}
-	if len(keys) != len(want) {
-		t.Fatalf("lookup keys = %v, want %v", keys, want)
-	}
-
-	for i := range want {
-		if keys[i] != want[i] {
-			t.Fatalf("lookup key[%d] = %q, want %q", i, keys[i], want[i])
-		}
-	}
+// epochTestDatabase는 여러 테스트 프로세스가 공유하는 PostgreSQL members 역할을 한다.
+type epochTestDatabase struct {
+	name atomic.Value
 }
 
-func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
+func (d *epochTestDatabase) load(context.Context) ([]*domain.Member, error) {
+	name, ok := d.name.Load().(string)
+	if !ok {
+		return nil, errors.New("epoch test database name is not set")
+	}
+
+	return []*domain.Member{{ID: 1, ChannelID: "UC-epoch", Name: name}}, nil
+}
+
+type epochTestTopology struct {
+	mini      *miniredis.Miniredis
+	database  *epochTestDatabase
+	processes []*Cache
+	publisher *Cache
+}
+
+// newEpochTestTopology는 같은 Valkey를 보는 두 member cache 프로세스와, mutation만 발행하는 별도 command client를 만든다.
+// Miniredis의 RESP2 Pub/Sub 연결 제약이 subscriber 자신의 mutation 명령을 간헐적으로 오염시키므로 실제 multi-process
+// topology처럼 별도 client에서 mutation을 발행한다.
+func newEpochTestTopology(t *testing.T) *epochTestTopology {
+	t.Helper()
+
 	host, port, mini := testredis.StartMiniRedis(t)
 	t.Cleanup(mini.Close)
 
@@ -491,61 +489,124 @@ func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
 		return service
 	}
 
-	config := CacheConfig{EpochReconcileInterval: 10 * time.Millisecond}
+	topology := &epochTestTopology{mini: mini, database: &epochTestDatabase{}}
+	topology.database.name.Store("Old")
 
-	first, err := NewMemberCache(t.Context(), nil, newService(), slog.New(slog.DiscardHandler), config)
-	if err != nil {
-		t.Fatalf("first NewMemberCache() error = %v", err)
-	}
+	for range 2 {
+		process, err := NewMemberCache(t.Context(), nil, newService(), slog.New(slog.DiscardHandler), CacheConfig{EpochReconcileInterval: 10 * time.Millisecond})
+		if err != nil {
+			t.Fatalf("NewMemberCache() error = %v", err)
+		}
 
-	second, err := NewMemberCache(t.Context(), nil, newService(), slog.New(slog.DiscardHandler), config)
-	if err != nil {
-		t.Fatalf("second NewMemberCache() error = %v", err)
+		process.loadAllMembers = topology.database.load
+		topology.processes = append(topology.processes, process)
 	}
 
 	assertEventually(t, func() bool { return mini.PubSubNumSub(memberEpochChannel)[memberEpochChannel] == 2 })
 
-	// miniredis의 RESP2 Pub/Sub 연결 제약이 subscriber 자신의 mutation 명령을 간헐적으로 오염시키므로
-	// 실제 multi-process topology처럼 별도 command client에서 mutation을 발행한다.
 	publisherService := newService()
-	publisher := newEpochTestCache(newValkeyMemberEpochAuthority(publisherService.GetClient()))
 
-	publisher.cache = publisherService
+	topology.publisher = newEpochTestCache(newValkeyMemberEpochAuthority(publisherService.GetClient()))
 
-	if err := publisher.InvalidateAll(t.Context()); err != nil {
+	return topology
+}
+
+func (topology *epochTestTopology) converged(epoch uint64, name string) func() bool {
+	return func() bool {
+		for _, process := range topology.processes {
+			if process.authorityEpoch.Load() != epoch || !process.authorityHealthy.Load() {
+				return false
+			}
+
+			members, err := process.AllMembers(context.Background())
+			if err != nil || len(members) != 1 || members[0].Name != name {
+				return false
+			}
+		}
+
+		return true
+	}
+}
+
+func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
+	topology := newEpochTestTopology(t)
+
+	assertEventually(t, topology.converged(1, "Old"))
+
+	topology.database.name.Store("New")
+
+	if err := topology.publisher.InvalidateAll(t.Context()); err != nil {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
 
-	assertEventually(t, func() bool {
-		return publisher.authorityEpoch.Load() == 2 && first.authorityEpoch.Load() == 2 && second.authorityEpoch.Load() == 2
-	})
+	assertEventually(t, topology.converged(2, "New"))
+
+	// Valkey에는 epoch authority만 남고 멤버 데이터 key는 쓰이지 않는다.
+	if keys := topology.mini.Keys(); len(keys) != 1 || keys[0] != memberEpochAuthorityKey {
+		t.Fatalf("valkey keys = %v, want only %s", keys, memberEpochAuthorityKey)
+	}
 }
 
-func TestCacheEpoch_InvalidationLeavesUnprefixedKeyspaceUntouched(t *testing.T) {
+// warmup, 채널·이름·별칭 조회, 무효화 전체에서 Valkey에 쓰이는 것은 epoch authority key 하나뿐이다.
+func TestCacheEpoch_MemberDataNeverWrittenToValkey(t *testing.T) {
 	service, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
-	c := &Cache{
-		cache:  service,
-		epoch:  newValkeyMemberEpochAuthority(service.GetClient()),
-		logger: slog.New(slog.DiscardHandler),
-	}
-	c.authorityEpoch.Store(1)
-	c.authorityHealthy.Store(true)
+	c := newEpochTestCache(newValkeyMemberEpochAuthority(service.GetClient()))
 
-	if err := mini.Set(memberNameKeyPrefix+"unprefixed", "stale"); err != nil {
-		t.Fatalf("seed unprefixed key: %v", err)
+	c.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
+		return []*domain.Member{{ID: 1, ChannelID: "UC-epoch", Name: "Epoch", Aliases: &domain.Aliases{Ko: []string{"에포크"}}}}, nil
+	}
+
+	if err := c.reconcileEpoch(t.Context(), epochReconcileStartup); err != nil {
+		t.Fatalf("reconcileEpoch() error = %v", err)
+	}
+
+	if err := c.WarmUpCache(t.Context()); err != nil {
+		t.Fatalf("WarmUpCache() error = %v", err)
+	}
+
+	byChannel, channelErr := c.GetByChannelID(t.Context(), "UC-epoch")
+	byName, nameErr := c.GetByName(t.Context(), "Epoch")
+	byAlias, aliasErr := c.FindByAlias(t.Context(), "에포크")
+
+	if channelErr != nil || nameErr != nil || aliasErr != nil || byChannel.ID != 1 || byName.ID != 1 || byAlias.ID != 1 {
+		t.Fatalf("snapshot lookups = %+v/%v, %+v/%v, %+v/%v", byChannel, channelErr, byName, nameErr, byAlias, aliasErr)
 	}
 
 	if err := c.InvalidateAll(t.Context()); err != nil {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
 
-	if !mini.Exists(memberEpochAuthorityKey) {
-		t.Fatal("invalidation deleted the V2 authority key")
+	if keys := mini.Keys(); len(keys) != 1 || keys[0] != memberEpochAuthorityKey {
+		t.Fatalf("valkey keys = %v, want only %s", keys, memberEpochAuthorityKey)
+	}
+}
+
+// Valkey 재시작으로 epoch key가 사라져 1로 다시 만들어져도(값 회귀) 장수 프로세스는 epoch 1을 건강한 authority로
+// 받아들이고 새 snapshot으로 수렴한다. 예전 크기 비교는 여기서 authority를 영구 불확실로 두어 재시작 전까지 PostgreSQL을
+// 직접 읽게 했다.
+func TestCacheEpoch_RecreatedEpochAfterValkeyRestartConverges(t *testing.T) {
+	topology := newEpochTestTopology(t)
+
+	for range 2 {
+		if err := topology.publisher.InvalidateAll(t.Context()); err != nil {
+			t.Fatalf("InvalidateAll() error = %v", err)
+		}
 	}
 
-	if !mini.Exists(memberNameKeyPrefix + "unprefixed") {
-		t.Fatal("invalidation scanned/deleted outside the epoch-scoped namespace; contraction removed the legacy member:* sweep")
+	assertEventually(t, topology.converged(3, "Old"))
+
+	topology.database.name.Store("AfterRestart")
+	topology.mini.FlushAll()
+
+	assertEventually(t, topology.converged(1, "AfterRestart"))
+
+	topology.database.name.Store("AfterMutation")
+
+	if err := topology.publisher.InvalidateAll(t.Context()); err != nil {
+		t.Fatalf("InvalidateAll() after restart error = %v", err)
 	}
+
+	assertEventually(t, topology.converged(2, "AfterMutation"))
 }
 
 func TestValkeyMemberEpochAuthorityRejectsOverflowAndCorruption(t *testing.T) {

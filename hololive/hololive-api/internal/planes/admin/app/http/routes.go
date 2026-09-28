@@ -68,7 +68,6 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsAPIHa
 	holoAPI.POST("/x-spaces/session", handler.SubmitXSpaceSession)
 	holoAPI.POST("/settings/llm", handler.UpdateLLMSettings)
 	holoAPI.POST("/names/room", handler.SetRoomName)
-	holoAPI.POST("/names/user", handler.SetUserName)
 }
 
 func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *api.StatsHandler, streamHandler *api.StreamHandler) {

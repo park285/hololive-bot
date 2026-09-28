@@ -22,20 +22,13 @@ package membernews
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/subscription"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 var _ subscription.SubscriptionRepository[model.SubscribedRoom] = (*Repository)(nil)
-
-const (
-	memberNewsRoomsKey     = "membernews:rooms"
-	memberNewsRoomNamesKey = "membernews:room_names"
-)
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -55,25 +48,15 @@ type memberNewsQuerier interface {
 }
 
 type Repository struct {
-	pool  memberNewsQuerier
-	cache cache.Client
-	log   *slog.Logger
+	pool memberNewsQuerier
 }
 
-func NewRepository(postgres database.Client, cacheClient cache.Client, logger *slog.Logger) *Repository {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
+func NewRepository(postgres database.Client) *Repository {
 	var pool memberNewsQuerier
 
 	if postgres != nil {
 		pool = newPGXMemberNewsQuerier(postgres.GetPool())
 	}
 
-	return &Repository{
-		pool:  pool,
-		cache: cacheClient,
-		log:   logger,
-	}
+	return &Repository{pool: pool}
 }

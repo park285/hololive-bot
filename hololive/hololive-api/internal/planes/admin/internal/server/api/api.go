@@ -33,13 +33,11 @@ import (
 	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
 // Admin Dashboard와 Tauri 앱 모두에서 사용됩니다.
@@ -47,7 +45,7 @@ import (
 //   - api_member.go: 멤버 관리 + 프로필 조회
 //   - api_alarm.go: 알람 관리
 //   - api_room.go: 룸/ACL 관리
-//   - api_stream.go: 스트림/채널 통계
+//   - api_stream.go: 스트림/채널 조회
 //   - api_stats.go: 봇 통계
 //   - api_settings.go: 설정/활동 로그/이름매핑
 //   - api_milestone.go: 마일스톤 조회
@@ -55,10 +53,8 @@ import (
 type Handler struct {
 	repository                 *member.Repository
 	memberCache                *member.Cache
-	valkeyCache                cache.Client
 	alarm                      domain.AlarmCRUD
 	holodex                    *holodexprovider.Service
-	youtube                    youtube.Service
 	communityShortsOps         YouTubeCommunityShortsOpsRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
@@ -89,7 +85,7 @@ type IrisRoomLister interface {
 }
 
 func newStreamState() *sharedserver.StreamState {
-	return sharedserver.NewStreamState(channelStatsCacheWorkers, channelStatsRefreshWorkers)
+	return sharedserver.NewStreamState()
 }
 
 func (h *Handler) ensureDefaults() *Handler {
@@ -140,9 +136,7 @@ type MemberDeps struct {
 }
 
 type StreamDeps struct {
-	Holodex     *holodexprovider.Service
-	YouTube     youtube.Service
-	ValkeyCache cache.Client
+	Holodex *holodexprovider.Service
 }
 
 type StatsDeps struct {
@@ -195,10 +189,8 @@ func NewHandler(deps *HandlerDeps) *Handler {
 	return (&Handler{
 		repository:                 deps.Member.Repository,
 		memberCache:                deps.Member.Cache,
-		valkeyCache:                deps.Stream.ValkeyCache,
 		alarm:                      deps.Stats.Alarm,
 		holodex:                    deps.Stream.Holodex,
-		youtube:                    deps.Stream.YouTube,
 		communityShortsOps:         deps.YouTubeOps.CommunityShortsOps,
 		activity:                   deps.Common.Activity,
 		settings:                   deps.Settings.Settings,

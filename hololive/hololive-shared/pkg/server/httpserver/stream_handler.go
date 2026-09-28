@@ -33,25 +33,13 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
 const (
-	ChannelStatsCacheKey = "admin:channel_stats"
-	ChannelStatsCacheTTL = 10 * time.Minute
-
-	ChannelStatsRefreshLockKey   = "admin:channel_stats:refresh_lock"
-	ChannelStatsRefreshLockValue = "locked"
-	ChannelStatsRefreshLockTTL   = 5 * time.Minute
-
 	MemberIndexCacheTTL = 1 * time.Minute
 
 	MemberIndexRefreshTimeout = 30 * time.Second
-
-	DefaultChannelStatsCacheWorkers   = 4
-	DefaultChannelStatsRefreshWorkers = 1
 )
 
 // 저장 즉시 불변으로 취급하고 통째로 교체한다. 필드를 제자리 수정하면
@@ -67,7 +55,7 @@ type StreamState struct {
 	memberIndexBuildGroup singleflight.Group
 }
 
-func NewStreamState(_, _ int) *StreamState {
+func NewStreamState() *StreamState {
 	return &StreamState{}
 }
 
@@ -86,8 +74,6 @@ type StreamRespondInternalErrorFunc func(c *gin.Context, userMessage, logMessage
 type StreamHandler struct {
 	Logger               *slog.Logger
 	Holodex              *holodexprovider.Service
-	YouTube              youtube.Service
-	ValkeyCache          cache.KeyValueCache
 	MemberRepository     StreamMemberRepository
 	MemberIndexLoader    func(context.Context) ([]*domain.Member, error)
 	State                *StreamState
@@ -97,7 +83,7 @@ type StreamHandler struct {
 
 func (h *StreamHandler) ensureState() *StreamState {
 	if h.State == nil {
-		h.State = NewStreamState(DefaultChannelStatsCacheWorkers, DefaultChannelStatsRefreshWorkers)
+		h.State = NewStreamState()
 	}
 
 	return h.State

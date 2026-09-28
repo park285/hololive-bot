@@ -91,10 +91,6 @@ hololive/hololive-alarm-worker/VERSION
 hololive/hololive-shared/internal/service/fallback/executor.go
 hololive/hololive-shared/internal/service/fallback/metrics.go
 hololive/hololive-shared/internal/service/fallback/secondary.go
-hololive/hololive-shared/internal/service/youtube/apiservice/interfaces.go
-hololive/hololive-shared/internal/service/youtube/apiservice/service.go
-hololive/hololive-shared/internal/service/youtube/apiservice/service_channel_statistics.go
-hololive/hololive-shared/internal/service/youtube/apiservice/service_read.go
 hololive/hololive-shared/pkg/service/youtube/contentid/canonical.go
 hololive/hololive-shared/pkg/cleanupctx/context.go
 hololive/hololive-shared/pkg/config/settings/config.go
@@ -190,7 +186,6 @@ hololive/hololive-shared/pkg/domain/org_member.go
 hololive/hololive-shared/pkg/domain/org_member_interface.go
 hololive/hololive-shared/pkg/domain/stream.go
 hololive/hololive-shared/pkg/domain/stream_interfaces.go
-hololive/hololive-shared/pkg/domain/stream_next.go
 hololive/hololive-shared/pkg/domain/stream_url.go
 hololive/hololive-shared/pkg/domain/x_space.go
 hololive/hololive-shared/pkg/domain/youtube_content.go
@@ -207,9 +202,6 @@ hololive/hololive-shared/pkg/providers/infra_providers.go
 hololive/hololive-shared/pkg/providers/member_providers.go
 hololive/hololive-shared/pkg/providers/modules/infra.go
 hololive/hololive-shared/pkg/providers/modules/settings.go
-hololive/hololive-shared/pkg/providers/modules/youtube_api_stack.go
-hololive/hololive-shared/pkg/providers/modules/youtube_stack.go
-hololive/hololive-shared/pkg/providers/types.go
 hololive/hololive-shared/pkg/providers/youtube_providers.go
 hololive/hololive-shared/pkg/providers/youtube_rate_limiter_provider.go
 hololive/hololive-shared/pkg/server/httpserver/channel_ids.go
@@ -269,8 +261,6 @@ hololive/hololive-shared/pkg/service/cache/hash.go
 hololive/hololive-shared/pkg/service/cache/interface.go
 hololive/hololive-shared/pkg/service/cache/kv.go
 hololive/hololive-shared/pkg/service/cache/lowlevel.go
-hololive/hololive-shared/pkg/service/cache/member.go
-hololive/hololive-shared/pkg/service/cache/member_cache.go
 hololive/hololive-shared/pkg/service/cache/script.go
 hololive/hololive-shared/pkg/service/cache/service.go
 hololive/hololive-shared/pkg/service/cache/service_connection.go
@@ -279,8 +269,6 @@ hololive/hololive-shared/pkg/service/cache/service_kv.go
 hololive/hololive-shared/pkg/service/cache/service_scripts.go
 hololive/hololive-shared/pkg/service/cache/service_set.go
 hololive/hololive-shared/pkg/service/cache/set.go
-hololive/hololive-shared/pkg/service/cache/stream.go
-hololive/hololive-shared/pkg/service/cache/stream_cache.go
 hololive/hololive-shared/pkg/service/database/interface.go
 hololive/hololive-shared/pkg/service/database/pgx_helpers.go
 hololive/hololive-shared/pkg/service/database/postgres.go
@@ -345,7 +333,7 @@ hololive/hololive-shared/pkg/service/member/cache_all_members.go
 hololive/hololive-shared/pkg/service/member/cache_epoch.go
 hololive/hololive-shared/pkg/service/member/cache_invalidation.go
 hololive/hololive-shared/pkg/service/member/cache_metrics.go
-hololive/hololive-shared/pkg/service/member/cache_point_ownership.go
+hololive/hololive-shared/pkg/service/member/cache_point_index.go
 hololive/hololive-shared/pkg/service/member/cache_point_store.go
 hololive/hololive-shared/pkg/service/member/cache_warmup.go
 hololive/hololive-shared/pkg/service/member/channel_representative.go
@@ -386,7 +374,6 @@ hololive/hololive-shared/pkg/service/settings/service.go
 hololive/hololive-shared/pkg/service/youtube/admission/deferred.go
 hololive/hololive-shared/pkg/service/youtube/alarmtiming/timing.go
 hololive/hololive-shared/internal/service/youtube/community/processor.go
-hololive/hololive-shared/pkg/service/youtube/interfaces.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/helpers.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/latency_persister.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_new_short_dedup_0048_01.sql
@@ -442,8 +429,6 @@ hololive/hololive-shared/pkg/service/youtube/scraper/scraping/admission.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/alerts.go
 hololive/hololive-shared/internal/service/youtube/scraper/scraping/backoff/backoff.go
 hololive/hololive-shared/internal/service/youtube/scraper/scraping/backoff/testing.go
-hololive/hololive-shared/pkg/service/youtube/scraper/scraping/channel.go
-hololive/hololive-shared/pkg/service/youtube/scraper/scraping/channel_health.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/client.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/client_http.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/client_operation_guard.go
@@ -479,7 +464,6 @@ hololive/hololive-shared/pkg/service/youtube/scraper/scraping/structure_alerts.g
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/videos.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/videos_rss.go
 hololive/hololive-shared/internal/service/youtube/scraper/ua/provider.go
-hololive/hololive-shared/pkg/service/youtube/service.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_photo_consumer.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_photo_persist.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_profile_consumer.go

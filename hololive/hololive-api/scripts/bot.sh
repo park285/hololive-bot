@@ -18,9 +18,9 @@ usage() {
 Usage: ./scripts/bot.sh <command> [options]
 
 Commands:
-  start [--no-ready-wait]
+  start
   stop
-  restart [--build] [--no-ready-wait]
+  restart [--build]
   rebuild [--restart]
   status
   help
@@ -64,9 +64,6 @@ load_env_file_literal() {
 
 cmd_start() {
   local container_cli="${CONTAINER_CLI:-docker}"
-  local wait_for_ready="true"
-  local min_count="${CORE_MEMBER_HASH_SOFT_MIN_COUNT:-50}"
-  local timeout_sec="${CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS:-45}"
   local old_pid=""
   local running_pids=""
   local required_vars="IRIS_BASE_URL HOLODEX_API_KEY CACHE_HOST"
@@ -76,24 +73,16 @@ cmd_start() {
   local backup_name=""
   local iris_port=""
   local bot_pid=""
-  local start_ts=0
-  local count=0
-  local now=0
-  local elapsed=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --no-ready-wait)
-        wait_for_ready="false"
-        shift
-        ;;
       -h|--help)
         usage
         return 0
         ;;
       *)
         echo "[ERROR] Unknown argument: $1"
-        echo "Usage: ./scripts/bot.sh start [--no-ready-wait]"
+        echo "Usage: ./scripts/bot.sh start"
         exit 1
         ;;
     esac
@@ -143,9 +132,6 @@ cmd_start() {
     fi
   done
   echo "[OK] Environment variables validated"
-
-  min_count="${CORE_MEMBER_HASH_SOFT_MIN_COUNT:-${min_count}}"
-  timeout_sec="${CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS:-${timeout_sec}}"
 
   if [[ ! -f "bin/bot" ]]; then
     echo "[BUILD] Binary not found, building..."
@@ -220,31 +206,6 @@ cmd_start() {
     tail -30 "${NOHUP_LOG}" 2>/dev/null || true
     rm -f "${PID_FILE}"
     exit 1
-  fi
-
-  if [[ "${wait_for_ready}" == "true" ]]; then
-    echo "[CHECK] Waiting for member cache readiness..."
-    start_ts="$(date +%s)"
-    while true; do
-      if "${container_cli}" exec holo-valkey valkey-cli EXISTS hololive:members:ready 2>/dev/null | grep -q "^1$"; then
-        echo "[READY] hololive:members:ready flag detected"
-        break
-      fi
-
-      count="$("${container_cli}" exec holo-valkey valkey-cli HLEN hololive:members 2>/dev/null | tr -d '\r' || echo 0)"
-      if [[ "${count}" =~ ^[0-9]+$ ]] && [[ "${count}" -ge "${min_count}" ]]; then
-        echo "[READY] hololive:members count >= ${min_count} (=${count})"
-        break
-      fi
-
-      now="$(date +%s)"
-      elapsed=$((now - start_ts))
-      if [[ "${elapsed}" -ge "${timeout_sec}" ]]; then
-        echo "[WARN] Readiness not reached in ${timeout_sec}s (flag missing, count=${count:-0})"
-        break
-      fi
-      sleep 1
-    done
   fi
 }
 
@@ -324,16 +285,11 @@ cmd_stop() {
 
 cmd_restart() {
   local build="false"
-  local start_args=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --build|-b)
         build="true"
-        shift
-        ;;
-      --no-ready-wait)
-        start_args+=("$1")
         shift
         ;;
       -h|--help)
@@ -342,7 +298,7 @@ cmd_restart() {
         ;;
       *)
         echo "[ERROR] Unknown argument: $1"
-        echo "Usage: ./scripts/bot.sh restart [--build] [--no-ready-wait]"
+        echo "Usage: ./scripts/bot.sh restart [--build]"
         exit 1
         ;;
     esac
@@ -356,7 +312,7 @@ cmd_restart() {
     CGO_ENABLED=0 go build -o bin/bot ./cmd/hololive-api
   fi
 
-  cmd_start "${start_args[@]}"
+  cmd_start
 }
 
 cmd_rebuild() {
@@ -411,8 +367,6 @@ cmd_status() {
   local cpu=""
   local fallback_pids=""
   local cache_port=""
-  local ready_flag=""
-  local member_count=""
   local iris_port=""
   local log_size=""
   local log_lines=""
@@ -458,14 +412,6 @@ cmd_status() {
     if timeout 2 "${container_cli}" exec holo-valkey valkey-cli ping >/dev/null 2>&1; then
       cache_port="$(grep "^CACHE_PORT=" .env 2>/dev/null | cut -d'=' -f2- || echo "6379")"
       echo "Redis: [CONNECTED] (host port ${cache_port} -> container port 6379)"
-      ready_flag="$("${container_cli}" exec holo-valkey valkey-cli EXISTS hololive:members:ready 2>/dev/null | tr -d '\r' || echo 0)"
-      member_count="$("${container_cli}" exec holo-valkey valkey-cli HLEN hololive:members 2>/dev/null | tr -d '\r' || echo 0)"
-      if [[ "${ready_flag}" == "1" ]]; then
-        echo "Ready: [SET] hololive:members:ready"
-      else
-        echo "Ready: [NOT SET] hololive:members:ready"
-      fi
-      echo "Members: ${member_count}"
     else
       echo "Redis: [WARN] CONTAINER UP but not responding"
     fi

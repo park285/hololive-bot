@@ -16,8 +16,8 @@ import (
 // 그 상태로 이 가드가 든 release가 중앙 호스트에 배포된 뒤. T18(2026-09-26)에서 collector env를 포함한 모든 hololive env에
 // 0건임을 확인했다.
 // 삭제 리비전: 제거 조건을 충족한 뒤의 첫 hololive-bot release. 그 리비전에서 이 파일,
-// config_youtube_producer_retired_test.go의 퇴역 가드 테스트 두 개, config.go의 rejectRetiredYouTubeProducerEnv 호출,
-// youtube-producer-retirement.allowlist의 두 파일 항목을 함께 삭제한다.
+// config_youtube_producer_retired_test.go의 퇴역 가드 테스트 두 개, config.go의 rejectRetiredYouTubeProducerEnv 호출을
+// 함께 삭제한다.
 // 재검토 기한: remove_after = "2026-12-31".
 var retiredYouTubeProducerEnvKeys = []string{
 	"YOUTUBE_PRODUCER_FETCHER_ENGINE",

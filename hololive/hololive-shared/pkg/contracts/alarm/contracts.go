@@ -20,32 +20,67 @@
 
 package alarm
 
-import "net/url"
+import (
+	"errors"
+	"net/url"
+	"strings"
+	"unicode/utf8"
+)
 
 const (
 	BasePath = "/internal/alarm"
 
-	AddRoute        = "/add"
-	RemoveRoute     = "/remove"
-	RoomRoute       = "/room/:id"
-	RoomViewRoute   = "/room/:id/view"
-	ClearRoute      = "/clear"
-	NextStreamRoute = "/next-stream/:id"
-	SettingsRoute   = "/settings"
-	RoomNameRoute   = "/room-name"
-	UserNameRoute   = "/user-name"
-	KeysRoute       = "/keys"
+	AddRoute      = "/add"
+	RemoveRoute   = "/remove"
+	RoomRoute     = "/room/:id"
+	RoomViewRoute = "/room/:id/view"
+	ClearRoute    = "/clear"
+	SettingsRoute = "/settings"
+	RoomNameRoute = "/room-name"
+	KeysRoute     = "/keys"
 
 	AddPath      = BasePath + AddRoute
 	RemovePath   = BasePath + RemoveRoute
 	ClearPath    = BasePath + ClearRoute
 	SettingsPath = BasePath + SettingsRoute
 	RoomNamePath = BasePath + RoomNameRoute
-	UserNamePath = BasePath + UserNameRoute
 	KeysPath     = BasePath + KeysRoute
 )
 
 const QueueEnvelopeVersionV1 uint8 = 1
+
+// 방 이름 요청 폭은 alarms.room_id VARCHAR(100)·alarm_room_display_names.display_name VARCHAR(255)를 따른다.
+// PG varchar 폭은 문자 수라 rune으로 센다.
+const (
+	MaxRoomIDLength   = 100
+	MaxRoomNameLength = 255
+)
+
+var (
+	ErrRoomIDRequired  = errors.New("room id is required")
+	ErrRoomIDTooLong   = errors.New("room id exceeds 100 characters")
+	ErrRoomNameTooLong = errors.New("room name exceeds 255 characters")
+)
+
+// NormalizeRoomName은 방 이름 설정 요청의 앞뒤 공백을 제거하고 저장 폭을 넘는 값을 거절한다.
+// 공백뿐인 이름은 빈 문자열(관리자 지정 해제)로 돌려준다.
+func NormalizeRoomName(roomID, roomName string) (string, string, error) {
+	roomID = strings.TrimSpace(roomID)
+	if roomID == "" {
+		return "", "", ErrRoomIDRequired
+	}
+
+	if utf8.RuneCountInString(roomID) > MaxRoomIDLength {
+		return "", "", ErrRoomIDTooLong
+	}
+
+	roomName = strings.TrimSpace(roomName)
+	if utf8.RuneCountInString(roomName) > MaxRoomNameLength {
+		return "", "", ErrRoomNameTooLong
+	}
+
+	return roomID, roomName, nil
+}
 
 func RoomAlarmsPath(roomID string) string {
 	return BasePath + "/room/" + url.PathEscape(roomID)
@@ -53,8 +88,4 @@ func RoomAlarmsPath(roomID string) string {
 
 func RoomAlarmsViewPath(roomID string) string {
 	return BasePath + "/room/" + url.PathEscape(roomID) + "/view"
-}
-
-func NextStreamPath(channelID string) string {
-	return BasePath + "/next-stream/" + url.PathEscape(channelID)
 }
