@@ -10,7 +10,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -77,12 +79,24 @@ func run(args []string) int {
 		return 2
 	}
 
+	broker := pobroker.New(revision, opts.node, opts.worker)
+	report := exitReporter(os.Stderr, broker.Generation())
+	stopWatching := watchTermination(report, broker.ExitReason)
+
 	listener, err := prepareListener(context.Background(), opts.socket, opts.listenFD)
 	if err != nil {
+		report(pobroker.ExitListenerFailed)
+		stopWatching()
+
 		return 1
 	}
 
-	serveErr := pobroker.New(revision, opts.node, opts.worker).Serve(listener)
+	serveErr := broker.Serve(listener)
+
+	// signal 감시를 멈추기 전에 기록해, 그 사이 도착한 signal도 원인 줄을 남긴 뒤 종료하게 합니다.
+	report(broker.ExitReason())
+	stopWatching()
+
 	// http.Server.Serve는 반환하면서 listener를 닫으므로 ErrClosed만 정상 결과다.
 	closeErr := listener.Close()
 	if serveErr != nil || (closeErr != nil && !errors.Is(closeErr, net.ErrClosed)) {
@@ -90,6 +104,54 @@ func run(args []string) int {
 	}
 
 	return 0
+}
+
+// exitReporter는 프로세스 종료 원인을 stderr에 한 줄만 기록합니다. 고정 어휘의
+// 원인과 broker가 만든 generation만 쓰고 요청·token·worker 출력은 쓰지 않습니다.
+func exitReporter(w io.Writer, generation string) func(pobroker.ExitReason) {
+	var once sync.Once
+
+	return func(reason pobroker.ExitReason) {
+		once.Do(func() {
+			// stderr 기록 실패는 종료 상태를 바꾸지 않습니다.
+			if _, err := fmt.Fprintf(w, "po-broker exit reason=%s generation=%s\n", reason, generation); err != nil {
+				return
+			}
+		})
+	}
+}
+
+// watchTermination은 종료 signal의 원인을 기록한 뒤 같은 signal을 기본 처리로
+// 다시 보내 종료 방식과 상태를 signal 처리 도입 전과 같게 둡니다. 퇴역이 이미 시작됐으면
+// signal 대신 처음 표시된 퇴역 원인을 기록합니다. 반환한 함수를 부른 뒤의 signal은 곧바로
+// 기본 처리로 가고, 그 전에 받은 signal도 같은 방식으로 종료합니다.
+func watchTermination(report func(pobroker.ExitReason), retired func() pobroker.ExitReason) (stop func()) {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		received := <-signals
+		sig := syscall.SIGTERM
+
+		if received == syscall.SIGINT {
+			sig = syscall.SIGINT
+		}
+
+		reason := retired()
+		if reason == "" {
+			reason = pobroker.ExitSignal
+		}
+
+		report(reason)
+		signal.Reset(sig)
+
+		// 자기 프로세스로의 signal은 실패하지 않습니다. 실패해도 종료 요청을 삼키지 않습니다.
+		if err := syscall.Kill(os.Getpid(), sig); err != nil {
+			os.Exit(1)
+		}
+	}()
+
+	return func() { signal.Stop(signals) }
 }
 
 func printVersion(args []string) int {

@@ -184,11 +184,75 @@ if grep -Fq 'no previous collector release to roll back to; fix forward' "${ROLL
 else
   record_fail "ap-host-native rollback must refuse hosts without a previous collector release"
 fi
-if grep -Fq 'stop_collector_unit_and_require_inactive' "${REMOTE_APPLY}"; then
-  pass "ap-host-native failed cutover stops the collector before restoring the previous release"
+stop_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
+stop_fixture="$(mktemp -d)"
+# 가짜 systemctl은 active unit을 파일로 두고 호출을 기록한다. socket stop은 Requires=처럼 service도 멈춘다.
+# collector_sticks가 있으면 disable --now 뒤에도 collector가 active로 남는다.
+run_native_stop() (
+  local state="$1"
+  po_service=hololive-youtube-po.service
+  po_socket=hololive-youtube-po.socket
+  unit=hololive-youtube-collector@youtube-collector-a.service
+  sudo() { [[ "${1:-}" != "-n" ]] || shift; "$@"; }
+  systemctl() {
+    local target
+    printf '%s\n' "$*" >>"${state}/calls"
+    case "$1" in
+      cat) return 0 ;;
+      is-active) [[ -e "${state}/active/${*: -1}" ]] ;;
+      stop | disable)
+        [[ "$1" == stop ]] || shift
+        shift
+        for target in "$@"; do
+          [[ "${target}" == "${unit}" && -e "${state}/collector_sticks" ]] && continue
+          rm -f "${state}/active/${target}"
+          [[ "${target}" != "${po_socket}" ]] || rm -f "${state}/active/${po_service}"
+        done
+        ;;
+      *) return 1 ;;
+    esac
+  }
+  eval "${stop_units_fns}"
+  stop_native_units_and_require_inactive
+)
+stop_case() {
+  local state="${stop_fixture}/$1" unit_name
+  shift
+  mkdir -p "${state}/active"
+  for unit_name in "$@"; do
+    touch "${state}/active/${unit_name}"
+  done
+  printf '%s\n' "${state}"
+}
+
+running_state="$(stop_case running hololive-youtube-po.socket hololive-youtube-po.service hololive-youtube-collector@youtube-collector-a.service)"
+if run_native_stop "${running_state}" >/dev/null &&
+   [[ -z "$(ls -A "${running_state}/active")" ]] &&
+   po_stop_line="$(grep -nFx 'stop hololive-youtube-po.socket' "${running_state}/calls" | cut -d: -f1)" &&
+   collector_stop_line="$(grep -nFx 'disable --now hololive-youtube-collector@youtube-collector-a.service' "${running_state}/calls" | cut -d: -f1)" &&
+   (( po_stop_line < collector_stop_line )); then
+  pass "ap-host-native cutover stops the PO issuer before the collector can retire its generation"
 else
-  record_fail "ap-host-native failed cutover must stop the collector before restoring the previous release"
+  record_fail "ap-host-native cutover must stop the PO issuer before the collector"
 fi
+
+first_install_state="$(stop_case first-install hololive-youtube-collector@youtube-collector-a.service)"
+if run_native_stop "${first_install_state}" >/dev/null &&
+   [[ -z "$(ls -A "${first_install_state}/active")" ]] &&
+   ! grep -q '^stop ' "${first_install_state}/calls"; then
+  pass "ap-host-native cutover stops the collector when no PO issuer is installed"
+else
+  record_fail "ap-host-native cutover must tolerate absent PO units and still stop the collector"
+fi
+
+stuck_state="$(stop_case stuck hololive-youtube-po.socket hololive-youtube-po.service hololive-youtube-collector@youtube-collector-a.service)"
+touch "${stuck_state}/collector_sticks"
+if run_native_stop "${stuck_state}" >/dev/null 2>&1; then
+  record_fail "ap-host-native cutover must fail while the collector stays active"
+else
+  pass "ap-host-native cutover fails closed while the collector stays active"
+fi
+rm -rf "${stop_fixture}"
 
 capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
 install_line="$(grep -nF '"$payload/youtube-collector-host.env" "$host_env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"

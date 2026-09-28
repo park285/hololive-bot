@@ -31,6 +31,33 @@ const (
 	Ready             State = "READY"
 )
 
+// ExitReason은 generation 퇴역(곧 프로세스 종료) 원인의 고정 어휘입니다. 종료
+// 로그에는 이 값만 기록하고 요청 본문·token·worker 출력은 싣지 않습니다.
+type ExitReason string
+
+const (
+	// ExitSessionClosed는 client의 DELETE /v1/session 반납입니다.
+	ExitSessionClosed ExitReason = "session_closed"
+	// ExitLeaseExpired는 lease 타이머나 요청 시점 검사가 만료를 확인한 경우입니다.
+	ExitLeaseExpired ExitReason = "lease_expired"
+	// ExitWorkerFailed는 worker의 잘못된 응답·IO 실패입니다.
+	ExitWorkerFailed ExitReason = "worker_failed"
+	// ExitWorkerTimeout은 operationLimit 초과입니다.
+	ExitWorkerTimeout ExitReason = "worker_timeout"
+	// ExitRequestAborted는 worker IO 중 요청 연결이 끊긴 경우입니다.
+	ExitRequestAborted ExitReason = "request_aborted"
+	// ExitResponseFailed는 worker 결과를 응답으로 인코딩·전송하지 못한 경우입니다.
+	ExitResponseFailed ExitReason = "response_failed"
+	// ExitWorkerExited는 기동을 마친 worker가 worker IO 요청이 없는 동안 스스로 종료한 경우입니다.
+	ExitWorkerExited ExitReason = "worker_exited"
+	// ExitStartupFailed는 worker 기동·loaded 확인 실패입니다.
+	ExitStartupFailed ExitReason = "startup_failed"
+	// ExitListenerFailed는 listener 준비 또는 Serve 자체의 실패입니다.
+	ExitListenerFailed ExitReason = "listener_failed"
+	// ExitSignal은 퇴역이 시작되기 전에 받은 종료 signal입니다. 퇴역 중 받은 signal은 먼저 표시된 원인을 남깁니다.
+	ExitSignal ExitReason = "signal"
+)
+
 type Broker struct {
 	generation      string
 	revision        string
@@ -47,7 +74,9 @@ type Broker struct {
 	expires         time.Time
 	leaseTimer      *time.Timer
 	retiring        bool
-	retireOnce      sync.Once
+	// exitReason은 처음 retiring을 표시한 호출의 원인이며 b.mu가 보호합니다.
+	exitReason ExitReason
+	retireOnce sync.Once
 	// retireErr is written inside retireOnce and read only after it completes.
 	retireErr error
 }
@@ -115,18 +144,31 @@ func New(revision, node, script string) *Broker {
 
 func (b *Broker) Generation() string { return b.generation }
 
+// ExitReason은 처음 기록된 퇴역 원인을 돌려줍니다. Serve가 반환한 뒤에는
+// 항상 비어 있지 않습니다.
+func (b *Broker) ExitReason() ExitReason {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	return b.exitReason
+}
+
 // Serve owns the listener until retirement. The caller must leave the process
 // after Serve returns; reusing this Broker could reuse a VM or generation.
 // Normal retirement returns nil; an error reports unconfirmed VM or listener
 // cleanup and never includes worker output.
 func (b *Broker) Serve(listener net.Listener) error {
+	// keep-alive를 유지해 정상 응답 직후 서버가 연결을 닫지 않습니다. 응답 직후의 서버
+	// close가 client의 새 연결 첫 read와 겹치면 AppArmor unix 미디에이션 경쟁
+	// (upstream b1aea2c19607 미적용 커널)으로 Oops가 납니다. 유휴 연결은 client
+	// (youtubejs/src/proof-broker.mjs)가 IdleTimeout 전에 닫고, 퇴역 시에는 retire의
+	// server.Close가 유휴·진행 중 연결을 모두 즉시 닫습니다.
 	b.server = &http.Server{
 		Handler:           http.HandlerFunc(b.handle),
 		ReadHeaderTimeout: 2 * time.Second, ReadTimeout: operationLimit,
 		WriteTimeout: operationLimit, IdleTimeout: 2 * time.Second,
 		MaxHeaderBytes: 8 << 10, ErrorLog: log.New(io.Discard, "", 0),
 	}
-	b.server.SetKeepAlivesEnabled(false)
 
 	// 신뢰된 SDK의 cold import는 서비스 준비 단계가 소유한다. 요청의 8초
 	// 예산에 VM 기동을 섞지 않고 loaded 확인 전에는 health도 제공하지 않는다.
@@ -136,13 +178,14 @@ func (b *Broker) Serve(listener net.Listener) error {
 	cancel()
 
 	if initErr != nil {
-		b.retire()
+		b.retire(ExitStartupFailed)
 
 		return errors.Join(initErr, b.retireErr, listener.Close())
 	}
 
 	err := b.server.Serve(listener)
-	b.retire()
+	// ErrServerClosed이면 retire가 이미 원인을 기록했으므로 아래 원인은 쓰이지 않습니다.
+	b.retire(ExitListenerFailed)
 
 	if errors.Is(err, http.ErrServerClosed) {
 		return b.retireErr
@@ -153,11 +196,12 @@ func (b *Broker) Serve(listener net.Listener) error {
 
 // retire always completes: a cleanup failure never keeps the generation or its
 // listener alive, and is reported only through Serve.
-func (b *Broker) retire() {
+func (b *Broker) retire(reason ExitReason) {
 	b.retireOnce.Do(func() {
 		b.mu.Lock()
 
-		b.retiring = true
+		b.markRetiringLocked(reason)
+
 		if b.leaseTimer != nil {
 			b.leaseTimer.Stop()
 		}
@@ -173,6 +217,15 @@ func (b *Broker) retire() {
 
 		b.retireErr = err
 	})
+}
+
+// markRetiringLocked는 generation을 퇴역 중으로 표시합니다. 퇴역 원인은 처음
+// 표시한 호출의 것만 남습니다. 호출자는 b.mu를 소유해야 합니다.
+func (b *Broker) markRetiringLocked(reason ExitReason) {
+	b.retiring = true
+	if b.exitReason == "" {
+		b.exitReason = reason
+	}
 }
 
 // lease는 요청이 끊겨도 비신뢰 VM을 무기한 유지하지 않도록 broker 수명에 묶습니다.
@@ -195,9 +248,9 @@ func (b *Broker) expireLease() {
 		return
 	}
 
-	b.retiring = true
+	b.markRetiringLocked(ExitLeaseExpired)
 	b.mu.Unlock()
-	b.retire()
+	b.retire(ExitLeaseExpired)
 }
 
 func (b *Broker) handle(w http.ResponseWriter, r *http.Request) {
@@ -409,7 +462,7 @@ func (b *Broker) dispatch(ctx context.Context, w http.ResponseWriter, body any, 
 			Generation      string `json:"generation"`
 			Closed          bool   `json:"closed"`
 		}{protocolVersion, b.generation, true})
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitSessionClosed)
 	}
 }
 
@@ -504,7 +557,8 @@ func (b *Broker) session(ctx context.Context, w http.ResponseWriter, v *sessionR
 		Generation      string `json:"generation"`
 		Prepared        bool   `json:"prepared"`
 	}{protocolVersion, b.generation, true}) {
-		b.workerFailure(w, errWorker)
+		failure(w, http.StatusServiceUnavailable, "worker_failed")
+		b.retireAfterResponse(w, ExitResponseFailed)
 	}
 }
 
@@ -560,7 +614,7 @@ func (b *Broker) challenge(ctx context.Context, w http.ResponseWriter, v *challe
 	if b.retiring || !time.Now().Before(b.expires) {
 		b.mu.Unlock()
 		failure(w, http.StatusConflict, "expired")
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitLeaseExpired)
 
 		return
 	}
@@ -573,7 +627,8 @@ func (b *Broker) challenge(ctx context.Context, w http.ResponseWriter, v *challe
 		Generation      string `json:"generation"`
 		Snapshot        string `json:"snapshot"`
 	}{protocolVersion, b.generation, result.Snapshot}) {
-		b.workerFailure(w, errWorker)
+		failure(w, http.StatusServiceUnavailable, "worker_failed")
+		b.retireAfterResponse(w, ExitResponseFailed)
 	}
 }
 
@@ -619,7 +674,7 @@ func (b *Broker) activate(ctx context.Context, w http.ResponseWriter, v *activat
 	deadline := started.Add(time.Duration(v.ValidForMS) * time.Millisecond)
 	if !time.Now().Before(deadline) {
 		failure(w, http.StatusConflict, "expired")
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitLeaseExpired)
 
 		return
 	}
@@ -629,7 +684,7 @@ func (b *Broker) activate(ctx context.Context, w http.ResponseWriter, v *activat
 	if b.retiring || !time.Now().Before(b.expires) {
 		b.mu.Unlock()
 		failure(w, http.StatusConflict, "expired")
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitLeaseExpired)
 
 		return
 	}
@@ -642,7 +697,7 @@ func (b *Broker) activate(ctx context.Context, w http.ResponseWriter, v *activat
 		Generation      string `json:"generation"`
 		Ready           bool   `json:"ready"`
 	}{protocolVersion, b.generation, true}) {
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitResponseFailed)
 	}
 }
 
@@ -660,7 +715,7 @@ func (b *Broker) pendingWorker(w http.ResponseWriter, expected State) *worker {
 
 	if !time.Now().Before(pendingExpiry) {
 		failure(w, http.StatusConflict, "expired")
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitLeaseExpired)
 
 		return nil
 	}
@@ -688,7 +743,7 @@ func (b *Broker) mint(ctx context.Context, w http.ResponseWriter, v *mintRequest
 
 	if !time.Now().Before(expiry) {
 		failure(w, http.StatusConflict, "expired")
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitLeaseExpired)
 
 		return
 	}
@@ -714,7 +769,7 @@ func (b *Broker) mint(ctx context.Context, w http.ResponseWriter, v *mintRequest
 
 	if !time.Now().Before(expiry) {
 		failure(w, http.StatusConflict, "expired")
-		b.retireAfterResponse(w)
+		b.retireAfterResponse(w, ExitLeaseExpired)
 
 		return
 	}
@@ -739,31 +794,36 @@ func (b *Broker) mint(ctx context.Context, w http.ResponseWriter, v *mintRequest
 		VideoID         string `json:"video_id"`
 		PoToken         string `json:"po_token"`
 	}{protocolVersion, b.generation, v.VideoID, result.PoToken}) {
-		b.workerFailure(w, errWorker)
+		failure(w, http.StatusServiceUnavailable, "worker_failed")
+		b.retireAfterResponse(w, ExitResponseFailed)
 	}
 }
 
 func (b *Broker) workerFailure(w http.ResponseWriter, err error) {
-	if errors.Is(err, errBeforeDispatch) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	switch {
+	case errors.Is(err, context.Canceled):
 		failure(w, http.StatusGatewayTimeout, "worker_timeout")
-	} else {
+		b.retireAfterResponse(w, ExitRequestAborted)
+	case errors.Is(err, errBeforeDispatch) || errors.Is(err, context.DeadlineExceeded):
+		failure(w, http.StatusGatewayTimeout, "worker_timeout")
+		b.retireAfterResponse(w, ExitWorkerTimeout)
+	default:
 		failure(w, http.StatusServiceUnavailable, "worker_failed")
+		b.retireAfterResponse(w, ExitWorkerFailed)
 	}
-
-	b.retireAfterResponse(w)
 }
 
-func (b *Broker) retireAfterResponse(w http.ResponseWriter) {
+func (b *Broker) retireAfterResponse(w http.ResponseWriter, reason ExitReason) {
 	b.mu.Lock()
 
-	b.retiring = true
+	b.markRetiringLocked(reason)
 	b.mu.Unlock()
 
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
 
-	go b.retire()
+	go b.retire(reason)
 }
 
 func success(w http.ResponseWriter, body any) bool {

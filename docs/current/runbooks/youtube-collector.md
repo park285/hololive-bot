@@ -186,6 +186,34 @@ Compose의 `image-id` 근거는 검증한 단일 이미지 archive에 묶인 Doc
 
 비정상 generation/늦은 응답/취소는 해당 연산의 실제 admission 단계에 따라 처리합니다. 작업 시작 전 취소는 다른 호출의 준비된 세대를 폐기하지 않으며, 실제 worker 연산 중 실패는 전체 VM을 종료합니다. provider TTL 필드, 고정 시계 경계 시험, 실제 장시간 만료·갱신 관측은 서로 다른 증거입니다.
 
+### Issuer generation 교체와 재시작 카운트
+
+`po-broker` 프로세스는 generation 하나만 소유합니다. 그 generation이 다음 사유로 퇴역하면 프로세스는 exit 0으로 종료합니다.
+
+- client의 `DELETE /v1/session`: collector 종료 시 소유 generation 반납, bootstrap 실패 뒤 정리, 약 12시간 주기 갱신의 이전 generation 교체
+- lease 만료
+- worker 실패나 연산 timeout
+
+native의 `Restart=always`(`RestartSec=1s`)와 Compose의 `restart: unless-stopped`가 exit 0 뒤 새 generation으로 다시 기동합니다. 따라서 Docker `RestartCount`와 systemd `NRestarts`는 generation 교체 횟수이며 실패 횟수가 아닙니다. 0이 아니라는 이유만으로 incident로 판정하지 않고, 카운터를 지우려고 container를 재생성하지 않습니다. 비 0 exit와 OOM은 계속 실패입니다.
+
+v6.0.1 collector·PO 산출물(`hololive/hololive-api/VERSION` 6.0.1)부터 `po-broker`는 종료할 때 `po-broker exit reason=<reason> generation=<id>` 한 줄을 남깁니다(`docker logs <container>`, `journalctl -u hololive-youtube-po.service`). `reason`은 퇴역·종료 사유의 고정 어휘이며 정확한 목록은 `po-broker` 코드가 소유합니다. 이 줄에는 token·payload·worker stderr가 없습니다. v6.0.0 이하 issuer는 종료 사유를 남기지 않으므로 exit 상태와 collector 종료 시각을 대조합니다.
+
+issuer rollout 수용 기준은 `RestartCount=0`/`NRestarts=0`이 아니라 아래 항목을 모두 만족하는 것입니다.
+
+| Runtime | 확인 | 기대값 |
+|---|---|---|
+| Compose `youtube-po-b`/`youtube-po-c` | `docker inspect <container> --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Health.Status}}'` | `0 false healthy` |
+| Compose, 재시작한 경우 | `docker events --since <container .Created> --until <지금> --filter container=<container> --filter event=die --filter event=oom --format '{{.Action}} {{index .Actor.Attributes "exitCode"}}'` | 모든 `die`가 `0`이고 `oom`이 없음 |
+| native `hololive-youtube-po.service` | `systemctl show hololive-youtube-po.service -p Result -p ExecMainStatus -p ActiveState` | `Result=success`, `ExecMainStatus=0`, `ActiveState=active` |
+| native, 재시작한 경우 | `journalctl -u hololive-youtube-po.service --since <change_started_at>` | 모든 종료가 `Deactivated successfully`이고 `Failed with result`가 없음 |
+| 공통 | broker socket `GET /health` | `state`가 `IDLE` 또는 `READY` |
+| 공통 | helper UDS `GET /health`의 `proof.generation` | 값이 있으면 broker `/health`의 `generation`과 같음 |
+
+Docker는 자동 재시작 때 `State.ExitCode`와 `State.OOMKilled`를 초기화하고 systemd도 새 기동에서 `Result`와 `ExecMainStatus`를 다시 씁니다. 그래서 재시작이 있었다면 그 사이의 종료는 `docker events`나 journal로 확인합니다.
+
+Compose b/c의 paired cutover(`ap-deploy.sh`, `po-central-remote.sh`)는 issuer를 먼저 force-recreate하고 healthy를 확인한 뒤 collector를 교체합니다. issuer가 실패하면 이전 collector를 그대로 두기 위한 순서이므로 유지합니다. 그 사이 이전 collector가 새 issuer의 generation을 잡으면 SIGTERM 종료에서 그 generation을 퇴역시키므로, 새 issuer는 이전 collector 종료 시각에 exit 0과 재시작 1회를 보일 수 있습니다. 이 1회는 예상된 교체입니다. 이 밖의 교체는 exit reason 줄로 사유를 확인합니다.
+
+native a/d cutover와 실패 복원(`ap-host-native-remote-apply.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 이후 issuer health를 확인하고 collector를 한 번 기동합니다.
 
 ## Logs
 
@@ -229,6 +257,25 @@ Symptoms:
 
 Diagnosis:
 - rendered `POSTGRES_USER` and `HOLOLIVE_SCRAPER_PASSWORD`를 확인합니다.
+
+### 4. Kernel Oops in `unix_fs_perm` on docker-default arm64 hosts
+
+Known kernel defect입니다. Ubuntu `linux-oracle` 6.17.0-1020과 apt가 제시하는 7.0.0-1011에는 upstream AppArmor 수정 `b1aea2c19607` "apparmor: fix race in unix socket mediation when peer_path is used"가 없습니다. 이 수정은 mainline v7.2-rc1, stable v6.18.40와 v7.1.5부터 들어 있습니다. AppArmor가 AF_UNIX 연결의 첫 read에서 peer 소켓 경로를 lock 없이 복사하므로, 같은 시점에 peer가 close되면 NULL `mnt`를 역참조할 수 있습니다.
+
+영향 범위는 collector helper와 PO issuer가 `docker-default (enforce)`로 도는 arm64 호스트입니다. hololive-osaka의 collector-c와 iris-seoul의 collector-b가 해당합니다. x86 osaka1/osaka2(a/d)는 6.8 커널에서 unconfined로 실행되어 이 경로에 해당하지 않습니다.
+
+Symptoms:
+- `journalctl -k`에 `Unable to handle kernel NULL pointer dereference`, `Internal error: Oops`, `pc : unix_fs_perm`, `lr : aa_unix_file_perm`, `vfs_read` call trace가 남습니다. `Comm`은 helper의 `MainThread`입니다.
+- `/proc/sys/kernel/tainted`에 TAINT_DIE(128)가 설정됩니다.
+
+Diagnosis:
+- `uname -r`와 `journalctl -k`로 커널 버전과 Oops 위치를 확인합니다.
+- `sudo docker top <container>`와 `/proc/<pid>/attr/current`로 helper·issuer의 AppArmor label을 확인합니다.
+
+Mitigation:
+- v6.0.1 collector·PO 산출물부터 broker HTTP 연결은 keep-alive를 쓰고, client가 server idle timeout보다 먼저 idle 연결을 닫습니다. 요청마다 새 연결을 열고 server가 곧바로 닫던 경쟁 창을 줄이지만 근본 수정은 아닙니다.
+- 근본 수정은 changelog에 위 커밋 제목이 있는 Ubuntu `linux-oracle` 빌드(또는 stable v6.18.40 / v7.1.5 이상 기반)를 설치하고 재부팅하는 것입니다. 업그레이드 전에 `apt-get changelog linux-modules-<version>-oracle | grep -F 'apparmor: fix race in unix socket mediation when peer_path is used'`로 포함 여부를 확인합니다. 7.0.0-1011은 stable v6.18.39 / v7.1.4까지만 반영해 이 수정이 없으므로 교체 대상이 아닙니다.
+- AppArmor profile을 완화하거나 unconfined로 바꾸지 않습니다. hololive-osaka 재부팅은 중앙 DB·API를 함께 멈추므로 승인된 유지보수 창에서 수행합니다.
 
 ## Smoke test
 

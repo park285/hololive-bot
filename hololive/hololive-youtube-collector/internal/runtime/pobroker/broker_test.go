@@ -32,7 +32,7 @@ func fakeNode(t *testing.T, name, script string) string {
 
 func initializeTestWorker(t *testing.T, broker *Broker) {
 	t.Helper()
-	t.Cleanup(broker.retire)
+	t.Cleanup(func() { broker.retire(ExitSignal) })
 
 	if err := broker.initializeWorker(t.Context()); err != nil {
 		t.Fatal(err)
@@ -133,6 +133,10 @@ func TestExpiredMintRetiresWorkerWithoutIssuing(t *testing.T) {
 		t.Fatalf("expired token path not rejected: %d %v", status, result)
 	}
 
+	if reason := b.ExitReason(); reason != ExitLeaseExpired {
+		t.Fatalf("expired mint recorded exit reason %q", reason)
+	}
+
 	select {
 	case <-process.done:
 	case <-time.After(2 * time.Second):
@@ -171,7 +175,7 @@ func phaseBroker(t *testing.T) (*Broker, string, string, string) {
 
 func TestPrepareChallengePreservesPendingLease(t *testing.T) {
 	b, prepare, challenge, activation := phaseBroker(t)
-	defer b.retire()
+	defer b.retire(ExitSignal)
 
 	status, result := call(t, b, http.MethodPost, "/v1/session", prepare)
 	if status != http.StatusOK || result["prepared"] != true || result["generation"] != b.Generation() {
@@ -211,7 +215,7 @@ func TestPrepareChallengePreservesPendingLease(t *testing.T) {
 
 func TestChallengeWrongPhaseDoesNotConsumeWorker(t *testing.T) {
 	b, prepare, challenge, activation := phaseBroker(t)
-	defer b.retire()
+	defer b.retire(ExitSignal)
 
 	status, result := call(t, b, http.MethodPost, "/v1/challenge", challenge)
 	if status != http.StatusConflict || errorCode(result) != "invalid_state" {
@@ -241,7 +245,7 @@ func TestChallengeWrongPhaseDoesNotConsumeWorker(t *testing.T) {
 
 func TestCanceledChallengeBeforeDispatchPreservesPreparedWorker(t *testing.T) {
 	b, prepare, challenge, _ := phaseBroker(t)
-	defer b.retire()
+	defer b.retire(ExitSignal)
 
 	status, result := call(t, b, http.MethodPost, "/v1/session", prepare)
 	if status != http.StatusOK || result["prepared"] != true {
@@ -303,6 +307,10 @@ func TestMalformedWorkerFrameFailsAndRetires(t *testing.T) {
 		t.Fatalf("malformed worker result accepted: %d %v", status, result)
 	}
 
+	if reason := b.ExitReason(); reason != ExitWorkerFailed {
+		t.Fatalf("malformed worker frame recorded exit reason %q", reason)
+	}
+
 	b.mu.RLock()
 
 	process := b.worker
@@ -353,6 +361,10 @@ func TestActiveCancellationRetiresWorker(t *testing.T) {
 		t.Fatalf("cancellation did not fail closed: %d %s", w.Code, response.Error.Code)
 	}
 
+	if reason := b.ExitReason(); reason != ExitWorkerTimeout {
+		t.Fatalf("operation deadline recorded exit reason %q", reason)
+	}
+
 	b.mu.RLock()
 
 	process := b.worker
@@ -366,5 +378,80 @@ func TestActiveCancellationRetiresWorker(t *testing.T) {
 	case <-process.done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("canceled VM survived retirement")
+	}
+}
+
+func TestClientAbortDuringWorkerIORecordsRequestAborted(t *testing.T) {
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
+	b := New("revision", fakeNode(t, "abort-node", script), "unused")
+	initializeTestWorker(t, b)
+
+	body, err := json.Marshal(sessionRequest{ProtocolVersion: protocolVersion, Generation: b.Generation(), UserAgent: "UA"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/v1/session", strings.NewReader(string(body)))
+	r.Header.Set("Content-Type", "application/json")
+
+	// worker가 응답하지 않으므로 요청은 worker IO 중에 client 끊김으로만 끝납니다.
+	time.AfterFunc(100*time.Millisecond, cancel)
+	b.handle(httptest.NewRecorder(), r)
+
+	if reason := b.ExitReason(); reason != ExitRequestAborted {
+		t.Fatalf("client abort recorded exit reason %q", reason)
+	}
+}
+
+func TestLoadedWorkerExitRecordsWorkerExited(t *testing.T) {
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nIFS= read -r request\nexit 0\n"
+	b := New("revision", fakeNode(t, "exiting-node", script), "unused")
+	initializeTestWorker(t, b)
+
+	b.mu.RLock()
+
+	process := b.worker
+	b.mu.RUnlock()
+
+	if _, err := process.stdin.Write([]byte("exit\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for b.ExitReason() == "" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if reason := b.ExitReason(); reason != ExitWorkerExited {
+		t.Fatalf("worker exit recorded exit reason %q", reason)
+	}
+}
+
+// 요청의 worker IO 중 종료는 감시 goroutine과 요청 경로가 경합해도 같은 원인으로 기록됩니다.
+func TestWorkerExitDuringRequestRecordsWorkerFailed(t *testing.T) {
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nIFS= read -r request\nexit 3\n"
+
+	for attempt := range 20 {
+		b := New("revision", fakeNode(t, "crashing-node", script), "unused")
+		initializeTestWorker(t, b)
+
+		body, err := json.Marshal(sessionRequest{ProtocolVersion: protocolVersion, Generation: b.Generation(), UserAgent: "UA"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/session", strings.NewReader(string(body)))
+		r.Header.Set("Content-Type", "application/json")
+		b.handle(httptest.NewRecorder(), r)
+
+		deadline := time.Now().Add(5 * time.Second)
+		for b.ExitReason() == "" && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		if reason := b.ExitReason(); reason != ExitWorkerFailed {
+			t.Fatalf("attempt %d: worker crash during request recorded exit reason %q", attempt, reason)
+		}
 	}
 }
