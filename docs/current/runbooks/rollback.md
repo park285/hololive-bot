@@ -111,6 +111,12 @@ migration 231(`auth_users.session_generation`)·232(`alarm_room_display_names`)�
 - `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 지우지 않고 TTL(8일)로 만료시킵니다.
 - rollback 기간에도 Console 방 이름 변경 동결을 유지합니다. 구 worker의 rename은 Valkey `alarm:room_names`에만
   남으므로, 동결을 풀었다면 재전진 전에 계획의 관리자 방 별칭 이관 절차를 다시 수행합니다.
+- 구 image의 알람 upsert는 기존 행의 `room_name`을 바꿀 때 `alarms.room_name_updated_at`을 갱신하지 않으므로, 재전진 뒤
+  관리 목록의 Kakao 대표 이름은 그 방의 다음 알람 upsert 전까지 rollback 이전 기준일 수 있습니다(관리 화면 표시만 영향).
+- 폐기 key를 회수한 뒤 rollback하면 구 worker가 회수한 key를 PG에서 다시 만들므로, 재전진 뒤 계획의 2차 폐기 key 회수 표
+  1~8을 같은 순서로 다시 수행합니다.
+- C4 db-migrate에서 233이 거절되면 231·232만 적용된 상태입니다. 계획의 migration 233 사전 점검 쿼리로 찾은 본문에서
+  `NextStream` 참조를 지우고 새 image의 db-migrate를 다시 실행하거나, 위처럼 `--no-deps`로 구 image를 되돌립니다.
 
 ## Contract Rollback
 

@@ -129,7 +129,7 @@ provider에 없는 hash-only 행을 새 설계에 fallback으로 합치지 않�
 | 순서 | 준비·판정 | 중단 조건 |
 |---|---|---|
 | C0 범위 고정 | API·alarm-worker·설치된 관련 CLI/script·구 one-shot writer 목록, host별 artifact ID, config/profile·이전 release set을 확정. 실제 delivery handoff mode·양쪽 executor 상태 포함 | consumer/writer·복구 target·source/CLI 영향이 미해결 |
-| C1 사전 준비 | clean reviewed full SHA 하나로 kapu에서 API/worker와 필요한 관리 파일 build/검증. remote에 준비만 하고 시작하지 않음 | wrong arch, SHA 혼합, 누락 image, unrelated dirty work 포함 |
+| C1 사전 준비 | clean reviewed full SHA 하나로 kapu에서 API/worker와 필요한 관리 파일 build/검증. remote에 준비만 하고 시작하지 않음. 아래 migration 233 사전 점검 쿼리 0건 확인 | wrong arch, SHA 혼합, 누락 image, unrelated dirty work 포함, 233 사전 점검 결과가 0건이 아님 |
 | C2 quiesce/drain | 승인된 traffic/producer를 잠시 제어하고 현재 runtime의 inbox/outbox·active lease·sending 상태를 해당 runbook 기준으로 정리. 뉴스 생성 작업과 `notification_delivery_outbox`·dispatch ledger 잔여 backlog 포함 | drain 실패, unknown-send 처리 미정, 유효한 rollback preflight 미확보 |
 | C3 구 runtime 종료 | 관련 구 API/worker·one-shot writer가 종료됐고 supervisor/autoheal이 구 artifact를 재시작하지 않음을 확인 | 구 프로세스·writer 재출현 또는 확인 불가 |
 | C4 일괄 release 적용 | 동일 SHA의 API·worker와 관련 script/config를 준비된 artifact로 순서 있게 시작. 외부 traffic은 아직 개방하지 않음 | 부분 시작 실패, 기존 release와 혼합, readiness 실패 |
@@ -150,19 +150,53 @@ rollback하면 runtime은 구 설계로 돌아간 것이므로 이번 fadeout의
 
 1차 폐기 대상은 `membernews:rooms`, `membernews:room_names`, `hololive:members`, 그리고 소유가 확인된 구 `hololive:members:ready` sentinel입니다. 이들은 TTL 자동 회수를 보장하지 않습니다. namespace 전체 삭제나 `FLUSH*`를 사용하지 않습니다. 세션·nonce·member epoch·alarm 채널 registry·구독 index·`alarm:member_names`는 유지합니다.
 
+### 2차 전환: migration 233 사전 점검
+
+233은 `CMD_ALARM_ADDED`·`CMD_ALARM_LIST` 가운데 표준 본문(233의 `old_body`)과 바이트 단위로 다르면서 `NextStream`을 참조하는 행이 하나라도 있으면 파일 전체를 거절합니다. C4의 db-migrate에서 거절되면 231·232만 커밋된 채 구 runtime은 이미 멈춰 있고 새 API·worker는 migration 의존 때문에 뜨지 않습니다. 그래서 C1에서, 늦어도 C3 전에 아래 read-only 쿼리로 거절 조건을 미리 확인하고, 그때부터 C4까지 두 템플릿의 Console 편집을 동결합니다. md5 값은 233 파일의 두 `$old$` 본문에서 계산했습니다.
+
+```sql
+SELECT template_key, channel_id
+FROM notification_templates
+WHERE template_key IN ('CMD_ALARM_ADDED', 'CMD_ALARM_LIST')
+  AND body LIKE '%NextStream%'
+  AND (template_key, md5(body)) NOT IN (
+      ('CMD_ALARM_ADDED', 'beb0b263948d956a24e6beef3872ca8f'),
+      ('CMD_ALARM_LIST', 'ae8fd72e5db7f640b06d87300ecc8298'));
+```
+
+결과가 0건일 때만 C3로 진행합니다. 행이 나오면 C3 전에 그 본문에서 `NextStream` 참조를 지우거나 배포를 보류합니다.
+
 ### 2차 전환: 관리자 방 별칭 이관
 
 base(`12d78df8a`)의 관리자 방 이름은 Valkey hash `alarm:room_names`에만 있었고 migration 232는 빈 `alarm_room_display_names`만 만듭니다. 구 worker는 기동·rebuild 때 이 hash를 PG `alarms.room_name`으로 다시 채웠으므로, hash에서 어떤 `alarms.room_name`과도 다른 값이 마지막 기동 이후 지정된 관리자 별칭입니다. 이 값을 이관하기 전에는 hash를 지우지 않습니다.
 
 1. C0부터 수용(C5)까지 Console의 방 이름 변경(`POST /api/holo/names/room`)을 동결하고 관리자에게 공지합니다. 전환 창에 구 worker로 들어온 rename은 Valkey에만 기록되어 사라집니다.
-2. 구 worker를 정지하기 직전(C3 직전)에 `HGETALL alarm:room_names`를 root 전용 경로의 권한 600 파일로 export합니다. 값은 방 제목 평문이므로 stdout·로그·티켓에 남기지 않고 건수만 기록합니다.
-3. migration 232 적용(C4의 db-migrate) 뒤, 같은 psql 세션에서 export를 임시 테이블로 읽어 PG와 비교하고 차이 나는 값만 넣습니다. 건수만 확인합니다.
+2. 구 worker를 정지하기 직전(C3 직전)에 `alarm:room_names`를 root 전용 경로의 권한 600 CSV로 export합니다. 값은 방 제목 평문이므로 stdout·로그·티켓에 남기지 않고 건수만 기록합니다. 아래 명령은 Valkey Lua `cjson`으로 hash를 JSON 배열로 받고 Python `csv.writer`가 쉼표·따옴표·줄바꿈을 quoting하므로 `\copy ... (FORMAT csv)`가 그대로 읽습니다. 출력은 건수 한 줄이고, Valkey가 오류를 돌려주면 JSON 해석이 실패해 파일을 만들지 않습니다.
+
+```bash
+# root shell(sudo -i)에서 실행합니다.
+set -o pipefail
+umask 077
+mkdir -p /root/valkey-fadeout
+docker exec valkey-cache sh -c 'REDISCLI_AUTH="$CACHE_PASSWORD" exec valkey-cli -s /var/run/valkey/valkey-cache.sock --raw EVAL "return cjson.encode(redis.call(\"HGETALL\", KEYS[1]))" 1 alarm:room_names' \
+  | python3 -c '
+import csv, json, sys
+pairs = json.load(sys.stdin)
+pairs = [] if isinstance(pairs, dict) else pairs  # cjson은 빈 hash를 {}로 씁니다
+with open(sys.argv[1], "x", encoding="utf-8", newline="") as out:
+    writer = csv.writer(out)
+    for i in range(0, len(pairs), 2):
+        writer.writerow(pairs[i:i + 2])
+print(len(pairs) // 2)' /root/valkey-fadeout/room_names.csv
+```
+
+3. migration 232 적용(C4의 db-migrate) 뒤, 같은 psql 세션에서 export를 임시 테이블로 읽어 PG와 비교하고 후보를 만듭니다. 이 비교는 오탐이 있습니다. 마지막 worker 기동 이후 방의 최신 Kakao 이름을 가진 유일한 알람 행이 삭제되면 hash에는 그 Kakao 이름이 남고 PG에는 옛 이름만 남으므로, Kakao 이름이 관리자 별칭 후보로 잡힙니다. 그렇게 들어간 이름은 관리자 별칭으로 고정되어 이후 Kakao 이름 변경을 따라가지 않습니다. 그래서 후보를 넣기 전에 운영자가 화면에서 확인하고(값은 복사·기록하지 않음) 실제 Kakao 방 제목과 같은 후보는 지웁니다. `\copy` 경로는 psql 클라이언트가 읽는 위치여야 합니다.
 
 ```sql
 CREATE TEMP TABLE room_name_export (room_id text PRIMARY KEY, room_name text NOT NULL);
--- \copy room_name_export FROM '<export.csv>' WITH (FORMAT csv)
-INSERT INTO alarm_room_display_names (room_id, display_name)
-SELECT e.room_id, btrim(e.room_name)
+-- \copy room_name_export FROM '<room_names.csv>' WITH (FORMAT csv)
+CREATE TEMP TABLE room_name_candidates AS
+SELECT e.room_id, btrim(e.room_name) AS display_name
 FROM room_name_export AS e
 WHERE btrim(e.room_name) <> ''
   AND char_length(e.room_id) <= 100
@@ -171,7 +205,17 @@ WHERE btrim(e.room_name) <> ''
   AND NOT EXISTS (
       SELECT 1 FROM alarms AS a
       WHERE a.room_id = e.room_id AND btrim(a.room_name) = btrim(e.room_name)
-  )
+  );
+SELECT count(*) FROM room_name_candidates;
+-- 운영자 확인: 화면에서만 보고 복사·기록하지 않습니다.
+SELECT c.room_id, c.display_name,
+       (SELECT string_agg(DISTINCT a.room_name, ' | ') FROM alarms AS a WHERE a.room_id = c.room_id) AS pg_room_names
+FROM room_name_candidates AS c
+ORDER BY c.room_id;
+-- Kakao 방 제목으로 판단한 후보를 지웁니다.
+-- DELETE FROM room_name_candidates WHERE room_id IN ('<room_id>', ...);
+INSERT INTO alarm_room_display_names (room_id, display_name)
+SELECT room_id, display_name FROM room_name_candidates
 ON CONFLICT (room_id) DO NOTHING;
 ```
 
@@ -184,10 +228,13 @@ ON CONFLICT (room_id) DO NOTHING;
 - rollback 직전에 `SCAN 0 MATCH auth:sess:* COUNT 1000` 반복과 `UNLINK`로 세션 key를 모두 지워 재로그인시킵니다. 새 코드가 발급한 세션은 `auth:user_sessions:*` 인덱스에 없어 구 reset이 폐기하지 못하고, 구 코드는 `session_generation`을 비교하지 않으므로 새 코드에서 reset으로 무효화된 세션이 되살아납니다. 세션 key는 사용자별로 걸러낼 수 없으므로 `session_generation > 0`인 사용자만 골라 지우는 대신 전체를 지웁니다.
 - `auth:user_sessions:*`는 rollback 창이 닫힐 때까지 회수하지 않고 TTL(8일)로 만료시킵니다. 구 reset의 폐기 대상 목록이기 때문입니다.
 - rollback 기간에도 방 이름 변경 동결을 유지합니다. 구 worker의 rename은 Valkey에만 남으므로, 동결을 풀었다면 재전진 전에 위 이관 절차를 다시 수행합니다.
+- 구 image의 알람 upsert는 기존 행의 `alarms.room_name`을 바꿀 때 `room_name_updated_at`을 갱신하지 않습니다(새 행은 DEFAULT `now()`). 재전진 뒤 관리 목록의 Kakao 대표 이름은 그 방의 다음 알람 upsert 전까지 rollback 이전 기준으로 골라질 수 있습니다. 영향은 관리 화면 표시 이름에 한정됩니다.
+- 폐기 key를 회수한 뒤 rollback하면 구 worker가 기동·rebuild 때 `alarm:registry`·`alarm:{roomID}`·`alarm:room_names` 등을 PG에서 다시 만듭니다. 재전진 뒤에는 아래 회수 표 1~8을 같은 순서로 다시 수행합니다.
+- C4에서 233이 거절되면(사전 점검을 건너뛰었거나 그 뒤 본문이 바뀐 경우) 231·232만 적용된 상태입니다. 위 사전 점검 쿼리로 찾은 본문에서 `NextStream` 참조를 지운 뒤 새 image의 db-migrate를 다시 실행하거나, 위 첫 규칙대로 `--no-deps`로 구 image를 되돌립니다. 233은 한 transaction이라 거절 시 바뀐 행이 없습니다.
 
 ### 2차 폐기 key 회수
 
-> **금지**: `alarm:*`, `membernews:*`, `notified:*`, `youtube:producer:*` 패턴 삭제와 `FLUSHDB`/`FLUSHALL`을 쓰지 않습니다. `alarm:*`에는 유지 key(`alarm:channel_registry`, `alarm:channel_subscribers*`, `alarm:member_names`, `alarm:subscriber_cache_empty`, `alarm:dispatch:wakeup*`)가, `membernews:*`에는 주간·월간 실행 잠금이, `notified:*`에는 활성 dedup claim이, `youtube:producer:*`에는 활성 분산 rate-limit bucket(`BucketBase` `youtube:producer`)이 있습니다. 회수 대상은 아래의 정확한 key 또는 family로만 지정하고, 회수 도구는 room·user 식별자와 값을 로그에 남기지 않습니다.
+> **금지**: `alarm:*`, `membernews:*`, `notified:*`, `youtube:producer:*`, `ratelimit:*` 패턴 삭제와 `FLUSHDB`/`FLUSHALL`을 쓰지 않습니다. `alarm:*`에는 유지 key(`alarm:channel_registry`, `alarm:channel_subscribers*`, `alarm:member_names`, `alarm:subscriber_cache_empty`, `alarm:dispatch:wakeup*`)가, `membernews:*`에는 주간·월간 실행 잠금이, `notified:*`에는 활성 dedup claim이 있습니다. 활성 분산 rate-limit bucket은 `ratelimit:sliding:` 아래(`KeyPrefix` `ratelimit:sliding` + `BucketBase`, 예: `ratelimit:sliding:youtube:producer:*`)에 있으며 회수 대상이 아닙니다. `youtube:producer:*`는 표 7의 정확한 family로만 회수합니다. 회수 대상은 아래의 정확한 key 또는 family로만 지정하고, 회수 도구는 room·user 식별자와 값을 로그에 남기지 않습니다.
 
 회수 순서는 표의 위에서 아래입니다. `alarm:user_names`(Kakao user ID→닉네임 평문)를 먼저 지우고, `alarm:room_names`는 별칭 이관(위 절차 4)이 끝난 뒤에만 지웁니다.
 
