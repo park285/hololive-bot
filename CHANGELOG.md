@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v7.0.0 - 2026-09-29
+
 - 중복 Valkey 기능 두 가지를 한 패치에서 제거합니다(빅뱅 fadeout, `docs/current/plans/2026-09-28-valkey-dependency-reduction.md`). ① 멤버 뉴스 구독 방 미러(`membernews:rooms`·`membernews:room_names`): repository의 cache 의존·write-through·`WarmupCacheFromDB`·`Service.WarmupSubscriptionCache`를 지우고 `NewRepository(postgres)`로 줄였습니다. 기동 시 `ListSubscribedRooms`를 1회 조회해 실패하면 경고만 남깁니다. ② 멤버 hash(`hololive:members`): `cache.MemberCache`와 `InitializeMemberDatabase`·`GetAllMembers`·`GetMemberChannelIDWithOrg`·`GetMemberChannelIDs`, mock field, 기동 초기화, matcher의 동적 hash 후보 경로를 지웠습니다. `NewMatcher`·`ProvideMatcher`는 cache 인자를 받지 않습니다. hash field 형식 오류나 DEL/HSET 실패로 기동이 실패하던 경로도 함께 사라집니다.
 - 공유 채널 대표 규칙(최소 영속 ID)을 `member.ChannelRepresentatives`로 승격했습니다. production 호출자가 없던 YouTube `apiservice`(채널 통계·`youtube:channel_stats:*` 캐시)와 `BuildYouTubeAPIStack`·`BuildYouTubeStack`, StreamHandler의 쓰이지 않는 YouTube·Valkey 필드는 삭제했습니다. 이 서비스 전용 `YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS`·`YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS`는 빈 값이어도 존재만으로 기동을 거절합니다(remove_after 2026-12-31).
 - `hololive-api/scripts/bot.sh`에서 멤버 hash 대기·상태 출력과 `--no-ready-wait`, `CORE_MEMBER_HASH_SOFT_MIN_COUNT`, `CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS`를 지웠습니다. 제거한 옵션은 알 수 없는 인자로 거절합니다. 운영에 남은 폐기 key는 자동 만료되지 않으며 회수는 별도 승인 작업입니다.
@@ -18,6 +20,8 @@
 - ACL Valkey mirror(`acl:*`)와 `config:update` Pub/Sub을 삭제했습니다. ACL 변경은 같은 hololive-api 프로세스에서 bot plane이 직렬화된 PG reload로 즉시 따라가며, reload에 실패하면 관리자 요청이 500 `acl_bot_resync_failed`로 실패를 드러내고 같은 요청 재시도로 수렴합니다. 알림 사전 시간(`alarm_advance_minutes`)은 settings.json 1회 기록과 worker HTTP 적용 1회만 하며, 적용 실패는 `alarm_applied=false`로 응답합니다.
 - member cache의 Valkey L2(`member-cache:v2:data:*`)를 삭제하고 in-process snapshot index만 씁니다. epoch는 값이 달라지면(작아져도) snapshot을 버리는 변경 신호가 되어, Valkey 재시작 뒤 장수 프로세스가 재기동 전까지 PG 직접 조회에 머물던 문제가 사라집니다.
 - 효과 없는 캐시와 죽은 코드를 지웠습니다: Holodex `search_channels:*`·`channels_live_status_*`·`hololive_channels`, YouTube producer state store(production 미연결), `StreamCache`·`MGet`·`MSet`·`SetNXMulti`·`CompareAndExpire`, locker `ClaimRoom`, 쓰이지 않는 dedup claim 함수와 `AlarmDispatchState`. 뉴스·주요 이벤트 실행 잠금이 Valkey 오류 시 실행하지 않는(fail-closed) 현재 동작에 맞게 기존 감사·계획 문서를 정정했습니다. 운영에 남는 폐기 key와 회수 순서는 계획 문서에 적었고 회수는 별도 승인 작업입니다.
+- CI 게이트를 슬림화합니다. 검사기 자기 테스트·fixture와 문서 토큰·삭제 코드 재도입 grep 가드를 지우고, 구조 예산은 golangci funlen/revive와 메타 저장소 검사로 옮겼습니다. 추적하던 `artifacts/architecture/go-workspace-import-graph.txt`와 그 생성 script, 소비자가 없는 `docs/architecture/release-governance-assets.txt`도 삭제했습니다. 최종 이미지 스캔 억제 금지 계약은 가짜 trivy로 실제 스캐너가 넘기는 인자를 확인하는 동작 검사로 바꿨습니다.
+- 공개 사용자 이름 API(`POST /api/holo/names/user`)와 worker 내부 API(`PUT /internal/alarm/user-name`, `GET /internal/alarm/next-stream/:id`)를 삭제하고 migration 231~233을 더하므로 루트·API 산출물 버전은 `7.0.0`, alarm-worker는 `6.0.0`입니다. collector·PO image도 `hololive/hololive-api/VERSION`을 씁니다. 배포는 migration 231~233 적용 뒤 API·alarm-worker 동시 교체(계획 문서 C0~C5)이고, Iris Console의 사용자 이름 호출 제거가 선행되어야 합니다. 새 retry·fallback은 추가하지 않습니다. LIVE 구독 set 미스 때의 조회는 PG 정본 read-through이고, 대표 멤버 이름이 빌 때의 채널 제목 표시는 기존 동작입니다.
 
 ## v6.0.2 - 2026-09-28
 
