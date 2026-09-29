@@ -164,9 +164,8 @@ func TestJSONClientCloseSendsCleanConnectionCloseToPeer(t *testing.T) {
 		t.Fatal("peer connection still open after Close; the peer would wait for the QUIC idle timeout")
 	}
 
-	var appErr *quic.ApplicationError
-
-	if cause := context.Cause(peerConn.Context()); !errors.As(cause, &appErr) || !appErr.Remote {
+	cause := context.Cause(peerConn.Context())
+	if appErr, ok := errors.AsType[*quic.ApplicationError](cause); !ok || !appErr.Remote {
 		t.Fatalf("peer close cause = %v, want a CONNECTION_CLOSE sent by the client", cause)
 	}
 }
