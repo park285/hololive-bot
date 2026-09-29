@@ -28,16 +28,27 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/httputil"
-
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 // Client는 llm-scheduler 내부 트리거 API를 호출한다.
 type Client struct {
-	httpClient *httputil.JSONClient
+	httpClient *internalhttp.JSONClient
 	logger     *slog.Logger
+}
+
+// Close는 llm-scheduler로 가는 H3 transport의 연결을 닫는다. 관리 plane이 요청을 모두 끝낸 뒤 부른다.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	if err := c.httpClient.Close(); err != nil {
+		return fmt.Errorf("close llm scheduler trigger client: %w", err)
+	}
+
+	return nil
 }
 
 // NewClient는 trigger 클라이언트를 생성한다. Scheduler URL이 https이고 H3 transport를 구성하지 못하면 오류다.

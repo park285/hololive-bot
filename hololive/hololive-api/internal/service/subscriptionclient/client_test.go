@@ -16,6 +16,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/service/subscriptionclient"
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 const testSubscriptionsPath = "/internal/subscriptions"
@@ -27,7 +28,7 @@ func newTestClient(t *testing.T, handler http.Handler) *subscriptionclient.Clien
 	t.Cleanup(server.Close)
 
 	return &subscriptionclient.Client{
-		HTTPClient:        httputil.NewJSONClient(server.URL, "test-api-key", 5*time.Second),
+		HTTPClient:        &internalhttp.JSONClient{JSONClient: httputil.NewJSONClient(server.URL, "test-api-key", 5*time.Second)},
 		SubscriptionsPath: testSubscriptionsPath,
 	}
 }

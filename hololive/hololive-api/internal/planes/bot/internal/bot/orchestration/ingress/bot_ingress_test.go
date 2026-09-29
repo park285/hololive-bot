@@ -99,8 +99,10 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 		t.Fatalf("chat id = %q, want %q", envelope.ChatID, "chat-123")
 	}
 
-	if envelope.RoomName != "chat-123" {
-		t.Fatalf("room name = %q, want %q", envelope.RoomName, "chat-123")
+	// Iris webhook에는 방 제목이 없다. 방 이름을 방 ID로 채우면 구독 upsert가 저장된 Kakao 방 이름을 방 ID로 덮어쓰므로
+	// 이름은 모르는 값(빈 문자열)이어야 한다.
+	if envelope.RoomName != "" {
+		t.Fatalf("room name = %q, want empty (Iris supplies no room title)", envelope.RoomName)
 	}
 
 	if envelope.UserID != testUserID {
@@ -185,23 +187,5 @@ func TestMessageIngressAcceptsHasNoRoomObservationSideEffect(t *testing.T) {
 
 	if rooms.roomID != "" {
 		t.Fatalf("admission filter observed room %q", rooms.roomID)
-	}
-}
-
-func TestResolveRoom_UsesTopLevelRoom(t *testing.T) {
-	t.Parallel()
-
-	message := &webhook.Message{
-		Room: "123456",
-		JSON: &webhook.MessageJSON{},
-	}
-
-	chatID, roomName := resolveRoom(message)
-	if chatID != "123456" {
-		t.Fatalf("chat id = %q, want %q", chatID, "123456")
-	}
-
-	if roomName != "123456" {
-		t.Fatalf("room name = %q, want %q", roomName, "123456")
 	}
 }

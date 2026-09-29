@@ -32,5 +32,6 @@ func InitAlarmModeComponents(
 	return &AlarmModeComponents{
 		AlarmCRUD:        alarmClient,
 		MemberDataSource: memberServiceAdapter,
+		AlarmClient:      alarmClient,
 	}, nil
 }

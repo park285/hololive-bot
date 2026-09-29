@@ -99,13 +99,25 @@ func TestRepositoryPostgres_SubscriptionLifecycle(t *testing.T) {
 	repository, pool := newPostgresMemberNewsRepository(t)
 	ctx := t.Context()
 
-	for _, room := range []subscribedRoomView{{subRoomA, "Alpha"}, {subRoomB, "Bravo"}, {subRoomC, "Charlie"}} {
+	// bot은 방 이름을 모르므로(Iris webhook에 방 제목 없음) 빈 이름으로 구독한다. 빈/공백 이름은 모름(NULL)이다.
+	for _, room := range []subscribedRoomView{{subRoomA, "Alpha"}, {subRoomB, "Bravo"}, {subRoomC, ""}} {
 		if err := repository.Subscribe(ctx, room.id, room.name); err != nil {
 			t.Fatalf("Subscribe(%q): %v", room.id, err)
 		}
 	}
 
-	// 재구독은 upsert이고, SQL의 COALESCE는 NULL만 보존하므로 빈/공백 문자열도 기존 이름을 덮어쓴다.
+	var unknownStoredAsNull bool
+
+	if err := pool.QueryRow(ctx, `SELECT room_name IS NULL FROM member_news_subscriptions WHERE room_id = $1`, subRoomC).
+		Scan(&unknownStoredAsNull); err != nil {
+		t.Fatalf("read stored room_name: %v", err)
+	}
+
+	if !unknownStoredAsNull {
+		t.Fatal("unknown room name was stored as a value instead of NULL")
+	}
+
+	// 재구독은 upsert다. 모르는 이름(빈/공백)은 저장된 이름을 덮어쓰지 않는다.
 	for _, room := range []subscribedRoomView{{subRoomA, ""}, {subRoomB, "   "}} {
 		if err := repository.Subscribe(ctx, room.id, room.name); err != nil {
 			t.Fatalf("resubscribe %q with %q: %v", room.id, room.name, err)
@@ -122,7 +134,16 @@ func TestRepositoryPostgres_SubscriptionLifecycle(t *testing.T) {
 		}
 	}
 
-	assertSubscribedRooms(t, repository, []subscribedRoomView{{subRoomC, "Charlie"}, {subRoomA, ""}, {subRoomB, "   "}})
+	assertSubscribedRooms(t, repository, []subscribedRoomView{{subRoomC, ""}, {subRoomA, "Alpha"}, {subRoomB, "Bravo"}})
+
+	// 아는 이름은 저장된 이름을 바꾸고, 모르던 이름을 채운다.
+	for _, room := range []subscribedRoomView{{subRoomA, "Alpha 2"}, {subRoomC, "Charlie"}} {
+		if err := repository.Subscribe(ctx, room.id, room.name); err != nil {
+			t.Fatalf("resubscribe %q with %q: %v", room.id, room.name, err)
+		}
+	}
+
+	assertSubscribedRooms(t, repository, []subscribedRoomView{{subRoomC, "Charlie"}, {subRoomA, "Alpha 2"}, {subRoomB, "Bravo"}})
 
 	if err := repository.Unsubscribe(ctx, subRoomA); err != nil {
 		t.Fatalf("Unsubscribe: %v", err)

@@ -102,18 +102,18 @@ func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 func TestResolveLLMSchedulerClients_Guards(t *testing.T) {
 	t.Parallel()
 
-	major, news, err := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{}, testBootstrapGuardLogger())
+	clients, err := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{}, testBootstrapGuardLogger())
 	require.NoError(t, err)
-	assert.Nil(t, major)
-	assert.Nil(t, news)
+	assert.Nil(t, clients.MajorEvent)
+	assert.Nil(t, clients.MemberNews)
 
-	major, news, err = appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
+	clients, err = appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
 		LLMSchedulerURL: "http://localhost:18080",
 		Server:          configsettings.ServerConfig{APIKey: "test-api-key"},
 	}, testBootstrapGuardLogger())
 	require.NoError(t, err)
-	assert.NotNil(t, major)
-	assert.NotNil(t, news)
+	assert.NotNil(t, clients.MajorEvent)
+	assert.NotNil(t, clients.MemberNews)
 }
 
 // https LLM scheduler URL이 설정됐는데 내부 H3 env가 없으면 명령을 조용히 끄거나 TCP client로 내려가지 않고
@@ -122,14 +122,14 @@ func TestResolveLLMSchedulerClientsFailsWithoutInternalH3Env(t *testing.T) {
 	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
 
-	major, news, err := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
+	clients, err := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
 		LLMSchedulerURL: "https://127.0.0.1:30003",
 		Server:          configsettings.ServerConfig{APIKey: "test-api-key"},
 	}, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "HOLOLIVE_INTERNAL_H3_CA_CERT_FILE")
-	assert.Nil(t, major)
-	assert.Nil(t, news)
+	assert.Nil(t, clients.MajorEvent)
+	assert.Nil(t, clients.MemberNews)
 }
 
 func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {

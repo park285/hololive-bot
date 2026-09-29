@@ -7,14 +7,26 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/park285/shared-go/v2/pkg/httputil"
-
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 type Client struct {
-	HTTPClient        *httputil.JSONClient
+	HTTPClient        *internalhttp.JSONClient
 	SubscriptionsPath string
+}
+
+// Close는 llm-scheduler로 가는 H3 transport의 연결을 닫는다. 소유 plane이 요청을 모두 끝낸 뒤 부른다.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	if err := c.HTTPClient.Close(); err != nil {
+		return fmt.Errorf("close subscription client: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) {

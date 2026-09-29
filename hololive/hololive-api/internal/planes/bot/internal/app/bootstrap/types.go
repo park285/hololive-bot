@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"time"
 
@@ -42,6 +43,8 @@ type IrisRoomLister interface {
 type AlarmModeComponents struct {
 	AlarmCRUD        domain.AlarmCRUD
 	MemberDataSource domain.MemberDataProvider
+	// AlarmClient는 AlarmCRUD의 alarm-worker H3 transport 소유자다. bot plane Close에서 닫는다.
+	AlarmClient io.Closer
 }
 
 type ScraperHolodexFoundation struct {
@@ -53,7 +56,9 @@ type CoreIntegrationServices struct {
 	ACLService           *acl.Service
 	MajorEventRepository handlercore.MajorEventRepository
 	MemberNewsService    handlercore.MemberNewsService
-	CommandBuilders      []orchcmd.CommandBuilder
+	// SchedulerTransports는 llm-scheduler client의 H3 transport다. bot plane Close에서 닫는다.
+	SchedulerTransports []io.Closer
+	CommandBuilders     []orchcmd.CommandBuilder
 }
 
 type BotCoreModule struct {

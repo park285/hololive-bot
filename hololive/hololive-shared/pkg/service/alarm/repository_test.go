@@ -176,9 +176,10 @@ func TestListAlarmEntriesUsesMostRecentlyChangedKakaoRoomName(t *testing.T) {
 	requireRoomName("새 방")
 }
 
-// Iris webhook에는 방 제목이 없어 bot은 방 ID를 RoomName으로 넘긴다. 운영 alarms에는 이렇게 room_name = room_id인
-// 행이 실제 Kakao 이름 행보다 나중에 바뀐 것으로 섞여 있다. 대표값은 관리자 이름 → Kakao 이름 → 방 ID이고,
-// 방 ID 자리표시자는 Kakao 이름을 가리지 못하며 재등록 upsert도 저장된 Kakao 이름을 방 ID로 덮어쓰지 못한다.
+// Iris webhook에는 방 제목이 없다. 옛 bot(v7.0.0까지)은 방 ID를 RoomName으로 넘겼고, 지금 bot(v7.0.1)은 빈 이름을
+// 넘긴다. 운영 alarms에는 room_name = room_id인 행이 실제 Kakao 이름 행보다 나중에 바뀐 것으로 섞여 있다. 대표값은
+// 관리자 이름 → Kakao 이름 → 방 ID이고, 방 ID 자리표시자는 Kakao 이름을 가리지 못하며 재등록 upsert는 방 ID든 빈
+// 이름이든 저장된 Kakao 이름을 덮어쓰지 못한다. 먼저 배포한 worker는 옛 API가 보내는 방 ID도 받는다.
 func TestListAlarmEntriesPrefersKakaoRoomNameOverRoomIDPlaceholder(t *testing.T) {
 	t.Parallel()
 
@@ -204,27 +205,31 @@ func TestListAlarmEntriesPrefersKakaoRoomNameOverRoomIDPlaceholder(t *testing.T)
 		t.Fatalf("SetRoomDisplayName() error = %v", err)
 	}
 
-	// bot 경로 재등록과 새 채널 등록은 방 ID를 이름으로 넘긴다.
-	addWithRoomIDName := func(channelID string) {
+	// 옛 API(방 ID)와 v7.0.1 API(빈 이름)의 재등록·새 채널 등록.
+	addWithoutKakaoName := func(channelID, roomName string) {
 		t.Helper()
 
 		if err := repository.Add(ctx, &domain.Alarm{
 			RoomID:     "room-mixed",
 			UserID:     "user-1",
 			ChannelID:  channelID,
-			RoomName:   "room-mixed",
+			RoomName:   roomName,
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts},
 		}); err != nil {
 			t.Fatalf("Add(%s) error = %v", channelID, err)
 		}
 	}
 
-	addWithRoomIDName("UC_mixed_a")
-	addWithRoomIDName("UC_mixed_d")
+	addWithoutKakaoName("UC_mixed_a", "room-mixed")
+	addWithoutKakaoName("UC_mixed_b", "")
+	addWithoutKakaoName("UC_mixed_d", "room-mixed")
+	addWithoutKakaoName("UC_mixed_e", "")
 
 	requireStoredRoomName(t, pool, "UC_mixed_a", "홀로 방", baseTime)
+	requireStoredRoomName(t, pool, "UC_mixed_b", "홀로 방", baseTime)
 	requireStoredRoomName(t, pool, "UC_mixed_d", "", time.Time{})
-	requireListedRoomNames(t, repository, 6, map[string]string{
+	requireStoredRoomName(t, pool, "UC_mixed_e", "", time.Time{})
+	requireListedRoomNames(t, repository, 7, map[string]string{
 		"room-mixed":   "홀로 방",
 		"room-id-only": "",
 		"room-aliased": "관리자 이름",

@@ -104,6 +104,19 @@ func NewCollector(endpoints []ServiceEndpoint, opts ...CollectorOption) *Collect
 	return collector
 }
 
+// Close는 health 조회용 H3 transport의 연결을 닫는다. 관리 plane이 요청을 모두 끝낸 뒤 부른다.
+func (c *Collector) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	if err := internalhttp.CloseClient(c.h3Client); err != nil {
+		return fmt.Errorf("close health H3 client: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
 	if stats := c.getCachedStats(); stats != nil {
 		return stats, nil

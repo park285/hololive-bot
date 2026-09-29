@@ -75,7 +75,7 @@ func TestGenerateRoomDigestRejectsNilHTTPResponse(t *testing.T) {
 
 	c := newTestClient(t, "http://example.com")
 
-	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
+	c.HTTPClient.JSONClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return nil, nil //nolint:nilnil // 응답과 오류가 모두 nil인 비정상 transport 재현이 이 테스트의 검증 대상이다.
 		}),
@@ -96,7 +96,7 @@ func TestGenerateRoomDigestRejectsNilResponseBody(t *testing.T) {
 
 	c := newTestClient(t, "http://example.com")
 
-	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
+	c.HTTPClient.JSONClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -122,7 +122,7 @@ func TestHandleRoomDigestNotFoundClosesReadableBody(t *testing.T) {
 
 	c := newTestClient(t, "http://example.com")
 
-	c.HTTPClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
+	c.HTTPClient.JSONClient = httputil.NewJSONClientWithHTTPClient("https://example.com", testAPIKey, &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusNotFound,

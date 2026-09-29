@@ -72,5 +72,6 @@ func buildAlarmModeComponents(
 	return &alarmModeComponents{
 		AlarmCRUD:        alarmClient,
 		MemberDataSource: memberData,
+		AlarmClient:      alarmClient,
 	}, nil
 }

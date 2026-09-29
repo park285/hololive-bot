@@ -14,17 +14,35 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+// JSONClient는 내부 JSON client와 그 transport의 소유권을 함께 든다. H3 transport의 QUIC 연결은 소유자가 Close로
+// 닫아야 peer가 CONNECTION_CLOSE를 받는다. 닫지 않고 프로세스가 끝나면 peer 서버의 graceful shutdown은 그 연결이
+// QUIC idle timeout으로 사라질 때까지 기다린다.
+type JSONClient struct {
+	*httputil.JSONClient
+
+	transport *http.Client
+}
+
+// Close는 H3 transport의 연결을 닫는다. TCP client나 nil client에서는 아무것도 하지 않는다.
+func (c *JSONClient) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	return CloseClient(c.transport)
+}
+
 // NewJSONClient는 내부 서비스 URL scheme에 맞는 JSON client를 생성합니다.
 // 내부 URL이 https일 때 H3 client를 구성하지 못하면(HOLOLIVE_INTERNAL_H3_* 누락 포함) TCP client로 바꾸지 않고
 // 오류를 돌려줍니다. 호출자는 이 오류로 기동을 실패시킵니다. 경고 뒤 기본 client로 내려가던 폴백은 H3 전용 서버에 대한
 // 요청을 런타임 실패로 미뤘기 때문에 지웠습니다(stack audit 2026-09-26).
-func NewJSONClient(baseURL, apiKey string, timeout time.Duration) (*httputil.JSONClient, error) {
+func NewJSONClient(baseURL, apiKey string, timeout time.Duration) (*JSONClient, error) {
 	client, err := NewClientForURLStrict(baseURL, timeout, nil)
 	if err != nil {
 		return nil, fmt.Errorf("new internal JSON client: %w", err)
 	}
 
-	return httputil.NewJSONClientWithHTTPClient(baseURL, apiKey, client), nil
+	return &JSONClient{JSONClient: httputil.NewJSONClientWithHTTPClient(baseURL, apiKey, client), transport: client}, nil
 }
 
 // NewClientForURLStrict은 https 내부 URL에는 H3 client를, 그 외에는 internal HTTP client를 반환합니다.

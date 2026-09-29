@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,7 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -28,6 +30,8 @@ type scraperHolodexFoundation struct {
 type alarmModeComponents struct {
 	AlarmCRUD        domain.AlarmCRUD
 	MemberDataSource domain.MemberDataProvider
+	// AlarmClient는 AlarmCRUD의 alarm-worker H3 transport 소유자다. plane Close에서 닫는다.
+	AlarmClient io.Closer
 }
 
 func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*AdminAPIRuntime, error) {
@@ -136,7 +140,9 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 
 	handler.SetXSpaceSessions(xSpaceSessions)
 
-	runtimeCleanup := stopHolodexRetriesBeforeCleanup(foundation.HolodexService, infra.Cleanup)
+	runtimeCleanup := stopHolodexRetriesBeforeCleanup(foundation.HolodexService, closeInternalClientsBeforeCleanup(
+		adminInternalClients(alarmMode, adminSettings.triggerClient, systemCollector, irisRoomClient), infra.Cleanup, logger,
+	))
 
 	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, runtimeCleanup, logger)
 	if err != nil {
@@ -186,6 +192,32 @@ func stopHolodexRetriesBeforeCleanup(holodex interface{ Stop() }, cleanup func()
 		holodex.Stop()
 		cleanup()
 	}
+}
+
+// closeInternalClientsBeforeCleanup은 관리 plane이 만든 내부 H3 client(alarm-worker·llm-scheduler·bot 내부 API·health)를
+// 닫은 뒤 infra를 닫는다. 닫힌 transport는 peer에 CONNECTION_CLOSE를 보내 peer의 graceful shutdown이 이 연결을 QUIC
+// idle timeout까지 기다리지 않게 한다. 각 plane의 Close는 aggregate runtime이 모든 plane의 Shutdown(요청 drain)을
+// 끝낸 뒤 불리므로 진행 중인 요청을 끊지 않는다(fxapp lifecycleCoordinator.OnStop).
+func closeInternalClientsBeforeCleanup(clients []io.Closer, cleanup func(), logger *slog.Logger) func() {
+	return func() {
+		if err := internalhttp.CloseAll(clients...); err != nil && logger != nil {
+			logger.Warn("admin_internal_client_close_failed", slog.Any("error", err))
+		}
+
+		cleanup()
+	}
+}
+
+// adminInternalClients는 관리 plane이 만든 내부 H3 client를 모은다. 설정하지 않은 선택 client는 nil receiver로
+// 들어오며 Close가 아무것도 하지 않는다. 내부 bot URL이 없으면 room lister 자체가 없다.
+func adminInternalClients(alarmMode *alarmModeComponents, trigger, collector io.Closer, roomLister server.IrisRoomLister) []io.Closer {
+	clients := []io.Closer{alarmMode.AlarmClient, trigger, collector}
+
+	if closer, ok := roomLister.(io.Closer); ok {
+		clients = append(clients, closer)
+	}
+
+	return clients
 }
 
 func newAdminAPIRuntime(

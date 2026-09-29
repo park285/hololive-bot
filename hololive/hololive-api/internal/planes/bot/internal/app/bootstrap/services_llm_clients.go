@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
@@ -10,30 +11,43 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+// LLMSchedulerClients는 major event·member news client와 그 H3 transport 소유권이다.
+// Scheduler URL이 없으면 모든 필드가 비고 명령은 꺼진다.
+type LLMSchedulerClients struct {
+	MajorEvent handlercore.MajorEventRepository
+	MemberNews handlercore.MemberNewsService
+	// Transports는 bot plane Close에서 닫을 client다.
+	Transports []io.Closer
+}
+
 // ResolveLLMSchedulerClients는 LLM_SCHEDULER_INTERNAL_URL이 설정된 경우에만 major event·member news client를 만든다.
 // URL이 설정됐는데 client를 만들지 못하면(HOLOLIVE_INTERNAL_H3_* 누락 포함) 명령을 조용히 끄지 않고 오류를 돌려
 // bot plane 기동을 실패시킨다(stack audit 2026-09-26).
 func ResolveLLMSchedulerClients(
 	appConfig *settings.Config,
 	logger *slog.Logger,
-) (handlercore.MajorEventRepository, handlercore.MemberNewsService, error) {
+) (LLMSchedulerClients, error) {
 	if appConfig.LLMSchedulerURL == "" {
 		logger.Warn("LLM scheduler URL not configured; majorevent/membernews commands disabled",
 			slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"),
 		)
 
-		return nil, nil, nil //nolint:nilnil // scheduler URL 미설정은 major event·member news 명령을 끄는 계약값이며 오류가 아니다.
+		return LLMSchedulerClients{}, nil
 	}
 
 	majorEventClient, err := majorevent.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("major event client: %w", err)
+		return LLMSchedulerClients{}, fmt.Errorf("major event client: %w", err)
 	}
 
 	memberNewsClient, err := membernews.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("member news client: %w", err)
+		return LLMSchedulerClients{}, fmt.Errorf("member news client: %w", err)
 	}
 
-	return majorEventClient, memberNewsClient, nil
+	return LLMSchedulerClients{
+		MajorEvent: majorEventClient,
+		MemberNews: memberNewsClient,
+		Transports: []io.Closer{majorEventClient, memberNewsClient},
+	}, nil
 }

@@ -41,6 +41,20 @@ func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger) (*Cl
 	}, nil
 }
 
+// Close는 alarm-worker로 가는 H3 transport의 연결을 닫는다. 소유 plane이 요청을 모두 끝낸 뒤 부른다.
+// 닫지 않으면 worker의 graceful shutdown이 이 연결을 QUIC idle timeout까지 기다린다.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	if err := internalhttp.CloseClient(c.httpClient); err != nil {
+		return fmt.Errorf("close alarm service client: %w", err)
+	}
+
+	return nil
+}
+
 func validateAlarmServiceOrigin(baseURL string) error {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
