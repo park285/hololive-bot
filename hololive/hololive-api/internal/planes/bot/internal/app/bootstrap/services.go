@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/park285/iris-client-go/v3/iris"
@@ -106,7 +107,12 @@ func buildBotInfrastructureServices(
 		IrisRoomLister: irisClient,
 		Postgres:       infra.Postgres,
 		Cache:          infra.Cache,
-		Cleanup:        composeBotInfrastructureCleanup(infra.Cleanup, irisClient, logger),
+		Cleanup: composeBotInfrastructureCleanup(
+			infra.Cleanup,
+			irisClient,
+			append([]io.Closer{alarmYouTubeStack.AlarmMode.AlarmClient}, integrationServices.SchedulerTransports...),
+			logger,
+		),
 	}, nil
 }
 

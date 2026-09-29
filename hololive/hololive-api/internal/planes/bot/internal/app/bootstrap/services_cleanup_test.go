@@ -1,30 +1,38 @@
 package bootstrap
 
-import "testing"
+import (
+	"io"
+	"testing"
+)
 
-type fakeIrisCleanupClient struct {
+type fakeCleanupCloser struct {
 	closed int
 }
 
-func (c *fakeIrisCleanupClient) Close() error {
+func (c *fakeCleanupCloser) Close() error {
 	c.closed++
 	return nil
 }
 
-func TestComposeBotInfrastructureCleanupClosesIrisAndInfraOnce(t *testing.T) {
+func TestComposeBotInfrastructureCleanupClosesClientsAndInfraOnce(t *testing.T) {
 	t.Parallel()
 
-	irisClient := &fakeIrisCleanupClient{}
+	irisClient := &fakeCleanupCloser{}
+	alarmClient := &fakeCleanupCloser{}
 	infraClosed := 0
 	cleanup := composeBotInfrastructureCleanup(func() {
 		infraClosed++
-	}, irisClient, nil)
+	}, irisClient, []io.Closer{alarmClient, nil}, nil)
 
 	cleanup()
 	cleanup()
 
 	if irisClient.closed != 1 {
 		t.Fatalf("iris client close count = %d, want 1", irisClient.closed)
+	}
+
+	if alarmClient.closed != 1 {
+		t.Fatalf("internal client close count = %d, want 1", alarmClient.closed)
 	}
 
 	if infraClosed != 1 {

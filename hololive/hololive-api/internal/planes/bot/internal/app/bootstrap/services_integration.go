@@ -34,15 +34,16 @@ func InitCoreIntegrationServices(
 		return nil, fmt.Errorf("provide ACL service: %w", err)
 	}
 
-	majorEventRepository, memberNewsService, err := ResolveLLMSchedulerClients(appConfig, logger)
+	schedulerClients, err := ResolveLLMSchedulerClients(appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("resolve LLM scheduler clients: %w", err)
 	}
 
 	return &CoreIntegrationServices{
 		ACLService:           aclService,
-		MajorEventRepository: majorEventRepository,
-		MemberNewsService:    memberNewsService,
+		MajorEventRepository: schedulerClients.MajorEvent,
+		MemberNewsService:    schedulerClients.MemberNews,
+		SchedulerTransports:  schedulerClients.Transports,
 		CommandBuilders:      []orchcmd.CommandBuilder{},
 	}, nil
 }

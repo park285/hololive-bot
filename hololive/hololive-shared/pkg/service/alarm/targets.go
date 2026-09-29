@@ -138,20 +138,20 @@ func resolveChannelSubscribersFromDB(
 ) ([]string, error) {
 	alarms, err := loadChannelSubscriberAlarms(ctx, db, channelID, alarmType)
 	if err != nil {
-		observeAlarmSubscriberDBFallback("error")
+		observeAlarmSubscriberDBFallback(subscriberDBFallbackError)
 
 		return nil, fmt.Errorf("resolve channel subscribers by type: %w", err)
 	}
 
 	subscribers := extractSubscriberIDsByType(alarms, alarmType)
 	if len(subscribers) == 0 {
-		observeAlarmSubscriberDBFallback("miss")
+		observeAlarmSubscriberDBFallback(subscriberDBFallbackMiss)
 		markEmptyChannelSubscriberCache(ctx, cacheClient, channelID, alarmType)
 
 		return nil, nil
 	}
 
-	observeAlarmSubscriberDBFallback("hit")
+	observeAlarmSubscriberDBFallback(subscriberDBFallbackHit)
 
 	warmChannelSubscriberCache(ctx, cacheClient, alarms, channelID, alarmType)
 
@@ -185,7 +185,7 @@ func ResolveUncachedChannelSubscribersByType(
 
 	alarmsByChannel, err := loadChannelSubscriberAlarmsByChannels(ctx, db, pending, alarmType)
 	if err != nil {
-		observeAlarmSubscriberDBFallback("error")
+		observeAlarmSubscriberDBFallback(subscriberDBFallbackError)
 
 		return nil, fmt.Errorf("resolve uncached channel subscribers: %w", err)
 	}
@@ -195,13 +195,13 @@ func ResolveUncachedChannelSubscribersByType(
 
 		subscribers := extractSubscriberIDsByType(alarms, alarmType)
 		if len(subscribers) == 0 {
-			observeAlarmSubscriberDBFallback("miss")
+			observeAlarmSubscriberDBFallback(subscriberDBFallbackMiss)
 			markEmptyChannelSubscriberCache(ctx, cacheClient, channelID, alarmType)
 
 			continue
 		}
 
-		observeAlarmSubscriberDBFallback("hit")
+		observeAlarmSubscriberDBFallback(subscriberDBFallbackHit)
 
 		result[channelID] = subscribers
 	}

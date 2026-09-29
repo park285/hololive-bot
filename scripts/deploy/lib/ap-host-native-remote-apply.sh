@@ -212,9 +212,14 @@ stop_native_units_and_require_inactive() {
 # 실패하면 이전 collector release로 되돌린다. 이전 release가 없는 첫 설치는 반쯤 구성된 unit을 지우고 실패로 끝낸다.
 # 퇴역 producer의 첫 cutover 상태를 기록·복원하던 경로는 T18(2026-09-26)에서 모든 host-native AP의 current·previous가
 # collector release이고 producer unit이 0개임을 확인해 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling).
+# set -E라 ERR trap은 명령 치환·subshell에도 상속된다. 그 안의 실패는 subshell에서 한 번, 치환이 실패로 끝난 부모에서
+# 또 한 번 trap을 부르므로 trap을 건 shell에서만 복원하고 subshell은 원래 상태로 끝나 부모에 실패를 넘긴다.
 restore_native_after_failed_cutover() {
   local status="$?"
   local restore_status
+  if [[ "$BASHPID" != "${cutover_restore_owner_pid:?cutover restore owner not armed}" ]]; then
+    exit "$status"
+  fi
   trap - ERR
   # if/!/&&/|| 조건 안의 subshell은 set -e를 무시해 실패한 복원 단계를 지나친다. 조건 밖에서 실행해 첫 실패에서 멈추고 상태를 받는다.
   set +e
@@ -243,7 +248,11 @@ restore_native_after_failed_cutover() {
   fi
   exit "$status"
 }
-trap restore_native_after_failed_cutover ERR
+arm_native_cutover_restore() {
+  cutover_restore_owner_pid="$BASHPID"
+  trap restore_native_after_failed_cutover ERR
+}
+arm_native_cutover_restore
 stop_native_units_and_require_inactive
 
 sudo -n install -m 0640 -o root -g root "$payload/youtube-collector-host.env" "$host_env"

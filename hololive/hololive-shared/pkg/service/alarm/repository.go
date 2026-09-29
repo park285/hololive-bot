@@ -51,10 +51,18 @@ func newRepositoryWithQuerier(querier dbx.Querier) *Repository {
 }
 
 // Add는 방·채널·멤버 구독별 알림 종류를 저장하며 빈 HostID는 전체 채널 구독이다.
+// Iris webhook은 방 제목을 싣지 않는다. 지금 bot(v7.0.1)은 모르는 이름을 빈 문자열로 넘기지만, 옛 bot(v7.0.0까지)은
+// 방 ID를 RoomName으로 넘겼고 worker를 API보다 먼저 배포하는 동안 옛 API가 계속 보낸다. 방 ID와 같은 이름은 Kakao 방
+// 이름이 아니므로 빈 이름으로 저장해 upsert가 기존 Kakao 방 이름과 room_name_updated_at을 방 ID로 덮어쓰지 않게 한다.
 func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	alarmTypes := alarm.AlarmTypes
 	if len(alarmTypes) == 0 {
 		alarmTypes = domain.DefaultAlarmTypes
+	}
+
+	roomName := alarm.RoomName
+	if roomName == alarm.RoomID {
+		roomName = ""
 	}
 
 	query := mustSQL("repository_0055_01.sql")
@@ -66,7 +74,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 
 	_, err = r.pool.Exec(ctx, query,
 		alarm.RoomID, alarm.UserID, alarm.ChannelID,
-		alarm.MemberName, alarm.RoomName, alarm.UserName,
+		alarm.MemberName, roomName, alarm.UserName,
 		typesValue, alarm.HostID,
 	)
 	if err != nil {

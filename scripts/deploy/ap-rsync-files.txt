@@ -206,6 +206,7 @@ hololive/hololive-shared/pkg/providers/youtube_providers.go
 hololive/hololive-shared/pkg/providers/youtube_rate_limiter_provider.go
 hololive/hololive-shared/pkg/server/httpserver/channel_ids.go
 hololive/hololive-shared/pkg/server/httpserver/h3.go
+hololive/hololive-shared/pkg/server/httpserver/h3_drain.go
 hololive/hololive-shared/pkg/server/httpserver/metrics.go
 hololive/hololive-shared/pkg/server/httpserver/oauth_proxy.go
 hololive/hololive-shared/pkg/server/httpserver/pprof.go

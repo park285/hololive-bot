@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	runtimehttpserver "github.com/park285/shared-go/v2/pkg/runtime/httpserver"
@@ -21,6 +22,8 @@ type RuntimeHTTPServers struct {
 	H3      *http3.Server
 	Metrics *http.Server
 	Pprof   *http.Server
+
+	h3Requests *h3RequestDrain
 }
 
 func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerConfig, handler http.Handler, operation string,
@@ -34,12 +37,15 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	servers := &RuntimeHTTPServers{}
 
 	if serverConfig.TransportEnabled("h3") {
-		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), handler, serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
+		drain := &h3RequestDrain{}
+
+		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), drain.wrap(handler), serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
 		if err != nil {
 			return nil, fmt.Errorf("H3 server: %w", err)
 		}
 
 		servers.H3 = h3Server
+		servers.h3Requests = drain
 	}
 
 	if metricsAddr := strings.TrimSpace(serverConfig.MetricsAddr); metricsAddr != "" {
@@ -96,21 +102,31 @@ func (s *RuntimeHTTPServers) Start(logger *slog.Logger, errCh chan<- error) {
 	}
 }
 
+// Shutdown은 H3·Metrics·Pprof를 같은 ctx 안에서 동시에 멈춘다. H3 정지는 idle 연결만 남으면 ctx가 끝날 때까지
+// 기다린 뒤 성공하므로, 그 뒤에 Metrics·Pprof를 멈추면 이미 끝난 ctx를 받는다. 그동안 열려 있던 listener로 들어온
+// scrape 연결이 남아 있으면 net/http Shutdown이 곧바로 ctx 오류를 돌려 정상 정지가 실패가 된다.
 func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
 
-	err := ShutdownH3Server(ctx, s.H3)
+	var metricsErr, pprofErr error
+
+	var wg sync.WaitGroup
+
 	if s.Metrics != nil {
-		err = errors.Join(err, runtimehttpserver.Shutdown(ctx, s.Metrics, "metrics server shutdown failed"))
+		wg.Go(func() { metricsErr = runtimehttpserver.Shutdown(ctx, s.Metrics, "metrics server shutdown failed") })
 	}
 
 	if s.Pprof != nil {
-		err = errors.Join(err, runtimehttpserver.Shutdown(ctx, s.Pprof, "pprof server shutdown failed"))
+		wg.Go(func() { pprofErr = runtimehttpserver.Shutdown(ctx, s.Pprof, "pprof server shutdown failed") })
 	}
 
-	return err
+	h3Err := shutdownH3Server(ctx, s.H3, s.h3Requests)
+
+	wg.Wait()
+
+	return errors.Join(h3Err, metricsErr, pprofErr)
 }
 
 func StartH3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
@@ -119,18 +135,6 @@ func StartH3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error
 	}
 
 	runtimehttpserver.StartServerWithPrefix(server, "HTTP/3 server error", logger, errCh)
-}
-
-func ShutdownH3Server(ctx context.Context, server *http3.Server) error {
-	if server == nil {
-		return nil
-	}
-
-	if err := runtimehttpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed"); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
-	}
-
-	return nil
 }
 
 func runtimeH3Addr(serverConfig *settings.ServerConfig) string {

@@ -11,14 +11,26 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 type Client struct {
-	httpClient *httputil.JSONClient
+	httpClient *internalhttp.JSONClient
+}
+
+// Close는 bot plane 내부 API로 가는 H3 transport의 연결을 닫는다. 관리 plane이 요청을 모두 끝낸 뒤 부른다.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	if err := c.httpClient.Close(); err != nil {
+		return fmt.Errorf("close bot rooms client: %w", err)
+	}
+
+	return nil
 }
 
 func NewClient(baseURL, apiKey string) (*Client, error) {
