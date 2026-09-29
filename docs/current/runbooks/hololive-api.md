@@ -122,6 +122,8 @@ Manifest의 **244 → 234–243** 순서와 API·collector fleet a/b/c/d·alarm-
 6. `db-migrate`를 다시 실행합니다. 241은 마지막 최대 1000건과 전체 참조 검증 후 FK/NOT NULL을 적용하고 구 payload/hash 열과 backfill 함수를 제거합니다. 242는 미처리 행 전용 임시 index를, 243은 contract 퇴역 참조 인덱스를 각각 동시 제거합니다. Cutover transaction에는 전체 FK/NULL 검증이 있으므로 대형 DB에서 짧은 종료 시간을 가정하지 않습니다. JSONB 사전의 hash는 32바이트이고 외부 hex 표현은 유지합니다. 모든 새 writer/reader를 함께 배포하고 API의 새 projection이 활성화된 뒤 collector를 재개합니다.
 7. 정상 metadata profile/photo와 live/schedule/content 발행, queue age, canonical/intent·중복 방지, GC·retention 오류, p95/p99를 확인합니다. 새 TTL 적용은 master 수정/sync/재생성 승인을 별도로 따릅니다. 오류·결과 불일치, 여유 20 GiB 미만, 6시간에 5 GiB 이상 감소, 반복 timeout이면 추가 backfill/정리를 중지합니다.
 
+`db-migrate --statement-timeout=10m`은 승인된 대용량 DDL 점검 창에만 명시적으로 사용합니다. 생략하거나 `0`이면 기존 문장당 4분이며, 음수와 10분 초과는 DB 접속 전에 거절합니다. 전체 명령 15분·세션 lock 10초와 각 migration의 더 짧은 lock budget은 유지합니다. 전역 DB 설정이나 Compose 기본값에는 이 예외를 저장하지 않습니다. 늘린 한도에서도 timeout이면 자동 증액·반복 실행하지 않고 정지 상태와 복구점을 보존한 채 다음 조치를 승인받습니다.
+
 추가 공간 상한을 사전 과소평가하지 않습니다. backfill 중 구 payload와 고유 payload·새 index가 함께 존재하며 UPDATE dead tuple/WAL이 발생합니다. 사전 표본 이득은 최대 공간 보장이 아닙니다. `DELETE`나 `DROP COLUMN` 뒤 relation 파일이 즉시 줄어들지 않을 수 있습니다. VACUUM FULL/파일 재작성은 강한 lock·임시 여유·중단 창·복구 계획을 별도로 승인받아 시행합니다. active `pg_wal`은 직접 삭제하지 않습니다.
 
 234 이후 통계 데이터는 구 이미지만으로 복원되지 않습니다. 241 이후 구 API/collector는 존재하지 않는 열에 접근하므로 이미지 단독 rollback도 금지합니다. 오류 때 모든 writer를 정지한 채 검증한 전체 복구본과 그 시점 schema/ledger/image를 함께 복원하거나 fix-forward합니다. TTL로 만료된 원본은 설정 원복으로 돌아오지 않습니다. 새 retry/fallback/dual writer는 추가하지 않습니다.

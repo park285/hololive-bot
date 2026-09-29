@@ -10,6 +10,7 @@
 
 - 채널 수치 통계 기능을 완전히 제거합니다. 구독자 수 명령·통계 템플릿·producer/consumer·공개 채널 통계 필드·도메인과 통계 전용 DB 객체를 migration 234로 함께 제거하며, 채널 profile/photo·방송·일정·알림 구독은 유지합니다. 미확정 통계 발송이나 예상 밖 durable MILESTONE 이력이 있으면 migration을 거절합니다.
 - 통계 contract 삭제의 FK 확인이 큰 application 이력을 전체 스캔하여 timeout 나던 문제를 고칩니다. manifest에서 244의 임시 참조 인덱스를 234보다 먼저 동시 생성하고, 이행 끝에 243으로 동시 삭제합니다. timeout·무결성 검사를 완화하지 않으며 정상 적재에 추가 인덱스를 남기지 않습니다.
+- 대용량 인덱스의 승인된 점검 창에 `db-migrate --statement-timeout`을 명시할 수 있습니다. 기본 4분, 허용 상한 10분, 전체 명령 15분과 기존 lock 제한은 유지하며 음수·상한 초과는 실행 전에 거절합니다.
 - 관측 저장량을 줄입니다. migration 238–242는 JSONB(LZ4) payload를 kind/schema/canonical profile+전체 32바이트 digest로 공유하고 슬롯별 관측은 독립 보존합니다. bounded backfill, 참조 보호 GC, 손상 시 오류, 동시 insert 가시성 검증을 포함합니다. 구 payload 열·backfill 함수와 임시 index는 cutover에서 제거합니다. API와 collector fleet의 coordinated cutover가 필요하며 구 이미지 단독 rollback은 불가능합니다.
 - 보관 기본값을 일반 원본 7일·schedule/absence 14일·profile/photo 30일·live-check 2일로 조정합니다. PROCESSED queue 1일·DLQ 14일·collision/replay 30일·application 추가 유예 3일·checkpoint 2일·RETIRED projection 7일입니다. 보호된 active/pending/head 조건은 유지하고 운영 master 값은 자동 변경하지 않습니다.
 - migration 235–237은 application의 orphan 제외 부분 UNIQUE, reasons+targets 실제 행 수로 제한한 projection 정리와 table-local vacuum 설정을 적용합니다. application 결과는 한 INSERT로 묶고 발행 fence/contract 검증은 한 pipeline으로 보냅니다. 새 fallback·재수집·dual writer·런타임 의존성은 없습니다.
