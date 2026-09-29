@@ -231,3 +231,14 @@ kapu, Go 1.27.1, PostgreSQL 18.6, `GOMAXPROCS=2`. 기준선 `8b847e683`의 별�
 - 중앙 API/worker와 collector b/c는 healthy이며 a/d native unit은 active/running, NRestarts=0이다. b 및 a/d release는 `3b5e3dd15255ef772ee60c4c9dee9c2efc1293f3` 계열이다. 중앙은 aarch64, a/d는 x86_64, b는 aarch64다.
 - authoritative DB guard `on`: PG 18.6, DB 27,874,940,607 bytes, 적용 manifest 94개·마지막 233. 통계 source 0, queue PENDING 21/PROCESSING 4/PROCESSED 1,202,603, metadata lease IDLE 120. 이 수치는 live drain 완료가 아니며 정지 직전 재확인이 필요하다. 중앙 filesystem 여유 55,183,527,936 bytes, WAL 864 MiB/54파일, replication slot/sender 0이다.
 - 자동 backup timer는 disabled/inactive다. 기존 backup 실행기는 Google Drive 전송과 7세대 삭제를 포함하므로 일회성 로컬 복구본에 그대로 실행하지 않는다. 복구본을 만들 경우 기존 암호화 수단을 재사용하되 별도 경로·외부 전송 없음·자동 백업 재활성화 없음·기존 사본 삭제 없음으로 범위를 제한한다.
+
+### 승인된 복구점과 운영에서 발견한 이행 결함
+
+- 사용자는 **일회성 백업 후 전환**(중단·통계 삭제·새 TTL·성능 미확정 위험 포함)과 **기존 부분 백업 보존**을 선택했다. 자동 백업·Drive 전송·기존 사본 삭제는 하지 않는다.
+- 최초 배포 후보는 로컬 commit `873a4c8fc6d19e20d66b94fc46be237a599a5ab6`이다. 중앙/Seoul ARM64 이미지와 a/d AMD64 native 묶음을 검증·전송했지만 아직 활성화하지 않았다. 이전 `3b5e3dd15255ef772ee60c4c9dee9c2efc1293f3` 이미지 태그와 두 Compose 호스트의 `/opt/hololive-bot/compose/deploy-backups/storage-pre-873a4c8fc/` 실행 트리를 보존했다. Seoul classic image store의 config digest와 중앙 containerd store의 manifest digest 차이는 기존 archive 검증기로 확인했다.
+- 12:39:08 UTC부터 collector를 정상 정지했고 API/worker도 exit 0으로 정지했다. metadata ACTIVE와 source PROCESSING은 0, MILESTONE outbox/event/collision은 0이었다. 백업·복원 검증 시간도 중단 창에 포함한다고 사전에 알렸다.
+- 복구점: `~/.local/share/hololive-db-backup/manual/20260929T124126Z-storage-873a4c8fc/`. 암호화 DB archive는 2,222,356,673 bytes다. 비밀번호를 제외한 role archive도 암호화했고, network-none PG 18.6에서 실제 복원을 완료했다. ledger 94개, 관측 4,861,270행, application의 비NULL observation_id 10,171,985개, queue 1,202,276행, invalid index 0을 확인했다. 검증용 DB/container는 제거했다.
+- 승인된 TTL 18개와 폐기된 통계 TTL 키 제거를 중앙 master에 반영하고 Hololive 범위 dry-run 후 sync했다. mirror-only 파일 0, master/mirror 일치와 manifest owner/mode 27개를 검증했다. 새 API 설정과 collector 네 대의 worker profile도 실행 검증을 통과했다. 서비스는 아직 정지 상태다.
+- 최초 234 실행은 contract 등록행 삭제에서 statement timeout으로 중단됐다. ledger는 94개/233까지이며 선행 배치 일부는 commit됐으므로 구 이미지 단독 재개는 안전하지 않다. PostgreSQL context는 `remove_channel_statistics_v234()`의 등록행 삭제문이고, application kind 조회 계획은 Parallel Seq Scan이었다. 일회성 전체 count도 별도로 10초 제한에 걸려, 이후 정지 확인에는 ledger/metadata lease와 client session 조회를 사용했다(남은 client는 idle exporter 하나).
+- 원인 보완: 새 244에서 `(observation_kind, provider)` 이행용 인덱스를 동시 생성하고 **manifest에서 234보다 먼저** 실행한다. 새 243은 최종 cutover 뒤 이를 동시 삭제한다. 234 본문과 이미 적용된 migration은 바꾸지 않았고 timeout·FK 검사·DDL 게이트도 완화하지 않았다. 정상 적재에 추가 인덱스를 남기지 않는다.
+- 회귀는 보존할 다른 kind의 application 15,000행이 있는 실제 PG에서 contract FK 조건의 행 방문 상한을 검사한다. 수정 전 15,000행으로 실패했고 수정 후 128행 이하 기준을 통과했다. 최종 concurrent 구성의 DB/migrationrunner race, manifest/SQL ownership 검사와 실제 `db-migrate` **105개 적용**을 통과했으며 마지막 이행용 인덱스 부재도 확인했다. 정본·소비자·projection의 앞선 race 검증도 통과했다.

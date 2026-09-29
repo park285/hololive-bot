@@ -1,6 +1,7 @@
 package dbtest
 
 import (
+	jsonv2 "encoding/json/v2"
 	"os"
 	"testing"
 
@@ -109,6 +110,59 @@ func TestChannelStatisticsRemovalPreservesDurableNotificationHistory(t *testing.
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM alarm_dispatch_events WHERE event_key='review-statistics'`).Scan(&events))
 	require.Equal(t, 1, events)
+}
+
+func TestChannelStatisticsRemovalBoundsContractReferenceLookup(t *testing.T) {
+	pool, dir := channelStatisticsRemovalPool(t)
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO source_observation_applications
+			(provider,observation_kind,subject_key,evidence_sha256,entity_kind,entity_key,decision,effective_at)
+		SELECT provider,observation_kind,'retained-'||n,repeat('a',64),'retained','retained-'||n,'APPLIED',now()
+		FROM observation_contract_generations CROSS JOIN generate_series(1,1000) n
+		WHERE observation_kind <> 'channel_stats'`)
+	require.NoError(t, err)
+	require.NoError(t, applyMigrationFile(t.Context(), pool, dir, channelStatisticsRemovalMigration))
+
+	_, err = pool.Exec(t.Context(), `ANALYZE source_observation_applications`)
+	require.NoError(t, err)
+
+	// 등록행 삭제의 FK 확인과 같은 조건이다. 다른 kind의 감사가 많아도 전체를 읽지 않아야 한다.
+	var raw []byte
+
+	require.NoError(t, pool.QueryRow(t.Context(), `EXPLAIN (ANALYZE, FORMAT JSON)
+		SELECT 1 FROM ONLY source_observation_applications AS application
+		WHERE provider='youtubejs' AND observation_kind='channel_stats'
+		FOR KEY SHARE OF application`).Scan(&raw))
+
+	type lookupPlan struct {
+		Relation string       `json:"Relation Name"`
+		Rows     float64      `json:"Actual Rows"`
+		Removed  float64      `json:"Rows Removed by Filter"`
+		Loops    float64      `json:"Actual Loops"`
+		Plans    []lookupPlan `json:"Plans"`
+	}
+
+	var plans []struct{ Plan lookupPlan }
+
+	require.NoError(t, jsonv2.Unmarshal(raw, &plans))
+	require.Len(t, plans, 1)
+
+	nodes := []lookupPlan{plans[0].Plan}
+	visits := float64(0)
+
+	for len(nodes) > 0 {
+		node := nodes[len(nodes)-1]
+
+		nodes = nodes[:len(nodes)-1]
+
+		if node.Relation == "source_observation_applications" {
+			visits += (node.Rows + node.Removed) * node.Loops
+		}
+
+		nodes = append(nodes, node.Plans...)
+	}
+
+	require.LessOrEqual(t, visits, float64(128), "contract removal must not scan unrelated retained applications")
 }
 
 func channelStatisticsRemovalPool(t *testing.T) (*pgxpool.Pool, string) {
