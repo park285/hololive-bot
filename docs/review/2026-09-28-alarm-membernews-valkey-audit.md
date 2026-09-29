@@ -128,6 +128,8 @@ reader는 알람 checker의 batch 이름 보강, 알람 조회, YouTube 알림 f
 
 또한 fake는 빈/공백 roomName 재구독 시 기존 이름을 보존하지만 실제 SQL의 `COALESCE(EXCLUDED.room_name, ...)`는 빈 문자열을 NULL로 바꾸지 않습니다. non-null 빈 문자열이면 덮어쓰는 차이가 있습니다. 이번 패치에서 SQL 의미를 임의로 바꾸지 않고, 구현 검증 시 fake를 실제 계약에 맞추고 빈 문자열·재구독을 격리 PG로 확인합니다.
 
+> 2026-09-29 v7.0.1 주: 이 문단은 당시 SQL 기준입니다. v7.0.1은 구독 upsert를 `NULLIF(btrim($2), '')` + `COALESCE(EXCLUDED.room_name, 기존)`으로 바꿔, 모르는(빈·공백) 이름은 NULL로 저장하고 재구독에서 저장된 이름을 보존합니다(`CHANGELOG.md` v7.0.1).
+
 미러 삭제 검증에 `cache=nil`만 사용하면 뉴스 잠금·cost tracker·member epoch 연결까지 끊어 놓고 통과할 수 있습니다. 두 폐기 키만 거부하는 spy와 필요한 Valkey capability의 정상 호출 검증을 함께 사용합니다. 수동 조회·정기 구독·관심 멤버의 관계, 실제 enqueue 이후 worker 결과를 별도 증거로 둡니다.
 
 ## N09 중간 우선순위 — 해지와 이미 enqueue된 뉴스의 경계를 보존

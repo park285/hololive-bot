@@ -22,6 +22,8 @@
 - hololive-api가 종료 때 내부 HTTP/3 client를 닫습니다. alarm-worker·llm-scheduler·bot 내부 API·health 조회용 client는 그동안 닫는 곳이 없어(`internalhttp.CloseClient` 호출처 0곳) API가 끝나면 연결이 CONNECTION_CLOSE 없이 사라졌고, peer의 graceful shutdown은 그 연결을 QUIC idle timeout까지 기다렸습니다. bot·관리 plane의 Close가 infra를 닫기 전에 이 client를 닫습니다. plane Close는 모든 plane의 `Shutdown`(요청 drain)이 끝난 뒤 불리므로 진행 중인 요청을 끊지 않습니다. 같은 조건에서 worker 쪽 H3 정지는 종료 시한 10s를 기다리던 것이 곧바로 끝납니다.
 - bot이 모르는 방 이름을 방 ID로 채우지 않습니다. Iris webhook에는 방 제목이 없어 ingress가 방 ID를 방 이름으로 넘겼고, 알림 등록과 major event·member news 구독 upsert가 저장된 이름을 방 ID로 덮어썼습니다. 이제 이름은 빈 값(모름)입니다. major event·member news 구독은 빈/공백 이름을 NULL로 저장하고 재구독에서 저장된 이름을 지우지 않습니다(그동안은 빈 문자열이 이름을 덮어썼습니다). 알림 저장은 방 ID와 같은 이름도 계속 빈 이름으로 받습니다. worker를 API보다 먼저 배포하면 옛 API가 방 ID를 보내기 때문입니다. 표시 순서(관리자 이름 → Kakao 이름 → 방 ID)는 그대로입니다.
 - H3 정지 판정의 남은 틈을 코드 주석에 적습니다. 요청 수는 handler 진입부터 셉니다. quic-go v0.63 http3에는 stream을 받은 시점의 hook이 없어서, HEADERS가 덜 도착한 요청은 세지 않습니다. 이 틈은 종료 시한에 그런 stream만 남았을 때 실패 대신 성공을 돌려줄 수만 있습니다. 그 요청은 handler에 닿지 않았고 어느 판정에서든 연결 종료로 끊기므로 서버 쪽 부수효과는 없습니다.
+- `RuntimeHTTPServers.Shutdown`이 Metrics·Pprof 서버를 H3와 동시에 같은 ctx로 멈춥니다. 그동안은 H3 정지가 끝난 뒤에 멈춰, H3가 idle 연결만 남아 종료 시한까지 기다렸다 성공하면 Metrics·Pprof는 이미 끝난 ctx를 받았습니다. 그 사이 열려 있던 metrics listener로 붙은 scrape 연결이 남아 있으면 `metrics server shutdown failed: context deadline exceeded`로 정상 SIGTERM이 exit 1이 될 수 있었습니다. 이제 세 listener가 정지 시작과 함께 닫힙니다.
+- 루트·API 산출물 버전은 `7.0.1`, alarm-worker는 `6.0.1`입니다. collector·PO image도 `hololive/hololive-api/VERSION`(`7.0.1`)을 씁니다. migration과 공개 API 변경은 없습니다. 배포는 API·alarm-worker 동시 교체 뒤 collector·PO 네 쌍(중앙 c, AP b·a·d)을 같은 SHA의 7.0.1로 교체합니다.
 
 ## v7.0.0 - 2026-09-29
 

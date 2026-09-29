@@ -457,6 +457,8 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 | K2 실제 검증 경로 | bot/admin/worker의 `BuildInfraModule`뿐 아니라 llm `bootstrap_llm_scheduler.go`의 `ProvideMemberCache`도 현재 writer. initializer 제거 후 네 경로의 epoch/L2 유지 검증. 과거 warmup 도구 경로는 현 checkout에 없음 |
 | script·privacy | `bot.sh`의 start/restart/help/status에서 hash/env/flag를 함께 제거. env-loader fixture는 새 invocation으로 실제 literal 검증에 도달. `privacylog/cachekey.go`의 D1 마스킹 및 `cachekey_test.go`의 D1/D2 입력은 보존 |
 
+> 2026-09-29 v7.0.1 주: 위 "D1 SQL 회귀 공백"의 "SQL은 유지"와 아래 B20의 "빈/공백 이름 재구독 덮어쓰기"는 v7.0.0 기준입니다. v7.0.1은 member news·major event 구독 upsert를 `NULLIF(btrim($2), '')` + `COALESCE(EXCLUDED.room_name, 기존)`으로 바꿔, 모르는(빈·공백) 이름은 NULL로 저장하고 재구독에서 저장된 이름을 지우지 않습니다(`CHANGELOG.md` v7.0.1).
+
 인접 `shared-go`, `iris-client-go`, `twentyq-bot`에서 hololive import·D2 전용 symbol/key/env/flag의 텍스트 검색은 0건이었습니다. `scripts`·`deploy`의 D1 key/warmup 검색도 0건입니다. 이는 설치된 script·비공개 외부 Go consumer·문자열 조합 호출까지 부재를 증명하지 않습니다. 조사에서는 텍스트 검색과 코드 읽기를 사용했으며, 구현 시 공개 symbol의 타입 참조 분석과 전체 module compile을 생략하지 않습니다.
 
 ### 이번에 실제 수행한 확인

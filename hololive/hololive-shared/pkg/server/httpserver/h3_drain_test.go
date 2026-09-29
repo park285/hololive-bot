@@ -149,6 +149,67 @@ func TestRuntimeH3ShutdownSucceedsWhenOnlyVanishedClientConnectionsRemain(t *tes
 	}
 }
 
+// H3가 시한까지 idle 연결을 기다리는 동안 metrics listener가 열려 있으면, 그 사이 붙은 scrape 연결이 시한에 StateNew로
+// 남는다. 끝난 ctx로 metrics를 멈추면 net/http Shutdown이 ctx 오류를 돌려 정상 SIGTERM이 exit 1이 된다.
+func TestRuntimeShutdownStopsMetricsWhileH3WaitsForIdleConnections(t *testing.T) {
+	t.Parallel()
+
+	fixture := startH3ShutdownFixture(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	var listenConfig net.ListenConfig
+
+	metricsListener, err := listenConfig.Listen(t.Context(), "tcp", testLoopbackAddr)
+	if err != nil {
+		t.Fatalf("listen metrics: %v", err)
+	}
+
+	fixture.servers.Metrics = NewMetricsServer(t.Context(), testLoopbackAddr, "")
+
+	metricsServed := make(chan error, 1)
+
+	go func() { metricsServed <- fixture.servers.Metrics.Serve(metricsListener) }()
+
+	client, clientConn := fixture.newClient(t)
+
+	if err := h3Get(t.Context(), client); err != nil {
+		t.Fatalf("GET before shutdown: %v", err)
+	}
+
+	if err := clientConn.Close(); err != nil {
+		t.Fatalf("close client socket: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	shutdown := make(chan error, 1)
+
+	go func() { shutdown <- fixture.servers.Shutdown(ctx) }()
+
+	// H3가 idle 연결을 기다리는 도중에 scrape가 붙는다. metrics listener가 이미 닫혔으면 연결이 거절된다.
+	time.Sleep(200 * time.Millisecond)
+
+	var dialer net.Dialer
+
+	if scrapeConn, dialErr := dialer.DialContext(t.Context(), "tcp", metricsListener.Addr().String()); dialErr == nil {
+		t.Cleanup(func() {
+			if err := scrapeConn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+				t.Errorf("close scrape connection: %v", err)
+			}
+		})
+	}
+
+	if err := <-shutdown; err != nil {
+		t.Fatalf("Shutdown() with only idle H3 connections and a late metrics connection = %v, want nil", err)
+	}
+
+	if err := <-metricsServed; !errors.Is(err, http.ErrServerClosed) {
+		t.Fatalf("metrics Serve() after Shutdown = %v, want http.ErrServerClosed", err)
+	}
+}
+
 // 실행 중인 요청은 끝날 때까지 기다리고, 그 응답은 client에 전달된다.
 func TestRuntimeH3ShutdownWaitsForInFlightRequest(t *testing.T) {
 	t.Parallel()
