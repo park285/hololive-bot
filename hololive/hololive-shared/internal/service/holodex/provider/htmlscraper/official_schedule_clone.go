@@ -80,8 +80,6 @@ func cloneChannelPtr(value *domain.Channel) *domain.Channel {
 	cloned.EnglishName = cloneStringPtr(value.EnglishName)
 	cloned.Photo = cloneStringPtr(value.Photo)
 	cloned.Twitter = cloneStringPtr(value.Twitter)
-	cloned.VideoCount = cloneIntPtr(value.VideoCount)
-	cloned.SubscriberCount = cloneIntPtr(value.SubscriberCount)
 	cloned.Org = cloneStringPtr(value.Org)
 	cloned.Suborg = cloneStringPtr(value.Suborg)
 	cloned.Group = cloneStringPtr(value.Group)

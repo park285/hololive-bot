@@ -95,6 +95,60 @@ WITH input AS MATERIALIZED (
         input.schema_version,
         input.contract_generation
     ) AS current ON TRUE
+), payload_keys AS MATERIALIZED (
+    SELECT DISTINCT ON (observation_kind, schema_version, payload_sha256)
+           observation_kind, schema_version, payload_sha256, payload
+    FROM existing
+    WHERE existing_id IS NULL AND NOT is_collision
+    ORDER BY observation_kind, schema_version, payload_sha256, ordinal
+), payload_advisory_locks AS MATERIALIZED (
+    SELECT pg_advisory_xact_lock(hashtextextended(
+        observation_kind || ':' || schema_version::text || ':' || payload_sha256, 1
+    )) AS acquired
+    FROM payload_keys
+    ORDER BY observation_kind, schema_version, payload_sha256
+), payload_lock_barrier AS MATERIALIZED (
+    SELECT count(acquired) AS acquired_count FROM payload_advisory_locks
+), payload_existing AS MATERIALIZED (
+    SELECT key.observation_kind, key.schema_version, key.payload_sha256,
+           key.payload, stored.id
+    FROM payload_keys AS key
+    CROSS JOIN payload_lock_barrier
+    LEFT JOIN LATERAL lock_source_observation_payload(
+        key.observation_kind, key.schema_version, decode(key.payload_sha256, 'hex'), key.payload
+    ) AS stored ON TRUE
+), payload_write AS (
+    INSERT INTO source_observation_payloads (
+        observation_kind, schema_version, canonical_profile, payload_sha256, payload
+    )
+    SELECT observation_kind, schema_version, 'source-observation-canonical-json-v1',
+           decode(payload_sha256, 'hex'), payload
+    FROM payload_existing
+    WHERE id IS NULL
+    ORDER BY observation_kind, schema_version, payload_sha256
+    ON CONFLICT (observation_kind, schema_version, canonical_profile, payload_sha256) DO NOTHING
+    RETURNING id, observation_kind, schema_version, encode(payload_sha256, 'hex') AS payload_sha256, payload
+), payload_resolved AS MATERIALIZED (
+    SELECT observation_kind, schema_version, payload_sha256, id, payload
+    FROM payload_existing
+    WHERE id IS NOT NULL
+    UNION ALL
+    SELECT observation_kind, schema_version, payload_sha256, id, payload
+    FROM payload_write
+), payload_resolution AS MATERIALIZED (
+    SELECT existing.ordinal,
+           assert_source_observation_payload_match(payload_resolved.id, payload_resolved.payload, existing.payload) AS id
+    FROM existing
+    JOIN payload_resolved
+      ON payload_resolved.observation_kind = existing.observation_kind
+     AND payload_resolved.schema_version = existing.schema_version
+     AND payload_resolved.payload_sha256 = existing.payload_sha256
+    WHERE existing.existing_id IS NULL AND NOT existing.is_collision
+), payload_guard AS MATERIALIZED (
+    SELECT assert_source_observation_payload_count(
+        count(payload_resolution.id), (SELECT count(existing.ordinal) FROM existing WHERE existing_id IS NULL AND NOT is_collision)
+    ) AS resolved
+    FROM payload_resolution
 ), collision_write AS (
     INSERT INTO source_observation_collisions (
         existing_observation_id,
@@ -141,8 +195,7 @@ WITH input AS MATERIALIZED (
         scope_sha256,
         completeness,
         continuity,
-        payload,
-        payload_sha256,
+        payload_id,
         evidence_sha256,
         collector_instance,
         job_key,
@@ -162,8 +215,7 @@ WITH input AS MATERIALIZED (
            existing.scope_sha256,
            existing.completeness,
            existing.continuity,
-           existing.payload,
-           existing.payload_sha256,
+           payload_resolution.id,
            existing.evidence_sha256,
            existing.collector_instance,
            existing.job_key,
@@ -171,8 +223,8 @@ WITH input AS MATERIALIZED (
            existing.fence_epoch,
            existing.projection_generation
     FROM existing
-    WHERE NOT existing.is_collision
-      AND existing.existing_id IS NULL
+    JOIN payload_resolution ON payload_resolution.ordinal = existing.ordinal
+    CROSS JOIN payload_guard
     ORDER BY existing.ordinal
     RETURNING id,
               provider,

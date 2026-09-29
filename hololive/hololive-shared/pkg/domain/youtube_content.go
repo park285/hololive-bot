@@ -27,22 +27,6 @@ import (
 	"time"
 )
 
-type YouTubeChannelStatsSnapshot struct {
-	ChannelID       string    `db:"channel_id" json:"channel_id"`
-	CapturedAt      time.Time `db:"captured_at" json:"captured_at"`
-	SubscriberCount int64     `json:"subscriber_count"`
-	ViewCount       int64     `json:"view_count"`
-	VideoCount      int64     `json:"video_count"`
-	JoinedDate      int64     `json:"joined_date"` // Unix 타임스탬프
-	Description     string    `db:"description" json:"description,omitempty"`
-	Country         string    `db:"country" json:"country,omitempty"`
-	Handle          string    `db:"handle" json:"handle,omitempty"`
-}
-
-func (YouTubeChannelStatsSnapshot) TableName() string {
-	return "youtube_channel_stats_snapshots"
-}
-
 type YouTubeChannelProfile struct {
 	ChannelID string         `db:"channel_id" json:"channel_id"`
 	Avatar    ThumbnailsJSON `db:"avatar" json:"avatar,omitempty"`
@@ -212,7 +196,6 @@ const (
 	OutboxKindNewShort      OutboxKind = "NEW_SHORT"
 	OutboxKindLiveStream    OutboxKind = "LIVE_STREAM"
 	OutboxKindCommunityPost OutboxKind = "COMMUNITY_POST"
-	OutboxKindMilestone     OutboxKind = "MILESTONE"
 )
 
 const youtubeNotificationDedupeKeyPrefix = "youtube-notification"
@@ -222,7 +205,6 @@ var outboxKindTemplateKeys = map[OutboxKind]TemplateKey{
 	OutboxKindNewShort:      TemplateKeyOutboxShorts,
 	OutboxKindLiveStream:    TemplateKeyOutboxVideo,
 	OutboxKindCommunityPost: TemplateKeyOutboxCommunity,
-	OutboxKindMilestone:     TemplateKeyOutboxMilestone,
 }
 
 func (k OutboxKind) IsValid() bool {
@@ -233,7 +215,7 @@ func (k OutboxKind) IsValid() bool {
 
 func (k OutboxKind) ToAlarmType() AlarmType {
 	switch k {
-	case OutboxKindNewVideo, OutboxKindLiveStream, OutboxKindMilestone:
+	case OutboxKindNewVideo, OutboxKindLiveStream:
 		return AlarmTypeLive
 	case OutboxKindNewShort:
 		return AlarmTypeShorts

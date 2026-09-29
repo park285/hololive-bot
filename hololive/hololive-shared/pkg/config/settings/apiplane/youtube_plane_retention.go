@@ -17,18 +17,27 @@ const (
 )
 
 func defaultYouTubePlaneRetentionConfig() YouTubePlaneRetentionConfig {
-	// 채널·영상 확인 원시 evidence는 7일 보존한다. canonical 최신값은 evidence 삭제와 별개다.
 	return YouTubePlaneRetentionConfig{
 		Interval:              120 * time.Second,
 		BatchSize:             youtubePlaneRetentionMaxBatchSize,
-		ApplicationAuditGrace: 60 * youtubePlaneRetentionDay,
-		LiveAbsenceSlotAge:    30 * youtubePlaneRetentionDay,
-		CheckpointHistoryAge:  7 * youtubePlaneRetentionDay,
-		ChannelStatsAge:       180 * youtubePlaneRetentionDay,
-		LiveSnapshotAge:       365 * youtubePlaneRetentionDay,
-		ViewerSampleAge:       30 * youtubePlaneRetentionDay,
-		ChannelLiveCheckAge:   7 * youtubePlaneRetentionDay,
-		VideoLiveCheckAge:     7 * youtubePlaneRetentionDay,
+		QueueProcessedAge:     youtubePlaneRetentionDay,
+		QueueDLQAge:           14 * youtubePlaneRetentionDay,
+		CollisionAge:          30 * youtubePlaneRetentionDay,
+		ReplayAuditAge:        30 * youtubePlaneRetentionDay,
+		ApplicationAuditGrace: 3 * youtubePlaneRetentionDay,
+		LiveAbsenceSlotAge:    14 * youtubePlaneRetentionDay,
+		CheckpointHistoryAge:  2 * youtubePlaneRetentionDay,
+		ProjectionRetiredAge:  7 * youtubePlaneRetentionDay,
+		CommunityPageAge:      7 * youtubePlaneRetentionDay,
+		VideoListAge:          7 * youtubePlaneRetentionDay,
+		ShortsListAge:         7 * youtubePlaneRetentionDay,
+		LiveSnapshotAge:       7 * youtubePlaneRetentionDay,
+		ViewerSampleAge:       7 * youtubePlaneRetentionDay,
+		ChannelProfileAge:     30 * youtubePlaneRetentionDay,
+		ChannelPhotoAge:       30 * youtubePlaneRetentionDay,
+		ScheduleSnapshotAge:   14 * youtubePlaneRetentionDay,
+		ChannelLiveCheckAge:   2 * youtubePlaneRetentionDay,
+		VideoLiveCheckAge:     2 * youtubePlaneRetentionDay,
 	}
 }
 
@@ -237,14 +246,6 @@ func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 
-	if config.Retention.ChannelStatsAge, err = load.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_CHANNEL_STATS_DAYS",
-		defaults.ChannelStatsAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
 	if config.Retention.ViewerSampleAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_VIEWER_SAMPLE_DAYS",
 		defaults.ViewerSampleAge,
@@ -360,7 +361,6 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 		{"community page", cfg.CommunityPageAge},
 		{"video list", cfg.VideoListAge},
 		{"shorts list", cfg.ShortsListAge},
-		{"channel stats", cfg.ChannelStatsAge},
 		{"live snapshot", cfg.LiveSnapshotAge},
 		{"viewer sample", cfg.ViewerSampleAge},
 		{"channel profile", cfg.ChannelProfileAge},
@@ -385,7 +385,6 @@ func maxEvidenceRetentionAge(cfg *YouTubePlaneRetentionConfig) time.Duration {
 		cfg.ShortsListAge,
 		cfg.LiveSnapshotAge,
 		cfg.ViewerSampleAge,
-		cfg.ChannelStatsAge,
 		cfg.ChannelProfileAge,
 		cfg.ChannelPhotoAge,
 		cfg.ScheduleSnapshotAge,
@@ -442,7 +441,6 @@ func (c *YouTubePlaneConfig) validateProductionRetention(environment string) err
 		{"YOUTUBE_PLANE_RETENTION_SHORTS_LIST_DAYS", c.Retention.ShortsListAge},
 		{"YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS", c.Retention.LiveSnapshotAge},
 		{"YOUTUBE_PLANE_RETENTION_VIEWER_SAMPLE_DAYS", c.Retention.ViewerSampleAge},
-		{"YOUTUBE_PLANE_RETENTION_CHANNEL_STATS_DAYS", c.Retention.ChannelStatsAge},
 		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS", c.Retention.ChannelProfileAge},
 		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS", c.Retention.ChannelPhotoAge},
 		{"YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS", c.Retention.ScheduleSnapshotAge},

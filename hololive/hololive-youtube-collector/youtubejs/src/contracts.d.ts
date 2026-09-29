@@ -261,11 +261,6 @@ export interface LiveSessionItem {
   ended_at?: string;
 }
 
-export interface ChannelStatsItem {
-  subscriber_count?: number | null;
-  view_count?: number | null;
-  video_count?: number | null;
-}
 
 export interface ChannelProfileItem {
   handle?: string | null;
@@ -285,7 +280,6 @@ export interface ChannelResult extends Pagination {
   protocol_version: number;
   live_sessions: LiveSessionItem[];
   unavailable_live_sessions?: UnavailableLiveSession[];
-  stats: ChannelStatsItem;
   profile: ChannelProfileItem;
   photo: ChannelPhotoVariant[];
   missing_tab?: boolean;

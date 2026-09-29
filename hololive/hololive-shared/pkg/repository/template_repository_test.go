@@ -211,7 +211,7 @@ func TestTemplateRepository_Revisions(t *testing.T) {
 	repo := newTemplateRepository(t)
 	ctx := t.Context()
 
-	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxMilestone, nil, "v1")
+	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxCommunity, nil, "v1")
 	require.NoError(t, err)
 
 	err = repo.CreateRevision(ctx, tmpl.ID, "v0 old body")

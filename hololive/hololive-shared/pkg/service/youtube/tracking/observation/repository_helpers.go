@@ -139,7 +139,7 @@ func normalizeIdentity(kind domain.OutboxKind, contentID string) (domain.OutboxK
 	switch kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:
 		return kind, normalizedContentID, nil
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
 		return "", "", fmt.Errorf("unsupported tracking kind: %s", kind)
 	default:
 		return "", "", fmt.Errorf("unsupported tracking kind: %s", kind)

@@ -203,7 +203,7 @@ func resolveOutboxPublishedAt(outbox *domain.YouTubeNotificationOutbox) *time.Ti
 		return resolveVideoPayloadPublishedAt(outbox.Payload)
 	case domain.OutboxKindCommunityPost:
 		return resolveCommunityPayloadPublishedAt(outbox.Payload)
-	case domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindLiveStream:
 		return nil
 	}
 

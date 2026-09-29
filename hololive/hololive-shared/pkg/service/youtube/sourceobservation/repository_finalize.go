@@ -208,16 +208,40 @@ func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Obse
 		return errors.New("finalize source observation: application count exceeds 1000")
 	}
 
+	if len(applications) == 0 {
+		return nil
+	}
+
+	// 공통 관측 정보는 한 번만 전송하고, 검증된 entity 결과를 한 문장으로 저장합니다.
+	// 세 배열은 하나의 backing slice를 나누어 payload 복사와 행별 DB 왕복을 피합니다.
+	count := len(applications)
+	values := make([]string, 3*count)
+	kinds := values[:count:count]
+	keys := values[count : 2*count : 2*count]
+	decisions := values[2*count:]
+
 	for i := range applications {
-		if err := writeFinalizeApplication(ctx, tx, observation, i, applications[i]); err != nil {
-			return fmt.Errorf("write finalize application: %w", err)
+		application := applications[i]
+		if err := validateFinalizeApplication(i, application); err != nil {
+			return err
 		}
+
+		kinds[i], keys[i], decisions[i] = application.EntityKind, application.EntityKey, application.Decision
+	}
+
+	if _, err := tx.Exec(
+		ctx,
+		mustSQL("repository_application_insert_0014_14.sql"),
+		observation.ID, observation.Provider, observation.ObservationKind, observation.SubjectKey,
+		observation.EvidenceSHA256, kinds, keys, decisions, observation.EffectiveAt,
+	); err != nil {
+		return fmt.Errorf("finalize source observation: insert application audit batch: %w", err)
 	}
 
 	return nil
 }
 
-func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation *Observation, index int, application Application) error {
+func validateFinalizeApplication(index int, application Application) error {
 	if err := validateText("application entity kind", application.EntityKind, 64); err != nil {
 		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
 	}
@@ -228,22 +252,6 @@ func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation *Obser
 
 	if err := validateText("application decision", application.Decision, 128); err != nil {
 		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
-	}
-
-	if _, err := tx.Exec(
-		ctx,
-		mustSQL("repository_application_insert_0014_14.sql"),
-		observation.ID,
-		observation.Provider,
-		observation.ObservationKind,
-		observation.SubjectKey,
-		observation.EvidenceSHA256,
-		application.EntityKind,
-		application.EntityKey,
-		application.Decision,
-		observation.EffectiveAt,
-	); err != nil {
-		return fmt.Errorf("finalize source observation: insert application audit: %w", err)
 	}
 
 	return nil
@@ -340,6 +348,10 @@ func scanLockedObservation(row pgx.Row) (Observation, error) {
 		&observation.replayEpochRejected,
 	); err != nil {
 		return Observation{}, fmt.Errorf("claim source observations: scan row: %w", err)
+	}
+
+	if err := validateStoredObservationPayload(observation.Payload, observation.PayloadSHA256); err != nil {
+		return Observation{}, fmt.Errorf("claim source observations: %w", err)
 	}
 
 	observation.Provider = contract.Provider(provider)

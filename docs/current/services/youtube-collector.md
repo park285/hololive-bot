@@ -36,7 +36,7 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 
 `DEC-20260925-hololive-viewer-collection-retirement`에 따라 신규 `viewer_sample`을 수집하지 않습니다. YouTube.js의 `youtubejs_viewer` 작업과 `/v1/viewer` RPC를 제거했으며, `holodex_live`는 `live_snapshot`만 발행합니다. Holodex의 기존 `/live` 조회와 방송 상태·일정·채널 메타데이터는 유지합니다. 응답에 포함된 시청자 수를 표본으로 만드는 비용은 별개이므로 더 이상 viewer envelope·checkpoint·queue를 생성하지 않습니다.
 
-공유 viewer payload/소비·재처리·보존 경로는 이미 저장된 관측과 기존 큐를 처리하는 계약입니다. 과거 표본·스키마를 삭제하거나 보존 기간을 바꾸지 않습니다. 현재 publisher는 양 공급자의 신규 viewer 발행을 거절하며, 기존 consumer는 과거 관측을 처리할 수 있습니다.
+공유 viewer payload/소비·재처리 경로는 이미 저장된 관측과 기존 큐를 처리하는 계약입니다. 현재 publisher는 양 공급자의 신규 viewer 발행을 거절하며, 기존 consumer는 보관 기간 안의 과거 관측을 처리할 수 있습니다. 저장 축소 변경의 viewer 원본 기본 보관 기간은 7일이며, 제품 samples 삭제는 이 변경에 포함하지 않습니다.
 
 사용자용 라이브 템플릿과 미리보기에는 `ViewerCount`가 없습니다. 미지원 변수는 기존 템플릿 오류로 거절하고 0명으로 대체하지 않습니다. 별도 Holodex 조회를 쓰는 Go Stream API의 `viewer_count`와 Twitch/Chzzk 데이터는 그대로입니다.
 

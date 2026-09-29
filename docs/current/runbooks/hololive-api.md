@@ -100,13 +100,34 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
 | `BOT_SEE_MORE_FOLD` | bot·llm plane의 긴 목록 응답을 머리 문단과 카카오톡 '전체보기'로 접음; 기본값 `true`, `false`는 접기를 끄는 운영 스위치 (`docs/current/architecture/MESSAGE_STYLE_GUIDE.md` §8) | no |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
-| `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 기본 30일, production에서는 양수 | production YouTube plane |
+| `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
 
 ## YouTube 관측 보존
 
-`youtube_live_absence_slots`는 30일이 지난 `scheduled_for` 행을 retention tick당 최대 1000건 삭제합니다. 과거 positive 재처리는 삭제된 slot을 복원할 수 없으므로 30일 밖의 absence 역재생 결과는 보장하지 않습니다. 이미 session/head에 반영된 absence clock과 `youtube_live_pending_ends`는 이 삭제에 포함되지 않습니다. 30일보다 오래된 `live_snapshot`이 queue에서 대기·처리 중이거나 replay 요청이 pending이면 slot 삭제를 보류합니다. 오래된 작업이 장기간 남으면 slot 크기가 계속 증가할 수 있으므로 상태를 함께 확인합니다.
+소스 기본값에서 `youtube_live_absence_slots`는 14일이 지난 `scheduled_for` 행을 retention tick당 최대 1000건 삭제합니다. 과거 positive 재처리는 삭제된 slot을 복원할 수 없으므로 보관 기간 밖의 absence 역재생 결과는 보장하지 않습니다. 이미 session/head에 반영된 absence clock과 `youtube_live_pending_ends`는 이 삭제에 포함되지 않습니다. 오래된 `live_snapshot`이 queue에서 대기·처리 중이거나 replay 요청이 pending이면 slot 삭제를 보류합니다. 오래된 작업이 장기간 남으면 slot 크기가 계속 증가할 수 있으므로 상태를 함께 확인합니다.
 
 운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-osaka/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간, `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. `hololive_youtube_plane_retention_backlog_age_seconds`는 현재 값을 채우지 않아 backlog 판단에 사용하지 않습니다. 물리적 파일 축소는 별도 유지보수입니다.
+
+기본 보관 정책은 일반 원본(live/community/video/shorts/viewer) 7일, schedule 14일, profile/photo 30일, live-check 2일입니다. terminal queue는 PROCESSED 1일·DEAD_LETTER 14일, collision/replay audit 30일, 과거 checkpoint 2일, RETIRED projection 7일입니다. application은 원본 kind 기간+3일보다 오래되고 observation FK가 NULL인 경우만 정리합니다. active queue·pending replay·live head/end candidate·최신 checkpoint 보호는 유지합니다. tick 120초와 batch 1000은 유지하며 처리량을 높이려고 상한/timeout을 늘리지 않습니다. 이 값은 소스 기본값이며 운영 master에 지정된 기존 값을 자동으로 바꾸지 않습니다.
+
+## YouTube 관측 저장 구조 전환
+
+Manifest의 **244 → 234–243** 순서와 API·collector fleet a/b/c/d·alarm-worker를 하나의 승인된 점검 창에서 전환합니다. 파일명 정렬로 적용하지 않습니다. **전체 backfill 동안 writer 정지가 필요하며**, 정지 시점과 같은 전체 복구본을 만들면 백업·복원 검증 시간도 중단 창에 포함됩니다. 온라인 backfill이나 짧은 중단을 보장하지 않습니다. 새 이미지·native artifact를 kapu에서 검증한 뒤에만 배포하며, 구현 완료와 운영 활성화를 구분합니다.
+
+1. `stack-platform-ops`의 읽기 전용 guard로 실제 revision/ledger, 통계 source/queue/replay·MILESTONE 원장, metadata ACTIVE lease, 디스크/DB/WAL을 재확인합니다. 2026-09-29 10:19 UTC에는 MILESTONE outbox/event/collision과 처리 중 통계 queue가 모두 0건이었습니다. 이 과거 수치는 적용 승인이나 당시 재검사를 대신하지 않습니다.
+2. 정확한 복구본·복원 범위를 승인받습니다. 자동 백업은 취소되어 있으며 최신 전체 DB 복구본이 있다는 전제가 없습니다. 새 일회성 복구본 생성 또는 백업 없는 복구 불가 위험의 명시적 수용 없이 234를 실행하지 않습니다. 기존 사본 제거와 이미지 정리는 별도 승인입니다.
+3. `hololive-bot-ops`로 외부 ingress/admission, collector 네 대와 API/worker의 관련 작업을 quiesce하고 in-flight 작업을 정상 종료합니다. metadata ACTIVE lease, 통계 PROCESSING, MILESTONE 발송/격리를 확인합니다. 상태를 가짜 성공으로 바꾸거나 직접 재큐잉하여 드레인을 통과시키지 않습니다.
+4. 유일한 적용 경로인 `db-migrate`로 manifest를 실행합니다. 244는 application의 `(observation_kind, provider)` 임시 참조 인덱스를 동시 생성합니다. 234는 통계 업무 행을 1000건씩 commit하여 제거하고 전용 객체/어휘·명령 템플릿을 삭제합니다. 다른 kind와 profile/photo는 보존합니다. 예상 밖 durable MILESTONE event/collision은 영구 closeout 원장까지 임의 삭제하지 않고 거절합니다. 235는 부분 UNIQUE를 CONCURRENTLY 생성하고, 236은 3초 lock budget 안에서 기존 전체 UNIQUE constraint를 교체합니다. 237은 bounded projection cleanup과 table-local vacuum 설정을 적용합니다.
+5. 238은 JSONB(LZ4) payload 사전과 nullable 참조를 준비하고, 239–240은 참조/미처리 행 index를 각각 CONCURRENTLY 생성합니다. 큰 DB에서 241이 `backfill incomplete`로 멈추면 241 전체는 rollback되고 240까지의 적용 기록만 남습니다. 승인된 maintenance 접속에서 `SELECT public.backfill_source_observation_payloads(1000);`을 **각각 독립 commit**하며 0을 반환할 때까지 실행합니다. `payload_id IS NULL` 잔여를 재검사합니다. 동시 backfill/삭제가 있어도 누락을 숨기지 않으며 0 반환 하나만으로 완료로 간주하지 않습니다. 실패한 concurrent build의 invalid index가 있으면 자동으로 무시하지 말고 그 index만 승인된 절차로 재생성한 뒤 재개합니다.
+6. `db-migrate`를 다시 실행합니다. 241은 마지막 최대 1000건과 전체 참조 검증 후 FK/NOT NULL을 적용하고 구 payload/hash 열과 backfill 함수를 제거합니다. 242는 미처리 행 전용 임시 index를, 243은 contract 퇴역 참조 인덱스를 각각 동시 제거합니다. Cutover transaction에는 전체 FK/NULL 검증이 있으므로 대형 DB에서 짧은 종료 시간을 가정하지 않습니다. JSONB 사전의 hash는 32바이트이고 외부 hex 표현은 유지합니다. 모든 새 writer/reader를 함께 배포하고 API의 새 projection이 활성화된 뒤 collector를 재개합니다.
+7. 정상 metadata profile/photo와 live/schedule/content 발행, queue age, canonical/intent·중복 방지, GC·retention 오류, p95/p99를 확인합니다. 새 TTL 적용은 master 수정/sync/재생성 승인을 별도로 따릅니다. 오류·결과 불일치, 여유 20 GiB 미만, 6시간에 5 GiB 이상 감소, 반복 timeout이면 추가 backfill/정리를 중지합니다.
+
+`db-migrate --statement-timeout=10m`은 승인된 대용량 DDL 점검 창에만 명시적으로 사용합니다. 생략하거나 `0`이면 기존 문장당 4분이며, 음수와 10분 초과는 DB 접속 전에 거절합니다. 전체 명령 15분·세션 lock 10초와 각 migration의 더 짧은 lock budget은 유지합니다. 전역 DB 설정이나 Compose 기본값에는 이 예외를 저장하지 않습니다. 늘린 한도에서도 timeout이면 자동 증액·반복 실행하지 않고 정지 상태와 복구점을 보존한 채 다음 조치를 승인받습니다.
+
+추가 공간 상한을 사전 과소평가하지 않습니다. backfill 중 구 payload와 고유 payload·새 index가 함께 존재하며 UPDATE dead tuple/WAL이 발생합니다. 사전 표본 이득은 최대 공간 보장이 아닙니다. `DELETE`나 `DROP COLUMN` 뒤 relation 파일이 즉시 줄어들지 않을 수 있습니다. VACUUM FULL/파일 재작성은 강한 lock·임시 여유·중단 창·복구 계획을 별도로 승인받아 시행합니다. active `pg_wal`은 직접 삭제하지 않습니다.
+
+234 이후 통계 데이터는 구 이미지만으로 복원되지 않습니다. 241 이후 구 API/collector는 존재하지 않는 열에 접근하므로 이미지 단독 rollback도 금지합니다. 오류 때 모든 writer를 정지한 채 검증한 전체 복구본과 그 시점 schema/ledger/image를 함께 복원하거나 fix-forward합니다. TTL로 만료된 원본은 설정 원복으로 돌아오지 않습니다. 새 retry/fallback/dual writer는 추가하지 않습니다.
+
 
 ## Logs
 

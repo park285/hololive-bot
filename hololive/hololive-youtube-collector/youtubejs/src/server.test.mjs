@@ -102,23 +102,6 @@ test("handleContentRequest requires kind", async () => {
   assert.match(result.body.error.message, /kind/);
 });
 
-test("handleChannelRequest returns the injected channel payload", async () => {
-  const result = await handleChannelRequest(
-    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
-    async ({ channelId }) => ({
-      live_sessions: [{ video_id: "vid-1", channel_id: channelId, status: "LIVE" }],
-      stats: {},
-      profile: {},
-      photo: [],
-      page_count: 1,
-      exhausted: true,
-      continuity: "NOT_APPLICABLE",
-      termination_reason: "exhausted",
-    }),
-  );
-  assert.equal(result.status, 200);
-  assert.equal(result.body.live_sessions[0].video_id, "vid-1");
-});
 
 test("handleChannelRequest requires an explicit live or metadata kind", async () => {
   for (const kind of [undefined, "all", "", 1]) {
@@ -143,7 +126,7 @@ test("handleChannelRequest rejects fields outside the validated response contrac
   const result = await handleChannelRequest(
     rpcBody({ kind: "live", channel_id: "UC_TEST" }),
     async () => ({
-      live_sessions: [], stats: {}, profile: {}, photo: [],
+      live_sessions: [], profile: {}, photo: [],
       page_count: 0, exhausted: true, continuity: "CONTIGUOUS",
       unchecked: "must-not-cross-the-rpc-boundary",
     }),

@@ -1,6 +1,7 @@
 package migrationrunner
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +19,9 @@ import (
 
 const AdvisoryLockKey int64 = 0x484F4C4F41504901
 
+// MaxStatementTimeout은 승인된 점검 창에서도 무제한 문장 실행을 허용하지 않는다.
+const MaxStatementTimeout = 10 * time.Minute
+
 const (
 	sessionLockTimeout      = 10 * time.Second
 	sessionStatementTimeout = 4 * time.Minute
@@ -28,7 +32,9 @@ type Config struct {
 	BaselineThrough        string
 	LockKey                int64
 	AllowBlockingIndexDrop bool
-	Logf                   func(format string, args ...any)
+	// StatementTimeout이 0이면 기존 4분 제한을 유지한다.
+	StatementTimeout time.Duration
+	Logf             func(format string, args ...any)
 }
 
 type Result struct {
@@ -52,6 +58,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 		return Result{}, errors.New("migration fs is nil")
 	}
 
+	if cfg.StatementTimeout < 0 || cfg.StatementTimeout > MaxStatementTimeout {
+		return Result{}, fmt.Errorf("statement timeout must be between 0 and %s", MaxStatementTimeout)
+	}
+
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("acquire migration connection: %w", err)
@@ -61,7 +71,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 	exec := &guardedExecer{conn: conn}
 	sessionCfg := dbmigrate.SessionConfig{
 		LockTimeout:      sessionLockTimeout,
-		StatementTimeout: sessionStatementTimeout,
+		StatementTimeout: cmp.Or(cfg.StatementTimeout, sessionStatementTimeout),
 	}
 
 	if configureErr := sessionCfg.Configure(ctx, exec.Exec); configureErr != nil {

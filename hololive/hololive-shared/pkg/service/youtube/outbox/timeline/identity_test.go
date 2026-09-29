@@ -75,7 +75,6 @@ func TestNormalizePostTrackingIdentities_UnsupportedKindsError(t *testing.T) {
 	for _, kind := range []domain.OutboxKind{
 		domain.OutboxKindNewVideo,
 		domain.OutboxKindLiveStream,
-		domain.OutboxKindMilestone,
 		domain.OutboxKind("UNKNOWN_KIND"),
 	} {
 		got, err := NormalizePostTrackingIdentities([]PostTrackingIdentity{

@@ -47,8 +47,8 @@ func initialSubjectJobContracts() StaticJobContracts {
 		mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_metadata"): mustJobContract(
 			mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_metadata"),
 			JobClassSubject, JobMembershipExactSubject, "",
-			[]contract.ObservationKind{contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto},
-			[]contract.ObservationKind{contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto},
+			[]contract.ObservationKind{contract.KindChannelProfile, contract.KindChannelPhoto},
+			[]contract.ObservationKind{contract.KindChannelProfile, contract.KindChannelPhoto},
 			nil,
 		),
 		mustJobID(contract.ProviderYouTubeJS, "youtubejs_video_live"): mustJobContract(
@@ -73,9 +73,9 @@ func initialGlobalJobContracts() StaticJobContracts {
 		mustJobID(contract.ProviderHolodex, "holodex_metadata"): mustJobContract(
 			mustJobID(contract.ProviderHolodex, "holodex_metadata"),
 			JobClassGlobal, JobMembershipCurrentProjection, "global:holodex_metadata",
-			[]contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
-			[]contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
-			[]contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
+			[]contract.ObservationKind{contract.KindChannelPhoto},
+			[]contract.ObservationKind{contract.KindChannelPhoto},
+			[]contract.ObservationKind{contract.KindChannelPhoto},
 		),
 		mustJobID(contract.ProviderHolodex, "holodex_schedule"): mustJobContract(
 			mustJobID(contract.ProviderHolodex, "holodex_schedule"),

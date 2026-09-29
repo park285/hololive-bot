@@ -120,37 +120,6 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem)
 	}
 }
 
-func channelStatsPayload(channelID string, stats youtubejs.ChannelStatsItem) (contract.ChannelStatsV1, bool) {
-	fields := make([]string, 0, 3)
-
-	if stats.SubscriberCount != nil {
-		fields = append(fields, "subscriber_count")
-	}
-
-	if stats.ViewCount != nil {
-		fields = append(fields, "view_count")
-	}
-
-	if stats.VideoCount != nil {
-		fields = append(fields, "video_count")
-	}
-
-	if len(fields) == 0 {
-		return contract.ChannelStatsV1{}, false
-	}
-
-	return contract.ChannelStatsV1{
-		ChannelID:       channelID,
-		SubscriberCount: stats.SubscriberCount,
-		ViewCount:       stats.ViewCount,
-		VideoCount:      stats.VideoCount,
-		Coverage: contract.ChannelStatsCoverageV1{
-			ChannelID: channelID,
-			Fields:    fields,
-		},
-	}, true
-}
-
 func channelProfilePayload(channelID string, profile youtubejs.ChannelProfileItem) (contract.ChannelProfileV1, bool) {
 	payload := contract.ChannelProfileV1{ChannelID: channelID}
 	fields := make([]string, 0, 4)

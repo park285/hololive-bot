@@ -17,6 +17,8 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
+const testJobClassSubject = "SUBJECT"
+
 type countedTerminalLease struct {
 	joblease.Lease
 
@@ -72,7 +74,7 @@ func newExecutorFixture(t *testing.T, runner JobRunner, fatal *[]error) (*collec
 	executor.workerTotals = &workercontract.Counters{}
 
 	return executor, &joblease.JobSpec{
-		JobKey: "collector:youtubejs:community_collect:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
+		JobKey: "collector:youtubejs:community_collect:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
 }

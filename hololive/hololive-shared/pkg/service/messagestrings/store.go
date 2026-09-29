@@ -44,7 +44,6 @@ const (
 	NamespaceCalendar    = "calendar"
 	NamespaceLiveCard    = "livecard"
 	NamespaceProfileCard = "profilecard"
-	NamespaceRankCard    = "rankcard"
 	NamespaceTimeFmt     = "timefmt"
 )
 

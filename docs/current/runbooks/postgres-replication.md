@@ -15,16 +15,14 @@ single-primary 구성입니다. Seoul AP 호스트(`iris-seoul` / `100.100.1.5`)
 `kapu`의 기존 시간별 dump/restore는 사용자 지시로 2026-09-05 종료했습니다
 (`DEC-20260905-kapu-db-backup-retirement`). 후속 승인으로 로컬 `holo-postgres` container와
 `hololive-bot_holo-pg-data` volume을 제거했습니다(`DEC-20260905-stack-disk-cleanup`).
-`/home/kapu/.local/share/hololive-db-backup/hololive-20260905T004953Z.dump` 하나를 보존하며
-현재 데이터로 간주하지 않습니다. 복구에는 별도 PostgreSQL과 archive restore가 필요합니다.
+2026-09-29 metadata 확인에서는 과거 09-05 static dump가 없고 `archive/`도 비어 있습니다.
 `kapu`는 `x86_64`이므로 현재 `aarch64` primary의 물리 standby로 전환하지 않습니다.
-Seoul 복제를 제거하면 동기화된 대기 복구와 자동 승격 역량이 사라집니다. 2026-09-05 static
-dump는 자동 갱신되지 않아 최신 백업이 아닙니다. 2026-09-08부터 같은 timer 이름은 새
-일일 암호화 백업으로 전환돼 enabled/active이며, `~/.local/bin/hololive-db-backup`이
-`~/.local/share/hololive-db-backup/daily/`의 성공 세대 7개를 보존합니다. 일정·검증·소유권은
-`../DEPLOYMENT_BASELINE.md`와 `iris-stack`의
-`DEC-20260908-infrastructure-efficiency-with-retention`을 따릅니다.
-복구 시점은 검증한 백업 세대의 생성 시각에 따릅니다. 구 시간별 전체 복원 재활성화,
+Seoul 복제를 제거하여 동기화된 대기 복구와 자동 승격 역량도 없습니다.
+09-08 재도입한 일일 암호화 백업은 09-28 취소되었으며 `hololive-db-backup.timer`는
+disabled/inactive입니다. 남은 09-27 암호화 dump와 별도 09-28 dump는 delivery ledger state
+한 객체의 사본이지 전체 DB 백업이 아닙니다. 최신 전체 복구본은 입증되지 않았습니다.
+정확한 metadata와 경계는 `../DEPLOYMENT_BASELINE.md`를 따릅니다.
+복구 시점은 실제 검증한 백업 세대의 생성 시각에 따릅니다. 새 복구본·자동 백업 재활성화,
 Seoul 복제 재구축이나 보존 자료 삭제는 각 대상과 영향에 대한 명시적 승인이 필요합니다.
 
 ## Current single-primary decision

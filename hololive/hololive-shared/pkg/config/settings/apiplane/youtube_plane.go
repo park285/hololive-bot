@@ -33,7 +33,6 @@ type YouTubePlaneRetentionConfig struct {
 	ShortsListAge         time.Duration
 	LiveSnapshotAge       time.Duration
 	ViewerSampleAge       time.Duration
-	ChannelStatsAge       time.Duration
 	ChannelProfileAge     time.Duration
 	ChannelPhotoAge       time.Duration
 	ScheduleSnapshotAge   time.Duration

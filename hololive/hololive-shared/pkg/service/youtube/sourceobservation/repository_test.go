@@ -418,26 +418,26 @@ func TestPublishBatchRejectsMissingCheckpointWithoutWrites(t *testing.T) {
 func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, testChannelID, "youtubejs_channel_metadata")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
 
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
 			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'UC_TEST', 'channel_profile', 50, 60000, TRUE, NOW() + INTERVAL '1 day')
+		) VALUES ($1, 'UC_TEST', 'channel_photo', 50, 60000, TRUE, NOW() + INTERVAL '1 day')
 	`, proof.ProjectionGeneration); err != nil {
 		t.Fatalf("seed second kind target: %v", err)
 	}
 
-	stats := channelStatsEnvelope(t, &proof, 1)
 	profile := channelProfileEnvelope(t, &proof, 1)
+	photo := channelPhotoEnvelopeFor(t, &proof, testChannelID)
 	input := &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
-			Entries:           []CheckpointEntry{checkpointForEnvelope(stats), checkpointForEnvelope(profile)},
+			Entries:           []CheckpointEntry{checkpointForEnvelope(profile), checkpointForEnvelope(photo)},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{*stats, *profile},
+		Observations: []contract.Envelope{*profile, *photo},
 	}
 
 	result, err := NewRepository(pool).PublishBatch(ctx, input)
@@ -457,27 +457,27 @@ func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, testChannelID, "youtubejs_channel_metadata")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
 
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
 			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'UC_TEST', 'channel_profile', 50, 60000, TRUE, NOW() + INTERVAL '1 day')
+		) VALUES ($1, 'UC_TEST', 'channel_photo', 50, 60000, TRUE, NOW() + INTERVAL '1 day')
 	`, proof.ProjectionGeneration); err != nil {
 		t.Fatalf("seed second kind target: %v", err)
 	}
 
-	stats := channelStatsEnvelope(t, &proof, 1)
 	profile := channelProfileEnvelope(t, &proof, 1)
-	statsCheckpoint := checkpointForEnvelope(stats)
+	photo := channelPhotoEnvelopeFor(t, &proof, testChannelID)
+	profileCheckpoint := checkpointForEnvelope(profile)
 	_, err := NewRepository(pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
-			Entries:           []CheckpointEntry{statsCheckpoint, statsCheckpoint},
+			Entries:           []CheckpointEntry{profileCheckpoint, profileCheckpoint},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{*stats, *profile},
+		Observations: []contract.Envelope{*profile, *photo},
 	})
 
 	if !errors.Is(err, ErrInvalidEnvelope) {
@@ -916,33 +916,6 @@ func TestPublishSetCollisionWriteKeepsInsertOnlyPrivilege(t *testing.T) {
 	}
 }
 
-func TestClaimSQLUsesBoundedSkipLockedWithoutGenerationFilter(t *testing.T) {
-	query := mustSQL("repository_claim_0012_12.sql")
-	if !strings.Contains(query, "LIMIT $2") || !strings.Contains(query, "FOR UPDATE OF queue SKIP LOCKED") {
-		t.Fatal("claim query must be bounded and use SKIP LOCKED")
-	}
-
-	if strings.Contains(query, "current_generation") {
-		t.Fatal("claim query must not filter immutable evidence by current generation")
-	}
-
-	for _, required := range []string{
-		"source_observation_replay_epoch",
-		"observation.received_at < epoch.cutoff_received_at",
-		"last_error_code = 'replay_epoch_expired'",
-	} {
-		if !strings.Contains(query, required) {
-			t.Fatalf("claim query is missing replay epoch fence %q", required)
-		}
-	}
-
-	for _, forbidden := range []string{"observation.payload", "payload_sha256", "evidence_sha256", "contract_generation"} {
-		if strings.Contains(query, forbidden) {
-			t.Fatalf("claim query returns non-work field %q", forbidden)
-		}
-	}
-}
-
 func TestClaimWorkStaysCompact(t *testing.T) {
 	if size := reflect.TypeFor[ClaimWork]().Size(); size > 64 {
 		t.Fatalf("ClaimWork size = %d bytes, want <= 64", size)
@@ -1020,26 +993,26 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, testChannelID, "youtubejs_channel_metadata")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
 
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
 			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'UC_OTHER', 'channel_profile', 50, 60000, TRUE, clock_timestamp() + INTERVAL '1 hour')
+		) VALUES ($1, 'UC_OTHER', 'channel_photo', 50, 60000, TRUE, clock_timestamp() + INTERVAL '1 hour')
 	`, proof.ProjectionGeneration); err != nil {
 		t.Fatal(err)
 	}
 
-	stats := channelStatsEnvelope(t, &proof, 1)
-	profile := channelProfileEnvelopeFor(t, &proof, 1, "UC_OTHER")
+	profile := channelProfileEnvelope(t, &proof, 1)
+	photo := channelPhotoEnvelopeFor(t, &proof, "UC_OTHER")
 	_, err := NewRepository(pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
-			Entries:           []CheckpointEntry{checkpointForEnvelope(stats), checkpointForEnvelope(profile)},
+			Entries:           []CheckpointEntry{checkpointForEnvelope(profile), checkpointForEnvelope(photo)},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{*stats, *profile},
+		Observations: []contract.Envelope{*profile, *photo},
 	})
 
 	if !errors.Is(err, ErrTargetDisabled) {
@@ -1265,141 +1238,6 @@ func (c *targetQueryCounter) reset() {
 	c.roundTrips.Store(0)
 }
 
-func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
-	subjects := make([]string, MaxPublishBatchSize-1)
-	kinds := make([]string, MaxPublishBatchSize-1)
-
-	for i := range subjects {
-		subjects[i] = fmt.Sprintf("video-%03d", i+1)
-		kinds[i] = string(contract.KindViewerSample)
-	}
-
-	if _, err := pool.Exec(ctx, mustTestSQL("insert_publish_targets.sql"), proof.ProjectionGeneration, subjects, kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	observations := make([]contract.Envelope, MaxPublishBatchSize)
-	for i := range observations {
-		observations[i] = contract.Envelope{
-			Provider: contract.ProviderHolodex, ObservationKind: contract.KindViewerSample,
-			SubjectKey: fmt.Sprintf("video-%03d", i),
-		}
-	}
-
-	counter := &targetQueryCounter{}
-	config := pool.Config()
-
-	config.ConnConfig.Tracer = counter
-
-	tracedPool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tracedPool.Close()
-
-	tx, err := tracedPool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			t.Errorf("rollback publish verifier transaction: %v", rollbackErr)
-		}
-	}()
-
-	counter.reset()
-
-	if err := (sqlPublishFenceVerifier{jobs: historicalViewerJobContracts()}).Verify(ctx, tx, &proof, observations); err != nil {
-		t.Fatalf("verify max batch: %v", err)
-	}
-
-	// fence·projection·target 3문장은 한 번의 파이프라인 왕복으로 간다.
-	if got, trips := counter.queries.Load(), counter.roundTrips.Load(); got != 3 || trips != 1 {
-		t.Fatalf("target fence statements = %d round trips = %d, want constant 3 statements in 1 round trip", got, trips)
-	}
-}
-
-func TestPublishBatchStatementCountIsConstant(t *testing.T) {
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
-	subjects := make([]string, MaxPublishBatchSize-1)
-	kinds := make([]string, MaxPublishBatchSize-1)
-
-	for i := range subjects {
-		subjects[i] = fmt.Sprintf("video-%03d", i+1)
-		kinds[i] = string(contract.KindViewerSample)
-	}
-
-	if _, err := pool.Exec(ctx, mustTestSQL("insert_publish_targets.sql"), proof.ProjectionGeneration, subjects, kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	counter := &targetQueryCounter{}
-	config := pool.Config()
-
-	config.ConnConfig.Tracer = counter
-
-	tracedPool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tracedPool.Close()
-
-	repository := historicalViewerPublisher(tracedPool)
-
-	for _, size := range []int{1, 361, MaxPublishBatchSize} {
-		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			assertPublishBatchStatementCount(ctx, t, tracedPool, repository, counter, &proof, size)
-		})
-	}
-}
-
-func assertPublishBatchStatementCount(
-	ctx context.Context,
-	t *testing.T,
-	pool *pgxpool.Pool,
-	repository *Repository,
-	counter *targetQueryCounter,
-	proof *contract.LeaseProof,
-	size int,
-) {
-	t.Helper()
-
-	input := viewerPublishBatch(t, proof, size)
-
-	prepared, err := preparePublishBatch(input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	counter.reset()
-
-	if _, err := repository.publishPreparedTx(ctx, tx, &prepared, repository.completePublishTerminal); err != nil {
-		rollbackPublishTestTx(ctx, t, tx, "failed publish")
-		t.Fatalf("publish %d observations: %v", size, err)
-	}
-
-	// 검증 3문장(1왕복) + contract(0031) + publish_set(0032) + terminal = 6문장·4왕복.
-	if got, trips := counter.queries.Load(), counter.roundTrips.Load(); got != 6 || trips != 4 {
-		rollbackPublishTestTx(ctx, t, tx, "unexpected statement count")
-		t.Fatalf("publish statements = %d round trips = %d, want constant 6 statements in 4 round trips", got, trips)
-	}
-
-	if err := tx.Rollback(ctx); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func rollbackPublishTestTx(ctx context.Context, t *testing.T, tx pgx.Tx, reason string) {
 	t.Helper()
 
@@ -1453,27 +1291,6 @@ func TestPublishBatchRejectsOversizedEncodedSetBeforeDatabaseAccess(t *testing.T
 
 	if got, trips := counter.queries.Load(), counter.roundTrips.Load(); got != 0 || trips != 0 {
 		t.Fatalf("database statements = %d round trips = %d, want 0", got, trips)
-	}
-}
-
-func viewerPublishBatch(t *testing.T, proof *contract.LeaseProof, size int) *PublishBatchInput {
-	t.Helper()
-
-	observations := make([]contract.Envelope, size)
-	checkpoints := make([]CheckpointEntry, size)
-
-	for i := range observations {
-		observations[i] = *viewerEnvelopeFor(t, proof, 1, fmt.Sprintf("video-%03d", i), int64(i+1))
-		checkpoints[i] = checkpointForEnvelope(&observations[i])
-	}
-
-	return &PublishBatchInput{
-		Lease: *proof,
-		Checkpoint: CheckpointUpdate{
-			Entries:           checkpoints,
-			CollectionLatency: time.Second,
-		},
-		Observations: observations,
 	}
 }
 
@@ -1734,42 +1551,31 @@ func viewerEnvelopeFor(
 	return &envelope
 }
 
-func channelStatsEnvelope(
+func channelPhotoEnvelopeFor(
 	t *testing.T,
 	proof *contract.LeaseProof,
-	generation int64,
+	subject string,
 ) *contract.Envelope {
 	t.Helper()
 
-	count := int64(123)
-
-	payload, err := contract.MarshalPayloadV1(contract.ChannelStatsV1{
-		ChannelID:       testChannelID,
-		SubscriberCount: &count,
-		Coverage: contract.ChannelStatsCoverageV1{
-			ChannelID: testChannelID, Fields: []string{"subscriber_count"},
-		},
+	payload, err := contract.MarshalPayloadV1(contract.ChannelPhotoV1{
+		ChannelID: subject,
+		Variants:  []contract.PhotoVariantV1{{Kind: "avatar", URL: "https://img.test/avatar.jpg"}},
+		Coverage:  contract.ChannelPhotoCoverageV1{ChannelID: subject, Variants: []string{"avatar"}},
 	})
 	if err != nil {
-		t.Fatalf("marshal channel stats payload: %v", err)
+		t.Fatalf("marshal channel photo payload: %v", err)
 	}
 
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
-		Provider:           contract.ProviderYouTubeJS,
-		ObservationKind:    contract.KindChannelStats,
-		SubjectKey:         testChannelID,
-		SchemaVersion:      contract.SchemaVersionV1,
-		ContractGeneration: generation,
-		ScheduledFor:       proof.ScheduledFor,
-		ObservedAt:         proof.ScheduledFor.Add(time.Second),
-		Completeness:       contract.CompletenessComplete,
-		Continuity:         contract.ContinuityContiguous,
-		Payload:            payload,
-		CollectorInstance:  proof.OwnerInstance,
-		Lease:              *proof,
+		Provider: contract.ProviderYouTubeJS, ObservationKind: contract.KindChannelPhoto,
+		SubjectKey: subject, SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
+		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
+		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
 	})
 	if err != nil {
-		t.Fatalf("prepare channel stats envelope: %v", err)
+		t.Fatalf("prepare channel photo envelope: %v", err)
 	}
 
 	return &envelope

@@ -23,7 +23,6 @@ var knownNamespaces = []string{
 	NamespaceCalendar,
 	NamespaceLiveCard,
 	NamespaceProfileCard,
-	NamespaceRankCard,
 	NamespaceTimeFmt,
 }
 

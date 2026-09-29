@@ -120,7 +120,6 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 		handlers.NewScheduleCommand(deps),
 		alarmcmd.NewAlarmCommand(deps),
 		info.NewMemberInfoCommand(deps),
-		handlers.NewSubscriberCommand(deps),
 		handlers.NewBroadcastHistoryCommand(deps),
 		handlers.NewBroadcastThumbnailCommand(deps),
 	}

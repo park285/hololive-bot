@@ -66,7 +66,7 @@ func TestNewPool_RestoresBaseSchema(t *testing.T) {
 	ctx := t.Context()
 
 	// base 테이블이 실제로 존재하는지 to_regclass로 확인한다.
-	for _, table := range []string{"members", "alarms", "youtube_milestones", "youtube_notification_outbox"} {
+	for _, table := range []string{"members", "alarms", "youtube_notification_outbox"} {
 		var oid *string
 
 		if err := pool.QueryRow(ctx, `SELECT to_regclass($1)::text`, table).Scan(&oid); err != nil {

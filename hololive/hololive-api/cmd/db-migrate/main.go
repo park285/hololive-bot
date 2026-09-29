@@ -37,6 +37,7 @@ func run() error {
 	}
 
 	baselineThrough := flag.String("baseline-through", os.Getenv("MIGRATION_BASELINE_THROUGH"), "baseline watermark")
+	statementTimeout := flag.Duration("statement-timeout", 0, "per-statement maintenance limit (0 uses 4m; maximum 10m; command limit remains 15m)")
 	allowBlockingIndexDrop := flag.Bool(
 		"allow-blocking-index-drop",
 		allowBlockingIndexDropDefault,
@@ -44,6 +45,10 @@ func run() error {
 	)
 
 	flag.Parse()
+
+	if *statementTimeout < 0 || *statementTimeout > migrationrunner.MaxStatementTimeout {
+		return fmt.Errorf("statement-timeout must be between 0 and %s", migrationrunner.MaxStatementTimeout)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -75,6 +80,7 @@ func run() error {
 	result, err := migrationrunner.Run(ctx, pool, migrations.FS, migrationrunner.Config{
 		BaselineThrough:        *baselineThrough,
 		AllowBlockingIndexDrop: *allowBlockingIndexDrop,
+		StatementTimeout:       *statementTimeout,
 		Logf:                   stdout.Printf,
 	})
 	if err != nil {

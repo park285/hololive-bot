@@ -212,7 +212,7 @@ func alarmDispatchYouTubeOutboxEnvelopeError(envelope *domain.AlarmQueueEnvelope
 	}
 
 	switch envelope.YouTubeOutbox.Kind {
-	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost, domain.OutboxKindMilestone:
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost:
 		return nil
 	default:
 		return fmt.Errorf("youtube outbox kind %q has no egress path", envelope.YouTubeOutbox.Kind)

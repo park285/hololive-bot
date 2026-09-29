@@ -1,6 +1,10 @@
 WITH sequence AS (
     SELECT ordinal
     FROM generate_series(1, $1::integer + $2::integer + $3::integer) AS ordinal
+), payload AS (
+    INSERT INTO source_observation_payloads(observation_kind,schema_version,canonical_profile,payload_sha256,payload)
+    VALUES ('community_page',1,'source-observation-canonical-json-v1',decode(repeat('b',64),'hex'),'{}')
+    RETURNING id
 ), observations AS (
     INSERT INTO source_observations (
         provider,
@@ -14,8 +18,7 @@ WITH sequence AS (
         scope_sha256,
         completeness,
         continuity,
-        payload,
-        payload_sha256,
+        payload_id,
         evidence_sha256,
         collector_instance,
         job_key,
@@ -34,15 +37,14 @@ WITH sequence AS (
            repeat('a', 64),
            'COMPLETE',
            'CONTIGUOUS',
-           '{}'::jsonb,
-           repeat('b', 64),
+           payload.id,
            repeat('c', 64),
            'collector-test',
            $4::text || ':job:' || sequence.ordinal::text,
            'community_collect',
            1,
            1
-    FROM sequence
+    FROM sequence CROSS JOIN payload
     RETURNING id, observation_key
 ), queued AS (
     INSERT INTO source_observation_queue (

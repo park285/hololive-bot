@@ -89,6 +89,15 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - 관측 순서 제약을 적용하는 첫 배포에서는 기존 YouTube consumer를 drain한 뒤 교체해야 합니다. 이미 구버전에서 claim된 작업까지 새 claim SQL이 재정렬하지는 않습니다. source replay epoch 변경이나 과거 관측 일괄 replay는 배포 절차에 포함하지 않습니다.
 - 부분 목록은 삭제·비공개 근거가 아니며 `earliest_complete_effective_at`을 채우지 않습니다. 일반 영상과 Premiere의 기존 알림 정책은 변경하지 않습니다. 최초 목록 이전의 관측이나 수집 범위 밖의 영상까지 복구한다는 보장은 하지 않습니다.
 
+## Observation storage and retention
+
+- 채널 수치 통계·구독자 수 명령·통계 알림은 제거합니다. 채널 profile/photo, 방송·일정과 알림 구독은 유지합니다.
+- 각 successful collection slot의 관측은 독립 저장합니다. payload만 kind/schema/canonical profile과 전체 32바이트 SHA-256으로 공유하며, JSONB의 PostgreSQL LZ4 압축을 사용합니다. identity와 외부 hex hash 계약은 바꾸지 않습니다.
+- claim/replay는 같은 SQL에서 payload를 조회합니다. 참조 누락·kind/schema 불일치·hash 손상은 오류이며 구 저장 경로로 되돌아가지 않습니다. GC는 참조가 없는 payload만 잠금 후 새 snapshot으로 확인하여 제한된 수만 삭제합니다.
+- application은 entity별 멱등·CANONICALIZED 결과를 그대로 저장하되 한 관측의 결과를 한 INSERT로 보냅니다. 유예는 원본 kind 기간 뒤 3일이며 orphan만 정리합니다. receipt 집약은 감사 조회 지연이 늘어 채택하지 않았습니다.
+- RETIRED projection 정리는 reasons+targets 합계를 batch 상한 이하로 제한하며 CURRENT/STAGING, lease 참조 generation을 보호합니다. 호출 timeout은 8초입니다.
+- 운영 cutover와 복구 경계는 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 소스 기본값 변경은 운영 TTL 적용 완료를 뜻하지 않습니다.
+
 ## Startup requirements
 
 - Iris URL/cert/token configuration

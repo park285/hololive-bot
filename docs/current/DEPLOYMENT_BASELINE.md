@@ -23,21 +23,17 @@
 스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
 의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `HOLOLIVE_OTLP_GRPC_ENDPOINT`가
 `<build-control-host>`를 가리키는 것은 이전 누락이 아니라 named exception입니다.
-둘째, 같은 호스트에 남아 있던 `holo-postgres`와 dump는 과거 복구용 사본입니다. 사용자
-지시로 2026-09-05 kapu의 기존 시간별 논리 덤프와 전체 복원을 종료했습니다
-(`DEC-20260905-kapu-db-backup-retirement`). 후속 승인으로 kapu의 `holo-postgres`
-container와 `hololive-bot_holo-pg-data` volume, 과거 dump 11개를 제거했습니다
-(`DEC-20260905-stack-disk-cleanup`). `/home/kapu/.local/share/hololive-db-backup/`의
-`hololive-20260905T004953Z.dump` 하나는 보존하지만 자동 갱신되지 않습니다. 현재 primary와
-같은 데이터로 취급하지 않으며 복구에는 별도 PostgreSQL과 archive restore가 필요합니다.
-2026-09-08부터 같은 `hololive-db-backup.timer` 이름은 새 일일 암호화 백업에 사용하며
-현재 `enabled`·`active`입니다. 새 owner는 `~/.local/bin/hololive-db-backup`이고 매일
-03:30 Asia/Seoul에 최대 180초 jitter로 실행해 `~/.local/share/hololive-db-backup/daily/`에
-암호화된 성공 세대 7개를 보존합니다. 격리 복원으로 검증했으며 상시 로컬 DB나 전체 복원을
-재도입하지 않습니다(`iris-stack`의 `DEC-20260908-infrastructure-efficiency-with-retention`).
-`valkey-cache`는 이번 정리 대상에 포함하지 않았습니다. 구 시간별 복원 작업 재활성화·
-보존 archive 삭제·운영 복구는 각 대상과 영향에 대한 승인이 필요합니다. `<build-control-host>`는 `x86_64`라 현재
-`aarch64` primary의 물리 standby 역할을 맡지 않습니다.
+둘째, 이 호스트의 과거 Hololive DB와 자동 백업은 현재 복구 수단으로 가정하지 않습니다.
+2026-09-05 로컬 `holo-postgres` container·volume과 시간별 dump/restore를 제거했고,
+09-08 재도입한 일일 암호화 백업도 09-28 취소했습니다.
+2026-09-29 metadata 확인에서 `hololive-db-backup.timer`는 disabled/inactive이며,
+`~/.local/share/hololive-db-backup/archive/`는 비어 있고 과거 09-05 static dump는 확인되지 않았습니다.
+`daily/20260927T150006Z-sql-w4-held-dsz7cbp9/`에는 delivery ledger state의 암호화 dump 1,413 bytes와
+manifest/checksum만 남아 있습니다. 별도 `w4-publication-20260928/private-drop-backups/`의
+Hololive ledger-state dump 4,733 bytes도 특정 객체의 복구본이지 전체 DB 백업이 아닙니다.
+최신 전체 복구점은 입증되지 않았습니다. 원문 복호화·새 백업·자동화 재활성화·기존 사본 삭제는
+각 대상과 손실 범위의 승인이 필요합니다. `valkey-cache`와 다른 서비스 사본은 정리 대상이 아닙니다.
+`<build-control-host>`는 `x86_64`라 현재 `aarch64` primary의 물리 standby 역할을 맡지 않습니다.
 이 호스트의 `hololive-compose.service`는 `disabled`로 두어 재부팅이 두 번째 alarm
 dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결정을 요구합니다.
 표준 `compose.sh`와 `compose-redeploy-service.sh`도 hostname이 `kapu`이면
@@ -46,9 +42,8 @@ dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결�
 
 2026-09-08 사용자 결정에 따라 Seoul physical standby와 failover controller를 제거했으며,
 Osaka `holo-postgres` 하나만 권위 primary로 운영합니다. 이 결정으로 동기화된 대기 복구와
-자동 승격 역량이 사라졌으며, Osaka primary 장애 시 새 PostgreSQL을 준비하고 보존 백업을
-복원해야 합니다.
-2026-09-05 보존한 static dump는 자동 갱신되지 않아 최신 백업이 아닙니다.
+자동 승격 역량이 사라졌습니다. Osaka primary 장애 시 새 PostgreSQL과 실제로 보존·검증한
+백업이 있어야 복원할 수 있습니다. 위의 부분 객체 dump를 최신 전체 백업으로 취급하지 않습니다.
 
 API, alarm worker와 중앙 collector `c`는 같은 Docker network의 `holo-postgres:5432`에
 직접 연결하고, 원격 collector `a/b/d`는 Osaka Tailscale IP `100.100.1.8:5433`에 직접

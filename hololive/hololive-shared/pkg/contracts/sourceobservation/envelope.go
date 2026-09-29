@@ -32,7 +32,6 @@ const (
 	KindShortsList       ObservationKind = "shorts_list"
 	KindLiveSnapshot     ObservationKind = "live_snapshot"
 	KindViewerSample     ObservationKind = "viewer_sample"
-	KindChannelStats     ObservationKind = "channel_stats"
 	KindChannelProfile   ObservationKind = "channel_profile"
 	KindChannelPhoto     ObservationKind = "channel_photo"
 	KindSchedule         ObservationKind = "schedule_snapshot"

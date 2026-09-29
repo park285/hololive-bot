@@ -14,7 +14,7 @@ const (
 )
 
 func TestCompactSeparatorMigrationUpgradePreservesCustomBodiesAndReplay(t *testing.T) {
-	pool := NewPool(t)
+	pool, _ := channelStatisticsRemovalPool(t)
 	bodies := loadTemplateMigrationBodies(t, compactSeparatorFile)
 
 	if len(bodies) != 15 {

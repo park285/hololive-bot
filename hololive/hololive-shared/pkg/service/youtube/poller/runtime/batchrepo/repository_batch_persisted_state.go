@@ -262,7 +262,7 @@ func isCommunityShortsOutboxKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
 		return true
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
 		return false
 	default:
 		return false

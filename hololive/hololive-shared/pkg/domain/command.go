@@ -33,8 +33,6 @@ const (
 	CommandAlarmClear             CommandType = "alarm_clear"
 	CommandAlarmInvalid           CommandType = "alarm_invalid"
 	CommandMemberInfo             CommandType = "member_info"
-	CommandStats                  CommandType = "stats"
-	CommandSubscriber             CommandType = "subscriber"
 	CommandMemberNews             CommandType = "member_news"
 	CommandMemberNewsSubscription CommandType = "news_subscription"
 	CommandMajorEvent             CommandType = "major_event"
@@ -52,7 +50,7 @@ func (c CommandType) IsValid() bool {
 	switch c {
 	case CommandLive, CommandUpcoming, CommandSchedule, CommandHelp,
 		CommandAlarmAdd, CommandAlarmRemove, CommandAlarmList, CommandAlarmClear, CommandAlarmInvalid,
-		CommandMemberInfo, CommandStats, CommandSubscriber,
+		CommandMemberInfo,
 		CommandMemberNews, CommandMemberNewsSubscription,
 		CommandMajorEvent,
 		CommandCalendar,

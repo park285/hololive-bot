@@ -67,7 +67,6 @@ func (t *ThumbnailsJSON) Scan(value any) error {
 }
 
 var YouTubeModels = []any{
-	&YouTubeChannelStatsSnapshot{},
 	&YouTubeChannelProfile{},
 	&YouTubeVideo{},
 	&YouTubeCommunityPost{},

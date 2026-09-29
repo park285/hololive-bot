@@ -86,10 +86,10 @@ func completeStubRunners() []JobRunner {
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_live", contract.KindLiveSnapshot),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_live_check", contract.KindChannelLiveCheck),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_metadata",
-			contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
+			contract.KindChannelProfile, contract.KindChannelPhoto),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_video_live", contract.KindVideoLiveCheck),
 		stubJob(contract.ProviderHolodex, "holodex_live", contract.KindLiveSnapshot),
-		stubJob(contract.ProviderHolodex, "holodex_metadata", contract.KindChannelStats, contract.KindChannelPhoto),
+		stubJob(contract.ProviderHolodex, "holodex_metadata", contract.KindChannelPhoto),
 		stubJob(contract.ProviderHolodex, "holodex_schedule", contract.KindSchedule),
 		stubJob(contract.ProviderHololiveOfficial, "official_schedule", contract.KindSchedule),
 	}

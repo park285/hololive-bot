@@ -36,7 +36,6 @@ type buildTemplateDataCase struct {
 	wantURL   string
 	wantTitle string
 	wantPost  string
-	wantMil   string
 	wantErr   bool
 }
 
@@ -73,14 +72,6 @@ func TestBuildTemplateData(t *testing.T) {
 			wantPost: "post1",
 		},
 		{
-			name: "milestone payload",
-			item: domain.YouTubeNotificationOutbox{
-				Kind:    domain.OutboxKindMilestone,
-				Payload: testPayloadMilestone,
-			},
-			wantMil: "100만",
-		},
-		{
 			name: "invalid payload",
 			item: domain.YouTubeNotificationOutbox{
 				Kind:    domain.OutboxKindNewVideo,
@@ -114,7 +105,7 @@ func assertBuildTemplateData(t *testing.T, mf *MessageFormatter, tt buildTemplat
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got.MemberName != "멤버" || got.Kind != string(tt.item.Kind) || got.URL != tt.wantURL || got.Title != tt.wantTitle || got.PostID != tt.wantPost || got.Milestone != tt.wantMil {
+	if got.MemberName != "멤버" || got.Kind != string(tt.item.Kind) || got.URL != tt.wantURL || got.Title != tt.wantTitle || got.PostID != tt.wantPost {
 		t.Fatalf("unexpected template data: %#v", got)
 	}
 }

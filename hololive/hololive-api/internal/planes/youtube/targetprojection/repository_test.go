@@ -338,7 +338,6 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 		"channel:notify/shorts_list":                 true,
 		"channel:ops/live_snapshot":                  true,
 		"channel:ops/channel_live_check":             true,
-		"channel:ops/channel_stats":                  true,
 		"channel:ops/channel_profile":                true,
 		"channel:ops/channel_photo":                  true,
 		"video-stale/video_live_check":               true,
@@ -611,7 +610,7 @@ func defaultPolicySchedules() map[contract.ObservationKind]Schedule {
 	for _, kind := range []contract.ObservationKind{
 		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
 		contract.KindLiveSnapshot, contract.KindChannelLiveCheck, contract.KindVideoLiveCheck,
-		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto, contract.KindSchedule,
+		contract.KindChannelProfile, contract.KindChannelPhoto, contract.KindSchedule,
 	} {
 		schedules[kind] = Schedule{Priority: 50, PollInterval: time.Minute, Enabled: true}
 	}

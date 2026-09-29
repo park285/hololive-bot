@@ -12,8 +12,12 @@ SELECT observation.id,
        observation.scope_sha256,
        observation.completeness,
        observation.continuity,
-       observation.payload,
-       observation.payload_sha256,
+       require_source_observation_payload(
+           observation.id, observation.observation_kind, observation.schema_version,
+           payload.observation_kind, payload.schema_version, payload.canonical_profile,
+           payload.payload_sha256, payload.payload
+       ) AS payload,
+       encode(payload.payload_sha256, 'hex') AS payload_sha256,
        observation.evidence_sha256,
        observation.collector_instance,
        observation.job_key,
@@ -33,6 +37,7 @@ SELECT observation.id,
 FROM source_observation_queue AS queue
 JOIN source_observations AS observation
   ON observation.id = queue.observation_id
+LEFT JOIN source_observation_payloads AS payload ON payload.id = observation.payload_id
 WHERE queue.observation_id = $1
   AND queue.status = 'PROCESSING'
   AND queue.lease_token = $2

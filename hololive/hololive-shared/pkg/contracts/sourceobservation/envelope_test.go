@@ -16,7 +16,7 @@ func TestProviderAndObservationKindVocabulary(t *testing.T) {
 
 	for _, kind := range []ObservationKind{
 		KindCommunityPage, KindVideoList, KindShortsList, KindLiveSnapshot,
-		KindViewerSample, KindChannelStats, KindChannelProfile, KindChannelPhoto, KindSchedule,
+		KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule,
 		KindChannelLiveCheck, KindVideoLiveCheck,
 	} {
 		if !kind.Valid() {
@@ -440,8 +440,6 @@ func TestTypedCoverageBindsLiveAndMetadataEntries(t *testing.T) {
 func typedCoverageInsideCases(t *testing.T) []typedPayloadCase {
 	t.Helper()
 
-	count := int64(10)
-
 	return []typedPayloadCase{
 		{
 			name: "live session channel and status",
@@ -466,14 +464,6 @@ func typedCoverageInsideCases(t *testing.T) []typedPayloadCase {
 			}),
 		},
 		{
-			name: "channel stats field",
-			kind: KindChannelStats,
-			payload: mustMarshalPayload(t, ChannelStatsV1{
-				ChannelID: testChannelID, SubscriberCount: &count,
-				Coverage: ChannelStatsCoverageV1{ChannelID: testChannelID, Fields: []string{"subscriber_count"}},
-			}),
-		},
-		{
 			name: "channel profile field",
 			kind: KindChannelProfile,
 			payload: mustMarshalPayload(t, ChannelProfileV1{
@@ -494,8 +484,6 @@ func typedCoverageInsideCases(t *testing.T) []typedPayloadCase {
 
 func typedCoverageOutsideCases(t *testing.T) []typedPayloadCase {
 	t.Helper()
-
-	count := int64(10)
 
 	return []typedPayloadCase{
 		{
@@ -518,14 +506,6 @@ func typedCoverageOutsideCases(t *testing.T) []typedPayloadCase {
 					RequestedChannelIDs: []string{testChannelA}, GroupKey: testChannelID,
 					Filters: LiveFiltersV1{Statuses: []string{testStatusLive}},
 				},
-			}),
-		},
-		{
-			name: "channel stats field outside coverage",
-			kind: KindChannelStats,
-			payload: mustMarshalPayload(t, ChannelStatsV1{
-				ChannelID: testChannelID, SubscriberCount: &count,
-				Coverage: ChannelStatsCoverageV1{ChannelID: testChannelID, Fields: []string{"view_count"}},
 			}),
 		},
 		{

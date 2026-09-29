@@ -255,8 +255,6 @@ func TestGroupDeliveryRows(t *testing.T) {
 		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 		3: {ID: 3, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
 		4: {ID: 4, ChannelID: "UCch2", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s3","title":"쇼츠3"}`},
-		5: {ID: 5, ChannelID: testChannelCh1, Kind: domain.OutboxKindMilestone, Payload: testPayloadMilestone},
-		6: {ID: 6, ChannelID: testChannelCh1, Kind: domain.OutboxKindMilestone, Payload: `{"milestone":"200만"}`},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
@@ -266,8 +264,6 @@ func TestGroupDeliveryRows(t *testing.T) {
 		{ID: 104, OutboxID: 4, RoomID: testRoom1},
 		{ID: 105, OutboxID: 1, RoomID: testRoom2},
 		{ID: 106, OutboxID: 99, RoomID: testRoom1},
-		{ID: 107, OutboxID: 5, RoomID: testRoom1},
-		{ID: 108, OutboxID: 6, RoomID: testRoom1},
 	}
 
 	groups, orphans := groupDeliveryRows(rows, outboxByID)
@@ -276,12 +272,11 @@ func TestGroupDeliveryRows(t *testing.T) {
 		t.Fatalf("orphans = %+v, want [{ID:106}]", orphans)
 	}
 
-	if len(groups) != 6 {
-		t.Fatalf("group count = %d, want 6", len(groups))
+	if len(groups) != 4 {
+		t.Fatalf("group count = %d, want 4", len(groups))
 	}
 
 	assertShortsDeliveryGroup(t, groups)
-	assertMilestoneDeliveryGroups(t, groups)
 }
 
 func assertShortsDeliveryGroup(t *testing.T, groups []deliveryGroup) {
@@ -306,28 +301,6 @@ func assertShortsDeliveryGroup(t *testing.T, groups []deliveryGroup) {
 
 	if len(shortsGroup.outboxes) != 2 {
 		t.Fatalf("shorts group outbox count = %d, want 2", len(shortsGroup.outboxes))
-	}
-}
-
-func assertMilestoneDeliveryGroups(t *testing.T, groups []deliveryGroup) {
-	t.Helper()
-
-	milestoneCount := 0
-
-	for i := range groups {
-		if groups[i].kind != domain.OutboxKindMilestone {
-			continue
-		}
-
-		milestoneCount++
-
-		if len(groups[i].rows) != 1 {
-			t.Fatalf("milestone group should be single-item, got %d rows", len(groups[i].rows))
-		}
-	}
-
-	if milestoneCount != 2 {
-		t.Fatalf("milestone group count = %d, want 2", milestoneCount)
 	}
 }
 
@@ -358,11 +331,6 @@ func TestValidateOutboxPayload(t *testing.T) {
 			name:   "invalid json",
 			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: `{broken`},
 			wantOK: false,
-		},
-		{
-			name:   "milestone always valid",
-			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindMilestone, Payload: testPayloadMilestone},
-			wantOK: true,
 		},
 		{
 			name:   "unknown kind",
@@ -723,7 +691,7 @@ func TestDispatchDeliveryRows_MixedBatch(t *testing.T) {
 		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
 		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 		3: {ID: 3, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
-		4: {ID: 4, ChannelID: testChannelCh1, Kind: domain.OutboxKindMilestone, ContentID: "milestone-1", Payload: testPayloadMilestone},
+		4: {ID: 4, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: "community:mixed-post", Payload: `{"canonical_post_id":"community:mixed-post","post_id":"mixed-post","content_text":"커뮤니티 소식"}`},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{

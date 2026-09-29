@@ -110,7 +110,6 @@ type TemplateData struct {
 	Title                string
 	URL                  string
 	ContentText          string
-	Milestone            string
 	VideoID              string
 	PostID               string
 	IsPremiere           bool
@@ -133,8 +132,6 @@ func populateTemplateData(data *TemplateData, item *domain.YouTubeNotificationOu
 		return populateVideoTemplateData(data, item)
 	case domain.OutboxKindCommunityPost:
 		return populateCommunityTemplateData(data, item.Payload)
-	case domain.OutboxKindMilestone:
-		return populateMilestoneTemplateData(data, item.Payload)
 	default:
 		return nil
 	}
@@ -151,14 +148,6 @@ func populateVideoTemplateData(data *TemplateData, item *domain.YouTubeNotificat
 func populateCommunityTemplateData(data *TemplateData, payload string) error {
 	if err := buildCommunityTemplateData(data, payload); err != nil {
 		return fmt.Errorf("build community template data: %w", err)
-	}
-
-	return nil
-}
-
-func populateMilestoneTemplateData(data *TemplateData, payload string) error {
-	if err := buildMilestoneTemplateData(data, payload); err != nil {
-		return fmt.Errorf("build milestone template data: %w", err)
 	}
 
 	return nil
@@ -217,18 +206,6 @@ func buildCommunityTemplateData(data *TemplateData, payload string) error {
 	return nil
 }
 
-func buildMilestoneTemplateData(data *TemplateData, payload string) error {
-	var p MilestonePayload
-
-	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
-		return fmt.Errorf("unmarshal milestone payload: %w", err)
-	}
-
-	data.Milestone = p.Milestone
-
-	return nil
-}
-
 type VideoPayload struct {
 	CanonicalPostID  string     `json:"canonical_post_id,omitempty"`
 	VideoID          string     `json:"video_id"`
@@ -244,11 +221,6 @@ type CommunityPayload struct {
 	PostID          string     `json:"post_id"`
 	ContentText     string     `json:"content_text"`
 	PublishedAt     *time.Time `json:"published_at,omitempty"`
-}
-
-type MilestonePayload struct {
-	SubscriberCount int64  `json:"subscriber_count"`
-	Milestone       string `json:"milestone"`
 }
 
 func (mf *MessageFormatter) GetMemberName(ctx context.Context, channelID string) (string, error) {
@@ -302,7 +274,7 @@ func groupedTemplateKey(kind domain.OutboxKind) domain.TemplateKey {
 		return domain.TemplateKeyOutboxShortsGroup
 	case domain.OutboxKindCommunityPost:
 		return domain.TemplateKeyOutboxCommunityGroup
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
 		return domain.TemplateKeyOutboxVideoGroup
 	default:
 		return domain.TemplateKeyOutboxVideoGroup
@@ -330,8 +302,6 @@ func BuildGroupedItemData(item *domain.YouTubeNotificationOutbox) GroupedItemDat
 		return buildGroupedVideoItemData(item)
 	case domain.OutboxKindCommunityPost:
 		return buildGroupedCommunityItemData(item.Payload)
-	case domain.OutboxKindMilestone:
-		return GroupedItemData{}
 	default:
 		return GroupedItemData{}
 	}

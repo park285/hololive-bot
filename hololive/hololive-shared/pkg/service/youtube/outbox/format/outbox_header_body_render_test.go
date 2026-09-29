@@ -54,7 +54,6 @@ const (
 {{- if .URL}}
 [커뮤니티 글 보기]({{.URL}})
 {{- end}}`
-	outboxBodyMilestone = `🎉 **{{mdsafe .MemberName}}** {{mdsafe .Milestone}} 달성`
 
 	outboxBodyVideoGroup = `## {{if eq .Kind "LIVE_STREAM"}}🔴 {{mdsafe .MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind "NEW_VIDEO"}}🔔 {{mdsafe .MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{mdsafe .MemberName}} 알림 ({{.Count}}){{end}}
 {{- $n := 0}}
@@ -138,11 +137,11 @@ func TestOutboxVideoGroupBodySkipsEmptyItems(t *testing.T) {
 
 	allEmpty := renderOutboxBody(t, outboxBodyVideoGroup, GroupedTemplateData{
 		MemberName: "사쿠라 미코",
-		Kind:       string(domain.OutboxKindMilestone),
+		Kind:       string(domain.OutboxKindNewVideo),
 		Count:      2,
 		Items:      []GroupedItemData{{}, {}},
 	})
-	if want := "## 🔔 사쿠라 미코 알림 (2)"; allEmpty != want {
+	if want := "## 🔔 사쿠라 미코 새 영상 (2)"; allEmpty != want {
 		t.Fatalf("all-empty render mismatch\n got=%q\nwant=%q", allEmpty, want)
 	}
 
@@ -233,12 +232,6 @@ func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
 			want: "🔔 **사쿠라 미코** 커뮤니티 글\n오늘 밤 10시에 방송합니다! 많이 놀러오세요~" + zwsp + "\n[커뮤니티 글 보기](https://www.youtube.com/post/Ugkxyz123)",
 		},
 		{
-			name: "single/milestone",
-			body: outboxBodyMilestone,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxMilestone, "MILESTONE"),
-			want: "🎉 **사쿠라 미코** 200만 달성",
-		},
-		{
 			name: "group/new_video",
 			body: outboxBodyVideoGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "NEW_VIDEO"),
@@ -249,12 +242,6 @@ func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
 			body: outboxBodyVideoGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "LIVE_STREAM"),
 			want: "## 🔴 사쿠라 미코 방송 시작 (2)\n1. [마인크래프트 건축 배틀 #" + zwsp + "1](https://youtu.be/group-video-1)\n2. [마인크래프트 건축 배틀 #" + zwsp + "2](https://youtu.be/group-video-2)",
-		},
-		{
-			name: "group/default_milestone",
-			body: outboxBodyVideoGroup,
-			data: sampleWithKind(t, domain.TemplateKeyOutboxVideoGroup, "MILESTONE"),
-			want: "## 🔔 사쿠라 미코 알림 (2)\n1. [마인크래프트 건축 배틀 #" + zwsp + "1](https://youtu.be/group-video-1)\n2. [마인크래프트 건축 배틀 #" + zwsp + "2](https://youtu.be/group-video-2)",
 		},
 		{
 			name: "group/shorts",

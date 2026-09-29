@@ -13,7 +13,7 @@ func validateOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 		return validateVideoOutboxPayload(item)
 	case domain.OutboxKindCommunityPost:
 		return validateCommunityOutboxPayload(item)
-	case domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindLiveStream:
 		return true
 	default:
 		return true

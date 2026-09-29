@@ -1,6 +1,7 @@
 package migrationrunner
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -9,7 +10,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
@@ -22,6 +25,40 @@ const (
 	secondSQL = "second.sql"
 	txSQL     = "tx.sql"
 )
+
+func TestStatementTimeoutCancelsAndAllowsResume(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 first.sql\n")},
+		firstSQL:               {Data: []byte("CREATE TABLE timeout_resume(id integer)")},
+	}
+
+	if _, err := Run(t.Context(), pool, fsys, Config{}); err != nil {
+		t.Fatalf("seed migration: %v", err)
+	}
+
+	fsys[dbmigrate.ManifestName] = &fstest.MapFile{Data: []byte("001 first.sql\n002 second.sql\n")}
+	fsys[secondSQL] = &fstest.MapFile{Data: []byte("SELECT pg_sleep(0.2)")}
+
+	_, err := Run(t.Context(), pool, fsys, Config{StatementTimeout: 50 * time.Millisecond})
+
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); !ok || pgErr.Code != "57014" {
+		t.Fatalf("bounded migration error = %v, want query cancellation", err)
+	}
+
+	assertLedger(t, pool, []string{firstSQL})
+
+	result, err := Run(t.Context(), pool, fsys, Config{StatementTimeout: 2 * time.Second})
+	if err != nil {
+		t.Fatalf("resume migration: %v", err)
+	}
+
+	if result.Applied != 1 || result.Skipped != 1 {
+		t.Fatalf("resume result = %+v, want one applied and one skipped", result)
+	}
+
+	assertLedger(t, pool, []string{firstSQL, secondSQL})
+}
 
 func TestFreshDBAppliesAllAndIgnoresBaselineWatermark(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)

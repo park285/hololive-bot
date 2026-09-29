@@ -17,7 +17,6 @@ FROM youtube_collection_projection_generations CROSS JOIN (VALUES
  ('content','video_list',true,interval '1 hour'),
  ('content','shorts_list',true,interval '1 hour'),
  ('notify','community_page',true,interval '1 hour'),
- ('metadata','channel_stats',true,interval '1 hour'),
  ('metadata','channel_profile',true,interval '1 hour'),
  ('metadata','channel_photo',true,interval '1 hour')
 ) AS seed(subject,kind,enabled,duration)

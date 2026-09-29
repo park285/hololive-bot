@@ -25,7 +25,7 @@ func IsCommunityShortsDeliveryAuditKind(kind domain.OutboxKind) bool {
 	switch kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:
 		return true
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
 		return false
 	default:
 		return false

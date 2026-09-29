@@ -171,7 +171,6 @@ func TestForOutboxKind(t *testing.T) {
 		{name: "community", kind: domain.OutboxKindCommunityPost, resourceID: "/post/UgkxPost123?lc=1", want: testCommunityCanonicalID},
 		{name: "video", kind: domain.OutboxKindNewVideo, resourceID: " video-1 ", want: "video-1"},
 		{name: "live", kind: domain.OutboxKindLiveStream, resourceID: " live-1 ", want: "live-1"},
-		{name: "milestone", kind: domain.OutboxKindMilestone, resourceID: " milestone-1 ", want: "milestone-1"},
 	}
 
 	for _, tt := range tests {
