@@ -260,3 +260,10 @@ kapu, Go 1.27.1, PostgreSQL 18.6, `GOMAXPROCS=2`. 기준선 `8b847e683`의 별�
 - 재개 직후 전체 표본 522건의 수신→PROCESSED p95/p99는 21.24/22.34초, 뒤의 최근 5분 표본 436건은 3.72/7.27초였다. 이는 startup/backlog를 포함하는 handoff latency이며 DB query 성능이나 기준선 대비 개선으로 치환하지 않는다. 마지막 DB는 28,559,849,151 bytes, WAL 1 GiB, filesystem 여유 52,976,799,744 bytes였다. backfill/새 index의 할당을 포함하므로 즉시 물리 용량 감소 목표를 달성했다고 주장하지 않는다.
 - 복구는 보존한 정지 시점 전체 DB archive·이전 schema/ledger·`3b5e3dd15255` fleet·기존 TTL을 함께 복원하는 경로다. 구 이미지 단독 rollback은 금지한다. 기존 부분 백업과 일회성 전체 복구본·배포 복구 tree/image를 보존했고 자동 백업/Drive 전송/백업 삭제/WAL 수동 삭제는 하지 않았다. Fallback delta: none.
 - **남은 시간 의존 검증:** 최소 7일 TTL 정착 관측, 실제 유입/정리/WAL/vacuum/알림 품질, 같은 대표 부하의 p95/p99 및 용량 목표 판정은 아직 완료되지 않았다. 새 timer·감시 daemon은 설치하지 않았다. 현재 완료 범위는 승인된 schema/fleet/TTL 전환과 즉시 기능·상태 검증이며, 장기 성능·용량 수용은 미확정 상태를 유지한다.
+
+### 적대적 리뷰와 게시 준비 — 2026-09-30
+
+- 리뷰 범위는 원격 `main`의 `8b847e683feacdd1bf4ef84f95cd930d665870b1`부터 `f18e3d898`까지의 미게시 4개 commit/169개 파일이다. 통계 계약 제거, migration 234–244의 manifest 순서·부분 commit·재실행, 공유 payload의 digest/참조/동시 발행·GC, application batch/부분 UNIQUE, projection 보존 상한, TTL 및 helper/Go 소비자 cutover를 검토했다. 추가 코드 수정이 필요한 게시 차단 결함은 확인하지 못했다. 이미 운영에 적용한 migration은 수정하지 않았다.
+- kapu의 network-none PostgreSQL 18.6에서 실제 `db-migrate --statement-timeout=10m`로 105개를 적용하고 기본 옵션 재실행의 105개 skip을 확인했다. 별도 scraper transaction이 payload KEY SHARE를 유지하는 동안 runtime 권한의 GC가 잠긴 orphan과 참조된 payload를 보존하고, 잠금 해제·cursor wrap 뒤 orphan만 제거하는 시나리오를 실행했다. scraper의 payload UPDATE 권한 거절과 참조 payload DELETE의 FK 거절도 확인했다. 임시 DB/container와 smoke 바이너리는 제거했다.
+- stack DB-access, retry, projection 계약 검사를 통과했다. 기존 DB/race 회귀에는 backfill rollback·재개, payload 손상 시 consume/replay 거절, 동시 publisher의 대기 후 가시성, 활성 application 멱등성과 orphan 이력, lease 보호 projection 보존이 포함된다. 최종 게시에는 저장소의 기존 pre-push hook을 그대로 사용하며 게이트 우회·강제 push·새 운영 배포는 하지 않는다.
+- 위 즉시 검증과 별개로 7일 정착 관측, 운영 용량 목표와 대표 부하 성능 수용은 계속 미확정이다. 게시 성공을 해당 목표의 달성이나 운영 재배포로 해석하지 않는다.
