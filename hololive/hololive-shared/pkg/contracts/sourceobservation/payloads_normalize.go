@@ -321,51 +321,6 @@ func validateViewerAvailability(p *ViewerSampleV1) error {
 	return nil
 }
 
-func (p *ChannelStatsV1) normalizeAndValidate(subject string) error {
-	if p.ChannelID != subject {
-		return errors.New("channel stats channel does not match subject")
-	}
-
-	if err := p.Coverage.normalizeAndValidate(subject); err != nil {
-		return fmt.Errorf("normalize and validate: %w", err)
-	}
-
-	if err := validateNonNegativeCounts(p.SubscriberCount, p.ViewCount, p.VideoCount); err != nil {
-		return fmt.Errorf("validate non negative counts: %w", err)
-	}
-
-	if err := validateCoveredStatsFields(p); err != nil {
-		return fmt.Errorf("validate covered stats fields: %w", err)
-	}
-
-	return nil
-}
-
-func validateNonNegativeCounts(counts ...*int64) error {
-	for _, count := range counts {
-		if count != nil && *count < 0 {
-			return errors.New("channel stats count must be non-negative")
-		}
-	}
-
-	return nil
-}
-
-func validateCoveredStatsFields(p *ChannelStatsV1) error {
-	coveredFields := stringSet(p.Coverage.Fields)
-	for field, present := range map[string]bool{
-		"subscriber_count": p.SubscriberCount != nil,
-		"view_count":       p.ViewCount != nil,
-		"video_count":      p.VideoCount != nil,
-	} {
-		if err := requireCoveredField(coveredFields, field, present); err != nil {
-			return fmt.Errorf("channel stats field %q is outside coverage", field)
-		}
-	}
-
-	return nil
-}
-
 func requireCoveredField(covered map[string]struct{}, field string, present bool) error {
 	if !present {
 		return nil

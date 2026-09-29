@@ -29,7 +29,6 @@ const (
 	TemplateKeyOutboxShorts    TemplateKey = "OUTBOX_SHORTS"
 	TemplateKeyOutboxCommunity TemplateKey = "OUTBOX_COMMUNITY"
 	TemplateKeyOutboxVideo     TemplateKey = "OUTBOX_VIDEO"
-	TemplateKeyOutboxMilestone TemplateKey = "OUTBOX_MILESTONE"
 
 	// OUTBOX_*_GROUP : YouTube 그룹 알림 (여러 항목 묶음).
 	TemplateKeyOutboxVideoGroup     TemplateKey = "OUTBOX_VIDEO_GROUP"
@@ -56,10 +55,6 @@ const (
 	TemplateKeyCmdAlarmAdded             TemplateKey = "CMD_ALARM_ADDED"
 	TemplateKeyCmdAlarmRemoved           TemplateKey = "CMD_ALARM_REMOVED"
 	TemplateKeyCmdAlarmCleared           TemplateKey = "CMD_ALARM_CLEARED"
-	TemplateKeyCmdMilestoneAchieved      TemplateKey = "CMD_MILESTONE_ACHIEVED"
-	TemplateKeyCmdMilestoneApproach      TemplateKey = "CMD_MILESTONE_APPROACHING"
-	TemplateKeyCmdStatsCount             TemplateKey = "CMD_STATS_COUNT"
-	TemplateKeyCmdStatsGainers           TemplateKey = "CMD_STATS_GAINERS"
 	TemplateKeyCmdCalendar               TemplateKey = "CMD_CALENDAR"
 	TemplateKeyCmdMemberNotLive          TemplateKey = "CMD_MEMBER_NOT_LIVE"
 	TemplateKeyCmdMemberNoUpcoming       TemplateKey = "CMD_MEMBER_NO_UPCOMING"

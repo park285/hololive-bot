@@ -31,18 +31,6 @@ func groupDeliveryRows(
 			continue
 		}
 
-		if outbox.Kind == domain.OutboxKindMilestone {
-			groups = append(groups, deliveryGroup{
-				roomID:    row.RoomID,
-				channelID: outbox.ChannelID,
-				kind:      outbox.Kind,
-				rows:      []domain.YouTubeNotificationDelivery{row},
-				outboxes:  []domain.YouTubeNotificationOutbox{outbox},
-			})
-
-			continue
-		}
-
 		key := row.RoomID + "|" + outbox.ChannelID + "|" + string(outbox.Kind)
 		if idx, exists := index[key]; exists {
 			groups[idx].rows = append(groups[idx].rows, row)

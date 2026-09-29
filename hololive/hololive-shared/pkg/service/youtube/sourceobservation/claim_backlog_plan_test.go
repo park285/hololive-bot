@@ -75,14 +75,14 @@ func seedClaimBacklog(t *testing.T, pool *pgxpool.Pool) {
 	_, err := pool.Exec(ctx, `
 		INSERT INTO source_observations (
 			provider, observation_kind, subject_key, observation_key, schema_version, contract_generation,
-			scheduled_for, observed_at, scope_sha256, completeness, continuity, payload, payload_sha256,
+			scheduled_for, observed_at, scope_sha256, completeness, continuity, payload_id,
 			evidence_sha256, collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
 		)
 		SELECT provider,
 			CASE WHEN n <= 2000 THEN 'shorts_list' ELSE 'video_list' END,
 			'UC_backlog_' || (n % 200), 'backlog-' || n, schema_version, contract_generation,
 			scheduled_for - n * INTERVAL '1 minute', observed_at, scope_sha256,
-			completeness, continuity, payload, payload_sha256, evidence_sha256,
+			completeness, continuity, payload_id, evidence_sha256,
 			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
 		FROM source_observations CROSS JOIN generate_series(1, 50000) AS n
 		WHERE id = $1

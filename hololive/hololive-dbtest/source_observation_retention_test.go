@@ -139,16 +139,22 @@ func TestSourceObservationRetentionBatchSkipsLockedRows(t *testing.T) {
 }
 
 const retentionPlanSeedObservationsSQL = `
+		WITH payloads AS (
+			INSERT INTO public.source_observation_payloads (observation_kind, schema_version, canonical_profile, payload_sha256, payload)
+			SELECT kind, 1, 'source-observation-canonical-json-v1', decode(repeat('b',64),'hex'), '{}'::jsonb
+			FROM (VALUES ('community_page'), ('live_snapshot')) kinds(kind)
+			RETURNING id, observation_kind
+		)
 		INSERT INTO public.source_observations (
 			provider, observation_kind, subject_key, observation_key,
 			schema_version, contract_generation, scheduled_for, observed_at, received_at,
-			scope_sha256, completeness, continuity, payload, payload_sha256, evidence_sha256,
+			scope_sha256, completeness, continuity, payload_id, evidence_sha256,
 			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
 		)
 		SELECT 'youtubejs', seed.observation_kind, seed.observation_key, seed.observation_key,
 		       1, 1, seed.received_at, seed.received_at, seed.received_at,
-		       pg_catalog.repeat('a', 64), 'COMPLETE', 'CONTIGUOUS', '{}'::jsonb,
-		       pg_catalog.repeat('b', 64), pg_catalog.repeat('c', 64),
+		       pg_catalog.repeat('a', 64), 'COMPLETE', 'CONTIGUOUS', payloads.id,
+		       pg_catalog.repeat('c', 64),
 		       'dbtest', seed.observation_key, seed.observation_kind, 1, 1
 		FROM (
 			SELECT 'community_page'::text AS observation_kind,
@@ -160,7 +166,7 @@ const retentionPlanSeedObservationsSQL = `
 			       'plan-live-' || series::text,
 			       $1::timestamptz - interval '1 day'
 			FROM pg_catalog.generate_series(1, 20000) AS series
-		) AS seed`
+		) AS seed JOIN payloads ON payloads.observation_kind = seed.observation_kind`
 
 const retentionPlanSeedQueueSQL = `
 		INSERT INTO public.source_observation_queue (observation_id)
@@ -289,18 +295,27 @@ func insertRetentionObservation(
 
 	const provider = "youtubejs"
 
+	if _, err := pool.Exec(t.Context(), `INSERT INTO public.source_observation_payloads
+		(observation_kind,schema_version,canonical_profile,payload_sha256,payload)
+		VALUES ($1,1,'source-observation-canonical-json-v1',decode(repeat('b',64),'hex'),'{}')
+		ON CONFLICT (observation_kind,schema_version,canonical_profile,payload_sha256) DO NOTHING`, kind); err != nil {
+		t.Fatalf("insert retention payload: %v", err)
+	}
+
 	var id int64
 
 	if err := pool.QueryRow(t.Context(), `
 		INSERT INTO public.source_observations (
 			provider, observation_kind, subject_key, observation_key,
 			schema_version, contract_generation, scheduled_for, observed_at, received_at,
-			scope_sha256, completeness, continuity, payload, payload_sha256, evidence_sha256,
+			scope_sha256, completeness, continuity, payload_id, evidence_sha256,
 			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
 		) VALUES (
 			$1, $2, $3, $3, 1, 1, $4, $4, $4,
-			pg_catalog.repeat('a', 64), 'COMPLETE', 'CONTIGUOUS', '{}'::jsonb,
-			pg_catalog.repeat('b', 64), pg_catalog.repeat('c', 64),
+			pg_catalog.repeat('a', 64), 'COMPLETE', 'CONTIGUOUS',
+			(SELECT id FROM public.source_observation_payloads WHERE observation_kind=$2 AND schema_version=1
+			 AND canonical_profile='source-observation-canonical-json-v1' AND payload_sha256=decode(repeat('b',64),'hex')),
+			pg_catalog.repeat('c', 64),
 			'dbtest', $3, $2, 1, 1
 		)
 		RETURNING id`, provider, kind, key, receivedAt).Scan(&id); err != nil {

@@ -41,8 +41,6 @@ func TestCommandType_IsValid(t *testing.T) {
 		domain.CommandAlarmClear,
 		domain.CommandAlarmInvalid,
 		domain.CommandMemberInfo,
-		domain.CommandStats,
-		domain.CommandSubscriber,
 		domain.CommandMemberNews,
 		domain.CommandMemberNewsSubscription,
 		domain.CommandMajorEvent,

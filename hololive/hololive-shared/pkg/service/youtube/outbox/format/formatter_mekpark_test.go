@@ -77,14 +77,12 @@ func TestMekParkUnattributedOutboxDisplay(t *testing.T) {
 	require.Equal(t, "다른 채널", data.MemberName)
 	require.Equal(t, "#玲銘ミラ", BuildGroupedItemData(&foreign).Title)
 
-	for _, kind := range []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindMilestone} {
-		item := domain.YouTubeNotificationOutbox{
-			Kind: kind, ChannelID: mekparkUnitBChannel,
-			Payload: `{"content_text":"#玲銘ミラ","milestone":"100000","title":"#玲銘ミラ"}`,
-		}
-
-		data, err = formatter.BuildTemplateData("유닛 B", &item)
-		require.NoError(t, err)
-		require.Equal(t, "유닛 B", data.MemberName)
+	item := domain.YouTubeNotificationOutbox{
+		Kind: domain.OutboxKindCommunityPost, ChannelID: mekparkUnitBChannel,
+		Payload: `{"content_text":"#玲銘ミラ","title":"#玲銘ミラ"}`,
 	}
+
+	data, err = formatter.BuildTemplateData("유닛 B", &item)
+	require.NoError(t, err)
+	require.Equal(t, "유닛 B", data.MemberName)
 }

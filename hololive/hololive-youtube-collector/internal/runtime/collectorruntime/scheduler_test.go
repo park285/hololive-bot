@@ -75,7 +75,7 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 	}
 	spec := joblease.JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:UC_TEST",
-		Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
+		Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
 	executor.runSpec(ctx, &spec)
@@ -126,7 +126,7 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	}
 	spec := joblease.JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:UC_TEST",
-		Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
+		Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
 	executor.runSpec(ctx, &spec)
@@ -185,7 +185,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedRuntimeTargets(t, pool, []leaseSeed{
-		{testSubjectKey, contract.KindChannelStats},
+		{testSubjectKey, contract.KindChannelProfile},
 		{testSubjectKey, contract.KindChannelPhoto},
 	})
 
@@ -196,12 +196,12 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	holodex := stubJob(contract.ProviderHolodex, "holodex_metadata",
-		contract.KindChannelStats, contract.KindChannelPhoto)
+	youtubejs := stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_metadata",
+		contract.KindChannelProfile, contract.KindChannelPhoto)
 
-	holodex.collect = collectHolodexMetadata
+	youtubejs.collect = collectYouTubeJSMetadata
 
-	registry, err := NewRegistry(withOverride(holodex)...)
+	registry, err := NewRegistry(withOverride(youtubejs)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,14 +214,14 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		gates:     defaultProviderGates(),
 	}
 	spec := joblease.JobSpec{
-		JobKey: "collector:holodex:holodex_metadata:global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
-		CollectionJobKind: "holodex_metadata", SubjectKey: "global:holodex_metadata", PollInterval: time.Minute,
+		JobKey: "collector:youtubejs:youtubejs_channel_metadata:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
+		CollectionJobKind: "youtubejs_channel_metadata", SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
 	executor.runSpec(ctx, &spec)
 
 	var count int
 
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM source_observations WHERE provider = 'holodex'`).Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM source_observations WHERE provider = 'youtubejs'`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 
@@ -262,7 +262,7 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 		gates:     defaultProviderGates(),
 	}
 	spec := joblease.JobSpec{
-		JobKey: "collector:youtubejs:youtubejs_content:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
+		JobKey: "collector:youtubejs:youtubejs_content:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: "youtubejs_content", SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
 	executor.runSpec(ctx, &spec)
@@ -391,18 +391,17 @@ const (
 	testOwnerInstance    = "collector-a"
 )
 
-func collectHolodexMetadata(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func collectYouTubeJSMetadata(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	lease := input.Lease()
 
-	subscriberCount := int64(9)
-
-	stats, err := collectutil.Envelope(
-		contract.ProviderHolodex, contract.KindChannelStats, testSubjectKey, 1, &lease,
+	profile, err := collectutil.Envelope(
+		contract.ProviderYouTubeJS, contract.KindChannelProfile, testSubjectKey, 1, &lease,
 		contract.CompletenessPartial, contract.ContinuityNotApplicable,
-		contract.ChannelStatsV1{
-			ChannelID: testSubjectKey, SubscriberCount: &subscriberCount,
-			Coverage: contract.ChannelStatsCoverageV1{
-				ChannelID: testSubjectKey, Fields: []string{"subscriber_count"},
+		contract.ChannelProfileV1{
+			ChannelID: testSubjectKey,
+			Handle:    contract.FieldValue[string]{Present: true, Value: "@test"},
+			Coverage: contract.ChannelProfileCoverageV1{
+				ChannelID: testSubjectKey, Fields: []string{"handle"},
 			},
 		},
 	)
@@ -411,7 +410,7 @@ func collectHolodexMetadata(_ context.Context, input *collectutil.RunInput) (col
 	}
 
 	photo, err := collectutil.Envelope(
-		contract.ProviderHolodex, contract.KindChannelPhoto, testSubjectKey, 1, &lease,
+		contract.ProviderYouTubeJS, contract.KindChannelPhoto, testSubjectKey, 1, &lease,
 		contract.CompletenessPartial, contract.ContinuityNotApplicable,
 		contract.ChannelPhotoV1{
 			ChannelID: testSubjectKey,
@@ -425,7 +424,7 @@ func collectHolodexMetadata(_ context.Context, input *collectutil.RunInput) (col
 		return collectutil.CollectResult{}, fmt.Errorf("envelope: %w", err)
 	}
 
-	complete, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{stats, photo}, time.Now())
+	complete, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{profile, photo}, time.Now())
 	if err != nil {
 		return collectutil.CollectResult{}, fmt.Errorf("complete from envelopes: %w", err)
 	}

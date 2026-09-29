@@ -18,7 +18,6 @@ func DefaultPolicySchedules() map[contract.ObservationKind]Schedule {
 		contract.KindLiveSnapshot:     live,
 		contract.KindChannelLiveCheck: live,
 		contract.KindVideoLiveCheck:   live,
-		contract.KindChannelStats:     {Priority: 70, PollInterval: 6 * time.Hour, Enabled: true},
 		contract.KindChannelProfile:   {Priority: 80, PollInterval: 6 * time.Hour, Enabled: true},
 		contract.KindChannelPhoto:     {Priority: 80, PollInterval: 6 * time.Hour, Enabled: true},
 		contract.KindSchedule:         {Priority: 30, PollInterval: 5 * time.Minute, Enabled: true},

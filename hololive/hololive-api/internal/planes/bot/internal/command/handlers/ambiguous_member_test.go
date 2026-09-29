@@ -34,27 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type subscriberHolodexStub struct {
-	subscriberCount int
-}
-
-func (s *subscriberHolodexStub) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (s *subscriberHolodexStub) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (s *subscriberHolodexStub) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (s *subscriberHolodexStub) GetChannel(_ context.Context, channelID string) (*domain.Channel, error) {
-	count := s.subscriberCount
-	return &domain.Channel{ID: channelID, Name: testMemberAqua, SubscriberCount: &count}, nil
-}
-
 func ambiguousMembersFixture() []*domain.Member {
 	return []*domain.Member{
 		{ChannelID: "ch-aqua-holo", Name: testMemberAqua, Org: "Hololive"},
@@ -189,37 +168,5 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 	})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "upcoming should not fall through to a not-found error on ambiguity")
-	assert.Equal(t, want, gotMessage)
-}
-
-func TestSubscriberCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.T) {
-	want := expectedAmbiguousMessage(t, newAmbiguousMatcher())
-
-	var (
-		gotMessage  string
-		sendErrSeen bool
-	)
-
-	deps := &handlercore.Dependencies{
-		Holodex:     &subscriberHolodexStub{subscriberCount: 12345},
-		Matcher:     newAmbiguousMatcher(),
-		MembersData: newContextAwareMemberProvider(ambiguousMembersFixture()),
-		Formatter:   newSeededTestFormatter(t),
-		SendMessage: func(_ context.Context, _, message string) error {
-			gotMessage = message
-			return nil
-		},
-		SendError: func(context.Context, string, string) error {
-			sendErrSeen = true
-			return nil
-		},
-		Logger: slog.New(slog.DiscardHandler),
-	}
-
-	err := NewSubscriberCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: testMemberAqua,
-	})
-	require.NoError(t, err)
-	assert.False(t, sendErrSeen, "subscriber should not fall through to a not-found error on ambiguity")
 	assert.Equal(t, want, gotMessage)
 }

@@ -13,69 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 
-func TestChannelStatsConsumerRetainsEqualConsecutiveSamplesBySlot(t *testing.T) {
-	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelStats)
-	ctx := t.Context()
-
-	proof = publishConsumeStats(ctx, t, pool, repo, consumer, &proof, contract.ProviderYouTubeJS, 10)
-	publishConsumeStats(ctx, t, pool, repo, consumer, &proof, contract.ProviderYouTubeJS, 10)
-	assertTableCount(t, pool, "youtube_channel_stats_snapshots", 2)
-	assertTableCount(t, pool, "youtube_channel_stats_evidence", 2)
-}
-
-func TestChannelStatsConsumerHiddenCountRemainsNil(t *testing.T) {
-	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelStats)
-	ctx := t.Context()
-	publishConsumeStatsHidden(ctx, t, repo, consumer, &proof)
-
-	var sub, views, videos *int64
-
-	if err := pool.QueryRow(ctx, `
-		SELECT subscriber_count, view_count, video_count
-		FROM youtube_channel_stats_snapshots WHERE channel_id = 'UC_TEST'
-	`).Scan(&sub, &views, &videos); err != nil {
-		t.Fatal(err)
-	}
-
-	if sub != nil || views != nil || videos != nil {
-		t.Fatalf("hidden snapshot counts = %v %v %v", sub, views, videos)
-	}
-
-	if err := pool.QueryRow(ctx, `
-		SELECT last_resolved_subscriber_count, last_resolved_view_count, last_resolved_video_count
-		FROM youtube_channel_stats_heads WHERE channel_id = 'UC_TEST'
-	`).Scan(&sub, &views, &videos); err != nil {
-		t.Fatal(err)
-	}
-
-	if sub != nil || views != nil || videos != nil {
-		t.Fatalf("hidden latest counts = %v %v %v", sub, views, videos)
-	}
-}
-
-func TestChannelStatsConsumerEqualTimeConflictDoesNotOverwrite(t *testing.T) {
-	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelStats)
-	ctx := t.Context()
-	alt := seedAdditionalLease(t, pool, &proof, contract.ProviderHolodex, contract.KindChannelStats, testChannelID, "holodex_metadata")
-	publishConsumeStats(ctx, t, pool, repo, consumer, &proof, contract.ProviderYouTubeJS, 10)
-	publishConsumeStats(ctx, t, pool, repo, consumer, &alt, contract.ProviderHolodex, 99)
-	assertTableCount(t, pool, "youtube_channel_stats_snapshots", 0)
-
-	var unresolved *time.Time
-
-	if err := pool.QueryRow(ctx, `
-		SELECT unresolved_scheduled_for FROM youtube_channel_stats_heads WHERE channel_id = 'UC_TEST'
-	`).Scan(&unresolved); err != nil {
-		t.Fatal(err)
-	}
-
-	if unresolved == nil || !unresolved.Equal(proof.ScheduledFor) {
-		t.Fatalf("unresolved = %v", unresolved)
-	}
-
-	assertTableCount(t, pool, "source_reconciliation_conflicts", 1)
-}
-
 func TestChannelProfileAbsentFieldDoesNotClear(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelProfile)
 	ctx := t.Context()
@@ -202,15 +139,6 @@ func TestChannelPhotoCollectorDoesNotSynthesizeFingerprint(t *testing.T) {
 	}
 }
 
-func TestChannelConsumerProviderPermutationsYieldSameProjection(t *testing.T) {
-	forward := projectStatsPermutation(t, contract.ProviderYouTubeJS, contract.ProviderHolodex)
-	reverse := projectStatsPermutation(t, contract.ProviderHolodex, contract.ProviderYouTubeJS)
-
-	if forward != reverse {
-		t.Fatalf("stats permutation %q vs %q", forward, reverse)
-	}
-}
-
 func seedAdditionalLease(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -283,62 +211,10 @@ func channelClaimOptions() ClaimOptions {
 	return ClaimOptions{
 		ConsumerName:  "youtube-channel-processor",
 		LeaseOwner:    testAPILeaseOwner,
-		Kinds:         []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto},
+		Kinds:         []contract.ObservationKind{contract.KindChannelProfile, contract.KindChannelPhoto},
 		Limit:         10,
 		LeaseDuration: 30 * time.Second,
 	}
-}
-
-func publishConsumeStats(
-	ctx context.Context,
-	t *testing.T,
-	pool *pgxpool.Pool,
-	repo *Repository,
-	consumer *Consumer,
-	proof *contract.LeaseProof,
-	provider contract.Provider,
-	sub int64,
-) contract.LeaseProof {
-	t.Helper()
-
-	views := int64(20)
-	videos := int64(3)
-
-	payload, err := contract.MarshalPayloadV1(contract.ChannelStatsV1{
-		ChannelID: testChannelID, SubscriberCount: &sub, ViewCount: &views, VideoCount: &videos,
-		Coverage: contract.ChannelStatsCoverageV1{
-			ChannelID: testChannelID, Fields: []string{"subscriber_count", "view_count", "video_count"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal stats: %v", err)
-	}
-
-	publishConsumeEnvelope(ctx, t, repo, consumer, statsEnvelope(t, proof, provider, payload))
-
-	return advanceLease(ctx, t, pool, proof, time.Hour)
-}
-
-func publishConsumeStatsHidden(
-	ctx context.Context,
-	t *testing.T,
-	repo *Repository,
-	consumer *Consumer,
-	proof *contract.LeaseProof,
-) {
-	t.Helper()
-
-	payload, err := contract.MarshalPayloadV1(contract.ChannelStatsV1{
-		ChannelID: testChannelID,
-		Coverage: contract.ChannelStatsCoverageV1{
-			ChannelID: testChannelID, Fields: []string{"subscriber_count", "view_count", "video_count"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal hidden stats: %v", err)
-	}
-
-	publishConsumeEnvelope(ctx, t, repo, consumer, statsEnvelope(t, proof, contract.ProviderYouTubeJS, payload))
 }
 
 func publishConsumeProfile(
@@ -438,31 +314,6 @@ func publishConsumeEnvelope(ctx context.Context, t *testing.T, repo *Repository,
 	}
 }
 
-func statsEnvelope(t *testing.T, proof *contract.LeaseProof, provider contract.Provider, payload []byte) *contract.Envelope {
-	t.Helper()
-
-	envelope, err := contract.PrepareEnvelope(contract.Envelope{
-		Provider: provider, ObservationKind: contract.KindChannelStats, SubjectKey: testChannelID,
-		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
-		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
-		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
-		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
-	})
-	if err != nil {
-		t.Fatalf("prepare stats: %v", err)
-	}
-
-	return &envelope
-}
-
-func jobKindFor(provider contract.Provider) string {
-	if provider == contract.ProviderHolodex {
-		return "holodex_metadata"
-	}
-
-	return "youtubejs_channel_metadata"
-}
-
 func present(value string) contract.FieldValue[string] {
 	return contract.FieldValue[string]{Present: true, Value: value}
 }
@@ -473,29 +324,4 @@ func absentField() contract.FieldValue[string] {
 
 func photoVariant(rawURL string, size int, mediaID string) *contract.PhotoVariantV1 {
 	return &contract.PhotoVariantV1{Kind: "avatar", URL: rawURL, Width: size, Height: size, StableMediaID: mediaID}
-}
-
-func projectStatsPermutation(t *testing.T, first, second contract.Provider) string {
-	t.Helper()
-
-	pool := dbtest.NewPool(t)
-	repo := NewRepository(pool)
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
-	ctx := t.Context()
-	firstProof := seedPublishLease(t.Context(), t, pool, first, contract.KindChannelStats, testChannelID, jobKindFor(first))
-	secondProof := seedAdditionalLease(t, pool, &firstProof, second, contract.KindChannelStats, testChannelID, jobKindFor(second))
-	publishConsumeStats(ctx, t, pool, repo, consumer, &firstProof, first, 10)
-	publishConsumeStats(ctx, t, pool, repo, consumer, &secondProof, second, 10)
-
-	var latest string
-
-	if err := pool.QueryRow(ctx, `
-		SELECT COALESCE(last_resolved_subscriber_count::text, 'nil') || '/' ||
-		       COALESCE(unresolved_scheduled_for::text, 'ok')
-		FROM youtube_channel_stats_heads WHERE channel_id = 'UC_TEST'
-	`).Scan(&latest); err != nil {
-		t.Fatal(err)
-	}
-
-	return latest
 }

@@ -53,14 +53,6 @@ type ViewerSampleV1 struct {
 	Coverage            ViewerSampleCoverageV1 `json:"coverage"`
 }
 
-type ChannelStatsV1 struct {
-	ChannelID       string                 `json:"channel_id"`
-	SubscriberCount *int64                 `json:"subscriber_count,omitempty"`
-	ViewCount       *int64                 `json:"view_count,omitempty"`
-	VideoCount      *int64                 `json:"video_count,omitempty"`
-	Coverage        ChannelStatsCoverageV1 `json:"coverage"`
-}
-
 type FieldValue[T any] struct {
 	Present bool `json:"present"`
 	Value   T    `json:"value"`

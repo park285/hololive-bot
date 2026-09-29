@@ -181,7 +181,6 @@ func operationalPolicyKinds() []contract.ObservationKind {
 	return []contract.ObservationKind{
 		contract.KindLiveSnapshot,
 		contract.KindChannelLiveCheck,
-		contract.KindChannelStats,
 		contract.KindChannelProfile,
 		contract.KindChannelPhoto,
 	}

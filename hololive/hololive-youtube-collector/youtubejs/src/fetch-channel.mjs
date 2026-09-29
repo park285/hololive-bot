@@ -11,7 +11,6 @@ const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+
 const responseReserveBytes = encodedSize({
   protocol_version: 1,
   live_sessions: [],
-  stats: {},
   profile: {},
   photo: [],
   ...paginationResult({
@@ -57,7 +56,6 @@ export async function fetchChannelFeed({
   return {
     live_sessions: liveSessions.filter((session) => !unavailableIDs.has(session.video_id)),
     ...(unavailable.length === 0 ? {} : { unavailable_live_sessions: unavailable }),
-    stats: kind === "metadata" ? mapStats(channel, about) : {},
     profile: kind === "metadata" ? mapProfile(channel, about) : {},
     photo: kind === "metadata" ? mapPhoto(channel, about) : [],
     ...paginationResult({
@@ -230,13 +228,6 @@ function* liveSessionRows(feed, channelId) {
   }
 }
 
-export function mapStats(channel, about) {
-  return {
-    subscriber_count: optionalCount(about?.subscriber_count ?? channel?.subscriber_count ?? channel?.subscribers),
-    view_count: optionalCount(about?.view_count ?? channel?.view_count),
-    video_count: optionalCount(about?.video_count ?? channel?.video_count),
-  };
-}
 
 export function mapProfile(channel, about) {
   return {
@@ -280,19 +271,6 @@ function mapLiveStatus(row) {
   return "";
 }
 
-function optionalCount(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-    return Math.trunc(value);
-  }
-  const parsed = Number.parseInt(String(value).replaceAll(",", ""), 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return null;
-  }
-  return parsed;
-}
 
 function optionalText(value) {
   const text = textOf(value).trim();

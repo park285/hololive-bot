@@ -21,15 +21,15 @@ type publishVerificationBatchSender interface {
 	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
 }
 
-// Verify는 fence(0001)·projection(0002)·target(0003) 조회를 한 번의 왕복으로 보낸다. 세 문장의 SQL 입력은
-// proof와 관측에서만 나오고, 서버가 입력 순서대로 실행하므로 잠금 순서(lease FOR UPDATE → projection FOR SHARE)는
-// 순차 실행과 같다. 판정은 결과를 순서대로 읽으며 기존 우선순위(fence → job kind/class/subject → projection →
-// membership → target)를 유지한다. 앞선 fence 판정이 실패해도 뒤 조회의 공유 잠금은 잡히지만 트랜잭션이 롤백된다.
+// Verify는 fence·projection·target·contract 조회를 한 번의 왕복으로 보냅니다.
+// 서버 실행과 결과 판정 순서는 lease → projection → target → contract를 유지하며,
+// 앞선 판정이 실패하면 이미 획득한 뒤쪽 공유 잠금도 트랜잭션과 함께 롤백됩니다.
 func (v sqlPublishFenceVerifier) Verify(
 	ctx context.Context,
 	tx dbx.Tx,
 	proof *contract.LeaseProof,
 	observations []contract.Envelope,
+	contracts []byte,
 ) (err error) {
 	sender, ok := tx.(publishVerificationBatchSender)
 	if !ok {
@@ -49,6 +49,7 @@ func (v sqlPublishFenceVerifier) Verify(
 	)
 	batch.Queue(mustSQL("repository_projection_current_0002_02.sql"), proof.ProjectionGeneration)
 	batch.Queue(mustSQL("repository_target_enabled_0003_03.sql"), proof.ProjectionGeneration, subjects, kinds)
+	batch.Queue(mustSQL("repository_contract_batch_current_0031_31.sql"), string(contracts))
 
 	results := sender.SendBatch(ctx, batch)
 	if results == nil {
@@ -77,6 +78,10 @@ func (v sqlPublishFenceVerifier) Verify(
 
 	if err := verifyTargetsEnabled(results); err != nil {
 		return fmt.Errorf("verify targets enabled: %w", err)
+	}
+
+	if err := verifyCurrentContracts(results.QueryRow()); err != nil {
+		return fmt.Errorf("verify current contracts: %w", err)
 	}
 
 	return nil
@@ -303,16 +308,13 @@ func (r *Repository) verifyPreparedPublish(
 		tx,
 		&prepared.input.Lease,
 		prepared.input.Observations,
+		prepared.contracts,
 	); err != nil {
 		return fmt.Errorf("publish source observation batch: verify fence: %w", err)
 	}
 
 	if err := r.applyPublishFault(ctx, tx, faultAfterFenceVerify); err != nil {
 		return fmt.Errorf("apply publish fault: %w", err)
-	}
-
-	if err := verifyCurrentContracts(ctx, tx, prepared.contracts); err != nil {
-		return fmt.Errorf("verify current contracts: %w", err)
 	}
 
 	if err := r.applyPublishFault(ctx, tx, faultAfterContractCheck); err != nil {

@@ -41,7 +41,6 @@
         {"syntax": "!행사 켜기 · 끄기", "description": "행사 알림 설정"},
         {"syntax": "!기념일", "description": "이번 달 생일 · 주년"},
         {"syntax": "!기념일 다음달 · 저번달", "description": "월별 기념일 조회"},
-        {"syntax": "!구독자 [멤버명]", "description": "현재 구독자 수"},
         {"syntax": "!도움말", "description": "전체 명령어 안내"}
       ]
     }

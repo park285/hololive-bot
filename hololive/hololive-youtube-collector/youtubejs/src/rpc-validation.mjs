@@ -442,12 +442,10 @@ export function validateChannelResponse(value) {
   const record = responseRecord(value);
   assertResponseKeys(
     record,
-    ["protocol_version", "live_sessions", "stats", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
+    ["protocol_version", "live_sessions", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
     ["cursor_start", "cursor_end", "missing_tab", "unavailable_live_sessions"],
   );
-  const stats = recordField(record, "stats");
   const profile = recordField(record, "profile");
-  assertResponseKeys(stats, [], ["subscriber_count", "view_count", "video_count"]);
   assertResponseKeys(profile, [], ["handle", "description", "country", "joined_date"]);
   const liveSessions = arrayField(record, "live_sessions").map(validateLiveSession);
   const unavailable = Object.hasOwn(record, "unavailable_live_sessions")
@@ -469,11 +467,6 @@ export function validateChannelResponse(value) {
     protocol_version: responseProtocolVersion(record),
     live_sessions: liveSessions,
     ...(unavailable == null ? {} : { unavailable_live_sessions: unavailable }),
-    stats: {
-      ...optionalNullableNonnegativeInteger(stats, "subscriber_count"),
-      ...optionalNullableNonnegativeInteger(stats, "view_count"),
-      ...optionalNullableNonnegativeInteger(stats, "video_count"),
-    },
     profile: {
       ...optionalNullableString(profile, "handle"),
       ...optionalNullableString(profile, "description"),
@@ -539,7 +532,6 @@ export const channelEndpoint = {
   minimumSuccessResponseBytes: Buffer.byteLength(JSON.stringify({
     protocol_version: 1,
     live_sessions: [],
-    stats: {},
     profile: {},
     photo: [],
     page_count: 1,
@@ -933,13 +925,6 @@ function nonnegativeIntegerField(record, field) {
   return Number(value);
 }
 
-/** @param {Record<string, unknown>} record @param {string} field */
-function optionalNullableNonnegativeInteger(record, field) {
-  const value = record[field];
-  if (value === undefined) return {};
-  if (value === null) return { [field]: null };
-  return { [field]: nonnegativeIntegerField(record, field) };
-}
 
 /** @param {Record<string, unknown>} record @param {string} field */
 function optionalRFC3339(record, field) {

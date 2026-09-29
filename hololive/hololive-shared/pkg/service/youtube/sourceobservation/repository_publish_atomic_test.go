@@ -312,7 +312,7 @@ func TestPUB011CallerMutationDuringTxUsesPreparedClone(t *testing.T) {
 
 	var storedSHA string
 
-	if err := pool.QueryRow(ctx, `SELECT payload_sha256 FROM source_observations`).Scan(&storedSHA); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT encode(payload.payload_sha256, 'hex') FROM source_observations observation JOIN source_observation_payloads payload ON payload.id=observation.payload_id`).Scan(&storedSHA); err != nil {
 		t.Fatal(err)
 	}
 

@@ -130,10 +130,10 @@ func marshalPublishBatch(rows []publishBatchRow, contracts []publishContractRow)
 	return encoded, contractEncoded, nil
 }
 
-func verifyCurrentContracts(ctx context.Context, tx dbx.Tx, encoded []byte) error {
+func verifyCurrentContracts(row pgx.Row) error {
 	var current bool
 
-	if err := tx.QueryRow(ctx, mustSQL("repository_contract_batch_current_0031_31.sql"), string(encoded)).Scan(&current); err != nil {
+	if err := row.Scan(&current); err != nil {
 		return fmt.Errorf("publish source observation batch: verify current contracts: %w", err)
 	}
 

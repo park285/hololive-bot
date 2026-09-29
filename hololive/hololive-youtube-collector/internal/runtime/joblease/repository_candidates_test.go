@@ -217,7 +217,6 @@ func TestCandidatesForProjectionMixedIntervalIsInternal(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
-		{subjectUCA, contract.KindChannelStats, time.Minute, true},
 		{subjectUCA, contract.KindChannelProfile, 2 * time.Minute, true},
 		{subjectUCA, contract.KindChannelPhoto, time.Minute, true},
 	})

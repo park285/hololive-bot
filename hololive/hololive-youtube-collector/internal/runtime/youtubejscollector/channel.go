@@ -52,7 +52,7 @@ func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput
 		return collectutil.CollectResult{}, fmt.Errorf("enabled channel kinds: %w", err)
 	}
 
-	if !enabled[contract.KindChannelStats] && !enabled[contract.KindChannelProfile] && !enabled[contract.KindChannelPhoto] {
+	if !enabled[contract.KindChannelProfile] && !enabled[contract.KindChannelPhoto] {
 		out, completeErr := completeEmptyCollection(started)
 
 		return out, completeErr
@@ -146,12 +146,7 @@ func channelMetadataEnvelopes(
 	continuity contract.Continuity,
 ) ([]contract.Envelope, error) {
 	subject := input.Spec().SubjectKey
-	envelopes := make([]contract.Envelope, 0, 3)
-
-	stats, ok := channelStatsPayload(subject, result.Stats)
-	if err := appendBuiltEnvelope(input, contract.KindChannelStats, enabled, completeness, continuity, stats, ok, &envelopes); err != nil {
-		return nil, fmt.Errorf("append channel stats: %w", err)
-	}
+	envelopes := make([]contract.Envelope, 0, 2)
 
 	profile, ok := channelProfilePayload(subject, result.Profile)
 	if err := appendBuiltEnvelope(input, contract.KindChannelProfile, enabled, completeness, continuity, profile, ok, &envelopes); err != nil {

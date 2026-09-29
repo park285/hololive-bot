@@ -11,6 +11,8 @@
 
 이 문서에서 `MUST`, `MUST NOT`, `SHOULD`는 구현 계약을 뜻한다. production migration, deploy, restart, live data 변경은 별도 승인 없이는 수행하지 않는다.
 
+2026-09-29 채널 통계 퇴역과 저장 구조 변경은 [저장 축소 계획](../plans/2026-09-29-youtube-storage-reduction.md)의 실행 기록 및 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 아래 DDL 예시는 초기 설계이며 현행 물리 스키마는 migration manifest와 schema snapshot이 소유합니다. payload는 kind/schema/canonical profile별 공유 JSONB(LZ4), 32바이트 digest와 8바이트 FK로 저장하며 슬롯별 관측·오류·알림 의미는 유지합니다.
+
 ### 근거와 신규 설계 결정의 구분
 
 제공된 snapshot에서 직접 확인된 사실은 다음과 같다.
@@ -27,7 +29,6 @@
 - immutable evidence와 mutable processing queue를 분리한다.
 - PostgreSQL scheduled slot은 same-run retry identity를, monotonic fence epoch는 stale holder 차단을 소유한다.
 - payload가 같아도 다음 successful collection slot은 새 observation을 발행한다.
-- `channel_stats`를 `viewer_sample`과 분리한다.
 - target projection은 staging/current generation으로 원자 교체한다.
 - scoped absence에는 typed coverage, strict newer-time, 서로 다른 slot의 2회 확인과 grace를 요구한다.
 - grace가 지난 뒤 새 observation이 없어도 DB due-finalizer가 LIVE end candidate를 재평가한다.
@@ -52,7 +53,6 @@ retention 기간, 기존 product grace, provider별 request budget처럼 snapsho
 | stale collector publish race | PostgreSQL monotonic `fence_epoch`와 publish-time row lock predicate | 8 |
 | coverage·clock·LIVE 종료 모호성 | typed coverage relation, absence capability, effective clock, DB grace, two-slot scoped absence | 5, 6, 13.3 |
 | target stale/empty/disable 모호성 | staging/current/retired generation의 atomic swap과 `valid_until` | 7 |
-| `channel_stats` 누락 | 독립 kind·payload·snapshot/latest parity wave | 3.2, 13.5, Task 7 |
 | profile/photo arrival-order 의존 | field presence/validity/stability reducer와 media identity 규칙 | 13.6, 13.7 |
 | collision DLQ 불가능 | immutable evidence와 별도 bounded collision audit | 9.3, 9.4, 10.2 |
 | retention/replay·manifest/grant 누락 | queue/evidence 수명 분리, replay audit, migration manifest·grant test | 9, 12, Tasks 1·8 |
@@ -88,7 +88,7 @@ retention 기간, 기존 product grace, provider별 request budget처럼 snapsho
 10. collection job의 stale holder는 PostgreSQL의 단조 fencing epoch로 publish가 차단된다.
 11. queue, worker, batch, retry, payload, DB pool과 외부 요청은 모두 bounded다.
 12. provider outage, timeout, parse drift, partial pagination, continuity gap은 negative evidence가 아니다.
-13. `channel_stats`는 `viewer_sample`이나 `channel_profile`에 암묵적으로 포함하지 않고 독립 observation kind로 보존한다.
+13. 채널 통계 기능과 과거 통계 replay는 제거한다. profile/photo와 알림 구독은 유지한다.
 14. migration `144`가 production 미적용이라는 전제가 확인된 경우에만 direct rewrite하며 compatibility migration이나 dual writer를 만들지 않는다.
 
 ## 2. Runtime 및 코드 소유 경계
@@ -111,7 +111,6 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/
   shorts_list_v1.go
   live_snapshot_v1.go
   viewer_sample_v1.go
-  channel_stats_v1.go
   channel_profile_v1.go
   channel_photo_v1.go
   schedule_snapshot_v1.go
@@ -184,14 +183,13 @@ const (
     KindShortsList     ObservationKind = "shorts_list"
     KindLiveSnapshot   ObservationKind = "live_snapshot"
     KindViewerSample   ObservationKind = "viewer_sample"
-    KindChannelStats   ObservationKind = "channel_stats"
     KindChannelProfile ObservationKind = "channel_profile"
     KindChannelPhoto   ObservationKind = "channel_photo"
     KindSchedule       ObservationKind = "schedule_snapshot"
 )
 ```
 
-`channel_stats`는 subscriber count, channel view count, video count의 시계열 snapshot을 소유한다. `viewer_sample`은 개별 방송의 동시 시청자 시계열이며 서로 대체하지 않는다. `channel_profile`은 handle, description, country, joined date 같은 profile 필드를 소유하고, `channel_photo`는 avatar/banner variant를 소유한다.
+`viewer_sample`은 퇴역 전 저장된 개별 방송 시청자 표본의 소비·replay 계약이다. `channel_profile`은 handle, description, country, joined date 같은 profile 필드를 소유하고, `channel_photo`는 avatar/banner variant를 소유한다.
 
 ### 3.3 초기 capability matrix
 
@@ -371,7 +369,6 @@ type EvidenceDigestV1 struct {
 | `shorts_list` | channel ID | `scheduled_for + scope_sha256` |
 | `live_snapshot` | channel ID 또는 global group | `scheduled_for + scope_sha256` |
 | `viewer_sample` | video ID | normalized sample-window start + scope hash |
-| `channel_stats` | channel ID | `scheduled_for + scope_sha256` |
 | `channel_profile` | channel ID | `scheduled_for + scope_sha256` |
 | `channel_photo` | channel ID | `scheduled_for + scope_sha256` |
 | `schedule_snapshot` | group key | `scheduled_for + scope_sha256` |
@@ -558,7 +555,7 @@ Projection은 generation 단위로 원자적으로 교체한다. refresh 실패�
 target source mapping은 다음과 같다.
 
 - notification target: `community_page`, `video_list`, `shorts_list`
-- operational roster: `live_snapshot`, `viewer_sample`, `channel_stats`, `channel_profile`, `channel_photo`
+- operational roster: `live_snapshot`, `viewer_sample`, `channel_profile`, `channel_photo`
 - fixed global operational target: `schedule_snapshot` with `subject_key=global:hololive-schedule`
 
 ### 7.2 Schema shape
@@ -865,7 +862,6 @@ CREATE TABLE observation_contract_generations (
             'shorts_list',
             'live_snapshot',
             'viewer_sample',
-            'channel_stats',
             'channel_profile',
             'channel_photo',
             'schedule_snapshot'
@@ -1334,7 +1330,7 @@ func (r *Repository) PublishBatch(
 ) (PublishBatchResult, error)
 ```
 
-같은 external fetch가 `channel_stats`, `channel_profile`, `channel_photo` 세 payload를 만들면 하나의 `PublishBatch` transaction으로 commit한다. 한 payload가 invalid하면 checkpoint를 포함해 전체 batch를 rollback한다.
+같은 metadata fetch가 `channel_profile`, `channel_photo` payload를 만들면 하나의 `PublishBatch` transaction으로 commit한다. 한 payload가 invalid하면 checkpoint를 포함해 전체 batch를 rollback한다.
 
 ### 10.2 Transaction sequence
 
@@ -1717,29 +1713,9 @@ finalizer는 in-memory session별 timer를 만들지 않으며 batch size, poll 
 
 초기 rollout에서 한 provider만 viewer sample capability를 갖는다면 capability matrix에 명시하며, 이를 primary source 개념으로 일반화하지 않는다.
 
-### 13.5 Channel stats
-
-`ChannelStatsV1`은 다음 형태를 가진다.
-
-```go
-type ChannelStatsV1 struct {
-    ChannelID       string  `json:"channel_id"`
-    SubscriberCount *int64  `json:"subscriber_count,omitempty"`
-    ViewCount       *int64  `json:"view_count,omitempty"`
-    VideoCount      *int64  `json:"video_count,omitempty"`
-    Coverage        ChannelStatsCoverageV1 `json:"coverage"`
-}
-```
-
-- hidden count는 zero로 변환하지 않고 nil로 보존한다.
-- count 감소를 일반적으로 거부하지 않는다. platform correction이 가능하므로 latest valid effective time을 사용한다.
-- equal-time conflicting stats는 canonical을 덮어쓰지 않고 conflict를 기록한다.
-- raw sample row는 `scheduled_for`별로 보존한다.
-- 기존 `youtube_channel_stats_snapshots`와 latest projection의 의미와 query contract를 보존한 뒤 producer writer를 삭제한다.
-
 ### 13.6 Channel profile
 
-fetch 결과가 stats와 profile을 함께 제공하더라도 payload kind는 분리한다.
+profile은 채널 수치 통계를 포함하지 않는다.
 
 ```go
 type FieldValue[T any] struct {
@@ -2256,24 +2232,19 @@ same live evidence permutations converge
 alarm-worker remains sole egress owner
 ```
 
-### Task 7 — Channel stats, profile, photo
+### Task 7 — Channel profile, photo
 
 구현:
 
-- `channel_stats` V1과 existing snapshot/latest persistence parity를 구현한다.
-- profile fields를 stats에서 분리한다.
 - `Present` semantics와 field reducer를 구현한다.
 - photo content fingerprint, stability, resolution-only no-event rule을 구현한다.
 - raw variants와 conflict audit를 보존한다.
 - stability settings inventory와 승인 전에는 profile clear와 canonical photo change를 disabled로 유지한다.
-- producer stats/profile/photo sync와 registrations를 삭제한다.
+- producer profile/photo sync와 registrations를 삭제한다.
 
 필수 test:
 
 ```text
-subscriber/view/video equal consecutive samples are both retained by scheduled slot
-hidden count remains nil, not zero
-equal-time conflicting stats do not arrival-order overwrite
 profile absent field does not clear
 explicit empty requires stability
 joined date conflict is rejected/recorded
@@ -2422,7 +2393,7 @@ DB/concurrency 변경에는 `go test -race`와 실제 lease/transaction invarian
 4. stale collection holder가 PostgreSQL fence로 observation/checkpoint/job state를 변경하지 못한다.
 5. target generation refresh 실패·same-hash stability·empty·disable·expiry 계약과 multi-kind per-observation target 검증이 통과한다.
 6. source-order permutation, clock-skew와 no-new-observation due-finalizer test가 canonical state/outbox invariance를 증명한다.
-7. `channel_stats`, profile, photo의 기존 user-visible behavior가 API plane에서 보존된다.
+7. profile, photo의 기존 user-visible behavior가 API plane에서 보존된다.
 8. API pool/worker/shutdown/readiness NFR가 검증된다.
 9. retention/replay가 bounded하고 auditable하다.
 10. standalone `youtube-producer`와 authority compatibility layer가 repository current surface에서 제거된다.

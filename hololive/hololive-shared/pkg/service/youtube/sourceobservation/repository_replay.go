@@ -236,7 +236,11 @@ func activateReplayDecision(ctx context.Context, tx dbx.Tx, result ReplayResult,
 var errReplayObservationMissing = errors.New("request source observation replay: observation not found")
 
 func loadReplayObservation(ctx context.Context, tx dbx.Tx, observationID int64) (replayObservation, error) {
-	var observation replayObservation
+	var (
+		observation   replayObservation
+		payload       []byte
+		payloadSHA256 string
+	)
 
 	err := tx.QueryRow(
 		ctx,
@@ -250,6 +254,8 @@ func loadReplayObservation(ctx context.Context, tx dbx.Tx, observationID int64) 
 		&observation.schemaVersion,
 		&observation.contractGeneration,
 		&observation.evidenceSHA256,
+		&payload,
+		&payloadSHA256,
 		&observation.epochRejected,
 	)
 
@@ -259,6 +265,10 @@ func loadReplayObservation(ctx context.Context, tx dbx.Tx, observationID int64) 
 
 	if err != nil {
 		return replayObservation{}, fmt.Errorf("request source observation replay: load observation: %w", err)
+	}
+
+	if err := validateStoredObservationPayload(payload, payloadSHA256); err != nil {
+		return replayObservation{}, fmt.Errorf("request source observation replay: %w", err)
 	}
 
 	return observation, nil

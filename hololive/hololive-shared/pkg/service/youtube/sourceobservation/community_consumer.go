@@ -232,10 +232,6 @@ func (c *Consumer) liveReconcile(kind contract.ObservationKind) (func(context.Co
 }
 
 func (c *Consumer) channelReconcile(kind contract.ObservationKind) (func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error), bool) {
-	if kind == contract.KindChannelStats {
-		return c.reconcileStats, true
-	}
-
 	if kind == contract.KindChannelProfile {
 		return c.reconcileProfile, true
 	}

@@ -71,11 +71,6 @@ type ViewerSampleCoverageV1 struct {
 	SampleWindowSeconds int       `json:"sample_window_seconds"`
 }
 
-type ChannelStatsCoverageV1 struct {
-	ChannelID string   `json:"channel_id"`
-	Fields    []string `json:"fields"`
-}
-
 type ChannelProfileCoverageV1 struct {
 	ChannelID string   `json:"channel_id"`
 	Fields    []string `json:"fields"`
@@ -241,14 +236,6 @@ func (c *ViewerSampleCoverageV1) normalizeAndValidate(subject string) error {
 	}
 
 	c.SampleWindowStart = c.SampleWindowStart.UTC()
-
-	return nil
-}
-
-func (c *ChannelStatsCoverageV1) normalizeAndValidate(subject string) error {
-	if err := normalizeChannelFields(subject, &c.ChannelID, &c.Fields, []string{"subscriber_count", "video_count", "view_count"}); err != nil {
-		return fmt.Errorf("normalize channel fields: %w", err)
-	}
 
 	return nil
 }

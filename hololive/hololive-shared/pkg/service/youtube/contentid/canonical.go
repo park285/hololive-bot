@@ -217,7 +217,7 @@ func ForOutboxKind(kind domain.OutboxKind, resourceID string) (string, error) {
 		}
 
 		return logicalID, nil
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
 		logicalID := strings.TrimSpace(resourceID)
 		if err := validateBounded(kind, "logical id", logicalID, MaxLogicalIDLength); err != nil {
 			return "", fmt.Errorf("validate outbox logical ID: %w", err)

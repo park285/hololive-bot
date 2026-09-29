@@ -44,14 +44,6 @@ const (
 	ErrScheduleQueryFailed       = "schedule_query_failed"
 	ErrScheduleNeedMemberName    = "schedule_need_member_name"
 
-	ErrUnknownStatsPeriod = "unknown_stats_period"
-	ErrStatsQueryFailed   = "stats_query_failed"
-	MsgNoStatsData        = "no_stats_data"
-
-	ErrSubscriberNeedMemberName = "subscriber_need_member_name"
-	ErrSubscriberQueryFailed    = "subscriber_query_failed"
-	MsgNoSubscriberData         = "no_subscriber_data"
-
 	ErrCalendarQueryFailed = "calendar_query_failed"
 
 	ErrMajorEventServiceNotInitialized = "major_event_service_not_initialized"
@@ -78,8 +70,6 @@ func ErrorMessageKeys() []string {
 		ErrAlarmServiceNotInitialized, ErrAlarmAddFailed, ErrAlarmRemoveFailed, ErrAlarmListFailed, ErrAlarmClearFailed,
 		ErrAlarmNeedMemberNameAdd, ErrAlarmNeedMemberNameRemove, ErrInvalidAlarmUsage,
 		ErrLiveStreamQueryFailed, ErrUpcomingStreamQueryFailed, ErrScheduleQueryFailed, ErrScheduleNeedMemberName,
-		ErrUnknownStatsPeriod, ErrStatsQueryFailed, MsgNoStatsData,
-		ErrSubscriberNeedMemberName, ErrSubscriberQueryFailed, MsgNoSubscriberData,
 		ErrCalendarQueryFailed,
 		ErrMajorEventServiceNotInitialized, ErrMajorEventStatusCheckFailed, ErrMajorEventSubscribeFailed,
 		ErrMajorEventUnsubscribeFailed,

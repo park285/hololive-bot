@@ -79,7 +79,7 @@ var sourceObservationReplayMigrations = []string{
 }
 
 func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.T) {
-	pool := NewPool(t)
+	pool, _ := channelStatisticsRemovalPool(t)
 	ctx := t.Context()
 
 	dir, err := resolveMigrationsDir()
@@ -138,7 +138,7 @@ func assertObservationContractsSurvivedReplay(t *testing.T, pool *pgxpool.Pool) 
 }
 
 func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
-	pool := NewPool(t)
+	pool, _ := channelStatisticsRemovalPool(t)
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)
 
@@ -165,6 +165,19 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	}
 
 	assertPreexistingScraperPrivilegesRevoked(t, pool, roles.scraper)
+
+	for _, filename := range []string{"238_source_observation_payload_prepare.sql", "239_source_observation_payload_index.sql", "240_source_observation_payload_backfill_index.sql", "241_source_observation_payload_cutover.sql", "242_drop_payload_backfill_index.sql"} {
+		raw, readErr := fs.ReadFile(os.DirFS(dir), filename)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+
+		content := strings.NewReplacer("hololive_scraper", roles.scraper, "hololive_runtime", roles.runtime).Replace(string(raw))
+		if err := applyMigrationContent(ctx, pool, filename, content); err != nil {
+			t.Fatalf("apply payload privilege migration %s: %v", filename, err)
+		}
+	}
+
 	assertObservationGrantMatrix(t, pool, roles)
 	assertObservationLockAPIAccess(t, pool, roles)
 	assertObservationRetentionAPIAccess(t, pool, roles)
@@ -419,6 +432,8 @@ var sourceObservationTables = []string{
 	"youtube_collection_job_leases",
 	"source_collection_checkpoints",
 	"source_observations",
+	"source_observation_payloads",
+	"source_observation_payload_gc_state",
 	"source_observation_queue",
 	"source_observation_collisions",
 	"source_observation_consumer_offsets",
@@ -442,6 +457,7 @@ var sourceObservationTables = []string{
 
 var sourceObservationSequences = []string{
 	"source_observations_id_seq",
+	"source_observation_payloads_id_seq",
 	"source_observation_collisions_id_seq",
 	"youtube_collection_projection_generations_generation_seq",
 	"source_observation_replay_requests_id_seq",
@@ -460,6 +476,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_collection_job_leases":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_collection_checkpoints":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_observations":                       observationPrivileges("SELECT", "INSERT"),
+			"source_observation_payloads":               observationPrivileges("SELECT", "INSERT"),
 			"source_observation_queue":                  observationPrivileges("SELECT", "INSERT"),
 			"source_observation_collisions":             observationPrivileges("INSERT"),
 		},
@@ -470,6 +487,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_collection_target_reasons":         observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_job_leases":             observationPrivileges("SELECT"),
 			"source_observations":                       observationPrivileges("SELECT", "DELETE"),
+			"source_observation_payloads":               observationPrivileges("SELECT"),
 			"source_observation_queue":                  observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_collisions":             observationPrivileges("SELECT", "DELETE"),
 			"source_observation_consumer_offsets":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
@@ -496,6 +514,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 	sequencePrivileges := map[string]map[string]map[string]bool{
 		roles.scraper: {
 			"source_observations_id_seq":           observationPrivileges("USAGE", "SELECT"),
+			"source_observation_payloads_id_seq":   observationPrivileges("USAGE", "SELECT"),
 			"source_observation_collisions_id_seq": observationPrivileges("USAGE", "SELECT"),
 		},
 		roles.runtime: {
@@ -580,7 +599,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		roles.scraper: {
 			{name: "repository_projection_current_0002_02.sql", args: []any{int64(0)}},
 			{name: "repository_contract_current_0004_04.sql", args: []any{"youtubejs", communityPageKind}},
-			{name: "repository_observation_identity_0006_06.sql", args: []any{"youtubejs", communityPageKind, "missing", "missing", int16(1), int64(1)}},
+			{name: "repository_publish_set_0032_32.sql", args: []any{"[]"}},
 		},
 		roles.runtime: {
 			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
@@ -673,6 +692,7 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		"public.delete_source_observation_retention_batch(text[],timestamp with time zone[],integer)",
 		"public.delete_source_observation_application_retention_batch(text[],timestamp with time zone[],integer)",
 		"public.delete_source_collection_checkpoint_retention_batch(timestamp with time zone,integer)",
+		"public.delete_source_observation_payload_batch(timestamp with time zone,integer)",
 	}
 
 	for role, want := range map[string]bool{roles.scraper: false, roles.runtime: true} {
@@ -712,6 +732,7 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		"SELECT * FROM public.delete_source_observation_retention_batch(ARRAY['community_page']::text[], ARRAY[clock_timestamp()]::timestamptz[], 1)",
 		"SELECT * FROM public.delete_source_observation_application_retention_batch(ARRAY['community_page']::text[], ARRAY[clock_timestamp()]::timestamptz[], 1)",
 		"SELECT * FROM public.delete_source_collection_checkpoint_retention_batch(clock_timestamp(), 1)",
+		"SELECT public.delete_source_observation_payload_batch(clock_timestamp(), 1)",
 	} {
 		rows, queryErr := tx.Query(t.Context(), query)
 		if queryErr != nil {

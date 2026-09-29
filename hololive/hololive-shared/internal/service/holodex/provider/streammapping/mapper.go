@@ -82,16 +82,14 @@ func (m *StreamMapper) MapChannelsResponse(rawChannels []ChannelRaw) []*domain.C
 
 func (m *StreamMapper) MapChannelResponse(raw *ChannelRaw) *domain.Channel {
 	return &domain.Channel{
-		ID:              raw.ID,
-		Name:            raw.Name,
-		EnglishName:     raw.EnglishName,
-		Photo:           raw.Photo,
-		Twitter:         raw.Twitter,
-		VideoCount:      raw.VideoCount,
-		SubscriberCount: raw.SubscriberCount,
-		Org:             raw.Org,
-		Suborg:          raw.Suborg,
-		Group:           raw.Group,
+		ID:          raw.ID,
+		Name:        raw.Name,
+		EnglishName: raw.EnglishName,
+		Photo:       raw.Photo,
+		Twitter:     raw.Twitter,
+		Org:         raw.Org,
+		Suborg:      raw.Suborg,
+		Group:       raw.Group,
 	}
 }
 

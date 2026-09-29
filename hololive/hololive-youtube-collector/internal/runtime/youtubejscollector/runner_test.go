@@ -233,7 +233,7 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 
 	metadata, err := NewChannelMetadataRunner(fake).Collect(t.Context(), youtubeInput(t,
 		restrictedTestChannelID, "youtubejs_channel_metadata",
-		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+		contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -246,7 +246,7 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 		t.Fatalf("live observations = %#v", liveObservations)
 	}
 
-	if len(metadataObservations) != 3 {
+	if len(metadataObservations) != 2 {
 		t.Fatalf("metadata observations = %#v", metadataObservations)
 	}
 
@@ -332,13 +332,13 @@ func TestChannelMetadataRunnerDoesNotRequireLiveSchedule(t *testing.T) {
 
 	output, err := NewChannelMetadataRunner(&channelFake{result: result}).Collect(
 		t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_channel_metadata",
-			contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
+			contract.KindChannelProfile, contract.KindChannelPhoto),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(output.Output().Observations()) != 3 {
+	if len(output.Output().Observations()) != 2 {
 		t.Fatalf("metadata observations = %#v", output.Output().Observations())
 	}
 }
@@ -361,7 +361,7 @@ func TestChannelRunnersSkipMissingLiveTabButKeepMetadata(t *testing.T) {
 
 	metadata, err := NewChannelMetadataRunner(fake).Collect(t.Context(), youtubeInput(t,
 		restrictedTestChannelID, "youtubejs_channel_metadata",
-		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+		contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +371,7 @@ func TestChannelRunnersSkipMissingLiveTabButKeepMetadata(t *testing.T) {
 		t.Fatalf("missing live tab published %#v", live.Output().Observations())
 	}
 
-	if len(metadata.Output().Observations()) != 3 {
+	if len(metadata.Output().Observations()) != 2 {
 		t.Fatalf("metadata observations = %#v", metadata.Output().Observations())
 	}
 }
@@ -387,7 +387,7 @@ func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
 
 	output, err := NewChannelMetadataRunner(fake).Collect(t.Context(), youtubeInput(t,
 		restrictedTestChannelID, "youtubejs_channel_metadata",
-		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+		contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -439,12 +439,11 @@ func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
 	fake := &channelFake{result: result}
 	input := youtubeInput(t,
 		restrictedTestChannelID, "youtubejs_channel_metadata",
-		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+		contract.KindChannelProfile, contract.KindChannelPhoto,
 	)
 
 	input = withEnabled(t, input, map[contract.ObservationKind][]string{
-		contract.KindChannelStats:   {restrictedTestChannelID},
-		contract.KindChannelProfile: {},
+		contract.KindChannelProfile: {restrictedTestChannelID},
 		contract.KindChannelPhoto:   {},
 	})
 
@@ -454,7 +453,7 @@ func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
 	}
 
 	observations := output.Output().Observations()
-	if fake.calls != 1 || len(observations) != 1 || observations[0].ObservationKind != contract.KindChannelStats {
+	if fake.calls != 1 || len(observations) != 1 || observations[0].ObservationKind != contract.KindChannelProfile {
 		t.Fatalf("calls=%d observations=%#v", fake.calls, observations)
 	}
 }

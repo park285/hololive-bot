@@ -48,7 +48,6 @@ import (
 //   - api_stream.go: 스트림/채널 조회
 //   - api_stats.go: 봇 통계
 //   - api_settings.go: 설정/활동 로그/이름매핑
-//   - api_milestone.go: 마일스톤 조회
 //   - api_template.go: 템플릿 관리
 type Handler struct {
 	repository                 *member.Repository

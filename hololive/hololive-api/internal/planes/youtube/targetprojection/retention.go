@@ -7,8 +7,12 @@ import (
 	"time"
 )
 
+const projectionRetentionTimeout = 8 * time.Second
+
 type RetentionResult struct {
 	LeasesDeleted      int64
+	ReasonsDeleted     int64
+	TargetsDeleted     int64
 	GenerationsDeleted int64
 }
 
@@ -17,6 +21,10 @@ func (r *Refresher) Retain(ctx context.Context, now time.Time, age time.Duration
 		return RetentionResult{}, errors.New("retain youtube target projections: invalid retention request")
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, projectionRetentionTimeout)
+
+	defer cancel()
+
 	cutoff := now.UTC().Add(-age)
 
 	leaseTag, err := r.pool.Exec(ctx, mustSQL("delete_retired_job_leases.sql"), cutoff, batchSize)
@@ -24,13 +32,15 @@ func (r *Refresher) Retain(ctx context.Context, now time.Time, age time.Duration
 		return RetentionResult{}, fmt.Errorf("retain youtube target projections: delete retired job leases: %w", err)
 	}
 
-	generationTag, err := r.pool.Exec(ctx, mustSQL("delete_retired_generations.sql"), cutoff, batchSize)
+	var result RetentionResult
+
+	result.LeasesDeleted = leaseTag.RowsAffected()
+
+	err = r.pool.QueryRow(ctx, mustSQL("delete_retired_generations.sql"), cutoff, batchSize).
+		Scan(&result.ReasonsDeleted, &result.TargetsDeleted, &result.GenerationsDeleted)
 	if err != nil {
-		return RetentionResult{LeasesDeleted: leaseTag.RowsAffected()}, fmt.Errorf("retain youtube target projections: delete retired generations: %w", err)
+		return RetentionResult{LeasesDeleted: result.LeasesDeleted}, fmt.Errorf("retain youtube target projections: delete retired generation rows: %w", err)
 	}
 
-	return RetentionResult{
-		LeasesDeleted:      leaseTag.RowsAffected(),
-		GenerationsDeleted: generationTag.RowsAffected(),
-	}, nil
+	return result, nil
 }

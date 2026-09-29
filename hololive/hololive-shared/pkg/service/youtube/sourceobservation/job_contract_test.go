@@ -146,8 +146,8 @@ func subjectJobContractFixtures() []jobContractFixture {
 		{
 			mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_metadata"),
 			JobClassSubject, JobMembershipExactSubject, "",
-			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelProfile, contract.KindChannelStats},
-			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelProfile, contract.KindChannelStats},
+			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelProfile},
+			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelProfile},
 			nil,
 		},
 		{
@@ -172,9 +172,9 @@ func globalJobContractFixtures() []jobContractFixture {
 		{
 			mustJobID(contract.ProviderHolodex, "holodex_metadata"),
 			JobClassGlobal, JobMembershipCurrentProjection, "global:holodex_metadata",
-			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelStats},
-			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelStats},
-			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelStats},
+			[]contract.ObservationKind{contract.KindChannelPhoto},
+			[]contract.ObservationKind{contract.KindChannelPhoto},
+			[]contract.ObservationKind{contract.KindChannelPhoto},
 		},
 		{
 			mustJobID(contract.ProviderHolodex, "holodex_schedule"),

@@ -7,7 +7,7 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
         ('youtubejs_video_live', ARRAY['video_live_check'], FALSE),
         ('community_collect', ARRAY['community_page'], FALSE),
         ('youtubejs_content', ARRAY['video_list', 'shorts_list'], TRUE),
-        ('youtubejs_channel_metadata', ARRAY['channel_stats', 'channel_profile', 'channel_photo'], FALSE)
+        ('youtubejs_channel_metadata', ARRAY['channel_profile', 'channel_photo'], FALSE)
 ), current_projection AS (
     SELECT generation FROM youtube_collection_projection_generations
     WHERE status = 'CURRENT' AND valid_until > statement_timestamp()

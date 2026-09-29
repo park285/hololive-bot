@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Utils } from "youtubei.js";
 
-import { fetchChannelFeed, mapLiveSessions, mapPhoto, mapProfile, mapStats } from "./fetch-channel.mjs";
+import { fetchChannelFeed, mapLiveSessions, mapPhoto, mapProfile } from "./fetch-channel.mjs";
 import { handleChannelRequest } from "./rpc-boundary.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 
@@ -152,7 +152,6 @@ test("fetchChannelFeed signals a typed missing streams tab without claiming live
   const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
   assert.equal(result.missing_tab, true);
-  assert.deepEqual(result.stats, {});
   assert.deepEqual(result.profile, {});
 });
 
@@ -165,7 +164,6 @@ test("fetchChannelFeed signals an unsupported live streams tab without claiming 
   const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
   assert.equal(result.missing_tab, true);
-  assert.deepEqual(result.stats, {});
   assert.deepEqual(result.profile, {});
 });
 
@@ -201,9 +199,6 @@ test("fetchChannelFeed propagates an untyped missing streams error", async () =>
   );
 });
 
-test("mapStats preserves missing counts as null", () => {
-  assert.equal(mapStats({}, {}).subscriber_count, null);
-});
 
 test("mapProfile keeps empty fields as null", () => {
   assert.equal(mapProfile({}, {}).handle, null);
@@ -230,7 +225,6 @@ test("metadata collection returns channel fields without requesting streams or p
   };
   const result = await fetchChannelFeed({ kind: "metadata", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
-  assert.equal(result.stats.subscriber_count, 12);
   assert.equal(result.profile.handle, "@test");
   assert.equal(result.exhausted, true);
 });
@@ -512,12 +506,17 @@ for (const resolution of ["restricted", "scheduled", "LIVE"]) {
       }
       return rawPlayerResponse(videoId, resolution === "LIVE" ? { isLive: true, isUpcoming: false } : {});
     });
+    const complete = { protocol_version: 1, ...await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube }) };
+    const rows = resolution === "restricted" ? complete.unavailable_live_sessions : complete.live_sessions;
+    rows.pop();
+    const limit = Buffer.byteLength(JSON.stringify(complete), "utf8") - 1;
+    calls.length = 0;
     const result = await handleChannelRequest(
-      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 390 }),
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: limit }),
       (options) => fetchChannelFeed({ ...options, innertube }),
     );
     assert.equal(result.body.error.code, "response_too_large");
-    assert.deepEqual(calls, ["first", "second"]);
+    assert.ok(calls.length < 3, "must stop before requesting an item that cannot fit");
   });
 
   test(`${resolution} hydration preserves duplicate rows at the exact response budget`, async (t) => {

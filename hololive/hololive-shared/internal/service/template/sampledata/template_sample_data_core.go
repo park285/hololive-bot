@@ -29,8 +29,8 @@ func templateSampleCoreData() map[domain.TemplateKey]any {
 	addTemplateCommandStreamSamples(data)
 	addTemplateCommandAlarmSamples(data)
 	addTemplateAlarmDispatchSamples(data)
-	addTemplateDirectoryMilestoneSamples(data)
-	addTemplateStatsCalendarSamples(data)
+	addTemplateDirectorySamples(data)
+	addTemplateCalendarSamples(data)
 	addTemplateMemberLookupSamples(data)
 	addTemplateCelebrationSamples(data)
 
@@ -89,18 +89,7 @@ func addTemplateMemberLookupSamples(data map[domain.TemplateKey]any) {
 	}
 }
 
-func addTemplateStatsCalendarSamples(data map[domain.TemplateKey]any) {
-	data[domain.TemplateKeyCmdStatsCount] = map[string]any{
-		fieldMemberName: sampleMemberMiko,
-		"Subscribers":   sampleSubs200Man,
-	}
-	data[domain.TemplateKeyCmdStatsGainers] = map[string]any{
-		"Period": "주간",
-		"Gainers": []map[string]any{
-			{"Rank": 1, fieldMemberName: sampleMemberMiko, "Delta": "1만 2345", "Current": sampleSubs200Man},
-			{"Rank": 2, fieldMemberName: "호시마치 스이세이", "Delta": "8500", "Current": "205만"},
-		},
-	}
+func addTemplateCalendarSamples(data map[domain.TemplateKey]any) {
 	data[domain.TemplateKeyCmdCalendar] = map[string]any{
 		"Year":     2026,
 		"Month":    6,
@@ -141,11 +130,6 @@ func addTemplateOutboxSingles(data map[domain.TemplateKey]any) {
 		"IsPremiere":           false,
 		"IsUpcomingPremiere":   false,
 		"MinutesUntilPremiere": 0,
-	}
-	data[domain.TemplateKeyOutboxMilestone] = map[string]any{
-		fieldMemberName: sampleMemberMiko,
-		fieldKind:       "MILESTONE",
-		"Milestone":     sampleSubs200Man,
 	}
 }
 
@@ -317,26 +301,13 @@ func templateAlarmNotificationSample(minutesUntil int) map[string]any {
 	}
 }
 
-func addTemplateDirectoryMilestoneSamples(data map[domain.TemplateKey]any) {
+func addTemplateDirectorySamples(data map[domain.TemplateKey]any) {
 	data[domain.TemplateKeyCmdMemberDirectory] = map[string]any{
 		fieldEmoji: map[string]string{"Star": "⭐"},
 		"Total":    2,
 		"Groups":   []map[string]any{templateMemberDirectoryGroup()},
 	}
 	data[domain.TemplateKeyCmdProfile] = templateProfileSample()
-	data[domain.TemplateKeyCmdMilestoneAchieved] = map[string]any{
-		fieldMemberName: sampleMemberMiko,
-		"Milestone":     sampleSubs200Man,
-		fieldEmoji:      map[string]string{"Trophy": "🏆"},
-	}
-	data[domain.TemplateKeyCmdMilestoneApproach] = map[string]any{
-		fieldMemberName:   sampleMemberMiko,
-		"CurrentSubs":     1990000,
-		"Milestone":       sampleSubs200Man,
-		"TargetMilestone": sampleSubs200Man,
-		"Remaining":       10000,
-		fieldEmoji:        map[string]string{"Rocket": "🚀"},
-	}
 }
 
 func templateProfileSample() map[string]any {

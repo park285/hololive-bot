@@ -170,37 +170,6 @@ func (s *alarmDispatchRunnerTestSender) SendMessageWithClientRequestID(_ context
 	return nil
 }
 
-func TestAlarmDispatchRunnerYouTubeOutboxMilestoneUsesTextDispatch_f8d2b5af(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-
-	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
-	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
-		Kind:       domain.OutboxKindMilestone,
-		AlarmType:  domain.AlarmTypeLive,
-		ChannelID:  testAlarmChannelID,
-		MemberName: "Milestone Member",
-		Items: []domain.YouTubeOutboxItem{{
-			OutboxID:  1,
-			ContentID: "milestone-1",
-			Payload:   `{"milestone":"100만"}`,
-		}},
-	}
-
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
-	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
-
-	processed, err := runner.runOnce(t.Context())
-
-	require.NoError(t, err)
-	assert.True(t, processed)
-	require.Len(t, sender.messages, 1)
-	assert.Contains(t, sender.messages[0], "100만")
-	assert.Len(t, consumer.markDispatched, 1)
-	assert.Empty(t, consumer.scheduledRetry)
-	assert.Empty(t, consumer.movedDLQ)
-}
-
 func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}}}
 	sender := &alarmDispatchRunnerTestSender{}

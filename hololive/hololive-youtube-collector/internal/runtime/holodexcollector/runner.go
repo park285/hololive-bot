@@ -92,7 +92,7 @@ func (r *Runner) buildBatch(input *collectutil.RunInput, rows []parsedLive) ([]c
 
 	var envelopes []contract.Envelope
 
-	if job.Emits(contract.KindLiveSnapshot) || job.Emits(contract.KindChannelStats) || job.Emits(contract.KindChannelPhoto) {
+	if job.Emits(contract.KindLiveSnapshot) || job.Emits(contract.KindChannelPhoto) {
 		envelopes, err = r.channelEnvelopes(input, job, groupByRequestedChannel(rows, allowed))
 		if err != nil {
 			return nil, fmt.Errorf("channel envelopes: %w", err)
@@ -131,7 +131,7 @@ func groupByRequestedChannel(rows []parsedLive, allowed map[string]struct{}) map
 func (r *Runner) channelEnvelopes(input *collectutil.RunInput, job sourceobservation.JobContract, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
 	kindCount := 0
 
-	for _, kind := range [...]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelPhoto} {
+	for _, kind := range [...]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindChannelPhoto} {
 		if job.Emits(kind) {
 			kindCount++
 		}
@@ -169,19 +169,6 @@ func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, job sourceobse
 			livePayload(channelID, sessions),
 			true,
 		)
-		if err != nil {
-			return nil, fmt.Errorf("append channel kind: %w", err)
-		}
-	}
-
-	// 다른 작업의 메타데이터 충돌로 방송·일정 관측을 막지 않고 불필요한 순회도 피합니다.
-	if job.Emits(contract.KindChannelStats) {
-		stats, ok, err := statsPayload(channelID, sessions)
-		if err != nil {
-			return nil, fmt.Errorf("stats payload: %w", err)
-		}
-
-		envelopes, err = r.appendChannelKind(input, envelopes, contract.KindChannelStats, channelID, stats, ok)
 		if err != nil {
 			return nil, fmt.Errorf("append channel kind: %w", err)
 		}

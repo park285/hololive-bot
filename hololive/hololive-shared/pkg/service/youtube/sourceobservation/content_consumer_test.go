@@ -123,7 +123,8 @@ func TestContentConsumerInvalidItemDoesNotBlockLaterItem(t *testing.T) {
 		t.Fatalf("publish first: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, `UPDATE source_observations SET payload = $1 WHERE id = $2`, []byte(`{"broken":true}`), first.Results[0].ObservationID); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE source_observation_payloads SET payload = $1, payload_sha256 = decode($3, 'hex')
+		WHERE id = (SELECT payload_id FROM source_observations WHERE id = $2)`, []byte(`{"broken":true}`), first.Results[0].ObservationID, contract.SHA256Hex([]byte(`{"broken":true}`))); err != nil {
 		t.Fatalf("corrupt payload: %v", err)
 	}
 

@@ -59,7 +59,6 @@ type reviveStaleFixture struct {
 	oldNextAttempt   time.Time
 	freshVideoID     int64
 	freshLiveID      int64
-	freshMilestoneID int64
 	zeroDeliveryID   int64
 	freshCommunityID int64
 	staleVideoID     int64
@@ -75,7 +74,7 @@ func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *t
 
 	revived, err := cm.reviveStaleFailedOutbox(ctx, 60*time.Minute, 50)
 	require.NoError(t, err)
-	assert.Equal(t, int64(5), revived, "fresh fanout 실패 4건과 미전송 room 논리 그룹 1건 revive")
+	assert.Equal(t, int64(4), revived, "fresh fanout 실패 3건과 미전송 room 논리 그룹 1건 revive")
 
 	assertReviveOutboxStatuses(t, db, fixture)
 
@@ -134,7 +133,6 @@ func seedReviveStaleFailedOutboxFixture(t *testing.T, db *pgxpool.Pool) reviveSt
 		oldNextAttempt:   oldNextAttempt,
 		freshVideoID:     freshVideo.ID,
 		freshLiveID:      newFailedOutbox(domain.OutboxKindLiveStream, "live-fresh", freshCreatedAt).ID,
-		freshMilestoneID: newFailedOutbox(domain.OutboxKindMilestone, "ms-fresh", freshCreatedAt).ID,
 		zeroDeliveryID:   newFailedOutbox(domain.OutboxKindNewVideo, "video-nodelivery", freshCreatedAt).ID,
 		freshCommunityID: newFailedOutbox(domain.OutboxKindCommunityPost, "post-fresh", freshCreatedAt).ID,
 		staleVideoID:     newFailedOutbox(domain.OutboxKindNewVideo, "video-stale", staleCreatedAt).ID,
@@ -148,7 +146,6 @@ func assertReviveOutboxStatuses(t *testing.T, db *pgxpool.Pool, fixture reviveSt
 
 	assertReviveOutboxProjectedPending(t, db, fixture.freshVideoID, fixture.oldNextAttempt, "freshVideo")
 	assertReviveOutboxRevived(t, db, fixture.freshLiveID, fixture.oldNextAttempt, "freshLive")
-	assertReviveOutboxRevived(t, db, fixture.freshMilestoneID, fixture.oldNextAttempt, "freshMilestone")
 	assertReviveOutboxRevived(t, db, fixture.zeroDeliveryID, fixture.oldNextAttempt, "zeroDeliveryVideo")
 	assertReviveOutboxRevived(t, db, fixture.freshCommunityID, fixture.oldNextAttempt, "freshCommunity")
 	assertReviveOutboxStillFailed(t, db, fixture.staleVideoID, "staleVideo")
@@ -304,7 +301,7 @@ func insertFailedReviveOutbox(
 		payload = `{"canonical_post_id":"short:` + contentID + `","video_id":"` + contentID + `"}`
 	case domain.OutboxKindCommunityPost:
 		payload = `{"canonical_post_id":"community:` + contentID + `","post_id":"` + contentID + `"}`
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
 	}
 
 	row := &domain.YouTubeNotificationOutbox{

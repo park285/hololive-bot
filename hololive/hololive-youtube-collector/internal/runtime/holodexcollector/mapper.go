@@ -30,11 +30,9 @@ type liveRow struct {
 }
 
 type liveChannel struct {
-	ID              string `json:"id"`
-	Photo           string `json:"photo"`
-	SubscriberCount *int64 `json:"subscriber_count"`
-	VideoCount      *int64 `json:"video_count"`
-	Name            string `json:"name"`
+	ID    string `json:"id"`
+	Photo string `json:"photo"`
+	Name  string `json:"name"`
 }
 
 type parsedLive struct {
@@ -267,71 +265,6 @@ func livePayload(channelID string, sessions []parsedLive) contract.LiveSnapshotV
 			Filters:             contract.LiveFiltersV1{Statuses: statuses},
 		},
 	}
-}
-
-func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1, bool, error) {
-	subscriber, err := uniqueStatsCount(rows, "subscriber_count", func(channel *liveChannel) *int64 {
-		return channel.SubscriberCount
-	})
-	if err != nil {
-		return contract.ChannelStatsV1{}, false, fmt.Errorf("unique stats count: %w", err)
-	}
-
-	videos, err := uniqueStatsCount(rows, "video_count", func(channel *liveChannel) *int64 {
-		return channel.VideoCount
-	})
-	if err != nil {
-		return contract.ChannelStatsV1{}, false, fmt.Errorf("unique stats count: %w", err)
-	}
-
-	fields := make([]string, 0, 2)
-
-	if subscriber != nil {
-		fields = append(fields, "subscriber_count")
-	}
-
-	if videos != nil {
-		fields = append(fields, "video_count")
-	}
-
-	if len(fields) == 0 {
-		return contract.ChannelStatsV1{}, false, nil
-	}
-
-	return contract.ChannelStatsV1{
-		ChannelID:       channelID,
-		SubscriberCount: subscriber,
-		VideoCount:      videos,
-		Coverage: contract.ChannelStatsCoverageV1{
-			ChannelID: channelID,
-			Fields:    fields,
-		},
-	}, true, nil
-}
-
-func uniqueStatsCount(rows []parsedLive, field string, valueOf func(*liveChannel) *int64) (*int64, error) {
-	var selected *int64
-
-	for i := range rows {
-		value := valueOf(&rows[i].row.Channel)
-		if value == nil {
-			continue
-		}
-
-		if selected != nil {
-			if *selected != *value {
-				return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel "+field+" metadata conflicts across rows")
-			}
-
-			continue
-		}
-
-		copied := *value
-
-		selected = &copied
-	}
-
-	return selected, nil
 }
 
 func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1, bool, error) {

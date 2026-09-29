@@ -35,8 +35,7 @@ const (
 	testTableDeliveryTelemetry    = "youtube_notification_delivery_telemetry"
 	testTableContentAlarmTracking = "youtube_content_alarm_tracking"
 
-	testPayloadVideoOne  = `{"video_id":"v1","title":"영상1"}`
-	testPayloadShortOne  = `{"canonical_post_id":"short:short-1","video_id":"s1","title":"쇼츠1"}`
-	testPayloadShortTwo  = `{"canonical_post_id":"short:short-2","video_id":"s2","title":"쇼츠2"}`
-	testPayloadMilestone = `{"milestone":"100만"}`
+	testPayloadVideoOne = `{"video_id":"v1","title":"영상1"}`
+	testPayloadShortOne = `{"canonical_post_id":"short:short-1","video_id":"s1","title":"쇼츠1"}`
+	testPayloadShortTwo = `{"canonical_post_id":"short:short-2","video_id":"s2","title":"쇼츠2"}`
 )

@@ -115,7 +115,6 @@ export const stubFetchers = {
   fetchChannel() {
     return {
       live_sessions: [],
-      stats: {},
       profile: {},
       photo: [],
       page_count: 1,

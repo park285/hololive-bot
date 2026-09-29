@@ -233,7 +233,6 @@ func evidenceRetentionAges(cfg *apiplane.YouTubePlaneRetentionConfig) map[contra
 	addEvidenceRetentionAge(ages, contract.KindShortsList, cfg.ShortsListAge)
 	addEvidenceRetentionAge(ages, contract.KindLiveSnapshot, cfg.LiveSnapshotAge)
 	addEvidenceRetentionAge(ages, contract.KindViewerSample, cfg.ViewerSampleAge)
-	addEvidenceRetentionAge(ages, contract.KindChannelStats, cfg.ChannelStatsAge)
 	addEvidenceRetentionAge(ages, contract.KindChannelProfile, cfg.ChannelProfileAge)
 	addEvidenceRetentionAge(ages, contract.KindChannelPhoto, cfg.ChannelPhotoAge)
 	addEvidenceRetentionAge(ages, contract.KindSchedule, cfg.ScheduleSnapshotAge)
@@ -303,6 +302,14 @@ func recordProjectionRetention(result targetprojection.RetentionResult, elapsed 
 
 	if result.LeasesDeleted > 0 {
 		youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_job_leases").Add(float64(result.LeasesDeleted))
+	}
+
+	if result.ReasonsDeleted > 0 {
+		youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_target_reasons").Add(float64(result.ReasonsDeleted))
+	}
+
+	if result.TargetsDeleted > 0 {
+		youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_targets").Add(float64(result.TargetsDeleted))
 	}
 
 	if result.GenerationsDeleted > 0 {

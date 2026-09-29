@@ -188,6 +188,11 @@ func (r *Repository) runRetentionSteps(
 			run:   func() (int64, error) { return r.deleteEvidenceBatch(ctx, cfg, now) },
 		},
 		{
+			table: "source_observation_payloads",
+			age:   minEvidenceAge(cfg.EvidenceAgeByKind),
+			run:   func() (int64, error) { return r.deleteUnreferencedPayloadBatch(ctx, cfg, now) },
+		},
+		{
 			table: "source_observation_applications",
 			age:   minApplicationAuditAge(cfg),
 			run:   func() (int64, error) { return r.deleteApplicationBatch(ctx, cfg, now) },
@@ -307,6 +312,28 @@ func (r *Repository) deleteEvidenceBatch(ctx context.Context, cfg RetentionConfi
 	}
 
 	return out, nil
+}
+
+// A cursor bounds each scan even when most dictionary entries are still live.
+// The FK, row locks and the publisher's KEY SHARE prevent collecting a payload
+// between its lookup and the new observation's INSERT.
+func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg RetentionConfig, now time.Time) (int64, error) {
+	if minEvidenceAge(cfg.EvidenceAgeByKind) == 0 {
+		return 0, nil
+	}
+
+	var removed int64
+
+	if err := r.pool.QueryRow(
+		ctx,
+		mustSQL("repository_retention_delete_payloads.sql"),
+		now.Add(-time.Hour),
+		cfg.BatchSize,
+	).Scan(&removed); err != nil {
+		return 0, fmt.Errorf("collect unreferenced source observation payloads: %w", err)
+	}
+
+	return removed, nil
 }
 
 func (r *Repository) deleteApplicationBatch(ctx context.Context, cfg RetentionConfig, now time.Time) (int64, error) {

@@ -57,12 +57,6 @@ func TestOutboxKind_ToAlarmType(t *testing.T) {
 			kind: domain.OutboxKindCommunityPost,
 			want: domain.AlarmTypeCommunity,
 		},
-		{
-			// MILESTONE → AlarmTypeLive (default)
-			name: "MILESTONE → AlarmTypeLive",
-			kind: domain.OutboxKindMilestone,
-			want: domain.AlarmTypeLive,
-		},
 	}
 
 	for _, tt := range tests {
@@ -107,12 +101,6 @@ func TestOutboxKind_ToTemplateKey(t *testing.T) {
 			name: "COMMUNITY_POST → TemplateKeyOutboxCommunity",
 			kind: domain.OutboxKindCommunityPost,
 			want: domain.TemplateKeyOutboxCommunity,
-		},
-		{
-			// MILESTONE → TemplateKeyOutboxMilestone
-			name: "MILESTONE → TemplateKeyOutboxMilestone",
-			kind: domain.OutboxKindMilestone,
-			want: domain.TemplateKeyOutboxMilestone,
 		},
 		{
 			// 알 수 없는 종류 → TemplateKeyOutboxVideo (default)

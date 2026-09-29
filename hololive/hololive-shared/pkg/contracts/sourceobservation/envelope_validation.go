@@ -38,7 +38,7 @@ func (p Provider) Valid() bool {
 func (k ObservationKind) Valid() bool {
 	switch k {
 	case KindCommunityPage, KindVideoList, KindShortsList, KindLiveSnapshot,
-		KindViewerSample, KindChannelStats, KindChannelProfile, KindChannelPhoto, KindSchedule,
+		KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule,
 		KindChannelLiveCheck, KindVideoLiveCheck:
 		return true
 	default:
@@ -67,7 +67,7 @@ func KindAllowsSourceEventTime(kind ObservationKind) bool {
 	switch kind {
 	case KindCommunityPage, KindLiveSnapshot, KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule:
 		return true
-	case KindVideoList, KindShortsList, KindChannelStats, KindChannelLiveCheck, KindVideoLiveCheck:
+	case KindVideoList, KindShortsList, KindChannelLiveCheck, KindVideoLiveCheck:
 		return false
 	default:
 		return false

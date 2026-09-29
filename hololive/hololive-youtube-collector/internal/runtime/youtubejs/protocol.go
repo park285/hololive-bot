@@ -286,12 +286,6 @@ type LiveSessionItem struct {
 	EndedAt      *time.Time `json:"ended_at,omitempty"`
 }
 
-type ChannelStatsItem struct {
-	SubscriberCount *int64 `json:"subscriber_count"`
-	ViewCount       *int64 `json:"view_count"`
-	VideoCount      *int64 `json:"video_count"`
-}
-
 type ChannelProfileItem struct {
 	Handle      *string `json:"handle"`
 	Description *string `json:"description"`
@@ -320,7 +314,6 @@ type ChannelResult struct {
 
 	LiveSessions            []LiveSessionItem        `json:"live_sessions"`
 	UnavailableLiveSessions []UnavailableLiveSession `json:"unavailable_live_sessions,omitempty"`
-	Stats                   ChannelStatsItem         `json:"stats"`
 	Profile                 ChannelProfileItem       `json:"profile"`
 	Photo                   []ChannelPhotoVariant    `json:"photo"`
 	MissingTab              bool                     `json:"missing_tab"`

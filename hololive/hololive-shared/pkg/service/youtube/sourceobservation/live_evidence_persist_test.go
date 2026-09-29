@@ -65,6 +65,9 @@ func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
 
 	// helper가 소유한 DB에서만 이전 저장 형태로 되돌려 production migration을 재생한다.
 	if _, err := pool.Exec(ctx, `
+		ALTER TABLE source_observations ADD COLUMN payload JSONB;
+		UPDATE source_observations observation SET payload = dictionary.payload
+		FROM source_observation_payloads dictionary WHERE dictionary.id = observation.payload_id;
 		ALTER TABLE youtube_live_reconciliation_heads DROP CONSTRAINT fk_youtube_live_head_pending_end;
 		DROP TABLE youtube_live_pending_ends, youtube_live_absence_slots;
 		ALTER TABLE youtube_live_reconciliation_heads
@@ -84,6 +87,10 @@ func TestLiveEvidenceUpgradeRestoresExistingCandidate(t *testing.T) {
 
 	if err := dbtest.ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("idempotent migration replay: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, `ALTER TABLE source_observations DROP COLUMN payload`); err != nil {
+		t.Fatal(err)
 	}
 
 	var restored time.Time

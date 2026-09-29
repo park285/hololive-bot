@@ -420,8 +420,6 @@ hololive/hololive-shared/internal/service/youtube/reconcile/profile/reduce.go
 hololive/hololive-shared/internal/service/youtube/reconcile/profile/types.go
 hololive/hololive-shared/internal/service/youtube/reconcile/schedule/reduce.go
 hololive/hololive-shared/internal/service/youtube/reconcile/schedule/types.go
-hololive/hololive-shared/internal/service/youtube/reconcile/stats/reduce.go
-hololive/hololive-shared/internal/service/youtube/reconcile/stats/types.go
 hololive/hololive-shared/internal/service/youtube/reconcile/viewer/reduce.go
 hololive/hololive-shared/internal/service/youtube/reconcile/viewer/types.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/initialdata/extractor.go
@@ -470,8 +468,6 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_photo_per
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_profile_consumer.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_profile_persist.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_reconcile.go
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_stats_consumer.go
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_stats_persist.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/community_canonical_writer.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/community_consumer.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/community_reconcile.go
@@ -532,8 +528,6 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repositor
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_session_upsert_0047_47.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_sessions_0045_45.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_subject_lock_0044_44.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_observation_identity_0006_06.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_observation_insert_0007_07.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_offset_upsert_0016_16.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_photo_head_0073_73.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_photo_head_upsert_0074_74.sql
@@ -563,16 +557,11 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repositor
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_collisions_0077_77.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_evidence_0079_79.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_live_absence_slots.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_payloads.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_queue_0076_76.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_replay_0078_78.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retry_0017_17.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_schedule_item_upsert_0059_59.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_stats_evidence_0064_64.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_stats_evidence_upsert_0063_63.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_stats_head_0065_65.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_stats_head_upsert_0066_66.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_stats_snapshot_delete_0068_68.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_stats_snapshot_insert_0067_67.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_target_enabled_0003_03.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_video_availability_upsert.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_viewer_channel_0062_62.sql
@@ -588,6 +577,7 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_commun
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_failure.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_finalize.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_helpers.go
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_payload.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_publish.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_publish_batch.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_publish_prepare.go

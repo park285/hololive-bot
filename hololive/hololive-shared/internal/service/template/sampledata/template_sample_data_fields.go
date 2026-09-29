@@ -36,5 +36,4 @@ const (
 
 	sampleMemberMiko   = "사쿠라 미코"
 	sampleMemberFubuki = "시라카미 후부키"
-	sampleSubs200Man   = "200만"
 )

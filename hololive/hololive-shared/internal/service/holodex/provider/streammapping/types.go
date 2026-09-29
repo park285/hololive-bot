@@ -3,16 +3,14 @@ package streammapping
 import "github.com/kapu/hololive-shared/pkg/domain"
 
 type ChannelRaw struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	EnglishName     *string `json:"english_name,omitempty"`
-	Photo           *string `json:"photo,omitempty"`
-	Twitter         *string `json:"twitter,omitempty"`
-	VideoCount      *int    `json:"video_count,omitempty"`
-	SubscriberCount *int    `json:"subscriber_count,omitempty"`
-	Org             *string `json:"org,omitempty"`
-	Suborg          *string `json:"suborg,omitempty"`
-	Group           *string `json:"group,omitempty"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	EnglishName *string `json:"english_name,omitempty"`
+	Photo       *string `json:"photo,omitempty"`
+	Twitter     *string `json:"twitter,omitempty"`
+	Org         *string `json:"org,omitempty"`
+	Suborg      *string `json:"suborg,omitempty"`
+	Group       *string `json:"group,omitempty"`
 }
 
 type StreamRaw struct {

@@ -46,7 +46,6 @@ func TestTemplateSampleData_OutboxTypes(t *testing.T) {
 		{domain.TemplateKeyOutboxShorts, "MemberName"},
 		{domain.TemplateKeyOutboxCommunity, "ContentText"},
 		{domain.TemplateKeyOutboxVideo, "Title"},
-		{domain.TemplateKeyOutboxMilestone, "Milestone"},
 	}
 
 	for _, tt := range tests {

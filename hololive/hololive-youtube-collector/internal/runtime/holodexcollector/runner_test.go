@@ -266,22 +266,6 @@ func TestRunnerRejectsConflictingChannelIdentity(t *testing.T) {
 	}
 }
 
-func TestMetadataRunnerRejectsConflictingStats(t *testing.T) {
-	t.Parallel()
-
-	body := []byte(`[
-		{"id":"video-a","status":"live","channel_id":"UC_A","channel":{"subscriber_count":10,"video_count":2}},
-		{"id":"video-b","status":"upcoming","channel_id":"UC_A","channel":{"subscriber_count":11,"video_count":2}}
-	]`)
-	output, err := NewMetadataRunner(&staticFetcher{body: body}).Collect(
-		t.Context(), holodexInputFor(t, "holodex_metadata", []string{channelA}),
-	)
-
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
-		t.Fatalf("error=%v output=%#v", err, output)
-	}
-}
-
 func TestMetadataRunnerRejectsConflictingPhotos(t *testing.T) {
 	t.Parallel()
 
@@ -323,7 +307,7 @@ func TestRunnersKeepCadenceKindsSeparate(t *testing.T) {
 		},
 		{
 			name: "metadata", runner: NewMetadataRunner(&staticFetcher{body: body}), jobKind: "holodex_metadata",
-			wantKinds: map[contract.ObservationKind]bool{contract.KindChannelStats: true, contract.KindChannelPhoto: true},
+			wantKinds: map[contract.ObservationKind]bool{contract.KindChannelPhoto: true},
 		},
 		{
 			name: "schedule", runner: NewScheduleRunner(&staticFetcher{body: body}), jobKind: "holodex_schedule",
@@ -423,7 +407,6 @@ func holodexInputWithLiveGeneration(
 
 	enabled := map[contract.ObservationKind][]string{
 		contract.KindLiveSnapshot:   requested,
-		contract.KindChannelStats:   requested,
 		contract.KindChannelPhoto:   requested,
 		contract.KindSchedule:       {officialScheduleSubject},
 		contract.KindChannelProfile: nil,
@@ -489,9 +472,9 @@ func (f *staticFetcher) Fetch(context.Context) ([]byte, error) {
 func TestRunnerDoesNotBuildUnrequestedChannelMetadata(t *testing.T) {
 	body := []byte(`[
 		{"id":"probe-live","title":"Live","channel_id":"UC_A","status":"live","start_actual":"2026-08-14T10:00:00Z",
-		 "channel":{"id":"UC_A","subscriber_count":10,"photo":"https://img.test/first.jpg"}},
+		 "channel":{"id":"UC_A","photo":"https://img.test/first.jpg"}},
 		{"id":"probe-soon","title":"Soon","channel_id":"UC_A","status":"upcoming","start_scheduled":"2026-08-14T12:00:00Z",
-		 "channel":{"id":"UC_A","subscriber_count":20,"photo":"https://img.test/second.jpg"}}
+		 "channel":{"id":"UC_A","photo":"https://img.test/second.jpg"}}
 	]`)
 
 	for _, kind := range []string{"holodex_live", "holodex_schedule", "holodex_metadata"} {

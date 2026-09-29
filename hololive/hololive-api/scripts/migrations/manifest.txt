@@ -92,3 +92,12 @@
 092 231_auth_session_generation.sql
 093 232_alarm_room_display_names.sql
 094 233_alarm_next_stream_template_removal.sql
+095 234_remove_channel_statistics.sql
+096 235_source_observation_application_active_unique.sql
+097 236_source_observation_application_drop_full_unique.sql
+098 237_bounded_projection_retention_and_vacuum.sql
+099 238_source_observation_payload_prepare.sql
+100 239_source_observation_payload_index.sql
+101 240_source_observation_payload_backfill_index.sql
+102 241_source_observation_payload_cutover.sql
+103 242_drop_payload_backfill_index.sql

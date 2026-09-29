@@ -8,6 +8,12 @@
 
 ## 미출시
 
+- 채널 수치 통계 기능을 완전히 제거합니다. 구독자 수 명령·통계 템플릿·producer/consumer·공개 채널 통계 필드·도메인과 통계 전용 DB 객체를 migration 234로 함께 제거하며, 채널 profile/photo·방송·일정·알림 구독은 유지합니다. 미확정 통계 발송이나 예상 밖 durable MILESTONE 이력이 있으면 migration을 거절합니다.
+- 관측 저장량을 줄입니다. migration 238–242는 JSONB(LZ4) payload를 kind/schema/canonical profile+전체 32바이트 digest로 공유하고 슬롯별 관측은 독립 보존합니다. bounded backfill, 참조 보호 GC, 손상 시 오류, 동시 insert 가시성 검증을 포함합니다. 구 payload 열·backfill 함수와 임시 index는 cutover에서 제거합니다. API와 collector fleet의 coordinated cutover가 필요하며 구 이미지 단독 rollback은 불가능합니다.
+- 보관 기본값을 일반 원본 7일·schedule/absence 14일·profile/photo 30일·live-check 2일로 조정합니다. PROCESSED queue 1일·DLQ 14일·collision/replay 30일·application 추가 유예 3일·checkpoint 2일·RETIRED projection 7일입니다. 보호된 active/pending/head 조건은 유지하고 운영 master 값은 자동 변경하지 않습니다.
+- migration 235–237은 application의 orphan 제외 부분 UNIQUE, reasons+targets 실제 행 수로 제한한 projection 정리와 table-local vacuum 설정을 적용합니다. application 결과는 한 INSERT로 묶고 발행 fence/contract 검증은 한 pipeline으로 보냅니다. 새 fallback·재수집·dual writer·런타임 의존성은 없습니다.
+- 상세 측정·미달 목표·운영 승인 경계는 [실행 기록](docs/current/plans/2026-09-29-youtube-storage-reduction.md#실행-기록--2026-09-29), 이행·복구는 [API runbook](docs/current/runbooks/hololive-api.md#youtube-관측-저장-구조-전환)에 기록합니다. 운영 migration·배포·백업 삭제·물리 공간 회수는 아직 수행하지 않았습니다.
+
 ## v7.0.1 - 2026-09-29
 
 - 이미지 빌드가 checkout의 umask에 따라 파일 모드가 달라지던 결함을 고칩니다. v7.0.0 배포에서 umask 077 checkout으로 빌드한 PO issuer 이미지의 `/app/po-sandbox` 파일이 600이라 uid 65532가 `worker.mjs`를 열지 못했고(EACCES) 중앙 쌍이 자동 rollback됐습니다. alarm-worker 이미지에도 600 파일이 들어갔습니다. PO issuer·collector·alarm-worker Dockerfile은 이미지에 실리는 Node 트리(`package.json`·`package-lock.json`·`src`)를 복사한 뒤 Node build stage에서 `chmod u=rwX,go=rX`로 파일 644·디렉터리 755로 맞춥니다. 기호 `COPY --chmod`는 BuildKit 전용이라 `CONTAINER_CLI=podman`(buildah)에서도 같은 결과가 나오도록 `RUN chmod`를 씁니다. 소유자와 umask 022 checkout의 산출물(모드·소유자·크기·내용)은 그대로입니다. `scripts/build/image-runtime-tree-permissions_test.sh`가 umask 077 checkout을 재현해 세 build stage를 빌드하고 runtime uid로 트리 전체를 읽는지 확인하며, pre-push 게이트는 이 Dockerfile들이 바뀔 때 이를 실행합니다(docker 필요, kapu 전용).
