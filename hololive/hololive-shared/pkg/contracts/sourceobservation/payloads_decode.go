@@ -3,6 +3,7 @@ package sourceobservation
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type payloadDecodeInput struct {
 	completeness       Completeness
 	contractGeneration int64
 	observedAt         time.Time
+	schemaVersion      int16
 }
 
 type payloadDecoder func(raw []byte, input payloadDecodeInput) (any, any, error)
@@ -45,6 +47,7 @@ func canonicalPayloadAndScope(envelope *Envelope) (payloadJSON, coverageJSON []b
 		completeness:       envelope.Completeness,
 		contractGeneration: envelope.ContractGeneration,
 		observedAt:         envelope.ObservedAt,
+		schemaVersion:      envelope.SchemaVersion,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("decode: %w", err)
@@ -123,12 +126,10 @@ func decodeShortsListPayload(raw []byte, input payloadDecodeInput) (payload, cov
 	return value, value.Coverage, nil
 }
 
-// decodeLiveSnapshotPayload는 세션 메타데이터를 담는 contract generation 2만 받는다. 이전 generation 1(identity/status/time만)
-// decoder는 runbook 제거 조건(youtube-collector.md "Live metadata contract", 활성화 4단계: generation 1 queue가 비고
-// replay 필요가 없음)이 T18(2026-09-26)에서 current generation 2·미처리 generation 1 관측 0건으로 충족되어 지웠다(계획
-// T11 C6, stack-audit 2026-09-26 holo-sourceobservation-live-snapshot-gen1). 남은 generation 1 관측은 unsupported로 드러난다.
+// generation 2는 과거 coverage 의미를 보존하고 generation 3는 streams 조회 증명을 요구한다.
+// 퇴역 generation 1 decoder는 기존 제거 조건을 충족해 삭제된 상태를 유지한다.
 func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
-	if input.contractGeneration != LiveSnapshotMetadataContractGeneration {
+	if input.contractGeneration != LiveSnapshotMetadataContractGeneration && input.contractGeneration != LiveSnapshotQueryContractGeneration {
 		return nil, nil, fmt.Errorf("unsupported live snapshot contract generation %d", input.contractGeneration)
 	}
 
@@ -141,7 +142,37 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 		return nil, nil, fmt.Errorf("normalize and validate: %w", err)
 	}
 
+	if err := validateLiveSnapshotQueryProof(&value, input); err != nil {
+		return nil, nil, err
+	}
+
 	return value, value.Coverage, nil
+}
+
+func validateLiveSnapshotQueryProof(value *LiveSnapshotV1, input payloadDecodeInput) error {
+	if input.contractGeneration == LiveSnapshotMetadataContractGeneration && value.Query != nil {
+		return errors.New("legacy live snapshot cannot carry query proof")
+	}
+
+	if input.contractGeneration == LiveSnapshotQueryContractGeneration {
+		query := value.Query
+		if query == nil || query.ChannelID != input.subjectKey || query.Source != "streams" || query.PageCount != 1 {
+			return errors.New("live snapshot query proof is missing or invalid")
+		}
+
+		query.Statuses = slices.Clone(query.Statuses)
+		slices.Sort(query.Statuses)
+
+		if !slices.Equal(query.Statuses, []string{"ENDED", "LIVE", "UPCOMING"}) || !slices.Equal(query.Statuses, value.Coverage.Filters.Statuses) {
+			return errors.New("live snapshot coverage does not match streams query scope")
+		}
+
+		if input.completeness == CompletenessComplete && (!query.Exhausted || query.AccessRestricted) {
+			return errors.New("limited live snapshot cannot provide complete negative coverage")
+		}
+	}
+
+	return nil
 }
 
 func decodeViewerSamplePayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
@@ -214,13 +245,27 @@ func decodeChannelLiveCheckPayload(raw []byte, input payloadDecodeInput) (payloa
 }
 
 func decodeVideoLiveCheckPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
-	if input.contractGeneration != LiveCheckContractGeneration {
+	if input.contractGeneration != LiveCheckContractGeneration && input.contractGeneration != VideoLifecycleContractGeneration {
 		return nil, nil, fmt.Errorf("unsupported video live check contract generation %d", input.contractGeneration)
 	}
 
 	value := VideoLiveCheckV1{}
 	if err := decodeStrictJSON(raw, &value); err != nil {
 		return nil, nil, fmt.Errorf("decode video live check payload: %w", err)
+	}
+
+	if input.contractGeneration == LiveCheckContractGeneration && (value.ScheduledAt != nil || value.WaitingStateConfirmed != nil) {
+		return nil, nil, errors.New("video live check generation 1 cannot carry lifecycle scheduling facts")
+	}
+
+	if input.contractGeneration == VideoLifecycleContractGeneration && input.schemaVersion != VideoLifecycleSchemaVersion {
+		return nil, nil, errors.New("video lifecycle generation requires schema 2")
+	}
+
+	if input.contractGeneration == VideoLifecycleContractGeneration && value.LifecycleFactsTrusted() {
+		if err := validateVideoLifecycleV2(&value, input.observedAt); err != nil {
+			return nil, nil, fmt.Errorf("validate video lifecycle: %w", err)
+		}
 	}
 
 	if err := value.normalizeAndValidate(input.subjectKey, input.completeness, input.observedAt); err != nil {

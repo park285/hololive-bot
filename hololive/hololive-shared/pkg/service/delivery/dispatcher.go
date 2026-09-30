@@ -32,12 +32,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -53,9 +55,16 @@ type deliveryOutboxClaimer interface {
 	FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
 }
 
+type deliveryRequestStore interface {
+	reissueFailedRequest(context.Context, int64, string, *preparedMessage, *preparedMessage, int, time.Duration, string) (bool, error)
+	markPreparationUnsent(context.Context, int64, string) (bool, error)
+	saveRequest(context.Context, int64, string, *preparedMessage, *preparedMessage) (bool, error)
+}
+
 type deliveryOutboxTransitioner interface {
 	MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
 	MarkSent(ctx context.Context, id int64, workerID string) (bool, error)
+	MarkQuarantined(ctx context.Context, id int64, workerID, reason string) (bool, error)
 	MarkFailed(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 }
 
@@ -66,14 +75,20 @@ type deliveryOutboxMaintainer interface {
 }
 
 type deliveryRepository interface {
+	deliveryRequestStore
 	deliveryOutboxClaimer
 	deliveryOutboxTransitioner
 	deliveryOutboxMaintainer
 }
 
-const deliveryLease = 60 * time.Second
+const (
+	deliveryLease              = 60 * time.Second
+	deliveryFinalizeTimeout    = 5 * time.Second
+	deliveryMaintenanceTimeout = 10 * time.Second
+)
 
 type DispatcherConfig struct {
+	AttemptTimeout            time.Duration
 	BatchSize                 int
 	MaxConcurrent             int
 	MaxRetries                int
@@ -89,6 +104,7 @@ type DispatcherConfig struct {
 
 func DefaultDispatcherConfig() DispatcherConfig {
 	return DispatcherConfig{
+		AttemptTimeout:            10 * time.Second,
 		BatchSize:                 50,
 		MaxConcurrent:             4,
 		MaxRetries:                3,
@@ -139,6 +155,10 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 
 	cfg.applyDefaults()
 
+	if cfg.AttemptTimeout >= deliveryLease-deliveryFinalizeTimeout {
+		return nil, fmt.Errorf("new delivery dispatcher: attempt timeout must leave finalization budget within %s lease", deliveryLease)
+	}
+
 	workerID, err := util.InstanceID("delivery-dispatcher")
 	if err != nil {
 		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
@@ -150,6 +170,7 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 func (c *DispatcherConfig) applyDefaults() {
 	defaults := DefaultDispatcherConfig()
 
+	c.AttemptTimeout = positiveOr(c.AttemptTimeout, defaults.AttemptTimeout)
 	c.BatchSize = positiveOr(c.BatchSize, defaults.BatchSize)
 	c.MaxConcurrent = positiveOr(c.MaxConcurrent, defaults.MaxConcurrent)
 	c.MaxRetries = positiveOr(c.MaxRetries, defaults.MaxRetries)
@@ -191,7 +212,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 }
 
 func (d *Dispatcher) processOnce(ctx context.Context) {
-	d.quarantineStaleSendingIfDue(ctx)
+	d.maintain(ctx)
 
 	items, err := d.repository.FetchAndLock(ctx, d.workerID, d.config.BatchSize, deliveryLease)
 	if err != nil {
@@ -200,11 +221,14 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 		return
 	}
 
-	if len(items) == 0 {
-		return
-	}
-
 	d.processBatch(ctx, items)
+}
+
+func (d *Dispatcher) maintain(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, deliveryMaintenanceTimeout)
+	defer cancel()
+
+	d.quarantineStaleSendingIfDue(ctx)
 	d.logAccumulatedFailures(ctx)
 	d.cleanupIfDue(ctx)
 }
@@ -226,6 +250,8 @@ func (d *Dispatcher) cleanupIfDue(ctx context.Context) {
 	if d.config.CleanupEnabled && time.Since(d.lastCleanupAt) >= d.config.CleanupInterval {
 		if cleaned, cleanErr := d.repository.Cleanup(ctx, d.config.CleanupAfter); cleanErr != nil {
 			d.logger.Warn("Outbox cleanup failed", slog.String("error", cleanErr.Error()))
+
+			return
 		} else if cleaned > 0 {
 			d.logger.Info("Outbox cleanup completed", slog.Int64("removed", cleaned))
 		}
@@ -242,6 +268,8 @@ func (d *Dispatcher) quarantineStaleSendingIfDue(ctx context.Context) {
 	quarantined, err := d.repository.QuarantineStaleSending(ctx, d.config.StaleSendingAfter, d.config.StaleSendingSweepLimit)
 	if err != nil {
 		d.logger.Warn("Stale sending outbox sweep failed", slog.String("error", err.Error()))
+
+		return
 	} else if quarantined > 0 {
 		d.logger.Warn("Stale sending outbox rows quarantined", slog.Int64("count", quarantined))
 	}
@@ -349,13 +377,53 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
+	if ctx.Err() != nil {
+		return
+	}
+
+	var p outboxPayload
+
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
+		d.markItemFailed(ctx, item.ID, "payload unmarshal: "+err.Error())
+
+		return
+	}
+
+	request, prepared := d.prepareRequest(ctx, item, p)
+	if !prepared {
+		return
+	}
+
+	if !d.markItemSending(ctx, item.ID) {
+		return
+	}
+
+	// 전송 직전 취소는 부수효과가 없으므로 일반 실패로 회수할 수 있습니다.
+	if ctx.Err() != nil {
+		finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deliveryFinalizeTimeout)
+		defer cancel()
+
+		d.markItemFailed(finalCtx, item.ID, ctx.Err().Error())
+
+		return
+	}
+
+	err := d.attemptSend(ctx, item, request)
+	d.finishSend(ctx, item, request, err)
+}
+
+func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage) error {
+	attemptCtx, cancel := context.WithTimeout(ctx, d.config.AttemptTimeout)
+
+	defer cancel()
+
 	var attemptID uint64
 
 	if d.workerTracker != nil {
 		attemptID = d.workerTracker.BeginAttempt(time.Now())
 	}
 
-	outcome := workercontract.AttemptFailed
+	outcome := workercontract.AttemptPanic
 
 	defer func() {
 		if d.workerTracker != nil {
@@ -367,34 +435,51 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		}
 	}()
 
-	var p outboxPayload
+	err := d.sendPrepared(attemptCtx, item, request)
 
-	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
-		d.logger.Error("Failed to unmarshal outbox payload",
-			slog.Int64("id", item.ID),
-			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, "payload unmarshal: "+err.Error())
+	outcome = deliveryProviderOutcome(err)
 
-		return
-	}
+	return err
+}
 
-	if !d.markItemSending(ctx, item.ID) {
-		return
-	}
+func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage, err error) {
+	// 부모 취소 뒤에도 결과를 저장하되 예산을 제한합니다. 저장 실패는 SENDING으로 남겨 sweep이 격리합니다.
+	finalCtx, finalizeCancel := context.WithTimeout(context.WithoutCancel(ctx), deliveryFinalizeTimeout)
+	defer finalizeCancel()
 
-	if err := d.sendMessage(ctx, item, p.Message); err != nil {
-		outcome = deliveryAttemptFailure(err)
-		d.logger.Error("Failed to send outbox message",
-			slog.Int64("id", item.ID),
-			privacylog.RoomIDAttr(item.RoomID),
-			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, err.Error())
+	if err == nil {
+		d.markItemSent(finalCtx, item.ID)
 
 		return
 	}
 
-	if d.markItemSent(ctx, item.ID) {
-		outcome = workercontract.AttemptSuccess
+	if sendoutcome.Classify(err) == sendoutcome.Failed && iris.IsPreHandoffClientRequestIDConflict(err) {
+		d.reissueRequest(finalCtx, item, request, err)
+
+		return
+	}
+
+	d.logger.Error("Failed to send outbox message", slog.Int64("id", item.ID), privacylog.RoomIDAttr(item.RoomID), slog.String("error", err.Error()))
+
+	switch sendoutcome.Classify(err) {
+	case sendoutcome.OutcomeUnknown, sendoutcome.TransportAmbiguous:
+		d.markItemQuarantined(finalCtx, item.ID, err.Error())
+	case sendoutcome.Failed:
+		d.markItemFailed(finalCtx, item.ID, err.Error())
+	case sendoutcome.Success:
+	}
+}
+
+func (d *Dispatcher) markItemQuarantined(ctx context.Context, id int64, reason string) {
+	fenced, err := d.repository.MarkQuarantined(ctx, id, d.workerID, reason)
+	if err != nil {
+		d.logger.Error("Failed to quarantine outbox item", slog.Int64("id", id), slog.String("error", err.Error()))
+
+		return
+	}
+
+	if !fenced {
+		d.logger.Warn("Outbox item fence skipped quarantine", slog.Int64("id", id))
 	}
 }
 
@@ -457,22 +542,6 @@ func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, reason string
 	}
 }
 
-func (d *Dispatcher) sendMessage(ctx context.Context, item *domain.NotificationDeliveryOutbox, message string) error {
-	if sender, ok := d.sender.(ClientRequestMessageSender); ok {
-		if err := sender.SendMessageWithClientRequestID(ctx, item.RoomID, message, notificationDeliveryClientRequestID(item)); err != nil {
-			return fmt.Errorf("send message with client request ID: %w", err)
-		}
-
-		return nil
-	}
-
-	if err := d.sender.SendMessage(ctx, item.RoomID, message); err != nil {
-		return fmt.Errorf("send message: %w", err)
-	}
-
-	return nil
-}
-
 // 이 결정적 ID는 Iris reply admission store의 멱등 키라, 재전송돼도 카톡 중복 송출이 막힌다.
 // 단 이 안전망은 Iris admission retention(168h) > outbox lease(lock_expires_at, 60s)일 때만 성립하며,
 // 대소가 뒤집히면 재전송분이 dedup window 밖이라 사용자에게 중복 알림이 간다.
@@ -494,4 +563,24 @@ func notificationDeliveryClientRequestID(item *domain.NotificationDeliveryOutbox
 	sum := sha256.Sum256([]byte(kind + "\x00" + contentID + "\x00" + roomID))
 
 	return "hololive-delivery:" + hex.EncodeToString(sum[:16])
+}
+
+func deliveryProviderOutcome(err error) workercontract.AttemptOutcome {
+	if err == nil {
+		return workercontract.AttemptSuccess
+	}
+
+	outcome := deliveryAttemptFailure(err)
+	if outcome != workercontract.AttemptFailed {
+		return outcome
+	}
+
+	switch sendoutcome.Classify(err) {
+	case sendoutcome.OutcomeUnknown, sendoutcome.TransportAmbiguous:
+		return workercontract.AttemptOutcomeUnknown
+	case sendoutcome.Success, sendoutcome.Failed:
+		return outcome
+	}
+
+	return outcome
 }

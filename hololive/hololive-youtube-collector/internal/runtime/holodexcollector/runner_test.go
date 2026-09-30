@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"io/fs"
 	"os"
 	"slices"
@@ -113,15 +114,21 @@ func TestRunnerIgnoresViewerCountsForLiveAndSchedule(t *testing.T) {
 	}
 }
 
-// live_snapshot generation 1 payload 경로는 지웠다(계획 T11 C6). DB current generation이 1이면 구성 오류로 끝난다.
-func TestRunnerRejectsRetiredLiveGenerationOne(t *testing.T) {
+// Holodex는 metadata generation 2를 유지하며 다른 세대의 payload로 발행하지 않습니다.
+func TestRunnerRejectsUnsupportedLiveGenerations(t *testing.T) {
 	t.Parallel()
 
-	input := holodexInputWithLiveGeneration(t, "holodex_live", []string{channelA, channelB}, 1)
+	for _, generation := range []int64{1, contract.LiveSnapshotQueryContractGeneration} {
+		t.Run(fmt.Sprintf("generation-%d", generation), func(t *testing.T) {
+			t.Parallel()
 
-	_, err := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(t.Context(), input)
-	if err == nil || collecterr.CodeOf(err) != collecterr.Configuration {
-		t.Fatalf("Collect(generation 1) error = %v, want configuration error", err)
+			input := holodexInputWithLiveGeneration(t, "holodex_live", []string{channelA, channelB}, generation)
+			_, err := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(t.Context(), input)
+
+			if err == nil || collecterr.CodeOf(err) != collecterr.Configuration {
+				t.Fatalf("Collect(generation %d) error = %v, want configuration error", generation, err)
+			}
+		})
 	}
 }
 
@@ -143,6 +150,10 @@ func TestRunnerPublishesLiveMetadataWithGenerationTwo(t *testing.T) {
 	for _, envelope := range result.Output().Observations() {
 		if envelope.ObservationKind != contract.KindLiveSnapshot || envelope.SubjectKey != channelA {
 			continue
+		}
+
+		if envelope.ContractGeneration != contract.LiveSnapshotMetadataContractGeneration {
+			t.Fatalf("live generation = %d, want metadata generation %d", envelope.ContractGeneration, contract.LiveSnapshotMetadataContractGeneration)
 		}
 
 		var payload contract.LiveSnapshotV1

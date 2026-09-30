@@ -9,15 +9,17 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 const replyStatusPollInterval = 250 * time.Millisecond
 
 var (
 	// ErrReplyHandoffOutcomeUnknown은 Markdown 발송의 Iris 접수 뒤 Kakao handoff 결과를 확정할 수 없음을 나타냅니다.
-	ErrReplyHandoffOutcomeUnknown = errors.New("iris reply handoff outcome unknown")
+	ErrReplyHandoffOutcomeUnknown = sendoutcome.ErrHandoffOutcomeUnknown
 	// ErrReplyHandoffFailed는 Markdown 발송에서 Iris가 Kakao handoff 실패를 확정했음을 나타냅니다.
-	ErrReplyHandoffFailed = errors.New("iris reply handoff failed")
+	ErrReplyHandoffFailed = sendoutcome.ErrHandoffFailed
 )
 
 // IrisClient는 alarm-worker가 알림 전송과 Markdown handoff 확인에 사용하는 Iris 계약입니다.

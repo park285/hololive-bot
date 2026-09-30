@@ -168,10 +168,17 @@ TABLE alarm_dispatch_send_units
   COLUMN room_id character varying(100) NOT NULL
   COLUMN client_request_id text NOT NULL
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN request_body text
+  COLUMN request_route text
+  COLUMN request_body_hash text
+  COLUMN request_delivery_ids bigint[]
+  COLUMN base_client_request_id text
+  COLUMN request_generation integer NOT NULL DEFAULT 0
   CONSTRAINT alarm_dispatch_send_units_client_request_id_check CHECK ((client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text))
   CONSTRAINT alarm_dispatch_send_units_group_key_check CHECK (((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768)))
   CONSTRAINT alarm_dispatch_send_units_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
   CONSTRAINT alarm_dispatch_send_units_unit_key_check CHECK ((unit_key ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_alarm_send_request_shape CHECK ((((request_generation >= 0) AND (request_generation <= 2)) AND (((request_body IS NULL) AND (request_route IS NULL) AND (request_body_hash IS NULL) AND (request_delivery_ids IS NULL) AND (base_client_request_id IS NULL) AND (request_generation = 0)) OR ((request_body IS NOT NULL) AND (request_route IS NOT NULL) AND (request_route = ANY (ARRAY['text'::text, 'markdown'::text])) AND (request_body_hash IS NOT NULL) AND (request_body_hash ~ '^[0-9a-f]{64}$'::text) AND (request_delivery_ids IS NOT NULL) AND ((cardinality(request_delivery_ids) >= 1) AND (cardinality(request_delivery_ids) <= 10)) AND (base_client_request_id IS NOT NULL) AND (base_client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text)))))
   CONSTRAINT alarm_dispatch_send_units_pkey PRIMARY KEY (id)
   CONSTRAINT alarm_dispatch_send_units_client_request_id_key UNIQUE (client_request_id)
   CONSTRAINT alarm_dispatch_send_units_unit_key_key UNIQUE (unit_key)
@@ -182,6 +189,30 @@ TABLE alarm_room_display_names
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_alarm_room_display_names_display_name_nonblank CHECK ((btrim((display_name)::text) <> ''::text))
   CONSTRAINT alarm_room_display_names_pkey PRIMARY KEY (room_id)
+
+TABLE alarm_upcoming_candidates
+  COLUMN dedupe_key text NOT NULL
+  COLUMN event_key text NOT NULL
+  COLUMN payload_hash text NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN stream_id text NOT NULL
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN scheduled_at timestamp with time zone NOT NULL
+  COLUMN notification jsonb NOT NULL
+  COLUMN selected_at timestamp with time zone NOT NULL
+  COLUMN checked_at timestamp with time zone NOT NULL
+  COLUMN terminal_at timestamp with time zone
+  COLUMN outcome text NOT NULL DEFAULT 'pending'::text
+  CONSTRAINT chk_alarm_upcoming_candidates_outcome_vocab CHECK ((outcome = ANY (ARRAY['pending'::text, 'accepted'::text, 'rejected_collision'::text, 'rejected_terminal'::text, 'expired'::text, 'schedule_changed'::text, 'stream_ended'::text, 'subscription_removed'::text])))
+  CONSTRAINT chk_alarm_upcoming_candidates_terminal CHECK (((outcome = 'pending'::text) = (terminal_at IS NULL)))
+  CONSTRAINT alarm_upcoming_candidates_pkey PRIMARY KEY (dedupe_key)
+  INDEX CREATE INDEX idx_alarm_upcoming_candidates_pending ON public.alarm_upcoming_candidates USING btree (checked_at, dedupe_key) WHERE (outcome = 'pending'::text)
+  INDEX CREATE INDEX idx_alarm_upcoming_candidates_terminal ON public.alarm_upcoming_candidates USING btree (terminal_at) WHERE (terminal_at IS NOT NULL)
+
+TABLE alarm_upcoming_checkpoints
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN evaluated_at timestamp with time zone NOT NULL
+  CONSTRAINT alarm_upcoming_checkpoints_pkey PRIMARY KEY (channel_id)
 
 TABLE alarms
   COLUMN id integer NOT NULL DEFAULT nextval('alarms_id_seq'::regclass)
@@ -577,6 +608,7 @@ TABLE source_observation_applications
   CONSTRAINT fk_source_observation_application_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_observation_applications_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT source_observation_applications_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_source_application_live_origin ON public.source_observation_applications USING btree (entity_key) WHERE ((entity_kind = 'youtube_live_session'::text) AND (decision = ANY (ARRAY['APPLIED'::text, 'ENDED'::text])) AND (observation_kind = ANY (ARRAY['live_snapshot'::text, 'video_live_check'::text])))
   INDEX CREATE INDEX idx_source_observation_applications_orphaned_kind_applied_id ON public.source_observation_applications USING btree (observation_kind, applied_at, id) WHERE (observation_id IS NULL)
   INDEX CREATE UNIQUE INDEX uq_source_observation_application_active ON public.source_observation_applications USING btree (observation_id, entity_kind, entity_key) WHERE (observation_id IS NOT NULL)
 
@@ -1233,6 +1265,25 @@ TABLE youtube_live_reconciliation_heads
   INDEX CREATE INDEX idx_youtube_live_reconciliation_end_candidate ON public.youtube_live_reconciliation_heads USING btree (end_candidate_observation_id) WHERE (end_candidate_observation_id IS NOT NULL)
   INDEX CREATE INDEX idx_youtube_live_reconciliation_heads_active_video ON public.youtube_live_reconciliation_heads USING btree (video_id) WHERE (status = ANY (ARRAY['LIVE'::text, 'UPCOMING'::text]))
 
+TABLE youtube_live_review_receipts
+  COLUMN receipt_id uuid NOT NULL
+  COLUMN video_id text NOT NULL
+  COLUMN snapshot_sha256 text NOT NULL
+  COLUMN original_snapshot jsonb NOT NULL
+  COLUMN evidence_refs jsonb NOT NULL
+  COLUMN disposition text NOT NULL
+  COLUMN operator_id text NOT NULL
+  COLUMN reason text NOT NULL
+  COLUMN recorded_at timestamp with time zone NOT NULL DEFAULT clock_timestamp()
+  CONSTRAINT youtube_live_review_receipts_disposition_check CHECK ((disposition = 'closed_unresolved'::text))
+  CONSTRAINT youtube_live_review_receipts_operator_id_check CHECK ((((length(operator_id) >= 1) AND (length(operator_id) <= 128)) AND (operator_id = btrim(operator_id)) AND (operator_id !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT youtube_live_review_receipts_original_snapshot_check CHECK ((octet_length((original_snapshot)::text) <= 262144))
+  CONSTRAINT youtube_live_review_receipts_reason_check CHECK ((((length(reason) >= 1) AND (length(reason) <= 1024)) AND (reason = btrim(reason)) AND (reason !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT youtube_live_review_receipts_snapshot_sha256_check CHECK ((snapshot_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT youtube_live_review_receipts_pkey PRIMARY KEY (receipt_id)
+  CONSTRAINT youtube_live_review_receipts_video_id_snapshot_sha256_key UNIQUE (video_id, snapshot_sha256)
+  TRIGGER CREATE TRIGGER youtube_live_review_receipts_immutable BEFORE DELETE OR UPDATE ON youtube_live_review_receipts FOR EACH ROW EXECUTE FUNCTION reject_youtube_live_review_receipt_change()
+
 TABLE youtube_live_sessions
   COLUMN video_id character varying(20) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
@@ -1246,6 +1297,10 @@ TABLE youtube_live_sessions
   COLUMN topic_id text NOT NULL DEFAULT ''::text
   COLUMN thumbnail_url text NOT NULL DEFAULT ''::text
   COLUMN is_premiere boolean
+  COLUMN lifecycle_origin text NOT NULL DEFAULT 'legacy_unknown'::text
+  COLUMN status_observed_at timestamp with time zone
+  COLUMN schedule_observed_at timestamp with time zone
+  CONSTRAINT chk_youtube_live_sessions_lifecycle_origin_vocab CHECK ((lifecycle_origin = ANY (ARRAY['metadata_only'::text, 'observed'::text, 'legacy_unknown'::text])))
   CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK ((status = ANY (ARRAY[('UPCOMING'::character varying)::text, ('LIVE'::character varying)::text, ('ENDED'::character varying)::text])))
   CONSTRAINT youtube_live_sessions_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_yls_channel_last_seen ON public.youtube_live_sessions USING btree (channel_id, last_seen_at DESC)
@@ -1308,13 +1363,17 @@ TABLE youtube_notification_delivery
   COLUMN sent_at timestamp with time zone
   COLUMN error text
   COLUMN row_version bigint NOT NULL DEFAULT 0
+  COLUMN send_request_id text
+  COLUMN request_snapshot_allowed boolean NOT NULL DEFAULT true
   CONSTRAINT chk_youtube_notification_delivery_row_version CHECK (((row_version IS NOT NULL) AND (row_version >= 0)))
   CONSTRAINT chk_youtube_notification_delivery_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text, ('QUARANTINED'::character varying)::text])))
   CONSTRAINT youtube_notification_delivery_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES youtube_notification_outbox(id) ON DELETE CASCADE
+  CONSTRAINT youtube_notification_delivery_send_request_id_fkey FOREIGN KEY (send_request_id) REFERENCES youtube_notification_send_request(base_id)
   CONSTRAINT youtube_notification_delivery_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_ynd_outbox_room ON public.youtube_notification_delivery USING btree (outbox_id, room_id)
   INDEX CREATE INDEX idx_ynd_pending_due_created_id ON public.youtube_notification_delivery USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_ynd_sending_stale ON public.youtube_notification_delivery USING btree (locked_at, id) WHERE (status = 'SENDING'::text)
+  INDEX CREATE INDEX idx_youtube_delivery_send_request ON public.youtube_notification_delivery USING btree (send_request_id) WHERE (send_request_id IS NOT NULL)
 
 TABLE youtube_notification_delivery_ledger
   COLUMN kind text NOT NULL
@@ -1390,6 +1449,22 @@ TABLE youtube_notification_outbox
   INDEX CREATE UNIQUE INDEX idx_yno_kind_content ON public.youtube_notification_outbox USING btree (kind, content_id)
   INDEX CREATE INDEX idx_yno_pending_due_created_id ON public.youtube_notification_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_yno_status_created ON public.youtube_notification_outbox USING btree (status, created_at)
+
+TABLE youtube_notification_send_request
+  COLUMN base_id text NOT NULL
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN message text NOT NULL
+  COLUMN message_hash text NOT NULL
+  COLUMN route text NOT NULL
+  COLUMN dedupe_keys text[] NOT NULL
+  COLUMN member_ids bigint[] NOT NULL
+  COLUMN generation integer NOT NULL DEFAULT 0
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT youtube_notification_send_request_dedupe_keys_check CHECK ((cardinality(dedupe_keys) > 0))
+  CONSTRAINT youtube_notification_send_request_generation_check CHECK (((generation >= 0) AND (generation <= 2)))
+  CONSTRAINT youtube_notification_send_request_member_ids_check CHECK ((cardinality(member_ids) > 0))
+  CONSTRAINT youtube_notification_send_request_route_check CHECK ((route = ANY (ARRAY['text'::text, 'markdown'::text, 'sender'::text])))
+  CONSTRAINT youtube_notification_send_request_pkey PRIMARY KEY (base_id)
 
 TABLE youtube_schedule_items
   COLUMN group_key text NOT NULL
@@ -1569,14 +1644,20 @@ FUNCTION notification_template_row_version() RETURNS trigger LANGUAGE plpgsql VO
 
 FUNCTION record_alarm_dispatch_closeout(p_receipt_id uuid, p_addressed_delivery_id bigint, p_expected_target_ids bigint[], p_expected_sha256 text, p_operator_id text, p_reason text) RETURNS void LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nDECLARE\n    unit_id bigint;\n    locked_count integer;\n    snapshot record;\nBEGIN\n    IF current_setting('transaction_isolation') <> 'serializable' THEN\n        RAISE EXCEPTION 'alarm dispatch closeout requires serializable transaction';\n    END IF;\n    IF p_receipt_id IS NULL OR p_addressed_delivery_id IS NULL OR p_addressed_delivery_id <= 0\n       OR p_expected_target_ids IS NULL OR cardinality(p_expected_target_ids) NOT BETWEEN 1 AND 100\n       OR p_expected_sha256 IS NULL OR p_expected_sha256 !~ '^[0-9a-f]{64}$'\n       OR p_operator_id IS NULL OR length(btrim(p_operator_id)) NOT BETWEEN 1 AND 128\n       OR p_operator_id <> btrim(p_operator_id) OR p_operator_id ~ '[[:cntrl:]]'\n       OR p_reason IS NULL OR length(btrim(p_reason)) NOT BETWEEN 1 AND 1024\n       OR p_reason <> btrim(p_reason) OR p_reason ~ '[[:cntrl:]]' THEN\n        RAISE EXCEPTION 'invalid alarm dispatch closeout request';\n    END IF;\n    IF array_position(p_expected_target_ids, p_addressed_delivery_id) IS NULL THEN\n        RAISE EXCEPTION 'addressed delivery missing from reviewed targets';\n    END IF;\n\n    -- 대상과 전체 send unit을 requeue와 같은 순서로 잠그고, 잠금 대기 뒤 재조회한다.\n    SELECT d.send_unit_id INTO unit_id\n    FROM public.alarm_dispatch_deliveries d WHERE d.id = p_addressed_delivery_id FOR UPDATE;\n    IF NOT FOUND OR unit_id IS NULL THEN\n        RAISE EXCEPTION 'addressed delivery or send unit missing';\n    END IF;\n    PERFORM d.id FROM public.alarm_dispatch_deliveries d\n    WHERE d.send_unit_id = unit_id ORDER BY d.id LIMIT 101 FOR UPDATE OF d;\n    GET DIAGNOSTICS locked_count = ROW_COUNT;\n    SELECT s.send_unit_id, s.target_ids, s.target_revisions, s.status_metadata,\n           s.original_sha256, s.member_count INTO snapshot\n    FROM public.alarm_dispatch_closeout_snapshot(p_addressed_delivery_id) AS s;\n    IF NOT FOUND OR snapshot.send_unit_id <> unit_id OR snapshot.member_count <> locked_count\n       OR snapshot.member_count > 100\n       OR snapshot.target_ids IS DISTINCT FROM p_expected_target_ids\n       OR snapshot.original_sha256 IS DISTINCT FROM p_expected_sha256 THEN\n        RAISE EXCEPTION 'reviewed closeout snapshot changed';\n    END IF;\n    IF EXISTS (\n        SELECT 1 FROM public.alarm_dispatch_deliveries d\n        WHERE d.id = ANY(snapshot.target_ids)\n          AND (d.status <> 'quarantined' OR d.sent_at IS NOT NULL OR d.cancelled_at IS NOT NULL)\n    ) THEN\n        RAISE EXCEPTION 'closeout requires only quarantined, unsent targets';\n    END IF;\n    IF EXISTS (SELECT 1 FROM public.alarm_dispatch_closeout_receipts r WHERE r.send_unit_id = unit_id) THEN\n        RAISE EXCEPTION 'send unit already has a closeout receipt';\n    END IF;\n    INSERT INTO public.alarm_dispatch_closeout_receipts (\n        receipt_id, send_unit_id, addressed_delivery_id, target_ids,\n        target_revisions, status_metadata, original_sha256, operator_id, reason\n    ) VALUES (\n        p_receipt_id, unit_id, p_addressed_delivery_id, snapshot.target_ids,\n        snapshot.target_revisions, snapshot.status_metadata, snapshot.original_sha256,\n        p_operator_id, p_reason\n    );\nEND\n"
 
+FUNCTION record_youtube_live_review(p_receipt_id uuid, p_video_id text, p_expected_sha256 text, p_operator_id text, p_reason text) RETURNS void LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nDECLARE\n    snapshot record;\nBEGIN\n    IF current_setting('transaction_isolation') <> 'serializable' THEN\n        RAISE EXCEPTION 'live review requires serializable transaction';\n    END IF;\n    IF p_receipt_id IS NULL OR p_video_id IS NULL OR length(p_video_id) NOT BETWEEN 1 AND 128\n       OR p_expected_sha256 IS NULL OR p_expected_sha256 !~ '^[0-9a-f]{64}$'\n       OR p_operator_id IS NULL OR length(p_operator_id) NOT BETWEEN 1 AND 128\n       OR p_operator_id <> btrim(p_operator_id) OR p_operator_id ~ '[[:cntrl:]]'\n       OR p_reason IS NULL OR length(p_reason) NOT BETWEEN 1 AND 1024\n       OR p_reason <> btrim(p_reason) OR p_reason ~ '[[:cntrl:]]' THEN\n        RAISE EXCEPTION 'invalid live review request';\n    END IF;\n    PERFORM video_id FROM public.youtube_live_sessions WHERE video_id = p_video_id FOR UPDATE;\n    IF NOT FOUND THEN\n        RAISE EXCEPTION 'reviewed live session missing';\n    END IF;\n    PERFORM video_id FROM public.youtube_live_reconciliation_heads WHERE video_id = p_video_id FOR UPDATE;\n    PERFORM video_id FROM public.youtube_live_pending_ends WHERE video_id = p_video_id FOR UPDATE;\n    PERFORM video_id FROM public.youtube_video_availability WHERE video_id = p_video_id FOR UPDATE;\n    SELECT reviewed.original_snapshot,reviewed.snapshot_sha256,reviewed.evidence_refs,reviewed.reviewable\n    INTO snapshot FROM public.youtube_live_review_snapshot(p_video_id) reviewed;\n    IF snapshot.snapshot_sha256 IS DISTINCT FROM p_expected_sha256 OR NOT snapshot.reviewable THEN\n        RAISE EXCEPTION 'reviewed live snapshot changed or is not unresolved';\n    END IF;\n    INSERT INTO public.youtube_live_review_receipts\n        (receipt_id,video_id,snapshot_sha256,original_snapshot,evidence_refs,disposition,operator_id,reason)\n    VALUES (p_receipt_id,p_video_id,snapshot.snapshot_sha256,snapshot.original_snapshot,\n            snapshot.evidence_refs,'closed_unresolved',p_operator_id,p_reason);\nEND\n"
+
 FUNCTION reject_alarm_dispatch_closeout_receipt_change() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    RAISE EXCEPTION 'alarm dispatch closeout receipts are append-only';\nEND\n"
 
 FUNCTION reject_bot_reply_outbox_replay_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_replay_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION reject_bot_reply_outbox_resolution_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_resolution_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
+FUNCTION reject_youtube_live_review_receipt_change() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    RAISE EXCEPTION 'live review receipts are append-only';\nEND\n"
+
 FUNCTION require_source_observation_payload(requested_id bigint, requested_kind text, requested_version smallint, actual_kind text, actual_version smallint, actual_profile text, actual_digest bytea, actual_payload jsonb) RETURNS jsonb LANGUAGE plpgsql VOLATILITY s SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF actual_payload IS NULL OR actual_kind IS DISTINCT FROM requested_kind\n       OR actual_version IS DISTINCT FROM requested_version\n       OR actual_profile IS DISTINCT FROM 'source-observation-canonical-json-v1'\n       OR actual_digest IS NULL OR octet_length(actual_digest) <> 32 THEN\n        RAISE EXCEPTION 'missing or corrupt source observation payload for observation %', requested_id;\n    END IF;\n    RETURN actual_payload;\nEND\n"
 
 FUNCTION scrub_bot_command_execution_terminal_summary() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.result_summary := NEW.status;\n    RETURN NEW;\nEND\n"
+
+FUNCTION youtube_live_review_snapshot(p_video_id text) RETURNS TABLE(original_snapshot jsonb, snapshot_sha256 text, evidence_refs jsonb, reviewable boolean) LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\n    WITH facts AS (\n        SELECT jsonb_build_object('session',to_jsonb(session),'head',to_jsonb(head),\n                   'pending',to_jsonb(pending),'availability',to_jsonb(availability)) AS snapshot,\n               jsonb_build_object('availability_observation_id',availability.observation_id,\n                   'availability_evidence_sha256',availability.evidence_sha256,\n                   'pending_observation_id',pending.observation_id) AS refs,\n               session.status = 'UPCOMING'\n                   AND (head.video_id IS NULL OR head.status = session.status)\n                   AND (session.lifecycle_origin <> 'observed' OR head.video_id IS NOT NULL)\n                   -- 가용성 PUBLIC도 수명 미상일 수 있다. 현재 확인보다 새롭거나\n                   -- 같은 positive가 있으면 확인된 UPCOMING을 unresolved로 닫지 않는다.\n                   AND availability.video_id IS NOT NULL\n                   AND NOT COALESCE(GREATEST(head.last_upcoming_positive_at,head.last_live_positive_at)\n                       >= availability.effective_at,false) AS reviewable\n        FROM public.youtube_live_sessions session\n        LEFT JOIN public.youtube_live_reconciliation_heads head USING (video_id)\n        LEFT JOIN public.youtube_live_pending_ends pending USING (video_id)\n        LEFT JOIN public.youtube_video_availability availability USING (video_id)\n        WHERE session.video_id = p_video_id\n    )\n    SELECT snapshot, encode(sha256(convert_to(snapshot::TEXT,'UTF8')),'hex'), refs,\n           COALESCE(reviewable,false) FROM facts\n"
 
 FUNCTION youtube_schedule_collabo_talent_names_valid(names text[]) RETURNS boolean LANGUAGE sql VOLATILITY i SECURITY_DEFINER false LEAKPROOF false PARALLEL s CONFIG search_path=pg_catalog BODY "\n    SELECT COALESCE(pg_catalog.array_ndims(names), 1) = 1\n       AND COALESCE(pg_catalog.array_lower(names, 1), 1) = 1\n       AND pg_catalog.cardinality(names) <= 32\n       AND NOT EXISTS (\n           SELECT 1\n           FROM pg_catalog.unnest(names) AS name\n           WHERE name IS NULL\n              OR pg_catalog.octet_length(name) < 1\n              OR pg_catalog.octet_length(name) > 256\n       );\n"

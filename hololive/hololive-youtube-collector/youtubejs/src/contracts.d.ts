@@ -283,6 +283,14 @@ export interface ChannelResult extends Pagination {
   profile: ChannelProfileItem;
   photo: ChannelPhotoVariant[];
   missing_tab?: boolean;
+  live_query?: {
+    channel_id: string;
+    source: "streams";
+    statuses: string[];
+    exhausted: boolean;
+    access_restricted: boolean;
+    page_count: number;
+  };
 }
 
 /** 접근 제한으로 시각을 확인하지 못한 영상입니다. 정상 live_sessions와 중복될 수 없습니다. */
@@ -338,6 +346,8 @@ export interface VideoLiveCheckResult {
   is_private?: boolean;
   has_live_broadcast_details?: boolean;
   started_at?: string;
+  scheduled_at?: string;
+  waiting_state_confirmed?: boolean;
   ended_at?: string;
   availability: VideoAvailability;
   method: VideoAvailabilityMethod;

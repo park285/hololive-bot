@@ -32,6 +32,9 @@ func TestScheduleConsumerOfficialIsLiveDoesNotFlipLive(t *testing.T) {
 		t.Fatal("official isLive must not write LIVE")
 	}
 
+	assertLifecycleOrigin(t, pool, "metadata_only")
+	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
+
 	var isLive bool
 
 	if err := pool.QueryRow(ctx, `

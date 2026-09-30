@@ -19,6 +19,13 @@ func applyUpcomingPositive(session *reduceSession, fact *SessionFact) {
 		return
 	}
 
+	if existing.Status == StatusLive && existing.Clock.LastLivePositiveAt == nil {
+		// UPCOMING 사실만으로 근거 없는 기존 LIVE에 LIVE head를 만들어 면제하지 않는다.
+		recordApplication(session, fact.VideoID, "LIVE_WITHOUT_POSITIVE_RETAINED")
+
+		return
+	}
+
 	if existing.Clock.LastUpcomingPositiveAt != nil && session.evidence.EffectiveAt.Before(*existing.Clock.LastUpcomingPositiveAt) {
 		recordApplication(session, fact.VideoID, "OLDER_POSITIVE_RETAINED")
 
@@ -105,6 +112,8 @@ func mergeLiveSession(existing *SessionState, fact *SessionFact, evidence *Evide
 		merged.Status = StatusLive
 	}
 
+	merged.StatusObservedAt = copyTime(evidence.EffectiveAt)
+
 	if merged.LiveFirstSeenAt == nil {
 		merged.LiveFirstSeenAt = copyTime(evidence.ReceivedAt)
 	}
@@ -120,10 +129,11 @@ func mergeLiveSession(existing *SessionState, fact *SessionFact, evidence *Evide
 }
 
 func newSession(fact *SessionFact, status Status, evidence *Evidence) SessionState {
-	return SessionState{
+	created := SessionState{
 		VideoID:            fact.VideoID,
 		ChannelID:          fact.ChannelID,
 		Status:             status,
+		LifecycleOrigin:    OriginMetadataOnly,
 		Title:              fact.Title,
 		TopicID:            fact.TopicID,
 		ThumbnailURL:       fact.ThumbnailURL,
@@ -131,6 +141,15 @@ func newSession(fact *SessionFact, status Status, evidence *Evidence) SessionSta
 		LastSeenAt:         evidence.ReceivedAt.UTC(),
 		Present:            true,
 	}
+	if fact.Status == string(status) && (status != StatusLive || fact.LiveStartConfirmed) {
+		created.StatusObservedAt = copyTime(evidence.EffectiveAt)
+	}
+
+	if fact.ScheduledAt != nil {
+		created.ScheduleObservedAt = copyTime(evidence.EffectiveAt)
+	}
+
+	return created
 }
 
 func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Evidence) SessionState {
@@ -154,6 +173,12 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 
 	if fact.ScheduledAt != nil {
 		merged.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
+		merged.ScheduleObservedAt = copyTime(evidence.EffectiveAt)
+	}
+
+	// 유지된 LIVE/ENDED나 시작 미확정 metadata를 새 상태 관측으로 해석하지 않는다.
+	if fact.Status == string(merged.Status) && (merged.Status != StatusLive || fact.LiveStartConfirmed) {
+		merged.StatusObservedAt = copyTime(evidence.EffectiveAt)
 	}
 
 	if fact.StartedAt != nil && merged.StartedAt == nil {
@@ -170,6 +195,7 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 }
 
 func storeAppliedSession(session *reduceSession, videoID string, existing *SessionState) {
+	existing.LifecycleOrigin = OriginObserved
 	session.state.Sessions[videoID] = *existing
 	markDirty(session, videoID)
 	recordApplication(session, videoID, "APPLIED")

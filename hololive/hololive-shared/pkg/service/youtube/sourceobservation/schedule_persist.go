@@ -51,6 +51,7 @@ func loadScheduleSessions(ctx context.Context, tx dbx.Tx, state *schedule.State,
 			Title:              session.Title,
 			ScheduledStartTime: session.ScheduledStartTime,
 			LastSeenAt:         session.LastSeenAt,
+			ScheduleObservedAt: session.ScheduleObservedAt,
 		}
 	}
 
@@ -95,9 +96,11 @@ func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation *Observ
 			VideoID:            session.VideoID,
 			ChannelID:          session.ChannelID,
 			Status:             session.Status,
+			LifecycleOrigin:    live.OriginMetadataOnly,
 			Title:              session.Title,
 			ScheduledStartTime: session.ScheduledStartTime,
 			LastSeenAt:         session.LastSeenAt,
+			ScheduleObservedAt: session.ScheduleObservedAt,
 		}); err != nil {
 			return fmt.Errorf("upsert live session: %w", err)
 		}

@@ -61,6 +61,11 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 
 	d.workerTracker = tracker
 	d.workerTotals = totals
+
+	if d.send != nil {
+		d.send.workerTracker = tracker
+		d.send.workerTotals = totals
+	}
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
@@ -224,11 +229,6 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 		return 0
 	}
 
-	if d.workerTracker != nil {
-		attemptID := d.workerTracker.BeginAttempt(time.Now())
-		defer d.workerTracker.EndAttempt(attemptID)
-	}
-
 	var processed int
 
 	if len(outboxItems) == 0 {
@@ -239,10 +239,6 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 			slog.Int("round", round+1))
 
 		processed = d.claim.processPerRoomBatch(ctx, outboxItems)
-	}
-
-	if processed > 0 && d.workerTotals != nil {
-		d.workerTotals.RecordAttempt(workercontract.AttemptSuccess)
 	}
 
 	return processed

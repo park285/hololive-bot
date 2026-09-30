@@ -84,6 +84,26 @@ Alarm dispatch payload/전달 문맥 복원 실패와 event 누락은 PostgreSQL
 
 Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면, 확정된 DLQ를 제외한 미발송 lease를 기존 `ReleaseLeased`로 반환합니다. 부분 발송 입력은 반환하지 않으며 attempt·send-unit·미발송 dedup 키를 유지합니다. 정리는 요청 취소와 독립된 최대 5초로 제한하고, 정리 실패도 원래 오류와 함께 반환합니다. 이미 terminal이거나 다른 worker가 소유한 row는 DB fence가 보호합니다.
 
+## 발행·복구 계약
+
+발행 결과는 입력 ordinal별 receipt로 확인합니다. 저장된 active delivery와 SENT는 수용된 발행이며, payload collision과 DLQ·QUARANTINED·CANCELLED는 성공으로 표시하지 않습니다. 방별 수용 결과만 dedup·tier에 반영하므로 한 방의 성공이 다른 방의 복구를 막지 않습니다. commit 응답이 불명확하면 안정적인 event key·payload hash·delivery key를 한 번, 최대 5초 동안 확인하고 확인되지 않은 항목은 성공 처리하지 않습니다.
+
+선정된 upcoming 알람은 `alarm_upcoming_candidates`에 최초 category·본문 입력·방을 저장하며 평가 checkpoint와 함께 commit합니다. 보장 시작점은 이 durable staging commit입니다. 기존 75초 조회 lookback 이후에도 미발행 후보를 복구하되 예정 시작 시각 이후에는 분 전 알람을 만료시킵니다. 확인된 일정 변경·방송 종료·최초공개·구독 해제는 사유를 남겨 종료하며, 단순 조회 목록 누락만으로 취소하지 않습니다. 최신 provider 응답은 과거 canonical 보강과 분리하고 canonical 종료는 선정 이후의 실제 상태·일정 관측 시각(`status_observed_at`, `schedule_observed_at`)만 사용합니다. 확정된 최초공개는 불변 분류이므로 시각과 무관하게 live 후보에서 제외합니다. 예정 시각도 저장되는 `last_seen_at`은 이 최신성의 증거가 아닙니다. 과거 행의 관측 시각은 추정하지 않습니다. Claim 대기 뒤 발행 직전에도 미발행 후보의 기한을 재검사하며, 이미 수용된 delivery의 현행 재시도 정책은 별도로 유지합니다. 제목 변경은 기존 event key/hash의 collision 거절 계약을 유지합니다.
+
+DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다.
+
+범용 delivery의 발송 attempt는 기본 10초로 제한하며 더 짧은 부모 deadline을 따릅니다. `OUTCOME_UNKNOWN`·handoff 불명·호출 이후 timeout/cancel은 worker/status fence로 QUARANTINED 전이를 시도합니다. 저장 실패 시 SENDING 증거를 유지하여 stale sweep이 처리하며, 확정 성공 후 DB 반영 실패도 일반 미발송 실패로 바꾸지 않습니다. batch가 없어도 기존 tick에서 due maintenance를 실행합니다.
+
+세 발송 경로는 최초 외부 발송 전에 최종 본문·경로·요청 ID 관계를 저장하고 재시도에서 재사용합니다. alarm과 YouTube의 묶음은 membership도 고정합니다. `CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK의 결정적 r1/r2 generation을 허용하며, 기존 attempt·시간 상한을 유지합니다. unknown·payload mismatch·already exists·code 없는 409·transport 오류에는 새 ID를 발급하지 않습니다.
+
+YouTube의 freshness를 지난 known-unsent PENDING은 bounded sweep에서 ledger·logical owner·row version을 확인한 뒤 명시적 만료 사유로 FAILED 종료합니다. SENT/QUARANTINED 및 진행 중인 SENDING 증거를 우선하며, 만료로 unknown을 재발송 가능 상태로 바꾸지 않습니다. 부모 aggregate·terminal retention을 거쳐 정리하고 만료 행은 revive하지 않습니다.
+
+### 운영 전환 제한
+
+새 migration과 코드의 로컬 검증은 운영 적용 승인이 아닙니다. 실제 적용 전에는 기존 미고정 request 행의 상태·과거 전송 증거를 inventory로 확인해야 합니다. 과거 본문을 입증할 수 없는 in-flight/retry 행은 현재 템플릿으로 복원하지 않으며, 자동 재전송·일괄 초기화하지 않습니다. 이 inventory, 공유 DB migration/backfill, 배포·재시작은 별도 승인 범위입니다.
+
+request snapshot/generation을 보존하지 못하는 구버전 바이너리로 단순 rollback하지 않습니다. 전환 문제가 생기면 egress를 멈추고 저장된 request·membership·generation·unknown 증거를 보존한 뒤 호환 코드 또는 forward fix로 복구합니다. 구독 조회·수집은 각 기존 소유 경계를 유지합니다.
+
 ## Observability
 
 - Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker`
@@ -91,6 +111,8 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 - Ready: `https://127.0.0.1:30007/ready`; authenticated `/diagnostics/workers` reports profile match, executors, and real queue snapshots.
 - Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority.
 - Metrics: alarm-dispatch backlog/retention metrics (the v3 handoff metrics were removed with the handoff)
+- YouTube 공통 attempt counter는 실제 provider operation을 집계하며 grouped 호출 1회와 방별 delivery 결과를 구분합니다. 준비·claim·이미 충족된 행은 provider success로 세지 않습니다. provider 성공과 DB finalization 실패도 별도로 유지합니다.
+- YouTube ready snapshot은 부모 created_at freshness·due·lock 조건을 실제 claim과 맞춥니다. `hololive_youtube_delivery_expired_pending_bounded`는 만료 대기 PENDING 수를 기존 batch size까지만 보여 주므로 전체 backlog 총수가 아닙니다.
 
 ## Related documents
 

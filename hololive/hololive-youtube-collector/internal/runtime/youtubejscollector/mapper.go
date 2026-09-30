@@ -79,10 +79,8 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 	}, contract.ShortsListV1{}
 }
 
-func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem) contract.LiveSnapshotV1 {
+func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem, query *contract.LiveSnapshotQueryV1) contract.LiveSnapshotV1 {
 	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
-	statuses := make([]string, 0, 4)
-	seenStatus := make(map[string]struct{}, 4)
 
 	for _, session := range sessions {
 		item := contract.LiveSessionV1{
@@ -97,25 +95,15 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem)
 		}
 
 		mapped = append(mapped, item)
-
-		if _, ok := seenStatus[session.Status]; ok {
-			continue
-		}
-
-		seenStatus[session.Status] = struct{}{}
-		statuses = append(statuses, session.Status)
-	}
-
-	if len(statuses) == 0 {
-		statuses = []string{"LIVE", "UPCOMING"}
 	}
 
 	return contract.LiveSnapshotV1{
 		Sessions: mapped,
+		Query:    query,
 		Coverage: contract.GlobalChannelCoverageV1{
 			RequestedChannelIDs: []string{channelID},
 			GroupKey:            channelID,
-			Filters:             contract.LiveFiltersV1{Statuses: statuses},
+			Filters:             contract.LiveFiltersV1{Statuses: query.Statuses},
 		},
 	}
 }

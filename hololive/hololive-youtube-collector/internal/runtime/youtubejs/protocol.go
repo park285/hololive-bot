@@ -312,11 +312,12 @@ type ChannelResult struct {
 	ProtocolMeta
 	Pagination
 
-	LiveSessions            []LiveSessionItem        `json:"live_sessions"`
-	UnavailableLiveSessions []UnavailableLiveSession `json:"unavailable_live_sessions,omitempty"`
-	Profile                 ChannelProfileItem       `json:"profile"`
-	Photo                   []ChannelPhotoVariant    `json:"photo"`
-	MissingTab              bool                     `json:"missing_tab"`
+	LiveSessions            []LiveSessionItem             `json:"live_sessions"`
+	UnavailableLiveSessions []UnavailableLiveSession      `json:"unavailable_live_sessions,omitempty"`
+	Profile                 ChannelProfileItem            `json:"profile"`
+	Photo                   []ChannelPhotoVariant         `json:"photo"`
+	MissingTab              bool                          `json:"missing_tab"`
+	LiveQuery               *contract.LiveSnapshotQueryV1 `json:"live_query,omitempty"`
 }
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -389,6 +390,8 @@ type VideoLiveCheckResult struct {
 	IsPrivate               *bool                            `json:"is_private,omitempty"`
 	HasLiveBroadcastDetails *bool                            `json:"has_live_broadcast_details,omitempty"`
 	StartedAt               *time.Time                       `json:"started_at,omitempty"`
+	ScheduledAt             *time.Time                       `json:"scheduled_at,omitempty"`
+	WaitingStateConfirmed   *bool                            `json:"waiting_state_confirmed,omitempty"`
 	EndedAt                 *time.Time                       `json:"ended_at,omitempty"`
 	Availability            contract.VideoAvailability       `json:"availability"`
 	Method                  contract.VideoAvailabilityMethod `json:"method"`

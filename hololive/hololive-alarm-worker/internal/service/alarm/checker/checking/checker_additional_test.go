@@ -413,7 +413,7 @@ func assertBuildUpcomingNotifications(t *testing.T) {
 
 	notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{testRoomShort1}, window)
 	require.NoError(t, err)
-	assert.Empty(t, notifications)
+	assert.Len(t, notifications, 1, "global marker must not hide a room candidate")
 
 	nonTarget := now.Add(10 * time.Minute)
 

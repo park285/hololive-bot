@@ -27,6 +27,8 @@ import (
 var errAlarmDispatchRunnerTestSend = errors.New("send failed")
 
 type alarmDispatchRunnerTestConsumer struct {
+	alarmRequestTestStore
+
 	batches               [][]domain.AlarmQueueEnvelope
 	drainErr              error
 	onDrain               func()

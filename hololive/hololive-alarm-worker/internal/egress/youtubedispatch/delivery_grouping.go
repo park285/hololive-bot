@@ -1,8 +1,12 @@
 package youtubedispatch
 
-import "github.com/kapu/hololive-shared/pkg/domain"
+import (
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
 
 type deliveryGroup struct {
+	frozen    *store.FrozenRequest
 	roomID    string
 	channelID string
 	kind      domain.OutboxKind

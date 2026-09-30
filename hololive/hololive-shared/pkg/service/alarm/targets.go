@@ -69,7 +69,7 @@ func ResolveChannelSubscribersByType(
 		}
 	}
 
-	out, err := resolveChannelSubscribersFromDB(ctx, cacheClient, db, normalizedChannelID, alarmType)
+	out, err := resolveChannelSubscribersFromDB(ctx, db, normalizedChannelID, alarmType)
 	if err != nil {
 		return out, fmt.Errorf("resolve channel subscribers from DB: %w", err)
 	}
@@ -131,7 +131,6 @@ func resolveKnownEmptySubscriberCache(
 
 func resolveChannelSubscribersFromDB(
 	ctx context.Context,
-	cacheClient cache.Client,
 	db dbx.Querier,
 	channelID string,
 	alarmType domain.AlarmType,
@@ -146,14 +145,11 @@ func resolveChannelSubscribersFromDB(
 	subscribers := extractSubscriberIDsByType(alarms, alarmType)
 	if len(subscribers) == 0 {
 		observeAlarmSubscriberDBFallback(subscriberDBFallbackMiss)
-		markEmptyChannelSubscriberCache(ctx, cacheClient, channelID, alarmType)
 
 		return nil, nil
 	}
 
 	observeAlarmSubscriberDBFallback(subscriberDBFallbackHit)
-
-	warmChannelSubscriberCache(ctx, cacheClient, alarms, channelID, alarmType)
 
 	return subscribers, nil
 }
@@ -165,7 +161,7 @@ func resolveChannelSubscribersFromDB(
 // Checker 경로의 read-through라 PG 결과는 이번 호출에만 쓰고 subscriber set을 다시 채우지 않는다. 조회 뒤 SADD하면
 // 그 사이 커밋된 구독 해지의 SREM보다 늦게 도착해 해지된 방이 set에 되살아날 수 있기 때문이다. 대가로 다른 쓰기 경로
 // (구독 변경 동기화·전체 rebuild)가 set을 다시 채울 때까지 evict된 채널은 매 cycle 이 batch PG 조회 1회를 다시 치른다.
-// 구독 0 채널의 empty marker 기록은 유지한다.
+// 빈 구독 marker도 늦은 조회 결과가 새 구독을 숨길 수 있으므로 read-through에서 기록하지 않는다.
 func ResolveUncachedChannelSubscribersByType(
 	ctx context.Context,
 	cacheClient cache.Client,
@@ -196,7 +192,6 @@ func ResolveUncachedChannelSubscribersByType(
 		subscribers := extractSubscriberIDsByType(alarms, alarmType)
 		if len(subscribers) == 0 {
 			observeAlarmSubscriberDBFallback(subscriberDBFallbackMiss)
-			markEmptyChannelSubscriberCache(ctx, cacheClient, channelID, alarmType)
 
 			continue
 		}

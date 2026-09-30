@@ -168,6 +168,7 @@ function analyzePlayer(raw, videoId, nowMs) {
     };
   }
 
+  /** @type {Omit<VideoCheck, "availability" | "method">} */
   const base = {
     video_id: videoId,
     channel_id: identity.channelId,
@@ -187,8 +188,16 @@ function analyzePlayer(raw, videoId, nowMs) {
       waiting: false,
     };
   }
+  if (facts.isUpcoming === true) {
+    delete base.started_at;
+  }
   return {
-    result: { ...base, ...classifyAvailability(facts, playability) },
+    result: {
+      ...base,
+      ...optionalField("scheduled_at", isWaitingState(facts, playability) ? (facts.startedAt ?? playability.slateStart) : undefined),
+      ...(facts.isUpcoming === true ? { waiting_state_confirmed: isWaitingState(facts, playability) } : {}),
+      ...classifyAvailability(facts, playability),
+    },
     waiting: isWaitingState(facts, playability),
   };
 }
@@ -330,6 +339,9 @@ function hasContradiction(facts, playability, nowMs) {
     return true;
   }
   const live = facts.isLive === true || facts.isLiveNow === true;
+	if (live && facts.startedAt !== undefined && Date.parse(facts.startedAt) > nowMs) {
+		return true;
+	}
   if (live && (facts.isUpcoming === true || facts.endedAt !== undefined)) {
     return true;
   }

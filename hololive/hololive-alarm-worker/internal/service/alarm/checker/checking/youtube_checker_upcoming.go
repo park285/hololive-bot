@@ -55,17 +55,6 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 		return nil, nil
 	}
 
-	alreadyNotified, err := c.dedupService.IsAlreadyNotifiedForSchedule(ctx, stream.ID, *stream.StartScheduled, selection.minutesUntil)
-	if err != nil {
-		return nil, fmt.Errorf("build upcoming notifications: check already notified for schedule: %w", err)
-	}
-
-	if alreadyNotified {
-		observeYouTubeUpcomingDecision("already_notified", selection.minutesUntil, selection.label, window)
-
-		return nil, nil
-	}
-
 	notifications := buildYouTubeUpcomingRoomNotifications(stream, subscriberRooms, selection)
 
 	observeYouTubeUpcomingDecision("selected", selection.minutesUntil, selection.label, window)

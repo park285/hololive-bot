@@ -40,6 +40,7 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 	}
 
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusUpcoming, new(true))
+	assertLifecycleOrigin(t, pool, "metadata_only")
 	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
 
 	replay, err := repo.RequestReplay(ctx, ReplayInput{
@@ -73,6 +74,7 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 	}
 
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(true))
+	assertLifecycleOrigin(t, pool, "observed")
 	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 1)
 }
 
@@ -113,6 +115,8 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(true))
 
 	afterSession, afterHead := premiereProjectionSnapshots(t, pool)
+	assertLifecycleOrigin(t, pool, "observed")
+
 	if afterSession != beforeSession {
 		t.Fatalf("content merge changed live-owned session fields\n before: %s\n  after: %s", beforeSession, afterSession)
 	}
@@ -273,6 +277,7 @@ func TestContentPremierePersistencePreservesRowCreatedAfterRead(t *testing.T) {
 		VideoID:            testVideoID,
 		ChannelID:          testChannelID,
 		Status:             livereconcile.StatusUpcoming,
+		LifecycleOrigin:    livereconcile.OriginMetadataOnly,
 		Title:              "Content-owned title",
 		ScheduledStartTime: &contentScheduled,
 		LastSeenAt:         received,

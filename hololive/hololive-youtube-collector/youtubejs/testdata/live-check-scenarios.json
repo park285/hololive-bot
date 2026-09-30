@@ -82,6 +82,8 @@
         "is_live_now": false,
         "is_upcoming": true,
         "has_live_broadcast_details": true,
+        "scheduled_at": "2027-12-31T12:00:00.000Z",
+        "waiting_state_confirmed": true,
         "availability": "UNKNOWN",
         "method": "unknown",
         "unknown_reason": "availability_unclassified"

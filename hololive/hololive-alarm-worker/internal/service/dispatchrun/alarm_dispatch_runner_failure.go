@@ -9,9 +9,9 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
@@ -107,16 +107,18 @@ func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []doma
 func (r *Runner) persistPostSendingFailure(ctx context.Context, group alarmDispatchGroup, cause error) error {
 	envelopes := group.envelopes
 
-	// Markdown handoff 결과 불명은 Iris가 이미 접수한 뒤라 재시도하지 않고 quarantine으로 보존한다.
-	if errors.Is(cause, egress.ErrReplyHandoffOutcomeUnknown) {
+	// 명시적 unknown 증거는 함께 전달된 pre-handoff 오류보다 우선하며 재발급하지 않는다.
+	if sendoutcome.Classify(cause) == sendoutcome.OutcomeUnknown {
 		return r.quarantinePostSendingFailure(ctx, envelopes, cause)
 	}
 
-	// 방 유형에 따라 Karing과 Text 사이에서 경로가 바뀌던 시절에는 방 기준 그룹의 ambiguous 실패를 quarantine했다.
-	// Karing 경로를 삭제해(DEC-20260926-hololive-karing-egress-disposition) 모든 그룹이 같은 Text 경로와 저장된 send-unit
-	// client_request_id로 다시 나가므로, 아래 재시도 판정을 source와 무관하게 적용한다.
-	if alarmDispatchPostSendFailureIsRetryable(cause, len(envelopes)) ||
-		(hasPersistedClientRequestID(envelopes) && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
+	if sendoutcome.Classify(cause) == sendoutcome.Failed && iris.IsPreHandoffClientRequestIDConflict(cause) && group.request != nil {
+		return r.reissueFailedRequest(ctx, group, cause)
+	}
+
+	// 응답 유실은 저장된 최종 본문·경로·membership·ID를 그대로 재사용할 수 있을 때만 재시도한다.
+	if isAlarmDispatchNotAdmittedRetryableFailure(cause) ||
+		(group.request != nil && hasPersistedClientRequestID(envelopes) && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
 		if err := r.persistSendingRetry(ctx, envelopes, cause); err != nil {
 			return fmt.Errorf("persist sending retry: %w", err)
 		}
@@ -163,17 +165,7 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 	return nil
 }
 
-// TransportError/DeadlineExceeded는 응답을 한 번도 받지 못한 경우라 첫 발송이 이미
-// admission됐을 수 있다. 저장된 send-unit ID가 없으면 ambiguous 원인은 단건 그룹에만 재시도를 허용한다.
-// 429/502/503은 미수용이 확정된 응답이라 그룹 크기와 무관하게 재시도한다.
-func alarmDispatchPostSendFailureIsRetryable(cause error, envelopeCount int) bool {
-	if isAlarmDispatchNotAdmittedRetryableFailure(cause) {
-		return true
-	}
-
-	return envelopeCount == 1 && isAlarmDispatchAmbiguousPostSendFailure(cause)
-}
-
+// Transport ambiguity는 고정된 request를 재사용할 때만 허용되며 횟수 예산은 현행 값을 따른다.
 func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
 	return isAlarmDispatchNotAdmittedRetryableFailure(cause) || isAlarmDispatchAmbiguousPostSendFailure(cause)
 }
@@ -187,19 +179,7 @@ func isAlarmDispatchNotAdmittedRetryableFailure(cause error) bool {
 }
 
 func isAlarmDispatchAmbiguousPostSendFailure(cause error) bool {
-	if cause == nil {
-		return false
-	}
-
-	if errors.Is(cause, egress.ErrReplyHandoffOutcomeUnknown) {
-		return false
-	}
-
-	if _, ok := errors.AsType[*iris.TransportError](cause); ok {
-		return true
-	}
-
-	return errors.Is(cause, context.DeadlineExceeded)
+	return !errors.Is(cause, context.Canceled) && sendoutcome.Classify(cause) == sendoutcome.TransportAmbiguous
 }
 
 func (r *Runner) preserveAfterPersistenceFailure(
@@ -367,4 +347,20 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 	retry.NextVisibleAt = time.Now().UTC().Add(retryAfter).Format(time.RFC3339Nano)
 
 	return retry
+}
+
+func (r *Runner) reissueFailedRequest(ctx context.Context, group alarmDispatchGroup, cause error) error {
+	retry, terminal := prepareDispatchFailure(group.envelopes, cause)
+	if len(terminal) == 0 {
+		reissued, err := r.consumer.ReissueSendRequest(ctx, retry, group.request.ClientRequestID)
+		if err != nil {
+			return fmt.Errorf("persist reissued alarm request: %w", err)
+		}
+
+		if reissued {
+			return nil
+		}
+	}
+
+	return r.quarantinePostSendingFailure(ctx, group.envelopes, fmt.Errorf("alarm request reissue budget exhausted: %w", cause))
 }

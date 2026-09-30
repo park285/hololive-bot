@@ -63,11 +63,10 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 		enqueue:   func(spec *joblease.JobSpec) EnqueueResult { return s.enqueueDiscovered(ctx, spec) },
 		warnFull:  s.warnQueueFullOnce(),
 	})
-	completed := outcome.queryErr == nil && !outcome.canceled
-	s.recordCycle(started, generation, &outcome, completed, start, len(runners))
+	s.recordCycle(started, generation, &outcome, start, len(runners))
 
-	if outcome.queryErr != nil {
-		s.logDiscoveryFailure(outcome.queryErr)
+	for _, failure := range outcome.failures {
+		s.logRunnerDiscoveryFailure(failure, runners)
 	}
 }
 
@@ -158,7 +157,6 @@ func (s *leaseScheduler) recordCycle(
 	started time.Time,
 	generation int64,
 	outcome *capacityCycleResult,
-	completed bool,
 	start, total int,
 ) {
 	s.cycleMu.Lock()
@@ -178,7 +176,7 @@ func (s *leaseScheduler) recordCycle(
 		s.lastCycleOperationCode = ""
 	}
 
-	if completed && total > 0 {
+	if total > 0 {
 		s.rotationCursor = nextRotationCursor(start, total, outcome)
 	}
 
@@ -225,4 +223,23 @@ func (s *leaseScheduler) logDiscoveryFailure(err error) {
 	spec := joblease.JobSpec{}
 	proof := contract.LeaseProof{}
 	s.executor.logFailure("candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), &spec, &proof)
+}
+
+func (s *leaseScheduler) logRunnerDiscoveryFailure(failure runnerQueryFailure, runners []RegisteredRunner) {
+	if supersededError(failure.err) {
+		return
+	}
+
+	for _, runner := range runners {
+		id := runner.Contract().ID()
+		if id.String() != failure.runnerID {
+			continue
+		}
+
+		spec := joblease.JobSpec{Provider: id.Provider, CollectionJobKind: string(id.Kind)}
+		proof := contract.LeaseProof{}
+		s.executor.logFailure("candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(failure.err)), collecterr.DiagnosticOf(failure.err).Detail(), &spec, &proof)
+
+		return
+	}
 }

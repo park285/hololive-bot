@@ -204,6 +204,16 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 }
 
 func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if repository, ok := c.repository.(interface {
+		BeginSendRequest(context.Context, int64, []int64, string, string, time.Duration) error
+	}); ok && len(envelopes) > 0 {
+		if err := repository.BeginSendRequest(ctx, envelopes[0].SendUnitID, idsFromEnvelopes(envelopes), c.workerID, envelopes[0].ClientRequestID, c.lease); err != nil {
+			return fmt.Errorf("begin immutable alarm send: %w", err)
+		}
+
+		return nil
+	}
+
 	ids := idsFromEnvelopes(envelopes)
 	if len(ids) == 0 {
 		return nil

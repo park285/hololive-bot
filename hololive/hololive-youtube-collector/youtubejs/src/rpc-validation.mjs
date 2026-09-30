@@ -326,6 +326,8 @@ export function validateVideoLiveCheckResponse(value) {
       "is_private",
       "has_live_broadcast_details",
       "started_at",
+      "scheduled_at",
+      "waiting_state_confirmed",
       "ended_at",
       "unknown_reason",
     ],
@@ -348,6 +350,8 @@ export function validateVideoLiveCheckResponse(value) {
     is_private: optionalResponseBoolean(record, "is_private"),
     has_live_broadcast_details: optionalResponseBoolean(record, "has_live_broadcast_details"),
     started_at: optionalResponseTimestamp(record, "started_at"),
+    scheduled_at: optionalResponseTimestamp(record, "scheduled_at"),
+    waiting_state_confirmed: optionalResponseBoolean(record, "waiting_state_confirmed"),
     ended_at: optionalResponseTimestamp(record, "ended_at"),
   };
   if (confirmed && channelId === undefined) {
@@ -398,6 +402,8 @@ export function validateVideoLiveCheckResponse(value) {
       ? {}
       : { has_live_broadcast_details: facts.has_live_broadcast_details }),
     ...(facts.started_at === undefined ? {} : { started_at: facts.started_at }),
+    ...(facts.scheduled_at === undefined ? {} : { scheduled_at: facts.scheduled_at }),
+    ...(facts.waiting_state_confirmed === undefined ? {} : { waiting_state_confirmed: facts.waiting_state_confirmed }),
     ...(facts.ended_at === undefined ? {} : { ended_at: facts.ended_at }),
     availability,
     method,
@@ -443,7 +449,7 @@ export function validateChannelResponse(value) {
   assertResponseKeys(
     record,
     ["protocol_version", "live_sessions", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["cursor_start", "cursor_end", "missing_tab", "unavailable_live_sessions"],
+    ["cursor_start", "cursor_end", "missing_tab", "unavailable_live_sessions", "live_query"],
   );
   const profile = recordField(record, "profile");
   assertResponseKeys(profile, [], ["handle", "description", "country", "joined_date"]);
@@ -476,7 +482,28 @@ export function validateChannelResponse(value) {
     photo: arrayField(record, "photo").map(validatePhoto),
     ...validatePagination(record),
     ...optionalBoolean(record, "missing_tab"),
+    ...(record.live_query === undefined ? {} : { live_query: validateLiveQuery(record, unavailable?.length ?? 0) }),
   };
+}
+
+/**
+ * @param {Record<string, unknown>} parent
+ * @param {number} unavailableCount
+ * @returns {NonNullable<import("./contracts.d.ts").ChannelResult["live_query"]>}
+ */
+function validateLiveQuery(parent, unavailableCount) {
+  const query = recordField(parent, "live_query");
+  assertResponseKeys(query, ["channel_id", "source", "statuses", "exhausted", "access_restricted", "page_count"], []);
+  const channelId = responseIdentifier(query, "channel_id", maxChannelIdentifierBytes);
+  const statuses = arrayField(query, "statuses");
+  if (typeof query.page_count !== "number" || query.source !== "streams" || JSON.stringify(statuses) !== JSON.stringify(["ENDED", "LIVE", "UPCOMING"]) ||
+      query.page_count !== parent.page_count || query.exhausted !== parent.exhausted ||
+      query.access_restricted !== (unavailableCount > 0) || parent.missing_tab === true) {
+    throw new RpcResponseError("live query proof contradicts collection scope");
+  }
+  return { channel_id: channelId, source: "streams", statuses: ["ENDED", "LIVE", "UPCOMING"],
+    exhausted: requiredResponseBoolean(query, "exhausted"), access_restricted: requiredResponseBoolean(query, "access_restricted"),
+    page_count: query.page_count };
 }
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").UnavailableLiveSession} */

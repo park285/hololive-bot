@@ -86,20 +86,25 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 }
 
 func (n *Notifier) publishPreparedBatch(ctx context.Context, prepared []claimedSend, result *delivery.SendResult, errs []error) []error {
-	publishedCount, err := n.publishBatchAndMark(ctx, prepared)
+	active, expired := splitExpiredUpcoming(prepared, time.Now().UTC())
+
+	result.Skipped += len(expired)
+
+	// 느린 claim 해제가 아직 유효한 후보의 발행을 지연시키지 않도록 발행 뒤 정리한다.
+	defer n.releaseExpiredClaims(ctx, expired)
+
+	if len(active) == 0 {
+		return errs
+	}
+
+	publishedCount, err := n.publishBatchAndMark(ctx, active)
 	if err != nil {
 		result.Sent += publishedCount
-		result.Failed += len(prepared) - publishedCount
+		result.Failed += len(active) - publishedCount
 
 		errs = append(errs, fmt.Errorf("send notifications: publish batch: %w", err))
 	} else {
 		result.Sent += publishedCount
-	}
-
-	for _, item := range prepared[:publishedCount] {
-		if n.tierScheduler != nil {
-			n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
-		}
 	}
 
 	return errs

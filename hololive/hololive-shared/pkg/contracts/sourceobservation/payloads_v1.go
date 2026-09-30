@@ -6,6 +6,18 @@ import (
 
 const LiveSnapshotMetadataContractGeneration int64 = 2
 
+const LiveSnapshotQueryContractGeneration int64 = 3
+
+// LiveSnapshotQueryV1은 반환 항목이 아니라 실제 조회한 범위와 완결성을 증명한다.
+type LiveSnapshotQueryV1 struct {
+	ChannelID        string   `json:"channel_id"`
+	Source           string   `json:"source"`
+	Statuses         []string `json:"statuses"`
+	Exhausted        bool     `json:"exhausted"`
+	AccessRestricted bool     `json:"access_restricted"`
+	PageCount        int      `json:"page_count"`
+}
+
 type VideoListItemV1 struct {
 	VideoID      string     `json:"video_id"`
 	ChannelID    string     `json:"channel_id"`
@@ -42,6 +54,7 @@ type LiveSessionV1 struct {
 type LiveSnapshotV1 struct {
 	Sessions []LiveSessionV1         `json:"sessions"`
 	Coverage GlobalChannelCoverageV1 `json:"coverage"`
+	Query    *LiveSnapshotQueryV1    `json:"query,omitempty"`
 }
 
 type ViewerSampleV1 struct {

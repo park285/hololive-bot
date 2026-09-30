@@ -155,7 +155,7 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	return
 }
 
-func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) error {
+func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) (sendErr error) {
 	if err := validateDeliverySendRequest(req); err != nil {
 		return fmt.Errorf("validate delivery send request: %w", err)
 	}
@@ -173,13 +173,29 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	defer cancel()
 
+	prepared, preparedOK := d.sender.(messagedelivery.PreparedMessageSender)
+	usePrepared := req.frozen != nil && req.frozen.Route != "sender"
+
+	if usePrepared && !preparedOK {
+		return errors.New("send frozen delivery: prepared sender required")
+	}
+
+	finish := d.beginProviderAttempt()
+	completed := false
+
+	defer func() { finish(sendErr, completed) }()
+
 	var err error
 
-	if sender, ok := d.sender.(messagedelivery.ClientRequestMessageSender); ok {
-		err = sender.SendMessageWithClientRequestID(sendCtx, req.roomID, req.message, deliveryClientRequestID(req.roomID, req.dedupeKeys))
+	if usePrepared {
+		err = prepared.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
+	} else if sender, ok := d.sender.(messagedelivery.ClientRequestMessageSender); ok {
+		err = sender.SendMessageWithClientRequestID(sendCtx, req.roomID, req.message, req.requestID())
 	} else {
 		err = d.sender.SendMessage(sendCtx, req.roomID, req.message)
 	}
+
+	completed = true
 
 	if err != nil {
 		return d.wrapDeliverySendError(sendCtx, err)
@@ -240,4 +256,12 @@ func (d *SendEngine) deliveryParallelism() int {
 	}
 
 	return dispatchstate.DefaultConfig().DeliveryParallelism
+}
+
+func (r deliverySendRequest) requestID() string {
+	if r.clientRequestID != "" {
+		return r.clientRequestID
+	}
+
+	return deliveryClientRequestID(r.roomID, r.dedupeKeys)
 }

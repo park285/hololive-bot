@@ -71,6 +71,13 @@ func applyAbsenceToKnownSession(session *reduceSession, existing *SessionState, 
 		return
 	}
 
+	// 부재만으로 수명 추적을 시작하지 않는다. 과거 일정의 last_seen_at도
+	// positive clock으로 해석하지 않으며, 기존 observed 부재 슬롯 계약은 유지한다.
+	if (existing.LifecycleOrigin == OriginMetadataOnly || existing.LifecycleOrigin == OriginLegacyUnknown) &&
+		existing.Clock.LastUpcomingPositiveAt == nil && existing.Clock.LastLivePositiveAt == nil {
+		return
+	}
+
 	covers := session.absenceCovers(slot, existing)
 	if !covers {
 		return

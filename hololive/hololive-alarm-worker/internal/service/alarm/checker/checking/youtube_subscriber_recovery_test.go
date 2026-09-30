@@ -103,7 +103,7 @@ func TestYouTubeCheckerCheck_RecoversEvictedSubscriberSetFromDB(t *testing.T) {
 	require.Empty(t, warmed)
 }
 
-func TestYouTubeCheckerCheck_EmptySubscriberMarkerSkipsDB(t *testing.T) {
+func TestYouTubeCheckerCheck_EmptySubscriberMarkerDoesNotHidePendingDBFailure(t *testing.T) {
 	t.Parallel()
 
 	checker, cacheClient := newSubscriberRecoveryChecker(t, failingSubscriberDB{})
@@ -115,7 +115,9 @@ func TestYouTubeCheckerCheck_EmptySubscriberMarkerSkipsDB(t *testing.T) {
 	))
 
 	notifications, err := checker.Check(t.Context())
-	require.NoError(t, err)
+	// cache의 구독 없음은 durable 미발행 후보가 없다는 증거가 아니다.
+	require.ErrorIs(t, err, errSubscriberDBUnavailable)
+	require.ErrorContains(t, err, "load pending")
 	require.Empty(t, notifications)
 }
 

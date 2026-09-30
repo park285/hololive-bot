@@ -296,3 +296,14 @@ func uniqueSortedInt64s(values []int64) []int64 {
 
 	return result
 }
+
+// AttemptCount는 묶음 owner 중 가장 많이 소비한 재시도 횟수다.
+func (o StartedOperation) AttemptCount() int {
+	count := 0
+
+	for i := range o.groups {
+		count = max(count, o.groups[i].ownerAfter.AttemptCount)
+	}
+
+	return count
+}

@@ -80,12 +80,18 @@ func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *col
 		return nil, nil
 	}
 
-	// collector는 generation 2(세션 메타데이터)만 만든다. generation 1 경로는 계획 T11 C6에서 지웠다.
+	// 새 collector는 generation 3의 실제 조회 증명만 발행한다.
 	if generationErr := input.RequireLiveSnapshotMetadataGeneration(); generationErr != nil {
 		return nil, fmt.Errorf("require live snapshot metadata generation: %w", generationErr)
 	}
 
-	payload := liveSnapshotPayload(input.Spec().SubjectKey, result.LiveSessions)
+	if result.LiveQuery == nil || result.LiveQuery.ChannelID != input.Spec().SubjectKey ||
+		result.LiveQuery.PageCount != result.PageCount || result.LiveQuery.Exhausted != result.Exhausted ||
+		result.LiveQuery.AccessRestricted != (len(result.UnavailableLiveSessions) > 0) {
+		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "live query proof does not match helper pagination and restrictions")
+	}
+
+	payload := liveSnapshotPayload(input.Spec().SubjectKey, result.LiveSessions, result.LiveQuery)
 
 	envelope, err := subjectEnvelope(input, contract.KindLiveSnapshot, completeness, continuity, payload)
 	if err != nil {

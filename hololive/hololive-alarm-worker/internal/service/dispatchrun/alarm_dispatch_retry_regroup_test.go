@@ -101,17 +101,6 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailur
 	assert.Equal(t, first.ClientRequestID, retryID)
 }
 
-func TestAlarmDispatchPostSendFailureIsRetryable(t *testing.T) {
-	t.Parallel()
-
-	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset by peer")}
-	assert.True(t, alarmDispatchPostSendFailureIsRetryable(transportErr, 1))
-	assert.False(t, alarmDispatchPostSendFailureIsRetryable(transportErr, 2))
-	assert.True(t, alarmDispatchPostSendFailureIsRetryable(&iris.HTTPError{StatusCode: 503}, 2))
-	assert.False(t, alarmDispatchPostSendFailureIsRetryable(&iris.HTTPError{StatusCode: 500}, 1))
-	assert.False(t, alarmDispatchPostSendFailureIsRetryable(nil, 1))
-}
-
 // migration 141 이전 delivery를 claim하던 legacy_head와 그룹 구성에서 ID를 파생하던 폴백을 지웠다. 저장된
 // send-unit client_request_id가 없는 그룹은 파생 ID로 보내지 않고 발송 전 실패로 드러낸다.
 func TestAlarmDispatchRunnerRefusesGroupWithoutPersistedSendUnitIdentity(t *testing.T) {

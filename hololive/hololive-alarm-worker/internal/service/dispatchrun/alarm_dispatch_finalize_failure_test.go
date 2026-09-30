@@ -30,6 +30,8 @@ type finalizeFailureCall struct {
 }
 
 type finalizeFailureRecordingConsumer struct {
+	alarmRequestTestStore
+
 	calls []finalizeFailureCall
 
 	routeFailuresErr         error

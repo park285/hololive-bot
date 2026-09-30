@@ -25,7 +25,17 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 
 ## 라이브 채널·영상 확인
 
-`DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 canonical LIVE의 신선한 positive가 없을 때 projection이 만드는 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check` 경로입니다. 두 새 kind는 youtubejs 전용 schema 1/generation 1이며 기존 live_snapshot 세대는 바꾸지 않습니다.
+`DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 canonical LIVE의 신선한 positive가 없을 때 projection이 만드는 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check` 경로입니다. 기존 운영 세대의 두 확인 kind는 youtubejs 전용 schema 1/generation 1이며 아래 개정의 별도 cutover 전에는 이를 유지합니다.
+
+수명 정합성 개정의 새 collector는 `live_snapshot` schema 1/generation 3과 `video_live_check` schema 2/generation 2를 요구합니다. `channel_live_check`와 Holodex 세대는 그대로입니다. API는 과거 snapshot generation 2와 영상 확인 generation 1의 의미를 보존합니다. [개정 계획과 검증 기록](../plans/2026-09-30-live-reconciliation-lifecycle.md)을 따르며 실제 세대 전환은 migration bootstrap과 분리한 `scripts/migrations/manual/youtube_live_lifecycle_cutover.sql`의 승인된 cutover로 수행합니다.
+
+generation 3 snapshot의 `query`는 helper의 `streams` 질의 범위·페이지 수·종료·접근 제한을 증명합니다. 반환 영상 상태나 빈 배열에서 coverage를 추정하지 않습니다. 현행 한 페이지 호출 예산에서 continuation이 남거나 종료 플래그가 없으면 PARTIAL이며 부재 종료에 사용하지 않습니다. 접근 제한 영상도 positive 결과와 분리합니다.
+
+영상 확인 대상은 LIVE를 먼저 확보하고 기존 1,000건 상한의 남은 자리에서 지난 UPCOMING과 예정 시각 없는 legacy_unknown을 선택합니다. 미래 UPCOMING은 전수 확인하지 않습니다. 최근 실제 영상 확인은 UNKNOWN이어도 재확인 빈도를 제한하며 positive clock을 만들지 않습니다. 신규 UPCOMING 검토 target의 우선순위는 기존 영상 확인보다 한 단계 낮고 최초 discovery도 기존 LIVE를 앞서지 않습니다. 요청·worker·retry 상한은 변경하지 않습니다.
+
+`lifecycle_origin`은 일정·Premiere·시작 미확정 메타데이터의 `metadata_only`, 실제 수명 사실의 `observed`, 증거 미확정 기존 행의 `legacy_unknown`입니다. 메타데이터 병합은 observed/legacy_unknown을 낮추지 않습니다. schema 2 영상 확인은 canonical 채널 identity·신뢰·무모순 시각·관측 순서를 확인한 명시적 종료에 한해 시작 미관측 UPCOMING을 정산합니다. 시작 clock과 과거 알림은 만들지 않습니다. UPCOMING positive에는 새 요청의 `scheduled_at`과 `waiting_state_confirmed`가 필요하며 과거 정본 일정은 대체 증거가 아닙니다.
+
+검토 영수증 `closed_unresolved`는 ENDED·전송 성공이 아닙니다. UNKNOWN 확인 이후 운영자가 정확한 snapshot CAS로 기록하는 append-only 결정이며 canonical/head/dispatch를 바꾸지 않습니다. 새 사실이나 snapshot 변경은 기존 면제를 무효화합니다. runtime은 영수증과 snapshot의 조회 권한만 가지며 기록 함수는 운영자가 SERIALIZABLE 트랜잭션에서 사용합니다.
 
 기본 cadence는 2분, evidence freshness는 270초입니다. 채널 확인은 resolve_url 1회와 선택 영상 player 최대 1회, 영상 확인은 player 1회이며 초기화용 config 조회·HTML·browse 보완·transport retry·자동 redirect를 사용하지 않습니다. 기존 목록 실패로 인한 job-level PARTIAL/defer는 아래 Atomic publish 계약을 유지하며, 새 확인의 UNKNOWN 자체를 추가 재시도의 이유로 삼지 않습니다.
 
@@ -111,3 +121,7 @@ Holodex와 Official Schedule fetch는 collector-owned `providerhttp` transport�
 ## Related docs
 
 - `../runbooks/youtube-collector.md`
+
+## Discovery 오류의 진행 범위
+
+후보 조회에서 명시적인 runner/target 계약 오류(`joblease.ErrCandidateContract`)가 발생하면 그 runner의 페이지를 거절하고 독립 runner 조회를 계속합니다. mixed poll interval bundle은 실행하지 않습니다. 실제 조회 지점과 잔여 capacity를 기준으로 cursor를 진행시키되 cycle 실패와 runner 진단은 유지합니다. 취소·stale projection·DB/조회 스트림 오류는 전역 중단하며, local 오류 표식으로 완화하지 않습니다. 기존 queue capacity·enqueue dedup·projection generation·lease/fence·원자적 publish 예산은 그대로 적용합니다.

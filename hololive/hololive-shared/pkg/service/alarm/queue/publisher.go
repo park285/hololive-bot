@@ -262,8 +262,11 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 		end := min(start+limit, len(envelopes))
 
 		result, err := p.outbox.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes[start:end]})
-		if err != nil {
-			return total, fmt.Errorf("insert batch: %w", err)
+		// 뒤 chunk가 실패해도 이미 commit 또는 ledger 조회로 확인한 receipt는 보존한다.
+		for _, receipt := range result.Receipts {
+			receipt.Ordinal += start
+
+			total.Receipts = append(total.Receipts, receipt)
 		}
 
 		total.RequestedEvents += result.RequestedEvents
@@ -271,10 +274,14 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 		total.DuplicateEvents += result.DuplicateEvents
 		total.HashConflictEvents += result.HashConflictEvents
 		total.RequestedDeliveries += len(envelopes[start:end])
-		total.ProcessedDeliveries += len(envelopes[start:end])
+		total.ProcessedDeliveries += len(result.Receipts)
 		total.InsertedDeliveries += result.InsertedDeliveries
 		total.DuplicateDeliveries += result.DuplicateDeliveries
 		total.TerminalDuplicates += result.TerminalDuplicates
+
+		if err != nil {
+			return total, fmt.Errorf("insert batch: %w", err)
+		}
 	}
 
 	return total, nil

@@ -195,19 +195,29 @@ func (i *RunInput) Generation(kind contract.ObservationKind) (int64, error) {
 	return out, nil
 }
 
-// RequireLiveSnapshotMetadataGeneration은 live_snapshot current generation이 collector가 만드는 generation 2(세션
-// 메타데이터 포함)인지 확인한다. 예전 generation 1 payload 경로는 계획 T11 C6(stack-audit 2026-09-26)에서 지웠으므로 다른
-// generation은 조용히 다른 형식으로 내보내지 않고 구성 오류로 드러낸다.
+// RequireLiveSnapshotMetadataGeneration은 provider별 발행 세대를 검증합니다.
+// YouTube.js의 streams 조회 증명은 generation 3이며 Holodex metadata는 generation 2를 유지합니다.
 func (i *RunInput) RequireLiveSnapshotMetadataGeneration() error {
 	generation, err := i.Generation(contract.KindLiveSnapshot)
 	if err != nil {
 		return fmt.Errorf("live snapshot generation: %w", err)
 	}
 
-	if generation != contract.LiveSnapshotMetadataContractGeneration {
+	var expected int64
+
+	switch {
+	case i.Spec().Provider == contract.ProviderYouTubeJS:
+		expected = contract.LiveSnapshotQueryContractGeneration
+	case i.Spec().Provider == contract.ProviderHolodex:
+		expected = contract.LiveSnapshotMetadataContractGeneration
+	default:
+		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "live snapshot provider is unsupported")
+	}
+
+	if generation != expected {
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, fmt.Sprintf(
 			"live snapshot contract generation %d is unsupported; collector emits generation %d",
-			generation, contract.LiveSnapshotMetadataContractGeneration,
+			generation, expected,
 		))
 	}
 

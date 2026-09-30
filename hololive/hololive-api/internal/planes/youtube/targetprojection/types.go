@@ -65,10 +65,11 @@ type PolicyInputs struct {
 	StaleLiveVideos        []StaleLiveVideo
 }
 
-// StaleLiveVideo는 운영 roster 채널의 canonical LIVE 중 head LIVE positive가 신선하지 않은 영상입니다.
+// StaleLiveVideo는 신선한 positive가 없는 LIVE 또는 지난 일정·출처 미상의 UPCOMING 확인 대상입니다.
 type StaleLiveVideo struct {
-	VideoID   string
-	ChannelID string
+	VideoID    string
+	ChannelID  string
+	IsUpcoming bool
 }
 
 // StaleLiveVideoQuery는 같은 projection transaction에서 읽은 운영 roster와 신선도 예산을 전달합니다.
@@ -221,7 +222,7 @@ func (b *policyTargetBuilder) appendSubjectKinds(subject string, kinds []contrac
 	return nil
 }
 
-// appendStaleLiveVideos는 운영 roster 채널의 stale LIVE 영상마다 영상 확인 target을 만듭니다.
+// appendStaleLiveVideos는 운영 roster 채널의 영상별 수명 확인 target을 만듭니다.
 // 근거 key는 영상이 속한 canonical 채널이며, roster 밖 채널의 영상은 입력 오류로 거부합니다.
 func (b *policyTargetBuilder) appendStaleLiveVideos(videos []StaleLiveVideo, operationalChannelIDs []string) error {
 	if len(videos) == 0 {
@@ -247,6 +248,13 @@ func (b *policyTargetBuilder) appendStaleLiveVideos(videos []StaleLiveVideo, ope
 
 		if err := b.appendTarget(videoID, contract.KindVideoLiveCheck, staleLiveVideoReasonKind, channelID); err != nil {
 			return fmt.Errorf("append target: %w", err)
+		}
+
+		if video.IsUpcoming {
+			// 같은 영상 확인 budget에서 LIVE가 먼저 실행되도록 새 검토 대상만 낮춘다.
+			target := &b.targets[len(b.targets)-1]
+
+			target.Priority = max(target.Priority-1, 0)
 		}
 	}
 

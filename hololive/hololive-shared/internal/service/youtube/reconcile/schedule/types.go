@@ -27,6 +27,7 @@ type Session struct {
 	Title              string
 	ScheduledStartTime *time.Time
 	LastSeenAt         time.Time
+	ScheduleObservedAt *time.Time
 }
 
 type Evidence struct {
@@ -100,6 +101,7 @@ func (s *Session) clone() Session {
 	cloned := *s
 
 	cloned.ScheduledStartTime = cloneTime(s.ScheduledStartTime)
+	cloned.ScheduleObservedAt = cloneTime(s.ScheduleObservedAt)
 
 	return cloned
 }

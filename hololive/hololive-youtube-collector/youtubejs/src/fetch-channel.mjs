@@ -3,7 +3,7 @@ import { Utils } from "youtubei.js";
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
 import { isVideoLockup, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 import { fetchLiveMetadata } from "./live-metadata.mjs";
-import { assertResponseBudget, EncodedArrayBudget, encodedSize, paginationResult } from "./pagination.mjs";
+import { assertResponseBudget, EncodedArrayBudget, encodedSize, paginationResult, hasContinuation } from "./pagination.mjs";
 
 const maxScheduleMetadataLookups = 32;
 const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -47,23 +47,34 @@ export async function fetchChannelFeed({
   const { liveFeed, missingTab } = kind === "live"
     ? await fetchLiveFeed(channel)
     : { liveFeed: { videos: [] }, missingTab: false };
-  const { sessions: liveSessions, minimumBytes } = collectLiveSnapshot(liveFeed, id, maxSuccessResponseBytes);
+  const exhausted = kind !== "live" || missingTab ||
+    (!hasContinuation(liveFeed) && (liveFeed.has_continuation === false || liveFeed.hasContinuation === false));
+  const pagination = paginationResult({ pageCount: 1, reason: exhausted ? "exhausted" : "max_pages", continuity: "NOT_APPLICABLE" });
+  const query = kind === "live" && !missingTab ? {
+    channel_id: id, source: "streams", statuses: ["ENDED", "LIVE", "UPCOMING"], exhausted, page_count: 1,
+  } : undefined;
+  // access_restricted=true가 한 byte 짧으므로 hydration 전에는 안전한 하한만 센다.
+  const reserveBytes = encodedSize({ protocol_version: 1, live_sessions: [], profile: {}, photo: [], ...pagination,
+    ...(query === undefined ? {} : { live_query: { ...query, access_restricted: true } }) });
+  const { sessions: liveSessions, minimumBytes } = collectLiveSnapshot(liveFeed, id, maxSuccessResponseBytes, reserveBytes);
   const unavailable = await enrichUpcomingSchedules(liveSessions, innertube, minimumBytes, maxSuccessResponseBytes);
   const unavailableIDs = new Set(unavailable.map((item) => item.video_id));
   if (unavailable.length > 0) {
     logUnavailableSchedules(id, unavailable);
   }
+  // streams 조회 한 페이지의 현행 호출 예산을 유지한다. continuation이 남거나
+  // 종료 플래그가 없으면 전체 범위를 완료한 것으로 주장하지 않는다.
   return {
     live_sessions: liveSessions.filter((session) => !unavailableIDs.has(session.video_id)),
     ...(unavailable.length === 0 ? {} : { unavailable_live_sessions: unavailable }),
     profile: kind === "metadata" ? mapProfile(channel, about) : {},
     photo: kind === "metadata" ? mapPhoto(channel, about) : [],
-    ...paginationResult({
-      pageCount: 1,
-      reason: "exhausted",
-      continuity: "NOT_APPLICABLE",
-    }),
+    ...pagination,
     ...(missingTab ? { missing_tab: true } : {}),
+    ...(kind === "live" && !missingTab ? { live_query: {
+      channel_id: id, source: "streams", statuses: ["ENDED", "LIVE", "UPCOMING"],
+      exhausted, access_restricted: unavailable.length > 0, page_count: 1,
+    } } : {}),
   };
 }
 
@@ -312,8 +323,8 @@ function optionalHTTPSURL(value) {
   }
 }
 
-function collectLiveSnapshot(feed, channelId, maxSuccessResponseBytes) {
-  const budget = new EncodedArrayBudget(maxSuccessResponseBytes, responseReserveBytes);
+function collectLiveSnapshot(feed, channelId, maxSuccessResponseBytes, reserveBytes) {
+  const budget = new EncodedArrayBudget(maxSuccessResponseBytes, reserveBytes);
   const unresolvedIDs = new Set();
   const sessions = [];
   for (const session of liveSessionRows(feed, channelId)) {
@@ -337,5 +348,5 @@ function collectLiveSnapshot(feed, channelId, maxSuccessResponseBytes) {
     }
     sessions.push(session);
   }
-  return { sessions, minimumBytes: responseReserveBytes + budget.encodedItemsBytes() };
+  return { sessions, minimumBytes: reserveBytes + budget.encodedItemsBytes() };
 }

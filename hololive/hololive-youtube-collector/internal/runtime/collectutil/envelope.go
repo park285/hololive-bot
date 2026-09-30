@@ -49,11 +49,17 @@ func Envelope(
 		return contract.Envelope{}, fmt.Errorf("marshal payload V1: %w", err)
 	}
 
+	schemaVersion := contract.SchemaVersionV1
+
+	if kind == contract.KindVideoLiveCheck && generation == contract.VideoLifecycleContractGeneration {
+		schemaVersion = contract.VideoLifecycleSchemaVersion
+	}
+
 	out, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider:           provider,
 		ObservationKind:    kind,
 		SubjectKey:         subject,
-		SchemaVersion:      contract.SchemaVersionV1,
+		SchemaVersion:      schemaVersion,
 		ContractGeneration: generation,
 		ScheduledFor:       lease.ScheduledFor,
 		ObservedAt:         time.Now().UTC(),

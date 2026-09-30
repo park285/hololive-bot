@@ -32,6 +32,8 @@ func TestChannelLiveRunnerPublishesRestrictedSchedulesAsPartial(t *testing.T) {
 				VideoID: "restricted-video", ChannelID: restrictedTestChannelID, Reason: "access_restricted",
 			}}
 
+			response.LiveQuery.AccessRestricted = true
+
 			input := channelLiveInput(t)
 
 			result, err := NewChannelLiveRunner(&channelFake{result: response}).Collect(t.Context(), input)

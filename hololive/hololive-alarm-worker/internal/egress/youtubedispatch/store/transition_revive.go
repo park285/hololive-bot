@@ -249,6 +249,14 @@ func (s *TransitionStore) evaluateReviveResolution(
 		return reviveEvaluation{}, fmt.Errorf("revive failed logical groups: owner row: %w", err)
 	}
 
+	members := resolution.Members()
+	for i := range members {
+		switch rowsByID[members[i].DeliveryID].Error {
+		case expiredPendingReason, "client request id generations exhausted", "legacy request evidence missing":
+			return reviveEvaluation{}, nil
+		}
+	}
+
 	groupRows, followerSnapshots, hasActiveLock, outboxNeverSent, err := s.reviveGroupEvidence(
 		owner, resolution.Followers(), rowsByID, at,
 	)

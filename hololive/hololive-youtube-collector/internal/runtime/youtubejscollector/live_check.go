@@ -115,6 +115,15 @@ func (r *VideoLiveCheckRunner) Collect(ctx context.Context, input *collectutil.R
 }
 
 func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input *collectutil.RunInput) (contract.Envelope, error) {
+	generation, err := input.Generation(contract.KindVideoLiveCheck)
+	if err != nil {
+		return contract.Envelope{}, fmt.Errorf("video lifecycle generation: %w", err)
+	}
+
+	if generation != contract.VideoLifecycleContractGeneration {
+		return contract.Envelope{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "video lifecycle collector requires generation 2")
+	}
+
 	subject := input.Spec().SubjectKey
 
 	result, err := r.client.FetchVideoLiveCheck(ctx, youtubejs.VideoLiveCheckRequest{
@@ -251,6 +260,8 @@ func videoLiveCheckPayload(subject string, result *youtubejs.VideoLiveCheckResul
 		IsPrivate:               result.IsPrivate,
 		HasLiveBroadcastDetails: result.HasLiveBroadcastDetails,
 		StartedAt:               result.StartedAt,
+		ScheduledAt:             result.ScheduledAt,
+		WaitingStateConfirmed:   result.WaitingStateConfirmed,
 		EndedAt:                 result.EndedAt,
 		Availability:            result.Availability,
 		Method:                  result.Method,

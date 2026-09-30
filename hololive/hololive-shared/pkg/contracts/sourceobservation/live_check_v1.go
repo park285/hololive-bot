@@ -11,6 +11,11 @@ import (
 // 기존 live_snapshot 세대와 독립적으로 증가한다.
 const LiveCheckContractGeneration int64 = 1
 
+const (
+	VideoLifecycleContractGeneration int64 = 2
+	VideoLifecycleSchemaVersion      int16 = 2
+)
+
 type ChannelLiveCheckOutcome string
 
 const (
@@ -84,6 +89,8 @@ type VideoLiveCheckV1 struct {
 	IsPrivate               *bool                    `json:"is_private,omitempty"`
 	HasLiveBroadcastDetails *bool                    `json:"has_live_broadcast_details,omitempty"`
 	StartedAt               *time.Time               `json:"started_at,omitempty"`
+	ScheduledAt             *time.Time               `json:"scheduled_at,omitempty"`
+	WaitingStateConfirmed   *bool                    `json:"waiting_state_confirmed,omitempty"`
 	EndedAt                 *time.Time               `json:"ended_at,omitempty"`
 	Availability            VideoAvailability        `json:"availability"`
 	Method                  VideoAvailabilityMethod  `json:"method"`
@@ -357,6 +364,10 @@ func (p *VideoLiveCheckV1) validateIdentity(subject string) error {
 }
 
 func (p *VideoLiveCheckV1) normalizeTimes() error {
+	if err := normalizeOptionalTime(&p.ScheduledAt); err != nil {
+		return fmt.Errorf("video live check scheduled at: %w", err)
+	}
+
 	if err := normalizeOptionalTime(&p.StartedAt); err != nil {
 		return fmt.Errorf("video live check started at: %w", err)
 	}
@@ -419,7 +430,7 @@ func (p *VideoLiveCheckV1) validateUnknownOutcome(completeness Completeness) err
 func (p *VideoLiveCheckV1) hasResponseFacts() bool {
 	return p.ChannelID != "" || p.IsLive != nil || p.IsLiveNow != nil || p.IsUpcoming != nil ||
 		p.IsLiveContent != nil || p.IsPrivate != nil || p.HasLiveBroadcastDetails != nil ||
-		p.StartedAt != nil || p.EndedAt != nil
+		p.StartedAt != nil || p.EndedAt != nil || p.ScheduledAt != nil || p.WaitingStateConfirmed != nil
 }
 
 // validateLifecycleFacts는 신뢰 가능한 수명 사실이 서로 모순되지 않음을 강제한다.

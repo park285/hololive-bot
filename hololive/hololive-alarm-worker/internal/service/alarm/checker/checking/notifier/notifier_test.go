@@ -63,7 +63,13 @@ func (o *notifierBatchOutbox) InsertBatch(_ context.Context, input dispatchoutbo
 		return dispatchoutbox.PublishBatchResult{}, o.batchErrors[callIndex]
 	}
 
+	receipts := make([]dispatchoutbox.PublishReceipt, len(input.Envelopes))
+	for i := range receipts {
+		receipts[i] = dispatchoutbox.PublishReceipt{Ordinal: i, Outcome: dispatchoutbox.PublishInserted}
+	}
+
 	return dispatchoutbox.PublishBatchResult{
+		Receipts:            receipts,
 		RequestedEvents:     1,
 		InsertedEvents:      1,
 		RequestedDeliveries: len(input.Envelopes),
@@ -343,8 +349,8 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 	)
 	require.NoError(t, err)
 
-	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
-	currentScheduled := time.Date(2026, time.April, 9, 12, 2, 0, 0, time.UTC)
+	previousScheduled := time.Now().UTC().Add(10 * time.Minute)
+	currentScheduled := previousScheduled.Add(2 * time.Minute)
 	stream := &domain.Stream{
 		ID:             "delayed-publish-fail",
 		Title:          "publish fail retry",
@@ -551,7 +557,7 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 	)
 	require.NoError(t, err)
 
-	start := time.Date(2026, time.May, 22, 12, 10, 0, 0, time.UTC)
+	start := time.Now().UTC().Add(10 * time.Minute)
 	stream := &domain.Stream{
 		ID:             "stream-payload-pg",
 		Title:          "Payload PG",
@@ -591,14 +597,6 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 	assert.Equal(t, domain.StreamStatusUpcoming, got.Stream.Status)
 	require.NotNil(t, got.Stream.StartScheduled)
 	assert.Equal(t, start, *got.Stream.StartScheduled)
-}
-
-func TestClampProcessedDeliveriesBoundsPublishResult(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 0, clampProcessedDeliveries(-1, 2))
-	assert.Equal(t, 1, clampProcessedDeliveries(1, 2))
-	assert.Equal(t, 2, clampProcessedDeliveries(5, 2))
 }
 
 func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testing.T) {

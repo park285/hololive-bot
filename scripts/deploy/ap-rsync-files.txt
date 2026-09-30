@@ -227,7 +227,6 @@ hololive/hololive-shared/pkg/server/middleware/security.go
 hololive/hololive-shared/pkg/service/alarm/api.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm_data.go
-hololive/hololive-shared/pkg/service/alarm/cache_warm_targets.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm_write.go
 hololive/hololive-shared/pkg/service/alarm/checker/helpers.go
 hololive/hololive-shared/pkg/service/alarm/checker/target_policy.go
@@ -747,3 +746,11 @@ scripts/deploy/lib/public-bind-mounts.sh
 scripts/deploy/lib/require-quic-udp-buffer.sh
 scripts/deploy/lib/youtubejs-node-version.sh
 scripts/deploy/lib/admin-bind.sh
+hololive/hololive-shared/internal/service/youtube/reconcile/live/verified_terminal.go
+hololive/hololive-shared/pkg/contracts/sourceobservation/video_lifecycle_v2.go
+hololive/hololive-shared/pkg/service/delivery/queries/outbox_mark_preparation_unsent.sql
+hololive/hololive-shared/pkg/service/delivery/queries/outbox_mark_quarantined.sql
+hololive/hololive-shared/pkg/service/delivery/queries/outbox_reissue_failed_request.sql
+hololive/hololive-shared/pkg/service/delivery/queries/outbox_save_request.sql
+hololive/hololive-shared/pkg/service/delivery/request.go
+hololive/hololive-shared/pkg/service/sendoutcome/outcome.go

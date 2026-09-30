@@ -159,6 +159,7 @@ func TestProcessedPublishBatchResult_TreatsConflictRecordAsProcessed(t *testing.
 	input := PublishBatchResult{
 		RequestedDeliveries: 2,
 		HashConflictEvents:  1,
+		Receipts:            []PublishReceipt{{Ordinal: 0, Outcome: PublishInserted}, {Ordinal: 1, Outcome: PublishRejectedCollision}},
 	}
 	result := processedPublishBatchResult(&input)
 

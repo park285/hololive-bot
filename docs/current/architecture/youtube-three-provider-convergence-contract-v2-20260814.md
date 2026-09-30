@@ -219,6 +219,14 @@ const (
 | completeness / continuity | 알려진 결과 COMPLETE, UNKNOWN은 UNKNOWN / NOT_APPLICABLE | 알려진 결과 PARTIAL, UNKNOWN은 UNKNOWN / NOT_APPLICABLE |
 | absence 권한 | POSITIVE_ONLY; reducer 호출 금지 | POSITIVE_ONLY; absence slot 생성 금지 |
 
+2026-09-30 수명 정합성 개정은 [실행 계획의 명시적 사용자 승인](../plans/2026-09-30-live-reconciliation-lifecycle.md)에 따라 영상 확인 schema 2/generation 2와 YouTube.js snapshot generation 3을 추가합니다. 위 표와 아래의 prior LIVE positive·grace 조건은 보관된 영상 확인 schema 1/generation 1의 의미로 유지합니다. 새 collector의 발행 세대 전환은 API·DB 준비와 분리한 승인된 cutover이며 채널 확인과 Holodex 세대는 바꾸지 않습니다.
+
+- 새 영상 세대는 지난 UPCOMING·출처 미상도 기존 lease·projection·1,000건 상한 안에서 확인합니다. LIVE가 우선이며 미래 UPCOMING 전수 polling과 새 retry/worker를 추가하지 않습니다.
+- 요청 영상·canonical 채널 identity, 신뢰와 현재 사실의 무모순성, 관측 시각 이하의 유효 ended_at, 더 새로운 positive/pending 부재를 확인한 영상별 명시적 종료만 시작 미관측 수명을 정산합니다. 기존 LIVE positive가 있는 경로의 grace는 유지합니다. 시작 근거가 없으면 started_at·positive clock은 NULL이며 과거 시작 알림을 만들지 않습니다.
+- optional `scheduled_at`과 `waiting_state_confirmed`는 같은 raw player 요청의 실제 예정 시각과 대기 상태를 뜻합니다. 기존 정본 일정으로 보충하지 않습니다. 현재 LIVE·검증된 UPCOMING만 observed/head의 정상 positive 경로로 들어갑니다. UNKNOWN·비공개·목록 누락·예정 시각 경과만으로 종료/취소하지 않습니다.
+- snapshot generation 3의 `query`는 실제 `streams` 질의의 channel/status 범위·page_count·exhausted·access_restricted를 증명합니다. 반환 상태 집합과 scope는 독립입니다. 한 페이지의 현행 호출 예산에서 continuation 또는 미확정 종료·접근 제한이 남으면 PARTIAL이며 absence 종료에 사용할 수 없습니다.
+- canonical `lifecycle_origin`은 metadata_only/observed/legacy_unknown이며 메타데이터 merge는 출처를 낮추지 않습니다. 실제 head 상태 충돌·LIVE/head 누락·observed UPCOMING/head 누락은 계속 결함입니다. `youtube_live_review_receipts.closed_unresolved`는 정확한 현재 snapshot CAS에 한한 검토 결정으로 원본을 바꾸거나 전송 성공·ENDED를 뜻하지 않습니다. snapshot 변경은 기존 검토의 면제를 해제합니다.
+
 새 확인 RPC는 전용 단일 시도 transport를 사용한다. 기존 feed·schedule transport의 재시도 정책은 바꾸지 않는다. HTML, 추가 browse, 다른 provider, 자동 재시도로 판정을 보완하지 않는다. 채널 RPC와 기존 live_snapshot fetch는 독립적으로 성공·실패를 기록한다. 한쪽의 실패가 다른 쪽의 유효 관측을 버리거나 completeness를 승격시키지 않는다. 새 확인의 요청 실패도 해당 subject의 UNKNOWN(`request_failed`)으로 관측하여, 이전 공개 불가 판정을 재확인 실패 뒤 계속 적용하지 않는다. 취소·lease 상실 때는 기존 publish fence를 우회하지 않는다.
 
 `DEC-20260927-live-check-slot-isolation`에 따라 `youtubejs_channel_live`는 `live_snapshot`만 발행한다. 채널 확인은 별도 job key·lease·scheduled_for로 COMPLETE/DEFERRED를 진행한다. 방송 탭의 같은-slot 재시도가 성공한 확인의 다음 2분 슬롯을 막거나 이미 발행한 확인을 다시 요청하게 하지 않는다. 같은 `channel_live_check`를 두 job에서 발행하는 호환 경로는 없다.

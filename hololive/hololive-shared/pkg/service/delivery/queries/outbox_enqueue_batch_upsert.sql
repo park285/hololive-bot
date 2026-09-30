@@ -49,8 +49,10 @@ SELECT
 FROM input
 ON CONFLICT (kind, content_id) DO UPDATE
 SET period_key = EXCLUDED.period_key,
-    room_id = EXCLUDED.room_id,
-    payload = EXCLUDED.payload,
+    room_id = CASE WHEN notification_delivery_outbox.payload->'request' IS NOT NULL
+                   THEN notification_delivery_outbox.room_id ELSE EXCLUDED.room_id END,
+    payload = CASE WHEN notification_delivery_outbox.payload->'request' IS NOT NULL
+                   THEN notification_delivery_outbox.payload ELSE EXCLUDED.payload END,
     status = 'PENDING',
     attempt_count = 0,
     next_attempt_at = NOW(),
@@ -60,3 +62,7 @@ SET period_key = EXCLUDED.period_key,
     sending_started_at = NULL,
     error = NULL
 WHERE notification_delivery_outbox.status = 'FAILED'
+  AND COALESCE(notification_delivery_outbox.payload->'request'->>'exhausted', 'false') <> 'true'
+  AND (notification_delivery_outbox.payload->'request' IS NOT NULL
+       OR notification_delivery_outbox.attempt_count = 0
+       OR notification_delivery_outbox.payload->>'known_unsent' = 'true')

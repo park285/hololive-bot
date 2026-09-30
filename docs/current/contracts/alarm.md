@@ -50,9 +50,12 @@ Alarm-worker does not send Karing templates
 (`DEC-20260926-hololive-karing-egress-disposition`, superseding
 `DEC-20260904-hololive-karing-regular-chat-egress`). The Karing chunk planner,
 per-chunk request IDs, and the `karing.kakaolink` contract were removed with it.
-Alarm dispatch sends each persisted send unit as one text message with its stored
-`client_request_id`; an ambiguous post-send failure retries with that same ID for
-every source kind. Past Karing `SENDING`/`outcome_unknown` rows keep the existing
+Alarm dispatch pins each send unit's final body, text/markdown route, membership,
+base ID and generation before `BeginSending`. Retries and restarts reuse that request.
+Transport ambiguity may retry with the stored ID and identical request for every
+source kind; structured `OUTCOME_UNKNOWN` and unknown handoff remain quarantined.
+Only confirmed pre-handoff `CLIENT_REQUEST_ID_FAILED` permits atomic generation/retry
+advance to SDK r1/r2 within the existing retry budget. Past Karing `SENDING`/`outcome_unknown` rows keep the existing
 quarantine and stale-sweeper contract (T18 2026-09-26: 0 non-terminal rows).
 
 Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
@@ -63,8 +66,21 @@ An existing event key with a different payload hash is a collision, not a conten
 substitution. The transaction records the collision and admits only delivery
 entries matching the committed event payload; matching entries in the same batch
 remain eligible. Rejected entries do not affect send-unit boundaries or request
-IDs. `InsertBatch` exposes `HashConflictEvents`; `InsertPending` returns
+IDs. `InsertBatch` exposes `HashConflictEvents` and per-input `Receipts` with ordinal,
+delivery key and committed outcome. Only inserted, duplicate-active and duplicate-SENT
+receipts satisfy publishing; collision and other terminal outcomes do not. A later chunk
+failure preserves earlier committed receipts. `InsertPending` returns
 `ErrEventPayloadConflict` and no existing record for a conflicting single input.
+
+선정된 upcoming 알람의 방별 payload/category는 `alarm_upcoming_candidates`에 채널 평가
+checkpoint와 함께 저장합니다. staging commit부터 복구를 보장하며 예정 시작 이후에는
+분 전 알람을 만료합니다. 확인된 최신 일정 변경·방송 종료·구독 해제는 사유 종료하고
+목록 누락만으로 취소하지 않습니다. 발행 성공은 방별 receipt로 확인하여 다른 방의
+미발행을 방송 전체 dedup으로 가리지 않습니다. 기존 target minutes와 조회 lookback은 유지합니다.
+Canonical 상태·일정의 최신성은 실제 `status_observed_at`·`schedule_observed_at`으로만
+판정하며 예정 시각도 포함하는 `last_seen_at`은 사용하지 않습니다. 과거 관측 시각을
+추정 backfill하지 않습니다. 확정된 `is_premiere=true`는 불변 분류이므로 선정·수신
+시각과 무관하게 live 후보에서 제외합니다.
 
 `PUT /room-name` stores the admin-assigned room display name in PostgreSQL
 `alarm_room_display_names` (migration 232). `room_name` is required; a blank value
@@ -142,8 +158,8 @@ HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service
 
 `alarm-worker` YouTube checker의 채널별 LIVE 구독 방은 `alarm:channel_subscribers:{channel}` set을 먼저 읽는다.
 set이 비어 있으면 `alarm:channel_subscribers_empty:LIVE:{channel}` marker(30초)가 있는 채널만 구독 0으로 본다.
-marker가 없는 채널은 set 유실(eviction 등)로 보고 해당 주기의 미확정 채널을 한 번의 DB 조회로 확정한 뒤,
-구독이 있으면 이번 주기의 대상으로만 쓰고 set을 다시 채우지 않으며(조회와 SADD 사이 구독 해지 경합 방지), 없으면 marker를 기록한다(`alarm.ResolveUncachedChannelSubscribersByType`). 유실된 set은 다음 rebuild나 구독 변경이 채울 때까지 주기마다 batch DB 조회 1회로 확정한다.
+marker가 없는 채널은 set 유실(eviction 등)로 보고 해당 주기의 미확정 채널을 한 번의 DB 조회로 확정한다.
+`ResolveChannelSubscribersByType`와 `ResolveUncachedChannelSubscribersByType`의 DB 결과는 이번 조회에만 사용하며 set이나 빈 구독 marker를 쓰지 않는다. 늦은 SADD가 해지를 되돌리거나 늦은 marker가 새 구독을 숨기는 경합을 방지한다. 유실된 set은 다음 rebuild나 구독 변경이 채울 때까지 DB에서 확인하며, checker는 주기마다 미확정 채널을 batch 조회 1회로 확정한다.
 set 조회 오류와 이 DB 조회 오류는 해당 check 주기 오류로 반환하며, 확정하지 못한 채널을 구독 0으로 기록하지 않는다.
 
 신규 구독을 허용하기 전에 migration 194–196, 양쪽 HTTP provider, worker의 대상 선정 코드를

@@ -35,7 +35,7 @@ func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalU
 func terminalStatusSQL(status Status) (statusColumn, timestampColumn string) {
 	overrides := map[Status][2]string{
 		StatusDLQ:         {"dlq_at", "status IN ('leased','sending')"},
-		StatusQuarantined: {"quarantined_at", "status = 'sending'"},
+		StatusQuarantined: {"quarantined_at", "status IN ('leased','sending')"},
 		StatusCancelled:   {"cancelled_at", terminalNonFinalStatusFilter}, //nolint:misspell // 실제 DB 컬럼명이라, canceled로 바꾸면 SQL이 깨진다.
 	}
 	if sql, ok := overrides[status]; ok {

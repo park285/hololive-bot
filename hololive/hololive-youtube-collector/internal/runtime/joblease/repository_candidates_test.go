@@ -43,26 +43,6 @@ func TestBuildJobKeyMatchesCandidateSQLExpression(t *testing.T) {
 	}
 }
 
-func TestSubjectCandidateSQLMatchesContractShape(t *testing.T) {
-	t.Parallel()
-
-	sql := mustSQL("repository_candidates_0144_02.sql")
-
-	for _, want := range []string{
-		"<> ALL($5::text[])",
-		"LIMIT $6 + 1",
-		"'collector:' || $3 || ':' || $4 || ':' || target.subject_key",
-		"lease.next_due_at <= statement_timestamp()",
-		"lease.retry_not_before <= statement_timestamp()",
-		"lease.lease_expires_at <= statement_timestamp()",
-		"ORDER BY (job_key IS NOT NULL), max_priority DESC, effective_due_at ASC, subject_key ASC",
-	} {
-		if !strings.Contains(sql, want) {
-			t.Fatalf("subject candidate SQL missing %q", want)
-		}
-	}
-}
-
 func TestGlobalCandidateSQLMatchesContractShape(t *testing.T) {
 	t.Parallel()
 

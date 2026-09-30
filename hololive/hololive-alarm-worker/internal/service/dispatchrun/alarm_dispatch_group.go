@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 type alarmDispatchGroup struct {
+	request       *dispatchoutbox.SendRequest
 	roomID        string
 	minutesUntil  int
 	envelopes     []domain.AlarmQueueEnvelope

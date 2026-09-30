@@ -39,7 +39,9 @@ import (
 
 // outboxPayload: outbox에 저장되는 메시지 payload.
 type outboxPayload struct {
-	Message string `json:"message"`
+	KnownUnsent bool             `json:"known_unsent,omitzero"`
+	Message     string           `json:"message"`
+	Request     *preparedMessage `json:"request,omitempty"`
 }
 
 type outboxBatchRow struct {
@@ -200,6 +202,20 @@ func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, workerID stri
 	)
 	if err != nil {
 		return false, fmt.Errorf("exec: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+// MarkQuarantined는 현재 worker의 SENDING만 격리하며 자동 재발송 가능한 FAILED로 되돌리지 않습니다.
+func (r *OutboxRepository) MarkQuarantined(ctx context.Context, id int64, workerID, reason string) (bool, error) {
+	if err := r.ensurePool(); err != nil {
+		return false, fmt.Errorf("quarantine delivery: %w", err)
+	}
+
+	tag, err := r.pool.Exec(ctx, mustSQL("outbox_mark_quarantined.sql"), id, workerID, reason)
+	if err != nil {
+		return false, fmt.Errorf("quarantine delivery: %w", err)
 	}
 
 	return tag.RowsAffected() > 0, nil

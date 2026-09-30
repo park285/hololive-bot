@@ -2,6 +2,7 @@ package collectorruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -22,16 +23,23 @@ type capacityCycleRequest struct {
 }
 
 type capacityCycleResult struct {
-	discovered   int
-	enqueued     int
-	deduped      int
-	truncated    bool
-	queueFull    bool
-	canceled     bool
-	stoppedEarly bool
-	queried      int
-	queryErr     error
-	limits       []int
+	discovered    int
+	enqueued      int
+	deduped       int
+	truncated     bool
+	queueFull     bool
+	canceled      bool
+	stoppedEarly  bool
+	queried       int
+	queryErr      error
+	globalFailure bool
+	failures      []runnerQueryFailure
+	limits        []int
+}
+
+type runnerQueryFailure struct {
+	runnerID string
+	err      error
 }
 
 func runCapacityAwareCycle(req *capacityCycleRequest) capacityCycleResult {
@@ -75,8 +83,14 @@ func (s *capacityCycleState) runStep(req *capacityCycleRequest, index, total int
 
 	page, err := s.queryPage(req, index, total)
 	if err != nil {
-		s.result.queryErr = err
-		return true
+		s.result.queryErr = errors.Join(s.result.queryErr, err)
+		s.result.failures = append(s.result.failures, runnerQueryFailure{runnerID: req.runnerIDs[(req.start+index)%total], err: err})
+		// 계약 오류는 해당 런너에서만 닫고, 전역 장애와 취소는 뒤 조회를 중단합니다.
+		s.result.globalFailure = !errors.Is(err, joblease.ErrCandidateContract) ||
+			errors.Is(err, joblease.ErrProjectionStale) ||
+			errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+
+		return s.result.globalFailure
 	}
 
 	stop, applied := applyCandidatePage(page, s.remaining, s.excluded, req.enqueue, req.warnFull)
@@ -121,7 +135,7 @@ func nextRotationCursor(start, total int, outcome *capacityCycleResult) int {
 		return start
 	}
 
-	if total <= 0 || outcome.queryErr != nil || outcome.canceled {
+	if total <= 0 || outcome.globalFailure || outcome.canceled {
 		return start
 	}
 
@@ -252,6 +266,10 @@ func (s *leaseScheduler) queryRunnerPage(
 	}
 
 	return func(runnerID string, excluded []string, limit int) (joblease.CandidatePage, error) {
+		if err := ctx.Err(); err != nil {
+			return joblease.CandidatePage{}, fmt.Errorf("query runner page: %w", err)
+		}
+
 		job, ok := byID[runnerID]
 		if !ok {
 			return joblease.CandidatePage{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "discovery cycle: runner identity is missing")
@@ -261,6 +279,16 @@ func (s *leaseScheduler) queryRunnerPage(
 
 		defer cancel()
 
-		return source.CandidatesForProjection(dbCtx, generation, job, excluded, limit)
+		page, err := source.CandidatesForProjection(dbCtx, generation, job, excluded, limit)
+
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return joblease.CandidatePage{}, fmt.Errorf("query runner page: %w", errors.Join(err, ctxErr))
+		}
+
+		if err != nil {
+			return page, fmt.Errorf("query runner page: %w", err)
+		}
+
+		return page, nil
 	}
 }

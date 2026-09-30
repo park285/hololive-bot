@@ -86,7 +86,9 @@ Ledger `SENT/QUARANTINED`가 retained physical state보다 우선합니다. Ledg
 
 외부 provider 요청 한 번에 포함되는 정확한 logical delivery owner 집합입니다. 개별 메시지는 owner 한 건, grouped 메시지는 서로 다른 logical key의 owner 여러 건을 가질 수 있습니다.
 
-Operation membership과 provider request는 `BeginSending` 이후 변경할 수 없습니다.
+Operation membership과 provider request는 최초 `BeginSending` 전에 `youtube_notification_send_request`에 저장하며 이후 변경할 수 없습니다. 최종 body·route·방·member IDs·dedupe keys·base ID·generation을 고정하고 retry/restart에서 다시 렌더링하지 않습니다. frozen 그룹의 모든 멤버가 due·freshness·lock 조건을 만족해야 claim 대상입니다. batch 상한보다 큰 그룹은 부분 전송하지 않으며 다른 eligible 작업을 막지 않습니다.
+
+기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 시 `request_snapshot_allowed=false`로 기존 행을 구분하고, 최초 발송 이전임을 확인할 수 있는 행만 고정합니다. 운영 inventory·전환 승인은 별도입니다.
 
 ### Tracking requirement
 
@@ -508,14 +510,16 @@ const (
 )
 ```
 
-Stable request ID의 존재만으로 retry-safe가 되지는 않습니다. Provider의 request rejection, dedupe, result-query 계약이 증거여야 합니다.
+Stable request ID의 존재만으로 retry-safe가 되지는 않습니다. Provider의 request rejection, dedupe, result-query 계약이 증거여야 합니다. 공통 `sendoutcome` 분류를 사용하되 각 파이프라인의 상태 전이 정책은 유지합니다.
+
+`CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK r1/r2 재발급을 허용합니다. generation과 owner/group retry·telemetry는 한 transaction으로 저장하고 다음 정규 attempt에서 전송합니다. 기존 MaxRetries·freshness·시간 한도를 확장하지 않으며 unknown·payload mismatch·already exists·code 없는 409에는 재발급하지 않습니다. generation 소진은 terminal 처리하고 revive로 초기화하지 않습니다.
 
 ### Grouped fallback
 
-- Outcome unknown에서는 fallback을 금지합니다.
+- Outcome unknown 및 client request admission 충돌(409)에서는 fallback을 금지합니다.
 - Known-not-accepted + `fallback_allowed=true`에서만 individual fallback을 허용합니다.
 - Fallback 자체는 attempt를 소비하지 않습니다.
-- Individual fallback 전 lease budget을 다시 확인합니다.
+- Individual fallback 전 lease budget을 다시 확인하며 singleton 최종 request도 발송 전에 저장합니다.
 
 ## Group transition semantics
 
@@ -664,6 +668,7 @@ Revive는 logical group 단위로 판정합니다.
 - 관련 outbox never-sent이며 freshness window 안
 - active group lock 없음
 - revive policy와 batch limit 충족
+- freshness 만료 및 ID generation 소진 사유가 아님; 저장된 request/generation을 초기화하지 않음
 
 적용:
 
@@ -725,6 +730,10 @@ terminal -> same terminal -> existing terminal_at 보존
 
 Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 telemetry와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다.
 
+## 만료 대기 종료
+
+부모 created_at이 기존 ClaimFreshnessWindow를 지난 PENDING은 bounded keyset sweep으로 검사합니다. logical ledger·owner·row_version을 검증하고 SENT/QUARANTINED·SENDING 증거를 우선합니다. known-unsent만 명시적 freshness 만료 사유로 FAILED 종료하며, unknown 증거를 만료로 지우지 않습니다. touched 부모는 표준 aggregate로 수렴하고 만료는 revive에서 제외합니다. ready snapshot은 실제 claim eligibility를 따르며 만료 대기 수는 기존 batch size 상한의 별도 지표로 집계합니다.
+
 ## Cleanup과 retention
 
 Full outbox/delivery row와 compact terminal evidence의 retention을 분리합니다.
@@ -737,6 +746,7 @@ Full outbox/delivery row와 compact terminal evidence의 retention을 분리합�
 - Cleanup retry가 cutoff를 더 최신 시각으로 앞당기면 안 됩니다.
 - Candidate selection, ledger verification, sibling guard, delete는 bounded transaction입니다.
 - Ledger는 초기 범위에서 자동 삭제하지 않습니다.
+- 참조 delivery가 모두 정리된 request 본문만 기존 retention cutoff와 batch 상한으로 삭제합니다.
 
 ## 금지 전이
 
@@ -923,3 +933,7 @@ TestBackfillCompletionRejectsUnprovenHistoricalCoverage
 19. Poller와 API를 포함한 모든 lifecycle 직접 writer가 제거되거나 새 transition owner로 전환됩니다.
 20. Contract, logical-owner, tracking, ledger backfill, integration, crash, commit fault-injection, race test가 통과합니다.
 21. Decision record를 `verified`로 올릴 evidence가 저장소에 남습니다.
+
+## 공통 attempt 계측
+
+`workercontract` Begin/End와 terminal counter는 실제 provider operation 한 번에 대응합니다. grouped 호출은 한 번이며 방별 delivery 결과와 구분합니다. claim·preparation·이미 충족된 행은 success를 만들지 않습니다. success/failed/timeout/canceled/panic/outcome_unknown은 provider 결과로 결정하며, DB finalization 실패는 provider 성공을 실패로 바꾸지 않습니다.

@@ -1,8 +1,8 @@
 INSERT INTO youtube_live_sessions (
     video_id, channel_id, status, title, topic_id, thumbnail_url,
     scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at,
-    is_premiere
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    is_premiere, lifecycle_origin, status_observed_at, schedule_observed_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $16)
 ON CONFLICT (video_id) DO UPDATE SET
     status = CASE
         WHEN $13::boolean THEN youtube_live_sessions.status
@@ -42,7 +42,23 @@ ON CONFLICT (video_id) DO UPDATE SET
         WHEN $13::boolean THEN youtube_live_sessions.last_seen_at
         ELSE GREATEST(youtube_live_sessions.last_seen_at, excluded.last_seen_at)
     END,
-    is_premiere = COALESCE(youtube_live_sessions.is_premiere, excluded.is_premiere)
+    is_premiere = COALESCE(youtube_live_sessions.is_premiere, excluded.is_premiere),
+    lifecycle_origin = CASE
+        WHEN $13::boolean OR excluded.lifecycle_origin <> 'observed' THEN youtube_live_sessions.lifecycle_origin
+        ELSE excluded.lifecycle_origin
+    END,
+    status_observed_at = CASE
+        WHEN $13::boolean OR youtube_live_sessions.status = 'ENDED'
+            OR (youtube_live_sessions.status = 'LIVE' AND excluded.status = 'UPCOMING')
+            THEN youtube_live_sessions.status_observed_at
+        WHEN youtube_live_sessions.status = excluded.status
+            THEN COALESCE(excluded.status_observed_at, youtube_live_sessions.status_observed_at)
+        ELSE excluded.status_observed_at
+    END,
+    schedule_observed_at = CASE
+        WHEN $13::boolean OR excluded.scheduled_start_time IS NULL THEN youtube_live_sessions.schedule_observed_at
+        ELSE excluded.schedule_observed_at
+    END
 WHERE
     (
         $13::boolean
@@ -77,5 +93,16 @@ WHERE
             OR GREATEST(youtube_live_sessions.last_seen_at, excluded.last_seen_at)
                 IS DISTINCT FROM youtube_live_sessions.last_seen_at
             OR (youtube_live_sessions.is_premiere IS NULL AND excluded.is_premiere IS NOT NULL)
+            OR (excluded.lifecycle_origin = 'observed' AND youtube_live_sessions.lifecycle_origin <> 'observed')
+            OR CASE
+                WHEN youtube_live_sessions.status = 'ENDED'
+                    OR (youtube_live_sessions.status = 'LIVE' AND excluded.status = 'UPCOMING')
+                    THEN youtube_live_sessions.status_observed_at
+                WHEN youtube_live_sessions.status = excluded.status
+                    THEN COALESCE(excluded.status_observed_at, youtube_live_sessions.status_observed_at)
+                ELSE excluded.status_observed_at
+            END IS DISTINCT FROM youtube_live_sessions.status_observed_at
+            OR (excluded.scheduled_start_time IS NOT NULL
+                AND excluded.schedule_observed_at IS DISTINCT FROM youtube_live_sessions.schedule_observed_at)
         )
     )

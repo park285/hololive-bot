@@ -185,6 +185,14 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
 	const defaultReason = lifecycleReasonUnknownError
 
+	if errors.Is(err, errRequestReissued) {
+		return ytlifecycle.FailureRetryable, lifecycleReasonTransport, 0
+	}
+
+	if errors.Is(err, errRequestGenerationsExhausted) {
+		return ytlifecycle.FailurePermanent, ytlifecycle.Reason(errRequestGenerationsExhausted.Error()), 0
+	}
+
 	if errors.Is(err, egress.ErrReplyHandoffFailed) {
 		return ytlifecycle.FailurePermanent, defaultReason, 0
 	}

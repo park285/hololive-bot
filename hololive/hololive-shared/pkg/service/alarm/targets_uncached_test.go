@@ -48,15 +48,15 @@ func TestResolveUncachedChannelSubscribersByType_RecoversChannelsInOneQuery(t *t
 	require.NoError(t, err)
 	require.Empty(t, warmed)
 
-	// LIVE 구독이 없는 채널은 empty marker로 기록되어 다음 조회는 DB를 거치지 않는다.
+	// 구독 없는 조회도 캐시를 쓰지 않으며 다음 조회에서 DB를 다시 확인한다.
 	knownEmpty, err := cacheClient.Exists(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(uncachedChannelC, domain.AlarmTypeLive))
 	require.NoError(t, err)
-	require.True(t, knownEmpty)
+	require.False(t, knownEmpty)
 
 	got, err = ResolveUncachedChannelSubscribersByType(ctx, cacheClient, db, []string{uncachedChannelC}, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Empty(t, got)
-	require.Equal(t, 1, queries)
+	require.Equal(t, 2, queries)
 }
 
 func TestResolveUncachedChannelSubscribersByType_KnownEmptyWithoutDatabase(t *testing.T) {

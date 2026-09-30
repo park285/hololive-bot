@@ -223,7 +223,8 @@ func (e *Envelope) validateEnvelopeIdentity() error {
 		return fmt.Errorf("validate bounded text: %w", err)
 	}
 
-	if e.SchemaVersion != SchemaVersionV1 {
+	if e.SchemaVersion != SchemaVersionV1 && (e.ObservationKind != KindVideoLiveCheck ||
+		e.SchemaVersion != VideoLifecycleSchemaVersion || e.ContractGeneration != VideoLifecycleContractGeneration) {
 		return fmt.Errorf("validate source observation envelope: unsupported schema version %d", e.SchemaVersion)
 	}
 
