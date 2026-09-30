@@ -34,20 +34,31 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
     SELECT video_id FROM youtube_live_reconciliation_heads WHERE status IN ('LIVE', 'UPCOMING')
     UNION
     SELECT video_id FROM youtube_live_sessions WHERE status IN ('LIVE', 'UPCOMING')
-), live_states AS (
+), live_states AS MATERIALIZED (
     SELECT v.video_id, h.status AS state, product.status AS product_state, product.scheduled_start_time, product.lifecycle_origin,
-           availability.observed_at AS checked_at,
-           (SELECT max(receipt.recorded_at) FROM youtube_live_review_receipts receipt
-               WHERE receipt.video_id=v.video_id AND receipt.snapshot_sha256=
-                   (SELECT snapshot_sha256 FROM youtube_live_review_snapshot(v.video_id))) AS reviewed_at,
-           EXISTS (SELECT 1 FROM youtube_live_review_receipts receipt
-               WHERE receipt.video_id=v.video_id AND receipt.snapshot_sha256=
-                   (SELECT snapshot_sha256 FROM youtube_live_review_snapshot(v.video_id))) AS review_closed
+           availability.observed_at AS checked_at
     FROM active_live_videos v
     JOIN youtube_live_sessions product ON product.video_id = v.video_id
     JOIN targets t ON t.kind = 'youtubejs_channel_live' AND t.subject_key = product.channel_id
     LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id = v.video_id
     LEFT JOIN youtube_video_availability availability ON availability.video_id=v.video_id
+), live_review_videos AS MATERIALIZED (
+    -- 영수증이 있는 현재 영상만 고정해 빈 영수증 집합에서 snapshot 계산을 건너뜁니다.
+    SELECT receipt.video_id FROM (SELECT DISTINCT video_id FROM youtube_live_review_receipts) receipt
+    WHERE EXISTS (SELECT 1 FROM live_states state WHERE state.video_id=receipt.video_id)
+), live_reviews AS MATERIALIZED (
+    -- 영상별 현재 snapshot 비교를 한 번만 계산하며 과거 영수증으로 미상을 닫지 않습니다.
+    SELECT video.video_id,
+           (SELECT max(receipt.recorded_at) FROM youtube_live_review_receipts receipt
+               WHERE receipt.video_id=video.video_id AND receipt.snapshot_sha256=
+                   (SELECT snapshot_sha256 FROM youtube_live_review_snapshot(video.video_id))) AS reviewed_at
+    FROM live_review_videos video
+), reviewed_live_states AS (
+    -- recorded_at은 NOT NULL이므로 현재 snapshot의 영수증 존재와 같은 판정입니다.
+    SELECT state.video_id, state.state, state.product_state, state.scheduled_start_time,
+           state.lifecycle_origin, state.checked_at, review.reviewed_at,
+           review.reviewed_at IS NOT NULL AS review_closed
+    FROM live_states state LEFT JOIN live_reviews review USING (video_id)
 ), live_summary AS (
     SELECT COUNT(video_id) FILTER (WHERE state = 'LIVE') AS live,
            COUNT(video_id) FILTER (WHERE state = 'UPCOMING') AS upcoming,
@@ -67,7 +78,7 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
            COUNT(video_id) FILTER(WHERE lifecycle_origin='metadata_only' AND checked_at IS NULL) AS metadata_never_checked,
            COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-checked_at),0)) FILTER(WHERE lifecycle_origin='metadata_only'),0)::double precision AS metadata_check_age,
            COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-reviewed_at),0)) FILTER(WHERE review_closed),0)::double precision AS oldest_review_age
-    FROM live_states
+    FROM reviewed_live_states
 ), target_summary AS (
     SELECT m.kind, EXISTS(SELECT 1 FROM current_projection) AS projection_valid,
            COUNT(s.subject_key) AS targets,

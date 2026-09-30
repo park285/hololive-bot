@@ -267,3 +267,12 @@ env -u TEST_DATABASE_URL -u TEST_DATABASE_OWNER_TOKEN -u ALLOW_EXTERNAL_TEST_DB 
 - 확인 시점에 중앙 앱과 collector a/b/c/d는 이미 중지 상태였습니다. 빌드·게시 검증은 kapu에서 수행하고, 전체 SHA·아키텍처·아티팩트 검증 후 중앙 schema/API, registry, collector fleet, worker 순서로 전환합니다. 이전 이미지·배포 파일은 롤백 지점으로 보존하며 세대 활성화 후 역방향 전환은 새 관측 큐 drain과 호환성 검증을 요구합니다.
 - topology·compose service·AP version·native deploy·systemd compose 필수 계약 검사 5개가 통과했습니다. 게시 gate와 실제 라이브 완료 여부는 실행 후 별도 기록합니다.
 - 최종 필드별 관측·Premiere 수정 뒤 live/schedule reducer·sourceobservation·checking·dispatchoutbox·dbtest 전체 race가 통과했습니다(1.019/1.012/67.785/12.255/6.873/32.074초). pinned lint 0 issues·NilAway·schema golden·migration manifest·AP source manifest 검사가 통과했고 독립 재검토의 잔여 확정 P1/P2는 없습니다.
+
+
+### 승인된 게시·운영 반영 결과
+
+- 사용자 승인에 따라 신뢰성·수명/D3 구현을 PR #552로 게시·병합했습니다. 필수 pre-push의 전체 local CI/race/NilAway·dependency hygiene와 원격 fast-gate가 통과했습니다. 운영에 이미 적용된 migration 255의 이력을 보존한 manifest 정합성 수정도 PR #553으로 게시·병합했습니다. 운영 source는 `f45d97a491c1943727f8d7cd20aa816865a132f8`이며 병합된 main `24e467daeb28b6b5c5ff215cf7d29e3ed625c8ca`와 tree가 같습니다.
+- 중앙 API·worker·collector c/issuer와 AP a/b/d를 kapu에서 빌드한 해당 SHA의 검증된 ARM64 이미지·AMD64 native artifact로 전환했습니다. 원격 빌드는 수행하지 않았습니다. 2026-09-30 12:24:22 UTC부터 생산자와 발송을 정지하고 관측/진행 중 발송 큐 0건을 확인한 뒤, migration job의 116개 checksum 일치와 새 migration 10개 성공을 확인했습니다. 이후 snapshot schema/generation 1/3, video_live_check 2/2 계약을 활성화하고 서비스를 순차 재시작했습니다.
+- 중앙 readiness·health·실행 image ID/SHA·아키텍처·시작시각을 확인했고 AP a/b/d의 owning 완료 검사도 통과했습니다. 중앙 collector의 완료 검사는 startup 시 YouTube.js 18.1.0의 `RecognitionShelf` 경고 스택에 있는 `ERROR_HANDLER`를 ERR로 검출해 종료 코드 1입니다. pinned library의 `Log.warn` 경로와 실제 수집 성공·structured error 부재를 별도로 확인했으며 이 경고나 검사 결과를 삭제하지 않았습니다.
+- DB는 읽기 전용 guard와 제한 시간을 유지하며 검사했습니다. 기존 legacy origin/전송 증거를 보존했고 증거 없는 미상 행을 ENDED나 성공으로 닫지 않았습니다. 과거 YouTube PENDING 5개도 수동 초기화하지 않았습니다. 실제 Iris 강제 발송은 수행하지 않았으며 이전 이미지·source snapshot·배포 파일 rollback 지점은 보존합니다.
+- D3 운영 확인에서 진단 SQL의 5초 초과와 snapshot_success=0을 재현했습니다. 현재 snapshot 영수증이 있는 영상만 materialize하고 영상별 exact hash 비교를 한 번 수행하는 후속 수정은 실제 `hololive_runtime` 역할·읽기 전용·1초 제한에서 전체 6종 snapshot을 최종 SQL 기준 61.644ms에 반환했습니다. 3만 활성 영상/영수증 0개는 79.922ms, 동일 영상/현재 영수증 500개·과거 영수증 15,000개는 101.793ms에 각각 1초 deadline 회귀를 통과했습니다. 후보 집합을 영수증 video ID부터 제한해 고카디널 실행계획의 JIT 컴파일 비용도 줄였습니다. exact hash/max(recorded_at)·전체 composite snapshot·현재 projection·미상 상태 및 실패 gauge 보존·1초 예산을 유지합니다. 성능 후속 수정의 운영 적용 범위는 중앙 API와 Grafana D3 경보입니다. API runtime 전체 race(7.687초), lint 0 issues, NilAway 및 독립 SQL 등가성 리뷰를 통과했습니다.
