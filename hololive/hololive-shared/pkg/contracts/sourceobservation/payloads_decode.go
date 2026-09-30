@@ -142,29 +142,37 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 		return nil, nil, fmt.Errorf("normalize and validate: %w", err)
 	}
 
+	if err := validateLiveSnapshotQueryProof(&value, input); err != nil {
+		return nil, nil, err
+	}
+
+	return value, value.Coverage, nil
+}
+
+func validateLiveSnapshotQueryProof(value *LiveSnapshotV1, input payloadDecodeInput) error {
 	if input.contractGeneration == LiveSnapshotMetadataContractGeneration && value.Query != nil {
-		return nil, nil, errors.New("legacy live snapshot cannot carry query proof")
+		return errors.New("legacy live snapshot cannot carry query proof")
 	}
 
 	if input.contractGeneration == LiveSnapshotQueryContractGeneration {
 		query := value.Query
 		if query == nil || query.ChannelID != input.subjectKey || query.Source != "streams" || query.PageCount != 1 {
-			return nil, nil, errors.New("live snapshot query proof is missing or invalid")
+			return errors.New("live snapshot query proof is missing or invalid")
 		}
 
 		query.Statuses = slices.Clone(query.Statuses)
 		slices.Sort(query.Statuses)
 
 		if !slices.Equal(query.Statuses, []string{"ENDED", "LIVE", "UPCOMING"}) || !slices.Equal(query.Statuses, value.Coverage.Filters.Statuses) {
-			return nil, nil, errors.New("live snapshot coverage does not match streams query scope")
+			return errors.New("live snapshot coverage does not match streams query scope")
 		}
 
 		if input.completeness == CompletenessComplete && (!query.Exhausted || query.AccessRestricted) {
-			return nil, nil, errors.New("limited live snapshot cannot provide complete negative coverage")
+			return errors.New("limited live snapshot cannot provide complete negative coverage")
 		}
 	}
 
-	return value, value.Coverage, nil
+	return nil
 }
 
 func decodeViewerSamplePayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {

@@ -62,19 +62,7 @@ func loadPublishReceipts(ctx context.Context, db publishReceiptQueryer, envelope
 			return nil, fmt.Errorf("scan receipt identity: %w", err)
 		}
 
-		switch {
-		case collision:
-			receipt.Outcome = PublishRejectedCollision
-		case receipt.Status == StatusSent:
-			receipt.Outcome = PublishDuplicateSent
-		case receipt.Status == StatusDLQ || receipt.Status == StatusQuarantined || receipt.Status == StatusCancelled:
-			receipt.Outcome = PublishRejectedTerminal
-		case inserted[receipt.DedupeKey]:
-			receipt.Outcome = PublishInserted
-			delete(inserted, receipt.DedupeKey)
-		default:
-			receipt.Outcome = PublishDuplicateActive
-		}
+		receipt.Outcome = publishReceiptOutcome(receipt, collision, inserted)
 
 		receipts = append(receipts, receipt)
 	}
@@ -84,6 +72,23 @@ func loadPublishReceipts(ctx context.Context, db publishReceiptQueryer, envelope
 	}
 
 	return receipts, nil
+}
+
+func publishReceiptOutcome(receipt PublishReceipt, collision bool, inserted map[string]bool) PublishOutcome {
+	switch {
+	case collision:
+		return PublishRejectedCollision
+	case receipt.Status == StatusSent:
+		return PublishDuplicateSent
+	case receipt.Status == StatusDLQ || receipt.Status == StatusQuarantined || receipt.Status == StatusCancelled:
+		return PublishRejectedTerminal
+	case inserted[receipt.DedupeKey]:
+		delete(inserted, receipt.DedupeKey)
+
+		return PublishInserted
+	default:
+		return PublishDuplicateActive
+	}
 }
 
 func countPublishReceiptDuplicates(result *PublishBatchResult) {

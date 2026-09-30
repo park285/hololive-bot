@@ -80,67 +80,96 @@ func (s *TransitionStore) FreezeRequest(ctx context.Context, deliveries []domain
 	var frozen FrozenRequest
 
 	err := s.executeTx(ctx, "freeze request", func(tx dbx.Querier) error {
-		ids := make([]int64, 0, len(deliveries))
-		for i := range deliveries {
-			ids = append(ids, deliveries[i].ID)
-		}
+		var err error
 
-		ids = uniqueSortedInt64s(ids)
-		if len(ids) == 0 {
-			return errors.New("freeze request: empty membership")
-		}
+		frozen, err = freezeRequestInTx(ctx, tx, deliveries, request)
 
-		rows, err := tx.Query(ctx, mustSQL("send_request_lock.sql"), ids)
-		if err != nil {
-			return fmt.Errorf("freeze request: lock deliveries: %w", err)
-		}
-
-		states, err := pgx.CollectRows(rows, pgx.RowToStructByName[requestDeliveryState])
-		if err != nil {
-			return fmt.Errorf("freeze request: read deliveries: %w", err)
-		}
-
-		bound, err := validateRequestDeliveryStates(deliveries, states)
-		if err != nil {
-			return err
-		}
-
-		if bound != "" {
-			frozen, err = loadFrozenRequest(ctx, tx, bound)
-			if err != nil {
-				return err
-			}
-
-			if !slices.Equal(uniqueSortedInt64s(frozen.MemberIDs), ids) {
-				return errors.New("freeze request: incomplete frozen membership")
-			}
-
-			return nil
-		}
-
-		request.MemberIDs = ids
-
-		frozen, err = insertFrozenRequest(ctx, tx, request)
-		if err != nil {
-			return err
-		}
-
-		tag, err := tx.Exec(ctx, mustSQL("send_request_bind.sql"), ids, request.BaseID)
-		if err != nil {
-			return fmt.Errorf("freeze request: bind: %w", err)
-		}
-
-		if tag.RowsAffected() != int64(len(ids)) {
-			return errors.New("freeze request: bind fence changed")
-		}
-
-		return nil
+		return err
 	})
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("freeze youtube request: %w", err)
 	}
 
 	return frozen, nil
+}
+
+func freezeRequestInTx(ctx context.Context, tx dbx.Querier, deliveries []domain.YouTubeNotificationDelivery, request FrozenRequest) (FrozenRequest, error) {
+	ids := make([]int64, 0, len(deliveries))
+	for i := range deliveries {
+		ids = append(ids, deliveries[i].ID)
+	}
+
+	ids = uniqueSortedInt64s(ids)
+	if len(ids) == 0 {
+		return FrozenRequest{}, errors.New("freeze request: empty membership")
+	}
+
+	states, err := loadRequestDeliveryStates(ctx, tx, ids)
+	if err != nil {
+		return FrozenRequest{}, err
+	}
+
+	bound, err := validateRequestDeliveryStates(deliveries, states)
+	if err != nil {
+		return FrozenRequest{}, err
+	}
+
+	if bound != "" {
+		return loadBoundFrozenRequest(ctx, tx, bound, ids)
+	}
+
+	request.MemberIDs = ids
+
+	frozen, err := insertFrozenRequest(ctx, tx, request)
+	if err != nil {
+		return FrozenRequest{}, err
+	}
+
+	if err := bindFrozenRequest(ctx, tx, ids, request.BaseID); err != nil {
+		return FrozenRequest{}, err
+	}
+
+	return frozen, nil
+}
+
+func loadRequestDeliveryStates(ctx context.Context, tx dbx.Querier, ids []int64) ([]requestDeliveryState, error) {
+	rows, err := tx.Query(ctx, mustSQL("send_request_lock.sql"), ids)
+	if err != nil {
+		return nil, fmt.Errorf("freeze request: lock deliveries: %w", err)
+	}
+
+	states, err := pgx.CollectRows(rows, pgx.RowToStructByName[requestDeliveryState])
+	if err != nil {
+		return nil, fmt.Errorf("freeze request: read deliveries: %w", err)
+	}
+
+	return states, nil
+}
+
+func loadBoundFrozenRequest(ctx context.Context, tx dbx.Querier, bound string, ids []int64) (FrozenRequest, error) {
+	frozen, err := loadFrozenRequest(ctx, tx, bound)
+	if err != nil {
+		return FrozenRequest{}, err
+	}
+
+	if !slices.Equal(uniqueSortedInt64s(frozen.MemberIDs), ids) {
+		return FrozenRequest{}, errors.New("freeze request: incomplete frozen membership")
+	}
+
+	return frozen, nil
+}
+
+func bindFrozenRequest(ctx context.Context, tx dbx.Querier, ids []int64, baseID string) error {
+	tag, err := tx.Exec(ctx, mustSQL("send_request_bind.sql"), ids, baseID)
+	if err != nil {
+		return fmt.Errorf("freeze request: bind: %w", err)
+	}
+
+	if tag.RowsAffected() != int64(len(ids)) {
+		return errors.New("freeze request: bind fence changed")
+	}
+
+	return nil
 }
 
 type requestDeliveryState struct {
@@ -214,45 +243,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 	}
 
 	err = s.executeTx(ctx, "advance request generation", func(tx dbx.Querier) error {
-		groups := sortedStartedGroups(operation.groups)
-		for i := range groups {
-			group := &groups[i]
-
-			var valid bool
-
-			if fenceErr := tx.QueryRow(ctx, mustSQL("send_request_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, request.BaseID).Scan(&valid); fenceErr != nil {
-				return fmt.Errorf("advance request generation: owner fence: %w", fenceErr)
-			}
-
-			if !valid {
-				return errors.New("advance request generation: stale owner")
-			}
-		}
-
-		tag, updateErr := tx.Exec(ctx, mustSQL("send_request_advance.sql"), request.BaseID, request.Generation)
-		if updateErr != nil {
-			return fmt.Errorf("advance request generation: update: %w", updateErr)
-		}
-
-		if tag.RowsAffected() != 1 {
-			return errors.New("advance request generation: generation fence changed")
-		}
-
-		if _, applyErr := applyRowTransitions(ctx, tx, "advance request generation", transitions); applyErr != nil {
-			return fmt.Errorf("advance request generation: retry transition: %w", applyErr)
-		}
-
-		mode := DeliveryModePerRoom
-
-		if operation.OwnerCount() > 1 {
-			mode = DeliveryModeGrouped
-		}
-
-		if telemetryErr := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultFailure, "provider_transport"), at); telemetryErr != nil {
-			return fmt.Errorf("advance request generation: telemetry: %w", telemetryErr)
-		}
-
-		return nil
+		return advanceRequestGenerationInTx(ctx, tx, operation, request, transitions, at)
 	})
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("advance youtube request generation: %w", err)
@@ -261,6 +252,56 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 	request.Generation++
 
 	return request, nil
+}
+
+func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation StartedOperation, request FrozenRequest, transitions []rowTransition, at time.Time) error {
+	if err := verifyStartedRequestOwners(ctx, tx, operation, request.BaseID); err != nil {
+		return err
+	}
+
+	tag, err := tx.Exec(ctx, mustSQL("send_request_advance.sql"), request.BaseID, request.Generation)
+	if err != nil {
+		return fmt.Errorf("advance request generation: update: %w", err)
+	}
+
+	if tag.RowsAffected() != 1 {
+		return errors.New("advance request generation: generation fence changed")
+	}
+
+	if _, err := applyRowTransitions(ctx, tx, "advance request generation", transitions); err != nil {
+		return fmt.Errorf("advance request generation: retry transition: %w", err)
+	}
+
+	mode := DeliveryModePerRoom
+
+	if operation.OwnerCount() > 1 {
+		mode = DeliveryModeGrouped
+	}
+
+	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultFailure, "provider_transport"), at); err != nil {
+		return fmt.Errorf("advance request generation: telemetry: %w", err)
+	}
+
+	return nil
+}
+
+func verifyStartedRequestOwners(ctx context.Context, tx dbx.Querier, operation StartedOperation, baseID string) error {
+	groups := sortedStartedGroups(operation.groups)
+	for i := range groups {
+		group := &groups[i]
+
+		var valid bool
+
+		if err := tx.QueryRow(ctx, mustSQL("send_request_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID).Scan(&valid); err != nil {
+			return fmt.Errorf("advance request generation: owner fence: %w", err)
+		}
+
+		if !valid {
+			return errors.New("advance request generation: stale owner")
+		}
+	}
+
+	return nil
 }
 
 // CleanupOrphanRequests는 기존 terminal retention 뒤 참조가 사라진 본문만 제한된 batch로 삭제한다.

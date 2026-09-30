@@ -45,17 +45,7 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 	}
 
 	result, err := n.queuePublisher.PublishBatch(ctx, notifications, claimKeys)
-	accepted := make(map[int]bool, len(result.Receipts))
-	terminal := make(map[int]bool, len(result.Receipts))
-
-	for _, receipt := range result.Receipts {
-		if receipt.Ordinal < 0 || receipt.Ordinal >= len(items) {
-			continue
-		}
-
-		accepted[receipt.Ordinal] = receipt.Accepted()
-		terminal[receipt.Ordinal] = receipt.Outcome == dispatchoutbox.PublishRejectedTerminal
-	}
+	accepted, terminal := publishReceiptResults(result.Receipts, len(items))
 
 	published := 0
 
@@ -83,6 +73,22 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 	}
 
 	return published, nil
+}
+
+func publishReceiptResults(receipts []dispatchoutbox.PublishReceipt, itemCount int) (accepted, terminal map[int]bool) {
+	accepted = make(map[int]bool, len(receipts))
+	terminal = make(map[int]bool, len(receipts))
+
+	for _, receipt := range receipts {
+		if receipt.Ordinal < 0 || receipt.Ordinal >= itemCount {
+			continue
+		}
+
+		accepted[receipt.Ordinal] = receipt.Accepted()
+		terminal[receipt.Ordinal] = receipt.Outcome == dispatchoutbox.PublishRejectedTerminal
+	}
+
+	return accepted, terminal
 }
 
 func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInput) {
