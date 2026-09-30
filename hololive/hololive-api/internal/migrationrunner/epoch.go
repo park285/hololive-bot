@@ -141,8 +141,8 @@ func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate
 
 	if residue {
 		return errors.New(
-			"schema_migrations has entries outside the current manifest; the epoch-1 ledger window is closed, " +
-				"so confirm where those rows came from and remove them manually before rerunning")
+			"schema_migrations has entries outside the current manifest; " +
+				"verify applied migration provenance and use matching reviewed sources and manifest before rerunning")
 	}
 
 	baseline := entries[0]
