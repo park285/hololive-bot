@@ -92,6 +92,12 @@ func applySessionFact(session *reduceSession, fact *SessionFact) {
 }
 
 func applyNegativeFact(session *reduceSession, fact *SessionFact) {
+	if fact.VerifiedTerminal && session.evidence.Kind == contract.KindVideoLiveCheck && fact.Status == "ENDED" {
+		applyVerifiedVideoEnd(session, fact)
+
+		return
+	}
+
 	if fact.Status == "ENDED" {
 		pending := pendingFromFact(session, fact, EndEvidenceExplicitEnd)
 		recordPendingEnd(session, &pending)

@@ -57,6 +57,7 @@ func TestReduceSparsePositivePreservesLiveMetadata(t *testing.T) {
 	metadata.Title = "Minecraft live"
 	metadata.TopicID = "minecraft"
 	metadata.ThumbnailURL = "https://i.ytimg.com/vi/vid-a/maxresdefault.jpg"
+	metadata.ScheduledAt = new(time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC))
 
 	first := liveEvidence(
 		1,
@@ -77,6 +78,14 @@ func TestReduceSparsePositivePreservesLiveMetadata(t *testing.T) {
 	if session.Title != metadata.Title || session.TopicID != metadata.TopicID ||
 		session.ThumbnailURL != metadata.ThumbnailURL {
 		t.Fatalf("metadata after sparse positive = %#v", session)
+	}
+
+	if session.ScheduleObservedAt == nil || !session.ScheduleObservedAt.Equal(first.EffectiveAt) {
+		t.Fatalf("sparse positive refreshed inherited schedule provenance: %v", session.ScheduleObservedAt)
+	}
+
+	if session.StatusObservedAt == nil || !session.StatusObservedAt.Equal(second.EffectiveAt) {
+		t.Fatalf("confirmed LIVE did not record its own observation: %v", session.StatusObservedAt)
 	}
 }
 

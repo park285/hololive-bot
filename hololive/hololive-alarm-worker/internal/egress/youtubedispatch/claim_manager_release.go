@@ -23,6 +23,8 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 		return
 	}
 
+	d.expirePendingDeliveries(ctx)
+
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
 
 	var (
@@ -64,6 +66,10 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 
 	d.cleanupExpiredFanoutOutboxes(ctx)
+
+	if _, err := d.transition.CleanupOrphanRequests(ctx, outboxCutoff, outboxCleanupBatchSize); err != nil {
+		d.logger.Warn("Failed to cleanup orphan requests", slog.Any("error", err))
+	}
 }
 
 // cutoff가 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가
@@ -246,5 +252,38 @@ func logClaimIssueAtLevel(logger *slog.Logger, level slog.Level, message string,
 		logger.Error(message, attrs...)
 	default:
 		logger.Info(message, attrs...)
+	}
+}
+
+func (d *ClaimManager) expirePendingDeliveries(ctx context.Context) {
+	var cursor int64
+
+	for {
+		result, err := d.transition.ExpirePending(ctx, cursor, d.config.BatchSize)
+		if err != nil {
+			d.logger.Warn("Failed to expire pending deliveries", slog.Any("error", err))
+
+			return
+		}
+
+		for _, blocked := range result.Blocked {
+			d.logger.Error("Blocked pending delivery expiry", slog.String("logical_key_hash", blocked.KeyHash), slog.String("invariant_reason", string(blocked.Reason)))
+		}
+
+		if err := d.projector.Project(ctx, result.TouchedOutboxIDs); err != nil {
+			d.logger.Warn("Failed to project expired pending deliveries", slog.Any("error", err))
+
+			return
+		}
+
+		if result.Examined < d.config.BatchSize {
+			return
+		}
+
+		cursor = result.NextID
+
+		if err := deliverysql.YieldBetweenDeleteBatches(ctx); err != nil {
+			return
+		}
 	}
 }

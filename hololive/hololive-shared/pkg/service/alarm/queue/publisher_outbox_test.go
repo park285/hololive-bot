@@ -54,17 +54,17 @@ func (r *fakeOutboxRepository) InsertBatch(_ context.Context, input dispatchoutb
 
 	callIndex := r.insertBatchCalls - 1
 
+	result := r.batchResult
+	if callIndex < len(r.batchResults) {
+		result = r.batchResults[callIndex]
+	}
+
 	if callIndex < len(r.batchErrors) && r.batchErrors[callIndex] != nil {
-		return dispatchoutbox.PublishBatchResult{}, r.batchErrors[callIndex]
+		return result, r.batchErrors[callIndex]
 	}
 
 	if r.batchErr != nil {
 		return dispatchoutbox.PublishBatchResult{}, r.batchErr
-	}
-
-	result := r.batchResult
-	if callIndex < len(r.batchResults) {
-		result = r.batchResults[callIndex]
 	}
 
 	if result.RequestedDeliveries == 0 {
@@ -77,6 +77,12 @@ func (r *fakeOutboxRepository) InsertBatch(_ context.Context, input dispatchoutb
 
 	if result.ProcessedDeliveries == 0 {
 		result.ProcessedDeliveries = result.RequestedDeliveries
+	}
+
+	if result.Receipts == nil {
+		for i := range input.Envelopes {
+			result.Receipts = append(result.Receipts, dispatchoutbox.PublishReceipt{Ordinal: i, Outcome: dispatchoutbox.PublishInserted})
+		}
 	}
 
 	return result, nil
@@ -175,4 +181,36 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 	assert.Equal(t, 0, repository.insertPendingCalls)
 	assert.Len(t, repository.lastBatchInput.Envelopes, 3)
 	assert.Equal(t, []string{"1"}, queueItemsByKeyOrEmpty(t, mini, AlarmDispatchWakeupQueue))
+}
+
+func TestPublisherPreservesNonPrefixReceiptsAcrossChunkError(t *testing.T) {
+	repository := &fakeOutboxRepository{
+		batchResults: []dispatchoutbox.PublishBatchResult{
+			{RequestedDeliveries: 2, Receipts: []dispatchoutbox.PublishReceipt{
+				{Ordinal: 0, Outcome: dispatchoutbox.PublishRejectedCollision},
+				{Ordinal: 1, Outcome: dispatchoutbox.PublishDuplicateActive},
+			}},
+			{RequestedDeliveries: 2, Receipts: []dispatchoutbox.PublishReceipt{
+				{Ordinal: 1, Outcome: dispatchoutbox.PublishDuplicateSent},
+			}},
+		},
+		batchErrors: []error{nil, errors.New("commit response unavailable")},
+	}
+	publisher := NewPublisher(nil, sharedlogging.NewTestLogger(), WithOutbox(repository), WithMaxDeliveriesPerBatch(2), WithWakeupEnabled(false))
+	notifications := make([]*domain.AlarmNotification, 4)
+
+	for i := range notifications {
+		notifications[i] = &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room"}
+	}
+
+	result, err := publisher.PublishBatch(t.Context(), notifications, nil)
+	require.ErrorContains(t, err, "commit response unavailable")
+	require.Len(t, result.Receipts, 3)
+	require.Equal(t, 0, result.Receipts[0].Ordinal)
+	require.Equal(t, 1, result.Receipts[1].Ordinal)
+	require.Equal(t, 3, result.Receipts[2].Ordinal)
+	require.False(t, result.Receipts[0].Accepted())
+	require.True(t, result.Receipts[1].Accepted())
+	require.True(t, result.Receipts[2].Accepted())
+	require.Equal(t, 3, result.ProcessedDeliveries)
 }

@@ -15,6 +15,14 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
+// ErrCandidateContract는 특정 런너 또는 target bundle의 후보 계약 오류입니다.
+// DB·projection·요청 예산 오류는 이 표식을 붙이지 않고 cycle 전체를 중단합니다.
+var ErrCandidateContract = errors.New("candidate contract is invalid")
+
+func candidateContractError(err error) error {
+	return fmt.Errorf("%w: %w", ErrCandidateContract, err)
+}
+
 type CandidatePage struct {
 	Jobs      []JobSpec
 	Truncated bool
@@ -88,11 +96,11 @@ func (r *Repository) validateCandidateRequest(generation int64, job sourceobserv
 	}
 
 	if err := job.Validate(); err != nil {
-		return collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+		return candidateContractError(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
 	}
 
 	if !r.isCanonicalJob(job) {
-		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: job contract is not canonical")
+		return candidateContractError(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: job contract is not canonical"))
 	}
 
 	return nil
@@ -145,12 +153,12 @@ func (r *Repository) globalCandidatesForProjection(
 ) (CandidatePage, error) {
 	subject, err := ExpectedLeaseSubject(job, "")
 	if err != nil {
-		return CandidatePage{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+		return CandidatePage{}, candidateContractError(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
 	}
 
 	jobKey, err := BuildJobKey(job.ID(), subject)
 	if err != nil {
-		return CandidatePage{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+		return CandidatePage{}, candidateContractError(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
 	}
 
 	rows, err := r.pool.Query(
@@ -189,6 +197,8 @@ func collectCandidatePage(
 	sawRow := false
 	projectionCurrent := false
 
+	var contractErr error
+
 	for rows.Next() {
 		row, err := scanCandidateRow(rows)
 		if err != nil {
@@ -204,7 +214,8 @@ func collectCandidatePage(
 
 		spec, err := specFromCandidateRow(job, row)
 		if err != nil {
-			return CandidatePage{}, fmt.Errorf("spec from candidate row: %w", err)
+			contractErr = errors.Join(contractErr, fmt.Errorf("spec from candidate row: %w", candidateContractError(err)))
+			continue
 		}
 
 		jobs = append(jobs, spec)
@@ -220,6 +231,10 @@ func collectCandidatePage(
 
 	if !projectionCurrent {
 		return CandidatePage{}, ErrProjectionStale
+	}
+
+	if contractErr != nil {
+		return CandidatePage{}, contractErr
 	}
 
 	truncated := len(jobs) > limit
@@ -293,7 +308,7 @@ func specFromCandidateRow(job sourceobservation.JobContract, row candidateRow) (
 func cadenceKindValues(job sourceobservation.JobContract) ([]string, error) {
 	kinds := job.CadenceKinds()
 	if len(kinds) == 0 {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: cadence kinds are empty")
+		return nil, candidateContractError(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: cadence kinds are empty"))
 	}
 
 	values := make([]string, len(kinds))

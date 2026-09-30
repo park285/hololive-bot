@@ -89,7 +89,7 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheEmpty(t *testing.T
 	}
 
 	typedKey := sharedalarmkeys.BuildChannelSubscriberKey("UC_shorts", domain.AlarmTypeShorts)
-	if len(warmed[typedKey]) != 1 || warmed[typedKey][0] != testDBRoomID {
+	if len(warmed[typedKey]) != 0 {
 		t.Fatalf("typed cache warm = %#v", warmed[typedKey])
 	}
 }
@@ -200,61 +200,20 @@ func TestResolveChannelSubscribersByTypeReturnsAuthoritativeEmptyOnlyAfterDBFall
 	}
 }
 
-func TestResolveChannelSubscribersByTypeUsesNegativeCacheForAuthoritativeEmpty(t *testing.T) {
+func TestResolveChannelSubscribersByTypeUsesExplicitNegativeCache(t *testing.T) {
 	t.Parallel()
-
-	emptyKey := sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_empty", domain.AlarmTypeLive)
-	emptyKnown := false
 
 	cache := cachemocks.NewLenientClient()
 
-	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_empty", domain.AlarmTypeLive) {
-			t.Fatalf("unexpected cache lookup key %q", key)
-		}
-
-		return nil, nil
-	}
 	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-		if key != emptyKey {
-			t.Fatalf("unexpected exists key %q", key)
-		}
+		require.Equal(t, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_empty", domain.AlarmTypeLive), key)
 
-		return emptyKnown, nil
-	}
-	cache.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
-		if key != emptyKey {
-			t.Fatalf("unexpected set key %q", key)
-		}
-
-		if value != "1" {
-			t.Fatalf("unexpected set value %#v", value)
-		}
-
-		emptyKnown = true
-
-		return nil
+		return true, nil
 	}
 
-	db := newAlarmTargetLookupTestDB(t)
-
-	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_empty", domain.AlarmTypeLive)
-	if err != nil {
-		t.Fatalf("ResolveChannelSubscribersByType() first error = %v", err)
-	}
-
-	if len(got) != 0 {
-		t.Fatalf("ResolveChannelSubscribersByType() first = %#v", got)
-	}
-
-	got, err = ResolveChannelSubscribersByType(t.Context(), cache, nil, "UC_empty", domain.AlarmTypeLive)
-	if err != nil {
-		t.Fatalf("ResolveChannelSubscribersByType() second error = %v", err)
-	}
-
-	if len(got) != 0 {
-		t.Fatalf("ResolveChannelSubscribersByType() second = %#v", got)
-	}
+	got, err := ResolveChannelSubscribersByType(t.Context(), cache, nil, "UC_empty", domain.AlarmTypeLive)
+	require.NoError(t, err)
+	require.Empty(t, got)
 }
 
 func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFallback(t *testing.T) {

@@ -560,13 +560,33 @@ test("resolved rows leave only identities for pending bulky restricted duplicate
       : rawPlayerResponse(videoId);
   });
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 500 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 700 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
   assert.equal(result.status, 200);
   assert.deepEqual(calls, ["scheduled", "restricted-fixture"]);
   assert.equal(result.body.live_sessions.length, 2);
   assert.equal(result.body.unavailable_live_sessions.length, 1);
+});
+
+test("streams scope is independent of ended-only and empty results", async () => {
+  for (const videos of [[], [{ id: "ended-only", status: "ENDED" }]]) {
+    const innertube = stubChannel({ videos, has_continuation: false });
+    const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
+    assert.equal(result.exhausted, true);
+    assert.deepEqual(result.live_query.statuses, ["ENDED", "LIVE", "UPCOMING"]);
+    assert.equal(result.live_query.source, "streams");
+  }
+});
+
+test("remaining or unproven continuation cannot give complete streams coverage", async () => {
+  for (const feed of [{ videos: [], has_continuation: true }, { videos: [] }]) {
+    const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube: stubChannel(feed) });
+    assert.equal(result.exhausted, false);
+    assert.equal(result.live_query.exhausted, false);
+    assert.equal(result.termination_reason, "max_pages");
+    assert.equal(result.page_count, 1);
+  }
 });
 
 test("unique unresolved identities alone can exceed the channel budget before hydration", async () => {

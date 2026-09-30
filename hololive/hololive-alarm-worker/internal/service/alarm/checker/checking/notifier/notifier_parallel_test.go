@@ -69,7 +69,7 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	start := time.Date(2026, time.June, 11, 12, 10, 0, 0, time.UTC)
+	start := time.Now().UTC().Add(10 * time.Minute)
 
 	const total = 64
 
@@ -129,7 +129,7 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	start := time.Date(2026, time.June, 11, 13, 0, 0, 0, time.UTC)
+	start := time.Now().UTC().Add(10 * time.Minute)
 	stream := &domain.Stream{
 		ID:             "stream-dup",
 		Title:          "Dup Test",

@@ -1,27 +1,29 @@
 package youtubedispatch
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 type deliverySendRequest struct {
-	roomID     string
-	message    string
-	dedupeKeys []string
+	clientRequestID string
+	frozen          *store.FrozenRequest
+	roomID          string
+	message         string
+	dedupeKeys      []string
 }
 
 const (
@@ -156,43 +158,19 @@ func deliveryFailureReasonIsPermanent(reason string) bool {
 }
 
 func shouldFallbackGroupedSend(err error) bool {
+	// 모든 admission 충돌은 새 singleton ID로 우회하지 않는다.
+	if httpErr, ok := errors.AsType[*iris.HTTPError](err); ok && httpErr.StatusCode == http.StatusConflict {
+		return false
+	}
+
 	return !errors.Is(err, errDeliverySendOutcomeUnknown) && deliveryFailureReason(err) == deliveryReasonPermanent
 }
 
 // sender 호출 이후의 오류만 대상으로 한다. 호출 전 취소는 sendDeliveryMessage가 먼저 걸러내며,
 // 여기서 context 오류를 unknown으로 보는 이유는 요청이 이미 Iris에 도달했을 수 있기 때문이다.
 func deliverySendOutcomeUnknown(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if errors.Is(err, egress.ErrReplyHandoffOutcomeUnknown) {
-		return true
-	}
-
-	if errors.Is(err, errDeliverySendTimeout) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return true
-	}
-
-	if iris.HTTPErrorCode(err) == iris.HTTPErrorCodeClientRequestIDOutcomeUnknown {
-		return true
-	}
-
-	if errors.Is(err, iris.ErrTransport) {
-		return !deliverySendNeverLeftClient(err)
-	}
-
-	return false
-}
-
-func deliverySendNeverLeftClient(err error) bool {
-	if opErr, ok := errors.AsType[*net.OpError](err); ok && opErr != nil && opErr.Op == "dial" {
-		return true
-	}
-
-	_, ok := errors.AsType[*net.DNSError](err)
-
-	return ok
+	kind := sendoutcome.Classify(err)
+	return kind == sendoutcome.OutcomeUnknown || kind == sendoutcome.TransportAmbiguous || errors.Is(err, errDeliverySendTimeout)
 }
 
 const maxDeliveryRetryAfter = 5 * time.Minute

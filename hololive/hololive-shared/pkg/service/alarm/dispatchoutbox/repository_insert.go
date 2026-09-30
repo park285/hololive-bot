@@ -135,32 +135,32 @@ func truncateHash(h string) string {
 	return h[:8] + "..."
 }
 
-func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInsert) (int, error) {
+func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInsert) ([]string, error) {
 	if len(deliveries) == 0 {
-		return 0, nil
+		return nil, nil
 	}
 
 	rows, err := buildDeliveryBatchRows(deliveries)
 	if err != nil {
-		return 0, fmt.Errorf("build delivery batch rows: %w", err)
+		return nil, fmt.Errorf("build delivery batch rows: %w", err)
 	}
 
 	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
-		return 0, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
+		return nil, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
 	}
 
 	if unitErr := ensureSendUnits(ctx, tx, raw); unitErr != nil {
-		return 0, fmt.Errorf("ensure send units: %w", unitErr)
+		return nil, fmt.Errorf("ensure send units: %w", unitErr)
 	}
 
 	selected, inserted, err := insertDeliveryBatch(ctx, tx, raw)
 	if err != nil {
-		return 0, fmt.Errorf("insert delivery batch: %w", err)
+		return nil, fmt.Errorf("insert delivery batch: %w", err)
 	}
 
 	if selected != len(deliveries) {
-		return 0, fmt.Errorf("insert dispatch deliveries: selected %d of %d rows", selected, len(deliveries))
+		return nil, fmt.Errorf("insert dispatch deliveries: selected %d of %d rows", selected, len(deliveries))
 	}
 
 	return inserted, nil
@@ -197,10 +197,10 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 	return rows, nil
 }
 
-func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected, inserted int, err error) {
+func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected int, inserted []string, err error) {
 	err = tx.QueryRow(ctx, mustSQL("repository_insert_0183_02.sql"), jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
 	if err != nil {
-		return 0, 0, fmt.Errorf("insert dispatch deliveries: %w", err)
+		return 0, nil, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}
 
 	return selected, inserted, nil
@@ -277,7 +277,7 @@ func addPreparedEvent(events map[string]eventInsert, event *eventInsert, result 
 	return nil
 }
 
-func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, preflightCollisions []eventCollision, result *PublishBatchResult) (publishResult PublishBatchResult, err error) {
+func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, preflightCollisions []eventCollision, envelopes []domain.AlarmQueueEnvelope, result *PublishBatchResult) (publishResult PublishBatchResult, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
@@ -289,25 +289,36 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 
 	collisions, deliveries, err := prepareBatchDeliveriesForInsert(ctx, tx, eventRows, deliveries, preflightCollisions, result, r.logger)
 	if err != nil {
-		return *result, fmt.Errorf("prepare batch deliveries for insert: %w", err)
+		return PublishBatchResult{RequestedDeliveries: len(envelopes)}, fmt.Errorf("prepare batch deliveries for insert: %w", err)
 	}
 
 	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
 	if err != nil {
-		return *result, fmt.Errorf("insert deliveries: %w", err)
+		return PublishBatchResult{RequestedDeliveries: len(envelopes)}, fmt.Errorf("insert deliveries: %w", err)
 	}
 
-	result.InsertedDeliveries = insertedDeliveries
-	result.DuplicateDeliveries = result.RequestedDeliveries - insertedDeliveries
+	result.InsertedDeliveries = len(insertedDeliveries)
+
+	receipts, receiptErr := loadPublishReceipts(ctx, tx, envelopes, insertedDeliveries)
+	if receiptErr != nil {
+		return PublishBatchResult{}, fmt.Errorf("load publish receipts: %w", receiptErr)
+	}
+
+	if len(receipts) != len(envelopes) {
+		return PublishBatchResult{}, fmt.Errorf("load publish receipts: resolved %d of %d inputs", len(receipts), len(envelopes))
+	}
 
 	if recordErr := recordEventCollisions(ctx, tx, collisions); recordErr != nil {
 		err = recordErr
-		return *result, err
+		return PublishBatchResult{RequestedDeliveries: len(envelopes)}, err
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: commit: %w", err)
+		return r.reconcilePublishCommit(ctx, envelopes, err)
 	}
+
+	result.Receipts = receipts
+	countPublishReceiptDuplicates(result)
 
 	return processedPublishBatchResult(result), nil
 }

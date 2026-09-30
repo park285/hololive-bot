@@ -201,6 +201,8 @@ func setEndCandidate(existing *SessionState, pending *PendingEnd, grace time.Dur
 
 func endSession(existing *SessionState, pending *PendingEnd, dbNow time.Time) {
 	existing.Status = StatusEnded
+	existing.LifecycleOrigin = OriginObserved
+	existing.StatusObservedAt = copyTime(pending.EffectiveAt)
 
 	if pending.EndedAt != nil {
 		existing.EndedAt = copyOptionalTime(pending.EndedAt)

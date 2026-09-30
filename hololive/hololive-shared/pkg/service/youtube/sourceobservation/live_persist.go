@@ -56,7 +56,10 @@ func liveDecisionStatements(sessions []live.SessionState) []dbx.Statement {
 		}
 
 		// session A → head A → session B → head B의 기존 순서를 바꾸지 않는다.
-		statements = append(statements, liveHeadStatement(session))
+		// 미확정 LIVE 메타데이터와 부재는 새 authoritative head의 근거가 아니다.
+		if session.HeadPresent || session.LifecycleOrigin == live.OriginObserved {
+			statements = append(statements, liveHeadStatement(session))
+		}
 	}
 
 	return statements
@@ -104,6 +107,8 @@ func liveSessionStatement(session *live.SessionState, classificationOnlyOnConfli
 			session.TopicID, session.ThumbnailURL, session.ScheduledStartTime,
 			session.StartedAt, session.EndedAt, session.LiveFirstSeenAt, session.LastSeenAt,
 			session.IsPremiere, classificationOnlyOnConflict,
+			string(session.LifecycleOrigin),
+			session.StatusObservedAt, session.ScheduleObservedAt,
 		},
 	}
 }

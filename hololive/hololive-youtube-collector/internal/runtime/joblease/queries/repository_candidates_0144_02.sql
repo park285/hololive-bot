@@ -54,6 +54,9 @@ LEFT JOIN (
            max_priority,
            effective_due_at
     FROM due
-    ORDER BY (job_key IS NOT NULL), max_priority DESC, effective_due_at ASC, subject_key ASC
+    -- 새 수명 검토 대상의 최초 discovery가 기존 LIVE 확인을 밀어내지 않는다.
+    -- 다른 job 종류의 현행 신규 대상 우선순위는 유지한다.
+    ORDER BY CASE WHEN $4 = 'youtubejs_video_live' THEN max_priority ELSE 0 END DESC,
+             (job_key IS NOT NULL), max_priority DESC, effective_due_at ASC, subject_key ASC
     LIMIT $6 + 1
 ) AS due ON projection.is_current;

@@ -83,7 +83,33 @@ type PublishBatchInput struct {
 	Envelopes []domain.AlarmQueueEnvelope
 }
 
+// PublishOutcome은 commit으로 확인한 입력별 발행 결과다.
+type PublishOutcome string
+
+const (
+	PublishInserted          PublishOutcome = "inserted"
+	PublishDuplicateActive   PublishOutcome = "duplicate_active"
+	PublishDuplicateSent     PublishOutcome = "duplicate_sent"
+	PublishRejectedCollision PublishOutcome = "rejected_collision"
+	PublishRejectedTerminal  PublishOutcome = "rejected_terminal"
+)
+
+// PublishReceipt의 Ordinal은 호출 입력의 위치이며 DedupeKey는 방별 영속 식별자다.
+// Receipt가 없는 입력은 수용 여부가 확인되지 않았으므로 성공으로 표시하지 않는다.
+type PublishReceipt struct {
+	Ordinal   int
+	DedupeKey string
+	Outcome   PublishOutcome
+	Status    Status
+}
+
+// Accepted는 pending 수용 또는 이미 성공한 동일 delivery만 인정한다.
+func (r PublishReceipt) Accepted() bool {
+	return r.Outcome == PublishInserted || r.Outcome == PublishDuplicateActive || r.Outcome == PublishDuplicateSent
+}
+
 type PublishBatchResult struct {
+	Receipts            []PublishReceipt
 	RequestedEvents     int
 	InsertedEvents      int
 	DuplicateEvents     int
@@ -96,7 +122,7 @@ type PublishBatchResult struct {
 }
 
 func processedPublishBatchResult(result *PublishBatchResult) PublishBatchResult {
-	result.ProcessedDeliveries = result.RequestedDeliveries
+	result.ProcessedDeliveries = len(result.Receipts)
 	return *result
 }
 

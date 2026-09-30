@@ -232,10 +232,10 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 			wantErrContains: []string{"Server error: 500"},
 		},
 		{
-			name:         "dedup",
+			name:         "global dedup does not suppress rooms",
 			scenario:     "dedup",
 			preMarkDedup: true,
-			wantCount:    0,
+			wantCount:    1,
 		},
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -418,4 +419,17 @@ func TestAlarmDispatchRunnerSeeMoreFoldHonorsCustomGroupTemplates(t *testing.T) 
 		require.Equal(t, 1, strings.Count(folded, seeMoreFoldPadding()))
 		require.True(t, strings.HasPrefix(folded, "리오나 쇼츠 10개"+seeMoreFoldPadding()+"\n\n"))
 	})
+}
+
+func (*seeMoreFoldConsumer) LoadSendRequest(context.Context, []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error) {
+	return nil, dispatchoutbox.ErrSendRequestUnpinned
+}
+
+func (*seeMoreFoldConsumer) PinSendRequest(_ context.Context, envelopes []domain.AlarmQueueEnvelope, request dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error) {
+	request.ClientRequestID = envelopes[0].ClientRequestID
+	return &request, nil
+}
+
+func (c *seeMoreFoldConsumer) ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, string) (bool, error) {
+	return false, c.unexpected("reissue")
 }

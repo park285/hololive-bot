@@ -75,6 +75,10 @@ func resolveScheduledStream(notif *domain.AlarmNotification, now time.Time) (*do
 	}
 
 	startScheduled := resolvedStream.StartScheduled.UTC()
+	if resolvedStream.IsUpcoming() && !startScheduled.After(now) {
+		return nil, time.Time{}, false
+	}
+
 	if startScheduled.IsZero() {
 		return nil, time.Time{}, false
 	}

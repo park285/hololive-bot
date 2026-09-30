@@ -103,3 +103,13 @@
 103 241_source_observation_payload_cutover.sql
 104 242_drop_payload_backfill_index.sql
 105 243_drop_channel_statistics_retirement_index.sql
+106 247_youtube_live_origin_application_index.sql
+107 245_youtube_live_lifecycle_origin.sql
+108 246_youtube_live_review_receipts.sql
+109 248_alarm_dispatch_immutable_request.sql
+110 250_alarm_upcoming_candidates.sql
+111 249_youtube_delivery_immutable_requests.sql
+112 251_youtube_delivery_send_request_index.sql
+113 252_alarm_upcoming_pending_index.sql
+114 253_alarm_upcoming_terminal_index.sql
+115 254_youtube_live_fact_observation_clocks.sql

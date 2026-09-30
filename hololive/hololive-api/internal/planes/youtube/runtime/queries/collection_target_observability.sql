@@ -35,18 +35,38 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
     UNION
     SELECT video_id FROM youtube_live_sessions WHERE status IN ('LIVE', 'UPCOMING')
 ), live_states AS (
-    SELECT v.video_id, h.status AS state, product.status AS product_state, product.scheduled_start_time
+    SELECT v.video_id, h.status AS state, product.status AS product_state, product.scheduled_start_time, product.lifecycle_origin,
+           availability.observed_at AS checked_at,
+           (SELECT max(receipt.recorded_at) FROM youtube_live_review_receipts receipt
+               WHERE receipt.video_id=v.video_id AND receipt.snapshot_sha256=
+                   (SELECT snapshot_sha256 FROM youtube_live_review_snapshot(v.video_id))) AS reviewed_at,
+           EXISTS (SELECT 1 FROM youtube_live_review_receipts receipt
+               WHERE receipt.video_id=v.video_id AND receipt.snapshot_sha256=
+                   (SELECT snapshot_sha256 FROM youtube_live_review_snapshot(v.video_id))) AS review_closed
     FROM active_live_videos v
     JOIN youtube_live_sessions product ON product.video_id = v.video_id
     JOIN targets t ON t.kind = 'youtubejs_channel_live' AND t.subject_key = product.channel_id
     LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id = v.video_id
+    LEFT JOIN youtube_video_availability availability ON availability.video_id=v.video_id
 ), live_summary AS (
     SELECT COUNT(video_id) FILTER (WHERE state = 'LIVE') AS live,
            COUNT(video_id) FILTER (WHERE state = 'UPCOMING') AS upcoming,
            COUNT(video_id) FILTER (WHERE state IS NULL OR state NOT IN ('LIVE', 'UPCOMING')) AS other,
-           COUNT(video_id) FILTER (WHERE state IS DISTINCT FROM product_state) AS state_mismatch,
+           COUNT(video_id) FILTER (WHERE (state IS NOT NULL AND state IS DISTINCT FROM product_state)
+               OR (state IS NULL AND (product_state='LIVE' OR (product_state='UPCOMING' AND lifecycle_origin='observed')))) AS state_mismatch,
            COUNT(video_id) FILTER (WHERE state = 'UPCOMING' AND scheduled_start_time < statement_timestamp()) AS past_due,
-           COUNT(video_id) FILTER (WHERE state = 'UPCOMING' AND scheduled_start_time < statement_timestamp() - INTERVAL '7 days') AS past_due_7d
+           COUNT(video_id) FILTER (WHERE state = 'UPCOMING' AND scheduled_start_time < statement_timestamp() - INTERVAL '7 days') AS past_due_7d,
+           COUNT(video_id) AS retained_total,
+           COUNT(video_id) FILTER(WHERE product_state='UPCOMING' AND lifecycle_origin='metadata_only') AS metadata_only,
+           COUNT(video_id) FILTER(WHERE lifecycle_origin='legacy_unknown' AND NOT review_closed) AS legacy_unreviewed,
+           COUNT(video_id) FILTER(WHERE review_closed) AS closed_unresolved,
+           COUNT(video_id) FILTER(WHERE checked_at IS NULL AND lifecycle_origin='legacy_unknown' AND NOT review_closed) AS never_checked,
+           COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-checked_at),0)) FILTER(WHERE lifecycle_origin='legacy_unknown' AND NOT review_closed),0)::double precision AS oldest_check_age,
+           COUNT(video_id) FILTER(WHERE NOT review_closed AND (lifecycle_origin='legacy_unknown'
+               OR (product_state='UPCOMING' AND lifecycle_origin='metadata_only' AND scheduled_start_time<statement_timestamp() AND checked_at IS NOT NULL))) AS unresolved_unreviewed,
+           COUNT(video_id) FILTER(WHERE lifecycle_origin='metadata_only' AND checked_at IS NULL) AS metadata_never_checked,
+           COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-checked_at),0)) FILTER(WHERE lifecycle_origin='metadata_only'),0)::double precision AS metadata_check_age,
+           COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-reviewed_at),0)) FILTER(WHERE review_closed),0)::double precision AS oldest_review_age
     FROM live_states
 ), target_summary AS (
     SELECT m.kind, EXISTS(SELECT 1 FROM current_projection) AS projection_valid,
@@ -62,6 +82,6 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
 )
 SELECT t.kind, t.projection_valid, t.targets, t.never_completed, t.stale,
        t.oldest_completion_age, t.due, t.oldest_due_age, t.required_rpc_rate,
-       l.live, l.upcoming, l.other, l.state_mismatch, l.past_due, l.past_due_7d
+       l.live, l.upcoming, l.other, l.state_mismatch, l.past_due, l.past_due_7d, l.retained_total, l.metadata_only, l.legacy_unreviewed, l.closed_unresolved, l.never_checked, l.oldest_check_age, l.unresolved_unreviewed, l.metadata_never_checked, l.metadata_check_age, l.oldest_review_age
 FROM target_summary t CROSS JOIN live_summary l
 ORDER BY t.kind;

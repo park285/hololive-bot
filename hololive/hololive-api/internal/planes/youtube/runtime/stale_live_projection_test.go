@@ -119,7 +119,7 @@ func TestStaleLiveVideoInputSelectsOperationalLiveWithoutFreshPositive(t *testin
 		got = append(got, video.VideoID)
 	}
 
-	want := []string{"tp-future", "tp-future-seen", "tp-no-head", "tp-null-clock", "tp-past-boundary", "tp-seen-stale", "tp-stale"}
+	want := []string{"tp-future", "tp-future-seen", "tp-no-head", "tp-null-clock", "tp-past-boundary", "tp-seen-stale", "tp-stale", "tp-upcoming"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("stale live videos = %v, want %v", got, want)
 	}

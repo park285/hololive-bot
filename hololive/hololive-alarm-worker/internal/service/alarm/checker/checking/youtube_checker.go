@@ -37,6 +37,7 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
@@ -54,6 +55,9 @@ type YouTubeChecker struct {
 	persistedLiveSource YouTubeLiveSessionSource
 	subscriptionDB      dbx.Querier
 	lookupSubscribers   func(context.Context, string, string, domain.AlarmType) ([]string, error)
+	upcomingCandidates  dispatchoutbox.UpcomingCandidateStore
+	unstagedMu          sync.Mutex
+	unstagedUpcoming    map[string]*unstagedYouTubeCandidates
 	targetPolicy        sharedchecker.TargetMinutePolicy
 	targetMinutesMu     sync.RWMutex
 	evaluationWindowCap time.Duration
@@ -123,7 +127,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 
 	initCheckerMetrics()
 
-	return &YouTubeChecker{
+	checker := &YouTubeChecker{
 		cacheClient:         cacheClient,
 		holodexService:      holodexService,
 		tierScheduler:       tierScheduler,
@@ -136,7 +140,12 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		targetPolicy:        sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,
 		logger:              SafeLogger(logger),
-	}, nil
+	}
+	if subscriptionDB != nil {
+		checker.upcomingCandidates = dispatchoutbox.NewUpcomingCandidates(subscriptionDB)
+	}
+
+	return checker, nil
 }
 
 // UpdateTargetMinutes는 runtime 설정 변경 시 target minute 정책을 갱신한다.
@@ -151,13 +160,13 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
 	now := time.Now().UTC()
 
-	dueChannels, streamsByChannel, liveEvidence, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx, now)
-	if err != nil {
-		return nil, fmt.Errorf("load due youtube check inputs: %w", err)
+	if err := c.flushUnstagedUpcoming(ctx); err != nil {
+		return c.recoverUpcomingAfterFailure(ctx, nil, now, fmt.Errorf("flush unstaged upcoming: %w", err))
 	}
 
-	if len(dueChannels) == 0 {
-		return []*domain.AlarmNotification{}, nil
+	dueChannels, streamsByChannel, liveEvidence, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx, now)
+	if err != nil {
+		return c.recoverUpcomingAfterFailure(ctx, liveEvidence.currentProviderStreams, now, fmt.Errorf("load due youtube check inputs: %w", err))
 	}
 
 	out, err := c.collectDueYouTubeNotifications(
@@ -170,7 +179,19 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 		now,
 	)
 	if err != nil {
-		return out, fmt.Errorf("collect due youtube notifications: %w", err)
+		return c.recoverUpcomingAfterFailure(ctx, liveEvidence.currentProviderStreams, now, fmt.Errorf("collect due youtube notifications: %w", err))
+	}
+
+	if c.upcomingCandidates != nil {
+		// 새 후보도 저장된 snapshot으로 반환해 동일 key의 재평가가 본문을 바꾸지 않는다.
+		out = withoutUpcomingNotifications(out)
+
+		recovered, recoverErr := c.recoverUpcomingCandidates(ctx, liveEvidence.currentProviderStreams, now)
+		if recoverErr != nil {
+			return out, fmt.Errorf("recover upcoming candidates: %w", recoverErr)
+		}
+
+		out = append(out, recovered...)
 	}
 
 	return out, nil
@@ -234,6 +255,13 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 				return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", work.channelID, err)
 			}
 
+			if err := c.stageUpcomingChannel(ctx, work, now, channelNotifications); err != nil {
+				return fmt.Errorf("check youtube streams: stage selected candidates: %w", err)
+			}
+
+			// 조회 시각은 선정 후보의 durable commit 이후에만 평가 완료로 인정한다.
+			c.tierScheduler.UpdateChannelState(work.channelID, work.streams)
+
 			appendYouTubeChannelNotifications(mu, notifications, channelNotifications)
 
 			return nil
@@ -260,10 +288,11 @@ func (c *YouTubeChecker) prepareYouTubeChannelWork(
 	}
 
 	prevCheckedAt := c.tierScheduler.LastCheckedAt(channelID)
-	c.tierScheduler.UpdateChannelState(channelID, channelStreams)
-
 	subscriberRooms := subscriberMap[channelID]
+
 	if len(subscriberRooms) == 0 {
+		c.tierScheduler.UpdateChannelState(channelID, channelStreams)
+
 		return youtubeChannelCheckWork{}, false
 	}
 

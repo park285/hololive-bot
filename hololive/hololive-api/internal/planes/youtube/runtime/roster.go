@@ -59,7 +59,7 @@ func (rosterReader) StaleLiveVideos(
 	for rows.Next() {
 		var video targetprojection.StaleLiveVideo
 
-		if err := rows.Scan(&video.VideoID, &video.ChannelID); err != nil {
+		if err := rows.Scan(&video.VideoID, &video.ChannelID, &video.IsUpcoming); err != nil {
 			return nil, fmt.Errorf("%w: scan stale live video: %w", targetprojection.ErrInputRead, err)
 		}
 

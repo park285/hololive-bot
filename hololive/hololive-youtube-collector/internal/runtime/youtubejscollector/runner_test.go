@@ -255,7 +255,7 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 	}
 }
 
-func TestChannelLiveRunnerPublishesMetadataWithGenerationTwo(t *testing.T) {
+func TestChannelLiveRunnerPublishesMetadataWithGenerationThree(t *testing.T) {
 	t.Parallel()
 
 	var result youtubejs.ChannelResult
@@ -555,7 +555,7 @@ func mustCollectCommunity(t *testing.T, result *youtubejs.CommunityResult) contr
 func youtubeInput(tb testing.TB, subject, jobKind string, kinds ...contract.ObservationKind) *collectutil.RunInput {
 	tb.Helper()
 
-	return youtubeInputWithLiveGeneration(tb, subject, jobKind, contract.LiveSnapshotMetadataContractGeneration, kinds...)
+	return youtubeInputWithLiveGeneration(tb, subject, jobKind, contract.LiveSnapshotQueryContractGeneration, kinds...)
 }
 
 func youtubeInputWithLiveGeneration(
@@ -570,6 +570,10 @@ func youtubeInputWithLiveGeneration(
 	generations := make(map[contract.ObservationKind]int64, len(kinds))
 	for _, kind := range kinds {
 		generations[kind] = 1
+		if kind == contract.KindVideoLiveCheck {
+			generations[kind] = contract.VideoLifecycleContractGeneration
+		}
+
 		if kind == contract.KindLiveSnapshot {
 			generations[kind] = liveGeneration
 		}
@@ -613,7 +617,7 @@ func channelLiveInput(tb testing.TB) *collectutil.RunInput {
 	tb.Helper()
 
 	return youtubeInputWithLiveGeneration(tb, restrictedTestChannelID, "youtubejs_channel_live",
-		contract.LiveSnapshotMetadataContractGeneration, contract.KindLiveSnapshot)
+		contract.LiveSnapshotQueryContractGeneration, contract.KindLiveSnapshot)
 }
 
 func withEnabled(tb testing.TB, input *collectutil.RunInput, enabled map[contract.ObservationKind][]string) *collectutil.RunInput {

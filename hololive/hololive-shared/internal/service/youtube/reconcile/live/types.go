@@ -15,6 +15,15 @@ const (
 	StatusEnded    = domain.LiveStatusEnded
 )
 
+// LifecycleOrigin은 일정 메타데이터와 실제 수명 관측의 출처를 구분한다.
+type LifecycleOrigin string
+
+const (
+	OriginMetadataOnly  LifecycleOrigin = "metadata_only"
+	OriginObserved      LifecycleOrigin = "observed"
+	OriginLegacyUnknown LifecycleOrigin = "legacy_unknown"
+)
+
 type EndEvidenceKind string
 
 const (
@@ -66,12 +75,14 @@ type SessionFact struct {
 	StartedAt          *time.Time
 	EndedAt            *time.Time
 	LiveStartConfirmed bool
+	VerifiedTerminal   bool
 }
 
 type SessionState struct {
 	VideoID                    string
 	ChannelID                  string
 	Status                     Status
+	LifecycleOrigin            LifecycleOrigin
 	Title                      string
 	TopicID                    string
 	ThumbnailURL               string
@@ -81,6 +92,8 @@ type SessionState struct {
 	LiveFirstSeenAt            *time.Time
 	LastSeenAt                 time.Time
 	IsPremiere                 *bool
+	StatusObservedAt           *time.Time
+	ScheduleObservedAt         *time.Time
 	Clock                      LiveEvidenceClock
 	EndReason                  *EndReason
 	FirstAbsenceScheduledFor   *time.Time
@@ -89,6 +102,7 @@ type SessionState struct {
 	LastAbsenceScheduledFor    *time.Time
 	IgnoredAbsenceScheduledFor []time.Time
 	Present                    bool
+	HeadPresent                bool
 }
 
 type AbsenceSlot struct {
@@ -207,6 +221,8 @@ func (s *SessionState) clone() SessionState {
 	cloned.StartedAt = copyOptionalTime(s.StartedAt)
 	cloned.EndedAt = copyOptionalTime(s.EndedAt)
 	cloned.LiveFirstSeenAt = copyOptionalTime(s.LiveFirstSeenAt)
+	cloned.StatusObservedAt = copyOptionalTime(s.StatusObservedAt)
+	cloned.ScheduleObservedAt = copyOptionalTime(s.ScheduleObservedAt)
 	cloned.IsPremiere = cloneBool(s.IsPremiere)
 	cloned.Clock.LastUpcomingPositiveAt = copyOptionalTime(s.Clock.LastUpcomingPositiveAt)
 	cloned.Clock.LastUpcomingPositiveSeenAt = copyOptionalTime(s.Clock.LastUpcomingPositiveSeenAt)

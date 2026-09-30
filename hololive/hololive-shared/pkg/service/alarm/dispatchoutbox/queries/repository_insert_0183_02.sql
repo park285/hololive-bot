@@ -29,7 +29,7 @@
 			  ON u.unit_key = n.send_unit_key
 			 AND u.dispatch_group_key = n.dispatch_group_key
 			 AND u.room_id = n.room_id
-			 AND u.client_request_id = n.client_request_id
+			 AND COALESCE(u.base_client_request_id, u.client_request_id) = n.client_request_id
 		), inserted AS (
 			INSERT INTO alarm_dispatch_deliveries (
 				event_id, room_id, dedupe_key, claim_keys, delivery_context, dispatch_group_key, send_unit_id, status, next_attempt_at
@@ -39,4 +39,4 @@
 			ON CONFLICT (dedupe_key) DO NOTHING
 			RETURNING dedupe_key
 		)
-		SELECT (SELECT count(dedupe_key) FROM resolved), (SELECT count(dedupe_key) FROM inserted)
+		SELECT (SELECT count(dedupe_key) FROM resolved), ARRAY(SELECT dedupe_key FROM inserted)

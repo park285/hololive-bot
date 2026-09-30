@@ -56,8 +56,10 @@ func (s StaticSupportedContracts) Supports(version ContractVersion) bool {
 func InitialSupportedContracts() StaticSupportedContracts {
 	result := make(StaticSupportedContracts)
 
-	// live_snapshot은 generation 2만 지원한다. generation 1 항목은 decoder와 함께 지웠다(계획 T11 C6, stack-audit 2026-09-26).
+	// 과거 세대의 해석은 유지하고 새 조회 증명·영상 수명 세대를 함께 지원한다. 퇴역 generation 1 live_snapshot은 복원하지 않는다.
 	for _, version := range []ContractVersion{
+		{contract.ProviderYouTubeJS, contract.KindLiveSnapshot, 1, contract.LiveSnapshotQueryContractGeneration},
+		{contract.ProviderYouTubeJS, contract.KindVideoLiveCheck, contract.VideoLifecycleSchemaVersion, contract.VideoLifecycleContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindCommunityPage, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindVideoList, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindShortsList, 1, 1},

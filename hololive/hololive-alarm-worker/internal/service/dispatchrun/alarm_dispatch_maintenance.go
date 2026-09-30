@@ -455,6 +455,13 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (int64, error) {
+	deletedCandidates, err := dispatchoutbox.NewUpcomingCandidates(s.db).Cleanup(ctx, retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	if err != nil {
+		return 0, fmt.Errorf("cleanup upcoming candidates: %w", err)
+	}
+
+	observeAlarmDispatchRetentionDeletedRows("upcoming_candidates", deletedCandidates)
+
 	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0368_05.sql"), retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)

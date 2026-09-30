@@ -42,7 +42,7 @@ func newAlarmWorkerRegistryState(profile *settings.AlarmWorkerProfile, pool *pgx
 
 	youtubeLockTimeout := time.Duration(profile.YouTubeDelivery.LockTimeoutMS) * time.Millisecond
 
-	state.samplers["youtube_delivery"] = newPostgresQueueSampler(pool, youtubeDeliveryReadySnapshotSQL, youtubeLockTimeout.Milliseconds())
+	state.samplers["youtube_delivery"] = newYouTubeQueueSampler(pool, youtubeLockTimeout, time.Duration(profile.YouTubeDelivery.ClaimFreshnessWindowMS)*time.Millisecond, profile.YouTubeDelivery.BatchSize)
 	state.registry = workercontract.NewRegistry(profile.Loaded, state.checker)
 
 	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {

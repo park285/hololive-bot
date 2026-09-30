@@ -30,6 +30,8 @@ func TestLiveConsumerHolodexLiveWithoutActualStartStaysUpcoming(t *testing.T) {
 
 	replayLiveObservation(t, repo, consumer, observationID)
 	requireUnconfirmedLiveProjection(t, loadLiveStartProjection(t, pool), *waitingRoom.ScheduledAt)
+	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
+	assertLifecycleOrigin(t, pool, "metadata_only")
 	requireLiveApplicationDecision(t, pool, observationID, "LIVE_START_UNCONFIRMED")
 }
 
@@ -101,7 +103,7 @@ func loadLiveStartProjection(t *testing.T, pool *pgxpool.Pool) liveStartProjecti
 		SELECT session.status, session.scheduled_start_time, session.started_at,
 		       session.live_first_seen_at, head.last_live_positive_at
 		FROM youtube_live_sessions AS session
-		JOIN youtube_live_reconciliation_heads AS head USING (video_id)
+		LEFT JOIN youtube_live_reconciliation_heads AS head USING (video_id)
 		WHERE session.video_id = $1
 	`, testVideoID).Scan(
 		&projection.status,

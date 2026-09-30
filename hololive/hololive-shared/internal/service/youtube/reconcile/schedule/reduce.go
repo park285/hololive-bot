@@ -36,6 +36,7 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 		})
 
 		if session, ok := mergeSession(&current, item); ok {
+			session.ScheduleObservedAt = new(workingEvidence.EffectiveAt.UTC())
 			current.Sessions[session.VideoID] = session
 			sessions = append(sessions, session)
 			applications = append(applications, Application{

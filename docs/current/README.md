@@ -52,6 +52,7 @@
 ## Active Implementation Plans
 
 - `plans/2026-08-31-youtube-egress-lifecycle-implementation.md` - canonical identity, internal transition store, ledger backfill, writer/cleanup cutover와 검증 순서
+- [알람 워커·YouTube 컬렉터 신뢰성 개선](plans/2026-09-30-alarm-worker-collector-reliability.md) - 재현한 13개 문제의 조치·회귀 검증, 구현 의존성·완료 조건·운영 적용 경계. [상세 리뷰 및 검증 기록](../history/architecture/2026-09-30-alarm-worker-collector-reliability-review.md)을 함께 봅니다.
 
 ## Compatibility Bridges
 

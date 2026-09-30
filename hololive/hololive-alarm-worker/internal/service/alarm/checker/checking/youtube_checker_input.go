@@ -13,8 +13,9 @@ import (
 )
 
 type youtubeLiveCheckEvidence struct {
-	observedAtByStreamID map[string]time.Time
-	sentRoomsByStreamID  map[string]map[string]struct{}
+	currentProviderStreams map[string][]*domain.Stream
+	observedAtByStreamID   map[string]time.Time
+	sentRoomsByStreamID    map[string]map[string]struct{}
 }
 
 func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
@@ -44,6 +45,11 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		streamsByChannel = make(map[string][]*domain.Stream)
 	}
 
+	if holodexErr == nil {
+		// 과거 canonical 보강이 최신 provider 응답으로 위장해 후보를 취소하지 않도록 분리한다.
+		liveEvidence.currentProviderStreams = cloneCurrentProviderStreams(streamsByChannel)
+	}
+
 	persistedSessions, persistedErr := c.loadPersistedLiveSessions(ctx, dueChannels, now)
 	if persistedErr != nil {
 		c.logPersistedLiveSourceError(persistedErr)
@@ -57,19 +63,19 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 
 	err = c.applyConfirmedPremiereClassification(ctx, streamsByChannel)
 	if err != nil {
-		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: classify confirmed premieres: %w", err)
+		return nil, nil, liveEvidence, nil, fmt.Errorf("check youtube streams: classify confirmed premieres: %w", err)
 	}
 
 	memberNames, err := LoadMemberNamesByChannel(ctx, c.cacheClient, dueChannels)
 	if err != nil {
-		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: load member names: %w", err)
+		return nil, nil, liveEvidence, nil, fmt.Errorf("check youtube streams: load member names: %w", err)
 	}
 
 	ApplyMemberNamesToStreams(streamsByChannel, memberNames)
 
 	subscriberMap, err = LoadSubscriberRoomsByChannel(ctx, c.cacheClient, c.subscriptionDB, dueChannels)
 	if err != nil {
-		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
+		return nil, nil, liveEvidence, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
 	}
 
 	evidence := c.observePersistedLiveGuardrails(ctx, persistedSessions, streamsByChannel, subscriberMap, now)

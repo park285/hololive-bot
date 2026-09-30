@@ -22,11 +22,13 @@ package notifier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend) (int, error) {
@@ -43,44 +45,44 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 	}
 
 	result, err := n.queuePublisher.PublishBatch(ctx, notifications, claimKeys)
-	processed := clampProcessedDeliveries(result.ProcessedDeliveries, len(items))
+	accepted := make(map[int]bool, len(result.Receipts))
+	terminal := make(map[int]bool, len(result.Receipts))
 
-	if err != nil {
-		n.releaseClaimsBestEffort(ctx, claimKeysFromItems(items[processed:]), "failed to release claims after queue batch publish error")
-
-		for _, item := range items[:processed] {
-			n.markPublishedBestEffort(ctx, item.payload)
+	for _, receipt := range result.Receipts {
+		if receipt.Ordinal < 0 || receipt.Ordinal >= len(items) {
+			continue
 		}
 
-		return processed, fmt.Errorf("publish queue batch: %w", err)
+		accepted[receipt.Ordinal] = receipt.Accepted()
+		terminal[receipt.Ordinal] = receipt.Outcome == dispatchoutbox.PublishRejectedTerminal
 	}
 
-	for _, item := range items {
-		n.markPublishedBestEffort(ctx, item.payload)
+	published := 0
+
+	for i, item := range items {
+		if accepted[i] {
+			n.markPublishedBestEffort(ctx, item.payload)
+
+			if n.tierScheduler != nil {
+				n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
+			}
+
+			published++
+		} else if !terminal[i] {
+			// 비성공 terminal의 기존 claim은 보존하고, 충돌·미확정 입력만 재평가 가능하게 한다.
+			n.releaseClaimsBestEffort(ctx, item.claimKeys, "failed to release unaccepted publish claims")
+		}
 	}
 
-	return len(items), nil
-}
-
-func clampProcessedDeliveries(processed, total int) int {
-	if processed < 0 {
-		return 0
+	if published != len(items) && err == nil {
+		err = errors.New("one or more deliveries were not accepted")
 	}
 
-	if processed > total {
-		return total
+	if err != nil {
+		return published, fmt.Errorf("publish queue batch: %w", err)
 	}
 
-	return processed
-}
-
-func claimKeysFromItems(items []claimedSend) []string {
-	keys := make([]string, 0, len(items)*2)
-	for _, item := range items {
-		keys = append(keys, item.claimKeys...)
-	}
-
-	return keys
+	return published, nil
 }
 
 func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInput) {

@@ -238,3 +238,25 @@ func TestDispatchClaimedDeliveryResponseLostAfterProviderSuccessDoesNotResend(t 
 		t.Fatalf("claim release calls = %d, want 0", got)
 	}
 }
+
+func (s *lifecycleTransitionSpy) LoadFrozenRequests(context.Context, []int64) ([]store.FrozenRequest, error) {
+	return nil, nil
+}
+
+func (s *lifecycleTransitionSpy) FreezeRequest(_ context.Context, rows []domain.YouTubeNotificationDelivery, request store.FrozenRequest) (store.FrozenRequest, error) {
+	request.MemberIDs = collectDeliveryIDs(rows)
+	return request, nil
+}
+
+func (s *lifecycleTransitionSpy) AdvanceRequestGeneration(_ context.Context, _ store.StartedOperation, request store.FrozenRequest) (store.FrozenRequest, error) {
+	request.Generation++
+	return request, nil
+}
+
+func (s *lifecycleTransitionSpy) DeferFollower(context.Context, store.DeferCommand) (store.ApplyResult, error) {
+	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
+}
+
+func (s *lifecycleTransitionSpy) FreezeFallbackRequests(_ context.Context, _ store.StartedOperation, requests []store.FrozenRequest) ([]store.FrozenRequest, error) {
+	return requests, nil
+}

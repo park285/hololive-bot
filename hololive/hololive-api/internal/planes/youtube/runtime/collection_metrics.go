@@ -15,12 +15,16 @@ import (
 const collectionTargetJobCount = 6
 
 type collectionTargetSample struct {
-	kind                                            string
-	valid                                           bool
-	targets, neverCompleted, stale, due             int64
-	oldestCompletionAge, oldestDueAge, requiredRate float64
-	live, upcoming, other                           int64
-	stateMismatch, pastDue, pastDue7d               int64
+	kind                                                                          string
+	valid                                                                         bool
+	targets, neverCompleted, stale, due                                           int64
+	oldestCompletionAge, oldestDueAge, requiredRate                               float64
+	live, upcoming, other                                                         int64
+	stateMismatch, pastDue, pastDue7d                                             int64
+	retainedTotal, metadataOnly, legacyUnreviewed, closedUnresolved, neverChecked int64
+	oldestCheckAge                                                                float64
+	unresolvedUnreviewed, metadataNeverChecked                                    int64
+	metadataCheckAge, oldestReviewAge                                             float64
 }
 
 type collectionTargetMetrics struct {
@@ -28,6 +32,9 @@ type collectionTargetMetrics struct {
 	oldestCompletionAge, oldestDueAge, requiredRate *prometheus.GaugeVec
 	liveState                                       *prometheus.GaugeVec
 	liveReview                                      *prometheus.GaugeVec
+	lifecycleRecords                                *prometheus.GaugeVec
+	lifecycleCheckAge                               *prometheus.GaugeVec
+	lifecycleReviewAge                              prometheus.Gauge
 	success, lastSuccess                            prometheus.Gauge
 }
 
@@ -49,11 +56,15 @@ func newCollectionTargetMetrics(reg prometheus.Registerer) *collectionTargetMetr
 		oldestDueAge:        gauge("oldest_due_age_seconds", "Maximum elapsed time past effective discovery due time among active subjects."),
 		requiredRate:        gauge("required_rpc_rate", "Nominal YouTube.js helper RPC calls per second required by active target polling intervals; excludes retries."),
 		liveState:           prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_live_states", Help: "Distinct live-session videos on enabled, unexpired live_snapshot channel targets in a current, unexpired projection where the head or product session is LIVE/UPCOMING, by reconciliation head state; other includes missing or terminal heads."}, []string{"state"}),
-		liveReview:          prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_live_state_review_targets", Help: "Distinct live-session videos on enabled, unexpired live_snapshot channel targets in a current, unexpired projection with a LIVE/UPCOMING head or product session requiring review: head/product mismatch or an UPCOMING head with product schedule before now/over 7 days overdue; reasons overlap and do not prove a broadcast ended."}, []string{"reason"}),
+		liveReview:          prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_live_state_review_targets", Help: "Distinct live-session videos on enabled, unexpired live_snapshot channel targets in a current, unexpired projection with a LIVE/UPCOMING head or product session requiring review: actual head/product mismatch, missing LIVE or observed UPCOMING head, unreviewed legacy origin, or an UPCOMING head with product schedule before now/over 7 days overdue; reasons overlap and do not prove a broadcast ended."}, []string{"reason"}),
 		success:             prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_snapshot_success", Help: "Whether the latest target snapshot completed with a current valid projection."}),
 		lastSuccess:         prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_snapshot_last_success_timestamp_seconds", Help: "Unix time of the last complete valid target snapshot."}),
 	}
-	reg.MustRegister(m.liveState, m.liveReview, m.success, m.lastSuccess)
+
+	m.lifecycleRecords = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_records", Help: "Retained active lifecycle records by classification; review closure requires the exact current snapshot. Categories may overlap."}, []string{"classification"})
+	m.lifecycleCheckAge = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_oldest_check_age_seconds", Help: "Age of the oldest actual video check by lifecycle classification; never-checked records are counted separately."}, []string{"classification"})
+	m.lifecycleReviewAge = prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_oldest_review_age_seconds", Help: "Age of the oldest currently applicable unresolved review receipt."})
+	reg.MustRegister(m.liveState, m.liveReview, m.lifecycleRecords, m.lifecycleCheckAge, m.lifecycleReviewAge, m.success, m.lastSuccess)
 
 	return m
 }
@@ -88,7 +99,9 @@ func scanCollectionTargets(rows pgx.Rows) ([]collectionTargetSample, error) {
 		if err := rows.Scan(&s.kind, &s.valid, &s.targets, &s.neverCompleted, &s.stale,
 			&s.oldestCompletionAge, &s.due, &s.oldestDueAge, &s.requiredRate,
 			&s.live, &s.upcoming, &s.other,
-			&s.stateMismatch, &s.pastDue, &s.pastDue7d); err != nil {
+			&s.stateMismatch, &s.pastDue, &s.pastDue7d,
+			&s.retainedTotal, &s.metadataOnly, &s.legacyUnreviewed, &s.closedUnresolved, &s.neverChecked, &s.oldestCheckAge,
+			&s.unresolvedUnreviewed, &s.metadataNeverChecked, &s.metadataCheckAge, &s.oldestReviewAge); err != nil {
 			return nil, fmt.Errorf("scan collection target snapshot: %w", err)
 		}
 
@@ -130,6 +143,20 @@ func (m *collectionTargetMetrics) observe(samples []collectionTargetSample, now 
 	m.liveState.WithLabelValues("UPCOMING").Set(float64(live.upcoming))
 	m.liveState.WithLabelValues("other").Set(float64(live.other))
 	m.liveReview.WithLabelValues("state_mismatch").Set(float64(live.stateMismatch))
+	m.liveReview.WithLabelValues("legacy_unreviewed").Set(float64(live.legacyUnreviewed))
+	m.liveReview.WithLabelValues("unresolved_unreviewed").Set(float64(live.unresolvedUnreviewed))
+
+	for classification, count := range map[string]int64{
+		"retained_total": live.retainedTotal, "metadata_only": live.metadataOnly,
+		"unresolved_unreviewed": live.unresolvedUnreviewed, "metadata_never_checked": live.metadataNeverChecked,
+		"legacy_unreviewed": live.legacyUnreviewed, "closed_unresolved": live.closedUnresolved, "never_checked": live.neverChecked,
+	} {
+		m.lifecycleRecords.WithLabelValues(classification).Set(float64(count))
+	}
+
+	m.lifecycleCheckAge.WithLabelValues("legacy_unreviewed").Set(live.oldestCheckAge)
+	m.lifecycleCheckAge.WithLabelValues("metadata_only").Set(live.metadataCheckAge)
+	m.lifecycleReviewAge.Set(live.oldestReviewAge)
 	m.liveReview.WithLabelValues("scheduled_before_now").Set(float64(live.pastDue))
 	m.liveReview.WithLabelValues("scheduled_overdue_7d").Set(float64(live.pastDue7d))
 

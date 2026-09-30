@@ -12,8 +12,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
+
+type RequestConsumer interface {
+	LoadSendRequest(context.Context, []domain.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error)
+	PinSendRequest(context.Context, []domain.AlarmQueueEnvelope, dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error)
+	ReissueSendRequest(context.Context, []domain.AlarmQueueEnvelope, string) (bool, error)
+}
 
 type QueueConsumer interface {
 	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
@@ -31,6 +38,7 @@ type FailureRouter interface {
 }
 
 type Consumer interface {
+	RequestConsumer
 	QueueConsumer
 	FailureRouter
 }
@@ -45,11 +53,9 @@ type IdleWaiter interface {
 // Sender는 alarm dispatch가 쓰는 Text 발송 계약이다. 오픈채팅의 Markdown 선택은 sender가 방 유형으로 정한다.
 // Karing template은 보내지 않는다(DEC-20260926-hololive-karing-egress-disposition).
 type Sender interface {
+	PrepareMessageRequest(context.Context, string, string) (string, string, error)
+	SendPreparedMessage(context.Context, string, string, string, string) error
 	SendMessage(ctx context.Context, roomID, message string) error
-}
-
-type clientRequestSender interface {
-	SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error
 }
 
 type Runner struct {
@@ -119,10 +125,6 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	attemptID := r.workerTracker.BeginAttempt(time.Now())
-
-	defer r.workerTracker.EndAttempt(attemptID)
-
 	attemptCtx := ctx
 	cancel := func() {}
 
@@ -133,8 +135,6 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 	defer cancel()
 
 	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForDelivery(envelopes))
-	r.workerTotals.RecordAttempt(dispatchAttemptOutcome(err))
-
 	if err != nil {
 		return true, fmt.Errorf("dispatch alarm dispatch groups: %w", err)
 	}
@@ -146,10 +146,14 @@ func dispatchAttemptOutcome(err error) workercontract.AttemptOutcome {
 	switch {
 	case err == nil:
 		return workercontract.AttemptSuccess
+	case sendoutcome.Classify(err) == sendoutcome.OutcomeUnknown:
+		return workercontract.AttemptOutcomeUnknown
 	case errors.Is(err, context.DeadlineExceeded):
 		return workercontract.AttemptTimeout
 	case errors.Is(err, context.Canceled):
 		return workercontract.AttemptCanceled
+	case sendoutcome.Classify(err) == sendoutcome.TransportAmbiguous:
+		return workercontract.AttemptOutcomeUnknown
 	default:
 		return workercontract.AttemptFailed
 	}
@@ -278,59 +282,92 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 		return nil
 	}
 
+	request, err := r.prepareGroupRequest(ctx, group)
+	if err != nil {
+		if errors.Is(err, dispatchoutbox.ErrLegacySendRequest) || errors.Is(err, dispatchoutbox.ErrSendRequestFence) {
+			return r.withStateContext(ctx, func(stateCtx context.Context) error {
+				return r.consumer.Quarantine(stateCtx, group.envelopes, err)
+			})
+		}
+
+		return r.routePreSendFailure(ctx, group.envelopes, err)
+	}
+
+	// claim 이후 다른 세대를 보내지 않도록 저장된 ID를 다시 확인한다.
+	if request.ClientRequestID != clientRequestID || request.RoomID != group.roomID {
+		return fmt.Errorf("prepare alarm request: %w", dispatchoutbox.ErrSendRequestFence)
+	}
+
+	return r.dispatchPreparedMessageGroup(ctx, group, request)
+}
+
+func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGroup) (*dispatchoutbox.SendRequest, error) {
+	request, err := r.consumer.LoadSendRequest(ctx, group.envelopes)
+	if err == nil {
+		return request, nil
+	}
+
+	if !errors.Is(err, dispatchoutbox.ErrSendRequestUnpinned) {
+		return nil, fmt.Errorf("load immutable request: %w", err)
+	}
+
 	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, r.shortLinkBaseURL, r.seeMoreFold, group)
 	if err != nil {
-		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
-			return fmt.Errorf("route pre send failure: %w", routeErr)
-		}
-
-		return nil
+		return nil, fmt.Errorf("render request: %w", err)
 	}
 
-	if err := r.dispatchRenderedMessageGroup(ctx, group, message, clientRequestID); err != nil {
-		return fmt.Errorf("dispatch rendered message group: %w", err)
+	body, route, err := r.sender.PrepareMessageRequest(ctx, group.roomID, message)
+	if err != nil {
+		return nil, fmt.Errorf("prepare request route: %w", err)
 	}
 
-	return nil
+	request, err = r.consumer.PinSendRequest(ctx, group.envelopes, dispatchoutbox.SendRequest{Body: body, Route: route, RoomID: group.roomID})
+	if err != nil {
+		return nil, fmt.Errorf("pin immutable request: %w", err)
+	}
+
+	return request, nil
 }
 
-func (r *Runner) dispatchRenderedMessageGroup(ctx context.Context, group alarmDispatchGroup, message, clientRequestID string) error {
-	// markSending은 실패를 영속화까지 마치면 err 없이 proceed=false를 돌려준다. nil을 감싸면
-	// 정상적인 발송 중단이 루프 오류로 바뀐다.
+func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDispatchGroup, request *dispatchoutbox.SendRequest) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("before alarm send: %w", err)
+	}
+
 	if proceed, markErr := r.markSending(ctx, group.envelopes); !proceed {
-		if markErr != nil {
-			return fmt.Errorf("mark alarm dispatch sending: %w", markErr)
-		}
-
-		return nil
+		return markErr
 	}
 
-	if sendErr := sendAlarmDispatchMessage(ctx, r.sender, group, message, clientRequestID); sendErr != nil {
-		if routeErr := r.routePostSendingFailure(ctx, group, sendErr); routeErr != nil {
-			return fmt.Errorf("route post sending failure: %w", routeErr)
-		}
-
-		return nil
+	if sendErr := r.sendPreparedRequest(ctx, request); sendErr != nil {
+		group.request = request
+		return r.routePostSendingFailure(ctx, group, sendErr)
 	}
 
-	if err := r.markDispatched(ctx, group.envelopes); err != nil {
-		return fmt.Errorf("mark dispatched: %w", err)
-	}
-
-	return nil
+	return r.markDispatched(ctx, group.envelopes)
 }
 
-func sendAlarmDispatchMessage(ctx context.Context, sender Sender, group alarmDispatchGroup, message, clientRequestID string) error {
-	if idSender, ok := sender.(clientRequestSender); ok {
-		if err := idSender.SendMessageWithClientRequestID(ctx, group.roomID, message, clientRequestID); err != nil {
-			return fmt.Errorf("send message with client request ID: %w", err)
+// 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다.
+func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (err error) {
+	id := r.workerTracker.BeginAttempt(time.Now())
+	completed := false
+
+	defer func() {
+		r.workerTracker.EndAttempt(id)
+
+		outcome := workercontract.AttemptPanic
+
+		if completed {
+			outcome = dispatchAttemptOutcome(err)
 		}
 
-		return nil
-	}
+		r.workerTotals.RecordAttempt(outcome)
+	}()
 
-	if err := sender.SendMessage(ctx, group.roomID, message); err != nil {
-		return fmt.Errorf("send message: %w", err)
+	err = r.sender.SendPreparedMessage(ctx, request.RoomID, request.Body, request.Route, request.ClientRequestID)
+	completed = true
+
+	if err != nil {
+		return fmt.Errorf("send prepared alarm request: %w", err)
 	}
 
 	return nil

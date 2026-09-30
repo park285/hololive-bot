@@ -18,6 +18,8 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 	ctx := t.Context()
 
 	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "UPCOMING"))
+	assertLifecycleOrigin(t, pool, "observed")
+
 	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "ENDED"))
 
@@ -27,6 +29,7 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 
 	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 	assertTableCount(t, pool, "youtube_live_sessions", 1)
+	assertLifecycleOrigin(t, pool, "observed")
 }
 
 func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *testing.T) {

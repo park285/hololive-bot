@@ -41,13 +41,36 @@ const testRoomID = "room-1"
 
 // mockDeliveryRepository: deliveryRepository mock 구현.
 type mockDeliveryRepository struct {
+	saveRequestFn            func(context.Context, int64, string, *preparedMessage, *preparedMessage) (bool, error)
 	fetchAndLockFn           func(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
 	markSendingFn            func(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
+	markQuarantinedFn        func(context.Context, int64, string, string) (bool, error)
 	markSentFn               func(ctx context.Context, id int64, workerID string) (bool, error)
 	markFailedFn             func(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	quarantineStaleSendingFn func(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
 	countByStatusFn          func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	cleanupFn                func(ctx context.Context, olderThan time.Duration) (int64, error)
+}
+
+func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
+	saved, err := m.saveRequest(ctx, id, worker, previous, next)
+	if err != nil || !saved {
+		return saved, err
+	}
+
+	return m.MarkFailed(ctx, id, worker, maxRetries, backoff, reason)
+}
+
+func (m *mockDeliveryRepository) markPreparationUnsent(context.Context, int64, string) (bool, error) {
+	return true, nil
+}
+
+func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, previous, next *preparedMessage) (bool, error) {
+	if m.saveRequestFn != nil {
+		return m.saveRequestFn(ctx, id, worker, previous, next)
+	}
+
+	return true, nil
 }
 
 func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
@@ -84,6 +107,14 @@ func (m *mockDeliveryRepository) MarkSent(ctx context.Context, id int64, workerI
 		}
 
 		return out, nil
+	}
+
+	return true, nil
+}
+
+func (m *mockDeliveryRepository) MarkQuarantined(ctx context.Context, id int64, workerID, reason string) (bool, error) {
+	if m.markQuarantinedFn != nil {
+		return m.markQuarantinedFn(ctx, id, workerID, reason)
 	}
 
 	return true, nil

@@ -91,6 +91,8 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 		&session.TopicID, &session.ThumbnailURL,
 		&session.ScheduledStartTime, &session.StartedAt, &session.EndedAt,
 		&session.LiveFirstSeenAt, &session.LastSeenAt, &session.IsPremiere,
+		&session.LifecycleOrigin,
+		&session.StatusObservedAt, &session.ScheduleObservedAt,
 	); err != nil {
 		return live.SessionState{}, fmt.Errorf("scan live session: %w", err)
 	}
@@ -140,6 +142,7 @@ func applyLiveHeadRow(rows pgx.Rows, state *live.State) error {
 	}
 
 	existing.Clock = head.Clock
+	existing.HeadPresent = true
 	existing.EndReason = head.EndReason
 	existing.LastAbsenceScheduledFor = head.LastAbsenceScheduledFor
 	existing.FirstAbsenceScheduledFor = head.FirstAbsenceScheduledFor

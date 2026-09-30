@@ -53,11 +53,15 @@ func mergeConfirmedPremiere(state *State, decision *PremiereDecision, fact *Conf
 			VideoID:            fact.VideoID,
 			ChannelID:          fact.ChannelID,
 			Status:             StatusUpcoming,
+			LifecycleOrigin:    OriginMetadataOnly,
 			Title:              fact.Title,
 			ScheduledStartTime: copyOptionalTime(fact.ScheduledAt),
 			LastSeenAt:         fact.ReceivedAt.UTC(),
 			IsPremiere:         new(true),
 			Present:            true,
+		}
+		if fact.ScheduledAt != nil {
+			created.ScheduleObservedAt = copyTime(fact.ReceivedAt)
 		}
 
 		state.Sessions[fact.VideoID] = created
