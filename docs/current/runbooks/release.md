@@ -200,21 +200,25 @@ GitHub Release 제목은 tag와 같은 `v<version>`으로 쓰고, 본문은
 
 `previous_tag`는 직전 게시 릴리즈로 명시하여, tag만 있고 Release가 없는 중간 버전의
 변경도 누락하지 않습니다. 첫 게시 릴리즈는 직전 app tag를 기준으로 합니다.
-승인된 tag 게시 후 생성 예:
+게시·본문 수정의 단일 진입점은 `scripts/publish-release.sh`입니다. 기본 mode는
+`preview`이며 대상 tag·직전 게시 릴리즈·자동 생성 본문을 확인합니다. GitHub API의
+자동 생성이 실패하거나 결과가 비면 중단하며 수동 본문으로 대체하지 않습니다.
+직전 게시 릴리즈와 다른 기준은 거부합니다. 첫 게시 릴리즈는 직전 app tag를
+명시합니다. 기존 릴리즈 수정 시에는 해당 릴리즈의 게시 시각 이전을 기준으로 합니다.
 
 ```bash
-gh release create "$tag" --repo park285/hololive-bot --verify-tag \
-  --title "$tag" --generate-notes --notes-start-tag "$previous_tag"
+bash scripts/publish-release.sh "$tag" "$previous_tag"
+# 기존 검증과 main 반영, annotated tag push 및 게시 승인을 마친 뒤:
+bash scripts/publish-release.sh "$tag" "$previous_tag" create
+# 승인된 기존 본문 교정:
+bash scripts/publish-release.sh "$tag" "$previous_tag" edit
 ```
 
-기존 본문의 수정은 원문을 보존한 뒤 같은 tag 구간으로 생성합니다. 태그·첨부물·
-draft/prerelease 상태는 변경하지 않습니다.
-
-```bash
-gh api repos/park285/hololive-bot/releases/generate-notes \
-  -f tag_name="$tag" -f previous_tag_name="$previous_tag" --jq .body > "$notes_file"
-gh release edit "$tag" --repo park285/hololive-bot --title "$tag" --notes-file "$notes_file"
-```
+스크립트는 tag를 생성하거나 push하지 않으며 전체 pre-push gate를 대신하지 않습니다.
+`create`는 원격 annotated tag를 요구합니다. `edit`는 원문을 로컬 임시 디렉터리에
+보존한 뒤 제목·본문만 수정하고 tag·첨부물·draft/prerelease 상태 보존을 확인합니다.
+기록 경로는 실행 시 출력합니다. 생성 본문과 게시 결과가 다르면 실패로 보고하며
+자동 재시도하지 않습니다. 임의 `gh release create/edit`나 웹 수동 요약으로 우회하지 않습니다.
 
 배포·검증·롤백 근거는 `docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`와
 `scripts/architecture/render-release-notes.sh`를 이용해 별도 운영 기록으로 유지합니다.
