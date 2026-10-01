@@ -22,23 +22,9 @@ package formatter
 
 import (
 	"context"
-	"strings"
 
-	templateview "github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-type majorEventWeeklySummaryData struct {
-	Count      int
-	Events     []templateview.MajorEventView
-	LLMSummary string
-}
-
-type majorEventMonthlySummaryData struct {
-	Count      int
-	Events     []templateview.MajorEventView
-	LLMSummary string
-}
 
 type majorEventSubscribedData struct {
 	Prefix string
@@ -51,64 +37,6 @@ type majorEventStatusData struct {
 
 type majorEventUsageData struct {
 	Prefix string
-}
-
-func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
-	if len(events) == 0 {
-		return ""
-	}
-
-	normalizedSummary := strings.TrimSpace(llmSummary)
-	views := buildMajorEventViews(events)
-
-	if normalizedSummary != "" {
-		// LLM 요약이 있는 경우 템플릿의 기본 목록과 중복 노출을 방지합니다.
-		views = nil
-	}
-
-	data := majorEventWeeklySummaryData{
-		Count:      len(events),
-		Events:     views,
-		LLMSummary: normalizedSummary,
-	}
-
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventWeeklySummary, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
-}
-
-func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
-	if len(events) == 0 {
-		return ""
-	}
-
-	normalizedSummary := strings.TrimSpace(llmSummary)
-	views := buildMajorEventViews(events)
-
-	if normalizedSummary != "" {
-		// LLM 요약이 있는 경우 템플릿의 기본 목록과 중복 노출을 방지합니다.
-		views = nil
-	}
-
-	data := majorEventMonthlySummaryData{
-		Count:      len(events),
-		Events:     views,
-		LLMSummary: normalizedSummary,
-	}
-
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventMonthlySummary, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
-}
-
-func buildMajorEventViews(events []domain.MajorEvent) []templateview.MajorEventView {
-	return templateview.BuildMajorEventViews(events)
 }
 
 func (f *ResponseFormatter) FormatMajorEventSubscribed(ctx context.Context) string {

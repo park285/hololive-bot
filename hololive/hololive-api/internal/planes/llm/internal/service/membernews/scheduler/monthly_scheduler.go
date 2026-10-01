@@ -159,7 +159,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 
 func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, roomID string) delivery.SendResult {
 	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
-		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID, "📅 이번달 구독 멤버 뉴스")
+		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID)
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {

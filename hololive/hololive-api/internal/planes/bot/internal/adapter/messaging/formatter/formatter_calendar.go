@@ -23,6 +23,7 @@ package formatter
 import (
 	"context"
 
+	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -54,12 +55,7 @@ func (f *ResponseFormatter) CelebrationCalendar(ctx context.Context, month, year
 		Days:  days,
 	}
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdCalendar, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
+	return f.renderResponse(ctx, domain.TemplateKeyCmdCalendar, data, templateview.ShouldFoldItems(data.Count))
 }
 
 func calendarDayViews(month int, entries []domain.CalendarEntry) []calendarDayView {

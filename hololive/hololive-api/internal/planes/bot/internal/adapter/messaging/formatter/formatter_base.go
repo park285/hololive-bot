@@ -27,10 +27,10 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type ResponseFormatter struct {
@@ -50,12 +50,22 @@ func WithSeeMoreFold(enabled bool) Option {
 	return func(f *ResponseFormatter) { f.seeMoreFold = enabled }
 }
 
-func (f *ResponseFormatter) foldSeeMore(s string) string {
-	if f == nil || !f.seeMoreFold {
+func (f *ResponseFormatter) foldSeeMore(s string, foldEligible bool) string {
+	if f == nil || !f.seeMoreFold || !foldEligible {
 		return s
 	}
 
-	return util.FoldForSeeMore(s, util.KakaoSeeMoreThreshold)
+	return templateview.FoldForSeeMore(s)
+}
+
+// renderResponse는 조회 렌더 실패 문구를 펼친 채 유지하고, 성공 본문에만 접기 정책을 적용한다.
+func (f *ResponseFormatter) renderResponse(ctx context.Context, key domain.TemplateKey, data any, foldEligible bool) string {
+	rendered, err := f.render(ctx, key, data)
+	if err != nil {
+		return f.renderFailureText()
+	}
+
+	return f.foldSeeMore(rendered, foldEligible)
 }
 
 func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, data any) (string, error) {

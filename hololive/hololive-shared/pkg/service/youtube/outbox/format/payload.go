@@ -14,9 +14,9 @@ type DispatchPayloadFormatter interface {
 	FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error)
 }
 
-// FormatYouTubeOutboxPayload는 dispatch payload를 최종 알림 본문으로 렌더링한다. 접기는 여러 항목 묶음에만 적용된다.
-func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, seeMoreFold bool, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
-	out, err := (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings, SeeMoreFold: seeMoreFold}).FormatYouTubeOutboxPayload(ctx, payload)
+// FormatYouTubeOutboxPayload는 dispatch payload를 최종 알림 본문으로 렌더링한다. 알림에는 자동 접기 패딩을 넣지 않는다.
+func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
+	out, err := (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings}).FormatYouTubeOutboxPayload(ctx, payload)
 	if err != nil {
 		return out, fmt.Errorf("format youtube outbox payload: %w", err)
 	}

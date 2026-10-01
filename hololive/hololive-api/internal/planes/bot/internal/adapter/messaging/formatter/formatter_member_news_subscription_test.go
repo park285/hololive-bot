@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -71,30 +70,4 @@ func TestFormatMemberNewsSubscriptionMessages_Fallback(t *testing.T) {
 	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsNotSubscribed), formatter.FormatMemberNewsNotSubscribed(ctx))
 	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsStatusOn), formatter.FormatMemberNewsStatus(ctx, true))
 	assert.Equal(t, store.Text(messagestrings.NotifyMemberNewsStatusOff), formatter.FormatMemberNewsStatus(ctx, false))
-}
-
-func TestMemberNewsLocalizationHelpers(t *testing.T) {
-	items := []membernewscontracts.SummaryItem{
-		{Category: "birthday_live"},
-		{Category: "solo_live"},
-		{Category: "collab"},
-		{Category: "event"},
-		{Category: "goods"},
-		{Category: "other"},
-		{Category: "unknown"},
-	}
-
-	formatter := NewResponseFormatter("!", nil, WithMessageStrings(setupFormatterTestStore(t)))
-
-	localized := formatter.localizeMemberNewsItems(t.Context(), items)
-	assert.Equal(t, "생일 라이브", localized[0].Category)
-	assert.Equal(t, "솔로 라이브", localized[1].Category)
-	assert.Equal(t, "콜라보", localized[2].Category)
-	assert.Equal(t, "이벤트", localized[3].Category)
-	assert.Equal(t, "굿즈", localized[4].Category)
-	assert.Equal(t, "기타", localized[5].Category)
-	assert.Equal(t, "unknown", localized[6].Category)
-
-	assert.Empty(t, formatter.memberNewsCategoryLabel(t.Context(), ""))
-	assert.Equal(t, "굿즈", formatter.memberNewsCategoryLabel(t.Context(), " goods "))
 }

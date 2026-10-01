@@ -16,6 +16,14 @@
 - migration 235–237은 application의 orphan 제외 부분 UNIQUE, reasons+targets 실제 행 수로 제한한 projection 정리와 table-local vacuum 설정을 적용합니다. application 결과는 한 INSERT로 묶고 발행 fence/contract 검증은 한 pipeline으로 보냅니다. 새 fallback·재수집·dual writer·런타임 의존성은 없습니다.
 - 상세 측정·미달 목표·운영 승인과 적용 결과는 [실행 기록](docs/current/plans/2026-09-29-youtube-storage-reduction.md#실행-기록--2026-09-29), 이행·복구는 [API runbook](docs/current/runbooks/hololive-api.md#youtube-관측-저장-구조-전환)에 기록합니다. 백업 삭제·물리 공간 회수는 전환과 분리하여 승인받습니다.
 
+## v7.1.1 - 2026-10-01
+
+- '전체보기' 접기를 글자 수(250자) 대신 기능과 표시 건수로 정합니다. 라이브·예정 방송·채널 일정·방송 이력·알람 목록·멤버 목록·캘린더 텍스트는 0건이면 안내문, 1건이면 펼치고 2건 이상이면 접습니다. 뉴스는 `TopItems`에 추가 요약 문단을 한 블록으로 더한 수로 판정하며, 프로필·전체 도움말 텍스트는 본문이 있으면 접습니다. `BOT_SEE_MORE_FOLD=false` 차단 스위치는 유지합니다.
+- 방송 예정·시작·선행공개, 영상·쇼츠·커뮤니티, 축하·생일 방송·X 스페이스 알림에는 단일·묶음 모두 자동 패딩을 넣지 않습니다. 사용자 template에 직접 넣은 패딩과 저장된 예약 본문·pinned request는 그대로 보존합니다.
+- 예약 뉴스·행사 요약이 공백으로 렌더되거나 formatter가 없으면 코드 대체 본문을 보내지 않고 실패로 집계합니다. 행사 요약은 빈 본문을 enqueue하거나 알림 완료로 표시하지 않고 다음 주기에 다시 시도합니다.
+- 접기 함수를 `hololive-api/internal/templateview`로 옮기고 bot/LLM의 뉴스 표시 데이터 조립을 공통화했으며, 호출되지 않던 bot 주간·월간 행사 요약 formatter를 제거했습니다.
+- 루트·API 산출물 버전은 `7.1.1`, alarm-worker는 `6.0.2`입니다. 이번 배포는 API와 alarm-worker를 교체하며 migration은 없습니다.
+
 ## v7.1.0 - 2026-10-01
 
 - 관리자 발송 원장 목록에 `alarmType`·`errorCode` 정확 일치 필터를 추가합니다. `/api/holo/dispatch/failures`는 실패 보관·격리 항목의 전체 건수와 오류 코드·알림 유형·채널·채팅방별 상위 10개 분포를 단일 스냅샷으로 반환하며 오류 원문·본문은 공개하지 않습니다.

@@ -64,7 +64,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	sender.route = dispatchoutbox.SendRouteText
 	sender.messageErr = nil
 
-	restarted := Runner{consumer: consumer, sender: sender, maxBatch: 10, seeMoreFold: true, shortLinkBaseURL: "https://changed.example"}
+	restarted := Runner{consumer: consumer, sender: sender, maxBatch: 10, shortLinkBaseURL: "https://changed.example"}
 
 	_, err = restarted.runOnce(ctx)
 	require.NoError(t, err)

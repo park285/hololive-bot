@@ -21,6 +21,7 @@
 package settings
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -267,17 +268,19 @@ func LoadSeeMoreFold() (bool, error) {
 func loadBotConfig() (BotConfig, error) {
 	var env load.StrictEnv
 
+	seeMoreFold, foldErr := LoadSeeMoreFold()
+
 	config := BotConfig{
 		Prefix:                sharedenv.String("BOT_PREFIX", "!"),
 		SelfUser:              sharedenv.String("BOT_SELF_USER", "iris"),
 		MentionPrefix:         sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		CalendarImageCacheDir: sharedenv.String("BOT_CALENDAR_IMAGE_CACHE_DIR", "data/calendar-cache"),
 		CalendarEntryCacheTTL: env.Seconds("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 24*time.Hour),
-		SeeMoreFold:           env.Bool(seeMoreFoldEnv, seeMoreFoldDefault),
+		SeeMoreFold:           seeMoreFold,
 		MarkdownReplies:       env.Bool("BOT_MARKDOWN_REPLIES", false),
 	}
 
-	if err := env.Err(); err != nil {
+	if err := errors.Join(env.Err(), foldErr); err != nil {
 		return BotConfig{}, fmt.Errorf("load bot config: %w", err)
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
+	"github.com/kapu/hololive-api/internal/templateview"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -45,8 +46,8 @@ func TestDefaultStreamLayoutsReportDisplayLimitAndKeepFold(t *testing.T) {
 				t.Error("multi-stream item separators lost or widened after final conversion")
 			}
 
-			padding := strings.Repeat(util.KakaoZeroWidthSpace, util.KakaoSeeMorePadding)
-			if strings.Count(out, padding) != 1 || util.FoldForSeeMore(out, util.KakaoSeeMoreThreshold) != out {
+			padding := strings.Repeat(util.KakaoZeroWidthSpace, templateview.KakaoSeeMorePadding)
+			if strings.Count(out, padding) != 1 || templateview.FoldForSeeMore(out) != out {
 				t.Error("fold padding lost or duplicated")
 			}
 
@@ -135,7 +136,7 @@ func TestLiveQueryKeepsTruncationNoticeAboveFold(t *testing.T) {
 		Items: items, Status: livequery.Partial, Truncated: true, AsOf: time.Unix(1, 0),
 	}, ""))
 
-	padding := strings.Repeat(util.KakaoZeroWidthSpace, util.KakaoSeeMorePadding)
+	padding := strings.Repeat(util.KakaoZeroWidthSpace, templateview.KakaoSeeMorePadding)
 	if notice := strings.Index(out, "표시 한도를 초과한 방송이 있습니다."); notice < 0 || notice > strings.Index(out, padding) {
 		t.Errorf("truncation notice folded away: %q", out[:min(len(out), 160)])
 	}

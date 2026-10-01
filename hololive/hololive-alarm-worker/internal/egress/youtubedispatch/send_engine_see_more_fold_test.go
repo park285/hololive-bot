@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
@@ -18,6 +17,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -41,7 +41,7 @@ func (*seeMoreFoldEgressClient) GetReplyStatus(context.Context, string) (*iris.R
 }
 
 // 사용자 첨부 화면처럼 한 방에 쇼츠 10개가 한 번에 묶여 나가는 v1 직접 발송 경로다.
-func runDirectGroupedShortsFinalPayload(t *testing.T, fold bool) string {
+func runDirectGroupedShortsFinalPayload(t *testing.T, count int, renderer *template.Renderer) string {
 	t.Helper()
 
 	titles := []string{
@@ -56,11 +56,14 @@ func runDirectGroupedShortsFinalPayload(t *testing.T, fold bool) string {
 		"Behind the scenes of my first 3D rehearsal #vtuber #hololive",
 		"Thank you for 1 million views!! #vtuber #shorts #thankyou",
 	}
+
+	titles = titles[:count]
+
 	client := &seeMoreFoldEgressClient{}
 	d := newDispatcherWithDepsForTest(t, nil, Dependencies{
-		Cache:       cachemocks.NewLenientClient(),
-		Sender:      egress.NewIrisMessageSender(client),
-		SeeMoreFold: fold,
+		Renderer: renderer,
+		Cache:    cachemocks.NewLenientClient(),
+		Sender:   egress.NewIrisMessageSender(client),
 	}, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
@@ -94,23 +97,30 @@ func runDirectGroupedShortsFinalPayload(t *testing.T, fold bool) string {
 	return client.texts[0]
 }
 
-func TestDispatchDeliveryRowsFoldsLongGroupedShortsAtFinalPayload(t *testing.T) {
+func TestDispatchDeliveryRowsKeepsShortsUnfoldedAtFinalPayload(t *testing.T) {
 	t.Parallel()
 
-	padding := strings.Repeat(util.KakaoZeroWidthSpace, util.KakaoSeeMorePadding)
-	plain := runDirectGroupedShortsFinalPayload(t, false)
-	folded := runDirectGroupedShortsFinalPayload(t, true)
+	for _, count := range []int{1, 2, 10} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			t.Parallel()
 
-	head, _, _ := strings.Cut(plain, "\n")
+			final := runDirectGroupedShortsFinalPayload(t, count, nil)
+			require.NotContains(t, final, util.KakaoZeroWidthSpace+util.KakaoZeroWidthSpace, "alarm text must not carry see-more padding (consecutive ZWSP)")
+			require.Equal(t, count, strings.Count(final, "https://www.youtube.com/shorts/"))
+			require.Contains(t, final, "[Announcement]")
 
-	require.NotContains(t, plain, padding, "BOT_SEE_MORE_FOLD=false must keep the grouped text unfolded")
-	require.Contains(t, head, "· 10개")
-	require.True(t, strings.HasPrefix(plain[len(head):], "\n\n"), "only the count header may stay above the fold: %q", plain)
-	require.Equal(t, head+padding+plain[len(head):], folded, "padding must follow the header and keep every expanded item")
-	require.Equal(t, 1, strings.Count(folded, padding))
-	require.Equal(t, 10, strings.Count(folded, "https://www.youtube.com/shorts/"))
+			if count > 1 {
+				require.Contains(t, final, fmt.Sprintf("· %d개", count))
+			}
+		})
+	}
+}
 
-	t.Logf("direct grouped shorts final payload: head=%q padding_after_rune=%d padding_runs=%d visible_runes=%d final_runes=%d\n%q",
-		head, utf8.RuneCountInString(head), strings.Count(folded, padding), utf8.RuneCountInString(plain),
-		utf8.RuneCountInString(folded), strings.Replace(folded, padding, "〔ZWSP×500〕", 1))
+func TestDispatchDeliveryRowsPreservesCustomPadding(t *testing.T) {
+	padding := strings.Repeat(util.KakaoZeroWidthSpace, 500)
+	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "제목"+padding+"\n{{range .Items}}{{.Title}}\n{{.URL}}\n{{end}}")
+	final := runDirectGroupedShortsFinalPayload(t, 2, renderer)
+	require.Equal(t, 1, strings.Count(final, padding))
+	require.True(t, strings.HasPrefix(final, "제목"+padding+"\n"))
+	require.Equal(t, 2, strings.Count(final, "https://www.youtube.com/shorts/"))
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -91,7 +92,7 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 		f.writeBroadcastHistoryEntry(ctx, &b, i+1, &entries[i])
 	}
 
-	return f.foldSeeMore(strings.TrimRight(b.String(), "\n"))
+	return f.foldSeeMore(strings.TrimRight(b.String(), "\n"), templateview.ShouldFoldItems(len(entries)))
 }
 
 func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry *BroadcastHistoryEntry) {
@@ -201,7 +202,7 @@ func (f *ResponseFormatter) BroadcastHistoryEmpty(_ context.Context, filter Broa
 		b.WriteString(broadcastHistoryTruncatedNotice)
 	}
 
-	return f.foldSeeMore(b.String())
+	return b.String()
 }
 
 func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {

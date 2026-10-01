@@ -57,12 +57,7 @@ func (f *ResponseFormatter) FormatMemberInfo(ctx context.Context, member *domain
 
 	data := memberInfoTemplateData(member)
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdProfile, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
+	return f.renderResponse(ctx, domain.TemplateKeyCmdProfile, data, true)
 }
 
 func memberInfoTemplateData(member *domain.Member) profileTemplateData {

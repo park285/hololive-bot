@@ -23,7 +23,6 @@ package formatter
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -34,31 +33,14 @@ func TestFormatMajorEventCommandMessages(t *testing.T) {
 	t.Parallel()
 
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdMajorEventWeeklySummary:  "주간 행사\n{{range .Events}}{{.Title}}|{{.DateStr}}|{{.Members}}|{{.Link}}\n{{end}}",
-		domain.TemplateKeyCmdMajorEventSubscribed:     "구독완료 {{.Prefix}}",
-		domain.TemplateKeyCmdMajorEventUnsubscribed:   "구독해제",
-		domain.TemplateKeyCmdMajorEventAlreadySub:     "이미구독",
-		domain.TemplateKeyCmdMajorEventNotSub:         "미구독 {{.Prefix}}",
-		domain.TemplateKeyCmdMajorEventStatus:         "상태 {{if .IsSubscribed}}ON{{else}}OFF{{end}}",
-		domain.TemplateKeyCmdMajorEventUsage:          "사용법 {{.Prefix}}행사알림",
-		domain.TemplateKeyCmdMajorEventMonthlySummary: "월간 행사\n{{range .Events}}{{.Title}}\n{{end}}",
+		domain.TemplateKeyCmdMajorEventSubscribed:   "구독완료 {{.Prefix}}",
+		domain.TemplateKeyCmdMajorEventUnsubscribed: "구독해제",
+		domain.TemplateKeyCmdMajorEventAlreadySub:   "이미구독",
+		domain.TemplateKeyCmdMajorEventNotSub:       "미구독 {{.Prefix}}",
+		domain.TemplateKeyCmdMajorEventStatus:       "상태 {{if .IsSubscribed}}ON{{else}}OFF{{end}}",
+		domain.TemplateKeyCmdMajorEventUsage:        "사용법 {{.Prefix}}행사알림",
 	})
 	formatter := NewResponseFormatter("!", renderer)
-
-	start := time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC)
-	events := []domain.MajorEvent{{
-		Title:          "EXPO",
-		EventStartDate: &start,
-		EventEndDate:   &start,
-		Members:        []string{"미코", "후부키"},
-		Link:           "https://example.com/expo",
-	}}
-
-	weekly := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
-	assert.Contains(t, weekly, "주간 행사")
-	assert.Contains(t, weekly, "EXPO")
-	assert.Contains(t, weekly, "https://example.com/expo")
-	assert.NotContains(t, weekly, "\u200b")
 
 	assert.Equal(t, "구독완료 !", formatter.FormatMajorEventSubscribed(t.Context()))
 	assert.Equal(t, "구독해제", formatter.FormatMajorEventUnsubscribed(t.Context()))

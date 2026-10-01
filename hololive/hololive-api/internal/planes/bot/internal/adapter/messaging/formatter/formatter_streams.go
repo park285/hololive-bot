@@ -27,6 +27,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
@@ -130,12 +131,7 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 		}
 	}
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdUpcomingStreams, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
+	return f.renderResponse(ctx, domain.TemplateKeyCmdUpcomingStreams, data, templateview.ShouldFoldItems(len(data.Streams)))
 }
 
 func limitedStreamList(streams []*domain.Stream) []*domain.Stream {
@@ -146,15 +142,15 @@ func limitedStreamList(streams []*domain.Stream) []*domain.Stream {
 	return streams[:streamListDisplayLimit]
 }
 
+// foldStreamList는 표시 한도를 적용한 뒤 실제로 보이는 방송 수로 접기 여부를 정한다.
+func (f *ResponseFormatter) foldStreamList(rendered string, streams []*domain.Stream) string {
+	return f.foldSeeMore(rendered, templateview.ShouldFoldItems(len(limitedStreamList(streams))))
+}
+
 func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) string {
 	data := f.channelScheduleTemplateData(ctx, channel, streams, days)
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdChannelSchedule, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
+	return f.renderResponse(ctx, domain.TemplateKeyCmdChannelSchedule, data, data.ChannelName != "" && templateview.ShouldFoldItems(len(data.Streams)))
 }
 
 func (f *ResponseFormatter) channelScheduleTemplateData(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {

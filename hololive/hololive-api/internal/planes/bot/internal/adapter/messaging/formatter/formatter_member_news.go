@@ -22,19 +22,12 @@ package formatter
 
 import (
 	"context"
-	"strings"
 
+	"github.com/kapu/hololive-api/internal/templateview"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
-
-type memberNewsDigestTemplateData struct {
-	Headline    string
-	TopItems    []membernewscontracts.SummaryItem
-	MoreSummary string
-	TotalCount  int
-}
 
 type memberNewsSubscriptionTemplateData struct {
 	Prefix       string
@@ -58,19 +51,9 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 		return f.renderFailureText()
 	}
 
-	data := memberNewsDigestTemplateData{
-		Headline:    digest.Headline,
-		TopItems:    f.localizeMemberNewsItems(ctx, digest.TopItems),
-		MoreSummary: digest.MoreSummary,
-		TotalCount:  digest.TotalCount,
-	}
+	data := templateview.BuildMemberNewsDigest(*digest, f.messageStrings)
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsDigest, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
+	return f.renderResponse(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, templateview.ShouldFoldItems(data.DisplayCount))
 }
 
 func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) string {
@@ -160,27 +143,4 @@ func (f *ResponseFormatter) memberNewsStatusFallback(_ context.Context, isSubscr
 	}
 
 	return f.memberNewsNotify(messagestrings.NotifyMemberNewsStatusOff)
-}
-
-func (f *ResponseFormatter) localizeMemberNewsItems(ctx context.Context, items []membernewscontracts.SummaryItem) []membernewscontracts.SummaryItem {
-	if len(items) == 0 {
-		return items
-	}
-
-	localized := make([]membernewscontracts.SummaryItem, len(items))
-	copy(localized, items)
-
-	for i := range localized {
-		localized[i].Category = f.memberNewsCategoryLabel(ctx, localized[i].Category)
-	}
-
-	return localized
-}
-
-func (f *ResponseFormatter) memberNewsCategoryLabel(_ context.Context, raw string) string {
-	if label, ok := f.messageStrings.Lookup(messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); ok {
-		return label
-	}
-
-	return raw
 }

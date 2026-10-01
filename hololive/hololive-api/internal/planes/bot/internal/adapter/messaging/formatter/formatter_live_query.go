@@ -40,7 +40,7 @@ func (f *ResponseFormatter) LiveQuery(ctx context.Context, result livequery.Resu
 		rendered = insertHeadNotice(rendered, "표시 한도를 초과한 방송이 있습니다.")
 	}
 
-	return f.foldSeeMore(rendered)
+	return f.foldStreamList(rendered, streams)
 }
 
 func insertHeadNotice(text, notice string) string {
