@@ -32,7 +32,7 @@ gateway 허용 목록 우회 경로는 사용하지 않습니다.
 `pending`, `retry`, `leased`, `sending`, `sent`, `dlq`, `quarantined`, `cancelled` 중 하나입니다.
 iris-console에서 퇴역 필터 제거를 배포한 뒤 `shadowed` 입력도 제거했습니다.
 채팅방과 채널은 정확히 일치하는 값을 사용합니다.
-`alarmType`은 `e.alarm_type::text`와 정확히 일치하며 최대 64자입니다.
+`alarmType`은 `e.alarm_type::text`와 대소문자까지 정확히 일치하며(저장값 예: `LIVE`, `BIRTHDAY`) 최대 64자입니다.
 앞뒤 공백과 제어 문자 및 잘못된 UTF-8은 거부합니다.
 `errorCode`는 `^[a-z][a-z0-9_]{0,63}$`만 허용하며 목록에 표시하는 분류 값과 정확히 비교합니다.
 `errorCode=unclassified`는 코드 형태를 벗어난 오류를 `unclassified`로 표시한 항목을 찾습니다.
