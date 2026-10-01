@@ -2,6 +2,8 @@
 
 루트 `scripts/`는 현재 11개 영역을 운영합니다: `ci/`, `architecture/`, `deploy/`, `logs/`, `review/`, `runtime/`, `smoke/`, `maintenance/`, `ops/`, `refactor/`, `systemd/`.
 
+GitHub Release 게시·본문 수정: `bash scripts/publish-release.sh <tag> <previous-tag> [preview|create|edit]`. 기본은 미리보기이며 [릴리즈 runbook](../docs/current/runbooks/release.md)의 승인·검증 절차를 따릅니다.
+
 ## 1. ci/
 로컬 CI gate 진입점입니다. `build-all.sh`는 Docker build 전에 이 gate를 실행합니다.
 
