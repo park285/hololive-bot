@@ -594,7 +594,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 	group := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{first, second})[0]
 
-	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", false, group)
+	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 1분 전 · 2개\n\n"+

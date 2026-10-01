@@ -27,7 +27,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - v1 YouTube outbox는 v3 ledger로 넘기지 않고 `youtube_delivery` dispatcher가 direct egress까지 소유 (`DEC-20260926-hololive-outbox-v3-convergence`로 `shadow|cutover` handoff 삭제)
 - Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room.
 
-긴 여러 항목 알림(쇼츠·영상·커뮤니티 묶음, 여러 방송 알람)은 `BOT_SEE_MORE_FOLD`(기본 true)에 따라 공통 머리 문단 전체보기 정책으로 렌더합니다. 단일 알림·상태·오류는 제외하고, 사용자 지정 본문/채널 override 저장값과 펼친 가시 문자는 보존합니다. 설정은 bot·llm과 같은 `settings.LoadSeeMoreFold`를 사용하되 실제 렌더 경로에 명시적으로 전달합니다.
+방송·콘텐츠·축하·생일 방송·X 스페이스 알림에는 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. worker의 렌더러와 dispatch 설정에는 접기 옵션이 없습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 표시를 제어하며, worker는 공통 설정 로딩에서 값 형식만 검증합니다. 사용자 template/채널 override의 직접 패딩, 기존 예약 본문과 pinned request의 본문·route·ID는 유지합니다.
 
 ## Provides
 

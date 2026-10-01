@@ -58,7 +58,7 @@ func processDigestForRoom(
 	outputGuard *outputguard.Guard,
 	period model.Period,
 	kind domain.DeliveryOutboxKind,
-	periodKey, roomID, emptyHeader string,
+	periodKey, roomID string,
 ) delivery.SendResult {
 	if logger == nil {
 		logger = slog.Default()
@@ -69,7 +69,7 @@ func processDigestForRoom(
 		return digestGenerationFailure(logger, roomID, period, err)
 	}
 
-	message, err := renderDigestMessage(ctx, fmtr, digest, emptyHeader)
+	message, err := renderDigestMessage(ctx, fmtr, digest)
 	if err != nil {
 		logger.Error("Member news digest render failed",
 			slog.String("room_id", roomID),
@@ -259,37 +259,23 @@ func logDigestResult(logger *slog.Logger, config *digestDispatchConfig, result d
 	)
 }
 
-func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest, emptyHeader string) (string, error) {
+func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest) (string, error) {
+	if fmtr == nil {
+		return "", errors.New("format member news digest: formatter not configured")
+	}
+
 	if digest == nil {
-		return emptyHeader + "\n- 표시할 항목이 없습니다.", nil
+		return "", errors.New("format member news digest: digest is nil")
 	}
 
-	if fmtr != nil {
-		formatted, err := fmtr.FormatMemberNewsDigest(ctx, digest)
-		if err != nil {
-			return "", fmt.Errorf("format member news digest: %w", err)
-		}
-
-		if strings.TrimSpace(formatted) != "" {
-			return formatted, nil
-		}
+	formatted, err := fmtr.FormatMemberNewsDigest(ctx, digest)
+	if err != nil {
+		return "", fmt.Errorf("format member news digest: %w", err)
 	}
 
-	if len(digest.TopItems) == 0 {
-		return digest.Headline + "\n- 표시할 항목이 없습니다.", nil
+	if strings.TrimSpace(formatted) == "" {
+		return "", errors.New("format member news digest: template rendered empty")
 	}
 
-	lines := make([]string, 0, 2+len(digest.TopItems))
-
-	lines = append(lines, digest.Headline)
-
-	for _, item := range digest.TopItems {
-		lines = append(lines, item.Summary)
-	}
-
-	if digest.MoreSummary != "" {
-		lines = append(lines, digest.MoreSummary)
-	}
-
-	return strings.Join(lines, "\n"), nil
+	return formatted, nil
 }

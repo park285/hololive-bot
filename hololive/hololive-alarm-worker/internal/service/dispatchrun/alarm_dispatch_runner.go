@@ -65,7 +65,6 @@ type Runner struct {
 	messageStrings    *messagestrings.Store
 	idleWaiter        IdleWaiter
 	shortLinkBaseURL  string
-	seeMoreFold       bool
 	maxBatch          int
 	maxBatchesPerWake int
 	batchesSinceWake  int
@@ -79,7 +78,6 @@ type Runner struct {
 
 type RunnerConfig struct {
 	ShortLinkBaseURL  string
-	SeeMoreFold       bool // 여러 항목 묶음 텍스트 알림을 '전체보기'로 접는다(BOT_SEE_MORE_FOLD).
 	MaxBatch          int
 	MaxBatchesPerWake int
 	Members           domain.MemberDataProvider
@@ -104,7 +102,6 @@ func NewRunner(
 		messageStrings:    messageStrings,
 		idleWaiter:        idleWaiter,
 		shortLinkBaseURL:  config.ShortLinkBaseURL,
-		seeMoreFold:       config.SeeMoreFold,
 		maxBatch:          config.MaxBatch,
 		maxBatchesPerWake: config.MaxBatchesPerWake,
 		logger:            logger,
@@ -311,7 +308,7 @@ func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGro
 		return nil, fmt.Errorf("load immutable request: %w", err)
 	}
 
-	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, r.shortLinkBaseURL, r.seeMoreFold, group)
+	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, r.shortLinkBaseURL, group)
 	if err != nil {
 		return nil, fmt.Errorf("render request: %w", err)
 	}

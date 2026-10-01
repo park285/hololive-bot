@@ -23,7 +23,6 @@ package runtime
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,51 +192,6 @@ func TestFormatMajorEventSummary_WeeklyMonthlyParity(t *testing.T) {
 	}
 }
 
-func TestBuildMajorEventViewsAndDateFormatting(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC)
-
-	events := []domain.MajorEvent{
-		{
-			Title:          "Range Event",
-			EventStartDate: &start,
-			EventEndDate:   &end,
-			Members:        []string{"A", "B"},
-			Link:           "https://example.com/range",
-		},
-		{
-			Title:   "TBA Event",
-			Members: []string{"C"},
-			Link:    "https://example.com/tba",
-		},
-	}
-
-	views := buildMajorEventViews(events)
-	require.Len(t, views, 2)
-
-	assert.Equal(t, "Range Event", views[0].Title)
-	assert.Contains(t, views[0].DateStr, "~")
-	assert.True(t, views[0].HasDates)
-	assert.Equal(t, "A, B", views[0].Members)
-
-	assert.Equal(t, "TBA", views[1].DateStr)
-	assert.False(t, views[1].HasDates)
-}
-
-func TestFormatMajorEventDatesFromDB(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC)
-
-	assert.Equal(t, "TBA", formatMajorEventDatesFromDB(nil, nil))
-	assert.Contains(t, formatMajorEventDatesFromDB(&start, nil), "2026년 3월 6일")
-	assert.Contains(t, formatMajorEventDatesFromDB(&start, &start), "2026년 3월 6일")
-	assert.Contains(t, formatMajorEventDatesFromDB(&start, &end), "~")
-}
-
 func TestFormatMemberNewsDigest(t *testing.T) {
 	t.Parallel()
 
@@ -248,6 +202,16 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 		got, err := formatter.FormatMemberNewsDigest(t.Context(), nil)
 		require.Error(t, err)
 		assert.Empty(t, got)
+	})
+
+	t.Run("normal empty digest", func(t *testing.T) {
+		t.Parallel()
+
+		formatter := newLLMSchedulerFormatter("!", setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, seedBodyMemberNewsDigest), nil, true)
+		got, err := formatter.FormatMemberNewsDigest(t.Context(), &model.Digest{Headline: "뉴스"})
+		require.NoError(t, err)
+		assert.Contains(t, got, "표시할 뉴스가 없습니다.")
+		assert.NotContains(t, got, strings.Repeat("\u200b", 500))
 	})
 
 	t.Run("localize categories", func(t *testing.T) {
@@ -277,31 +241,4 @@ func TestFormatMemberNewsDigest(t *testing.T) {
 		assert.Contains(t, got, "· 기타")
 		assert.Contains(t, got, "합방")
 	})
-}
-
-func TestLocalizeMemberNewsItemsAndCategoryLabel(t *testing.T) {
-	t.Parallel()
-
-	items := []model.SummaryItem{
-		{Category: "birthday_live", Title: "A"},
-		{Category: "solo_live", Title: "B"},
-		{Category: "event", Title: "C"},
-		{Category: "unknown_code", Title: "D"},
-	}
-
-	formatter := newLLMSchedulerFormatter("!", nil, nil, false)
-
-	formatter.store = setupMemberNewsStore(t)
-
-	localized := formatter.localizeMemberNewsItems(t.Context(), items)
-	require.Len(t, localized, 4)
-	assert.Equal(t, "생일 라이브", localized[0].Category)
-	assert.Equal(t, "솔로 라이브", localized[1].Category)
-	assert.Equal(t, "이벤트", localized[2].Category)
-	assert.Equal(t, "unknown_code", localized[3].Category)
-
-	assert.Equal(t, "콜라보", formatter.memberNewsCategoryLabel(t.Context(), "collab"))
-	assert.Equal(t, "굿즈", formatter.memberNewsCategoryLabel(t.Context(), "goods"))
-	assert.Equal(t, "기타", formatter.memberNewsCategoryLabel(t.Context(), "other"))
-	assert.Equal(t, "custom", formatter.memberNewsCategoryLabel(t.Context(), "custom"))
 }

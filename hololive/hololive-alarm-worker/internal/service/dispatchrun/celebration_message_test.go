@@ -269,7 +269,7 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	}
 
-	msg, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", false, group)
+	msg, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, nil, "", group)
 	require.NoError(t, err)
 	assert.Equal(t, "🎉 토키노 소라 데뷔 7주년 축하합니다!\nhttps://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg", msg)
 }

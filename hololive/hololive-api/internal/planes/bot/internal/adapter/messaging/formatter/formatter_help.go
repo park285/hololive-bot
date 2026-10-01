@@ -50,7 +50,7 @@ func (f *ResponseFormatter) FormatHelpContent(ctx context.Context) (HelpContent,
 	}
 
 	return HelpContent{
-		TextFallback: f.foldSeeMore(rendered),
+		TextFallback: f.foldSeeMore(rendered, true),
 	}, nil
 }
 

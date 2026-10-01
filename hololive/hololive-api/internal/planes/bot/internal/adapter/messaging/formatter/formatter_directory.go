@@ -26,6 +26,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -58,10 +59,14 @@ type memberDirectoryEntryView struct {
 func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []MemberDirectoryGroup, total int) string {
 	viewGroups := prepareMemberDirectoryGroups(groups)
 
+	displayCount := 0
+
+	for _, group := range viewGroups {
+		displayCount += len(group.Members)
+	}
+
 	if total <= 0 {
-		for _, group := range viewGroups {
-			total += len(group.Members)
-		}
+		total += displayCount
 	}
 
 	data := memberDirectoryTemplateData{
@@ -69,12 +74,7 @@ func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []Member
 		Groups: viewGroups,
 	}
 
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberDirectory, data)
-	if err != nil {
-		return f.renderFailureText()
-	}
-
-	return f.foldSeeMore(rendered)
+	return f.renderResponse(ctx, domain.TemplateKeyCmdMemberDirectory, data, templateview.ShouldFoldItems(displayCount))
 }
 
 func prepareMemberDirectoryGroups(groups []MemberDirectoryGroup) []memberDirectoryGroupView {

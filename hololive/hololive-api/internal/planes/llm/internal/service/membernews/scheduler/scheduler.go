@@ -166,7 +166,7 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 
 func (s *Scheduler) processRoomDigest(ctx context.Context, weekKey, roomID string) delivery.SendResult {
 	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
-		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID, "🗞️ 이번주 구독 멤버 뉴스")
+		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID)
 }
 
 func startOfWeek(t time.Time) time.Time {

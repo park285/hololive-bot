@@ -45,9 +45,6 @@ type Dependencies struct {
 	Sender         delivery.MessageSender
 	Renderer       *template.Renderer
 	MessageStrings *messagestrings.Store
-
-	// SeeMoreFold는 여러 항목 묶음 텍스트 알림을 머리 문단과 '전체보기'로 접는다(BOT_SEE_MORE_FOLD).
-	SeeMoreFold bool
 }
 
 // NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
@@ -132,7 +129,7 @@ func assembleDispatcher(
 	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config)
 	grouper := newOutboxGrouper(deps.DB, deps.Cache, logger, &config)
-	formatter := newMessageFormatter(deps.Renderer, deps.Cache, logger, deps.MessageStrings, deps.SeeMoreFold)
+	formatter := newMessageFormatter(deps.Renderer, deps.Cache, logger, deps.MessageStrings)
 
 	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, nil, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)

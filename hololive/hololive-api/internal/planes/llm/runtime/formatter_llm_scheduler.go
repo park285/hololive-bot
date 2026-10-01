@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
@@ -35,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // llmSchedulerFormatter는 llm-scheduler가 사용하는 최소 메시지 포맷터 구현이다.
@@ -81,16 +79,20 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 // renderNotification은 예약 알림 본문을 렌더한다. 렌더에 실패하면 코드 대체 문구를 구독 방에 보내지 않고
 // 오류를 돌려준다. 호출자는 enqueue하지 않고 알림을 미표시로 남겨 다음 주기에 다시 시도한다
 // (DEC-20260926-hololive-message-strings-startup-validation).
-func (f *llmSchedulerFormatter) renderNotification(ctx context.Context, key domain.TemplateKey, data any, failureMsg string) (string, error) {
+func (f *llmSchedulerFormatter) renderNotification(ctx context.Context, key domain.TemplateKey, data any, failureMsg string, foldEligible bool) (string, error) {
 	rendered, err := f.render(ctx, key, data)
+	if err == nil && strings.TrimSpace(rendered) == "" {
+		err = errors.New("template rendered empty")
+	}
+
 	if err != nil {
 		f.logger.Warn(failureMsg, slog.Any("error", err))
 
 		return "", fmt.Errorf("%s: %w", failureMsg, err)
 	}
 
-	if f.seeMoreFold {
-		return util.FoldForSeeMore(rendered, util.KakaoSeeMoreThreshold), nil
+	if f.seeMoreFold && foldEligible {
+		return templateview.FoldForSeeMore(rendered), nil
 	}
 
 	return rendered, nil
@@ -116,7 +118,7 @@ func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key
 	}
 
 	normalizedSummary := strings.TrimSpace(llmSummary)
-	views := buildMajorEventViews(events)
+	views := templateview.BuildMajorEventViews(events)
 
 	if normalizedSummary != "" {
 		// LLM 요약이 있는 경우 템플릿의 기본 목록과 중복 노출을 방지합니다.
@@ -129,7 +131,7 @@ func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key
 		LLMSummary: normalizedSummary,
 	}
 
-	return f.renderNotification(ctx, key, data, majorEventSummaryWarnMsg(key))
+	return f.renderNotification(ctx, key, data, majorEventSummaryWarnMsg(key), templateview.ShouldFoldItems(len(events)))
 }
 
 func majorEventSummaryWarnMsg(key domain.TemplateKey) string {
@@ -140,55 +142,12 @@ func majorEventSummaryWarnMsg(key domain.TemplateKey) string {
 	return "major event weekly summary render failed"
 }
 
-func buildMajorEventViews(events []domain.MajorEvent) []templateview.MajorEventView {
-	return templateview.BuildMajorEventViews(events)
-}
-
-func formatMajorEventDatesFromDB(start, end *time.Time) string {
-	return templateview.FormatMajorEventDatesFromDB(start, end)
-}
-
-type memberNewsDigestTemplateData struct {
-	Headline    string
-	TopItems    []model.SummaryItem
-	MoreSummary string
-	TotalCount  int
-}
-
 func (f *llmSchedulerFormatter) FormatMemberNewsDigest(ctx context.Context, digest *model.Digest) (string, error) {
 	if digest == nil {
 		return "", errors.New("format member news digest: digest is nil")
 	}
 
-	data := memberNewsDigestTemplateData{
-		Headline:    digest.Headline,
-		TopItems:    f.localizeMemberNewsItems(ctx, digest.TopItems),
-		MoreSummary: digest.MoreSummary,
-		TotalCount:  digest.TotalCount,
-	}
+	data := templateview.BuildMemberNewsDigest(*convertMemberNewsDigest(digest), f.store)
 
-	return f.renderNotification(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed")
-}
-
-func (f *llmSchedulerFormatter) localizeMemberNewsItems(ctx context.Context, items []model.SummaryItem) []model.SummaryItem {
-	if len(items) == 0 {
-		return items
-	}
-
-	localized := make([]model.SummaryItem, len(items))
-	copy(localized, items)
-
-	for i := range localized {
-		localized[i].Category = f.memberNewsCategoryLabel(ctx, localized[i].Category)
-	}
-
-	return localized
-}
-
-func (f *llmSchedulerFormatter) memberNewsCategoryLabel(_ context.Context, raw string) string {
-	if label, ok := f.store.Lookup(messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); ok {
-		return label
-	}
-
-	return raw
+	return f.renderNotification(ctx, domain.TemplateKeyCmdMemberNewsDigest, data, "member news digest render failed", templateview.ShouldFoldItems(data.DisplayCount))
 }

@@ -80,14 +80,15 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 ## 8. '전체보기' 접기(fold) 정책
 
-- `util.FoldForSeeMore(text, KakaoSeeMoreThreshold)` — 임계(250 rune) 이하 no-op. 초과 시 머리 문단(첫 빈 줄 앞의 줄, 최대 `KakaoSeeMoreHeadMaxLines`=4줄)의 마지막 줄 끝에 ZWSP×`KakaoSeeMorePadding`을 붙여 KakaoTalk이 머리 문단 + '전체보기'로 접게 한다. 4줄 안에 빈 줄이 없으면 첫 줄만 남긴다. 펼친 화면의 가시 문자는 원문과 같다.
-- 운영 기본값은 접기 ON(`BOT_SEE_MORE_FOLD` 기본 `true`)이다. bot·llm plane과 alarm-worker의 목록 렌더 경로가 같은 설정을 읽으며 `false`는 해당 프로세스의 접기를 끄는 운영 스위치다.
-- fold-in (긴 목록·다이제스트): `FormatHelp`(이미지 실패 시 텍스트), `LiveQuery`(`!라이브`, 표시 한도 안내는 머리 문단), `UpcomingStreams`, `ChannelSchedule`, `FormatAlarmList`, `MemberDirectory`, `FormatMemberInfo`(`!정보`), `FormatMemberNewsDigest`, `CelebrationCalendar`(이미지 실패 시 텍스트), `FormatMajorEventWeeklySummary`, `FormatMajorEventMonthlySummary`, `BroadcastHistory` — llm plane 동명 3곳(weekly/monthly/digest)은 bot과 fold parity를 유지한다.
-- 2026-09-27 사용자 요청으로 긴 여러 항목 알림도 fold-in에 포함한다: `OUTBOX_VIDEO_GROUP`, `OUTBOX_SHORTS_GROUP`, `OUTBOX_COMMUNITY_GROUP` 및 여러 방송을 묶은 알람 텍스트. 명령 목록과 동일한 helper·임계·머리 문단·패딩을 사용한다. 일반 전송층에서 모든 메시지를 무조건 접지 않는다.
-- 헤더 보조 행(개수·기간·표시 한도·일부 결과 안내)은 머리 문단 안에 두어 접힌 화면에서도 보이게 한다.
-- fold-out (전문이 즉시 보여야 함): 상태·확인·에러 단문, 단일 알림, celebration 카드. 여러 항목 묶음 알림은 위 fold-in 규칙을 적용한다. 임계 이하·한 줄 메시지는 기존 helper의 no-op 규칙을 유지한다.
-- 명령 응답은 일반 방에서 `kakaoformat.Render`를 거친다. 이 변환은 연속 ZWSP 패딩을 보존한다(shared-go `TestRenderNeutralizedTextKeepsMarkdownCodeURLsAndFoldPadding`).
-- 사용자 지정 template/채널 override의 저장 본문과 펼친 가시 문자를 변경하지 않는다. 이미 접힌 본문에는 패딩을 중복 삽입하지 않는다. 로컬 검증은 실제 template→최종 text payload에서 수행하며 카카오톡 클라이언트의 접힌 화면은 별도 승인된 테스트 방 수신으로 확인한다.
+- `internal/templateview.FoldForSeeMore(text)`는 글자 수 임계 없이 머리 문단(첫 빈 줄 앞, 최대 4줄) 끝에 ZWSP 500개를 붙입니다. 4줄 안에 빈 줄이 없으면 첫 줄만 남깁니다. 빈 본문·한 줄 본문·이미 패딩된 본문은 그대로 유지합니다.
+- `BOT_SEE_MORE_FOLD`는 bot·llm plane의 기능별 접기 스위치입니다. 기본 `true`이며 `false`이면 프로그램이 자동 패딩을 넣지 않습니다. 카카오톡 자체의 긴 메시지 접기는 제어하지 않습니다.
+- 라이브·예정 방송·채널 일정·방송 이력·알람 목록·멤버 목록·캘린더 텍스트는 표시 결과 0건이면 안내문, 1건이면 펼침, 2건 이상이면 접습니다. 멤버 지정 조회에도 동일하게 적용합니다. 멤버 목록은 정규화 후 유효 멤버 수, 캘린더는 nil 멤버를 제외한 표시 건수를 셉니다. 표시 한도·필터 안내는 별도 항목으로 세지 않습니다.
+- 뉴스 직접 조회와 예약 뉴스는 공통 `templateview.BuildMemberNewsDigest`를 사용합니다. 표시 블록은 `TopItems` 수와 `MoreSummary`가 있으면 한 블록을 합친 값이며, 1블록은 펼침·2블록 이상은 접습니다. `TotalCount`는 접기 기준이 아닙니다. 정상 빈 뉴스는 템플릿 안내문을 펼쳐 보냅니다.
+- 주간·월간 행사 요약은 LLM formatter가 소유합니다. 원본 행사 1건은 펼침·2건 이상은 접으며, 빈 행사는 기존 미발송 계약을 유지합니다. LLM 요약이 있으면 행사 목록을 함께 반복하지 않습니다. 예약 뉴스·행사의 렌더 오류와 빈/공백 본문은 enqueue하지 않습니다.
+- 프로필과 전체 도움말 텍스트는 유효 본문이 있으면 길이와 무관하게 접습니다. 도움말·캘린더 이미지 성공 시 기존 이미지 발송을 유지하며, 텍스트 대체 경로에만 이 정책을 적용합니다.
+- 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 패딩을 넣지 않습니다. 구독 상태·추가/삭제 결과·후보 선택·사용법·오류·졸업 안내도 펼칩니다. `행사 목록`은 구독 상태 안내입니다.
+- 머리 문단의 개수·기간·표시 한도·일부 결과 안내와 펼친 화면의 가시 문자·URL·순서를 보존합니다. 일반 방의 `kakaoformat.Render`도 연속 ZWSP 패딩을 보존합니다.
+- 사용자 template/채널 override에 직접 넣은 패딩은 제거하거나 중복 삽입하지 않습니다. 저장된 요청의 본문·route·ID와 예약 `PreRenderedMessage`는 다시 렌더하지 않습니다. 새 정책은 새로 렌더하는 메시지에 적용합니다. 실제 카카오톡 화면은 별도 승인된 테스트 방 수신으로 확인합니다.
 
 `!라이브`의 확인 완료 빈 결과는 '현재 방송 중인 멤버가 없습니다.' 한 문장입니다. 미확인 빈 결과는 '현재 방송 상태를 확인할 수 없습니다.'이며 두 결과를 바꾸어 쓰지 않습니다. 공개 방송 범위 설명·조회 미완료 채널·기준 시각은 붙이지 않고 운영 로그로 남깁니다. 멤버 지정 조회는 기존 `CMD_MEMBER_NOT_LIVE`를 유지합니다. migration 220은 217 표준 전역 본문만 바꾸고 사용자 지정 본문·채널 override를 보존합니다.
 

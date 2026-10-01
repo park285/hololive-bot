@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
@@ -143,7 +144,7 @@ func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]stri
 }
 
 // runSeeMoreFoldFinalPayload는 실제 DB template와 Runner 렌더링을 거쳐 Iris 텍스트 lane에 넘어간 최종 문자열을 반환한다.
-func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store *messagestrings.Store, fold bool, envelopes ...domain.AlarmQueueEnvelope) string {
+func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store *messagestrings.Store, envelopes ...domain.AlarmQueueEnvelope) string {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -152,7 +153,7 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 	client := &seeMoreFoldIrisClient{}
 	consumer := &seeMoreFoldConsumer{batch: envelopes, cancel: cancel}
 	runner := dispatchrun.NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, consumer,
-		dispatchrun.RunnerConfig{MaxBatch: len(envelopes), SeeMoreFold: fold}, slog.New(slog.DiscardHandler))
+		dispatchrun.RunnerConfig{MaxBatch: len(envelopes)}, slog.New(slog.DiscardHandler))
 
 	require.NoError(t, runner.Start(ctx))
 	require.Empty(t, consumer.failures)
@@ -163,35 +164,15 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 }
 
 func seeMoreFoldPadding() string {
-	return strings.Repeat(util.KakaoZeroWidthSpace, util.KakaoSeeMorePadding)
+	return strings.Repeat(util.KakaoZeroWidthSpace, 500)
 }
 
-func logSeeMoreFoldFinalPayload(t *testing.T, name, final, plain string) {
+// requireNoAutoPadding은 접기 패딩 판정과 같은 기준(연속 ZWSP)으로 확인해, 길이가 다른 패딩이 다시 생겨도 잡는다.
+// 템플릿의 단발 ZWSP(제목 Markdown 해석 방지)는 허용한다.
+func requireNoAutoPadding(t *testing.T, final string) {
 	t.Helper()
 
-	padding := seeMoreFoldPadding()
-	head := ""
-
-	if prefix, _, found := strings.Cut(final, padding); found {
-		head = prefix
-	}
-
-	t.Logf("%s final payload: head=%q padding_after_rune=%d padding_runs=%d padding_zwsp=%d visible_runes=%d final_runes=%d visible_body_preserved=%t\n%q",
-		name, head, utf8.RuneCountInString(head), strings.Count(final, padding), util.KakaoSeeMorePadding,
-		utf8.RuneCountInString(plain), utf8.RuneCountInString(final), strings.Replace(final, padding, "", 1) == plain,
-		strings.Replace(final, padding, "〔ZWSP×500〕", 1))
-}
-
-// requireFoldedAfterHead는 접힌 최종 payload가 머리 문단 직후 패딩 한 번만 더한 비접힘 payload인지 확인한다.
-func requireFoldedAfterHead(t *testing.T, folded, plain, head string) {
-	t.Helper()
-
-	padding := seeMoreFoldPadding()
-
-	require.NotContains(t, plain, padding, "fold-off payload must not carry see-more padding")
-	require.True(t, strings.HasPrefix(plain, head), "head %q is not the start of %q", head, plain)
-	require.Equal(t, head+padding+plain[len(head):], folded, "padding must sit right after the head and keep the expanded body")
-	require.Equal(t, 1, strings.Count(folded, padding))
+	require.NotContains(t, final, util.KakaoZeroWidthSpace+util.KakaoZeroWidthSpace)
 }
 
 func seeMoreFoldVideoPayload(t *testing.T, videoID, title string) string {
@@ -261,7 +242,7 @@ func seeMoreFoldScreenshotShortPayloads(t *testing.T) []string {
 	return payloads
 }
 
-func TestAlarmDispatchRunnerFoldsLongGroupedOutboxAtFinalPayload(t *testing.T) {
+func TestAlarmDispatchRunnerKeepsLongGroupedOutboxUnfoldedAtFinalPayload(t *testing.T) {
 	t.Parallel()
 
 	renderer, store := newSeeMoreFoldRendering(t, nil)
@@ -287,20 +268,20 @@ func TestAlarmDispatchRunnerFoldsLongGroupedOutboxAtFinalPayload(t *testing.T) {
 			t.Parallel()
 
 			envelope := seeMoreFoldOutboxEnvelope(tc.kind, tc.payloads)
-			plain := runSeeMoreFoldFinalPayload(t, renderer, store, false, envelope)
-			folded := runSeeMoreFoldFinalPayload(t, renderer, store, true, envelope)
 
-			head, _, _ := strings.Cut(plain, "\n")
-			require.True(t, strings.HasPrefix(plain[len(head):], "\n\n"), "only the count header may stay above the fold: %q", plain)
+			final := runSeeMoreFoldFinalPayload(t, renderer, store, envelope)
+
+			head, _, _ := strings.Cut(final, "\n")
+			require.True(t, strings.HasPrefix(final[len(head):], "\n\n"), "count header and body must stay separated: %q", final)
 			require.Contains(t, head, fmt.Sprintf("· %d개", len(tc.payloads)))
-			requireFoldedAfterHead(t, folded, plain, head)
-			require.Equal(t, len(tc.payloads), strings.Count(folded, tc.urlPrefix), "every item URL must stay in the expanded body")
-			logSeeMoreFoldFinalPayload(t, tc.name, folded, plain)
+			requireNoAutoPadding(t, final)
+
+			require.Equal(t, len(tc.payloads), strings.Count(final, tc.urlPrefix), "every item URL must stay in the expanded body")
 		})
 	}
 }
 
-func TestAlarmDispatchRunnerFoldsLongAlarmNotificationGroupAtFinalPayload(t *testing.T) {
+func TestAlarmDispatchRunnerKeepsLongAlarmNotificationGroupUnfoldedAtFinalPayload(t *testing.T) {
 	t.Parallel()
 
 	renderer, store := newSeeMoreFoldRendering(t, nil)
@@ -318,18 +299,17 @@ func TestAlarmDispatchRunnerFoldsLongAlarmNotificationGroupAtFinalPayload(t *tes
 		envelopes = append(envelopes, envelope)
 	}
 
-	plain := runSeeMoreFoldFinalPayload(t, renderer, store, false, envelopes...)
-	folded := runSeeMoreFoldFinalPayload(t, renderer, store, true, envelopes...)
+	final := runSeeMoreFoldFinalPayload(t, renderer, store, envelopes...)
 
-	head, _, _ := strings.Cut(plain, "\n")
-	require.True(t, strings.HasPrefix(plain[len(head):], "\n\n"), "only the alarm header may stay above the fold: %q", plain)
+	head, _, _ := strings.Cut(final, "\n")
+	require.True(t, strings.HasPrefix(final[len(head):], "\n\n"), "alarm header and body must stay separated: %q", final)
 	require.Contains(t, head, "· 6개")
-	requireFoldedAfterHead(t, folded, plain, head)
-	require.Equal(t, len(envelopes), strings.Count(folded, "https://youtube.com/watch?v="))
-	logSeeMoreFoldFinalPayload(t, "alarm notification group", folded, plain)
+	requireNoAutoPadding(t, final)
+
+	require.Equal(t, len(envelopes), strings.Count(final, "https://youtube.com/watch?v="))
 }
 
-func TestAlarmDispatchRunnerSeeMoreFoldKeepsSingleShortAndPreRenderedMessages(t *testing.T) {
+func TestAlarmDispatchRunnerKeepsSingleShortAndPreRenderedMessagesUnpadded(t *testing.T) {
 	t.Parallel()
 
 	longText := strings.Repeat("단일 공지 본문이 길게 이어집니다. ", 12)
@@ -370,39 +350,48 @@ func TestAlarmDispatchRunnerSeeMoreFoldKeepsSingleShortAndPreRenderedMessages(t 
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			plain := runSeeMoreFoldFinalPayload(t, renderer, store, false, tc.envelope)
-			final := runSeeMoreFoldFinalPayload(t, renderer, store, true, tc.envelope)
+			var storedMessage string
 
-			if tc.long {
-				require.Greater(t, utf8.RuneCountInString(plain), util.KakaoSeeMoreThreshold, "boundary needs a message long enough to fold")
-			} else {
-				require.LessOrEqual(t, utf8.RuneCountInString(plain), util.KakaoSeeMoreThreshold)
+			if tc.envelope.DeliveryDigest != nil {
+				storedMessage = tc.envelope.DeliveryDigest.PreRenderedMessage
 			}
 
-			require.Equal(t, plain, final, "fold must not touch single, short, or pre-rendered messages")
-			require.NotContains(t, final, seeMoreFoldPadding())
-			logSeeMoreFoldFinalPayload(t, tc.name, final, plain)
+			final := runSeeMoreFoldFinalPayload(t, renderer, store, tc.envelope)
+
+			if tc.long {
+				require.Greater(t, utf8.RuneCountInString(final), 250, "exercise a long message")
+			} else {
+				require.LessOrEqual(t, utf8.RuneCountInString(final), 250)
+			}
+
+			requireNoAutoPadding(t, final)
+
+			if tc.envelope.DeliveryDigest != nil {
+				// 저장 본문은 그대로 두고, 최종 text lane의 기존 Markdown 변환만 허용한다.
+				require.Equal(t, storedMessage, tc.envelope.DeliveryDigest.PreRenderedMessage)
+				require.Equal(t, kakaoformat.Render(storedMessage), final)
+			}
 		})
 	}
 }
 
-func TestAlarmDispatchRunnerSeeMoreFoldHonorsCustomGroupTemplates(t *testing.T) {
+func TestAlarmDispatchRunnerPreservesCustomGroupTemplatePadding(t *testing.T) {
 	t.Parallel()
 
 	envelope := seeMoreFoldOutboxEnvelope(domain.OutboxKindNewShort, seeMoreFoldScreenshotShortPayloads(t))
 
-	t.Run("override without blank line folds after first line", func(t *testing.T) {
+	t.Run("override without blank line stays unfolded", func(t *testing.T) {
 		t.Parallel()
 
 		renderer, store := newSeeMoreFoldRendering(t, map[domain.TemplateKey]string{
 			domain.TemplateKeyOutboxShortsGroup: "{{.MemberName}} 쇼츠 {{.Count}}개\n{{range .Items}}{{.Title}}\n{{.URL}}\n{{end}}",
 		})
 
-		plain := runSeeMoreFoldFinalPayload(t, renderer, store, false, envelope)
-		folded := runSeeMoreFoldFinalPayload(t, renderer, store, true, envelope)
+		final := runSeeMoreFoldFinalPayload(t, renderer, store, envelope)
 
-		requireFoldedAfterHead(t, folded, plain, "리오나 쇼츠 10개")
-		logSeeMoreFoldFinalPayload(t, "custom override", folded, plain)
+		requireNoAutoPadding(t, final)
+
+		require.True(t, strings.HasPrefix(final, "리오나 쇼츠 10개\n"))
 	})
 
 	t.Run("override already folded stays single padded", func(t *testing.T) {
@@ -412,12 +401,10 @@ func TestAlarmDispatchRunnerSeeMoreFoldHonorsCustomGroupTemplates(t *testing.T) 
 			domain.TemplateKeyOutboxShortsGroup: "{{.MemberName}} 쇼츠 {{.Count}}개" + seeMoreFoldPadding() + "\n\n{{range .Items}}{{.Title}}\n{{.URL}}\n{{end}}",
 		})
 
-		plain := runSeeMoreFoldFinalPayload(t, renderer, store, false, envelope)
-		folded := runSeeMoreFoldFinalPayload(t, renderer, store, true, envelope)
+		final := runSeeMoreFoldFinalPayload(t, renderer, store, envelope)
 
-		require.Equal(t, plain, folded)
-		require.Equal(t, 1, strings.Count(folded, seeMoreFoldPadding()))
-		require.True(t, strings.HasPrefix(folded, "리오나 쇼츠 10개"+seeMoreFoldPadding()+"\n\n"))
+		require.Equal(t, 1, strings.Count(final, seeMoreFoldPadding()))
+		require.True(t, strings.HasPrefix(final, "리오나 쇼츠 10개"+seeMoreFoldPadding()+"\n\n"))
 	})
 }
 

@@ -32,7 +32,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 카카오 네이티브 Markdown 전송 여부; 기본값 `false`. 명령 응답과 알림에 공통 적용 | no |
-| `BOT_SEE_MORE_FOLD` | 긴 여러 항목 알림을 머리 문단과 전체보기로 접음; 기본 `true`. 단일 알림·짧은 메시지 제외 | no |
+| `BOT_SEE_MORE_FOLD` | worker 렌더에는 쓰지 않음. 공통 설정 로딩이 bool로 검증하므로 잘못된 값이면 worker도 기동 실패; 기본 `true` | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
 | `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
 | `BIRTHDAY_STREAM_POLL_INTERVAL_MS` | birthday stream session 평가 주기; 기본 30분 | no |
@@ -56,7 +56,7 @@ Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kaka
 
 일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown resolver는 오픈채팅 여부만 제공합니다. Karing 선택 분기, chunk planner, Karing sender는 삭제했고, Markdown lane이 쓰는 handoff 확인(`ErrReplyHandoffOutcomeUnknown`, `ErrReplyHandoffFailed`)만 남아 있습니다. `scripts/architecture/ci-notification-egress-gate.sh`는 alarm-worker Go 코드에 Karing SDK 호출이 다시 들어오면 실패합니다.
 
-긴 쇼츠·영상·커뮤니티 묶음 및 여러 방송 알람 텍스트는 `BOT_SEE_MORE_FOLD`를 따라 머리 문단 끝에 공통 ZWSP 패딩을 넣습니다. 단일 알림·상태·오류·celebration은 그대로 유지합니다. `kakaoformat.Render` 뒤에도 패딩과 모든 항목·URL이 보존되어야 합니다. 사용자 지정 template/채널 override는 저장값을 바꾸지 않고 렌더 결과만 같은 목록 정책으로 접습니다. 변경 배포 때 API뿐 아니라 실제 알림 렌더 소유자인 alarm-worker의 설정과 바이너리도 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
+방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
 이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다. T18(2026-09-26)에서 v1·v3 원장의 Karing 비종단 행이 0건임을 확인했습니다.
 

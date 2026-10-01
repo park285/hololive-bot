@@ -13,13 +13,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// renderAlarmDispatchGroup는 그룹을 최종 텍스트로 렌더링한다. 접기는 여러 항목 묶음에만 적용하며
-// 단일 알림·축하·X 스페이스·사전 렌더된 다이제스트는 전문을 유지한다.
-func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, seeMoreFold bool, group alarmDispatchGroup) (string, error) {
-	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, seeMoreFold, group); handled {
+// renderAlarmDispatchGroup는 알림을 자동 접기 없이 렌더링하고 사전 렌더된 다이제스트는 그대로 유지한다.
+func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
+	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, group); handled {
 		if err != nil {
 			return message, fmt.Errorf("render alarm dispatch group source: %w", err)
 		}
@@ -41,14 +39,10 @@ func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, 
 		return out, fmt.Errorf("render alarm dispatch notification group: %w", err)
 	}
 
-	if seeMoreFold {
-		return util.FoldForSeeMore(out, util.KakaoSeeMoreThreshold), nil
-	}
-
 	return out, nil
 }
 
-func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, seeMoreFold bool, group alarmDispatchGroup) (message string, handled bool, err error) {
+func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (message string, handled bool, err error) {
 	if len(group.envelopes) == 0 {
 		return "", false, nil
 	}
@@ -78,7 +72,7 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 		domain.AlarmDispatchSourceKindYouTubeOutbox: {
 			action: "render alarm dispatch youtube outbox",
 			run: func() (string, error) {
-				return renderAlarmDispatchYouTubeOutbox(ctx, renderer, messageStrings, seeMoreFold, envelope)
+				return renderAlarmDispatchYouTubeOutbox(ctx, renderer, messageStrings, envelope)
 			},
 		},
 		domain.AlarmDispatchSourceKindDeliveryDigest: {
@@ -108,12 +102,12 @@ func renderAlarmDispatchDeliveryDigest(envelope *domain.AlarmQueueEnvelope) (str
 	return envelope.DeliveryDigest.PreRenderedMessage, nil
 }
 
-func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, seeMoreFold bool, envelope *domain.AlarmQueueEnvelope) (string, error) {
+func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) (string, error) {
 	if envelope.YouTubeOutbox == nil {
 		return "", errors.New("render youtube outbox dispatch: payload is nil")
 	}
 
-	out, err := youtubedispatch.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, seeMoreFold, envelope.YouTubeOutbox)
+	out, err := youtubedispatch.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
 	if err != nil {
 		return out, fmt.Errorf("format youtube outbox payload: %w", err)
 	}

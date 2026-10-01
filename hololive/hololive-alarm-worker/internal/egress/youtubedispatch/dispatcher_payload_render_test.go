@@ -17,7 +17,7 @@ func TestFormatYouTubeOutboxPayloadRendersSSOT(t *testing.T) {
 	renderer := template.NewRenderer(db, slog.New(slog.DiscardHandler))
 	ctx := t.Context()
 
-	single, err := FormatYouTubeOutboxPayload(ctx, renderer, nil, false, &domain.YouTubeOutboxDispatchPayload{
+	single, err := FormatYouTubeOutboxPayload(ctx, renderer, nil, &domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  []int64{1},
 		Kind:       domain.OutboxKindNewShort,
 		AlarmType:  domain.AlarmTypeShorts,
@@ -36,7 +36,7 @@ func TestFormatYouTubeOutboxPayloadRendersSSOT(t *testing.T) {
 		t.Fatalf("single message = %q, want %q", single, wantSingle)
 	}
 
-	grouped, err := FormatYouTubeOutboxPayload(ctx, renderer, nil, false, &domain.YouTubeOutboxDispatchPayload{
+	grouped, err := FormatYouTubeOutboxPayload(ctx, renderer, nil, &domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  []int64{1, 2},
 		Kind:       domain.OutboxKindCommunityPost,
 		AlarmType:  domain.AlarmTypeCommunity,
@@ -56,7 +56,7 @@ func TestFormatYouTubeOutboxPayloadRendersSSOT(t *testing.T) {
 		t.Fatalf("grouped message = %q, want %q", grouped, wantGrouped)
 	}
 
-	if _, err := FormatYouTubeOutboxPayload(ctx, nil, nil, false, &domain.YouTubeOutboxDispatchPayload{
+	if _, err := FormatYouTubeOutboxPayload(ctx, nil, nil, &domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  []int64{1},
 		Kind:       domain.OutboxKindNewShort,
 		AlarmType:  domain.AlarmTypeShorts,
@@ -77,7 +77,7 @@ func TestFormatYouTubeOutboxPayloadRendersPremiereCountdown(t *testing.T) {
 	renderer := template.NewRenderer(db, slog.New(slog.DiscardHandler))
 	scheduled := time.Now().UTC().Add(30 * time.Minute)
 
-	premiere, err := FormatYouTubeOutboxPayload(t.Context(), renderer, nil, false, &domain.YouTubeOutboxDispatchPayload{
+	premiere, err := FormatYouTubeOutboxPayload(t.Context(), renderer, nil, &domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  []int64{2},
 		Kind:       domain.OutboxKindNewVideo,
 		AlarmType:  domain.AlarmTypeLive,

@@ -59,7 +59,7 @@ func TestDeliveryDigestGroupingAndRenderingUsesContentIdentity(t *testing.T) {
 	seen := make(map[string]struct{}, len(groups))
 
 	for i := range groups {
-		message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, messageStrings, false, groups[i])
+		message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, messageStrings, groups[i])
 		require.NoError(t, err)
 		require.True(t, handled)
 

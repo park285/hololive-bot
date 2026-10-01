@@ -275,5 +275,5 @@ func formatLiveStreams(ctx context.Context, f *ResponseFormatter, streams []*dom
 		return f.renderFailureText()
 	}
 
-	return f.foldSeeMore(rendered)
+	return f.foldStreamList(rendered, streams)
 }
