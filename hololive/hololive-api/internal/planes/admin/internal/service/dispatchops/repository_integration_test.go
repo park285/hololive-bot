@@ -347,3 +347,80 @@ func TestOpsIntegrationActionPaginationUsesNumericOrder(t *testing.T) {
 		t.Fatalf("second: %+v", second)
 	}
 }
+
+func TestOpsIntegrationFailuresAndClassifiedFilter(t *testing.T) {
+	repo, pool := setupOpsIntegration(t)
+	ctx := t.Context()
+	empty, err := repo.Failures(ctx)
+	if err != nil || empty.Total != "0" || empty.ErrorCodes == nil || empty.AlarmTypes == nil || empty.Channels == nil || empty.Rooms == nil {
+		t.Fatalf("empty: %+v %v", empty, err)
+	}
+	ids := seedOpsGroup(t, pool, 16, false)
+	for i, id := range ids {
+		code := fmt.Sprintf("code_%02d", i)
+		status, alarmType := "dlq", "LIVE"
+		if i < 2 {
+			code = "private error\npayload"
+		}
+		if i == 2 {
+			code = ""
+		}
+		if i == 3 {
+			code = "SEND_FAILED"
+		}
+		if i == 4 {
+			status, alarmType = "quarantined", "COMMUNITY"
+		}
+		if i == 15 {
+			status = "sent"
+		}
+		_, err := pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries
+ SET last_error_code=$2,room_id=$3,status=$4,
+ quarantined_at=CASE WHEN $4='quarantined' THEN now() ELSE NULL END,
+ sent_at=CASE WHEN $4='sent' THEN now() ELSE NULL END WHERE id::text=$1`,
+			id, code, fmt.Sprintf("room_%02d", i), status)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 4 {
+			_, err = pool.Exec(ctx, `WITH event AS (
+ INSERT INTO alarm_dispatch_events(event_key,payload_hash,alarm_type,channel_id,payload)
+ VALUES('community',repeat('c',64),$2::alarm_type,'UC-community','{}') RETURNING id)
+ UPDATE alarm_dispatch_deliveries SET event_id=(SELECT id FROM event) WHERE id::text=$1`, id, alarmType)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	result, err := repo.Failures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != "15" || result.ObservedAt.IsZero() || result.ObservedAt.Location() != time.UTC {
+		t.Fatalf("total/time: %+v", result)
+	}
+	if len(result.ErrorCodes) != FailureBreakdownLimit || result.ErrorCodes[0] != (FailureCount{Value: "unclassified", Count: "2"}) ||
+		result.ErrorCodes[1] != (FailureCount{Value: "", Count: "1"}) || result.ErrorCodes[2] != (FailureCount{Value: "SEND_FAILED", Count: "1"}) ||
+		result.ErrorCodes[9] != (FailureCount{Value: "code_10", Count: "1"}) {
+		t.Fatalf("codes: %+v", result.ErrorCodes)
+	}
+	if len(result.AlarmTypes) != 2 || result.AlarmTypes[0] != (FailureCount{Value: "LIVE", Count: "14"}) ||
+		result.AlarmTypes[1] != (FailureCount{Value: "COMMUNITY", Count: "1"}) {
+		t.Fatalf("alarms: %+v", result.AlarmTypes)
+	}
+	if len(result.Channels) != 2 || result.Channels[0] != (FailureCount{Value: "", Count: "14"}) ||
+		result.Channels[1] != (FailureCount{Value: "UC-community", Count: "1"}) {
+		t.Fatalf("channels: %+v", result.Channels)
+	}
+	if len(result.Rooms) != FailureBreakdownLimit || result.Rooms[0] != (FailureCount{Value: "room_00", Count: "1"}) ||
+		result.Rooms[9] != (FailureCount{Value: "room_09", Count: "1"}) {
+		t.Fatalf("rooms: %+v", result.Rooms)
+	}
+	page, err := repo.List(ctx, Filter{ErrorCode: "unclassified", AlarmType: "LIVE"})
+	if err != nil || len(page.Items) != 2 {
+		t.Fatalf("classified filter: %+v %v", page, err)
+	}
+	if page.Items[0].ID != ids[1] || page.Items[1].ID != ids[0] || page.Items[0].ErrorCode != "unclassified" || page.Items[1].ErrorCode != "unclassified" {
+		t.Fatalf("classified rows: %+v", page.Items)
+	}
+}

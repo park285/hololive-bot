@@ -21,16 +21,22 @@ gateway 허용 목록 우회 경로는 사용하지 않습니다.
 | Method | 경로 | 설명 |
 | --- | --- | --- |
 | GET | `/api/holo/dispatch/summary` | 보존 중인 원장 전체의 상태별 건수와 가장 오래된 생성 시각 |
-| GET | `/api/holo/dispatch/deliveries` | 상태·채팅방·채널별 발송 목록 |
+| GET | `/api/holo/dispatch/failures` | 실패 보관·격리 전체 건수와 오류 코드·알림 유형·채널·채팅방별 상위 분포 |
+| GET | `/api/holo/dispatch/deliveries` | 상태·채팅방·채널·알림 유형·오류 코드별 발송 목록 |
 | GET | `/api/holo/dispatch/deliveries/{id}` | 상태, 같은 외부 발송 묶음, 재처리 가능 여부와 리비전 |
 | GET | `/api/holo/dispatch/deliveries/{id}/actions` | 해당 발송의 영속 감사 이력 |
 | POST | `/api/holo/dispatch/deliveries/{id}/requeue` | 조회한 묶음 전체를 원자적으로 retry에 등록 |
 
-목록 query는 `status`, `roomId`, `channelId`, `beforeId`만 허용합니다.
+목록 query는 `status`, `roomId`, `channelId`, `beforeId`, `alarmType`, `errorCode`만 허용합니다.
 상태 생략 시 `dlq`와 `quarantined`를 함께 조회합니다. 단일 상태는
 `pending`, `retry`, `leased`, `sending`, `sent`, `dlq`, `quarantined`, `cancelled` 중 하나입니다.
 iris-console에서 퇴역 필터 제거를 배포한 뒤 `shadowed` 입력도 제거했습니다.
 채팅방과 채널은 정확히 일치하는 값을 사용합니다.
+`alarmType`은 `e.alarm_type::text`와 대소문자까지 정확히 일치하며(저장값 예: `LIVE`, `BIRTHDAY`) 최대 64자입니다.
+앞뒤 공백과 제어 문자 및 잘못된 UTF-8은 거부합니다.
+`errorCode`는 `^[a-z][a-z0-9_]{0,63}$`만 허용하며 목록에 표시하는 분류 값과 정확히 비교합니다.
+`errorCode=unclassified`는 코드 형태를 벗어난 오류를 `unclassified`로 표시한 항목을 찾습니다.
+표시 가능한 대문자·구두점 코드와 빈 코드는 분포에 포함되지만 이 목록 query 형식으로 선택할 수 없습니다.
 명시적인 빈 query, 알 수 없는 query 및 중복 query는 400입니다.
 
 목록과 감사 이력은 최대 50건을 ID 내림차순으로 반환합니다. `nextBeforeId`가 비어 있지
@@ -42,6 +48,14 @@ ID를 JavaScript Number로 변환하거나 숫자 문자열을 사전순으로 �
 집계의 `oldestAt`은 상태 진입 시각이 아니라 발송 항목의 **생성 시각**입니다.
 건수가 0인 상태는 `counts`에 포함되지 않습니다. 집계는 최근 24시간 같은 시간 창으로
 잘라낸 값이 아닙니다. DB가 제한 시간 안에 완료하지 못하면 부분 집계를 반환하지 않습니다.
+
+`/failures`는 어떤 query도 허용하지 않으며 기본 목록과 같은 `dlq`·`quarantined`만 집계합니다.
+`total`은 전체 건수이고, `errorCodes`, `alarmTypes`, `channels`, `rooms`는 각각
+`{"value":"분류 값","count":"건수"}` 항목을 건수 내림차순·동률 값 오름차순으로 최대 10개 반환합니다.
+오류 코드는 목록과 같은 분류식을 사용하며 빈 코드와 빈 채널도 분류 값으로 유지합니다.
+한 SQL의 단일 스냅샷으로 계산하고 `observedAt`은 조회 완료 시점의 UTC입니다.
+실패가 없으면 `total: "0"`과 네 개의 빈 배열을 반환하며 배열은 `null`이 아닙니다.
+오류 원문과 메시지 본문은 공개하지 않습니다.
 
 상세 응답의 `group`은 같은 send unit의 발송 항목입니다. 100건을 넘으면
 `groupTruncated: true`, `replayBlocked: "group_too_large"`로 재처리를 차단합니다.
@@ -124,10 +138,6 @@ TEST_DATABASE_URL='<test database DSN>' go test -race -tags=integration \
 
 통합 테스트는 기존 dispatchoutbox 테스트의 마이그레이션 정본을 재사용합니다.
 묶음의 원자적 재처리, 부분 선택 차단, 감사 실패 롤백, 동시 요청의 단일 승자,
-큰 bigint ID, 숫자순 cursor 페이지, 수정 시각 불일치와 이미 전송된 형제를 검사합니다.
+큰 bigint ID, 숫자순 cursor 페이지, 수정 시각 불일치와 이미 전송된 형제,
+실패 분포의 정렬·상한·오류 분류와 `unclassified` 목록 필터를 검사합니다.
 전체 저장소의 기존 lint/build/test/release gate를 대체하지 않습니다.
-
-이 작업 환경에서 실행한 검증은 `model.go`와 `model_test.go`를 대상으로 한
-Go 1.23.2의 단위·race·coverage 검사입니다. 해당 순수 검증 로직의 statement coverage는
-100%였지만, repository·HTTP·PostgreSQL 통합 검증이나 전체 저장소 coverage를 뜻하지 않습니다.
-Go 1.27 기반 전체 빌드/테스트와 Iris Admin 연결은 아직 검증되지 않았습니다.

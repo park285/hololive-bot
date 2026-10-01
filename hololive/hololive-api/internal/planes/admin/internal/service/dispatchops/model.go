@@ -4,6 +4,7 @@ package dispatchops
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 const (
 	// PageSize는 조회 한 페이지의 최대 행 수입니다.
 	PageSize = 50
+	// FailureBreakdownLimit는 실패 원인별 최대 항목 수입니다.
+	FailureBreakdownLimit = 10
 	// MaxReplaySize는 재처리할 수 있는 외부 발송 묶음의 최대 행 수입니다.
 	MaxReplaySize = 100
 )
@@ -31,6 +34,8 @@ var (
 
 // statuses는 조회 필터로 받는 상태입니다.
 var statuses = [...]string{"pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"} //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
+
+var errorCodeFilter = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // Delivery는 본문과 전송용 내부 식별자를 제외한 발송 상태입니다. Bigint는 문자열로 유지합니다.
 type Delivery struct {
@@ -55,9 +60,9 @@ type Delivery struct {
 	CancelledAt   *time.Time `json:"cancelledAt"`
 }
 
-// Filter는 허용된 상태와 정확한 채팅방·채널 식별자 및 ID 커서로 조회 범위를 제한합니다.
+// Filter는 상태·채팅방·채널·알림 유형·오류 코드와 ID 커서로 조회 범위를 제한합니다.
 // 비어 있는 Status는 DLQ와 격리 상태를 함께 조회합니다.
-type Filter struct{ Status, RoomID, ChannelID, BeforeID string }
+type Filter struct{ Status, RoomID, ChannelID, BeforeID, AlarmType, ErrorCode string }
 
 // Page는 ID 내림차순 조회 결과입니다. NextBeforeId가 비어 있으면 마지막 페이지입니다.
 type Page struct {
@@ -76,6 +81,22 @@ type StatusCount struct {
 type Summary struct {
 	Counts     []StatusCount `json:"counts"`
 	ObservedAt time.Time     `json:"observedAt"`
+}
+
+// FailureCount는 실패 분류 값과 문자열 bigint 건수입니다.
+type FailureCount struct {
+	Value string `json:"value"`
+	Count string `json:"count"`
+}
+
+// FailureBreakdown은 실패 보관·격리 원장의 단일 스냅샷 분포입니다.
+type FailureBreakdown struct {
+	Total      string         `json:"total"`
+	ErrorCodes []FailureCount `json:"errorCodes"`
+	AlarmTypes []FailureCount `json:"alarmTypes"`
+	Channels   []FailureCount `json:"channels"`
+	Rooms      []FailureCount `json:"rooms"`
+	ObservedAt time.Time      `json:"observedAt"`
 }
 
 // Revision은 확인한 행의 낙관적 잠금 토큰입니다. UpdatedAt의 소수초를 보존해야 합니다.
@@ -144,8 +165,12 @@ func (f Filter) Validate() error {
 		return fmt.Errorf("status: %w", ErrInvalidInput)
 	}
 
-	if !validText(f.RoomID, 100) || !validText(f.ChannelID, 64) {
+	if !validText(f.RoomID, 100) || !validText(f.ChannelID, 64) || !validText(f.AlarmType, 64) {
 		return fmt.Errorf("filter: %w", ErrInvalidInput)
+	}
+
+	if f.ErrorCode != "" && !errorCodeFilter.MatchString(f.ErrorCode) {
+		return fmt.Errorf("error code: %w", ErrInvalidInput)
 	}
 
 	if f.BeforeID != "" {

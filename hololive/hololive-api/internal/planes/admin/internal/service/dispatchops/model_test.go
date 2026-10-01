@@ -41,7 +41,7 @@ func TestParseID(t *testing.T) {
 
 func TestFilterValidation(t *testing.T) {
 	for _, status := range append(statuses[:], "") {
-		if err := (Filter{Status: status, RoomID: "9007199254740993", ChannelID: "UC-example", BeforeID: "9223372036854775807"}).Validate(); err != nil {
+		if err := (Filter{Status: status, RoomID: "9007199254740993", ChannelID: "UC-example", BeforeID: "9223372036854775807", AlarmType: strings.Repeat("가", 64), ErrorCode: "a" + strings.Repeat("_", 63)}).Validate(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -55,6 +55,17 @@ func TestFilterValidation(t *testing.T) {
 		{RoomID: "\troom"},
 		{ChannelID: strings.Repeat("a", 65)},
 		{ChannelID: "a\n"},
+		{AlarmType: strings.Repeat("가", 65)},
+		{AlarmType: " live"},
+		{AlarmType: "live "},
+		{AlarmType: "li\nve"},
+		{AlarmType: string([]byte{0xff})},
+		{ErrorCode: "Timeout"},
+		{ErrorCode: "_timeout"},
+		{ErrorCode: "time-out"},
+		{ErrorCode: "timeout.code"},
+		{ErrorCode: "timeout\n"},
+		{ErrorCode: strings.Repeat("a", 65)},
 	} {
 		if err := f.Validate(); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("filter %+v: %v", f, err)

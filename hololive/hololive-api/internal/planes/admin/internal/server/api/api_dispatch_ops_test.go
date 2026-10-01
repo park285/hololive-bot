@@ -28,6 +28,15 @@ func (s *dispatchOpsStub) Summary(ctx context.Context) (dispatchops.Summary, err
 	return dispatchops.Summary{Counts: []dispatchops.StatusCount{}}, s.err
 }
 
+func (s *dispatchOpsStub) Failures(ctx context.Context) (dispatchops.FailureBreakdown, error) {
+	s.record(ctx)
+
+	return dispatchops.FailureBreakdown{
+		Total: "0", ErrorCodes: []dispatchops.FailureCount{}, AlarmTypes: []dispatchops.FailureCount{},
+		Channels: []dispatchops.FailureCount{}, Rooms: []dispatchops.FailureCount{},
+	}, s.err
+}
+
 func (s *dispatchOpsStub) List(ctx context.Context, f dispatchops.Filter) (dispatchops.Page, error) {
 	s.record(ctx)
 
@@ -62,6 +71,7 @@ func dispatchTestRouter(ops DispatchOperations) *gin.Engine {
 
 	router := gin.New()
 	router.GET("/dispatch/summary", h.GetDispatchSummary)
+	router.GET("/dispatch/failures", h.GetDispatchFailures)
 	router.GET("/dispatch/deliveries", h.GetDispatchDeliveries)
 	router.GET("/dispatch/deliveries/:id", h.GetDispatchDelivery)
 	router.GET("/dispatch/deliveries/:id/actions", h.GetDispatchActions)
@@ -145,6 +155,11 @@ func TestDispatchHandlerQueryValidation(t *testing.T) {
 		"/dispatch/deliveries?roomId=a%0Ab", "/dispatch/deliveries?status=dlq;status=sent",
 		"/dispatch/summary?status=dlq", "/dispatch/deliveries/01", "/dispatch/deliveries/1?beforeId=2",
 		"/dispatch/deliveries/1/actions?beforeId=0", "/dispatch/deliveries/1/actions?beforeId=1&beforeId=2",
+		"/dispatch/deliveries?errorCode=Timeout", "/dispatch/deliveries?errorCode=",
+		"/dispatch/deliveries?errorCode=timeout&errorCode=timeout",
+		"/dispatch/deliveries?alarmType=%20live", "/dispatch/deliveries?alarmType=",
+		"/dispatch/deliveries?alarmType=" + strings.Repeat("a", 65),
+		"/dispatch/deliveries?alarmType=live&alarmType=live", "/dispatch/failures?x=1",
 	} {
 		t.Run(path, func(t *testing.T) {
 			stub := &dispatchOpsStub{}
@@ -157,9 +172,9 @@ func TestDispatchHandlerQueryValidation(t *testing.T) {
 	}
 
 	stub := &dispatchOpsStub{}
-	response := dispatchRequest(t, dispatchTestRouter(stub), "GET", "/dispatch/deliveries?status=dlq&roomId=9007199254740993&beforeId=9223372036854775807", "", "")
+	response := dispatchRequest(t, dispatchTestRouter(stub), "GET", "/dispatch/deliveries?status=dlq&roomId=9007199254740993&beforeId=9223372036854775807&alarmType=LIVE&errorCode=unclassified", "", "")
 
-	if response.Code != 200 || stub.filter.RoomID != "9007199254740993" || stub.filter.BeforeID != "9223372036854775807" || !stub.deadline {
+	if response.Code != 200 || stub.filter.RoomID != "9007199254740993" || stub.filter.BeforeID != "9223372036854775807" || stub.filter.AlarmType != "LIVE" || stub.filter.ErrorCode != "unclassified" || !stub.deadline {
 		t.Fatalf("response=%s stub=%+v", response.Body.String(), stub)
 	}
 }
@@ -195,7 +210,7 @@ func TestDispatchHandlerErrorsAreSanitized(t *testing.T) {
 }
 
 func TestDispatchHandlerMissingDependencyFailsClosed(t *testing.T) {
-	for _, path := range []string{"/dispatch/summary", "/dispatch/deliveries", "/dispatch/deliveries/1", "/dispatch/deliveries/1/actions"} {
+	for _, path := range []string{"/dispatch/summary", "/dispatch/failures", "/dispatch/deliveries", "/dispatch/deliveries/1", "/dispatch/deliveries/1/actions"} {
 		response := dispatchRequest(t, dispatchTestRouter(nil), "GET", path, "", "")
 		if response.Code != 503 {
 			t.Fatalf("%s: %d", path, response.Code)
@@ -205,5 +220,27 @@ func TestDispatchHandlerMissingDependencyFailsClosed(t *testing.T) {
 	response := dispatchRequest(t, dispatchTestRouter(nil), "POST", dispatchTestReplayPath, dispatchTestBody, dispatchTestContentType)
 	if response.Code != 503 {
 		t.Fatalf("mutation: %d", response.Code)
+	}
+}
+
+func TestDispatchFailuresHTTP(t *testing.T) {
+	stub := &dispatchOpsStub{}
+	response := dispatchRequest(t, dispatchTestRouter(stub), "GET", "/dispatch/failures", "", "")
+
+	if response.Code != 200 || response.Header().Get("Cache-Control") != "no-store" || !stub.deadline {
+		t.Fatalf("status=%d headers=%v deadline=%v", response.Code, response.Header(), stub.deadline)
+	}
+
+	for _, field := range []string{`"total":"0"`, `"errorCodes":[]`, `"alarmTypes":[]`, `"channels":[]`, `"rooms":[]`} {
+		if !strings.Contains(response.Body.String(), field) {
+			t.Fatalf("missing %s: %s", field, response.Body.String())
+		}
+	}
+
+	stub.err = errors.New("SELECT private_payload")
+	response = dispatchRequest(t, dispatchTestRouter(stub), "GET", "/dispatch/failures", "", "")
+
+	if response.Code != 500 || strings.Contains(response.Body.String(), "private_payload") {
+		t.Fatalf("unsanitized failure: %d %s", response.Code, response.Body.String())
 	}
 }

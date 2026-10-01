@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,7 +37,7 @@ func querySQL(name string) string {
 		panic(fmt.Sprintf("dispatch operation SQL missing: %s", name))
 	}
 
-	return string(content)
+	return strings.ReplaceAll(string(content), "{{errorCodeExpression}}", errorCodeExpression)
 }
 
 // Summary는 보존 중인 모든 발송 상태를 단일 PostgreSQL 스냅샷으로 집계합니다.
@@ -65,6 +66,55 @@ func (r *Repository) Summary(ctx context.Context) (Summary, error) {
 
 	if err := rows.Err(); err != nil {
 		return Summary{}, fmt.Errorf("read dispatch summary: %w", err)
+	}
+
+	result.ObservedAt = time.Now().UTC()
+
+	return result, nil
+}
+
+// Failures는 실패 보관·격리 항목의 전체 건수와 상위 분포를 한 SQL로 조회합니다.
+func (r *Repository) Failures(ctx context.Context) (FailureBreakdown, error) {
+	result := FailureBreakdown{
+		Total: "0", ErrorCodes: []FailureCount{}, AlarmTypes: []FailureCount{},
+		Channels: []FailureCount{}, Rooms: []FailureCount{},
+	}
+
+	if err := r.available(); err != nil {
+		return result, err
+	}
+
+	rows, err := r.pool.Query(ctx, querySQL("failures"), FailureBreakdownLimit)
+	if err != nil {
+		return result, fmt.Errorf("query dispatch failures: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var kind string
+
+		var item FailureCount
+
+		if err := rows.Scan(&kind, &item.Value, &item.Count); err != nil {
+			return FailureBreakdown{}, fmt.Errorf("scan dispatch failures: %w", err)
+		}
+
+		switch kind {
+		case "total":
+			result.Total = item.Count
+		case "errorCodes":
+			result.ErrorCodes = append(result.ErrorCodes, item)
+		case "alarmTypes":
+			result.AlarmTypes = append(result.AlarmTypes, item)
+		case "channels":
+			result.Channels = append(result.Channels, item)
+		case "rooms":
+			result.Rooms = append(result.Rooms, item)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return FailureBreakdown{}, fmt.Errorf("read dispatch failures: %w", err)
 	}
 
 	result.ObservedAt = time.Now().UTC()

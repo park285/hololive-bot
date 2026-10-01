@@ -19,11 +19,12 @@ func TestDispatchRoutesRequireAPIKey(t *testing.T) {
 	registerAlarmRoutes(group, (&api.Handler{}).DomainHandlers().Alarm)
 
 	for _, route := range []struct{ method, path string }{
-		{"GET", "/api/holo/dispatch/summary"},
-		{"GET", "/api/holo/dispatch/deliveries"},
-		{"GET", "/api/holo/dispatch/deliveries/1"},
-		{"GET", "/api/holo/dispatch/deliveries/1/actions"},
-		{"POST", "/api/holo/dispatch/deliveries/1/requeue"},
+		{http.MethodGet, "/api/holo/dispatch/summary"},
+		{http.MethodGet, "/api/holo/dispatch/failures"},
+		{http.MethodGet, "/api/holo/dispatch/deliveries"},
+		{http.MethodGet, "/api/holo/dispatch/deliveries/1"},
+		{http.MethodGet, "/api/holo/dispatch/deliveries/1/actions"},
+		{http.MethodPost, "/api/holo/dispatch/deliveries/1/requeue"},
 	} {
 		for _, key := range []string{"", "wrong-key", "dispatch-ops-test-key"} {
 			request := httptest.NewRequestWithContext(t.Context(), route.method, route.path, http.NoBody)
