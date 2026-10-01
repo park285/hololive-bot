@@ -30,6 +30,7 @@ func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *api.AlarmHandler) {
 	holoAPI.GET("/alarms", handler.GetAlarms)
 	holoAPI.DELETE("/alarms", handler.DeleteAlarm)
 	holoAPI.GET("/dispatch/summary", handler.GetDispatchSummary)
+	holoAPI.GET("/dispatch/failures", handler.GetDispatchFailures)
 	holoAPI.GET("/dispatch/deliveries", handler.GetDispatchDeliveries)
 	holoAPI.GET("/dispatch/deliveries/:id", handler.GetDispatchDelivery)
 	holoAPI.GET("/dispatch/deliveries/:id/actions", handler.GetDispatchActions)

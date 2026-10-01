@@ -9,57 +9,23 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 )
 
 // 기존 dispatchoutbox 통합 테스트와 같은 마이그레이션 정본을 사용합니다.
 func setupOpsIntegration(t *testing.T) (*Repository, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
+	pool := dbtest.NewBlankPool(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	setup, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := pgx.Identifier{fmt.Sprintf("dispatchops_test_%d", time.Now().UnixNano())}.Sanitize()
-	if _, err := setup.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		setup.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if _, err := setup.Exec(cleanup, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
-			t.Error(err)
-		}
-		setup.Close()
-	})
-	config, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, "SET search_path TO "+schema)
-		if err != nil {
-			return fmt.Errorf("set integration schema: %w", err)
-		}
-		return nil
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
 	if _, err := pool.Exec(ctx, "CREATE TYPE alarm_type AS ENUM ('LIVE', 'COMMUNITY', 'SHORTS')"); err != nil {
 		t.Fatal(err)
 	}
@@ -345,5 +311,125 @@ func TestOpsIntegrationActionPaginationUsesNumericOrder(t *testing.T) {
 	}
 	if len(second.Items) != 1 || second.Items[0].ID != "1" || second.NextBeforeID != "" {
 		t.Fatalf("second: %+v", second)
+	}
+}
+
+func TestOpsIntegrationFailuresAndClassifiedFilter(t *testing.T) {
+	repo, pool := setupOpsIntegration(t)
+	ctx := t.Context()
+	empty, err := repo.Failures(ctx)
+	if err != nil || empty.Total != "0" || empty.ErrorCodes == nil || empty.AlarmTypes == nil || empty.Channels == nil || empty.Rooms == nil {
+		t.Fatalf("empty: %+v %v", empty, err)
+	}
+	ids := seedOpsGroup(t, pool, 16, false)
+	for i, id := range ids {
+		code := fmt.Sprintf("code_%02d", i)
+		status, alarmType := "dlq", "LIVE"
+		if i < 2 {
+			code = "private error\npayload"
+		}
+		if i == 2 {
+			code = ""
+		}
+		if i == 3 {
+			code = "SEND_FAILED"
+		}
+		if i == 4 {
+			status, alarmType = "quarantined", "COMMUNITY"
+		}
+		if i == 15 {
+			status = "sent"
+		}
+		_, err := pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries
+ SET last_error_code=$2,room_id=$3,status=$4,
+ quarantined_at=CASE WHEN $4='quarantined' THEN now() ELSE NULL END,
+ sent_at=CASE WHEN $4='sent' THEN now() ELSE NULL END WHERE id::text=$1`,
+			id, code, fmt.Sprintf("room_%02d", i), status)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 4 {
+			_, err = pool.Exec(ctx, `WITH event AS (
+ INSERT INTO alarm_dispatch_events(event_key,payload_hash,alarm_type,channel_id,payload)
+ VALUES('community',repeat('c',64),$2::alarm_type,'UC-community','{}') RETURNING id)
+ UPDATE alarm_dispatch_deliveries SET event_id=(SELECT id FROM event) WHERE id::text=$1`, id, alarmType)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	result, err := repo.Failures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != "15" || result.ObservedAt.IsZero() || result.ObservedAt.Location() != time.UTC {
+		t.Fatalf("total/time: %+v", result)
+	}
+	if len(result.ErrorCodes) != FailureBreakdownLimit || result.ErrorCodes[0] != (FailureCount{Value: "unclassified", Count: "2"}) ||
+		result.ErrorCodes[1] != (FailureCount{Value: "", Count: "1"}) || result.ErrorCodes[2] != (FailureCount{Value: "SEND_FAILED", Count: "1"}) ||
+		result.ErrorCodes[9] != (FailureCount{Value: "code_10", Count: "1"}) {
+		t.Fatalf("codes: %+v", result.ErrorCodes)
+	}
+	if len(result.AlarmTypes) != 2 || result.AlarmTypes[0] != (FailureCount{Value: "LIVE", Count: "14"}) ||
+		result.AlarmTypes[1] != (FailureCount{Value: "COMMUNITY", Count: "1"}) {
+		t.Fatalf("alarms: %+v", result.AlarmTypes)
+	}
+	if len(result.Channels) != 2 || result.Channels[0] != (FailureCount{Value: "", Count: "14"}) ||
+		result.Channels[1] != (FailureCount{Value: "UC-community", Count: "1"}) {
+		t.Fatalf("channels: %+v", result.Channels)
+	}
+	if len(result.Rooms) != FailureBreakdownLimit || result.Rooms[0] != (FailureCount{Value: "room_00", Count: "1"}) ||
+		result.Rooms[9] != (FailureCount{Value: "room_09", Count: "1"}) {
+		t.Fatalf("rooms: %+v", result.Rooms)
+	}
+	page, err := repo.List(ctx, Filter{ErrorCode: "unclassified", AlarmType: "LIVE"})
+	if err != nil || len(page.Items) != 2 {
+		t.Fatalf("classified filter: %+v %v", page, err)
+	}
+	if page.Items[0].ID != ids[1] || page.Items[1].ID != ids[0] || page.Items[0].ErrorCode != "unclassified" || page.Items[1].ErrorCode != "unclassified" {
+		t.Fatalf("classified rows: %+v", page.Items)
+	}
+}
+
+func TestOpsIntegrationFailuresUseNumericCounts(t *testing.T) {
+	repo, pool := setupOpsIntegration(t)
+	ctx := t.Context()
+	ids := seedOpsGroup(t, pool, 12, false)
+	if _, err := pool.Exec(ctx, `UPDATE alarm_dispatch_events SET channel_id='UC-major' WHERE event_key='test-event'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET last_error_code='timeout',room_id='room-major'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `WITH event AS (
+ INSERT INTO alarm_dispatch_events(event_key,payload_hash,alarm_type,channel_id,payload)
+ VALUES('failure-minor',repeat('c',64),'COMMUNITY','UC-minor','{}') RETURNING id)
+ UPDATE alarm_dispatch_deliveries
+ SET event_id=(SELECT id FROM event),last_error_code='network',room_id='room-minor'
+ WHERE id::text=ANY($1::text[])`, ids[10:]); err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.Failures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != "12" {
+		t.Fatalf("total: %+v", result)
+	}
+	for _, dimension := range []struct {
+		name  string
+		got   []FailureCount
+		major string
+		minor string
+	}{
+		{name: "errorCodes", got: result.ErrorCodes, major: "timeout", minor: "network"},
+		{name: "alarmTypes", got: result.AlarmTypes, major: "LIVE", minor: "COMMUNITY"},
+		{name: "channels", got: result.Channels, major: "UC-major", minor: "UC-minor"},
+		{name: "rooms", got: result.Rooms, major: "room-major", minor: "room-minor"},
+	} {
+		want := []FailureCount{{Value: dimension.major, Count: "10"}, {Value: dimension.minor, Count: "2"}}
+		if !slices.Equal(dimension.got, want) {
+			t.Errorf("%s: got %+v want %+v", dimension.name, dimension.got, want)
+		}
 	}
 }

@@ -16,6 +16,12 @@
 - migration 235–237은 application의 orphan 제외 부분 UNIQUE, reasons+targets 실제 행 수로 제한한 projection 정리와 table-local vacuum 설정을 적용합니다. application 결과는 한 INSERT로 묶고 발행 fence/contract 검증은 한 pipeline으로 보냅니다. 새 fallback·재수집·dual writer·런타임 의존성은 없습니다.
 - 상세 측정·미달 목표·운영 승인과 적용 결과는 [실행 기록](docs/current/plans/2026-09-29-youtube-storage-reduction.md#실행-기록--2026-09-29), 이행·복구는 [API runbook](docs/current/runbooks/hololive-api.md#youtube-관측-저장-구조-전환)에 기록합니다. 백업 삭제·물리 공간 회수는 전환과 분리하여 승인받습니다.
 
+## v7.1.0 - 2026-10-01
+
+- 관리자 발송 원장 목록에 `alarmType`·`errorCode` 정확 일치 필터를 추가합니다. `/api/holo/dispatch/failures`는 실패 보관·격리 항목의 전체 건수와 오류 코드·알림 유형·채널·채팅방별 상위 10개 분포를 단일 스냅샷으로 반환하며 오류 원문·본문은 공개하지 않습니다.
+- 실패 분포의 건수를 숫자로 내림차순 정렬합니다. PostgreSQL 출력 alias가 문자열 건수 정렬을 선택하던 문제를 수정하고 네 분류의 10건·2건 순서를 실제 격리 DB에서 검증합니다.
+- 루트와 API 산출물 버전은 `7.1.0`이며 이번 배포는 API만 교체합니다. worker·collector·PO와 migration은 변경하지 않습니다.
+
 ## v7.0.1 - 2026-09-29
 
 - 이미지 빌드가 checkout의 umask에 따라 파일 모드가 달라지던 결함을 고칩니다. v7.0.0 배포에서 umask 077 checkout으로 빌드한 PO issuer 이미지의 `/app/po-sandbox` 파일이 600이라 uid 65532가 `worker.mjs`를 열지 못했고(EACCES) 중앙 쌍이 자동 rollback됐습니다. alarm-worker 이미지에도 600 파일이 들어갔습니다. PO issuer·collector·alarm-worker Dockerfile은 이미지에 실리는 Node 트리(`package.json`·`package-lock.json`·`src`)를 복사한 뒤 Node build stage에서 `chmod u=rwX,go=rX`로 파일 644·디렉터리 755로 맞춥니다. 기호 `COPY --chmod`는 BuildKit 전용이라 `CONTAINER_CLI=podman`(buildah)에서도 같은 결과가 나오도록 `RUN chmod`를 씁니다. 소유자와 umask 022 checkout의 산출물(모드·소유자·크기·내용)은 그대로입니다. `scripts/build/image-runtime-tree-permissions_test.sh`가 umask 077 checkout을 재현해 세 build stage를 빌드하고 runtime uid로 트리 전체를 읽는지 확인하며, pre-push 게이트는 이 Dockerfile들이 바뀔 때 이를 실행합니다(docker 필요, kapu 전용).

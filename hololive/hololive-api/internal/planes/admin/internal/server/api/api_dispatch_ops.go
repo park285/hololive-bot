@@ -23,8 +23,11 @@ const (
 
 // DispatchOperations는 관리자 API가 사용하는 원장 조회 및 재처리 계약입니다.
 // 구현은 재처리와 감사 기록의 원자성 및 결과 불명 요청의 비재실행을 보장해야 합니다.
+//
+//nolint:interfacebloat // 원장 HTTP 계약의 6개 작업을 한 의존성으로 연결하므로 메서드 수 경고는 오탐입니다.
 type DispatchOperations interface {
 	Summary(context.Context) (dispatchops.Summary, error)
+	Failures(context.Context) (dispatchops.FailureBreakdown, error)
 	List(context.Context, dispatchops.Filter) (dispatchops.Page, error)
 	Detail(context.Context, string) (dispatchops.Detail, error)
 	Actions(context.Context, string, string) (dispatchops.ActionPage, error)
@@ -113,18 +116,45 @@ func (h *AlarmHandler) GetDispatchSummary(c *gin.Context) {
 	ginjson.Respond(c, 200, result)
 }
 
-// GetDispatchDeliveries는 상태·채팅방·채널 필터와 ID 커서로 최대 50건을 조회합니다.
+// GetDispatchFailures는 실패 보관·격리 원장의 상위 원인 분포를 조회합니다.
+func (h *AlarmHandler) GetDispatchFailures(c *gin.Context) {
+	if !h.dispatchReady(c) {
+		return
+	}
+
+	if _, ok := dispatchQuery(c); !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), dispatchOpsTimeout)
+
+	defer cancel()
+
+	result, err := h.dispatchOps.Failures(ctx)
+	if err != nil {
+		dispatchError(c, err)
+
+		return
+	}
+
+	ginjson.Respond(c, 200, result)
+}
+
+// GetDispatchDeliveries는 상태·채팅방·채널·알림 유형·오류 코드와 ID 커서로 최대 50건을 조회합니다.
 func (h *AlarmHandler) GetDispatchDeliveries(c *gin.Context) {
 	if !h.dispatchReady(c) {
 		return
 	}
 
-	query, ok := dispatchQuery(c, "status", "roomId", "channelId", "beforeId")
+	query, ok := dispatchQuery(c, "status", "roomId", "channelId", "beforeId", "alarmType", "errorCode")
 	if !ok {
 		return
 	}
 
-	filter := dispatchops.Filter{Status: query.Get("status"), RoomID: query.Get("roomId"), ChannelID: query.Get("channelId"), BeforeID: query.Get("beforeId")}
+	filter := dispatchops.Filter{
+		Status: query.Get("status"), RoomID: query.Get("roomId"), ChannelID: query.Get("channelId"),
+		BeforeID: query.Get("beforeId"), AlarmType: query.Get("alarmType"), ErrorCode: query.Get("errorCode"),
+	}
 	if err := filter.Validate(); err != nil {
 		dispatchError(c, err)
 

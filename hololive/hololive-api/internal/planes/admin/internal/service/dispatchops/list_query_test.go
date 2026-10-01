@@ -1,7 +1,6 @@
 package dispatchops
 
 import (
-	_ "embed"
 	"errors"
 	"fmt"
 	"reflect"
@@ -12,16 +11,14 @@ import (
 )
 
 // 실제 projection을 사용하되 DB 연결이나 쿼리 계획 검증을 대신하지 않습니다.
-//
-//go:embed queries/list.sql
-var testListProjection string
+var testListProjection = querySQL("list")
 
 func TestListQueryAllFilterCombinations(t *testing.T) {
-	for mask := range 16 {
-		t.Run(fmt.Sprintf("filters_%04b", mask), func(t *testing.T) {
+	for mask := range 64 {
+		t.Run(fmt.Sprintf("filters_%06b", mask), func(t *testing.T) {
 			filter := Filter{}
-			wantPredicates := make([]string, 0, 4)
-			wantArgs := make([]any, 0, 5)
+			wantPredicates := make([]string, 0, 6)
+			wantArgs := make([]any, 0, 7)
 			add := func(predicate string, value any) {
 				wantArgs = append(wantArgs, value)
 				wantPredicates = append(wantPredicates, fmt.Sprintf("%s $%d", predicate, len(wantArgs)))
@@ -49,6 +46,16 @@ func TestListQueryAllFilterCombinations(t *testing.T) {
 				filter.BeforeID = "9223372036854775807"
 
 				add("d.id <", int64(9223372036854775807))
+			}
+
+			if mask&16 != 0 {
+				filter.AlarmType = "LIVE"
+				add("e.alarm_type::text =", filter.AlarmType)
+			}
+
+			if mask&32 != 0 {
+				filter.ErrorCode = "unclassified"
+				add(errorCodeExpression+" =", filter.ErrorCode)
 			}
 
 			wantArgs = append(wantArgs, PageSize+1)
