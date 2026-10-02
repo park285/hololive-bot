@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package providers
+package dbresource
 
 import (
 	"log/slog"
@@ -48,13 +48,13 @@ func TestProvideDatabaseResourcesPassesSSLRootCertExplicitly(t *testing.T) {
 		PoolMaxConns: 1,
 	}
 
-	resources, cleanup, err := ProvideDatabaseResources(t.Context(), config, slog.New(slog.DiscardHandler))
+	resources, cleanup, err := Provide(t.Context(), config, slog.New(slog.DiscardHandler))
 	if err == nil {
 		cleanup()
-		t.Fatalf("ProvideDatabaseResources() = %v, want CA file read failure", resources)
+		t.Fatalf("Provide() = %v, want CA file read failure", resources)
 	}
 
 	if !strings.Contains(err.Error(), missingCA) {
-		t.Fatalf("ProvideDatabaseResources() error = %v, want failure naming sslrootcert %q", err, missingCA)
+		t.Fatalf("Provide() error = %v, want failure naming sslrootcert %q", err, missingCA)
 	}
 }

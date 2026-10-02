@@ -41,6 +41,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/providers/dbresource"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -203,7 +204,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiplane.LLM
 
 	cacheService := cacheResources.Service
 
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := dbresource.Provide(ctx, &schedulerConfig.Postgres, logger)
 	if err != nil {
 		cleanupCache()
 

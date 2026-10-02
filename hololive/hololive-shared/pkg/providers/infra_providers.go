@@ -31,17 +31,11 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type CacheResources struct {
 	Service *cache.Service
-	Close   func()
-}
-
-type DatabaseResources struct {
-	Service *database.PostgresService
 	Close   func()
 }
 
@@ -63,41 +57,6 @@ func ProvideCacheResources(ctx context.Context, valkeyConfig settings.ValkeyConf
 		Close: func() {
 			if err := cacheClient.Close(); err != nil && logger != nil {
 				logger.Warn("close cache resources failed", slog.Any("error", err))
-			}
-		},
-	}
-
-	return resources, resources.Close, nil
-}
-
-// ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함).
-func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
-	if postgresConfig == nil {
-		return nil, nil, errors.New("postgres config is nil")
-	}
-
-	dbService, err := database.NewPostgresService(ctx, &database.PostgresConfig{
-		Host:          postgresConfig.Host,
-		Port:          postgresConfig.Port,
-		SocketPath:    postgresConfig.SocketPath,
-		User:          postgresConfig.User,
-		Password:      postgresConfig.Password,
-		Database:      postgresConfig.Database,
-		SSLMode:       postgresConfig.SSLMode,
-		SSLRootCert:   postgresConfig.SSLRootCert,
-		QueryExecMode: postgresConfig.QueryExecMode,
-		PoolMinConns:  postgresConfig.PoolMinConns,
-		PoolMaxConns:  postgresConfig.PoolMaxConns,
-	}, logger)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create database resources: %w", err)
-	}
-
-	resources := &DatabaseResources{
-		Service: dbService,
-		Close: func() {
-			if err := dbService.Close(); err != nil && logger != nil {
-				logger.Warn("close database resources failed", slog.Any("error", err))
 			}
 		},
 	}

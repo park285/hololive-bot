@@ -19,7 +19,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/providers/dbresource"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
@@ -109,7 +109,7 @@ func Build(ctx context.Context, plane *apiplane.YouTubePlaneConfig, postgresConf
 	postgres.PoolMinConns = config.PostgresPoolMinConns
 	postgres.PoolMaxConns = config.PostgresPoolMaxConns
 
-	resources, cleanup, err := providers.ProvideDatabaseResources(ctx, postgres, logger)
+	resources, cleanup, err := dbresource.Provide(ctx, postgres, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: dedicated pool: %w", err)
 	}
