@@ -1,0 +1,150 @@
+package stackmodels
+
+import "encoding/base64"
+
+// Returning a nil element is safe; dereferencing the same element is not.
+func appendNilElement() *int {
+	var element *int
+	values := append(make([]*int, 0), element)
+	return values[0]
+}
+
+func dereferenceNilElement() int {
+	var element *int
+	values := append(make([]*int, 0), element)
+	return *values[0] //want "dereferenced"
+}
+
+func safeAppendPointers() int {
+	value := new(int)
+	values := append(make([]*int, 0), value, value)
+	return *values[0]
+}
+
+func badLaterElement() int {
+	var missing *int
+	values := append(make([]*int, 0), new(int), missing)
+	return *values[1] //want "dereferenced"
+}
+
+func badExistingElement() int {
+	values := []*int{nil}
+	values = append(values, new(int))
+	return *values[0] //want "dereferenced"
+}
+
+func safeVariadicContainer() *int {
+	values := []*int{nil}
+	var tail []*int
+	values = append(values, tail...)
+	return values[0]
+}
+
+func badVariadicElement() int {
+	tail := []*int{nil}
+	values := append(make([]*int, 0), tail...)
+	return *values[0] //want "dereferenced"
+}
+
+func badNilVariadicContainer() *int {
+	var values, tail []*int
+	values = append(values, tail...)
+	return values[0] //want "sliced into"
+}
+
+func safeAppendLoop() *int {
+	value := new(int)
+	values := []*int{value}
+	for range 4 {
+		current := values[0]
+		values[0] = nil
+		values = append(values[1:], current)
+	}
+	return values[0]
+}
+
+func safeCapacity(data []byte, text string) []byte {
+	needed := len(text)
+	if cap(data) >= needed {
+		return data[:needed]
+	}
+	return make([]byte, needed)
+}
+
+func safeCapacityElse(data []byte, text string) []byte {
+	needed := len(text)
+	if cap(data) < needed {
+		data = make([]byte, needed)
+	} else {
+		data = data[:needed]
+	}
+	return data
+}
+
+func safeDecodedCapacity(data []byte, text string) []byte {
+	needed := base64.RawStdEncoding.DecodedLen(len(text))
+	if cap(data) >= needed {
+		return data[:needed]
+	}
+	return make([]byte, needed)
+}
+
+func safeCapacityInputs() {
+	_ = safeCapacity(nil, "")
+	_ = safeCapacityElse(nil, "")
+	_ = safeDecodedCapacity(nil, "")
+}
+
+func badNegativeBound() []byte {
+	var data []byte
+	needed := -1
+	if cap(data) >= needed {
+		return data[:needed] //want "sliced into"
+	}
+	return nil
+}
+
+func badChangedBound() []byte {
+	var data []byte
+	needed := 0
+	if cap(data) >= needed {
+		needed++
+		return data[:needed] //want "sliced into"
+	}
+	return nil
+}
+
+func badEscapedBound() []byte {
+	var data []byte
+	needed := len("")
+	func(value *int) { *value = -1 }(&needed)
+	if cap(data) >= needed {
+		return data[:needed] //want "sliced into"
+	}
+	return nil
+}
+
+func badOtherCapacity() []byte {
+	var data []byte
+	other := make([]byte, 1)
+	needed := len("a")
+	if cap(other) >= needed {
+		return data[:needed] //want "sliced into"
+	}
+	return nil
+}
+
+func badShadowedCapacity() []byte {
+	var data []byte
+	cap := func([]byte) int { return 1 }
+	needed := len("a")
+	if cap(data) >= needed {
+		return data[:needed] //want "sliced into"
+	}
+	return nil
+}
+
+func badPointerSlice() []byte {
+	var data *[0]byte
+	return data[:0] //want "dereferenced"
+}

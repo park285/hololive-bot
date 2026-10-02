@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- 7.2.0에서 hololive 사본만 바꿨던 NilAway 모델 빌드 입력(`scripts/ci/nilaway-models`)을 stack 정본 `tools/nilaway`와 다시 맞춥니다. stack 계약 검사가 두 사본의 차이로 메타 저장소 게시를 막았습니다. 같은 변경에서 지운 검사가 남긴, 쓰이지 않는 테스트 변수 하나도 지웁니다.
+
 ## v7.2.2 - 2026-10-02
 
 - migration 256이 `youtube_notification_delivery.request_snapshot_allowed`를 지웁니다. 7.2.0부터 이 열을 읽는 코드가 없고, 표시가 `false`인 행은 모두 `SENT`·`FAILED`입니다. 끝나지 않은 행에 이 표시가 남아 있으면 열을 남기고 실패합니다.

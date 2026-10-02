@@ -4,7 +4,8 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd "$root"
 inputs=(build.sh files/append_result.go.in files/capacity_guard.go.in
-  files/stack_model_version.go.in models.patch profile.json)
+  files/http-good.go.in files/http-other.go.in files/http-pointer.go.in files/http-unchecked.go.in
+  files/stack_model_version.go.in files/stack_models.go.in files/stack_models_test.go.in models.patch profile.json)
 for file in SHA256SUMS "${inputs[@]}"; do
   [[ -f "$file" && ! -L "$file" ]] || { echo "invalid NilAway input: $file" >&2; exit 1; }
 done
@@ -62,8 +63,30 @@ patch --batch --fuzz=0 -p1 -d "$source_dir" <models.patch >&2
 install -m 0644 files/append_result.go.in "$source_dir/assertion/function/assertiontree/append_result.go"
 install -m 0644 files/capacity_guard.go.in "$source_dir/assertion/function/assertiontree/capacity_guard.go"
 install -m 0644 files/stack_model_version.go.in "$source_dir/cmd/nilaway/stack_model_version.go"
+install -m 0644 files/stack_models_test.go.in "$source_dir/stack_models_test.go"
+install -D -m 0644 files/stack_models.go.in "$source_dir/testdata/src/go.uber.org/stackmodels/models.go"
+GOMEMLIMIT=4GiB GOMAXPROCS=4 go -C "$source_dir" test -count=1 -p 1 -parallel=2 ./... 2>&1 |
+  tee "$temporary/upstream-tests.log" >&2
 go -C "$source_dir" build -trimpath -buildvcs=false -o "$temporary/nilaway" \
   -ldflags="-X main.stackSourceVersion=$source_version -X main.stackModelProfile=$profile_id" ./cmd/nilaway
+# Exercise the real standard-library HTTP types through the same native driver as consumers.
+for fixture in good other pointer unchecked; do
+  fixture_dir="$temporary/http-contract/$fixture"
+  install -D -m 0644 "files/http-$fixture.go.in" "$fixture_dir/model.go"
+  printf 'module example.com/nilaway-contract/%s\n\ngo %s\n' "$fixture" "${go_version#go}" >"$fixture_dir/go.mod"
+  if go -C "$fixture_dir" vet -p 1 -vettool="$temporary/nilaway" -pretty-print=false \
+      -group-error-messages=false -exclude-test-files=false ./... >"$fixture_dir/analysis.log" 2>&1; then
+    status=0
+  else
+    status=$?
+  fi
+  if [[ "$fixture" == good ]]; then
+    [[ "$status" == 0 ]]
+  else
+    [[ "$status" == 1 && "$(grep -c 'Potential nil panic detected' "$fixture_dir/analysis.log")" == 1 ]]
+  fi
+  printf 'HTTP model contract: %s passed\n' "$fixture" >&2
+done
 sha256sum --check --strict SHA256SUMS >&2
 [[ "$(sha256sum SHA256SUMS | cut -d ' ' -f1)" == "$profile_id" ]]
 (cd "$temporary" && sha256sum nilaway >BINARY.sha256)
