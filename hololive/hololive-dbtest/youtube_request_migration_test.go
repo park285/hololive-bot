@@ -9,7 +9,7 @@ import (
 func TestYouTubeRequestMigrationPreservesLegacyAndReplays(t *testing.T) {
 	pool := NewPool(t)
 	ctx := t.Context()
-	_, err := pool.Exec(ctx, `ALTER TABLE youtube_notification_delivery DROP COLUMN send_request_id, DROP COLUMN request_snapshot_allowed;
+	_, err := pool.Exec(ctx, `ALTER TABLE youtube_notification_delivery DROP COLUMN send_request_id, DROP COLUMN IF EXISTS request_snapshot_allowed;
  DROP TABLE youtube_notification_send_request;
  INSERT INTO youtube_notification_outbox(kind,channel_id,content_id,payload) VALUES('NEW_VIDEO','migration-channel','migration-video','{}');
  INSERT INTO youtube_notification_delivery(outbox_id,room_id) SELECT id,'legacy-room' FROM youtube_notification_outbox WHERE content_id='migration-video';`)
