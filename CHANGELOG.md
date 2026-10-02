@@ -8,6 +8,12 @@
 
 ## 미출시
 
+## v7.2.1 - 2026-10-02
+
+- 7.2.0 YouTube 수집기에서 일부 채널의 영상·shorts 목록 수집이 `parser_drift/DATA_CONTRACT`(`cursor start exceeds 512 bytes`)로 실패하던 회귀를 고칩니다. helper가 실제 InnerTube continuation token을 coverage cursor로 내보내기 시작했는데, 이 token은 수 KB까지 커지고 요청마다 달라질 수 있어 512 byte 상한을 넘고 observation scope도 흔들었습니다. 이제 token은 helper 안에서 cursor 반복 감지에만 쓰고, helper 응답과 coverage에는 cursor를 싣지 않습니다. 저장된 observation을 읽기 위해 계약의 cursor 필드는 남깁니다.
+- Seoul Compose 배포(`ap-deploy.sh`)가 원격에 보내는 소스를 실행 checkout의 HEAD commit과 collector `go.mod`가 고정한 shared-go tag에서 만듭니다. 이전에는 `<저장소 상위>/hololive-bot`을 그대로 보내, 이름이 다른 worktree에서 실행하면 빌드 원본이 아닌 기본 checkout(미커밋 변경 포함)을 설치하려 했습니다.
+- Seoul PO issuer의 active receipt를 같은 디렉터리의 rename으로 교체합니다. 소유자가 다른 기존 receipt를 `cp`로 덮어쓰지 못해 배포가 실패했고, rollback은 issuer를 지운 뒤 같은 단계에서 멈춰 issuer 없이 남았습니다. rollback은 이제 issuer를 멈추기 전에 receipt를 바꿉니다.
+
 ## v7.2.0 - 2026-10-02
 
 - 봇 응답 저장이나 Iris 전송의 결과가 불명이면 추가 응답(대체 텍스트·공통 오류 문구)을 보내지 않고 결과 불명으로 남깁니다. Iris가 접수한 reply의 handoff 결과를 확정하지 못하면 자동 재발송하지 않는 `manual_review`로 정산합니다.

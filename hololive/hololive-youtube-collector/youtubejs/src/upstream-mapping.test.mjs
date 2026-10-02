@@ -197,7 +197,7 @@ test("repeated real Feed body tokens terminate before the page budget is exhaust
   });
   assert.equal(result.termination_reason, "cursor_loop");
   assert.equal(result.page_count, 2);
-  assert.equal(result.cursor_start, "repeated-token");
-  assert.equal(result.cursor_end, "repeated-token");
+  assert.equal(Object.hasOwn(result, "cursor_start"), false);
+  assert.equal(Object.hasOwn(result, "cursor_end"), false);
   assert.equal(calls, 1);
 });

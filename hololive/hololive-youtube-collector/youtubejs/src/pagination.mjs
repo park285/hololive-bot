@@ -6,7 +6,6 @@ export const continuityContiguous = "CONTIGUOUS";
 export const continuityGap = "GAP_UNRESOLVED";
 export const continuityNotApplicable = "NOT_APPLICABLE";
 
-export const maxCursorJSONBytes = 8192;
 const maxPagesLimit = 100;
 const maxResultsLimit = 10_000;
 const terminationReasons = new Set([
@@ -98,12 +97,9 @@ export class EncodedArrayBudget {
 }
 
 export function paginationEnvelopeReserve(skeleton) {
-  const cursor = "x".repeat(maxCursorJSONBytes - 2);
   return encodedSize({
     ...skeleton,
     page_count: maxPagesLimit,
-    cursor_start: cursor,
-    cursor_end: cursor,
     exhausted: false,
     continuity: continuityGap,
     termination_reason: "max_success_response_bytes",
@@ -123,8 +119,6 @@ export function assertResponseBudget(limitBytes, reservedEnvelopeBytes) {
 
 export function paginationResult({
   pageCount,
-  cursorStart,
-  cursorEnd,
   reason,
   continuity,
 }) {
@@ -158,8 +152,6 @@ export function paginationResult({
   }
   return {
     page_count: pageCount,
-    ...(cursorStart ? { cursor_start: cursorStart } : {}),
-    ...(cursorEnd ? { cursor_end: cursorEnd } : {}),
     exhausted: reason === "exhausted",
     continuity: resolvedContinuity,
     termination_reason: reason,
@@ -181,10 +173,10 @@ export async function paginate({
   const reserve = nonnegativeSafeInteger(reservedEnvelopeBytes, "reserved envelope bytes");
   assertResponseBudget(maxSuccessResponseBytes, reserve);
   const budget = new EncodedArrayBudget(maxSuccessResponseBytes, reserve);
+  // continuation token은 반복 감지에만 씁니다. 같은 목록이라도 요청마다 달라질 수 있고 수 KB까지
+  // 커지므로 응답에 실으면 observation scope가 흔들리고 coverage 계약의 길이 상한을 넘습니다.
   const seen = new Set();
   let pageCount = 0;
-  let cursorStart = "";
-  let cursorEnd = "";
   let feed = firstPage;
   let reason = "";
   while (feed != null) {
@@ -198,11 +190,6 @@ export async function paginate({
     }
     pageCount += 1;
     const cursor = continuationToken(feed);
-    assertCursor(cursor);
-    if (pageCount === 1) {
-      cursorStart = cursor;
-    }
-    cursorEnd = cursor;
     for await (const item of mapped.items) {
       if (budget.tryAppend(item) === "WOULD_EXCEED") {
         if (budget.count() === 0) {
@@ -260,8 +247,6 @@ export async function paginate({
   assertParentRequestAlive();
   const pagination = paginationResult({
     pageCount,
-    cursorStart,
-    cursorEnd,
     reason,
     continuity: undefined,
   });
@@ -271,12 +256,6 @@ export async function paginate({
 function isIterable(items) {
   return items != null &&
     (typeof items[Symbol.iterator] === "function" || typeof items[Symbol.asyncIterator] === "function");
-}
-
-function assertCursor(cursor) {
-  if (encodedSize(cursor) > maxCursorJSONBytes) {
-    throw protocolFault("pagination cursor exceeds the protocol limit");
-  }
 }
 
 function assertParentRequestAlive() {
