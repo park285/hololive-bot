@@ -89,4 +89,12 @@
 - `!라이브` 목록의 접기 판정을 `foldStreamList`로 모아, 실제 경로와 테스트 진입점이 같은 표시 건수(표시 한도 적용 후)를 쓰게 했습니다.
 - `templateview_test.go`의 행사 view 검사는 `major_event_test.go`와 중복되어 삭제했습니다.
 - worker 최종 payload 테스트는 500개 패딩이 아니라 접기 판정과 같은 연속 ZWSP 부재로 확인하도록 강화했고, 현재 동작과 맞지 않던 테스트 이름을 고쳤습니다.
-- 검증: 세 모듈 빌드, 변경 패키지 vet, 변경 패키지 23개 테스트(`-count=1`), 수정 패키지 `-race` 테스트, 저장소 설정 golangci-lint(0 issues), 저장소 NilAway 바이너리 검사(종료 코드 0), `git diff --check`가 통과했습니다. 전체 `local-ci`와 opt-in 통합 테스트는 이번 보완 뒤 다시 실행하지 않았습니다.
+- 검증: 세 모듈 빌드, 변경 패키지 vet, 변경 패키지 23개 테스트(`-count=1`), 수정 패키지 `-race` 테스트, 저장소 설정 golangci-lint(0 issues), 저장소 NilAway 바이너리 검사(종료 코드 0), `git diff --check`가 통과했습니다. 보완 직후에는 전체 `local-ci`와 opt-in 통합 테스트를 다시 실행하지 않았으며, 이후 아래 최종 검증에서 완료했습니다.
+
+## 최종 완결 확인 (2026-10-02)
+
+- 후속 리뷰 보완까지 반영된 main `c3e2ee6ac`를 기준으로 계획의 7개 구현 항목과 보존 조건을 다시 대조했습니다. 추가 애플리케이션 수정이 필요한 결함이나 미구현 항목은 확인되지 않았습니다.
+- kapu에서 `RUN_INTEGRATION_TESTS=true GOFLAGS=-p=2 RACE_TEST_PARALLEL=2 bash scripts/ci/local-ci.sh`를 실행하여 종료 코드 0과 `[LOCAL CI] Passed`를 확인했습니다. 기존 전체 게이트의 아키텍처·모듈 정합성·vet·staticcheck·golangci-lint·NilAway·빌드·성능 예산·일반 테스트·race 검사가 모두 통과했습니다.
+- 추가 통합 검증은 소유권 sentinel이 있는 일회용 PostgreSQL과 일회용 Valkey를 사용했습니다. `dispatchoutbox`·`batchrepo`의 integration-tag 테스트, `youtubedispatch`·`joblease`의 실제 로컬 DB/Valkey 테스트가 통과했고 테스트 컨테이너 정리도 완료됐습니다.
+- 실제 외부 LLM 호출은 실행하지 않았습니다. `CLIPROXY_API_KEY`를 전달하지 않고 빈 `HOLOLIVE_API_ENV_FILE`을 지정해 기존 환경 파일을 읽거나 유료 호출을 하지 않도록 했으며, 해당 실호출 테스트는 기존 조건에 따라 skip됐습니다.
+- 현재 코드에 대한 필수 검증과 로컬 통합 검증을 완료했습니다. 이번 확인에서는 애플리케이션 코드·의존성·운영 데이터 변경이나 추가 게시·배포를 수행하지 않았습니다. 실제 카카오톡 화면 수신은 검증하지 않았습니다.
