@@ -86,6 +86,7 @@ go.work
 go.work.sum
 hololive/hololive-dbtest/go.mod
 hololive/hololive-dbtest/go.sum
+VERSION
 hololive/hololive-api/VERSION
 hololive/hololive-alarm-worker/VERSION
 hololive/hololive-shared/pkg/config/settings/config.go
