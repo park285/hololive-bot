@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 func (r *Runtime) runRetentionLoop(ctx context.Context, errCh chan<- error) {
@@ -65,7 +65,7 @@ func (r *Runtime) retainSource(ctx context.Context) error {
 
 	started := time.Now()
 
-	var result sourceobservation.RetentionResult
+	var result consume.RetentionResult
 
 	err := r.withRetainDB(ctx, func(ctx context.Context) error {
 		var tickErr error
@@ -212,8 +212,8 @@ func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
 	return processed, nil
 }
 
-func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
-	return sourceobservation.RetentionConfig{
+func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) consume.RetentionConfig {
+	return consume.RetentionConfig{
 		QueueProcessedAge:     cfg.QueueProcessedAge,
 		QueueDLQAge:           cfg.QueueDLQAge,
 		CollisionAge:          cfg.CollisionAge,
@@ -252,7 +252,7 @@ func addEvidenceRetentionAge(
 	}
 }
 
-func recordRetentionTick(result sourceobservation.RetentionResult, elapsed time.Duration, err error) {
+func recordRetentionTick(result consume.RetentionResult, elapsed time.Duration, err error) {
 	youtubeRetentionTickSeconds.Observe(elapsed.Seconds())
 
 	for _, part := range retentionParts(result) {
@@ -260,17 +260,17 @@ func recordRetentionTick(result sourceobservation.RetentionResult, elapsed time.
 	}
 }
 
-func retentionParts(result sourceobservation.RetentionResult) []sourceobservation.RetentionResult {
+func retentionParts(result consume.RetentionResult) []consume.RetentionResult {
 	if len(result.ByTable) > 0 {
 		return result.ByTable
 	}
 
-	return []sourceobservation.RetentionResult{{
+	return []consume.RetentionResult{{
 		Table: result.Table, Deleted: result.Deleted, BacklogAge: result.BacklogAge,
 	}}
 }
 
-func recordRetentionPart(part sourceobservation.RetentionResult, err error) {
+func recordRetentionPart(part consume.RetentionResult, err error) {
 	table := part.Table
 	if table == "" {
 		table = "none"

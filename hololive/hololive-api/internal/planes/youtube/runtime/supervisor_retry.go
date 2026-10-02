@@ -12,14 +12,14 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
-func (r *Runtime) remember(work sourceobservation.ClaimWork) {
+func (r *Runtime) remember(work consume.ClaimWork) {
 	r.inFlight.Store(work.Key(), work)
 }
 
-func (r *Runtime) forget(work sourceobservation.ClaimWork) {
+func (r *Runtime) forget(work consume.ClaimWork) {
 	r.inFlight.CompareAndDelete(work.Key(), work)
 }
 
@@ -27,14 +27,14 @@ func (r *Runtime) releaseInFlight(ctx context.Context) error {
 	var releaseErrors []error
 
 	r.inFlight.Range(func(key, value any) bool {
-		work, ok := value.(sourceobservation.ClaimWork)
+		work, ok := value.(consume.ClaimWork)
 		if !ok {
 			releaseErrors = append(releaseErrors, fmt.Errorf("release youtube observation: invalid in-flight value for %v", key))
 			return true
 		}
 
 		err := r.retryObservation(ctx, work, errors.New("youtube plane shutting down"))
-		if errors.Is(err, sourceobservation.ErrClaimLost) {
+		if errors.Is(err, consume.ErrClaimLost) {
 			youtubeClaimLostTotal.Inc()
 
 			err = nil
@@ -53,7 +53,7 @@ func (r *Runtime) releaseInFlight(ctx context.Context) error {
 	return errors.Join(releaseErrors...)
 }
 
-func (r *Runtime) retryObservation(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
+func (r *Runtime) retryObservation(ctx context.Context, work consume.ClaimWork, cause error) error {
 	if r.Config.TransactionTimeout <= 0 {
 		return errors.New("youtube plane transaction timeout must be positive")
 	}
@@ -63,7 +63,7 @@ func (r *Runtime) retryObservation(ctx context.Context, work sourceobservation.C
 	defer cancel()
 
 	if err := r.withDB(retryCtx, func(ctx context.Context) error {
-		status, err := r.claimer.Retry(ctx, sourceobservation.RetryInput{
+		status, err := r.claimer.Retry(ctx, consume.RetryInput{
 			ObservationID: work.ObservationID,
 			LeaseToken:    work.LeaseToken,
 			Delay:         r.Config.ClaimInterval,
@@ -108,12 +108,12 @@ func (r *Runtime) markDeadLettered() {
 }
 
 type observationDeadLetterer interface {
-	DeadLetter(context.Context, sourceobservation.DeadLetterInput) error
+	DeadLetter(context.Context, consume.DeadLetterInput) error
 }
 
-var _ observationDeadLetterer = (*sourceobservation.ConsumeRepository)(nil)
+var _ observationDeadLetterer = (*consume.Repository)(nil)
 
-func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observationDeadLetterer, work sourceobservation.ClaimWork, cause error) error {
+func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observationDeadLetterer, work consume.ClaimWork, cause error) error {
 	if r.Config.TransactionTimeout <= 0 {
 		return errors.New("youtube plane transaction timeout must be positive")
 	}
@@ -123,7 +123,7 @@ func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observ
 	defer cancel()
 
 	if err := r.withDB(deadLetterCtx, func(ctx context.Context) error {
-		return deadLetterer.DeadLetter(ctx, sourceobservation.DeadLetterInput{
+		return deadLetterer.DeadLetter(ctx, consume.DeadLetterInput{
 			ObservationID: work.ObservationID,
 			LeaseToken:    work.LeaseToken,
 			ErrorCode:     "youtube_plane_fatal",

@@ -15,7 +15,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 const activationTimeout = 30 * time.Second
@@ -71,9 +71,9 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	defer cleanup()
 
-	result, err := sourceobservation.NewRepository(resources.Service.GetPool()).ActivateReplayEpoch(
+	result, err := consume.NewRepository(resources.Service.GetPool()).ActivateReplayEpoch(
 		activationContext,
-		sourceobservation.ReplayEpochInput{
+		consume.ReplayEpochInput{
 			ActivatedBy: options.activatedBy,
 			Reason:      options.reason,
 		},

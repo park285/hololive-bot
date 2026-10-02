@@ -30,7 +30,7 @@ type Publisher struct {
 }
 
 func NewPublisher(pool *pgxpool.Pool) *Publisher {
-	return &Publisher{contracts: &postgresContractGenerationReader{pool: pool}, observations: sourceobservation.NewPublishRepository(pool)}
+	return &Publisher{contracts: &postgresContractGenerationReader{pool: pool}, observations: sourceobservation.NewRepository(pool)}
 }
 
 func NewPublisherWithStores(contracts ContractGenerationReader, observations ObservationPublisher) (*Publisher, error) {

@@ -1,0 +1,212 @@
+package consume
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+)
+
+func videoListEnvelope(
+	t *testing.T,
+	proof *contract.LeaseProof,
+	completeness contract.Completeness,
+	videoIDs ...string,
+) *contract.Envelope {
+	t.Helper()
+
+	published := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	videos := make([]contract.VideoListItemV1, 0, len(videoIDs))
+
+	for _, videoID := range videoIDs {
+		itemPublished := published
+
+		videos = append(videos, contract.VideoListItemV1{
+			VideoID: videoID, ChannelID: testChannelID, Title: videoID, PublishedAt: &itemPublished,
+		})
+	}
+
+	payload, err := contract.MarshalPayloadV1(contract.VideoListV1{
+		ChannelID: testChannelID,
+		Videos:    videos,
+		Coverage: contract.ChannelListCoverageV1{
+			ChannelID: testChannelID, MaxResults: 10, Exhausted: completeness == contract.CompletenessComplete,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal video list payload: %v", err)
+	}
+
+	return prepareContentListEnvelope(t, proof, contract.KindVideoList, completeness, payload)
+}
+
+func contentClaimOptions() ClaimOptions {
+	return ClaimOptions{
+		ConsumerName:  "youtube-content-processor",
+		LeaseOwner:    testAPILeaseOwner,
+		Kinds:         []contract.ObservationKind{contract.KindVideoList, contract.KindShortsList},
+		Limit:         10,
+		LeaseDuration: 30 * time.Second,
+	}
+}
+
+func shortsListEnvelope(
+	t *testing.T,
+	proof *contract.LeaseProof,
+	completeness contract.Completeness,
+	videoIDs ...string,
+) *contract.Envelope {
+	t.Helper()
+
+	published := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	videos := make([]contract.VideoListItemV1, 0, len(videoIDs))
+
+	for _, videoID := range videoIDs {
+		itemPublished := published
+
+		videos = append(videos, contract.VideoListItemV1{
+			VideoID: videoID, ChannelID: testChannelID, Title: videoID, PublishedAt: &itemPublished,
+		})
+	}
+
+	payload, err := contract.MarshalPayloadV1(contract.ShortsListV1{
+		ChannelID: testChannelID,
+		Videos:    videos,
+		Coverage: contract.ShortsListCoverageV1{
+			ChannelID: testChannelID, MaxResults: 10, Exhausted: completeness == contract.CompletenessComplete,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal shorts list payload: %v", err)
+	}
+
+	return prepareContentListEnvelope(t, proof, contract.KindShortsList, completeness, payload)
+}
+
+func prepareContentListEnvelope(t *testing.T, proof *contract.LeaseProof, kind contract.ObservationKind, completeness contract.Completeness, payload []byte) *contract.Envelope {
+	t.Helper()
+
+	envelope, err := contract.PrepareEnvelope(contract.Envelope{
+		Provider:           contract.ProviderYouTubeJS,
+		ObservationKind:    kind,
+		SubjectKey:         testChannelID,
+		SchemaVersion:      contract.SchemaVersionV1,
+		ContractGeneration: 1,
+		ScheduledFor:       proof.ScheduledFor,
+		ObservedAt:         proof.ScheduledFor.Add(time.Second),
+		Completeness:       completeness,
+		Continuity:         contract.ContinuityContiguous,
+		Payload:            payload,
+		CollectorInstance:  proof.OwnerInstance,
+		Lease:              *proof,
+	})
+	if err != nil {
+		t.Fatalf("prepare %s envelope: %v", kind, err)
+	}
+
+	return &envelope
+}
+
+func seedContentWatermark(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized, last_content_id)
+		VALUES ($1, 'VIDEO', TRUE, 'old-video')
+	`, testChannelID); err != nil {
+		t.Fatalf("seed video watermark: %v", err)
+	}
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_content_channel_heads (channel_id, observation_kind, earliest_complete_effective_at)
+		VALUES ($1, 'video_list', TIMESTAMPTZ '2026-08-01 00:00:00+00')
+	`, testChannelID); err != nil {
+		t.Fatalf("seed content channel head: %v", err)
+	}
+}
+
+func seedShortsWatermark(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized, last_content_id)
+		VALUES ($1, 'SHORT', TRUE, 'old-short')
+	`, testChannelID); err != nil {
+		t.Fatalf("seed shorts watermark: %v", err)
+	}
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_content_channel_heads (channel_id, observation_kind, earliest_complete_effective_at)
+		VALUES ($1, 'shorts_list', TIMESTAMPTZ '2026-08-01 00:00:00+00')
+	`, testChannelID); err != nil {
+		t.Fatalf("seed shorts channel head: %v", err)
+	}
+}
+
+func seedCatalogVideoWithClock(t *testing.T, pool *pgxpool.Pool, videoID string, viewCount int64, lastSeen time.Time) {
+	t.Helper()
+
+	coverage, err := contract.MarshalPayloadV1(contract.ChannelListCoverageV1{
+		ChannelID: testChannelID, MaxResults: 10, Exhausted: true,
+	})
+	if err != nil {
+		t.Fatalf("marshal coverage: %v", err)
+	}
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_videos (
+			video_id, channel_id, title, view_count, first_seen_at, last_seen_at
+		) VALUES ($1, 'UC_TEST', $1, $2, $3, $3)
+	`, videoID, viewCount, lastSeen); err != nil {
+		t.Fatalf("seed catalog video: %v", err)
+	}
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_content_evidence_clocks (
+			video_id, first_positive_effective_at, last_positive_effective_at, last_positive_received_at,
+			last_positive_value_sha256, last_positive_scope_sha256, last_positive_coverage
+		) VALUES (
+			$1, TIMESTAMPTZ '2026-08-14 00:00:00+00', TIMESTAMPTZ '2026-08-14 00:00:00+00',
+			TIMESTAMPTZ '2026-08-14 00:00:00+00', $2, $2, $3
+		)
+	`, videoID, strings.Repeat("ab", 32), coverage); err != nil {
+		t.Fatalf("seed content clock: %v", err)
+	}
+}
+
+func assertContentMissing(t *testing.T, pool *pgxpool.Pool, videoID string, want bool) {
+	t.Helper()
+
+	var missing *time.Time
+
+	err := pool.QueryRow(t.Context(), `
+		SELECT missing_since_effective_at FROM youtube_content_evidence_clocks WHERE video_id = $1
+	`, videoID).Scan(&missing)
+	if err != nil {
+		t.Fatalf("load missing state for %s: %v", videoID, err)
+	}
+
+	if (missing != nil) != want {
+		t.Fatalf("video %s missing = %t, want %t", videoID, missing != nil, want)
+	}
+}
+
+func assertContentWithdrawn(t *testing.T, pool *pgxpool.Pool, videoID string, want bool) {
+	t.Helper()
+
+	var withdrawn *time.Time
+
+	err := pool.QueryRow(t.Context(), `
+		SELECT withdrawn_at FROM youtube_content_evidence_clocks WHERE video_id = $1
+	`, videoID).Scan(&withdrawn)
+	if err != nil {
+		t.Fatalf("load withdrawn state for %s: %v", videoID, err)
+	}
+
+	if (withdrawn != nil) != want {
+		t.Fatalf("video %s withdrawn = %t, want %t", videoID, withdrawn != nil, want)
+	}
+}

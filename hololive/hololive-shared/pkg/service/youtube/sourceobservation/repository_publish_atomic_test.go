@@ -14,15 +14,16 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/observationtest"
 )
 
 func TestPUB001SuccessfulCompletePreservesPriorFailureDiagnostic(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	prior := seedPriorLeaseFailure(ctx, t, pool, proof.JobKey)
 
-	result, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
+	result, err := NewRepository(pool).PublishBatch(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,17 +45,17 @@ func TestPUB001SuccessfulCompletePreservesPriorFailureDiagnostic(t *testing.T) {
 func TestPUB002DuplicateCompleteKeepsQueueIdentity(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	repo := NewRepository(pool)
 
-	first, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
+	first, err := repo.PublishBatch(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	reactivateLease(t, pool, &proof)
+	observationtest.ReactivateLease(ctx, t, pool, &proof)
 
-	second, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
+	second, err := repo.PublishBatch(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,10 +76,10 @@ func TestPUB003MixedCollisionCompletesWithDurableDiagnostic(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	baseID, baseKey, collision, independent, result := publishMixedCollisionBatch(ctx, t, pool, repo, &proof)
 	assertMixedPublishResult(t, baseID, baseKey, collision, independent, result)
-	assertMixedPersistence(ctx, t, pool, baseID, independent)
+	observationtest.AssertMixedPersistence(ctx, t, pool, baseID, independent)
 
 	got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
 	if got.state != "IDLE" || got.errorCode != string(contract.ErrorObservationCollision) ||
@@ -98,22 +99,17 @@ func TestPublishBatchAndDeferRejectsEmptyObservations(t *testing.T) {
 		t.Fatalf("empty PublishBatchAndDefer error = %v, want ErrInvalidEnvelope", err)
 	}
 
-	_, err = NewPublishRepository(pool).PublishBatchAndDefer(ctx, &PublishBatchInput{}, deferInput)
-	if !errors.Is(err, ErrInvalidEnvelope) {
-		t.Fatalf("empty PublishRepository.PublishBatchAndDefer error = %v, want ErrInvalidEnvelope", err)
-	}
-
 	assertPublishSideEffects(t, pool, 0, 0, 0)
 }
 
 func TestPUB004PartialOutputDefersAtomically(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	deferInput := mustTestDeferInput(t, contract.ErrorCollectionTimeout, contract.ClassTimeout, "partial collection timeout")
 	scheduledFor := proof.ScheduledFor
 
-	result, err := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), deferInput)
+	result, err := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")), deferInput)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,14 +132,14 @@ func TestPUB005PartialCollisionKeepsIndependentRowsAndPartialDiagnostic(t *testi
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	base := communityEnvelope(t, &proof, "post-base")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	base := observationtest.CommunityEnvelope(t, &proof, "post-base")
 
 	if _, err := repo.PublishBatch(ctx, publishInput(base)); err != nil {
 		t.Fatal(err)
 	}
 
-	reactivateLease(t, pool, &proof)
+	observationtest.ReactivateLease(ctx, t, pool, &proof)
 
 	input := mixedCollisionInput(t, &proof)
 	deferInput := mustTestDeferInput(t, contract.ErrorParserDrift, contract.ClassDataContract, "shorts tab drifted")
@@ -157,7 +153,7 @@ func TestPUB005PartialCollisionKeepsIndependentRowsAndPartialDiagnostic(t *testi
 		t.Fatalf("partial mixed result = %#v", result.Results)
 	}
 
-	assertMixedPersistence(ctx, t, pool, result.Results[0].ObservationID, &input.Observations[1])
+	observationtest.AssertMixedPersistence(ctx, t, pool, result.Results[0].ObservationID, &input.Observations[1])
 
 	got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
 	if got.state != "DEFERRED" || got.failureCode != string(contract.ErrorParserDrift) || got.errorCode != string(contract.ErrorParserDrift) {
@@ -168,10 +164,10 @@ func TestPUB005PartialCollisionKeepsIndependentRowsAndPartialDiagnostic(t *testi
 func TestPUB006StaleFenceHasNoSideEffects(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	proof.FenceEpoch++
 
-	_, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
+	_, err := NewRepository(pool).PublishBatch(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")))
 
 	if !errors.Is(err, ErrCollectionFenceLost) {
 		t.Fatalf("stale fence error = %v", err)
@@ -187,8 +183,8 @@ func TestPUB006StaleFenceHasNoSideEffects(t *testing.T) {
 func TestPUB007LeaseExpiredAfterPrepareBeforeTxHasNoSideEffects(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	input := publishInput(communityEnvelope(t, &proof, "post-1"))
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	input := publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1"))
 
 	prepared, err := preparePublishBatch(input)
 	if err != nil {
@@ -214,7 +210,7 @@ func TestPUB007LeaseExpiredAfterPrepareBeforeTxHasNoSideEffects(t *testing.T) {
 func TestPUB008StaleContractAndDisabledTargetHaveNoSideEffects(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
 	if _, err := pool.Exec(ctx, `
 		UPDATE observation_contract_generations
@@ -226,7 +222,7 @@ func TestPUB008StaleContractAndDisabledTargetHaveNoSideEffects(t *testing.T) {
 
 	_, err := NewRepository(pool).PublishBatchAndDefer(
 		ctx,
-		publishInput(communityEnvelope(t, &proof, "post-1")),
+		publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")),
 		mustTestDeferInput(t, contract.ErrorCollectionFailed, contract.ClassTransient, "unused"),
 	)
 	if !errors.Is(err, ErrStaleContract) {
@@ -239,7 +235,7 @@ func TestPUB008StaleContractAndDisabledTargetHaveNoSideEffects(t *testing.T) {
 func TestPUB009TerminalRowCountZeroRollsBackObservations(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	repo := NewRepository(pool)
 
 	repo.publishFault = func(ctx context.Context, tx dbx.Tx, point publishFaultPoint) error {
@@ -258,7 +254,7 @@ func TestPUB009TerminalRowCountZeroRollsBackObservations(t *testing.T) {
 		return nil
 	}
 
-	_, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
+	_, err := repo.PublishBatch(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")))
 
 	if !errors.Is(err, ErrCollectionFenceLost) {
 		t.Fatalf("zero terminal rows error = %v", err)
@@ -272,7 +268,7 @@ func TestPUB010InvalidPublishResultRollsBack(t *testing.T) {
 		t.Run(terminal, func(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
-			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 			repo := NewRepository(pool)
 
 			repo.rewritePublishResult = func(result PublishBatchResult) PublishBatchResult {
@@ -280,7 +276,7 @@ func TestPUB010InvalidPublishResultRollsBack(t *testing.T) {
 				return result
 			}
 
-			input := publishInput(communityEnvelope(t, &proof, "post-1"))
+			input := publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1"))
 
 			var err error
 
@@ -306,8 +302,8 @@ func TestPUB010InvalidPublishResultRollsBack(t *testing.T) {
 func TestPUB011CallerMutationDuringTxUsesPreparedClone(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	input := publishInput(communityEnvelope(t, &proof, "post-1"))
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	input := publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1"))
 	originalSHA := input.Observations[0].PayloadSHA256
 	repo := NewRepository(pool)
 
@@ -350,7 +346,7 @@ func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
-			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
 			diagnostic, err := contract.NewFailureDiagnostic(contract.ErrorCooldown, contract.ClassCooldown, "cooldown")
 			if err != nil {
@@ -373,7 +369,7 @@ func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), input); err != nil {
+			if _, err := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")), input); err != nil {
 				t.Fatal(err)
 			}
 
@@ -396,10 +392,10 @@ func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	repo := NewRepository(pool)
 
-	_, err := repo.PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), DeferCollectionInput{})
+	_, err := repo.PublishBatchAndDefer(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")), DeferCollectionInput{})
 	if err == nil {
 		t.Fatal("invalid defer input must fail before tx")
 	}
@@ -412,7 +408,7 @@ func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 
 	_, err = repo.PublishBatchAndDefer(
 		ctx,
-		publishInput(communityEnvelope(t, &proof, "post-2")),
+		publishInput(observationtest.CommunityEnvelope(t, &proof, "post-2")),
 		mustTestDeferInput(t, contract.ErrorCollectionFailed, contract.ClassTransient, "unused"),
 	)
 	if err == nil {
@@ -440,12 +436,12 @@ func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 func TestPUB014AtomicDeferStoresConstructorDetailUnchanged(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	detail := "helper protocol reset"
 
 	if _, err := NewRepository(pool).PublishBatchAndDefer(
 		ctx,
-		publishInput(communityEnvelope(t, &proof, "post-1")),
+		publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1")),
 		mustTestDeferInput(t, contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, detail),
 	); err != nil {
 		t.Fatal(err)
@@ -461,7 +457,7 @@ func TestPUB014AtomicDeferStoresConstructorDetailUnchanged(t *testing.T) {
 func TestFaultBeforeCommitRollsBackCompleteAndObservations(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	repo := NewRepository(pool)
 
 	repo.publishFault = func(_ context.Context, _ dbx.Tx, point publishFaultPoint) error {
@@ -472,7 +468,7 @@ func TestFaultBeforeCommitRollsBackCompleteAndObservations(t *testing.T) {
 		return nil
 	}
 
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err == nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1"))); err == nil {
 		t.Fatal("commit fault must fail")
 	}
 
@@ -558,8 +554,8 @@ func assertLeaseFailure(t *testing.T, got, want *leaseTerminalState) {
 func mixedCollisionInput(t *testing.T, proof *contract.LeaseProof) *PublishBatchInput {
 	t.Helper()
 
-	collision := communityEnvelope(t, proof, "post-collision")
-	independent := independentCommunityEnvelope(t, proof)
+	collision := observationtest.CommunityEnvelope(t, proof, "post-collision")
+	independent := observationtest.IndependentCommunityEnvelope(t, proof)
 	input := publishInput(collision)
 
 	input.Observations = append(input.Observations, *independent)

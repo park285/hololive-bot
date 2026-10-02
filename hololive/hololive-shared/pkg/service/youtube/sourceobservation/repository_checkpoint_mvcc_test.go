@@ -9,6 +9,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/observationtest"
 )
 
 type checkpointTupleVersion struct {
@@ -21,14 +22,14 @@ type checkpointTupleVersion struct {
 func TestPublishBatchDuplicateDoesNotRewriteCheckpointTuple(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t,
+	proof := observationtest.SeedPublishLease(ctx, t,
 		pool,
 		contract.ProviderYouTubeJS,
 		contract.KindCommunityPage,
 		testChannelID,
 		"community_collect",
 	)
-	envelope := communityEnvelope(t, &proof, "post-1")
+	envelope := observationtest.CommunityEnvelope(t, &proof, "post-1")
 	repo := NewRepository(pool)
 
 	first, err := repo.PublishBatch(ctx, publishInput(envelope))
@@ -42,7 +43,7 @@ func TestPublishBatchDuplicateDoesNotRewriteCheckpointTuple(t *testing.T) {
 
 	before := loadCheckpointTupleVersion(ctx, t, pool, envelope)
 
-	reactivateLease(t, pool, &proof)
+	observationtest.ReactivateLease(ctx, t, pool, &proof)
 
 	second, err := repo.PublishBatch(ctx, publishInput(envelope))
 	if err != nil {
@@ -62,14 +63,14 @@ func TestPublishBatchDuplicateDoesNotRewriteCheckpointTuple(t *testing.T) {
 func TestPublishBatchDuplicateUpdatesChangedCheckpointMetadata(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t,
+	proof := observationtest.SeedPublishLease(ctx, t,
 		pool,
 		contract.ProviderYouTubeJS,
 		contract.KindCommunityPage,
 		testChannelID,
 		"community_collect",
 	)
-	envelope := communityEnvelope(t, &proof, "post-1")
+	envelope := observationtest.CommunityEnvelope(t, &proof, "post-1")
 	input := publishInput(envelope)
 	repo := NewRepository(pool)
 
@@ -82,7 +83,7 @@ func TestPublishBatchDuplicateUpdatesChangedCheckpointMetadata(t *testing.T) {
 
 	input.Checkpoint.CollectionLatency += time.Millisecond
 
-	reactivateLease(t, pool, &proof)
+	observationtest.ReactivateLease(ctx, t, pool, &proof)
 
 	second, err := repo.PublishBatch(ctx, input)
 	if err != nil {
@@ -119,14 +120,14 @@ func TestPublishBatchDuplicateUpdatesChangedCheckpointMetadata(t *testing.T) {
 func TestPublishBatchDuplicateClearsCheckpointErrorState(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t,
+	proof := observationtest.SeedPublishLease(ctx, t,
 		pool,
 		contract.ProviderYouTubeJS,
 		contract.KindCommunityPage,
 		testChannelID,
 		"community_collect",
 	)
-	envelope := communityEnvelope(t, &proof, "post-1")
+	envelope := observationtest.CommunityEnvelope(t, &proof, "post-1")
 	input := publishInput(envelope)
 	repo := NewRepository(pool)
 
@@ -148,7 +149,7 @@ func TestPublishBatchDuplicateClearsCheckpointErrorState(t *testing.T) {
 
 	before := loadCheckpointTupleVersion(ctx, t, pool, envelope)
 
-	reactivateLease(t, pool, &proof)
+	observationtest.ReactivateLease(ctx, t, pool, &proof)
 
 	second, err := repo.PublishBatch(ctx, input)
 	if err != nil {

@@ -21,7 +21,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 const (
@@ -34,14 +34,14 @@ const (
 )
 
 type observationClaimer interface {
-	ClaimBatch(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error)
-	ProbeClaim(context.Context, sourceobservation.ClaimOptions) error
-	EnsureClaimBudget(context.Context, sourceobservation.Claim, time.Duration) error
-	Retry(context.Context, sourceobservation.RetryInput) (contract.Status, error)
+	ClaimBatch(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error)
+	ProbeClaim(context.Context, consume.ClaimOptions) error
+	EnsureClaimBudget(context.Context, consume.Claim, time.Duration) error
+	Retry(context.Context, consume.RetryInput) (contract.Status, error)
 }
 
 type observationConsumer interface {
-	ConsumeClaim(context.Context, sourceobservation.Claim) error
+	ConsumeClaim(context.Context, consume.Claim) error
 }
 
 type projectionRefresher interface {
@@ -57,7 +57,7 @@ type liveEndFinalizer interface {
 }
 
 type observationRetainer interface {
-	RunRetentionTick(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error)
+	RunRetentionTick(context.Context, consume.RetentionConfig, time.Time) (consume.RetentionResult, error)
 }
 
 type observationReplayer interface {
@@ -81,8 +81,8 @@ type Runtime struct {
 	now                func() time.Time
 
 	dbSem         chan struct{}
-	workCh        chan sourceobservation.ClaimWork
-	claim         sourceobservation.ClaimOptions
+	workCh        chan consume.ClaimWork
+	claim         consume.ClaimOptions
 	runCancel     context.CancelFunc
 	started       atomic.Bool
 	claiming      atomic.Bool
@@ -174,22 +174,22 @@ func newRuntime(
 	pool *pgxpool.Pool,
 	cleanup func(),
 ) (*Runtime, error) {
-	repo := sourceobservation.NewConsumeRepository(pool)
+	repo := consume.NewRepository(pool)
 
 	refresher, err := targetprojection.NewRefresher(pool, plane.TargetProjection.Validity)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: %w", err)
 	}
 
-	writer := sourceobservation.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
+	writer := consume.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
 	runtime := &Runtime{
 		Config:    *plane,
 		Logger:    logger,
 		pool:      pool,
 		closePool: cleanup,
 		claimer:   repo,
-		consumer: sourceobservation.NewConsumerWithGraces(repo, writer, nil, plane.ContentAbsenceGrace, plane.LiveEndGrace).
-			WithChannelPolicy(sourceobservation.ChannelPolicy{
+		consumer: consume.NewConsumerWithGraces(repo, writer, nil, plane.ContentAbsenceGrace, plane.LiveEndGrace).
+			WithChannelPolicy(consume.ChannelPolicy{
 				ProfileClearMinObservations: plane.ProfileClearMinObservations,
 				ProfileClearStability:       plane.ProfileClearStability,
 				PhotoChangeMinObservations:  plane.PhotoChangeMinObservations,
@@ -206,12 +206,12 @@ func newRuntime(
 		},
 		now:           func() time.Time { return time.Now().UTC() },
 		dbSem:         make(chan struct{}, plane.DBOperationConcurrency),
-		workCh:        make(chan sourceobservation.ClaimWork, plane.ConsumerWorkers),
+		workCh:        make(chan consume.ClaimWork, plane.ConsumerWorkers),
 		loopDone:      make(chan struct{}, youtubeSupervisorLoopCapacity),
 		workerDone:    make(chan struct{}, plane.ConsumerWorkers),
 		workerTracker: workercontract.NewExecutorTracker(),
 		workerTotals:  &workercontract.Counters{},
-		claim: sourceobservation.ClaimOptions{
+		claim: consume.ClaimOptions{
 			ConsumerName:  communityConsumerName,
 			LeaseOwner:    communityLeaseOwner,
 			Kinds:         youtubePlaneClaimKinds(),
@@ -240,7 +240,7 @@ func (r *Runtime) sampleReadyQueue(ctx context.Context) (workercontract.QueueVal
 		oldestAgeSeconds float64
 	)
 
-	if err := r.pool.QueryRow(ctx, mustSQL("worker_queue_snapshot.sql"), kinds, sourceobservation.MaxAttempts).
+	if err := r.pool.QueryRow(ctx, mustSQL("worker_queue_snapshot.sql"), kinds, consume.MaxAttempts).
 		Scan(&depth, &oldestAgeSeconds); err != nil {
 		return workercontract.QueueValues{}, fmt.Errorf("snapshot source observation ready queue: %w", err)
 	}

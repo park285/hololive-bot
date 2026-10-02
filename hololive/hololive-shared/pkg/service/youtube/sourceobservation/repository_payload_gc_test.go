@@ -11,70 +11,16 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/observationtest"
 )
-
-func TestPayloadGCConcurrentPublishNeverLosesEvidence(t *testing.T) {
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	repo := NewRepository(pool)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-
-	first, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "same-post")))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := pool.Exec(ctx, `DELETE FROM source_observations WHERE id = $1`, first.Results[0].ObservationID); err != nil {
-		t.Fatal(err)
-	}
-
-	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
-
-	input := publishInput(communityEnvelope(t, &proof, "same-post"))
-	start := make(chan struct{})
-	result := make(chan error, 1)
-
-	go func() {
-		<-start
-
-		_, publishErr := repo.PublishBatch(ctx, input)
-		result <- publishErr
-	}()
-
-	close(start)
-
-	_, gcErr := repo.deleteUnreferencedPayloadBatch(ctx, RetentionConfig{
-		BatchSize: 1, EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindCommunityPage: time.Hour},
-	}, time.Now().Add(2*time.Hour))
-	if gcErr != nil {
-		t.Fatal(gcErr)
-	}
-
-	if err := <-result; err != nil {
-		t.Fatalf("publish racing payload GC: %v", err)
-	}
-
-	var observations, payloads int
-
-	if err := pool.QueryRow(ctx, `
-		SELECT (SELECT count(*) FROM source_observations),
-		       (SELECT count(*) FROM source_observation_payloads)
-	`).Scan(&observations, &payloads); err != nil {
-		t.Fatal(err)
-	}
-
-	if observations != 1 || payloads != 1 {
-		t.Fatalf("publish/GC left observations=%d payloads=%d", observations, payloads)
-	}
-}
 
 func TestPayloadNullOrMissingReferenceIsRejected(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "same-post")))
+	published, err := repo.PublishBatch(ctx, publishInput(observationtest.CommunityEnvelope(t, &proof, "same-post")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,9 +47,9 @@ func TestPayloadConcurrentPublishSeesCommittedDictionaryAfterWaiting(t *testing.
 
 	defer cancel()
 
-	firstProof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindChannelPhoto, testChannelID, "youtubejs_channel_metadata")
-	secondProof := seedAdditionalLease(t, pool, &firstProof, contract.ProviderHolodex, contract.KindChannelPhoto, testChannelID, "holodex_metadata")
-	first := channelPhotoEnvelopeFor(t, &firstProof, testChannelID)
+	firstProof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindChannelPhoto, testChannelID, "youtubejs_channel_metadata")
+	secondProof := observationtest.SeedAdditionalLease(t, pool, &firstProof, contract.ProviderHolodex, contract.KindChannelPhoto, testChannelID, "holodex_metadata")
+	first := observationtest.ChannelPhotoEnvelopeFor(t, &firstProof, testChannelID)
 	second := *first
 
 	second.Provider, second.Lease = contract.ProviderHolodex, secondProof

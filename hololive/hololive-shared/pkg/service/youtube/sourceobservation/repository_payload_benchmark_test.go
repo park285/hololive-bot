@@ -7,6 +7,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/observationtest"
 )
 
 // Run with -benchtime=30x and compare both cases to the pre-cutover
@@ -22,7 +23,7 @@ func BenchmarkPayloadDictionaryPublish(b *testing.B) {
 			ctx := b.Context()
 			pool := dbtest.NewPool(b)
 			repo := NewRepository(pool)
-			proof := seedPublishLease(ctx, b, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			proof := observationtest.SeedPublishLease(ctx, b, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
 			var (
 				firstBytes, lastBytes int64
@@ -50,7 +51,7 @@ func BenchmarkPayloadDictionaryPublish(b *testing.B) {
 			for b.Loop() {
 				b.StopTimer()
 
-				proof = advanceLease(ctx, b, pool, &proof, time.Minute)
+				proof = observationtest.AdvanceLease(ctx, b, pool, &proof, time.Minute)
 
 				postID := "same-post"
 
@@ -58,7 +59,7 @@ func BenchmarkPayloadDictionaryPublish(b *testing.B) {
 					postID = fmt.Sprintf("post-%d", iteration)
 				}
 
-				input := publishInput(communityEnvelope(b, &proof, postID))
+				input := publishInput(observationtest.CommunityEnvelope(b, &proof, postID))
 				b.StartTimer()
 
 				if _, err := repo.PublishBatch(ctx, input); err != nil {
