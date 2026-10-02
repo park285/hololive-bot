@@ -8,6 +8,11 @@
 
 ## 미출시
 
+## v7.2.2 - 2026-10-02
+
+- migration 256이 `youtube_notification_delivery.request_snapshot_allowed`를 지웁니다. 7.2.0부터 이 열을 읽는 코드가 없고, 표시가 `false`인 행은 모두 `SENT`·`FAILED`입니다. 끝나지 않은 행에 이 표시가 남아 있으면 열을 남기고 실패합니다.
+- Seoul Compose 배포가 루트 `VERSION`도 보내 원격 tree가 실제 릴리스 버전을 가리킵니다. 이전에는 예전 전체 tree 배포가 남긴 `3.5.2`가 그대로 있었습니다.
+
 ## v7.2.1 - 2026-10-02
 
 - 7.2.0 YouTube 수집기에서 일부 채널의 영상·shorts 목록 수집이 `parser_drift/DATA_CONTRACT`(`cursor start exceeds 512 bytes`)로 실패하던 회귀를 고칩니다. helper가 실제 InnerTube continuation token을 coverage cursor로 내보내기 시작했는데, 이 token은 수 KB까지 커지고 요청마다 달라질 수 있어 512 byte 상한을 넘고 observation scope도 흔들었습니다. 이제 token은 helper 안에서 cursor 반복 감지에만 쓰고, helper 응답과 coverage에는 cursor를 싣지 않습니다. 저장된 observation을 읽기 위해 계약의 cursor 필드는 남깁니다.
