@@ -69,12 +69,21 @@ compose=("$HOME/hololive-bot/scripts/deploy/compose.sh")
 cmp -s "$old_prod" "$prod_source"
 cmp -s "$old_ap" "$ap_source"
 sudo -n docker tag "$old_collector_tag" hololive-youtube-collector:prod
+# active receipt는 issuer를 멈추기 전에 같은 디렉터리의 rename으로 바꾼다. 기존 파일에 cp로 덮어쓰면
+# 소유자가 다른 receipt에서 실패하고, 2026-10-02 seoul rollback은 issuer를 지운 뒤 이 단계에서 멈춰
+# issuer 없이 남았다.
+replace_receipt() {
+  cp "$1" "$2.tmp"
+  mv -f "$2.tmp" "$2"
+}
+if [[ "$po_state" == present ]]; then
+  replace_receipt "$backup/po-sandbox-prechange-manifest.json" backups/po-sandbox-current-b.json
+  replace_receipt "$backup/po-sandbox-prechange.image-id" backups/po-sandbox-current-b.image-id
+fi
 sudo -n docker stop hololive-youtube-po-b >/dev/null 2>&1 || true
 sudo -n docker rm -f hololive-youtube-po-b >/dev/null 2>&1 || true
 if [[ "$po_state" == present ]]; then
   sudo -n docker tag "$old_po_tag" hololive-youtube-po-sandbox:prod
-  cp "$backup/po-sandbox-prechange-manifest.json" backups/po-sandbox-current-b.json
-  cp "$backup/po-sandbox-prechange.image-id" backups/po-sandbox-current-b.image-id
   sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
     "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up -d --no-build --no-deps youtube-po-b
   for _ in $(seq 1 30); do
