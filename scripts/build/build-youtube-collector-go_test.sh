@@ -5,7 +5,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${ROOT_DIR}/scripts/ci/python-runtime.sh"
 repo_python_init
 BUILD="${ROOT_DIR}/scripts/build/build-youtube-collector-go.sh"
-MAKEFILE="${ROOT_DIR}/hololive/hololive-youtube-collector/Makefile"
 GATE="${ROOT_DIR}/scripts/ci/public-pr-go-gate.sh"
 
 TMP_ROOT="$(mktemp -d)"

@@ -1,0 +1,8 @@
+package contract
+
+import "net/http"
+
+func unchecked(req *http.Request) int {
+	response, _ := http.DefaultClient.Do(req)
+	return response.StatusCode
+}
