@@ -1,3 +1,4 @@
+import { Innertube, Utils } from "youtubei.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -60,7 +61,7 @@ test("PAG-012 response validator rejects a 8193-byte cursor", () => {
   );
 });
 
-test("PAG-004 cooldown and configuration failures remain fatal with retry metadata", () => {
+test("PAG-004 real library HTTP errors use the existing failure tuples", async () => {
   const cooldown = new Error("limited");
   cooldown.status = 429;
   cooldown.retry = { kind: "after", after_ms: 30_000 };
@@ -68,11 +69,31 @@ test("PAG-004 cooldown and configuration failures remain fatal with retry metada
   assert.equal(cooldownResult.status, 429);
   assert.deepEqual(cooldownResult.body.error.retry, { kind: "after", after_ms: 30_000 });
 
-  const forbidden = new Error("forbidden");
-  forbidden.status = 403;
-  const forbiddenResult = rpcErrorResultFor(forbidden);
-  assert.equal(forbiddenResult.body.error.code, "configuration_error");
-  assert.equal(forbiddenResult.body.error.class, "CONFIGURATION");
+  for (const [status, code, failureClass] of [
+    [400, "collection_failed", "TRANSIENT"],
+    [401, "configuration_error", "CONFIGURATION"],
+    [403, "configuration_error", "CONFIGURATION"],
+    [404, "collection_failed", "TRANSIENT"],
+    [429, "cooldown", "COOLDOWN"],
+  ]) {
+    let calls = 0;
+    const innertube = await Innertube.create({
+      retrieve_player: false, generate_session_locally: true, enable_session_cache: false,
+      retrieve_innertube_config: false,
+      fetch: async () => { calls++; return new Response("private upstream body", { status }); },
+    });
+    await assert.rejects(innertube.actions.execute("/browse", { browseId: "UC_TEST", parse: false }), (error) => {
+      assert.ok(error instanceof Utils.InnertubeError);
+      assert.equal(error.status, undefined);
+      const result = rpcErrorResultFor(error);
+      assert.equal(result.status, status === 429 ? 429 : 502);
+      assert.equal(result.body.error.code, code);
+      assert.equal(result.body.error.class, failureClass);
+      assert.equal(JSON.stringify(result).includes("private upstream body"), false);
+      return true;
+    });
+    assert.equal(calls, 1);
+  }
 });
 
 test("canceled requests do not copy abort reason into the error body", async () => {
@@ -136,9 +157,21 @@ test("RequestInit abort is not misclassified as parent request cancellation", as
   assert.equal(rpcController.signal.aborted, false);
 });
 
-test("untyped errors fail-close instead of becoming transient collection failures", () => {
-  const result = rpcErrorResultFor(new Error("programming failure"));
-  assert.equal(result.status, 500);
-  assert.equal(result.body.error.code, "helper_internal_invariant");
-  assert.equal(result.body.error.class, "INTERNAL");
+test("ordinary untyped upstream errors remain nonfatal failures", () => {
+  const result = rpcErrorResultFor(new Error("unclassified upstream failure"));
+  assert.equal(result.status, 502);
+  assert.equal(result.body.error.code, "collection_failed");
+  assert.equal(result.body.error.class, "TRANSIENT");
+});
+
+test("explicit helper invariants and local programming errors remain fatal", () => {
+  for (const error of [
+    Object.assign(new Error("invalid helper state"), { code: "helper_internal_invariant" }),
+    new TypeError("helper callback is not a function"),
+  ]) {
+    const result = rpcErrorResultFor(error);
+    assert.equal(result.status, 500);
+    assert.equal(result.body.error.code, "helper_internal_invariant");
+    assert.equal(result.body.error.class, "INTERNAL");
+  }
 });

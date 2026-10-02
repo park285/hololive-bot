@@ -434,7 +434,7 @@ func (e *collectionExecutor) commitCollectResult(
 	)
 
 	if result.Kind() == collectutil.CollectPartial {
-		retry, retryErr := joblease.NewRetryAt(e.retryAt(resultPartialCause(result)))
+		retry, retryErr := sourceobservation.NewRetryAtSchedule(e.retryAt(resultPartialCause(result)))
 		if retryErr != nil {
 			return fmt.Errorf("retry at: %w", retryErr)
 		}

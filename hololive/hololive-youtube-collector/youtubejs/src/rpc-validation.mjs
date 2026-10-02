@@ -1,7 +1,7 @@
 // @ts-check
 
 import { encodedSize, maxCursorJSONBytes } from "./pagination.mjs";
-import { currentRequestSignal } from "./request-context.mjs";
+import { classifyUpstreamError, failureTuples } from "./upstream-errors.mjs";
 import { encodeResponseBody } from "./response-encoding.mjs";
 
 /**
@@ -69,73 +69,25 @@ export function rpcErrorBody(error) {
   return rpcErrorResultFor(error).body;
 }
 
-const failureTuples = Object.freeze({
-  invalid_request: Object.freeze({ class: "PROTOCOL", statuses: Object.freeze([400, 404]) }),
-  request_too_large: Object.freeze({ class: "PROTOCOL", statuses: Object.freeze([413]) }),
-  helper_not_ready: Object.freeze({ class: "PROTOCOL", statuses: Object.freeze([503]) }),
-  helper_busy: Object.freeze({ class: "TRANSIENT", statuses: Object.freeze([503]) }),
-  collection_canceled: Object.freeze({ class: "CANCELED", statuses: Object.freeze([408]) }),
-  collection_timeout: Object.freeze({ class: "TIMEOUT", statuses: Object.freeze([504, 408]) }),
-  cooldown: Object.freeze({ class: "COOLDOWN", statuses: Object.freeze([429]) }),
-  parser_drift: Object.freeze({ class: "DATA_CONTRACT", statuses: Object.freeze([422]) }),
-  configuration_error: Object.freeze({ class: "CONFIGURATION", statuses: Object.freeze([502]) }),
-  response_too_large: Object.freeze({ class: "RESOURCE_LIMIT", statuses: Object.freeze([422]) }),
-  helper_protocol_mismatch: Object.freeze({ class: "PROTOCOL", statuses: Object.freeze([409]) }),
-  helper_internal_invariant: Object.freeze({ class: "INTERNAL", statuses: Object.freeze([500]) }),
-  collection_failed: Object.freeze({ class: "TRANSIENT", statuses: Object.freeze([502]) }),
-});
-
 /** @param {unknown} error */
 export function rpcErrorResultFor(error) {
-  if (isCanceledError(error)) {
-    return rpcErrorResult(408, "collection_canceled", "CANCELED", "collection canceled");
+  const code = classifyUpstreamError(error);
+  if (code === "collection_canceled") {
+    return rpcErrorResult(408, code, "CANCELED", "collection canceled");
   }
-  if (error instanceof RpcResponseError) {
-    return rpcErrorResult(422, "parser_drift", "DATA_CONTRACT", error.message);
-  }
-  if (isRecord(error) && (error.status === 401 || error.status === 403)) {
-    return rpcErrorResult(502, "configuration_error", "CONFIGURATION", safeErrorMessage(error));
-  }
-  if (isRecord(error) && error.status === 429) {
-    const result = rpcErrorResult(429, "cooldown", "COOLDOWN", safeErrorMessage(error));
-    if (isRecord(error.retry)) {
-      const retry = error.retry;
-      if (retry.kind === "after" && Number.isSafeInteger(retry.after_ms) && Number(retry.after_ms) > 0) {
-        Object.assign(result.body.error.retry, { kind: "after", after_ms: Number(retry.after_ms) });
-      } else if (
-        retry.kind === "at" &&
-        typeof retry.at === "string" &&
-        Number.isFinite(Date.parse(retry.at))
-      ) {
-        Object.assign(result.body.error.retry, { kind: "at", at: retry.at });
-      } else if (retry.kind !== "default") {
-        return rpcErrorResult(500, "helper_internal_invariant", "INTERNAL", "upstream retry hint is invalid");
-      }
+  const tuple = failureTuples[code];
+  const result = rpcErrorResult(tuple.statuses[0], code, tuple.class, safeErrorMessage(error));
+  if ((code === "cooldown" || code === "helper_busy") && isRecord(error) && isRecord(error.retry)) {
+    const retry = error.retry;
+    if (retry.kind === "after" && Number.isSafeInteger(retry.after_ms) && Number(retry.after_ms) > 0) {
+      Object.assign(result.body.error.retry, { kind: "after", after_ms: Number(retry.after_ms) });
+    } else if (code === "cooldown" && retry.kind === "at" && typeof retry.at === "string" && Number.isFinite(Date.parse(retry.at))) {
+      Object.assign(result.body.error.retry, { kind: "at", at: retry.at });
+    } else if (retry.kind !== "default") {
+      return rpcErrorResult(500, "helper_internal_invariant", "INTERNAL", "upstream retry hint is invalid");
     }
-    return result;
   }
-  if (isRecord(error) && typeof error.code === "string" && Object.hasOwn(failureTuples, error.code)) {
-    const code = /** @type {import("./contracts.d.ts").RPCErrorCode} */ (error.code);
-    const tuple = failureTuples[code];
-    const result = rpcErrorResult(tuple.statuses[0], code, tuple.class, safeErrorMessage(error));
-    if ((code === "cooldown" || code === "helper_busy") && isRecord(error.retry)) {
-      const retry = error.retry;
-      if (retry.kind === "after" && Number.isSafeInteger(retry.after_ms) && Number(retry.after_ms) > 0) {
-        Object.assign(result.body.error.retry, { kind: "after", after_ms: Number(retry.after_ms) });
-      } else if (
-        code === "cooldown" &&
-        retry.kind === "at" &&
-        typeof retry.at === "string" &&
-        Number.isFinite(Date.parse(retry.at))
-      ) {
-        Object.assign(result.body.error.retry, { kind: "at", at: retry.at });
-      } else if (retry.kind !== "default") {
-        return rpcErrorResult(500, "helper_internal_invariant", "INTERNAL", "upstream retry hint is invalid");
-      }
-    }
-    return result;
-  }
-  return rpcErrorResult(500, "helper_internal_invariant", "INTERNAL", safeErrorMessage(error));
+  return result;
 }
 
 /**
@@ -147,7 +99,7 @@ export function rpcErrorResultFor(error) {
 export function rpcErrorResult(status, code, failureClass, message) {
   const tuple = failureTuples[code];
   if (tuple == null || tuple.class !== failureClass || !tuple.statuses.includes(status)) {
-    throw new Error("invalid RPC failure tuple");
+    throw Object.assign(new Error("invalid RPC failure tuple"), { code: "helper_internal_invariant" });
   }
   return {
     status,
@@ -1163,12 +1115,4 @@ function boundedMessage(message) {
     end -= 1;
   }
   return raw.subarray(0, end).toString("utf8");
-}
-
-/** @param {unknown} error */
-function isCanceledError(error) {
-  if (currentRequestSignal()?.aborted) {
-    return true;
-  }
-  return isRecord(error) && error.code === "collection_canceled";
 }

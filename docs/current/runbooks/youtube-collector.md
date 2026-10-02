@@ -262,9 +262,11 @@ Diagnosis:
 
 ### 4. Kernel Oops in `unix_fs_perm` on docker-default arm64 hosts
 
-Known kernel defect입니다. Ubuntu `linux-oracle` 6.17.0-1020과 apt가 제시하는 7.0.0-1011에는 upstream AppArmor 수정 `b1aea2c19607` "apparmor: fix race in unix socket mediation when peer_path is used"가 없습니다. 이 수정은 mainline v7.2-rc1, stable v6.18.40와 v7.1.5부터 들어 있습니다. AppArmor가 AF_UNIX 연결의 첫 read에서 peer 소켓 경로를 lock 없이 복사하므로, 같은 시점에 peer가 close되면 NULL `mnt`를 역참조할 수 있습니다.
+과거 운영 커널에서 발생한 결함입니다. Ubuntu `linux-oracle` 6.17.0-1020과 당시 후보였던 7.0.0-1011에는 upstream AppArmor 수정 `b1aea2c19607` "apparmor: fix race in unix socket mediation when peer_path is used"가 없었습니다. 이 수정은 mainline v7.2-rc1, stable v6.18.40와 v7.1.5부터 들어 있습니다. 미수정 커널에서는 AppArmor가 AF_UNIX 연결의 첫 read에서 peer 소켓 경로를 lock 없이 복사하므로, 같은 시점에 peer가 close되면 NULL `mnt`를 역참조할 수 있습니다.
 
-영향 범위는 collector helper와 PO issuer가 `docker-default (enforce)`로 도는 arm64 호스트입니다. hololive-osaka의 collector-c와 iris-seoul의 collector-b가 해당합니다. x86 osaka1/osaka2(a/d)는 6.8 커널에서 unconfined로 실행되어 이 경로에 해당하지 않습니다.
+당시 영향 범위는 collector helper와 PO issuer가 `docker-default (enforce)`로 돌던 arm64 호스트인 hololive-osaka의 collector-c와 iris-seoul의 collector-b였습니다. x86 osaka1/osaka2(a/d)는 6.8 커널에서 unconfined로 실행되어 이 경로에 해당하지 않았습니다.
+
+2026-10-02 확인: 두 arm64 호스트 모두 `7.0.0-1013-oracle`로 재부팅했습니다. 설치 패키지 `7.0.0-1013.13~24.04.1`의 changelog와 [공식 소스 패치](https://packages.ubuntu.com/noble-updates/linux-image-unsigned-7.0.0-1013-oracle)에서 `peer_path`를 `unix_state_lock` 아래 복사하고 `path_get`/`path_put`으로 참조를 보존하는 수정을 확인했습니다. 해당 부팅 이후 관련 Oops는 관측되지 않았고 kernel taint는 두 호스트 모두 `0`이었습니다. collector·PO의 `docker-default` 격리는 유지했습니다. 이는 확인 시점의 상태이며, 이후 커널 교체·롤백 시에는 다시 확인합니다.
 
 Symptoms:
 - `journalctl -k`에 `Unable to handle kernel NULL pointer dereference`, `Internal error: Oops`, `pc : unix_fs_perm`, `lr : aa_unix_file_perm`, `vfs_read` call trace가 남습니다. `Comm`은 helper의 `MainThread`입니다.
@@ -274,10 +276,10 @@ Diagnosis:
 - `uname -r`와 `journalctl -k`로 커널 버전과 Oops 위치를 확인합니다.
 - `sudo docker top <container>`와 `/proc/<pid>/attr/current`로 helper·issuer의 AppArmor label을 확인합니다.
 
-Mitigation:
-- v6.0.1 collector·PO 산출물부터 broker HTTP 연결은 keep-alive를 쓰고, client가 유휴 연결을 약 1초 뒤 먼저 닫습니다. v6.0.2부터 broker `IdleTimeout`은 30초라 Node event loop가 수 초 멈춰도 서버가 먼저 닫은 socket을 재사용하지 않고, `po-broker --healthcheck`도 keep-alive로 client가 먼저 닫습니다. 요청마다 새 연결을 열고 server가 곧바로 닫던 경쟁 창을 줄이지만 근본 수정은 아닙니다.
-- 남은 창은 새 연결의 첫 응답이 퇴역·오류 응답이라 응답 직후 `server.Close`가 따르는 경우입니다. worker가 이미 죽은 경로(`worker_failed`, watchdog)는 응답과 close 간격이 µs 수준으로 v6.0.0과 같습니다. `session_closed`·`lease_expired`·`worker_timeout`은 worker SIGKILL부터 reap까지의 수 ms(측정: 30MB 약 6ms, 300MB 약 22ms) 간격입니다. 반복되는 대표 트리거는 bootstrap 실패 뒤 helper `retireOwned`의 `DELETE /v1/session`입니다.
-- 근본 수정은 changelog에 위 커밋 제목이 있는 Ubuntu `linux-oracle` 빌드(또는 stable v6.18.40 / v7.1.5 이상 기반)를 설치하고 재부팅하는 것입니다. 업그레이드 전에 `apt-get changelog linux-modules-<version>-oracle | grep -F 'apparmor: fix race in unix socket mediation when peer_path is used'`로 포함 여부를 확인합니다. 7.0.0-1011은 stable v6.18.39 / v7.1.4까지만 반영해 이 수정이 없으므로 교체 대상이 아닙니다.
+Retained connection policy and unpatched-kernel history:
+- v6.0.1부터 broker HTTP 연결은 keep-alive를 쓰고, client가 유휴 연결을 약 1초 뒤 먼저 닫습니다. v6.0.2부터 broker `IdleTimeout`은 30초이며 `po-broker --healthcheck`도 응답을 읽은 뒤 client가 연결을 정리합니다. 커널 수정 후에도 연결 재사용과 유휴 socket의 재사용 경쟁(`EPIPE`) 완화를 위해 이 설정을 유지합니다. 커널 결함 때문에 필요한 임시 완화책으로 취급하지 않으며, 종료 원인 기록과 퇴역 시 `server.Close`도 유지합니다.
+- 미수정 커널에서는 이 정책만으로 Oops를 막을 수 없었습니다. 새 연결의 첫 응답이 퇴역·오류 응답이고 곧바로 `server.Close`가 따르는 경우 경쟁 창이 남았습니다. worker가 이미 죽은 경로(`worker_failed`, watchdog)는 응답과 close 간격이 µs 수준이고, `session_closed`·`lease_expired`·`worker_timeout`은 worker SIGKILL부터 reap까지 수 ms(측정: 30MB 약 6ms, 300MB 약 22ms)였습니다. 대표 트리거는 bootstrap 실패 뒤 helper `retireOwned`의 `DELETE /v1/session`이었습니다.
+- 커널을 교체하거나 롤백할 때는 `apt-get changelog linux-modules-<version>-oracle | grep -F 'apparmor: fix race in unix socket mediation when peer_path is used'`와 해당 소스 패치로 수정 포함 여부를 확인하고, 재부팅 후 `uname -r`로 실행 커널을 대조합니다. 7.0.0-1011은 이 수정이 없으므로 결함 복구용 교체 대상이 아닙니다.
 - AppArmor profile을 완화하거나 unconfined로 바꾸지 않습니다. hololive-osaka 재부팅은 중앙 DB·API를 함께 멈추므로 승인된 유지보수 창에서 수행합니다.
 
 ## Smoke test

@@ -1,4 +1,5 @@
 import { Mixins, YTNodes } from "youtubei.js";
+import { classifyUpstreamError, readUpstream } from "./upstream-errors.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 
 export const continuityContiguous = "CONTIGUOUS";
@@ -16,23 +17,12 @@ const terminationReasons = new Set([
   "cursor_loop",
   "continuation_transient",
 ]);
-const transientNetworkCodes = new Set([
-  "ECONNRESET",
-  "ENETRESET",
-  "EPIPE",
-  "ETIMEDOUT",
-  "EAI_AGAIN",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_HEADERS_TIMEOUT",
-  "UND_ERR_BODY_TIMEOUT",
-  "UND_ERR_SOCKET",
-]);
 
 export function continuationToken(feed) {
   if (feed == null) {
     return "";
   }
-  const token = (() => {
+  const token = readUpstream(() => {
     const explicitToken = feed.continuation ?? feed.continuation_token ?? feed.continuationToken;
     if (explicitToken != null) return explicitToken;
     if (feed instanceof Mixins.Feed && feed.has_continuation) {
@@ -43,7 +33,7 @@ export function continuationToken(feed) {
       return bodyContinuation?.endpoint.payload.token ?? "";
     }
     return "";
-  })();
+  });
   if (typeof token === "string") {
     return token.trim();
   }
@@ -57,7 +47,7 @@ export function hasContinuation(feed) {
   if (feed == null) {
     return false;
   }
-  if (feed.has_continuation === true || feed.hasContinuation === true) {
+  if (readUpstream(() => feed.has_continuation === true || feed.hasContinuation === true)) {
     return true;
   }
   return continuationToken(feed) !== "";
@@ -296,15 +286,8 @@ function assertParentRequestAlive() {
 }
 
 function isContinuationTransient(error) {
-  const code = error?.code;
-  if (code === "collection_timeout" || code === "collection_failed" || code === "helper_busy") {
-    return true;
-  }
-  if (typeof code === "string" && transientNetworkCodes.has(code)) {
-    return true;
-  }
-  const causeCode = error?.cause?.code;
-  return typeof causeCode === "string" && transientNetworkCodes.has(causeCode);
+  const code = classifyUpstreamError(error);
+  return code === "collection_timeout" || code === "collection_failed" || code === "helper_busy";
 }
 
 function boundedInteger(value, minimum, maximum, fallback, field) {

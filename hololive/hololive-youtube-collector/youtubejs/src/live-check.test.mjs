@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import test from "node:test";
+import { Innertube } from "youtubei.js";
 
 import { createFetchTransport, FetchTransportError } from "./fetch-transport.mjs";
 import { fetchChannelLiveCheck, fetchVideoLiveCheck } from "./live-check.mjs";
@@ -121,6 +122,33 @@ test("upstream failures stay typed RPC failures and never become observations", 
     (error) => error.code === "collection_failed",
   );
   assert.equal(playerFailure.calls.length, 2);
+});
+
+test("real library HTTP failures retain their RPC class within one live-check request", async () => {
+  for (const [status, code] of [[400, "collection_failed"], [401, "configuration_error"], [403, "configuration_error"], [404, "collection_failed"]]) {
+    let calls = 0;
+    const innertube = await Innertube.create({
+      retrieve_player: false, generate_session_locally: true, enable_session_cache: false,
+      retrieve_innertube_config: false,
+      fetch: async () => { calls++; return new Response("{}", { status }); },
+    });
+    const result = await handleVideoLiveCheckRequest(JSON.stringify({
+      protocol_version: 1, video_id: "failure-fixture", max_success_response_bytes: 4096,
+    }), (options) => fetchVideoLiveCheck(innertube, options.videoId, clock));
+    assert.equal(result.status, 502);
+    assert.equal(result.body.error.code, code);
+    assert.equal(calls, 1);
+  }
+});
+
+test("live-check preserves explicit defects while classifying upstream parser TypeErrors", async () => {
+  const failure = Object.assign(new TypeError("helper invariant failed"), { code: "helper_internal_invariant" });
+  const defective = fakeInnertube([failure]);
+  await assert.rejects(fetchVideoLiveCheck(defective, "fixture", clock), (error) => error.code === "helper_internal_invariant");
+  const malformed = fakeInnertube([new TypeError("library parser could not read an upstream field")]);
+  await assert.rejects(fetchVideoLiveCheck(malformed, "fixture", clock), (error) => error.code === "collection_failed");
+  assert.equal(defective.calls.length, 1);
+  assert.equal(malformed.calls.length, 1);
 });
 
 test("non-JSON success bodies are UNKNOWN structure observations", async () => {
@@ -289,7 +317,8 @@ test("single-attempt checks do not follow redirects into an extra upstream reque
   }));
   const transport = createFetchTransport({ currentSignal: () => undefined });
   const url = `http://127.0.0.1:${server.address().port}/player`;
-  await assert.rejects(transport.singleAttemptFetch(url, { method: "POST", body: "{}" }), TypeError);
+  await assert.rejects(transport.singleAttemptFetch(url, { method: "POST", body: "{}" }),
+    (error) => error.code === "collection_failed" && error.cause instanceof TypeError);
   assert.deepEqual(paths, ["/player"]);
   paths.length = 0;
   const legacy = await transport.fetch(url, { method: "POST", body: "{}" });

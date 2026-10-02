@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -220,6 +223,162 @@ func TestProviderResponseDrainsBoundedRemainder(t *testing.T) {
 	}
 }
 
+func TestProviderResponseSuccessBodyLimitEdges(t *testing.T) {
+	t.Parallel()
+
+	for _, limit := range []int64{0, 1, 2, math.MaxInt64} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			t.Parallel()
+
+			policy := DefaultJSONPolicy(2)
+
+			policy.MaxSuccessBodyBytes = limit
+
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": {"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`[]`)),
+			}
+
+			body, err := ReadProviderJSONDocument(t.Context(), resp, policy, contract.ProviderHolodex)
+
+			if limit < 2 {
+				if body != nil || collecterr.CodeOf(err) != collecterr.ResponseTooLarge {
+					t.Fatalf("body = %q, error = %v", body, err)
+				}
+
+				return
+			}
+
+			if err != nil || string(body) != `[]` {
+				t.Fatalf("body = %q, error = %v", body, err)
+			}
+		})
+	}
+}
+
+func TestProviderResponseTruncatesErrorExcerpt(t *testing.T) {
+	t.Parallel()
+
+	for _, limit := range []int64{0, 7, math.MaxInt64} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			t.Parallel()
+
+			const payload = "visible hidden"
+
+			var (
+				reads  atomic.Int64
+				closes atomic.Int32
+			)
+
+			policy := DefaultJSONPolicy(2)
+
+			policy.MaxErrorBodyBytes = limit
+			policy.MaxDrainBytes = 0
+
+			resp := &http.Response{
+				StatusCode: http.StatusTooManyRequests,
+				Header:     http.Header{"Retry-After": {"15"}},
+				Body:       &countingReadCloser{r: strings.NewReader(payload), reads: &reads, closes: &closes},
+			}
+
+			err := readResponse(t, resp, policy)
+			if collecterr.CodeOf(err) != collecterr.Cooldown || collecterr.RetryOf(err).After() != 15*time.Second {
+				t.Fatalf("error = %v", err)
+			}
+
+			wantMessage := "holodex status 429"
+
+			if limit > 0 {
+				wantMessage += ": " + payload[:min(int64(len(payload)), limit)]
+			}
+
+			if !strings.HasSuffix(err.Error(), wantMessage) {
+				t.Fatalf("error = %v, want suffix %q", err, wantMessage)
+			}
+
+			wantReads := int64(len(payload))
+			if limit < wantReads {
+				wantReads = limit + 1
+			}
+
+			if reads.Load() != wantReads || closes.Load() != 1 {
+				t.Fatalf("reads/closes = %d/%d, want %d/1", reads.Load(), closes.Load(), wantReads)
+			}
+		})
+	}
+}
+
+func TestProviderResponsePreservesReadDrainAndCloseErrors(t *testing.T) {
+	t.Parallel()
+
+	readErr := &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}
+	tests := []struct {
+		name    string
+		status  int
+		payload string
+		code    collecterr.ErrorCode
+		class   collecterr.FailureClass
+	}{
+		{name: "success read", status: http.StatusOK, payload: "[", code: collecterr.Failed, class: collecterr.ClassTransient},
+		{name: "error read", status: http.StatusBadGateway, payload: "no", code: collecterr.Failed, class: collecterr.ClassTransient},
+		{name: "error drain", status: http.StatusTooManyRequests, payload: "abcdef", code: collecterr.Cooldown, class: collecterr.ClassCooldown},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			body := &failingCloseBody{
+				Reader: io.MultiReader(strings.NewReader(test.payload), iotest.ErrReader(readErr)),
+				err:    context.Canceled,
+			}
+			resp := &http.Response{
+				StatusCode: test.status,
+				Header:     http.Header{"Content-Type": {"application/json"}, "Retry-After": {"15"}},
+				Body:       body,
+			}
+			policy := DefaultJSONPolicy(8)
+
+			policy.MaxErrorBodyBytes = 3
+
+			data, err := ReadProviderJSONDocument(t.Context(), resp, policy, contract.ProviderHolodex)
+			if data != nil || collecterr.CodeOf(err) != test.code || collecterr.ClassOf(err) != test.class {
+				t.Fatalf("body = %q, error = %v", data, err)
+			}
+
+			if !errors.Is(err, syscall.ECONNRESET) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("lost read or close cause: %v", err)
+			}
+
+			if got, ok := errors.AsType[*net.OpError](err); !ok || got != readErr {
+				t.Fatalf("lost network error: %v", err)
+			}
+
+			if body.closes != 1 {
+				t.Fatalf("closes = %d", body.closes)
+			}
+
+			if test.status == http.StatusTooManyRequests && collecterr.RetryOf(err).After() != 15*time.Second {
+				t.Fatalf("lost cooldown retry: %v", err)
+			}
+		})
+	}
+}
+
+type failingCloseBody struct {
+	io.Reader
+
+	err    error
+	closes int
+}
+
+func (b *failingCloseBody) Close() error {
+	b.closes++
+
+	return b.err
+}
+
 func TestProviderResponseDrainsForConnectionReuse(t *testing.T) {
 	t.Parallel()
 
@@ -322,6 +481,40 @@ func TestHTTP011CanceledBodyDoesNotDrainAndClosesOnce(t *testing.T) {
 
 	if closes.Load() != 1 {
 		t.Fatalf("closes = %d", closes.Load())
+	}
+}
+
+func TestProviderResponseCanceledAtReadLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	var (
+		reads  atomic.Int64
+		closes atomic.Int32
+	)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body: &countingReadCloser{
+			r:      &cancelOnRead{cancel: cancel, rest: strings.NewReader("unread")},
+			reads:  &reads,
+			closes: &closes,
+		},
+	}
+	policy := DefaultJSONPolicy(2)
+
+	policy.MaxSuccessBodyBytes = 0
+
+	_, err := ReadProviderJSONDocument(ctx, resp, policy, contract.ProviderHolodex)
+	if collecterr.CodeOf(err) != collecterr.Canceled || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled at read limit = %v", err)
+	}
+
+	if reads.Load() != 1 || closes.Load() != 1 {
+		t.Fatalf("reads/closes = %d/%d, want 1/1", reads.Load(), closes.Load())
 	}
 }
 

@@ -15,6 +15,8 @@
 ## 현재 설계 문서 위치
 
 - [알람 워커·API 공유 모듈 리팩토링과 fallback·구형 호환 정리 계획](2026-10-02-alarm-worker-api-shared-refactoring.md) — 재현한 lease·취소·종료 문제, shared 유지·이동 기준, 계약 없는 fallback과 구형 alias·재등장 가드 정리, 단계별 검증과 필요한 결정
+- [YouTube 컬렉터와 공유 코드 분석 및 리팩토링안](2026-10-02-youtube-collector-shared-refactoring.md) — 미인식 upstream 오류의 INTERNAL 분류와 fatal 계약 복원, 탭 판정·재시도 경로 정리, 문자열 경계 테스트 삭제, collector 관점의 이관 보존 조건, 구현 순서와 실제 검증 결과
+- [코드 감사 후속 수정](2026-10-02-code-audit-fixes.md) — 2026-10-02 코드 감사에서 재현한 결함 수정, 규칙과 충돌하는 검사 제거, 검증과 적대적 재검토 결과
 - `docs/superpowers/specs/` — 현재 design spec 저장 위치
 - `three-runtime-consolidation-plan.md` — `bot` + `admin-api` + `llm-scheduler`를 `hololive-api`로 통합해 3개 runtime으로 줄이는 migration plan
 

@@ -1,15 +1,17 @@
 package providerhttp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"strings"
+
+	sharedhttputil "github.com/park285/shared-go/v2/pkg/httputil"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -37,6 +39,8 @@ func DefaultJSONPolicy(maxSuccessBodyBytes int64) ProviderResponsePolicy {
 	}
 }
 
+// ReadProviderJSONDocument는 상태와 본문 계약을 검사하고 호출자가 소유하는 JSON 바이트를 반환합니다.
+// 성공 여부와 관계없이 본문을 닫으며, 취소되지 않은 응답의 나머지는 MaxDrainBytes까지만 버립니다.
 func ReadProviderJSONDocument(
 	ctx context.Context,
 	resp *http.Response,
@@ -68,7 +72,7 @@ func ReadProviderJSONDocument(
 		return nil, fmt.Errorf("read provider success: %w", err)
 	}
 
-	return bytes.Clone(body), nil
+	return body, nil
 }
 
 func cleanupProviderResponse(ctx context.Context, body io.ReadCloser, maxDrainBytes int64, primary error) error {
@@ -104,13 +108,9 @@ func (policy ProviderResponsePolicy) validate() error {
 }
 
 func readProviderError(ctx context.Context, resp *http.Response, policy ProviderResponsePolicy, provider contract.Provider) error {
-	excerpt, _, readErr := readAtMost(ctx, resp.Body, policy.MaxErrorBodyBytes)
+	excerpt, readErr := readErrorExcerpt(ctx, resp.Body, policy.MaxErrorBodyBytes)
 	if readErr != nil {
-		if err := collecterr.FromContext(fmt.Errorf("read %s error body: %w", provider, readErr)); err != nil {
-			return fmt.Errorf("from context: %w", err)
-		}
-
-		return nil
+		return collecterr.FromContext(fmt.Errorf("read %s error body: %w", provider, readErr))
 	}
 
 	if err := mapProviderStatus(provider, resp.StatusCode, resp.Header.Get("Retry-After"), string(excerpt)); err != nil {
@@ -133,17 +133,13 @@ func validateSuccessHeaders(resp *http.Response, policy ProviderResponsePolicy, 
 }
 
 func readProviderSuccess(ctx context.Context, body io.Reader, policy ProviderResponsePolicy, provider contract.Provider) ([]byte, error) {
-	data, overflow, err := readAtMost(ctx, body, policy.MaxSuccessBodyBytes)
-	if err != nil {
-		if fromErr := collecterr.FromContext(fmt.Errorf("read %s: %w", provider, err)); fromErr != nil {
-			return nil, fmt.Errorf("from context: %w", fromErr)
-		}
-
-		return nil, nil
+	data, err := sharedhttputil.ReadAllLimited(&ctxReader{ctx: ctx, r: body}, policy.MaxSuccessBodyBytes)
+	if errors.Is(err, sharedhttputil.ErrResponseBodyTooLarge) {
+		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, string(provider)+" response exceeds body limit")
 	}
 
-	if overflow {
-		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, string(provider)+" response exceeds body limit")
+	if err != nil {
+		return nil, collecterr.FromContext(fmt.Errorf("read %s: %w", provider, err))
 	}
 
 	if !jsontext.Value(data).IsValid() {
@@ -181,21 +177,22 @@ func allowedSuccessContentType(header string, allowed []string) bool {
 	return false
 }
 
-func readAtMost(ctx context.Context, body io.Reader, maxBytes int64) (data []byte, overflow bool, err error) {
-	if maxBytes < 0 {
-		return nil, false, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "provider response body limit is invalid")
+func readErrorExcerpt(ctx context.Context, body io.Reader, maxBytes int64) ([]byte, error) {
+	readLimit := maxBytes
+	if readLimit < math.MaxInt64 {
+		readLimit++
 	}
 
-	data, err = io.ReadAll(&ctxReader{ctx: ctx, r: io.LimitReader(body, maxBytes+1)})
+	data, err := io.ReadAll(&ctxReader{ctx: ctx, r: io.LimitReader(body, readLimit)})
 	if err != nil {
-		return nil, false, fmt.Errorf("read all: %w", err)
+		return nil, fmt.Errorf("read error excerpt: %w", err)
 	}
 
 	if int64(len(data)) > maxBytes {
-		return data[:maxBytes], true, nil
+		return data[:maxBytes], nil
 	}
 
-	return data, false, nil
+	return data, nil
 }
 
 func drainBounded(ctx context.Context, body io.Reader, maxBytes int64) error {
@@ -203,8 +200,11 @@ func drainBounded(ctx context.Context, body io.Reader, maxBytes int64) error {
 		return nil
 	}
 
-	if _, err := io.Copy(io.Discard, &ctxReader{ctx: ctx, r: io.LimitReader(body, maxBytes)}); err != nil {
-		return fmt.Errorf("copy: %w", err)
+	// 공유 drain의 EOF 확인용 추가 읽기도 기존 상한에 포함한다. 실제 close는 호출부가
+	// 따로 수행해 drain 오류와 close 오류 각각의 분류 및 원인을 보존한다.
+	bounded := io.NopCloser(&ctxReader{ctx: ctx, r: io.LimitReader(body, maxBytes)})
+	if err := sharedhttputil.DrainAndClose(bounded, maxBytes); err != nil {
+		return fmt.Errorf("drain bounded response: %w", err)
 	}
 
 	return nil
@@ -229,7 +229,12 @@ func (r *ctxReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 
-	// io.ReadAll과 io.Copy는 종료 조건을 EOF 등가 비교로 판별하므로, 여기서 %w로 감싸면
-	// 정상 종료가 실패로 뒤바뀌어 모든 응답 읽기가 실패한다.
-	return r.r.Read(p)
+	n, err := r.r.Read(p)
+	if err == nil {
+		// 바깥 LimitReader가 다음 Read를 생략해도 마지막 읽기 중 발생한 취소를 보존한다.
+		err = r.ctx.Err()
+	}
+
+	// io.ReadAll과 io.Copy가 EOF를 직접 비교하므로 읽기 오류는 감싸지 않는다.
+	return n, err
 }

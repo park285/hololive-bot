@@ -8,22 +8,14 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-type RetryScheduleKind string
-
-const (
-	RetryScheduleDelay RetryScheduleKind = "DELAY"
-	RetryScheduleAt    RetryScheduleKind = "AT"
-)
-
 type RetryBounds struct {
 	Minimum time.Duration
 	Maximum time.Duration
 }
 
+// RetrySchedule은 UTC 절대 시각을 보관하며 최종 지연 범위는 DB 시계로 보정합니다.
 type RetrySchedule struct {
-	kind  RetryScheduleKind
-	delay time.Duration
-	at    time.Time
+	at time.Time
 }
 
 type DeferCollectionInput struct {
@@ -36,21 +28,13 @@ type deferCollectionState struct {
 	schedule   RetrySchedule
 }
 
-func NewRetryDelaySchedule(delay time.Duration) (RetrySchedule, error) {
-	schedule := RetrySchedule{kind: RetryScheduleDelay, delay: delay}
-	if err := schedule.Validate(); err != nil {
-		return RetrySchedule{}, fmt.Errorf("validate: %w", err)
-	}
-
-	return schedule, nil
-}
-
+// NewRetryAtSchedule은 시각을 UTC로 정규화하며 영 시각은 거부합니다.
 func NewRetryAtSchedule(at time.Time) (RetrySchedule, error) {
 	if at.IsZero() {
 		return RetrySchedule{}, errors.New("new retry schedule: timestamp is zero")
 	}
 
-	schedule := RetrySchedule{kind: RetryScheduleAt, at: at.UTC()}
+	schedule := RetrySchedule{at: at.UTC()}
 	if err := schedule.Validate(); err != nil {
 		return RetrySchedule{}, fmt.Errorf("validate: %w", err)
 	}
@@ -75,48 +59,13 @@ func NewDeferCollectionInput(
 	return input, nil
 }
 
-func (s RetrySchedule) Kind() RetryScheduleKind { return s.kind }
-func (s RetrySchedule) Delay() time.Duration    { return s.delay }
-func (s RetrySchedule) At() time.Time           { return s.at }
+// At은 저장소에 전달할 UTC 재시도 시각을 반환합니다.
+func (s RetrySchedule) At() time.Time { return s.at }
 
+// Validate는 생성자를 거치지 않은 빈 값이나 UTC가 아닌 시각을 거부합니다.
 func (s RetrySchedule) Validate() error {
-	switch s.kind {
-	case RetryScheduleDelay:
-		return s.validateDelaySchedule()
-	case RetryScheduleAt:
-		return s.validateAtSchedule()
-	default:
-		return fmt.Errorf("validate retry schedule: unknown kind %q", s.kind)
-	}
-}
-
-func (s RetrySchedule) validateDelaySchedule() error {
-	if err := s.validateDelay(); err != nil {
-		return fmt.Errorf("validate delay: %w", err)
-	}
-
-	return nil
-}
-
-func (s RetrySchedule) validateAtSchedule() error {
-	if err := s.validateAt(); err != nil {
-		return fmt.Errorf("validate at: %w", err)
-	}
-
-	return nil
-}
-
-func (s RetrySchedule) validateDelay() error {
-	if s.delay <= 0 || !millisecondAligned(s.delay) || !s.at.IsZero() {
-		return errors.New("validate retry schedule: DELAY requires a positive millisecond-aligned delay")
-	}
-
-	return nil
-}
-
-func (s RetrySchedule) validateAt() error {
-	if s.at.IsZero() || s.at.Location() != time.UTC || s.delay != 0 {
-		return errors.New("validate retry schedule: AT requires a UTC timestamp and zero delay")
+	if s.at.IsZero() || s.at.Location() != time.UTC {
+		return errors.New("validate retry schedule: requires a nonzero UTC timestamp")
 	}
 
 	return nil

@@ -268,22 +268,39 @@ func TestPUB009TerminalRowCountZeroRollsBackObservations(t *testing.T) {
 }
 
 func TestPUB010InvalidPublishResultRollsBack(t *testing.T) {
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	repo := NewRepository(pool)
+	for _, terminal := range []string{"complete", "defer"} {
+		t.Run(terminal, func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			repo := NewRepository(pool)
 
-	repo.rewritePublishResult = func(result PublishBatchResult) PublishBatchResult {
-		result.Results = nil
-		return result
+			repo.rewritePublishResult = func(result PublishBatchResult) PublishBatchResult {
+				result.Results = nil
+				return result
+			}
+
+			input := publishInput(communityEnvelope(t, &proof, "post-1"))
+
+			var err error
+
+			if terminal == "defer" {
+				_, err = repo.PublishBatchAndDefer(ctx, input, mustTestDeferInput(t, contract.ErrorCooldown, contract.ClassCooldown, "cooldown"))
+			} else {
+				_, err = repo.PublishBatch(ctx, input)
+			}
+
+			if err == nil {
+				t.Fatal("missing result must fail")
+			}
+
+			assertPublishSideEffects(t, pool, 0, 0, 0)
+
+			if got := readLeaseTerminal(ctx, t, pool, proof.JobKey); got.state != testSlotStateActive {
+				t.Fatalf("invalid result mutated lease = %#v", got)
+			}
+		})
 	}
-
-	_, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
-	if err == nil {
-		t.Fatal("missing result must fail")
-	}
-
-	assertPublishSideEffects(t, pool, 0, 0, 0)
 }
 
 func TestPUB011CallerMutationDuringTxUsesPreparedClone(t *testing.T) {
@@ -321,63 +338,58 @@ func TestPUB011CallerMutationDuringTxUsesPreparedClone(t *testing.T) {
 	}
 }
 
-func TestPUB012RetryAtAndDelayClampAgainstPostgresClock(t *testing.T) {
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	scheduledFor := proof.ScheduledFor
+func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		at   time.Time
+		want time.Duration
+	}{
+		{name: "past clamps to minimum", at: time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC), want: 200 * time.Millisecond},
+		{name: "future clamps to maximum", at: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC), want: time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	diagnostic, err := contract.NewFailureDiagnostic(contract.ErrorCooldown, contract.ClassCooldown, "cooldown")
-	if err != nil {
-		t.Fatal(err)
-	}
+			diagnostic, err := contract.NewFailureDiagnostic(contract.ErrorCooldown, contract.ClassCooldown, "cooldown")
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	past, err := NewRetryAtSchedule(time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Fatal(err)
-	}
+			schedule, err := NewRetryAtSchedule(test.at)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	input, err := NewDeferCollectionInput(diagnostic, RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, past)
-	if err != nil {
-		t.Fatal(err)
-	}
+			input, err := NewDeferCollectionInput(diagnostic, RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, schedule)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	if _, publishErr := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), input); publishErr != nil {
-		t.Fatal(publishErr)
-	}
+			var before, after time.Time
 
-	got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
-	assertClampedRetry(t, &got, scheduledFor)
-	reactivateLease(t, pool, &proof)
+			if err := pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&before); err != nil {
+				t.Fatal(err)
+			}
 
-	delay, err := NewRetryDelaySchedule(200 * time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
-	}
+			if _, err := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), input); err != nil {
+				t.Fatal(err)
+			}
 
-	delayInput, err := NewDeferCollectionInput(diagnostic, RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, delay)
-	if err != nil {
-		t.Fatal(err)
-	}
+			if err := pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&after); err != nil {
+				t.Fatal(err)
+			}
 
-	if _, err := NewRepository(pool).PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), delayInput); err != nil {
-		t.Fatal(err)
-	}
+			got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
+			if !got.scheduledFor.Equal(proof.ScheduledFor) || got.retryAt == nil {
+				t.Fatalf("retry clamp = %#v", got)
+			}
 
-	got = readLeaseTerminal(ctx, t, pool, proof.JobKey)
-	assertClampedRetry(t, &got, scheduledFor)
-}
-
-func assertClampedRetry(t *testing.T, got *leaseTerminalState, scheduledFor time.Time) {
-	t.Helper()
-
-	if !got.scheduledFor.Equal(scheduledFor) || got.retryAt == nil {
-		t.Fatalf("retry clamp = %#v", got)
-	}
-
-	now := time.Now().UTC()
-	if got.retryAt.Before(now.Add(50*time.Millisecond)) || got.retryAt.After(now.Add(1500*time.Millisecond)) {
-		t.Fatalf("retry_not_before = %s not clamped to postgres min delay", got.retryAt)
+			if got.retryAt.Before(before.Add(test.want)) || got.retryAt.After(after.Add(test.want)) {
+				t.Fatalf("retry_not_before = %s, want postgres clock + %s", got.retryAt, test.want)
+			}
+		})
 	}
 }
 
@@ -413,7 +425,7 @@ func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 
 	err = pool.QueryRow(ctx, mustSQL("repository_job_defer_0082_82.sql"),
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
-		"not_a_code", "TRANSIENT", "detail", "DELAY", int64(200), time.Time{}, int64(100), int64(1000),
+		"not_a_code", "TRANSIENT", "detail", time.Now().UTC().Add(200*time.Millisecond), int64(100), int64(1000),
 	).Scan(&jobKey)
 
 	if !errors.Is(err, pgx.ErrNoRows) {

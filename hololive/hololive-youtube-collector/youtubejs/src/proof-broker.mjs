@@ -27,10 +27,10 @@ export class ProofBrokerClient {
   /** @param {{ socket?: string }} [options] */
   constructor(options = {}) {
     this.socket = options.socket ?? socketPath;
-    // keep-alive 연결을 재사용해 서버가 응답 직후 닫는 연결의 첫 read(AppArmor unix 미디에이션
-    // 경쟁, upstream b1aea2c19607 미적용 커널의 Oops 경로)를 만들지 않습니다. Agent timeout은
-    // 유휴(free) socket만 파기하고 진행 중 요청은 끊지 않으므로, 유휴 연결은 서버 IdleTimeout 전에
-    // client가 닫아 서버가 닫는 socket에 요청을 보내는 재사용 경쟁도 피합니다.
+    // 연결 재사용과 유휴 socket의 client 우선 종료를 위해 keep-alive를 유지합니다.
+    // AppArmor 경쟁(b1aea2c19607)의 과거 완화책이었으며, 운영 커널 수정 확인은 runbook §4에 기록합니다.
+    // Agent timeout은 유휴(free) socket만 파기합니다. 서버 IdleTimeout보다 짧게 두어
+    // 서버가 이미 닫은 socket을 재사용하는 경쟁을 줄이고, 진행 중 요청의 예산은 별도로 유지합니다.
     this.agent = new Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 1, timeout: idleSocketTimeoutMs });
   }
 

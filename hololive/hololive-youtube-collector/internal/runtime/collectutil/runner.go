@@ -89,6 +89,8 @@ type RunInput struct {
 	maxSuccessResponseBytes int
 }
 
+// RunOutput은 생성 시 입력을 복사한 불변 수집 결과입니다.
+// 값 복사는 내부 저장소를 공유하며, 가변 관측·체크포인트 조회는 독립된 복사본을 반환합니다.
 type RunOutput struct {
 	observations      []contract.Envelope
 	checkpoints       []sourceobservation.CheckpointEntry
@@ -274,6 +276,7 @@ func (i *RunInput) MaxSuccessResponseBytes() int {
 	return i.maxSuccessResponseBytes
 }
 
+// NewRunOutput은 payload, source event 시각과 cursor를 포함한 입력의 소유권을 복사로 확보합니다.
 func NewRunOutput(
 	observations []contract.Envelope,
 	checkpoints []sourceobservation.CheckpointEntry,
@@ -322,10 +325,12 @@ func CompleteFromEnvelopes(envelopes []contract.Envelope, started time.Time) (Co
 	return out, nil
 }
 
+// Observations는 payload와 source event 시각까지 독립된 관측 복사본을 반환합니다.
 func (o RunOutput) Observations() []contract.Envelope {
 	return cloneEnvelopes(o.observations)
 }
 
+// Checkpoints는 cursor까지 독립된 체크포인트 복사본을 반환합니다.
 func (o RunOutput) Checkpoints() []sourceobservation.CheckpointEntry {
 	return cloneCheckpoints(o.checkpoints)
 }

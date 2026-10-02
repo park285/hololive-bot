@@ -5,6 +5,7 @@ import test from "node:test";
 import { createFetchTransport } from "./fetch-transport.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { rpcErrorResultFor } from "./rpc-validation.mjs";
+import { paginate, paginationEnvelopeReserve } from "./pagination.mjs";
 
 test("effective Request semantics reach the origin through local sockets", async () => {
   const fixture = await originFixture();
@@ -127,6 +128,105 @@ test("known transport errors remain explicitly transient", async (t) => {
     transport.fetch("http://origin.test/"),
     (error) => error.code === "collection_failed" && error.failureClass === "TRANSIENT",
   );
+});
+
+test("body ECONNRESET remains transient after headers without a second request", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    calls++;
+    return new Response(new ReadableStream({
+      start(controller) {
+        controller.error(Object.assign(new Error("body socket reset"), { code: "ECONNRESET" }));
+      },
+    }));
+  });
+  const transport = createFetchTransport({ currentSignal: () => undefined, retryDelayMs: 0 });
+  const response = await transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" });
+  await assert.rejects(response.text(), (error) => {
+    const result = rpcErrorResultFor(error);
+    assert.equal(result.status, 502);
+    assert.equal(result.body.error.code, "collection_failed");
+    return true;
+  });
+  assert.equal(calls, 1);
+});
+
+test("real undici body termination uses the same first-page and continuation classification", async (t) => {
+  const nativeFetch = globalThis.fetch;
+  let calls = 0;
+  const origin = createServer((_req, res) => {
+    calls++;
+    res.writeHead(200, { "content-type": "application/json", "content-length": "100000" });
+    res.write('{"items":');
+    setTimeout(() => res.destroy(), 20);
+  });
+  await listen(origin);
+  t.after(() => close(origin));
+  const url = `http://127.0.0.1:${origin.address().port}/`;
+  t.mock.method(globalThis, "fetch", (_request, init) => nativeFetch(url, { signal: init.signal }));
+  const transport = createFetchTransport({ currentSignal: () => undefined, retryDelayMs: 0 });
+
+  for (const send of [transport.fetch, transport.singleAttemptFetch]) {
+    let bodyFailure;
+    const before = calls;
+    const response = await send("https://www.youtube.com/youtubei/v1/browse", { method: "POST" });
+    await assert.rejects(response.json(), (error) => {
+      assert.ok(error instanceof TypeError);
+      assert.equal(error.message, "terminated");
+      assert.equal(error.cause.code, "UND_ERR_SOCKET");
+      bodyFailure = error;
+      return true;
+    });
+    assert.equal(calls, before + 1);
+    const result = rpcErrorResultFor(bodyFailure);
+    assert.equal(result.status, 502);
+    assert.equal(result.body.error.class, "TRANSIENT");
+
+    const partial = await paginate({
+      firstPage: { items: [{ id: "first" }], continuation: "next" },
+      mapPage: (page) => ({ recognized_shape: true, items: page.items }),
+      getContinuation: async () => { throw bodyFailure; },
+      maxPages: 2, reservedEnvelopeBytes: paginationEnvelopeReserve({ items: [] }),
+    });
+    assert.equal(partial.termination_reason, "continuation_transient");
+    assert.equal(partial.continuity, "GAP_UNRESOLVED");
+    assert.deepEqual(partial.items, [{ id: "first" }]);
+  }
+});
+
+test("real undici cleanup failures preserve HTTP classification and never schedule another attempt", async (t) => {
+  const nativeFetch = globalThis.fetch;
+  let calls = 0;
+  let status = 500;
+  const origin = createServer((_req, res) => {
+    calls++;
+    res.writeHead(status, { "content-type": "application/json", "content-length": "100000" });
+    res.write('{"error":');
+    setTimeout(() => res.destroy(), 5);
+  });
+  await listen(origin);
+  t.after(() => close(origin));
+  const url = `http://127.0.0.1:${origin.address().port}/`;
+  t.mock.method(globalThis, "fetch", async (_request, init) => {
+    const response = await nativeFetch(url, { signal: init.signal });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    return response;
+  });
+  const transport = createFetchTransport({
+    currentSignal: () => undefined, retryDelayMs: 0,
+    observeRetry: () => assert.fail("cleanup failure must stop the attempt"),
+  });
+  for (const upstreamStatus of [500, 429]) {
+    status = upstreamStatus;
+    const before = calls;
+    await assert.rejects(transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" }), (error) => {
+      assert.equal(error.cause.cause.code, "UND_ERR_SOCKET");
+      const result = rpcErrorResultFor(error);
+      assert.equal(result.body.error.code, status === 429 ? "cooldown" : "collection_failed");
+      return true;
+    });
+    assert.equal(calls, before + 1);
+  }
 });
 
 test("safe Innertube HTTP 500 is retried once with the same request body", async (t) => {

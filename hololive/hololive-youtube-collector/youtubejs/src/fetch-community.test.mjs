@@ -1,10 +1,10 @@
+import { channelFixture } from "./test-fixtures/channel.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
   fetchCommunityFeed,
   fetchCommunityPosts,
-  isMissingCommunity,
   listBackstagePosts,
 } from "./fetch-community.mjs";
 
@@ -20,16 +20,12 @@ test("listBackstagePosts reads memo.getType", () => {
   assert.equal(posts[0].id, "post-1");
 });
 
-test("isMissingCommunity recognizes tab-not-found", () => {
-  assert.equal(isMissingCommunity(new Error("Community tab not found")), true);
-  assert.equal(isMissingCommunity(new Error("rate limited")), false);
-});
-
 test("fetchCommunityFeed maps stub Innertube posts without live YouTube", async () => {
   const innertube = {
-    getChannel: async (channelId) => ({
+    getChannel: async (channelId) => channelFixture({
       has_community: true,
-      getCommunity: async () => ({
+      getCommunity: async () => channelFixture({
+        posts: undefined,
         memo: {
           getType: () => [
             {
@@ -55,14 +51,9 @@ test("fetchCommunityFeed maps stub Innertube posts without live YouTube", async 
   assert.equal(result.continuity, "CONTIGUOUS");
 });
 
-test("PAG-011 fetchCommunityFeed keeps missing tab as a capability signal", async () => {
+test("PAG-011 fetchCommunityFeed recognizes a complete raw list without the posts tab", async () => {
   const innertube = {
-    getChannel: async () => ({
-      has_community: false,
-      getCommunity: async () => {
-        throw new Error("should not run");
-      },
-    }),
+    getChannel: async () => channelFixture({ has_community: undefined }, ["featured"]),
   };
   const result = await fetchCommunityFeed({ channelId: "UC_NONE", innertube });
   assert.equal(result.missing_tab, true);
@@ -73,12 +64,11 @@ test("PAG-011 fetchCommunityFeed keeps missing tab as a capability signal", asyn
 
 test("fetchCommunityPosts returns empty when the posts tab is missing", async () => {
   const innertube = {
-    getChannel: async () => ({
-      has_community: false,
+    getChannel: async () => channelFixture({
       getCommunity: async () => {
         throw new Error("should not run");
       },
-    }),
+    }, ["featured"]),
   };
   const posts = await fetchCommunityPosts({ channelId: "UC_NONE", innertube });
   assert.deepEqual(posts, []);
@@ -98,9 +88,9 @@ test("fetchCommunityFeed fail-closes on Innertube errors", async () => {
 
 test("fetchCommunityFeed fail-closes when a community post id is missing", async () => {
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       has_community: true,
-      getCommunity: async () => ({
+      getCommunity: async () => channelFixture({
         posts: [{ author: { id: "UC_TEST", name: "Author" }, content: "missing id" }],
       }),
     }),
@@ -113,9 +103,9 @@ test("fetchCommunityFeed fail-closes when a community post id is missing", async
 
 test("fetchCommunityFeed preserves continuation metadata across pages", async () => {
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       has_community: true,
-      getCommunity: async () => ({
+      getCommunity: async () => channelFixture({
         continuation: "page-2",
         posts: [{ id: "post-1", author: { id: "UC_TEST", name: "Author" }, content: "one" }],
         getContinuation: async () => ({

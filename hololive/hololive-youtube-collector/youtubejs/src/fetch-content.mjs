@@ -1,3 +1,6 @@
+import { FetchTransportError } from "./fetch-transport.mjs";
+import { readUpstream, runUpstream } from "./upstream-errors.mjs";
+import { fetchChannelTab } from "./channel-tabs.mjs";
 import {
   assertResponseBudget,
   paginate,
@@ -22,7 +25,7 @@ export async function fetchContentFeed({
   const id = String(channelId ?? "").trim();
   const contentKind = String(kind ?? "").trim();
   if (id === "") {
-    throw new Error("channel id is required");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel id is required");
   }
   if (contentKind !== "videos" && contentKind !== "shorts") {
     const err = new Error("content kind must be videos or shorts");
@@ -30,12 +33,16 @@ export async function fetchContentFeed({
     throw err;
   }
   if (innertube == null || typeof innertube.getChannel !== "function") {
-    throw new Error("innertube client is required");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "innertube client is required");
   }
   assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
-  const channel = await innertube.getChannel(id);
+  const channel = await runUpstream(() => innertube.getChannel(id));
   const loader = contentKind === "shorts" ? channel.getShorts : channel.getVideos;
   if (typeof loader !== "function") {
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "content tab loader is unavailable");
+  }
+  const tab = await fetchChannelTab(channel, contentKind, () => loader.call(channel));
+  if (tab.missing === true) {
     return {
       items: [],
       ...paginationResult({
@@ -46,16 +53,15 @@ export async function fetchContentFeed({
       missing_tab: true,
     };
   }
-  const feed = await loader.call(channel);
   const paged = await paginate({
-    firstPage: feed,
+    firstPage: tab.feed,
     getContinuation: async (current) => {
       if (typeof current.getContinuation !== "function") {
         const err = new Error("content continuation is missing");
         err.code = "parser_drift";
         throw err;
       }
-      return current.getContinuation();
+      return runUpstream(() => current.getContinuation());
     },
     mapPage: async (current) => ({
       recognized_shape: true,
@@ -75,10 +81,13 @@ export function mapContentItems(feed, channelId) {
 }
 
 function contentRows(feed) {
-  if (Array.isArray(feed?.videos)) {
-    return feed.videos;
-  } else if (Array.isArray(feed?.items)) {
-    return feed.items;
+  const videos = readUpstream(() => feed?.videos);
+  if (Array.isArray(videos)) {
+    return videos;
+  }
+  const items = readUpstream(() => feed?.items);
+  if (Array.isArray(items)) {
+    return items;
   } else {
     const error = new Error("content page shape is not recognized");
     error.code = "parser_drift";

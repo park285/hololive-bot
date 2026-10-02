@@ -664,12 +664,12 @@ hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_run.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/sql.go
 hololive/hololive-youtube-collector/internal/runtime/collectutil/envelope.go
+hololive/hololive-youtube-collector/internal/runtime/collectutil/output_metadata.go
 hololive/hololive-youtube-collector/internal/runtime/collectutil/result.go
 hololive/hololive-youtube-collector/internal/runtime/collectutil/runner.go
 hololive/hololive-youtube-collector/internal/runtime/holodexcollector/client.go
 hololive/hololive-youtube-collector/internal/runtime/holodexcollector/mapper.go
 hololive/hololive-youtube-collector/internal/runtime/holodexcollector/runner.go
-hololive/hololive-youtube-collector/internal/runtime/joblease/durable_failure_sql.go
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_candidates_0144_02.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_candidates_global_0144_17.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_acquire_0144_08.sql

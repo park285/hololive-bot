@@ -78,7 +78,9 @@ func TestAPI008DeferCollectionInputHasNoPublicMutableSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	schedule, err := NewRetryDelaySchedule(1500 * time.Millisecond)
+	retryAt := time.Date(2026, time.October, 2, 0, 0, 0, 500000000, time.UTC)
+
+	schedule, err := NewRetryAtSchedule(retryAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +96,7 @@ func TestAPI008DeferCollectionInputHasNoPublicMutableSurface(t *testing.T) {
 
 	got := input.Schedule()
 
-	if bounds.Minimum != time.Hour || input.Bounds().Minimum != time.Second || got.Delay() != 1500*time.Millisecond {
+	if bounds.Minimum != time.Hour || input.Bounds().Minimum != time.Second || !got.At().Equal(retryAt) {
 		t.Fatal("DeferCollectionInput getter mutation leaked")
 	}
 

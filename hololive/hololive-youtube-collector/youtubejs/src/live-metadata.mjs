@@ -1,3 +1,5 @@
+import { runUpstream } from "./upstream-errors.mjs";
+
 const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export async function fetchLiveMetadata(innertube, videoId) {
@@ -9,12 +11,12 @@ export async function fetchLiveMetadata(innertube, videoId) {
     throw parserDrift("raw player metadata lookup is unavailable");
   }
 
-  const response = await innertube.actions.execute("/player", {
+  const response = await runUpstream(() => innertube.actions.execute("/player", {
     videoId: id,
     racyCheckOk: true,
     contentCheckOk: true,
     parse: false,
-  });
+  }));
   if (!isRecord(response)) {
     throw parserDrift("raw player response is not an object");
   }
