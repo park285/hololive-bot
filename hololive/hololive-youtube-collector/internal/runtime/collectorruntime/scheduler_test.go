@@ -477,7 +477,7 @@ func runtimeLeaseConfig() joblease.Config {
 	}
 }
 
-func withOverride(overrides ...JobRunner) []JobRunner {
+func withOverride(overrides ...collectutil.JobRunner) []collectutil.JobRunner {
 	runners := completeStubRunners()
 	for i, runner := range runners {
 		for _, override := range overrides {

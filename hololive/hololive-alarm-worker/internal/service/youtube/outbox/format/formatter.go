@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -127,7 +128,8 @@ func populateTemplateData(data *TemplateData, item *domain.YouTubeNotificationOu
 	case domain.OutboxKindCommunityPost:
 		return populateCommunityTemplateData(data, item.Payload)
 	default:
-		return nil
+		// 알 수 없는 kind를 빈 데이터로 영상 template에 렌더링하지 않는다. 렌더링 전에 포맷 실패로 드러낸다.
+		return fmt.Errorf("unsupported outbox kind %q", item.Kind)
 	}
 }
 
@@ -148,7 +150,7 @@ func populateCommunityTemplateData(data *TemplateData, payload string) error {
 }
 
 func buildVideoTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
-	var p VideoPayload
+	var p youtubeoutbox.Video
 
 	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
 		return fmt.Errorf("unmarshal video payload: %w", err)
@@ -163,7 +165,7 @@ func buildVideoTemplateData(data *TemplateData, item *domain.YouTubeNotification
 	return nil
 }
 
-func populatePremiereTemplateData(data *TemplateData, kind domain.OutboxKind, payload *VideoPayload, now time.Time) {
+func populatePremiereTemplateData(data *TemplateData, kind domain.OutboxKind, payload *youtubeoutbox.Video, now time.Time) {
 	if kind != domain.OutboxKindNewVideo || payload.IsPremiere == nil || !*payload.IsPremiere {
 		return
 	}
@@ -187,7 +189,7 @@ func VideoTemplateURL(kind domain.OutboxKind, videoID string) string {
 }
 
 func buildCommunityTemplateData(data *TemplateData, payload string) error {
-	var p CommunityPayload
+	var p youtubeoutbox.Community
 
 	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
 		return fmt.Errorf("unmarshal community payload: %w", err)
@@ -198,23 +200,6 @@ func buildCommunityTemplateData(data *TemplateData, payload string) error {
 	data.URL = fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID)
 
 	return nil
-}
-
-type VideoPayload struct {
-	CanonicalPostID  string     `json:"canonical_post_id,omitempty"`
-	VideoID          string     `json:"video_id"`
-	Title            string     `json:"title"`
-	PublishedText    string     `json:"published_text,omitempty"`
-	PublishedAt      *time.Time `json:"published_at,omitempty"`
-	ScheduledStartAt *time.Time `json:"scheduled_start_at,omitempty"`
-	IsPremiere       *bool      `json:"is_premiere,omitempty"`
-}
-
-type CommunityPayload struct {
-	CanonicalPostID string     `json:"canonical_post_id,omitempty"`
-	PostID          string     `json:"post_id"`
-	ContentText     string     `json:"content_text"`
-	PublishedAt     *time.Time `json:"published_at,omitempty"`
 }
 
 func (mf *MessageFormatter) GetMemberName(ctx context.Context, channelID string) (string, error) {
@@ -248,9 +233,17 @@ func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName
 		return "", errors.New("no items to format")
 	}
 
-	data := mf.BuildGroupedTemplateData(memberName, kind, items)
+	templateKey, err := groupedTemplateKey(kind)
+	if err != nil {
+		return "", err
+	}
 
-	out, err := mf.renderTemplate(ctx, groupedTemplateKey(kind), channelID, data)
+	data, err := mf.BuildGroupedTemplateData(memberName, kind, items)
+	if err != nil {
+		return "", err
+	}
+
+	out, err := mf.renderTemplate(ctx, templateKey, channelID, data)
 	if err != nil {
 		return out, fmt.Errorf("render template: %w", err)
 	}
@@ -258,20 +251,22 @@ func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName
 	return out, nil
 }
 
-func groupedTemplateKey(kind domain.OutboxKind) domain.TemplateKey {
+func groupedTemplateKey(kind domain.OutboxKind) (domain.TemplateKey, error) {
 	switch kind {
 	case domain.OutboxKindNewShort:
-		return domain.TemplateKeyOutboxShortsGroup
+		return domain.TemplateKeyOutboxShortsGroup, nil
 	case domain.OutboxKindCommunityPost:
-		return domain.TemplateKeyOutboxCommunityGroup
+		return domain.TemplateKeyOutboxCommunityGroup, nil
 	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
-		return domain.TemplateKeyOutboxVideoGroup
+		return domain.TemplateKeyOutboxVideoGroup, nil
 	default:
-		return domain.TemplateKeyOutboxVideoGroup
+		return "", fmt.Errorf("grouped template: unsupported outbox kind %q", kind)
 	}
 }
 
-func (mf *MessageFormatter) BuildGroupedTemplateData(memberName string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) GroupedTemplateData {
+// BuildGroupedTemplateData는 묶음 template 입력을 만든다. 항목 하나라도 payload를 읽지 못하면 빈 항목으로
+// 보내지 않고 오류를 돌려주며, 호출자는 묶음 전체를 재시도 가능한 포맷 실패로 처리한다.
+func (mf *MessageFormatter) BuildGroupedTemplateData(memberName string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) (GroupedTemplateData, error) {
 	data := GroupedTemplateData{
 		MemberName: memberName,
 		Kind:       string(kind),
@@ -280,28 +275,33 @@ func (mf *MessageFormatter) BuildGroupedTemplateData(memberName string, kind dom
 	}
 
 	for i := range items {
-		data.Items = append(data.Items, BuildGroupedItemData(&items[i]))
+		item, err := buildGroupedItemData(&items[i])
+		if err != nil {
+			return GroupedTemplateData{}, fmt.Errorf("grouped item %d (outbox %d): %w", i, items[i].ID, err)
+		}
+
+		data.Items = append(data.Items, item)
 	}
 
-	return data
+	return data, nil
 }
 
-func BuildGroupedItemData(item *domain.YouTubeNotificationOutbox) GroupedItemData {
+func buildGroupedItemData(item *domain.YouTubeNotificationOutbox) (GroupedItemData, error) {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
 		return buildGroupedVideoItemData(item)
 	case domain.OutboxKindCommunityPost:
 		return buildGroupedCommunityItemData(item.Payload)
 	default:
-		return GroupedItemData{}
+		return GroupedItemData{}, fmt.Errorf("unsupported outbox kind %q", item.Kind)
 	}
 }
 
-func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) GroupedItemData {
-	var p VideoPayload
+func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) (GroupedItemData, error) {
+	var p youtubeoutbox.Video
 
 	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
-		return GroupedItemData{}
+		return GroupedItemData{}, fmt.Errorf("unmarshal video payload: %w", err)
 	}
 
 	title := p.Title
@@ -312,18 +312,18 @@ func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) GroupedIt
 	return GroupedItemData{
 		Title: title,
 		URL:   VideoTemplateURL(item.Kind, p.VideoID),
-	}
+	}, nil
 }
 
-func buildGroupedCommunityItemData(payload string) GroupedItemData {
-	var p CommunityPayload
+func buildGroupedCommunityItemData(payload string) (GroupedItemData, error) {
+	var p youtubeoutbox.Community
 
 	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
-		return GroupedItemData{}
+		return GroupedItemData{}, fmt.Errorf("unmarshal community payload: %w", err)
 	}
 
 	return GroupedItemData{
 		ContentText: p.ContentText,
 		URL:         fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID),
-	}
+	}, nil
 }

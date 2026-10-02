@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	format "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -55,7 +55,7 @@ func TestOutboxMemberSubscriptionsSeparateTitlesInOneBatch(t *testing.T) {
 	items := make([]domain.YouTubeNotificationOutbox, 0, len(cases))
 
 	for i, tc := range cases {
-		payload, err := jsonv2.Marshal(format.VideoPayload{VideoID: "video", Title: tc.title})
+		payload, err := jsonv2.Marshal(youtubeoutbox.Video{VideoID: "video", Title: tc.title})
 		require.NoError(t, err)
 
 		items = append(items, domain.YouTubeNotificationOutbox{ID: int64(i + 1), ChannelID: outboxUnitBChannel, Kind: tc.kind, Payload: string(payload)})

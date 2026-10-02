@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	format "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
@@ -52,11 +52,11 @@ func shouldFilterLiveCatchupSuppression(g *OutboxGrouper, item *domain.YouTubeNo
 		len(rooms) > 0
 }
 
-func liveStreamPayloadForSuppression(item *domain.YouTubeNotificationOutbox) (format.VideoPayload, bool) {
-	var payload format.VideoPayload
+func liveStreamPayloadForSuppression(item *domain.YouTubeNotificationOutbox) (youtubeoutbox.Video, bool) {
+	var payload youtubeoutbox.Video
 
 	if err := jsonv2.Unmarshal([]byte(item.Payload), &payload); err != nil {
-		return format.VideoPayload{}, false
+		return youtubeoutbox.Video{}, false
 	}
 
 	scheduledAt := liveSuppressionScheduledAt(&payload)
@@ -68,7 +68,7 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 	ctx context.Context,
 	roomID string,
 	channelID string,
-	payload *format.VideoPayload,
+	payload *youtubeoutbox.Video,
 ) bool {
 	scheduledAt := liveSuppressionScheduledAt(payload)
 	if scheduledAt == nil || scheduledAt.IsZero() {
@@ -116,7 +116,7 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 	return true
 }
 
-func liveSuppressionScheduledAt(payload *format.VideoPayload) *time.Time {
+func liveSuppressionScheduledAt(payload *youtubeoutbox.Video) *time.Time {
 	if payload.ScheduledStartAt != nil && !payload.ScheduledStartAt.IsZero() {
 		return payload.ScheduledStartAt
 	}

@@ -55,6 +55,14 @@ func TestBuildTemplateData(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "unknown kind",
+			item: domain.YouTubeNotificationOutbox{
+				Kind:    domain.OutboxKind("UNKNOWN"),
+				Payload: `{"video_id":"vid1","title":"영상1"}`,
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -92,12 +100,15 @@ func TestBuildGroupedTemplateData(t *testing.T) {
 	mf := &MessageFormatter{}
 	items := []domain.YouTubeNotificationOutbox{
 		{Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"영상1"}`},
-		{Kind: domain.OutboxKindNewShort, Payload: `{invalid}`},
 		{Kind: domain.OutboxKindCommunityPost, Payload: `{"post_id":"p1","content_text":"내용"}`},
 	}
 
-	got := mf.BuildGroupedTemplateData("멤버", domain.OutboxKindNewVideo, items)
-	if got.MemberName != "멤버" || got.Kind != string(domain.OutboxKindNewVideo) || got.Count != 3 || len(got.Items) != 3 {
+	got, err := mf.BuildGroupedTemplateData("멤버", domain.OutboxKindNewVideo, items)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got.MemberName != "멤버" || got.Kind != string(domain.OutboxKindNewVideo) || got.Count != 2 || len(got.Items) != 2 {
 		t.Fatalf("unexpected grouped template header: %#v", got)
 	}
 
@@ -105,12 +116,33 @@ func TestBuildGroupedTemplateData(t *testing.T) {
 		t.Fatalf("unexpected first item: %#v", got.Items[0])
 	}
 
-	if got.Items[1].Title != "" || got.Items[1].URL != "" {
-		t.Fatalf("expected invalid payload item to stay empty: %#v", got.Items[1])
+	if got.Items[1].ContentText != "내용" || got.Items[1].URL != "https://www.youtube.com/post/p1" {
+		t.Fatalf("unexpected second item: %#v", got.Items[1])
 	}
+}
 
-	if got.Items[2].ContentText != "내용" || got.Items[2].URL != "https://www.youtube.com/post/p1" {
-		t.Fatalf("unexpected third item: %#v", got.Items[2])
+// 묶음 안의 항목 하나라도 읽지 못하면 빈 항목으로 보내지 않고 묶음 전체를 포맷 실패로 돌려준다.
+func TestBuildGroupedTemplateDataRejectsUnreadableItems(t *testing.T) {
+	t.Parallel()
+
+	valid := domain.YouTubeNotificationOutbox{ID: 1, Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"영상1"}`}
+
+	for _, tc := range []struct {
+		name string
+		item domain.YouTubeNotificationOutbox
+	}{
+		{name: "invalid video payload", item: domain.YouTubeNotificationOutbox{ID: 2, Kind: domain.OutboxKindNewShort, Payload: `{invalid}`}},
+		{name: "invalid community payload", item: domain.YouTubeNotificationOutbox{ID: 2, Kind: domain.OutboxKindCommunityPost, Payload: `[]`}},
+		{name: "unknown kind", item: domain.YouTubeNotificationOutbox{ID: 2, Kind: domain.OutboxKind("UNKNOWN"), Payload: `{}`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := (&MessageFormatter{}).BuildGroupedTemplateData("멤버", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{valid, tc.item})
+			if err == nil {
+				t.Fatal("expected grouped template data error")
+			}
+		})
 	}
 }
 
@@ -122,7 +154,12 @@ func TestFormatGroupedMessageErrors(t *testing.T) {
 		t.Fatal("expected empty items error")
 	}
 
-	if _, err := mf.FormatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{{}}); err == nil {
+	if _, err := mf.FormatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKind("UNKNOWN"), []domain.YouTubeNotificationOutbox{{}}); err == nil {
+		t.Fatal("expected unsupported grouped kind error")
+	}
+
+	validItem := domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"영상1"}`}
+	if _, err := mf.FormatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{validItem}); err == nil {
 		t.Fatal("expected nil renderer error")
 	}
 }
