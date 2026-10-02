@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
@@ -31,10 +30,8 @@ func (as *AlarmService) RemoveHostAlarm(ctx context.Context, roomID, channelID, 
 }
 
 func (as *AlarmService) removeAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
-	as.cacheMutationMu.Lock()
+	startedAt := as.lockCacheMutation("remove")
 	defer as.cacheMutationMu.Unlock()
-
-	startedAt := time.Now()
 
 	var opErr error
 

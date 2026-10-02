@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
@@ -15,10 +14,8 @@ import (
 
 // AddAlarm은 채팅방의 채널·멤버별 알림 종류를 저장하고 캐시를 갱신하며 새 종류가 추가됐는지 반환한다.
 func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
-	as.cacheMutationMu.Lock()
+	startedAt := as.lockCacheMutation("add")
 	defer as.cacheMutationMu.Unlock()
-
-	startedAt := time.Now()
 
 	var opErr error
 

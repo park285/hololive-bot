@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
@@ -13,10 +12,8 @@ import (
 
 // ClearRoomAlarms는 채팅방의 모든 채널·멤버별 구독을 해지하고 해지한 구독 수를 반환한다.
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
-	as.cacheMutationMu.Lock()
+	startedAt := as.lockCacheMutation("clear")
 	defer as.cacheMutationMu.Unlock()
-
-	startedAt := time.Now()
 
 	var opErr error
 
