@@ -8,6 +8,18 @@
 
 ## 미출시
 
+- 봇 응답 저장이나 Iris 전송의 결과가 불명이면 추가 응답(대체 텍스트·공통 오류 문구)을 보내지 않고 결과 불명으로 남깁니다. Iris가 접수한 reply의 handoff 결과를 확정하지 못하면 자동 재발송하지 않는 `manual_review`로 정산합니다.
+- 멤버 조회 backend 오류를 "찾을 수 없음" 응답으로 바꾸지 않고 오류로 드러냅니다.
+- 관리자 비밀번호 재설정 두 경로(`POST /api/auth/password/reset-request`, `POST /api/auth/password/reset`)는 재설정 링크 전달 수단이 없어 HTTP 503으로 응답합니다. 허용 IP의 요청은 본문·계정과 관계없이 같은 응답을 받고 토큰 발급·소비나 비밀번호 변경을 하지 않습니다.
+- LLM 요약의 `source_url`과 `member`는 입력 후보의 URL과 정본 멤버 이름(`MatchedMembers`)에 정확히 맞아야 합니다. 이름 안의 쉼표를 멤버 경계로 잘못 나누던 승인도 고칩니다. 인증 오류 로그의 키는 비식별화합니다.
+- YouTube 영상 제목을 500바이트로 자를 때 UTF-8 문자 중간에서 자르지 않습니다. 같은 호스트의 limiter 표식이 충돌하던 문제와, 채널 metadata의 vanity URL 전체를 handle로 저장하던 문제를 고칩니다.
+- YouTube 수집기는 helper가 인식하지 못한 일반 upstream 실패(탭 부재, 응답 본문 연결 오류, 400·403·404)를 내부 불변식 위반(fatal)으로 올리지 않고 기존 `collection_failed/TRANSIENT`로 분류합니다. 탭 부재는 원문 증거로 판정하고, 파싱 중 유실된 탭은 `parser_drift/DATA_CONTRACT`로 거부합니다. helper 종료 중 늦게 생성된 자원도 정리합니다. 실제 YouTube.js 객체 기준으로 profile·photo·attachment·continuation 매핑을 고칩니다.
+- 묶음 YouTube 알림에서 payload를 읽지 못한 항목을 빈 줄로 보내지 않고, 알 수 없는 알림 종류를 영상 template으로 렌더링하지 않습니다. 둘 다 재시도 가능한 `format_message` 실패로 처리합니다.
+- 멤버 표시명 예외의 중간 단계(최신 `alarms.member_name`, 알람 등록 때 사용자가 보낸 이름)를 지웁니다. 제거 조건(두 지표 30일 0회, 구독 채널 21개 모두 members 한국어 표시명 보유)을 확인했습니다. `hololive_alarm_member_name_fallback_channels`와 `hololive_alarm_member_name_caller_fallback_total`이 없어지고, 종단 문구(`misc/vtuber_fallback`) 사용 횟수를 `hololive_youtube_outbox_member_name_missing_total`로 셉니다.
+- UNIT B 채널의 YouTube 알림 대상 조회를 진행자 조합마다 하지 않고 채널·알림 종류당 한 번만 합니다. 수신 집합과 조회 실패 의미는 같습니다.
+- 알람 추가·삭제·초기화·캐시 warm의 lock 대기를 `hololive_alarm_service_mutation_lock_wait_seconds{operation}`로 기록합니다. `hololive_alarm_service_operation_duration_seconds`는 이제 lock 대기를 포함한 전체 응답 시간입니다.
+- 수집 관측 저장소를 collector가 쓰는 발행(`sourceobservation`)과 API가 쓰는 소비(`sourceobservation/consume`)로 나누고, DB 자원 생성을 `providers/dbresource`로 분리합니다. collector가 링크하는 shared 패키지가 51개에서 36개로 줄었습니다. YouTube 알림 payload는 `pkg/contracts/youtubeoutbox` 타입으로 저장하며 JSON 형태는 그대로입니다. 동작 변경은 없습니다.
+- 소스·스크립트 문자열만 확인하던 검사(collector 6개, batch 저장소 소유권 grep, QUIC UDP buffer 스크립트 문자열)를 stack 규칙에 따라 지웁니다.
 - 행사·멤버 뉴스 알림 발송 배치가 방 순서와 동시 실행 슬롯을 기다리는 동안 60초 claim lease가 지나 전송 전에 건너뛰던 문제를 고칩니다. 실행 슬롯이 빈 방의 첫 항목만 claim하므로 대기 항목이 lease를 미리 쓰지 않고, 짧은 backoff로 다시 due가 된 항목도 같은 poll에서는 한 번만 처리합니다. 발송 attempt 시간은 worker profile의 `notification_delivery.executor.attempt_timeout`을 따르며, dispatcher 설정이 0 이하이면 기본값으로 바꾸지 않고 기동에 실패합니다.
 - 달력 명령에서 같은 달을 함께 기다리던 요청이 먼저 온 요청의 취소 때문에 실패하거나, 취소된 요청이 공유 조회가 끝날 때까지 기다리던 문제를 고칩니다. 공유 조회는 요청 취소와 분리하되 기존 봇 명령 예산(10초) 안에서 끝납니다.
 - 멤버 캐시의 epoch 재조회가 Valkey client를 닫은 뒤에도 15초마다 반복되던 문제를 고칩니다. 캐시의 `Close`가 구독·재조회 작업을 취소하고 끝날 때까지 기다리며, infra 모듈과 LLM plane은 Valkey·DB를 닫기 전에 이를 호출합니다.
@@ -19,7 +31,7 @@
 - 도움말·달력 명령은 이미지 provider·renderer·전송 callback이 없으면 텍스트로 조용히 바꾸지 않고 명령 오류를 반환합니다. 운영 조립은 이 의존성을 항상 연결합니다.
 - major event 링크 검사는 HEAD 오류를 문자열이 아니라 시간 제한·연결 재설정 타입으로만 판단해 GET으로 다시 확인합니다. `timeout`이나 `method not allowed` 문구만 들어간 다른 오류는 더 이상 GET으로 재확인하지 않습니다.
 - membernews·major event 요약 prompt의 JSON 직렬화 실패를 고정 문자열로 대체하지 않고 요약 실패로 처리합니다. 최종 출력 검토 prompt를 만들지 못하면 Warn을 남기고 조립된 본문을 유지합니다.
-- YouTube 발송 dispatcher와 alarm dispatch 보존 작업은 0 이하 설정값을 기본값으로 바꾸지 않고 생성 때 거절합니다. 기본값은 worker profile 로더 한 곳에만 둡니다. YouTube 발송의 `delivery_send_timeout_ms`가 `youtube_delivery.executor.attempt_timeout`과 다르면 기동에 실패합니다.
+- YouTube 발송 dispatcher는 0 이하 설정값을 기본값으로 바꾸지 않고 생성 때 거절합니다. alarm dispatch 보존 작업은 실행 중에 기본값을 채우지 않고, 설정 로더가 0 이하 값을 기동 때 거절합니다. 기본값은 설정 로더 한 곳에만 둡니다. YouTube 발송의 `delivery_send_timeout_ms`가 `youtube_delivery.executor.attempt_timeout`과 다르면 기동에 실패합니다.
 - 공식 일정 fallback 하나만 쓰던 범용 실행기 `internal/service/fallback`을 Holodex provider 안으로 합칩니다. `hololive_fallback_primary_total`·`hololive_fallback_execution_total`의 이름과 label은 그대로입니다.
 - `hololive_messagestrings_lookup_fallback_total`의 이름을 `hololive_messagestrings_lookup_miss_total`로 바꿉니다(label 동일). 호출자 대체 문구가 없어진 뒤로 이 metric은 "조회했지만 값이 없음"을 셉니다. 이전 이름의 시계열은 이어지지 않습니다.
 - 중복 구현을 기존 공통 기능으로 바꿉니다. nil 판정은 shared-go `reflectutil.IsNil`, 이미지 body 상한 읽기는 `httputil.ReadAllLimited`, YouTube 발송 SQL helper는 `dbx`를 씁니다. 영상 필드 변경은 `dbx.ExecStatements`로 묶어 보냅니다. YouTube 발송의 MetricsRecorder는 claim 해제를 하지 않고 기록만 합니다.

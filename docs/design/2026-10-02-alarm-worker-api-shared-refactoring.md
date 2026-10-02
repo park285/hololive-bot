@@ -525,12 +525,28 @@ runtime binary별 `go list -deps`로 worker만 링크하는 shared 패키지 7�
 
 `SERVICE_OWNERSHIP.md`의 shared 잔류 목록과 현재 문서의 경로를 함께 고쳤습니다.
 
+### collector 작업 인계 (2026-10-02)
+
+메인 checkout에 커밋되지 않고 남아 있던 [YouTube 컬렉터 리팩토링](2026-10-02-youtube-collector-shared-refactoring.md)의 구현을 인계받았습니다. 감사 수정과 같은 내용인 변경 144개를 뺀 collector 고유 변경 65개를 이 branch에 적용하고, Go build·vet, collector 전체 테스트, shared 관측 패키지 테스트, YouTube.js 358개 테스트와 타입 검사, AP 매니페스트·경계 gate를 다시 통과시켰습니다. 메인 checkout의 미커밋 상태는 적용 전에 `backup/main-worktree-20261002`로 보존했습니다.
+
+### 5–8단계와 4.5절 (2026-10-02)
+
+| 항목 | 결과 |
+|---|---|
+| 5단계 payload 계약 | `pkg/contracts/youtubeoutbox`의 `Video`·`Short`·`Community`로 payload를 정의했습니다. producer는 domain 값을 필드마다 옮기고, renderer·구독 대상·finalize·live 억제·저장 직전 검증이 같은 타입으로 읽습니다. 바꾸기 전 producer 출력 7종과 바이트가 같음을 확인했고, JSON 형태를 계약 테스트로 고정했습니다. 같은 변경에서 묶음 renderer가 읽지 못한 항목을 빈 줄로 보내던 경로와 알 수 없는 kind를 영상 template으로 렌더링하던 경로를 포맷 실패로 바꿨습니다. |
+| 5단계 job/lease 계약 | job 계약은 publish 저장소와 collector만 씁니다. 7단계에서 publish 패키지가 이를 소유하므로 별도 계약 패키지로 옮기지 않았습니다. |
+| 6단계 `dispatchoutbox` | 옮기지 않았습니다. API와 collector production은 이 패키지를 링크하지 않아 이동으로 바뀌는 링크가 없습니다. 또 upcoming 후보 저장소의 `Stage`가 dispatch ledger 식별자(`buildLedgerRows`)를 쓰고, consume 테스트가 같은 후보 행을 API canonical 저장과 함께 검증합니다. 후보 계약만 떼어 내도 식별자 핵심부가 shared에 남습니다. |
+| 6단계 설정 loader | 옮기지 않았습니다. `alarmworker`·`collector`·`apiplane` loader는 `settings/internal/load`의 함수 30여 개를 쓰므로, 옮기려면 사실상 `internal/load` 전체를 공개해야 합니다. collector 설계 문서가 이를 금지했고, 각 loader는 이미 자기 runtime만 링크합니다. |
+| 7단계 publish/consume | `sourceobservation`(collector 발행)과 `sourceobservation/consume`(API 소비)으로 나눴습니다. 두 패키지는 서로 import하지 않습니다. 계획은 publish를 collector `internal`로, consume을 API `internal`로 옮기는 것이었지만, 소비 테스트 대부분이 실제 발행 경로로 데이터를 넣고 collector 통합 테스트가 실제 소비를 실행하므로 shared 안의 패키지 분리로 바꿨습니다. 테스트 함수 213개는 분리 전후 같고, 공통 DB fixture는 `observationtest`와 `testqueries` 자산으로 모았습니다. 역할 wrapper(`PublishRepository`, `ConsumeRepository`)와 읽지 않던 SQL 5개를 지웠습니다. |
+| 2.7절 `providers` | DB 자원 생성을 `providers/dbresource`로 분리했습니다. collector production이 링크하는 shared 패키지는 51개(7단계 전)에서 36개로 줄었습니다. `providers`·`providers/modules`의 나머지는 API와 worker가 함께 써서 남겼습니다. |
+| 8단계 | UNIT B 구독 조회를 (채널, 알림 종류)당 한 번으로 묶었고, 조회 횟수 테스트와 기존 실제 DB 수신 집합 테스트로 확인했습니다. 알람 변경 lock 대기를 `hololive_alarm_service_mutation_lock_wait_seconds`로 기록합니다. SQL batch(2.2)는 4단계에서 했습니다. API 내부 HTTP 호출 전환(2.6)은 병목 측정 근거가 없어 하지 않았습니다. |
+| 4.5절 | collector `collecterr` 이름은 오류 분류 어휘로 900여 곳에서 쓰여 유지했고, 쓰이지 않던 registry alias를 지웠습니다. repo 수준 검사는 compose 렌더·보안 설정 검사를 남기고, 문자열만 확인하던 검사(collector 6개, batch 저장소 소유권 grep, QUIC UDP buffer 스크립트 문자열)를 지웠습니다. |
+| 멤버 표시명 예외 | 운영 DB 읽기 전용 조회로 구독 채널 21개 모두 한국어 표시명을 가짐을 확인해 제거 조건을 충족했습니다. 중간 단계 두 개와 두 지표를 지우고, 남은 종단 문구에 `hololive_youtube_outbox_member_name_missing_total`을 붙였습니다. |
+
 ### 남은 작업
 
-- 5단계(payload·job/lease 계약 분리), 6단계 나머지(`alarmworker` 설정, `dispatchoutbox`), 7·8단계
-- 4.5절의 범위 밖 관찰
-- D4 오래된 `legacy_unknown` 비종단 행 정리(DB 쓰기 승인 필요)와 `request_snapshot_allowed` 열 삭제 migration(운영 적용 승인 필요)
-- 멤버 표시명 예외의 나머지 제거 조건(구독 채널 전부의 한국어 표시명) 확인
+- D4 오래된 `legacy_unknown` 비종단 행 정리(운영 DB 쓰기 승인 필요)와 `request_snapshot_allowed` 열 삭제 migration(운영 적용 승인 필요)
+- 위 표에서 근거를 들어 하지 않은 항목은 근거가 바뀌면 다시 검토합니다.
 
 ## 수행한 검증과 한계
 

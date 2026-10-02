@@ -73,7 +73,7 @@ func TestPostgresPlaceholdersRewritesNonPlaceholderQuestionMarks(t *testing.T) {
 func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 	moduleRoot := filepath.Join("..", "..")
 	// 이 SQL만 live_evidence.go의 tx.Query가 직접 실행하며 ?|는 migration 193의 GIN 인덱스 조건이다.
-	nativeJSONBAnyQuery := filepath.Join(moduleRoot, "pkg/service/youtube/sourceobservation/queries/repository_live_absence_slots.sql")
+	nativeJSONBAnyQuery := filepath.Join(moduleRoot, "pkg/service/youtube/sourceobservation/consume/queries/repository_live_absence_slots.sql")
 
 	err := filepath.Walk(moduleRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
