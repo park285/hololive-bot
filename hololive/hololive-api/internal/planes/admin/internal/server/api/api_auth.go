@@ -97,11 +97,6 @@ type meResponse struct {
 	User    meUser `json:"user"`
 }
 
-type resetRequestResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-}
-
 func NewAuthHandler(auth *authsvc.Service, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{auth: auth, logger: logger}
 }
@@ -115,15 +110,6 @@ type registerRequest struct {
 type loginRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
-}
-
-type resetRequest struct {
-	Email string `json:"email" binding:"required"`
-}
-
-type resetPasswordRequest struct {
-	Token       string `json:"token" binding:"required"`
-	NewPassword string `json:"newPassword" binding:"required"`
 }
 
 var authErrorHTTPStatus = map[authsvc.ErrorCode]int{
@@ -343,57 +329,12 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	})
 }
 
+// ResetRequest는 재설정 링크 전달 수단이 없어 토큰을 발급하지 않고 미지원으로 응답한다.
 func (h *AuthHandler) ResetRequest(c *gin.Context) {
-	var req resetRequest
-
-	if err := bindJSON(c, &req); err != nil {
-		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
-
-		return
-	}
-
-	if !h.requireAuthService(c) {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
-	defer cancel()
-
-	if _, err := h.auth.RequestPasswordReset(ctx, req.Email, c.ClientIP()); err != nil {
-		status, code := mapAuthErrorToHTTP(err)
-		writeAuthError(c, status, code)
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, resetRequestResponse{
-		Success: true,
-		Message: "If the email exists, a reset link has been sent.",
-	})
+	writeAuthError(c, http.StatusServiceUnavailable, authsvc.CodeInternal)
 }
 
+// ResetPassword는 재설정 기능 미지원 동안 토큰을 소비하거나 비밀번호를 변경하지 않는다.
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
-	var req resetPasswordRequest
-
-	if err := bindJSON(c, &req); err != nil {
-		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
-
-		return
-	}
-
-	if !h.requireAuthService(c) {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
-	defer cancel()
-
-	if err := h.auth.ResetPassword(ctx, req.Token, req.NewPassword); err != nil {
-		status, code := mapAuthErrorToHTTP(err)
-		writeAuthError(c, status, code)
-
-		return
-	}
-
-	ginjson.Respond(c, http.StatusOK, successResponse{Success: true})
+	writeAuthError(c, http.StatusServiceUnavailable, authsvc.CodeInternal)
 }

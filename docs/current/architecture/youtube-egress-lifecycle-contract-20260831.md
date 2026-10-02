@@ -303,7 +303,7 @@ type AlarmClaimToken struct {
 }
 ```
 
-- Preparation/known-not-delivered failure는 durable failure commit 뒤 새 claim을 release합니다.
+- Preparation/known-not-delivered failure는 durable failure commit 뒤 해제를 요청합니다. 같은 post token을 공유하는 배치의 모든 방 처리가 끝나고, 그 token을 사용한 모든 소비자가 확정 실패로 해제를 요청했을 때만 새 claim을 release합니다. 다른 방의 성공·결과 불명·미정산 소비자가 있으면 완료 증명을 보존합니다.
 - Success finalization은 exact token 또는 durable already-sent state를 요구합니다.
 - Outcome unknown과 `Indeterminate`에서는 claim release를 추정하지 않습니다.
 - Claim timeout 뒤 same-room resend는 durable logical group gate가 차단합니다.
@@ -516,6 +516,7 @@ Stable request ID의 존재만으로 retry-safe가 되지는 않습니다. Provi
 
 ### Grouped fallback
 
+- 멤버 이름 조회 오류와 grouped 포맷 오류는 `format_message` 준비 실패로 보존합니다. 포맷 실패를 개별 발송으로 바꾸지 않으며 provider를 호출하지 않습니다. 이름 조회가 성공했지만 표시명이 빈 경우의 예외는 alarm 계약을 따릅니다.
 - Outcome unknown 및 client request admission 충돌(409)에서는 fallback을 금지합니다.
 - Known-not-accepted + `fallback_allowed=true`에서만 individual fallback을 허용합니다.
 - Fallback 자체는 attempt를 소비하지 않습니다.

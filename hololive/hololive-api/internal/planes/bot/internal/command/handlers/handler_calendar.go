@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -58,7 +59,12 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 		return nil
 	}
 
-	if c.trySendCalendarImage(ctx, cmdCtx.Room, month, year, entries) {
+	imageSent, imageErr := c.trySendCalendarImage(ctx, cmdCtx.Room, month, year, entries)
+	if imageErr != nil {
+		return fmt.Errorf("send calendar image: %w", imageErr)
+	}
+
+	if imageSent {
 		return nil
 	}
 
@@ -99,9 +105,9 @@ func (c *CalendarCommand) nowKST() time.Time {
 	return util.NowKST()
 }
 
-func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string, month, year int, entries []domain.CalendarEntry) bool {
+func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string, month, year int, entries []domain.CalendarEntry) (bool, error) {
 	if c.imageRenderer == nil {
-		return false
+		return false, nil
 	}
 
 	data, err := c.renderCalendarImage(ctx, month, year, entries)
@@ -110,26 +116,26 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 			slog.Any("error", err),
 		)
 
-		return false
+		return false, nil
 	}
 
 	if err := c.Deps().SendImage(ctx, room, data); err != nil {
-		if handlercore.IsReplyOutcomeUnknown(err) {
+		if transport.IsReplyOutcomeUnknown(err) {
 			c.Deps().Logger.Warn("calendar image outcome unknown, suppressing text fallback",
 				slog.Any("error", err),
 			)
 
-			return true
+			return false, fmt.Errorf("calendar image outcome unknown: %w", err)
 		}
 
 		c.Deps().Logger.Warn("calendar image send failed, falling back to text",
 			slog.Any("error", err),
 		)
 
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
 func (c *CalendarCommand) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
@@ -67,7 +68,7 @@ func (r *Repository) listPostSendCounts(ctx context.Context, since time.Time) ([
 	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
 	args = append(args, since)
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}
 

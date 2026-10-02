@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -60,7 +59,7 @@ func (d *SendEngine) dispatchRowsIndividually(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -72,55 +71,27 @@ func (d *SendEngine) dispatchRowsIndividually(
 func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
-) (string, bool) {
+) (string, error) {
 	if group == nil {
-		d.logger.Warn("Grouped format skipped because delivery group is missing",
-			slog.Int("count", len(validRows)))
-
-		return "", false
+		return "", errors.New("format grouped message: delivery group is missing")
 	}
 
 	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
-	if err != nil || memberName == "" {
+	if err != nil {
+		return "", fmt.Errorf("format grouped delivery member name: %w", err)
+	}
+
+	if memberName == "" {
 		memberName = d.formatter.vtuberFallback(ctx)
 	}
 
 	message, err := d.formatter.formatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
 	if err != nil {
-		d.logger.Warn("Grouped format failed, falling back to individual dispatch",
-			slog.String("room_id", group.roomID),
-			slog.String("channel_id", group.channelID),
-			slog.String("kind", string(group.kind)),
-			slog.Int("count", len(validRows)),
-			slog.Any("error", err))
-
-		return "", false
+		return "", fmt.Errorf("format grouped delivery message: %w", err)
 	}
 
-	return message, true
-}
-
-func (d *SendEngine) dispatchClaimedRowsIndividually(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	formattedMessages map[int64]string,
-	formatFailures map[int64]bool,
-	rowClaimTokens [][]dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
-) {
-	for i := range rows {
-		var claims []dispatchstate.ClaimToken
-
-		if i < len(rowClaimTokens) {
-			claims = rowClaimTokens[i]
-		}
-
-		d.dispatchClaimedDeliveryRow(ctx, &rows[i], &outboxes[i], formattedMessages, formatFailures, claims, result, mu)
-	}
+	return message, nil
 }
 
 func singleDeliveryBatch(

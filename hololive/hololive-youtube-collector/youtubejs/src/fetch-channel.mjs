@@ -241,21 +241,46 @@ function* liveSessionRows(feed, channelId) {
 
 
 export function mapProfile(channel, about) {
+  // 최신 about 응답은 AboutChannel.metadata에 필드를 보관합니다.
+  const profile = about?.type === "AboutChannel" ? about.metadata : about;
+  const providedHandle = profile?.handle ?? channel?.header?.channel_handle ?? channel?.handle;
+  let metadataHandle = null;
+  if (providedHandle == null && typeof channel?.metadata?.vanity_channel_url === "string") {
+    try {
+      const url = new URL(channel.metadata.vanity_channel_url);
+      if ((url.protocol === "https:" || url.protocol === "http:") &&
+          (url.hostname === "www.youtube.com" || url.hostname === "youtube.com") &&
+          url.port === "" && url.username === "" && url.password === "") {
+        // legacy /user·/c 주소는 handle을 증명하지 않습니다.
+        const match = /^\/(@[^\s/]+)\/?$/u.exec(decodeURIComponent(url.pathname));
+        metadataHandle = match?.[1] ?? null;
+      }
+    } catch {
+      // 파싱할 수 없는 vanity URL은 handle 값이 없는 상태로 보존합니다.
+    }
+  }
   return {
-    handle: optionalText(about?.handle ?? channel?.handle ?? channel?.vanity_channel_url),
-    description: optionalText(about?.description ?? channel?.description),
-    country: optionalText(about?.country ?? channel?.country),
-    joined_date: optionalText(about?.joined ?? about?.joined_date ?? channel?.joined),
+    handle: optionalText(providedHandle ?? metadataHandle ?? channel?.vanity_channel_url),
+    description: optionalText(profile?.description ?? channel?.metadata?.description ?? channel?.description),
+    country: optionalText(profile?.country ?? channel?.country),
+    joined_date: optionalText(profile?.joined ?? profile?.joined_date ?? channel?.joined),
   };
 }
 
 export function mapPhoto(channel, about) {
   const variants = [];
-  const avatar = firstThumbnail(channel?.header?.author?.thumbnails || channel?.author?.thumbnails || about?.avatar);
+  const header = channel?.header;
+  const headerImage = header?.type === "PageHeader" ? header.content?.image : undefined;
+  const avatar = firstThumbnail(headerImage?.type === "DecoratedAvatarView" ? headerImage.avatar?.image : headerImage?.image)
+    ?? firstThumbnail(header?.author?.thumbnails)
+    ?? firstThumbnail(channel?.metadata?.avatar)
+    ?? firstThumbnail(channel?.author?.thumbnails)
+    ?? firstThumbnail(about?.avatar);
   if (avatar != null) {
     variants.push({ kind: "avatar", url: avatar.url, width: avatar.width, height: avatar.height });
   }
-  const banner = firstThumbnail(channel?.header?.banner?.thumbnails || about?.banner);
+  const banner = firstThumbnail(header?.type === "PageHeader" ? header.content?.banner?.image : header?.banner)
+    ?? firstThumbnail(about?.banner);
   if (banner != null) {
     variants.push({ kind: "banner", url: banner.url, width: banner.width, height: banner.height });
   }

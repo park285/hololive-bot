@@ -51,14 +51,6 @@ func NewMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, 
 	return &MessageFormatter{Renderer: renderer, Cache: cacheClient, Logger: logger, MessageStrings: messageStrings}
 }
 
-func (mf *MessageFormatter) logger() *slog.Logger {
-	if mf.Logger != nil {
-		return mf.Logger
-	}
-
-	return slog.Default()
-}
-
 func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouTubeNotificationOutbox) (string, error) {
 	if item == nil {
 		return "", errors.New("notification outbox item is nil")
@@ -66,12 +58,10 @@ func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouT
 
 	memberName, err := mf.GetMemberName(ctx, item.ChannelID)
 	if err != nil {
-		mf.logger().Warn("Failed to get member name, using fallback",
-			slog.String("channel_id", item.ChannelID),
-			slog.Any("error", err))
+		return "", fmt.Errorf("resolve notification member name: %w", err)
+	}
 
-		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
-	} else if memberName == "" {
+	if memberName == "" {
 		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 	}
 

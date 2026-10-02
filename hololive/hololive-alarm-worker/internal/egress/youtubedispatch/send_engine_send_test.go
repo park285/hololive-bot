@@ -17,7 +17,6 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -490,7 +489,7 @@ func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 	}
 }
 
-func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
+func TestDispatchDeliveryRows_GroupedFormatFailureDoesNotSend(t *testing.T) {
 	t.Parallel()
 
 	sender := &testSender{failRoom: map[string]bool{}}
@@ -516,8 +515,12 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
-	if len(result.SuccessDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 0 || result.FailedDeliveries != 2 {
+		t.Fatalf("success=%v failed=%d; want no success and two format failures", result.SuccessDeliveryIDs, result.FailedDeliveries)
+	}
+
+	if len(result.FailureBuckets["format message"]) != 2 {
+		t.Fatalf("format failure bucket = %v", result.FailureBuckets)
 	}
 
 	sender.mu.Lock()
@@ -525,8 +528,8 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 	msgCount := len(sender.messages)
 	sender.mu.Unlock()
 
-	if msgCount != 2 {
-		t.Fatalf("sender message count = %d, want 2 (fallback)", msgCount)
+	if msgCount != 0 {
+		t.Fatalf("sender message count=%d; format failure must not send", msgCount)
 	}
 }
 
@@ -1710,7 +1713,7 @@ type outcomeUnknownClaimSpy struct {
 	releaseCalls atomic.Int32
 }
 
-func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ claim.DecisionCache) deliveryClaimSelection {
+func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ *claimDecisionCache) deliveryClaimSelection {
 	selection := deliveryClaimSelection{
 		sendRows:       rows,
 		sendOutboxes:   outboxes,
@@ -1854,4 +1857,40 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 	}
 
 	assertOutcomeUnknownHold(t, &result, spy)
+}
+
+func TestDispatchDeliveryRows_GroupedMemberLookupErrorDoesNotSend(t *testing.T) {
+	t.Parallel()
+
+	cache := cachemocks.NewLenientClient()
+
+	cache.HGetFunc = func(context.Context, string, string) (string, error) {
+		return "", errors.New("member name cache unavailable")
+	}
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}")
+	d := newDispatcherForTest(t, nil, cache, sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	outboxes := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
+	}
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
+	}
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxes)
+	require.Empty(t, result.SuccessDeliveryIDs)
+	require.Equal(t, 2, result.FailedDeliveries)
+	require.Len(t, result.FailureBuckets["format message"], 2)
+	sender.mu.Lock()
+
+	messageCount := len(sender.messages)
+	sender.mu.Unlock()
+	require.Zero(t, messageCount)
+
+	transition, ok := d.send.transition.(*lifecycleTransitionSpy)
+	require.True(t, ok)
+	require.Equal(t, []string{"prepared_failure:grouped"}, transition.recordedModes())
+	require.Zero(t, transition.beginCalls.Load())
 }

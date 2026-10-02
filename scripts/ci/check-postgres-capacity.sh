@@ -33,7 +33,6 @@ esac
 
 "${CI_PYTHON_BIN}" - "${tmp}" "${policy_file}" "${target_env_file}" "${mode}" "${@:5}" <<'PY'
 import json
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -106,7 +105,9 @@ if verify_compose:
 used = 0
 seen = set()
 scaled_services_seen = set()
-expected_owner_inventory_sha256 = "73c0d2caaa84f46159d651c06ddcf81b010e5d2054c6ddd84715d70487eba27e"
+required_owners = {
+    "bot", "admin-api", "llm-scheduler", "youtube-plane", "alarm-worker", "youtube-collector", "db-migrate"
+}
 for line in policy:
     if not line or line.startswith("#") or line.startswith("@"):
         continue
@@ -162,12 +163,11 @@ if unknown_scaled_services:
         + ", ".join(unknown_scaled_services)
     )
 
-owner_inventory = "\n".join(sorted(seen)) + "\n"
-owner_inventory_sha256 = hashlib.sha256(owner_inventory.encode()).hexdigest()
-if owner_inventory_sha256 != expected_owner_inventory_sha256:
+missing_owners = sorted(required_owners - seen)
+unexpected_owners = sorted(seen - required_owners)
+if missing_owners or unexpected_owners:
     raise SystemExit(
-        "[pg-capacity] owner inventory mismatch: policy owner set changed; "
-        "review the topology and update expected_owner_inventory_sha256 intentionally"
+        f"[pg-capacity] owner inventory mismatch: missing={missing_owners}, unexpected={unexpected_owners}"
     )
 # reserve는 비슈퍼유저 역할이 실제로 접속 거부당하기 전까지 남는 슬롯이다(PG 거부 조건과 같은 기준).
 # 하한 2는 현재 할당 55에서 보장되는 값이며, 하한 상향은 풀 사용 지표로 collector max 축소를

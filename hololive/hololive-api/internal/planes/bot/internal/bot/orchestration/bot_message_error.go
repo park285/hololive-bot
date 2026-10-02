@@ -69,7 +69,7 @@ func (b *Bot) sendImages(ctx context.Context, room string, images [][]byte, opts
 
 // outcome이 unknown이면 reply가 이미 전달됐을 수 있어, 오류 응답을 덧붙이면 중복 발화가 된다.
 func (b *Bot) skipErrorResponseOnUnknownOutcome(ctx context.Context, chatID, commandType string, err error) bool {
-	if !errors.Is(err, transport.ErrReplyOutcomeUnknown) {
+	if !transport.IsReplyOutcomeUnknown(err) {
 		return false
 	}
 

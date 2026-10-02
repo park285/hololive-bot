@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -47,7 +46,7 @@ func (d *ClaimManager) selectClaimedDeliveries(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 ) deliveryClaimSelection {
 	safeRows := make([]domain.YouTubeNotificationDelivery, len(rows))
 	copy(safeRows, rows)
@@ -79,7 +78,7 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 	selection *deliveryClaimSelection,
 	row *domain.YouTubeNotificationDelivery,
 	outbox *domain.YouTubeNotificationOutbox,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 ) {
 	if err := validateDeliveryLogicalIdentity(row, outbox); err != nil {
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve delivery logical identity before send", err)
@@ -101,12 +100,7 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 		return
 	}
 
-	cr, ok := result.Decision.Value.(claimResult)
-	if !ok {
-		d.retryDeliveryClaimSelection(selection, row, outbox, "Unexpected community/shorts claim result type before send", fmt.Errorf("claim result type %T", result.Decision.Value))
-
-		return
-	}
+	cr := result.Decision
 
 	// post 단위 결정은 reuseCache로 공유되지만 "이 room이 이미 받았는가"는 행마다 다르므로 캐시 밖에서 판정한다.
 	decision := cr.decision
@@ -151,20 +145,14 @@ type claimResult struct {
 func (d *ClaimManager) claimDeliveryResolver(
 	row *domain.YouTubeNotificationDelivery,
 	outbox *domain.YouTubeNotificationOutbox,
-) claim.ComputeFn {
-	return func(ctx context.Context) (claim.ComputeResult, error) {
-		resolved, claimErr := d.tryClaimDelivery(ctx, row, outbox)
-		if claimErr != nil {
-			return claim.ComputeResult{}, fmt.Errorf("try claim delivery: %w", claimErr)
+) claimDecisionCompute {
+	return func(ctx context.Context) (claimResult, error) {
+		resolved, err := d.tryClaimDelivery(ctx, row, outbox)
+		if err != nil {
+			return claimResult{}, fmt.Errorf("try claim delivery: %w", err)
 		}
 
-		var token *claim.Token
-
-		if resolved.claimToken != nil {
-			token = &claim.Token{AuthorizedAt: resolved.claimToken.AuthorizedAt}
-		}
-
-		return claim.ComputeResult{Decision: claim.Decision{Value: resolved}, Token: token}, nil
+		return resolved, nil
 	}
 }
 

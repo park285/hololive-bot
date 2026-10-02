@@ -174,6 +174,27 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, ba
 	return items, nil
 }
 
+// fetchReadyAndLock은 활성 방을 제외하고 각 방의 첫 due 항목만 임대합니다.
+// 다른 worker가 선행 항목을 처리 중이어도 후행 항목이 앞서 발송되지 않습니다.
+func (r *OutboxRepository) fetchReadyAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration, activeRooms []string, processedIDs []int64) ([]domain.NotificationDeliveryOutbox, error) {
+	if err := r.ensurePool(); err != nil {
+		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, mustSQL("outbox_claim_ready.sql"), batchSize, workerID, positiveDurationMilliseconds(lease), activeRooms, processedIDs)
+	if err != nil {
+		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
+	}
+	defer rows.Close()
+
+	items, err := pgx.CollectRows(rows, scanNotificationDeliveryOutbox)
+	if err != nil {
+		return nil, fmt.Errorf("collect ready deliveries: %w", err)
+	}
+
+	return items, nil
+}
+
 func (r *OutboxRepository) MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, fmt.Errorf("ensure pool: %w", err)

@@ -78,7 +78,7 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 		args = append(args, *status)
 	}
 
-	if err := deliverysql.SelectDeliverySQL(ctx, db, &targets, "query delivery alarm sent targets", mustSQL("delivery_repository_tracking_0066_01.sql")+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+`
+	if err := dbx.SelectSQL(ctx, db, &targets, "query delivery alarm sent targets", mustSQL("delivery_repository_tracking_0066_01.sql")+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+`
 		  AND `+deliverysql.DeliveryInClause("o.kind", len(postKinds))+`
 		`+statusClause, args...); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)

@@ -184,6 +184,21 @@ set 조회 오류와 이 DB 조회 오류는 해당 check 주기 오류로 반�
 코드 근거는 `alarm.Repository.GetMemberName` 주석(`memberDisplayNameExceptionContract`)과
 `queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
 
+이 예외는 이름 조회가 성공했으나 값이 없는 경우에만 적용합니다. YouTube 단건·묶음 formatter는 이름 저장소 조회 실패를 포맷 오류로 반환하며 대체 표시명으로 성공을 만들지 않습니다.
+
+### Live catchup 억제 marker의 실패 처리
+
+upcoming 알림의 최근 전송 marker는 추가 catchup을 줄이는 보조 증거입니다. marker를 읽지 못한 사실을 이미 알림을 받았다는 증거로 쓰지 않습니다. 다음은 기존 동작과 `TestFilterLiveCatchupSuppressedRoomsFailsOpenOnCacheError`·`TestFilterLiveCatchupSuppressedRoomsFailsOpenOnInvalidMarker`가 재현하는 예외입니다.
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | upcoming 억제 marker의 캐시 조회 오류 또는 `notified_at` 형식 오류 |
+| 한도 | 해당 LIVE_STREAM outbox의 기존 구독 방에만 적용합니다. 정상 marker의 억제 창은 `LiveCatchupSuppressWindow` 15분이며, 이 예외가 새 수집·재시도·수신 방을 만들지 않습니다. |
+| 종단 동작 | 억제를 적용하지 않고 기존 delivery 원장·멱등성·발송 상태 전이를 따릅니다. 별도 upcoming 알림 뒤 catchup 알림이 추가될 수 있습니다. |
+| Telemetry | `hololive_youtube_outbox_live_catchup_suppression_total{result="cache_error"}` 또는 `result="invalid_marker"`와 기존 Warn 로그 |
+| Owner | alarm-worker의 YouTube OutboxGrouper |
+| 재검토 조건 | 억제 증거 저장소 변경, 중복 upcoming/catchup 사례 확인, 또는 delivery 원장만으로 억제를 판정할 수 있게 될 때 이 예외를 재검토합니다. |
+
 ## Response
 
 ```go

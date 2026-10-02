@@ -82,3 +82,18 @@ func TestValidateWorkerProfileRequiresYouTubeLockTimeout(t *testing.T) {
 		t.Fatalf("validateWorkerProfile() error = %v, want youtube_delivery lock timeout still required", err)
 	}
 }
+
+func TestValidateWorkerProfileRequiresMatchingYouTubeAttemptTimeout(t *testing.T) {
+	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
+
+	profile, err := LoadWorkerProfile()
+	if err != nil {
+		t.Fatalf("LoadWorkerProfile() error = %v", err)
+	}
+
+	profile.YouTubeDelivery.DeliverySendTimeoutMS++
+
+	if err := validateWorkerProfile(profile); err == nil || !strings.Contains(err.Error(), "youtube_delivery attempt_timeout must match delivery_send_timeout_ms") {
+		t.Fatalf("validateWorkerProfile() error = %v, want conflicting timeout rejected", err)
+	}
+}

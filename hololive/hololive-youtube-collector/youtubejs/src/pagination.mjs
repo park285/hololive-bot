@@ -1,3 +1,4 @@
+import { Mixins, YTNodes } from "youtubei.js";
 import { currentRequestSignal } from "./request-context.mjs";
 
 export const continuityContiguous = "CONTIGUOUS";
@@ -31,7 +32,18 @@ export function continuationToken(feed) {
   if (feed == null) {
     return "";
   }
-  const token = feed.continuation ?? feed.continuation_token ?? feed.continuationToken ?? "";
+  const token = (() => {
+    const explicitToken = feed.continuation ?? feed.continuation_token ?? feed.continuationToken;
+    if (explicitToken != null) return explicitToken;
+    if (feed instanceof Mixins.Feed && feed.has_continuation) {
+      const headerContinuations = feed.page.header_memo?.getType(YTNodes.ContinuationItem, YTNodes.ContinuationItemView) ?? [];
+      // about 조회에 쓰는 header continuation은 목록의 이어보기 토큰이 아닙니다.
+      const bodyContinuation = feed.memo.getType(YTNodes.ContinuationItem, YTNodes.ContinuationItemView)
+        .find((continuation) => !headerContinuations.includes(continuation));
+      return bodyContinuation?.endpoint.payload.token ?? "";
+    }
+    return "";
+  })();
   if (typeof token === "string") {
     return token.trim();
   }

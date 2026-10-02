@@ -54,7 +54,7 @@ func commandOutcome(err error) error {
 		return err
 	}
 
-	if errors.Is(err, transport.ErrReplyStagingFailed) || errors.Is(err, transport.ErrReplyOutcomeUnknown) ||
+	if transport.IsReplyOutcomeUnknown(err) ||
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return commandOutcomeUnknownError{cause: err}
 	}

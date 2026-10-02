@@ -151,11 +151,20 @@ func parseMemberEpoch(value string) (uint64, error) {
 }
 
 func (c *Cache) runEpochReconciliation(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
 	triggers := make(chan string, 1)
+	workerDone := make(chan struct{})
 
 	go panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-epoch-reconciler", func() {
+		defer close(workerDone)
+
 		c.runEpochReconcileWorker(ctx, triggers)
 	})
+
+	defer func() {
+		cancel()
+		<-workerDone
+	}()
 
 	for ctx.Err() == nil {
 		if c.runEpochSubscription(ctx, triggers) {
@@ -227,6 +236,10 @@ func (c *Cache) runEpochReconcileWorker(ctx context.Context, triggers <-chan str
 			return
 		}
 
+		if ctx.Err() != nil {
+			return
+		}
+
 		c.reconcileEpochWithTimeout(ctx, reason)
 	}
 }
@@ -260,7 +273,7 @@ func (c *Cache) reconcileEpochWithTimeout(parent context.Context, reason string)
 	ctx, cancel := context.WithTimeout(parent, epochOperationTimeout)
 	defer cancel()
 
-	if err := c.reconcileEpoch(ctx, reason); err != nil && c.logger != nil {
+	if err := c.reconcileEpoch(ctx, reason); err != nil && parent.Err() == nil && c.logger != nil {
 		c.logger.Warn("member cache epoch reconciliation failed", slog.String("reason", reason), slog.Any("error", err))
 	}
 }
@@ -271,7 +284,10 @@ func (c *Cache) reconcileEpoch(ctx context.Context, reason string) error {
 
 	epoch, err := c.epoch.Current(ctx)
 	if err != nil {
-		c.markEpochUncertain(reason, err)
+		// 작업 종료를 위한 취소는 authority 장애로 기록하지 않는다.
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			c.markEpochUncertain(reason, err)
+		}
 
 		return fmt.Errorf("current: %w", err)
 	}

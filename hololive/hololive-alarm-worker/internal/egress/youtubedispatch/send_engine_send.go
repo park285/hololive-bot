@@ -30,7 +30,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -42,6 +41,15 @@ func (d *SendEngine) dispatchDeliveryRows(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) dispatchstate.DispatchResult {
+	claims := newBatchClaimResolver(d.claims)
+	batch := *d
+
+	batch.claims = claims
+	batch.metricsRecorder = newMetricsRecorder(d.logger, d.auditLogger, claims)
+	d = &batch
+
+	defer claims.releaseFinished(ctx)
+
 	result := dispatchstate.DispatchResult{
 		SuccessDeliveryIDs: make([]int64, 0, len(rows)),
 		TouchedOutboxIDs:   make([]int64, 0, len(rows)),
@@ -51,7 +59,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 	var mu sync.Mutex
 
-	reuseCache := claim.NewMemoryDecisionCache()
+	reuseCache := newClaimDecisionCache()
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
 
@@ -98,7 +106,7 @@ func (d *SendEngine) dispatchGroup(
 	group *deliveryGroup,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -160,9 +168,17 @@ func (d *SendEngine) dispatchClaimedGroup(
 		return
 	}
 
-	message, formatted := d.formatGroupedMessage(ctx, group, validRows, validOutboxes)
-	if !formatted {
-		d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection.rowClaimTokens, result, mu)
+	message, err := d.formatGroupedMessage(ctx, group, validOutboxes)
+	if err != nil {
+		if d.applyPreparedLifecycleFailure(ctx, validRows, validOutboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped, result, mu) {
+			d.claims.releaseDeliveryClaimsWithWarning(ctx, claimSelection.claimTokens, "Failed to release grouped delivery claims after format error")
+			d.logger.Warn("Failed to format grouped delivery", slog.Int("count", len(validRows)), slog.Any("error", err))
+			d.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, time.Now(), "grouped", "failure", "format message")
+
+			for i := range validRows {
+				d.recordDeliveryFailure(result, mu, "format message", validRows[i].ID, validRows[i].OutboxID)
+			}
+		}
 
 		return
 	}
@@ -176,7 +192,7 @@ func (d *SendEngine) dispatchDeliveryRow(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {

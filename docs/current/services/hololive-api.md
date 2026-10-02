@@ -56,6 +56,12 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - Proactive alarm dispatch queue consumption owned by `alarm-worker`
 - Proactive Iris/Kakao notification egress owned by `alarm-worker`
 
+## Password reset API
+
+- `POST /api/auth/password/reset-request`와 `POST /api/auth/password/reset` 경로는 유지하지만, 재설정 링크 전달 수단이 없어 HTTP 503과 기존 인증 오류 본문 `{"success":false,"error":"INTERNAL_ERROR"}`으로 응답합니다.
+- 기존 IP 허용 목록 검사를 통과한 요청은 본문·계정 존재·토큰 유효성과 관계없이 같은 응답을 받습니다. 본문을 해석하거나 계정을 조회하지 않으며, 토큰 발급·소비, 비밀번호·세션 세대 변경 및 링크 발송 성공 응답은 하지 않습니다. 허용 목록 밖의 요청은 기존 403 차단을 유지합니다.
+- 다시 지원하려면 링크 전달 수단과 복구 절차를 먼저 구현하고 공개 API 계약 변경 승인을 받아야 합니다.
+
 ## Live query behavior
 
 - `!라이브`는 기존 bot DB pool의 단일 snapshot으로 확정 방송과 채널 확인 최신값을 읽으며 원천을 호출하지 않습니다. 무인자는 우이를 포함한 활성 등록 Hololive 채널, 멤버 지정은 해석된 채널을 직접 조회합니다. freshness는 `min(5분, 2×poll interval+30초)`, 기본 270초이며 DB 조회 예산은 1초입니다. `DEC-20260926-hololive-live-absence-evidence`와 [실행 계획](../plans/2026-09-26-live-absence-evidence.md)이 소유합니다.
@@ -69,6 +75,10 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - `org=all`에서 일부 org만 실패하면 provider는 성공한 org의 stream과 `PartialStreamsError`를 함께 돌려주고 캐시하지 않습니다(stack audit B1, PLN-20260926-stack-audit-refactoring T09). Stream HTTP API(`/api/holo/streams/live`, `/api/holo/streams/upcoming`)는 이 오류를 다른 원천 실패와 같이 500으로 응답하며 부분 목록을 내보내지 않습니다. 이전에는 부분 목록을 200으로 응답하고 캐시했습니다. 부분 목록과 실패 org를 함께 돌려주는 응답 필드는 공개 계약 변경이라 별도 결정 전에는 추가하지 않습니다. 소비자(iris-console admin-web의 streams 화면)는 한 org 장애 동안 `org=all` 조회 실패를 받습니다.
 
 ## Source fallback retirement
+
+- 영속 reply INSERT의 접수 결과 불명(`ErrReplyStagingFailed`)과 Iris 전송 결과 불명은 같은 추가 응답 억제 규칙을 따릅니다. 도움말·달력 이미지 실패의 대체 텍스트나 공통 오류 응답을 추가하지 않고 명령 결과 불명을 보존합니다.
+- Iris가 접수한 reply의 handoff 결과를 확정하지 못하면 자동 재발송하지 않는 `manual_review`로 정산합니다. 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다.
+- 멤버 조회 backend 오류는 미발견 응답으로 바꾸지 않습니다. 달력 cache miss의 공유 조회는 기존 bot 명령 시간 예산으로 제한하고, 각 대기 요청은 자신의 context 취소에 따라 반환합니다. shared member cache의 epoch 구독·재조회 작업은 각 plane의 DB·Valkey 정리 전에 종료합니다.
 
 `DEC-20260926-hololive-source-fallbacks-retirement`(PLN-20260926-stack-audit-refactoring T19)에 따라 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꿨습니다. T18(2026-09-26) 30일 로그에서 아래 경로의 fallback·fail-open 경고는 0건이었습니다.
 

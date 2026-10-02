@@ -116,6 +116,8 @@ func newInfraModule(
 		MemberRepository: memberRepository,
 		MemberCache:      memberCache,
 		Cleanup: func() {
+			memberCache.Close()
+
 			if cleanupDB != nil {
 				cleanupDB()
 			}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/content"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -123,17 +124,23 @@ func domainTracking(intent *content.NotificationIntent, detectedAt time.Time) *d
 }
 
 func persistContentFieldUpdates(ctx context.Context, tx dbx.Tx, updates []content.Entity, seenAt time.Time) error {
+	statements := make([]dbx.Statement, 0, len(updates))
+
 	for i := range updates {
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_content_video_fields_0043_43.sql"),
-			updates[i].VideoID,
-			boundedVideoTitle(updates[i].Title),
-			updates[i].PublishedAt,
-			seenAt,
-		); err != nil {
-			return fmt.Errorf("update content video fields: %w", err)
-		}
+		statements = append(statements, dbx.Statement{
+			Operation: "update content video fields",
+			SQL:       mustSQL("repository_content_video_fields_0043_43.sql"),
+			Args: []any{
+				updates[i].VideoID,
+				boundedVideoTitle(updates[i].Title),
+				updates[i].PublishedAt,
+				seenAt,
+			},
+		})
+	}
+
+	if err := dbx.ExecStatements(ctx, tx, statements); err != nil {
+		return fmt.Errorf("update content video fields: %w", err)
 	}
 
 	return nil
@@ -203,9 +210,17 @@ func persistContentConflicts(ctx context.Context, tx dbx.Tx, observation *Observ
 }
 
 func boundedVideoTitle(title string) string {
-	if len(title) > 500 {
-		return title[:500]
+	const maxTitleBytes = 500
+
+	if len(title) <= maxTitleBytes {
+		return title
 	}
 
-	return title
+	// 기존 바이트 상한을 지키면서 JSON과 PostgreSQL에 유효한 UTF-8 접두사만 저장한다.
+	end := maxTitleBytes
+	for end > 0 && !utf8.RuneStart(title[end]) {
+		end--
+	}
+
+	return title[:end]
 }

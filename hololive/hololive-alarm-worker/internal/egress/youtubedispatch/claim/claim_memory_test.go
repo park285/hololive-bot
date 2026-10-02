@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// MemoryCache 는 ReuseCache 의 in-memory 구현 (테스트 + local 용).
-// 외부 cache (Valkey/Redis) 가 없는 환경에서 fallback 으로 사용 가능.
+// MemoryCache는 claim 동작 검증에 사용하는 테스트 전용 저장소입니다.
 const memoryClaimSweepInterval = time.Minute
 
 type MemoryCache struct {

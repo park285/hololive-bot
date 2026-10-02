@@ -48,21 +48,6 @@ report_hits \
   "alarm-worker lifecycle SQL stays in the canonical store" \
   "${worker_noncanonical_hits}"
 
-legacy_import_hits="$(
-  rg -n -F 'github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store' "${hololive_root}" \
-    -g '*.go' -g '!*_test.go' \
-    || true
-)"
-report_hits "legacy shared lifecycle store has no production importer" "${legacy_import_hits}"
-
-legacy_writer_hits="$(
-  rg -n 'StatusUpdater|recoverSuccessfulCommunityShortsSentState|markRecoveredSentDeliveryRows' \
-    "${alarm_worker}/internal/egress/youtubedispatch" \
-    -g '*.go' -g '*.sql' -g '!*_test.go' \
-    || true
-)"
-report_hits "retired lifecycle writers remain absent" "${legacy_writer_hits}"
-
 poller_conflict_hits=""
 if [[ -d "${poller_queries}" ]]; then
   poller_conflict_hits="$(

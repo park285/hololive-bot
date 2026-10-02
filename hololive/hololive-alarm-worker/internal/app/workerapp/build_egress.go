@@ -194,7 +194,8 @@ func buildDeliveryOutboxDispatcher(
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["notification_delivery"]
 	profile := appConfig.AlarmWorkerProfile.NotificationDelivery
 	dispatcherConfig := delivery.DispatcherConfig{
-		BatchSize: profile.BatchSize, MaxConcurrent: worker.Executor.ConfiguredWorkers,
+		AttemptTimeout: time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
+		BatchSize:      profile.BatchSize, MaxConcurrent: worker.Executor.ConfiguredWorkers,
 		MaxRetries: profile.MaxRetries, PollInterval: durationMS(profile.PollIntervalMS),
 		RetryBackoff: durationMS(profile.RetryBackoffMS),
 		CleanupAfter: durationMS(profile.CleanupAfterMS), CleanupInterval: durationMS(profile.CleanupIntervalMS),
@@ -369,6 +370,12 @@ func newYouTubeOutboxDispatcher(
 
 	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
+	attemptTimeout := time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond
+	// 공통 executor 예산과 보존 중인 service 설정은 같은 provider 호출을 제한합니다.
+	if durationMS(profile.DeliverySendTimeoutMS) != attemptTimeout {
+		return nil, errors.New("youtube delivery send timeout must match executor attempt timeout")
+	}
+
 	dispatchConfig := dispatchstate.Config{
 		BatchSize: profile.BatchSize, LockTimeout: durationMS(profile.LockTimeoutMS),
 		PollInterval: durationMS(profile.PollIntervalMS), MaxRetries: profile.MaxRetries,
@@ -376,7 +383,7 @@ func newYouTubeOutboxDispatcher(
 		CleanupEnabled: profile.CleanupEnabled, ReviveEnabled: profile.ReviveEnabled,
 		ReviveInterval: durationMS(profile.ReviveIntervalMS), ReviveFreshnessWindow: durationMS(profile.ReviveFreshnessWindowMS),
 		ClaimFreshnessWindow: durationMS(profile.ClaimFreshnessWindowMS), DeliveryParallelism: worker.Executor.ConfiguredWorkers,
-		DeliverySendTimeout: durationMS(profile.DeliverySendTimeoutMS), SubscriberLookupParallelism: profile.SubscriberLookupParallelism,
+		DeliverySendTimeout: attemptTimeout, SubscriberLookupParallelism: profile.SubscriberLookupParallelism,
 		AggregateSyncInterval: durationMS(profile.AggregateSyncIntervalMS), TelemetryPollInterval: durationMS(profile.TelemetryPollIntervalMS),
 		TelemetryFlushBatch:   profile.TelemetryFlushBatch,
 		TelemetryRetryBackoff: durationMS(profile.TelemetryRetryBackoffMS), TelemetryRetention: durationMS(profile.TelemetryRetentionMS),

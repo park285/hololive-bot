@@ -127,9 +127,9 @@ function mapAttachment(attachment) {
   const videoId = textOf(
     attachment.video_id || (type === "Video" || type === "CompactVideo" ? attachment.id : ""),
   ).trim();
-  const images = thumbnailsOf(
-    attachment.image || attachment.images || attachment.thumbnails,
-  );
+  const images = type === "PostMultiImage"
+    ? attachment.images.flatMap((image) => thumbnailsOf(image.image))
+    : thumbnailsOf(attachment.image || attachment.images || attachment.thumbnails);
   return { images, videoId };
 }
 

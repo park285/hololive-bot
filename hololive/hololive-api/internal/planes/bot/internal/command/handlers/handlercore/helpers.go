@@ -26,17 +26,11 @@ import (
 	"fmt"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 var ErrMemberLookupHandled = errors.New("member lookup handled")
-
-// 전송 결과가 unknown이면 이미 전달됐을 수 있으므로, 호출자는 대체 응답을 추가로 보내면 안 된다.
-func IsReplyOutcomeUnknown(err error) bool {
-	return errors.Is(err, transport.ErrReplyOutcomeUnknown)
-}
 
 // 성공 시 (*domain.Channel, nil)을, 사용자-facing 응답을 보낸 경우 ErrMemberLookupHandled를 반환한다.
 func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
@@ -45,7 +39,11 @@ func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName
 	}
 
 	member, found, err := deps.Matcher.FindBestMatch(ctx, memberName)
-	if err != nil || !found {
+	if err != nil {
+		return nil, fmt.Errorf("find best member match: %w", err)
+	}
+
+	if !found {
 		if replyErr := sendMemberNotFound(ctx, deps, room, memberName); replyErr != nil {
 			return nil, fmt.Errorf("send member not found: %w", replyErr)
 		}
@@ -106,7 +104,7 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 
 	channel, found, err := deps.Matcher.FindBestMatchWithCandidates(ctx, memberName)
 	if err != nil {
-		if replyErr := replyMemberLookupFailure(ctx, deps, room, memberName, commandExample, err); replyErr != nil {
+		if replyErr := replyMemberLookupFailure(ctx, deps, room, commandExample, err); replyErr != nil {
 			return nil, fmt.Errorf("reply member lookup failure: %w", replyErr)
 		}
 
@@ -124,14 +122,10 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 	return channel, nil
 }
 
-func replyMemberLookupFailure(ctx context.Context, deps *Dependencies, room, memberName, commandExample string, lookupErr error) error {
+func replyMemberLookupFailure(ctx context.Context, deps *Dependencies, room, commandExample string, lookupErr error) error {
 	ambiguousErr, ok := errors.AsType[*matcher.AmbiguousMatchError](lookupErr)
 	if !ok {
-		if err := sendMemberNotFound(ctx, deps, room, memberName); err != nil {
-			return fmt.Errorf("send member not found: %w", err)
-		}
-
-		return nil
+		return fmt.Errorf("find member candidates: %w", lookupErr)
 	}
 
 	message := deps.Formatter.FormatAmbiguousMembers(ctx, ambiguousErr.Candidates, commandExample)

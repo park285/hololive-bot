@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
@@ -59,7 +60,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	var outboxes []domain.YouTubeNotificationOutbox
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", mustSQL("delivery_final_result_0060_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if err := dbx.SelectSQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", mustSQL("delivery_final_result_0060_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 		  AND `+deliverysql.DeliveryInClause("kind", len(postKinds))+`
 		  AND `+deliverysql.DeliveryInClause("status", len(terminalStatuses))+`
 		ORDER BY id ASC
@@ -81,7 +82,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	var deliveries []domain.YouTubeNotificationDelivery
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(outboxResultIDs))+`
+	if err := dbx.SelectSQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(outboxResultIDs))+`
 		ORDER BY outbox_id ASC, id ASC
 	`, deliverysql.AppendDeliveryInt64Args(nil, outboxResultIDs)...); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts deliveries: %w", err)

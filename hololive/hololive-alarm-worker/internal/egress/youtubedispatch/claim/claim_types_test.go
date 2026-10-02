@@ -36,5 +36,4 @@ var (
 	ErrEmptyKey       = errors.New("claim: empty key")
 	ErrEmptyHolder    = errors.New("claim: empty holder")
 	ErrInvalidTTL     = errors.New("claim: ttl must be positive")
-	ErrNilCompute     = errors.New("claim: nil compute")
 )

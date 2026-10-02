@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 // LedgerStatus is the monotonic terminal status stored for a logical delivery.
@@ -76,7 +75,7 @@ func RecordDeliveryLedgerWrites(
 
 	var recorded []DeliveryLedgerRecord
 
-	if err := deliverysql.SelectDeliverySQL(
+	if err := dbx.SelectSQL(
 		ctx,
 		tx,
 		&recorded,

@@ -350,7 +350,7 @@ func (s *TransitionStore) loadLogicalGroupRows(
 
 	var rows []transitionRow
 
-	if err := deliverysql.SelectDeliverySQL(
+	if err := dbx.SelectSQL(
 		ctx,
 		db,
 		&rows,
@@ -390,7 +390,7 @@ func loadTransitionLedger(
 
 	var records []DeliveryLedgerRecord
 
-	if err := deliverysql.SelectDeliverySQL(
+	if err := dbx.SelectSQL(
 		ctx,
 		db,
 		&records,

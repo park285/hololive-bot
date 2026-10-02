@@ -32,15 +32,11 @@ func (r *InboxRepository) beginLockedMessageTx(ctx context.Context, messageID st
 
 func rollbackInboxTx(ctx context.Context, tx pgx.Tx) error {
 	err := tx.Rollback(ctx)
-	if errors.Is(err, pgx.ErrTxClosed) {
+	if err == nil || errors.Is(err, pgx.ErrTxClosed) {
 		return nil
 	}
 
-	if safeErr := safeRepositoryError("rollback webhook transaction", err); safeErr != nil {
-		return fmt.Errorf("safe repository error: %w", safeErr)
-	}
-
-	return nil
+	return safeRepositoryError("rollback webhook transaction", err)
 }
 
 func lockInboxOrderingKey(ctx context.Context, tx pgx.Tx, orderingKey string) error {

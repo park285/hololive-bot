@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 func (s *TransitionStore) BeginSending(
@@ -326,7 +325,7 @@ func deliverysqlSelectTransitionRows(
 	ids []int64,
 	dest *[]transitionRow,
 ) error {
-	if err := deliverysql.SelectDeliverySQL(
+	if err := dbx.SelectSQL(
 		ctx,
 		db,
 		dest,

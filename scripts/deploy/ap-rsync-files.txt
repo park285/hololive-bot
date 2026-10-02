@@ -753,4 +753,6 @@ hololive/hololive-shared/pkg/service/delivery/queries/outbox_mark_quarantined.sq
 hololive/hololive-shared/pkg/service/delivery/queries/outbox_reissue_failed_request.sql
 hololive/hololive-shared/pkg/service/delivery/queries/outbox_save_request.sql
 hololive/hololive-shared/pkg/service/delivery/request.go
+hololive/hololive-shared/pkg/service/delivery/dispatcher_claim.go
+hololive/hololive-shared/pkg/service/delivery/queries/outbox_claim_ready.sql
 hololive/hololive-shared/pkg/service/sendoutcome/outcome.go

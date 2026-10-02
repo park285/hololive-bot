@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 type ReviveResult struct {
@@ -367,7 +366,7 @@ func loadReviveCandidates(
 ) ([]transitionRow, error) {
 	var candidates []transitionRow
 
-	if err := deliverysql.SelectDeliverySQL(
+	if err := dbx.SelectSQL(
 		ctx,
 		db,
 		&candidates,

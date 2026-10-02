@@ -27,9 +27,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 	"time"
+
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 )
@@ -273,7 +274,7 @@ func isTimeoutNetError(err error) bool {
 		return false
 	}
 
-	if urlErr, ok := errors.AsType[*url.Error](err); ok && !isNilInterfaceValue(urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && !reflectutil.IsNil(urlErr) {
 		if urlErr.Err == nil {
 			return false
 		}
@@ -281,7 +282,7 @@ func isTimeoutNetError(err error) bool {
 		return isTimeoutNetError(urlErr.Err)
 	}
 
-	if netErr, ok := errors.AsType[net.Error](err); ok && !isNilInterfaceValue(netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && !reflectutil.IsNil(netErr) && netErr.Timeout() {
 		return true
 	}
 
@@ -293,7 +294,7 @@ func isTemporaryNetError(err error) bool {
 		return false
 	}
 
-	if urlErr, ok := errors.AsType[*url.Error](err); ok && !isNilInterfaceValue(urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && !reflectutil.IsNil(urlErr) {
 		if urlErr.Err == nil {
 			return false
 		}
@@ -306,31 +307,11 @@ func isTemporaryNetError(err error) bool {
 		return false
 	}
 
-	if isNilInterfaceValue(tempErr) {
+	if reflectutil.IsNil(tempErr) {
 		return false
 	}
 
 	return tempErr.Temporary()
-}
-
-func isNilInterfaceValue(value any) bool {
-	if value == nil {
-		return true
-	}
-
-	reflected := reflect.ValueOf(value)
-	kind := reflected.Kind()
-
-	if kind == reflect.Chan ||
-		kind == reflect.Func ||
-		kind == reflect.Interface ||
-		kind == reflect.Map ||
-		kind == reflect.Pointer ||
-		kind == reflect.Slice {
-		return reflected.IsNil()
-	}
-
-	return false
 }
 
 var transientTransportSignatures = []string{

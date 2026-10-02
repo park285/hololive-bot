@@ -67,6 +67,8 @@ type Digest struct {
 
 Subscribe/unsubscribe success currently returns `{"status":"subscribed"}` or `{"status":"unsubscribed"}`.
 
+LLM 출력의 `source_url`은 입력 후보의 URL을 정확히 복사해야 하며, `member`도 같은 후보에 포함된 멤버여야 합니다. 신뢰되는 공식 도메인이라는 이유만으로 입력에 없던 경로를 허용하지 않습니다. 멤버 검증은 `MatchedMembers`의 정본 이름을 사용하며 이름 자체에 포함된 쉼표를 쪼개지 않습니다. 콜라보 후보의 멤버 부분집합·순서 변경은 허용하지만 다른 후보의 멤버를 붙일 수는 없습니다. primary와 consensus adjudicator에 같은 검증을 적용합니다. 모든 항목이 탈락하면 기존 `ErrNoValidatedItems` 처리로 전달하며 새 원천이나 자동 재시도를 추가하지 않습니다.
+
 ## Error codes
 
 | Code | HTTP status | Meaning | Consumer behavior |

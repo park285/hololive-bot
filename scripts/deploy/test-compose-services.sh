@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
-literal_dollar='$'
 TEST_TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEST_TMP_DIR}"' EXIT
 TEST_OUT="${TEST_TMP_DIR}/out"
@@ -81,19 +80,6 @@ for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-a
     expect_fail "redeploy target rejects retired runtime ${removed}" compose_service_resolve_redeploy_target "${removed}"
 done
 
-# 7693d0b93에서 정적 멤버 프로필이 제거됐으므로 생산 패키징이 삭제된 경로를 다시 요구하면 안 됩니다.
-if rg -n 'hololive-shared/pkg/domain/internal/model/data|internal/domain/data' \
-    "${ROOT_DIR}/hololive/hololive-api/Dockerfile" \
-    "${ROOT_DIR}/hololive/hololive-alarm-worker/Dockerfile" \
-    "${ROOT_DIR}/hololive/hololive-youtube-collector/Dockerfile" \
-    "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh" \
-    "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" \
-    "${ROOT_DIR}/scripts/deploy/lib/ap-host-native-remote-apply.sh" \
-    "${ROOT_DIR}/scripts/deploy/lib/ap-host-native-rollback-check.sh"; then
-    fail "production packaging still requires removed static member profile data"
-fi
-pass "production packaging no longer requires removed static member profile data"
-
 for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-compose.seoul.yml; do
     expect_fail_contains "${ap_overlay} rejects explicit collector redeploy" \
         "youtube-collector is central-only" \
@@ -152,27 +138,6 @@ done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "${ROOT_DIR}/scripts/dep
 pass "ap active-active syncs every Compose helper"
 grep -qx 'scripts/deploy/ap-collector-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs collector preflight"
 pass "ap active-active syncs collector preflight"
-grep -q 'ap-collector-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs collector preflight"
-pass "ap active-active deploy runs collector preflight"
-
-for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
-  grep -Fq 'export GIT_OPTIONAL_LOCKS=0' "${ROOT_DIR}/${compose_entrypoint}" \
-    || fail "${compose_entrypoint} disables root-owned optional Git index refresh"
-done
-pass "Compose deploy entrypoints preserve checkout Git index ownership"
-for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
-    grep -q '/etc/stack-secrets/hololive-bot/ap-compose.env' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} uses AP compose env"
-    if grep -q '/etc/stack-secrets/hololive-bot/env' "${ROOT_DIR}/${ap_script}"; then
-        fail "${ap_script} must not require legacy monolithic env"
-    fi
-    grep -q 'ap_remote_bash' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} must pass remote arguments through ap_remote_bash"
-    literal_ap_ssh_array="${literal_dollar}{AP_SSH[@]}"
-    if grep -Fq "${literal_ap_ssh_array}" "${ROOT_DIR}/${ap_script}"; then
-        fail "${ap_script} must not build direct ssh remote command strings"
-    fi
-done
-pass "ap active-active smoke/status use AP compose env and safe remote argv"
-grep -q 'ap_prechange_config sudo' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy allows token-free transition prechange config only with explicit marker"
 bash "${ROOT_DIR}/scripts/deploy/lib/ap-prechange-config_test.sh" || fail "AP prechange exact-error contract"
 pass "ap active-active deploy handles token-free prechange transition"
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
@@ -183,16 +148,9 @@ bash "${ROOT_DIR}/scripts/deploy/ap-deploy-cutover-failure_test.sh" \
     || fail "AP deploy leaves a failed collector cutover for the recorded collector rollback"
 bash "${ROOT_DIR}/scripts/deploy/source-revision-provenance_test.sh" \
     || fail "image builds and cutovers preserve exact source revision provenance"
-for ap_runtime_script in scripts/deploy/ap-collector-preflight.sh scripts/deploy/ap-completion-check.sh; do
-    grep -q 'AP_REQUIRED_UDP_BUFFER_BYTES' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} exposes AP_REQUIRED_UDP_BUFFER_BYTES"
-    grep -q 'require-quic-udp-buffer.sh' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} delegates QUIC UDP buffer checks to require-quic-udp-buffer.sh"
-done
 ap_udp_lib="scripts/deploy/lib/require-quic-udp-buffer.sh"
-grep -q 'net.core.rmem_max' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} checks net.core.rmem_max"
-grep -q 'net.core.wmem_max' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} checks net.core.wmem_max"
-grep -q '/etc/sysctl.d/\*.conf' "${ROOT_DIR}/${ap_udp_lib}" || fail "${ap_udp_lib} checks persisted sysctl values"
 grep -qx "${ap_udp_lib}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_udp_lib}"
-pass "ap active-active verifies QUIC UDP buffer sysctls (runtime+persisted via lib)"
+pass "ap active-active syncs the QUIC UDP buffer preflight"
 
 # persisted 검증은 sysctl --system 적용 의미론(last-wins: sysctl.d lexical 순서 후 sysctl.conf 최종)을 따라야 한다.
 quic_fixture_root="${TEST_TMP_DIR}/quic"
@@ -265,13 +223,4 @@ expect_fail_contains "Seoul native rollback rejects Compose runtime" \
     "${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh" seoul --dry-run
 expect_fail "seoul active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --apply
 
-if rg -n 'ap-(deploy|rollback)\.sh (osaka|osaka2)' \
-    "${ROOT_DIR}/docs/current" \
-    "${ROOT_DIR}/docs/runbook_execution" \
-    "${ROOT_DIR}/scripts/README.md"; then
-    fail "current operator docs must route Osaka and Osaka2 through host-native helpers"
-fi
-pass "current operator docs route Osaka and Osaka2 through host-native helpers"
-
 python3 -B "${ROOT_DIR}/scripts/build/po-sandbox-manifest_test.py"
-

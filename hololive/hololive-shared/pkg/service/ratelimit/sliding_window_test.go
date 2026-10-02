@@ -132,6 +132,35 @@ func TestAllowEnforcesLimit(t *testing.T) {
 	}
 }
 
+func TestAllowCountsInstancesOnSameHost(t *testing.T) {
+	firstLimiter := newTestLimiter(t)
+
+	secondLimiter, err := NewSlidingWindowLimiter(firstLimiter.cacheClient, firstLimiter.keyPrefix, firstLimiter.logger)
+	if err != nil {
+		t.Fatalf("new second limiter: %v", err)
+	}
+
+	fixed := time.UnixMilli(1_700_000_000_000)
+
+	firstLimiter.now = func() time.Time { return fixed }
+	secondLimiter.now = func() time.Time { return fixed }
+
+	for i, limiter := range []*SlidingWindowLimiter{firstLimiter, secondLimiter, firstLimiter} {
+		decision, allowErr := limiter.Allow(t.Context(), "holodex:api:live", 2, time.Minute)
+		if allowErr != nil {
+			t.Fatalf("request %d: %v", i+1, allowErr)
+		}
+
+		if want := i < 2; decision.Allowed != want {
+			t.Fatalf("request %d allowed = %v, want %v", i+1, decision.Allowed, want)
+		}
+
+		if want := min(i+1, 2); decision.Current != want {
+			t.Fatalf("request %d current = %d, want %d", i+1, decision.Current, want)
+		}
+	}
+}
+
 func TestAllowAfterWindowExpires(t *testing.T) {
 	limiter := newTestLimiter(t)
 	ctx := t.Context()

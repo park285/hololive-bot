@@ -43,7 +43,7 @@ one pass:
   integration.
 - Dependency hygiene: `go list -m -u` and `govulncheck` for the root module and
   every `go.work` module.
-- Workspace compatibility: `scripts/ci/test-go-workspace-modules.sh`.
+- Workspace compatibility: canonical module vet and the configured Go build/test scopes in `scripts/ci/local-ci.sh`.
 
 A docs-only push (`docs/**` and `*.md` only, no `.go`/`.sh`/`.sql` under
 `docs/`, exact push range, not `full`) skips the Go gates.

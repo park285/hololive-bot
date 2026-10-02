@@ -25,9 +25,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"reflect"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -60,7 +60,7 @@ func NewPgxBatchRepositoryWithPersister(db any, persister PostLatencyClassificat
 }
 
 func normalizeBatchDB(db any) batchTxBeginner {
-	if isNilBatchDB(db) {
+	if reflectutil.IsNil(db) {
 		return nil
 	}
 
@@ -69,42 +69,6 @@ func normalizeBatchDB(db any) batchTxBeginner {
 	}
 
 	return normalizeBatchPoolAdapter(db)
-}
-
-func isNilBatchDB(db any) bool {
-	if db == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(db)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	case reflect.Invalid,
-		reflect.Bool,
-		reflect.Int,
-		reflect.Int8,
-		reflect.Int16,
-		reflect.Int32,
-		reflect.Int64,
-		reflect.Uint,
-		reflect.Uint8,
-		reflect.Uint16,
-		reflect.Uint32,
-		reflect.Uint64,
-		reflect.Uintptr,
-		reflect.Float32,
-		reflect.Float64,
-		reflect.Complex64,
-		reflect.Complex128,
-		reflect.Array,
-		reflect.String,
-		reflect.Struct,
-		reflect.UnsafePointer:
-		return false
-	default:
-		return false
-	}
 }
 
 func requireBatchDB(db any) batchTxBeginner {
@@ -117,7 +81,7 @@ func requireBatchDB(db any) batchTxBeginner {
 }
 
 func normalizeBatchPoolAdapter(db any) batchTxBeginner {
-	if isNilBatchDB(db) {
+	if reflectutil.IsNil(db) {
 		return nil
 	}
 

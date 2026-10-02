@@ -63,6 +63,8 @@ type Cache struct {
 	authorityEpoch         atomic.Uint64
 	authorityHealthy       atomic.Bool
 	epochReconcileInterval time.Duration
+	epochRuntimeCancel     context.CancelFunc
+	epochRuntimeDone       <-chan struct{}
 }
 
 type CacheConfig struct {
@@ -128,11 +130,34 @@ func (c *Cache) configureEpoch(ctx context.Context, epochStore cache.LowLevelCac
 		c.logger.Warn("member cache epoch unavailable at startup; cache bypass enabled", slog.Any("error", err))
 	}
 
-	go panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-epoch-subscription", func() {
-		c.runEpochReconciliation(memberEpochRuntimeContext(ctx))
-	})
+	c.startEpochReconciliation(ctx)
 
 	return nil
+}
+
+func (c *Cache) startEpochReconciliation(ctx context.Context) {
+	runtimeCtx, cancel := context.WithCancel(memberEpochRuntimeContext(ctx))
+	done := make(chan struct{})
+
+	c.epochRuntimeCancel = cancel
+	c.epochRuntimeDone = done
+
+	go panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-epoch-subscription", func() {
+		defer close(done)
+
+		c.runEpochReconciliation(runtimeCtx)
+	})
+}
+
+// Close는 epoch 구독과 재조회 작업을 취소하고 둘 다 끝날 때까지 기다린다.
+// Valkey 자원을 닫기 전에 호출하며, nil 캐시와 반복 호출도 안전하다.
+func (c *Cache) Close() {
+	if c == nil || c.epochRuntimeCancel == nil {
+		return
+	}
+
+	c.epochRuntimeCancel()
+	<-c.epochRuntimeDone
 }
 
 func (c *Cache) warmUpAtStartup(ctx context.Context) {

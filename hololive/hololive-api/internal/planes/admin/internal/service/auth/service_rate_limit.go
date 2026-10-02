@@ -30,6 +30,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -134,7 +135,7 @@ func incrWithTTL(ctx context.Context, cacheClient cache.Client, key string, ttl 
 
 	count, err := results[0].AsInt64()
 	if err != nil {
-		return 0, fmt.Errorf("increment with ttl: parse incr %s: %w", key, err)
+		return 0, fmt.Errorf("increment with ttl: parse incr %s: %w", privacylog.RedactCacheKey(key), err)
 	}
 
 	return count, nil
@@ -171,7 +172,7 @@ func validateIncrWithTTLResults(key string, results []valkey.ValkeyResult, want 
 	}
 
 	if err := results[0].Error(); err != nil {
-		return fmt.Errorf("increment with ttl: incr %s: %w", key, err)
+		return fmt.Errorf("increment with ttl: incr %s: %w", privacylog.RedactCacheKey(key), err)
 	}
 
 	if hasTTL {
@@ -187,7 +188,7 @@ func validateIncrWithTTLResults(key string, results []valkey.ValkeyResult, want 
 
 func validateIncrTTLExpireResult(key string, result valkey.ValkeyResult) error {
 	if err := result.Error(); err != nil {
-		return fmt.Errorf("increment with ttl: expire nx %s: %w", key, err)
+		return fmt.Errorf("increment with ttl: expire nx %s: %w", privacylog.RedactCacheKey(key), err)
 	}
 
 	return nil

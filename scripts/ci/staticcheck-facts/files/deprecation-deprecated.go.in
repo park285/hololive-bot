@@ -1,8 +1,0 @@
-package consumer
-
-import "example.com/staticcheck-contract/api"
-
-func Use(client *api.Client) int {
-	client.Legacy()
-	return client.Decode(1)
-}
