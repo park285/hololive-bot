@@ -77,6 +77,11 @@ func TestAlarmDispatchMaintenancePGObservationFailureDoesNotContaminateDeletionT
 				retentionEnabled: true,
 				queryTimeout:     250 * time.Millisecond,
 				limit:            1000,
+				sentDays:         90,
+				dlqDays:          180,
+				quarantinedDays:  180,
+				cancelledDays:    90,
+				eventDays:        90,
 				retentionLockKey: 42,
 			}
 

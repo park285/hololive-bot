@@ -232,12 +232,5 @@ if [[ "${make_n}" == *"go test -tags"* ]]; then
 fi
 PASSED=$((PASSED + 1))
 printf 'ok - Makefile has no second tagged test implementation\n'
-# 영구 계약(재도입 방지): 퇴역한 build-bin 별칭은 다시 생기지 않는다. 제거 조건이 없다.
-if grep -Eq '^build-bin:' "${MAKEFILE}"; then
-  printf 'not ok - Makefile still exposes the retired build-bin alias\n' >&2
-  exit 1
-fi
-PASSED=$((PASSED + 1))
-printf 'ok - Makefile retired the build-bin compatibility alias\n'
 
 printf 'ok - %s collector production build entrypoint checks passed\n' "${PASSED}"

@@ -13,6 +13,8 @@
 - 폐기되면 `docs/history/`로 이동합니다.
 
 ## 현재 설계 문서 위치
+
+- [알람 워커·API 공유 모듈 리팩토링과 fallback·구형 호환 정리 계획](2026-10-02-alarm-worker-api-shared-refactoring.md) — 재현한 lease·취소·종료 문제, shared 유지·이동 기준, 계약 없는 fallback과 구형 alias·재등장 가드 정리, 단계별 검증과 필요한 결정
 - `docs/superpowers/specs/` — 현재 design spec 저장 위치
 - `three-runtime-consolidation-plan.md` — `bot` + `admin-api` + `llm-scheduler`를 `hololive-api`로 통합해 3개 runtime으로 줄이는 migration plan
 

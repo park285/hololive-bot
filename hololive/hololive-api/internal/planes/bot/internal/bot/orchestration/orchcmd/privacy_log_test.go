@@ -13,6 +13,7 @@ import (
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const privacySentinel = "SENTINEL"
@@ -277,12 +278,12 @@ func TestCommandContextAttrsKeepTheIngressRoomToken(t *testing.T) {
 	var roomToken string
 
 	for _, attr := range attrs {
-		if attr.Key == privacylog.KeyRoomID {
+		if attr.Key == sharedprivacylog.KeyRoomID {
 			roomToken = attr.Value.String()
 		}
 	}
 
-	if roomToken == privacylog.UnknownToken {
+	if roomToken == sharedprivacylog.UnknownToken {
 		t.Fatal("chat_id가 빈 경로에서 ingress와 상관 키가 갈렸다")
 	}
 

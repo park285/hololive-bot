@@ -107,6 +107,19 @@ Holodex success-empty는 authoritative empty이며 공식 API를 호출하지 �
 
 모든 대상 org가 성공한 결과만 캐시합니다. `org=all`에서 일부 org만 성공하면 성공한 org의 stream과 함께 `PartialStreamsError`(실패 org 목록 포함)를 반환하고 캐시하지 않습니다. Stream HTTP API는 이 오류를 500으로 응답하고 부분 목록을 내보내지 않습니다(부분 응답 필드는 별도 결정 전 추가하지 않음). 공식 API fallback이 stream을 하나도 찾지 못하면 빈 성공을 만들지 않고 primary 오류를 반환하며 캐시하지 않습니다. 호출자 context 취소로 끝난 primary는 fallback·재시도·캐시 없이 취소 오류를 반환합니다.
 
+workspace 예외 형식에 맞춰 다음을 함께 지킵니다(2026-10-02 보강).
+
+| 항목 | 내용 |
+|---|---|
+| Trigger | `org=hololive` upcoming 조회에서 primary가 stream을 하나도 얻지 못했고 실패한 org가 있음 |
+| 한도 | 요청당 공식 일정 조회 한 번이며(origin fetch는 아래 cache·singleflight를 공유) 재시도하지 않습니다. caller의 `hours` window와 기존 list limit을 적용합니다. |
+| 종단 | 공식 API 오류나 빈 결과이면 primary 오류를 반환하고 캐시하지 않습니다. |
+| Telemetry | `hololive_fallback_primary_total{service="holodex"}`, `hololive_fallback_execution_total{service="holodex",trigger="on_empty_primary_with_error",outcome}`(`skipped`, `error`, `hit`, `miss`), `hololive_holodex_official_schedule_fallback_total`과 Warn 로그 |
+| Owner | `hololive-shared/pkg/service/holodex/provider`(실행)와 `internal/service/holodex/provider/htmlscraper`(공식 API 조회) |
+| 검토 조건 | `outcome="hit"`이 90일 동안 0이면 이 fallback을 지우고 Holodex 실패를 그대로 오류로 반환합니다. Holodex upcoming이 공식 일정 API를 대체할 수 없게 되면(Holodex 퇴역 등) 공식 API를 primary로 올리고 이 예외를 지웁니다. |
+
+이 fallback만 쓰던 범용 실행기 `internal/service/fallback`은 2026-10-02 provider 안으로 합쳤습니다. 위 metric의 이름과 label 구성은 그대로입니다.
+
 ### Channel schedule
 
 ```text

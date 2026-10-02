@@ -29,7 +29,6 @@ type ClaimManager struct {
 	fanout      *OutboxFanoutService
 	projector   *OutboxAggregateProjector
 	executor    DeliveryExecutor
-	metrics     *MetricsRecorder
 	grouper     *OutboxGrouper
 	auditLogger *AuditLogger
 }
@@ -68,12 +67,6 @@ func newClaimManager(
 func (d *ClaimManager) setExecutor(executor DeliveryExecutor) {
 	if d != nil {
 		d.executor = executor
-	}
-}
-
-func (d *ClaimManager) setMetricsRecorder(metrics *MetricsRecorder) {
-	if d != nil {
-		d.metrics = metrics
 	}
 }
 

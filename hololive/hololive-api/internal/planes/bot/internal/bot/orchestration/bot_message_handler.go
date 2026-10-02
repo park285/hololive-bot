@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 var ErrCommandOutcomeUnknown = errors.New("command execution outcome unknown")
@@ -184,7 +185,7 @@ func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandTy
 		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
 
 		attrs = append(attrs,
-			privacylog.ChatIDAttr(chatID),
+			sharedprivacylog.ChatIDAttr(chatID),
 			slog.String("command", commandType),
 		)
 		attrs = append(attrs, errorAttrs...)

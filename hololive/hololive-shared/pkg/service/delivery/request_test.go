@@ -51,7 +51,7 @@ func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 
 	conflict := &iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`}
 	sender := &preparedSenderSpy{body: "original final body", route: testPreparedMarkdown, err: conflict}
-	cfg := DefaultDispatcherConfig()
+	cfg := testDispatcherConfig()
 
 	cfg.RetryBackoff = time.Nanosecond
 
@@ -83,7 +83,7 @@ func TestGenericRequestOrdinaryFailedRearmPreservesSnapshot(t *testing.T) {
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "rearm", "room", "source"))
 
 	sender := &preparedSenderSpy{body: "pinned body", route: testPreparedText, err: errors.New("known failure")}
-	cfg := DefaultDispatcherConfig()
+	cfg := testDispatcherConfig()
 
 	cfg.MaxRetries = 1
 
@@ -255,7 +255,7 @@ func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "period:part", "room", "source"))
 
 	sender := &preparedSenderSpy{body: "pinned body", route: testPreparedText, err: errors.New("known failure")}
-	cfg := DefaultDispatcherConfig()
+	cfg := testDispatcherConfig()
 
 	cfg.MaxRetries = 1
 
@@ -299,7 +299,7 @@ func TestGenericPreparationFailureKeepsUnsentEvidenceForRetry(t *testing.T) {
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "prepare-retry", "room", "source"))
 
 	sender := &preparedSenderSpy{body: "body", route: testPreparedText, prepareErr: errors.New("prepare unavailable")}
-	cfg := DefaultDispatcherConfig()
+	cfg := testDispatcherConfig()
 
 	cfg.RetryBackoff = time.Nanosecond
 

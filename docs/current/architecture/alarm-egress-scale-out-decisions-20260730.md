@@ -49,10 +49,10 @@ lease 삭제와 scheduler role 완화의 결과로, **validator는 더 이상 �
 
 ### deploy 계층 단언
 
-deploy 계층에서는 `scripts/architecture/ci-notification-egress-gate.sh`가 두 가지를 단언합니다.
+deploy 계층에서는 `scripts/architecture/ci-notification-egress-gate.sh`가 alarm-worker compose 블록에 대해 다음을 단언합니다. 퇴역한 key의 재등장 검사는 2026-10-02에 지웠고, 그런 key는 런타임 퇴역 가드가 기동 때 거절합니다.
 
-- `ALARM_WORKER_EGRESS_LEASE_ENABLED`가 compose에 되살아나지 않을 것. 이 env를 읽는 런타임이 더는 없으므로, 재도입은 proactive egress에 Valkey 가용성 의존만 다시 붙이는 결과가 됩니다.
-- alarm-worker 블록이 `NOTIFICATION_SCHEDULER_ROLE: "worker"` 리터럴을 고정할 것. validator가 `off`를 허용하게 되었으므로, 이 리터럴이 유일 인스턴스를 감지기 없이 기동시키는 오배포를 막는 deploy 계층 방어선입니다.
+- `NOTIFICATION_SCHEDULER_ROLE: "worker"` 리터럴을 고정할 것. validator가 `off`를 허용하게 되었으므로, 이 리터럴이 유일 인스턴스를 감지기 없이 기동시키는 오배포를 막는 deploy 계층 방어선입니다.
+- `container_name`과 고정 loopback 호스트 포트를 유지하고 `replicas`를 선언하지 않을 것. 이 셋이 단일 인스턴스를 보장합니다.
 
 ### 코드 위치
 
@@ -169,7 +169,7 @@ hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_metri
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher.go
   Dispatcher.Start — aggregateSyncLoop / telemetryLoop / cleanupLoop / reviveLoop
 
-hololive/hololive-shared/pkg/service/alarm/dedup/fallback.go
+hololive/hololive-shared/pkg/service/alarm/dedup/fallback.go (`2bc32799f`에서 삭제)
   LocalFallback.TryClaimOnOutage — fail-open
 
 scripts/ci/local-ci.sh, scripts/ci/local-ci-integration.sh, scripts/ci/pre-push-gate.sh

@@ -17,8 +17,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-var ErrLegacyRequestEvidence = errors.New("legacy request evidence missing")
-
 // FrozenRequest는 한 provider 호출의 불변 본문·수신 방·membership과 현재 ID 세대다.
 type FrozenRequest struct {
 	BaseID      string
@@ -173,13 +171,11 @@ func bindFrozenRequest(ctx context.Context, tx dbx.Querier, ids []int64, baseID 
 }
 
 type requestDeliveryState struct {
-	ID                     int64
-	RoomID                 string
-	Status                 string
-	RowVersion             int64
-	AttemptCount           int
-	SendRequestID          string
-	RequestSnapshotAllowed bool
+	ID            int64
+	RoomID        string
+	Status        string
+	RowVersion    int64
+	SendRequestID string
 }
 
 func validateRequestDeliveryStates(expected []domain.YouTubeNotificationDelivery, states []requestDeliveryState) (string, error) {
@@ -201,10 +197,6 @@ func validateRequestDeliveryStates(expected []domain.YouTubeNotificationDelivery
 
 		if row.SendRequestID != bound {
 			return "", errors.New("freeze request: mixed frozen membership")
-		}
-
-		if bound == "" && !row.RequestSnapshotAllowed && (row.AttemptCount > 0 || row.RowVersion > 1) {
-			return "", ErrLegacyRequestEvidence
 		}
 	}
 

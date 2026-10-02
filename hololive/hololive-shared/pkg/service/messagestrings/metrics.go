@@ -41,10 +41,9 @@ func initMetrics() {
 				Help: "Total failed message_strings loads from PostgreSQL at runtime startup.",
 			},
 		)
-		// metric 이름은 대시보드 연속성을 위해 유지한다. 코드 대체 문구는 없어졌으므로 값은 "조회했지만 값이 없음"을 뜻한다.
 		lookupMissTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "hololive_messagestrings_lookup_fallback_total",
+				Name: "hololive_messagestrings_lookup_miss_total",
 				Help: "Total message_strings lookups that found no value, by reason (unloaded: Load was not called, missing: namespace/key absent) and namespace. Required keys are validated at startup, so increases on validated keys indicate a wiring defect; dynamic label lookups use the raw value.",
 			},
 			[]string{"reason", "namespace"},

@@ -251,7 +251,7 @@ func (s *TransitionStore) evaluateReviveResolution(
 	members := resolution.Members()
 	for i := range members {
 		switch rowsByID[members[i].DeliveryID].Error {
-		case expiredPendingReason, "client request id generations exhausted", "legacy request evidence missing":
+		case expiredPendingReason, "client request id generations exhausted":
 			return reviveEvaluation{}, nil
 		}
 	}

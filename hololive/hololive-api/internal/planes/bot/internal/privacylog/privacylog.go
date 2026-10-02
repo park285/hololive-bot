@@ -27,32 +27,8 @@ import (
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-const (
-	KeyRoomID     = sharedprivacylog.KeyRoomID
-	KeyChatID     = sharedprivacylog.KeyChatID
-	KeyCacheKey   = sharedprivacylog.KeyCacheKey
-	KeyCacheField = sharedprivacylog.KeyCacheField
-
-	UnknownToken    = sharedprivacylog.UnknownToken
-	PseudonymPrefix = sharedprivacylog.PseudonymPrefix
-)
-
-func RoomIDAttr(room string) slog.Attr {
-	return sharedprivacylog.RoomIDAttr(room)
-}
-
-func ChatIDAttr(chatID string) slog.Attr {
-	return sharedprivacylog.ChatIDAttr(chatID)
-}
-
-func IsCanonicalRoomID(value string) bool {
-	return sharedprivacylog.IsCanonicalRoomID(value)
-}
-
-func Pseudonym(value string) string {
-	return sharedprivacylog.Pseudonym(value)
-}
-
+// RoomAttr와 ChatAttr는 bot ingress의 상관 키 규칙(chat_id가 비면 방 제목)을 적용한 뒤 shared privacylog로 가명화한다.
+// 그 밖의 key 상수와 가명화 helper는 shared privacylog를 직접 쓴다.
 func RoomAttr(chatID, roomName string) slog.Attr {
 	return sharedprivacylog.RoomIDAttr(correlationSource(chatID, roomName))
 }

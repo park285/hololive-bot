@@ -25,8 +25,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -45,28 +48,41 @@ type Dependencies struct {
 	Sender         delivery.MessageSender
 	Renderer       *template.Renderer
 	MessageStrings *messagestrings.Store
+	// MemberNames는 알림 표시명의 PostgreSQL 정본 조회다. Valkey 장애가 표시명을 바꾸거나 발송을 막지 않게 한다.
+	MemberNames format.MemberNameSource
 }
 
 // NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
 func NewDispatcher(deps Dependencies, logger *slog.Logger, config *dispatchstate.Config) (*Dispatcher, error) {
-	if deps.DB == nil || deliverysql.IsNilDB(deps.DB) {
+	if deps.DB == nil || reflectutil.IsNil(deps.DB) {
 		return nil, errors.New("initialize youtube dispatcher: db is required")
+	}
+
+	if deps.MemberNames == nil {
+		return nil, errors.New("initialize youtube dispatcher: member name source is required")
+	}
+
+	if config == nil {
+		return nil, errors.New("initialize youtube dispatcher: config is required")
+	}
+
+	validConfig := *config
+	if err := validConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}
 
 	initOutboxMetrics()
 
 	logger = dispatcherLogger(logger)
 
-	normalizedConfig := normalizedDispatcherConfig(config)
-
-	transitionStore, err := newDispatcherTransitionStore(deps.DB, logger, normalizedConfig)
+	transitionStore, err := newDispatcherTransitionStore(deps.DB, logger, validConfig)
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}
 
 	telemetryRepository := newDispatcherTelemetryRepository(deps.DB)
 
-	return assembleDispatcher(deps, logger, normalizedConfig, telemetryRepository, transitionStore), nil
+	return assembleDispatcher(deps, logger, validConfig, telemetryRepository, transitionStore), nil
 }
 
 func dispatcherLogger(logger *slog.Logger) *slog.Logger {
@@ -75,21 +91,6 @@ func dispatcherLogger(logger *slog.Logger) *slog.Logger {
 	}
 
 	return slog.Default()
-}
-
-func normalizedDispatcherConfig(config *dispatchstate.Config) dispatchstate.Config {
-	normalized := dispatchstate.NormalizeDispatcherConfig(config)
-	defaults := dispatchstate.DefaultConfig()
-
-	if normalized.MaxRetries <= 0 {
-		normalized.MaxRetries = defaults.MaxRetries
-	}
-
-	if normalized.RetryBackoff <= 0 {
-		normalized.RetryBackoff = defaults.RetryBackoff
-	}
-
-	return normalized
 }
 
 func newDispatcherTelemetryRepository(querier dbx.Querier) *telemetry.Repository {
@@ -129,15 +130,14 @@ func assembleDispatcher(
 	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config)
 	grouper := newOutboxGrouper(deps.DB, deps.Cache, logger, &config)
-	formatter := newMessageFormatter(deps.Renderer, deps.Cache, logger, deps.MessageStrings)
+	formatter := format.NewMessageFormatter(deps.Renderer, deps.MemberNames, deps.MessageStrings)
 
 	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, nil, grouper, al)
-	metricsRecorder := newMetricsRecorder(logger, al, claimManager)
+	metricsRecorder := newMetricsRecorder(logger, al)
 	sendEngine := newSendEngine(
 		deps.Sender, formatter, logger, &config, claimManager, al, metricsRecorder, transitionStore,
 	)
 	claimManager.setExecutor(sendEngine)
-	claimManager.setMetricsRecorder(metricsRecorder)
 
 	return &Dispatcher{
 		claim:     claimManager,

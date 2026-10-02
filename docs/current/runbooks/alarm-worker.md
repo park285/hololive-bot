@@ -54,7 +54,7 @@ Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kaka
 | 방 유형 미확인 | 일반 텍스트 |
 | Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
 
-일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown resolver는 오픈채팅 여부만 제공합니다. Karing 선택 분기, chunk planner, Karing sender는 삭제했고, Markdown lane이 쓰는 handoff 확인(`ErrReplyHandoffOutcomeUnknown`, `ErrReplyHandoffFailed`)만 남아 있습니다. `scripts/architecture/ci-notification-egress-gate.sh`는 alarm-worker Go 코드에 Karing SDK 호출이 다시 들어오면 실패합니다.
+일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown resolver는 오픈채팅 여부만 제공합니다. Karing 선택 분기, chunk planner, Karing sender는 삭제했고, Markdown lane이 쓰는 handoff 확인(`sendoutcome.ErrHandoffOutcomeUnknown`, `sendoutcome.ErrHandoffFailed`)만 남아 있습니다.
 
 방송·선행공개·영상·쇼츠·커뮤니티·축하·생일 방송·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 

@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
 func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {

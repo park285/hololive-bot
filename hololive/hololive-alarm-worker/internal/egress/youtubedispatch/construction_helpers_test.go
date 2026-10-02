@@ -63,6 +63,10 @@ func newDispatcherWithDepsForTest(
 
 	deps.DB = db
 
+	if deps.MemberNames == nil {
+		deps.MemberNames = staticMemberNames{}
+	}
+
 	// 운영 기동과 같이 message_strings를 한 번 적재해 둔다. 조회 시 lazy 적재는 없다.
 	deps.MessageStrings = messagestrings.NewStore(db, logger)
 	require.NoError(tb, deps.MessageStrings.Load(tb.Context()))
@@ -71,7 +75,7 @@ func newDispatcherWithDepsForTest(
 		deps.Renderer = template.NewRenderer(db, logger)
 	}
 
-	dispatcher, err := NewDispatcher(deps, logger, config)
+	dispatcher, err := NewDispatcher(deps, logger, withTestDispatchConfigDefaults(config))
 	require.NoError(tb, err)
 
 	if unitTransition {

@@ -249,11 +249,16 @@ func (c *ConsensusSummarizer) review(
 	input *model.SummarizeInput,
 	digest *model.Digest,
 ) (*consensus.ReviewVerdict, error) {
+	userPrompt, err := buildReviewUserPrompt(input, digest)
+	if err != nil {
+		return nil, fmt.Errorf("build review prompt: %w", err)
+	}
+
 	raw, err := c.reviewer.GenerateJSON(
 		ctx,
 		openaipreset.PromptLayers{
 			Developer: reviewSystemPrompt(),
-			User:      buildReviewUserPrompt(input, digest),
+			User:      userPrompt,
 		},
 		consensus.ReviewVerdictSchema(),
 	)
@@ -286,11 +291,16 @@ func (c *ConsensusSummarizer) adjudicate(
 	digest *model.Digest,
 	verdict *consensus.ReviewVerdict,
 ) (*summaryResponse, error) {
+	userPrompt, err := buildAdjudicatorUserPrompt(input, digest, verdict)
+	if err != nil {
+		return nil, fmt.Errorf("build adjudicator prompt: %w", err)
+	}
+
 	raw, err := c.adjudicator.GenerateJSON(
 		ctx,
 		openaipreset.PromptLayers{
 			Developer: adjudicatorSystemPrompt(),
-			User:      buildAdjudicatorUserPrompt(input, digest, verdict),
+			User:      userPrompt,
 		},
 		memberNewsSummarySchema(),
 	)

@@ -377,7 +377,11 @@ func (s *EventSummarizer) buildSummaryResponse(
 		return nil, fmt.Errorf("get system prompt: %w", err)
 	}
 
-	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext)
+	userPrompt, err := buildUserPrompt(events, summaryType, periodKey, searchContext)
+	if err != nil {
+		return nil, fmt.Errorf("build summary prompt: %w", err)
+	}
+
 	schema := summaryResponseSchema()
 
 	rawJSON, err := s.llm.GenerateJSON(ctx, openaipreset.PromptLayers{Invariant: invariantPrompt, Developer: sysPrompt, User: userPrompt}, schema)

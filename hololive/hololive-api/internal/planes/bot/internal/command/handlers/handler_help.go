@@ -31,8 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-var errHelpImageUnavailable = errors.New("help image capability is unavailable")
-
 type HelpCommand struct {
 	deps *handlercore.Dependencies
 }
@@ -69,54 +67,55 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		return fmt.Errorf("format help content: %w", contentErr)
 	}
 
-	imageErr := c.sendHelpImages(ctx, cmdCtx.Room)
-	if imageErr == nil {
+	images, loadErr := c.loadHelpImages(ctx)
+	if loadErr != nil {
+		return c.sendTextFallback(ctx, cmdCtx.Room, content.TextFallback, imageTextFallbackReasonRenderFailed, loadErr)
+	}
+
+	sendErr := c.deps.SendImages(ctx, cmdCtx.Room, images)
+	if sendErr == nil {
 		return nil
 	}
 
-	c.logImageFallback(ctx, imageErr)
+	sendErr = fmt.Errorf("send help image album: %w", sendErr)
 
-	if transport.IsReplyOutcomeUnknown(imageErr) {
-		return fmt.Errorf("send help images: %w", imageErr)
+	// 결과 불명이면 이미지가 이미 전달됐을 수 있으므로 텍스트를 보내지 않고 결과 불명으로 올린다.
+	if transport.IsReplyOutcomeUnknown(sendErr) {
+		observeImageTextFallback(c.Name(), imageTextFallbackReasonOutcomeUnknown)
+		c.logImageFallback(ctx, sendErr)
+
+		return fmt.Errorf("send help images: %w", sendErr)
 	}
 
-	if err := c.deps.SendMessage(ctx, cmdCtx.Room, content.TextFallback); err != nil {
-		return errors.Join(imageErr, fmt.Errorf("send help text fallback: %w", err))
-	}
-
-	return nil
+	return c.sendTextFallback(ctx, cmdCtx.Room, content.TextFallback, imageTextFallbackReasonSendFailed, sendErr)
 }
 
-func (c *HelpCommand) sendHelpImages(ctx context.Context, room string) error {
-	if c.deps.HelpImageProvider == nil || c.deps.SendImages == nil {
-		return errHelpImageUnavailable
-	}
-
+func (c *HelpCommand) loadHelpImages(ctx context.Context) ([][]byte, error) {
 	images, err := c.deps.HelpImageProvider.HelpImages(ctx)
 	if err != nil {
-		return fmt.Errorf("load help images: %w", err)
+		return nil, fmt.Errorf("load help images: %w", err)
 	}
 
 	if len(images) == 0 {
-		return errors.New("load help images: empty result")
+		return nil, errors.New("load help images: empty result")
 	}
 
-	if err := c.sendHelpImagePayloads(ctx, room, images); err != nil {
-		return fmt.Errorf("send help image payloads: %w", err)
-	}
-
-	return nil
-}
-
-func (c *HelpCommand) sendHelpImagePayloads(ctx context.Context, room string, images [][]byte) error {
 	for index, imageData := range images {
 		if len(imageData) == 0 {
-			return fmt.Errorf("load help image %d/%d: empty payload", index+1, len(images))
+			return nil, fmt.Errorf("load help image %d/%d: empty payload", index+1, len(images))
 		}
 	}
 
-	if err := c.deps.SendImages(ctx, room, images); err != nil {
-		return fmt.Errorf("send help image album: %w", err)
+	return images, nil
+}
+
+// sendTextFallback은 이미지 응답이 확정적으로 실패했을 때만 텍스트 도움말을 보낸다.
+func (c *HelpCommand) sendTextFallback(ctx context.Context, room, text, reason string, imageErr error) error {
+	observeImageTextFallback(c.Name(), reason)
+	c.logImageFallback(ctx, imageErr)
+
+	if err := c.deps.SendMessage(ctx, room, text); err != nil {
+		return errors.Join(imageErr, fmt.Errorf("send help text fallback: %w", err))
 	}
 
 	return nil
@@ -141,6 +140,11 @@ func (c *HelpCommand) ensureDeps() error {
 
 	if c.deps.Formatter == nil {
 		return errors.New("formatter not configured")
+	}
+
+	// 운영 조립은 이미지 provider와 album 전송을 항상 연결한다. 없으면 텍스트로 조용히 바꾸지 않고 설정 오류로 드러낸다.
+	if c.deps.HelpImageProvider == nil || c.deps.SendImages == nil {
+		return errors.New("help image capability not configured")
 	}
 
 	return nil

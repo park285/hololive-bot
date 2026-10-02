@@ -68,6 +68,8 @@ func (d *SendEngine) dispatchRowsIndividually(
 	}
 }
 
+// formatGroupedMessage는 묶음 메시지를 만든다. 이름 조회나 렌더링이 실패하면 개별 발송으로 바꾸지 않고 오류를 돌려주며,
+// 호출자가 그룹 전체를 재시도 가능한 포맷 실패로 전이한다. 표시명이 없는 채널만 예외 계약의 종단 문구를 쓴다.
 func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
 	group *deliveryGroup,
@@ -77,18 +79,18 @@ func (d *SendEngine) formatGroupedMessage(
 		return "", errors.New("format grouped message: delivery group is missing")
 	}
 
-	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
+	memberName, err := d.formatter.GetMemberName(ctx, group.channelID)
 	if err != nil {
-		return "", fmt.Errorf("format grouped delivery member name: %w", err)
+		return "", fmt.Errorf("format grouped message: %w", err)
 	}
 
 	if memberName == "" {
-		memberName = d.formatter.vtuberFallback(ctx)
+		memberName = d.formatter.VTuberFallback()
 	}
 
-	message, err := d.formatter.formatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
+	message, err := d.formatter.FormatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
 	if err != nil {
-		return "", fmt.Errorf("format grouped delivery message: %w", err)
+		return "", fmt.Errorf("format grouped message: %w", err)
 	}
 
 	return message, nil
@@ -109,7 +111,7 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	for id := range outboxByID {
 		item := outboxByID[id]
 
-		msg, err := d.formatter.formatMessage(ctx, &item)
+		msg, err := d.formatter.FormatMessage(ctx, &item)
 		if err != nil {
 			d.logger.Warn("Failed to pre-format outbox message",
 				slog.Int64("outbox_id", id),
@@ -219,14 +221,6 @@ func (d *SendEngine) recordGroupedSendOutcomeUnknown(
 		slog.Any("outbox_ids", collectDeliveryOutboxIDs(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
-}
-
-func (d *SendEngine) deliveryParallelism() int {
-	if d.config.DeliveryParallelism > 0 {
-		return d.config.DeliveryParallelism
-	}
-
-	return dispatchstate.DefaultConfig().DeliveryParallelism
 }
 
 func (r deliverySendRequest) requestID() string {

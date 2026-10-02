@@ -32,11 +32,3 @@ func newOutboxGrouper(db dbx.Querier, cacheClient cache.Client, logger *slog.Log
 		config: *config,
 	}
 }
-
-func (g *OutboxGrouper) subscriberLookupParallelism() int {
-	if g == nil || g.config.SubscriberLookupParallelism <= 0 {
-		return dispatchstate.DefaultConfig().SubscriberLookupParallelism
-	}
-
-	return g.config.SubscriberLookupParallelism
-}

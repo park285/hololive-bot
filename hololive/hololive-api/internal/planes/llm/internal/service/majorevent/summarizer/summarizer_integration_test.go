@@ -109,7 +109,11 @@ func mar2026Events() []domain.MajorEvent {
 func TestIntegration_BuildUserPrompt_Output(t *testing.T) {
 	// API 호출 없이 프롬프트 생성 검증 (INTEGRATION_TEST 불필요)
 	events := feb2026Events()
-	prompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
+
+	prompt, err := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
+	if err != nil {
+		t.Fatalf("buildUserPrompt() error = %v", err)
+	}
 
 	t.Logf("\n=== Weekly User Prompt ===\n%s\n=== END ===", prompt)
 

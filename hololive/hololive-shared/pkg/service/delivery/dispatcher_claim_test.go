@@ -87,7 +87,7 @@ func TestDispatcherClaimsOnlyWhenDeliveryCanStart(t *testing.T) {
 
 					return nil
 				}}
-				cfg := DefaultDispatcherConfig()
+				cfg := testDispatcherConfig()
 
 				cfg.AttemptTimeout = 54 * time.Second
 
@@ -108,7 +108,7 @@ func TestDispatcherStopsClaimingAtBatchLimit(t *testing.T) {
 		repo.pending = append(repo.pending, domain.NotificationDeliveryOutbox{ID: int64(i + 1), RoomID: "room", Payload: makePayload(t, "hello")})
 	}
 
-	cfg := DefaultDispatcherConfig()
+	cfg := testDispatcherConfig()
 
 	cfg.BatchSize = 3
 

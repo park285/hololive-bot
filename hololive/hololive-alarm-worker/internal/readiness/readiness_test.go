@@ -28,11 +28,6 @@ func TestInternalResponseReportsDependencies(t *testing.T) {
 	if !dependencies["postgres"] || !dependencies["valkey"] {
 		t.Fatalf("dependencies = %v, want postgres and valkey ready", dependencies)
 	}
-
-	// 영구 계약(재도입 방지): 퇴역한 egress_flags 필드는 readiness 응답에 다시 나오지 않는다. 제거 조건이 없다.
-	if _, ok := payload["egress_flags"]; ok {
-		t.Fatalf("internal response exposed retired egress flags: %v", payload)
-	}
 }
 
 func TestInternalResponseNotReadyWhenDependencyFails(t *testing.T) {

@@ -7,6 +7,8 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 func TestMarkdownAdmissionWaitsForExactHandoffOutcome(t *testing.T) {
@@ -16,9 +18,9 @@ func TestMarkdownAdmissionWaitsForExactHandoffOutcome(t *testing.T) {
 		want  error
 	}{
 		{name: "confirmed", state: "handoff_completed"},
-		{name: "failed", state: "failed", want: ErrReplyHandoffFailed},
-		{name: "unknown", state: "outcome_unknown", want: ErrReplyHandoffOutcomeUnknown},
-		{name: "timeout", state: "sending", want: ErrReplyHandoffOutcomeUnknown},
+		{name: "failed", state: "failed", want: sendoutcome.ErrHandoffFailed},
+		{name: "unknown", state: "outcome_unknown", want: sendoutcome.ErrHandoffOutcomeUnknown},
+		{name: "timeout", state: "sending", want: sendoutcome.ErrHandoffOutcomeUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -64,7 +66,7 @@ func TestMarkdownMalformedAdmissionCannotReportSuccess(t *testing.T) {
 		sender := NewIrisMessageSender(client, WithMarkdownReplies(true),
 			WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
 		err := sender.SendMessage(t.Context(), testIrisSenderRoomID, "synthetic markdown")
-		require.ErrorIs(t, err, ErrReplyHandoffOutcomeUnknown)
+		require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
 		require.Zero(t, client.statusCalls)
 		require.Len(t, client.markdownCalls, 1)
 	}

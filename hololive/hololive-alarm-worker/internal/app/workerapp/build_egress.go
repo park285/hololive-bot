@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
@@ -191,18 +192,7 @@ func buildDeliveryOutboxDispatcher(
 		return nil, errors.New("postgres is required")
 	}
 
-	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["notification_delivery"]
-	profile := appConfig.AlarmWorkerProfile.NotificationDelivery
-	dispatcherConfig := delivery.DispatcherConfig{
-		AttemptTimeout: time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
-		BatchSize:      profile.BatchSize, MaxConcurrent: worker.Executor.ConfiguredWorkers,
-		MaxRetries: profile.MaxRetries, PollInterval: durationMS(profile.PollIntervalMS),
-		RetryBackoff: durationMS(profile.RetryBackoffMS),
-		CleanupAfter: durationMS(profile.CleanupAfterMS), CleanupInterval: durationMS(profile.CleanupIntervalMS),
-		CleanupEnabled: profile.CleanupEnabled, StaleSendingAfter: durationMS(profile.StaleSendingAfterMS),
-		StaleSendingSweepInterval: durationMS(profile.StaleSendingSweepIntervalMS),
-		StaleSendingSweepLimit:    profile.StaleSendingSweepLimit,
-	}
+	dispatcherConfig := notificationDeliveryDispatcherConfig(appConfig)
 
 	dispatcher, err := delivery.NewDispatcher(
 		delivery.NewOutboxRepository(infra.Postgres, logger),
@@ -217,6 +207,28 @@ func buildDeliveryOutboxDispatcher(
 	dispatcher.SetWorkerInstrumentation(workerState.trackers["notification_delivery"], workerState.totals["notification_delivery"])
 
 	return workerruntime.NewDeliveryOutboxDispatcherRunner(dispatcher, logger), nil
+}
+
+// notificationDeliveryDispatcherConfig는 worker profile의 notification_delivery 항목을 그대로 옮긴다. 시도 시간은
+// executor의 fixed attempt_timeout이며, profile 스키마가 fixed 모드와 값을 요구하므로 dispatcher 기본값을 쓰지 않는다.
+func notificationDeliveryDispatcherConfig(appConfig *settings.Config) delivery.DispatcherConfig {
+	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["notification_delivery"]
+	profile := appConfig.AlarmWorkerProfile.NotificationDelivery
+
+	return delivery.DispatcherConfig{
+		AttemptTimeout:            time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
+		BatchSize:                 profile.BatchSize,
+		MaxConcurrent:             worker.Executor.ConfiguredWorkers,
+		MaxRetries:                profile.MaxRetries,
+		PollInterval:              durationMS(profile.PollIntervalMS),
+		RetryBackoff:              durationMS(profile.RetryBackoffMS),
+		CleanupAfter:              durationMS(profile.CleanupAfterMS),
+		CleanupInterval:           durationMS(profile.CleanupIntervalMS),
+		CleanupEnabled:            profile.CleanupEnabled,
+		StaleSendingAfter:         durationMS(profile.StaleSendingAfterMS),
+		StaleSendingSweepInterval: durationMS(profile.StaleSendingSweepIntervalMS),
+		StaleSendingSweepLimit:    profile.StaleSendingSweepLimit,
+	}
 }
 
 func buildAlarmDispatchRunner(
@@ -368,37 +380,58 @@ func newYouTubeOutboxDispatcher(
 		return nil, errors.New("youtube outbox postgres pool is required")
 	}
 
-	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
-	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
-	attemptTimeout := time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond
-	// 공통 executor 예산과 보존 중인 service 설정은 같은 provider 호출을 제한합니다.
-	if durationMS(profile.DeliverySendTimeoutMS) != attemptTimeout {
-		return nil, errors.New("youtube delivery send timeout must match executor attempt timeout")
+	dispatchConfig, err := youtubeDispatchConfig(appConfig)
+	if err != nil {
+		return nil, err
 	}
 
-	dispatchConfig := dispatchstate.Config{
-		BatchSize: profile.BatchSize, LockTimeout: durationMS(profile.LockTimeoutMS),
-		PollInterval: durationMS(profile.PollIntervalMS), MaxRetries: profile.MaxRetries,
-		RetryBackoff: durationMS(profile.RetryBackoffMS), CleanupAfter: durationMS(profile.CleanupAfterMS),
-		CleanupEnabled: profile.CleanupEnabled, ReviveEnabled: profile.ReviveEnabled,
-		ReviveInterval: durationMS(profile.ReviveIntervalMS), ReviveFreshnessWindow: durationMS(profile.ReviveFreshnessWindowMS),
-		ClaimFreshnessWindow: durationMS(profile.ClaimFreshnessWindowMS), DeliveryParallelism: worker.Executor.ConfiguredWorkers,
-		DeliverySendTimeout: attemptTimeout, SubscriberLookupParallelism: profile.SubscriberLookupParallelism,
-		AggregateSyncInterval: durationMS(profile.AggregateSyncIntervalMS), TelemetryPollInterval: durationMS(profile.TelemetryPollIntervalMS),
-		TelemetryFlushBatch:   profile.TelemetryFlushBatch,
-		TelemetryRetryBackoff: durationMS(profile.TelemetryRetryBackoffMS), TelemetryRetention: durationMS(profile.TelemetryRetentionMS),
-	}
 	pool := infra.Postgres.GetPool()
 
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: pool, Cache: infra.Cache, Sender: sender,
 		Renderer: template.NewRenderer(pool, logger), MessageStrings: messageStrings,
+		// 표시명은 PostgreSQL 정본(members → alarms.member_name)에서 읽어 Valkey 장애가 알림 이름과 발송을 막지 않게 한다.
+		MemberNames: sharedalarm.NewRepository(infra.Postgres, logger),
 	}, logger, &dispatchConfig)
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube outbox dispatcher dependencies: %w", err)
 	}
 
 	return dispatcher, nil
+}
+
+// youtubeDispatchConfig는 worker profile의 youtube_delivery 항목을 그대로 옮긴다. 생성자가 기본값을 채우지 않으므로
+// 모든 필드를 profile에서 받는다.
+func youtubeDispatchConfig(appConfig *settings.Config) (dispatchstate.Config, error) {
+	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
+	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
+	attemptTimeout := time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond
+	// 공통 executor 예산과 보존 중인 service 설정은 같은 provider 호출을 제한합니다.
+	if durationMS(profile.DeliverySendTimeoutMS) != attemptTimeout {
+		return dispatchstate.Config{}, errors.New("youtube delivery send timeout must match executor attempt timeout")
+	}
+
+	return dispatchstate.Config{
+		BatchSize:                   profile.BatchSize,
+		LockTimeout:                 durationMS(profile.LockTimeoutMS),
+		PollInterval:                durationMS(profile.PollIntervalMS),
+		MaxRetries:                  profile.MaxRetries,
+		RetryBackoff:                durationMS(profile.RetryBackoffMS),
+		CleanupAfter:                durationMS(profile.CleanupAfterMS),
+		CleanupEnabled:              profile.CleanupEnabled,
+		ReviveEnabled:               profile.ReviveEnabled,
+		ReviveInterval:              durationMS(profile.ReviveIntervalMS),
+		ReviveFreshnessWindow:       durationMS(profile.ReviveFreshnessWindowMS),
+		ClaimFreshnessWindow:        durationMS(profile.ClaimFreshnessWindowMS),
+		DeliveryParallelism:         worker.Executor.ConfiguredWorkers,
+		DeliverySendTimeout:         attemptTimeout,
+		SubscriberLookupParallelism: profile.SubscriberLookupParallelism,
+		AggregateSyncInterval:       durationMS(profile.AggregateSyncIntervalMS),
+		TelemetryPollInterval:       durationMS(profile.TelemetryPollIntervalMS),
+		TelemetryFlushBatch:         profile.TelemetryFlushBatch,
+		TelemetryRetryBackoff:       durationMS(profile.TelemetryRetryBackoffMS),
+		TelemetryRetention:          durationMS(profile.TelemetryRetentionMS),
+	}, nil
 }
 
 func durationMS(milliseconds int64) time.Duration {

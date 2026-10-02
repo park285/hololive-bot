@@ -14,6 +14,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const privacySentinel = "SENTINEL"
@@ -243,17 +244,17 @@ func TestMessageIngressNeverLogsRoomTitleAsRoomID(t *testing.T) {
 			records := snapshot()
 			record := requireMessage(t, records, tc.record)
 
-			roomID, ok := record.attrs[privacylog.KeyRoomID].(string)
+			roomID, ok := record.attrs[sharedprivacylog.KeyRoomID].(string)
 			if !ok {
-				t.Fatalf("room_id attr = %#v, want a string", record.attrs[privacylog.KeyRoomID])
+				t.Fatalf("room_id attr = %#v, want a string", record.attrs[sharedprivacylog.KeyRoomID])
 			}
 
-			if !strings.HasPrefix(roomID, privacylog.PseudonymPrefix) {
-				t.Fatalf("room_id = %q, want the %q pseudonym of a non-canonical room", roomID, privacylog.PseudonymPrefix)
+			if !strings.HasPrefix(roomID, sharedprivacylog.PseudonymPrefix) {
+				t.Fatalf("room_id = %q, want the %q pseudonym of a non-canonical room", roomID, sharedprivacylog.PseudonymPrefix)
 			}
 
-			if roomID != privacylog.Pseudonym(roomTitle) {
-				t.Fatalf("room_id = %q, want the deterministic token %q", roomID, privacylog.Pseudonym(roomTitle))
+			if roomID != sharedprivacylog.Pseudonym(roomTitle) {
+				t.Fatalf("room_id = %q, want the deterministic token %q", roomID, sharedprivacylog.Pseudonym(roomTitle))
 			}
 
 			assertNoSentinelInLogs(t, records)
@@ -281,8 +282,8 @@ func TestMessageIngressKeepsCanonicalRoomIDReadable(t *testing.T) {
 	records := snapshot()
 	record := requireMessage(t, records, "Unknown command ignored")
 
-	if record.attrs[privacylog.KeyRoomID] != testMaxUint64RoomID {
-		t.Fatalf("room_id = %v, want the canonical numeric room id", record.attrs[privacylog.KeyRoomID])
+	if record.attrs[sharedprivacylog.KeyRoomID] != testMaxUint64RoomID {
+		t.Fatalf("room_id = %v, want the canonical numeric room id", record.attrs[sharedprivacylog.KeyRoomID])
 	}
 }
 

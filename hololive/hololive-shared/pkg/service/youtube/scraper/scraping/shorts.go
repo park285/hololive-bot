@@ -118,7 +118,7 @@ func (c *Client) parseShortsLockupViewModel(short *gjson.Result) *parser.Short {
 	})
 
 	viewCountText := short.Get("overlayMetadata.secondaryText.content").String()
-	viewCount := parseShortNumber(viewCountText)
+	viewCount := parser.ParseShortNumber(viewCountText)
 
 	return &parser.Short{
 		VideoID:   videoID,

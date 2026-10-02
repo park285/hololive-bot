@@ -367,7 +367,6 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 
 	httpErr := errors.New("http shutdown failed")
 	webhookErr := errors.New("webhook close failed")
-	alarmErr := errors.New("alarm shutdown failed")
 	botErr := errors.New("bot shutdown failed")
 	err := Shutdown(ctx, ShutdownHooks{
 		Logger: slog.New(slog.DiscardHandler),
@@ -388,15 +387,6 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 			calls = append(calls, "close-webhook-handler")
 			return webhookErr
 		},
-		ShutdownAlarmServices: func(gotCtx context.Context) error {
-			calls = append(calls, "shutdown-alarm-services")
-
-			if gotCtx != ctx {
-				t.Fatal("ShutdownAlarmServices received unexpected context")
-			}
-
-			return alarmErr
-		},
 		ShutdownBot: func(gotCtx context.Context) error {
 			calls = append(calls, "shutdown-bot")
 
@@ -412,11 +402,10 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 		"clear-alarm-scheduler",
 		"shutdown-http-server",
 		"close-webhook-handler",
-		"shutdown-alarm-services",
 		"shutdown-bot",
 	}, calls)
 
-	for _, wantErr := range []error{httpErr, webhookErr, alarmErr, botErr} {
+	for _, wantErr := range []error{httpErr, webhookErr, botErr} {
 		assert.ErrorIs(t, err, wantErr)
 	}
 }

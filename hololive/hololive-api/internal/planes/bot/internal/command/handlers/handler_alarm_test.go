@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -211,7 +210,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 	var sentError string
 
 	deps := &handlercore.Dependencies{
-		Alarm:     &alarmservice.AlarmService{},
+		Alarm:     &alarmAddRecorder{},
 		Matcher:   &matcher.Matcher{},
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {

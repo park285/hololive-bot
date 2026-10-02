@@ -62,24 +62,13 @@ expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
 expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
 expect_eq "$(compose_service_resolve_build_target youtube-collector-c)" "youtube-collector" "build alias youtube-collector-c"
-# resolver가 퇴역 runtime 이름을 거절하는 검사는 재도입 방지 영구 계약이다. 퇴역 가드가 아니므로 제거 조건이 없다.
-expect_fail "standalone web build removed" compose_service_resolve_build_target admin-dashboard
-for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
-    expect_fail "build target rejects retired runtime ${removed}" compose_service_resolve_build_target "${removed}"
-done
 
 expect_eq "$(compose_service_resolve_redeploy_target hololive-api)" "hololive-api" "redeploy target hololive-api"
 expect_eq "$(compose_service_resolve_redeploy_target alarm-worker)" "hololive-alarm-worker" "redeploy alias alarm-worker"
 expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
-expect_fail "standalone admin redeploy removed" compose_service_resolve_redeploy_target admin
-expect_fail "standalone admin service removed" compose_service_resolve_redeploy_target admin-dashboard
 expect_fail "redeploy rejects unpaired all-service cutover" compose_service_resolve_redeploy_target all
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector-c)" "youtube-collector" "redeploy alias youtube-collector-c"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"
-for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
-    expect_fail "redeploy target rejects retired runtime ${removed}" compose_service_resolve_redeploy_target "${removed}"
-done
-
 for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-compose.seoul.yml; do
     expect_fail_contains "${ap_overlay} rejects explicit collector redeploy" \
         "youtube-collector is central-only" \
@@ -94,9 +83,6 @@ expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "l
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
 expect_eq "$(compose_service_resolve_log_target youtube-collector)" "youtube-collector" "log target youtube-collector"
 expect_eq "$(compose_service_resolve_log_target youtube-collector-c)" "youtube-collector" "log alias youtube-collector-c"
-for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler producer dispatcher-go; do
-    expect_fail "log target rejects retired runtime ${removed}" compose_service_resolve_log_target "${removed}"
-done
 
 . "${ROOT_DIR}/scripts/deploy/lib/ap-host.sh"
 

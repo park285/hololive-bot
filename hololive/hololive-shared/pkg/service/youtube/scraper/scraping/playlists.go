@@ -154,7 +154,7 @@ func (c *Client) parseGridPlaylistRenderer(playlist *gjson.Result, channelID str
 	}
 
 	videoCountText := playlist.Get("videoCountText.runs.0.text").String()
-	videoCount := parseVideoCount(videoCountText)
+	videoCount := parser.ParseVideoCount(videoCountText)
 
 	return &parser.Playlist{
 		PlaylistID:   playlistID,

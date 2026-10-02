@@ -88,7 +88,7 @@ Ledger `SENT/QUARANTINED`가 retained physical state보다 우선합니다. Ledg
 
 Operation membership과 provider request는 최초 `BeginSending` 전에 `youtube_notification_send_request`에 저장하며 이후 변경할 수 없습니다. 최종 body·route·방·member IDs·dedupe keys·base ID·generation을 고정하고 retry/restart에서 다시 렌더링하지 않습니다. frozen 그룹의 모든 멤버가 due·freshness·lock 조건을 만족해야 claim 대상입니다. batch 상한보다 큰 그룹은 부분 전송하지 않으며 다른 eligible 작업을 막지 않습니다.
 
-기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 시 `request_snapshot_allowed=false`로 기존 행을 구분하고, 최초 발송 이전임을 확인할 수 있는 행만 고정합니다. 운영 inventory·전환 승인은 별도입니다.
+기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 249는 `request_snapshot_allowed=false`로 기존 행을 구분했습니다. 2026-10-02 운영 조회에서 이 표시를 가진 67행이 모두 `SENT`·`FAILED`(2026-05-17, revive 신선도 창 밖)였으므로 dispatcher의 구분 검사(`ErrLegacyRequestEvidence`)는 지웠습니다. 열은 별도 migration으로 지울 때까지 남습니다.
 
 ### Tracking requirement
 
@@ -521,6 +521,19 @@ Stable request ID의 존재만으로 retry-safe가 되지는 않습니다. Provi
 - Known-not-accepted + `fallback_allowed=true`에서만 individual fallback을 허용합니다.
 - Fallback 자체는 attempt를 소비하지 않습니다.
 - Individual fallback 전 lease budget을 다시 확인하며 singleton 최종 request도 발송 전에 저장합니다.
+
+이 fallback은 workspace Failure paths 규칙의 예외 경로이므로 다음 항목을 함께 지킵니다(2026-10-02 보강).
+
+| 항목 | 내용 |
+|---|---|
+| Trigger | grouped 전송이 Iris `ErrPermanent`로 거절된 경우만 해당합니다. 인증 실패, 409 admission 충돌, outcome unknown은 fallback하지 않습니다. |
+| 한도 | group attempt 하나에 한 번이며, 개별 request 수는 group row 수와 같습니다. 개별 발송은 각 row의 per-room 전이를 따르고 fallback을 다시 하지 않습니다. |
+| 종단 | 개별 request를 만들거나 저장하지 못하면 개별 발송을 시작하지 않습니다. 이때 group은 `SENDING`에 남고 stale sweeper가 quarantine합니다. |
+| Telemetry | `hololive_youtube_outbox_grouped_send_fallback_total{result}`(`started`, `prepare_failed`, `freeze_failed`)와 Warn 로그 "Grouped delivery send failed, falling back to version-fenced individual deliveries"를 남깁니다. |
+| Owner | `hololive-alarm-worker`의 `internal/egress/youtubedispatch`입니다. |
+| 검토 조건 | `result="started"`가 90일 동안 0이면 이 경로를 지우고 grouped `ErrPermanent`를 group 전체의 permanent failure로 처리합니다. `prepare_failed`나 `freeze_failed`가 0이 아니면 결함으로 보고 원인을 조사합니다. |
+
+Grouped 포맷 실패는 이 fallback의 trigger가 아닙니다. 묶음 메시지를 만들지 못하면(템플릿 결함이나 표시명 정본 조회 오류) 개별 발송으로 바꾸지 않고, group 전체를 재시도 가능한 `format_message` 실패로 전이합니다.
 
 ## Group transition semantics
 

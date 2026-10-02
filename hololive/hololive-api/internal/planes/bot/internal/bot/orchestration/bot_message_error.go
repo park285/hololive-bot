@@ -31,8 +31,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {

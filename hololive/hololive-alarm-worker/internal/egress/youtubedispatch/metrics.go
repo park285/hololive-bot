@@ -50,6 +50,7 @@ var (
 
 	outboxDeliveryRetryAfterClampedTotal prometheus.Counter
 	outboxLiveCatchupSuppressionTotal    *prometheus.CounterVec
+	outboxGroupedSendFallbackTotal       *prometheus.CounterVec
 
 	youtubeDeliveryTransitionTotal      *prometheus.CounterVec
 	youtubeDeliveryRuleTotal            *prometheus.CounterVec
@@ -69,6 +70,12 @@ const (
 	liveCatchupSuppressionResultSuppressed    = "suppressed"
 	liveCatchupSuppressionResultCacheError    = "cache_error"
 	liveCatchupSuppressionResultInvalidMarker = "invalid_marker"
+
+	// 묶음(grouped) 전송 fallback 결과다. 개별 요청을 저장해 발송을 시작하면 started이고, 개별 요청을 만들거나 저장하지
+	// 못하면 나머지 둘 중 하나다. 이때 그룹은 SENDING에 남아 stale sweeper가 quarantine한다.
+	groupedSendFallbackResultStarted       = "started"
+	groupedSendFallbackResultPrepareFailed = "prepare_failed"
+	groupedSendFallbackResultFreezeFailed  = "freeze_failed"
 )
 
 func initOutboxMetrics() {
@@ -148,6 +155,13 @@ func initOutboxDispatchMetrics() {
 		},
 		[]string{metricLabelResult},
 	)
+	outboxGroupedSendFallbackTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_grouped_send_fallback_total",
+			Help: "YouTube grouped deliveries that fell back to individual sends after a known-not-accepted permanent failure, by result (started, prepare_failed, freeze_failed).",
+		},
+		[]string{metricLabelResult},
+	)
 
 	initOutboxLifecycleMetrics()
 }
@@ -208,6 +222,16 @@ func observeLiveCatchupSuppression(result string) {
 	}
 
 	outboxLiveCatchupSuppressionTotal.WithLabelValues(result).Inc()
+}
+
+func observeGroupedSendFallback(result string) {
+	initOutboxMetrics()
+
+	if outboxGroupedSendFallbackTotal == nil {
+		return
+	}
+
+	outboxGroupedSendFallbackTotal.WithLabelValues(result).Inc()
 }
 
 func initOutboxDispatchHistograms() {

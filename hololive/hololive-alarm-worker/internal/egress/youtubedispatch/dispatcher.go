@@ -169,7 +169,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("batch_size", d.config.BatchSize),
 		slog.Duration("delivery_send_timeout", d.config.DeliverySendTimeout),
 		slog.Int("delivery_parallelism", d.config.DeliveryParallelism),
-		slog.Int("subscriber_lookup_parallelism", d.grouper.subscriberLookupParallelism()))
+		slog.Int("subscriber_lookup_parallelism", d.grouper.config.SubscriberLookupParallelism))
 
 	d.processOnce(ctx)
 

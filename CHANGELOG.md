@@ -8,6 +8,24 @@
 
 ## 미출시
 
+- 행사·멤버 뉴스 알림 발송 배치가 방 순서와 동시 실행 슬롯을 기다리는 동안 60초 claim lease가 지나 전송 전에 건너뛰던 문제를 고칩니다. 실행 슬롯이 빈 방의 첫 항목만 claim하므로 대기 항목이 lease를 미리 쓰지 않고, 짧은 backoff로 다시 due가 된 항목도 같은 poll에서는 한 번만 처리합니다. 발송 attempt 시간은 worker profile의 `notification_delivery.executor.attempt_timeout`을 따르며, dispatcher 설정이 0 이하이면 기본값으로 바꾸지 않고 기동에 실패합니다.
+- 달력 명령에서 같은 달을 함께 기다리던 요청이 먼저 온 요청의 취소 때문에 실패하거나, 취소된 요청이 공유 조회가 끝날 때까지 기다리던 문제를 고칩니다. 공유 조회는 요청 취소와 분리하되 기존 봇 명령 예산(10초) 안에서 끝납니다.
+- 멤버 캐시의 epoch 재조회가 Valkey client를 닫은 뒤에도 15초마다 반복되던 문제를 고칩니다. 캐시의 `Close`가 구독·재조회 작업을 취소하고 끝날 때까지 기다리며, infra 모듈과 LLM plane은 Valkey·DB를 닫기 전에 이를 호출합니다.
+- Holodex 장애 때 live check가 Holodex 재시도로 주기 예산(45초)을 모두 써서, 저장된 live session으로 계속하는 경로까지 기한 초과로 실패하던 문제를 고칩니다. 2026-09-30 장애에서 이 경로가 108회 쓰였고 그중 101회가 주기 실패였습니다. Holodex 조회는 이제 주기 안에서 최대 25초입니다.
+- 제거 조건을 충족한 `YOUTUBE_PRODUCER_*` 퇴역 env 기동 거절 가드를 지웁니다. 2026-10-02에 중앙·AP env 파일, stack-secrets master 사본, 실행 중인 API·worker 프로세스에서 키가 0건이고, 남은 복구점도 키 정리 이후 상태임을 확인했습니다.
+- YouTube 발송이 migration 249 이전 행을 구분하던 검사(`ErrLegacyRequestEvidence`)를 지웁니다. 해당 표시를 가진 67행은 모두 `SENT`이거나 revive 창 밖의 `FAILED`입니다. `request_snapshot_allowed` 열은 별도 migration으로 지울 때까지 남습니다.
+- YouTube 알림의 멤버 표시명을 Valkey `alarm:member_names` 대신 PostgreSQL 정본(`alarm.Repository.GetMemberName`)에서 메시지마다 읽습니다. 조회 오류는 `misc/vtuber_fallback` 문구로 보내지 않고 재시도 가능한 `format_message` 실패로 처리합니다. 묶음 메시지를 만들지 못하면 개별 발송으로 바꾸지 않고 묶음 전체를 같은 실패로 재시도합니다.
+- 남은 fallback 경로를 trigger·한도·종단·telemetry·owner·검토 조건을 갖춘 예외 계약으로 문서화합니다. 대상은 grouped 전송 permanent 실패의 개별 발송, Holodex 실패 때 저장된 live session 사용, live catchup 억제 marker 오류, membernews 결정적 digest, 공식 일정 fallback, 도움말·달력 이미지의 텍스트 대체, major event 링크의 HEAD→GET 재확인입니다. 새 metric은 `hololive_youtube_outbox_grouped_send_fallback_total{result}`, `hololive_bot_image_text_fallback_total{command,reason}`, `hololive_majorevent_link_get_fallback_total{result}`와 `hololive_alarm_youtube_persisted_live_sessions_total`의 `result="holodex_error_continued"`입니다.
+- 도움말·달력 명령은 이미지 provider·renderer·전송 callback이 없으면 텍스트로 조용히 바꾸지 않고 명령 오류를 반환합니다. 운영 조립은 이 의존성을 항상 연결합니다.
+- major event 링크 검사는 HEAD 오류를 문자열이 아니라 시간 제한·연결 재설정 타입으로만 판단해 GET으로 다시 확인합니다. `timeout`이나 `method not allowed` 문구만 들어간 다른 오류는 더 이상 GET으로 재확인하지 않습니다.
+- membernews·major event 요약 prompt의 JSON 직렬화 실패를 고정 문자열로 대체하지 않고 요약 실패로 처리합니다. 최종 출력 검토 prompt를 만들지 못하면 Warn을 남기고 조립된 본문을 유지합니다.
+- YouTube 발송 dispatcher와 alarm dispatch 보존 작업은 0 이하 설정값을 기본값으로 바꾸지 않고 생성 때 거절합니다. 기본값은 worker profile 로더 한 곳에만 둡니다. YouTube 발송의 `delivery_send_timeout_ms`가 `youtube_delivery.executor.attempt_timeout`과 다르면 기동에 실패합니다.
+- 공식 일정 fallback 하나만 쓰던 범용 실행기 `internal/service/fallback`을 Holodex provider 안으로 합칩니다. `hololive_fallback_primary_total`·`hololive_fallback_execution_total`의 이름과 label은 그대로입니다.
+- `hololive_messagestrings_lookup_fallback_total`의 이름을 `hololive_messagestrings_lookup_miss_total`로 바꿉니다(label 동일). 호출자 대체 문구가 없어진 뒤로 이 metric은 "조회했지만 값이 없음"을 셉니다. 이전 이름의 시계열은 이어지지 않습니다.
+- 중복 구현을 기존 공통 기능으로 바꿉니다. nil 판정은 shared-go `reflectutil.IsNil`, 이미지 body 상한 읽기는 `httputil.ReadAllLimited`, YouTube 발송 SQL helper는 `dbx`를 씁니다. 영상 필드 변경은 `dbx.ExecStatements`로 묶어 보냅니다. YouTube 발송의 MetricsRecorder는 claim 해제를 하지 않고 기록만 합니다.
+- YouTube 알림 renderer(`format`)를 alarm-worker로 옮기고, 같은 기능을 다시 감싸던 worker 쪽 `MessageFormatter` wrapper를 지웁니다. 실제 seed template과 달라진 template 복사본 기반 테스트를 지우고, 실제 seed 본문을 렌더링하는 golden 테스트를 template 패키지에 둡니다.
+- alarm-worker만 쓰는 shared 패키지 4개(`alarmservice`, `alarmcache`, `alarm/dedup`, `alarm/queue`)를 `hololive-alarm-worker/internal`로 옮깁니다. 동작 변경은 없습니다.
+- 구형 호환 alias와 잔재를 지웁니다(scraper parser 재바인딩, reply handoff 오류 별칭, bot privacylog pass-through, 미사용 claim 구현, delivery format 별칭, `AlarmService.Close`). 삭제된 이름이나 퇴역 서비스의 재등장을 grep으로 확인하던 CI·deploy 검사와 테스트 단언도 함께 지웁니다.
 - 채널 수치 통계 기능을 완전히 제거합니다. 구독자 수 명령·통계 템플릿·producer/consumer·공개 채널 통계 필드·도메인과 통계 전용 DB 객체를 migration 234로 함께 제거하며, 채널 profile/photo·방송·일정·알림 구독은 유지합니다. 미확정 통계 발송이나 예상 밖 durable MILESTONE 이력이 있으면 migration을 거절합니다.
 - 통계 contract 삭제의 FK 확인이 큰 application 이력을 전체 스캔하여 timeout 나던 문제를 고칩니다. manifest에서 244의 임시 참조 인덱스를 234보다 먼저 동시 생성하고, 이행 끝에 243으로 동시 삭제합니다. timeout·무결성 검사를 완화하지 않으며 정상 적재에 추가 인덱스를 남기지 않습니다.
 - 대용량 인덱스의 승인된 점검 창에 `db-migrate --statement-timeout`을 명시할 수 있습니다. 기본 4분, 허용 상한 10분, 전체 명령 15분과 기존 lock 제한은 유지하며 음수·상한 초과는 실행 전에 거절합니다.

@@ -88,9 +88,6 @@ hololive/hololive-dbtest/go.mod
 hololive/hololive-dbtest/go.sum
 hololive/hololive-api/VERSION
 hololive/hololive-alarm-worker/VERSION
-hololive/hololive-shared/internal/service/fallback/executor.go
-hololive/hololive-shared/internal/service/fallback/metrics.go
-hololive/hololive-shared/internal/service/fallback/secondary.go
 hololive/hololive-shared/pkg/service/youtube/contentid/canonical.go
 hololive/hololive-shared/pkg/cleanupctx/context.go
 hololive/hololive-shared/pkg/config/settings/config.go
@@ -107,7 +104,6 @@ hololive/hololive-shared/pkg/config/settings/config_parsers.go
 hololive/hololive-shared/pkg/config/settings/config_types.go
 hololive/hololive-shared/pkg/config/settings/config_validation.go
 hololive/hololive-shared/pkg/config/settings/config_youtube.go
-hololive/hololive-shared/pkg/config/settings/config_youtube_producer_retired.go
 hololive/hololive-shared/pkg/config/settings/config_youtube_retired_env.go
 hololive/hololive-shared/pkg/config/settings/config_holodex_retired_env.go
 hololive/hololive-shared/pkg/config/settings/config_llm_retired_env.go
@@ -322,6 +318,8 @@ hololive/hololive-shared/pkg/service/holodex/provider/service_channels_search.go
 hololive/hololive-shared/pkg/service/holodex/provider/service_streams.go
 hololive/hololive-shared/pkg/service/holodex/provider/service_streams_cache_fill.go
 hololive/hololive-shared/pkg/service/holodex/provider/service_streams_fallback.go
+hololive/hololive-shared/pkg/service/holodex/provider/service_streams_fallback_metrics.go
+hololive/hololive-shared/pkg/service/holodex/provider/service_streams_org_fetch.go
 hololive/hololive-shared/internal/service/holodex/provider/streammapping/filter.go
 hololive/hololive-shared/internal/service/holodex/provider/streammapping/mapper.go
 hololive/hololive-shared/internal/service/holodex/provider/streammapping/types.go
@@ -457,10 +455,8 @@ hololive/hololive-shared/pkg/service/youtube/scraper/scraping/snapshot.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/snapshot_capture.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/snapshot_file_sink.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/state_manager.go
-hololive/hololive-shared/pkg/service/youtube/scraper/scraping/stats_parser.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/structure_alerts.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/videos.go
-hololive/hololive-shared/pkg/service/youtube/scraper/scraping/videos_rss.go
 hololive/hololive-shared/internal/service/youtube/scraper/ua/provider.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_photo_consumer.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_photo_persist.go

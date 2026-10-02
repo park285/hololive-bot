@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"time"
 
+	format "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	format "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format"
 )
 
 type liveUpcomingSuppressionData struct {

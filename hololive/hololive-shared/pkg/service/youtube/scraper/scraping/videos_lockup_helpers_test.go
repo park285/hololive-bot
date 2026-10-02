@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/tidwall/gjson"
+
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 const testPublishedTwoHoursAgo = "2 hours ago"
@@ -17,7 +19,7 @@ func TestCollectLockupTexts_SkipsEmptyEntries(t *testing.T) {
 		{"text":{"content":"2 hours ago"}}
 	]`)
 
-	got := collectLockupTexts(&parts)
+	got := parser.CollectLockupTexts(&parts)
 
 	want := []string{"3.2K views", testPublishedTwoHoursAgo}
 	if len(got) != len(want) {
@@ -36,7 +38,7 @@ func TestCollectLockupTexts_HandlesEmptyArray(t *testing.T) {
 
 	parts := gjson.Parse(`[]`)
 
-	if got := collectLockupTexts(&parts); len(got) != 0 {
+	if got := parser.CollectLockupTexts(&parts); len(got) != 0 {
 		t.Fatalf("want empty slice, got %v", got)
 	}
 }
@@ -45,7 +47,7 @@ func TestPickViewCountAndPublished_FindsViewCountAtAnyIndex(t *testing.T) {
 	t.Parallel()
 
 	texts := []string{testPublishedTwoHoursAgo, "3.2K views"}
-	viewCount, published, ok := pickViewCountAndPublished(texts)
+	viewCount, published, ok := parser.PickViewCountAndPublished(texts)
 
 	if !ok {
 		t.Fatal("ok want true, got false")
@@ -64,7 +66,7 @@ func TestPickViewCountAndPublished_ReturnsFalseWhenNoViewCount(t *testing.T) {
 	t.Parallel()
 
 	texts := []string{testPublishedTwoHoursAgo, "Premiered"}
-	_, _, ok := pickViewCountAndPublished(texts)
+	_, _, ok := parser.PickViewCountAndPublished(texts)
 
 	if ok {
 		t.Fatal("ok want false, got true")
@@ -75,7 +77,7 @@ func TestPickViewCountAndPublished_EmptyPublishedWhenSingleEntry(t *testing.T) {
 	t.Parallel()
 
 	texts := []string{"3.2K views"}
-	viewCount, published, ok := pickViewCountAndPublished(texts)
+	viewCount, published, ok := parser.PickViewCountAndPublished(texts)
 
 	if !ok {
 		t.Fatal("ok want true, got false")
@@ -93,7 +95,7 @@ func TestPickViewCountAndPublished_EmptyPublishedWhenSingleEntry(t *testing.T) {
 func TestFallbackPickMetadata_UsesFirstTwoTexts(t *testing.T) {
 	t.Parallel()
 
-	viewCount, published := fallbackPickMetadata([]string{"3.2K views", "Premiered"})
+	viewCount, published := parser.FallbackPickMetadata([]string{"3.2K views", "Premiered"})
 
 	if viewCount != 3200 {
 		t.Fatalf("viewCount want 3200, got %d", viewCount)
@@ -107,7 +109,7 @@ func TestFallbackPickMetadata_UsesFirstTwoTexts(t *testing.T) {
 func TestFallbackPickMetadata_HandlesEmpty(t *testing.T) {
 	t.Parallel()
 
-	viewCount, published := fallbackPickMetadata(nil)
+	viewCount, published := parser.FallbackPickMetadata(nil)
 
 	if viewCount != 0 {
 		t.Fatalf("viewCount want 0, got %d", viewCount)
@@ -126,7 +128,7 @@ func TestPickLockupMetadataTexts_PrefersViewCountFromAnyPosition(t *testing.T) {
 		{"text":{"content":"3.2K views"}}
 	]`)
 
-	viewCount, published := pickLockupMetadataTexts(&parts)
+	viewCount, published := parser.PickLockupMetadataTexts(&parts)
 
 	if viewCount != 3200 {
 		t.Fatalf("viewCount want 3200, got %d", viewCount)
@@ -145,7 +147,7 @@ func TestPickLockupMetadataTexts_FallbackWhenNoViewCount(t *testing.T) {
 		{"text":{"content":"5 days ago"}}
 	]`)
 
-	viewCount, published := pickLockupMetadataTexts(&parts)
+	viewCount, published := parser.PickLockupMetadataTexts(&parts)
 
 	if viewCount != 0 {
 		t.Fatalf("viewCount want 0, got %d", viewCount)

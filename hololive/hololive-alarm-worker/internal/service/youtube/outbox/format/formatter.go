@@ -1,0 +1,329 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package format
+
+import (
+	"context"
+	jsonv2 "encoding/json/v2"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/util"
+)
+
+// MemberNameSource는 알림 표시명의 정본 조회다. 운영 구현은 PostgreSQL을 읽는 alarm.Repository.GetMemberName이며,
+// members 한국어 표시명 → 같은 채널의 최신 alarms.member_name 순서를 따른다(멤버 표시명 예외 계약). 조회 오류는 오류로
+// 돌려주고, 빈 문자열은 표시명이 없다는 뜻이다.
+type MemberNameSource interface {
+	GetMemberName(ctx context.Context, channelID string) (string, error)
+}
+
+type MessageFormatter struct {
+	Renderer       *template.Renderer
+	MemberNames    MemberNameSource
+	MessageStrings *messagestrings.Store
+}
+
+func NewMessageFormatter(renderer *template.Renderer, memberNames MemberNameSource, messageStrings *messagestrings.Store) *MessageFormatter {
+	return &MessageFormatter{Renderer: renderer, MemberNames: memberNames, MessageStrings: messageStrings}
+}
+
+// VTuberFallback은 표시명이 없는 채널에 쓰는 멤버 표시명 예외 계약의 종단 문구(misc/vtuber_fallback)다.
+func (mf *MessageFormatter) VTuberFallback() string {
+	return mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
+}
+
+func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouTubeNotificationOutbox) (string, error) {
+	if item == nil {
+		return "", errors.New("notification outbox item is nil")
+	}
+
+	// 조회 오류는 대체 문구로 바꾸지 않고 포맷 실패로 돌려준다. 호출자는 재시도 가능한 실패로 전이한다.
+	memberName, err := mf.GetMemberName(ctx, item.ChannelID)
+	if err != nil {
+		return "", fmt.Errorf("get member name: %w", err)
+	}
+
+	// 표시명이 없는 채널은 멤버 표시명 예외 계약의 종단 단계인 misc/vtuber_fallback 문구를 쓴다.
+	if memberName == "" {
+		memberName = mf.VTuberFallback()
+	}
+
+	data, err := mf.BuildTemplateData(memberName, item)
+	if err != nil {
+		return "", fmt.Errorf("build template data: %w", err)
+	}
+
+	out, err := mf.renderTemplate(ctx, item.Kind.ToTemplateKey(), item.ChannelID, data)
+	if err != nil {
+		return out, fmt.Errorf("render template: %w", err)
+	}
+
+	return out, nil
+}
+
+func (mf *MessageFormatter) renderTemplate(ctx context.Context, templateKey domain.TemplateKey, channelID string, data any) (string, error) {
+	if mf.Renderer == nil {
+		return "", fmt.Errorf("render template %s: renderer is nil", templateKey)
+	}
+
+	msg, err := mf.Renderer.Render(ctx, templateKey, channelID, data)
+	if err != nil {
+		return "", fmt.Errorf("render template %s: %w", templateKey, err)
+	}
+
+	return msg, nil
+}
+
+type TemplateData struct {
+	MemberName           string
+	Kind                 string
+	Title                string
+	URL                  string
+	ContentText          string
+	VideoID              string
+	PostID               string
+	IsPremiere           bool
+	IsUpcomingPremiere   bool
+	MinutesUntilPremiere int
+}
+
+func (mf *MessageFormatter) BuildTemplateData(memberName string, item *domain.YouTubeNotificationOutbox) (TemplateData, error) {
+	data := TemplateData{MemberName: memberName, Kind: string(item.Kind)}
+	if err := populateTemplateData(&data, item); err != nil {
+		return TemplateData{}, fmt.Errorf("populate template data: %w", err)
+	}
+
+	return data, nil
+}
+
+func populateTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
+	switch item.Kind {
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
+		return populateVideoTemplateData(data, item)
+	case domain.OutboxKindCommunityPost:
+		return populateCommunityTemplateData(data, item.Payload)
+	default:
+		return nil
+	}
+}
+
+func populateVideoTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
+	if err := buildVideoTemplateData(data, item); err != nil {
+		return fmt.Errorf("build video template data: %w", err)
+	}
+
+	return nil
+}
+
+func populateCommunityTemplateData(data *TemplateData, payload string) error {
+	if err := buildCommunityTemplateData(data, payload); err != nil {
+		return fmt.Errorf("build community template data: %w", err)
+	}
+
+	return nil
+}
+
+func buildVideoTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
+	var p VideoPayload
+
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
+		return fmt.Errorf("unmarshal video payload: %w", err)
+	}
+
+	data.Title = p.Title
+	data.MemberName = mekparkhost.DisplayName(item.ChannelID, p.Title, data.MemberName)
+	data.VideoID = p.VideoID
+	data.URL = VideoTemplateURL(item.Kind, p.VideoID)
+	populatePremiereTemplateData(data, item.Kind, &p, time.Now())
+
+	return nil
+}
+
+func populatePremiereTemplateData(data *TemplateData, kind domain.OutboxKind, payload *VideoPayload, now time.Time) {
+	if kind != domain.OutboxKindNewVideo || payload.IsPremiere == nil || !*payload.IsPremiere {
+		return
+	}
+
+	data.IsPremiere = true
+
+	if payload.ScheduledStartAt == nil || payload.ScheduledStartAt.IsZero() {
+		return
+	}
+
+	data.MinutesUntilPremiere = util.MinutesUntilCeilPtr(payload.ScheduledStartAt, now)
+	data.IsUpcomingPremiere = data.MinutesUntilPremiere > 0
+}
+
+func VideoTemplateURL(kind domain.OutboxKind, videoID string) string {
+	if kind == domain.OutboxKindNewShort {
+		return fmt.Sprintf("https://www.youtube.com/shorts/%s", videoID)
+	}
+
+	return fmt.Sprintf("https://youtu.be/%s", videoID)
+}
+
+func buildCommunityTemplateData(data *TemplateData, payload string) error {
+	var p CommunityPayload
+
+	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
+		return fmt.Errorf("unmarshal community payload: %w", err)
+	}
+
+	data.ContentText = p.ContentText
+	data.PostID = p.PostID
+	data.URL = fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID)
+
+	return nil
+}
+
+type VideoPayload struct {
+	CanonicalPostID  string     `json:"canonical_post_id,omitempty"`
+	VideoID          string     `json:"video_id"`
+	Title            string     `json:"title"`
+	PublishedText    string     `json:"published_text,omitempty"`
+	PublishedAt      *time.Time `json:"published_at,omitempty"`
+	ScheduledStartAt *time.Time `json:"scheduled_start_at,omitempty"`
+	IsPremiere       *bool      `json:"is_premiere,omitempty"`
+}
+
+type CommunityPayload struct {
+	CanonicalPostID string     `json:"canonical_post_id,omitempty"`
+	PostID          string     `json:"post_id"`
+	ContentText     string     `json:"content_text"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
+}
+
+func (mf *MessageFormatter) GetMemberName(ctx context.Context, channelID string) (string, error) {
+	if mf.MemberNames == nil {
+		return "", errors.New("member name source is nil")
+	}
+
+	name, err := mf.MemberNames.GetMemberName(ctx, channelID)
+	if err != nil {
+		return "", fmt.Errorf("member name source: %w", err)
+	}
+
+	return name, nil
+}
+
+type GroupedItemData struct {
+	Title       string
+	ContentText string
+	URL         string
+}
+
+type GroupedTemplateData struct {
+	MemberName string
+	Kind       string
+	Count      int
+	Items      []GroupedItemData
+}
+
+func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName, channelID string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) (string, error) {
+	if len(items) == 0 {
+		return "", errors.New("no items to format")
+	}
+
+	data := mf.BuildGroupedTemplateData(memberName, kind, items)
+
+	out, err := mf.renderTemplate(ctx, groupedTemplateKey(kind), channelID, data)
+	if err != nil {
+		return out, fmt.Errorf("render template: %w", err)
+	}
+
+	return out, nil
+}
+
+func groupedTemplateKey(kind domain.OutboxKind) domain.TemplateKey {
+	switch kind {
+	case domain.OutboxKindNewShort:
+		return domain.TemplateKeyOutboxShortsGroup
+	case domain.OutboxKindCommunityPost:
+		return domain.TemplateKeyOutboxCommunityGroup
+	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream:
+		return domain.TemplateKeyOutboxVideoGroup
+	default:
+		return domain.TemplateKeyOutboxVideoGroup
+	}
+}
+
+func (mf *MessageFormatter) BuildGroupedTemplateData(memberName string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) GroupedTemplateData {
+	data := GroupedTemplateData{
+		MemberName: memberName,
+		Kind:       string(kind),
+		Count:      len(items),
+		Items:      make([]GroupedItemData, 0, len(items)),
+	}
+
+	for i := range items {
+		data.Items = append(data.Items, BuildGroupedItemData(&items[i]))
+	}
+
+	return data
+}
+
+func BuildGroupedItemData(item *domain.YouTubeNotificationOutbox) GroupedItemData {
+	switch item.Kind {
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
+		return buildGroupedVideoItemData(item)
+	case domain.OutboxKindCommunityPost:
+		return buildGroupedCommunityItemData(item.Payload)
+	default:
+		return GroupedItemData{}
+	}
+}
+
+func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) GroupedItemData {
+	var p VideoPayload
+
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
+		return GroupedItemData{}
+	}
+
+	title := p.Title
+	if label := mekparkhost.Identify(item.ChannelID, p.Title).Label(); label != "" {
+		title = label + " · " + title
+	}
+
+	return GroupedItemData{
+		Title: title,
+		URL:   VideoTemplateURL(item.Kind, p.VideoID),
+	}
+}
+
+func buildGroupedCommunityItemData(payload string) GroupedItemData {
+	var p CommunityPayload
+
+	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
+		return GroupedItemData{}
+	}
+
+	return GroupedItemData{
+		ContentText: p.ContentText,
+		URL:         fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID),
+	}
+}

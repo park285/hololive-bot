@@ -44,12 +44,11 @@ type StartHooks struct {
 }
 
 type ShutdownHooks struct {
-	Logger                *slog.Logger
-	ClearAlarmScheduler   func() bool
-	ShutdownHTTPServer    func(ctx context.Context) error
-	WebhookHandlerClose   func() error
-	ShutdownAlarmServices func(ctx context.Context) error
-	ShutdownBot           func(ctx context.Context) error
+	Logger              *slog.Logger
+	ClearAlarmScheduler func() bool
+	ShutdownHTTPServer  func(ctx context.Context) error
+	WebhookHandlerClose func() error
+	ShutdownBot         func(ctx context.Context) error
 }
 
 func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
@@ -146,7 +145,6 @@ func Shutdown(ctx context.Context, hooks ShutdownHooks) error {
 	return errors.Join(
 		shutdownHTTPServer(ctx, hooks),
 		closeWebhookHandler(hooks),
-		shutdownAlarmServices(ctx, hooks),
 		shutdownBot(ctx, hooks),
 	)
 }
@@ -178,20 +176,6 @@ func closeWebhookHandler(hooks ShutdownHooks) error {
 		}
 
 		logInfo(hooks.Logger, "Iris webhook handler stopped")
-	}
-
-	return nil
-}
-
-func shutdownAlarmServices(ctx context.Context, hooks ShutdownHooks) error {
-	if hooks.ShutdownAlarmServices != nil {
-		if err := hooks.ShutdownAlarmServices(ctx); err != nil {
-			logError(hooks.Logger, "Alarm service shutdown error", err)
-
-			return fmt.Errorf("shutdown alarm service: %w", err)
-		}
-
-		logInfo(hooks.Logger, "Alarm services stopped")
 	}
 
 	return nil

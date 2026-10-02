@@ -12,14 +12,6 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-var (
-	parseLockupVideoViewModel = parser.ParseLockupVideoViewModel
-	pickLockupMetadataTexts   = parser.PickLockupMetadataTexts
-	collectLockupTexts        = parser.CollectLockupTexts
-	pickViewCountAndPublished = parser.PickViewCountAndPublished
-	fallbackPickMetadata      = parser.FallbackPickMetadata
-)
-
 // GetRecentVideos는 채널 /videos HTML 하나만 원천으로 쓴다. 실패와 parser drift는 오류로 돌려주고, RSS로 보충하거나
 // 빈 결과를 성공으로 돌려주지 않는다(DEC-20260926-hololive-source-fallbacks-retirement). RSS backoff 상태와
 // YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS도 이 결정으로 퇴역했다.
@@ -75,7 +67,7 @@ func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, m
 		return nil, fmt.Errorf("fetch channel source page: %w", err)
 	}
 
-	videos, err := parseVideosFromRSSFeed(html, channelID, maxResults)
+	videos, err := parser.ParseVideosFromRSSFeed(html, channelID, maxResults)
 	if err != nil {
 		return nil, c.recordParserDrift(ctx, "recent_videos_rss", "parse_rss_feed", channelID, rssURL, FailureSourceRSS, html, err)
 	}
@@ -259,7 +251,7 @@ func (c *Client) parseVideoCommon(video *gjson.Result, channelID, durationPath, 
 	}
 
 	viewCountText := video.Get("viewCountText.simpleText").String()
-	viewCount := parseViewCount(viewCountText)
+	viewCount := parser.ParseViewCount(viewCountText)
 
 	return &parser.Video{
 		VideoID:       videoID,

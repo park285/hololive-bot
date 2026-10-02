@@ -165,7 +165,7 @@ func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domai
 func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []channelAlarmEntry) []subscriberLookupResult {
 	results := make([]subscriberLookupResult, len(entries))
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(g.subscriberLookupParallelism())
+	eg.SetLimit(g.config.SubscriberLookupParallelism)
 
 	for idx := range entries {
 		eg.Go(func() error {

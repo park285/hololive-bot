@@ -48,13 +48,6 @@ func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) error {
 			return canceled
 		},
 		ShutdownHTTPServer: r.ShutdownHTTPServer,
-		ShutdownAlarmServices: func(ctx context.Context) error {
-			if r.AlarmService == nil {
-				return nil
-			}
-
-			return r.AlarmService.Close(ctx)
-		},
 	})
 
 	if schedulerWaitErr != nil {

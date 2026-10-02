@@ -8,12 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	format "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	format "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format"
 )
 
 const (
@@ -62,7 +61,7 @@ func TestOutboxMemberSubscriptionsSeparateTitlesInOneBatch(t *testing.T) {
 		items = append(items, domain.YouTubeNotificationOutbox{ID: int64(i + 1), ChannelID: outboxUnitBChannel, Kind: tc.kind, Payload: string(payload)})
 	}
 
-	config := dispatchstate.DefaultConfig()
+	config := testDispatchConfig()
 	grouper := newOutboxGrouper(pool, nil, logger, &config)
 	targets := grouper.collectRoomsByChannel(t.Context(), items)
 
@@ -82,7 +81,7 @@ func TestOutboxMemberSubscriptionsSeparateTitlesInOneBatch(t *testing.T) {
 }
 
 func TestOutboxMemberSubscriptionFailuresAreNotUnknownTitles(t *testing.T) {
-	config := dispatchstate.DefaultConfig()
+	config := testDispatchConfig()
 	grouper := newOutboxGrouper(nil, nil, slog.New(slog.DiscardHandler), &config)
 
 	for _, payload := range []string{"not-json", "null", `{"title":123}`, `{"title":"?"}`} {

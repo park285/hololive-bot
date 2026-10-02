@@ -26,6 +26,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 var bannedLogAttrKeys = map[string]string{
@@ -39,16 +41,16 @@ var bannedLogAttrKeys = map[string]string{
 // 이 key들은 값 자체가 비-canonical일 수 있어 privacylog 헬퍼만 만들 수 있다. 여기서 key 이름 재도입이
 // 아니라 "허용 key에 실린 raw 값"이 이번 회귀의 본체라, literal key 사용 자체를 금지한다.
 var privacylogOnlyAttrKeys = map[string]string{
-	KeyRoomID:     "privacylog.RoomIDAttr/RoomAttr",
-	KeyChatID:     "privacylog.ChatIDAttr/ChatAttr",
-	KeyCacheKey:   "privacylog.CacheKeyAttr",
-	KeyCacheField: "privacylog.CacheFieldAttr",
+	sharedprivacylog.KeyRoomID:     "privacylog.RoomIDAttr/RoomAttr",
+	sharedprivacylog.KeyChatID:     "privacylog.ChatIDAttr/ChatAttr",
+	sharedprivacylog.KeyCacheKey:   "privacylog.CacheKeyAttr",
+	sharedprivacylog.KeyCacheField: "privacylog.CacheFieldAttr",
 }
 
 // 이 package들의 "key"는 Kakao 식별자가 아니라 고정 cache name, Holodex retry/cache
 // identifier, 또는 public YouTube snapshot identifier를 담는다. 다른 attr key는 계속 검사한다.
 var reviewedNonSensitiveRestrictedKeys = map[string][]string{
-	KeyCacheKey: {
+	sharedprivacylog.KeyCacheKey: {
 		"pkg/service/holodex/provider",
 		"pkg/service/holodex/provider/htmlscraper",
 		"pkg/service/youtube/scraper/scraping",
@@ -401,7 +403,7 @@ func isReviewedNonSensitiveKey(use logAttrKeyUse) bool {
 func TestPrivacylogOwnedAttrKeysStayRestricted(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []string{KeyRoomID, KeyChatID, KeyCacheKey, KeyCacheField} {
+	for _, key := range []string{sharedprivacylog.KeyRoomID, sharedprivacylog.KeyChatID, sharedprivacylog.KeyCacheKey, sharedprivacylog.KeyCacheField} {
 		if _, restricted := privacylogOnlyAttrKeys[key]; !restricted {
 			t.Errorf("attr key %q is built by a privacylog helper but is absent from privacylogOnlyAttrKeys; "+
 				"a raw literal on this key would carry Kakao plaintext past this gate unreported", key)
