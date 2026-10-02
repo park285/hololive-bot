@@ -3,7 +3,6 @@ import type { Continuity, TerminationReason } from "./contracts.d.ts";
 export const continuityContiguous: "CONTIGUOUS";
 export const continuityGap: "GAP_UNRESOLVED";
 export const continuityNotApplicable: "NOT_APPLICABLE";
-export const maxCursorJSONBytes: 8192;
 
 export class EncodedArrayBudget<T = unknown> {
   constructor(limitBytes: number, reservedEnvelopeBytes: number);
@@ -20,14 +19,10 @@ export function paginationEnvelopeReserve(skeleton: Record<string, unknown>): nu
 export function assertResponseBudget(limitBytes: number, reservedEnvelopeBytes: number): void;
 export function paginationResult(options: {
   pageCount: number;
-  cursorStart?: string;
-  cursorEnd?: string;
   reason: TerminationReason;
   continuity?: Continuity;
 }): {
   page_count: number;
-  cursor_start?: string;
-  cursor_end?: string;
   exhausted: boolean;
   continuity: Continuity;
   termination_reason: TerminationReason;

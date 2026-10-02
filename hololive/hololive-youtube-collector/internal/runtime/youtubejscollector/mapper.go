@@ -33,7 +33,6 @@ func communityPayload(channelID string, posts []*parser.CommunityPost, maxResult
 			ChannelID:  channelID,
 			MaxResults: maxResults,
 			PageCount:  page.PageCount,
-			CursorEnd:  page.CursorEnd,
 			Exhausted:  page.Exhausted,
 		},
 	}
@@ -57,11 +56,9 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 			ChannelID: channelID,
 			Videos:    videos,
 			Coverage: contract.ShortsListCoverageV1{
-				ChannelID:   channelID,
-				MaxResults:  maxResults,
-				CursorStart: page.CursorStart,
-				CursorEnd:   page.CursorEnd,
-				Exhausted:   page.Exhausted,
+				ChannelID:  channelID,
+				MaxResults: maxResults,
+				Exhausted:  page.Exhausted,
 			},
 		}
 	}
@@ -70,11 +67,9 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 		ChannelID: channelID,
 		Videos:    videos,
 		Coverage: contract.ChannelListCoverageV1{
-			ChannelID:   channelID,
-			MaxResults:  maxResults,
-			CursorStart: page.CursorStart,
-			CursorEnd:   page.CursorEnd,
-			Exhausted:   page.Exhausted,
+			ChannelID:  channelID,
+			MaxResults: maxResults,
+			Exhausted:  page.Exhausted,
 		},
 	}, contract.ShortsListV1{}
 }

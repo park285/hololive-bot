@@ -1,6 +1,5 @@
 // @ts-check
 
-import { encodedSize, maxCursorJSONBytes } from "./pagination.mjs";
 import { classifyUpstreamError, failureTuples } from "./upstream-errors.mjs";
 import { encodeResponseBody } from "./response-encoding.mjs";
 
@@ -369,7 +368,7 @@ export function validateCommunityResponse(value) {
   assertResponseKeys(
     record,
     ["protocol_version", "posts", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["cursor_start", "cursor_end", "missing_tab"],
+    ["missing_tab"],
   );
   return {
     protocol_version: responseProtocolVersion(record),
@@ -385,7 +384,7 @@ export function validateContentResponse(value) {
   assertResponseKeys(
     record,
     ["protocol_version", "items", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["cursor_start", "cursor_end", "missing_tab"],
+    ["missing_tab"],
   );
   return {
     protocol_version: responseProtocolVersion(record),
@@ -401,7 +400,7 @@ export function validateChannelResponse(value) {
   assertResponseKeys(
     record,
     ["protocol_version", "live_sessions", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["cursor_start", "cursor_end", "missing_tab", "unavailable_live_sessions", "live_query"],
+    ["missing_tab", "unavailable_live_sessions", "live_query"],
   );
   const profile = recordField(record, "profile");
   assertResponseKeys(profile, [], ["handle", "description", "country", "joined_date"]);
@@ -787,19 +786,8 @@ function validatePagination(record) {
   if (terminationReason !== "exhausted" && continuity === "CONTIGUOUS") {
     throw new RpcProtocolError("partial pagination cannot be contiguous");
   }
-  const cursors = {
-    ...optionalResponseString(record, "cursor_start"),
-    ...optionalResponseString(record, "cursor_end"),
-  };
-  if (cursors.cursor_start != null && encodedSize(cursors.cursor_start) > maxCursorJSONBytes) {
-    throw new RpcProtocolError("pagination cursor exceeds the protocol limit");
-  }
-  if (cursors.cursor_end != null && encodedSize(cursors.cursor_end) > maxCursorJSONBytes) {
-    throw new RpcProtocolError("pagination cursor exceeds the protocol limit");
-  }
   return {
     page_count: pageCount,
-    ...cursors,
     exhausted: record.exhausted,
     continuity,
     termination_reason: terminationReason,

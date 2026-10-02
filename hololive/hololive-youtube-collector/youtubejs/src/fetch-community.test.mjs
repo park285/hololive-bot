@@ -122,7 +122,7 @@ test("fetchCommunityFeed preserves continuation metadata across pages", async ()
   assert.equal(result.posts.length, 2);
   assert.equal(result.page_count, 2);
   assert.equal(result.exhausted, true);
-  assert.equal(result.cursor_start, "page-2");
+  assert.equal(Object.hasOwn(result, "cursor_start"), false);
 });
 
 test("youtubei.js preserves attachment runs without length", async (t) => {
