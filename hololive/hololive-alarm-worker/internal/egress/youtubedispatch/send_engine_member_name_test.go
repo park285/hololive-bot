@@ -123,7 +123,7 @@ func TestDispatchDeliveryRows_PerRoomMemberNameComesFromCanonicalSource(t *testi
 
 			d, messages, _ := dispatchOnePerRoomShort(t, tc.memberNames)
 
-			wantName := cmp.Or(tc.wantName, d.send.formatter.VTuberFallback())
+			wantName := cmp.Or(tc.wantName, d.send.formatter.DisplayMemberName(""))
 			if wantName == "" {
 				t.Fatal("misc/vtuber_fallback string is not loaded")
 			}

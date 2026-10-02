@@ -3,7 +3,6 @@ package format
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -25,10 +24,7 @@ func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payl
 		return "", fmt.Errorf("format youtube outbox payload: %w", err)
 	}
 
-	memberName := strings.TrimSpace(payload.MemberName)
-	if memberName == "" {
-		memberName = mf.VTuberFallback()
-	}
+	memberName := mf.DisplayMemberName(payload.MemberName)
 
 	items := notificationOutboxItemsFromDispatchPayload(payload)
 	if len(items) == 1 {

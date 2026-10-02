@@ -84,11 +84,7 @@ func (d *SendEngine) formatGroupedMessage(
 		return "", fmt.Errorf("format grouped message: %w", err)
 	}
 
-	if memberName == "" {
-		memberName = d.formatter.VTuberFallback()
-	}
-
-	message, err := d.formatter.FormatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
+	message, err := d.formatter.FormatGroupedMessage(ctx, d.formatter.DisplayMemberName(memberName), group.channelID, group.kind, validOutboxes)
 	if err != nil {
 		return "", fmt.Errorf("format grouped message: %w", err)
 	}

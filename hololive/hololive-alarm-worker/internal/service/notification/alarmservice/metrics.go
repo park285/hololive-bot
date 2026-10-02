@@ -35,7 +35,6 @@ type alarmMetricSet struct {
 	cacheRebuildTotal        *prometheus.CounterVec
 	cacheRebuildDuration     *prometheus.HistogramVec
 	cacheRebuildLoaded       *prometheus.GaugeVec
-	memberNameCallerFallback prometheus.Counter
 	mutationLockWait         *prometheus.HistogramVec
 }
 
@@ -78,12 +77,6 @@ func newAlarmMetricSet() *alarmMetricSet {
 			},
 			[]string{metricLabelOperation, "resource"},
 		),
-		memberNameCallerFallback: promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_member_name_caller_fallback_total",
-				Help: "Alarm cache writes that used the caller member name because member data had no display name.",
-			},
-		),
 		mutationLockWait: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "hololive_alarm_service_mutation_lock_wait_seconds",
@@ -93,10 +86,6 @@ func newAlarmMetricSet() *alarmMetricSet {
 			[]string{metricLabelOperation},
 		),
 	}
-}
-
-func observeAlarmMemberNameCallerFallback() {
-	alarmMetrics().memberNameCallerFallback.Inc()
 }
 
 func observeAlarmServiceOperation(operation string, startedAt time.Time, err error) {

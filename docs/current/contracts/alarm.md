@@ -169,20 +169,21 @@ set 조회 오류와 이 DB 조회 오류는 해당 check 주기 오류로 반�
 ### 멤버 표시명 예외 계약
 
 `DEC-20260926-hololive-source-fallbacks-retirement`는 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꾸고,
-알림 멤버 표시명 폴백 하나만 예외로 남겼다. members에 등록되지 않았거나 한국어 표시명이 빈 채널을 알림에
-표시하기 위한 것이다.
+알림 멤버 표시명 폴백 하나만 예외로 남겼다. 2026-10-02에 제거 조건을 확인했다. 두 지표(`hololive_alarm_member_name_fallback_channels`,
+`hololive_alarm_member_name_caller_fallback_total`)가 30일 동안 0이었고, 운영 DB 읽기 전용 조회에서 구독 채널 21개 모두
+members 한국어 표시명을 가졌다. 그래서 중간 단계(최신 `alarms.member_name`, alarm cache 기록 때 호출자 값)와 두 지표를 지웠다.
+남은 것은 표시 단계의 종단 문구다.
 
 | 항목 | 계약 |
 |---|---|
 | Trigger | `members`의 `short_korean_name`·`korean_name`이 모두 비었거나 채널 행이 없음 |
-| 순서 | members(`short_korean_name`→`korean_name`) → 같은 채널의 최신 비어 있지 않은 `alarms.member_name`(host 구독 제외, 채널당 1행) → alarm cache 기록 때 호출자 값 → 표시 단계 `misc/vtuber_fallback` 문구(종단) |
-| 한도 | 표시 전용. 식별·dedup·라우팅에 쓰지 않고 외부 호출·재시도가 없음 |
-| Telemetry | `hololive_alarm_member_name_fallback_channels`(cache warm·rebuild 때 `alarms.member_name`으로 채운 채널 수), `hololive_alarm_member_name_caller_fallback_total`(alarm cache 기록 때 호출자 값을 쓴 횟수) |
-| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`, `hololive-alarm-worker/internal/service/notification/alarmservice`) |
-| 제거 조건 | 두 지표가 0으로 유지되고 구독 채널 전부가 members 한국어 표시명을 가질 때 폴백 단계를 지운다. 재검토 기한 2026-12-31 |
+| 순서 | members(`short_korean_name`→`korean_name`) → 표시 단계 `misc/vtuber_fallback` 문구(종단) |
+| 한도 | 표시 전용. 식별·dedup·라우팅에 쓰지 않고 외부 호출·재시도가 없음. 조회 오류는 trigger가 아님 |
+| Telemetry | `hololive_youtube_outbox_member_name_missing_total`(alarm-worker가 종단 문구로 YouTube 알림을 만든 횟수) |
+| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`의 `GetMemberName`, `hololive-alarm-worker/internal/service/youtube/outbox/format`의 `DisplayMemberName`) |
+| 검토 조건 | 지표가 0이 아니면 해당 채널의 members 한국어 표시명을 등록한다. 90일 동안 0이면 종단 문구 대신 포맷 실패로 바꿀지 다시 결정한다 |
 
-코드 근거는 `alarm.Repository.GetMemberName` 주석(`memberDisplayNameExceptionContract`)과
-`queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
+코드 근거는 `alarm.Repository.GetMemberName` 주석과 `queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
 
 YouTube outbox dispatch는 표시명을 Valkey `alarm:member_names`에서 읽지 않고 메시지마다 `alarm.Repository.GetMemberName`으로
 PostgreSQL 정본을 조회한다(2026-10-02). 조회 오류는 이 예외 계약의 trigger가 아니다. 대체 문구로 보내지 않고

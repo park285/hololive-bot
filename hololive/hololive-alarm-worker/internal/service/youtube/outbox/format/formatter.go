@@ -25,6 +25,7 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
@@ -52,8 +53,15 @@ func NewMessageFormatter(renderer *template.Renderer, memberNames MemberNameSour
 	return &MessageFormatter{Renderer: renderer, MemberNames: memberNames, MessageStrings: messageStrings}
 }
 
-// VTuberFallback은 표시명이 없는 채널에 쓰는 멤버 표시명 예외 계약의 종단 문구(misc/vtuber_fallback)다.
-func (mf *MessageFormatter) VTuberFallback() string {
+// DisplayMemberName은 알림에 쓸 멤버 표시명을 돌려준다. 멤버 데이터(members)에 한국어 표시명이 없으면 멤버 표시명 예외 계약의
+// 종단 문구(misc/vtuber_fallback)를 쓰고 hololive_youtube_outbox_member_name_missing_total로 센다.
+func (mf *MessageFormatter) DisplayMemberName(name string) string {
+	if name = strings.TrimSpace(name); name != "" {
+		return name
+	}
+
+	memberNameMissingTotal().Inc()
+
 	return mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 }
 
@@ -68,10 +76,7 @@ func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouT
 		return "", fmt.Errorf("get member name: %w", err)
 	}
 
-	// 표시명이 없는 채널은 멤버 표시명 예외 계약의 종단 단계인 misc/vtuber_fallback 문구를 쓴다.
-	if memberName == "" {
-		memberName = mf.VTuberFallback()
-	}
+	memberName = mf.DisplayMemberName(memberName)
 
 	data, err := mf.BuildTemplateData(memberName, item)
 	if err != nil {
