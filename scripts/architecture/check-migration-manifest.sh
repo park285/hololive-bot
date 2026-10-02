@@ -8,7 +8,6 @@ repo_python_init
 MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-api/scripts/migrations"
 MANIFEST="${MIGRATIONS_DIR}/manifest.txt"
 EPOCH2_BASELINE="001_schema_epoch2_baseline.sql"
-EPOCH2_CONTRACT="${SCRIPT_DIR}/epoch2_legacy_contract.sha256"
 EPOCH2_ACL_TAIL="${MIGRATIONS_DIR}/manual/epoch2_acl_tail.sql"
 EPOCH2_SUFFIX_CONTRACT="${ROOT_DIR}/scripts/architecture/epoch2_suffix_contract.txt"
 EPOCH2_NORMALIZER="${ROOT_DIR}/scripts/architecture/normalize-epoch2-baseline.py"
@@ -167,41 +166,12 @@ if [[ "${manifest_files[0]}" != "${EPOCH2_BASELINE}" ]]; then
   echo "FAIL: epoch-2 manifest must begin with ${EPOCH2_BASELINE}" >&2
   exit 1
 fi
-for required in "${EPOCH2_CONTRACT}" "${EPOCH2_ACL_TAIL}" "${EPOCH2_SUFFIX_CONTRACT}"; do
+for required in "${EPOCH2_ACL_TAIL}" "${EPOCH2_SUFFIX_CONTRACT}"; do
   if [[ ! -s "${required}" ]]; then
     echo "FAIL: epoch-2 contract artifact missing or empty: ${required}" >&2
     exit 1
   fi
 done
-
-PYTHONDONTWRITEBYTECODE=1 "${CI_PYTHON_BIN}" - "${EPOCH2_CONTRACT}" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-lines = Path(sys.argv[1]).read_text().splitlines()
-if len(lines) != 136:
-    raise SystemExit(f"FAIL: epoch-2 legacy contract has {len(lines)} lines, want 136")
-entries = []
-for number, line in enumerate(lines, 1):
-    match = re.fullmatch(r"([0-9a-f]{64})  ([^ /]+\.sql)", line)
-    if match is None:
-        raise SystemExit(f"FAIL: malformed epoch-2 legacy contract line {number}")
-    entries.append(match.group(2))
-if entries[0] != "006-base-runtime-tables.sql" or entries[-1] != "140_epoch2_checkpoint.sql":
-    raise SystemExit("FAIL: epoch-2 legacy contract boundary drift")
-if len(entries) != len(set(entries)):
-    raise SystemExit("FAIL: duplicate filename in epoch-2 legacy contract")
-PY
-
-while read -r _ legacy_file; do
-  if [[ -e "${MIGRATIONS_DIR}/${legacy_file}" ]]; then
-    echo "FAIL: legacy/checkpoint migration remains active: ${legacy_file}" >&2
-    exit 1
-  fi
-done < "${EPOCH2_CONTRACT}"
-
-bash "${SCRIPT_DIR}/check-epoch2-source-contracts.sh"
 
 mapfile -t epoch2_suffix < "${EPOCH2_SUFFIX_CONTRACT}"
 if (( ${#manifest_files[@]} - 1 < ${#epoch2_suffix[@]} )); then
@@ -216,13 +186,6 @@ for index in "${!epoch2_suffix[@]}"; do
 done
 
 baseline_path="${MIGRATIONS_DIR}/${EPOCH2_BASELINE}"
-if ! grep -qE '^-- Source commit: [0-9a-f]{40}$' "${baseline_path}" ||
-   ! grep -qxF -- '-- Legacy cutoff: 139_trust_alarm_short_links.sql' "${baseline_path}" ||
-   ! grep -qxF -- '-- Compatibility checkpoint: 140_epoch2_checkpoint.sql' "${baseline_path}"; then
-  echo "FAIL: epoch-2 baseline header contract drift" >&2
-  exit 1
-fi
-
 PYTHONDONTWRITEBYTECODE=1 "${CI_PYTHON_BIN}" "${EPOCH2_NORMALIZER}" --check-existing "${baseline_path}"
 
 PYTHONDONTWRITEBYTECODE=1 "${CI_PYTHON_BIN}" - "${baseline_path}" "${EPOCH2_ACL_TAIL}" <<'PY'

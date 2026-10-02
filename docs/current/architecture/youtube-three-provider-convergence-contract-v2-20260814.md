@@ -115,14 +115,17 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/
   channel_photo_v1.go
   schedule_snapshot_v1.go
 
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/          # collector 발행(2026-10-02 분리)
   repository.go
   repository_publish.go
+  queries/*.sql
+
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/consume/  # API 소비(2026-10-02 분리)
+  repository.go
   repository_claim.go
   repository_finalize.go
   repository_replay.go
   repository_retention.go
-  errors.go
   queries/*.sql
 
 hololive/hololive-shared/pkg/service/youtube/reconcile/

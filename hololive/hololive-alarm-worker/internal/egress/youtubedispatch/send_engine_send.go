@@ -30,7 +30,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -42,6 +41,15 @@ func (d *SendEngine) dispatchDeliveryRows(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) dispatchstate.DispatchResult {
+	claims := newBatchClaimResolver(d.claims)
+	batch := *d
+
+	// 실패 기록 wrapper가 d.claims로 해제를 요청하므로 배치 resolver로 바꾸면 해제가 배치 종료까지 모인다.
+	batch.claims = claims
+	d = &batch
+
+	defer claims.releaseFinished(ctx)
+
 	result := dispatchstate.DispatchResult{
 		SuccessDeliveryIDs: make([]int64, 0, len(rows)),
 		TouchedOutboxIDs:   make([]int64, 0, len(rows)),
@@ -51,7 +59,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 	var mu sync.Mutex
 
-	reuseCache := claim.NewMemoryDecisionCache()
+	reuseCache := newClaimDecisionCache()
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
 
@@ -72,7 +80,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(d.deliveryParallelism())
+	eg.SetLimit(d.config.DeliveryParallelism)
 
 	for i := range groups {
 		group := &groups[i]
@@ -98,7 +106,7 @@ func (d *SendEngine) dispatchGroup(
 	group *deliveryGroup,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -160,9 +168,11 @@ func (d *SendEngine) dispatchClaimedGroup(
 		return
 	}
 
-	message, formatted := d.formatGroupedMessage(ctx, group, validRows, validOutboxes)
-	if !formatted {
-		d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection.rowClaimTokens, result, mu)
+	message, err := d.formatGroupedMessage(ctx, group, validOutboxes)
+	if err != nil {
+		if d.applyPreparedLifecycleFailure(ctx, validRows, validOutboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped, result, mu) {
+			d.recordGroupedFormatFailure(ctx, group, validRows, validOutboxes, claimSelection.claimTokens, err, result, mu)
+		}
 
 		return
 	}
@@ -176,7 +186,7 @@ func (d *SendEngine) dispatchDeliveryRow(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -477,6 +487,7 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 ) {
 	requests, err := d.prepareFallbackRequests(ctx, rows, outboxes, formattedMessages, formatFailures)
 	if err != nil {
+		observeGroupedSendFallback(groupedSendFallbackResultPrepareFailed)
 		d.logger.Warn("Failed to prepare grouped fallback", slog.Any("error", err))
 
 		return
@@ -484,10 +495,13 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 
 	frozen, err := d.transition.FreezeFallbackRequests(ctx, operation, requests)
 	if err != nil {
+		observeGroupedSendFallback(groupedSendFallbackResultFreezeFailed)
 		d.logger.Error("Failed to freeze grouped fallback", slog.Any("error", err))
 
 		return
 	}
+
+	observeGroupedSendFallback(groupedSendFallbackResultStarted)
 
 	byID := make(map[int64]store.FrozenRequest, len(frozen))
 	for i := range frozen {

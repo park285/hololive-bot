@@ -11,7 +11,6 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -141,7 +140,7 @@ func (d *SendEngine) frozenDeliveryGroups(ctx context.Context, rows []domain.You
 	return groups, remaining, nil
 }
 
-func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]string, formatFailures map[int64]bool, reuseCache claim.DecisionCache, result *dispatchstate.DispatchResult, mu *sync.Mutex) {
+func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]string, formatFailures map[int64]bool, reuseCache *claimDecisionCache, result *dispatchstate.DispatchResult, mu *sync.Mutex) {
 	if len(group.rows) != len(group.frozen.MemberIDs) {
 		d.deferIncompleteFrozenGroup(ctx, group.rows)
 

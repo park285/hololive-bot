@@ -143,8 +143,14 @@ func TestHelpCommand_Execute_ImageProviderFailureFallsBackToText(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
+	before := imageTextFallbackCount("help", imageTextFallbackReasonRenderFailed)
+
 	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if got := imageTextFallbackCount("help", imageTextFallbackReasonRenderFailed) - before; got != 1 {
+		t.Fatalf("image text fallback delta = %v, want 1", got)
 	}
 
 	if !strings.Contains(fallback, "명령어: !도움말") {
@@ -174,8 +180,14 @@ func TestHelpCommand_Execute_AlbumFailureFallsBackToText(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
+	before := imageTextFallbackCount("help", imageTextFallbackReasonSendFailed)
+
 	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if got := imageTextFallbackCount("help", imageTextFallbackReasonSendFailed) - before; got != 1 {
+		t.Fatalf("image text fallback delta = %v, want 1", got)
 	}
 
 	if imageCalls != 1 {
@@ -188,35 +200,34 @@ func TestHelpCommand_Execute_AlbumFailureFallsBackToText(t *testing.T) {
 }
 
 func TestHelpCommand_Execute_AlbumOutcomeUnknownSuppressesTextFallback(t *testing.T) {
-	var fallback string
+	for _, imageErr := range []error{transport.ErrReplyOutcomeUnknown, transport.ErrReplyStagingFailed} {
+		t.Run(imageErr.Error(), func(t *testing.T) {
+			imageCalls, textCalls := 0, 0
+			deps := &handlercore.Dependencies{
+				Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+				HelpImageProvider: &stubHelpImageProvider{images: [][]byte{[]byte("one"), []byte("two")}},
+				SendMessage:       func(context.Context, string, string) error { textCalls++; return nil },
+				SendImages: func(context.Context, string, [][]byte, ...iris.SendOption) error {
+					imageCalls++
+					return fmt.Errorf("send help album: %w", imageErr)
+				},
+				Logger: slog.New(slog.DiscardHandler),
+			}
+			before := imageTextFallbackCount("help", imageTextFallbackReasonOutcomeUnknown)
+			err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
 
-	imageCalls := 0
-	deps := &handlercore.Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
-		HelpImageProvider: &stubHelpImageProvider{
-			images: [][]byte{[]byte("one"), []byte("two")},
-		},
-		SendMessage: func(_ context.Context, _, message string) error {
-			fallback = message
-			return nil
-		},
-		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
-			imageCalls++
-			return fmt.Errorf("send help album: %w", transport.ErrReplyOutcomeUnknown)
-		},
-		Logger: slog.New(slog.DiscardHandler),
-	}
+			if !errors.Is(err, imageErr) {
+				t.Fatalf("Execute() error = %v, want preserved outcome uncertainty", err)
+			}
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
-		t.Fatalf("Execute returned error: %v", err)
-	}
+			if imageCalls != 1 || textCalls != 0 {
+				t.Fatalf("uncertain album: images=%d text=%d", imageCalls, textCalls)
+			}
 
-	if imageCalls != 1 {
-		t.Fatalf("image album calls = %d, want 1", imageCalls)
-	}
-
-	if fallback != "" {
-		t.Fatalf("album outcome was unknown, so the text fallback must be suppressed; got %q", fallback)
+			if got := imageTextFallbackCount("help", imageTextFallbackReasonOutcomeUnknown) - before; got != 1 {
+				t.Fatalf("image text fallback delta = %v, want 1", got)
+			}
+		})
 	}
 }
 
@@ -241,7 +252,7 @@ func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 	}
 }
 
-func TestHelpCommand_Execute_MissingImageCapabilityUsesTextFallback(t *testing.T) {
+func TestHelpCommand_Execute_MissingImageCapabilityReturnsError(t *testing.T) {
 	var sentMessage string
 
 	deps := &handlercore.Dependencies{
@@ -253,12 +264,14 @@ func TestHelpCommand_Execute_MissingImageCapabilityUsesTextFallback(t *testing.T
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+	// 운영 조립은 이미지 provider와 album 전송을 항상 연결하므로, 없으면 텍스트로 조용히 바꾸지 않고 설정 오류를 돌려준다.
+	err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
+	if err == nil || !strings.Contains(err.Error(), "help image capability not configured") {
+		t.Fatalf("Execute error = %v, want help image capability not configured", err)
 	}
 
-	if sentMessage == "" {
-		t.Fatal("expected text fallback")
+	if sentMessage != "" {
+		t.Fatalf("sent message = %q, want none", sentMessage)
 	}
 }
 

@@ -20,10 +20,14 @@
 
 package dispatchstate
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
-const defaultTelemetryRetention = 24 * time.Hour
-
+// Config의 값은 alarm-worker profile의 youtube_delivery 항목이 정본이다. 생성자는 profile 로더가 양수와 신선도 관계를
+// 검증한다는 전제로 기본값으로 바꾸거나 값을 끌어올리지 않고, 잘못된 값이면 Validate가 생성 오류로 드러낸다.
 type Config struct {
 	BatchSize                   int           // 한 번에 처리할 알림 수
 	LockTimeout                 time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
@@ -46,109 +50,46 @@ type Config struct {
 	TelemetryRetention          time.Duration // telemetry 버퍼 최소 보존 기간
 }
 
-func DefaultConfig() Config {
-	return Config{
-		BatchSize:             50,
-		LockTimeout:           5 * time.Minute,
-		PollInterval:          2 * time.Second,
-		MaxRetries:            3,
-		RetryBackoff:          1 * time.Minute,
-		CleanupAfter:          7 * 24 * time.Hour, // 7일
-		CleanupEnabled:        true,
-		ReviveEnabled:         true,
-		ReviveInterval:        5 * time.Minute,
-		ReviveFreshnessWindow: 60 * time.Minute,
-		// revive window보다 커야 되살린 PENDING(created_at 최대 60m)이 primary claim에서 탈락하지 않는다.
-		ClaimFreshnessWindow:        2 * time.Hour,
-		DeliveryParallelism:         4,
-		DeliverySendTimeout:         10 * time.Second,
-		SubscriberLookupParallelism: 16,
-		AggregateSyncInterval:       30 * time.Second,
-		TelemetryPollInterval:       30 * time.Second,
-		TelemetryFlushBatch:         200,
-		TelemetryRetryBackoff:       30 * time.Second,
-		TelemetryRetention:          defaultTelemetryRetention,
-	}
-}
-
-func NormalizeDispatcherConfig(config *Config) Config {
-	if config == nil {
-		defaults := DefaultConfig()
-
-		config = &defaults
+// Validate는 dispatcher가 쓰는 주기·한도·병렬성이 양수인지와, claim 신선도 기간이 revive 기간과 주기의 합 이상인지
+// 확인한다. 그보다 claim 기간이 짧으면 되살린 PENDING이 primary claim에서 탈락한다.
+func (c *Config) Validate() error {
+	required := []struct {
+		name  string
+		valid bool
+	}{
+		{"batch size", c.BatchSize > 0},
+		{"lock timeout", c.LockTimeout > 0},
+		{"poll interval", c.PollInterval > 0},
+		{"max retries", c.MaxRetries > 0},
+		{"retry backoff", c.RetryBackoff > 0},
+		{"revive interval", c.ReviveInterval > 0},
+		{"revive freshness window", c.ReviveFreshnessWindow > 0},
+		{"claim freshness window", c.ClaimFreshnessWindow > 0},
+		{"delivery parallelism", c.DeliveryParallelism > 0},
+		{"delivery send timeout", c.DeliverySendTimeout > 0},
+		{"subscriber lookup parallelism", c.SubscriberLookupParallelism > 0},
+		{"aggregate sync interval", c.AggregateSyncInterval > 0},
+		{"telemetry poll interval", c.TelemetryPollInterval > 0},
+		{"telemetry flush batch", c.TelemetryFlushBatch > 0},
+		{"telemetry retry backoff", c.TelemetryRetryBackoff > 0},
+		{"telemetry retention", c.TelemetryRetention > 0},
 	}
 
-	defaults := DefaultConfig()
-	normalizeDispatcherCoreConfig(config, &defaults)
-	normalizeDispatcherDeliveryConfig(config, &defaults)
-	normalizeDispatcherTelemetryConfig(config, &defaults)
+	var invalid []string
 
-	return *config
-}
-
-func normalizeDispatcherCoreConfig(config, defaults *Config) {
-	if config.BatchSize <= 0 {
-		config.BatchSize = defaults.BatchSize
+	for _, setting := range required {
+		if !setting.valid {
+			invalid = append(invalid, setting.name)
+		}
 	}
 
-	if config.LockTimeout <= 0 {
-		config.LockTimeout = defaults.LockTimeout
+	if len(invalid) > 0 {
+		return fmt.Errorf("settings must be positive: %s", strings.Join(invalid, ", "))
 	}
 
-	if config.PollInterval <= 0 {
-		config.PollInterval = defaults.PollInterval
+	if minimum := c.ReviveFreshnessWindow + c.ReviveInterval; c.ClaimFreshnessWindow < minimum {
+		return fmt.Errorf("claim freshness window %s must be at least revive freshness window plus revive interval (%s)", c.ClaimFreshnessWindow, minimum)
 	}
 
-	if config.AggregateSyncInterval <= 0 {
-		config.AggregateSyncInterval = defaults.AggregateSyncInterval
-	}
-
-	if config.ReviveInterval <= 0 {
-		config.ReviveInterval = defaults.ReviveInterval
-	}
-
-	if config.ReviveFreshnessWindow <= 0 {
-		config.ReviveFreshnessWindow = defaults.ReviveFreshnessWindow
-	}
-
-	if config.ClaimFreshnessWindow <= 0 {
-		config.ClaimFreshnessWindow = defaults.ClaimFreshnessWindow
-	}
-
-	minClaimFreshnessWindow := config.ReviveFreshnessWindow + config.ReviveInterval
-	if config.ClaimFreshnessWindow < minClaimFreshnessWindow {
-		config.ClaimFreshnessWindow = minClaimFreshnessWindow
-	}
-}
-
-func normalizeDispatcherDeliveryConfig(config, defaults *Config) {
-	if config.DeliveryParallelism <= 0 {
-		config.DeliveryParallelism = defaults.DeliveryParallelism
-	}
-
-	if config.DeliverySendTimeout <= 0 {
-		config.DeliverySendTimeout = defaults.DeliverySendTimeout
-	}
-
-	if config.SubscriberLookupParallelism <= 0 {
-		config.SubscriberLookupParallelism = defaults.SubscriberLookupParallelism
-	}
-}
-
-func normalizeDispatcherTelemetryConfig(config, defaults *Config) {
-	if config.TelemetryPollInterval <= 0 {
-		config.TelemetryPollInterval = defaults.TelemetryPollInterval
-	}
-
-	if config.TelemetryFlushBatch <= 0 {
-		config.TelemetryFlushBatch = defaults.TelemetryFlushBatch
-	}
-
-	if config.TelemetryRetryBackoff <= 0 {
-		config.TelemetryRetryBackoff = defaults.TelemetryRetryBackoff
-	}
-
-	if config.TelemetryRetention <= 0 {
-		config.TelemetryRetention = defaults.TelemetryRetention
-	}
+	return nil
 }

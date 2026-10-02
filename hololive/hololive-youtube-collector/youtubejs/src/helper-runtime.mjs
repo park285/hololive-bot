@@ -70,6 +70,9 @@ export class HelperRuntime {
     /** @type {Promise<{ status: number, body: unknown }> | null} */
     this.bootstrapPromise = null;
     this.bootstrapAttemptFingerprint = "";
+    this.initializing = false;
+    /** @type {Promise<{ status: number, body: unknown } | undefined> | null} */
+    this.drainPromise = null;
     this.createTransport = options.createTransport ??
       (async () => createFetchTransport({ currentSignal: currentRequestSignal }));
     this.createFetchers = options.createFetchers;
@@ -169,6 +172,7 @@ export class HelperRuntime {
    * @returns {Promise<{ status: number, body: unknown }>}
    */
   async initializeBootstrap(parsed, nextFingerprint) {
+    this.initializing = true;
     try {
       const transport = await this.createTransport();
       const fetchers = this.createFetchers
@@ -178,6 +182,12 @@ export class HelperRuntime {
         )
         : null;
       this.fetchers = fetchers;
+      this.initializing = false;
+      // 초기화 중 들어온 종료 요청은 늦게 생성된 자원을 닫은 뒤 완료합니다.
+      if (this.state === RuntimeState.DRAINING) {
+        const failure = await this.settleDrain();
+        return failure ?? rpcErrorResult(503, "helper_not_ready", "PROTOCOL", "helper is not ready");
+      }
       this.requestBodyBytes = parsed.limits.request_body_bytes;
       this.responseBodyBytes = parsed.limits.response_body_bytes;
       this.maxInflight = parsed.limits.max_inflight;
@@ -191,6 +201,8 @@ export class HelperRuntime {
       this.state = RuntimeState.FAULTED;
       this.onFaulted?.();
       return rpcErrorResult(500, "helper_internal_invariant", "INTERNAL", errorMessage(error));
+    } finally {
+      this.initializing = false;
     }
   }
 
@@ -205,12 +217,12 @@ export class HelperRuntime {
   }
 
   beginDrain() {
-    if (this.state === RuntimeState.UNCONFIGURED) {
+    if (this.state === RuntimeState.UNCONFIGURED && !this.initializing) {
       this.state = RuntimeState.STOPPED;
       this.onStopped?.();
       return;
     }
-    if (this.state !== RuntimeState.READY) {
+    if (this.state !== RuntimeState.READY && this.state !== RuntimeState.UNCONFIGURED) {
       return;
     }
     this.state = RuntimeState.DRAINING;
@@ -220,17 +232,24 @@ export class HelperRuntime {
   }
 
   async settleDrain() {
-    if (this.state !== RuntimeState.DRAINING) {
+    if (this.state !== RuntimeState.DRAINING || this.initializing || this.inflight > 0) {
       return;
     }
-    try {
-      await this.closeResources();
-      this.state = RuntimeState.STOPPED;
-      this.onStopped?.();
-    } catch {
-      this.state = RuntimeState.FAULTED;
-      this.onFaulted?.();
+    if (this.drainPromise === null) {
+      // close에서 재진입해도 정리와 종료 통보를 한 번만 수행하도록 먼저 작업을 공유합니다.
+      this.drainPromise = Promise.resolve().then(async () => {
+        try {
+          await this.closeResources();
+          this.state = RuntimeState.STOPPED;
+          this.onStopped?.();
+        } catch (error) {
+          this.state = RuntimeState.FAULTED;
+          this.onFaulted?.();
+          return rpcErrorResult(500, "helper_internal_invariant", "INTERNAL", errorMessage(error));
+        }
+      });
     }
+    return this.drainPromise;
   }
 
   async closeResources() {

@@ -113,8 +113,6 @@ func deferCollectionJob(
 		string(diagnostic.Code()),
 		string(diagnostic.Class()),
 		diagnostic.Detail(),
-		string(schedule.Kind()),
-		schedule.Delay().Milliseconds(),
 		schedule.At(),
 		bounds.Minimum.Milliseconds(),
 		bounds.Maximum.Milliseconds(),

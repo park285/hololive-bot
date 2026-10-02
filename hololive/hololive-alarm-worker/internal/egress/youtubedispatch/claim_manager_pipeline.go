@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
@@ -265,8 +266,8 @@ func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (m
 
 	var rows []domain.YouTubeNotificationOutbox
 
-	if err := deliverysql.SelectDeliverySQL(ctx, d.db, &rows, "load outbox rows by ids", mustSQL("dispatcher_claim_0370_02.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
-	`, deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
+	if err := dbx.SelectSQL(ctx, d.db, &rows, "load outbox rows by ids", mustSQL("dispatcher_claim_0370_02.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	`, dbx.AnyArgs(uniqueIDs)...); err != nil {
 		return nil, fmt.Errorf("load outbox rows by ids: %w", err)
 	}
 

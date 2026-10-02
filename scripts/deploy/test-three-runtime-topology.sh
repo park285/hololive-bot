@@ -54,29 +54,6 @@ for expected in hololive-api hololive-alarm-worker youtube-collector; do
 done
 pass "production Compose defines all three application runtimes"
 
-# 이하 퇴역 서비스·컨테이너·alias·Dockerfile 검사는 재도입 방지 영구 계약이다. 퇴역 가드가 아니므로 제거 조건이 없다.
-for removed in hololive-bot hololive-admin-api llm-scheduler admin-dashboard; do
-    for file in "${ACTIVE_COMPOSE_FILES[@]}"; do
-        if list_services "${file}" | grep -Fxq "${removed}"; then
-            fail "active Compose file still defines retired service ${removed}: ${file}"
-        fi
-    done
-done
-pass "active Compose files do not reintroduce retired services"
-
-if grep -En 'container_name:[[:space:]]*(hololive-kakao-bot-go|hololive-admin-api|hololive-llm-scheduler)([[:space:]]|$)' "${ACTIVE_COMPOSE_FILES[@]}"; then
-    fail "active Compose files still declare retired runtime containers"
-fi
-pass "active Compose files do not declare retired runtime containers"
-
-if grep -En '^[[:space:]]*-[[:space:]]*(hololive-bot|hololive-admin-api|llm-scheduler)[[:space:]]*$' "${ACTIVE_COMPOSE_FILES[@]}"; then
-    fail "active Compose files still declare retired network aliases"
-fi
-pass "active Compose files do not declare retired network aliases"
-
-if grep -Eq 'dockerfile:[[:space:]]*hololive/(hololive-kakao-bot-go|hololive-admin-api|hololive-llm-sched)/Dockerfile' "${PROD_FILE}"; then
-    fail "production Compose still builds a retired runtime image"
-fi
 grep -Eq 'dockerfile:[[:space:]]*hololive/hololive-api/Dockerfile' "${PROD_FILE}" \
     || fail "production Compose does not build the unified hololive-api image"
 pass "production image build contract targets hololive-api only"

@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
@@ -70,7 +70,7 @@ func shouldSkipDeliveryClaim(d *ClaimManager, outbox *domain.YouTubeNotification
 		return true
 	}
 
-	return d == nil || deliverysql.IsNilDB(d.db) || !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind)
+	return d == nil || reflectutil.IsNil(d.db) || !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind)
 }
 
 func deliveryClaimIdentityForOutbox(outbox *domain.YouTubeNotificationOutbox) (string, error) {

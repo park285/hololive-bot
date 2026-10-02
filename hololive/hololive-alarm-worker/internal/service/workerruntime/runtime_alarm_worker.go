@@ -50,7 +50,6 @@ type AlarmWorkerRuntime struct {
 	XSpacesRunner        Scheduler
 	ServerAddr           string
 	HTTPServers          *sharedserver.RuntimeHTTPServers
-	AlarmService         interface{ Close(context.Context) error }
 	WorkerObservability  interface{ Start(context.Context) }
 
 	schedulerMu     sync.Mutex

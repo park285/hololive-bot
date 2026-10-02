@@ -1,6 +1,10 @@
 package privacylog
 
-import "testing"
+import (
+	"testing"
+
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
+)
 
 func TestRoomAttrFallsBackToTheRoomNameToken(t *testing.T) {
 	t.Parallel()
@@ -8,13 +12,13 @@ func TestRoomAttrFallsBackToTheRoomNameToken(t *testing.T) {
 	const roomName = "상대방닉네임 님과의 대화"
 
 	fromIngress := RoomAttr("", roomName)
-	if fromIngress.Value.String() == UnknownToken {
+	if fromIngress.Value.String() == sharedprivacylog.UnknownToken {
 		t.Fatal("chat_id가 비면 방 제목 token으로 상관관계를 이어야 한다")
 	}
 
-	if fromIngress.Value.String() != RoomIDAttr(roomName).Value.String() {
+	if fromIngress.Value.String() != sharedprivacylog.RoomIDAttr(roomName).Value.String() {
 		t.Fatalf("ingress token = %q, want the room-name token %q",
-			fromIngress.Value.String(), RoomIDAttr(roomName).Value.String())
+			fromIngress.Value.String(), sharedprivacylog.RoomIDAttr(roomName).Value.String())
 	}
 
 	if fromIngress.Value.String() == roomName {
@@ -30,8 +34,8 @@ func TestRoomAttrAndChatAttrShareOneToken(t *testing.T) {
 	roomAttr := RoomAttr("", roomName)
 	chatAttr := ChatAttr("", roomName)
 
-	if roomAttr.Key != KeyRoomID || chatAttr.Key != KeyChatID {
-		t.Fatalf("keys = %q/%q, want %q/%q", roomAttr.Key, chatAttr.Key, KeyRoomID, KeyChatID)
+	if roomAttr.Key != sharedprivacylog.KeyRoomID || chatAttr.Key != sharedprivacylog.KeyChatID {
+		t.Fatalf("keys = %q/%q, want %q/%q", roomAttr.Key, chatAttr.Key, sharedprivacylog.KeyRoomID, sharedprivacylog.KeyChatID)
 	}
 
 	if roomAttr.Value.String() != chatAttr.Value.String() {
@@ -47,7 +51,7 @@ func TestRoomAttrPrefersTheChatIdentifier(t *testing.T) {
 		t.Fatalf("RoomAttr = %q, want %q", got, want)
 	}
 
-	if got := RoomAttr("   ", "방 제목").Value.String(); got != RoomIDAttr("방 제목").Value.String() {
+	if got := RoomAttr("   ", "방 제목").Value.String(); got != sharedprivacylog.RoomIDAttr("방 제목").Value.String() {
 		t.Fatalf("공백 chat_id는 비어 있는 것으로 봐야 한다: %q", got)
 	}
 }
@@ -55,7 +59,7 @@ func TestRoomAttrPrefersTheChatIdentifier(t *testing.T) {
 func TestBlankRoomAndNameStillCollapseToUnknown(t *testing.T) {
 	t.Parallel()
 
-	if got := RoomAttr("", "").Value.String(); got != UnknownToken {
-		t.Fatalf("RoomAttr(\"\", \"\") = %q, want %q", got, UnknownToken)
+	if got := RoomAttr("", "").Value.String(); got != sharedprivacylog.UnknownToken {
+		t.Fatalf("RoomAttr(\"\", \"\") = %q, want %q", got, sharedprivacylog.UnknownToken)
 	}
 }

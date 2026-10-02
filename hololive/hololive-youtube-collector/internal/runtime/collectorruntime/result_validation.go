@@ -1,7 +1,6 @@
 package collectorruntime
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 
@@ -11,8 +10,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
-
-var errInvalidPartialFailure = errors.New("partial result failure is invalid")
 
 func ValidateCollectResult(
 	input *collectutil.RunInput,
@@ -34,14 +31,12 @@ func ValidateCollectResult(
 	}
 
 	output := result.Output()
-	observations := output.Observations()
-	checkpoints := output.Checkpoints()
 
-	if err := validateOutputBounds(output, observations, checkpoints); err != nil {
+	if err := validateOutputBounds(output); err != nil {
 		return fmt.Errorf("validate output bounds: %w", err)
 	}
 
-	if err := validateResultEntries(input, registration, observations, checkpoints); err != nil {
+	if err := validateResultEntries(input, registration, output); err != nil {
 		return fmt.Errorf("validate result entries: %w", err)
 	}
 
@@ -49,7 +44,7 @@ func ValidateCollectResult(
 		return validateCompleteResult(result)
 	}
 
-	if err := validatePartialResult(registration, result, observations); err != nil {
+	if err := validatePartialResult(registration, result, output); err != nil {
 		return fmt.Errorf("validate partial result: %w", err)
 	}
 
@@ -58,7 +53,7 @@ func ValidateCollectResult(
 
 func validateCompleteResult(result *collectutil.CollectResult) error {
 	if _, ok := result.PartialFailure(); ok {
-		return wrappedInvariantError("complete result contains a partial failure")
+		return invariantError("complete result contains a partial failure")
 	}
 
 	return nil
@@ -66,11 +61,7 @@ func validateCompleteResult(result *collectutil.CollectResult) error {
 
 func validateFatalResult(result *collectutil.CollectResult, fatal error) error {
 	if fatal != nil && !result.IsZero() {
-		if err := invariantError("fatal collection returned a non-zero result"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("fatal collection returned a non-zero result")
 	}
 
 	return nil
@@ -78,11 +69,7 @@ func validateFatalResult(result *collectutil.CollectResult, fatal error) error {
 
 func validateResultShape(input *collectutil.RunInput, result *collectutil.CollectResult) error {
 	if input == nil || !validCollectResultKind(result.Kind()) {
-		if err := invariantError("collection result kind is invalid"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("collection result kind is invalid")
 	}
 
 	return nil
@@ -92,25 +79,13 @@ func validCollectResultKind(kind collectutil.CollectResultKind) bool {
 	return kind == collectutil.CollectComplete || kind == collectutil.CollectPartial
 }
 
-func validateOutputBounds(
-	output collectutil.RunOutput,
-	observations []contract.Envelope,
-	checkpoints []sourceobservation.CheckpointEntry,
-) error {
-	if len(observations) != len(checkpoints) || len(observations) > sourceobservation.MaxPublishBatchSize {
-		if err := invariantError("collection output bounds are invalid"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+func validateOutputBounds(output collectutil.RunOutput) error {
+	if output.ObservationCount() != output.CheckpointCount() || output.ObservationCount() > sourceobservation.MaxPublishBatchSize {
+		return invariantError("collection output bounds are invalid")
 	}
 
 	if output.CollectionLatency() < 0 || output.CollectionLatency() > sourceobservation.MaxCollectionLatency {
-		if err := invariantError("collection output bounds are invalid"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("collection output bounds are invalid")
 	}
 
 	return nil
@@ -119,16 +94,18 @@ func validateOutputBounds(
 func validateResultEntries(
 	input *collectutil.RunInput,
 	registration RegisteredRunner,
-	observations []contract.Envelope,
-	checkpoints []sourceobservation.CheckpointEntry,
+	output collectutil.RunOutput,
 ) error {
 	spec := input.Spec()
 	lease := input.Lease()
 	job := registration.Contract()
-	seen := make(map[string]struct{}, len(checkpoints))
+	seen := make(map[string]struct{}, output.CheckpointCount())
 
-	for index := range observations {
-		if err := validateResultEntry(input, &spec, &lease, job, &observations[index], &checkpoints[index], seen); err != nil {
+	for index := range output.ObservationCount() {
+		envelope := output.ObservationMetadata(index)
+		checkpoint := output.CheckpointMetadata(index)
+
+		if err := validateResultEntry(input, &spec, &lease, job, &envelope, &checkpoint, seen); err != nil {
 			return fmt.Errorf("validate result entry: %w", err)
 		}
 	}
@@ -141,8 +118,8 @@ func validateResultEntry(
 	spec *joblease.JobSpec,
 	lease *contract.LeaseProof,
 	job sourceobservation.JobContract,
-	envelope *contract.Envelope,
-	checkpoint *sourceobservation.CheckpointEntry,
+	envelope *collectutil.ObservationMetadata,
+	checkpoint *collectutil.CheckpointMetadata,
 	seen map[string]struct{},
 ) error {
 	if err := validateEnvelopeContract(job, envelope); err != nil {
@@ -155,11 +132,7 @@ func validateResultEntry(
 
 	generation, err := input.Generation(envelope.ObservationKind)
 	if err != nil || generation != envelope.ContractGeneration {
-		if err := invariantError("observation contract generation is invalid"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("observation contract generation is invalid")
 	}
 
 	if err := validateEnvelopeSubject(spec, job, envelope); err != nil {
@@ -173,79 +146,58 @@ func validateResultEntry(
 	return nil
 }
 
-func validateEnvelopeContract(job sourceobservation.JobContract, envelope *contract.Envelope) error {
+func validateEnvelopeContract(job sourceobservation.JobContract, envelope *collectutil.ObservationMetadata) error {
 	if envelope.Provider != job.ID().Provider || !job.Emits(envelope.ObservationKind) {
-		if err := invariantError("observation lease or contract binding is invalid"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("observation lease or contract binding is invalid")
 	}
 
 	if envelope.ContractGeneration <= 0 {
-		if err := invariantError("observation lease or contract binding is invalid"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("observation lease or contract binding is invalid")
 	}
 
 	return nil
 }
 
-func validateEnvelopeLease(spec *joblease.JobSpec, lease *contract.LeaseProof, envelope *contract.Envelope) error {
+func validateEnvelopeLease(spec *joblease.JobSpec, lease *contract.LeaseProof, envelope *collectutil.ObservationMetadata) error {
 	if envelope.Lease != *lease {
-		return wrappedInvariantError("observation lease or contract binding is invalid")
+		return invariantError("observation lease or contract binding is invalid")
 	}
 
 	if envelope.Lease.JobKey != spec.JobKey || envelope.Lease.CollectionJobKind != spec.CollectionJobKind {
-		return wrappedInvariantError("observation lease or contract binding is invalid")
+		return invariantError("observation lease or contract binding is invalid")
 	}
 
 	if envelope.CollectorInstance != lease.OwnerInstance || envelope.Lease.ProjectionGeneration != lease.ProjectionGeneration {
-		return wrappedInvariantError("observation lease or contract binding is invalid")
+		return invariantError("observation lease or contract binding is invalid")
 	}
 
 	if !envelope.ScheduledFor.Equal(lease.ScheduledFor) {
-		return wrappedInvariantError("observation lease or contract binding is invalid")
+		return invariantError("observation lease or contract binding is invalid")
 	}
 
 	return nil
 }
 
-func validateEnvelopeSubject(spec *joblease.JobSpec, job sourceobservation.JobContract, envelope *contract.Envelope) error {
+func validateEnvelopeSubject(spec *joblease.JobSpec, job sourceobservation.JobContract, envelope *collectutil.ObservationMetadata) error {
 	if job.Membership() == sourceobservation.JobMembershipExactSubject && envelope.SubjectKey != spec.SubjectKey {
-		if err := invariantError("observation subject does not match exact-subject lease"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("observation subject does not match exact-subject lease")
 	}
 
 	return nil
 }
 
 func recordCheckpoint(
-	envelope *contract.Envelope,
-	actual *sourceobservation.CheckpointEntry,
+	envelope *collectutil.ObservationMetadata,
+	actual *collectutil.CheckpointMetadata,
 	seen map[string]struct{},
 ) error {
-	expected := collectutil.Checkpoint(envelope)
-	if !checkpointMatches(&expected, actual) {
-		if err := invariantError("checkpoint does not match observation"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+	if !checkpointMatches(envelope, actual) {
+		return invariantError("checkpoint does not match observation")
 	}
 
 	key := string(actual.Provider) + "\x00" + string(actual.ObservationKind) + "\x00" + actual.SubjectKey
 	if _, ok := seen[key]; ok {
-		if err := invariantError("checkpoint binding is duplicated"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+		return invariantError("checkpoint binding is duplicated")
 	}
 
 	seen[key] = struct{}{}
@@ -253,22 +205,22 @@ func recordCheckpoint(
 	return nil
 }
 
-func checkpointMatches(expected, actual *sourceobservation.CheckpointEntry) bool {
+func checkpointMatches(expected *collectutil.ObservationMetadata, actual *collectutil.CheckpointMetadata) bool {
 	return expected.Provider == actual.Provider &&
 		expected.ObservationKind == actual.ObservationKind &&
 		expected.SubjectKey == actual.SubjectKey &&
 		expected.ScopeSHA256 == actual.ScopeSHA256 &&
 		expected.ContractGeneration == actual.ContractGeneration &&
-		expected.LastObservationKey == actual.LastObservationKey &&
-		expected.LastEvidenceSHA256 == actual.LastEvidenceSHA256 &&
-		expected.LastScheduledFor.Equal(actual.LastScheduledFor) &&
+		expected.ObservationKey == actual.LastObservationKey &&
+		expected.EvidenceSHA256 == actual.LastEvidenceSHA256 &&
+		expected.ScheduledFor.Equal(actual.LastScheduledFor) &&
 		expected.Continuity == actual.Continuity
 }
 
 func validatePartialResult(
 	registration RegisteredRunner,
 	result *collectutil.CollectResult,
-	observations []contract.Envelope,
+	output collectutil.RunOutput,
 ) error {
 	partial, err := validatedPartialFailure(result)
 	if err != nil {
@@ -276,17 +228,13 @@ func validatePartialResult(
 	}
 
 	failed := partial.FailedKinds()
-	if len(failed) == 0 || len(observations) == 0 {
-		if err := invariantError("partial result has no failed kind or output"); err != nil {
-			return fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil
+	if len(failed) == 0 || output.Empty() {
+		return invariantError("partial result has no failed kind or output")
 	}
 
-	emitted := make([]contract.ObservationKind, 0, len(observations))
-	for i := range observations {
-		emitted = append(emitted, observations[i].ObservationKind)
+	emitted := make([]contract.ObservationKind, 0, output.ObservationCount())
+	for i := range output.ObservationCount() {
+		emitted = append(emitted, output.ObservationMetadata(i).ObservationKind)
 	}
 
 	if err := validateFailedKinds(registration.Contract(), failed, emitted); err != nil {
@@ -299,11 +247,7 @@ func validatePartialResult(
 func validatedPartialFailure(result *collectutil.CollectResult) (*collectutil.PartialFailure, error) {
 	partial, ok := result.PartialFailure()
 	if !ok || partial.Cause() == nil || !collectutil.PartialFailureClassAllowed(collecterr.ClassOf(partial.Cause())) {
-		if err := invariantError("partial result failure is invalid"); err != nil {
-			return nil, fmt.Errorf("invariant error: %w", err)
-		}
-
-		return nil, errInvalidPartialFailure
+		return nil, invariantError("partial result failure is invalid")
 	}
 
 	return partial, nil
@@ -315,11 +259,7 @@ func validateFailedKinds(
 ) error {
 	for _, kind := range failed {
 		if !job.Emits(kind) || slices.Contains(emitted, kind) {
-			if err := invariantError("partial failed kind is outside the job contract or overlaps output"); err != nil {
-				return fmt.Errorf("invariant error: %w", err)
-			}
-
-			return nil
+			return invariantError("partial failed kind is outside the job contract or overlaps output")
 		}
 	}
 
@@ -328,8 +268,4 @@ func validateFailedKinds(
 
 func invariantError(message string) error {
 	return collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, fmt.Errorf("collection_internal_invariant: %s", message))
-}
-
-func wrappedInvariantError(message string) error {
-	return fmt.Errorf("invariant error: %w", invariantError(message))
 }

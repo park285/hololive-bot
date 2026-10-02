@@ -59,9 +59,8 @@ func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
 }
 
 func (e *collectionExecutor) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
-	observations := output.Observations()
-	for i := range observations {
-		envelope := &observations[i]
+	for i := range output.ObservationCount() {
+		envelope := output.ObservationMetadata(i)
 		outcome, ok := publishedOutcome(result, i)
 
 		if !ok {
@@ -131,9 +130,8 @@ func publishOutcomeLabel(outcome sourceobservation.PublishOutcome) (string, bool
 }
 
 func (e *collectionExecutor) observePublishOutcome(provider contract.Provider, output collectutil.RunOutput, outcome string) {
-	observations := output.Observations()
-	for i := range observations {
-		envelope := &observations[i]
+	for i := range output.ObservationCount() {
+		envelope := output.ObservationMetadata(i)
 		e.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
@@ -63,7 +64,7 @@ func (r *Repository) listPostDeliveryTimelines(
 
 	query, args := postDeliveryTimelineQuery(outboxIDs, identities)
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}
 
@@ -82,7 +83,7 @@ func postDeliveryTimelineQuery(outboxIDs []int64, identities []timeline.PostTrac
 	if len(outboxIDs) > 0 {
 		query += " AND " + deliverysql.DeliveryInClause("o.id", len(outboxIDs))
 
-		args = deliverysql.AppendDeliveryInt64Args(args, outboxIDs)
+		args = append(args, dbx.AnyArgs(outboxIDs)...)
 	}
 
 	if len(identities) > 0 {

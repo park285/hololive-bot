@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -107,7 +107,7 @@ func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Re
 		return "", errors.New("render youtube outbox dispatch: payload is nil")
 	}
 
-	out, err := youtubedispatch.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
+	out, err := format.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
 	if err != nil {
 		return out, fmt.Errorf("format youtube outbox payload: %w", err)
 	}

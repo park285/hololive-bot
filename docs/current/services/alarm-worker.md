@@ -74,7 +74,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Stop scheduler/checker loops gracefully.
 - Stop dispatch queue and YouTube outbox consumers during shutdown.
 
-Runtime은 scheduler·egress·celebration·birthday stream·설정 subscriber를 같은 취소 및 종료 대기 경계에서 관리합니다. 부모가 살아 있을 때 자식의 자체 timeout은 runtime 오류로 전달합니다. 종료 기한을 넘겨도 HTTP와 alarm service cleanup은 호출하며, 작업 대기 실패와 cleanup 오류를 함께 반환합니다. Subscriber의 연결 오류는 기존 log-only 정책을 유지합니다.
+Runtime은 scheduler·egress·celebration·birthday stream·설정 subscriber를 같은 취소 및 종료 대기 경계에서 관리합니다. 부모가 살아 있을 때 자식의 자체 timeout은 runtime 오류로 전달합니다. 종료 기한을 넘겨도 HTTP cleanup은 호출하며, 작업 대기 실패와 cleanup 오류를 함께 반환합니다. Subscriber의 연결 오류는 기존 log-only 정책을 유지합니다.
 
 부모 종료에 따른 순수 context 오류만 정상 종료로 처리합니다. 취소와 실제 오류가 함께 반환되면 오류 채널 또는 ERROR 로그에 원인을 남기며, 종료 중 소비되지 않는 오류 채널 때문에 작업이 멈추지 않도록 합니다.
 
@@ -92,7 +92,11 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 
 DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다.
 
-범용 delivery의 발송 attempt는 기본 10초로 제한하며 더 짧은 부모 deadline을 따릅니다. `OUTCOME_UNKNOWN`·handoff 불명·호출 이후 timeout/cancel은 worker/status fence로 QUARANTINED 전이를 시도합니다. 저장 실패 시 SENDING 증거를 유지하여 stale sweep이 처리하며, 확정 성공 후 DB 반영 실패도 일반 미발송 실패로 바꾸지 않습니다. batch가 없어도 기존 tick에서 due maintenance를 실행합니다.
+범용 delivery의 발송 attempt는 `notification_delivery.executor.attempt_timeout`(기본 10초)을 따르며 더 짧은 부모 deadline을 적용합니다. dispatcher는 profile 값을 기본값으로 바꾸지 않고, 잘못된 설정이면 기동에 실패합니다. 실행 가능한 슬롯 수만큼 방별 첫 due 항목을 claim하고, 실행 중인 방과 다른 owner가 처리 중인 방의 후행 항목은 claim하지 않습니다. 따라서 슬롯·방별 순서를 기다리는 항목의 60초 lease를 미리 소비하지 않습니다. `OUTCOME_UNKNOWN`·handoff 불명·호출 이후 timeout/cancel은 worker/status fence로 QUARANTINED 전이를 시도합니다. 저장 실패 시 SENDING 증거를 유지하여 stale sweep이 처리하며, 확정 성공 후 DB 반영 실패도 일반 미발송 실패로 바꾸지 않습니다. batch가 없어도 기존 tick에서 due maintenance를 실행합니다.
+
+YouTube 전송은 `youtube_delivery.executor.attempt_timeout`을 실제 전송 예산으로 사용합니다. 서비스별 `delivery_send_timeout_ms`는 이 값과 같아야 하며, 불일치는 설정 오류로 거절합니다. 기존 두 설정 필드와 기본값은 유지합니다.
+
+한 poll에서 같은 notification outbox ID는 한 번만 처리합니다. 처리한 ID 목록은 batch 크기 이내로 유지하고 다음 poll에 초기화하여 짧은 backoff나 재발급이 같은 poll에서 재시도 예산을 연속 소비하지 않게 합니다.
 
 세 발송 경로는 최초 외부 발송 전에 최종 본문·경로·요청 ID 관계를 저장하고 재시도에서 재사용합니다. alarm과 YouTube의 묶음은 membership도 고정합니다. `CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK의 결정적 r1/r2 generation을 허용하며, 기존 attempt·시간 상한을 유지합니다. unknown·payload mismatch·already exists·code 없는 409·transport 오류에는 새 ID를 발급하지 않습니다.
 

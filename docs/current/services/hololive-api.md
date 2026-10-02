@@ -56,6 +56,12 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - Proactive alarm dispatch queue consumption owned by `alarm-worker`
 - Proactive Iris/Kakao notification egress owned by `alarm-worker`
 
+## Password reset API
+
+- `POST /api/auth/password/reset-request`와 `POST /api/auth/password/reset` 경로는 유지하지만, 재설정 링크 전달 수단이 없어 HTTP 503과 기존 인증 오류 본문 `{"success":false,"error":"INTERNAL_ERROR"}`으로 응답합니다.
+- 기존 IP 허용 목록 검사를 통과한 요청은 본문·계정 존재·토큰 유효성과 관계없이 같은 응답을 받습니다. 본문을 해석하거나 계정을 조회하지 않으며, 토큰 발급·소비, 비밀번호·세션 세대 변경 및 링크 발송 성공 응답은 하지 않습니다. 허용 목록 밖의 요청은 기존 403 차단을 유지합니다.
+- 다시 지원하려면 링크 전달 수단과 복구 절차를 먼저 구현하고 공개 API 계약 변경 승인을 받아야 합니다.
+
 ## Live query behavior
 
 - `!라이브`는 기존 bot DB pool의 단일 snapshot으로 확정 방송과 채널 확인 최신값을 읽으며 원천을 호출하지 않습니다. 무인자는 우이를 포함한 활성 등록 Hololive 채널, 멤버 지정은 해석된 채널을 직접 조회합니다. freshness는 `min(5분, 2×poll interval+30초)`, 기본 270초이며 DB 조회 예산은 1초입니다. `DEC-20260926-hololive-live-absence-evidence`와 [실행 계획](../plans/2026-09-26-live-absence-evidence.md)이 소유합니다.
@@ -70,6 +76,10 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 
 ## Source fallback retirement
 
+- 영속 reply INSERT의 접수 결과 불명(`ErrReplyStagingFailed`)과 Iris 전송 결과 불명은 같은 추가 응답 억제 규칙을 따릅니다. 도움말·달력 이미지 실패의 대체 텍스트나 공통 오류 응답을 추가하지 않고 명령 결과 불명을 보존합니다.
+- Iris가 접수한 reply의 handoff 결과를 확정하지 못하면 자동 재발송하지 않는 `manual_review`로 정산합니다. 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다.
+- 멤버 조회 backend 오류는 미발견 응답으로 바꾸지 않습니다. 달력 cache miss의 공유 조회는 기존 bot 명령 시간 예산으로 제한하고, 각 대기 요청은 자신의 context 취소에 따라 반환합니다. shared member cache의 epoch 구독·재조회 작업은 각 plane의 DB·Valkey 정리 전에 종료합니다.
+
 `DEC-20260926-hololive-source-fallbacks-retirement`(PLN-20260926-stack-audit-refactoring T19)에 따라 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꿨습니다. T18(2026-09-26) 30일 로그에서 아래 경로의 fallback·fail-open 경고는 0건이었습니다.
 
 - Holodex `GetChannel`은 YouTube scraper로 부분 Channel을 만들지 않고, `GetChannels`는 목록 API 실패를 개별 조회로 보충하지 않으며, `GetChannelSchedule`은 YouTube·공식 일정으로 보충하거나 그 결과를 캐시하지 않습니다([공식 일정 계약](../contracts/schedule-hololive-tv-api.md)).
@@ -78,6 +88,26 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - `/api/holo` rate limit은 fail-closed입니다. rate limit이 켜져 있는데 cache가 없거나 limiter 초기화에 실패하면 admin API가 기동하지 않고, 판정 실패는 503으로 거절하며 `hololive_admin_rate_limit_check_failures_total`로 셉니다. `hololive_admin_rate_limit_fail_open_total`은 삭제했습니다.
 - `domain.MemberDataProvider`는 오류를 돌려주는 `LoadAllMembers` 하나로 전체 멤버를 적재합니다. 오류를 흡수하던 `GetAllMembers`와 선택적 `MemberDataLoader`는 삭제했습니다. 공식 일정 식별 색인·멤버 목록 응답·alarm 콜라보 표시명은 멤버 적재 실패를 빈 결과로 바꾸지 않고 오류로 드러냅니다.
 - 알림 멤버 표시명 폴백만 예외 계약으로 남습니다([alarm 계약](../contracts/alarm.md)의 멤버 표시명 예외 계약).
+
+## 도움말·달력 이미지의 텍스트 대체 예외 계약
+
+`!도움말`과 `!달력`은 이미지 응답이 정상 경로이고, 이미지가 확정적으로 실패했을 때만 같은 내용을 텍스트로 보냅니다(2026-10-02 계약화).
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | 이미지 적재·렌더링 실패나 빈 결과(`render_failed`), 또는 이미지 전송이 전달되지 않았다고 확정된 실패(`send_failed`) |
+| 한도 | 명령 한 번에 텍스트 응답 한 번입니다. 이미지 재시도는 없습니다. 이미지 전송 결과가 불명(`IsReplyOutcomeUnknown`)이면 이미 전달됐을 수 있으므로 텍스트를 보내지 않습니다(`outcome_unknown`). |
+| 종단 | 텍스트 전송도 실패하면 두 오류를 합쳐 명령 오류로 반환합니다(도움말). 이미지 provider·renderer·전송 callback이 설정되지 않았으면 텍스트로 바꾸지 않고 명령 의존성 오류를 반환합니다. 운영 조립은 이 의존성을 항상 연결합니다. |
+| Telemetry | `hololive_bot_image_text_fallback_total{command,reason}`(`command`: `help`, `calendar`; `reason`: `render_failed`, `send_failed`, `outcome_unknown`)와 Warn 로그(`help_image_fallback`, `calendar image ... falling back to text`) |
+| Owner | `hololive-api` bot plane의 command handlers(`internal/planes/bot/internal/command/handlers`) |
+| 검토 조건 | `render_failed`가 0이 아니면 이미지 렌더러 결함으로 보고 원인을 고칩니다. 두 명령의 `render_failed`와 `send_failed`가 90일 동안 0이면 텍스트 대체를 지우고 이미지 실패를 명령 오류로 반환합니다. |
+
+## Plane별 공유 자원
+
+- bot·admin plane은 `BuildInfraModule`, llm plane은 `BuildLLMSchedulerRuntime`에서 각자 Valkey client 1개, PostgreSQL pool 1개, 멤버 캐시 1개를 만듭니다. YouTube plane은 PostgreSQL pool만 둡니다. 한 프로세스 안에 Valkey client 3개, PostgreSQL pool 4개, 멤버 캐시 3개가 있습니다.
+- 각 plane은 종료 때 멤버 캐시(epoch 작업 정지와 대기) → PostgreSQL → Valkey 순서로 닫습니다. 멤버 캐시의 epoch 작업이 Valkey client를 쓰기 때문입니다.
+- 이 구조는 `DEC-20260825-hololive-api-dedicated-plane-pools`가 PostgreSQL pool을 plane별로 나눈 것(장애 격리와 독립 drain)과 같은 lifecycle 모델을 Valkey client와 멤버 캐시에도 적용한 것입니다. `DEC-20260626-hololive-api-three-runtime-consolidation`의 "shared Valkey client 1개" 조항은 이 구조로 대체합니다(2026-10-02 결정).
+- 비용은 시작 때 멤버 적재 3회, epoch 구독 연결 3개, 15초마다 epoch 조회 3회입니다. 하나로 합치면 한 plane의 pool에 다른 plane이 기대거나 root 소유 pool을 새로 둬야 하므로 합치지 않습니다.
 
 ## Shorts observation processing
 

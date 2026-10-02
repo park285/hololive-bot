@@ -2,11 +2,30 @@ package youtubedispatch
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+// 실패 기록 wrapper는 claim 해제(DB 상태 변경)를 먼저 수행하고, 확정된 결과만 MetricsRecorder에 넘긴다.
+// recorder는 로그·audit·결과 집계만 맡는다.
+
+func (d *SendEngine) releasePerRoomClaims(ctx context.Context, row *domain.YouTubeNotificationDelivery, claimTokens []dispatchstate.ClaimToken, cause string) {
+	d.claims.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after "+cause,
+		slog.Int64("delivery_id", row.ID),
+		slog.Int64("outbox_id", row.OutboxID),
+	)
+}
+
+func (d *SendEngine) releaseGroupedClaims(ctx context.Context, group *deliveryGroup, claimTokens []dispatchstate.ClaimToken, cause string) {
+	roomID, channelID, _ := groupedDeliveryFields(group)
+	d.claims.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after "+cause,
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
+	)
+}
 
 func (d *SendEngine) recordPerRoomFormatFailure(
 	ctx context.Context,
@@ -17,7 +36,22 @@ func (d *SendEngine) recordPerRoomFormatFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordPerRoomFormatFailure(ctx, row, rows, outboxes, claimTokens, result, mu)
+	d.releasePerRoomClaims(ctx, row, claimTokens, "format error")
+	d.metricsRecorder.recordPerRoomFormatFailure(row, rows, outboxes, result, mu)
+}
+
+func (d *SendEngine) recordGroupedFormatFailure(
+	ctx context.Context,
+	group *deliveryGroup,
+	validRows []domain.YouTubeNotificationDelivery,
+	validOutboxes []domain.YouTubeNotificationOutbox,
+	claimTokens []dispatchstate.ClaimToken,
+	err error,
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+) {
+	d.releaseGroupedClaims(ctx, group, claimTokens, "format error")
+	d.metricsRecorder.recordGroupedFormatFailure(group, validRows, validOutboxes, err, result, mu)
 }
 
 func (d *SendEngine) recordPerRoomMissingMessage(
@@ -27,7 +61,8 @@ func (d *SendEngine) recordPerRoomMissingMessage(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordPerRoomMissingMessage(ctx, row, claimTokens, result, mu)
+	d.releasePerRoomClaims(ctx, row, claimTokens, "missing preformatted message")
+	d.metricsRecorder.recordPerRoomMissingMessage(row, result, mu)
 }
 
 func (d *SendEngine) recordPerRoomRequestBuildFailure(
@@ -41,7 +76,8 @@ func (d *SendEngine) recordPerRoomRequestBuildFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordPerRoomRequestBuildFailure(ctx, row, outbox, rows, outboxes, claimTokens, err, result, mu)
+	d.releasePerRoomClaims(ctx, row, claimTokens, "request build error")
+	d.metricsRecorder.recordPerRoomRequestBuildFailure(row, outbox, rows, outboxes, err, result, mu)
 }
 
 func (d *SendEngine) recordPerRoomSendFailure(
@@ -55,7 +91,8 @@ func (d *SendEngine) recordPerRoomSendFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordPerRoomSendFailure(ctx, row, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
+	d.releasePerRoomClaims(ctx, row, claimTokens, "send failure")
+	d.metricsRecorder.recordPerRoomSendFailure(row, rows, outboxes, sendReq, sendErr, result, mu)
 }
 
 func (d *SendEngine) recordPerRoomSuccess(
@@ -89,7 +126,8 @@ func (d *SendEngine) recordGroupedRequestBuildFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordGroupedRequestBuildFailure(ctx, group, validRows, validOutboxes, claimTokens, err, result, mu)
+	d.releaseGroupedClaims(ctx, group, claimTokens, "request build error")
+	d.metricsRecorder.recordGroupedRequestBuildFailure(group, validRows, validOutboxes, err, result, mu)
 }
 
 func (d *SendEngine) recordGroupedSendFailure(
@@ -103,7 +141,8 @@ func (d *SendEngine) recordGroupedSendFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	d.metricsRecorder.recordGroupedSendFailure(ctx, group, validRows, validOutboxes, sendReq, claimTokens, sendErr, result, mu)
+	d.releaseGroupedClaims(ctx, group, claimTokens, "send failure")
+	d.metricsRecorder.recordGroupedSendFailure(group, validRows, validOutboxes, sendReq, sendErr, result, mu)
 }
 
 func (d *SendEngine) recordGroupedSuccess(

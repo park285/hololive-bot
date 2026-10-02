@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -64,6 +63,10 @@ func newDispatcherWithDepsForTest(
 
 	deps.DB = db
 
+	if deps.MemberNames == nil {
+		deps.MemberNames = staticMemberNames{}
+	}
+
 	// 운영 기동과 같이 message_strings를 한 번 적재해 둔다. 조회 시 lazy 적재는 없다.
 	deps.MessageStrings = messagestrings.NewStore(db, logger)
 	require.NoError(tb, deps.MessageStrings.Load(tb.Context()))
@@ -72,7 +75,7 @@ func newDispatcherWithDepsForTest(
 		deps.Renderer = template.NewRenderer(db, logger)
 	}
 
-	dispatcher, err := NewDispatcher(deps, logger, config)
+	dispatcher, err := NewDispatcher(deps, logger, withTestDispatchConfigDefaults(config))
 	require.NoError(tb, err)
 
 	if unitTransition {
@@ -92,7 +95,7 @@ func (resolver unitClaimResolver) selectClaimedDeliveries(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	_ claim.DecisionCache,
+	_ *claimDecisionCache,
 ) deliveryClaimSelection {
 	selection := deliveryClaimSelection{}
 

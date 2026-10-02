@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kapu/hololive-shared/internal/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -46,16 +45,16 @@ func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamF
 	state := newStreamFetchState()
 	targetOrgs := streamTargetOrgs(plan.resolvedOrg)
 	primary := h.runStreamPrimaryFetches(ctx, plan, targetOrgs, state)
-	fallback.ObservePrimary("holodex", plan.operation, primary)
+	observeStreamPrimary(plan.operation, primary)
 
 	// 호출자 취소는 원천 실패가 아니다. fallback·재시도·캐시 없이 취소를 그대로 돌려준다.
-	if primary.WasCanceled() {
+	if primary.wasCanceled() {
 		return nil, fmt.Errorf("fetch streams: %w", context.Cause(ctx))
 	}
 
 	h.scheduleStreamRetryIfNeeded(ctx, plan, primary)
 
-	if !primary.HasFailures() {
+	if !primary.hasFailures() {
 		// 모든 org가 성공한 결과만 캐시한다. 성공한 빈 목록도 정상 결과다.
 		streams := state.streams()
 		cacheStreamsByOrg(ctx, plan, streams)
@@ -101,15 +100,15 @@ func (e *PartialStreamsError) Unwrap() error {
 func (h *Service) resolveFailedPrimary(
 	ctx context.Context,
 	plan *streamFetchPlan,
-	primary fallback.PrimaryResult[string],
+	primary orgFetchResult,
 	state *streamFetchState,
 ) ([]*domain.Stream, error) {
-	secondary, err := h.runOfficialScheduleFallback(ctx, plan, primary, state)
+	outcome, err := h.runOfficialScheduleFallback(ctx, plan, primary, state)
 	if err != nil {
 		return nil, errors.Join(state.primaryError(plan), fmt.Errorf("official schedule fallback: %w", err))
 	}
 
-	if secondary.Outcome == "hit" {
+	if outcome == streamFallbackOutcomeHit {
 		streams := state.streams()
 		cacheStreamsByOrg(ctx, plan, streams)
 
@@ -136,10 +135,10 @@ func (h *Service) runStreamPrimaryFetches(
 	plan *streamFetchPlan,
 	targetOrgs []string,
 	state *streamFetchState,
-) fallback.PrimaryResult[string] {
-	return fallback.FetchPlan[string]{
-		Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg, h.concurrency.OrgAllParallelism),
-	}.RunPrimary(ctx, targetOrgs, func(fetchCtx context.Context, targetOrg string) error {
+) orgFetchResult {
+	parallelism := holodexOrgFetchParallelism(plan.resolvedOrg, h.concurrency.OrgAllParallelism)
+
+	return runOrgFetches(ctx, parallelism, targetOrgs, func(fetchCtx context.Context, targetOrg string) error {
 		return h.fetchAndStoreStreamsForOrg(fetchCtx, targetOrg, plan, state)
 	})
 }
@@ -237,9 +236,9 @@ func (state *streamFetchState) primaryError(plan *streamFetchPlan) error {
 func (h *Service) scheduleStreamRetryIfNeeded(
 	ctx context.Context,
 	plan *streamFetchPlan,
-	primary fallback.PrimaryResult[string],
+	primary orgFetchResult,
 ) {
-	if !primary.HasFailures() || plan.retry == nil {
+	if !primary.hasFailures() || plan.retry == nil {
 		return
 	}
 
@@ -248,38 +247,45 @@ func (h *Service) scheduleStreamRetryIfNeeded(
 	})
 }
 
+// runOfficialScheduleFallback은 조건이 맞을 때 공식 일정 fallback을 한 번 실행하고 결과를 skipped·error·hit·miss로 기록한다.
 func (h *Service) runOfficialScheduleFallback(
 	ctx context.Context,
 	plan *streamFetchPlan,
-	primary fallback.PrimaryResult[string],
+	primary orgFetchResult,
 	state *streamFetchState,
-) (fallback.SecondaryExecution, error) {
-	policy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
+) (string, error) {
+	if !h.shouldRunOfficialScheduleFallback(plan, primary, state) {
+		observeStreamFallbackExecution(plan.operation, streamFallbackOutcomeSkipped)
 
-	out, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
-		Service:   "holodex",
-		Operation: plan.operation,
-		Trigger:   policy.Trigger,
-		ShouldRun: h.shouldRunOfficialScheduleFallback(plan, primary, policy, state),
-		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
-			return h.runOfficialScheduleFallbackFetch(runCtx, plan, primary, state)
-		},
-	})
-	if err != nil {
-		return out, fmt.Errorf("run secondary: %w", err)
+		return streamFallbackOutcomeSkipped, nil
 	}
 
-	return out, nil
+	items, err := h.runOfficialScheduleFallbackFetch(ctx, plan, primary, state)
+	if err != nil {
+		observeStreamFallbackExecution(plan.operation, streamFallbackOutcomeError)
+
+		return streamFallbackOutcomeError, err
+	}
+
+	outcome := streamFallbackOutcomeMiss
+
+	if items > 0 {
+		outcome = streamFallbackOutcomeHit
+	}
+
+	observeStreamFallbackExecution(plan.operation, outcome)
+
+	return outcome, nil
 }
 
+// shouldRunOfficialScheduleFallback은 계약의 trigger로, primary가 stream을 하나도 얻지 못했고 실패한 org가 있을 때만 참이다.
 func (h *Service) shouldRunOfficialScheduleFallback(
 	plan *streamFetchPlan,
-	primary fallback.PrimaryResult[string],
-	policy fallback.Policy,
+	primary orgFetchResult,
 	state *streamFetchState,
 ) bool {
 	return h.scraper != nil && supportsOfficialScheduleFallback(plan) &&
-		policy.ShouldRun(len(state.streams()), len(primary.Failed))
+		len(state.streams()) == 0 && primary.hasFailures()
 }
 
 func supportsOfficialScheduleFallback(plan *streamFetchPlan) bool {
@@ -291,14 +297,14 @@ func supportsOfficialScheduleFallback(plan *streamFetchPlan) bool {
 func (h *Service) runOfficialScheduleFallbackFetch(
 	ctx context.Context,
 	plan *streamFetchPlan,
-	primary fallback.PrimaryResult[string],
+	primary orgFetchResult,
 	state *streamFetchState,
-) (fallback.SecondaryResult, error) {
+) (int, error) {
 	h.logger.Warn(plan.fallbackLogMessage, slog.Int("failed_orgs", len(primary.Failed)))
 
 	streams, err := h.scraper.FetchUpcomingStreams(ctx, plan.hours)
 	if err != nil {
-		return fallback.SecondaryResult{}, fmt.Errorf("fetch upcoming streams: %w", err)
+		return 0, fmt.Errorf("fetch upcoming streams: %w", err)
 	}
 
 	if plan.fallbackFilter != nil {
@@ -308,7 +314,7 @@ func (h *Service) runOfficialScheduleFallbackFetch(
 	streams = limitStreamList(streams)
 	state.replaceStreams(streams)
 
-	return fallback.SecondaryResult{Items: len(streams), Successes: 1}, nil
+	return len(streams), nil
 }
 
 func cacheStreamsByOrg(ctx context.Context, plan *streamFetchPlan, streams []*domain.Stream) {

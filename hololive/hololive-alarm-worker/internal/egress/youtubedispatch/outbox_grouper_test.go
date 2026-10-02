@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -39,7 +38,7 @@ func TestOutboxGrouperCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.
 		}
 	}
 
-	grouper := newOutboxGrouper(nil, cache, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	grouper := newOutboxGrouper(nil, cache, slog.New(slog.DiscardHandler), withTestDispatchConfigDefaults(nil))
 	roomsByChannel := grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: testChannelTarget, Kind: domain.OutboxKindNewShort},
 		{ChannelID: testChannelTarget, Kind: domain.OutboxKindCommunityPost},

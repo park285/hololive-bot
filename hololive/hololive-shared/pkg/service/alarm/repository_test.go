@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -62,7 +61,8 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 	requireAlarmRoomIDs(t, subscribers, []string{"room-live", "room-empty"})
 }
 
-func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *testing.T) {
+// 표시명은 members 정본만 쓴다. 멤버 데이터에 한국어 표시명이 없는 채널은 alarms.member_name이 있어도 빈 값이고 전체 목록에서 빠진다.
+func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -97,13 +97,13 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 		t.Fatalf("display member name = %q, want 표시", displayName)
 	}
 
-	fallbackName, err := repository.GetMemberName(ctx, "UC_alarm_fallback")
+	missingName, err := repository.GetMemberName(ctx, "UC_alarm_fallback")
 	if err != nil {
-		t.Fatalf("GetMemberName(fallback) error = %v", err)
+		t.Fatalf("GetMemberName(missing) error = %v", err)
 	}
 
-	if fallbackName != "New Fallback" {
-		t.Fatalf("fallback member name = %q, want New Fallback", fallbackName)
+	if missingName != "" {
+		t.Fatalf("member name without members display name = %q, want empty", missingName)
 	}
 
 	names, err := repository.GetAllMemberNames(ctx)
@@ -115,13 +115,8 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 		t.Fatalf("all member names display = %q, want 표시", names["UC_display_name"])
 	}
 
-	if names["UC_alarm_fallback"] != "New Fallback" {
-		t.Fatalf("all member names fallback = %q, want New Fallback", names["UC_alarm_fallback"])
-	}
-
-	// 예외 계약 telemetry: alarms.member_name으로 채운 채널(UC_alarm_fallback)만 센다.
-	if got := testutil.ToFloat64(alarmMemberNameFallbackChannels); got != 1 {
-		t.Fatalf("hololive_alarm_member_name_fallback_channels = %v, want 1", got)
+	if name, ok := names["UC_alarm_fallback"]; ok {
+		t.Fatalf("all member names include channel without members display name: %q", name)
 	}
 }
 

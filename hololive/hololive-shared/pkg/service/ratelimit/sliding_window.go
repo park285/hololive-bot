@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"uuid"
 
 	"github.com/valkey-io/valkey-go"
 
@@ -107,7 +108,7 @@ func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, 
 		cacheClient: cacheClient,
 		keyPrefix:   keyPrefix,
 		logger:      logger,
-		instanceID:  instanceID,
+		instanceID:  instanceID + ":" + uuid.New().String(),
 		now:         time.Now,
 	}, nil
 }
@@ -264,8 +265,9 @@ func (l *SlidingWindowLimiter) memberID(nowMS int64) string {
 	return strconv.FormatInt(nowMS, 10) + ":" + l.instanceID + ":" + strconv.FormatUint(seq, 10)
 }
 
-// resolveInstanceID는 sorted set member의 인스턴스 구분자로 hostname 하나만 쓴다. T18(2026-09-26)에서 INSTANCE_ID가
-// 어느 운영 env에도 없음을 확인해 hostname을 필수 출처로 정했다(DEC-20260926-hololive-legacy-env-config-retirement).
+// resolveInstanceID는 sorted set member의 필수 hostname 구분자를 읽는다. 생성자는 UUID를 덧붙여
+// 같은 호스트의 서로 다른 limiter와 프로세스가 같은 밀리초·순번을 써도 표식이 겹치지 않게 한다.
+// T18(2026-09-26)에서 INSTANCE_ID가 어느 운영 env에도 없음을 확인해 hostname을 필수 출처로 정했다.
 // 퇴역한 INSTANCE_ID 키의 존재 거절은 settings.LoadConfig runtime(config_ratelimit_retired_env.go)이 소유한다.
 // 호스트 이름을 얻지 못하면 random이나 "local"로 바꾸지 않고 오류다. 같은 member를 두 인스턴스가 만들면 한도 판정이 어긋나기 때문이다.
 func resolveInstanceID(hostname func() (string, error)) (string, error) {

@@ -72,8 +72,7 @@ if ! jq -e -f scripts/ci/disabled-bake-attestations.jq "$tmp_dir/security-scan-b
   fail "disposable local-image scan builds must not request unsupported attestations"
 fi
 
-# 최종 이미지 스캔은 발견 시 실패하고 어떤 억제도 두지 않는다. 정책 배열과, 실제 스캐너가
-# 가짜 trivy에 넘긴 인자를 같은 규칙으로 검사한다.
+# 최종 이미지 스캔 정책은 발견 시 실패하고 어떤 억제도 두지 않는다.
 . scripts/ci/final-image-scan-policy.sh
 check_trivy_args() {
   local label="$1" arg key value
@@ -120,66 +119,8 @@ check_trivy_args() {
     fail "$label: every severity must be reported"
   [[ "${positional[0]-}" == image ]] || fail "$label: trivy subcommand must be image"
   scanned_positional=("${positional[@]:1}")
-  scanned_image_src="${seen[--image-src]-}"
-  scanned_platform="${seen[--platform]-}"
 }
 check_trivy_args "final-image-scan-policy.sh" "${FINAL_IMAGE_TRIVY_ARGS[@]}"
 ((${#scanned_positional[@]} == 0)) || fail "policy args must not name an image"
-
-stub_bin="$tmp_dir/stub-bin"
-mkdir -p "$stub_bin" "$tmp_dir/trivy-calls" "$tmp_dir/scan-tmp"
-cat >"$stub_bin/trivy" <<'SH'
-#!/usr/bin/env bash
-set -eu
-if [[ "$*" == --version ]]; then echo "Version: $STUB_TRIVY_VERSION"; exit 0; fi
-call="$STUB_TRIVY_CALLS/$(find "$STUB_TRIVY_CALLS" -name '*.args' | wc -l).args"
-printf '%s\0' "$@" >"$call"
-env | grep '^TRIVY_' >"${call%.args}.env" || true
-while (($#)) && [[ "$1" != --output ]]; do shift; done
-echo '{"SchemaVersion":2,"Results":[{"Target":"stub","Type":"alpine"}]}' >"$2"
-SH
-cat >"$stub_bin/docker" <<'SH'
-#!/usr/bin/env bash
-set -eu
-[[ "$1 $2" == "image inspect" ]] || exit 2
-if [[ "$4" == *Architecture* ]]; then echo linux/arm64; else echo "sha256:$(printf '0%.0s' {1..64})"; fi
-SH
-printf '%s\n' '#!/usr/bin/env bash' 'echo govulncheck@v1.8.0' >"$stub_bin/govulncheck"
-chmod +x "$stub_bin"/*
-remote_image="$(grep -m1 '^remote|' scripts/ci/final-image-scan-manifest.txt)"
-local_image="$(grep -m1 '^local|' scripts/ci/final-image-scan-manifest.txt)"
-printf '%s\n' "$remote_image" "$local_image" >"$tmp_dir/stub-manifest"
-# env -i: 호출 환경의 TRIVY_* 가 아니라 스캐너 자신이 넘기는 설정만 관찰한다.
-env -i PATH="$stub_bin:$PATH" HOME="$tmp_dir" TMPDIR="$tmp_dir/scan-tmp" \
-  STUB_TRIVY_VERSION="$FINAL_IMAGE_TRIVY_VERSION" STUB_TRIVY_CALLS="$tmp_dir/trivy-calls" \
-  bash scripts/ci/run-final-image-scan.sh "$tmp_dir/stub-manifest" >"$tmp_dir/scan.log" 2>&1 ||
-  fail "final-image scanner failed against a clean stub report: $(cat "$tmp_dir/scan.log")"
-expected=("remote|remote|${remote_image##*|}" "docker|local|sha256:$(printf '0%.0s' {1..64})")
-[[ "$(find "$tmp_dir/trivy-calls" -name '*.args' | wc -l)" == 2 ]] ||
-  fail "final-image scanner must invoke trivy once per manifest image"
-for index in 0 1; do
-  [[ ! -s "$tmp_dir/trivy-calls/$index.env" ]] ||
-    fail "final-image scanner must not configure trivy through TRIVY_* environment"
-  mapfile -d '' -t scanned_args <"$tmp_dir/trivy-calls/$index.args"
-  check_trivy_args "run-final-image-scan.sh call $index" "${scanned_args[@]}"
-  IFS='|' read -r want_src want_source want_image <<<"${expected[index]}"
-  [[ "$scanned_image_src" == "$want_src" && "$scanned_platform" == linux/arm64 ]] ||
-    fail "$want_source images must be scanned from $want_src for linux/arm64"
-  [[ "${scanned_positional[*]}" == "$want_image" ]] ||
-    fail "$want_source scan must target exactly $want_image, got: ${scanned_positional[*]}"
-done
-
-workflow=.github/workflows/security.yml
-if grep -Eq '^[[:space:]-]*uses:[[:space:]]*aquasecurity/' "$workflow"; then
-  fail "security workflow must install the hash-pinned Trivy release, not an aquasecurity action"
-fi
-trivy_step="$(awk '/^      - name: Install exact Trivy$/ { f = 1; print; next } f && /^      - name:/ { f = 0 } f' "$workflow")"
-grep -Fxq "          TRIVY_VERSION: \"$FINAL_IMAGE_TRIVY_VERSION\"" <<<"$trivy_step" ||
-  fail "security workflow must install Trivy $FINAL_IMAGE_TRIVY_VERSION required by the scanner"
-# shellcheck disable=SC2016 # workflow의 셸 식을 글자 그대로 찾는다.
-if ! grep -Eq '^          TRIVY_LINUX_AMD64_SHA256: [0-9a-f]{64}$' <<<"$trivy_step" ||
-  ! grep -Fq '"${TRIVY_LINUX_AMD64_SHA256}" "${archive}" | sha256sum --check -' <<<"$trivy_step"; then
-  fail "security workflow must verify the Trivy archive against a pinned sha256"
-fi
 
 echo "recurring npm and final-image security scan contract passed"

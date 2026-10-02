@@ -1,3 +1,5 @@
+import { classifyUpstreamError, failureTuples, isTransientNetworkError, upstreamHTTPFailureCode } from "./upstream-errors.mjs";
+
 export class FetchTransportError extends Error {
   constructor(code, failureClass, message, options) {
     super(message, options);
@@ -7,17 +9,6 @@ export class FetchTransportError extends Error {
   }
 }
 
-const transientNetworkCodes = new Set([
-  "ECONNRESET",
-  "ENETRESET",
-  "EPIPE",
-  "ETIMEDOUT",
-  "EAI_AGAIN",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_HEADERS_TIMEOUT",
-  "UND_ERR_BODY_TIMEOUT",
-  "UND_ERR_SOCKET",
-]);
 const retryableStatusCodes = new Set([500, 503]);
 const retryableYouTubePaths = new Map([
   ["/youtubei/v1/browse", "browse"],
@@ -95,15 +86,9 @@ function effectiveFetch(currentSignal, retryOptions) {
           request = retry.request;
           continue;
         }
-        if (isTransientNetworkError(error)) {
-          throw new FetchTransportError(
-            "collection_failed",
-            "TRANSIENT",
-            "upstream request failed",
-            { cause: error },
-          );
-        }
-        throw error;
+        if (error instanceof FetchTransportError) throw error;
+        const code = classifyUpstreamError(error, "upstream");
+        throw new FetchTransportError(code, failureTuples[code].class, "upstream request failed", { cause: error });
       }
 
       if (!retryAttempted && retry.request != null && retryableStatusCodes.has(response.status)) {
@@ -222,30 +207,24 @@ async function waitBeforeRetry(signal, delayMs) {
 }
 
 async function classifyUpstreamResponse(response) {
-  if (response.status === 429) {
-    // youtubei.js가 HTTP status 없는 InnertubeError로 바꾸기 전에 기존 cooldown 계약을 보존합니다.
-    await discardUpstreamResponse(response);
-    throw new FetchTransportError(
-      "cooldown",
-      "COOLDOWN",
-      "upstream request failed with status code 429",
-    );
-  }
-  if (response.status < 500 || response.status > 599) {
+  if (response.status !== 429 && (response.status < 500 || response.status > 599)) {
     return response;
   }
+  // youtubei.js가 HTTP status 없는 InnertubeError로 바꾸기 전에 기존 실패 계약을 보존합니다.
   await discardUpstreamResponse(response);
-  throw new FetchTransportError(
-    "collection_failed",
-    "TRANSIENT",
-    `upstream request failed with status code ${response.status}`,
-  );
+  const code = upstreamHTTPFailureCode(response.status);
+  throw new FetchTransportError(code, failureTuples[code].class, `upstream request failed with status code ${response.status}`);
 }
 
 async function discardUpstreamResponse(response) {
   try {
     await response.body?.cancel();
   } catch (error) {
+    if (isTransientNetworkError(error)) {
+      // 이미 오류가 난 본문의 cancel도 같은 소켓 오류를 던집니다. 확인한 HTTP 분류를 보존하고 재시도는 중단합니다.
+      const code = upstreamHTTPFailureCode(response.status);
+      throw new FetchTransportError(code, failureTuples[code].class, "upstream response cleanup failed", { cause: error });
+    }
     throw new FetchTransportError(
       "helper_internal_invariant",
       "INTERNAL",
@@ -267,20 +246,4 @@ function abortError(requestSignal, requestInitSignal) {
     );
   }
   return new FetchTransportError("helper_internal_invariant", "INTERNAL", "fetch aborted without provenance");
-}
-
-function isTransientNetworkError(error) {
-  if (error == null || typeof error !== "object") {
-    return false;
-  }
-  const code = "code" in error ? error.code : undefined;
-  if (typeof code === "string" && transientNetworkCodes.has(code)) {
-    return true;
-  }
-  const cause = "cause" in error ? error.cause : undefined;
-  if (cause == null || typeof cause !== "object") {
-    return false;
-  }
-  const causeCode = "code" in cause ? cause.code : undefined;
-  return typeof causeCode === "string" && transientNetworkCodes.has(causeCode);
 }

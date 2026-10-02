@@ -9,7 +9,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {
@@ -194,14 +194,14 @@ func (r *Runtime) runWorker(ctx context.Context, errCh chan<- error) {
 	}
 }
 
-func (r *Runtime) nextWork(ctx context.Context) (sourceobservation.ClaimWork, bool) {
+func (r *Runtime) nextWork(ctx context.Context) (consume.ClaimWork, bool) {
 	if ctx.Err() != nil {
-		return sourceobservation.ClaimWork{}, false
+		return consume.ClaimWork{}, false
 	}
 
 	select {
 	case <-ctx.Done():
-		return sourceobservation.ClaimWork{}, false
+		return consume.ClaimWork{}, false
 	case work, ok := <-r.workCh:
 		return work, ok
 	}
@@ -232,8 +232,8 @@ func (r *Runtime) claimTick(ctx context.Context) (bool, error) {
 	return len(batch.Claims) >= r.claim.Limit, nil
 }
 
-func (r *Runtime) claimObservationBatch(ctx context.Context) (sourceobservation.ClaimedBatch, error) {
-	var batch sourceobservation.ClaimedBatch
+func (r *Runtime) claimObservationBatch(ctx context.Context) (consume.ClaimedBatch, error) {
+	var batch consume.ClaimedBatch
 
 	if err := r.withDB(ctx, func(ctx context.Context) error {
 		var err error
@@ -251,7 +251,7 @@ func (r *Runtime) claimObservationBatch(ctx context.Context) (sourceobservation.
 	return batch, nil
 }
 
-func sendWork(ctx context.Context, workCh chan<- sourceobservation.ClaimWork, work sourceobservation.ClaimWork) error {
+func sendWork(ctx context.Context, workCh chan<- consume.ClaimWork, work consume.ClaimWork) error {
 	select {
 	case <-ctx.Done():
 		if err := ctx.Err(); err != nil {
@@ -264,7 +264,7 @@ func sendWork(ctx context.Context, workCh chan<- sourceobservation.ClaimWork, wo
 	}
 }
 
-func (r *Runtime) processClaim(ctx context.Context, work sourceobservation.ClaimWork) error {
+func (r *Runtime) processClaim(ctx context.Context, work consume.ClaimWork) error {
 	attemptID := r.workerTracker.BeginAttempt(time.Now())
 	outcome := workercontract.AttemptFailed
 
@@ -307,7 +307,7 @@ func (r *Runtime) processClaim(ctx context.Context, work sourceobservation.Claim
 	return nil
 }
 
-func (r *Runtime) consumeClaim(ctx context.Context, work sourceobservation.ClaimWork) error {
+func (r *Runtime) consumeClaim(ctx context.Context, work consume.ClaimWork) error {
 	txCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
 	defer cancel()
 
@@ -325,8 +325,8 @@ func (r *Runtime) consumeClaim(ctx context.Context, work sourceobservation.Claim
 	return nil
 }
 
-func (r *Runtime) forgetLostClaim(err error, work sourceobservation.ClaimWork) bool {
-	if !errors.Is(err, sourceobservation.ErrClaimLost) {
+func (r *Runtime) forgetLostClaim(err error, work consume.ClaimWork) bool {
+	if !errors.Is(err, consume.ErrClaimLost) {
 		return false
 	}
 
@@ -337,7 +337,7 @@ func (r *Runtime) forgetLostClaim(err error, work sourceobservation.ClaimWork) b
 	return true
 }
 
-func (r *Runtime) handleConsumeFailure(ctx context.Context, work sourceobservation.ClaimWork, err error) error {
+func (r *Runtime) handleConsumeFailure(ctx context.Context, work consume.ClaimWork, err error) error {
 	r.Logger.Error("youtube plane consume failed",
 		slog.Int64("observation_id", work.ObservationID),
 		slog.String("observation_kind", string(work.ObservationKind)),
@@ -360,7 +360,7 @@ func (r *Runtime) handleConsumeFailure(ctx context.Context, work sourceobservati
 	return nil
 }
 
-func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
+func (r *Runtime) deadLetterAndForget(ctx context.Context, work consume.ClaimWork, cause error) error {
 	deadLetterer, ok := r.claimer.(observationDeadLetterer)
 	if !ok {
 		youtubeConsumeTotal.WithLabelValues("fatal").Inc()
@@ -372,7 +372,7 @@ func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservatio
 	deadLetterErr := r.deadLetterObservation(ctx, deadLetterer, work, cause)
 	r.forget(work)
 
-	if errors.Is(deadLetterErr, sourceobservation.ErrClaimLost) {
+	if errors.Is(deadLetterErr, consume.ErrClaimLost) {
 		youtubeClaimLostTotal.Inc()
 		youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
 
@@ -391,9 +391,9 @@ func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservatio
 	return nil
 }
 
-func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
+func (r *Runtime) retryAndForget(ctx context.Context, work consume.ClaimWork, cause error) error {
 	retryErr := r.retryObservation(ctx, work, cause)
-	if errors.Is(retryErr, sourceobservation.ErrClaimLost) {
+	if errors.Is(retryErr, consume.ErrClaimLost) {
 		youtubeClaimLostTotal.Inc()
 		youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
 

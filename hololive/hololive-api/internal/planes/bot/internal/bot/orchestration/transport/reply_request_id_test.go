@@ -25,6 +25,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ func TestReplyClientRequestIDShape(t *testing.T) {
 
 	got := replyClientRequestID("message:m-1", 0)
 	assert.Equal(t, "hololive:v1:message:m-1:reply:0", got)
-	assert.True(t, isValidReplyClientRequestID(got))
+	assert.NoError(t, iris.ValidateClientRequestID(got))
 }
 
 func TestReplyClientRequestIDIsStable(t *testing.T) {
@@ -103,10 +104,10 @@ func TestReissuedReplyClientRequestID(t *testing.T) {
 	_, err = reissuedReplyClientRequestID("", 1)
 	require.Error(t, err)
 
-	maxBase := strings.Repeat("a", replyClientRequestIDMaxLen)
+	maxBase := strings.Repeat("a", 160)
 	oversized, err := reissuedReplyClientRequestID(maxBase, 1)
 	require.NoError(t, err)
-	assert.True(t, isValidReplyClientRequestID(oversized))
+	assert.NoError(t, iris.ValidateClientRequestID(oversized))
 	assert.True(t, strings.HasSuffix(oversized, ":r1"))
 
 	again, err := reissuedReplyClientRequestID(maxBase, 1)
@@ -149,7 +150,7 @@ func TestReplyClientRequestIDHonoursIrisConstraints(t *testing.T) {
 
 		long := strings.Repeat("m", 400)
 		got := replyClientRequestID(long, 0)
-		require.True(t, isValidReplyClientRequestID(got), "id %q violates the iris contract", got)
+		require.NoError(t, iris.ValidateClientRequestID(got), "id %q violates the iris contract", got)
 		assert.Contains(t, got, hashedReplyIDToken(long))
 		assert.Equal(t, got, replyClientRequestID(long, 0))
 	})
@@ -159,7 +160,7 @@ func TestReplyClientRequestIDHonoursIrisConstraints(t *testing.T) {
 
 		raw := "message:닉네임 with/slash?and=query"
 		got := replyClientRequestID(raw, 0)
-		require.True(t, isValidReplyClientRequestID(got), "id %q violates the iris contract", got)
+		require.NoError(t, iris.ValidateClientRequestID(got), "id %q violates the iris contract", got)
 		assert.Contains(t, got, hashedReplyIDToken(raw))
 		assert.Equal(t, got, replyClientRequestID(raw, 0))
 	})
@@ -168,34 +169,8 @@ func TestReplyClientRequestIDHonoursIrisConstraints(t *testing.T) {
 		t.Parallel()
 
 		got := replyClientRequestID("message:m-1", ^uint64(0))
-		assert.True(t, isValidReplyClientRequestID(got), "id %q violates the iris contract", got)
+		assert.NoError(t, iris.ValidateClientRequestID(got), "id %q violates the iris contract", got)
 	})
-}
-
-func TestIsValidReplyClientRequestID(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name string
-		id   string
-		want bool
-	}{
-		{"canonical id", "hololive:v1:message:m-1:reply:0", true},
-		{"dot underscore dash are allowed", "hololive:v1:a_b.c-d:reply:0", true},
-		{"too short", "short", false},
-		{"too long", strings.Repeat("a", 161), false},
-		{"space is rejected", "hololive:v1:a b:reply:0", false},
-		{"slash is rejected", "hololive:v1:a/b:reply:0", false},
-		{"non ascii is rejected", "hololive:v1:한글:reply:0", false},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tc.want, isValidReplyClientRequestID(tc.id))
-		})
-	}
 }
 
 func TestNextReplyClientRequestID(t *testing.T) {

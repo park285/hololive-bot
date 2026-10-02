@@ -330,10 +330,6 @@ func loadHolodexConfig() (HolodexConfig, error) {
 }
 
 func loadYouTubeConfig() (YouTubeConfig, error) {
-	if err := rejectRetiredYouTubeProducerEnv(); err != nil {
-		return YouTubeConfig{}, fmt.Errorf("reject retired youtube producer env: %w", err)
-	}
-
 	if err := rejectRetiredYouTubeConfigEnv(); err != nil {
 		return YouTubeConfig{}, fmt.Errorf("reject retired youtube config env: %w", err)
 	}

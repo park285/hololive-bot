@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	format "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
@@ -211,7 +211,7 @@ func resolveOutboxPublishedAt(outbox *domain.YouTubeNotificationOutbox) *time.Ti
 }
 
 func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
-	var payload format.VideoPayload
+	var payload youtubeoutbox.Video
 
 	if err := jsonv2.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil
@@ -221,7 +221,7 @@ func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 }
 
 func resolveCommunityPayloadPublishedAt(rawPayload string) *time.Time {
-	var payload format.CommunityPayload
+	var payload youtubeoutbox.Community
 
 	if err := jsonv2.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil

@@ -28,6 +28,7 @@ const (
 
 var youtubeCollectorInstanceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
+// Config는 collector의 수집 동시성, 제한과 lease 예산을 보관합니다.
 type Config struct {
 	InstanceID               string
 	TotalWorkers             int
@@ -60,6 +61,7 @@ type Config struct {
 	RequestInterval          time.Duration
 }
 
+// DefaultConfig는 인스턴스 ID를 제외한 기본 수집 설정을 반환합니다.
 func DefaultConfig() Config {
 	workers := youtubeCollectorDefaultWorkerCount
 	queueCapacity := workers * 4
@@ -97,157 +99,7 @@ func DefaultConfig() Config {
 	}
 }
 
-func (c *Config) OrDefault() Config {
-	out := *c
-	defaults := DefaultConfig()
-	out.defaultWorkerQueue(&defaults)
-	out.defaultLeaseBudgets(&defaults)
-	out.defaultProviderLimits(&defaults)
-
-	return out
-}
-
-func (c *Config) defaultWorkerQueue(defaults *Config) {
-	if c.TotalWorkers <= 0 {
-		c.TotalWorkers = defaults.TotalWorkers
-	}
-
-	if c.QueueCapacity <= 0 {
-		c.QueueCapacity = min(c.TotalWorkers*4, youtubeCollectorMaxQueueCapacity)
-	}
-
-	if c.AcquisitionBatch <= 0 {
-		c.AcquisitionBatch = min(c.QueueCapacity, youtubeCollectorMaxAcquisitionBatch)
-	}
-
-	if c.AcquisitionCadence <= 0 {
-		c.AcquisitionCadence = defaults.AcquisitionCadence
-	}
-}
-
-func (c *Config) defaultLeaseBudgets(defaults *Config) {
-	c.defaultLeaseTimings(defaults)
-	c.defaultPhaseTimeouts(defaults)
-	c.defaultRetryDelays(defaults)
-}
-
-func (c *Config) defaultLeaseTimings(defaults *Config) {
-	if c.LeaseTTL <= 0 {
-		c.LeaseTTL = defaults.LeaseTTL
-	}
-
-	if c.RenewInterval <= 0 {
-		c.RenewInterval = defaults.RenewInterval
-	}
-
-	if c.RenewTimeout <= 0 {
-		c.RenewTimeout = defaults.RenewTimeout
-	}
-}
-
-func (c *Config) defaultPhaseTimeouts(defaults *Config) {
-	if c.DBTimeout <= 0 {
-		c.DBTimeout = defaults.DBTimeout
-	}
-
-	if c.CleanupTimeout <= 0 {
-		c.CleanupTimeout = defaults.CleanupTimeout
-	}
-
-	if c.ProviderAdmissionTimeout <= 0 {
-		c.ProviderAdmissionTimeout = defaults.ProviderAdmissionTimeout
-	}
-
-	if c.CollectionOverhead <= 0 {
-		c.CollectionOverhead = defaults.CollectionOverhead
-	}
-
-	if c.PublishTimeout <= 0 {
-		c.PublishTimeout = defaults.PublishTimeout
-	}
-
-	if c.ReadinessTimeout <= 0 {
-		c.ReadinessTimeout = defaults.ReadinessTimeout
-	}
-
-	if c.HelperHealthTimeout <= 0 {
-		c.HelperHealthTimeout = defaults.HelperHealthTimeout
-	}
-}
-
-func (c *Config) defaultRetryDelays(defaults *Config) {
-	if c.RetryMin <= 0 {
-		c.RetryMin = defaults.RetryMin
-	}
-
-	if c.RetryMax <= 0 {
-		c.RetryMax = defaults.RetryMax
-	}
-}
-
-func (c *Config) defaultProviderLimits(defaults *Config) {
-	c.defaultInflightLimits()
-
-	if c.ReleaseJitterMin <= 0 {
-		c.ReleaseJitterMin = defaults.ReleaseJitterMin
-	}
-
-	if c.ReleaseJitterMax <= 0 {
-		c.ReleaseJitterMax = defaults.ReleaseJitterMax
-	}
-
-	if c.YouTubeJSRequestTimeout <= 0 {
-		c.YouTubeJSRequestTimeout = defaults.YouTubeJSRequestTimeout
-	}
-
-	if c.YouTubeJSStartupTimeout <= 0 {
-		c.YouTubeJSStartupTimeout = defaults.YouTubeJSStartupTimeout
-	}
-
-	if c.YouTubeJSShutdownTimeout <= 0 {
-		c.YouTubeJSShutdownTimeout = defaults.YouTubeJSShutdownTimeout
-	}
-
-	c.defaultPaginationLimits(defaults)
-}
-
-func (c *Config) defaultInflightLimits() {
-	if c.HolodexMaxInflight <= 0 {
-		c.HolodexMaxInflight = c.TotalWorkers
-	}
-
-	if c.OfficialMaxInflight <= 0 {
-		c.OfficialMaxInflight = c.TotalWorkers
-	}
-
-	if c.YouTubeJSMaxInflight <= 0 {
-		c.YouTubeJSMaxInflight = c.TotalWorkers
-	}
-}
-
-func (c *Config) defaultPaginationLimits(defaults *Config) {
-	if c.MaxPages <= 0 {
-		c.MaxPages = defaults.MaxPages
-	}
-
-	if c.MaxSuccessResponseBytes <= 0 {
-		c.MaxSuccessResponseBytes = defaults.MaxSuccessResponseBytes
-	}
-
-	if c.MaxTargetRosterRows <= 0 {
-		c.MaxTargetRosterRows = defaults.MaxTargetRosterRows
-	}
-
-	if c.RequestInterval <= 0 {
-		c.RequestInterval = defaults.RequestInterval
-	}
-}
-
-func (c *Config) MaxProviderTimeout(holodexTimeout, officialTimeout time.Duration) time.Duration {
-	maxTimeout := max(officialTimeout, max(holodexTimeout, c.YouTubeJSRequestTimeout))
-	return maxTimeout
-}
-
+// Validate는 기본값을 보충하지 않고 런타임 설정과 provider timeout을 검증합니다.
 func (c *Config) Validate(holodexTimeout, officialTimeout time.Duration) error {
 	if err := c.validateInstanceID(); err != nil {
 		return fmt.Errorf("validate instance ID: %w", err)

@@ -43,6 +43,7 @@ const (
 	testSeverityCritical = "critical"
 	testSeverityWarning  = "warning"
 	testSeverityInfo     = "info"
+	testSourceURLField   = "source_url"
 )
 
 // fakeLLMWithCounter: 호출 횟수를 추적하는 LLM 모의 클라이언트.
@@ -132,7 +133,7 @@ func criticalVerdictJSON() string {
 	v := consensus.ReviewVerdict{
 		Approved: false,
 		Issues: []consensus.ReviewIssue{
-			{Field: "source_url", ItemIndex: 0, Severity: testSeverityCritical, Description: "URL fabricated"},
+			{Field: testSourceURLField, ItemIndex: 0, Severity: testSeverityCritical, Description: "URL fabricated"},
 		},
 		Confidence: 0.3,
 	}
@@ -179,7 +180,7 @@ func warningOnlyVerdictJSON() string {
 
 func adjudicatorResponseJSON(title string) string {
 	r := summaryResponse{
-		Period:   "weekly",
+		Period:   string(model.PeriodWeekly),
 		Headline: "수정된 헤드라인",
 		TopItems: []summaryResponseItem{
 			{Member: testMemberMiko, Category: testItemCategory, Title: title, DateText: testItemDateText, Summary: "수정된 요약", SourceURL: testSourceURLNews1},
@@ -249,6 +250,47 @@ func TestConsensus_CriticalIssues_TriggersAdjudication(t *testing.T) {
 
 	if digest.TopItems[0].Title != "수정된 EXPO" {
 		t.Errorf("expected adjudicator title, got %q", digest.TopItems[0].Title)
+	}
+}
+
+func TestConsensus_RejectsAdjudicatorSourceAndMemberOutsideCandidate(t *testing.T) {
+	for _, field := range []string{testSourceURLField, "member"} {
+		t.Run(field, func(t *testing.T) {
+			response := summaryResponse{
+				Period: string(model.PeriodWeekly), Headline: "무효 판정",
+				TopItems: []summaryResponseItem{{
+					Member: testMemberMiko, Category: testItemCategory, Title: "무효 항목", DateText: testItemDateText,
+					Summary: "요약", SourceURL: testSourceURLNews1,
+				}},
+			}
+
+			if field == testSourceURLField {
+				response.TopItems[0].SourceURL = "https://hololive.hololivepro.com/news/fabricated"
+			} else {
+				response.TopItems[0].Member = testMemberSuisei
+			}
+
+			payload, err := jsonv2.Marshal(response)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			primary := primaryDigest()
+			adjudicator := &fakeLLMWithCounter{response: string(payload)}
+			cs := NewConsensusSummarizer(
+				&fakeSummarizer{digest: primary}, &fakeLLMWithCounter{response: criticalVerdictJSON()},
+				adjudicator, mustValidatorWithAllowlist(t), defaultConsensusConfig(), nil,
+			)
+
+			digest, err := cs.Summarize(t.Context(), defaultTestInput())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if adjudicator.callCount.Load() != 1 || digest != primary {
+				t.Fatalf("invalid adjudicator output replaced validated primary: %v", digest)
+			}
+		})
 	}
 }
 
@@ -371,7 +413,7 @@ func TestConsensus_OnlyWarnings_NoAdjudication(t *testing.T) {
 func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 	// adjudicator가 잘못된 URL이 포함된 2개 항목 반환
 	badResponse := summaryResponse{
-		Period:   "weekly",
+		Period:   string(model.PeriodWeekly),
 		Headline: "수정됨",
 		TopItems: []summaryResponseItem{
 			{Member: testMemberMiko, Category: testItemCategory, Title: "Good", DateText: testItemDateText, Summary: "요약", SourceURL: testSourceURLNews1},
@@ -570,7 +612,7 @@ func TestConsensus_AdjudicatorMalformedJSON_ReturnsPrimary(t *testing.T) {
 func TestConsensus_ValidationDropsAllAdjudicatorItems_ReturnsPrimary(t *testing.T) {
 	// adjudicator가 모두 잘못된 URL인 항목만 반환
 	allBadResponse := summaryResponse{
-		Period:   "weekly",
+		Period:   string(model.PeriodWeekly),
 		Headline: "수정됨",
 		TopItems: []summaryResponseItem{
 			{Member: "A", Category: testItemCategory, Title: "Bad1", DateText: testItemDateText, Summary: "요약", SourceURL: "https://evil.com/fake1"},

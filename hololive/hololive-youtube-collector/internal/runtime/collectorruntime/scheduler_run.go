@@ -336,7 +336,7 @@ func (e *collectionExecutor) collectAndPublish(
 	return nil
 }
 
-func (e *collectionExecutor) runCollector(ctx context.Context, runner JobRunner, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (e *collectionExecutor) runCollector(ctx context.Context, runner collectutil.JobRunner, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	var (
 		result     collectutil.CollectResult
 		collectErr error
@@ -434,7 +434,7 @@ func (e *collectionExecutor) commitCollectResult(
 	)
 
 	if result.Kind() == collectutil.CollectPartial {
-		retry, retryErr := joblease.NewRetryAt(e.retryAt(resultPartialCause(result)))
+		retry, retryErr := sourceobservation.NewRetryAtSchedule(e.retryAt(resultPartialCause(result)))
 		if retryErr != nil {
 			return fmt.Errorf("retry at: %w", retryErr)
 		}

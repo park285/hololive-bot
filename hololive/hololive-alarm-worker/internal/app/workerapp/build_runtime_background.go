@@ -7,11 +7,11 @@ import (
 
 	envutil "github.com/park285/shared-go/v2/pkg/envutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/celebration"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 

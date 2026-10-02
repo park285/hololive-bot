@@ -119,5 +119,10 @@ func relationshipProblems(profile *settings.AlarmWorkerProfile, workers map[stri
 		problems = append(problems, "alarm_dispatch currently requires exactly one scheduler worker")
 	}
 
+	youtubeTimeout := workers["youtube_delivery"].Executor.AttemptTimeout.Milliseconds
+	if youtubeTimeout != nil && *youtubeTimeout != profile.YouTubeDelivery.DeliverySendTimeoutMS {
+		problems = append(problems, "youtube_delivery attempt_timeout must match delivery_send_timeout_ms")
+	}
+
 	return problems
 }

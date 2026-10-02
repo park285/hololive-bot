@@ -289,8 +289,8 @@ func check(path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// keep-alive를 끄면 서버가 응답 직후 먼저 연결을 닫습니다. 켜 두면 client가 body를 읽은 뒤
-	// CloseIdleConnections로 먼저 닫고 서버는 EOF를 본 뒤 닫습니다.
+	// healthcheck도 응답을 읽은 뒤 client가 유휴 연결을 정리하도록 keep-alive를 유지합니다.
+	// 서버의 유휴 제한까지 기다리지 않고 CloseIdleConnections로 연결 수명을 끝냅니다.
 	transport := &http.Transport{
 		Proxy: nil,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {

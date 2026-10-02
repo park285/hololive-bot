@@ -3,16 +3,18 @@ package youtubedispatch
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 type lifecycleTestSender struct {
@@ -23,7 +25,7 @@ type lifecycleTestSender struct {
 func TestLifecycleProviderFailureTreatsReplyHandoffFailureAsKnown(t *testing.T) {
 	t.Parallel()
 
-	kind, reason, retryAfter := lifecycleProviderFailure(egress.ErrReplyHandoffFailed)
+	kind, reason, retryAfter := lifecycleProviderFailure(sendoutcome.ErrHandoffFailed)
 
 	if kind != ytlifecycle.FailurePermanent || reason != lifecycleReasonUnknownError || retryAfter != 0 {
 		t.Fatalf("lifecycleProviderFailure() = %v, %q, %s; want permanent, %q, 0", kind, reason, retryAfter, lifecycleReasonUnknownError)
@@ -46,6 +48,9 @@ type lifecycleTransitionSpy struct {
 
 	modesMu sync.Mutex
 	modes   []string
+
+	preparedFailuresMu sync.Mutex
+	preparedFailures   []string
 }
 
 // recordMode는 전이 호출이 TransitionStore에 넘긴 발송 방식을 "operation:mode" 형태로 모은다.
@@ -89,12 +94,13 @@ func (s *lifecycleTransitionSpy) ApplyPreparedFailure(
 	_ context.Context,
 	_ []domain.YouTubeNotificationDelivery,
 	_ map[int64]domain.YouTubeNotificationOutbox,
-	_ ytlifecycle.FailureKind,
-	_ ytlifecycle.Reason,
+	kind ytlifecycle.FailureKind,
+	reason ytlifecycle.Reason,
 	_ time.Duration,
 	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
 	s.recordMode("prepared_failure", mode)
+	s.recordPreparedFailure(kind, reason, mode)
 
 	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
@@ -259,4 +265,19 @@ func (s *lifecycleTransitionSpy) DeferFollower(context.Context, store.DeferComma
 
 func (s *lifecycleTransitionSpy) FreezeFallbackRequests(_ context.Context, _ store.StartedOperation, requests []store.FrozenRequest) ([]store.FrozenRequest, error) {
 	return requests, nil
+}
+
+// recordPreparedFailure는 준비 단계 실패 전이를 "kind/reason/mode" 형태로 모은다.
+func (s *lifecycleTransitionSpy) recordPreparedFailure(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, mode store.DeliveryMode) {
+	s.preparedFailuresMu.Lock()
+	defer s.preparedFailuresMu.Unlock()
+
+	s.preparedFailures = append(s.preparedFailures, fmt.Sprintf("%v/%v/%v", kind, reason, mode))
+}
+
+func (s *lifecycleTransitionSpy) recordedPreparedFailures() []string {
+	s.preparedFailuresMu.Lock()
+	defer s.preparedFailuresMu.Unlock()
+
+	return slices.Clone(s.preparedFailures)
 }

@@ -15,11 +15,12 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -490,7 +491,7 @@ func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 	}
 }
 
-func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
+func TestDispatchDeliveryRows_GroupedFormatFailureDoesNotSend(t *testing.T) {
 	t.Parallel()
 
 	sender := &testSender{failRoom: map[string]bool{}}
@@ -516,8 +517,12 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 
 	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
-	if len(result.SuccessDeliveryIDs) != 2 {
-		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
+	if len(result.SuccessDeliveryIDs) != 0 || result.FailedDeliveries != 2 {
+		t.Fatalf("success=%v failed=%d; want no success and two format failures", result.SuccessDeliveryIDs, result.FailedDeliveries)
+	}
+
+	if len(result.FailureBuckets["format message"]) != 2 {
+		t.Fatalf("format failure bucket = %v", result.FailureBuckets)
 	}
 
 	sender.mu.Lock()
@@ -525,8 +530,8 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 	msgCount := len(sender.messages)
 	sender.mu.Unlock()
 
-	if msgCount != 2 {
-		t.Fatalf("sender message count = %d, want 2 (fallback)", msgCount)
+	if msgCount != 0 {
+		t.Fatalf("sender message count=%d; format failure must not send", msgCount)
 	}
 }
 
@@ -569,8 +574,7 @@ func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T
 }
 
 func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *testing.T) {
-	t.Parallel()
-
+	// 전역 counter 증가분을 정확히 보므로 병렬로 돌리지 않는다.
 	renderer := newShortsGroupAndSingleTemplateRenderer(t)
 	sender := &groupedPermanentFailureSender{}
 	db := newDeliveryPool(t)
@@ -611,6 +615,8 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 		}, "id = ?", rows[i].ID).Error)
 	}
 
+	startedBefore := groupedSendFallbackCount(groupedSendFallbackResultStarted)
+
 	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 0 {
@@ -623,6 +629,10 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 
 	if got := sender.messageCount(); got != 3 {
 		t.Fatalf("sender message count = %d, want grouped attempt plus 2 individual fallbacks", got)
+	}
+
+	if got := groupedSendFallbackCount(groupedSendFallbackResultStarted) - startedBefore; got != 1 {
+		t.Fatalf("grouped send fallback started delta = %v, want 1", got)
 	}
 }
 
@@ -1682,27 +1692,26 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 	})
 }
 
-func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
+func TestNewDispatcherRejectsMissingOrInvalidConfig(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := newDispatcherForTest(t, nil,
-		cachemocks.NewLenientClient(),
-		&testSender{failRoom: map[string]bool{}},
-		nil,
-		slog.New(slog.DiscardHandler), &dispatchstate.Config{},
-	)
+	pool := newDeliveryPool(t)
 
-	defaults := dispatchstate.DefaultConfig()
-	if dispatcher.config.DeliveryParallelism != defaults.DeliveryParallelism {
-		t.Fatalf("DeliveryParallelism = %d, want %d", dispatcher.config.DeliveryParallelism, defaults.DeliveryParallelism)
+	config := testDispatchConfig()
+	if _, err := NewDispatcher(Dependencies{DB: pool}, nil, &config); err == nil || !strings.Contains(err.Error(), "member name source is required") {
+		t.Fatalf("NewDispatcher(no member names) error = %v, want member name source is required", err)
 	}
 
-	if dispatcher.config.DeliverySendTimeout != defaults.DeliverySendTimeout {
-		t.Fatalf("DeliverySendTimeout = %s, want %s", dispatcher.config.DeliverySendTimeout, defaults.DeliverySendTimeout)
+	if _, err := NewDispatcher(Dependencies{DB: pool, MemberNames: staticMemberNames{}}, nil, nil); err == nil || !strings.Contains(err.Error(), "config is required") {
+		t.Fatalf("NewDispatcher(nil config) error = %v, want config is required", err)
 	}
 
-	if dispatcher.config.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
-		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.config.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
+	invalid := testDispatchConfig()
+
+	invalid.DeliveryParallelism = 0
+
+	if _, err := NewDispatcher(Dependencies{DB: pool, MemberNames: staticMemberNames{}}, nil, &invalid); err == nil || !strings.Contains(err.Error(), "delivery parallelism") {
+		t.Fatalf("NewDispatcher(zero parallelism) error = %v, want rejection naming delivery parallelism", err)
 	}
 }
 
@@ -1710,7 +1719,7 @@ type outcomeUnknownClaimSpy struct {
 	releaseCalls atomic.Int32
 }
 
-func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ claim.DecisionCache) deliveryClaimSelection {
+func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ *claimDecisionCache) deliveryClaimSelection {
 	selection := deliveryClaimSelection{
 		sendRows:       rows,
 		sendOutboxes:   outboxes,
@@ -1744,8 +1753,8 @@ func newOutcomeUnknownTestEngine(sender messagedelivery.MessageSender, renderer 
 	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
 	spy := &outcomeUnknownClaimSpy{}
 	auditLogger := newAuditLogger(nil, nil, logger, cfg)
-	formatter := newMessageFormatter(renderer, cachemocks.NewLenientClient(), logger, nil)
-	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger, spy), &lifecycleTransitionSpy{})
+	formatter := format.NewMessageFormatter(renderer, staticMemberNames{}, nil)
+	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger), &lifecycleTransitionSpy{})
 
 	return engine, spy
 }
@@ -1854,4 +1863,10 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 	}
 
 	assertOutcomeUnknownHold(t, &result, spy)
+}
+
+func groupedSendFallbackCount(result string) float64 {
+	initOutboxMetrics()
+
+	return testutil.ToFloat64(outboxGroupedSendFallbackTotal.WithLabelValues(result))
 }

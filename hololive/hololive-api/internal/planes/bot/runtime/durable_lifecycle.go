@@ -9,7 +9,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const (

@@ -21,7 +21,7 @@ WHERE delivery.status = $1
   AND (delivery.locked_at IS NULL OR delivery.locked_at < $2)
   AND outbox.created_at >= $3
   AND outbox.sent_at IS NULL
-  AND COALESCE(delivery.error, '') NOT IN ('delivery freshness expired', 'client request id generations exhausted', 'legacy request evidence missing')
+  AND COALESCE(delivery.error, '') NOT IN ('delivery freshness expired', 'client request id generations exhausted')
 ORDER BY delivery.created_at, delivery.id
 LIMIT $4
 FOR UPDATE OF delivery SKIP LOCKED;

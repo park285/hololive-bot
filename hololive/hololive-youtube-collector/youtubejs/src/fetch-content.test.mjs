@@ -1,3 +1,4 @@
+import { channelFixture } from "./test-fixtures/channel.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -78,8 +79,8 @@ test("mapContentItems maps current YouTube.js ShortsLockupView rows", () => {
 
 test("fetchContentFeed fail-closes when every row is missing video id", async () => {
   const innertube = {
-    getChannel: async () => ({
-      getVideos: async () => ({
+    getChannel: async () => channelFixture({
+      getVideos: async () => channelFixture({
         videos: [{ title: "missing" }],
       }),
     }),
@@ -95,9 +96,9 @@ test("fetchContentFeed fail-closes when every row is missing video id", async ()
   );
 });
 
-test("PAG-011 fetchContentFeed keeps missing_tab without claiming absence", async () => {
+test("PAG-011 fetchContentFeed recognizes a complete raw list without the shorts tab", async () => {
   const innertube = {
-    getChannel: async () => ({}),
+    getChannel: async () => channelFixture({ has_shorts: undefined }, ["featured"]),
   };
   const result = await fetchContentFeed({
     channelId: "UC_TEST",
@@ -112,8 +113,8 @@ test("PAG-011 fetchContentFeed keeps missing_tab without claiming absence", asyn
 
 test("fetchContentFeed paginates videos from a stub channel", async () => {
   const innertube = {
-    getChannel: async () => ({
-      getVideos: async () => ({
+    getChannel: async () => channelFixture({
+      getVideos: async () => channelFixture({
         videos: [{ id: "vid-1", title: "One" }],
       }),
     }),
@@ -131,8 +132,8 @@ test("fetchContentFeed paginates videos from a stub channel", async () => {
 test("fetchContentFeed enriches an upcoming premiere with its start timestamp", async () => {
   const startTimestamp = "2026-08-24T14:30:00.000Z";
   const innertube = {
-    getChannel: async () => ({
-      getVideos: async () => ({
+    getChannel: async () => channelFixture({
+      getVideos: async () => channelFixture({
         videos: [{
           type: "LockupView",
           content_type: "VIDEO",
@@ -160,8 +161,8 @@ test("fetchContentFeed enriches an upcoming premiere with its start timestamp", 
 
 test("fetchContentFeed does not classify upcoming live content as a premiere", async () => {
   const innertube = {
-    getChannel: async () => ({
-      getVideos: async () => ({
+    getChannel: async () => channelFixture({
+      getVideos: async () => channelFixture({
         videos: [{
           id: "live-1",
           title: "Live",
@@ -187,8 +188,8 @@ test("fetchContentFeed does not classify upcoming live content as a premiere", a
 
 test("fetchContentFeed keeps a confirmed premiere typed without a start timestamp", async () => {
   const innertube = {
-    getChannel: async () => ({
-      getVideos: async () => ({
+    getChannel: async () => channelFixture({
+      getVideos: async () => channelFixture({
         videos: [{
           id: "premiere-1",
           title: "Premiere",
@@ -233,7 +234,7 @@ function rawPlayerResponse(videoId, { isLiveContent, startTimestamp }) {
 test("content result budget stops before hydrating or validating unselected rows", async () => {
   const calls = [];
   const innertube = {
-    getChannel: async () => ({ getVideos: async () => ({ videos: [
+    getChannel: async () => channelFixture({ getVideos: async () => channelFixture({ videos: [
       { id: "first", is_upcoming: true },
       { id: "second", is_upcoming: true },
       { title: "unselected malformed row" },
@@ -252,7 +253,7 @@ test("content result budget stops before hydrating or validating unselected rows
 test("content byte budget stops metadata lookups after the overflowing candidate", async () => {
   const calls = [];
   const innertube = {
-    getChannel: async () => ({ getVideos: async () => ({ videos: [
+    getChannel: async () => channelFixture({ getVideos: async () => channelFixture({ videos: [
       { id: "first", is_upcoming: true },
       { id: "overflow", title: "x".repeat(30000), is_upcoming: true },
       { id: "unselected", is_upcoming: true },
@@ -270,7 +271,7 @@ test("content byte budget stops metadata lookups after the overflowing candidate
 
 test("shorts result budget skips unselected normalization without metadata requests", async () => {
   const innertube = {
-    getChannel: async () => ({ getShorts: async () => ({ videos: [
+    getChannel: async () => channelFixture({ getShorts: async () => channelFixture({ videos: [
       { id: "first", is_upcoming: true }, { title: "unselected malformed" },
     ] }) }),
     actions: { execute: async () => assert.fail("shorts must not request premiere metadata") },

@@ -148,15 +148,11 @@ func ValidatePublishBatchResult(want int, result PublishBatchResult) error {
 		return errors.New("publish source observation batch: invalid set result")
 	}
 
-	seen := make([]bool, want)
-
 	for i := range result.Results {
 		item := result.Results[i]
-		if item.Ordinal != i || item.ObservationID <= 0 || !validPublishOutcome(item.Outcome) || seen[i] {
+		if item.Ordinal != i || item.ObservationID <= 0 || !validPublishOutcome(item.Outcome) {
 			return errors.New("publish source observation batch: invalid set result")
 		}
-
-		seen[i] = true
 	}
 
 	return nil

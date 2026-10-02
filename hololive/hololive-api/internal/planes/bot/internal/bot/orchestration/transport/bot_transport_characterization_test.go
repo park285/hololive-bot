@@ -480,9 +480,9 @@ func TestReplyHandoffStatusResult(t *testing.T) {
 		{"failed is terminal failure", "failed", replyOutcomeFailed, isReplyStatusFailed},
 		{"queued keeps polling", "queued", replyOutcomeInFlight, nil},
 		{"sending keeps polling", "sending", replyOutcomeInFlight, nil},
-		{"outcome_unknown is unknown", "outcome_unknown", replyOutcomeUnknown, isReplyOutcomeUnknown},
-		{"unrecognized state is unknown", "brand-new", replyOutcomeUnknown, isReplyOutcomeUnknown},
-		{"empty state is unknown", "", replyOutcomeUnknown, isReplyOutcomeUnknown},
+		{"outcome_unknown is unknown", "outcome_unknown", replyOutcomeUnknown, IsReplyOutcomeUnknown},
+		{"unrecognized state is unknown", "brand-new", replyOutcomeUnknown, IsReplyOutcomeUnknown},
+		{"empty state is unknown", "", replyOutcomeUnknown, IsReplyOutcomeUnknown},
 	}
 
 	for _, tc := range cases {
@@ -500,7 +500,7 @@ func TestReplyHandoffStatusResult(t *testing.T) {
 
 			require.Error(t, err)
 			assert.True(t, tc.wantErr(err), "unexpected error kind: %v", err)
-			assert.False(t, isReplyOutcomeUnknown(err) && isReplyStatusFailed(err), "unknown and failed must stay disjoint")
+			assert.False(t, IsReplyOutcomeUnknown(err) && isReplyStatusFailed(err), "unknown and failed must stay disjoint")
 		})
 	}
 
@@ -531,7 +531,7 @@ func TestCheckReplyHandoffStatus(t *testing.T) {
 		outcome, err := checkReplyHandoffStatus(ctx, &stubStatusGetter{snap: nil}, "r")
 		assert.Equal(t, replyOutcomeUnknown, outcome)
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 	})
 
 	t.Run("handoff completed succeeds", func(t *testing.T) {
@@ -550,7 +550,7 @@ func TestCheckReplyHandoffStatus(t *testing.T) {
 		assert.Equal(t, replyOutcomeFailed, outcome)
 		require.Error(t, err)
 		assert.True(t, isReplyStatusFailed(err))
-		assert.False(t, isReplyOutcomeUnknown(err))
+		assert.False(t, IsReplyOutcomeUnknown(err))
 	})
 }
 
@@ -593,7 +593,7 @@ func TestWaitForReplyHandoff(t *testing.T) {
 		err := waitForReplyHandoff(t.Context(), g, "r")
 		require.Error(t, err)
 		assert.True(t, isReplyStatusFailed(err))
-		assert.False(t, isReplyOutcomeUnknown(err))
+		assert.False(t, IsReplyOutcomeUnknown(err))
 	})
 
 	t.Run("transient getter errors keep polling until the deadline", func(t *testing.T) {
@@ -605,7 +605,7 @@ func TestWaitForReplyHandoff(t *testing.T) {
 		g := &stubStatusGetter{err: errors.New("status down")}
 		err := waitForReplyHandoff(ctx, g, "r")
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		assert.Contains(t, err.Error(), "status down", "the last query error must survive into the unknown result")
 		assert.Greater(t, g.calls, 1, "a single transient query error must not end polling")
@@ -637,7 +637,7 @@ func TestWaitForReplyHandoffEndsPolling(t *testing.T) {
 		g := &stubStatusGetter{snap: nil}
 		err := waitForReplyHandoff(t.Context(), g, "r")
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		assert.Equal(t, 1, g.calls)
 	})
 
@@ -651,7 +651,7 @@ func TestWaitForReplyHandoffEndsPolling(t *testing.T) {
 		}
 		err := waitForReplyHandoff(ctx, g, "r")
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		require.ErrorIs(t, err, context.Canceled)
 	})
 
@@ -664,7 +664,7 @@ func TestWaitForReplyHandoffEndsPolling(t *testing.T) {
 		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "sending"}}
 		err := waitForReplyHandoff(ctx, g, "r")
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 }
@@ -678,7 +678,7 @@ func TestWaitForAcceptedReplyHandoff(t *testing.T) {
 		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}
 		err := waitForAcceptedReplyHandoff(t.Context(), g, nil)
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		assert.Equal(t, 0, g.calls)
 	})
 
@@ -688,7 +688,7 @@ func TestWaitForAcceptedReplyHandoff(t *testing.T) {
 		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}
 		err := waitForAcceptedReplyHandoff(t.Context(), g, &iris.ReplyAcceptedResponse{RequestID: "   "})
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		assert.Equal(t, 0, g.calls)
 	})
 
@@ -735,7 +735,7 @@ func testSendReplyAdmission(t *testing.T, newLane func(*stubAcceptedSender) repl
 		s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
 		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		assert.Equal(t, replyAdmissionMaxAttempts, s.acceptCalls)
 	})
 
@@ -750,7 +750,7 @@ func testSendReplyAdmission(t *testing.T, newLane func(*stubAcceptedSender) repl
 
 		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err),
+		assert.True(t, IsReplyOutcomeUnknown(err),
 			"the lost first attempt may already have been admitted, so the rejection is not authoritative")
 		assert.Equal(t, replyAdmissionMaxAttempts, s.acceptCalls)
 	})
@@ -759,7 +759,7 @@ func testSendReplyAdmission(t *testing.T, newLane func(*stubAcceptedSender) repl
 		s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
 		err := sendReply(ctx, newLane(s), "room", "msg", "", nil)
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		assert.Equal(t, 1, s.acceptCalls)
 	})
 }
@@ -799,7 +799,7 @@ func testSendReplyHandoff(t *testing.T, newLane func(*stubAcceptedSender) replyL
 		}
 		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		assert.Equal(t, 1, s.acceptCalls, "unknown outcome must not be re-posted")
 	})
 
@@ -807,7 +807,7 @@ func testSendReplyHandoff(t *testing.T, newLane func(*stubAcceptedSender) replyL
 		s := &stubAcceptedSender{accepted: &iris.ReplyAcceptedResponse{RequestID: ""}}
 		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 		require.Error(t, err)
-		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.True(t, IsReplyOutcomeUnknown(err))
 		assert.Equal(t, 1, s.acceptCalls)
 		assert.Equal(t, 0, s.calls)
 	})

@@ -27,14 +27,11 @@ WITH clock AS MATERIALIZED (
       AND vf.failure_class = $7::text
       AND octet_length($8::text) BETWEEN 1 AND 2048
 ), candidate AS MATERIALIZED (
-    SELECT CASE $9::text
-             WHEN 'DELAY' THEN clock.now_at + ($10::bigint * INTERVAL '1 millisecond')
-             WHEN 'AT' THEN $11::timestamptz
-           END AS retry_at,
+    SELECT $9::timestamptz AS retry_at,
            clock.now_at,
            clock.failure_at,
-           ($12::bigint * INTERVAL '1 millisecond') AS min_delay,
-           ($13::bigint * INTERVAL '1 millisecond') AS max_delay
+           ($10::bigint * INTERVAL '1 millisecond') AS min_delay,
+           ($11::bigint * INTERVAL '1 millisecond') AS max_delay
     FROM clock
 ), updated AS (
     UPDATE youtube_collection_job_leases AS jobs
@@ -60,8 +57,8 @@ WITH clock AS MATERIALIZED (
       AND jobs.slot_state = 'ACTIVE'
       AND jobs.lease_expires_at > candidate.failure_at
       AND candidate.retry_at IS NOT NULL
-      AND $12::bigint > 0
-      AND $13::bigint >= $12::bigint
+      AND $10::bigint > 0
+      AND $11::bigint >= $10::bigint
     RETURNING jobs.job_key
 )
 SELECT job_key FROM updated;

@@ -31,8 +31,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
@@ -69,7 +69,7 @@ func (b *Bot) sendImages(ctx context.Context, room string, images [][]byte, opts
 
 // outcome이 unknown이면 reply가 이미 전달됐을 수 있어, 오류 응답을 덧붙이면 중복 발화가 된다.
 func (b *Bot) skipErrorResponseOnUnknownOutcome(ctx context.Context, chatID, commandType string, err error) bool {
-	if !errors.Is(err, transport.ErrReplyOutcomeUnknown) {
+	if !transport.IsReplyOutcomeUnknown(err) {
 		return false
 	}
 

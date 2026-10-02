@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
@@ -32,9 +33,9 @@ func (r *Repository) loadTrackingSnapshots(
 
 	var trackingRows []domain.YouTubeContentAlarmTracking
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", mustSQL("load_0032_01.sql")+deliverysql.DeliveryInClause("kind", len(kinds))+`
+	if err := dbx.SelectSQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", mustSQL("load_0032_01.sql")+deliverysql.DeliveryInClause("kind", len(kinds))+`
 		  AND `+deliverysql.DeliveryInClause("content_id", len(contentIDs))+`
-	`, deliverysql.AppendDeliveryStringArgs(deliverysql.AppendDeliveryOutboxKindArgs(nil, kinds...), contentIDs)...); err != nil {
+	`, append(deliverysql.AppendDeliveryOutboxKindArgs(nil, kinds...), dbx.AnyArgs(contentIDs)...)...); err != nil {
 		return nil, fmt.Errorf("enrich delivery telemetry context: load tracking rows: %w", err)
 	}
 

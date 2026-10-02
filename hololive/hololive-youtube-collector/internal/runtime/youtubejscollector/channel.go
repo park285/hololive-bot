@@ -21,12 +21,12 @@ type ChannelClient interface {
 	FetchChannel(ctx context.Context, request youtubejs.ChannelRequest) (youtubejs.ChannelResult, error)
 }
 
-// ChannelRunner는 방송 일정 조회 없이 채널 통계·프로필·사진만 수집합니다.
+// ChannelRunner는 방송 일정 조회 없이 채널 프로필·사진만 수집합니다.
 type ChannelRunner struct {
 	client ChannelClient
 }
 
-// NewChannelMetadataRunner는 방송 일정 조회 없이 채널 통계·프로필·사진만 수집합니다.
+// NewChannelMetadataRunner는 방송 일정 조회 없이 채널 프로필·사진만 수집합니다.
 func NewChannelMetadataRunner(client ChannelClient) *ChannelRunner {
 	return &ChannelRunner{client: client}
 }

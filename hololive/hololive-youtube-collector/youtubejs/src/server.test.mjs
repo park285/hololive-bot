@@ -49,17 +49,17 @@ test("handleCommunityRequest returns pagination metadata from the injected fetch
   assert.equal(result.body.continuity, "CONTIGUOUS");
 });
 
-test("handleCommunityRequest fail-closes when the fetcher throws", async () => {
+test("handleCommunityRequest reports an ordinary upstream failure without a success result", async () => {
   const result = await handleCommunityRequest(
     rpcBody({ channel_id: "UC_FAIL" }),
     async () => {
       throw new Error("innertube down");
     },
   );
-  assert.equal(result.status, 500);
+  assert.equal(result.status, 502);
   assert.match(result.body.error.message, /innertube down/);
-  assert.equal(result.body.error.code, "helper_internal_invariant");
-  assert.equal(result.body.error.class, "INTERNAL");
+  assert.equal(result.body.error.code, "collection_failed");
+  assert.equal(result.body.error.class, "TRANSIENT");
 });
 
 test("handleChannelRequest reports the typed parser response error class", async () => {
@@ -72,7 +72,7 @@ test("handleChannelRequest reports the typed parser response error class", async
   assert.equal(result.body.error.class, "DATA_CONTRACT");
 });
 
-test("handleCommunityRequest rejects an invalid custom error name", async () => {
+test("handleCommunityRequest does not infer an internal defect from a custom error name", async () => {
   const result = await handleCommunityRequest(
     rpcBody({ channel_id: "UC_TEST" }),
     async () => {
@@ -81,8 +81,8 @@ test("handleCommunityRequest rejects an invalid custom error name", async () => 
       throw error;
     },
   );
-  assert.equal(result.status, 500);
-  assert.equal(result.body.error.class, "INTERNAL");
+  assert.equal(result.status, 502);
+  assert.equal(result.body.error.class, "TRANSIENT");
 });
 
 test("handleCommunityRequest rejects invalid JSON", async () => {

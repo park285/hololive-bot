@@ -5,12 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"reflect"
 	"strings"
 	"time"
 
-	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -22,28 +21,8 @@ type DeliveryDB interface {
 	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
 }
 
-func IsNilDB(db any) bool {
-	if db == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(db)
-	kind := value.Kind()
-
-	if kind == reflect.Chan ||
-		kind == reflect.Func ||
-		kind == reflect.Interface ||
-		kind == reflect.Map ||
-		kind == reflect.Pointer ||
-		kind == reflect.Slice {
-		return value.IsNil()
-	}
-
-	return false
-}
-
 func AsQuerier(db any) dbx.Querier {
-	if IsNilDB(db) {
+	if reflectutil.IsNil(db) {
 		return nil
 	}
 
@@ -52,36 +31,6 @@ func AsQuerier(db any) dbx.Querier {
 	}
 
 	return nil
-}
-
-func ExecDeliverySQL(ctx context.Context, db dbx.Querier, action, query string, args ...any) (int64, error) {
-	tag, err := db.Exec(ctx, PostgresPlaceholders(query), args...)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", action, err)
-	}
-
-	return tag.RowsAffected(), nil
-}
-
-func SelectDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action, query string, args ...any) error {
-	if err := pgxscan.Select(ctx, db, dest, PostgresPlaceholders(query), args...); err != nil {
-		return fmt.Errorf("%s: %w", action, err)
-	}
-
-	return nil
-}
-
-func GetDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action, query string, args ...any) (bool, error) {
-	err := pgxscan.Get(ctx, db, dest, PostgresPlaceholders(query), args...)
-	if err == nil {
-		return true, nil
-	}
-
-	if pgxscan.NotFound(err) {
-		return false, nil
-	}
-
-	return false, fmt.Errorf("%s: %w", action, err)
 }
 
 func DeliveryInClause(column string, count int) string {
@@ -98,22 +47,6 @@ func inDeliveryPlaceholders(count int) string {
 	}
 
 	return strings.TrimSuffix(strings.Repeat("?, ", count), ", ")
-}
-
-func AppendDeliveryInt64Args(args []any, values []int64) []any {
-	for _, value := range values {
-		args = append(args, value)
-	}
-
-	return args
-}
-
-func AppendDeliveryStringArgs(args []any, values []string) []any {
-	for _, value := range values {
-		args = append(args, value)
-	}
-
-	return args
 }
 
 func AppendDeliveryOutboxKindArgs(args []any, values ...domain.OutboxKind) []any {
@@ -179,26 +112,6 @@ func finishDeliveryTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 	}
 
 	return nil
-}
-
-func PostgresPlaceholders(query string) string {
-	var out strings.Builder
-
-	index := 1
-
-	for i := range len(query) {
-		if query[i] != '?' {
-			out.WriteByte(query[i])
-
-			continue
-		}
-
-		fmt.Fprintf(&out, "$%d", index)
-
-		index++
-	}
-
-	return out.String()
 }
 
 func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, error) {

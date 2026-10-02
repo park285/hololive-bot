@@ -25,7 +25,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
@@ -43,7 +46,7 @@ func NewDeliveryRepository(db any, logger *slog.Logger) *DeliveryRepository {
 }
 
 func AsDeliveryDB(db any) deliverysql.DeliveryDB {
-	if deliverysql.IsNilDB(db) {
+	if reflectutil.IsNil(db) {
 		return nil
 	}
 
@@ -95,7 +98,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 
 	var outboxIDs []int64
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), batchSize); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}
 

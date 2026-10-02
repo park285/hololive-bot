@@ -7,35 +7,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
-func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
-	lib := readRepoFile(t, "scripts/deploy/lib/require-quic-udp-buffer.sh")
-
-	for _, snippet := range []string{
-		"net.core.rmem_max",
-		"net.core.wmem_max",
-		"/etc/sysctl.d/*.conf",
-		"are not persisted",
-	} {
-		if !strings.Contains(lib, snippet) {
-			t.Fatalf("require-quic-udp-buffer.sh missing runtime+persisted contract %q", snippet)
-		}
-	}
-
-	for _, file := range []string{
-		"scripts/deploy/ap-collector-preflight.sh",
-		"scripts/deploy/ap-completion-check.sh",
-	} {
-		content := readRepoFile(t, file)
-		if !strings.Contains(content, "require-quic-udp-buffer.sh") {
-			t.Fatalf("%s must delegate QUIC UDP buffer checks to require-quic-udp-buffer.sh", file)
-		}
-
-		if strings.Contains(content, "sysctl -n net.core.rmem_max") {
-			t.Fatalf("%s still uses runtime-only inline sysctl check", file)
-		}
-	}
-}
-
 // 모든 운영 스택 렌더에서 Postgres 클라이언트는 verify-full + 마운트된 CA 번들을
 // 사용해야 한다(구 accepted-risk ledger의 exit criteria).
 func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {

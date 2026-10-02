@@ -1,3 +1,4 @@
+import { channelFixture } from "./test-fixtures/channel.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -129,9 +130,9 @@ test("mapLiveSessions maps current YouTube.js LockupView rows", () => {
 
 test("fetchChannelFeed fail-closes when live rows lack status", async () => {
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => ({}),
-      getLiveStreams: async () => ({ videos: [{ id: "mystery", status: "unknown" }] }),
+      getLiveStreams: async () => channelFixture({ videos: [{ id: "mystery", status: "unknown" }] }),
     }),
   };
   await assert.rejects(
@@ -142,12 +143,10 @@ test("fetchChannelFeed fail-closes when live rows lack status", async () => {
 
 test("fetchChannelFeed signals a typed missing streams tab without claiming live absence", async () => {
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => ({ subscriber_count: 12, handle: "@test" }),
-      getLiveStreams: async () => {
-        throw new Utils.InnertubeError('Tab "streams" not found');
-      },
-    }),
+      has_live_streams: undefined,
+    }, ["featured"]),
   };
   const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
@@ -157,9 +156,10 @@ test("fetchChannelFeed signals a typed missing streams tab without claiming live
 
 test("fetchChannelFeed signals an unsupported live streams tab without claiming live absence", async () => {
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => ({ subscriber_count: 7, handle: "@unsupported" }),
-    }),
+      getLiveStreams: async () => assert.fail("missing tab must not be requested"),
+    }, ["featured"]),
   };
   const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
@@ -170,7 +170,7 @@ test("fetchChannelFeed signals an unsupported live streams tab without claiming 
 test("fetchChannelFeed propagates a typed error with a different message", async () => {
   const expected = new Utils.InnertubeError("streams request failed");
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => ({}),
       getLiveStreams: async () => {
         throw expected;
@@ -186,7 +186,7 @@ test("fetchChannelFeed propagates a typed error with a different message", async
 test("fetchChannelFeed propagates an untyped missing streams error", async () => {
   const expected = new Error('Tab "streams" not found');
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => ({}),
       getLiveStreams: async () => {
         throw expected;
@@ -215,7 +215,7 @@ test("mapPhoto maps avatar and banner variants", () => {
 
 test("metadata collection returns channel fields without requesting streams or player", async () => {
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => ({ subscriber_count: 12, handle: "@test", description: "hi" }),
       getLiveStreams: async () => { throw new Error("metadata requested streams"); },
     }),
@@ -231,9 +231,9 @@ test("metadata collection returns channel fields without requesting streams or p
 
 test("live collection does not depend on the about endpoint", async () => {
   const innertube = {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => { throw new Error("live requested about"); },
-      getLiveStreams: async () => ({ videos: [{ id: "live-1", is_live: true }] }),
+      getLiveStreams: async () => channelFixture({ videos: [{ id: "live-1", is_live: true }] }),
     }),
   };
   const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
@@ -429,9 +429,9 @@ test("fetchChannelFeed cancellation remains a typed canceled RPC failure", async
 
 function stubChannel(feed, execute) {
   return {
-    getChannel: async () => ({
+    getChannel: async () => channelFixture({
       getAbout: async () => ({}),
-      getLiveStreams: async () => feed,
+      getLiveStreams: async () => channelFixture({ has_continuation: undefined, ...feed }),
     }),
     actions: { execute },
   };

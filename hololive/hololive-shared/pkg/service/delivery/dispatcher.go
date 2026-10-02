@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
@@ -52,7 +52,7 @@ type ClientRequestMessageSender interface {
 }
 
 type deliveryOutboxClaimer interface {
-	FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	fetchReadyAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration, activeRooms []string, processedIDs []int64) ([]domain.NotificationDeliveryOutbox, error)
 }
 
 type deliveryRequestStore interface {
@@ -87,6 +87,8 @@ const (
 	deliveryMaintenanceTimeout = 10 * time.Second
 )
 
+// DispatcherConfig의 값은 alarm-worker profile의 notification_delivery 항목이 정본이다. 생성자는 profile 로더가 양수를
+// 검증한다는 전제로 기본값으로 바꾸지 않고, 잘못된 값이면 생성 오류로 드러낸다.
 type DispatcherConfig struct {
 	AttemptTimeout            time.Duration
 	BatchSize                 int
@@ -95,28 +97,11 @@ type DispatcherConfig struct {
 	PollInterval              time.Duration
 	RetryBackoff              time.Duration
 	CleanupAfter              time.Duration
-	CleanupInterval           time.Duration // cleanup 실행 주기 (기본: 1시간)
+	CleanupInterval           time.Duration
 	CleanupEnabled            bool
 	StaleSendingAfter         time.Duration
 	StaleSendingSweepInterval time.Duration
 	StaleSendingSweepLimit    int
-}
-
-func DefaultDispatcherConfig() DispatcherConfig {
-	return DispatcherConfig{
-		AttemptTimeout:            10 * time.Second,
-		BatchSize:                 50,
-		MaxConcurrent:             4,
-		MaxRetries:                3,
-		PollInterval:              30 * time.Second,
-		RetryBackoff:              1 * time.Minute,
-		CleanupAfter:              7 * 24 * time.Hour,
-		CleanupInterval:           1 * time.Hour,
-		CleanupEnabled:            true,
-		StaleSendingAfter:         deliveryLease,
-		StaleSendingSweepInterval: deliveryLease,
-		StaleSendingSweepLimit:    defaultStaleSendingSweepLimit,
-	}
 }
 
 type Dispatcher struct {
@@ -147,16 +132,13 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 		logger = slog.Default()
 	}
 
-	cfg := DispatcherConfig{}
-
-	if config != nil {
-		cfg = *config
+	if config == nil {
+		return nil, errors.New("new delivery dispatcher: config is required")
 	}
 
-	cfg.applyDefaults()
-
-	if cfg.AttemptTimeout >= deliveryLease-deliveryFinalizeTimeout {
-		return nil, fmt.Errorf("new delivery dispatcher: attempt timeout must leave finalization budget within %s lease", deliveryLease)
+	cfg := *config
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
 	}
 
 	workerID, err := util.InstanceID("delivery-dispatcher")
@@ -167,28 +149,41 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: workerID}, nil
 }
 
-func (c *DispatcherConfig) applyDefaults() {
-	defaults := DefaultDispatcherConfig()
-
-	c.AttemptTimeout = positiveOr(c.AttemptTimeout, defaults.AttemptTimeout)
-	c.BatchSize = positiveOr(c.BatchSize, defaults.BatchSize)
-	c.MaxConcurrent = positiveOr(c.MaxConcurrent, defaults.MaxConcurrent)
-	c.MaxRetries = positiveOr(c.MaxRetries, defaults.MaxRetries)
-	c.PollInterval = positiveOr(c.PollInterval, defaults.PollInterval)
-	c.RetryBackoff = positiveOr(c.RetryBackoff, defaults.RetryBackoff)
-	c.CleanupAfter = positiveOr(c.CleanupAfter, defaults.CleanupAfter)
-	c.CleanupInterval = positiveOr(c.CleanupInterval, defaults.CleanupInterval)
-	c.StaleSendingAfter = positiveOr(c.StaleSendingAfter, defaults.StaleSendingAfter)
-	c.StaleSendingSweepInterval = positiveOr(c.StaleSendingSweepInterval, defaults.StaleSendingSweepInterval)
-	c.StaleSendingSweepLimit = positiveOr(c.StaleSendingSweepLimit, defaults.StaleSendingSweepLimit)
-}
-
-func positiveOr[T ~int | ~int64](value, fallback T) T {
-	if value <= 0 {
-		return fallback
+func (c *DispatcherConfig) validate() error {
+	required := []struct {
+		name  string
+		valid bool
+	}{
+		{"attempt timeout", c.AttemptTimeout > 0},
+		{"batch size", c.BatchSize > 0},
+		{"max concurrent", c.MaxConcurrent > 0},
+		{"max retries", c.MaxRetries > 0},
+		{"poll interval", c.PollInterval > 0},
+		{"retry backoff", c.RetryBackoff > 0},
+		{"cleanup after", c.CleanupAfter > 0},
+		{"cleanup interval", c.CleanupInterval > 0},
+		{"stale sending after", c.StaleSendingAfter > 0},
+		{"stale sending sweep interval", c.StaleSendingSweepInterval > 0},
+		{"stale sending sweep limit", c.StaleSendingSweepLimit > 0},
 	}
 
-	return value
+	var invalid []string
+
+	for _, setting := range required {
+		if !setting.valid {
+			invalid = append(invalid, setting.name)
+		}
+	}
+
+	if len(invalid) > 0 {
+		return fmt.Errorf("settings must be positive: %s", strings.Join(invalid, ", "))
+	}
+
+	if c.AttemptTimeout >= deliveryLease-deliveryFinalizeTimeout {
+		return fmt.Errorf("attempt timeout must leave finalization budget within %s lease", deliveryLease)
+	}
+
+	return nil
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
@@ -214,14 +209,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 func (d *Dispatcher) processOnce(ctx context.Context) {
 	d.maintain(ctx)
 
-	items, err := d.repository.FetchAndLock(ctx, d.workerID, d.config.BatchSize, deliveryLease)
-	if err != nil {
-		d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
-
-		return
-	}
-
-	d.processBatch(ctx, items)
+	d.processReady(ctx)
 }
 
 func (d *Dispatcher) maintain(ctx context.Context) {
@@ -275,101 +263,6 @@ func (d *Dispatcher) quarantineStaleSendingIfDue(ctx context.Context) {
 	}
 
 	d.lastStaleSendingSweepAt = time.Now()
-}
-
-func (d *Dispatcher) processBatch(ctx context.Context, items []domain.NotificationDeliveryOutbox) {
-	if len(items) == 0 {
-		return
-	}
-
-	maxConcurrent := d.batchConcurrency(len(items))
-	if maxConcurrent <= 1 {
-		d.processBatchSequential(ctx, items)
-
-		return
-	}
-
-	d.processBatchConcurrent(ctx, items, maxConcurrent)
-}
-
-func (d *Dispatcher) batchConcurrency(itemCount int) int {
-	if itemCount == 1 || d.config.MaxConcurrent <= 1 {
-		return 1
-	}
-
-	if d.config.MaxConcurrent > itemCount {
-		return itemCount
-	}
-
-	return d.config.MaxConcurrent
-}
-
-func (d *Dispatcher) processBatchSequential(ctx context.Context, items []domain.NotificationDeliveryOutbox) {
-	for i := range items {
-		d.processItem(ctx, &items[i])
-	}
-}
-
-func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.NotificationDeliveryOutbox, maxConcurrent int) {
-	var wg sync.WaitGroup
-
-	sem := make(chan struct{}, maxConcurrent)
-	roomOrder := make([]string, 0, len(items))
-	itemsByRoom := make(map[string][]*domain.NotificationDeliveryOutbox, len(items))
-
-	for i := range items {
-		item := &items[i]
-		if _, exists := itemsByRoom[item.RoomID]; !exists {
-			roomOrder = append(roomOrder, item.RoomID)
-		}
-
-		itemsByRoom[item.RoomID] = append(itemsByRoom[item.RoomID], item)
-	}
-
-	for _, roomID := range roomOrder {
-		if !d.acquireBatchSlot(ctx, sem, &wg) {
-			return
-		}
-
-		roomItems := itemsByRoom[roomID]
-
-		wg.Go(func() {
-			panicguard.Run(d.logger, panicguard.BackgroundTask, "delivery-dispatch-room", func() {
-				d.processRoomBatchAsync(ctx, roomItems, sem)
-			})
-		})
-	}
-
-	wg.Wait()
-}
-
-func (d *Dispatcher) acquireBatchSlot(ctx context.Context, sem chan<- struct{}, wg *sync.WaitGroup) bool {
-	select {
-	case <-ctx.Done():
-		errText := "context canceled"
-
-		if err := ctx.Err(); err != nil {
-			errText = err.Error()
-		}
-
-		d.logger.Warn("Delivery batch canceled before completion",
-			slog.String("error", errText))
-		wg.Wait()
-
-		return false
-	case sem <- struct{}{}:
-		return true
-	}
-}
-
-func (d *Dispatcher) processRoomBatchAsync(ctx context.Context, items []*domain.NotificationDeliveryOutbox, sem <-chan struct{}) {
-	defer func() { <-sem }()
-
-	for _, item := range items {
-		panicguard.Run(d.logger, panicguard.BackgroundTask, "delivery-dispatch-item", func() {
-			d.processItem(ctx, item)
-		})
-	}
 }
 
 func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationDeliveryOutbox) {

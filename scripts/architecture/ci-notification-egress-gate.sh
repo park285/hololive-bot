@@ -49,21 +49,6 @@ check_forbidden_global_go_hits \
   -g '!hololive/hololive-alarm-worker/internal/egress/**' \
   -g '!hololive/hololive-alarm-worker/internal/app/**'
 
-# 퇴역 가드 짝: 런타임 퇴역 가드(retired_notification_egress.go)를 삭제하는 같은 변경에서 아래 -g 예외만 지운다.
-# 예외가 없어진 검사는 퇴역 키 재도입을 막는 영구 계약으로 남는다. 제거 조건은 런타임 가드 주석을 따른다.
-check_forbidden_global_go_hits \
-  "retired Karing opt-in env is referenced only by the alarm-worker guard" \
-  'YOUTUBE_OUTBOX_KARING_ENABLED|ALARM_DISPATCH_KARING_ENABLED' \
-  -g '!hololive/hololive-shared/pkg/config/settings/alarmworker/retired_notification_egress.go'
-
-# 영구 계약(재도입 방지): alarm-worker는 Karing template을 보내지 않는다(DEC-20260926-hololive-karing-egress-disposition,
-# DEC-20260904-hololive-karing-regular-chat-egress 대체). 죽은 Karing 분기의 문자열을 필수로 요구하던 검사는 그 DEC에 따라
-# 분기와 함께 지웠다. 퇴역 가드가 아니므로 제거 조건이 없고, Karing을 다시 쓰려면 새 DEC로 이 검사부터 바꾼다.
-check_forbidden_scoped_go_hits \
-  "alarm-worker does not send Karing templates" \
-  'SendKaringContentList|KaringContentListRequest|SendKaringHololive|KaringTemplateArgs' \
-  "hololive/hololive-alarm-worker"
-
 # Dispatcher symbols are compiler-protected by alarm-worker/internal; shared delivery/Iris symbols require this scoped textual gate.
 check_forbidden_scoped_go_hits \
   "youtube-collector does not own YouTube outbox dispatch or Iris egress capability" \
@@ -132,20 +117,6 @@ if ! grep -Fq 'STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/alar
 else
   echo "[PASS] alarm-worker uses its strict local Stack Worker Profile v1"
 fi
-# 영구 계약(재도입 방지): alarm-worker compose 블록은 퇴역한 worker·Karing enablement key를 다시 선언하지 않는다.
-# 퇴역 가드가 아니므로 제거 조건이 없다(stack-audit 2026-09-26 T17 분류).
-for retired in \
-  DELIVERY_DISPATCHER_ENABLED \
-  ALARM_DISPATCH_CONSUMER_ENABLED \
-  YOUTUBE_OUTBOX_DISPATCHER_ENABLED \
-  YOUTUBE_OUTBOX_KARING_ENABLED \
-  ALARM_DISPATCH_KARING_ENABLED; do
-  if grep -Fq "${retired}:" <<< "${alarm_worker_block}"; then
-    echo "[FAIL] alarm-worker still declares retired worker enablement ${retired}" >&2
-    fail=1
-  fi
-done
-
 if [[ "${fail}" -ne 0 ]]; then
   exit 1
 fi

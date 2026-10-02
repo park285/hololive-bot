@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -42,7 +41,7 @@ func (s *frozenProviderSender) SendPreparedMessage(_ context.Context, _, body, r
 func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 	ctx := t.Context()
 	pool := newDeliveryPool(t)
-	config := dispatchstate.DefaultConfig()
+	config := testDispatchConfig()
 
 	config.MaxRetries = 3
 	config.RetryBackoff = time.Millisecond

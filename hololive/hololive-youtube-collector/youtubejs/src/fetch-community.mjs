@@ -1,3 +1,7 @@
+import { createCollectionClient } from "./collection-client.mjs";
+import { FetchTransportError } from "./fetch-transport.mjs";
+import { readUpstream, runUpstream } from "./upstream-errors.mjs";
+import { fetchChannelTab } from "./channel-tabs.mjs";
 import { mapPost } from "./map-posts.mjs";
 import {
   assertResponseBudget,
@@ -9,24 +13,18 @@ import {
 const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, posts: [] });
 
 export function listBackstagePosts(feed, postType) {
-  if (feed == null) {
-    return [];
+  const posts = readUpstream(() => feed?.posts);
+  if (Array.isArray(posts)) {
+    return posts;
   }
-  if (Array.isArray(feed.posts)) {
-    return feed.posts;
-  }
-  if (typeof feed.memo?.getType === "function") {
-    const typed = feed.memo.getType(postType) || [];
+  const memo = readUpstream(() => feed?.memo);
+  if (typeof memo?.getType === "function") {
+    const typed = readUpstream(() => memo.getType(postType)) || [];
     return [...typed];
   }
   const error = new Error("community page shape is not recognized");
   error.code = "parser_drift";
   throw error;
-}
-
-export function isMissingCommunity(err) {
-  const message = String(err?.message || err);
-  return /tab not found/i.test(message) || /channel does not exist/i.test(message) || err?.status === 404;
 }
 
 export async function fetchCommunityPosts(options = {}) {
@@ -45,42 +43,27 @@ export async function fetchCommunityFeed({
 } = {}) {
   const id = String(channelId ?? "").trim();
   if (id === "") {
-    throw new Error("channel id is required");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel id is required");
   }
   if (innertube == null || typeof innertube.getChannel !== "function") {
-    throw new Error("innertube client is required");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "innertube client is required");
   }
   assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
-  let channel;
-  try {
-    channel = await innertube.getChannel(id);
-  } catch (err) {
-    if (isMissingCommunity(err)) {
-      return emptyCommunityPage();
-    }
-    throw err;
+  const channel = await runUpstream(() => innertube.getChannel(id));
+  if (typeof channel.getCommunity !== "function") {
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "community tab loader is unavailable");
   }
-  if (channel?.has_community === false) {
-    return emptyCommunityPage();
-  }
-  let feed;
-  try {
-    feed = await channel.getCommunity();
-  } catch (err) {
-    if (isMissingCommunity(err)) {
-      return emptyCommunityPage();
-    }
-    throw err;
-  }
+  const tab = await fetchChannelTab(channel, "posts", () => channel.getCommunity());
+  if (tab.missing === true) return emptyCommunityPage();
   const paged = await paginate({
-    firstPage: feed,
+    firstPage: tab.feed,
     getContinuation: async (current) => {
       if (typeof current.getContinuation !== "function") {
         const err = new Error("community continuation is missing");
         err.code = "parser_drift";
         throw err;
       }
-      return current.getContinuation();
+      return runUpstream(() => current.getContinuation());
     },
     mapPage: (current) => {
       const mapped = [];
@@ -119,10 +102,10 @@ export function emptyCommunityPage() {
 /** @param {YouTubeJSFetchOptions} [options] */
 export async function createInnertube({ fetchImpl } = {}) {
   const { Innertube } = await import("youtubei.js");
-  return Innertube.create({
+  return createCollectionClient(await Innertube.create({
     retrieve_player: false,
     generate_session_locally: true,
     enable_session_cache: false,
     fetch: fetchImpl,
-  });
+  }));
 }

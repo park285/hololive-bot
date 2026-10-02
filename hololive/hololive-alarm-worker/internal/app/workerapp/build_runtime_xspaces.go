@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	xspacesworker "github.com/kapu/hololive-alarm-worker/internal/service/xspaces"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 

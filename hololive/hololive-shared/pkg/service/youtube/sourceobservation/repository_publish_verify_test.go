@@ -10,6 +10,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/observationtest"
 )
 
 func breakPublishFence(ctx context.Context, t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
@@ -107,8 +108,8 @@ func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
-			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-			input := publishInput(communityEnvelope(t, &proof, "post-1"))
+			proof := observationtest.SeedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			input := publishInput(observationtest.CommunityEnvelope(t, &proof, "post-1"))
 
 			for _, apply := range tc.breakers {
 				apply(ctx, t, pool, &input.Lease)

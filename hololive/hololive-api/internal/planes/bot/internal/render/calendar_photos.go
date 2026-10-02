@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/image/webp"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -242,13 +243,9 @@ func validateCalendarPhotoResponse(resp *http.Response) (string, error) {
 }
 
 func readCalendarPhotoData(body io.Reader) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(body, calendarPhotoMaxBytes+1))
+	data, err := httputil.ReadAllLimited(body, calendarPhotoMaxBytes)
 	if err != nil {
-		return nil, fmt.Errorf("read all: %w", err)
-	}
-
-	if len(data) > calendarPhotoMaxBytes {
-		return nil, errors.New("image exceeds calendar photo byte limit")
+		return nil, fmt.Errorf("read calendar photo: %w", err)
 	}
 
 	return data, nil

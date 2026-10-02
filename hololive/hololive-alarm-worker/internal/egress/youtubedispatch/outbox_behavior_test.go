@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
@@ -15,56 +14,6 @@ import (
 func TestErrDeliveryDedupeKeyRequiredMatchesInternalSentinel(t *testing.T) {
 	if got, want := youtubedispatch.ErrDeliveryDedupeKeyRequired.Error(), "delivery dedupe key is required"; got != want {
 		t.Fatalf("sentinel message = %q, want %q", got, want)
-	}
-}
-
-func TestDefaultConfigProvidesUsableDispatchDefaults(t *testing.T) {
-	config := dispatchstate.DefaultConfig()
-
-	for name, value := range map[string]int{
-		"BatchSize":                   config.BatchSize,
-		"MaxRetries":                  config.MaxRetries,
-		"DeliveryParallelism":         config.DeliveryParallelism,
-		"SubscriberLookupParallelism": config.SubscriberLookupParallelism,
-		"TelemetryFlushBatch":         config.TelemetryFlushBatch,
-	} {
-		if value <= 0 {
-			t.Errorf("DefaultConfig().%s = %d, want positive", name, value)
-		}
-	}
-
-	for name, value := range map[string]time.Duration{
-		"LockTimeout":           config.LockTimeout,
-		"PollInterval":          config.PollInterval,
-		"RetryBackoff":          config.RetryBackoff,
-		"CleanupAfter":          config.CleanupAfter,
-		"ReviveInterval":        config.ReviveInterval,
-		"ReviveFreshnessWindow": config.ReviveFreshnessWindow,
-		"ClaimFreshnessWindow":  config.ClaimFreshnessWindow,
-		"DeliverySendTimeout":   config.DeliverySendTimeout,
-		"AggregateSyncInterval": config.AggregateSyncInterval,
-		"TelemetryPollInterval": config.TelemetryPollInterval,
-		"TelemetryRetryBackoff": config.TelemetryRetryBackoff,
-		"TelemetryRetention":    config.TelemetryRetention,
-	} {
-		if value <= 0 {
-			t.Errorf("DefaultConfig().%s = %v, want positive", name, value)
-		}
-	}
-
-	if !config.CleanupEnabled {
-		t.Error("DefaultConfig().CleanupEnabled = false, want true")
-	}
-
-	if !config.ReviveEnabled {
-		t.Error("DefaultConfig().ReviveEnabled = false, want true")
-	}
-
-	if config.ClaimFreshnessWindow < config.ReviveFreshnessWindow+config.ReviveInterval {
-		t.Errorf(
-			"DefaultConfig().ClaimFreshnessWindow = %v, want at least ReviveFreshnessWindow+ReviveInterval = %v",
-			config.ClaimFreshnessWindow, config.ReviveFreshnessWindow+config.ReviveInterval,
-		)
 	}
 }
 

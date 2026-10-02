@@ -1,6 +1,7 @@
 // !라이브 채널·영상 확인 관측을 raw innertube 응답의 사실 필드로만 판정합니다.
 // 판정 순서는 identity → boolean·시각 사실 → 모순 → 가용성이며, 해석할 수 없는 응답은 예외 대신
 // UNKNOWN 결과로 돌려줍니다. upstream 요청 실패만 typed RPC 실패로 전파합니다.
+import { classifyUpstreamError, failureTuples, upstreamHTTPFailureCode } from "./upstream-errors.mjs";
 import { FetchTransportError } from "./fetch-transport.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 
@@ -137,7 +138,7 @@ export function parseVideoLiveCheck(raw, videoId, nowMs) {
 /** @returns {{ result: VideoCheck, waiting: boolean }} */
 function analyzePlayer(raw, videoId, nowMs) {
   if (!Number.isFinite(nowMs)) {
-    throw new Error("live check clock is invalid");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "live check clock is invalid");
   }
   const identity = playerIdentity(raw, videoId);
   if (identity.ok === false) {
@@ -463,7 +464,8 @@ async function executeRaw(innertube, endpoint, payload) {
     return { ok: false, reason: "structure_unrecognized" };
   }
   if (!response.success) {
-    throw new LiveCheckRequestError(`live check upstream request failed with status code ${response.status_code}`);
+    const code = upstreamHTTPFailureCode(response.status_code);
+    throw new FetchTransportError(code, failureTuples[code].class, `live check upstream request failed with status code ${response.status_code}`);
   }
   if (response.status_code !== 200) {
     return { ok: false, reason: "structure_unrecognized" };
@@ -471,15 +473,14 @@ async function executeRaw(innertube, endpoint, payload) {
   return { ok: true, data: response.data };
 }
 
-// 취소와 transport가 이미 분류한 실패는 보존하고, youtubei.js HTTP 오류·분류되지 않은 네트워크 오류는 요청 실패로 묶습니다.
+// 취소와 이미 분류한 오류의 원인을 보존하며 RPC·pagination과 같은 정책을 적용합니다.
 function requestFailure(error) {
-  if (currentRequestSignal()?.aborted || error instanceof FetchTransportError) {
-    return error;
+  if (currentRequestSignal()?.aborted || error instanceof FetchTransportError) return error;
+  const code = classifyUpstreamError(error, "upstream");
+  if (code === "collection_failed") {
+    return new LiveCheckRequestError("live check upstream request failed", { cause: error });
   }
-  if (error instanceof Error && error.name === "AbortError") {
-    return error;
-  }
-  return new LiveCheckRequestError("live check upstream request failed", { cause: error });
+  return new FetchTransportError(code, failureTuples[code].class, "live check upstream request failed", { cause: error });
 }
 
 export class LiveCheckRequestError extends Error {

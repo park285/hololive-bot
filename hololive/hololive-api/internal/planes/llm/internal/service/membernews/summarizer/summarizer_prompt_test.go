@@ -39,22 +39,24 @@ func promptFixtureInput() *model.SummarizeInput {
 					Title:       "EXPO",
 					Description: "official news",
 				},
-				EffectiveDate: time.Date(2026, time.February, 20, 12, 0, 0, 0, util.KSTZone),
-				MemberText:    testMemberMiko,
-				Category:      model.CategoryEvent,
-				SourceTier:    model.SourceTierOfficial,
-				SourceURL:     testSourceURLNews1,
+				EffectiveDate:  time.Date(2026, time.February, 20, 12, 0, 0, 0, util.KSTZone),
+				MemberText:     testMemberMiko,
+				MatchedMembers: []string{testMemberMiko},
+				Category:       model.CategoryEvent,
+				SourceTier:     model.SourceTierOfficial,
+				SourceURL:      testSourceURLNews1,
 			},
 			{
 				Candidate: model.Candidate{
 					Title:       "SUISEI LIVE",
 					Description: "official event",
 				},
-				EffectiveDate: time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
-				MemberText:    testMemberSuisei,
-				Category:      model.CategorySoloLive,
-				SourceTier:    model.SourceTierOfficial,
-				SourceURL:     "https://hololive.hololivepro.com/news/2",
+				EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
+				MemberText:     testMemberSuisei,
+				MatchedMembers: []string{testMemberSuisei},
+				Category:       model.CategorySoloLive,
+				SourceTier:     model.SourceTierOfficial,
+				SourceURL:      "https://hololive.hololivepro.com/news/2",
 			},
 		},
 	}
@@ -67,7 +69,11 @@ room_members=사쿠라 미코, 호시마치 스이세이
 candidate_events=[{"member":"사쿠라 미코","category":"event","title":"EXPO","date":"2026-02-20","source_url":"https://hololive.hololivepro.com/news/1","source_tier":"official","summary":"official news"},{"member":"호시마치 스이세이","category":"solo_live","title":"SUISEI LIVE","date":"2026-02-21","source_url":"https://hololive.hololivepro.com/news/2","source_tier":"official","summary":"official event"}]
 Return only schema JSON.`
 
-	got := buildMemberNewsUserPrompt(promptFixtureInput(), "")
+	got, err := buildMemberNewsUserPrompt(promptFixtureInput(), "")
+	if err != nil {
+		t.Fatalf("buildMemberNewsUserPrompt() error = %v", err)
+	}
+
 	if got != want {
 		t.Fatalf("buildMemberNewsUserPrompt snapshot mismatch\n got: %q\nwant: %q", got, want)
 	}
@@ -81,7 +87,11 @@ candidate_events=[{"member":"사쿠라 미코","category":"event","title":"EXPO"
 exa_search_context=ctx body
 Return only schema JSON.`
 
-	got := buildMemberNewsUserPrompt(promptFixtureInput(), "ctx body")
+	got, err := buildMemberNewsUserPrompt(promptFixtureInput(), "ctx body")
+	if err != nil {
+		t.Fatalf("buildMemberNewsUserPrompt() error = %v", err)
+	}
+
 	if got != want {
 		t.Fatalf("buildMemberNewsUserPrompt snapshot mismatch\n got: %q\nwant: %q", got, want)
 	}
@@ -108,5 +118,16 @@ func TestBuildMemberNewsUserPrompt_CandidatesMatchBuildPromptCandidates(t *testi
 			got.Summary != src.Candidate.Description {
 			t.Fatalf("candidate %d mapping mismatch: %+v", i, got)
 		}
+	}
+}
+
+// 직렬화할 수 없는 후보를 빈 목록으로 바꿔 LLM에 넘기지 않고 오류로 돌려준다.
+func TestBuildMemberNewsUserPrompt_RejectsUnencodableCandidate(t *testing.T) {
+	input := promptFixtureInput()
+
+	input.Candidates[0].Candidate.Title = "\xff"
+
+	if got, err := buildMemberNewsUserPrompt(input, ""); err == nil {
+		t.Fatalf("buildMemberNewsUserPrompt() = %q, want marshal error", got)
 	}
 }

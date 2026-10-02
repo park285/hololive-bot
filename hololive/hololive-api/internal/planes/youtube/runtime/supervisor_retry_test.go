@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 func TestRetryableObservationErrorClassification(t *testing.T) {
@@ -49,7 +49,7 @@ func TestRetryableObservationErrorClassification(t *testing.T) {
 		{name: "undefined table", err: &pgconn.PgError{Code: "42P01"}, want: false},
 		{name: "invalid text representation", err: &pgconn.PgError{Code: "22P02"}, want: false},
 		{name: "canceled", err: context.Canceled, want: false},
-		{name: "claim lost", err: sourceobservation.ErrClaimLost, want: false},
+		{name: "claim lost", err: consume.ErrClaimLost, want: false},
 		{name: "unknown", err: errors.New("unexpected canonical write failure"), want: false},
 	}
 	for _, tc := range cases {
@@ -67,16 +67,16 @@ func TestNonRetryableConsumeErrorDeadLettersWithoutExit(t *testing.T) {
 	var (
 		retries      atomic.Int64
 		deadLettered atomic.Int64
-		input        sourceobservation.DeadLetterInput
+		input        consume.DeadLetterInput
 	)
 
 	runtime := newTestRuntime(deadLetterClaimer{
-		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(context.Context, consume.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
 			return contract.StatusPending, nil
 		},
-		deadLetter: func(_ context.Context, in sourceobservation.DeadLetterInput) error {
+		deadLetter: func(_ context.Context, in consume.DeadLetterInput) error {
 			deadLettered.Add(1)
 
 			input = in
@@ -84,11 +84,11 @@ func TestNonRetryableConsumeErrorDeadLettersWithoutExit(t *testing.T) {
 			return nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return &pgconn.PgError{Code: "22P02", Message: "invalid input syntax"}
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   31,
 		LeaseToken:      strings.Repeat("ab", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -126,15 +126,15 @@ func TestNonRetryableConsumeErrorDeadLettersWithoutExit(t *testing.T) {
 
 func TestDeadLetterClaimLostDoesNotDegrade(t *testing.T) {
 	runtime := newTestRuntime(deadLetterClaimer{
-		deadLetter: func(context.Context, sourceobservation.DeadLetterInput) error {
-			return sourceobservation.ErrClaimLost
+		deadLetter: func(context.Context, consume.DeadLetterInput) error {
+			return consume.ErrClaimLost
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return errors.New("unexpected canonical write failure")
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   32,
 		LeaseToken:      strings.Repeat("cd", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -152,15 +152,15 @@ func TestDeadLetterClaimLostDoesNotDegrade(t *testing.T) {
 
 func TestDeadLetterWriteFailureFailsClosed(t *testing.T) {
 	runtime := newTestRuntime(deadLetterClaimer{
-		deadLetter: func(context.Context, sourceobservation.DeadLetterInput) error {
+		deadLetter: func(context.Context, consume.DeadLetterInput) error {
 			return errors.New("dead letter write failed")
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return errors.New("unexpected canonical write failure")
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   33,
 		LeaseToken:      strings.Repeat("ef", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -184,22 +184,22 @@ func TestConnectionLossConsumeErrorIsRetried(t *testing.T) {
 	)
 
 	runtime := newTestRuntime(deadLetterClaimer{
-		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(context.Context, consume.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
 			return contract.StatusPending, nil
 		},
-		deadLetter: func(context.Context, sourceobservation.DeadLetterInput) error {
+		deadLetter: func(context.Context, consume.DeadLetterInput) error {
 			deadLettered.Add(1)
 
 			return nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return fmt.Errorf("finalize: %w", &net.OpError{Op: "write", Net: "tcp", Err: syscall.EPIPE})
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   34,
 		LeaseToken:      strings.Repeat("ab", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -222,10 +222,10 @@ func TestConnectionLossConsumeErrorIsRetried(t *testing.T) {
 type deadLetterClaimer struct {
 	fakeClaimer
 
-	deadLetter func(context.Context, sourceobservation.DeadLetterInput) error
+	deadLetter func(context.Context, consume.DeadLetterInput) error
 }
 
-func (c deadLetterClaimer) DeadLetter(ctx context.Context, input sourceobservation.DeadLetterInput) error {
+func (c deadLetterClaimer) DeadLetter(ctx context.Context, input consume.DeadLetterInput) error {
 	if c.deadLetter == nil {
 		return nil
 	}

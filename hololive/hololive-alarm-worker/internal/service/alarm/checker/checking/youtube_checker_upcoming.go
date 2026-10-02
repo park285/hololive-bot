@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 )
 
 func (c *YouTubeChecker) buildUpcomingNotifications(

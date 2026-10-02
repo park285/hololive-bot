@@ -140,7 +140,7 @@ func TestIdleMaintenanceRetriesFailedCleanupAndSweep(t *testing.T) {
 		},
 		countByStatusFn: func(context.Context, domain.DeliveryOutboxStatus) (int64, error) { counts++; return 0, nil },
 	}
-	cfg := DefaultDispatcherConfig()
+	cfg := testDispatcherConfig()
 	d := mustNewDispatcher(t, repo, &mockSender{}, dispatcherLogger(), &cfg)
 	d.processOnce(t.Context())
 	d.processOnce(t.Context())
@@ -152,7 +152,7 @@ func TestIdleMaintenanceRetriesFailedCleanupAndSweep(t *testing.T) {
 }
 
 func TestDispatcherRejectsAttemptBudgetExceedingLease(t *testing.T) {
-	cfg := DefaultDispatcherConfig()
+	cfg := testDispatcherConfig()
 
 	cfg.AttemptTimeout = deliveryLease - deliveryFinalizeTimeout
 

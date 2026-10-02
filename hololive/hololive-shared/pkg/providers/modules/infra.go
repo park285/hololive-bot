@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/providers/dbresource"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -73,8 +74,8 @@ func buildInfraDatabaseResources(
 	ctx context.Context,
 	appConfig *settings.Config,
 	logger *slog.Logger,
-) (*providers.DatabaseResources, func(), error) {
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
+) (*dbresource.Resources, func(), error) {
+	databaseResources, cleanupDB, err := dbresource.Provide(ctx, &appConfig.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide database resources: %w", err)
 	}
@@ -116,6 +117,8 @@ func newInfraModule(
 		MemberRepository: memberRepository,
 		MemberCache:      memberCache,
 		Cleanup: func() {
+			memberCache.Close()
+
 			if cleanupDB != nil {
 				cleanupDB()
 			}

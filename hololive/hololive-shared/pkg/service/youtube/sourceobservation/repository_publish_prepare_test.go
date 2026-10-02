@@ -340,7 +340,7 @@ func mustTestDeferInput(t *testing.T, code contract.CollectionErrorCode, class c
 		t.Fatal(err)
 	}
 
-	schedule, err := NewRetryDelaySchedule(200 * time.Millisecond)
+	schedule, err := NewRetryAtSchedule(time.Now().UTC().Add(200 * time.Millisecond).Truncate(time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -41,10 +41,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/providers/dbresource"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -65,6 +67,7 @@ type LLMSchedulerRuntime struct {
 	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
 
 	httpServers *sharedserver.RuntimeHTTPServers
+	memberCache *member.Cache
 }
 
 func (r *LLMSchedulerRuntime) Run() {
@@ -201,7 +204,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiplane.LLM
 
 	cacheService := cacheResources.Service
 
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := dbresource.Provide(ctx, &schedulerConfig.Postgres, logger)
 	if err != nil {
 		cleanupCache()
 
@@ -222,7 +225,10 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiplane.LLM
 		return nil, fmt.Errorf("build LLM scheduler components: %w", err)
 	}
 
-	runtime.Managed = lifecycle.NewManaged(cleanup)
+	runtime.Managed = lifecycle.NewManaged(func() {
+		runtime.memberCache.Close()
+		cleanup()
+	})
 
 	return runtime, nil
 }
@@ -233,7 +239,7 @@ func buildLLMSchedulerComponents(
 	logger *slog.Logger,
 	cacheService cache.Client,
 	postgresService database.Client,
-) (*LLMSchedulerRuntime, error) {
+) (_ *LLMSchedulerRuntime, err error) {
 	guards, err := buildLLMGuards(logger)
 	if err != nil {
 		return nil, fmt.Errorf("build LLM guards: %w", err)
@@ -245,6 +251,12 @@ func buildLLMSchedulerComponents(
 	if err != nil {
 		return nil, fmt.Errorf("init member cache: %w", err)
 	}
+
+	defer func() {
+		if err != nil {
+			memberCache.Close()
+		}
+	}()
 
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
 	memberDataProvider := memberServiceAdapter
@@ -284,6 +296,8 @@ func buildLLMSchedulerComponents(
 	if err != nil {
 		return nil, fmt.Errorf("build LLM scheduler runtime components: %w", err)
 	}
+
+	out.memberCache = memberCache
 
 	return out, nil
 }

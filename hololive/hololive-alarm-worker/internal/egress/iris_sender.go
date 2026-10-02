@@ -15,13 +15,6 @@ import (
 
 const replyStatusPollInterval = 250 * time.Millisecond
 
-var (
-	// ErrReplyHandoffOutcomeUnknown은 Markdown 발송의 Iris 접수 뒤 Kakao handoff 결과를 확정할 수 없음을 나타냅니다.
-	ErrReplyHandoffOutcomeUnknown = sendoutcome.ErrHandoffOutcomeUnknown
-	// ErrReplyHandoffFailed는 Markdown 발송에서 Iris가 Kakao handoff 실패를 확정했음을 나타냅니다.
-	ErrReplyHandoffFailed = sendoutcome.ErrHandoffFailed
-)
-
 // IrisClient는 alarm-worker가 알림 전송과 Markdown handoff 확인에 사용하는 Iris 계약입니다.
 // Karing template은 보내지 않습니다(DEC-20260926-hololive-karing-egress-disposition).
 type IrisClient interface {
@@ -97,7 +90,7 @@ func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message st
 	}
 
 	if accepted == nil {
-		return fmt.Errorf("%w: markdown admission response is empty", ErrReplyHandoffOutcomeUnknown)
+		return fmt.Errorf("%w: markdown admission response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
 	requestID, err := acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
@@ -145,12 +138,12 @@ func (s *IrisMessageSender) SendMessageWithClientRequestID(ctx context.Context, 
 
 func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string, error) {
 	if !success || !strings.EqualFold(strings.TrimSpace(delivery), "queued") {
-		return "", fmt.Errorf("%w: admission response is not queued", ErrReplyHandoffOutcomeUnknown)
+		return "", fmt.Errorf("%w: admission response is not queued", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
 	requestID := strings.TrimSpace(rawRequestID)
 	if requestID == "" {
-		return "", fmt.Errorf("%w: admission response has no request id", ErrReplyHandoffOutcomeUnknown)
+		return "", fmt.Errorf("%w: admission response has no request id", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
 	return requestID, nil
@@ -180,7 +173,7 @@ func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID s
 		case <-ctx.Done():
 			return fmt.Errorf(
 				"%w: status polling ended before handoff: %w",
-				ErrReplyHandoffOutcomeUnknown,
+				sendoutcome.ErrHandoffOutcomeUnknown,
 				ctx.Err(),
 			)
 		case <-ticks:
@@ -194,7 +187,7 @@ func assessReplyHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot, 
 	}
 
 	if status == nil {
-		return false, fmt.Errorf("%w: reply status response is empty", ErrReplyHandoffOutcomeUnknown)
+		return false, fmt.Errorf("%w: reply status response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
 	if err := validateReplyHandoffStatus(requestID, status); err != nil {
@@ -206,22 +199,22 @@ func assessReplyHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot, 
 
 func validateReplyHandoffStatus(requestID string, status *iris.ReplyStatusSnapshot) error {
 	if status == nil {
-		return fmt.Errorf("%w: reply status response is empty", ErrReplyHandoffOutcomeUnknown)
+		return fmt.Errorf("%w: reply status response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
 	if strings.TrimSpace(status.RequestID) != requestID {
-		return fmt.Errorf("%w: reply status request id does not match", ErrReplyHandoffOutcomeUnknown)
+		return fmt.Errorf("%w: reply status request id does not match", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
 	switch normalizedReplyState(status.State) {
 	case "queued", "preparing", "prepared", "sending", "handoff_completed":
 		return nil
 	case "failed":
-		return ErrReplyHandoffFailed
+		return sendoutcome.ErrHandoffFailed
 	case "outcome_unknown":
-		return ErrReplyHandoffOutcomeUnknown
+		return sendoutcome.ErrHandoffOutcomeUnknown
 	default:
-		return fmt.Errorf("%w: reply status state is not recognized", ErrReplyHandoffOutcomeUnknown)
+		return fmt.Errorf("%w: reply status state is not recognized", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 }
 

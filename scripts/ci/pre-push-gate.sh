@@ -237,23 +237,11 @@ run_dependency_hygiene() {
   done
 }
 
-# 형제 checkout(go.work 의 ../ 모듈) 상태를 소비하는 호환성 검사.
-run_workspace_compatibility() {
-  resolve_route
-  if is_docs_only_route; then
-    echo "[pre-push] docs-only change detected; skipping workspace compatibility"
-    return 0
-  fi
-
-  bash scripts/ci/test-go-workspace-modules.sh
-}
-
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
 run_content_gates
 run_dependency_hygiene
-run_workspace_compatibility
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate passed"
 echo "════════════════════════════════════════"

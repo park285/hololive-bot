@@ -19,7 +19,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 func TestRuntimeClaimsEverySupportedObservationKind(t *testing.T) {
@@ -32,7 +32,7 @@ func TestRuntimeClaimsEverySupportedObservationKind(t *testing.T) {
 	}
 
 	// 수집 계약이 지원하는 kind를 claim하지 않으면 관측이 queue에 남아 canonical에 반영되지 않는다.
-	for version := range sourceobservation.InitialSupportedContracts() {
+	for version := range consume.InitialSupportedContracts() {
 		if !got[version.Kind] {
 			t.Fatalf("missing claim kind %s", version.Kind)
 		}
@@ -83,10 +83,10 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 		var claims atomic.Int64
 
 		runtime := newTestRuntime(fakeClaimer{
-			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+			claim: func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error) {
 				claims.Add(1)
 
-				return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
+				return consume.ClaimedBatch{Claims: []consume.ClaimWork{{
 					ObservationID:   7,
 					LeaseToken:      strings.Repeat("ab", 32),
 					ObservationKind: contract.KindCommunityPage,
@@ -94,7 +94,7 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 				}}}, nil
 			},
 		}, fakeConsumer{
-			consume: func(context.Context, sourceobservation.Claim) error {
+			consume: func(context.Context, consume.Claim) error {
 				select {
 				case <-entered:
 				default:
@@ -151,12 +151,12 @@ func TestFirstClaimTickTransientErrorDoesNotKillProcess(t *testing.T) {
 
 		errCh := make(chan error, 1)
 		runtime := newTestRuntime(fakeClaimer{
-			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+			claim: func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error) {
 				if attempts.Add(1) == 1 {
-					return sourceobservation.ClaimedBatch{}, &pgconn.PgError{Code: "40001", Message: "serialization failure"}
+					return consume.ClaimedBatch{}, &pgconn.PgError{Code: "40001", Message: "serialization failure"}
 				}
 
-				return sourceobservation.ClaimedBatch{}, nil
+				return consume.ClaimedBatch{}, nil
 			},
 		}, fakeConsumer{})
 		ctx := t.Context()
@@ -182,8 +182,8 @@ func TestFirstClaimTickTransientErrorDoesNotKillProcess(t *testing.T) {
 func TestUnknownClaimErrorFailsSupervisor(t *testing.T) {
 	errCh := make(chan error, 1)
 	runtime := newTestRuntime(fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
-			return sourceobservation.ClaimedBatch{}, errors.New("unexpected claim failure")
+		claim: func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error) {
+			return consume.ClaimedBatch{}, errors.New("unexpected claim failure")
 		},
 	}, fakeConsumer{})
 	runtime.Start(t.Context(), errCh)
@@ -215,17 +215,17 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	claimer := fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+		claim: func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error) {
 			if claimed.Swap(true) {
-				return sourceobservation.ClaimedBatch{}, nil
+				return consume.ClaimedBatch{}, nil
 			}
 
-			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
+			return consume.ClaimedBatch{Claims: []consume.ClaimWork{
 				{ObservationID: 1, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
 				{ObservationID: 2, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
 			}}, nil
 		},
-		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(_ context.Context, input consume.RetryInput) (contract.Status, error) {
 			retried.Add(1)
 
 			if input.ObservationID != 2 {
@@ -236,7 +236,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 		},
 	}
 	runtime := newTestRuntime(claimer, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			select {
 			case <-entered:
 			default:
@@ -250,7 +250,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 	})
 
 	runtime.Config.ConsumerWorkers = 1
-	runtime.workCh = make(chan sourceobservation.ClaimWork)
+	runtime.workCh = make(chan consume.ClaimWork)
 
 	ctx := t.Context()
 	runtime.Start(ctx, make(chan error, 1))
@@ -283,21 +283,21 @@ func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 	var retried atomic.Int64
 
 	runtime := newTestRuntime(fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
-			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
+		claim: func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error) {
+			return consume.ClaimedBatch{Claims: []consume.ClaimWork{{
 				ObservationID:   9,
 				LeaseToken:      strings.Repeat("ef", 32),
 				ObservationKind: contract.KindCommunityPage,
 				SubjectKey:      "UC_TIMEOUT",
 			}}}, nil
 		},
-		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(context.Context, consume.RetryInput) (contract.Status, error) {
 			retried.Add(1)
 
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			close(entered)
 			<-release
 
@@ -330,17 +330,17 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	runtime := newTestRuntime(fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+		claim: func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error) {
 			if claimed.Swap(true) {
-				return sourceobservation.ClaimedBatch{}, nil
+				return consume.ClaimedBatch{}, nil
 			}
 
-			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
+			return consume.ClaimedBatch{Claims: []consume.ClaimWork{
 				{ObservationID: 10, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
 				{ObservationID: 11, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
 			}}, nil
 		},
-		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(_ context.Context, input consume.RetryInput) (contract.Status, error) {
 			if input.ObservationID != 11 {
 				t.Fatalf("retry id = %d, want unsent 11", input.ObservationID)
 			}
@@ -348,7 +348,7 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 			return "", errors.New("release failed")
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			close(entered)
 			<-release
 
@@ -357,7 +357,7 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 	})
 
 	runtime.Config.ConsumerWorkers = 1
-	runtime.workCh = make(chan sourceobservation.ClaimWork)
+	runtime.workCh = make(chan consume.ClaimWork)
 	runtime.Start(t.Context(), make(chan error, 1))
 
 	awaitSignal(t, entered, "worker did not start")
@@ -398,19 +398,19 @@ func TestEmptyViewerRosterDoesNotFailProjectionRefresh(t *testing.T) {
 }
 
 func TestTransientConsumeErrorUsesBoundedQueueRetry(t *testing.T) {
-	var retryInput sourceobservation.RetryInput
+	var retryInput consume.RetryInput
 
 	runtime := newTestRuntime(fakeClaimer{
-		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(_ context.Context, input consume.RetryInput) (contract.Status, error) {
 			retryInput = input
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return &pgconn.PgError{Code: "40P01", Message: "deadlock detected"}
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   12,
 		LeaseToken:      strings.Repeat("ab", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -435,26 +435,26 @@ func TestClaimLoopImmediatelyDrainsFullBatch(t *testing.T) {
 	var calls atomic.Int64
 
 	runtime := newTestRuntime(fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+		claim: func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error) {
 			if calls.Add(1) == 2 {
 				close(secondClaim)
 				cancel()
 
-				return sourceobservation.ClaimedBatch{}, nil
+				return consume.ClaimedBatch{}, nil
 			}
 
-			claims := make([]sourceobservation.ClaimWork, runtimeClaimBatchSizeForTest)
+			claims := make([]consume.ClaimWork, runtimeClaimBatchSizeForTest)
 			for i := range claims {
-				claims[i] = sourceobservation.ClaimWork{ObservationID: int64(i + 1)}
+				claims[i] = consume.ClaimWork{ObservationID: int64(i + 1)}
 			}
 
-			return sourceobservation.ClaimedBatch{Claims: claims}, nil
+			return consume.ClaimedBatch{Claims: claims}, nil
 		},
 	}, fakeConsumer{})
 
 	runtime.Config.ClaimInterval = time.Hour
 	runtime.claim.Limit = runtimeClaimBatchSizeForTest
-	runtime.workCh = make(chan sourceobservation.ClaimWork, runtimeClaimBatchSizeForTest)
+	runtime.workCh = make(chan consume.ClaimWork, runtimeClaimBatchSizeForTest)
 	runtime.claiming.Store(true)
 
 	go runtime.runClaimLoop(ctx, make(chan error, 1))
@@ -472,17 +472,17 @@ func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 	var retries atomic.Int64
 
 	runtime := newTestRuntime(fakeClaimer{
-		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(context.Context, consume.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return errors.New("unexpected canonical write failure")
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   13,
 		LeaseToken:      strings.Repeat("cd", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -503,17 +503,17 @@ func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 	var retries atomic.Int64
 
 	runtime := newTestRuntime(fakeClaimer{
-		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(context.Context, consume.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return context.Canceled
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   15,
 		LeaseToken:      strings.Repeat("ab", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -531,15 +531,15 @@ func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 
 func TestRetryDeadLetterDegradesPlane(t *testing.T) {
 	runtime := newTestRuntime(fakeClaimer{
-		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(context.Context, consume.RetryInput) (contract.Status, error) {
 			return contract.StatusDeadLetter, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
+		consume: func(context.Context, consume.Claim) error {
 			return &pgconn.PgError{Code: "40001", Message: "serialization failure"}
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   16,
 		LeaseToken:      strings.Repeat("cd", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -559,17 +559,17 @@ func TestClaimLostDoesNotRetry(t *testing.T) {
 	var retries atomic.Int64
 
 	runtime := newTestRuntime(fakeClaimer{
-		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+		retry: func(context.Context, consume.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
-			return sourceobservation.ErrClaimLost
+		consume: func(context.Context, consume.Claim) error {
+			return consume.ErrClaimLost
 		},
 	})
-	observation := sourceobservation.ClaimWork{
+	observation := consume.ClaimWork{
 		ObservationID:   14,
 		LeaseToken:      strings.Repeat("ef", 32),
 		ObservationKind: contract.KindCommunityPage,
@@ -589,8 +589,8 @@ func TestForgetStaleClaimDoesNotDeleteNewToken(t *testing.T) {
 	t.Parallel()
 
 	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
-	oldWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("ab", 32)}
-	newWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("cd", 32)}
+	oldWork := consume.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("ab", 32)}
+	newWork := consume.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("cd", 32)}
 
 	runtime.remember(oldWork)
 	runtime.remember(newWork)
@@ -667,10 +667,10 @@ func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *R
 		builder:    targetprojection.PolicyBuilder{Reader: emptyRosterReader{}, Schedules: targetprojection.DefaultPolicySchedules()},
 		now:        func() time.Time { return time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC) },
 		dbSem:      make(chan struct{}, cfg.DBOperationConcurrency),
-		workCh:     make(chan sourceobservation.ClaimWork, cfg.ConsumerWorkers),
+		workCh:     make(chan consume.ClaimWork, cfg.ConsumerWorkers),
 		loopDone:   make(chan struct{}, youtubeSupervisorLoopCapacity),
 		workerDone: make(chan struct{}, cfg.ConsumerWorkers),
-		claim: sourceobservation.ClaimOptions{
+		claim: consume.ClaimOptions{
 			ConsumerName:  communityConsumerName,
 			LeaseOwner:    communityLeaseOwner,
 			Kinds:         []contract.ObservationKind{contract.KindCommunityPage},
@@ -681,13 +681,13 @@ func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *R
 }
 
 type fakeClaimer struct {
-	claim func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error)
-	retry func(context.Context, sourceobservation.RetryInput) (contract.Status, error)
+	claim func(context.Context, consume.ClaimOptions) (consume.ClaimedBatch, error)
+	retry func(context.Context, consume.RetryInput) (contract.Status, error)
 }
 
-func (f fakeClaimer) ClaimBatch(ctx context.Context, options sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+func (f fakeClaimer) ClaimBatch(ctx context.Context, options consume.ClaimOptions) (consume.ClaimedBatch, error) {
 	if f.claim == nil {
-		return sourceobservation.ClaimedBatch{}, nil
+		return consume.ClaimedBatch{}, nil
 	}
 
 	out, err := f.claim(ctx, options)
@@ -698,15 +698,15 @@ func (f fakeClaimer) ClaimBatch(ctx context.Context, options sourceobservation.C
 	return out, nil
 }
 
-func (fakeClaimer) ProbeClaim(context.Context, sourceobservation.ClaimOptions) error {
+func (fakeClaimer) ProbeClaim(context.Context, consume.ClaimOptions) error {
 	return nil
 }
 
-func (fakeClaimer) EnsureClaimBudget(context.Context, sourceobservation.Claim, time.Duration) error {
+func (fakeClaimer) EnsureClaimBudget(context.Context, consume.Claim, time.Duration) error {
 	return nil
 }
 
-func (f fakeClaimer) Retry(ctx context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
+func (f fakeClaimer) Retry(ctx context.Context, input consume.RetryInput) (contract.Status, error) {
 	if f.retry != nil {
 		out, err := f.retry(ctx, input)
 		if err != nil {
@@ -720,10 +720,10 @@ func (f fakeClaimer) Retry(ctx context.Context, input sourceobservation.RetryInp
 }
 
 type fakeConsumer struct {
-	consume func(context.Context, sourceobservation.Claim) error
+	consume func(context.Context, consume.Claim) error
 }
 
-func (f fakeConsumer) ConsumeClaim(ctx context.Context, claim sourceobservation.Claim) error {
+func (f fakeConsumer) ConsumeClaim(ctx context.Context, claim consume.Claim) error {
 	if f.consume == nil {
 		return nil
 	}

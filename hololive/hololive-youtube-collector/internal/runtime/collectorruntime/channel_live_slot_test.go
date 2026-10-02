@@ -15,6 +15,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
@@ -42,7 +43,7 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 		waitLeaseDue(t, pool, checkSpec.JobKey)
 		executor.runSpec(ctx, &checkSpec)
 
-		if err := consumer.Consume(ctx, sourceobservation.ClaimOptions{
+		if err := consumer.Consume(ctx, consume.ClaimOptions{
 			ConsumerName: "youtube-live-processor", LeaseOwner: "api-a",
 			Kinds: []contract.ObservationKind{contract.KindChannelLiveCheck}, Limit: 10, LeaseDuration: 30 * time.Second,
 		}); err != nil {
@@ -86,7 +87,7 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 	}
 }
 
-func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor, *sourceobservation.Consumer, *splitChannelLiveClient) {
+func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor, *consume.Consumer, *splitChannelLiveClient) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
@@ -119,9 +120,9 @@ func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 	}
-	observations := sourceobservation.NewRepository(pool)
-	consumer := sourceobservation.NewConsumer(
-		observations, sourceobservation.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil,
+	observations := consume.NewRepository(pool)
+	consumer := consume.NewConsumer(
+		observations, consume.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil,
 	)
 
 	return pool, executor, consumer, client

@@ -39,12 +39,6 @@ const (
 	replyPhaseReply      = "reply"
 )
 
-// iris.WithClientRequestID 계약: 8..160 ASCII, [A-Za-z0-9._:-]만 허용.
-const (
-	replyClientRequestIDMinLen = 8
-	replyClientRequestIDMaxLen = 160
-)
-
 // replyReissueLadder는 스택 공통 bounded reissue 사다리다. 세대 상한과 :rN 규칙은 iris-client-go가
 // 소유하고, hololive는 base가 길이 제약으로 :rN을 못 붙일 때의 hashed base 파생만 더한다.
 var replyReissueLadder = irisdurable.ReissueLadder{
@@ -68,7 +62,7 @@ func replyClientRequestID(messageID string, ordinal uint64) string {
 	}
 
 	candidate := formatReplyClientRequestID(id, ordinal)
-	if isValidReplyClientRequestID(candidate) {
+	if iris.ValidateClientRequestID(candidate) == nil {
 		return candidate
 	}
 
@@ -114,24 +108,4 @@ func reissuedReplyClientRequestID(clientRequestID string, generation int) (strin
 func hashedReplyIDToken(messageID string) string {
 	sum := sha256.Sum256([]byte(messageID))
 	return "h" + hex.EncodeToString(sum[:16])
-}
-
-func isValidReplyClientRequestID(id string) bool {
-	if len(id) < replyClientRequestIDMinLen || len(id) > replyClientRequestIDMaxLen {
-		return false
-	}
-
-	for _, r := range id {
-		if !isReplyClientRequestIDRune(r) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func isReplyClientRequestIDRune(r rune) bool {
-	const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
-
-	return strings.ContainsRune(allowed, r)
 }

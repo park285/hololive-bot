@@ -256,11 +256,9 @@ func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 	}
 
 	now := time.Now().UTC()
-	args := []any{now}
+	args := append([]any{now}, dbx.AnyArgs(uniqueIDs)...)
 
-	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery telemetry logged: %w", err)
 	}
@@ -275,11 +273,9 @@ func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff ti
 	}
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
-	args := []any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}
+	args := append([]any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}, dbx.AnyArgs(uniqueIDs)...)
 
-	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery telemetry retry: %w", err)
 	}
@@ -322,7 +318,7 @@ func (r *Repository) refreshLockedRows(
 		return nil
 	}
 
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "refresh locked delivery telemetry rows", mustSQL("repository_0343_08.sql"), ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "refresh locked delivery telemetry rows", mustSQL("repository_0343_08.sql"), ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
 		return fmt.Errorf("exec delivery SQL: %w", err)
 	}
 

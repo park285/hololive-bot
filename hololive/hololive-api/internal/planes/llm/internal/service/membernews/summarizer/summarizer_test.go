@@ -160,7 +160,7 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
   "top_items":[
     {"member":"A","category":"event","title":"no source","date_text":"2026-02-20","summary":"x","source_url":""},
     {"member":"B","category":"event","title":"bad x","date_text":"2026-02-20","summary":"x","source_url":"https://x.com/not_allowed/status/1"},
-    {"member":"C","category":"event","title":"valid","date_text":"2026-02-20","summary":"x","source_url":"https://hololive.hololivepro.com/news/2"}
+    {"member":"사쿠라 미코","category":"event","title":"valid","date_text":"2026-02-20","summary":"x","source_url":"https://hololive.hololivepro.com/news/1"}
   ],
   "more_summary":"",
   "omitted_count":0
@@ -224,22 +224,24 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "SUISIEI LIVE",
 				Description: "official event",
 			},
-			EffectiveDate: time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
-			MemberText:    testMemberSuisei,
-			Category:      model.CategorySoloLive,
-			SourceTier:    model.SourceTierOfficial,
-			SourceURL:     "https://hololive.hololivepro.com/news/2",
+			EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
+			MemberText:     testMemberSuisei,
+			MatchedMembers: []string{testMemberSuisei},
+			Category:       model.CategorySoloLive,
+			SourceTier:     model.SourceTierOfficial,
+			SourceURL:      "https://hololive.hololivepro.com/news/2",
 		},
 		{
 			Candidate: model.Candidate{
 				Title:       "Miko Goods",
 				Description: "official goods",
 			},
-			EffectiveDate: time.Date(2026, time.February, 22, 12, 0, 0, 0, util.KSTZone),
-			MemberText:    testMemberMiko,
-			Category:      model.CategoryGoods,
-			SourceTier:    model.SourceTierOfficial,
-			SourceURL:     "https://hololive.hololivepro.com/news/3",
+			EffectiveDate:  time.Date(2026, time.February, 22, 12, 0, 0, 0, util.KSTZone),
+			MemberText:     testMemberMiko,
+			MatchedMembers: []string{testMemberMiko},
+			Category:       model.CategoryGoods,
+			SourceTier:     model.SourceTierOfficial,
+			SourceURL:      "https://hololive.hololivepro.com/news/3",
 		},
 	}
 
@@ -359,11 +361,12 @@ func sampleCandidates() []model.FilteredCandidate {
 				Title:       "EXPO",
 				Description: "official news",
 			},
-			EffectiveDate: date,
-			MemberText:    testMemberMiko,
-			Category:      model.CategoryEvent,
-			SourceTier:    model.SourceTierOfficial,
-			SourceURL:     testSourceURLNews1,
+			EffectiveDate:  date,
+			MemberText:     testMemberMiko,
+			MatchedMembers: []string{testMemberMiko},
+			Category:       model.CategoryEvent,
+			SourceTier:     model.SourceTierOfficial,
+			SourceURL:      testSourceURLNews1,
 		},
 	}
 }

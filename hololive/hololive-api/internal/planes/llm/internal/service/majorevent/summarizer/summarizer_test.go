@@ -763,7 +763,10 @@ func TestBuildUserPrompt_EventDatePassthrough(t *testing.T) {
 		},
 	}
 
-	prompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
+	prompt, err := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
+	if err != nil {
+		t.Fatalf("buildUserPrompt() error = %v", err)
+	}
 
 	if !strings.Contains(prompt, "2026년 2월 21일") {
 		t.Errorf("user prompt should contain formatted date '2026년 2월 21일', got: %s", prompt)
@@ -1294,5 +1297,14 @@ func TestNoteTruncation(t *testing.T) {
 
 	if !strings.HasSuffix(result, "…") {
 		t.Errorf("truncated result should end with …, got %q", result)
+	}
+}
+
+// 직렬화할 수 없는 행사를 빈 목록으로 바꿔 LLM에 넘기지 않고 오류로 돌려준다.
+func TestBuildUserPrompt_RejectsUnencodableEvent(t *testing.T) {
+	events := []domain.MajorEvent{{Title: "\xff"}}
+
+	if got, err := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21"); err == nil {
+		t.Fatalf("buildUserPrompt() = %q, want marshal error", got)
 	}
 }

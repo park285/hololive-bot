@@ -25,12 +25,13 @@
 `hololive-shared/pkg`는 외부 안정 API 전체가 아니라 monorepo 내부 cross-runtime 계약면입니다. 단일 runtime만 소비하는 실행 구현은 해당 module의 `internal/`로 이동하지만, 다음 범주는 shared에 남습니다.
 
 - 진성 다중 소비자: `service/delivery`, `service/scraper/**`, `service/youtube/outbox/{analytics,telemetry}`. 퇴역 producer의 poll scheduler(`service/youtube/poller/runtime/scheduler`)와 budget·job claim 타입은 production 소비자가 없어 DEC-20260926-hololive-legacy-env-config-retirement(퇴역 producer budget 계약 종료 포함)로 삭제했습니다.
-- `service/notification/alarmservice`는 stack-audit T05에서 `hololive-api` bot·admin plane의 in-process AlarmService 분기를 제거한 뒤 production 소비자가 `alarm-worker` 하나입니다. 위 규칙상 `hololive-alarm-worker/internal/` 이동 대상이며, 이동 시점과 범위는 `검토 필요`입니다.
-- producer/consumer 양측 계약면: `service/youtube/outbox/{store,format,deliverysql,dispatchstate}`.
-- shared 내부 소비 그래프가 여러 runtime에 걸치는 기반 패키지: `service/youtube/{admission,batchrepo,poller/runtime,tracking/observation}`, `service/youtube/outbox/timeline`.
-- alarm HTTP migration facade가 공동으로 사용하는 계약·handler: `service/alarm/{checker,queue,dispatchoutbox}`(v3 handoff mode 패키지 `service/alarm/handoff`는 DEC-20260926-hololive-outbox-v3-convergence로 삭제). 이 범주는 facade 제거 뒤에도 실제 다중 소비가 남는지 다시 확인하며 자동 삭제하지 않습니다.
+- `service/notification/alarmservice`·`internal/service/notification/alarmcache`·`service/alarm/{dedup,queue}`는 production 소비자가 `alarm-worker` 하나라 2026-10-02 `hololive-alarm-worker/internal/service/{notification,alarm}/`로 옮겼습니다.
+- producer/consumer 양측 계약면: `service/youtube/outbox/deliverysql`. `store`·`dispatchstate`는 이미 worker로 옮겼습니다. `format`은 production 소비자가 worker 하나라 2026-10-02 `hololive-alarm-worker/internal/service/youtube/outbox/format`으로 옮겼습니다.
+- 수집 관측은 발행과 소비를 패키지로 나눕니다. `service/youtube/sourceobservation`은 collector가 쓰는 발행 저장소(job 계약·checkpoint·publish·complete/defer)이고, `service/youtube/sourceobservation/consume`은 API YouTube plane이 쓰는 claim·finalize·canonical 저장·replay·retention입니다(2026-10-02). 두 패키지는 서로 import하지 않으며 같은 테이블을 각자의 DB role 권한으로 다룹니다. `consume`과 그 의존(`internal/service/youtube/{community,reconcile/*}`, `service/youtube/poller/runtime{,/batchrepo}`)은 production 소비자가 API 하나지만, collector 통합 테스트가 실제 발행 뒤 실제 소비 경로를 실행하므로 shared에 둡니다. `sourceobservation/observationtest`는 두 쪽 테스트가 함께 쓰는 DB fixture이며 운영 코드는 import하지 않습니다.
+- shared 내부 소비 그래프가 여러 runtime에 걸치는 기반 패키지: `service/youtube/{admission,tracking/observation}`, `service/youtube/outbox/timeline`.
+- alarm HTTP migration facade가 공동으로 사용하는 계약·handler: `service/alarm/{checker,dispatchoutbox}`. `dispatchoutbox`의 upcoming 후보 저장소는 API canonical writer가 같은 `alarm_upcoming_candidates` 행을 갱신하는 DB 계약이라 shared 테스트가 함께 검증합니다(v3 handoff mode 패키지 `service/alarm/handoff`는 DEC-20260926-hololive-outbox-v3-convergence로 삭제). 이 범주는 facade 제거 뒤에도 실제 다중 소비가 남는지 다시 확인하며 자동 삭제하지 않습니다.
 
-YouTube dispatcher와 poller 구현처럼 단일 owner로 확정된 코드는 각각 `hololive-alarm-worker/internal/egress/youtubedispatch`와 `hololive-youtube-collector/internal/runtime/pollers`가 소유합니다. public package 잔류는 구현 ownership을 공유한다는 뜻이 아니며, 새 single-owner 실행 구현을 `hololive-shared/pkg`에 추가할 근거로 사용할 수 없습니다.
+YouTube dispatcher와 poller 구현처럼 단일 owner로 확정된 코드는 각각 `hololive-alarm-worker/internal/egress/youtubedispatch`와 `hololive-youtube-collector/internal/runtime/collectorruntime`이 소유합니다. public package 잔류는 구현 ownership을 공유한다는 뜻이 아니며, 새 single-owner 실행 구현을 `hololive-shared/pkg`에 추가할 근거로 사용할 수 없습니다.
 
 ## Validation
 

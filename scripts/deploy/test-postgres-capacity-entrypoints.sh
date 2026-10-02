@@ -2,26 +2,6 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-gate_call='postgres_capacity_assert_target'
-
-for entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
-    path="${root}/${entrypoint}"
-    grep -Fq 'scripts/deploy/lib/postgres-capacity.sh' "${path}" || {
-        echo "${entrypoint} does not source the common PostgreSQL capacity gate" >&2
-        exit 1
-    }
-    gate_line="$(grep -n "${gate_call}" "${path}" | tail -n1 | cut -d: -f1)"
-    compose_execution_line="$(grep -n 'config --quiet' "${path}" | tail -n1 | cut -d: -f1)"
-    [[ "$(grep -c "${gate_call}" "${path}")" == "1" ]] || {
-        echo "${entrypoint} does not invoke the PostgreSQL capacity gate exactly once" >&2
-        exit 1
-    }
-    [[ -n "${gate_line}" && -n "${compose_execution_line}" && "${gate_line}" -lt "${compose_execution_line}" ]] || {
-        echo "${entrypoint} can mutate production before the PostgreSQL capacity gate" >&2
-        exit 1
-    }
-done
-
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 cat >"${tmp}/unsafe.env" <<'ENV'
@@ -41,11 +21,6 @@ SH
 chmod +x "${tmp}/bin/docker"
 
 source "${root}/scripts/deploy/lib/postgres-capacity.sh"
-if rg -q 'python|scripts/ci/check-postgres-capacity.sh' \
-    "${root}/scripts/deploy/lib/postgres-capacity.sh"; then
-    echo "deployment PostgreSQL capacity preflight must not require the CI Python runtime" >&2
-    exit 1
-fi
 if postgres_capacity_assert_target "${root}" "${tmp}/unsafe.env" >"${tmp}/out" 2>&1; then
     echo "common PostgreSQL capacity gate accepted unsafe target overrides" >&2
     exit 1

@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -64,18 +65,6 @@ func MustMarshalJSON(v any) string {
 	}
 
 	return string(data)
-}
-
-type shortNotificationPayload struct {
-	domain.YouTubeVideo
-
-	CanonicalPostID string `json:"canonical_post_id"`
-}
-
-type communityNotificationPayload struct {
-	domain.YouTubeCommunityPost
-
-	CanonicalPostID string `json:"canonical_post_id"`
 }
 
 func normalizeNotificationCanonicalPostID(kind domain.OutboxKind, id string) string {
@@ -282,8 +271,8 @@ func BuildShortNotificationPayload(video *domain.YouTubeVideo, canonicalPostID s
 		return "{}"
 	}
 
-	return MustMarshalJSON(shortNotificationPayload{
-		YouTubeVideo:    *video,
+	return MustMarshalJSON(youtubeoutbox.Short{
+		VideoFields:     youtubeoutbox.NewVideoFields(video),
 		CanonicalPostID: normalizeNotificationCanonicalPostID(domain.OutboxKindNewShort, canonicalPostID),
 	})
 }
@@ -297,10 +286,7 @@ func BuildCommunityNotificationPayload(post *domain.YouTubeCommunityPost, canoni
 
 	payloadPost.PostID = NormalizeCommunityResourceID(payloadPost.PostID)
 
-	return MustMarshalJSON(communityNotificationPayload{
-		YouTubeCommunityPost: payloadPost,
-		CanonicalPostID:      normalizeNotificationCanonicalPostID(domain.OutboxKindCommunityPost, canonicalPostID),
-	})
+	return MustMarshalJSON(youtubeoutbox.NewCommunity(&payloadPost, normalizeNotificationCanonicalPostID(domain.OutboxKindCommunityPost, canonicalPostID)))
 }
 
 // parseViewerCount: 시청자 수 텍스트 파싱

@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
@@ -192,6 +192,8 @@ func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.Majo
 	}
 
 	out, err := c.checkGetLink(ctx, targetURL)
+	observeLinkGetFallback(out)
+
 	if err != nil {
 		return out, fmt.Errorf("check get link: %w", err)
 	}
@@ -300,19 +302,11 @@ func isSuccessStatus(code int) bool {
 	return code >= http.StatusOK && code < http.StatusMultipleChoices
 }
 
+// shouldFallbackToGET은 HEAD를 거절하거나 처리하지 못하는 서버를 GET 한 번으로 다시 확인할지 정한다.
+// 예외 계약은 docs/current/contracts/majorevent.md의 링크 검사 HEAD→GET 절이다.
 func shouldFallbackToGET(statusCode int, probeErr error) bool {
 	if probeErr != nil {
-		// probe의 ctx 타임아웃은 "context deadline exceeded"라 "timeout" 부분문자열에
-		// 걸리지 않는다 — HEAD를 끊는 서버가 GET에는 정상 응답하는 경우를 놓치지 않게 한다.
-		if errors.Is(probeErr, context.DeadlineExceeded) {
-			return true
-		}
-
-		normalized := strings.ToLower(probeErr.Error())
-
-		return strings.Contains(normalized, "timeout") ||
-			strings.Contains(normalized, "connection reset") ||
-			strings.Contains(normalized, "method not allowed")
+		return isHeadTransportFailure(probeErr)
 	}
 
 	switch statusCode {
@@ -321,4 +315,16 @@ func shouldFallbackToGET(statusCode int, probeErr error) bool {
 	default:
 		return false
 	}
+}
+
+// isHeadTransportFailure는 HEAD 요청이 시간 제한에 걸렸거나 연결이 재설정된 경우만 참이다. HEAD를 끊는 서버가 GET에는
+// 정상 응답하는 경우를 놓치지 않기 위한 것이다. 호출자 취소와 그 밖의 전송 오류는 GET으로 다시 시도하지 않는다.
+func isHeadTransportFailure(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+
+	netErr, ok := errors.AsType[net.Error](err)
+
+	return ok && netErr.Timeout()
 }

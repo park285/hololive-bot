@@ -126,6 +126,8 @@ func IsReplyStatusFailed(err error) bool {
 	return errors.Is(err, ErrReplyStatusFailed)
 }
 
-func isReplyOutcomeUnknown(err error) bool {
-	return errors.Is(err, ErrReplyOutcomeUnknown)
+// IsReplyOutcomeUnknown은 Iris 전달 또는 영속 응답 저장의 결과가 불명인지 판정한다.
+// 저장 응답이 유실돼도 outbox 행은 커밋됐을 수 있으므로 추가 응답을 보내면 안 된다.
+func IsReplyOutcomeUnknown(err error) bool {
+	return errors.Is(err, ErrReplyOutcomeUnknown) || errors.Is(err, ErrReplyStagingFailed)
 }

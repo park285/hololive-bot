@@ -44,7 +44,7 @@ func (l *countedTerminalLease) CompleteCurrent(ctx context.Context) error {
 	return nil
 }
 
-func newExecutorFixture(t *testing.T, runner JobRunner, fatal *[]error) (*collectionExecutor, *joblease.JobSpec) {
+func newExecutorFixture(t *testing.T, runner collectutil.JobRunner, fatal *[]error) (*collectionExecutor, *joblease.JobSpec) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)

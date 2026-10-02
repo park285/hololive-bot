@@ -1,7 +1,6 @@
 package youtubedispatch
 
 import (
-	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -11,21 +10,14 @@ import (
 )
 
 func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
-	ctx context.Context,
 	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []dispatchstate.ClaimToken,
 	err error,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
-	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after request build error",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-	)
-
 	failedAt := time.Now()
 
 	mr.logger.Warn("Failed to build grouped delivery request",
@@ -43,22 +35,15 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 }
 
 func (mr *MetricsRecorder) recordGroupedSendFailure(
-	ctx context.Context,
 	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
-	claimTokens []dispatchstate.ClaimToken,
 	sendErr error,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
-	mr.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after send failure",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-	)
-
 	failedAt := time.Now()
 	reason := deliveryFailureReason(sendErr)
 	mr.logger.Warn("Failed to send grouped delivery",
@@ -112,4 +97,28 @@ func groupedDeliveryFields(group *deliveryGroup) (roomID, channelID string, kind
 	}
 
 	return group.roomID, group.channelID, group.kind
+}
+
+// recordGroupedFormatFailure는 묶음 메시지를 만들지 못해 그룹 전체를 재시도 가능한 포맷 실패로 전이한 뒤의 기록이다.
+// 개별 발송으로 내려가지 않으므로 묶음의 모든 행을 같은 사유로 남긴다.
+func (mr *MetricsRecorder) recordGroupedFormatFailure(
+	group *deliveryGroup,
+	validRows []domain.YouTubeNotificationDelivery,
+	validOutboxes []domain.YouTubeNotificationOutbox,
+	err error,
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+) {
+	roomID, channelID, kind := groupedDeliveryFields(group)
+	mr.logger.Warn("Failed to format grouped delivery",
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
+		slog.String("kind", string(kind)),
+		slog.Int("count", len(validOutboxes)),
+		slog.Any("error", err))
+	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, time.Now(), "grouped", "failure", "format message")
+
+	for i := range validRows {
+		mr.recordDeliveryFailure(result, mu, "format message", validRows[i].ID, validRows[i].OutboxID)
+	}
 }

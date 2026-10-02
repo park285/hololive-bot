@@ -56,7 +56,13 @@ func replyOutboxSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAtte
 }
 
 func replyUncertainSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAttempts int32, err error) (string, bool) {
-	if !accepted && !errors.Is(err, transport.ErrReplyOutcomeUnknown) {
+	// Iris가 수리한 응답은 자동 재발송 큐로 돌리지 않는다. 관측 실패도 즉시 정산해
+	// lease 만료까지 같은 방의 후속 응답을 막지 않고 수동 확인 대상으로 남긴다.
+	if accepted {
+		return durability.ReplyOutboxManualReview, true
+	}
+
+	if !transport.IsReplyOutcomeUnknown(err) {
 		return "", false
 	}
 

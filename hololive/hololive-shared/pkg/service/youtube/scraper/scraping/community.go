@@ -242,7 +242,7 @@ func (c *Client) parseBackstagePost(post *gjson.Result) *parser.CommunityPost {
 
 	// 좋아요 수 파싱
 	likeCountText := post.Get("voteCount.simpleText").String()
-	likeCount := parseShortNumber(likeCountText)
+	likeCount := parser.ParseShortNumber(likeCountText)
 
 	// 이미지 첨부
 	imageThumbnails := post.Get("backstageAttachment.backstageImageRenderer.image.thumbnails")

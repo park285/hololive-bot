@@ -24,9 +24,10 @@ const (
 	faultBeforeCommit        publishFaultPoint = "before_commit"
 )
 
+// Repository는 collector가 수집 관측을 원자적으로 발행하고 수집 job을 완료·연기하는 저장소다. 발행된 관측의
+// claim·finalize는 consume.Repository가 맡는다.
 type Repository struct {
 	pool                 *pgxpool.Pool
-	supported            SupportedContractSet
 	jobContracts         JobContractSet
 	fenceVerifier        PublishFenceVerifier
 	publishFault         func(ctx context.Context, tx dbx.Tx, point publishFaultPoint) error
@@ -34,17 +35,16 @@ type Repository struct {
 }
 
 func NewRepository(pool *pgxpool.Pool) *Repository {
-	return NewRepositoryWithContracts(pool, InitialSupportedContracts(), InitialJobContracts(), nil)
+	return NewRepositoryWithContracts(pool, InitialJobContracts(), nil)
 }
 
 func NewRepositoryWithContracts(
 	pool *pgxpool.Pool,
-	supported SupportedContractSet,
 	jobContracts JobContractSet,
 	fenceVerifier PublishFenceVerifier,
 ) *Repository {
 	repository := &Repository{
-		pool: pool, supported: supported, jobContracts: jobContracts, fenceVerifier: fenceVerifier,
+		pool: pool, jobContracts: jobContracts, fenceVerifier: fenceVerifier,
 	}
 	if repository.fenceVerifier == nil {
 		repository.fenceVerifier = sqlPublishFenceVerifier{jobs: jobContracts}
@@ -54,7 +54,7 @@ func NewRepositoryWithContracts(
 }
 
 func (r *Repository) validate() error {
-	if r == nil || r.pool == nil || r.supported == nil || r.jobContracts == nil || r.fenceVerifier == nil {
+	if r == nil || r.pool == nil || r.jobContracts == nil || r.fenceVerifier == nil {
 		return fmt.Errorf("validate source observation repository: %w", ErrInvalidRepository)
 	}
 

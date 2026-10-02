@@ -10,6 +10,8 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 const (
@@ -224,11 +226,11 @@ func TestIrisMessageSenderClassifiesTerminalStatus(t *testing.T) {
 		status *iris.ReplyStatusSnapshot
 		want   error
 	}{
-		{name: "failed", status: replyTestStatus("markdown-request-1", "failed"), want: ErrReplyHandoffFailed},
-		{name: "outcome unknown", status: replyTestStatus("markdown-request-1", "outcome_unknown"), want: ErrReplyHandoffOutcomeUnknown},
-		{name: "unknown state", status: replyTestStatus("markdown-request-1", "mystery"), want: ErrReplyHandoffOutcomeUnknown},
-		{name: "empty status", want: ErrReplyHandoffOutcomeUnknown},
-		{name: "request mismatch", status: replyTestStatus("another-request", "handoff_completed"), want: ErrReplyHandoffOutcomeUnknown},
+		{name: "failed", status: replyTestStatus("markdown-request-1", "failed"), want: sendoutcome.ErrHandoffFailed},
+		{name: "outcome unknown", status: replyTestStatus("markdown-request-1", "outcome_unknown"), want: sendoutcome.ErrHandoffOutcomeUnknown},
+		{name: "unknown state", status: replyTestStatus("markdown-request-1", "mystery"), want: sendoutcome.ErrHandoffOutcomeUnknown},
+		{name: "empty status", want: sendoutcome.ErrHandoffOutcomeUnknown},
+		{name: "request mismatch", status: replyTestStatus("another-request", "handoff_completed"), want: sendoutcome.ErrHandoffOutcomeUnknown},
 	}
 
 	for _, tc := range testCases {
@@ -268,7 +270,7 @@ func TestIrisMessageSenderPollingDeadlineIsOutcomeUnknown(t *testing.T) {
 		t.Fatal("SendMessage() error = nil, want outcome unknown")
 	}
 
-	require.ErrorIs(t, err, ErrReplyHandoffOutcomeUnknown)
+	require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.NotContains(t, err.Error(), "markdown-request-1")
 	assert.GreaterOrEqual(t, client.statusCalls, 1)

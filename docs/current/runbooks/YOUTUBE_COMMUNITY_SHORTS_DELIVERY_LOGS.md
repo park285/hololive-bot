@@ -17,7 +17,7 @@
 - `failure_reason`은 lifecycle Reason 코드 어휘(`provider_rate_limited`, `provider_transport`, `format_message` 등)를 씁니다.
 - `attempt_ordinal`은 telemetry 버퍼에 남은 delivery별 최대 순번 다음 값과 claim 시점 `attempt_count + 1`(attempt started 로그의 값) 중 큰 값입니다. revive가 `attempt_count`를 0으로 되돌려도 버퍼에 남은 순번 뒤로 이어지므로 revive 뒤에는 `attempt_count + 1`보다 클 수 있고, telemetry processor가 retention(기본 24h, profile `youtube_delivery.telemetry_retention_ms`)이 지난 방출 행을 지운 뒤에도 `attempt_count`가 하한이라 되돌아가지 않습니다. 한계: 버퍼 행이 retention으로 지워진 뒤 revive된 delivery는 두 값이 모두 초기화되어 1부터 다시 셉니다. 그래서 같은 `(delivery_id, attempt_ordinal)` 감사 로그가 retention보다 긴 간격을 두고 두 번 나올 수 있으며, 이때는 `sent_at`으로 시도를 구분합니다. 버퍼에 남은 행과 같은 `(delivery_id, attempt_ordinal)`이 다시 들어오면 조용히 건너뛰지 않고 오류로 전이 트랜잭션을 rollback합니다.
 - `post_id`는 content_id와 payload `canonical_post_id`가 일치함을 검증한 logical key(`short:…`, `community:…`)입니다.
-- 알려진 공백: grouped 발송이 permanent로 실패해 개별 발송으로 넘어간 경우 그 grouped 시도는 전이가 없어 기록되지 않습니다. 이어지는 개별 발송 시도는 `per_room`으로 기록됩니다.
+- 알려진 공백: grouped 발송이 permanent로 실패해 개별 발송으로 넘어간 경우 그 grouped 시도는 전이가 없어 기록되지 않습니다. 이어지는 개별 발송 시도는 `per_room`으로 기록됩니다. 넘어간 횟수는 `hololive_youtube_outbox_grouped_send_fallback_total{result="started"}`로 확인합니다.
 - fail-closed 비용: telemetry INSERT가 실패하면 전이 트랜잭션 전체가 rollback됩니다. `CompleteSent`가 이렇게 실패하면 provider가 이미 받은 발송이 SENDING으로 남고 stale sweep이 QUARANTINED로 격리합니다. 재발송하지 않고 결과 불명으로 드러나며, 운영자는 해당 delivery를 전송 증거로 검토합니다.
 
 ## Canonical Validation Log

@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -60,7 +59,7 @@ func (d *SendEngine) dispatchRowsIndividually(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	reuseCache claim.DecisionCache,
+	reuseCache *claimDecisionCache,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -69,58 +68,28 @@ func (d *SendEngine) dispatchRowsIndividually(
 	}
 }
 
+// formatGroupedMessage는 묶음 메시지를 만든다. 이름 조회나 렌더링이 실패하면 개별 발송으로 바꾸지 않고 오류를 돌려주며,
+// 호출자가 그룹 전체를 재시도 가능한 포맷 실패로 전이한다. 표시명이 없는 채널만 예외 계약의 종단 문구를 쓴다.
 func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
-) (string, bool) {
+) (string, error) {
 	if group == nil {
-		d.logger.Warn("Grouped format skipped because delivery group is missing",
-			slog.Int("count", len(validRows)))
-
-		return "", false
+		return "", errors.New("format grouped message: delivery group is missing")
 	}
 
-	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
-	if err != nil || memberName == "" {
-		memberName = d.formatter.vtuberFallback(ctx)
-	}
-
-	message, err := d.formatter.formatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
+	memberName, err := d.formatter.GetMemberName(ctx, group.channelID)
 	if err != nil {
-		d.logger.Warn("Grouped format failed, falling back to individual dispatch",
-			slog.String("room_id", group.roomID),
-			slog.String("channel_id", group.channelID),
-			slog.String("kind", string(group.kind)),
-			slog.Int("count", len(validRows)),
-			slog.Any("error", err))
-
-		return "", false
+		return "", fmt.Errorf("format grouped message: %w", err)
 	}
 
-	return message, true
-}
-
-func (d *SendEngine) dispatchClaimedRowsIndividually(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	formattedMessages map[int64]string,
-	formatFailures map[int64]bool,
-	rowClaimTokens [][]dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
-) {
-	for i := range rows {
-		var claims []dispatchstate.ClaimToken
-
-		if i < len(rowClaimTokens) {
-			claims = rowClaimTokens[i]
-		}
-
-		d.dispatchClaimedDeliveryRow(ctx, &rows[i], &outboxes[i], formattedMessages, formatFailures, claims, result, mu)
+	message, err := d.formatter.FormatGroupedMessage(ctx, d.formatter.DisplayMemberName(memberName), group.channelID, group.kind, validOutboxes)
+	if err != nil {
+		return "", fmt.Errorf("format grouped message: %w", err)
 	}
+
+	return message, nil
 }
 
 func singleDeliveryBatch(
@@ -138,7 +107,7 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	for id := range outboxByID {
 		item := outboxByID[id]
 
-		msg, err := d.formatter.formatMessage(ctx, &item)
+		msg, err := d.formatter.FormatMessage(ctx, &item)
 		if err != nil {
 			d.logger.Warn("Failed to pre-format outbox message",
 				slog.Int64("outbox_id", id),
@@ -248,14 +217,6 @@ func (d *SendEngine) recordGroupedSendOutcomeUnknown(
 		slog.Any("outbox_ids", collectDeliveryOutboxIDs(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
-}
-
-func (d *SendEngine) deliveryParallelism() int {
-	if d.config.DeliveryParallelism > 0 {
-		return d.config.DeliveryParallelism
-	}
-
-	return dispatchstate.DefaultConfig().DeliveryParallelism
 }
 
 func (r deliverySendRequest) requestID() string {

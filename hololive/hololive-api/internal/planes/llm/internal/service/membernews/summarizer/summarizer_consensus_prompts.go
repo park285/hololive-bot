@@ -48,9 +48,16 @@ Rules:
 - severity=info: stylistic suggestions.`
 }
 
-func buildReviewUserPrompt(input *model.SummarizeInput, digest *model.Digest) string {
-	candidatesJSON := marshalPromptJSON(buildPromptCandidates(input), "[]")
-	digestJSON := marshalPromptJSON(digest, "null")
+func buildReviewUserPrompt(input *model.SummarizeInput, digest *model.Digest) (string, error) {
+	candidatesJSON, err := marshalPromptJSON("candidates", buildPromptCandidates(input))
+	if err != nil {
+		return "", err
+	}
+
+	digestJSON, err := marshalPromptJSON("primary summary", digest)
+	if err != nil {
+		return "", err
+	}
 
 	return fmt.Sprintf(`ORIGINAL CANDIDATES:
 %s
@@ -61,7 +68,7 @@ PRIMARY SUMMARY TO REVIEW:
 Review the summary against the original candidates. Return only schema JSON.`,
 		string(candidatesJSON),
 		string(digestJSON),
-	)
+	), nil
 }
 
 func buildPromptCandidates(input *model.SummarizeInput) []promptCandidate {
@@ -105,10 +112,21 @@ func buildAdjudicatorUserPrompt(
 	input *model.SummarizeInput,
 	digest *model.Digest,
 	verdict *consensus.ReviewVerdict,
-) string {
-	candidatesJSON := marshalPromptJSON(buildPromptCandidates(input), "[]")
-	digestJSON := marshalPromptJSON(digest, "null")
-	verdictJSON := marshalPromptJSON(verdict, "null")
+) (string, error) {
+	candidatesJSON, err := marshalPromptJSON("candidates", buildPromptCandidates(input))
+	if err != nil {
+		return "", err
+	}
+
+	digestJSON, err := marshalPromptJSON("primary summary", digest)
+	if err != nil {
+		return "", err
+	}
+
+	verdictJSON, err := marshalPromptJSON("reviewer verdict", verdict)
+	if err != nil {
+		return "", err
+	}
 
 	return fmt.Sprintf(`ORIGINAL CANDIDATES:
 %s
@@ -123,5 +141,5 @@ Produce a corrected summary that fixes the identified issues. Return only schema
 		string(candidatesJSON),
 		string(digestJSON),
 		string(verdictJSON),
-	)
+	), nil
 }

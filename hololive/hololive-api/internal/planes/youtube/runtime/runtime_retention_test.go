@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
@@ -25,10 +25,10 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 	runtime.Config.Retention.Enabled = true
 	runtime.Config.Replay.Enabled = true
 	runtime.retainer = fakeRetainer{
-		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
+		tick: func(context.Context, consume.RetentionConfig, time.Time) (consume.RetentionResult, error) {
 			retentionTicks.Add(1)
 
-			return sourceobservation.RetentionResult{}, nil
+			return consume.RetentionResult{}, nil
 		},
 	}
 	runtime.replayer = fakeReplayer{
@@ -82,10 +82,10 @@ func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 		},
 	}
 	runtime.retainer = fakeRetainer{
-		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
+		tick: func(context.Context, consume.RetentionConfig, time.Time) (consume.RetentionResult, error) {
 			sourceTicks.Add(1)
 
-			return sourceobservation.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
+			return consume.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
 		},
 	}
 
@@ -188,16 +188,16 @@ func waitForTicks(t *testing.T, ticks *atomic.Int64) {
 }
 
 type fakeRetainer struct {
-	tick func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error)
+	tick func(context.Context, consume.RetentionConfig, time.Time) (consume.RetentionResult, error)
 }
 
 func (f fakeRetainer) RunRetentionTick(
 	ctx context.Context,
-	cfg sourceobservation.RetentionConfig,
+	cfg consume.RetentionConfig,
 	now time.Time,
-) (sourceobservation.RetentionResult, error) {
+) (consume.RetentionResult, error) {
 	if f.tick == nil {
-		return sourceobservation.RetentionResult{}, nil
+		return consume.RetentionResult{}, nil
 	}
 
 	out, err := f.tick(ctx, cfg, now)

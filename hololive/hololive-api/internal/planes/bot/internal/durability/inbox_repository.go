@@ -228,11 +228,7 @@ func (r *InboxRepository) Claim(ctx context.Context, claimToken string, lease ti
 	}
 
 	if err != nil {
-		if safeErr := safeRepositoryError("claim webhook inbox row", err); safeErr != nil {
-			return nil, fmt.Errorf("safe repository error: %w", safeErr)
-		}
-
-		return nil, nil //nolint:nilnil // safe*Error가 오류를 삼킨 경우도 위 ErrNoRows 분기와 같은 "행 없음"으로 접는다.
+		return nil, safeRepositoryError("claim webhook inbox row", err)
 	}
 
 	return &claim, nil
@@ -337,11 +333,7 @@ func (r *InboxRepository) Abandon(ctx context.Context, messageID, claimToken, re
 
 	id, token, err := r.fenceArgs(messageID, claimToken)
 	if err != nil {
-		if safeErr := safeMessageRepositoryError("begin webhook abandon", id, err); safeErr != nil {
-			return false, fmt.Errorf("safe message repository error: %w", safeErr)
-		}
-
-		return false, nil
+		return false, safeMessageRepositoryError("begin webhook abandon", id, err)
 	}
 
 	terminalReason, err := requireIdentity("terminal reason", reason)
@@ -406,11 +398,7 @@ func (r *InboxRepository) Heartbeat(ctx context.Context, messageID, claimToken s
 	}
 
 	if err != nil {
-		if safeErr := safeMessageRepositoryError("heartbeat webhook inbox row", id, err); safeErr != nil {
-			return time.Time{}, false, fmt.Errorf("safe message repository error: %w", safeErr)
-		}
-
-		return time.Time{}, false, nil
+		return time.Time{}, false, safeMessageRepositoryError("heartbeat webhook inbox row", id, err)
 	}
 
 	return leaseUntil, true, nil
