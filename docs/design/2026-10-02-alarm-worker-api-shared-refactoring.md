@@ -543,9 +543,19 @@ runtime binary별 `go list -deps`로 worker만 링크하는 shared 패키지 7�
 | 4.5절 | collector `collecterr` 이름은 오류 분류 어휘로 900여 곳에서 쓰여 유지했고, 쓰이지 않던 registry alias를 지웠습니다. repo 수준 검사는 compose 렌더·보안 설정 검사를 남기고, 문자열만 확인하던 검사(collector 6개, batch 저장소 소유권 grep, QUIC UDP buffer 스크립트 문자열)를 지웠습니다. |
 | 멤버 표시명 예외 | 운영 DB 읽기 전용 조회로 구독 채널 21개 모두 한국어 표시명을 가짐을 확인해 제거 조건을 충족했습니다. 중간 단계 두 개와 두 지표를 지우고, 남은 종단 문구에 `hololive_youtube_outbox_member_name_missing_total`을 붙였습니다. |
 
+### 보류 항목 처리 (2026-10-02, 7.2.2)
+
+- `request_snapshot_allowed`: migration 256이 열을 지웠습니다. 적용 전 운영 조회에서 `false` 행은 `SENT` 54, `FAILED` 5였고 끝나지 않은 행은 0건이었습니다.
+- D4: 계약(`2026-09-30-live-reconciliation-lifecycle.md`)상 정보가 부족한 행을 상태 추정으로 끝내지 않고, 운영자 결정은 `record_youtube_live_review`의 `closed_unresolved` receipt로만 남깁니다. 비종단 `legacy_unknown` 68행 중 검토 가능한 `UPCOMING` 53행에 receipt를 시도해 27행을 닫았습니다(`operator_id=kapu`).
+  - 26행은 원본 snapshot이 receipt 상한 256 KiB를 넘어 거절됐습니다. 원인은 아래 head 배열 증가입니다.
+  - `UPCOMING` 6행은 가용성 기록이 없고, `LIVE` 9행(마지막 관측 2026-05-24~06-03)은 head·가용성이 없어 검토 함수 대상이 아닙니다. 둘 다 활성 수집 대상 밖이라 영상별 확인도 받지 않습니다.
+  - 종단 `legacy_unknown`도 5,536행이 있어 `OriginLegacyUnknown` 처리 제거 조건은 여전히 충족되지 않습니다.
+- 새로 확인한 결함: `youtube_live_reconciliation_heads.ignored_absence_scheduled_for`에 상한이 없습니다. LIVE 시작을 관측하지 못한 head(`last_live_positive_at` 없음)에 목록 부재 slot마다 시각이 하나씩 쌓이고 종료 뒤에도 남아 최대 17,006개, 1,000개 초과 head 1,661개, `ENDED` head에만 59 MB가 쌓였습니다. head를 갱신할 때마다 큰 배열을 다시 쓰고, 위 26행의 검토도 막습니다. reducer의 재생 방지 의미를 유지하면서 배열을 줄이는 설계가 필요합니다.
+
 ### 남은 작업
 
-- D4 오래된 `legacy_unknown` 비종단 행 정리(운영 DB 쓰기 승인 필요)와 `request_snapshot_allowed` 열 삭제 migration(운영 적용 승인 필요)
+- `ignored_absence_scheduled_for` 상한 설계와 기존 배열 정리(운영 DB 쓰기 포함)
+- 위 처리 뒤 남은 D4 41행: 26행은 배열 정리 뒤 검토를 다시 시도하고, 15행은 활성 수집 대상 밖 영상의 확인 경로나 검토 계약을 정해야 합니다.
 - 위 표에서 근거를 들어 하지 않은 항목은 근거가 바뀌면 다시 검토합니다.
 
 ## 수행한 검증과 한계

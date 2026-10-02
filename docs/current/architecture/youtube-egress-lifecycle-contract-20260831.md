@@ -88,7 +88,7 @@ Ledger `SENT/QUARANTINED`가 retained physical state보다 우선합니다. Ledg
 
 Operation membership과 provider request는 최초 `BeginSending` 전에 `youtube_notification_send_request`에 저장하며 이후 변경할 수 없습니다. 최종 body·route·방·member IDs·dedupe keys·base ID·generation을 고정하고 retry/restart에서 다시 렌더링하지 않습니다. frozen 그룹의 모든 멤버가 due·freshness·lock 조건을 만족해야 claim 대상입니다. batch 상한보다 큰 그룹은 부분 전송하지 않으며 다른 eligible 작업을 막지 않습니다.
 
-기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 249는 `request_snapshot_allowed=false`로 기존 행을 구분했습니다. 2026-10-02 운영 조회에서 이 표시를 가진 67행이 모두 `SENT`·`FAILED`(2026-05-17, revive 신선도 창 밖)였으므로 dispatcher의 구분 검사(`ErrLegacyRequestEvidence`)는 지웠습니다. 열은 별도 migration으로 지울 때까지 남습니다.
+기존 미고정 행은 과거 전송 가능성을 현재 본문으로 추정하지 않습니다. migration 249는 `request_snapshot_allowed=false`로 기존 행을 구분했습니다. 2026-10-02 운영 조회에서 이 표시를 가진 67행이 모두 `SENT`·`FAILED`(2026-05-17, revive 신선도 창 밖)였으므로 dispatcher의 구분 검사(`ErrLegacyRequestEvidence`)는 지웠습니다. migration 256이 열을 지웠습니다. 표시가 `false`인데 아직 끝나지 않은(`PENDING`·`SENDING`·`QUARANTINED`) 행이 있으면 이 migration은 열을 남기고 실패합니다.
 
 ### Tracking requirement
 

@@ -1364,7 +1364,6 @@ TABLE youtube_notification_delivery
   COLUMN error text
   COLUMN row_version bigint NOT NULL DEFAULT 0
   COLUMN send_request_id text
-  COLUMN request_snapshot_allowed boolean NOT NULL DEFAULT true
   CONSTRAINT chk_youtube_notification_delivery_row_version CHECK (((row_version IS NOT NULL) AND (row_version >= 0)))
   CONSTRAINT chk_youtube_notification_delivery_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text, ('QUARANTINED'::character varying)::text])))
   CONSTRAINT youtube_notification_delivery_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES youtube_notification_outbox(id) ON DELETE CASCADE
