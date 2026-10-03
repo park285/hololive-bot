@@ -148,6 +148,27 @@ test("parseRawLiveMetadata rejects disagreeing machine-readable schedules", () =
   );
 });
 
+test("parseRawLiveMetadata keeps distinct policies at the leap-day calendar boundary", () => {
+  const withTimes = (startTimestamp, endTimestamp) => {
+    const raw = structuredClone(playerFixture);
+    raw.microformat.playerMicroformatRenderer.liveBroadcastDetails = { startTimestamp, endTimestamp };
+    return raw;
+  };
+
+  const leap = parseRawLiveMetadata(withTimes("2028-02-29T11:00:00+09:00", "2028-02-29T12:00:00Z"), "upcoming-fixture");
+  assert.equal(leap.startTimestamp, "2028-02-29T02:00:00.000Z");
+  assert.equal(leap.endTimestamp, "2028-02-29T12:00:00.000Z");
+
+  // 필수 시작 시각의 달력 오류는 parser drift이고, 부가 종료 시각의 같은 오류는 생략입니다.
+  const omittedEnd = parseRawLiveMetadata(withTimes("2028-02-29T11:00:00Z", "2100-02-29T12:00:00Z"), "upcoming-fixture");
+  assert.equal(omittedEnd.startTimestamp, "2028-02-29T11:00:00.000Z");
+  assert.equal(Object.hasOwn(omittedEnd, "endTimestamp"), false);
+  assert.throws(
+    () => parseRawLiveMetadata(withTimes("2100-02-29T11:00:00Z", undefined), "upcoming-fixture"),
+    (error) => error.code === "parser_drift",
+  );
+});
+
 test("parseRawLiveMetadata rejects identity, boolean, and timestamp drift", () => {
   assert.throws(
     () => parseRawLiveMetadata(playerFixture, "different-video"),

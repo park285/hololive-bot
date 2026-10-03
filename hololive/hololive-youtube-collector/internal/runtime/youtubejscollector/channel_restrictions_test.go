@@ -7,7 +7,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -42,9 +42,8 @@ func TestChannelLiveRunnerPublishesRestrictedSchedulesAsPartial(t *testing.T) {
 			}
 
 			observations := result.Output().Observations()
-			checkpoints := result.Output().Checkpoints()
 
-			if result.Kind() != collectutil.CollectComplete || len(observations) != 1 || len(checkpoints) != 1 {
+			if result.Kind() != collection.CollectComplete || len(observations) != 1 {
 				t.Fatalf("poll must complete with one partial observation: %#v", result)
 			}
 
@@ -52,10 +51,6 @@ func TestChannelLiveRunnerPublishesRestrictedSchedulesAsPartial(t *testing.T) {
 			if observation.Completeness != contract.CompletenessPartial ||
 				contract.NegativeEligible(observation.Completeness, observation.Continuity) {
 				t.Fatalf("restricted schedule became absence evidence: %#v", observation)
-			}
-
-			if !checkpoints[0].LastScheduledFor.Equal(observation.ScheduledFor) {
-				t.Fatal("checkpoint did not preserve the observed poll slot")
 			}
 
 			var payload contract.LiveSnapshotV1

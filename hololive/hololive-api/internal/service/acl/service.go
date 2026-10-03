@@ -175,8 +175,8 @@ type Service struct {
 	// 오류는 mutation 호출자에게 ErrACLPropagation으로 전달된다.
 	changeListeners []func(context.Context) error
 
-	// reloadMu는 Reload의 PG 읽기~메모리 적용 전체를 직렬화한다. 겹친 두 Reload가 서로 다른
-	// 시점의 스냅샷을 순서 없이 적용하면, 먼저 읽은 오래된 스냅샷이 나중에 덮어써 최신 커밋을 잃는다.
+	// reloadMu는 mutation의 PG 커밋~메모리 적용과 Reload의 PG 읽기~메모리 적용을 직렬화한다.
+	// 메모리의 선행 변경이나 오래된 Reload가 최신 PG 커밋을 덮어쓰면 권한 철회가 유실된다.
 	reloadMu sync.Mutex
 
 	// 메모리 캐시 (빠른 조회용)

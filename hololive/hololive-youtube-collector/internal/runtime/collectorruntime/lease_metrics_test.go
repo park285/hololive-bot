@@ -10,6 +10,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
@@ -63,7 +64,7 @@ func TestPublishFenceLossIsCountedOnceAsPublish(t *testing.T) {
 	spec := leaseMetricSpec()
 	lease := &supersededLease{}
 	publishErr := markLeasePhase(phasePublish, fmt.Errorf("publish complete: %w",
-		collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, sourceobservation.ErrCollectionFenceLost)))
+		collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, collection.ErrFenceLost)))
 
 	executor.handleRunError(t.Context(), lease, spec, &contract.LeaseProof{}, fmt.Errorf("run collection job: %w", publishErr))
 
@@ -91,7 +92,7 @@ func TestRenewFenceLossIsCountedAsRenew(t *testing.T) {
 
 	executor.metrics = NewMetrics(registerer)
 
-	result := joblease.LeaseRunResult{Outcome: joblease.LeaseRunFenceLost, Err: errors.Join(joblease.ErrFenceLost, nil)}
+	result := joblease.LeaseRunResult{Outcome: joblease.LeaseRunFenceLost, Err: errors.Join(collection.ErrFenceLost, nil)}
 	if !executor.handleLeaseRunOutcome(t.Context(), result, leaseMetricSpec(), &contract.LeaseProof{}) {
 		t.Fatal("renew fence loss was not handled")
 	}
@@ -116,7 +117,7 @@ func TestRenewSupersededIsHandledWithoutLeaseLossOrSecondRelease(t *testing.T) {
 
 	executor.metrics = NewMetrics(registerer)
 
-	err := fmt.Errorf("run collection job: superseded renew: %w", errors.Join(joblease.ErrTargetDisabled, nil))
+	err := fmt.Errorf("run collection job: superseded renew: %w", errors.Join(collection.ErrTargetDisabled, nil))
 	result := joblease.LeaseRunResult{Outcome: joblease.LeaseRunReleasedAfterSuperseded, Err: err}
 
 	if !executor.handleLeaseRunOutcome(t.Context(), result, leaseMetricSpec(), &contract.LeaseProof{}) {
@@ -138,7 +139,7 @@ func TestRenewSupersededIsHandledWithoutLeaseLossOrSecondRelease(t *testing.T) {
 func TestAcquireSupersededIsLabeled(t *testing.T) {
 	t.Parallel()
 
-	for _, cause := range []error{joblease.ErrProjectionStale, joblease.ErrTargetDisabled} {
+	for _, cause := range []error{collection.ErrProjectionStale, collection.ErrTargetDisabled} {
 		registerer := prometheus.NewPedanticRegistry()
 		executor := &collectionExecutor{metrics: NewMetrics(registerer)}
 

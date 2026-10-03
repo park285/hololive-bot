@@ -11,7 +11,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const officialScheduleSubject = "global:hololive-schedule"
@@ -209,7 +209,7 @@ func requestedSet(ids []string) map[string]struct{} {
 	return result
 }
 
-func subjectAllowed(input *collectutil.RunInput, kind contract.ObservationKind, subject string) (bool, error) {
+func subjectAllowed(input *collection.RunInput, kind contract.ObservationKind, subject string) (bool, error) {
 	out, err := input.Allows(kind, subject)
 	if err != nil {
 		return out, fmt.Errorf("allows: %w", err)

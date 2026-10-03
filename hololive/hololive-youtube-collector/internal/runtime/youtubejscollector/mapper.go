@@ -2,11 +2,10 @@ package youtubejscollector
 
 import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-func communityPayload(channelID string, posts []*parser.CommunityPost, maxResults int, page *youtubejs.Pagination) contract.CommunityPayloadV1 {
+func communityPayload(channelID string, posts []*youtubejs.CommunityPost, maxResults int, page *youtubejs.Pagination) contract.CommunityPayloadV1 {
 	mapped := make([]contract.CommunityPostV1, 0, len(posts))
 	for _, post := range posts {
 		mapped = append(mapped, contract.CommunityPostV1{
@@ -201,7 +200,7 @@ func channelPhotoPayload(channelID string, variants []youtubejs.ChannelPhotoVari
 	}, true
 }
 
-func thumbnails(values []parser.Thumbnail) []contract.Thumbnail {
+func thumbnails(values []youtubejs.CommunityThumbnail) []contract.Thumbnail {
 	if len(values) == 0 {
 		return nil
 	}

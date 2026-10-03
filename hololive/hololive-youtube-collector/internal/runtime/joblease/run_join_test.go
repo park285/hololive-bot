@@ -10,6 +10,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestWaitRunResultPrefersCompletedRunnerAfterDeadline(t *testing.T) {
@@ -44,7 +45,7 @@ func TestCleanupJoinDistinguishesCallbackDeadline(t *testing.T) {
 	for _, testCase := range []cleanupJoinCase{
 		{name: "parent cancel", outcome: LeaseRunReleasedAfterParentCancel, reason: ReleaseShutdown, cause: context.Canceled},
 		{name: "renew failure", outcome: LeaseRunReleasedAfterRenewFailure, reason: ReleaseRenewFail, cause: renewErr},
-		{name: "fence loss", outcome: LeaseRunFenceLost, cause: ErrFenceLost},
+		{name: "fence loss", outcome: LeaseRunFenceLost, cause: collection.ErrFenceLost},
 	} {
 		for _, completed := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s/completed=%t", testCase.name, completed), func(t *testing.T) {
@@ -147,7 +148,7 @@ func TestFenceLossPreservesCallbackAfterCancel(t *testing.T) {
 				return errors.Join(ctx.Err(), cause)
 			})
 
-			if result.Outcome != LeaseRunFenceLost || !errors.Is(result.Err, ErrFenceLost) {
+			if result.Outcome != LeaseRunFenceLost || !errors.Is(result.Err, collection.ErrFenceLost) {
 				t.Fatalf("result = %#v, want fence loss", result)
 			}
 

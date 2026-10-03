@@ -7,8 +7,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 // ChannelLiveRunner는 방송 탭 live_snapshot만 수집합니다. 채널 /live 확인은 별도 job 슬롯이 담당하므로
@@ -21,24 +20,24 @@ func NewChannelLiveRunner(client ChannelClient) *ChannelLiveRunner {
 	return &ChannelLiveRunner{client: client}
 }
 
-func (r *ChannelLiveRunner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_" + channelKindLive}
+func (r *ChannelLiveRunner) JobID() collection.JobID {
+	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_" + channelKindLive}
 }
 
-func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel client is not configured")
+		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel client is not configured")
 	}
 
 	if input == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
 
-	allowed, err := input.Allows(contract.KindLiveSnapshot, input.Spec().SubjectKey)
+	allowed, err := input.Allows(contract.KindLiveSnapshot, input.Subject())
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("allows: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("allows: %w", err)
 	}
 
 	if !allowed {
@@ -47,7 +46,7 @@ func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collectutil.RunI
 
 	snapshot, err := r.liveSnapshotEnvelope(ctx, input)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("live snapshot: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("live snapshot: %w", err)
 	}
 
 	// 방송 탭이 없으면 snapshot 없이 성공합니다. 실패한 목록 조회는 빈 snapshot으로 바꾸지 않습니다.
@@ -57,7 +56,7 @@ func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collectutil.RunI
 		envelopes = []contract.Envelope{*snapshot}
 	}
 
-	out, err := collectutil.CompleteFromEnvelopes(envelopes, started)
+	out, err := collection.CompleteFromEnvelopes(envelopes, started)
 	if err != nil {
 		return out, fmt.Errorf("complete from envelopes: %w", err)
 	}
@@ -65,7 +64,7 @@ func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collectutil.RunI
 	return out, nil
 }
 
-func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *collectutil.RunInput) (*contract.Envelope, error) {
+func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *collection.RunInput) (*contract.Envelope, error) {
 	result, completeness, continuity, err := fetchChannelPage(ctx, r.client, input, channelKindLive)
 	if err != nil {
 		return nil, fmt.Errorf("fetch channel page: %w", err)
@@ -85,13 +84,13 @@ func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *col
 		return nil, fmt.Errorf("require live snapshot metadata generation: %w", generationErr)
 	}
 
-	if result.LiveQuery == nil || result.LiveQuery.ChannelID != input.Spec().SubjectKey ||
+	if result.LiveQuery == nil || result.LiveQuery.ChannelID != input.Subject() ||
 		result.LiveQuery.PageCount != result.PageCount || result.LiveQuery.Exhausted != result.Exhausted ||
 		result.LiveQuery.AccessRestricted != (len(result.UnavailableLiveSessions) > 0) {
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "live query proof does not match helper pagination and restrictions")
 	}
 
-	payload := liveSnapshotPayload(input.Spec().SubjectKey, result.LiveSessions, result.LiveQuery)
+	payload := liveSnapshotPayload(input.Subject(), result.LiveSessions, result.LiveQuery)
 
 	envelope, err := subjectEnvelope(input, contract.KindLiveSnapshot, completeness, continuity, payload)
 	if err != nil {

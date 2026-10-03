@@ -15,6 +15,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
@@ -124,7 +125,7 @@ func TestHistoricalViewerPublishEqualValueNextWindowCreatesTwoObservations(t *te
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	firstProof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
-	repo := historicalViewerPublisher(pool)
+	repo := historicalViewerPublisher(t, pool)
 	first := viewerEnvelope(t, &firstProof, 1, 100)
 
 	if _, err := repo.PublishBatch(ctx, publishInput(first)); err != nil {
@@ -378,7 +379,7 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 
 	// 새 CURRENT가 이 job의 target을 이어받지 않았으므로 job별 membership 변경(superseded)으로 거절된다.
 	_, err = NewRepository(pool).PublishBatch(ctx, publishInput(envelope))
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("own target removed mid-fetch error = %v", err)
 	}
 
@@ -413,7 +414,7 @@ func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 		Observations: []contract.Envelope{*profile, *photo},
 	})
 
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("out-of-bundle error = %v", err)
 	}
 
@@ -429,7 +430,7 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 
 	first := viewerEnvelopeFor(t, &proof, 1, "video-1", 100)
 	second := viewerEnvelopeFor(t, &proof, 1, "video-2", 200)
-	_, err := historicalViewerPublisher(pool).PublishBatch(ctx, &PublishBatchInput{
+	_, err := historicalViewerPublisher(t, pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{checkpointForEnvelope(first), checkpointForEnvelope(second)},
@@ -438,7 +439,7 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 		Observations: []contract.Envelope{*first, *second},
 	})
 
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("global disabled target error = %v", err)
 	}
 
@@ -495,7 +496,7 @@ func TestStaleHolderCannotMutatePublishOrJobState(t *testing.T) {
 
 	close(resumeA)
 
-	if err := <-resultA; !errors.Is(err, ErrCollectionFenceLost) {
+	if err := <-resultA; !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale holder error = %v", err)
 	}
 
@@ -569,7 +570,7 @@ func runStaleHolderCase(t *testing.T, name, postID string) {
 	before := readCollectionJobLeaseState(ctx, t, pool, proofB.JobKey)
 
 	candidate := communityEnvelope(t, &proofA, postID)
-	if _, err := repo.PublishBatch(ctx, publishInput(candidate)); !errors.Is(err, ErrCollectionFenceLost) {
+	if _, err := repo.PublishBatch(ctx, publishInput(candidate)); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale %s error = %v", name, err)
 	}
 
@@ -758,7 +759,7 @@ func seedPublishLease(
 		jobClass = "GLOBAL"
 	}
 
-	scope := publishFixtureScope(provider, jobKind)
+	scope := publishFixtureScope(tb, provider, jobKind)
 
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_job_leases (
@@ -779,13 +780,15 @@ func seedPublishLease(
 
 // publishFixtureScope는 시드 lease에 acquire와 같은 membership 범위를 기록한다. 과거 viewer 계약까지 포함한 집합에서
 // 찾으며, 계약이 없는 job은 빈 범위로 남겨 fail closed한다.
-func publishFixtureScope(provider contract.Provider, jobKind string) MembershipScope {
-	definition, ok := historicalViewerJobContracts().Definition(JobID{Provider: provider, Kind: JobKind(jobKind)})
+func publishFixtureScope(tb testing.TB, provider contract.Provider, jobKind string) collection.MembershipScope {
+	tb.Helper()
+
+	definition, ok := historicalViewerJobContracts(tb).Definition(collection.JobID{Provider: provider, Kind: collection.JobKind(jobKind)})
 	if !ok {
-		return MembershipScope{Kinds: []string{}}
+		return collection.MembershipScope{Kinds: []string{}}
 	}
 
-	return MembershipScopeFor(definition)
+	return collection.MembershipScopeFor(definition)
 }
 
 // insertPublishTarget은 이 generation부터 이어지는 활성/비활성 대상을 넣고, 획득 시점 roster로 보고 ACTIVE lease의

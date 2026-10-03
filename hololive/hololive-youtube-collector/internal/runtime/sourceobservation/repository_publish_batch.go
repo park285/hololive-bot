@@ -150,7 +150,7 @@ func publishObservationSet(
 	encoded []byte,
 	want int,
 ) (PublishBatchResult, bool, error) {
-	rows, err := tx.Query(ctx, mustSQL("repository_publish_set_0032_32.sql"), string(encoded))
+	rows, err := tx.Query(ctx, sqlPublishSet, string(encoded))
 	if err != nil {
 		return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: execute set: %w", err)
 	}

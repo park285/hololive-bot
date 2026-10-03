@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
@@ -72,7 +71,7 @@ func validateLiveSchedules(sessions []youtubejs.LiveSessionItem) error {
 	return nil
 }
 
-func validateCommunityRows(posts []*parser.CommunityPost) error {
+func validateCommunityRows(posts []*youtubejs.CommunityPost) error {
 	for _, post := range posts {
 		if post == nil {
 			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js community response contains a null row")

@@ -12,6 +12,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const maxCheckpointCursorBytes = 16384
@@ -36,15 +37,15 @@ func validatePublishBatch(input *PublishBatchInput) error {
 }
 
 func validatePublishBatchCounts(input *PublishBatchInput) error {
-	if len(input.Observations) < 1 || len(input.Observations) > MaxPublishBatchSize {
-		return fmt.Errorf("%w: observation count must be between 1 and %d", ErrInvalidEnvelope, MaxPublishBatchSize)
+	if len(input.Observations) < 1 || len(input.Observations) > collection.MaxPublishBatchSize {
+		return fmt.Errorf("%w: observation count must be between 1 and %d", ErrInvalidEnvelope, collection.MaxPublishBatchSize)
 	}
 
 	if len(input.Checkpoint.Entries) != len(input.Observations) || len(input.Checkpoint.Entries) > MaxCheckpointCount {
 		return fmt.Errorf("%w: checkpoint count must equal observation count and be at most %d", ErrInvalidEnvelope, MaxCheckpointCount)
 	}
 
-	if input.Checkpoint.CollectionLatency < 0 || input.Checkpoint.CollectionLatency > MaxCollectionLatency {
+	if input.Checkpoint.CollectionLatency < 0 || input.Checkpoint.CollectionLatency > collection.MaxCollectionLatency {
 		return fmt.Errorf("%w: collection latency is outside the accepted range", ErrInvalidEnvelope)
 	}
 
@@ -286,29 +287,21 @@ func completeCollectionJob(
 	ctx context.Context,
 	tx dbx.Tx,
 	proof *contract.LeaseProof,
-	errorCode string,
 ) error {
-	var code any
-
-	if errorCode != "" {
-		code = errorCode
-	}
-
 	var jobKey string
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_job_complete_0011_11.sql"),
+		sqlJobComplete,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,
 		proof.ProjectionGeneration,
 		proof.ScheduledFor,
-		code,
 	).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrCollectionFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {

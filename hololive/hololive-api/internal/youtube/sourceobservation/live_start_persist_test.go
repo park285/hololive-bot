@@ -75,7 +75,7 @@ func startHolodexLivePersist(t *testing.T) (*pgxpool.Pool, *Repository, *Consume
 		"holodex_live",
 	)
 
-	return pool, repo, newLiveTestConsumer(pool, repo, 0), proof
+	return pool, repo, NewConsumerWithGraces(repo, 0, 0), proof
 }
 
 func replayLiveObservation(t *testing.T, repo *Repository, consumer *Consumer, observationID int64) {

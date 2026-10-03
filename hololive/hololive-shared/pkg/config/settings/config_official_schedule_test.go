@@ -52,16 +52,19 @@ func TestValidateOfficialScheduleConfig(t *testing.T) {
 	}
 }
 
-func TestLoadOfficialScheduleRuntimeConfig(t *testing.T) {
+func TestLoadBotRuntimeReadsOfficialScheduleRuntime(t *testing.T) {
+	setRequiredLoadEnv(t)
 	t.Setenv("OFFICIAL_SCHEDULE_BASE_URL", "https://schedule.example")
 	t.Setenv("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", "7")
 	t.Setenv("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", "9")
 	t.Setenv("MAX_RESPONSE_BODY_BYTES", "12345")
 
-	config, err := LoadOfficialScheduleRuntimeConfig()
+	loaded, err := loadBotRuntimeConfig()
 	if err != nil {
-		t.Fatalf("LoadOfficialScheduleRuntimeConfig() error = %v", err)
+		t.Fatalf("loadBotRuntimeConfig() error = %v", err)
 	}
+
+	config := loaded.OfficialScheduleRuntime()
 
 	if config.OfficialSchedule.BaseURL != "https://schedule.example" {
 		t.Fatalf("BaseURL = %q", config.OfficialSchedule.BaseURL)

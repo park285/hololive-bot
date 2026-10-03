@@ -16,7 +16,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 const usersLivePath = "/users/live"
@@ -67,12 +67,12 @@ func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, ap
 		IdleConnTimeout:     holodexCfg.Transport.IdleConnTimeout,
 	})
 
-	var distributedLimiter *ratelimit.SlidingWindowLimiter
+	var distributedLimiter *ratelimitvalkey.SlidingWindowLimiter
 
 	if holodexCfg.DistributedRateLimit.Enabled {
 		var err error
 
-		distributedLimiter, err = ratelimit.NewSlidingWindowLimiter(cacheClient, holodexCfg.DistributedRateLimit.KeyPrefix, logger)
+		distributedLimiter, err = ratelimitvalkey.NewSlidingWindowLimiter(cacheClient, holodexCfg.DistributedRateLimit.KeyPrefix, logger)
 		if err != nil {
 			return nil, fmt.Errorf("initialize holodex distributed rate limiter: %w", err)
 		}

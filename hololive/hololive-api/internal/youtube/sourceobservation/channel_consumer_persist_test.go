@@ -10,7 +10,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -208,7 +207,7 @@ func startChannelPersistPolicy(
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, kind, testChannelID, "youtubejs_channel_metadata")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0).
+	consumer := NewConsumerWithGraces(repo, 0, 0).
 		WithChannelPolicy(policy)
 
 	return pool, repo, consumer, proof

@@ -5,7 +5,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -15,8 +14,7 @@ func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-	consumer := NewConsumer(repo, writer, nil)
+	consumer := NewConsumer(repo)
 
 	proof = bootstrapCommunityWindow(ctx, t, pool, publishkit.NewPublisher(pool), consumer, proof)
 

@@ -131,16 +131,18 @@ func contentTabExecutorFixture(t *testing.T, client *youtubejs.RPC, fatal *[]err
 
 	executor := newRunErrorExecutor(fatal)
 
-	executor.config = runtimeLeaseConfig()
+	executor.retryBounds = testRetryBounds
+
+	config := runtimeLeaseConfig()
 
 	var err error
 
-	executor.repository, err = joblease.NewRepository(pool, &executor.config)
+	executor.repository, err = joblease.NewRepository(pool, &config)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	executor.registry, err = NewRegistry(withOverride(youtubejscollector.NewContentRunner(client, sourceobservation.NewRepository(pool), 10, time.Second))...)
+	executor.registry, err = newTestRegistry(withOverride(youtubejscollector.NewContentRunner(client, sourceobservation.NewRepository(pool), time.Second))...)
 	if err != nil {
 		t.Fatal(err)
 	}

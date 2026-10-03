@@ -14,42 +14,42 @@ func (c *Consumer) reconcileContent(
 	ctx context.Context,
 	tx dbx.Tx,
 	claimed *Observation,
-) (content.Decision, ReconcileResult, error) {
+) (ReconcileResult, error) {
 	evidence, err := evidenceFromObservation(claimed)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("evidence from observation: %w", err)
+		return ReconcileResult{}, fmt.Errorf("evidence from observation: %w", err)
 	}
 
 	if lockErr := lockContentSubject(ctx, tx, claimed.ObservationKind, claimed.SubjectKey); lockErr != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
+		return ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
 	}
 
 	state, err := loadContentState(ctx, tx, claimed.ObservationKind, claimed.SubjectKey, &evidence)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("load content state: %w", err)
+		return ReconcileResult{}, fmt.Errorf("load content state: %w", err)
 	}
 
 	decision, err := content.Reduce(state, evidence, c.grace)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("reduce: %w", err)
+		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
 	if persistErr := persistContentDecision(ctx, tx, c.writer, claimed, &state, &decision); persistErr != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
+		return ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
 	}
 
 	premiereApplications, err := mergeContentPremieres(ctx, tx, claimed, &evidence)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
+		return ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
 	}
 
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
+		return ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
 	}
 
 	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
 
-	return decision, ReconcileResult{Applications: applications}, nil
+	return ReconcileResult{Applications: applications}, nil
 }
 
 func mergeContentApplications(contentApplications, premiereApplications []Application) []Application {

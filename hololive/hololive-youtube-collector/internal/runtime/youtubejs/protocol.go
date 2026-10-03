@@ -7,7 +7,6 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 const (
@@ -184,12 +183,35 @@ type CommunityRequest struct {
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
+// CommunityThumbnail은 helper community 응답의 이미지 wire 형식입니다.
+type CommunityThumbnail struct {
+	URL    string `json:"url"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// CommunityPost는 helper /v1/community 응답의 게시물 wire 형식입니다.
+type CommunityPost struct {
+	PostID         string               `json:"postId"`
+	UpstreamPostID string               `json:"upstreamPostId,omitempty"`
+	AuthorID       string               `json:"authorId"`
+	AuthorName     string               `json:"authorName"`
+	AuthorPhoto    []CommunityThumbnail `json:"authorPhoto"`
+	ContentText    string               `json:"contentText"`
+	PublishedText  string               `json:"publishedText"`
+	PublishedAt    *time.Time           `json:"publishedAt,omitempty"`
+	LikeCount      int64                `json:"likeCount"`
+	CommentCount   int64                `json:"commentCount"`
+	Images         []CommunityThumbnail `json:"images,omitempty"`
+	VideoID        string               `json:"videoId,omitempty"`
+}
+
 type CommunityResult struct {
 	ProtocolMeta
 	Pagination
 
-	Posts      []*parser.CommunityPost `json:"posts"`
-	MissingTab bool                    `json:"missing_tab"`
+	Posts      []*CommunityPost `json:"posts"`
+	MissingTab bool             `json:"missing_tab"`
 }
 
 func (r *CommunityResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }

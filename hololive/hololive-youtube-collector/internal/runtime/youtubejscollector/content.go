@@ -2,13 +2,13 @@ package youtubejscollector
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"fmt"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -19,9 +19,8 @@ type ContentClient interface {
 }
 
 type ContentRunner struct {
-	client     ContentClient
-	cursors    ContentCursorReader
-	maxResults int
+	client  ContentClient
+	cursors ContentCursorReader
 	// publicationReserve는 공개 근거 조회가 쓰지 않고 남겨 두는 수집 기한입니다. 실행 profile의 RPC 외 작업 여유(overhead)이며,
 	// 근거 조회가 수집 기한을 끝까지 써서 이미 받은 목록·근거까지 버려지지 않게 합니다.
 	publicationReserve time.Duration
@@ -32,10 +31,10 @@ type contentKind struct {
 	tab  string
 }
 
-// contentObservation은 kind 하나의 관측과 그 checkpoint입니다. 공개 근거 cursor는 video_list checkpoint만 싣습니다.
+// contentObservation은 kind 하나의 관측과 그 checkpoint cursor입니다. 공개 근거 cursor는 video_list 관측만 싣습니다.
 type contentObservation struct {
-	envelope   contract.Envelope
-	checkpoint sourceobservation.CheckpointEntry
+	envelope contract.Envelope
+	cursor   jsontext.Value
 }
 
 // contentListFetch는 목록 RPC 결과와 envelope에 필요한 계약 세대·완결성입니다.
@@ -56,23 +55,21 @@ var contentKinds = []contentKind{
 	{kind: contract.KindShortsList, tab: contentTabShorts},
 }
 
-func NewContentRunner(client ContentClient, cursors ContentCursorReader, maxResults int, publicationReserve time.Duration) *ContentRunner {
-	return &ContentRunner{
-		client: client, cursors: cursors, maxResults: collectutil.MaxResults(maxResults), publicationReserve: max(publicationReserve, 0),
-	}
+func NewContentRunner(client ContentClient, cursors ContentCursorReader, publicationReserve time.Duration) *ContentRunner {
+	return &ContentRunner{client: client, cursors: cursors, publicationReserve: max(publicationReserve, 0)}
 }
 
-func (r *ContentRunner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_content"}
+func (r *ContentRunner) JobID() collection.JobID {
+	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_content"}
 }
 
-func (r *ContentRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (r *ContentRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil || r.cursors == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js content client is not configured")
+		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js content client is not configured")
 	}
 
 	if input == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
 	out, err := r.collectAllowedKinds(ctx, input, time.Now())
@@ -91,9 +88,9 @@ func (r *ContentRunner) Collect(ctx context.Context, input *collectutil.RunInput
 // identity이므로 다시 만든 payload가 달라지면 collision이 되고 cursor 전진도 저장되지 않기 때문입니다.
 func (r *ContentRunner) collectAllowedKinds(
 	ctx context.Context,
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	started time.Time,
-) (collectutil.CollectResult, error) {
+) (collection.CollectResult, error) {
 	var (
 		videos videoListFetch
 		shorts *contentObservation
@@ -115,7 +112,7 @@ func (r *ContentRunner) collectAllowedKinds(
 		if err == nil && fetched != nil {
 			var observation contentObservation
 
-			observation, err = shortsObservation(input, fetched, r.maxResults)
+			observation, err = shortsObservation(input, fetched)
 			shorts = &observation
 		}
 
@@ -127,7 +124,7 @@ func (r *ContentRunner) collectAllowedKinds(
 
 			observations, videoErr := r.videoListObservations(ctx, input, videos)
 			if videoErr != nil {
-				return collectutil.CollectResult{}, videoErr
+				return collection.CollectResult{}, videoErr
 			}
 
 			return partialContentResultForError(ctx, observations, started, item.kind, err)
@@ -136,7 +133,7 @@ func (r *ContentRunner) collectAllowedKinds(
 
 	observations, err := r.videoListObservations(ctx, input, videos)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collection.CollectResult{}, err
 	}
 
 	if shorts != nil {
@@ -145,15 +142,10 @@ func (r *ContentRunner) collectAllowedKinds(
 
 	output, err := contentOutput(observations, started)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collection.CollectResult{}, err
 	}
 
-	out, err := collectutil.NewCompleteResult(output)
-	if err != nil {
-		return out, fmt.Errorf("complete result: %w", err)
-	}
-
-	return out, nil
+	return collection.NewCompleteResult(output), nil
 }
 
 // videoListFetch는 이 slot에서 받은 video_list 목록과 직전에 수락된 공개 근거 cursor입니다.
@@ -165,8 +157,8 @@ type videoListFetch struct {
 
 // collectVideoList는 video_list가 수집 대상이고 이 slot에서 아직 수락되지 않았을 때만 목록 RPC를 보냅니다.
 // 직전 cursor의 slot이 현재 lease slot과 같다는 것은 같은 publish tx로 이 slot의 video_list가 수락됐다는 뜻입니다.
-func (r *ContentRunner) collectVideoList(ctx context.Context, input *collectutil.RunInput) (videoListFetch, error) {
-	subject := input.Spec().SubjectKey
+func (r *ContentRunner) collectVideoList(ctx context.Context, input *collection.RunInput) (videoListFetch, error) {
+	subject := input.Subject()
 
 	allowed, err := input.Allows(contract.KindVideoList, subject)
 	if err != nil {
@@ -197,7 +189,7 @@ func (r *ContentRunner) collectVideoList(ctx context.Context, input *collectutil
 // videoListObservations는 받은 video_list 목록이 있으면 근거를 붙인 관측 하나를, 없으면 빈 목록을 반환합니다.
 func (r *ContentRunner) videoListObservations(
 	ctx context.Context,
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	videos videoListFetch,
 ) ([]contentObservation, error) {
 	observations := make([]contentObservation, 0, len(contentKinds))
@@ -214,16 +206,16 @@ func (r *ContentRunner) videoListObservations(
 	return append(observations, observation), nil
 }
 
-func contentOutput(observations []contentObservation, started time.Time) (collectutil.RunOutput, error) {
+func contentOutput(observations []contentObservation, started time.Time) (collection.RunOutput, error) {
 	envelopes := make([]contract.Envelope, len(observations))
-	checkpoints := make([]sourceobservation.CheckpointEntry, len(observations))
+	cursors := make([]jsontext.Value, len(observations))
 
 	for i := range observations {
 		envelopes[i] = observations[i].envelope
-		checkpoints[i] = observations[i].checkpoint
+		cursors[i] = observations[i].cursor
 	}
 
-	output, err := collectutil.NewRunOutput(envelopes, checkpoints, collectutil.ClampLatency(started))
+	output, err := collection.NewRunOutputWithCursors(envelopes, cursors, collection.ClampLatency(started))
 	if err != nil {
 		return output, fmt.Errorf("run output: %w", err)
 	}
@@ -231,7 +223,7 @@ func contentOutput(observations []contentObservation, started time.Time) (collec
 	return output, nil
 }
 
-func partialContentResultForError(ctx context.Context, observations []contentObservation, started time.Time, kind contract.ObservationKind, cause error) (collectutil.CollectResult, error) {
+func partialContentResultForError(ctx context.Context, observations []contentObservation, started time.Time, kind contract.ObservationKind, cause error) (collection.CollectResult, error) {
 	out, err := partialContentResult(ctx, observations, started, kind, cause)
 	if err != nil {
 		return out, fmt.Errorf("partial content result: %w", err)
@@ -240,8 +232,8 @@ func partialContentResultForError(ctx context.Context, observations []contentObs
 	return out, nil
 }
 
-func (r *ContentRunner) collectKind(ctx context.Context, input *collectutil.RunInput, item contentKind) (*contentListFetch, error) {
-	allowed, err := input.Allows(item.kind, input.Spec().SubjectKey)
+func (r *ContentRunner) collectKind(ctx context.Context, input *collection.RunInput, item contentKind) (*contentListFetch, error) {
+	allowed, err := input.Allows(item.kind, input.Subject())
 	if err != nil {
 		return nil, fmt.Errorf("allows: %w", err)
 	}
@@ -265,25 +257,25 @@ func partialContentResult(
 	started time.Time,
 	kind contract.ObservationKind,
 	err error,
-) (collectutil.CollectResult, error) {
+) (collection.CollectResult, error) {
 	if ctx.Err() != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return collectutil.CollectResult{}, fmt.Errorf("collect content: %w", ctxErr)
+			return collection.CollectResult{}, fmt.Errorf("collect content: %w", ctxErr)
 		}
 
-		return collectutil.CollectResult{}, nil
+		return collection.CollectResult{}, nil
 	}
 
 	if len(observations) == 0 || !contentPartialFailureAllowed(collecterr.ClassOf(err)) {
-		return collectutil.CollectResult{}, err
+		return collection.CollectResult{}, err
 	}
 
 	output, buildErr := contentOutput(observations, started)
 	if buildErr != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("content output: %w", buildErr)
+		return collection.CollectResult{}, fmt.Errorf("content output: %w", buildErr)
 	}
 
-	out, err := collectutil.NewPartialResult(output, collecterr.Normalize(err), kind)
+	out, err := collection.NewPartialResult(output, collecterr.Normalize(err), kind)
 	if err != nil {
 		return out, fmt.Errorf("partial result: %w", err)
 	}
@@ -293,11 +285,11 @@ func partialContentResult(
 
 func (r *ContentRunner) fetchKind(
 	ctx context.Context,
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	observationKind contract.ObservationKind,
 	tab string,
 ) (*contentListFetch, error) {
-	spec := input.Spec()
+	subject := input.Subject()
 
 	generation, err := input.Generation(observationKind)
 	if err != nil {
@@ -309,9 +301,9 @@ func (r *ContentRunner) fetchKind(
 	}
 
 	result, err := r.client.FetchContent(ctx, youtubejs.ContentRequest{
-		ChannelID:               spec.SubjectKey,
+		ChannelID:               subject,
 		Kind:                    tab,
-		MaxResults:              r.maxResults,
+		MaxResults:              maxResultsPerPage,
 		MaxPages:                input.MaxPages(),
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 	})
@@ -319,7 +311,7 @@ func (r *ContentRunner) fetchKind(
 		return nil, fmt.Errorf("fetch content: %w", err)
 	}
 
-	if validateErr := validateContentIdentity(spec.SubjectKey, result.Items); validateErr != nil {
+	if validateErr := validateContentIdentity(subject, result.Items); validateErr != nil {
 		return nil, fmt.Errorf("validate content identity: %w", validateErr)
 	}
 
@@ -336,15 +328,15 @@ func (r *ContentRunner) fetchKind(
 	return &contentListFetch{result: result, generation: generation, completeness: completeness, continuity: continuity}, nil
 }
 
-func shortsObservation(input *collectutil.RunInput, fetched *contentListFetch, maxResults int) (contentObservation, error) {
-	payload := shortsListPayload(input.Spec().SubjectKey, fetched.result.Items, maxResults, &fetched.result.Pagination)
+func shortsObservation(input *collection.RunInput, fetched *contentListFetch) (contentObservation, error) {
+	payload := shortsListPayload(input.Subject(), fetched.result.Items, maxResultsPerPage, &fetched.result.Pagination)
 
-	envelope, err := contentEnvelope(input, contract.KindShortsList, fetched.generation, fetched.completeness, fetched.continuity, payload)
+	envelope, err := generationEnvelope(input, contract.KindShortsList, fetched.generation, fetched.completeness, fetched.continuity, payload)
 	if err != nil {
 		return contentObservation{}, err
 	}
 
-	return contentObservation{envelope: envelope, checkpoint: collectutil.Checkpoint(&envelope)}, nil
+	return contentObservation{envelope: envelope}, nil
 }
 
 // videoListObservation은 목록 항목에 영상별 공개 근거를 붙이고, 근거 조회 이력을 같은 checkpoint cursor로 남깁니다.
@@ -352,11 +344,11 @@ func shortsObservation(input *collectutil.RunInput, fetched *contentListFetch, m
 // 목록 관측을 발행합니다. 근거 조회 실패는 해당 항목을 근거 미수집으로 남길 뿐 목록 관측 자체를 버리지 않습니다.
 func (r *ContentRunner) videoListObservation(
 	ctx context.Context,
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	fetched *contentListFetch,
 	prior storedPublicationCursor,
 ) (contentObservation, error) {
-	subject := input.Spec().SubjectKey
+	subject := input.Subject()
 
 	enrichCtx, cancel := r.publicationContext(ctx)
 	publications, cursor, err := r.enrichPublications(enrichCtx, ctx, subject, fetched.result.Items, prior, input.MaxSuccessResponseBytes())
@@ -369,9 +361,9 @@ func (r *ContentRunner) videoListObservation(
 
 	cursor.ScheduledFor = input.Lease().ScheduledFor.UTC()
 
-	payload := videoListPayload(subject, fetched.result.Items, publications, r.maxResults, &fetched.result.Pagination)
+	payload := videoListPayload(subject, fetched.result.Items, publications, maxResultsPerPage, &fetched.result.Pagination)
 
-	envelope, err := contentEnvelope(input, contract.KindVideoList, fetched.generation, fetched.completeness, fetched.continuity, payload)
+	envelope, err := generationEnvelope(input, contract.KindVideoList, fetched.generation, fetched.completeness, fetched.continuity, payload)
 	if err != nil {
 		return contentObservation{}, err
 	}
@@ -381,11 +373,7 @@ func (r *ContentRunner) videoListObservation(
 		return contentObservation{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
 	}
 
-	checkpoint := collectutil.Checkpoint(&envelope)
-
-	checkpoint.Cursor = rawCursor
-
-	return contentObservation{envelope: envelope, checkpoint: checkpoint}, nil
+	return contentObservation{envelope: envelope, cursor: rawCursor}, nil
 }
 
 // publicationContext는 수집 기한에서 publicationReserve만큼 앞당긴 근거 조회 기한입니다. 수집 기한이 없으면 부모 문맥을 그대로 씁니다.
@@ -396,31 +384,4 @@ func (r *ContentRunner) publicationContext(ctx context.Context) (context.Context
 	}
 
 	return context.WithDeadline(ctx, deadline.Add(-r.publicationReserve))
-}
-
-func contentEnvelope(
-	input *collectutil.RunInput,
-	observationKind contract.ObservationKind,
-	generation int64,
-	completeness contract.Completeness,
-	continuity contract.Continuity,
-	payload any,
-) (contract.Envelope, error) {
-	lease := input.Lease()
-
-	envelope, err := collectutil.Envelope(
-		contract.ProviderYouTubeJS,
-		observationKind,
-		input.Spec().SubjectKey,
-		generation,
-		&lease,
-		completeness,
-		continuity,
-		payload,
-	)
-	if err != nil {
-		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
-	}
-
-	return envelope, nil
 }

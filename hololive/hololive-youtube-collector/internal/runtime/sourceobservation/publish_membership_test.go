@@ -12,6 +12,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 // projectionWriter는 pool과 트랜잭션 모두에서 projection 전환 fixture를 실행하기 위한 최소 능력이다.
@@ -90,7 +91,7 @@ func TestPublishRejectsReaddedOwnTarget(t *testing.T) {
 	transitionPublishProjection(ctx, t, pool, proof.ProjectionGeneration, true)
 
 	_, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("readded target publish error = %v, want ErrTargetDisabled", err)
 	}
 
@@ -110,7 +111,7 @@ func TestPublishRejectsRetiredGenerationWithoutCurrent(t *testing.T) {
 	}
 
 	_, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
-	if !errors.Is(err, ErrProjectionStale) {
+	if !errors.Is(err, collection.ErrProjectionStale) {
 		t.Fatalf("retired projection publish error = %v, want ErrProjectionStale", err)
 	}
 

@@ -40,18 +40,16 @@ func TestInitScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	appConfig := &settings.Config{
-		YouTube: settings.DefaultYouTubeOperationalConfig(),
 		Holodex: settings.DefaultHolodexOperationalConfig(),
 	}
 
-	appConfig.YouTube.DistributedRateLimit.Enabled = false
 	appConfig.Holodex.BaseURL = server.URL + "/configured"
 	appConfig.Holodex.APIKey = "configured-key"
 	appConfig.Holodex.DistributedRateLimit.Enabled = false
 
 	foundation, err := apifoundation.BuildScraperHolodex(
 		t.Context(),
-		apifoundation.ScraperHolodexOptions{YouTube: appConfig.YouTube, Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialScheduleRuntime()},
+		apifoundation.ScraperHolodexOptions{Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialScheduleRuntime()},
 		newFoundationTestMemberCache(t), cachemocks.NewLenientClient(),
 		slog.New(slog.DiscardHandler),
 	)

@@ -875,7 +875,9 @@ func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		t.Fatalf("resolve migrations dir for collection membership check: %v", err)
 	}
 
+	// projection guard SQL은 collector sourceobservation, lease membership SQL은 collector collection 패키지가 소유한다.
 	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
+	membershipQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "collection", "queries"))
 	refreshQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "planes", "youtube", "targetprojection", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 
@@ -896,19 +898,19 @@ func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		}
 	}
 
-	assertScraperCollectionMembership(t, pool, roles.scraper, roleSQLPath, collectorQueryDir)
+	assertScraperCollectionMembership(t, pool, roles.scraper, roleSQLPath, collectorQueryDir, membershipQueryDir)
 	assertRuntimeProjectionGuardAccess(t, pool, roles.runtime, roleSQLPath, refreshQueryDir)
 }
 
 // assertScraperCollectionMembership은 acquire가 기록하는 범위·수를 가진 ACTIVE lease를 소유자 권한으로
 // 시드한 뒤 scraper로 실제 lock·membership 쿼리를 실행한다. 시드는 같은 트랜잭션과 함께 롤백된다.
-func assertScraperCollectionMembership(t *testing.T, pool *pgxpool.Pool, role, roleSQLPath, queryDir string) {
+func assertScraperCollectionMembership(t *testing.T, pool *pgxpool.Pool, role, roleSQLPath, queryDir, membershipQueryDir string) {
 	t.Helper()
 
 	ctx := t.Context()
 	roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": pgx.Identifier{role}.Sanitize()})
 	lockSQL := readObservationRoleSQL(t, filepath.Join(queryDir, "repository_projection_current_0002_02.sql"), nil)
-	membershipSQL := readObservationRoleSQL(t, filepath.Join(queryDir, "repository_lease_membership_0004_04.sql"), nil)
+	membershipSQL := readObservationRoleSQL(t, filepath.Join(membershipQueryDir, "repository_lease_membership_0004_04.sql"), nil)
 	kinds := []string{"shorts_list", "video_list"}
 	scheduledFor := time.Date(2026, time.October, 3, 0, 0, 0, 0, time.UTC)
 	jobKey := "collector:youtubejs:youtubejs_content:" + membershipGrantSubject

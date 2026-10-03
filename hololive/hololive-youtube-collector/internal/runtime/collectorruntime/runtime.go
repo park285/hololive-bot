@@ -13,10 +13,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -28,7 +27,7 @@ const (
 type Runtime struct {
 	Config          *collectorconfig.RuntimeConfig
 	Logger          *slog.Logger
-	Scheduler       *leaseScheduler
+	scheduler       *leaseScheduler
 	servers         *sharedserver.RuntimeHTTPServers
 	helper          *youtubejs.Helper
 	infra           *collectorInfrastructure
@@ -170,7 +169,7 @@ func assembleRuntime(
 	runtime := &Runtime{
 		Config:         appConfig,
 		Logger:         logger,
-		Scheduler:      sched,
+		scheduler:      sched,
 		servers:        servers,
 		helper:         infra.youtubejs,
 		infra:          infra,
@@ -224,11 +223,11 @@ func (r *Runtime) start(ctx context.Context, errCh chan<- error) {
 }
 
 func (r *Runtime) watchSchedulerFatal(ctx context.Context, errCh chan<- error) {
-	if r.Scheduler == nil || !r.collectionExecutorEnabled() {
+	if r.scheduler == nil || !r.collectionExecutorEnabled() {
 		return
 	}
 
-	fatal := r.Scheduler.Fatal()
+	fatal := r.scheduler.Fatal()
 	if fatal == nil {
 		return
 	}
@@ -295,11 +294,11 @@ func (r *Runtime) reportHelperExit(ctx context.Context, errCh chan<- error) {
 }
 
 func (r *Runtime) startScheduler(ctx context.Context, errCh chan<- error) {
-	if r.Scheduler == nil || !r.collectionExecutorEnabled() {
+	if r.scheduler == nil || !r.collectionExecutorEnabled() {
 		return
 	}
 
-	if err := r.Scheduler.Start(ctx); err != nil {
+	if err := r.scheduler.Start(ctx); err != nil {
 		forwardRuntimeError(ctx, errCh, err)
 
 		return
@@ -318,7 +317,7 @@ func (r *Runtime) collectionExecutorEnabled() bool {
 	return ok && worker.Executor.Enabled
 }
 
-func collectorProfileEnabled(profile *settings.YouTubeCollectorWorkerProfile) bool {
+func collectorProfileEnabled(profile *collectorconfig.WorkerProfile) bool {
 	if profile == nil {
 		return false
 	}
@@ -343,8 +342,8 @@ func (r *Runtime) startServers(errCh chan<- error) {
 func (r *Runtime) shutdown(ctx context.Context) error {
 	var shutdownErr error
 
-	if r.Scheduler != nil {
-		shutdownErr = errors.Join(shutdownErr, r.Scheduler.Stop(ctx))
+	if r.scheduler != nil {
+		shutdownErr = errors.Join(shutdownErr, r.scheduler.Stop(ctx))
 	}
 
 	if r.servers != nil {

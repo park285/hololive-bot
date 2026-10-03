@@ -15,7 +15,7 @@
 
 ## Role
 
-Observation publish/checkpoint/job 계약 구현은 `hololive/hololive-youtube-collector/internal/runtime/sourceobservation`이 소유합니다. 공용 envelope·canonical JSON·hash·lease 값은 shared `pkg/contracts/sourceobservation`, consume·canonical/replay/retention과 private reducer는 API `internal/youtube/`에 있습니다. YouTube.js pagination 해석은 `internal/runtime/youtubejscollector`가 소유합니다.
+순수 job 계약·target snapshot·수집 입력/결과·retry 값은 `hololive/hololive-youtube-collector/internal/runtime/collection`이 소유하며 SQL adapter에 의존하지 않습니다. Lease SQL은 `joblease`, observation publish/checkpoint SQL은 `sourceobservation`이 소유합니다. 공용 envelope·canonical JSON·hash·lease 값은 shared `pkg/contracts/sourceobservation`, consume·canonical/replay/retention과 private reducer는 API `internal/youtube/`에 있습니다. YouTube.js pagination은 `youtubejscollector`, RPC DTO와 로컬 요청 pacing은 `youtubejs`가 소유합니다.
 
 AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normalize와 PostgreSQL collection lease/checkpoint/`source_observations` Publish만 소유합니다. Canonical persist와 notification intent는 `hololive-api` YouTube plane이 소유합니다. `members.photo` product path는 hololive-api admin PhotoSync가 소유합니다.
 
@@ -56,15 +56,21 @@ Holodex live/schedule 작업은 채널 통계·사진 payload를 만들지 않�
 
 ## Atomic publish
 
-`PublishBatch`는 `COMPLETE` terminal을 유지합니다. Scheduler는 `PARTIAL` output에 `PublishBatchAndDefer`를 사용하여 observation/checkpoint/queue와 `DEFERRED` 및 typed `last_failure_*`를 같은 PostgreSQL transaction에서 기록합니다. 성공한 `COMPLETE`/`PARTIAL` terminal commit 뒤에는 별도 defer를 수행하지 않습니다. collision complete는 `observation_collision/DATA_CONTRACT` durable diagnostic을 남기고, 성공 complete는 `last_error_code`만 지웁니다. Release는 `shutdown_release`/`renew_failed_release`/`superseded_release` shape이며 `last_failure_*`는 보존합니다. migration 177/189의 `legacy_collector` backfill trigger는 migration 218에서 지웠고, 기존 행의 `legacy_collector` 값은 이력으로 남습니다.
+`PublishBatch`는 `COMPLETE` terminal을 유지합니다. Scheduler는 `PARTIAL` output에 `PublishBatchAndDefer`를 사용하여 observation/checkpoint/queue와 typed `last_failure_*`를 같은 PostgreSQL transaction에서 기록합니다. 충돌이 없는 PARTIAL은 `DEFERRED`로 같은 슬롯을 재시도합니다. 하나라도 `COLLISION`이면 PARTIAL도 `observation_collision/DATA_CONTRACT`로 완료하여 `IDLE`과 다음 due 슬롯으로 전진합니다. 기존 불변 evidence를 덮어쓰지 않으며 독립 관측은 함께 확정합니다. 성공한 `COMPLETE`/`PARTIAL` terminal commit 뒤에는 별도 defer를 수행하지 않습니다. collision complete는 `observation_collision/DATA_CONTRACT` durable diagnostic을 남기고, 성공 complete는 `last_error_code`만 지웁니다. Release는 `shutdown_release`/`renew_failed_release`/`superseded_release` shape이며 `last_failure_*`는 보존합니다. migration 177/189의 `legacy_collector` backfill trigger는 migration 218에서 지웠고, 기존 행의 `legacy_collector` 값은 이력으로 남습니다.
 
 Runner input의 `TargetSnapshot`은 canonical job contract가 요청한 kind를 한 번에 읽는 immutable view입니다. 요청 kind가 누락되면 fail-closed로 오류를 반환하며, 최종 authority는 계속 publish transaction의 lease fence/current projection/enabled target 검증입니다. Snapshot은 fallback이나 publish 검증 대체 경로가 아닙니다.
 
 membership 개정(migration 259)은 CURRENT guard를 잡은 뒤 lease·현재 target의 연속성을 검증합니다. lease 취득 시 전체 job scope의 kind·정확한 subject 여부·개수를 저장하며, `member_since_generation`으로 무관한 projection 교체를 허용하되 자기 target 제거·재추가(ABA)와 policy 변경을 거부합니다. 취득 generation·owner·epoch·scheduled_for·expiry fence는 유지합니다. `not_before`는 새 취득에만 적용하며 이미 진행 중인 작업을 취소하지 않습니다. 갱신은 guard를 역순으로 잠그지 않습니다. superseded는 실행 취소·합류 후 fenced release하며 합류 실패 때 lease를 풀지 않습니다.
 
+수집 결과는 immutable 관측과 latency만 보관합니다. `collectorruntime.Publisher`가 관측을 한 번 복사해 같은 순서·identity의 checkpoint와 저장 입력을 만듭니다. Repository의 독립 payload·cursor·binding 검증과 방어적 복사는 유지합니다. Job 계약 definition은 불변 handle을 공유하되 호출자에게 주는 kind slice와 확장 가능한 계약 map은 독립 소유입니다.
+
 Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다.
 
-Scheduler가 queue·discovery·lifecycle을 소유하고, 구성 시 한 번 생성한 executor가 provider admission·collection·publish·attempt 결과를 소유합니다. fatal은 first-wins이며 명시적으로 분류된 INTERNAL/PROTOCOL 오류와 runner panic·result invariant·불가능한 queue 상태가 대상입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다. Lease-run join의 `CLEANUP_TIMED_OUT`은 callback이 실제로 합류하지 못한 경우이며, 자체 request timeout을 반환하고 끝난 callback과 구분합니다. Lease supervision timeout만으로 process fatal을 보고하지 않는 기존 정책을 유지하며 함께 보존된 classified fatal 원인은 보고합니다. 아래 helper process cleanup timeout은 별도의 fatal shutdown 경계입니다.
+`collection.queue.max_age`의 fixed 상한을 넘긴 로컬 항목은 dequeue 시 lease 취득 전에 폐기합니다. stale discard·경고를 기록하고 queue 표식을 해제한 뒤 다음 항목을 계속 처리하며, DB terminal이나 즉시 재시도는 만들지 않습니다. Collector `internal/config`는 profile-only preflight와 runtime이 동일한 profile 수치 정책을 적용하도록 소유합니다.
+
+Scheduler가 queue·discovery·lifecycle과 worker·queue·batch·cadence 정책을 소유하고, executor는 단일 collector 설정과 검증된 retry bounds로 수집·발행을 실행합니다. Provider gate는 lease 취득 뒤 snapshot 조회와 수집 동안만 점유하며, 수집 함수가 반환하면 검증·DB publish 전에 정확히 한 번 반환합니다. 반환하지 않은 수집 함수는 계속 슬롯을 점유합니다. Admission timeout의 durable 실패·retry 정책은 그대로입니다. Typed defer는 직접 실패와 PARTIAL 발행에 같은 bounds를 쓰며, 저장 adapter의 진단 마스킹과 DB clock clamp를 유지합니다.
+
+Fatal은 first-wins이며 명시적으로 분류된 INTERNAL/PROTOCOL 오류와 runner panic·result invariant·불가능한 queue 상태가 대상입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다. Lease-run join의 `CLEANUP_TIMED_OUT`은 callback이 실제로 합류하지 못한 경우이며, 자체 request timeout을 반환하고 끝난 callback과 구분합니다. Lease supervision timeout만으로 process fatal을 보고하지 않는 기존 정책을 유지하며 함께 보존된 classified fatal 원인은 보고합니다. 아래 helper process cleanup timeout은 별도의 fatal shutdown 경계입니다.
 
 Official Schedule의 mixed-invalid 응답은 유효한 row를 COMPLETE로 발행하고, 모든 row가 잘못된 응답만 parser drift로 처리합니다. API schedule reducer는 관측한 row를 적용하며 응답에 없는 기존 일정의 삭제 근거로 사용하지 않습니다. 이 COMPLETE는 입력의 모든 row가 유효하다는 보장이 아닙니다.
 

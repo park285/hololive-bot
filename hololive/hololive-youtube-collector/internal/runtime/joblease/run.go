@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 type RunFunc func(ctx context.Context, proof contract.LeaseProof) error
@@ -160,7 +161,7 @@ func (r *Repository) finishRenewFailure(
 	result <-chan error,
 	err error,
 ) LeaseRunResult {
-	if errors.Is(err, ErrFenceLost) {
+	if errors.Is(err, collection.ErrFenceLost) {
 		return r.finishFenceLoss(runCtx, cancel, result)
 	}
 
@@ -206,14 +207,14 @@ func (r *Repository) finishFenceLoss(
 
 	joined, runErr := waitRunResult(cleanupCtx, result)
 	if !joined {
-		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", errors.Join(ErrFenceLost, runErr))}
+		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", errors.Join(collection.ErrFenceLost, runErr))}
 	}
 
-	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: errors.Join(ErrFenceLost, runErr)}
+	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: errors.Join(collection.ErrFenceLost, runErr)}
 }
 
 func supersededRenewError(err error) bool {
-	return errors.Is(err, ErrProjectionStale) || errors.Is(err, ErrTargetDisabled)
+	return errors.Is(err, collection.ErrProjectionStale) || errors.Is(err, collection.ErrTargetDisabled)
 }
 
 // finishSuperseded는 callback을 먼저 취소·join하고, join이 끝난 경우에만 자기 증명으로 fenced release한다.
@@ -261,7 +262,7 @@ func (r *Repository) releaseSuperseded(ctx context.Context, lease Lease, renewEr
 	defer cancel()
 
 	releaseErr := releaseWithTimeout(releaseCtx, lease, ReleaseSuperseded, r.config.DBTimeout)
-	if errors.Is(releaseErr, ErrFenceLost) {
+	if errors.Is(releaseErr, collection.ErrFenceLost) {
 		// 판정과 해제 사이에 소유를 잃었다. 다른 소유자의 lease는 건드리지 않았다.
 		releaseErr = nil
 	}

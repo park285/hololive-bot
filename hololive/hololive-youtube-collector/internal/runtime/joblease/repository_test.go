@@ -17,7 +17,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const (
@@ -28,14 +28,43 @@ const (
 	subjectUCB            = "UC_B"
 )
 
+// testRetryBounds는 executor가 internal/config에서 만드는 재시도 범위를 시험용으로 고정한 값입니다.
+var testRetryBounds = collection.RetryBounds{Minimum: 100 * time.Millisecond, Maximum: time.Second}
+
 func testConfig() Config {
 	return Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
 		RenewTimeout: 50 * time.Millisecond, DBTimeout: 100 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
-		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
-		AcquisitionBatch: 10, WorkerCount: 2, QueueCapacity: 4, PollCadence: 100 * time.Millisecond,
+		AcquisitionBatch: 10, QueueCapacity: 4,
 	}
+}
+
+func testDeferInput(
+	t *testing.T,
+	retryAt time.Time,
+	code contract.CollectionErrorCode,
+	class contract.FailureClass,
+	detail string,
+) collection.DeferCollectionInput {
+	t.Helper()
+
+	diagnostic, err := contract.NewFailureDiagnostic(code, class, detail)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	schedule, err := collection.NewRetryAtSchedule(retryAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	input, err := collection.NewDeferCollectionInput(diagnostic, testRetryBounds, schedule)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return input
 }
 
 func TestConfigRequiresBoundedLeaseAndRuntimeBudgets(t *testing.T) {
@@ -91,7 +120,7 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 		t.Fatalf("takeover proof = %#v, first = %#v", second.Proof(), first.Proof())
 	}
 
-	if err := first.Renew(ctx); !errors.Is(err, ErrFenceLost) {
+	if err := first.Renew(ctx); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale renew error = %v", err)
 	}
 
@@ -471,7 +500,7 @@ func assertActionPreservesScheduledSlot(t *testing.T, action string) {
 	}
 
 	if action == "defer" {
-		err = first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), string(contract.ErrorCollectionTimeout), string(contract.ClassTimeout), "provider timed out")
+		err = first.Defer(ctx, testDeferInput(t, time.Now().UTC().Add(500*time.Millisecond), contract.ErrorCollectionTimeout, contract.ClassTimeout, "provider timed out"))
 	} else {
 		err = first.Release(ctx, ReleaseShutdown)
 	}
@@ -506,7 +535,7 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := lease.Defer(ctx, time.Now().UTC(), string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "provider rate limited"); err != nil {
+	if err := lease.Defer(ctx, testDeferInput(t, time.Now().UTC(), contract.ErrorCollectionFailed, contract.ClassTransient, "provider rate limited")); err != nil {
 		t.Fatalf("defer short retry: %v", err)
 	}
 
@@ -519,7 +548,7 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if state != "DEFERRED" || retryAt.Before(time.Now().UTC()) || retryAt.After(time.Now().UTC().Add(repository.config.MaxRetryDelay)) {
+	if state != "DEFERRED" || retryAt.Before(time.Now().UTC()) || retryAt.After(time.Now().UTC().Add(testRetryBounds.Maximum)) {
 		t.Fatalf("deferred state=%s retry_at=%s", state, retryAt)
 	}
 }
@@ -539,7 +568,7 @@ func TestDeferAndCompleteRetainFailureDiagnostics(t *testing.T) {
 	rawDetail := "youtube.js helper: Authorization: Bearer secret-value"
 	detail := collecterr.SanitizeDetail(rawDetail)
 
-	if deferErr := first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), string(contract.ErrorCollectionFailed), string(contract.ClassTransient), rawDetail); deferErr != nil {
+	if deferErr := first.Defer(ctx, testDeferInput(t, time.Now().UTC().Add(500*time.Millisecond), contract.ErrorCollectionFailed, contract.ClassTransient, rawDetail)); deferErr != nil {
 		t.Fatalf("defer: %v", deferErr)
 	}
 
@@ -622,14 +651,14 @@ func TestLegacyShapedDeferNoLongerSynthesizesDiagnostics(t *testing.T) {
 	spec := communityJob()
 
 	first := mustAcquireLease(t, repository, spec, "collector-a")
-	mustDeferLease(t, first, string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "first detail")
+	mustDeferLease(t, first, contract.ErrorCollectionFailed, contract.ClassTransient, "first detail")
 
 	typed := readFailureDiagnostics(t, pool, spec.JobKey)
 
 	makeRetryDue(t, pool, spec.JobKey)
 
 	second := mustAcquireLease(t, repository, spec, "collector-b")
-	legacyDefer(t, pool, repository, second, "legacy_failure")
+	legacyDefer(t, pool, second, "legacy_failure")
 
 	assertFailureDiagnostics(t, pool, spec.JobKey, typed.code, typed.class, typed.detail, typed.at)
 }
@@ -716,15 +745,15 @@ func mustAcquireLease(t *testing.T, repository *Repository, spec *JobSpec, owner
 	return lease
 }
 
-func mustDeferLease(t *testing.T, lease *JobLease, code, class, detail string) {
+func mustDeferLease(t *testing.T, lease *JobLease, code contract.CollectionErrorCode, class contract.FailureClass, detail string) {
 	t.Helper()
 
-	if err := lease.Defer(t.Context(), time.Now().UTC().Add(500*time.Millisecond), code, class, detail); err != nil {
+	if err := lease.Defer(t.Context(), testDeferInput(t, time.Now().UTC().Add(500*time.Millisecond), code, class, detail)); err != nil {
 		t.Fatalf("defer lease: %v", err)
 	}
 }
 
-func legacyDefer(t *testing.T, pool *pgxpool.Pool, repository *Repository, lease *JobLease, code string) {
+func legacyDefer(t *testing.T, pool *pgxpool.Pool, lease *JobLease, code string) {
 	t.Helper()
 
 	const query = `UPDATE youtube_collection_job_leases
@@ -746,7 +775,7 @@ RETURNING job_key`
 	if err := pool.QueryRow(t.Context(), query,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		time.Now().UTC().Add(500*time.Millisecond), code,
-		repository.config.MinRetryDelay.Milliseconds(), repository.config.MaxRetryDelay.Milliseconds(),
+		testRetryBounds.Minimum.Milliseconds(), testRetryBounds.Maximum.Milliseconds(),
 	).Scan(&jobKey); err != nil {
 		t.Fatalf("legacy defer: %v", err)
 	}
@@ -769,7 +798,7 @@ func TestReleasePreservesExistingFailureDiagnostics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if deferErr := first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "provider detail"); deferErr != nil {
+	if deferErr := first.Defer(ctx, testDeferInput(t, time.Now().UTC().Add(500*time.Millisecond), contract.ErrorCollectionFailed, contract.ClassTransient, "provider detail")); deferErr != nil {
 		t.Fatalf("record provider failure: %v", deferErr)
 	}
 
@@ -833,16 +862,34 @@ func assertFailureDiagnostics(t *testing.T, pool *pgxpool.Pool, jobKey, wantCode
 	}
 }
 
+// 비정상 진단·tuple은 typed 입력 생성에서 거절되고, 생성자를 거치지 않은 입력은 lease 갱신 없이 ErrInvalidJob이다.
 func TestDeferRejectsInvalidDiagnosticBounds(t *testing.T) {
-	lease := &JobLease{}
-	err := lease.Defer(t.Context(), time.Now().UTC().Add(time.Second), string(contract.ErrorCollectionFailed), string(contract.ClassTransient), strings.Repeat("x", collecterr.MaxDetailBytes+1))
-
-	if !errors.Is(err, ErrInvalidJob) {
-		t.Fatalf("oversized diagnostic error = %v, want ErrInvalidJob", err)
+	if _, err := contract.NewFailureDiagnostic(
+		contract.ErrorCollectionFailed, contract.ClassTransient, strings.Repeat("x", collecterr.MaxDetailBytes+1),
+	); err == nil {
+		t.Fatal("oversized diagnostic was accepted")
 	}
 
-	if err := lease.Defer(t.Context(), time.Now().UTC().Add(time.Second), "provider_failed", "HelperError", "detail"); !errors.Is(err, ErrInvalidJob) {
-		t.Fatalf("invalid tuple error = %v, want ErrInvalidJob", err)
+	if _, err := contract.NewFailureDiagnostic("provider_failed", "HelperError", "detail"); err == nil {
+		t.Fatal("invalid tuple was accepted")
+	}
+
+	collision, err := contract.NewFailureDiagnostic(contract.ErrorObservationCollision, contract.ClassDataContract, "collision")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	schedule, err := collection.NewRetryAtSchedule(time.Now().UTC().Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := collection.NewDeferCollectionInput(collision, testRetryBounds, schedule); err == nil {
+		t.Fatal("non-deferable diagnostic was accepted")
+	}
+
+	if err := (&JobLease{}).Defer(t.Context(), collection.DeferCollectionInput{}); !errors.Is(err, ErrInvalidJob) {
+		t.Fatalf("unconstructed defer input error = %v, want ErrInvalidJob", err)
 	}
 }
 
@@ -855,7 +902,7 @@ func TestProjectionExpiryBlocksAcquisition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := newTestRepository(t, pool).Acquire(ctx, communityJob(), "collector-a"); !errors.Is(err, ErrProjectionStale) {
+	if _, err := newTestRepository(t, pool).Acquire(ctx, communityJob(), "collector-a"); !errors.Is(err, collection.ErrProjectionStale) {
 		t.Fatalf("expired projection acquire error = %v", err)
 	}
 }
@@ -869,8 +916,8 @@ func TestLoadExactTargetSnapshotReturnsOnlyLeasedSubject(t *testing.T) {
 	})
 	repository := newTestRepository(t, pool)
 	spec := *communityJob()
-	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: spec.Provider, Kind: sourceobservation.JobKind(spec.CollectionJobKind),
+	job, _ := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: spec.Provider, Kind: collection.JobKind(spec.CollectionJobKind),
 	})
 	proof := seedSnapshotLease(t, pool, &spec, job, generation, 1)
 
@@ -897,7 +944,7 @@ func TestLoadProjectionTargetSnapshotPreservesEmptyAndEnforcesCap(t *testing.T) 
 		{subjectUCB, contract.KindLiveSnapshot, time.Minute, true},
 	})
 	repository := newTestRepository(t, pool)
-	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
+	job, _ := collection.InitialJobContracts().Definition(collection.JobID{
 		Provider: contract.ProviderHolodex, Kind: "holodex_schedule",
 	})
 	spec := JobSpec{
@@ -933,8 +980,8 @@ func TestLoadTargetSnapshotRejectsStaleProjection(t *testing.T) {
 
 	repository := newTestRepository(t, pool)
 	spec := *communityJob()
-	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: spec.Provider, Kind: sourceobservation.JobKind(spec.CollectionJobKind),
+	job, _ := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: spec.Provider, Kind: collection.JobKind(spec.CollectionJobKind),
 	})
 	proof := seedSnapshotLease(t, pool, &spec, job, generation, 1)
 
@@ -942,7 +989,7 @@ func TestLoadTargetSnapshotRejectsStaleProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10); !errors.Is(err, ErrProjectionStale) {
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10); !errors.Is(err, collection.ErrProjectionStale) {
 		t.Fatalf("stale snapshot error = %v", err)
 	}
 }
@@ -953,12 +1000,12 @@ func TestLoadTargetSnapshotRejectsUnownedProof(t *testing.T) {
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)
 	spec := *communityJob()
-	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: spec.Provider, Kind: sourceobservation.JobKind(spec.CollectionJobKind),
+	job, _ := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: spec.Provider, Kind: collection.JobKind(spec.CollectionJobKind),
 	})
 	proof := snapshotProof(&spec, generation)
 
-	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10); !errors.Is(err, ErrFenceLost) {
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("unowned snapshot error = %v", err)
 	}
 }
@@ -989,11 +1036,11 @@ func TestCompleteCurrentFailsClosedAfterTargetDisabledOrProjectionStale(t *testi
 			}
 
 			err = lease.CompleteCurrent(ctx)
-			if scenario == "disabled" && !errors.Is(err, ErrTargetDisabled) {
+			if scenario == "disabled" && !errors.Is(err, collection.ErrTargetDisabled) {
 				t.Fatalf("disabled complete error = %v", err)
 			}
 
-			if scenario == "stale" && !errors.Is(err, ErrProjectionStale) {
+			if scenario == "stale" && !errors.Is(err, collection.ErrProjectionStale) {
 				t.Fatalf("stale complete error = %v", err)
 			}
 		})
@@ -1002,11 +1049,11 @@ func TestCompleteCurrentFailsClosedAfterTargetDisabledOrProjectionStale(t *testi
 
 // seedSnapshotLease는 획득을 거치지 않고 snapshotProof와 같은 소유 증명의 ACTIVE lease와 membership 범위를 기록한다.
 // 인자 count는 범위 안의 활성 target 행 수이며 acquire가 기록하는 값과 같은 의미다.
-func seedSnapshotLease(t *testing.T, pool *pgxpool.Pool, spec *JobSpec, job sourceobservation.JobContract, generation int64, count int32) contract.LeaseProof {
+func seedSnapshotLease(t *testing.T, pool *pgxpool.Pool, spec *JobSpec, job collection.JobContract, generation int64, count int32) contract.LeaseProof {
 	t.Helper()
 
 	proof := snapshotProof(spec, generation)
-	scope := sourceobservation.MembershipScopeFor(job)
+	scope := collection.MembershipScopeFor(job)
 
 	if _, err := pool.Exec(t.Context(), mustTestSQL("insert_active_lease.sql"),
 		spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey, generation,
@@ -1077,11 +1124,11 @@ func (l *fakeLease) Renew(context.Context) error {
 		return l.renewErr
 	}
 
-	return ErrFenceLost
+	return collection.ErrFenceLost
 }
-func (l *fakeLease) Complete(context.Context) error                                 { return nil }
-func (l *fakeLease) CompleteCurrent(context.Context) error                          { return nil }
-func (l *fakeLease) Defer(context.Context, time.Time, string, string, string) error { return nil }
+func (l *fakeLease) Complete(context.Context) error                               { return nil }
+func (l *fakeLease) CompleteCurrent(context.Context) error                        { return nil }
+func (l *fakeLease) Defer(context.Context, collection.DeferCollectionInput) error { return nil }
 func (l *fakeLease) Release(_ context.Context, reason ReleaseReason) error {
 	l.lastRelease = reason
 	l.releaseCalls.Add(1)
@@ -1105,7 +1152,7 @@ func TestRenewFailureCancelsFetchAndRunJoins(t *testing.T) {
 		return ctx.Err()
 	})
 
-	if !errors.Is(result.Err, ErrFenceLost) || result.Outcome != LeaseRunFenceLost {
+	if !errors.Is(result.Err, collection.ErrFenceLost) || result.Outcome != LeaseRunFenceLost {
 		t.Fatalf("run result = %#v", result)
 	}
 
@@ -1138,7 +1185,7 @@ func TestFenceLossPrefersBufferedCallbackResult(t *testing.T) {
 
 			result <- testCase.err
 
-			got := repository.finishRenewFailure(runCtx, cancel, lease, result, ErrFenceLost)
+			got := repository.finishRenewFailure(runCtx, cancel, lease, result, collection.ErrFenceLost)
 			if got.Outcome != testCase.outcome || !errors.Is(got.Err, testCase.err) {
 				t.Fatalf("run result = %#v, want outcome %s and error %v", got, testCase.outcome, testCase.err)
 			}
@@ -1264,6 +1311,28 @@ func newTestRepository(t *testing.T, pool *pgxpool.Pool) *Repository {
 	return repository
 }
 
+// Complete는 target 재검증 없이 같은 0144_11 SQL로 lease를 완료하는 시험 전용 경로입니다.
+// 운영 완료는 현재 projection과 활성 target을 확인하는 CompleteCurrent만 씁니다.
+func (l *JobLease) Complete(ctx context.Context) error {
+	if l == nil || l.repository == nil {
+		return fmt.Errorf("complete collection job lease: %w", collection.ErrFenceLost)
+	}
+
+	var jobKey string
+
+	err := l.repository.pool.QueryRow(ctx, sqlLeaseComplete, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+		l.proof.ProjectionGeneration, l.proof.ScheduledFor).Scan(&jobKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return collection.ErrFenceLost
+	}
+
+	if err != nil {
+		return fmt.Errorf("complete collection job lease: %w", err)
+	}
+
+	return nil
+}
+
 func communityJob() *JobSpec {
 	return &JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:" + subjectChannelA,
@@ -1288,8 +1357,8 @@ func candidatePage(t *testing.T, repository *Repository, provider contract.Provi
 		t.Fatal(err)
 	}
 
-	job, ok := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: provider, Kind: sourceobservation.JobKind(kind),
+	job, ok := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: provider, Kind: collection.JobKind(kind),
 	})
 	if !ok {
 		t.Fatalf("missing job contract %s/%s", provider, kind)

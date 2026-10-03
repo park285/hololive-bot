@@ -10,6 +10,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestMixedBundleFailureIsLocalAndPreservesHealthyRunner(t *testing.T) {
@@ -36,7 +37,7 @@ func TestMixedBundleFailureIsLocalAndPreservesHealthyRunner(t *testing.T) {
 	}
 
 	_, err := repository.CandidatesForProjection(t.Context(), generation+1, broken, nil, 4)
-	if !errors.Is(err, ErrProjectionStale) || errors.Is(err, ErrCandidateContract) {
+	if !errors.Is(err, collection.ErrProjectionStale) || errors.Is(err, ErrCandidateContract) {
 		t.Fatalf("stale projection must remain global: %v", err)
 	}
 }

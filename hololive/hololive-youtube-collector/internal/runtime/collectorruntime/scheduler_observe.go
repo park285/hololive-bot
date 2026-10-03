@@ -11,14 +11,14 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 // observePublishError는 관측 kind별 publish 결과만 센다. Fence 손실의 lease_lost 계측은 callback join 뒤
 // handleRunError가 phase 표식을 보고 한 번만 기록한다.
-func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
+func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collection.RunOutput, err error) {
 	if supersededError(err) {
 		e.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
 
@@ -64,7 +64,7 @@ func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
 
 // observePublished는 commit이 끝난 뒤에만 호출된다. Inserted·duplicate는 durable 수락으로 보고 수락 시각을 남기며,
 // checkpoint가 실제로 전진한 관측만 수락 간격을 기록한다. Collision은 수락이 아니다.
-func (e *collectionExecutor) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
+func (e *collectionExecutor) observePublished(output collection.RunOutput, result sourceobservation.PublishBatchResult) {
 	committedAt := time.Now().UTC()
 
 	for i := range output.ObservationCount() {
@@ -144,7 +144,7 @@ func publishOutcomeLabel(outcome sourceobservation.PublishOutcome) (string, bool
 	return "", false
 }
 
-func (e *collectionExecutor) observePublishOutcome(provider contract.Provider, output collectutil.RunOutput, outcome string) {
+func (e *collectionExecutor) observePublishOutcome(provider contract.Provider, output collection.RunOutput, outcome string) {
 	for i := range output.ObservationCount() {
 		envelope := output.ObservationMetadata(i)
 		e.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
@@ -164,8 +164,8 @@ func attemptResult(err error) string {
 }
 
 func supersededError(err error) bool {
-	return errors.Is(err, joblease.ErrProjectionStale) ||
-		errors.Is(err, joblease.ErrTargetDisabled)
+	return errors.Is(err, collection.ErrProjectionStale) ||
+		errors.Is(err, collection.ErrTargetDisabled)
 }
 
 func attemptFailureResult(err error) string {
@@ -183,8 +183,9 @@ func attemptFailureResult(err error) string {
 
 func (e *collectionExecutor) retryAt(err error) time.Time {
 	now := time.Now().UTC()
-	minAt := now.Add(e.config.MinRetryDelay)
-	maxAt := now.Add(e.config.MaxRetryDelay)
+	bounds := e.retryBounds
+	minAt := now.Add(bounds.Minimum)
+	maxAt := now.Add(bounds.Maximum)
 	hint := collecterr.RetryOf(err)
 
 	switch hint.Kind() {
@@ -193,9 +194,9 @@ func (e *collectionExecutor) retryAt(err error) time.Time {
 	case collecterr.RetryAfter:
 		return clampRetryAt(now.Add(hint.After()), minAt, maxAt)
 	case collecterr.RetryDefault:
-		return now.Add(e.config.MinRetryDelay + (e.config.MaxRetryDelay-e.config.MinRetryDelay)/2)
+		return now.Add(bounds.Minimum + (bounds.Maximum-bounds.Minimum)/2)
 	default:
-		return now.Add(e.config.MinRetryDelay + (e.config.MaxRetryDelay-e.config.MinRetryDelay)/2)
+		return now.Add(bounds.Minimum + (bounds.Maximum-bounds.Minimum)/2)
 	}
 }
 

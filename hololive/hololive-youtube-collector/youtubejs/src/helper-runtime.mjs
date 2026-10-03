@@ -278,14 +278,14 @@ export function parseBootstrapRequest(rawBody) {
   if (!isRecord(value)) {
     throw new HelperHTTPError(400, "invalid_request", "request must be a JSON object");
   }
-  assertExactKeys(value, ["protocol_version", "limits"], []);
+  assertExactKeys(value, bootstrapKeys);
   if (value.protocol_version !== 1) {
     throw new HelperHTTPError(409, "helper_protocol_mismatch", "protocol version mismatch");
   }
   if (!isRecord(value.limits)) {
     throw new HelperHTTPError(400, "invalid_request", "limits must be an object");
   }
-  assertExactKeys(value.limits, ["request_body_bytes", "response_body_bytes", "max_inflight"], []);
+  assertExactKeys(value.limits, bootstrapLimitKeys);
   return {
     protocol_version: 1,
     limits: {
@@ -296,19 +296,22 @@ export function parseBootstrapRequest(rawBody) {
   };
 }
 
+// bootstrap key는 모두 필수이므로 허용 집합의 삽입 순서가 곧 누락 검사 순서입니다.
+const bootstrapKeys = new Set(["protocol_version", "limits"]);
+const bootstrapLimitKeys = new Set(["request_body_bytes", "response_body_bytes", "max_inflight"]);
+
 /**
+ * unknown key를 record 순서대로 먼저 거부한 뒤 필수 key 누락을 거부합니다.
  * @param {Record<string, unknown>} record
- * @param {string[]} required
- * @param {string[]} optional
+ * @param {ReadonlySet<string>} requiredKeys
  */
-export function assertExactKeys(record, required, optional) {
-  const allowed = new Set([...required, ...optional]);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) {
+function assertExactKeys(record, requiredKeys) {
+  for (const key in record) {
+    if (Object.hasOwn(record, key) && !requiredKeys.has(key)) {
       throw new HelperHTTPError(400, "invalid_request", `unknown field: ${key}`);
     }
   }
-  for (const key of required) {
+  for (const key of requiredKeys) {
     if (!Object.hasOwn(record, key)) {
       throw new HelperHTTPError(400, "invalid_request", `${key} is required`);
     }

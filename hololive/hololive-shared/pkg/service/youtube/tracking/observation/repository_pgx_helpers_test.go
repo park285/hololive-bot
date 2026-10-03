@@ -9,52 +9,58 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type recordingTrackingRollbackTx struct {
+type recordingTrackingTx struct {
 	pgx.Tx
 
-	rollbackCtxErr      error
-	rollbackHasDeadline bool
-	rollbackErr         error
+	commits   int
+	rollbacks int
 }
 
-func (tx *recordingTrackingRollbackTx) Rollback(ctx context.Context) error {
-	tx.rollbackCtxErr = ctx.Err()
-	_, tx.rollbackHasDeadline = ctx.Deadline()
+func (tx *recordingTrackingTx) Commit(context.Context) error {
+	tx.commits++
 
-	return tx.rollbackErr
+	return nil
 }
 
-type panicTrackingBeginner struct {
+func (tx *recordingTrackingTx) Rollback(context.Context) error {
+	tx.rollbacks++
+
+	return nil
+}
+
+type queryOnlyTrackingDB struct {
 	trackingDB
-
-	tx pgx.Tx
 }
 
-func (db *panicTrackingBeginner) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) {
-	return db.tx, nil
+// 호출자 트랜잭션에 합류할 때는 commit/rollback을 호출자에게 남기고 fn 오류만 감싸 돌려준다.
+func TestInPgxTxJoinsCallerTransaction(t *testing.T) {
+	tx := &recordingTrackingTx{}
+	fnErr := errors.New("apply marks failed")
+
+	var received trackingDB
+
+	err := inPgxTx(t.Context(), tx, func(db trackingDB) error {
+		received = db
+
+		return fnErr
+	})
+
+	require.ErrorIs(t, err, fnErr)
+	require.Same(t, tx, received)
+	require.Zero(t, tx.commits)
+	require.Zero(t, tx.rollbacks)
 }
 
-func TestInPgxTxPreservesPanicWhenRollbackFails(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+// pgx.Tx도 *pgxpool.Pool도 아닌 DB는 트랜잭션 없이 fn을 실행하지 않는다.
+func TestInPgxTxRejectsUnsupportedDB(t *testing.T) {
+	called := false
 
-	tx := &recordingTrackingRollbackTx{rollbackErr: errors.New("rollback failed")}
-	db := &panicTrackingBeginner{tx: tx}
-	panicValue := &struct{ message string }{message: "tracking panic"}
+	err := inPgxTx(t.Context(), queryOnlyTrackingDB{}, func(trackingDB) error {
+		called = true
 
-	var recovered any
+		return nil
+	})
 
-	func() {
-		defer func() {
-			recovered = recover()
-		}()
-
-		require.NoError(t, inPgxTx(ctx, db, func(trackingDB) error {
-			panic(panicValue)
-		}))
-	}()
-
-	require.Same(t, panicValue, recovered)
-	require.NoError(t, tx.rollbackCtxErr)
-	require.True(t, tx.rollbackHasDeadline)
+	require.EqualError(t, err, "db does not support transactions")
+	require.False(t, called)
 }

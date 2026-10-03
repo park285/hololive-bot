@@ -7,7 +7,7 @@ cd "${ROOT_DIR}"
 
 alarm_worker="hololive/hololive-alarm-worker"
 hololive_root="hololive"
-poller_queries="hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries"
+canonical_queries="hololive/hololive-api/internal/youtube/canonicalwrite/queries"
 
 fail=0
 
@@ -48,9 +48,9 @@ report_hits \
   "alarm-worker lifecycle SQL stays in the canonical store" \
   "${worker_noncanonical_hits}"
 
-poller_conflict_hits=""
-if [[ -d "${poller_queries}" ]]; then
-  poller_conflict_hits="$(
+canonical_conflict_hits=""
+if [[ -d "${canonical_queries}" ]]; then
+  canonical_conflict_hits="$(
     awk '
       BEGIN { IGNORECASE = 1; in_outbox_insert = 0 }
       /INSERT[[:space:]]+INTO[[:space:]]+(public\.)?youtube_notification_outbox/ {
@@ -63,10 +63,13 @@ if [[ -d "${poller_queries}" ]]; then
       in_outbox_insert && /DO[[:space:]]+UPDATE/ {
         print FILENAME ":" FNR ":" $0
       }
-    ' "${poller_queries}"/repository_batch_writes_*.sql 2>/dev/null || true
+    ' "${canonical_queries}"/repository_batch_writes_*.sql
   )"
+else
+  echo "[FAIL] canonical writer SQL directory missing: ${canonical_queries}" >&2
+  fail=1
 fi
-report_hits "poller outbox insert never rewrites an existing lifecycle row" "${poller_conflict_hits}"
+report_hits "canonical outbox insert never rewrites an existing lifecycle row" "${canonical_conflict_hits}"
 
 if [[ "${fail}" -ne 0 ]]; then
   exit 1

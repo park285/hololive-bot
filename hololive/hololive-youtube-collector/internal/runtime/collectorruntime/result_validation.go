@@ -6,15 +6,13 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func ValidateCollectResult(
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	registration RegisteredRunner,
-	result *collectutil.CollectResult,
+	result *collection.CollectResult,
 	fatal error,
 ) error {
 	if err := validateFatalResult(result, fatal); err != nil {
@@ -40,7 +38,7 @@ func ValidateCollectResult(
 		return fmt.Errorf("validate result entries: %w", err)
 	}
 
-	if result.Kind() == collectutil.CollectComplete {
+	if result.Kind() == collection.CollectComplete {
 		return validateCompleteResult(result)
 	}
 
@@ -51,7 +49,7 @@ func ValidateCollectResult(
 	return nil
 }
 
-func validateCompleteResult(result *collectutil.CollectResult) error {
+func validateCompleteResult(result *collection.CollectResult) error {
 	if _, ok := result.PartialFailure(); ok {
 		return invariantError("complete result contains a partial failure")
 	}
@@ -59,7 +57,7 @@ func validateCompleteResult(result *collectutil.CollectResult) error {
 	return nil
 }
 
-func validateFatalResult(result *collectutil.CollectResult, fatal error) error {
+func validateFatalResult(result *collection.CollectResult, fatal error) error {
 	if fatal != nil && !result.IsZero() {
 		return invariantError("fatal collection returned a non-zero result")
 	}
@@ -67,7 +65,7 @@ func validateFatalResult(result *collectutil.CollectResult, fatal error) error {
 	return nil
 }
 
-func validateResultShape(input *collectutil.RunInput, result *collectutil.CollectResult) error {
+func validateResultShape(input *collection.RunInput, result *collection.CollectResult) error {
 	if input == nil || !validCollectResultKind(result.Kind()) {
 		return invariantError("collection result kind is invalid")
 	}
@@ -75,16 +73,16 @@ func validateResultShape(input *collectutil.RunInput, result *collectutil.Collec
 	return nil
 }
 
-func validCollectResultKind(kind collectutil.CollectResultKind) bool {
-	return kind == collectutil.CollectComplete || kind == collectutil.CollectPartial
+func validCollectResultKind(kind collection.CollectResultKind) bool {
+	return kind == collection.CollectComplete || kind == collection.CollectPartial
 }
 
-func validateOutputBounds(output collectutil.RunOutput) error {
-	if output.ObservationCount() != output.CheckpointCount() || output.ObservationCount() > sourceobservation.MaxPublishBatchSize {
+func validateOutputBounds(output collection.RunOutput) error {
+	if output.ObservationCount() > collection.MaxPublishBatchSize {
 		return invariantError("collection output bounds are invalid")
 	}
 
-	if output.CollectionLatency() < 0 || output.CollectionLatency() > sourceobservation.MaxCollectionLatency {
+	if output.CollectionLatency() < 0 || output.CollectionLatency() > collection.MaxCollectionLatency {
 		return invariantError("collection output bounds are invalid")
 	}
 
@@ -92,20 +90,19 @@ func validateOutputBounds(output collectutil.RunOutput) error {
 }
 
 func validateResultEntries(
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	registration RegisteredRunner,
-	output collectutil.RunOutput,
+	output collection.RunOutput,
 ) error {
-	spec := input.Spec()
+	subject := input.Subject()
 	lease := input.Lease()
 	job := registration.Contract()
-	seen := make(map[string]struct{}, output.CheckpointCount())
+	seen := make(map[string]struct{}, output.ObservationCount())
 
 	for index := range output.ObservationCount() {
 		envelope := output.ObservationMetadata(index)
-		checkpoint := output.CheckpointMetadata(index)
 
-		if err := validateResultEntry(input, &spec, &lease, job, &envelope, &checkpoint, seen); err != nil {
+		if err := validateResultEntry(input, subject, &lease, job, &envelope, seen); err != nil {
 			return fmt.Errorf("validate result entry: %w", err)
 		}
 	}
@@ -114,19 +111,18 @@ func validateResultEntries(
 }
 
 func validateResultEntry(
-	input *collectutil.RunInput,
-	spec *joblease.JobSpec,
+	input *collection.RunInput,
+	subject string,
 	lease *contract.LeaseProof,
-	job sourceobservation.JobContract,
-	envelope *collectutil.ObservationMetadata,
-	checkpoint *collectutil.CheckpointMetadata,
+	job collection.JobContract,
+	envelope *collection.ObservationMetadata,
 	seen map[string]struct{},
 ) error {
 	if err := validateEnvelopeContract(job, envelope); err != nil {
 		return fmt.Errorf("validate envelope contract: %w", err)
 	}
 
-	if err := validateEnvelopeLease(spec, lease, envelope); err != nil {
+	if err := validateEnvelopeLease(lease, envelope); err != nil {
 		return fmt.Errorf("validate envelope lease: %w", err)
 	}
 
@@ -135,18 +131,18 @@ func validateResultEntry(
 		return invariantError("observation contract generation is invalid")
 	}
 
-	if err := validateEnvelopeSubject(spec, job, envelope); err != nil {
+	if err := validateEnvelopeSubject(subject, job, envelope); err != nil {
 		return fmt.Errorf("validate envelope subject: %w", err)
 	}
 
-	if err := recordCheckpoint(envelope, checkpoint, seen); err != nil {
-		return fmt.Errorf("record checkpoint: %w", err)
+	if err := recordCheckpointBinding(envelope, seen); err != nil {
+		return fmt.Errorf("record checkpoint binding: %w", err)
 	}
 
 	return nil
 }
 
-func validateEnvelopeContract(job sourceobservation.JobContract, envelope *collectutil.ObservationMetadata) error {
+func validateEnvelopeContract(job collection.JobContract, envelope *collection.ObservationMetadata) error {
 	if envelope.Provider != job.ID().Provider || !job.Emits(envelope.ObservationKind) {
 		return invariantError("observation lease or contract binding is invalid")
 	}
@@ -158,12 +154,10 @@ func validateEnvelopeContract(job sourceobservation.JobContract, envelope *colle
 	return nil
 }
 
-func validateEnvelopeLease(spec *joblease.JobSpec, lease *contract.LeaseProof, envelope *collectutil.ObservationMetadata) error {
+// validateEnvelopeLease는 관측 lease가 입력 lease와 같은지 확인합니다. 입력 lease의 job key·kind 결합은
+// target snapshot 적재와 실행 입력 생성이 이미 검증했습니다.
+func validateEnvelopeLease(lease *contract.LeaseProof, envelope *collection.ObservationMetadata) error {
 	if envelope.Lease != *lease {
-		return invariantError("observation lease or contract binding is invalid")
-	}
-
-	if envelope.Lease.JobKey != spec.JobKey || envelope.Lease.CollectionJobKind != spec.CollectionJobKind {
 		return invariantError("observation lease or contract binding is invalid")
 	}
 
@@ -178,24 +172,17 @@ func validateEnvelopeLease(spec *joblease.JobSpec, lease *contract.LeaseProof, e
 	return nil
 }
 
-func validateEnvelopeSubject(spec *joblease.JobSpec, job sourceobservation.JobContract, envelope *collectutil.ObservationMetadata) error {
-	if job.Membership() == sourceobservation.JobMembershipExactSubject && envelope.SubjectKey != spec.SubjectKey {
+func validateEnvelopeSubject(subject string, job collection.JobContract, envelope *collection.ObservationMetadata) error {
+	if job.Membership() == collection.JobMembershipExactSubject && envelope.SubjectKey != subject {
 		return invariantError("observation subject does not match exact-subject lease")
 	}
 
 	return nil
 }
 
-func recordCheckpoint(
-	envelope *collectutil.ObservationMetadata,
-	actual *collectutil.CheckpointMetadata,
-	seen map[string]struct{},
-) error {
-	if !checkpointMatches(envelope, actual) {
-		return invariantError("checkpoint does not match observation")
-	}
-
-	key := string(actual.Provider) + "\x00" + string(actual.ObservationKind) + "\x00" + actual.SubjectKey
+// recordCheckpointBinding은 관측에서 파생될 체크포인트 바인딩이 배치 안에서 유일한지 확인합니다.
+func recordCheckpointBinding(envelope *collection.ObservationMetadata, seen map[string]struct{}) error {
+	key := string(envelope.Provider) + "\x00" + string(envelope.ObservationKind) + "\x00" + envelope.SubjectKey
 	if _, ok := seen[key]; ok {
 		return invariantError("checkpoint binding is duplicated")
 	}
@@ -205,22 +192,10 @@ func recordCheckpoint(
 	return nil
 }
 
-func checkpointMatches(expected *collectutil.ObservationMetadata, actual *collectutil.CheckpointMetadata) bool {
-	return expected.Provider == actual.Provider &&
-		expected.ObservationKind == actual.ObservationKind &&
-		expected.SubjectKey == actual.SubjectKey &&
-		expected.ScopeSHA256 == actual.ScopeSHA256 &&
-		expected.ContractGeneration == actual.ContractGeneration &&
-		expected.ObservationKey == actual.LastObservationKey &&
-		expected.EvidenceSHA256 == actual.LastEvidenceSHA256 &&
-		expected.ScheduledFor.Equal(actual.LastScheduledFor) &&
-		expected.Continuity == actual.Continuity
-}
-
 func validatePartialResult(
 	registration RegisteredRunner,
-	result *collectutil.CollectResult,
-	output collectutil.RunOutput,
+	result *collection.CollectResult,
+	output collection.RunOutput,
 ) error {
 	partial, err := validatedPartialFailure(result)
 	if err != nil {
@@ -244,9 +219,9 @@ func validatePartialResult(
 	return nil
 }
 
-func validatedPartialFailure(result *collectutil.CollectResult) (*collectutil.PartialFailure, error) {
+func validatedPartialFailure(result *collection.CollectResult) (*collection.PartialFailure, error) {
 	partial, ok := result.PartialFailure()
-	if !ok || partial.Cause() == nil || !collectutil.PartialFailureClassAllowed(collecterr.ClassOf(partial.Cause())) {
+	if !ok || partial.Cause() == nil || !collection.PartialFailureClassAllowed(collecterr.ClassOf(partial.Cause())) {
 		return nil, invariantError("partial result failure is invalid")
 	}
 
@@ -254,7 +229,7 @@ func validatedPartialFailure(result *collectutil.CollectResult) (*collectutil.Pa
 }
 
 func validateFailedKinds(
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	failed, emitted []contract.ObservationKind,
 ) error {
 	for _, kind := range failed {

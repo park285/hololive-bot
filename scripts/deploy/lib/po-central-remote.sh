@@ -70,6 +70,21 @@ wait_collector() {
   [[ "$(docker inspect -f '{{.Image}}' "$collector_container")" == "$(docker image inspect -f '{{.Id}}' "$collector")" ]]
   docker exec "$collector_container" ./bin/healthcheck https://127.0.0.1:30025/ready >/dev/null
 }
+require_post_cutover_logs() {
+  local since="$1" container="$2" output status
+  output="$(docker logs --since "$since" "$container" 2>&1)" || {
+    status="$?"
+    echo "failed to read post-cutover logs for $container" >&2
+    return "$status"
+  }
+  if grep -E 'ERR|panic|permission denied|x509|no such file|OOM' <<<"$output"; then
+    return 1
+  else
+    status="$?"
+    # grep의 불일치(1)만 정상입니다. 조회·검사 실패를 완료 성공으로 바꾸지 않습니다.
+    [[ "$status" -eq 1 ]] || return "$status"
+  fi
+}
 restore() {
   local old_revision old_po_revision state rel
   trap - ERR INT TERM HUP
@@ -186,7 +201,7 @@ if [[ "$mode" == check ]]; then
   since_epoch="$(date -u -d "$since" +%s)"
   for container in "$issuer_container" "$collector_container"; do
     [[ "$(date -u -d "$(docker inspect -f '{{.State.StartedAt}}' "$container")" +%s)" -ge "$since_epoch" ]]
-    if docker logs --since "$since" "$container" 2>&1 | grep -E 'ERR|panic|permission denied|x509|no such file|OOM'; then exit 1; fi
+    require_post_cutover_logs "$since" "$container"
   done
   echo "central collector/issuer completion verified revision=$revision backup=$backup"
   exit 0
@@ -234,6 +249,10 @@ printf '%s\n' "$version" > "$backup/candidate.version"
 # 이전 pair와 설정 snapshot을 확보한 뒤에만 복원을 무장합니다.
 restore_after_failed_cutover() {
   local status="${1:-1}" restore_status
+  # 상속된 ERR trap의 자식은 실패를 부모에 넘기고, cutover 소유 shell에서만 한 번 복원합니다.
+  if [[ "$BASHPID" != "${cutover_restore_owner_pid:?cutover restore owner not armed}" ]]; then
+    exit "$status"
+  fi
   trap - ERR INT TERM HUP
   set +e
   # restore를 ||/if 조건에서 호출하면 함수 내부 errexit가 꺼집니다.
@@ -244,6 +263,7 @@ restore_after_failed_cutover() {
   fi
   exit "$status"
 }
+cutover_restore_owner_pid="$BASHPID"
 trap 'restore_after_failed_cutover $?' ERR
 trap 'restore_after_failed_cutover 130' INT
 trap 'restore_after_failed_cutover 143' TERM
@@ -268,7 +288,7 @@ wait_collector "$revision"
 since_epoch="$(date -u -d "$started_at" +%s)"
 for container in "$issuer_container" "$collector_container"; do
   [[ "$(date -u -d "$(docker inspect -f '{{.State.StartedAt}}' "$container")" +%s)" -ge "$since_epoch" ]]
-  if docker logs --since "$started_at" "$container" 2>&1 | grep -E 'ERR|panic|permission denied|x509|no such file|OOM'; then false; fi
+  require_post_cutover_logs "$started_at" "$container"
 done
 trap - ERR INT TERM HUP
 printf 'central issuer-first cutover verified revision=%s backup=%s started_at=%s\n' "$revision" "$backup" "$started_at"

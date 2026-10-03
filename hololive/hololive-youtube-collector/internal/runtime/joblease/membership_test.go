@@ -12,13 +12,13 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const (
 	subjectUCC      = "UC_C"
 	videoLiveID     = "video-live-1"
-	testGlobalClass = string(sourceobservation.JobClassGlobal)
+	testGlobalClass = string(collection.JobClassGlobal)
 )
 
 func contentJob(subject string) *JobSpec {
@@ -37,11 +37,11 @@ func holodexLiveJob() *JobSpec {
 	}
 }
 
-func jobContractFor(t *testing.T, spec *JobSpec) sourceobservation.JobContract {
+func jobContractFor(t *testing.T, spec *JobSpec) collection.JobContract {
 	t.Helper()
 
-	job, ok := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: spec.Provider, Kind: sourceobservation.JobKind(spec.CollectionJobKind),
+	job, ok := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: spec.Provider, Kind: collection.JobKind(spec.CollectionJobKind),
 	})
 	if !ok {
 		t.Fatalf("missing job contract %s/%s", spec.Provider, spec.CollectionJobKind)
@@ -246,15 +246,15 @@ func assertSuperseded(t *testing.T, repository *Repository, lease *JobLease, spe
 	ctx := t.Context()
 	proof := lease.Proof()
 
-	if err := lease.Renew(ctx); !errors.Is(err, ErrTargetDisabled) || errors.Is(err, ErrFenceLost) {
+	if err := lease.Renew(ctx); !errors.Is(err, collection.ErrTargetDisabled) || errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("renew error = %v, want membership superseded without owner loss", err)
 	}
 
-	if _, err := repository.LoadTargetSnapshot(ctx, &proof, spec, jobContractFor(t, spec), 10); !errors.Is(err, ErrTargetDisabled) {
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, spec, jobContractFor(t, spec), 10); !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("snapshot error = %v, want membership superseded", err)
 	}
 
-	if err := lease.CompleteCurrent(ctx); !errors.Is(err, ErrTargetDisabled) {
+	if err := lease.CompleteCurrent(ctx); !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("complete error = %v, want membership superseded", err)
 	}
 }
@@ -310,17 +310,17 @@ func testExpiredLeaseIsOwnerLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := lease.Renew(ctx); !errors.Is(err, ErrFenceLost) {
+	if err := lease.Renew(ctx); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("expired renew error = %v", err)
 	}
 
-	if err := lease.CompleteCurrent(ctx); !errors.Is(err, ErrFenceLost) {
+	if err := lease.CompleteCurrent(ctx); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("expired complete error = %v", err)
 	}
 
 	takeover := mustAcquireLease(t, repository, spec, "collector-b")
 
-	if err := lease.Release(ctx, ReleaseSuperseded); !errors.Is(err, ErrFenceLost) {
+	if err := lease.Release(ctx, ReleaseSuperseded); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale release error = %v, must not release another owner", err)
 	}
 
@@ -341,7 +341,7 @@ func testOwnerLossOutranksStaleProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := lease.Renew(ctx); !errors.Is(err, ErrProjectionStale) {
+	if err := lease.Renew(ctx); !errors.Is(err, collection.ErrProjectionStale) {
 		t.Fatalf("stale projection renew error = %v", err)
 	}
 
@@ -349,7 +349,7 @@ func testOwnerLossOutranksStaleProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := lease.CompleteCurrent(ctx); !errors.Is(err, ErrFenceLost) {
+	if err := lease.CompleteCurrent(ctx); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("expired lease on stale projection complete error = %v", err)
 	}
 }
@@ -405,15 +405,15 @@ func TestLeaseRecreatedAfterRetentionDoesNotReviveOldProof(t *testing.T) {
 		t.Fatalf("recreated proof = %#v, old = %#v; want reused epoch with a distinct proof", recreated.Proof(), old.Proof())
 	}
 
-	if err := old.Renew(ctx); !errors.Is(err, ErrFenceLost) {
+	if err := old.Renew(ctx); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("old proof renew error = %v", err)
 	}
 
-	if err := old.CompleteCurrent(ctx); !errors.Is(err, ErrFenceLost) {
+	if err := old.CompleteCurrent(ctx); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("old proof complete error = %v", err)
 	}
 
-	if err := old.Release(ctx, ReleaseSuperseded); !errors.Is(err, ErrFenceLost) {
+	if err := old.Release(ctx, ReleaseSuperseded); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("old proof release error = %v", err)
 	}
 
@@ -504,7 +504,7 @@ func TestGuardWaitersEvaluateFreshSnapshotAfterTransition(t *testing.T) {
 	})
 
 	type snapshotResult struct {
-		snapshot TargetSnapshot
+		snapshot collection.TargetSnapshot
 		err      error
 	}
 
@@ -581,7 +581,7 @@ func TestSupersededRenewReleasesOnlyAfterCallbackJoin(t *testing.T) {
 	config.RenewInterval = 10 * time.Millisecond
 
 	repository := &Repository{config: config}
-	lease := &orderedReleaseLease{renewErr: ErrTargetDisabled}
+	lease := &orderedReleaseLease{renewErr: collection.ErrTargetDisabled}
 	result := repository.Run(t.Context(), lease, func(ctx context.Context, _ contract.LeaseProof) error {
 		<-ctx.Done()
 		lease.callbackDone.Store(true)
@@ -589,7 +589,7 @@ func TestSupersededRenewReleasesOnlyAfterCallbackJoin(t *testing.T) {
 		return ctx.Err()
 	})
 
-	if result.Outcome != LeaseRunReleasedAfterSuperseded || !errors.Is(result.Err, ErrTargetDisabled) || errors.Is(result.Err, ErrFenceLost) {
+	if result.Outcome != LeaseRunReleasedAfterSuperseded || !errors.Is(result.Err, collection.ErrTargetDisabled) || errors.Is(result.Err, collection.ErrFenceLost) {
 		t.Fatalf("run result = %#v", result)
 	}
 
@@ -605,7 +605,7 @@ func TestSupersededRenewDoesNotReleaseWhenCallbackJoinTimesOut(t *testing.T) {
 	config.CleanupTimeout = 20 * time.Millisecond
 
 	repository := &Repository{config: config}
-	lease := &fakeLease{renewErr: ErrProjectionStale}
+	lease := &fakeLease{renewErr: collection.ErrProjectionStale}
 	releaseRunner := make(chan struct{})
 	result := repository.Run(t.Context(), lease, func(context.Context, contract.LeaseProof) error {
 		<-releaseRunner
@@ -615,7 +615,7 @@ func TestSupersededRenewDoesNotReleaseWhenCallbackJoinTimesOut(t *testing.T) {
 
 	close(releaseRunner)
 
-	if result.Outcome != LeaseRunCleanupTimedOut || !errors.Is(result.Err, ErrProjectionStale) {
+	if result.Outcome != LeaseRunCleanupTimedOut || !errors.Is(result.Err, collection.ErrProjectionStale) {
 		t.Fatalf("run result = %#v", result)
 	}
 

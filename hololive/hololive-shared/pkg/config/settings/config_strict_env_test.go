@@ -31,8 +31,6 @@ func TestLoadBotRuntimeRejectsInvalidEnvValues(t *testing.T) {
 		{key: "HOLODEX_MAX_RETRY_ATTEMPTS", value: "three"},
 		{key: "HOLODEX_REQUEST_DELAY_MS", value: "500ms"},
 		{key: "HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED", value: invalidBoolValue},
-		{key: "YOUTUBE_MAX_PAGE_BODY_BYTES", value: "8MB"},
-		{key: "YOUTUBE_DISTRIBUTED_RATELIMIT_ENABLED", value: invalidBoolValue},
 		{key: "OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", value: "15s"},
 		{key: "CHECK_INTERVAL_SECONDS", value: "1m"},
 		{key: "CLIPROXY_ENABLED", value: invalidBoolValue},

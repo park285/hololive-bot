@@ -381,22 +381,15 @@ func buildAlarmFoundation(
 	}, nil
 }
 
-// buildAlarmHolodexService는 runtime이 읽은 YouTube·Holodex 설정으로 스크레이퍼와 Holodex 서비스를 만든다.
+// buildAlarmHolodexService는 runtime이 읽은 공식 일정·Holodex 설정으로 공식 일정 서비스와 Holodex 서비스를 만든다.
 func buildAlarmHolodexService(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	memberData domain.MemberDataProvider,
 	logger *slog.Logger,
 ) (*holodexprovider.Service, error) {
-	sharedRL, err := providers.ProvideYouTubeRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
-	}
-
 	scraperService, err := providers.ProvideScraperServiceWithOfficialSchedule(
 		memberData,
-		appConfig.YouTube,
-		sharedRL,
 		logger,
 		appConfig.OfficialScheduleRuntime(),
 	)

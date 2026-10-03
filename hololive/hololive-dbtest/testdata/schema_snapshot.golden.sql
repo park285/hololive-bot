@@ -1492,6 +1492,7 @@ TABLE youtube_schedule_items
   COLUMN is_live boolean NOT NULL DEFAULT false
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN collabo_talent_names text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN observed_at timestamp with time zone
   CONSTRAINT chk_youtube_schedule_item_bounds CHECK ((((length(group_key) >= 1) AND (length(group_key) <= 256)) AND ((length(external_id) >= 1) AND (length(external_id) <= 256)) AND (length(video_id) <= 128) AND (length(channel_id) <= 256) AND ((length(title) >= 1) AND (length(title) <= 4096))))
   CONSTRAINT chk_youtube_schedule_item_collabo_talent_names CHECK (youtube_schedule_collabo_talent_names_valid(collabo_talent_names))
   CONSTRAINT chk_youtube_schedule_item_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))

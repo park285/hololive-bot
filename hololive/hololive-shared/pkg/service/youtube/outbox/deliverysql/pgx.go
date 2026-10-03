@@ -2,9 +2,7 @@ package deliverysql
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -13,7 +11,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 type DeliveryDB interface {
@@ -63,55 +60,6 @@ func AppendDeliveryOutboxStatusArgs(args []any, values ...domain.OutboxStatus) [
 	}
 
 	return args
-}
-
-func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) error) error {
-	if db == nil {
-		return errors.New("db is nil")
-	}
-
-	if fn == nil {
-		return nil
-	}
-
-	tx, err := db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer rollbackDeliveryTxOnPanic(ctx, tx)
-
-	if err := finishDeliveryTx(ctx, tx, fn(tx)); err != nil {
-		return fmt.Errorf("finish delivery tx: %w", err)
-	}
-
-	return nil
-}
-
-func rollbackDeliveryTxOnPanic(ctx context.Context, tx pgx.Tx) {
-	if p := recover(); p != nil {
-		rollbackErr := pgxutil.Rollback(ctx, tx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			slog.Default().Warn("delivery transaction rollback after panic failed", slog.Any("error", rollbackErr))
-		}
-
-		panic(p)
-	}
-}
-
-func finishDeliveryTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
-	if fnErr != nil {
-		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-			return fmt.Errorf("transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
-		}
-
-		return fnErr
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
 }
 
 func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, error) {

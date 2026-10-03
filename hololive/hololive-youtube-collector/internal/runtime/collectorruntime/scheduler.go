@@ -3,14 +3,16 @@ package collectorruntime
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 type SchedulerState string
@@ -54,7 +56,7 @@ type projectionCandidateSource interface {
 	CandidatesForProjection(
 		ctx context.Context,
 		generation int64,
-		job sourceobservation.JobContract,
+		job collection.JobContract,
 		excludedJobKeys []string,
 		limit int,
 	) (joblease.CandidatePage, error)
@@ -63,6 +65,21 @@ type projectionCandidateSource interface {
 type leaseScheduler struct {
 	executor   *collectionExecutor
 	candidates projectionCandidateSource
+
+	// worker·queue·discovery 정책은 scheduler가 internal/config에서 한 번 받아 소유합니다.
+	workers          int
+	queueCapacity    int
+	queueMaxAge      time.Duration
+	acquisitionBatch int
+	pollCadence      time.Duration
+	dbTimeout        time.Duration
+
+	// 관측 의존성은 executor와 같은 인스턴스를 공유합니다. scheduler는 admission·discard·worker 수명을,
+	// executor는 attempt를 기록합니다.
+	metrics       *Metrics
+	logger        *slog.Logger
+	workerTracker *workercontract.ExecutorTracker
+	workerTotals  *workercontract.Counters
 
 	lifecycleMu            sync.Mutex
 	queueMu                sync.Mutex
@@ -107,24 +124,24 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 	s.cancel = cancel
 	s.done = done
 	s.state = SchedulerRunning
-	s.executor.workerTracker.StartWorkers(s.executor.config.WorkerCount)
+	s.workerTracker.StartWorkers(s.workers)
 
-	for range s.executor.config.WorkerCount {
+	for range s.workers {
 		s.wg.Go(func() {
-			panicguard.Run(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() {
+			panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() {
 				s.worker(runCtx)
 			})
 		})
 	}
 
 	s.wg.Go(func() {
-		panicguard.Run(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() {
+		panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() {
 			s.discover(runCtx)
 		})
 	})
 	s.lifecycleMu.Unlock()
 
-	go panicguard.Run(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-join", func() {
+	go panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-join", func() {
 		s.join(done)
 	})
 
@@ -205,7 +222,7 @@ func (s *leaseScheduler) waitDone(ctx context.Context, done chan struct{}) error
 
 func (s *leaseScheduler) join(done chan struct{}) {
 	s.wg.Wait()
-	s.executor.workerTracker.StopWorkers(s.executor.config.WorkerCount)
+	s.workerTracker.StopWorkers(s.workers)
 	s.drainQueue()
 	s.lifecycleMu.Lock()
 
@@ -215,8 +232,8 @@ func (s *leaseScheduler) join(done chan struct{}) {
 }
 
 func (s *leaseScheduler) discover(ctx context.Context) {
-	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() error {
-		ticker := time.NewTicker(s.executor.config.PollCadence)
+	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() error {
+		ticker := time.NewTicker(s.pollCadence)
 		defer ticker.Stop()
 
 		s.pollGuarded(ctx)
@@ -232,7 +249,7 @@ func (s *leaseScheduler) discover(ctx context.Context) {
 }
 
 func (s *leaseScheduler) pollGuarded(ctx context.Context) {
-	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-poll", func() error {
+	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-poll", func() error {
 		s.pollOnce(ctx)
 
 		return nil
@@ -263,13 +280,13 @@ func (s *leaseScheduler) waitPoll(ctx context.Context, ticker *time.Ticker) bool
 }
 
 func (s *leaseScheduler) refreshFreshness(now time.Time) {
-	if s.executor.metrics == nil || s.executor.registry == nil {
+	if s.metrics == nil || s.executor.registry == nil {
 		return
 	}
 
 	for _, runner := range s.executor.registry.Runners() {
 		id := runner.Contract().ID()
-		s.executor.metrics.ObserveFreshness(id.Provider, string(id.Kind), now)
+		s.metrics.ObserveFreshness(id.Provider, string(id.Kind), now)
 	}
 }
 
@@ -374,7 +391,7 @@ func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
 	return SchedulerSnapshot{
 		State:                  state,
 		QueueDepth:             depth,
-		QueueCapacity:          s.executor.config.QueueCapacity,
+		QueueCapacity:          s.queueCapacity,
 		Discovered:             s.discovered,
 		Enqueued:               s.enqueued,
 		Deduped:                s.deduped,

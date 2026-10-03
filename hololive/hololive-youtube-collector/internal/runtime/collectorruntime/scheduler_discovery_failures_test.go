@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 const (
@@ -48,14 +48,14 @@ func checkLocalFailureProgress(t *testing.T, failedIndex, capacity int) {
 
 	for range 10 {
 		outcome := runCapacityAwareCycle(&capacityCycleRequest{
-			runnerIDs: ids, start: cursor, remaining: capacity, batch: capacity,
-			query: func(id string, excluded []string, limit int) (joblease.CandidatePage, error) {
-				if id == ids[failedIndex] {
+			runnerCount: len(ids), start: cursor, remaining: capacity, batch: capacity,
+			query: func(runner int, excluded []string, limit int) (joblease.CandidatePage, error) {
+				if runner == failedIndex {
 					failures++
 					return joblease.CandidatePage{}, localCandidateFailure()
 				}
 
-				return fairnessCandidatePage(id, excluded, limit)
+				return fairnessCandidatePage(ids[runner], excluded, limit)
 			},
 			enqueue: func(spec *joblease.JobSpec) EnqueueResult {
 				seen[spec.JobKey]++
@@ -87,17 +87,18 @@ func checkLocalFailureProgress(t *testing.T, failedIndex, capacity int) {
 func TestDiscoveryGlobalFailureStopsAfterLocalFailure(t *testing.T) {
 	t.Parallel()
 
-	for _, cause := range []error{errors.New("database unavailable"), joblease.ErrProjectionStale, context.Canceled, context.DeadlineExceeded} {
+	for _, cause := range []error{errors.New("database unavailable"), collection.ErrProjectionStale, context.Canceled, context.DeadlineExceeded} {
 		t.Run(cause.Error(), func(t *testing.T) {
 			t.Parallel()
 
 			queries := 0
+			ids := []string{"local", "global", healthyRunnerID}
 			outcome := runCapacityAwareCycle(&capacityCycleRequest{
-				runnerIDs: []string{"local", "global", healthyRunnerID}, remaining: 3, batch: 3,
-				query: func(id string, _ []string, _ int) (joblease.CandidatePage, error) {
+				runnerCount: len(ids), remaining: 3, batch: 3,
+				query: func(runner int, _ []string, _ int) (joblease.CandidatePage, error) {
 					queries++
 
-					if id == "local" {
+					if ids[runner] == "local" {
 						return joblease.CandidatePage{}, localCandidateFailure()
 					}
 
@@ -110,7 +111,8 @@ func TestDiscoveryGlobalFailureStopsAfterLocalFailure(t *testing.T) {
 				},
 			})
 
-			if queries != 2 || !outcome.globalFailure || !errors.Is(outcome.queryErr, cause) || len(outcome.failures) != 2 {
+			if queries != 2 || !outcome.globalFailure || !errors.Is(outcome.queryErr, cause) || len(outcome.failures) != 2 ||
+				outcome.failures[0].runner != 0 || outcome.failures[1].runner != 1 {
 				t.Fatalf("queries=%d outcome=%+v", queries, outcome)
 			}
 
@@ -129,9 +131,12 @@ func TestDiscoveryLocalFailureDedupAndQueueFullKeepBudget(t *testing.T) {
 			t.Parallel()
 
 			warned := 0
+			ids := []string{brokenRunnerID, healthyRunnerID, "later"}
 			outcome := runCapacityAwareCycle(&capacityCycleRequest{
-				runnerIDs: []string{brokenRunnerID, healthyRunnerID, "later"}, remaining: 1, batch: 4,
-				query: func(id string, _ []string, limit int) (joblease.CandidatePage, error) {
+				runnerCount: len(ids), remaining: 1, batch: 4,
+				query: func(runner int, _ []string, limit int) (joblease.CandidatePage, error) {
+					id := ids[runner]
+
 					if limit != 1 {
 						t.Fatalf("limit=%d, want 1", limit)
 					}
@@ -179,7 +184,7 @@ type runnerFailureSource struct {
 	cancel   context.CancelFunc
 }
 
-func (s *runnerFailureSource) CandidatesForProjection(ctx context.Context, generation int64, job sourceobservation.JobContract, excluded []string, limit int) (joblease.CandidatePage, error) {
+func (s *runnerFailureSource) CandidatesForProjection(ctx context.Context, generation int64, job collection.JobContract, excluded []string, limit int) (joblease.CandidatePage, error) {
 	if job.ID().String() == s.failedID {
 		if s.cancel != nil {
 			s.cancel()
@@ -201,7 +206,7 @@ func TestDiscoveryRecordsFailureWhileAdvancingCursor(t *testing.T) {
 		t.Fatal("runner registry is empty")
 	}
 
-	ids := runnerIDs(runners)
+	ids := jobIDStrings(runners)
 
 	var logged bytes.Buffer
 
@@ -214,7 +219,7 @@ func TestDiscoveryRecordsFailureWhileAdvancingCursor(t *testing.T) {
 	}
 
 	scheduler.candidates = source
-	scheduler.executor.config.QueueCapacity = len(ids)
+	scheduler.queueCapacity = len(ids)
 	scheduler.queue = make(chan joblease.JobSpec, len(ids))
 	scheduler.discoverOnce(t.Context())
 
@@ -241,7 +246,7 @@ func TestDiscoveryParentCancelWinsOverLocalError(t *testing.T) {
 	t.Parallel()
 
 	scheduler := newLifecycleScheduler(t)
-	ids := runnerIDs(scheduler.discoveryRunners())
+	ids := jobIDStrings(scheduler.discoveryRunners())
 	ctx, cancel := context.WithCancel(t.Context())
 
 	defer cancel()
@@ -259,11 +264,15 @@ func TestDiscoveryParentCancelWinsOverLocalError(t *testing.T) {
 func TestDiscoveryLocalFailureCapacityOneStartsAfterLastQueriedRunner(t *testing.T) {
 	t.Parallel()
 
+	ids := []string{brokenRunnerID, healthyRunnerID, "later"}
 	queried := []string{}
 	outcome := runCapacityAwareCycle(&capacityCycleRequest{
-		runnerIDs: []string{brokenRunnerID, healthyRunnerID, "later"}, remaining: 1, batch: 1,
-		query: func(id string, _ []string, _ int) (joblease.CandidatePage, error) {
+		runnerCount: len(ids), remaining: 1, batch: 1,
+		query: func(runner int, _ []string, _ int) (joblease.CandidatePage, error) {
+			id := ids[runner]
+
 			queried = append(queried, id)
+
 			if id == brokenRunnerID {
 				return joblease.CandidatePage{}, localCandidateFailure()
 			}
@@ -285,11 +294,20 @@ func TestDiscoveryFullQueueDoesNotQuery(t *testing.T) {
 	source := newEmptyCandidateStub(t)
 
 	scheduler.candidates = source
-	scheduler.executor.config.QueueCapacity = 1
+	scheduler.queueCapacity = 1
 	scheduler.queued["pending"] = struct{}{}
 	scheduler.discoverOnce(t.Context())
 
 	if source.generationCalls != 0 || source.queries != 0 || scheduler.rotationCursor != 0 || !scheduler.Snapshot().QueueFull {
 		t.Fatalf("full queue discovery: generation=%d queries=%d snapshot=%+v", source.generationCalls, source.queries, scheduler.Snapshot())
 	}
+}
+
+func jobIDStrings(runners []RegisteredRunner) []string {
+	ids := make([]string, len(runners))
+	for i, runner := range runners {
+		ids[i] = runner.Contract().ID().String()
+	}
+
+	return ids
 }

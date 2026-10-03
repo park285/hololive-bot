@@ -10,7 +10,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -19,7 +18,7 @@ func TestCommunityWindowBaselinePreventsPinnedPostReorderBurst(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+	consumer := NewConsumer(repo)
 
 	baseline := publishCommunityWindow(ctx, t, publishkit.NewPublisher(pool), &proof, "pinned", "known-a", "known-b")
 	consumeCommunityWindow(ctx, t, consumer)

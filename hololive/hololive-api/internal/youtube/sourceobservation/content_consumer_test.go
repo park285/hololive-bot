@@ -9,7 +9,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -33,7 +32,7 @@ func TestContentConsumerPositiveThenCompleteNegative(t *testing.T) {
 		t.Fatalf("publish negative: %v", err)
 	}
 
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+	consumer := NewConsumer(repo)
 
 	// 같은 채널·종류 목록은 한 tick에 선두 하나만 claim하므로, 앞선 등장 관측이 끝나기 전 부재 관측은 대기한다.
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
@@ -62,7 +61,7 @@ func TestContentConsumerCompleteNegativeThenPositive(t *testing.T) {
 
 	repo := NewRepository(pool)
 	base := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+	consumer := NewConsumer(repo)
 
 	// 늦은 slot의 complete 부재가 먼저 처리된 뒤 이른 slot의 등장 관측이 처리되는 역순을 만든다.
 	// queue는 활성 같은 채널 목록끼리 추월시키지 않으므로, 이른 관측을 늦은 관측 처리 뒤에 발행한다.
@@ -125,7 +124,7 @@ func TestContentConsumerReplayDoesNotDuplicateNotification(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+	consumer := NewConsumer(repo)
 	if consumeErr := consumer.Consume(ctx, contentClaimOptions()); consumeErr != nil {
 		t.Fatalf("first consume: %v", consumeErr)
 	}
@@ -171,7 +170,7 @@ func TestContentConsumerInvalidItemDoesNotBlockLaterItem(t *testing.T) {
 		t.Fatalf("publish second: %v", err)
 	}
 
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+	consumer := NewConsumer(repo)
 
 	// 첫 tick은 같은 채널 선두인 손상 관측만 claim해 DEAD_LETTER로 보내고, 후속 관측은 선행 관측이 끝날 때까지 대기한다.
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {

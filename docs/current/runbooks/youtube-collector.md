@@ -117,7 +117,9 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 | `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES` | successful provider response ceiling | yes |
 | `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS` | per-request YouTube.js ceiling; default 30s | yes |
 
-Worker count, local queue capacity, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
+Worker count, local queue capacity and fixed `queue.max_age`, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
+
+로컬 대기 시간이 `collection.queue.max_age.milliseconds`를 넘으면 lease 취득 전에 해당 항목을 버리고 다음 항목을 처리합니다. 경고와 stale discard를 기록하고 중복 방지 표식을 해제하므로 다음 discovery에서 다시 후보가 될 수 있습니다. 아직 lease를 취득하지 않았으므로 DB complete/defer/release는 수행하지 않습니다. `--check-worker-profile`은 `internal/config`의 runtime과 같은 profile 수치 정책(TTL 최대 30분 등)을 검증하며 DB·provider 환경 변수는 요구하지 않습니다.
 
 ### 수집 처리량과 대상 신선도
 
@@ -135,7 +137,7 @@ Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailab
 
 `youtube_observation_accept_interval_seconds`는 실제 checkpoint가 전진한 수락 간격이며 첫 표본·중복·collision·정상 empty completion과 구분합니다. 마지막 수락 gauge만으로 탭 부재를 장애로 판정하지 않습니다. publish superseded 비율은 empty를 제외한 전체 publish 결과를 분모로 하며 publish 이전 폐기는 포함하지 않는 하한입니다. 여섯 작업의 due/stale·필수 metric 부재와 실제 RPC admission pressure를 함께 확인합니다. 85% admission은 여유 부족 신호이지 완전 포화나 재시도 포함 총 수요의 측정값이 아닙니다.
 
-Collector loader와 Compose는 canonical env만 읽습니다. 폐기된 `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`·`YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`와 퇴역한 `SCRAPER_PROXY_ENABLED`·`SCRAPER_PROXY_URL`은 빈 값이어도 키가 있으면 기동 실패입니다(존재 기준 퇴역 가드, `collector/retired_env.go`, remove_after 2026-12-31). 이 가드가 든 release는 모든 youtube-collector env와 stack-secrets master 사본에서 네 키를 지운 뒤에만 배포합니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
+Collector loader와 Compose는 canonical env만 읽습니다. 폐기된 `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`·`YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`와 퇴역한 `SCRAPER_PROXY_ENABLED`·`SCRAPER_PROXY_URL`은 빈 값이어도 키가 있으면 기동 실패입니다(존재 기준 퇴역 가드, `internal/config/retired_env.go`, remove_after 2026-12-31). 이 가드가 든 release는 모든 youtube-collector env와 stack-secrets master 사본에서 네 키를 지운 뒤에만 배포합니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
 
 ### Viewer 수집 중단 반영과 검증
 
@@ -228,7 +230,11 @@ Docker는 자동 재시작 때 `State.ExitCode`와 `State.OOMKilled`를 초기�
 
 Compose b/c의 paired cutover(`ap-deploy.sh`, `po-central-remote.sh`)는 issuer를 먼저 force-recreate하고 healthy를 확인한 뒤 collector를 교체합니다. issuer가 실패하면 이전 collector를 그대로 두기 위한 순서이므로 유지합니다. 그 사이 이전 collector가 새 issuer의 generation을 잡으면 SIGTERM 종료에서 그 generation을 퇴역시키므로, 새 issuer는 이전 collector 종료 시각에 exit 0과 재시작 1회를 보일 수 있습니다. 이 1회는 예상된 교체입니다. 이 밖의 교체는 exit reason 줄로 사유를 확인합니다.
 
-native a/d cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다. 이 경고 뒤에는 issuer가 멈춰 있고 collector unit이 disabled일 수 있으므로, 원인을 해소한 뒤 `scripts/deploy/ap-host-native-rollback.sh <ap> --apply`로 `previous` release와 그 issuer를 다시 적용하고 완료 검사를 확인합니다.
+native a/d cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다. 이 경고 뒤에는 issuer가 멈춰 있고 collector unit이 disabled일 수 있으므로, 아래 절차로 실행 중 변경과 guard를 확인·해소한 뒤 `scripts/deploy/ap-host-native-rollback.sh <ap> --apply`로 `previous` release와 그 issuer를 다시 적용하고 완료 검사를 확인합니다.
+
+native 배포는 root 소유 `/opt/hololive-bot/youtube-collector/cutover-recovery` guard를 원자적으로 선점하고 단계명·release·소유 shell/worker PID·종료 상태만 기록합니다. HUP/INT/TERM이 배포 shell에만 도착하면 실행 중 변경의 완료를 최대 5초 관찰합니다. worker의 정상 종료 상태와 완료 기록이 일치한 경계에서는 이전 runtime을 한 번 복원하고 129/130/143으로 끝납니다. 변경 명령이나 worker가 신호로 종료되거나 기록을 확인하지 못하면 `outcome_unknown`이며 자동 복원을 시작하지 않습니다. 복원 중 신호도 완료를 확인할 수 없으면 guard를 남깁니다. 최종 journal 조회·grep 실행 오류도 배포 실패이며 grep의 불일치 상태 1만 정상입니다.
+
+guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니다. 준비 중 실패와 복원 실패도 guard를 보존하며 rollback `--dry-run`은 기존 payload 진단에 사용할 수 있습니다. 운영 변경 승인을 받은 뒤 기록의 worker와 자식 process group, 잔존 systemd job 및 collector/issuer 상태를 확인하고 변경 완료 여부를 확정하십시오. PID는 재사용될 수 있으므로 PID 숫자만으로 다른 프로세스를 종료하지 않습니다. 5초 뒤 worker group에 TERM을 전달해도 신호를 무시하는 클라이언트나 daemon 작업의 종료를 보장하지 않습니다. 복구가 확정된 뒤에만 guard를 해제하고 필요한 rollback/fix-forward를 적용합니다. 새 release와 `previous`의 rollback 자료는 이 확인이 끝날 때까지 보존합니다.
 
 ### Native AP 배포 산출물 보존
 

@@ -32,7 +32,7 @@ func seedAdditionalLease(
 		jobClass = "GLOBAL"
 	}
 
-	scope := publishFixtureScope(provider, jobKind)
+	scope := publishFixtureScope(t, provider, jobKind)
 
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_collection_job_leases (

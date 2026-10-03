@@ -46,6 +46,42 @@ func TestPrepareEnvelopeCanonicalizesCoverageAndHashes(t *testing.T) {
 	}
 }
 
+// PrepareEnvelope는 재정규화 없이 자신이 만든 canonical 값으로 검증하므로, 비 UTC 입력 시각으로 준비한
+// 결과도 독립적인 공개 Validate와 같은 판정을 받아야 한다.
+func TestPrepareEnvelopeNonUTCInputPassesIndependentValidate(t *testing.T) {
+	utc := newCommunityEnvelope(t, time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC))
+	shifted := utc
+	zone := time.FixedZone("KST", 9*60*60)
+
+	shifted.ScheduledFor = utc.ScheduledFor.In(zone)
+	shifted.ObservedAt = utc.ObservedAt.In(zone)
+	shifted.Lease.ScheduledFor = utc.Lease.ScheduledFor.In(zone)
+
+	want, err := PrepareEnvelope(utc)
+	if err != nil {
+		t.Fatalf("prepare utc envelope: %v", err)
+	}
+
+	got, err := PrepareEnvelope(shifted)
+	if err != nil {
+		t.Fatalf("prepare shifted envelope: %v", err)
+	}
+
+	if err := got.Validate(); err != nil {
+		t.Fatalf("independent validate rejected prepared envelope: %v", err)
+	}
+
+	if got.ScheduledFor.Location() != time.UTC || got.ObservedAt.Location() != time.UTC || got.Lease.ScheduledFor.Location() != time.UTC {
+		t.Fatal("prepared clocks are not UTC")
+	}
+
+	if got.ObservationKey != want.ObservationKey || got.ScopeSHA256 != want.ScopeSHA256 ||
+		got.PayloadSHA256 != want.PayloadSHA256 || got.EvidenceSHA256 != want.EvidenceSHA256 ||
+		string(got.Payload) != string(want.Payload) {
+		t.Fatal("time zone of input changed prepared identity or hashes")
+	}
+}
+
 func TestSnapshotObservationIdentityPreservesNextSlot(t *testing.T) {
 	first := newCommunityEnvelope(t, time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC))
 

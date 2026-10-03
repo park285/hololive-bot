@@ -10,7 +10,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -95,12 +95,12 @@ func TestContentRunnerKeepsListAndShortsWhenEnrichmentFails(t *testing.T) {
 		videoErrs: map[string]error{"failed": collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "player timeout")},
 	}
 
-	result, err := NewContentRunner(fake, &cursorFake{}, 10, 0).Collect(t.Context(), contentInput(t))
+	result, err := NewContentRunner(fake, &cursorFake{}, 0).Collect(t.Context(), contentInput(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if result.Kind() != collectutil.CollectComplete || len(result.Output().Observations()) != 2 {
+	if result.Kind() != collection.CollectComplete || len(result.Output().Observations()) != 2 {
 		t.Fatalf("result kind=%s observations=%d", result.Kind(), len(result.Output().Observations()))
 	}
 
@@ -136,7 +136,7 @@ func TestContentRunnerStopsOnNonDegradableEnrichmentFailure(t *testing.T) {
 		videoErrs: map[string]error{"a": collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "helper configuration")},
 	}
 
-	result, err := NewContentRunner(fake, &cursorFake{}, 10, 0).Collect(t.Context(), contentInput(t))
+	result, err := NewContentRunner(fake, &cursorFake{}, 0).Collect(t.Context(), contentInput(t))
 	if err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
@@ -158,7 +158,7 @@ func TestContentRunnerPreservesNonDegradableErrorAfterEnrichmentDeadline(t *test
 
 	defer cancel()
 
-	result, err := NewContentRunner(fake, &cursorFake{}, 10, time.Hour-200*time.Millisecond).Collect(ctx, input)
+	result, err := NewContentRunner(fake, &cursorFake{}, time.Hour-200*time.Millisecond).Collect(ctx, input)
 	if ctx.Err() != nil || err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
 		t.Fatalf("parent=%v zero=%t kind=%s err=%v", ctx.Err(), result.IsZero(), result.Kind(), err)
 	}
@@ -172,7 +172,7 @@ func TestContentRunnerRequiresPublicationContractGeneration(t *testing.T) {
 		contract.KindVideoList, contract.KindShortsList)
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: contentList()}}
 
-	result, err := NewContentRunner(fake, &cursorFake{}, 10, 0).Collect(t.Context(), input)
+	result, err := NewContentRunner(fake, &cursorFake{}, 0).Collect(t.Context(), input)
 	if err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
 		t.Fatalf("legacy generation collected: result=%#v err=%v", result, err)
 	}
@@ -205,7 +205,7 @@ func TestContentRunnerFailsClosedOnUnreadableCursor(t *testing.T) {
 				videoChecks: map[string]youtubejs.VideoLiveCheckResult{"a": publishedCheck("a", testPublishedAt)},
 			}
 
-			result, err := NewContentRunner(fake, &cursorFake{cursor: []byte(raw)}, 10, 0).Collect(t.Context(), contentInput(t))
+			result, err := NewContentRunner(fake, &cursorFake{cursor: []byte(raw)}, 0).Collect(t.Context(), contentInput(t))
 			if err == nil || !result.IsZero() {
 				t.Fatalf("unreadable cursor collected: result=%#v err=%v", result, err)
 			}
@@ -286,7 +286,7 @@ func TestContentPublicationCursorDoesNotStarveBeyondCache(t *testing.T) {
 
 	reader := &cursorFake{}
 	fake := &contentFake{videoChecks: checks}
-	runner := NewContentRunner(fake, reader, itemCount, 0)
+	runner := NewContentRunner(fake, reader, 0)
 	prior := storedPublicationCursor{}
 	seen := make(map[string]bool, itemCount)
 
@@ -459,7 +459,7 @@ func earlierSlot(t *testing.T, raw []byte) []byte {
 	return shifted
 }
 
-func contentInput(tb testing.TB) *collectutil.RunInput {
+func contentInput(tb testing.TB) *collection.RunInput {
 	tb.Helper()
 
 	return youtubeInput(tb, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
@@ -492,12 +492,12 @@ func premiereCheck(videoID string, scheduledAt time.Time) youtubejs.VideoLiveChe
 func collectVideoList(t *testing.T, fake *contentFake, cursor []byte) (contract.VideoListV1, []byte) {
 	t.Helper()
 
-	input := withEnabled(t, contentInput(t), map[contract.ObservationKind][]string{
-		contract.KindVideoList:  {restrictedTestChannelID},
-		contract.KindShortsList: {},
+	input := withEnabled(t, contentInput(t), map[contract.ObservationKind]bool{
+		contract.KindVideoList:  true,
+		contract.KindShortsList: false,
 	})
 
-	result, err := NewContentRunner(fake, &cursorFake{cursor: cursor}, 10, 0).Collect(t.Context(), input)
+	result, err := NewContentRunner(fake, &cursorFake{cursor: cursor}, 0).Collect(t.Context(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,11 +505,10 @@ func collectVideoList(t *testing.T, fake *contentFake, cursor []byte) (contract.
 	return videoListOutput(t, result.Output())
 }
 
-func videoListOutput(t *testing.T, output collectutil.RunOutput) (contract.VideoListV1, []byte) {
+func videoListOutput(t *testing.T, output collection.RunOutput) (contract.VideoListV1, []byte) {
 	t.Helper()
 
 	observations := output.Observations()
-	checkpoints := output.Checkpoints()
 
 	for i := range observations {
 		if observations[i].ObservationKind != contract.KindVideoList {
@@ -526,7 +525,7 @@ func videoListOutput(t *testing.T, output collectutil.RunOutput) (contract.Video
 			t.Fatalf("video list generation = %d", observations[i].ContractGeneration)
 		}
 
-		return payload, checkpoints[i].Cursor
+		return payload, output.Cursor(i)
 	}
 
 	t.Fatal("video list observation is missing")
@@ -646,25 +645,25 @@ func TestContentRunnerSameSlotRetryCollectsOnlyUnacceptedKinds(t *testing.T) {
 		errByKind: map[string]error{contentTabShorts: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "shorts timeout")},
 	}
 
-	partial, err := NewContentRunner(first, &cursorFake{}, 10, 0).Collect(t.Context(), contentInput(t))
+	partial, err := NewContentRunner(first, &cursorFake{}, 0).Collect(t.Context(), contentInput(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if partial.Kind() != collectutil.CollectPartial || !slices.Equal(first.videoCalls, []string{"a", "b"}) {
+	if partial.Kind() != collection.CollectPartial || !slices.Equal(first.videoCalls, []string{"a", "b"}) {
 		t.Fatalf("first attempt kind=%s calls=%v", partial.Kind(), first.videoCalls)
 	}
 
 	_, cursor := videoListOutput(t, partial.Output())
 	retry := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: list, contentTabShorts: shorts}}
 
-	result, err := NewContentRunner(retry, &cursorFake{cursor: cursor}, 10, 0).Collect(t.Context(), contentInput(t))
+	result, err := NewContentRunner(retry, &cursorFake{cursor: cursor}, 0).Collect(t.Context(), contentInput(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	observations := result.Output().Observations()
-	if result.Kind() != collectutil.CollectComplete || len(observations) != 1 || observations[0].ObservationKind != contract.KindShortsList {
+	if result.Kind() != collection.CollectComplete || len(observations) != 1 || observations[0].ObservationKind != contract.KindShortsList {
 		t.Fatalf("retry kind=%s observations=%#v", result.Kind(), observations)
 	}
 
@@ -694,12 +693,12 @@ func TestContentRunnerPublicationDeadlineKeepsListsAndCursorProgress(t *testing.
 
 	defer cancel()
 
-	result, err := NewContentRunner(fake, &cursorFake{}, 10, time.Hour-50*time.Millisecond).Collect(ctx, input)
+	result, err := NewContentRunner(fake, &cursorFake{}, time.Hour-50*time.Millisecond).Collect(ctx, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if ctx.Err() != nil || result.Kind() != collectutil.CollectComplete || len(result.Output().Observations()) != 2 {
+	if ctx.Err() != nil || result.Kind() != collection.CollectComplete || len(result.Output().Observations()) != 2 {
 		t.Fatalf("ctx=%v kind=%s observations=%d", ctx.Err(), result.Kind(), len(result.Output().Observations()))
 	}
 
@@ -721,7 +720,7 @@ func TestContentRunnerPublicationDeadlineKeepsListsAndCursorProgress(t *testing.
 	}
 
 	exhausted := &contentFake{results: fake.results}
-	if _, err := NewContentRunner(exhausted, &cursorFake{}, 10, 2*time.Hour).Collect(ctx, input); err != nil || len(exhausted.videoCalls) != 0 {
+	if _, err := NewContentRunner(exhausted, &cursorFake{}, 2*time.Hour).Collect(ctx, input); err != nil || len(exhausted.videoCalls) != 0 {
 		t.Fatalf("exhausted reserve err=%v calls=%v", err, exhausted.videoCalls)
 	}
 }

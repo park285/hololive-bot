@@ -21,7 +21,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 
 const (
@@ -194,14 +193,13 @@ func newRuntime(
 
 	schedules := targetprojection.DefaultPolicySchedules()
 
-	writer := sourceobservation.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
 	runtime := &Runtime{
 		Config:    *plane,
 		Logger:    logger,
 		pool:      pool,
 		closePool: cleanup,
 		claimer:   repo,
-		consumer: sourceobservation.NewConsumerWithGraces(repo, writer, nil, plane.ContentAbsenceGrace, plane.LiveEndGrace).
+		consumer: sourceobservation.NewConsumerWithGraces(repo, plane.ContentAbsenceGrace, plane.LiveEndGrace).
 			WithChannelPolicy(sourceobservation.ChannelPolicy{
 				ProfileClearMinObservations: plane.ProfileClearMinObservations,
 				ProfileClearStability:       plane.ProfileClearStability,

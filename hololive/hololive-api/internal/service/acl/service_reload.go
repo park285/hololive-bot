@@ -29,8 +29,8 @@ import (
 // 닿지 않는다. Follow로 묶인 쪽이 이걸 호출해 DB 상태로 수렴한다.
 // 읽기 전용이다 — 기본값을 새로 만들지 않으므로, 복제본이 관리 plane이 방금 쓴 DB 상태를
 // 자기 기본값으로 덮어쓰지 않는다.
-// PG 읽기부터 메모리 적용까지 reloadMu로 직렬화한다. 각 Reload는 자기 커밋 뒤에 시작하므로,
-// 마지막으로 적용되는 스냅샷은 앞선 모든 Reload가 끝난 뒤 읽은 것이라 겹친 커밋을 모두 반영한다.
+// PG 읽기부터 메모리 적용까지 mutation과 같은 reloadMu로 직렬화한다.
+// 오래된 읽기가 같은 인스턴스의 최신 커밋을 메모리에서 되돌리지 않는다.
 func (s *Service) Reload(ctx context.Context) error {
 	s.reloadMu.Lock()
 	defer s.reloadMu.Unlock()

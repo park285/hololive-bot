@@ -10,12 +10,12 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func (l *JobLease) CompleteCurrent(ctx context.Context) error {
 	if l == nil || l.repository == nil {
-		return fmt.Errorf("complete current collection job lease: %w", ErrFenceLost)
+		return fmt.Errorf("complete current collection job lease: %w", collection.ErrFenceLost)
 	}
 
 	if err := dbx.InPgxTx(ctx, l.repository.pool, func(tx dbx.Tx) error {
@@ -40,7 +40,7 @@ func (l *JobLease) completeCurrentTx(ctx context.Context, tx dbx.Tx) error {
 		return fmt.Errorf("lock active lease: %w", err)
 	}
 
-	if err := sourceobservation.VerifyLeaseMembership(ctx, tx, &l.proof, l.scope); err != nil {
+	if err := collection.VerifyLeaseMembership(ctx, tx, &l.proof, l.scope); err != nil {
 		return fmt.Errorf("verify lease membership: %w", err)
 	}
 
@@ -54,11 +54,11 @@ func (l *JobLease) completeCurrentTx(ctx context.Context, tx dbx.Tx) error {
 func completeCurrentLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof) error {
 	var jobKey string
 
-	err := tx.QueryRow(ctx, mustSQL("repository_lease_complete_0144_11.sql"), proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
+	err := tx.QueryRow(ctx, sqlLeaseComplete, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
 		proof.ProjectionGeneration, proof.ScheduledFor).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {
@@ -76,12 +76,12 @@ func lockActiveLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof)
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_lease_failure_lock_0144_14.sql"),
+		sqlLeaseFailureLock,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {

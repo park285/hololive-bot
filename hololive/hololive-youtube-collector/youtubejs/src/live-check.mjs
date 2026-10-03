@@ -4,11 +4,11 @@
 import { classifyUpstreamError, failureTuples, upstreamHTTPFailureCode } from "./upstream-errors.mjs";
 import { FetchTransportError } from "./fetch-transport.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
+import { hasRFC3339Shape, isCalendarRFC3339 } from "./rfc3339.mjs";
 
 /** @typedef {Omit<import("./contracts.d.ts").VideoLiveCheckResult, "protocol_version">} VideoCheck */
 /** @typedef {Pick<VideoCheck, "availability" | "method" | "unknown_reason">} AvailabilityFacts */
 
-const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const maxVideoIdBytes = 128;
 const maxChannelIdBytes = 256;
 const playabilityStatuses = new Set(["OK", "UNPLAYABLE", "LIVE_STREAM_OFFLINE", "LOGIN_REQUIRED", "ERROR"]);
@@ -266,9 +266,8 @@ function readPublishDate(microformat) {
   if (typeof value !== "string") {
     return undefined;
   }
-  const match = rfc3339Pattern.exec(value);
   const parsed = Date.parse(value);
-  if (match == null || !validDateTime(match) || !Number.isFinite(parsed)) {
+  if (!isCalendarRFC3339(value) || !Number.isFinite(parsed)) {
     return undefined;
   }
   return new Date(parsed).toISOString();
@@ -574,9 +573,8 @@ function rawTimestamp(record, key) {
   if (typeof value !== "string") {
     throw new RawStructureError("structure_unrecognized", `raw ${key} is not a string`);
   }
-  const match = rfc3339Pattern.exec(value);
   const parsed = Date.parse(value);
-  if (match == null || !validDateTime(match) || !Number.isFinite(parsed)) {
+  if (!isCalendarRFC3339(value) || !Number.isFinite(parsed)) {
     throw new RawStructureError("structure_unrecognized", `raw ${key} is not RFC3339`);
   }
   return new Date(parsed).toISOString();
@@ -595,25 +593,10 @@ function epochSeconds(value) {
     throw new RawStructureError("structure_unrecognized", "raw scheduledStartTime is outside the supported range");
   }
   const normalized = parsed.toISOString();
-  if (!rfc3339Pattern.test(normalized)) {
+  if (!hasRFC3339Shape(normalized)) {
     throw new RawStructureError("structure_unrecognized", "raw scheduledStartTime is outside the RFC3339 range");
   }
   return normalized;
-}
-
-function validDateTime(match) {
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) {
-    return false;
-  }
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const monthDays = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return day <= monthDays[month - 1];
 }
 
 function isRecord(value) {

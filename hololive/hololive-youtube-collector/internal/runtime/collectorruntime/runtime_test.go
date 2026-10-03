@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"testing"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {

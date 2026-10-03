@@ -25,6 +25,7 @@ unit="hololive-youtube-collector@${service}.service"
 po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 swapfile="/swapfile"
+native_recovery_require_clear
 
 normalize_runtime_payload_permissions() {
   local root="$1"
@@ -107,6 +108,8 @@ vm.swappiness = 10
 SYSCTL
 sudo -n sysctl -w vm.swappiness=10 >/dev/null
 
+native_cutover_claim "$releases_root/$release_id"
+# 준비 중 실패도 guard와 산출물을 남깁니다. 다음 apply 전에 소유 worker와 runtime을 확인합니다.
 old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
@@ -132,8 +135,8 @@ if [[ -z "$old_target" && -n "$old_previous_target" ]]; then
 fi
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
-sudo -n rm -rf "$release_dir"
-sudo -n mkdir -p "$release_dir"
+# 새 릴리스 경로를 독점 생성합니다. 검증 실패나 동시 배포도 기존 복구 산출물을 덮어쓰지 않습니다.
+sudo -n mkdir "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R -P root:root "$release_dir"
 normalize_runtime_payload_permissions "$release_dir"
@@ -181,7 +184,6 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
     } > rollback-contract/SHA256SUMS
     chmod 0644 rollback-contract/SHA256SUMS
   ' sh "$old_target"
-  sudo -n ln -sfn "$old_target" "$previous_link"
 fi
 
 stop_collector_unit_and_require_inactive() {
@@ -214,56 +216,87 @@ stop_native_units_and_require_inactive() {
 # collector release이고 producer unit이 0개임을 확인해 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling).
 # set -E라 ERR trap은 명령 치환·subshell에도 상속된다. 그 안의 실패는 subshell에서 한 번, 치환이 실패로 끝난 부모에서
 # 또 한 번 trap을 부르므로 trap을 건 shell에서만 복원하고 subshell은 원래 상태로 끝나 부모에 실패를 넘긴다.
+native_restore_recorded_runtime() {
+  stop_native_units_and_require_inactive
+  if [[ -n "$old_target" && -d "$old_target" ]]; then
+    rollback_contract_dir="$old_target/rollback-contract"
+    sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
+    sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
+    sudo -n ln -sfn "$old_target" "$current_link"
+    native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
+    po_restore_previous "$old_target"
+    sudo -n systemctl daemon-reload
+    sudo -n systemctl enable --now "$unit"
+  else
+    po_restore_previous ""
+    sudo -n rm -f "$current_link" "$host_env" "$unit_file"
+    sudo -n systemctl daemon-reload
+  fi
+}
 restore_native_after_failed_cutover() {
-  local status="$?"
-  local restore_status
+  local status="${1:-$?}" restore_status=0
   if [[ "$BASHPID" != "${cutover_restore_owner_pid:?cutover restore owner not armed}" ]]; then
     exit "$status"
   fi
   trap - ERR
+  native_restoring=true
+  if [[ "${native_phase_active:-false}" == true && "${native_phase_started:-false}" == true ]]; then
+    native_cutover_unknown
+  fi
+  if [[ "${native_outcome_unknown:-false}" == true ]]; then
+    exit "$status"
+  fi
   # if/!/&&/|| 조건 안의 subshell은 set -e를 무시해 실패한 복원 단계를 지나친다. 조건 밖에서 실행해 첫 실패에서 멈추고 상태를 받는다.
   set +e
-  (
-    set -e
-    stop_native_units_and_require_inactive
-    if [[ -n "$old_target" && -d "$old_target" ]]; then
-      rollback_contract_dir="$old_target/rollback-contract"
-      sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
-      sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
-      sudo -n ln -sfn "$old_target" "$current_link"
-      native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
-      po_restore_previous "$old_target"
-      sudo -n systemctl daemon-reload
-      sudo -n systemctl enable --now "$unit"
-    else
-      po_restore_previous ""
-      sudo -n rm -f "$current_link" "$host_env" "$unit_file"
-      sudo -n systemctl daemon-reload
-    fi
-  )
+  native_signal_status=0
+  native_cutover_run restore native_restore_recorded_runtime
   restore_status="$?"
   set -e
-  if [[ "$restore_status" -ne 0 ]]; then
-    echo "host-native collector cutover failed and the recorded runtime could not be restored" >&2
+  if (( ${native_signal_status:-0} != 0 )); then
+    status="$native_signal_status"
   fi
+  if [[ "${native_outcome_unknown:-false}" == true || "${native_worker_status:-$restore_status}" -ne 0 || "${native_completion_verified:-false}" != true ]]; then
+    echo "host-native collector cutover failed and the recorded runtime could not be restored" >&2
+  else
+    native_cutover_release_guard || echo 'recorded runtime restored but native recovery guard could not be released' >&2
+  fi
+  (( ${native_signal_status:-0} == 0 )) || status="$native_signal_status"
+  trap - HUP INT TERM
   exit "$status"
+}
+native_cutover_failed() {
+  local failure_status="$?"
+  native_restoring=true
+  restore_native_after_failed_cutover "$failure_status"
 }
 arm_native_cutover_restore() {
   cutover_restore_owner_pid="$BASHPID"
-  trap restore_native_after_failed_cutover ERR
+  native_signal_status=0
+  native_outcome_unknown=false
+  native_phase_active=false
+  # shellcheck disable=SC2034 # 연결된 cutover helper의 신호 handler가 재진입을 막습니다.
+  native_restoring=false
+  trap - EXIT
+  trap native_cutover_failed ERR
+  trap 'native_cutover_signal 129' HUP
+  trap 'native_cutover_signal 130' INT
+  trap 'native_cutover_signal 143' TERM
 }
 arm_native_cutover_restore
-stop_native_units_and_require_inactive
+if [[ -n "$old_target" && -d "$old_target" ]]; then
+  native_cutover_run previous-link sudo -n ln -sfn "$old_target" "$previous_link"
+fi
+native_cutover_run stop stop_native_units_and_require_inactive
 
-sudo -n install -m 0640 -o root -g root "$payload/youtube-collector-host.env" "$host_env"
-sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-collector@.service" "$unit_file"
-sudo -n ln -sfn "$release_dir" "$current_link"
+native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$payload/youtube-collector-host.env" "$host_env"
+native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-collector@.service" "$unit_file"
+native_cutover_run current-link sudo -n ln -sfn "$release_dir" "$current_link"
 
-po_install_release "$release_dir" "$EXPECTED_REVISION"
+native_cutover_run issuer po_install_release "$release_dir" "$EXPECTED_REVISION"
 sudo -n systemd-analyze verify "$unit_file"
-sudo -n systemctl daemon-reload
-sudo -n systemctl enable "$unit"
-sudo -n systemctl restart "$unit"
+native_cutover_run daemon-reload sudo -n systemctl daemon-reload
+native_cutover_run collector-enable sudo -n systemctl enable "$unit"
+native_cutover_run collector-restart sudo -n systemctl restart "$unit"
 
 since_epoch="$(date -u -d "$change_started_at" +%s)"
 for _ in $(seq 1 30); do
@@ -300,15 +333,24 @@ ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
 
+native_post_cutover_log_check() {
+local journal_since journal_output grep_status=0
 journal_since="${change_started_at/T/ }"
 journal_since="${journal_since%Z} UTC"
 if ! journal_output="$(journalctl -u "$unit" --since "$journal_since" --no-pager)"; then
   echo "failed to read post-cutover logs for $unit" >&2
-  exit 1
+  false
 fi
-printf '%s\n' "$journal_output" |
-  grep -E 'PostgreSQL|Valkey|active_active|ERR|panic|permission denied|x509|no such file' || true
+grep -E 'PostgreSQL|Valkey|active_active|ERR|panic|permission denied|x509|no such file' <<<"$journal_output" || grep_status=$?
+(( grep_status <= 1 )) || return "$grep_status"
+grep_status=0
 if grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output"; then
-  exit 1
+  return 1
+else
+  grep_status=$?
 fi
-trap - ERR
+(( grep_status == 1 )) || return "$grep_status"
+}
+native_post_cutover_log_check
+trap - ERR HUP INT TERM
+native_cutover_release_guard

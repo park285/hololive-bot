@@ -12,10 +12,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	dbtest "github.com/kapu/hololive-dbtest"
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
@@ -34,8 +34,15 @@ func TestLeaseConfigFromUsesCollectorBudgets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if lease.WorkerCount != 3 || lease.QueueCapacity != 12 || lease.RenewTimeout != cfg.RenewTimeout {
+	if lease.AcquisitionBatch != 12 || lease.QueueCapacity != 12 || lease.RenewTimeout != cfg.RenewTimeout {
 		t.Fatalf("lease config = %+v", lease)
+	}
+
+	scheduler := newScheduler(&collectionExecutor{}, nil, &cfg)
+	if scheduler.workers != 3 || scheduler.queueCapacity != 12 || cap(scheduler.queue) != 12 ||
+		scheduler.pollCadence != cfg.AcquisitionCadence || scheduler.queueMaxAge != cfg.QueueMaxAge {
+		t.Fatalf("scheduler policy = workers %d queue %d/%d cadence %s max age %s",
+			scheduler.workers, scheduler.queueCapacity, cap(scheduler.queue), scheduler.pollCadence, scheduler.queueMaxAge)
 	}
 }
 
@@ -53,11 +60,11 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 
 	failing := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-	failing.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
-		return collectutil.CollectResult{}, errors.New("provider unavailable")
+	failing.collect = func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
+		return collection.CollectResult{}, errors.New("provider unavailable")
 	}
 
-	registry, err := NewRegistry(withOverride(failing)...)
+	registry, err := newTestRegistry(withOverride(failing)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +72,7 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
-		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
+		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 	}
@@ -104,11 +111,11 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	retryAt := time.Now().UTC().Add(200 * time.Millisecond)
 	failing := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-	failing.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
-		return collectutil.CollectResult{}, collecterr.CooldownUntil("limited", retryAt)
+	failing.collect = func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
+		return collection.CollectResult{}, collecterr.CooldownUntil("limited", retryAt)
 	}
 
-	registry, err := NewRegistry(withOverride(failing)...)
+	registry, err := newTestRegistry(withOverride(failing)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +123,7 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
-		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
+		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 	}
@@ -148,7 +155,13 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		{testSubjectKey, contract.KindChannelPhoto},
 	})
 
-	config := runtimeLeaseConfig()
+	// 이 테스트는 짧은 갱신 제한 시간이 아니라 두 종류의 원자적 발행을 검증합니다.
+	collector := collectorconfig.DefaultConfig()
+
+	config, err := leaseConfigFrom(&collector)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	repository, err := joblease.NewRepository(pool, &config)
 	if err != nil {
@@ -160,7 +173,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 
 	youtubejs.collect = collectYouTubeJSMetadata
 
-	registry, err := NewRegistry(withOverride(youtubejs)...)
+	registry, err := newTestRegistry(withOverride(youtubejs)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,8 +181,8 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
-		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-		collector: collectorconfig.DefaultConfig(),
+		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
+		collector: collector,
 		gates:     defaultProviderGates(),
 	}
 	spec := joblease.JobSpec{
@@ -209,7 +222,7 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 
 	content.collect = collectYouTubeJSPartialVideoList
 
-	registry, err := NewRegistry(withOverride(content)...)
+	registry, err := newTestRegistry(withOverride(content)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +230,7 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
-		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
+		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 	}
@@ -261,23 +274,20 @@ func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	registry, err := NewRegistry(completeStubRunners()...)
+	registry, err := newTestRegistry(completeStubRunners()...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	scheduler := &leaseScheduler{
-		executor: &collectionExecutor{
-			repository: repository, registry: registry, publisher: NewPublisher(pool),
-			metrics: NewMetrics(prometheus.NewPedanticRegistry()),
-			owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-			collector: collectorconfig.DefaultConfig(),
-			gates:     defaultProviderGates(),
-		}, candidates: repository,
+	collector := runtimeCollectorConfig()
+	scheduler := newScheduler(&collectionExecutor{
+		repository: repository, registry: registry, publisher: NewPublisher(pool),
+		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
+		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
+		collector: collector,
+		gates:     defaultProviderGates(),
+	}, repository, &collector)
 
-		state: SchedulerNew, queued: make(map[string]struct{}),
-		queue: make(chan joblease.JobSpec, config.QueueCapacity), fatal: make(chan error, 1),
-	}
 	if err := scheduler.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -301,8 +311,9 @@ func TestLeaseSchedulerStopTimeoutKeepsRunStateUntilJoin(t *testing.T) {
 		executor: &collectionExecutor{
 			repository: new(joblease.Repository),
 			registry:   new(Registry),
-			config:     joblease.Config{WorkerCount: 1, QueueCapacity: 1},
-		}, state: SchedulerRunning,
+		},
+		workers: 1, queueCapacity: 1,
+		state:  SchedulerRunning,
 		cancel: cancel,
 		done:   done,
 		queued: make(map[string]struct{}),
@@ -353,93 +364,109 @@ const (
 	testOwnerInstance    = "collector-a"
 )
 
-func collectYouTubeJSMetadata(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func collectYouTubeJSMetadata(_ context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	lease := input.Lease()
+	subject := input.Subject()
 
-	profile, err := collectutil.Envelope(
-		contract.ProviderYouTubeJS, contract.KindChannelProfile, testSubjectKey, 1, &lease,
+	profile, err := collection.Envelope(
+		contract.ProviderYouTubeJS, contract.KindChannelProfile, subject, 1, &lease,
 		contract.CompletenessPartial, contract.ContinuityNotApplicable,
 		contract.ChannelProfileV1{
-			ChannelID: testSubjectKey,
+			ChannelID: subject,
 			Handle:    contract.FieldValue[string]{Present: true, Value: "@test"},
 			Coverage: contract.ChannelProfileCoverageV1{
-				ChannelID: testSubjectKey, Fields: []string{"handle"},
+				ChannelID: subject, Fields: []string{"handle"},
 			},
 		},
 	)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("envelope: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("envelope: %w", err)
 	}
 
-	photo, err := collectutil.Envelope(
-		contract.ProviderYouTubeJS, contract.KindChannelPhoto, testSubjectKey, 1, &lease,
+	photo, err := collection.Envelope(
+		contract.ProviderYouTubeJS, contract.KindChannelPhoto, subject, 1, &lease,
 		contract.CompletenessPartial, contract.ContinuityNotApplicable,
 		contract.ChannelPhotoV1{
-			ChannelID: testSubjectKey,
+			ChannelID: subject,
 			Variants:  []contract.PhotoVariantV1{{Kind: "avatar", URL: "https://img.test/avatar.jpg"}},
 			Coverage: contract.ChannelPhotoCoverageV1{
-				ChannelID: testSubjectKey, Variants: []string{"avatar"},
+				ChannelID: subject, Variants: []string{"avatar"},
 			},
 		},
 	)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("envelope: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("envelope: %w", err)
 	}
 
-	complete, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{profile, photo}, time.Now())
+	complete, err := collection.CompleteFromEnvelopes([]contract.Envelope{profile, photo}, time.Now())
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("complete from envelopes: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("complete from envelopes: %w", err)
 	}
 
 	return complete, nil
 }
 
-func collectYouTubeJSPartialVideoList(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func collectYouTubeJSPartialVideoList(_ context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	lease := input.Lease()
 
-	envelope, err := collectutil.Envelope(
-		contract.ProviderYouTubeJS, contract.KindVideoList, input.Spec().SubjectKey, contract.VideoListPublicationContractGeneration, &lease,
+	envelope, err := collection.Envelope(
+		contract.ProviderYouTubeJS, contract.KindVideoList, input.Subject(), contract.VideoListPublicationContractGeneration, &lease,
 		contract.CompletenessComplete, contract.ContinuityContiguous,
 		contract.VideoListV1{
-			ChannelID: input.Spec().SubjectKey,
+			ChannelID: input.Subject(),
 			Videos:    []contract.VideoListItemV1{},
 			Coverage: contract.ChannelListCoverageV1{
-				ChannelID: input.Spec().SubjectKey, MaxResults: 10, Exhausted: true,
+				ChannelID: input.Subject(), MaxResults: 10, Exhausted: true,
 			},
 		},
 	)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("envelope: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("envelope: %w", err)
 	}
 
-	output, err := collectutil.OutputFromEnvelopes([]contract.Envelope{envelope}, time.Now())
+	output, err := collection.OutputFromEnvelopes([]contract.Envelope{envelope}, time.Now())
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("output from envelopes: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("output from envelopes: %w", err)
 	}
 
-	partial, err := collectutil.NewPartialResult(
+	partial, err := collection.NewPartialResult(
 		output,
 		collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "shorts timeout"),
 		contract.KindShortsList,
 	)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("new partial result: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("new partial result: %w", err)
 	}
 
 	return partial, nil
 }
 
+var testRetryBounds = collection.RetryBounds{Minimum: 100 * time.Millisecond, Maximum: time.Second}
+
 func runtimeLeaseConfig() joblease.Config {
 	return joblease.Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
 		RenewTimeout: 50 * time.Millisecond, DBTimeout: 250 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
-		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
-		AcquisitionBatch: 4, WorkerCount: 1, QueueCapacity: 4, PollCadence: 100 * time.Millisecond,
+		AcquisitionBatch: 4, QueueCapacity: 4,
 	}
 }
 
-func withOverride(overrides ...collectutil.JobRunner) []collectutil.JobRunner {
+// runtimeCollectorConfig는 runtime 테스트의 scheduler 정책을 lease 설정과 같은 작은 예산으로 맞춥니다.
+func runtimeCollectorConfig() collectorconfig.Config {
+	cfg := collectorconfig.DefaultConfig()
+
+	cfg.TotalWorkers = 1
+	cfg.QueueCapacity = 4
+	cfg.AcquisitionBatch = 4
+	cfg.AcquisitionCadence = 100 * time.Millisecond
+	cfg.RetryMin = testRetryBounds.Minimum
+	cfg.RetryMax = testRetryBounds.Maximum
+
+	return cfg
+}
+
+func withOverride(overrides ...collection.JobRunner) []collection.JobRunner {
 	runners := completeStubRunners()
 	for i, runner := range runners {
 		for _, override := range overrides {

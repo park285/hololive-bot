@@ -31,7 +31,7 @@ func TestReleaseReasonsUseDistinctShapesAndPreserveFailureHistory(t *testing.T) 
 			repository := newTestRepository(t, pool)
 			spec := communityJob()
 			first := mustAcquireLease(t, repository, spec, "collector-a")
-			mustDeferLease(t, first, string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "prior failure")
+			mustDeferLease(t, first, contract.ErrorCollectionFailed, contract.ClassTransient, "prior failure")
 
 			prior := readFailureDiagnostics(t, pool, spec.JobKey)
 			scheduledFor := first.Proof().ScheduledFor
@@ -69,7 +69,7 @@ func TestOrdinaryDeferSQLInvalidTupleDoesNotUpdateActiveLease(t *testing.T) {
 	err := pool.QueryRow(ctx, mustSQL("repository_lease_defer_0144_12.sql"),
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		time.Now().UTC().Add(time.Second), "not_a_code", "TRANSIENT", "detail",
-		repository.config.MinRetryDelay.Milliseconds(), repository.config.MaxRetryDelay.Milliseconds(),
+		testRetryBounds.Minimum.Milliseconds(), testRetryBounds.Maximum.Milliseconds(),
 	).Scan(&jobKey)
 
 	if !errors.Is(err, pgx.ErrNoRows) {

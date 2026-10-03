@@ -15,7 +15,6 @@ import (
 )
 
 type ScraperHolodexOptions struct {
-	YouTube          settings.YouTubeConfig
 	Holodex          settings.HolodexConfig
 	OfficialSchedule settings.OfficialScheduleRuntimeConfig
 }
@@ -35,15 +34,8 @@ func BuildScraperHolodex(
 ) (*ScraperHolodexFoundation, error) {
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
 
-	sharedRL, err := providers.ProvideYouTubeRateLimiterWithConfig(&options.YouTube, cacheClient, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
-	}
-
 	scraperService, err := providers.ProvideScraperServiceWithOfficialSchedule(
 		memberServiceAdapter,
-		options.YouTube,
-		sharedRL,
 		logger,
 		options.OfficialSchedule,
 	)

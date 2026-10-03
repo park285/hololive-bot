@@ -50,7 +50,7 @@ func publishConsumeContentAt(
 		t.Fatalf("align received_at for %s: %v", step.label, err)
 	}
 
-	if err := newContentTestConsumer(pool, repo, 0).Consume(ctx, contentClaimOptions()); err != nil {
+	if err := NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume %s: %v", step.label, err)
 	}
 }
@@ -293,6 +293,6 @@ func TestContentLoaderKeepsShortsBaselineWithLegacyCatalogOnly(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	publishShortWindow(t, repo, &proof, "new")
-	require.NoError(t, newContentTestConsumer(pool, repo, 0).Consume(ctx, contentClaimOptions()))
+	require.NoError(t, NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()))
 	assertShortWindowOutboxes(t, pool, "new")
 }

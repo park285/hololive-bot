@@ -12,7 +12,10 @@ import { lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 
 const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, items: [] });
 
-/** @param {YouTubeJSFetchOptions} [options] */
+/**
+ * @param {YouTubeJSFetchOptions} [options]
+ * @returns {Promise<Omit<import("./contracts.d.ts").ContentResult, "protocol_version">>}
+ */
 export async function fetchContentFeed({
   channelId,
   kind,

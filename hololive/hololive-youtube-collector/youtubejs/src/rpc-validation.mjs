@@ -135,10 +135,12 @@ export function parseRpcRequest(rawBody, validate) {
   }
 }
 
+const communityRequestKeys = keySchema(["protocol_version", "channel_id", "max_success_response_bytes"], ["max_results", "max_pages"]);
+
 /** @param {unknown} value @returns {import("./contracts.d.ts").CommunityRequest} */
 export function validateCommunityRequest(value) {
   const record = requestRecord(value);
-  assertRequestKeys(record, ["protocol_version", "channel_id", "max_success_response_bytes"], ["max_results", "max_pages"]);
+  assertRequestKeys(record, communityRequestKeys);
   return {
     protocol_version: protocolVersion(record),
     channel_id: requiredString(record, "channel_id"),
@@ -147,14 +149,12 @@ export function validateCommunityRequest(value) {
   };
 }
 
+const contentRequestKeys = keySchema(["protocol_version", "channel_id", "kind", "max_success_response_bytes"], ["max_results", "max_pages"]);
+
 /** @param {unknown} value @returns {import("./contracts.d.ts").ContentRequest} */
 export function validateContentRequest(value) {
   const record = requestRecord(value);
-  assertRequestKeys(
-    record,
-    ["protocol_version", "channel_id", "kind", "max_success_response_bytes"],
-    ["max_results", "max_pages"],
-  );
+  assertRequestKeys(record, contentRequestKeys);
   const kind = requiredString(record, "kind");
   if (kind !== "videos" && kind !== "shorts") {
     throw new RpcRequestError("kind must be videos or shorts");
@@ -168,10 +168,12 @@ export function validateContentRequest(value) {
   };
 }
 
+const channelRequestKeys = keySchema(["protocol_version", "channel_id", "kind", "max_success_response_bytes"], ["max_pages"]);
+
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelRequest} */
 export function validateChannelRequest(value) {
   const record = requestRecord(value);
-  assertRequestKeys(record, ["protocol_version", "channel_id", "kind", "max_success_response_bytes"], ["max_pages"]);
+  assertRequestKeys(record, channelRequestKeys);
   const kind = requiredString(record, "kind");
   if (kind !== "live" && kind !== "metadata") {
     throw new RpcRequestError("kind must be live or metadata");
@@ -187,11 +189,13 @@ export function validateChannelRequest(value) {
 
 const maxChannelIdentifierBytes = 256;
 const maxVideoIdentifierBytes = 128;
+const channelLiveCheckRequestKeys = keySchema(["protocol_version", "channel_id", "max_success_response_bytes"]);
+const videoLiveCheckRequestKeys = keySchema(["protocol_version", "video_id", "max_success_response_bytes"]);
 
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelLiveCheckRequest} */
 export function validateChannelLiveCheckRequest(value) {
   const record = requestRecord(value);
-  assertRequestKeys(record, ["protocol_version", "channel_id", "max_success_response_bytes"], []);
+  assertRequestKeys(record, channelLiveCheckRequestKeys);
   return {
     protocol_version: protocolVersion(record),
     channel_id: requestIdentifier(record, "channel_id", maxChannelIdentifierBytes),
@@ -202,13 +206,18 @@ export function validateChannelLiveCheckRequest(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").VideoLiveCheckRequest} */
 export function validateVideoLiveCheckRequest(value) {
   const record = requestRecord(value);
-  assertRequestKeys(record, ["protocol_version", "video_id", "max_success_response_bytes"], []);
+  assertRequestKeys(record, videoLiveCheckRequestKeys);
   return {
     protocol_version: protocolVersion(record),
     video_id: requestIdentifier(record, "video_id", maxVideoIdentifierBytes),
     max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
   };
 }
+
+const channelLiveCheckResponseKeys = keySchema(
+  ["protocol_version", "channel_id", "outcome", "channel_identity_confirmed"],
+  ["selected_video_id", "unknown_reason"],
+);
 
 /**
  * 채널 확인 결과는 pagination 없이 자체 불변식으로 검증합니다. 확인된 결과만 identity를 확정하고,
@@ -218,11 +227,7 @@ export function validateVideoLiveCheckRequest(value) {
  */
 export function validateChannelLiveCheckResponse(value) {
   const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["protocol_version", "channel_id", "outcome", "channel_identity_confirmed"],
-    ["selected_video_id", "unknown_reason"],
-  );
+  assertResponseKeys(record, channelLiveCheckResponseKeys);
   const channelId = responseIdentifier(record, "channel_id", maxChannelIdentifierBytes);
   const outcome = channelLiveCheckOutcome(record);
   const confirmed = requiredResponseBoolean(record, "channel_identity_confirmed");
@@ -257,6 +262,25 @@ export function validateChannelLiveCheckResponse(value) {
   };
 }
 
+const videoLiveCheckResponseKeys = keySchema(
+  ["protocol_version", "video_id", "identity_confirmed", "availability", "method"],
+  [
+    "channel_id",
+    "is_live",
+    "is_live_now",
+    "is_upcoming",
+    "is_live_content",
+    "is_private",
+    "has_live_broadcast_details",
+    "started_at",
+    "scheduled_at",
+    "waiting_state_confirmed",
+    "ended_at",
+    "published_at",
+    "unknown_reason",
+  ],
+);
+
 /**
  * 영상 확인 결과를 검증합니다. method는 availability에서만 결정되고, UNKNOWN일 때만 사유가 있습니다.
  * identity가 확인되지 않은 결과는 다른 영상의 사실을 싣지 않으며, 신뢰 가능한 수명 사실은 서로 모순되지 않아야 합니다.
@@ -265,25 +289,7 @@ export function validateChannelLiveCheckResponse(value) {
  */
 export function validateVideoLiveCheckResponse(value) {
   const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["protocol_version", "video_id", "identity_confirmed", "availability", "method"],
-    [
-      "channel_id",
-      "is_live",
-      "is_live_now",
-      "is_upcoming",
-      "is_live_content",
-      "is_private",
-      "has_live_broadcast_details",
-      "started_at",
-      "scheduled_at",
-      "waiting_state_confirmed",
-      "ended_at",
-      "published_at",
-      "unknown_reason",
-    ],
-  );
+  assertResponseKeys(record, videoLiveCheckResponseKeys);
   const videoId = responseIdentifier(record, "video_id", maxVideoIdentifierBytes);
   const channelId = Object.hasOwn(record, "channel_id")
     ? responseIdentifier(record, "channel_id", maxChannelIdentifierBytes)
@@ -365,14 +371,26 @@ export function validateVideoLiveCheckResponse(value) {
   };
 }
 
+const communityResponseKeys = keySchema(
+  ["protocol_version", "posts", "page_count", "exhausted", "continuity", "termination_reason"],
+  ["missing_tab"],
+);
+const contentResponseKeys = keySchema(
+  ["protocol_version", "items", "page_count", "exhausted", "continuity", "termination_reason"],
+  ["missing_tab"],
+);
+const channelResponseKeys = keySchema(
+  ["protocol_version", "live_sessions", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
+  ["missing_tab", "unavailable_live_sessions", "live_query"],
+);
+const channelProfileKeys = keySchema([], ["handle", "description", "country", "joined_date"]);
+const liveQueryKeys = keySchema(["channel_id", "source", "statuses", "exhausted", "access_restricted", "page_count"]);
+const unavailableLiveSessionKeys = keySchema(["video_id", "channel_id", "reason"]);
+
 /** @param {unknown} value @returns {import("./contracts.d.ts").CommunityResult} */
 export function validateCommunityResponse(value) {
   const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["protocol_version", "posts", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["missing_tab"],
-  );
+  assertResponseKeys(record, communityResponseKeys);
   return {
     protocol_version: responseProtocolVersion(record),
     posts: arrayField(record, "posts").map(validateCommunityPost),
@@ -384,11 +402,7 @@ export function validateCommunityResponse(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").ContentResult} */
 export function validateContentResponse(value) {
   const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["protocol_version", "items", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["missing_tab"],
-  );
+  assertResponseKeys(record, contentResponseKeys);
   return {
     protocol_version: responseProtocolVersion(record),
     items: arrayField(record, "items").map(validateContentItem),
@@ -400,13 +414,9 @@ export function validateContentResponse(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelResult} */
 export function validateChannelResponse(value) {
   const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["protocol_version", "live_sessions", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["missing_tab", "unavailable_live_sessions", "live_query"],
-  );
+  assertResponseKeys(record, channelResponseKeys);
   const profile = recordField(record, "profile");
-  assertResponseKeys(profile, [], ["handle", "description", "country", "joined_date"]);
+  assertResponseKeys(profile, channelProfileKeys);
   const liveSessions = arrayField(record, "live_sessions").map(validateLiveSession);
   const unavailable = Object.hasOwn(record, "unavailable_live_sessions")
     ? arrayField(record, "unavailable_live_sessions").map(validateUnavailableLiveSession)
@@ -447,7 +457,7 @@ export function validateChannelResponse(value) {
  */
 function validateLiveQuery(parent, unavailableCount) {
   const query = recordField(parent, "live_query");
-  assertResponseKeys(query, ["channel_id", "source", "statuses", "exhausted", "access_restricted", "page_count"], []);
+  assertResponseKeys(query, liveQueryKeys);
   const channelId = responseIdentifier(query, "channel_id", maxChannelIdentifierBytes);
   const statuses = arrayField(query, "statuses");
   if (typeof query.page_count !== "number" || query.source !== "streams" || JSON.stringify(statuses) !== JSON.stringify(["ENDED", "LIVE", "UPCOMING"]) ||
@@ -463,7 +473,7 @@ function validateLiveQuery(parent, unavailableCount) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").UnavailableLiveSession} */
 function validateUnavailableLiveSession(value) {
   const record = responseRecord(value);
-  assertResponseKeys(record, ["video_id", "channel_id", "reason"], []);
+  assertResponseKeys(record, unavailableLiveSessionKeys);
   if (record.reason !== "access_restricted") {
     throw new RpcResponseError("unavailable live session reason is invalid");
   }
@@ -560,14 +570,19 @@ export const videoLiveCheckEndpoint = {
   ),
 };
 
+const communityPostKeys = keySchema(
+  ["postId", "authorId", "authorName", "authorPhoto", "contentText", "publishedText", "likeCount", "commentCount"],
+  ["upstreamPostId", "publishedAt", "images", "videoId"],
+);
+const thumbnailKeys = keySchema(["url", "width", "height"]);
+const contentItemKeys = keySchema(["video_id", "channel_id", "title"], ["published_at", "scheduled_for", "is_upcoming"]);
+const liveSessionKeys = keySchema(["video_id", "channel_id", "status"], ["title", "thumbnail_url", "scheduled_at", "started_at", "ended_at"]);
+const photoKeys = keySchema(["kind", "url", "width", "height"]);
+
 /** @param {unknown} value @returns {import("./contracts.d.ts").CommunityPost} */
 function validateCommunityPost(value) {
   const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["postId", "authorId", "authorName", "authorPhoto", "contentText", "publishedText", "likeCount", "commentCount"],
-    ["upstreamPostId", "publishedAt", "images", "videoId"],
-  );
+  assertResponseKeys(record, communityPostKeys);
   return {
     postId: nonemptyStringField(record, "postId"),
     ...optionalResponseString(record, "upstreamPostId"),
@@ -587,7 +602,7 @@ function validateCommunityPost(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").Thumbnail} */
 function validateThumbnail(value) {
   const record = responseRecord(value);
-  assertResponseKeys(record, ["url", "width", "height"], []);
+  assertResponseKeys(record, thumbnailKeys);
   return {
     url: nonemptyStringField(record, "url"),
     width: nonnegativeIntegerField(record, "width"),
@@ -598,7 +613,7 @@ function validateThumbnail(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").ContentItem} */
 function validateContentItem(value) {
   const record = responseRecord(value);
-  assertResponseKeys(record, ["video_id", "channel_id", "title"], ["published_at", "scheduled_for", "is_upcoming"]);
+  assertResponseKeys(record, contentItemKeys);
   if (Object.hasOwn(record, "is_upcoming") && record.is_upcoming !== true) {
     throw new RpcResponseError("content item is_upcoming must be omitted unless true");
   }
@@ -615,11 +630,7 @@ function validateContentItem(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").LiveSessionItem} */
 function validateLiveSession(value) {
   const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["video_id", "channel_id", "status"],
-    ["title", "thumbnail_url", "scheduled_at", "started_at", "ended_at"],
-  );
+  assertResponseKeys(record, liveSessionKeys);
   return {
     video_id: nonemptyStringField(record, "video_id"),
     channel_id: nonemptyStringField(record, "channel_id"),
@@ -635,7 +646,7 @@ function validateLiveSession(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelPhotoVariant} */
 function validatePhoto(value) {
   const record = responseRecord(value);
-  assertResponseKeys(record, ["kind", "url", "width", "height"], []);
+  assertResponseKeys(record, photoKeys);
   return {
     kind: validatePhotoKind(record),
     url: nonemptyStringField(record, "url"),
@@ -652,38 +663,41 @@ function requestRecord(value) {
   return value;
 }
 
+/** @typedef {{ readonly required: readonly string[], readonly allowed: ReadonlySet<string> }} KeySchema */
+
 /**
- * @param {Record<string, unknown>} record
- * @param {string[]} required
- * @param {string[]} optional
+ * 요청마다 배열·Set을 만들지 않도록 모듈 로드 시 한 번 만드는 불변 key 목록입니다.
+ * @param {readonly string[]} required
+ * @param {readonly string[]} [optional]
+ * @returns {KeySchema}
  */
-function assertRequestKeys(record, required, optional) {
-  assertExactKeys(record, required, optional, RpcRequestError);
+function keySchema(required, optional = []) {
+  return Object.freeze({ required: Object.freeze([...required]), allowed: new Set([...required, ...optional]) });
+}
+
+/** @param {Record<string, unknown>} record @param {KeySchema} schema */
+function assertRequestKeys(record, schema) {
+  assertExactKeys(record, schema, RpcRequestError);
+}
+
+/** @param {Record<string, unknown>} record @param {KeySchema} schema */
+function assertResponseKeys(record, schema) {
+  assertExactKeys(record, schema, RpcResponseError);
 }
 
 /**
+ * unknown key를 record 순서대로 먼저 거부한 뒤 required key 누락을 선언 순서대로 거부합니다.
  * @param {Record<string, unknown>} record
- * @param {string[]} required
- * @param {string[]} optional
- */
-function assertResponseKeys(record, required, optional) {
-  assertExactKeys(record, required, optional, RpcResponseError);
-}
-
-/**
- * @param {Record<string, unknown>} record
- * @param {string[]} required
- * @param {string[]} optional
+ * @param {KeySchema} schema
  * @param {typeof RpcRequestError | typeof RpcResponseError} ErrorType
  */
-export function assertExactKeys(record, required, optional, ErrorType = RpcRequestError) {
-  const allowed = new Set([...required, ...optional]);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) {
+function assertExactKeys(record, schema, ErrorType) {
+  for (const key in record) {
+    if (Object.hasOwn(record, key) && !schema.allowed.has(key)) {
       throw new ErrorType(`unknown field: ${key}`);
     }
   }
-  for (const key of required) {
+  for (const key of schema.required) {
     if (!Object.hasOwn(record, key)) {
       throw new ErrorType(`${key} is required`);
     }
@@ -901,13 +915,8 @@ function nonnegativeIntegerField(record, field) {
 
 /** @param {Record<string, unknown>} record @param {string} field */
 function optionalRFC3339(record, field) {
-  const value = record[field];
-  if (value === undefined) return {};
-  const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN;
-  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) {
-    throw new RpcResponseError(`${field} must be an RFC3339 timestamp`);
-  }
-  return { [field]: value };
+  const value = optionalResponseTimestamp(record, field);
+  return value === undefined ? {} : { [field]: value };
 }
 
 /** @param {Record<string, unknown>} record @param {string} field @returns {string | undefined} */

@@ -4,63 +4,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
+// inPgxTx: 호출자가 연 pgx.Tx에는 그대로 합류해 commit/rollback을 호출자에게 남긴다.
+// *pgxpool.Pool이면 트랜잭션 수명주기(panic rollback, 실패 rollback, commit)를 dbx.InPgxTx가 소유한다.
 func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) error {
-	if _, ok := db.(pgx.Tx); ok {
-		if err := fn(db); err != nil {
+	switch typed := db.(type) {
+	case pgx.Tx:
+		if err := fn(typed); err != nil {
 			return fmt.Errorf("fn: %w", err)
 		}
 
 		return nil
-	}
+	case *pgxpool.Pool:
+		if err := dbx.InPgxTx(ctx, typed, func(tx dbx.Tx) error { return fn(tx) }); err != nil {
+			return fmt.Errorf("tracking pgx tx: %w", err)
+		}
 
-	beginner, ok := db.(trackingTxBeginner)
-	if !ok {
+		return nil
+	default:
 		return errors.New("db does not support transactions")
 	}
-
-	tx, err := beginner.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer rollbackPgxTxOnPanic(ctx, tx)
-
-	if err := finishPgxTx(ctx, tx, fn(tx)); err != nil {
-		return fmt.Errorf("finish pgx tx: %w", err)
-	}
-
-	return nil
-}
-
-func rollbackPgxTxOnPanic(ctx context.Context, tx pgx.Tx) {
-	if p := recover(); p != nil {
-		rollbackErr := pgxutil.Rollback(ctx, tx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			slog.Default().Warn("pgx tracking transaction rollback after panic failed", slog.Any("error", rollbackErr))
-		}
-
-		panic(p)
-	}
-}
-
-func finishPgxTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
-	if fnErr != nil {
-		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-			return fmt.Errorf("transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
-		}
-
-		return fnErr
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
 }

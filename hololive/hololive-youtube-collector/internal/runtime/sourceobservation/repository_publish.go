@@ -9,10 +9,11 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 type sqlPublishFenceVerifier struct {
-	jobs JobContractSet
+	jobs collection.JobContractSet
 }
 
 // publishVerificationBatchSender는 pgx 트랜잭션의 파이프라인 전송 능력이다. 발행 트랜잭션은 항상
@@ -61,17 +62,17 @@ func (v sqlPublishFenceVerifier) Verify(
 // publishVerificationBatch는 Verify의 판정 순서대로 guard·fence·membership·target·contract 조회를 한 batch에 쌓는다.
 func publishVerificationBatch(
 	proof *contract.LeaseProof,
-	scope MembershipScope,
+	scope collection.MembershipScope,
 	observations []contract.Envelope,
 	contracts []byte,
 ) *pgx.Batch {
 	subjects, kinds := publishTargetKeys(observations)
-	membershipQuery, membershipArgs := leaseMembershipQuery(proof, scope)
+	membershipQuery, membershipArgs := collection.LeaseMembershipQuery(proof, scope)
 	batch := &pgx.Batch{}
 
-	batch.Queue(mustSQL("repository_projection_current_0002_02.sql"))
+	batch.Queue(sqlProjectionCurrent)
 	batch.Queue(
-		mustSQL("repository_publish_fence_0001_01.sql"),
+		sqlPublishFence,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,
@@ -79,8 +80,8 @@ func publishVerificationBatch(
 		proof.ScheduledFor,
 	)
 	batch.Queue(membershipQuery, membershipArgs...)
-	batch.Queue(mustSQL("repository_target_enabled_0003_03.sql"), proof.ProjectionGeneration, subjects, kinds)
-	batch.Queue(mustSQL("repository_contract_batch_current_0031_31.sql"), string(contracts))
+	batch.Queue(sqlTargetEnabled, proof.ProjectionGeneration, subjects, kinds)
+	batch.Queue(sqlContractBatchCurrent, string(contracts))
 
 	return batch
 }
@@ -103,7 +104,7 @@ func (v sqlPublishFenceVerifier) verifyPublishResults(
 		return fmt.Errorf("verify projection: %w", projectionErr)
 	}
 
-	if err := scanLeaseMembership(results.QueryRow()); err != nil {
+	if err := collection.ScanLeaseMembership(results.QueryRow()); err != nil {
 		return fmt.Errorf("verify lease membership: %w", err)
 	}
 
@@ -124,23 +125,23 @@ func (v sqlPublishFenceVerifier) verifyPublishResults(
 
 // publishMembershipScope는 lease 행을 읽기 전에 같은 batch로 보낼 membership 범위를 컴파일된 계약에서 만든다.
 // Provider는 관측에서 가져오며, 실제 lease 행의 provider·job 종류와 다르면 loadPublishFence가 fence 손실로 거절한다.
-func (v sqlPublishFenceVerifier) publishMembershipScope(proof *contract.LeaseProof, observations []contract.Envelope) (MembershipScope, error) {
+func (v sqlPublishFenceVerifier) publishMembershipScope(proof *contract.LeaseProof, observations []contract.Envelope) (collection.MembershipScope, error) {
 	if len(observations) == 0 {
-		return MembershipScope{}, fmt.Errorf("verify publish fence: %w: observations are empty", ErrInvalidEnvelope)
+		return collection.MembershipScope{}, fmt.Errorf("verify publish fence: %w: observations are empty", ErrInvalidEnvelope)
 	}
 
-	definition, ok := v.jobs.Definition(JobID{Provider: observations[0].Provider, Kind: JobKind(proof.CollectionJobKind)})
+	definition, ok := v.jobs.Definition(collection.JobID{Provider: observations[0].Provider, Kind: collection.JobKind(proof.CollectionJobKind)})
 	if !ok {
-		return MembershipScope{}, ErrCollectionFenceLost
+		return collection.MembershipScope{}, collection.ErrFenceLost
 	}
 
-	return MembershipScopeFor(definition), nil
+	return collection.MembershipScopeFor(definition), nil
 }
 
 type publishFenceJob struct {
 	provider          string
 	collectionJobKind string
-	definition        JobContract
+	definition        collection.JobContract
 	jobSubject        string
 }
 
@@ -156,7 +157,7 @@ func (v sqlPublishFenceVerifier) loadPublishFence(
 	err := results.QueryRow().Scan(&job.provider, &job.collectionJobKind, &jobClass, &job.jobSubject)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return publishFenceJob{}, ErrCollectionFenceLost
+		return publishFenceJob{}, collection.ErrFenceLost
 	}
 
 	if err != nil {
@@ -164,17 +165,22 @@ func (v sqlPublishFenceVerifier) loadPublishFence(
 	}
 
 	if job.collectionJobKind != proof.CollectionJobKind {
-		return publishFenceJob{}, ErrCollectionFenceLost
+		return publishFenceJob{}, collection.ErrFenceLost
 	}
 
-	definition, ok := v.jobs.Definition(JobID{Provider: contract.Provider(job.provider), Kind: JobKind(job.collectionJobKind)})
+	definition, ok := v.jobs.Definition(collection.JobID{Provider: contract.Provider(job.provider), Kind: collection.JobKind(job.collectionJobKind)})
 	if !ok || string(definition.Class()) != jobClass || leaseSubjectMismatch(definition, job.jobSubject) {
-		return publishFenceJob{}, ErrCollectionFenceLost
+		return publishFenceJob{}, collection.ErrFenceLost
 	}
 
 	job.definition = definition
 
 	return job, nil
+}
+
+// leaseSubjectMismatch는 고정 lease subject를 가진 EXACT_SUBJECT job의 lease 행 subject가 계약과 다른지 확인합니다.
+func leaseSubjectMismatch(job collection.JobContract, subject string) bool {
+	return job.Membership() == collection.JobMembershipExactSubject && job.LeaseSubject() != "" && job.LeaseSubject() != subject
 }
 
 func verifyProjection(results pgx.BatchResults) error {
@@ -183,7 +189,7 @@ func verifyProjection(results pgx.BatchResults) error {
 	err := results.QueryRow().Scan(&current)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrProjectionStale
+		return collection.ErrProjectionStale
 	}
 
 	if err != nil {
@@ -217,16 +223,16 @@ func (v sqlPublishFenceVerifier) validatePublishObservations(job *publishFenceJo
 
 func (v sqlPublishFenceVerifier) validatePublishObservation(job *publishFenceJob, observation *contract.Envelope, index int) error {
 	if job.provider != string(observation.Provider) ||
-		!v.jobs.Allows(JobID{Provider: observation.Provider, Kind: JobKind(job.collectionJobKind)}, observation.ObservationKind) {
-		return fmt.Errorf("verify collection job emission %d: %w", index, ErrTargetDisabled)
+		!v.jobs.Allows(collection.JobID{Provider: observation.Provider, Kind: collection.JobKind(job.collectionJobKind)}, observation.ObservationKind) {
+		return fmt.Errorf("verify collection job emission %d: %w", index, collection.ErrTargetDisabled)
 	}
 
-	if job.definition.Membership() == JobMembershipExactSubject && observation.SubjectKey != job.jobSubject {
-		return fmt.Errorf("verify collection job membership %d: %w", index, ErrTargetDisabled)
+	if job.definition.Membership() == collection.JobMembershipExactSubject && observation.SubjectKey != job.jobSubject {
+		return fmt.Errorf("verify collection job membership %d: %w", index, collection.ErrTargetDisabled)
 	}
 
-	if job.definition.Membership() != JobMembershipExactSubject && job.definition.Membership() != JobMembershipCurrentProjection {
-		return fmt.Errorf("verify collection job membership %d: %w", index, ErrTargetDisabled)
+	if job.definition.Membership() != collection.JobMembershipExactSubject && job.definition.Membership() != collection.JobMembershipCurrentProjection {
+		return fmt.Errorf("verify collection job membership %d: %w", index, collection.ErrTargetDisabled)
 	}
 
 	return nil
@@ -240,7 +246,7 @@ func verifyTargetsEnabled(results pgx.BatchResults) error {
 	}
 
 	if !allEnabled {
-		return fmt.Errorf("verify collection targets: %w", ErrTargetDisabled)
+		return fmt.Errorf("verify collection targets: %w", collection.ErrTargetDisabled)
 	}
 
 	return nil
@@ -284,7 +290,7 @@ func (r *Repository) PublishBatch(
 func (r *Repository) PublishBatchAndDefer(
 	ctx context.Context,
 	input *PublishBatchInput,
-	deferInput DeferCollectionInput,
+	deferInput collection.DeferCollectionInput,
 ) (PublishBatchResult, error) {
 	if err := r.validate(); err != nil {
 		return PublishBatchResult{}, fmt.Errorf("validate: %w", err)
@@ -299,7 +305,7 @@ func (r *Repository) PublishBatchAndDefer(
 		return PublishBatchResult{}, fmt.Errorf("prepare publish batch: %w", err)
 	}
 
-	out, err := r.runPreparedPublish(ctx, &prepared, deferPublishTerminal(deferInput))
+	out, err := r.runPreparedPublish(ctx, &prepared, r.deferPublishTerminal(deferInput))
 	if err != nil {
 		return out, fmt.Errorf("run prepared publish: %w", err)
 	}

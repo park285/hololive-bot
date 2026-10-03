@@ -32,7 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 type unusedLowLevelCache struct{}
@@ -64,7 +64,7 @@ func TestAPIRateLimitMiddlewareRejectsMissingCache(t *testing.T) {
 func TestAPIRateLimitHandlerCountsCheckFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	limiter, err := ratelimit.NewSlidingWindowLimiter(unusedLowLevelCache{}, "test:holo:ip", slog.New(slog.DiscardHandler))
+	limiter, err := ratelimitvalkey.NewSlidingWindowLimiter(unusedLowLevelCache{}, "test:holo:ip", slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NewSlidingWindowLimiter() error = %v", err)
 	}

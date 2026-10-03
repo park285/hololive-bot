@@ -9,7 +9,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -30,7 +29,7 @@ func TestViewerConsumerRetainsEqualConsecutiveSamples(t *testing.T) {
 	}
 
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindViewerSample, testVideoID, "youtubejs_viewer")
-	consumer := NewConsumerWithGraces(NewRepository(pool), NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(NewRepository(pool), 0, 0)
 	first := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
 	second := first.Add(2 * time.Minute)
 
@@ -56,7 +55,7 @@ func TestViewerConsumerEqualWindowConflictStaysUnresolved(t *testing.T) {
 	}
 
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindViewerSample, testVideoID, "youtubejs_viewer")
-	consumer := NewConsumerWithGraces(NewRepository(pool), NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(NewRepository(pool), 0, 0)
 	first := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
 	second := first.Add(2 * time.Minute)
 

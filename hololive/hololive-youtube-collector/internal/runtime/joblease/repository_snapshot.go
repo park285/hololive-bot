@@ -11,7 +11,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 // LoadTargetSnapshot은 이미 획득한 lease의 target roster를 읽는다. Guard를 share 잠금한 뒤 별도 문장으로 소유 증명과
@@ -22,18 +22,18 @@ func (r *Repository) LoadTargetSnapshot(
 	ctx context.Context,
 	proof *contract.LeaseProof,
 	spec *JobSpec,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	maxRosterRows int,
-) (TargetSnapshot, error) {
+) (collection.TargetSnapshot, error) {
 	if err := r.validateSnapshotRequest(proof, spec, job, maxRosterRows); err != nil {
-		return TargetSnapshot{}, fmt.Errorf("validate snapshot request: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("validate snapshot request: %w", err)
 	}
 
-	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (TargetSnapshot, error) {
+	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (collection.TargetSnapshot, error) {
 		return loadTargetSnapshotTx(ctx, tx, proof, spec, job, maxRosterRows)
 	})
 	if err != nil {
-		return TargetSnapshot{}, fmt.Errorf("in pgx tx with result: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("in pgx tx with result: %w", err)
 	}
 
 	return out, nil
@@ -44,16 +44,16 @@ func loadTargetSnapshotTx(
 	tx dbx.Tx,
 	proof *contract.LeaseProof,
 	spec *JobSpec,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	maxRosterRows int,
-) (TargetSnapshot, error) {
+) (collection.TargetSnapshot, error) {
 	current, _, err := lockProjectionGuard(ctx, tx)
 	if err != nil {
-		return TargetSnapshot{}, fmt.Errorf("lock projection guard: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("lock projection guard: %w", err)
 	}
 
-	if err := sourceobservation.VerifyLeaseMembership(ctx, tx, proof, sourceobservation.MembershipScopeFor(job)); err != nil {
-		return TargetSnapshot{}, fmt.Errorf("verify lease membership: %w", err)
+	if err := collection.VerifyLeaseMembership(ctx, tx, proof, collection.MembershipScopeFor(job)); err != nil {
+		return collection.TargetSnapshot{}, fmt.Errorf("verify lease membership: %w", err)
 	}
 
 	requested := job.RequestedKinds()
@@ -66,14 +66,14 @@ func loadTargetSnapshotTx(
 	query := snapshotQuery{current: current, acquired: proof.ProjectionGeneration, requested: requested, kindValues: kindValues, maxRosterRows: maxRosterRows}
 
 	switch job.Membership() {
-	case sourceobservation.JobMembershipExactSubject:
+	case collection.JobMembershipExactSubject:
 		out, err := query.loadExact(ctx, tx, spec.SubjectKey)
 		if err != nil {
 			return out, fmt.Errorf("load exact target snapshot: %w", err)
 		}
 
 		return out, nil
-	case sourceobservation.JobMembershipCurrentProjection:
+	case collection.JobMembershipCurrentProjection:
 		out, err := query.loadProjection(ctx, tx)
 		if err != nil {
 			return out, fmt.Errorf("load projection target snapshot: %w", err)
@@ -81,7 +81,7 @@ func loadTargetSnapshotTx(
 
 		return out, nil
 	default:
-		return TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("target snapshot membership is invalid"))
+		return collection.TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("target snapshot membership is invalid"))
 	}
 }
 
@@ -97,7 +97,7 @@ type snapshotQuery struct {
 func (r *Repository) validateSnapshotRequest(
 	proof *contract.LeaseProof,
 	spec *JobSpec,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	maxRosterRows int,
 ) error {
 	if invalidSnapshotRepository(r) || invalidSnapshotProof(proof, spec, maxRosterRows) {
@@ -127,7 +127,7 @@ func invalidSnapshotProof(proof *contract.LeaseProof, spec *JobSpec, maxRosterRo
 func (r *Repository) validateSnapshotJob(
 	proof *contract.LeaseProof,
 	spec *JobSpec,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 ) error {
 	definition, _, err := spec.validate(r.contracts)
 	if err != nil {
@@ -155,29 +155,29 @@ func (r *Repository) validateSnapshotJob(
 	return nil
 }
 
-func sameJobContract(left, right sourceobservation.JobContract) bool {
+func sameJobContract(left, right collection.JobContract) bool {
 	return left.ID() == right.ID() && left.Class() == right.Class() && left.Membership() == right.Membership() &&
 		left.LeaseSubject() == right.LeaseSubject() && slices.Equal(left.Emissions(), right.Emissions()) &&
 		slices.Equal(left.CadenceKinds(), right.CadenceKinds()) && slices.Equal(left.RosterKinds(), right.RosterKinds())
 }
 
-func (q *snapshotQuery) loadExact(ctx context.Context, tx dbx.Tx, subject string) (TargetSnapshot, error) {
-	rows, err := tx.Query(ctx, mustSQL("repository_target_snapshot_exact_0144_15.sql"), q.current, q.kindValues, subject)
+func (q *snapshotQuery) loadExact(ctx context.Context, tx dbx.Tx, subject string) (collection.TargetSnapshot, error) {
+	rows, err := tx.Query(ctx, sqlTargetSnapshotExact, q.current, q.kindValues, subject)
 	if err != nil {
-		return TargetSnapshot{}, fmt.Errorf("load exact target snapshot: query targets: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("load exact target snapshot: query targets: %w", err)
 	}
 	defer rows.Close()
 
 	enabled, err := scanExactTargetRows(rows, q.maxRosterRows)
 	if err != nil {
-		return TargetSnapshot{}, fmt.Errorf("scan exact target rows: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("scan exact target rows: %w", err)
 	}
 
 	if len(enabled) != len(q.requested) {
-		return TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("exact target snapshot row count does not match requested kinds"))
+		return collection.TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("exact target snapshot row count does not match requested kinds"))
 	}
 
-	out, err := newExactTargetSnapshot(q.acquired, subject, q.requested, enabled)
+	out, err := collection.NewExactTargetSnapshot(q.acquired, subject, q.requested, enabled)
 	if err != nil {
 		return out, fmt.Errorf("exact target snapshot: %w", err)
 	}
@@ -241,25 +241,25 @@ func scanExactTargetRow(rows pgx.Rows) (contract.ObservationKind, bool, error) {
 	}
 
 	if !current {
-		return "", false, ErrProjectionStale
+		return "", false, collection.ErrProjectionStale
 	}
 
 	return kind, enabled, nil
 }
 
-func (q *snapshotQuery) loadProjection(ctx context.Context, tx dbx.Tx) (TargetSnapshot, error) {
-	rows, err := tx.Query(ctx, mustSQL("repository_target_snapshot_projection_0144_16.sql"), q.current, q.kindValues, q.maxRosterRows)
+func (q *snapshotQuery) loadProjection(ctx context.Context, tx dbx.Tx) (collection.TargetSnapshot, error) {
+	rows, err := tx.Query(ctx, sqlTargetSnapshotProjection, q.current, q.kindValues, q.maxRosterRows)
 	if err != nil {
-		return TargetSnapshot{}, fmt.Errorf("load projection target snapshot: query targets: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("load projection target snapshot: query targets: %w", err)
 	}
 	defer rows.Close()
 
 	values, err := scanProjectionTargetRows(rows, q.requested)
 	if err != nil {
-		return TargetSnapshot{}, fmt.Errorf("scan projection target rows: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("scan projection target rows: %w", err)
 	}
 
-	out, err := newProjectionTargetSnapshot(q.acquired, q.requested, values, q.maxRosterRows)
+	out, err := collection.NewProjectionTargetSnapshot(q.acquired, q.requested, values, q.maxRosterRows)
 	if err != nil {
 		return out, fmt.Errorf("projection target snapshot: %w", err)
 	}
@@ -315,8 +315,12 @@ func scanProjectionTargetRow(rows pgx.Rows) (contract.ObservationKind, *string, 
 	}
 
 	if !current {
-		return "", nil, ErrProjectionStale
+		return "", nil, collection.ErrProjectionStale
 	}
 
 	return kind, subject, nil
+}
+
+func snapshotInvariant(message string) error {
+	return collecterr.New(collecterr.Internal, collecterr.ClassInternal, message)
 }

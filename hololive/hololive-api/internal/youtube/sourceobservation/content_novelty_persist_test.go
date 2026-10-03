@@ -42,7 +42,7 @@ func TestContentNoveltyBaselineTakesEarliestAcceptedListWithoutLegacyBackfill(t 
 	require.NoError(t, err)
 
 	repo := NewRepository(pool)
-	consumer := newContentTestConsumer(pool, repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	base := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 	early, middle, late := base.ScheduledFor, base.ScheduledFor.Add(time.Hour), base.ScheduledFor.Add(2*time.Hour)
 
@@ -202,7 +202,7 @@ func TestContentVideoListClaimsKeepSameChannelOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, batch.Claims, 1)
 	require.Equal(t, first, batch.Claims[0].ObservationID)
-	require.NoError(t, newContentTestConsumer(pool, repo, 0).ConsumeClaim(ctx, batch.Claims[0].Claim(batch.ConsumerName)))
+	require.NoError(t, NewConsumerWithGraces(repo, 0, 0).ConsumeClaim(ctx, batch.Claims[0].Claim(batch.ConsumerName)))
 
 	batch, err = repo.ClaimBatch(ctx, contentClaimOptions())
 	require.NoError(t, err)
@@ -238,7 +238,7 @@ func TestContentNoveltyBaselinePremiereStaysSilentThroughRelease(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	consumer := newContentTestConsumer(pool, repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 	scheduled := proof.ScheduledFor.Add(2 * time.Hour)
 

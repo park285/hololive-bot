@@ -106,3 +106,20 @@ func TestAddAlarmAfterRegistryEvictionRestoresAllSubscribedChannels(t *testing.T
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{testChannelID, testOtherChannelID, "new-channel"}, channels)
 }
+
+func TestAddAlarmCacheFailureKeepsCommittedRecipients(t *testing.T) {
+	service, pool := newEvictionAlarmService(t)
+	ctx := t.Context()
+	_, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "existing", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
+	require.NoError(t, err)
+
+	// commit 뒤 cache 갱신을 잘못된 자료형으로 실패시켜도, 먼저 commit한 구독은 수신 대상에 포함되어야 한다.
+	require.NoError(t, service.cache.Set(ctx, sharedalarmkeys.MemberNameKey, "wrong-type", time.Minute))
+
+	_, err = service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "committed", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
+	require.Error(t, err)
+
+	rooms, err := sharedalarm.ResolveEventSubscribers(ctx, service.cache, pool, testChannelID, "", domain.AlarmTypeLive)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"existing", "committed"}, rooms)
+}
