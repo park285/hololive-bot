@@ -441,6 +441,7 @@ hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_observe.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_queue.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_run.go
+hololive/hololive-youtube-collector/internal/runtime/collectorruntime/tracing.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/sql.go
 hololive/hololive-youtube-collector/internal/runtime/collectutil/envelope.go
 hololive/hololive-youtube-collector/internal/runtime/collectutil/output_metadata.go
