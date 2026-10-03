@@ -3,13 +3,13 @@ package httpserver
 import (
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
@@ -36,37 +36,27 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 }
 
 func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T) {
-	identity, err := workercontract.KnownIdentity("hololive", "youtube-collector")
-	if err != nil {
-		t.Fatal(err)
+	loaded := settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")
+
+	// executor를 끈 memory queue worker는 snapshot source 없이 등록되므로 profile의 worker 전체를 그렇게 등록한다.
+	for workerID, worker := range loaded.Profile.Workers {
+		worker.Executor.Enabled = false
+		loaded.Profile.Workers[workerID] = worker
 	}
-
-	profilePath, err := filepath.Abs(filepath.Join("..", "..", "config", "settings", "testdata", "stack-worker-profile-youtube-collector.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	loaded, err := workercontract.LoadProfileFile(profilePath, identity)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	worker := loaded.Profile.Workers["collection"]
-
-	worker.Executor.Enabled = false
-	loaded.Profile.Workers["collection"] = worker
 
 	registry := workercontract.NewRegistry(loaded, nil)
 
-	if registerErr := registry.Register(workercontract.Registration{
-		WorkerID:                "collection",
-		Runtime:                 workercontract.RuntimeGo,
-		QueueBackend:            workercontract.QueueMemory,
-		QueueScope:              workercontract.QueueScopeProcess,
-		SettingsValidated:       true,
-		PerJobDeadlineValidated: true,
-	}); registerErr != nil {
-		t.Fatal(registerErr)
+	for workerID := range loaded.Profile.Workers {
+		if registerErr := registry.Register(workercontract.Registration{
+			WorkerID:                workerID,
+			Runtime:                 workercontract.RuntimeGo,
+			QueueBackend:            workercontract.QueueMemory,
+			QueueScope:              workercontract.QueueScopeProcess,
+			SettingsValidated:       true,
+			PerJobDeadlineValidated: true,
+		}); registerErr != nil {
+			t.Fatal(registerErr)
+		}
 	}
 
 	if sealErr := registry.Seal(); sealErr != nil {
@@ -98,7 +88,7 @@ func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T
 	}
 
 	body := recorder.Body.String()
-	if !strings.Contains(body, `iris_stack_worker_configured_workers{`) || !strings.Contains(body, `worker="collection"`) {
+	if !strings.Contains(body, `iris_stack_worker_configured_workers{`) || !strings.Contains(body, `worker="source_observation"`) {
 		t.Fatalf("metrics missing worker registry:\n%.500s", body)
 	}
 }

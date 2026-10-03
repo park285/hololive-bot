@@ -36,11 +36,11 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 type apiRateLimitHandler struct {
-	limiter *ratelimit.SlidingWindowLimiter
+	limiter *ratelimitvalkey.SlidingWindowLimiter
 	limit   int
 	window  time.Duration
 	logger  *slog.Logger
@@ -125,7 +125,7 @@ func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) (gin.
 		return nil, errors.New("api rate limit requires a cache client")
 	}
 
-	limiter, err := ratelimit.NewSlidingWindowLimiter(cacheClient, "api:holo:ip", logger)
+	limiter, err := ratelimitvalkey.NewSlidingWindowLimiter(cacheClient, "api:holo:ip", logger)
 	if err != nil {
 		return nil, fmt.Errorf("init api rate limiter: %w", err)
 	}

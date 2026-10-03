@@ -8,8 +8,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 type ExecutionProfile struct {
@@ -131,26 +130,26 @@ func checkedAddDuration(values ...time.Duration) (time.Duration, error) {
 }
 
 type RegisteredRunner struct {
-	runner   collectutil.JobRunner
-	contract sourceobservation.JobContract
+	runner   collection.JobRunner
+	contract collection.JobContract
 	profile  ExecutionProfile
 }
 
 func newRegisteredRunner(
-	runner collectutil.JobRunner,
-	job sourceobservation.JobContract,
+	runner collection.JobRunner,
+	job collection.JobContract,
 	profile ExecutionProfile,
 ) (RegisteredRunner, error) {
 	if runner == nil || runner.JobID() != job.ID() || job.Validate() != nil || profile.Validate() != nil {
 		return RegisteredRunner{}, errors.New("register collection job runner: registration is invalid")
 	}
 
-	return RegisteredRunner{runner: runner, contract: job.Clone(), profile: profile}, nil
+	return RegisteredRunner{runner: runner, contract: job, profile: profile}, nil
 }
 
-func (r RegisteredRunner) Runner() collectutil.JobRunner           { return r.runner }
-func (r RegisteredRunner) Contract() sourceobservation.JobContract { return r.contract.Clone() }
-func (r RegisteredRunner) Profile() ExecutionProfile               { return r.profile }
+func (r RegisteredRunner) Runner() collection.JobRunner     { return r.runner }
+func (r RegisteredRunner) Contract() collection.JobContract { return r.contract }
+func (r RegisteredRunner) Profile() ExecutionProfile        { return r.profile }
 
 type runnerKey struct {
 	provider contract.Provider
@@ -162,47 +161,13 @@ type Registry struct {
 	byKey   map[runnerKey]RegisteredRunner
 }
 
-func NewRegistry(runners ...collectutil.JobRunner) (*Registry, error) {
-	profiles := make(map[sourceobservation.JobID]ExecutionProfile, len(runners))
-	for _, runner := range runners {
-		if runner == nil {
-			continue
-		}
-
-		profile, err := NewExecutionProfile(jobMaxUpstreamCalls(runner.JobID()), time.Second, 0, 1, time.Second, 0)
-		if err != nil {
-			return nil, fmt.Errorf("execution profile: %w", err)
-		}
-
-		profiles[runner.JobID()] = profile
-	}
-
-	out, err := NewRegistryWithProfiles(profiles, runners...)
-	if err != nil {
-		return nil, fmt.Errorf("registry with profiles: %w", err)
-	}
-
-	return out, nil
-}
-
-// jobMaxUpstreamCalls는 job 실행 한 번이 보내는 helper RPC 수의 상한입니다.
-// 목록 두 종류를 수집하는 content만 두 RPC를 보냅니다. 방송 탭 snapshot·채널 확인·영상 확인은 각자 RPC 1회입니다.
-func jobMaxUpstreamCalls(id sourceobservation.JobID) int {
-	switch string(id.Kind) {
-	case "youtubejs_content":
-		return 2
-	default:
-		return 1
-	}
-}
-
-func NewRegistryWithProfiles(profiles map[sourceobservation.JobID]ExecutionProfile, runners ...collectutil.JobRunner) (*Registry, error) {
-	contracts := sourceobservation.InitialJobContracts()
+func NewRegistryWithProfiles(profiles map[collection.JobID]ExecutionProfile, runners ...collection.JobRunner) (*Registry, error) {
+	contracts := collection.InitialJobContracts()
 	registry := &Registry{
 		runners: make([]RegisteredRunner, 0, len(runners)),
 		byKey:   make(map[runnerKey]RegisteredRunner, len(runners)),
 	}
-	seenContracts := make(map[sourceobservation.JobID]struct{}, len(contracts))
+	seenContracts := make(map[collection.JobID]struct{}, len(contracts))
 
 	for _, runner := range runners {
 		if err := registerRunner(registry, contracts, seenContracts, profiles, runner); err != nil {
@@ -219,10 +184,10 @@ func NewRegistryWithProfiles(profiles map[sourceobservation.JobID]ExecutionProfi
 
 func registerRunner(
 	registry *Registry,
-	contracts sourceobservation.JobContractSet,
-	seenContracts map[sourceobservation.JobID]struct{},
-	profiles map[sourceobservation.JobID]ExecutionProfile,
-	runner collectutil.JobRunner,
+	contracts collection.JobContractSet,
+	seenContracts map[collection.JobID]struct{},
+	profiles map[collection.JobID]ExecutionProfile,
+	runner collection.JobRunner,
 ) error {
 	if runner == nil {
 		return errors.New("register collection job runner: runner is nil")

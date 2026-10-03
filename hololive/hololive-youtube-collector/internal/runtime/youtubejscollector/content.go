@@ -7,8 +7,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -17,8 +16,7 @@ type ContentClient interface {
 }
 
 type ContentRunner struct {
-	client     ContentClient
-	maxResults int
+	client ContentClient
 }
 
 type contentKind struct {
@@ -36,21 +34,21 @@ var contentKinds = []contentKind{
 	{kind: contract.KindShortsList, tab: contentTabShorts},
 }
 
-func NewContentRunner(client ContentClient, maxResults int) *ContentRunner {
-	return &ContentRunner{client: client, maxResults: collectutil.MaxResults(maxResults)}
+func NewContentRunner(client ContentClient) *ContentRunner {
+	return &ContentRunner{client: client}
 }
 
-func (r *ContentRunner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_content"}
+func (r *ContentRunner) JobID() collection.JobID {
+	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_content"}
 }
 
-func (r *ContentRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (r *ContentRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js content client is not configured")
+		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js content client is not configured")
 	}
 
 	if input == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
 	out, err := r.collectAllowedKinds(ctx, input, time.Now())
@@ -63,9 +61,9 @@ func (r *ContentRunner) Collect(ctx context.Context, input *collectutil.RunInput
 
 func (r *ContentRunner) collectAllowedKinds(
 	ctx context.Context,
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	started time.Time,
-) (collectutil.CollectResult, error) {
+) (collection.CollectResult, error) {
 	envelopes := make([]contract.Envelope, 0, 2)
 
 	for _, item := range contentKinds {
@@ -81,7 +79,7 @@ func (r *ContentRunner) collectAllowedKinds(
 		}
 	}
 
-	out, err := collectutil.CompleteFromEnvelopes(envelopes, started)
+	out, err := collection.CompleteFromEnvelopes(envelopes, started)
 	if err != nil {
 		return out, fmt.Errorf("complete from envelopes: %w", err)
 	}
@@ -89,7 +87,7 @@ func (r *ContentRunner) collectAllowedKinds(
 	return out, nil
 }
 
-func partialContentResultForError(ctx context.Context, envelopes []contract.Envelope, started time.Time, kind contract.ObservationKind, cause error) (collectutil.CollectResult, error) {
+func partialContentResultForError(ctx context.Context, envelopes []contract.Envelope, started time.Time, kind contract.ObservationKind, cause error) (collection.CollectResult, error) {
 	out, err := partialContentResult(ctx, envelopes, started, kind, cause)
 	if err != nil {
 		return out, fmt.Errorf("partial content result: %w", err)
@@ -98,8 +96,8 @@ func partialContentResultForError(ctx context.Context, envelopes []contract.Enve
 	return out, nil
 }
 
-func (r *ContentRunner) collectKind(ctx context.Context, input *collectutil.RunInput, item contentKind) (*contract.Envelope, error) {
-	allowed, err := input.Allows(item.kind, input.Spec().SubjectKey)
+func (r *ContentRunner) collectKind(ctx context.Context, input *collection.RunInput, item contentKind) (*contract.Envelope, error) {
+	allowed, err := input.Allows(item.kind, input.Subject())
 	if err != nil {
 		return nil, fmt.Errorf("allows: %w", err)
 	}
@@ -123,25 +121,25 @@ func partialContentResult(
 	started time.Time,
 	kind contract.ObservationKind,
 	err error,
-) (collectutil.CollectResult, error) {
+) (collection.CollectResult, error) {
 	if ctx.Err() != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return collectutil.CollectResult{}, fmt.Errorf("collect content: %w", ctxErr)
+			return collection.CollectResult{}, fmt.Errorf("collect content: %w", ctxErr)
 		}
 
-		return collectutil.CollectResult{}, nil
+		return collection.CollectResult{}, nil
 	}
 
 	if len(envelopes) == 0 || !contentPartialFailureAllowed(collecterr.ClassOf(err)) {
-		return collectutil.CollectResult{}, err
+		return collection.CollectResult{}, err
 	}
 
-	output, buildErr := collectutil.OutputFromEnvelopes(envelopes, started)
+	output, buildErr := collection.OutputFromEnvelopes(envelopes, started)
 	if buildErr != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("output from envelopes: %w", buildErr)
+		return collection.CollectResult{}, fmt.Errorf("output from envelopes: %w", buildErr)
 	}
 
-	out, err := collectutil.NewPartialResult(output, collecterr.Normalize(err), kind)
+	out, err := collection.NewPartialResult(output, collecterr.Normalize(err), kind)
 	if err != nil {
 		return out, fmt.Errorf("partial result: %w", err)
 	}
@@ -151,16 +149,16 @@ func partialContentResult(
 
 func (r *ContentRunner) fetchKind(
 	ctx context.Context,
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	observationKind contract.ObservationKind,
 	tab string,
 ) (*contract.Envelope, error) {
-	spec := input.Spec()
+	subject := input.Subject()
 
 	result, err := r.client.FetchContent(ctx, youtubejs.ContentRequest{
-		ChannelID:               spec.SubjectKey,
+		ChannelID:               subject,
 		Kind:                    tab,
-		MaxResults:              r.maxResults,
+		MaxResults:              maxResultsPerPage,
 		MaxPages:                input.MaxPages(),
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 	})
@@ -168,7 +166,7 @@ func (r *ContentRunner) fetchKind(
 		return nil, fmt.Errorf("fetch content: %w", err)
 	}
 
-	if validateErr := validateContentIdentity(spec.SubjectKey, result.Items); validateErr != nil {
+	if validateErr := validateContentIdentity(subject, result.Items); validateErr != nil {
 		return nil, fmt.Errorf("validate content identity: %w", validateErr)
 	}
 
@@ -187,25 +185,7 @@ func (r *ContentRunner) fetchKind(
 		return nil, fmt.Errorf("pagination of: %w", err)
 	}
 
-	out, envelopeErr := r.contentEnvelope(input, &result, observationKind, tab, generation, completeness, continuity)
-	if envelopeErr != nil {
-		return nil, envelopeErr
-	}
-
-	return out, nil
-}
-
-func (r *ContentRunner) contentEnvelope(
-	input *collectutil.RunInput,
-	result *youtubejs.ContentResult,
-	observationKind contract.ObservationKind,
-	tab string,
-	generation int64,
-	completeness contract.Completeness,
-	continuity contract.Continuity,
-) (*contract.Envelope, error) {
-	spec := input.Spec()
-	videos, shorts := videoListPayload(spec.SubjectKey, result.Items, r.maxResults, &result.Pagination, tab == contentTabShorts)
+	videos, shorts := videoListPayload(subject, result.Items, maxResultsPerPage, &result.Pagination, tab == contentTabShorts)
 
 	var payload any = videos
 
@@ -213,20 +193,9 @@ func (r *ContentRunner) contentEnvelope(
 		payload = shorts
 	}
 
-	lease := input.Lease()
-
-	envelope, err := collectutil.Envelope(
-		contract.ProviderYouTubeJS,
-		observationKind,
-		spec.SubjectKey,
-		generation,
-		&lease,
-		completeness,
-		continuity,
-		payload,
-	)
+	envelope, err := generationEnvelope(input, observationKind, generation, completeness, continuity, payload)
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
+		return nil, err
 	}
 
 	return &envelope, nil

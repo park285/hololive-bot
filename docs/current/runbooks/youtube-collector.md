@@ -106,7 +106,9 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 | `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES` | successful provider response ceiling | yes |
 | `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS` | per-request YouTube.js ceiling; default 30s | yes |
 
-Worker count, local queue capacity, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
+Worker count, local queue capacity and fixed `queue.max_age`, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
+
+로컬 대기 시간이 `collection.queue.max_age.milliseconds`를 넘으면 lease 취득 전에 해당 항목을 버리고 다음 항목을 처리합니다. 경고와 stale discard를 기록하고 중복 방지 표식을 해제하므로 다음 discovery에서 다시 후보가 될 수 있습니다. 아직 lease를 취득하지 않았으므로 DB complete/defer/release는 수행하지 않습니다. `--check-worker-profile`은 `internal/config`의 runtime과 같은 profile 수치 정책(TTL 최대 30분 등)을 검증하며 DB·provider 환경 변수는 요구하지 않습니다.
 
 ### 수집 처리량과 대상 신선도
 
@@ -122,7 +124,7 @@ API 집계는 기존 claim 관측 경로에서 최대 30초마다, DB admission�
 
 Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailable`, `HololiveCollectionTargetsStale`, `HololiveCollectionCallBudgetPressure`, `HololiveCollectionLiveStateMismatch`를 확인합니다. 명목 수요가 가동 AP 상한의 85%를 10분 넘게 사용하면 대상·주기·장애 시 여유를 검토합니다. 이 경계값은 초기 운영 기준이며 수집 정책을 자동 변경하지 않습니다. 관측 배포는 API와 AP 계측을 먼저 검증하고 Grafana 생성물·경보를 반영합니다.
 
-Collector loader와 Compose는 canonical env만 읽습니다. 폐기된 `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`·`YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`와 퇴역한 `SCRAPER_PROXY_ENABLED`·`SCRAPER_PROXY_URL`은 빈 값이어도 키가 있으면 기동 실패입니다(존재 기준 퇴역 가드, `collector/retired_env.go`, remove_after 2026-12-31). 이 가드가 든 release는 모든 youtube-collector env와 stack-secrets master 사본에서 네 키를 지운 뒤에만 배포합니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
+Collector loader와 Compose는 canonical env만 읽습니다. 폐기된 `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`·`YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`와 퇴역한 `SCRAPER_PROXY_ENABLED`·`SCRAPER_PROXY_URL`은 빈 값이어도 키가 있으면 기동 실패입니다(존재 기준 퇴역 가드, `internal/config/retired_env.go`, remove_after 2026-12-31). 이 가드가 든 release는 모든 youtube-collector env와 stack-secrets master 사본에서 네 키를 지운 뒤에만 배포합니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
 
 ### Viewer 수집 중단 반영과 검증
 

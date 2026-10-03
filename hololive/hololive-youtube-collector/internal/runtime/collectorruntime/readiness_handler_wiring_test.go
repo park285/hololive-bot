@@ -3,8 +3,8 @@ package collectorruntime
 import (
 	"testing"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestConfigurePreservesInjectedTracker(t *testing.T) {

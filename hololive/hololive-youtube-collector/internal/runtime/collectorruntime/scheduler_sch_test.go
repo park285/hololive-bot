@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 func TestSCH001StartTwiceRejected(t *testing.T) {
@@ -67,8 +67,8 @@ func TestSCH003QueueFullRollsBackMarkAndIncrementsMetric(t *testing.T) {
 	registerer := prometheus.NewPedanticRegistry()
 	scheduler := newLifecycleScheduler(t)
 
-	scheduler.executor.metrics = NewMetrics(registerer)
-	scheduler.executor.config.QueueCapacity = 1
+	scheduler.metrics = NewMetrics(registerer)
+	scheduler.queueCapacity = 1
 	scheduler.queue = make(chan joblease.JobSpec, 1)
 
 	scheduler.queue <- joblease.JobSpec{JobKey: "filler"}
@@ -115,8 +115,8 @@ func TestSCH005CancelAfterDequeueDoesNotRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	if _, ok := scheduler.acceptDequeued(ctx, &spec); ok {
-		t.Fatal("canceled dequeue was accepted for run")
+	if decision := scheduler.acceptDequeued(ctx, &spec); decision != dequeueStop {
+		t.Fatalf("canceled dequeue decision = %d, want stop", decision)
 	}
 
 	if _, marked := scheduler.queued[spec.JobKey]; marked {
@@ -129,6 +129,54 @@ func TestSCH005CancelAfterDequeueDoesNotRun(t *testing.T) {
 	got, ok := scheduler.nextSpec(ctx)
 	if ok {
 		t.Fatalf("canceled nextSpec ran %#v", got)
+	}
+}
+
+func TestSCH005StaleQueuedJobIsDiscardedAndWorkerTakesNextFreshJob(t *testing.T) {
+	t.Parallel()
+
+	scheduler := newLifecycleScheduler(t)
+
+	scheduler.workerTotals = &workercontract.Counters{}
+	scheduler.queueMaxAge = time.Hour
+
+	stale := joblease.JobSpec{JobKey: "stale"}
+	fresh := joblease.JobSpec{JobKey: "fresh"}
+
+	for _, spec := range []joblease.JobSpec{stale, fresh} {
+		if result := scheduler.enqueue(t.Context(), &spec); result != EnqueueAccepted {
+			t.Fatalf("enqueue %s = %s, want ACCEPTED", spec.JobKey, result)
+		}
+	}
+
+	scheduler.queueMu.Lock()
+
+	scheduler.queuedAt[stale.JobKey] = time.Now().Add(-(time.Hour + time.Minute))
+	scheduler.queueMu.Unlock()
+
+	got, ok := scheduler.nextSpec(t.Context())
+	if !ok || got.JobKey != fresh.JobKey {
+		t.Fatalf("nextSpec = %#v, %t, want fresh job after discarding stale", got, ok)
+	}
+
+	if _, marked := scheduler.queued[stale.JobKey]; marked {
+		t.Fatal("stale job kept its queued mark and would block re-admission")
+	}
+
+	if _, timed := scheduler.queuedAt[stale.JobKey]; timed {
+		t.Fatal("stale job kept its queued timestamp")
+	}
+
+	if _, marked := scheduler.queued[fresh.JobKey]; !marked {
+		t.Fatal("fresh job lost its queued mark before run")
+	}
+
+	if discarded := scheduler.workerTotals.Snapshot().Discarded; discarded.Stale != 1 || discarded.Shutdown != 0 {
+		t.Fatalf("discarded = %+v, want one stale discard", discarded)
+	}
+
+	if result := scheduler.enqueue(t.Context(), &stale); result != EnqueueAccepted {
+		t.Fatalf("re-enqueue discarded job = %s, want ACCEPTED", result)
 	}
 }
 
@@ -159,8 +207,8 @@ func TestSCH007AcceptedAndQueryLimitStayWithinCapacity(t *testing.T) {
 	scheduler := newLifecycleScheduler(t)
 
 	scheduler.candidates = stub
-	scheduler.executor.config.QueueCapacity = capacity
-	scheduler.executor.config.AcquisitionBatch = 10
+	scheduler.queueCapacity = capacity
+	scheduler.acquisitionBatch = 10
 	scheduler.queue = make(chan joblease.JobSpec, capacity)
 	scheduler.discoverOnce(t.Context())
 
@@ -432,11 +480,13 @@ func runFairnessCycle(seed fairnessSeed, ids []string, cursor, cycle int, seen m
 	accepted := 0
 
 	return runCapacityAwareCycle(&capacityCycleRequest{
-		runnerIDs: ids,
-		start:     cursor % seed.runnerCount,
-		remaining: seed.capacity,
-		batch:     seed.capacity,
-		query:     fairnessCandidatePage,
+		runnerCount: len(ids),
+		start:       cursor % seed.runnerCount,
+		remaining:   seed.capacity,
+		batch:       seed.capacity,
+		query: func(runner int, excluded []string, limit int) (joblease.CandidatePage, error) {
+			return fairnessCandidatePage(ids[runner], excluded, limit)
+		},
 		enqueue: func(spec *joblease.JobSpec) EnqueueResult {
 			if accepted >= seed.capacity {
 				return EnqueueFull
@@ -514,7 +564,7 @@ func (s *stubCandidateSource) CurrentProjectionGeneration(context.Context) (int6
 func (s *stubCandidateSource) CandidatesForProjection(
 	_ context.Context,
 	_ int64,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	excludedJobKeys []string,
 	limit int,
 ) (joblease.CandidatePage, error) {
@@ -560,7 +610,7 @@ func (s *panickingCandidateSource) CurrentProjectionGeneration(context.Context) 
 }
 
 func (s *panickingCandidateSource) CandidatesForProjection(
-	context.Context, int64, sourceobservation.JobContract, []string, int,
+	context.Context, int64, collection.JobContract, []string, int,
 ) (joblease.CandidatePage, error) {
 	s.calls++
 
@@ -572,7 +622,7 @@ func newEmptyCandidateStub(t *testing.T) *stubCandidateSource {
 
 	pages := make(map[string]joblease.CandidatePage)
 
-	for _, job := range sourceobservation.InitialJobContracts().IDs() {
+	for _, job := range collection.InitialJobContracts().IDs() {
 		pages[job.String()] = joblease.CandidatePage{}
 	}
 
@@ -582,9 +632,9 @@ func newEmptyCandidateStub(t *testing.T) *stubCandidateSource {
 func newLifecycleScheduler(t *testing.T) *leaseScheduler {
 	t.Helper()
 
-	config := runtimeLeaseConfig()
+	collector := runtimeCollectorConfig()
 
-	registry, err := NewRegistry(completeStubRunners()...)
+	registry, err := newTestRegistry(completeStubRunners()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,14 +642,14 @@ func newLifecycleScheduler(t *testing.T) *leaseScheduler {
 	stub := newEmptyCandidateStub(t)
 
 	return newScheduler(&collectionExecutor{
-		repository: new(joblease.Repository),
-		registry:   registry,
-		metrics:    NewMetrics(prometheus.NewPedanticRegistry()),
-		logger:     slog.New(slog.DiscardHandler),
-		config:     config,
-		collector:  collectorconfig.DefaultConfig(),
-		readiness:  &readinessTracker{},
-	}, stub)
+		repository:  new(joblease.Repository),
+		registry:    registry,
+		metrics:     NewMetrics(prometheus.NewPedanticRegistry()),
+		logger:      slog.New(slog.DiscardHandler),
+		collector:   collector,
+		retryBounds: testRetryBounds,
+		readiness:   &readinessTracker{},
+	}, stub, &collector)
 }
 
 func dueSpecs(prefix string, count int) []joblease.JobSpec {
@@ -611,11 +661,11 @@ func dueSpecs(prefix string, count int) []joblease.JobSpec {
 	return specs
 }
 
-func mustSchedulerJob(t *testing.T, provider contract.Provider, kind string) sourceobservation.JobContract {
+func mustSchedulerJob(t *testing.T, provider contract.Provider, kind string) collection.JobContract {
 	t.Helper()
 
-	job, ok := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: provider, Kind: sourceobservation.JobKind(kind),
+	job, ok := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: provider, Kind: collection.JobKind(kind),
 	})
 	if !ok {
 		t.Fatalf("missing job %s/%s", provider, kind)
@@ -624,7 +674,7 @@ func mustSchedulerJob(t *testing.T, provider contract.Provider, kind string) sou
 	return job
 }
 
-func setRotationTo(scheduler *leaseScheduler, id sourceobservation.JobID) {
+func setRotationTo(scheduler *leaseScheduler, id collection.JobID) {
 	runners := scheduler.executor.registry.Runners()
 	for i, runner := range runners {
 		if runner.Contract().ID() == id {

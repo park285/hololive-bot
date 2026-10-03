@@ -71,7 +71,6 @@ func buildBotInfrastructureServices(
 	formatter := messageformatter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, messageformatter.WithMessageStrings(messageStrings), messageformatter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
 
 	foundation, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
-		YouTube:          appConfig.YouTube,
 		Holodex:          appConfig.Holodex,
 		OfficialSchedule: appConfig.OfficialScheduleRuntime(),
 	}, infra.MemberCache, infra.Cache, logger)

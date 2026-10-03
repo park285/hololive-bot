@@ -6,7 +6,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -27,7 +26,7 @@ func TestContentConsumerPositiveThenCompleteNegative(t *testing.T) {
 		t.Fatalf("publish negative: %v", err)
 	}
 
-	if err := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil).Consume(ctx, contentClaimOptions()); err != nil {
+	if err := NewConsumer(repo).Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume: %v", err)
 	}
 
@@ -59,7 +58,7 @@ func TestContentConsumerCompleteNegativeThenPositive(t *testing.T) {
 		t.Fatalf("defer positive: %v", err)
 	}
 
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+	consumer := NewConsumer(repo)
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume negative first: %v", err)
 	}
@@ -90,7 +89,7 @@ func TestContentConsumerReplayDoesNotDuplicateNotification(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+	consumer := NewConsumer(repo)
 	if consumeErr := consumer.Consume(ctx, contentClaimOptions()); consumeErr != nil {
 		t.Fatalf("first consume: %v", consumeErr)
 	}
@@ -134,7 +133,7 @@ func TestContentConsumerInvalidItemDoesNotBlockLaterItem(t *testing.T) {
 		t.Fatalf("publish second: %v", err)
 	}
 
-	if err := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil).Consume(ctx, contentClaimOptions()); err != nil {
+	if err := NewConsumer(repo).Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume: %v", err)
 	}
 

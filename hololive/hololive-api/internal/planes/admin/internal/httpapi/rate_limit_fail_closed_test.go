@@ -9,14 +9,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
 // DEC-20260926-hololive-source-fallbacks-retirement: /api/holo rate limit 판정 실패는 요청을 통과시키지 않는다.
 func TestAPIRateLimitHandlerFailsClosedOnCheckError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	limiter, err := ratelimit.NewSlidingWindowLimiter(unusedLowLevelCache{}, "test:holo:ip", slog.New(slog.DiscardHandler))
+	limiter, err := ratelimitvalkey.NewSlidingWindowLimiter(unusedLowLevelCache{}, "test:holo:ip", slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NewSlidingWindowLimiter() error = %v", err)
 	}

@@ -9,6 +9,14 @@
 ## 미출시
 
 - 7.2.0에서 hololive 사본만 바꿨던 NilAway 모델 빌드 입력(`scripts/ci/nilaway-models`)을 stack 정본 `tools/nilaway`와 다시 맞춥니다. stack 계약 검사가 두 사본의 차이로 메타 저장소 게시를 막았습니다. 같은 변경에서 지운 검사가 남긴, 쓰이지 않는 테스트 변수 하나도 지웁니다.
+- YouTube 수집기 내부 상태와 계산을 줄입니다. 검증된 job 계약 집합과 고정 SQL 자산을 한 번만 만들고, 체크포인트는 수집 결과에 따로 저장하지 않고 발행 직전에 관측에서 만듭니다. discovery는 저장소가 이미 정렬·중복 제거하는 제외 키를 다시 정렬하지 않고, `PrepareEnvelope`는 방금 만든 canonical 값으로 최종 검증합니다. 공개 `Validate`, 발행 fence 검증, COMPLETE/PARTIAL 원자성과 식별자·해시 규칙은 그대로입니다.
+- YouTube 수집기가 profile의 `collection.queue.max_age`를 넘긴 로컬 대기 항목을 lease 취득 전에 버리고 다음 항목을 계속 처리합니다. stale discard와 경고를 기록하며 DB terminal은 만들지 않습니다. `--check-worker-profile`은 TTL 30분 상한 등 runtime과 같은 profile 수치 정책을 운영 환경 변수 없이 검증합니다. collector 전용 설정과 profile 로더는 `hololive-youtube-collector/internal/config`가 소유합니다.
+- 로컬 수집 pacing이 Valkey 구현을 가져오지 않도록 공용 rate-limit 판정과 Valkey backend를 분리하고, community RPC DTO를 collector로 옮겨 HTML scraper 의존을 없앱니다. helper raw 반환형에서 RPC 경계가 붙이는 `protocol_version`을 제외하고 소스 문자열 검사 대신 실제 타입·행동 검증을 유지합니다. 반복 exact-key schema와 날짜 판정 primitive를 공유하되 wire 형식과 provider별 실패 정책은 바꾸지 않습니다.
+- 수집 job 계약·target snapshot·입력/결과·retry 값을 SQL에 의존하지 않는 collector `collection` core로 분리합니다. Scheduler가 실행 정책을 소유하고 defer는 typed 입력을 사용합니다. Provider 슬롯은 snapshot 조회·수집 뒤 반환하므로 DB publish의 잠금 대기가 다음 provider 수집을 막지 않습니다. Admission timeout의 durable 정책, 진단 마스킹과 DB clock clamp는 유지합니다.
+- API만 사용하는 canonical 저장을 `internal/youtube/canonicalwrite`의 transaction 전용 함수로 옮깁니다. Shared batch repository·독립 transaction 경로·미사용 latency persister·post-commit 재조립·keyword 분기와 전달 wrapper를 지웁니다. Community는 canonical payload를 한 번 정규화해 조회·저장·알림에 쓰며 ID 병합 순서, NULL·시각·저장 JSON과 replay 중복 방지는 유지합니다.
+- 호출자가 없던 YouTube HTML/RSS scraper·parser·admission·분산 limiter·생성자·설정 필드와 호환 경로를 모두 제거합니다. 로컬 pacing은 collector로 옮기고 사용하지 않는 goquery/gjson 계열 의존성을 정리합니다. 공식 일정·Holodex 경로는 유지합니다. 운영 env 변경이나 배포는 포함하지 않습니다.
+- Collector의 tracing slot 정책과 profile fixture를 collector로 회수하고, shared tracking의 자체 transaction 경로는 기존 `dbx`를 사용합니다. 호출자 없는 transaction helper·cleanupctx와 퇴역 이름 grep·구현 개수 검사는 제거합니다. 공유 worker 계약과 실제 다중 소비자 primitive는 유지합니다.
+- 다중 종류의 정상 발행 테스트가 수집 설정과 같은 운영 lease 예산을 사용합니다. 기존 50ms 갱신 제한은 DB 발행 지연을 갱신 실패로 바꿔 테스트를 불안정하게 만들었습니다. 운영 예산과 갱신 실패 테스트는 변경하지 않습니다.
 
 ## v7.2.2 - 2026-10-02
 

@@ -47,13 +47,12 @@ var privacylogOnlyAttrKeys = map[string]string{
 	sharedprivacylog.KeyCacheField: "privacylog.CacheFieldAttr",
 }
 
-// 이 package들의 "key"는 Kakao 식별자가 아니라 고정 cache name, Holodex retry/cache
-// identifier, 또는 public YouTube snapshot identifier를 담는다. 다른 attr key는 계속 검사한다.
+// 이 package들의 "key"는 Kakao 식별자가 아니라 고정 cache name 또는 Holodex retry/cache identifier다.
+// 다른 attr key는 계속 검사한다.
 var reviewedNonSensitiveRestrictedKeys = map[string][]string{
 	sharedprivacylog.KeyCacheKey: {
 		"pkg/service/holodex/provider",
 		"pkg/service/holodex/provider/htmlscraper",
-		"pkg/service/youtube/scraper/scraping",
 	},
 }
 
@@ -108,37 +107,6 @@ type scannerPackageGraph struct {
 	packages       []listedPackage
 	exports        map[string]string
 	buildCacheRoot string
-}
-
-func TestScannedRootsCoverReachablePrivacylogServices(t *testing.T) {
-	t.Parallel()
-
-	sources := parseScannedRoots(t, token.NewFileSet())
-
-	const servicePrefix = "github.com/kapu/hololive-shared/pkg/service/"
-
-	count := 0
-
-	for _, importPath := range sources.importPathByScope {
-		if strings.HasPrefix(importPath, servicePrefix) {
-			count++
-		}
-	}
-
-	// Chzzk/Twitch 두 제공자 퇴역과, stack-audit T05의 bot plane in-process AlarmService 분기 삭제로
-	// 도달하지 않게 된 notification/alarmservice·alarm/dedup 두 패키지, stack-audit T11 C2에서 삭제한
-	// youtube/scraper/internal/browserfetcher 패키지, stack-audit T19에서 v3 handoff와 함께 삭제한
-	// alarm/handoff 패키지, 같은 T19에서 scraper proxy 토글과 퇴역 producer scheduler·budget 코드를 지워 bot plane이
-	// 더 이상 닿지 않는 youtube/poller/runtime{,/scheduler,/batchrepo}·youtube/tracking/observation·
-	// youtube/alarmtiming·youtube/contentid 여섯 패키지와, Valkey 책임 축소 A11/A13에서 호출자 없는
-	// youtube.Service 인터페이스와 함께 삭제한 youtube 루트 패키지, Valkey 책임 축소 B7-B9에서 config:update
-	// Pub/Sub과 함께 삭제한 configsub 패키지를 반영한다.
-	// 실제 의존성 탐색과 모든 log/taint 검사는 유지한다.
-	const minimumServicePackages = 22
-
-	if count < minimumServicePackages {
-		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least %d", count, minimumServicePackages)
-	}
 }
 
 func reachableScannerPackages(t *testing.T) scannerPackageGraph {

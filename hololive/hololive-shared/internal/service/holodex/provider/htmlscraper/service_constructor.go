@@ -3,65 +3,20 @@ package htmlscraper
 import (
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
-// NewServiceWithYouTubeClient는 공식 일정 runtime 설정을 env에서 엄격하게 읽어 Service를 만든다.
-// 잘못된 값은 기본값으로 바꾸지 않고 오류다.
-func NewServiceWithYouTubeClient(
+// NewService는 적재한 공식 일정 runtime 설정으로 Service를 구성한다. 전달한 HTTP client가 nil이면 공식 일정 timeout을
+// 쓰는 외부 API client를 만든다. 식별 색인용 멤버 데이터를 적재하지 못하면 빈 색인으로 두지 않고 오류를 반환한다.
+func NewService(
 	membersData domain.MemberDataProvider,
-	youtubeClient *scraper.Client,
-	logger *slog.Logger,
-) (*Service, error) {
-	runtimeConfig, err := settings.LoadOfficialScheduleRuntimeConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load official schedule runtime config: %w", err)
-	}
-
-	service, err := NewServiceWithOfficialSchedule(membersData, youtubeClient, logger, runtimeConfig)
-	if err != nil {
-		return nil, fmt.Errorf("new official schedule service: %w", err)
-	}
-
-	return service, nil
-}
-
-func NewServiceWithOfficialSchedule(
-	membersData domain.MemberDataProvider,
-	youtubeClient *scraper.Client,
-	logger *slog.Logger,
-	runtimeConfig settings.OfficialScheduleRuntimeConfig,
-) (*Service, error) {
-	var source YouTubeClient
-
-	if youtubeClient != nil {
-		source = youtubeClient
-	}
-
-	service, err := NewServiceWithDependencies(
-		membersData,
-		ServiceDependencies{YouTube: source},
-		logger,
-		runtimeConfig,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new service with dependencies: %w", err)
-	}
-
-	return service, nil
-}
-
-// NewServiceWithDependencies는 명시한 runtime config와 외부 client로 Service를 구성한다. 공식 일정 식별 색인을 만들 멤버
-// 데이터를 적재하지 못하면 빈 색인으로 두지 않고 오류다.
-func NewServiceWithDependencies(
-	membersData domain.MemberDataProvider,
-	dependencies ServiceDependencies,
+	httpClient *http.Client,
 	logger *slog.Logger,
 	runtimeConfig settings.OfficialScheduleRuntimeConfig,
 ) (*Service, error) {
@@ -71,8 +26,8 @@ func NewServiceWithDependencies(
 
 	runtimeConfig = normalizeOfficialScheduleRuntimeConfig(runtimeConfig)
 
-	if dependencies.HTTP == nil {
-		dependencies.HTTP = httputil.NewExternalAPIClient(runtimeConfig.OfficialSchedule.Timeout)
+	if httpClient == nil {
+		httpClient = httputil.NewExternalAPIClient(runtimeConfig.OfficialSchedule.Timeout)
 	}
 
 	identityIndex, err := buildOfficialScheduleIdentityIndex(membersData)
@@ -85,12 +40,11 @@ func NewServiceWithDependencies(
 		slog.Int("identity_keys", len(identityIndex)))
 
 	return &Service{
-		httpClient:           dependencies.HTTP,
+		httpClient:           httpClient,
 		identityIndex:        identityIndex,
 		logger:               logger,
 		officialSchedule:     runtimeConfig.OfficialSchedule,
 		maxResponseBodyBytes: runtimeConfig.MaxResponseBodyBytes,
-		youtubeClient:        dependencies.YouTube,
 	}, nil
 }
 

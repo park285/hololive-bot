@@ -4,37 +4,30 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kapu/hololive-api/internal/youtube/canonicalwrite"
 	"github.com/kapu/hololive-api/internal/youtube/community"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 
-type batchCanonicalWriter struct {
-	repo *batchrepo.PgxBatchRepository
+// canonicalWriter는 확정 트랜잭션 안의 canonical 저장 경계다. 운영 구현은 canonicalTxWriter 하나이며,
+// 테스트만 롤백 원자성을 검증하려고 실패 구현을 주입한다.
+type canonicalWriter interface {
+	PersistTx(context.Context, dbx.Tx, *community.Batch) error
+	PersistVideosTx(context.Context, dbx.Tx, []*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox, []*domain.YouTubeContentAlarmTracking, *domain.YouTubeContentWatermark) error
 }
 
-func NewBatchCanonicalWriter(repo *batchrepo.PgxBatchRepository) CanonicalWriter {
-	if repo == nil {
-		return nil
-	}
+type canonicalTxWriter struct{}
 
-	return batchCanonicalWriter{repo: repo}
-}
-
-func (w batchCanonicalWriter) PersistTx(ctx context.Context, tx dbx.Tx, batch *community.Batch) error {
-	if err := w.repo.PersistCommunityPostsTx(ctx, tx, batch.Posts, batch.Notifications, batch.Tracking, batch.Watermark); err != nil {
+func (canonicalTxWriter) PersistTx(ctx context.Context, tx dbx.Tx, batch *community.Batch) error {
+	if err := canonicalwrite.PersistCommunityPostsTx(ctx, tx, batch.Posts, batch.Notifications, batch.Tracking, batch.Watermark); err != nil {
 		return fmt.Errorf("persist community posts tx: %w", err)
 	}
 
 	return nil
 }
 
-func (w batchCanonicalWriter) AfterCommit(ctx context.Context, batch *community.Batch) {
-	w.repo.RecordCommunityLatencyAfterCommit(ctx, batch.Tracking)
-}
-
-func (w batchCanonicalWriter) PersistVideosTx(
+func (canonicalTxWriter) PersistVideosTx(
 	ctx context.Context,
 	tx dbx.Tx,
 	videos []*domain.YouTubeVideo,
@@ -42,13 +35,9 @@ func (w batchCanonicalWriter) PersistVideosTx(
 	tracking []*domain.YouTubeContentAlarmTracking,
 	watermark *domain.YouTubeContentWatermark,
 ) error {
-	if err := w.repo.PersistVideosTx(ctx, tx, videos, notifications, tracking, watermark); err != nil {
+	if err := canonicalwrite.PersistVideosTx(ctx, tx, videos, notifications, tracking, watermark); err != nil {
 		return fmt.Errorf("persist videos tx: %w", err)
 	}
 
 	return nil
-}
-
-func (w batchCanonicalWriter) AfterCommitVideos(ctx context.Context, tracking []*domain.YouTubeContentAlarmTracking) {
-	w.repo.RecordCommunityLatencyAfterCommit(ctx, tracking)
 }

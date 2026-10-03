@@ -6,7 +6,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
 type reduceSession struct {
@@ -154,6 +154,12 @@ func outboxKind(kind contract.ObservationKind) domain.OutboxKind {
 	return domain.OutboxKindNewVideo
 }
 
+// notificationContentID는 알림 content ID를 정규화한다. 정규화할 수 없는 ID는 빈 문자열이다.
 func notificationContentID(kind contract.ObservationKind, videoID string) string {
-	return polling.NormalizeContentID(outboxKind(kind), videoID)
+	contentID, err := ytcontentid.ForOutboxKind(outboxKind(kind), videoID)
+	if err != nil {
+		return ""
+	}
+
+	return contentID
 }

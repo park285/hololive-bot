@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 // ErrCandidateContract는 특정 런너 또는 target bundle의 후보 계약 오류입니다.
@@ -35,10 +35,10 @@ func (r *Repository) CurrentProjectionGeneration(ctx context.Context) (int64, er
 
 	var generation int64
 
-	err := r.pool.QueryRow(ctx, mustSQL("repository_projection_current_0144_01.sql")).Scan(&generation)
+	err := r.pool.QueryRow(ctx, sqlProjectionCurrent).Scan(&generation)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, ErrProjectionStale
+		return 0, collection.ErrProjectionStale
 	}
 
 	if err != nil {
@@ -51,7 +51,7 @@ func (r *Repository) CurrentProjectionGeneration(ctx context.Context) (int64, er
 func (r *Repository) CandidatesForProjection(
 	ctx context.Context,
 	generation int64,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	excludedJobKeys []string,
 	limit int,
 ) (CandidatePage, error) {
@@ -69,7 +69,7 @@ func (r *Repository) CandidatesForProjection(
 		return CandidatePage{}, fmt.Errorf("cadence kind values: %w", err)
 	}
 
-	if job.Class() == sourceobservation.JobClassGlobal {
+	if job.Class() == collection.JobClassGlobal {
 		out, globalErr := r.globalCandidatesForProjection(ctx, generation, job, kindValues, excluded)
 		if globalErr != nil {
 			return out, fmt.Errorf("global candidates for projection: %w", globalErr)
@@ -86,7 +86,7 @@ func (r *Repository) CandidatesForProjection(
 	return out, nil
 }
 
-func (r *Repository) validateCandidateRequest(generation int64, job sourceobservation.JobContract, limit int) error {
+func (r *Repository) validateCandidateRequest(generation int64, job collection.JobContract, limit int) error {
 	if r == nil || r.pool == nil || r.contracts == nil {
 		return fmt.Errorf("list collection job candidates: %w", ErrInvalidJob)
 	}
@@ -106,7 +106,7 @@ func (r *Repository) validateCandidateRequest(generation int64, job sourceobserv
 	return nil
 }
 
-func (r *Repository) isCanonicalJob(job sourceobservation.JobContract) bool {
+func (r *Repository) isCanonicalJob(job collection.JobContract) bool {
 	canonical, ok := r.contracts.Definition(job.ID())
 
 	return ok && canonical.Class() == job.Class() && canonical.Membership() == job.Membership() &&
@@ -116,14 +116,14 @@ func (r *Repository) isCanonicalJob(job sourceobservation.JobContract) bool {
 func (r *Repository) subjectCandidatesForProjection(
 	ctx context.Context,
 	generation int64,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	kindValues []string,
 	excluded []string,
 	limit int,
 ) (CandidatePage, error) {
 	rows, err := r.pool.Query(
 		ctx,
-		mustSQL("repository_candidates_0144_02.sql"),
+		sqlCandidates,
 		generation,
 		kindValues,
 		string(job.ID().Provider),
@@ -147,7 +147,7 @@ func (r *Repository) subjectCandidatesForProjection(
 func (r *Repository) globalCandidatesForProjection(
 	ctx context.Context,
 	generation int64,
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	kindValues []string,
 	excluded []string,
 ) (CandidatePage, error) {
@@ -163,10 +163,10 @@ func (r *Repository) globalCandidatesForProjection(
 
 	rows, err := r.pool.Query(
 		ctx,
-		mustSQL("repository_candidates_global_0144_17.sql"),
+		sqlCandidatesGlobal,
 		generation,
 		kindValues,
-		job.Membership() == sourceobservation.JobMembershipExactSubject,
+		job.Membership() == collection.JobMembershipExactSubject,
 		subject,
 		jobKey,
 		excluded,
@@ -190,7 +190,7 @@ func collectCandidatePage(
 		Scan(dest ...any) error
 		Err() error
 	},
-	job sourceobservation.JobContract,
+	job collection.JobContract,
 	limit int,
 ) (CandidatePage, error) {
 	jobs := make([]JobSpec, 0, limit)
@@ -230,7 +230,7 @@ func collectCandidatePage(
 	}
 
 	if !projectionCurrent {
-		return CandidatePage{}, ErrProjectionStale
+		return CandidatePage{}, collection.ErrProjectionStale
 	}
 
 	if contractErr != nil {
@@ -281,7 +281,7 @@ func scanCandidateRow(rows interface{ Scan(dest ...any) error }) (candidateRow, 
 	return row, nil
 }
 
-func specFromCandidateRow(job sourceobservation.JobContract, row candidateRow) (JobSpec, error) {
+func specFromCandidateRow(job collection.JobContract, row candidateRow) (JobSpec, error) {
 	if row.minMS <= 0 {
 		return JobSpec{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: target bundle has no poll interval")
 	}
@@ -305,7 +305,7 @@ func specFromCandidateRow(job sourceobservation.JobContract, row candidateRow) (
 	}, nil
 }
 
-func cadenceKindValues(job sourceobservation.JobContract) ([]string, error) {
+func cadenceKindValues(job collection.JobContract) ([]string, error) {
 	kinds := job.CadenceKinds()
 	if len(kinds) == 0 {
 		return nil, candidateContractError(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: cadence kinds are empty"))

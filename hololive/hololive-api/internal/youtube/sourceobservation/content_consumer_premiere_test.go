@@ -16,7 +16,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -28,7 +27,7 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 	repo := NewRepository(pool)
 	contentProof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 	liveProof := seedPremiereLivePublishLease(ctx, t, pool, &contentProof)
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &contentProof, scheduled)))
@@ -87,7 +86,7 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 	repo := NewRepository(pool)
 	contentProof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 	liveProof := seedPremiereLivePublishLease(ctx, t, pool, &contentProof)
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 	live := liveSession(testVideoID, "LIVE")
 
@@ -144,7 +143,7 @@ func TestContentConsumerPremiereIgnoresUnknownAndFalse(t *testing.T) {
 
 			repo := NewRepository(pool)
 			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-			consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+			consumer := NewConsumerWithGraces(repo, 0, 0)
 			scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 			if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(classifiedVideoListEnvelope(t, &proof, scheduled, test.isPremiere))); err != nil {
@@ -180,7 +179,7 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 	beforeSession := premiereSessionSnapshot(t, pool)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &proof, scheduled)))
@@ -240,7 +239,7 @@ func TestContentConsumerPremiereAtomicRollback(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &proof, scheduled))); err != nil {
@@ -318,7 +317,7 @@ func TestContentConsumerPremiereKeepsApplicationsWithinFinalizeLimit(t *testing.
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(largePremiereVideoListEnvelope(t, &proof, scheduled, 999)))

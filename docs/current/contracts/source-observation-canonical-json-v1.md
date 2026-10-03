@@ -54,8 +54,9 @@ fixture의 `cases`는 input, expected canonical UTF-8 text와 lowercase SHA-256�
 
 | Owner | Source | Responsibility |
 |---|---|---|
-| Collector | `hololive/hololive-youtube-collector/internal/runtime/sourceobservation` | observation publish, checkpoint, collection lease/job 계약 구현 |
-| API | `hololive/hololive-api/internal/youtube/sourceobservation` | claim/consume, canonical persist, replay·retention |
+| Collector core | `hololive/hololive-youtube-collector/internal/runtime/collection` | SQL에 의존하지 않는 job·target snapshot·수집 입력/결과·retry 값 |
+| Collector storage | `hololive/hololive-youtube-collector/internal/runtime/{joblease,sourceobservation}` | collection lease, observation publish, checkpoint |
+| API | `hololive/hololive-api/internal/youtube/{sourceobservation,canonicalwrite}` | claim/consume, transaction 전용 canonical persist, replay·retention |
 | API private reducers | `hololive/hololive-api/internal/youtube/reconcile`, `internal/youtube/community` | content/live/viewer/schedule/profile/photo와 community 처리 |
 | Worker clock regression | `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/canonical_fact_clock_test.go` | 실제 publish/consume 관측 시각과 upcoming candidate 종료·일정 변경 검증 |
 
@@ -63,8 +64,10 @@ fixture의 `cases`는 input, expected canonical UTF-8 text와 lowercase SHA-256�
 
 ```bash
 go test ./hololive/hololive-shared/pkg/contracts/sourceobservation \
+  ./hololive/hololive-youtube-collector/internal/runtime/collection \
   ./hololive/hololive-youtube-collector/internal/runtime/sourceobservation \
   ./hololive/hololive-api/internal/youtube/sourceobservation \
+  ./hololive/hololive-api/internal/youtube/canonicalwrite \
   ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
 ```
 

@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 type RunFunc func(ctx context.Context, proof contract.LeaseProof) error
@@ -157,7 +158,7 @@ func (r *Repository) finishRenewFailure(
 	result <-chan error,
 	err error,
 ) LeaseRunResult {
-	if errors.Is(err, ErrFenceLost) {
+	if errors.Is(err, collection.ErrFenceLost) {
 		return r.finishFenceLoss(runCtx, cancel, result)
 	}
 
@@ -199,10 +200,10 @@ func (r *Repository) finishFenceLoss(
 
 	joined, runErr := waitRunResult(cleanupCtx, result)
 	if !joined {
-		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", errors.Join(ErrFenceLost, runErr))}
+		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", errors.Join(collection.ErrFenceLost, runErr))}
 	}
 
-	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: errors.Join(ErrFenceLost, runErr)}
+	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: errors.Join(collection.ErrFenceLost, runErr)}
 }
 
 func (r *Repository) handleRunCancel(

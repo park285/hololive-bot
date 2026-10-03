@@ -5,24 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
-
-func TestNewServiceWithYouTubeClientUsesProvidedClient(t *testing.T) {
-	client := scraper.NewClient(settings.DefaultYouTubeOperationalConfig(), scraper.WithRateLimiter(ratelimiter.New(0)))
-
-	service, err := NewServiceWithYouTubeClient(nil, client, slog.Default())
-	if err != nil {
-		t.Fatalf("NewServiceWithYouTubeClient() error = %v", err)
-	}
-
-	if service.youtubeClient != client {
-		t.Fatal("NewServiceWithYouTubeClient did not keep provided scraper client")
-	}
-}
 
 func TestOfficialScheduleAPINilResponse(t *testing.T) {
 	service := newTestServiceWithHTTPClient(

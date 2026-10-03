@@ -7,7 +7,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
@@ -16,7 +16,7 @@ func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "hololive-shared", "pkg", "config", "settings", "testdata", "stack-worker-profile-youtube-collector.json"))
+	path, err := filepath.Abs(filepath.Join("..", "..", "config", "testdata", "stack-worker-profile-youtube-collector.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
 	worker.Executor.Enabled = false
 	loaded.Profile.Workers["collection"] = worker
 
-	registry, _, err := newCollectorWorkerRegistry(&settings.YouTubeCollectorWorkerProfile{Loaded: loaded}, nil)
+	registry, _, err := newCollectorWorkerRegistry(&collectorconfig.WorkerProfile{Loaded: loaded}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

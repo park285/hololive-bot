@@ -1,6 +1,5 @@
 import { runUpstream } from "./upstream-errors.mjs";
-
-const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+import { hasRFC3339Shape, isCalendarRFC3339 } from "./rfc3339.mjs";
 
 export async function fetchLiveMetadata(innertube, videoId) {
   const id = String(videoId ?? "").trim();
@@ -113,9 +112,8 @@ function optionalValidRFC3339(value) {
   if (typeof value !== "string") {
     return undefined;
   }
-  const match = rfc3339Pattern.exec(value);
   const parsed = Date.parse(value);
-  if (match == null || !validDateTime(match) || !Number.isFinite(parsed)) {
+  if (!isCalendarRFC3339(value) || !Number.isFinite(parsed)) {
     return undefined;
   }
   return new Date(parsed).toISOString();
@@ -198,8 +196,7 @@ function normalizedRFC3339(value) {
   if (typeof value !== "string") {
     throw parserDrift("raw player startTimestamp is not a string");
   }
-  const match = rfc3339Pattern.exec(value);
-  if (match == null || !validDateTime(match)) {
+  if (!isCalendarRFC3339(value)) {
     throw parserDrift("raw player startTimestamp is not RFC3339");
   }
   const parsed = Date.parse(value);
@@ -226,28 +223,10 @@ function normalizedEpochSeconds(value) {
     throw parserDrift("raw player scheduledStartTime is invalid");
   }
   const normalized = parsed.toISOString();
-  if (!rfc3339Pattern.test(normalized)) {
+  if (!hasRFC3339Shape(normalized)) {
     throw parserDrift("raw player scheduledStartTime is outside the supported RFC3339 range");
   }
   return normalized;
-}
-
-function validDateTime(match) {
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) {
-    return false;
-  }
-  const monthDays = [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return day <= monthDays[month - 1];
-}
-
-function isLeapYear(year) {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 }
 
 function parserDrift(message) {

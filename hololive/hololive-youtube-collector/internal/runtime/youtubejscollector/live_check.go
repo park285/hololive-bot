@@ -7,8 +7,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -30,24 +29,24 @@ func NewChannelLiveCheckRunner(client ChannelLiveCheckClient) *ChannelLiveCheckR
 	return &ChannelLiveCheckRunner{client: client}
 }
 
-func (r *ChannelLiveCheckRunner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_live_check"}
+func (r *ChannelLiveCheckRunner) JobID() collection.JobID {
+	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_live_check"}
 }
 
-func (r *ChannelLiveCheckRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (r *ChannelLiveCheckRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel live check client is not configured")
+		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel live check client is not configured")
 	}
 
 	if input == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
 
-	allowed, err := input.Allows(contract.KindChannelLiveCheck, input.Spec().SubjectKey)
+	allowed, err := input.Allows(contract.KindChannelLiveCheck, input.Subject())
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("allows: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("allows: %w", err)
 	}
 
 	if !allowed {
@@ -56,10 +55,10 @@ func (r *ChannelLiveCheckRunner) Collect(ctx context.Context, input *collectutil
 
 	envelope, err := channelLiveCheckEnvelope(ctx, r.client, input)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("channel live check envelope: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("channel live check envelope: %w", err)
 	}
 
-	out, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
+	out, err := collection.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
 	if err != nil {
 		return out, fmt.Errorf("complete from envelopes: %w", err)
 	}
@@ -77,24 +76,24 @@ func NewVideoLiveCheckRunner(client VideoLiveCheckClient) *VideoLiveCheckRunner 
 	return &VideoLiveCheckRunner{client: client}
 }
 
-func (r *VideoLiveCheckRunner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_video_live"}
+func (r *VideoLiveCheckRunner) JobID() collection.JobID {
+	return collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_video_live"}
 }
 
-func (r *VideoLiveCheckRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (r *VideoLiveCheckRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js video live check client is not configured")
+		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js video live check client is not configured")
 	}
 
 	if input == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
 
-	allowed, err := input.Allows(contract.KindVideoLiveCheck, input.Spec().SubjectKey)
+	allowed, err := input.Allows(contract.KindVideoLiveCheck, input.Subject())
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("allows: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("allows: %w", err)
 	}
 
 	if !allowed {
@@ -103,10 +102,10 @@ func (r *VideoLiveCheckRunner) Collect(ctx context.Context, input *collectutil.R
 
 	envelope, err := r.videoLiveCheckEnvelope(ctx, input)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("video live check envelope: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("video live check envelope: %w", err)
 	}
 
-	out, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
+	out, err := collection.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
 	if err != nil {
 		return out, fmt.Errorf("complete from envelopes: %w", err)
 	}
@@ -114,7 +113,7 @@ func (r *VideoLiveCheckRunner) Collect(ctx context.Context, input *collectutil.R
 	return out, nil
 }
 
-func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input *collectutil.RunInput) (contract.Envelope, error) {
+func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input *collection.RunInput) (contract.Envelope, error) {
 	generation, err := input.Generation(contract.KindVideoLiveCheck)
 	if err != nil {
 		return contract.Envelope{}, fmt.Errorf("video lifecycle generation: %w", err)
@@ -124,7 +123,7 @@ func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input
 		return contract.Envelope{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "video lifecycle collector requires generation 2")
 	}
 
-	subject := input.Spec().SubjectKey
+	subject := input.Subject()
 
 	result, err := r.client.FetchVideoLiveCheck(ctx, youtubejs.VideoLiveCheckRequest{
 		VideoID:                 subject,
@@ -158,8 +157,8 @@ func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input
 }
 
 // channelLiveCheckEnvelope은 채널 /live 확인 envelope을 만듭니다. 요청 실패와 응답 계약 오류는 UNKNOWN으로 남깁니다.
-func channelLiveCheckEnvelope(ctx context.Context, client ChannelLiveCheckClient, input *collectutil.RunInput) (contract.Envelope, error) {
-	subject := input.Spec().SubjectKey
+func channelLiveCheckEnvelope(ctx context.Context, client ChannelLiveCheckClient, input *collection.RunInput) (contract.Envelope, error) {
+	subject := input.Subject()
 
 	result, err := client.FetchChannelLiveCheck(ctx, youtubejs.ChannelLiveCheckRequest{
 		ChannelID:               subject,

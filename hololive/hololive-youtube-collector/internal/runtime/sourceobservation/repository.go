@@ -6,13 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
-
-type PublishFenceVerifier interface {
-	Verify(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof, observations []contract.Envelope, contracts []byte) error
-}
 
 type publishFaultPoint string
 
@@ -26,27 +22,22 @@ const (
 
 type Repository struct {
 	pool                 *pgxpool.Pool
-	jobContracts         JobContractSet
-	fenceVerifier        PublishFenceVerifier
+	fenceVerifier        sqlPublishFenceVerifier
 	publishFault         func(context.Context, dbx.Tx, publishFaultPoint) error
 	rewritePublishResult func(PublishBatchResult) PublishBatchResult
 }
 
 func NewRepository(pool *pgxpool.Pool) *Repository {
-	return NewRepositoryWithContracts(pool, InitialJobContracts(), nil)
+	return NewRepositoryWithContracts(pool, collection.InitialJobContracts())
 }
 
-func NewRepositoryWithContracts(pool *pgxpool.Pool, jobContracts JobContractSet, fenceVerifier PublishFenceVerifier) *Repository {
-	repository := &Repository{pool: pool, jobContracts: jobContracts, fenceVerifier: fenceVerifier}
-	if repository.fenceVerifier == nil {
-		repository.fenceVerifier = sqlPublishFenceVerifier{jobs: jobContracts}
-	}
-
-	return repository
+// NewRepositoryWithContracts는 과거 계약 집합 주입을 유지한다. 발행 fence 검증은 항상 SQL 검증기를 쓴다.
+func NewRepositoryWithContracts(pool *pgxpool.Pool, jobContracts collection.JobContractSet) *Repository {
+	return &Repository{pool: pool, fenceVerifier: sqlPublishFenceVerifier{jobs: jobContracts}}
 }
 
 func (r *Repository) validate() error {
-	if r == nil || r.pool == nil || r.jobContracts == nil || r.fenceVerifier == nil {
+	if r == nil || r.pool == nil || r.fenceVerifier.jobs == nil {
 		return fmt.Errorf("validate source observation repository: %w", ErrInvalidRepository)
 	}
 

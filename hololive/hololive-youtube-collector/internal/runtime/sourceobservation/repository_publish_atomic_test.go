@@ -14,6 +14,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestPUB001SuccessfulCompletePreservesPriorFailureDiagnostic(t *testing.T) {
@@ -173,7 +174,7 @@ func TestPUB006StaleFenceHasNoSideEffects(t *testing.T) {
 
 	_, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 
-	if !errors.Is(err, ErrCollectionFenceLost) {
+	if !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale fence error = %v", err)
 	}
 
@@ -204,7 +205,7 @@ func TestPUB007LeaseExpiredAfterPrepareBeforeTxHasNoSideEffects(t *testing.T) {
 	}
 
 	_, err = NewRepository(pool).runPreparedPublish(ctx, &prepared, NewRepository(pool).completePublishTerminal)
-	if !errors.Is(err, ErrCollectionFenceLost) {
+	if !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("expired-after-prepare error = %v", err)
 	}
 
@@ -260,7 +261,7 @@ func TestPUB009TerminalRowCountZeroRollsBackObservations(t *testing.T) {
 
 	_, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 
-	if !errors.Is(err, ErrCollectionFenceLost) {
+	if !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("zero terminal rows error = %v", err)
 	}
 
@@ -357,12 +358,12 @@ func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			schedule, err := NewRetryAtSchedule(test.at)
+			schedule, err := collection.NewRetryAtSchedule(test.at)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			input, err := NewDeferCollectionInput(diagnostic, RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, schedule)
+			input, err := collection.NewDeferCollectionInput(diagnostic, collection.RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, schedule)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -399,7 +400,7 @@ func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	repo := NewRepository(pool)
 
-	_, err := repo.PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), DeferCollectionInput{})
+	_, err := repo.PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), collection.DeferCollectionInput{})
 	if err == nil {
 		t.Fatal("invalid defer input must fail before tx")
 	}

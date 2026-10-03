@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 type collectorReadiness struct {

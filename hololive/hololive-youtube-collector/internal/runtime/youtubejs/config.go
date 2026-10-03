@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 const ProtocolVersion int16 = 1
@@ -42,7 +40,7 @@ type Config struct {
 	RequestBodyLimit  int64
 	ResponseBodyLimit int64
 	MaxInflight       int
-	Limiter           *ratelimiter.RateLimiter
+	Limiter           *RateLimiter
 	extraArgs         []string
 }
 

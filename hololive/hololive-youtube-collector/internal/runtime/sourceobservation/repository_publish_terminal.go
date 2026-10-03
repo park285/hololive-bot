@@ -9,6 +9,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const observationCollisionDetail = "observation identity collided with existing evidence"
@@ -21,7 +22,7 @@ func (r *Repository) completePublishTerminal(
 	hasCollision bool,
 ) error {
 	if !hasCollision {
-		if err := completeCollectionJob(ctx, tx, proof, ""); err != nil {
+		if err := completeCollectionJob(ctx, tx, proof); err != nil {
 			return fmt.Errorf("complete collection job: %w", err)
 		}
 
@@ -44,7 +45,7 @@ func (r *Repository) completePublishTerminal(
 	return nil
 }
 
-func deferPublishTerminal(deferInput DeferCollectionInput) leaseTerminalFunc {
+func deferPublishTerminal(deferInput collection.DeferCollectionInput) leaseTerminalFunc {
 	return func(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof, _ PublishBatchResult, _ bool) error {
 		return deferCollectionJob(ctx, tx, proof, deferInput)
 	}
@@ -64,7 +65,7 @@ func completeCollectionJobWithError(
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_job_complete_error_0081_81.sql"),
+		sqlJobCompleteError,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,
@@ -76,7 +77,7 @@ func completeCollectionJobWithError(
 	).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrCollectionFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {
@@ -90,7 +91,7 @@ func deferCollectionJob(
 	ctx context.Context,
 	tx dbx.Tx,
 	proof *contract.LeaseProof,
-	deferInput DeferCollectionInput,
+	deferInput collection.DeferCollectionInput,
 ) error {
 	if err := deferInput.Validate(); err != nil {
 		return fmt.Errorf("publish source observation batch: %w", err)
@@ -104,7 +105,7 @@ func deferCollectionJob(
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_job_defer_0082_82.sql"),
+		sqlJobDefer,
 		proof.JobKey,
 		proof.OwnerInstance,
 		proof.FenceEpoch,
@@ -119,7 +120,7 @@ func deferCollectionJob(
 	).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrCollectionFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {

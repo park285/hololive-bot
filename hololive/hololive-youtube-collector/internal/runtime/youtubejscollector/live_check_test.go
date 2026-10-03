@@ -9,7 +9,7 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -32,7 +32,7 @@ func TestChannelLiveJobsEmitOnlyOwnKind(t *testing.T) {
 	}
 
 	snapshots := snapshot.Output().Observations()
-	if snapshot.Kind() != collectutil.CollectComplete || len(snapshots) != 1 ||
+	if snapshot.Kind() != collection.CollectComplete || len(snapshots) != 1 ||
 		snapshots[0].ObservationKind != contract.KindLiveSnapshot || fake.checkCalls != 0 {
 		t.Fatalf("snapshot job result = %#v check calls=%d", snapshots, fake.checkCalls)
 	}
@@ -43,7 +43,7 @@ func TestChannelLiveJobsEmitOnlyOwnKind(t *testing.T) {
 	}
 
 	observations := result.Output().Observations()
-	if result.Kind() != collectutil.CollectComplete || len(observations) != 1 ||
+	if result.Kind() != collection.CollectComplete || len(observations) != 1 ||
 		observations[0].ObservationKind != contract.KindChannelLiveCheck || fake.calls != 1 || fake.checkCalls != 1 {
 		t.Fatalf("check job result = %#v channel calls=%d check calls=%d", observations, fake.calls, fake.checkCalls)
 	}
@@ -96,7 +96,7 @@ func TestChannelLiveCheckRunnerRecordsRequestFailureAsUnknown(t *testing.T) {
 			}
 
 			observations := result.Output().Observations()
-			if result.Kind() != collectutil.CollectComplete || len(observations) != 1 {
+			if result.Kind() != collection.CollectComplete || len(observations) != 1 {
 				t.Fatalf("result = %#v", result)
 			}
 
@@ -149,7 +149,7 @@ func TestVideoLiveCheckRunnerPublishesFactsForRequestedSubject(t *testing.T) {
 	}
 
 	observations := result.Output().Observations()
-	if result.Kind() != collectutil.CollectComplete || len(observations) != 1 || fake.request.VideoID != liveCheckTestVideoID {
+	if result.Kind() != collection.CollectComplete || len(observations) != 1 || fake.request.VideoID != liveCheckTestVideoID {
 		t.Fatalf("result = %#v request=%#v", result, fake.request)
 	}
 
@@ -196,7 +196,7 @@ func TestVideoLiveCheckRunnerRecordsRequestFailureAsUnknown(t *testing.T) {
 			}
 
 			observations := result.Output().Observations()
-			if result.Kind() != collectutil.CollectComplete || len(observations) != 1 {
+			if result.Kind() != collection.CollectComplete || len(observations) != 1 {
 				t.Fatalf("result = %#v", result)
 			}
 
@@ -239,7 +239,7 @@ func TestVideoLiveCheckRunnerSkipsDisabledTarget(t *testing.T) {
 	t.Parallel()
 
 	fake := &videoLiveFake{}
-	input := withEnabled(t, videoLiveInput(t), map[contract.ObservationKind][]string{contract.KindVideoLiveCheck: {}})
+	input := withEnabled(t, videoLiveInput(t), map[contract.ObservationKind]bool{contract.KindVideoLiveCheck: false})
 
 	result, err := NewVideoLiveCheckRunner(fake).Collect(t.Context(), input)
 	if err != nil {
@@ -287,13 +287,13 @@ func stopCheckCases() []stopCheckCase {
 	}
 }
 
-func videoLiveInput(tb testing.TB) *collectutil.RunInput {
+func videoLiveInput(tb testing.TB) *collection.RunInput {
 	tb.Helper()
 
 	return youtubeInput(tb, liveCheckTestVideoID, "youtubejs_video_live", contract.KindVideoLiveCheck)
 }
 
-func channelLiveCheckInput(tb testing.TB) *collectutil.RunInput {
+func channelLiveCheckInput(tb testing.TB) *collection.RunInput {
 	tb.Helper()
 
 	return youtubeInput(tb, restrictedTestChannelID, "youtubejs_channel_live_check", contract.KindChannelLiveCheck)

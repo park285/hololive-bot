@@ -16,7 +16,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 type Service struct {
@@ -25,7 +24,6 @@ type Service struct {
 	logger               *slog.Logger
 	officialSchedule     settings.OfficialScheduleConfig
 	maxResponseBodyBytes int64
-	youtubeClient        YouTubeClient
 	officialPageMu       sync.RWMutex
 	officialPage         officialSchedulePageCache
 	officialGroup        singleflight.Group
@@ -131,34 +129,4 @@ func (e *StructureChangedError) Error() string {
 func IsStructureError(err error) bool {
 	_, ok := errors.AsType[*StructureChangedError](err)
 	return ok
-}
-
-func (s *Service) GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error) {
-	if s.youtubeClient == nil {
-		return nil, errors.New("youtube producer not initialized")
-	}
-
-	videos, err := s.youtubeClient.GetRecentVideos(ctx, channelID, maxResults)
-	if err != nil {
-		return nil, fmt.Errorf("youtube recent videos scraper error: %w", err)
-	}
-
-	s.logger.Debug("Recent videos fetched via scraper", slog.String("channel", channelID), slog.Int("count", len(videos)))
-
-	return videos, nil
-}
-
-func (s *Service) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error) {
-	if s.youtubeClient == nil {
-		return nil, errors.New("youtube producer not initialized")
-	}
-
-	videos, err := s.youtubeClient.GetPopularVideos(ctx, channelID, maxResults)
-	if err != nil {
-		return nil, fmt.Errorf("youtube popular videos scraper error: %w", err)
-	}
-
-	s.logger.Debug("Popular videos fetched via scraper", slog.String("channel", channelID), slog.Int("count", len(videos)))
-
-	return videos, nil
 }

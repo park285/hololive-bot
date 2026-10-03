@@ -11,19 +11,14 @@ import (
 )
 
 const (
-	MaxPublishBatchSize  = 1024
 	MaxPublishBatchBytes = 8 << 20
 	MaxCheckpointCount   = 1024
-	MaxCollectionLatency = 24 * time.Hour
 )
 
 var (
-	ErrInvalidEnvelope     = errors.New("source observation envelope is invalid")
-	ErrStaleContract       = errors.New("source observation contract is stale")
-	ErrCollectionFenceLost = errors.New("collection job fence was lost")
-	ErrProjectionStale     = errors.New("collection projection is stale")
-	ErrTargetDisabled      = errors.New("collection target is disabled")
-	ErrInvalidRepository   = errors.New("source observation repository is not configured")
+	ErrInvalidEnvelope   = errors.New("source observation envelope is invalid")
+	ErrStaleContract     = errors.New("source observation contract is stale")
+	ErrInvalidRepository = errors.New("source observation repository is not configured")
 )
 
 type CheckpointEntry struct {

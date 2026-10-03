@@ -11,8 +11,8 @@ import (
 // proactive notification egress 소유를 거부하는 bot runtime config 로더다.
 func LoadBotRuntime() (*Config, error) {
 	out, err := LoadConfig((*Config).ValidateBotRuntime, LoadOptions{
-		Section:        loadAPIWorkerProfile,
-		TracingRuntime: TracingRuntimeHololiveAPI,
+		Section:           loadAPIWorkerProfile,
+		TracingEnabledEnv: envload.TracingHololiveAPIEnabledEnv,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load config validated: %w", err)

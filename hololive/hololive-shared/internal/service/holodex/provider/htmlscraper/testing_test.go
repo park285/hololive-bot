@@ -24,9 +24,9 @@ func newTestServiceWithHTTPClient(
 
 	config.BaseURL = baseURL
 
-	service, err := NewServiceWithDependencies(
+	service, err := NewService(
 		nil,
-		ServiceDependencies{HTTP: httpClient},
+		httpClient,
 		logger,
 		settings.OfficialScheduleRuntimeConfig{
 			OfficialSchedule:     config,
@@ -34,7 +34,7 @@ func newTestServiceWithHTTPClient(
 		},
 	)
 	if err != nil {
-		t.Fatalf("NewServiceWithDependencies() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
 	}
 
 	return service

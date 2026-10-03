@@ -11,10 +11,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
@@ -26,8 +26,8 @@ type collectionExecutor struct {
 	metrics       *Metrics
 	owner         string
 	logger        *slog.Logger
-	config        joblease.Config
 	collector     collectorconfig.Config
+	retryBounds   collection.RetryBounds
 	gates         map[contract.Provider]chan struct{}
 	readiness     *readinessTracker
 	workerTracker *workercontract.ExecutorTracker
@@ -227,7 +227,7 @@ func fatalCollectionError(err error) bool {
 
 func (e *collectionExecutor) handleSuperseded(ctx context.Context, lease joblease.Lease, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	releaseErr := e.releaseSuperseded(ctx, lease)
-	if releaseErr == nil || errors.Is(releaseErr, joblease.ErrFenceLost) {
+	if releaseErr == nil || errors.Is(releaseErr, collection.ErrFenceLost) {
 		return
 	}
 
@@ -248,12 +248,12 @@ func (e *collectionExecutor) releaseSuperseded(ctx context.Context, lease joblea
 func ignoreRunError(err error) bool {
 	return err == nil ||
 		errors.Is(err, context.Canceled) ||
-		errors.Is(err, joblease.ErrFenceLost) ||
+		errors.Is(err, collection.ErrFenceLost) ||
 		supersededError(err)
 }
 
 func (e *collectionExecutor) observeFenceLost(spec *joblease.JobSpec, err error) {
-	if errors.Is(err, joblease.ErrFenceLost) {
+	if errors.Is(err, collection.ErrFenceLost) {
 		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phaseCollect)
 	}
 }
@@ -274,13 +274,38 @@ func (e *collectionExecutor) deferFailedRun(
 	class := string(diagnostic.Class())
 	detail := diagnostic.Detail()
 
-	if deferErr := lease.Defer(cleanupCtx, retryAt, code, class, detail); deferErr != nil && !errors.Is(deferErr, joblease.ErrFenceLost) {
+	if deferErr := e.deferLease(cleanupCtx, lease, diagnostic, retryAt); deferErr != nil && !errors.Is(deferErr, collection.ErrFenceLost) {
 		e.logFailure("defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 
 		return
 	}
 
 	e.logFailure("collect", code, class, detail, spec, proof)
+}
+
+// deferLease는 executor가 소유한 재시도 범위로 typed defer 입력을 한 번 만들어 lease에 넘깁니다.
+// 입력을 만들 수 없는 진단(예: defer할 수 없는 code)도 lease 거절과 같은 비치명 defer 실패로 돌려줍니다.
+func (e *collectionExecutor) deferLease(
+	ctx context.Context,
+	lease joblease.Lease,
+	diagnostic contract.FailureDiagnostic,
+	retryAt time.Time,
+) error {
+	schedule, err := collection.NewRetryAtSchedule(retryAt)
+	if err != nil {
+		return fmt.Errorf("retry schedule: %w", err)
+	}
+
+	input, err := collection.NewDeferCollectionInput(diagnostic, e.retryBounds, schedule)
+	if err != nil {
+		return fmt.Errorf("defer collection input: %w", err)
+	}
+
+	if err := lease.Defer(ctx, input); err != nil {
+		return fmt.Errorf("defer: %w", err)
+	}
+
+	return nil
 }
 
 func (e *collectionExecutor) collectAndPublish(
@@ -290,35 +315,9 @@ func (e *collectionExecutor) collectAndPublish(
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
 ) error {
-	admissionCtx, admissionCancel := context.WithTimeout(ctx, e.collector.ProviderAdmissionTimeout)
-	err := e.acquireProvider(admissionCtx, spec.Provider)
-
-	admissionCancel()
-
+	input, result, fatal, err := e.collectWithAdmission(ctx, registration, spec, proof)
 	if err != nil {
-		return fmt.Errorf("provider admission: %w", err)
-	}
-
-	defer e.releaseProvider(spec.Provider)
-
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return fmt.Errorf("start collect: %w", ctxErr)
-	}
-
-	input, err := e.buildRunInput(ctx, registration, spec, proof)
-	if err != nil {
-		return fmt.Errorf("build run input: %w", err)
-	}
-
-	collectCtx, collectCancel := context.WithTimeout(ctx, registration.Profile().CollectTimeout())
-	result, fatal := e.runCollector(collectCtx, registration.Runner(), &input)
-	collectErr := collectCtx.Err()
-
-	collectCancel()
-
-	if collectErr != nil {
-		result = collectutil.CollectResult{}
-		fatal = errors.Join(fatal, collectErr)
+		return err
 	}
 
 	if validationErr := ValidateCollectResult(&input, registration, &result, fatal); validationErr != nil {
@@ -336,9 +335,55 @@ func (e *collectionExecutor) collectAndPublish(
 	return nil
 }
 
-func (e *collectionExecutor) runCollector(ctx context.Context, runner collectutil.JobRunner, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+// collectWithAdmission은 provider gate를 얻은 뒤 실행 입력 적재와 수집만 gate 안에서 수행합니다.
+// Collector가 반환하면 이 함수가 끝나면서 gate를 정확히 한 번 반환하므로 결과 검증과 발행은 gate 밖에서 진행합니다.
+// Collector가 반환하지 않으면 upstream 호출이 남아 있을 수 있어 gate를 계속 점유합니다.
+// 반환값 setupErr는 수집 전에 끝난 실패이고, fatal은 검증 대상인 수집 실패입니다.
+func (e *collectionExecutor) collectWithAdmission(
+	ctx context.Context,
+	registration RegisteredRunner,
+	spec *joblease.JobSpec,
+	proof *contract.LeaseProof,
+) (input collection.RunInput, result collection.CollectResult, fatal, setupErr error) {
+	admissionCtx, admissionCancel := context.WithTimeout(ctx, e.collector.ProviderAdmissionTimeout)
+	err := e.acquireProvider(admissionCtx, spec.Provider)
+
+	admissionCancel()
+
+	if err != nil {
+		return collection.RunInput{}, collection.CollectResult{}, nil, fmt.Errorf("provider admission: %w", err)
+	}
+
+	defer e.releaseProvider(spec.Provider)
+
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return collection.RunInput{}, collection.CollectResult{}, nil, fmt.Errorf("start collect: %w", ctxErr)
+	}
+
+	input, err = e.buildRunInput(ctx, registration, spec, proof)
+	if err != nil {
+		return collection.RunInput{}, collection.CollectResult{}, nil, fmt.Errorf("build run input: %w", err)
+	}
+
+	collectCtx, collectCancel := context.WithTimeout(ctx, registration.Profile().CollectTimeout())
+
+	result, fatal = e.runCollector(collectCtx, registration.Runner(), &input)
+
+	collectErr := collectCtx.Err()
+
+	collectCancel()
+
+	if collectErr != nil {
+		result = collection.CollectResult{}
+		fatal = errors.Join(fatal, collectErr)
+	}
+
+	return input, result, fatal, nil
+}
+
+func (e *collectionExecutor) runCollector(ctx context.Context, runner collection.JobRunner, input *collection.RunInput) (collection.CollectResult, error) {
 	var (
-		result     collectutil.CollectResult
+		result     collection.CollectResult
 		collectErr error
 	)
 
@@ -351,7 +396,7 @@ func (e *collectionExecutor) runCollector(ctx context.Context, runner collectuti
 	})
 	// 반환 오류의 분류는 provider가 소유합니다. 실제 panic만 실행 불변 위반으로 분류합니다.
 	if !returned {
-		return collectutil.CollectResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, recoveredErr)
+		return collection.CollectResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, recoveredErr)
 	}
 
 	if collectErr != nil {
@@ -366,14 +411,14 @@ func (e *collectionExecutor) buildRunInput(
 	registration RegisteredRunner,
 	spec *joblease.JobSpec,
 	proof *contract.LeaseProof,
-) (collectutil.RunInput, error) {
+) (collection.RunInput, error) {
 	dbCtx, dbCancel := context.WithTimeout(ctx, e.collector.DBTimeout)
 	snapshot, err := e.publisher.LoadContractSnapshot(dbCtx, registration)
 
 	dbCancel()
 
 	if err != nil {
-		return collectutil.RunInput{}, fmt.Errorf("load contract snapshot: %w", err)
+		return collection.RunInput{}, fmt.Errorf("load contract snapshot: %w", err)
 	}
 
 	dbCtx, dbCancel = context.WithTimeout(ctx, e.collector.DBTimeout)
@@ -385,15 +430,15 @@ func (e *collectionExecutor) buildRunInput(
 	dbCancel()
 
 	if err != nil {
-		return collectutil.RunInput{}, fmt.Errorf("load target snapshot: %w", err)
+		return collection.RunInput{}, fmt.Errorf("load target snapshot: %w", err)
 	}
 
-	input, err := collectutil.NewRunInput(
-		spec, proof, snapshot, targets, e.collector.MaxPages,
-		e.collector.MaxSuccessResponseBytes, registration.Contract(),
+	input, err := collection.NewRunInput(
+		registration.Contract(), spec.SubjectKey, proof, snapshot, targets,
+		e.collector.MaxPages, e.collector.MaxSuccessResponseBytes,
 	)
 	if err != nil {
-		return collectutil.RunInput{}, fmt.Errorf("run input: %w", err)
+		return collection.RunInput{}, fmt.Errorf("run input: %w", err)
 	}
 
 	return input, nil
@@ -404,10 +449,10 @@ func (e *collectionExecutor) commitCollectResult(
 	spec *joblease.JobSpec,
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
-	result *collectutil.CollectResult,
+	result *collection.CollectResult,
 ) error {
 	output := result.Output()
-	if result.Kind() == collectutil.CollectComplete && output.Empty() {
+	if result.Kind() == collection.CollectComplete && output.Empty() {
 		e.metrics.ObservePublish(spec.Provider, spec.CollectionJobKind, outcomeEmpty)
 
 		dbCtx, cancel := context.WithTimeout(ctx, e.collector.DBTimeout)
@@ -433,16 +478,13 @@ func (e *collectionExecutor) commitCollectResult(
 		err       error
 	)
 
-	if result.Kind() == collectutil.CollectPartial {
-		retry, retryErr := sourceobservation.NewRetryAtSchedule(e.retryAt(resultPartialCause(result)))
+	if result.Kind() == collection.CollectPartial {
+		retry, retryErr := collection.NewRetryAtSchedule(e.retryAt(resultPartialCause(result)))
 		if retryErr != nil {
 			return fmt.Errorf("retry at: %w", retryErr)
 		}
 
-		published, err = e.publisher.PublishPartial(
-			publishCtx, proof, result, retry,
-			sourceobservation.RetryBounds{Minimum: e.config.MinRetryDelay, Maximum: e.config.MaxRetryDelay},
-		)
+		published, err = e.publisher.PublishPartial(publishCtx, proof, result, retry, e.retryBounds)
 	} else {
 		published, err = e.publisher.PublishComplete(publishCtx, proof, output)
 	}
@@ -460,7 +502,7 @@ func (e *collectionExecutor) commitCollectResult(
 	return nil
 }
 
-func resultPartialCause(result *collectutil.CollectResult) error {
+func resultPartialCause(result *collection.CollectResult) error {
 	partial, _ := result.PartialFailure()
 	if partial == nil {
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure is missing")
@@ -483,11 +525,10 @@ func (e *collectionExecutor) deferInvariant(
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.collector.CleanupTimeout)
 	defer cancel()
 
-	retryAt := time.Now().UTC().Add(e.config.MaxRetryDelay)
-	diagnostic := collecterr.DiagnosticOf(err)
+	retryAt := time.Now().UTC().Add(e.retryBounds.Maximum)
 
-	if deferErr := lease.Defer(cleanupCtx, retryAt, string(diagnostic.Code()), string(diagnostic.Class()), diagnostic.Detail()); deferErr != nil &&
-		!errors.Is(deferErr, joblease.ErrFenceLost) {
+	if deferErr := e.deferLease(cleanupCtx, lease, collecterr.DiagnosticOf(err), retryAt); deferErr != nil &&
+		!errors.Is(deferErr, collection.ErrFenceLost) {
 		e.logFailure("defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 	}
 }

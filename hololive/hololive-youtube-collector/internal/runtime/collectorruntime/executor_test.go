@@ -13,7 +13,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
@@ -26,9 +26,9 @@ type countedTerminalLease struct {
 	completes int
 }
 
-func (l *countedTerminalLease) Defer(ctx context.Context, retry time.Time, code, class, detail string) error {
+func (l *countedTerminalLease) Defer(ctx context.Context, input collection.DeferCollectionInput) error {
 	l.defers++
-	if err := l.Lease.Defer(ctx, retry, code, class, detail); err != nil {
+	if err := l.Lease.Defer(ctx, input); err != nil {
 		return fmt.Errorf("defer counted lease: %w", err)
 	}
 
@@ -44,7 +44,7 @@ func (l *countedTerminalLease) CompleteCurrent(ctx context.Context) error {
 	return nil
 }
 
-func newExecutorFixture(t *testing.T, runner collectutil.JobRunner, fatal *[]error) (*collectionExecutor, *joblease.JobSpec) {
+func newExecutorFixture(t *testing.T, runner collection.JobRunner, fatal *[]error) (*collectionExecutor, *joblease.JobSpec) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
@@ -52,16 +52,18 @@ func newExecutorFixture(t *testing.T, runner collectutil.JobRunner, fatal *[]err
 
 	executor := newRunErrorExecutor(fatal)
 
-	executor.config = runtimeLeaseConfig()
+	executor.retryBounds = testRetryBounds
+
+	config := runtimeLeaseConfig()
 
 	var err error
 
-	executor.repository, err = joblease.NewRepository(pool, &executor.config)
+	executor.repository, err = joblease.NewRepository(pool, &config)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	executor.registry, err = NewRegistry(withOverride(runner)...)
+	executor.registry, err = newTestRegistry(withOverride(runner)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +86,8 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 
 	runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-	runner.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
-		return collectutil.CollectResult{}, nil
+	runner.collect = func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
+		return collection.CollectResult{}, nil
 	}
 
 	executor, spec := newExecutorFixture(t, runner, &fatal)
@@ -141,8 +143,8 @@ func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 
 	runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-	runner.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Failed, collecterr.ClassTimeout, "impossible tuple")
+	runner.collect = func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
+		return collection.CollectResult{}, collecterr.New(collecterr.Failed, collecterr.ClassTimeout, "impossible tuple")
 	}
 
 	executor, spec := newExecutorFixture(t, runner, &fatal)
@@ -188,10 +190,10 @@ func TestCollectDeadlinePreservesClassifiedRunnerFailure(t *testing.T) {
 
 			runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-			runner.collect = func(ctx context.Context, _ *collectutil.RunInput) (collectutil.CollectResult, error) {
+			runner.collect = func(ctx context.Context, _ *collection.RunInput) (collection.CollectResult, error) {
 				<-ctx.Done()
 
-				return collectutil.CollectResult{}, cause
+				return collection.CollectResult{}, cause
 			}
 
 			executor, spec := newExecutorFixture(t, runner, &fatal)
@@ -281,14 +283,14 @@ func checkRunnerFailure(t *testing.T, test runnerFailureCase) {
 
 	runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-	runner.collect = func(ctx context.Context, _ *collectutil.RunInput) (collectutil.CollectResult, error) {
+	runner.collect = func(ctx context.Context, _ *collection.RunInput) (collection.CollectResult, error) {
 		if test.waitDeadline {
 			<-ctx.Done()
 		}
 
 		test.run()
 
-		return collectutil.CollectResult{}, errors.New("returned provider error")
+		return collection.CollectResult{}, errors.New("returned provider error")
 	}
 
 	executor, spec := newExecutorFixture(t, runner, &fatal)

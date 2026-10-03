@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,13 +15,16 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
+
+// canonicalJobContracts는 패키지 초기화 때 한 번 검증된 계약 집합이다. 패키지 안에서 변경하지 않는다.
+var canonicalJobContracts = collection.InitialJobContracts()
 
 type Repository struct {
 	pool      *pgxpool.Pool
 	config    Config
-	contracts sourceobservation.JobContractSet
+	contracts collection.JobContractSet
 }
 
 func NewRepository(pool *pgxpool.Pool, config *Config) (*Repository, error) {
@@ -38,7 +40,7 @@ func NewRepository(pool *pgxpool.Pool, config *Config) (*Repository, error) {
 		return nil, fmt.Errorf("validate: %w", err)
 	}
 
-	return &Repository{pool: pool, config: *config, contracts: sourceobservation.InitialJobContracts()}, nil
+	return &Repository{pool: pool, config: *config, contracts: canonicalJobContracts}, nil
 }
 
 func (r *Repository) Acquire(ctx context.Context, spec *JobSpec, owner string) (*JobLease, error) {
@@ -67,7 +69,7 @@ func (r *Repository) Acquire(ctx context.Context, spec *JobSpec, owner string) (
 		return nil, fmt.Errorf("in pgx tx with result: %w", err)
 	}
 
-	return &JobLease{repository: r, spec: *spec, contract: definition.Clone(), proof: proof}, nil
+	return &JobLease{repository: r, spec: *spec, contract: definition, proof: proof}, nil
 }
 
 func (r *Repository) acquireTx(
@@ -75,7 +77,7 @@ func (r *Repository) acquireTx(
 	tx dbx.Tx,
 	spec *JobSpec,
 	owner string,
-	definition sourceobservation.JobContract,
+	definition collection.JobContract,
 	kinds []contract.ObservationKind,
 ) (contract.LeaseProof, error) {
 	generation, err := lockAcquireProjection(ctx, tx)
@@ -106,10 +108,10 @@ func (r *Repository) acquireTx(
 func lockAcquireProjection(ctx context.Context, tx dbx.Tx) (int64, error) {
 	var generation int64
 
-	err := tx.QueryRow(ctx, mustSQL("repository_projection_lock_0144_05.sql")).Scan(&generation)
+	err := tx.QueryRow(ctx, sqlProjectionLock).Scan(&generation)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, ErrProjectionStale
+		return 0, collection.ErrProjectionStale
 	}
 
 	if err != nil {
@@ -123,7 +125,7 @@ func (r *Repository) verifyAcquireTargets(
 	ctx context.Context,
 	tx dbx.Tx,
 	spec *JobSpec,
-	definition sourceobservation.JobContract,
+	definition collection.JobContract,
 	kinds []contract.ObservationKind,
 	generation int64,
 ) error {
@@ -138,11 +140,11 @@ func (r *Repository) verifyAcquireTargets(
 		maxIntervalMS int64
 	)
 
-	exact := definition.Membership() == sourceobservation.JobMembershipExactSubject
+	exact := definition.Membership() == collection.JobMembershipExactSubject
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_target_bundle_0144_04.sql"),
+		sqlTargetBundle,
 		generation,
 		kindValues,
 		exact,
@@ -153,7 +155,7 @@ func (r *Repository) verifyAcquireTargets(
 	}
 
 	if targetCount == 0 {
-		return ErrTargetDisabled
+		return collection.ErrTargetDisabled
 	}
 
 	if acquireCadenceMismatch(spec, definition, minIntervalMS, maxIntervalMS) {
@@ -163,12 +165,12 @@ func (r *Repository) verifyAcquireTargets(
 	return nil
 }
 
-func acquireCadenceMismatch(spec *JobSpec, _ sourceobservation.JobContract, minIntervalMS, maxIntervalMS int64) bool {
+func acquireCadenceMismatch(spec *JobSpec, _ collection.JobContract, minIntervalMS, maxIntervalMS int64) bool {
 	return minIntervalMS <= 0 || minIntervalMS != maxIntervalMS || minIntervalMS != spec.PollInterval.Milliseconds()
 }
 
 func insertAcquireJobRow(ctx context.Context, tx dbx.Tx, spec *JobSpec, generation int64) error {
-	if _, err := tx.Exec(ctx, mustSQL("repository_lease_insert_0144_06.sql"), spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
+	if _, err := tx.Exec(ctx, sqlLeaseInsert, spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
 		generation, spec.PollInterval.Milliseconds()); err != nil {
 		return fmt.Errorf("acquire collection job lease: create job row: %w", err)
 	}
@@ -209,7 +211,7 @@ func acquireLeaseProof(
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_lease_acquire_0144_08.sql"),
+		sqlLeaseAcquire,
 		spec.JobKey,
 		owner,
 		generation,
@@ -236,7 +238,7 @@ func acquireLeaseProof(
 type JobLease struct {
 	repository *Repository
 	spec       JobSpec
-	contract   sourceobservation.JobContract
+	contract   collection.JobContract
 	proof      contract.LeaseProof
 }
 
@@ -250,16 +252,16 @@ func (l *JobLease) Proof() contract.LeaseProof {
 
 func (l *JobLease) Renew(ctx context.Context) error {
 	if l == nil || l.repository == nil {
-		return fmt.Errorf("renew collection job lease: %w", ErrFenceLost)
+		return fmt.Errorf("renew collection job lease: %w", collection.ErrFenceLost)
 	}
 
 	var jobKey string
 
-	err := l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_renew_0144_09.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := l.repository.pool.QueryRow(ctx, sqlLeaseRenew, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, l.repository.config.LeaseTTL.Milliseconds()).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {
@@ -269,41 +271,43 @@ func (l *JobLease) Renew(ctx context.Context) error {
 	return nil
 }
 
-func (l *JobLease) Complete(ctx context.Context) error {
-	if err := l.finish(ctx, "", time.Time{}, "", "", "complete"); err != nil {
-		return fmt.Errorf("finish: %w", err)
+// Defer는 executor가 만든 typed 재시도 입력으로 lease를 DEFERRED로 전환합니다.
+// 공개 진단 생성자는 redaction하지 않으므로 adapter 경계에서 detail을 한 번 더 정제하고,
+// retry_not_before는 SQL이 DB 시계 기준 입력 bounds 안으로 보정합니다.
+func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionInput) error {
+	if err := input.Validate(); err != nil {
+		return fmt.Errorf("defer collection job lease: %w: %w", ErrInvalidJob, err)
 	}
 
-	return nil
-}
-
-func (l *JobLease) Defer(ctx context.Context, retryAt time.Time, code, class, detail string) error {
-	code = strings.TrimSpace(code)
-	class = strings.TrimSpace(class)
-
-	if retryAt.IsZero() || !validDeferFailureTuple(code, class) || invalidDeferDetail(detail) {
-		return fmt.Errorf("defer collection job lease: %w", ErrInvalidJob)
+	if l == nil || l.repository == nil {
+		return fmt.Errorf("defer collection job lease: %w", collection.ErrFenceLost)
 	}
 
-	detail = collecterr.SanitizeDetail(detail)
+	diagnostic := input.Diagnostic()
+	code := string(diagnostic.Code())
+
+	detail := collecterr.SanitizeDetail(diagnostic.Detail())
 	if strings.TrimSpace(detail) == "" {
 		detail = code
 	}
 
-	if err := l.finish(ctx, code, retryAt.UTC(), class, detail, "defer"); err != nil {
-		return fmt.Errorf("finish: %w", err)
+	bounds := input.Bounds()
+
+	var jobKey string
+
+	err := l.repository.pool.QueryRow(ctx, sqlLeaseDefer, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+		l.proof.ProjectionGeneration, l.proof.ScheduledFor, input.Schedule().At(), code, string(diagnostic.Class()), detail,
+		bounds.Minimum.Milliseconds(), bounds.Maximum.Milliseconds()).Scan(&jobKey)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return collection.ErrFenceLost
+	}
+
+	if err != nil {
+		return fmt.Errorf("defer collection job lease: %w", err)
 	}
 
 	return nil
-}
-
-func validDeferFailureTuple(code, class string) bool {
-	typed := contract.CollectionErrorCode(code)
-	return contract.ValidDurableFailureTuple(typed, contract.FailureClass(class)) && typed.Deferable()
-}
-
-func invalidDeferDetail(detail string) bool {
-	return len(detail) > collecterr.MaxDetailBytes || !utf8.ValidString(detail) || strings.IndexByte(detail, 0) >= 0
 }
 
 func (l *JobLease) Release(ctx context.Context, reason ReleaseReason) error {
@@ -312,7 +316,7 @@ func (l *JobLease) Release(ctx context.Context, reason ReleaseReason) error {
 	}
 
 	if l == nil || l.repository == nil {
-		return fmt.Errorf("release collection job lease: %w", ErrFenceLost)
+		return fmt.Errorf("release collection job lease: %w", collection.ErrFenceLost)
 	}
 
 	delay := deterministicJitter(&l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
@@ -343,50 +347,17 @@ func releaseLeaseTx(
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_lease_release_0144_10.sql"),
+		sqlLeaseRelease,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		delay.Milliseconds(), string(reason.ErrorCode()),
 	).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {
 		return fmt.Errorf("release collection job lease: %w", err)
-	}
-
-	return nil
-}
-
-func (l *JobLease) finish(ctx context.Context, code string, retryAt time.Time, class, detail, action string) error {
-	if l == nil || l.repository == nil {
-		return fmt.Errorf("%s collection job lease: %w", action, ErrFenceLost)
-	}
-
-	var (
-		jobKey string
-		err    error
-	)
-
-	if action == "complete" {
-		err = l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_complete_0144_11.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
-			l.proof.ProjectionGeneration, l.proof.ScheduledFor).Scan(&jobKey)
-	} else {
-		minDelay := l.repository.config.MinRetryDelay
-		maxDelay := l.repository.config.MaxRetryDelay
-
-		err = l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_defer_0144_12.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
-			l.proof.ProjectionGeneration, l.proof.ScheduledFor, retryAt, code, class, detail,
-			minDelay.Milliseconds(), maxDelay.Milliseconds()).Scan(&jobKey)
-	}
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
-	}
-
-	if err != nil {
-		return fmt.Errorf("%s collection job lease: %w", action, err)
 	}
 
 	return nil

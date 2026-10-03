@@ -10,6 +10,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func breakPublishFence(ctx context.Context, t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
@@ -81,24 +82,24 @@ func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 		{
 			name:     "fence_before_projection_and_target",
 			breakers: []breaker{breakPublishFence, stalePublishProjection, disablePublishTarget, stalePublishContract},
-			want:     ErrCollectionFenceLost,
+			want:     collection.ErrFenceLost,
 		},
 		{
 			name:     "projection_before_membership_and_target",
 			breakers: []breaker{stalePublishProjection, breakPublishMembership, disablePublishTarget, stalePublishContract},
-			want:     ErrProjectionStale,
+			want:     collection.ErrProjectionStale,
 		},
 		{
 			name:     "membership_before_target",
 			breakers: []breaker{breakPublishMembership, disablePublishTarget, stalePublishContract},
-			want:     ErrTargetDisabled,
+			want:     collection.ErrTargetDisabled,
 			contains: "verify collection job membership",
 			excludes: "verify collection targets",
 		},
 		{
 			name:     "target_before_contract",
 			breakers: []breaker{disablePublishTarget, stalePublishContract},
-			want:     ErrTargetDisabled,
+			want:     collection.ErrTargetDisabled,
 			contains: "verify collection targets",
 		},
 	}

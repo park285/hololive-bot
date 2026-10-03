@@ -8,20 +8,23 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 // 과거 생산자의 계약으로 보존 관측을 시드합니다. 현재 운영 publisher에는 적용하지 않습니다.
-func historicalViewerJobContracts() StaticJobContracts {
-	jobs := InitialJobContracts()
-	youtubejs := mustJobID(contract.ProviderYouTubeJS, "youtubejs_viewer")
+func historicalViewerJobContracts(tb testing.TB) collection.StaticJobContracts {
+	tb.Helper()
 
-	jobs[youtubejs] = mustJobContract(youtubejs, JobClassSubject, JobMembershipExactSubject, "",
+	jobs := collection.InitialJobContracts()
+	youtubejs := collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_viewer"}
+
+	jobs[youtubejs] = mustHistoricalJob(tb, youtubejs, collection.JobClassSubject, collection.JobMembershipExactSubject, "",
 		[]contract.ObservationKind{contract.KindViewerSample},
 		[]contract.ObservationKind{contract.KindViewerSample}, nil)
 
-	holodex := mustJobID(contract.ProviderHolodex, "holodex_live")
+	holodex := collection.JobID{Provider: contract.ProviderHolodex, Kind: "holodex_live"}
 
-	jobs[holodex] = mustJobContract(holodex, JobClassGlobal, JobMembershipCurrentProjection, "global:holodex_live",
+	jobs[holodex] = mustHistoricalJob(tb, holodex, collection.JobClassGlobal, collection.JobMembershipCurrentProjection, "global:holodex_live",
 		[]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
 		[]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
 		[]contract.ObservationKind{contract.KindLiveSnapshot})
@@ -29,8 +32,28 @@ func historicalViewerJobContracts() StaticJobContracts {
 	return jobs
 }
 
-func historicalViewerPublisher(pool *pgxpool.Pool) *Repository {
-	return NewRepositoryWithContracts(pool, historicalViewerJobContracts(), nil)
+func mustHistoricalJob(
+	tb testing.TB,
+	id collection.JobID,
+	class collection.JobClass,
+	membership collection.JobMembership,
+	leaseSubject string,
+	emissions, cadence, roster []contract.ObservationKind,
+) collection.JobContract {
+	tb.Helper()
+
+	job, err := collection.NewJobContract(id, class, membership, leaseSubject, emissions, cadence, roster)
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	return job
+}
+
+func historicalViewerPublisher(tb testing.TB, pool *pgxpool.Pool) *Repository {
+	tb.Helper()
+
+	return NewRepositoryWithContracts(pool, historicalViewerJobContracts(tb))
 }
 
 func TestPublishRejectsRetiredViewerCollectionWithoutSideEffects(t *testing.T) {
@@ -39,8 +62,8 @@ func TestPublishRejectsRetiredViewerCollectionWithoutSideEffects(t *testing.T) {
 		job      string
 		wantErr  error
 	}{
-		{contract.ProviderYouTubeJS, "youtubejs_viewer", ErrCollectionFenceLost},
-		{contract.ProviderHolodex, "holodex_live", ErrTargetDisabled},
+		{contract.ProviderYouTubeJS, "youtubejs_viewer", collection.ErrFenceLost},
+		{contract.ProviderHolodex, "holodex_live", collection.ErrTargetDisabled},
 	} {
 		t.Run(string(tc.provider), func(t *testing.T) {
 			pool := dbtest.NewPool(t)

@@ -13,16 +13,6 @@ type HolodexConfig struct {
 	DistributedRateLimit DistributedRateLimitConfig
 }
 
-type YouTubeConfig struct {
-	MaxPageBodyBytes     int64
-	ScraperHTTPTimeout   time.Duration
-	ScraperDialTimeout   time.Duration
-	ScraperHeaderTimeout time.Duration
-	CommunityMissingTTL  time.Duration
-	RequestInterval      time.Duration
-	DistributedRateLimit DistributedRateLimitConfig
-}
-
 type IngestionConfig struct {
 	PhotoSyncEnabled bool
 }

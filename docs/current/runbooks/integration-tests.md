@@ -10,7 +10,7 @@ RUN_INTEGRATION_TESTS=true bash scripts/ci/local-ci.sh --integration-tests-only
 
 - `INTEGRATION_TEST` 입력으로 실행하는 그룹: major-event summarizer, member-news summarizer, YouTube delivery dispatcher 및 collector `joblease` DB 회귀
 - `TEST_VALKEY_ADDR` 입력: YouTube delivery dispatcher의 real Valkey 연결
-- `-tags=integration`: alarm `dispatchoutbox`, YouTube poller `batchrepo`
+- `-tags=integration`: alarm `dispatchoutbox`
 
 `TEST_DATABASE_URL`이 없으면 스테이지가 임의의 localhost 포트에 disposable PostgreSQL 컨테이너를 기동하고 모든 DB 테스트에 해당 DSN을 제공합니다. 컨테이너에는 `ci_ephemeral_sentinel`을 생성하고 일치하는 `TEST_DATABASE_OWNER_TOKEN`을 설정하므로 `github.com/kapu/hololive-dbtest`의 소유권 가드를 우회하지 않습니다. `TEST_VALKEY_ADDR`와 `TEST_VALKEY_HOST`가 모두 없을 때도 임의 포트의 disposable Valkey를 기동해 dispatcher 테스트에 연결 주소를 제공합니다. 성공과 실패 모두 shell `EXIT` trap으로 컨테이너를 정리하며, 테스트가 성공한 경우에는 스테이지 종료 전에 즉시 제거합니다. Docker가 사용 가능해야 하며 기본 이미지는 digest로 고정된 `postgres:18.6-alpine`과 `valkey/valkey:9.1.2-alpine3.24`입니다. 필요할 때만 `INTEGRATION_POSTGRES_IMAGE` 또는 `INTEGRATION_VALKEY_IMAGE`로 다른 disposable 이미지를 지정합니다.
 
@@ -24,6 +24,12 @@ LLM integration 테스트는 `CLIPROXY_API_KEY`가 없으면 skip합니다. 실�
 
 ```bash
 go vet -tags=integration \
-  ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox \
-  ./hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
+  ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
+```
+
+API `internal/youtube/canonicalwrite`의 DB 회귀는 실제 migration schema와 호출자 소유 transaction을 사용하는 일반 테스트입니다. 퇴역 shared `batchrepo`의 별도 schema 복사본과 integration-tagged 경로는 없습니다.
+
+```bash
+go test ./hololive/hololive-api/internal/youtube/canonicalwrite \
+  ./hololive/hololive-api/internal/youtube/sourceobservation
 ```

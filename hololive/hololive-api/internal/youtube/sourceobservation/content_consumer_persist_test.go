@@ -10,8 +10,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -25,7 +24,7 @@ func TestContentConsumerDoesNotRewriteAbsentCatalogRow(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := newContentTestConsumer(pool, repo, 0)
+	consumer := NewConsumerWithAbsenceGrace(repo, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-new"))); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -55,7 +54,7 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
-	consumer := newContentTestConsumer(pool, repo, 0)
+	consumer := NewConsumerWithAbsenceGrace(repo, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, contract.CompletenessComplete, "vid-s"))); err != nil {
 		t.Fatalf("publish first: %v", err)
@@ -65,7 +64,11 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 		t.Fatalf("first consume: %v", err)
 	}
 
-	contentID := polling.NormalizeContentID(domain.OutboxKindNewShort, "vid-s")
+	contentID, err := ytcontentid.ForShort("vid-s")
+	if err != nil {
+		t.Fatalf("canonical short id: %v", err)
+	}
+
 	if _, err := pool.Exec(ctx, `
 		UPDATE youtube_notification_outbox SET status = $1 WHERE kind = $2 AND content_id = $3
 	`, domain.OutboxStatusFailed, domain.OutboxKindNewShort, contentID); err != nil {
@@ -238,10 +241,6 @@ func TestContentConsumerPersistReplayedNegativeDoesNotIncrement(t *testing.T) {
 	}
 }
 
-func newContentTestConsumer(pool *pgxpool.Pool, repo *Repository, grace time.Duration) *Consumer {
-	return NewConsumerWithAbsenceGrace(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, grace)
-}
-
 func startContentPersist(t *testing.T) (*pgxpool.Pool, *Repository, *Consumer, contract.LeaseProof) {
 	t.Helper()
 
@@ -257,7 +256,7 @@ func startContentPersistGrace(t *testing.T, grace time.Duration) (*pgxpool.Pool,
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 
-	return pool, repo, newContentTestConsumer(pool, repo, grace), proof
+	return pool, repo, NewConsumerWithAbsenceGrace(repo, grace), proof
 }
 
 func publishConsumeVideos(

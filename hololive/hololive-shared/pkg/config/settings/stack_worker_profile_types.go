@@ -101,28 +101,3 @@ type AlarmWorkerProfile struct {
 	NotificationDelivery NotificationDeliveryWorkerSettings
 	YouTubeDelivery      YouTubeDeliveryWorkerSettings
 }
-
-type CollectionWorkerSettings struct {
-	AcquisitionBatch           int   `json:"acquisition_batch"`
-	AcquisitionCadenceMS       int64 `json:"acquisition_cadence_ms"`
-	LeaseTTLMS                 int64 `json:"lease_ttl_ms"`
-	RenewIntervalMS            int64 `json:"renew_interval_ms"`
-	RenewTimeoutMS             int64 `json:"renew_timeout_ms"`
-	DBTimeoutMS                int64 `json:"db_timeout_ms"`
-	CleanupTimeoutMS           int64 `json:"cleanup_timeout_ms"`
-	ProviderAdmissionTimeoutMS int64 `json:"provider_admission_timeout_ms"`
-	CollectionOverheadMS       int64 `json:"collection_overhead_ms"`
-	PublishTimeoutMS           int64 `json:"publish_timeout_ms"`
-	RetryMinMS                 int64 `json:"retry_min_ms"`
-	RetryMaxMS                 int64 `json:"retry_max_ms"`
-	ReleaseJitterMinMS         int64 `json:"release_jitter_min_ms"`
-	ReleaseJitterMaxMS         int64 `json:"release_jitter_max_ms"`
-	HolodexMaxInflight         int   `json:"holodex_max_inflight"`
-	OfficialMaxInflight        int   `json:"official_max_inflight"`
-	YouTubeJSMaxInflight       int   `json:"youtubejs_max_inflight"`
-}
-
-type YouTubeCollectorWorkerProfile struct {
-	Loaded     workercontract.LoadedProfile
-	Collection CollectionWorkerSettings
-}

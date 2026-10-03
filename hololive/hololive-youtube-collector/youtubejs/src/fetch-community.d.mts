@@ -6,10 +6,10 @@ export function fetchCommunityFeed(
     innertube?: unknown;
     postType?: unknown;
   },
-): Promise<CommunityResult>;
+): Promise<Omit<CommunityResult, "protocol_version">>;
 
 export function createInnertube(options?: {
   fetchImpl?: InnertubeFetch;
 }): Promise<unknown>;
 
-export function emptyCommunityPage(): CommunityResult;
+export function emptyCommunityPage(): Omit<CommunityResult, "protocol_version">;

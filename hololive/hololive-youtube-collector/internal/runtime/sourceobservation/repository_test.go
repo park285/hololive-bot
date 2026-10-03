@@ -15,6 +15,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
@@ -124,7 +125,7 @@ func TestHistoricalViewerPublishEqualValueNextWindowCreatesTwoObservations(t *te
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	firstProof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
-	repo := historicalViewerPublisher(pool)
+	repo := historicalViewerPublisher(t, pool)
 	first := viewerEnvelope(t, &firstProof, 1, 100)
 
 	if _, err := repo.PublishBatch(ctx, publishInput(first)); err != nil {
@@ -398,7 +399,7 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 	}
 
 	_, err = NewRepository(pool).PublishBatch(ctx, publishInput(envelope))
-	if !errors.Is(err, ErrProjectionStale) {
+	if !errors.Is(err, collection.ErrProjectionStale) {
 		t.Fatalf("disabled mid-fetch error = %v", err)
 	}
 
@@ -440,7 +441,7 @@ func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 		Observations: []contract.Envelope{*profile, *photo},
 	})
 
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("out-of-bundle error = %v", err)
 	}
 
@@ -463,7 +464,7 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 
 	first := viewerEnvelopeFor(t, &proof, 1, "video-1", 100)
 	second := viewerEnvelopeFor(t, &proof, 1, "video-2", 200)
-	_, err := historicalViewerPublisher(pool).PublishBatch(ctx, &PublishBatchInput{
+	_, err := historicalViewerPublisher(t, pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{checkpointForEnvelope(first), checkpointForEnvelope(second)},
@@ -472,7 +473,7 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 		Observations: []contract.Envelope{*first, *second},
 	})
 
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("global disabled target error = %v", err)
 	}
 
@@ -529,7 +530,7 @@ func TestStaleHolderCannotMutatePublishOrJobState(t *testing.T) {
 
 	close(resumeA)
 
-	if err := <-resultA; !errors.Is(err, ErrCollectionFenceLost) {
+	if err := <-resultA; !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale holder error = %v", err)
 	}
 
@@ -603,7 +604,7 @@ func runStaleHolderCase(t *testing.T, name, postID string) {
 	before := readCollectionJobLeaseState(ctx, t, pool, proofB.JobKey)
 
 	candidate := communityEnvelope(t, &proofA, postID)
-	if _, err := repo.PublishBatch(ctx, publishInput(candidate)); !errors.Is(err, ErrCollectionFenceLost) {
+	if _, err := repo.PublishBatch(ctx, publishInput(candidate)); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale %s error = %v", name, err)
 	}
 

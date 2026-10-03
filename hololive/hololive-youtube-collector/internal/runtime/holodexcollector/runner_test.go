@@ -12,13 +12,9 @@ import (
 	"testing"
 	"time"
 
-	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/testutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const (
@@ -77,11 +73,9 @@ func TestRunnerIgnoresViewerCountsForLiveAndSchedule(t *testing.T) {
 
 	for _, envelope := range observations {
 		assertLiveScopeWithoutViewers(t, envelope)
-	}
 
-	for _, checkpoint := range output.Checkpoints() {
-		if checkpoint.ObservationKind != contract.KindLiveSnapshot {
-			t.Fatalf("unexpected checkpoint = %#v", checkpoint)
+		if envelope.ObservationKind != contract.KindLiveSnapshot {
+			t.Fatalf("unexpected observation kind = %#v", envelope)
 		}
 	}
 
@@ -226,12 +220,12 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	firstOutput, err := collectutil.OutputFromEnvelopes(first, time.Now())
+	firstOutput, err := collection.OutputFromEnvelopes(first, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	secondOutput, err := collectutil.OutputFromEnvelopes(second, time.Now())
+	secondOutput, err := collection.OutputFromEnvelopes(second, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +345,7 @@ func TestRunnersKeepCadenceKindsSeparate(t *testing.T) {
 	}
 }
 
-func mustCollect(t *testing.T, body []byte, requested []string) collectutil.RunOutput {
+func mustCollect(t *testing.T, body []byte, requested []string) collection.RunOutput {
 	t.Helper()
 
 	output, err := NewLiveRunner(&staticFetcher{body: body}).Collect(t.Context(), holodexInput(t, requested))
@@ -362,7 +356,7 @@ func mustCollect(t *testing.T, body []byte, requested []string) collectutil.RunO
 	return output.Output()
 }
 
-func hashes(t *testing.T, output collectutil.RunOutput) string {
+func hashes(t *testing.T, output collection.RunOutput) string {
 	t.Helper()
 
 	type pair struct {
@@ -396,13 +390,13 @@ func hashes(t *testing.T, output collectutil.RunOutput) string {
 	return string(encoded)
 }
 
-func holodexInput(tb testing.TB, requested []string) *collectutil.RunInput {
+func holodexInput(tb testing.TB, requested []string) *collection.RunInput {
 	tb.Helper()
 
 	return holodexInputFor(tb, "holodex_live", requested)
 }
 
-func holodexInputFor(tb testing.TB, jobKind string, requested []string) *collectutil.RunInput {
+func holodexInputFor(tb testing.TB, jobKind string, requested []string) *collection.RunInput {
 	tb.Helper()
 
 	return holodexInputWithLiveGeneration(tb, jobKind, requested, contract.LiveSnapshotMetadataContractGeneration)
@@ -413,7 +407,7 @@ func holodexInputWithLiveGeneration(
 	jobKind string,
 	requested []string,
 	liveGeneration int64,
-) *collectutil.RunInput {
+) *collection.RunInput {
 	tb.Helper()
 
 	enabled := map[contract.ObservationKind][]string{
@@ -422,17 +416,13 @@ func holodexInputWithLiveGeneration(
 		contract.KindSchedule:       {officialScheduleSubject},
 		contract.KindChannelProfile: nil,
 	}
-	spec := joblease.JobSpec{
-		JobKey: "collector:holodex:" + jobKind + ":global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
-		CollectionJobKind: jobKind, SubjectKey: "global:" + jobKind, PollInterval: time.Minute,
-	}
 	lease := contract.LeaseProof{
 		JobKey: "collector:holodex:" + jobKind + ":global", CollectionJobKind: jobKind,
 		OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
 		ScheduledFor: time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC),
 	}
-	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: contract.ProviderHolodex, Kind: sourceobservation.JobKind(jobKind),
+	job, _ := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: contract.ProviderHolodex, Kind: collection.JobKind(jobKind),
 	})
 	generations := make(map[contract.ObservationKind]int64, len(job.Emissions()))
 
@@ -443,16 +433,22 @@ func holodexInputWithLiveGeneration(
 		}
 	}
 
-	snapshot, err := collectutil.NewContractSnapshot(job.Emissions(), generations)
+	snapshot, err := collection.NewContractSnapshot(job.Emissions(), generations)
 	if err != nil {
 		tb.Fatal(err)
 	}
 
-	targets := testutil.TargetSnapshot(tb, dbtest.NewPool(tb), &spec, job, enabled)
+	rows := make(map[contract.ObservationKind][]string, len(job.RequestedKinds()))
+	for _, kind := range job.RequestedKinds() {
+		rows[kind] = slices.Clone(enabled[kind])
+	}
 
-	lease.ProjectionGeneration = targets.Generation()
+	targets, err := collection.NewProjectionTargetSnapshot(lease.ProjectionGeneration, job.RequestedKinds(), rows, 100_000)
+	if err != nil {
+		tb.Fatal(err)
+	}
 
-	input, err := collectutil.NewRunInput(&spec, &lease, snapshot, targets, 1, 1<<20, job)
+	input, err := collection.NewRunInput(job, job.LeaseSubject(), &lease, snapshot, targets, 1, 1<<20)
 	if err != nil {
 		tb.Fatal(err)
 	}

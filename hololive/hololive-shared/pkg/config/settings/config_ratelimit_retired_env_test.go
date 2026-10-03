@@ -20,10 +20,9 @@ func TestRejectRetiredRateLimiterInstanceIDEnvIsPresenceBased(t *testing.T) {
 
 // 분산 limiter를 끄면 limiter 생성 경로가 실행되지 않는다. 그래도 키가 있으면 LoadConfig runtime 기동이 실패해야
 // 존재 기준 거절이 limiter 설정과 무관하게 유지된다.
-func TestLoadBotRuntimeRejectsRetiredInstanceIDWithDistributedLimitersDisabled(t *testing.T) {
+func TestLoadBotRuntimeRejectsRetiredInstanceIDWithDistributedLimiterDisabled(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED", "false")
-	t.Setenv("YOUTUBE_DISTRIBUTED_RATELIMIT_ENABLED", "false")
 	t.Setenv("INSTANCE_ID", "")
 
 	if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), "INSTANCE_ID is retired") {

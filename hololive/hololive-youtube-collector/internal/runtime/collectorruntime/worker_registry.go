@@ -7,11 +7,11 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func newCollectorWorkerRegistry(
-	profile *settings.YouTubeCollectorWorkerProfile,
+	profile *collectorconfig.WorkerProfile,
 	scheduler *leaseScheduler,
 ) (*workercontract.Registry, *workercontract.ProfileFileChecker, error) {
 	if profile == nil {
@@ -36,13 +36,13 @@ func newCollectorWorkerRegistry(
 
 	if scheduler != nil {
 		registration.ExecutorSnapshot = func() workercontract.ExecutorSnapshot {
-			return scheduler.executor.workerTracker.Snapshot(time.Now())
+			return scheduler.workerTracker.Snapshot(time.Now())
 		}
 		registration.QueueSnapshot = func() workercontract.QueueSnapshot {
 			snapshot := scheduler.Snapshot()
 			return workercontract.CurrentQueueSnapshot(int64(snapshot.QueueDepth), snapshot.OldestQueueAge, time.Now())
 		}
-		registration.Counters = scheduler.executor.workerTotals
+		registration.Counters = scheduler.workerTotals
 	}
 
 	if err := registry.Register(registration); err != nil {
