@@ -7,6 +7,8 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
+	"github.com/kapu/hololive-shared/pkg/cleanupctx"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -31,19 +33,28 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 		return 0, nil
 	}
 
+	channelIDs := uniqueAlarmChannelIDs(alarmRecords)
+	for _, channelID := range channelIDs {
+		if err := as.invalidateChannelSubscribers(ctx, channelID, domain.AllAlarmTypes); err != nil {
+			opErr = err
+			return 0, fmt.Errorf("invalidate subscribers before room clear: %w", err)
+		}
+	}
+
 	if deleteErr := as.deleteRoomAlarmsBeforeCacheClear(ctx, roomID); deleteErr != nil {
 		opErr = deleteErr
 		return 0, fmt.Errorf("delete room alarms before cache clear: %w", deleteErr)
 	}
 
-	channelIDs := uniqueAlarmChannelIDs(alarmRecords)
+	cacheCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+	defer cancel()
 
-	if err := as.clearRoomAlarmsCacheMutation(ctx, roomID, channelIDs); err != nil {
+	if err := as.clearRoomAlarmsCacheMutation(cacheCtx, channelIDs); err != nil {
 		opErr = err
 		return 0, fmt.Errorf("clear room alarms cache mutation: %w", err)
 	}
 
-	as.afterClearRoomAlarms(ctx, roomID, channelIDs)
+	as.afterClearRoomAlarms(roomID, channelIDs)
 
 	return len(alarmRecords), nil
 }
@@ -56,11 +67,13 @@ func (as *AlarmService) deleteRoomAlarmsBeforeCacheClear(ctx context.Context, ro
 	return nil
 }
 
-func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID string, channelIDs []string) error {
-	if err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs); err != nil {
-		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
+func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, channelIDs []string) error {
+	for _, channelID := range channelIDs {
+		if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil {
+			opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
 
-		return sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr)
+			return sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr)
+		}
 	}
 
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
@@ -72,27 +85,11 @@ func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID
 	return nil
 }
 
-func (as *AlarmService) afterClearRoomAlarms(ctx context.Context, roomID string, channelIDs []string) {
-	for _, channelID := range channelIDs {
-		as.cleanupClearedRoomAlarmChannel(ctx, roomID, channelID)
-	}
-
+func (as *AlarmService) afterClearRoomAlarms(roomID string, channelIDs []string) {
 	if as.logger != nil {
 		as.logger.Info("All alarms cleared",
 			privacylog.RoomIDAttr(roomID),
 			slog.Int("count", len(channelIDs)),
-		)
-	}
-}
-
-func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, roomID, channelID string) {
-	if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil && as.logger != nil {
-		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
-			"cleanup channel registry during room alarm clear.failed",
-			"Failed to cleanup channel registry during room alarm clear",
-			err,
-			privacylog.RoomIDAttr(roomID),
-			slog.String("channel_id", channelID),
 		)
 	}
 }

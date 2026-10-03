@@ -1,14 +1,11 @@
 package subscriptions
 
 import (
-	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -145,48 +142,6 @@ func TestMemberSubscriptionsRejectUnavailableOrInvalidTargets(t *testing.T) {
 	rooms, err := as.GetRoomAlarms(t.Context(), testRoomID)
 	require.NoError(t, err)
 	require.Empty(t, rooms)
-}
-
-func TestMemberSubscriptionRemovalRebuildsCacheAfterRefreshFailure(t *testing.T) {
-	ctx := t.Context()
-	as := newMemberSubscriptionService(t)
-	seedMemberSubscriptionChoices(t, as, map[string]domain.AlarmTypes{
-		memberSubscriptionMiraID: {domain.AlarmTypeShorts},
-		"yoinagi-neon":           {domain.AlarmTypeLive},
-	})
-
-	original := findRoomAlarmsFromRepository
-
-	t.Cleanup(func() { findRoomAlarmsFromRepository = original })
-
-	lookupErr := errors.New("remaining subscriptions lookup failed")
-	calls := 0
-
-	findRoomAlarmsFromRepository = func(ctx context.Context, repository *sharedalarm.Repository, roomID string) ([]*domain.Alarm, error) {
-		calls++
-		if calls == 2 {
-			return nil, lookupErr
-		}
-
-		return original(ctx, repository, roomID)
-	}
-
-	removed, err := as.RemoveHostAlarm(ctx, testRoomID, memberSubscriptionChannel, memberSubscriptionMiraID, nil)
-	require.ErrorIs(t, err, lookupErr)
-	require.False(t, removed)
-
-	alarms, err := as.GetRoomAlarmsWithTypes(ctx, testRoomID)
-	require.NoError(t, err)
-	require.Len(t, alarms, 1)
-	require.Equal(t, "yoinagi-neon", alarms[0].HostID)
-
-	shortsRooms, err := as.GetChannelSubscribersByType(ctx, memberSubscriptionChannel, domain.AlarmTypeShorts)
-	require.NoError(t, err)
-	require.Empty(t, shortsRooms)
-
-	liveRooms, err := as.GetChannelSubscribersByType(ctx, memberSubscriptionChannel, domain.AlarmTypeLive)
-	require.NoError(t, err)
-	require.Equal(t, []string{testRoomID}, liveRooms)
 }
 
 func TestMemberSubscriptionViewNamesEachSubscribedMember(t *testing.T) {

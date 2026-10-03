@@ -7,56 +7,41 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/valkey-io/valkey-go"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-func (as *AlarmService) removeChannelSubscribers(ctx context.Context, channelID, registryKey string, alarmTypes domain.AlarmTypes) error {
-	if len(alarmTypes) == 0 {
-		return nil
+// 호출자는 mutation mutex를 보유한다. 빈 구독 표식을 먼저 지워 positive 삭제 뒤
+// 기존 DB read-through가 가려지지 않게 하고, 모두 성공한 뒤에만 DB 변경을 시작한다.
+func (as *AlarmService) invalidateChannelSubscribers(ctx context.Context, channelID string, alarmTypes domain.AlarmTypes) error {
+	for _, alarmType := range alarmTypes {
+		if err := as.cache.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {
+			return fmt.Errorf("invalidate subscriber empty marker: type %s: %w", alarmType, err)
+		}
 	}
 
-	builder := as.cache.Builder()
-	subscriberKeys := as.channelSubscriberKeys(channelID, alarmTypes)
-
-	if err := as.executeSubscriberTypeRemoval(ctx, builder, subscriberKeys, registryKey, alarmTypes); err != nil {
-		return fmt.Errorf("execute subscriber type removal: %w", err)
-	}
-
-	cleanupKeys, err := as.collectEmptySubscriberKeys(ctx, builder, subscriberKeys, alarmTypes, "remove channel subscribers")
-	if err != nil {
-		return fmt.Errorf("collect empty subscriber keys: %w", err)
-	}
-
-	if err := as.deleteSubscriberKeys(ctx, builder, cleanupKeys, "remove channel subscribers"); err != nil {
-		return fmt.Errorf("delete subscriber keys: %w", err)
+	for _, alarmType := range alarmTypes {
+		if err := as.cache.Del(ctx, as.channelSubscribersKeyByType(channelID, alarmType)); err != nil {
+			return fmt.Errorf("invalidate subscriber set: type %s: %w", alarmType, err)
+		}
 	}
 
 	return nil
 }
 
-func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, alarms []string, registryKey string) error {
-	if len(alarms) == 0 {
-		return nil
+func (as *AlarmService) prepareAddedAlarmCache(ctx context.Context, channelID string, alarmTypes domain.AlarmTypes) error {
+	// 새 채널은 먼저 발견 가능하게 만든다. commit 전에는 DB 구독이 없으므로 수신 방이 생기지 않는다.
+	if err := as.cacheAlarmChannelRegistry(ctx, channelID); err != nil {
+		return fmt.Errorf("register channel before commit: %w", err)
 	}
 
-	builder := as.cache.Builder()
-	channelSubsKeys := as.roomChannelSubscriberKeys(alarms)
-
-	if err := as.executeSubscriberKeyRemoval(ctx, builder, channelSubsKeys, registryKey, "clear channel subscribers"); err != nil {
-		return fmt.Errorf("execute subscriber key removal: %w", err)
+	if err := as.markAlarmCacheChanged(ctx); err != nil {
+		return fmt.Errorf("clear empty registry marker before commit: %w", err)
 	}
 
-	cleanupKeys, err := as.collectEmptySubscriberKeys(ctx, builder, channelSubsKeys, nil, "clear channel subscribers")
-	if err != nil {
-		return fmt.Errorf("collect empty subscriber keys: %w", err)
-	}
-
-	if err := as.deleteSubscriberKeys(ctx, builder, cleanupKeys, "clear channel subscribers"); err != nil {
-		return fmt.Errorf("delete subscriber keys: %w", err)
+	if err := as.invalidateChannelSubscribers(ctx, channelID, alarmTypes); err != nil {
+		return fmt.Errorf("invalidate subscribers before commit: %w", err)
 	}
 
 	return nil
@@ -204,127 +189,6 @@ func (as *AlarmService) logAlarmAdded(req *domain.AddAlarmRequest, alarmTypes do
 		slog.String("member_name", req.MemberName),
 		slog.Any("alarm_types", alarmTypes),
 	)
-}
-
-func (as *AlarmService) channelSubscriberKeys(channelID string, alarmTypes domain.AlarmTypes) []string {
-	keys := make([]string, len(alarmTypes))
-	for i, alarmType := range alarmTypes {
-		keys[i] = as.channelSubscribersKeyByType(channelID, alarmType)
-	}
-
-	return keys
-}
-
-func (as *AlarmService) roomChannelSubscriberKeys(channelIDs []string) []string {
-	keys := make([]string, 0, len(channelIDs)*len(domain.AllAlarmTypes))
-	for _, channelID := range channelIDs {
-		keys = append(keys, as.channelSubscriberKeys(channelID, domain.AllAlarmTypes)...)
-	}
-
-	return keys
-}
-
-func (as *AlarmService) executeSubscriberTypeRemoval(ctx context.Context, builder valkey.Builder, subscriberKeys []string, registryKey string, alarmTypes domain.AlarmTypes) error {
-	results := as.cache.DoMulti(ctx, buildSubscriberSRemCommands(builder, subscriberKeys, registryKey)...)
-	if len(results) != len(subscriberKeys) {
-		return fmt.Errorf("remove channel subscribers: unexpected SREM result count: %d", len(results))
-	}
-
-	for i, result := range results {
-		if err := result.Error(); err != nil {
-			return fmt.Errorf("remove channel subscribers: srem type %s: %w", alarmTypes[i], err)
-		}
-	}
-
-	return nil
-}
-
-func (as *AlarmService) executeSubscriberKeyRemoval(ctx context.Context, builder valkey.Builder, subscriberKeys []string, registryKey, operation string) error {
-	results := as.cache.DoMulti(ctx, buildSubscriberSRemCommands(builder, subscriberKeys, registryKey)...)
-	if len(results) != len(subscriberKeys) {
-		return fmt.Errorf("%s: unexpected SREM result count: %d", operation, len(results))
-	}
-
-	for i, result := range results {
-		if err := result.Error(); err != nil {
-			return fmt.Errorf("%s: srem key %s: %w", operation, subscriberKeys[i], err)
-		}
-	}
-
-	return nil
-}
-
-func buildSubscriberSRemCommands(builder valkey.Builder, subscriberKeys []string, registryKey string) []valkey.Completed {
-	commands := make([]valkey.Completed, len(subscriberKeys))
-	for i, key := range subscriberKeys {
-		commands[i] = builder.Srem().Key(key).Member(registryKey).Build()
-	}
-
-	return commands
-}
-
-func buildSubscriberScardCommands(builder valkey.Builder, subscriberKeys []string) []valkey.Completed {
-	commands := make([]valkey.Completed, len(subscriberKeys))
-	for i, key := range subscriberKeys {
-		commands[i] = builder.Scard().Key(key).Build()
-	}
-
-	return commands
-}
-
-func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder valkey.Builder, subscriberKeys []string, alarmTypes domain.AlarmTypes, operation string) ([]string, error) {
-	scardCommands := buildSubscriberScardCommands(builder, subscriberKeys)
-	results := as.cache.DoMulti(ctx, scardCommands...)
-
-	if len(results) != len(scardCommands) {
-		return nil, fmt.Errorf("%s: unexpected SCARD result count: %d", operation, len(results))
-	}
-
-	cleanupKeys := make([]string, 0, len(results))
-	for i, result := range results {
-		count, err := result.AsInt64()
-		if err != nil {
-			return nil, formatSubscriberScardError(operation, subscriberKeys, alarmTypes, i, err)
-		}
-
-		if count == 0 {
-			cleanupKeys = append(cleanupKeys, subscriberKeys[i])
-		}
-	}
-
-	return cleanupKeys, nil
-}
-
-func formatSubscriberScardError(operation string, subscriberKeys []string, alarmTypes domain.AlarmTypes, index int, err error) error {
-	if len(alarmTypes) > 0 {
-		return fmt.Errorf("%s: scard type %s: %w", operation, alarmTypes[index], err)
-	}
-
-	return fmt.Errorf("%s: scard key %s: %w", operation, subscriberKeys[index], err)
-}
-
-func (as *AlarmService) deleteSubscriberKeys(ctx context.Context, builder valkey.Builder, cleanupKeys []string, operation string) error {
-	if len(cleanupKeys) == 0 {
-		return nil
-	}
-
-	cleanupCommands := make([]valkey.Completed, len(cleanupKeys))
-	for i, key := range cleanupKeys {
-		cleanupCommands[i] = builder.Del().Key(key).Build()
-	}
-
-	results := as.cache.DoMulti(ctx, cleanupCommands...)
-	if len(results) != len(cleanupCommands) {
-		return fmt.Errorf("%s: unexpected DEL result count: %d", operation, len(results))
-	}
-
-	for i, result := range results {
-		if err := result.Error(); err != nil {
-			return fmt.Errorf("%s: delete key %s: %w", operation, cleanupKeys[i], err)
-		}
-	}
-
-	return nil
 }
 
 func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, channelID string) error {

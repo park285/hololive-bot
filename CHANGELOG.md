@@ -11,6 +11,8 @@
 - YouTube 방송 제목·예정 시각을 필드별 관측 시각으로 갱신합니다. 늦게 도착한 과거 관측이나 같은 시각의 충돌은 정본 값을 덮지 않습니다. migration 257이 nullable `title_observed_at`을 추가하며 과거 시각은 추정하지 않습니다. 새 API 실행 전에 이 migration이 필요합니다.
 - 알림 구독 set이 유실됐을 때 새 구독 하나로 부분 캐시를 만들지 않고 기존 DB 조회 경로를 유지합니다. 채널 registry 삭제는 DB의 잔여 구독으로 판단하며, registry 자체가 유실되면 전체 DB 구독으로 복구합니다.
 - 방송 checker와 생일 방송 후보 조회가 `last_seen_at` 대신 LIVE의 `status_observed_at`, UPCOMING의 `schedule_observed_at`으로 최신성을 판정합니다. 관측 시각이 없거나 현재보다 미래이면 후보로 사용하지 않으며, 새 일정의 `last_seen_at`에는 예약 시각이 아닌 수신 시각을 기록합니다. LIVE guardrail 로그와 생일 알림 runbook도 실제 관측 시각에 맞춥니다.
+- 구독 변경 전에 종류별 캐시를 무효화하고, DB commit 뒤 후처리를 요청 취소와 분리된 최대 5초 context로 수행합니다. commit 직후 취소·캐시 장애가 나도 오래된 수신자 집합이 남지 않으며, 무효화 실패 시에는 DB를 변경하지 않습니다.
+- Holodex·생일 멤버 조회를 기다린 뒤 관측 최신성 기준 시각을 다시 측정합니다. 대기 중 들어온 정상 관측이 주기 시작 시각보다 늦다는 이유로 제외되던 회귀를 고칩니다.
 - 7.2.0에서 hololive 사본만 바꿨던 NilAway 모델 빌드 입력(`scripts/ci/nilaway-models`)을 stack 정본 `tools/nilaway`와 다시 맞춥니다. stack 계약 검사가 두 사본의 차이로 메타 저장소 게시를 막았습니다. 같은 변경에서 지운 검사가 남긴, 쓰이지 않는 테스트 변수 하나도 지웁니다.
 
 ## v7.2.2 - 2026-10-02

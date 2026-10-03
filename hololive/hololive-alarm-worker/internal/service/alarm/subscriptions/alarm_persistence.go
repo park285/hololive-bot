@@ -196,7 +196,7 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 	return mutationErr
 }
 
-// 이 메서드는 앱 시작 시 한 번만 호출되며, 이후 런타임 중에는 Valkey만 사용한다.
+// 구독 변경과 직렬화해 DB 정본으로 캐시 전체를 재구성한다.
 func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 	startedAt := as.lockCacheMutation("warm")
 	defer as.cacheMutationMu.Unlock()

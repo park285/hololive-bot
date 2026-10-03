@@ -8,6 +8,7 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
+	"github.com/kapu/hololive-shared/pkg/cleanupctx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
@@ -45,12 +46,26 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		return false, nil
 	}
 
-	if persistErr := as.persistAddAlarmMutation(ctx, &mutation); persistErr != nil {
-		opErr = persistErr
-		return false, fmt.Errorf("persist add alarm mutation: %w", persistErr)
+	// commit 이후 요청이 취소되거나 cache가 끊겨도 오래된 positive set을 읽지 않게 한다.
+	if err := as.prepareAddedAlarmCache(ctx, mutation.record.ChannelID, mutation.newlyAddedTypes); err != nil {
+		opErr = err
+		return false, fmt.Errorf("prepare alarm cache before commit: %w", err)
 	}
 
-	if err := as.cacheAddAlarmMutation(ctx, &mutation); err != nil {
+	if persistErr := as.persistAddAlarmMutation(ctx, &mutation); persistErr != nil {
+		cleanupCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+		defer cancel()
+
+		// commit 결과가 불명확해도 DB를 다시 쓰지 않고 registry만 실제 구독에 맞춘다.
+		opErr = errors.Join(persistErr, as.cleanupChannelRegistryIfEmpty(cleanupCtx, mutation.record.ChannelID))
+
+		return false, fmt.Errorf("persist add alarm mutation: %w", opErr)
+	}
+
+	cacheCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+	defer cancel()
+
+	if err := as.cacheAddAlarmMutation(cacheCtx, &mutation); err != nil {
 		opErr = err
 		return false, fmt.Errorf("cache add alarm mutation: %w", err)
 	}
@@ -61,7 +76,7 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 }
 
 func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) error {
-	err := as.cacheAlarm(ctx, &mutation.cacheRecord)
+	err := as.cacheAlarm(ctx, mutation.record)
 	if err == nil {
 		return nil
 	}
@@ -114,13 +129,8 @@ func (as *AlarmService) prepareAddAlarmMutation(ctx context.Context, req *domain
 	}
 
 	record := buildAlarmRecord(req, mergedTypes)
-	cacheRecord := *record
 
-	if existing != nil {
-		cacheRecord.AlarmTypes = newlyAddedTypes
-	}
-
-	return addAlarmMutation{record: record, cacheRecord: cacheRecord, newlyAddedTypes: newlyAddedTypes, existing: existing != nil}, true, nil
+	return addAlarmMutation{record: record, newlyAddedTypes: newlyAddedTypes, existing: existing != nil}, true, nil
 }
 
 func addAlarmTypeMutation(existing *domain.Alarm, requestedTypes domain.AlarmTypes) (merged, newlyAdded domain.AlarmTypes, err error) {
