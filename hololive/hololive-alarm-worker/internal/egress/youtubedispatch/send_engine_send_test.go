@@ -41,7 +41,8 @@ func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 
 	cache := cachemocks.NewLenientClient()
 
-	return newDispatcherForTest(t, nil, cache, sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	// 기본 renderer는 dispatcher의 seed DB를 함께 사용해 같은 테스트의 중복 DB를 만들지 않는다.
+	return newDispatcherForTest(t, nil, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -1345,10 +1346,6 @@ func (b *safeBuffer) String() string {
 
 func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *template.Renderer) (*Dispatcher, *safeBuffer) {
 	t.Helper()
-
-	if renderer == nil {
-		renderer = newSendTestRenderer(t)
-	}
 
 	cache := cachemocks.NewLenientClient()
 	logBuffer := &safeBuffer{}
