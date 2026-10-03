@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -108,20 +109,52 @@ func seedClaimBacklog(t *testing.T, pool *pgxpool.Pool) {
 	require.NoError(t, err)
 }
 
-// explainClaimBacklog는 PREPARE/EXECUTE로 plan_cache_mode가 실제 generic plan에도 적용되게 하고,
-// 판정 전에 prepared statement를 해제하고 롤백해 연결을 pool에 돌려준다.
+// explainClaimBacklog는 PREPARE/EXECUTE로 plan_cache_mode가 실제 generic plan에도 적용되게 한다.
+// 준비된 statement는 세션 객체라 롤백으로 사라지지 않고, statement_timeout 등으로 트랜잭션이 중단되면
+// 같은 트랜잭션 안에서 DEALLOCATE할 수도 없다(25P02). 그래서 전용 연결에서 롤백한 뒤 트랜잭션 밖에서 해제하고,
+// 해제에 실패한 연결은 pool에 돌려주지 않고 닫아 다음 subtest가 같은 이름을 물려받지 않게 한다.
+// 원래 오류와 정리 오류는 모두 보존한다.
 func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode string, kinds []string) (raw []byte, err error) {
-	tx, err := pool.Begin(ctx)
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire: %w", err)
+	}
+
+	var tx pgx.Tx
+
+	prepared := false
+
+	// 측정 취소와 분리된 유한 예산에서 롤백한 뒤 세션의 statement를 해제한다.
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+
+		defer cancel()
+
+		if tx != nil {
+			if rollbackErr := tx.Rollback(cleanupCtx); rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf("rollback explain: %w", rollbackErr))
+			}
+		}
+
+		if prepared {
+			if _, deallocErr := conn.Exec(cleanupCtx, "DEALLOCATE claim_backlog_plan"); deallocErr != nil {
+				err = errors.Join(err, fmt.Errorf("deallocate claim: %w", deallocErr))
+
+				if closeErr := conn.Hijack().Close(cleanupCtx); closeErr != nil {
+					err = errors.Join(err, fmt.Errorf("close leaked claim connection: %w", closeErr))
+				}
+
+				return
+			}
+		}
+
+		conn.Release()
+	}()
+
+	tx, err = conn.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
 	}
-
-	// claim은 행을 바꾸므로 측정 뒤 항상 롤백한다.
-	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			err = errors.Join(err, fmt.Errorf("rollback explain: %w", rollbackErr))
-		}
-	}()
 
 	if _, err := tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode); err != nil {
 		return nil, fmt.Errorf("set plan cache mode: %w", err)
@@ -135,17 +168,13 @@ func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode string, k
 		return nil, fmt.Errorf("prepare claim: %w", err)
 	}
 
-	explainErr := tx.QueryRow(ctx, fmt.Sprintf(
+	prepared = true
+
+	if err := tx.QueryRow(ctx, fmt.Sprintf(
 		"EXPLAIN (ANALYZE, FORMAT JSON) EXECUTE claim_backlog_plan('{%s}', 4, 'test-plan', '%s', 60000, %d)",
 		strings.Join(kinds, ","), strings.Repeat("a", 64), MaxAttempts,
-	)).Scan(&raw)
-
-	if _, err := tx.Exec(ctx, "DEALLOCATE claim_backlog_plan"); err != nil {
-		return nil, fmt.Errorf("deallocate claim: %w", err)
-	}
-
-	if explainErr != nil {
-		return nil, fmt.Errorf("explain claim: %w", explainErr)
+	)).Scan(&raw); err != nil {
+		return nil, fmt.Errorf("explain claim: %w", err)
 	}
 
 	return raw, nil

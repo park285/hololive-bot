@@ -1,7 +1,11 @@
 WITH replay_epoch AS MATERIALIZED (
+    -- singleton boolean PRIMARY KEY + CHECK (singleton)이라 행은 최대 1개다. LIMIT 1은 결과를 바꾸지 않고 그 상한을
+    -- planner에 알린다. 없으면 분석 전 빈 테이블 추정(400행)이 active_backlog anti join·replay 만료 join에 곱해져
+    -- 총 비용이 64만~193만으로 부풀고(실제 0행), JIT inline·optimize 임계를 넘어 claim 1회 JIT만 0.5~0.8초가 들었다.
     SELECT cutoff_received_at
     FROM source_observation_replay_epoch
     WHERE singleton
+    LIMIT 1
 ), active_backlog AS MATERIALIZED (
     -- 활성 queue(PENDING·PROCESSING) 행을 한 번만 읽어 claim 판정 재료를 모은다.
     -- 같은 채널·종류 목록의 선두 판정에는 차단된 후속 목록까지 포함한 활성 행 전체가 필요하므로 이 단일 pass는

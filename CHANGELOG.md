@@ -15,6 +15,10 @@
   검증을 합류합니다. 취소된 미발송 작업은 재큐잉하고 이미 발송된 작업의 결과 불명은 유지합니다.
 - API·alarm-worker·shared의 `iris-client-go/v3`를 검증된 v3.0.4로 올려 webhook body timeout의
   `408` 재시도 계약을 반영합니다.
+- replay epoch의 실제 단일행 제약을 claim planner에도 명시하여 빈 epoch 테이블의 과대 추정과
+  불필요한 JIT 최적화를 제거합니다. 5만 행 backlog 실측은 custom 1,253→161ms,
+  generic 697→160ms이며, 1초 제한·방문 행 예산·JIT 설정은 유지합니다. 실패한 EXPLAIN의
+  원래 오류를 보존하고 rollback 뒤 prepared statement를 정리하여 다음 조회를 오염시키지 않습니다.
 
 - 수집 projection의 구조적 membership과 `not_before` eligibility를 분리합니다. migration 259의 CURRENT guard·job scope·연속 membership fence로 무관한 세대 교체는 진행 중인 수집을 취소하지 않고, 자기 대상 변경·제거/재추가와 이전 owner는 계속 거부합니다. 대상 상한 초과는 잘라서 발행하지 않고 마지막 정상 projection을 유지한 채 오류로 드러냅니다.
 - 일반 영상 목록 generation 2와 migration 260의 부분 목록 기준·항목별 pending 증거를 도입합니다. 목록 두 RPC 뒤 기존 limiter 안에서 player RPC 최대 두 번으로 게시 시각/최초공개를 확인합니다. 첫 기준 목록과 과거 재등장은 조용히 저장하고, 근거가 나중에 확인된 신규 영상·새 최초공개만 한 번 알립니다. 기존 영상·관측을 자동 backfill하지 않습니다.
