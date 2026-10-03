@@ -28,8 +28,8 @@ import (
 	"testing"
 	"time"
 
+	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func TestBuildActiveMemberIndex(t *testing.T) {
@@ -40,7 +40,7 @@ func TestBuildActiveMemberIndex(t *testing.T) {
 		{ChannelID: "UC3", Name: "C"},
 	}
 
-	ids, names := sharedserver.BuildActiveMemberIndex(members)
+	ids, names := adminhandlers.BuildActiveMemberIndex(members)
 	if len(ids) != 2 {
 		t.Fatalf("len(ids)=%d want=2 ids=%v", len(ids), ids)
 	}
@@ -123,7 +123,7 @@ func TestMemberToChannelResponse(t *testing.T) {
 	tests := []struct {
 		name     string
 		member   *domain.Member
-		expected *sharedserver.ChannelResponse
+		expected *adminhandlers.ChannelResponse
 	}{
 		{
 			name:     "nil member",
@@ -137,7 +137,7 @@ func TestMemberToChannelResponse(t *testing.T) {
 				Name:      "Test Member",
 				Photo:     "https://example.com/photo.jpg",
 			},
-			expected: &sharedserver.ChannelResponse{
+			expected: &adminhandlers.ChannelResponse{
 				ID:    "UC123",
 				Name:  "Test Member",
 				Photo: new("https://example.com/photo.jpg"),
@@ -150,7 +150,7 @@ func TestMemberToChannelResponse(t *testing.T) {
 				Name:      "No Photo Member",
 				Photo:     "",
 			},
-			expected: &sharedserver.ChannelResponse{
+			expected: &adminhandlers.ChannelResponse{
 				ID:    "UC456",
 				Name:  "No Photo Member",
 				Photo: nil,
@@ -160,13 +160,13 @@ func TestMemberToChannelResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := sharedserver.MemberToChannelResponse(tt.member)
+			got := adminhandlers.MemberToChannelResponse(tt.member)
 			assertChannelResponse(t, got, tt.expected)
 		})
 	}
 }
 
-func assertChannelResponse(t *testing.T, got, expected *sharedserver.ChannelResponse) {
+func assertChannelResponse(t *testing.T, got, expected *adminhandlers.ChannelResponse) {
 	t.Helper()
 
 	if expected == nil {

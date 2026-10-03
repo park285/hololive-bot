@@ -2,13 +2,13 @@ package modules
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/providers/dbresource"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -19,15 +19,18 @@ type InfraModule struct {
 	Postgres         database.Client
 	MemberRepository *member.Repository
 	MemberCache      *member.Cache
+	StopMemberCache  func()
 	Cleanup          func()
 }
 
-func BuildInfraModule(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *InfraModule, retErr error) {
-	if appConfig == nil {
-		return nil, errors.New("build infra module: config is nil")
-	}
+// InfraOptions는 infra 생성이 실제로 소비하는 cache·DB 설정만 담는다.
+type InfraOptions struct {
+	Valkey   settings.ValkeyConfig
+	Postgres settings.PostgresConfig
+}
 
-	cacheResources, cleanupCache, err := buildInfraCacheResources(ctx, appConfig, logger)
+func BuildInfraModule(ctx context.Context, options InfraOptions, logger *slog.Logger) (_ *InfraModule, retErr error) {
+	cacheResources, cleanupCache, err := buildInfraCacheResources(ctx, options.Valkey, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build infra cache resources: %w", err)
 	}
@@ -36,7 +39,7 @@ func BuildInfraModule(ctx context.Context, appConfig *settings.Config, logger *s
 		cleanupInfraOnError(retErr, cleanupCache)
 	}()
 
-	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, appConfig, logger)
+	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, &options.Postgres, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build infra database resources: %w", err)
 	}
@@ -59,10 +62,10 @@ func BuildInfraModule(ctx context.Context, appConfig *settings.Config, logger *s
 
 func buildInfraCacheResources(
 	ctx context.Context,
-	appConfig *settings.Config,
+	valkeyConfig settings.ValkeyConfig,
 	logger *slog.Logger,
 ) (*providers.CacheResources, func(), error) {
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, appConfig.Valkey, logger)
+	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, valkeyConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide cache resources: %w", err)
 	}
@@ -72,10 +75,10 @@ func buildInfraCacheResources(
 
 func buildInfraDatabaseResources(
 	ctx context.Context,
-	appConfig *settings.Config,
+	postgresConfig *settings.PostgresConfig,
 	logger *slog.Logger,
-) (*dbresource.Resources, func(), error) {
-	databaseResources, cleanupDB, err := dbresource.Provide(ctx, &appConfig.Postgres, logger)
+) (*databaseproviders.DatabaseResources, func(), error) {
+	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, postgresConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide database resources: %w", err)
 	}
@@ -111,13 +114,16 @@ func newInfraModule(
 	cleanupDB func(),
 	cleanupCache func(),
 ) *InfraModule {
+	stopMemberCache := sync.OnceFunc(memberCache.Close)
+
 	return &InfraModule{
 		Cache:            cacheService,
 		Postgres:         postgresService,
 		MemberRepository: memberRepository,
 		MemberCache:      memberCache,
-		Cleanup: func() {
-			memberCache.Close()
+		StopMemberCache:  stopMemberCache,
+		Cleanup: sync.OnceFunc(func() {
+			stopMemberCache()
 
 			if cleanupDB != nil {
 				cleanupDB()
@@ -126,6 +132,6 @@ func newInfraModule(
 			if cleanupCache != nil {
 				cleanupCache()
 			}
-		},
+		}),
 	}
 }

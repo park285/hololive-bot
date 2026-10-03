@@ -9,17 +9,17 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
-	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -28,7 +28,7 @@ import (
 
 func buildNotificationEgress(
 	ctx context.Context,
-	appConfig *alarmworker.RuntimeConfig,
+	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -79,7 +79,7 @@ func buildNotificationSender(client egress.IrisClient, markdownReplies bool, roo
 
 func buildEgressRunners(
 	ctx context.Context,
-	appConfig *alarmworker.RuntimeConfig,
+	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
 	messageStrings *messagestrings.Store,
@@ -93,7 +93,7 @@ func buildEgressRunners(
 
 	runners = append(runners, workerruntime.NamedScheduler{
 		Name:      "alarm-dispatch-maintenance",
-		Scheduler: dispatchrun.NewMaintenanceRunner(infra, appConfig.DispatchRetention, logger),
+		Scheduler: alarmdispatch.NewMaintenanceRunner(infra, appConfig.DispatchRetention, logger),
 	})
 
 	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다(DEC-20260926-hololive-outbox-v3-convergence).
@@ -235,12 +235,12 @@ func buildAlarmDispatchRunner(
 	ctx context.Context,
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
-	sender dispatchrun.Sender,
+	sender alarmdispatch.Sender,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) (workerruntime.Scheduler, error) {
-	if err := dispatchrun.ValidateAlarmShortLinkConfig(appConfig.Notification.AlarmShortLinkBaseURL); err != nil {
+	if err := alarmdispatch.ValidateAlarmShortLinkConfig(appConfig.Notification.AlarmShortLinkBaseURL); err != nil {
 		return nil, fmt.Errorf("validate alarm dispatch short links: %w", err)
 	}
 
@@ -266,7 +266,7 @@ func buildAlarmDispatchRunner(
 		config.Members = providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 	}
 
-	wakeupWaiter, err := dispatchrun.NewWakeupWaiterWithConfig(infra.Cache, logger, dispatchrun.WakeupConfig{
+	wakeupWaiter, err := alarmdispatch.NewWakeupWaiterWithConfig(infra.Cache, logger, alarmdispatch.WakeupConfig{
 		WakeupEnabled: appConfig.AlarmWorkerProfile.AlarmDispatch.WakeupEnabled,
 		PollInterval:  durationMS(appConfig.AlarmWorkerProfile.AlarmDispatch.PollIntervalMS),
 		BackoffMin:    durationMS(appConfig.AlarmWorkerProfile.AlarmDispatch.IdleBackoffMinMS),
@@ -276,7 +276,7 @@ func buildAlarmDispatchRunner(
 		return nil, fmt.Errorf("wakeup waiter with config: %w", err)
 	}
 
-	return dispatchrun.NewRunner(
+	return alarmdispatch.NewRunner(
 		consumer,
 		sender,
 		template.NewRenderer(infra.Postgres.GetPool(), logger),
@@ -307,11 +307,11 @@ func newAlarmDispatchConsumer(appConfig *settings.Config, infra *sharedmodules.I
 	return consumer, nil
 }
 
-func alarmDispatchRunnerConfig(appConfig *settings.Config) dispatchrun.RunnerConfig {
+func alarmDispatchRunnerConfig(appConfig *settings.Config) alarmdispatch.RunnerConfig {
 	profile := appConfig.AlarmWorkerProfile.AlarmDispatch
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["alarm_dispatch"]
 
-	return dispatchrun.RunnerConfig{
+	return alarmdispatch.RunnerConfig{
 		ShortLinkBaseURL:  appConfig.Notification.AlarmShortLinkBaseURL,
 		MaxBatch:          profile.MaxBatch,
 		MaxBatchesPerWake: profile.MaxBatchesPerWake,

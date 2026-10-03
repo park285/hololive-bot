@@ -11,21 +11,21 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/readiness"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
-	"github.com/kapu/hololive-alarm-worker/internal/service/notification/alarmservice"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -40,7 +40,7 @@ const (
 
 type alarmFoundation struct {
 	HolodexService *holodexprovider.Service
-	AlarmService   *alarmservice.AlarmService
+	AlarmService   *subscriptions.AlarmService
 	Outbox         dispatchoutbox.Writer
 }
 
@@ -52,7 +52,7 @@ func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err er
 	return fmt.Errorf("build alarm worker runtime: %s: %w", stage, err)
 }
 
-func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *alarmworker.RuntimeConfig, logger *slog.Logger) (*workerruntime.AlarmWorkerRuntime, error) {
+func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *workerconfig.RuntimeConfig, logger *slog.Logger) (*workerruntime.AlarmWorkerRuntime, error) {
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
@@ -62,7 +62,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *alarmworker.Runtime
 		return nil, errors.New("config must not be nil")
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig.Config, logger)
+	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build alarm worker runtime: build infra module: %w", err)
 	}
@@ -77,7 +77,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *alarmworker.Runtime
 
 func buildAlarmWorkerRuntimeFromInfra(
 	ctx context.Context,
-	appConfig *alarmworker.RuntimeConfig,
+	appConfig *workerconfig.RuntimeConfig,
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
 ) (runtime *workerruntime.AlarmWorkerRuntime, err error) {
@@ -316,7 +316,7 @@ func buildRuntimeScheduler(
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(alarmscheduler.Dependencies{
 		Cache:          infra.Cache,
 		HolodexService: foundation.HolodexService,
-		AlarmCRUD:      foundation.AlarmService,
+		AlarmState:     foundation.AlarmService,
 		Postgres:       infra.Postgres,
 		Notification:   appConfig.Notification,
 		Outbox:         foundation.Outbox,
@@ -367,7 +367,7 @@ func buildAlarmFoundation(
 		return nil, fmt.Errorf("resolve alarm target minutes: %w", err)
 	}
 
-	alarmService, err := alarmservice.NewAlarmService(infra.Cache, memberData, alarmRepository, logger, resolved)
+	alarmService, err := subscriptions.NewAlarmService(infra.Cache, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}
@@ -412,7 +412,7 @@ func buildAlarmHolodexService(
 	return holodexService, nil
 }
 
-func warmAlarmService(ctx context.Context, alarmService *alarmservice.AlarmService, logger *slog.Logger) {
+func warmAlarmService(ctx context.Context, alarmService *subscriptions.AlarmService, logger *slog.Logger) {
 	if err := alarmService.WarmCacheFromDB(ctx); err != nil {
 		logger.Warn("Failed to warm alarm cache from DB", slog.Any("error", err))
 

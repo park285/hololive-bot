@@ -16,7 +16,7 @@ import (
 
 	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 var readinessHTTPStatusTable = map[ReadinessState]struct {

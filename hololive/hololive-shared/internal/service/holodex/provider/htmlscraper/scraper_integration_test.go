@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 )
 
 func TestOfficialScheduleAPILiveIntegration(t *testing.T) {
@@ -22,7 +23,7 @@ func TestOfficialScheduleAPILiveIntegration(t *testing.T) {
 		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialSchedule:     config,
 		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
-		identityIndex:        officialScheduleIdentityIndex{},
+		identityIndex:        officialidentity.Index{},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

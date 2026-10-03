@@ -6,6 +6,8 @@ YouTube 컬렉터의 구조, 성능, 컨벤션, 중복 구현과 불필요한 �
 
 이 문서는 2026-10-02 코드 분석과 같은 날의 적대적 리뷰 결과를 문서화한 설계와 실행 기록입니다. 아래 분석은 수정 전 상태를 설명하며, 사용자 요청에 따른 구현·검증 진행은 **구현 진행 기록** 절에 구분합니다. 현재 런타임 소유권은 [PROJECT_MAP](../current/PROJECT_MAP.md), [SERVICE_OWNERSHIP](../current/SERVICE_OWNERSHIP.md), [CONTRACT_MAP](../current/CONTRACT_MAP.md)을 따릅니다. `sourceobservation`·설정 loader·`providers` 이관의 실행 계획은 [알람 워커와 API 공유 모듈 리팩토링안](2026-10-02-alarm-worker-api-shared-refactoring.md)이 소유하며, 이 문서는 해당 이관에서 collector가 보존해야 할 조건만 기록합니다.
 
+공유 패키지 이관의 후속 최종 경로와 통합 검증은 [Hololive 통합 리팩토링 계획](2026-10-02-hololive-api-refactoring.md)과 현재 소유권·계약 문서를 따릅니다. 아래 2026-10-02 인계 기록의 `sourceobservation/consume`·`providers/dbresource`·loader 미이관과 51→36 그래프 수치는 당시 단계의 결과이며, 현재 코드 경로나 후속 구현의 완료 판정을 대신하지 않습니다.
+
 ## 구현 진행 기록
 
 2026-10-02 사용자 요청으로 독립 구현 범위(1·2·4단계와 helper 수명주기)를 완료했습니다. `executing-plans`, `modern-go-guidelines:use-modern-go`, `modern-javascript-typescript`를 적용했으며, 추가 요청에 따라 병렬 구현·검토 작업자는 `gpt-6-astra`를 사용했습니다. 조건부 작업과 다른 계획 소유의 이관은 아래에 별도로 남깁니다.
@@ -27,7 +29,7 @@ YouTube 컬렉터의 구조, 성능, 컨벤션, 중복 구현과 불필요한 �
 - Retry-After 전달과 Holodex 요청 병합·큰 queue 최적화는 문서에 명시한 운영/측정 근거가 확보된 경우에만 진행합니다.
 - publish/consume·설정 loader·providers 이관은 연관 문서의 소유 범위이며 여기서 별도로 실행하지 않습니다. 이관에 필요한 collector 보존 조건은 위 문서와 이 문서의 소유권 절을 따릅니다.
 - 배포, 운영 상태/데이터 변경과 Git 게시는 이 작업에 포함하지 않습니다.
-- 이 구현은 2026-10-02 [알람 워커와 API 공유 모듈 리팩토링안](2026-10-02-alarm-worker-api-shared-refactoring.md)의 branch로 인계해 함께 커밋·게시합니다. 5단계 중 publish/consume 분리와 `providers` DB 초기화 분리는 그 계획이 실행했습니다(`sourceobservation`·`sourceobservation/consume`, `providers/dbresource`). 설정 loader 이동은 `internal/load` 전체 공개가 필요해 하지 않았습니다. 이관 뒤 collector가 링크하는 shared 패키지는 51개에서 36개로 줄었습니다.
+- 당시 branch 인계·구현 기록: 이 구현은 2026-10-02 [알람 워커와 API 공유 모듈 리팩토링안](2026-10-02-alarm-worker-api-shared-refactoring.md)의 branch로 인계해 함께 커밋·게시합니다. 5단계 중 publish/consume 분리와 `providers` DB 초기화 분리는 그 계획이 실행했습니다(`sourceobservation`·`sourceobservation/consume`, `providers/dbresource`). 설정 loader 이동은 `internal/load` 전체 공개가 필요해 하지 않았습니다. 이관 뒤 collector가 링크하는 shared 패키지는 51개에서 36개로 줄었습니다.
 
 운영 확인 구간은 `2026-10-01T01:56:59Z ≤ time < 2026-10-02T01:56:59Z`(KST 10/1 10:56:59~10/2 10:56:59)입니다. 4개 collector의 최신 동기화 로그가 원격 원본 파일의 크기·수정 시각과 일치함을 확인하고, native journal(a/d)과 Docker logs(b/c)를 같은 구간으로 조회했습니다. `helper_internal_invariant`, `youtube collector scheduler fatal`, upstream 429 및 Retry-After 언급은 각 0건입니다. 이는 해당 로그 구간의 관찰이며 일반적인 발생 부재를 증명하지 않습니다. 활성 파일의 과거 `retry_after` 언급은 Holodex 오류 detail의 JSON 필드였으며 YouTube 응답 헤더 근거가 아닙니다. 따라서 Retry-After 전달의 착수 조건은 충족하지 않았습니다. 운영 변경·DB 조회·새 YouTube 요청은 수행하지 않았습니다.
 

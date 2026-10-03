@@ -6,9 +6,9 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -182,7 +182,7 @@ func (r *ContentRunner) fetchKind(
 		return nil, fmt.Errorf("generation: %w", err)
 	}
 
-	completeness, continuity, err := collectutil.PaginationOf(&result.Pagination)
+	completeness, continuity, err := PaginationOf(&result.Pagination)
 	if err != nil {
 		return nil, fmt.Errorf("pagination of: %w", err)
 	}

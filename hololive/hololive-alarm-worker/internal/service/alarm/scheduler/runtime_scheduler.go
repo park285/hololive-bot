@@ -29,13 +29,12 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -75,11 +74,17 @@ type RuntimeScheduler struct {
 }
 
 // Dependencies는 모듈 내부 스케줄러 조립에 필요한 서비스와 실행 설정입니다.
-// AlarmCRUD는 설정 갱신과 HTTP 경로에서 사용하는 동일 서비스여야 합니다.
+// AlarmState는 설정 갱신과 HTTP 경로에서 사용하는 동일 서비스여야 합니다.
+// AlarmState는 scheduler가 사용하는 target 조회와 캐시 재구성 포트입니다.
+type AlarmState interface {
+	targetMinutesSource
+	alarmCacheWarmer
+}
+
 type Dependencies struct {
 	Cache          cache.Client
 	HolodexService *holodexprovider.Service
-	AlarmCRUD      domain.AlarmCRUD
+	AlarmState     AlarmState
 	Postgres       database.Client
 	Notification   settings.NotificationConfig
 	Outbox         dispatchoutbox.Writer
@@ -89,13 +94,13 @@ type Dependencies struct {
 
 // NewRuntimeScheduler는 의존성을 검증하고 루프를 구성하며 실행은 시작하지 않습니다.
 func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
-	if err := validateRuntimeSchedulerDeps(deps.Cache, deps.HolodexService, deps.AlarmCRUD); err != nil {
+	if err := validateRuntimeSchedulerDeps(deps.Cache, deps.HolodexService, deps.AlarmState); err != nil {
 		return nil, fmt.Errorf("validate runtime scheduler deps: %w", err)
 	}
 
 	logger := runtimeSchedulerLogger(deps.Logger)
 
-	targetMinutes := sharedchecker.NormalizeTargetMinutes(deps.AlarmCRUD.GetTargetMinutes())
+	targetMinutes := targetpolicy.NormalizeTargetMinutes(deps.AlarmState.GetTargetMinutes())
 	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(deps.Notification.CheckInterval)
 	tierScheduler := tier.NewTieredScheduler(logger)
 	dedupService := dedup.NewService(deps.Cache, targetMinutes, logger)
@@ -121,7 +126,7 @@ func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
 
-	return newRuntimeSchedulerInstance(deps.Cache, deps.AlarmCRUD, youtubeChecker, notifierService, dedupService, youtubeInterval, logger), nil
+	return newRuntimeSchedulerInstance(deps.Cache, deps.AlarmState, youtubeChecker, notifierService, dedupService, youtubeInterval, logger), nil
 }
 
 func newRuntimeSchedulerYouTubeChecker(
@@ -170,7 +175,7 @@ func runtimeSchedulerLogger(logger *slog.Logger) *slog.Logger {
 func validateRuntimeSchedulerDeps(
 	cacheClient cache.Client,
 	holodexService *holodexprovider.Service,
-	alarmCRUD domain.AlarmCRUD,
+	alarmState AlarmState,
 ) error {
 	if cacheClient == nil {
 		return errors.New("new runtime scheduler: cache service is nil")
@@ -180,7 +185,7 @@ func validateRuntimeSchedulerDeps(
 		return errors.New("new runtime scheduler: holodex service is nil")
 	}
 
-	if alarmCRUD == nil {
+	if alarmState == nil {
 		return errors.New("new runtime scheduler: alarm CRUD is nil")
 	}
 
@@ -213,7 +218,7 @@ func newRuntimeSchedulerQueuePublisher(
 
 func newRuntimeSchedulerInstance(
 	cacheClient cache.Client,
-	alarmCRUD domain.AlarmCRUD,
+	alarmState AlarmState,
 	youtubeChecker *checking.YouTubeChecker,
 	notifierService checking.Sender,
 	dedupService targetMinutesUpdater,
@@ -227,8 +232,8 @@ func newRuntimeSchedulerInstance(
 
 		youtubeTargetUpdater: youtubeChecker,
 		dedupTargetUpdater:   dedupService,
-		targetMinutesSource:  alarmCRUD,
-		alarmCacheWarmer:     alarmCRUD,
+		targetMinutesSource:  alarmState,
+		alarmCacheWarmer:     alarmState,
 
 		youtubeInterval: youtubeInterval,
 

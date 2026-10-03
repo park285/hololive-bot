@@ -3,12 +3,8 @@
 package dispatchops
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -20,48 +16,10 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 기존 dispatchoutbox 통합 테스트와 같은 마이그레이션 정본을 사용합니다.
+// setupOpsIntegration은 현재 전체 production migration을 적용한 격리 DB를 사용한다.
 func setupOpsIntegration(t *testing.T) (*Repository, *pgxpool.Pool) {
 	t.Helper()
-	pool := dbtest.NewBlankPool(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	if _, err := pool.Exec(ctx, "CREATE TYPE alarm_type AS ENUM ('LIVE', 'COMMUNITY', 'SHORTS')"); err != nil {
-		t.Fatal(err)
-	}
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("source path unavailable")
-	}
-	root := filepath.Dir(file)
-	for {
-		if _, err := os.Stat(filepath.Join(root, "hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/058_create_alarm_dispatch_outbox.sql")); err == nil {
-			break
-		}
-		parent := filepath.Dir(root)
-		if parent == root {
-			t.Fatal("repository root not found")
-		}
-		root = parent
-	}
-	for _, migration := range []string{
-		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/058_create_alarm_dispatch_outbox.sql",
-		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/059_harden_alarm_dispatch_outbox.sql",
-		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/065_record_alarm_dispatch_event_collisions.sql",
-		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/118_alarm_dispatch_state_shape_check.sql",
-		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/122_alarm_dispatch_last_error_size_check.sql",
-		"hololive/hololive-api/scripts/migrations/141_alarm_dispatch_send_units.sql",
-		"hololive/hololive-api/scripts/migrations/142_alarm_dispatch_send_unit_due_index.sql",
-		"hololive/hololive-api/scripts/migrations/143_alarm_dispatch_send_unit_index.sql",
-	} {
-		data, err := os.ReadFile(filepath.Join(root, migration))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pool.Exec(ctx, string(data)); err != nil {
-			t.Fatalf("apply %s: %v", migration, err)
-		}
-	}
+	pool := dbtest.NewPool(t)
 	return NewRepository(pool), pool
 }
 

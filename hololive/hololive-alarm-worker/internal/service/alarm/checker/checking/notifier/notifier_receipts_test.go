@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 func TestNotifierMixedCollisionOnlyMarksAcceptedRooms(t *testing.T) {

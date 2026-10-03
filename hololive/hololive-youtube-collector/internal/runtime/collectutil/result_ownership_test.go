@@ -9,8 +9,8 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 const testChangedSubject = "changed"

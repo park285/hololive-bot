@@ -16,7 +16,7 @@ import (
 // /etc/stack-secrets/hololive-bot/bot.env(HOLOLIVE_API_ENV_FILE)·alarm-worker.env(HOLOLIVE_ALARM_WORKER_ENV_FILE)·compose.env,
 // 그 stack-secrets master 사본, 실행 중 hololive-api·alarm-worker 프로세스 env에 두 키가 0건임을 hololive-bot-ops로 다시 확인한 뒤
 // 이 가드가 든 release를 배포한다. 배포 뒤 이 파일, 테스트, rejectRetiredRuntimeEnv(config_build.go)와
-// LoadLLMSchedulerRuntime(apiplane/llm_scheduler.go)의 호출을 함께 삭제한다. 재검토 기한: remove_after = "2026-12-31".
+// API LoadLLMSchedulerRuntime(internal/config/llm_scheduler.go)의 호출을 함께 삭제한다. 재검토 기한: remove_after = "2026-12-31".
 var retiredOutboxV3HandoffEnvKeys = []string{
 	"DELIVERY_OUTBOX_V3_HANDOFF_MODE",
 	"YOUTUBE_OUTBOX_V3_HANDOFF_MODE",

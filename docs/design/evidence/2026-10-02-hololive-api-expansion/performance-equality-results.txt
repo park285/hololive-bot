@@ -1,0 +1,7 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+=== RUN   TestPerformancePreparedMetadataEqual
+    zz_performance_filter_test.go:188: metadata_equality input_candidates=152 cases=60 prototypes=prepared,lazy comparison=reflect.DeepEqual full_values_and_order=true
+--- PASS: TestPerformancePreparedMetadataEqual (0.03s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter	0.029s

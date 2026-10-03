@@ -2,15 +2,15 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 
 	"github.com/park285/iris-client-go/v3/iris"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -24,6 +24,14 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 		return nil, fmt.Errorf("init infra resources: %w", err)
 	}
 
+	owner := &botInfrastructureOwner{infraCleanup: infra.Cleanup, stopMemberCache: infra.StopMemberCache}
+
+	defer func() {
+		if retErr != nil {
+			retErr = errors.Join(retErr, owner.Close())
+		}
+	}()
+
 	irisClient, err := providers.ProvideIrisClient(
 		&appConfig.Iris,
 		logger,
@@ -31,37 +39,17 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 		iris.WithBotToken(appConfig.Iris.BotToken),
 	)
 	if err != nil {
-		infra.Cleanup()
-
 		return nil, fmt.Errorf("provide iris client: %w", err)
 	}
 
-	defer func() {
-		retErr = cleanupFailedBotInfrastructureBuild(retErr, irisClient, infra, logger)
-	}()
+	owner.irisClient = irisClient
 
-	infrastructure, err := buildBotInfrastructureServices(ctx, appConfig, logger, infra, irisClient)
+	infrastructure, err := buildBotInfrastructureServices(ctx, appConfig, logger, infra, irisClient, owner)
 	if err != nil {
 		return nil, fmt.Errorf("build bot infrastructure services: %w", err)
 	}
 
 	return infrastructure, nil
-}
-
-func cleanupFailedBotInfrastructureBuild(
-	buildErr error,
-	irisClient providers.ManagedIrisClient,
-	infra *sharedmodules.InfraModule,
-	logger *slog.Logger,
-) error {
-	if buildErr == nil {
-		return nil
-	}
-
-	closeIrisClientForCleanup(irisClient, logger)
-	infra.Cleanup()
-
-	return buildErr
 }
 
 func buildBotInfrastructureServices(
@@ -70,6 +58,7 @@ func buildBotInfrastructureServices(
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
 	irisClient providers.ManagedIrisClient,
+	owner *botInfrastructureOwner,
 ) (*BotInfrastructure, error) {
 	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
 
@@ -81,67 +70,42 @@ func buildBotInfrastructureServices(
 	messageAdapter := messaging.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
 	formatter := messageformatter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, messageformatter.WithMessageStrings(messageStrings), messageformatter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
 
-	foundation, err := InitScraperHolodexFoundation(ctx, appConfig, infra, logger)
+	foundation, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
+		YouTube:          appConfig.YouTube,
+		Holodex:          appConfig.Holodex,
+		OfficialSchedule: appConfig.OfficialScheduleRuntime(),
+	}, infra.MemberCache, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init scraper holodex foundation: %w", err)
 	}
 
-	alarmYouTubeStack, err := InitAlarmYouTubeStack(appConfig, foundation, irisClient, formatter, logger)
+	owner.stopHolodex = foundation.HolodexService.Stop
+
+	alarmYouTubeStack, err := InitAlarmYouTubeStack(appConfig, foundation, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm youtube stack: %w", err)
 	}
+
+	owner.internalClients = append(owner.internalClients, alarmYouTubeStack.AlarmMode.AlarmClient)
 
 	integrationServices, err := InitCoreIntegrationServices(ctx, appConfig, infra, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init core integration services: %w", err)
 	}
 
-	deps := provideBotDependenciesFromStacks(
+	owner.internalClients = append(owner.internalClients, integrationServices.SchedulerTransports...)
+
+	deps := BuildBotDependencies(
 		appConfig, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, messageStrings, irisClient, logger,
 	)
 
 	return &BotInfrastructure{
 		Deps:           deps,
-		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
-		HolodexService: foundation.HolodexService,
 		IrisRoomLister: irisClient,
 		Postgres:       infra.Postgres,
 		Cache:          infra.Cache,
-		Cleanup: composeBotInfrastructureCleanup(
-			infra.Cleanup,
-			irisClient,
-			append([]io.Closer{alarmYouTubeStack.AlarmMode.AlarmClient}, integrationServices.SchedulerTransports...),
-			logger,
-		),
+		Cleanup:        owner.Close,
 	}, nil
-}
-
-func provideBotDependenciesFromStacks(
-	appConfig *settings.Config,
-	infra *sharedmodules.InfraModule,
-	foundation *ScraperHolodexFoundation,
-	alarmYouTubeStack *AlarmYouTubeStackComponents,
-	integrationServices *CoreIntegrationServices,
-	messageAdapter *messaging.MessageAdapter,
-	formatter *messageformatter.ResponseFormatter,
-	messageStrings *messagestrings.Store,
-	irisClient orchestration.BotIrisClient,
-	logger *slog.Logger,
-) *orchestration.Dependencies {
-	modules := BuildBotDependencyModules(
-		appConfig,
-		infra,
-		foundation,
-		alarmYouTubeStack,
-		integrationServices,
-		messageAdapter,
-		formatter,
-		messageStrings,
-		irisClient,
-		logger,
-	)
-
-	return ProvideBotDependencies(&modules)
 }
 
 // loadBotMessageStrings는 bot plane이 쓰는 message_strings를 기동 때 한 번 적재하고 formatter·오류 응답·기념일 카드

@@ -1,0 +1,12 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient/live
+    zz_expansion_ownership_probe_test.go:124: inflight_requests=0 client_state=live shutdown_error=<nil> elapsed=418.486µs
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient/closed
+    zz_expansion_ownership_probe_test.go:124: inflight_requests=0 client_state=closed shutdown_error=<nil> elapsed=61.116µs
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient/vanished
+    zz_expansion_ownership_probe_test.go:124: inflight_requests=0 client_state=vanished shutdown_error=shutdown: shutdown HTTP server: shutdown: HTTP/3 server shutdown failed: context deadline exceeded elapsed=80.499007ms
+--- PASS: TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient (0.11s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/bot/runtime	1.272s

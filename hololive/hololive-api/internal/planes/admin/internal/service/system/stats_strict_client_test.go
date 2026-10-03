@@ -23,12 +23,14 @@ package system
 import (
 	"path/filepath"
 	"testing"
+
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 )
 
 func TestClientForURLReturnsNotOKWhenH3ClientUnavailable(t *testing.T) {
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", filepath.Join(t.TempDir(), "missing-ca.pem"))
+	t.Parallel()
 
-	collector := NewCollector(nil)
+	collector := NewCollector(nil, sharedh3.ClientOptions{CACertFile: filepath.Join(t.TempDir(), "missing-ca.pem"), ServerName: "internal"})
 
 	client, ok := collector.clientForURL("https://hololive-bot:30191/health")
 	if ok || client != nil {
@@ -37,9 +39,9 @@ func TestClientForURLReturnsNotOKWhenH3ClientUnavailable(t *testing.T) {
 }
 
 func TestClientForURLKeepsPlainHTTPClientWhenH3Unavailable(t *testing.T) {
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", filepath.Join(t.TempDir(), "missing-ca.pem"))
+	t.Parallel()
 
-	collector := NewCollector(nil)
+	collector := NewCollector(nil, sharedh3.ClientOptions{CACertFile: filepath.Join(t.TempDir(), "missing-ca.pem"), ServerName: "internal"})
 
 	client, ok := collector.clientForURL("http://hololive-bot:30191/health")
 	if !ok || client == nil {

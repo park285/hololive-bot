@@ -7,8 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 func TargetSnapshot(

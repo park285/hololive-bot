@@ -33,7 +33,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 const (
@@ -117,11 +117,11 @@ func (s *MonthlyScheduler) Stop() {
 }
 
 func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
-	nowKST := now.In(util.KSTZone)
+	nowKST := now.In(timeutil.KSTZone)
 
 	target := time.Date(
 		nowKST.Year(), nowKST.Month(), MonthlyScheduleDay,
-		MonthlyScheduleHourKST, monthlyScheduleMinuteKST, 0, 0, util.KSTZone,
+		MonthlyScheduleHourKST, monthlyScheduleMinuteKST, 0, 0, timeutil.KSTZone,
 	)
 
 	if !target.After(nowKST) {
@@ -140,9 +140,13 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 		return errors.New("member news service is nil")
 	}
 
-	monthKey := s.getMonthKey()
+	now := s.digest.Clock()
+	nowKST := now.In(timeutil.KSTZone)
+	monthKey := fmt.Sprintf("%d-%02d", nowKST.Year(), nowKST.Month())
 
 	if err := runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
+		period:           model.PeriodMonthly,
+		now:              now,
 		periodKey:        monthKey,
 		periodFieldName:  "month_key",
 		resultMessage:    "Member news monthly result",
@@ -157,12 +161,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 	return nil
 }
 
-func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, roomID string) delivery.SendResult {
-	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
+func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, monthKey, roomID string) delivery.SendResult {
+	return processDigestForRoom(ctx, generator, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
 		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID)
-}
-
-func (s *MonthlyScheduler) getMonthKey() string {
-	now := s.digest.Clock().In(util.KSTZone)
-	return fmt.Sprintf("%d-%02d", now.Year(), now.Month())
 }

@@ -6,14 +6,16 @@
 |---|---|
 | Module | `hololive-youtube-collector` |
 | Binary | `youtube-collector` |
-| Compose service | `youtube-collector` (central `c`); AP overlays `youtube-collector-a/b/d` |
+| Execution | Central `c`: Compose `youtube-collector`; Seoul `b`: Compose `youtube-collector-b`; Osaka `a` / Osaka2 `d`: host-native systemd `hololive-youtube-collector@youtube-collector-{a,d}.service` |
 | Ports | `a` 30005, `b` 30015, `c` 30025, `d` 30035 |
 | Health endpoint | `https://127.0.0.1:<port>/health` over H3 |
 | Ready endpoint | `https://127.0.0.1:<port>/ready` over H3 |
 | DB role | `hololive_scraper` |
-| TLS | `POSTGRES_SSLMODE=verify-full`, `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` |
+| TLS | `POSTGRES_SSLMODE=verify-full`; Compose CA `/run/hololive-bot/certs/postgres-ca.pem`, native CA `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem` |
 
 ## Role
+
+Observation publish/checkpoint/job 계약 구현은 `hololive/hololive-youtube-collector/internal/runtime/sourceobservation`이 소유합니다. 공용 envelope·canonical JSON·hash·lease 값은 shared `pkg/contracts/sourceobservation`, consume·canonical/replay/retention과 private reducer는 API `internal/youtube/`에 있습니다. YouTube.js pagination 해석은 `internal/runtime/youtubejscollector`가 소유합니다.
 
 AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normalize와 PostgreSQL collection lease/checkpoint/`source_observations` Publish만 소유합니다. Canonical persist와 notification intent는 `hololive-api` YouTube plane이 소유합니다. `members.photo` product path는 hololive-api admin PhotoSync가 소유합니다.
 
@@ -27,7 +29,7 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 
 `DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 canonical LIVE의 신선한 positive가 없을 때 projection이 만드는 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check` 경로입니다. 기존 운영 세대의 두 확인 kind는 youtubejs 전용 schema 1/generation 1이며 아래 개정의 별도 cutover 전에는 이를 유지합니다.
 
-수명 정합성 개정의 새 collector는 `live_snapshot` schema 1/generation 3과 `video_live_check` schema 2/generation 2를 요구합니다. `channel_live_check`와 Holodex 세대는 그대로입니다. API는 과거 snapshot generation 2와 영상 확인 generation 1의 의미를 보존합니다. [개정 계획과 검증 기록](../plans/2026-09-30-live-reconciliation-lifecycle.md)을 따르며 실제 세대 전환은 migration bootstrap과 분리한 `scripts/migrations/manual/youtube_live_lifecycle_cutover.sql`의 승인된 cutover로 수행합니다.
+수명 정합성 개정의 새 collector는 `live_snapshot` schema 1/generation 3과 `video_live_check` schema 2/generation 2를 요구합니다. `channel_live_check`와 Holodex 세대는 그대로입니다. API는 과거 snapshot generation 2와 영상 확인 generation 1의 의미를 보존합니다. [개정 계획과 검증 기록](../plans/2026-09-30-live-reconciliation-lifecycle.md)을 따르며 실제 세대 전환은 migration bootstrap과 분리한 `hololive/hololive-api/scripts/migrations/manual/youtube_live_lifecycle_cutover.sql`의 승인된 cutover로 수행합니다.
 
 generation 3 snapshot의 `query`는 helper의 `streams` 질의 범위·페이지 수·종료·접근 제한을 증명합니다. 반환 영상 상태나 빈 배열에서 coverage를 추정하지 않습니다. 현행 한 페이지 호출 예산에서 continuation이 남거나 종료 플래그가 없으면 PARTIAL이며 부재 종료에 사용하지 않습니다. 접근 제한 영상도 positive 결과와 분리합니다.
 
@@ -91,8 +93,8 @@ Official Schedule의 mixed-invalid 응답은 유효한 row를 COMPLETE로 발행
 - `YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-{a,b,c,d}`
 - `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
-- `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`
-- Central default `up` starts fleet member `c` as compose service `youtube-collector`. AP overlays pin that service to `central-only` and start the host instance.
+- `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the Compose/native CA path above
+- Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` for fleet member `c` and issuer `youtube-po-c`. Seoul uses `docker-compose.prod.yml` + `docker-compose.seoul.yml` for `youtube-collector-b` and issuer `youtube-po-b`; the AP overlay pins central services to `central-only`. Osaka `a` and Osaka2 `d` use native systemd units; their Compose overlays validate configuration/path contracts. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
 
 ## Shutdown behavior
 

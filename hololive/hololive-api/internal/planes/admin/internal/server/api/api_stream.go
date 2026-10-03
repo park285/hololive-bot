@@ -27,17 +27,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-func (h *StreamHandler) sharedStreamHandler() *sharedserver.StreamHandler {
+func (h *StreamHandler) sharedStreamHandler() *adminhandlers.StreamHandler {
 	var api *Handler
 
 	if h != nil {
 		api = h.Handler
 	}
 
-	handler := &sharedserver.StreamHandler{
+	handler := &adminhandlers.StreamHandler{
 		Logger:       api.safeLogger(),
 		State:        api.ensureStreamState(),
 		RespondError: sharedserver.RespondError,

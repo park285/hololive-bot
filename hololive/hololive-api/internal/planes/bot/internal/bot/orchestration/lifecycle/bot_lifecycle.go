@@ -28,31 +28,25 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 type BotLifecycle struct {
 	logger      *slog.Logger
-	cache       cache.ConnectionManager
+	cache       CacheReadiness
 	irisClient  IrisPinger
 	irisBaseURL string
 	stopCh      chan struct{}
 	doneCh      chan struct{}
 	doneOnce    sync.Once
-	holodex     Stoppable
-	postgres    database.Client
 }
 
 func NewBotLifecycle(
 	logger *slog.Logger,
-	cacheClient cache.ConnectionManager,
+	cacheClient CacheReadiness,
 	irisClient IrisPinger,
 	irisBaseURL string,
 	stopCh chan struct{},
 	doneCh chan struct{},
-	holodex Stoppable,
-	postgres database.Client,
 ) *BotLifecycle {
 	return &BotLifecycle{
 		logger:      logger,
@@ -61,8 +55,6 @@ func NewBotLifecycle(
 		irisBaseURL: irisBaseURL,
 		stopCh:      stopCh,
 		doneCh:      doneCh,
-		holodex:     holodex,
-		postgres:    postgres,
 	}
 }
 
@@ -111,36 +103,11 @@ func (l *BotLifecycle) Start(ctx context.Context) error {
 func (l *BotLifecycle) Shutdown(_ context.Context) error {
 	l.logInfo("Shutting down bot...")
 
-	l.stopHolodex()
-	l.closeCache()
-	l.closePostgres()
 	l.closeDoneCh()
 
 	l.logInfo("Bot shutdown complete")
 
 	return nil
-}
-
-func (l *BotLifecycle) stopHolodex() {
-	if l.holodex != nil {
-		l.holodex.Stop()
-	}
-}
-
-func (l *BotLifecycle) closeCache() {
-	if l.cache != nil {
-		if err := l.cache.Close(); err != nil {
-			l.logWarn("Error closing cache", slog.Any("error", err))
-		}
-	}
-}
-
-func (l *BotLifecycle) closePostgres() {
-	if l.postgres != nil {
-		if err := l.postgres.Close(); err != nil {
-			l.logWarn("Error closing postgres", slog.Any("error", err))
-		}
-	}
 }
 
 func (l *BotLifecycle) closeDoneCh() {

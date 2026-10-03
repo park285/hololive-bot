@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func TestDefaultYouTubeCollectorConfigMatchesCurrentBehavior(t *testing.T) {
@@ -153,14 +153,14 @@ func TestRequiredCollectorNumericEnvRejectsInvalidValues(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("YOUTUBE_COLLECTOR_MAX_PAGES", test.value)
 
-			if _, err := load.RequiredPositiveIntEnv("YOUTUBE_COLLECTOR_MAX_PAGES", 4); err == nil {
-				t.Fatalf("load.RequiredPositiveIntEnv accepted %q", test.value)
+			if _, err := envload.RequiredPositiveIntEnv("YOUTUBE_COLLECTOR_MAX_PAGES", 4); err == nil {
+				t.Fatalf("envload.RequiredPositiveIntEnv accepted %q", test.value)
 			}
 
 			t.Setenv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", test.value)
 
-			if _, err := load.RequiredSecondsDurationEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", time.Minute); err == nil {
-				t.Fatalf("load.RequiredSecondsDurationEnv accepted %q", test.value)
+			if _, err := envload.RequiredSecondsDurationEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", time.Minute); err == nil {
+				t.Fatalf("envload.RequiredSecondsDurationEnv accepted %q", test.value)
 			}
 		})
 	}

@@ -10,7 +10,7 @@ if [[ ! -r "$preview_file" ]]; then
 fi
 
 alarm_worker_dir="$remote_repo_dir/hololive/hololive-alarm-worker/"
-alarm_worker_version="${alarm_worker_dir}VERSION"
+api_dir="$remote_repo_dir/hololive/hololive-api/"
 forbidden=false
 
 while IFS= read -r line; do
@@ -20,13 +20,15 @@ while IFS= read -r line; do
   if [[ "$path" == "$alarm_worker_dir" && "${item:1:1}" == "d" ]]; then
     continue
   fi
-  if [[ "$path" == "$alarm_worker_version" && "${item:1:1}" == "f" ]]; then
-    continue
+  if [[ "${item:1:1}" == "f" ]]; then
+    case "$path" in
+      "${alarm_worker_dir}VERSION"|"${alarm_worker_dir}go.mod"|"${alarm_worker_dir}go.sum"|"${api_dir}go.mod"|"${api_dir}go.sum") continue ;;
+    esac
   fi
 
   printf '%s\n' "$line" >&2
   forbidden=true
-done < <(rg '(\.env|\.key|\.pem|hololive-alarm-worker|_test\.go|docs/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file" || true)
+done < <(rg '(\.env|\.key|\.pem|hololive-alarm-worker|hololive-api/(go\.mod|go\.sum)(/|[[:space:]]|$)|_test\.go|docs/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file" || true)
 
 if [[ "$forbidden" == true ]]; then
   echo "rsync preview contains forbidden deployment scope" >&2

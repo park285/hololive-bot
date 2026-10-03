@@ -1,0 +1,299 @@
+[
+  {
+    "package": "internal/service/notification/alarmcache",
+    "gofiles": [
+      "state.go",
+      "state_member.go"
+    ],
+    "tests": [
+      "state_pure_test.go"
+    ],
+    "consumers": {
+      "Imports": [
+        "github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
+      ],
+      "TestImports": [
+        "github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
+      ],
+      "XTestImports": []
+    },
+    "sql_assets": []
+  },
+  {
+    "package": "pkg/config/settings/alarmworker",
+    "gofiles": [
+      "dispatch_retention.go",
+      "ownership.go",
+      "retired_notification_egress.go",
+      "runtime.go",
+      "worker_profile.go"
+    ],
+    "tests": [
+      "dispatch_retention_test.go",
+      "ownership_test.go",
+      "retired_notification_egress_test.go",
+      "runtime_test.go",
+      "worker_profile_test.go"
+    ],
+    "consumers": {
+      "Imports": [
+        "github.com/kapu/hololive-alarm-worker/cmd/alarm-worker",
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp",
+        "github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
+      ],
+      "TestImports": [
+        "github.com/kapu/hololive-alarm-worker/cmd/alarm-worker",
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
+      ],
+      "XTestImports": []
+    },
+    "sql_assets": []
+  },
+  {
+    "package": "pkg/service/alarm/dedup",
+    "gofiles": [
+      "dedup_claim.go",
+      "dedup_notified.go",
+      "dedup_upcoming.go",
+      "notified_cache.go",
+      "schedule_change.go",
+      "service.go"
+    ],
+    "tests": [
+      "claim_key_log_test.go",
+      "fixtures_test.go",
+      "service_test.go",
+      "h5_guard_test.go"
+    ],
+    "consumers": {
+      "Imports": [
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
+      ],
+      "TestImports": [
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
+      ],
+      "XTestImports": [
+        "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+      ]
+    },
+    "sql_assets": []
+  },
+  {
+    "package": "pkg/service/alarm/dispatchoutbox",
+    "gofiles": [
+      "consumer.go",
+      "consumer_claim_release.go",
+      "consumer_envelope.go",
+      "consumer_send_request.go",
+      "dedupe_key.go",
+      "dispatch_group.go",
+      "error_store.go",
+      "jsonb_param.go",
+      "metrics.go",
+      "model.go",
+      "repository.go",
+      "repository_claim.go",
+      "repository_collision.go",
+      "repository_event_preflight.go",
+      "repository_insert.go",
+      "repository_insert_batch.go",
+      "repository_maintenance.go",
+      "repository_payload.go",
+      "repository_publish_receipts.go",
+      "repository_terminal.go",
+      "repository_transitions.go",
+      "send_request.go",
+      "sql.go",
+      "upcoming_candidates.go"
+    ],
+    "tests": [
+      "alloc_budget_norace_test.go",
+      "consumer_batch_cleanup_integration_test.go",
+      "consumer_batch_cleanup_test.go",
+      "consumer_construct_helpers_test.go",
+      "consumer_payload_cleanup_test.go",
+      "consumer_release_claim_test.go",
+      "consumer_test.go",
+      "dedupe_input_api_test.go",
+      "dedupe_key_authority_test.go",
+      "dedupe_key_bench_test.go",
+      "dedupe_key_celebration_test.go",
+      "dedupe_key_digest_test.go",
+      "dedupe_key_test.go",
+      "dispatch_group_test.go",
+      "error_store_test.go",
+      "fixtures_test.go",
+      "jsonb_param_test.go",
+      "repository_deadlock_retry_test.go",
+      "repository_insert_test.go",
+      "repository_insert_tx_test.go",
+      "repository_integration_test.go",
+      "repository_p1_integration_test.go",
+      "repository_publish_receipts_test.go",
+      "repository_test.go",
+      "repository_transitions_partial_test.go",
+      "send_request_test.go",
+      "upcoming_candidates_test.go",
+      "x_space_test.go"
+    ],
+    "consumers": {
+      "Imports": [
+        "github.com/kapu/hololive-shared/pkg/service/alarm/queue",
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler",
+        "github.com/kapu/hololive-alarm-worker/internal/service/celebration",
+        "github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun",
+        "github.com/kapu/hololive-alarm-worker/internal/service/xspaces"
+      ],
+      "TestImports": [
+        "github.com/kapu/hololive-shared/pkg/service/alarm/queue",
+        "github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation",
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier",
+        "github.com/kapu/hololive-alarm-worker/internal/service/celebration",
+        "github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun",
+        "github.com/kapu/hololive-alarm-worker/internal/service/xspaces"
+      ],
+      "XTestImports": []
+    },
+    "sql_assets": [
+      "queries/send_request_members.sql",
+      "queries/repository_maintenance_0035_02.sql",
+      "queries/repository_insert_0179_01.sql",
+      "queries/upcoming_candidates_finish.sql",
+      "queries/upcoming_candidates_cleanup.sql",
+      "queries/send_request_reissue.sql",
+      "queries/repository_claim_0029_01.sql",
+      "queries/repository_terminal_0019_01.sql",
+      "queries/repository_claim_0053_02.sql",
+      "queries/repository_transitions_0020_01.sql",
+      "queries/send_request_pin.sql",
+      "queries/repository_event_preflight_0033_01.sql",
+      "queries/repository_transitions_0040_02.sql",
+      "queries/repository_claim_0102_03.sql",
+      "queries/repository_transitions_0160_06.sql",
+      "queries/upcoming_candidates_pending.sql",
+      "queries/repository_transitions_0170_07.sql",
+      "queries/repository_insert_0092_01.sql",
+      "queries/repository_collision_0038_01.sql",
+      "queries/repository_publish_receipts.sql",
+      "queries/repository_maintenance_0010_01.sql",
+      "queries/repository_transitions_0152_05.sql",
+      "queries/repository_insert_0183_02.sql",
+      "queries/send_request_reissue_delivery.sql",
+      "queries/repository_transitions_0185_08.sql",
+      "queries/send_request_lock.sql",
+      "queries/upcoming_candidates_stage.sql",
+      "testdata/epoch1_migrations/058_create_alarm_dispatch_outbox.sql",
+      "testdata/epoch1_migrations/065_record_alarm_dispatch_event_collisions.sql",
+      "testdata/epoch1_migrations/122_alarm_dispatch_last_error_size_check.sql",
+      "testdata/epoch1_migrations/059_harden_alarm_dispatch_outbox.sql",
+      "testdata/epoch1_migrations/118_alarm_dispatch_state_shape_check.sql"
+    ]
+  },
+  {
+    "package": "pkg/service/alarm/queue",
+    "gofiles": [
+      "metrics.go",
+      "publisher.go"
+    ],
+    "tests": [
+      "publisher_outbox_test.go",
+      "queue_test.go"
+    ],
+    "consumers": {
+      "Imports": [
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler",
+        "github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
+      ],
+      "TestImports": [
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
+      ],
+      "XTestImports": []
+    },
+    "sql_assets": []
+  },
+  {
+    "package": "pkg/service/notification/alarmservice",
+    "gofiles": [
+      "alarm_admin.go",
+      "alarm_cache.go",
+      "alarm_cache_view.go",
+      "alarm_keys.go",
+      "alarm_member_subscriptions.go",
+      "alarm_persistence.go",
+      "alarm_service.go",
+      "alarm_service_add.go",
+      "alarm_service_cache_mutation.go",
+      "alarm_service_cache_removal.go",
+      "alarm_service_cache_write.go",
+      "alarm_service_clear.go",
+      "alarm_service_lifecycle.go",
+      "alarm_service_mutation.go",
+      "alarm_service_mutation_lookup.go",
+      "alarm_service_remove.go",
+      "alarm_types.go",
+      "metrics.go"
+    ],
+    "tests": [
+      "alarm_admin_cache_additional_test.go",
+      "alarm_cache_helpers_test.go",
+      "alarm_member_subscriptions_test.go",
+      "alarm_room_names_test.go",
+      "alarm_service_cleanup_test.go",
+      "alarm_service_crud_additional_test.go",
+      "alarm_service_durability_test.go",
+      "alarm_service_privacy_log_test.go",
+      "alarm_service_test.go",
+      "alarm_table_scenarios_test.go",
+      "alarm_test.go",
+      "alarm_test_helpers_test.go",
+      "alarm_timeout_policy_test.go",
+      "metrics_test.go"
+    ],
+    "consumers": {
+      "Imports": [
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
+      ],
+      "TestImports": [
+        "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers",
+        "github.com/kapu/hololive-alarm-worker/internal/app/workerapp",
+        "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
+      ],
+      "XTestImports": []
+    },
+    "sql_assets": []
+  },
+  {
+    "package": "pkg/service/youtube/outbox/format",
+    "gofiles": [
+      "formatter.go",
+      "payload.go"
+    ],
+    "tests": [
+      "formatter_failure_test.go",
+      "formatter_mekpark_test.go",
+      "formatter_premiere_test.go",
+      "outbox_header_body_render_test.go"
+    ],
+    "consumers": {
+      "Imports": [
+        "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
+      ],
+      "TestImports": [
+        "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
+      ],
+      "XTestImports": []
+    },
+    "sql_assets": []
+  }
+]

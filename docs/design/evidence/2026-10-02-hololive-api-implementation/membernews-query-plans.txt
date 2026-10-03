@@ -1,0 +1,57 @@
+=== RUN   TestStage6CandidatePeriodPlans
+2026/10/02 23:44:49 github.com/testcontainers/testcontainers-go - Connected to docker:
+  Server Version: 29.8.2
+  API Version: 1.56
+  Operating System: Ubuntu 26.04.1 LTS
+  Total Memory: 62646 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: f6da13fa3b09cdee91bef4f28d5d1c08532fdd55c924f1a02dca235c19766f92
+  Test ProcessID: e3fbfb41-b46d-4548-9659-53234229d880
+2026/10/02 23:44:49 🐳 Creating container for image postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+2026/10/02 23:44:50 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/10/02 23:44:50 ✅ Container created: e9dd69ad6caa
+2026/10/02 23:44:50 🐳 Starting container: e9dd69ad6caa
+2026/10/02 23:44:50 ✅ Container started: e9dd69ad6caa
+2026/10/02 23:44:50 ⏳ Waiting for container id e9dd69ad6caa image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/10/02 23:44:51 Shell not found in container
+2026/10/02 23:44:51 🔔 Container is ready: e9dd69ad6caa
+2026/10/02 23:44:51 ✅ Container created: 0c8bb49634b0
+2026/10/02 23:44:51 🐳 Starting container: 0c8bb49634b0
+2026/10/02 23:44:51 ✅ Container started: 0c8bb49634b0
+2026/10/02 23:44:51 ⏳ Waiting for container id 0c8bb49634b0 image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2)]
+2026/10/02 23:44:52 🔔 Container is ready: 0c8bb49634b0
+    stage6_candidate_plans_test.go:21: variant=full Seq Scan on major_events  (cost=0.00..2175.00 rows=9900 width=149) (actual time=0.010..5.426 rows=10000.00 loops=1)
+    stage6_candidate_plans_test.go:21: variant=full   Filter: ((type = ANY ('{news,event}'::text[])) AND (COALESCE(link_status, 'unchecked'::text) <> ALL ('{failed,blocked}'::text[])) AND (status = 'active'::text))
+    stage6_candidate_plans_test.go:21: variant=full   Buffers: shared hit=2000
+    stage6_candidate_plans_test.go:21: variant=full Planning:
+    stage6_candidate_plans_test.go:21: variant=full   Buffers: shared hit=62
+    stage6_candidate_plans_test.go:21: variant=full Planning Time: 0.632 ms
+    stage6_candidate_plans_test.go:21: variant=full Execution Time: 5.797 ms
+    stage6_candidate_plans_test.go:21: variant=period Sort  (cost=4247.32..4271.38 rows=9625 width=157) (actual time=27.548..27.556 rows=100.00 loops=1)
+    stage6_candidate_plans_test.go:21: variant=period   Sort Key: candidate.candidate_ordinal
+    stage6_candidate_plans_test.go:21: variant=period   Sort Method: quicksort  Memory: 170kB
+    stage6_candidate_plans_test.go:21: variant=period   Buffers: shared hit=2003
+    stage6_candidate_plans_test.go:21: variant=period   ->  Subquery Scan on candidate  (cost=0.00..3610.50 rows=9625 width=157) (actual time=0.353..27.252 rows=100.00 loops=1)
+    stage6_candidate_plans_test.go:21: variant=period         Filter: ((NOT isfinite(candidate.pub_date)) OR (NOT isfinite(candidate.event_start_date)) OR EXISTS(SubPlan 1) OR CASE WHEN (((candidate.type = 'news'::text) AND (candidate.pub_date IS NOT NULL)) OR ((candidate.type = 'event'::text) AND (candidate.event_start_date IS NULL))) THEN ((candidate.pub_date >= '2026-09-24 15:00:00+00'::timestamp with time zone) AND (candidate.pub_date < '2026-10-23 15:00:00+00'::timestamp with time zone)) ELSE ((candidate.event_start_date >= '2026-09-25'::date) AND (candidate.event_start_date < '2026-10-24'::date)) END)
+    stage6_candidate_plans_test.go:21: variant=period         Rows Removed by Filter: 9900
+    stage6_candidate_plans_test.go:21: variant=period         Buffers: shared hit=2000
+    stage6_candidate_plans_test.go:21: variant=period         ->  WindowAgg  (cost=0.00..2298.75 rows=9900 width=1456) (actual time=0.027..14.973 rows=10000.00 loops=1)
+    stage6_candidate_plans_test.go:21: variant=period               Window: w1 AS (ROWS UNBOUNDED PRECEDING)
+    stage6_candidate_plans_test.go:21: variant=period               Storage: Memory  Maximum Storage: 19kB
+    stage6_candidate_plans_test.go:21: variant=period               Buffers: shared hit=2000
+    stage6_candidate_plans_test.go:21: variant=period               ->  Seq Scan on major_events  (cost=0.00..2175.00 rows=9900 width=1448) (actual time=0.007..6.398 rows=10000.00 loops=1)
+    stage6_candidate_plans_test.go:21: variant=period                     Filter: ((type = ANY ('{news,event}'::text[])) AND (COALESCE(link_status, 'unchecked'::text) <> ALL ('{failed,blocked}'::text[])) AND (status = 'active'::text))
+    stage6_candidate_plans_test.go:21: variant=period                     Buffers: shared hit=2000
+    stage6_candidate_plans_test.go:21: variant=period         SubPlan 1
+    stage6_candidate_plans_test.go:21: variant=period           ->  Function Scan on unnest member_name  (cost=0.00..0.10 rows=1 width=0) (actual time=0.001..0.001 rows=0.00 loops=10000)
+    stage6_candidate_plans_test.go:21: variant=period                 Filter: (member_name IS NULL)
+    stage6_candidate_plans_test.go:21: variant=period                 Rows Removed by Filter: 1
+    stage6_candidate_plans_test.go:21: variant=period Planning:
+    stage6_candidate_plans_test.go:21: variant=period   Buffers: shared hit=14
+    stage6_candidate_plans_test.go:21: variant=period Planning Time: 0.325 ms
+    stage6_candidate_plans_test.go:21: variant=period Execution Time: 27.743 ms
+--- PASS: TestStage6CandidatePeriodPlans (3.47s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews	3.531s

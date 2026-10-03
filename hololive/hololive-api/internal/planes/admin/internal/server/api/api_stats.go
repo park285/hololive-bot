@@ -36,6 +36,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -146,7 +147,7 @@ func (h *StatsHandler) StreamSystemStats(c *gin.Context) {
 		return
 	}
 
-	conn, err := sharedserver.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := adminhandlers.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.safeLogger().Warn("failed to upgrade websocket", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "failed to upgrade websocket connection", nil)

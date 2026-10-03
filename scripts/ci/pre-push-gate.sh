@@ -188,7 +188,7 @@ run_content_gates() {
   run_if_changed scripts/runtime/pg-hotpath-explain-snapshot_test.sh \
     scripts/runtime/pg-hotpath-explain-snapshot.sh scripts/runtime/lib \
     hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries \
-    hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries
+    hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries
   run_if_changed scripts/deploy/ap-host-native-deploy_test.sh \
     scripts/deploy/ap-host-native-deploy.sh scripts/deploy/ap-host-native-rollback.sh \
     scripts/deploy/ap-host-native-deploy_contract_checks.inc.sh scripts/deploy/ap-completion-check.sh \

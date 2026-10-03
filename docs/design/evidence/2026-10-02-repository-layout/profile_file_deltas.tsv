@@ -1,0 +1,6 @@
+"profile"	"package"	"file_kind"	"added_files"	"removed_files"
+"workspace-integration-tests"	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops"	"TestGoFiles"	"repository_integration_test.go"	""
+"workspace-integration-tests"	"github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"	"TestGoFiles"	"scraper_integration_test.go"	""
+"workspace-integration-tests"	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"	"TestGoFiles"	"consumer_batch_cleanup_integration_test.go,repository_integration_test.go,repository_p1_integration_test.go"	""
+"workspace-integration-tests"	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"	"TestGoFiles"	"repository_batch_postgres_integration_test.go"	""
+"workspace-integration-tests"	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"	"TestGoFiles"	"client_test.go"	""

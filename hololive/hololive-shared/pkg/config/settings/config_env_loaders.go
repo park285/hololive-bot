@@ -28,12 +28,13 @@ import (
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func LoadValkeyConfig() (ValkeyConfig, error) {
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	config := ValkeyConfig{
 		Host:       sharedenv.String("CACHE_HOST", "localhost"),
@@ -56,7 +57,7 @@ func LoadPostgresConfig() (PostgresConfig, error) {
 		password = constants.DatabaseDefaults.Password
 	}
 
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	config := PostgresConfig{
 		Host:          sharedenv.String("POSTGRES_HOST", constants.DatabaseDefaults.Host),
@@ -65,7 +66,7 @@ func LoadPostgresConfig() (PostgresConfig, error) {
 		User:          sharedenv.String("POSTGRES_USER", constants.DatabaseDefaults.User),
 		Password:      password,
 		Database:      sharedenv.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
-		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", load.PostgresSSLModeVerifyFull),
+		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", runtimepolicy.PostgresSSLModeVerifyFull),
 		SSLRootCert:   sharedenv.String("POSTGRES_SSLROOTCERT", ""),
 		QueryExecMode: sharedenv.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
 		PoolMinConns:  env.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
@@ -85,22 +86,22 @@ func loadServerConfig() (ServerConfig, error) {
 
 // LoadServerConfigWithAPIKey: 런타임마다 인증 키 환경변수가 달라 호출자가 값을 넘긴다.
 func LoadServerConfigWithAPIKey(apiKey string) (ServerConfig, error) {
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	port := env.Int("SERVER_PORT", 30001)
 	config := ServerConfig{
 		AuthBcryptCost:          env.Int("AUTH_BCRYPT_COST", 0),
 		Port:                    port,
 		APIKey:                  apiKey,
-		HTTPTransports:          load.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
+		HTTPTransports:          envload.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
 		H3Addr:                  sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
 		H3CertFile:              strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
 		H3KeyFile:               strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
 		ShortLinkAddr:           strings.TrimSpace(sharedenv.String("HOLOLIVE_SHORT_LINK_ADDR", "")),
 		MetricsAddr:             strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
 		PprofAddr:               strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
-		AdminAllowedIPs:         load.CommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
-		WebSocketAllowedOrigins: load.CommaSeparated(sharedenv.String("WEBSOCKET_ALLOWED_ORIGINS", "")),
+		AdminAllowedIPs:         envload.CommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
+		WebSocketAllowedOrigins: envload.CommaSeparated(sharedenv.String("WEBSOCKET_ALLOWED_ORIGINS", "")),
 	}
 
 	if err := env.Err(); err != nil {
@@ -111,7 +112,7 @@ func LoadServerConfigWithAPIKey(apiKey string) (ServerConfig, error) {
 }
 
 func loadNotificationConfig() (NotificationConfig, error) {
-	checkInterval, err := load.StrictDurationUnitEnv("CHECK_INTERVAL_SECONDS", time.Minute, time.Second)
+	checkInterval, err := envload.StrictDurationUnitEnv("CHECK_INTERVAL_SECONDS", time.Minute, time.Second)
 	if err != nil {
 		return NotificationConfig{}, fmt.Errorf("load notification config: %w", err)
 	}
@@ -154,7 +155,7 @@ func LoadGeminiConfig() (GeminiConfig, error) {
 }
 
 // loadConsensusLLMConfig: prefix 기반 환경변수에서 ConsensusLLMConfig를 로드한다.
-func loadConsensusLLMConfig(env *load.StrictEnv, prefix string) ConsensusLLMConfig {
+func loadConsensusLLMConfig(env *envload.StrictEnv, prefix string) ConsensusLLMConfig {
 	reviewTimeout := env.Int(prefix+"_REVIEW_TIMEOUT_SEC", 30)
 	if reviewTimeout < 5 {
 		reviewTimeout = 30
@@ -176,7 +177,7 @@ func loadConsensusLLMConfig(env *load.StrictEnv, prefix string) ConsensusLLMConf
 }
 
 func LoadLLMConfig() (LLMConfig, error) {
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	config := LLMConfig{
 		MemberNewsModel:       sharedenv.String("MEMBER_NEWS_LLM_MODEL", ""),

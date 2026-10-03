@@ -4,6 +4,8 @@
 
 이 문서는 **2026-10-02 분석과 후속 실행 계획**입니다. 같은 날 초안의 주장을 코드와 진단으로 다시 확인했고, fallback·구형 호환 조사를 추가했습니다. 1–3단계는 같은 날 미커밋 worktree에서 구현했으며 결과는 [구현 진행 기록](#구현-진행-기록-2026-10-02)에 있습니다. 운영 적용 결과를 뜻하지 않으며, 문서만으로 runtime·DB·외부 계약 변경 권한을 확대하지 않습니다. 현재 운영 소유권은 [PROJECT_MAP](../current/PROJECT_MAP.md), [SERVICE_OWNERSHIP](../current/SERVICE_OWNERSHIP.md), [CONTRACT_MAP](../current/CONTRACT_MAP.md)을 따릅니다.
 
+이 문서의 경로·그래프·검증 기록은 2026-10-02 단계의 이력으로 보존합니다. 후속 통합 이관의 최종 경로와 검증은 [Hololive 통합 리팩토링 계획](2026-10-02-hololive-api-refactoring.md)을, 현재 runtime·DB·HTTP 계약은 위 `docs/current/` 소유권·계약 문서를 따릅니다. 아래의 shared `sourceobservation/consume`, worker `internal/service/notification`·`internal/service/youtube/outbox/format`, `providers/dbresource` 경로는 현재 owner를 정의하지 않습니다.
+
 ## 목표
 
 1. 재현한 동작 결함 3건을 회귀 테스트와 함께 고칩니다.

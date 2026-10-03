@@ -23,6 +23,7 @@
 ## Transport
 
 - HTTP JSON with `X-API-Key`
+- The common trigger handler/router is API-owned at `hololive/hololive-api/internal/httpapi`; shared retains generic health/ready, JSON response and HTTP server primitives.
 
 ## Endpoint / Event / Queue
 
@@ -61,6 +62,7 @@ gin.H{"status": "member news weekly digest sent"}
 ## Timeout and retry policy
 
 - Timeout: consumer client uses 30 seconds.
+- Provider execution uses a separate 5-minute context; a client disconnect does not shorten it. Internal H3 options are passed from admin config, and admin owns its client transport cleanup.
 - Retry: no automatic client retry documented.
 - Idempotency: protected by provider in-progress handling where implemented.
 
@@ -73,7 +75,7 @@ gin.H{"status": "member news weekly digest sent"}
 ## Tests
 
 - Route constants: `hololive/hololive-shared/pkg/contracts/trigger/routes_test.go`
-- Provider/router tests: `hololive/hololive-api/internal/planes/llm/internal/app/internal/runtime/router_integration_test.go`
+- Provider/router tests: `hololive/hololive-api/internal/planes/llm/runtime/router_integration_test.go`, `hololive/hololive-api/internal/httpapi/trigger_test.go`, `router_test.go`
 - Consumer tests: `hololive/hololive-api/internal/planes/admin/internal/client/trigger/client_test.go`
 
 ## Known gaps

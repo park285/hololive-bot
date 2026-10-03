@@ -1,0 +1,122 @@
+package targetpolicy
+
+import (
+	"slices"
+	"time"
+)
+
+type TargetMinutePolicy struct {
+	targetMinutes []int
+}
+
+func NewTargetMinutePolicy(targetMinutes []int) TargetMinutePolicy {
+	normalized := normalizeExplicitTargetMinutes(targetMinutes)
+	if len(normalized) == 0 {
+		return TargetMinutePolicy{targetMinutes: cloneDefaultTargetMinutes()}
+	}
+
+	return TargetMinutePolicy{targetMinutes: slices.Clone(normalized)}
+}
+
+func NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes int) TargetMinutePolicy {
+	normalized := normalizeExplicitTargetMinutes([]int{alarmAdvanceMinutes})
+	if len(normalized) == 0 {
+		return TargetMinutePolicy{targetMinutes: cloneDefaultTargetMinutes()}
+	}
+
+	minute := normalized[0]
+	switch {
+	case minute <= 1:
+		return TargetMinutePolicy{targetMinutes: []int{1}}
+	case minute == 2:
+		return TargetMinutePolicy{targetMinutes: []int{2, 1}}
+	case minute == 3:
+		return TargetMinutePolicy{targetMinutes: []int{3, 1}}
+	default:
+		return TargetMinutePolicy{targetMinutes: []int{minute, 3, 1}}
+	}
+}
+
+func NewTargetMinutePolicyFromConfigured(targetMinutes []int) TargetMinutePolicy {
+	normalized := normalizeExplicitTargetMinutes(targetMinutes)
+	if len(normalized) == 0 {
+		return TargetMinutePolicy{targetMinutes: cloneDefaultTargetMinutes()}
+	}
+
+	if len(normalized) == 1 {
+		return NewTargetMinutePolicyFromRuntimeAdvance(normalized[0])
+	}
+
+	return TargetMinutePolicy{targetMinutes: slices.Clone(normalized)}
+}
+
+// NewTargetMinutePolicyFromPersisted는 저장된 명시 값을 보존하고, 값이 없을 때만 runtime 기본값을 만든다.
+func NewTargetMinutePolicyFromPersisted(alarmAdvanceMinutes int, targetMinutes []int) TargetMinutePolicy {
+	if len(targetMinutes) == 0 {
+		return NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes)
+	}
+
+	return NewTargetMinutePolicy(targetMinutes)
+}
+
+func (p TargetMinutePolicy) Clone() []int {
+	if len(p.targetMinutes) == 0 {
+		return cloneDefaultTargetMinutes()
+	}
+
+	return slices.Clone(p.targetMinutes)
+}
+
+func (p TargetMinutePolicy) Contains(minute int) bool {
+	return slices.Contains(p.targetMinutes, minute)
+}
+
+func (p TargetMinutePolicy) PrimaryAdvanceMinute() int {
+	if len(p.targetMinutes) == 0 {
+		return defaultTargetMinutes[0]
+	}
+
+	return p.targetMinutes[0]
+}
+
+func (p TargetMinutePolicy) HighestCrossed(startScheduled time.Time, window EvaluationWindow) (int, bool) {
+	if startScheduled.IsZero() || !window.Start.Before(window.End) {
+		return 0, false
+	}
+
+	resolvedTargets := p.resolvedTargetMinutes()
+	current := MinutesUntilFloorZeroClamped(startScheduled, window.End)
+	previous := MinutesUntilFloorZeroClamped(startScheduled, window.Start)
+
+	if previous <= current {
+		return currentTargetIfConfigured(resolvedTargets, current)
+	}
+
+	return highestDescendingCrossedTarget(resolvedTargets, current, previous)
+}
+
+func (p TargetMinutePolicy) resolvedTargetMinutes() []int {
+	if len(p.targetMinutes) == 0 {
+		return cloneDefaultTargetMinutes()
+	}
+
+	return p.targetMinutes
+}
+
+func currentTargetIfConfigured(resolvedTargets []int, current int) (int, bool) {
+	if slices.Contains(resolvedTargets, current) {
+		return current, true
+	}
+
+	return 0, false
+}
+
+func highestDescendingCrossedTarget(resolvedTargets []int, current, previous int) (int, bool) {
+	for _, target := range resolvedTargets {
+		if current == target || (current < target && target <= previous) {
+			return target, true
+		}
+	}
+
+	return 0, false
+}

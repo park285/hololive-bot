@@ -3,25 +3,32 @@ package botruntime
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestBotRuntimeStartStartsH3CertReload(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
 	seen := make(chan context.Context, 1)
-	r := &BotRuntime{h3CertReloadStart: func(c context.Context) { seen <- c }}
+	r := &BotRuntime{h3CertReloadStart: func(ctx context.Context) { seen <- ctx }}
 
-	r.Start(ctx, nil)
+	r.Start(t.Context(), nil)
+	t.Cleanup(r.Close)
 
 	select {
 	case got := <-seen:
-		if got != ctx {
-			t.Fatalf("h3CertReloadStart ctx = %v, want start ctx", got)
+		if got.Err() != nil {
+			t.Fatalf("reload context already canceled: %v", got.Err())
 		}
-	default:
-		t.Fatal("h3CertReloadStart was not invoked")
+
+		if err := r.Shutdown(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+
+		if got.Err() == nil {
+			t.Fatal("shutdown did not cancel reload context")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("H3 certificate reload was not started")
 	}
 }

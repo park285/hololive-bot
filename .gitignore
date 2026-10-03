@@ -3,12 +3,6 @@
 # ============================================
 
 # ============================================
-# Kubernetes (기존 항목)
-# ============================================
-k8s/base/monitoring/charts/
-k8s/base/secret-*.yaml
-
-# ============================================
 # Secrets & Credentials (CRITICAL)
 # ============================================
 .env
@@ -23,6 +17,7 @@ ssh-key-2026-03-09.key.pub
 credentials.json
 secrets.yml
 secrets.yaml
+secret-*.yaml
 secrets/*
 !secrets/.gitkeep
 

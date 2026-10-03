@@ -51,18 +51,6 @@ func TestProvideACLServiceWrapsInitializationErrorForNilPostgres(t *testing.T) {
 	assert.ErrorContains(t, err, "postgres service is nil")
 }
 
-func TestProvideActivityLoggerReturnsLogger(t *testing.T) {
-	t.Parallel()
-
-	logger := ProvideActivityLogger(slog.New(slog.DiscardHandler))
-
-	require.NotNil(t, logger)
-
-	logs, err := logger.GetRecentLogs(1)
-	require.NoError(t, err)
-	assert.Empty(t, logs)
-}
-
 func newACLPostgresMock(t *testing.T) *databasemocks.Client {
 	t.Helper()
 

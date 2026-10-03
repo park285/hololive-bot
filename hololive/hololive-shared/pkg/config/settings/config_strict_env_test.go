@@ -61,7 +61,7 @@ func TestLoadBotRuntimeRejectsInvalidEnvValues(t *testing.T) {
 }
 
 // 퇴역한 env 이름은 값을 읽지 않고 존재만으로(빈 값 포함) 거절한다. 제거 조건과 재검토 기한은
-// internal/load/retired_env_aliases.go와 config_services_retired_env.go 상단 주석이 소유한다.
+// pkg/config/envload/retired_env_aliases.go와 config_services_retired_env.go 상단 주석이 소유한다.
 func TestLoadBotRuntimeRejectsRetiredEnvAliases(t *testing.T) {
 	for _, key := range []string{"HOLODEX_API_KEY_1", "SERVICES_LLM_SERVER_HEALTH_URL"} {
 		for _, value := range []string{"", "legacy-value"} {

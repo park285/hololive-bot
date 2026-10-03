@@ -26,22 +26,23 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
+	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scheduler"
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/providers/dbresource"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -57,7 +58,7 @@ const llmSchedulerAPISecretRequired = "build llm scheduler router: API_SECRET_KE
 type LLMSchedulerRuntime struct {
 	lifecycle.Managed
 
-	Config *apiplane.LLMSchedulerConfig
+	Config *apiconfig.LLMSchedulerConfig
 	Logger *slog.Logger
 
 	MajorEventScheduler        *mescheduler.Scheduler
@@ -68,30 +69,21 @@ type LLMSchedulerRuntime struct {
 
 	httpServers *sharedserver.RuntimeHTTPServers
 	memberCache *member.Cache
-}
 
-func (r *LLMSchedulerRuntime) Run() {
-	if err := lifecycle.Run(context.Background(), lifecycle.Options{
-		ShutdownTimeout: constants.AppTimeout.Shutdown,
-		Start: func(ctx context.Context, errCh chan<- error) {
-			r.startSchedulers(ctx)
-			r.startHTTPServer(errCh)
-		},
-		OnSignal: func(sig os.Signal) {
-			r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
-		},
-		OnError: func(err error) {
-			r.Logger.Error("Server error", slog.Any("error", err))
-		},
-		BeforeShutdown: func() {
-			r.Logger.Info("Shutting down gracefully...")
-		},
-		Shutdown: r.Shutdown,
-	}); err != nil {
-		r.Logger.Error("Shutdown completed with errors", slog.Any("error", err))
-	}
-
-	r.Logger.Info("Shutdown complete")
+	lifecycleMu        sync.Mutex
+	started            bool
+	stopping           bool
+	tasksCancel        context.CancelFunc
+	schedulersStopOnce sync.Once
+	schedulersDone     chan struct{}
+	httpStopInit       sync.Once
+	httpStopGate       chan struct{}
+	httpStopErr        error
+	httpQuiesced       bool
+	drainErr           error
+	resourcesCloseOnce sync.Once
+	resourcesDone      chan struct{}
+	resourcesErr       error
 }
 
 func (r *LLMSchedulerRuntime) startHTTPServer(errCh chan<- error) {
@@ -169,26 +161,7 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 	}
 }
 
-func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
-	var errs []error
-
-	r.stopSchedulers()
-
-	shutdownHTTPServer := func(ctx context.Context) error {
-		return r.httpServers.Shutdown(ctx)
-	}
-	if err := shutdownHTTPServer(ctx); err != nil {
-		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
-
-		errs = append(errs, err)
-	} else {
-		r.Logger.Info("HTTP server stopped")
-	}
-
-	return errors.Join(errs...)
-}
-
-func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiplane.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
+func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
 	if schedulerConfig == nil {
 		return nil, errors.New("llm scheduler config must not be nil")
 	}
@@ -204,7 +177,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiplane.LLM
 
 	cacheService := cacheResources.Service
 
-	databaseResources, cleanupDB, err := dbresource.Provide(ctx, &schedulerConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, logger)
 	if err != nil {
 		cleanupCache()
 
@@ -235,7 +208,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiplane.LLM
 
 func buildLLMSchedulerComponents(
 	ctx context.Context,
-	schedulerConfig *apiplane.LLMSchedulerConfig,
+	schedulerConfig *apiconfig.LLMSchedulerConfig,
 	logger *slog.Logger,
 	cacheService cache.Client,
 	postgresService database.Client,
@@ -271,7 +244,7 @@ func buildLLMSchedulerComponents(
 
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
 
-	memberNewsService, err := initMemberNewsService(ctx, schedulerConfig.SelectedLLMProvider(), &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, memberDataProvider, guards, logger)
+	memberNewsService, err := initMemberNewsService(ctx, schedulerConfig.SelectedLLMProvider(), &schedulerConfig.LLM, schedulerConfig.Exa, schedulerConfig.MemberNewsXAllowlistPath, postgresService, memberDataProvider, guards, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init member news service: %w", err)
 	}
@@ -304,7 +277,7 @@ func buildLLMSchedulerComponents(
 
 func buildLLMSchedulerRuntimeComponents(
 	ctx context.Context,
-	schedulerConfig *apiplane.LLMSchedulerConfig,
+	schedulerConfig *apiconfig.LLMSchedulerConfig,
 	logger *slog.Logger,
 	postgresService database.Client,
 	cacheService cache.Client,
@@ -326,7 +299,7 @@ func buildLLMSchedulerRuntimeComponents(
 	)
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, guards.output, logger)
 
-	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
+	triggerHandler := apiserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
 	readyProbe := buildLLMSchedulerReadyProbe(postgresService, cacheService)
 
 	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService, readyProbe)
@@ -354,7 +327,7 @@ func buildLLMSchedulerReadyProbe(postgresService database.Client, cacheService c
 }
 
 func newLLMSchedulerRuntime(
-	schedulerConfig *apiplane.LLMSchedulerConfig,
+	schedulerConfig *apiconfig.LLMSchedulerConfig,
 	logger *slog.Logger,
 	majorEventScheduler *mescheduler.Scheduler,
 	majorEventMonthlyScheduler *mescheduler.MonthlyScheduler,
@@ -399,7 +372,7 @@ func buildLLMSchedulerHTTPServer(
 	ctx context.Context,
 	port int,
 	logger *slog.Logger,
-	triggerHandler *sharedserver.TriggerHandler,
+	triggerHandler *apiserver.TriggerHandler,
 	apiKey string,
 	majorEventRepository *majorevent.Repository,
 	memberNewsService *membernews.Service,
@@ -427,7 +400,7 @@ func buildLLMSchedulerHTTPServers(
 	ctx context.Context,
 	serverConfig *settings.ServerConfig,
 	logger *slog.Logger,
-	triggerHandler *sharedserver.TriggerHandler,
+	triggerHandler *apiserver.TriggerHandler,
 	apiKey string,
 	majorEventRepository *majorevent.Repository,
 	memberNewsService *membernews.Service,
@@ -458,15 +431,6 @@ func buildLLMSchedulerHTTPServers(
 	}
 
 	return out, nil
-}
-
-// Close는 nil outer runtime에서도 안전하며 등록된 자원 정리를 한 번만 실행한다.
-func (r *LLMSchedulerRuntime) Close() {
-	if r == nil {
-		return
-	}
-
-	r.Managed.Close()
 }
 
 // loadLLMMessageStrings는 llm plane formatter가 쓰는 message_strings를 기동 때 적재하고 뉴스 분류 namespace를

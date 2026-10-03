@@ -1,0 +1,38 @@
+package api
+
+import (
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"sync/atomic"
+	"testing"
+
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	alarmclient "github.com/kapu/hololive-shared/pkg/service/alarm"
+	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
+)
+
+// handler의 0 허용과 실 저장 서비스의 양수 계약이 만나는 경로를 검증한다.
+func TestConfigExpansionZeroValidationWithRealStore(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+	logger := slog.New(slog.DiscardHandler)
+	client := alarmclient.NewClientWithAPIKey(server.URL, "synthetic-probe-key", logger)
+	defer client.Close()
+	store, err := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{AlarmAdvanceMinutes: 5}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &SettingsHandler{Logger: logger, Settings: store, SettingsApplier: sharedsettings.NewLocalSettingsApplier(client)}
+	ctx, rec := newSettingsTestContext(t, []byte(`{"alarmAdvanceMinutes":0}`))
+	handler.UpdateSettings(ctx)
+	if rec.Code != http.StatusInternalServerError || calls.Load() != 0 || store.Get().AlarmAdvanceMinutes != 5 {
+		t.Fatalf("status=%d worker_calls=%d store=%+v body=%s", rec.Code, calls.Load(), store.Get(), rec.Body.String())
+	}
+	t.Logf("request=0; HTTP_status=%d; worker_calls=%d; persisted_snapshot=%d", rec.Code, calls.Load(), store.Get().AlarmAdvanceMinutes)
+}

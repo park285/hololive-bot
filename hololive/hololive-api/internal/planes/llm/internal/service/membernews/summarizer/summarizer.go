@@ -34,10 +34,10 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
-var kst = util.KSTZone
+var kst = timeutil.KSTZone
 
 var categoryLabels = map[model.Category]string{
 	model.CategoryBirthdayLive: "생일 라이브",

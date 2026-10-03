@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
@@ -23,7 +23,7 @@ func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
 	for _, service := range []string{
 		serviceHololiveAPI,
 		serviceAlarmWorker,
-		load.RuntimeYouTubeCollector,
+		runtimepolicy.RuntimeYouTubeCollector,
 	} {
 		block := composeServiceBlock(t, content, service)
 		if got := strings.Count(block, "mode=min"); got != 1 {
@@ -86,7 +86,7 @@ func assertHololiveAPIPlaneAuthRequired(t *testing.T) {
 	t.Helper()
 
 	for path, marker := range map[string]string{
-		"hololive/hololive-api/internal/planes/admin/app/http/router.go":               "API_SECRET_KEY required",
+		"hololive/hololive-api/internal/planes/admin/internal/httpapi/router.go":       "API_SECRET_KEY required",
 		"hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go": "API_SECRET_KEY required",
 	} {
 		if content := readRepoFile(t, path); !strings.Contains(content, marker) {
@@ -148,10 +148,10 @@ func assertHololiveAPITemplateInterpretationContract(t *testing.T) {
 	t.Helper()
 
 	for path, markers := range map[string][]string{
-		"hololive/hololive-api/internal/planes/admin/app/http/registration.go": {
+		"hololive/hololive-api/internal/planes/admin/internal/httpapi/registration.go": {
 			"holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))",
 		},
-		"hololive/hololive-api/internal/planes/admin/app/http/routes.go": {
+		"hololive/hololive-api/internal/planes/admin/internal/httpapi/routes.go": {
 			`holoAPI.PUT("/templates/:key", handler.UpsertTemplate)`,
 			`holoAPI.POST("/templates/:key/preview", handler.PreviewTemplate)`,
 		},

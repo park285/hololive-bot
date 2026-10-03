@@ -28,7 +28,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
 )
 
 // clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.
@@ -79,7 +79,7 @@ func parseIntList(value string) []int {
 }
 
 func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bool) {
-	origins := load.CommaSeparated(rawOrigins)
+	origins := envload.CommaSeparated(rawOrigins)
 
 	if !isProduction {
 		if len(origins) == 0 {

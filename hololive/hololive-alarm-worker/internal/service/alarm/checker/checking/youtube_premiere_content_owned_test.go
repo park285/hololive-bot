@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
 
 func TestMergePersistedLiveSessionStreamsAppliesPremiereTrueOR(t *testing.T) {
@@ -84,7 +84,7 @@ func TestYouTubeCheckerBuildUpcomingNotificationsSkipsPremiereInFiveMinuteWindow
 
 	checker, _, now := newYouTubeBuilderFixture(t)
 	start := now.Add(5 * time.Minute)
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: now.Add(-75 * time.Second),
 		End:   now,
 	}
@@ -106,7 +106,7 @@ func TestYouTubeCheckerBuildUpcomingNotificationsKeepsOrdinaryFiveMinuteCandidat
 
 	checker, _, now := newYouTubeBuilderFixture(t)
 	start := now.Add(5 * time.Minute)
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: now.Add(-75 * time.Second),
 		End:   now,
 	}
@@ -132,7 +132,7 @@ func TestYouTubeCheckerBuildUpcomingNotificationsSkipsPremiereScheduleChange(t *
 
 	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "premiere-delay", previousScheduled, 5))
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: now.Add(-75 * time.Second),
 		End:   now,
 	}

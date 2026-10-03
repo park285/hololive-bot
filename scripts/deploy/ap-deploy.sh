@@ -52,7 +52,7 @@ while IFS= read -r path; do
     exit 1
   }
   case "$path" in
-    hololive/hololive-youtube-collector/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
+    hololive/hololive-youtube-collector/go.sum|hololive/hololive-api/go.sum|hololive/hololive-alarm-worker/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
     go.sum|*/go.sum)
       echo "files-from list contains unapproved go.sum path: $path" >&2
       exit 1
@@ -67,7 +67,7 @@ while IFS= read -r path; do
 done < "$FILES_FROM"
 
 if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM" \
-  | rg -v 'hololive/hololive-alarm-worker/VERSION$'; then
+  | rg -v '^[0-9]+:hololive/hololive-alarm-worker/(VERSION|go\.mod|go\.sum)$'; then
   echo "files-from list contains forbidden deployment scope" >&2
   exit 1
 fi

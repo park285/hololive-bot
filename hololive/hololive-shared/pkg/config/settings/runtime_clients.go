@@ -1,7 +1,6 @@
 package settings
 
 import (
-	"errors"
 	"os"
 	"strings"
 
@@ -37,17 +36,10 @@ func (c IrisRuntimeValidationConfig) HostAllowlistConfigured() bool {
 
 // LoadInternalH3ClientOptions는 내부 서비스 H3 client의 TLS 경로와 이름을 전용 키 두 개에서만 읽는다.
 // 공통 서버 키(HOLOLIVE_H3_CERT_FILE, HOLOLIVE_H3_SERVER_NAME)로 내려가던 폴백은 지웠다(stack audit 2026-09-26).
-// 두 키 중 하나라도 비어 있으면 오류다. 파일 검증과 client 생성은 호출자가 소유한다.
-func LoadInternalH3ClientOptions() (sharedh3.ClientOptions, error) {
-	caCertFile := strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE"))
-	if caCertFile == "" {
-		return sharedh3.ClientOptions{}, errors.New("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE is required")
+// 빈 값의 HTTPS 거절과 파일 검증은 client 생성자가 소유하여 HTTP-only runtime 기동을 보존한다.
+func LoadInternalH3ClientOptions() sharedh3.ClientOptions {
+	return sharedh3.ClientOptions{
+		CACertFile: strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE")),
+		ServerName: strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME")),
 	}
-
-	serverName := strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME"))
-	if serverName == "" {
-		return sharedh3.ClientOptions{}, errors.New("HOLOLIVE_INTERNAL_H3_SERVER_NAME is required")
-	}
-
-	return sharedh3.ClientOptions{CACertFile: caCertFile, ServerName: serverName}, nil
 }

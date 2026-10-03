@@ -28,7 +28,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 type MemberNewsSubscriptionCommand struct {
@@ -133,7 +133,7 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 		},
 		OnSubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Member news subscribe failed",
-				privacylog.RoomIDAttr(cmdCtx.Room),
+				sharedprivacylog.RoomIDAttr(cmdCtx.Room),
 				slog.Any("error", err),
 			)
 
@@ -147,7 +147,7 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 		},
 		OnUnsubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Member news unsubscribe failed",
-				privacylog.RoomIDAttr(cmdCtx.Room),
+				sharedprivacylog.RoomIDAttr(cmdCtx.Room),
 				slog.Any("error", err),
 			)
 

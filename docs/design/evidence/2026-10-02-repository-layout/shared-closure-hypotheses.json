@@ -1,0 +1,24 @@
+{
+  "basis": "actual default go list original package Imports; excludes synthetic test variants. Module-wide production roots; hypothesis only, no source patch build",
+  "baseline": 51,
+  "db_extraction": 48,
+  "server_feature_extraction": 50,
+  "both": 36,
+  "both_removed": [
+    "github.com/kapu/hololive-shared/internal/service/fallback",
+    "github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient",
+    "github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper",
+    "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping",
+    "github.com/kapu/hololive-shared/internal/service/youtube/scraper/scraping/backoff",
+    "github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua",
+    "github.com/kapu/hololive-shared/pkg/contracts/trigger",
+    "github.com/kapu/hololive-shared/pkg/providers",
+    "github.com/kapu/hololive-shared/pkg/service/delivery",
+    "github.com/kapu/hololive-shared/pkg/service/holodex/provider",
+    "github.com/kapu/hololive-shared/pkg/service/member",
+    "github.com/kapu/hololive-shared/pkg/service/officialidentity",
+    "github.com/kapu/hololive-shared/pkg/service/sendoutcome",
+    "github.com/kapu/hololive-shared/pkg/service/youtube/admission",
+    "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+  ]
+}

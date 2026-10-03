@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -15,7 +15,7 @@ func BuildSettingsService(settingsPath string, targetMinutes []int, logger *slog
 		logger.Info("Using settings file path", slog.String("path", settingsPath))
 	}
 
-	policy := sharedchecker.NewTargetMinutePolicyFromConfigured(targetMinutes)
+	policy := targetpolicy.NewTargetMinutePolicyFromConfigured(targetMinutes)
 
 	service, err := settings.NewSettingsService(settingsPath, settings.Settings{
 		AlarmAdvanceMinutes: policy.PrimaryAdvanceMinute(),
@@ -39,7 +39,7 @@ func ResolvePersistedTargetMinutes(settingsPath string, targetMinutes []int, log
 	}
 
 	if !found {
-		resolvedConfigured := sharedchecker.NewTargetMinutePolicyFromConfigured(targetMinutes).Clone()
+		resolvedConfigured := targetpolicy.NewTargetMinutePolicyFromConfigured(targetMinutes).Clone()
 		logResolvedTargetMinutes(logger, "config-missing", resolvedConfigured)
 
 		return resolvedConfigured, nil

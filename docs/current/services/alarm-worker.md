@@ -17,7 +17,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 
 ## Owns
 
-- Alarm HTTP provider route registration for `/internal/alarm/*` during the staged provider migration
+- Alarm HTTP provider route registration for `/internal/alarm/*`
 - YouTube alarm checking and scheduling loops
 - Dispatch queue publish path
 - Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Compose instance
@@ -33,11 +33,17 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
-| Alarm HTTP provider | internal HTTP JSON | `/internal/alarm/*` | `bot`, `admin-api` facade |
+| Alarm HTTP provider | internal HTTP JSON | `/internal/alarm/*` | `hololive-api` bot/admin clients |
 | Alarm dispatch egress | PostgreSQL table | `alarm_dispatch_deliveries` | Iris/Kakao via alarm-worker egress |
 | Notification delivery outbox | PostgreSQL table | `notification_delivery_outbox` | Iris/Kakao via alarm-worker egress |
 | YouTube outbox dispatch | PostgreSQL table | `youtube_notification_outbox` | Iris/Kakao via alarm-worker egress |
-| Alarm service state | in-process domain service | `domain.AlarmCRUD` | local scheduler/checker and alarm HTTP provider |
+| Alarm service state | in-process subscription service | `internal/service/alarm/subscriptions` | scheduler `AlarmState` target/cache-warm port and alarm HTTP route-specific ports use the same service instance |
+
+Worker 설정은 `internal/config`, 실제 구독 서비스와 private cache는
+`internal/service/alarm/subscriptions[/internal/alarmcache]`, dedup·queue·dispatch 저장은
+`internal/service/alarm/{dedup,queue,dispatchoutbox}`가 소유합니다. Alarm dispatch runner·SQL은
+`internal/egress/alarmdispatch`, 실제 YouTube formatter는 `internal/egress/youtubedispatch/format`입니다.
+Shared에는 envelope/DTO 계약과 HTTP client/handler 및 실제 공용 DB·시간·target-minute primitives가 남습니다.
 
 ## Consumes
 
@@ -52,8 +58,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 
 - YouTube collection, owned by `youtube-collector`
 - YouTube canonical persist and notification intent, owned by `hololive-api` YouTube plane
-- Kakao command parsing, owned by `bot`
-- LLM summary generation, owned by `llm-scheduler`
+- Kakao command parsing, owned by the `hololive-api` bot plane
+- LLM summary generation, owned by the `hololive-api` LLM plane
 
 ## Startup requirements
 
@@ -74,7 +80,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Stop scheduler/checker loops gracefully.
 - Stop dispatch queue and YouTube outbox consumers during shutdown.
 
-Runtime은 scheduler·egress·celebration·birthday stream·설정 subscriber를 같은 취소 및 종료 대기 경계에서 관리합니다. 부모가 살아 있을 때 자식의 자체 timeout은 runtime 오류로 전달합니다. 종료 기한을 넘겨도 HTTP cleanup은 호출하며, 작업 대기 실패와 cleanup 오류를 함께 반환합니다. Subscriber의 연결 오류는 기존 log-only 정책을 유지합니다.
+Runtime은 scheduler·egress·celebration·birthday stream·X Spaces runner를 같은 취소 및 종료 대기 경계에서 관리합니다. 부모가 살아 있을 때 자식의 자체 timeout은 runtime 오류로 전달합니다. 종료 기한을 넘겨도 HTTP cleanup은 호출하며, 작업 대기 실패와 cleanup 오류를 함께 반환합니다.
 
 부모 종료에 따른 순수 context 오류만 정상 종료로 처리합니다. 취소와 실제 오류가 함께 반환되면 오류 채널 또는 ERROR 로그에 원인을 남기며, 종료 중 소비되지 않는 오류 채널 때문에 작업이 멈추지 않도록 합니다.
 

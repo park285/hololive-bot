@@ -4,8 +4,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 func TestBotRuntimeCloseNilAndOnce(t *testing.T) {
@@ -15,7 +13,11 @@ func TestBotRuntimeCloseNilAndOnce(t *testing.T) {
 
 	var cleanups atomic.Int32
 
-	runtime := &BotRuntime{Managed: lifecycle.NewManaged(func() { cleanups.Add(1) })}
+	runtime := &BotRuntime{cleanup: func() error {
+		cleanups.Add(1)
+
+		return nil
+	}}
 
 	var callers sync.WaitGroup
 

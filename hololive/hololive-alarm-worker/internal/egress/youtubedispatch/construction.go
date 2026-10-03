@@ -27,9 +27,9 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"

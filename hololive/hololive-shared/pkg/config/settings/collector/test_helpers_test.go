@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func mustLoadCollectorWorkerProfile(t *testing.T) *settings.YouTubeCollectorWorkerProfile {

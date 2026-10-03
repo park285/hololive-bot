@@ -466,7 +466,7 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 		}),
 		handlerTimeout:    handlerTimeout,
 		heartbeatEvery:    time.Hour,
-		settlementTimeout: durableSettlementTimeout,
+		settlementTimeout: 3 * time.Second,
 		inboxHeartbeat:    inbox.Heartbeat,
 		commandHeartbeat:  durability.NewCommandExecutionRepository(pool).Heartbeat,
 	}
@@ -714,7 +714,7 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		}),
 		handlerTimeout:    time.Second,
 		heartbeatEvery:    time.Hour,
-		settlementTimeout: durableSettlementTimeout,
+		settlementTimeout: 3 * time.Second,
 		inboxHeartbeat:    inbox.Heartbeat,
 		commandHeartbeat:  commands.Heartbeat,
 	}

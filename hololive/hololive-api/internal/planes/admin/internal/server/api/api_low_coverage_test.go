@@ -54,10 +54,6 @@ type stubAlarmCRUDForServer struct {
 	removeAlarm     func(context.Context, string, string, domain.AlarmTypes) (bool, error)
 }
 
-func (s *stubAlarmCRUDForServer) AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error) {
-	return false, nil
-}
-
 func (s *stubAlarmCRUDForServer) RemoveAlarm(
 	ctx context.Context,
 	roomID, channelID string,
@@ -75,34 +71,6 @@ func (s *stubAlarmCRUDForServer) RemoveAlarm(
 	return out, nil
 }
 
-func (s *stubAlarmCRUDForServer) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
-	return false, nil
-}
-
-func (s *stubAlarmCRUDForServer) GetRoomAlarms(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
-func (s *stubAlarmCRUDForServer) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
-	return nil, nil
-}
-
-func (s *stubAlarmCRUDForServer) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
-	return nil, nil
-}
-
-func (s *stubAlarmCRUDForServer) ClearRoomAlarms(context.Context, string) (int, error) {
-	return 0, nil
-}
-
-func (s *stubAlarmCRUDForServer) UpdateAlarmAdvanceMinutes(context.Context, int) []int {
-	return nil
-}
-
-func (s *stubAlarmCRUDForServer) GetTargetMinutes() []int {
-	return nil
-}
-
 func (s *stubAlarmCRUDForServer) SetRoomName(context.Context, string, string) error {
 	return nil
 }
@@ -118,10 +86,6 @@ func (s *stubAlarmCRUDForServer) GetAllAlarmKeys(ctx context.Context) ([]*domain
 	}
 
 	return out, nil
-}
-
-func (s *stubAlarmCRUDForServer) WarmCacheFromDB(context.Context) error {
-	return nil
 }
 
 func newAPITestContext(method, urlPath string, body []byte) (*gin.Context, *httptest.ResponseRecorder) {

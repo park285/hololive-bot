@@ -32,12 +32,12 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
@@ -66,7 +66,7 @@ type YouTubeChecker struct {
 	upcomingCandidates  dispatchoutbox.UpcomingCandidateStore
 	unstagedMu          sync.Mutex
 	unstagedUpcoming    map[string]*unstagedYouTubeCandidates
-	targetPolicy        sharedchecker.TargetMinutePolicy
+	targetPolicy        targetpolicy.TargetMinutePolicy
 	targetMinutesMu     sync.RWMutex
 	evaluationWindowCap time.Duration
 	logger              *slog.Logger
@@ -146,7 +146,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		lookupSubscribers: func(ctx context.Context, channelID, title string, alarmType domain.AlarmType) ([]string, error) {
 			return sharedalarm.ResolveEventSubscribers(ctx, cacheClient, subscriptionDB, channelID, title, alarmType)
 		},
-		targetPolicy:        sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
+		targetPolicy:        targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,
 		logger:              SafeLogger(logger),
 	}
@@ -162,7 +162,7 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 	c.targetMinutesMu.Lock()
 	defer c.targetMinutesMu.Unlock()
 
-	c.targetPolicy = sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes))
+	c.targetPolicy = targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes))
 }
 
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
@@ -282,7 +282,7 @@ type youtubeChannelCheckWork struct {
 	channelID       string
 	streams         []*domain.Stream
 	subscriberRooms []string
-	window          sharedchecker.EvaluationWindow
+	window          targetpolicy.EvaluationWindow
 }
 
 func (c *YouTubeChecker) prepareYouTubeChannelWork(
@@ -309,7 +309,7 @@ func (c *YouTubeChecker) prepareYouTubeChannelWork(
 		channelID:       channelID,
 		streams:         channelStreams,
 		subscriberRooms: subscriberRooms,
-		window:          sharedchecker.ResolveEvaluationWindow(prevCheckedAt, now, c.evaluationWindowCap),
+		window:          targetpolicy.ResolveEvaluationWindow(prevCheckedAt, now, c.evaluationWindowCap),
 	}, true
 }
 
@@ -317,7 +317,7 @@ func (c *YouTubeChecker) targetMinutesSnapshot() []int {
 	return c.targetPolicySnapshot().Clone()
 }
 
-func (c *YouTubeChecker) targetPolicySnapshot() sharedchecker.TargetMinutePolicy {
+func (c *YouTubeChecker) targetPolicySnapshot() targetpolicy.TargetMinutePolicy {
 	c.targetMinutesMu.RLock()
 	defer c.targetMinutesMu.RUnlock()
 

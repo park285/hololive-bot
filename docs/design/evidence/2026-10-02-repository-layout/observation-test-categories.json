@@ -1,0 +1,427 @@
+[
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/canonical_fact_clock_test.go",
+    "category": "cross",
+    "recorded_tests": 2,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/channel_consumer_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 7,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/claim_backlog_plan_test.go",
+    "category": "cross",
+    "recorded_tests": 1,
+    "hints": [
+      "collector"
+    ],
+    "reason": "seedClaimBacklog publisher at71-72 and API claim SQL at123"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/community_consumer_test.go",
+    "category": "cross",
+    "recorded_tests": 5,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/community_window_regression_test.go",
+    "category": "cross",
+    "recorded_tests": 1,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/consts_test.go",
+    "category": "unconfirmed",
+    "recorded_tests": 0,
+    "hints": [],
+    "reason": "helper-only shared test constants; duplicate or assign after test function split"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_clock_write_test.go",
+    "category": "cross",
+    "recorded_tests": 3,
+    "hints": [
+      "both",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_conflict_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 1,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_consumer_helpers_test.go",
+    "category": "unconfirmed",
+    "recorded_tests": 0,
+    "hints": [],
+    "reason": "helper-only file: contract Envelope builders plus API ClaimOptions/canonical seed; function split needed"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_consumer_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 8,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_consumer_premiere_test.go",
+    "category": "cross",
+    "recorded_tests": 8,
+    "hints": [
+      "both",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_consumer_test.go",
+    "category": "cross",
+    "recorded_tests": 4,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_persist_payload_test.go",
+    "category": "API",
+    "recorded_tests": 1,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "API content persistence mapping helpers"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_state_test.go",
+    "category": "cross",
+    "recorded_tests": 4,
+    "hints": [
+      "both",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_title_test.go",
+    "category": "cross",
+    "recorded_tests": 3,
+    "hints": [
+      "both",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/job_contract_test.go",
+    "category": "collector",
+    "recorded_tests": 7,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "JobContract/InitialJobContracts/DeferCollectionInput"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/lifecycle_origin_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 3,
+    "hints": [
+      "both",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_absence_slot_plan_test.go",
+    "category": "API",
+    "recorded_tests": 1,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "API live absence lookup SQL at53"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_batch_boundary_test.go",
+    "category": "API",
+    "recorded_tests": 2,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "API liveSession/pending batch writes and transaction boundary"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_check_consumer_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 12,
+    "hints": [
+      "both",
+      "collector"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_consumer_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 13,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_evidence_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 8,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_hotpath_test.go",
+    "category": "API",
+    "recorded_tests": 6,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "API liveDecisionStatements/session writes"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_start_admission_test.go",
+    "category": "API",
+    "recorded_tests": 2,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "API liveEvidence/reduce"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_start_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 2,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/nullable_title_test.go",
+    "category": "cross",
+    "recorded_tests": 2,
+    "hints": [
+      "both",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/performance_test.go",
+    "category": "cross",
+    "recorded_tests": 1,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_checkpoint_mvcc_test.go",
+    "category": "collector",
+    "recorded_tests": 3,
+    "hints": [
+      "collector"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_claim_budget_test.go",
+    "category": "cross",
+    "recorded_tests": 3,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_payload_benchmark_test.go",
+    "category": "collector",
+    "recorded_tests": 1,
+    "hints": [
+      "collector"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_payload_gc_test.go",
+    "category": "cross",
+    "recorded_tests": 3,
+    "hints": [
+      "both",
+      "collector"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_payload_storage_test.go",
+    "category": "cross",
+    "recorded_tests": 2,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_publish_atomic_test.go",
+    "category": "collector",
+    "recorded_tests": 16,
+    "hints": [
+      "collector",
+      "pure/inspect"
+    ],
+    "reason": "publisher transaction/fault/rewrite/terminal tests"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_publish_prepare_test.go",
+    "category": "collector",
+    "recorded_tests": 6,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "preparePublishBatch/clonePublishBatchInput"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_publish_verify_test.go",
+    "category": "collector",
+    "recorded_tests": 1,
+    "hints": [
+      "collector"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_epoch_test.go",
+    "category": "cross",
+    "recorded_tests": 5,
+    "hints": [
+      "api",
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_test.go",
+    "category": "cross",
+    "recorded_tests": 2,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_retention_test.go",
+    "category": "cross",
+    "recorded_tests": 10,
+    "hints": [
+      "api",
+      "both",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_test.go",
+    "category": "cross",
+    "recorded_tests": 30,
+    "hints": [
+      "both",
+      "collector",
+      "pure/inspect"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/retention_application_unique_test.go",
+    "category": "cross",
+    "recorded_tests": 1,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/retry_schedule_test.go",
+    "category": "collector",
+    "recorded_tests": 2,
+    "hints": [
+      "pure/inspect"
+    ],
+    "reason": "NewRetryAtSchedule/RetrySchedule"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/schedule_consumer_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 5,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/shorts_claim_plan_test.go",
+    "category": "cross",
+    "recorded_tests": 1,
+    "hints": [
+      "collector"
+    ],
+    "reason": "publisher lease at24-25 and API claim SQL at75"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/shorts_window_test.go",
+    "category": "cross",
+    "recorded_tests": 7,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/video_lifecycle_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 4,
+    "hints": [
+      "both"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  },
+  {
+    "file": "hololive/hololive-shared/pkg/service/youtube/sourceobservation/viewer_consumer_persist_test.go",
+    "category": "cross",
+    "recorded_tests": 3,
+    "hints": [
+      "both",
+      "collector"
+    ],
+    "reason": "existing per-test caller hints; helpers/indirect calls require further same-package split, not a build proof"
+  }
+]

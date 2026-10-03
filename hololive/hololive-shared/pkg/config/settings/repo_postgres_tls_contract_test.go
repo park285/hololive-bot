@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 // 모든 운영 스택 렌더에서 Postgres 클라이언트는 verify-full + 마운트된 CA 번들을
@@ -18,7 +18,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 		{
 			name:     "base prod",
 			files:    []string{composeProdFile},
-			services: []string{serviceHololiveAPI, serviceAlarmWorker, load.RuntimeYouTubeCollector},
+			services: []string{serviceHololiveAPI, serviceAlarmWorker, runtimepolicy.RuntimeYouTubeCollector},
 		},
 		{
 			name: "live-compat",
@@ -26,7 +26,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 				composeProdFile,
 				composeLiveCompatFile,
 			},
-			services: []string{serviceHololiveAPI, serviceAlarmWorker, load.RuntimeYouTubeCollector},
+			services: []string{serviceHololiveAPI, serviceAlarmWorker, runtimepolicy.RuntimeYouTubeCollector},
 		},
 	}
 
@@ -35,7 +35,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 			cfg := renderComposeConfig(t, tt.files...)
 			for _, service := range tt.services {
 				env := composeEnvironment(t, cfg, service)
-				if env["POSTGRES_SSLMODE"] != load.PostgresSSLModeVerifyFull {
+				if env["POSTGRES_SSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
 					t.Fatalf("%s in %s POSTGRES_SSLMODE = %q, want verify-full", service, tt.name, env["POSTGRES_SSLMODE"])
 				}
 
@@ -120,7 +120,7 @@ func assertDBMigrateVerifyFullTLS(t *testing.T, cfg renderedCompose, stackName s
 	t.Helper()
 
 	migrateEnv := composeEnvironment(t, cfg, "hololive-db-migrate")
-	if migrateEnv["PGSSLMODE"] != load.PostgresSSLModeVerifyFull {
+	if migrateEnv["PGSSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
 		t.Fatalf("hololive-db-migrate PGSSLMODE = %q in %s, want verify-full", migrateEnv["PGSSLMODE"], stackName)
 	}
 

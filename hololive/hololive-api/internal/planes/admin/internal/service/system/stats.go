@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -69,6 +70,7 @@ type Collector struct {
 	serviceName string
 	cacheMu     sync.RWMutex
 	refreshMu   sync.Mutex
+	refreshDone chan struct{}
 	cachedAt    time.Time
 	cached      *SystemStats
 }
@@ -84,8 +86,8 @@ func WithServiceName(name string) CollectorOption {
 	}
 }
 
-func NewCollector(endpoints []ServiceEndpoint, opts ...CollectorOption) *Collector {
-	h3Client, h3ClientErr := internalhttp.NewClientForURLStrict("https://internal", 2*time.Second, nil)
+func NewCollector(endpoints []ServiceEndpoint, options sharedh3.ClientOptions, opts ...CollectorOption) *Collector {
+	h3Client, h3ClientErr := internalhttp.NewClientForURLStrict("https://internal", 2*time.Second, options)
 	collector := &Collector{
 		httpClient:  httputil.NewInternalServiceClient(2 * time.Second),
 		h3Client:    h3Client,
@@ -118,16 +120,54 @@ func (c *Collector) Close() error {
 }
 
 func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
-	if stats := c.getCachedStats(); stats != nil {
-		return stats, nil
-	}
+	for {
+		if stats := c.getCachedStats(); stats != nil {
+			return stats, nil
+		}
 
-	c.refreshMu.Lock()
-	defer c.refreshMu.Unlock()
+		c.refreshMu.Lock()
 
-	if stats := c.getCachedStats(); stats != nil {
-		return stats, nil
+		if stats := c.getCachedStats(); stats != nil {
+			c.refreshMu.Unlock()
+
+			return stats, nil
+		}
+
+		if c.refreshDone == nil {
+			done := make(chan struct{})
+
+			c.refreshDone = done
+			c.refreshMu.Unlock()
+
+			return c.refreshCurrentStats(ctx, done)
+		}
+
+		done := c.refreshDone
+		c.refreshMu.Unlock()
+
+		// 다른 요청의 수집은 유지하고 이 요청의 대기만 취소한다.
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("wait for current stats refresh: %w", ctx.Err())
+		case <-done:
+			if err := ctx.Err(); err != nil {
+				return nil, fmt.Errorf("wait for current stats refresh: %w", err)
+			}
+
+			// 실패 결과는 공유하지 않고 다음 수집의 소유권을 다시 확인한다.
+		}
 	}
+}
+
+func (c *Collector) refreshCurrentStats(ctx context.Context, done chan struct{}) (*SystemStats, error) {
+	defer func() {
+		c.refreshMu.Lock()
+
+		c.refreshDone = nil
+
+		close(done)
+		c.refreshMu.Unlock()
+	}()
 
 	stats, err := c.collectCurrentStats(ctx)
 	if err != nil {

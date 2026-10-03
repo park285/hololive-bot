@@ -111,7 +111,7 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 		if err != nil {
 			d.logger.Warn("Failed to pre-format outbox message",
 				slog.Int64("outbox_id", id),
-				slog.Any("error", err))
+				slog.Any("error", fmt.Errorf("format message: %w", err)))
 
 			failures[id] = true
 

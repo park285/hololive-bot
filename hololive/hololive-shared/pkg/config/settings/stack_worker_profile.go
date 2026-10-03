@@ -6,7 +6,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
@@ -71,10 +71,10 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 		"source_observation.shutdown_timeout_ms":       profile.SourceObservation.ShutdownTimeoutMS,
 	}
 
-	problems = append(problems, load.PositiveValueProblems(positive)...)
+	problems = append(problems, runtimepolicy.PositiveValueProblems(positive)...)
 	problems = append(problems, apiWorkerRelationshipProblems(profile, workers)...)
 
-	if err := load.JoinWorkerProfileProblems("API", problems); err != nil {
+	if err := runtimepolicy.JoinWorkerProfileProblems("API", problems); err != nil {
 		return fmt.Errorf("join worker profile problems: %w", err)
 	}
 
@@ -84,7 +84,7 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 func apiWorkerRelationshipProblems(profile *APIWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
 	problems := make([]string, 0)
 
-	if profile.BotWebhookInbox.MaxAttempts <= 0 || profile.BotReplyOutbox.MaxAttempts <= 0 || !load.AllPositiveInts(
+	if profile.BotWebhookInbox.MaxAttempts <= 0 || profile.BotReplyOutbox.MaxAttempts <= 0 || !runtimepolicy.AllPositiveInts(
 		profile.SourceObservation.DBOperationConcurrency,
 		profile.SourceObservation.ClaimBatchSize,
 	) {

@@ -22,10 +22,6 @@ func (c *Client) getJSON[T any](ctx context.Context, path string) (T, error) {
 	return c.doJSON[T](ctx, http.MethodGet, path, nil)
 }
 
-func (c *Client) putJSON[T any](ctx context.Context, path string, body any) (T, error) {
-	return c.doJSON[T](ctx, http.MethodPut, path, body)
-}
-
 func (c *Client) doJSON[T any](ctx context.Context, method, path string, body any) (T, error) {
 	var zero T
 

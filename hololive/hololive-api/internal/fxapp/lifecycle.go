@@ -91,9 +91,10 @@ func (c *lifecycleCoordinator) OnStop(ctx context.Context) error {
 	drainCancel()
 
 	c.supervisor.Stop()
-	c.resources.Close(ctx)
 
-	resultErr := errors.Join(c.supervisor.Err(), wrapShutdownError(shutdownErr))
+	closeErr := c.resources.Close(ctx)
+
+	resultErr := errors.Join(c.supervisor.Err(), wrapShutdownError(shutdownErr), closeErr)
 	c.mu.Lock()
 
 	c.resultErr = resultErr

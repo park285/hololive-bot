@@ -20,6 +20,6 @@
 
 package summarizer
 
-import "github.com/kapu/hololive-shared/pkg/util"
+import "github.com/kapu/hololive-shared/pkg/timeutil"
 
-var kst = util.KSTZone
+var kst = timeutil.KSTZone

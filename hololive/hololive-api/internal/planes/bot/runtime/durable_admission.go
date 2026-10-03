@@ -23,7 +23,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const (
@@ -38,10 +38,6 @@ const (
 	durableMaxAttempts           = int32(5)
 	durableBatchSize             = int32(100)
 	commandStaleAfter            = 5 * time.Minute
-	// Stop이 wg.Wait로 in-flight 정산을 조인하고 종료 hook 체인(bot→admin→llm plane)은
-	// AppTimeout.Shutdown(10s) 단일 ctx를 순차 공유하므로, 정산 예산이 그 절반을 넘으면
-	// DB 장애 시 후속 plane의 graceful 종료가 통째로 굶는다.
-	durableSettlementTimeout     = 3 * time.Second
 	durableTerminalRetention     = 8 * 24 * time.Hour
 	durableManualReviewRetention = 30 * 24 * time.Hour
 )
@@ -167,6 +163,11 @@ type durableRuntime struct {
 	outboxWake             chan struct{}
 	cancel                 context.CancelFunc
 	wg                     sync.WaitGroup
+	lifecycleMu            sync.Mutex
+	started                bool
+	stopping               bool
+	stopDone               chan struct{}
+	trackersStopOnce       sync.Once
 	dispatchBudget         time.Duration
 	outboxClaimLease       time.Duration
 	heartbeatEvery         time.Duration
@@ -467,7 +468,7 @@ func (r *durableRuntime) completeCommandAndInbox(ctx context.Context, messageID,
 
 		if r.logger != nil {
 			r.logger.Error("durable command outcome requires manual review",
-				slog.String("message_token", privacylog.Pseudonym(messageID)))
+				slog.String("message_token", sharedprivacylog.Pseudonym(messageID)))
 		}
 	}
 

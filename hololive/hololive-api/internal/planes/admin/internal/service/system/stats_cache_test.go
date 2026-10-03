@@ -26,12 +26,14 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 )
 
 func TestNewCollector_DefaultConfiguration(t *testing.T) {
 	endpoints := []ServiceEndpoint{{Name: "svc-a", URL: "http://example.com/health"}}
 
-	collector := NewCollector(endpoints)
+	collector := NewCollector(endpoints, sharedh3.ClientOptions{})
 	if collector == nil {
 		t.Fatal("NewCollector returned nil")
 	}
@@ -121,7 +123,7 @@ func TestCollector_FetchServiceGoroutines_MixedEndpoints(t *testing.T) {
 }
 
 func TestCollector_GetCurrentStats_CacheMissThenHit(t *testing.T) {
-	collector := NewCollector(nil)
+	collector := NewCollector(nil, sharedh3.ClientOptions{})
 
 	first, err := collector.GetCurrentStats(t.Context())
 	if err != nil {

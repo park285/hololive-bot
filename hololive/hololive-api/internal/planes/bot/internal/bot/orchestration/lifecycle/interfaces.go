@@ -1,11 +1,14 @@
 package lifecycle
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type IrisPinger interface {
 	Ping(ctx context.Context) bool
 }
 
-type Stoppable interface {
-	Stop()
+type CacheReadiness interface {
+	WaitUntilReady(context.Context, time.Duration) error
 }

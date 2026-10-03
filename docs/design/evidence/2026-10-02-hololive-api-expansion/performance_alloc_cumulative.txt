@@ -1,0 +1,21 @@
+File: performance_filter.test
+Build ID: 9691e1f69c487e21b98984a2a45cbcbe5ef6b080
+Type: alloc_space
+Time: 2026-10-02 20:43:21 KST
+Showing nodes accounting for 707.61MB, 98.84% of 715.92MB total
+Dropped 54 nodes (cum <= 3.58MB)
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%   710.61MB 99.26%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.TestPerformanceFilterProfile
+         0     0%     0%   710.61MB 99.26%  testing.tRunner
+   23.46MB  3.28%  3.28%   709.61MB 99.12%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.FilterCandidates
+         0     0%  3.28%   709.61MB 99.12%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.TestPerformanceFilterProfile.func1
+         0     0%  3.28%   709.61MB 99.12%  runtime/pprof.Do
+         0     0%  3.28%   674.20MB 94.17%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.buildFilteredCandidate
+  131.68MB 18.39% 21.67%   497.99MB 69.56%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.matchMembers
+         0     0% 21.67%   337.81MB 47.19%  github.com/park285/shared-go/v2/pkg/stringutil.NormalizeKey
+         0     0% 21.67%   337.81MB 47.19%  strings.(*Builder).WriteRune
+         0     0% 21.67%   337.81MB 47.19%  unicode/utf8.AppendRune (inline)
+  337.81MB 47.19% 68.85%   337.81MB 47.19%  unicode/utf8.appendRuneNonASCII
+  176.21MB 24.61% 93.47%   176.21MB 24.61%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.classifyCategory
+   26.50MB  3.70% 97.17%       27MB  3.77%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.buildCandidateMemberTokenSet
+   11.96MB  1.67% 98.84%    11.96MB  1.67%  github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter.applyPeriodFilter

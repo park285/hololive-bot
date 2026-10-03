@@ -129,7 +129,7 @@ HTTP 400/404/413/415/503은 각각 잘못된 입력, 없는 상세 대상, 본�
 ```bash
 go test -race ./hololive/hololive-api/internal/planes/admin/internal/service/dispatchops \
   ./hololive/hololive-api/internal/planes/admin/internal/server/api \
-  ./hololive/hololive-api/internal/planes/admin/app/http
+  ./hololive/hololive-api/internal/planes/admin/internal/httpapi
 
 # 기존 dbtest provider가 소유하는 임시 PostgreSQL과 고유 DB를 쓰고 종료 시 회수합니다.
 env -u TEST_DATABASE_URL -u TEST_DATABASE_OWNER_TOKEN -u ALLOW_EXTERNAL_TEST_DB \
@@ -137,7 +137,7 @@ env -u TEST_DATABASE_URL -u TEST_DATABASE_OWNER_TOKEN -u ALLOW_EXTERNAL_TEST_DB 
   ./hololive/hololive-api/internal/planes/admin/internal/service/dispatchops
 ```
 
-통합 테스트는 기존 dispatchoutbox 테스트의 마이그레이션 정본을 재사용합니다.
+통합 테스트는 기존 `hololive-dbtest.NewPool`의 전체 제품 migration을 적용한 임시 DB를 사용합니다.
 외부 테스트 DB를 지정하려면 dbtest의 ownership sentinel·token 검증을 충족해야 합니다.
 묶음의 원자적 재처리, 부분 선택 차단, 감사 실패 롤백, 동시 요청의 단일 승자,
 큰 bigint ID, 숫자순 cursor 페이지, 수정 시각 불일치와 이미 전송된 형제,

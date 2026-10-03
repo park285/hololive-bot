@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )

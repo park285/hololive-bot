@@ -33,6 +33,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -242,5 +243,5 @@ func broadcastHistoryTime(_ context.Context, f *ResponseFormatter, t time.Time) 
 		return f.messageStrings.Text(messagestrings.MiscTimeUnknown)
 	}
 
-	return util.FormatKST(t, "2006/01/02 15:04")
+	return timeutil.FormatKST(t, "2006/01/02 15:04")
 }

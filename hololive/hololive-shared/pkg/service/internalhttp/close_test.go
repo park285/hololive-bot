@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 )
@@ -124,10 +125,9 @@ func startPeerH3Server(t *testing.T) (addr, caFile string, conns <-chan *quic.Co
 func TestJSONClientCloseSendsCleanConnectionCloseToPeer(t *testing.T) {
 	addr, caFile, conns := startPeerH3Server(t)
 
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", caFile)
-	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "127.0.0.1")
+	options := sharedh3.ClientOptions{CACertFile: caFile, ServerName: testInternalH3ServerName}
 
-	client, err := NewJSONClient("https://"+addr, "", 5*time.Second)
+	client, err := NewJSONClient("https://"+addr, "", 5*time.Second, options)
 	if err != nil {
 		t.Fatalf("NewJSONClient() error = %v", err)
 	}

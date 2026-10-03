@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -155,7 +156,7 @@ func TestBuildLLMSchedulerHTTPServer_FailsClosedWithoutAPIKey(t *testing.T) {
 	})
 
 	logger := newDiscardLogger()
-	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	server, err := buildLLMSchedulerHTTPServer(
 		t.Context(),
@@ -179,7 +180,7 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	})
 
 	logger := newDiscardLogger()
-	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	server, err := buildLLMSchedulerHTTPServer(
 		t.Context(),

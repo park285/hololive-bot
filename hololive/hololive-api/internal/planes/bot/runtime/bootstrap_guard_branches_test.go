@@ -28,22 +28,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 func testBootstrapGuardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
@@ -54,23 +41,21 @@ func canceledContext() context.Context {
 	return ctx
 }
 
-func TestInitializeBotDependencies_ContextCanceled(t *testing.T) {
+func TestInitBotInfrastructureContextCanceled(t *testing.T) {
 	t.Parallel()
 
-	deps, cleanup, err := InitializeBotDependencies(canceledContext(), &configsettings.Config{}, testBootstrapGuardLogger())
+	infra, err := appbootstrap.InitBotInfrastructure(canceledContext(), &configsettings.Config{}, testBootstrapGuardLogger())
 	require.Error(t, err)
-	assert.Nil(t, deps)
-	assert.Nil(t, cleanup)
-	assert.Contains(t, err.Error(), "provide infra resources")
+	assert.Nil(t, infra)
+	assert.ErrorContains(t, err, "provide infra resources")
 }
 
-func TestInitializeBotRuntime_ContextCanceled(t *testing.T) {
+func TestBuildRuntimeContextCanceled(t *testing.T) {
 	t.Parallel()
 
-	runtime, cleanup, err := InitializeBotRuntime(canceledContext(), &configsettings.Config{}, testBootstrapGuardLogger())
+	runtime, err := BuildRuntime(canceledContext(), &configsettings.Config{}, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Nil(t, cleanup)
 	assert.Contains(t, err.Error(), "provide infra resources")
 }
 
@@ -86,7 +71,7 @@ func TestInitInfraResources_ContextCanceled(t *testing.T) {
 func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
 	t.Parallel()
 
-	handler := sharedserver.NewTriggerHandler(nil, nil, nil, testBootstrapGuardLogger())
+	handler := apiserver.NewTriggerHandler(nil, nil, nil, testBootstrapGuardLogger())
 	require.NotNil(t, handler)
 }
 
@@ -118,75 +103,13 @@ func TestResolveLLMSchedulerClients_Guards(t *testing.T) {
 
 // https LLM scheduler URL이 설정됐는데 내부 H3 env가 없으면 명령을 조용히 끄거나 TCP client로 내려가지 않고
 // 기동 오류다(stack audit 2026-09-26).
-func TestResolveLLMSchedulerClientsFailsWithoutInternalH3Env(t *testing.T) {
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
-	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
-
+func TestResolveLLMSchedulerClientsFailsWithoutInternalH3Options(t *testing.T) {
 	clients, err := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
 		LLMSchedulerURL: "https://127.0.0.1:30003",
 		Server:          configsettings.ServerConfig{APIKey: "test-api-key"},
 	}, testBootstrapGuardLogger())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HOLOLIVE_INTERNAL_H3_CA_CERT_FILE")
+	require.ErrorContains(t, err, "configure major event client transport")
 	assert.Nil(t, clients.MajorEvent)
 	assert.Nil(t, clients.MemberNews)
-}
-
-func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
-	t.Parallel()
-
-	logger := testBootstrapGuardLogger()
-	cacheService := &cache.Service{}
-	postgresService := &database.PostgresService{}
-	memberRepository := &member.Repository{}
-	memberCache := &member.Cache{}
-	memberData := &stubMemberDataProvider{}
-	matcherService := &matcher.Matcher{}
-	activityLogger := &activity.Logger{}
-	settingsService := &settings.Service{}
-	aclService := &acl.Service{}
-	commandBuilder := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command { return nil })
-
-	modules := buildBotDependencyModules(
-		&configsettings.Config{
-			Bot:          configsettings.BotConfig{SelfUser: "self-user"},
-			Iris:         configsettings.IrisConfig{BaseURL: "https://iris.example"},
-			Notification: configsettings.NotificationConfig{AdvanceMinutes: []int{5}},
-		},
-		&sharedmodules.InfraModule{Cache: cacheService, Postgres: postgresService, MemberRepository: memberRepository, MemberCache: memberCache},
-		&appbootstrap.ScraperHolodexFoundation{
-			HolodexService: &holodexprovider.Service{},
-		},
-		&appbootstrap.AlarmYouTubeStackComponents{
-			AlarmMode:       &appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, MemberDataSource: memberData},
-			Matcher:         matcherService,
-			ActivityLogger:  activityLogger,
-			SettingsService: settingsService,
-		},
-		&appbootstrap.CoreIntegrationServices{
-			ACLService:           aclService,
-			MajorEventRepository: &stubMajorEventRepository{},
-			MemberNewsService:    &stubMemberNewsService{},
-			CommandBuilders:      []orchcmd.CommandBuilder{commandBuilder},
-		},
-		&messaging.MessageAdapter{},
-		&formatter.ResponseFormatter{},
-		nil,
-		&stubIrisClient{},
-		logger,
-	)
-
-	assert.Equal(t, "self-user", modules.Core.BotSelfUser)
-	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
-	assert.Same(t, cacheService, modules.Data.Cache)
-	assert.Same(t, postgresService, modules.Data.Postgres)
-	assert.Same(t, memberRepository, modules.Data.MemberRepository)
-	assert.Same(t, memberCache, modules.Data.MemberCache)
-	assert.Same(t, memberData, modules.Data.MembersData)
-	assert.Same(t, matcherService, modules.Stream.MemberMatch)
-	assert.Same(t, activityLogger, modules.Support.ActivityLogger)
-	assert.Same(t, settingsService, modules.Support.Settings)
-	assert.Same(t, aclService, modules.Support.ACL)
-	require.Len(t, modules.Feature.CommandBuilders, 1)
-	assert.NotNil(t, modules.Feature.CommandBuilders[0])
 }

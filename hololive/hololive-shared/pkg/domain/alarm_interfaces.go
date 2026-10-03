@@ -20,10 +20,6 @@
 
 package domain
 
-import (
-	"context"
-)
-
 // AddAlarmRequest는 채팅방의 구독 대상을 지정하며 빈 HostID는 전체 채널을 뜻한다.
 type AddAlarmRequest struct {
 	RoomID     string
@@ -51,39 +47,18 @@ type AlarmListView struct {
 	AlarmTypes AlarmTypes
 }
 
-type AlarmWriter interface {
-	AddAlarm(ctx context.Context, req *AddAlarmRequest) (bool, error)
-	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes AlarmTypes) (bool, error)
-	// RemoveHostAlarm은 지정한 멤버의 알림 종류만 해지하고 다른 구독을 보존한다.
-	RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes AlarmTypes) (bool, error)
-	ClearRoomAlarms(ctx context.Context, roomID string) (int, error)
-}
+// ApplyOutcome은 변경 적용 여부를 확인한 근거를 구분한다.
+type ApplyOutcome string
 
-type AlarmReader interface {
-	GetRoomAlarms(ctx context.Context, roomID string) ([]string, error)
-	GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*Alarm, error)
-	ListRoomAlarmsView(ctx context.Context, roomID string) ([]AlarmListView, error)
-	GetAllAlarmKeys(ctx context.Context) ([]*AlarmEntry, error)
-}
+const (
+	ApplyConfirmed ApplyOutcome = "applied"
+	ApplyRejected  ApplyOutcome = "not_applied"
+	ApplyUnknown   ApplyOutcome = "outcome_unknown"
+)
 
-type AlarmRepository interface {
-	AlarmReader
-	AlarmWriter
-}
-
-type AlarmCache interface {
-	WarmCacheFromDB(ctx context.Context) error
-	// SetRoomName은 관리자 지정 방 이름을 저장하며, 공백뿐인 이름은 지정을 해제해 Kakao 방 이름으로 되돌린다.
-	SetRoomName(ctx context.Context, roomID, roomName string) error
-}
-
-type AlarmStateManager interface {
-	UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int
-	GetTargetMinutes() []int
-}
-
-type AlarmCRUD interface {
-	AlarmRepository
-	AlarmCache
-	AlarmStateManager
+// AdvanceMinutesResult의 TargetMinutes는 이번 호출에서 적용을 확인한 값만 담는다.
+type AdvanceMinutesResult struct {
+	RequestedMinutes int
+	Outcome          ApplyOutcome
+	TargetMinutes    []int
 }

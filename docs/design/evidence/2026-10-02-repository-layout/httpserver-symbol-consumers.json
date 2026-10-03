@@ -1,0 +1,1430 @@
+[
+  {
+    "file": "hololive/hololive-alarm-worker/internal/service/workerruntime/runtime_alarm_worker.go",
+    "line": 52,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "line": 119,
+    "symbol": "NewMetricsServer",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "line": 137,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "line": 222,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "line": 225,
+    "symbol": "NewRuntimeRouter",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "line": 225,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "line": 266,
+    "symbol": "NewRuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-alarm-worker/internal/app/workerapp/build_runtime.go",
+    "line": 267,
+    "symbol": "LocalPlaneTraceFilter",
+    "test": false,
+    "module": "hololive-alarm-worker"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/trace_identity_test.go",
+    "line": 33,
+    "symbol": "NewHealthOnlyRuntimeRouter",
+    "test": true,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/trace_identity_test.go",
+    "line": 34,
+    "symbol": "RuntimeRouterOptions",
+    "test": true,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/trace_identity_test.go",
+    "line": 40,
+    "symbol": "LocalPlaneTraceFilter",
+    "test": true,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go",
+    "line": 32,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go",
+    "line": 109,
+    "symbol": "NewHealthOnlyRuntimeRouter",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go",
+    "line": 109,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go",
+    "line": 119,
+    "symbol": "NewRuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go",
+    "line": 150,
+    "symbol": "NewHealthOnlyRuntimeRouter",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go",
+    "line": 154,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go",
+    "line": 165,
+    "symbol": "NewRuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_handler_wiring_test.go",
+    "line": 13,
+    "symbol": "RuntimeRouterOptions",
+    "test": true,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_handler_wiring_test.go",
+    "line": 29,
+    "symbol": "RuntimeRouterOptions",
+    "test": true,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_handler_wiring_test.go",
+    "line": 56,
+    "symbol": "RuntimeRouterOptions",
+    "test": true,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_handler.go",
+    "line": 45,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-youtube-collector"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/build_runtime.go",
+    "line": 234,
+    "symbol": "InitWSUpgrader",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/build_runtime.go",
+    "line": 236,
+    "symbol": "NewRuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/build_runtime.go",
+    "line": 237,
+    "symbol": "LocalPlaneTraceFilter",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/runtime_admin_api.go",
+    "line": 41,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_alarm.go",
+    "line": 58,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_alarm.go",
+    "line": 74,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_alarm.go",
+    "line": 89,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_domains_oauth_response_test.go",
+    "line": 138,
+    "symbol": "RespondError",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_domains_oauth_response_test.go",
+    "line": 157,
+    "symbol": "RespondInternalError",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stats_response_test.go",
+    "line": 61,
+    "symbol": "WSUpgrader",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stats_response_test.go",
+    "line": 63,
+    "symbol": "WSUpgrader",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stats_response_test.go",
+    "line": 72,
+    "symbol": "WSUpgrader",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_youtube_ops.go",
+    "line": 103,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_youtube_ops.go",
+    "line": 114,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_youtube_ops.go",
+    "line": 122,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_youtube_ops.go",
+    "line": 133,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_youtube_ops.go",
+    "line": 141,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_x_spaces.go",
+    "line": 28,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_x_spaces.go",
+    "line": 48,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_x_spaces.go",
+    "line": 55,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_x_spaces.go",
+    "line": 71,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_x_spaces.go",
+    "line": 79,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_dispatch_ops.go",
+    "line": 56,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_dispatch_ops.go",
+    "line": 68,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_dispatch_ops.go",
+    "line": 92,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_dispatch_ops.go",
+    "line": 270,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_dispatch_ops.go",
+    "line": 281,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_dispatch_ops.go",
+    "line": 283,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream_test.go",
+    "line": 43,
+    "symbol": "BuildActiveMemberIndex",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream_test.go",
+    "line": 126,
+    "symbol": "ChannelResponse",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream_test.go",
+    "line": 140,
+    "symbol": "ChannelResponse",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream_test.go",
+    "line": 153,
+    "symbol": "ChannelResponse",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream_test.go",
+    "line": 163,
+    "symbol": "MemberToChannelResponse",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream_test.go",
+    "line": 169,
+    "symbol": "ChannelResponse",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 97,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 104,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 149,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 159,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 176,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 195,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 215,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 230,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 238,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 263,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 269,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_room.go",
+    "line": 316,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 95,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 116,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 122,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 139,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 188,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 193,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 206,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 241,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 243,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 245,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 247,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 269,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 293,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 301,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go",
+    "line": 307,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 132,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 140,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 154,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 182,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 190,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 223,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 239,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 245,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 332,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 342,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/settings_handler.go",
+    "line": 348,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_trigger_test.go",
+    "line": 65,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_trigger_test.go",
+    "line": 87,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_majorevent.go",
+    "line": 86,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_majorevent.go",
+    "line": 93,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_majorevent.go",
+    "line": 98,
+    "symbol": "RespondInternalError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream.go",
+    "line": 33,
+    "symbol": "StreamHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream.go",
+    "line": 40,
+    "symbol": "StreamHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream.go",
+    "line": 43,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stream.go",
+    "line": 45,
+    "symbol": "RespondInternalError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_field_update.go",
+    "line": 71,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_field_update.go",
+    "line": 87,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_field_update.go",
+    "line": 95,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/oauth_proxy.go",
+    "line": 37,
+    "symbol": "BuildOAuthDeepLinkURL",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/oauth_proxy.go",
+    "line": 38,
+    "symbol": "BuildOAuthRedirectHTML",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_alias.go",
+    "line": 79,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_alias.go",
+    "line": 86,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_alias.go",
+    "line": 99,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_alias.go",
+    "line": 107,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member_alias.go",
+    "line": 114,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_deps.go",
+    "line": 54,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_calendar.go",
+    "line": 45,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_calendar.go",
+    "line": 70,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_calendar.go",
+    "line": 78,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 46,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 53,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 77,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 84,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 100,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 108,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 149,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 162,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 174,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_member.go",
+    "line": 182,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api.go",
+    "line": 69,
+    "symbol": "StreamState",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api.go",
+    "line": 86,
+    "symbol": "StreamState",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api.go",
+    "line": 87,
+    "symbol": "NewStreamState",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api.go",
+    "line": 111,
+    "symbol": "StreamState",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stats.go",
+    "line": 117,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stats.go",
+    "line": 144,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stats.go",
+    "line": 149,
+    "symbol": "WSUpgrader",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/internal/server/api/api_stats.go",
+    "line": 152,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/http/middleware.go",
+    "line": 134,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+    "line": 50,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+    "line": 158,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/http/router.go",
+    "line": 158,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/admin/app/http/router.go",
+    "line": 177,
+    "symbol": "NewRuntimeRouter",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/worker_registry.go",
+    "line": 54,
+    "symbol": "NewMetricsServer",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/bootstrap_guard_branches_test.go",
+    "line": 89,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/bootstrap_bot_runtime_helpers_test.go",
+    "line": 42,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/router_integration_test.go",
+    "line": 45,
+    "symbol": "NewHealthOnlyRuntimeRouter",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/router_integration_test.go",
+    "line": 207,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/api_router_trigger_test.go",
+    "line": 56,
+    "symbol": "NewTriggerRuntimeRouter",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/api_router_trigger_test.go",
+    "line": 78,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/api_router_trigger_test.go",
+    "line": 80,
+    "symbol": "NewTriggerRuntimeRouter",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/api_router_trigger_test.go",
+    "line": 99,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/api_router_trigger_test.go",
+    "line": 101,
+    "symbol": "NewTriggerRuntimeRouter",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/bootstrap_bot_runtime_orchestration.go",
+    "line": 50,
+    "symbol": "NewMetricsServer",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/runtime/bootstrap_bot_runtime_orchestration.go",
+    "line": 54,
+    "symbol": "NewPprofServer",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/http/bot_router.go",
+    "line": 55,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/http/bot_router.go",
+    "line": 59,
+    "symbol": "NewRuntimeRouter",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/http/bot_router.go",
+    "line": 59,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/http/bot_router.go",
+    "line": 85,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/http/bot_router.go",
+    "line": 136,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/http/bot_router.go",
+    "line": 143,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/http/bot_router.go",
+    "line": 155,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/bot_server.go",
+    "line": 27,
+    "symbol": "NewHTTPServer",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/bot_server.go",
+    "line": 28,
+    "symbol": "LocalPlaneTraceFilter",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/bot_server.go",
+    "line": 35,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/bot_server.go",
+    "line": 52,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler_lifecycle_test.go",
+    "line": 67,
+    "symbol": "RuntimeHTTPServers",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler_lifecycle_test.go",
+    "line": 113,
+    "symbol": "RuntimeHTTPServers",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 63,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 70,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 87,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 100,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 106,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 143,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 152,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 164,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 171,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 181,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_membernews.go",
+    "line": 186,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router.go",
+    "line": 39,
+    "symbol": "NewRuntimeRouter",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router.go",
+    "line": 39,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router.go",
+    "line": 53,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router.go",
+    "line": 57,
+    "symbol": "RuntimeRouterOptions",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router.go",
+    "line": 78,
+    "symbol": "NewRuntimeRouter",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/providers_membernews_routes_test.go",
+    "line": 72,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_majorevent.go",
+    "line": 73,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_majorevent.go",
+    "line": 80,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_majorevent.go",
+    "line": 94,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_majorevent.go",
+    "line": 103,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_majorevent.go",
+    "line": 109,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_majorevent.go",
+    "line": 122,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_internal_majorevent.go",
+    "line": 128,
+    "symbol": "RespondError",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/router_integration_test.go",
+    "line": 38,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/router_integration_test.go",
+    "line": 75,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router_unit_test.go",
+    "line": 56,
+    "symbol": "NewHTTPServer",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router_unit_test.go",
+    "line": 158,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/api_router_unit_test.go",
+    "line": 182,
+    "symbol": "NewTriggerHandler",
+    "test": true,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 68,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 328,
+    "symbol": "NewTriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 363,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 401,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 422,
+    "symbol": "NewHTTPServer",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 422,
+    "symbol": "LocalPlaneTraceFilter",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 429,
+    "symbol": "TriggerHandler",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 434,
+    "symbol": "RuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 453,
+    "symbol": "NewRuntimeHTTPServers",
+    "test": false,
+    "module": "hololive-api"
+  },
+  {
+    "file": "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "line": 454,
+    "symbol": "LocalPlaneTraceFilter",
+    "test": false,
+    "module": "hololive-api"
+  }
+]

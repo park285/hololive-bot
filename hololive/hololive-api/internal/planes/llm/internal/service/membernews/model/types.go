@@ -128,9 +128,14 @@ type DigestFormatter interface {
 	FormatMemberNewsDigest(ctx context.Context, digest *Digest) (string, error)
 }
 
-type DigestService interface {
+type DigestGenerator interface {
 	GenerateRoomDigest(ctx context.Context, roomID string, period Period) (*Digest, error)
+}
+
+type DigestService interface {
+	DigestGenerator
 	ListSubscribedRooms(ctx context.Context) ([]SubscribedRoom, error)
+	PrepareDigestRun(ctx context.Context, period Period, now time.Time) (DigestGenerator, error)
 }
 
 func NormalizePeriod(period Period) Period {

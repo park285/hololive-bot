@@ -1,0 +1,66 @@
+{
+  "checks": [
+    {
+      "name": "baseline",
+      "exitCode": 0,
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "test",
+        "-json",
+        "-count=1",
+        "-run",
+        "^Test(BotRuntimeCloseNilAndOnce|AdminAPIRuntimeCloseNilAndOnce|CorsOriginGuard_ForbiddenResponseContract|NormalizeCommandKey|CloneParamsWithAction|ReplyClientRequestIDShape|ReplyClientRequestIDIsStable|ReissuedReplyClientRequestID|NextReplyClientRequestID)$",
+        "./internal/planes/bot/runtime",
+        "./internal/planes/admin/app",
+        "./internal/planes/admin/app/http",
+        "./internal/planes/bot/internal/bot/orchestration/orchcmd",
+        "./internal/planes/bot/internal/bot/orchestration/transport"
+      ],
+      "passedTests": 33,
+      "passedPackages": 5
+    },
+    {
+      "name": "production-build",
+      "exitCode": 0,
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "build",
+        "-buildvcs=false",
+        "./..."
+      ]
+    },
+    {
+      "name": "focused-final",
+      "exitCode": 0,
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "test",
+        "-json",
+        "-count=1",
+        "-run",
+        "^Test(BotRuntimeCloseNilAndOnce|AdminAPIRuntimeCloseNilAndOnce|CorsOriginGuard_ForbiddenResponseContract|RuntimeStartPropagatesContextAndErrorChannel|RuntimeShutdownPreservesJoinedErrorsAndAttemptsAllPlanes|RuntimePlaneOrder|RuntimeCloseIsIdempotentAndOrdered|DependenciesViews_NilSafety|DependenciesViews_FieldMapping|NormalizeCommandKey|CloneParamsWithAction|CloneCommandBuildersNilSourceReturnsNil|CloneCommandBuildersProducesIndependentSlice|CommandRouterExecuteWithoutRegistryFails|CommandRouterExecutesRegisteredCommand|ReplyClientRequestIDShape|ReplyClientRequestIDIsStable|ReissuedReplyClientRequestID|NextReplyClientRequestID)$",
+        "./internal/planes/bot/runtime",
+        "./internal/planes/admin/runtime",
+        "./internal/planes/admin/internal/httpapi",
+        "./internal/app",
+        "./internal/planes/bot/internal/orchestration/..."
+      ],
+      "passedTests": 45,
+      "passedPackages": 9
+    },
+    {
+      "name": "visibility-negative",
+      "exitCode": 1,
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "build",
+        "./internal/layoutvisibilityprobe"
+      ],
+      "expectedRejected": true
+    }
+  ],
+  "originalApiSourceChanged": [],
+  "sourceCopiedFiles": 932,
+  "moves": 84,
+  "scope": "Cumulative C1+C2+C3; API production compile and focused tests; no DB/network integration or race"
+}

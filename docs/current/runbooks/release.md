@@ -45,8 +45,9 @@ build host 생성·검증, image와 deploy tree 전송, runtime host no-build cu
 분리해 수행합니다.
 
 `./scripts/deploy/compose-redeploy-service.sh`는 실행한 한 호스트에서 build, migration과
-`compose up`을 연속 수행하는 로컬 검증 도구입니다. 중앙 production cutover 진입점이
-아니며 build host나 runtime host 어느 쪽에서도 중앙 배포용으로 실행하지 않습니다.
+`compose up`을 연속 수행하는 배포 도구입니다. 실행하면 runtime과 DB에 영향을 줄 수 있으므로
+로컬 검증 명령으로 사용하지 않습니다. 중앙 production cutover 진입점이 아니며 build host나
+runtime host 어느 쪽에서도 중앙 배포용으로 실행하지 않습니다.
 
 ### 1. 빌드 호스트: 이미지 생성과 검증
 

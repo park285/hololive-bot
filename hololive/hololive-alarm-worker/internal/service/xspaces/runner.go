@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 

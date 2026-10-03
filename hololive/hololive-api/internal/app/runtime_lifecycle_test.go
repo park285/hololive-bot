@@ -118,11 +118,11 @@ func TestRuntimePlaneOrder(t *testing.T) {
 func TestRuntimeCloseIsIdempotentAndOrdered(t *testing.T) {
 	var calls []string
 
-	runtime := &Runtime{closeSteps: []func(){
-		func() { calls = append(calls, lifecycleBotName) },
-		func() { calls = append(calls, lifecycleAdminName) },
-		func() { calls = append(calls, lifecycleLLMName) },
-		func() { calls = append(calls, lifecycleYouTubeName) },
+	runtime := &Runtime{closeSteps: []func(context.Context) error{
+		func(context.Context) error { calls = append(calls, lifecycleBotName); return nil },
+		func(context.Context) error { calls = append(calls, lifecycleAdminName); return nil },
+		func(context.Context) error { calls = append(calls, lifecycleLLMName); return nil },
+		func(context.Context) error { calls = append(calls, lifecycleYouTubeName); return nil },
 	}}
 
 	runtime.Close()

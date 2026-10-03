@@ -39,11 +39,12 @@ func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
 
 	return &SettingsHandler{
 		Logger:          h.logger,
-		Alarm:           h.alarm,
+		Alarm:           h.roomNames,
 		Activity:        h.activity,
 		ReadRecentLogs:  readRecentLogs,
 		Settings:        h.settings,
 		SettingsApplier: h.settingsApplier,
+		operationGate:   &h.settingsOperations,
 	}
 }
 

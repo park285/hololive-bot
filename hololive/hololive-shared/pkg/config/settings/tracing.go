@@ -28,7 +28,7 @@ import (
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
 )
 
 const defaultOTELSampleRate = 0.1
@@ -69,19 +69,19 @@ func LoadTracingConfig(runtime TracingRuntime, collectorInstanceID string) (Trac
 		}
 	}
 
-	insecure, err := sharedenv.BoolE(load.OTLPInsecureEnv, false)
+	insecure, err := sharedenv.BoolE(envload.OTLPInsecureEnv, false)
 	if err != nil {
 		return TracingConfig{}, fmt.Errorf("read bool env: %w", err)
 	}
 
-	sampleRate, err := sharedenv.FloatE(load.OTELSampleRateEnv, defaultOTELSampleRate)
+	sampleRate, err := sharedenv.FloatE(envload.OTELSampleRateEnv, defaultOTELSampleRate)
 	if err != nil {
 		return TracingConfig{}, fmt.Errorf("read float env: %w", err)
 	}
 
 	config := TracingConfig{
 		Enabled:    enabled,
-		Endpoint:   strings.TrimSpace(sharedenv.String(load.HololiveOTLPGRPCEndpointEnv, "")),
+		Endpoint:   strings.TrimSpace(sharedenv.String(envload.HololiveOTLPGRPCEndpointEnv, "")),
 		Insecure:   insecure,
 		SampleRate: sampleRate,
 	}
@@ -98,9 +98,9 @@ func LoadTracingConfig(runtime TracingRuntime, collectorInstanceID string) (Trac
 // 날이 오지 않으므로 제거 조건과 재검토 기한을 두지 않는다. 판정은 OTel 명세가 빈 값을 미설정으로 다루는 것에
 // 맞춰 non-empty로 한다(프로젝트 퇴역 키의 존재 기준과 다른 이유).
 func rejectStandardOTLPEndpointEnv() error {
-	for _, standardEnv := range []string{load.OTLPEndpointEnv, load.OTLPTracesEndpointEnv} {
+	for _, standardEnv := range []string{envload.OTLPEndpointEnv, envload.OTLPTracesEndpointEnv} {
 		if strings.TrimSpace(sharedenv.String(standardEnv, "")) != "" {
-			return fmt.Errorf("%s is not accepted by Hololive runtimes; use %s", standardEnv, load.HololiveOTLPGRPCEndpointEnv)
+			return fmt.Errorf("%s is not accepted by Hololive runtimes; use %s", standardEnv, envload.HololiveOTLPGRPCEndpointEnv)
 		}
 	}
 
@@ -110,9 +110,9 @@ func rejectStandardOTLPEndpointEnv() error {
 func tracingEnabledEnv(runtime TracingRuntime, collectorInstanceID string) (string, error) {
 	switch runtime {
 	case TracingRuntimeHololiveAPI:
-		return load.TracingHololiveAPIEnabledEnv, nil
+		return envload.TracingHololiveAPIEnabledEnv, nil
 	case TracingRuntimeAlarmWorker:
-		return load.TracingAlarmWorkerEnabledEnv, nil
+		return envload.TracingAlarmWorkerEnabledEnv, nil
 	case TracingRuntimeYouTubeCollector:
 		out, err := youtubeCollectorTracingEnabledResult(collectorInstanceID)
 
@@ -138,7 +138,7 @@ func tracingEnabledEnvForYouTubeCollector(collectorInstanceID string) (string, e
 	}
 
 	if strings.TrimSpace(collectorInstanceID) == "" {
-		return load.TracingYouTubeCollectorEnabledEnv, nil
+		return envload.TracingYouTubeCollectorEnabledEnv, nil
 	}
 
 	disabled, disabledErr := allYouTubeCollectorTracingDisabled()
@@ -155,11 +155,11 @@ func tracingEnabledEnvForYouTubeCollector(collectorInstanceID string) (string, e
 
 func allYouTubeCollectorTracingDisabled() (bool, error) {
 	for _, key := range []string{
-		load.TracingYouTubeCollectorAEnabledEnv,
-		load.TracingYouTubeCollectorBEnabledEnv,
-		load.TracingYouTubeCollectorCEnabledEnv,
-		load.TracingYouTubeCollectorDEnabledEnv,
-		load.TracingYouTubeCollectorEnabledEnv,
+		envload.TracingYouTubeCollectorAEnabledEnv,
+		envload.TracingYouTubeCollectorBEnabledEnv,
+		envload.TracingYouTubeCollectorCEnabledEnv,
+		envload.TracingYouTubeCollectorDEnabledEnv,
+		envload.TracingYouTubeCollectorEnabledEnv,
 	} {
 		enabled, err := sharedenv.BoolE(key, false)
 		if err != nil {
@@ -178,10 +178,10 @@ func allYouTubeCollectorTracingDisabled() (bool, error) {
 func YouTubeCollectorTracingEnabledEnv(instanceID string) (string, error) {
 	normalized := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-collector-")
 	enabledEnv, ok := map[string]string{
-		"a": load.TracingYouTubeCollectorAEnabledEnv,
-		"b": load.TracingYouTubeCollectorBEnabledEnv,
-		"c": load.TracingYouTubeCollectorCEnabledEnv,
-		"d": load.TracingYouTubeCollectorDEnabledEnv,
+		"a": envload.TracingYouTubeCollectorAEnabledEnv,
+		"b": envload.TracingYouTubeCollectorBEnabledEnv,
+		"c": envload.TracingYouTubeCollectorCEnabledEnv,
+		"d": envload.TracingYouTubeCollectorDEnabledEnv,
 	}[normalized]
 
 	if !ok {
@@ -197,7 +197,7 @@ func ValidateTracingConfig(config TracingConfig) error {
 	}
 
 	if config.Enabled && strings.TrimSpace(config.Endpoint) == "" {
-		return fmt.Errorf("%s is required when tracing is enabled", load.HololiveOTLPGRPCEndpointEnv)
+		return fmt.Errorf("%s is required when tracing is enabled", envload.HololiveOTLPGRPCEndpointEnv)
 	}
 
 	return nil

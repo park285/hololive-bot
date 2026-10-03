@@ -7,7 +7,7 @@ INTEGRATION_TEST_PACKAGES=(
     ./hololive/hololive-youtube-collector/internal/runtime/joblease
 )
 INTEGRATION_TAG_PACKAGES=(
-    ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
+    ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
     ./hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
 )
 INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}"
@@ -177,7 +177,7 @@ check_integration_tests() {
 
     if [[ -n "${TEST_DATABASE_URL:-}" ]]; then
         run_step "Alarm dispatch PostgreSQL integration test" \
-            go_mod_readonly go test -count=1 -tags=integration ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
+            go_mod_readonly go test -count=1 -tags=integration ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
         return 0
     fi
 

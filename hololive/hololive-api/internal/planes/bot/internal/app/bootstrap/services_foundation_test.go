@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -49,10 +49,10 @@ func TestInitScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	appConfig.Holodex.APIKey = "configured-key"
 	appConfig.Holodex.DistributedRateLimit.Enabled = false
 
-	foundation, err := InitScraperHolodexFoundation(
+	foundation, err := apifoundation.BuildScraperHolodex(
 		t.Context(),
-		appConfig,
-		&sharedmodules.InfraModule{Cache: cachemocks.NewLenientClient(), MemberCache: newFoundationTestMemberCache(t)},
+		apifoundation.ScraperHolodexOptions{YouTube: appConfig.YouTube, Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialScheduleRuntime()},
+		newFoundationTestMemberCache(t), cachemocks.NewLenientClient(),
 		slog.New(slog.DiscardHandler),
 	)
 	require.NoError(t, err)

@@ -6,9 +6,9 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 // ChannelLiveRunner는 방송 탭 live_snapshot만 수집합니다. 채널 /live 확인은 별도 job 슬롯이 담당하므로

@@ -1,0 +1,28 @@
+package member
+
+import (
+	"context"
+	"log/slog"
+	"time"
+)
+
+// ExpansionNewCache starts the actual epoch lifecycle around a supplied authority read.
+func ExpansionNewCache(ctx context.Context, read func(context.Context) (uint64, error)) (*Cache, <-chan struct{}) {
+	c := newMemberCache(nil, slog.New(slog.DiscardHandler), CacheConfig{EpochReconcileInterval: time.Hour})
+	c.epoch = expansionEpochAuthority{read: read}
+	c.startEpochReconciliation(ctx)
+	return c, c.epochRuntimeDone
+}
+
+type expansionEpochAuthority struct {
+	read func(context.Context) (uint64, error)
+}
+
+func (a expansionEpochAuthority) Current(ctx context.Context) (uint64, error) { return a.read(ctx) }
+func (a expansionEpochAuthority) Advance(context.Context) (uint64, error)     { return 1, nil }
+func (a expansionEpochAuthority) Publish(context.Context, uint64) error       { return nil }
+func (a expansionEpochAuthority) Subscribe(ctx context.Context, subscribed func(), _ func(string)) error {
+	subscribed()
+	<-ctx.Done()
+	return ctx.Err()
+}

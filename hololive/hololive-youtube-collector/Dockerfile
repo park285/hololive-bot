@@ -49,6 +49,8 @@ WORKDIR /workspace/hololive-bot
 COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ./hololive/hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
 COPY hololive/hololive-youtube-collector/go.mod hololive/hololive-youtube-collector/go.sum ./hololive/hololive-youtube-collector/
+COPY hololive/hololive-api/go.mod hololive/hololive-api/go.sum ./hololive/hololive-api/
+COPY hololive/hololive-alarm-worker/go.mod hololive/hololive-alarm-worker/go.sum ./hololive/hololive-alarm-worker/
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-collector
 

@@ -59,6 +59,12 @@ func periodRange(period model.Period, now time.Time) (rangeStart, rangeEnd time.
 	return beginningOfDay(nowKST.AddDate(0, 0, -7)), endOfDay(nowKST.AddDate(0, 0, 21))
 }
 
+// PeriodBounds는 Go 필터와 PostgreSQL이 같은 KST 범위를 쓰도록 포함 시작·제외 끝을 제공합니다.
+func PeriodBounds(period model.Period, now time.Time) (start, end time.Time) {
+	start, inclusiveEnd := periodRange(period, now)
+	return start, inclusiveEnd.Add(time.Nanosecond)
+}
+
 func withinRange(candidateDate, rangeStart, rangeEnd time.Time) bool {
 	return !candidateDate.Before(rangeStart) && !candidateDate.After(rangeEnd)
 }

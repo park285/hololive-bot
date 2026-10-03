@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation/consume"
 )
 
 func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
@@ -25,10 +25,10 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 	runtime.Config.Retention.Enabled = true
 	runtime.Config.Replay.Enabled = true
 	runtime.retainer = fakeRetainer{
-		tick: func(context.Context, consume.RetentionConfig, time.Time) (consume.RetentionResult, error) {
+		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
 			retentionTicks.Add(1)
 
-			return consume.RetentionResult{}, nil
+			return sourceobservation.RetentionResult{}, nil
 		},
 	}
 	runtime.replayer = fakeReplayer{
@@ -82,10 +82,10 @@ func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 		},
 	}
 	runtime.retainer = fakeRetainer{
-		tick: func(context.Context, consume.RetentionConfig, time.Time) (consume.RetentionResult, error) {
+		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
 			sourceTicks.Add(1)
 
-			return consume.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
+			return sourceobservation.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
 		},
 	}
 
@@ -106,7 +106,7 @@ func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 
 func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 	day := 24 * time.Hour
-	cfg := apiplane.YouTubePlaneRetentionConfig{
+	cfg := apiconfig.YouTubePlaneRetentionConfig{
 		CommunityPageAge:    1 * day,
 		VideoListAge:        2 * day,
 		ShortsListAge:       3 * day,
@@ -152,7 +152,7 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 }
 
 func TestPlaneRetentionConfigIncludesDependentRetention(t *testing.T) {
-	cfg := apiplane.YouTubePlaneRetentionConfig{
+	cfg := apiconfig.YouTubePlaneRetentionConfig{
 		ApplicationAuditGrace: 60 * 24 * time.Hour,
 		LiveAbsenceSlotAge:    30 * 24 * time.Hour,
 		CheckpointHistoryAge:  7 * 24 * time.Hour,
@@ -188,16 +188,16 @@ func waitForTicks(t *testing.T, ticks *atomic.Int64) {
 }
 
 type fakeRetainer struct {
-	tick func(context.Context, consume.RetentionConfig, time.Time) (consume.RetentionResult, error)
+	tick func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error)
 }
 
 func (f fakeRetainer) RunRetentionTick(
 	ctx context.Context,
-	cfg consume.RetentionConfig,
+	cfg sourceobservation.RetentionConfig,
 	now time.Time,
-) (consume.RetentionResult, error) {
+) (sourceobservation.RetentionResult, error) {
 	if f.tick == nil {
-		return consume.RetentionResult{}, nil
+		return sourceobservation.RetentionResult{}, nil
 	}
 
 	out, err := f.tick(ctx, cfg, now)

@@ -95,7 +95,7 @@ func TestWaitUntilIrisReady_SucceedsAfterRetry(t *testing.T) {
 		logger:     slog.New(slog.DiscardHandler),
 	}
 
-	err := b.waitUntilIrisReady(t.Context(), 300*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
+	err := b.ensureLifecycle().WaitUntilIrisReady(t.Context(), 300*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("waitUntilIrisReady failed: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestWaitUntilIrisReady_TimesOut(t *testing.T) {
 		logger:     slog.New(slog.DiscardHandler),
 	}
 
-	err := b.waitUntilIrisReady(t.Context(), 70*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
+	err := b.ensureLifecycle().WaitUntilIrisReady(t.Context(), 70*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}

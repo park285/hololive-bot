@@ -9,8 +9,9 @@ import (
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 type RuntimeConfig struct {
@@ -51,7 +52,7 @@ type ProviderTransportConfig struct {
 }
 
 func LoadRuntime() (*RuntimeConfig, error) {
-	if err := load.DotEnv(); err != nil {
+	if err := envload.DotEnv(); err != nil {
 		return nil, fmt.Errorf("load youtube collector runtime: %w", err)
 	}
 
@@ -105,7 +106,7 @@ func buildRuntimeConfig() (*RuntimeConfig, error) {
 	}
 
 	config := &RuntimeConfig{
-		Environment:      load.AppEnvironment(),
+		Environment:      envload.AppEnvironment(),
 		Version:          sharedenv.String("APP_VERSION", "1.1.0-go"),
 		Server:           server,
 		Logging:          logging,
@@ -136,19 +137,19 @@ func loadRuntimeOwnershipConfig() (RuntimeOwnershipConfig, error) {
 	return RuntimeOwnershipConfig{
 		RuntimeAllowed:         runtimeAllowed,
 		PhotoSyncEnabled:       photoSyncEnabled,
-		NotificationEgressRole: load.TrimmedEnv(load.NotificationEgressRoleEnv),
+		NotificationEgressRole: envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv),
 	}, nil
 }
 
 func loadHolodexConfig() (HolodexConfig, error) {
-	apiKey, err := load.HolodexAPIKey()
+	apiKey, err := envload.HolodexAPIKey()
 	if err != nil {
 		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
 	}
 
 	defaults := settings.DefaultHolodexOperationalConfig()
 
-	timeout, err := load.StrictDurationUnitEnv("HOLODEX_TIMEOUT_SECONDS", defaults.Timeout, time.Second)
+	timeout, err := envload.StrictDurationUnitEnv("HOLODEX_TIMEOUT_SECONDS", defaults.Timeout, time.Second)
 	if err != nil {
 		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
 	}
@@ -163,7 +164,7 @@ func loadHolodexConfig() (HolodexConfig, error) {
 func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 	defaults := settings.DefaultOfficialScheduleConfig()
 
-	timeout, err := load.StrictDurationUnitEnv("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", defaults.Timeout, time.Second)
+	timeout, err := envload.StrictDurationUnitEnv("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", defaults.Timeout, time.Second)
 	if err != nil {
 		return OfficialScheduleConfig{}, fmt.Errorf("load official schedule config: %w", err)
 	}
@@ -179,7 +180,7 @@ func (c *RuntimeConfig) Validate() error {
 		return errors.New("youtube collector runtime config is nil")
 	}
 
-	if err := load.ValidateUnsupportedLegacyEnvUsage(); err != nil {
+	if err := envload.ValidateUnsupportedLegacyEnvUsage(); err != nil {
 		return fmt.Errorf("validate unsupported legacy env usage: %w", err)
 	}
 
@@ -231,7 +232,7 @@ func (c *RuntimeConfig) validateServer() error {
 }
 
 func validateCollectorMetricsAPIKey(environment, apiKey string) error {
-	if !load.IsProduction(environment) || strings.TrimSpace(apiKey) != "" {
+	if !runtimepolicy.IsProduction(environment) || strings.TrimSpace(apiKey) != "" {
 		return nil
 	}
 
@@ -243,7 +244,7 @@ func (c *RuntimeConfig) validateTracing() error {
 		return fmt.Errorf("validate tracing config: %w", err)
 	}
 
-	if !load.IsProduction(c.Environment) || c.Tracing.Enabled {
+	if !runtimepolicy.IsProduction(c.Environment) || c.Tracing.Enabled {
 		return nil
 	}
 
@@ -281,18 +282,18 @@ func (c *RuntimeConfig) validateCollectorOwnershipFlags() error {
 	}
 
 	if c.RuntimeOwnership.PhotoSyncEnabled {
-		return fmt.Errorf("%s requires PHOTO_SYNC_ENABLED=false", load.RuntimeYouTubeCollector)
+		return fmt.Errorf("%s requires PHOTO_SYNC_ENABLED=false", runtimepolicy.RuntimeYouTubeCollector)
 	}
 
 	return nil
 }
 
 func (c *RuntimeConfig) validateCollectorEgressOwnership() error {
-	if err := load.ValidateNotificationRoleEnvValues(); err != nil {
+	if err := runtimepolicy.ValidateNotificationRoleEnvValues(envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
 		return fmt.Errorf("validate notification role env values: %w", err)
 	}
 
-	if err := load.RejectReservedEgressRoles(load.RuntimeYouTubeCollector); err != nil {
+	if err := runtimepolicy.RejectReservedEgressRoles(runtimepolicy.RuntimeYouTubeCollector, envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
 		return fmt.Errorf("reject reserved egress roles: %w", err)
 	}
 
@@ -300,12 +301,12 @@ func (c *RuntimeConfig) validateCollectorEgressOwnership() error {
 }
 
 func (c *RuntimeConfig) validateProductionCollectorOwnership() error {
-	if !load.IsProduction(c.Environment) {
+	if !runtimepolicy.IsProduction(c.Environment) {
 		return nil
 	}
 
-	if !strings.EqualFold(c.RuntimeOwnership.NotificationEgressRole, load.NotificationEgressRoleOff) {
-		return fmt.Errorf("%s production requires %s=%s", load.RuntimeYouTubeCollector, load.NotificationEgressRoleEnv, load.NotificationEgressRoleOff)
+	if !strings.EqualFold(c.RuntimeOwnership.NotificationEgressRole, runtimepolicy.NotificationEgressRoleOff) {
+		return fmt.Errorf("%s production requires %s=%s", runtimepolicy.RuntimeYouTubeCollector, runtimepolicy.NotificationEgressRoleEnv, runtimepolicy.NotificationEgressRoleOff)
 	}
 
 	return nil
@@ -316,16 +317,16 @@ func (c *RuntimeConfig) validatePostgres() error {
 		return fmt.Errorf("validate youtube collector postgres user: %w", err)
 	}
 
-	if err := load.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+	if err := runtimepolicy.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
 
-	if !load.IsProduction(c.Environment) {
+	if !runtimepolicy.IsProduction(c.Environment) {
 		return nil
 	}
 
 	if strings.TrimSpace(c.Postgres.Password) == "" {
-		return fmt.Errorf("%s production requires POSTGRES_PASSWORD", load.RuntimeYouTubeCollector)
+		return fmt.Errorf("%s production requires POSTGRES_PASSWORD", runtimepolicy.RuntimeYouTubeCollector)
 	}
 
 	if err := validateReadablePostgresSSLRootCert(c.Postgres.SSLRootCert); err != nil {
@@ -336,19 +337,19 @@ func (c *RuntimeConfig) validatePostgres() error {
 }
 
 func (c *RuntimeConfig) validateProviders() error {
-	if err := load.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
+	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
 		return fmt.Errorf("validate holodex API key: %w", err)
 	}
 
-	if err := load.ValidateHolodexTimeout(c.Holodex.Transport.Timeout); err != nil {
+	if err := runtimepolicy.ValidateHolodexTimeout(c.Holodex.Transport.Timeout); err != nil {
 		return fmt.Errorf("validate holodex timeout: %w", err)
 	}
 
-	if err := load.ValidateOfficialScheduleBaseURL(c.OfficialSchedule.BaseURL); err != nil {
+	if err := runtimepolicy.ValidateOfficialScheduleBaseURL(c.OfficialSchedule.BaseURL); err != nil {
 		return fmt.Errorf("validate official schedule base URL: %w", err)
 	}
 
-	if err := load.ValidateOfficialScheduleTimeout(c.OfficialSchedule.Transport.Timeout); err != nil {
+	if err := runtimepolicy.ValidateOfficialScheduleTimeout(c.OfficialSchedule.Transport.Timeout); err != nil {
 		return fmt.Errorf("validate official schedule timeout: %w", err)
 	}
 
@@ -411,16 +412,16 @@ func validateReadablePostgresSSLRootCert(path string) error {
 func validatePostgresUser(user string) error {
 	want := resolvedHololiveScraperUser()
 	if strings.TrimSpace(user) != want {
-		return fmt.Errorf("%s requires POSTGRES_USER=%s", load.RuntimeYouTubeCollector, want)
+		return fmt.Errorf("%s requires POSTGRES_USER=%s", runtimepolicy.RuntimeYouTubeCollector, want)
 	}
 
 	return nil
 }
 
 func resolvedHololiveScraperUser() string {
-	user := strings.TrimSpace(sharedenv.String("HOLOLIVE_SCRAPER_USER", load.PostgresScraperRoleUser))
+	user := strings.TrimSpace(sharedenv.String("HOLOLIVE_SCRAPER_USER", runtimepolicy.PostgresScraperRoleUser))
 	if user == "" {
-		return load.PostgresScraperRoleUser
+		return runtimepolicy.PostgresScraperRoleUser
 	}
 
 	return user

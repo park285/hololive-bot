@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,29 +71,6 @@ func (p *stubPinger) Ping(context.Context) bool {
 	}
 
 	return p.result
-}
-
-type stubStoppable struct {
-	stopped   bool
-	stopCalls int
-}
-
-func (s *stubStoppable) Stop() {
-	s.stopped = true
-	s.stopCalls++
-}
-
-type stubPostgres struct {
-	closeErr   error
-	closeCalls int
-}
-
-func (p *stubPostgres) GetPool() *pgxpool.Pool     { return nil }
-func (p *stubPostgres) Ping(context.Context) error { return nil }
-
-func (p *stubPostgres) Close() error {
-	p.closeCalls++
-	return p.closeErr
 }
 
 type recordingHandler struct {
@@ -150,7 +126,7 @@ func TestNewBotLifecycle(t *testing.T) {
 	cacheClient := &stubCache{}
 	pinger := &stubPinger{}
 
-	l := NewBotLifecycle(discardLogger(), cacheClient, pinger, "http://iris", stopCh, doneCh, nil, nil)
+	l := NewBotLifecycle(discardLogger(), cacheClient, pinger, "http://iris", stopCh, doneCh)
 
 	require.NotNil(t, l)
 	assert.Equal(t, "http://iris", l.irisBaseURL)
@@ -166,7 +142,7 @@ func TestBotLifecycleStart(t *testing.T) {
 	t.Run("cache not configured", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", make(chan struct{}), make(chan struct{}), nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", make(chan struct{}), make(chan struct{}))
 		err := l.Start(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache is not configured")
@@ -175,7 +151,7 @@ func TestBotLifecycleStart(t *testing.T) {
 	t.Run("cache readiness failure", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), &stubCache{waitErr: errors.New("down")}, &stubPinger{}, "", make(chan struct{}), make(chan struct{}), nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{waitErr: errors.New("down")}, &stubPinger{}, "", make(chan struct{}), make(chan struct{}))
 		err := l.Start(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "valkey connection timeout")
@@ -187,7 +163,7 @@ func TestBotLifecycleStart(t *testing.T) {
 		stopCh := make(chan struct{})
 		close(stopCh)
 
-		l := NewBotLifecycle(discardLogger(), &stubCache{}, nil, "http://iris", stopCh, make(chan struct{}), nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{}, nil, "http://iris", stopCh, make(chan struct{}))
 		require.NoError(t, l.Start(t.Context()))
 	})
 
@@ -197,14 +173,14 @@ func TestBotLifecycleStart(t *testing.T) {
 		stopCh := make(chan struct{})
 		close(stopCh)
 
-		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", stopCh, make(chan struct{}), nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", stopCh, make(chan struct{}))
 		require.NoError(t, l.Start(t.Context()))
 	})
 
 	t.Run("canceled context returns error", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", make(chan struct{}), make(chan struct{}), nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", make(chan struct{}), make(chan struct{}))
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
@@ -221,40 +197,34 @@ func TestBotLifecycleShutdown(t *testing.T) {
 		t.Parallel()
 
 		doneCh := make(chan struct{})
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), doneCh, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), doneCh)
 		require.NoError(t, l.Shutdown(t.Context()))
 		assertChannelClosed(t, doneCh)
 	})
 
-	t.Run("stops and closes all components", func(t *testing.T) {
+	t.Run("does not close plane-owned cache", func(t *testing.T) {
 		t.Parallel()
 
 		cacheClient := &stubCache{}
-		holodex := &stubStoppable{}
-		postgres := &stubPostgres{}
 		doneCh := make(chan struct{})
 
-		l := NewBotLifecycle(discardLogger(), cacheClient, &stubPinger{}, "http://iris", make(chan struct{}), doneCh, holodex, postgres)
+		l := NewBotLifecycle(discardLogger(), cacheClient, &stubPinger{}, "http://iris", make(chan struct{}), doneCh)
 
 		require.NoError(t, l.Shutdown(t.Context()))
-		assert.Equal(t, 1, cacheClient.closeCalls)
-		assert.True(t, holodex.stopped)
-		assert.Equal(t, 1, postgres.closeCalls)
+		assert.Zero(t, cacheClient.closeCalls)
 		assertChannelClosed(t, doneCh)
 	})
 
-	t.Run("component close errors are swallowed", func(t *testing.T) {
+	t.Run("does not call cache Close even when it would fail", func(t *testing.T) {
 		t.Parallel()
 
 		cacheClient := &stubCache{closeErr: errors.New("cache boom")}
-		postgres := &stubPostgres{closeErr: errors.New("pg boom")}
 		doneCh := make(chan struct{})
 
-		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh, nil, postgres)
+		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh)
 
 		require.NoError(t, l.Shutdown(t.Context()))
-		assert.Equal(t, 1, cacheClient.closeCalls)
-		assert.Equal(t, 1, postgres.closeCalls)
+		assert.Zero(t, cacheClient.closeCalls)
 		assertChannelClosed(t, doneCh)
 	})
 
@@ -263,18 +233,18 @@ func TestBotLifecycleShutdown(t *testing.T) {
 
 		cacheClient := &stubCache{}
 		doneCh := make(chan struct{})
-		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh, nil, nil)
+		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh)
 
 		require.NoError(t, l.Shutdown(t.Context()))
 		require.NoError(t, l.Shutdown(t.Context()))
-		assert.Equal(t, 2, cacheClient.closeCalls)
+		assert.Zero(t, cacheClient.closeCalls)
 		assertChannelClosed(t, doneCh)
 	})
 
 	t.Run("nil done channel does not panic", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), nil)
 		require.NoError(t, l.Shutdown(t.Context()))
 	})
 }
@@ -295,7 +265,7 @@ func TestWaitUntilIrisReady(t *testing.T) {
 	t.Run("nil client returns configuration error", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 		err := l.WaitUntilIrisReady(t.Context(), time.Second, time.Millisecond, time.Millisecond)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
@@ -305,7 +275,7 @@ func TestWaitUntilIrisReady(t *testing.T) {
 		t.Parallel()
 
 		p := &stubPinger{result: true}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil)
 		require.NoError(t, l.WaitUntilIrisReady(t.Context(), time.Second, 10*time.Millisecond, 10*time.Millisecond))
 		assert.Equal(t, 1, p.calls)
 	})
@@ -314,7 +284,7 @@ func TestWaitUntilIrisReady(t *testing.T) {
 		t.Parallel()
 
 		p := &stubPinger{result: false}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil)
 		err := l.WaitUntilIrisReady(t.Context(), 40*time.Millisecond, 10*time.Millisecond, 5*time.Millisecond)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "timeout after 40ms")
@@ -328,7 +298,7 @@ func TestRunIrisReadyWaitLoop(t *testing.T) {
 		t.Parallel()
 
 		p := &stubPinger{result: true}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil)
 		require.NoError(t, l.runIrisReadyWaitLoop(t.Context(), make(chan time.Time), time.Minute, time.Second, time.Second))
 		assert.Equal(t, 1, p.calls)
 	})
@@ -337,7 +307,7 @@ func TestRunIrisReadyWaitLoop(t *testing.T) {
 		t.Parallel()
 
 		p := &stubPinger{results: []bool{false, true}}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil)
 		tick := make(chan time.Time, 1)
 
 		tick <- time.Now()
@@ -350,7 +320,7 @@ func TestRunIrisReadyWaitLoop(t *testing.T) {
 		t.Parallel()
 
 		p := &stubPinger{result: false}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
@@ -367,10 +337,10 @@ func TestValidateIrisReadyWaiter(t *testing.T) {
 
 	require.Error(t, nilReceiver.validateIrisReadyWaiter())
 
-	nilClient := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
+	nilClient := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 	require.Error(t, nilClient.validateIrisReadyWaiter())
 
-	valid := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", nil, nil, nil, nil)
+	valid := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", nil, nil)
 	require.NoError(t, valid.validateIrisReadyWaiter())
 }
 
@@ -378,12 +348,12 @@ func TestPingIrisReady(t *testing.T) {
 	t.Parallel()
 
 	up := &stubPinger{result: true}
-	l := NewBotLifecycle(discardLogger(), nil, up, "", nil, nil, nil, nil)
+	l := NewBotLifecycle(discardLogger(), nil, up, "", nil, nil)
 	assert.True(t, l.pingIrisReady(t.Context(), 10*time.Millisecond))
 	assert.Equal(t, 1, up.calls)
 
 	down := &stubPinger{result: false}
-	l2 := NewBotLifecycle(discardLogger(), nil, down, "", nil, nil, nil, nil)
+	l2 := NewBotLifecycle(discardLogger(), nil, down, "", nil, nil)
 	assert.False(t, l2.pingIrisReady(t.Context(), 10*time.Millisecond))
 }
 
@@ -394,7 +364,7 @@ func TestLogIrisReadyAfterRetry(t *testing.T) {
 		t.Parallel()
 
 		h := &recordingHandler{}
-		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil)
 		l.logIrisReadyAfterRetry(1, time.Now())
 		assert.Empty(t, h.messages())
 	})
@@ -403,7 +373,7 @@ func TestLogIrisReadyAfterRetry(t *testing.T) {
 		t.Parallel()
 
 		h := &recordingHandler{}
-		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil)
 		l.logIrisReadyAfterRetry(3, time.Now().Add(-time.Second))
 		require.Len(t, h.messages(), 1)
 		assert.Equal(t, "Iris server became ready after retry", h.messages()[0])
@@ -418,7 +388,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 	t.Run("first attempt logs and returns fresh timestamp", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 		got, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Time{})
 		assert.True(t, ok)
 		assert.False(t, got.IsZero())
@@ -427,7 +397,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 	t.Run("later attempt within a minute is suppressed", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 		last := time.Now()
 		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last)
 		assert.False(t, ok)
@@ -437,7 +407,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 	t.Run("later attempt after a minute logs again", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 		last := time.Now().Add(-2 * time.Minute)
 		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last)
 		assert.True(t, ok)
@@ -447,7 +417,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 	t.Run("first attempt bypasses throttle even with recent timestamp", func(t *testing.T) {
 		t.Parallel()
 
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil)
 		_, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Now())
 		assert.True(t, ok)
 	})
@@ -513,7 +483,7 @@ func TestLoggingHelpersAreNilSafe(t *testing.T) {
 		nilReceiver.logWarn("y")
 	})
 
-	nilLogger := NewBotLifecycle(nil, nil, nil, "", nil, nil, nil, nil)
+	nilLogger := NewBotLifecycle(nil, nil, nil, "", nil, nil)
 
 	require.NotPanics(t, func() {
 		nilLogger.logInfo("x", slog.String("k", "v"))

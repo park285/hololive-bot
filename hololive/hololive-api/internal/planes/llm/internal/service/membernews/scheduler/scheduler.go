@@ -33,7 +33,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 const maxConcurrentDigests = 5
@@ -123,12 +123,12 @@ func (s *Scheduler) Stop() {
 }
 
 func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
-	nowKST := now.In(util.KSTZone)
+	nowKST := now.In(timeutil.KSTZone)
 
 	daysUntilMonday := (int(time.Monday) - int(nowKST.Weekday()) + 7) % 7
 	target := time.Date(
 		nowKST.Year(), nowKST.Month(), nowKST.Day()+daysUntilMonday,
-		WeeklyScheduleHourKST, weeklyScheduleMinuteKST, 0, 0, util.KSTZone,
+		WeeklyScheduleHourKST, weeklyScheduleMinuteKST, 0, 0, timeutil.KSTZone,
 	)
 
 	if !target.After(nowKST) {
@@ -147,9 +147,12 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 		return errors.New("member news service is nil")
 	}
 
-	weekKey := startOfWeek(s.digest.Clock()).Format(time.DateOnly)
+	now := s.digest.Clock()
+	weekKey := startOfWeek(now).Format(time.DateOnly)
 
 	if err := runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
+		period:           model.PeriodWeekly,
+		now:              now,
 		periodKey:        weekKey,
 		periodFieldName:  "week_key",
 		resultMessage:    "Member news weekly result",
@@ -164,15 +167,15 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 	return nil
 }
 
-func (s *Scheduler) processRoomDigest(ctx context.Context, weekKey, roomID string) delivery.SendResult {
-	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
+func (s *Scheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, weekKey, roomID string) delivery.SendResult {
+	return processDigestForRoom(ctx, generator, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
 		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID)
 }
 
 func startOfWeek(t time.Time) time.Time {
-	kstNow := t.In(util.KSTZone)
+	kstNow := t.In(timeutil.KSTZone)
 	daysFromMonday := (int(kstNow.Weekday()) - int(time.Monday) + 7) % 7
 	start := kstNow.AddDate(0, 0, -daysFromMonday)
 
-	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, util.KSTZone)
+	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, timeutil.KSTZone)
 }

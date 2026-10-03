@@ -30,16 +30,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	handler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+	handler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 	require.NotNil(t, handler)
 
 	router := gin.New()

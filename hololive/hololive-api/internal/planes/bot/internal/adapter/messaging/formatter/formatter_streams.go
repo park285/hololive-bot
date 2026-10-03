@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -216,7 +217,7 @@ func (f *ResponseFormatter) streamTimeInfo(_ context.Context, stream *domain.Str
 		return f.messageStrings.Text(messagestrings.MiscTimeUnknown)
 	}
 
-	kstTime := util.FormatKST(*stream.StartScheduled, "01/02 15:04")
+	kstTime := timeutil.FormatKST(*stream.StartScheduled, "01/02 15:04")
 	minutesUntil := stream.MinutesUntilStart()
 
 	if minutesUntil <= 0 {

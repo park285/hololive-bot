@@ -1,0 +1,19 @@
+Synthetic httptest settings probes and selected existing tests; no production calls.
+
+=== RUN   TestConfigExpansionApplyAfterResponseLoss
+    zz_config_apply_unknown_probe_test.go:55: server_applied=15; admin_applied=false; reason="alarm worker did not apply alarm advance minutes"; confirmed_cache=[10 5 1]; requests=2
+--- PASS: TestConfigExpansionApplyAfterResponseLoss (0.00s)
+PASS
+ok  github.com/kapu/hololive-api/internal/server/settings 0.011s
+=== RUN   TestConfigExpansionZeroValidationWithRealStore
+    zz_config_zero_validation_probe_test.go:37: request=0; HTTP_status=500; worker_calls=0; persisted_snapshot=5
+--- PASS: TestConfigExpansionZeroValidationWithRealStore (0.00s)
+PASS
+ok  github.com/kapu/hololive-api/internal/planes/admin/internal/server/api 0.133s
+ok  github.com/kapu/hololive-shared/pkg/config/settings/apiplane 0.012s
+ok  github.com/kapu/hololive-shared/pkg/config/settings/internal/load 0.005s
+ok  github.com/kapu/hololive-shared/pkg/service/internalhttp 0.005s
+ok  github.com/kapu/hololive-api/internal/server/settings 0.004s [no tests to run]
+ok  github.com/kapu/hololive-shared/pkg/service/alarm 0.108s
+ok  github.com/kapu/hololive-api/internal/planes/admin/internal/server/api 0.160s
+ok  github.com/kapu/hololive-api/internal/planes/llm/runtime 0.074s

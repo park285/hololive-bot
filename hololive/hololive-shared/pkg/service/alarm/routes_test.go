@@ -74,10 +74,6 @@ func (fakeAlarmCRUD) RemoveHostAlarm(context.Context, string, string, string, do
 	return false, nil
 }
 
-func (fakeAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) {
-	return nil, nil
-}
-
 func (fakeAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
 	return nil, nil
 }
@@ -94,18 +90,10 @@ func (fakeAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, err
 	return nil, nil
 }
 
-func (fakeAlarmCRUD) WarmCacheFromDB(context.Context) error {
-	return nil
-}
-
 func (fakeAlarmCRUD) SetRoomName(context.Context, string, string) error {
 	return nil
 }
 
-func (fakeAlarmCRUD) UpdateAlarmAdvanceMinutes(context.Context, int) []int {
-	return nil
-}
-
-func (fakeAlarmCRUD) GetTargetMinutes() []int {
-	return nil
+func (fakeAlarmCRUD) UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error) {
+	return domain.AdvanceMinutesResult{}, nil
 }

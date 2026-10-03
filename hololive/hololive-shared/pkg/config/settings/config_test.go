@@ -29,8 +29,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func loadBotRuntimeConfig() (*Config, error) {
@@ -72,13 +73,13 @@ func TestResolveHolodexAPIKey(t *testing.T) {
 		t.Setenv("HOLODEX_API_KEY", " primary-key ")
 		settingstest.UnsetEnv(t, "HOLODEX_API_KEY_1")
 
-		got, err := load.HolodexAPIKey()
+		got, err := envload.HolodexAPIKey()
 		if err != nil {
-			t.Fatalf("load.HolodexAPIKey() error = %v", err)
+			t.Fatalf("envload.HolodexAPIKey() error = %v", err)
 		}
 
 		if got != "primary-key" {
-			t.Fatalf("load.HolodexAPIKey() = %q, want %q", got, "primary-key")
+			t.Fatalf("envload.HolodexAPIKey() = %q, want %q", got, "primary-key")
 		}
 	})
 
@@ -88,8 +89,8 @@ func TestResolveHolodexAPIKey(t *testing.T) {
 			t.Setenv("HOLODEX_API_KEY", "")
 			t.Setenv("HOLODEX_API_KEY_1", value)
 
-			if _, err := load.HolodexAPIKey(); err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY_1") {
-				t.Fatalf("load.HolodexAPIKey() error = %v, want HOLODEX_API_KEY_1 rejection", err)
+			if _, err := envload.HolodexAPIKey(); err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY_1") {
+				t.Fatalf("envload.HolodexAPIKey() error = %v, want HOLODEX_API_KEY_1 rejection", err)
 			}
 		})
 	}
@@ -351,7 +352,7 @@ func TestLoad_ServerHTTPTransportsRejectUnsupportedValue(t *testing.T) {
 
 func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "false")
 
@@ -385,7 +386,7 @@ func TestLoad_UnsupportedLegacyTelemetryEnvRejected(t *testing.T) {
 
 func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "true")
 
@@ -401,7 +402,7 @@ func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 
 func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("CORS_ENFORCE", "false")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*,http://localhost:5173,https://admin.example.com")
 
@@ -528,14 +529,14 @@ func TestLoad_DefaultPostgresSSLModeVerifyFull(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if config.Postgres.SSLMode != load.PostgresSSLModeVerifyFull {
-		t.Fatalf("Postgres.SSLMode = %q, want %q", config.Postgres.SSLMode, load.PostgresSSLModeVerifyFull)
+	if config.Postgres.SSLMode != runtimepolicy.PostgresSSLModeVerifyFull {
+		t.Fatalf("Postgres.SSLMode = %q, want %q", config.Postgres.SSLMode, runtimepolicy.PostgresSSLModeVerifyFull)
 	}
 }
 
 func TestLoad_PostgresSSLRootCertEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("POSTGRES_SSLMODE", load.PostgresSSLModeVerifyFull)
+	t.Setenv("POSTGRES_SSLMODE", runtimepolicy.PostgresSSLModeVerifyFull)
 	t.Setenv("POSTGRES_SSLROOTCERT", "/run/postgresql/root.crt")
 
 	config, err := loadBotRuntimeConfig()
@@ -550,7 +551,7 @@ func TestLoad_PostgresSSLRootCertEnvOverride(t *testing.T) {
 
 func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("API_SECRET_KEY", "")
 
 	_, err := loadBotRuntimeConfig()
@@ -565,7 +566,7 @@ func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 
 func TestLoad_ProductionRejectsWeakPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "require")
 
 	_, err := loadBotRuntimeConfig()
@@ -577,14 +578,14 @@ func TestLoad_ProductionRejectsWeakPostgresSSLMode(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(err.Error(), load.PostgresSSLModeVerifyFull) {
+	if !strings.Contains(err.Error(), runtimepolicy.PostgresSSLModeVerifyFull) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
 
@@ -597,14 +598,14 @@ func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(err.Error(), load.PostgresSSLModeVerifyFull) {
+	if !strings.Contains(err.Error(), runtimepolicy.PostgresSSLModeVerifyFull) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode_WithRetiredOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
@@ -620,8 +621,8 @@ func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode_WithRetiredOverride(t *te
 
 func TestLoad_ProductionAllowsVerifyFullPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
-	t.Setenv("POSTGRES_SSLMODE", load.PostgresSSLModeVerifyFull)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
+	t.Setenv("POSTGRES_SSLMODE", runtimepolicy.PostgresSSLModeVerifyFull)
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
 
 	config, err := loadBotRuntimeConfig()
@@ -629,14 +630,14 @@ func TestLoad_ProductionAllowsVerifyFullPostgresSSLMode(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if config.Postgres.SSLMode != load.PostgresSSLModeVerifyFull {
+	if config.Postgres.SSLMode != runtimepolicy.PostgresSSLModeVerifyFull {
 		t.Fatalf("Postgres.SSLMode = %q, want verify-full", config.Postgres.SSLMode)
 	}
 }
 
 func TestLoad_ProductionRejectsWeakPostgresSSLMode_WithRetiredOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("APP_ENV", runtimepolicy.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "require")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 

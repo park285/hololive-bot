@@ -7,10 +7,10 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/format"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )

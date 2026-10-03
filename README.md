@@ -10,9 +10,9 @@
 
 ## 시스템 아키텍처 (Architecture Overview)
 
-본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성되어 있으며 단일 호스트에서 Docker Compose로 격리 가동됩니다. `hololive-api`는 bot/admin/llm plane을 단일 프로세스에서 호스팅합니다. `youtube-collector`는 AP fleet(`a`/`b`/`c`/`d`)으로 확장 운용됩니다 — Seoul `b`·메인 `c` 인스턴스는 Docker Compose 컨테이너로, Osaka `a`·Osaka2 `d` 인스턴스는 host-native systemd 런타임으로 가동됩니다.
+본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`와 Seoul collector `b`는 Docker Compose로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
 
-인프라 이력 사양: 이전의 k8s/k3s 오케스트레이션 구성에서 관리 편의성 향상을 위해 단일 호스트 Docker Compose 기반 환경으로 롤백 복귀하였습니다. 현재 배포 롤아웃 및 로그 분석, 트러블슈팅의 표준 준거는 Docker Compose 운영 문서군을 따릅니다.
+현재 배포 대상과 실행 방식은 [PROJECT_MAP](docs/current/PROJECT_MAP.md)과 [Deployment Baseline](docs/current/DEPLOYMENT_BASELINE.md), 작업 절차는 [Current Runbooks](docs/current/runbooks/README.md)를 따릅니다. 과거 기록과 설계 문서의 전환 절차를 현재 배포 작업으로 실행하지 않습니다.
 
 ### 런타임 컴포넌트 일람 (Runtime Services)
 

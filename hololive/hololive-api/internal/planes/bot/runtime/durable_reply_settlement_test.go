@@ -43,7 +43,7 @@ func TestAcceptedReplySettlementAfterCancellationReleasesRoomQueue(t *testing.T)
 			require.NoError(t, err)
 			require.True(t, applied)
 
-			runtime := &durableRuntime{outbox: repository, settlementTimeout: durableSettlementTimeout, outboxMaxAttempts: durableMaxAttempts, outboxTotals: &workercontract.Counters{}}
+			runtime := &durableRuntime{outbox: repository, settlementTimeout: 3 * time.Second, outboxMaxAttempts: durableMaxAttempts, outboxTotals: &workercontract.Counters{}}
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
 

@@ -13,7 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 type calendarResponse struct {
@@ -61,7 +61,7 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 }
 
 func parseCalendarParams(c *gin.Context) (month, year int, ok bool) {
-	now := util.NowKST()
+	now := timeutil.NowKST()
 
 	month = int(now.Month())
 	year = now.Year()

@@ -23,7 +23,7 @@ package domain
 import (
 	"time"
 
-	sharedtime "github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 type StreamStatus string
@@ -120,7 +120,7 @@ func (s *Stream) TimeUntilStart() *time.Duration {
 }
 
 func (s *Stream) MinutesUntilStart() int {
-	return sharedtime.MinutesUntilFloorPtr(s.StartScheduled, time.Now())
+	return timeutil.MinutesUntilFloorPtr(s.StartScheduled, time.Now())
 }
 
 func (s *Stream) HasYouTubeInfo() bool {

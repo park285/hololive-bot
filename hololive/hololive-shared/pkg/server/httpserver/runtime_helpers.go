@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -60,43 +59,6 @@ func NewHealthOnlyRuntimeRouter(
 	}
 
 	return out, nil
-}
-
-func NewTriggerRuntimeRouter(
-	ctx context.Context,
-	logger *slog.Logger,
-	triggerHandler *TriggerHandler,
-	apiKey string,
-	opts ...func(*RuntimeRouterOptions),
-) (*gin.Engine, error) {
-	options := RuntimeRouterOptions{
-		APIKey:         apiKey,
-		RegisterRoutes: triggerRuntimeRouteRegistrar(triggerHandler, apiKey),
-	}
-	applyRuntimeRouterOptions(&options, opts)
-
-	out, err := NewRuntimeRouter(ctx, logger, &options)
-	if err != nil {
-		return nil, fmt.Errorf("runtime router: %w", err)
-	}
-
-	return out, nil
-}
-
-func triggerRuntimeRouteRegistrar(triggerHandler *TriggerHandler, apiKey string) func(*gin.Engine) error {
-	return func(router *gin.Engine) error {
-		if triggerHandler == nil {
-			return nil
-		}
-
-		if strings.TrimSpace(apiKey) == "" {
-			return errors.New("API_SECRET_KEY required")
-		}
-
-		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
-
-		return nil
-	}
 }
 
 func NewHTTPServer(addr string, handler http.Handler, operation string,
@@ -185,14 +147,6 @@ func configureRuntimeClientIPTrust(router *gin.Engine, trustRemoteAddrOnly bool)
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	return nil
-}
-
-func applyRuntimeRouterOptions(options *RuntimeRouterOptions, opts []func(*RuntimeRouterOptions)) {
-	for _, opt := range opts {
-		if opt != nil {
-			opt(options)
-		}
-	}
 }
 
 func installRuntimeMiddleware(ctx context.Context, router *gin.Engine, logger *slog.Logger, opts *RuntimeRouterOptions) {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
-	"github.com/kapu/hololive-shared/pkg/privacylog"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const (
@@ -30,11 +30,24 @@ func (r *durableRuntime) Start(ctx context.Context) {
 		return
 	}
 
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+
+	if r.started || r.stopping {
+		return
+	}
+
+	r.started = true
+
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	r.cancel = cancel
-	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-inbox-queue-sampler", func() { r.inboxSampler.Run(runCtx) })
-	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-outbox-queue-sampler", func() { r.outboxSampler.Run(runCtx) })
+	r.wg.Go(func() {
+		panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-inbox-queue-sampler", func() { r.inboxSampler.Run(runCtx) })
+	})
+	r.wg.Go(func() {
+		panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-outbox-queue-sampler", func() { r.outboxSampler.Run(runCtx) })
+	})
 
 	if r.inboxEnabled {
 		r.inboxTracker.StartWorkers(r.inboxWorkers)
@@ -62,26 +75,48 @@ func (r *durableRuntime) Start(ctx context.Context) {
 }
 
 func (r *durableRuntime) Stop(ctx context.Context) error {
-	if r == nil || r.cancel == nil {
+	if r == nil {
 		return nil
 	}
 
-	r.cancel()
+	r.lifecycleMu.Lock()
 
-	done := make(chan struct{})
+	if r.cancel == nil {
+		r.stopping = true
+		r.lifecycleMu.Unlock()
 
-	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-stop-wait", func() { r.wg.Wait(); close(done) })
+		return nil
+	}
+
+	if !r.stopping {
+		r.stopping = true
+		r.cancel()
+	}
+
+	if r.stopDone == nil {
+		r.stopDone = make(chan struct{})
+		go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-stop-wait", func() { r.wg.Wait(); close(r.stopDone) })
+	}
+
+	done := r.stopDone
+	r.lifecycleMu.Unlock()
 
 	if err := waitForDurableStop(ctx, done); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
-	r.stopWorkerTrackers()
+	r.trackersStopOnce.Do(r.stopWorkerTrackers)
 
 	return nil
 }
 
 func waitForDurableStop(ctx context.Context, done <-chan struct{}) error {
+	select {
+	case <-done:
+		return nil
+	default:
+	}
+
 	select {
 	case <-done:
 		return nil
@@ -209,7 +244,7 @@ func (r *durableRuntime) cancelCommandForOwnership(messageID, reason string, can
 	if r.logger != nil {
 		r.logger.Error("durable command canceled before ownership lease expiry",
 			slog.String("reason", reason),
-			slog.String("message_token", privacylog.Pseudonym(messageID)))
+			slog.String("message_token", sharedprivacylog.Pseudonym(messageID)))
 	}
 
 	cancelCommand()

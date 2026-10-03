@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
@@ -77,7 +77,7 @@ func (b *Bot) skipErrorResponseOnUnknownOutcome(ctx context.Context, chatID, com
 	attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
 
 	attrs = append(attrs,
-		privacylog.ChatIDAttr(chatID),
+		sharedprivacylog.ChatIDAttr(chatID),
 		slog.String("command", commandType),
 	)
 	attrs = append(attrs, errorAttrs...)

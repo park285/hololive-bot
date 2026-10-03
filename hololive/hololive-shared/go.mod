@@ -10,7 +10,6 @@ require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.8
 	github.com/gin-gonic/gin v1.12.0
-	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-dbtest v0.0.0

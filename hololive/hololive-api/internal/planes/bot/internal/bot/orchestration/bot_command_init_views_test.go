@@ -276,7 +276,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 }
 
 var (
-	_ streamRuntime                    = (*stubCommandInitStreamProvider)(nil)
+	_ domain.StreamProvider            = (*stubCommandInitStreamProvider)(nil)
 	_ handlercore.MajorEventRepository = (*stubCommandInitMajorEventRepository)(nil)
 	_ handlercore.MemberNewsService    = (*stubCommandInitMemberNewsService)(nil)
 )

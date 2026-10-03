@@ -1,0 +1,10 @@
+Synthetic data only; expected semantic counterexamples, not production incidents.
+
+    zz_performance_review_test.go:40: same_ids=true left_order=[1 2] right_order=[2 1] fallback_first_source=https://hololive.hololivepro.com/a reversed_first_source=https://hololive.hololivepro.com/b
+--- PASS: TestPerformanceReviewCandidateOrder (0.00s)
+    zz_performance_review_test.go:69: full_error=scan active major event: can't scan into dest[5] (col: pub_date): cannot scan Infinity into *time.Time period_error=<nil> period_rows=0
+--- PASS: TestPerformanceReviewOutOfRangeScanError (4.56s)
+    zz_performance_review_test.go:90: initial_month=2026-09 next_month=2026-10 full_next_count=1 initial_snapshot_next_count=0
+--- PASS: TestPerformanceReviewMonthBoundarySnapshot (0.00s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews	4.602s

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 func TestWrapPublishFailurePreservesFailureSemantics(t *testing.T) {

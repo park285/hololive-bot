@@ -26,9 +26,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -243,7 +243,7 @@ func newScheduleChange(previousScheduled string, currentScheduled time.Time) (Sc
 		return ScheduleChange{}, false
 	}
 
-	message := sharedchecker.FormatScheduleChangeMessage(oldScheduled, newScheduled)
+	message := targetpolicy.FormatScheduleChangeMessage(oldScheduled, newScheduled)
 	if message == "" {
 		return ScheduleChange{}, false
 	}

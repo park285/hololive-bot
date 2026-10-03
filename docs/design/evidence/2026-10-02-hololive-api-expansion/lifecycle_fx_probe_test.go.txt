@@ -1,0 +1,162 @@
+package fxapp
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	botruntime "github.com/kapu/hololive-api/internal/planes/bot/runtime"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
+	modules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/telemetry"
+)
+
+type expansionTelemetry struct{ calls atomic.Int64 }
+
+func (r *expansionTelemetry) Shutdown(context.Context) error { r.calls.Add(1); return nil }
+
+type expansionSignalRuntime struct {
+	runtimeResource
+	afterStart func()
+}
+
+func (r *expansionSignalRuntime) Start(ctx context.Context, errCh chan<- error) {
+	r.runtimeResource.Start(ctx, errCh)
+	if r.afterStart != nil {
+		r.afterStart()
+	}
+	errCh <- nil
+}
+
+type expansionRunner struct {
+	*Application
+	stopTimeout time.Duration
+}
+
+func (r expansionRunner) LifecycleTimeouts() (time.Duration, time.Duration) {
+	return time.Second, r.stopTimeout
+}
+
+func expansionApplication(t *testing.T, runtime runtimeResource, tel *expansionTelemetry) *Application {
+	t.Helper()
+	application, err := newApplication(t.Context(), applicationParams{
+		config: &apiplane.RuntimeConfig{Bot: &settings.Config{Environment: "test"}}, logger: slog.New(slog.DiscardHandler), version: "probe",
+		dependencies: applicationDependencies{
+			newTelemetry: func(context.Context, telemetry.Config) (telemetryResource, error) { return tel, nil },
+			buildRuntime: func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
+				return runtime, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return application
+}
+
+func TestExpansionFxClosesResourcesWhileTimedOutDurableWorkerLives(t *testing.T) {
+	release := make(chan struct{})
+	var workerDone <-chan struct{}
+	var closedWhileAlive atomic.Bool
+	var cleanupCalls atomic.Int64
+	r, canceled, done, observe := botruntime.ExpansionHeldRuntime(release, func() {
+		cleanupCalls.Add(1)
+		select {
+		case <-workerDone:
+		default:
+			closedWhileAlive.Store(true)
+		}
+	})
+	workerDone = done
+	wrapped := &expansionSignalRuntime{runtimeResource: r, afterStart: observe}
+	tel := &expansionTelemetry{}
+	application := expansionApplication(t, wrapped, tel)
+	application.coordinator.drainLimit = 10 * time.Millisecond
+	code := runApplication(expansionRunner{application, time.Second}, slog.New(slog.DiscardHandler))
+	select {
+	case <-canceled:
+	default:
+		t.Fatal("durable cancel was not called")
+	}
+	if code != 1 || !closedWhileAlive.Load() || cleanupCalls.Load() != 1 || tel.calls.Load() != 1 {
+		t.Fatalf("exit=%d aliveAtClose=%t cleanup=%d telemetry=%d", code, closedWhileAlive.Load(), cleanupCalls.Load(), tel.calls.Load())
+	}
+	close(release)
+	<-done
+	if err := r.Shutdown(t.Context()); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
+	t.Logf("exit=%d worker_alive_at_resource_close=%t cleanup_calls=%d telemetry_calls=%d (worker deliberately held)", code, closedWhileAlive.Load(), cleanupCalls.Load(), tel.calls.Load())
+}
+
+func TestExpansionFxHardDeadlineReturnsWhileMemberCacheCloseStillRuns(t *testing.T) {
+	readStarted := make(chan struct{})
+	release := make(chan struct{})
+	readExited := make(chan struct{})
+	parent, cancelParent := context.WithCancel(t.Context())
+	defer cancelParent()
+	mc, memberDone := member.ExpansionNewCache(parent, func(context.Context) (uint64, error) {
+		close(readStarted)
+		<-release
+		close(readExited)
+		return 1, nil
+	})
+	<-readStarted
+	cancelParent()
+	closeEntered := make(chan struct{})
+	closeExited := make(chan struct{})
+	var cleanupCalls atomic.Int64
+	var infraClosed atomic.Bool
+	infra := modules.ExpansionNewInfra(nil, nil, mc, func() { infraClosed.Store(true) }, nil)
+	r := &botruntime.BotRuntime{Logger: slog.New(slog.DiscardHandler), Managed: lifecycle.NewManaged(func() {
+		cleanupCalls.Add(1)
+		close(closeEntered)
+		infra.Cleanup()
+		close(closeExited)
+	})}
+	tel := &expansionTelemetry{}
+	application := expansionApplication(t, &expansionSignalRuntime{runtimeResource: r}, tel)
+	application.coordinator.drainLimit = time.Second
+	began := time.Now()
+	code := runApplication(expansionRunner{application, 25 * time.Millisecond}, slog.New(slog.DiscardHandler))
+	elapsed := time.Since(began)
+	<-closeEntered
+	select {
+	case <-closeExited:
+		t.Fatal("close unexpectedly completed before held read release")
+	default:
+	}
+	select {
+	case <-memberDone:
+		t.Fatal("member cache unexpectedly exited")
+	default:
+	}
+	if code != 1 || cleanupCalls.Load() != 1 || infraClosed.Load() || tel.calls.Load() != 0 {
+		t.Fatalf("exit=%d cleanup=%d infraClosed=%t telemetry=%d", code, cleanupCalls.Load(), infraClosed.Load(), tel.calls.Load())
+	}
+	t.Logf("exit=%d elapsed=%s member_alive=true close_in_progress=true db_cleanup=false telemetry_cleanup=false", code, elapsed)
+	close(release)
+	<-readExited
+	<-memberDone
+	<-closeExited
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	for tel.calls.Load() == 0 {
+		select {
+		case <-deadline.C:
+			t.Fatal("late coordinator cleanup did not complete")
+		default:
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if cleanupCalls.Load() != 1 {
+		t.Fatal("concurrent second cleanup was attempted")
+	}
+	t.Logf("after_release member_alive=false db_cleanup=%t telemetry_cleanup=%d cleanup_calls=%d", infraClosed.Load(), tel.calls.Load(), cleanupCalls.Load())
+}

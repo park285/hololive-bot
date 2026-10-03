@@ -1,0 +1,12 @@
+package modules
+
+import (
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+)
+
+// ExpansionNewInfra uses the existing infra cleanup, including Cache.Close and its join.
+func ExpansionNewInfra(c cache.Client, p database.Client, m *member.Cache, db, kv func()) *InfraModule {
+	return newInfraModule(c, p, nil, m, db, kv)
+}

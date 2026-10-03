@@ -23,8 +23,8 @@ package botruntime
 import (
 	"context"
 	"errors"
-
-	appruntime "github.com/kapu/hololive-api/internal/planes/bot/internal/app/runtime"
+	"fmt"
+	"net/http"
 )
 
 func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
@@ -32,10 +32,86 @@ func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
 		return
 	}
 
-	appruntime.StartHTTP3Server(r.H3Server, r.Logger, errCh)
-	appruntime.StartShortLinkServer(r.ShortLinkServer, r.Logger, errCh)
-	appruntime.StartMetricsServer(r.MetricsServer, r.Logger, errCh)
-	appruntime.StartPprofServer(r.PprofServer, r.Logger, errCh)
+	r.requestsMu.Lock()
+	defer r.requestsMu.Unlock()
+
+	if r.requestsClosing {
+		return
+	}
+
+	r.prepareHTTPHandlers()
+
+	startHTTP3Server(r.H3Server, r.Logger, errCh)
+	startShortLinkServer(r.ShortLinkServer, r.Logger, errCh)
+	startMetricsServer(r.MetricsServer, r.Logger, errCh)
+	startPprofServer(r.PprofServer, r.Logger, errCh)
+}
+
+func (r *BotRuntime) prepareHTTPHandlers() {
+	r.httpHandlersOnce.Do(func() {
+		if r.H3Server != nil {
+			r.H3Server.Handler = r.trackHTTPHandler(r.H3Server.Handler)
+		}
+
+		for _, server := range []*http.Server{r.ShortLinkServer, r.MetricsServer, r.PprofServer} {
+			if server != nil {
+				server.Handler = r.trackHTTPHandler(server.Handler)
+			}
+		}
+	})
+}
+
+func (r *BotRuntime) trackHTTPHandler(next http.Handler) http.Handler {
+	if next == nil {
+		next = http.DefaultServeMux
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		r.requestsMu.Lock()
+
+		if r.requestsClosing {
+			r.requestsMu.Unlock()
+			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+
+			return
+		}
+
+		r.requestsWG.Add(1)
+		r.requestsMu.Unlock()
+
+		defer r.requestsWG.Done()
+
+		next.ServeHTTP(w, req)
+	})
+}
+
+func (r *BotRuntime) stopHTTPRequestAdmission() {
+	r.requestsMu.Lock()
+	defer r.requestsMu.Unlock()
+
+	r.requestsClosing = true
+
+	if r.requestsDone == nil {
+		r.requestsDone = make(chan struct{})
+
+		go func() {
+			r.requestsWG.Wait()
+			close(r.requestsDone)
+		}()
+	}
+}
+
+func (r *BotRuntime) joinHTTPRequests(ctx context.Context) error {
+	r.requestsMu.Lock()
+
+	done := r.requestsDone
+	r.requestsMu.Unlock()
+
+	if err := waitForDurableStop(ctx, done); err != nil {
+		return fmt.Errorf("join bot HTTP requests: %w", err)
+	}
+
+	return nil
 }
 
 func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
@@ -44,9 +120,9 @@ func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	}
 
 	return errors.Join(
-		appruntime.ShutdownHTTP3Server(ctx, r.H3Server),
-		appruntime.ShutdownShortLinkServer(ctx, r.ShortLinkServer),
-		appruntime.ShutdownMetricsServer(ctx, r.MetricsServer),
-		appruntime.ShutdownPprofServer(ctx, r.PprofServer),
+		shutdownHTTP3Server(ctx, r.H3Server),
+		shutdownShortLinkServer(ctx, r.ShortLinkServer),
+		shutdownMetricsServer(ctx, r.MetricsServer),
+		shutdownPprofServer(ctx, r.PprofServer),
 	)
 }

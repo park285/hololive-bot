@@ -27,12 +27,12 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
+	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
@@ -52,12 +52,14 @@ import (
 type Handler struct {
 	repository                 *member.Repository
 	memberCache                *member.Cache
-	alarm                      domain.AlarmCRUD
+	alarm                      AlarmManager
+	roomNames                  RoomNameSetter
 	holodex                    *holodexprovider.Service
 	communityShortsOps         YouTubeCommunityShortsOpsRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
 	settingsApplier            sharedsettings.SettingsApplier
+	settingsOperations         settingsOperationGate
 	acl                        *acl.Service
 	iris                       IrisRoomLister
 	logger                     *slog.Logger
@@ -66,7 +68,7 @@ type Handler struct {
 	majorEventScheduler        MajorEventScheduler
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler
 	startTime                  time.Time
-	streamState                *sharedserver.StreamState
+	streamState                *adminhandlers.StreamState
 	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
 	xSpaceSessions             *xspaces.Store
 }
@@ -83,8 +85,8 @@ type IrisRoomLister interface {
 	GetRooms(ctx context.Context) (*iris.RoomListResponse, error)
 }
 
-func newStreamState() *sharedserver.StreamState {
-	return sharedserver.NewStreamState()
+func newStreamState() *adminhandlers.StreamState {
+	return adminhandlers.NewStreamState()
 }
 
 func (h *Handler) ensureDefaults() *Handler {
@@ -108,7 +110,7 @@ func (h *Handler) ensureDefaults() *Handler {
 }
 
 // streamState 접근자. 생성자에서 반드시 초기화되므로 nil이 될 수 없다.
-func (h *Handler) ensureStreamState() *sharedserver.StreamState {
+func (h *Handler) ensureStreamState() *adminhandlers.StreamState {
 	if h == nil {
 		return newStreamState()
 	}
@@ -139,15 +141,22 @@ type StreamDeps struct {
 }
 
 type StatsDeps struct {
-	Alarm       domain.AlarmCRUD
+	Alarm       AlarmManager
 	ACL         *acl.Service
 	Iris        IrisRoomLister
 	SystemStats *system.Collector
 }
 
 type SettingsDeps struct {
-	Settings settings.ReadWriter
-	Applier  sharedsettings.SettingsApplier
+	Settings  settings.ReadWriter
+	Applier   sharedsettings.SettingsApplier
+	RoomNames RoomNameSetter
+}
+
+// AlarmManager는 관리 목록·통계 조회와 구독 삭제에 필요한 작업만 제공한다.
+type AlarmManager interface {
+	GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error)
+	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
 }
 
 type TemplateDeps struct {
@@ -189,6 +198,7 @@ func NewHandler(deps *HandlerDeps) *Handler {
 		repository:                 deps.Member.Repository,
 		memberCache:                deps.Member.Cache,
 		alarm:                      deps.Stats.Alarm,
+		roomNames:                  deps.Settings.RoomNames,
 		holodex:                    deps.Stream.Holodex,
 		communityShortsOps:         deps.YouTubeOps.CommunityShortsOps,
 		activity:                   deps.Common.Activity,

@@ -593,9 +593,9 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		t.Fatalf("resolve migrations dir for observation lock API check: %v", err)
 	}
 
-	// 발행 SQL은 collector가 쓰는 sourceobservation, 소비 SQL은 API가 쓰는 sourceobservation/consume 패키지가 소유한다.
-	publishQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-shared", "pkg", "service", "youtube", "sourceobservation", "queries"))
-	consumeQueryDir := filepath.Join(filepath.Dir(publishQueryDir), "consume", "queries")
+	// 발행 SQL은 collector, 소비 SQL은 API의 sourceobservation 패키지가 소유한다.
+	publishQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
+	consumeQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "youtube", "sourceobservation", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 	checks := map[string]struct {
 		dir     string

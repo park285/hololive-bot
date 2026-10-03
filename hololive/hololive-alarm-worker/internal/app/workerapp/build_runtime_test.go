@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/notification/alarmservice"
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 )
 
 func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -22,7 +22,7 @@ func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
 	assert.Nil(t, runtime)
 	assert.Equal(t, "normalize runtime build inputs: config must not be nil", err.Error())
 
-	runtime, err = BuildAlarmWorkerRuntime(t.Context(), &alarmworker.RuntimeConfig{}, nil)
+	runtime, err = BuildAlarmWorkerRuntime(t.Context(), &workerconfig.RuntimeConfig{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Equal(t, "normalize runtime build inputs: logger must not be nil", err.Error())
@@ -94,6 +94,6 @@ func TestRuntimeSchedulerDisabledSkipsDependencyConstruction(t *testing.T) {
 
 func TestRuntimeSchedulerRejectsMissingInfrastructure(t *testing.T) {
 	config := &settings.Config{AlarmWorkerProfile: &settings.AlarmWorkerProfile{}}
-	_, err := buildRuntimeScheduler(config, nil, &alarmFoundation{AlarmService: &alarmservice.AlarmService{}}, nil)
+	_, err := buildRuntimeScheduler(config, nil, &alarmFoundation{AlarmService: &subscriptions.AlarmService{}}, nil)
 	require.ErrorContains(t, err, "infrastructure is required")
 }

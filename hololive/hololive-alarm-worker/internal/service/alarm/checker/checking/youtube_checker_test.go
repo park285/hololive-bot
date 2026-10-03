@@ -35,8 +35,8 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
@@ -721,7 +721,7 @@ func TestYouTubeChecker_RecoversRecentCappedFiveMinuteAlarm(t *testing.T) {
 
 	now := time.Date(2026, time.April, 9, 11, 56, 0, 0, time.UTC)
 	startScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
-	window := sharedchecker.ResolveEvaluationWindow(
+	window := targetpolicy.ResolveEvaluationWindow(
 		time.Date(2026, time.April, 9, 11, 51, 0, 0, time.UTC),
 		now,
 		75*time.Second,
@@ -752,7 +752,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_FallsBackToThreeMinuteTarget(
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: time.Date(2026, time.April, 9, 11, 56, 30, 0, time.UTC),
 		End:   time.Date(2026, time.April, 9, 11, 57, 10, 0, time.UTC),
 	}
@@ -783,7 +783,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_PrefersRecoveredFiveMinuteTar
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start:  time.Date(2026, time.April, 9, 11, 55, 55, 0, time.UTC),
 		End:    time.Date(2026, time.April, 9, 11, 57, 10, 0, time.UTC),
 		Capped: true,
@@ -815,7 +815,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DoesNotInventThreeMinuteTarge
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 1}, 0, logger)
 	require.NoError(t, err)
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: time.Date(2026, time.April, 9, 11, 56, 30, 0, time.UTC),
 		End:   time.Date(2026, time.April, 9, 11, 57, 10, 0, time.UTC),
 	}
@@ -850,7 +850,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_SendsScheduleDelayOnNonTarget
 
 	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "delayed-stream", previousScheduled, 5))
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: time.Date(2026, time.April, 9, 11, 52, 50, 0, time.UTC),
 		End:   time.Date(2026, time.April, 9, 11, 53, 10, 0, time.UTC),
 	}
@@ -886,7 +886,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_TargetReminderDoesNotCarrySch
 
 	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "delayed-target-stream", previousScheduled, 5))
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: time.Date(2026, time.April, 9, 12, 24, 0, 0, time.UTC),
 		End:   time.Date(2026, time.April, 9, 12, 25, 0, 0, time.UTC),
 	}
@@ -930,7 +930,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DetectsReplacedWaitingRoomSch
 	}
 	require.NoError(t, dedupService.MarkUpcomingEventNotified(t.Context(), testRoomID1, testChID1, previousStream))
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: time.Date(2026, time.April, 9, 11, 52, 50, 0, time.UTC),
 		End:   time.Date(2026, time.April, 9, 11, 53, 10, 0, time.UTC),
 	}
@@ -1038,7 +1038,7 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, sharedchecker.NormalizeTargetMinutes(tc.input))
+			assert.Equal(t, tc.want, targetpolicy.NormalizeTargetMinutes(tc.input))
 		})
 	}
 }

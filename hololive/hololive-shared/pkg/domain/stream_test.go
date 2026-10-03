@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	sharedtime "github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 func TestStreamStatus_IsValid(t *testing.T) {
@@ -117,10 +117,10 @@ func TestStream_MinutesUntilStartUsesSharedTimeSemantics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stream := &Stream{StartScheduled: tt.target}
 			got := stream.MinutesUntilStart()
-			want := sharedtime.MinutesUntilFloorPtr(tt.target, time.Now())
+			want := timeutil.MinutesUntilFloorPtr(tt.target, time.Now())
 
 			if tt.target != nil {
-				want = sharedtime.MinutesUntilFloorPtr(tt.target, time.Now())
+				want = timeutil.MinutesUntilFloorPtr(tt.target, time.Now())
 			}
 
 			if got != want {

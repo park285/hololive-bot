@@ -70,7 +70,7 @@ Provider-first 순서를 지켜 아래 단계를 앞 단계가 검증된 뒤에�
 - Route constants: `hololive/hololive-shared/pkg/contracts/shortlink/routes_test.go`
 - Origin and video ID validation: `hololive/hololive-shared/pkg/service/shortlink/youtube_test.go`
 - Redirect and scraper rejection: `hololive/hololive-api/internal/planes/bot/internal/app/http/shortlink_handler_test.go`
-- Alarm URL selection and startup validation: `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_*shortlink*_test.go`, `hololive/hololive-alarm-worker/internal/app/workerapp/build_egress_shortlink_test.go`
+- Alarm URL selection and startup validation: `hololive/hololive-alarm-worker/internal/egress/alarmdispatch/alarm_dispatch_*shortlink*_test.go`, `hololive/hololive-alarm-worker/internal/app/workerapp/build_egress_shortlink_test.go`
 - Deployed three-hop contract: `scripts/deploy/shortlink-smoke.sh`
 
 ## Compatibility

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
@@ -54,8 +54,8 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 
 	assertLiveCompatRenderedPortsAndModes(t, cfg)
 	assertLiveCompatRenderedPostgres(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, load.RuntimeYouTubeCollector) // CFG-007
-	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, load.RuntimeYouTubeCollector)
+	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector) // CFG-007
+	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 	assertValkeyConsumersIsolated(t, cfg) // CFG-009
 	assertLiveCompatRenderedSecrets(t, cfg)
 	assertLiveCompatRenderedRuntimeConfig(t, cfg)
@@ -85,7 +85,7 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 		}
 	}
 
-	for _, service := range []string{load.RuntimeYouTubeCollector} {
+	for _, service := range []string{runtimepolicy.RuntimeYouTubeCollector} {
 		block := composeServiceBlock(t, overlay, service)
 		if strings.Contains(block, "env_file:") {
 			t.Fatalf("live overlay must keep nonEgress %s scoped without env_file", service)
@@ -143,7 +143,7 @@ func assertLiveCompatRenderedPostgres(t *testing.T, cfg renderedCompose) {
 		t.Fatalf("holo-postgres PGPORT = %q, want 5432", postgresEnv["PGPORT"])
 	}
 
-	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker, load.RuntimeYouTubeCollector} {
+	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker, runtimepolicy.RuntimeYouTubeCollector} {
 		assertLiveCompatRenderedPostgresService(t, cfg, service)
 	}
 }
@@ -152,7 +152,7 @@ func assertLiveCompatRenderedPostgresService(t *testing.T, cfg renderedCompose, 
 	t.Helper()
 
 	env := composeEnvironment(t, cfg, service)
-	if env["POSTGRES_HOST"] != serviceHoloPostgres || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != load.PostgresSSLModeVerifyFull {
+	if env["POSTGRES_HOST"] != serviceHoloPostgres || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
 		t.Fatalf("%s POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 	}
 
@@ -173,7 +173,7 @@ func assertLiveCompatVolumeTargets(t *testing.T, cfg renderedCompose, service st
 	targets := strings.Join(composeVolumeTargets(t, cfg, service), "\n")
 	required := []string{"/app/data", "/app/logs", runtimeCertsDir}
 
-	if service != load.RuntimeYouTubeCollector {
+	if service != runtimepolicy.RuntimeYouTubeCollector {
 		required = append(required, "/app/runtime-config", "/var/run/valkey")
 	}
 
@@ -183,7 +183,7 @@ func assertLiveCompatVolumeTargets(t *testing.T, cfg renderedCompose, service st
 		}
 	}
 
-	if service == load.RuntimeYouTubeCollector && strings.Contains(targets, "/var/run/valkey") {
+	if service == runtimepolicy.RuntimeYouTubeCollector && strings.Contains(targets, "/var/run/valkey") {
 		t.Fatal("youtube-collector live-compat still mounts Valkey socket")
 	}
 }
@@ -212,7 +212,7 @@ func assertLiveCompatEgressSecrets(t *testing.T, cfg renderedCompose) {
 func assertLiveCompatNonEgressSecrets(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{load.RuntimeYouTubeCollector} {
+	for _, service := range []string{runtimepolicy.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 
 		for _, key := range []string{irisWebhookTokenEnv, irisBotTokenEnv} {
@@ -261,8 +261,8 @@ func TestRepoComposeLiveCompatOverlayRendersCentralCollector(t *testing.T) {
 
 	assertLiveCompatRenderedEgressAllowedHosts(t, cfg)
 	assertLiveCompatRenderedCollector(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, load.RuntimeYouTubeCollector) // CFG-007
-	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, load.RuntimeYouTubeCollector)
+	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector) // CFG-007
+	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 }
 
 func assertLiveCompatCollectorEnvFileText(t *testing.T) {
@@ -272,7 +272,7 @@ func assertLiveCompatCollectorEnvFileText(t *testing.T) {
 
 	const collectorEnvFile = "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}"
 
-	if block := composeServiceBlock(t, prod, load.RuntimeYouTubeCollector); !strings.Contains(block, "env_file:") || !strings.Contains(block, collectorEnvFile) {
+	if block := composeServiceBlock(t, prod, runtimepolicy.RuntimeYouTubeCollector); !strings.Contains(block, "env_file:") || !strings.Contains(block, collectorEnvFile) {
 		t.Fatalf("prod must give youtube-collector scoped env_file %q", collectorEnvFile)
 	}
 }
@@ -291,8 +291,8 @@ func assertLiveCompatRenderedEgressAllowedHosts(t *testing.T, cfg renderedCompos
 func assertLiveCompatRenderedCollector(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	env := composeEnvironment(t, cfg, load.RuntimeYouTubeCollector)
-	if env["POSTGRES_HOST"] != serviceHoloPostgres || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != load.PostgresSSLModeVerifyFull {
+	env := composeEnvironment(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
+	if env["POSTGRES_HOST"] != serviceHoloPostgres || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
 		t.Fatalf("youtube-collector POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 	}
 
@@ -324,7 +324,7 @@ func assertLiveCompatRenderedCollector(t *testing.T, cfg renderedCompose) {
 		t.Fatal("youtube-collector must not receive retired HOLODEX_API_KEY_1 under live overlay")
 	}
 
-	targets := strings.Join(composeVolumeTargets(t, cfg, load.RuntimeYouTubeCollector), "\n")
+	targets := strings.Join(composeVolumeTargets(t, cfg, runtimepolicy.RuntimeYouTubeCollector), "\n")
 
 	for _, target := range []string{"/app/data", "/app/logs", runtimeCertsDir} {
 		if !strings.Contains(targets, target) {

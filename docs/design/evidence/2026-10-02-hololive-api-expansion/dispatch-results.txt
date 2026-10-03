@@ -1,0 +1,156 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+=== RUN   TestExpansionSummaryCost
+    zz_expansion_test.go:114: summary_rows=10000 variant=count_id median_ms=2.268 min_ms=2.069 max_ms=2.932
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id Sort  (cost=671.07..671.08 rows=3 width=45) (actual time=2.343..2.344 rows=3.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id   Sort Key: status
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id   Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id   Buffers: shared hit=496
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id   ->  HashAggregate  (cost=671.00..671.04 rows=3 width=45) (actual time=2.331..2.332 rows=3.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id         Group Key: status
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id         Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id         Buffers: shared hit=496
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id         ->  Seq Scan on alarm_dispatch_deliveries  (cost=0.00..596.00 rows=10000 width=21) (actual time=0.004..0.427 rows=10000.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id               Buffers: shared hit=496
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id Planning Time: 0.043 ms
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_id Execution Time: 2.382 ms
+    zz_expansion_test.go:114: summary_rows=10000 variant=count_star median_ms=0.859 min_ms=0.839 max_ms=1.073
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star GroupAggregate  (cost=0.29..393.33 rows=3 width=45) (actual time=0.027..1.192 rows=3.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star   Group Key: status
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star   Buffers: shared hit=42
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star   ->  Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.29..318.29 rows=10000 width=13) (actual time=0.014..0.584 rows=10000.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star         Heap Fetches: 0
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star         Index Searches: 1
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star         Buffers: shared hit=42
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star Planning Time: 0.038 ms
+    zz_expansion_test.go:124: plan_rows=10000 variant=count_star Execution Time: 1.205 ms
+    zz_expansion_test.go:114: summary_rows=100000 variant=count_id median_ms=22.618 min_ms=21.211 max_ms=24.585
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id Finalize GroupAggregate  (cost=6725.25..6726.16 rows=3 width=45) (actual time=17.730..21.628 rows=3.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id   Group Key: status
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id   Buffers: shared hit=5012
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id   ->  Gather Merge  (cost=6725.25..6726.06 rows=7 width=21) (actual time=17.723..21.620 rows=9.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id         Workers Planned: 2
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id         Workers Launched: 2
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id         Buffers: shared hit=5012
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id         ->  Sort  (cost=5725.22..5725.23 rows=3 width=21) (actual time=13.179..13.180 rows=3.00 loops=3)
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id               Sort Key: status
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id               Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id               Buffers: shared hit=5012
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id               Worker 0:  Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id               Worker 1:  Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id               ->  Partial HashAggregate  (cost=5725.17..5725.20 rows=3 width=21) (actual time=13.130..13.131 rows=3.00 loops=3)
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id                     Group Key: status
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id                     Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id                     Buffers: shared hit=4996
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id                     Worker 0:  Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id                     Worker 1:  Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id                     ->  Parallel Seq Scan on alarm_dispatch_deliveries  (cost=0.00..5412.67 rows=41667 width=21) (actual time=0.009..3.336 rows=33333.33 loops=3)
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id                           Buffers: shared hit=4996
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id Planning Time: 0.118 ms
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_id Execution Time: 21.701 ms
+    zz_expansion_test.go:114: summary_rows=100000 variant=count_star median_ms=8.629 min_ms=7.940 max_ms=13.258
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star GroupAggregate  (cost=0.42..3826.46 rows=3 width=45) (actual time=0.246..16.696 rows=3.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star   Group Key: status
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star   Buffers: shared hit=393
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star   ->  Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.42..3076.42 rows=100000 width=13) (actual time=0.027..8.510 rows=100000.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star         Heap Fetches: 0
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star         Index Searches: 1
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star         Buffers: shared hit=393
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star Planning Time: 0.055 ms
+    zz_expansion_test.go:124: plan_rows=100000 variant=count_star Execution Time: 16.722 ms
+    zz_expansion_test.go:114: summary_rows=500000 variant=count_id median_ms=61.942 min_ms=52.380 max_ms=67.236
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id Finalize GroupAggregate  (cost=29641.91..29642.82 rows=3 width=45) (actual time=56.294..61.697 rows=3.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id   Group Key: status
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id   Buffers: shared hit=14854 read=10158 written=278
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id   ->  Gather Merge  (cost=29641.91..29642.72 rows=7 width=21) (actual time=56.287..61.687 rows=9.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id         Workers Planned: 2
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id         Workers Launched: 2
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id         Buffers: shared hit=14854 read=10158 written=278
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id         ->  Sort  (cost=28641.88..28641.89 rows=3 width=21) (actual time=51.765..51.766 rows=3.00 loops=3)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id               Sort Key: status
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id               Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id               Buffers: shared hit=14854 read=10158 written=278
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id               Worker 0:  Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id               Worker 1:  Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id               ->  Partial HashAggregate  (cost=28641.83..28641.86 rows=3 width=21) (actual time=51.704..51.705 rows=3.00 loops=3)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id                     Group Key: status
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id                     Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id                     Buffers: shared hit=14838 read=10158 written=278
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id                     Worker 0:  Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id                     Worker 1:  Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id                     ->  Parallel Seq Scan on alarm_dispatch_deliveries  (cost=0.00..27079.33 rows=208333 width=21) (actual time=0.180..14.065 rows=166666.67 loops=3)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id                           Buffers: shared hit=14838 read=10158 written=278
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id Planning Time: 0.070 ms
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_id Execution Time: 61.758 ms
+    zz_expansion_test.go:114: summary_rows=500000 variant=count_star median_ms=40.543 min_ms=30.881 max_ms=51.519
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star Finalize GroupAggregate  (cost=1000.45..14975.21 rows=3 width=45) (actual time=42.722..47.019 rows=3.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star   Group Key: status
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star   Buffers: shared hit=1951
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star   ->  Gather Merge  (cost=1000.45..14975.12 rows=7 width=21) (actual time=42.698..47.008 rows=6.00 loops=1)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star         Workers Planned: 2
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star         Workers Launched: 2
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star         Buffers: shared hit=1951
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star         ->  Partial GroupAggregate  (cost=0.42..13974.28 rows=3 width=21) (actual time=0.591..25.328 rows=2.00 loops=3)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star               Group Key: status
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star               Buffers: shared hit=1951
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star               ->  Parallel Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.42..12411.76 rows=208333 width=13) (actual time=0.034..13.677 rows=166666.67 loops=3)
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star                     Heap Fetches: 0
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star                     Index Searches: 1
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star                     Buffers: shared hit=1951
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star Planning Time: 0.095 ms
+    zz_expansion_test.go:124: plan_rows=500000 variant=count_star Execution Time: 47.064 ms
+    zz_expansion_test.go:178: concurrent_summary variant=count_id callers=12 max_pool=4 median_ms=327.120 max_ms=564.919 total_ms=565 acquire_wait_ms=2056 empty_acquires=8
+    zz_expansion_test.go:178: concurrent_summary variant=count_star callers=12 max_pool=4 median_ms=136.830 max_ms=257.837 total_ms=258 acquire_wait_ms=879 empty_acquires=8
+    zz_expansion_test.go:198: after_update rows=500000 variant=count_id median_ms=73.227 min_ms=59.746 max_ms=123.659
+    zz_expansion_test.go:208: churn_plan variant=count_id Finalize GroupAggregate  (cost=31074.23..31075.15 rows=3 width=45) (actual time=73.325..80.924 rows=3.00 loops=1)
+    zz_expansion_test.go:208: churn_plan variant=count_id   Group Key: status
+    zz_expansion_test.go:208: churn_plan variant=count_id   Buffers: shared hit=16016 read=10246 written=168
+    zz_expansion_test.go:208: churn_plan variant=count_id   ->  Gather Merge  (cost=31074.23..31075.05 rows=7 width=21) (actual time=73.316..80.913 rows=9.00 loops=1)
+    zz_expansion_test.go:208: churn_plan variant=count_id         Workers Planned: 2
+    zz_expansion_test.go:208: churn_plan variant=count_id         Workers Launched: 2
+    zz_expansion_test.go:208: churn_plan variant=count_id         Buffers: shared hit=16016 read=10246 written=168
+    zz_expansion_test.go:208: churn_plan variant=count_id         ->  Sort  (cost=30074.21..30074.22 rows=3 width=21) (actual time=67.951..67.952 rows=3.00 loops=3)
+    zz_expansion_test.go:208: churn_plan variant=count_id               Sort Key: status
+    zz_expansion_test.go:208: churn_plan variant=count_id               Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:208: churn_plan variant=count_id               Buffers: shared hit=16016 read=10246 written=168
+    zz_expansion_test.go:208: churn_plan variant=count_id               Worker 0:  Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:208: churn_plan variant=count_id               Worker 1:  Sort Method: quicksort  Memory: 25kB
+    zz_expansion_test.go:208: churn_plan variant=count_id               ->  Partial HashAggregate  (cost=30074.16..30074.19 rows=3 width=21) (actual time=67.883..67.884 rows=3.00 loops=3)
+    zz_expansion_test.go:208: churn_plan variant=count_id                     Group Key: status
+    zz_expansion_test.go:208: churn_plan variant=count_id                     Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:208: churn_plan variant=count_id                     Buffers: shared hit=16000 read=10246 written=168
+    zz_expansion_test.go:208: churn_plan variant=count_id                     Worker 0:  Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:208: churn_plan variant=count_id                     Worker 1:  Batches: 1  Memory Usage: 32kB
+    zz_expansion_test.go:208: churn_plan variant=count_id                     ->  Parallel Seq Scan on alarm_dispatch_deliveries  (cost=0.00..28433.52 rows=218752 width=21) (actual time=0.118..22.927 rows=166666.67 loops=3)
+    zz_expansion_test.go:208: churn_plan variant=count_id                           Buffers: shared hit=16000 read=10246 written=168
+    zz_expansion_test.go:208: churn_plan variant=count_id Planning Time: 0.092 ms
+    zz_expansion_test.go:208: churn_plan variant=count_id Execution Time: 80.987 ms
+    zz_expansion_test.go:198: after_update rows=500000 variant=count_star median_ms=119.808 min_ms=117.012 max_ms=144.310
+    zz_expansion_test.go:208: churn_plan variant=count_star Finalize GroupAggregate  (cost=1000.45..18342.64 rows=3 width=45) (actual time=160.554..167.858 rows=3.00 loops=1)
+    zz_expansion_test.go:208: churn_plan variant=count_star   Group Key: status
+    zz_expansion_test.go:208: churn_plan variant=count_star   Buffers: shared hit=46056 read=28759 written=15
+    zz_expansion_test.go:208: churn_plan variant=count_star   ->  Gather Merge  (cost=1000.45..18342.54 rows=7 width=21) (actual time=160.348..167.846 rows=8.00 loops=1)
+    zz_expansion_test.go:208: churn_plan variant=count_star         Workers Planned: 2
+    zz_expansion_test.go:208: churn_plan variant=count_star         Workers Launched: 2
+    zz_expansion_test.go:208: churn_plan variant=count_star         Buffers: shared hit=46056 read=28759 written=15
+    zz_expansion_test.go:208: churn_plan variant=count_star         ->  Partial GroupAggregate  (cost=0.42..17341.71 rows=3 width=21) (actual time=7.742..106.516 rows=2.67 loops=3)
+    zz_expansion_test.go:208: churn_plan variant=count_star               Group Key: status
+    zz_expansion_test.go:208: churn_plan variant=count_star               Buffers: shared hit=46056 read=28759 written=15
+    zz_expansion_test.go:208: churn_plan variant=count_star               ->  Parallel Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.42..15701.04 rows=218752 width=13) (actual time=0.045..90.324 rows=166666.67 loops=3)
+    zz_expansion_test.go:208: churn_plan variant=count_star                     Heap Fetches: 500068
+    zz_expansion_test.go:208: churn_plan variant=count_star                     Index Searches: 1
+    zz_expansion_test.go:208: churn_plan variant=count_star                     Buffers: shared hit=46056 read=28759 written=15
+    zz_expansion_test.go:208: churn_plan variant=count_star Planning Time: 0.115 ms
+    zz_expansion_test.go:208: churn_plan variant=count_star Execution Time: 167.918 ms
+--- PASS: TestExpansionSummaryCost (13.71s)
+=== RUN   TestExpansionErrorCodeRoundTrip
+    zz_expansion_test.go:238: displayed_code=SEND_FAILED filter_error=error code: invalid dispatch operation input dotted_display=provider.timeout dotted_filter_error=error code: invalid dispatch operation input
+--- PASS: TestExpansionErrorCodeRoundTrip (0.76s)
+goos: linux
+goarch: amd64
+pkg: github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops
+cpu: AMD Ryzen 5 5600G with Radeon Graphics
+BenchmarkExpansionQuerySQL
+BenchmarkExpansionQuerySQL-12    	  210358	      1741 ns/op	    3624 B/op	       5 allocs/op
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops	14.951s

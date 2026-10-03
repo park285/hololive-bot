@@ -7,7 +7,8 @@ import (
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 func buildConfig(
@@ -120,7 +121,7 @@ func applyAPIWorkerProfile(config *Config, profile *APIWorkerProfile) {
 	inbox := workers["bot_webhook_inbox"]
 
 	config.Webhook.WorkerCount = inbox.Executor.ConfiguredWorkers
-	config.Webhook.HandlerTimeout = load.WorkerDuration(inbox.Executor.AttemptTimeout)
+	config.Webhook.HandlerTimeout = runtimepolicy.WorkerDuration(inbox.Executor.AttemptTimeout)
 	config.Webhook.MaxBodyBytes = profile.BotWebhookInbox.MaxBodyBytes
 	config.Webhook.DedupTTL = time.Duration(profile.BotWebhookInbox.DedupTTLMS) * time.Millisecond
 	config.Webhook.DedupTimeout = time.Duration(profile.BotWebhookInbox.DedupTimeoutMS) * time.Millisecond
@@ -159,6 +160,7 @@ func newBaseConfig(
 	}
 
 	return &Config{
+		InternalH3:           LoadInternalH3ClientOptions(),
 		Server:               server,
 		Holodex:              holodex,
 		Valkey:               valkey,
@@ -167,7 +169,7 @@ func newBaseConfig(
 		Logging:              logging,
 		Bot:                  bot,
 		Services:             services,
-		Environment:          load.AppEnvironment(),
+		Environment:          envload.AppEnvironment(),
 		SettingsFilePath:     loadSettingsFilePath(),
 		Cliproxy:             cliproxy,
 		LLM:                  llm,

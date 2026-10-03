@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 func TestRepoComposeProdHardenedDefaults(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRepoComposeCollectorRendersCanonicalDefaults(t *testing.T) {
 	}
 
 	cfg := renderComposeConfig(t, composeProdFile)
-	env := composeEnvironment(t, cfg, load.RuntimeYouTubeCollector)
+	env := composeEnvironment(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 
 	for name, want := range defaults {
 		if got := env[name]; got != want {
@@ -152,7 +152,7 @@ func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
 func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 	t.Helper()
 
-	block := composeServiceBlock(t, content, load.RuntimeYouTubeCollector)
+	block := composeServiceBlock(t, content, runtimepolicy.RuntimeYouTubeCollector)
 	if !strings.Contains(block, "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}") {
 		t.Fatal("youtube-collector must inject secrets via its scoped env_file")
 	}
@@ -169,8 +169,8 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 
 	assertProdRenderedPostgresIsolation(t, cfg)
 	assertProdRenderedValkeySocketIsolation(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, load.RuntimeYouTubeCollector) // CFG-006
-	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, load.RuntimeYouTubeCollector)
+	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector) // CFG-006
+	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 	assertValkeyConsumersIsolated(t, cfg) // CFG-009
 	assertProdRenderedNonEgressSecretIsolation(t, cfg)
 	assertProdRenderedEgressRuntimeKeys(t, cfg)
@@ -300,7 +300,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker, load.RuntimeYouTubeCollector} {
+	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker, runtimepolicy.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 		if env["POSTGRES_HOST"] != serviceHoloPostgres {
 			t.Fatalf("%s POSTGRES_HOST = %q, want holo-postgres", service, env["POSTGRES_HOST"])
@@ -310,7 +310,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 			t.Fatalf("%s POSTGRES_PORT = %q, want 5432", service, env["POSTGRES_PORT"])
 		}
 
-		if env["POSTGRES_SSLMODE"] != load.PostgresSSLModeVerifyFull {
+		if env["POSTGRES_SSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
 			t.Fatalf("%s POSTGRES_SSLMODE = %q, want verify-full", service, env["POSTGRES_SSLMODE"])
 		}
 	}
@@ -319,7 +319,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 func assertProdRenderedNonEgressSecretIsolation(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{load.RuntimeYouTubeCollector} {
+	for _, service := range []string{runtimepolicy.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 
 		for _, key := range []string{irisWebhookTokenEnv, irisBotTokenEnv} {
@@ -367,7 +367,7 @@ func assertProdRenderedEgressRuntimeKeys(t *testing.T, cfg renderedCompose) {
 func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{load.RuntimeYouTubeCollector} {
+	for _, service := range []string{runtimepolicy.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 		if _, ok := env["API_SECRET_KEY"]; ok {
 			t.Fatalf("%s must not receive admin API_SECRET_KEY", service)
@@ -382,7 +382,7 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{load.RuntimeYouTubeCollector} {
+	for _, service := range []string{runtimepolicy.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 
 		if _, ok := env["HOLODEX_API_KEY"]; !ok {
@@ -394,7 +394,7 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	collectorEnv := composeEnvironment(t, cfg, load.RuntimeYouTubeCollector)
+	collectorEnv := composeEnvironment(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 	if collectorEnv["POSTGRES_USER"] != "hololive_scraper" {
 		t.Fatalf("youtube-collector POSTGRES_USER = %q, want hololive_scraper", collectorEnv["POSTGRES_USER"])
 	}
@@ -410,7 +410,7 @@ func assertProdRenderedNoRuntimeConfigMount(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{load.RuntimeYouTubeCollector} {
+	for _, service := range []string{runtimepolicy.RuntimeYouTubeCollector} {
 		for _, target := range composeVolumeTargets(t, cfg, service) {
 			if target == "/app/runtime-config" {
 				t.Fatalf("%s still mounts runtime-config", service)
@@ -423,9 +423,9 @@ func assertProdRenderedPortAndCertScope(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	h3KeyConsumers := map[string]bool{
-		serviceHololiveAPI:           true,
-		serviceAlarmWorker:           true,
-		load.RuntimeYouTubeCollector: true,
+		serviceHololiveAPI:                    true,
+		serviceAlarmWorker:                    true,
+		runtimepolicy.RuntimeYouTubeCollector: true,
 	}
 
 	for serviceName, service := range cfg.Services {

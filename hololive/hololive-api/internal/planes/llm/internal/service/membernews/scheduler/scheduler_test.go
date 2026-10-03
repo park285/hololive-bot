@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 const (
@@ -41,9 +41,14 @@ const (
 )
 
 type mockDigestService struct {
-	rooms      []model.SubscribedRoom
-	digests    map[string]*model.Digest
-	digestErrs map[string]error
+	rooms        []model.SubscribedRoom
+	digests      map[string]*model.Digest
+	digestErrs   map[string]error
+	prepareCalls int
+	prepareErr   error
+	runPeriod    model.Period
+	runNow       time.Time
+	generator    model.DigestGenerator
 }
 
 func (m *mockDigestService) GenerateRoomDigest(_ context.Context, roomID string, _ model.Period) (*model.Digest, error) {
@@ -63,6 +68,23 @@ func (m *mockDigestService) GenerateRoomDigest(_ context.Context, roomID string,
 
 func (m *mockDigestService) ListSubscribedRooms(_ context.Context) ([]model.SubscribedRoom, error) {
 	return m.rooms, nil
+}
+
+func (m *mockDigestService) PrepareDigestRun(_ context.Context, period model.Period, now time.Time) (model.DigestGenerator, error) {
+	m.prepareCalls++
+
+	m.runPeriod = period
+	m.runNow = now
+
+	if m.prepareErr != nil {
+		return nil, m.prepareErr
+	}
+
+	if m.generator != nil {
+		return m.generator, nil
+	}
+
+	return m, nil
 }
 
 type mockFormatter struct{}
@@ -140,7 +162,7 @@ func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
@@ -158,7 +180,7 @@ func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}, {RoomID: "room-2"}}}
 	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
@@ -179,7 +201,7 @@ func TestScheduler_AllEnqueueFailureReturnsError(t *testing.T) {
 
 	outbox.enqueueErr[testRoomID] = errors.New("db error")
 
-	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
@@ -199,18 +221,18 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 	}{
 		{
 			name: "before monday target same day",
-			now:  time.Date(2026, time.February, 16, 8, 30, 0, 0, util.KSTZone), // Monday
-			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.February, 16, 8, 30, 0, 0, timeutil.KSTZone), // Monday
+			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, timeutil.KSTZone),
 		},
 		{
 			name: "exact monday target next week",
-			now:  time.Date(2026, time.February, 16, 9, 0, 0, 0, util.KSTZone),
-			want: time.Date(2026, time.February, 23, 9, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.February, 16, 9, 0, 0, 0, timeutil.KSTZone),
+			want: time.Date(2026, time.February, 23, 9, 0, 0, 0, timeutil.KSTZone),
 		},
 		{
 			name: "sunday moves next day monday",
-			now:  time.Date(2026, time.February, 15, 23, 0, 0, 0, util.KSTZone), // Sunday
-			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.February, 15, 23, 0, 0, 0, timeutil.KSTZone), // Sunday
+			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, timeutil.KSTZone),
 		},
 	}
 
@@ -244,7 +266,7 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
 
-	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
@@ -267,7 +289,7 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 	}
 	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
@@ -285,7 +307,7 @@ func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireToken: "tok-1", acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
@@ -305,7 +327,7 @@ func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireToken: "degraded", acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })

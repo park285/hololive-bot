@@ -38,9 +38,9 @@ type trackingSettingsApplier struct {
 	runtimeResult    sharedserver.SettingsRuntimeStateResult
 }
 
-func (a *trackingSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedserver.AlarmAdvanceMinutesApplyResult {
+func (a *trackingSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) (sharedserver.AlarmAdvanceMinutesApplyResult, error) {
 	a.lastAlarmMinutes = minutes
-	return a.alarmResult
+	return a.alarmResult, nil
 }
 
 func (a *trackingSettingsApplier) ApplyMemberNewsWeeklyRunNow(context.Context) sharedserver.MemberNewsWeeklyRunNowResult {
@@ -96,7 +96,9 @@ func TestBotSettingsApplier_DelegatesToBase(t *testing.T) {
 	}
 	applier := &botSettingsApplier{SettingsApplier: base}
 
-	assert.Equal(t, expectedAlarm, applier.ApplyAlarmAdvanceMinutes(t.Context(), 15))
+	alarmResult, err := applier.ApplyAlarmAdvanceMinutes(t.Context(), 15)
+	require.NoError(t, err)
+	assert.Equal(t, expectedAlarm, alarmResult)
 	assert.Equal(t, 15, base.lastAlarmMinutes)
 
 	assert.Equal(t, expectedRuntime, applier.SettingsRuntimeState())

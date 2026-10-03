@@ -15,12 +15,13 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 type Service struct {
 	httpClient           *http.Client
-	identityIndex        officialScheduleIdentityIndex
+	identityIndex        officialidentity.Index
 	logger               *slog.Logger
 	officialSchedule     settings.OfficialScheduleConfig
 	maxResponseBodyBytes int64

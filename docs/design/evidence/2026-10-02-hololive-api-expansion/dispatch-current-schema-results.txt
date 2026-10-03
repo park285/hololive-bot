@@ -1,0 +1,20 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+=== RUN   TestOpsIntegrationGroupReplayAndAudit
+--- PASS: TestOpsIntegrationGroupReplayAndAudit (5.05s)
+=== RUN   TestOpsIntegrationAuditFailureRollsBack
+--- PASS: TestOpsIntegrationAuditFailureRollsBack (0.11s)
+=== RUN   TestOpsIntegrationConcurrentReplaySingleWinner
+--- PASS: TestOpsIntegrationConcurrentReplaySingleWinner (0.12s)
+=== RUN   TestOpsIntegrationPaginationAndLargeIDs
+--- PASS: TestOpsIntegrationPaginationAndLargeIDs (0.12s)
+=== RUN   TestOpsIntegrationStaleRevisionAndSentSibling
+--- PASS: TestOpsIntegrationStaleRevisionAndSentSibling (0.10s)
+=== RUN   TestOpsIntegrationActionPaginationUsesNumericOrder
+--- PASS: TestOpsIntegrationActionPaginationUsesNumericOrder (0.10s)
+=== RUN   TestOpsIntegrationFailuresAndClassifiedFilter
+--- PASS: TestOpsIntegrationFailuresAndClassifiedFilter (0.12s)
+=== RUN   TestOpsIntegrationFailuresUseNumericCounts
+--- PASS: TestOpsIntegrationFailuresUseNumericCounts (0.11s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops	5.917s

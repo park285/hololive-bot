@@ -9,11 +9,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 func TestUpcomingCandidateVirtualTimePreservesSelectedCategoryUntilStart(t *testing.T) {
@@ -25,7 +25,7 @@ func TestUpcomingCandidateVirtualTimePreservesSelectedCategoryUntilStart(t *test
 		time.Sleep(65 * time.Second)
 
 		// 현재 crossing에서는 5분을 다시 선정할 수 없어도 저장된 후보는 유효하다.
-		_, crossed := sharedchecker.NewTargetMinutePolicy([]int{5}).HighestCrossed(start, sharedchecker.ResolveEvaluationWindow(now.Add(time.Minute), time.Now(), 75*time.Second))
+		_, crossed := targetpolicy.NewTargetMinutePolicy([]int{5}).HighestCrossed(start, targetpolicy.ResolveEvaluationWindow(now.Add(time.Minute), time.Now(), 75*time.Second))
 		require.False(t, crossed)
 		require.Empty(t, upcomingCandidateTermination(&candidate, nil, time.Now()))
 		require.Equal(t, 5, candidate.Notification.MinutesUntil)

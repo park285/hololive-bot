@@ -1,0 +1,102 @@
+package bootstrap
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"reflect"
+	"testing"
+	"time"
+
+	botlifecycle "github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
+	modules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+)
+
+type expansionCache struct {
+	cache.Client
+	calls  int
+	record func(string)
+}
+
+func (c *expansionCache) Close() error {
+	c.calls++
+	c.record(fmt.Sprintf("cache.close.%d", c.calls))
+	return nil
+}
+
+type expansionDB struct {
+	database.Client
+	calls  int
+	record func(string)
+}
+
+func (d *expansionDB) Close() error {
+	d.calls++
+	d.record(fmt.Sprintf("postgres.close.%d", d.calls))
+	return nil
+}
+
+type expansionCloser struct {
+	name   string
+	record func(string)
+}
+
+func (c expansionCloser) Close() error { c.record(c.name); return nil }
+
+type expansionStopper struct{ record func(string) }
+
+func (s expansionStopper) Stop() { s.record("holodex.stop") }
+
+func TestExpansionActualCloseOrderAndDuplicateOwnership(t *testing.T) {
+	var calls []string
+	started := make(chan struct{})
+	parent, cancelParent := context.WithCancel(t.Context())
+	mc, memberDone := member.ExpansionNewCache(parent, func(ctx context.Context) (uint64, error) {
+		close(started)
+		<-ctx.Done()
+		return 0, ctx.Err()
+	})
+	<-started
+	defer mc.Close()
+	cancelParent()
+	select {
+	case <-memberDone:
+		t.Fatal("member cache unexpectedly inherited cancellation")
+	default:
+	}
+	record := func(name string) {
+		alive := true
+		select {
+		case <-memberDone:
+			alive = false
+		default:
+		}
+		calls = append(calls, fmt.Sprintf("%s(member_alive=%t)", name, alive))
+	}
+	c := &expansionCache{record: record}
+	db := &expansionDB{record: record}
+	infra := modules.ExpansionNewInfra(c, db, mc, func() { _ = db.Close() }, func() { _ = c.Close() })
+	cleanup := composeBotInfrastructureCleanup(infra.Cleanup,
+		expansionCloser{"iris.close", record}, []io.Closer{expansionCloser{"alarm.close", record}}, nil)
+	inner := botlifecycle.NewBotLifecycle(slog.New(slog.DiscardHandler), c, nil, "", nil, nil, expansionStopper{record}, db)
+	shutdownCtx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if err := inner.Shutdown(shutdownCtx); err != nil {
+		t.Fatal(err)
+	}
+	cleanup()
+	cleanup()
+	want := []string{
+		"holodex.stop(member_alive=true)", "cache.close.1(member_alive=true)", "postgres.close.1(member_alive=true)",
+		"alarm.close(member_alive=true)", "iris.close(member_alive=true)",
+		"postgres.close.2(member_alive=false)", "cache.close.2(member_alive=false)",
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls=%v want=%v", calls, want)
+	}
+	t.Logf("observed=%v; one outer cleanup, two cache/PG calls, no error injected", calls)
+}

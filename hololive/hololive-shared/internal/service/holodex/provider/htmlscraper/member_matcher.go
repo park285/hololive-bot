@@ -7,8 +7,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 )
 
-type officialScheduleIdentityIndex = officialidentity.Index
-
 func buildOfficialScheduleIdentityIndex(membersData domain.MemberDataProvider) (officialidentity.Index, error) {
 	index, err := officialidentity.Build(membersData)
 	if err != nil {

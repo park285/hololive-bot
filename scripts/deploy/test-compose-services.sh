@@ -174,7 +174,7 @@ while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
     [[ -e "${ROOT_DIR}/${path}" ]] || fail "ap active-active files list path exists: ${path}"
     case "${path}" in
-        hololive/hololive-youtube-collector/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
+        hololive/hololive-youtube-collector/go.sum|hololive/hololive-api/go.sum|hololive/hololive-alarm-worker/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
         go.sum|*/go.sum) fail "ap active-active files list excludes unapproved go.sum path: ${path}" ;;
     esac
     case "${path}" in
@@ -185,7 +185,7 @@ done < "${AP_ACTIVE_ACTIVE_FILES}"
 pass "ap active-active files list paths exist"
 
 if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "${AP_ACTIVE_ACTIVE_FILES}" \
-    | grep -Ev 'hololive/hololive-alarm-worker/VERSION$'; then
+    | grep -Ev '^[0-9]+:hololive/hololive-alarm-worker/(VERSION|go\.mod|go\.sum)$'; then
     fail "ap active-active files list excludes forbidden deployment scope"
 fi
 pass "ap active-active files list excludes forbidden deployment scope"

@@ -60,5 +60,7 @@ func (r *BotRuntime) startWorkerProfileChecker(ctx context.Context) {
 		return
 	}
 
-	go panicguard.Run(r.Logger, panicguard.BackgroundTask, "stack-worker-profile-checker", func() { r.workerProfileChecker.Run(ctx) })
+	r.tasksWG.Go(func() {
+		panicguard.Run(r.Logger, panicguard.BackgroundTask, "stack-worker-profile-checker", func() { r.workerProfileChecker.Run(ctx) })
+	})
 }

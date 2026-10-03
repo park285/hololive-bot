@@ -1,100 +1,43 @@
 # App Bootstrap Boundary Guide
 
-이 문서는 `hololive-api`의 bot plane(`hololive/hololive-api/internal/planes/bot/internal/app`) 경계 분리의 **현재 상태**를 기록한다.
+`hololive-api` bot plane의 현재 bootstrap·HTTP·runtime 소유 경계입니다.
 
-## 2026-04-15 상태
+## 현재 경계 — 2026-10-02
 
-이번 정리로 아래 항목은 완료됐다.
+| 경로 (`hololive/hololive-api/` 기준) | 책임 |
+|---|---|
+| `internal/planes/bot/runtime/` | bot 구성 조립, 시작·종료 순서, durable ingress/reply, runtime 시험 |
+| `internal/planes/bot/internal/app/bootstrap/` | provider·service·서버 구성과 bootstrap helper |
+| `internal/planes/bot/internal/app/http/` | router·middleware·route 및 shortlink handler |
 
-- 2026-05-16 구조 정리
-  - `internal/app` 루트는 `app.go` façade만 유지한다.
-  - 이전 루트 orchestration/build/runtime 구현은 `internal/app/internal/botruntime/` 으로 이동했다.
-  - 기존 `http/`, `runtime/`, `wiring/`, `bootstrap/` helper package는 그대로 의미별 경계로 유지한다.
-- `internal/app/http/`
-  - API router / middleware / route registration 구현이 전용 디렉터리로 이동했다.
-  - root façade는 `internal/app/internal/botruntime` 을 통해 기존 public entrypoint를 유지한다.
-- `internal/app/runtime/`
-  - lifecycle / HTTP server / run loop 구현이 전용 helper seam 으로 분리됐다.
-  - `internal/app/runtime*.go` 루트 파일은 façade / thin wrapper 역할만 남긴다.
-- `internal/app/wiring/`
-  - container assembly / accessor 구현이 전용 helper seam 으로 분리됐다.
-  - `container.go`, `container_accessors.go` 는 façade / local shape adapter 역할만 남긴다.
-  - runtime dependency-view 구성은 `internal/app/botruntime/bootstrap_bot_dependency_views.go` 로 이동했다.
-- `internal/app/bootstrap/`
-  - provider / core / service / bot helper 구현이 전용 디렉터리로 이동했다.
-  - 루트 `bootstrap_*.go` 파일은 orchestration / local shape adapter 역할만 남기고, 중복 provider/type wrapper 파일은 제거됐다.
-- `*_additional_test.go`
-  - `internal/app` 하위의 임시 파일명은 모두 제거됐다.
-  - 테스트 파일명은 행위/책임 중심 이름으로 재배치됐다.
+단일 소비자였던 `internal/planes/bot/internal/app/runtime/http_server.go`는
+`internal/planes/bot/runtime/http_server_helpers.go`로 흡수했습니다. 실제 runtime이 같은 package의
+private helper를 직접 사용하며, 이전 package의 alias나 forwarding 함수는 남기지 않습니다.
 
-즉, `internal/app` 의 즉시성 높은 경계 리스크는 더 이상 “HTTP만 분리된 상태”가 아니다.
-현재는 **http / runtime / wiring / bootstrap / botruntime 구현이 의미별 seam 뒤로 숨겨지고, 루트 패키지는 `app.go` façade만 남은 상태**다.
+이 이동은 nil 처리, 서버별 로그 prefix, 오류 wrapping과 종료 호출 순서를 보존합니다.
+raw HTTP/3의 정상 종료·listener 소실·진행 중 요청 처리 방식을 바꾸는 작업은 별도 행동 변경입니다.
 
-## 현재 경계
+## 현재 자원과 구성 소유권
 
-### `internal/app/http/`
-- router construction
-- middleware registration
-- route exposure
+[통합 리팩토링 계획](../../design/2026-10-02-hololive-api-refactoring.md)에 따라 공통 서비스 생성은 접근 가능한
+`internal/apifoundation`, API 설정은 `internal/config`가 소유합니다. 각 plane의 DB pool·인스턴스는 별도로 유지합니다.
+Bot의 획득 자원은 즉시 rollback owner에 등록하고 성공 시 같은 owner를 runtime에 이전합니다.
+Orchestration의 readiness 포트에는 Close가 없으며 DB/cache/Holodex 수명은 plane이 관리합니다.
+Durable sampler·certificate reload 등 background task를 cancel/join한 뒤 member-cache 작업을 끝내고
+PG/cache를 해제합니다. `CloseContext`가 공유된 남은 종료 예산을 사용하며, join 미완료에서 자원을 닫거나
+동일 cleanup을 병렬로 다시 시작하지 않습니다. Fatal/drain/cleanup 오류는 합쳐서 보존합니다.
 
-### `internal/app/runtime/`
-- start / stop / shutdown ordering
-- HTTP server lifecycle helper
-- run loop helper
+과거 `internal/app` façade·`internal/app/internal/botruntime`·wiring 배치는 현재 경로 계약으로 사용하지 않습니다.
 
-### `internal/app/wiring/`
-- container assembly helper
-- accessor/helper exposure
+## 검증
 
-### `internal/app/bootstrap/`
-- provider assembly
-- core/service bootstrap implementation
-- bot runtime helper implementation
-
-### `internal/app/internal/botruntime/`
-- root public entrypoint backing implementation
-- bot runtime build/orchestration
-- module-local integration/runtime tests
-
-### `internal/app` 루트
-- public façade only
-
-## 이번 라운드에서 닫힌 위험
-
-### 1. startup/shutdown 와 router/wiring 변경의 직접 결합
-`runtime/` 와 `wiring/` seam 이 생기면서, 구현 변경은 전용 helper 파일에서 다루고 루트 파일은 forwarding façade 를 유지한다.
-
-### 2. `*_additional_test.go` 누적
-`internal/app` 하위에서 `*_additional_test.go` 가 0개가 되었다.
-테스트 파일명은 `runtime_lifecycle_test.go`, `container_lifecycle_test.go` 같은 책임 중심 이름으로 바뀌었다.
-
-### 3. HTTP 구현이 루트에 남아 있던 문제
-HTTP router 관련 구현은 `internal/app/http/` 아래로 이동했고 루트에는 thin entrypoint 만 남았다.
-
-### 4. bootstrap 구현이 루트에 남아 있던 문제
-bootstrap helper 구현은 `internal/app/bootstrap/` 아래로 이동했고 루트에는 orchestration / local shape helper 만 남았다.
-
-## 남아 있는 장기 과제
-
-아래는 현재 기준으로 “즉시 blocker” 가 아니라 다음 구조 패치에서 다뤄도 되는 장기 과제다.
-
-- bootstrap orchestration 파일의 추가 축소
-
-이 장기 과제는 신규 churn 이 다시 루트에 쌓일 때만 진행하면 된다.
-
-## 검증 기준
-
-현재 경계 상태는 아래 명령으로 검증한다.
+저장소 루트에서 실제 소비자와 bootstrap 회귀를 실행합니다.
 
 ```bash
-cd hololive/hololive-api
-find internal/planes/bot/internal/app -name '*_additional_test.go'
-go test ./internal/planes/bot/internal/app/... -count=1
+go test ./hololive/hololive-api/internal/planes/bot/internal/app/...
+go test -race ./hololive/hololive-api/internal/planes/bot/runtime \
+  -run 'TestBotRuntime(StartHTTPServer|ShutdownHTTPServer|CloseContext|CloseBeforeStart|ClosePreservesFatal)'
 ```
 
-종료 조건은 다음과 같다.
-
-- `internal/app/http/`, `internal/app/runtime/`, `internal/app/wiring/`, `internal/app/bootstrap/` 이 실제 구현 seam 으로 존재
-- 루트 `internal/app` 파일은 façade / orchestration 위주로 유지
-- `*_additional_test.go` 가 0개
-- `go test ./internal/app/... -count=1` 통과
+서버 기동 오류 전파, nil 구성, shortlink listener drain 등 제품 동작으로 판단합니다.
+package 이름·파일 수나 제거된 경로의 문자열 부재를 별도 gate로 만들지 않습니다.

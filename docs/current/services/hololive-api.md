@@ -17,13 +17,13 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 
 - Bot plane: Kakao/Iris webhook ingress와 사용자 명령 routing, reply orchestration.
 - LLM plane: major event/member news scheduling, LLM digest 생성, internal subscription/trigger 제공.
-- Admin plane: dashboard-facing admin HTTP control plane, trigger client facade, alarm HTTP 호환 facade.
+- Admin plane: dashboard-facing admin HTTP control plane, trigger client, worker alarm HTTP client.
 
 ## Owns
 
 - Kakao/Iris webhook ingress, user-facing command routing and reply orchestration (bot plane)
 - Major event/member news subscription, digest generation, internal trigger endpoints, LLM summary cache and notification intent production (llm plane)
-- Dashboard-facing admin HTTP API, operational trigger client facade, alarm HTTP compatibility facade during migration (admin plane)
+- Dashboard-facing admin HTTP API and operational trigger/worker alarm clients (admin plane)
 - Bot-side clients for major event, member news, and alarm operations
 - Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention/replay (YouTube plane)
 - `members.photo` Holodex PhotoSync product path (admin plane). YouTube channel photos are the `channel_photo` reducer.
@@ -38,7 +38,6 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | trigger | HTTP JSON | `/internal/trigger/*` | `hololive-api` (admin plane) |
 | Admin HTTP API | HTTP JSON | 검토 필요 | `admin-dashboard` |
 | settings.update | HTTP JSON + `settings.json` | `POST /api/holo/settings`, `POST /api/holo/settings/llm` | `iris-console`, `alarm-worker` |
-| alarm HTTP compatibility | HTTP JSON | `/internal/alarm/*` | migration callers (target owner is `alarm-worker`) |
 
 ## Consumes
 
@@ -49,6 +48,12 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | Iris | KakaoTalk ingress/reply automation | webhook/reply delivery failure |
 | cliproxy/LLM | external summary generation where configured | summary generation degradation |
 | Alarm API | alarm CRUD/query | alarm commands and admin operations fail |
+
+API 설정은 `internal/config`, plane별 공통 서비스 생성은 `internal/apifoundation`이 소유합니다.
+Admin 조립·수명은 `internal/planes/admin/runtime`, router와 Stream/OAuth/WebSocket handler는
+`internal/planes/admin/internal/httpapi`, 공통 trigger handler/router는 `internal/httpapi`에 있습니다.
+Observation consume·canonical/replay/retention과 private reducer는 `internal/youtube/`가 소유합니다.
+Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-process alarm service를 생성하지 않습니다.
 
 ## Must not own
 
@@ -133,13 +138,18 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - Iris URL/cert/token configuration
 - PostgreSQL and Valkey availability
 - Internal API base URLs and key configuration for scheduler, trigger, and alarm services
+- Internal HTTP/H3 client options are loaded once into `Config.InternalH3` and passed explicitly; each plane owns timeout and transport cleanup. Iris URL-file dynamic reload remains on its existing path.
 - CLIPROXY/LLM settings where enabled
 - Uber Fx v1.24.0 is the process lifecycle owner for this binary only. It is an implementation detail, not an operator-selectable mode, and does not change ports, routes, config keys, or dependency readiness requirements.
 
 ## Shutdown behavior
 
 - Fx is the single process signal owner. It starts the optional YouTube plane, then llm, admin, and bot; shutdown cancels the runtime context and drains bot, admin, llm, then the optional YouTube plane.
-- Stop HTTP/H3 ingress and scheduler workers gracefully within the existing 10-second plane-drain budget. The whole Fx stop is capped at 30 seconds inside the Compose 45-second grace period.
+- Stop HTTP/H3 ingress and scheduler workers within one shared 10-second plane-drain budget. The whole Fx stop is capped at 30 seconds inside the Compose 45-second grace period.
+- Plane `CloseContext` receives the remaining process-stop context. Each plane joins its background tasks before releasing owned member-cache/DB/cache resources; bot durable samplers are included. A join timeout preserves live resources and the error, while later waiting uses the same cleanup owner rather than starting concurrent cleanup.
+- LLM HTTP/H3 shutdown has one active owner. A caller deadline returns control to the remaining planes even when a detached trigger is still running; the original shutdown error remains observable. LLM resources are released only after the actual HTTP handlers and scheduler have joined, including metrics/pprof handlers.
+- YouTube claim release waits for the claim producer to finish registering its returned batch. Registration and fenced release share the existing settlement budget; if registration times out, a later `CloseContext` can finish that release. An attempted release failure is retained without automatic retry, and DB cleanup still waits for all workers to join.
+- Bot readiness cancellation is normal only when its error matches the runtime's actual shutdown cancellation. An independent readiness deadline or a joined operational error remains fatal.
 - A runtime fatal, plane-drain failure, or process-stop timeout remains process-fatal. Cleanup is attempted once and no legacy lifecycle fallback is selected.
 - Do not drain or mutate dispatch queues during shutdown.
 - Preserve delivery/outbox state in PostgreSQL.

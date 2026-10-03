@@ -13,7 +13,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/retry"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 const birthdayStreamMaxPublishedPerMemberDay = 3
@@ -108,7 +108,7 @@ func birthdayStreamEvaluationDates(now time.Time, tickInterval time.Duration) []
 }
 
 func kstDayStart(t time.Time) time.Time {
-	kst := util.ToKST(t)
+	kst := timeutil.ToKST(t)
 	return time.Date(kst.Year(), kst.Month(), kst.Day(), 0, 0, 0, 0, kst.Location())
 }
 
@@ -337,7 +337,7 @@ func sortBirthdayStreamSessions(sessions []BirthdayStreamSession) {
 }
 
 func birthdayStreamEffectiveStart(session *BirthdayStreamSession) time.Time {
-	if start := util.FirstNonNilTime(session.StartedAt, session.ScheduledStart); start != nil {
+	if start := timeutil.FirstNonNilTime(session.StartedAt, session.ScheduledStart); start != nil {
 		return *start
 	}
 
@@ -365,7 +365,7 @@ func (r *BirthdayStreamRunner) effectiveNow() time.Time {
 		return r.now()
 	}
 
-	return util.NowKST()
+	return timeutil.NowKST()
 }
 
 func (r *BirthdayStreamRunner) effectiveSleep() func(context.Context, time.Duration) bool {

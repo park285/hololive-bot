@@ -1,0 +1,22 @@
+{
+  "kind": "graph-only counterfactual, not measured compiled output",
+  "removed_edges": [
+    [
+      "github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime",
+      "github.com/kapu/hololive-shared/pkg/providers"
+    ]
+  ],
+  "before_shared_packages": 51,
+  "after_shared_packages": 48,
+  "removed_shared_packages": [
+    "github.com/kapu/hololive-shared/pkg/providers",
+    "github.com/kapu/hololive-shared/pkg/service/delivery",
+    "github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+  ],
+  "remaining_path_to_holodex": [
+    "github.com/kapu/hololive-youtube-collector/cmd/runtime/youtube-collector",
+    "github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime",
+    "github.com/kapu/hololive-shared/pkg/server/httpserver",
+    "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+  ]
+}

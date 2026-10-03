@@ -27,6 +27,8 @@ import (
 	"strings"
 	"testing"
 
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
@@ -147,7 +149,7 @@ func TestClientSendWeeklyNotificationWithAPIKey(t *testing.T) {
 func newTestClient(t *testing.T, schedulerURL, apiKey string) *Client {
 	t.Helper()
 
-	client, err := NewClient(schedulerURL, apiKey, nil)
+	client, err := NewClient(schedulerURL, apiKey, nil, sharedh3.ClientOptions{})
 	if err != nil {
 		t.Fatalf("NewClient(%q) error = %v", schedulerURL, err)
 	}
@@ -155,14 +157,13 @@ func newTestClient(t *testing.T, schedulerURL, apiKey string) *Client {
 	return client
 }
 
-// https scheduler URL은 H3 전용 내부 서버다. HOLOLIVE_INTERNAL_H3_* 가 없으면 TCP client로 내려가지 않고 오류다
+// https scheduler URL은 H3 전용 내부 서버다. 명시한 H3 options가 없으면 TCP client로 내려가지 않고 오류다
 // (stack audit 2026-09-26).
-func TestNewClientRequiresInternalH3EnvForHTTPS(t *testing.T) {
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
-	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+func TestNewClientRequiresInternalH3OptionsForHTTPS(t *testing.T) {
+	t.Parallel()
 
-	client, err := NewClient("https://127.0.0.1:30003", "", nil)
+	client, err := NewClient("https://127.0.0.1:30003", "", nil, sharedh3.ClientOptions{})
 	if err == nil || client != nil {
-		t.Fatalf("NewClient(https) = (%v, %v), want missing internal H3 env error", client, err)
+		t.Fatalf("NewClient(https) = (%v, %v), want missing internal H3 options error", client, err)
 	}
 }

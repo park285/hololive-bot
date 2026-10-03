@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -49,7 +49,7 @@ type LogicalScheduleNotifiedData struct {
 
 type Service struct {
 	cache           cache.Client
-	targetPolicy    sharedchecker.TargetMinutePolicy
+	targetPolicy    targetpolicy.TargetMinutePolicy
 	targetMinutesMu sync.RWMutex
 	logger          *slog.Logger
 }
@@ -61,7 +61,7 @@ func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Servi
 
 	return &Service{
 		cache:        c,
-		targetPolicy: sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
+		targetPolicy: targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes)),
 		logger:       logger,
 	}
 }
@@ -71,7 +71,7 @@ func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
 	s.targetMinutesMu.Lock()
 	defer s.targetMinutesMu.Unlock()
 
-	s.targetPolicy = sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes))
+	s.targetPolicy = targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes))
 }
 
 // SETNX 기반 키 선점. 저장소 오류는 "이미 선점됨"(false, nil)과 구분해 오류로 돌려준다.
@@ -95,7 +95,7 @@ func (s *Service) TargetMinutesSnapshot() []int {
 	return s.targetPolicySnapshot().Clone()
 }
 
-func (s *Service) targetPolicySnapshot() sharedchecker.TargetMinutePolicy {
+func (s *Service) targetPolicySnapshot() targetpolicy.TargetMinutePolicy {
 	s.targetMinutesMu.RLock()
 	defer s.targetMinutesMu.RUnlock()
 

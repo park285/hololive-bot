@@ -1,0 +1,9 @@
+Final SQL validation: every 1,000/10,000 x 1/10/100% benchmark condition calls assertMatrixCandidateEquivalence before timing and compares complete values and order for full, period, and prepared candidates. The final three-sample benchmark output is membernews-matrix.txt.
+
+Full package race results after the boundary fixes:
+ok  	github.com/kapu/hololive-api/internal/planes/llm/runtime	8.063s
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews	9.582s
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter	1.239s
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model	1.021s
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler	1.050s
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer	1.170s

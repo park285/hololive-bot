@@ -26,7 +26,7 @@ output="$(
     -benchtime="${iterations}x" \
     -count=1 \
     -benchmem \
-    ./hololive/hololive-shared/pkg/service/youtube/sourceobservation/consume
+    ./hololive/hololive-api/internal/youtube/sourceobservation
 )"
 printf '%s\n' "${output}"
 

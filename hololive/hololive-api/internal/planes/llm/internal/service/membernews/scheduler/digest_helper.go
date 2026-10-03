@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
@@ -39,6 +40,8 @@ import (
 )
 
 type digestDispatchConfig struct {
+	period           model.Period
+	now              time.Time
 	periodKey        string
 	periodFieldName  string
 	resultMessage    string
@@ -51,7 +54,7 @@ type digestDispatchConfig struct {
 
 func processDigestForRoom(
 	ctx context.Context,
-	service model.DigestService,
+	service model.DigestGenerator,
 	fmtr model.DigestFormatter,
 	outbox outboxEnqueuer,
 	logger *slog.Logger,
@@ -190,11 +193,10 @@ func runMemberNewsDigest(
 	ctx context.Context,
 	digest *schedulerkit.DigestScheduler,
 	service model.DigestService,
-	processRoom func(context.Context, string, string) delivery.SendResult,
+	processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult,
 	config *digestDispatchConfig,
 ) error {
-	config.processRoom = processRoom
-	if err := digest.RunDigest(ctx, buildDigestOp(digest, service, config)); err != nil {
+	if err := digest.RunDigest(ctx, buildDigestOp(digest, service, processRoom, config)); err != nil {
 		return fmt.Errorf("run digest: %w", err)
 	}
 
@@ -204,6 +206,7 @@ func runMemberNewsDigest(
 func buildDigestOp(
 	digest *schedulerkit.DigestScheduler,
 	service model.DigestService,
+	processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult,
 	config *digestDispatchConfig,
 ) schedulerkit.DigestOp[[]model.SubscribedRoom] {
 	return schedulerkit.DigestOp[[]model.SubscribedRoom]{
@@ -213,12 +216,12 @@ func buildDigestOp(
 
 			return nil
 		},
-		Collect: collectSubscribedRooms(service, digest.Logger, config.skipMessage),
+		Collect: collectSubscribedRooms(service, digest.Logger, config, processRoom),
 		Execute: executeDigestDispatch(digest.Logger, config),
 	}
 }
 
-func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, skipMsg string) func(context.Context) ([]model.SubscribedRoom, bool, error) {
+func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, config *digestDispatchConfig, processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult) func(context.Context) ([]model.SubscribedRoom, bool, error) {
 	return func(ctx context.Context) ([]model.SubscribedRoom, bool, error) {
 		rooms, err := service.ListSubscribedRooms(ctx)
 		if err != nil {
@@ -226,9 +229,22 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, sk
 		}
 
 		if len(rooms) == 0 {
-			logger.Info(skipMsg)
+			logger.Info(config.skipMessage)
 
 			return nil, false, nil
+		}
+
+		generator, err := service.PrepareDigestRun(ctx, config.period, config.now)
+		if err != nil {
+			return nil, false, fmt.Errorf("prepare member news digest run: %w", err)
+		}
+
+		if generator == nil {
+			return nil, false, errors.New("prepared member news digest generator is nil")
+		}
+
+		config.processRoom = func(ctx context.Context, key, roomID string) delivery.SendResult {
+			return processRoom(ctx, generator, key, roomID)
 		}
 
 		return rooms, true, nil

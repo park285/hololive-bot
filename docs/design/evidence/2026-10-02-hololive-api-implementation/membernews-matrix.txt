@@ -1,0 +1,104 @@
+2026/10/02 23:44:49 github.com/testcontainers/testcontainers-go - Connected to docker:
+  Server Version: 29.8.2
+  API Version: 1.56
+  Operating System: Ubuntu 26.04.1 LTS
+  Total Memory: 62646 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: 727282da17ba81b439ca9996f7b7624a2b3f93eb6a84bfa0f478cb2b69901475
+  Test ProcessID: 26a43074-bf7d-4658-b14c-2f62d404f35f
+2026/10/02 23:44:49 🐳 Creating container for image postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+2026/10/02 23:44:50 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/10/02 23:44:50 ✅ Container created: 764ef96d6ba5
+2026/10/02 23:44:50 🐳 Starting container: 764ef96d6ba5
+2026/10/02 23:44:50 ✅ Container started: 764ef96d6ba5
+2026/10/02 23:44:50 ⏳ Waiting for container id 764ef96d6ba5 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/10/02 23:44:51 Shell not found in container
+2026/10/02 23:44:51 🔔 Container is ready: 764ef96d6ba5
+2026/10/02 23:44:51 ✅ Container created: 4e245c16a42d
+2026/10/02 23:44:51 🐳 Starting container: 4e245c16a42d
+2026/10/02 23:44:51 ✅ Container started: 4e245c16a42d
+2026/10/02 23:44:51 ⏳ Waiting for container id 4e245c16a42d image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2)]
+2026/10/02 23:44:52 🔔 Container is ready: 4e245c16a42d
+goos: linux
+goarch: amd64
+pkg: github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews
+cpu: AMD Ryzen 5 5600G with Radeon Graphics
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/full-12         	       1	  30340269 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	47273296 B/op	  242778 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/full-12         	       1	  31693813 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	47274048 B/op	  242781 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/full-12         	       1	  44579012 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	47274048 B/op	  242785 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/period-12       	       1	  15576498 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       200.0 rows/op	    277640 string-bytes/op	 1070704 B/op	    5138 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/period-12       	       1	  13816760 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       200.0 rows/op	    277640 string-bytes/op	 1070704 B/op	    5138 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/period-12       	       1	  12147174 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       200.0 rows/op	    277640 string-bytes/op	 1070688 B/op	    5138 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/snapshot-12     	       1	   2354709 ns/op	         5.000 parallel-peak	         0 pool-waits/op	        10.00 rows/op	     13882 string-bytes/op	  115936 B/op	    1001 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/snapshot-12     	       1	   2466230 ns/op	         5.000 parallel-peak	         0 pool-waits/op	        10.00 rows/op	     13882 string-bytes/op	  116416 B/op	    1002 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=1/snapshot-12     	       1	   2361181 ns/op	         5.000 parallel-peak	         0 pool-waits/op	        10.00 rows/op	     13882 string-bytes/op	  117376 B/op	    1004 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/full-12        	       1	  30522385 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	51260040 B/op	  260796 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/full-12        	       1	  26760951 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	51270416 B/op	  260788 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/full-12        	       1	  26981761 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	51246992 B/op	  260780 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/period-12      	       1	  19054633 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      2000 rows/op	   2775320 string-bytes/op	 9134920 B/op	   44805 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/period-12      	       1	  19524096 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      2000 rows/op	   2775320 string-bytes/op	 9129344 B/op	   44798 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/period-12      	       1	  18077183 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      2000 rows/op	   2775320 string-bytes/op	 9129296 B/op	   44798 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/snapshot-12    	       1	   3816880 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       100.0 rows/op	    138766 string-bytes/op	 1081096 B/op	    8834 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/snapshot-12    	       1	   4079810 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       100.0 rows/op	    138766 string-bytes/op	 1081096 B/op	    8834 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=10/snapshot-12    	       1	   4107513 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       100.0 rows/op	    138766 string-bytes/op	 1081096 B/op	    8834 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/full-12       	       1	  71886773 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	90622976 B/op	  440777 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/full-12       	       1	  94462363 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	90623952 B/op	  440787 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/full-12       	       1	  94312468 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	90623456 B/op	  440779 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/period-12     	       1	 117230009 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	90743184 B/op	  440883 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/period-12     	       1	 111779001 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	90744128 B/op	  440891 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/period-12     	       1	 105235104 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27755720 string-bytes/op	90744592 B/op	  440882 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/snapshot-12   	       1	  18492183 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      1000 rows/op	   1387786 string-bytes/op	10431208 B/op	   87140 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/snapshot-12   	       1	  20874264 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      1000 rows/op	   1387786 string-bytes/op	10430568 B/op	   87138 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=1000/select=100/snapshot-12   	       1	  22681321 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      1000 rows/op	   1387786 string-bytes/op	10430584 B/op	   87138 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/full-12        	       1	 194689982 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	483839200 B/op	 2420927 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/full-12        	       1	 224577470 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	483840224 B/op	 2420933 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/full-12        	       1	 192107028 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	483840384 B/op	 2420919 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/period-12      	       1	  83487578 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      2000 rows/op	   2779680 string-bytes/op	 9136112 B/op	   44799 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/period-12      	       1	 101794460 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      2000 rows/op	   2779680 string-bytes/op	 9133040 B/op	   44800 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/period-12      	       1	  89591549 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      2000 rows/op	   2779680 string-bytes/op	 9146192 B/op	   44803 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/snapshot-12    	       1	  18573528 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       100.0 rows/op	    138984 string-bytes/op	 1081200 B/op	    8834 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/snapshot-12    	       1	  17955823 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       100.0 rows/op	    138984 string-bytes/op	 1081168 B/op	    8834 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=1/snapshot-12    	       1	  19719838 ns/op	         5.000 parallel-peak	         0 pool-waits/op	       100.0 rows/op	    138984 string-bytes/op	 1082160 B/op	    8836 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/full-12       	       1	 265296158 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	523215584 B/op	 2600930 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/full-12       	       1	 293136883 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	523216096 B/op	 2600934 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/full-12       	       1	 257090331 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	523215520 B/op	 2600929 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/period-12     	       1	 167183994 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27795360 string-bytes/op	90757440 B/op	  440880 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/period-12     	       1	 193211920 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27795360 string-bytes/op	90758016 B/op	  440886 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/period-12     	       1	 248435439 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     20000 rows/op	  27795360 string-bytes/op	90757616 B/op	  440883 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/snapshot-12   	       1	  31886630 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      1000 rows/op	   1389768 string-bytes/op	10432008 B/op	   87144 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/snapshot-12   	       1	  30700203 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      1000 rows/op	   1389768 string-bytes/op	10431832 B/op	   87139 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=10/snapshot-12   	       1	  31513681 ns/op	         5.000 parallel-peak	         0 pool-waits/op	      1000 rows/op	   1389768 string-bytes/op	10433688 B/op	   87143 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/full-12      	       1	 621049733 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	916322112 B/op	 4400931 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/full-12      	       1	 579199752 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	916319680 B/op	 4400922 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/full-12      	       1	 616671856 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	916320192 B/op	 4400926 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/period-12    	       1	 753935700 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	916440608 B/op	 4401034 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/period-12    	       1	 756331998 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	916439872 B/op	 4401026 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/period-12    	       1	 772196734 ns/op	         5.000 parallel-peak	         0 pool-waits/op	    200000 rows/op	 277955760 string-bytes/op	916439296 B/op	 4401021 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/snapshot-12  	       1	 173332037 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     10000 rows/op	  13897788 string-bytes/op	103760344 B/op	  870145 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/snapshot-12  	       1	 183383467 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     10000 rows/op	  13897788 string-bytes/op	103760952 B/op	  870151 allocs/op
+BenchmarkMemberNewsCandidateQueries/rows=10000/select=100/snapshot-12  	       1	 173606419 ns/op	         5.000 parallel-peak	         0 pool-waits/op	     10000 rows/op	  13897788 string-bytes/op	103760872 B/op	  870150 allocs/op
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews	20.680s
+goos: linux
+goarch: amd64
+pkg: github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter
+cpu: AMD Ryzen 5 5600G with Radeon Graphics
+BenchmarkCandidateMetadata/eager-12         	       1	  97618416 ns/op	141171776 B/op	  400171 allocs/op
+BenchmarkCandidateMetadata/eager-12         	       1	  97305811 ns/op	141139280 B/op	  400128 allocs/op
+BenchmarkCandidateMetadata/eager-12         	       1	  97524437 ns/op	141139152 B/op	  400127 allocs/op
+BenchmarkCandidateMetadata/lazy-12          	       1	  42418242 ns/op	46577792 B/op	  200122 allocs/op
+BenchmarkCandidateMetadata/lazy-12          	       1	  41997452 ns/op	46578112 B/op	  200123 allocs/op
+BenchmarkCandidateMetadata/lazy-12          	       1	  40144367 ns/op	46577264 B/op	  200122 allocs/op
+BenchmarkCandidateMetadata/prepared-12      	       1	  10768332 ns/op	 8222776 B/op	   75101 allocs/op
+BenchmarkCandidateMetadata/prepared-12      	       1	  10941712 ns/op	 8223256 B/op	   75102 allocs/op
+BenchmarkCandidateMetadata/prepared-12      	       1	  10143253 ns/op	 8221336 B/op	   75098 allocs/op
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter	0.458s
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model	0.003s
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler	0.005s
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer	0.005s

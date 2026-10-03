@@ -1,0 +1,125 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package subscriptions
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+)
+
+const (
+	alarmServiceCloseTimeout = 3 * time.Second
+	alarmPersistTaskTimeout  = alarmServiceCloseTimeout
+)
+
+func NewAlarmService(
+	cacheClient cache.Client,
+	memberData domain.MemberDataProvider,
+	alarmRepository *alarm.Repository,
+	logger *slog.Logger,
+	advanceMinutes []int,
+) (*AlarmService, error) {
+	if cacheClient == nil {
+		return nil, errors.New("new alarm service: cache client is nil")
+	}
+
+	// PG가 구독·방 이름의 원천이다. repository 없이 Valkey만으로 조회·변경하던 경로는 없앴다.
+	if alarmRepository == nil {
+		return nil, errors.New("new alarm service: alarm repository is nil")
+	}
+
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	// 첫 관측을 기다리지 않고 서비스 생성 시점에 alarm metric을 등록한다.
+	alarmMetrics()
+
+	targetPolicy := targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(advanceMinutes))
+
+	service := &AlarmService{
+		cache:           cacheClient,
+		memberData:      memberData,
+		alarmRepository: alarmRepository,
+		alarmWriter:     alarmRepository,
+		logger:          logger,
+		targetPolicy:    targetPolicy,
+	}
+	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
+
+	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
+
+	return service, nil
+}
+
+func (as *AlarmService) getTargetMinutes() []int {
+	as.targetMinutesMu.RLock()
+	defer as.targetMinutesMu.RUnlock()
+
+	return as.targetPolicy.Clone()
+}
+
+func (as *AlarmService) GetTargetMinutes() []int {
+	return as.getTargetMinutes()
+}
+
+func (as *AlarmService) UpdateAlarmAdvanceMinutes(ctx context.Context, alarmAdvanceMinutes int) (domain.AdvanceMinutesResult, error) {
+	result := domain.AdvanceMinutesResult{RequestedMinutes: alarmAdvanceMinutes, Outcome: domain.ApplyRejected}
+
+	if err := ctx.Err(); err != nil {
+		return result, fmt.Errorf("update alarm advance minutes: before apply: %w", err)
+	}
+
+	normalized := targetpolicy.NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes)
+
+	as.targetMinutesMu.Lock()
+
+	// 대기 중 취소된 요청도 target을 변경하지 않는다. 변경 뒤 취소는 확인된 적용을 뒤집지 않는다.
+	if err := ctx.Err(); err != nil {
+		as.targetMinutesMu.Unlock()
+
+		return result, fmt.Errorf("update alarm advance minutes: before apply: %w", err)
+	}
+
+	as.targetPolicy = normalized
+	as.targetMinutesMu.Unlock()
+
+	if as.logger != nil {
+		as.logger.Info("Alarm advance minutes updated",
+			slog.Int("alarm_advance_minutes", alarmAdvanceMinutes),
+			slog.Any("target_minutes", normalized.Clone()),
+		)
+	}
+
+	result.Outcome = domain.ApplyConfirmed
+	result.TargetMinutes = normalized.Clone()
+
+	return result, nil
+}

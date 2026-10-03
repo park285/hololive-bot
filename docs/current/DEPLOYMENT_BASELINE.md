@@ -2,11 +2,10 @@
 
 ## Scope
 
-현재 production baseline은 단일 호스트 `deploy/compose/docker-compose.prod.yml`입니다. 이 문서는 runtime/infra 구성의 요약 기준입니다. 서비스별 현재 절차는 `docs/current/runbooks/`를 따릅니다.
+현재 production은 중앙 호스트와 Seoul collector `b`의 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`의 host-native systemd로 운영합니다. 중앙은 `deploy/compose/docker-compose.prod.yml`과 `docker-compose.live-compat.yml`을 함께 사용합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 서비스별 적용·검증·복구 절차는 `docs/current/runbooks/`를 따릅니다.
 
 ## Non-Goals
 
-- k8s/k3s 재도입 설계
 - Docker Compose 절차 중복
 - service env 전체 목록 복제
 
@@ -14,10 +13,13 @@
 
 | 역할 | 호스트 | 내용 |
 |---|---|---|
-| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, collector fleet member `youtube-collector` (`c` on 30025). 권위 PostgreSQL이 여기 있습니다. |
-| 서울 AP | `<tailnet-seoul-ap>` (`aarch64`) | `youtube-collector-b`. 기존 `holo-postgres-standby`와 failover controller는 2026-09-08 제거했으며, 복구·승격 대상으로 사용하지 않습니다. |
+| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | Compose의 `hololive-api`, `hololive-alarm-worker`, `holo-postgres`, `valkey-cache`, shortlink ingress, autoheal, collector fleet member `youtube-collector` (`c` on 30025)와 격리 issuer `youtube-po-c`. 권위 PostgreSQL이 여기 있습니다. |
+| 서울 AP·관리 웹 | `<tailnet-seoul-ap>` (`aarch64`) | Compose의 `youtube-collector-b`와 격리 issuer `youtube-po-b`, host service `iris-console.service`의 통합 관리자 웹. PostgreSQL standby나 자동 failover 대상으로 사용하지 않습니다. |
+| Osaka AP `a` | `<tailnet-osaka-a>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-a.service`와 격리 issuer `hololive-youtube-po.service`. |
+| Osaka2 AP `d` | `<tailnet-osaka2-d>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-d.service`와 격리 issuer `hololive-youtube-po.service`. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
-| 원격 AP | Osaka `a`, Seoul `b`, Osaka2 `d` | `a`/`d`는 host-native systemd, `b`는 Compose. |
+
+Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용합니다. Osaka `a`·Osaka2 `d`의 Compose overlay는 경로·설정 계약 검증용이며 실제 기동은 native unit이 소유합니다. 실행 방식의 설정은 `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`의 `AP_RUNTIME_MODE`가 소유합니다.
 
 `<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, CLIProxy와 observability
 스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
@@ -67,11 +69,13 @@ timeline을 그대로 재기동하지 않습니다.
 
 ## Runtime Services
 
-| Runtime | Compose service | Port | Env groups | Volumes | Depends on |
+| Runtime | 실행 대상 | Port | Env groups | 자산 | 기동 의존성 |
 |---|---|---:|---|---|---|
-| `hololive-api` | `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, docker-proxy |
-| `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-collector` | `youtube-collector` | 30025 (`c`; AP `a/b/d` 30005/30015/30035) | app file log, PostgreSQL (`hololive_scraper`) | `data`, `logs` | PostgreSQL, migration |
+| `hololive-api` | 중앙 Compose `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, `hololive-alarm-worker` |
+| `alarm-worker` | 중앙 Compose `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
+| `youtube-collector` | 중앙 Compose `youtube-collector` (`c`), Seoul Compose `youtube-collector-b`, Osaka native `a`, Osaka2 native `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30035 | app file log, PostgreSQL (`hololive_scraper`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 Compose의 DB·migration 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
+
+`hololive-api`는 `hololive-net`만 사용하며 Docker socket·`DOCKER_HOST`·`docker-proxy-net`에 접근하지 않습니다. 중앙 `docker-proxy`의 유일한 소비자는 `deunhealth`입니다. Collector와 issuer의 동일 source SHA 및 paired deploy/rollback 계약은 [collector runbook](runbooks/youtube-collector.md#isolated-po-token-lifecycle)을 따릅니다.
 
 ## Infra Services
 
@@ -82,8 +86,9 @@ timeline을 그대로 재기동하지 않습니다.
 | `postgres-failover.service` | 재활성화 참고용 fail-closed controller | Production unit과 timer는 제거했습니다. 저장소의 코드·unit template과 기존 원격 helper·정적 설정은 재구축 참고용으로 보존하며 자동 실행하지 않습니다. |
 | `hololive-db-migrate` | Migration job | Runs before app services; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
-| `admin-dashboard` | Dashboard frontend | Port 30190, not part of Go runtime count |
-| `docker-proxy` | Restricted Docker API proxy | Used instead of mounting the Docker socket directly |
+| `admin-dashboard-ingress` | 중앙 shortlink ingress | `docker-compose.live-compat.yml`이 정의합니다. 30192의 source-restricted shortlink와 loopback 30193의 health를 제공하며 관리자 웹을 호스팅하지 않습니다. |
+| `youtube-po-c` / `youtube-po-b` | Compose의 격리 PO issuer | 중앙 `c`와 Seoul `b` collector에 private Unix socket을 제공합니다. 앱 비밀·DB·helper socket을 공유하지 않습니다. native `a`/`d`의 issuer는 각 호스트의 `hololive-youtube-po.service`입니다. |
+| `docker-proxy` | Restricted Docker API proxy | internal `docker-proxy-net`에서 `deunhealth`에만 Docker API를 제공합니다. `hololive-api`와 관리자 웹은 접근하지 않습니다. |
 | `deunhealth` | Autoheal sidecar | Restarts unhealthy labeled containers; old-primary fencing 동작은 비활성 HA 참고 절차에만 해당합니다. |
 
 ## External Boundaries
@@ -109,10 +114,11 @@ that directory read-only at `/run/hololive-bot/postgres-tls/`. Reissuance and
 reload are approval-gated `stack-secrets-operations` work; no agent renews it in
 place.
 
-The production client set uses `verify-full` with
+The Compose client set uses `verify-full` with
 `/run/hololive-bot/certs/postgres-ca.pem`: `hololive-api`, `alarm-worker`,
-central `youtube-collector`, `hololive-db-migrate`, Seoul `youtube-collector-b`,
-and Osaka APs `youtube-collector-a`/`youtube-collector-d` when they are rolled out.
+central `youtube-collector`, `hololive-db-migrate`, and Seoul `youtube-collector-b`.
+Native Osaka APs `youtube-collector-a`/`youtube-collector-d`도 `verify-full`을 사용하며,
+CA 경로는 host env generator가 지정하는 `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`입니다.
 
 Operational evidence from the 2026-06-07 transition showed all 35 TCP
 PostgreSQL connections on TLSv1.3 and `0` plaintext TCP connections. One Unix
@@ -127,6 +133,9 @@ domain socket monitor connection remained outside the TCP TLS scope.
 ## Related Files
 
 - `deploy/compose/docker-compose.prod.yml`
+- `deploy/compose/docker-compose.live-compat.yml`
+- `deploy/compose/docker-compose.seoul.yml`
+- `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`
 - `deploy/compose/docker-compose.standby.yml`
 - `docs/current/PROJECT_MAP.md`
 - `docs/current/runbooks/postgres-replication.md`

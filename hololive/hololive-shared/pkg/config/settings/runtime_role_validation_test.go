@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func clearRuntimeRoleEnv(t *testing.T) {
@@ -35,10 +35,10 @@ func validRuntimeRoleConfig(t *testing.T) *Config {
 			APIKey:  "x",
 			Timeout: DefaultHolodexOperationalConfig().Timeout,
 		},
-		Postgres:             PostgresConfig{SSLMode: load.PostgresSSLModeVerifyFull},
+		Postgres:             PostgresConfig{SSLMode: runtimepolicy.PostgresSSLModeVerifyFull},
 		OfficialSchedule:     DefaultOfficialScheduleConfig(),
 		MaxResponseBodyBytes: DefaultMaxResponseBodyBytes,
-		Environment:          load.EnvironmentProduction,
+		Environment:          runtimepolicy.EnvironmentProduction,
 		APIWorkerProfile:     apiWorkerProfileFixture(t),
 		AlarmWorkerProfile:   alarmWorkerProfileFixture(t),
 	}
@@ -46,7 +46,7 @@ func validRuntimeRoleConfig(t *testing.T) *Config {
 
 func TestValidateBotRuntimeRejectsNotificationEgressOwner(t *testing.T) {
 	clearRuntimeRoleEnv(t)
-	t.Setenv(load.NotificationEgressRoleEnv, load.NotificationEgressRoleOwner)
+	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, runtimepolicy.NotificationEgressRoleOwner)
 
 	err := validRuntimeRoleConfig(t).ValidateBotRuntime()
 	if err == nil || !strings.Contains(err.Error(), "must not own proactive notification egress") {
@@ -56,7 +56,7 @@ func TestValidateBotRuntimeRejectsNotificationEgressOwner(t *testing.T) {
 
 func TestValidateBotRuntimeRejectsMixedCaseNotificationEgressOwner(t *testing.T) {
 	clearRuntimeRoleEnv(t)
-	t.Setenv(load.NotificationEgressRoleEnv, "Owner")
+	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, "Owner")
 
 	err := validRuntimeRoleConfig(t).ValidateBotRuntime()
 	if err == nil || err.Error() != "validate no notification egress ownership: bot must not own proactive notification egress; NOTIFICATION_EGRESS_ROLE=owner is reserved for alarm-worker" {

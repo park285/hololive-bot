@@ -12,9 +12,9 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
@@ -63,7 +63,7 @@ func TestYouTubeCheckerMemberSubscriptionsForUpcomingAndLiveCatchup(t *testing.T
 	ctx := t.Context()
 	checker := newMemberSubscriptionChecker(t)
 	now := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
-	window := sharedchecker.ResolveEvaluationWindow(now.Add(-5*time.Minute), now, 75*time.Second)
+	window := targetpolicy.ResolveEvaluationWindow(now.Add(-5*time.Minute), now, 75*time.Second)
 	coarseRooms := []string{checkerWholeRoom, checkerMiraRoom, checkerNeonRoom, checkerSeveralRoom, "stale-unsubscribed-room"}
 	streams := []*domain.Stream{
 		{ID: "up-mira", Title: "#玲銘ミラ", ChannelID: checkerUnitBChannel, Status: domain.StreamStatusUpcoming, StartScheduled: new(now.Add(4 * time.Minute))},

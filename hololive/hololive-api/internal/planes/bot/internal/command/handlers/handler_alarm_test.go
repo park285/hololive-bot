@@ -63,9 +63,11 @@ func (s *alarmListViewerStub) GetRoomAlarmsWithTypes(context.Context, string) ([
 
 func (s *alarmListViewerStub) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
 
-func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
-func (s *alarmListViewerStub) GetTargetMinutes() []int                              { return nil }
-func (s *alarmListViewerStub) SetRoomName(context.Context, string, string) error    { return nil }
+func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error) {
+	return domain.AdvanceMinutesResult{}, nil
+}
+func (s *alarmListViewerStub) GetTargetMinutes() []int                           { return nil }
+func (s *alarmListViewerStub) SetRoomName(context.Context, string, string) error { return nil }
 func (s *alarmListViewerStub) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return nil, nil
 }
@@ -194,7 +196,9 @@ func (s *alarmAddRecorder) ListRoomAlarmsView(context.Context, string) ([]domain
 
 func (s *alarmAddRecorder) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
 
-func (s *alarmAddRecorder) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
+func (s *alarmAddRecorder) UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error) {
+	return domain.AdvanceMinutesResult{}, nil
+}
 
 func (s *alarmAddRecorder) GetTargetMinutes() []int { return nil }
 
@@ -210,7 +214,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 	var sentError string
 
 	deps := &handlercore.Dependencies{
-		Alarm:     &alarmAddRecorder{},
+		Alarm:     &alarmListViewerStub{},
 		Matcher:   &matcher.Matcher{},
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {

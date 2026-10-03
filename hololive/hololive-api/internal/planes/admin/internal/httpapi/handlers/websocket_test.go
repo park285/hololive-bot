@@ -1,0 +1,191 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package handlers
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gorilla/websocket"
+)
+
+const testAllowedOrigin = "https://bot.example.com"
+
+func TestCheckOrigin(t *testing.T) {
+	tests := []struct {
+		name    string
+		origins []string
+		origin  string
+		want    bool
+	}{
+		{
+			name:    "allowed origin passes",
+			origins: []string{testAllowedOrigin, "https://admin.example.com"},
+			origin:  testAllowedOrigin,
+			want:    true,
+		},
+		{
+			name:    "disallowed origin fails",
+			origins: []string{testAllowedOrigin},
+			origin:  "https://evil.example.com",
+			want:    false,
+		},
+		{
+			name:    "empty env var denies all",
+			origins: nil,
+			origin:  testAllowedOrigin,
+			want:    false,
+		},
+		{
+			name:    "case insensitive matching",
+			origins: []string{"https://Bot.Example.COM"},
+			origin:  testAllowedOrigin,
+			want:    true,
+		},
+		{
+			name:    "empty origin header denied",
+			origins: []string{testAllowedOrigin},
+			origin:  "",
+			want:    false,
+		},
+		{
+			name:    "host header fallback removed",
+			origins: []string{},
+			origin:  "https://localhost:8080",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 테스트용 오리진 설정
+			orig := wsAllowedOrigins.Load()
+			origins := tt.origins
+			wsAllowedOrigins.Store(&origins)
+
+			defer func() { wsAllowedOrigins.Store(orig) }()
+
+			r, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost/ws", http.NoBody)
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
+
+			if tt.origin != "" {
+				r.Header.Set("Origin", tt.origin)
+			}
+
+			r.Host = "localhost:8080"
+
+			got := checkOrigin(r)
+			if got != tt.want {
+				t.Errorf("checkOrigin() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInitWSUpgrader(t *testing.T) {
+	InitWSUpgrader([]string{"https://a.com", "https://b.com"})
+
+	origins := allowedWSOrigins()
+	if len(origins) != 2 {
+		t.Fatalf("allowedWSOrigins() len = %d, want 2", len(origins))
+	}
+
+	if origins[0] != "https://a.com" {
+		t.Errorf("allowedWSOrigins()[0] = %q, want %q", origins[0], "https://a.com")
+	}
+
+	if origins[1] != "https://b.com" {
+		t.Errorf("allowedWSOrigins()[1] = %q, want %q", origins[1], "https://b.com")
+	}
+}
+
+func TestInitWSUpgrader_EmptyDeniesAll(t *testing.T) {
+	InitWSUpgrader(nil)
+
+	if origins := allowedWSOrigins(); len(origins) != 0 {
+		t.Fatalf("allowedWSOrigins() should be empty, got %d", len(origins))
+	}
+
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost/ws", http.NoBody)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	r.Header.Set("Origin", "https://anything.com")
+
+	if checkOrigin(r) {
+		t.Error("checkOrigin should deny when allowed origins are empty")
+	}
+}
+
+func TestWSUpgrader_DisallowedOriginReturns403(t *testing.T) {
+	InitWSUpgrader([]string{"https://allowed.example.com"})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := WSUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+
+		if err := conn.Close(); err != nil {
+			t.Errorf("close websocket connection: %v", err)
+		}
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, http.Header{
+		"Origin": []string{"https://evil.example.com"},
+	})
+
+	if resp != nil && resp.Body != nil {
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("close handshake response body: %v", closeErr)
+			}
+		}()
+	}
+
+	if conn != nil {
+		if closeErr2 := conn.Close(); closeErr2 != nil {
+			t.Errorf("close websocket connection: %v", closeErr2)
+		}
+	}
+
+	if err == nil {
+		t.Fatal("expected websocket handshake failure for disallowed origin")
+	}
+
+	if resp == nil {
+		t.Fatal("expected HTTP response on handshake failure")
+	}
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}

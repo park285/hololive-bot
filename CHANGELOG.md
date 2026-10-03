@@ -833,5 +833,5 @@
 
 ### 추가
 
-- Kubernetes manifest와 운영 문서를 기반으로 hololive-bot repository를
+- 초기 배포 구성과 운영 문서를 기반으로 hololive-bot repository를
   초기화했습니다.

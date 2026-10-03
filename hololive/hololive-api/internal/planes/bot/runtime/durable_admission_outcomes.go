@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func workerAttemptOutcome(err error) workercontract.AttemptOutcome {
@@ -59,7 +59,7 @@ func (r *durableRuntime) releaseInbox(ctx context.Context, claim *durability.Inb
 	if outcome == durability.InboxReleaseAbandoned && r.logger != nil {
 		r.logger.Error("durable webhook abandoned after max attempts",
 			slog.Int("attempts", int(claim.Attempts)),
-			slog.String("message_token", privacylog.Pseudonym(claim.MessageID)))
+			slog.String("message_token", sharedprivacylog.Pseudonym(claim.MessageID)))
 	}
 }
 

@@ -603,6 +603,11 @@ func collectBotPlaneLogAttrKeys(t *testing.T) []logAttrKeyUse {
 				return true
 			}
 
+			// 이름이 같은 logger.Error와 혼동하지 않고 실제 net/http.Error 함수만 구분한다.
+			if isHTTPErrorFunction(call, sources.typesInfo[file]) {
+				return true
+			}
+
 			uses = append(uses, logAttrKeysFromCall(scope, fileSet, call, constants)...)
 
 			return true
@@ -610,6 +615,22 @@ func collectBotPlaneLogAttrKeys(t *testing.T) []logAttrKeyUse {
 	}
 
 	return uses
+}
+
+func isHTTPErrorFunction(call *ast.CallExpr, info *types.Info) bool {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || info == nil {
+		return false
+	}
+
+	function, ok := info.Uses[selector.Sel].(*types.Func)
+	if !ok || function.Pkg() == nil || function.Pkg().Path() != "net/http" || function.Name() != "Error" {
+		return false
+	}
+
+	signature, ok := function.Type().(*types.Signature)
+
+	return ok && signature.Recv() == nil
 }
 
 func parseScannedRoots(t *testing.T, fileSet *token.FileSet) scannedSources {

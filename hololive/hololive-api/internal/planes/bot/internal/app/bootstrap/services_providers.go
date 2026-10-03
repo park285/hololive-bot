@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -32,42 +30,4 @@ func ProvideACLService(
 	}
 
 	return service, nil
-}
-
-func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
-	return activity.NewActivityLogger("", logger)
-}
-
-func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Dependencies {
-	if modules == nil {
-		return nil
-	}
-
-	return &orchestration.Dependencies{
-		BotSelfUser:           modules.Core.BotSelfUser,
-		IrisBaseURL:           modules.Core.IrisBaseURL,
-		Notification:          modules.Core.Notification,
-		CalendarImageCacheDir: modules.Core.CalendarImageCacheDir,
-		CalendarEntryCacheTTL: modules.Core.CalendarEntryCacheTTL,
-		Logger:                modules.Core.Logger,
-		Client:                modules.Messaging.Client,
-		MessageAdapter:        modules.Messaging.MessageAdapter,
-		Formatter:             modules.Messaging.Formatter,
-		MessageStrings:        modules.Messaging.MessageStrings,
-		MarkdownReplies:       modules.Messaging.MarkdownReplies,
-		Cache:                 modules.Data.Cache,
-		Postgres:              modules.Data.Postgres,
-		MemberRepository:      modules.Data.MemberRepository,
-		MemberCache:           modules.Data.MemberCache,
-		Holodex:               modules.Stream.Holodex,
-		Alarm:                 modules.Stream.Alarm,
-		Matcher:               modules.Stream.MemberMatch,
-		MembersData:           modules.Data.MembersData,
-		Activity:              modules.Support.ActivityLogger,
-		Settings:              modules.Support.Settings,
-		ACL:                   modules.Support.ACL,
-		MajorEventRepository:  modules.Feature.MajorEventRepository,
-		MemberNews:            modules.Feature.MemberNews,
-		CommandBuilders:       modules.Feature.CommandBuilders,
-	}
 }

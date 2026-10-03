@@ -21,6 +21,7 @@
 package alarm
 
 import (
+	"context"
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
@@ -37,8 +38,29 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
+type alarmHTTPWriter interface {
+	AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error)
+	RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error)
+	RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error)
+	ClearRoomAlarms(context.Context, string) (int, error)
+}
+
+type alarmHTTPReader interface {
+	GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error)
+	ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error)
+	GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error)
+}
+
+// AlarmHTTPService는 실제 알림 HTTP route가 호출하는 작업만 요구한다.
+type AlarmHTTPService interface {
+	alarmHTTPWriter
+	alarmHTTPReader
+	UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error)
+	SetRoomName(context.Context, string, string) error
+}
+
 type Handler struct {
-	alarm  domain.AlarmCRUD
+	alarm  AlarmHTTPService
 	logger *slog.Logger
 }
 
@@ -58,7 +80,7 @@ func decodeAlarmRequest(c *gin.Context, destination any) error {
 	return nil
 }
 
-func NewHandler(alarm domain.AlarmCRUD, logger *slog.Logger) *Handler {
+func NewHandler(alarm AlarmHTTPService, logger *slog.Logger) *Handler {
 	return &Handler{
 		alarm:  alarm,
 		logger: logger,
@@ -244,8 +266,15 @@ func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 		return
 	}
 
-	targets := h.alarm.UpdateAlarmAdvanceMinutes(c.Request.Context(), req.Minutes)
-	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": targets}})
+	result, err := h.alarm.UpdateAlarmAdvanceMinutes(c.Request.Context(), req.Minutes)
+	if err != nil || result.Outcome != domain.ApplyConfirmed || !validAdvanceTargets(result.TargetMinutes) {
+		h.logger.Error("알람 사전 알림 시점 적용 실패", slog.String("outcome", string(result.Outcome)), slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("alarm_advance_update_failed", "alarm advance update failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": result.TargetMinutes}})
 }
 
 func (h *Handler) SetRoomName(c *gin.Context) {

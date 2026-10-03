@@ -21,12 +21,12 @@ import (
 
 type testSettingsApplier struct{}
 
-func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
+func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) (sharedsettings.AlarmAdvanceMinutesApplyResult, error) {
 	return sharedsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 		AlarmApplied:                 true,
 		AlarmTargetMinutes:           []int{minutes},
-	}
+	}, nil
 }
 
 func (testSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {

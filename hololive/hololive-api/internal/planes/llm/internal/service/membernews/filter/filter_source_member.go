@@ -120,19 +120,49 @@ func matchMembers(candidate *model.Candidate, profiles []memberProfile) []string
 		return nil
 	}
 
-	normalizedBody := stringutil.NormalizeKey(candidate.Title + " " + candidate.Description)
 	memberTokenSet := buildCandidateMemberTokenSet(candidate.Members)
+
+	return matchPreparedMembers(profiles, memberTokenSet, func() string {
+		return stringutil.NormalizeKey(candidate.Title + " " + candidate.Description)
+	})
+}
+
+func matchPreparedMembers(profiles []memberProfile, memberTokenSet map[string]struct{}, body func() string) []string {
+	var (
+		normalizedBody string
+		normalized     bool
+	)
 
 	matched := make([]string, 0)
 	matchedSet := make(map[string]struct{})
 
 	for _, profile := range profiles {
-		if profileMatchesCandidate(profile, memberTokenSet, normalizedBody) {
+		if profileMatchesExactMember(profile, memberTokenSet) {
+			matched = appendUniqueMatchedMember(matched, matchedSet, profile.display)
+			continue
+		}
+
+		if !normalized {
+			normalizedBody = body()
+			normalized = true
+		}
+
+		if profileMatchesCandidate(profile, nil, normalizedBody) {
 			matched = appendUniqueMatchedMember(matched, matchedSet, profile.display)
 		}
 	}
 
 	return matched
+}
+
+func profileMatchesExactMember(profile memberProfile, memberTokenSet map[string]struct{}) bool {
+	for _, token := range profile.tokens {
+		if _, ok := memberTokenSet[token]; token != "" && ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func profileMatchesCandidate(

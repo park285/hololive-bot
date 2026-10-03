@@ -18,6 +18,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 )
 
 type testMemberDataProvider struct {
@@ -264,7 +265,7 @@ func TestOfficialScheduleAPIResponseContract(t *testing.T) {
 }
 
 func TestOfficialScheduleAPISkipsInvalidRowsAndFailsWhenAllRowsInvalid(t *testing.T) {
-	service := &Service{identityIndex: officialScheduleIdentityIndex{}}
+	service := &Service{identityIndex: officialidentity.Index{}}
 	partial := []byte(`{"dateGroupList":[{"videoList":[
 		{"datetime":"bad","url":"https://www.youtube.com/watch?v=invalid","name":"Bad"},
 		{"datetime":"2026/12/31 20:00:00","url":"https://www.youtube.com/watch?v=valid","name":"Good","title":"Good"}
@@ -291,7 +292,7 @@ func TestOfficialScheduleAPISkipsInvalidRowsAndFailsWhenAllRowsInvalid(t *testin
 }
 
 func TestOfficialScheduleAPIDeduplicatesAndMergesProviderFields(t *testing.T) {
-	service := &Service{identityIndex: officialScheduleIdentityIndex{}}
+	service := &Service{identityIndex: officialidentity.Index{}}
 	body := []byte(`{"dateGroupList":[{"videoList":[
 		{"datetime":"2026/12/31 20:00:00","url":"https://www.youtube.com/watch?v=duplicate","name":"Member","title":"","thumbnail":""},
 		{"datetime":"2026/12/31 20:01:00","url":"https://www.youtube.com/watch?v=duplicate&feature=share","name":"Member","title":"Provider title","thumbnail":"https://cdn.example/provider.jpg"}
@@ -324,7 +325,7 @@ func TestOfficialScheduleAPIClosesAndBoundsResponseBody(t *testing.T) {
 		logger:               slog.New(slog.DiscardHandler),
 		officialSchedule:     settings.DefaultOfficialScheduleConfig(),
 		maxResponseBodyBytes: 32,
-		identityIndex:        officialScheduleIdentityIndex{},
+		identityIndex:        officialidentity.Index{},
 	}
 
 	_, err := service.fetchOfficialScheduleAPI(t.Context())
@@ -499,7 +500,7 @@ func TestOfficialScheduleAPIClosesRejectedResponseBody(t *testing.T) {
 				logger:               slog.New(slog.DiscardHandler),
 				officialSchedule:     settings.DefaultOfficialScheduleConfig(),
 				maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
-				identityIndex:        officialScheduleIdentityIndex{},
+				identityIndex:        officialidentity.Index{},
 			}
 
 			_, err := service.fetchOfficialScheduleAPI(t.Context())

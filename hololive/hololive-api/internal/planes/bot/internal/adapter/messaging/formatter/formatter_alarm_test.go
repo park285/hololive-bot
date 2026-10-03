@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 const cmdAlarmNotificationGroupBody = `🔔 방송 알림 ({{.Count}})
@@ -158,7 +158,7 @@ func TestAlarmNotification_UpcomingScheduledTime(t *testing.T) {
 	var scheduledTimeKST string
 
 	if notification.MinutesUntil > 0 && notification.Stream.StartScheduled != nil {
-		scheduledTimeKST = util.FormatKST(*notification.Stream.StartScheduled, "15:04")
+		scheduledTimeKST = timeutil.FormatKST(*notification.Stream.StartScheduled, "15:04")
 	}
 
 	if scheduledTimeKST == "" {
@@ -187,7 +187,7 @@ func TestAlarmNotification_LiveFallback(t *testing.T) {
 	var scheduledTimeKST string
 
 	if notification.MinutesUntil > 0 && notification.Stream.StartScheduled != nil {
-		scheduledTimeKST = util.FormatKST(*notification.Stream.StartScheduled, "15:04")
+		scheduledTimeKST = timeutil.FormatKST(*notification.Stream.StartScheduled, "15:04")
 	}
 
 	if scheduledTimeKST != "" {

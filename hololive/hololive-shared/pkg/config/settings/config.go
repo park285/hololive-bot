@@ -28,12 +28,14 @@ import (
 	"time"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
 )
 
 type Config struct {
 	Iris         IrisConfig
+	InternalH3   sharedh3.ClientOptions
 	Server       ServerConfig
 	Kakao        KakaoConfig
 	Holodex      HolodexConfig
@@ -87,7 +89,7 @@ func LoadAdminAPIRuntime() (*Config, error) {
 
 // LoadConfig: .env를 읽고 core Config를 만든 뒤 호출자가 준 검증을 적용한다.
 func LoadConfig(validate func(*Config) error, options LoadOptions) (*Config, error) {
-	if err := load.DotEnv(); err != nil {
+	if err := envload.DotEnv(); err != nil {
 		return nil, fmt.Errorf("load dot env: %w", err)
 	}
 
@@ -148,7 +150,7 @@ func loadServicesConfig() (ServicesConfig, error) {
 }
 
 func loadIrisConfig(webhookToken, botToken string) (IrisConfig, error) {
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	config := IrisConfig{
 		BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
@@ -183,7 +185,7 @@ func loadKakaoConfig() (*KakaoConfig, error) {
 	// 값이 없으면 validate*RequiredConfig의 "KAKAO_ROOMS is required"로 기동을 거절한다
 	// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
 	return &KakaoConfig{
-		Rooms:      load.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "")),
+		Rooms:      envload.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "")),
 		ACLEnabled: enabled,
 		ACLMode:    mode,
 	}, nil
@@ -229,7 +231,7 @@ func loadKakaoACLMode() (string, error) {
 }
 
 func LoadLoggingConfig() (LoggingConfig, error) {
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	config := LoggingConfig{
 		Level:      sharedenv.String("LOG_LEVEL", "info"),
@@ -255,7 +257,7 @@ const (
 // LoadSeeMoreFold는 bot·llm plane이 공유하는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
 // 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다(PLN-20260926-stack-audit-refactoring T10).
 func LoadSeeMoreFold() (bool, error) {
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	fold := env.Bool(seeMoreFoldEnv, seeMoreFoldDefault)
 	if err := env.Err(); err != nil {
@@ -266,7 +268,7 @@ func LoadSeeMoreFold() (bool, error) {
 }
 
 func loadBotConfig() (BotConfig, error) {
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	seeMoreFold, foldErr := LoadSeeMoreFold()
 
@@ -288,14 +290,14 @@ func loadBotConfig() (BotConfig, error) {
 }
 
 func loadHolodexConfig() (HolodexConfig, error) {
-	apiKey, err := load.HolodexAPIKey()
+	apiKey, err := envload.HolodexAPIKey()
 	if err != nil {
 		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
 	}
 
 	d := DefaultHolodexOperationalConfig()
 
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	config := HolodexConfig{
 		BaseURL:           sharedenv.String("HOLODEX_BASE_URL", d.BaseURL),
@@ -336,7 +338,7 @@ func loadYouTubeConfig() (YouTubeConfig, error) {
 
 	d := DefaultYouTubeOperationalConfig()
 
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	interval := env.Seconds("YOUTUBE_REQUEST_INTERVAL_SECONDS", d.RequestInterval)
 	config := YouTubeConfig{
@@ -369,7 +371,7 @@ func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 
 	d := DefaultOfficialScheduleConfig()
 
-	var env load.StrictEnv
+	var env envload.StrictEnv
 
 	config := OfficialScheduleConfig{
 		BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", d.BaseURL),

@@ -2,7 +2,7 @@
 
 ## Role
 
-Docker Compose runtime rollback과 contract/document rollback 판단 기준입니다.
+중앙·Seoul의 Docker Compose, Osaka·Osaka2 AP의 native systemd runtime rollback과 contract/document rollback 판단 기준입니다. Collector의 paired issuer 복원 절차는 [collector runbook](youtube-collector.md#rollback)을 따릅니다.
 
 ## Before Rollback
 

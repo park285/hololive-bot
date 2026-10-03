@@ -1,10 +1,14 @@
-# Three Runtime Consolidation Plan
+# Three Runtime Consolidation Plan — 완료된 전환 기록
 
-> 완료됨 (2026-06-27 cutover) — `docs/history/runtime-split/THREE_RUNTIME_CUTOVER_20260627.md` 참조. 아래 본문은 계획 당시(5-runtime 기준) 기록입니다.
+> Historical plan. 완료됨 (2026-06-27 cutover) — [전환 기록](../history/runtime-split/THREE_RUNTIME_CUTOVER_20260627.md) 참조.
+> 아래 본문은 계획 당시(5-runtime 기준) 기록입니다. 현재 구조는 [Project Map](../current/PROJECT_MAP.md),
+> 실행 명령은 [Current Runbooks](../current/runbooks/README.md)를 따릅니다.
 
 ## 상태
 
-이 문서는 아직 `docs/current` SSOT가 아닙니다. 현재 운영 구조는 5개 Go runtime이며, 본 문서는 3개 runtime으로 줄이기 위한 코드 레벨 목표와 migration guardrail을 고정합니다.
+이 문서는 완료된 전환 계획의 기록이며 현재 운영 SSOT가 아닙니다. 계획 당시 운영 구조는 5개 Go runtime이었고,
+아래 내용은 이를 3개 runtime으로 줄이기 위한 코드 레벨 목표와 migration guardrail을 보존합니다.
+목표 표의 `youtube-producer`도 이후 퇴역했으므로 현재 runtime 목록으로 해석하지 않습니다.
 
 목표 runtime은 다음 3개입니다.
 
@@ -16,9 +20,9 @@
 
 핵심 결정은 단순히 Compose service 수만 줄이는 것이 아니라, `bot`, `admin-api`, `llm-scheduler`를 하나의 Go process 안에 세 logical plane으로 통합하는 것입니다. 하나의 컨테이너에서 3개 바이너리를 supervisor로 실행하는 방식은 금지합니다. 그 방식은 장애 전파, signal handling, log rotation, readiness, memory accounting을 불명확하게 만들어 MSA 경계를 줄인 효과보다 운영 리스크가 큽니다.
 
-## 현재 제약
+## 계획 당시 제약
 
-현재 각 runtime은 독립 Go module이며 핵심 runtime package가 각 module의 `internal` 아래에 있습니다.
+계획 당시 각 runtime은 독립 Go module이었으며 핵심 runtime package는 각 module의 `internal` 아래에 있었습니다.
 
 - `hololive/hololive-kakao-bot-go/internal/app/botruntime`
 - `hololive/hololive-admin-api/internal/app`

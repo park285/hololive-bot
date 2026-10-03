@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 type CalendarCommand struct {
@@ -99,10 +99,10 @@ func (c *CalendarCommand) targetMonthYear(params map[string]any) (month, year in
 
 func (c *CalendarCommand) nowKST() time.Time {
 	if c.now != nil {
-		return util.ToKST(c.now())
+		return timeutil.ToKST(c.now())
 	}
 
-	return util.NowKST()
+	return timeutil.NowKST()
 }
 
 // trySendCalendarImage는 이미지를 보냈으면 true, 렌더링·전송이 확정적으로 실패하면 false를 돌려 텍스트 달력을 보내게 한다.

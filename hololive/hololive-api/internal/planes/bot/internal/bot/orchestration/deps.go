@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -40,7 +39,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 // BotIrisClient는 bot orchestration이 발송과 room catalog 구성에 사용하는 Iris 계약입니다.
@@ -64,137 +62,12 @@ type Dependencies struct {
 	Cache                 cache.Client
 	Postgres              database.Client
 	MemberRepository      *member.Repository
-	MemberCache           *member.Cache
 	Holodex               domain.StreamProvider
-	Alarm                 domain.AlarmCRUD
+	Alarm                 handlercore.AlarmService
 	Matcher               *matcher.Matcher
 	MembersData           domain.MemberDataProvider
-	Activity              *activity.Logger
-	Settings              settings.ReadWriter
 	ACL                   *acl.Service
 	MajorEventRepository  handlercore.MajorEventRepository
 	MemberNews            handlercore.MemberNewsService
 	CommandBuilders       []orchcmd.CommandBuilder
-}
-
-type coreDependencies struct {
-	botSelfUser           string
-	irisBaseURL           string
-	notification          configsettings.NotificationConfig
-	calendarImageCacheDir string
-	calendarEntryCacheTTL time.Duration
-	logger                *slog.Logger
-}
-
-type messagingDependencies struct {
-	client          BotIrisClient
-	messageAdapter  *messaging.MessageAdapter
-	formatter       *formatter.ResponseFormatter
-	messageStrings  *messagestrings.Store
-	markdownReplies bool
-}
-
-type dataDependencies struct {
-	cache            cache.Client
-	postgres         database.Client
-	memberRepository *member.Repository
-	memberCache      *member.Cache
-}
-
-type streamDependencies struct {
-	holodex     domain.StreamProvider
-	alarm       domain.AlarmCRUD
-	matcher     *matcher.Matcher
-	membersData domain.MemberDataProvider
-}
-
-type supportDependencies struct {
-	activity *activity.Logger
-	settings settings.ReadWriter
-	acl      *acl.Service
-}
-
-type featureDependencies struct {
-	majorEventRepository handlercore.MajorEventRepository
-	memberNews           handlercore.MemberNewsService
-	commandBuilders      []orchcmd.CommandBuilder
-}
-
-func (d *Dependencies) coreDeps() coreDependencies {
-	if d == nil {
-		return coreDependencies{}
-	}
-
-	return coreDependencies{
-		botSelfUser:           d.BotSelfUser,
-		irisBaseURL:           d.IrisBaseURL,
-		notification:          d.Notification,
-		calendarImageCacheDir: d.CalendarImageCacheDir,
-		calendarEntryCacheTTL: d.CalendarEntryCacheTTL,
-		logger:                d.Logger,
-	}
-}
-
-func (d *Dependencies) messagingDeps() messagingDependencies {
-	if d == nil {
-		return messagingDependencies{}
-	}
-
-	return messagingDependencies{
-		client:          d.Client,
-		messageAdapter:  d.MessageAdapter,
-		formatter:       d.Formatter,
-		messageStrings:  d.MessageStrings,
-		markdownReplies: d.MarkdownReplies,
-	}
-}
-
-func (d *Dependencies) dataDeps() dataDependencies {
-	if d == nil {
-		return dataDependencies{}
-	}
-
-	return dataDependencies{
-		cache:            d.Cache,
-		postgres:         d.Postgres,
-		memberRepository: d.MemberRepository,
-		memberCache:      d.MemberCache,
-	}
-}
-
-func (d *Dependencies) streamDeps() streamDependencies {
-	if d == nil {
-		return streamDependencies{}
-	}
-
-	return streamDependencies{
-		holodex:     d.Holodex,
-		alarm:       d.Alarm,
-		matcher:     d.Matcher,
-		membersData: d.MembersData,
-	}
-}
-
-func (d *Dependencies) supportDeps() supportDependencies {
-	if d == nil {
-		return supportDependencies{}
-	}
-
-	return supportDependencies{
-		activity: d.Activity,
-		settings: d.Settings,
-		acl:      d.ACL,
-	}
-}
-
-func (d *Dependencies) featureDeps() featureDependencies {
-	if d == nil {
-		return featureDependencies{}
-	}
-
-	return featureDependencies{
-		majorEventRepository: d.MajorEventRepository,
-		memberNews:           d.MemberNews,
-		commandBuilders:      orchcmd.CloneCommandBuilders(d.CommandBuilders),
-	}
 }

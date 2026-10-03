@@ -33,7 +33,7 @@ import (
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 const (
@@ -132,7 +132,7 @@ func TestSummarizer_SchemaSuccess(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
@@ -187,7 +187,7 @@ func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err == nil || digest != nil {
@@ -198,7 +198,7 @@ func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 func TestSummarizer_NilLLMReturnsUnavailable(t *testing.T) {
 	s := NewSummarizer(nil, nil, mustValidatorWithAllowlist(t), nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	if _, err := s.Summarize(t.Context(), &input); !errors.Is(err, ErrLLMUnavailable) {
 		t.Fatalf("Summarize() error = %v, want ErrLLMUnavailable", err)
@@ -224,7 +224,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "SUISIEI LIVE",
 				Description: "official event",
 			},
-			EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
+			EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, timeutil.KSTZone),
 			MemberText:     testMemberSuisei,
 			MatchedMembers: []string{testMemberSuisei},
 			Category:       model.CategorySoloLive,
@@ -236,7 +236,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "Miko Goods",
 				Description: "official goods",
 			},
-			EffectiveDate:  time.Date(2026, time.February, 22, 12, 0, 0, 0, util.KSTZone),
+			EffectiveDate:  time.Date(2026, time.February, 22, 12, 0, 0, 0, timeutil.KSTZone),
 			MemberText:     testMemberMiko,
 			MatchedMembers: []string{testMemberMiko},
 			Category:       model.CategoryGoods,
@@ -247,7 +247,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:     model.PeriodWeekly,
-		Now:        time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		Now:        time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		Candidates: candidates,
 	}
 
@@ -353,7 +353,7 @@ func TestMemberNewsSystemPrompt_ContainsGuide(t *testing.T) {
 }
 
 func sampleCandidates() []model.FilteredCandidate {
-	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, util.KSTZone)
+	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 
 	return []model.FilteredCandidate{
 		{

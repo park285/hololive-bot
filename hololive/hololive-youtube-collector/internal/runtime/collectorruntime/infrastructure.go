@@ -9,7 +9,7 @@ import (
 	"time"
 
 	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
-	"github.com/kapu/hololive-shared/pkg/providers/dbresource"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
@@ -34,7 +34,7 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 		return nil, errors.New("build collector infra: config is nil")
 	}
 
-	databaseResources, cleanupDB, err := dbresource.Provide(ctx, &appConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build collector infra: %w", err)
 	}

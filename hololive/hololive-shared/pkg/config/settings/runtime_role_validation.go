@@ -4,7 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 // proactive notification egress 소유를 거부하는 bot runtime config 로더다.
@@ -29,7 +30,7 @@ func (c *Config) ValidateBotRuntime() error {
 		return errors.New("bot runtime requires Stack Worker Profile v1")
 	}
 
-	if err := load.ValidateNoNotificationEgressOwnership(load.RuntimeBot); err != nil {
+	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeBot, envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
 		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 

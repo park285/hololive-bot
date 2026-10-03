@@ -4,12 +4,14 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 )
 
 func TestNewClientForURLStrictReturnsErrorWhenH3ClientConfigFails(t *testing.T) {
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", filepath.Join(t.TempDir(), "missing-ca.pem"))
+	options := sharedh3.ClientOptions{CACertFile: filepath.Join(t.TempDir(), "missing-ca.pem"), ServerName: testInternalH3ServerName}
 
-	client, err := NewClientForURLStrict("https://hololive-admin-api:30006", time.Second, nil)
+	client, err := NewClientForURLStrict("https://hololive-admin-api:30006", time.Second, options)
 	if err == nil {
 		t.Fatal("NewClientForURLStrict() error = nil, want h3 client config error")
 	}
@@ -20,9 +22,9 @@ func TestNewClientForURLStrictReturnsErrorWhenH3ClientConfigFails(t *testing.T) 
 }
 
 func TestNewClientForURLStrictKeepsPlainHTTPClient(t *testing.T) {
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", filepath.Join(t.TempDir(), "missing-ca.pem"))
+	options := sharedh3.ClientOptions{CACertFile: filepath.Join(t.TempDir(), "missing-ca.pem"), ServerName: testInternalH3ServerName}
 
-	client, err := NewClientForURLStrict("http://localhost:30190", time.Second, nil)
+	client, err := NewClientForURLStrict("http://localhost:30190", time.Second, options)
 	if err != nil {
 		t.Fatalf("NewClientForURLStrict(http) error = %v", err)
 	}
@@ -34,22 +36,21 @@ func TestNewClientForURLStrictKeepsPlainHTTPClient(t *testing.T) {
 
 // https 내부 URL의 JSON client는 HOLOLIVE_INTERNAL_H3_* 누락을 오류로 돌려준다. 경고 뒤 TCP client로 내려가면
 // 기동은 성공하고 H3 전용 내부 서버 요청만 런타임에 실패하므로 그 폴백은 두지 않는다(stack audit 2026-09-26).
-func TestNewJSONClientRequiresInternalH3EnvForHTTPS(t *testing.T) {
+func TestNewJSONClientRequiresExplicitH3OptionsForHTTPS(t *testing.T) {
 	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
 
-	if client, err := NewJSONClient("https://127.0.0.1:30003", "key", time.Second); err == nil || client != nil {
+	if client, err := NewJSONClient("https://127.0.0.1:30003", "key", time.Second, sharedh3.ClientOptions{}); err == nil || client != nil {
 		t.Fatalf("NewJSONClient(https) = (%v, %v), want missing internal H3 env error", client, err)
 	}
 
-	if client, err := NewJSONClient("http://127.0.0.1:30003", "key", time.Second); err != nil || client == nil {
+	if client, err := NewJSONClient("http://127.0.0.1:30003", "key", time.Second, sharedh3.ClientOptions{}); err != nil || client == nil {
 		t.Fatalf("NewJSONClient(http) = (%v, %v), want plain internal client", client, err)
 	}
 
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", writeTestCACertificate(t))
-	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "127.0.0.1")
+	options := sharedh3.ClientOptions{CACertFile: writeTestCACertificate(t), ServerName: testInternalH3ServerName}
 
-	client, err := NewJSONClient("https://127.0.0.1:30003", "key", time.Second)
+	client, err := NewJSONClient("https://127.0.0.1:30003", "key", time.Second, options)
 	if err != nil || client == nil {
 		t.Fatalf("NewJSONClient(https) = (%v, %v), want configured H3 client", client, err)
 	}

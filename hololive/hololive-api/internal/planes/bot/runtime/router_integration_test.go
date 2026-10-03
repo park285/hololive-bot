@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
@@ -204,7 +205,7 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 
 func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	router, err := apphttp.ProvideBotRouter(t.Context(), &settings.Config{}, logger, nil, triggerHandler, nil)
 	if err == nil {

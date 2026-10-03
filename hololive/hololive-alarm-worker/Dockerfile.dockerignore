@@ -7,6 +7,12 @@
 !hololive/hololive-dbtest/go.sum
 !hololive/hololive-alarm-worker/
 !hololive/hololive-alarm-worker/**
+!hololive/hololive-api/
+!hololive/hololive-api/go.mod
+!hololive/hololive-api/go.sum
+!hololive/hololive-youtube-collector/
+!hololive/hololive-youtube-collector/go.mod
+!hololive/hololive-youtube-collector/go.sum
 
 **/*_test.go
 **/testdata/

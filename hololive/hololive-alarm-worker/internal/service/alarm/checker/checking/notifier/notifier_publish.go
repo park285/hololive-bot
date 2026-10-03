@@ -26,9 +26,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend) (int, error) {

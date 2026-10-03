@@ -1,8 +1,8 @@
-# YouTube Producer 운영 Runbook
+# 퇴역 YouTube Producer 운영 절차의 과거 기록
 
-> Historical document. `youtube-producer` is retired. Current ownership and operations
-> are defined by `docs/current/PROJECT_MAP.md` and
-> `docs/current/runbooks/youtube-collector.md`.
+> Historical document. `youtube-producer`는 퇴역했습니다. 아래 설정·명령·복구 순서는 당시 절차의 기록입니다.
+> 현재 소유권은 [Project Map](../../current/PROJECT_MAP.md), 중앙·AP 실행 명령은
+> [YouTube collector runbook](../../current/runbooks/youtube-collector.md)을 따릅니다.
 
 > 실제 tailnet 주소/호스트는 private ops evidence 참조.
 
@@ -11,7 +11,10 @@
 
 ## 1) 목적
 
-현재 YouTube 수집/스크래핑/아웃박스 런타임을 `youtube-producer` 서비스의 4-way active-active 인스턴스(osaka `a` + seoul `b` + main `c` + osaka2 `d`)로 운영합니다. seoul `b`·main `c`는 Docker Compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행됩니다.
+2026-07-11 당시 YouTube 수집/스크래핑/아웃박스 런타임은 `youtube-producer` 서비스의 4-way active-active 인스턴스(osaka `a` + seoul `b` + main `c` + osaka2 `d`)로 운영했습니다. seoul `b`·main `c`는 Docker Compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행됐습니다.
+
+이하의 `youtube-producer`·OpenBao·Valkey AP 연결·`main-ap` profile 설명과 명령은 당시 상태입니다.
+현재 collector에 같은 설정을 적용하거나 아래 명령으로 배포·복구하지 않습니다.
 
 포함 책임:
 - YouTube ingestion scheduler
@@ -28,11 +31,11 @@
 - `youtube-producer`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=false`, `SERVER_PORT=30005`
 - container image는 `GOWORK=off`로 `hololive-youtube-producer/go.mod`의 published external pin을 사용합니다. `SHARED_GO_WORKSPACE_PATH`는 local CI source 검증에만 사용합니다.
 
-운영 기준:
+당시 운영 기준:
 - YouTube 커뮤니티/쇼츠 알람 라우팅은 `youtube-producer` outbox row production과 `alarm-worker` final egress로 고정합니다.
 - canary/legacy 선택 플래그 없이 전체 운영 채널에 동일 경로를 적용합니다.
 
-Remote AP split-host 운영 기준 (4-way active-active):
+당시 Remote AP split-host 운영 기준 (4-way active-active):
 - 토폴로지: Osaka `youtube-producer-a` (`<osaka-a-host>`, `<tailnet-osaka-a>`, `30005`, host-native `systemd`) + Seoul `youtube-producer-b` (`<tailnet-seoul-b>`, `30015`) + main `youtube-producer-c` (`<tailnet-central>`, `30025`, profile `main-ap`) + Osaka2 `youtube-producer-d` (`<tailnet-osaka2-d>`, `30035`, host-native `systemd`)
 - shared state/control 호스트: `kapu` (`<tailnet-central>`)
 - 원격 AP에서는 `holo-postgres`, `hololive-db-migrate`, `valkey-cache`를 올리지 않고 `<tailnet-central>:5433`, `<tailnet-central>:6379`, `http://<tailnet-central>:8787/v1`을 사용합니다.
@@ -151,7 +154,10 @@ I_APPROVE_SEOUL_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/seoul-active-acti
 I_APPROVE_OSAKA2_ACTIVE_ACTIVE_ROLLBACK=true ./scripts/deploy/ap-host-native-rollback.sh osaka2 --apply
 ```
 
-rollback도 한 번에 한 호스트만 수행합니다. 토폴로지/순서 기준은 `docs/current/runbooks/youtube-producer.md`의 Rollback 섹션을 따릅니다. `youtube-producer`는 outbox row producer이므로 승인된 active-active guard 없이 여러 호스트에 동시 기동하지 않습니다.
+당시 rollback은 한 번에 한 호스트씩 수행하도록 안내했고, 당시
+`docs/current/runbooks/youtube-producer.md`의 Rollback 섹션을 참조했습니다.
+현재 토폴로지·복구 순서는 [YouTube collector runbook](../../current/runbooks/youtube-collector.md)을 따릅니다.
+`youtube-producer`의 outbox row production과 active-active guard 설명은 퇴역 runtime의 기록입니다.
 
 ## 6) 장애 대응 원칙
 
@@ -167,7 +173,9 @@ rollback도 한 번에 한 호스트만 수행합니다. 토폴로지/순서 기
 - 스케줄러 시작 로그가 모두 남는지 확인
 - 커뮤니티/쇼츠 big-bang 배포 직후에는 첫 24시간 동안 `detected/success/unsent/pending/duplicate/latency` 지표를 `YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`·`YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md` 기준으로 재확인
 
-## 8) 관련 문서
+## 8) 당시 관련 문서
+
+아래 경로는 당시 참조 관계이며 일부 파일·runtime은 퇴역했습니다. 현재 실행 절차는 상단의 current 문서에서 선택합니다.
 
 - `docs/history/runbooks/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md`

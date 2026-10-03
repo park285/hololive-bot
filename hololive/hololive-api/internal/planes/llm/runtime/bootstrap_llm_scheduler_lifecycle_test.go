@@ -107,24 +107,19 @@ func TestLLMSchedulerRuntimeShutdown_StopsHTTPServer(t *testing.T) {
 	require.NoError(t, runtime.Shutdown(ctx))
 }
 
-func TestLLMSchedulerRuntimeRun_ReturnsOnServerError(t *testing.T) {
-	runtime := &LLMSchedulerRuntime{
-		Logger:      testRuntimeLogger(),
-		httpServers: &sharedserver.RuntimeHTTPServers{H3: &http3.Server{Addr: "invalid-address"}},
-	}
-
-	done := make(chan struct{})
-
-	go func() {
-		runtime.Run()
-		close(done)
-	}()
+func TestLLMSchedulerRuntimeStartReportsServerErrorAndCloses(t *testing.T) {
+	runtime := &LLMSchedulerRuntime{Logger: testRuntimeLogger(), httpServers: &sharedserver.RuntimeHTTPServers{H3: &http3.Server{Addr: "invalid-address"}}}
+	errors := make(chan error, 1)
+	runtime.Start(t.Context(), errors)
 
 	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("Run() did not return on server error")
+	case err := <-errors:
+		require.Error(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not report server error")
 	}
+
+	require.NoError(t, runtime.CloseContext(t.Context()))
 }
 
 func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {

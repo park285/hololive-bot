@@ -26,15 +26,15 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
 
 func (c *YouTubeChecker) buildUpcomingNotifications(
 	ctx context.Context,
 	stream *domain.Stream,
 	subscriberRooms []string,
-	window sharedchecker.EvaluationWindow,
+	window targetpolicy.EvaluationWindow,
 ) ([]*domain.AlarmNotification, error) {
 	if stream != nil && stream.IsPremiere {
 		observeYouTubeUpcomingNoMinuteDecision("premiere_content_owned", window)
@@ -63,7 +63,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	return notifications, nil
 }
 
-func isUpcomingNotificationCandidate(stream *domain.Stream, window sharedchecker.EvaluationWindow) bool {
+func isUpcomingNotificationCandidate(stream *domain.Stream, window targetpolicy.EvaluationWindow) bool {
 	return stream != nil && !stream.IsPremiere && stream.IsUpcoming() && stream.StartScheduled != nil && stream.StartScheduled.After(window.End)
 }
 
@@ -81,11 +81,11 @@ func (c *YouTubeChecker) resolveYouTubeUpcomingSelection(
 	ctx context.Context,
 	stream *domain.Stream,
 	subscriberRooms []string,
-	window sharedchecker.EvaluationWindow,
+	window targetpolicy.EvaluationWindow,
 ) (youtubeUpcomingSelection, error) {
 	targetPolicy := c.targetPolicySnapshot()
-	currentMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
-	previousMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.Start)
+	currentMinutesUntil := targetpolicy.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
+	previousMinutesUntil := targetpolicy.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.Start)
 	minutesUntil, targetCrossed := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
 
 	var scheduleChanges map[string]*dedup.ScheduleChange
@@ -145,7 +145,7 @@ func buildYouTubeUpcomingRoomNotifications(
 func (c *YouTubeChecker) logYouTubeUpcomingSelection(
 	stream *domain.Stream,
 	selection youtubeUpcomingSelection,
-	window sharedchecker.EvaluationWindow,
+	window targetpolicy.EvaluationWindow,
 	roomCount int,
 ) {
 	c.logger.Info("YouTube upcoming alarm selected",

@@ -1,0 +1,295 @@
+package filter
+
+import (
+	"context"
+	"fmt"
+	"reflect"
+	"runtime"
+	"runtime/pprof"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+// 제품 함수와 원래 입력 순서를 재사용하는 run-local prototype입니다. URL 검증은 방별로 유지합니다.
+type performancePreparedCandidate struct {
+	item     datedCandidate
+	body     string
+	tokens   map[string]struct{}
+	category model.Category
+}
+
+func performancePrepare(candidates []model.Candidate, period model.Period, now time.Time) []performancePreparedCandidate {
+	periodCandidates := applyPeriodFilter(candidates, period, now)
+	prepared := make([]performancePreparedCandidate, 0, len(periodCandidates))
+	for _, item := range periodCandidates {
+		prepared = append(prepared, performancePreparedCandidate{
+			item:     item,
+			body:     stringutil.NormalizeKey(item.candidate.Title + " " + item.candidate.Description),
+			tokens:   buildCandidateMemberTokenSet(item.candidate.Members),
+			category: classifyCategory(&item.candidate),
+		})
+	}
+	return prepared
+}
+
+func performanceFilterPrepared(prepared []performancePreparedCandidate, roomMembers []string, membersData domain.MemberDataProvider, validator model.SourceURLValidator) []model.FilteredCandidate {
+	profiles := buildMemberProfiles(roomMembers, membersData)
+	result := make([]model.FilteredCandidate, 0, len(prepared))
+	for _, preparedItem := range prepared {
+		matched := make([]string, 0)
+		seen := make(map[string]struct{})
+		for _, profile := range profiles {
+			if profileMatchesCandidate(profile, preparedItem.tokens, preparedItem.body) {
+				matched = appendUniqueMatchedMember(matched, seen, profile.display)
+			}
+		}
+		if len(matched) == 0 {
+			continue
+		}
+		tier, sourceURL, ok := resolveSource(&preparedItem.item.candidate, validator)
+		if !ok {
+			continue
+		}
+		result = append(result, model.FilteredCandidate{
+			Candidate:      preparedItem.item.candidate,
+			EffectiveDate:  preparedItem.item.date,
+			MatchedMembers: matched,
+			MemberText:     formatMemberText(matched),
+			Category:       preparedItem.category,
+			SourceTier:     tier,
+			SourceURL:      sourceURL,
+		})
+	}
+	slices.SortStableFunc(result, compareFilteredCandidate)
+	return result
+}
+
+// 방별 조회·시각·profile·URL 검증을 유지하고, exact token으로 해결되지 않는 경우에만 본문을 정규화합니다.
+func performanceFilterLazy(candidates []model.Candidate, period model.Period, now time.Time, roomMembers []string, membersData domain.MemberDataProvider, validator model.SourceURLValidator) []model.FilteredCandidate {
+	periodCandidates := applyPeriodFilter(candidates, period, now)
+	profiles := buildMemberProfiles(roomMembers, membersData)
+	result := make([]model.FilteredCandidate, 0, len(periodCandidates))
+	if len(profiles) == 0 {
+		return result
+	}
+	for _, item := range periodCandidates {
+		tokens := buildCandidateMemberTokenSet(item.candidate.Members)
+		matched := make([]string, 0)
+		seen := make(map[string]struct{})
+		body, normalized := "", false
+		for _, profile := range profiles {
+			exact := false
+			for _, token := range profile.tokens {
+				if _, ok := tokens[token]; token != "" && ok {
+					exact = true
+					break
+				}
+			}
+			if !exact {
+				if !normalized {
+					body = stringutil.NormalizeKey(item.candidate.Title + " " + item.candidate.Description)
+					normalized = true
+				}
+				for _, token := range profile.tokens {
+					if token != "" && strings.Contains(body, token) {
+						exact = true
+						break
+					}
+				}
+			}
+			if exact {
+				matched = appendUniqueMatchedMember(matched, seen, profile.display)
+			}
+		}
+		if len(matched) == 0 {
+			continue
+		}
+		tier, sourceURL, ok := resolveSource(&item.candidate, validator)
+		if !ok {
+			continue
+		}
+		result = append(result, model.FilteredCandidate{
+			Candidate:      item.candidate,
+			EffectiveDate:  item.date,
+			MatchedMembers: matched,
+			MemberText:     formatMemberText(matched),
+			Category:       classifyCategory(&item.candidate),
+			SourceTier:     tier,
+			SourceURL:      sourceURL,
+		})
+	}
+	slices.SortStableFunc(result, compareFilteredCandidate)
+	return result
+}
+
+func performanceFilterFixture(count, descriptionRepeats int, now time.Time) []model.Candidate {
+	cs := make([]model.Candidate, count)
+	for i := range cs {
+		cs[i] = model.Candidate{
+			ID:          i + 1,
+			Type:        domain.MajorEventTypeNews,
+			Title:       fmt.Sprintf("미코 행사 %04d", i),
+			Description: strings.Repeat("미코 공식 기사 ", descriptionRepeats),
+			Members:     []string{"미코"},
+			PubDate:     new(now),
+			SourceURL:   fmt.Sprintf("https://hololive.hololivepro.com/%d", i),
+		}
+	}
+	return cs
+}
+
+func TestPerformancePreparedMetadataEqual(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, kst)
+	member := &domain.Member{Name: "Sakura Miko", NameKo: "사쿠라 미코", NameJa: "さくらみこ", Aliases: &domain.Aliases{Ko: []string{"미코", "사쿠라미코"}, Ja: []string{"みこ"}}}
+	provider := &mockMemberDataForFilter{byName: map[string]*domain.Member{"사쿠라 미코": member}, byAlias: map[string]*domain.Member{"미코": member, "사쿠라미코": member}}
+	titles := []string{"미코 Birthday Live", "さくらみこ solo live", "みこ collaboration", "사쿠라-미코 굿즈", "무관 행사", "동률 행사"}
+	bodies := []string{"미코 공식 기사", "사쿠라미코 생일", "\t미코	官方☆ー", "미코 https://hololivepro.com/x", "solo live 단독 라이브", ""}
+	urls := []string{"https://hololivepro.com/a", "https://prtimes.jp/b", "https://example.com/c", "", " ::invalid:: ", " https://hololivepro.com/trim "}
+	memberSets := [][]string{{"미코"}, {"Sakura_Miko"}, {"아쿠아"}, nil, {"", "미코", "미코"}}
+	dates := []*time.Time{nil, new(now), new(now.AddDate(0, 0, -9)), new(now.AddDate(0, 0, 23)), new(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))}
+	cs := make([]model.Candidate, 0, 150)
+	for i := range 150 {
+		typ := domain.MajorEventTypeNews
+		if i%2 == 0 {
+			typ = domain.MajorEventTypeEvent
+		}
+		cs = append(cs, model.Candidate{ID: i + 1, Type: typ, Title: titles[i%len(titles)], Description: bodies[(i/3)%len(bodies)], Members: memberSets[(i/2)%len(memberSets)], PubDate: dates[i%len(dates)], EventStartDate: dates[(i/7)%len(dates)], SourceURL: urls[(i/5)%len(urls)]})
+	}
+	// 같은 날짜·분류·제목이며 출처가 다른 후보도 원래 입력 순서를 보존합니다.
+	cs = append(cs, model.Candidate{ID: 1001, Type: domain.MajorEventTypeNews, Title: "미코 동률 행사", PubDate: new(now), SourceURL: "https://hololivepro.com/tie-z"}, model.Candidate{ID: 1002, Type: domain.MajorEventTypeNews, Title: "미코 동률 행사", PubDate: new(now), SourceURL: "https://hololivepro.com/tie-a"})
+	cases := 0
+	for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly, "이번달"} {
+		prepared := performancePrepare(cs, period, now)
+		for _, members := range [][]string{{"미코"}, {"사쿠라 미코", "아쿠아"}, {"미코", "사쿠라미코", "미코"}, {"未知", " "}, nil} {
+			for _, data := range []domain.MemberDataProvider{nil, provider} {
+				for _, validator := range []model.SourceURLValidator{nil, &testSourceValidator{}} {
+					want := FilterCandidates(cs, period, now, members, data, validator)
+					got := performanceFilterPrepared(prepared, members, data, validator)
+					if !reflect.DeepEqual(want, got) {
+						t.Fatalf("전체값 또는 순서 불일치 period=%s members=%v provider=%t validator=%t", period, members, data != nil, validator != nil)
+					}
+					lazy := performanceFilterLazy(cs, period, now, members, data, validator)
+					if !reflect.DeepEqual(want, lazy) {
+						t.Fatalf("lazy 전체값 또는 순서 불일치 period=%s members=%v provider=%t validator=%t", period, members, data != nil, validator != nil)
+					}
+					cases++
+				}
+			}
+		}
+	}
+	t.Logf("metadata_equality input_candidates=%d cases=%d prototypes=prepared,lazy comparison=reflect.DeepEqual full_values_and_order=true", len(cs), cases)
+}
+
+func performanceFilterParallel(cs []model.Candidate, prepared []performancePreparedCandidate, now time.Time, mode string) int {
+	var wg sync.WaitGroup
+	results := make(chan int, 5)
+	for range 5 {
+		wg.Go(func() {
+			count := 0
+			for range 4 {
+				if mode == "baseline" {
+					count += len(FilterCandidates(cs, model.PeriodWeekly, now, []string{"미코"}, nil, nil))
+				} else if mode == "lazy" {
+					count += len(performanceFilterLazy(cs, model.PeriodWeekly, now, []string{"미코"}, nil, nil))
+				} else {
+					count += len(performanceFilterPrepared(prepared, []string{"미코"}, nil, nil))
+				}
+			}
+			results <- count
+		})
+	}
+	wg.Wait()
+	close(results)
+	count := 0
+	for n := range results {
+		count += n
+	}
+	return count
+}
+
+func TestPerformancePreparedMetadataCost(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, kst)
+	for _, repeats := range []int{4, 64} {
+		cs := performanceFilterFixture(1000, repeats, now)
+		for rep := range 3 {
+			modes := []string{"baseline", "prepared"}
+			if rep%2 == 1 {
+				modes[0], modes[1] = modes[1], modes[0]
+			}
+			for _, mode := range modes {
+				runtime.GC()
+				var before, after runtime.MemStats
+				runtime.ReadMemStats(&before)
+				begin := time.Now()
+				var prepared []performancePreparedCandidate
+				if mode == "prepared" {
+					prepared = performancePrepare(cs, model.PeriodWeekly, now)
+				}
+				prepareMicros := time.Since(begin).Microseconds()
+				count := performanceFilterParallel(cs, prepared, now, mode)
+				elapsed := time.Since(begin)
+				runtime.ReadMemStats(&after)
+				if count != 20000 {
+					t.Fatalf("최종 후보 count=%d want=20000", count)
+				}
+				t.Logf("metadata candidates=1000 rooms=20 concurrency=5 description_repeats=%d variant=%s rep=%d final=%d elapsed_us=%d prepare_us=%d alloc_bytes=%d mallocs=%d", repeats, mode, rep, count, elapsed.Microseconds(), prepareMicros, after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs)
+			}
+		}
+	}
+}
+
+func TestPerformanceLazyMetadataCost(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, kst)
+	for _, exactPercent := range []int{0, 50, 100} {
+		cs := performanceFilterFixture(1000, 64, now)
+		for i := range cs {
+			if i%100 >= exactPercent {
+				cs[i].Members = []string{"무관"}
+			}
+		}
+		for rep := range 3 {
+			modes := []string{"baseline", "lazy"}
+			if rep%2 == 1 {
+				modes[0], modes[1] = modes[1], modes[0]
+			}
+			for _, mode := range modes {
+				runtime.GC()
+				var before, after runtime.MemStats
+				runtime.ReadMemStats(&before)
+				begin := time.Now()
+				count := performanceFilterParallel(cs, nil, now, mode)
+				elapsed := time.Since(begin)
+				runtime.ReadMemStats(&after)
+				if count != 20000 {
+					t.Fatalf("lazy 최종 후보 count=%d want=20000", count)
+				}
+				t.Logf("lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=%d variant=%s rep=%d final=%d elapsed_us=%d alloc_bytes=%d mallocs=%d", exactPercent, mode, rep, count, elapsed.Microseconds(), after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs)
+			}
+		}
+	}
+}
+
+func TestPerformanceFilterProfile(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, kst)
+	cs := performanceFilterFixture(1000, 64, now)
+	runtime.GC()
+	loops := 0
+	pprof.Do(context.Background(), pprof.Labels("phase", "filter"), func(context.Context) {
+		end := time.Now().Add(2 * time.Second)
+		for time.Now().Before(end) {
+			if got := FilterCandidates(cs, model.PeriodWeekly, now, []string{"미코"}, nil, nil); len(got) != len(cs) {
+				t.Fatal("profile 후보 수 불일치")
+			}
+			loops++
+		}
+	})
+	t.Logf("profile=FilterCandidates candidates=1000 description_repeats=64 provider=nil validator=nil iterations=%d target_seconds=2", loops)
+}

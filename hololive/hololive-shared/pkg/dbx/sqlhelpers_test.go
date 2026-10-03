@@ -73,30 +73,34 @@ func TestPostgresPlaceholdersRewritesNonPlaceholderQuestionMarks(t *testing.T) {
 func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 	moduleRoot := filepath.Join("..", "..")
 	// 이 SQL만 live_evidence.go의 tx.Query가 직접 실행하며 ?|는 migration 193의 GIN 인덱스 조건이다.
-	nativeJSONBAnyQuery := filepath.Join(moduleRoot, "pkg/service/youtube/sourceobservation/consume/queries/repository_live_absence_slots.sql")
+	apiQueryRoot := filepath.Join(moduleRoot, "..", "hololive-api", "internal", "youtube", "sourceobservation")
+	collectorQueryRoot := filepath.Join(moduleRoot, "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation")
+	nativeJSONBAnyQuery := filepath.Join(apiQueryRoot, "queries", "repository_live_absence_slots.sql")
 
-	err := filepath.Walk(moduleRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	for _, queryRoot := range []string{moduleRoot, apiQueryRoot, collectorQueryRoot} {
+		err := filepath.Walk(queryRoot, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
 
-		if info.IsDir() || !strings.HasSuffix(path, ".sql") || filepath.Base(filepath.Dir(path)) != "queries" {
+			if info.IsDir() || !strings.HasSuffix(path, ".sql") || filepath.Base(filepath.Dir(path)) != "queries" {
+				return nil
+			}
+
+			data, readErr := os.ReadFile(path) //nolint:gosec // walk 결과 경로만 읽는다.
+			if readErr != nil {
+				return fmt.Errorf("read file: %w", readErr)
+			}
+
+			for _, hazard := range questionMarkHazards(string(data), path == nativeJSONBAnyQuery) {
+				t.Errorf("%s: %s: PostgresPlaceholders would rewrite this '?'", path, hazard)
+			}
+
 			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk SQL assets: %v", err)
 		}
-
-		data, readErr := os.ReadFile(path) //nolint:gosec // walk 결과 경로만 읽는다.
-		if readErr != nil {
-			return fmt.Errorf("read file: %w", readErr)
-		}
-
-		for _, hazard := range questionMarkHazards(string(data), path == nativeJSONBAnyQuery) {
-			t.Errorf("%s: %s: PostgresPlaceholders would rewrite this '?'", path, hazard)
-		}
-
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk SQL assets: %v", err)
 	}
 }
 
