@@ -101,7 +101,7 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 
-	if err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+	if _, err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
 		t.Fatal("failed collection returned nil error")
 	}
 
@@ -161,7 +161,7 @@ func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 
-	if err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+	if _, err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
 		t.Fatal("failed collection returned nil error")
 	}
 
@@ -213,7 +213,7 @@ func TestCollectDeadlinePreservesClassifiedRunnerFailure(t *testing.T) {
 
 			proof := lease.Proof()
 
-			err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
+			_, err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
 
 			if !errors.Is(err, cause) || !errors.Is(err, context.DeadlineExceeded) || !fatalCollectionError(err) {
 				t.Fatalf("collect = %v, want classified cause and deadline", err)
@@ -311,7 +311,7 @@ func checkRunnerFailure(t *testing.T, test runnerFailureCase) {
 		registration.profile.collectTimeout = time.Millisecond
 	}
 
-	if err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+	if _, err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
 		t.Fatal("failed collection returned nil error")
 	}
 

@@ -45,9 +45,12 @@ func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec
 		attribute.String("collection.job_kind", spec.CollectionJobKind),
 	))
 
-	var operationErr error
+	var (
+		result       *collectutil.CollectResult
+		operationErr error
+	)
 
-	defer func() { finishCollectionSpan(span, operationErr) }()
+	defer func() { finishCollectionResultSpan(span, result, operationErr) }()
 
 	registration, ok := e.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	if !ok {
@@ -71,7 +74,7 @@ func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec
 		return
 	}
 
-	operationErr = e.runAcquired(ctx, registration, spec, lease)
+	result, operationErr = e.runAcquired(ctx, registration, spec, lease)
 }
 
 func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.JobSpec) (joblease.Lease, error) {
@@ -107,12 +110,18 @@ func (e *collectionExecutor) observeAcquireError(ctx context.Context, spec *jobl
 	e.logFailure(ctx, "acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
 }
 
-func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) error {
+func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) (*collectutil.CollectResult, error) {
+	var collected *collectutil.CollectResult
+
 	proof := lease.Proof()
 	started := time.Now()
 	attemptID := e.workerTracker.BeginAttempt(started)
 	runResult := e.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
-		return e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
+		var err error
+
+		collected, err = e.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
+
+		return err
 	})
 	err := runResult.Err
 
@@ -127,12 +136,17 @@ func (e *collectionExecutor) runAcquired(ctx context.Context, registration Regis
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("collection.lease_outcome", string(runResult.Outcome)))
 
 	if e.handleLeaseRunOutcome(ctx, runResult, spec, &proof) {
-		return err
+		// callback 완료 통지를 받은 경우만 결과를 읽는다. 취소 후 남은 callback과 경합하지 않는다.
+		if runResult.Outcome == joblease.LeaseRunCallbackCompleted {
+			return collected, nil
+		}
+
+		return nil, err
 	}
 
 	e.handleRunError(ctx, lease, spec, &proof, err)
 
-	return err
+	return nil, err
 }
 
 func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
@@ -315,20 +329,20 @@ func (e *collectionExecutor) collectAndPublish(
 	spec *joblease.JobSpec,
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
-) error {
+) (*collectutil.CollectResult, error) {
 	admissionCtx, admissionCancel := context.WithTimeout(ctx, e.collector.ProviderAdmissionTimeout)
 	err := e.acquireProvider(admissionCtx, spec.Provider)
 
 	admissionCancel()
 
 	if err != nil {
-		return fmt.Errorf("provider admission: %w", err)
+		return nil, fmt.Errorf("provider admission: %w", err)
 	}
 
 	defer e.releaseProvider(spec.Provider)
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return fmt.Errorf("start collect: %w", ctxErr)
+		return nil, fmt.Errorf("start collect: %w", ctxErr)
 	}
 
 	inputCtx, inputSpan := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.input.load")
@@ -336,7 +350,7 @@ func (e *collectionExecutor) collectAndPublish(
 	finishCollectionSpan(inputSpan, err)
 
 	if err != nil {
-		return fmt.Errorf("build run input: %w", err)
+		return nil, fmt.Errorf("build run input: %w", err)
 	}
 
 	collectCtx, collectCancel := context.WithTimeout(ctx, registration.Profile().CollectTimeout())
@@ -355,24 +369,24 @@ func (e *collectionExecutor) collectAndPublish(
 	finishCollectionSpan(validationSpan, validationErr)
 
 	if validationErr != nil {
-		return &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
+		return nil, &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
 	}
 
 	if fatal != nil {
-		return fatal
+		return nil, fatal
 	}
 
 	if err := e.commitCollectResult(ctx, spec, lease, proof, &result); err != nil {
-		return fmt.Errorf("commit collect result: %w", err)
+		return nil, fmt.Errorf("commit collect result: %w", err)
 	}
 
-	return nil
+	return &result, nil
 }
 
 func (e *collectionExecutor) runCollector(ctx context.Context, runner collectutil.JobRunner, input *collectutil.RunInput) (result collectutil.CollectResult, resultErr error) {
 	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.fetch")
 
-	defer func() { finishCollectionSpan(span, resultErr) }()
+	defer func() { finishCollectionResultSpan(span, &result, resultErr) }()
 
 	var collectErr error
 

@@ -644,7 +644,7 @@ func TestProviderAdmissionPreservesConfiguration(t *testing.T) {
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	proof := lease.Proof()
 
-	err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
+	_, err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
 
 	if collecterr.CodeOf(err) != collecterr.Configuration || collecterr.IsUnclassified(err) {
 		t.Fatalf("missing gate = %v (%s), want classified configuration before runner access", err, collecterr.CodeOf(err))
