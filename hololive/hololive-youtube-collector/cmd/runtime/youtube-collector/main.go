@@ -46,14 +46,20 @@ func main() {
 		},
 		LoadConfig:             collectorconfig.LoadRuntime,
 		LoadConfigErrorMessage: "Failed to load youtube collector config",
-		LoggerConfig: func(appConfig *collectorconfig.RuntimeConfig) sharedlogging.Config {
-			return sharedlogging.Config{
+		NewLogger: func(appConfig *collectorconfig.RuntimeConfig) (*slog.Logger, io.Closer, error) {
+			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
+				Level:      appConfig.Logging.Level,
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
+			}, youtubeCollectorLogFileName(), sharedlogging.Options{OTel: appConfig.Tracing.Enabled})
+			if err != nil {
+				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}
+
+			return logger, closer, nil
 		},
 		LoggerFileName: youtubeCollectorLogFileName(),
 		LoggerLevel: func(appConfig *collectorconfig.RuntimeConfig) string {

@@ -8,6 +8,10 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 )
@@ -257,12 +261,24 @@ func sendWork(ctx context.Context, workCh chan<- sourceobservation.ClaimWork, wo
 }
 
 func (r *Runtime) processClaim(ctx context.Context, work sourceobservation.ClaimWork) error {
+	ctx, span := otel.Tracer("hololive/youtube-consumer").Start(ctx, "youtube.observation.consume", trace.WithAttributes(
+		attribute.String("observation.kind", string(work.ObservationKind)),
+	))
 	attemptID := r.workerTracker.BeginAttempt(time.Now())
 	outcome := workercontract.AttemptFailed
 
 	defer func() {
 		r.workerTracker.EndAttempt(attemptID)
 		r.workerTotals.RecordAttempt(outcome)
+		span.SetAttributes(attribute.String("observation.outcome", string(outcome)))
+
+		if outcome == workercontract.AttemptSuccess {
+			span.SetStatus(codes.Ok, "")
+		} else {
+			span.SetStatus(codes.Error, string(outcome))
+		}
+
+		span.End()
 	}()
 
 	r.remember(work)
@@ -330,7 +346,7 @@ func (r *Runtime) forgetLostClaim(err error, work sourceobservation.ClaimWork) b
 }
 
 func (r *Runtime) handleConsumeFailure(ctx context.Context, work sourceobservation.ClaimWork, err error) error {
-	r.Logger.Error("youtube plane consume failed",
+	r.Logger.ErrorContext(ctx, "youtube plane consume failed",
 		slog.Int64("observation_id", work.ObservationID),
 		slog.String("observation_kind", string(work.ObservationKind)),
 		slog.String("subject_key", work.SubjectKey),

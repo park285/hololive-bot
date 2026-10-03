@@ -100,7 +100,10 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
-	executor.runAcquired(t.Context(), registration, spec, counted)
+
+	if err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+		t.Fatal("failed collection returned nil error")
+	}
 
 	if counted.defers != 1 || counted.completes != 0 {
 		t.Fatalf("terminal calls defer=%d complete=%d, want 1/0", counted.defers, counted.completes)
@@ -157,7 +160,10 @@ func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
-	executor.runAcquired(t.Context(), registration, spec, counted)
+
+	if err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+		t.Fatal("failed collection returned nil error")
+	}
 
 	if counted.defers != 1 || counted.completes != 0 {
 		t.Fatalf("terminal calls defer=%d complete=%d, want 1/0", counted.defers, counted.completes)
@@ -305,7 +311,9 @@ func checkRunnerFailure(t *testing.T, test runnerFailureCase) {
 		registration.profile.collectTimeout = time.Millisecond
 	}
 
-	executor.runAcquired(t.Context(), registration, spec, counted)
+	if err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+		t.Fatal("failed collection returned nil error")
+	}
 
 	if counted.defers != 1 || counted.completes != 0 {
 		t.Fatalf("terminal calls = %d/%d, want one defer", counted.defers, counted.completes)

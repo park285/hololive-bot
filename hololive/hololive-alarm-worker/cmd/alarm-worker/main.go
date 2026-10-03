@@ -61,14 +61,20 @@ func main() {
 		},
 		LoadConfig:             workerconfig.LoadRuntime,
 		LoadConfigErrorMessage: "Failed to load config",
-		LoggerConfig: func(appConfig *workerconfig.RuntimeConfig) sharedlogging.Config {
-			return sharedlogging.Config{
+		NewLogger: func(appConfig *workerconfig.RuntimeConfig) (*slog.Logger, io.Closer, error) {
+			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
+				Level:      appConfig.Logging.Level,
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
+			}, "alarm-worker.log", sharedlogging.Options{OTel: appConfig.Tracing.Enabled})
+			if err != nil {
+				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}
+
+			return logger, closer, nil
 		},
 		LoggerFileName: "alarm-worker.log",
 		LoggerLevel: func(appConfig *workerconfig.RuntimeConfig) string {

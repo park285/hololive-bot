@@ -27,7 +27,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 	source := s.projectionSource()
 	if source == nil {
-		s.failCycle(started, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "discovery cycle: candidate source is missing"))
+		s.failCycle(ctx, started, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "discovery cycle: candidate source is missing"))
 
 		return
 	}
@@ -38,7 +38,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 	cancel()
 
 	if err != nil {
-		s.failCycle(started, err)
+		s.failCycle(ctx, started, err)
 
 		return
 	}
@@ -66,7 +66,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 	s.recordCycle(started, generation, &outcome, start, len(runners))
 
 	for _, failure := range outcome.failures {
-		s.logRunnerDiscoveryFailure(failure, runners)
+		s.logRunnerDiscoveryFailure(ctx, failure, runners)
 	}
 }
 
@@ -205,27 +205,27 @@ func (s *leaseScheduler) finishCycle(started time.Time, code collecterr.Operatio
 	s.cycleMu.Unlock()
 }
 
-func (s *leaseScheduler) failCycle(started time.Time, err error) {
+func (s *leaseScheduler) failCycle(ctx context.Context, started time.Time, err error) {
 	s.cycleMu.Lock()
 
 	s.cycleStartedAt = started
 	s.lastCycleCompletedAt = time.Now().UTC()
 	s.lastCycleOperationCode = collecterr.OperationCandidateLoadFailed
 	s.cycleMu.Unlock()
-	s.logDiscoveryFailure(err)
+	s.logDiscoveryFailure(ctx, err)
 }
 
-func (s *leaseScheduler) logDiscoveryFailure(err error) {
+func (s *leaseScheduler) logDiscoveryFailure(ctx context.Context, err error) {
 	if supersededError(err) {
 		return
 	}
 
 	spec := joblease.JobSpec{}
 	proof := contract.LeaseProof{}
-	s.executor.logFailure("candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), &spec, &proof)
+	s.executor.logFailure(ctx, "candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), &spec, &proof)
 }
 
-func (s *leaseScheduler) logRunnerDiscoveryFailure(failure runnerQueryFailure, runners []RegisteredRunner) {
+func (s *leaseScheduler) logRunnerDiscoveryFailure(ctx context.Context, failure runnerQueryFailure, runners []RegisteredRunner) {
 	if supersededError(failure.err) {
 		return
 	}
@@ -238,7 +238,7 @@ func (s *leaseScheduler) logRunnerDiscoveryFailure(failure runnerQueryFailure, r
 
 		spec := joblease.JobSpec{Provider: id.Provider, CollectionJobKind: string(id.Kind)}
 		proof := contract.LeaseProof{}
-		s.executor.logFailure("candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(failure.err)), collecterr.DiagnosticOf(failure.err).Detail(), &spec, &proof)
+		s.executor.logFailure(ctx, "candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(failure.err)), collecterr.DiagnosticOf(failure.err).Detail(), &spec, &proof)
 
 		return
 	}

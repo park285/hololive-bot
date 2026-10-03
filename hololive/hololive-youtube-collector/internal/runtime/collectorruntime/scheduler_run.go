@@ -10,6 +10,9 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -36,20 +39,39 @@ type collectionExecutor struct {
 }
 
 func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec) {
+	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.attempt", trace.WithAttributes(
+		attribute.String("youtube.collector.instance_id", e.collector.InstanceID),
+		attribute.String("collection.provider", string(spec.Provider)),
+		attribute.String("collection.job_kind", spec.CollectionJobKind),
+	))
+
+	var operationErr error
+
+	defer func() { finishCollectionSpan(span, operationErr) }()
+
 	registration, ok := e.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	if !ok {
 		proof := contract.LeaseProof{}
-		e.logFailure("collect", string(collecterr.Failed), collecterr.UnknownClass, "", spec, &proof)
+
+		operationErr = errors.New("collection runner registration missing")
+
+		e.logFailure(ctx, "collect", string(collecterr.Failed), collecterr.UnknownClass, "", spec, &proof)
 
 		return
 	}
 
 	lease, err := e.acquireLease(ctx, spec)
 	if err != nil || lease == nil {
+		if errors.Is(err, joblease.ErrNotAcquired) {
+			span.SetAttributes(attribute.String("collection.admission", "not_acquired"))
+		} else {
+			operationErr = err
+		}
+
 		return
 	}
 
-	e.runAcquired(ctx, registration, spec, lease)
+	operationErr = e.runAcquired(ctx, registration, spec, lease)
 }
 
 func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.JobSpec) (joblease.Lease, error) {
@@ -64,7 +86,7 @@ func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.Jo
 	}
 
 	if err != nil {
-		e.observeAcquireError(spec, err)
+		e.observeAcquireError(ctx, spec, err)
 
 		return nil, fmt.Errorf("acquire: %w", err)
 	}
@@ -74,7 +96,7 @@ func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.Jo
 	return lease, nil
 }
 
-func (e *collectionExecutor) observeAcquireError(spec *joblease.JobSpec, err error) {
+func (e *collectionExecutor) observeAcquireError(ctx context.Context, spec *joblease.JobSpec, err error) {
 	if supersededError(err) {
 		return
 	}
@@ -82,10 +104,10 @@ func (e *collectionExecutor) observeAcquireError(spec *joblease.JobSpec, err err
 	e.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultError)
 
 	proof := contract.LeaseProof{}
-	e.logFailure("acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
+	e.logFailure(ctx, "acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
 }
 
-func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) {
+func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) error {
 	proof := lease.Proof()
 	started := time.Now()
 	attemptID := e.workerTracker.BeginAttempt(started)
@@ -102,11 +124,15 @@ func (e *collectionExecutor) runAcquired(ctx context.Context, registration Regis
 		e.metrics.ObserveInvalidFailureTuple(spec.Provider, spec.CollectionJobKind)
 	}
 
-	if e.handleLeaseRunOutcome(runResult, spec, &proof) {
-		return
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("collection.lease_outcome", string(runResult.Outcome)))
+
+	if e.handleLeaseRunOutcome(ctx, runResult, spec, &proof) {
+		return err
 	}
 
 	e.handleRunError(ctx, lease, spec, &proof, err)
+
+	return err
 }
 
 func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
@@ -122,7 +148,7 @@ func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
 	}
 }
 
-func (e *collectionExecutor) handleLeaseRunOutcome(runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) bool {
+func (e *collectionExecutor) handleLeaseRunOutcome(ctx context.Context, runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) bool {
 	if runResult.Outcome == joblease.LeaseRunCallbackCompleted {
 		return true
 	}
@@ -131,14 +157,14 @@ func (e *collectionExecutor) handleLeaseRunOutcome(runResult joblease.LeaseRunRe
 		e.observeFenceLost(spec, runResult.Err)
 
 		if fatalCollectionError(runResult.Err) {
-			e.failSupervision("cleanup", runResult.Err, spec, proof)
+			e.failSupervision(ctx, "cleanup", runResult.Err, spec, proof)
 		}
 
 		return true
 	}
 
 	if leaseRunIsSupervisionFailure(runResult.Outcome) {
-		e.observeSupervisionFailure(runResult, spec, proof)
+		e.observeSupervisionFailure(ctx, runResult, spec, proof)
 
 		return true
 	}
@@ -146,7 +172,7 @@ func (e *collectionExecutor) handleLeaseRunOutcome(runResult joblease.LeaseRunRe
 	return false
 }
 
-func (e *collectionExecutor) observeSupervisionFailure(runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+func (e *collectionExecutor) observeSupervisionFailure(ctx context.Context, runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	phase := "cleanup"
 
 	if runResult.Outcome == joblease.LeaseRunReleasedAfterRenewFailure {
@@ -154,12 +180,12 @@ func (e *collectionExecutor) observeSupervisionFailure(runResult joblease.LeaseR
 		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phaseRenew)
 	}
 
-	e.failSupervision(phase, runResult.Err, spec, proof)
+	e.failSupervision(ctx, phase, runResult.Err, spec, proof)
 }
 
-func (e *collectionExecutor) failSupervision(phase string, err error, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+func (e *collectionExecutor) failSupervision(ctx context.Context, phase string, err error, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	diagnostic := collecterr.DiagnosticOf(err)
-	e.logFailure(phase, string(diagnostic.Code()), string(diagnostic.Class()), diagnostic.Detail(), spec, proof)
+	e.logFailure(ctx, phase, string(diagnostic.Code()), string(diagnostic.Class()), diagnostic.Detail(), spec, proof)
 
 	if fatalCollectionError(err) {
 		e.reportFatal(&FatalRuntimeError{Phase: "lease_supervision", Err: err})
@@ -231,7 +257,7 @@ func (e *collectionExecutor) handleSuperseded(ctx context.Context, lease jobleas
 		return
 	}
 
-	e.failSupervision("release", releaseErr, spec, proof)
+	e.failSupervision(ctx, "release", releaseErr, spec, proof)
 }
 
 func (e *collectionExecutor) releaseSuperseded(ctx context.Context, lease joblease.Lease) error {
@@ -275,12 +301,12 @@ func (e *collectionExecutor) deferFailedRun(
 	detail := diagnostic.Detail()
 
 	if deferErr := lease.Defer(cleanupCtx, retryAt, code, class, detail); deferErr != nil && !errors.Is(deferErr, joblease.ErrFenceLost) {
-		e.logFailure("defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
+		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 
 		return
 	}
 
-	e.logFailure("collect", code, class, detail, spec, proof)
+	e.logFailure(ctx, "collect", code, class, detail, spec, proof)
 }
 
 func (e *collectionExecutor) collectAndPublish(
@@ -305,7 +331,10 @@ func (e *collectionExecutor) collectAndPublish(
 		return fmt.Errorf("start collect: %w", ctxErr)
 	}
 
-	input, err := e.buildRunInput(ctx, registration, spec, proof)
+	inputCtx, inputSpan := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.input.load")
+	input, err := e.buildRunInput(inputCtx, registration, spec, proof)
+	finishCollectionSpan(inputSpan, err)
+
 	if err != nil {
 		return fmt.Errorf("build run input: %w", err)
 	}
@@ -321,7 +350,11 @@ func (e *collectionExecutor) collectAndPublish(
 		fatal = errors.Join(fatal, collectErr)
 	}
 
-	if validationErr := ValidateCollectResult(&input, registration, &result, fatal); validationErr != nil {
+	_, validationSpan := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.validate")
+	validationErr := ValidateCollectResult(&input, registration, &result, fatal)
+	finishCollectionSpan(validationSpan, validationErr)
+
+	if validationErr != nil {
 		return &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
 	}
 
@@ -336,11 +369,12 @@ func (e *collectionExecutor) collectAndPublish(
 	return nil
 }
 
-func (e *collectionExecutor) runCollector(ctx context.Context, runner collectutil.JobRunner, input *collectutil.RunInput) (collectutil.CollectResult, error) {
-	var (
-		result     collectutil.CollectResult
-		collectErr error
-	)
+func (e *collectionExecutor) runCollector(ctx context.Context, runner collectutil.JobRunner, input *collectutil.RunInput) (result collectutil.CollectResult, resultErr error) {
+	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.fetch")
+
+	defer func() { finishCollectionSpan(span, resultErr) }()
+
+	var collectErr error
 
 	returned := false
 	recoveredErr := panicguard.RunE(e.logger, panicguard.BackgroundTask, "youtube-collector-collect", func() error {
@@ -405,7 +439,11 @@ func (e *collectionExecutor) commitCollectResult(
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
 	result *collectutil.CollectResult,
-) error {
+) (resultErr error) {
+	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.publish")
+
+	defer func() { finishCollectionSpan(span, resultErr) }()
+
 	output := result.Output()
 	if result.Kind() == collectutil.CollectComplete && output.Empty() {
 		e.metrics.ObservePublish(spec.Provider, spec.CollectionJobKind, outcomeEmpty)
@@ -488,6 +526,6 @@ func (e *collectionExecutor) deferInvariant(
 
 	if deferErr := lease.Defer(cleanupCtx, retryAt, string(diagnostic.Code()), string(diagnostic.Class()), diagnostic.Detail()); deferErr != nil &&
 		!errors.Is(deferErr, joblease.ErrFenceLost) {
-		e.logFailure("defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
+		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 	}
 }
