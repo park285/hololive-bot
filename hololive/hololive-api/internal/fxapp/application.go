@@ -13,6 +13,7 @@ import (
 
 	runtimeapp "github.com/kapu/hololive-api/internal/app"
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 const processLifecycleTimeout = 30 * time.Second
@@ -95,11 +96,11 @@ func newApplication(ctx context.Context, params applicationParams) (*Application
 	fxApplication := fx.New(options...)
 
 	if err := fxApplication.Err(); err != nil {
-		return nil, errors.Join(fmt.Errorf("initialize Fx application: %w", err), resources.Close(ctx))
+		return nil, rollbackApplicationConstruction(ctx, resources, fmt.Errorf("initialize Fx application: %w", err))
 	}
 
 	if state.coordinator == nil {
-		return nil, errors.Join(errors.New("initialize Fx application: lifecycle coordinator was not registered"), resources.Close(ctx))
+		return nil, rollbackApplicationConstruction(ctx, resources, errors.New("initialize Fx application: lifecycle coordinator was not registered"))
 	}
 
 	return &Application{
@@ -107,6 +108,16 @@ func newApplication(ctx context.Context, params applicationParams) (*Application
 		resources:   resources,
 		coordinator: state.coordinator,
 	}, nil
+}
+
+// 생성 실패에서는 owner를 caller에게 넘기지 못하므로 build 취소와 분리한 기존 종료 예산으로 자원을 회수한다.
+func rollbackApplicationConstruction(ctx context.Context, resources *resourceOwner, err error) error {
+	constructionErr := errors.Join(err, ctx.Err())
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), constants.AppTimeout.Shutdown)
+
+	defer cleanupCancel()
+
+	return errors.Join(constructionErr, resources.Close(cleanupCtx))
 }
 
 func applicationOptions(

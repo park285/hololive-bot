@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -348,59 +349,129 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 func TestLoadChannelSubscriberAlarms_QueryContextIgnoresParentDeadline(t *testing.T) {
 	t.Parallel()
 
-	db := newAlarmTargetLookupTestDB(t)
-	deadline := time.Now().Add(2 * time.Second)
-	ctx, cancel := context.WithDeadline(t.Context(), deadline)
-
-	defer cancel()
-
-	deadlines := make(chan time.Time, 1)
-	hasDeadline := make(chan bool, 1)
-
-	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
-		capturedDeadline, ok := ctx.Deadline()
-		hasDeadline <- ok
-
-		if ok {
-			deadlines <- capturedDeadline
-		}
-	})
-
-	alarms, err := loadChannelSubscriberAlarms(ctx, db, "UC_deadline_isolated", domain.AlarmTypeLive)
-	require.NoError(t, err)
-	require.Nil(t, alarms)
-	require.True(t, <-hasDeadline)
-
-	remaining := time.Until(<-deadlines)
-	require.Greater(t, remaining, 4*time.Second)
-	require.Less(t, remaining, 6*time.Second)
+	testChannelSubscriberQueryContext(t, "UC_deadline_isolated", true)
 }
 
 func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutParentDeadline(t *testing.T) {
 	t.Parallel()
 
-	db := newAlarmTargetLookupTestDB(t)
+	testChannelSubscriberQueryContext(t, "UC_fallback_timeout", false)
+}
 
-	deadlines := make(chan time.Time, 1)
-	hasDeadline := make(chan bool, 1)
+// 실제 조회 경로의 Query에 전달된 context를 제어하고, DB 왕복과 호스트 부하 없이 종료 경계를 검증한다.
+func testChannelSubscriberQueryContext(t *testing.T, channelID string, parentDeadline bool) {
+	t.Helper()
 
-	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
-		capturedDeadline, ok := ctx.Deadline()
-		hasDeadline <- ok
+	synctest.Test(t, func(t *testing.T) {
+		type queryContextKey struct{}
 
-		if ok {
-			deadlines <- capturedDeadline
+		value := new(int)
+		valueCtx := context.WithValue(t.Context(), queryContextKey{}, value)
+
+		var (
+			parent        context.Context
+			cancel        context.CancelFunc
+			wantParentErr = context.Canceled
+		)
+
+		if parentDeadline {
+			parent, cancel = context.WithTimeout(valueCtx, 2*time.Second)
+			wantParentErr = context.DeadlineExceeded
+		} else {
+			parent, cancel = context.WithCancel(valueCtx)
+
+			_, ok := parent.Deadline()
+			require.False(t, ok)
 		}
+
+		defer cancel()
+
+		db := &alarmQueryContextTestDB{entered: make(chan context.Context, 1)}
+		startedAt := time.Now()
+		firstDone := startAlarmQueryContextLoad(parent, db, channelID)
+
+		queryCtx := <-db.entered
+		deadline, ok := queryCtx.Deadline()
+		require.True(t, ok)
+		assert.Equal(t, startedAt.Add(5*time.Second), deadline)
+		assert.NotEqual(t, parent.Done(), queryCtx.Done())
+		assert.Same(t, value, queryCtx.Value(queryContextKey{}))
+
+		followerDone := startAlarmQueryContextLoad(t.Context(), db, channelID)
+
+		synctest.Wait()
+
+		if parentDeadline {
+			synctest.Sleep(2 * time.Second)
+		} else {
+			cancel()
+			synctest.Wait()
+		}
+
+		first := <-firstDone
+		require.ErrorIs(t, first.err, wantParentErr)
+		assert.Nil(t, first.alarms)
+		require.NoError(t, queryCtx.Err(), "parent termination must not stop the shared query")
+		assert.Equal(t, int32(1), db.calls.Load(), "the follower must share the original query context")
+
+		assertAlarmQueryContextTimeout(queryCtx, t, deadline, followerDone)
+		assert.Equal(t, int32(1), db.calls.Load())
 	})
+}
 
-	alarms, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_fallback_timeout", domain.AlarmTypeLive)
-	require.NoError(t, err)
-	require.Nil(t, alarms)
-	require.True(t, <-hasDeadline)
+func startAlarmQueryContextLoad(ctx context.Context, db *alarmQueryContextTestDB, channelID string) <-chan alarmLoadResult {
+	done := make(chan alarmLoadResult, 1)
 
-	remaining := time.Until(<-deadlines)
-	require.Greater(t, remaining, 4*time.Second)
-	require.Less(t, remaining, 6*time.Second)
+	go func() {
+		alarms, err := loadChannelSubscriberAlarms(ctx, db, channelID, domain.AlarmTypeLive)
+		done <- alarmLoadResult{alarms: alarms, err: err}
+	}()
+
+	return done
+}
+
+func assertAlarmQueryContextTimeout(queryCtx context.Context, t *testing.T, deadline time.Time, followerDone <-chan alarmLoadResult) {
+	t.Helper()
+
+	synctest.Sleep(time.Until(deadline) - time.Nanosecond)
+	require.NoError(t, queryCtx.Err())
+
+	select {
+	case result := <-followerDone:
+		t.Fatalf("follower finished before the query deadline: %+v", result)
+	default:
+	}
+
+	synctest.Sleep(time.Nanosecond)
+	require.ErrorIs(t, queryCtx.Err(), context.DeadlineExceeded)
+
+	follower := <-followerDone
+	require.ErrorIs(t, follower.err, context.DeadlineExceeded)
+	assert.Nil(t, follower.alarms)
+	assert.Equal(t, deadline, time.Now())
+}
+
+type alarmQueryContextTestDB struct {
+	entered chan context.Context
+	calls   atomic.Int32
+}
+
+func (db *alarmQueryContextTestDB) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
+	db.calls.Add(1)
+
+	db.entered <- ctx
+
+	<-ctx.Done()
+
+	return nil, fmt.Errorf("subscriber query deadline: %w", ctx.Err())
+}
+
+func (*alarmQueryContextTestDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	panic("unexpected subscriber query Exec")
+}
+
+func (*alarmQueryContextTestDB) QueryRow(context.Context, string, ...any) pgx.Row {
+	panic("unexpected subscriber query QueryRow")
 }
 
 func TestLoadChannelSubscriberAlarms_SingleflightIsolatesFollowersFromFirstCallerDeadline(t *testing.T) {
