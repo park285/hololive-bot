@@ -1,0 +1,3 @@
+SELECT guard_key
+FROM youtube_collection_projection_guard
+FOR UPDATE

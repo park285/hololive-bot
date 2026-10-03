@@ -102,6 +102,21 @@ test("handleContentRequest requires kind", async () => {
   assert.match(result.body.error.message, /kind/);
 });
 
+test("handleContentRequest passes the upcoming flag and rejects the retired premiere field at the RPC boundary", async () => {
+  const page = (items) => async () => ({
+    items, page_count: 1, exhausted: true, continuity: "CONTIGUOUS", termination_reason: "exhausted",
+  });
+  const item = { video_id: "v", channel_id: "UC_TEST", title: "T" };
+  const ok = await handleContentRequest(rpcBody({ channel_id: "UC_TEST", kind: "videos" }), page([{ ...item, is_upcoming: true }]));
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.body.items, [{ ...item, is_upcoming: true }]);
+  for (const leaked of [{ ...item, is_premiere: true }, { ...item, is_upcoming: false }]) {
+    const result = await handleContentRequest(rpcBody({ channel_id: "UC_TEST", kind: "videos" }), page([leaked]));
+    assert.equal(result.status, 422);
+    assert.equal(result.body.error.code, "parser_drift");
+  }
+});
+
 
 test("handleChannelRequest requires an explicit live or metadata kind", async () => {
   for (const kind of [undefined, "all", "", 1]) {

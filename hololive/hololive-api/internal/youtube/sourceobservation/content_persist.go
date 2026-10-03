@@ -43,7 +43,7 @@ func persistContentDecision(
 		return fmt.Errorf("persist content absence: %w", err)
 	}
 
-	if err := persistContentHead(ctx, tx, observation, decision.EarliestCompleteAt); err != nil {
+	if err := persistContentHead(ctx, tx, observation, decision.EarliestCompleteAt, decision.EarliestBaselineAt); err != nil {
 		return fmt.Errorf("persist content head: %w", err)
 	}
 
@@ -174,13 +174,14 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 	return nil
 }
 
-func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation, earliest *time.Time) error {
+func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation, earliestComplete, earliestBaseline *time.Time) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_content_channel_head_upsert_0041_41.sql"),
 		observation.SubjectKey,
 		observation.ObservationKind,
-		earliest,
+		earliestComplete,
+		earliestBaseline,
 	); err != nil {
 		return fmt.Errorf("upsert content channel head: %w", err)
 	}

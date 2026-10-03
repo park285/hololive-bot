@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
@@ -41,7 +42,7 @@ func TestCollectionLifecycleSnapshotWithinRuntimeBudget(t *testing.T) {
 			defer cancel()
 
 			started := time.Now()
-			rows, err := pool.Query(ctx, mustSQL("collection_target_observability.sql"))
+			rows, err := pool.Query(ctx, mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
 			require.NoError(t, err)
 
 			defer rows.Close()
@@ -59,7 +60,7 @@ func TestCollectionLifecycleSnapshotWithinRuntimeBudget(t *testing.T) {
 	}
 }
 
-func TestStaleLiveReviewWorkIsBoundedByReviewedVideos(t *testing.T) {
+func TestLiveCheckReviewWorkIsBoundedByReviewedVideos(t *testing.T) {
 	for _, withReceipts := range []bool{false, true} {
 		name := "zero_receipts"
 
@@ -81,8 +82,8 @@ func TestStaleLiveReviewWorkIsBoundedByReviewedVideos(t *testing.T) {
 
 			var raw []byte
 
-			require.NoError(t, pool.QueryRow(t.Context(), "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("stale_live_videos.sql"),
-				[]string{"load-channel"}, int64(120000), 101).Scan(&raw))
+			require.NoError(t, pool.QueryRow(t.Context(), "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("live_check_videos.sql"),
+				[]string{"load-channel"}, int64(270000), 101).Scan(&raw))
 
 			var plans []struct {
 				Plan collectionStatePlanNode `json:"Plan"`
@@ -114,7 +115,9 @@ func liveReviewPendingEndLookups(node collectionStatePlanNode) float64 {
 	return lookups
 }
 
-func TestStaleLiveVideosKeepChangedReviewsAndLivePriority(t *testing.T) {
+// TestLiveCheckVideosExcludeOnlyMatchedReviews는 현재 snapshot과 일치하는 검토 영수증만 UPCOMING을
+// 구조 membership에서 빼고, 검토 뒤 바뀐 영상과 LIVE는 남기는지 확인한다.
+func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `
@@ -134,31 +137,79 @@ func TestStaleLiveVideosKeepChangedReviewsAndLivePriority(t *testing.T) {
     `)
 	require.NoError(t, err)
 
-	for _, limit := range []int{4, 3} {
-		rows, queryErr := pool.Query(ctx, mustSQL("stale_live_videos.sql"), []string{"review-channel"}, int64(120000), limit)
-		require.NoError(t, queryErr)
+	rows, err := pool.Query(ctx, mustSQL("live_check_videos.sql"), []string{"review-channel"}, int64(270000), 10)
+	require.NoError(t, err)
 
-		var ids []string
+	defer rows.Close()
 
-		for rows.Next() {
-			var (
-				id, channel string
-				upcoming    bool
-			)
+	var ids []string
 
-			require.NoError(t, rows.Scan(&id, &channel, &upcoming))
-			require.Equal(t, "review-channel", channel)
-			require.Equal(t, id != "live", upcoming)
+	for rows.Next() {
+		var (
+			id, channel string
+			upcoming    bool
+			notBefore   *time.Time
+		)
 
-			ids = append(ids, id)
-		}
+		require.NoError(t, rows.Scan(&id, &channel, &upcoming, &notBefore))
+		require.Equal(t, "review-channel", channel)
+		require.Equal(t, id != "live", upcoming)
+		require.Nil(t, notBefore, "video without freshness evidence must be immediately eligible")
 
-		require.NoError(t, rows.Err())
-		rows.Close()
-
-		want := []string{"live", "review-changed", "unreviewed"}
-		require.Equal(t, want[:limit-1], ids)
+		ids = append(ids, id)
 	}
+
+	require.NoError(t, rows.Err())
+	require.Equal(t, []string{"live", "review-changed", "unreviewed"}, ids)
+}
+
+// TestLiveCheckOverflowPreservesLastGoodProjection은 구조 membership이 상한을 넘으면 일부를 고정 순서로
+// 잘라 쓰지 않고 refresh를 실패시켜 직전 CURRENT를 그대로 유지하는지 실제 Refresh 경로로 확인한다.
+func TestLiveCheckOverflowPreservesLastGoodProjection(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+
+	seedLiveCheckProjectionMembers(t, pool)
+
+	_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id, channel_id, status) VALUES ('overflow-0000', 'UC_tp_stale_ops', 'LIVE')`)
+	require.NoError(t, err)
+
+	refresher, err := targetprojection.NewRefresher(pool, time.Hour)
+	require.NoError(t, err)
+
+	builder := targetprojection.PolicyBuilder{Reader: rosterReader{}, Schedules: targetprojection.DefaultPolicySchedules()}
+
+	lastGood, err := refresher.Refresh(ctx, builder, time.Now())
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `
+        INSERT INTO youtube_live_sessions(video_id, channel_id, status)
+        SELECT 'overflow-' || lpad(n::text, 4, '0'), 'UC_tp_stale_ops', CASE WHEN n % 2 = 0 THEN 'LIVE' ELSE 'UPCOMING' END
+        FROM generate_series(1, $1::int) n
+    `, targetprojection.MaxInputLiveCheckVideoCount)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `UPDATE youtube_live_sessions SET scheduled_start_time = statement_timestamp() - INTERVAL '1 hour' WHERE status = 'UPCOMING'`)
+	require.NoError(t, err)
+
+	_, err = refresher.Refresh(ctx, builder, time.Now())
+	require.ErrorIs(t, err, targetprojection.ErrInputRead)
+	require.ErrorIs(t, err, targetprojection.ErrInvalidProjection)
+
+	var (
+		current int64
+		videos  int
+	)
+
+	require.NoError(t, pool.QueryRow(ctx, `
+        SELECT g.generation, count(t.subject_key) FILTER (WHERE t.observation_kind = 'video_live_check')
+        FROM youtube_collection_projection_generations g
+        JOIN youtube_collection_targets t ON t.projection_generation = g.generation
+        WHERE g.status = 'CURRENT' AND g.valid_until > statement_timestamp()
+        GROUP BY g.generation
+    `).Scan(&current, &videos))
+	require.Equal(t, lastGood.Generation, current)
+	require.Equal(t, 1, videos)
 }
 
 func seedCollectionLifecyclePopulation(t *testing.T, pool *pgxpool.Pool) {

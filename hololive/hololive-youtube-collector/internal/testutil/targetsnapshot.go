@@ -30,17 +30,56 @@ func TargetSnapshot(
 
 	insertSnapshotTargets(tb, pool, generation, spec, subjects)
 
+	proof := targetSnapshotProof(spec, generation)
+	insertSnapshotLease(tb, pool, spec, job, proof, subjects)
+
 	repository, err := joblease.NewRepository(pool, targetSnapshotConfig())
 	if err != nil {
 		tb.Fatal(err)
 	}
 
-	snapshot, err := repository.LoadTargetSnapshot(ctx, targetSnapshotProof(spec, generation), spec, job, 100_000)
+	snapshot, err := repository.LoadTargetSnapshot(ctx, proof, spec, job, 100_000)
 	if err != nil {
 		tb.Fatal(err)
 	}
 
 	return snapshot
+}
+
+// insertSnapshotLease는 snapshot이 요구하는 소유 증명과 job membership 범위를 acquire와 같은 의미로 기록한다.
+func insertSnapshotLease(
+	tb testing.TB,
+	pool *pgxpool.Pool,
+	spec *joblease.JobSpec,
+	job sourceobservation.JobContract,
+	proof *contract.LeaseProof,
+	subjects map[contract.ObservationKind][]string,
+) {
+	tb.Helper()
+
+	scope := sourceobservation.MembershipScopeFor(job)
+
+	if _, err := pool.Exec(tb.Context(), mustTestSQL("insert_active_lease.sql"),
+		spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey, proof.ProjectionGeneration,
+		spec.PollInterval.Milliseconds(), proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance,
+		scope.Kinds, scope.ExactSubject, scopeTargetCount(scope, spec.SubjectKey, subjects),
+	); err != nil {
+		tb.Fatal(err)
+	}
+}
+
+func scopeTargetCount(scope sourceobservation.MembershipScope, subject string, subjects map[contract.ObservationKind][]string) int32 {
+	var count int32
+
+	for _, kind := range scope.Kinds {
+		for _, value := range subjects[contract.ObservationKind(kind)] {
+			if !scope.ExactSubject || value == subject {
+				count++
+			}
+		}
+	}
+
+	return count
 }
 
 func insertSnapshotTargets(

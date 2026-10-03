@@ -12,7 +12,8 @@ SELECT video_id,
        last_absence_observation_id,
        missing_since_effective_at,
        consecutive_absence_slots,
-       withdrawn_at
+       withdrawn_at,
+       novelty_pending
 FROM youtube_content_evidence_clocks
 WHERE video_id = ANY($1)
 FOR UPDATE

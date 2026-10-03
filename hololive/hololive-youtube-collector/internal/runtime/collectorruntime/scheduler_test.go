@@ -347,6 +347,7 @@ func TestLeaseSchedulerStopTimeoutKeepsRunStateUntilJoin(t *testing.T) {
 }
 
 const (
+	testJobKey           = "job"
 	testSubjectKey       = "UC_TEST"
 	testCommunityJobKind = "community_collect"
 	testOwnerInstance    = "collector-a"
@@ -397,7 +398,7 @@ func collectYouTubeJSPartialVideoList(_ context.Context, input *collectutil.RunI
 	lease := input.Lease()
 
 	envelope, err := collectutil.Envelope(
-		contract.ProviderYouTubeJS, contract.KindVideoList, input.Spec().SubjectKey, 1, &lease,
+		contract.ProviderYouTubeJS, contract.KindVideoList, input.Spec().SubjectKey, contract.VideoListPublicationContractGeneration, &lease,
 		contract.CompletenessComplete, contract.ContinuityContiguous,
 		contract.VideoListV1{
 			ChannelID: input.Spec().SubjectKey,
@@ -491,8 +492,8 @@ func seedRuntimeTargetsEvery(t *testing.T, pool *pgxpool.Pool, interval time.Dur
 		if _, err := pool.Exec(ctx, `
 			INSERT INTO youtube_collection_targets (
 				projection_generation, subject_key, observation_kind,
-				priority, poll_interval_ms, enabled, valid_until
-			) VALUES ($1, $2, $3, 50, $4, TRUE, clock_timestamp() + INTERVAL '1 hour')
+				priority, poll_interval_ms, enabled, valid_until, member_since_generation
+			) VALUES ($1, $2, $3, 50, $4, TRUE, clock_timestamp() + INTERVAL '1 hour', $1)
 		`, generation, target.subject, target.kind, interval.Milliseconds()); err != nil {
 			t.Fatal(err)
 		}

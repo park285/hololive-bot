@@ -66,8 +66,9 @@ func stalePublishContract(ctx context.Context, t *testing.T, pool *pgxpool.Pool,
 	}
 }
 
-// 검증 조회를 한 번에 보내도 판정 우선순위(fence → projection → membership → target → contract)는
-// 순차 실행과 같아야 한다. 여러 실패를 동시에 만들고 가장 앞선 실패만 보고되는지 확인한다.
+// 검증 조회를 한 번에 보내도 판정 우선순위(fence → projection → job membership → target → contract)는
+// 순차 실행과 같아야 한다. 여러 실패를 동시에 만들고 가장 앞선 실패만 보고되는지 확인한다. 자기 target 비활성은
+// lease membership 범위의 행 수를 바꾸므로 target 조회보다 앞선 membership 판정에서 거절된다.
 func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 	type breaker func(context.Context, *testing.T, *pgxpool.Pool, *contract.LeaseProof)
 
@@ -92,14 +93,14 @@ func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 			name:     "membership_before_target",
 			breakers: []breaker{breakPublishMembership, disablePublishTarget, stalePublishContract},
 			want:     ErrTargetDisabled,
-			contains: "verify collection job membership",
+			contains: "verify lease membership",
 			excludes: "verify collection targets",
 		},
 		{
-			name:     "target_before_contract",
+			name:     "own_target_disable_before_contract",
 			breakers: []breaker{disablePublishTarget, stalePublishContract},
 			want:     ErrTargetDisabled,
-			contains: "verify collection targets",
+			contains: "verify lease membership",
 		},
 	}
 

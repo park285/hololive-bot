@@ -132,6 +132,8 @@ func shortsEvidence(observation *Observation) (content.Evidence, error) {
 	}, nil
 }
 
+// entitiesFromItems는 payload 항목을 reducer 입력으로 옮깁니다. Generation 1 video_list 항목은 Publication이 없으므로
+// 기존 canonical·재처리 반영은 그대로 하되 신규성 근거가 없는 항목으로 판정됩니다.
 func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.Entity {
 	entities := make([]content.Entity, 0, len(items))
 	for i := range items {
@@ -143,6 +145,7 @@ func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.
 			ScheduledFor: items[i].ScheduledFor,
 			IsPremiere:   items[i].IsPremiere,
 			IsShort:      shorts,
+			Publication:  items[i].Publication,
 		})
 	}
 

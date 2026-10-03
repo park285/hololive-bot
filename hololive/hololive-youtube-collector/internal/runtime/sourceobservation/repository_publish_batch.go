@@ -174,16 +174,16 @@ func collectPublishSetRows(rows pgx.Rows, want int) (PublishBatchResult, bool, e
 	collision := false
 
 	for rows.Next() {
-		ordinal, observationID, outcome, err := scanPublishSetRow(rows)
+		row, err := scanPublishSetRow(rows)
 		if err != nil {
 			return PublishBatchResult{}, false, fmt.Errorf("scan publish set row: %w", err)
 		}
 
-		if err := recordPublishSetRow(&result, seen, ordinal, observationID, outcome, want); err != nil {
+		if err := recordPublishSetRow(&result, seen, row, want); err != nil {
 			return PublishBatchResult{}, false, fmt.Errorf("record publish set row: %w", err)
 		}
 
-		collision = collision || outcome == PublishCollision
+		collision = collision || row.Outcome == PublishCollision
 	}
 
 	if err := ensurePublishSetComplete(seen); err != nil {
@@ -193,40 +193,46 @@ func collectPublishSetRows(rows pgx.Rows, want int) (PublishBatchResult, bool, e
 	return result, collision, nil
 }
 
-func scanPublishSetRow(rows pgx.Rows) (rowOrdinal int, rowObservationID int64, rowOutcome PublishOutcome, rowErr error) {
+func scanPublishSetRow(rows pgx.Rows) (PublishedObservation, error) {
 	var (
-		ordinal       int
-		observationID int64
-		outcome       PublishOutcome
+		row        PublishedObservation
+		intervalMS *int64
 	)
 
-	if err := rows.Scan(&ordinal, &observationID, &outcome); err != nil {
-		return 0, 0, "", fmt.Errorf("publish source observation batch: scan set result: %w", err)
+	if err := rows.Scan(&row.Ordinal, &row.ObservationID, &row.Outcome, &intervalMS); err != nil {
+		return PublishedObservation{}, fmt.Errorf("publish source observation batch: scan set result: %w", err)
 	}
 
-	return ordinal, observationID, outcome, nil
+	if intervalMS != nil {
+		if *intervalMS < 0 {
+			return PublishedObservation{}, errors.New("publish source observation batch: accepted interval is negative")
+		}
+
+		row.AcceptedInterval = time.Duration(*intervalMS) * time.Millisecond
+		row.HasAcceptedInterval = true
+	}
+
+	return row, nil
 }
 
-func recordPublishSetRow(
-	result *PublishBatchResult,
-	seen []bool,
-	ordinal int,
-	observationID int64,
-	outcome PublishOutcome,
-	want int,
-) error {
-	if invalidPublishSetRow(ordinal, seen, outcome, want) {
+func recordPublishSetRow(result *PublishBatchResult, seen []bool, row PublishedObservation, want int) error {
+	if invalidPublishSetRow(row, seen, want) {
 		return errors.New("publish source observation batch: invalid set result")
 	}
 
-	seen[ordinal] = true
-	result.Results[ordinal] = NewPublishedObservation(observationID, outcome, ordinal)
+	seen[row.Ordinal] = true
+	result.Results[row.Ordinal] = row
 
 	return nil
 }
 
-func invalidPublishSetRow(ordinal int, seen []bool, outcome PublishOutcome, want int) bool {
-	return ordinal < 0 || ordinal >= want || seen[ordinal] || !validPublishOutcome(outcome)
+func invalidPublishSetRow(row PublishedObservation, seen []bool, want int) bool {
+	if row.Ordinal < 0 || row.Ordinal >= want || seen[row.Ordinal] || !validPublishOutcome(row.Outcome) {
+		return true
+	}
+
+	// 충돌은 checkpoint를 쓰지 않으므로 수락 간격이 있을 수 없다.
+	return row.HasAcceptedInterval && row.Outcome == PublishCollision
 }
 
 func validPublishOutcome(outcome PublishOutcome) bool {

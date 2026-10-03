@@ -45,20 +45,13 @@ func TestContentConsumerPersistsUTF8TitleAndNotification(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
 
-	payload, err := contract.MarshalPayloadV1(contract.VideoListV1{
-		ChannelID: testChannelID,
-		Videos: []contract.VideoListItemV1{{
-			VideoID: testVideoID, ChannelID: testChannelID, Title: strings.Repeat("가", 167),
-		}},
-		Coverage: contract.ChannelListCoverageV1{ChannelID: testChannelID, MaxResults: 10, Exhausted: true},
-	})
-	if err != nil {
-		t.Fatalf("marshal valid video payload: %v", err)
-	}
-
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	envelope := prepareContentListEnvelope(t, &proof, contract.KindVideoList, contract.CompletenessComplete, payload)
+	item := trustedVideoItem(testVideoID, proof.ScheduledFor.Add(-time.Hour), proof.ScheduledFor)
+
+	item.Title = strings.Repeat("가", 167)
+
+	envelope := videoListItemsEnvelope(t, &proof, contract.CompletenessComplete, item)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(envelope)); err != nil {
 		t.Fatalf("publish: %v", err)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -28,50 +30,58 @@ func (rosterReader) OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]str
 	return out, nil
 }
 
-// StaleLiveVideos는 같은 projection transaction에서 운영 roster의 신선한 positive 없는 LIVE 영상을 조회 시점 DB 시각으로 읽습니다.
-func (rosterReader) StaleLiveVideos(
+// LiveCheckVideos는 같은 projection transaction에서 운영 roster의 영상 확인 구조 membership과
+// 조회 시점 DB 시각 기준 not_before를 읽습니다. 상한 초과는 절단하지 않고 거부해 last-good을 유지합니다.
+func (rosterReader) LiveCheckVideos(
 	ctx context.Context,
 	tx dbx.Tx,
-	query targetprojection.StaleLiveVideoQuery,
-) ([]targetprojection.StaleLiveVideo, error) {
+	query targetprojection.LiveCheckVideoQuery,
+) ([]targetprojection.LiveCheckVideo, error) {
 	if tx == nil {
 		return nil, fmt.Errorf("%w: transaction is not configured", targetprojection.ErrInputRead)
 	}
 
 	if query.FreshnessBudget <= 0 {
-		return nil, fmt.Errorf("%w: stale live video freshness budget is invalid", targetprojection.ErrInvalidProjection)
+		return nil, fmt.Errorf("%w: live check video freshness budget is invalid", targetprojection.ErrInvalidProjection)
 	}
 
 	if len(query.OperationalChannelIDs) == 0 {
 		return nil, nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("stale_live_videos.sql"),
+	rows, err := tx.Query(ctx, mustSQL("live_check_videos.sql"),
 		query.OperationalChannelIDs, query.FreshnessBudget.Milliseconds(),
-		targetprojection.MaxInputStaleLiveVideoCount+1)
+		targetprojection.MaxInputLiveCheckVideoCount+1)
 	if err != nil {
-		return nil, fmt.Errorf("%w: load stale live videos: %w", targetprojection.ErrInputRead, err)
+		return nil, fmt.Errorf("%w: load live check videos: %w", targetprojection.ErrInputRead, err)
 	}
 	defer rows.Close()
 
-	videos := make([]targetprojection.StaleLiveVideo, 0)
+	videos := make([]targetprojection.LiveCheckVideo, 0)
 
 	for rows.Next() {
-		var video targetprojection.StaleLiveVideo
+		var (
+			video     targetprojection.LiveCheckVideo
+			notBefore pgtype.Timestamptz
+		)
 
-		if err := rows.Scan(&video.VideoID, &video.ChannelID, &video.IsUpcoming); err != nil {
-			return nil, fmt.Errorf("%w: scan stale live video: %w", targetprojection.ErrInputRead, err)
+		if err := rows.Scan(&video.VideoID, &video.ChannelID, &video.IsUpcoming, &notBefore); err != nil {
+			return nil, fmt.Errorf("%w: scan live check video: %w", targetprojection.ErrInputRead, err)
+		}
+
+		if notBefore.Valid {
+			video.NotBefore = notBefore.Time
 		}
 
 		videos = append(videos, video)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%w: read stale live videos: %w", targetprojection.ErrInputRead, err)
+		return nil, fmt.Errorf("%w: read live check videos: %w", targetprojection.ErrInputRead, err)
 	}
 
-	if len(videos) > targetprojection.MaxInputStaleLiveVideoCount {
-		return nil, fmt.Errorf("%w: stale live video count exceeds %d", targetprojection.ErrInvalidProjection, targetprojection.MaxInputStaleLiveVideoCount)
+	if len(videos) > targetprojection.MaxInputLiveCheckVideoCount {
+		return nil, fmt.Errorf("%w: live check video count exceeds %d", targetprojection.ErrInvalidProjection, targetprojection.MaxInputLiveCheckVideoCount)
 	}
 
 	return videos, nil

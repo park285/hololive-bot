@@ -243,7 +243,7 @@ func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
 	var output bytes.Buffer
 
 	scheduler := &leaseScheduler{executor: &collectionExecutor{logger: slog.New(slog.NewJSONHandler(&output, nil))}}
-	spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
+	spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 	scheduler.executor.logFailure(t.Context(), "collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
 
 	if strings.Contains(output.String(), "secret-value") {
@@ -372,7 +372,7 @@ func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
 	executor := newRunErrorExecutor(&fatal)
 	lease := &recordingLease{}
 	spec := &joblease.JobSpec{
-		JobKey:            "job",
+		JobKey:            testJobKey,
 		Provider:          contract.ProviderYouTubeJS,
 		CollectionJobKind: testCommunityJobKind,
 		SubjectKey:        testSubjectKey,
@@ -541,7 +541,7 @@ func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing
 
 			executor.metrics = NewMetrics(registerer)
 
-			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
+			spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 
 			handled := executor.handleLeaseRunOutcome(t.Context(), joblease.LeaseRunResult{Outcome: test.outcome, Err: test.err}, spec, &contract.LeaseProof{})
 
@@ -581,7 +581,7 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 
 			executor := newRunErrorExecutor(&fatal)
 			lease := &supersededLease{releaseErr: test.releaseErr}
-			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
+			spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 			runErr := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", sourceobservation.ErrProjectionStale))
 
 			executor.handleRunError(t.Context(), lease, spec, &contract.LeaseProof{}, runErr)

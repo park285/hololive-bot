@@ -139,7 +139,7 @@ func TestContentConsumerPersistNarrowScopeNegative(t *testing.T) {
 
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider: contract.ProviderYouTubeJS, ObservationKind: contract.KindVideoList, SubjectKey: testChannelID,
-		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
+		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: contract.VideoListPublicationContractGeneration,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
 		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,

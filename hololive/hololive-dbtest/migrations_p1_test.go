@@ -2,6 +2,7 @@ package dbtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
@@ -166,7 +168,9 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 
 	assertPreexistingScraperPrivilegesRevoked(t, pool, roles.scraper)
 
-	for _, filename := range []string{"238_source_observation_payload_prepare.sql", "239_source_observation_payload_index.sql", "240_source_observation_payload_backfill_index.sql", "241_source_observation_payload_cutover.sql", "242_drop_payload_backfill_index.sql"} {
+	// 234 이전 기준선 위에 실제 collector·API 쿼리가 요구하는 최소 현재 schema만 올린다. 259는 156의
+	// 이전 lock 함수를 지우므로 144~218 묶음 재적용 뒤에 두고, 재적용 안전성을 위해 두 번 적용한다.
+	for _, filename := range observationGrantPostBaselineMigrations {
 		raw, readErr := fs.ReadFile(os.DirFS(dir), filename)
 		if readErr != nil {
 			t.Fatal(readErr)
@@ -174,7 +178,7 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 
 		content := strings.NewReplacer("hololive_scraper", roles.scraper, "hololive_runtime", roles.runtime).Replace(string(raw))
 		if err := applyMigrationContent(ctx, pool, filename, content); err != nil {
-			t.Fatalf("apply payload privilege migration %s: %v", filename, err)
+			t.Fatalf("apply post-baseline privilege migration %s: %v", filename, err)
 		}
 	}
 
@@ -182,6 +186,17 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	assertObservationLockAPIAccess(t, pool, roles)
 	assertObservationRetentionAPIAccess(t, pool, roles)
 	assertScheduleCollaboConstraintAccess(t, pool, roles)
+	assertCollectionMembershipAPIAccess(t, pool, roles)
+}
+
+var observationGrantPostBaselineMigrations = []string{
+	"238_source_observation_payload_prepare.sql",
+	"239_source_observation_payload_index.sql",
+	"240_source_observation_payload_backfill_index.sql",
+	"241_source_observation_payload_cutover.sql",
+	"242_drop_payload_backfill_index.sql",
+	collectionMembershipMigration,
+	collectionMembershipMigration,
 }
 
 // 이어 붙이는 순서가 grant/revoke 결과를 결정하므로 파일 번호순이 아니라 적용 순서대로 나열한다.
@@ -428,6 +443,7 @@ var sourceObservationTables = []string{
 	"observation_contract_generations",
 	"youtube_collection_projection_generations",
 	"youtube_collection_targets",
+	"youtube_collection_projection_guard",
 	"youtube_collection_target_reasons",
 	"youtube_collection_job_leases",
 	"source_collection_checkpoints",
@@ -484,6 +500,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"observation_contract_generations":          observationPrivileges("SELECT"),
 			"youtube_collection_projection_generations": observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_targets":                observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
+			"youtube_collection_projection_guard":       observationPrivileges("SELECT", "UPDATE"),
 			"youtube_collection_target_reasons":         observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_job_leases":             observationPrivileges("SELECT"),
 			"source_observations":                       observationPrivileges("SELECT", "DELETE"),
@@ -602,7 +619,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		queries []observationRoleQuery
 	}{
 		roles.scraper: {dir: publishQueryDir, queries: []observationRoleQuery{
-			{name: "repository_projection_current_0002_02.sql", args: []any{int64(0)}},
+			{name: "repository_projection_current_0002_02.sql"},
 			{name: "repository_contract_batch_current_0031_31.sql", args: []any{fmt.Sprintf(
 				`[{"provider":"youtubejs","observation_kind":%q,"schema_version":1,"contract_generation":1}]`, communityPageKind,
 			)}},
@@ -840,4 +857,226 @@ func observationPrivileges(privileges ...string) map[string]bool {
 	}
 
 	return result
+}
+
+const (
+	membershipGrantSubject = "UCgrantcheck0000000000ab"
+	membershipGrantOwner   = "grant-check-collector"
+)
+
+// assertCollectionMembershipAPIAccess는 259의 guard·membership 경로를 실제 collector·API 쿼리로 실행한다.
+// 이때 scraper는 guard 테이블 권한 없이 SECURITY DEFINER lock 함수로만 공유 잠금하고 membership을 판정하며,
+// runtime은 refresh의 guard FOR UPDATE만 할 수 있고 guard row 변경이나 collector 함수 실행은 거부돼야 한다.
+func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
+	t.Helper()
+
+	dir, err := resolveMigrationsDir()
+	if err != nil {
+		t.Fatalf("resolve migrations dir for collection membership check: %v", err)
+	}
+
+	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
+	refreshQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "planes", "youtube", "targetprojection", "queries"))
+	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
+
+	for role, want := range map[string]bool{roles.scraper: true, roles.runtime: false} {
+		for _, function := range []string{
+			"public.lock_current_youtube_collection_projection()",
+			"public.youtube_collection_membership_valid(text[],boolean,text,integer,bigint)",
+		} {
+			var got bool
+
+			if err := pool.QueryRow(t.Context(), "SELECT has_function_privilege($1, $2, 'EXECUTE')", role, function).Scan(&got); err != nil {
+				t.Fatalf("check collection membership function %s privilege for %s: %v", function, role, err)
+			}
+
+			if got != want {
+				t.Errorf("collection membership function %s privilege for %s = %t, want %t", function, role, got, want)
+			}
+		}
+	}
+
+	assertScraperCollectionMembership(t, pool, roles.scraper, roleSQLPath, collectorQueryDir)
+	assertRuntimeProjectionGuardAccess(t, pool, roles.runtime, roleSQLPath, refreshQueryDir)
+}
+
+// assertScraperCollectionMembership은 acquire가 기록하는 범위·수를 가진 ACTIVE lease를 소유자 권한으로
+// 시드한 뒤 scraper로 실제 lock·membership 쿼리를 실행한다. 시드는 같은 트랜잭션과 함께 롤백된다.
+func assertScraperCollectionMembership(t *testing.T, pool *pgxpool.Pool, role, roleSQLPath, queryDir string) {
+	t.Helper()
+
+	ctx := t.Context()
+	roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": pgx.Identifier{role}.Sanitize()})
+	lockSQL := readObservationRoleSQL(t, filepath.Join(queryDir, "repository_projection_current_0002_02.sql"), nil)
+	membershipSQL := readObservationRoleSQL(t, filepath.Join(queryDir, "repository_lease_membership_0004_04.sql"), nil)
+	kinds := []string{"shorts_list", "video_list"}
+	scheduledFor := time.Date(2026, time.October, 3, 0, 0, 0, 0, time.UTC)
+	jobKey := "collector:youtubejs:youtubejs_content:" + membershipGrantSubject
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin scraper collection membership check: %v", err)
+	}
+
+	generation := seedScraperCollectionMembership(t, tx, role, jobKey, kinds, scheduledFor)
+
+	if _, err := tx.Exec(ctx, roleSQL); err != nil {
+		failObservationRoleTx(t, tx, role, "set scraper collection membership role: %v", err)
+	}
+
+	var locked int64
+
+	if err := tx.QueryRow(ctx, lockSQL).Scan(&locked); err != nil {
+		failObservationRoleTx(t, tx, role, "lock CURRENT projection as scraper: %v", err)
+	}
+
+	if locked != generation {
+		failObservationRoleTx(t, tx, role, "scraper locked projection generation = %d, want CURRENT %d", locked, generation)
+	}
+
+	var projectionCurrent, membershipValid bool
+
+	if err := tx.QueryRow(ctx, membershipSQL,
+		jobKey, membershipGrantOwner, int64(1), generation, scheduledFor, kinds, true,
+	).Scan(&projectionCurrent, &membershipValid); err != nil {
+		failObservationRoleTx(t, tx, role, "check lease membership as scraper: %v", err)
+	}
+
+	if !projectionCurrent || !membershipValid {
+		failObservationRoleTx(t, tx, role, "scraper lease membership = (current %t, valid %t), want both true", projectionCurrent, membershipValid)
+	}
+
+	assertScraperProjectionGuardDenied(t, tx, role)
+
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatalf("rollback scraper collection membership check: %v", err)
+	}
+}
+
+// seedScraperCollectionMembership은 소유자 권한으로 CURRENT projection, 두 kind의 target, acquire와 같은
+// 범위·수를 기록한 ACTIVE lease를 시드하고 CURRENT generation을 돌려준다.
+func seedScraperCollectionMembership(t *testing.T, tx pgx.Tx, role, jobKey string, kinds []string, scheduledFor time.Time) int64 {
+	t.Helper()
+
+	ctx := t.Context()
+
+	var generation int64
+
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO youtube_collection_projection_generations(status, row_count, projection_sha256, valid_until, activated_at)
+		VALUES ('CURRENT', 2, repeat('d', 64), clock_timestamp() + interval '1 hour', clock_timestamp())
+		RETURNING generation`).Scan(&generation); err != nil {
+		failObservationRoleTx(t, tx, role, "seed CURRENT collection projection: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO youtube_collection_targets(projection_generation, subject_key, observation_kind, priority,
+			poll_interval_ms, enabled, valid_until, member_since_generation)
+		SELECT $1, $2, kind, 40, 600000, TRUE, clock_timestamp() + interval '1 hour', $1
+		FROM unnest($3::text[]) AS kind`, generation, membershipGrantSubject, kinds); err != nil {
+		failObservationRoleTx(t, tx, role, "seed collection membership targets: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO youtube_collection_job_leases(job_key, provider, job_class, collection_job_kind, subject_key,
+			projection_generation, poll_interval_ms, slot_state, scheduled_for, next_due_at, fence_epoch,
+			owner_instance, lease_expires_at, membership_kinds, membership_exact_subject, membership_target_count)
+		VALUES ($1, 'youtubejs', 'SUBJECT', 'youtubejs_content', $2, $3, 600000, 'ACTIVE', $4, $4, 1,
+			$5, clock_timestamp() + interval '1 hour', $6::text[], TRUE, cardinality($6::text[]))`,
+		jobKey, membershipGrantSubject, generation, scheduledFor, membershipGrantOwner, kinds); err != nil {
+		failObservationRoleTx(t, tx, role, "seed scoped collection lease: %v", err)
+	}
+
+	return generation
+}
+
+// assertScraperProjectionGuardDenied는 scraper 역할이 guard row를 직접 잠그거나 지우지 못하는지 확인한다.
+// 이 guard row는 lock 함수로만 공유 잠금한다. 직접 잠금·삭제 권한이 있으면 refresh의 배타 잠금을 막거나
+// guard를 지워 collector 전체를 멈출 수 있다.
+func assertScraperProjectionGuardDenied(t *testing.T, tx pgx.Tx, role string) {
+	t.Helper()
+
+	for _, query := range []string{
+		"SELECT guard_key FROM youtube_collection_projection_guard WHERE guard_key FOR SHARE",
+		"DELETE FROM youtube_collection_projection_guard",
+	} {
+		if err := expectObservationPermissionDenied(t.Context(), tx, query); err != nil {
+			failObservationRoleTx(t, tx, role, "scraper guard access: %v", err)
+		}
+	}
+}
+
+// assertRuntimeProjectionGuardAccess는 API refresh의 실제 guard 잠금 쿼리가 runtime으로 성공하고,
+// guard row 추가·삭제와 collector 전용 함수 실행은 권한 오류로 거부되는지 확인한다.
+func assertRuntimeProjectionGuardAccess(t *testing.T, pool *pgxpool.Pool, role, roleSQLPath, queryDir string) {
+	t.Helper()
+
+	ctx := t.Context()
+	roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": pgx.Identifier{role}.Sanitize()})
+	refreshSQL := readObservationRoleSQL(t, filepath.Join(queryDir, "lock_projection_guard.sql"), nil)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin runtime projection guard check: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, roleSQL); err != nil {
+		failObservationRoleTx(t, tx, role, "set runtime projection guard role: %v", err)
+	}
+
+	var guard bool
+
+	if err := tx.QueryRow(ctx, refreshSQL).Scan(&guard); err != nil {
+		failObservationRoleTx(t, tx, role, "lock projection guard as runtime: %v", err)
+	}
+
+	if !guard {
+		failObservationRoleTx(t, tx, role, "runtime locked guard_key = false, want singleton true row")
+	}
+
+	for _, query := range []string{
+		"DELETE FROM youtube_collection_projection_guard",
+		"INSERT INTO youtube_collection_projection_guard(guard_key) VALUES (TRUE) ON CONFLICT DO NOTHING",
+		"SELECT generation FROM lock_current_youtube_collection_projection()",
+		"SELECT youtube_collection_membership_valid(ARRAY['video_list']::text[], TRUE, 'UCgrantcheck0000000000ab', 1, 1)",
+	} {
+		if err := expectObservationPermissionDenied(ctx, tx, query); err != nil {
+			failObservationRoleTx(t, tx, role, "runtime guard access: %v", err)
+		}
+	}
+
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatalf("rollback runtime projection guard check: %v", err)
+	}
+}
+
+// expectObservationPermissionDenied는 savepoint 안에서 query를 실행해 insufficient_privilege(42501)만
+// 성공으로 본다. 다른 오류나 성공은 권한 경계가 아니라 다른 원인이므로 실패로 돌려준다.
+func expectObservationPermissionDenied(ctx context.Context, tx pgx.Tx, query string) error {
+	if _, err := tx.Exec(ctx, "SAVEPOINT observation_permission_check"); err != nil {
+		return fmt.Errorf("open permission savepoint: %w", err)
+	}
+
+	_, execErr := tx.Exec(ctx, query)
+
+	if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT observation_permission_check"); err != nil {
+		return fmt.Errorf("rollback permission savepoint: %w", err)
+	}
+
+	if execErr == nil {
+		return fmt.Errorf("query %q succeeded, want insufficient_privilege", query)
+	}
+
+	if pgErr, ok := errors.AsType[*pgconn.PgError](execErr); !ok || pgErr.Code != "42501" {
+		return fmt.Errorf("query %q error = %w, want insufficient_privilege", query, execErr)
+	}
+
+	return nil
+}
+
+// failObservationRoleTx는 열린 트랜잭션을 먼저 롤백해 연결을 pool에 돌려준 뒤 테스트를 멈춘다.
+func failObservationRoleTx(t *testing.T, tx pgx.Tx, role, format string, args ...any) {
+	t.Helper()
+	rollbackObservationRoleTx(t, tx, role, "failure")
+	t.Fatalf(format, args...)
 }

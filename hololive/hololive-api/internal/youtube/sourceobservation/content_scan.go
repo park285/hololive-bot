@@ -39,6 +39,7 @@ func scanContentClock(rows pgx.Rows, kind contract.ObservationKind) (content.Ent
 		&missing,
 		&state.ConsecutiveAbsenceSlots,
 		&withdrawn,
+		&state.NoveltyPending,
 	)
 	if err != nil {
 		return content.EntityState{}, fmt.Errorf("scan content clock: %w", err)

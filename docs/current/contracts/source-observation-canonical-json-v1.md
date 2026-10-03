@@ -6,6 +6,8 @@
 
 이 profile은 RFC 8785 JSON Canonicalization Scheme의 출력 규칙을 따르되 JSON number를 JavaScript safe integer 범위의 정수 값으로 제한한 strict subset이다. 허용된 입력의 출력은 RFC 8785/JCS 출력과 동일하다. profile 규칙을 바꾸려면 fixture와 contract generation을 함께 version-up해야 하며 기존 generation의 hash를 조용히 재해석하면 안 된다.
 
+`youtubejs/video_list` generation 2도 canonical profile v1을 사용합니다. typed payload의 `publication`은 `status`(`PUBLISHED`, `UPCOMING_PREMIERE`, `UNRESOLVED`)와 `checked_at`, 상태에 맞는 `published_at` 또는 `scheduled_for`를 담습니다. 게시 시각은 확인 시각보다 미래일 수 없고 확인 시각은 관측 시각보다 미래일 수 없습니다. generation 1에 이 필드를 소급 추가하지 않으며 저장된 bytes/hash를 재작성하지 않습니다. generation 2의 확장 payload와 generation 1의 과거 payload는 각 generation으로 검증합니다. `shorts_list`에는 이 증거를 허용하지 않습니다.
+
 구현의 기준은 다음 language-neutral fixture다.
 
 ```text

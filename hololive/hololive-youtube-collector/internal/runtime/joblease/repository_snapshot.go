@@ -9,10 +9,15 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
+// LoadTargetSnapshot은 이미 획득한 lease의 target roster를 읽는다. Guard를 share 잠금한 뒤 별도 문장으로 소유 증명과
+// job membership을 판정하므로, API 전환을 기다린 snapshot도 새 CURRENT에서 평가되고 무관한 target 변경으로
+// 거절되지 않는다. Membership이 유효하면 CURRENT의 범위는 획득 시점 범위와 같으므로 snapshot의 generation은
+// lease 증명의 획득 generation으로 표시한다. Not_before 같은 입장 조건은 적용하지 않는다.
 func (r *Repository) LoadTargetSnapshot(
 	ctx context.Context,
 	proof *contract.LeaseProof,
@@ -24,6 +29,33 @@ func (r *Repository) LoadTargetSnapshot(
 		return TargetSnapshot{}, fmt.Errorf("validate snapshot request: %w", err)
 	}
 
+	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (TargetSnapshot, error) {
+		return loadTargetSnapshotTx(ctx, tx, proof, spec, job, maxRosterRows)
+	})
+	if err != nil {
+		return TargetSnapshot{}, fmt.Errorf("in pgx tx with result: %w", err)
+	}
+
+	return out, nil
+}
+
+func loadTargetSnapshotTx(
+	ctx context.Context,
+	tx dbx.Tx,
+	proof *contract.LeaseProof,
+	spec *JobSpec,
+	job sourceobservation.JobContract,
+	maxRosterRows int,
+) (TargetSnapshot, error) {
+	current, _, err := lockProjectionGuard(ctx, tx)
+	if err != nil {
+		return TargetSnapshot{}, fmt.Errorf("lock projection guard: %w", err)
+	}
+
+	if err := sourceobservation.VerifyLeaseMembership(ctx, tx, proof, sourceobservation.MembershipScopeFor(job)); err != nil {
+		return TargetSnapshot{}, fmt.Errorf("verify lease membership: %w", err)
+	}
+
 	requested := job.RequestedKinds()
 	kindValues := make([]string, len(requested))
 
@@ -31,36 +63,35 @@ func (r *Repository) LoadTargetSnapshot(
 		kindValues[index] = string(kind)
 	}
 
+	query := snapshotQuery{current: current, acquired: proof.ProjectionGeneration, requested: requested, kindValues: kindValues, maxRosterRows: maxRosterRows}
+
 	switch job.Membership() {
 	case sourceobservation.JobMembershipExactSubject:
-		out, err := r.loadExactSnapshotResult(ctx, proof.ProjectionGeneration, spec.SubjectKey, requested, kindValues, maxRosterRows)
+		out, err := query.loadExact(ctx, tx, spec.SubjectKey)
+		if err != nil {
+			return out, fmt.Errorf("load exact target snapshot: %w", err)
+		}
 
-		return out, err
+		return out, nil
 	case sourceobservation.JobMembershipCurrentProjection:
-		out, err := r.loadProjectionSnapshotResult(ctx, proof.ProjectionGeneration, requested, kindValues, maxRosterRows)
+		out, err := query.loadProjection(ctx, tx)
+		if err != nil {
+			return out, fmt.Errorf("load projection target snapshot: %w", err)
+		}
 
-		return out, err
+		return out, nil
 	default:
 		return TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("target snapshot membership is invalid"))
 	}
 }
 
-func (r *Repository) loadExactSnapshotResult(ctx context.Context, generation int64, subject string, requested []contract.ObservationKind, kindValues []string, maxRosterRows int) (TargetSnapshot, error) {
-	out, err := r.loadExactTargetSnapshot(ctx, generation, subject, requested, kindValues, maxRosterRows)
-	if err != nil {
-		return out, fmt.Errorf("load exact target snapshot: %w", err)
-	}
-
-	return out, nil
-}
-
-func (r *Repository) loadProjectionSnapshotResult(ctx context.Context, generation int64, requested []contract.ObservationKind, kindValues []string, maxRosterRows int) (TargetSnapshot, error) {
-	out, err := r.loadProjectionTargetSnapshot(ctx, generation, requested, kindValues, maxRosterRows)
-	if err != nil {
-		return out, fmt.Errorf("load projection target snapshot: %w", err)
-	}
-
-	return out, nil
+// snapshotQuery는 guard 아래에서 읽은 CURRENT generation으로 target을 읽고, 결과는 획득 generation으로 식별한다.
+type snapshotQuery struct {
+	current       int64
+	acquired      int64
+	requested     []contract.ObservationKind
+	kindValues    []string
+	maxRosterRows int
 }
 
 func (r *Repository) validateSnapshotRequest(
@@ -130,30 +161,23 @@ func sameJobContract(left, right sourceobservation.JobContract) bool {
 		slices.Equal(left.CadenceKinds(), right.CadenceKinds()) && slices.Equal(left.RosterKinds(), right.RosterKinds())
 }
 
-func (r *Repository) loadExactTargetSnapshot(
-	ctx context.Context,
-	generation int64,
-	subject string,
-	requested []contract.ObservationKind,
-	kindValues []string,
-	maxRosterRows int,
-) (TargetSnapshot, error) {
-	rows, err := r.pool.Query(ctx, mustSQL("repository_target_snapshot_exact_0144_15.sql"), generation, kindValues, subject)
+func (q *snapshotQuery) loadExact(ctx context.Context, tx dbx.Tx, subject string) (TargetSnapshot, error) {
+	rows, err := tx.Query(ctx, mustSQL("repository_target_snapshot_exact_0144_15.sql"), q.current, q.kindValues, subject)
 	if err != nil {
 		return TargetSnapshot{}, fmt.Errorf("load exact target snapshot: query targets: %w", err)
 	}
 	defer rows.Close()
 
-	enabled, err := scanExactTargetRows(rows, maxRosterRows)
+	enabled, err := scanExactTargetRows(rows, q.maxRosterRows)
 	if err != nil {
 		return TargetSnapshot{}, fmt.Errorf("scan exact target rows: %w", err)
 	}
 
-	if len(enabled) != len(requested) {
+	if len(enabled) != len(q.requested) {
 		return TargetSnapshot{}, fmt.Errorf("snapshot invariant: %w", snapshotInvariant("exact target snapshot row count does not match requested kinds"))
 	}
 
-	out, err := newExactTargetSnapshot(generation, subject, requested, enabled)
+	out, err := newExactTargetSnapshot(q.acquired, subject, q.requested, enabled)
 	if err != nil {
 		return out, fmt.Errorf("exact target snapshot: %w", err)
 	}
@@ -223,25 +247,19 @@ func scanExactTargetRow(rows pgx.Rows) (contract.ObservationKind, bool, error) {
 	return kind, enabled, nil
 }
 
-func (r *Repository) loadProjectionTargetSnapshot(
-	ctx context.Context,
-	generation int64,
-	requested []contract.ObservationKind,
-	kindValues []string,
-	maxRosterRows int,
-) (TargetSnapshot, error) {
-	rows, err := r.pool.Query(ctx, mustSQL("repository_target_snapshot_projection_0144_16.sql"), generation, kindValues, maxRosterRows)
+func (q *snapshotQuery) loadProjection(ctx context.Context, tx dbx.Tx) (TargetSnapshot, error) {
+	rows, err := tx.Query(ctx, mustSQL("repository_target_snapshot_projection_0144_16.sql"), q.current, q.kindValues, q.maxRosterRows)
 	if err != nil {
 		return TargetSnapshot{}, fmt.Errorf("load projection target snapshot: query targets: %w", err)
 	}
 	defer rows.Close()
 
-	values, err := scanProjectionTargetRows(rows, requested)
+	values, err := scanProjectionTargetRows(rows, q.requested)
 	if err != nil {
 		return TargetSnapshot{}, fmt.Errorf("scan projection target rows: %w", err)
 	}
 
-	out, err := newProjectionTargetSnapshot(generation, requested, values, maxRosterRows)
+	out, err := newProjectionTargetSnapshot(q.acquired, q.requested, values, q.maxRosterRows)
 	if err != nil {
 		return out, fmt.Errorf("projection target snapshot: %w", err)
 	}

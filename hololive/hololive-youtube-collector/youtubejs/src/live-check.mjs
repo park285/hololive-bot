@@ -182,6 +182,7 @@ function analyzePlayer(raw, videoId, nowMs) {
     ...optionalField("has_live_broadcast_details", facts.hasLiveBroadcastDetails),
     ...optionalField("started_at", facts.startedAt),
     ...optionalField("ended_at", facts.endedAt),
+    ...optionalField("published_at", facts.publishedAt),
   };
   if (hasContradiction(facts, playability, nowMs)) {
     return {
@@ -251,7 +252,26 @@ function readFacts(details, microformat) {
     hasLiveBroadcastDetails: broadcast.present,
     startedAt: broadcast.startedAt,
     endedAt: broadcast.endedAt,
+    publishedAt: readPublishDate(microformat),
   };
+}
+
+// publishDate는 신규성 판정의 부가 근거라 기존 가용성·수명 판정을 바꾸지 않습니다. 시·분·초와 offset을 가진
+// RFC3339만 정확한 공개 시각으로 받고, 날짜만 있는 값·다른 형식·비문자열은 근거 없음으로 생략합니다.
+function readPublishDate(microformat) {
+  if (!isRecord(microformat) || !isRecord(microformat.playerMicroformatRenderer)) {
+    return undefined;
+  }
+  const value = microformat.playerMicroformatRenderer.publishDate;
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const match = rfc3339Pattern.exec(value);
+  const parsed = Date.parse(value);
+  if (match == null || !validDateTime(match) || !Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return new Date(parsed).toISOString();
 }
 
 // microformat renderer가 없으면 liveBroadcastDetails 존재 여부를 알 수 없으므로 false로 만들지 않습니다.

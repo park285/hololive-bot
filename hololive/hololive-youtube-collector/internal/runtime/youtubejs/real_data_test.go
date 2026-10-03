@@ -42,6 +42,21 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 	if len(content.Items) == 0 {
 		t.Fatal("real channel returned no video items")
 	}
+
+	// videos 탭 항목은 시각을 싣지 않고, 공개 시각은 영상별 확인 응답에서만 옵니다. 응답에 시각이 없을 수도 있으므로 존재는 요구하지 않습니다.
+	first := content.Items[0]
+	if first.PublishedAt != nil || first.ScheduledFor != nil {
+		t.Fatalf("videos item carried list-derived times: %#v", first)
+	}
+
+	check, err := rpc.FetchVideoLiveCheck(ctx, VideoLiveCheckRequest{VideoID: first.VideoID, MaxSuccessResponseBytes: MaxLiveCheckResponseBytes})
+	if err != nil {
+		t.Fatalf("fetch real video live check: %v", err)
+	}
+
+	if check.VideoID != first.VideoID || (check.PublishedAt != nil && (!check.IdentityConfirmed || check.PublishedAt.After(time.Now()))) {
+		t.Fatalf("real video live check publication facts = %#v", check)
+	}
 }
 
 func startRealDataHelper(t *testing.T) (context.Context, *RPC) {

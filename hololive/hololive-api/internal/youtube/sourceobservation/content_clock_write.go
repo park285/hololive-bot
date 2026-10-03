@@ -79,6 +79,7 @@ func contentClockStatement(clock *content.EntityState, coverage []byte) dbx.Stat
 			clock.Clock.MissingSinceEffectiveAt,
 			clock.ConsecutiveAbsenceSlots,
 			clock.WithdrawnAt,
+			clock.NoveltyPending,
 		},
 	}
 }
@@ -125,7 +126,7 @@ func sameContentClockArg(stored, next any) (bool, error) {
 		nextValue, ok := next.([]byte)
 
 		return ok && bytes.Equal(storedValue, nextValue), nil
-	case nil, string, int, int64:
+	case nil, string, int, int64, bool:
 		return stored == next, nil
 	default:
 		return false, fmt.Errorf("unsupported content clock arg type %T", stored)

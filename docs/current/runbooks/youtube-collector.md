@@ -80,6 +80,17 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 운영 비교 관측은 별도 승인 뒤 수행합니다: 멤버 한정 LIVE와 음성 /live의 공존, 동시 방송·최초공개 표시, 로봇/비공개/삭제 UNKNOWN 수와 stale LIVE 차단, 유효 endTimestamp와 canonical ended_at 일치, 가용성 만료·재확인 실패 뒤 차단 복원, target 생성/제거 지연과 1초 query 예산. `isPrivate=true`를 포함하는 익명 응답과 실제 로봇 응답은 로컬 실측을 완료했다고 간주하지 않습니다.
 
 
+## Collection membership·video novelty cutover
+
+이 개정은 migration 259/260과 API·collector/helper의 로컬 준비물입니다. 운영 DB 적용·배포·관측 설정 활성화 승인을 대신하지 않습니다. worker `1942a78af`와 API retention `43a5c57a1`의 변경을 보존합니다.
+
+1. 승인된 중단 창에서 기존 collector 전체와 YouTube consumer/target refresh를 drain합니다. 259는 구 generation-lock 함수를 제거하며 260은 video-list current generation을 2로 전환하므로 구 runtime을 실행한 채 전체 manifest를 적용하지 않습니다. 다른 세션의 migration 258은 이 변경에 임의로 포함하지 않습니다.
+2. DB 복구점과 실제 manifest 상태를 확인한 뒤 승인된 migration을 적용하고 새 API를 시작합니다. CURRENT guard·연속 membership·`not_before`가 포함된 유효 projection과 generation 1/2 reader를 먼저 확인합니다. 기존 lease의 fail-closed 기본 scope는 새 취득 때 갱신합니다. 과거 관측·pending·canonical·발송 이력을 삭제하거나 replay epoch를 변경하지 않습니다.
+3. 새 collector와 helper를 같은 bundle로 a/b/c/d에 반영합니다. 무관한 projection 교체 중 수락 유지, 자기 대상 변경 거부, 실제 checkpoint 전진·consumer 처리·신규성 억제를 확인합니다. 첫 기준 목록과 근거 부족 영상은 알리지 않으며 보존 이력의 자동 backfill은 하지 않습니다.
+4. 새 metric 수집 뒤 비활성 observability worktree의 규칙과 alert-log를 별도 승인으로 반영합니다. 실제 rule 발화·Alertmanager 전달·휴대전화 수신을 구분합니다. 격리 Grafana/Prometheus 검증은 휴대전화 도달 증거가 아닙니다.
+
+이 경계에서는 이전 image만 복원하는 일반 rollback을 사용하지 않습니다. 새 발행을 멈춘 뒤 generation 2 backlog/replay가 남아 있으면 해당 API decoder를 유지해야 합니다. 구 lock 함수·계약 세대 복원은 별도 검증·승인된 DB 절차가 필요하며 관측 데이터를 버리는 방법으로 맞추지 않습니다. 중간 호환 artifact를 실제로 준비·검증하지 않은 상태에서 무중단 단계적 전환을 보장하지 않습니다.
+
 ## Key environment variables
 
 | Env | Purpose | Required |
@@ -115,12 +126,14 @@ Worker count, local queue capacity, acquisition cadence/batch, lease/renew/clean
 - `youtubejs_rpc_phase_duration_seconds{operation,phase,outcome}`: `rate_limit` 대기와 `helper` 수행·응답 해석을 분리한 histogram. helper 내부의 외부 응답·파싱 시간은 합산입니다. operation은 community/content/channel/unknown, outcome은 success/timeout/canceled/error입니다.
 - `youtubejs_rpc_phase_in_flight{operation,phase}`와 `youtubejs_rpc_request_interval_seconds`: 현재 기다리는 호출, 수행 중인 호출과 설정된 호출 간격입니다. helper phase count는 제한을 통과한 RPC 시도 수입니다.
 - `youtube_collection_duration_seconds`: 15/30/60/120/300초 버킷까지 포함합니다. 기존 10초 상한을 넘는 content job의 p95를 10초로 해석하지 않습니다. 롤링 배포 중에는 AP별 histogram을 확인하고 모든 AP가 같은 버킷으로 전환되기 전 fleet 합산 quantile을 해석하지 않습니다.
-- API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target을 community/content/channel-live/channel-live-check/channel-metadata/video-live 여섯 작업으로 묶어 집계합니다. 채널 확인과 방송 탭은 각자의 완료·due 시각을 사용합니다. `targets`, `stale_targets`(완료 시각이 poll interval보다 오래됨), `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. 미완료를 완료 경과 0초로 해석하지 않습니다. due에는 AP 로컬 큐에 들어오지 않은 대상과 만료 lease도 포함됩니다. 없던 lease의 due 기준은 현재 target의 created_at입니다. 퇴역 viewer 작업의 과거 lease·지표는 현재 수요에 포함하지 않습니다.
+- API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target을 community/content/channel-live/channel-live-check/channel-metadata/video-live 여섯 작업으로 묶어 집계합니다. `targets`, `stale_targets`, `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. `not_before`가 미래인 영상 확인은 잠든 membership이며 stale/due 수요로 세지 않습니다. due는 lease와 eligibility 중 늦은 시각을 따르고, lease가 없으면 세대가 바뀌어도 보존한 논리 target 생성 시각을 사용합니다. baseline RPC 수요는 retry·publication enrichment를 포함하지 않습니다. 퇴역 viewer 작업의 과거 lease·지표는 현재 수요에 포함하지 않습니다.
 - `hololive_youtube_collection_live_states{state}`와 `live_state_review_targets{reason}`는 현재 유효한 `live_snapshot` 채널 대상에 속한 서로 다른 영상 중 head 또는 서비스 상태가 LIVE/UPCOMING인 집합을 진단합니다. 상태는 head 기준이며 missing/그 밖의 상태는 other입니다. 양방향 상태 불일치를 포함하고, 채널 식별자가 없는 head-only 항목과 양쪽 모두 종료된 이력은 제외합니다. state_mismatch, scheduled_before_now, scheduled_overdue_7d는 겹칠 수 있으며 종료 증거가 아닙니다.
 
 API 집계는 기존 claim 관측 경로에서 최대 30초마다, DB admission을 포함해 1초 예산으로 실행합니다. 실패·유효 projection 부재는 `hololive_youtube_collection_snapshot_success=0`이며 이전 숫자와 마지막 성공 시각을 보존합니다. 성공 지표가 1이고 마지막 성공이 120초 이내일 때만 대상 숫자를 현재값으로 사용합니다. 기존 `youtube_collection_freshness_seconds`는 해당 provider/kind 중 마지막 성공 하나의 경과이며 전체 대상의 신선도를 보장하지 않습니다.
 
 Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailable`, `HololiveCollectionTargetsStale`, `HololiveCollectionCallBudgetPressure`, `HololiveCollectionLiveStateMismatch`를 확인합니다. 명목 수요가 가동 AP 상한의 85%를 10분 넘게 사용하면 대상·주기·장애 시 여유를 검토합니다. 이 경계값은 초기 운영 기준이며 수집 정책을 자동 변경하지 않습니다. 관측 배포는 API와 AP 계측을 먼저 검증하고 Grafana 생성물·경보를 반영합니다.
+
+`youtube_observation_accept_interval_seconds`는 실제 checkpoint가 전진한 수락 간격이며 첫 표본·중복·collision·정상 empty completion과 구분합니다. 마지막 수락 gauge만으로 탭 부재를 장애로 판정하지 않습니다. publish superseded 비율은 empty를 제외한 전체 publish 결과를 분모로 하며 publish 이전 폐기는 포함하지 않는 하한입니다. 여섯 작업의 due/stale·필수 metric 부재와 실제 RPC admission pressure를 함께 확인합니다. 85% admission은 여유 부족 신호이지 완전 포화나 재시도 포함 총 수요의 측정값이 아닙니다.
 
 Collector loader와 Compose는 canonical env만 읽습니다. 폐기된 `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`·`YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`와 퇴역한 `SCRAPER_PROXY_ENABLED`·`SCRAPER_PROXY_URL`은 빈 값이어도 키가 있으면 기동 실패입니다(존재 기준 퇴역 가드, `collector/retired_env.go`, remove_after 2026-12-31). 이 가드가 든 release는 모든 youtube-collector env와 stack-secrets master 사본에서 네 키를 지운 뒤에만 배포합니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
 
@@ -148,7 +161,7 @@ Channel RPC의 필수 `kind=live|metadata`가 수집 범위를 지정합니다. 
 
 Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`, `CANCELLED`는 schedule 보강 대상이 아닙니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
 
-로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean을 검증합니다. 예정 시각은 RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`를 우선 사용하고, 이 값이 없으면 동일 video ID의 `playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate.liveStreamOfflineSlateRenderer.scheduledStartTime` epoch seconds를 사용합니다. 두 값이 모두 있으면 같은 시각이어야 합니다. 표시 문자열은 사용하지 않습니다. Content 목록의 premiere 분류도 같은 raw adapter를 사용하며 `isUpcoming=true`와 `isLiveContent=false`일 때만 content-owned premiere로 유지합니다.
+로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean을 검증합니다. 예정 시각은 RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`를 우선 사용하고, 이 값이 없으면 동일 video ID의 `playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate.liveStreamOfflineSlateRenderer.scheduledStartTime` epoch seconds를 사용합니다. 두 값이 모두 있으면 같은 시각이어야 합니다. 표시 문자열은 사용하지 않습니다. Content 목록은 helper 내부에서 player를 추가 호출하지 않습니다. Go content runner가 별도로 제한된 video-live-check RPC를 호출하여 `isUpcoming=true`, `isLiveContent=false`와 검증된 예정 시각을 신규 최초공개 근거로 사용합니다.
 
 접근 제한 예외는 `UNPLAYABLE`과 `errorScreen.playerLegacyDesktopYpcOfferRenderer`, 정확한 video ID, `isUpcoming=true`, `isLiveContent=true`가 확인되며 두 예정 시각이 모두 없는 경우에만 적용합니다. 해당 행은 `unavailable_live_sessions`의 ID·채널·`access_restricted` 사유로 분리하고 helper가 `youtubejs_live_schedule_unavailable` WARN에 공개 식별자와 사유를 기록합니다. 번역된 가입 안내문으로 분류하지 않습니다. 멤버십 영상에도 기계가독 시각이 있으면 정상 수집합니다.
 
@@ -301,6 +314,8 @@ Retained connection policy and unpatched-kernel history:
 ## Rollback
 
 Config and topology rollback is an exact repository revision. Restore the following artifacts together. Binary-only rollback is forbidden. Schema/data rollback is none. Mixed-version boundaries and the collector cache-topology unit are in [`rollback.md`](rollback.md#runtime-rollback). Production canary was not executed.
+
+단, migration 259/260 적용 뒤에는 위 [membership·novelty 전환 경계](#collection-membershipvideo-novelty-cutover)가 우선합니다. 구 image만의 자동 복원은 새 lock/contract와 호환되지 않습니다.
 
 ```text
 collector Go binary/image

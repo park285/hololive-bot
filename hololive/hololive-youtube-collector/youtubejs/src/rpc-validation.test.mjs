@@ -10,6 +10,7 @@ import {
   rpcErrorResult,
   rpcErrorResultFor,
   validateCommunityResponse,
+  validateContentResponse,
 } from "./rpc-validation.mjs";
 
 test("rpcErrorResult accepts the closed status and class tuples", () => {
@@ -59,6 +60,27 @@ test("PAG-012 response validator rejects pagination cursors", () => {
       () => validateCommunityResponse({ ...page, [field]: "token" }),
       (error) => error.code === "parser_drift" && error.message === `unknown field: ${field}`,
     );
+  }
+});
+
+test("content items carry only a true is_upcoming flag and reject the retired premiere field", () => {
+  const page = (items) => ({
+    protocol_version: 1, items, page_count: 1, exhausted: true, continuity: "CONTIGUOUS", termination_reason: "exhausted",
+  });
+  const item = { video_id: "v", channel_id: "UC_TEST", title: "T" };
+  assert.deepEqual(validateContentResponse(page([{ ...item, is_upcoming: true }, item])).items, [
+    { ...item, is_upcoming: true },
+    item,
+  ]);
+  for (const invalid of [
+    { ...item, is_upcoming: false },
+    { ...item, is_upcoming: "true" },
+    { ...item, is_premiere: true },
+    { ...item, published_at: "3 hours ago" },
+    { ...item, published_at: "2026-09-20" },
+  ]) {
+    assert.throws(() => validateContentResponse(page([invalid])), (error) => error.code === "parser_drift",
+      JSON.stringify(invalid));
   }
 });
 

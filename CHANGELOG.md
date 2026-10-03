@@ -8,6 +8,12 @@
 
 ## 미출시
 
+- 수집 projection의 구조적 membership과 `not_before` eligibility를 분리합니다. migration 259의 CURRENT guard·job scope·연속 membership fence로 무관한 세대 교체는 진행 중인 수집을 취소하지 않고, 자기 대상 변경·제거/재추가와 이전 owner는 계속 거부합니다. 대상 상한 초과는 잘라서 발행하지 않고 마지막 정상 projection을 유지한 채 오류로 드러냅니다.
+- 일반 영상 목록 generation 2와 migration 260의 부분 목록 기준·항목별 pending 증거를 도입합니다. 목록 두 RPC 뒤 기존 limiter 안에서 player RPC 최대 두 번으로 게시 시각/최초공개를 확인합니다. 첫 기준 목록과 과거 재등장은 조용히 저장하고, 근거가 나중에 확인된 신규 영상·새 최초공개만 한 번 알립니다. 기존 영상·관측을 자동 backfill하지 않습니다.
+- 신규성 근거 조회의 예약 시한과 오류가 겹쳐도 설정·취소·소유권·내부 오류를 정상 목록으로 바꾸지 않습니다. 허용된 요청 실패·timeout은 근거 미확정으로 보존하며, 비강등 오류가 조회 시한 뒤 반환되는 회귀를 추가합니다.
+- 영상/Shorts 목록을 채널·kind별 선행 관측 순서로 소비하고 활성 backlog와 claim 후보 조회 비용을 구분하여 제한합니다. collector는 실제 checkpoint 전진의 수락 간격과 마지막 수락 시각을 기록하고, superseded·empty terminal 결과를 실제 durable 상태와 맞춥니다.
+- 수락 간격 집계가 늘어난 publish 경로에서 단일행 잠금 함수의 기본 cardinality 추정이 반복 JIT를 유발하던 성능 회귀를 고칩니다. migration 259가 UNIQUE 키로 최대 한 행을 반환하는 두 함수에 `ROWS 1`을 지정하며, JIT·성능 예산·잠금/충돌 판정은 유지합니다.
+- migration 259/260과 새 API·collector/helper는 승인된 coordinated cutover가 필요합니다. 기존 lock 함수와 video-list 세대가 바뀌므로 혼합 버전 실행이나 이전 image만의 롤백을 지원하지 않습니다. 이 미출시 변경은 운영 적용을 뜻하지 않습니다.
 - YouTube 방송 제목·예정 시각을 필드별 관측 시각으로 갱신합니다. 늦게 도착한 과거 관측이나 같은 시각의 충돌은 정본 값을 덮지 않습니다. migration 257이 nullable `title_observed_at`을 추가하며 과거 시각은 추정하지 않습니다. 새 API 실행 전에 이 migration이 필요합니다.
 - 알림 구독 set이 유실됐을 때 새 구독 하나로 부분 캐시를 만들지 않고 기존 DB 조회 경로를 유지합니다. 채널 registry 삭제는 DB의 잔여 구독으로 판단하며, registry 자체가 유실되면 전체 DB 구독으로 복구합니다.
 - 방송 checker와 생일 방송 후보 조회가 `last_seen_at` 대신 LIVE의 `status_observed_at`, UPCOMING의 `schedule_observed_at`으로 최신성을 판정합니다. 관측 시각이 없거나 현재보다 미래이면 후보로 사용하지 않으며, 새 일정의 `last_seen_at`에는 예약 시각이 아닌 수신 시각을 기록합니다. LIVE guardrail 로그와 생일 알림 runbook도 실제 관측 시각에 맞춥니다.

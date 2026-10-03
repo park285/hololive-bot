@@ -151,6 +151,7 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_decode.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_normalize.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_profile.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_v1.go
+hololive/hololive-shared/pkg/contracts/sourceobservation/video_publication_v1.go
 hololive/hololive-shared/pkg/contracts/trigger/errors.go
 hololive/hololive-shared/pkg/contracts/trigger/routes.go
 hololive/hololive-shared/pkg/dbx/sqlhelpers.go
@@ -494,6 +495,7 @@ hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/channel.
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/channel_live.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/community.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/content.go
+hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/content_publication.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/live_check.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/mapper.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/validation.go
@@ -547,15 +549,19 @@ hololive/hololive-shared/pkg/config/runtimepolicy/workerprofile.go
 hololive/hololive-shared/pkg/providers/database/database.go
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/job_contract.go
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/job_contract_initial.go
+hololive/hololive-youtube-collector/internal/runtime/sourceobservation/lease_membership.go
+hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_checkpoint_cursor_0005_05.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_contract_batch_current_0031_31.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_job_complete_0011_11.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_job_complete_error_0081_81.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_job_defer_0082_82.sql
+hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_lease_membership_0004_04.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_projection_current_0002_02.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_publish_fence_0001_01.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_publish_set_0032_32.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/queries/repository_target_enabled_0003_03.sql
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/repository.go
+hololive/hololive-youtube-collector/internal/runtime/sourceobservation/repository_checkpoint_cursor.go
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/repository_publish.go
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/repository_publish_batch.go
 hololive/hololive-youtube-collector/internal/runtime/sourceobservation/repository_publish_prepare.go

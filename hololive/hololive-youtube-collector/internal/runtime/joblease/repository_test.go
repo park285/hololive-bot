@@ -102,7 +102,7 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 
 func TestProjectionLockUsesRestrictedRoleFunction(t *testing.T) {
 	query := mustSQL("repository_projection_lock_0144_05.sql")
-	if !strings.Contains(query, "lock_youtube_collection_projection") {
+	if !strings.Contains(query, "lock_current_youtube_collection_projection()") {
 		t.Fatal("projection lock query must use the restricted-role lock function")
 	}
 
@@ -119,7 +119,7 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 	repository := newTestRepository(t, pool)
 	spec := JobSpec{
 		JobKey: "collector:hololive_official:official_schedule:global", Provider: contract.ProviderHololiveOfficial,
-		Class: "GLOBAL", CollectionJobKind: "official_schedule",
+		Class: testGlobalClass, CollectionJobKind: "official_schedule",
 		SubjectKey: subjectGlobalSchedule, PollInterval: time.Minute,
 	}
 
@@ -860,19 +860,19 @@ func TestProjectionExpiryBlocksAcquisition(t *testing.T) {
 	}
 }
 
-func TestLoadExactTargetSnapshotReturnsOnlyLeasedSubjectInOneQuery(t *testing.T) {
+func TestLoadExactTargetSnapshotReturnsOnlyLeasedSubject(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{
 		{subjectChannelA, contract.KindCommunityPage, time.Minute, true},
 		{subjectChannelB, contract.KindCommunityPage, time.Minute, true},
 	})
-	repository, queryCount := newCountingRepository(t, pool)
+	repository := newTestRepository(t, pool)
 	spec := *communityJob()
-	proof := snapshotProof(&spec, generation)
 	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
 		Provider: spec.Provider, Kind: sourceobservation.JobKind(spec.CollectionJobKind),
 	})
+	proof := seedSnapshotLease(t, pool, &spec, job, generation, 1)
 
 	snapshot, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10)
 	if err != nil {
@@ -884,12 +884,8 @@ func TestLoadExactTargetSnapshotReturnsOnlyLeasedSubjectInOneQuery(t *testing.T)
 		t.Fatal(err)
 	}
 
-	if len(roster) != 1 || roster[0] != spec.SubjectKey {
-		t.Fatalf("exact snapshot roster = %#v", roster)
-	}
-
-	if queryCount.Load() != 1 {
-		t.Fatalf("exact snapshot query count = %d", queryCount.Load())
+	if len(roster) != 1 || roster[0] != spec.SubjectKey || snapshot.Generation() != generation {
+		t.Fatalf("exact snapshot roster = %#v generation = %d", roster, snapshot.Generation())
 	}
 }
 
@@ -900,15 +896,15 @@ func TestLoadProjectionTargetSnapshotPreservesEmptyAndEnforcesCap(t *testing.T) 
 		{subjectUCA, contract.KindLiveSnapshot, time.Minute, true},
 		{subjectUCB, contract.KindLiveSnapshot, time.Minute, true},
 	})
-	repository, queryCount := newCountingRepository(t, pool)
+	repository := newTestRepository(t, pool)
 	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
 		Provider: contract.ProviderHolodex, Kind: "holodex_schedule",
 	})
 	spec := JobSpec{
 		JobKey: "collector:holodex:holodex_schedule:global", Provider: contract.ProviderHolodex,
-		Class: "GLOBAL", CollectionJobKind: "holodex_schedule", SubjectKey: job.LeaseSubject(), PollInterval: time.Minute,
+		Class: testGlobalClass, CollectionJobKind: "holodex_schedule", SubjectKey: job.LeaseSubject(), PollInterval: time.Minute,
 	}
-	proof := snapshotProof(&spec, generation)
+	proof := seedSnapshotLease(t, pool, &spec, job, generation, 2)
 
 	snapshot, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 2)
 	if err != nil {
@@ -925,10 +921,6 @@ func TestLoadProjectionTargetSnapshotPreservesEmptyAndEnforcesCap(t *testing.T) 
 		t.Fatalf("schedule sentinel = %#v, %v", schedule, err)
 	}
 
-	if queryCount.Load() != 1 {
-		t.Fatalf("projection snapshot query count = %d", queryCount.Load())
-	}
-
 	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 1); collecterr.CodeOf(err) != collecterr.TargetRosterTooLarge {
 		t.Fatalf("roster cap error = %v", err)
 	}
@@ -939,10 +931,26 @@ func TestLoadTargetSnapshotRejectsStaleProjection(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
+	repository := newTestRepository(t, pool)
+	spec := *communityJob()
+	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
+		Provider: spec.Provider, Kind: sourceobservation.JobKind(spec.CollectionJobKind),
+	})
+	proof := seedSnapshotLease(t, pool, &spec, job, generation, 1)
+
 	if _, err := pool.Exec(ctx, mustTestSQL("expire_projection.sql"), generation); err != nil {
 		t.Fatal(err)
 	}
 
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10); !errors.Is(err, ErrProjectionStale) {
+		t.Fatalf("stale snapshot error = %v", err)
+	}
+}
+
+func TestLoadTargetSnapshotRejectsUnownedProof(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)
 	spec := *communityJob()
 	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
@@ -950,8 +958,8 @@ func TestLoadTargetSnapshotRejectsStaleProjection(t *testing.T) {
 	})
 	proof := snapshotProof(&spec, generation)
 
-	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10); !errors.Is(err, ErrProjectionStale) {
-		t.Fatalf("stale snapshot error = %v", err)
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 10); !errors.Is(err, ErrFenceLost) {
+		t.Fatalf("unowned snapshot error = %v", err)
 	}
 }
 
@@ -992,53 +1000,31 @@ func TestCompleteCurrentFailsClosedAfterTargetDisabledOrProjectionStale(t *testi
 	}
 }
 
+// seedSnapshotLease는 획득을 거치지 않고 snapshotProof와 같은 소유 증명의 ACTIVE lease와 membership 범위를 기록한다.
+// 인자 count는 범위 안의 활성 target 행 수이며 acquire가 기록하는 값과 같은 의미다.
+func seedSnapshotLease(t *testing.T, pool *pgxpool.Pool, spec *JobSpec, job sourceobservation.JobContract, generation int64, count int32) contract.LeaseProof {
+	t.Helper()
+
+	proof := snapshotProof(spec, generation)
+	scope := sourceobservation.MembershipScopeFor(job)
+
+	if _, err := pool.Exec(t.Context(), mustTestSQL("insert_active_lease.sql"),
+		spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey, generation,
+		spec.PollInterval.Milliseconds(), proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance,
+		scope.Kinds, scope.ExactSubject, count,
+	); err != nil {
+		t.Fatalf("seed snapshot lease: %v", err)
+	}
+
+	return proof
+}
+
 func snapshotProof(spec *JobSpec, generation int64) contract.LeaseProof {
 	return contract.LeaseProof{
 		JobKey: spec.JobKey, CollectionJobKind: spec.CollectionJobKind, OwnerInstance: "collector-a",
 		FenceEpoch: 1, ProjectionGeneration: generation,
 		ScheduledFor: time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC),
 	}
-}
-
-type queryCounter struct {
-	count atomic.Int32
-}
-
-func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
-	c.count.Add(1)
-
-	return ctx
-}
-
-func (c *queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
-
-func (c *queryCounter) Load() int32 {
-	return c.count.Load()
-}
-
-func newCountingRepository(t *testing.T, pool *pgxpool.Pool) (*Repository, *queryCounter) {
-	t.Helper()
-
-	config := pool.Config().Copy()
-	counter := &queryCounter{}
-
-	config.ConnConfig.Tracer = counter
-
-	tracedPool, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(tracedPool.Close)
-
-	leaseConfig := testConfig()
-
-	repository, err := NewRepository(tracedPool, &leaseConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return repository, counter
 }
 
 func TestYouTubeSubjectJobsDistributeWithoutDuplicateAcquisition(t *testing.T) {

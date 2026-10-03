@@ -21,9 +21,11 @@ type publishVerificationBatchSender interface {
 	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
 }
 
-// Verify는 fence·projection·target·contract 조회를 한 번의 왕복으로 보냅니다.
-// 서버 실행과 결과 판정 순서는 lease → projection → target → contract를 유지하며,
-// 앞선 판정이 실패하면 이미 획득한 뒤쪽 공유 잠금도 트랜잭션과 함께 롤백됩니다.
+// Verify는 guard·fence·membership·target·contract 조회를 한 번의 왕복으로 보냅니다.
+// 서버 실행과 결과 판정 순서는 projection guard(share) → lease(FOR UPDATE) → job membership → target →
+// contract이며, collector의 acquire·CompleteCurrent와 같은 잠금 순서다. Guard 대기 뒤의 문장은 새 snapshot에서
+// 평가되므로 API 전환 중 기다린 publish가 사라진 generation을 보고 거절되지 않는다. 앞선 판정이 실패하면
+// 이미 획득한 뒤쪽 잠금도 트랜잭션과 함께 롤백됩니다.
 func (v sqlPublishFenceVerifier) Verify(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -36,22 +38,12 @@ func (v sqlPublishFenceVerifier) Verify(
 		return errors.New("verify publish fence: transaction does not support pipelined batches")
 	}
 
-	subjects, kinds := publishTargetKeys(observations)
-	batch := &pgx.Batch{}
+	scope, err := v.publishMembershipScope(proof, observations)
+	if err != nil {
+		return fmt.Errorf("publish membership scope: %w", err)
+	}
 
-	batch.Queue(
-		mustSQL("repository_publish_fence_0001_01.sql"),
-		proof.JobKey,
-		proof.OwnerInstance,
-		proof.FenceEpoch,
-		proof.ProjectionGeneration,
-		proof.ScheduledFor,
-	)
-	batch.Queue(mustSQL("repository_projection_current_0002_02.sql"), proof.ProjectionGeneration)
-	batch.Queue(mustSQL("repository_target_enabled_0003_03.sql"), proof.ProjectionGeneration, subjects, kinds)
-	batch.Queue(mustSQL("repository_contract_batch_current_0031_31.sql"), string(contracts))
-
-	results := sender.SendBatch(ctx, batch)
+	results := sender.SendBatch(ctx, publishVerificationBatch(proof, scope, observations, contracts))
 	if results == nil {
 		return errors.New("verify publish fence: batch results are nil")
 	}
@@ -63,13 +55,56 @@ func (v sqlPublishFenceVerifier) Verify(
 		}
 	}()
 
+	return v.verifyPublishResults(results, proof, observations)
+}
+
+// publishVerificationBatch는 Verify의 판정 순서대로 guard·fence·membership·target·contract 조회를 한 batch에 쌓는다.
+func publishVerificationBatch(
+	proof *contract.LeaseProof,
+	scope MembershipScope,
+	observations []contract.Envelope,
+	contracts []byte,
+) *pgx.Batch {
+	subjects, kinds := publishTargetKeys(observations)
+	membershipQuery, membershipArgs := leaseMembershipQuery(proof, scope)
+	batch := &pgx.Batch{}
+
+	batch.Queue(mustSQL("repository_projection_current_0002_02.sql"))
+	batch.Queue(
+		mustSQL("repository_publish_fence_0001_01.sql"),
+		proof.JobKey,
+		proof.OwnerInstance,
+		proof.FenceEpoch,
+		proof.ProjectionGeneration,
+		proof.ScheduledFor,
+	)
+	batch.Queue(membershipQuery, membershipArgs...)
+	batch.Queue(mustSQL("repository_target_enabled_0003_03.sql"), proof.ProjectionGeneration, subjects, kinds)
+	batch.Queue(mustSQL("repository_contract_batch_current_0031_31.sql"), string(contracts))
+
+	return batch
+}
+
+// verifyPublishResults는 publishVerificationBatch가 쌓은 순서대로 응답을 읽어 판정한다.
+func (v sqlPublishFenceVerifier) verifyPublishResults(
+	results pgx.BatchResults,
+	proof *contract.LeaseProof,
+	observations []contract.Envelope,
+) error {
+	// 소유 손실이 projection 부재보다 우선한다. 다른 소유자의 lease를 superseded로 해제하려 하지 않게 한다.
+	projectionErr := verifyProjection(results)
+
 	job, err := v.loadPublishFence(results, proof)
 	if err != nil {
 		return fmt.Errorf("load publish fence: %w", err)
 	}
 
-	if projectionErr := verifyProjection(results); projectionErr != nil {
+	if projectionErr != nil {
 		return fmt.Errorf("verify projection: %w", projectionErr)
+	}
+
+	if err := scanLeaseMembership(results.QueryRow()); err != nil {
+		return fmt.Errorf("verify lease membership: %w", err)
 	}
 
 	if err := v.validatePublishObservations(&job, observations); err != nil {
@@ -85,6 +120,21 @@ func (v sqlPublishFenceVerifier) Verify(
 	}
 
 	return nil
+}
+
+// publishMembershipScope는 lease 행을 읽기 전에 같은 batch로 보낼 membership 범위를 컴파일된 계약에서 만든다.
+// Provider는 관측에서 가져오며, 실제 lease 행의 provider·job 종류와 다르면 loadPublishFence가 fence 손실로 거절한다.
+func (v sqlPublishFenceVerifier) publishMembershipScope(proof *contract.LeaseProof, observations []contract.Envelope) (MembershipScope, error) {
+	if len(observations) == 0 {
+		return MembershipScope{}, fmt.Errorf("verify publish fence: %w: observations are empty", ErrInvalidEnvelope)
+	}
+
+	definition, ok := v.jobs.Definition(JobID{Provider: observations[0].Provider, Kind: JobKind(proof.CollectionJobKind)})
+	if !ok {
+		return MembershipScope{}, ErrCollectionFenceLost
+	}
+
+	return MembershipScopeFor(definition), nil
 }
 
 type publishFenceJob struct {

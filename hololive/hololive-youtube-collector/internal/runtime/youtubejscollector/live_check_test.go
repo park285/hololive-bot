@@ -235,22 +235,6 @@ func TestVideoLiveCheckRunnerDoesNotPublishCanceledOrFatalCheck(t *testing.T) {
 	}
 }
 
-func TestVideoLiveCheckRunnerSkipsDisabledTarget(t *testing.T) {
-	t.Parallel()
-
-	fake := &videoLiveFake{}
-	input := withEnabled(t, videoLiveInput(t), map[contract.ObservationKind][]string{contract.KindVideoLiveCheck: {}})
-
-	result, err := NewVideoLiveCheckRunner(fake).Collect(t.Context(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if fake.calls != 0 || !result.Output().Empty() {
-		t.Fatalf("disabled target fetched=%d output=%#v", fake.calls, result.Output().Observations())
-	}
-}
-
 type stopCheckCase struct {
 	name       string
 	newContext func(*testing.T) context.Context

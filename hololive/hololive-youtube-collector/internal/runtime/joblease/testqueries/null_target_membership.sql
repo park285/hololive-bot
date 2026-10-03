@@ -1,3 +1,3 @@
 UPDATE youtube_collection_targets
-SET valid_until = $2
+SET member_since_generation = NULL
 WHERE projection_generation = $1

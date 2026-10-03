@@ -99,8 +99,11 @@ func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.Jo
 	return lease, nil
 }
 
+// observeAcquireError는 획득 시점 membership·projection 무효를 오류가 아닌 superseded로 센다.
 func (e *collectionExecutor) observeAcquireError(ctx context.Context, spec *joblease.JobSpec, err error) {
 	if supersededError(err) {
+		e.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultSuperseded)
+
 		return
 	}
 
@@ -163,27 +166,40 @@ func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
 }
 
 func (e *collectionExecutor) handleLeaseRunOutcome(ctx context.Context, runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) bool {
-	if runResult.Outcome == joblease.LeaseRunCallbackCompleted {
+	switch runResult.Outcome {
+	case joblease.LeaseRunCallbackCompleted:
 		return true
-	}
+	case joblease.LeaseRunFenceLost:
+		// renew가 실제 소유 손실을 확인한 경우다. callback 오류에 섞인 fence 손실을 따로 세지 않는다.
+		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phaseRenew)
+		e.failFatalCleanup(ctx, runResult.Err, spec, proof)
 
-	if runResult.Outcome == joblease.LeaseRunFenceLost || runResult.Outcome == joblease.LeaseRunReleasedAfterParentCancel {
+		return true
+	case joblease.LeaseRunReleasedAfterSuperseded:
+		// 소유는 유지된 채 membership이 무효가 되어 join 뒤 fenced release까지 끝났다. lease 손실이 아니다.
+		e.failFatalCleanup(ctx, runResult.Err, spec, proof)
+
+		return true
+	case joblease.LeaseRunReleasedAfterParentCancel:
 		e.observeFenceLost(spec, runResult.Err)
-
-		if fatalCollectionError(runResult.Err) {
-			e.failSupervision(ctx, "cleanup", runResult.Err, spec, proof)
-		}
+		e.failFatalCleanup(ctx, runResult.Err, spec, proof)
 
 		return true
-	}
-
-	if leaseRunIsSupervisionFailure(runResult.Outcome) {
+	case joblease.LeaseRunReleasedAfterRenewFailure, joblease.LeaseRunCleanupTimedOut:
 		e.observeSupervisionFailure(ctx, runResult, spec, proof)
 
 		return true
+	case joblease.LeaseRunCallbackFailed:
+		return false
+	default:
+		return false
 	}
+}
 
-	return false
+func (e *collectionExecutor) failFatalCleanup(ctx context.Context, err error, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+	if fatalCollectionError(err) {
+		e.failSupervision(ctx, "cleanup", err, spec, proof)
+	}
 }
 
 func (e *collectionExecutor) observeSupervisionFailure(ctx context.Context, runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) {
@@ -204,10 +220,6 @@ func (e *collectionExecutor) failSupervision(ctx context.Context, phase string, 
 	if fatalCollectionError(err) {
 		e.reportFatal(&FatalRuntimeError{Phase: "lease_supervision", Err: err})
 	}
-}
-
-func leaseRunIsSupervisionFailure(outcome joblease.LeaseRunOutcome) bool {
-	return outcome == joblease.LeaseRunReleasedAfterRenewFailure || outcome == joblease.LeaseRunCleanupTimedOut
 }
 
 func (e *collectionExecutor) handleRunError(
@@ -292,10 +304,38 @@ func ignoreRunError(err error) bool {
 		supersededError(err)
 }
 
+// observeFenceLost는 callback join 뒤 fence 손실을 한 번만 센다. Publish·empty complete terminal에서 생긴 손실은
+// leasePhaseError 표식으로 phase=publish, 그 밖의 callback 경로는 phase=collect다.
 func (e *collectionExecutor) observeFenceLost(spec *joblease.JobSpec, err error) {
-	if errors.Is(err, joblease.ErrFenceLost) {
-		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phaseCollect)
+	if !errors.Is(err, joblease.ErrFenceLost) {
+		return
 	}
+
+	phase := phaseCollect
+
+	if marked, ok := errors.AsType[*leasePhaseError](err); ok {
+		phase = marked.phase
+	}
+
+	e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phase)
+}
+
+// leasePhaseError는 오류가 생긴 lease 단계를 표시한다. 분류·errors.Is는 감싼 오류를 그대로 따른다.
+type leasePhaseError struct {
+	phase string
+	err   error
+}
+
+func (e *leasePhaseError) Error() string { return e.err.Error() }
+
+func (e *leasePhaseError) Unwrap() error { return e.err }
+
+func markLeasePhase(phase string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	return &leasePhaseError{phase: phase, err: err}
 }
 
 func (e *collectionExecutor) deferFailedRun(
@@ -460,16 +500,16 @@ func (e *collectionExecutor) commitCollectResult(
 
 	output := result.Output()
 	if result.Kind() == collectutil.CollectComplete && output.Empty() {
-		e.metrics.ObservePublish(spec.Provider, spec.CollectionJobKind, outcomeEmpty)
-
 		dbCtx, cancel := context.WithTimeout(ctx, e.collector.DBTimeout)
 
 		defer cancel()
 
+		// tab이 없는 정상 empty COMPLETE는 checkpoint 없이 lease만 완료한다. 관측 수락과 구분해 job kind로 센다.
 		if err := lease.CompleteCurrent(dbCtx); err != nil {
-			return fmt.Errorf("complete current: %w", err)
+			return markLeasePhase(phasePublish, fmt.Errorf("complete current: %w", err))
 		}
 
+		e.metrics.ObservePublish(spec.Provider, spec.CollectionJobKind, outcomeEmpty)
 		e.recordTerminalSuccess(nil)
 		e.metrics.ObserveSuccess(spec.Provider, spec.CollectionJobKind, time.Now().UTC())
 
@@ -502,7 +542,7 @@ func (e *collectionExecutor) commitCollectResult(
 	if err != nil {
 		e.observePublishError(spec, output, err)
 
-		return fmt.Errorf("publish complete: %w", err)
+		return markLeasePhase(phasePublish, fmt.Errorf("publish complete: %w", err))
 	}
 
 	e.observePublished(output, published)

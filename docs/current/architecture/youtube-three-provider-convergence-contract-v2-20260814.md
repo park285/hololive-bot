@@ -603,6 +603,9 @@ CREATE TABLE youtube_collection_targets (
     poll_interval_ms BIGINT NOT NULL CHECK (poll_interval_ms BETWEEN 1000 AND 86400000),
     enabled BOOLEAN NOT NULL,
     valid_until TIMESTAMPTZ NOT NULL,
+    member_since_generation BIGINT
+        CHECK (member_since_generation IS NULL OR member_since_generation BETWEEN 1 AND projection_generation),
+    not_before TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (projection_generation, subject_key, observation_kind),
     CHECK (length(subject_key) BETWEEN 1 AND 256)
@@ -631,6 +634,8 @@ CREATE TABLE youtube_collection_target_reasons (
 ```
 
 `youtube_collection_target_reasons`는 API 진단용이며 collector에 SELECT grant를 주지 않는다. `subject_key`는 `channel:<id>`뿐 아니라 `global:hololive-schedule` 같은 global target을 표현한다.
+
+Migration 259의 `youtube_collection_projection_guard`는 항상 TRUE인 단일 PK row입니다. API refresh는 이 row를 `FOR UPDATE`로 잠근 뒤 CURRENT를 전환합니다. collector의 `lock_current_youtube_collection_projection()`은 같은 row를 `FOR SHARE`로 기다린 뒤 별도 statement snapshot에서 유효 CURRENT를 읽습니다. guard 부재는 오류이며 임의 재시도로 우회하지 않습니다. `member_since_generation`은 직전 CURRENT와 subject/kind/priority/poll/enabled가 같은 동안만 이어받습니다. 재등록·의미 변경은 새 generation identity를 받고, 논리적 `created_at`도 이때만 갱신됩니다. 과거 이력의 NULL은 유효 membership이 아니며 heartbeat로 자동 복구하지 않습니다.
 
 collector가 읽을 수 있는 target은 current generation과 유효 기간을 통과한 row뿐이다.
 
@@ -661,16 +666,18 @@ type TargetProjectionBuilder interface {
 API refresh transaction은 다음 순서를 따른다.
 
 1. 모든 authoritative input을 읽는다. 하나라도 실패하면 rollback한다.
-2. normalized `TargetSpec`을 `(subject_key, observation_kind)`로 deterministic sort/dedup하고 projection SHA-256을 계산한다. hash 입력은 collector scheduling 의미를 가진 subject, kind, priority, poll interval, enabled만 포함하며 heartbeat용 `valid_until`과 진단용 reason은 제외한다.
-3. 기존 `CURRENT` generation을 lock한다.
-4. row count와 hash가 기존 current와 같으면 새 generation을 만들지 않는다. current generation과 target row의 `valid_until`을 연장하고, reason tuple이 달라졌다면 해당 generation의 진단용 reason row만 같은 transaction에서 교체한 뒤 commit한다. 이 heartbeat는 collector-facing content identity와 generation을 바꾸지 않는다.
+2. normalized `TargetSpec`을 `(subject_key, observation_kind)`로 deterministic sort/dedup하고 projection SHA-256을 계산한다. hash 입력은 subject, kind, priority, poll interval, enabled만 포함한다. `valid_until`, 다음 admission 시각 `not_before`, 진단용 reason은 제외한다.
+3. 고정 projection guard를 `FOR UPDATE`로 잠근 뒤 기존 CURRENT를 잠근다. authoritative input 조회는 guard를 잡기 전에 끝낸다.
+4. row count와 hash가 같으면 새 generation을 만들지 않는다. generation과 target의 validity heartbeat를 보존하고 `not_before` 및 변경된 reason을 같은 transaction에서 갱신한다. heartbeat가 validity를 연장하므로 target 전체 UPDATE는 남지만, freshness만 바뀔 때 전체 snapshot INSERT·history 증가는 없다.
 5. row count 또는 hash가 다르면 새 generation을 `STAGING`으로 insert한다.
-6. target과 reason을 bulk insert한다.
+6. target과 reason을 bulk insert한다. scheduling identity가 같은 직전 CURRENT target만 `member_since_generation`과 논리적 `created_at`을 이어받으며, 새 대상·변경·ABA 재등록은 이번 generation에서 시작한다.
 7. insert row count와 generation row count가 같고 projection hash가 재계산 결과와 같은지 확인한다.
 8. 기존 `CURRENT`를 `RETIRED`, 새 generation을 `CURRENT`로 한 transaction에서 전환한다.
 9. 성공 후에만 in-memory cache와 metrics를 갱신한다.
 
 5초 refresh는 freshness heartbeat이지 generation clock이 아니다. 동일 projection이 반복된다는 이유만으로 in-flight fetch를 stale 처리하지 않는다. reason-only 변경도 collector fence 입력이 아니므로 generation을 회전시키지 않는다.
+
+LIVE와 지난 일정/시각 없는 legacy UPCOMING은 신선도와 무관한 구조적 membership입니다. 기존 positive/availability(UNKNOWN 포함)의 유효한 두 시각 중 이른 값에 `LiveFreshnessBudget`을 더해 `not_before`를 정합니다. 미래 근거는 신선도로 인정하지 않고, UNKNOWN을 ENDED로 추정하지 않습니다. 현재 snapshot과 맞는 UPCOMING 검토 영수증은 제외합니다. 구조적 후보 1,000개 초과는 절단하지 않고 refresh 실패로 드러내며 last-good만 기존 validity까지 유지합니다.
 
 정상적으로 계산된 빈 target set은 유효하다. input load 실패로 얻은 빈 slice와 구분하기 위해 builder는 error를 반환해야 하며, 실패 시 current generation은 유지된다.
 
@@ -680,14 +687,16 @@ API refresh transaction은 다음 순서를 따른다.
 - refresh 실패 시 last-good generation을 `valid_until`까지 유지한다.
 - `valid_until` 이후 collector는 새 job을 획득하지 않는다.
 - target disable은 새 projection generation 활성화로 표현한다.
-- 이전 generation에서 시작한 in-flight fetch는 publish transaction에서 current generation mismatch로 거부된다.
+- 이전 generation의 proof도 자신의 membership이 CURRENT까지 연속되고 acquire 당시 scope/count가 같으면 유효하다. 무관한 target 변경은 수집·renew·발행·checkpoint를 폐기하지 않는다. 자신의 해제/disable/cadence/priority 변경·ABA·계약 변경은 기존 owner/epoch/slot/expiry 및 관측 schema/contract 검사와 함께 거부한다.
+- `not_before`는 신규 candidate/acquire에만 적용한다. 획득 뒤 다른 관측이 신선도를 갱신해도 snapshot·renew·complete·publish를 무효화하지 않는다.
+- lease는 정렬된 cadence/roster kind 합집합, exact-subject 여부와 acquire 당시 target 수를 보존한다. CURRENT 범위의 유효 target 수가 같고 모든 `member_since_generation`이 proof generation 이하인지 검사한다. RETIRED target의 남은 validity나 삭제될 수 있는 history를 유효성 근거로 사용하지 않는다.
 - stale projection은 YouTube plane health를 `degraded`로 만들지만 bot/admin/llm global readiness를 자동 실패시켜 restart loop를 만들지 않는다.
 
 ## 8. PostgreSQL monotonically fenced collection lease
 
 ### 8.1 Correctness boundary
 
-Valkey coordination은 중복 acquisition과 외부 호출을 줄이는 최적화로만 사용한다. stale holder publish를 막는 correctness fence는 PostgreSQL이 소유한다.
+Collection lease의 소유·renew·완료·발행 fence는 PostgreSQL이 소유한다. 메모리 queue와 provider limiter는 correctness fence를 대신하지 않는다.
 
 ```sql
 CREATE TABLE youtube_collection_job_leases (
@@ -697,6 +706,9 @@ CREATE TABLE youtube_collection_job_leases (
     collection_job_kind TEXT NOT NULL,
     subject_key TEXT NOT NULL,
     projection_generation BIGINT NOT NULL,
+    membership_kinds TEXT[] NOT NULL DEFAULT '{}',
+    membership_exact_subject BOOLEAN NOT NULL DEFAULT FALSE,
+    membership_target_count INTEGER NOT NULL DEFAULT 0 CHECK (membership_target_count >= 0),
     poll_interval_ms BIGINT NOT NULL
         CHECK (poll_interval_ms BETWEEN 1000 AND 86400000),
     slot_state TEXT NOT NULL DEFAULT 'IDLE'
@@ -748,55 +760,17 @@ collection job과 observation kind는 같은 개념이 아니다. 한 external f
 
 Acquisition은 row lock 안에서 epoch를 반드시 증가시킨다.
 
-```sql
-UPDATE youtube_collection_job_leases
-SET owner_instance = $2,
-    fence_epoch = fence_epoch + 1,
-    projection_generation = $3,
-    scheduled_for = CASE
-        WHEN slot_state = 'IDLE' THEN date_bin(
-            poll_interval_ms * INTERVAL '1 millisecond',
-            NOW(),
-            next_due_at
-        )
-        ELSE scheduled_for
-    END,
-    slot_state = 'ACTIVE',
-    retry_not_before = NULL,
-    lease_expires_at = NOW() + ($4::bigint * INTERVAL '1 millisecond'),
-    updated_at = NOW()
-WHERE job_key = $1
-  AND (
-      (slot_state = 'IDLE' AND next_due_at <= NOW())
-      OR
-      (slot_state = 'DEFERRED' AND retry_not_before <= NOW())
-      OR
-      (slot_state = 'ACTIVE' AND lease_expires_at <= NOW())
-    )
-  AND (owner_instance IS NULL OR lease_expires_at <= NOW())
-RETURNING job_key,
-          provider,
-          job_class,
-          collection_job_kind,
-          subject_key,
-          owner_instance,
-          fence_epoch,
-          projection_generation,
-          poll_interval_ms,
-          slot_state,
-          scheduled_for,
-          lease_expires_at;
-```
+정본 SQL은 collector의 `joblease/queries/repository_lease_acquire_0144_08.sql`이다. transaction은 고정 guard share → candidate lease `FOR UPDATE SKIP LOCKED` → epoch 증가 순서이며, 현재 generation과 job membership scope/count를 함께 기록한다. 마무리 중인 holder의 row lock을 기다려 acquisition을 정체시키지 않는다. 빈 scope/0 count와 NULL membership은 fail closed다.
 
 새 job row 생성과 acquisition을 같은 helper가 소유할 수 있지만, concurrent `INSERT ... ON CONFLICT` 뒤에는 반드시 row lock과 epoch increment를 거쳐야 한다.
-acquisition transaction은 UPDATE 전에 current projection과 이 job이 대표하는 target 집합의 enable/validity를 검증한다. caller가 전달한 `$3`만 신뢰해 stale generation을 lease row에 기록하지 않는다.
+Acquisition은 current projection, job target의 enable/validity 및 `not_before`를 검증한다. caller가 전달한 generation만 신뢰해 lease에 기록하지 않는다.
 acquire는 같은 row를 다시 읽지 않고 이 UPDATE의 RETURNING `provider`, `job_class`, `collection_job_kind`, `subject_key`로 job identity를 검증한다. 요청한 job spec과 다르면 `ErrInvalidJob`으로 transaction을 롤백한다.
 
 #### Missed-slot coalescing
 
 장기 중단 뒤 missed slot을 무제한 재생하지 않는다. `IDLE` acquisition에서만 `date_bin`이 `next_due_at`을 origin으로 사용해 DB `NOW()` 이하의 가장 최신 due boundary 하나를 `scheduled_for`로 선택한다. lease-expired takeover와 `DEFERRED` retry는 기존 `scheduled_for`를 유지한다. 성공 또는 known collision completion은 `slot_state=IDLE`, `next_due_at = scheduled_for + poll_interval`로 전진한다. transient provider failure의 `Defer`는 owner/expiry를 clear하고 `slot_state=DEFERRED`, bounded `retry_not_before`를 설정하며 같은 slot identity를 유지한다. shutdown `Release`도 성공으로 간주하지 않고 같은 slot을 bounded jitter 뒤 재획득할 수 있게 한다.
 
-따라서 한 acquisition은 최대 한 slot만 대표하며 AP 복구가 과거 slot 폭주를 만들지 않는다. poll interval 변경은 current projection activation transaction이 다음 acquisition 전에 job row에 반영하며, 이미 acquired된 proof는 projection mismatch로 stale 처리한다.
+따라서 한 acquisition은 최대 한 slot만 대표하며 AP 복구가 과거 slot 폭주를 만들지 않는다. poll interval 변경은 새 target membership을 만들고 다음 acquisition이 job row에 반영한다. 이미 acquired된 proof는 자신의 membership 변경으로 거부되며, 무관한 target의 변경은 영향을 주지 않는다.
 
 ### 8.3 Renewal과 cancellation
 
@@ -810,15 +784,15 @@ type JobLease interface {
 }
 ```
 
-- renewal은 동일 `job_key + owner_instance + fence_epoch`에만 성공한다.
-- renewal failure는 in-flight provider request context를 즉시 cancel한다.
+- renewal은 동일 job/owner/epoch/projection-generation/scheduled-for/ACTIVE/미만료 lease와 현재 membership에만 성공한다. renewal의 lease 잠금은 projection guard를 뒤늦게 요청하지 않으므로 publish/refresh와 lock-order 역전을 만들지 않는다.
+- owner 손실은 fence lost다. 소유는 남고 CURRENT 또는 자신의 membership이 무효면 superseded로 구분해 callback 취소·join 후에만 fenced release한다. join timeout에는 release하지 않는다. 버퍼에 먼저 도착한 callback 결과의 기존 우선순위는 유지한다.
 - lease TTL은 provider request timeout, normalization, DB publish budget보다 커야 한다.
 - renew interval은 TTL의 1/3 이하로 bounded한다.
 - detached renew goroutine을 만들지 않는다. collection run owner가 renew loop를 start/join한다.
 
 ### 8.4 Publish-time fence predicate
 
-collector publish transaction은 observation insert 전에 lease row를 `FOR UPDATE`하고 다음을 모두 검증한다.
+Collector publish transaction은 고정 guard를 share-lock한 뒤 lease row를 `FOR UPDATE`하고 다음 소유 조건을 모두 검증한다.
 
 ```sql
 SELECT collection_job_kind,
@@ -840,7 +814,7 @@ WHERE job_key = $1
 FOR UPDATE;
 ```
 
-추가로 current projection generation과 `valid_until`을 같은 transaction에서 확인한다. batch의 **각 observation**은 해당 `(generation, subject_key, observation_kind)` target이 enabled인지 검증한다. compile-time job contract는 `collection_job_kind`가 그 provider/kind를 발행할 수 있는지도 검증한다. global Holodex/Official job도 generation만 확인하고 우회하지 않으며, batch에 포함된 모든 channel/global observation이 current target을 가져야 한다.
+이후 별도 statement snapshot에서 유효 CURRENT와 저장된 job membership을 검사한다. batch의 **각 observation**은 CURRENT의 `(subject_key, observation_kind)` target이 enabled·미만료이며 `member_since_generation <= proof generation`인지 검증한다. compile-time job contract의 provider/kind emission과 DB의 schema/contract generation도 검증한다. global job도 자신의 scope/count를 확인하며 우회하지 않는다. 이 잠금은 observation·queue·checkpoint·terminal 커밋까지 유지된다.
 
 이 predicate 때문에 다음 race가 차단된다.
 
@@ -1522,7 +1496,7 @@ type Reducer[S any, E any] interface {
 - provider 이름으로 branch하지 않는다.
 - effective time, scope relation, validity, positive/negative semantics만 사용한다.
 - equal-time conflict는 기존 canonical 유지 + conflict audit다.
-- arrival order permutation test에서 state와 notification intent가 같아야 한다.
+- arrival order permutation test에서 canonical state와 기준이 확정된 관측의 notification intent가 수렴해야 한다. `video_list` 최초 기준과 늦은 신규성 근거에는 아래 §13.2의 무소급 정책이 적용되며, 이미 발행한 intent를 뒤늦은 기준 관측으로 되돌리지 않는다.
 - reducer는 external client나 DB를 호출하지 않는다.
 
 ### 13.2 Community, videos, shorts
@@ -1550,6 +1524,12 @@ type ContentEvidenceClock struct {
 6. 더 최신 또는 같은 effective time의 positive는 missing candidate를 지운다.
 7. `POSITIVE_ONLY` kind는 `missing_since`도 갱신하지 않는다.
 8. 이미 생성된 notification intent를 list absence만으로 삭제하지 않는다.
+
+`video_list` generation 2는 항목별 `publication` 근거를 사용합니다. `PUBLISHED`는 같은 영상·채널의 player `publishDate`가 시간대가 있는 정확한 RFC3339일 때, `UPCOMING_PREMIERE`는 live 콘텐츠가 아닌 예정 영상의 기계가독 예정 시각이 확인됐을 때만 만듭니다. 목록 상대 문자열, 정렬 순서, first-seen 시각을 게시 시각으로 추정하지 않습니다. 근거의 `checked_at`은 envelope observed 시각 이하이고, 공개 시각은 확인 시각보다 미래일 수 없습니다. 항목의 공개/예정 시각과 Premiere 표시는 근거와 일치해야 합니다.
+
+채널의 처음 수락된 비어 있지 않은 목록 또는 COMPLETE 빈 목록은 `earliest_baseline_effective_at`으로 저장하고 알리지 않습니다. PARTIAL은 complete anchor나 부재 근거를 만들지 않습니다. 기존 complete anchor가 더 이르면 이를 유지하고, year-1 레거시 clock·이미 저장된 영상·다른 채널이나 Shorts로 알려진 ID는 새 알림 기준으로 승격하지 않습니다. 기준 이후 처음 본 후보는 신규성 근거가 없으면 canonical과 `novelty_pending`만 보존합니다. 나중에 기준 이후의 유효 공개 시각 또는 미래 예정 최초공개 근거가 생기면 한 번만 NEW_VIDEO를 만들고 pending을 닫습니다. 오래된 공개 시각이 확인되면 무알림으로 닫습니다. 첫 기준에 포함된 최초공개와 이미 알린 최초공개의 공개 전환은 다시 알리지 않습니다.
+
+generation 1은 보존 관측의 canonical consume/replay를 위해 해석하지만 `publication`을 실을 수 없고 그 관측만으로 NEW_VIDEO를 새로 생성하지 않습니다. video_list도 같은 채널의 진행 가능한 앞선 목록을 먼저 claim합니다. 뒤늦게 삽입된 관측·DLQ/replay까지 임의 도착 순서로 재정렬하거나 과거 누락을 자동 backfill하는 보장은 없습니다.
 
 `video_list`의 `is_premiere=true`는 이미 확정된 최초공개(Premiere) positive fact이며, 같은 observation finalize transaction에서 기존 live projection에도 병합한다. 이 교차 projection은 다음 경계를 따른다.
 

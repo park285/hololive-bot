@@ -280,6 +280,7 @@ export function validateVideoLiveCheckResponse(value) {
       "scheduled_at",
       "waiting_state_confirmed",
       "ended_at",
+      "published_at",
       "unknown_reason",
     ],
   );
@@ -304,6 +305,7 @@ export function validateVideoLiveCheckResponse(value) {
     scheduled_at: optionalResponseTimestamp(record, "scheduled_at"),
     waiting_state_confirmed: optionalResponseBoolean(record, "waiting_state_confirmed"),
     ended_at: optionalResponseTimestamp(record, "ended_at"),
+    published_at: optionalResponseTimestamp(record, "published_at"),
   };
   if (confirmed && channelId === undefined) {
     throw new RpcResponseError("confirmed video live check identity requires channel_id");
@@ -356,6 +358,7 @@ export function validateVideoLiveCheckResponse(value) {
     ...(facts.scheduled_at === undefined ? {} : { scheduled_at: facts.scheduled_at }),
     ...(facts.waiting_state_confirmed === undefined ? {} : { waiting_state_confirmed: facts.waiting_state_confirmed }),
     ...(facts.ended_at === undefined ? {} : { ended_at: facts.ended_at }),
+    ...(facts.published_at === undefined ? {} : { published_at: facts.published_at }),
     availability,
     method,
     ...(unknownReason === undefined ? {} : { unknown_reason: unknownReason }),
@@ -595,14 +598,17 @@ function validateThumbnail(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").ContentItem} */
 function validateContentItem(value) {
   const record = responseRecord(value);
-  assertResponseKeys(record, ["video_id", "channel_id", "title"], ["published_at", "scheduled_for", "is_premiere"]);
+  assertResponseKeys(record, ["video_id", "channel_id", "title"], ["published_at", "scheduled_for", "is_upcoming"]);
+  if (Object.hasOwn(record, "is_upcoming") && record.is_upcoming !== true) {
+    throw new RpcResponseError("content item is_upcoming must be omitted unless true");
+  }
   return {
     video_id: nonemptyStringField(record, "video_id"),
     channel_id: nonemptyStringField(record, "channel_id"),
     title: stringField(record, "title"),
     ...optionalRFC3339(record, "published_at"),
     ...optionalRFC3339(record, "scheduled_for"),
-    ...optionalBoolean(record, "is_premiere"),
+    ...(record.is_upcoming === true ? { is_upcoming: true } : {}),
   };
 }
 

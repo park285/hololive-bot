@@ -129,8 +129,7 @@ test("fetchContentFeed paginates videos from a stub channel", async () => {
   assert.equal(result.continuity, "CONTIGUOUS");
 });
 
-test("fetchContentFeed enriches an upcoming premiere with its start timestamp", async () => {
-  const startTimestamp = "2026-08-24T14:30:00.000Z";
+test("videos content RPC makes no per-row player calls and drops lockup-derived times", async () => {
   const innertube = {
     getChannel: async () => channelFixture({
       getVideos: async () => channelFixture({
@@ -140,133 +139,31 @@ test("fetchContentFeed enriches an upcoming premiere with its start timestamp", 
           content_id: "premiere-1",
           metadata: { title: "Premiere" },
           content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
+          published: "3 hours ago",
+          scheduled: "2026-08-24T14:30:00Z",
         }],
       }),
     }),
-    actions: { execute: async (_endpoint, { videoId }) => {
-      assert.equal(videoId, "premiere-1");
-      return rawPlayerResponse(videoId, { isLiveContent: false, startTimestamp });
-    } },
-  };
-
-  const result = await fetchContentFeed({
-    channelId: "UC_TEST",
-    kind: "videos",
-    innertube,
-  });
-
-  assert.equal(result.items[0].scheduled_for, startTimestamp);
-  assert.equal(result.items[0].is_premiere, true);
-});
-
-test("fetchContentFeed does not classify upcoming live content as a premiere", async () => {
-  const innertube = {
-    getChannel: async () => channelFixture({
-      getVideos: async () => channelFixture({
-        videos: [{
-          id: "live-1",
-          title: "Live",
-          content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
-        }],
-      }),
-    }),
-    actions: { execute: async (_endpoint, { videoId }) => rawPlayerResponse(videoId, {
-      isLiveContent: true,
-      startTimestamp: "2026-08-24T14:30:00.000Z",
-    }) },
-  };
-
-  const result = await fetchContentFeed({
-    channelId: "UC_TEST",
-    kind: "videos",
-    innertube,
-  });
-
-  assert.equal(result.items[0].scheduled_for, undefined);
-  assert.equal(result.items[0].is_premiere, undefined);
-});
-
-test("fetchContentFeed keeps a confirmed premiere typed without a start timestamp", async () => {
-  const innertube = {
-    getChannel: async () => channelFixture({
-      getVideos: async () => channelFixture({
-        videos: [{
-          id: "premiere-1",
-          title: "Premiere",
-          content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
-        }],
-      }),
-    }),
-    actions: { execute: async (_endpoint, { videoId }) => rawPlayerResponse(videoId, {
-      isLiveContent: false,
-      startTimestamp: undefined,
-    }) },
+    actions: { execute: async () => assert.fail("content RPC must not hide per-video player requests") },
   };
 
   const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", innertube });
 
-  assert.equal(result.items[0].is_premiere, true);
-  assert.equal(result.items[0].scheduled_for, undefined);
+  assert.deepEqual(result.items, [{ video_id: "premiere-1", channel_id: "UC_TEST", title: "Premiere", is_upcoming: true }]);
 });
 
-function rawPlayerResponse(videoId, { isLiveContent, startTimestamp }) {
-  return {
-    success: true,
-    status_code: 200,
-    data: {
-      videoDetails: {
-        videoId,
-        isLive: false,
-        isLiveContent,
-        isUpcoming: true,
-      },
-      microformat: {
-        playerMicroformatRenderer: {
-          liveBroadcastDetails: {
-            ...(startTimestamp == null ? {} : { startTimestamp }),
-          },
-        },
-      },
-    },
-  };
-}
-
-test("content result budget stops before hydrating or validating unselected rows", async () => {
-  const calls = [];
+test("content result budget stops before validating unselected rows", async () => {
   const innertube = {
     getChannel: async () => channelFixture({ getVideos: async () => channelFixture({ videos: [
       { id: "first", is_upcoming: true },
       { id: "second", is_upcoming: true },
       { title: "unselected malformed row" },
     ] }) }),
-    actions: { execute: async (_, { videoId }) => {
-      calls.push(videoId);
-      return rawPlayerResponse(videoId, { isLiveContent: false });
-    } },
+    actions: { execute: async () => assert.fail("content RPC must not request player metadata") },
   };
   const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", maxResults: 1, innertube });
-  assert.deepEqual(calls, ["first"]);
   assert.equal(result.termination_reason, "max_results");
-  assert.equal(result.items.length, 1);
-});
-
-test("content byte budget stops metadata lookups after the overflowing candidate", async () => {
-  const calls = [];
-  const innertube = {
-    getChannel: async () => channelFixture({ getVideos: async () => channelFixture({ videos: [
-      { id: "first", is_upcoming: true },
-      { id: "overflow", title: "x".repeat(30000), is_upcoming: true },
-      { id: "unselected", is_upcoming: true },
-    ] }) }),
-    actions: { execute: async (_, { videoId }) => {
-      calls.push(videoId);
-      return rawPlayerResponse(videoId, { isLiveContent: false });
-    } },
-  };
-  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", maxSuccessResponseBytes: 20000, innertube });
-  assert.deepEqual(calls, ["first", "overflow"]);
-  assert.equal(result.termination_reason, "max_success_response_bytes");
-  assert.equal(result.items.length, 1);
+  assert.deepEqual(result.items.map((item) => item.video_id), ["first"]);
 });
 
 test("shorts result budget skips unselected normalization without metadata requests", async () => {

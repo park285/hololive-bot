@@ -62,6 +62,10 @@ type PublishedObservation struct {
 	ObservationID int64
 	Outcome       PublishOutcome
 	Ordinal       int
+	// AcceptedInterval은 이 발행이 같은 checkpoint를 실제로 전진시켰을 때 직전 durable 수락 이후 경과 시간이다.
+	// 최초 checkpoint·충돌·checkpoint가 바뀌지 않은 동일 slot 재생에서는 HasAcceptedInterval이 false다.
+	AcceptedInterval    time.Duration
+	HasAcceptedInterval bool
 }
 
 func NewPublishedObservation(observationID int64, outcome PublishOutcome, ordinal int) PublishedObservation {

@@ -16,15 +16,13 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
+// observePublishError는 관측 kind별 publish 결과만 센다. Fence 손실의 lease_lost 계측은 callback join 뒤
+// handleRunError가 phase 표식을 보고 한 번만 기록한다.
 func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
 	if supersededError(err) {
 		e.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
 
 		return
-	}
-
-	if errors.Is(err, joblease.ErrFenceLost) {
-		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phasePublish)
 	}
 
 	e.observePublishOutcome(spec.Provider, output, outcomeRejected)
@@ -64,7 +62,11 @@ func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
 	}
 }
 
+// observePublished는 commit이 끝난 뒤에만 호출된다. Inserted·duplicate는 durable 수락으로 보고 수락 시각을 남기며,
+// checkpoint가 실제로 전진한 관측만 수락 간격을 기록한다. Collision은 수락이 아니다.
 func (e *collectionExecutor) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
+	committedAt := time.Now().UTC()
+
 	for i := range output.ObservationCount() {
 		envelope := output.ObservationMetadata(i)
 		outcome, ok := publishedOutcome(result, i)
@@ -75,6 +77,13 @@ func (e *collectionExecutor) observePublished(output collectutil.RunOutput, resu
 
 		e.metrics.ObservePublish(envelope.Provider, string(envelope.ObservationKind), outcome)
 		e.metrics.ObserveCompleteness(envelope.Provider, string(envelope.ObservationKind), envelope.Completeness, envelope.Continuity)
+
+		if outcome == outcomeCollision {
+			continue
+		}
+
+		published := result.Results[i]
+		e.metrics.ObserveAccepted(envelope.Provider, envelope.ObservationKind, committedAt, published.AcceptedInterval, published.HasAcceptedInterval)
 	}
 }
 

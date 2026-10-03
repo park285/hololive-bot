@@ -49,12 +49,12 @@ func newCollectionTargetMetrics(reg prometheus.Registerer) *collectionTargetMetr
 	}
 	m := &collectionTargetMetrics{
 		targets:             gauge("targets", "Current valid enabled YouTube.js collection subjects, bundled per job."),
-		neverCompleted:      gauge("never_completed_targets", "Active subjects without a completed collection lease; not a zero age."),
-		stale:               gauge("stale_targets", "Active subjects whose last completed YouTube.js collection is older than the configured polling interval; excludes never-completed subjects."),
-		due:                 gauge("due_targets", "Active subjects eligible for discovery, including those not in any AP local queue."),
-		oldestCompletionAge: gauge("oldest_completion_age_seconds", "Maximum age of a completed collection among active subjects; see never_completed_targets separately."),
-		oldestDueAge:        gauge("oldest_due_age_seconds", "Maximum elapsed time past effective discovery due time among active subjects."),
-		requiredRate:        gauge("required_rpc_rate", "Nominal YouTube.js helper RPC calls per second required by active target polling intervals; excludes retries."),
+		neverCompleted:      gauge("never_completed_targets", "Active subjects without a completed collection lease, excluding subjects whose fresher evidence defers the next check (not_before in the future); not a zero age."),
+		stale:               gauge("stale_targets", "Active completed subjects past both the polling interval after their last completion and their not_before eligibility; excludes never-completed subjects."),
+		due:                 gauge("due_targets", "Active subjects whose effective due time, the later of the lease slot due time and not_before eligibility, has passed, including those not in any AP local queue."),
+		oldestCompletionAge: gauge("oldest_completion_age_seconds", "Maximum age of a completed collection among active subjects not deferred by not_before; see never_completed_targets separately."),
+		oldestDueAge:        gauge("oldest_due_age_seconds", "Maximum elapsed time past the effective due time (later of lease slot due time and not_before) among active subjects; unleased subjects use their continuous membership start."),
+		requiredRate:        gauge("required_rpc_rate", "Base nominal YouTube.js helper RPC calls per second from active target polling intervals; subjects deferred by not_before count at most once per live freshness budget. Excludes retries and in-job enrichment calls."),
 		liveState:           prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_live_states", Help: "Distinct live-session videos on enabled, unexpired live_snapshot channel targets in a current, unexpired projection where the head or product session is LIVE/UPCOMING, by reconciliation head state; other includes missing or terminal heads."}, []string{"state"}),
 		liveReview:          prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_live_state_review_targets", Help: "Distinct live-session videos on enabled, unexpired live_snapshot channel targets in a current, unexpired projection with a LIVE/UPCOMING head or product session requiring review: actual head/product mismatch, missing LIVE or observed UPCOMING head, unreviewed legacy origin, or an UPCOMING head with product schedule before now/over 7 days overdue; reasons overlap and do not prove a broadcast ended."}, []string{"reason"}),
 		success:             prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_snapshot_success", Help: "Whether the latest target snapshot completed with a current valid projection."}),
@@ -77,7 +77,7 @@ func (r *Runtime) observeCollectionTargets(ctx context.Context) {
 	var samples []collectionTargetSample
 
 	err := r.withDB(ctx, func(ctx context.Context) error {
-		rows, err := r.pool.Query(ctx, mustSQL("collection_target_observability.sql"))
+		rows, err := r.pool.Query(ctx, mustSQL("collection_target_observability.sql"), r.liveFreshnessBudget.Milliseconds())
 		if err != nil {
 			return fmt.Errorf("query collection target snapshot: %w", err)
 		}

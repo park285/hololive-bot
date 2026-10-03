@@ -10,6 +10,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
 
 type ExecutionProfile struct {
@@ -186,11 +187,12 @@ func NewRegistry(runners ...collectutil.JobRunner) (*Registry, error) {
 }
 
 // jobMaxUpstreamCalls는 job 실행 한 번이 보내는 helper RPC 수의 상한입니다.
-// 목록 두 종류를 수집하는 content만 두 RPC를 보냅니다. 방송 탭 snapshot·채널 확인·영상 확인은 각자 RPC 1회입니다.
+// Content는 목록 두 종류 RPC에 더해 신규 영상의 공개 시각 근거 확인 RPC(youtubejscollector.ContentPublicationMaxCalls)를
+// 같은 예산 안에서 보냅니다. 방송 탭 snapshot·채널 확인·영상 확인은 각자 RPC 1회입니다.
 func jobMaxUpstreamCalls(id sourceobservation.JobID) int {
 	switch string(id.Kind) {
 	case "youtubejs_content":
-		return 2
+		return 2 + youtubejscollector.ContentPublicationMaxCalls
 	default:
 		return 1
 	}

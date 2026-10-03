@@ -30,9 +30,20 @@ func wideCoverage() CoverageValue {
 	})
 }
 
+// videoA는 complete 기준(8월 1일) 이후 공개됐다는 player 공개 근거를 가진 영상입니다.
 func videoA() Entity {
-	published := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
-	return Entity{VideoID: "vid-a", ChannelID: testChannelID, Title: "Alpha", PublishedAt: &published}
+	published := time.Date(2026, time.August, 5, 0, 0, 0, 0, time.UTC)
+
+	return publishedEntity("vid-a", "Alpha", published)
+}
+
+func publishedEntity(videoID, title string, published time.Time) Entity {
+	return Entity{
+		VideoID: videoID, ChannelID: testChannelID, Title: title, PublishedAt: new(published),
+		Publication: &contract.VideoPublicationV1{
+			Status: contract.VideoPublicationPublished, PublishedAt: new(published), CheckedAt: published.Add(time.Hour),
+		},
+	}
 }
 
 func positiveAt(id int64, at time.Time, entity Entity) Evidence {
@@ -142,6 +153,8 @@ func stateFromDecision(previous *State, decision *Decision, evidence *Evidence) 
 	}
 
 	next.EarliestCompleteAt = decision.EarliestCompleteAt
+	next.EarliestBaselineAt = decision.EarliestBaselineAt
+
 	if next.Videos == nil {
 		next.Videos = map[string]EntityState{}
 	}

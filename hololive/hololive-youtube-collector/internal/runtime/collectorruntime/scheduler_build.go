@@ -142,7 +142,7 @@ func newCollectorRegistry(
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,
 ) (*Registry, error) {
-	runners := collectorRunners(infra)
+	runners := collectorRunners(infra, cfg.CollectionOverhead)
 
 	profiles, err := collectorExecutionProfiles(runners, cfg, holodexTimeout, officialTimeout)
 	if err != nil {
@@ -157,12 +157,16 @@ func newCollectorRegistry(
 	return registry, nil
 }
 
-func collectorRunners(infra *collectorInfrastructure) []collectutil.JobRunner {
+// collectorRunners는 provider runner를 만든다. Content runner의 신규성 판정은 마지막 durable checkpoint cursor를
+// 읽어야 하므로 발행과 같은 source observation 저장소를 cursor 조회자로 받는다. 공개 근거 조회는 수집 deadline에서
+// 기존 비-RPC 여유(collectionOverhead)를 남기고 끝나야 목록 관측과 cursor가 같은 수집에서 발행된다.
+func collectorRunners(infra *collectorInfrastructure, collectionOverhead time.Duration) []collectutil.JobRunner {
 	maxResults := collectutil.DefaultMaxResults()
+	cursors := sourceobservation.NewRepository(infra.postgres.GetPool())
 
 	return []collectutil.JobRunner{
 		youtubejscollector.NewCommunityRunner(infra.youtubejsRPC, maxResults),
-		youtubejscollector.NewContentRunner(infra.youtubejsRPC, maxResults),
+		youtubejscollector.NewContentRunner(infra.youtubejsRPC, cursors, maxResults, collectionOverhead),
 		youtubejscollector.NewChannelLiveRunner(infra.youtubejsRPC),
 		youtubejscollector.NewChannelLiveCheckRunner(infra.youtubejsRPC),
 		youtubejscollector.NewChannelMetadataRunner(infra.youtubejsRPC),

@@ -1,8 +1,11 @@
 package sourceobservation
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -18,19 +21,34 @@ func TestContentConsumerPositiveThenCompleteNegative(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 
-	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, testVideoID))); err != nil {
+	positive, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, testVideoID)))
+	if err != nil {
 		t.Fatalf("publish positive: %v", err)
 	}
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
-	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete))); err != nil {
+
+	negative, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete)))
+	if err != nil {
 		t.Fatalf("publish negative: %v", err)
 	}
 
-	if err := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil).Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("consume: %v", err)
+	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+
+	// 같은 채널·종류 목록은 한 tick에 선두 하나만 claim하므로, 앞선 등장 관측이 끝나기 전 부재 관측은 대기한다.
+	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
+		t.Fatalf("consume positive: %v", err)
 	}
 
+	requireQueueStatus(ctx, t, pool, positive.Results[0].ObservationID, contract.StatusProcessed)
+	requireQueueStatus(ctx, t, pool, negative.Results[0].ObservationID, contract.StatusPending)
+	assertContentMissing(t, pool, testVideoID, false)
+
+	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
+		t.Fatalf("consume negative: %v", err)
+	}
+
+	requireQueueStatus(ctx, t, pool, negative.Results[0].ObservationID, contract.StatusProcessed)
 	assertTableCount(t, pool, "youtube_videos", 1)
 	assertTableCount(t, pool, "youtube_notification_outbox", 1)
 	assertContentMissing(t, pool, testVideoID, true)
@@ -43,38 +61,55 @@ func TestContentConsumerCompleteNegativeThenPositive(t *testing.T) {
 	seedContentWatermark(t, pool)
 
 	repo := NewRepository(pool)
-	oldProof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
+	base := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
+	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
 
-	old, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &oldProof, contract.CompletenessComplete, testVideoID)))
+	// 늦은 slot의 complete 부재가 먼저 처리된 뒤 이른 slot의 등장 관측이 처리되는 역순을 만든다.
+	// queue는 활성 같은 채널 목록끼리 추월시키지 않으므로, 이른 관측을 늦은 관측 처리 뒤에 발행한다.
+	// 수신 시각은 각 slot 직후로 맞춰 등장 관측이 먼저 수신됐고 처리만 늦은 상황의 grace 판정을 유지한다.
+	late := moveContentLease(ctx, t, pool, &base, base.FenceEpoch+1, base.ScheduledFor.Add(time.Minute))
+
+	negative, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &late, contract.CompletenessComplete)))
+	if err != nil {
+		t.Fatalf("publish negative: %v", err)
+	}
+
+	alignReceivedAtToSlot(ctx, t, pool, negative.Results[0].ObservationID)
+
+	if consumeErr := consumer.Consume(ctx, contentClaimOptions()); consumeErr != nil {
+		t.Fatalf("consume negative first: %v", consumeErr)
+	}
+
+	requireQueueStatus(ctx, t, pool, negative.Results[0].ObservationID, contract.StatusProcessed)
+
+	early := moveContentLease(ctx, t, pool, &base, base.FenceEpoch+2, base.ScheduledFor)
+
+	positive, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &early, contract.CompletenessComplete, testVideoID)))
 	if err != nil {
 		t.Fatalf("publish positive: %v", err)
 	}
 
-	newProof := advanceLease(ctx, t, pool, &oldProof, time.Minute)
-	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &newProof, contract.CompletenessComplete))); err != nil {
-		t.Fatalf("publish negative: %v", err)
-	}
-
-	if _, err := pool.Exec(ctx, `UPDATE source_observation_queue SET available_at = NOW() + INTERVAL '1 hour' WHERE observation_id = $1`, old.Results[0].ObservationID); err != nil {
-		t.Fatalf("defer positive: %v", err)
-	}
-
-	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
-	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("consume negative first: %v", err)
-	}
-
-	if _, err := pool.Exec(ctx, `UPDATE source_observation_queue SET available_at = NOW() - INTERVAL '1 second' WHERE observation_id = $1`, old.Results[0].ObservationID); err != nil {
-		t.Fatalf("make positive due: %v", err)
-	}
+	alignReceivedAtToSlot(ctx, t, pool, positive.Results[0].ObservationID)
 
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume positive: %v", err)
 	}
 
+	requireQueueStatus(ctx, t, pool, positive.Results[0].ObservationID, contract.StatusProcessed)
 	assertTableCount(t, pool, "youtube_videos", 1)
 	assertTableCount(t, pool, "youtube_notification_outbox", 1)
 	assertContentMissing(t, pool, testVideoID, true)
+}
+
+// alignReceivedAtToSlot은 관측 수신 시각을 slot 직후로 맞춰 발행 순서와 무관하게 grace 판정이 slot 순서를 따르게 한다.
+func alignReceivedAtToSlot(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64) {
+	t.Helper()
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE source_observations SET received_at = scheduled_for + INTERVAL '1 second' WHERE id = $1
+	`, observationID); err != nil {
+		t.Fatalf("align received_at for %d: %v", observationID, err)
+	}
 }
 
 func TestContentConsumerReplayDoesNotDuplicateNotification(t *testing.T) {
@@ -124,35 +159,32 @@ func TestContentConsumerInvalidItemDoesNotBlockLaterItem(t *testing.T) {
 		t.Fatalf("publish first: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, `UPDATE source_observation_payloads SET payload = $1, payload_sha256 = decode($3, 'hex')
-		WHERE id = (SELECT payload_id FROM source_observations WHERE id = $2)`, []byte(`{"broken":true}`), first.Results[0].ObservationID, contract.SHA256Hex([]byte(`{"broken":true}`))); err != nil {
-		t.Fatalf("corrupt payload: %v", err)
+	if _, execErr := pool.Exec(ctx, `UPDATE source_observation_payloads SET payload = $1, payload_sha256 = decode($3, 'hex')
+		WHERE id = (SELECT payload_id FROM source_observations WHERE id = $2)`, []byte(`{"broken":true}`), first.Results[0].ObservationID, contract.SHA256Hex([]byte(`{"broken":true}`))); execErr != nil {
+		t.Fatalf("corrupt payload: %v", execErr)
 	}
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
-	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-good"))); err != nil {
+
+	second, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-good")))
+	if err != nil {
 		t.Fatalf("publish second: %v", err)
 	}
 
-	if err := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil).Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("consume: %v", err)
+	consumer := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil)
+
+	// 첫 tick은 같은 채널 선두인 손상 관측만 claim해 DEAD_LETTER로 보내고, 후속 관측은 선행 관측이 끝날 때까지 대기한다.
+	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
+		t.Fatalf("consume invalid: %v", err)
 	}
 
-	var firstStatus, secondStatus string
+	requireQueueStatus(ctx, t, pool, first.Results[0].ObservationID, contract.StatusDeadLetter)
+	requireQueueStatus(ctx, t, pool, second.Results[0].ObservationID, contract.StatusPending)
 
-	if err := pool.QueryRow(ctx, `SELECT status FROM source_observation_queue WHERE observation_id = $1`, first.Results[0].ObservationID).Scan(&firstStatus); err != nil {
-		t.Fatal(err)
+	// DEAD_LETTER는 더 이상 활성 선행 관측이 아니므로 다음 tick에 후속 관측이 처리된다.
+	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
+		t.Fatalf("consume later: %v", err)
 	}
 
-	if firstStatus != string(contract.StatusDeadLetter) {
-		t.Fatalf("invalid item status = %s, want DEAD_LETTER", firstStatus)
-	}
-
-	if err := pool.QueryRow(ctx, `SELECT status FROM source_observation_queue ORDER BY observation_id DESC LIMIT 1`).Scan(&secondStatus); err != nil {
-		t.Fatal(err)
-	}
-
-	if secondStatus != string(contract.StatusProcessed) {
-		t.Fatalf("later item status = %s, want PROCESSED", secondStatus)
-	}
+	requireQueueStatus(ctx, t, pool, second.Results[0].ObservationID, contract.StatusProcessed)
 }

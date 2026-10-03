@@ -2,7 +2,11 @@ WITH target_bundle AS (
     SELECT COUNT(subject_key) AS target_count,
            MIN(poll_interval_ms) AS min_interval_ms,
            MAX(poll_interval_ms) AS max_interval_ms,
-           MAX(priority) AS max_priority
+           MAX(priority) AS max_priority,
+           -- not_before는 신규 입장 판정에만 쓴다. bundle의 한 행이라도 입장 가능하면 후보다.
+           COUNT(subject_key) FILTER (
+               WHERE not_before IS NULL OR not_before <= statement_timestamp()
+           ) AS admissible_count
     FROM youtube_collection_targets
     WHERE projection_generation = $1
       AND observation_kind = ANY($2::text[])
@@ -15,7 +19,8 @@ WITH target_bundle AS (
            target_bundle.target_count,
            target_bundle.min_interval_ms,
            target_bundle.max_interval_ms,
-           target_bundle.max_priority
+           target_bundle.max_priority,
+           target_bundle.admissible_count
     FROM target_bundle
 ), due AS (
     SELECT identity.job_key,
@@ -32,6 +37,7 @@ WITH target_bundle AS (
     LEFT JOIN youtube_collection_job_leases AS lease
       ON lease.job_key = identity.job_key
     WHERE identity.target_count > 0
+      AND identity.admissible_count > 0
       AND identity.job_key <> ALL($6::text[])
       AND (
            lease.job_key IS NULL

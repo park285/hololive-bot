@@ -155,7 +155,7 @@ func TestSCH008GlobalNotDueReturnsEmptyPage(t *testing.T) {
 	repository := newTestRepository(t, pool)
 	spec := JobSpec{
 		JobKey: "collector:hololive_official:official_schedule:global", Provider: contract.ProviderHololiveOfficial,
-		Class: "GLOBAL", CollectionJobKind: "official_schedule",
+		Class: testGlobalClass, CollectionJobKind: "official_schedule",
 		SubjectKey: subjectGlobalSchedule, PollInterval: time.Minute,
 	}
 

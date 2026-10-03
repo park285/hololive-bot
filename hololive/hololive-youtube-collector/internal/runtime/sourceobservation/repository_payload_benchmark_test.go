@@ -3,7 +3,6 @@ package sourceobservation
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -50,7 +49,7 @@ func BenchmarkPayloadDictionaryPublish(b *testing.B) {
 			for b.Loop() {
 				b.StopTimer()
 
-				proof = advanceLease(ctx, b, pool, &proof, time.Minute)
+				proof = advanceLease(ctx, b, pool, &proof)
 
 				postID := "same-post"
 

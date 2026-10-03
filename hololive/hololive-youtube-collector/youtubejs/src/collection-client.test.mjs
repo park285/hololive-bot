@@ -266,6 +266,24 @@ test("one shared client isolates concurrent raw evidence and parser failures", a
   assert.equal(requests.length, 2);
 });
 
+test("videos tab lockup times never become item times and only the structured upcoming flag survives", async () => {
+  const upcoming = rowNode("videos", "upcoming-row");
+  upcoming.videoRenderer.upcomingEventData = { startTime: "4102444800" };
+  const premiered = rowNode("videos", "premiered-row");
+  premiered.videoRenderer.publishedTimeText = { simpleText: "Premiered Sep 20, 2026" };
+  const relative = rowNode("videos", "relative-row");
+  relative.videoRenderer.publishedTimeText = { simpleText: "3 hours ago" };
+  const { client, requests } = await localClient([page([tabNode("videos", true, [upcoming, premiered, relative])])]);
+  const result = await collect(scenarios[0], client);
+  assert.deepEqual(result.items, [
+    { video_id: "upcoming-row", channel_id: "UC_TEST", title: "upcoming-row", is_upcoming: true },
+    { video_id: "premiered-row", channel_id: "UC_TEST", title: "premiered-row" },
+    { video_id: "relative-row", channel_id: "UC_TEST", title: "relative-row" },
+  ]);
+  assert.equal(requests.length, 1);
+  assert.ok(requests.every(request => !request.url.includes("/player")));
+});
+
 test("request cancellation stops before the first request, a tab load, or another navigation", async () => {
   for (const stage of ["before", "initial", "navigate", "loaded"]) {
     const controller = new AbortController();

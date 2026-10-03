@@ -204,13 +204,15 @@ type ContentRequest struct {
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
+// ContentItem은 목록 lockup 항목입니다. 시각은 videos 탭 항목에 실리지 않으며, 공개 근거는 영상별 FetchVideoLiveCheck로만 얻습니다.
+// IsUpcoming은 lockup의 구조화된 예정 표시이며 시각 근거가 아니라 저장된 근거의 현재 일치 여부 판단에만 씁니다.
 type ContentItem struct {
 	VideoID      string     `json:"video_id"`
 	ChannelID    string     `json:"channel_id"`
 	Title        string     `json:"title"`
 	PublishedAt  *time.Time `json:"published_at,omitempty"`
 	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
-	IsPremiere   *bool      `json:"is_premiere,omitempty"`
+	IsUpcoming   bool       `json:"is_upcoming,omitzero"`
 }
 
 type ContentResult struct {
@@ -338,22 +340,24 @@ type VideoLiveCheckRequest struct {
 type VideoLiveCheckResult struct {
 	ProtocolMeta
 
-	VideoID                 string                           `json:"video_id"`
-	ChannelID               string                           `json:"channel_id,omitempty"`
-	IdentityConfirmed       bool                             `json:"identity_confirmed"`
-	IsLive                  *bool                            `json:"is_live,omitempty"`
-	IsLiveNow               *bool                            `json:"is_live_now,omitempty"`
-	IsUpcoming              *bool                            `json:"is_upcoming,omitempty"`
-	IsLiveContent           *bool                            `json:"is_live_content,omitempty"`
-	IsPrivate               *bool                            `json:"is_private,omitempty"`
-	HasLiveBroadcastDetails *bool                            `json:"has_live_broadcast_details,omitempty"`
-	StartedAt               *time.Time                       `json:"started_at,omitempty"`
-	ScheduledAt             *time.Time                       `json:"scheduled_at,omitempty"`
-	WaitingStateConfirmed   *bool                            `json:"waiting_state_confirmed,omitempty"`
-	EndedAt                 *time.Time                       `json:"ended_at,omitempty"`
-	Availability            contract.VideoAvailability       `json:"availability"`
-	Method                  contract.VideoAvailabilityMethod `json:"method"`
-	UnknownReason           contract.LiveCheckUnknownReason  `json:"unknown_reason,omitempty"`
+	VideoID                 string     `json:"video_id"`
+	ChannelID               string     `json:"channel_id,omitempty"`
+	IdentityConfirmed       bool       `json:"identity_confirmed"`
+	IsLive                  *bool      `json:"is_live,omitempty"`
+	IsLiveNow               *bool      `json:"is_live_now,omitempty"`
+	IsUpcoming              *bool      `json:"is_upcoming,omitempty"`
+	IsLiveContent           *bool      `json:"is_live_content,omitempty"`
+	IsPrivate               *bool      `json:"is_private,omitempty"`
+	HasLiveBroadcastDetails *bool      `json:"has_live_broadcast_details,omitempty"`
+	StartedAt               *time.Time `json:"started_at,omitempty"`
+	ScheduledAt             *time.Time `json:"scheduled_at,omitempty"`
+	WaitingStateConfirmed   *bool      `json:"waiting_state_confirmed,omitempty"`
+	EndedAt                 *time.Time `json:"ended_at,omitempty"`
+	// PublishedAt은 player microformat publishDate가 시·분·초와 offset을 가진 RFC3339일 때만 있습니다.
+	PublishedAt   *time.Time                       `json:"published_at,omitempty"`
+	Availability  contract.VideoAvailability       `json:"availability"`
+	Method        contract.VideoAvailabilityMethod `json:"method"`
+	UnknownReason contract.LiveCheckUnknownReason  `json:"unknown_reason,omitempty"`
 }
 
 func (r *VideoLiveCheckResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }

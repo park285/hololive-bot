@@ -19,12 +19,13 @@ type LiveSnapshotQueryV1 struct {
 }
 
 type VideoListItemV1 struct {
-	VideoID      string     `json:"video_id"`
-	ChannelID    string     `json:"channel_id"`
-	Title        string     `json:"title"`
-	PublishedAt  *time.Time `json:"published_at,omitempty"`
-	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
-	IsPremiere   *bool      `json:"is_premiere,omitempty"`
+	VideoID      string              `json:"video_id"`
+	ChannelID    string              `json:"channel_id"`
+	Title        string              `json:"title"`
+	PublishedAt  *time.Time          `json:"published_at,omitempty"`
+	ScheduledFor *time.Time          `json:"scheduled_for,omitempty"`
+	IsPremiere   *bool               `json:"is_premiere,omitempty"`
+	Publication  *VideoPublicationV1 `json:"publication,omitempty"`
 }
 
 type VideoListV1 struct {

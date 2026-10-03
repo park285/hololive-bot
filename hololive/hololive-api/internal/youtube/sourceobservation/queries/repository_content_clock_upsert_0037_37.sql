@@ -13,9 +13,10 @@ INSERT INTO youtube_content_evidence_clocks (
     last_absence_observation_id,
     missing_since_effective_at,
     consecutive_absence_slots,
-    withdrawn_at
+    withdrawn_at,
+    novelty_pending
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
 ON CONFLICT (video_id) DO UPDATE
 SET first_positive_effective_at = EXCLUDED.first_positive_effective_at,
@@ -32,6 +33,7 @@ SET first_positive_effective_at = EXCLUDED.first_positive_effective_at,
     missing_since_effective_at = EXCLUDED.missing_since_effective_at,
     consecutive_absence_slots = EXCLUDED.consecutive_absence_slots,
     withdrawn_at = EXCLUDED.withdrawn_at,
+    novelty_pending = EXCLUDED.novelty_pending,
     updated_at = NOW()
 WHERE (
     youtube_content_evidence_clocks.first_positive_effective_at,
@@ -47,7 +49,8 @@ WHERE (
     youtube_content_evidence_clocks.last_absence_observation_id,
     youtube_content_evidence_clocks.missing_since_effective_at,
     youtube_content_evidence_clocks.consecutive_absence_slots,
-    youtube_content_evidence_clocks.withdrawn_at
+    youtube_content_evidence_clocks.withdrawn_at,
+    youtube_content_evidence_clocks.novelty_pending
 ) IS DISTINCT FROM (
     EXCLUDED.first_positive_effective_at,
     EXCLUDED.last_positive_effective_at,
@@ -62,5 +65,6 @@ WHERE (
     EXCLUDED.last_absence_observation_id,
     EXCLUDED.missing_since_effective_at,
     EXCLUDED.consecutive_absence_slots,
-    EXCLUDED.withdrawn_at
+    EXCLUDED.withdrawn_at,
+    EXCLUDED.novelty_pending
 )
