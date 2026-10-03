@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,15 +119,6 @@ func newLenientAlarmCacheMock(
 	return cacheMock, cacheClient
 }
 
-func assertRebuildLoadedMetric(t *testing.T, operation, resource string, want float64) {
-	t.Helper()
-
-	assert.InDelta(t, want, gaugeValueForLabels(t, map[string]string{
-		testMetricLabelOperation: operation,
-		"resource":               resource,
-	}), 0.000001)
-}
-
 // stubSuccessfulRebuild는 cache 변경 실패 뒤의 repository rebuild를 성공으로 고정해, 로그에 변경 실패만 남는지 본다.
 func stubSuccessfulRebuild(t *testing.T) {
 	t.Helper()
@@ -227,49 +217,6 @@ func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
 	assert.Equal(t, "persist alarm: stub add: db down", logRecord["error_message"])
 }
 
-func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
-	ctx := t.Context()
-	stubSuccessfulRebuild(t)
-
-	var logBuffer bytes.Buffer
-
-	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheClient *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
-		if key == sharedalarmkeys.AlarmChannelRegistryKey {
-			return 0, errors.New("channel registry add failed")
-		}
-
-		return cacheClient.SAdd(ctx, key, members)
-	})
-
-	logger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
-	as := &AlarmService{
-		cache:      cacheMock,
-		logger:     logger,
-		memberData: &mockMemberDataProvider{members: []*domain.Member{}},
-	}
-	memberDataFn := func() domain.MemberDataProvider { return as.memberData }
-
-	as.cacheState = alarmcache.NewState(cacheMock, memberDataFn, logger)
-	cacheMock.GetClientFunc = func() valkey.Client { return nil }
-
-	mutation := addAlarmMutation{
-		cacheRecord: domain.Alarm{
-			RoomID:     testRoomID,
-			ChannelID:  testChannelID,
-			MemberName: testMemberName,
-			AlarmTypes: domain.DefaultAlarmTypes,
-		},
-	}
-	err := as.cacheAddAlarmMutation(ctx, &mutation)
-	require.Error(t, err)
-
-	logRecord := decodeSingleJSONLog(t, &logBuffer)
-	assert.Equal(t, "rebuild add cache from repository.failed", logRecord["event"])
-	assert.NotContains(t, logRecord, "error")
-	assert.Equal(t, "wrapError", logRecord["error_type"])
-	assert.Contains(t, logRecord["error_message"], "add alarm: cache alarm sequential: add channel registry: channel registry add failed")
-}
-
 func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
 	t.Parallel()
 
@@ -324,71 +271,6 @@ func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
 			as.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError}))
 
 			err := tt.run(t.Context(), as)
-			require.Error(t, err)
-
-			logRecord := decodeSingleJSONLog(t, &logBuffer)
-			assert.Equal(t, tt.wantEvent, logRecord["event"])
-			assert.NotContains(t, logRecord, "error")
-			assert.Equal(t, "wrapError", logRecord["error_type"])
-			assert.Equal(t, tt.wantError, logRecord["error_message"])
-		})
-	}
-}
-
-func TestRemoveAlarmCacheMutationFailureLogsWrappedEvents(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(*cachemocks.Client, *cache.Service)
-		mutation  removeAlarmMutation
-		wantEvent string
-		wantError string
-	}{
-		{
-			name: "rebuild_remove_cache_from_repository",
-			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
-				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
-					return 0, errors.New("srem failed")
-				}
-			},
-			mutation: removeAlarmMutation{
-				effectiveRemovalTypes: domain.AlarmTypes{domain.AlarmTypeLive},
-				removeRoomChannel:     true,
-			},
-			wantEvent: "rebuild remove cache from repository.failed",
-			wantError: "remove alarm: cleanup channel registry if empty: cleanup channel registry: remove channel registry entry: srem failed",
-		},
-		{
-			name: "mark_room_alarms_changed_in_cache",
-			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
-				cacheMock.DelFunc = func(context.Context, string) error {
-					return errors.New("del failed")
-				}
-			},
-			mutation: removeAlarmMutation{
-				removeRoomChannel: true,
-			},
-			wantEvent: "mark room alarms changed in cache.failed",
-			wantError: "mark alarm cache changed: clear empty subscriber cache marker: del failed",
-		},
-	}
-
-	stubSuccessfulRebuild(t)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
-
-			var logBuffer bytes.Buffer
-
-			cacheMock, cacheClient := newLenientAlarmCacheMock(ctx, t, nil)
-			tt.setup(cacheMock, cacheClient)
-
-			as := &AlarmService{
-				cache:  cacheMock,
-				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
-			}
-
-			err := as.removeAlarmCacheMutation(ctx, testRoomID, testChannelID, tt.mutation)
 			require.Error(t, err)
 
 			logRecord := decodeSingleJSONLog(t, &logBuffer)
@@ -526,10 +408,11 @@ func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
 			}
 
 			warnLogger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn}))
-			as := &AlarmService{
-				cache:  cacheMock,
-				logger: warnLogger,
-			}
+			as := newTestAlarmService(t)
+
+			as.cache = cacheMock
+			as.logger = warnLogger
+
 			memberDataFn := func() domain.MemberDataProvider { return as.memberData }
 
 			as.cacheState = alarmcache.NewState(cacheMock, memberDataFn, warnLogger)
@@ -604,128 +487,4 @@ func TestClearRoomAlarms_UsesRepositoryAsAuthority(t *testing.T) {
 	count, err := as.ClearRoomAlarms(t.Context(), testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
-}
-
-func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
-	ctx := t.Context()
-	before := counterValueForLabels(t, map[string]string{
-		testMetricLabelOperation: "add",
-		testMetricLabelResult:    "ok",
-	})
-	beforeDurationCount := histogramCountForLabels(t, map[string]string{
-		testMetricLabelOperation: "add",
-		testMetricLabelResult:    "ok",
-	})
-	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, func(cacheClient *cache.Service, ctx context.Context, key string, members []string) (int64, error) {
-		if key == sharedalarmkeys.AlarmChannelRegistryKey {
-			return 0, errors.New("channel registry add failed")
-		}
-
-		return cacheClient.SAdd(ctx, key, members)
-	})
-
-	discardLogger := newDiscardAlarmLogger()
-	as := &AlarmService{
-		cache:           cacheMock,
-		logger:          discardLogger,
-		memberData:      &mockMemberDataProvider{members: []*domain.Member{}},
-		alarmRepository: &sharedalarm.Repository{},
-		alarmWriter:     &stubAlarmWriter{},
-	}
-	rebuildMemberDataFn := func() domain.MemberDataProvider { return as.memberData }
-
-	as.cacheState = alarmcache.NewState(cacheMock, rebuildMemberDataFn, discardLogger)
-	cacheMock.GetClientFunc = func() valkey.Client { return nil }
-
-	originalRebuild := rebuildSubscriberCacheFromRepository
-	originalFindRoomAlarms := findRoomAlarmsFromRepository
-	rebuildCalled := false
-
-	findRoomAlarmsFromRepository = func(context.Context, *sharedalarm.Repository, string) ([]*domain.Alarm, error) {
-		return nil, nil
-	}
-
-	rebuildSubscriberCacheFromRepository = func(context.Context, cache.Client, *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
-		rebuildCalled = true
-
-		return sharedalarm.CacheWarmSummary{
-			AlarmCount:   3,
-			RoomCount:    2,
-			ChannelCount: 1,
-		}, nil
-	}
-
-	t.Cleanup(func() {
-		rebuildSubscriberCacheFromRepository = originalRebuild
-		findRoomAlarmsFromRepository = originalFindRoomAlarms
-	})
-
-	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testChannelID,
-		MemberName: testMemberName,
-	})
-	require.Error(t, err)
-	assert.False(t, added)
-	assert.True(t, rebuildCalled)
-	assert.InDelta(t, before+1, counterValueForLabels(t, map[string]string{
-		testMetricLabelOperation: "add",
-		testMetricLabelResult:    "ok",
-	}), 0.000001)
-	assert.Equal(t, beforeDurationCount+1, histogramCountForLabels(t, map[string]string{
-		testMetricLabelOperation: "add",
-		testMetricLabelResult:    "ok",
-	}))
-	assertRebuildLoadedMetric(t, "add", "alarms", 3.0)
-	assertRebuildLoadedMetric(t, "add", "rooms", 2.0)
-	assertRebuildLoadedMetric(t, "add", "channels", 1.0)
-}
-
-// 채널 registry version key를 없앤 뒤 add 성공 경로는 Valkey SET을 쓰지 않는다. 예전에는 version SET 실패가
-// 전체 rebuild와 add 오류로 번졌다.
-func TestAddAlarm_SucceedsWithoutValkeySetOrRebuild(t *testing.T) {
-	ctx := t.Context()
-	as := newTestAlarmService(t)
-	cacheMock, _ := newLenientAlarmCacheMock(ctx, t, nil)
-
-	setCalls := 0
-
-	cacheMock.SetFunc = func(context.Context, string, any, time.Duration) error {
-		setCalls++
-
-		return errors.New("set unavailable")
-	}
-	as.cache = cacheMock
-	as.cacheState = alarmcache.NewState(cacheMock, func() domain.MemberDataProvider { return as.memberData }, as.logger)
-
-	originalRebuild := rebuildSubscriberCacheFromRepository
-	rebuildCalled := false
-
-	rebuildSubscriberCacheFromRepository = func(context.Context, cache.Client, *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
-		rebuildCalled = true
-
-		return sharedalarm.CacheWarmSummary{}, nil
-	}
-
-	t.Cleanup(func() {
-		rebuildSubscriberCacheFromRepository = originalRebuild
-	})
-
-	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testChannelID,
-		MemberName: testMemberName,
-		RoomName:   "메인방",
-		UserName:   "관리자",
-	})
-	require.NoError(t, err)
-	assert.True(t, added)
-	assert.False(t, rebuildCalled)
-	assert.Zero(t, setCalls)
-
-	liveSubscribers, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeLive)
-	require.NoError(t, err)
-	assert.Equal(t, []string{testRoomID}, liveSubscribers)
 }

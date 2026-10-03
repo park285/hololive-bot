@@ -31,9 +31,15 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-// 캐시 갱신은 의도적으로 비원자(sequential)다: alarm 키들은 hash tag가 없어 단일
-// EVAL이 Cluster에서 cross-slot이 되고, 중간 실패의 부분 상태는 호출부의 repository
-// rebuild가 흡수한다.
+// 캐시 set이 유실되면 새 구독 하나만으로 부분 집합을 만들지 않는다.
+// 기존 set의 증분 갱신만 원자적으로 허용하고, 누락은 기존 PG 조회 경로가 처리한다.
+const addToExistingSubscriberSetScript = `
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return -1
+end
+return redis.call('SADD', KEYS[1], ARGV[1])
+`
+
 func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) error {
 	if record == nil {
 		return stdErrors.New("alarm is nil")
@@ -62,8 +68,8 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 		return fmt.Errorf("cache alarm subscribers sequential: %w", err)
 	}
 
-	if _, err := as.cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
-		return fmt.Errorf("add channel registry: %w", err)
+	if err := as.cacheAlarmChannelRegistry(ctx, record.ChannelID); err != nil {
+		return fmt.Errorf("register alarm channel: %w", err)
 	}
 
 	if err := as.CacheMemberName(ctx, record.ChannelID, record.MemberName); err != nil {
@@ -79,22 +85,47 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 
 func (as *AlarmService) cacheAlarmSubscribersSequential(ctx context.Context, record *domain.Alarm, registryKey string) error {
 	builder := as.cache.Builder()
-	saddCmds := make([]valkey.Completed, len(record.AlarmTypes))
+	commands := make([]valkey.Completed, 2*len(record.AlarmTypes))
 
 	for i, alarmType := range record.AlarmTypes {
 		subsKey := as.channelSubscribersKeyByType(record.ChannelID, alarmType)
 
-		saddCmds[i] = builder.Sadd().Key(subsKey).Member(registryKey).Build()
+		commands[2*i] = builder.Del().Key(sharedalarmkeys.BuildChannelSubscriberEmptyKey(record.ChannelID, alarmType)).Build()
+		commands[2*i+1] = builder.Eval().Script(addToExistingSubscriberSetScript).Numkeys(1).Key(subsKey).Arg(registryKey).Build()
 	}
 
-	results := as.cache.DoMulti(ctx, saddCmds...)
-	if len(results) != len(saddCmds) {
+	results := as.cache.DoMulti(ctx, commands...)
+	if len(results) != len(commands) {
 		return fmt.Errorf("add channel subscribers: unexpected result count: %d", len(results))
 	}
 
 	for i, result := range results {
 		if err := result.Error(); err != nil {
-			return fmt.Errorf("add channel subscriber type %s: %w", record.AlarmTypes[i], err)
+			return fmt.Errorf("update channel subscriber type %s: %w", record.AlarmTypes[i/2], err)
+		}
+	}
+
+	return nil
+}
+
+// 호출자는 구독 변경 mutex를 보유한다. 누락된 채널 registry는 DB 전체로 복구한다.
+func (as *AlarmService) cacheAlarmChannelRegistry(ctx context.Context, channelID string) error {
+	command := as.cache.Builder().Eval().Script(addToExistingSubscriberSetScript).
+		Numkeys(1).Key(sharedalarmkeys.AlarmChannelRegistryKey).Arg(channelID).Build()
+	results := as.cache.DoMulti(ctx, command)
+
+	if len(results) != 1 {
+		return fmt.Errorf("update channel registry: unexpected result count: %d", len(results))
+	}
+
+	added, err := results[0].AsInt64()
+	if err != nil {
+		return fmt.Errorf("update channel registry: %w", err)
+	}
+
+	if added < 0 {
+		if _, err := rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepository); err != nil {
+			return fmt.Errorf("restore missing channel registry: %w", err)
 		}
 	}
 

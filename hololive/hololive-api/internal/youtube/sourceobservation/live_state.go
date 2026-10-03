@@ -92,7 +92,7 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 		&session.ScheduledStartTime, &session.StartedAt, &session.EndedAt,
 		&session.LiveFirstSeenAt, &session.LastSeenAt, &session.IsPremiere,
 		&session.LifecycleOrigin,
-		&session.StatusObservedAt, &session.ScheduleObservedAt,
+		&session.StatusObservedAt, &session.ScheduleObservedAt, &session.TitleObservedAt,
 	); err != nil {
 		return live.SessionState{}, fmt.Errorf("scan live session: %w", err)
 	}

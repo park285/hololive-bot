@@ -13,7 +13,7 @@ import (
 )
 
 type birthdayStreamSessionStore interface {
-	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, seenSince time.Time) ([]BirthdayStreamSession, error)
+	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, observedSince, observedUntil time.Time) ([]BirthdayStreamSession, error)
 	ListPublishedEventKeys(ctx context.Context, keyPrefix string) ([]string, error)
 	FindPublishedBirthdayStreamEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
 	FindPublishedCelebrationEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
@@ -35,9 +35,9 @@ func NewPgxStore(db BirthdayStreamQuerier) *PgxStore {
 func (s *PgxStore) FindBirthdaySessions(
 	ctx context.Context,
 	channelIDs []string,
-	windowStartUTC, windowEndUTC, seenSince time.Time,
+	windowStartUTC, windowEndUTC, observedSince, observedUntil time.Time,
 ) ([]BirthdayStreamSession, error) {
-	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0050_01.sql"), channelIDs, windowStartUTC, windowEndUTC, seenSince)
+	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0050_01.sql"), channelIDs, windowStartUTC, windowEndUTC, observedSince, observedUntil)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query sessions: %w", err)
 	}

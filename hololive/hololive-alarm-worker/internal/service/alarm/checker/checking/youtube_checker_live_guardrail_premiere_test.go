@@ -36,8 +36,8 @@ func TestObservePersistedLiveGuardrailsExcludesConfirmedPremiere(t *testing.T) {
 			}
 
 			checker.observePersistedLiveGuardrails(t.Context(), []PersistedYouTubeLiveSession{
-				{Stream: ordinary, LastSeenAt: now, LiveFirstSeenAt: now.Add(-3 * time.Minute)},
-				{Stream: premiere, LastSeenAt: now, LiveFirstSeenAt: now.Add(-3 * time.Minute)},
+				{Stream: ordinary, ObservedAt: now, LiveFirstSeenAt: now.Add(-3 * time.Minute)},
+				{Stream: premiere, ObservedAt: now, LiveFirstSeenAt: now.Add(-3 * time.Minute)},
 			}, map[string][]*domain.Stream{
 				testChannelID1: {ordinary, &classifiedPremiere},
 			}, map[string][]string{testChannelID1: {testRoomID1}}, now)

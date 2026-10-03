@@ -43,40 +43,6 @@ func TestAlarmKeyHelpers(t *testing.T) {
 	assert.Equal(t, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChannelID, as.channelSubscribersKey(testChannelID))
 }
 
-func TestAlarmCacheNameAndSubscriberHelpers(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-
-	require.NoError(t, as.CacheMemberName(ctx, testChannelID, testMemberName))
-
-	name, err := as.GetMemberName(ctx, testChannelID)
-	require.NoError(t, err)
-	assert.Equal(t, testMemberName, name)
-
-	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType(testChannelID, domain.AlarmTypeLive), []string{testRoomID})
-	require.NoError(t, err)
-
-	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType(testChannelID, domain.AlarmTypeCommunity), []string{testRoomID})
-	require.NoError(t, err)
-
-	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType(testChannelID, domain.AlarmTypeShorts), []string{testRoomID})
-	require.NoError(t, err)
-
-	liveSubs, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeLive)
-	require.NoError(t, err)
-	assert.Equal(t, []string{testRoomID}, liveSubs)
-
-	communitySubs, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeCommunity)
-	require.NoError(t, err)
-	assert.Equal(t, []string{testRoomID}, communitySubs)
-
-	shortsSubs, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeShorts)
-	require.NoError(t, err)
-	assert.Equal(t, []string{testRoomID}, shortsSubs)
-}
-
 func TestTargetMinutesUpdatesReturnConfirmedResult(t *testing.T) {
 	t.Parallel()
 

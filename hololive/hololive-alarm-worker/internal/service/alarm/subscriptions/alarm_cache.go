@@ -3,6 +3,7 @@ package subscriptions
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -31,10 +32,17 @@ func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID st
 }
 
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-	out, err := as.cacheState.GetChannelSubscribersByType(ctx, channelID, alarmType)
+	alarms, err := as.alarmRepository.FindByChannelAndType(ctx, channelID, alarmType)
 	if err != nil {
-		return out, fmt.Errorf("get channel subscribers by type: %w", err)
+		return nil, fmt.Errorf("get channel subscribers by type: %w", err)
 	}
 
-	return out, nil
+	rooms := make([]string, 0, len(alarms))
+	for _, alarm := range alarms {
+		rooms = append(rooms, alarm.RoomID)
+	}
+
+	slices.Sort(rooms)
+
+	return slices.Compact(rooms), nil
 }

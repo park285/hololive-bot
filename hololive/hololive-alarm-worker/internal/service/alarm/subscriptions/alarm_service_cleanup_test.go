@@ -79,22 +79,22 @@ func TestCleanupChannelRegistryIfEmpty_ReturnsErrorWhenRemovingRegistryEntryFail
 	t.Parallel()
 
 	cache := sharedtestutil.NewTestCacheService(t.Context(), t)
-	as := &AlarmService{
-		cache: &cachemocks.Client{
-			BuilderFunc: cache.Builder,
-			BFunc:       cache.B,
-			GetClientFunc: func() valkey.Client {
-				return cache.GetClient()
-			},
-			DoMultiFunc: cache.DoMulti,
-			SRemFunc: func(context.Context, string, []string) (int64, error) {
-				return 0, errors.New("remove failed")
-			},
+	as := newTestAlarmService(t)
+	removeErr := errors.New("remove failed")
+
+	as.cache = &cachemocks.Client{
+		BuilderFunc: cache.Builder,
+		BFunc:       cache.B,
+		GetClientFunc: func() valkey.Client {
+			return cache.GetClient()
 		},
-		logger: newDiscardAlarmLogger(),
+		DoMultiFunc: cache.DoMulti,
+		SRemFunc: func(context.Context, string, []string) (int64, error) {
+			return 0, removeErr
+		},
 	}
 
 	err := as.cleanupChannelRegistryIfEmpty(t.Context(), "channel-1")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "remove channel registry entry")
+	assert.ErrorIs(t, err, removeErr)
 }

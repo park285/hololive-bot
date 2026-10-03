@@ -16,7 +16,7 @@ const (
 
 type PersistedYouTubeLiveSession struct {
 	Stream          *domain.Stream
-	LastSeenAt      time.Time
+	ObservedAt      time.Time
 	LiveFirstSeenAt time.Time
 }
 
@@ -90,7 +90,7 @@ func mergePersistedLiveSessionStreams(
 		}
 
 		if stream.IsLive() {
-			recordLiveObservedAt(liveObservedAtByStreamID, stream.ID, session.LastSeenAt)
+			recordLiveObservedAt(liveObservedAtByStreamID, stream.ID, session.ObservedAt)
 		}
 
 		mergePersistedLiveSessionStream(streamsByChannel, channelID, stream)

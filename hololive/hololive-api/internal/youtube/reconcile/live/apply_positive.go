@@ -143,6 +143,10 @@ func newSession(fact *SessionFact, status domain.LiveStatus, evidence *Evidence)
 		LastSeenAt:         evidence.ReceivedAt.UTC(),
 		Present:            true,
 	}
+	if fact.Title != "" {
+		created.TitleObservedAt = copyTime(evidence.EffectiveAt)
+	}
+
 	if fact.Status == string(status) && (status != domain.LiveStatusLive || fact.LiveStartConfirmed) {
 		created.StatusObservedAt = copyTime(evidence.EffectiveAt)
 	}
@@ -161,8 +165,9 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 		merged.ChannelID = fact.ChannelID
 	}
 
-	if fact.Title != "" {
+	if fact.Title != "" && (existing.TitleObservedAt == nil || evidence.EffectiveAt.After(*existing.TitleObservedAt)) {
 		merged.Title = fact.Title
+		merged.TitleObservedAt = copyTime(evidence.EffectiveAt)
 	}
 
 	if fact.TopicID != "" {
@@ -173,7 +178,7 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 		merged.ThumbnailURL = fact.ThumbnailURL
 	}
 
-	if fact.ScheduledAt != nil {
+	if fact.ScheduledAt != nil && (existing.ScheduleObservedAt == nil || evidence.EffectiveAt.After(*existing.ScheduleObservedAt)) {
 		merged.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
 		merged.ScheduleObservedAt = copyTime(evidence.EffectiveAt)
 	}

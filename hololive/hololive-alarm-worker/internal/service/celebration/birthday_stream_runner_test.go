@@ -67,7 +67,7 @@ type birthdayStreamTestStore struct {
 func (s *birthdayStreamTestStore) FindBirthdaySessions(
 	_ context.Context,
 	channelIDs []string,
-	windowStartUTC, windowEndUTC, seenSince time.Time,
+	windowStartUTC, windowEndUTC, seenSince, _ time.Time,
 ) ([]BirthdayStreamSession, error) {
 	s.sessionCalls = append(s.sessionCalls, birthdayStreamSessionQuery{
 		channelIDs:  channelIDs,

@@ -312,15 +312,10 @@ func TestAlarmService_AddAlarmMergesTypesForExistingChannel(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, added)
 
-	registryKey := as.getRegistryKey("room-type-1")
-	liveSubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-1", domain.AlarmTypeLive), registryKey)
+	alarms, err := as.GetRoomAlarmsWithTypes(ctx, "room-type-1")
 	require.NoError(t, err)
-
-	communitySubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-1", domain.AlarmTypeCommunity), registryKey)
-	require.NoError(t, err)
-
-	assert.True(t, liveSubscribed)
-	assert.True(t, communitySubscribed)
+	require.Len(t, alarms, 1)
+	assert.ElementsMatch(t, domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeCommunity}, alarms[0].AlarmTypes)
 }
 
 func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {

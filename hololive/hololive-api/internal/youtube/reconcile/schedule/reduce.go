@@ -35,8 +35,7 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 			EntityKind: "youtube_schedule_item", EntityKey: key, Decision: "APPLIED",
 		})
 
-		if session, ok := mergeSession(&current, item); ok {
-			session.ScheduleObservedAt = new(workingEvidence.EffectiveAt.UTC())
+		if session, ok := mergeSession(&current, item, &workingEvidence); ok {
 			current.Sessions[session.VideoID] = session
 			sessions = append(sessions, session)
 			applications = append(applications, Application{
@@ -52,7 +51,7 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 	return Decision{Items: items, Sessions: sessions, Applications: applications}, nil
 }
 
-func mergeSession(state *State, item *Item) (Session, bool) {
+func mergeSession(state *State, item *Item, evidence *Evidence) (Session, bool) {
 	if item.VideoID == "" {
 		return Session{}, false
 	}
@@ -65,31 +64,45 @@ func mergeSession(state *State, item *Item) (Session, bool) {
 
 		scheduled := item.ScheduledAt.UTC()
 
-		return Session{
+		created := Session{
 			VideoID:            item.VideoID,
 			ChannelID:          item.ChannelID,
 			Status:             domain.LiveStatusUpcoming,
 			Title:              item.Title,
 			ScheduledStartTime: &scheduled,
-			LastSeenAt:         scheduled,
-		}, true
+			LastSeenAt:         evidence.ReceivedAt.UTC(),
+			ScheduleObservedAt: new(evidence.EffectiveAt.UTC()),
+		}
+		if item.Title != "" {
+			created.TitleObservedAt = new(evidence.EffectiveAt.UTC())
+		}
+
+		return created, true
 	}
 
 	if existing.Status == domain.LiveStatusEnded {
 		return Session{}, false
 	}
 
-	if item.Title != "" {
+	// 서로 다른 원천도 필드별 실제 관측 시각으로 비교한다. 같은 시각의 충돌은 기존 정본을 유지한다.
+	changed := false
+
+	if item.Title != "" && (existing.TitleObservedAt == nil || evidence.EffectiveAt.After(*existing.TitleObservedAt)) {
 		existing.Title = item.Title
+		existing.TitleObservedAt = new(evidence.EffectiveAt.UTC())
+		changed = true
 	}
 
 	if item.ChannelID != "" && existing.ChannelID == "" {
 		existing.ChannelID = item.ChannelID
+		changed = true
 	}
 
-	scheduled := item.ScheduledAt.UTC()
+	if existing.ScheduleObservedAt == nil || evidence.EffectiveAt.After(*existing.ScheduleObservedAt) {
+		existing.ScheduledStartTime = new(item.ScheduledAt.UTC())
+		existing.ScheduleObservedAt = new(evidence.EffectiveAt.UTC())
+		changed = true
+	}
 
-	existing.ScheduledStartTime = &scheduled
-
-	return existing, true
+	return existing, changed
 }

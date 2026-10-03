@@ -96,6 +96,11 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 
 선정된 upcoming 알람은 `alarm_upcoming_candidates`에 최초 category·본문 입력·방을 저장하며 평가 checkpoint와 함께 commit합니다. 보장 시작점은 이 durable staging commit입니다. 기존 75초 조회 lookback 이후에도 미발행 후보를 복구하되 예정 시작 시각 이후에는 분 전 알람을 만료시킵니다. 확인된 일정 변경·방송 종료·최초공개·구독 해제는 사유를 남겨 종료하며, 단순 조회 목록 누락만으로 취소하지 않습니다. 최신 provider 응답은 과거 canonical 보강과 분리하고 canonical 종료는 선정 이후의 실제 상태·일정 관측 시각(`status_observed_at`, `schedule_observed_at`)만 사용합니다. 확정된 최초공개는 불변 분류이므로 시각과 무관하게 live 후보에서 제외합니다. 예정 시각도 저장되는 `last_seen_at`은 이 최신성의 증거가 아닙니다. 과거 행의 관측 시각은 추정하지 않습니다. Claim 대기 뒤 발행 직전에도 미발행 후보의 기한을 재검사하며, 이미 수용된 delivery의 현행 재시도 정책은 별도로 유지합니다. 제목 변경은 기존 event key/hash의 collision 거절 계약을 유지합니다.
 
+방송 checker와 생일 방송 조회는 LIVE의 `status_observed_at`, UPCOMING의
+`schedule_observed_at`을 각 최신성 창의 하한부터 현재까지로 제한합니다. 관측 시각이
+NULL이거나 미래이면 후보에서 제외합니다. LIVE guardrail 로그도 실제로 읽은 시각을
+`status_observed_at` 필드로 기록합니다.
+
 DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다.
 
 범용 delivery의 발송 attempt는 `notification_delivery.executor.attempt_timeout`(기본 10초)을 따르며 더 짧은 부모 deadline을 적용합니다. dispatcher는 profile 값을 기본값으로 바꾸지 않고, 잘못된 설정이면 기동에 실패합니다. 실행 가능한 슬롯 수만큼 방별 첫 due 항목을 claim하고, 실행 중인 방과 다른 owner가 처리 중인 방의 후행 항목은 claim하지 않습니다. 따라서 슬롯·방별 순서를 기다리는 항목의 60초 lease를 미리 소비하지 않습니다. `OUTCOME_UNKNOWN`·handoff 불명·호출 이후 timeout/cancel은 worker/status fence로 QUARANTINED 전이를 시도합니다. 저장 실패 시 SENDING 증거를 유지하여 stale sweep이 처리하며, 확정 성공 후 DB 반영 실패도 일반 미발송 실패로 바꾸지 않습니다. batch가 없어도 기존 tick에서 due maintenance를 실행합니다.

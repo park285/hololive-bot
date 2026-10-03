@@ -328,22 +328,13 @@ func (as *AlarmService) deleteSubscriberKeys(ctx context.Context, builder valkey
 }
 
 func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, channelID string) error {
-	builder := as.cache.Builder()
-	allSubsKeys := as.channelSubscriberKeys(channelID, domain.AllAlarmTypes)
-	scardCmds := buildSubscriberScardCommands(builder, allSubsKeys)
-	scardResults := as.cache.DoMulti(ctx, scardCmds...)
-
-	if len(scardResults) != len(scardCmds) {
-		return fmt.Errorf("cleanup channel registry: unexpected SCARD result count: %d", len(scardResults))
-	}
-
-	hasSubscribers, err := anySubscriberKeyHasMembers(scardResults, allSubsKeys)
+	hasSubscribers, err := as.alarmRepository.HasChannelSubscriptions(ctx, channelID)
 	if err != nil {
-		return fmt.Errorf("any subscriber key has members: %w", err)
+		return fmt.Errorf("check authoritative channel subscriptions: %w", err)
 	}
 
 	if hasSubscribers {
-		return nil
+		return as.cacheAlarmChannelRegistry(ctx, channelID)
 	}
 
 	if _, err := as.cache.SRem(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID}); err != nil {
@@ -351,19 +342,4 @@ func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, chann
 	}
 
 	return nil
-}
-
-func anySubscriberKeyHasMembers(results []valkey.ValkeyResult, subscriberKeys []string) (bool, error) {
-	for i, result := range results {
-		count, err := result.AsInt64()
-		if err != nil {
-			return false, fmt.Errorf("cleanup channel registry: scard key %s: %w", subscriberKeys[i], err)
-		}
-
-		if count > 0 {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }

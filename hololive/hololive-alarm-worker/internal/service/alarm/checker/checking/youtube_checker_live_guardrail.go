@@ -154,7 +154,7 @@ func (c *YouTubeChecker) logPartialLiveDeliveryGuardrail(
 	c.logger.Warn("alarm.youtube.live_guardrail.partial_delivery",
 		slog.String("stream_id", meta.streamID),
 		slog.String("channel_id", meta.channelID),
-		slog.Time("last_seen_at", meta.lastSeenAt.UTC()),
+		slog.Time("status_observed_at", meta.observedAt.UTC()),
 		slog.Time("dispatch_since", since.UTC()),
 		slog.Int("subscriber_rooms", len(meta.rooms)),
 		slog.Int("sent_rooms", len(sentRooms)),
@@ -167,7 +167,7 @@ func (c *YouTubeChecker) logMissingLiveDeliveryGuardrail(meta *persistedLiveGuar
 	c.logger.Warn("alarm.youtube.live_guardrail.missing_delivery",
 		slog.String("stream_id", meta.streamID),
 		slog.String("channel_id", meta.channelID),
-		slog.Time("last_seen_at", meta.lastSeenAt.UTC()),
+		slog.Time("status_observed_at", meta.observedAt.UTC()),
 		slog.Time("dispatch_since", since.UTC()),
 		slog.Int("subscriber_rooms", len(meta.rooms)),
 	)
@@ -178,7 +178,7 @@ func (c *YouTubeChecker) logMissingLiveDispatchGuardrail(meta *persistedLiveGuar
 	c.logger.Warn("alarm.youtube.live_guardrail.missing_dispatch",
 		slog.String("stream_id", meta.streamID),
 		slog.String("channel_id", meta.channelID),
-		slog.Time("last_seen_at", meta.lastSeenAt.UTC()),
+		slog.Time("status_observed_at", meta.observedAt.UTC()),
 		slog.Time("dispatch_since", since.UTC()),
 		slog.Int("subscriber_rooms", len(meta.rooms)),
 	)
@@ -310,7 +310,7 @@ func mergeStringSet(dst, src map[string]struct{}) {
 type persistedLiveGuardrailMeta struct {
 	streamID   string
 	channelID  string
-	lastSeenAt time.Time
+	observedAt time.Time
 	rooms      []string
 }
 
@@ -368,7 +368,7 @@ func persistedLiveGuardrailMetaFromSession(
 	return persistedLiveGuardrailMeta{
 		streamID:   stream.ID,
 		channelID:  channelID,
-		lastSeenAt: session.LastSeenAt,
+		observedAt: session.ObservedAt,
 		rooms:      UniqueStrings(rooms),
 	}, true
 }
@@ -378,8 +378,8 @@ func persistedLiveGuardrailObservedAt(session PersistedYouTubeLiveSession) time.
 		return session.LiveFirstSeenAt.UTC()
 	}
 
-	if !session.LastSeenAt.IsZero() {
-		return session.LastSeenAt.UTC()
+	if !session.ObservedAt.IsZero() {
+		return session.ObservedAt.UTC()
 	}
 
 	return time.Time{}

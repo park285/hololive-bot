@@ -312,6 +312,8 @@ type YouTubeLiveSession struct {
 	TopicID            string     `db:"topic_id" json:"topic_id,omitempty"`
 	ThumbnailURL       string     `db:"thumbnail_url" json:"thumbnail_url,omitempty"`
 	LastSeenAt         time.Time  `db:"last_seen_at" json:"last_seen_at"`
+	StatusObservedAt   *time.Time `db:"status_observed_at" json:"status_observed_at,omitempty"`
+	ScheduleObservedAt *time.Time `db:"schedule_observed_at" json:"schedule_observed_at,omitempty"`
 }
 
 func (YouTubeLiveSession) TableName() string {

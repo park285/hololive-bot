@@ -28,16 +28,17 @@ func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
 		{
-			VideoID:         testLiveIncludedID,
-			ChannelID:       testChID1,
-			Status:          domain.LiveStatusLive,
-			Title:           " live title ",
-			StartedAt:       &liveStart,
-			LiveFirstSeenAt: &liveFirstSeen,
-			TopicID:         "Rhythm_Heaven",
-			ThumbnailURL:    "https://i.ytimg.com/vi/live-included/maxresdefault.jpg",
-			LastSeenAt:      recentSeen,
-			IsPremiere:      &isPremiere,
+			VideoID:          testLiveIncludedID,
+			ChannelID:        testChID1,
+			Status:           domain.LiveStatusLive,
+			Title:            " live title ",
+			StartedAt:        &liveStart,
+			LiveFirstSeenAt:  &liveFirstSeen,
+			TopicID:          "Rhythm_Heaven",
+			ThumbnailURL:     "https://i.ytimg.com/vi/live-included/maxresdefault.jpg",
+			LastSeenAt:       recentSeen,
+			StatusObservedAt: new(recentSeen),
+			IsPremiere:       &isPremiere,
 		},
 		{
 			VideoID:            testUpcomingIncludedID,
@@ -45,6 +46,7 @@ func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
 			LastSeenAt:         recentSeen,
+			ScheduleObservedAt: new(recentSeen),
 			IsPremiere:         &isNotPremiere,
 		},
 		{
@@ -53,20 +55,23 @@ func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
 			LastSeenAt:         recentSeen,
+			ScheduleObservedAt: new(recentSeen),
 		},
 		{
-			VideoID:    "live-too-old",
-			ChannelID:  testChID1,
-			Status:     domain.LiveStatusLive,
-			StartedAt:  &liveStart,
-			LastSeenAt: oldSeen,
+			VideoID:          "live-too-old",
+			ChannelID:        testChID1,
+			Status:           domain.LiveStatusLive,
+			StartedAt:        &liveStart,
+			LastSeenAt:       oldSeen,
+			StatusObservedAt: new(oldSeen),
 		},
 		{
-			VideoID:    "other-channel",
-			ChannelID:  "ch-2",
-			Status:     domain.LiveStatusLive,
-			StartedAt:  &liveStart,
-			LastSeenAt: recentSeen,
+			VideoID:          "other-channel",
+			ChannelID:        "ch-2",
+			Status:           domain.LiveStatusLive,
+			StartedAt:        &liveStart,
+			LastSeenAt:       recentSeen,
+			StatusObservedAt: new(recentSeen),
 		},
 	})
 
@@ -166,10 +171,10 @@ func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
 	oldSeen := now.Add(-20 * time.Minute)
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
-		{VideoID: "live-recent", ChannelID: testChID1, Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
-		{VideoID: "live-old", ChannelID: "ch-2", Status: domain.LiveStatusLive, LastSeenAt: oldSeen},
-		{VideoID: "ended-recent", ChannelID: "ch-3", Status: domain.LiveStatusEnded, LastSeenAt: recentSeen},
-		{VideoID: "outside-request", ChannelID: "ch-4", Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
+		{VideoID: "live-recent", ChannelID: testChID1, Status: domain.LiveStatusLive, LastSeenAt: recentSeen, StatusObservedAt: new(recentSeen)},
+		{VideoID: "live-old", ChannelID: "ch-2", Status: domain.LiveStatusLive, LastSeenAt: oldSeen, StatusObservedAt: new(oldSeen)},
+		{VideoID: "ended-recent", ChannelID: "ch-3", Status: domain.LiveStatusEnded, LastSeenAt: recentSeen, StatusObservedAt: new(recentSeen)},
+		{VideoID: "outside-request", ChannelID: "ch-4", Status: domain.LiveStatusLive, LastSeenAt: recentSeen, StatusObservedAt: new(recentSeen)},
 	})
 
 	source := &PgYouTubeLiveSessionSource{pool: pool}
@@ -196,6 +201,7 @@ func TestPgYouTubeLiveSessionSourceLoadConfirmedPremiereIDsIncludesStaleUpcoming
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
 			LastSeenAt:         oldSeen,
+			ScheduleObservedAt: new(oldSeen),
 			IsPremiere:         &isPremiere,
 		},
 		{
@@ -204,6 +210,7 @@ func TestPgYouTubeLiveSessionSourceLoadConfirmedPremiereIDsIncludesStaleUpcoming
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
 			LastSeenAt:         oldSeen,
+			ScheduleObservedAt: new(oldSeen),
 			IsPremiere:         &isNotPremiere,
 		},
 		{
@@ -212,13 +219,15 @@ func TestPgYouTubeLiveSessionSourceLoadConfirmedPremiereIDsIncludesStaleUpcoming
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
 			LastSeenAt:         recentSeen,
+			ScheduleObservedAt: new(recentSeen),
 		},
 		{
-			VideoID:    "recent-live-p",
-			ChannelID:  testChID1,
-			Status:     domain.LiveStatusLive,
-			LastSeenAt: recentSeen,
-			IsPremiere: &isPremiere,
+			VideoID:          "recent-live-p",
+			ChannelID:        testChID1,
+			Status:           domain.LiveStatusLive,
+			LastSeenAt:       recentSeen,
+			StatusObservedAt: new(recentSeen),
+			IsPremiere:       &isPremiere,
 		},
 	})
 
@@ -258,11 +267,12 @@ func TestPgYouTubeLiveSessionSourceLiveRecentWindowIndependentFromCatchupWindow(
 	lastSeenOutsideCatchup := now.Add(-(sharedconstants.LiveCatchupWindow + time.Minute))
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{{
-		VideoID:    "live-window-indep",
-		ChannelID:  testChID1,
-		Status:     domain.LiveStatusLive,
-		StartedAt:  &start,
-		LastSeenAt: lastSeenOutsideCatchup,
+		VideoID:          "live-window-indep",
+		ChannelID:        testChID1,
+		Status:           domain.LiveStatusLive,
+		StartedAt:        &start,
+		LastSeenAt:       lastSeenOutsideCatchup,
+		StatusObservedAt: new(lastSeenOutsideCatchup),
 	}})
 
 	source := &PgYouTubeLiveSessionSource{pool: pool}
@@ -300,9 +310,9 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 			INSERT INTO youtube_live_sessions(
 				video_id, channel_id, status, title, scheduled_start_time,
 				started_at, ended_at, live_first_seen_at, topic_id, thumbnail_url, last_seen_at,
-				is_premiere
+				is_premiere, status_observed_at, schedule_observed_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		`,
 			session.VideoID,
 			session.ChannelID,
@@ -316,6 +326,8 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 			session.ThumbnailURL,
 			session.LastSeenAt,
 			session.IsPremiere,
+			session.StatusObservedAt,
+			session.ScheduleObservedAt,
 		)
 		require.NoError(t, err)
 	}
@@ -394,4 +406,86 @@ func sessionsByID(sessions []PersistedYouTubeLiveSession) map[string]PersistedYo
 	}
 
 	return byID
+}
+
+func TestPersistedSessionFreshnessUsesObservedFacts(t *testing.T) {
+	t.Parallel()
+
+	pool := dbtest.NewPool(t)
+	now := time.Date(2026, time.October, 3, 4, 0, 0, 0, time.UTC)
+	channelIDs, wantLiveChannels, wantClocks := seedObservedFreshnessSessions(t, pool, now)
+
+	source := &PgYouTubeLiveSessionSource{pool: pool}
+	sessions, err := source.LoadRecentSessions(t.Context(), channelIDs, now)
+	require.NoError(t, err)
+
+	require.Len(t, sessions, len(wantClocks))
+
+	byID := sessionsByID(sessions)
+
+	for videoID, clock := range wantClocks {
+		session, ok := byID[videoID]
+		require.True(t, ok)
+		require.True(t, session.ObservedAt.Equal(clock))
+	}
+
+	channels, err := source.LoadRecentLiveChannelIDs(t.Context(), channelIDs, now)
+	require.NoError(t, err)
+	require.ElementsMatch(t, wantLiveChannels, channels)
+}
+
+func seedObservedFreshnessSessions(t *testing.T, pool liveSessionPool, now time.Time) ([]string, []string, map[string]time.Time) {
+	t.Helper()
+
+	start := now.Add(5 * time.Minute)
+	observations := []struct {
+		name  string
+		clock *time.Time
+		valid bool
+	}{
+		{name: "fresh", clock: new(now.Add(-time.Minute)), valid: true},
+		{name: "boundary", clock: new(now.Add(-defaultPersistedLiveSessionRecentWindow)), valid: true},
+		{name: "now", clock: new(now), valid: true},
+		{name: "stale", clock: new(now.Add(-defaultPersistedLiveSessionRecentWindow - time.Microsecond))},
+		{name: "future", clock: new(now.Add(time.Microsecond))},
+		{name: "unknown"},
+	}
+	rows := make([]domain.YouTubeLiveSession, 0, 2*len(observations))
+	channelIDs := make([]string, 0, len(observations))
+	wantLiveChannels := make([]string, 0, len(observations))
+	wantClocks := make(map[string]time.Time)
+
+	for _, observation := range observations {
+		channelID := "channel-" + observation.name
+
+		channelIDs = append(channelIDs, channelID)
+
+		if observation.valid {
+			wantLiveChannels = append(wantLiveChannels, channelID)
+		}
+
+		for _, status := range []domain.LiveStatus{domain.LiveStatusLive, domain.LiveStatusUpcoming} {
+			row := domain.YouTubeLiveSession{
+				VideoID: string(status) + "-" + observation.name, ChannelID: channelID, Status: status,
+				ScheduledStartTime: new(start), LastSeenAt: start,
+				StatusObservedAt: new(now), ScheduleObservedAt: new(now),
+			}
+			if status == domain.LiveStatusLive {
+				row.StatusObservedAt = observation.clock
+			} else {
+				row.ScheduleObservedAt = observation.clock
+			}
+
+			if observation.valid {
+				row.LastSeenAt = now.Add(-24 * time.Hour)
+				wantClocks[row.VideoID] = *observation.clock
+			}
+
+			rows = append(rows, row)
+		}
+	}
+
+	insertLiveSessions(t, pool, rows)
+
+	return channelIDs, wantLiveChannels, wantClocks
 }

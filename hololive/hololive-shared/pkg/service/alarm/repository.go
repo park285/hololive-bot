@@ -137,6 +137,17 @@ func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.A
 	return out, nil
 }
 
+// HasChannelSubscriptions는 캐시 유실과 구독 0을 구분하기 위해 영속 구독의 존재를 확인한다.
+func (r *Repository) HasChannelSubscriptions(ctx context.Context, channelID string) (bool, error) {
+	var exists bool
+
+	if err := r.pool.QueryRow(ctx, mustSQL("repository_channel_subscriptions_exist.sql"), channelID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check channel subscriptions: %w", err)
+	}
+
+	return exists, nil
+}
+
 func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*domain.Alarm, error) {
 	query := mustSQL("repository_0117_05.sql")
 

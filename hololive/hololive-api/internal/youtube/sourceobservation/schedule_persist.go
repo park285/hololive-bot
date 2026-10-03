@@ -52,6 +52,7 @@ func loadScheduleSessions(ctx context.Context, tx dbx.Tx, state *schedule.State,
 			ScheduledStartTime: session.ScheduledStartTime,
 			LastSeenAt:         session.LastSeenAt,
 			ScheduleObservedAt: session.ScheduleObservedAt,
+			TitleObservedAt:    session.TitleObservedAt,
 		}
 	}
 
@@ -101,6 +102,7 @@ func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation *Observ
 			ScheduledStartTime: session.ScheduledStartTime,
 			LastSeenAt:         session.LastSeenAt,
 			ScheduleObservedAt: session.ScheduleObservedAt,
+			TitleObservedAt:    session.TitleObservedAt,
 		}); err != nil {
 			return fmt.Errorf("upsert live session: %w", err)
 		}
