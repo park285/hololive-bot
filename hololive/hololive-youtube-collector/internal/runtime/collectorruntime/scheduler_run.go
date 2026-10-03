@@ -473,6 +473,7 @@ func (e *collectionExecutor) runCollector(ctx context.Context, runner collection
 	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.fetch")
 
 	defer func() { finishCollectionResultSpan(span, &result, resultErr) }()
+
 	var collectErr error
 
 	returned := false

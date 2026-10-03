@@ -14,7 +14,7 @@ import (
 // MembershipScope는 acquire가 lease에 기록하는 job별 membership 범위다.
 // Kinds는 cadence·roster kind의 정렬된 합집합이고(emission은 cadence의 부분집합),
 // ExactSubject면 lease subject 하나, 아니면 해당 kind의 CURRENT 전체 target이 범위다.
-// lease 저장소와 발행 저장소가 같은 판정을 쓰므로 두 adapter 어느 쪽도 소유하지 않습니다.
+// Lease 저장소와 발행 저장소가 같은 판정을 쓰므로 두 adapter 어느 쪽도 소유하지 않습니다.
 type MembershipScope struct {
 	Kinds        []string
 	ExactSubject bool

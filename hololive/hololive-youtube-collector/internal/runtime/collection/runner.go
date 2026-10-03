@@ -353,7 +353,7 @@ func (o RunOutput) CollectionLatency() time.Duration {
 	return o.collectionLatency
 }
 
-// Cursor는 [0, ObservationCount()) 범위 관측의 checkpoint cursor 복사본을 반환합니다. cursor가 없으면 nil입니다.
+// Cursor는 [0, ObservationCount()) 범위 관측의 checkpoint cursor 복사본을 반환합니다. 커서가 없으면 nil입니다.
 func (o RunOutput) Cursor(index int) jsontext.Value {
 	if index < 0 || index >= len(o.cursors) {
 		return nil
