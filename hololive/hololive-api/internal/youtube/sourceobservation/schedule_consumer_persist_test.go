@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -220,6 +222,74 @@ func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
 
 	if title != "Keep" {
 		t.Fatalf("temporary schedule item merged into YouTube session: %s", title)
+	}
+}
+
+func TestScheduleConsumerArbitratesMetadataByFieldObservation(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		titleAge     time.Duration
+		scheduleAge  time.Duration
+		wantTitle    string
+		wantNewStart bool
+	}{
+		{name: "older source", titleAge: time.Minute, scheduleAge: time.Minute, wantTitle: "Current"},
+		{name: "equal clock conflict", wantTitle: "Current"},
+		{name: "newer source", titleAge: -time.Minute, scheduleAge: -time.Minute, wantTitle: "Incoming", wantNewStart: true},
+		{name: "newer schedule only", titleAge: time.Minute, scheduleAge: -time.Minute, wantTitle: "Current", wantNewStart: true},
+		{name: "newer title only", titleAge: -time.Minute, scheduleAge: time.Minute, wantTitle: "Incoming"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			proof := seedPublishLease(ctx, t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
+			observed := proof.ScheduledFor
+			currentStart := observed.Add(time.Hour)
+			incomingStart := observed.Add(2 * time.Hour)
+			titleClock, scheduleClock := observed.Add(test.titleAge), observed.Add(test.scheduleAge)
+
+			_, err := pool.Exec(ctx, `
+				INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,scheduled_start_time,title_observed_at,schedule_observed_at)
+				VALUES($1,$2,'UPCOMING','Current',$3,$4,$5)
+			`, testVideoID, testChannelID, currentStart, titleClock, scheduleClock)
+			require.NoError(t, err)
+
+			envelope := scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
+				ExternalID: testVideoID, VideoID: testVideoID, ChannelID: testChannelID,
+				Title: "Incoming", ScheduledAt: incomingStart,
+			})
+
+			_, err = publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(envelope))
+			require.NoError(t, err)
+
+			consumer := NewConsumerWithGraces(NewRepository(pool), NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+			require.NoError(t, consumer.Consume(ctx, liveClaimOptions()))
+
+			var title string
+
+			var scheduled, gotTitleClock, gotScheduleClock time.Time
+
+			err = pool.QueryRow(ctx, `
+				SELECT title,scheduled_start_time,title_observed_at,schedule_observed_at
+				FROM youtube_live_sessions WHERE video_id=$1
+			`, testVideoID).Scan(&title, &scheduled, &gotTitleClock, &gotScheduleClock)
+			require.NoError(t, err)
+
+			wantStart := currentStart
+
+			if test.wantNewStart {
+				wantStart, scheduleClock = incomingStart, observed
+			}
+
+			if test.wantTitle == "Incoming" {
+				titleClock = observed
+			}
+
+			require.Equal(t, test.wantTitle, title)
+			require.True(t, scheduled.Equal(wantStart))
+			require.True(t, gotTitleClock.Equal(titleClock))
+			require.True(t, gotScheduleClock.Equal(scheduleClock))
+		})
 	}
 }
 

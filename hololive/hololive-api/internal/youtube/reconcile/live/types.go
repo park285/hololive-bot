@@ -86,6 +86,7 @@ type SessionState struct {
 	IsPremiere                 *bool
 	StatusObservedAt           *time.Time
 	ScheduleObservedAt         *time.Time
+	TitleObservedAt            *time.Time
 	Clock                      LiveEvidenceClock
 	EndReason                  *EndReason
 	FirstAbsenceScheduledFor   *time.Time
@@ -215,6 +216,7 @@ func (s *SessionState) clone() SessionState {
 	cloned.LiveFirstSeenAt = copyOptionalTime(s.LiveFirstSeenAt)
 	cloned.StatusObservedAt = copyOptionalTime(s.StatusObservedAt)
 	cloned.ScheduleObservedAt = copyOptionalTime(s.ScheduleObservedAt)
+	cloned.TitleObservedAt = copyOptionalTime(s.TitleObservedAt)
 	cloned.IsPremiere = cloneBool(s.IsPremiere)
 	cloned.Clock.LastUpcomingPositiveAt = copyOptionalTime(s.Clock.LastUpcomingPositiveAt)
 	cloned.Clock.LastUpcomingPositiveSeenAt = copyOptionalTime(s.Clock.LastUpcomingPositiveSeenAt)

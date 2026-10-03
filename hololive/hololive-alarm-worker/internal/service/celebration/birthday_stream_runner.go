@@ -129,6 +129,7 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, now, kstDay time.
 		kstDay.UTC(),
 		kstDay.Add(24*time.Hour).UTC(),
 		now.Add(-r.effectiveFreshness()),
+		now,
 	)
 	if err != nil {
 		return fmt.Errorf("find birthday sessions: %w", err)

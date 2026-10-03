@@ -1300,6 +1300,7 @@ TABLE youtube_live_sessions
   COLUMN lifecycle_origin text NOT NULL DEFAULT 'legacy_unknown'::text
   COLUMN status_observed_at timestamp with time zone
   COLUMN schedule_observed_at timestamp with time zone
+  COLUMN title_observed_at timestamp with time zone
   CONSTRAINT chk_youtube_live_sessions_lifecycle_origin_vocab CHECK ((lifecycle_origin = ANY (ARRAY['metadata_only'::text, 'observed'::text, 'legacy_unknown'::text])))
   CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK ((status = ANY (ARRAY[('UPCOMING'::character varying)::text, ('LIVE'::character varying)::text, ('ENDED'::character varying)::text])))
   CONSTRAINT youtube_live_sessions_pkey PRIMARY KEY (video_id)

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
@@ -28,7 +30,11 @@ func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output 
 	e.observePublishOutcome(spec.Provider, output, outcomeRejected)
 }
 
-func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contract.Provider) error {
+func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contract.Provider) (resultErr error) {
+	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.provider.wait")
+
+	defer func() { finishCollectionSpan(span, resultErr) }()
+
 	gate := e.gates[provider]
 	if gate == nil {
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider gate is not configured")
@@ -196,13 +202,13 @@ func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
 	return retryAt.UTC()
 }
 
-func (e *collectionExecutor) logFailure(phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+func (e *collectionExecutor) logFailure(ctx context.Context, phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	if e.logger == nil {
 		return
 	}
 
 	detail = collecterr.SanitizeDetail(detail)
-	e.logger.Warn("YouTube collection job failed",
+	e.logger.WarnContext(ctx, "YouTube collection job failed",
 		slog.String("job_key", spec.JobKey),
 		slog.String("provider", string(spec.Provider)),
 		slog.String("job_kind", spec.CollectionJobKind),

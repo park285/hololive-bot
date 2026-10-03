@@ -1,8 +1,8 @@
 INSERT INTO youtube_live_sessions (
     video_id, channel_id, status, title, topic_id, thumbnail_url,
     scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at,
-    is_premiere, lifecycle_origin, status_observed_at, schedule_observed_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $16)
+    is_premiere, lifecycle_origin, status_observed_at, schedule_observed_at, title_observed_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $16, $17)
 ON CONFLICT (video_id) DO UPDATE SET
     status = CASE
         WHEN $13::boolean THEN youtube_live_sessions.status
@@ -11,7 +11,9 @@ ON CONFLICT (video_id) DO UPDATE SET
         ELSE excluded.status
     END,
     title = CASE
-        WHEN $13::boolean OR excluded.title = '' THEN youtube_live_sessions.title
+        WHEN $13::boolean OR excluded.title = '' OR excluded.title_observed_at IS NULL
+            OR youtube_live_sessions.title_observed_at >= excluded.title_observed_at
+            THEN youtube_live_sessions.title
         ELSE excluded.title
     END,
     topic_id = CASE
@@ -23,8 +25,10 @@ ON CONFLICT (video_id) DO UPDATE SET
         ELSE excluded.thumbnail_url
     END,
     scheduled_start_time = CASE
-        WHEN $13::boolean THEN youtube_live_sessions.scheduled_start_time
-        ELSE COALESCE(excluded.scheduled_start_time, youtube_live_sessions.scheduled_start_time)
+        WHEN $13::boolean OR excluded.scheduled_start_time IS NULL OR excluded.schedule_observed_at IS NULL
+            OR youtube_live_sessions.schedule_observed_at >= excluded.schedule_observed_at
+            THEN youtube_live_sessions.scheduled_start_time
+        ELSE excluded.scheduled_start_time
     END,
     started_at = CASE
         WHEN $13::boolean THEN youtube_live_sessions.started_at
@@ -56,8 +60,16 @@ ON CONFLICT (video_id) DO UPDATE SET
         ELSE excluded.status_observed_at
     END,
     schedule_observed_at = CASE
-        WHEN $13::boolean OR excluded.scheduled_start_time IS NULL THEN youtube_live_sessions.schedule_observed_at
+        WHEN $13::boolean OR excluded.scheduled_start_time IS NULL OR excluded.schedule_observed_at IS NULL
+            OR youtube_live_sessions.schedule_observed_at >= excluded.schedule_observed_at
+            THEN youtube_live_sessions.schedule_observed_at
         ELSE excluded.schedule_observed_at
+    END,
+    title_observed_at = CASE
+        WHEN $13::boolean OR excluded.title = '' OR excluded.title_observed_at IS NULL
+            OR youtube_live_sessions.title_observed_at >= excluded.title_observed_at
+            THEN youtube_live_sessions.title_observed_at
+        ELSE excluded.title_observed_at
     END
 WHERE
     (
@@ -75,7 +87,9 @@ WHERE
             END IS DISTINCT FROM youtube_live_sessions.status
             OR (
                 excluded.title <> ''
-                AND excluded.title IS DISTINCT FROM youtube_live_sessions.title
+                AND excluded.title_observed_at IS NOT NULL
+                AND (youtube_live_sessions.title_observed_at IS NULL
+                    OR excluded.title_observed_at > youtube_live_sessions.title_observed_at)
             )
             OR (
                 excluded.topic_id <> ''
@@ -85,8 +99,6 @@ WHERE
                 excluded.thumbnail_url <> ''
                 AND excluded.thumbnail_url IS DISTINCT FROM youtube_live_sessions.thumbnail_url
             )
-            OR COALESCE(excluded.scheduled_start_time, youtube_live_sessions.scheduled_start_time)
-                IS DISTINCT FROM youtube_live_sessions.scheduled_start_time
             OR (youtube_live_sessions.started_at IS NULL AND excluded.started_at IS NOT NULL)
             OR (youtube_live_sessions.ended_at IS NULL AND excluded.ended_at IS NOT NULL)
             OR (youtube_live_sessions.live_first_seen_at IS NULL AND excluded.live_first_seen_at IS NOT NULL)
@@ -103,6 +115,8 @@ WHERE
                 ELSE excluded.status_observed_at
             END IS DISTINCT FROM youtube_live_sessions.status_observed_at
             OR (excluded.scheduled_start_time IS NOT NULL
-                AND excluded.schedule_observed_at IS DISTINCT FROM youtube_live_sessions.schedule_observed_at)
+                AND excluded.schedule_observed_at IS NOT NULL
+                AND (youtube_live_sessions.schedule_observed_at IS NULL
+                    OR excluded.schedule_observed_at > youtube_live_sessions.schedule_observed_at))
         )
     )

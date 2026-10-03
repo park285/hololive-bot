@@ -244,7 +244,7 @@ func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
 
 	scheduler := &leaseScheduler{executor: &collectionExecutor{logger: slog.New(slog.NewJSONHandler(&output, nil))}}
 	spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
-	scheduler.executor.logFailure("collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
+	scheduler.executor.logFailure(t.Context(), "collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
 
 	if strings.Contains(output.String(), "secret-value") {
 		t.Fatalf("structured log leaked diagnostic credential: %s", output.String())
@@ -543,7 +543,7 @@ func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing
 
 			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 
-			handled := executor.handleLeaseRunOutcome(joblease.LeaseRunResult{Outcome: test.outcome, Err: test.err}, spec, &contract.LeaseProof{})
+			handled := executor.handleLeaseRunOutcome(t.Context(), joblease.LeaseRunResult{Outcome: test.outcome, Err: test.err}, spec, &contract.LeaseProof{})
 
 			if !handled {
 				t.Fatal("supervision failure must be handled without falling through to handleRunError")
@@ -644,7 +644,7 @@ func TestProviderAdmissionPreservesConfiguration(t *testing.T) {
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	proof := lease.Proof()
 
-	err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
+	_, err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
 
 	if collecterr.CodeOf(err) != collecterr.Configuration || collecterr.IsUnclassified(err) {
 		t.Fatalf("missing gate = %v (%s), want classified configuration before runner access", err, collecterr.CodeOf(err))
@@ -664,7 +664,7 @@ func TestSupervisionRetainsFatalCallbackAfterCancellation(t *testing.T) {
 			cause := collecterr.New(collecterr.Internal, collecterr.ClassInternal, "callback invariant")
 			err := errors.Join(context.Canceled, joblease.ErrFenceLost, cause)
 
-			if !executor.handleLeaseRunOutcome(joblease.LeaseRunResult{Outcome: outcome, Err: err}, &joblease.JobSpec{}, &contract.LeaseProof{}) {
+			if !executor.handleLeaseRunOutcome(t.Context(), joblease.LeaseRunResult{Outcome: outcome, Err: err}, &joblease.JobSpec{}, &contract.LeaseProof{}) {
 				t.Fatal("supervision outcome was not handled")
 			}
 

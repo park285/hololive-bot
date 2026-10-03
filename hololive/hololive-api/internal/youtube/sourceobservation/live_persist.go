@@ -108,7 +108,7 @@ func liveSessionStatement(session *live.SessionState, classificationOnlyOnConfli
 			session.StartedAt, session.EndedAt, session.LiveFirstSeenAt, session.LastSeenAt,
 			session.IsPremiere, classificationOnlyOnConflict,
 			string(session.LifecycleOrigin),
-			session.StatusObservedAt, session.ScheduleObservedAt,
+			session.StatusObservedAt, session.ScheduleObservedAt, session.TitleObservedAt,
 		},
 	}
 }

@@ -31,7 +31,7 @@ func TestUpcomingRecoverySeparatesCurrentProviderFromStaleCanonical(t *testing.T
 			store := dispatchoutbox.NewUpcomingCandidates(pool)
 			require.NoError(t, store.Stage(ctx, stream.ChannelID, now.Add(-2*time.Second), []*domain.AlarmNotification{notification}))
 
-			_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,scheduled_start_time,last_seen_at,lifecycle_origin) VALUES($1,$2,'UPCOMING','Snapshot',$3,$3,'metadata_only')`, stream.ID, stream.ChannelID, canonicalStart)
+			_, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,scheduled_start_time,last_seen_at,lifecycle_origin,schedule_observed_at) VALUES($1,$2,'UPCOMING','Snapshot',$3,$3,'metadata_only',$4)`, stream.ID, stream.ChannelID, canonicalStart, now.Add(-time.Minute))
 			require.NoError(t, err)
 
 			_, err = pool.Exec(ctx, `INSERT INTO alarms(room_id,channel_id,user_id,alarm_types) VALUES($1,$2,'',ARRAY['LIVE']::alarm_type[])`, notification.RoomID, stream.ChannelID)

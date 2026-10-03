@@ -100,7 +100,10 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
-	executor.runAcquired(t.Context(), registration, spec, counted)
+
+	if _, err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+		t.Fatal("failed collection returned nil error")
+	}
 
 	if counted.defers != 1 || counted.completes != 0 {
 		t.Fatalf("terminal calls defer=%d complete=%d, want 1/0", counted.defers, counted.completes)
@@ -157,7 +160,10 @@ func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 
 	counted := &countedTerminalLease{Lease: lease}
 	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
-	executor.runAcquired(t.Context(), registration, spec, counted)
+
+	if _, err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+		t.Fatal("failed collection returned nil error")
+	}
 
 	if counted.defers != 1 || counted.completes != 0 {
 		t.Fatalf("terminal calls defer=%d complete=%d, want 1/0", counted.defers, counted.completes)
@@ -207,7 +213,7 @@ func TestCollectDeadlinePreservesClassifiedRunnerFailure(t *testing.T) {
 
 			proof := lease.Proof()
 
-			err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
+			_, err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
 
 			if !errors.Is(err, cause) || !errors.Is(err, context.DeadlineExceeded) || !fatalCollectionError(err) {
 				t.Fatalf("collect = %v, want classified cause and deadline", err)
@@ -305,7 +311,9 @@ func checkRunnerFailure(t *testing.T, test runnerFailureCase) {
 		registration.profile.collectTimeout = time.Millisecond
 	}
 
-	executor.runAcquired(t.Context(), registration, spec, counted)
+	if _, err := executor.runAcquired(t.Context(), registration, spec, counted); err == nil {
+		t.Fatal("failed collection returned nil error")
+	}
 
 	if counted.defers != 1 || counted.completes != 0 {
 		t.Fatalf("terminal calls = %d/%d, want one defer", counted.defers, counted.completes)

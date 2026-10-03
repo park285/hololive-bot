@@ -123,9 +123,14 @@ func persistedSessionsFromLiveRows(rows []domain.YouTubeLiveSession) []Persisted
 			continue
 		}
 
+		observedAt := row.ScheduleObservedAt
+		if row.Status == domain.LiveStatusLive {
+			observedAt = row.StatusObservedAt
+		}
+
 		sessions = append(sessions, PersistedYouTubeLiveSession{
 			Stream:          stream,
-			LastSeenAt:      row.LastSeenAt.UTC(),
+			ObservedAt:      utcTimeValue(observedAt),
 			LiveFirstSeenAt: utcTimeValue(row.LiveFirstSeenAt),
 		})
 	}
@@ -151,7 +156,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 
 	var rows []string
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0132_02.sql"), uniqueChannelIDs, domain.LiveStatusLive, liveSince); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0132_02.sql"), uniqueChannelIDs, domain.LiveStatusLive, liveSince, now.UTC()); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 

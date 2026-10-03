@@ -115,3 +115,4 @@
 115 254_youtube_live_fact_observation_clocks.sql
 116 255_payload_dictionary_least_privilege.sql
 117 256_drop_youtube_delivery_request_snapshot_allowed.sql
+118 257_youtube_live_title_observation_clock.sql

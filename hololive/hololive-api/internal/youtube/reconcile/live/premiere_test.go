@@ -20,6 +20,7 @@ func TestMergeConfirmedPremieresCreatesUpcomingSession(t *testing.T) {
 		ChannelID:   "UC_PREMIERE",
 		Title:       "Premiere title",
 		ScheduledAt: &scheduled,
+		EffectiveAt: received.Add(-time.Minute),
 		ReceivedAt:  received,
 	}})
 
@@ -79,6 +80,7 @@ func TestMergeConfirmedPremieresOnlyFillsUnknownClassification(t *testing.T) {
 		Title:       "Content title",
 		ScheduledAt: new(scheduled.Add(24 * time.Hour)),
 		ReceivedAt:  seen.Add(24 * time.Hour),
+		EffectiveAt: seen.Add(23 * time.Hour),
 	}})
 
 	if len(decision.Sessions) != 1 || !reflect.DeepEqual(decision.Sessions[0], want) {

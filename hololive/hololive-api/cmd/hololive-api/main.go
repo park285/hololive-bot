@@ -152,7 +152,7 @@ func newHololiveAPILogger(config *apiconfig.RuntimeConfig) (loggerResult, error)
 		MaxBackups: config.Logging.MaxBackups,
 		MaxAgeDays: config.Logging.MaxAgeDays,
 		Compress:   config.Logging.Compress,
-	}, "hololive-api.log", sharedlogging.Options{AsyncStdout: true})
+	}, "hololive-api.log", sharedlogging.Options{OTel: config.Tracing.Enabled, AsyncStdout: true})
 	result := loggerResult{logger: logger, closer: closer}
 
 	if err != nil {

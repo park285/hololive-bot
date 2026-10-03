@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -122,6 +125,11 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
+	ctx, batchSpan := otel.Tracer("hololive/alarm").Start(ctx, "alarm.dispatch.batch")
+	defer batchSpan.End()
+
+	batchSpan.SetAttributes(attribute.Int("dispatch.envelopes", len(envelopes)))
+
 	attemptCtx := ctx
 	cancel := func() {}
 
@@ -133,8 +141,13 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 
 	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForDelivery(envelopes))
 	if err != nil {
+		batchSpan.SetStatus(codes.Error, "batch settlement failed")
+
 		return true, fmt.Errorf("dispatch alarm dispatch groups: %w", err)
 	}
+
+	// 배치 정산 성공과 개별 외부 전송 결과는 별도 span으로 구분한다.
+	batchSpan.SetStatus(codes.Ok, "")
 
 	return true, nil
 }
@@ -298,7 +311,19 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 	return r.dispatchPreparedMessageGroup(ctx, group, request)
 }
 
-func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGroup) (*dispatchoutbox.SendRequest, error) {
+func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGroup) (prepared *dispatchoutbox.SendRequest, resultErr error) {
+	ctx, span := otel.Tracer("hololive/alarm").Start(ctx, "alarm.dispatch.prepare")
+
+	defer func() {
+		if resultErr != nil {
+			span.SetStatus(codes.Error, "request preparation failed")
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+
+		span.End()
+	}()
+
 	request, err := r.consumer.LoadSendRequest(ctx, group.envelopes)
 	if err == nil {
 		return request, nil
@@ -345,6 +370,7 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 
 // 외부 provider 호출마다 한 번만 attempt를 기록한다. DB 상태 반영 결과는 발송 결론을 바꾸지 않는다.
 func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (err error) {
+	ctx, span := otel.Tracer("hololive/alarm").Start(ctx, "iris.reply.send")
 	id := r.workerTracker.BeginAttempt(time.Now())
 	completed := false
 
@@ -358,6 +384,19 @@ func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbo
 		}
 
 		r.workerTotals.RecordAttempt(outcome)
+		span.SetAttributes(attribute.String("delivery.outcome", string(outcome)))
+
+		if outcome == workercontract.AttemptSuccess {
+			span.SetStatus(codes.Ok, "")
+		} else {
+			span.SetStatus(codes.Error, string(outcome))
+
+			if r.logger != nil {
+				r.logger.WarnContext(ctx, "alarm dispatch send attempt finished", slog.String("outcome", string(outcome)))
+			}
+		}
+
+		span.End()
 	}()
 
 	err = r.sender.SendPreparedMessage(ctx, request.RoomID, request.Body, request.Route, request.ClientRequestID)

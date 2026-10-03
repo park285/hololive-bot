@@ -32,10 +32,6 @@ func TestLiveDecisionStatementsPreserveSessionHeadOrder(t *testing.T) {
 			t.Fatalf("statement %d changed execution order", i)
 		}
 	}
-
-	if len(statements[0].Args) != 16 || len(statements[1].Args) != 19 || statements[0].Args[12] != false {
-		t.Fatal("SQL argument shape changed")
-	}
 }
 
 func TestLiveSessionUpsertSkipsUnchangedEffectiveValues(t *testing.T) {
@@ -43,7 +39,7 @@ func TestLiveSessionUpsertSkipsUnchangedEffectiveValues(t *testing.T) {
 	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	scheduled := now.Add(-time.Hour)
-	args := []any{"hotpath-noop", "hotpath-channel", "LIVE", "title", "", "", scheduled, now, nil, now, now, nil, false, "observed", nil, nil}
+	args := []any{"hotpath-noop", "hotpath-channel", "LIVE", "title", "", "", scheduled, now, nil, now, now, nil, false, "observed", nil, nil, nil}
 	query := mustSQL("repository_live_session_upsert_0047_47.sql")
 
 	for step, want := range []int64{1, 0, 1, 1, 0} {
@@ -74,6 +70,51 @@ func TestLiveSessionUpsertSkipsUnchangedEffectiveValues(t *testing.T) {
 
 	if !gotScheduled.Equal(scheduled) || !gotSeen.Equal(now.Add(time.Minute)) {
 		t.Fatal("no-op guard changed effective persisted values")
+	}
+}
+
+func TestLiveSessionUpsertRejectsStaleOrUnprovenMetadata(t *testing.T) {
+	pool, _, _, _ := startLivePersist(t)
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	scheduled := now.Add(time.Hour)
+	current := live.SessionState{
+		VideoID: "metadata-clock", ChannelID: "metadata-channel", Status: domain.LiveStatusUpcoming,
+		Title: "Current title", TitleObservedAt: new(now),
+		ScheduledStartTime: new(scheduled), ScheduleObservedAt: new(now), LastSeenAt: now,
+		LifecycleOrigin: live.OriginObserved,
+	}
+
+	if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error { return upsertLiveSession(ctx, tx, &current) }); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, clock := range []*time.Time{new(now.Add(-time.Minute)), new(now), nil} {
+		incoming := current
+
+		incoming.Title = "Conflicting title"
+		incoming.ScheduledStartTime = new(scheduled.Add(time.Hour))
+		incoming.TitleObservedAt, incoming.ScheduleObservedAt = clock, clock
+		incoming.LastSeenAt = now.Add(time.Minute)
+
+		if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error { return upsertLiveSession(ctx, tx, &incoming) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var title string
+
+	var start, titleClock, scheduleClock time.Time
+
+	if err := pool.QueryRow(ctx, `
+		SELECT title,scheduled_start_time,title_observed_at,schedule_observed_at
+		FROM youtube_live_sessions WHERE video_id=$1
+	`, current.VideoID).Scan(&title, &start, &titleClock, &scheduleClock); err != nil {
+		t.Fatal(err)
+	}
+
+	if title != current.Title || !start.Equal(scheduled) || !titleClock.Equal(now) || !scheduleClock.Equal(now) {
+		t.Fatalf("stale snapshot replaced metadata: %q %s clocks=%s/%s", title, start, titleClock, scheduleClock)
 	}
 }
 

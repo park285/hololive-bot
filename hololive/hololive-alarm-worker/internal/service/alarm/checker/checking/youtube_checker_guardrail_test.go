@@ -110,7 +110,7 @@ func persistedLiveGuardrailMetaCases(now time.Time) map[string]persistedLiveGuar
 					Status:  domain.StreamStatusLive,
 					Channel: &domain.Channel{ID: "channel-from-object"},
 				},
-				LastSeenAt:      lastSeenAt,
+				ObservedAt:      lastSeenAt,
 				LiveFirstSeenAt: graceBoundary,
 			},
 			subscriberMap: map[string][]string{
@@ -134,14 +134,14 @@ func persistedLiveGuardrailMetaCases(now time.Time) map[string]persistedLiveGuar
 		"rejects empty stream id": {
 			session: PersistedYouTubeLiveSession{
 				Stream:     &domain.Stream{ChannelID: testChannelID1, Status: domain.StreamStatusLive},
-				LastSeenAt: graceBoundary,
+				ObservedAt: graceBoundary,
 			},
 			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 		},
 		"rejects fresh observation inside grace window": {
 			session: PersistedYouTubeLiveSession{
 				Stream:     &domain.Stream{ID: "stream-fresh", ChannelID: testChannelID1, Status: domain.StreamStatusLive},
-				LastSeenAt: now.Add(-persistedLiveGuardrailGraceWindow + time.Second),
+				ObservedAt: now.Add(-persistedLiveGuardrailGraceWindow + time.Second),
 			},
 			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 		},
@@ -154,7 +154,7 @@ func persistedLiveGuardrailMetaCases(now time.Time) map[string]persistedLiveGuar
 		"rejects duplicate stream id": {
 			session: PersistedYouTubeLiveSession{
 				Stream:     &domain.Stream{ID: "stream-live", ChannelID: testChannelID1, Status: domain.StreamStatusLive},
-				LastSeenAt: graceBoundary,
+				ObservedAt: graceBoundary,
 			},
 			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 			seen:          map[string]struct{}{"stream-live": {}},
@@ -162,14 +162,14 @@ func persistedLiveGuardrailMetaCases(now time.Time) map[string]persistedLiveGuar
 		"rejects live stream without subscriber rooms": {
 			session: PersistedYouTubeLiveSession{
 				Stream:     &domain.Stream{ID: "stream-no-room", ChannelID: testChannelID1, Status: domain.StreamStatusLive},
-				LastSeenAt: graceBoundary,
+				ObservedAt: graceBoundary,
 			},
 			subscriberMap: map[string][]string{testChannelID1: nil},
 		},
 		"rejects live stream without channel id": {
 			session: PersistedYouTubeLiveSession{
 				Stream:     &domain.Stream{ID: "stream-no-channel", Status: domain.StreamStatusLive},
-				LastSeenAt: graceBoundary,
+				ObservedAt: graceBoundary,
 			},
 			subscriberMap: map[string][]string{"": {testRoomID1}},
 		},
@@ -200,7 +200,7 @@ func TestPersistedLiveGuardrailMetaFromSession(t *testing.T) {
 
 			assert.Equal(t, tc.wantStreamID, meta.streamID)
 			assert.Equal(t, tc.wantChannelID, meta.channelID)
-			assert.Equal(t, lastSeenAt, meta.lastSeenAt)
+			assert.Equal(t, lastSeenAt, meta.observedAt)
 			assert.Equal(t, tc.wantRooms, meta.rooms)
 			assert.Contains(t, seen, tc.wantStreamID)
 		})
@@ -303,7 +303,7 @@ func TestObservePersistedLiveGuardrailsReturnsSentRooms(t *testing.T) {
 	}
 	sessions := []PersistedYouTubeLiveSession{{
 		Stream:          &domain.Stream{ID: testStreamID1, ChannelID: testChannelID1, Status: domain.StreamStatusLive},
-		LastSeenAt:      now,
+		ObservedAt:      now,
 		LiveFirstSeenAt: now.Add(-3 * time.Minute),
 	}}
 
@@ -332,7 +332,7 @@ func TestObservePersistedLiveGuardrailsLoadsSentRoomsDuringGrace(t *testing.T) {
 	}
 	sessions := []PersistedYouTubeLiveSession{{
 		Stream:          stream,
-		LastSeenAt:      now,
+		ObservedAt:      now,
 		LiveFirstSeenAt: now.Add(-time.Second),
 	}}
 
@@ -353,7 +353,7 @@ func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *test
 	meta := persistedLiveGuardrailMeta{
 		streamID:   testStreamID1,
 		channelID:  testChannelID1,
-		lastSeenAt: now.Add(-3 * time.Minute),
+		observedAt: now.Add(-3 * time.Minute),
 		rooms:      []string{testRoomID1, testRoomID2},
 	}
 

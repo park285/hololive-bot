@@ -90,6 +90,35 @@ func TestReduceSparsePositivePreservesLiveMetadata(t *testing.T) {
 	}
 }
 
+func TestReduceLivePositiveCannotRegressScheduleSourceMetadata(t *testing.T) {
+	t.Parallel()
+
+	observed := time.Date(2026, time.October, 3, 3, 0, 0, 0, time.UTC)
+	start := observed.Add(time.Hour)
+	state := emptyState()
+
+	state.Sessions[testVideoID] = SessionState{
+		VideoID: testVideoID, ChannelID: channelCoverage().RequestedChannelIDs[0],
+		Status: domain.LiveStatusUpcoming, LifecycleOrigin: OriginObserved, Present: true,
+		Title: "Latest schedule title", TitleObservedAt: new(observed),
+		ScheduledStartTime: new(start), ScheduleObservedAt: new(observed),
+		Clock: LiveEvidenceClock{LastUpcomingPositiveAt: new(observed.Add(-2 * time.Minute))},
+	}
+
+	fact := sessionFact("UPCOMING")
+
+	fact.Title = "Older live snapshot title"
+	fact.ScheduledAt = new(start.Add(time.Hour))
+
+	incoming := liveEvidence(2, observed.Add(-time.Minute), contract.CompletenessComplete, contract.ContinuityContiguous, fact)
+	got := sessionOf(mustReduceAll(t, state, []Evidence{incoming}, 0))
+
+	if got.Title != "Latest schedule title" || !got.ScheduledStartTime.Equal(start) ||
+		!got.TitleObservedAt.Equal(observed) || !got.ScheduleObservedAt.Equal(observed) {
+		t.Fatalf("older live metadata replaced schedule facts: %#v", got)
+	}
+}
+
 func TestReducePartialGapTimeoutCannotEnd(t *testing.T) {
 	t.Parallel()
 

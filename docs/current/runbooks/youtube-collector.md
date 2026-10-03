@@ -217,6 +217,15 @@ Compose b/c의 paired cutover(`ap-deploy.sh`, `po-central-remote.sh`)는 issuer�
 
 native a/d cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다. 이 경고 뒤에는 issuer가 멈춰 있고 collector unit이 disabled일 수 있으므로, 원인을 해소한 뒤 `scripts/deploy/ap-host-native-rollback.sh <ap> --apply`로 `previous` release와 그 issuer를 다시 적용하고 완료 검사를 확인합니다.
 
+### Native AP 배포 산출물 보존
+
+수용 검사 뒤에는 stack의 [배포 산출물 보존 절차](../../../../docs/ops/release-artifact-retention.md)를
+배포 완료 기록에 포함합니다. `tools/ops/prune-release-artifacts.py --profile native-ap --ap-name <AP_NAME>`으로
+current·previous·최근 세 release와 실행 중인 참조를 보존하는 후보를 산출합니다.
+전송 staging도 보존 release와 연결된 것은 남기며 `.incoming-*`와 소유 불명 파일은 삭제하지 않습니다.
+이전 staging/release 삭제는 별도 승인된 exact 경로만 `--apply`로 실행하고, 배포와 동시에 실행하지 않습니다.
+후보 출력·수용 성공만으로 정리가 완료됐다고 표시하지 않습니다.
+
 ## Logs
 
 ```bash

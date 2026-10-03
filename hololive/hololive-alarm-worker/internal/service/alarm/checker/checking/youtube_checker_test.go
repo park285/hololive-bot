@@ -484,7 +484,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 				StartActual: &startActual,
 				Channel:     &domain.Channel{ID: channelID, Name: testDBChannelName},
 			},
-			LastSeenAt: lastSeenAt,
+			ObservedAt: lastSeenAt,
 		}},
 		recentDispatch: map[string]bool{streamID: true},
 	}
@@ -566,7 +566,7 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 			StartActual:    &liveStart,
 			Channel:        &domain.Channel{ID: channelID, Name: "Persisted Channel"},
 		},
-		LastSeenAt: now,
+		ObservedAt: now,
 	}}
 	persistedSource.recentDispatch = map[string]bool{streamID: true}
 
@@ -616,7 +616,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 				StartActual: &startActual,
 				Channel:     &domain.Channel{ID: channelID, Name: testDBChannelName},
 			},
-			LastSeenAt: lastSeenAt,
+			ObservedAt: lastSeenAt,
 		}},
 		recentDispatch: map[string]bool{streamID: true},
 	}
@@ -1288,7 +1288,7 @@ func TestYouTubeCheckerCheck_HolodexHangLeavesBudgetForPersistedSessions(t *test
 				ID: streamID, Title: "DB live", ChannelID: channelID, Status: domain.StreamStatusLive,
 				StartActual: &startActual, Channel: &domain.Channel{ID: channelID, Name: testDBChannelName},
 			},
-			LastSeenAt: time.Now().UTC().Truncate(time.Second),
+			ObservedAt: time.Now().UTC().Truncate(time.Second),
 		}},
 		recentDispatch: map[string]bool{streamID: true},
 	}

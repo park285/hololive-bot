@@ -190,6 +190,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 }
 
 func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
+	recorder := newCollectionTraceRecorder(t)
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedRuntimeTargets(t, pool, []leaseSeed{
@@ -225,6 +226,7 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 		CollectionJobKind: "youtubejs_content", SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
 	executor.runSpec(ctx, &spec)
+	assertPartialCollectionSpans(t, recorder.Ended())
 
 	var (
 		count int

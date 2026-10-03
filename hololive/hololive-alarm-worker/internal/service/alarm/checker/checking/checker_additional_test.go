@@ -670,7 +670,7 @@ func TestMergePersistedLiveSessionStreamsKeepsHolodexPrimaryFields(t *testing.T)
 			StartActual:    &persistedStart,
 			Channel:        &domain.Channel{ID: channelID, Name: testDBChannelName},
 		},
-		LastSeenAt: lastSeenAt,
+		ObservedAt: lastSeenAt,
 	}})
 
 	require.Len(t, streamsByChannel[channelID], 1)
@@ -712,7 +712,7 @@ func TestMergePersistedLiveSessionStreamsDoesNotUseUpcomingObservedAtForLiveCatc
 			StartScheduled: &persistedScheduled,
 			Channel:        &domain.Channel{ID: channelID, Name: testDBChannelName},
 		},
-		LastSeenAt: lastSeenAt,
+		ObservedAt: lastSeenAt,
 	}})
 
 	require.Len(t, streamsByChannel[channelID], 1)
@@ -749,7 +749,7 @@ func TestMergePersistedLiveSessionStreamsPromotesHolodexUpcomingToPersistedLive(
 			StartActual:    &persistedStart,
 			Channel:        &domain.Channel{ID: channelID, Name: testDBChannelName},
 		},
-		LastSeenAt: lastSeenAt,
+		ObservedAt: lastSeenAt,
 	}})
 
 	require.Len(t, streamsByChannel[channelID], 1)
@@ -772,7 +772,7 @@ func TestPersistedLiveGuardrailMetasSkipFreshObservationGrace(t *testing.T) {
 			ChannelID: testChIDLive,
 			Status:    domain.StreamStatusLive,
 		},
-		LastSeenAt: now.Add(-30 * time.Second),
+		ObservedAt: now.Add(-30 * time.Second),
 	}
 
 	metas := persistedLiveGuardrailMetas([]PersistedYouTubeLiveSession{session}, map[string][]string{
@@ -780,7 +780,7 @@ func TestPersistedLiveGuardrailMetasSkipFreshObservationGrace(t *testing.T) {
 	}, now)
 	assert.Empty(t, metas)
 
-	session.LastSeenAt = now.Add(-3 * time.Minute)
+	session.ObservedAt = now.Add(-3 * time.Minute)
 	metas = persistedLiveGuardrailMetas([]PersistedYouTubeLiveSession{session}, map[string][]string{
 		testChIDLive: {testRoomID1},
 	}, now)
@@ -798,7 +798,7 @@ func TestPersistedLiveGuardrailDoesNotStayInGraceWhenLastSeenKeepsRefreshing(t *
 			ChannelID: testChID1,
 			Status:    domain.StreamStatusLive,
 		},
-		LastSeenAt:      now.Add(-30 * time.Second),
+		ObservedAt:      now.Add(-30 * time.Second),
 		LiveFirstSeenAt: now.Add(-5 * time.Minute),
 	}
 

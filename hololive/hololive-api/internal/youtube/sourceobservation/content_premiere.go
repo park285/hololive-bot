@@ -56,6 +56,7 @@ func confirmedPremiereFacts(evidence *content.Evidence) []live.ConfirmedPremiere
 			ChannelID:   video.ChannelID,
 			Title:       boundedVideoTitle(video.Title),
 			ScheduledAt: video.ScheduledFor,
+			EffectiveAt: evidence.EffectiveAt,
 			ReceivedAt:  evidence.ReceivedAt,
 		})
 	}

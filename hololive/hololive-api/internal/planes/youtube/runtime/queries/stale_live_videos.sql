@@ -11,6 +11,17 @@ WITH clock AS MATERIALIZED (
           h.last_live_positive_at BETWEEN clock.as_of-$2::bigint*INTERVAL '1 millisecond' AND clock.as_of
           AND h.last_live_positive_seen_at BETWEEN clock.as_of-$2::bigint*INTERVAL '1 millisecond' AND clock.as_of,false)
     ORDER BY s.video_id COLLATE "C" LIMIT $3
+), review_videos AS MATERIALIZED (
+    -- 영수증이 있는 운영 영상만 고정합니다. 영수증 없는 후보의 snapshot을
+    -- 계산하거나 과거 영수증마다 같은 현재 snapshot을 다시 읽지 않습니다.
+    SELECT DISTINCT receipt.video_id
+    FROM youtube_live_review_receipts receipt
+    JOIN youtube_live_sessions s ON s.video_id=receipt.video_id
+    WHERE s.status='UPCOMING' AND s.channel_id=ANY($1::text[])
+), review_snapshots AS MATERIALIZED (
+    SELECT video.video_id,
+           (SELECT snapshot_sha256 FROM youtube_live_review_snapshot(video.video_id)) AS snapshot_sha256
+    FROM review_videos video
 ), upcoming_candidates AS MATERIALIZED (
     SELECT s.video_id,s.channel_id,1 AS priority,availability.observed_at AS checked_at
     FROM youtube_live_sessions s CROSS JOIN clock
@@ -25,9 +36,10 @@ WITH clock AS MATERIALIZED (
           availability.effective_at BETWEEN clock.as_of-$2::bigint*INTERVAL '1 millisecond' AND clock.as_of
           AND availability.observed_at BETWEEN clock.as_of-$2::bigint*INTERVAL '1 millisecond' AND clock.as_of,false)
       AND NOT EXISTS (
-          SELECT 1 FROM youtube_live_review_receipts receipt
-          WHERE receipt.video_id=s.video_id
-            AND receipt.snapshot_sha256=(SELECT snapshot_sha256 FROM youtube_live_review_snapshot(s.video_id)))
+          SELECT 1 FROM review_snapshots review
+          JOIN youtube_live_review_receipts receipt
+            ON receipt.video_id=review.video_id AND receipt.snapshot_sha256=review.snapshot_sha256
+          WHERE review.video_id=s.video_id)
     ORDER BY availability.observed_at NULLS FIRST,s.video_id COLLATE "C"
     LIMIT GREATEST($3-1-(SELECT count(video_id) FROM live_candidates),0)
 )

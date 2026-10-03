@@ -12,6 +12,7 @@ type ConfirmedPremiereFact struct {
 	ChannelID   string
 	Title       string
 	ScheduledAt *time.Time
+	EffectiveAt time.Time
 	ReceivedAt  time.Time
 }
 
@@ -61,8 +62,12 @@ func mergeConfirmedPremiere(state *State, decision *PremiereDecision, fact *Conf
 			IsPremiere:         new(true),
 			Present:            true,
 		}
+		if fact.Title != "" {
+			created.TitleObservedAt = copyTime(fact.EffectiveAt)
+		}
+
 		if fact.ScheduledAt != nil {
-			created.ScheduleObservedAt = copyTime(fact.ReceivedAt)
+			created.ScheduleObservedAt = copyTime(fact.EffectiveAt)
 		}
 
 		state.Sessions[fact.VideoID] = created

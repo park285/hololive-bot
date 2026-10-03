@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"testing"
 	"time"
 
@@ -55,6 +56,108 @@ func TestCollectionLifecycleSnapshotWithinRuntimeBudget(t *testing.T) {
 			require.Equal(t, reviewed, samples[0].closedUnresolved)
 			require.Zero(t, samples[0].stateMismatch)
 		})
+	}
+}
+
+func TestStaleLiveReviewWorkIsBoundedByReviewedVideos(t *testing.T) {
+	for _, withReceipts := range []bool{false, true} {
+		name := "zero_receipts"
+
+		if withReceipts {
+			name = "many_receipts"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			pool := dbtest.NewPool(t)
+			seedCollectionLifecyclePopulation(t, pool)
+
+			var reviewed int
+
+			if withReceipts {
+				seedCollectionLifecycleReceipts(t, pool)
+
+				reviewed = collectionLifecycleReviewed
+			}
+
+			var raw []byte
+
+			require.NoError(t, pool.QueryRow(t.Context(), "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("stale_live_videos.sql"),
+				[]string{"load-channel"}, int64(120000), 101).Scan(&raw))
+
+			var plans []struct {
+				Plan collectionStatePlanNode `json:"Plan"`
+			}
+
+			require.NoError(t, jsonv2.Unmarshal(raw, &plans))
+			require.Len(t, plans, 1)
+
+			// pending ends는 검토 snapshot만 읽습니다. 영수증 없는 영상과 과거
+			// 영수증 세대 수가 현재 snapshot 계산 횟수를 늘리면 안 됩니다.
+			lookups := liveReviewPendingEndLookups(plans[0].Plan)
+			t.Logf("reviewed videos=%d, pending-end lookups=%.0f", reviewed, lookups)
+			require.LessOrEqual(t, lookups, float64(reviewed))
+		})
+	}
+}
+
+func liveReviewPendingEndLookups(node collectionStatePlanNode) float64 {
+	var lookups float64
+
+	if node.Relation == "youtube_live_pending_ends" {
+		lookups = node.Loops
+	}
+
+	for _, child := range node.Plans {
+		lookups += liveReviewPendingEndLookups(child)
+	}
+
+	return lookups
+}
+
+func TestStaleLiveVideosKeepChangedReviewsAndLivePriority(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+	_, err := pool.Exec(ctx, `
+        INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,lifecycle_origin)
+        VALUES ('live','review-channel','LIVE','','observed'),
+               ('review-current','review-channel','UPCOMING','','legacy_unknown'),
+               ('review-changed','review-channel','UPCOMING','','legacy_unknown'),
+               ('unreviewed','review-channel','UPCOMING','','legacy_unknown');
+        INSERT INTO youtube_live_review_receipts
+        (receipt_id,video_id,snapshot_sha256,original_snapshot,evidence_refs,disposition,operator_id,reason)
+        SELECT md5(video_id)::uuid,video_id,snapshot.snapshot_sha256,snapshot.original_snapshot,
+               snapshot.evidence_refs,'closed_unresolved','test-operator','현재 snapshot 검토'
+        FROM youtube_live_sessions session
+        CROSS JOIN LATERAL youtube_live_review_snapshot(session.video_id) snapshot
+        WHERE session.video_id IN ('review-current','review-changed');
+        UPDATE youtube_live_sessions SET title='changed' WHERE video_id='review-changed';
+    `)
+	require.NoError(t, err)
+
+	for _, limit := range []int{4, 3} {
+		rows, queryErr := pool.Query(ctx, mustSQL("stale_live_videos.sql"), []string{"review-channel"}, int64(120000), limit)
+		require.NoError(t, queryErr)
+
+		var ids []string
+
+		for rows.Next() {
+			var (
+				id, channel string
+				upcoming    bool
+			)
+
+			require.NoError(t, rows.Scan(&id, &channel, &upcoming))
+			require.Equal(t, "review-channel", channel)
+			require.Equal(t, id != "live", upcoming)
+
+			ids = append(ids, id)
+		}
+
+		require.NoError(t, rows.Err())
+		rows.Close()
+
+		want := []string{"live", "review-changed", "unreviewed"}
+		require.Equal(t, want[:limit-1], ids)
 	}
 }
 

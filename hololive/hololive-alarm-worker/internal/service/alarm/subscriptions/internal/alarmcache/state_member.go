@@ -6,8 +6,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -54,15 +52,6 @@ func FirstMemberName(candidates ...string) string {
 	}
 
 	return ""
-}
-
-func (s *State) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-	subscribers, err := sharedalarm.LookupChannelSubscribersByType(ctx, s.Cache, channelID, alarmType)
-	if err != nil {
-		return nil, fmt.Errorf("lookup channel subscribers by type: %w", err)
-	}
-
-	return subscribers, nil
 }
 
 func (s *State) GetMemberNamesBatch(ctx context.Context, channelIDs []string) (map[string]string, error) {

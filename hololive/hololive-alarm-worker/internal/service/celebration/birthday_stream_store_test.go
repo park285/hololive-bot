@@ -132,8 +132,8 @@ func seedBirthdayStreamTitleDrift(
 
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_live_sessions (
-			video_id, channel_id, status, title, scheduled_start_time, last_seen_at
-		) VALUES ($1, $2, 'UPCOMING', $3, $4, $5)
+			video_id, channel_id, status, title, scheduled_start_time, last_seen_at, schedule_observed_at
+		) VALUES ($1, $2, 'UPCOMING', $3, $4, $5, $5)
 	`, testVideoA, testChannelA, "original title", scheduledAt, now)
 	require.NoError(t, err)
 
@@ -227,4 +227,57 @@ func birthdayGreetingTestEnvelope(memberID int, channelID, roomID string) domain
 			Date:       testBirthdayDate,
 		},
 	}
+}
+
+func TestBirthdaySessionsRequireFreshStateSpecificObservation(t *testing.T) {
+	t.Parallel()
+
+	pool := dbtest.NewPool(t)
+	now := time.Date(2026, time.October, 3, 4, 0, 0, 0, time.UTC)
+	since := now.Add(-30 * time.Minute)
+
+	var expected []string
+
+	for _, observation := range []struct {
+		name  string
+		clock *time.Time
+		valid bool
+	}{
+		{name: "fresh", clock: new(now.Add(-time.Minute)), valid: true},
+		{name: "boundary", clock: new(since), valid: true},
+		{name: "stale", clock: new(since.Add(-time.Microsecond))},
+		{name: "future", clock: new(now.Add(time.Microsecond))},
+		{name: "unknown"},
+	} {
+		for _, status := range []string{"LIVE", "UPCOMING"} {
+			id := status + "-" + observation.name
+			statusClock, scheduleClock := new(now), new(now)
+
+			if status == "LIVE" {
+				statusClock = observation.clock
+			} else {
+				scheduleClock = observation.clock
+			}
+
+			_, err := pool.Exec(t.Context(), `
+				INSERT INTO youtube_live_sessions(video_id,channel_id,status,scheduled_start_time,started_at,last_seen_at,status_observed_at,schedule_observed_at)
+				VALUES($1,$2,$3,$4,$5,$4,$6,$7)
+			`, id, testChannelA, status, now.Add(10*time.Minute), now.Add(-time.Hour), statusClock, scheduleClock)
+			require.NoError(t, err)
+
+			if observation.valid {
+				expected = append(expected, id)
+			}
+		}
+	}
+
+	sessions, err := NewPgxStore(pool).FindBirthdaySessions(t.Context(), []string{testChannelA}, now.Add(-2*time.Hour), now.Add(20*time.Hour), since, now)
+	require.NoError(t, err)
+
+	ids := make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		ids = append(ids, session.VideoID)
+	}
+
+	require.ElementsMatch(t, expected, ids)
 }
