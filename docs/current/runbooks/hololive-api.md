@@ -108,7 +108,9 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 
 운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-osaka/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간, `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. `hololive_youtube_plane_retention_backlog_age_seconds`는 현재 값을 채우지 않아 backlog 판단에 사용하지 않습니다. 물리적 파일 축소는 별도 유지보수입니다.
 
-기본 보관 정책은 일반 원본(live/community/video/shorts/viewer) 7일, schedule 14일, profile/photo 30일, live-check 2일입니다. terminal queue는 PROCESSED 1일·DEAD_LETTER 14일, collision/replay audit 30일, 과거 checkpoint 2일, RETIRED projection 7일입니다. application은 원본 kind 기간+3일보다 오래되고 observation FK가 NULL인 경우만 정리합니다. active queue·pending replay·live head/end candidate·최신 checkpoint 보호는 유지합니다. tick 120초와 batch 1000은 유지하며 처리량을 높이려고 상한/timeout을 늘리지 않습니다. 이 값은 소스 기본값이며 운영 master에 지정된 기존 값을 자동으로 바꾸지 않습니다.
+기본 보관 정책은 일반 원본(live/community/video/shorts/viewer) 7일, schedule 14일, profile/photo 30일, live-check 2일입니다. terminal queue는 PROCESSED 1일·DEAD_LETTER 14일, collision/replay audit 30일, 과거 checkpoint 2일, RETIRED projection 7일입니다. application은 원본 kind 기간+3일보다 오래되고 observation FK가 NULL인 경우만 정리합니다. active queue·pending replay·live head/end candidate·최신 checkpoint 보호는 유지합니다. tick 120초와 배치당 1000행은 유지합니다. RETIRED projection만 한 tick에서 최대 64개 배치를 독립 commit하며, 전체는 기존 DB 작업 시한(기본 10초)을 공유합니다. 배치마다 reasons+targets 합계 최대 1000행, lease 최대 1000행이며 CURRENT와 lease 참조 세대는 보존합니다. 진척 없음·오류·취소에서 중단하고 실패한 문장을 재시도하지 않습니다. 뒤 배치 오류에도 확정된 삭제 계수와 오류를 함께 기록하며 source retention은 독립 실행합니다. 이 값은 소스 기본값이며 운영 master에 지정된 기존 값을 자동으로 바꾸지 않습니다.
+
+한 세대의 마지막 배치가 1000행 미만이어도 다른 만료 세대가 남을 수 있으므로 이를 전체 backlog 종료로 해석하지 않습니다. 64배치는 유입 증가에 대한 무제한 처리 보장이 아니며, 신규 세대·target/reason 생성량과 실제 삭제량·tick 시간·DB 크기를 함께 확인합니다. 특히 TTL 안의 이력은 삭제하지 않으므로 배포 직후 파일 크기 감소나 기존 용량 절감 목표 달성을 보장하지 않습니다.
 
 ## YouTube 관측 저장 구조 전환
 

@@ -96,12 +96,7 @@ func (r *Runtime) retainProjections(ctx context.Context) error {
 	err := r.withRetainDB(ctx, func(ctx context.Context) error {
 		var retainErr error
 
-		result, retainErr = r.projectionRetainer.Retain(
-			ctx,
-			r.now(),
-			r.Config.Retention.ProjectionRetiredAge,
-			r.Config.Retention.BatchSize,
-		)
+		result, retainErr = r.retainProjectionBatches(ctx, r.now())
 		if retainErr != nil {
 			return fmt.Errorf("retain projections: %w", retainErr)
 		}
@@ -292,8 +287,6 @@ func recordProjectionRetention(result targetprojection.RetentionResult, elapsed 
 
 	if err != nil {
 		youtubeRetentionErrorsTotal.WithLabelValues("youtube_collection_projection_generations").Inc()
-
-		return
 	}
 
 	if result.LeasesDeleted > 0 {
