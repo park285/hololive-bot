@@ -8,12 +8,12 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	botruntime "github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 )
 
-func installAPIWorkerRegistry(ctx context.Context, config *apiplane.RuntimeConfig, bot *botruntime.BotRuntime, youtube *youtuberuntime.Runtime) error {
+func installAPIWorkerRegistry(ctx context.Context, config *apiconfig.RuntimeConfig, bot *botruntime.BotRuntime, youtube *youtuberuntime.Runtime) error {
 	if err := validateAPIWorkerRegistryInputs(config, bot); err != nil {
 		return fmt.Errorf("validate API worker registry inputs: %w", err)
 	}
@@ -41,7 +41,7 @@ func installAPIWorkerRegistry(ctx context.Context, config *apiplane.RuntimeConfi
 	return nil
 }
 
-func validateAPIWorkerRegistryInputs(config *apiplane.RuntimeConfig, bot *botruntime.BotRuntime) error {
+func validateAPIWorkerRegistryInputs(config *apiconfig.RuntimeConfig, bot *botruntime.BotRuntime) error {
 	if config == nil || config.Bot == nil || config.Bot.APIWorkerProfile == nil {
 		return errors.New("install API worker registry: worker profile is required")
 	}

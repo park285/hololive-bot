@@ -3,8 +3,9 @@
 상태: **HISTORICAL TODO (superseded on 2026-04-16)**
 
 이 문서는 runtime split 전/중간 단계의 page-based TODO 보드다.
-현재는 `hololive-admin-api`, `hololive-alarm-worker`, `hololive-shared/pkg/service/notification` ownership 으로 수렴했으므로,
-아래 owning seam/path 표기는 historical planning reference 로만 사용한다.
+2026-04-16 당시에는 `hololive-admin-api`, `hololive-alarm-worker`, `hololive-shared/pkg/service/notification` ownership으로 수렴했다.
+아래 owning seam/path와 실행 순서는 당시 planning reference다. 현재 모듈·소유권은
+[Project Map](../current/PROJECT_MAP.md), 운영 명령은 [Current Runbooks](../current/runbooks/README.md)를 따른다.
 
 
 Source review: `hololive_improved_version_review.md`

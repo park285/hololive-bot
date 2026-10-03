@@ -20,8 +20,8 @@ const (
 	workerStartupLimit = 30 * time.Second
 	requestLimit       = 1 << 20
 	// HTTP IdleTimeout인 idleConnectionLimit은 client free-socket timeout(youtubejs/src/proof-broker.mjs, 1초)보다
-	// 훨씬 길어야 합니다. Node event loop가 수 초 멈춰도 client가 먼저 유휴 연결을 닫아,
-	// 서버가 이미 닫은 socket을 client가 재사용하다 EPIPE(broker_unavailable)를 받지 않습니다.
+	// 훨씬 길어야 합니다. Node event loop가 수 초 멈춰도 client가 먼저 유휴 연결을 닫을 여유를 두어,
+	// 서버가 이미 닫은 socket을 재사용하다 EPIPE(broker_unavailable)를 받는 경쟁을 줄입니다.
 	idleConnectionLimit = 30 * time.Second
 )
 
@@ -126,11 +126,10 @@ func (b *Broker) Generation() string { return b.generation }
 // Normal retirement returns nil; an error reports unconfirmed VM or listener
 // cleanup and never includes worker output.
 func (b *Broker) Serve(listener net.Listener) error {
-	// keep-alive를 유지해 정상 응답 직후 서버가 연결을 닫지 않습니다. 응답 직후의 서버
-	// close가 client의 새 연결 첫 read와 겹치면 AppArmor unix 미디에이션 경쟁
-	// (upstream b1aea2c19607 미적용 커널)으로 Oops가 납니다. 유휴 연결은 client
-	// (youtubejs/src/proof-broker.mjs)가 idleConnectionLimit보다 훨씬 먼저 닫고, 퇴역 시에는
-	// retire의 server.Close가 유휴·진행 중 연결을 모두 즉시 닫습니다.
+	// 연결 재사용과 client 우선 유휴 종료를 위해 keep-alive를 유지합니다.
+	// AppArmor 경쟁(b1aea2c19607)의 과거 완화책이었으며, 운영 커널 수정 확인은 runbook §4에 기록합니다.
+	// 유휴 연결은 client(youtubejs/src/proof-broker.mjs)가 idleConnectionLimit보다 먼저 닫도록 하고,
+	// 퇴역 시에는 retire의 server.Close가 유휴·진행 중 연결을 모두 즉시 닫습니다.
 	b.server = &http.Server{
 		Handler:           http.HandlerFunc(b.handle),
 		ReadHeaderTimeout: 2 * time.Second, ReadTimeout: operationLimit,

@@ -25,7 +25,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 func (c *Config) Validate() error {
@@ -43,7 +44,7 @@ func (c *Config) ValidateAdminAPIRuntime() error {
 		return fmt.Errorf("validate with required: %w", err)
 	}
 
-	if err := load.ValidateNoNotificationEgressOwnership(load.RuntimeAdminAPI); err != nil {
+	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeAdminAPI, envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
 		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 
@@ -51,7 +52,7 @@ func (c *Config) ValidateAdminAPIRuntime() error {
 }
 
 func (c *Config) validateWithRequired(validateRequired func() error) error {
-	if err := load.ValidateUnsupportedLegacyEnvUsage(); err != nil {
+	if err := envload.ValidateUnsupportedLegacyEnvUsage(); err != nil {
 		return fmt.Errorf("validate unsupported legacy env usage: %w", err)
 	}
 
@@ -63,7 +64,7 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 		return fmt.Errorf("validate server transports: %w", err)
 	}
 
-	if err := load.ValidateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
+	if err := runtimepolicy.ValidateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return fmt.Errorf("validate API secret key: %w", err)
 	}
 
@@ -71,7 +72,7 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 		return fmt.Errorf("validate required: %w", err)
 	}
 
-	if err := load.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+	if err := runtimepolicy.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
 
@@ -107,7 +108,7 @@ func validateHolodexConfig(config *HolodexConfig) error {
 		return nil
 	}
 
-	if err := load.ValidateHolodexTimeout(config.Timeout); err != nil {
+	if err := runtimepolicy.ValidateHolodexTimeout(config.Timeout); err != nil {
 		return fmt.Errorf("validate holodex timeout: %w", err)
 	}
 
@@ -119,11 +120,11 @@ func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseB
 		return errors.New("official schedule config is required")
 	}
 
-	if err := load.ValidateOfficialScheduleBaseURL(config.BaseURL); err != nil {
+	if err := runtimepolicy.ValidateOfficialScheduleBaseURL(config.BaseURL); err != nil {
 		return fmt.Errorf("validate official schedule base URL: %w", err)
 	}
 
-	if err := load.ValidateOfficialScheduleTimeout(config.Timeout); err != nil {
+	if err := runtimepolicy.ValidateOfficialScheduleTimeout(config.Timeout); err != nil {
 		return fmt.Errorf("validate official schedule timeout: %w", err)
 	}
 
@@ -143,7 +144,7 @@ func (c *Config) validateAdminAPIRequiredConfig() error {
 		return errors.New("KAKAO_ROOMS is required")
 	}
 
-	if err := load.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
+	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
 		return fmt.Errorf("validate holodex API key: %w", err)
 	}
 
@@ -167,7 +168,7 @@ func (c *Config) validateRequiredConfig() error {
 		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
-	if err := load.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
+	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
 		return fmt.Errorf("validate holodex API key: %w", err)
 	}
 
@@ -175,7 +176,7 @@ func (c *Config) validateRequiredConfig() error {
 }
 
 func validateCORSConfig(environment string, config CORSConfig) error {
-	if load.IsProduction(environment) && config.Enforce && len(config.AllowedOrigins) == 0 {
+	if runtimepolicy.IsProduction(environment) && config.Enforce && len(config.AllowedOrigins) == 0 {
 		return errors.New("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 

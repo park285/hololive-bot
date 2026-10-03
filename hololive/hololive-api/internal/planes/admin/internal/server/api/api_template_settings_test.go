@@ -37,11 +37,11 @@ type stubSettingsApplier struct {
 	memberNewsApplied bool
 }
 
-func (s *stubSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
+func (s *stubSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) (sharedsettings.AlarmAdvanceMinutesApplyResult, error) {
 	return sharedsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 		AlarmApplied:                 true,
-	}
+	}, nil
 }
 
 func (s *stubSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {

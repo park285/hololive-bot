@@ -12,16 +12,13 @@ AGENTS.md forbids doc-sync, self-test and removed-code guard gates.
 boundaries, tracked local artifacts, alarm contract values and route hardcoding, migration
 manifest, SQL ownership, DB access policy, markdown local paths, runtime import boundaries,
 notification egress ownership, topology parity, deploy/compose/log script tests, and deprecated removal deadlines. Non-test Go files are capped at 800 lines by golangci-lint
-`revive` `file-length-limit` and functions at 120 lines by `funlen`. Non-test `.rs`/`.sh`/`.ts`/`.tsx`
-files (800 lines), Go function complexity 16 and nesting 8, and the `_partN` file ban are enforced by
-the iris-stack meta pre-push hook through `tools/structure/check_repo_budgets.py`. That check runs only
-when the meta repository is pushed, not on a hololive-bot push, so a violation merged here fails the next
-meta push; run `python3 tools/structure/check_repo_budgets.py --stack-root . --policy tools/structure/repo-budgets.json`
-from the meta checkout before publishing a structural change.
+`revive` `file-length-limit` and functions at 120 lines by `funlen`. Code complexity is checked by
+the configured linters; separate duplicate structure-budget gates are not required.
 
 The final-image scan never suppresses findings: `scripts/ci/final-image-scan-policy.sh` owns the Trivy
-arguments, and `scripts/ci/check-recurring-security-scan-contract.sh` runs the real scanner against a stub
-`trivy` to prove the invocation (security.yml, and pre-push when its inputs change).
+arguments, and `scripts/ci/check-recurring-security-scan-contract.sh` checks the security configuration.
+The actual final-image scan validates the built images. Scanner self-tests, workflow/script text markers,
+retired-name grep guards, and historical fixture/owner hash locks are not product validation gates.
 
 ## Document Gates
 

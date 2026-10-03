@@ -45,10 +45,19 @@ func (r *BotRuntime) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	if err := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
-		Logger:              r.Logger,
-		ShutdownHTTPServer:  r.ShutdownHTTPServer,
-		WebhookHandlerClose: func() error { return r.shutdownWebhookAndDurability(ctx) },
+	r.cancelBackgroundTasks()
+	r.stopHTTPRequestAdmission()
+
+	var usersErr error
+
+	shutdownErr := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
+		Logger:             r.Logger,
+		ShutdownHTTPServer: r.ShutdownHTTPServer,
+		WebhookHandlerClose: func() error {
+			usersErr = r.shutdownWebhookAndDurability(ctx)
+
+			return usersErr
+		},
 		ShutdownBot: func(ctx context.Context) error {
 			if r.Bot == nil {
 				return nil
@@ -56,11 +65,24 @@ func (r *BotRuntime) Shutdown(ctx context.Context) error {
 
 			return r.Bot.Shutdown(ctx)
 		},
-	}); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
+	})
+	joinErr := r.joinBackgroundTasks(ctx)
+	requestErr := r.joinHTTPRequests(ctx)
+
+	err := errors.Join(shutdownErr, joinErr, requestErr)
+	quiesced := usersErr == nil && requestErr == nil && r.backgroundTasksJoined()
+
+	r.lifecycleMu.Lock()
+
+	r.shutdownErr = err
+
+	if quiesced {
+		r.quiesced.Store(true)
 	}
 
-	return nil
+	r.lifecycleMu.Unlock()
+
+	return err
 }
 
 func (r *BotRuntime) shutdownWebhookAndDurability(ctx context.Context) error {

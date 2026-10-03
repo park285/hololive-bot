@@ -31,11 +31,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -194,10 +194,10 @@ func assertRoomNotificationsHelper(t *testing.T) {
 func assertNormalizeTargetMinutesHelper(t *testing.T) {
 	t.Helper()
 
-	assert.Equal(t, []int{5, 3, 1}, sharedchecker.NormalizeTargetMinutes(nil))
-	assert.Equal(t, []int{5, 3, 1}, sharedchecker.NormalizeTargetMinutes([]int{0, -1}))
-	assert.Equal(t, []int{10, 5, 1}, sharedchecker.NormalizeTargetMinutes([]int{5, 10, 10, 0}))
-	assert.Equal(t, []int{10, 3, 1}, sharedchecker.NormalizeTargetMinutes([]int{1, 3, 10, 3}))
+	assert.Equal(t, []int{5, 3, 1}, targetpolicy.NormalizeTargetMinutes(nil))
+	assert.Equal(t, []int{5, 3, 1}, targetpolicy.NormalizeTargetMinutes([]int{0, -1}))
+	assert.Equal(t, []int{10, 5, 1}, targetpolicy.NormalizeTargetMinutes([]int{5, 10, 10, 0}))
+	assert.Equal(t, []int{10, 3, 1}, targetpolicy.NormalizeTargetMinutes([]int{1, 3, 10, 3}))
 }
 
 func assertSafeLoggerHelper(t *testing.T) {
@@ -376,7 +376,7 @@ func newYouTubeBuilderFixture(t *testing.T) (*YouTubeChecker, *dedup.Service, ti
 	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
 	checker := &YouTubeChecker{
 		dedupService:        dedupService,
-		targetPolicy:        sharedchecker.NewTargetMinutePolicy([]int{5, 3, 1}),
+		targetPolicy:        targetpolicy.NewTargetMinutePolicy([]int{5, 3, 1}),
 		evaluationWindowCap: 75 * time.Second,
 		logger:              newCheckerTestLogger(),
 	}
@@ -399,7 +399,7 @@ func assertBuildUpcomingNotifications(t *testing.T) {
 		Channel:        &domain.Channel{ID: testChIDShort1, Name: testChannelName1},
 	}
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: now.Add(-75 * time.Second),
 		End:   now,
 	}
@@ -441,7 +441,7 @@ func assertBuildUpcomingCrossedWindow(t *testing.T) {
 		Channel:        &domain.Channel{ID: testChIDShort1, Name: testChannelName1},
 	}
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: now.Add(-40 * time.Second),
 		End:   now,
 	}
@@ -467,7 +467,7 @@ func assertBuildUpcomingInitialCappedBackfill(t *testing.T) {
 		Channel:        &domain.Channel{ID: testChIDShort1, Name: testChannelName1},
 	}
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start:              now.Add(-75 * time.Second),
 		End:                now,
 		Capped:             true,
@@ -495,7 +495,7 @@ func assertBuildUpcomingCappedRecovery(t *testing.T) {
 		Channel:        &domain.Channel{ID: testChIDShort1, Name: testChannelName1},
 	}
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start:              now.Add(-75 * time.Second),
 		End:                now,
 		Capped:             true,
@@ -587,7 +587,7 @@ func assertBuildChannelNotifications(t *testing.T) {
 		},
 	}
 
-	window := sharedchecker.EvaluationWindow{
+	window := targetpolicy.EvaluationWindow{
 		Start: now.Add(-45 * time.Second),
 		End:   now,
 	}
@@ -1053,7 +1053,7 @@ func newTestYouTubeCheckerWithDedup(t *testing.T) (*YouTubeChecker, *dedup.Servi
 	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
 	checker := &YouTubeChecker{
 		dedupService:        dedupService,
-		targetPolicy:        sharedchecker.NewTargetMinutePolicy([]int{5, 3, 1}),
+		targetPolicy:        targetpolicy.NewTargetMinutePolicy([]int{5, 3, 1}),
 		evaluationWindowCap: 75 * time.Second,
 		logger:              newCheckerTestLogger(),
 	}

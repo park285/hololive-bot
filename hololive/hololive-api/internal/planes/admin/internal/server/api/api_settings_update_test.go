@@ -168,3 +168,32 @@ func TestSettingsAPIHandler_UpdateSettings_ReportsWorkerApplyFailure(t *testing.
 		t.Fatalf("alarm_reason missing on worker failure: %#v", runtime)
 	}
 }
+
+// 0분은 저장이나 worker 적용 전에 거절하여 기존 양수 설정과 런타임을 보존한다.
+func TestSettingsAPIHandler_UpdateSettings_RejectsZeroBeforeStoreAndWorker(t *testing.T) {
+	t.Parallel()
+
+	worker, targetMinutes, puts := newSettingsResponseLossWorker(t)
+	handler, writer := newSettingsUpdateAPIHandler(t, worker.URL)
+	previous := writer.Get()
+	req, rec := newAPITestContext(http.MethodPost, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":0}`))
+	handler.UpdateSettings(req)
+
+	assertErrorResponse(t, rec, http.StatusBadRequest, "alarmAdvanceMinutes must be between 1 and 1440")
+
+	if got := writer.updates.Load(); got != 0 {
+		t.Fatalf("settings write count = %d, want 0", got)
+	}
+
+	if got := puts.Load(); got != 0 {
+		t.Fatalf("worker PUT count = %d, want 0", got)
+	}
+
+	if got := writer.Get(); got.AlarmAdvanceMinutes != previous.AlarmAdvanceMinutes {
+		t.Fatalf("settings advance = %d, want preserved %d", got.AlarmAdvanceMinutes, previous.AlarmAdvanceMinutes)
+	}
+
+	if got := targetMinutes(); len(got) != 3 || got[0] != 5 {
+		t.Fatalf("worker targets = %v, want preserved [5 3 1]", got)
+	}
+}

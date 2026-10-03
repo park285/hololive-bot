@@ -1,0 +1,43 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+=== RUN   TestPerformanceSensitivityMatrix
+    zz_performance_matrix_test.go:86: method=matrix concurrency=5 room_equivalents=20 repetitions=3 gomaxprocs=12 pool_max_conns=12 descriptions_repeat=64 index=existing_only validator=nil members_provider=nil
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=1 variant=full rep=0 returned=20000 final=200 concurrency_peak=5 elapsed_us=30793 alloc_bytes=48544256 mallocs=244792 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=1 variant=period rep=0 returned=200 final=200 concurrency_peak=5 elapsed_us=4564 alloc_bytes=1915576 mallocs=7157 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=1 variant=period rep=1 returned=200 final=200 concurrency_peak=5 elapsed_us=3892 alloc_bytes=1915544 mallocs=7156 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=1 variant=full rep=1 returned=20000 final=200 concurrency_peak=5 elapsed_us=29656 alloc_bytes=48537896 mallocs=244776 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=1 variant=full rep=2 returned=20000 final=200 concurrency_peak=5 elapsed_us=27400 alloc_bytes=48538472 mallocs=244781 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=1 variant=period rep=2 returned=200 final=200 concurrency_peak=5 elapsed_us=3937 alloc_bytes=1916952 mallocs=7159 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=10 variant=period rep=0 returned=2000 final=2000 concurrency_peak=5 elapsed_us=21964 alloc_bytes=18513720 mallocs=64820 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=10 variant=full rep=0 returned=20000 final=2000 concurrency_peak=5 elapsed_us=47443 alloc_bytes=61024200 mallocs=280787 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=10 variant=full rep=1 returned=20000 final=2000 concurrency_peak=5 elapsed_us=49904 alloc_bytes=61022792 mallocs=280784 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=10 variant=period rep=1 returned=2000 final=2000 concurrency_peak=5 elapsed_us=22407 alloc_bytes=18513416 mallocs=64817 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=10 variant=period rep=2 returned=2000 final=2000 concurrency_peak=5 elapsed_us=22075 alloc_bytes=18516264 mallocs=64820 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=10 variant=full rep=2 returned=20000 final=2000 concurrency_peak=5 elapsed_us=51114 alloc_bytes=61045960 mallocs=280791 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=100 variant=full rep=0 returned=20000 final=20000 concurrency_peak=5 elapsed_us=137650 alloc_bytes=185503608 mallocs=640788 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=100 variant=period rep=0 returned=20000 final=20000 concurrency_peak=5 elapsed_us=142123 alloc_bytes=185519832 mallocs=640904 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=100 variant=period rep=1 returned=20000 final=20000 concurrency_peak=5 elapsed_us=159208 alloc_bytes=185519416 mallocs=640900 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=100 variant=full rep=1 returned=20000 final=20000 concurrency_peak=5 elapsed_us=161118 alloc_bytes=185503000 mallocs=640783 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=100 variant=full rep=2 returned=20000 final=20000 concurrency_peak=5 elapsed_us=157522 alloc_bytes=185503736 mallocs=640787 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=1000 selection_pct=100 variant=period rep=2 returned=20000 final=20000 concurrency_peak=5 elapsed_us=164695 alloc_bytes=185519480 mallocs=640901 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=1 variant=period rep=0 returned=2000 final=2000 concurrency_peak=5 elapsed_us=41024 alloc_bytes=18514744 mallocs=64816 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=1 variant=full rep=0 returned=200000 final=2000 concurrency_peak=5 elapsed_us=290558 alloc_bytes=496493496 mallocs=2440918 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=1 variant=full rep=1 returned=200000 final=2000 concurrency_peak=5 elapsed_us=284020 alloc_bytes=496494664 mallocs=2440930 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=1 variant=period rep=1 returned=2000 final=2000 concurrency_peak=5 elapsed_us=42691 alloc_bytes=18515176 mallocs=64820 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=1 variant=period rep=2 returned=2000 final=2000 concurrency_peak=5 elapsed_us=44226 alloc_bytes=18515000 mallocs=64819 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=1 variant=full rep=2 returned=200000 final=2000 concurrency_peak=5 elapsed_us=293286 alloc_bytes=496495272 mallocs=2440933 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=10 variant=full rep=0 returned=200000 final=20000 concurrency_peak=5 elapsed_us=421202 alloc_bytes=620977944 mallocs=2800940 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=10 variant=period rep=0 returned=20000 final=20000 concurrency_peak=5 elapsed_us=205368 alloc_bytes=185536200 mallocs=640916 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=10 variant=period rep=1 returned=20000 final=20000 concurrency_peak=5 elapsed_us=202922 alloc_bytes=185535080 mallocs=640911 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=10 variant=full rep=1 returned=200000 final=20000 concurrency_peak=5 elapsed_us=458838 alloc_bytes=620983360 mallocs=2800950 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=10 variant=full rep=2 returned=200000 final=20000 concurrency_peak=5 elapsed_us=409975 alloc_bytes=620975192 mallocs=2800932 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=10 variant=period rep=2 returned=20000 final=20000 concurrency_peak=5 elapsed_us=193765 alloc_bytes=185534616 mallocs=640908 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=100 variant=period rep=0 returned=200000 final=200000 concurrency_peak=5 elapsed_us=1706775 alloc_bytes=1865137320 mallocs=6401059 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=100 variant=full rep=0 returned=200000 final=200000 concurrency_peak=5 elapsed_us=1532814 alloc_bytes=1865120520 mallocs=6400936 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=100 variant=full rep=1 returned=200000 final=200000 concurrency_peak=5 elapsed_us=1480736 alloc_bytes=1865120600 mallocs=6400938 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=100 variant=period rep=1 returned=200000 final=200000 concurrency_peak=5 elapsed_us=1542803 alloc_bytes=1865138024 mallocs=6401063 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=100 variant=period rep=2 returned=200000 final=200000 concurrency_peak=5 elapsed_us=1175070 alloc_bytes=1865142520 mallocs=6401057 pool_wait_count=0
+    zz_performance_matrix_test.go:127: matrix total=10000 selection_pct=100 variant=full rep=2 returned=200000 final=200000 concurrency_peak=5 elapsed_us=1201677 alloc_bytes=1865141992 mallocs=6400931 pool_wait_count=0
+--- PASS: TestPerformanceSensitivityMatrix (21.39s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews	21.472s

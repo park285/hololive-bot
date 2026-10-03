@@ -6,9 +6,9 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 type upcomingSubscriptionKey struct{ channel, title string }

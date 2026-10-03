@@ -80,7 +80,8 @@ Pros:
 - Central/build host can produce artifacts; AP receives only binaries and runtime data.
 
 Cons:
-- Current deploy/status/rollback automation is Docker Compose based.
+- At the 2026-06-21 snapshot, deploy/status/rollback automation was Docker Compose based;
+  the implemented host-native path is now documented in the current runbook linked above.
 - Needs a new repo-supported artifact deploy wrapper, systemd unit, status/smoke commands, and rollback path.
 - Needs OpenBao Agent render path and service hardening to be implemented before live start.
 

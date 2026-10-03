@@ -1,16 +1,29 @@
-# Hololive Docker Compose Deployment Guide
+# Hololive Docker Compose 배포 절차의 과거 기록
 
-> Historical document. Do not use as the current source of truth. Current deployment,
-> release, rollback, and runtime procedures live under `docs/current/runbooks/` and must
-> be executed through `hololive-bot-ops`.
+> Historical document. 아래 서비스 목록·설정·명령은 당시 절차를 보존한 기록이며 현재 운영에 적용하지 않습니다.
+> 현재 배포 방식과 실행 명령은 [Deployment Baseline](../../current/DEPLOYMENT_BASELINE.md)과
+> [Current Runbooks](../../current/runbooks/README.md)를 확인하고 `hololive-bot-ops`로 수행합니다.
 
 ## 목적
 
-단일 호스트 `docker compose` 기반으로 hololive runtime을 운영하기 위한 기본 절차입니다.
+이 문서는 단일 호스트 Compose 배포와 당시 YouTube producer AP 운영 절차를 보존합니다.
+퇴역한 `youtube-producer`, 중앙 singleton collector, OpenBao env 렌더링에 대한 설명은
+현재 런타임·설정 계약으로 해석하지 않습니다.
 
-> 운영 기준 (2026-03-07): 기존 k8s/k3s 배포에서 Docker Compose 기준으로 롤백했습니다. 현재 운영에서는 `kubectl`, `kustomize`, `helm` 절차 대신 이 문서를 우선 사용합니다.
+현재 작업은 다음 문서에서 실행 명령을 선택합니다.
 
-대상 서비스:
+- [API 배포·복구](../../current/runbooks/hololive-api.md)
+- [알람 워커 배포·복구](../../current/runbooks/alarm-worker.md)
+- [YouTube collector 중앙·AP 운영](../../current/runbooks/youtube-collector.md)
+- [현재 rollback 절차](../../current/runbooks/rollback.md)
+
+## 당시 전환 배경
+
+2026-03-07 기록에는 이전 배포 구성에서 Docker Compose로 롤백한 이력이 있습니다.
+이 전환 이력은 현재 명령 선택이나 복구 대상의 근거가 아닙니다.
+
+## 당시 대상 서비스
+
 - `hololive-api` (통합 런타임 — bot plane `30001`, llm plane `30003`, admin plane `30006`)
 - `hololive-alarm-worker` (`30007`)
 - `youtube-producer` (4-way AP: osaka `30005` / seoul `30015` / main `30025` / osaka2 `30035`)
@@ -18,14 +31,14 @@
 - `holo-postgres` (`5433`)
 - `valkey-cache` (`6379`)
 
-## 운영 원칙
+## 당시 운영 원칙
 
-- 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
-- 인자 없는 `./build-all.sh`는 live deploy로 해석되므로 거부됩니다. 프로덕션은 반드시 clean tree에서 `--no-bump`를 사용하며, local/dev image build는 `./build-all.sh --build-only` 또는 `./build-all.sh <service>`를 사용합니다.
-- 직접 Compose 명령이 필요하면 raw `docker compose` 대신 `./scripts/deploy/compose.sh`를 사용합니다. 이 wrapper는 OpenBao env preflight와 shell shadowing 차단을 먼저 수행합니다.
+- 당시 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`였습니다.
+- 당시 인자 없는 `./build-all.sh`는 live deploy로 해석되어 거부됐습니다. 프로덕션은 clean tree에서 `--no-bump`를, local/dev image build는 `./build-all.sh --build-only` 또는 `./build-all.sh <service>`를 사용하도록 안내했습니다.
+- 당시 직접 Compose 명령은 `./scripts/deploy/compose.sh`를 사용하도록 안내했으며, wrapper는 OpenBao env preflight와 shell shadowing 차단을 수행했습니다.
 - 당시 env 전환 정리 기록은 [Env Cleanup Runbook](../openbao/OPENBAO_ENV_CLEANUP_RUNBOOK.md)에 보존합니다.
 - 상태/장애 1차 확인은 `./scripts/deploy/compose.sh -f docker-compose.prod.yml ps`, `./scripts/deploy/compose.sh ... logs`, `/health`, `/ready` 기준으로 수행합니다.
-- k8s/k3s 시절 절차나 매니페스트가 저장소에 남아 있더라도, 현재 운영 SSOT로 간주하지 않습니다.
+- 이하의 서비스·env·명령 예시는 당시 상태를 보존합니다. 현재 배포·상태 조회·복구에는 위 current runbook을 사용합니다.
 - 앱 이미지는 distroless에서 UID/GID `1000:1000`으로 실행하고 `/etc/passwd`의 `app` 사용자와 `USER=app`, `HOME=/tmp`를 함께 제공합니다.
 - Compose healthcheck는 Dockerfile의 `HEALTHCHECK --start-period=5s`보다 운영 Compose anchor의 `start_period: 30s`를 우선 적용합니다.
 - Compose가 Dockerfile 기본값을 의도적으로 override하는 값이 있습니다. `hololive-api`는 Compose에서 `GOGC=80`, `GOMEMLIMIT=1024MiB`를 적용합니다.
@@ -76,7 +89,9 @@ split-host 구성에서는 producer AP runtime만 원격 호스트에서 실행�
 - env 정본은 OpenBao KV입니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
 - 중앙 host의 `./scripts/deploy/compose-redeploy-service.sh youtube-producer`는 기본적으로 차단됩니다. 원격 AP overlay 또는 명시적 emergency override 없이 중앙에서 재기동하지 않습니다.
 
-원격 AP 재배포 진입점은 runtime별 host 파라미터화 wrapper입니다. Osaka와 Osaka2는 host-native helper, Seoul은 Compose helper를 사용합니다. 로컬 build/artifact transfer/no-build recreate/검증 절차는 `docs/current/runbooks/youtube-producer.md`의 Remote AP rollout 섹션을 따릅니다.
+당시 원격 AP 재배포는 runtime별 host 파라미터화 wrapper를 사용했습니다. 아래 명령과
+당시 `docs/current/runbooks/youtube-producer.md`의 Remote AP rollout 안내는 퇴역 runtime의 기록입니다.
+현재 AP 실행 명령은 [YouTube collector runbook](../../current/runbooks/youtube-collector.md)에서 확인합니다.
 
 ```bash
 ./scripts/deploy/ap-host-native-deploy.sh osaka --dry-run
@@ -309,10 +324,12 @@ docker logs -f hololive-youtube-producer-c
 명령 종료 후 `hololive-db-migrate` 성공 로그와 적용 ledger를 확인한 다음 runtime을 재개합니다.
 override를 지정하지 않은 모든 경로는 기본값 `false`로 plain index drop을 거부합니다.
 
-## 관련 런북
+## 당시 참고 문서
 
 - `docs/history/youtube/YOUTUBE_PRODUCER_RUNBOOK.md`
 - `hololive/hololive-kakao-bot-go/docs/STREAM_INGESTER_RUNBOOK.md`
+
+위 경로는 당시 참고 관계를 보존한 것입니다. 현재 운영 문서는 이 문서 상단의 current runbook 링크를 따릅니다.
 
 ## 정지 / 재기동
 

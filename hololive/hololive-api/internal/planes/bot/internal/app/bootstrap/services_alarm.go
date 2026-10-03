@@ -24,7 +24,7 @@ func InitAlarmModeComponents(
 		return nil, errors.New("alarm provider URL (ALARM_INTERNAL_URL) is required")
 	}
 
-	alarmClient, err := alarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger)
+	alarmClient, err := alarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger, appConfig.InternalH3)
 	if err != nil {
 		return nil, fmt.Errorf("configure alarm worker client: %w", err)
 	}

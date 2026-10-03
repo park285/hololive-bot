@@ -12,7 +12,7 @@ import (
 	"go.uber.org/fx/fxevent"
 
 	runtimeapp "github.com/kapu/hololive-api/internal/app"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 )
 
 const processLifecycleTimeout = 30 * time.Second
@@ -26,12 +26,12 @@ type telemetryResource interface {
 type runtimeResource interface {
 	Start(context.Context, chan<- error)
 	Shutdown(context.Context) error
-	Close()
+	CloseContext(context.Context) error
 }
 
 type (
 	telemetryFactory func(context.Context, telemetry.Config) (telemetryResource, error)
-	runtimeFactory   func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error)
+	runtimeFactory   func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger) (runtimeResource, error)
 )
 
 type applicationDependencies struct {
@@ -44,7 +44,7 @@ type applicationState struct {
 }
 
 type applicationParams struct {
-	config       *apiplane.RuntimeConfig
+	config       *apiconfig.RuntimeConfig
 	logger       *slog.Logger
 	version      string
 	dependencies applicationDependencies
@@ -59,7 +59,7 @@ type Application struct {
 
 func New(
 	ctx context.Context,
-	config *apiplane.RuntimeConfig,
+	config *apiconfig.RuntimeConfig,
 	logger *slog.Logger,
 	version string,
 ) (*Application, error) {
@@ -95,15 +95,11 @@ func newApplication(ctx context.Context, params applicationParams) (*Application
 	fxApplication := fx.New(options...)
 
 	if err := fxApplication.Err(); err != nil {
-		resources.Close(ctx)
-
-		return nil, fmt.Errorf("initialize Fx application: %w", err)
+		return nil, errors.Join(fmt.Errorf("initialize Fx application: %w", err), resources.Close(ctx))
 	}
 
 	if state.coordinator == nil {
-		resources.Close(ctx)
-
-		return nil, errors.New("initialize Fx application: lifecycle coordinator was not registered")
+		return nil, errors.Join(errors.New("initialize Fx application: lifecycle coordinator was not registered"), resources.Close(ctx))
 	}
 
 	return &Application{
@@ -161,7 +157,7 @@ func productionDependencies() applicationDependencies {
 		},
 		buildRuntime: func(
 			ctx context.Context,
-			config *apiplane.RuntimeConfig,
+			config *apiconfig.RuntimeConfig,
 			logger *slog.Logger,
 		) (runtimeResource, error) {
 			runtime, err := runtimeapp.BuildRuntime(ctx, config, logger)
@@ -177,14 +173,14 @@ func productionDependencies() applicationDependencies {
 func telemetryConstructor(factory telemetryFactory) func(
 	context.Context,
 	buildVersion,
-	*apiplane.RuntimeConfig,
+	*apiconfig.RuntimeConfig,
 	*slog.Logger,
 	*resourceOwner,
 ) (telemetryResource, error) {
 	return func(
 		ctx context.Context,
 		version buildVersion,
-		config *apiplane.RuntimeConfig,
+		config *apiconfig.RuntimeConfig,
 		logger *slog.Logger,
 		resources *resourceOwner,
 	) (telemetryResource, error) {
@@ -193,10 +189,14 @@ func telemetryConstructor(factory telemetryFactory) func(
 			return nil, fmt.Errorf("create telemetry resource: %w", err)
 		}
 
-		resources.Add(func(closeCtx context.Context) {
+		resources.Add(func(closeCtx context.Context) error {
 			if err := provider.Shutdown(closeCtx); err != nil {
 				logDiagnosticError(logger, "telemetry provider shutdown failed", err)
+
+				return fmt.Errorf("close telemetry provider: %w", err)
 			}
+
+			return nil
 		})
 
 		return provider, nil
@@ -205,14 +205,14 @@ func telemetryConstructor(factory telemetryFactory) func(
 
 func runtimeConstructor(factory runtimeFactory) func(
 	context.Context,
-	*apiplane.RuntimeConfig,
+	*apiconfig.RuntimeConfig,
 	*slog.Logger,
 	telemetryResource,
 	*resourceOwner,
 ) (runtimeResource, error) {
 	return func(
 		ctx context.Context,
-		config *apiplane.RuntimeConfig,
+		config *apiconfig.RuntimeConfig,
 		logger *slog.Logger,
 		_ telemetryResource,
 		resources *resourceOwner,
@@ -222,9 +222,7 @@ func runtimeConstructor(factory runtimeFactory) func(
 			return nil, fmt.Errorf("create aggregate runtime resource: %w", err)
 		}
 
-		resources.Add(func(context.Context) {
-			runtime.Close()
-		})
+		resources.AddResumable(runtime.CloseContext)
 
 		return runtime, nil
 	}
@@ -238,7 +236,7 @@ func newFXEventLogger(logger *slog.Logger) fxevent.Logger {
 	return fxLogger
 }
 
-func hololiveAPITelemetryConfig(config *apiplane.RuntimeConfig, version string) telemetry.Config {
+func hololiveAPITelemetryConfig(config *apiconfig.RuntimeConfig, version string) telemetry.Config {
 	return telemetry.Config{
 		Enabled:        config.Tracing.Enabled,
 		ServiceName:    "hololive-api",

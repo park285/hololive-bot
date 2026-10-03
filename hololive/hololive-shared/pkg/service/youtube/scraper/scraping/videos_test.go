@@ -260,7 +260,7 @@ func TestParseVideosFromRSSFeed(t *testing.T) {
   </entry>
 </feed>`
 
-	videos, err := parseVideosFromRSSFeed(rssXML, "UC_TEST", 10)
+	videos, err := parser.ParseVideosFromRSSFeed(rssXML, "UC_TEST", 10)
 	require.NoError(t, err)
 	require.Len(t, videos, 2)
 
@@ -296,7 +296,7 @@ func TestParseVideosFromRSSFeed_MaxResultsAndInvalidEntries(t *testing.T) {
   </entry>
 </feed>`
 
-	videos, err := parseVideosFromRSSFeed(rssXML, "UC_TEST", 1)
+	videos, err := parser.ParseVideosFromRSSFeed(rssXML, "UC_TEST", 1)
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
 	assert.Equal(t, "vid001", videos[0].VideoID)

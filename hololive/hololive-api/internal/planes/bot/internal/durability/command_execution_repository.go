@@ -80,11 +80,7 @@ func (r *CommandExecutionRepository) Claim(ctx context.Context, messageID, comma
 
 	tag, err := r.pool.Exec(ctx, commandExecutionClaimSQL, id, kind, token)
 	if err != nil {
-		if safeErr := safeMessageRepositoryError("claim command execution", id, err); safeErr != nil {
-			return false, fmt.Errorf("safe message repository error: %w", safeErr)
-		}
-
-		return false, nil
+		return false, safeMessageRepositoryError("claim command execution", id, err)
 	}
 
 	return tag.RowsAffected() == 1, nil
@@ -142,11 +138,7 @@ func (r *CommandExecutionRepository) Heartbeat(ctx context.Context, messageID, c
 
 	tag, err := r.pool.Exec(ctx, commandExecutionHeartbeatSQL, id, token)
 	if err != nil {
-		if safeErr := safeMessageRepositoryError("heartbeat command execution", id, err); safeErr != nil {
-			return false, fmt.Errorf("safe message repository error: %w", safeErr)
-		}
-
-		return false, nil
+		return false, safeMessageRepositoryError("heartbeat command execution", id, err)
 	}
 
 	return tag.RowsAffected() == 1, nil
@@ -171,11 +163,7 @@ func (r *CommandExecutionRepository) State(ctx context.Context, messageID string
 	}
 
 	if err != nil {
-		if safeErr := safeMessageRepositoryError("inspect command execution state", id, err); safeErr != nil {
-			return nil, fmt.Errorf("safe message repository error: %w", safeErr)
-		}
-
-		return nil, nil //nolint:nilnil // safe*Error가 오류를 삼킨 경우도 위 ErrNoRows 분기와 같은 "행 없음"으로 접는다.
+		return nil, safeMessageRepositoryError("inspect command execution state", id, err)
 	}
 
 	return &state, nil

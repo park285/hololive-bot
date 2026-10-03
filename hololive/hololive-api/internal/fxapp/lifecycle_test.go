@@ -31,7 +31,7 @@ func TestLifecycleCancelsRuntimeBeforeShutdownAndClosesResources(t *testing.T) {
 	}
 
 	owner := newResourceOwner()
-	owner.Add(func(context.Context) { calls = append(calls, "close") })
+	owner.Add(func(context.Context) error { calls = append(calls, "close"); return nil })
 
 	coordinator := lifecycleTestCoordinator(runtime, owner)
 
@@ -77,7 +77,7 @@ func TestLifecycleJoinsFatalAndShutdownErrors(t *testing.T) {
 	}
 }
 
-func TestLifecycleAppliesBoundedPlaneDrainAndStillCloses(t *testing.T) {
+func TestLifecycleBoundedDrainErrorStillClosesQuiescedResources(t *testing.T) {
 	closed := false
 	runtime := &lifecycleTestRuntime{shutdown: func(ctx context.Context) error {
 		<-ctx.Done()
@@ -85,7 +85,7 @@ func TestLifecycleAppliesBoundedPlaneDrainAndStillCloses(t *testing.T) {
 		return ctx.Err()
 	}}
 	owner := newResourceOwner()
-	owner.Add(func(context.Context) { closed = true })
+	owner.Add(func(context.Context) error { closed = true; return nil })
 
 	coordinator := lifecycleTestCoordinator(runtime, owner)
 
@@ -106,9 +106,10 @@ func TestLifecycleAppliesBoundedPlaneDrainAndStillCloses(t *testing.T) {
 }
 
 type lifecycleTestRuntime struct {
-	start    func(context.Context, chan<- error)
-	errCh    chan<- error
-	shutdown func(context.Context) error
+	start        func(context.Context, chan<- error)
+	errCh        chan<- error
+	shutdown     func(context.Context) error
+	closeRuntime func(context.Context) error
 }
 
 func (r *lifecycleTestRuntime) Start(ctx context.Context, errCh chan<- error) {
@@ -131,7 +132,13 @@ func (r *lifecycleTestRuntime) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (r *lifecycleTestRuntime) Close() {}
+func (r *lifecycleTestRuntime) CloseContext(ctx context.Context) error {
+	if r.closeRuntime != nil {
+		return r.closeRuntime(ctx)
+	}
+
+	return nil
+}
 
 func lifecycleTestCoordinator(runtime runtimeResource, owner *resourceOwner) *lifecycleCoordinator {
 	return &lifecycleCoordinator{

@@ -22,23 +22,24 @@ package botruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
+	"sync/atomic"
 
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 
+	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type BotRuntime struct {
-	lifecycle.Managed
-
 	Config *settings.Config
 	Logger *slog.Logger
 
@@ -59,6 +60,25 @@ type BotRuntime struct {
 	durable              *durableRuntime
 	workerRegistry       *workercontract.Registry
 	workerProfileChecker *workercontract.ProfileFileChecker
+
+	lifecycleMu        sync.Mutex
+	started            bool
+	stopping           bool
+	tasksCancel        context.CancelFunc
+	tasksWG            sync.WaitGroup
+	tasksDone          chan struct{}
+	backgroundErr      error
+	shutdownErr        error
+	quiesced           atomic.Bool
+	cleanup            func() error
+	resourcesCloseOnce sync.Once
+	resourcesDone      chan struct{}
+	resourcesErr       error
+	requestsMu         sync.Mutex
+	requestsWG         sync.WaitGroup
+	requestsDone       chan struct{}
+	requestsClosing    bool
+	httpHandlersOnce   sync.Once
 }
 
 func BuildRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*BotRuntime, error) {
@@ -67,12 +87,17 @@ func BuildRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
 
-	runtime, cleanup, err := InitializeBotRuntime(ctx, appConfig, logger)
+	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
+		return nil, fmt.Errorf("failed to initialize runtime: init bot infrastructure: %w", err)
 	}
 
-	runtime.Managed = lifecycle.NewManaged(cleanup)
+	runtime, err := buildBotRuntime(ctx, appConfig, logger, infra)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("failed to initialize runtime: build bot runtime: %w", err), infra.Cleanup())
+	}
+
+	runtime.cleanup = infra.Cleanup
 
 	return runtime, nil
 }
@@ -83,5 +108,7 @@ func (r *BotRuntime) Close() {
 		return
 	}
 
-	r.Managed.Close()
+	if err := r.CloseContext(context.Background()); err != nil {
+		r.logError("bot runtime close failed", err)
+	}
 }

@@ -1,0 +1,56 @@
+package settings
+
+import (
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"sync/atomic"
+	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	alarmclient "github.com/kapu/hololive-shared/pkg/service/alarm"
+)
+
+// 연결 종료는 worker가 적용한 뒤 caller가 응답을 받지 못한 경우를 재현한다.
+func TestConfigExpansionApplyAfterResponseLoss(t *testing.T) {
+	var applied atomic.Int32
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != alarm.SettingsPath {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-API-Key") != "synthetic-probe-key" {
+			t.Error("missing synthetic API key")
+		}
+		if requests.Add(1) == 1 {
+			applied.Store(10)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"success":true,"data":{"target_minutes":[10,5,1]}}`)
+			return
+		}
+		applied.Store(15)
+		panic(http.ErrAbortHandler)
+	}))
+	defer server.Close()
+
+	client := alarmclient.NewClientWithAPIKey(server.URL, "synthetic-probe-key", slog.New(slog.DiscardHandler))
+	defer client.Close()
+	applier := NewLocalSettingsApplier(client)
+	confirmed := applier.ApplyAlarmAdvanceMinutes(t.Context(), 10)
+	if !confirmed.AlarmApplied || !reflect.DeepEqual(confirmed.AlarmTargetMinutes, []int{10, 5, 1}) {
+		t.Fatalf("first confirmation: %+v", confirmed)
+	}
+	lost := applier.ApplyAlarmAdvanceMinutes(t.Context(), 15)
+	if applied.Load() != 15 || requests.Load() != 2 {
+		t.Fatalf("server applied=%d requests=%d", applied.Load(), requests.Load())
+	}
+	if lost.AlarmApplied || lost.AlarmReason != "alarm worker did not apply alarm advance minutes" {
+		t.Fatalf("unexpected current apply result: %+v", lost)
+	}
+	if !reflect.DeepEqual(client.GetTargetMinutes(), []int{10, 5, 1}) {
+		t.Fatalf("cached state changed despite response loss: %v", client.GetTargetMinutes())
+	}
+	t.Logf("server_applied=%d; admin_applied=%v; reason=%q; confirmed_cache=%v; requests=%d", applied.Load(), lost.AlarmApplied, lost.AlarmReason, client.GetTargetMinutes(), requests.Load())
+}

@@ -3,7 +3,8 @@ package settings
 import (
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 const (
@@ -13,10 +14,10 @@ const (
 
 // LoadRuntimeTokensAndCORS: Iris egress 토큰과 CORS 허용 origin을 함께 읽는다.
 func LoadRuntimeTokensAndCORS() (webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) {
-	webhookToken = load.TrimmedEnv(irisWebhookTokenEnv)
-	botToken = load.TrimmedEnv(irisBotTokenEnv)
+	webhookToken = envload.TrimmedEnv(irisWebhookTokenEnv)
+	botToken = envload.TrimmedEnv(irisBotTokenEnv)
 
-	isProduction := load.IsProduction(load.AppEnvironment())
+	isProduction := runtimepolicy.IsProduction(envload.AppEnvironment())
 
 	corsAllowedOrigins, corsMissingInProduction = parseCORSAllowedOrigins(
 		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),

@@ -1,0 +1,81 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package alarmdispatch
+
+import (
+	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestInitAlarmDispatchRunnerMetricsIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	require.NotPanics(t, func() {
+		initAlarmDispatchRunnerMetrics()
+		initAlarmDispatchRunnerMetrics()
+	})
+	assert.NotNil(t, alarmDispatchRunnerEmptyPollsTotal)
+	assert.NotNil(t, alarmDispatchRunnerIdleWaitSeconds)
+	assert.NotNil(t, alarmDispatchRunnerWakeupConsumedTotal)
+	assert.NotNil(t, alarmDispatchRunnerWakeupTimeoutTotal)
+	assert.NotNil(t, alarmDispatchRunnerWakeupErrorTotal)
+	assert.NotNil(t, alarmDispatchRunnerPostSendQuarantinedTotal)
+	assert.NotNil(t, alarmDispatchPGRetentionDeletedRowsTotal)
+	assert.NotNil(t, alarmDispatchPGRetentionFailedTotal)
+	assert.NotNil(t, alarmDispatchPGBacklogObservationFailedTotal)
+	assert.NotNil(t, alarmDispatchPGBacklogRows)
+	assert.NotNil(t, alarmDispatchPGOldestPendingAgeSeconds)
+	assert.NotNil(t, alarmDispatchPGOldestRetryAgeSeconds)
+	assert.NotNil(t, alarmDispatchPGOldestSendingAgeSeconds)
+}
+
+func TestObserveAlarmDispatchBacklogObservationFailureIncrementsCounter(t *testing.T) {
+	initAlarmDispatchRunnerMetrics()
+
+	before := alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total")
+
+	observeAlarmDispatchBacklogObservationFailure()
+
+	assert.InDelta(t, before+1, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total"), 0)
+}
+
+func alarmDispatchCounterMetricValue(t *testing.T, name string) float64 {
+	t.Helper()
+	initAlarmDispatchRunnerMetrics()
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+
+	for _, family := range families {
+		if family.GetName() == name {
+			require.Len(t, family.Metric, 1)
+
+			return family.Metric[0].GetCounter().GetValue()
+		}
+	}
+
+	require.FailNow(t, "alarm dispatch counter metric not found", name)
+
+	return 0
+}

@@ -9,12 +9,10 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 )
 
 func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {
-	defer func() { r.loopDone <- struct{}{} }()
-
 	ticker := time.NewTicker(r.Config.ClaimInterval)
 
 	defer ticker.Stop()
@@ -67,8 +65,6 @@ func (r *Runtime) stopAfterClaimError(ctx context.Context, errCh chan<- error, e
 }
 
 func (r *Runtime) runLiveEndLoop(ctx context.Context, errCh chan<- error) {
-	defer func() { r.loopDone <- struct{}{} }()
-
 	ticker := time.NewTicker(r.Config.LiveEndFinalizer.Interval)
 
 	defer ticker.Stop()
@@ -144,8 +140,6 @@ func (r *Runtime) finalizeNextDueLiveEnd(ctx context.Context) (bool, error) {
 }
 
 func (r *Runtime) runProjectionLoop(ctx context.Context, errCh chan<- error) {
-	defer func() { r.loopDone <- struct{}{} }()
-
 	ticker := time.NewTicker(r.Config.TargetProjection.Interval)
 
 	defer ticker.Stop()
@@ -178,8 +172,6 @@ func (r *Runtime) stopAfterProjectionError(ctx context.Context, errCh chan<- err
 }
 
 func (r *Runtime) runWorker(ctx context.Context, errCh chan<- error) {
-	defer func() { r.workerDone <- struct{}{} }()
-
 	for {
 		work, ok := r.nextWork(ctx)
 		if !ok {

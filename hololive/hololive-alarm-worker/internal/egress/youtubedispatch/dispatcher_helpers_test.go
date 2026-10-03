@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
@@ -42,7 +43,7 @@ type buildTemplateDataCase struct {
 func TestBuildTemplateData(t *testing.T) {
 	t.Parallel()
 
-	mf := &MessageFormatter{}
+	mf := &format.MessageFormatter{}
 	tests := []buildTemplateDataCase{
 		{
 			name: "video payload",
@@ -89,10 +90,10 @@ func TestBuildTemplateData(t *testing.T) {
 	}
 }
 
-func assertBuildTemplateData(t *testing.T, mf *MessageFormatter, tt buildTemplateDataCase) {
+func assertBuildTemplateData(t *testing.T, mf *format.MessageFormatter, tt buildTemplateDataCase) {
 	t.Helper()
 
-	got, err := mf.buildTemplateData("멤버", &tt.item)
+	got, err := mf.BuildTemplateData("멤버", &tt.item)
 	if tt.wantErr {
 		if err == nil {
 			t.Fatal("expected error, got nil")
@@ -140,14 +141,14 @@ func TestTruncateString(t *testing.T) {
 func TestBuildGroupedTemplateData(t *testing.T) {
 	t.Parallel()
 
-	mf := &MessageFormatter{}
+	mf := &format.MessageFormatter{}
 	items := []domain.YouTubeNotificationOutbox{
 		{Kind: domain.OutboxKindNewVideo, Payload: testPayloadVideoOne},
 		{Kind: domain.OutboxKindNewShort, Payload: `{invalid}`},
 		{Kind: domain.OutboxKindCommunityPost, Payload: `{"post_id":"p1","content_text":"내용"}`},
 	}
 
-	got := mf.buildGroupedTemplateData("멤버", domain.OutboxKindNewVideo, items)
+	got := mf.BuildGroupedTemplateData("멤버", domain.OutboxKindNewVideo, items)
 	if got.MemberName != "멤버" || got.Kind != string(domain.OutboxKindNewVideo) || got.Count != 3 || len(got.Items) != 3 {
 		t.Fatalf("unexpected grouped template header: %#v", got)
 	}
@@ -246,12 +247,12 @@ func TestUniqueInt64s(t *testing.T) {
 func TestFormatGroupedMessageErrors(t *testing.T) {
 	t.Parallel()
 
-	mf := &MessageFormatter{}
-	if _, err := mf.formatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, nil); err == nil {
+	mf := &format.MessageFormatter{}
+	if _, err := mf.FormatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, nil); err == nil {
 		t.Fatal("expected empty items error")
 	}
 
-	if _, err := mf.formatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{{}}); err == nil {
+	if _, err := mf.FormatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{{}}); err == nil {
 		t.Fatal("expected nil renderer error")
 	}
 }

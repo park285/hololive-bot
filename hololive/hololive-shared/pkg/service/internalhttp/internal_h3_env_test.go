@@ -12,7 +12,11 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 )
+
+const testInternalH3ServerName = "127.0.0.1"
 
 func writeTestCACertificate(t *testing.T) string {
 	t.Helper()
@@ -47,22 +51,24 @@ func writeTestCACertificate(t *testing.T) string {
 
 // 내부 H3 client는 전용 HOLOLIVE_INTERNAL_H3_* 두 키만 쓴다. 공통 서버 키(HOLOLIVE_H3_CERT_FILE,
 // HOLOLIVE_H3_SERVER_NAME)로 내려가는 폴백은 두지 않는다(stack audit 2026-09-26).
-func TestNewClientForURLStrictRequiresInternalH3EnvWithoutServerFallback(t *testing.T) {
+func TestNewClientForURLStrictUsesExplicitOptionsWithoutEnvironmentFallback(t *testing.T) {
 	serverCert := writeTestCACertificate(t)
 
 	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", serverCert)
-	t.Setenv("HOLOLIVE_H3_SERVER_NAME", "127.0.0.1")
+	t.Setenv("HOLOLIVE_H3_SERVER_NAME", testInternalH3ServerName)
 
-	if client, err := NewClientForURLStrict("https://hololive-admin-api:30006", time.Second, nil); err == nil || client != nil {
+	if client, err := NewClientForURLStrict("https://hololive-admin-api:30006", time.Second, sharedh3.ClientOptions{}); err == nil || client != nil {
 		t.Fatalf("NewClientForURLStrict() = (%T, %v), want missing internal H3 env error", client, err)
 	}
 
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", serverCert)
-	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "127.0.0.1")
+	options := sharedh3.ClientOptions{CACertFile: serverCert, ServerName: testInternalH3ServerName}
 
-	client, err := NewClientForURLStrict("https://hololive-admin-api:30006", time.Second, nil)
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "invalid-env-file")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "invalid-env-name")
+
+	client, err := NewClientForURLStrict("https://hololive-admin-api:30006", time.Second, options)
 	if err != nil || client == nil {
 		t.Fatalf("NewClientForURLStrict() = (%T, %v), want configured client", client, err)
 	}

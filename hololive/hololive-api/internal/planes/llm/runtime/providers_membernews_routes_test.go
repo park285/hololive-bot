@@ -34,11 +34,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -69,7 +69,7 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	require.NotNil(t, module.Repository)
 	require.NotNil(t, module.Locker)
 
-	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 	require.NotNil(t, triggerHandler)
 }
 

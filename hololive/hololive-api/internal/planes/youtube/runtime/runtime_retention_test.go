@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
@@ -106,7 +106,7 @@ func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 
 func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 	day := 24 * time.Hour
-	cfg := apiplane.YouTubePlaneRetentionConfig{
+	cfg := apiconfig.YouTubePlaneRetentionConfig{
 		CommunityPageAge:    1 * day,
 		VideoListAge:        2 * day,
 		ShortsListAge:       3 * day,
@@ -152,7 +152,7 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 }
 
 func TestPlaneRetentionConfigIncludesDependentRetention(t *testing.T) {
-	cfg := apiplane.YouTubePlaneRetentionConfig{
+	cfg := apiconfig.YouTubePlaneRetentionConfig{
 		ApplicationAuditGrace: 60 * 24 * time.Hour,
 		LiveAbsenceSlotAge:    30 * 24 * time.Hour,
 		CheckpointHistoryAge:  7 * 24 * time.Hour,

@@ -8,7 +8,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func TestLoadWorkerProfileLoadsExactRoleSettings(t *testing.T) {

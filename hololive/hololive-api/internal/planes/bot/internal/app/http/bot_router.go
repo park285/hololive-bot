@@ -34,6 +34,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/health"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/readiness"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
@@ -52,7 +53,7 @@ func ProvideBotRouter(
 	appConfig *settings.Config,
 	logger *slog.Logger,
 	webhookHandler *webhook.Handler,
-	triggerHandler *sharedserver.TriggerHandler,
+	triggerHandler *apiserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*gin.Engine, error) {
@@ -82,7 +83,7 @@ func botReadyResponder(ctx context.Context, probe *sharedreadiness.Probe) func(*
 func botRouteRegistrar(
 	apiKey string,
 	webhookHandler *webhook.Handler,
-	triggerHandler *sharedserver.TriggerHandler,
+	triggerHandler *apiserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
 ) func(*gin.Engine) error {
@@ -152,7 +153,7 @@ func handleIrisRooms(roomLister IrisRoomLister, logger *slog.Logger) gin.Handler
 func registerTriggerRoutes(
 	router *gin.Engine,
 	apiKey string,
-	triggerHandler *sharedserver.TriggerHandler,
+	triggerHandler *apiserver.TriggerHandler,
 ) error {
 	if triggerHandler == nil {
 		return nil

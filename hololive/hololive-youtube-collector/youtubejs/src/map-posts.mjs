@@ -1,3 +1,5 @@
+import { readUpstream } from "./upstream-errors.mjs";
+
 export function textOf(value) {
   if (value == null) {
     return "";
@@ -12,7 +14,12 @@ export function textOf(value) {
     return value.text;
   }
   if (typeof value.toString === "function" && value.toString !== Object.prototype.toString) {
-    const rendered = value.toString();
+    const rendered = readUpstream(() => value.toString());
+    if (typeof rendered !== "string") {
+      const error = new Error("upstream text renderer did not return a string");
+      error.code = "parser_drift";
+      throw error;
+    }
     if (rendered && rendered !== "[object Object]") {
       return rendered;
     }
@@ -127,9 +134,9 @@ function mapAttachment(attachment) {
   const videoId = textOf(
     attachment.video_id || (type === "Video" || type === "CompactVideo" ? attachment.id : ""),
   ).trim();
-  const images = thumbnailsOf(
-    attachment.image || attachment.images || attachment.thumbnails,
-  );
+  const images = type === "PostMultiImage"
+    ? attachment.images.flatMap((image) => thumbnailsOf(image.image))
+    : thumbnailsOf(attachment.image || attachment.images || attachment.thumbnails);
   return { images, videoId };
 }
 

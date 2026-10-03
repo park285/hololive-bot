@@ -142,10 +142,10 @@ func newRoundTripAlarmMock(t *testing.T) *mockAlarmCRUD {
 
 		return 3, nil
 	}
-	mock.updateAlarmAdvanceMinutesFn = func(minutes int) []int {
+	mock.updateAlarmAdvanceMinutesFn = func(minutes int) (domain.AdvanceMinutesResult, error) {
 		assert.Equal(t, 10, minutes)
 
-		return []int{10, 5, 1}
+		return domain.AdvanceMinutesResult{RequestedMinutes: minutes, Outcome: domain.ApplyConfirmed, TargetMinutes: []int{10, 5, 1}}, nil
 	}
 	mock.setRoomNameFn = func(_ context.Context, roomID, roomName string) error {
 		assert.Equal(t, testRoomID, roomID)
@@ -192,7 +192,10 @@ func TestClientRoundTripWithRealHandlerEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, deleted)
 
-	assert.Equal(t, []int{10, 5, 1}, client.UpdateAlarmAdvanceMinutes(t.Context(), 10))
+	advanceResult, err := client.UpdateAlarmAdvanceMinutes(t.Context(), 10)
+	require.NoError(t, err)
+	assert.Equal(t, domain.ApplyConfirmed, advanceResult.Outcome)
+	assert.Equal(t, []int{10, 5, 1}, advanceResult.TargetMinutes)
 	assert.Equal(t, []int{10, 5, 1}, client.GetTargetMinutes())
 
 	require.NoError(t, client.SetRoomName(t.Context(), testRoomID, "Room One"))
@@ -263,14 +266,11 @@ func completeAlarmMock() *mockAlarmCRUD {
 	return &mockAlarmCRUD{
 		addAlarmFn:                  func(context.Context, domain.AddAlarmRequest) (bool, error) { return false, nil },
 		removeAlarmFn:               func(context.Context, string, string, domain.AlarmTypes) (bool, error) { return false, nil },
-		getRoomAlarmsFn:             func(context.Context, string) ([]string, error) { return nil, nil },
 		getRoomAlarmsWithTypesFn:    func(context.Context, string) ([]*domain.Alarm, error) { return nil, nil },
 		listRoomAlarmsViewFn:        func(context.Context, string) ([]domain.AlarmListView, error) { return nil, nil },
 		clearRoomAlarmsFn:           func(context.Context, string) (int, error) { return 0, nil },
-		updateAlarmAdvanceMinutesFn: func(int) []int { return nil },
-		getTargetMinutesFn:          func() []int { return nil },
+		updateAlarmAdvanceMinutesFn: func(int) (domain.AdvanceMinutesResult, error) { return domain.AdvanceMinutesResult{}, nil },
 		setRoomNameFn:               func(context.Context, string, string) error { return nil },
 		getAllAlarmKeysFn:           func(context.Context) ([]*domain.AlarmEntry, error) { return nil, nil },
-		warmCacheFromDBFn:           func(context.Context) error { return nil },
 	}
 }

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 

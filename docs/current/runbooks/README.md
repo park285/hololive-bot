@@ -9,7 +9,10 @@
 | `hololive-api` | `hololive-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
 | `youtube-collector` | `youtube-collector.md` |
-| `admin-dashboard` | `admin-dashboard.md` |
+
+Collector runbook은 중앙 `c`·Seoul `b`의 Compose와 Osaka `a`·Osaka2 `d`의 native systemd 절차를 함께 소유합니다.
+통합 관리자 웹은 iris-seoul의 `iris-console.service`가 소유하며, 이 저장소의 연결·shortlink 경계는
+[`admin-dashboard.md`](admin-dashboard.md)를 따릅니다.
 
 ## Infra And Release
 

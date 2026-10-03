@@ -28,7 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification *domain.AlarmNotification) string {
@@ -70,7 +70,7 @@ func alarmNotificationScheduledKST(stream *domain.Stream) string {
 		return ""
 	}
 
-	return util.FormatKST(*stream.StartScheduled, "15:04")
+	return timeutil.FormatKST(*stream.StartScheduled, "15:04")
 }
 
 func alarmNotificationTemplateKey(minutesUntil int) domain.TemplateKey {
@@ -171,7 +171,7 @@ func (f *ResponseFormatter) alarmNotificationGroupEntries(ctx context.Context, n
 		var scheduledKST string
 
 		if notification.Stream.StartScheduled != nil {
-			scheduledKST = util.FormatKST(*notification.Stream.StartScheduled, "15:04")
+			scheduledKST = timeutil.FormatKST(*notification.Stream.StartScheduled, "15:04")
 		}
 
 		entries = append(entries, alarmNotificationGroupEntry{

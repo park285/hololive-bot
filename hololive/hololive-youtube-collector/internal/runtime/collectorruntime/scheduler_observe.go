@@ -8,10 +8,10 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
@@ -59,9 +59,8 @@ func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
 }
 
 func (e *collectionExecutor) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
-	observations := output.Observations()
-	for i := range observations {
-		envelope := &observations[i]
+	for i := range output.ObservationCount() {
+		envelope := output.ObservationMetadata(i)
 		outcome, ok := publishedOutcome(result, i)
 
 		if !ok {
@@ -131,9 +130,8 @@ func publishOutcomeLabel(outcome sourceobservation.PublishOutcome) (string, bool
 }
 
 func (e *collectionExecutor) observePublishOutcome(provider contract.Provider, output collectutil.RunOutput, outcome string) {
-	observations := output.Observations()
-	for i := range observations {
-		envelope := &observations[i]
+	for i := range output.ObservationCount() {
+		envelope := output.ObservationMetadata(i)
 		e.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
 	}
 }

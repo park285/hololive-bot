@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
-	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -73,7 +73,7 @@ func alarmWorkerTestConfig(t *testing.T) (*settings.Config, *alarmWorkerRegistry
 	require.NoError(t, err)
 	t.Setenv(workercontract.ProfileFileEnv, path)
 
-	profile, err := alarmworker.LoadWorkerProfile()
+	profile, err := workerconfig.LoadWorkerProfile()
 	require.NoError(t, err)
 
 	profile.AlarmDispatch.WakeupEnabled = false
@@ -187,7 +187,7 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 
 func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
-	runner, err := buildNotificationEgress(t.Context(), &alarmworker.RuntimeConfig{Config: config}, &sharedmodules.InfraModule{}, nil, state)
+	runner, err := buildNotificationEgress(t.Context(), &workerconfig.RuntimeConfig{Config: config}, &sharedmodules.InfraModule{}, nil, state)
 
 	require.Error(t, err)
 	assert.Nil(t, runner)
@@ -204,7 +204,7 @@ func TestBuildAlarmDispatchRunnerBuildsPGRunner(t *testing.T) {
 	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
 	require.NoError(t, err)
 
-	runner, ok := scheduler.(*dispatchrun.Runner)
+	runner, ok := scheduler.(*alarmdispatch.Runner)
 	require.True(t, ok)
 	assert.NotNil(t, runner)
 
@@ -223,7 +223,7 @@ func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
 	require.NoError(t, err)
 
-	runner, ok := scheduler.(*dispatchrun.Runner)
+	runner, ok := scheduler.(*alarmdispatch.Runner)
 	require.True(t, ok)
 	assert.NotNil(t, runner)
 
@@ -246,7 +246,7 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	runners, err := buildEgressRunners(t.Context(), &alarmworker.RuntimeConfig{Config: config}, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
+	runners, err := buildEgressRunners(t.Context(), &workerconfig.RuntimeConfig{Config: config}, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))
@@ -261,7 +261,7 @@ func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: dbtest.NewPool(t)}}
 
-	runners, err := buildEgressRunners(t.Context(), &alarmworker.RuntimeConfig{Config: config}, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
+	runners, err := buildEgressRunners(t.Context(), &workerconfig.RuntimeConfig{Config: config}, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))

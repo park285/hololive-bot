@@ -15,22 +15,21 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/providers"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 const (
-	communityConsumerName         = "hololive-api-youtube"
-	communityLeaseOwner           = "hololive-api"
-	scraperDatabaseRole           = "hololive_scraper"
-	runtimeDatabaseRole           = "hololive_runtime"
-	youtubeHealthComponent        = "youtube"
-	youtubeSupervisorLoopCapacity = 5
+	communityConsumerName  = "hololive-api-youtube"
+	communityLeaseOwner    = "hololive-api"
+	scraperDatabaseRole    = "hololive_scraper"
+	runtimeDatabaseRole    = "hololive_runtime"
+	youtubeHealthComponent = "youtube"
 )
 
 type observationClaimer interface {
@@ -65,7 +64,7 @@ type observationReplayer interface {
 }
 
 type Runtime struct {
-	Config apiplane.YouTubePlaneConfig
+	Config apiconfig.YouTubePlaneConfig
 	Logger *slog.Logger
 
 	pool               *pgxpool.Pool
@@ -89,9 +88,19 @@ type Runtime struct {
 	ready         atomic.Bool
 	degraded      atomic.Bool
 	loopDone      chan struct{}
+	claimDone     chan struct{}
 	loopCount     int
 	workerDone    chan struct{}
 	closeWork     sync.Once
+	lifecycleMu   sync.Mutex
+	tasks         sync.WaitGroup
+	loopTasks     sync.WaitGroup
+	workerTasks   sync.WaitGroup
+	tasksDone     chan struct{}
+	closing       bool
+	closed        bool
+	releaseDone   chan struct{}
+	releaseErr    error
 	inFlight      sync.Map
 	workerTracker *workercontract.ExecutorTracker
 	workerTotals  *workercontract.Counters
@@ -100,7 +109,7 @@ type Runtime struct {
 	collectionObservation queueObservationThrottle
 }
 
-func Build(ctx context.Context, plane *apiplane.YouTubePlaneConfig, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
+func Build(ctx context.Context, plane *apiconfig.YouTubePlaneConfig, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
 	config, postgres, err := validateBuildInputs(plane, postgresConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("validate build inputs: %w", err)
@@ -109,7 +118,7 @@ func Build(ctx context.Context, plane *apiplane.YouTubePlaneConfig, postgresConf
 	postgres.PoolMinConns = config.PostgresPoolMinConns
 	postgres.PoolMaxConns = config.PostgresPoolMaxConns
 
-	resources, cleanup, err := providers.ProvideDatabaseResources(ctx, postgres, logger)
+	resources, cleanup, err := databaseproviders.ProvideDatabaseResources(ctx, postgres, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: dedicated pool: %w", err)
 	}
@@ -129,19 +138,19 @@ func Build(ctx context.Context, plane *apiplane.YouTubePlaneConfig, postgresConf
 	}
 
 	if err := runtime.prepare(ctx); err != nil {
-		runtime.Close()
+		closeErr := runtime.CloseContext(ctx)
 
-		return nil, fmt.Errorf("prepare: %w", err)
+		return nil, errors.Join(fmt.Errorf("prepare: %w", err), closeErr)
 	}
 
 	return runtime, nil
 }
 
 func validateBuildInputs(
-	plane *apiplane.YouTubePlaneConfig,
+	plane *apiconfig.YouTubePlaneConfig,
 	postgres *settings.PostgresConfig,
 	logger *slog.Logger,
-) (*apiplane.YouTubePlaneConfig, *settings.PostgresConfig, error) {
+) (*apiconfig.YouTubePlaneConfig, *settings.PostgresConfig, error) {
 	if logger == nil {
 		return nil, nil, errors.New("build youtube plane: logger is not configured")
 	}
@@ -169,12 +178,12 @@ func validateBuildInputs(
 }
 
 func newRuntime(
-	plane *apiplane.YouTubePlaneConfig,
+	plane *apiconfig.YouTubePlaneConfig,
 	logger *slog.Logger,
 	pool *pgxpool.Pool,
 	cleanup func(),
 ) (*Runtime, error) {
-	repo := sourceobservation.NewConsumeRepository(pool)
+	repo := sourceobservation.NewRepository(pool)
 
 	refresher, err := targetprojection.NewRefresher(pool, plane.TargetProjection.Validity)
 	if err != nil {
@@ -207,8 +216,6 @@ func newRuntime(
 		now:           func() time.Time { return time.Now().UTC() },
 		dbSem:         make(chan struct{}, plane.DBOperationConcurrency),
 		workCh:        make(chan sourceobservation.ClaimWork, plane.ConsumerWorkers),
-		loopDone:      make(chan struct{}, youtubeSupervisorLoopCapacity),
-		workerDone:    make(chan struct{}, plane.ConsumerWorkers),
 		workerTracker: workercontract.NewExecutorTracker(),
 		workerTotals:  &workercontract.Counters{},
 		claim: sourceobservation.ClaimOptions{
@@ -267,14 +274,28 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
-	if !r.started.CompareAndSwap(false, true) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+
+	// Close의 시작 차단 뒤와 취소된 task의 join 전에는 기동을 허용하지 않는다.
+	if r.closing || r.closed || r.tasksDone != nil {
 		return
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
 
 	r.runCancel = cancel
-	go panicguard.Run(r.Logger, panicguard.BackgroundTask, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
+	r.tasksDone = make(chan struct{})
+	r.loopDone = make(chan struct{})
+	r.claimDone = make(chan struct{})
+	r.workerDone = make(chan struct{})
+	r.started.Store(true)
+
+	defer r.finishStart()
+
+	r.tasks.Go(func() {
+		panicguard.Run(r.Logger, panicguard.BackgroundTask, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
+	})
 
 	if !r.Config.Enabled {
 		return
@@ -286,51 +307,123 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	r.publishHealth()
 
 	for range r.Config.ConsumerWorkers {
-		r.startGuarded(runCtx, errCh, "youtube-consumer-worker", func() {
+		r.startGuarded(runCtx, errCh, "youtube-consumer-worker", &r.workerTasks, func() {
 			r.runWorker(runCtx, errCh)
 		})
 	}
 
 	r.loopCount = 2
-	r.startGuarded(runCtx, errCh, "youtube-claim-loop", func() {
+	r.startGuarded(runCtx, errCh, "youtube-claim-loop", &r.loopTasks, func() {
+		defer close(r.claimDone)
+
 		r.runClaimLoop(runCtx, errCh)
 	})
-	r.startGuarded(runCtx, errCh, "youtube-projection-loop", func() {
+	r.startGuarded(runCtx, errCh, "youtube-projection-loop", &r.loopTasks, func() {
 		r.runProjectionLoop(runCtx, errCh)
 	})
 
 	if r.Config.LiveEndFinalizer.Enabled {
 		r.loopCount++
-		r.startGuarded(runCtx, errCh, "youtube-live-end-loop", func() {
+		r.startGuarded(runCtx, errCh, "youtube-live-end-loop", &r.loopTasks, func() {
 			r.runLiveEndLoop(runCtx, errCh)
 		})
 	}
 
 	if r.Config.Retention.Enabled {
 		r.loopCount++
-		r.startGuarded(runCtx, errCh, "youtube-retention-loop", func() {
+		r.startGuarded(runCtx, errCh, "youtube-retention-loop", &r.loopTasks, func() {
 			r.runRetentionLoop(runCtx, errCh)
 		})
 	}
 
 	if r.Config.Replay.Enabled {
 		r.loopCount++
-		r.startGuarded(runCtx, errCh, "youtube-replay-loop", func() {
+		r.startGuarded(runCtx, errCh, "youtube-replay-loop", &r.loopTasks, func() {
 			r.runReplayLoop(runCtx, errCh)
 		})
 	}
 }
 
-func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name string, run func()) {
-	go panicguard.Run(r.Logger, panicguard.BackgroundTask, name, func() {
-		if err := panicguard.RunE(r.Logger, panicguard.BackgroundTask, name, func() error {
-			run()
+func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name string, group *sync.WaitGroup, run func()) {
+	group.Add(1)
+	r.tasks.Go(func() {
+		defer group.Done()
 
-			return nil
-		}); err != nil {
-			r.reportLoopError(ctx, errCh, name, err)
-		}
+		panicguard.Run(r.Logger, panicguard.BackgroundTask, name, func() {
+			if err := panicguard.RunE(r.Logger, panicguard.BackgroundTask, name, func() error {
+				run()
+
+				return nil
+			}); err != nil {
+				r.reportLoopError(ctx, errCh, name, err)
+			}
+		})
 	})
+}
+
+// finishStart는 등록이 끝난 task들의 종료를 반복해서 대기할 수 있는 닫힌 채널로 보존한다.
+func (r *Runtime) finishStart() {
+	if r.Config.Enabled {
+		r.tasks.Go(func() {
+			r.loopTasks.Wait()
+			r.closeWork.Do(func() { close(r.workCh) })
+			close(r.loopDone)
+		})
+		r.tasks.Go(func() {
+			r.workerTasks.Wait()
+			r.workerTracker.StopWorkers(r.Config.ConsumerWorkers)
+			close(r.workerDone)
+		})
+	} else {
+		close(r.loopDone)
+		close(r.claimDone)
+		close(r.workerDone)
+	}
+
+	done := r.tasksDone
+
+	// 모든 task 등록이 끝났으므로 Wait와 Add가 경쟁하지 않는다.
+	go func() {
+		r.tasks.Wait()
+		close(done)
+	}()
+}
+
+func (r *Runtime) stopTasks() (tasksDone, loopDone, workerDone <-chan struct{}) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+
+	return r.stopTasksLocked()
+}
+
+// beginClose는 첫 Start 차단과 이미 등록된 task snapshot을 같은 잠금에서 확정한다.
+// 기동 차단 상태인 closing은 자원 해제 완료를 나타내는 closed와 구분한다.
+func (r *Runtime) beginClose() <-chan struct{} {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+
+	r.closing = true
+
+	tasksDone, _, _ := r.stopTasksLocked()
+
+	return tasksDone
+}
+
+// stopTasksLocked는 lifecycleMu를 보유한 호출자가 등록된 작업을 취소하고 snapshot을 얻는다.
+func (r *Runtime) stopTasksLocked() (tasksDone, loopDone, workerDone <-chan struct{}) {
+	r.started.Store(false)
+	r.claiming.Store(false)
+	r.ready.Store(false)
+
+	if !r.closed {
+		r.publishHealth()
+	}
+
+	if r.runCancel != nil {
+		r.runCancel()
+	}
+
+	return r.tasksDone, r.loopDone, r.workerDone
 }
 
 func (r *Runtime) Shutdown(ctx context.Context) error {
@@ -338,50 +431,110 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	r.ready.Store(false)
-	r.publishHealth()
-
-	if !r.started.CompareAndSwap(true, false) {
-		return nil
-	}
-
-	r.claiming.Store(false)
-
-	if r.runCancel != nil {
-		r.runCancel()
-	}
-
-	if !r.Config.Enabled {
+	tasksDone, loopDone, workerDone := r.stopTasks()
+	if tasksDone == nil {
 		return nil
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(ctx, r.Config.ShutdownTimeout)
-
 	defer cancel()
 
-	loopErr := waitForCompletions(shutdownCtx, r.loopDone, r.supervisorLoopCount(), "youtube supervisor loops")
-	if loopErr == nil {
-		r.closeWork.Do(func() {
-			close(r.workCh)
-		})
-	}
+	loopErr := waitTaskCompletion(shutdownCtx, loopDone, "youtube supervisor loops")
+	workerErr := waitTaskCompletion(shutdownCtx, workerDone, "youtube workers")
+	taskErr := waitTaskCompletion(shutdownCtx, tasksDone, "youtube background tasks")
+	releaseErr := r.releaseClaims(ctx)
 
-	workerErr := waitForCompletions(shutdownCtx, r.workerDone, r.Config.ConsumerWorkers, "youtube workers")
-	r.workerTracker.StopWorkers(r.Config.ConsumerWorkers)
-
-	releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), r.Config.TransactionTimeout)
-
-	defer releaseCancel()
-
-	releaseErr := r.releaseInFlight(releaseCtx)
-
-	return errors.Join(loopErr, workerErr, releaseErr)
+	return errors.Join(loopErr, workerErr, taskErr, releaseErr)
 }
 
-func (r *Runtime) Close() {
-	if r == nil {
-		return
+func (r *Runtime) releaseClaims(ctx context.Context) error {
+	r.lifecycleMu.Lock()
+
+	claimDone := r.claimDone
+	r.lifecycleMu.Unlock()
+
+	// ClaimBatch 성공 뒤 등록이 지연되면 빈 해제 결과를 최종 결과로 봉인하지 않습니다.
+	// 취소 전용 부모와 분리한 기존 settlement 예산을 등록 join과 token-fenced 해제에 함께 씁니다.
+	deadline := time.Now().Add(r.Config.TransactionTimeout)
+	if parentDeadline, ok := ctx.Deadline(); ok && parentDeadline.Before(deadline) {
+		deadline = parentDeadline
 	}
+
+	releaseCtx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline)
+	defer cancel()
+
+	if claimDone != nil {
+		if err := waitTaskCompletion(releaseCtx, claimDone, "youtube claim producer"); err != nil {
+			return fmt.Errorf("release youtube claims: %w", err)
+		}
+	}
+
+	r.lifecycleMu.Lock()
+
+	if r.releaseDone != nil {
+		done := r.releaseDone
+		r.lifecycleMu.Unlock()
+
+		if err := waitTaskCompletion(ctx, done, "youtube claim release"); err != nil {
+			return fmt.Errorf("wait for claim release: %w", err)
+		}
+
+		r.lifecycleMu.Lock()
+		defer r.lifecycleMu.Unlock()
+
+		return r.releaseErr
+	}
+
+	r.releaseDone = make(chan struct{})
+	r.lifecycleMu.Unlock()
+
+	err := r.releaseInFlight(releaseCtx)
+
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+
+	r.releaseErr = err
+	close(r.releaseDone)
+
+	return err
+}
+
+// CloseContext는 남은 종료 예산으로 sampler를 포함한 task를 join한 뒤 pool을 한 번 해제한다.
+// 종료 대기가 끝나지 않으면 pool 소유권을 유지하여 후속 close가 다시 기다릴 수 있다.
+func (r *Runtime) CloseContext(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+
+	tasksDone := r.beginClose()
+
+	var releaseErr error
+
+	if tasksDone != nil {
+		if err := waitTaskCompletion(ctx, tasksDone, "youtube background tasks"); err != nil {
+			return fmt.Errorf("close youtube plane: %w", err)
+		}
+
+		releaseErr = r.releaseClaims(ctx)
+	}
+
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+
+	// 다른 Shutdown이 아직 release 중이면 timeout을 보고하고 pool을 보유한다.
+	if r.releaseDone != nil {
+		select {
+		case <-r.releaseDone:
+		default:
+			return releaseErr
+		}
+	}
+
+	if r.closed {
+		return releaseErr
+	}
+
+	r.closed = true
 
 	if r.closePool != nil {
 		r.closePool()
@@ -392,6 +545,21 @@ func (r *Runtime) Close() {
 	r.pool = nil
 
 	health.RemoveComponent(youtubeHealthComponent)
+
+	return releaseErr
+}
+
+func (r *Runtime) Close() {
+	if r == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), r.Config.ShutdownTimeout)
+	defer cancel()
+
+	if err := r.CloseContext(ctx); err != nil && r.Logger != nil {
+		r.Logger.Error("youtube plane close did not finish", slog.Any("error", err))
+	}
 }
 
 func youtubePlaneClaimKinds() []contract.ObservationKind {
@@ -407,14 +575,6 @@ func youtubePlaneClaimKinds() []contract.ObservationKind {
 		contract.KindChannelLiveCheck,
 		contract.KindVideoLiveCheck,
 	}
-}
-
-func (r *Runtime) supervisorLoopCount() int {
-	if r == nil || r.loopCount == 0 {
-		return 2
-	}
-
-	return r.loopCount
 }
 
 func (r *Runtime) Ready() bool {
@@ -452,17 +612,13 @@ func (r *Runtime) publishHealth() {
 	})
 }
 
-func waitForCompletions(ctx context.Context, done <-chan struct{}, count int, owner string) error {
-	for range count {
-		if err := waitOneCompletion(ctx, done, owner); err != nil {
-			return fmt.Errorf("wait one completion: %w", err)
-		}
+func waitTaskCompletion(ctx context.Context, done <-chan struct{}, owner string) error {
+	select {
+	case <-done:
+		return nil
+	default:
 	}
 
-	return nil
-}
-
-func waitOneCompletion(ctx context.Context, done <-chan struct{}, owner string) error {
 	select {
 	case <-done:
 		return nil

@@ -26,6 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
@@ -95,7 +96,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 
 	var outboxIDs []int64
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), batchSize); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}
 

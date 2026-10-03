@@ -13,11 +13,11 @@ import (
 
 	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
 

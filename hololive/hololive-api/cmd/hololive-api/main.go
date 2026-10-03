@@ -12,9 +12,9 @@ import (
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/fxapp"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
@@ -32,7 +32,7 @@ func main() {
 	}
 
 	if handled, exitCode := runConfigCheck(os.Args[1:], os.Stderr, func() error {
-		if _, err := apiplane.LoadRuntime(); err != nil {
+		if _, err := apiconfig.LoadRuntime(); err != nil {
 			return fmt.Errorf("load hololive api runtime: %w", err)
 		}
 
@@ -69,9 +69,9 @@ type loggerResult struct {
 
 type startupDependencies struct {
 	initialize     func(string)
-	loadConfig     func() (*apiplane.RuntimeConfig, error)
-	newLogger      func(*apiplane.RuntimeConfig) (loggerResult, error)
-	newApplication func(context.Context, *apiplane.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error)
+	loadConfig     func() (*apiconfig.RuntimeConfig, error)
+	newLogger      func(*apiconfig.RuntimeConfig) (loggerResult, error)
+	newApplication func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error)
 	stderr         io.Writer
 }
 
@@ -81,11 +81,11 @@ func productionStartupDependencies() startupDependencies {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		loadConfig: apiplane.LoadRuntime,
+		loadConfig: apiconfig.LoadRuntime,
 		newLogger:  newHololiveAPILogger,
 		newApplication: func(
 			ctx context.Context,
-			config *apiplane.RuntimeConfig,
+			config *apiconfig.RuntimeConfig,
 			logger *slog.Logger,
 			version string,
 		) (hololiveAPIApplication, error) {
@@ -144,7 +144,7 @@ func runHololiveAPIWithDependencies(setLogCloser func(io.Closer), dependencies s
 	return application.Run(logger)
 }
 
-func newHololiveAPILogger(config *apiplane.RuntimeConfig) (loggerResult, error) {
+func newHololiveAPILogger(config *apiconfig.RuntimeConfig) (loggerResult, error) {
 	logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
 		Level:      config.Logging.Level,
 		Dir:        config.Logging.Dir,

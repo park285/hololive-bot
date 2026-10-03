@@ -1,0 +1,133 @@
+package membernews
+
+import (
+	"context"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-dbtest"
+)
+
+const performancePeriodSQL = ` AND (CASE WHEN type='news' THEN COALESCE(pub_date, event_start_date::timestamp AT TIME ZONE 'UTC') ELSE COALESCE(event_start_date::timestamp AT TIME ZONE 'UTC', pub_date) END) >= $1 AND (CASE WHEN type='news' THEN COALESCE(pub_date, event_start_date::timestamp AT TIME ZONE 'UTC') ELSE COALESCE(event_start_date::timestamp AT TIME ZONE 'UTC', pub_date) END) < $2`
+
+type performancePeriodQuerier struct {
+	memberNewsQuerier
+	start, end time.Time
+}
+
+func (q *performancePeriodQuerier) Query(ctx context.Context, query string, _ ...any) (rowsScanner, error) {
+	return q.memberNewsQuerier.Query(ctx, query+performancePeriodSQL, q.start, q.end)
+}
+
+type performanceMatrixResult struct {
+	returned, final int
+	err             error
+}
+
+func performanceMatrixWork(ctx context.Context, repo *Repository, now time.Time, concurrency int) (int, int, int32, error) {
+	results := make(chan performanceMatrixResult, concurrency)
+	var wg sync.WaitGroup
+	var active, peak atomic.Int32
+	for range concurrency {
+		wg.Go(func() {
+			r := performanceMatrixResult{}
+			for range 20 / concurrency {
+				current := active.Add(1)
+				for prev := peak.Load(); current > prev && !peak.CompareAndSwap(prev, current); prev = peak.Load() {
+				}
+				cs, err := repo.ListActiveMajorEvents(ctx)
+				if err == nil {
+					r.returned += len(cs)
+					r.final += len(filter.FilterCandidates(cs, model.PeriodWeekly, now, []string{"미코"}, nil, nil))
+				}
+				active.Add(-1)
+				if err != nil {
+					r.err = err
+					break
+				}
+			}
+			results <- r
+		})
+	}
+	wg.Wait()
+	close(results)
+	returned, final := 0, 0
+	for result := range results {
+		if result.err != nil {
+			return 0, 0, peak.Load(), result.err
+		}
+		returned += result.returned
+		final += result.final
+	}
+	return returned, final, peak.Load(), nil
+}
+
+func TestPerformanceSensitivityMatrix(t *testing.T) {
+	p := dbtest.NewBlankPool(t)
+	ctx := t.Context()
+	_, err := p.Exec(ctx, `CREATE TABLE major_events(id int PRIMARY KEY,type varchar(20) NOT NULL,title varchar(500) NOT NULL,description text,members text[],pub_date timestamptz,event_start_date date,link varchar(1000),status text NOT NULL,link_status varchar(20)); CREATE INDEX ON major_events(event_start_date); CREATE INDEX ON major_events(status,type,event_start_date)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Config().MaxConns < 5 {
+		t.Fatal("실제 상한 5의 실험에 필요한 테스트 pool 연결 수가 부족합니다")
+	}
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.FixedZone("KST", 9*3600))
+	start := time.Date(2026, 9, 25, 0, 0, 0, 0, now.Location())
+	end := time.Date(2026, 10, 24, 0, 0, 0, 0, now.Location())
+	base := newPGXMemberNewsQuerier(p)
+	full := &Repository{pool: base}
+	period := &Repository{pool: &performancePeriodQuerier{memberNewsQuerier: base, start: start, end: end}}
+	t.Logf("method=matrix concurrency=5 room_equivalents=20 repetitions=3 gomaxprocs=%d pool_max_conns=%d descriptions_repeat=64 index=existing_only validator=nil members_provider=nil", runtime.GOMAXPROCS(0), p.Config().MaxConns)
+	caseID := 0
+	for _, total := range []int{1000, 10000} {
+		for _, percent := range []int{1, 10, 100} {
+			selected := total * percent / 100
+			if _, err = p.Exec(ctx, "TRUNCATE major_events"); err != nil {
+				t.Fatal(err)
+			}
+			_, err = p.Exec(ctx, `INSERT INTO major_events SELECT i,'news','미코 행사 '||i,repeat('미코 공식 기사 ',64),ARRAY['미코'],CASE WHEN i%100<$2 THEN '2026-10-02T03:00:00Z'::timestamptz ELSE '2020-01-01T00:00:00Z'::timestamptz END,NULL,'https://hololive.hololivepro.com/'||i,'active','unchecked' FROM generate_series(1,$1) i`, total, percent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = p.Exec(ctx, "ANALYZE major_events"); err != nil {
+				t.Fatal(err)
+			}
+			// 각 SQL과 다섯 연결을 계측 전에 준비합니다.
+			for _, repo := range []*Repository{full, period} {
+				if _, n, _, err := performanceMatrixWork(ctx, repo, now, 5); err != nil || n != selected*20 {
+					t.Fatalf("warmup final=%d want=%d error=%v", n, selected*20, err)
+				}
+			}
+			for rep := range 3 {
+				variants := []struct {
+					name string
+					repo *Repository
+				}{{"full", full}, {"period", period}}
+				if (caseID+rep)%2 != 0 {
+					variants[0], variants[1] = variants[1], variants[0]
+				}
+				for _, v := range variants {
+					runtime.GC()
+					var before, after runtime.MemStats
+					runtime.ReadMemStats(&before)
+					waitBefore := p.Stat().EmptyAcquireCount()
+					begin := time.Now()
+					returned, final, peak, err := performanceMatrixWork(ctx, v.repo, now, 5)
+					elapsed := time.Since(begin)
+					runtime.ReadMemStats(&after)
+					if err != nil || final != selected*20 {
+						t.Fatalf("matrix final=%d want=%d error=%v", final, selected*20, err)
+					}
+					t.Logf("matrix total=%d selection_pct=%d variant=%s rep=%d returned=%d final=%d concurrency_peak=%d elapsed_us=%d alloc_bytes=%d mallocs=%d pool_wait_count=%d", total, percent, v.name, rep, returned, final, peak, elapsed.Microseconds(), after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs, p.Stat().EmptyAcquireCount()-waitBefore)
+				}
+			}
+			caseID++
+		}
+	}
+}

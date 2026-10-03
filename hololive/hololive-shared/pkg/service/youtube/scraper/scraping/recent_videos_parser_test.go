@@ -26,6 +26,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/gjson"
+
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 const testChannelAboutPath = "/channel/UC_TEST/about"
@@ -54,7 +56,7 @@ func TestFindVideosTabContentMatchesAdditionalLocales(t *testing.T) {
 				`,"endpoint":{"commandMetadata":{"webCommandMetadata":{"url":` + jsonQuote(tc.tabURL) +
 				`}}},"content":{"richGridRenderer":{"contents":[]}}}}]}`
 			tabs := parseGJSONResultPtr(input).Get("tabs")
-			content, _ := findVideosTabContent(gjsonResultPtr(&tabs))
+			content, _ := parser.FindVideosTabContent(gjsonResultPtr(&tabs))
 			assert.Equal(t, tc.shouldHit, content.Exists(), "tab=%q url=%q", tc.tabTitle, tc.tabURL)
 		})
 	}
@@ -97,7 +99,7 @@ func TestParseLockupVideoViewModelHandlesSwappedMetadataParts(t *testing.T) {
             }}
         }}
     }`
-	got := parseLockupVideoViewModel(parseGJSONResultPtr(lockupOrdered), "UC_X")
+	got := parser.ParseLockupVideoViewModel(parseGJSONResultPtr(lockupOrdered), "UC_X")
 	assert.NotNil(t, got)
 	assert.Equal(t, int64(12_000), got.ViewCount)
 	assert.Equal(t, "2 days ago", got.PublishedText)
@@ -118,7 +120,7 @@ func TestParseLockupVideoViewModelHandlesSwappedMetadataParts(t *testing.T) {
         }}
     }`
 
-	got = parseLockupVideoViewModel(parseGJSONResultPtr(lockupSwapped), "UC_X")
+	got = parser.ParseLockupVideoViewModel(parseGJSONResultPtr(lockupSwapped), "UC_X")
 	assert.NotNil(t, got)
 	assert.Equal(t, int64(1_200_000), got.ViewCount, "viewCount는 위치와 무관하게 숫자 패턴으로 식별되어야 함")
 	assert.Equal(t, "3 weeks ago", got.PublishedText)
@@ -142,6 +144,6 @@ func TestCollectVideoRenderers_BoundedScan(t *testing.T) {
 	builder.WriteString(`}`)
 
 	contents := gjson.Parse(builder.String()).Get("contents")
-	renderers := collectVideoRenderers(gjsonResultPtr(&contents), 1)
+	renderers := parser.CollectVideoRenderers(gjsonResultPtr(&contents), 1)
 	assert.Empty(t, renderers)
 }

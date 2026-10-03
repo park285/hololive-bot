@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 )
 
 var (
@@ -55,7 +55,7 @@ func initCheckerMetrics() {
 	})
 }
 
-func observeYouTubeUpcomingDecision(result string, minute int, selection string, window sharedchecker.EvaluationWindow) {
+func observeYouTubeUpcomingDecision(result string, minute int, selection string, window targetpolicy.EvaluationWindow) {
 	initCheckerMetrics()
 	youtubeUpcomingDecisionTotal.WithLabelValues(
 		result,
@@ -66,7 +66,7 @@ func observeYouTubeUpcomingDecision(result string, minute int, selection string,
 	).Inc()
 }
 
-func observeYouTubeUpcomingNoMinuteDecision(result string, window sharedchecker.EvaluationWindow) {
+func observeYouTubeUpcomingNoMinuteDecision(result string, window targetpolicy.EvaluationWindow) {
 	initCheckerMetrics()
 	youtubeUpcomingDecisionTotal.WithLabelValues(
 		result,

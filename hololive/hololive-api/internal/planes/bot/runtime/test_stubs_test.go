@@ -86,9 +86,11 @@ func (testAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) {
 	return 0, nil
 }
 
-func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return []int{5} }
-func (testAlarmCRUD) GetTargetMinutes() []int                              { return []int{5} }
-func (testAlarmCRUD) SetRoomName(context.Context, string, string) error    { return nil }
+func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) (domain.AdvanceMinutesResult, error) {
+	return domain.AdvanceMinutesResult{RequestedMinutes: minutes, Outcome: domain.ApplyConfirmed, TargetMinutes: []int{5}}, nil
+}
+func (testAlarmCRUD) GetTargetMinutes() []int                           { return []int{5} }
+func (testAlarmCRUD) SetRoomName(context.Context, string, string) error { return nil }
 
 func (testAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return []*domain.AlarmEntry{}, nil

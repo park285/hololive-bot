@@ -1,50 +1,55 @@
 package bootstrap
 
 import (
+	"errors"
+	"fmt"
 	"io"
-	"log/slog"
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
-type irisCleanupCloser interface {
-	Close() error
+type botInfrastructureOwner struct {
+	once sync.Once
+
+	infraCleanup    func()
+	stopMemberCache func()
+	stopHolodex     func()
+	irisClient      io.Closer
+	internalClients []io.Closer
+	closeErr        error
 }
 
-// composeBotInfrastructureCleanup은 bot plane Close에서 한 번만 돈다. 내부 H3 client(alarm-worker·llm-scheduler)를 닫아
-// peer에 CONNECTION_CLOSE를 보낸 뒤 Iris client와 infra를 닫는다. 닫지 않으면 peer의 graceful shutdown이 이 연결을
-// QUIC idle timeout까지 기다린다. 각 plane의 Close는 aggregate runtime이 모든 plane의 Shutdown(요청 drain)을 끝낸 뒤
-// 불리므로 진행 중인 요청을 끊지 않는다(fxapp lifecycleCoordinator.OnStop).
-func composeBotInfrastructureCleanup(
-	infraCleanup func(),
-	irisClient irisCleanupCloser,
-	internalClients []io.Closer,
-	logger *slog.Logger,
-) func() {
-	var once sync.Once
+// Close는 background 사용자 종료 뒤 내부 client/Iris와 DB/cache를 한 번만 닫는다.
+// 같은 owner가 부분 생성 rollback과 정상 plane Close를 맡는다.
+func (o *botInfrastructureOwner) Close() error {
+	o.once.Do(func() {
+		if o.stopHolodex != nil {
+			o.stopHolodex()
+		}
 
-	return func() {
-		once.Do(func() {
-			if err := internalhttp.CloseAll(internalClients...); err != nil && logger != nil {
-				logger.Warn("bot_internal_client_close_failed", slog.Any("error", err))
+		if o.stopMemberCache != nil {
+			o.stopMemberCache()
+		}
+
+		var closeErrs []error
+
+		if err := internalhttp.CloseAll(o.internalClients...); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("close bot internal clients: %w", err))
+		}
+
+		if o.irisClient != nil {
+			if err := o.irisClient.Close(); err != nil {
+				closeErrs = append(closeErrs, fmt.Errorf("close bot Iris client: %w", err))
 			}
+		}
 
-			closeIrisClientForCleanup(irisClient, logger)
+		if o.infraCleanup != nil {
+			o.infraCleanup()
+		}
 
-			if infraCleanup != nil {
-				infraCleanup()
-			}
-		})
-	}
-}
+		o.closeErr = errors.Join(closeErrs...)
+	})
 
-func closeIrisClientForCleanup(irisClient irisCleanupCloser, logger *slog.Logger) {
-	if irisClient == nil {
-		return
-	}
-
-	if err := irisClient.Close(); err != nil && logger != nil {
-		logger.Warn("iris_client_close_failed", slog.Any("error", err))
-	}
+	return o.closeErr
 }

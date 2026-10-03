@@ -6,9 +6,9 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -21,12 +21,12 @@ type ChannelClient interface {
 	FetchChannel(ctx context.Context, request youtubejs.ChannelRequest) (youtubejs.ChannelResult, error)
 }
 
-// ChannelRunner는 방송 일정 조회 없이 채널 통계·프로필·사진만 수집합니다.
+// ChannelRunner는 방송 일정 조회 없이 채널 프로필·사진만 수집합니다.
 type ChannelRunner struct {
 	client ChannelClient
 }
 
-// NewChannelMetadataRunner는 방송 일정 조회 없이 채널 통계·프로필·사진만 수집합니다.
+// NewChannelMetadataRunner는 방송 일정 조회 없이 채널 프로필·사진만 수집합니다.
 func NewChannelMetadataRunner(client ChannelClient) *ChannelRunner {
 	return &ChannelRunner{client: client}
 }
@@ -125,7 +125,7 @@ func fetchChannelPage(
 		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("validate unavailable live sessions: %w", validateErr)
 	}
 
-	completeness, continuity, err := collectutil.PaginationOf(&result.Pagination)
+	completeness, continuity, err := PaginationOf(&result.Pagination)
 	if err != nil {
 		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("pagination of: %w", err)
 	}

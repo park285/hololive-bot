@@ -29,8 +29,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (mm *Matcher) maybeCleanupMatchCache() {
@@ -156,7 +156,7 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 	channel := mm.finalizeCandidate(mm.resolveSnapshotCandidate(snapshot, queryNorm))
 	if channel == nil {
 		mm.logger.Debug("No match found in internal data",
-			slog.String("query_token", privacylog.Pseudonym(queryNorm)),
+			slog.String("query_token", sharedprivacylog.Pseudonym(queryNorm)),
 		)
 	}
 

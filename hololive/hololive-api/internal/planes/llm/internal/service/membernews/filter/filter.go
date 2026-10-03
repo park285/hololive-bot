@@ -26,10 +26,10 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
-var kst = util.KSTZone
+var kst = timeutil.KSTZone
 
 type datedCandidate struct {
 	candidate model.Candidate

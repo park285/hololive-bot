@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 type groupRowsQueryPlan struct {
@@ -98,7 +98,7 @@ func assertGroupQueryPreparedPlan(t *testing.T, pool *pgxpool.Pool, mode string,
 	// 계획의 row 수만으로 동등성을 주장하지 않고 실제 정렬된 ID 전체를 확인한다.
 	var rows []transitionRow
 
-	err = deliverysql.SelectDeliverySQL(t.Context(), tx, &rows, "prepared group SQL result", execute)
+	err = dbx.SelectSQL(t.Context(), tx, &rows, "prepared group SQL result", execute)
 	require.NoError(t, err)
 	require.Equal(t, wanted, groupQueryRowIDs(rows))
 	t.Logf("prepared %s: tuples=%d tuple-only=%d direct-only=1 ids=%d/order match; execution=%.3fms",

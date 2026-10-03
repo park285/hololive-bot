@@ -300,13 +300,6 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 	}
 }
 
-// ProcessOnceForTest는 outbox 패키지 외부의 통합 테스트(poller/internal/pollers 등)에서
-// 한 번의 폴링 사이클을 동기 실행하기 위한 test-support 진입점이다. 외부 test 패키지가
-// 의존하므로 _test.go로 격리할 수 없어 production 빌드에 노출된다. 부수효과는 없다.
-func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {
-	d.processOnce(ctx)
-}
-
 func logTickerStop(logger *slog.Logger, msg string, err error) {
 	if logger == nil || err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return

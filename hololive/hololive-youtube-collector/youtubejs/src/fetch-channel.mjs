@@ -1,5 +1,6 @@
-import { Utils } from "youtubei.js";
-
+import { FetchTransportError } from "./fetch-transport.mjs";
+import { readUpstream, runUpstream } from "./upstream-errors.mjs";
+import { fetchChannelTab } from "./channel-tabs.mjs";
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
 import { isVideoLockup, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 import { fetchLiveMetadata } from "./live-metadata.mjs";
@@ -32,23 +33,25 @@ export async function fetchChannelFeed({
 } = {}) {
   const id = String(channelId ?? "").trim();
   if (id === "") {
-    throw new Error("channel id is required");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel id is required");
   }
   if (kind !== "live" && kind !== "metadata") {
-    throw new Error("channel kind must be live or metadata");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "channel kind must be live or metadata");
   }
   if (innertube == null || typeof innertube.getChannel !== "function") {
-    throw new Error("innertube client is required");
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "innertube client is required");
   }
   assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
-  const channel = await innertube.getChannel(id);
+  const channel = await runUpstream(() => innertube.getChannel(id));
   // Metadata 작업은 streams/player 장애와 독립적이며 live 작업에는 about 조회가 필요 없습니다.
-  const about = kind === "metadata" && typeof channel.getAbout === "function" ? await channel.getAbout() : {};
+  const about = kind === "metadata" && typeof channel.getAbout === "function" ? await runUpstream(() => channel.getAbout()) : {};
   const { liveFeed, missingTab } = kind === "live"
     ? await fetchLiveFeed(channel)
     : { liveFeed: { videos: [] }, missingTab: false };
   const exhausted = kind !== "live" || missingTab ||
-    (!hasContinuation(liveFeed) && (liveFeed.has_continuation === false || liveFeed.hasContinuation === false));
+    (!hasContinuation(liveFeed) && readUpstream(() =>
+      ("has_continuation" in liveFeed && liveFeed.has_continuation === false) ||
+      ("hasContinuation" in liveFeed && liveFeed.hasContinuation === false)));
   const pagination = paginationResult({ pageCount: 1, reason: exhausted ? "exhausted" : "max_pages", continuity: "NOT_APPLICABLE" });
   const query = kind === "live" && !missingTab ? {
     channel_id: id, source: "streams", statuses: ["ENDED", "LIVE", "UPCOMING"], exhausted, page_count: 1,
@@ -79,16 +82,13 @@ export async function fetchChannelFeed({
 }
 
 async function fetchLiveFeed(channel) {
-  if (typeof channel.getLiveStreams === "function") {
-    try {
-      return { liveFeed: await channel.getLiveStreams(), missingTab: false };
-    } catch (err) {
-      if (!isMissingStreamsTab(err)) {
-        throw err;
-      }
-    }
+  if (typeof channel.getLiveStreams !== "function") {
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "streams tab loader is unavailable");
   }
-  return { liveFeed: { videos: [] }, missingTab: true };
+  const tab = await fetchChannelTab(channel, "streams", () => channel.getLiveStreams());
+  return tab.missing === true
+    ? { liveFeed: { videos: [] }, missingTab: true }
+    : { liveFeed: tab.feed, missingTab: false };
 }
 
 function logUnavailableSchedules(channelId, unavailable) {
@@ -185,20 +185,17 @@ async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuc
   return [...unavailable.values()];
 }
 
-function isMissingStreamsTab(err) {
-  return err instanceof Utils.InnertubeError && err.message === 'Tab "streams" not found';
-}
-
 export function mapLiveSessions(feed, channelId) {
   return Array.from(liveSessionRows(feed, channelId));
 }
 
 function* liveSessionRows(feed, channelId) {
   let rows;
-  if (Array.isArray(feed?.videos)) {
-    rows = feed.videos;
-  } else if (Array.isArray(feed?.items)) {
-    rows = feed.items;
+  const videos = readUpstream(() => feed?.videos);
+  if (Array.isArray(videos)) {
+    rows = videos;
+  } else if (Array.isArray(readUpstream(() => feed?.items))) {
+    rows = readUpstream(() => feed.items);
   } else {
     const error = new Error("live page shape is not recognized");
     error.code = "parser_drift";
@@ -241,21 +238,46 @@ function* liveSessionRows(feed, channelId) {
 
 
 export function mapProfile(channel, about) {
+  // 최신 about 응답은 AboutChannel.metadata에 필드를 보관합니다.
+  const profile = about?.type === "AboutChannel" ? about.metadata : about;
+  const providedHandle = profile?.handle ?? channel?.header?.channel_handle ?? channel?.handle;
+  let metadataHandle = null;
+  if (providedHandle == null && typeof channel?.metadata?.vanity_channel_url === "string") {
+    try {
+      const url = new URL(channel.metadata.vanity_channel_url);
+      if ((url.protocol === "https:" || url.protocol === "http:") &&
+          (url.hostname === "www.youtube.com" || url.hostname === "youtube.com") &&
+          url.port === "" && url.username === "" && url.password === "") {
+        // legacy /user·/c 주소는 handle을 증명하지 않습니다.
+        const match = /^\/(@[^\s/]+)\/?$/u.exec(decodeURIComponent(url.pathname));
+        metadataHandle = match?.[1] ?? null;
+      }
+    } catch {
+      // 파싱할 수 없는 vanity URL은 handle 값이 없는 상태로 보존합니다.
+    }
+  }
   return {
-    handle: optionalText(about?.handle ?? channel?.handle ?? channel?.vanity_channel_url),
-    description: optionalText(about?.description ?? channel?.description),
-    country: optionalText(about?.country ?? channel?.country),
-    joined_date: optionalText(about?.joined ?? about?.joined_date ?? channel?.joined),
+    handle: optionalText(providedHandle ?? metadataHandle ?? channel?.vanity_channel_url),
+    description: optionalText(profile?.description ?? channel?.metadata?.description ?? channel?.description),
+    country: optionalText(profile?.country ?? channel?.country),
+    joined_date: optionalText(profile?.joined ?? profile?.joined_date ?? channel?.joined),
   };
 }
 
 export function mapPhoto(channel, about) {
   const variants = [];
-  const avatar = firstThumbnail(channel?.header?.author?.thumbnails || channel?.author?.thumbnails || about?.avatar);
+  const header = channel?.header;
+  const headerImage = header?.type === "PageHeader" ? header.content?.image : undefined;
+  const avatar = firstThumbnail(headerImage?.type === "DecoratedAvatarView" ? headerImage.avatar?.image : headerImage?.image)
+    ?? firstThumbnail(header?.author?.thumbnails)
+    ?? firstThumbnail(channel?.metadata?.avatar)
+    ?? firstThumbnail(channel?.author?.thumbnails)
+    ?? firstThumbnail(about?.avatar);
   if (avatar != null) {
     variants.push({ kind: "avatar", url: avatar.url, width: avatar.width, height: avatar.height });
   }
-  const banner = firstThumbnail(channel?.header?.banner?.thumbnails || about?.banner);
+  const banner = firstThumbnail(header?.type === "PageHeader" ? header.content?.banner?.image : header?.banner)
+    ?? firstThumbnail(about?.banner);
   if (banner != null) {
     variants.push({ kind: "banner", url: banner.url, width: banner.width, height: banner.height });
   }

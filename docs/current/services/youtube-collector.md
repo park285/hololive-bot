@@ -6,14 +6,16 @@
 |---|---|
 | Module | `hololive-youtube-collector` |
 | Binary | `youtube-collector` |
-| Compose service | `youtube-collector` (central `c`); AP overlays `youtube-collector-a/b/d` |
+| Execution | Central `c`: Compose `youtube-collector`; Seoul `b`: Compose `youtube-collector-b`; Osaka `a` / Osaka2 `d`: host-native systemd `hololive-youtube-collector@youtube-collector-{a,d}.service` |
 | Ports | `a` 30005, `b` 30015, `c` 30025, `d` 30035 |
 | Health endpoint | `https://127.0.0.1:<port>/health` over H3 |
 | Ready endpoint | `https://127.0.0.1:<port>/ready` over H3 |
 | DB role | `hololive_scraper` |
-| TLS | `POSTGRES_SSLMODE=verify-full`, `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` |
+| TLS | `POSTGRES_SSLMODE=verify-full`; Compose CA `/run/hololive-bot/certs/postgres-ca.pem`, native CA `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem` |
 
 ## Role
+
+Observation publish/checkpoint/job 계약 구현은 `hololive/hololive-youtube-collector/internal/runtime/sourceobservation`이 소유합니다. 공용 envelope·canonical JSON·hash·lease 값은 shared `pkg/contracts/sourceobservation`, consume·canonical/replay/retention과 private reducer는 API `internal/youtube/`에 있습니다. YouTube.js pagination 해석은 `internal/runtime/youtubejscollector`가 소유합니다.
 
 AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normalize와 PostgreSQL collection lease/checkpoint/`source_observations` Publish만 소유합니다. Canonical persist와 notification intent는 `hololive-api` YouTube plane이 소유합니다. `members.photo` product path는 hololive-api admin PhotoSync가 소유합니다.
 
@@ -27,7 +29,7 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 
 `DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 canonical LIVE의 신선한 positive가 없을 때 projection이 만드는 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check` 경로입니다. 기존 운영 세대의 두 확인 kind는 youtubejs 전용 schema 1/generation 1이며 아래 개정의 별도 cutover 전에는 이를 유지합니다.
 
-수명 정합성 개정의 새 collector는 `live_snapshot` schema 1/generation 3과 `video_live_check` schema 2/generation 2를 요구합니다. `channel_live_check`와 Holodex 세대는 그대로입니다. API는 과거 snapshot generation 2와 영상 확인 generation 1의 의미를 보존합니다. [개정 계획과 검증 기록](../plans/2026-09-30-live-reconciliation-lifecycle.md)을 따르며 실제 세대 전환은 migration bootstrap과 분리한 `scripts/migrations/manual/youtube_live_lifecycle_cutover.sql`의 승인된 cutover로 수행합니다.
+수명 정합성 개정의 새 collector는 `live_snapshot` schema 1/generation 3과 `video_live_check` schema 2/generation 2를 요구합니다. `channel_live_check`와 Holodex 세대는 그대로입니다. API는 과거 snapshot generation 2와 영상 확인 generation 1의 의미를 보존합니다. [개정 계획과 검증 기록](../plans/2026-09-30-live-reconciliation-lifecycle.md)을 따르며 실제 세대 전환은 migration bootstrap과 분리한 `hololive/hololive-api/scripts/migrations/manual/youtube_live_lifecycle_cutover.sql`의 승인된 cutover로 수행합니다.
 
 generation 3 snapshot의 `query`는 helper의 `streams` 질의 범위·페이지 수·종료·접근 제한을 증명합니다. 반환 영상 상태나 빈 배열에서 coverage를 추정하지 않습니다. 현행 한 페이지 호출 예산에서 continuation이 남거나 종료 플래그가 없으면 PARTIAL이며 부재 종료에 사용하지 않습니다. 접근 제한 영상도 positive 결과와 분리합니다.
 
@@ -91,8 +93,8 @@ Official Schedule의 mixed-invalid 응답은 유효한 row를 COMPLETE로 발행
 - `YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-{a,b,c,d}`
 - `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
-- `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`
-- Central default `up` starts fleet member `c` as compose service `youtube-collector`. AP overlays pin that service to `central-only` and start the host instance.
+- `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the Compose/native CA path above
+- Central startup uses `docker-compose.prod.yml` + `docker-compose.live-compat.yml` for fleet member `c` and issuer `youtube-po-c`. Seoul uses `docker-compose.prod.yml` + `docker-compose.seoul.yml` for `youtube-collector-b` and issuer `youtube-po-b`; the AP overlay pins central services to `central-only`. Osaka `a` and Osaka2 `d` use native systemd units; their Compose overlays validate configuration/path contracts. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).
 
 ## Shutdown behavior
 
@@ -104,6 +106,8 @@ YouTube.js helper는 `RuntimeBaseDir` 아래 unique `0700` directory의 private 
 Canonical success-response ceiling env는 `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`입니다. 없으면 documented default입니다. 명시적 empty는 startup fail입니다.
 
 Helper bootstrap(`/v1/bootstrap`)은 `protocol_version`과 `limits`만 받고, bootstrap·`/health` 응답에는 proxy 항목이 없습니다. Helper는 proxy 없이 Node 내장 `fetch`로만 YouTube에 접속하며 upstream proxy 설정 경로는 없습니다. `SCRAPER_PROXY_*` 퇴역(`DEC-20260926-hololive-legacy-env-config-retirement`) 뒤 production에서 도달할 수 없던 helper proxy 프로토콜(Go `youtubejs.ProxyConfig`·bootstrap/health proxy 필드, Node proxy bootstrap·`ProxyAgent`·`--shutdown-timeout-ms` transport close 한도)과 `undici` 의존성을 matched pair로 지웠습니다. 두 쪽이 exact-key로 decode하므로 `proxy` 필드를 보내는 이전 collector와 새 helper, 또는 그 반대 조합은 bootstrap protocol mismatch로 fail-closed됩니다(helper는 같은 image의 collector가 띄우므로 정상 배포에서 섞이지 않습니다). Collection RPC는 `protocol_version`과 `max_success_response_bytes`를 전달하며 `proxy_url`이나 `max_aggregate_bytes`를 받지 않습니다. Success와 error envelope는 분리되고 unknown field, trailing JSON value, HTTP status/error tuple mismatch는 protocol mismatch로 fail-closed됩니다. Go request cancellation이나 client disconnect는 해당 RPC의 `AbortSignal`에만 전파됩니다.
+
+YouTube.js upstream 오류 분류는 helper의 공통 분류기가 소유합니다. 라이브러리 HTTP 401/403은 `configuration_error/CONFIGURATION`, 429는 `cooldown/COOLDOWN`이며 본문 연결 종료와 일반 upstream 실패는 `collection_failed/TRANSIENT`입니다. 탭 없음은 파싱 전 원문 목록이 비어 있지 않고 모든 항목의 경로가 확인된 경우에만 확정합니다. 파서가 진단 없이 제거하는 null·빈 객체나 경로 불명 항목이 있으면 부재로 판단하지 않습니다. 요청 탭이 확인된 성공 경로에서는 무관한 탭의 선택적 URL 누락을 허용하며, URL의 query·fragment·후행 slash는 탭 경로 비교에 영향을 주지 않습니다. 반환된 요청 탭의 유일한 선택 상태·본문·제공된 채널 식별자를 검증하고 해당 본문만 수집합니다. 라이브러리가 파싱 오류를 기록한 뒤 노드를 제거하는 경우도 호출별 오류를 보존하여 `parser_drift/DATA_CONTRACT`로 거부합니다. 채널 404·파싱·네트워크 실패를 빈 성공으로 바꾸지 않습니다. SDK의 endpoint 호출, 초기 browse 이동, continuation과 요청 취소 동작을 유지하며 새 재시도나 fallback은 추가하지 않습니다. Helper 자체 불변식·프로그래밍 결함은 INTERNAL, helper 프로토콜 불일치는 PROTOCOL로 유지하며 parser drift는 DATA_CONTRACT입니다. 초기화 중 drain은 늦게 생성된 자원까지 정리한 뒤 bootstrap을 거부하며 READY로 되돌아가지 않습니다.
 
 Channel live snapshot은 정규화 중 출력 크기의 하한을 검사하고, 예정 영상의 metadata가 해결될 때마다 scheduled/LIVE/unavailable 표현으로 하한을 갱신합니다. 한도 초과가 확정되면 다음 player 요청을 중단합니다. 미해결 restricted 중복은 고유 identity로 축소될 수 있으므로 원문의 큰 제목을 그대로 예산에 넣어 거절하지 않습니다. 최종 RPC 검증이 전체 응답 크기를 확인하며 raw upstream 응답의 최대 메모리까지 이 예산으로 제한하지는 않습니다.
 

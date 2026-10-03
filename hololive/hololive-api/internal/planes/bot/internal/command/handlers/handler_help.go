@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -75,8 +76,8 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 
 	c.logImageFallback(ctx, imageErr)
 
-	if handlercore.IsReplyOutcomeUnknown(imageErr) {
-		return nil
+	if transport.IsReplyOutcomeUnknown(imageErr) {
+		return fmt.Errorf("send help images: %w", imageErr)
 	}
 
 	if err := c.deps.SendMessage(ctx, cmdCtx.Room, content.TextFallback); err != nil {

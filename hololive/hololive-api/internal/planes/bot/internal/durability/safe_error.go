@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 type repositoryError struct {
@@ -49,7 +49,7 @@ func safeMessageRepositoryError(operation, messageID string, err error) error {
 	}
 
 	return &repositoryError{
-		operation: operation, messageToken: privacylog.Pseudonym(messageID),
+		operation: operation, messageToken: sharedprivacylog.Pseudonym(messageID),
 		reason: repositoryErrorReason(err), cause: err,
 	}
 }

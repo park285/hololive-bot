@@ -1,0 +1,38 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+=== RUN   TestPerformancePreparedMetadataCost
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=4 variant=baseline rep=0 final=20000 elapsed_us=29406 prepare_us=0 alloc_bytes=27893336 mallocs=320180
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=4 variant=prepared rep=0 final=20000 elapsed_us=4870 prepare_us=2229 alloc_bytes=6238280 mallocs=35096
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=4 variant=prepared rep=1 final=20000 elapsed_us=5864 prepare_us=3180 alloc_bytes=6239288 mallocs=35098
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=4 variant=baseline rep=1 final=20000 elapsed_us=21493 prepare_us=0 alloc_bytes=27857656 mallocs=320122
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=4 variant=baseline rep=2 final=20000 elapsed_us=23806 prepare_us=0 alloc_bytes=27857224 mallocs=320121
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=4 variant=prepared rep=2 final=20000 elapsed_us=4932 prepare_us=1988 alloc_bytes=6239016 mallocs=35100
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=64 variant=baseline rep=0 final=20000 elapsed_us=162708 prepare_us=0 alloc_bytes=141145456 mallocs=400147
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=64 variant=prepared rep=0 final=20000 elapsed_us=21672 prepare_us=19451 alloc_bytes=11903304 mallocs=39098
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=64 variant=prepared rep=1 final=20000 elapsed_us=19559 prepare_us=16973 alloc_bytes=11902584 mallocs=39098
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=64 variant=baseline rep=1 final=20000 elapsed_us=120456 prepare_us=0 alloc_bytes=141138824 mallocs=400126
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=64 variant=baseline rep=2 final=20000 elapsed_us=121396 prepare_us=0 alloc_bytes=141139176 mallocs=400123
+    zz_performance_filter_test.go:243: metadata candidates=1000 rooms=20 concurrency=5 description_repeats=64 variant=prepared rep=2 final=20000 elapsed_us=21499 prepare_us=18884 alloc_bytes=11902824 mallocs=39097
+--- PASS: TestPerformancePreparedMetadataCost (0.57s)
+=== RUN   TestPerformanceLazyMetadataCost
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=0 variant=baseline rep=0 final=20000 elapsed_us=118436 alloc_bytes=141136888 mallocs=400118
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=0 variant=lazy rep=0 final=20000 elapsed_us=122131 alloc_bytes=141137448 mallocs=400117
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=0 variant=lazy rep=1 final=20000 elapsed_us=117498 alloc_bytes=141139704 mallocs=400121
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=0 variant=baseline rep=1 final=20000 elapsed_us=103909 alloc_bytes=141138312 mallocs=400119
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=0 variant=baseline rep=2 final=20000 elapsed_us=127634 alloc_bytes=141139816 mallocs=400128
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=0 variant=lazy rep=2 final=20000 elapsed_us=117397 alloc_bytes=141137832 mallocs=400120
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=50 variant=baseline rep=0 final=20000 elapsed_us=114781 alloc_bytes=141139304 mallocs=400122
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=50 variant=lazy rep=0 final=20000 elapsed_us=77557 alloc_bytes=93858984 mallocs=300123
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=50 variant=lazy rep=1 final=20000 elapsed_us=95189 alloc_bytes=93857912 mallocs=300121
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=50 variant=baseline rep=1 final=20000 elapsed_us=135146 alloc_bytes=141137304 mallocs=400121
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=50 variant=baseline rep=2 final=20000 elapsed_us=156237 alloc_bytes=141138744 mallocs=400125
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=50 variant=lazy rep=2 final=20000 elapsed_us=107848 alloc_bytes=93857928 mallocs=300122
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=100 variant=baseline rep=0 final=20000 elapsed_us=140474 alloc_bytes=141138120 mallocs=400119
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=100 variant=lazy rep=0 final=20000 elapsed_us=50023 alloc_bytes=46576936 mallocs=200115
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=100 variant=lazy rep=1 final=20000 elapsed_us=46356 alloc_bytes=46577544 mallocs=200117
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=100 variant=baseline rep=1 final=20000 elapsed_us=112916 alloc_bytes=141136440 mallocs=400113
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=100 variant=baseline rep=2 final=20000 elapsed_us=107378 alloc_bytes=141137624 mallocs=400117
+    zz_performance_filter_test.go:274: lazy candidates=1000 rooms=20 concurrency=5 description_repeats=64 exact_member_pct=100 variant=lazy rep=2 final=20000 elapsed_us=46900 alloc_bytes=46577608 mallocs=200117
+--- PASS: TestPerformanceLazyMetadataCost (1.91s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter	2.479s

@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
-	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/alarmdispatch"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -152,8 +152,8 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 
 	client := &seeMoreFoldIrisClient{}
 	consumer := &seeMoreFoldConsumer{batch: envelopes, cancel: cancel}
-	runner := dispatchrun.NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, consumer,
-		dispatchrun.RunnerConfig{MaxBatch: len(envelopes)}, slog.New(slog.DiscardHandler))
+	runner := alarmdispatch.NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, consumer,
+		alarmdispatch.RunnerConfig{MaxBatch: len(envelopes)}, slog.New(slog.DiscardHandler))
 
 	require.NoError(t, runner.Start(ctx))
 	require.Empty(t, consumer.failures)

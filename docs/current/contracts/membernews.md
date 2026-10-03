@@ -24,6 +24,7 @@
 ## Transport
 
 - HTTP JSON with `X-API-Key`
+- Internal H3 options are passed from the bot plane's loaded config; the bot plane owns its client transport and the existing timeout. The provider remains the LLM plane in the same API process.
 
 ## Endpoint / Event / Queue
 
@@ -67,6 +68,10 @@ type Digest struct {
 
 Subscribe/unsubscribe success currently returns `{"status":"subscribed"}` or `{"status":"unsubscribed"}`.
 
+LLM 출력의 `source_url`은 입력 후보의 URL을 정확히 복사해야 하며, `member`도 같은 후보에 포함된 멤버여야 합니다. 신뢰되는 공식 도메인이라는 이유만으로 입력에 없던 경로를 허용하지 않습니다. 멤버 검증은 `MatchedMembers`의 정본 이름을 사용하며 이름 자체에 포함된 쉼표를 쪼개지 않습니다. 콜라보 후보의 멤버 부분집합·순서 변경은 허용하지만 다른 후보의 멤버를 붙일 수는 없습니다. primary와 consensus adjudicator에 같은 검증을 적용합니다. 모든 항목이 탈락하면 기존 `ErrNoValidatedItems` 처리로 전달하며 새 원천이나 자동 재시도를 추가하지 않습니다.
+
+정기·trigger 실행은 시작 시각과 기간 후보를 실행별로 한 번 고정하고 읽기 전용 후보 metadata를 공유합니다. SQL·Go 필터·요약은 같은 시각을 사용합니다. 방별 구독 멤버·alias는 해당 방 처리 시점에 조회하며 guard·요약·render·enqueue 오류도 방별로 처리합니다. 공통 후보 조회 실패는 실행 전체 오류로 반환하고 이전 후보나 빈 성공으로 대체하지 않습니다. 단일 방 요청은 구독 멤버가 없으면 후보 조회 전에 기존 `ErrNoSubscribedMembers`를 반환합니다.
+
 ## Error codes
 
 | Code | HTTP status | Meaning | Consumer behavior |
@@ -94,8 +99,10 @@ Subscribe/unsubscribe success currently returns `{"status":"subscribed"}` or `{"
 
 ## Tests
 
-- Provider route tests: `hololive/hololive-api/internal/planes/llm/internal/app/internal/runtime/providers_membernews_routes_test.go`
+- Provider route tests: `hololive/hololive-api/internal/planes/llm/runtime/providers_membernews_routes_test.go`
 - Consumer client tests: `hololive/hololive-api/internal/planes/bot/internal/client/membernews/client_test.go`
+- Candidate values/order and period SQL: `hololive/hololive-api/internal/planes/llm/internal/service/membernews/repository_period_test.go`
+- Run snapshot, per-room observation and failure behavior: `hololive/hololive-api/internal/planes/llm/internal/service/membernews/service_run_test.go`
 
 ## Known gaps
 

@@ -24,11 +24,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
-var tracingEnabledEnvKeys = load.TracingEnabledEnvKeys()
+var tracingEnabledEnvKeys = envload.TracingEnabledEnvKeys()
 
 func clearTracingEnv(t *testing.T) {
 	t.Helper()
@@ -37,14 +37,14 @@ func clearTracingEnv(t *testing.T) {
 
 // 표준 OTel endpoint env 거부는 영구 계약이다. 빈 값은 OTel 명세상 미설정이라 통과한다.
 func TestLoadTracingConfigRejectsStandardOTLPEndpoint(t *testing.T) {
-	for _, standardEnv := range []string{load.OTLPEndpointEnv, load.OTLPTracesEndpointEnv} {
+	for _, standardEnv := range []string{envload.OTLPEndpointEnv, envload.OTLPTracesEndpointEnv} {
 		for _, includeCanonical := range []bool{false, true} {
 			clearTracingEnv(t)
-			t.Setenv(load.TracingHololiveAPIEnabledEnv, "true")
+			t.Setenv(envload.TracingHololiveAPIEnabledEnv, "true")
 			t.Setenv(standardEnv, "otel-collector:4317")
 
 			if includeCanonical {
-				t.Setenv(load.HololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
+				t.Setenv(envload.HololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 			}
 
 			_, err := LoadTracingConfig(TracingRuntimeHololiveAPI, "")
@@ -87,13 +87,13 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 		collectorInstanceID string
 		selectedEnv         string
 	}{
-		{name: "hololive api", runtime: TracingRuntimeHololiveAPI, selectedEnv: load.TracingHololiveAPIEnabledEnv},
-		{name: "alarm worker", runtime: TracingRuntimeAlarmWorker, selectedEnv: load.TracingAlarmWorkerEnabledEnv},
-		{name: "youtube collector a", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "a", selectedEnv: load.TracingYouTubeCollectorAEnabledEnv},
-		{name: "youtube collector b", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "b", selectedEnv: load.TracingYouTubeCollectorBEnabledEnv},
-		{name: "youtube collector c", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "c", selectedEnv: load.TracingYouTubeCollectorCEnabledEnv},
-		{name: "youtube collector d", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "d", selectedEnv: load.TracingYouTubeCollectorDEnabledEnv},
-		{name: "youtube collector default", runtime: TracingRuntimeYouTubeCollector, selectedEnv: load.TracingYouTubeCollectorEnabledEnv},
+		{name: "hololive api", runtime: TracingRuntimeHololiveAPI, selectedEnv: envload.TracingHololiveAPIEnabledEnv},
+		{name: "alarm worker", runtime: TracingRuntimeAlarmWorker, selectedEnv: envload.TracingAlarmWorkerEnabledEnv},
+		{name: "youtube collector a", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "a", selectedEnv: envload.TracingYouTubeCollectorAEnabledEnv},
+		{name: "youtube collector b", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "b", selectedEnv: envload.TracingYouTubeCollectorBEnabledEnv},
+		{name: "youtube collector c", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "c", selectedEnv: envload.TracingYouTubeCollectorCEnabledEnv},
+		{name: "youtube collector d", runtime: TracingRuntimeYouTubeCollector, collectorInstanceID: "d", selectedEnv: envload.TracingYouTubeCollectorDEnabledEnv},
+		{name: "youtube collector default", runtime: TracingRuntimeYouTubeCollector, selectedEnv: envload.TracingYouTubeCollectorEnabledEnv},
 	}
 
 	for _, tt := range tests {
@@ -106,7 +106,7 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 
 			t.Setenv(tt.selectedEnv, "true")
 			t.Setenv("OTEL_ENABLED", "true")
-			t.Setenv(load.HololiveOTLPGRPCEndpointEnv, " otel-collector:4317 ")
+			t.Setenv(envload.HololiveOTLPGRPCEndpointEnv, " otel-collector:4317 ")
 
 			config, err := LoadTracingConfig(tt.runtime, tt.collectorInstanceID)
 			if err != nil {
@@ -180,9 +180,9 @@ func TestLoadTracingConfigRejectsInvalidValues(t *testing.T) {
 	}{
 		{
 			name:     "selected enabled toggle",
-			envKey:   load.TracingHololiveAPIEnabledEnv,
+			envKey:   envload.TracingHololiveAPIEnabledEnv,
 			envValue: "not-a-bool",
-			wantErr:  load.TracingHololiveAPIEnabledEnv,
+			wantErr:  envload.TracingHololiveAPIEnabledEnv,
 		},
 		{
 			name:     "insecure toggle",
@@ -192,31 +192,31 @@ func TestLoadTracingConfigRejectsInvalidValues(t *testing.T) {
 		},
 		{
 			name:     "sample parse",
-			envKey:   load.OTELSampleRateEnv,
+			envKey:   envload.OTELSampleRateEnv,
 			envValue: "not-a-number",
-			wantErr:  load.OTELSampleRateEnv,
+			wantErr:  envload.OTELSampleRateEnv,
 		},
 		{
 			name:     "negative sample",
-			envKey:   load.OTELSampleRateEnv,
+			envKey:   envload.OTELSampleRateEnv,
 			envValue: "-0.1",
 			wantErr:  "between 0 and 1",
 		},
 		{
 			name:     "sample above one",
-			envKey:   load.OTELSampleRateEnv,
+			envKey:   envload.OTELSampleRateEnv,
 			envValue: "1.1",
 			wantErr:  "between 0 and 1",
 		},
 		{
 			name:     "non finite sample",
-			envKey:   load.OTELSampleRateEnv,
+			envKey:   envload.OTELSampleRateEnv,
 			envValue: "NaN",
 			wantErr:  "between 0 and 1",
 		},
 		{
 			name:     "enabled without endpoint",
-			envKey:   load.TracingHololiveAPIEnabledEnv,
+			envKey:   envload.TracingHololiveAPIEnabledEnv,
 			envValue: "true",
 			wantErr:  "HOLOLIVE_OTLP_GRPC_ENDPOINT is required",
 		},

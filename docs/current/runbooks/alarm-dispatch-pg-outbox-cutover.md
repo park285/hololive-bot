@@ -53,7 +53,7 @@ Former mode matrix (REMOVED — historical only):
 2. PostgreSQL integration gate:
 
 ```bash
-TEST_DATABASE_URL=postgres://... go test -tags=integration ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
+TEST_DATABASE_URL=postgres://... go test -tags=integration ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
 ```
 
 3. The publisher writes `pending` rows directly and emits a payload-free Valkey wakeup; the PG consumer
@@ -68,8 +68,8 @@ legacy mode value as safer than silently running the wrong producer; clear the v
 Before deploying alarm-worker logic hardening, verify these checks:
 
 ```bash
-go test ./hololive/hololive-alarm-worker/internal/app -count=1
-go test ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox -count=1
+go test ./hololive/hololive-alarm-worker/internal/app/workerapp -count=1
+go test ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox -count=1
 ```
 
 ```bash

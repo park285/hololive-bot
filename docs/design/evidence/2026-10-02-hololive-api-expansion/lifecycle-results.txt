@@ -1,0 +1,34 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+=== RUN   TestExpansionActualCloseOrderAndDuplicateOwnership
+    zz_expansion_ownership_probe_test.go:101: observed=[holodex.stop(member_alive=true) cache.close.1(member_alive=true) postgres.close.1(member_alive=true) alarm.close(member_alive=true) iris.close(member_alive=true) postgres.close.2(member_alive=false) cache.close.2(member_alive=false)]; one outer cleanup, two cache/PG calls, no error injected
+--- PASS: TestExpansionActualCloseOrderAndDuplicateOwnership (0.00s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap	0.102s
+=== RUN   TestExpansionDurableStopDoesNotJoinQueueSampler
+    zz_expansion_ownership_probe_test.go:53: durable_stop_error=nil sampler_read_active=true source_context_canceled=true; cancellation completion deliberately held
+--- PASS: TestExpansionDurableStopDoesNotJoinQueueSampler (0.00s)
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient/live
+    zz_expansion_ownership_probe_test.go:124: inflight_requests=0 client_state=live shutdown_error=<nil> elapsed=115.83µs
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient/closed
+    zz_expansion_ownership_probe_test.go:124: inflight_requests=0 client_state=closed shutdown_error=<nil> elapsed=17.343µs
+=== RUN   TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient/vanished
+    zz_expansion_ownership_probe_test.go:124: inflight_requests=0 client_state=vanished shutdown_error=shutdown: shutdown HTTP server: shutdown: HTTP/3 server shutdown failed: context deadline exceeded elapsed=80.940116ms
+--- PASS: TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient (0.09s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/bot/runtime	0.173s
+=== RUN   TestExpansionFxClosesResourcesWhileTimedOutDurableWorkerLives
+    zz_expansion_ownership_probe_test.go:95: exit=1 worker_alive_at_resource_close=true cleanup_calls=1 telemetry_calls=1 (worker deliberately held)
+--- PASS: TestExpansionFxClosesResourcesWhileTimedOutDurableWorkerLives (0.01s)
+=== RUN   TestExpansionFxHardDeadlineReturnsWhileMemberCacheCloseStillRuns
+    zz_expansion_ownership_probe_test.go:143: exit=1 elapsed=25.246718ms member_alive=true close_in_progress=true db_cleanup=false telemetry_cleanup=false
+    zz_expansion_ownership_probe_test.go:161: after_release member_alive=false db_cleanup=true telemetry_cleanup=1 cleanup_calls=1
+--- PASS: TestExpansionFxHardDeadlineReturnsWhileMemberCacheCloseStillRuns (0.03s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/fxapp	0.057s
+=== RUN   TestExpansionAdminRouterFailureDropsRuntimeCleanup
+    zz_expansion_ownership_probe_test.go:20: router_error=build admin api runtime: provide api router: provide API router: validate API router inputs: API_SECRET_KEY required infra_cleanup=1 supplied_runtime_cleanup=0; no DB or request
+--- PASS: TestExpansionAdminRouterFailureDropsRuntimeCleanup (0.00s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/admin/app	0.079s

@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/membernews"
@@ -529,7 +530,7 @@ func TestIsNoSubscribedMembers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := membernews.IsNoSubscribedMembers(tc.err)
+			got := errors.Is(tc.err, membernewscontracts.ErrNoSubscribedMembers)
 			if got != tc.want {
 				t.Errorf("IsNoSubscribedMembers(%v) = %v, want %v", tc.err, got, tc.want)
 			}
@@ -546,7 +547,7 @@ func TestIsNoSubscribedMembers_WrappedSentinel(t *testing.T) {
 	c := newTestClient(t, srv.URL)
 	_, err := c.GenerateRoomDigest(t.Context(), "room-1", membernewscontracts.PeriodWeekly)
 
-	if !membernews.IsNoSubscribedMembers(err) {
+	if !errors.Is(err, membernewscontracts.ErrNoSubscribedMembers) {
 		t.Errorf("GenerateRoomDigest()가 반환한 에러에서 IsNoSubscribedMembers() = false, want true; err = %v", err)
 	}
 }
@@ -554,7 +555,7 @@ func TestIsNoSubscribedMembers_WrappedSentinel(t *testing.T) {
 func newTestClient(t *testing.T, baseURL string) *membernews.Client {
 	t.Helper()
 
-	client, err := membernews.New(baseURL, testAPIKey)
+	client, err := membernews.New(baseURL, testAPIKey, sharedh3.ClientOptions{})
 	if err != nil {
 		t.Fatalf("New(%q) error = %v", baseURL, err)
 	}
@@ -562,14 +563,11 @@ func newTestClient(t *testing.T, baseURL string) *membernews.Client {
 	return client
 }
 
-// https llm-scheduler URL은 H3 전용 내부 서버다. HOLOLIVE_INTERNAL_H3_* 가 없으면 TCP client로 내려가지 않고
+// https llm-scheduler URL은 H3 전용 내부 서버다. H3 options가 없으면 TCP client로 내려가지 않고
 // 오류다(stack audit 2026-09-26).
 func TestNewRequiresInternalH3EnvForHTTPS(t *testing.T) {
-	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
-	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
-
-	client, err := membernews.New("https://127.0.0.1:30003", testAPIKey)
+	client, err := membernews.New("https://127.0.0.1:30003", testAPIKey, sharedh3.ClientOptions{})
 	if err == nil || client != nil {
-		t.Fatalf("New(https) = (%v, %v), want missing internal H3 env error", client, err)
+		t.Fatalf("New(https) = (%v, %v), want missing internal H3 options error", client, err)
 	}
 }

@@ -28,10 +28,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -53,7 +53,7 @@ func provideExaSearcher(exaConfig settings.ExaConfig, logger *slog.Logger) share
 	return client
 }
 
-func buildMajorEventSummarizer(exaConfig *apiplane.LLMSchedulerConfig, cacheClient cache.Client, guards *llmGuards, logger *slog.Logger) *mesummarizer.EventSummarizer {
+func buildMajorEventSummarizer(exaConfig *apiconfig.LLMSchedulerConfig, cacheClient cache.Client, guards *llmGuards, logger *slog.Logger) *mesummarizer.EventSummarizer {
 	costTracker := ProvideLLMCostTracker()
 	provider := exaConfig.SelectedLLMProvider()
 	majorEventLLMClient := guardLLMClient(ProvideMajorEventLLMClient(provider, costTracker, logger), guards)

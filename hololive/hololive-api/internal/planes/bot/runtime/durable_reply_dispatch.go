@@ -91,7 +91,7 @@ func (r *durableRuntime) finishOutboxSettlement(claim *durability.ReplyOutboxCla
 		r.logError("settle reply outbox", settleErr)
 
 		outcome = workercontract.AttemptOutcomeUnknown
-	case !applied && !accepted:
+	case !applied:
 		r.logError("settle reply outbox", errors.New("reply outbox settlement lost its claim"))
 
 		outcome = workercontract.AttemptOutcomeUnknown
@@ -133,10 +133,15 @@ func (r *durableRuntime) observeOutboxSettlement(claim *durability.ReplyOutboxCl
 }
 
 func (r *durableRuntime) settleOutboxDispatch(ctx context.Context, claim *durability.ReplyOutboxClaim, token string, accepted bool, dispatchErr error) (bool, error) {
+	// shutdown 취소 뒤에도 이미 관측한 전달 결과를 token fencing 아래 정산한다.
+	// inbox와 같은 유한 예산을 사용해 후속 plane의 종료 시간을 남긴다.
+	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
+	defer cancel()
+
 	status := replyOutboxSettlementStatusWithMaxAttempts(accepted, claim.Attempts, r.outboxMaxAttempts, dispatchErr)
 	retryAfter := replyOutboxRetryAfterWithBase(status, claim.Attempts, r.outboxRetryAfter)
 
-	out, err := r.outbox.Settle(ctx, durability.ReplyOutboxSettlement{
+	out, err := r.outbox.Settle(settleCtx, durability.ReplyOutboxSettlement{
 		ID: claim.ID, ClaimToken: token, Status: status, LastError: errorText(dispatchErr), RetryAfter: retryAfter,
 	})
 	if err != nil {

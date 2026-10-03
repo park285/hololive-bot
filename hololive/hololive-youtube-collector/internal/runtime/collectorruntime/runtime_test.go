@@ -54,56 +54,6 @@ func TestBuildRequiresWorkerProfile(t *testing.T) {
 	}
 }
 
-func TestCollectorProductionSourceDoesNotClaimProducerLease(t *testing.T) {
-	t.Parallel()
-
-	root := filepath.Join("..", "..", "..")
-	forbidden := []string{
-		"ingestionlease",
-		"WithSchedulerJobClaimer",
-		"JobRunGuard",
-		"AcquireIngestionLease",
-		"YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED",
-		"ProvideYouTubeProducerRateLimiter",
-		"sourceobservation.NewRepository(",
-		".ClaimBatch(",
-		"ProcessNextReplay",
-		"RunRetentionTick",
-	}
-
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-
-		src, readErr := readWalkedSource(root, path)
-		if readErr != nil {
-			return fmt.Errorf("read walked source: %w", readErr)
-		}
-
-		body := string(src)
-
-		for _, token := range forbidden {
-			if strings.Contains(body, token) {
-				t.Errorf("%s must not contain %q", path, token)
-			}
-		}
-
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk collector source: %v", err)
-	}
-}
-
 func TestCollectorProductionSourceDoesNotUseHolodex(t *testing.T) {
 	t.Parallel()
 

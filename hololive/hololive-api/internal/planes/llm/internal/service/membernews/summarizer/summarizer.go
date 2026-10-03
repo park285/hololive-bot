@@ -34,10 +34,10 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
-var kst = util.KSTZone
+var kst = timeutil.KSTZone
 
 var categoryLabels = map[model.Category]string{
 	model.CategoryBirthdayLive: "생일 라이브",
@@ -202,7 +202,7 @@ func validateAndBuildDigestFromResponse(
 	validatedItems := make([]model.SummaryItem, 0, len(response.TopItems))
 
 	for i := range response.TopItems {
-		appendValidatedSummaryItem(&validatedItems, &response.TopItems[i], validator)
+		appendValidatedSummaryItem(&validatedItems, &response.TopItems[i], input.Candidates, validator)
 	}
 
 	if len(validatedItems) > 5 {
@@ -234,8 +234,8 @@ func validateAndBuildDigestFromResponse(
 	}
 }
 
-func appendValidatedSummaryItem(items *[]model.SummaryItem, item *summaryResponseItem, validator model.SourceURLValidator) {
-	if !summaryResponseItemHasRequiredFields(item) {
+func appendValidatedSummaryItem(items *[]model.SummaryItem, item *summaryResponseItem, candidates []model.FilteredCandidate, validator model.SourceURLValidator) {
+	if !summaryResponseItemHasRequiredFields(item) || !summaryItemMatchesCandidate(item, candidates) {
 		return
 	}
 
@@ -252,6 +252,63 @@ func appendValidatedSummaryItem(items *[]model.SummaryItem, item *summaryRespons
 		Summary:   strings.TrimSpace(item.Summary),
 		SourceURL: normalizedURL,
 	})
+}
+
+// 도메인이 신뢰되는 URL도 LLM이 만든 경로나 다른 멤버에게 귀속한 후보면 승인하지 않는다.
+// 출처와 멤버를 같은 입력 후보에 묶어 primary·adjudicator 양쪽에서 검증한다.
+func summaryItemMatchesCandidate(item *summaryResponseItem, candidates []model.FilteredCandidate) bool {
+	for i := range candidates {
+		candidate := &candidates[i]
+		if item.SourceURL != candidate.SourceURL {
+			continue
+		}
+
+		if summaryMembersMatchCandidate(item.Member, candidate.MatchedMembers) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func summaryMembersMatchCandidate(memberText string, candidateMembers []string) bool {
+	remaining := []string{strings.TrimSpace(memberText)}
+	seen := map[string]struct{}{remaining[0]: {}}
+
+	// 이름 자체의 쉼표는 쪼개지 않고, 정본 이름 뒤의 쉼표만 협업 구분자로 소비한다.
+	// 여러 이름이 같은 접두사를 가져도 유효한 조합을 버리지 않도록 남은 문자열마다 한 번만 확인한다.
+	for i := 0; i < len(remaining); i++ {
+		for _, candidateMember := range candidateMembers {
+			candidateMember = strings.TrimSpace(candidateMember)
+			if candidateMember == "" {
+				continue
+			}
+
+			if remaining[i] == candidateMember {
+				return true
+			}
+
+			suffix, matched := strings.CutPrefix(remaining[i], candidateMember)
+			if !matched {
+				continue
+			}
+
+			suffix, separated := strings.CutPrefix(strings.TrimSpace(suffix), ",")
+
+			suffix = strings.TrimSpace(suffix)
+
+			if !separated || suffix == "" {
+				continue
+			}
+
+			if _, visited := seen[suffix]; !visited {
+				seen[suffix] = struct{}{}
+				remaining = append(remaining, suffix)
+			}
+		}
+	}
+
+	return false
 }
 
 func summaryResponseItemHasRequiredFields(item *summaryResponseItem) bool {

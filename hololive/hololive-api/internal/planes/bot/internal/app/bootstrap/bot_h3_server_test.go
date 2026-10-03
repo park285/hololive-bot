@@ -56,7 +56,18 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	runCtx, runCancel := context.WithCancel(t.Context())
 	defer runCancel()
 
-	startCertReload(runCtx)
+	reloadDone := make(chan struct{})
+
+	go func() {
+		defer close(reloadDone)
+
+		startCertReload(runCtx)
+	}()
+
+	t.Cleanup(func() {
+		runCancel()
+		<-reloadDone
+	})
 
 	overwriteLocalhostCertificate(t, certFile, keyFile)
 

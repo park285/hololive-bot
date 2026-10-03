@@ -26,8 +26,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func serveTriggerRouterRequest(t *testing.T, router http.Handler, method, path, apiKey string) int {
@@ -53,7 +53,7 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 	t.Run("nil trigger handler keeps health only", func(t *testing.T) {
 		t.Parallel()
 
-		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, nil, "api-key")
+		router, err := apiserver.NewTriggerRuntimeRouter(t.Context(), logger, nil, "api-key")
 		if err != nil {
 			t.Fatalf("NewTriggerRuntimeRouter() error = %v", err)
 		}
@@ -75,9 +75,9 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 	t.Run("trigger routes require api key and are registered", func(t *testing.T) {
 		t.Parallel()
 
-		triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+		triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
-		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "api-key")
+		router, err := apiserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "api-key")
 		if err != nil {
 			t.Fatalf("NewTriggerRuntimeRouter() error = %v", err)
 		}
@@ -96,9 +96,9 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 	t.Run("trigger routes fail closed when api key missing", func(t *testing.T) {
 		t.Parallel()
 
-		triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+		triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
-		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "")
+		router, err := apiserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "")
 		if err == nil {
 			t.Fatal("NewTriggerRuntimeRouter() error = nil, want non-nil")
 		}

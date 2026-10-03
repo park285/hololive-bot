@@ -22,47 +22,70 @@ package settings
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // localSettingsApplier: admin plane 프로세스 내 직접 설정 적용 (in-process).
 type localSettingsApplier struct {
-	alarm domain.AlarmCRUD
+	alarm AlarmAdvanceService
+}
+
+// AlarmAdvanceService는 설정 적용과 마지막으로 확인한 target 조회만 요구한다.
+type AlarmAdvanceService interface {
+	UpdateAlarmAdvanceMinutes(context.Context, int) (domain.AdvanceMinutesResult, error)
+	GetTargetMinutes() []int
 }
 
 var _ SettingsApplier = (*localSettingsApplier)(nil)
 
-func NewLocalSettingsApplier(alarm domain.AlarmCRUD) SettingsApplier {
+func NewLocalSettingsApplier(alarm AlarmAdvanceService) SettingsApplier {
 	return &localSettingsApplier{alarm: alarm}
 }
 
-func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) AlarmAdvanceMinutesApplyResult {
+func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (AlarmAdvanceMinutesApplyResult, error) {
 	runtime := AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
+		AlarmReason:                  "alarm worker outcome_unknown: alarm advance minutes application could not be confirmed",
 	}
 
 	if a.alarm == nil {
 		runtime.AlarmApplied = false
 		runtime.AlarmReason = "alarm service not configured"
 
-		return runtime
+		return runtime, errors.New("apply alarm advance minutes: alarm service not configured")
 	}
 
-	targetMinutes := a.alarm.UpdateAlarmAdvanceMinutes(ctx, minutes)
-	// alarm-worker HTTP client는 PUT 실패 시 빈 목록을 돌려준다. 이 호출이 worker에 닿는 유일한 적용
-	// 경로이므로(config:update Pub/Sub 재적용 없음) 실패를 적용 성공으로 보고하지 않는다.
-	if len(targetMinutes) == 0 {
-		runtime.AlarmApplied = false
+	result, err := a.alarm.UpdateAlarmAdvanceMinutes(ctx, minutes)
+	switch result.Outcome {
+	case domain.ApplyRejected:
 		runtime.AlarmReason = "alarm worker did not apply alarm advance minutes"
-
-		return runtime
+	case domain.ApplyConfirmed:
+		if err == nil && len(result.TargetMinutes) > 0 {
+			runtime.AlarmApplied = true
+			runtime.AlarmReason = ""
+			runtime.AlarmTargetMinutes = slices.Clone(result.TargetMinutes)
+		}
+	case domain.ApplyUnknown:
+		runtime.AlarmReason = "alarm worker outcome_unknown: alarm advance minutes application could not be confirmed"
 	}
 
-	runtime.AlarmApplied = true
-	runtime.AlarmTargetMinutes = targetMinutes
+	if err != nil {
+		return runtime, fmt.Errorf("apply alarm advance minutes: %w", err)
+	}
 
-	return runtime
+	if !runtime.AlarmApplied {
+		if runtime.AlarmReason == "" {
+			runtime.AlarmReason = "alarm worker outcome_unknown: alarm advance minutes application could not be confirmed"
+		}
+
+		return runtime, errors.New("apply alarm advance minutes: application was not confirmed")
+	}
+
+	return runtime, nil
 }
 
 func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) MemberNewsWeeklyRunNowResult {

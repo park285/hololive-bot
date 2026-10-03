@@ -10,8 +10,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 	"go.uber.org/fx"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 )
 
 func TestApplicationGraphValidates(t *testing.T) {
@@ -48,7 +48,7 @@ func TestApplicationStartsAndStopsAggregateLifecycle(t *testing.T) {
 	params := successfulApplicationParams(&cleanup)
 	runtime := &applicationLifecycleTestRuntime{}
 
-	params.dependencies.buildRuntime = func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
+	params.dependencies.buildRuntime = func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 		return runtime, nil
 	}
 
@@ -87,7 +87,7 @@ func TestApplicationTelemetryFailureStopsBeforeRuntimeBuild(t *testing.T) {
 	params.dependencies.newTelemetry = func(context.Context, telemetry.Config) (telemetryResource, error) {
 		return nil, telemetryErr
 	}
-	params.dependencies.buildRuntime = func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
+	params.dependencies.buildRuntime = func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 		runtimeBuilt = true
 
 		return &applicationTestRuntime{}, nil
@@ -112,7 +112,7 @@ func TestApplicationRuntimeFailureClosesTelemetry(t *testing.T) {
 	params.dependencies.newTelemetry = func(context.Context, telemetry.Config) (telemetryResource, error) {
 		return telemetrySpy, nil
 	}
-	params.dependencies.buildRuntime = func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
+	params.dependencies.buildRuntime = func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 		return nil, runtimeErr
 	}
 
@@ -156,11 +156,16 @@ func TestResourceOwnerClosesInReverseOrderExactlyOnce(t *testing.T) {
 
 	var calls []string
 
-	owner.Add(func(context.Context) { calls = append(calls, "telemetry") })
-	owner.Add(func(context.Context) { calls = append(calls, "runtime") })
+	owner.Add(func(context.Context) error { calls = append(calls, "telemetry"); return nil })
+	owner.Add(func(context.Context) error { calls = append(calls, "runtime"); return nil })
 
-	owner.Close(t.Context())
-	owner.Close(t.Context())
+	if err := owner.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := owner.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 
 	if want := []string{"runtime", "telemetry"}; !reflect.DeepEqual(calls, want) {
 		t.Fatalf("Close() calls = %v, want %v", calls, want)
@@ -168,7 +173,7 @@ func TestResourceOwnerClosesInReverseOrderExactlyOnce(t *testing.T) {
 }
 
 func TestHololiveAPITelemetryConfigUsesFixedIdentity(t *testing.T) {
-	config := &apiplane.RuntimeConfig{
+	config := &apiconfig.RuntimeConfig{
 		Bot: &settings.Config{Environment: "production"},
 		Tracing: settings.TracingConfig{
 			Enabled:    true,
@@ -223,8 +228,9 @@ func (r *applicationLifecycleTestRuntime) Shutdown(context.Context) error {
 	return nil
 }
 
-func (r *applicationLifecycleTestRuntime) Close() {
+func (r *applicationLifecycleTestRuntime) CloseContext(context.Context) error {
 	r.closeCalls++
+	return nil
 }
 
 func (r *applicationTestRuntime) Start(context.Context, chan<- error) {}
@@ -233,17 +239,19 @@ func (r *applicationTestRuntime) Shutdown(context.Context) error {
 	return nil
 }
 
-func (r *applicationTestRuntime) Close() {
+func (r *applicationTestRuntime) CloseContext(context.Context) error {
 	if r.cleanup != nil {
 		*r.cleanup = append(*r.cleanup, "runtime")
 	}
+
+	return nil
 }
 
 func successfulApplicationParams(cleanup *[]string) applicationParams {
 	logger := slog.New(slog.DiscardHandler)
 
 	return applicationParams{
-		config: &apiplane.RuntimeConfig{
+		config: &apiconfig.RuntimeConfig{
 			Bot: &settings.Config{Environment: "test"},
 		},
 		logger:  logger,
@@ -252,7 +260,7 @@ func successfulApplicationParams(cleanup *[]string) applicationParams {
 			newTelemetry: func(context.Context, telemetry.Config) (telemetryResource, error) {
 				return &applicationTestTelemetry{cleanup: cleanup}, nil
 			},
-			buildRuntime: func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
+			buildRuntime: func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 				return &applicationTestRuntime{cleanup: cleanup}, nil
 			},
 		},

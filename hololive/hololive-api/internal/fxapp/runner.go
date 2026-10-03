@@ -80,7 +80,9 @@ func (a *Application) SafetyClose(ctx context.Context) {
 		return
 	}
 
-	a.resources.Close(ctx)
+	if err := a.resources.Close(ctx); err != nil {
+		logDiagnosticError(nil, "hololive-api safety cleanup failed", err)
+	}
 }
 
 func runApplication(application runnerApplication, logger *slog.Logger) int {

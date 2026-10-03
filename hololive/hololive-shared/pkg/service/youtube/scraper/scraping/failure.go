@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
+
 	admission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
@@ -218,7 +220,7 @@ func isTimeoutFailure(err error) bool {
 
 func isTimeoutURLFailure(err error) bool {
 	urlErr, ok := errors.AsType[*url.Error](err)
-	if !ok || isNilInterfaceValue(urlErr) || isNilInterfaceValue(urlErr.Err) {
+	if !ok || reflectutil.IsNil(urlErr) || reflectutil.IsNil(urlErr.Err) {
 		return false
 	}
 
@@ -226,12 +228,12 @@ func isTimeoutURLFailure(err error) bool {
 }
 
 func isTimeoutNetFailure(err error) bool {
-	if urlErr, ok := errors.AsType[*url.Error](err); ok && !isNilInterfaceValue(urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && !reflectutil.IsNil(urlErr) {
 		return false
 	}
 
 	netErr, ok := errors.AsType[net.Error](err)
-	if !ok || isNilInterfaceValue(netErr) {
+	if !ok || reflectutil.IsNil(netErr) {
 		return false
 	}
 

@@ -1,0 +1,78 @@
+{
+  "root": "/home/kapu/work/iris-stack/hololive-bot",
+  "method": "lexical references in present safe tracked/visible-untracked files plus explicit ignored project docs; not runtime reachability or compilation",
+  "excluded": [
+    "secrets/certificates/env contents",
+    "binary files",
+    "node_modules/target/artifacts",
+    "docs evidence captures/security CSV",
+    "go.sum/package-lock",
+    "SQL asset bodies (asset membership separately covered by Go embed graph)",
+    "non-whitelisted file types",
+    "symlinks",
+    "files > 2 MB"
+  ],
+  "outer_candidates": {
+    "hololive/hololive-api": "apps/api",
+    "hololive/hololive-alarm-worker": "apps/alarm-worker",
+    "hololive/hololive-youtube-collector": "apps/youtube-collector",
+    "hololive/hololive-shared": "libs/hololive",
+    "hololive/hololive-dbtest": "tests/dbtest"
+  },
+  "inner_candidates": {
+    "hololive/hololive-api/internal/planes/bot/internal/app/runtime": "hololive/hololive-api/internal/planes/bot/runtime",
+    "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap": "hololive/hololive-api/internal/planes/bot/internal/bootstrap",
+    "hololive/hololive-api/internal/planes/admin/app/http": "hololive/hololive-api/internal/planes/admin/internal/httpapi",
+    "hololive/hololive-api/internal/planes/admin/app": "hololive/hololive-api/internal/planes/admin/runtime",
+    "hololive/hololive-alarm-worker/internal/app/workerapp": "hololive/hololive-alarm-worker/internal/app",
+    "hololive/hololive-alarm-worker/internal/service/workerruntime": "hololive/hololive-alarm-worker/internal/runtime",
+    "hololive/hololive-youtube-collector/cmd/runtime/youtube-collector": "hololive/hololive-youtube-collector/cmd/youtube-collector",
+    "hololive/hololive-youtube-collector/cmd/runtime/healthcheck": "hololive/hololive-youtube-collector/cmd/healthcheck"
+  },
+  "semantic_split_search_placeholders": {
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation": "SEARCH-ONLY semantic split: retain shared public contracts; review collector Publish and API Consume per symbol; no whole-directory move"
+  },
+  "interpretation": "outer-edit-files.tsv and inner-edit-files.tsv are lexical REVIEW SETS, not instructions that every file must be edited; reviewed-path-contracts.tsv provides individually reviewed actions. Historical/ignored references are preserved evidence, not active consumers. Inner candidate destinations remain proposals; semantic split placeholders are not valid destination paths.",
+  "scanned_files": 2978,
+  "reference_rows": 14435,
+  "unique_reference_files": 1769,
+  "categories_rows": {
+    "test-build": 2269,
+    "current-doc": 474,
+    "historical": 7509,
+    "runtime-active": 2853,
+    "ignored-local": 1061,
+    "proposal-doc": 269
+  },
+  "categories_unique_files": {
+    "current-doc": 67,
+    "historical": 121,
+    "ignored-local": 40,
+    "proposal-doc": 10,
+    "runtime-active": 762,
+    "test-build": 769
+  },
+  "kinds_rows": {
+    "module-identity": 3689,
+    "outer-diskpath": 9090,
+    "outer-root-selector": 98,
+    "workspace-discovery": 15,
+    "relative-root-depth": 301,
+    "semantic-split-disk-reference": 930,
+    "inner-diskpath": 125,
+    "semantic-split-import-reference": 51,
+    "package-local-asset": 81,
+    "inner-relative-command": 10,
+    "inner-test-identity-suffix": 7,
+    "inner-importpath": 30,
+    "module-relative-replace": 8
+  },
+  "head": "5c12d2c503915caf63f21aa86e1aeb346da94e63",
+  "retained_reference_rows": 5596,
+  "retained_reference_categories": [
+    "runtime-active",
+    "test-build",
+    "current-doc"
+  ],
+  "artifact_note": "Historical, ignored-local and proposal snippets remain excluded from the retained reference TSV; full scan totals describe the original one-off analysis. Reproduction may emit the full classified inventory into a temporary directory."
+}

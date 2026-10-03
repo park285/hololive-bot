@@ -28,7 +28,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
@@ -41,28 +41,28 @@ func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
 	}{
 		{
 			name: "before 1st target same month",
-			now:  time.Date(2026, time.March, 1, 9, 0, 0, 0, util.KSTZone),
-			want: time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.March, 1, 9, 0, 0, 0, timeutil.KSTZone),
+			want: time.Date(2026, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone),
 		},
 		{
 			name: "after 1st target next month",
-			now:  time.Date(2026, time.March, 1, 10, 30, 0, 0, util.KSTZone),
-			want: time.Date(2026, time.April, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.March, 1, 10, 30, 0, 0, timeutil.KSTZone),
+			want: time.Date(2026, time.April, 1, 10, 0, 0, 0, timeutil.KSTZone),
 		},
 		{
 			name: "exact 1st 10:00 target next month",
-			now:  time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone),
-			want: time.Date(2026, time.April, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone),
+			want: time.Date(2026, time.April, 1, 10, 0, 0, 0, timeutil.KSTZone),
 		},
 		{
 			name: "year end december to january",
-			now:  time.Date(2026, time.December, 2, 0, 0, 0, 0, util.KSTZone),
-			want: time.Date(2027, time.January, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.December, 2, 0, 0, 0, 0, timeutil.KSTZone),
+			want: time.Date(2027, time.January, 1, 10, 0, 0, 0, timeutil.KSTZone),
 		},
 		{
 			name: "leap year february to march",
-			now:  time.Date(2028, time.February, 1, 11, 0, 0, 0, util.KSTZone), // 2028 = 윤년
-			want: time.Date(2028, time.March, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2028, time.February, 1, 11, 0, 0, 0, timeutil.KSTZone), // 2028 = 윤년
+			want: time.Date(2028, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone),
 		},
 	}
 
@@ -88,7 +88,7 @@ func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
@@ -114,7 +114,7 @@ func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
 
-	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone)
 
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })

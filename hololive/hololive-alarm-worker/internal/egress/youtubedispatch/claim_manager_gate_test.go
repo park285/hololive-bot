@@ -12,7 +12,6 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -548,7 +547,7 @@ func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
 		t.Context(),
 		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
 		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
-		claim.NewMemoryDecisionCache(),
+		newClaimDecisionCache(),
 	)
 
 	require.Len(t, selection.sendRows, 3)
@@ -571,7 +570,7 @@ func TestSelectClaimedDeliveriesHandlesNilInputs(t *testing.T) {
 		t.Context(),
 		nil,
 		nil,
-		claim.NewMemoryDecisionCache(),
+		newClaimDecisionCache(),
 	)
 
 	require.Empty(t, selection.sendRows)
@@ -605,27 +604,22 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 		t.Context(),
 		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
 		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
-		claim.NewMemoryDecisionCache(),
+		newClaimDecisionCache(),
 	)
 
 	result := &dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
 
 	var mu sync.Mutex
 
-	dispatcher.send.dispatchClaimedRowsIndividually(
-		t.Context(),
-		selection.sendRows,
-		selection.sendOutboxes,
-		map[int64]string{
-			firstOutbox.ID:     "message-1",
-			secondOutbox.ID:    "message-2",
-			duplicateOutbox.ID: "message-3",
-		},
-		map[int64]bool{},
-		selection.rowClaimTokens,
-		result,
-		&mu,
-	)
+	messages := map[int64]string{
+		firstOutbox.ID:     "message-1",
+		secondOutbox.ID:    "message-2",
+		duplicateOutbox.ID: "message-3",
+	}
+
+	for i := range selection.sendRows {
+		dispatcher.send.dispatchClaimedDeliveryRow(t.Context(), &selection.sendRows[i], &selection.sendOutboxes[i], messages, nil, selection.rowClaimTokens[i], result, &mu)
+	}
 
 	require.Equal(t, 2, sender.messageCount())
 	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.SuccessDeliveryIDs)
@@ -810,7 +804,7 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefers
 		"row_version": 1,
 	}, "id = ?", row.ID).Error)
 
-	selection := dispatcher.claim.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, claim.NewMemoryDecisionCache())
+	selection := dispatcher.claim.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, newClaimDecisionCache())
 
 	require.Empty(t, selection.sendRows)
 	require.Empty(t, selection.retryDeliveryIDs)

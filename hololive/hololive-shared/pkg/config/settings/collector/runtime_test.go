@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
@@ -21,7 +22,7 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "dummy-admin-secret")
 	t.Setenv("METRICS_API_KEY", "dummy-metrics-secret")
 	settingstest.SetRuntimeH3ServerEnv(t)
-	t.Setenv("POSTGRES_USER", load.PostgresScraperRoleUser)
+	t.Setenv("POSTGRES_USER", runtimepolicy.PostgresScraperRoleUser)
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", settingstest.CollectorInstanceC)
 	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "true")
 	t.Setenv("PHOTO_SYNC_ENABLED", "false")
@@ -72,7 +73,7 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 	collector.InstanceID = settingstest.CollectorInstanceC
 
 	return &RuntimeConfig{
-		Environment: load.EnvironmentProduction,
+		Environment: runtimepolicy.EnvironmentProduction,
 		Version:     "test",
 		Server: settings.ServerConfig{
 			Port:           30025,
@@ -89,15 +90,15 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 			SampleRate: 0.1,
 		},
 		Postgres: settings.PostgresConfig{
-			User:        load.PostgresScraperRoleUser,
+			User:        runtimepolicy.PostgresScraperRoleUser,
 			Password:    "x",
-			SSLMode:     load.PostgresSSLModeVerifyFull,
+			SSLMode:     runtimepolicy.PostgresSSLModeVerifyFull,
 			SSLRootCert: cert,
 		},
 		RuntimeOwnership: RuntimeOwnershipConfig{
 			RuntimeAllowed:         true,
 			PhotoSyncEnabled:       false,
-			NotificationEgressRole: load.NotificationEgressRoleOff,
+			NotificationEgressRole: runtimepolicy.NotificationEgressRoleOff,
 		},
 		WorkerProfile: mustLoadCollectorWorkerProfile(t),
 		Collector:     collector,
@@ -121,8 +122,8 @@ func TestCFG001CollectorLoaderSucceedsWithoutCacheEnv(t *testing.T) {
 		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
-	if cfg.Postgres.User != load.PostgresScraperRoleUser {
-		t.Fatalf("Postgres.User = %q, want %s", cfg.Postgres.User, load.PostgresScraperRoleUser)
+	if cfg.Postgres.User != runtimepolicy.PostgresScraperRoleUser {
+		t.Fatalf("Postgres.User = %q, want %s", cfg.Postgres.User, runtimepolicy.PostgresScraperRoleUser)
 	}
 
 	if cfg.Collector.InstanceID != settingstest.CollectorInstanceC {
@@ -273,7 +274,7 @@ func collectorRuntimeServerValidateCases() []collectorRuntimeValidateCase {
 		{
 			name:    "tracing disabled",
 			mutate:  func(c *RuntimeConfig) { c.Tracing.Enabled = false },
-			wantSub: load.TracingYouTubeCollectorCEnabledEnv,
+			wantSub: envload.TracingYouTubeCollectorCEnabledEnv,
 		},
 		{
 			name:    "h3 cert missing",
@@ -287,7 +288,7 @@ func collectorRuntimePostgresValidateCases() []collectorRuntimeValidateCase {
 	return []collectorRuntimeValidateCase{
 		{
 			name:    "postgres user mismatch",
-			mutate:  func(c *RuntimeConfig) { c.Postgres.User = load.PostgresRuntimeRoleUser },
+			mutate:  func(c *RuntimeConfig) { c.Postgres.User = runtimepolicy.PostgresRuntimeRoleUser },
 			wantSub: "POSTGRES_USER",
 		},
 		{
@@ -448,11 +449,11 @@ func TestValidateYouTubeCollectorRuntimeRequiresScraperPostgresUser(t *testing.T
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 
-	cfg.Postgres.User = load.PostgresRuntimeRoleUser
+	cfg.Postgres.User = runtimepolicy.PostgresRuntimeRoleUser
 
 	err := cfg.Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER="+load.PostgresScraperRoleUser) {
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER="+runtimepolicy.PostgresScraperRoleUser) {
 		t.Fatalf("Validate() error = %v, want scraper postgres user", err)
 	}
 }

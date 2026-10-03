@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -35,13 +36,17 @@ func ResolveLLMSchedulerClients(
 		return LLMSchedulerClients{}, nil
 	}
 
-	majorEventClient, err := majorevent.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
+	majorEventClient, err := majorevent.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey, appConfig.InternalH3)
 	if err != nil {
 		return LLMSchedulerClients{}, fmt.Errorf("major event client: %w", err)
 	}
 
-	memberNewsClient, err := membernews.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey)
+	memberNewsClient, err := membernews.New(appConfig.LLMSchedulerURL, appConfig.Server.APIKey, appConfig.InternalH3)
 	if err != nil {
+		if closeErr := majorEventClient.Close(); closeErr != nil {
+			return LLMSchedulerClients{}, errors.Join(fmt.Errorf("member news client: %w", err), fmt.Errorf("rollback major event client: %w", closeErr))
+		}
+
 		return LLMSchedulerClients{}, fmt.Errorf("member news client: %w", err)
 	}
 

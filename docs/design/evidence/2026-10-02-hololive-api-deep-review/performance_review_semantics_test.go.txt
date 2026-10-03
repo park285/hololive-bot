@@ -1,0 +1,91 @@
+package membernews
+
+import (
+	"context"
+	"reflect"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
+	"github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+func TestPerformanceReviewCandidateOrder(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.FixedZone("KST", 9*3600))
+	a := model.Candidate{ID: 1, Type: domain.MajorEventTypeNews, Title: "미코 행사", Members: []string{"미코"}, PubDate: new(now), SourceURL: "https://hololive.hololivepro.com/a"}
+	b := a
+	b.ID, b.SourceURL = 2, "https://hololive.hololivepro.com/b"
+	left := filter.FilterCandidates([]model.Candidate{a, b}, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
+	right := filter.FilterCandidates([]model.Candidate{b, a}, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
+	ids := func(cs []model.FilteredCandidate) []int {
+		out := make([]int, 0, len(cs))
+		for _, c := range cs {
+			out = append(out, c.Candidate.ID)
+		}
+		return out
+	}
+	leftIDs, rightIDs := ids(left), ids(right)
+	setLeft, setRight := slices.Clone(leftIDs), slices.Clone(rightIDs)
+	slices.Sort(setLeft)
+	slices.Sort(setRight)
+	ld := summarizer.BuildDeterministicFallback(model.PeriodWeekly, left)
+	rd := summarizer.BuildDeterministicFallback(model.PeriodWeekly, right)
+	if !reflect.DeepEqual(setLeft, setRight) || reflect.DeepEqual(ld, rd) {
+		t.Fatal("순서에 따라 fallback이 달라지는 재현 조건이 성립하지 않습니다")
+	}
+	t.Logf("same_ids=%t left_order=%v right_order=%v fallback_first_source=%s reversed_first_source=%s", reflect.DeepEqual(setLeft, setRight), leftIDs, rightIDs, ld.TopItems[0].SourceURL, rd.TopItems[0].SourceURL)
+}
+
+type performanceReviewPeriodQuerier struct {
+	memberNewsQuerier
+	start, end time.Time
+}
+
+func (q *performanceReviewPeriodQuerier) Query(ctx context.Context, sql string, _ ...any) (rowsScanner, error) {
+	const predicate = ` AND (CASE WHEN type='news' THEN COALESCE(pub_date, event_start_date::timestamp AT TIME ZONE 'UTC') ELSE COALESCE(event_start_date::timestamp AT TIME ZONE 'UTC', pub_date) END) >= $1 AND (CASE WHEN type='news' THEN COALESCE(pub_date, event_start_date::timestamp AT TIME ZONE 'UTC') ELSE COALESCE(event_start_date::timestamp AT TIME ZONE 'UTC', pub_date) END) < $2`
+	return q.memberNewsQuerier.Query(ctx, sql+predicate, q.start, q.end)
+}
+
+func TestPerformanceReviewOutOfRangeScanError(t *testing.T) {
+	p := dbtest.NewBlankPool(t)
+	ctx := t.Context()
+	_, err := p.Exec(ctx, `CREATE TABLE major_events(id int PRIMARY KEY,type varchar(20) NOT NULL,title varchar(500) NOT NULL,description text,members text[],pub_date timestamptz,event_start_date date,link varchar(1000),status text NOT NULL,link_status varchar(20)); INSERT INTO major_events VALUES(1,'news','미코 행사','미코 기사',ARRAY['미코'],'infinity'::timestamptz,NULL,'https://hololive.hololivepro.com/x','active','unchecked')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := newPGXMemberNewsQuerier(p)
+	all := &Repository{pool: base}
+	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	cut := &Repository{pool: &performanceReviewPeriodQuerier{memberNewsQuerier: base, start: start, end: start.AddDate(0, 1, 0)}}
+	_, fullErr := all.ListActiveMajorEvents(ctx)
+	cs, cutErr := cut.ListActiveMajorEvents(ctx)
+	if fullErr == nil || cutErr != nil || len(cs) != 0 {
+		t.Fatalf("전체조회 fullErr=%v, 기간조회 cutErr=%v rows=%d", fullErr, cutErr, len(cs))
+	}
+	t.Logf("full_error=%v period_error=%v period_rows=%d", fullErr, cutErr, len(cs))
+}
+
+func TestPerformanceReviewMonthBoundarySnapshot(t *testing.T) {
+	kst := time.FixedZone("KST", 9*3600)
+	before := time.Date(2026, 9, 30, 23, 59, 59, 0, kst)
+	after := before.Add(2 * time.Second)
+	sept := model.Candidate{ID: 1, Type: domain.MajorEventTypeNews, Title: "미코 9월 행사", Members: []string{"미코"}, PubDate: new(before), SourceURL: "https://hololive.hololivepro.com/sept"}
+	oct := sept
+	oct.ID, oct.Title, oct.PubDate = 2, "미코 10월 행사", new(after)
+	all := []model.Candidate{sept, oct}
+	initial := filter.FilterCandidates(all, model.PeriodMonthly, before, []string{"미코"}, nil, nil)
+	snapshot := make([]model.Candidate, 0, len(initial))
+	for _, c := range initial {
+		snapshot = append(snapshot, c.Candidate)
+	}
+	fullAfter := filter.FilterCandidates(all, model.PeriodMonthly, after, []string{"미코"}, nil, nil)
+	snapshotAfter := filter.FilterCandidates(snapshot, model.PeriodMonthly, after, []string{"미코"}, nil, nil)
+	if len(fullAfter) != 1 || len(snapshotAfter) != 0 {
+		t.Fatal("월경계 스냅샷 누락 재현 조건이 성립하지 않습니다")
+	}
+	t.Logf("initial_month=%s next_month=%s full_next_count=%d initial_snapshot_next_count=%d", before.Format("2006-01"), after.Format("2006-01"), len(fullAfter), len(snapshotAfter))
+}

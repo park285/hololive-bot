@@ -1,0 +1,2 @@
+package github.com/kapu/hololive-api/internal/layoutvisibilityprobe
+	internal/layoutvisibilityprobe/probe.go:2:8: use of internal package github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi not allowed

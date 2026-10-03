@@ -29,8 +29,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 type stubMajorEventScheduler struct {
@@ -62,7 +62,7 @@ func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {
 
 	router := gin.New()
 
-	handler := sharedserver.NewTriggerHandler(
+	handler := apiserver.NewTriggerHandler(
 		&stubMajorEventScheduler{},
 		&stubMajorEventMonthlyScheduler{},
 		nil,
@@ -84,7 +84,7 @@ func TestTriggerHandler_MemberNewsWeekly_Success(t *testing.T) {
 
 	router := gin.New()
 
-	handler := sharedserver.NewTriggerHandler(
+	handler := apiserver.NewTriggerHandler(
 		&stubMajorEventScheduler{},
 		&stubMajorEventMonthlyScheduler{},
 		&stubMemberNewsWeeklyScheduler{},

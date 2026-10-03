@@ -6,7 +6,7 @@
 
 - Bot plane: Kakao/Iris webhook ingress, 사용자 명령 routing, reply orchestration (port `30001`).
 - LLM plane: major event/member news scheduling, LLM digest 생성, internal subscription/trigger 제공자 (port `30003`).
-- Admin plane: dashboard-facing admin HTTP control plane, trigger client facade, alarm HTTP 호환 facade, `members.photo` Holodex PhotoSync (port `30006`).
+- Admin plane: dashboard-facing admin HTTP control plane, trigger client와 worker alarm HTTP client, `members.photo` Holodex PhotoSync (port `30006`).
 - YouTube plane: observation claim/finalize, canonical persist, notification intent, live-end finalizer, retention/replay. YouTube channel photos는 `channel_photo` reducer.
 
 ## Normal status

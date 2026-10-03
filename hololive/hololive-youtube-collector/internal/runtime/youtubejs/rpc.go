@@ -167,11 +167,7 @@ func (c *RPC) successLimit(requested int) (int, error) {
 	}
 
 	if int64(requested) > configured {
-		if err := protocolMismatch(errors.New("youtube.js helper success response limit exceeds bootstrap limit")); err != nil {
-			return 0, fmt.Errorf("protocol mismatch: %w", err)
-		}
-
-		return 0, nil
+		return 0, protocolMismatch(errors.New("youtube.js helper success response limit exceeds bootstrap limit"))
 	}
 
 	return requested, nil
@@ -281,38 +277,14 @@ func decodeHelperResponse(resp *http.Response, limit int64, response any) error 
 	}
 
 	if int64(len(payload)) > bodyLimit {
-		return oversizedHelperResponseResult(resp.StatusCode)
+		return oversizedHelperResponse(resp.StatusCode)
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		return decodeHelperSuccessResult(payload, response)
+		return decodeHelperSuccess(payload, response)
 	}
 
-	return helperStatusErrorResult(resp.StatusCode, payload)
-}
-
-func oversizedHelperResponseResult(status int) error {
-	if err := oversizedHelperResponse(status); err != nil {
-		return fmt.Errorf("oversized helper response: %w", err)
-	}
-
-	return nil
-}
-
-func decodeHelperSuccessResult(payload []byte, response any) error {
-	if err := decodeHelperSuccess(payload, response); err != nil {
-		return fmt.Errorf("decode helper success: %w", err)
-	}
-
-	return nil
-}
-
-func helperStatusErrorResult(status int, payload []byte) error {
-	if err := helperStatusError(status, payload); err != nil {
-		return fmt.Errorf("helper status error: %w", err)
-	}
-
-	return nil
+	return helperStatusError(resp.StatusCode, payload)
 }
 
 func helperResponseLimit(status int, requested int64) int64 {
@@ -330,11 +302,7 @@ func helperResponseLimit(status int, requested int64) int64 {
 func readHelperBody(resp *http.Response, limit int64) ([]byte, error) {
 	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err := errors.Join(readErr, resp.Body.Close()); err != nil {
-		if fromErr := collecterr.FromContext(fmt.Errorf("read youtube.js helper: %w", err)); fromErr != nil {
-			return nil, fmt.Errorf("from context: %w", fromErr)
-		}
-
-		return nil, nil
+		return nil, collecterr.FromContext(fmt.Errorf("read youtube.js helper: %w", err))
 	}
 
 	return payload, nil
@@ -345,11 +313,7 @@ func oversizedHelperResponse(status int) error {
 		return collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "youtube.js helper success response exceeds body limit")
 	}
 
-	if err := protocolMismatch(errors.New("youtube.js helper error response exceeds body limit")); err != nil {
-		return fmt.Errorf("protocol mismatch: %w", err)
-	}
-
-	return nil
+	return protocolMismatch(errors.New("youtube.js helper error response exceeds body limit"))
 }
 
 // helperSuccess는 성공 응답 유형마다 자신의 결과 계약을 검증하게 합니다.
@@ -361,7 +325,7 @@ type helperSuccess interface {
 
 func decodeHelperSuccess(payload []byte, response any) error {
 	if err := strictDecode(payload, response); err != nil {
-		return protocolMismatchError(fmt.Errorf("decode youtube.js helper success response: %w", err))
+		return protocolMismatch(fmt.Errorf("decode youtube.js helper success response: %w", err))
 	}
 
 	success, ok := response.(helperSuccess)
@@ -370,11 +334,11 @@ func decodeHelperSuccess(payload []byte, response any) error {
 	}
 
 	if success.protocolMetadata().ProtocolVersion != ProtocolVersion {
-		return protocolMismatchError(errors.New("youtube.js helper success protocol version mismatch"))
+		return protocolMismatch(errors.New("youtube.js helper success protocol version mismatch"))
 	}
 
 	if err := success.validateSuccess(); err != nil {
-		return protocolMismatchError(err)
+		return protocolMismatch(err)
 	}
 
 	return nil

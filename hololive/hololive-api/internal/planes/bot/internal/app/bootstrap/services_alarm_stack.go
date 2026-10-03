@@ -1,41 +1,43 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v3/iris"
-
-	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 type AlarmYouTubeStackComponents struct {
-	AlarmMode       *AlarmModeComponents
-	Matcher         *matcher.Matcher
-	ActivityLogger  *activity.Logger
-	SettingsService settings.ReadWriter
+	AlarmMode *AlarmModeComponents
+	Matcher   *matcher.Matcher
 }
 
 func InitAlarmYouTubeStack(
 	appConfig *configsettings.Config,
-	foundation *ScraperHolodexFoundation,
-	_ iris.Sender,
-	_ *messageformatter.ResponseFormatter,
+	foundation *apifoundation.ScraperHolodexFoundation,
 	logger *slog.Logger,
-) (*AlarmYouTubeStackComponents, error) {
+) (_ *AlarmYouTubeStackComponents, retErr error) {
 	alarmMode, err := InitAlarmModeComponents(appConfig, foundation.MemberServiceAdapter, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm mode components: %w", err)
 	}
 
+	defer func() {
+		if retErr != nil && alarmMode.AlarmClient != nil {
+			if closeErr := alarmMode.AlarmClient.Close(); closeErr != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("rollback alarm client: %w", closeErr))
+			}
+		}
+	}()
+
 	memberMatcher := ProvideMatcher(alarmMode.MemberDataSource, logger)
 
-	settingsService, err := sharedmodules.BuildSettingsService(
+	// orchestration에 전달하지 않아도 settings 파일 기동 검증은 유지한다.
+	_, err = sharedmodules.BuildSettingsService(
 		appConfig.SettingsFilePath,
 		appConfig.Notification.AdvanceMinutes,
 		logger,
@@ -45,9 +47,7 @@ func InitAlarmYouTubeStack(
 	}
 
 	return &AlarmYouTubeStackComponents{
-		AlarmMode:       alarmMode,
-		Matcher:         memberMatcher,
-		ActivityLogger:  ProvideActivityLogger(logger),
-		SettingsService: settingsService,
+		AlarmMode: alarmMode,
+		Matcher:   memberMatcher,
 	}, nil
 }

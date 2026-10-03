@@ -8,10 +8,10 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/retry"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 type MemberRepository interface {
@@ -183,7 +183,7 @@ func toKSTForSchedule(now time.Time) time.Time {
 		return now
 	}
 
-	return util.ToKST(now)
+	return timeutil.ToKST(now)
 }
 
 const celebrationSameDayGrace = time.Hour
@@ -227,7 +227,7 @@ func (r *Runner) effectiveNow() time.Time {
 		return r.now()
 	}
 
-	return util.NowKST()
+	return timeutil.NowKST()
 }
 
 func (r *Runner) effectiveSleep() func(context.Context, time.Duration) bool {

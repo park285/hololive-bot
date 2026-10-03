@@ -29,6 +29,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 func TestParseShortNumber(t *testing.T) {
@@ -47,7 +48,7 @@ func TestParseShortNumber(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := parseShortNumber(tt.input)
+			result := parser.ParseShortNumber(tt.input)
 			assert.Equal(t, tt.expected, result, "input: %s", tt.input)
 		})
 	}
@@ -69,7 +70,7 @@ func TestParseViewCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := parseViewCount(tt.input)
+			result := parser.ParseViewCount(tt.input)
 			assert.Equal(t, tt.expected, result, "input: %s", tt.input)
 		})
 	}
@@ -88,7 +89,7 @@ func TestParseVideoCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := parseVideoCount(tt.input)
+			result := parser.ParseVideoCount(tt.input)
 			assert.Equal(t, tt.expected, result, "input: %s", tt.input)
 		})
 	}

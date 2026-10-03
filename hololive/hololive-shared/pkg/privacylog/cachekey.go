@@ -40,9 +40,13 @@ type identifierKeyRule struct {
 	keepTrailing int
 }
 
-// alarm/keys의 room 인자를 받는 Build* 함수와 1:1로 대응한다. 대응 누락은
-// alarm/keys의 room_key_redaction_test.go가 잡는다.
+// alarm/keys의 room 인자를 받는 Build* 함수와 인증 키의 이메일·IP를 비식별화한다.
+// 인증 키는 식별자 전체를 가려야 하므로 keepTrailing이 0이다.
 var identifierKeyRules = []identifierKeyRule{
+	{prefix: "auth:rl:login:", keepTrailing: 0},
+	{prefix: "auth:rl:reset_req:", keepTrailing: 0},
+	{prefix: "auth:login_fail:", keepTrailing: 0},
+	{prefix: "auth:lock:", keepTrailing: 0},
 	{prefix: "notified:schedule:transition:event:", keepTrailing: 4},
 	{prefix: "notified:schedule:transition:room:", keepTrailing: 3},
 	{prefix: "notified:schedule:index:", keepTrailing: 2},
@@ -95,6 +99,10 @@ func longestIdentifierKeyRule(key string) (identifierKeyRule, bool) {
 }
 
 func pseudonymizeLeadingSegments(remainder string, keepTrailing int) string {
+	if keepTrailing == 0 {
+		return Pseudonym(remainder)
+	}
+
 	segments := strings.Split(remainder, segmentSeparator)
 	if len(segments) <= keepTrailing {
 		return IdentifierToken(remainder)

@@ -24,10 +24,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/envutil"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	llmclient "github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
@@ -47,6 +45,7 @@ func initMemberNewsService(
 	provider settings.LLMProviderConfig,
 	llmConfig *settings.LLMConfig,
 	exaConfig settings.ExaConfig,
+	xAllowlistPath string,
 	postgres database.Client,
 	membersData domain.MemberDataProvider, guards *llmGuards,
 	logger *slog.Logger,
@@ -60,7 +59,7 @@ func initMemberNewsService(
 		return nil, fmt.Errorf("provide member news LLM clients: %w", err)
 	}
 
-	validator, err := initMemberNewsSourceValidator(membersData, logger)
+	validator, err := initMemberNewsSourceValidator(xAllowlistPath, membersData, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init member news source validator: %w", err)
 	}
@@ -160,12 +159,10 @@ func guardLLMClient(client llmclient.Client, guards *llmGuards) llmclient.Client
 	return llmclient.NewGuardedClient(client, guards.output)
 }
 
-// initMemberNewsSourceValidator는 X allowlist 경로를 MEMBER_NEWS_X_ALLOWLIST_PATH 하나로만 받는다. 값이 없으면
+// initMemberNewsSourceValidator는 runtime config가 적재한 X allowlist 경로를 받는다. 값이 없으면
 // X allowlist 없이(공식 도메인·YouTube 채널만) 검증한다. 값이 있는데 읽지 못하면 빈 allowlist로 내려가지 않고
 // 오류를 돌려 기동을 실패시킨다. 작업 디렉터리 기준 후보 경로 탐색은 두지 않는다(stack audit B5).
-func initMemberNewsSourceValidator(membersData domain.MemberDataProvider, logger *slog.Logger) (*membernews.SourceValidator, error) {
-	allowlistPath := strings.TrimSpace(envutil.StringRaw("MEMBER_NEWS_X_ALLOWLIST_PATH", ""))
-
+func initMemberNewsSourceValidator(allowlistPath string, membersData domain.MemberDataProvider, logger *slog.Logger) (*membernews.SourceValidator, error) {
 	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
 	if err != nil {
 		return nil, fmt.Errorf("load member news x allowlist: %w", err)

@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,16 +39,17 @@ import (
 )
 
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
-	logger     *slog.Logger
+	baseURL         string
+	apiKey          string
+	httpClient      *http.Client
+	logger          *slog.Logger
+	advanceRequests chan struct{}
 
 	targetMinutesMu sync.RWMutex
 	targetMinutes   []int
 }
 
-var _ domain.AlarmCRUD = (*Client)(nil)
+var _ AlarmHTTPService = (*Client)(nil)
 
 func NewClient(baseURL string, logger *slog.Logger) *Client {
 	return NewClientWithAPIKey(baseURL, "", logger)
@@ -61,10 +63,11 @@ func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	}
 
 	return &Client{
-		baseURL:    baseURL,
-		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httputil.NewInternalServiceClient(10 * time.Second),
-		logger:     logger,
+		baseURL:         baseURL,
+		apiKey:          strings.TrimSpace(apiKey),
+		httpClient:      httputil.NewInternalServiceClient(10 * time.Second),
+		logger:          logger,
+		advanceRequests: make(chan struct{}, 1),
 	}
 }
 
@@ -233,34 +236,11 @@ func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error
 	return resp.Deleted, nil
 }
 
-func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int {
-	body := updateAdvanceMinutesReq{Minutes: minutes}
-
-	resp, err := c.putJSON[minutesResp](ctx, contractsalarm.SettingsPath, body)
-	if err != nil {
-		c.logger.Warn("UpdateAlarmAdvanceMinutes failed",
-			slog.Int("minutes", minutes),
-			slog.Any("error", err),
-		)
-
-		return []int{}
-	}
-
-	result := append([]int(nil), resp.TargetMinutes...)
-
-	c.targetMinutesMu.Lock()
-
-	c.targetMinutes = result
-	c.targetMinutesMu.Unlock()
-
-	return append([]int(nil), result...)
-}
-
 func (c *Client) GetTargetMinutes() []int {
 	c.targetMinutesMu.RLock()
 	defer c.targetMinutesMu.RUnlock()
 
-	return append([]int(nil), c.targetMinutes...)
+	return slices.Clone(c.targetMinutes)
 }
 
 func (c *Client) SetRoomName(ctx context.Context, roomID, roomName string) error {
@@ -283,8 +263,4 @@ func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, err
 	}
 
 	return entries, nil
-}
-
-func (c *Client) WarmCacheFromDB(_ context.Context) error {
-	return nil
 }

@@ -2,13 +2,13 @@
 
 ## Scope
 
-현재 3개 app runtime(`hololive-api`, `alarm-worker`, `youtube-collector`)의 책임 경계와 금지 소유 범위를 정리합니다. `hololive-api`는 bot/admin/llm plane을 한 프로세스에서 호스팅합니다. Historical handoff 문서는 `docs/history/runtime-split/`에 보관합니다.
+현재 3개 app runtime(`hololive-api`, `alarm-worker`, `youtube-collector`)의 책임 경계와 금지 소유 범위를 정리합니다. `hololive-api`는 bot/admin/llm/YouTube plane을 한 프로세스에서 호스팅합니다. Historical handoff 문서는 `docs/history/runtime-split/`에 보관합니다.
 
 ## Ownership Matrix
 
 | Runtime | Owns | Provides | Consumes | Must not own | Detail |
 |---|---|---|---|---|---|
-| `hololive-api` | Bot plane: Kakao/Iris webhook ingress, command routing, user-facing replies. Admin plane: dashboard-facing admin HTTP control plane + alarm HTTP compatibility facade during migration + `members.photo` Holodex PhotoSync product path. LLM plane: major event/member news scheduling, LLM summaries, internal subscription/trigger APIs. YouTube plane: observation claim/finalize, canonical persist, notification intent, live-end finalizer, retention/replay | Kakao webhook/H3 ingress, Admin API + trigger client facade, temporary alarm HTTP compatibility provider, `membernews`/`majorevent`/`trigger` internal HTTP contracts, YouTube consume | PostgreSQL (`hololive_runtime`), Valkey, Iris, alarm API, cliproxy/LLM where configured | alarm checking worker, alarm scheduling loops, proactive dispatch queue consumption, proactive notification egress, collector scrape/lease | `services/hololive-api.md` |
+| `hololive-api` | Bot plane: Kakao/Iris webhook ingress, command routing, user-facing replies. Admin plane: dashboard-facing admin HTTP control plane + `members.photo` Holodex PhotoSync product path. LLM plane: major event/member news scheduling, LLM summaries, internal subscription/trigger APIs. YouTube plane: observation claim/finalize, canonical persist, notification intent, live-end finalizer, retention/replay | Kakao webhook/H3 ingress, Admin API + trigger client, `membernews`/`majorevent`/`trigger` internal HTTP contracts, YouTube consume | PostgreSQL (`hololive_runtime`), Valkey, Iris, worker alarm HTTP API through bot/admin clients, cliproxy/LLM where configured | alarm checking worker, alarm scheduling loops, proactive dispatch queue consumption, proactive notification egress, collector scrape/lease | `services/hololive-api.md` |
 | `alarm-worker` | Alarm HTTP provider, alarm checker, alarm scheduler, dispatch queue publishing/consumption, proactive notification egress | Alarm HTTP provider, alarm queue publisher/consumer, YouTube outbox dispatcher | PostgreSQL, Valkey, `settings.json`, Iris | Kakao command routing, YouTube collection, YouTube canonical detection write | `services/alarm-worker.md` |
 | `youtube-collector` | AP fleet (`a`/`b`/`c`/`d`) external clients, provider adapters, fixture-backed parsing, normalization, collection target read, DB job lease/fence, bounded scheduling, rate limit/retry/cooldown, checkpoint, observation publish, provider health | Community/content/live/stats/profile/photo/schedule observations for the `hololive-api` YouTube plane | PostgreSQL (`hololive_scraper`) | canonical tables, live transition, domain watermark, notification intent/outbox, profile/photo 최종 선택, proactive egress | `services/youtube-collector.md` |
 
@@ -18,22 +18,29 @@
 - Service-to-service `internal` package imports are not allowed as an ownership shortcut.
 - Queue/PubSub changes must update `CONTRACT_MAP.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md`, and affected service docs.
 - Unclear ownership is marked `검토 필요` in the service doc instead of being silently assigned.
-- Runtime binaries must use role-specific config loaders where available (`settings.LoadBotRuntime`, `settings.LoadAdminAPIRuntime`, `apiplane.LoadRuntime`, `apiplane.LoadLLMSchedulerRuntime`, `alarmworker.LoadRuntime`, `collector.LoadRuntime`) so ownership drift fails during startup rather than after queues or egress clients are constructed.
+- Runtime binaries use their owning loaders: API `internal/config.LoadRuntime`, worker `internal/config.LoadRuntime`, collector `shared/pkg/config/settings/collector.LoadRuntime`. API plane settings and worker profile ownership are validated before queues or egress clients are constructed.
+- API `internal/apifoundation` creates common services with the consuming plane's options and cache; it does not merge plane instances or bounded DB pools. Internal H3 options are passed from loaded config, while each plane owns client timeout and transport cleanup.
+- API planes register acquired resources immediately for rollback and transfer the same owner to a successful runtime. `CloseContext` receives the remaining process-stop budget, joins background tasks including durable samplers, then releases member cache before PG/cache. A join timeout preserves live resources and the error; it does not launch concurrent duplicate cleanup.
+- Cross-module behavior tests use narrow module-root testkits (`hololive-api/testkit/sourceobservation`, `hololive-youtube-collector/testkit/sourceobservation`, `hololive-alarm-worker/alarmtestkit`) to run the actual publisher, consumer or worker provider without importing a peer's `internal` package.
 
 ## Shared Package Retention
 
 `hololive-shared/pkg`는 외부 안정 API 전체가 아니라 monorepo 내부 cross-runtime 계약면입니다. 단일 runtime만 소비하는 실행 구현은 해당 module의 `internal/`로 이동하지만, 다음 범주는 shared에 남습니다.
 
-- 진성 다중 소비자: `service/delivery`, `service/scraper/**`, `service/youtube/outbox/{analytics,telemetry}`. 퇴역 producer의 poll scheduler(`service/youtube/poller/runtime/scheduler`)와 budget·job claim 타입은 production 소비자가 없어 DEC-20260926-hololive-legacy-env-config-retirement(퇴역 producer budget 계약 종료 포함)로 삭제했습니다.
-- `service/notification/alarmservice`는 stack-audit T05에서 `hololive-api` bot·admin plane의 in-process AlarmService 분기를 제거한 뒤 production 소비자가 `alarm-worker` 하나입니다. 위 규칙상 `hololive-alarm-worker/internal/` 이동 대상이며, 이동 시점과 범위는 `검토 필요`입니다.
-- producer/consumer 양측 계약면: `service/youtube/outbox/{store,format,deliverysql,dispatchstate}`.
-- shared 내부 소비 그래프가 여러 runtime에 걸치는 기반 패키지: `service/youtube/{admission,batchrepo,poller/runtime,tracking/observation}`, `service/youtube/outbox/timeline`.
-- alarm HTTP migration facade가 공동으로 사용하는 계약·handler: `service/alarm/{checker,queue,dispatchoutbox}`(v3 handoff mode 패키지 `service/alarm/handoff`는 DEC-20260926-hololive-outbox-v3-convergence로 삭제). 이 범주는 facade 제거 뒤에도 실제 다중 소비가 남는지 다시 확인하며 자동 삭제하지 않습니다.
+- Cross-runtime 계약·domain 값: `pkg/contracts/*`, `pkg/domain`, alarm HTTP client/DTO/handler/route registrar와 repository primitives인 `pkg/service/alarm`.
+- 공통 기반: `pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/database` 및 DB/cache/member/delivery/template·HTTP 서버 기반. DB factory는 설정을 DB options로 변환하며 순수 `pkg/service/database`에 startup settings 의존을 넣지 않습니다.
+- YouTube 공통 라이브러리: `pkg/service/youtube/admission`, `pkg/service/youtube/scraper`, `pkg/service/youtube/outbox/{analytics,telemetry,deliverysql,timeline}`. API의 canonical writer가 사용하는 `pkg/service/youtube/poller/runtime/batchrepo`도 현재 공유 라이브러리 위치를 유지합니다.
+- Worker 전용 구현은 `hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,dedup,dispatchoutbox,queue}`, `internal/egress/youtubedispatch/format`으로 회수했습니다. private alarm cache는 `subscriptions/internal/alarmcache`, alarm dispatch runner와 SQL은 `internal/egress/alarmdispatch`가 소유합니다.
+- Observation publisher·checkpoint·job 계약 구현은 collector `internal/runtime/sourceobservation`, consume·canonical·replay·retention 구현과 private reducer는 API `internal/youtube/{sourceobservation,reconcile,community}`가 소유합니다. 공용 envelope·canonical JSON·hash·lease 값 계약은 shared `pkg/contracts/sourceobservation`에 남습니다.
 
 YouTube dispatcher와 poller 구현처럼 단일 owner로 확정된 코드는 각각 `hololive-alarm-worker/internal/egress/youtubedispatch`와 `hololive-youtube-collector/internal/runtime/pollers`가 소유합니다. public package 잔류는 구현 ownership을 공유한다는 뜻이 아니며, 새 single-owner 실행 구현을 `hololive-shared/pkg`에 추가할 근거로 사용할 수 없습니다.
 
 ## Validation
 
 ```bash
-go test ./hololive/hololive-shared/pkg/config/settings/... -run 'Runtime|NonEgress|AdminAPI'
+go test ./hololive/hololive-api/internal/config ./hololive/hololive-alarm-worker/internal/config \
+  ./hololive/hololive-shared/pkg/config/settings/collector
+go test ./hololive/hololive-api/internal/youtube/sourceobservation \
+  ./hololive/hololive-youtube-collector/internal/runtime/sourceobservation \
+  ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
 ```

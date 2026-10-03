@@ -45,7 +45,7 @@ type commandInitView struct {
 	holodex               domain.StreamProvider
 	cache                 cache.Client
 	postgres              database.Client
-	alarm                 domain.AlarmCRUD
+	alarm                 handlercore.AlarmService
 	matcher               *matcher.Matcher
 	memberNews            handlercore.MemberNewsService
 	membersData           domain.MemberDataProvider

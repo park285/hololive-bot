@@ -1,0 +1,4 @@
+{
+  "hololive/hololive-api/internal/server/settings/zz_config_apply_unknown_probe_test.go": "config_apply_unknown_probe_test.go.txt",
+  "hololive/hololive-api/internal/planes/admin/internal/server/api/zz_config_zero_validation_probe_test.go": "config_zero_validation_probe_test.go.txt"
+}

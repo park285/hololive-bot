@@ -34,8 +34,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 
 	"github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
-	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/observability"
 )
@@ -44,7 +44,7 @@ var Version = "dev"
 
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
-		if _, err := alarmworker.LoadWorkerProfile(); err != nil {
+		if _, err := workerconfig.LoadWorkerProfile(); err != nil {
 			return fmt.Errorf("load alarm worker profile: %w", err)
 		}
 
@@ -53,15 +53,15 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	os.Exit(bootstrap.Options[*alarmworker.RuntimeConfig, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
+	os.Exit(bootstrap.Options[*workerconfig.RuntimeConfig, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             alarmworker.LoadRuntime,
+		LoadConfig:             workerconfig.LoadRuntime,
 		LoadConfigErrorMessage: "Failed to load config",
-		LoggerConfig: func(appConfig *alarmworker.RuntimeConfig) sharedlogging.Config {
+		LoggerConfig: func(appConfig *workerconfig.RuntimeConfig) sharedlogging.Config {
 			return sharedlogging.Config{
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
@@ -71,14 +71,14 @@ func main() {
 			}
 		},
 		LoggerFileName: "alarm-worker.log",
-		LoggerLevel: func(appConfig *alarmworker.RuntimeConfig) string {
+		LoggerLevel: func(appConfig *workerconfig.RuntimeConfig) string {
 			return appConfig.Logging.Level
 		},
 		StartupMessage: "Hololive Alarm Worker starting...",
 		BuildTimeout:   constants.AppTimeout.Build,
 		BuildRuntime: func(
 			ctx context.Context,
-			appConfig *alarmworker.RuntimeConfig,
+			appConfig *workerconfig.RuntimeConfig,
 			logger *slog.Logger,
 		) (*observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime], error) {
 			traceConfig := alarmWorkerTelemetryConfig(appConfig, Version)
@@ -116,7 +116,7 @@ func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (
 	return true, 0
 }
 
-func alarmWorkerTelemetryConfig(appConfig *alarmworker.RuntimeConfig, version string) telemetry.Config {
+func alarmWorkerTelemetryConfig(appConfig *workerconfig.RuntimeConfig, version string) telemetry.Config {
 	return telemetry.Config{
 		Enabled:        appConfig.Tracing.Enabled,
 		ServiceName:    "hololive-alarm-worker",

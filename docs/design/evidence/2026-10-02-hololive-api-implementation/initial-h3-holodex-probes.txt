@@ -1,0 +1,14 @@
+# github.com/kapu/hololive-shared/pkg/server/httpserver
+found packages httpserver (h3.go) and sharedhttpserver (stage6_h3_probe_test.go) in /home/kapu/work/iris-stack/hololive-bot/hololive/hololive-shared/pkg/server/httpserver
+FAIL	github.com/kapu/hololive-shared/pkg/server/httpserver [setup failed]
+=== RUN   TestStage6HolodexFillCostAndFailureContract
+=== RUN   TestStage6HolodexFillCostAndFailureContract/success
+    stage6_fill_probe_test.go:53: synthetic_origin=true callers=6 origin_budget_ms=100 failure=false origin_calls=1 first_ms=104.420 last_ms=106.853 total_ms=106.969
+=== RUN   TestStage6HolodexFillCostAndFailureContract/failure
+    stage6_fill_probe_test.go:53: synthetic_origin=true callers=6 origin_budget_ms=100 failure=true origin_calls=6 first_ms=103.433 last_ms=605.650 total_ms=605.664
+--- PASS: TestStage6HolodexFillCostAndFailureContract (0.72s)
+    --- PASS: TestStage6HolodexFillCostAndFailureContract/success (0.11s)
+    --- PASS: TestStage6HolodexFillCostAndFailureContract/failure (0.61s)
+PASS
+ok  	github.com/kapu/hololive-shared/pkg/service/holodex/provider	0.723s
+FAIL

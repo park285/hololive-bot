@@ -1,0 +1,6 @@
+=== RUN   TestStage6H3TypedBoundaryCost
+    stage6_h3_probe_test.go:62: synthetic_transport_only=true variant=h3 samples=1000 p50_ns=196554 p95_ns=306182 p99_ns=633475 total_ms=217.010 alloc_bytes_per_call=35056.7 mallocs_per_call=319.8 DB_LLM=false
+    stage6_h3_probe_test.go:62: synthetic_transport_only=true variant=typed_copy samples=1000 p50_ns=70 p95_ns=90 p99_ns=401 total_ms=0.403 alloc_bytes_per_call=384.0 mallocs_per_call=4.0 DB_LLM=false
+--- PASS: TestStage6H3TypedBoundaryCost (0.28s)
+PASS
+ok  	github.com/kapu/hololive-shared/pkg/server/httpserver	0.292s

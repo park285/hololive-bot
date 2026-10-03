@@ -52,17 +52,3 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 	assert.True(t, enabled)
 	assert.Len(t, rooms, 2)
 }
-
-func TestProvideActivityLogger_StdoutOnlyMode(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.DiscardHandler)
-	activityLogger := appbootstrap.ProvideActivityLogger(logger)
-	require.NotNil(t, activityLogger)
-
-	activityLogger.Log("test", "summary", map[string]any{"k": "v"})
-
-	logs, err := activityLogger.GetRecentLogs(10)
-	require.NoError(t, err)
-	assert.Empty(t, logs)
-}

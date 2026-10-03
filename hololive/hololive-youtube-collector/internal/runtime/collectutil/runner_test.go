@@ -6,9 +6,8 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 func TestOutputAcceptsHololiveSizedBatch(t *testing.T) {
@@ -29,24 +28,6 @@ func TestOutputAcceptsHololiveSizedBatch(t *testing.T) {
 
 	if len(output.Observations()) != hololiveSized || len(output.Checkpoints()) != hololiveSized {
 		t.Fatalf("output sizes = %d/%d", len(output.Observations()), len(output.Checkpoints()))
-	}
-}
-
-func TestPaginationOfRejectsImpossibleTupleAsProtocolFault(t *testing.T) {
-	t.Parallel()
-
-	_, _, err := PaginationOf(&youtubejs.Pagination{
-		PageCount:         1,
-		Exhausted:         true,
-		Continuity:        "",
-		TerminationReason: youtubejs.TerminationExhausted,
-	})
-	if err == nil {
-		t.Fatal("empty continuity must fail closed")
-	}
-
-	if collecterr.CodeOf(err) != collecterr.HelperProtocolMismatch {
-		t.Fatalf("error code = %q, want helper protocol mismatch", collecterr.CodeOf(err))
 	}
 }
 

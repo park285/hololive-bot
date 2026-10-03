@@ -4,7 +4,7 @@
 
 ## Current
 
-`docs/current`는 현재 운영 기준의 SSOT입니다. 운영자와 LLM은 먼저 current 문서를 읽고, history/design은 보조 근거로만 사용합니다.
+`docs/current`는 현재 운영 기준의 SSOT입니다. 운영자와 LLM은 먼저 current 문서를 읽고, history/design은 보조 근거로만 사용합니다. 중앙·Seoul의 Docker Compose와 Osaka·Osaka2 collector의 host-native systemd 배치 및 작업 절차는 `current/PROJECT_MAP.md`와 `current/runbooks/`에서 확인합니다. 과거 전환 기록과 캡처된 검토 프롬프트는 현재 작업 지시가 아닙니다.
 
 - `current/README.md` - current 문서 인덱스
 - `current/PROJECT_MAP.md` - 현재 module/runtime 운영 인벤토리

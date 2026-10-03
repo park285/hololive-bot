@@ -91,8 +91,6 @@ func (b *Bot) ensureLifecycle() *lifecycle.BotLifecycle {
 			b.irisBaseURL,
 			b.stopCh,
 			b.doneCh,
-			b.holodex,
-			b.postgres,
 		)
 	}
 

@@ -1,0 +1,9 @@
+{
+  "hololive/hololive-shared/pkg/service/member/zz_expansion_ownership_probe.go": "lifecycle_member_bridge.go.txt",
+  "hololive/hololive-shared/pkg/providers/modules/zz_expansion_ownership_probe.go": "lifecycle_modules_bridge.go.txt",
+  "hololive/hololive-api/internal/planes/bot/runtime/zz_expansion_ownership_probe.go": "lifecycle_bot_bridge.go.txt",
+  "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/zz_expansion_ownership_probe_test.go": "lifecycle_bootstrap_probe_test.go.txt",
+  "hololive/hololive-api/internal/fxapp/zz_expansion_ownership_probe_test.go": "lifecycle_fx_probe_test.go.txt",
+  "hololive/hololive-api/internal/planes/admin/app/zz_expansion_ownership_probe_test.go": "lifecycle_admin_probe_test.go.txt",
+  "hololive/hololive-api/internal/planes/bot/runtime/zz_expansion_ownership_probe_test.go": "lifecycle_bot_sampler_probe_test.go.txt"
+}

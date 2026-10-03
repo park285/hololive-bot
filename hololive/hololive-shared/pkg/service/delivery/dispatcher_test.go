@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,7 +38,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-const testRoomID = "room-1"
+const (
+	testRoomID       = "room-1"
+	testRoomA        = "room-a"
+	testFirstMessage = "first"
+)
 
 // mockDeliveryRepository: deliveryRepository mock 구현.
 type mockDeliveryRepository struct {
@@ -50,6 +55,7 @@ type mockDeliveryRepository struct {
 	quarantineStaleSendingFn func(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
 	countByStatusFn          func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	cleanupFn                func(ctx context.Context, olderThan time.Duration) (int64, error)
+	claimedIDs               map[int64]struct{}
 }
 
 func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
@@ -84,6 +90,50 @@ func (m *mockDeliveryRepository) FetchAndLock(ctx context.Context, workerID stri
 	}
 
 	return nil, nil
+}
+
+func (m *mockDeliveryRepository) fetchReadyAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration, activeRooms []string, processedIDs []int64) ([]domain.NotificationDeliveryOutbox, error) {
+	items, err := m.FetchAndLock(ctx, workerID, batchSize, lease)
+	if err != nil {
+		return nil, err
+	}
+
+	if m.claimedIDs == nil {
+		m.claimedIDs = make(map[int64]struct{})
+	}
+
+	blocked := make(map[string]struct{}, len(activeRooms))
+	for _, roomID := range activeRooms {
+		blocked[roomID] = struct{}{}
+	}
+
+	ready := make([]domain.NotificationDeliveryOutbox, 0, batchSize)
+
+	for i := range items {
+		item := &items[i]
+
+		if slices.Contains(processedIDs, item.ID) {
+			continue
+		}
+
+		if _, claimed := m.claimedIDs[item.ID]; claimed {
+			continue
+		}
+
+		if _, active := blocked[item.RoomID]; active {
+			continue
+		}
+
+		ready = append(ready, *item)
+		m.claimedIDs[item.ID] = struct{}{}
+		blocked[item.RoomID] = struct{}{}
+
+		if len(ready) == batchSize {
+			break
+		}
+	}
+
+	return ready, nil
 }
 
 func (m *mockDeliveryRepository) MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error) {
@@ -275,7 +325,7 @@ func TestProcessOnce_E2E(t *testing.T) {
 	repository := &mockDeliveryRepository{
 		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
-				{ID: 1, RoomID: "room-a", Payload: makePayload(t, "hello-a")},
+				{ID: 1, RoomID: testRoomA, Payload: makePayload(t, "hello-a")},
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
 			}, nil
 		},
@@ -675,7 +725,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 	repository := &mockDeliveryRepository{
 		fetchAndLockFn: func(_ context.Context, _ string, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
 			return []domain.NotificationDeliveryOutbox{
-				{ID: 1, RoomID: "room-a", Payload: makePayload(t, "hello-a")},
+				{ID: 1, RoomID: testRoomA, Payload: makePayload(t, "hello-a")},
 				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
 				{ID: 3, RoomID: "room-c", Payload: makePayload(t, "hello-c")},
 				{ID: 4, RoomID: "room-d", Payload: makePayload(t, "hello-d")},
@@ -732,7 +782,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 	}
 }
 
-func TestProcessBatchPreservesOrderWithinRoom(t *testing.T) {
+func TestProcessOncePreservesOrderWithinRoom(t *testing.T) {
 	t.Parallel()
 
 	firstStarted := make(chan struct{})
@@ -743,7 +793,7 @@ func TestProcessBatchPreservesOrderWithinRoom(t *testing.T) {
 
 	sender := &mockSender{sendFn: func(_ context.Context, _, message string) error {
 		switch message {
-		case "first":
+		case testFirstMessage:
 			close(firstStarted)
 			<-releaseFirst
 		case "second":
@@ -758,16 +808,19 @@ func TestProcessBatchPreservesOrderWithinRoom(t *testing.T) {
 
 		return nil
 	}}
-	dispatcher := mustNewDispatcher(t, &mockDeliveryRepository{}, sender, dispatcherLogger(), &DispatcherConfig{MaxConcurrent: 2})
 	items := []domain.NotificationDeliveryOutbox{
-		{ID: 1, RoomID: "room-a", Payload: makePayload(t, "first")},
-		{ID: 2, RoomID: "room-a", Payload: makePayload(t, "second")},
+		{ID: 1, RoomID: testRoomA, Payload: makePayload(t, testFirstMessage)},
+		{ID: 2, RoomID: testRoomA, Payload: makePayload(t, "second")},
 		{ID: 3, RoomID: "room-b", Payload: makePayload(t, "other")},
 	}
+	repo := &mockDeliveryRepository{fetchAndLockFn: func(context.Context, string, int, time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+		return items, nil
+	}}
+	dispatcher := mustNewDispatcher(t, repo, sender, dispatcherLogger(), &DispatcherConfig{MaxConcurrent: 2})
 	done := make(chan struct{})
 
 	go func() {
-		dispatcher.processBatch(t.Context(), items)
+		dispatcher.processOnce(t.Context())
 		close(done)
 	}()
 

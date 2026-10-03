@@ -33,7 +33,7 @@ import (
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 const (
@@ -132,7 +132,7 @@ func TestSummarizer_SchemaSuccess(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
@@ -160,13 +160,13 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
   "top_items":[
     {"member":"A","category":"event","title":"no source","date_text":"2026-02-20","summary":"x","source_url":""},
     {"member":"B","category":"event","title":"bad x","date_text":"2026-02-20","summary":"x","source_url":"https://x.com/not_allowed/status/1"},
-    {"member":"C","category":"event","title":"valid","date_text":"2026-02-20","summary":"x","source_url":"https://hololive.hololivepro.com/news/2"}
+    {"member":"사쿠라 미코","category":"event","title":"valid","date_text":"2026-02-20","summary":"x","source_url":"https://hololive.hololivepro.com/news/1"}
   ],
   "more_summary":"",
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
@@ -187,7 +187,7 @@ func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
 	if err == nil || digest != nil {
@@ -198,7 +198,7 @@ func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 func TestSummarizer_NilLLMReturnsUnavailable(t *testing.T) {
 	s := NewSummarizer(nil, nil, mustValidatorWithAllowlist(t), nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone), Candidates: sampleCandidates()}
 
 	if _, err := s.Summarize(t.Context(), &input); !errors.Is(err, ErrLLMUnavailable) {
 		t.Fatalf("Summarize() error = %v, want ErrLLMUnavailable", err)
@@ -224,28 +224,30 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "SUISIEI LIVE",
 				Description: "official event",
 			},
-			EffectiveDate: time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
-			MemberText:    testMemberSuisei,
-			Category:      model.CategorySoloLive,
-			SourceTier:    model.SourceTierOfficial,
-			SourceURL:     "https://hololive.hololivepro.com/news/2",
+			EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, timeutil.KSTZone),
+			MemberText:     testMemberSuisei,
+			MatchedMembers: []string{testMemberSuisei},
+			Category:       model.CategorySoloLive,
+			SourceTier:     model.SourceTierOfficial,
+			SourceURL:      "https://hololive.hololivepro.com/news/2",
 		},
 		{
 			Candidate: model.Candidate{
 				Title:       "Miko Goods",
 				Description: "official goods",
 			},
-			EffectiveDate: time.Date(2026, time.February, 22, 12, 0, 0, 0, util.KSTZone),
-			MemberText:    testMemberMiko,
-			Category:      model.CategoryGoods,
-			SourceTier:    model.SourceTierOfficial,
-			SourceURL:     "https://hololive.hololivepro.com/news/3",
+			EffectiveDate:  time.Date(2026, time.February, 22, 12, 0, 0, 0, timeutil.KSTZone),
+			MemberText:     testMemberMiko,
+			MatchedMembers: []string{testMemberMiko},
+			Category:       model.CategoryGoods,
+			SourceTier:     model.SourceTierOfficial,
+			SourceURL:      "https://hololive.hololivepro.com/news/3",
 		},
 	}
 
 	input := model.SummarizeInput{
 		Period:     model.PeriodWeekly,
-		Now:        time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		Now:        time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		Candidates: candidates,
 	}
 
@@ -351,7 +353,7 @@ func TestMemberNewsSystemPrompt_ContainsGuide(t *testing.T) {
 }
 
 func sampleCandidates() []model.FilteredCandidate {
-	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, util.KSTZone)
+	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone)
 
 	return []model.FilteredCandidate{
 		{
@@ -359,11 +361,12 @@ func sampleCandidates() []model.FilteredCandidate {
 				Title:       "EXPO",
 				Description: "official news",
 			},
-			EffectiveDate: date,
-			MemberText:    testMemberMiko,
-			Category:      model.CategoryEvent,
-			SourceTier:    model.SourceTierOfficial,
-			SourceURL:     testSourceURLNews1,
+			EffectiveDate:  date,
+			MemberText:     testMemberMiko,
+			MatchedMembers: []string{testMemberMiko},
+			Category:       model.CategoryEvent,
+			SourceTier:     model.SourceTierOfficial,
+			SourceURL:      testSourceURLNews1,
 		},
 	}
 }

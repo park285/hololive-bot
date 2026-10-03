@@ -57,7 +57,7 @@ func buildBotOptionalServers(ctx context.Context, appConfig *settings.Config) (m
 	return metricsServer, pprofServer
 }
 
-func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (*BotRuntime, error) {
+func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (_ *BotRuntime, retErr error) {
 	if appConfig == nil {
 		return nil, errors.New("build bot runtime: app config is nil")
 	}
@@ -66,9 +66,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		return nil, errors.New("build bot runtime: infra is nil")
 	}
 
-	runtimeViews := buildBotRuntimeDependencyViews(infra)
-
-	botBot, err := orchestration.NewBot(runtimeViews.botDeps)
+	botBot, err := orchestration.NewBot(infra.Deps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
@@ -86,10 +84,16 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		accept: botBot.AcceptsMessage,
 		logger: logger,
 		totals: durable.inboxTotals,
-	}, runtimeViews.webhook, logger)
+	}, appbootstrap.BotWebhookRuntimeDependencies{Cache: infra.Cache}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
+
+	defer func() {
+		if retErr != nil {
+			retErr = errors.Join(retErr, webhookHandler.CloseContext(ctx))
+		}
+	}()
 
 	readyProbe := newBotReadyProbe(infra)
 
@@ -107,7 +111,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 
 	metricsServer, pprofServer := buildBotOptionalServers(ctx, appConfig)
 
-	return assembleBotRuntime(appConfig, logger, botBot, runtimeViews.botDeps.ACL, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
+	return assembleBotRuntime(appConfig, logger, botBot, infra.Deps.ACL, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
 }
 
 func assembleBotRuntime(

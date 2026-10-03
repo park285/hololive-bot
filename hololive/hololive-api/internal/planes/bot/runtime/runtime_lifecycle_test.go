@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/quic-go/quic-go/http3"
 )
 
@@ -40,7 +39,7 @@ func TestBotRuntimeClose_CallsCleanup(t *testing.T) {
 
 	calls := 0
 	runtime := &BotRuntime{
-		Managed: lifecycle.NewManaged(func() { calls++ }),
+		cleanup: func() error { calls++; return nil },
 	}
 
 	runtime.Close()
@@ -116,6 +115,7 @@ func TestBotRuntimeStartAndHelpers_NoPanicOnNilComponents(t *testing.T) {
 	}
 
 	runtime.Start(t.Context(), nil)
+	t.Cleanup(runtime.Close)
 	runtime.logError("expected test error", errors.New("boom"))
 
 	if logBuf.Len() == 0 {
@@ -225,7 +225,7 @@ func TestBotRuntimeShutdownHTTPServer_DrainsShortLinkListener(t *testing.T) {
 	assertShortLinkListenerClosed(t, addr)
 }
 
-func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
+func TestBotRuntimeStartReportsServerError(t *testing.T) {
 	t.Parallel()
 
 	runtime := &BotRuntime{
@@ -236,16 +236,15 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 
 	errCh := make(chan error, 1)
 
-	go func() {
-		errCh <- runtime.Run()
-	}()
+	runtime.Start(t.Context(), errCh)
+	t.Cleanup(runtime.Close)
 
 	select {
 	case err := <-errCh:
 		if err == nil || !strings.Contains(err.Error(), "HTTP/3 server error") {
-			t.Fatalf("unexpected Run() error: %v", err)
+			t.Fatalf("unexpected startup error: %v", err)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("Run() did not exit on server error")
+		t.Fatal("Start() did not report server error")
 	}
 }

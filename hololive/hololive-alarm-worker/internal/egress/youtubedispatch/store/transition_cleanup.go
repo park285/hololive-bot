@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 type CleanupResult struct {
@@ -255,7 +254,7 @@ func loadCleanupCandidates(
 ) ([]cleanupCandidate, error) {
 	var candidates []cleanupCandidate
 
-	if err := deliverysql.SelectDeliverySQL(
+	if err := dbx.SelectSQL(
 		ctx,
 		db,
 		&candidates,
@@ -276,7 +275,7 @@ func loadCleanupCandidates(
 func loadCleanupChildren(ctx context.Context, db dbx.Querier, outboxIDs []int64) ([]transitionRow, error) {
 	var rows []transitionRow
 
-	if err := deliverysql.SelectDeliverySQL(
+	if err := dbx.SelectSQL(
 		ctx,
 		db,
 		&rows,

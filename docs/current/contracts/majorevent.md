@@ -23,6 +23,7 @@
 ## Transport
 
 - HTTP JSON with `X-API-Key`
+- Internal H3 options are passed from the bot plane's loaded config, and that plane owns its client timeout and transport cleanup.
 
 ## Endpoint / Event / Queue
 
@@ -76,7 +77,7 @@ Subscribe/unsubscribe success currently returns `{"status":"subscribed"}` or `{"
 
 ## Tests
 
-- Provider route tests: `hololive/hololive-api/internal/planes/llm/internal/app/internal/runtime/providers_major_event_routes_test.go`
+- Provider route tests: `hololive/hololive-api/internal/planes/llm/runtime/providers_major_event_routes_test.go`
 - Consumer client tests: `hololive/hololive-api/internal/planes/bot/internal/client/majorevent/client_test.go`
 
 ## Known gaps

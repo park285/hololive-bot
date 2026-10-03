@@ -27,32 +27,6 @@ import (
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-const (
-	KeyRoomID     = sharedprivacylog.KeyRoomID
-	KeyChatID     = sharedprivacylog.KeyChatID
-	KeyCacheKey   = sharedprivacylog.KeyCacheKey
-	KeyCacheField = sharedprivacylog.KeyCacheField
-
-	UnknownToken    = sharedprivacylog.UnknownToken
-	PseudonymPrefix = sharedprivacylog.PseudonymPrefix
-)
-
-func RoomIDAttr(room string) slog.Attr {
-	return sharedprivacylog.RoomIDAttr(room)
-}
-
-func ChatIDAttr(chatID string) slog.Attr {
-	return sharedprivacylog.ChatIDAttr(chatID)
-}
-
-func IsCanonicalRoomID(value string) bool {
-	return sharedprivacylog.IsCanonicalRoomID(value)
-}
-
-func Pseudonym(value string) string {
-	return sharedprivacylog.Pseudonym(value)
-}
-
 func RoomAttr(chatID, roomName string) slog.Attr {
 	return sharedprivacylog.RoomIDAttr(correlationSource(chatID, roomName))
 }

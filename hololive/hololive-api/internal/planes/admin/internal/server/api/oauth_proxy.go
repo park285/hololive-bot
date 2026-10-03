@@ -23,7 +23,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 )
 
 // GET /oauth/callback?code=XXX&state=YYY
@@ -34,8 +34,8 @@ func (h *OAuthHandler) OAuthCallbackHandler(c *gin.Context) {
 	errorParam := c.Query("error")
 	errorDesc := c.Query("error_description")
 
-	deepLinkURL := sharedserver.BuildOAuthDeepLinkURL(code, state, errorParam, errorDesc)
-	htmlResponse := sharedserver.BuildOAuthRedirectHTML(deepLinkURL, errorParam != "")
+	deepLinkURL := adminhandlers.BuildOAuthDeepLinkURL(code, state, errorParam, errorDesc)
+	htmlResponse := adminhandlers.BuildOAuthRedirectHTML(deepLinkURL, errorParam != "")
 
 	c.Data(200, "text/html; charset=utf-8", []byte(htmlResponse))
 }

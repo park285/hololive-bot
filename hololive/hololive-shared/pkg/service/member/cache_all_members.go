@@ -198,7 +198,8 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context, _ *allMembersState, 
 		return nil, fmt.Errorf("unexpected all members result type %T", result)
 	}
 
-	return cloneMemberSlice(members), nil
+	// 공유 결과의 slice 복사는 공개 AllMembers 경계에서 한 번만 수행한다.
+	return members, nil
 }
 
 func (c *Cache) allMembersLoader() (func(context.Context) ([]*domain.Member, error), error) {

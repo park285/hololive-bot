@@ -7,10 +7,9 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 type JobRunner interface {
@@ -89,6 +88,8 @@ type RunInput struct {
 	maxSuccessResponseBytes int
 }
 
+// RunOutput은 생성 시 입력을 복사한 불변 수집 결과입니다.
+// 값 복사는 내부 저장소를 공유하며, 가변 관측·체크포인트 조회는 독립된 복사본을 반환합니다.
 type RunOutput struct {
 	observations      []contract.Envelope
 	checkpoints       []sourceobservation.CheckpointEntry
@@ -274,6 +275,7 @@ func (i *RunInput) MaxSuccessResponseBytes() int {
 	return i.maxSuccessResponseBytes
 }
 
+// NewRunOutput은 payload, source event 시각과 cursor를 포함한 입력의 소유권을 복사로 확보합니다.
 func NewRunOutput(
 	observations []contract.Envelope,
 	checkpoints []sourceobservation.CheckpointEntry,
@@ -322,10 +324,12 @@ func CompleteFromEnvelopes(envelopes []contract.Envelope, started time.Time) (Co
 	return out, nil
 }
 
+// Observations는 payload와 source event 시각까지 독립된 관측 복사본을 반환합니다.
 func (o RunOutput) Observations() []contract.Envelope {
 	return cloneEnvelopes(o.observations)
 }
 
+// Checkpoints는 cursor까지 독립된 체크포인트 복사본을 반환합니다.
 func (o RunOutput) Checkpoints() []sourceobservation.CheckpointEntry {
 	return cloneCheckpoints(o.checkpoints)
 }
@@ -363,19 +367,6 @@ func cloneCheckpoints(values []sourceobservation.CheckpointEntry) []sourceobserv
 	}
 
 	return cloned
-}
-
-func PaginationOf(page *youtubejs.Pagination) (contract.Completeness, contract.Continuity, error) {
-	if page == nil {
-		return "", "", collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pagination is nil")
-	}
-
-	completeness, continuity, err := page.Quality()
-	if err != nil {
-		return "", "", collecterr.Wrap(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, err)
-	}
-
-	return completeness, continuity, nil
 }
 
 func DefaultMaxResults() int {

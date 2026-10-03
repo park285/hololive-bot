@@ -1,6 +1,7 @@
 # Hololive
 
 - Read ../AGENTS.md in iris-stack and affected subtree guidance. Run from root; [PROJECT_MAP](docs/current/PROJECT_MAP.md) owns topology. No standalone dashboard; web/credentials/native deployment belong to Iris web.
+- Current deployment is central/Seoul Docker Compose and Osaka/Osaka2 collector host-native systemd. Select deployment procedures from [current runbooks](docs/current/runbooks/README.md); history, design, changelog and captured prompts do not define current deployment work.
 - Compile/test/build only on kapu; host compose.env owns bind addresses. hololive-bot-ops owns verified no-build remote cutovers; compose-redeploy-service.sh is a build-host deployment, not validation.
 - Select ./build-all.sh --build-only --no-bump, affected Go/shared module tests or youtubejs npm test; docs need diff review. Publication requires scripts/ci/pre-push-gate.sh; preserve [README](README.md) verification ownership.
 - GitHub Release creation/body edits must read [release runbook](docs/current/runbooks/release.md) and use `bash scripts/publish-release.sh <tag> <previous-published-tag> [preview|create|edit]`. Preview first; use GitHub-generated notes only, never manual summaries or CHANGELOG copies. Publication approval and existing pre-push checks still apply.

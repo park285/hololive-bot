@@ -21,6 +21,7 @@
 package settings
 
 import (
+	"bytes"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -45,17 +46,22 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 		t.Fatalf("expected default 5, got %d", got.AlarmAdvanceMinutes)
 	}
 
-	updated := Settings{AlarmAdvanceMinutes: 12}
+	updated := Settings{AlarmAdvanceMinutes: 12, TargetMinutes: []int{12, 3, 1}}
 	if err := service.Update(updated); err != nil {
 		t.Fatalf("update failed: %v", err)
+	}
+
+	got = service.Get()
+	if got.AlarmAdvanceMinutes != 12 || !slices.Equal(got.TargetMinutes, updated.TargetMinutes) {
+		t.Fatalf("published settings = %+v, want %+v", got, updated)
 	}
 
 	reloaded := mustNewSettingsService(t, filePath, defaults, logger)
 
 	got = reloaded.Get()
 
-	if got.AlarmAdvanceMinutes != 12 {
-		t.Fatalf("expected persisted 12, got %d", got.AlarmAdvanceMinutes)
+	if got.AlarmAdvanceMinutes != 12 || !slices.Equal(got.TargetMinutes, updated.TargetMinutes) {
+		t.Fatalf("persisted settings = %+v, want %+v", got, updated)
 	}
 
 	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
@@ -194,8 +200,14 @@ func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOn
 	path := filepath.Join(dir, "settings.json")
 	service := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
 
-	if err := service.Update(Settings{AlarmAdvanceMinutes: 9}); err != nil {
+	previous := Settings{AlarmAdvanceMinutes: 9, TargetMinutes: []int{9, 5, 1}}
+	if err := service.Update(previous); err != nil {
 		t.Fatalf("seed Update() error = %v", err)
+	}
+
+	before, readErr := fs.ReadFile(os.DirFS(dir), "settings.json")
+	if readErr != nil {
+		t.Fatalf("read seeded settings: %v", readErr)
 	}
 
 	// 디렉터리는 탐색에 x 비트가 필요해 0600 이하로 낮출 수 없다.
@@ -209,13 +221,26 @@ func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOn
 		}
 	})
 
-	if err := service.Update(Settings{AlarmAdvanceMinutes: 11}); err == nil {
+	if err := service.Update(Settings{AlarmAdvanceMinutes: 11, TargetMinutes: []int{11, 3, 1}}); err == nil {
 		t.Fatal("Update() error = nil, want failure on a read-only directory")
 	}
 
+	if got := service.Get(); got.AlarmAdvanceMinutes != previous.AlarmAdvanceMinutes || !slices.Equal(got.TargetMinutes, previous.TargetMinutes) {
+		t.Fatalf("published settings after failed Update = %+v, want %+v", got, previous)
+	}
+
+	after, readErr := fs.ReadFile(os.DirFS(dir), "settings.json")
+	if readErr != nil {
+		t.Fatalf("read settings after failed Update: %v", readErr)
+	}
+
+	if !bytes.Equal(after, before) {
+		t.Fatalf("settings file changed on failed Update: before=%s after=%s", before, after)
+	}
+
 	reloaded := mustNewSettingsService(t, path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.DiscardHandler))
-	if got := reloaded.Get().AlarmAdvanceMinutes; got != 9 {
-		t.Fatalf("persisted AlarmAdvanceMinutes = %d, want the pre-failure value 9", got)
+	if got := reloaded.Get(); got.AlarmAdvanceMinutes != previous.AlarmAdvanceMinutes || !slices.Equal(got.TargetMinutes, previous.TargetMinutes) {
+		t.Fatalf("persisted settings after failed Update = %+v, want %+v", got, previous)
 	}
 }
 

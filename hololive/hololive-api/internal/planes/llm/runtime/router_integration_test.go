@@ -28,14 +28,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func TestBuildTriggerRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	router, err := buildTriggerRouter(t.Context(), logger, triggerHandler, "")
 	if err == nil {
@@ -72,7 +72,7 @@ func requireTriggerRouterStatus(t *testing.T, method, url, apiKey string, wantSt
 
 func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	router, err := buildTriggerRouter(t.Context(), logger, triggerHandler, routerIntegrationAPIKey)
 	if err != nil {

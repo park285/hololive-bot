@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 )
 
 // runner 스위치의 잘못된 값은 "꺼짐"으로 읽히지 않고 기동 오류로 드러나야 한다(stack audit B4).

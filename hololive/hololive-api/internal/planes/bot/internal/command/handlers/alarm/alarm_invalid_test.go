@@ -9,8 +9,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const alarmPrivacySentinel = "SENTINEL"
@@ -91,7 +91,7 @@ func TestHandleInvalidLogKeepsRoomIDWithoutUserInput(t *testing.T) {
 	}
 
 	logged := logs.String()
-	if !strings.Contains(logged, `"`+privacylog.KeyRoomID+`":"123456789"`) {
+	if !strings.Contains(logged, `"`+sharedprivacylog.KeyRoomID+`":"123456789"`) {
 		t.Fatalf("log record lost the room correlation key: %s", logged)
 	}
 

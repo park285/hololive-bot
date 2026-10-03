@@ -1,10 +1,10 @@
 package celebration
 
 import (
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 func celebrationEventKey(payload *domain.CelebrationDispatchPayload) string {
@@ -150,10 +150,10 @@ func countBirthdayStreamAudienceRooms(roomsByEventKey map[string][]string) int {
 }
 
 func birthdayStreamScheduledStartKST(session *BirthdayStreamSession) string {
-	start := util.FirstNonNilTime(session.ScheduledStart, session.StartedAt)
+	start := timeutil.FirstNonNilTime(session.ScheduledStart, session.StartedAt)
 	if start == nil {
 		return ""
 	}
 
-	return util.FormatKST(*start, "15:04")
+	return timeutil.FormatKST(*start, "15:04")
 }

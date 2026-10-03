@@ -6,15 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/singleflight"
 
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -73,36 +76,79 @@ func (f *cachedCelebrationCalendarFinder) FindMembersWithCelebrationsInMonth(
 	ctx context.Context,
 	month, referenceYear int,
 ) ([]domain.CalendarEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("calendar entries request: %w", err)
+	}
+
 	path := f.snapshotPath(month, referenceYear)
 	if entries, ok := f.readSnapshot(path); ok {
 		return entries, nil
 	}
 
-	value, err, _ := f.flights.Do(fmt.Sprintf("%04d-%02d", referenceYear, month), func() (any, error) {
-		if entries, ok := f.readSnapshot(path); ok {
-			return entries, nil
-		}
+	resultCh := f.flights.DoChan(fmt.Sprintf("%04d-%02d", referenceYear, month), func() (any, error) {
+		var entries []domain.CalendarEntry
 
-		entries, err := f.base.FindMembersWithCelebrationsInMonth(ctx, month, referenceYear)
+		// DoChan의 goroutine panic은 호출자의 복구 경계를 벗어나므로 공유 조회 안에서 오류로 돌려준다.
+		err := panicguard.RunE(slog.Default(), panicguard.BackgroundTask, "calendar-entry-cache", func() error {
+			var loadErr error
+
+			entries, loadErr = f.loadEntriesSnapshot(ctx, path, month, referenceYear)
+			if loadErr != nil {
+				return fmt.Errorf("load calendar entries snapshot: %w", loadErr)
+			}
+
+			return nil
+		})
 		if err != nil {
-			return nil, fmt.Errorf("find members with celebrations in month: %w", err)
+			return nil, fmt.Errorf("run shared calendar entries lookup: %w", err)
 		}
 
-		cloned := cloneCalendarEntries(entries)
-		f.writeSnapshot(path, cloned)
-
-		return cloned, nil
+		return entries, nil
 	})
+
+	var result singleflight.Result
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for calendar entries: %w", ctx.Err())
+	case result = <-resultCh:
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("calendar entries request: %w", err)
+	}
+
+	if result.Err != nil {
+		return nil, fmt.Errorf("find members with celebrations in month: %w", result.Err)
+	}
+
+	entries, ok := result.Val.([]domain.CalendarEntry)
+	if !ok {
+		return nil, fmt.Errorf("calendar entries cache returned %T", result.Val)
+	}
+
+	return cloneCalendarEntries(entries), nil
+}
+
+func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Context, path string, month, referenceYear int) ([]domain.CalendarEntry, error) {
+	if entries, ok := f.readSnapshot(path); ok {
+		return entries, nil
+	}
+
+	// 공유 조회는 첫 요청의 취소와 분리하되 기존 봇 요청 예산(10초) 안에서 끝낸다.
+	// 모든 호출자가 이탈해도 이 예산 안에서 캐시를 채울 수 있다.
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), constants.RequestTimeout.BotCommand)
+	defer cancel()
+
+	entries, err := f.base.FindMembersWithCelebrationsInMonth(loadCtx, month, referenceYear)
 	if err != nil {
 		return nil, fmt.Errorf("find members with celebrations in month: %w", err)
 	}
 
-	entries, ok := value.([]domain.CalendarEntry)
-	if !ok {
-		return nil, fmt.Errorf("calendar entries cache returned %T", value)
-	}
+	cloned := cloneCalendarEntries(entries)
+	f.writeSnapshot(path, cloned)
 
-	return cloneCalendarEntries(entries), nil
+	return cloned, nil
 }
 
 func (f *cachedCelebrationCalendarFinder) readSnapshot(path string) ([]domain.CalendarEntry, bool) {

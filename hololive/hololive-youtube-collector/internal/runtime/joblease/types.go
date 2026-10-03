@@ -8,7 +8,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 const (
@@ -192,52 +192,4 @@ func (r ReleaseReason) Valid() bool {
 
 func (r ReleaseReason) ErrorCode() contract.CollectionErrorCode {
 	return contract.CollectionErrorCode(r)
-}
-
-type RetryDecisionKind string
-
-const (
-	RetryDecisionDelay RetryDecisionKind = "DELAY"
-	RetryDecisionAt    RetryDecisionKind = "AT"
-)
-
-type RetryDecision struct {
-	kind  RetryDecisionKind
-	delay time.Duration
-	at    time.Time
-}
-
-func NewRetryDelay(delay time.Duration) (RetryDecision, error) {
-	decision := RetryDecision{kind: RetryDecisionDelay, delay: delay}
-	if err := decision.Validate(); err != nil {
-		return decision, fmt.Errorf("validate: %w", err)
-	}
-
-	return decision, nil
-}
-
-func NewRetryAt(at time.Time) (RetryDecision, error) {
-	decision := RetryDecision{kind: RetryDecisionAt, at: at.UTC()}
-	if err := decision.Validate(); err != nil {
-		return decision, fmt.Errorf("validate: %w", err)
-	}
-
-	return decision, nil
-}
-
-func (d RetryDecision) Kind() RetryDecisionKind { return d.kind }
-func (d RetryDecision) Delay() (time.Duration, bool) {
-	return d.delay, d.kind == RetryDecisionDelay
-}
-func (d RetryDecision) At() (time.Time, bool) { return d.at, d.kind == RetryDecisionAt }
-func (d RetryDecision) Validate() error {
-	if d.kind == RetryDecisionDelay && d.delay > 0 && d.at.IsZero() {
-		return nil
-	}
-
-	if d.kind == RetryDecisionAt && !d.at.IsZero() && d.delay == 0 {
-		return nil
-	}
-
-	return fmt.Errorf("%w: retry decision is invalid", ErrInvalidJob)
 }

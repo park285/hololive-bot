@@ -28,6 +28,8 @@ import (
 	"net/http"
 	"time"
 
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
@@ -52,12 +54,12 @@ func (c *Client) Close() error {
 }
 
 // NewClient는 trigger 클라이언트를 생성한다. Scheduler URL이 https이고 H3 transport를 구성하지 못하면 오류다.
-func NewClient(schedulerURL, apiKey string, logger *slog.Logger) (*Client, error) {
+func NewClient(schedulerURL, apiKey string, logger *slog.Logger, options sharedh3.ClientOptions) (*Client, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	httpClient, err := internalhttp.NewJSONClient(schedulerURL, apiKey, 30*time.Second)
+	httpClient, err := internalhttp.NewJSONClient(schedulerURL, apiKey, 30*time.Second, options)
 	if err != nil {
 		return nil, fmt.Errorf("configure llm scheduler trigger transport: %w", err)
 	}

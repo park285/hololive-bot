@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type fakeCleanupCloser struct {
@@ -14,18 +16,20 @@ func (c *fakeCleanupCloser) Close() error {
 	return nil
 }
 
-func TestComposeBotInfrastructureCleanupClosesClientsAndInfraOnce(t *testing.T) {
+func TestBotInfrastructureOwnerClosesClientsAndInfraOnce(t *testing.T) {
 	t.Parallel()
 
 	irisClient := &fakeCleanupCloser{}
 	alarmClient := &fakeCleanupCloser{}
 	infraClosed := 0
-	cleanup := composeBotInfrastructureCleanup(func() {
-		infraClosed++
-	}, irisClient, []io.Closer{alarmClient, nil}, nil)
+	owner := &botInfrastructureOwner{
+		infraCleanup:    func() { infraClosed++ },
+		irisClient:      irisClient,
+		internalClients: []io.Closer{alarmClient, nil},
+	}
 
-	cleanup()
-	cleanup()
+	require.NoError(t, owner.Close())
+	require.NoError(t, owner.Close())
 
 	if irisClient.closed != 1 {
 		t.Fatalf("iris client close count = %d, want 1", irisClient.closed)

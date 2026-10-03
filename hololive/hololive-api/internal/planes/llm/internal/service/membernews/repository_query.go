@@ -25,7 +25,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -115,13 +117,20 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 }
 
 func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candidate, error) {
+	return r.listActiveMajorEvents(ctx, mustSQL("repository_query_0129_04.sql"))
+}
+
+func (r *Repository) ListActiveMajorEventsForPeriod(ctx context.Context, period model.Period, now time.Time) ([]model.Candidate, error) {
+	start, end := filter.PeriodBounds(period, now)
+	return r.listActiveMajorEvents(ctx, mustSQL("repository_query_period.sql"), start, end)
+}
+
+func (r *Repository) listActiveMajorEvents(ctx context.Context, query string, args ...any) ([]model.Candidate, error) {
 	if r.pool == nil {
 		return nil, errors.New("membernews repository pool is nil")
 	}
 
-	query := mustSQL("repository_query_0129_04.sql")
-
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list active major events: %w", err)
 	}

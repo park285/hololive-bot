@@ -11,11 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 func (r *Runtime) remember(work sourceobservation.ClaimWork) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+
+	// claim loop가 모든 batch를 등록한 뒤 최종 해제가 시작됩니다.
+	// 늦게 처리에 진입한 worker의 중복 등록이 해제한 token을 되살리지 않게 합니다.
+	if r.releaseDone != nil {
+		return
+	}
+
 	r.inFlight.Store(work.Key(), work)
 }
 
@@ -111,7 +120,7 @@ type observationDeadLetterer interface {
 	DeadLetter(context.Context, sourceobservation.DeadLetterInput) error
 }
 
-var _ observationDeadLetterer = (*sourceobservation.ConsumeRepository)(nil)
+var _ observationDeadLetterer = (*sourceobservation.Repository)(nil)
 
 func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observationDeadLetterer, work sourceobservation.ClaimWork, cause error) error {
 	if r.Config.TransactionTimeout <= 0 {

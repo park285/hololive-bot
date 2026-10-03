@@ -593,7 +593,8 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		t.Fatalf("resolve migrations dir for observation lock API check: %v", err)
 	}
 
-	queryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-shared", "pkg", "service", "youtube", "sourceobservation", "queries"))
+	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
+	apiQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "youtube", "sourceobservation", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 	checks := map[string][]observationRoleQuery{
 		roles.scraper: {
@@ -612,6 +613,12 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 
 	for role, queries := range checks {
+		queryDir := apiQueryDir
+
+		if role == roles.scraper {
+			queryDir = collectorQueryDir
+		}
+
 		runObservationRoleQueries(t, pool, role, roleSQLPath, queryDir, queries)
 	}
 }

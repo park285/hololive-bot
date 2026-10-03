@@ -1,0 +1,21 @@
+package app
+
+import (
+	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	modules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"log/slog"
+	"testing"
+)
+
+func TestExpansionAdminRouterFailureDropsRuntimeCleanup(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	infraClosed, runtimeClosed := 0, 0
+	infra := &modules.InfraModule{Cleanup: func() { infraClosed++ }}
+	handler := server.NewHandler(&server.HandlerDeps{Common: server.CommonDeps{Logger: logger}})
+	runtime, err := buildAdminAPIHTTPRuntime(t.Context(), &settings.Config{}, infra, nil, handler, func() { runtimeClosed++ }, logger)
+	if err == nil || runtime != nil || infraClosed != 1 || runtimeClosed != 0 {
+		t.Fatalf("runtime=%v err=%v infra_cleanup=%d final_cleanup=%d", runtime, err, infraClosed, runtimeClosed)
+	}
+	t.Logf("router_error=%v infra_cleanup=%d supplied_runtime_cleanup=%d; no DB or request", err, infraClosed, runtimeClosed)
+}

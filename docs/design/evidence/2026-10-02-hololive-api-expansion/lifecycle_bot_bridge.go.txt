@@ -1,0 +1,22 @@
+package botruntime
+
+import (
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"log/slog"
+	"sync"
+	"time"
+)
+
+func ExpansionHeldRuntime(release <-chan struct{}, cleanup func()) (*BotRuntime, <-chan struct{}, <-chan struct{}, func()) {
+	r := &durableRuntime{logger: slog.New(slog.DiscardHandler), maintenanceEvery: time.Hour}
+	canceled := make(chan struct{})
+	done := make(chan struct{})
+	var once sync.Once
+	r.wg.Go(func() { <-release; close(done) })
+	runtime := &BotRuntime{Logger: r.logger, durable: r, Managed: lifecycle.NewManaged(cleanup)}
+	observeCancel := func() {
+		originalCancel := r.cancel
+		r.cancel = func() { originalCancel(); once.Do(func() { close(canceled) }) }
+	}
+	return runtime, canceled, done, observeCancel
+}

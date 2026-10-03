@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
@@ -33,13 +34,13 @@ func (c *Client) Close() error {
 	return nil
 }
 
-func NewClient(baseURL, apiKey string) (*Client, error) {
+func NewClient(baseURL, apiKey string, options sharedh3.ClientOptions) (*Client, error) {
 	validatedBaseURL, err := validateInternalBotRoomsBaseURL(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("validate internal bot rooms base URL: %w", err)
 	}
 
-	httpClient, err := internalhttp.NewJSONClient(validatedBaseURL, apiKey, 30*time.Second)
+	httpClient, err := internalhttp.NewJSONClient(validatedBaseURL, apiKey, 30*time.Second, options)
 	if err != nil {
 		return nil, fmt.Errorf("configure internal bot rooms transport: %w", err)
 	}

@@ -77,7 +77,7 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 	t.Run("cache not configured", func(t *testing.T) {
 		t.Parallel()
 
-		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}), nil, nil)
+		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}))
 
 		err := botLifecycle.Start(t.Context())
 		require.Error(t, err)
@@ -90,7 +90,7 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 		cacheClient := &cachemocks.Client{
 			WaitUntilReadyFunc: func(context.Context, time.Duration) error { return errors.New("down") },
 		}
-		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}), nil, nil)
+		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}))
 
 		err := botLifecycle.Start(t.Context())
 		require.Error(t, err)
@@ -106,7 +106,7 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 		stopCh := make(chan struct{})
 		close(stopCh)
 
-		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, nil, "http://iris", stopCh, make(chan struct{}), nil, nil)
+		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, nil, "http://iris", stopCh, make(chan struct{}))
 
 		err := botLifecycle.Start(t.Context())
 		require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestBotLifecycleStart_ContextCanceled(t *testing.T) {
 	cacheClient := &cachemocks.Client{
 		WaitUntilReadyFunc: func(context.Context, time.Duration) error { return nil },
 	}
-	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), make(chan struct{}), nil, nil)
+	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), make(chan struct{}))
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -148,12 +148,14 @@ func TestBotLifecycleShutdownBranches(t *testing.T) {
 	postgres := &lifecycleTestPostgres{}
 	doneCh := make(chan struct{})
 
-	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), doneCh, holodex, postgres)
+	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), doneCh)
 
-	require.NoError(t, botLifecycle.Shutdown(t.Context()))
-	assert.True(t, cacheClosed)
-	assert.True(t, holodex.stopCalled)
-	assert.True(t, postgres.closeCalled)
+	b := &Bot{cache: cacheClient, postgres: postgres, holodex: holodex, lifecycle: botLifecycle}
+
+	require.NoError(t, b.Shutdown(t.Context()))
+	assert.False(t, cacheClosed)
+	assert.False(t, holodex.stopCalled)
+	assert.False(t, postgres.closeCalled)
 
 	select {
 	case <-doneCh:
@@ -165,7 +167,7 @@ func TestBotLifecycleShutdownBranches(t *testing.T) {
 func TestBotStartAndShutdownDelegateToLifecycle(t *testing.T) {
 	t.Parallel()
 
-	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, nil, "", make(chan struct{}), make(chan struct{}), nil, nil)
+	botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, nil, "", make(chan struct{}), make(chan struct{}))
 	b := &Bot{lifecycle: botLifecycle}
 
 	err := b.Start(t.Context())

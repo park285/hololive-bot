@@ -7,15 +7,13 @@ import (
 	"log/slog"
 	"time"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 func (r *Runtime) runRetentionLoop(ctx context.Context, errCh chan<- error) {
-	defer func() { r.loopDone <- struct{}{} }()
-
 	ticker := time.NewTicker(r.Config.Retention.Interval)
 
 	defer ticker.Stop()
@@ -136,8 +134,6 @@ func (r *Runtime) withRetainDB(ctx context.Context, fn func(context.Context) err
 }
 
 func (r *Runtime) runReplayLoop(ctx context.Context, errCh chan<- error) {
-	defer func() { r.loopDone <- struct{}{} }()
-
 	ticker := time.NewTicker(r.Config.Replay.Interval)
 
 	defer ticker.Stop()
@@ -212,7 +208,7 @@ func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
 	return processed, nil
 }
 
-func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
+func planeRetentionConfig(cfg *apiconfig.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
 	return sourceobservation.RetentionConfig{
 		QueueProcessedAge:     cfg.QueueProcessedAge,
 		QueueDLQAge:           cfg.QueueDLQAge,
@@ -226,7 +222,7 @@ func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) sourceobser
 	}
 }
 
-func evidenceRetentionAges(cfg *apiplane.YouTubePlaneRetentionConfig) map[contract.ObservationKind]time.Duration {
+func evidenceRetentionAges(cfg *apiconfig.YouTubePlaneRetentionConfig) map[contract.ObservationKind]time.Duration {
 	ages := make(map[contract.ObservationKind]time.Duration, 11)
 	addEvidenceRetentionAge(ages, contract.KindCommunityPage, cfg.CommunityPageAge)
 	addEvidenceRetentionAge(ages, contract.KindVideoList, cfg.VideoListAge)

@@ -28,11 +28,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
-const (
-	responseKeyError   = "error"
-	responseKeyMessage = "message"
-	responseKeyStatus  = "status"
-)
+const responseKeyError = "error"
 
 func respondJSON(c *gin.Context, status int, payload any) {
 	ginjson.Respond(c, status, payload)

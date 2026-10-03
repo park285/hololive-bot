@@ -32,14 +32,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
 type runnerFunc struct {
@@ -123,7 +123,7 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.expected, sharedchecker.NormalizeTargetMinutes(tc.input))
+			assert.Equal(t, tc.expected, targetpolicy.NormalizeTargetMinutes(tc.input))
 		})
 	}
 }
@@ -220,7 +220,7 @@ func testYouTubeIterationSyncsTargetMinutes(t *testing.T) {
 func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 	t.Parallel()
 
-	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, &sharedalarm.Repository{}, testSchedulerLogger(), []int{5, 3, 1})
+	alarmService, err := subscriptions.NewAlarmService(cachemocks.NewLenientClient(), nil, &sharedalarm.Repository{}, testSchedulerLogger(), []int{5, 3, 1})
 	require.NoError(t, err)
 
 	youtubeUpdater := &targetMinutesUpdaterStub{}
@@ -238,7 +238,9 @@ func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 		logger:               testSchedulerLogger(),
 	}
 
-	require.Equal(t, []int{12, 3, 1}, alarmService.UpdateAlarmAdvanceMinutes(t.Context(), 12))
+	updated, err := alarmService.UpdateAlarmAdvanceMinutes(t.Context(), 12)
+	require.NoError(t, err)
+	require.Equal(t, []int{12, 3, 1}, updated.TargetMinutes)
 
 	require.NoError(t, s.runYouTubeIteration(t.Context()))
 	assert.Equal(t, [][]int{{12, 3, 1}}, youtubeUpdater.calls)

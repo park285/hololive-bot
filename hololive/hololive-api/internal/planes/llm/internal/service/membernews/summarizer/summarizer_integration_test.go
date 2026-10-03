@@ -34,7 +34,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 func skipIfNoLLMKey(t *testing.T) {
@@ -240,7 +240,7 @@ func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko, testMemberSuisei},
 		Candidates:  integrationCandidates(),
 	}
@@ -281,7 +281,7 @@ func TestIntegration_MemberNewsSummarize_Monthly(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodMonthly,
-		Now:         time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone),
+		Now:         time.Date(2026, time.March, 1, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko, testMemberSuisei},
 		Candidates:  integrationCandidates(),
 	}
@@ -318,7 +318,7 @@ func TestIntegration_MemberNewsSummarize_SchemaCompliance(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko},
 		Candidates:  integrationCandidates(),
 	}
@@ -403,7 +403,7 @@ func TestIntegration_Consensus_FullPipeline(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberMiko, testMemberSuisei},
 		Candidates:  integrationCandidates(),
 	}

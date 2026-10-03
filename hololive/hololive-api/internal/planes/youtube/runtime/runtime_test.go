@@ -14,12 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/park285/shared-go/v2/pkg/health"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 func TestRuntimeClaimsEverySupportedObservationKind(t *testing.T) {
@@ -42,7 +42,7 @@ func TestRuntimeClaimsEverySupportedObservationKind(t *testing.T) {
 func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 	t.Parallel()
 
-	cfg := apiplane.DefaultYouTubePlaneConfig()
+	cfg := apiconfig.DefaultYouTubePlaneConfig()
 
 	cfg.DBOperationConcurrency = cfg.PostgresPoolMaxConns
 
@@ -56,7 +56,7 @@ func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 	t.Parallel()
 
-	cfg := apiplane.DefaultYouTubePlaneConfig()
+	cfg := apiconfig.DefaultYouTubePlaneConfig()
 	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: scraperDatabaseRole}, slog.Default())
 
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
@@ -67,7 +67,7 @@ func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 	t.Parallel()
 
-	cfg := apiplane.DefaultYouTubePlaneConfig()
+	cfg := apiconfig.DefaultYouTubePlaneConfig()
 	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
 
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
@@ -280,7 +280,7 @@ func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 
-	var retried atomic.Int64
+	var retried, closes atomic.Int64
 
 	runtime := newTestRuntime(fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
@@ -306,6 +306,7 @@ func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 	})
 
 	runtime.Config.ShutdownTimeout = 30 * time.Millisecond
+	runtime.closePool = func() { closes.Add(1) }
 	runtime.Start(t.Context(), make(chan error, 1))
 
 	awaitSignal(t, entered, "worker did not start")
@@ -319,9 +320,26 @@ func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 		t.Fatalf("active observation release attempts = %d, want 1", retried.Load())
 	}
 
+	closeCtx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+
+	if err := runtime.CloseContext(closeCtx); !errors.Is(err, context.DeadlineExceeded) || closes.Load() != 0 {
+		t.Fatalf("close before worker joined: err=%v closes=%d", err, closes.Load())
+	}
+
 	close(release)
 
 	awaitSignal(t, runtime.workerDone, "worker did not exit after test release")
+
+	if err := runtime.CloseContext(t.Context()); err != nil {
+		t.Fatalf("close after worker joined: %v", err)
+	}
+
+	runtime.Close()
+
+	if closes.Load() != 1 || retried.Load() != 1 {
+		t.Fatalf("close after worker join: closes=%d releases=%d", closes.Load(), retried.Load())
+	}
 }
 
 func TestShutdownReturnsReleaseFailure(t *testing.T) {
@@ -653,23 +671,21 @@ func awaitSignal(t *testing.T, signal <-chan struct{}, message string) {
 }
 
 func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *Runtime {
-	cfg := apiplane.DefaultYouTubePlaneConfig()
+	cfg := apiconfig.DefaultYouTubePlaneConfig()
 
 	cfg.ClaimInterval = 20 * time.Millisecond
 	cfg.TargetProjection.Interval = time.Hour
 
 	return &Runtime{
-		Config:     cfg,
-		Logger:     slog.Default(),
-		claimer:    claimer,
-		consumer:   consumer,
-		refresher:  fakeRefresher{},
-		builder:    targetprojection.PolicyBuilder{Reader: emptyRosterReader{}, Schedules: targetprojection.DefaultPolicySchedules()},
-		now:        func() time.Time { return time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC) },
-		dbSem:      make(chan struct{}, cfg.DBOperationConcurrency),
-		workCh:     make(chan sourceobservation.ClaimWork, cfg.ConsumerWorkers),
-		loopDone:   make(chan struct{}, youtubeSupervisorLoopCapacity),
-		workerDone: make(chan struct{}, cfg.ConsumerWorkers),
+		Config:    cfg,
+		Logger:    slog.Default(),
+		claimer:   claimer,
+		consumer:  consumer,
+		refresher: fakeRefresher{},
+		builder:   targetprojection.PolicyBuilder{Reader: emptyRosterReader{}, Schedules: targetprojection.DefaultPolicySchedules()},
+		now:       func() time.Time { return time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC) },
+		dbSem:     make(chan struct{}, cfg.DBOperationConcurrency),
+		workCh:    make(chan sourceobservation.ClaimWork, cfg.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
 			ConsumerName:  communityConsumerName,
 			LeaseOwner:    communityLeaseOwner,

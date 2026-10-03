@@ -8,16 +8,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 type ContractGenerationReader interface {
 	LoadContractGenerations(context.Context, contract.Provider, []contract.ObservationKind) (map[contract.ObservationKind]int64, error)
 }
 
+// ObservationPublisher는 결과의 개수·순서·식별자를 커밋 전에 검증하고,
+// 관측 발행과 lease 완료 또는 defer를 하나의 트랜잭션으로 확정합니다.
 type ObservationPublisher interface {
 	PublishBatch(context.Context, *sourceobservation.PublishBatchInput) (sourceobservation.PublishBatchResult, error)
 	PublishBatchAndDefer(context.Context, *sourceobservation.PublishBatchInput, sourceobservation.DeferCollectionInput) (sourceobservation.PublishBatchResult, error)
@@ -29,7 +30,7 @@ type Publisher struct {
 }
 
 func NewPublisher(pool *pgxpool.Pool) *Publisher {
-	return &Publisher{contracts: &postgresContractGenerationReader{pool: pool}, observations: sourceobservation.NewPublishRepository(pool)}
+	return &Publisher{contracts: &postgresContractGenerationReader{pool: pool}, observations: sourceobservation.NewRepository(pool)}
 }
 
 func NewPublisherWithStores(contracts ContractGenerationReader, observations ObservationPublisher) (*Publisher, error) {
@@ -174,10 +175,6 @@ func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeasePr
 		return sourceobservation.PublishBatchResult{}, fmt.Errorf("wrap publish failure: %w", wrapPublishFailure("publish observation batch", err))
 	}
 
-	if err := sourceobservation.ValidatePublishBatchResult(len(observations), result); err != nil {
-		return sourceobservation.PublishBatchResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
-	}
-
 	return result, nil
 }
 
@@ -185,7 +182,7 @@ func (p *Publisher) PublishPartial(
 	ctx context.Context,
 	lease *contract.LeaseProof,
 	result *collectutil.CollectResult,
-	retry joblease.RetryDecision,
+	schedule sourceobservation.RetrySchedule,
 	bounds sourceobservation.RetryBounds,
 ) (sourceobservation.PublishBatchResult, error) {
 	partial, err := validatePartialPublishInput(p, lease, result)
@@ -194,11 +191,6 @@ func (p *Publisher) PublishPartial(
 	}
 
 	output := result.Output()
-
-	schedule, err := retrySchedule(retry)
-	if err != nil {
-		return sourceobservation.PublishBatchResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
-	}
 
 	deferInput, err := sourceobservation.NewDeferCollectionInput(collecterr.DiagnosticOf(partial.Cause()), bounds, schedule)
 	if err != nil {
@@ -228,53 +220,6 @@ func validatePartialPublishInput(
 	return partial, nil
 }
 
-func retrySchedule(retry joblease.RetryDecision) (sourceobservation.RetrySchedule, error) {
-	switch retry.Kind() {
-	case joblease.RetryDecisionDelay:
-		out, err := retryDelaySchedule(retry)
-
-		return out, err
-	case joblease.RetryDecisionAt:
-		out, err := retryAtSchedule(retry)
-
-		return out, err
-	default:
-		err := validateEmptyRetrySchedule(retry)
-
-		return sourceobservation.RetrySchedule{}, err
-	}
-}
-
-func retryDelaySchedule(retry joblease.RetryDecision) (sourceobservation.RetrySchedule, error) {
-	delay, _ := retry.Delay()
-
-	out, err := sourceobservation.NewRetryDelaySchedule(delay)
-	if err != nil {
-		return out, fmt.Errorf("retry delay schedule: %w", err)
-	}
-
-	return out, nil
-}
-
-func retryAtSchedule(retry joblease.RetryDecision) (sourceobservation.RetrySchedule, error) {
-	at, _ := retry.At()
-
-	out, err := sourceobservation.NewRetryAtSchedule(at)
-	if err != nil {
-		return out, fmt.Errorf("retry at schedule: %w", err)
-	}
-
-	return out, nil
-}
-
-func validateEmptyRetrySchedule(retry joblease.RetryDecision) error {
-	if err := retry.Validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
-	}
-
-	return nil
-}
-
 func publishBatchInput(lease *contract.LeaseProof, output collectutil.RunOutput) *sourceobservation.PublishBatchInput {
 	return &sourceobservation.PublishBatchInput{
 		Lease: *lease,
@@ -292,15 +237,7 @@ func (p *Publisher) publishPartialBatch(
 ) (sourceobservation.PublishBatchResult, error) {
 	published, err := p.observations.PublishBatchAndDefer(ctx, input, deferInput)
 	if err != nil {
-		if wrapPublishErr := wrapPublishFailure("publish partial observation batch", err); wrapPublishErr != nil {
-			return sourceobservation.PublishBatchResult{}, fmt.Errorf("wrap publish failure: %w", wrapPublishErr)
-		}
-
-		return sourceobservation.PublishBatchResult{}, nil
-	}
-
-	if err := sourceobservation.ValidatePublishBatchResult(len(input.Observations), published); err != nil {
-		return sourceobservation.PublishBatchResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+		return sourceobservation.PublishBatchResult{}, wrapPublishFailure("publish partial observation batch", err)
 	}
 
 	return published, nil

@@ -134,6 +134,10 @@ Rollback:
 
 ### 2. Settings update not applied
 
+공개 `alarmAdvanceMinutes` 범위는 `1..1440`입니다. 0과 범위 밖 값은 파일 저장·worker 호출 전에 거절합니다.
+저장 실패에서는 기존 Get·disk 값과 worker 미호출을 유지합니다. 저장 뒤 적용 응답이 유실되면 실제 worker 상태는
+결과 불명이며, 자동 재시도나 저장 파일 rollback을 하지 않습니다.
+
 Symptoms:
 - Alarm advance minutes remains stale.
 

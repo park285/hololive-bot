@@ -1,0 +1,480 @@
+package alarmdispatch
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/retry"
+
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+)
+
+const (
+	alarmDispatchRetentionMaxLimit = 10000
+	alarmDispatchRetentionLockKey  = 781512042
+)
+
+// shadowed 행 retention은 v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence, migration 226).
+var alarmDispatchTerminalTimestampColumns = map[dispatchoutbox.Status]string{
+	dispatchoutbox.StatusSent:        "sent_at",
+	dispatchoutbox.StatusDLQ:         "dlq_at",
+	dispatchoutbox.StatusQuarantined: "quarantined_at",
+	dispatchoutbox.StatusCancelled:   "cancelled_at", //nolint:misspell // alarm_dispatch_deliveries의 실제 컬럼명이 영국식 cancelled_at이라 canceled로 바꾸면 쿼리가 깨진다.
+}
+
+type alarmDispatchMaintenanceStore interface {
+	WithAdvisoryLock(ctx context.Context, key int64, fn func(context.Context, alarmDispatchMaintenanceDataStore) error) error
+}
+
+type alarmDispatchMaintenanceObserverStore interface {
+	BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error)
+}
+
+type alarmDispatchMaintenanceDataStore interface {
+	DeleteTerminal(ctx context.Context, status dispatchoutbox.Status, retentionDays, limit int) (int64, error)
+	DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error)
+	DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (int64, error)
+}
+
+type alarmDispatchBacklogSnapshot struct {
+	RowsByStatus                map[dispatchoutbox.Status]int64
+	OldestPendingAgeSeconds     float64
+	OldestRetryAgeSeconds       float64
+	OldestSendingAgeSeconds     float64
+	QuarantinedRows             int64
+	OldestQuarantinedAgeSeconds float64
+}
+
+type alarmDispatchMaintenanceRunner struct {
+	store            alarmDispatchMaintenanceStore
+	observerStore    alarmDispatchMaintenanceObserverStore
+	retentionEnabled bool
+	interval         time.Duration
+	queryTimeout     time.Duration
+	limit            int
+	sentDays         int
+	dlqDays          int
+	quarantinedDays  int
+	cancelledDays    int
+	eventDays        int
+	retentionLockKey int64
+	logger           *slog.Logger
+}
+
+type alarmDispatchMaintenanceQuerier interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type alarmDispatchMaintenancePgxStore struct {
+	db       alarmDispatchMaintenanceQuerier
+	beginner *pgxpool.Pool
+}
+
+func NewMaintenanceRunner(
+	infra *sharedmodules.InfraModule,
+	retentionConfig workerconfig.DispatchRetentionConfig,
+	logger *slog.Logger,
+) Scheduler {
+	if infra == nil || infra.Postgres == nil {
+		return nil
+	}
+
+	pool := infra.Postgres.GetPool()
+	if pool == nil {
+		return nil
+	}
+
+	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
+
+	return &alarmDispatchMaintenanceRunner{
+		store:            store,
+		observerStore:    store,
+		retentionEnabled: retentionConfig.Enabled,
+		interval:         retentionConfig.Interval,
+		queryTimeout:     retentionConfig.QueryTimeout,
+		limit:            clampAlarmDispatchRetentionLimit(retentionConfig.Limit),
+		sentDays:         retentionConfig.SentDays,
+		dlqDays:          retentionConfig.DLQDays,
+		quarantinedDays:  retentionConfig.QuarantinedDays,
+		cancelledDays:    retentionConfig.CancelledDays,
+		eventDays:        retentionConfig.EventDays,
+		retentionLockKey: alarmDispatchRetentionLockKey,
+		logger:           logger,
+	}
+}
+
+func (r *alarmDispatchMaintenanceRunner) Start(ctx context.Context) error {
+	for {
+		if err := r.RunOnce(ctx); err != nil {
+			r.reportFailure(ctx, err)
+		}
+
+		if !retry.Sleep(ctx, r.effectiveInterval()) {
+			return nil
+		}
+	}
+}
+
+func (r *alarmDispatchMaintenanceRunner) reportFailure(ctx context.Context, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+
+	observeAlarmDispatchRetentionFailure()
+
+	if r.logger != nil {
+		r.logger.Warn("Alarm dispatch maintenance failed", slog.Any("error", err))
+	}
+}
+
+func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
+	if r.store == nil {
+		return nil
+	}
+
+	r.observeBacklogOnce(ctx)
+
+	if !r.retentionEnabled || ctx.Err() != nil {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("retention sweep aborted: %w", err)
+		}
+
+		return nil
+	}
+
+	deleteCtx, cancelDelete := context.WithTimeout(ctx, r.effectiveQueryTimeout())
+
+	defer cancelDelete()
+
+	if err := r.store.WithAdvisoryLock(deleteCtx, r.effectiveLockKey(), r.deleteRetainedRows); err != nil {
+		return fmt.Errorf("with advisory lock: %w", err)
+	}
+
+	return nil
+}
+
+func (r *alarmDispatchMaintenanceRunner) observeBacklogOnce(ctx context.Context) {
+	if r.observerStore != nil {
+		observeCtx, cancelObserve := context.WithTimeout(ctx, r.effectiveQueryTimeout())
+		err := r.observeBacklog(observeCtx, r.observerStore)
+
+		cancelObserve()
+
+		if err != nil && ctx.Err() == nil {
+			observeAlarmDispatchBacklogObservationFailure()
+
+			if r.logger != nil {
+				r.logger.Warn("alarm dispatch backlog observation failed", slog.Any("error", err))
+			}
+		}
+	}
+}
+
+func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context, store alarmDispatchMaintenanceDataStore) error {
+	for _, target := range r.retentionTargets() {
+		rows, err := store.DeleteTerminal(ctx, target.status, target.retentionDays, r.effectiveLimit())
+		if err != nil {
+			return fmt.Errorf("delete retained alarm dispatch %s rows: %w", target.status, err)
+		}
+
+		observeAlarmDispatchRetentionDeletedRows(string(target.status), rows)
+	}
+
+	rows, err := store.DeleteOrphanSendUnits(ctx, r.effectiveLimit())
+	if err != nil {
+		return fmt.Errorf("delete retained orphan alarm dispatch send units: %w", err)
+	}
+
+	observeAlarmDispatchRetentionDeletedRows("send_unit", rows)
+
+	rows, err = store.DeleteOrphanEvents(ctx, r.effectiveEventDays(), r.effectiveLimit())
+	if err != nil {
+		return fmt.Errorf("delete retained orphan alarm dispatch events: %w", err)
+	}
+
+	observeAlarmDispatchRetentionDeletedRows("event", rows)
+
+	return nil
+}
+
+func (r *alarmDispatchMaintenanceRunner) observeBacklog(ctx context.Context, store alarmDispatchMaintenanceObserverStore) error {
+	snapshot, err := store.BacklogSnapshot(ctx)
+	if err != nil {
+		observeAlarmDispatchBacklogSnapshotSuccess(false)
+
+		return fmt.Errorf("backlog snapshot: %w", err)
+	}
+
+	for _, status := range []dispatchoutbox.Status{
+		dispatchoutbox.StatusPending,
+		dispatchoutbox.StatusRetry,
+		dispatchoutbox.StatusLeased,
+		dispatchoutbox.StatusSending,
+	} {
+		observeAlarmDispatchBacklogStatus(string(status), snapshot.RowsByStatus[status])
+	}
+
+	observeAlarmDispatchOldestAges(
+		snapshot.OldestPendingAgeSeconds,
+		snapshot.OldestRetryAgeSeconds,
+		snapshot.OldestSendingAgeSeconds,
+	)
+	observeAlarmDispatchQuarantine(snapshot.QuarantinedRows, snapshot.OldestQuarantinedAgeSeconds)
+	observeAlarmDispatchBacklogSnapshotSuccess(true)
+
+	return nil
+}
+
+func (r *alarmDispatchMaintenanceRunner) retentionTargets() []alarmDispatchRetentionTarget {
+	return []alarmDispatchRetentionTarget{
+		{status: dispatchoutbox.StatusSent, retentionDays: r.effectiveDays(r.sentDays, 90)},
+		{status: dispatchoutbox.StatusDLQ, retentionDays: r.effectiveDays(r.dlqDays, 180)},
+		{status: dispatchoutbox.StatusQuarantined, retentionDays: r.effectiveDays(r.quarantinedDays, 180)},
+		{status: dispatchoutbox.StatusCancelled, retentionDays: r.effectiveDays(r.cancelledDays, 90)},
+	}
+}
+
+type alarmDispatchRetentionTarget struct {
+	status        dispatchoutbox.Status
+	retentionDays int
+}
+
+func (r *alarmDispatchMaintenanceRunner) effectiveInterval() time.Duration {
+	if r.interval > 0 {
+		return r.interval
+	}
+
+	return time.Hour
+}
+
+func (r *alarmDispatchMaintenanceRunner) effectiveQueryTimeout() time.Duration {
+	if r.queryTimeout > 0 {
+		return r.queryTimeout
+	}
+
+	return 30 * time.Second
+}
+
+func (r *alarmDispatchMaintenanceRunner) effectiveLimit() int {
+	return clampAlarmDispatchRetentionLimit(r.limit)
+}
+
+func (r *alarmDispatchMaintenanceRunner) effectiveEventDays() int {
+	return r.effectiveDays(r.eventDays, 90)
+}
+
+func (r *alarmDispatchMaintenanceRunner) effectiveLockKey() int64 {
+	if r.retentionLockKey != 0 {
+		return r.retentionLockKey
+	}
+
+	return alarmDispatchRetentionLockKey
+}
+
+func (r *alarmDispatchMaintenanceRunner) effectiveDays(value, fallback int) int {
+	if value > 0 {
+		return value
+	}
+
+	return fallback
+}
+
+func clampAlarmDispatchRetentionLimit(limit int) int {
+	if limit <= 0 {
+		return 1000
+	}
+
+	if limit > alarmDispatchRetentionMaxLimit {
+		return alarmDispatchRetentionMaxLimit
+	}
+
+	return limit
+}
+
+func alarmDispatchTerminalTimestampColumn(status dispatchoutbox.Status) (string, bool) {
+	column, ok := alarmDispatchTerminalTimestampColumns[status]
+	return column, ok
+}
+
+func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
+	ctx context.Context,
+	key int64,
+	fn func(context.Context, alarmDispatchMaintenanceDataStore) error,
+) error {
+	if s.beginner == nil {
+		return errors.New("alarm dispatch maintenance pgx pool is nil")
+	}
+
+	tx, err := s.beginner.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin alarm dispatch retention transaction: %w", err)
+	}
+
+	defer rollbackAlarmDispatchTxOnPanic(ctx, tx)
+
+	locked, err := acquireAlarmDispatchLock(ctx, tx, key)
+	if err != nil {
+		return fmt.Errorf("acquire alarm dispatch lock: %w", err)
+	}
+
+	if locked && fn != nil {
+		err = fn(ctx, alarmDispatchMaintenancePgxStore{db: tx})
+	}
+
+	if err != nil {
+		return rollbackAlarmDispatchTx(ctx, tx, err, "alarm dispatch retention transaction failed and rollback failed: %w")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit alarm dispatch retention transaction: %w", err)
+	}
+
+	return nil
+}
+
+func rollbackAlarmDispatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
+	if p := recover(); p != nil {
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("alarm dispatch retention transaction rollback after panic failed", slog.Any("error", rollbackErr))
+		}
+
+		panic(p)
+	}
+}
+
+func acquireAlarmDispatchLock(ctx context.Context, tx pgx.Tx, key int64) (bool, error) {
+	var locked bool
+
+	err := tx.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0275_01.sql"), key).Scan(&locked)
+	if err == nil {
+		return locked, nil
+	}
+
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
+		return false, fmt.Errorf("acquire alarm dispatch retention transaction lock and rollback failed: %w", errors.Join(err, rollbackErr))
+	}
+
+	return false, fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
+}
+
+func rollbackAlarmDispatchTx(ctx context.Context, tx pgx.Tx, cause error, joinFmt string) error {
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
+		return fmt.Errorf(joinFmt, errors.Join(cause, rollbackErr))
+	}
+
+	return cause
+}
+
+func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {
+	snapshot := alarmDispatchBacklogSnapshot{RowsByStatus: map[dispatchoutbox.Status]int64{}}
+	if err := s.loadBacklogRows(ctx, snapshot.RowsByStatus); err != nil {
+		return snapshot, fmt.Errorf("load backlog rows: %w", err)
+	}
+
+	if err := s.loadOldestAges(ctx, &snapshot); err != nil {
+		return snapshot, fmt.Errorf("load oldest ages: %w", err)
+	}
+
+	return snapshot, nil
+}
+
+func (s alarmDispatchMaintenancePgxStore) loadBacklogRows(ctx context.Context, out map[dispatchoutbox.Status]int64) error {
+	rows, err := s.db.Query(ctx, mustSQL("alarm_dispatch_maintenance_0304_02.sql"))
+	if err != nil {
+		return fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			status string
+			count  int64
+		)
+
+		if err := rows.Scan(&status, &count); err != nil {
+			return fmt.Errorf("scan: %w", err)
+		}
+
+		out[dispatchoutbox.Status(status)] = count
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate rows: %w", err)
+	}
+
+	return nil
+}
+
+func (s alarmDispatchMaintenancePgxStore) loadOldestAges(ctx context.Context, snapshot *alarmDispatchBacklogSnapshot) error {
+	if err := s.db.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0325_03.sql")).
+		Scan(
+			&snapshot.OldestPendingAgeSeconds,
+			&snapshot.OldestRetryAgeSeconds,
+			&snapshot.OldestSendingAgeSeconds,
+			&snapshot.QuarantinedRows,
+			&snapshot.OldestQuarantinedAgeSeconds,
+		); err != nil {
+		return fmt.Errorf("scan: %w", err)
+	}
+
+	return nil
+}
+
+func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
+	ctx context.Context,
+	status dispatchoutbox.Status,
+	retentionDays, limit int,
+) (int64, error) {
+	column, ok := alarmDispatchTerminalTimestampColumn(status)
+	if !ok {
+		return 0, fmt.Errorf("unsupported alarm dispatch retention status: %s", status)
+	}
+
+	// picked CTE는 행을 잠그지 않고 EvalPlanQual 때 다시 계산되지 않습니다. 바깥 DELETE가 status와
+	// 보존 시각을 다시 검사해야 대기 중에 requeue로 commit된 행을 최신 버전 기준으로 건너뜁니다.
+	query := fmt.Sprintf(mustSQL("alarm_dispatch_maintenance_0348_04.sql"), column, column, column)
+
+	tag, err := s.db.Exec(ctx, query, string(status), retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	if err != nil {
+		return 0, fmt.Errorf("exec: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (int64, error) {
+	deletedCandidates, err := dispatchoutbox.NewUpcomingCandidates(s.db).Cleanup(ctx, retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	if err != nil {
+		return 0, fmt.Errorf("cleanup upcoming candidates: %w", err)
+	}
+
+	observeAlarmDispatchRetentionDeletedRows("upcoming_candidates", deletedCandidates)
+
+	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0368_05.sql"), retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	if err != nil {
+		return 0, fmt.Errorf("exec: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+func (s alarmDispatchMaintenancePgxStore) DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error) {
+	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0360_05.sql"), clampAlarmDispatchRetentionLimit(limit))
+	if err != nil {
+		return 0, fmt.Errorf("exec: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
+}

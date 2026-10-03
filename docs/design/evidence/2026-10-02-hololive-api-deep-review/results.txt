@@ -1,0 +1,66 @@
+Host: kapu
+Go: go1.27.1 linux/amd64
+Synthetic data only; isolated dbtest.NewBlankPool; five repetitions per query variant.
+Measurement source: overlay Go probes below; allocations are cumulative TotalAlloc differences.
+
+    zz_deep_review_test.go:114: period=weekly zone=UTC predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=weekly zone=UTC predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=monthly zone=UTC predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=monthly zone=UTC predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=weekly zone=Asia/Seoul predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=weekly zone=Asia/Seoul predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=monthly zone=Asia/Seoul predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=monthly zone=Asia/Seoul predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=weekly zone=America/Los_Angeles predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=weekly zone=America/Los_Angeles predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=monthly zone=America/Los_Angeles predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=monthly zone=America/Los_Angeles predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=weekly zone=Pacific/Kiritimati predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=weekly zone=Pacific/Kiritimati predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=60 same=false
+    zz_deep_review_test.go:114: period=monthly zone=Pacific/Kiritimati predicate=explicit_utc total=140 full_final=68 cut_raw=68 cut_final=68 same=true
+    zz_deep_review_test.go:114: period=monthly zone=Pacific/Kiritimati predicate=implicit_cast total=140 full_final=68 cut_raw=68 cut_final=60 same=false
+    zz_deep_review_test.go:174: measurement=full_per_room rep=0 rooms=20 rows=200000 queries=20 text_bytes=279755760 final=2000 elapsed_us=696210 alloc_bytes=496493184 allocs=2440906
+    zz_deep_review_test.go:174: measurement=full_per_room rep=1 rooms=20 rows=200000 queries=20 text_bytes=279755760 final=2000 elapsed_us=581165 alloc_bytes=496503920 allocs=2440917
+    zz_deep_review_test.go:174: measurement=full_per_room rep=2 rooms=20 rows=200000 queries=20 text_bytes=279755760 final=2000 elapsed_us=613329 alloc_bytes=496494992 allocs=2440903
+    zz_deep_review_test.go:174: measurement=full_per_room rep=3 rooms=20 rows=200000 queries=20 text_bytes=279755760 final=2000 elapsed_us=569770 alloc_bytes=496498368 allocs=2440904
+    zz_deep_review_test.go:174: measurement=full_per_room rep=4 rooms=20 rows=200000 queries=20 text_bytes=279755760 final=2000 elapsed_us=563499 alloc_bytes=496492976 allocs=2440901
+    zz_deep_review_test.go:174: measurement=period_per_room rep=0 rooms=20 rows=2000 queries=20 text_bytes=2797680 final=2000 elapsed_us=107630 alloc_bytes=18513664 allocs=64802
+    zz_deep_review_test.go:174: measurement=period_per_room rep=1 rooms=20 rows=2000 queries=20 text_bytes=2797680 final=2000 elapsed_us=106731 alloc_bytes=18513616 allocs=64800
+    zz_deep_review_test.go:174: measurement=period_per_room rep=2 rooms=20 rows=2000 queries=20 text_bytes=2797680 final=2000 elapsed_us=103434 alloc_bytes=18513648 allocs=64800
+    zz_deep_review_test.go:174: measurement=period_per_room rep=3 rooms=20 rows=2000 queries=20 text_bytes=2797680 final=2000 elapsed_us=100034 alloc_bytes=18515936 allocs=64801
+    zz_deep_review_test.go:174: measurement=period_per_room rep=4 rooms=20 rows=2000 queries=20 text_bytes=2797680 final=2000 elapsed_us=103771 alloc_bytes=18519056 allocs=64802
+    zz_deep_review_test.go:174: measurement=period_run_snapshot rep=0 rooms=20 rows=100 queries=1 text_bytes=139884 final=2000 elapsed_us=37979 alloc_bytes=14373640 allocs=41335
+    zz_deep_review_test.go:174: measurement=period_run_snapshot rep=1 rooms=20 rows=100 queries=1 text_bytes=139884 final=2000 elapsed_us=38821 alloc_bytes=14373704 allocs=41335
+    zz_deep_review_test.go:174: measurement=period_run_snapshot rep=2 rooms=20 rows=100 queries=1 text_bytes=139884 final=2000 elapsed_us=40529 alloc_bytes=14373720 allocs=41335
+    zz_deep_review_test.go:174: measurement=period_run_snapshot rep=3 rooms=20 rows=100 queries=1 text_bytes=139884 final=2000 elapsed_us=39819 alloc_bytes=14373688 allocs=41335
+    zz_deep_review_test.go:174: measurement=period_run_snapshot rep=4 rooms=20 rows=100 queries=1 text_bytes=139884 final=2000 elapsed_us=39490 alloc_bytes=14373688 allocs=41335
+    zz_deep_review_test.go:190: explain=full Seq Scan on major_events  (cost=0.00..2175.00 rows=9900 width=149) (actual time=0.016..3.062 rows=10000.00 loops=1)
+    zz_deep_review_test.go:190: explain=full   Filter: (((type)::text = ANY ('{news,event}'::text[])) AND ((COALESCE(link_status, 'unchecked'::character varying))::text <> ALL ('{failed,blocked}'::text[])) AND (status = 'active'::text))
+    zz_deep_review_test.go:190: explain=full   Buffers: shared hit=2000
+    zz_deep_review_test.go:190: explain=full Planning Time: 0.093 ms
+    zz_deep_review_test.go:190: explain=full Execution Time: 3.339 ms
+    zz_deep_review_test.go:190: explain=period Seq Scan on major_events  (cost=0.00..2475.00 rows=50 width=149) (actual time=0.042..2.685 rows=100.00 loops=1)
+    zz_deep_review_test.go:190: explain=period   Filter: (((type)::text = ANY ('{news,event}'::text[])) AND ((COALESCE(link_status, 'unchecked'::character varying))::text <> ALL ('{failed,blocked}'::text[])) AND (status = 'active'::text) AND (CASE WHEN ((type)::text = 'news'::text) THEN COALESCE(pub_date, ((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text)) ELSE COALESCE(((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text), pub_date) END >= '2026-09-25 05:00:00+14'::timestamp with time zone) AND (CASE WHEN ((type)::text = 'news'::text) THEN COALESCE(pub_date, ((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text)) ELSE COALESCE(((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text), pub_date) END < '2026-10-24 05:00:00+14'::timestamp with time zone))
+    zz_deep_review_test.go:190: explain=period   Rows Removed by Filter: 9900
+    zz_deep_review_test.go:190: explain=period   Buffers: shared hit=2000
+    zz_deep_review_test.go:190: explain=period Planning Time: 0.071 ms
+    zz_deep_review_test.go:190: explain=period Execution Time: 2.701 ms
+    zz_deep_review_test.go:214: measurement=period_indexed_per_room rep=0 rooms=20 final=2000 elapsed_us=52197 alloc_bytes=18513632 allocs=64800
+    zz_deep_review_test.go:214: measurement=period_indexed_per_room rep=1 rooms=20 final=2000 elapsed_us=52425 alloc_bytes=18513712 allocs=64800
+    zz_deep_review_test.go:214: measurement=period_indexed_per_room rep=2 rooms=20 final=2000 elapsed_us=52198 alloc_bytes=18513792 allocs=64802
+    zz_deep_review_test.go:214: measurement=period_indexed_per_room rep=3 rooms=20 final=2000 elapsed_us=51738 alloc_bytes=18513728 allocs=64801
+    zz_deep_review_test.go:214: measurement=period_indexed_per_room rep=4 rooms=20 final=2000 elapsed_us=51572 alloc_bytes=18515936 allocs=64801
+    zz_deep_review_test.go:225: explain=period_indexed Index Scan using review_period_idx on major_events  (cost=0.29..25.51 rows=50 width=149) (actual time=0.023..0.086 rows=100.00 loops=1)
+    zz_deep_review_test.go:225: explain=period_indexed   Index Cond: ((CASE WHEN ((type)::text = 'news'::text) THEN COALESCE(pub_date, ((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text)) ELSE COALESCE(((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text), pub_date) END >= '2026-09-25 05:00:00+14'::timestamp with time zone) AND (CASE WHEN ((type)::text = 'news'::text) THEN COALESCE(pub_date, ((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text)) ELSE COALESCE(((event_start_date)::timestamp without time zone AT TIME ZONE 'UTC'::text), pub_date) END < '2026-10-24 05:00:00+14'::timestamp with time zone))
+    zz_deep_review_test.go:225: explain=period_indexed   Index Searches: 1
+    zz_deep_review_test.go:225: explain=period_indexed   Buffers: shared hit=102
+    zz_deep_review_test.go:225: explain=period_indexed Planning Time: 0.120 ms
+    zz_deep_review_test.go:225: explain=period_indexed Execution Time: 0.107 ms
+--- PASS: TestDeepReviewPeriodSQL (7.13s)
+ok  	github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews	7.164s
+    zz_deep_review_test.go:44: callers=6 source_delay_ms=100 fail=false origin_calls=1 failures=0 elapsed_ms=105
+    zz_deep_review_test.go:44: callers=6 source_delay_ms=100 fail=true origin_calls=6 failures=6 elapsed_ms=607
+--- PASS: TestDeepReviewCacheFillLatency (0.72s)
+    --- PASS: TestDeepReviewCacheFillLatency/success (0.11s)
+    --- PASS: TestDeepReviewCacheFillLatency/failure (0.61s)
+ok  	github.com/kapu/hololive-shared/pkg/service/holodex/provider	0.724s

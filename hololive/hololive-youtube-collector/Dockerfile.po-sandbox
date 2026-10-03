@@ -23,6 +23,7 @@ RUN if [ "${REVISION}" != "unknown" ]; then test "${#REVISION}" -eq 40 && case "
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-collector
 COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ../hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ../hololive-shared/
+COPY hololive/hololive-api/go.mod hololive/hololive-api/go.sum ../hololive-api/
 COPY hololive/hololive-youtube-collector/go.mod hololive/hololive-youtube-collector/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY hololive/hololive-shared ../hololive-shared

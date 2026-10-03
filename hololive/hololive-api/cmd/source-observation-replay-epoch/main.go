@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
 const activationTimeout = 30 * time.Second
@@ -63,7 +63,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	activationContext, cancel := context.WithTimeout(ctx, activationTimeout)
 	defer cancel()
 
-	resources, cleanup, err := providers.ProvideDatabaseResources(activationContext, &postgres, logger)
+	resources, cleanup, err := databaseproviders.ProvideDatabaseResources(activationContext, &postgres, logger)
 	if err != nil {
 		logger.Error("open source observation replay epoch database", slog.Any("error", err))
 

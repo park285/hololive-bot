@@ -1,0 +1,47 @@
+package holodexprovider
+
+import (
+	"context"
+	"errors"
+	"net/url"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+func TestDeepReviewCacheFillLatency(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "failure"}[fail], func(t *testing.T) {
+			var calls atomic.Int32
+			s := newStreamFillTestService(t, &MockRequester{DoRequestFunc: func(ctx context.Context, _, _ string, _ url.Values) ([]byte, error) {
+				calls.Add(1)
+				select {
+				case <-time.After(100 * time.Millisecond):
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				if fail {
+					return nil, errors.New("synthetic origin failure")
+				}
+				return []byte("[]"), nil
+			}})
+			gate := make(chan struct{})
+			var wg sync.WaitGroup
+			start := time.Now()
+			var failures atomic.Int32
+			for range 6 {
+				wg.Go(func() {
+					<-gate
+					_, e := s.GetLiveStreams(t.Context())
+					if e != nil {
+						failures.Add(1)
+					}
+				})
+			}
+			close(gate)
+			wg.Wait()
+			t.Logf("callers=6 source_delay_ms=100 fail=%t origin_calls=%d failures=%d elapsed_ms=%d", fail, calls.Load(), failures.Load(), time.Since(start).Milliseconds())
+		})
+	}
+}

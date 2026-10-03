@@ -107,33 +107,39 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 		return nil, model.ErrNoSubscribedMembers
 	}
 
-	candidates, err := s.repository.ListActiveMajorEvents(ctx)
+	now := s.now()
+
+	prepared, err := s.prepareCandidates(ctx, normalizedPeriod, now)
 	if err != nil {
 		return nil, fmt.Errorf("list active major events: %w", err)
 	}
 
+	return s.generatePreparedRoomDigest(ctx, roomID, normalizedPeriod, now, members, prepared)
+}
+
+func (s *Service) generatePreparedRoomDigest(ctx context.Context, roomID string, period model.Period, now time.Time, members []string, prepared *filter.PreparedCandidates) (*model.Digest, error) {
 	memberProvider := s.membersData
 	if memberProvider != nil {
 		memberProvider = memberProvider.WithContext(ctx)
 	}
 
-	filtered := filter.FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
+	filtered := prepared.Filter(members, memberProvider, s.sourceValidator)
 
-	filtered, err = filterPromptCandidates(filtered, s.promptGuard, s.logger)
+	filtered, err := filterPromptCandidates(filtered, s.promptGuard, s.logger)
 	if err != nil {
 		return nil, fmt.Errorf("guard member news candidates: %w", err)
 	}
 
 	if len(filtered) == 0 {
-		return emptyDigest(normalizedPeriod), nil
+		return emptyDigest(period), nil
 	}
 
-	digest, err := s.summarizeRoomDigest(ctx, roomID, normalizedPeriod, members, filtered)
+	digest, err := s.summarizeRoomDigest(ctx, roomID, period, members, filtered, now)
 	if err != nil {
 		return nil, fmt.Errorf("summarize room digest: %w", err)
 	}
 
-	normalizeDigest(digest, normalizedPeriod, len(filtered))
+	normalizeDigest(digest, period, len(filtered))
 
 	return digest, nil
 }
@@ -169,14 +175,14 @@ func emptyDigest(period model.Period) *model.Digest {
 // summarizeRoomDigest는 결정적 fallback digest를 만드는 유일한 곳이다. 요약기(summarizer)는 실패를 오류로만 알리고,
 // 여기서 사유를 bounded enum으로 분류해 result_type과 함께 metric과 로그에 남긴다(stack audit B5).
 // 호출자 context가 끝났으면 fallback digest를 만들지 않고 취소를 돌려준다.
-func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate) (*model.Digest, error) {
+func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate, now time.Time) (*model.Digest, error) {
 	if s.summarizer == nil {
 		return s.fallbackDigest(roomID, period, filtered, digestFallbackReasonLLMDisabled, nil), nil
 	}
 
 	digest, err := s.summarizer.Summarize(ctx, &model.SummarizeInput{
 		Period:      period,
-		Now:         s.now(),
+		Now:         now,
 		RoomID:      roomID,
 		RoomMembers: members,
 		Candidates:  filtered,

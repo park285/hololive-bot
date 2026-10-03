@@ -7,6 +7,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -18,7 +19,7 @@ type SendEngine struct {
 	workerTracker   *workercontract.ExecutorTracker
 	workerTotals    *workercontract.Counters
 	sender          messagedelivery.MessageSender
-	formatter       *MessageFormatter
+	formatter       *format.MessageFormatter
 	logger          *slog.Logger
 	config          dispatchstate.Config
 	claims          ClaimResolver
@@ -52,7 +53,7 @@ type lifecycleTransition interface {
 
 func newSendEngine(
 	sender messagedelivery.MessageSender,
-	formatter *MessageFormatter,
+	formatter *format.MessageFormatter,
 	logger *slog.Logger,
 	config *dispatchstate.Config,
 	claims ClaimResolver,

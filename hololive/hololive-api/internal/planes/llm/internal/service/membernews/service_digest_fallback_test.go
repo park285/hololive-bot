@@ -33,7 +33,7 @@ func TestSummarizeRoomDigestOwnsFallbackAndRecordsReason(t *testing.T) {
 	service := NewService(nil, failingDigestSummarizer{err: errors.New("llm down")}, nil, nil, nil)
 	before := memberNewsDigestResultCount(t, "fallback", "summarizer_error")
 
-	digest, err := service.summarizeRoomDigest(t.Context(), "room-1", model.PeriodWeekly, []string{"사쿠라 미코"}, digestFallbackCandidates())
+	digest, err := service.summarizeRoomDigest(t.Context(), "room-1", model.PeriodWeekly, []string{"사쿠라 미코"}, digestFallbackCandidates(), time.Now())
 	if err != nil {
 		t.Fatalf("summarizeRoomDigest() error = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestSummarizeRoomDigestPropagatesCallerCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	digest, err := service.summarizeRoomDigest(ctx, "room-1", model.PeriodWeekly, []string{"사쿠라 미코"}, digestFallbackCandidates())
+	digest, err := service.summarizeRoomDigest(ctx, "room-1", model.PeriodWeekly, []string{"사쿠라 미코"}, digestFallbackCandidates(), time.Now())
 	if !errors.Is(err, context.Canceled) || digest != nil {
 		t.Fatalf("summarizeRoomDigest() = (%#v, %v), want (nil, context.Canceled)", digest, err)
 	}

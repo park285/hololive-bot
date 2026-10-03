@@ -31,7 +31,7 @@ import (
 	"slices"
 	"sync"
 
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 )
 
 // Settings는 관리 화면이 바꾸는 알림 설정이다. 예전의 scraper proxy 토글(scraperProxyEnabled)은
@@ -59,7 +59,7 @@ func cloneTargetMinutes(targetMinutes []int) []int {
 		return nil
 	}
 
-	return append([]int(nil), targetMinutes...)
+	return slices.Clone(targetMinutes)
 }
 
 func ensureParentDir(filePath string) error {
@@ -87,7 +87,7 @@ func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger)
 		logger:   logger,
 		cache: &Settings{
 			AlarmAdvanceMinutes: defaults.AlarmAdvanceMinutes,
-			TargetMinutes:       sharedchecker.NewTargetMinutePolicyFromConfigured(defaults.TargetMinutes).Clone(),
+			TargetMinutes:       targetpolicy.NewTargetMinutePolicyFromConfigured(defaults.TargetMinutes).Clone(),
 		},
 	}
 
@@ -145,7 +145,7 @@ func ReadFile(filePath string) (stored Settings, found bool, err error) {
 
 	stored = Settings{
 		AlarmAdvanceMinutes: *disk.AlarmAdvanceMinutes,
-		TargetMinutes:       sharedchecker.NewTargetMinutePolicy(disk.TargetMinutes).Clone(),
+		TargetMinutes:       targetpolicy.NewTargetMinutePolicy(disk.TargetMinutes).Clone(),
 	}
 
 	return stored, true, nil
@@ -173,24 +173,27 @@ func (s *Service) Update(newSettings Settings) error {
 		return fmt.Errorf("ensure parent dir: %w", err)
 	}
 
-	resolvedTargets := sharedchecker.NewTargetMinutePolicyFromConfigured(newSettings.TargetMinutes).Clone()
+	resolvedTargets := targetpolicy.NewTargetMinutePolicyFromConfigured(newSettings.TargetMinutes).Clone()
 
-	s.cache = &Settings{
+	candidate := Settings{
 		AlarmAdvanceMinutes: newSettings.AlarmAdvanceMinutes,
 		TargetMinutes:       resolvedTargets,
 	}
 
-	if err := s.persistCache(); err != nil {
+	if err := s.persistSettings(candidate); err != nil {
 		return fmt.Errorf("persist cache: %w", err)
 	}
+
+	// 저장이 성공한 값만 공개하여 실패 응답 뒤 Get과 파일 값이 갈라지지 않게 한다.
+	s.cache = &candidate
 
 	return nil
 }
 
 // 같은 디렉터리의 temp 파일에 전량 기록한 뒤 rename으로 교체한다. 제자리 truncate+write는
-// 중간에 실패하면 잘린 settings 파일을 남기고, 그 파일은 다음 기동에서 기본값으로 조용히 대체된다.
-func (s *Service) persistCache() (err error) {
-	tempPath, writeErr := s.writeSettingsTempFile()
+// 중간에 실패하면 잘린 settings 파일을 남겨 다음 기동의 읽기 계약을 깨뜨린다.
+func (s *Service) persistSettings(candidate Settings) (err error) {
+	tempPath, writeErr := s.writeSettingsTempFile(candidate)
 
 	defer func() {
 		if err == nil || tempPath == "" {
@@ -213,7 +216,7 @@ func (s *Service) persistCache() (err error) {
 	return nil
 }
 
-func (s *Service) writeSettingsTempFile() (path string, err error) {
+func (s *Service) writeSettingsTempFile(candidate Settings) (path string, err error) {
 	temp, err := os.CreateTemp(filepath.Dir(s.filePath), filepath.Base(s.filePath)+".tmp-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp settings file: %w", err)
@@ -225,7 +228,7 @@ func (s *Service) writeSettingsTempFile() (path string, err error) {
 		}
 	}()
 
-	if encodeErr := jsonv2.MarshalWrite(temp, s.cache); encodeErr != nil {
+	if encodeErr := jsonv2.MarshalWrite(temp, candidate); encodeErr != nil {
 		return temp.Name(), fmt.Errorf("failed to write settings: %w", encodeErr)
 	}
 

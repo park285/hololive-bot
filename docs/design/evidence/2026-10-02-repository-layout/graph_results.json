@@ -1,0 +1,191 @@
+{
+  "head": "5c12d2c503915caf63f21aa86e1aeb346da94e63",
+  "toolchain": "go version go1.27.1 linux/amd64",
+  "profiles": [
+    {
+      "name": "workspace-default-tests",
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "list",
+        "-deps",
+        "-e",
+        "-json=ImportPath,Dir,Module,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,Error,DepsErrors",
+        "-test",
+        "./hololive/hololive-api/...",
+        "./hololive/hololive-alarm-worker/...",
+        "./hololive/hololive-youtube-collector/...",
+        "./hololive/hololive-shared/...",
+        "./hololive/hololive-dbtest/..."
+      ],
+      "cwd": ".",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "GOFLAGS": "-mod=readonly"
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.492,
+      "loaded_packages": 1449,
+      "repository_packages_including_test_variants": 589,
+      "packages_with_errors": 0,
+      "errors": [],
+      "stderr": ""
+    },
+    {
+      "name": "workspace-integration-tests",
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "list",
+        "-deps",
+        "-e",
+        "-json=ImportPath,Dir,Module,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,Error,DepsErrors",
+        "-test",
+        "-tags=integration",
+        "./hololive/hololive-api/...",
+        "./hololive/hololive-alarm-worker/...",
+        "./hololive/hololive-youtube-collector/...",
+        "./hololive/hololive-shared/...",
+        "./hololive/hololive-dbtest/..."
+      ],
+      "cwd": ".",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "GOFLAGS": "-mod=readonly"
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.487,
+      "loaded_packages": 1449,
+      "repository_packages_including_test_variants": 589,
+      "packages_with_errors": 0,
+      "errors": [],
+      "stderr": ""
+    },
+    {
+      "name": "workspace-arm64-production",
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "list",
+        "-deps",
+        "-e",
+        "-json=ImportPath,Dir,Module,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,Error,DepsErrors",
+        "./hololive/hololive-api/...",
+        "./hololive/hololive-alarm-worker/...",
+        "./hololive/hololive-youtube-collector/..."
+      ],
+      "cwd": ".",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "GOFLAGS": "-mod=readonly",
+        "CGO_ENABLED": "0",
+        "GOOS": "linux",
+        "GOARCH": "arm64"
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.3,
+      "loaded_packages": 907,
+      "repository_packages_including_test_variants": 196,
+      "packages_with_errors": 0,
+      "errors": [],
+      "stderr": ""
+    },
+    {
+      "name": "canonical-hololive-api",
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "list",
+        "-deps",
+        "-e",
+        "-json=ImportPath,Dir,Module,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,Error,DepsErrors",
+        "./cmd/hololive-api",
+        "./cmd/db-migrate",
+        "./cmd/source-observation-replay-epoch",
+        "./cmd/healthcheck"
+      ],
+      "cwd": "hololive/hololive-api",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "GOFLAGS": "-mod=readonly",
+        "GOWORK": "off",
+        "CGO_ENABLED": "0",
+        "GOOS": "linux",
+        "GOARCH": "arm64"
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.099,
+      "loaded_packages": 855,
+      "repository_packages_including_test_variants": 147,
+      "packages_with_errors": 0,
+      "errors": [],
+      "stderr": ""
+    },
+    {
+      "name": "canonical-hololive-alarm-worker",
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "list",
+        "-deps",
+        "-e",
+        "-json=ImportPath,Dir,Module,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,Error,DepsErrors",
+        "./cmd/alarm-worker",
+        "./cmd/healthcheck"
+      ],
+      "cwd": "hololive/hololive-alarm-worker",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "GOFLAGS": "-mod=readonly",
+        "GOWORK": "off",
+        "CGO_ENABLED": "0",
+        "GOOS": "linux",
+        "GOARCH": "arm64"
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.083,
+      "loaded_packages": 681,
+      "repository_packages_including_test_variants": 88,
+      "packages_with_errors": 0,
+      "errors": [],
+      "stderr": ""
+    },
+    {
+      "name": "canonical-hololive-youtube-collector",
+      "command": [
+        "/home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go",
+        "list",
+        "-deps",
+        "-e",
+        "-json=ImportPath,Dir,Module,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,Error,DepsErrors",
+        "./cmd/runtime/youtube-collector",
+        "./cmd/runtime/healthcheck",
+        "./cmd/po-broker"
+      ],
+      "cwd": "hololive/hololive-youtube-collector",
+      "environment": {
+        "GOTOOLCHAIN": "local",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "GOFLAGS": "-mod=readonly",
+        "GOWORK": "off",
+        "CGO_ENABLED": "0",
+        "GOOS": "linux",
+        "GOARCH": "arm64"
+      },
+      "exit_code": 0,
+      "elapsed_seconds": 0.084,
+      "loaded_packages": 649,
+      "repository_packages_including_test_variants": 64,
+      "packages_with_errors": 0,
+      "errors": [],
+      "stderr": ""
+    }
+  ],
+  "note": "Package loading only, not compilation or test execution. Working tree includes uncommitted changes; no dependencies were downloaded."
+}

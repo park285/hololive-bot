@@ -123,6 +123,7 @@ func TestRedactCacheKeyLeavesIdentifierFreeKeysIntact(t *testing.T) {
 		"holodex:api",
 		"member:name:" + channelID,
 		"lock:ingestion:runtime",
+		"auth:sess:0123456789abcdef",
 		"majorevent:lock:weekly:2026-W31",
 		"{alarm:twitch_logins}:tmp:1",
 		"",
@@ -132,6 +133,38 @@ func TestRedactCacheKeyLeavesIdentifierFreeKeysIntact(t *testing.T) {
 		if got := RedactCacheKey(key); got != key {
 			t.Errorf("RedactCacheKey(%q) = %q, want the key unchanged", key, got)
 		}
+	}
+}
+
+func TestRedactAuthenticationCacheKeys(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		prefix     string
+		identifier string
+	}{
+		{prefix: "auth:login_fail:", identifier: "synthetic@example.invalid"},
+		{prefix: "auth:lock:", identifier: "\"synthetic:name\"@example.invalid"},
+		{prefix: "auth:rl:login:", identifier: "192.0.2.1"},
+		{prefix: "auth:rl:reset_req:", identifier: "2001:db8::1"},
+		{prefix: "auth:rl:login:", identifier: "2130706433"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.prefix+tc.identifier, func(t *testing.T) {
+			t.Parallel()
+
+			key := tc.prefix + tc.identifier
+			got := RedactCacheKey(key)
+			want := tc.prefix + Pseudonym(tc.identifier)
+
+			if got != want || strings.Contains(got, tc.identifier) {
+				t.Fatalf("RedactCacheKey(%q) = %q, want fully pseudonymized identifier %q", key, got, want)
+			}
+
+			if attr := CacheKeyAttr(key); attr.Value.String() != want {
+				t.Fatalf("CacheKeyAttr = %v, want the same redacted key", attr)
+			}
+		})
 	}
 }
 

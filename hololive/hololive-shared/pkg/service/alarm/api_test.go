@@ -40,20 +40,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 테스트용 domain.AlarmCRUD mock.
+// 실제 HTTP route의 알림 포트 mock.
 type mockAlarmCRUD struct {
 	addAlarmFn                  func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
 	removeAlarmFn               func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
 	removeHostAlarmFn           func(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error)
-	getRoomAlarmsFn             func(ctx context.Context, roomID string) ([]string, error)
 	getRoomAlarmsWithTypesFn    func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
 	listRoomAlarmsViewFn        func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
 	clearRoomAlarmsFn           func(ctx context.Context, roomID string) (int, error)
-	updateAlarmAdvanceMinutesFn func(minutes int) []int
-	getTargetMinutesFn          func() []int
+	updateAlarmAdvanceMinutesFn func(minutes int) (domain.AdvanceMinutesResult, error)
 	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
 	getAllAlarmKeysFn           func(ctx context.Context) ([]*domain.AlarmEntry, error)
-	warmCacheFromDBFn           func(ctx context.Context) error
 }
 
 func (m *mockAlarmCRUD) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
@@ -78,15 +75,6 @@ func (m *mockAlarmCRUD) RemoveHostAlarm(ctx context.Context, roomID, channelID, 
 	out, err := m.removeHostAlarmFn(ctx, roomID, channelID, hostID, alarmTypes)
 	if err != nil {
 		return out, fmt.Errorf("remove host alarm fn: %w", err)
-	}
-
-	return out, nil
-}
-
-func (m *mockAlarmCRUD) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
-	out, err := m.getRoomAlarmsFn(ctx, roomID)
-	if err != nil {
-		return out, fmt.Errorf("get room alarms fn: %w", err)
 	}
 
 	return out, nil
@@ -119,12 +107,8 @@ func (m *mockAlarmCRUD) ClearRoomAlarms(ctx context.Context, roomID string) (int
 	return out, nil
 }
 
-func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
+func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) (domain.AdvanceMinutesResult, error) {
 	return m.updateAlarmAdvanceMinutesFn(minutes)
-}
-
-func (m *mockAlarmCRUD) GetTargetMinutes() []int {
-	return m.getTargetMinutesFn()
 }
 
 func (m *mockAlarmCRUD) SetRoomName(ctx context.Context, roomID, roomName string) error {
@@ -142,14 +126,6 @@ func (m *mockAlarmCRUD) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	}
 
 	return out, nil
-}
-
-func (m *mockAlarmCRUD) WarmCacheFromDB(ctx context.Context) error {
-	if err := m.warmCacheFromDBFn(ctx); err != nil {
-		return fmt.Errorf("warm cache from DB fn: %w", err)
-	}
-
-	return nil
 }
 
 // newTestHandler: 테스트용 핸들러와 gin.Engine을 생성합니다.
@@ -465,15 +441,15 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	tests := []struct {
 		name       string
 		body       any
-		mockFn     func(minutes int) []int
+		mockFn     func(minutes int) (domain.AdvanceMinutesResult, error)
 		wantStatus int
 		wantOK     bool
 	}{
 		{
 			name: "성공",
 			body: UpdateAdvanceMinutesRequest{Minutes: 10},
-			mockFn: func(_ int) []int {
-				return []int{5, 10}
+			mockFn: func(minutes int) (domain.AdvanceMinutesResult, error) {
+				return domain.AdvanceMinutesResult{RequestedMinutes: minutes, Outcome: domain.ApplyConfirmed, TargetMinutes: []int{5, 10}}, nil
 			},
 			wantStatus: http.StatusOK,
 			wantOK:     true,

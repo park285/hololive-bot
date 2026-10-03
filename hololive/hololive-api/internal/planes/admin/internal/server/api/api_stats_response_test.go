@@ -12,9 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
+	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 const systemStatsPath = "/api/holo/stats/system"
@@ -58,9 +59,9 @@ func newSystemStatsStreamFixture(t *testing.T) *systemStatsStreamFixture {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	oldUpgrader := sharedserver.WSUpgrader
+	oldUpgrader := adminhandlers.WSUpgrader
 
-	sharedserver.WSUpgrader = websocket.Upgrader{
+	adminhandlers.WSUpgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(*http.Request) bool {
@@ -69,12 +70,12 @@ func newSystemStatsStreamFixture(t *testing.T) *systemStatsStreamFixture {
 	}
 
 	t.Cleanup(func() {
-		sharedserver.WSUpgrader = oldUpgrader
+		adminhandlers.WSUpgrader = oldUpgrader
 	})
 
 	handler := &StatsHandler{Handler: &Handler{
 		logger:      newDiscardLogger(),
-		systemStats: system.NewCollector(nil),
+		systemStats: system.NewCollector(nil, sharedh3.ClientOptions{}),
 	}}
 
 	done := make(chan struct{})

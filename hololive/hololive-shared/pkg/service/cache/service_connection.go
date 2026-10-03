@@ -3,7 +3,6 @@ package cache
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -129,7 +128,7 @@ func (c *Service) waitUntilReady(ctx context.Context, ticks <-chan time.Time) er
 func (c *Service) waitUntilReadyTick(ctx context.Context, ticks <-chan time.Time) (bool, error) {
 	select {
 	case <-ctx.Done():
-		return false, errors.New("timeout waiting for cache store to be ready")
+		return false, fmt.Errorf("timeout waiting for cache store to be ready: %w", ctx.Err())
 	case <-ticks:
 		return c.IsConnected(ctx), nil
 	}

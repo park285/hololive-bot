@@ -1,0 +1,228 @@
+package membernews
+
+import (
+	"context"
+	"reflect"
+	"runtime"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-dbtest"
+)
+
+// 실제 필터가 선택하는 date scan의 UTC midnight을 보존하는 후보 조건입니다.
+const deepReviewPredicate = ` AND (CASE WHEN type='news' THEN COALESCE(pub_date, event_start_date::timestamp AT TIME ZONE 'UTC') ELSE COALESCE(event_start_date::timestamp AT TIME ZONE 'UTC', pub_date) END) >= $1 AND (CASE WHEN type='news' THEN COALESCE(pub_date, event_start_date::timestamp AT TIME ZONE 'UTC') ELSE COALESCE(event_start_date::timestamp AT TIME ZONE 'UTC', pub_date) END) < $2`
+
+type deepReviewQuerier struct {
+	memberNewsQuerier
+	start, end time.Time
+	calls      int
+}
+
+func (q *deepReviewQuerier) Query(ctx context.Context, sql string, args ...any) (rowsScanner, error) {
+	q.calls++
+	return q.memberNewsQuerier.Query(ctx, sql+deepReviewPredicate, q.start, q.end)
+}
+func deepReviewIDs(cs []model.FilteredCandidate) []int {
+	out := make([]int, len(cs))
+	for i := range cs {
+		out[i] = cs[i].Candidate.ID
+	}
+	sort.Ints(out)
+	return out
+}
+func deepReviewBounds(now time.Time, period model.Period) (time.Time, time.Time) {
+	k := time.FixedZone("KST", 9*3600)
+	n := now.In(k)
+	if period == model.PeriodMonthly {
+		s := time.Date(n.Year(), n.Month(), 1, 0, 0, 0, 0, k)
+		return s, s.AddDate(0, 1, 0)
+	}
+	s := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, k)
+	return s.AddDate(0, 0, -7), s.AddDate(0, 0, 22)
+}
+
+func TestDeepReviewPeriodSQL(t *testing.T) {
+	p := dbtest.NewBlankPool(t)
+	ctx := t.Context()
+	_, err := p.Exec(ctx, `CREATE TABLE major_events(id int PRIMARY KEY,type varchar(20) NOT NULL,title varchar(500) NOT NULL,description text,members text[],pub_date timestamptz,event_start_date date,link varchar(1000),status text NOT NULL,link_status varchar(20)); CREATE INDEX ON major_events(event_start_date); CREATE INDEX ON major_events(status,type,event_start_date);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.FixedZone("KST", 9*3600))
+	id := 0
+	for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly} {
+		start, end := deepReviewBounds(now, period)
+		pubs := []any{nil, start.Add(-time.Microsecond), start, start.Add(time.Microsecond), end.Add(-time.Microsecond), end, end.Add(time.Microsecond)}
+		dates := []any{nil, start.AddDate(0, 0, -1).Format("2006-01-02"), start.Format("2006-01-02"), end.AddDate(0, 0, -1).Format("2006-01-02"), end.Format("2006-01-02")}
+		for _, typ := range []string{"news", "event"} {
+			for _, pub := range pubs {
+				for _, date := range dates {
+					id++
+					_, err = p.Exec(ctx, `INSERT INTO major_events VALUES($1,$2,'미코 행사','미코 공식 기사',ARRAY['미코'],$3,$4,'https://hololive.hololivepro.com/x','active','unchecked')`, id, typ, pub, date)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}
+	}
+	// 한 연결에서 timezone을 바꾸어 암묵 cast의 영향을 분리합니다.
+	for _, zone := range []string{"UTC", "Asia/Seoul", "America/Los_Angeles", "Pacific/Kiritimati"} {
+		conn, err := p.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = conn.Exec(ctx, `SELECT set_config('TimeZone',$1,false)`, zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, period := range []model.Period{model.PeriodWeekly, model.PeriodMonthly} {
+			start, end := deepReviewBounds(now, period)
+			for _, pred := range []struct{ name, sql string }{{"explicit_utc", deepReviewPredicate}, {"implicit_cast", strings.ReplaceAll(deepReviewPredicate, "event_start_date::timestamp AT TIME ZONE 'UTC'", "event_start_date")}} {
+				fetch := func(sql string, args ...any) []model.Candidate {
+					rows, e := conn.Query(ctx, sql, args...)
+					if e != nil {
+						t.Fatal(e)
+					}
+					defer rows.Close()
+					var out []model.Candidate
+					for rows.Next() {
+						var c model.Candidate
+						var typ string
+						e = rows.Scan(&c.ID, &typ, &c.Title, &c.Description, &c.Members, &c.PubDate, &c.EventStartDate, &c.SourceURL)
+						if e != nil {
+							t.Fatal(e)
+						}
+						c.Type = domainMajorEventType(typ)
+						out = append(out, c)
+					}
+					if rows.Err() != nil {
+						t.Fatal(rows.Err())
+					}
+					return out
+				}
+				all := fetch(mustSQL("repository_query_0129_04.sql"))
+				cut := fetch(mustSQL("repository_query_0129_04.sql")+pred.sql, start, end)
+				full := filter.FilterCandidates(all, period, now, []string{"미코"}, nil, nil)
+				filtered := filter.FilterCandidates(cut, period, now, []string{"미코"}, nil, nil)
+				same := reflect.DeepEqual(deepReviewIDs(full), deepReviewIDs(filtered))
+				t.Logf("period=%s zone=%s predicate=%s total=%d full_final=%d cut_raw=%d cut_final=%d same=%t", period, zone, pred.name, len(all), len(full), len(cut), len(filtered), same)
+				if pred.name == "explicit_utc" && !same {
+					t.Fatal("prefilter changed selected IDs")
+				}
+			}
+		}
+		conn.Release()
+	}
+	// 합성 데이터: 1%가 대상 기간이며, 나머지는 start_date가 NULL인 과거 news입니다.
+	_, err = p.Exec(ctx, `TRUNCATE major_events; INSERT INTO major_events SELECT i,'news','미코 행사 '||i,repeat('미코 공식 기사 ',64),ARRAY['미코'],CASE WHEN i%100=0 THEN '2026-10-02T03:00:00Z'::timestamptz ELSE '2020-01-01T00:00:00Z'::timestamptz END,NULL,'https://hololive.hololivepro.com/'||i,'active','unchecked' FROM generate_series(1,10000) i; ANALYZE major_events`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, end := deepReviewBounds(now, model.PeriodWeekly)
+	base := newPGXMemberNewsQuerier(p)
+	allRepo := &Repository{pool: base}
+	cutQ := &deepReviewQuerier{memberNewsQuerier: base, start: start, end: end}
+	cutRepo := &Repository{pool: cutQ}
+	for _, tc := range []struct {
+		name string
+		repo *Repository
+		once bool
+	}{{"full_per_room", allRepo, false}, {"period_per_room", cutRepo, false}, {"period_run_snapshot", cutRepo, true}} {
+		for rep := range 5 {
+			runtime.GC()
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			begin := time.Now()
+			scanned, textBytes, final := 0, 0, 0
+			var snapshot []model.Candidate
+			if tc.once {
+				snapshot, err = tc.repo.ListActiveMajorEvents(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				scanned += len(snapshot)
+				for _, c := range snapshot {
+					textBytes += len(c.Title) + len(c.Description) + len(c.SourceURL)
+				}
+			}
+			for range 20 {
+				cs := snapshot
+				if !tc.once {
+					cs, err = tc.repo.ListActiveMajorEvents(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+					scanned += len(cs)
+					for _, c := range cs {
+						textBytes += len(c.Title) + len(c.Description) + len(c.SourceURL)
+					}
+				}
+				final += len(filter.FilterCandidates(cs, model.PeriodWeekly, now, []string{"미코"}, nil, nil))
+			}
+			elapsed := time.Since(begin)
+			runtime.ReadMemStats(&after)
+			queries := 20
+			if tc.once {
+				queries = 1
+			}
+			t.Logf("measurement=%s rep=%d rooms=20 rows=%d queries=%d text_bytes=%d final=%d elapsed_us=%d alloc_bytes=%d allocs=%d", tc.name, rep, scanned, queries, textBytes, final, elapsed.Microseconds(), after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs)
+		}
+	}
+	for _, tc := range []struct {
+		name, sql string
+		args      []any
+	}{{"full", mustSQL("repository_query_0129_04.sql"), nil}, {"period", mustSQL("repository_query_0129_04.sql") + deepReviewPredicate, []any{start, end}}} {
+		rows, e := p.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+tc.sql, tc.args...)
+		if e != nil {
+			t.Fatal(e)
+		}
+		for rows.Next() {
+			var line string
+			if e = rows.Scan(&line); e != nil {
+				t.Fatal(e)
+			}
+			t.Logf("explain=%s %s", tc.name, line)
+		}
+		rows.Close()
+	}
+
+	_, err = p.Exec(ctx, `CREATE INDEX review_period_idx ON major_events ((CASE WHEN type='news' THEN COALESCE(pub_date, event_start_date::timestamp AT TIME ZONE 'UTC') ELSE COALESCE(event_start_date::timestamp AT TIME ZONE 'UTC', pub_date) END)) WHERE status='active' AND type IN ('news','event') AND COALESCE(link_status,'unchecked') NOT IN ('failed','blocked'); ANALYZE major_events`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rep := range 5 {
+		runtime.GC()
+		var a, z runtime.MemStats
+		runtime.ReadMemStats(&a)
+		begin := time.Now()
+		final := 0
+		for range 20 {
+			cs, e := cutRepo.ListActiveMajorEvents(ctx)
+			if e != nil {
+				t.Fatal(e)
+			}
+			final += len(filter.FilterCandidates(cs, model.PeriodWeekly, now, []string{"미코"}, nil, nil))
+		}
+		elapsed := time.Since(begin)
+		runtime.ReadMemStats(&z)
+		t.Logf("measurement=period_indexed_per_room rep=%d rooms=20 final=%d elapsed_us=%d alloc_bytes=%d allocs=%d", rep, final, elapsed.Microseconds(), z.TotalAlloc-a.TotalAlloc, z.Mallocs-a.Mallocs)
+	}
+	rows, e := p.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+mustSQL("repository_query_0129_04.sql")+deepReviewPredicate, start, end)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for rows.Next() {
+		var line string
+		if e = rows.Scan(&line); e != nil {
+			t.Fatal(e)
+		}
+		t.Logf("explain=period_indexed %s", line)
+	}
+	rows.Close()
+}

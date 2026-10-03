@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 )
 
 func TestRunConfigCheck(t *testing.T) {
@@ -90,10 +90,10 @@ func TestRunHololiveAPIInitializesAndRunsFxApplication(t *testing.T) {
 	applicationBuilt := false
 	dependencies := startupDependencies{
 		initialize: func(version string) { initializedVersion = version },
-		loadConfig: func() (*apiplane.RuntimeConfig, error) {
+		loadConfig: func() (*apiconfig.RuntimeConfig, error) {
 			return config, nil
 		},
-		newLogger: func(got *apiplane.RuntimeConfig) (loggerResult, error) {
+		newLogger: func(got *apiconfig.RuntimeConfig) (loggerResult, error) {
 			if got != config {
 				t.Fatal("newLogger() received a different config")
 			}
@@ -102,7 +102,7 @@ func TestRunHololiveAPIInitializesAndRunsFxApplication(t *testing.T) {
 		},
 		newApplication: func(
 			ctx context.Context,
-			got *apiplane.RuntimeConfig,
+			got *apiconfig.RuntimeConfig,
 			_ *slog.Logger,
 			version string,
 		) (hololiveAPIApplication, error) {
@@ -143,15 +143,15 @@ func TestRunHololiveAPIStopsBeforeLoggerAndFxOnConfigFailure(t *testing.T) {
 	applicationCalled := false
 	dependencies := startupDependencies{
 		initialize: func(string) {},
-		loadConfig: func() (*apiplane.RuntimeConfig, error) {
+		loadConfig: func() (*apiconfig.RuntimeConfig, error) {
 			return nil, errors.New("postgres://user:canary-secret@db:5432/app")
 		},
-		newLogger: func(*apiplane.RuntimeConfig) (loggerResult, error) {
+		newLogger: func(*apiconfig.RuntimeConfig) (loggerResult, error) {
 			loggerCalled = true
 
 			return loggerResult{}, errors.New("newLogger must not be called")
 		},
-		newApplication: func(context.Context, *apiplane.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error) {
+		newApplication: func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error) {
 			applicationCalled = true
 
 			return nil, errors.New("newApplication must not be called")
@@ -176,16 +176,16 @@ func TestRunHololiveAPIReturnsOneAfterFxConstructionFailure(t *testing.T) {
 	buildErr := errors.New("Fx graph failed")
 	dependencies := startupDependencies{
 		initialize: func(string) {},
-		loadConfig: func() (*apiplane.RuntimeConfig, error) {
+		loadConfig: func() (*apiconfig.RuntimeConfig, error) {
 			return mainTestConfig(), nil
 		},
-		newLogger: func(*apiplane.RuntimeConfig) (loggerResult, error) {
+		newLogger: func(*apiconfig.RuntimeConfig) (loggerResult, error) {
 			return loggerResult{
 				logger: slog.New(slog.NewTextHandler(&logs, nil)),
 				closer: &mainTestCloser{},
 			}, nil
 		},
-		newApplication: func(context.Context, *apiplane.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error) {
+		newApplication: func(context.Context, *apiconfig.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error) {
 			return nil, buildErr
 		},
 		stderr: io.Discard,
@@ -216,11 +216,11 @@ func (*mainTestCloser) Close() error {
 	return nil
 }
 
-func mainTestConfig() *apiplane.RuntimeConfig {
-	return &apiplane.RuntimeConfig{
+func mainTestConfig() *apiconfig.RuntimeConfig {
+	return &apiconfig.RuntimeConfig{
 		Bot:   &settings.Config{Server: settings.ServerConfig{Port: 30001}},
 		Admin: &settings.Config{Server: settings.ServerConfig{Port: 30006}},
-		LLM:   &apiplane.LLMSchedulerConfig{Server: settings.ServerConfig{Port: 30003}},
+		LLM:   &apiconfig.LLMSchedulerConfig{Server: settings.ServerConfig{Port: 30003}},
 		Logging: settings.LoggingConfig{
 			Level: "info",
 		},

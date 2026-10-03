@@ -202,6 +202,21 @@ func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 			t.Fatalf("goroutine %d len = %d, want 3", i, len(results[i]))
 		}
 	}
+
+	firstMember := results[0][0]
+
+	results[0][0] = nil
+
+	for i := 1; i < goroutines; i++ {
+		if results[i][0] != firstMember {
+			t.Fatalf("caller 0 mutated caller %d's result slice", i)
+		}
+	}
+
+	cached, err := c.AllMembers(t.Context())
+	if err != nil || cached[0] != firstMember {
+		t.Fatalf("caller mutated cached snapshot: members=%v error=%v", cached, err)
+	}
 }
 
 func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {

@@ -1,14 +1,10 @@
 # internal/app
 
-`hololive-kakao-bot-go` 런타임의 부트스트랩 진입점이다.
+`hololive-api` bot plane의 bootstrap 및 HTTP 구성 helper입니다.
 
-원칙:
+- `bootstrap/`은 provider·service·서버 구성을 소유합니다.
+- `http/`는 router·middleware·route 및 shortlink handler를 소유합니다.
+- 시작·종료와 HTTP server helper는 bot plane의 `runtime/`이 소유합니다.
+- 얇은 중복 wrapper와 그것만 검증하는 시험을 추가하지 않습니다.
 
-- 루트 `internal/app` 는 façade / orchestration 역할만 유지한다.
-- 구현은 `internal/app/http`, `internal/app/runtime`, `internal/app/bootstrap` 아래에 둔다.
-- 얇은 중복 wrapper 와 불필요한 추가 테스트 파일 누적을 피한다.
-
-참조:
-
-- `docs/current/architecture/app-bootstrap-boundary-guide.md`
-- `docs/current/ALARM_DISPATCH_REMEDIATION_20260414.md`
+현재 경계는 저장소의 `docs/current/architecture/app-bootstrap-boundary-guide.md`를 따릅니다.

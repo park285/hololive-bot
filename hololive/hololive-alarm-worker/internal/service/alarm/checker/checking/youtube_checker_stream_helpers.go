@@ -26,8 +26,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
 
 func (c *YouTubeChecker) buildChannelNotifications(
@@ -35,7 +35,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 	channelID string,
 	subscriberRooms []string,
 	streams []*domain.Stream,
-	window sharedchecker.EvaluationWindow,
+	window targetpolicy.EvaluationWindow,
 	now time.Time,
 	sentRoomsByStreamID map[string]map[string]struct{},
 	liveObservedAtByStreamID ...map[string]time.Time,

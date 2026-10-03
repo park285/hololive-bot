@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -129,7 +130,7 @@ func assembleDispatcher(
 	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config)
 	grouper := newOutboxGrouper(deps.DB, deps.Cache, logger, &config)
-	formatter := newMessageFormatter(deps.Renderer, deps.Cache, logger, deps.MessageStrings)
+	formatter := format.NewMessageFormatter(deps.Renderer, deps.Cache, logger, deps.MessageStrings)
 
 	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, nil, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)

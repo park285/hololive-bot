@@ -6,8 +6,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 func LoadWorkerProfile() (*settings.YouTubeCollectorWorkerProfile, error) {
@@ -53,7 +53,7 @@ func validateWorkerProfile(profile *settings.YouTubeCollectorWorkerProfile) erro
 		"collection.release_jitter_max_ms":         profile.Collection.ReleaseJitterMaxMS,
 	}
 
-	problems = append(problems, load.PositiveValueProblems(positive)...)
+	problems = append(problems, runtimepolicy.PositiveValueProblems(positive)...)
 
 	worker := workers["collection"]
 
@@ -61,7 +61,7 @@ func validateWorkerProfile(profile *settings.YouTubeCollectorWorkerProfile) erro
 	problems = append(problems, concurrencyProblems(profile, &worker)...)
 	problems = append(problems, timingProblems(profile)...)
 
-	if err := load.JoinWorkerProfileProblems("youtube-collector", problems); err != nil {
+	if err := runtimepolicy.JoinWorkerProfileProblems("youtube-collector", problems); err != nil {
 		return fmt.Errorf("join worker profile problems: %w", err)
 	}
 

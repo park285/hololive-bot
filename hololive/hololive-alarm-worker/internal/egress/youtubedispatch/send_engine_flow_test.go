@@ -15,6 +15,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 )
 
@@ -146,7 +147,7 @@ func (s *flowTestSender) SendMessage(ctx context.Context, _, _ string) error {
 }
 
 func newFlowTestSendEngine(sender *flowTestSender, timeout time.Duration) *SendEngine {
-	return newSendEngine(sender, &MessageFormatter{}, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	return newSendEngine(sender, &format.MessageFormatter{}, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliverySendTimeout: timeout,
 	}, nil, nil, nil, &lifecycleTransitionSpy{})
 }

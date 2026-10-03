@@ -1,0 +1,252 @@
+package dispatchops
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	dbtest "github.com/kapu/hololive-dbtest"
+)
+
+func expansionSummaryRows(ctx context.Context, p *pgxpool.Pool, sql string) ([]StatusCount, error) {
+	rows, err := p.Query(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []StatusCount{}
+	for rows.Next() {
+		var x StatusCount
+		if err = rows.Scan(&x.Status, &x.Count, &x.OldestAt); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+func TestExpansionSummaryCost(t *testing.T) {
+	p := dbtest.NewBlankPool(t)
+	ctx := t.Context()
+	root, e := os.Getwd()
+	if e != nil {
+		t.Fatal(e)
+	}
+	for {
+		if _, e = os.Stat(filepath.Join(root, "go.work")); e == nil {
+			break
+		}
+		next := filepath.Dir(root)
+		if next == root {
+			t.Fatal("workspace not found")
+		}
+		root = next
+	}
+	baseline, e := os.ReadFile(filepath.Join(root, "hololive/hololive-api/scripts/migrations/001_schema_epoch2_baseline.sql"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	from := strings.Index(string(baseline), "CREATE TABLE public.alarm_dispatch_deliveries (")
+	if from < 0 {
+		t.Fatal("table missing")
+	}
+	suffix := string(baseline[from:])
+	end := strings.Index(suffix, ";\n")
+	if end < 0 {
+		t.Fatal("table end missing")
+	}
+	if _, e = p.Exec(ctx, suffix[:end+1]); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = p.Exec(ctx, `ALTER TABLE alarm_dispatch_deliveries ADD PRIMARY KEY(id); CREATE INDEX idx_alarm_dispatch_deliveries_status_created ON alarm_dispatch_deliveries(status,created_at DESC)`); e != nil {
+		t.Fatal(e)
+	}
+	oldSQL := querySQL("summary")
+	newSQL := strings.Replace(oldSQL, "count(id)", "count(*)", 1)
+	for _, size := range []int{10000, 100000, 500000} {
+		if _, e = p.Exec(ctx, `TRUNCATE alarm_dispatch_deliveries`); e != nil {
+			t.Fatal(e)
+		}
+		_, e = p.Exec(ctx, `INSERT INTO alarm_dispatch_deliveries(id,event_id,room_id,dedupe_key,status,created_at,sent_at,dlq_at,last_error)
+   SELECT i,i%1000+1,'room-'||(i%1000),i::text,CASE WHEN i%100=0 THEN 'pending' WHEN i%100=1 THEN 'dlq' ELSE 'sent' END,
+   '2026-10-02'::timestamptz-(i%7776000)*interval '1 second',CASE WHEN i%100 NOT IN (0,1) THEN '2026-10-02'::timestamptz END,
+   CASE WHEN i%100=1 THEN '2026-10-02'::timestamptz END,repeat('synthetic error ',16)
+   FROM generate_series(1,$1::int) i`, size)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = p.Exec(ctx, "VACUUM (ANALYZE) alarm_dispatch_deliveries"); e != nil {
+			t.Fatal(e)
+		}
+		reference, e := expansionSummaryRows(ctx, p, oldSQL)
+		if e != nil {
+			t.Fatal(e)
+		}
+		alternative, e := expansionSummaryRows(ctx, p, newSQL)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if !reflect.DeepEqual(reference, alternative) {
+			t.Fatal("summary values differ")
+		}
+		for _, variant := range []struct{ name, sql string }{{"count_id", oldSQL}, {"count_star", newSQL}} {
+			measurements := []float64{}
+			for range 7 {
+				begin := time.Now()
+				got, e := expansionSummaryRows(ctx, p, variant.sql)
+				if e != nil {
+					t.Fatal(e)
+				}
+				if !reflect.DeepEqual(got, reference) {
+					t.Fatal("summary changed")
+				}
+				measurements = append(measurements, float64(time.Since(begin).Microseconds())/1000)
+			}
+			slices.Sort(measurements)
+			t.Logf("summary_rows=%d variant=%s median_ms=%.3f min_ms=%.3f max_ms=%.3f", size, variant.name, measurements[3], measurements[0], measurements[6])
+			rows, e := p.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+variant.sql)
+			if e != nil {
+				t.Fatal(e)
+			}
+			for rows.Next() {
+				var line string
+				if e = rows.Scan(&line); e != nil {
+					t.Fatal(e)
+				}
+				t.Logf("plan_rows=%d variant=%s %s", size, variant.name, line)
+			}
+			rows.Close()
+		}
+		if size == 500000 {
+			config := p.Config().Copy()
+			config.MaxConns = 4
+			config.MinConns = 0
+			limited, e := pgxpool.NewWithConfig(ctx, config)
+			if e != nil {
+				t.Fatal(e)
+			}
+			warm := make([]*pgxpool.Conn, 0, 4)
+			for range 4 {
+				connection, err := limited.Acquire(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				warm = append(warm, connection)
+			}
+			for _, connection := range warm {
+				connection.Release()
+			}
+			for _, variant := range []struct{ name, sql string }{{"count_id", oldSQL}, {"count_star", newSQL}} {
+				gate := make(chan struct{})
+				results := make(chan float64, 12)
+				errs := make(chan error, 12)
+				var wg sync.WaitGroup
+				before := limited.Stat()
+				start := time.Now()
+				for range 12 {
+					wg.Go(func() {
+						<-gate
+						begin := time.Now()
+						_, err := expansionSummaryRows(ctx, limited, variant.sql)
+						results <- float64(time.Since(begin).Microseconds()) / 1000
+						errs <- err
+					})
+				}
+				close(gate)
+				wg.Wait()
+				close(results)
+				close(errs)
+				for e := range errs {
+					if e != nil {
+						t.Fatal(e)
+					}
+				}
+				times := []float64{}
+				for x := range results {
+					times = append(times, x)
+				}
+				slices.Sort(times)
+				after := limited.Stat()
+				t.Logf("concurrent_summary variant=%s callers=12 max_pool=4 median_ms=%.3f max_ms=%.3f total_ms=%d acquire_wait_ms=%d empty_acquires=%d", variant.name, (times[5]+times[6])/2, times[11], time.Since(start).Milliseconds(), (after.EmptyAcquireWaitTime() - before.EmptyAcquireWaitTime()).Milliseconds(), after.EmptyAcquireCount()-before.EmptyAcquireCount())
+			}
+			limited.Close()
+			if _, e = p.Exec(ctx, "UPDATE alarm_dispatch_deliveries SET updated_at=updated_at + interval '1 second' WHERE id%20=0"); e != nil {
+				t.Fatal(e)
+			}
+			for _, variant := range []struct{ name, sql string }{{"count_id", oldSQL}, {"count_star", newSQL}} {
+				churnTimes := make([]float64, 0, 7)
+				for range 7 {
+					begin := time.Now()
+					got, err := expansionSummaryRows(ctx, p, variant.sql)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !reflect.DeepEqual(got, reference) {
+						t.Fatal("updated summary changed")
+					}
+					churnTimes = append(churnTimes, float64(time.Since(begin).Microseconds())/1000)
+				}
+				slices.Sort(churnTimes)
+				t.Logf("after_update rows=%d variant=%s median_ms=%.3f min_ms=%.3f max_ms=%.3f", size, variant.name, churnTimes[3], churnTimes[0], churnTimes[6])
+				rows, e := p.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+variant.sql)
+				if e != nil {
+					t.Fatal(e)
+				}
+				for rows.Next() {
+					var line string
+					if e = rows.Scan(&line); e != nil {
+						t.Fatal(e)
+					}
+					t.Logf("churn_plan variant=%s %s", variant.name, line)
+				}
+				rows.Close()
+			}
+		}
+	}
+}
+func TestExpansionErrorCodeRoundTrip(t *testing.T) {
+	repo, p := setupOpsIntegration(t)
+	ids := seedOpsGroup(t, p, 1, false)
+	all, err := repo.Failures(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all.ErrorCodes) != 1 {
+		t.Fatal(all)
+	}
+	value := all.ErrorCodes[0].Value
+	_, err = repo.List(t.Context(), Filter{ErrorCode: value})
+	if value != "SEND_FAILED" || !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unexpected roundtrip value=%q err=%v", value, err)
+	}
+	if _, e := p.Exec(t.Context(), "UPDATE alarm_dispatch_deliveries SET last_error_code='provider.timeout' WHERE id=$1", mustExpansionID(t, ids[0])); e != nil {
+		t.Fatal(e)
+	}
+	all, e := repo.Failures(t.Context())
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, second := repo.List(t.Context(), Filter{ErrorCode: all.ErrorCodes[0].Value})
+	t.Logf("displayed_code=%s filter_error=%v dotted_display=%s dotted_filter_error=%v", value, err, all.ErrorCodes[0].Value, second)
+}
+func mustExpansionID(t *testing.T, s string) int64 {
+	t.Helper()
+	id, e := strconv.ParseInt(s, 10, 64)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return id
+}
+func BenchmarkExpansionQuerySQL(b *testing.B) {
+	for b.Loop() {
+		_ = querySQL("failures")
+	}
+}

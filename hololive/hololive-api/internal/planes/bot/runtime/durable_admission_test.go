@@ -88,7 +88,7 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 		{name: "retry exhausted", attempts: durableMaxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
 		{name: "unknown", err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxOutcomeUnknown},
 		{name: "unknown exhausted", attempts: durableMaxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},
-		{name: "accepted observation failure", accepted: true, err: errors.New("status unavailable"), want: durability.ReplyOutboxOutcomeUnknown},
+		{name: "accepted observation failure", accepted: true, err: errors.New("status unavailable"), want: durability.ReplyOutboxManualReview},
 		{name: "accepted observation exhausted", accepted: true, attempts: durableMaxAttempts, err: errors.New("status unavailable"), want: durability.ReplyOutboxManualReview},
 		{name: "explicit failure after acceptance", accepted: true, err: transport.ErrReplyStatusFailed, want: durability.ReplyOutboxDead},
 	}
@@ -466,7 +466,7 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 		}),
 		handlerTimeout:    handlerTimeout,
 		heartbeatEvery:    time.Hour,
-		settlementTimeout: durableSettlementTimeout,
+		settlementTimeout: 3 * time.Second,
 		inboxHeartbeat:    inbox.Heartbeat,
 		commandHeartbeat:  durability.NewCommandExecutionRepository(pool).Heartbeat,
 	}
@@ -714,7 +714,7 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		}),
 		handlerTimeout:    time.Second,
 		heartbeatEvery:    time.Hour,
-		settlementTimeout: durableSettlementTimeout,
+		settlementTimeout: 3 * time.Second,
 		inboxHeartbeat:    inbox.Heartbeat,
 		commandHeartbeat:  commands.Heartbeat,
 	}

@@ -25,13 +25,13 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
 func promptFixtureInput() *model.SummarizeInput {
 	return &model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, timeutil.KSTZone),
 		RoomMembers: []string{testMemberSuisei, testMemberMiko},
 		Candidates: []model.FilteredCandidate{
 			{
@@ -39,22 +39,24 @@ func promptFixtureInput() *model.SummarizeInput {
 					Title:       "EXPO",
 					Description: "official news",
 				},
-				EffectiveDate: time.Date(2026, time.February, 20, 12, 0, 0, 0, util.KSTZone),
-				MemberText:    testMemberMiko,
-				Category:      model.CategoryEvent,
-				SourceTier:    model.SourceTierOfficial,
-				SourceURL:     testSourceURLNews1,
+				EffectiveDate:  time.Date(2026, time.February, 20, 12, 0, 0, 0, timeutil.KSTZone),
+				MemberText:     testMemberMiko,
+				MatchedMembers: []string{testMemberMiko},
+				Category:       model.CategoryEvent,
+				SourceTier:     model.SourceTierOfficial,
+				SourceURL:      testSourceURLNews1,
 			},
 			{
 				Candidate: model.Candidate{
 					Title:       "SUISEI LIVE",
 					Description: "official event",
 				},
-				EffectiveDate: time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
-				MemberText:    testMemberSuisei,
-				Category:      model.CategorySoloLive,
-				SourceTier:    model.SourceTierOfficial,
-				SourceURL:     "https://hololive.hololivepro.com/news/2",
+				EffectiveDate:  time.Date(2026, time.February, 21, 12, 0, 0, 0, timeutil.KSTZone),
+				MemberText:     testMemberSuisei,
+				MatchedMembers: []string{testMemberSuisei},
+				Category:       model.CategorySoloLive,
+				SourceTier:     model.SourceTierOfficial,
+				SourceURL:      "https://hololive.hololivepro.com/news/2",
 			},
 		},
 	}

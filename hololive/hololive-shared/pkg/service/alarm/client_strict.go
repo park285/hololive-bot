@@ -8,13 +8,15 @@ import (
 	"strings"
 	"time"
 
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 // 범용 internal client가 쓰는 transport fallback 없이 alarm service client를 만든다.
 // 이 생성자를 big-bang runtime 조립이 쓰는 이유는, CA 누락·잘못된 server name·손상된
 // H3 transport가 bot/admin listener가 트래픽을 받기 전에 실패하도록 하기 위해서다.
-func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger) (*Client, error) {
+func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger, options sharedh3.ClientOptions) (*Client, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		return nil, errors.New("alarm service base URL is required")
@@ -28,16 +30,17 @@ func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger) (*Cl
 		logger = slog.Default()
 	}
 
-	httpClient, err := internalhttp.NewClientForURLStrict(baseURL, 10*time.Second, logger)
+	httpClient, err := internalhttp.NewClientForURLStrict(baseURL, 10*time.Second, options)
 	if err != nil {
 		return nil, fmt.Errorf("configure alarm service transport: %w", err)
 	}
 
 	return &Client{
-		baseURL:    baseURL,
-		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httpClient,
-		logger:     logger,
+		baseURL:         baseURL,
+		apiKey:          strings.TrimSpace(apiKey),
+		httpClient:      httpClient,
+		logger:          logger,
+		advanceRequests: make(chan struct{}, 1),
 	}, nil
 }
 

@@ -50,4 +50,22 @@ fixture의 `cases`는 input, expected canonical UTF-8 text와 lowercase SHA-256�
 
 ## 언어와 runtime 경계
 
+공용 envelope·schema·canonical JSON·hash·lease 값은 `hololive/hololive-shared/pkg/contracts/sourceobservation`에 있습니다. 실행 구현은 다음 owner가 소유하며 이 이관은 저장 schema나 canonical bytes 계약을 바꾸지 않습니다.
+
+| Owner | Source | Responsibility |
+|---|---|---|
+| Collector | `hololive/hololive-youtube-collector/internal/runtime/sourceobservation` | observation publish, checkpoint, collection lease/job 계약 구현 |
+| API | `hololive/hololive-api/internal/youtube/sourceobservation` | claim/consume, canonical persist, replay·retention |
+| API private reducers | `hololive/hololive-api/internal/youtube/reconcile`, `internal/youtube/community` | content/live/viewer/schedule/profile/photo와 community 처리 |
+| Worker clock regression | `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/canonical_fact_clock_test.go` | 실제 publish/consume 관측 시각과 upcoming candidate 종료·일정 변경 검증 |
+
+교차 DB 시험은 API·collector의 `testkit/sourceobservation`으로 실제 양 구현을 호출합니다. private fault hook을 공개하거나 runtime alias를 남기는 방식은 사용하지 않습니다. 저장소 루트에서 다음 owner 시험을 실행합니다.
+
+```bash
+go test ./hololive/hololive-shared/pkg/contracts/sourceobservation \
+  ./hololive/hololive-youtube-collector/internal/runtime/sourceobservation \
+  ./hololive/hololive-api/internal/youtube/sourceobservation \
+  ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
+```
+
 현재 collector는 Go로 유지한다. TypeScript collector는 언어 선호 때문에 도입하지 않는다. YouTube.js의 8개 kind가 실제 활성화된 뒤 helper RPC call 수·latency·CPU 또는 failure amplification이 material bottleneck이라는 동일 workload evidence가 있을 때만 검토한다. 그 검토 전에 Go와 TypeScript 양쪽이 이 fixture를 통과해야 한다.

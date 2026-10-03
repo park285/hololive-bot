@@ -11,12 +11,11 @@ import (
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -50,14 +49,22 @@ type SettingsActivityLogger interface {
 
 type SettingsReadRecentLogsFunc func(limit int) (any, error)
 
+// RoomNameSetter는 관리 화면이 알림 서비스에 요구하는 방 이름 변경 작업만 제공한다.
+type RoomNameSetter interface {
+	SetRoomName(ctx context.Context, roomID, roomName string) error
+}
+
 type SettingsHandler struct {
 	sharedsettings.SettingsApplier
 
 	Logger         *slog.Logger
-	Alarm          domain.AlarmCRUD
+	Alarm          RoomNameSetter
 	Activity       SettingsActivityLogger
 	ReadRecentLogs SettingsReadRecentLogsFunc
 	Settings       settingssvc.ReadWriter
+
+	operationGate *settingsOperationGate
+	operations    settingsOperationGate
 }
 
 // updateSettingsRequest의 scraperProxyEnabled 필드는 DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 소비자인
@@ -71,7 +78,7 @@ type updateLLMSettingsRequest struct {
 }
 
 const (
-	minAlarmAdvanceMinutes = 0
+	minAlarmAdvanceMinutes = 1
 	maxAlarmAdvanceMinutes = 24 * 60
 )
 
@@ -129,6 +136,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
+
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -137,6 +145,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	roomID, roomName, err := contractsalarm.NormalizeRoomName(req.RoomID, *req.RoomName)
 	if err != nil {
 		h.safeLogger().Warn("Invalid room name request", slog.Any("error", err))
+
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -147,10 +156,12 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+
 	defer cancel()
 
 	if err := h.Alarm.SetRoomName(ctx, roomID, roomName); err != nil {
 		h.safeLogger().Error("Failed to set room name", slog.Any("error", err))
+
 		sharedserver.RespondError(c, 500, "Failed to set room name", nil)
 
 		return
@@ -158,7 +169,9 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 
 	if roomName == "" {
 		h.safeLogger().Info("Room name cleared", slog.String("room_id", roomID))
+
 		h.logActivity("name_update", "Room name cleared: "+roomID, map[string]any{"room_id": roomID})
+
 		ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room name cleared"})
 
 		return
@@ -187,6 +200,7 @@ func (h *SettingsHandler) GetLogs(c *gin.Context) {
 	logs, err := h.ReadRecentLogs(100)
 	if err != nil {
 		h.safeLogger().Error("Failed to get logs", slog.Any("error", err))
+
 		sharedserver.RespondError(c, 500, "Failed to get logs", nil)
 
 		return
@@ -200,13 +214,39 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+
+	defer cancel()
+
+	release, err := h.settingsOperationGate().acquire(ctx)
+	if err != nil {
+		h.safeLogger().Warn("Failed to get settings", slog.Any("error", err))
+
+		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to get settings", nil)
+
+		return
+	}
+
+	defer release()
+
 	s := h.Settings.Get()
+
+	if err := ctx.Err(); err != nil {
+		h.safeLogger().Warn("Failed to get settings", slog.Any("error", err))
+
+		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to get settings", nil)
+
+		return
+	}
+
 	runtime := h.SettingsRuntimeState().AsMap()
+
 	ginjson.Respond(c, 200, settingsResponse{Status: "ok", Settings: s, Runtime: runtime})
 }
 
 func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	req, ok := h.bindUpdateSettingsRequest(c)
+
 	if !ok {
 		return
 	}
@@ -215,18 +255,48 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	current := h.Settings.Get()
-	alarmAdvanceUpdated := req.applyTo(&current)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 
-	if err := h.Settings.Update(current); err != nil {
-		h.safeLogger().Error("Failed to update settings", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to update settings", nil)
+	defer cancel()
+
+	release, err := h.settingsOperationGate().acquire(ctx)
+	if err != nil {
+		h.safeLogger().Warn("Failed to update settings", slog.Any("error", err))
+
+		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to update settings", nil)
 
 		return
 	}
 
-	runtime := h.applySettingsRuntime(c.Request.Context(), current, alarmAdvanceUpdated)
-	h.logSettingsUpdate(current, runtime)
+	defer release()
+
+	current := h.Settings.Get()
+
+	if err := ctx.Err(); err != nil {
+		h.safeLogger().Warn("Failed to update settings", slog.Any("error", err))
+
+		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to update settings", nil)
+
+		return
+	}
+
+	alarmAdvanceUpdated := req.applyTo(&current)
+
+	if alarmAdvanceUpdated {
+		if err := h.Settings.Update(current); err != nil {
+			h.safeLogger().Error("Failed to update settings", slog.Any("error", err))
+
+			sharedserver.RespondError(c, 500, "Failed to update settings", nil)
+
+			return
+		}
+	}
+
+	runtime := h.applySettingsRuntime(ctx, current, alarmAdvanceUpdated)
+
+	if alarmAdvanceUpdated {
+		h.logSettingsUpdate(current, runtime)
+	}
 
 	ginjson.Respond(c, 200, settingsUpdateResponse{Status: "ok", Message: "Settings updated", Settings: current, Runtime: runtime})
 }
@@ -236,6 +306,7 @@ func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSetti
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
+
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return req, false
@@ -261,9 +332,11 @@ func validAlarmAdvanceMinutes(minutes *int) bool {
 
 func (req updateSettingsRequest) applyTo(current *settingssvc.Settings) bool {
 	alarmAdvanceUpdated := req.AlarmAdvanceMinutes != nil
+
 	if alarmAdvanceUpdated {
 		current.AlarmAdvanceMinutes = *req.AlarmAdvanceMinutes
-		current.TargetMinutes = sharedchecker.BuildRuntimeTargetMinutes(*req.AlarmAdvanceMinutes)
+
+		current.TargetMinutes = targetpolicy.BuildRuntimeTargetMinutes(*req.AlarmAdvanceMinutes)
 	}
 
 	return alarmAdvanceUpdated
@@ -273,7 +346,11 @@ func (h *SettingsHandler) applySettingsRuntime(ctx context.Context, current sett
 	runtime := map[string]any{}
 
 	if alarmAdvanceUpdated {
-		alarmAdvanceResult := h.ApplyAlarmAdvanceMinutes(ctx, current.AlarmAdvanceMinutes)
+		alarmAdvanceResult, err := h.ApplyAlarmAdvanceMinutes(ctx, current.AlarmAdvanceMinutes)
+		if err != nil {
+			h.safeLogger().Warn("알람 사전 알림 시점 적용 확인 실패", slog.Int("minutes", current.AlarmAdvanceMinutes), slog.Any("error", err))
+		}
+
 		maps.Copy(runtime, alarmAdvanceResult.AsMap())
 	}
 
@@ -289,6 +366,7 @@ func (h *SettingsHandler) logSettingsUpdate(current settingssvc.Settings, runtim
 
 func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 	req, ok := h.bindUpdateLLMSettingsRequest(c)
+
 	if !ok {
 		return
 	}
@@ -302,6 +380,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+
 	defer cancel()
 
 	runtime := map[string]any{}
@@ -329,6 +408,7 @@ func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLL
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
+
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return req, false

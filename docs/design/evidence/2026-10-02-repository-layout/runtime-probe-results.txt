@@ -1,0 +1,109 @@
+temporary_workspace /tmp/hololive-layout-reproduce-9del968r
+COMMAND existing npm test silently skips nested failure npm test
+EXIT 0 EXPECTED 0
+
+> test
+> node --test --test-concurrency=1 src/*.test.mjs
+
+✔ top-level selected (0.753734ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45.262081
+
+COMMAND recursive test selection discovers nested failure node --test --test-concurrency=1 src/**/*.test.mjs
+EXIT 1 EXPECTED 1
+✖ nested failure must be discovered (0.857952ms)
+✔ top-level selected (0.597656ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 85.108171
+
+✖ failing tests:
+
+test at src/rpc/nested.test.mjs:3:1
+✖ nested failure must be discovered (0.857952ms)
+  AssertionError [ERR_ASSERTION]: nested sentinel
+      at TestContext.<anonymous> (file:///tmp/hololive-layout-reproduce-9del968r/node-discovery/src/rpc/nested.test.mjs:3:56)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+COMMAND flat artifact test pruning sh -c rm -f ./src/*.test.mjs
+EXIT 0 EXPECTED 0
+
+REMAINING_TESTS ['src/rpc/nested.test.mjs']
+COMMAND before move strict implicit-any failure /home/kapu/work/iris-stack/hololive-bot/hololive/hololive-youtube-collector/youtubejs/node_modules/.bin/tsc --noEmit --pretty false -p tsconfig.json
+EXIT 1 EXPECTED 1
+src/server.mjs(2,24): error TS7006: Parameter 'value' implicitly has an 'any' type.
+
+COMMAND before move relaxed excludes strict source /home/kapu/work/iris-stack/hololive-bot/hololive/hololive-youtube-collector/youtubejs/node_modules/.bin/tsc --noEmit --pretty false -p jsconfig.json
+EXIT 0 EXPECTED 0
+
+COMMAND after nested move strict no longer includes source /home/kapu/work/iris-stack/hololive-bot/hololive/hololive-youtube-collector/youtubejs/node_modules/.bin/tsc --noEmit --pretty false -p tsconfig.json
+EXIT 0 EXPECTED 0
+
+COMMAND after nested move relaxed allows implicit any /home/kapu/work/iris-stack/hololive-bot/hololive/hololive-youtube-collector/youtubejs/node_modules/.bin/tsc --noEmit --pretty false -p jsconfig.json
+EXIT 0 EXPECTED 0
+
+COMMAND original DeliveryExecutor cannot cross package /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go build ./internal/egress/splitprobe
+EXIT 1 EXPECTED 1
+# github.com/kapu/hololive-alarm-worker/internal/egress/splitprobe
+internal/egress/splitprobe/probe.go:13:29: cannot use (*SendEngine)(nil) (value of type *SendEngine) as youtubedispatch.DeliveryExecutor value in variable declaration: *SendEngine does not implement youtubedispatch.DeliveryExecutor (unexported method dispatchDeliveryRows)
+
+COMMAND moved alarmdispatch and workerapp production compile /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go build ./internal/egress/alarmdispatch ./internal/app/workerapp
+EXIT 0 EXPECTED 0
+
+COMMAND moved alarmdispatch tests compile without running /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go test -c -o /tmp/hololive-layout-reproduce-9del968r/alarmdispatch.test ./internal/egress/alarmdispatch
+EXIT 0 EXPECTED 0
+
+COMMAND alarmdispatch direct imports and embedded queries /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go list -json ./internal/egress/alarmdispatch
+EXIT 0 EXPECTED 0
+DIRECT_IMPORTS ['github.com/kapu/hololive-shared/pkg/config/settings/alarmworker', 'github.com/kapu/hololive-shared/pkg/domain', 'github.com/kapu/hololive-shared/pkg/domain/mekparkhost', 'github.com/kapu/hololive-shared/pkg/pgxutil', 'github.com/kapu/hololive-shared/pkg/providers/modules', 'github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox', 'github.com/kapu/hololive-shared/pkg/service/alarm/queue', 'github.com/kapu/hololive-shared/pkg/service/cache', 'github.com/kapu/hololive-shared/pkg/service/messagestrings', 'github.com/kapu/hololive-shared/pkg/service/officialidentity', 'github.com/kapu/hololive-shared/pkg/service/sendoutcome', 'github.com/kapu/hololive-shared/pkg/service/shortlink', 'github.com/kapu/hololive-shared/pkg/service/template', 'github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format', 'github.com/kapu/hololive-shared/pkg/sqlassets', 'github.com/kapu/hololive-shared/pkg/util']
+EMBED_FILES ['queries/alarm_dispatch_maintenance_0275_01.sql', 'queries/alarm_dispatch_maintenance_0304_02.sql', 'queries/alarm_dispatch_maintenance_0325_03.sql', 'queries/alarm_dispatch_maintenance_0348_04.sql', 'queries/alarm_dispatch_maintenance_0360_05.sql', 'queries/alarm_dispatch_maintenance_0368_05.sql']
+COMMAND pagination moved production compile /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go build ./internal/runtime/collectutil ./internal/runtime/youtubejscollector
+EXIT 0 EXPECTED 0
+
+COMMAND collectutil test compilation /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go test -c -o /tmp/hololive-layout-reproduce-9del968r/collectutil.test ./internal/runtime/collectutil
+EXIT 0 EXPECTED 0
+
+COMMAND provider test compilation /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go test -c -o /tmp/hololive-layout-reproduce-9del968r/youtubejscollector.test ./internal/runtime/youtubejscollector
+EXIT 0 EXPECTED 0
+
+COMMAND moved existing impossible tuple regression /tmp/hololive-layout-reproduce-9del968r/youtubejscollector.test -test.run ^TestPaginationOfRejectsImpossibleTupleAsProtocolFault$ -test.v
+EXIT 0 EXPECTED 0
+=== RUN   TestPaginationOfRejectsImpossibleTupleAsProtocolFault
+=== PAUSE TestPaginationOfRejectsImpossibleTupleAsProtocolFault
+=== CONT  TestPaginationOfRejectsImpossibleTupleAsProtocolFault
+--- PASS: TestPaginationOfRejectsImpossibleTupleAsProtocolFault (0.00s)
+PASS
+
+COMMAND collectutil imports after move /home/kapu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64/bin/go list -json ./internal/runtime/collectutil
+EXIT 0 EXPECTED 0
+DIRECT_IMPORTS ['github.com/kapu/hololive-shared/pkg/contracts/sourceobservation', 'github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation', 'github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr', 'github.com/kapu/hololive-youtube-collector/internal/runtime/joblease']
+EMBED_FILES []
+OLD_GO_HELPER_TEST_SOURCE_EXISTS False
+NEW_HELPER_SOURCE_EXISTS True
+OLD_PROTOCOL_FIXTURE_EXISTS False
+NEW_PROTOCOL_FIXTURE_EXISTS True
+COMMAND moved actual helper entrypoint syntax only node --check /tmp/hololive-layout-reproduce-9del968r/go/hololive/hololive-youtube-collector/helpers/youtubejs/src/server.mjs
+EXIT 0 EXPECTED 0
+
+ALL_PROBES_COMPLETED; no production source or runtime changed

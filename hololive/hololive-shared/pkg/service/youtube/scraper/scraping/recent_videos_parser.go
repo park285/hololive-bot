@@ -8,11 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
-var (
-	findVideosTabContent  = parser.FindVideosTabContent
-	collectVideoRenderers = parser.CollectVideoRenderers
-)
-
 const maxVideoRendererFallbackNodes = parser.MaxVideoRendererFallbackNodes
 
 func parseVideosFromInitialData(

@@ -1,0 +1,135 @@
+package botruntime
+
+import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+)
+
+func TestExpansionDurableStopDoesNotJoinQueueSampler(t *testing.T) {
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	release := make(chan struct{})
+	readDone := make(chan struct{})
+	sampler := workercontract.NewQueueSampler(func(ctx context.Context) (workercontract.QueueValues, error) {
+		close(started)
+		<-ctx.Done()
+		close(canceled)
+		<-release
+		close(readDone)
+		return workercontract.QueueValues{}, ctx.Err()
+	})
+	r := &durableRuntime{logger: slog.New(slog.DiscardHandler), maintenanceEvery: time.Hour, inboxSampler: sampler}
+	parent, cancelParent := context.WithCancel(t.Context())
+	defer cancelParent()
+	r.Start(parent)
+	<-started
+	cancelParent()
+	select {
+	case <-canceled:
+		t.Fatal("sampler inherited parent cancellation")
+	default:
+	}
+	if err := r.Stop(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	<-canceled
+	select {
+	case <-readDone:
+		t.Fatal("held sampler read already exited")
+	default:
+	}
+	t.Log("durable_stop_error=nil sampler_read_active=true source_context_canceled=true; cancellation completion deliberately held")
+	close(release)
+	<-readDone
+}
+
+func TestExpansionBotRawH3ShutdownDistinguishesLiveAndVanishedClient(t *testing.T) {
+	for _, clientState := range []string{"live", "closed", "vanished"} {
+		t.Run(clientState, func(t *testing.T) {
+			fixture := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+			pair := fixture.TLS.Certificates[0]
+			roots := x509.NewCertPool()
+			roots.AddCert(fixture.Certificate())
+			fixture.Close()
+			handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+			h3Server := sharedh3.NewServerWithTLSConfig("", handler, &tls.Config{Certificates: []tls.Certificate{pair}, MinVersion: tls.VersionTLS13})
+			conn, err := (&net.ListenConfig{}).ListenPacket(t.Context(), "udp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			serverDone := make(chan error, 1)
+			go func() { serverDone <- h3Server.Serve(conn) }()
+			defer h3Server.Close()
+			clientConn, err := (&net.ListenConfig{}).ListenPacket(t.Context(), "udp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer clientConn.Close()
+			transport := &http3.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13},
+				Dial: func(ctx context.Context, _ string, cfg *tls.Config, qcfg *quic.Config) (*quic.Conn, error) {
+					return quic.DialEarly(ctx, clientConn, conn.LocalAddr(), cfg, qcfg)
+				},
+			}
+			defer transport.Close()
+			client := &http.Client{Transport: transport, Timeout: time.Second}
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://"+conn.LocalAddr().String()+"/health", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusNoContent {
+				t.Fatalf("status=%d", response.StatusCode)
+			}
+			if err := response.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if clientState == "closed" {
+				if err := transport.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if clientState == "vanished" {
+				if err := clientConn.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r := &BotRuntime{H3Server: h3Server, Logger: slog.New(slog.DiscardHandler)}
+			ctx, cancel := context.WithTimeout(t.Context(), 80*time.Millisecond)
+			defer cancel()
+			start := time.Now()
+			shutdownErr := r.Shutdown(ctx)
+			elapsed := time.Since(start)
+			if clientState != "vanished" && shutdownErr != nil {
+				t.Fatalf("early client close: %v", shutdownErr)
+			}
+			if clientState == "vanished" && !errors.Is(shutdownErr, context.DeadlineExceeded) {
+				t.Fatalf("idle client kept: %v", shutdownErr)
+			}
+			t.Logf("inflight_requests=0 client_state=%s shutdown_error=%v elapsed=%s", clientState, shutdownErr, elapsed)
+			select {
+			case err := <-serverDone:
+				if !errors.Is(err, http.ErrServerClosed) {
+					t.Fatalf("serve err=%v", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("H3 serve did not end")
+			}
+		})
+	}
+}

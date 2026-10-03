@@ -8,9 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -195,7 +195,7 @@ func setLatencyPositiveAge(t *testing.T, pool *pgxpool.Pool, age time.Duration) 
 // 신선한 positive나 종료 이후 다음 refresh가 제거한다.
 func TestProjectionRefreshTracksStaleLiveVideoTransitions(t *testing.T) {
 	pool, refresh := newLatencyProjection(t)
-	interval := apiplane.DefaultYouTubePlaneConfig().TargetProjection.Interval
+	interval := apiconfig.DefaultYouTubePlaneConfig().TargetProjection.Interval
 	budget := defaultLiveFreshnessBudget()
 
 	refresh(time.Now(), "fresh positive")
@@ -268,7 +268,7 @@ func TestProjectionRefreshKeepsPositiveCommittedAfterRefreshClock(t *testing.T) 
 	pool, refresh := newLatencyProjection(t)
 	ctx := t.Context()
 
-	setLatencyPositiveAge(t, pool, defaultLiveFreshnessBudget()+apiplane.DefaultYouTubePlaneConfig().TargetProjection.Interval)
+	setLatencyPositiveAge(t, pool, defaultLiveFreshnessBudget()+apiconfig.DefaultYouTubePlaneConfig().TargetProjection.Interval)
 
 	// 호출자의 refresh 시각을 같은 DB 시계로 잡아 호스트 간 시계 차이 없이 커밋 순서만 남긴다.
 	var captured time.Time

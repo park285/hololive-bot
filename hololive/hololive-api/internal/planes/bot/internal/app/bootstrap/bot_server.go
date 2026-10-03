@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/park285/iris-client-go/v3/webhook"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 
+	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
@@ -32,7 +34,7 @@ func BuildBotHTTP3Server(
 	ctx context.Context,
 	appConfig *settings.Config,
 	webhookHandler *webhook.Handler,
-	triggerHandler *sharedserver.TriggerHandler,
+	triggerHandler *apiserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
 	readyProbe ...*sharedreadiness.Probe,
@@ -49,7 +51,7 @@ func buildBotHTTP3ServerWithReloaderOptions(
 	ctx context.Context,
 	appConfig *settings.Config,
 	webhookHandler *webhook.Handler,
-	triggerHandler *sharedserver.TriggerHandler,
+	triggerHandler *apiserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
 	reloaderOptions sharedh3.CertificateReloaderOptions,
@@ -72,5 +74,28 @@ func buildBotHTTP3ServerWithReloaderOptions(
 		GetCertificate: certReloader.GetCertificate,
 	}
 
-	return sharedh3.NewServerWithTLSConfig(appConfig.Server.H3Addr, botRouter, tlsConfig), certReloader.Start, nil
+	return sharedh3.NewServerWithTLSConfig(appConfig.Server.H3Addr, botRouter, tlsConfig), runBotCertificateReload(certReloader, reloaderOptions), nil
+}
+
+func runBotCertificateReload(reloader *sharedh3.CertificateReloader, options sharedh3.CertificateReloaderOptions) func(context.Context) {
+	interval := options.ReloadInterval
+	if interval <= 0 {
+		interval = sharedh3.DefaultCertificateReloadInterval
+	}
+
+	return func(ctx context.Context) {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := reloader.GetCertificate(nil); err != nil && options.Logger != nil {
+					options.Logger.Warn("bot_h3_certificate_reload_failed", slog.Any("error", err))
+				}
+			}
+		}
+	}
 }

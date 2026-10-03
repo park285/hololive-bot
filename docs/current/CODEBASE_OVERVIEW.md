@@ -4,28 +4,30 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm plane), `alarm-worker`, `youtube-collector`로 Docker Compose production baseline과 AP overlays에서 운영합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙과 Seoul collector `b`는 Docker Compose, Osaka collector `a`와 Osaka2 collector `d`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
 
 ## 큰 구조
 
 ```text
 .
 ├── hololive/
-│   ├── hololive-api/               # Unified runtime: bot/admin/llm planes (webhook ingress, admin API, LLM/news/event scheduler)
+│   ├── hololive-api/               # Unified bot/admin/llm/YouTube consume runtime
 │   ├── hololive-alarm-worker/      # Alarm checker, dispatch queue, proactive egress
 │   ├── hololive-youtube-collector/  # AP-fleet YouTube collector module
-│   └── hololive-shared/            # shared domain, config, providers, contracts, services
-├── shared-go/                      # lower-level shared Go utilities
-├── admin-dashboard/                # dashboard frontend/backend assets
+│   ├── hololive-shared/            # shared domain, config, providers, contracts, services
+│   └── hololive-dbtest/            # PostgreSQL test harness and migration replay
+├── admin-dashboard/                # web ownership boundary guidance
 ├── docs/current/                   # current architecture, service, contract, runbook docs
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
 └── deploy/compose/                 # Docker Compose baselines and overlays
     ├── docker-compose.prod.yml     # production compose baseline
     ├── docker-compose.live-compat.yml # main-host live wiring overlay (always applied; owns collector-c ports/volumes)
-    └── docker-compose.seoul.yml    # Seoul split-host AP (youtube-collector-b)
+    ├── docker-compose.seoul.yml    # Seoul Compose AP (youtube-collector-b + youtube-po-b)
+    ├── docker-compose.osaka.yml    # native Osaka a configuration/path validation
+    └── docker-compose.osaka2.yml   # native Osaka2 d configuration/path validation
 ```
 
-`go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
+`go.work` ties the root module, the Go runtime/shared/dbtest modules under `hololive/`, and sibling modules `../shared-go` and `../iris-client-go` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`; `admin-dashboard/` contains the Hololive web boundary guidance.
 
 ## Runtime Services
 
@@ -48,7 +50,15 @@ The current production runtime set is three Go binaries:
 - runtime contracts under `pkg/contracts`;
 - database/cache integration under internal/shared packages.
 
-`shared-go/` holds lower-level utilities shared outside the Hololive-specific modules.
+실행 구현의 조립은 각 module이 소유합니다. API는 `internal/config`와 plane별 인스턴스를 만드는
+`internal/apifoundation`, admin의 `runtime`·`internal/httpapi`, 공통 trigger의 `internal/httpapi`를 사용합니다.
+Observation publish는 collector `internal/runtime/sourceobservation`, consume와 private reducer는 API
+`internal/youtube/{sourceobservation,reconcile,community}`에 있습니다. Worker의 구독 서비스·private cache,
+dedup·queue·dispatchoutbox와 alarm dispatch runner·formatter는 worker의 `internal/`이 소유합니다.
+공용 strict 환경 파싱과 순수 정책은 shared `pkg/config/{envload,runtimepolicy}`, 시간과 target-minute 계산은
+`pkg/timeutil`·`pkg/alarmtiming/targetpolicy`, DB 구성은 `pkg/providers/database`가 담당합니다.
+
+Sibling `../shared-go/` holds lower-level utilities shared outside the Hololive-specific modules.
 
 ## Core Data Flow
 
@@ -94,25 +104,31 @@ The `hololive-api` llm plane owns major event and member-news scheduling. Other 
 
 ```text
 runtime services
-  -> shared config loader
+  -> owning API/worker/collector config loader + shared strict/policy leaves
   -> PostgreSQL and Valkey
   -> member epoch Pub/Sub / alarm wakeup / runtime cache
 ```
 
 `youtube-collector` scheduling uses PostgreSQL leases. It does not join this Valkey Pub/Sub or cache path.
 
+내부 HTTP/H3 client에는 시작 시 적재한 옵션을 명시적으로 전달합니다. API bot·admin의 alarm client는
+worker HTTP provider를 사용합니다. `alarmAdvanceMinutes` 공개 입력 범위는 `1..1440`이며, 저장 실패 때
+이전 Get·disk 값과 worker 미호출을 유지합니다. 적용 뒤 응답 유실은 결과 불명으로 보고하며 자동 재시도나 파일 rollback을 하지 않습니다.
+
 Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS.md` and `CONTRACT_MAP.md` before changing producers or consumers.
 
 ## Deployment Model
 
-The production baseline is Docker Compose, not Kubernetes. The main files are:
+현재 production의 실행 경로는 다음과 같습니다. 모든 컴파일·테스트·이미지 빌드는 kapu에서 수행하고, 런타임 호스트에는 검증한 image/native bundle을 전송합니다.
 
-- `deploy/compose/docker-compose.prod.yml`: production service shape;
-- `deploy/compose/docker-compose.seoul.yml`: Seoul split-host active-active AP (`youtube-collector-b`);
-- `deploy/compose/docker-compose.live-compat.yml`: main-host live wiring overlay applied with every central up/down; the main-host collector-c is `youtube-collector` in prod.yml;
-- `scripts/deploy/`: deployment and compose validation helpers;
-- `scripts/logs/`: status and smoke-check helpers;
-- `docs/current/runbooks/`: current service runbooks (`youtube-collector.md` is the YouTube collect runtime);
+| 대상 | 실행 방식·설정 | 배포·검증 절차 |
+|---|---|---|
+| 중앙 API·worker·collector `c`·infra | `deploy/compose/docker-compose.prod.yml` + `docker-compose.live-compat.yml` | [release runbook](runbooks/release.md); collector `c`와 issuer는 [paired cutover](runbooks/youtube-collector.md#isolated-po-token-lifecycle) |
+| Seoul collector `b` | `docker-compose.prod.yml` + `docker-compose.seoul.yml`, issuer `youtube-po-b` | `scripts/deploy/ap-deploy.sh seoul`; [collector runbook](runbooks/youtube-collector.md) |
+| Osaka collector `a`·Osaka2 collector `d` | native `hololive-youtube-collector@youtube-collector-{a,d}.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 또는 `osaka2` 대상; [collector runbook](runbooks/youtube-collector.md) |
+| 통합 관리자 웹 | iris-seoul의 `iris-console.service` | Iris Console 운영 절차; 이 저장소의 [연결 경계](runbooks/admin-dashboard.md) |
+
+`scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Seoul에 `compose`, Osaka·Osaka2에 `native`를 지정합니다. Osaka의 Compose overlays는 설정·경로 계약 검증용입니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
 
 Live deploy, restart, rollback, secret writes, and production config mutation require explicit operator approval.
 
@@ -125,7 +141,7 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 - `members.photo` stays on hololive-api admin PhotoSync; YouTube channel photos are the `channel_photo` reducer;
 - final notification delivery is owned by `alarm-worker`.
 
-Current operational details live in `docs/current/services/youtube-collector.md` and `docs/current/runbooks/youtube-collector.md`. Planning archives under `docs/superpowers/` or `docs/history/` are supporting history, not the operational source of truth.
+Current operational details live in `docs/current/services/youtube-collector.md` and `docs/current/runbooks/youtube-collector.md`. Dated plans under `docs/current/plans/` and records under `docs/history/` are supporting references, not the operational source of truth.
 
 ## Where To Start For Common Tasks
 
@@ -133,14 +149,15 @@ Current operational details live in `docs/current/services/youtube-collector.md`
 |---|---|
 | Find runtime ownership | `docs/current/SERVICE_OWNERSHIP.md` |
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
-| Change deploy shape | `deploy/compose/docker-compose.prod.yml`, `deploy/compose/docker-compose.seoul.yml`, `docs/current/DEPLOYMENT_BASELINE.md` |
+| Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-youtube-collector.service` |
 | Release, rollback, or deploy | `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
+| Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/apifoundation/`, `internal/app/`, `internal/fxapp/`; each plane's `runtime/` |
 | Change YouTube collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change final notification delivery | `docs/current/contracts/alarm.md`, `docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md`, `docs/current/runbooks/alarm-worker.md`, `docs/current/runbooks/dlq-replay.md`, `hololive/hololive-alarm-worker/` |
 | Change command handling | `hololive/hololive-api/internal/planes/bot/` |
-| Change admin dashboard API | `hololive/hololive-api/internal/planes/admin/`, `admin-dashboard/` |
+| Change Hololive admin API / web | API: `hololive/hololive-api/internal/planes/admin/`; web: `../iris-console/`; boundary: `admin-dashboard/AGENTS.md`, `docs/current/runbooks/admin-dashboard.md` |
 | Run architecture checks | `scripts/architecture/` |
 | Run deploy/status checks | `scripts/deploy/`, `scripts/logs/` |
 
@@ -150,13 +167,13 @@ Use the smallest command that matches the change. For broad Go runtime changes, 
 
 ```bash
 ./build-all.sh --no-bump --build-only
-go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
-go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
+go build ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
+go test ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/... ./hololive/hololive-dbtest/...
 ```
 
 Run the deploying `./build-all.sh --no-bump` path only with explicit operator approval because it can recreate live Compose services.
 
-For architecture-doc changes, prefer:
+For documentation-only changes, review the diff and verify referenced source/command paths. For implementation changes affecting runtime ownership, use the existing product boundary checks:
 
 ```bash
 ./scripts/architecture/ci-boundary-gate.sh

@@ -367,37 +367,30 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 }
 
 func TestCalendarCommand_Execute_ImageOutcomeUnknownSuppressesTextFallback(t *testing.T) {
-	var sentMessage string
+	for _, imageErr := range []error{transport.ErrReplyOutcomeUnknown, transport.ErrReplyStagingFailed} {
+		t.Run(imageErr.Error(), func(t *testing.T) {
+			sentMessages := 0
+			deps := &handlercore.Dependencies{
+				Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
+				SendMessage: func(context.Context, string, string) error { sentMessages++; return nil },
+				SendImage: func(context.Context, string, []byte, ...iris.SendOption) error {
+					return fmt.Errorf("send image: %w", imageErr)
+				},
+				SendError: func(context.Context, string, string) error { return nil },
+				Logger:    slog.New(slog.DiscardHandler),
+			}
+			repo := &calendarRepoStub{entries: []domain.CalendarEntry{{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5}}}
+			command := NewCalendarCommand(deps, repo, &calendarImageRendererStub{data: []byte("png-data")})
+			err := command.Execute(t.Context(), &domain.CommandContext{Room: testCalendarRoom}, map[string]any{testParamMonth: 3})
 
-	deps := &handlercore.Dependencies{
-		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
-		SendMessage: func(_ context.Context, _, msg string) error {
-			sentMessage = msg
-			return nil
-		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
-			return fmt.Errorf("send image: %w", transport.ErrReplyOutcomeUnknown)
-		},
-		SendError: func(_ context.Context, _, _ string) error { return nil },
-		Logger:    slog.Default(),
-	}
+			if !errors.Is(err, imageErr) {
+				t.Fatalf("Execute() error = %v, want preserved outcome uncertainty", err)
+			}
 
-	repo := &calendarRepoStub{
-		entries: []domain.CalendarEntry{
-			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5},
-		},
-	}
-	renderer := &calendarImageRendererStub{data: []byte("png-data")}
-
-	cmd := NewCalendarCommand(deps, repo, renderer)
-	cmdCtx := &domain.CommandContext{Room: testCalendarRoom}
-
-	if err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 3}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	if sentMessage != "" {
-		t.Errorf("image outcome was unknown, so the text fallback must be suppressed; got %q", sentMessage)
+			if sentMessages != 0 {
+				t.Fatalf("uncertain image produced %d text replies", sentMessages)
+			}
+		})
 	}
 }
 

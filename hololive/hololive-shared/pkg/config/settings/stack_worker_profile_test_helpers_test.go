@@ -3,7 +3,7 @@ package settings
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func useStackWorkerProfileFixture(t *testing.T, name string) {

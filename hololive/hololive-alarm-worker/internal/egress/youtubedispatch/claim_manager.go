@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -16,7 +15,7 @@ type DeliveryExecutor interface {
 }
 
 type ClaimResolver interface {
-	selectClaimedDeliveries(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, reuseCache claim.DecisionCache) deliveryClaimSelection
+	selectClaimedDeliveries(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, reuseCache *claimDecisionCache) deliveryClaimSelection
 	releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error
 	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
 }

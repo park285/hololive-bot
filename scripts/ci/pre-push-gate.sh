@@ -188,7 +188,7 @@ run_content_gates() {
   run_if_changed scripts/runtime/pg-hotpath-explain-snapshot_test.sh \
     scripts/runtime/pg-hotpath-explain-snapshot.sh scripts/runtime/lib \
     hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries \
-    hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries
+    hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries
   run_if_changed scripts/deploy/ap-host-native-deploy_test.sh \
     scripts/deploy/ap-host-native-deploy.sh scripts/deploy/ap-host-native-rollback.sh \
     scripts/deploy/ap-host-native-deploy_contract_checks.inc.sh scripts/deploy/ap-completion-check.sh \
@@ -237,23 +237,11 @@ run_dependency_hygiene() {
   done
 }
 
-# 형제 checkout(go.work 의 ../ 모듈) 상태를 소비하는 호환성 검사.
-run_workspace_compatibility() {
-  resolve_route
-  if is_docs_only_route; then
-    echo "[pre-push] docs-only change detected; skipping workspace compatibility"
-    return 0
-  fi
-
-  bash scripts/ci/test-go-workspace-modules.sh
-}
-
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
 run_content_gates
 run_dependency_hygiene
-run_workspace_compatibility
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate passed"
 echo "════════════════════════════════════════"

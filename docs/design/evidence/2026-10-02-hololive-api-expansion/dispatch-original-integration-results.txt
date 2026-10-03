@@ -1,0 +1,3 @@
+Synthetic/local investigation only. Recorded 2026-10-02 on kapu; not production performance.
+
+ok  	github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops	3.956s

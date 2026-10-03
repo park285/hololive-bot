@@ -105,7 +105,7 @@ compact_sql_file() {
   tr '\n\t' '  ' < "$1" | sed -E 's/[[:space:]]+/ /g'
 }
 
-alarm_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql")"
+alarm_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql")"
 youtube_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries/fanout_claim.sql")"
 
 if (( ${#alarm_claim_source} <= 500 || ${#youtube_claim_source} <= 500 )); then
@@ -156,8 +156,8 @@ for fragment in \
 done
 
 for non_claim_source_path in \
-  "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_maintenance_0010_01.sql" \
-  "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_maintenance_0035_02.sql"; do
+  "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_maintenance_0010_01.sql" \
+  "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_maintenance_0035_02.sql"; do
   non_claim_source="$(compact_sql_file "${non_claim_source_path}")"
   if [[ "${non_claim_source}" == *"), updated AS ("* \
     || "${non_claim_source}" == *"RETURNING d.id, d.event_id"* \
@@ -200,8 +200,8 @@ assert_not_a_claim() {
 }
 
 for non_claim_source_path in \
-  "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_maintenance_0010_01.sql" \
-  "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_maintenance_0035_02.sql"; do
+  "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_maintenance_0010_01.sql" \
+  "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_maintenance_0035_02.sql"; do
   assert_not_a_claim "$(compact_sql_file "${non_claim_source_path}")"
 done
 assert_not_a_claim "${youtube_revive_source}"

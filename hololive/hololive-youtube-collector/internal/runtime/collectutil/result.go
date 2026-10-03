@@ -31,7 +31,7 @@ func NewCompleteResult(output RunOutput) (CollectResult, error) {
 		return CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "complete result output is invalid")
 	}
 
-	return CollectResult{kind: CollectComplete, output: cloneRunOutput(output)}, nil
+	return CollectResult{kind: CollectComplete, output: output}, nil
 }
 
 func NewPartialResult(output RunOutput, cause error, failedKinds ...contract.ObservationKind) (CollectResult, error) {
@@ -53,7 +53,7 @@ func NewPartialResult(output RunOutput, cause error, failedKinds ...contract.Obs
 	}
 
 	return CollectResult{
-		kind: CollectPartial, output: cloneRunOutput(output),
+		kind: CollectPartial, output: output,
 		partial: &PartialFailure{failedKinds: failed, cause: normalized},
 	}, nil
 }
@@ -110,12 +110,13 @@ func (r *CollectResult) Kind() CollectResultKind {
 	return r.kind
 }
 
+// Output은 불변 수집 결과를 공유합니다. 가변 데이터가 필요한 호출자는 결과의 방어적 조회를 사용합니다.
 func (r *CollectResult) Output() RunOutput {
 	if r == nil {
 		return RunOutput{}
 	}
 
-	return cloneRunOutput(r.output)
+	return r.output
 }
 
 func (r *CollectResult) PartialFailure() (*PartialFailure, bool) {
@@ -152,12 +153,4 @@ func (p *PartialFailure) FailedKinds() []contract.ObservationKind {
 	}
 
 	return slices.Clone(p.failedKinds)
-}
-
-func cloneRunOutput(output RunOutput) RunOutput {
-	return RunOutput{
-		observations:      cloneEnvelopes(output.observations),
-		checkpoints:       cloneCheckpoints(output.checkpoints),
-		collectionLatency: output.collectionLatency,
-	}
 }

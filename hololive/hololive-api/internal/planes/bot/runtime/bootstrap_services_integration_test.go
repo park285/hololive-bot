@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/apifoundation"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -64,10 +65,10 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 	integrationServices, err := appbootstrap.InitCoreIntegrationServices(t.Context(), config, infra, logger)
 	require.NoError(t, err)
 
-	modules := buildBotDependencyModules(
+	deps := appbootstrap.BuildBotDependencies(
 		&settings.Config{},
 		&sharedmodules.InfraModule{},
-		&appbootstrap.ScraperHolodexFoundation{},
+		&apifoundation.ScraperHolodexFoundation{},
 		&appbootstrap.AlarmYouTubeStackComponents{AlarmMode: &appbootstrap.AlarmModeComponents{}},
 		integrationServices,
 		nil,
@@ -76,7 +77,6 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		nil,
 		logger,
 	)
-	deps := appbootstrap.ProvideBotDependencies(&modules)
 
 	require.NotNil(t, deps)
 	assert.NotNil(t, deps.CommandBuilders)

@@ -139,7 +139,7 @@ func (r *CommandRouter) executeRegisteredCommand(
 
 // outcome unknown은 실패가 아니라 미확정이므로 Error 집계에서 분리한다.
 func (r *CommandRouter) logExecutionFailure(ctx context.Context, err error, attrs []slog.Attr) {
-	if errors.Is(err, transport.ErrReplyOutcomeUnknown) {
+	if transport.IsReplyOutcomeUnknown(err) {
 		sharedlog.Warn(ctx, r.logger, EventBotReplyOutcomeUnknown, "command reply outcome unknown", attrs...)
 
 		return

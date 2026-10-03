@@ -1,0 +1,170 @@
+=== RUN   TestExpansionSummaryCost
+2026/10/02 23:11:33 github.com/testcontainers/testcontainers-go - Connected to docker:
+  Server Version: 29.8.2
+  API Version: 1.56
+  Operating System: Ubuntu 26.04.1 LTS
+  Total Memory: 62646 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: b3a5237e22990416d90ff547a8a28b8ba47347f813037a99c75c72c7bcbe9149
+  Test ProcessID: 6042eed8-1cc1-4f90-a51b-69015907c24c
+2026/10/02 23:11:33 🐳 Creating container for image postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+2026/10/02 23:11:33 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/10/02 23:11:33 ✅ Container created: 228c4cf23cc3
+2026/10/02 23:11:33 🐳 Starting container: 228c4cf23cc3
+2026/10/02 23:11:33 ✅ Container started: 228c4cf23cc3
+2026/10/02 23:11:33 ⏳ Waiting for container id 228c4cf23cc3 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/10/02 23:11:34 Shell not found in container
+2026/10/02 23:11:34 🔔 Container is ready: 228c4cf23cc3
+2026/10/02 23:11:34 ✅ Container created: 5891deb7bc77
+2026/10/02 23:11:34 🐳 Starting container: 5891deb7bc77
+2026/10/02 23:11:34 ✅ Container started: 5891deb7bc77
+2026/10/02 23:11:34 ⏳ Waiting for container id 5891deb7bc77 image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2)]
+2026/10/02 23:11:35 🔔 Container is ready: 5891deb7bc77
+    stage6_summary_probe_test.go:112: summary_rows=10000 variant=count_id median_ms=2.072 min_ms=1.538 max_ms=3.313
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id Sort  (cost=671.07..671.08 rows=3 width=45) (actual time=1.876..1.876 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id   Sort Key: status
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id   Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id   Buffers: shared hit=496
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id   ->  HashAggregate  (cost=671.00..671.04 rows=3 width=45) (actual time=1.864..1.865 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id         Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id         Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id         Buffers: shared hit=496
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id         ->  Seq Scan on alarm_dispatch_deliveries  (cost=0.00..596.00 rows=10000 width=21) (actual time=0.003..0.362 rows=10000.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id               Buffers: shared hit=496
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id Planning Time: 0.059 ms
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_id Execution Time: 1.903 ms
+    stage6_summary_probe_test.go:112: summary_rows=10000 variant=count_star median_ms=0.888 min_ms=0.844 max_ms=0.947
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star GroupAggregate  (cost=0.29..393.33 rows=3 width=45) (actual time=0.027..1.177 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star   Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star   Buffers: shared hit=42
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star   ->  Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.29..318.29 rows=10000 width=13) (actual time=0.014..0.581 rows=10000.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star         Heap Fetches: 0
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star         Index Searches: 1
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star         Buffers: shared hit=42
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star Planning Time: 0.052 ms
+    stage6_summary_probe_test.go:122: plan_rows=10000 variant=count_star Execution Time: 1.190 ms
+    stage6_summary_probe_test.go:112: summary_rows=100000 variant=count_id median_ms=23.832 min_ms=15.674 max_ms=25.467
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id Finalize GroupAggregate  (cost=6725.25..6726.16 rows=3 width=45) (actual time=13.875..17.729 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id   Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id   Buffers: shared hit=5012
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id   ->  Gather Merge  (cost=6725.25..6726.06 rows=7 width=21) (actual time=13.867..17.720 rows=9.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id         Workers Planned: 2
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id         Workers Launched: 2
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id         Buffers: shared hit=5012
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id         ->  Sort  (cost=5725.22..5725.23 rows=3 width=21) (actual time=10.149..10.150 rows=3.00 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id               Sort Key: status
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id               Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id               Buffers: shared hit=5012
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id               Worker 0:  Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id               Worker 1:  Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id               ->  Partial HashAggregate  (cost=5725.17..5725.20 rows=3 width=21) (actual time=10.109..10.110 rows=3.00 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id                     Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id                     Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id                     Buffers: shared hit=4996
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id                     Worker 0:  Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id                     Worker 1:  Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id                     ->  Parallel Seq Scan on alarm_dispatch_deliveries  (cost=0.00..5412.67 rows=41667 width=21) (actual time=0.008..2.913 rows=33333.33 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id                           Buffers: shared hit=4996
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id Planning Time: 0.107 ms
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_id Execution Time: 17.792 ms
+    stage6_summary_probe_test.go:112: summary_rows=100000 variant=count_star median_ms=7.726 min_ms=7.543 max_ms=8.090
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star GroupAggregate  (cost=0.42..3826.46 rows=3 width=45) (actual time=0.151..13.562 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star   Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star   Buffers: shared hit=393
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star   ->  Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.42..3076.42 rows=100000 width=13) (actual time=0.025..6.982 rows=100000.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star         Heap Fetches: 0
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star         Index Searches: 1
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star         Buffers: shared hit=393
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star Planning Time: 0.066 ms
+    stage6_summary_probe_test.go:122: plan_rows=100000 variant=count_star Execution Time: 13.588 ms
+    stage6_summary_probe_test.go:112: summary_rows=500000 variant=count_id median_ms=50.587 min_ms=43.435 max_ms=60.542
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id Finalize GroupAggregate  (cost=29641.91..29642.82 rows=3 width=45) (actual time=45.472..50.660 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id   Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id   Buffers: shared hit=15125 read=9887 written=282
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id   ->  Gather Merge  (cost=29641.91..29642.72 rows=7 width=21) (actual time=45.466..50.653 rows=9.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id         Workers Planned: 2
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id         Workers Launched: 2
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id         Buffers: shared hit=15125 read=9887 written=282
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id         ->  Sort  (cost=28641.88..28641.89 rows=3 width=21) (actual time=41.967..41.968 rows=3.00 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id               Sort Key: status
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id               Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id               Buffers: shared hit=15125 read=9887 written=282
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id               Worker 0:  Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id               Worker 1:  Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id               ->  Partial HashAggregate  (cost=28641.83..28641.86 rows=3 width=21) (actual time=41.924..41.926 rows=3.00 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id                     Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id                     Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id                     Buffers: shared hit=15109 read=9887 written=282
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id                     Worker 0:  Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id                     Worker 1:  Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id                     ->  Parallel Seq Scan on alarm_dispatch_deliveries  (cost=0.00..27079.33 rows=208333 width=21) (actual time=0.094..11.799 rows=166666.67 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id                           Buffers: shared hit=15109 read=9887 written=282
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id Planning Time: 0.077 ms
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_id Execution Time: 50.709 ms
+    stage6_summary_probe_test.go:112: summary_rows=500000 variant=count_star median_ms=30.160 min_ms=29.429 max_ms=37.049
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star Finalize GroupAggregate  (cost=1000.45..14975.21 rows=3 width=45) (actual time=38.499..42.640 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star   Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star   Buffers: shared hit=1951
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star   ->  Gather Merge  (cost=1000.45..14975.12 rows=7 width=21) (actual time=38.469..42.623 rows=6.00 loops=1)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star         Workers Planned: 2
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star         Workers Launched: 2
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star         Buffers: shared hit=1951
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star         ->  Partial GroupAggregate  (cost=0.42..13974.28 rows=3 width=21) (actual time=0.501..22.732 rows=2.00 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star               Group Key: status
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star               Buffers: shared hit=1951
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star               ->  Parallel Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.42..12411.76 rows=208333 width=13) (actual time=0.020..12.246 rows=166666.67 loops=3)
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star                     Heap Fetches: 0
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star                     Index Searches: 1
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star                     Buffers: shared hit=1951
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star Planning Time: 0.066 ms
+    stage6_summary_probe_test.go:122: plan_rows=500000 variant=count_star Execution Time: 42.685 ms
+    stage6_summary_probe_test.go:176: concurrent_summary variant=count_id callers=12 max_pool=4 median_ms=241.019 max_ms=388.653 total_ms=388 acquire_wait_ms=1490 empty_acquires=8
+    stage6_summary_probe_test.go:176: concurrent_summary variant=count_star callers=12 max_pool=4 median_ms=95.966 max_ms=195.415 total_ms=195 acquire_wait_ms=631 empty_acquires=8
+    stage6_summary_probe_test.go:195: after_update rows=500000 variant=count_id median_ms=72.378 min_ms=63.113 max_ms=133.883
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id Finalize GroupAggregate  (cost=31074.23..31075.15 rows=3 width=45) (actual time=72.743..81.729 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id   Group Key: status
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id   Buffers: shared hit=16016 read=10246 written=175
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id   ->  Gather Merge  (cost=31074.23..31075.05 rows=7 width=21) (actual time=72.729..81.713 rows=9.00 loops=1)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id         Workers Planned: 2
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id         Workers Launched: 2
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id         Buffers: shared hit=16016 read=10246 written=175
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id         ->  Sort  (cost=30074.21..30074.22 rows=3 width=21) (actual time=67.634..67.636 rows=3.00 loops=3)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id               Sort Key: status
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id               Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id               Buffers: shared hit=16016 read=10246 written=175
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id               Worker 0:  Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id               Worker 1:  Sort Method: quicksort  Memory: 25kB
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id               ->  Partial HashAggregate  (cost=30074.16..30074.19 rows=3 width=21) (actual time=67.572..67.574 rows=3.00 loops=3)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id                     Group Key: status
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id                     Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id                     Buffers: shared hit=16000 read=10246 written=175
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id                     Worker 0:  Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id                     Worker 1:  Batches: 1  Memory Usage: 32kB
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id                     ->  Parallel Seq Scan on alarm_dispatch_deliveries  (cost=0.00..28433.52 rows=218752 width=21) (actual time=0.504..23.123 rows=166666.67 loops=3)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id                           Buffers: shared hit=16000 read=10246 written=175
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id Planning Time: 0.100 ms
+    stage6_summary_probe_test.go:205: churn_plan variant=count_id Execution Time: 81.801 ms
+    stage6_summary_probe_test.go:195: after_update rows=500000 variant=count_star median_ms=141.960 min_ms=115.282 max_ms=148.800
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star Finalize GroupAggregate  (cost=1000.45..18343.29 rows=3 width=45) (actual time=146.238..154.246 rows=3.00 loops=1)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star   Group Key: status
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star   Buffers: shared hit=46010 read=28783
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star   ->  Gather Merge  (cost=1000.45..18343.19 rows=7 width=21) (actual time=145.969..154.230 rows=8.00 loops=1)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star         Workers Planned: 2
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star         Workers Launched: 2
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star         Buffers: shared hit=46010 read=28783
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star         ->  Partial GroupAggregate  (cost=0.42..17342.36 rows=3 width=21) (actual time=6.622..95.785 rows=2.67 loops=3)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star               Group Key: status
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star               Buffers: shared hit=46010 read=28783
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star               ->  Parallel Index Only Scan using idx_alarm_dispatch_deliveries_status_created on alarm_dispatch_deliveries  (cost=0.42..15701.69 rows=218752 width=13) (actual time=0.047..81.347 rows=166666.67 loops=3)
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star                     Heap Fetches: 500068
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star                     Index Searches: 1
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star                     Buffers: shared hit=46010 read=28783
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star Planning Time: 0.094 ms
+    stage6_summary_probe_test.go:205: churn_plan variant=count_star Execution Time: 154.333 ms
+    stage6_summary_probe_test.go:240: after_update_concurrent_summary variant=count_id callers=12 max_pool=4 median_ms=320.125 max_ms=489.672 total_ms=489 acquire_wait_ms=1843 empty_acquires=8
+    stage6_summary_probe_test.go:240: after_update_concurrent_summary variant=count_star callers=12 max_pool=4 median_ms=363.919 max_ms=541.199 total_ms=541 acquire_wait_ms=2178 empty_acquires=8
+--- PASS: TestExpansionSummaryCost (12.13s)
+PASS
+ok  	github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops	12.187s

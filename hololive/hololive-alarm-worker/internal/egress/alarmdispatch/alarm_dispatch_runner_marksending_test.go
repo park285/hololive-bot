@@ -1,0 +1,70 @@
+package alarmdispatch
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+var errAlarmDispatchRunnerTestMarkSending = errors.New("mark sending partial update")
+
+func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt(t *testing.T) {
+	consumer := &alarmDispatchRunnerTestConsumer{
+		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
+		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
+	}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := Runner{
+		consumer: consumer,
+		sender:   sender,
+		renderer: newAlarmDispatchTestRenderer(t),
+		maxBatch: 10,
+	}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Empty(t, sender.messages, "메시지는 발송되면 안 된다")
+	require.Len(t, consumer.preSendRequeued, 1)
+	require.NotNil(t, consumer.preSendRequeued[0].Retry)
+	assert.Equal(t, 0, consumer.preSendRequeued[0].Retry.Attempt)
+	assert.Contains(t, consumer.preSendRequeued[0].Retry.LastError, errAlarmDispatchRunnerTestMarkSending.Error())
+	assert.Empty(t, consumer.scheduledSendingRetry, "외부 발송 후 실패 경로를 사용하면 attempt를 소비한다")
+	assert.Empty(t, consumer.scheduledRetry, "leased 전용 RouteFailures로 보상하면 sending 행이 잔류한다")
+	assert.Empty(t, consumer.quarantined)
+	assert.Empty(t, consumer.movedDLQ)
+	assert.Empty(t, consumer.markDispatched)
+}
+
+func TestAlarmDispatchRunnerMarkSendingFailureDoesNotExhaustExistingAttempt(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: 2})
+
+	envelope.ClaimKeys = []string{testAlarmClaimKey}
+
+	consumer := &alarmDispatchRunnerTestConsumer{
+		batches:        [][]domain.AlarmQueueEnvelope{{envelope}},
+		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
+	}
+	runner := Runner{
+		consumer: consumer,
+		sender:   &alarmDispatchRunnerTestSender{},
+		renderer: newAlarmDispatchTestRenderer(t),
+		maxBatch: 10,
+	}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Empty(t, consumer.scheduledSendingRetry)
+	require.Len(t, consumer.preSendRequeued, 1)
+	require.NotNil(t, consumer.preSendRequeued[0].Retry)
+	assert.Equal(t, 2, consumer.preSendRequeued[0].Retry.Attempt)
+	assert.Empty(t, consumer.movedDLQ)
+	assert.Empty(t, consumer.releasedClaims)
+}

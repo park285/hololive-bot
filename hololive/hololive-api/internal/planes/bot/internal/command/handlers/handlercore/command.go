@@ -121,11 +121,20 @@ type BroadcastThumbnailDownloader interface {
 	Download(ctx context.Context, entry *BroadcastHistoryEntry) ([]byte, string, error)
 }
 
+// AlarmService는 bot 명령이 소비하는 알림 저장 작업만 제공한다.
+type AlarmService interface {
+	AddAlarm(context.Context, *domain.AddAlarmRequest) (bool, error)
+	RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error)
+	RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error)
+	ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error)
+	ClearRoomAlarms(context.Context, string) (int, error)
+}
+
 type Dependencies struct {
 	Holodex             domain.StreamProvider
 	LiveQuery           livequery.Reader
 	Cache               cache.Client
-	Alarm               domain.AlarmCRUD
+	Alarm               AlarmService
 	Matcher             *matcher.Matcher
 	MemberNews          MemberNewsService
 	BroadcastHistory    BroadcastHistoryRepository

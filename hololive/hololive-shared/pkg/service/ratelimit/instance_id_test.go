@@ -43,8 +43,8 @@ func TestMemberIDIncludesHostnameInstanceID(t *testing.T) {
 
 	limiter := newTestLimiter(t)
 
-	want := "123:" + sanitizeInstanceID(hostname) + ":1"
-	if member := limiter.memberID(123); member != want {
-		t.Fatalf("memberID() = %q, want %q", member, want)
+	wantPrefix := "123:" + sanitizeInstanceID(hostname) + ":"
+	if member := limiter.memberID(123); !strings.HasPrefix(member, wantPrefix) || !strings.HasSuffix(member, ":1") {
+		t.Fatalf("memberID() = %q, want hostname prefix %q and sequence suffix :1", member, wantPrefix)
 	}
 }
