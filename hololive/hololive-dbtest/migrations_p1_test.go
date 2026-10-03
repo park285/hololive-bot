@@ -593,33 +593,33 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		t.Fatalf("resolve migrations dir for observation lock API check: %v", err)
 	}
 
-	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
-	apiQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "youtube", "sourceobservation", "queries"))
+	// 발행 SQL은 collector, 소비 SQL은 API의 sourceobservation 패키지가 소유한다.
+	publishQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
+	consumeQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "youtube", "sourceobservation", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
-	checks := map[string][]observationRoleQuery{
-		roles.scraper: {
+	checks := map[string]struct {
+		dir     string
+		queries []observationRoleQuery
+	}{
+		roles.scraper: {dir: publishQueryDir, queries: []observationRoleQuery{
 			{name: "repository_projection_current_0002_02.sql", args: []any{int64(0)}},
-			{name: "repository_contract_current_0004_04.sql", args: []any{"youtubejs", communityPageKind}},
+			{name: "repository_contract_batch_current_0031_31.sql", args: []any{fmt.Sprintf(
+				`[{"provider":"youtubejs","observation_kind":%q,"schema_version":1,"contract_generation":1}]`, communityPageKind,
+			)}},
 			{name: "repository_publish_set_0032_32.sql", args: []any{"[]"}},
-		},
-		roles.runtime: {
+		}},
+		roles.runtime: {dir: consumeQueryDir, queries: []observationRoleQuery{
 			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
 			{name: "repository_replay_epoch_load_0086_86.sql"},
 			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_pending_ends.sql", args: []any{[]string{}}},
 			{name: "repository_live_absence_slots.sql", args: []any{[]string{}, nil, time.Now().UTC(), []string{}}},
-		},
+		}},
 	}
 
-	for role, queries := range checks {
-		queryDir := apiQueryDir
-
-		if role == roles.scraper {
-			queryDir = collectorQueryDir
-		}
-
-		runObservationRoleQueries(t, pool, role, roleSQLPath, queryDir, queries)
+	for role, check := range checks {
+		runObservationRoleQueries(t, pool, role, roleSQLPath, check.dir, check.queries)
 	}
 }
 

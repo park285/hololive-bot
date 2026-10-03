@@ -21,12 +21,8 @@ type DeliveryDB interface {
 	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
 }
 
-func IsNilDB(db any) bool {
-	return reflectutil.IsNil(db)
-}
-
 func AsQuerier(db any) dbx.Querier {
-	if IsNilDB(db) {
+	if reflectutil.IsNil(db) {
 		return nil
 	}
 
@@ -51,22 +47,6 @@ func inDeliveryPlaceholders(count int) string {
 	}
 
 	return strings.TrimSuffix(strings.Repeat("?, ", count), ", ")
-}
-
-func AppendDeliveryInt64Args(args []any, values []int64) []any {
-	for _, value := range values {
-		args = append(args, value)
-	}
-
-	return args
-}
-
-func AppendDeliveryStringArgs(args []any, values []string) []any {
-	for _, value := range values {
-		args = append(args, value)
-	}
-
-	return args
 }
 
 func AppendDeliveryOutboxKindArgs(args []any, values ...domain.OutboxKind) []any {
@@ -132,10 +112,6 @@ func finishDeliveryTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 	}
 
 	return nil
-}
-
-func PostgresPlaceholders(query string) string {
-	return dbx.PostgresPlaceholders(query)
 }
 
 func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, error) {

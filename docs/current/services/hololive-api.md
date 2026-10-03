@@ -94,6 +94,26 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - `domain.MemberDataProvider`는 오류를 돌려주는 `LoadAllMembers` 하나로 전체 멤버를 적재합니다. 오류를 흡수하던 `GetAllMembers`와 선택적 `MemberDataLoader`는 삭제했습니다. 공식 일정 식별 색인·멤버 목록 응답·alarm 콜라보 표시명은 멤버 적재 실패를 빈 결과로 바꾸지 않고 오류로 드러냅니다.
 - 알림 멤버 표시명 폴백만 예외 계약으로 남습니다([alarm 계약](../contracts/alarm.md)의 멤버 표시명 예외 계약).
 
+## 도움말·달력 이미지의 텍스트 대체 예외 계약
+
+`!도움말`과 `!달력`은 이미지 응답이 정상 경로이고, 이미지가 확정적으로 실패했을 때만 같은 내용을 텍스트로 보냅니다(2026-10-02 계약화).
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | 이미지 적재·렌더링 실패나 빈 결과(`render_failed`), 또는 이미지 전송이 전달되지 않았다고 확정된 실패(`send_failed`) |
+| 한도 | 명령 한 번에 텍스트 응답 한 번입니다. 이미지 재시도는 없습니다. 이미지 전송 결과가 불명(`IsReplyOutcomeUnknown`)이면 이미 전달됐을 수 있으므로 텍스트를 보내지 않습니다(`outcome_unknown`). |
+| 종단 | 텍스트 전송도 실패하면 두 오류를 합쳐 명령 오류로 반환합니다(도움말). 이미지 provider·renderer·전송 callback이 설정되지 않았으면 텍스트로 바꾸지 않고 명령 의존성 오류를 반환합니다. 운영 조립은 이 의존성을 항상 연결합니다. |
+| Telemetry | `hololive_bot_image_text_fallback_total{command,reason}`(`command`: `help`, `calendar`; `reason`: `render_failed`, `send_failed`, `outcome_unknown`)와 Warn 로그(`help_image_fallback`, `calendar image ... falling back to text`) |
+| Owner | `hololive-api` bot plane의 command handlers(`internal/planes/bot/internal/command/handlers`) |
+| 검토 조건 | `render_failed`가 0이 아니면 이미지 렌더러 결함으로 보고 원인을 고칩니다. 두 명령의 `render_failed`와 `send_failed`가 90일 동안 0이면 텍스트 대체를 지우고 이미지 실패를 명령 오류로 반환합니다. |
+
+## Plane별 공유 자원
+
+- bot·admin plane은 `BuildInfraModule`, llm plane은 `BuildLLMSchedulerRuntime`에서 각자 Valkey client 1개, PostgreSQL pool 1개, 멤버 캐시 1개를 만듭니다. YouTube plane은 PostgreSQL pool만 둡니다. 한 프로세스 안에 Valkey client 3개, PostgreSQL pool 4개, 멤버 캐시 3개가 있습니다.
+- 각 plane은 종료 때 멤버 캐시(epoch 작업 정지와 대기) → PostgreSQL → Valkey 순서로 닫습니다. 멤버 캐시의 epoch 작업이 Valkey client를 쓰기 때문입니다.
+- 이 구조는 `DEC-20260825-hololive-api-dedicated-plane-pools`가 PostgreSQL pool을 plane별로 나눈 것(장애 격리와 독립 drain)과 같은 lifecycle 모델을 Valkey client와 멤버 캐시에도 적용한 것입니다. `DEC-20260626-hololive-api-three-runtime-consolidation`의 "shared Valkey client 1개" 조항은 이 구조로 대체합니다(2026-10-02 결정).
+- 비용은 시작 때 멤버 적재 3회, epoch 구독 연결 3개, 15초마다 epoch 조회 3회입니다. 하나로 합치면 한 plane의 pool에 다른 plane이 기대거나 root 소유 pool을 새로 둬야 하므로 합치지 않습니다.
+
 ## Shorts observation processing
 
 - 쇼츠 알림 초기화는 `SHORT` watermark와 저장된 canonical 영상이 소유합니다. 비어 있지 않은 유효 목록은 `PARTIAL / GAP_UNRESOLVED`여도 최초 기준 목록으로 저장하며 알리지 않습니다. 빈 부분 목록은 초기화하지 않고, 검증된 complete-empty 목록은 초기화합니다.

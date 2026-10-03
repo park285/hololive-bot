@@ -14,9 +14,9 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 func TestDeliveryFailureReason_ClassifiesIrisSentinels(t *testing.T) {
@@ -98,7 +98,7 @@ func TestDeliverySendOutcomeUnknown_Classification(t *testing.T) {
 		{"send-timeout", fmt.Errorf("wrap: %w", errDeliverySendTimeout), true},
 		{"deadline", fmt.Errorf("wrap: %w", context.DeadlineExceeded), true},
 		{"canceled", context.Canceled, true},
-		{"reply-handoff-status-unknown", fmt.Errorf("wrap: %w", egress.ErrReplyHandoffOutcomeUnknown), true},
+		{"reply-handoff-status-unknown", fmt.Errorf("wrap: %w", sendoutcome.ErrHandoffOutcomeUnknown), true},
 		{"transport-post", fmt.Errorf("wrap: %w", &iris.TransportError{Op: testTransportOpPost, Err: io.ErrUnexpectedEOF}), true},
 		{"transport-dial", &iris.TransportError{Op: testTransportOpPost, Err: &net.OpError{Op: "dial", Err: errors.New("connection refused")}}, false},
 		{"transport-dns", &iris.TransportError{Op: testTransportOpPost, Err: &net.DNSError{Err: "no such host", IsNotFound: true}}, false},
@@ -147,9 +147,9 @@ func (s *flowTestSender) SendMessage(ctx context.Context, _, _ string) error {
 }
 
 func newFlowTestSendEngine(sender *flowTestSender, timeout time.Duration) *SendEngine {
-	return newSendEngine(sender, &format.MessageFormatter{}, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	return newSendEngine(sender, &format.MessageFormatter{}, slog.New(slog.DiscardHandler), withTestDispatchConfigDefaults(&dispatchstate.Config{
 		DeliverySendTimeout: timeout,
-	}, nil, nil, nil, &lifecycleTransitionSpy{})
+	}), nil, nil, nil, &lifecycleTransitionSpy{})
 }
 
 func flowTestSendRequest(roomID string) deliverySendRequest {

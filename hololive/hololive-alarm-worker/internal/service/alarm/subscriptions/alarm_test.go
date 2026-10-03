@@ -23,7 +23,7 @@ package subscriptions
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
+	targetpolicy "github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 )
 
 func TestNormalizeTargetMinutes(t *testing.T) {

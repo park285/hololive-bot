@@ -123,11 +123,3 @@ func (as *AlarmService) UpdateAlarmAdvanceMinutes(ctx context.Context, alarmAdva
 
 	return result, nil
 }
-
-func (as *AlarmService) Close(_ context.Context) error {
-	if as == nil {
-		return nil
-	}
-
-	return nil
-}

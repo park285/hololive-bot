@@ -59,6 +59,11 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: %w", holodexErr)
 	}
 
+	if holodexErr != nil {
+		// Holodex 실패 뒤 persisted 세션만으로 이번 주기를 계속한 횟수다. 예외 계약(contracts/alarm.md)의 telemetry다.
+		observeYouTubePersistedLiveSessions("holodex_error_continued", "all", 1)
+	}
+
 	liveEvidence.observedAtByStreamID = mergePersistedLiveSessionStreams(streamsByChannel, persistedSessions)
 
 	err = c.applyConfirmedPremiereClassification(ctx, streamsByChannel)
@@ -148,7 +153,10 @@ func (c *YouTubeChecker) loadHolodexStreamsByChannel(
 	ctx context.Context,
 	dueChannels []string,
 ) (map[string][]*domain.Stream, error) {
-	streams, err := c.holodexService.GetChannelsLiveStatus(ctx, dueChannels)
+	holodexCtx, cancel := context.WithTimeout(ctx, c.holodexBudget)
+	defer cancel()
+
+	streams, err := c.holodexService.GetChannelsLiveStatus(holodexCtx, dueChannels)
 	if err == nil {
 		return groupStreamsByChannel(streams), nil
 	}

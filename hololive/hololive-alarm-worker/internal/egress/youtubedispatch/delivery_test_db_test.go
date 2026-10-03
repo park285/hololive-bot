@@ -16,8 +16,8 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
 type deliveryTestSQLResult struct {
@@ -101,7 +101,7 @@ func countDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, dest *int64, wher
 		query += " WHERE " + where
 	}
 
-	err := pool.QueryRow(context.Background(), deliverysql.PostgresPlaceholders(query), args...).Scan(dest)
+	err := pool.QueryRow(context.Background(), dbx.PostgresPlaceholders(query), args...).Scan(dest)
 
 	return deliveryTestSQLResult{Error: err}
 }
@@ -139,7 +139,7 @@ func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[strin
 
 	queryArgs = append(queryArgs, args...)
 
-	tag, err := pool.Exec(context.Background(), deliverysql.PostgresPlaceholders(query), queryArgs...)
+	tag, err := pool.Exec(context.Background(), dbx.PostgresPlaceholders(query), queryArgs...)
 
 	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
 }
@@ -168,7 +168,7 @@ func firstDeliveryTestRowContext(ctx context.Context, pool *pgxpool.Pool, dest a
 
 	query += " LIMIT 1"
 
-	if err := pgxscan.Get(ctx, pool, dest, deliverysql.PostgresPlaceholders(query), args...); err != nil {
+	if err := pgxscan.Get(ctx, pool, dest, dbx.PostgresPlaceholders(query), args...); err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
 
@@ -191,7 +191,7 @@ func findDeliveryTestRowsContext(ctx context.Context, pool *pgxpool.Pool, dest a
 		query += " ORDER BY " + order
 	}
 
-	if err := pgxscan.Select(ctx, pool, dest, deliverysql.PostgresPlaceholders(query), args...); err != nil {
+	if err := pgxscan.Select(ctx, pool, dest, dbx.PostgresPlaceholders(query), args...); err != nil {
 		return fmt.Errorf("select: %w", err)
 	}
 

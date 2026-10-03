@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -44,7 +46,7 @@ func NewDeliveryRepository(db any, logger *slog.Logger) *DeliveryRepository {
 }
 
 func AsDeliveryDB(db any) deliverysql.DeliveryDB {
-	if deliverysql.IsNilDB(db) {
+	if reflectutil.IsNil(db) {
 		return nil
 	}
 

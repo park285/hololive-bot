@@ -8,8 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
-const maxVideoRendererFallbackNodes = parser.MaxVideoRendererFallbackNodes
-
 func parseVideosFromInitialData(
 	data *gjson.Result,
 	channelID string,

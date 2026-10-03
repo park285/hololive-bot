@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -52,11 +53,17 @@ type fakeYouTubeLiveSessionSource struct {
 }
 
 func (s *fakeYouTubeLiveSessionSource) LoadRecentSessions(
-	_ context.Context,
+	ctx context.Context,
 	ids []string,
 	_ time.Time,
 ) ([]PersistedYouTubeLiveSession, error) {
+	// 실제 PostgreSQL 조회처럼 기한이 지난 context에서는 실패한다.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	s.loadRecentChannelArgs = append(s.loadRecentChannelArgs, append([]string(nil), ids...))
+
 	return s.sessions, nil
 }
 
@@ -572,8 +579,7 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 }
 
 func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing.T) {
-	t.Parallel()
-
+	// 전역 counter 증가분을 정확히 보므로 병렬로 돌리지 않는다.
 	const (
 		channelID = "UC_TEST_CHANNEL"
 		roomID    = testRoomID1
@@ -626,10 +632,15 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
+	initCheckerMetrics()
+
+	continuedBefore := testutil.ToFloat64(youtubePersistedLiveTotal.WithLabelValues("holodex_error_continued", "all"))
+
 	notifications, err := checker.Check(ctx)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, streamID, notifications[0].Stream.ID)
+	assert.InDelta(t, continuedBefore+1, testutil.ToFloat64(youtubePersistedLiveTotal.WithLabelValues("holodex_error_continued", "all")), 0)
 }
 
 func TestYouTubeCheckerCheck_SkipsHolodexUpcomingWhenConfirmedPremiere(t *testing.T) {
@@ -1248,4 +1259,58 @@ func TestResolveLiveStart(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Holodex가 응답하지 않아도 Holodex 한도가 주기 예산을 다 쓰지 않으므로 저장된 live session으로 이번 주기를 끝낸다.
+func TestYouTubeCheckerCheck_HolodexHangLeavesBudgetForPersistedSessions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		channelID = "UC_TEST_CHANNEL_HANG"
+		streamID  = "stream-live-holodex-hang"
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	cache := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
+	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	require.NoError(t, err)
+
+	startActual := time.Now().UTC().Truncate(time.Second).Add(-20 * time.Minute)
+	persistedSource := &fakeYouTubeLiveSessionSource{
+		sessions: []PersistedYouTubeLiveSession{{
+			Stream: &domain.Stream{
+				ID: streamID, Title: "DB live", ChannelID: channelID, Status: domain.StreamStatusLive,
+				StartActual: &startActual, Channel: &domain.Channel{ID: channelID, Name: testDBChannelName},
+			},
+			LastSeenAt: time.Now().UTC().Truncate(time.Second),
+		}},
+		recentDispatch: map[string]bool{streamID: true},
+	}
+
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tier.NewTieredScheduler(logger), dedupService, []int{5, 3, 1}, 0, persistedSource, nil, logger)
+	require.NoError(t, err)
+
+	// 운영 비율(주기 45초, Holodex 25초)을 축소한다. 한도가 없으면 Holodex가 주기 기한까지 붙잡아 저장 세션 조회도 실패한다.
+	checker.holodexBudget = 200 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	require.NoError(t, err)
+
+	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{testRoomID1})
+	require.NoError(t, err)
+
+	notifications, err := checker.Check(ctx)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, streamID, notifications[0].Stream.ID)
+	require.NoError(t, ctx.Err(), "check must finish before the cycle deadline")
 }

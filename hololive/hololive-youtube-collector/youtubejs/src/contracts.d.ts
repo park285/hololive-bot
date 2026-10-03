@@ -64,8 +64,6 @@ export type TerminationReason =
 
 export interface Pagination {
   page_count: number;
-  cursor_start?: string;
-  cursor_end?: string;
   exhausted: boolean;
   continuity: Continuity;
   termination_reason: TerminationReason;

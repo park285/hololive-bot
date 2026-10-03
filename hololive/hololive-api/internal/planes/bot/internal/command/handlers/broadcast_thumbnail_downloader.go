@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/netguard"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -185,17 +186,13 @@ func validateThumbnailResponse(resp *http.Response) (string, error) {
 }
 
 func readBroadcastThumbnailBody(body io.Reader) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(body, maxBroadcastThumbnailBytes+1))
+	data, err := httputil.ReadAllLimited(body, maxBroadcastThumbnailBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read thumbnail: %w", err)
 	}
 
 	if len(data) == 0 {
 		return nil, errors.New("thumbnail body is empty")
-	}
-
-	if len(data) > maxBroadcastThumbnailBytes {
-		return nil, errors.New("thumbnail body exceeds size limit")
 	}
 
 	return data, nil

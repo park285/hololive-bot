@@ -103,7 +103,7 @@ func NewMaintenanceRunner(
 		retentionEnabled: retentionConfig.Enabled,
 		interval:         retentionConfig.Interval,
 		queryTimeout:     retentionConfig.QueryTimeout,
-		limit:            clampAlarmDispatchRetentionLimit(retentionConfig.Limit),
+		limit:            retentionConfig.Limit,
 		sentDays:         retentionConfig.SentDays,
 		dlqDays:          retentionConfig.DLQDays,
 		quarantinedDays:  retentionConfig.QuarantinedDays,
@@ -120,7 +120,7 @@ func (r *alarmDispatchMaintenanceRunner) Start(ctx context.Context) error {
 			r.reportFailure(ctx, err)
 		}
 
-		if !retry.Sleep(ctx, r.effectiveInterval()) {
+		if !retry.Sleep(ctx, r.interval) {
 			return nil
 		}
 	}
@@ -153,11 +153,11 @@ func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
 		return nil
 	}
 
-	deleteCtx, cancelDelete := context.WithTimeout(ctx, r.effectiveQueryTimeout())
+	deleteCtx, cancelDelete := context.WithTimeout(ctx, r.queryTimeout)
 
 	defer cancelDelete()
 
-	if err := r.store.WithAdvisoryLock(deleteCtx, r.effectiveLockKey(), r.deleteRetainedRows); err != nil {
+	if err := r.store.WithAdvisoryLock(deleteCtx, r.retentionLockKey, r.deleteRetainedRows); err != nil {
 		return fmt.Errorf("with advisory lock: %w", err)
 	}
 
@@ -166,7 +166,7 @@ func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
 
 func (r *alarmDispatchMaintenanceRunner) observeBacklogOnce(ctx context.Context) {
 	if r.observerStore != nil {
-		observeCtx, cancelObserve := context.WithTimeout(ctx, r.effectiveQueryTimeout())
+		observeCtx, cancelObserve := context.WithTimeout(ctx, r.queryTimeout)
 		err := r.observeBacklog(observeCtx, r.observerStore)
 
 		cancelObserve()
@@ -183,7 +183,7 @@ func (r *alarmDispatchMaintenanceRunner) observeBacklogOnce(ctx context.Context)
 
 func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context, store alarmDispatchMaintenanceDataStore) error {
 	for _, target := range r.retentionTargets() {
-		rows, err := store.DeleteTerminal(ctx, target.status, target.retentionDays, r.effectiveLimit())
+		rows, err := store.DeleteTerminal(ctx, target.status, target.retentionDays, r.limit)
 		if err != nil {
 			return fmt.Errorf("delete retained alarm dispatch %s rows: %w", target.status, err)
 		}
@@ -191,14 +191,14 @@ func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context,
 		observeAlarmDispatchRetentionDeletedRows(string(target.status), rows)
 	}
 
-	rows, err := store.DeleteOrphanSendUnits(ctx, r.effectiveLimit())
+	rows, err := store.DeleteOrphanSendUnits(ctx, r.limit)
 	if err != nil {
 		return fmt.Errorf("delete retained orphan alarm dispatch send units: %w", err)
 	}
 
 	observeAlarmDispatchRetentionDeletedRows("send_unit", rows)
 
-	rows, err = store.DeleteOrphanEvents(ctx, r.effectiveEventDays(), r.effectiveLimit())
+	rows, err = store.DeleteOrphanEvents(ctx, r.eventDays, r.limit)
 	if err != nil {
 		return fmt.Errorf("delete retained orphan alarm dispatch events: %w", err)
 	}
@@ -238,68 +238,16 @@ func (r *alarmDispatchMaintenanceRunner) observeBacklog(ctx context.Context, sto
 
 func (r *alarmDispatchMaintenanceRunner) retentionTargets() []alarmDispatchRetentionTarget {
 	return []alarmDispatchRetentionTarget{
-		{status: dispatchoutbox.StatusSent, retentionDays: r.effectiveDays(r.sentDays, 90)},
-		{status: dispatchoutbox.StatusDLQ, retentionDays: r.effectiveDays(r.dlqDays, 180)},
-		{status: dispatchoutbox.StatusQuarantined, retentionDays: r.effectiveDays(r.quarantinedDays, 180)},
-		{status: dispatchoutbox.StatusCancelled, retentionDays: r.effectiveDays(r.cancelledDays, 90)},
+		{status: dispatchoutbox.StatusSent, retentionDays: r.sentDays},
+		{status: dispatchoutbox.StatusDLQ, retentionDays: r.dlqDays},
+		{status: dispatchoutbox.StatusQuarantined, retentionDays: r.quarantinedDays},
+		{status: dispatchoutbox.StatusCancelled, retentionDays: r.cancelledDays},
 	}
 }
 
 type alarmDispatchRetentionTarget struct {
 	status        dispatchoutbox.Status
 	retentionDays int
-}
-
-func (r *alarmDispatchMaintenanceRunner) effectiveInterval() time.Duration {
-	if r.interval > 0 {
-		return r.interval
-	}
-
-	return time.Hour
-}
-
-func (r *alarmDispatchMaintenanceRunner) effectiveQueryTimeout() time.Duration {
-	if r.queryTimeout > 0 {
-		return r.queryTimeout
-	}
-
-	return 30 * time.Second
-}
-
-func (r *alarmDispatchMaintenanceRunner) effectiveLimit() int {
-	return clampAlarmDispatchRetentionLimit(r.limit)
-}
-
-func (r *alarmDispatchMaintenanceRunner) effectiveEventDays() int {
-	return r.effectiveDays(r.eventDays, 90)
-}
-
-func (r *alarmDispatchMaintenanceRunner) effectiveLockKey() int64 {
-	if r.retentionLockKey != 0 {
-		return r.retentionLockKey
-	}
-
-	return alarmDispatchRetentionLockKey
-}
-
-func (r *alarmDispatchMaintenanceRunner) effectiveDays(value, fallback int) int {
-	if value > 0 {
-		return value
-	}
-
-	return fallback
-}
-
-func clampAlarmDispatchRetentionLimit(limit int) int {
-	if limit <= 0 {
-		return 1000
-	}
-
-	if limit > alarmDispatchRetentionMaxLimit {
-		return alarmDispatchRetentionMaxLimit
-	}
-
-	return limit
 }
 
 func alarmDispatchTerminalTimestampColumn(status dispatchoutbox.Status) (string, bool) {
@@ -477,4 +425,16 @@ func (s alarmDispatchMaintenancePgxStore) DeleteOrphanSendUnits(ctx context.Cont
 	}
 
 	return tag.RowsAffected(), nil
+}
+
+func clampAlarmDispatchRetentionLimit(limit int) int {
+	if limit <= 0 {
+		return 1000
+	}
+
+	if limit > alarmDispatchRetentionMaxLimit {
+		return alarmDispatchRetentionMaxLimit
+	}
+
+	return limit
 }

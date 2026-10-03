@@ -86,15 +86,6 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "alarm foundation", err)
 	}
 
-	runtimeOwnsAlarmService := false
-
-	defer func() {
-		closeErr := closeAlarmServiceOnBuildFailure(ctx, foundation, runtimeOwnsAlarmService)
-		if closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("close alarm service after build failure: %w", closeErr))
-		}
-	}()
-
 	workerState, err := newAlarmWorkerRegistryState(appConfig.AlarmWorkerProfile, infra.Postgres.GetPool())
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, "worker registry", err)
@@ -126,7 +117,6 @@ func buildAlarmWorkerRuntimeFromInfra(
 		backgroundRunners:  backgroundRunners,
 		workerState:        workerState,
 	})
-	runtimeOwnsAlarmService = true
 
 	return runtime, nil
 }
@@ -156,7 +146,6 @@ func newAlarmWorkerRuntime(
 		XSpacesRunner:        parts.backgroundRunners.xSpaces,
 		ServerAddr:           parts.servers.Addr(),
 		HTTPServers:          parts.servers,
-		AlarmService:         foundation.AlarmService,
 		WorkerObservability:  parts.workerState,
 		Managed:              lifecycle.NewManaged(stopHolodexRetriesBeforeCleanup(foundation.HolodexService, infra.Cleanup)),
 	}
@@ -193,18 +182,6 @@ func buildOptionalRuntimeScheduler(
 	}
 
 	return optionalRuntimeSchedulerResult{scheduler: scheduler}
-}
-
-func closeAlarmServiceOnBuildFailure(ctx context.Context, foundation *alarmFoundation, owned bool) error {
-	if owned || foundation == nil || foundation.AlarmService == nil {
-		return nil
-	}
-
-	if err := foundation.AlarmService.Close(ctx); err != nil {
-		return fmt.Errorf("close: %w", err)
-	}
-
-	return nil
 }
 
 type alarmWorkerBackgroundRunners struct {

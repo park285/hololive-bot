@@ -22,7 +22,6 @@ package holodexprovider
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -42,11 +41,7 @@ func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.C
 	// 매 요청마다 그 목록을 필터링해도 upstream 호출은 늘지 않는다(Valkey 책임 축소 A10).
 	channels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
-		if logErr := sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, searchQueryAttr(query)); logErr != nil {
-			return nil, fmt.Errorf("log and wrap error: %w", logErr)
-		}
-
-		return nil, nil
+		return nil, sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, searchQueryAttr(query))
 	}
 
 	h.logger.Debug("Holodex API search results",
@@ -106,6 +101,3 @@ func channelMatchesSearchQuery(ch *domain.Channel, normalizedQuery string) bool 
 
 	return strings.Contains(strings.ToLower(ch.ID), normalizedQuery)
 }
-
-// retryable Holodex 오류(5xx/timeout/circuit/key rotation)에서만 YouTube 스크래퍼로 폴백하고,
-// non-retryable 오류는 그대로 반환합니다.

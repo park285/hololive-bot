@@ -12,13 +12,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
-type (
-	JobRunner     = collectutil.JobRunner
-	RunInput      = collectutil.RunInput
-	RunOutput     = collectutil.RunOutput
-	CollectResult = collectutil.CollectResult
-)
-
 type ExecutionProfile struct {
 	maxUpstreamCalls int
 	requestTimeout   time.Duration
@@ -138,13 +131,13 @@ func checkedAddDuration(values ...time.Duration) (time.Duration, error) {
 }
 
 type RegisteredRunner struct {
-	runner   JobRunner
+	runner   collectutil.JobRunner
 	contract sourceobservation.JobContract
 	profile  ExecutionProfile
 }
 
 func newRegisteredRunner(
-	runner JobRunner,
+	runner collectutil.JobRunner,
 	job sourceobservation.JobContract,
 	profile ExecutionProfile,
 ) (RegisteredRunner, error) {
@@ -155,7 +148,7 @@ func newRegisteredRunner(
 	return RegisteredRunner{runner: runner, contract: job.Clone(), profile: profile}, nil
 }
 
-func (r RegisteredRunner) Runner() JobRunner                       { return r.runner }
+func (r RegisteredRunner) Runner() collectutil.JobRunner           { return r.runner }
 func (r RegisteredRunner) Contract() sourceobservation.JobContract { return r.contract.Clone() }
 func (r RegisteredRunner) Profile() ExecutionProfile               { return r.profile }
 
@@ -169,7 +162,7 @@ type Registry struct {
 	byKey   map[runnerKey]RegisteredRunner
 }
 
-func NewRegistry(runners ...JobRunner) (*Registry, error) {
+func NewRegistry(runners ...collectutil.JobRunner) (*Registry, error) {
 	profiles := make(map[sourceobservation.JobID]ExecutionProfile, len(runners))
 	for _, runner := range runners {
 		if runner == nil {
@@ -203,7 +196,7 @@ func jobMaxUpstreamCalls(id sourceobservation.JobID) int {
 	}
 }
 
-func NewRegistryWithProfiles(profiles map[sourceobservation.JobID]ExecutionProfile, runners ...JobRunner) (*Registry, error) {
+func NewRegistryWithProfiles(profiles map[sourceobservation.JobID]ExecutionProfile, runners ...collectutil.JobRunner) (*Registry, error) {
 	contracts := sourceobservation.InitialJobContracts()
 	registry := &Registry{
 		runners: make([]RegisteredRunner, 0, len(runners)),
@@ -229,7 +222,7 @@ func registerRunner(
 	contracts sourceobservation.JobContractSet,
 	seenContracts map[sourceobservation.JobID]struct{},
 	profiles map[sourceobservation.JobID]ExecutionProfile,
-	runner JobRunner,
+	runner collectutil.JobRunner,
 ) error {
 	if runner == nil {
 		return errors.New("register collection job runner: runner is nil")

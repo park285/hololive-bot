@@ -36,7 +36,7 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-func TestNewAlarmServiceAndClose(t *testing.T) {
+func TestNewAlarmServiceValidatesRepositoryAndNormalizesTargets(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 
@@ -53,8 +53,6 @@ func TestNewAlarmServiceAndClose(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, service)
 	assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
-
-	require.NoError(t, service.Close(ctx))
 }
 
 func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {

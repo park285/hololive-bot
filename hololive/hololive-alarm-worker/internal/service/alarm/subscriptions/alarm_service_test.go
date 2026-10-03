@@ -30,6 +30,7 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
+// members에 표시명이 없으면 요청의 member_name을 대신 쓰지 않고 빈 표시명을 캐시한다. 알림 표시 단계가 종단 문구를 쓴다.
 func TestAddAlarm_CacheWrite(t *testing.T) {
 	t.Parallel()
 
@@ -62,7 +63,7 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 
 	name, err := as.cache.HGet(ctx, sharedalarmkeys.MemberNameKey, testUCChannelID)
 	require.NoError(t, err)
-	assert.Equal(t, "테스트 멤버", name)
+	assert.Empty(t, name)
 }
 
 func TestAddAlarm_CacheWriteUsesShortKoreanMemberName(t *testing.T) {
@@ -273,6 +274,7 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	result, err := as.UpdateAlarmAdvanceMinutes(t.Context(), 20)
 	require.NoError(t, err)
 	assert.Equal(t, domain.ApplyConfirmed, result.Outcome)
+	assert.Equal(t, 20, result.RequestedMinutes)
 
 	assert.Contains(t, result.TargetMinutes, 20)
 	assert.Contains(t, result.TargetMinutes, 1)

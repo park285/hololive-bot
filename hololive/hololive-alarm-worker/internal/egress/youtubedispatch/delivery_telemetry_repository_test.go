@@ -205,7 +205,7 @@ func TestDispatcher_Cleanup_RemovesOnlyLoggedTelemetryOlderThanRetention(t *test
 
 	require.NoError(t, insertDeliveryTestRows(db, &rows).Error)
 
-	config := dispatchstate.DefaultConfig()
+	config := testDispatchConfig()
 
 	config.CleanupAfter = 7 * 24 * time.Hour
 	config.CleanupEnabled = false

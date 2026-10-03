@@ -131,13 +131,13 @@ func TestCollectVideoRenderers_BoundedScan(t *testing.T) {
 
 	builder.WriteString(`{"contents":`)
 
-	for range maxVideoRendererFallbackNodes + 32 {
+	for range parser.MaxVideoRendererFallbackNodes + 32 {
 		builder.WriteString(`{"child":`)
 	}
 
 	builder.WriteString(`{"videoRenderer":{"videoId":"too-deep","title":{"runs":[{"text":"Too Deep"}]}}}`)
 
-	for range maxVideoRendererFallbackNodes + 32 {
+	for range parser.MaxVideoRendererFallbackNodes + 32 {
 		builder.WriteString(`}`)
 	}
 

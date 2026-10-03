@@ -77,7 +77,7 @@ func TestAlarmCacheNameAndSubscriberHelpers(t *testing.T) {
 	assert.Equal(t, []string{testRoomID}, shortsSubs)
 }
 
-func TestTargetMinutesAndCloseHelpers(t *testing.T) {
+func TestTargetMinutesUpdatesReturnConfirmedResult(t *testing.T) {
 	t.Parallel()
 
 	as := &AlarmService{logger: newDiscardAlarmLogger()}
@@ -85,16 +85,15 @@ func TestTargetMinutesAndCloseHelpers(t *testing.T) {
 
 	updated, err := as.UpdateAlarmAdvanceMinutes(t.Context(), 10)
 	require.NoError(t, err)
+	assert.Equal(t, domain.ApplyConfirmed, updated.Outcome)
+	assert.Equal(t, 10, updated.RequestedMinutes)
 	assert.Equal(t, []int{10, 3, 1}, updated.TargetMinutes)
 	assert.Equal(t, []int{10, 3, 1}, as.GetTargetMinutes())
 
 	updated, err = as.UpdateAlarmAdvanceMinutes(t.Context(), 1)
 	require.NoError(t, err)
+	assert.Equal(t, domain.ApplyConfirmed, updated.Outcome)
+	assert.Equal(t, 1, updated.RequestedMinutes)
 	assert.Equal(t, []int{1}, updated.TargetMinutes)
 	assert.Equal(t, []int{1}, as.GetTargetMinutes())
-
-	var nilService *AlarmService
-
-	require.NoError(t, nilService.Close(t.Context()))
-	require.NoError(t, as.Close(t.Context()))
 }

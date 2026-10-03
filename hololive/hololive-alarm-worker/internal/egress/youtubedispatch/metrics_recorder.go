@@ -1,7 +1,6 @@
 package youtubedispatch
 
 import (
-	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -9,23 +8,14 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 )
 
+// MetricsRecorder는 확정된 발송 결과를 로그·audit·DispatchResult에 기록하며, claim 해제 같은 상태 변경은 하지 않는다.
 type MetricsRecorder struct {
-	claimReleaser
-
 	logger      *slog.Logger
 	auditLogger *AuditLogger
 }
 
-type claimReleaser interface {
-	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
-}
-
-func newMetricsRecorder(logger *slog.Logger, auditLogger *AuditLogger, cr claimReleaser) *MetricsRecorder {
-	return &MetricsRecorder{
-		logger:        logger,
-		auditLogger:   auditLogger,
-		claimReleaser: cr,
-	}
+func newMetricsRecorder(logger *slog.Logger, auditLogger *AuditLogger) *MetricsRecorder {
+	return &MetricsRecorder{logger: logger, auditLogger: auditLogger}
 }
 
 func (mr *MetricsRecorder) recordDeliveryFailure(

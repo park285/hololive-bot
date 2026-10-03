@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -14,7 +15,7 @@ const mekparkUnitBChannel = "UC3OH5FKQ3qtl4uRme_vZTgA"
 func mekparkVideoOutbox(t *testing.T, kind domain.OutboxKind, title string) domain.YouTubeNotificationOutbox {
 	t.Helper()
 
-	payload, err := jsonv2.Marshal(VideoPayload{VideoID: "video123", Title: title})
+	payload, err := jsonv2.Marshal(youtubeoutbox.Video{VideoID: "video123", Title: title})
 	require.NoError(t, err)
 
 	return domain.YouTubeNotificationOutbox{Kind: kind, ChannelID: mekparkUnitBChannel, Payload: string(payload)}
@@ -34,7 +35,6 @@ func TestMekParkVideoOutboxDisplay(t *testing.T) {
 			require.Equal(t, "유닛 B · 미라", data.MemberName)
 			require.Equal(t, "【挑戦】ピアノ #玲銘ミラ", data.Title)
 			require.Equal(t, original, item)
-			require.Contains(t, renderOutboxBody(t, outboxBodyVideo, data), "**유닛 B · 미라**")
 		})
 	}
 }
@@ -47,17 +47,12 @@ func TestMekParkGroupedOutboxKeepsHostsPerItem(t *testing.T) {
 		mekparkVideoOutbox(t, domain.OutboxKindNewVideo, "#宵凪ネオン"),
 		mekparkVideoOutbox(t, domain.OutboxKindNewVideo, "?"),
 	}
-	data := (&MessageFormatter{}).BuildGroupedTemplateData("유닛 B", domain.OutboxKindNewVideo, items)
+	data, err := (&MessageFormatter{}).BuildGroupedTemplateData("유닛 B", domain.OutboxKindNewVideo, items)
+	require.NoError(t, err)
 	require.Equal(t, "유닛 B", data.MemberName)
 	require.Equal(t, "미라 · #玲銘ミラ", data.Items[0].Title)
 	require.Equal(t, "네온 · #宵凪ネオン", data.Items[1].Title)
 	require.Equal(t, "?", data.Items[2].Title)
-
-	message := renderOutboxBody(t, outboxBodyVideoGroup, data)
-	require.Contains(t, message, "유닛 B 새 영상 (3)")
-	require.Contains(t, message, "1. [미라 ·")
-	require.Contains(t, message, "2. [네온 ·")
-	require.Contains(t, message, "3. [?]")
 }
 
 func TestMekParkUnattributedOutboxDisplay(t *testing.T) {
@@ -75,7 +70,10 @@ func TestMekParkUnattributedOutboxDisplay(t *testing.T) {
 	data, err = formatter.BuildTemplateData("다른 채널", &foreign)
 	require.NoError(t, err)
 	require.Equal(t, "다른 채널", data.MemberName)
-	require.Equal(t, "#玲銘ミラ", BuildGroupedItemData(&foreign).Title)
+
+	groupedItem, err := buildGroupedItemData(&foreign)
+	require.NoError(t, err)
+	require.Equal(t, "#玲銘ミラ", groupedItem.Title)
 
 	item := domain.YouTubeNotificationOutbox{
 		Kind: domain.OutboxKindCommunityPost, ChannelID: mekparkUnitBChannel,

@@ -115,14 +115,17 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/
   channel_photo_v1.go
   schedule_snapshot_v1.go
 
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/          # collector 발행(2026-10-02 분리)
   repository.go
   repository_publish.go
+  queries/*.sql
+
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/consume/  # API 소비(2026-10-02 분리)
+  repository.go
   repository_claim.go
   repository_finalize.go
   repository_replay.go
   repository_retention.go
-  errors.go
   queries/*.sql
 
 hololive/hololive-shared/pkg/service/youtube/reconcile/
@@ -428,6 +431,8 @@ type GlobalChannelCoverageV1 struct {
 ```
 
 모든 ID slice는 trim, validate, sort, deduplicate한 뒤 hash한다. caller가 전달한 순서가 scope identity를 바꾸지 않는다.
+
+`cursor_start`·`cursor_end`는 이미 저장된 observation을 strict decode하기 위해 계약에 남아 있지만, youtubejs provider는 채우지 않는다. InnerTube continuation token은 같은 목록이라도 요청마다 달라질 수 있고 수 KB까지 커진다. coverage는 `scope_sha256`과 observation key에 들어가므로, 이 token을 실으면 같은 slot의 재시도가 서로 다른 observation이 되고 512 byte 상한도 넘는다. helper는 token을 cursor 반복 감지에만 쓰고 helper 응답에는 cursor를 싣지 않는다(2026-10-02 7.2.0 회귀와 7.2.1 수정).
 
 ### 5.2 completeness와 continuity
 

@@ -240,13 +240,10 @@ test("PAG-008 budget measures the full success envelope", async () => {
   assert.equal(twoItemExact.items.length, 2);
   assert.ok(Buffer.byteLength(JSON.stringify({ protocol_version: 1, ...twoItemExact })) <= twoItemLimit);
 
-  const cursor = "x".repeat(8190);
   const maximumMetadata = {
     protocol_version: 1,
     items: [],
     page_count: 100,
-    cursor_start: cursor,
-    cursor_end: cursor,
     exhausted: false,
     continuity: "GAP_UNRESOLVED",
     termination_reason: "max_success_response_bytes",
@@ -271,21 +268,16 @@ test("PAG-010 unknown shape and plain array are distinct fatal errors", async ()
   );
 });
 
-test("PAG-012 cursor JSON bytes accept 8192 and reject 8193", async () => {
-  const accepted = "x".repeat(8190);
+test("PAG-012 continuation tokens stay out of the response at any length", async () => {
+  const token = "x".repeat(16_384);
   const result = await paginate(options({
-    firstPage: page("a", accepted),
+    firstPage: page("a", token),
     maxPages: 1,
   }));
-  assert.equal(result.cursor_start, accepted);
-
-  await assert.rejects(
-    () => paginate(options({
-      firstPage: page("a", "x".repeat(8191)),
-      maxPages: 1,
-    })),
-    (error) => error.code === "helper_protocol_mismatch",
-  );
+  assert.equal(result.termination_reason, "max_pages");
+  assert.equal(Object.hasOwn(result, "cursor_start"), false);
+  assert.equal(Object.hasOwn(result, "cursor_end"), false);
+  assert.equal(JSON.stringify(result).includes(token), false);
 });
 
 test("PAG-013 paginationResult rejects impossible tuples", () => {

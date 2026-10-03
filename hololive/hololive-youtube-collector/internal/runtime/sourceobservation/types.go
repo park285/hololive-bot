@@ -18,13 +18,12 @@ const (
 )
 
 var (
-	ErrInvalidEnvelope      = errors.New("source observation envelope is invalid")
-	ErrStaleContract        = errors.New("source observation contract is stale")
-	ErrCollectionFenceLost  = errors.New("collection job fence was lost")
-	ErrProjectionStale      = errors.New("collection projection is stale")
-	ErrTargetDisabled       = errors.New("collection target is disabled")
-	ErrObservationCollision = errors.New("source observation identity has conflicting evidence")
-	ErrInvalidRepository    = errors.New("source observation repository is not configured")
+	ErrInvalidEnvelope     = errors.New("source observation envelope is invalid")
+	ErrStaleContract       = errors.New("source observation contract is stale")
+	ErrCollectionFenceLost = errors.New("collection job fence was lost")
+	ErrProjectionStale     = errors.New("collection projection is stale")
+	ErrTargetDisabled      = errors.New("collection target is disabled")
+	ErrInvalidRepository   = errors.New("source observation repository is not configured")
 )
 
 type CheckpointEntry struct {

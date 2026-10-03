@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
@@ -31,10 +30,8 @@ func (as *AlarmService) RemoveHostAlarm(ctx context.Context, roomID, channelID, 
 }
 
 func (as *AlarmService) removeAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
-	as.cacheMutationMu.Lock()
+	startedAt := as.lockCacheMutation("remove")
 	defer as.cacheMutationMu.Unlock()
-
-	startedAt := time.Now()
 
 	var opErr error
 
@@ -140,11 +137,7 @@ func (as *AlarmService) persistRemoveAlarmMutation(ctx context.Context, roomID, 
 
 func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomID, channelID, hostID string) error {
 	if err := as.deleteAlarm(ctx, roomID, channelID, hostID); err != nil {
-		if logErr := sharedlogging.LogAndWrapError(ctx, as.logger, "delete alarm before cache removal", err); logErr != nil {
-			return fmt.Errorf("log and wrap error: %w", logErr)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete alarm before cache removal", err)
 	}
 
 	return nil
@@ -152,11 +145,7 @@ func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomI
 
 func (as *AlarmService) updateAlarmTypesBeforeCacheRemoval(ctx context.Context, updated *domain.Alarm) error {
 	if err := as.updateAlarmTypes(ctx, updated); err != nil {
-		if logAndErr := sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm type update before cache removal", err); logAndErr != nil {
-			return fmt.Errorf("log and wrap error: %w", logAndErr)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm type update before cache removal", err)
 	}
 
 	return nil
@@ -174,21 +163,13 @@ func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID, ch
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
 
-		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild remove cache from repository", opErr); err != nil {
-			return fmt.Errorf("log and wrap error: %w", err)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild remove cache from repository", opErr)
 	}
 
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
 
-		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr); err != nil {
-			return fmt.Errorf("log and wrap error: %w", err)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr)
 	}
 
 	return nil

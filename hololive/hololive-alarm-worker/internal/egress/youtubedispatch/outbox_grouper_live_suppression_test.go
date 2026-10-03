@@ -10,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
-	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -33,7 +32,7 @@ func newLiveCatchupSuppressionItem(t *testing.T) (domain.YouTubeNotificationOutb
 }
 
 func newLiveCatchupSuppressionGrouper(cache *cachemocks.Client) *OutboxGrouper {
-	return newOutboxGrouper(nil, cache, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	return newOutboxGrouper(nil, cache, slog.New(slog.DiscardHandler), withTestDispatchConfigDefaults(nil))
 }
 
 func liveCatchupSuppressionCount(t *testing.T, result string) int64 {

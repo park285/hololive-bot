@@ -293,7 +293,6 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 	env := newDispatcherIntegrationEnv(t, newIntegrationDispatchConfig(50*time.Millisecond))
 
 	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:SHORTS:UCperroom_success", []string{"roomA", "roomB"})
-	setupMemberName(t, env.cacheService, "UCperroom_success", "PerRoomMember")
 
 	contentID := "test_perroom_success_" + time.Now().Format("150405")
 	payload := mustMarshalPayload(t, map[string]string{
@@ -347,7 +346,6 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 
 	env.sender.setFailRoom("roomB")
 	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:UCperroom_retry", []string{"roomA", "roomB"})
-	setupMemberName(t, env.cacheService, "UCperroom_retry", "PerRoomRetryMember")
 
 	payload := mustMarshalPayload(t, map[string]string{
 		payloadKeyVideoID: "perroom_retry_video",
@@ -484,7 +482,6 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 
 	env.sender.setFailRoom("roomB")
 	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:UCperroom_terminal_fail", []string{"roomA", "roomB"})
-	setupMemberName(t, env.cacheService, "UCperroom_terminal_fail", "PerRoomTerminalFailMember")
 
 	payload := mustMarshalPayload(t, map[string]string{
 		payloadKeyVideoID: "perroom_terminal_fail_video",
@@ -542,7 +539,6 @@ type concurrentAlarmCase struct {
 	kind            domain.OutboxKind
 	channelID       string
 	roomID          string
-	memberName      string
 	contentPrefix   string
 	messageFragment string
 	postID          func(contentID string) string
@@ -558,7 +554,6 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			kind:            domain.OutboxKindCommunityPost,
 			channelID:       "UCintegration_race_community",
 			roomID:          "room-community-race",
-			memberName:      "ConcurrentCommunityMember",
 			contentPrefix:   "community_race",
 			messageFragment: "커뮤니티 글",
 			postID: func(contentID string) string {
@@ -580,7 +575,6 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			kind:            domain.OutboxKindNewShort,
 			channelID:       "UCintegration_race_short",
 			roomID:          "room-short-race",
-			memberName:      "ConcurrentShortMember",
 			contentPrefix:   "short_race",
 			messageFragment: "새 쇼츠",
 			postID: func(contentID string) string {
@@ -617,8 +611,6 @@ func runConcurrentAlarmCase(t *testing.T, tc concurrentAlarmCase) {
 
 	sender := &fakeSender{}
 	cacheService := setupCacheService(t)
-
-	setupMemberName(t, cacheService, tc.channelID, tc.memberName)
 
 	config := newIntegrationDispatchConfig(30 * time.Millisecond)
 	logger := newIntegrationTestLogger()
@@ -844,8 +836,6 @@ func setupTestSubscribers(t *testing.T, cacheService *cache.Service) {
 
 	_, err = cacheService.SAdd(ctx, "alarm:channel_subscribers:UCtest456", []string{"testroom"})
 	require.NoError(t, err)
-	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", "UCtest123", "TestMember"))
-	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", "UCtest456", "TestMember2"))
 
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
@@ -868,13 +858,6 @@ func setupChannelSubscribers(t *testing.T, cacheService *cache.Service, key stri
 
 		require.NoError(t, cacheService.Del(cleanupCtx, key))
 	})
-}
-
-func setupMemberName(t *testing.T, cacheService *cache.Service, channelID, name string) {
-	t.Helper()
-
-	ctx := t.Context()
-	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", channelID, name))
 }
 
 func fetchDeliveryRows(t *testing.T, db *pgxpool.Pool, outboxID int64) []domain.YouTubeNotificationDelivery {

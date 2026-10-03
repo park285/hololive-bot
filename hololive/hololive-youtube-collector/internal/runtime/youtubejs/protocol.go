@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -101,8 +100,6 @@ type RPCErrorBody struct {
 
 type Pagination struct {
 	PageCount         int               `json:"page_count"`
-	CursorStart       string            `json:"cursor_start,omitempty"`
-	CursorEnd         string            `json:"cursor_end,omitempty"`
 	Exhausted         bool              `json:"exhausted"`
 	Continuity        string            `json:"continuity"`
 	TerminationReason TerminationReason `json:"termination_reason"`
@@ -111,14 +108,6 @@ type Pagination struct {
 func (p Pagination) Validate() error {
 	if p.PageCount < 1 || p.PageCount > 100 {
 		return errors.New("validate pagination: page_count must be between 1 and 100")
-	}
-
-	if err := validateCursor("cursor_start", p.CursorStart); err != nil {
-		return err
-	}
-
-	if err := validateCursor("cursor_end", p.CursorEnd); err != nil {
-		return err
 	}
 
 	return validatePaginationTermination(p)
@@ -185,37 +174,6 @@ func (p Pagination) Quality() (contract.Completeness, contract.Continuity, error
 	}
 
 	return contract.CompletenessPartial, continuity, nil
-}
-
-func validateCursor(field, cursor string) error {
-	if jsonStringBytes(cursor) > 8192 {
-		return fmt.Errorf("validate pagination: %s exceeds 8192 bytes", field)
-	}
-
-	return nil
-}
-
-func jsonStringBytes(value string) int {
-	size := 2
-
-	for _, r := range value {
-		size += jsonRuneBytes(r)
-	}
-
-	return size
-}
-
-func jsonRuneBytes(r rune) int {
-	switch r {
-	case '"', '\\', '\b', '\f', '\n', '\r', '\t':
-		return 2
-	default:
-		if r < 0x20 {
-			return 6
-		}
-
-		return utf8.RuneLen(r)
-	}
 }
 
 type CommunityRequest struct {

@@ -3,7 +3,6 @@ package subscriptions
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -25,19 +24,10 @@ func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (st
 	return out, nil
 }
 
-// resolveCacheMemberName은 멤버 데이터 표시명을 우선하고, 없으면 호출자 값(알람 등록 때 member_name)을 쓴다. 이 단계는
-// alarm.Repository의 memberDisplayNameExceptionContract 예외 계약에 속하며 hololive_alarm_member_name_caller_fallback_total로 센다.
-func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID, fallback string) string {
-	if name := as.cacheState.ResolveMemberDataName(ctx, channelID); name != "" {
-		return name
-	}
-
-	name := strings.TrimSpace(fallback)
-	if name != "" {
-		observeAlarmMemberNameCallerFallback()
-	}
-
-	return name
+// resolveCacheMemberName은 members 정본의 한국어 표시명을 캐시에 쓴다. 표시명이 없으면 빈 값이며, 알림 표시 단계가
+// misc/vtuber_fallback 문구를 쓴다.
+func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID string) string {
+	return as.cacheState.ResolveMemberDataName(ctx, channelID)
 }
 
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {

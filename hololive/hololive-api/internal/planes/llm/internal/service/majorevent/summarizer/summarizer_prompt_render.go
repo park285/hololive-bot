@@ -40,9 +40,13 @@ type eventForPrompt struct {
 
 const maxEventNoteRunes = 30
 
-func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, periodKey string, searchContext ...string) string {
+func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, periodKey string, searchContext ...string) (string, error) {
 	promptEvents := projectPromptEvents(events)
-	eventsJSON := marshalPromptJSON(promptEvents, "[]")
+
+	eventsJSON, err := marshalPromptJSON("events", promptEvents)
+	if err != nil {
+		return "", err
+	}
 
 	now := time.Now().In(kst)
 	todayStr := fmt.Sprintf("%d년 %d월 %d일 (%s요일)",
@@ -72,19 +76,21 @@ func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, period
 비공식 출처이거나 입력 행사와 중복되면 무시하세요.
 
 %s
-</web_search_context>`, base, searchContext[0])
+</web_search_context>`, base, searchContext[0]), nil
 	}
 
-	return base
+	return base, nil
 }
 
-func marshalPromptJSON(value any, fallback string) []byte {
+// marshalPromptJSON은 prompt에 넣을 값을 직렬화한다. 실패를 빈 목록·null로 바꾸면 LLM이 입력 없이 요약하므로
+// 오류를 그대로 돌려준다. 외부에서 수집한 제목의 잘못된 UTF-8이 대표적인 실패 원인이다.
+func marshalPromptJSON(field string, value any) ([]byte, error) {
 	data, err := jsonv2.Marshal(value)
 	if err != nil {
-		return []byte(fallback)
+		return nil, fmt.Errorf("marshal prompt %s: %w", field, err)
 	}
 
-	return data
+	return data, nil
 }
 
 func projectPromptEvents(events []domain.MajorEvent) []eventForPrompt {

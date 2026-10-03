@@ -44,7 +44,7 @@ test("PAG-013 response validator requires termination_reason and rejects impossi
   );
 });
 
-test("PAG-012 response validator rejects a 8193-byte cursor", () => {
+test("PAG-012 response validator rejects pagination cursors", () => {
   const page = {
     protocol_version: 1,
     posts: [],
@@ -52,13 +52,14 @@ test("PAG-012 response validator rejects a 8193-byte cursor", () => {
     exhausted: false,
     continuity: "GAP_UNRESOLVED",
     termination_reason: "max_pages",
-    cursor_start: "x".repeat(8190),
   };
-  assert.equal(validateCommunityResponse(page).cursor_start, page.cursor_start);
-  assert.throws(
-    () => validateCommunityResponse({ ...page, cursor_start: `${page.cursor_start}x` }),
-    (error) => error.code === "helper_protocol_mismatch",
-  );
+  assert.equal(Object.hasOwn(validateCommunityResponse(page), "cursor_start"), false);
+  for (const field of ["cursor_start", "cursor_end"]) {
+    assert.throws(
+      () => validateCommunityResponse({ ...page, [field]: "token" }),
+      (error) => error.code === "parser_drift" && error.message === `unknown field: ${field}`,
+    );
+  }
 });
 
 test("PAG-004 real library HTTP errors use the existing failure tuples", async () => {

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 [[ "$(hostname -s)" == kapu ]] || { echo 'AP image builds and export are restricted to kapu' >&2; exit 1; }
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "$REPO_ROOT/.." && pwd)}"
+SHARED_GO_DIR="${SHARED_GO_WORKSPACE_PATH:-$REPO_ROOT/../shared-go}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-hololive-bot}"
 FILES_FROM="${FILES_FROM:-$REPO_ROOT/scripts/deploy/ap-rsync-files.txt}"
 EXCLUDES="${EXCLUDES:-$REPO_ROOT/scripts/deploy/ap-rsync-excludes.txt}"
@@ -101,11 +101,29 @@ build_rsync_files_from() {
   done < "$FILES_FROM" > "$rsync_files_from"
 }
 
+# rsync 원본은 이번에 빌드하는 commit과 같아야 한다. 예전에는 $REPO_ROOT/../hololive-bot을 그대로 보내,
+# 이름이 다른 worktree에서 실행하면 빌드 원본이 아닌 기본 checkout(미커밋 변경 포함)을 원격 tree에
+# 설치하려 했다(2026-10-02 7.2.0 seoul 배포). 저장소 파일은 HEAD commit에서, shared-go 파일은
+# collector go.mod가 고정한 module tag에서 꺼낸다.
+stage_transfer_workspace() {
+  local shared_go_version
+  transfer_revision="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
+  shared_go_version="$(awk '$1 == "github.com/park285/shared-go/v2" { print $2; exit }' \
+    "$REPO_ROOT/hololive/hololive-youtube-collector/go.mod")"
+  if [[ ! "$shared_go_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "collector go.mod has no pinned shared-go version" >&2
+    exit 1
+  fi
+  mkdir "$transfer_root/$REMOTE_REPO_DIR" "$transfer_root/shared-go"
+  git -C "$REPO_ROOT" archive "$transfer_revision" | tar -x -C "$transfer_root/$REMOTE_REPO_DIR"
+  git -C "$SHARED_GO_DIR" archive "refs/tags/$shared_go_version" | tar -x -C "$transfer_root/shared-go"
+}
+
 rsync_preview() {
   rsync -ani \
     --files-from="$rsync_files_from" \
     --exclude-from="$EXCLUDES" \
-    "$WORKSPACE_ROOT"/ \
+    "$transfer_root"/ \
     -e "$RSYNC_RSH" \
     "$(ap_rsync_target './')"
 }
@@ -121,11 +139,14 @@ validate_preview() {
 
 rsync_files_from="$(mktemp)"
 preview_file="$(mktemp)"
+transfer_root="$(mktemp -d)"
+transfer_revision=""
 image_archive=""
 issuer_build_root=""
 collector_check_id=""
-trap 'rm -f "$preview_file" "$rsync_files_from"; [[ -z "$image_archive" ]] || rm -f "$image_archive"; [[ -z "$issuer_build_root" ]] || rm -rf "$issuer_build_root"; [[ -z "$collector_check_id" ]] || docker rm "$collector_check_id" >/dev/null' EXIT
+trap 'rm -f "$preview_file" "$rsync_files_from"; rm -rf "$transfer_root"; [[ -z "$image_archive" ]] || rm -f "$image_archive"; [[ -z "$issuer_build_root" ]] || rm -rf "$issuer_build_root"; [[ -z "$collector_check_id" ]] || docker rm "$collector_check_id" >/dev/null' EXIT
 
+stage_transfer_workspace
 build_rsync_files_from
 "$REPO_ROOT/scripts/deploy/check-ap-rsync-manifest.sh" "$FILES_FROM"
 rsync_preview | tee "$preview_file"
@@ -139,6 +160,10 @@ if [[ "$MODE" == "--dry-run" ]]; then
 fi
 
 REVISION="$(deploy_source_revision "$REPO_ROOT")"
+if [[ "$REVISION" != "$transfer_revision" ]]; then
+  echo "source revision changed after transfer staging: staged=$transfer_revision build=$REVISION" >&2
+  exit 1
+fi
 export REVISION
 
 IMAGE_REF="hololive-youtube-collector:prod"
@@ -283,12 +308,12 @@ remote "mkdir -p '$source_stage'"
 rsync -ai \
   --files-from="$rsync_files_from" \
   --exclude-from="$EXCLUDES" \
-  "$WORKSPACE_ROOT"/ \
+  "$transfer_root"/ \
   -e "$RSYNC_RSH" \
   "$(ap_rsync_target "./$source_stage/")"
 rsync -ai "$rsync_files_from" -e "$RSYNC_RSH" "$(ap_rsync_target "./$REMOTE_REPO_DIR/$backup_dir/source-files.manifest")"
 rsync -anic --files-from="$rsync_files_from" --exclude-from="$EXCLUDES" \
-  "$WORKSPACE_ROOT"/ -e "$RSYNC_RSH" "$(ap_rsync_target "./$source_stage/")" > "$preview_file"
+  "$transfer_root"/ -e "$RSYNC_RSH" "$(ap_rsync_target "./$source_stage/")" > "$preview_file"
 [[ ! -s "$preview_file" ]] || { echo 'AP staged source differs from reviewed input' >&2; exit 1; }
 "${AP_SSH[@]}" "python3 - capture \"\$HOME\" \"\$HOME/$REMOTE_REPO_DIR/$backup_dir\" \"\$HOME/$REMOTE_REPO_DIR/$backup_dir/source-files.manifest\"" < "$source_snapshot"
 
@@ -414,8 +439,11 @@ done
 docker exec hololive-youtube-po-b /app/bin/po-broker --healthcheck --socket /run/hololive-youtube-po/worker.sock
 socket_mount=\$(docker inspect -f '{{range .Mounts}}{{if eq .Destination \"/run/hololive-youtube-po\"}}{{.Source}}{{end}}{{end}}' hololive-youtube-po-b)
 [[ \$(sudo -n stat -c '%u:%g %a' \"\$socket_mount\") == '65532:1000 770' ]]
-cp '$backup_dir/po-sandbox-candidate-manifest.json' '$po_manifest_active'
-cp '$backup_dir/po-sandbox-candidate.image-id' '$po_image_id_active'
+# active receipt는 같은 디렉터리의 rename으로 바꾼다. cp로 덮어쓰면 소유자가 다른 기존 receipt에서 실패한다.
+cp '$backup_dir/po-sandbox-candidate-manifest.json' '$po_manifest_active.tmp'
+mv -f '$po_manifest_active.tmp' '$po_manifest_active'
+cp '$backup_dir/po-sandbox-candidate.image-id' '$po_image_id_active.tmp'
+mv -f '$po_image_id_active.tmp' '$po_image_id_active'
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
 echo change_started_at='$change_started_at'"
 

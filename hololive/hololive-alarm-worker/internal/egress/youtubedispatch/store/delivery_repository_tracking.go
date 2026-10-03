@@ -66,7 +66,7 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 
 	var targets []deliveryAlarmSentTarget
 
-	args := deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)
+	args := dbx.AnyArgs(uniqueIDs)
 
 	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
 

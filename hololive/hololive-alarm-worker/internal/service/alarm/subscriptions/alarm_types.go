@@ -26,7 +26,7 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
-	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
+	targetpolicy "github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"

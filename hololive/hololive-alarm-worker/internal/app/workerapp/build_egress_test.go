@@ -232,6 +232,20 @@ func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 	assert.Equal(t, 3, runnerConfig.MaxBatchesPerWake)
 }
 
+// dispatcher가 기본값을 채우지 않으므로, 운영 profile 형상이 두 dispatcher의 생성 검증을 통과하는지 확인한다.
+func TestProfileShapedDispatcherConfigsPassValidation(t *testing.T) {
+	config, _ := alarmWorkerTestConfig(t)
+
+	youtubeConfig, err := youtubeDispatchConfig(config)
+	require.NoError(t, err)
+	require.NoError(t, youtubeConfig.Validate())
+
+	deliveryConfig := notificationDeliveryDispatcherConfig(config)
+
+	_, err = delivery.NewDispatcher(&delivery.OutboxRepository{}, egress.NewIrisMessageSender(nil), nil, &deliveryConfig)
+	require.NoError(t, err)
+}
+
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
 

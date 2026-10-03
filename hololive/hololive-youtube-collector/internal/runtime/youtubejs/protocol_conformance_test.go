@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -71,29 +70,5 @@ func TestPAG013PaginationValidateAndQuality(t *testing.T) {
 		if err := page.Validate(); err == nil {
 			t.Fatalf("Validate accepted impossible tuple: %#v", page)
 		}
-	}
-}
-
-func TestPAG012PaginationCursorJSONByteBound(t *testing.T) {
-	t.Parallel()
-
-	accepted := Pagination{
-		PageCount:         1,
-		CursorStart:       strings.Repeat("x", 8190),
-		Exhausted:         false,
-		Continuity:        "GAP_UNRESOLVED",
-		TerminationReason: TerminationMaxPages,
-	}
-	if encoded, err := jsonv2.Marshal(accepted.CursorStart); err != nil || len(encoded) != 8192 {
-		t.Fatalf("accepted cursor bytes = %d, error = %v", len(encoded), err)
-	}
-
-	if err := accepted.Validate(); err != nil {
-		t.Fatalf("Validate accepted cursor: %v", err)
-	}
-
-	accepted.CursorStart += "x"
-	if err := accepted.Validate(); err == nil {
-		t.Fatal("Validate accepted 8193-byte cursor")
 	}
 }

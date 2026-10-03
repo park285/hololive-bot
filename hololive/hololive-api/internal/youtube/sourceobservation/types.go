@@ -20,9 +20,8 @@ const (
 )
 
 var (
-	ErrClaimLost           = errors.New("source observation claim was lost")
-	ErrUnsupportedContract = errors.New("source observation contract is unsupported")
-	ErrInvalidRepository   = errors.New("source observation repository is not configured")
+	ErrClaimLost         = errors.New("source observation claim was lost")
+	ErrInvalidRepository = errors.New("source observation repository is not configured")
 )
 
 type ContractVersion struct {

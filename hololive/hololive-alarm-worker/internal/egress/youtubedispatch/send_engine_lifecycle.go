@@ -9,11 +9,11 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 const (
@@ -193,7 +193,7 @@ func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.R
 		return ytlifecycle.FailurePermanent, ytlifecycle.Reason(errRequestGenerationsExhausted.Error()), 0
 	}
 
-	if errors.Is(err, egress.ErrReplyHandoffFailed) {
+	if errors.Is(err, sendoutcome.ErrHandoffFailed) {
 		return ytlifecycle.FailurePermanent, defaultReason, 0
 	}
 

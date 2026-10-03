@@ -9,6 +9,8 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 func TestMarkdownHandoffStaysBoundedWhenStatusCannotFinish(t *testing.T) {
@@ -40,7 +42,7 @@ func TestMarkdownHandoffStaysBoundedWhenStatusCannotFinish(t *testing.T) {
 
 				started := time.Now()
 				err := sender.SendMessage(ctx, testIrisSenderRoomID, "message")
-				require.ErrorIs(t, err, ErrReplyHandoffOutcomeUnknown)
+				require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
 
 				if cancelParent {
 					require.ErrorIs(t, err, context.Canceled)

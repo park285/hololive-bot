@@ -179,7 +179,11 @@ func generateSummaryResponse(
 		t.Fatalf("getSystemPrompt 실패: %v", err)
 	}
 
-	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext...)
+	userPrompt, err := buildUserPrompt(events, summaryType, periodKey, searchContext...)
+	if err != nil {
+		t.Fatalf("buildUserPrompt 실패: %v", err)
+	}
+
 	t.Logf("\n=== User Prompt ===\n%s\n=== END ===", userPrompt)
 
 	invariantPrompt, err := getInvariantPrompt()

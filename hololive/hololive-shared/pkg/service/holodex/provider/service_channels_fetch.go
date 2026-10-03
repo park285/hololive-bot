@@ -45,11 +45,7 @@ func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Cha
 		return channel, nil
 	}
 
-	if logErr := sharedlog.LogAndWrapError(ctx, h.logger, "get channel", err, slog.String("channel_id", channelID)); logErr != nil {
-		return nil, fmt.Errorf("log and wrap error: %w", logErr)
-	}
-
-	return nil, fmt.Errorf("get channel %s: %w", channelID, err)
+	return nil, sharedlog.LogAndWrapError(ctx, h.logger, "get channel", err, slog.String("channel_id", channelID))
 }
 
 func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*domain.Channel, error) {

@@ -42,8 +42,8 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 ### Iris Markdown admission
 
 Markdown admission retains the exact Iris request ID and polls its reply status.
-Only `handoff_completed` succeeds; confirmed failure (`ErrReplyHandoffFailed`) and
-an unknown or timed-out outcome (`ErrReplyHandoffOutcomeUnknown`) retain their
+Only `handoff_completed` succeeds; confirmed failure (`sendoutcome.ErrHandoffFailed`) and
+an unknown or timed-out outcome (`sendoutcome.ErrHandoffOutcomeUnknown`) retain their
 distinct failure/claim semantics.
 
 Alarm-worker does not send Karing templates
@@ -169,20 +169,58 @@ set 조회 오류와 이 DB 조회 오류는 해당 check 주기 오류로 반�
 ### 멤버 표시명 예외 계약
 
 `DEC-20260926-hololive-source-fallbacks-retirement`는 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꾸고,
-알림 멤버 표시명 폴백 하나만 예외로 남겼다. members에 등록되지 않았거나 한국어 표시명이 빈 채널을 알림에
-표시하기 위한 것이다.
+알림 멤버 표시명 폴백 하나만 예외로 남겼다. 2026-10-02에 제거 조건을 확인했다. 두 지표(`hololive_alarm_member_name_fallback_channels`,
+`hololive_alarm_member_name_caller_fallback_total`)가 30일 동안 0이었고, 운영 DB 읽기 전용 조회에서 구독 채널 21개 모두
+members 한국어 표시명을 가졌다. 그래서 중간 단계(최신 `alarms.member_name`, alarm cache 기록 때 호출자 값)와 두 지표를 지웠다.
+남은 것은 표시 단계의 종단 문구다.
 
 | 항목 | 계약 |
 |---|---|
 | Trigger | `members`의 `short_korean_name`·`korean_name`이 모두 비었거나 채널 행이 없음 |
-| 순서 | members(`short_korean_name`→`korean_name`) → 같은 채널의 최신 비어 있지 않은 `alarms.member_name`(host 구독 제외, 채널당 1행) → alarm cache 기록 때 호출자 값 → 표시 단계 `misc/vtuber_fallback` 문구(종단) |
-| 한도 | 표시 전용. 식별·dedup·라우팅에 쓰지 않고 외부 호출·재시도가 없음 |
-| Telemetry | `hololive_alarm_member_name_fallback_channels`(cache warm·rebuild 때 `alarms.member_name`으로 채운 채널 수), `hololive_alarm_member_name_caller_fallback_total`(alarm cache 기록 때 호출자 값을 쓴 횟수) |
-| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`, `pkg/service/notification/alarmservice`) |
-| 제거 조건 | 두 지표가 0으로 유지되고 구독 채널 전부가 members 한국어 표시명을 가질 때 폴백 단계를 지운다. 재검토 기한 2026-12-31 |
+| 순서 | members(`short_korean_name`→`korean_name`) → 표시 단계 `misc/vtuber_fallback` 문구(종단) |
+| 한도 | 표시 전용. 식별·dedup·라우팅에 쓰지 않고 외부 호출·재시도가 없음. 조회 오류는 trigger가 아님 |
+| Telemetry | `hololive_youtube_outbox_member_name_missing_total`(alarm-worker가 종단 문구로 YouTube 알림을 만든 횟수) |
+| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`의 `GetMemberName`, `hololive-alarm-worker/internal/egress/youtubedispatch/format`의 `DisplayMemberName`) |
+| 검토 조건 | 지표가 0이 아니면 해당 채널의 members 한국어 표시명을 등록한다. 90일 동안 0이면 종단 문구 대신 포맷 실패로 바꿀지 다시 결정한다 |
 
-코드 근거는 `alarm.Repository.GetMemberName` 주석(`memberDisplayNameExceptionContract`)과
-`queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
+코드 근거는 `alarm.Repository.GetMemberName` 주석과 `queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
+
+YouTube outbox dispatch의 `MemberNameSource`는 표시명을 Valkey `alarm:member_names`에서 읽지 않고 메시지마다 `alarm.Repository.GetMemberName`으로
+PostgreSQL 정본을 조회한다(2026-10-02). 조회 오류는 이 예외 계약의 trigger가 아니다. 대체 문구로 보내지 않고
+재시도 가능한 `format_message` 실패로 전이하며, grouped 발송이면 group 전체를 같은 실패로 전이한다. 조회 결과가 빈
+문자열일 때만 `misc/vtuber_fallback` 문구를 쓴다.
+
+### Live catchup 억제 marker의 실패 처리
+
+upcoming 알림의 최근 전송 marker는 추가 catchup을 줄이는 보조 증거입니다. marker를 읽지 못한 사실을 이미 알림을 받았다는 증거로 쓰지 않습니다. 다음은 기존 동작과 `TestFilterLiveCatchupSuppressedRoomsFailsOpenOnCacheError`·`TestFilterLiveCatchupSuppressedRoomsFailsOpenOnInvalidMarker`가 재현하는 예외입니다.
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | upcoming 억제 marker의 캐시 조회 오류 또는 `notified_at` 형식 오류 |
+| 한도 | 해당 LIVE_STREAM outbox의 기존 구독 방에만 적용합니다. 정상 marker의 억제 창은 `LiveCatchupSuppressWindow` 15분이며, 이 예외가 새 수집·재시도·수신 방을 만들지 않습니다. |
+| 종단 동작 | 억제를 적용하지 않고 기존 delivery 원장·멱등성·발송 상태 전이를 따릅니다. 별도 upcoming 알림 뒤 catchup 알림이 추가될 수 있습니다. |
+| Telemetry | `hololive_youtube_outbox_live_catchup_suppression_total{result="cache_error"}` 또는 `result="invalid_marker"`와 기존 Warn 로그 |
+| Owner | alarm-worker의 YouTube OutboxGrouper |
+| 재검토 조건 | 억제 증거 저장소 변경, 중복 upcoming/catchup 사례 확인, 또는 delivery 원장만으로 억제를 판정할 수 있게 될 때 이 예외를 재검토합니다. |
+
+2026-10-02 운영 조회에서 이 metric의 시계열이 30일 동안 없었습니다(억제·오류 모두 0회). 같은 기간 관련 Warn 로그도 0건이었습니다.
+
+### Holodex 실패 시 persisted live session 계속 예외 계약
+
+live checker는 Holodex live 상태와 collector가 저장한 `youtube_live_sessions`를 매 주기 함께 읽어 합친다. Holodex가
+실패하면 저장된 세션만으로 그 주기를 계속한다. collector가 이미 관측한 방송의 시작 알림을 Holodex 장애 때문에 놓치지 않기
+위한 것이다(2026-10-02 계약화). 2026-09-30 Holodex 장애(요청 timeout과 DNS 조회 timeout) 동안 이 경로가 108회
+실행됐고 그중 101회가 주기 실패로 끝났다. 54회는 Holodex 재시도가 check 주기 예산(45초)을 모두 써서 저장 세션
+조회가 기한을 넘긴 경우였다. 그 뒤로 Holodex 조회는 주기 안에서 자체 한도를 가진다.
+
+| 항목 | 계약 |
+|---|---|
+| Trigger | 이번 주기의 Holodex `GetChannelsLiveStatus` 오류 |
+| 한도 | Holodex 조회는 주기 안에서 최대 25초(`youtubeHolodexLiveStatusBudget`)이며, 나머지 예산을 저장 세션 조회와 후속 단계에 남긴다. 이번 주기의 due 채널에서 최근 15분 안에 LIVE로 관측된 세션과, 최근 15분 안에 관측됐고 30분 안에 시작할 UPCOMING 세션만 쓴다. Holodex 응답이 없으므로 provider 응답으로 후보를 취소하지 않는다. 추가 외부 호출·재시도는 없다. |
+| 종단 | persisted source가 없거나, 세션 조회가 실패했거나, 세션이 0건이면 Holodex 오류를 그 check 주기의 오류로 반환한다. |
+| Telemetry | `hololive_alarm_youtube_persisted_live_sessions_total{result="holodex_error_continued",status="all"}`와 Warn 로그 "YouTube Holodex live status source failed; continuing with persisted live sessions" |
+| Owner | hololive-bot alarm-worker live checker(`internal/service/alarm/checker/checking`) |
+| 검토 조건 | Holodex 없이 live 상태를 판정하는 단일 원천이 생기면 이 예외를 지운다. `holodex_error_continued`가 늘어나는데 알림 누락 보고가 있으면 한도(15분·30분)를 다시 검토한다. |
 
 이 예외는 이름 조회가 성공했으나 값이 없는 경우에만 적용합니다. YouTube 단건·묶음 formatter는 이름 저장소 조회 실패를 포맷 오류로 반환하며 대체 표시명으로 성공을 만들지 않습니다.
 

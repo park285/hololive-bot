@@ -105,13 +105,12 @@ func (c *CalendarCommand) nowKST() time.Time {
 	return timeutil.NowKST()
 }
 
+// trySendCalendarImage는 이미지를 보냈으면 true, 렌더링·전송이 확정적으로 실패하면 false를 돌려 텍스트 달력을 보내게 한다.
+// 전송 결과가 불명이면 이미지가 이미 전달됐을 수 있으므로 텍스트 없이 오류로 올린다.
 func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string, month, year int, entries []domain.CalendarEntry) (bool, error) {
-	if c.imageRenderer == nil {
-		return false, nil
-	}
-
 	data, err := c.renderCalendarImage(ctx, month, year, entries)
 	if err != nil || len(data) == 0 {
+		observeImageTextFallback(c.Name(), imageTextFallbackReasonRenderFailed)
 		c.Deps().Logger.Warn("calendar image render failed, falling back to text",
 			slog.Any("error", err),
 		)
@@ -121,6 +120,7 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 
 	if err := c.Deps().SendImage(ctx, room, data); err != nil {
 		if transport.IsReplyOutcomeUnknown(err) {
+			observeImageTextFallback(c.Name(), imageTextFallbackReasonOutcomeUnknown)
 			c.Deps().Logger.Warn("calendar image outcome unknown, suppressing text fallback",
 				slog.Any("error", err),
 			)
@@ -128,6 +128,7 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 			return false, fmt.Errorf("calendar image outcome unknown: %w", err)
 		}
 
+		observeImageTextFallback(c.Name(), imageTextFallbackReasonSendFailed)
 		c.Deps().Logger.Warn("calendar image send failed, falling back to text",
 			slog.Any("error", err),
 		)
@@ -158,6 +159,11 @@ func (c *CalendarCommand) ensureDeps() error {
 
 	if c.memberRepo == nil {
 		return errors.New("calendar command: member repository not configured")
+	}
+
+	// 운영 조립은 달력 이미지 renderer와 이미지 전송을 항상 연결한다. 없으면 텍스트로 조용히 바꾸지 않고 설정 오류로 드러낸다.
+	if c.imageRenderer == nil || c.Deps().SendImage == nil {
+		return errors.New("calendar command: image renderer not configured")
 	}
 
 	return nil

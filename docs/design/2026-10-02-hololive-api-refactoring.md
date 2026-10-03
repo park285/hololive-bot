@@ -14,7 +14,7 @@ API 책임·성능 분석과 저장소 폴더·파일 개편안을 합친 **단�
 - aggregate/Fx의 Close 대기는 호출자별 시한을 지키며, 최초 timeout 뒤에도 같은 plane owner에 다시 합류해 미완료 자원을 정리합니다. 실제 admin 작업과 Fx `Stop → SafetyClose`, 동시 대기, 원래 오류 보존, telemetry 정리 1회를 검증했습니다.
 - YouTube의 첫 Start와 Close가 동시에 호출돼도 Close가 같은 lifecycle 잠금에서 시작을 차단하고 task snapshot을 확정합니다. 기존 Shutdown-before-Start 의미와 늦은 claim 해제를 유지합니다.
 
-추가 변경은 대상 race·lint·NilAway 또는 Console 타입 검사와 동작 시험을 통과했고 독립 리뷰도 완료했습니다. 이 결과는 아래 전체 CI 이후의 후속 검증입니다. 게시 대상은 원격 main의 7.2.2·migration 256·Seoul 원본 전송 수정을 보존하여 통합하며, 통합본의 게시 검사와 실제 운영 수용 결과는 별도로 기록합니다.
+추가 변경은 대상 race·lint·NilAway 또는 Console 타입 검사와 동작 시험을 통과했고 독립 리뷰도 완료했습니다. 이 결과는 아래 전체 CI 이후의 후속 검증입니다. 게시 대상에는 원격 main `54f1fbbd8`의 7.2.2·migration 256·Seoul 원본 전송 수정을 보존하여 통합했습니다. 원격의 DB 표시명 조회·strict worker 설정·claim 해제 소유권과 collector cursor 계약도 유지합니다. 통합 후 API 관련 57개 package와 worker/alarm 27개 package race, observation 격리 DB race 및 각 범위 lint·NilAway가 통과했습니다. 이동된 시험의 자기 import와 typed 결과 호출 누락을 해결한 뒤 해당 시험을 재검증했습니다. 통합본의 전체 게시 검사와 실제 운영 수용 결과는 별도로 기록합니다.
 
 통합 구현과 당시 전체 검증 뒤 적대적 리뷰에서 7개 미해결 경계를 확인했습니다. 사용자 요청에 따라 7건의 제품 수정·독립 리뷰·최종 전체 CI를 완료했습니다. `alarmAdvanceMinutes`는 사용자 승인에 따라 `1..1440`으로 확정했으며 0은 저장·worker 호출 전에 400으로 거절합니다. 조건부 Node·최상위 폴더·H3/local 항목은 비용과 계약 근거에 따라 채택 여부를 결정했습니다. 아래 1차 기록과 후반 분석 원문은 이전 범위·조사 시점의 이력이며, 현재 완료 판정은 이 절과 체크리스트를 따릅니다.
 

@@ -132,13 +132,21 @@ func (s *EventSummarizer) reviewSummary(
 	periodKey string,
 	primary *summaryResponse,
 ) (*consensus.ReviewVerdict, error) {
-	primaryJSON := marshalPromptJSON(primary, "null")
+	primaryJSON, err := marshalPromptJSON("primary summary", primary)
+	if err != nil {
+		return nil, fmt.Errorf("build review prompt: %w", err)
+	}
+
+	userPrompt, err := buildReviewSummaryUserPrompt(events, summaryType, periodKey, string(primaryJSON))
+	if err != nil {
+		return nil, fmt.Errorf("build review prompt: %w", err)
+	}
 
 	raw, err := s.reviewer.GenerateJSON(
 		ctx,
 		openaipreset.PromptLayers{
 			Developer: reviewSummarySystemPrompt(),
-			User:      buildReviewSummaryUserPrompt(events, summaryType, periodKey, string(primaryJSON)),
+			User:      userPrompt,
 		},
 		reviewSummarySchema(),
 	)
@@ -167,14 +175,26 @@ func (s *EventSummarizer) adjudicateSummary(
 	primary *summaryResponse,
 	verdict *consensus.ReviewVerdict,
 ) (*summaryResponse, error) {
-	primaryJSON := marshalPromptJSON(primary, "null")
-	verdictJSON := marshalPromptJSON(verdict, "null")
+	primaryJSON, err := marshalPromptJSON("primary summary", primary)
+	if err != nil {
+		return nil, fmt.Errorf("build adjudicator prompt: %w", err)
+	}
+
+	verdictJSON, err := marshalPromptJSON("reviewer verdict", verdict)
+	if err != nil {
+		return nil, fmt.Errorf("build adjudicator prompt: %w", err)
+	}
+
+	userPrompt, err := buildAdjudicateSummaryUserPrompt(events, summaryType, periodKey, searchContext, string(primaryJSON), string(verdictJSON))
+	if err != nil {
+		return nil, fmt.Errorf("build adjudicator prompt: %w", err)
+	}
 
 	raw, err := s.adjudicator.GenerateJSON(
 		ctx,
 		openaipreset.PromptLayers{
 			Developer: adjudicateSummarySystemPrompt(),
-			User:      buildAdjudicateSummaryUserPrompt(events, summaryType, periodKey, searchContext, string(primaryJSON), string(verdictJSON)),
+			User:      userPrompt,
 		},
 		summaryResponseSchema(),
 	)
@@ -211,11 +231,20 @@ func (s *EventSummarizer) runFinalOutputReview(
 
 	defer cancel()
 
+	// 최종 출력 검토는 선택 단계라 검토 호출 실패와 같이 조립본을 유지한다.
+	userPrompt, err := buildFinalOutputReviewUserPrompt(events, summaryType, periodKey, trimmed)
+	if err != nil {
+		s.logger.Warn("major event final output review prompt failed; keep assembled",
+			slog.String("error", err.Error()))
+
+		return assembled, false
+	}
+
 	raw, err := s.reviewer.GenerateJSON(
 		reviewCtx,
 		openaipreset.PromptLayers{
 			Developer: finalOutputReviewSystemPrompt(),
-			User:      buildFinalOutputReviewUserPrompt(events, summaryType, periodKey, trimmed),
+			User:      userPrompt,
 		},
 		finalOutputReviewSchema(),
 	)
@@ -270,8 +299,11 @@ func buildReviewSummaryUserPrompt(
 	events []domain.MajorEvent,
 	summaryType SummaryType,
 	periodKey, primarySummaryJSON string,
-) string {
-	eventBytes := marshalPromptJSON(events, "[]")
+) (string, error) {
+	eventBytes, err := marshalPromptJSON("input events", events)
+	if err != nil {
+		return "", err
+	}
 
 	return fmt.Sprintf(`summary_type=%s
 period_key=%s
@@ -287,15 +319,18 @@ Tasks:
 2) Verify ongoing events are placed in ongoing_events.
 3) Verify discovered_events have trusted source and are not duplicates.
 4) Verify date/member/link consistency.
-5) Output verdict JSON only.`, summaryType, periodKey, string(eventBytes), primarySummaryJSON)
+5) Output verdict JSON only.`, summaryType, periodKey, string(eventBytes), primarySummaryJSON), nil
 }
 
 func buildAdjudicateSummaryUserPrompt(
 	events []domain.MajorEvent,
 	summaryType SummaryType,
 	periodKey, searchContext, primarySummaryJSON, verdictJSON string,
-) string {
-	basePrompt := buildUserPrompt(events, summaryType, periodKey, searchContext)
+) (string, error) {
+	basePrompt, err := buildUserPrompt(events, summaryType, periodKey, searchContext)
+	if err != nil {
+		return "", err
+	}
 
 	return fmt.Sprintf(`primary_summary_json:
 %s
@@ -306,15 +341,18 @@ review_verdict_json:
 original_generation_context:
 %s
 
-Please regenerate corrected summary JSON by fixing reviewer issues.`, primarySummaryJSON, verdictJSON, basePrompt)
+Please regenerate corrected summary JSON by fixing reviewer issues.`, primarySummaryJSON, verdictJSON, basePrompt), nil
 }
 
 func buildFinalOutputReviewUserPrompt(
 	events []domain.MajorEvent,
 	summaryType SummaryType,
 	periodKey, assembled string,
-) string {
-	eventBytes := marshalPromptJSON(events, "[]")
+) (string, error) {
+	eventBytes, err := marshalPromptJSON("input events", events)
+	if err != nil {
+		return "", err
+	}
 
 	return fmt.Sprintf(`summary_type=%s
 period_key=%s
@@ -330,7 +368,7 @@ Tasks:
 2) Keep factual content identical to input events and discovered events already present.
 3) Keep section labels if present: [기간 행사], [추가 발견].
 4) Keep all valid links.
-5) Return JSON only.`, summaryType, periodKey, string(eventBytes), assembled)
+5) Return JSON only.`, summaryType, periodKey, string(eventBytes), assembled), nil
 }
 
 func reviewSummarySchema() map[string]any {

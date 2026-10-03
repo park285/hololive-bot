@@ -79,8 +79,8 @@ func TestExecutionProfileRejectsDurationOverflowAndUndersizedTimeout(t *testing.
 	}
 }
 
-func completeStubRunners() []JobRunner {
-	return []JobRunner{
+func completeStubRunners() []collectutil.JobRunner {
+	return []collectutil.JobRunner{
 		stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_live", contract.KindLiveSnapshot),

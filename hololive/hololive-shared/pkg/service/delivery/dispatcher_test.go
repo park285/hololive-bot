@@ -356,7 +356,7 @@ func TestProcessOnce_E2E(t *testing.T) {
 		},
 	}
 
-	defaultCfg := DefaultDispatcherConfig()
+	defaultCfg := testDispatcherConfig()
 
 	d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
@@ -398,7 +398,7 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 
 	sender := &mockSender{}
 
-	defaultCfg := DefaultDispatcherConfig()
+	defaultCfg := testDispatcherConfig()
 
 	d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
@@ -439,7 +439,7 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 		},
 	}
 
-	defaultCfg := DefaultDispatcherConfig()
+	defaultCfg := testDispatcherConfig()
 
 	d := mustNewDispatcher(t, repository, sender, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
@@ -520,7 +520,7 @@ func TestProcessOnce_QuarantinesStaleSendingBeforeFetch(t *testing.T) {
 		},
 	}
 
-	defaultCfg := DefaultDispatcherConfig()
+	defaultCfg := testDispatcherConfig()
 
 	d := mustNewDispatcher(t, repository, &mockSender{}, dispatcherLogger(), &defaultCfg)
 	d.processOnce(t.Context())
@@ -548,7 +548,7 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 
 		sender := &mockSender{}
 
-		config := DefaultDispatcherConfig()
+		config := testDispatcherConfig()
 
 		config.PollInterval = 10 * time.Millisecond
 
@@ -607,7 +607,7 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 		},
 	}
 
-	config := DefaultDispatcherConfig()
+	config := testDispatcherConfig()
 
 	config.PollInterval = 10 * time.Millisecond
 
@@ -647,7 +647,7 @@ func TestDispatcher_RunDoesNotWarnWhenContextCanceled(t *testing.T) {
 	var logs bytes.Buffer
 
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	config := DefaultDispatcherConfig()
+	config := testDispatcherConfig()
 
 	config.PollInterval = time.Hour
 
@@ -691,7 +691,7 @@ func TestDispatcher_StartProcessesOnceBeforeFirstTick(t *testing.T) {
 		},
 	}
 
-	config := DefaultDispatcherConfig()
+	config := testDispatcherConfig()
 
 	config.PollInterval = time.Hour
 
@@ -762,7 +762,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 		},
 	}
 
-	config := DefaultDispatcherConfig()
+	config := testDispatcherConfig()
 
 	config.MaxConcurrent = 2
 

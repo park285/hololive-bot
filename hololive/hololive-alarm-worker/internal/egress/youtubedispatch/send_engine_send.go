@@ -44,8 +44,8 @@ func (d *SendEngine) dispatchDeliveryRows(
 	claims := newBatchClaimResolver(d.claims)
 	batch := *d
 
+	// 실패 기록 wrapper가 d.claims로 해제를 요청하므로 배치 resolver로 바꾸면 해제가 배치 종료까지 모인다.
 	batch.claims = claims
-	batch.metricsRecorder = newMetricsRecorder(d.logger, d.auditLogger, claims)
 	d = &batch
 
 	defer claims.releaseFinished(ctx)
@@ -80,7 +80,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(d.deliveryParallelism())
+	eg.SetLimit(d.config.DeliveryParallelism)
 
 	for i := range groups {
 		group := &groups[i]
@@ -171,13 +171,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 	message, err := d.formatGroupedMessage(ctx, group, validOutboxes)
 	if err != nil {
 		if d.applyPreparedLifecycleFailure(ctx, validRows, validOutboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped, result, mu) {
-			d.claims.releaseDeliveryClaimsWithWarning(ctx, claimSelection.claimTokens, "Failed to release grouped delivery claims after format error")
-			d.logger.Warn("Failed to format grouped delivery", slog.Int("count", len(validRows)), slog.Any("error", err))
-			d.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, time.Now(), "grouped", "failure", "format message")
-
-			for i := range validRows {
-				d.recordDeliveryFailure(result, mu, "format message", validRows[i].ID, validRows[i].OutboxID)
-			}
+			d.recordGroupedFormatFailure(ctx, group, validRows, validOutboxes, claimSelection.claimTokens, err, result, mu)
 		}
 
 		return
@@ -493,6 +487,7 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 ) {
 	requests, err := d.prepareFallbackRequests(ctx, rows, outboxes, formattedMessages, formatFailures)
 	if err != nil {
+		observeGroupedSendFallback(groupedSendFallbackResultPrepareFailed)
 		d.logger.Warn("Failed to prepare grouped fallback", slog.Any("error", err))
 
 		return
@@ -500,10 +495,13 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 
 	frozen, err := d.transition.FreezeFallbackRequests(ctx, operation, requests)
 	if err != nil {
+		observeGroupedSendFallback(groupedSendFallbackResultFreezeFailed)
 		d.logger.Error("Failed to freeze grouped fallback", slog.Any("error", err))
 
 		return
 	}
+
+	observeGroupedSendFallback(groupedSendFallbackResultStarted)
 
 	byID := make(map[int64]store.FrozenRequest, len(frozen))
 	for i := range frozen {

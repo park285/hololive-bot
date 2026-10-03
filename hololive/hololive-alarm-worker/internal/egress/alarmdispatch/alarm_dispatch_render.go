@@ -109,8 +109,7 @@ func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Re
 
 	out, err := format.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
 	if err != nil {
-		// 제거한 전달 층이 붙이던 오류 문맥도 유지합니다.
-		return out, fmt.Errorf("format youtube outbox payload: %w", fmt.Errorf("format youtube outbox payload: %w", err))
+		return out, fmt.Errorf("format youtube outbox payload: %w", err)
 	}
 
 	return out, nil

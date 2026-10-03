@@ -9,11 +9,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 	"golang.org/x/sync/singleflight"
 
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -51,7 +51,7 @@ func newCachedCelebrationCalendarFinder(
 	ttl time.Duration,
 	now func() time.Time,
 ) handlercore.CelebrationCalendarFinder {
-	if isNilCelebrationCalendarFinder(base) {
+	if reflectutil.IsNil(base) {
 		return nil
 	}
 
@@ -266,42 +266,6 @@ func cloneCalendarMember(member *domain.Member) *domain.Member {
 	}
 
 	return &cloned
-}
-
-func isNilCelebrationCalendarFinder(base handlercore.CelebrationCalendarFinder) bool {
-	if base == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(base)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	case reflect.Invalid,
-		reflect.Bool,
-		reflect.Int,
-		reflect.Int8,
-		reflect.Int16,
-		reflect.Int32,
-		reflect.Int64,
-		reflect.Uint,
-		reflect.Uint8,
-		reflect.Uint16,
-		reflect.Uint32,
-		reflect.Uint64,
-		reflect.Uintptr,
-		reflect.Float32,
-		reflect.Float64,
-		reflect.Complex64,
-		reflect.Complex128,
-		reflect.Array,
-		reflect.String,
-		reflect.Struct,
-		reflect.UnsafePointer:
-		return false
-	default:
-		return false
-	}
 }
 
 func readCacheFile(path string) ([]byte, error) {

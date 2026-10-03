@@ -336,7 +336,7 @@ func (e *collectionExecutor) collectAndPublish(
 	return nil
 }
 
-func (e *collectionExecutor) runCollector(ctx context.Context, runner JobRunner, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (e *collectionExecutor) runCollector(ctx context.Context, runner collectutil.JobRunner, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	var (
 		result     collectutil.CollectResult
 		collectErr error

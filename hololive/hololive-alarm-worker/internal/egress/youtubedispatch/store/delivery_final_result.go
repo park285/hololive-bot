@@ -66,7 +66,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 		ORDER BY id ASC
 	`, deliverysql.AppendDeliveryOutboxStatusArgs(
 		deliverysql.AppendDeliveryOutboxKindArgs(
-			deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs),
+			dbx.AnyArgs(uniqueIDs),
 			postKinds...,
 		),
 		terminalStatuses...,
@@ -84,7 +84,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	if err := dbx.SelectSQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(outboxResultIDs))+`
 		ORDER BY outbox_id ASC, id ASC
-	`, deliverysql.AppendDeliveryInt64Args(nil, outboxResultIDs)...); err != nil {
+	`, dbx.AnyArgs(outboxResultIDs)...); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts deliveries: %w", err)
 	}
 

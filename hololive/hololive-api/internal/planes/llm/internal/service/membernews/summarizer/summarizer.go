@@ -129,9 +129,14 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 		return nil, fmt.Errorf("member news search context: %w", err)
 	}
 
+	userPrompt, err := buildMemberNewsUserPrompt(input, searchContext)
+	if err != nil {
+		return nil, fmt.Errorf("build member news summary prompt: %w", err)
+	}
+
 	raw, err := s.llm.GenerateJSON(ctx, openaipreset.PromptLayers{
 		Developer: memberNewsSystemPrompt(),
-		User:      buildMemberNewsUserPrompt(input, searchContext),
+		User:      userPrompt,
 	}, memberNewsSummarySchema())
 	if err != nil {
 		return nil, fmt.Errorf("generate member news summary: %w", err)

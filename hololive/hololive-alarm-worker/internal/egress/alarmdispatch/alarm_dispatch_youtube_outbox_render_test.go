@@ -74,7 +74,7 @@ func TestRenderAlarmDispatchYouTubeOutboxPreservesErrorContext(t *testing.T) {
 	}}
 
 	message, err := renderAlarmDispatchYouTubeOutbox(t.Context(), nil, nil, &envelope)
-	want := fmt.Sprintf("format youtube outbox payload: format youtube outbox payload: format youtube outbox payload: render template: render template %s: renderer is nil", domain.TemplateKeyOutboxShorts)
+	want := fmt.Sprintf("format youtube outbox payload: format youtube outbox payload: render template: render template %s: renderer is nil", domain.TemplateKeyOutboxShorts)
 
 	if message != "" || err == nil || err.Error() != want {
 		t.Fatalf("renderAlarmDispatchYouTubeOutbox() = %q, %v; want empty message and %q", message, err, want)

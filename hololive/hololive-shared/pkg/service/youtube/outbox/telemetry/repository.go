@@ -256,9 +256,7 @@ func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 	}
 
 	now := time.Now().UTC()
-	args := []any{now}
-
-	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+	args := append([]any{now}, dbx.AnyArgs(uniqueIDs)...)
 
 	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
@@ -275,9 +273,7 @@ func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff ti
 	}
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
-	args := []any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}
-
-	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+	args := append([]any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}, dbx.AnyArgs(uniqueIDs)...)
 
 	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {

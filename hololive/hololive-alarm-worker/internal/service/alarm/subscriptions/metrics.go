@@ -35,12 +35,15 @@ type alarmMetricSet struct {
 	cacheRebuildTotal        *prometheus.CounterVec
 	cacheRebuildDuration     *prometheus.HistogramVec
 	cacheRebuildLoaded       *prometheus.GaugeVec
-	memberNameCallerFallback prometheus.Counter
+	mutationLockWait         *prometheus.HistogramVec
 }
 
 // alarmMetrics는 첫 호출에서 수집기를 기본 registerer에 등록한다. 등록이 panic하면 이후 호출도 같은 값으로
 // panic하므로, 반쯤 초기화된 수집기가 관측 경로에 노출되지 않는다.
 var alarmMetrics = sync.OnceValue(newAlarmMetricSet)
+
+// metricLabelOperation은 alarm service 수집기가 공통으로 쓰는 작업 이름 label이다.
+const metricLabelOperation = "operation"
 
 func newAlarmMetricSet() *alarmMetricSet {
 	return &alarmMetricSet{
@@ -50,14 +53,14 @@ func newAlarmMetricSet() *alarmMetricSet {
 				Help:    "Alarm service operation duration in seconds by operation and result.",
 				Buckets: prometheus.DefBuckets,
 			},
-			[]string{"operation", "result"},
+			[]string{metricLabelOperation, "result"},
 		),
 		cacheRebuildTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_cache_rebuild_total",
 				Help: "Alarm cache rebuild attempts by operation and result.",
 			},
-			[]string{"operation", "result"},
+			[]string{metricLabelOperation, "result"},
 		),
 		cacheRebuildDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -65,26 +68,24 @@ func newAlarmMetricSet() *alarmMetricSet {
 				Help:    "Alarm cache rebuild duration in seconds by operation and result.",
 				Buckets: prometheus.DefBuckets,
 			},
-			[]string{"operation", "result"},
+			[]string{metricLabelOperation, "result"},
 		),
 		cacheRebuildLoaded: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "hololive_alarm_cache_rebuild_loaded",
 				Help: "Last successful alarm cache rebuild loaded counts by operation and resource.",
 			},
-			[]string{"operation", "resource"},
+			[]string{metricLabelOperation, "resource"},
 		),
-		memberNameCallerFallback: promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_member_name_caller_fallback_total",
-				Help: "Alarm cache writes that used the caller member name because member data had no display name.",
+		mutationLockWait: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "hololive_alarm_service_mutation_lock_wait_seconds",
+				Help:    "Time alarm subscription mutations waited for the cache mutation lock, by operation.",
+				Buckets: prometheus.DefBuckets,
 			},
+			[]string{metricLabelOperation},
 		),
 	}
-}
-
-func observeAlarmMemberNameCallerFallback() {
-	alarmMetrics().memberNameCallerFallback.Inc()
 }
 
 func observeAlarmServiceOperation(operation string, startedAt time.Time, err error) {
@@ -112,4 +113,8 @@ func observeAlarmCacheRebuildLoaded(operation string, alarmsLoaded, roomsLoaded,
 	loaded.WithLabelValues(operation, "alarms").Set(float64(alarmsLoaded))
 	loaded.WithLabelValues(operation, "rooms").Set(float64(roomsLoaded))
 	loaded.WithLabelValues(operation, "channels").Set(float64(channelsLoaded))
+}
+
+func observeAlarmMutationLockWait(operation string, startedAt time.Time) {
+	alarmMetrics().mutationLockWait.WithLabelValues(operation).Observe(time.Since(startedAt).Seconds())
 }

@@ -9,7 +9,9 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -33,7 +35,9 @@ func newIntegrationDispatcher(
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: db, Cache: cacheClient, Sender: sender,
 		Renderer: template.NewRenderer(db, logger), MessageStrings: messageStrings,
-	}, logger, config)
+		// 운영과 같이 PostgreSQL 정본에서 표시명을 읽는다.
+		MemberNames: sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return db }}, logger),
+	}, logger, youtubedispatch.WithTestDispatchConfigDefaults(config))
 	require.NoError(tb, err)
 
 	return dispatcher

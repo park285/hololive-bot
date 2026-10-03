@@ -13,6 +13,9 @@ import (
 	store "github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
+// ErrTargetDisabled는 실제 publisher가 발행 job의 emission·target을 거절한 오류다.
+var ErrTargetDisabled = store.ErrTargetDisabled
+
 type CheckpointEntry struct {
 	Provider           contract.Provider
 	ObservationKind    contract.ObservationKind

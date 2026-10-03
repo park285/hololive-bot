@@ -28,12 +28,16 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -69,8 +73,7 @@ func TestLinkCheckerCheckLink_OKWithHead(t *testing.T) {
 }
 
 func TestLinkCheckerCheckLink_FallbackToGet(t *testing.T) {
-	t.Parallel()
-
+	// 전역 counter 증가분을 정확히 보므로 병렬로 돌리지 않는다.
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch req.Method {
 		case http.MethodHead:
@@ -86,6 +89,8 @@ func TestLinkCheckerCheckLink_FallbackToGet(t *testing.T) {
 
 	checker.resolver = staticResolver{"example.com": {net.ParseIP("93.184.216.34")}}
 
+	before := testutil.ToFloat64(linkGetFallbackTotal.WithLabelValues(string(domain.MajorEventLinkStatusOK)))
+
 	status, err := checker.CheckLink(t.Context(), "https://example.com")
 	if err != nil {
 		t.Fatalf("CheckLink() error = %v", err)
@@ -93,6 +98,10 @@ func TestLinkCheckerCheckLink_FallbackToGet(t *testing.T) {
 
 	if status != domain.MajorEventLinkStatusOK {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusOK)
+	}
+
+	if got := testutil.ToFloat64(linkGetFallbackTotal.WithLabelValues(string(domain.MajorEventLinkStatusOK))) - before; got != 1 {
+		t.Fatalf("GET fallback ok delta = %v, want 1", got)
 	}
 }
 
@@ -351,5 +360,38 @@ func TestShouldFallbackToGETOnContextDeadline(t *testing.T) {
 
 	if shouldFallbackToGET(0, fmt.Errorf("probe link: do request: %w", context.Canceled)) {
 		t.Fatal("context cancellation must not trigger a GET fallback")
+	}
+}
+
+type timeoutNetError struct{ timeout bool }
+
+func (e timeoutNetError) Error() string   { return "i/o deadline" }
+func (e timeoutNetError) Timeout() bool   { return e.timeout }
+func (e timeoutNetError) Temporary() bool { return false }
+
+// HEAD 전송 실패는 오류 문자열이 아니라 타입으로 분류한다.
+func TestShouldFallbackToGETClassifiesTransportErrorsByType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "net timeout", err: &url.Error{Op: "Head", URL: "https://example.com", Err: timeoutNetError{timeout: true}}, want: true},
+		{name: "connection reset", err: &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}, want: true},
+		{name: "non-timeout net error", err: timeoutNetError{}, want: false},
+		{name: "timeout text without type", err: errors.New("upstream timeout"), want: false},
+		{name: "method not allowed text", err: errors.New("method not allowed"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := shouldFallbackToGET(0, fmt.Errorf("probe link: do request: %w", tt.err)); got != tt.want {
+				t.Fatalf("shouldFallbackToGET(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }

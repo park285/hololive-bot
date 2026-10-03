@@ -9,7 +9,7 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 type alarmDispatchRetryableCase struct {
@@ -117,7 +117,7 @@ func alarmDispatchRetryableTransportCases() []alarmDispatchRetryableCase {
 		},
 		{
 			name: "confirmed outcome unknown stays non-retryable",
-			err:  errors.Join(egress.ErrReplyHandoffOutcomeUnknown, context.DeadlineExceeded),
+			err:  errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded),
 			want: false,
 		},
 		{

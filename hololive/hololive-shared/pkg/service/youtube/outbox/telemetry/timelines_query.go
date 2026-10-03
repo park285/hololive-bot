@@ -83,7 +83,7 @@ func postDeliveryTimelineQuery(outboxIDs []int64, identities []timeline.PostTrac
 	if len(outboxIDs) > 0 {
 		query += " AND " + deliverysql.DeliveryInClause("o.id", len(outboxIDs))
 
-		args = deliverysql.AppendDeliveryInt64Args(args, outboxIDs)
+		args = append(args, dbx.AnyArgs(outboxIDs)...)
 	}
 
 	if len(identities) > 0 {

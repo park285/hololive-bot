@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
@@ -13,10 +12,8 @@ import (
 
 // ClearRoomAlarms는 채팅방의 모든 채널·멤버별 구독을 해지하고 해지한 구독 수를 반환한다.
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
-	as.cacheMutationMu.Lock()
+	startedAt := as.lockCacheMutation("clear")
 	defer as.cacheMutationMu.Unlock()
-
-	startedAt := time.Now()
 
 	var opErr error
 
@@ -53,11 +50,7 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 
 func (as *AlarmService) deleteRoomAlarmsBeforeCacheClear(ctx context.Context, roomID string) error {
 	if err := as.deleteRoomAlarms(ctx, roomID); err != nil {
-		if logErr := sharedlogging.LogAndWrapError(ctx, as.logger, "delete room alarms before cache clear", err); logErr != nil {
-			return fmt.Errorf("log and wrap error: %w", logErr)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete room alarms before cache clear", err)
 	}
 
 	return nil
@@ -67,21 +60,13 @@ func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID
 	if err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
 
-		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr); err != nil {
-			return fmt.Errorf("log and wrap error: %w", err)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr)
 	}
 
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
 
-		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr); err != nil {
-			return fmt.Errorf("log and wrap error: %w", err)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr)
 	}
 
 	return nil

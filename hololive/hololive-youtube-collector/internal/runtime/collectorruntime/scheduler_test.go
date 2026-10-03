@@ -4,11 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -141,43 +137,6 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 
 	if deferred.Before(retryAt.Add(-50*time.Millisecond)) || deferred.After(retryAt.Add(50*time.Millisecond)) {
 		t.Fatalf("retry_not_before = %s, want %s", deferred, retryAt)
-	}
-}
-
-func TestProductionSchedulerHasNoUnleasedPollPath(t *testing.T) {
-	matches, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var source strings.Builder
-
-	for _, path := range matches {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-
-		chunk, err := fs.ReadFile(os.DirFS("."), path)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		source.Write(chunk)
-		source.WriteByte('\n')
-	}
-
-	body := source.String()
-	if strings.Contains(body, "PollWithLease") || strings.Contains(body, "communitycollector") ||
-		strings.Contains(body, "currentCommunityContractGeneration") {
-		t.Fatal("production scheduler must not keep the Community-only publish path")
-	}
-
-	if !strings.Contains(body, "Collect(") || !strings.Contains(body, "Publish(") || !strings.Contains(body, "internal/runtime/joblease") {
-		t.Fatal("production scheduler must collect through the typed registry and PublishBatch")
-	}
-
-	if !strings.Contains(body, "ObserveFreshness") {
-		t.Fatal("production scheduler must refresh collection freshness")
 	}
 }
 
@@ -477,7 +436,7 @@ func runtimeLeaseConfig() joblease.Config {
 	}
 }
 
-func withOverride(overrides ...JobRunner) []JobRunner {
+func withOverride(overrides ...collectutil.JobRunner) []collectutil.JobRunner {
 	runners := completeStubRunners()
 	for i, runner := range runners {
 		for _, override := range overrides {

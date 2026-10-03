@@ -134,8 +134,11 @@ Rules:
 - Do not guess unknown facts.`
 }
 
-func buildMemberNewsUserPrompt(input *model.SummarizeInput, searchContext string) string {
-	payload := marshalPromptJSON(buildPromptCandidates(input), "[]")
+func buildMemberNewsUserPrompt(input *model.SummarizeInput, searchContext string) (string, error) {
+	payload, err := marshalPromptJSON("candidate events", buildPromptCandidates(input))
+	if err != nil {
+		return "", err
+	}
 
 	members := append([]string(nil), input.RoomMembers...)
 	slices.Sort(members)
@@ -151,19 +154,21 @@ candidate_events=%s`,
 	)
 
 	if strings.TrimSpace(searchContext) == "" {
-		return base + "\nReturn only schema JSON."
+		return base + "\nReturn only schema JSON.", nil
 	}
 
-	return base + "\nexa_search_context=" + searchContext + "\nReturn only schema JSON."
+	return base + "\nexa_search_context=" + searchContext + "\nReturn only schema JSON.", nil
 }
 
-func marshalPromptJSON(value any, fallback string) []byte {
+// marshalPromptJSON은 prompt에 넣을 값을 직렬화한다. 실패를 빈 목록·null로 바꾸면 LLM이 입력 없이 요약하므로
+// 오류를 그대로 돌려준다. 외부에서 수집한 제목의 잘못된 UTF-8이 대표적인 실패 원인이다.
+func marshalPromptJSON(field string, value any) ([]byte, error) {
 	data, err := jsonv2.Marshal(value)
 	if err != nil {
-		return []byte(fallback)
+		return nil, fmt.Errorf("marshal prompt %s: %w", field, err)
 	}
 
-	return data
+	return data, nil
 }
 
 func buildSearchQuery(period model.Period, roomMembers []string, now time.Time) string {

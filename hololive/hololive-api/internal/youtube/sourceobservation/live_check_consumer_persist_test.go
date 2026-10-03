@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -12,6 +13,22 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
+
+func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {
+	pool, _, _, proof := startLivePersist(t)
+	ctx := t.Context()
+
+	seedChannelLiveCheckLease(t, pool, &proof)
+
+	_, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(channelLiveCheckEnvelope(t, &proof, contract.ChannelLiveCheckV1{
+		Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true,
+	})))
+	if !errors.Is(err, publishkit.ErrTargetDisabled) {
+		t.Fatalf("channel live check under snapshot job lease: err = %v, want %v", err, publishkit.ErrTargetDisabled)
+	}
+
+	assertTableCount(t, pool, "source_observations", 0)
+}
 
 // 채널 /live 확인은 최신값만 남기고 live reducer·pending·absence slot을 건드리지 않는다.
 func TestChannelLiveCheckStoresLatestWithoutLiveLifecycle(t *testing.T) {

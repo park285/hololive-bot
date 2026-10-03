@@ -30,7 +30,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
+	targetpolicy "github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"

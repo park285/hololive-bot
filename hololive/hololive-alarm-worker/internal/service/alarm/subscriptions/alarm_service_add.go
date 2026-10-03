@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
@@ -15,10 +14,8 @@ import (
 
 // AddAlarm은 채팅방의 채널·멤버별 알림 종류를 저장하고 캐시를 갱신하며 새 종류가 추가됐는지 반환한다.
 func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
-	as.cacheMutationMu.Lock()
+	startedAt := as.lockCacheMutation("add")
 	defer as.cacheMutationMu.Unlock()
-
-	startedAt := time.Now()
 
 	var opErr error
 
@@ -71,11 +68,7 @@ func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation *add
 
 	opErr := as.rebuildAlarmCacheFromRepository(ctx, "add", fmt.Errorf("add alarm: %w", err))
 
-	if err := sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild add cache from repository", opErr); err != nil {
-		return fmt.Errorf("log and wrap error: %w", err)
-	}
-
-	return nil
+	return sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild add cache from repository", opErr)
 }
 
 func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequest, error) {
@@ -155,11 +148,7 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation *a
 	}
 
 	if err != nil {
-		if logErr := sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm before cache write", err); logErr != nil {
-			return fmt.Errorf("log and wrap error: %w", logErr)
-		}
-
-		return nil
+		return sharedlogging.LogAndWrapError(ctx, as.logger, "persist alarm before cache write", err)
 	}
 
 	return nil

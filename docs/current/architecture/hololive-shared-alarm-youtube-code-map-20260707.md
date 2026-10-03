@@ -8,7 +8,7 @@
 
 - 사용자의 `!알람` 명령은 `hololive-api`에서 파싱되고, 구독 상태는 PostgreSQL의 `alarms` 테이블에 저장된다.
 - YouTube 감지는 `hololive-alarm-worker/internal/service/alarm/checker/internal/checking` 아래의 `YouTubeChecker`가 담당한다.
-- 감지된 후보 알림은 `notifier`가 Valkey dedup claim을 먼저 잡고, `hololive-shared/pkg/service/alarm/queue.Publisher`가 PostgreSQL dispatch outbox에 기록한다.
+- 감지된 후보 알림은 `notifier`가 Valkey dedup claim을 먼저 잡고, `hololive-alarm-worker/internal/service/alarm/queue.Publisher`가 PostgreSQL dispatch outbox에 기록한다.
 - 실제 외부 발송은 `alarm_dispatch_runner`가 `alarm_dispatch_deliveries`를 claim하고, `MarkSending` 조건부 UPDATE를 통과한 뒤 Iris/Kakao로 보낸다.
 - Valkey는 channel registry, subscriber set, dedup claim, wakeup 신호, lease 등 빠른 조율을 맡고, PostgreSQL은 outbox와 delivery 상태의 최종 진실을 맡는다.
 
@@ -509,7 +509,7 @@ dedupService.MarkUpcomingEventNotified(roomID, channelID, stream)
 
 파일:
 
-- `hololive/hololive-shared/pkg/service/alarm/queue/publisher.go`
+- `hololive/hololive-alarm-worker/internal/service/alarm/queue/publisher.go`
 
 `Publisher`는 notification을 `domain.AlarmQueueEnvelope`로 감싸고, PostgreSQL dispatch outbox에 먼저 기록한다.
 
@@ -1033,7 +1033,7 @@ ClientRequestID downstream idempotency
 
 ### Shared queue/outbox
 
-- `hololive/hololive-shared/pkg/service/alarm/queue/publisher.go`: PG-first queue publisher
+- `hololive/hololive-alarm-worker/internal/service/alarm/queue/publisher.go`: PG-first queue publisher
 - `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_insert_batch.go`: batch insert orchestration
 - `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_insert.go`: event/delivery insert
 - `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_claim.go`: due delivery claim

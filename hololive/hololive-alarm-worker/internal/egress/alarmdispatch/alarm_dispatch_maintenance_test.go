@@ -23,6 +23,11 @@ func TestAlarmDispatchMaintenanceSkipsRetentionWhenAdvisoryLockUnavailable(t *te
 		retentionEnabled: true,
 		queryTimeout:     time.Second,
 		limit:            1000,
+		sentDays:         90,
+		dlqDays:          180,
+		quarantinedDays:  180,
+		cancelledDays:    90,
+		eventDays:        90,
 		retentionLockKey: 42,
 	}
 
@@ -104,6 +109,11 @@ func TestAlarmDispatchMaintenanceReturnsRetentionDeleteErrors(t *testing.T) {
 		retentionEnabled: true,
 		queryTimeout:     time.Second,
 		limit:            1000,
+		sentDays:         90,
+		dlqDays:          180,
+		quarantinedDays:  180,
+		cancelledDays:    90,
+		eventDays:        90,
 		retentionLockKey: 42,
 	}
 
@@ -136,6 +146,11 @@ func TestAlarmDispatchMaintenanceObservationFailuresDoNotBlockDeletion(t *testin
 				retentionEnabled: true,
 				queryTimeout:     20 * time.Millisecond,
 				limit:            1000,
+				sentDays:         90,
+				dlqDays:          180,
+				quarantinedDays:  180,
+				cancelledDays:    90,
+				eventDays:        90,
 				retentionLockKey: 42,
 			}
 
@@ -168,6 +183,7 @@ func TestAlarmDispatchMaintenanceParentCancellationIsNotCountedAsFailure(t *test
 		observerStore:    store,
 		retentionEnabled: true,
 		queryTimeout:     time.Second,
+		interval:         time.Hour,
 		logger:           slog.New(slog.NewTextHandler(&logs, nil)),
 	}
 	beforeObservation := alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total")

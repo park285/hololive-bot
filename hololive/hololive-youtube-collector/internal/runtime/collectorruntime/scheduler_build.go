@@ -157,10 +157,10 @@ func newCollectorRegistry(
 	return registry, nil
 }
 
-func collectorRunners(infra *collectorInfrastructure) []JobRunner {
+func collectorRunners(infra *collectorInfrastructure) []collectutil.JobRunner {
 	maxResults := collectutil.DefaultMaxResults()
 
-	return []JobRunner{
+	return []collectutil.JobRunner{
 		youtubejscollector.NewCommunityRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewContentRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewChannelLiveRunner(infra.youtubejsRPC),
@@ -175,7 +175,7 @@ func collectorRunners(infra *collectorInfrastructure) []JobRunner {
 }
 
 func collectorExecutionProfiles(
-	runners []JobRunner,
+	runners []collectutil.JobRunner,
 	cfg *collectorconfig.Config,
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,

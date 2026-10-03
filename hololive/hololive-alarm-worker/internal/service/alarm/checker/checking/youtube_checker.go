@@ -44,12 +44,20 @@ import (
 
 const (
 	channelProcessingConcurrency = 16
+
+	// Holodex live 조회가 check 주기(scheduler 45초) 안에서 쓸 수 있는 최대 시간이다.
+	// Holodex client는 시도당 20초로 최대 4회 시도하므로 한도가 없으면 주기 예산을 모두 쓰고, 그 뒤의 저장 세션 조회와
+	// 구독·이름 조회가 기한 초과로 실패한다. 실제로 2026-09-30 Holodex 장애에서 108회 중 101회가 주기 실패였고 그중 54회가
+	// 저장 세션 조회 기한 초과였다. 시도 1회는 끝나게 두고 나머지 20초를 persisted live session 예외 계약
+	// (contracts/alarm.md) 경로에 남긴다.
+	youtubeHolodexLiveStatusBudget = 25 * time.Second
 )
 
 // YouTubeChecker는 Holodex live status 기반 알림 후보를 생성한다.
 type YouTubeChecker struct {
 	cacheClient         cache.Client
 	holodexService      *holodexprovider.Service
+	holodexBudget       time.Duration
 	tierScheduler       *tier.TieredScheduler
 	dedupService        *dedup.Service
 	persistedLiveSource YouTubeLiveSessionSource
@@ -130,6 +138,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	checker := &YouTubeChecker{
 		cacheClient:         cacheClient,
 		holodexService:      holodexService,
+		holodexBudget:       youtubeHolodexLiveStatusBudget,
 		tierScheduler:       tierScheduler,
 		dedupService:        dedupService,
 		persistedLiveSource: persistedLiveSource,

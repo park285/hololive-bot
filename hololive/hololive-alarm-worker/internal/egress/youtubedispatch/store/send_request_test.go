@@ -60,22 +60,6 @@ func TestFrozenRequestPreservesBodyRouteGenerationAndMembership(t *testing.T) {
 	require.Equal(t, "youtube:freeze:r1", id)
 }
 
-func TestFrozenRequestLegacyRetryRequiresEvidence(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	ctx := t.Context()
-	seedTransitionLogicalGroup(t, pool, "legacy-video", "legacy-room")
-
-	_, err := pool.Exec(ctx, `UPDATE youtube_notification_delivery SET request_snapshot_allowed=false,attempt_count=1`)
-	require.NoError(t, err)
-
-	transition := newTestTransitionStore(t, pool)
-	claimed, err := transition.ClaimPending(ctx, 1)
-	require.NoError(t, err)
-
-	_, err = transition.FreezeRequest(ctx, claimed, FrozenRequest{BaseID: "legacy", RoomID: "legacy-room", Message: "current body", Route: testFrozenTextRoute, DedupeKeys: []string{"key"}})
-	require.ErrorIs(t, err, ErrLegacyRequestEvidence)
-}
-
 func TestExpiredPendingConvergesWithoutLedgerAndCannotRevive(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

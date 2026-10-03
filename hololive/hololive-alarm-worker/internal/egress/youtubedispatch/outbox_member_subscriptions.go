@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	format "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
+	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
@@ -17,7 +17,7 @@ func outboxSubscriberTarget(item *domain.YouTubeNotificationOutbox) (targetKey, 
 		return item.ChannelID, "", nil
 	}
 
-	var payload *format.VideoPayload
+	var payload *youtubeoutbox.Video
 
 	if err := jsonv2.Unmarshal([]byte(item.Payload), &payload); err != nil {
 		return "", "", fmt.Errorf("decode member subscription title: %w", err)
