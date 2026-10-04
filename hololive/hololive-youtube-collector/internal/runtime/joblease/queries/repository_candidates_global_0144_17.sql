@@ -11,7 +11,6 @@ WITH target_bundle AS (
     WHERE projection_generation = $1
       AND observation_kind = ANY($2::text[])
       AND enabled = TRUE
-      AND valid_until > statement_timestamp()
       AND (NOT $3::boolean OR subject_key = $4)
 ), identity AS (
     SELECT $5::text AS job_key,

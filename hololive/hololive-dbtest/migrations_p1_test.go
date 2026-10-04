@@ -197,6 +197,8 @@ var observationGrantPostBaselineMigrations = []string{
 	"242_drop_payload_backfill_index.sql",
 	collectionMembershipMigration,
 	collectionMembershipMigration,
+	projectionHeaderMigration,
+	projectionHeaderMigration,
 }
 
 // 이어 붙이는 순서가 grant/revoke 결과를 결정하므로 파일 번호순이 아니라 적용 순서대로 나열한다.
@@ -458,6 +460,7 @@ var sourceObservationTables = []string{
 	"source_observation_applications",
 	"source_observation_subject_heads",
 	"source_reconciliation_conflicts",
+	"youtube_live_sessions",
 	"youtube_live_reconciliation_heads",
 	"youtube_live_pending_ends",
 	"youtube_live_absence_slots",
@@ -522,7 +525,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_live_viewer_sample_evidence":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_live_viewer_sample_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_schedule_items":                    observationPrivileges("SELECT", "INSERT", "UPDATE"),
-			"youtube_live_sessions":                     observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_live_sessions":                     observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_live_viewer_samples":               observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_channel_live_checks":               observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_video_availability":                observationPrivileges("SELECT", "INSERT", "UPDATE"),
@@ -973,8 +976,8 @@ func seedScraperCollectionMembership(t *testing.T, tx pgx.Tx, role, jobKey strin
 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO youtube_collection_targets(projection_generation, subject_key, observation_kind, priority,
-			poll_interval_ms, enabled, valid_until, member_since_generation)
-		SELECT $1, $2, kind, 40, 600000, TRUE, clock_timestamp() + interval '1 hour', $1
+			poll_interval_ms, enabled, member_since_generation)
+		SELECT $1, $2, kind, 40, 600000, TRUE, $1
 		FROM unnest($3::text[]) AS kind`, generation, membershipGrantSubject, kinds); err != nil {
 		failObservationRoleTx(t, tx, role, "seed collection membership targets: %v", err)
 	}

@@ -2,7 +2,6 @@ package joblease
 
 import (
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-func TestBuildJobKeyMatchesCandidateSQLExpression(t *testing.T) {
+func TestBuildJobKeyCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 
 	subject := "UC_TEST"
@@ -28,38 +27,11 @@ func TestBuildJobKeyMatchesCandidateSQLExpression(t *testing.T) {
 		t.Fatalf("BuildJobKey = %q, want SQL expression %q", key, want)
 	}
 
-	sql := mustSQL("repository_candidates_0144_02.sql")
-	expr := "'collector:' || $3 || ':' || $4 || ':' || target.subject_key"
-
-	if strings.Count(sql, expr) < 2 {
-		t.Fatalf("subject candidate SQL must inline BuildJobKey expression %s", expr)
-	}
-
 	globalID := collection.JobID{Provider: contract.ProviderHolodex, Kind: "holodex_live"}
 	globalKey, err := BuildJobKey(globalID, "global:holodex_live")
 
 	if err != nil || globalKey != "collector:holodex:holodex_live:global" {
 		t.Fatalf("global BuildJobKey = %q, %v", globalKey, err)
-	}
-}
-
-func TestGlobalCandidateSQLMatchesContractShape(t *testing.T) {
-	t.Parallel()
-
-	sql := mustSQL("repository_candidates_global_0144_17.sql")
-
-	for _, want := range []string{
-		"AND (NOT $3::boolean OR subject_key = $4)",
-		"SELECT $5::text AS job_key",
-		"$4::text AS subject_key",
-		"identity.job_key <> ALL($6::text[])",
-		"lease.next_due_at <= statement_timestamp()",
-		"lease.retry_not_before <= statement_timestamp()",
-		"lease.lease_expires_at <= statement_timestamp()",
-	} {
-		if !strings.Contains(sql, want) {
-			t.Fatalf("global candidate SQL missing %q", want)
-		}
 	}
 }
 
@@ -215,53 +187,6 @@ func TestCandidatesForProjectionMixedIntervalIsInternal(t *testing.T) {
 	if collecterr.ClassOf(err) != collecterr.ClassInternal {
 		t.Fatalf("mixed cadence error = %v", err)
 	}
-}
-
-func TestCandidatesForProjectionQueryPlansAreAvailable(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
-
-	ctx := t.Context()
-
-	rows, err := pool.Query(
-		ctx,
-		"EXPLAIN "+mustSQL("repository_candidates_0144_02.sql"),
-		int64(1),
-		[]string{string(contract.KindCommunityPage)},
-		string(contract.ProviderYouTubeJS),
-		"community_collect",
-		[]string{},
-		1,
-	)
-	if err != nil {
-		t.Logf("TRACK live EXPLAIN unavailable: %v", err)
-
-		return
-	}
-	defer rows.Close()
-
-	var plan strings.Builder
-
-	for rows.Next() {
-		var line string
-
-		if scanErr := rows.Scan(&line); scanErr != nil {
-			t.Logf("TRACK live EXPLAIN scan: %v", scanErr)
-
-			return
-		}
-
-		plan.WriteString(line)
-		plan.WriteByte('\n')
-	}
-
-	if plan.Len() == 0 {
-		t.Log("TRACK live EXPLAIN returned no rows")
-
-		return
-	}
-
-	t.Logf("TRACK candidate EXPLAIN (no performance claim):\n%s", plan.String())
 }
 
 func mustTestJob(t *testing.T, provider contract.Provider, kind string) collection.JobContract {

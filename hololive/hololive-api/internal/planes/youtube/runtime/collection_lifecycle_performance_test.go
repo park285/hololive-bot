@@ -83,7 +83,7 @@ func TestLiveCheckReviewWorkIsBoundedByReviewedVideos(t *testing.T) {
 			var raw []byte
 
 			require.NoError(t, pool.QueryRow(t.Context(), "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("live_check_videos.sql"),
-				[]string{"load-channel"}, int64(270000), 101).Scan(&raw))
+				[]string{"load-channel"}, 101).Scan(&raw))
 
 			var plans []struct {
 				Plan collectionStatePlanNode `json:"Plan"`
@@ -144,7 +144,7 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
     `)
 	require.NoError(t, err)
 
-	rows, err := pool.Query(ctx, mustSQL("live_check_videos.sql"), []string{"review-channel"}, int64(270000), 10)
+	rows, err := pool.Query(ctx, mustSQL("live_check_videos.sql"), []string{"review-channel"}, 10)
 	require.NoError(t, err)
 
 	defer rows.Close()
@@ -155,17 +155,19 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 		var (
 			id, channel string
 			upcoming    bool
-			notBefore   *time.Time
+			facts       liveCheckFreshness
 		)
 
-		require.NoError(t, rows.Scan(&id, &channel, &upcoming, &notBefore))
+		require.NoError(t, rows.Scan(&id, &channel, &upcoming, &facts.asOf,
+			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt))
 		require.Equal(t, "review-channel", channel)
 		require.Equal(t, id != "live", upcoming)
 
+		notBefore := facts.notBefore(defaultLiveFreshnessBudget())
 		if id == "review-changed" {
-			require.NotNil(t, notBefore, "availability check is freshness evidence for the reopened video")
+			require.False(t, notBefore.IsZero(), "availability check is freshness evidence for the reopened video")
 		} else {
-			require.Nil(t, notBefore, "video without freshness evidence must be immediately eligible")
+			require.True(t, notBefore.IsZero(), "video without freshness evidence must be immediately eligible")
 		}
 
 		ids = append(ids, id)
@@ -232,8 +234,8 @@ func seedCollectionLifecyclePopulation(t *testing.T, pool *pgxpool.Pool) {
         (status,row_count,projection_sha256,valid_until,activated_at)
         VALUES ('CURRENT',1,repeat('a',64),now()+interval '1 hour',now());
         INSERT INTO youtube_collection_targets
-        (projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
-        SELECT generation,'load-channel','live_snapshot',20,120000,true,now()+interval '1 hour'
+        (projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
+        SELECT generation,'load-channel','live_snapshot',20,120000,true
         FROM youtube_collection_projection_generations WHERE status='CURRENT';
         INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,lifecycle_origin)
         SELECT 'load-'||n,'load-channel','UPCOMING',repeat('x',500),'legacy_unknown'

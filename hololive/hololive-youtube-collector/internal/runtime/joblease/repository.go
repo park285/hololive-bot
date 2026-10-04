@@ -158,7 +158,10 @@ func verifyAcquireTargets(
 		kindValues[i] = string(kinds[i])
 	}
 
-	var bundle acquireTargetBundle
+	var (
+		bundle  acquireTargetBundle
+		current bool
+	)
 
 	err := tx.QueryRow(
 		ctx,
@@ -168,9 +171,13 @@ func verifyAcquireTargets(
 		scope.ExactSubject,
 		spec.SubjectKey,
 		scope.Kinds,
-	).Scan(&bundle.targetCount, &bundle.minIntervalMS, &bundle.maxIntervalMS, &bundle.admissibleCount, &bundle.memberCount, &bundle.membersProven)
+	).Scan(&bundle.targetCount, &bundle.minIntervalMS, &bundle.maxIntervalMS, &bundle.admissibleCount, &bundle.memberCount, &bundle.membersProven, &current)
 	if err != nil {
 		return 0, fmt.Errorf("acquire collection job lease: verify target set: %w", err)
+	}
+
+	if !current {
+		return 0, collection.ErrProjectionStale
 	}
 
 	return bundle.admit(spec)

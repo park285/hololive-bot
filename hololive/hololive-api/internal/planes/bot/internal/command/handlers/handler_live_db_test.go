@@ -41,8 +41,8 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
  UPDATE youtube_collection_projection_generations SET status='RETIRED' WHERE status='CURRENT';
  INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
  VALUES('CURRENT',2,repeat('a',64),now()+interval '1 hour',now());
- INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
- SELECT generation,'UC_command_query',kind,20,120000,true,valid_until FROM youtube_collection_projection_generations
+ INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
+ SELECT generation,'UC_command_query',kind,20,120000,true FROM youtube_collection_projection_generations
  CROSS JOIN (VALUES('live_snapshot'),('channel_live_check')) kinds(kind) WHERE status='CURRENT';`)
 
 	deps, _, message := liveCardTestDeps(t, []*domain.Member{{ChannelID: "UC_command_query", Name: "Query Member"}})

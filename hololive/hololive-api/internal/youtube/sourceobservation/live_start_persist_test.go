@@ -209,10 +209,12 @@ func finalizeLeaseRosterCount(t *testing.T, pool *pgxpool.Pool, proof *contract.
 		SET membership_target_count = (
 			SELECT count(*)
 			FROM youtube_collection_targets AS target
+			JOIN youtube_collection_projection_generations AS projection
+			  ON projection.generation = target.projection_generation
 			WHERE target.projection_generation = job.projection_generation
 			  AND target.observation_kind = ANY(job.membership_kinds)
 			  AND target.enabled
-			  AND target.valid_until > NOW()
+			  AND projection.status = 'CURRENT' AND projection.valid_until > NOW()
 			  AND (NOT job.membership_exact_subject OR target.subject_key = job.subject_key)
 		)
 		WHERE job.job_key = $1

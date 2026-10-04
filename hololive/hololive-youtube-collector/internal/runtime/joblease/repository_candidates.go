@@ -108,9 +108,7 @@ func (r *Repository) validateCandidateRequest(generation int64, job collection.J
 
 func (r *Repository) isCanonicalJob(job collection.JobContract) bool {
 	canonical, ok := r.contracts.Definition(job.ID())
-
-	return ok && canonical.Class() == job.Class() && canonical.Membership() == job.Membership() &&
-		canonical.LeaseSubject() == job.LeaseSubject()
+	return ok && canonical.Class() == job.Class() && canonical.Membership() == job.Membership() && canonical.LeaseSubject() == job.LeaseSubject()
 }
 
 func (r *Repository) subjectCandidatesForProjection(
@@ -331,17 +329,11 @@ func normalizeExcludedJobKeys(keys []string, capacity int) ([]string, error) {
 	cloned := slices.Clone(keys)
 	slices.Sort(cloned)
 
-	unique := make([]string, 0, len(cloned))
-	for _, key := range cloned {
-		if invalidExcludedJobKey(key) {
+	unique := slices.Compact(cloned)
+	for _, key := range unique {
+		if strings.TrimSpace(key) != key || key == "" {
 			return nil, fmt.Errorf("list collection job candidates: %w: excluded job key is outside bounds", ErrInvalidJob)
 		}
-
-		if duplicateLast(unique, key) {
-			continue
-		}
-
-		unique = append(unique, key)
 	}
 
 	if len(unique) > capacity {
@@ -349,12 +341,4 @@ func normalizeExcludedJobKeys(keys []string, capacity int) ([]string, error) {
 	}
 
 	return unique, nil
-}
-
-func invalidExcludedJobKey(key string) bool {
-	return strings.TrimSpace(key) != key || key == ""
-}
-
-func duplicateLast(keys []string, key string) bool {
-	return len(keys) > 0 && keys[len(keys)-1] == key
 }

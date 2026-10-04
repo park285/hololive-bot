@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -71,6 +72,96 @@ func TestLiveSessionUpsertSkipsUnchangedEffectiveValues(t *testing.T) {
 	if !gotScheduled.Equal(scheduled) || !gotSeen.Equal(now.Add(time.Minute)) {
 		t.Fatal("no-op guard changed effective persisted values")
 	}
+}
+
+// 같은 근거를 다시 저장해 검토 snapshot을 무효화하지 않으며 새 사실 시각은 반드시 저장한다.
+func TestLiveHeadNoopPreservesReviewSnapshotButNewEvidenceInvalidatesIt(t *testing.T) {
+	pool, _, _, _ := startLivePersist(t)
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	session := live.SessionState{
+		VideoID: "head-noop", ChannelID: "head-noop-channel", Status: domain.LiveStatusUpcoming,
+		LifecycleOrigin: live.OriginObserved, LastSeenAt: now,
+	}
+
+	session.Clock.LastUpcomingPositiveAt = new(now)
+	session.Clock.LastUpcomingPositiveSeenAt = new(now)
+
+	if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error { return upsertLiveSession(ctx, tx, &session) }); err != nil {
+		t.Fatal(err)
+	}
+
+	assertLiveHeadWrites(t, pool, &session, 1)
+
+	beforeTuple, beforeHash := liveHeadReviewSnapshot(t, pool, session.VideoID)
+
+	assertLiveHeadWrites(t, pool, &session, 0)
+
+	afterTuple, afterHash := liveHeadReviewSnapshot(t, pool, session.VideoID)
+	if beforeTuple != afterTuple || beforeHash != afterHash {
+		t.Fatal("identical head evidence rewrote tuple or invalidated review snapshot")
+	}
+
+	session.Clock.LastUpcomingPositiveSeenAt = new(now.Add(time.Second))
+
+	assertLiveHeadWrites(t, pool, &session, 1)
+
+	changedTuple, changedHash := liveHeadReviewSnapshot(t, pool, session.VideoID)
+	if changedTuple == afterTuple || changedHash == afterHash {
+		t.Fatal("new evidence clock did not persist and invalidate review snapshot")
+	}
+
+	assertLiveHeadWrites(t, pool, &session, 0)
+
+	session.IgnoredAbsenceScheduledFor = []time.Time{now.Add(-time.Minute)}
+
+	assertLiveHeadWrites(t, pool, &session, 1)
+
+	_, ignoredHash := liveHeadReviewSnapshot(t, pool, session.VideoID)
+	if ignoredHash == changedHash {
+		t.Fatal("changed replay evidence did not invalidate review snapshot")
+	}
+
+	assertLiveHeadWrites(t, pool, &session, 0)
+
+	session.IgnoredAbsenceScheduledFor = []time.Time{}
+
+	assertLiveHeadWrites(t, pool, &session, 1)
+
+	session.IgnoredAbsenceScheduledFor = nil
+
+	assertLiveHeadWrites(t, pool, &session, 0)
+}
+
+func assertLiveHeadWrites(t *testing.T, pool *pgxpool.Pool, session *live.SessionState, want int64) {
+	t.Helper()
+
+	statement := liveHeadStatement(session)
+
+	tag, err := pool.Exec(t.Context(), statement.SQL, statement.Args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if tag.RowsAffected() != want {
+		t.Fatalf("head writes = %d, want %d", tag.RowsAffected(), want)
+	}
+}
+
+func liveHeadReviewSnapshot(t *testing.T, pool *pgxpool.Pool, videoID string) (string, string) {
+	t.Helper()
+
+	var tuple, hash string
+
+	if err := pool.QueryRow(t.Context(), `
+		SELECT head.ctid::text, review.snapshot_sha256
+		FROM youtube_live_reconciliation_heads head
+		CROSS JOIN LATERAL youtube_live_review_snapshot(head.video_id) review
+		WHERE head.video_id=$1`, videoID).Scan(&tuple, &hash); err != nil {
+		t.Fatal(err)
+	}
+
+	return tuple, hash
 }
 
 func TestLiveSessionUpsertRejectsStaleOrUnprovenMetadata(t *testing.T) {

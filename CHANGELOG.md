@@ -16,6 +16,14 @@
   기존 영수증은 다시 쓰지 않고 같은 사실 추출로 인정합니다. 미래 일정 `legacy_unknown` UPCOMING은
   `legacy_not_due`로 분리하고 `unresolved_unreviewed`에서 뺍니다. 운영 collector의 RPC 간격은
   코드 기본값 2초를 유지한 채 운영 env에서 1초로 override합니다.
+- projection 유효기간 설정을 줄여도 이전의 긴 만료가 남던 회귀를 수정합니다. 마지막으로
+  수락한 refresh 시각을 header에 기록하여 최신 호출의 TTL 변경을 반영하고, 과거 호출의
+  역순 갱신은 막습니다. migration 이전의 refresh 시각은 추정하지 않습니다.
+- projection heartbeat의 유효기간을 header 한 행에서 관리하고, 실제로 바뀐 `not_before`만
+  갱신합니다. collector는 전송량 회귀가 확인된 전체 target/lease 캐시를 채택하지 않고
+  기존 관계형 후보 조회와 `LIMIT+1`을 유지합니다. LIVE 확인의 신선도 계산은 API로
+  옮기고 같은 canonical head의 재저장을 생략합니다. 261은 새 API·collector를 함께
+  전환해야 하는 계약이며 운영 적용·보존 단축·삭제·물리 회수는 포함하지 않습니다.
 - 수집기 내부 계약·snapshot·membership 검증의 소유자를 `internal/runtime/collection`으로
   통합하고, PARTIAL 충돌은 오류를 보존한 terminal completion으로 정산합니다. 동시 실행의
   RPC 예약은 전체 호출 수와 inflight를 반영하며, content 근거 조회도 기존 limiter를 따릅니다.

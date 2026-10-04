@@ -22,7 +22,6 @@ WITH requested(kind) AS (
       ON targets.projection_generation = current_projection.generation
      AND targets.observation_kind = requested.kind
      AND targets.enabled = TRUE
-     AND targets.valid_until > statement_timestamp()
     ORDER BY requested.kind, targets.subject_key
     LIMIT $3 + 1
 ), rows AS (

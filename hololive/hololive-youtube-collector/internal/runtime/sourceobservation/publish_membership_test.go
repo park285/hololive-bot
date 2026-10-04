@@ -3,6 +3,7 @@ package sourceobservation
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,9 +49,9 @@ func transitionPublishProjection(ctx context.Context, t *testing.T, q projection
 	if _, err := q.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until, member_since_generation
+			priority, poll_interval_ms, enabled, member_since_generation
 		)
-		SELECT $1, subject_key, observation_kind, priority, poll_interval_ms, enabled, valid_until,
+		SELECT $1, subject_key, observation_kind, priority, poll_interval_ms, enabled,
 		       CASE WHEN $3 THEN $1 ELSE member_since_generation END
 		FROM youtube_collection_targets
 		WHERE projection_generation = $2
@@ -173,6 +174,76 @@ func TestPublishWaitsForProjectionGuardAndSeesCarriedMembership(t *testing.T) {
 	}
 
 	assertPublishSideEffects(t, pool, 1, 1, 1)
+}
+
+// guard를 기다리는 사이 header가 만료되면 새 snapshot으로 거절하고 발행·checkpoint·terminal을 모두 보존한다.
+func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+
+	defer cancel()
+
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	seedPriorLeaseFailure(ctx, t, pool, proof.JobKey)
+
+	beforeTerminal := readLeaseTerminal(ctx, t, pool, proof.JobKey)
+	beforeLease := readCollectionJobLeaseState(ctx, t, pool, proof.JobKey)
+
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback projection expiry transaction: %v", rollbackErr)
+		}
+	}()
+
+	var guard bool
+
+	require.NoError(t, tx.QueryRow(ctx, `SELECT guard_key FROM youtube_collection_projection_guard FOR UPDATE`).Scan(&guard))
+
+	input := publishInput(communityEnvelope(t, &proof, "post-1"))
+	done := make(chan error, 1)
+
+	var publishers sync.WaitGroup
+
+	publishers.Go(func() {
+		_, publishErr := NewRepository(pool).PublishBatch(ctx, input)
+		done <- publishErr
+	})
+
+	defer func() {
+		cancel()
+		publishers.Wait()
+	}()
+
+	// 이 writer PID에 막힌 Publish를 확인해 무관한 lock 대기를 근거로 삼지 않는다.
+	require.Eventually(t, func() bool {
+		var waiting bool
+
+		queryErr := pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity
+				WHERE datname = current_database() AND wait_event_type = 'Lock'
+				  AND $1::integer = ANY(pg_blocking_pids(pid))
+			)
+		`, tx.Conn().PgConn().PID()).Scan(&waiting)
+
+		return queryErr == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond)
+
+	_, err = tx.Exec(ctx, `
+		UPDATE youtube_collection_projection_generations
+		SET valid_until = clock_timestamp() - INTERVAL '1 second'
+		WHERE generation = $1
+	`, proof.ProjectionGeneration)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.ErrorIs(t, <-done, collection.ErrProjectionStale)
+
+	assertPublishSideEffects(t, pool, 0, 0, 0)
+	require.Equal(t, beforeTerminal, readLeaseTerminal(ctx, t, pool, proof.JobKey))
+	require.Equal(t, beforeLease, readCollectionJobLeaseState(ctx, t, pool, proof.JobKey))
 }
 
 // 수락 간격은 checkpoint가 실제로 전진한 발행에서만 나온다. 첫 수락·같은 slot 재생·충돌은 간격이 없다.

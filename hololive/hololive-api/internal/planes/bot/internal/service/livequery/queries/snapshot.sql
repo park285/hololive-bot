@@ -25,11 +25,11 @@ WITH clock AS MATERIALIZED (
     LEFT JOIN youtube_collection_targets t
       ON t.subject_key = r.channel_id AND t.observation_kind = 'live_snapshot'
      AND t.projection_generation IN (SELECT generation FROM generation)
-     AND t.enabled AND t.valid_until > as_of
+     AND t.enabled
     LEFT JOIN youtube_collection_targets c
       ON c.subject_key = r.channel_id AND c.observation_kind = 'channel_live_check'
      AND c.projection_generation IN (SELECT generation FROM generation)
-     AND c.enabled AND c.valid_until > as_of
+     AND c.enabled
 ), coverage AS MATERIALIZED (
     -- 목록 누락과 absence slot은 부재 근거가 아니다. 최신 /live의 검증된 음성만 읽는다.
     SELECT t.channel_id, c.effective_at AS covered_at
@@ -49,7 +49,7 @@ WITH clock AS MATERIALIZED (
     JOIN youtube_collection_targets v
       ON v.subject_key = s.video_id AND v.observation_kind = 'video_live_check'
      AND v.projection_generation IN (SELECT generation FROM generation)
-     AND v.enabled AND v.valid_until > t.as_of
+     AND v.enabled
     CROSS JOIN LATERAL (
         SELECT LEAST(INTERVAL '5 minutes', (2 * v.poll_interval_ms + 30000) * INTERVAL '1 millisecond') AS budget
     ) validity

@@ -54,7 +54,7 @@ func TestRefreshProjectionPaths(t *testing.T) {
 		t.Fatalf("same projection rotated generation: before=%#v after=%#v", created, refreshed)
 	}
 
-	assertTargetValidUntil(t, pool, created.Generation, projectionNow.Add(70*time.Minute))
+	assertGenerationValidUntil(t, pool, created.Generation, projectionNow.Add(70*time.Minute))
 
 	newReason := reason
 
@@ -81,12 +81,27 @@ func TestRefreshProjectionPaths(t *testing.T) {
 	assertGenerationStatus(t, pool, created.Generation, "RETIRED")
 	assertGenerationStatus(t, pool, changed.Generation, "CURRENT")
 
+	assertEmptyProjectionRefresh(t, pool, refresher, changed.Generation)
+}
+
+func assertEmptyProjectionRefresh(t *testing.T, pool *pgxpool.Pool, refresher *Refresher, previous int64) {
+	t.Helper()
+
 	empty := mustRefresh(t, refresher, staticBuilder{}, projectionNow.Add(40*time.Minute), "empty")
-	if !empty.Changed || empty.RowCount != 0 || empty.Generation == changed.Generation {
+	if !empty.Changed || empty.RowCount != 0 || empty.Generation == previous {
 		t.Fatalf("empty result = %#v", empty)
 	}
 
 	assertTargetCount(t, pool, empty.Generation, 0)
+	requireEligibilityVersion(t, pool, empty.Generation, 1)
+
+	emptyHeartbeat := mustRefresh(t, refresher, staticBuilder{}, projectionNow.Add(50*time.Minute), "empty heartbeat")
+	if emptyHeartbeat.Changed || emptyHeartbeat.Generation != empty.Generation {
+		t.Fatalf("empty heartbeat rotated generation: %#v", emptyHeartbeat)
+	}
+
+	requireEligibilityVersion(t, pool, empty.Generation, 1)
+	assertGenerationValidUntil(t, pool, empty.Generation, projectionNow.Add(110*time.Minute))
 }
 
 func TestRefreshProjectionUsesCanonicalByteOrderAcrossDatabaseCollations(t *testing.T) {
@@ -619,12 +634,12 @@ func defaultPolicySchedules() map[contract.ObservationKind]Schedule {
 	return schedules
 }
 
-func assertTargetValidUntil(t *testing.T, pool *pgxpool.Pool, generation int64, want time.Time) {
+func assertGenerationValidUntil(t *testing.T, pool *pgxpool.Pool, generation int64, want time.Time) {
 	t.Helper()
 
 	var validUntil time.Time
 
-	if err := pool.QueryRow(t.Context(), `SELECT valid_until FROM youtube_collection_targets WHERE projection_generation = $1`, generation).Scan(&validUntil); err != nil {
+	if err := pool.QueryRow(t.Context(), `SELECT valid_until FROM youtube_collection_projection_generations WHERE generation = $1`, generation).Scan(&validUntil); err != nil {
 		t.Fatal(err)
 	}
 
