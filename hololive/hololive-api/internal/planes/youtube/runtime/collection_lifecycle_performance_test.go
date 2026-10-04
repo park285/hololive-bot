@@ -115,8 +115,8 @@ func liveReviewPendingEndLookups(node collectionStatePlanNode) float64 {
 	return lookups
 }
 
-// TestLiveCheckVideosExcludeOnlyMatchedReviews는 현재 snapshot과 일치하는 검토 영수증만 UPCOMING을
-// 구조 membership에서 빼고, 검토 뒤 바뀐 영상과 LIVE는 남기는지 확인한다.
+// TestLiveCheckVideosExcludeOnlyMatchedReviews는 현재 원본에 적용되는 검토 영수증만 UPCOMING을
+// 구조 membership에서 빼고, 검토 뒤 의미 사실이 바뀐 영상과 LIVE는 남기는지 확인한다.
 func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -126,6 +126,13 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
                ('review-current','review-channel','UPCOMING','','legacy_unknown'),
                ('review-changed','review-channel','UPCOMING','','legacy_unknown'),
                ('unreviewed','review-channel','UPCOMING','','legacy_unknown');
+        -- 검토 영수증은 현재도 검토 가능한(가용성 확인이 있는) 원본에만 적용된다.
+        INSERT INTO youtube_video_availability
+        (video_id,channel_id,provider,identity_confirmed,availability,method,unknown_reason,evidence_sha256,
+         scheduled_for,effective_at,observed_at,received_at)
+        SELECT video_id,'review-channel','youtubejs',false,'UNKNOWN','unknown','identity_missing',repeat('a',64),
+               now(),now(),now(),now()
+        FROM youtube_live_sessions WHERE video_id IN ('review-current','review-changed');
         INSERT INTO youtube_live_review_receipts
         (receipt_id,video_id,snapshot_sha256,original_snapshot,evidence_refs,disposition,operator_id,reason)
         SELECT md5(video_id)::uuid,video_id,snapshot.snapshot_sha256,snapshot.original_snapshot,
@@ -155,7 +162,14 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt))
 		require.Equal(t, "review-channel", channel)
 		require.Equal(t, id != "live", upcoming)
-		require.True(t, facts.notBefore(defaultLiveFreshnessBudget()).IsZero(), "video without freshness evidence must be immediately eligible")
+
+		notBefore := facts.notBefore(defaultLiveFreshnessBudget())
+
+		if id == "review-changed" {
+			require.False(t, notBefore.IsZero(), "availability check is freshness evidence for the reopened video")
+		} else {
+			require.True(t, notBefore.IsZero(), "video without freshness evidence must be immediately eligible")
+		}
 
 		ids = append(ids, id)
 	}

@@ -23,7 +23,7 @@ type collectionTargetSample struct {
 	stateMismatch, pastDue, pastDue7d                                             int64
 	retainedTotal, metadataOnly, legacyUnreviewed, closedUnresolved, neverChecked int64
 	oldestCheckAge                                                                float64
-	unresolvedUnreviewed, metadataNeverChecked                                    int64
+	unresolvedUnreviewed, legacyNotDue, metadataNeverChecked                      int64
 	metadataCheckAge, oldestReviewAge                                             float64
 }
 
@@ -61,7 +61,7 @@ func newCollectionTargetMetrics(reg prometheus.Registerer) *collectionTargetMetr
 		lastSuccess:         prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_snapshot_last_success_timestamp_seconds", Help: "Unix time of the last complete valid target snapshot."}),
 	}
 
-	m.lifecycleRecords = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_records", Help: "Retained active lifecycle records by classification; review closure requires the exact current snapshot. Categories may overlap."}, []string{"classification"})
+	m.lifecycleRecords = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_records", Help: "Retained active lifecycle records by classification; review closure requires a currently reviewable record whose receipt matches the exact snapshot digest or the same lifecycle facts (status, schedule, origin, positive/end/absence evidence, availability verdict). unresolved_unreviewed excludes legacy_unknown UPCOMING records scheduled in the future, which stay in legacy_unreviewed and legacy_not_due. Categories may overlap."}, []string{"classification"})
 	m.lifecycleCheckAge = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_oldest_check_age_seconds", Help: "Age of the oldest actual video check by lifecycle classification; never-checked records are counted separately."}, []string{"classification"})
 	m.lifecycleReviewAge = prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_oldest_review_age_seconds", Help: "Age of the oldest currently applicable unresolved review receipt."})
 	reg.MustRegister(m.liveState, m.liveReview, m.lifecycleRecords, m.lifecycleCheckAge, m.lifecycleReviewAge, m.success, m.lastSuccess)
@@ -101,7 +101,7 @@ func scanCollectionTargets(rows pgx.Rows) ([]collectionTargetSample, error) {
 			&s.live, &s.upcoming, &s.other,
 			&s.stateMismatch, &s.pastDue, &s.pastDue7d,
 			&s.retainedTotal, &s.metadataOnly, &s.legacyUnreviewed, &s.closedUnresolved, &s.neverChecked, &s.oldestCheckAge,
-			&s.unresolvedUnreviewed, &s.metadataNeverChecked, &s.metadataCheckAge, &s.oldestReviewAge); err != nil {
+			&s.unresolvedUnreviewed, &s.legacyNotDue, &s.metadataNeverChecked, &s.metadataCheckAge, &s.oldestReviewAge); err != nil {
 			return nil, fmt.Errorf("scan collection target snapshot: %w", err)
 		}
 
@@ -149,7 +149,8 @@ func (m *collectionTargetMetrics) observe(samples []collectionTargetSample, now 
 	for classification, count := range map[string]int64{
 		"retained_total": live.retainedTotal, "metadata_only": live.metadataOnly,
 		"unresolved_unreviewed": live.unresolvedUnreviewed, "metadata_never_checked": live.metadataNeverChecked,
-		"legacy_unreviewed": live.legacyUnreviewed, "closed_unresolved": live.closedUnresolved, "never_checked": live.neverChecked,
+		"legacy_unreviewed": live.legacyUnreviewed, "legacy_not_due": live.legacyNotDue,
+		"closed_unresolved": live.closedUnresolved, "never_checked": live.neverChecked,
 	} {
 		m.lifecycleRecords.WithLabelValues(classification).Set(float64(count))
 	}

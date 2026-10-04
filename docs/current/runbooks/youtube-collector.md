@@ -123,7 +123,7 @@ Worker count, local queue capacity and fixed `queue.max_age`, acquisition cadenc
 
 ### 수집 처리량과 대상 신선도
 
-`iris_stack_worker_in_flight / iris_stack_worker_configured_workers`는 작업 슬롯 점유율입니다. CPU 사용률이 아니며, provider admission과 YouTube.js 호출 제한 대기도 포함합니다. AP별 `YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS`는 **helper RPC 전체가 공유하는 간격**입니다. 기본 2초이면 AP 한 대의 명목 상한은 시간당 1,800 RPC입니다. 워커 수만 늘려 이 상한을 늘릴 수 없습니다. 한 RPC가 외부 HTTP 요청 여러 번을 수행할 수 있으므로 외부 API 호출량과 동일시하지 않습니다.
+`iris_stack_worker_in_flight / iris_stack_worker_configured_workers`는 작업 슬롯 점유율입니다. CPU 사용률이 아니며, provider admission과 YouTube.js 호출 제한 대기도 포함합니다. AP별 `YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS`는 **helper RPC 전체가 공유하는 간격**입니다. 코드 기본값은 2초(AP 한 대 명목 상한 시간당 1,800 RPC)입니다. 운영은 AP 4대 모두 1초로 override합니다(AP 한 대 초당 1 RPC, fleet 명목 상한 초당 4 RPC). Osaka·Osaka2 native는 static master의 `youtube-collector.env`, Seoul은 `ap-compose.env`, central은 `compose.env`가 값을 소유합니다. Compose `environment`가 `env_file`보다 우선하므로 Seoul·central collector env 파일에는 같은 키를 두지 않습니다. 119채널 roster와 job cadence는 이 override로 바뀌지 않습니다. 워커 수만 늘려 이 상한을 늘릴 수 없습니다. 한 RPC가 외부 HTTP 요청 여러 번을 수행할 수 있으므로 외부 API 호출량과 동일시하지 않습니다.
 
 - `youtubejs_rpc_phase_duration_seconds{operation,phase,outcome}`: `rate_limit` 대기와 `helper` 수행·응답 해석을 분리한 histogram. helper 내부의 외부 응답·파싱 시간은 합산입니다. operation은 community/content/channel/unknown, outcome은 success/timeout/canceled/error입니다.
 - `youtubejs_rpc_phase_in_flight{operation,phase}`와 `youtubejs_rpc_request_interval_seconds`: 현재 기다리는 호출, 수행 중인 호출과 설정된 호출 간격입니다. helper phase count는 제한을 통과한 RPC 시도 수입니다.

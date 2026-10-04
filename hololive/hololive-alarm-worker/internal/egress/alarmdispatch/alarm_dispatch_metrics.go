@@ -27,6 +27,8 @@ var (
 	alarmDispatchPGOldestSendingAgeSeconds       prometheus.Gauge
 	alarmDispatchPGQuarantinedRows               prometheus.Gauge
 	alarmDispatchPGOldestQuarantinedAgeSeconds   prometheus.Gauge
+	alarmDispatchPGUnreviewedQuarantinedRows     prometheus.Gauge
+	alarmDispatchPGOldestUnreviewedAgeSeconds    prometheus.Gauge
 	alarmDispatchPGBacklogSnapshotSuccess        prometheus.Gauge
 )
 
@@ -37,11 +39,19 @@ func initAlarmDispatchRunnerMetrics() {
 
 		alarmDispatchPGQuarantinedRows = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "alarm_dispatch_pg_quarantined_rows",
-			Help: "Retained quarantined alarm dispatch rows requiring disposition review.",
+			Help: "Retained quarantined alarm dispatch rows, including rows already closed by a matching closeout receipt; retention is unchanged.",
 		})
 		alarmDispatchPGOldestQuarantinedAgeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "alarm_dispatch_pg_oldest_quarantined_age_seconds",
 			Help: "Age of the oldest retained quarantined alarm dispatch row.",
+		})
+		alarmDispatchPGUnreviewedQuarantinedRows = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "alarm_dispatch_pg_unreviewed_quarantined_rows",
+			Help: "Retained quarantined alarm dispatch rows requiring disposition review: no closeout receipt matches the row's current revision and status metadata.",
+		})
+		alarmDispatchPGOldestUnreviewedAgeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "alarm_dispatch_pg_oldest_unreviewed_quarantined_age_seconds",
+			Help: "Age of the oldest retained quarantined alarm dispatch row requiring disposition review.",
 		})
 		alarmDispatchPGBacklogSnapshotSuccess = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "alarm_dispatch_pg_backlog_snapshot_success",
@@ -224,15 +234,18 @@ func observeAlarmDispatchBacklogStatus(status string, rows int64) {
 	alarmDispatchPGBacklogRows.WithLabelValues(status).Set(float64(rows))
 }
 
-func observeAlarmDispatchQuarantine(rows int64, oldestAgeSeconds float64) {
+func observeAlarmDispatchQuarantine(snapshot *alarmDispatchBacklogSnapshot) {
 	initAlarmDispatchRunnerMetrics()
 
-	if alarmDispatchPGQuarantinedRows == nil || alarmDispatchPGOldestQuarantinedAgeSeconds == nil {
+	if alarmDispatchPGQuarantinedRows == nil || alarmDispatchPGOldestQuarantinedAgeSeconds == nil ||
+		alarmDispatchPGUnreviewedQuarantinedRows == nil || alarmDispatchPGOldestUnreviewedAgeSeconds == nil {
 		return
 	}
 
-	alarmDispatchPGQuarantinedRows.Set(float64(rows))
-	alarmDispatchPGOldestQuarantinedAgeSeconds.Set(oldestAgeSeconds)
+	alarmDispatchPGQuarantinedRows.Set(float64(snapshot.QuarantinedRows))
+	alarmDispatchPGOldestQuarantinedAgeSeconds.Set(snapshot.OldestQuarantinedAgeSeconds)
+	alarmDispatchPGUnreviewedQuarantinedRows.Set(float64(snapshot.UnreviewedQuarantinedRows))
+	alarmDispatchPGOldestUnreviewedAgeSeconds.Set(snapshot.OldestUnreviewedQuarantinedAgeSeconds)
 }
 
 func observeAlarmDispatchBacklogSnapshotSuccess(success bool) {

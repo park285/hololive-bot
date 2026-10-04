@@ -8,6 +8,14 @@
 
 ## 미출시
 
+- alarm-worker가 보존 격리 총량·경과는 그대로 두고 `alarm_dispatch_pg_unreviewed_quarantined_rows`와
+  `alarm_dispatch_pg_oldest_unreviewed_quarantined_age_seconds`를 추가합니다. 행의 현재 revision·상태와
+  정확히 일치하는 closeout receipt만 검토 완료로 보며, 바뀐 행이나 재격리된 행은 다시 셉니다.
+- 라이브 검토 영수증의 면제를 수명 사실 기준으로 판정합니다(migration 262). 기록 CAS는 계속 전체
+  원본 digest이고, 저장 snapshot은 무시한 부재 slot 배열을 개수·digest로 요약해 상한을 지킵니다.
+  기존 영수증은 다시 쓰지 않고 같은 사실 추출로 인정합니다. 미래 일정 `legacy_unknown` UPCOMING은
+  `legacy_not_due`로 분리하고 `unresolved_unreviewed`에서 뺍니다. 운영 collector의 RPC 간격은
+  코드 기본값 2초를 유지한 채 운영 env에서 1초로 override합니다.
 - projection 유효기간 설정을 줄여도 이전의 긴 만료가 남던 회귀를 수정합니다. 마지막으로
   수락한 refresh 시각을 header에 기록하여 최신 호출의 TTL 변경을 반영하고, 과거 호출의
   역순 갱신은 막습니다. migration 이전의 refresh 시각은 추정하지 않습니다.

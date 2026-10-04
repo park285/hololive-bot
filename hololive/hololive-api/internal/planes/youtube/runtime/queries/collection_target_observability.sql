@@ -58,14 +58,13 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
     SELECT receipt.video_id FROM (SELECT DISTINCT video_id FROM youtube_live_review_receipts) receipt
     WHERE EXISTS (SELECT 1 FROM live_states state WHERE state.video_id=receipt.video_id)
 ), live_reviews AS MATERIALIZED (
-    -- 영상별 현재 snapshot 비교를 한 번만 계산하며 과거 영수증으로 미상을 닫지 않습니다.
+    -- 영상별 현재 원본 판정을 한 번만 계산합니다. 기술적 갱신 시각·무시한 부재 slot은 검토를
+    -- 다시 열지 않고, 상태·일정·가용성·positive 등 의미 사실이 바뀐 영수증은 미상을 닫지 않습니다.
     SELECT video.video_id,
-           (SELECT max(receipt.recorded_at) FROM youtube_live_review_receipts receipt
-               WHERE receipt.video_id=video.video_id AND receipt.snapshot_sha256=
-                   (SELECT snapshot_sha256 FROM youtube_live_review_snapshot(video.video_id))) AS reviewed_at
+           (SELECT review.reviewed_at FROM youtube_live_review_current_receipt(video.video_id) review) AS reviewed_at
     FROM live_review_videos video
 ), reviewed_live_states AS (
-    -- recorded_at은 NOT NULL이므로 현재 snapshot의 영수증 존재와 같은 판정입니다.
+    -- recorded_at은 NOT NULL이므로 현재 원본에 적용되는 영수증 존재와 같은 판정입니다.
     SELECT state.video_id, state.state, state.product_state, state.scheduled_start_time,
            state.lifecycle_origin, state.checked_at, review.reviewed_at,
            review.reviewed_at IS NOT NULL AS review_closed
@@ -84,8 +83,12 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
            COUNT(video_id) FILTER(WHERE review_closed) AS closed_unresolved,
            COUNT(video_id) FILTER(WHERE checked_at IS NULL AND lifecycle_origin='legacy_unknown' AND NOT review_closed) AS never_checked,
            COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-checked_at),0)) FILTER(WHERE lifecycle_origin='legacy_unknown' AND NOT review_closed),0)::double precision AS oldest_check_age,
-           COUNT(video_id) FILTER(WHERE NOT review_closed AND (lifecycle_origin='legacy_unknown'
+           -- 가용성 확인이 없는 미래 일정 legacy_unknown은 아직 확인할 수 없어 legacy_unreviewed·legacy_not_due로만 남깁니다.
+           COUNT(video_id) FILTER(WHERE NOT review_closed AND ((lifecycle_origin='legacy_unknown'
+                   AND NOT COALESCE(product_state='UPCOMING' AND scheduled_start_time>=statement_timestamp(),false))
                OR (product_state='UPCOMING' AND lifecycle_origin='metadata_only' AND scheduled_start_time<statement_timestamp() AND checked_at IS NOT NULL))) AS unresolved_unreviewed,
+           COUNT(video_id) FILTER(WHERE NOT review_closed AND lifecycle_origin='legacy_unknown'
+               AND product_state='UPCOMING' AND scheduled_start_time>=statement_timestamp()) AS legacy_not_due,
            COUNT(video_id) FILTER(WHERE lifecycle_origin='metadata_only' AND checked_at IS NULL) AS metadata_never_checked,
            COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-checked_at),0)) FILTER(WHERE lifecycle_origin='metadata_only'),0)::double precision AS metadata_check_age,
            COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp()-reviewed_at),0)) FILTER(WHERE review_closed),0)::double precision AS oldest_review_age
@@ -105,6 +108,6 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
 )
 SELECT t.kind, t.projection_valid, t.targets, t.never_completed, t.stale,
        t.oldest_completion_age, t.due, t.oldest_due_age, t.required_rpc_rate,
-       l.live, l.upcoming, l.other, l.state_mismatch, l.past_due, l.past_due_7d, l.retained_total, l.metadata_only, l.legacy_unreviewed, l.closed_unresolved, l.never_checked, l.oldest_check_age, l.unresolved_unreviewed, l.metadata_never_checked, l.metadata_check_age, l.oldest_review_age
+       l.live, l.upcoming, l.other, l.state_mismatch, l.past_due, l.past_due_7d, l.retained_total, l.metadata_only, l.legacy_unreviewed, l.closed_unresolved, l.never_checked, l.oldest_check_age, l.unresolved_unreviewed, l.legacy_not_due, l.metadata_never_checked, l.metadata_check_age, l.oldest_review_age
 FROM target_summary t CROSS JOIN live_summary l
 ORDER BY t.kind;

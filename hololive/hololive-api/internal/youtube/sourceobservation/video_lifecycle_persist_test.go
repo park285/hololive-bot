@@ -221,14 +221,13 @@ func TestVideoLifecycleUnknownReviewCASAndNewFactsInvalidateReceipt(t *testing.T
 	publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), lifecycleVideoEnvelope(t, &proof, endedVideoCheck(proof.ScheduledFor.Add(-time.Second))))
 	consumeLiveChecks(ctx, t, consumer)
 
-	var matches int
+	var exempted bool
 
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM youtube_live_review_receipts receipt
-        WHERE video_id=$1 AND snapshot_sha256=(SELECT snapshot_sha256 FROM youtube_live_review_snapshot($1))`, testVideoID).Scan(&matches); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT reviewed_at IS NOT NULL FROM youtube_live_review_current_receipt($1)`, testVideoID).Scan(&exempted); err != nil {
 		t.Fatal(err)
 	}
 
-	if matches != 0 {
+	if exempted {
 		t.Fatal("new terminal fact was exempted by an old review")
 	}
 
