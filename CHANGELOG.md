@@ -8,6 +8,9 @@
 
 ## 미출시
 
+- 대형 부재 이력이 있는 검토 영상의 지표 조회가 1초 예산을 넘던 문제를 수정합니다(migration 263).
+  지속 판정은 필요한 수명 사실만 읽고, 전체 배열 직렬화·hash는 기존 기록 CAS에만 남깁니다.
+  영수증·원본·보존 정책을 바꾸지 않으며 17,006개 slot을 가진 53개 head로 예산 회귀를 검증합니다.
 - alarm-worker가 보존 격리 총량·경과는 그대로 두고 `alarm_dispatch_pg_unreviewed_quarantined_rows`와
   `alarm_dispatch_pg_oldest_unreviewed_quarantined_age_seconds`를 추가합니다. 행의 현재 revision·상태와
   정확히 일치하는 closeout receipt만 검토 완료로 보며, 바뀐 행이나 재격리된 행은 다시 셉니다.

@@ -46,6 +46,11 @@ generation 3 snapshot의 `query`는 helper의 `streams` 질의 범위·페이지
 과거 영수증에 없던 진단 메타데이터를 추정해 채우지 않습니다. 판정 변경은 재검토 대상이며,
 같은 판정의 재확인도 기록 **전**에는 전체 원본 CAS를 무효화합니다.
 
+지속 판정은 필요한 head 수명 사실만 투영하며 큰 `ignored_absence_scheduled_for` 배열을
+직렬화하거나 hash하지 않습니다(migration 263). 현재 사실 추출은 영상마다 한 번만 수행하고
+기존 영수증의 같은 사실 추출 결과와 비교합니다. 전체 snapshot·배열 digest는 운영자가
+영수증을 기록하는 CAS 경로에 그대로 남습니다. 원본·기존 영수증을 수정하지 않습니다.
+
 기본 cadence는 2분, evidence freshness는 270초입니다. 채널 확인은 resolve_url 1회와 선택 영상 player 최대 1회, 영상 확인은 player 1회이며 초기화용 config 조회·HTML·browse 보완·transport retry·자동 redirect를 사용하지 않습니다. 기존 목록 실패로 인한 job-level PARTIAL/defer는 아래 Atomic publish 계약을 유지하며, 새 확인의 UNKNOWN 자체를 추가 재시도의 이유로 삼지 않습니다.
 
 원시 영상·채널 identity, isLive/isLiveNow와 시작·종료 시각을 먼저 판정합니다. UNPLAYABLE은 LIVE/종료 모두에 올 수 있습니다. 회원 offer renderer는 MEMBERS_ONLY, 명시적인 isPrivate=false는 PUBLIC, identity와 isPrivate=true가 함께 확인된 경우만 PUBLIC_UNAVAILABLE입니다. LOGIN_REQUIRED·ERROR·messages·번역 문구만으로 공개 불가를 추정하지 않습니다. 모순·해석 불가와 요청/응답 계약 실패는 UNKNOWN으로 기록하여 과거 음성을 유지하지 않습니다. 취소·lease 상실·설정/내부 불변식 오류는 publish하지 않습니다. Collector는 canonical 테이블에 접근하거나 종료를 직접 적용하지 않습니다.
