@@ -221,7 +221,10 @@ func TestTransitionFanoutFailureSchedulesVersionFencedRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 
+	retryWindowStart := time.Now().UTC().Truncate(time.Microsecond).Add(time.Second)
 	result, err := transition.ApplyFanoutFailure(ctx, claimed[0], "subscriber lookup failed")
+	retryWindowEnd := time.Now().UTC().Truncate(time.Microsecond).Add(time.Second)
+
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 
@@ -244,7 +247,8 @@ func TestTransitionFanoutFailureSchedulesVersionFencedRetry(t *testing.T) {
 	require.Nil(t, lockedAt)
 	require.Nil(t, terminalAt)
 	require.Equal(t, "subscriber lookup failed", reason)
-	require.WithinDuration(t, time.Now().UTC().Add(time.Second), nextAttemptAt, time.Second)
+	require.False(t, nextAttemptAt.Before(retryWindowStart), "재시도는 실패 처리 시각부터 backoff 이후여야 합니다")
+	require.False(t, nextAttemptAt.After(retryWindowEnd), "재시도 시각에 backoff 외의 지연이 추가되면 안 됩니다")
 }
 
 func TestTransitionFanoutFailureTerminatesAtRetryLimitAndConfirmsLostResponse(t *testing.T) {

@@ -178,7 +178,12 @@ func TestFanoutMaterialization_SubscriberLookupFailureSchedulesRetryBackoff(t *t
 	claimed, err := dispatcher.claim.fanout.Claim(ctx)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
+
+	retryWindowStart := time.Now().UTC().Truncate(time.Microsecond).Add(time.Minute)
+
 	dispatcher.claim.fanout.materializeOne(ctx, &claimed[0], map[string]channelAlarmRoomTargets{})
+
+	retryWindowEnd := time.Now().UTC().Truncate(time.Microsecond).Add(time.Minute)
 
 	var updated domain.YouTubeNotificationOutbox
 
@@ -186,7 +191,8 @@ func TestFanoutMaterialization_SubscriberLookupFailureSchedulesRetryBackoff(t *t
 	assert.Equal(t, domain.OutboxStatusPending, updated.Status)
 	assert.Equal(t, 1, updated.AttemptCount)
 	assert.Nil(t, updated.LockedAt)
-	assert.WithinDuration(t, now.Add(time.Minute), updated.NextAttemptAt, time.Second)
+	assert.False(t, updated.NextAttemptAt.Before(retryWindowStart), "재시도는 실패 처리 시각부터 backoff 이후여야 합니다")
+	assert.False(t, updated.NextAttemptAt.After(retryWindowEnd), "재시도 시각에 backoff 외의 지연이 추가되면 안 됩니다")
 	assert.Equal(t, "subscriber lookup failed", updated.Error)
 }
 
