@@ -97,12 +97,12 @@ func rollbackLiveReviewTx(t *testing.T, tx pgx.Tx) {
 	}
 }
 
-func liveReviewClosed(t *testing.T, pool *pgxpool.Pool, videoID string) bool {
+func liveReviewClosed(ctx context.Context, t *testing.T, pool *pgxpool.Pool, videoID string) bool {
 	t.Helper()
 
 	var closed bool
 
-	require.NoError(t, pool.QueryRow(t.Context(),
+	require.NoError(t, pool.QueryRow(ctx,
 		`SELECT reviewed_at IS NOT NULL FROM youtube_live_review_current_receipt($1)`, videoID).Scan(&closed))
 
 	return closed
@@ -120,12 +120,12 @@ func TestLiveReviewSurvivesTechnicalRefreshAndReopensOnFacts(t *testing.T) {
 	const videoID = "review-legacy"
 
 	seedReviewableLegacyVideo(t, pool, videoID)
-	require.False(t, liveReviewClosed(t, pool, videoID))
+	require.False(t, liveReviewClosed(ctx, t, pool, videoID))
 
 	before := observeLifecycleMetrics(t, pool)
 
 	insertLegacyFormatReceipt(t, pool, "30000000-0000-0000-0000-000000000001", videoID)
-	require.True(t, liveReviewClosed(t, pool, videoID))
+	require.True(t, liveReviewClosed(ctx, t, pool, videoID))
 
 	// 관측 시각·head 갱신 시각·무시한 부재 slot 증가·같은 판정의 가용성 재확인은 검토를 다시 열지 않는다.
 	execLiveReviewStatements(t, pool, videoID,
@@ -139,7 +139,7 @@ func TestLiveReviewSurvivesTechnicalRefreshAndReopensOnFacts(t *testing.T) {
 		        observed_at=now(),received_at=now(),updated_at=now(),evidence_sha256=repeat('b',64)
 		 WHERE video_id=$1`,
 	)
-	require.True(t, liveReviewClosed(t, pool, videoID), "technical refresh reopened an unchanged review")
+	require.True(t, liveReviewClosed(ctx, t, pool, videoID), "technical refresh reopened an unchanged review")
 
 	after := observeLifecycleMetrics(t, pool)
 	require.InDelta(t, testutil.ToFloat64(before.lifecycleRecords.WithLabelValues("closed_unresolved"))+1,
@@ -175,12 +175,14 @@ func TestLiveReviewSurvivesTechnicalRefreshAndReopensOnFacts(t *testing.T) {
 			tag, err := pool.Exec(ctx, change.apply, videoID)
 			require.NoError(t, err)
 			require.EqualValues(t, 1, tag.RowsAffected())
+
 			defer func() {
 				_, err := pool.Exec(ctx, change.revert, videoID)
 				require.NoError(t, err)
-				require.True(t, liveReviewClosed(t, pool, videoID))
+				require.True(t, liveReviewClosed(ctx, t, pool, videoID))
 			}()
-			require.False(t, liveReviewClosed(t, pool, videoID))
+
+			require.False(t, liveReviewClosed(ctx, t, pool, videoID))
 		})
 	}
 }
@@ -218,18 +220,19 @@ func TestLiveReviewRecordsOversizedHeadWithBoundedSnapshot(t *testing.T) {
 		SET ignored_absence_scheduled_for=ignored_absence_scheduled_for||now() WHERE video_id=$1`, videoID)
 	require.NoError(t, err)
 	require.Error(t, recordLiveReview(ctx, pool, "30000000-0000-0000-0000-000000000002", videoID, digest))
-	require.False(t, liveReviewClosed(t, pool, videoID))
+	require.False(t, liveReviewClosed(ctx, t, pool, videoID))
 
 	// 같은 가용성 판정의 재확인도 기록 전에는 전체 원본 CAS를 무효화한다.
 	require.NoError(t, pool.QueryRow(ctx, `SELECT snapshot_sha256 FROM youtube_live_review_snapshot($1)`, videoID).Scan(&digest))
+
 	_, err = pool.Exec(ctx, `UPDATE youtube_video_availability SET observed_at=observed_at+interval '1 second' WHERE video_id=$1`, videoID)
 	require.NoError(t, err)
 	require.Error(t, recordLiveReview(ctx, pool, "30000000-0000-0000-0000-000000000004", videoID, digest))
-	require.False(t, liveReviewClosed(t, pool, videoID))
+	require.False(t, liveReviewClosed(ctx, t, pool, videoID))
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT snapshot_sha256 FROM youtube_live_review_snapshot($1)`, videoID).Scan(&digest))
 	require.NoError(t, recordLiveReview(ctx, pool, "30000000-0000-0000-0000-000000000003", videoID, digest))
-	require.True(t, liveReviewClosed(t, pool, videoID))
+	require.True(t, liveReviewClosed(ctx, t, pool, videoID))
 
 	var (
 		count       int
@@ -254,7 +257,7 @@ func TestLiveReviewRecordsOversizedHeadWithBoundedSnapshot(t *testing.T) {
 	_, err = pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
 		SET ignored_absence_scheduled_for=ignored_absence_scheduled_for||now(), updated_at=now() WHERE video_id=$1`, videoID)
 	require.NoError(t, err)
-	require.True(t, liveReviewClosed(t, pool, videoID))
+	require.True(t, liveReviewClosed(ctx, t, pool, videoID))
 }
 
 // 가용성 확인이 없는 미래 일정 legacy_unknown은 보존·미상 집계에 남지만 지난 미해결 검토 대상은 아니다.

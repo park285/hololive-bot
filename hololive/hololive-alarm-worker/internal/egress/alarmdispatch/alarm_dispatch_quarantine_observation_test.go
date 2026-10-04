@@ -163,6 +163,7 @@ func newQuarantineReviewStore(t *testing.T) (alarmDispatchMaintenancePgxStore, *
 	t.Cleanup(conn.Release)
 
 	// 임시 테이블이 같은 이름의 public 테이블을 가려 조회 SQL을 그대로 실행한다.
+	//nolint:misspell // cancelled_at은 변경할 수 없는 정본 DB 열 이름입니다.
 	_, err = conn.Exec(t.Context(), `
 		CREATE TEMP TABLE alarm_dispatch_deliveries (
 			id bigint, status text, send_unit_id bigint, attempt_count integer NOT NULL DEFAULT 0,
@@ -187,6 +188,7 @@ func recordQuarantineCloseout(t *testing.T, conn *pgxpool.Conn, sendUnitID int64
 	_, err := conn.Exec(ctx, "SELECT set_config('TimeZone', $1, false)", timeZone)
 	require.NoError(t, err)
 
+	//nolint:misspell // cancelledAt·cancelled_at은 migration 228 영수증·DB 식별자 계약입니다.
 	_, err = conn.Exec(ctx, `
 		INSERT INTO alarm_dispatch_closeout_receipts (send_unit_id, target_ids, status_metadata)
 		SELECT $1::bigint, array_agg(id ORDER BY id), jsonb_agg(jsonb_build_object(
