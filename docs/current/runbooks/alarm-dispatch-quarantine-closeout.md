@@ -38,3 +38,5 @@ sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/scripts/maintenance
 ```
 
 기록 함수는 SERIALIZABLE 트랜잭션에서 대상과 send unit 전체를 ID 순서로 잠그고 현재 ID 집합·digest·격리 상태를 재검사합니다. 대상 행이 전부 `quarantined`이고 `sent_at`과 `cancelled_at`이 비어 있을 때만 INSERT합니다. `receipt_id`와 `send_unit_id`는 각각 유일하며 UPDATE/DELETE는 트리거가 거부합니다. 기존 재처리 API와 worker는 이 receipt를 상태 전환이나 전송 성공으로 해석하지 않습니다.
+
+worker의 `alarm_dispatch_pg_unreviewed_quarantined_rows`는 receipt의 `target_ids`·`status_metadata`가 행의 현재 revision·상태와 정확히 일치하는 격리 행만 검토 완료로 보고 뺍니다. `alarm_dispatch_pg_quarantined_rows`는 보존 총량이라 receipt 뒤에도 retention 삭제 전까지 그대로입니다. 이후 재처리·재격리로 revision이 바뀐 행은 같은 receipt가 있어도 다시 검토 대상입니다.

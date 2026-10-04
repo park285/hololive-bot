@@ -8,6 +8,14 @@
 
 ## 미출시
 
+- alarm-worker가 보존 격리 총량·경과는 그대로 두고 `alarm_dispatch_pg_unreviewed_quarantined_rows`와
+  `alarm_dispatch_pg_oldest_unreviewed_quarantined_age_seconds`를 추가합니다. 행의 현재 revision·상태와
+  정확히 일치하는 closeout receipt만 검토 완료로 보며, 바뀐 행이나 재격리된 행은 다시 셉니다.
+- 라이브 검토 영수증의 면제를 수명 사실 기준으로 판정합니다(migration 262). 기록 CAS는 계속 전체
+  원본 digest이고, 저장 snapshot은 무시한 부재 slot 배열을 개수·digest로 요약해 상한을 지킵니다.
+  기존 영수증은 다시 쓰지 않고 같은 사실 추출로 인정합니다. 미래 일정 `legacy_unknown` UPCOMING은
+  `legacy_not_due`로 분리하고 `unresolved_unreviewed`에서 뺍니다. 운영 collector의 RPC 간격은
+  코드 기본값 2초를 유지한 채 운영 env에서 1초로 override합니다.
 - 수집기 내부 계약·snapshot·membership 검증의 소유자를 `internal/runtime/collection`으로
   통합하고, PARTIAL 충돌은 오류를 보존한 terminal completion으로 정산합니다. 동시 실행의
   RPC 예약은 전체 호출 수와 inflight를 반영하며, content 근거 조회도 기존 limiter를 따릅니다.

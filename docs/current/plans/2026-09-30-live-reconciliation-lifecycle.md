@@ -50,7 +50,7 @@
 - 현재 3건은 위 영상 확인으로 새 사실을 먼저 확보합니다. 종료를 증명하면 정산하고, 새 예정/방송 positive가 있으면 수명 추적에 편입합니다.
 - UNKNOWN만 남으면 원본 status를 보존하고 운영 검토 대상으로 남깁니다. 무한 고빈도 확인 대신 현행 collection 예산 안에서 재평가하며, 자동 retry/horizon 확대는 하지 않습니다.
 - 운영자가 추적 종료를 선택할 경우 기존 append-only closeout 방식과 같은 bounded CAS 검토 영수증을 수명 owner에 둡니다. 제안 저장소는 youtube_live_review_receipts이며 disposition은 closed_unresolved입니다. 원본 snapshot, 증거 참조, 운영자·사유·시각을 보존하고 payload/오류 원문은 복사하지 않습니다.
-- closed_unresolved는 전송 성공이나 ENDED를 뜻하지 않습니다. 일정/수명 사실과 별개인 검토 결정입니다. 새 positive/종료 사실이나 검토한 snapshot 변경은 기존 검토 결정을 현재 상태에 적용하지 못하게 합니다.
+- closed_unresolved는 전송 성공이나 ENDED를 뜻하지 않습니다. 일정/수명 사실과 별개인 검토 결정입니다. 새 positive/종료 사실이나 검토한 수명 사실(상태·일정·출처·가용성 판정 등)의 변경은 기존 검토 결정을 현재 상태에 적용하지 못하게 합니다. 관측·갱신 시각과 무시한 부재 slot 증가는 수명 사실이 아닙니다(migration 262, `youtube_live_review_current_receipt`).
 - 원본을 삭제하거나 임의 head를 넣지 않습니다. 기존 dispatch·dedup 원장도 변경하지 않습니다.
 
 ### 5. 실제 위반과 정보 부족을 별도 관측합니다
@@ -112,7 +112,7 @@
 - 새 계약은 YouTube.js live_snapshot schema 1/generation 3, video_live_check schema 2/generation 2입니다. API는 과거 snapshot generation 2와 video generation 1을 기존 의미로 처리합니다. 채널 확인·Holodex 세대와 실제 시작이 관측된 LIVE의 기존 grace는 유지합니다.
 - 조회 호출 예산은 현행 한 페이지입니다. `streams` continuation 또는 종료 플래그 미확정은 PARTIAL, 접근 제한도 positive-only입니다. 빈 응답과 ENDED-only 응답은 실제 query proof가 완결된 경우에만 같은 전체 streams scope를 갖습니다. 미래 UPCOMING 전수 polling·runtime dependency·worker·retry/horizon/retention 확장은 없습니다. Fallback delta: none.
 - 검토 대상은 최근 확인보다 새롭거나 같은 positive가 없는 UPCOMING입니다. 가용성 PUBLIC도 수명 사실은 미상일 수 있으므로 두 의미를 구분합니다. 검토 영수증은 runtime SELECT 전용이며 기록 함수 실행·직접 INSERT/UPDATE/DELETE 권한을 부여하지 않습니다. 기존 default grant도 회수합니다. 변경·삭제 거부 trigger는 영수증 보호용으로 canonical 자동 보정이 아닙니다. snapshot CAS·동일 owner 잠금 순서·SERIALIZABLE은 원자성과 TOCTOU 방지 제약입니다.
-- 실제 결함과 `unresolved_unreviewed` 경보를 분리했습니다. legacy_unknown 또는 지난 metadata_only 일정의 실제 확인 후 미정산 기록은 경보하며, 정확한 현재 snapshot의 closed_unresolved만 검토 집계에서 제외됩니다. 같은 활성 범위의 보존 총량·출처·검토 종료·미확인 건수와 실제 확인/검토 나이를 노출합니다. 수명 관측 시각을 예정 시각에서 만들지 않습니다.
+- 실제 결함과 `unresolved_unreviewed` 경보를 분리했습니다. legacy_unknown(미래 일정 UPCOMING 제외) 또는 지난 metadata_only 일정의 실제 확인 후 미정산 기록은 경보하며, 현재 원본에 적용되는 closed_unresolved만 검토 집계에서 제외됩니다. 미래 일정 legacy_unknown UPCOMING은 `legacy_unreviewed`·`legacy_not_due`로 보존·노출합니다. 같은 활성 범위의 보존 총량·출처·검토 종료·미확인 건수와 실제 확인/검토 나이를 노출합니다. 수명 관측 시각을 예정 시각에서 만들지 않습니다.
 
 ### 실제 통과한 검증
 
