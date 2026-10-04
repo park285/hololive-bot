@@ -24,7 +24,8 @@ type HolodexTransportConfig struct {
 type HolodexConcurrencyConfig struct {
 	MaxConcurrentRequests int
 	OrgAllParallelism     int
-	RequestDelay          time.Duration
+	// RequestDelay는 로컬 요청 간격이며 0이면 간격 제한을 적용하지 않습니다.
+	RequestDelay time.Duration
 }
 
 type OfficialScheduleConfig struct {

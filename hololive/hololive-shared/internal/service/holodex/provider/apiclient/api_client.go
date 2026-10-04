@@ -34,13 +34,14 @@ package apiclient
 import (
 	"context"
 	stdErrors "errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
-	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -54,12 +55,17 @@ type Requester interface {
 }
 
 type APIClient struct {
+	maxRetryAttempts     int
+	cooldownMu           sync.Mutex
+	cooldownUntil        time.Time
 	httpClient           *http.Client
 	baseURL              string
 	apiKey               string
 	logger               *slog.Logger
 	breaker              *util.Breaker
-	rateLimiter          *rate.Limiter
+	admissionGate        chan struct{}
+	requestDelay         time.Duration
+	nextRequestAt        time.Time
 	semaphore            chan struct{}
 	distributed          distributedRateLimiter
 	perAttemptTimeout    time.Duration
@@ -87,11 +93,15 @@ func NewHolodexAPIClient(
 	logger *slog.Logger,
 	distributed distributedRateLimiter,
 	holodexCfg *settings.HolodexConfig,
-) *APIClient {
+) (*APIClient, error) {
 	if holodexCfg == nil {
 		cfg := settings.DefaultHolodexOperationalConfig()
 
 		holodexCfg = &cfg
+	}
+
+	if err := settings.ValidateHolodexRequestConfig(holodexCfg); err != nil {
+		return nil, fmt.Errorf("validate holodex request config: %w", err)
 	}
 
 	if httpClient == nil {
@@ -103,21 +113,23 @@ func NewHolodexAPIClient(
 	maxBody := settings.DefaultMaxResponseBodyBytes
 
 	return &APIClient{
-		httpClient: httpClient,
-		baseURL:    baseURL,
-		apiKey:     apiKey,
-		logger:     logger,
+		maxRetryAttempts: holodexCfg.MaxRetryAttempts,
+		httpClient:       httpClient,
+		baseURL:          baseURL,
+		apiKey:           apiKey,
+		logger:           logger,
 		breaker: util.NewBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
 			constants.CircuitBreakerConfig.ResetTimeout,
 		),
-		rateLimiter:          rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
+		admissionGate:        make(chan struct{}, 1),
+		requestDelay:         holodexCfg.Concurrency.RequestDelay,
 		semaphore:            make(chan struct{}, holodexCfg.Concurrency.MaxConcurrentRequests),
 		distributed:          distributed,
 		perAttemptTimeout:    holodexCfg.PerAttemptTimeout,
 		maxResponseBodyBytes: maxBody,
 		distributedRLCfg:     holodexCfg.DistributedRateLimit,
-	}
+	}, nil
 }
 
 func newHolodexHTTPClient(timeout time.Duration) *http.Client {

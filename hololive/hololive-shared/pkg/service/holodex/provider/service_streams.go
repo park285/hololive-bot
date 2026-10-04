@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
@@ -105,24 +106,40 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		return nil, fmt.Errorf("resolve stream org: %w", err)
 	}
 
+	// /users/live에는 시간 상한이 없으므로 원천·공식 일정·캐시에 같은 요청 범위를 적용합니다.
+	// /live의 168시간 제한과 별개로 공식 일정과 캐시 키는 원래 hours를 유지합니다.
+	filterUpcoming := func(streams []*domain.Stream) []*domain.Stream {
+		// 조회 중 예정 시각이 지난 방송도 기존처럼 제외하도록 결과를 받은 뒤 시각을 잡습니다.
+		now := time.Now()
+
+		var until time.Time
+
+		if hours > 0 {
+			until = now.Add(time.Duration(hours) * time.Hour)
+		}
+
+		return h.filter.FilterUpcomingStreamsInWindow(filterStreamsByStatus(streams, domain.StreamStatusUpcoming), now, until)
+	}
+
 	out, err := h.getStreamsByOrgWithFallback(ctx, &streamFetchPlan{
 		resolvedOrg: resolvedOrg,
 		status:      constants.HolodexAPIParams.StatusUpcoming,
 		hours:       hours,
 		operation:   "upcoming_streams",
 		cacheGet: func(cacheCtx context.Context, org string, hours int) ([]*domain.Stream, bool) {
-			return h.cacheManager.GetUpcomingStreamsByOrg(cacheCtx, org, hours)
+			streams, found := h.cacheManager.GetUpcomingStreamsByOrg(cacheCtx, org, hours)
+			if !found {
+				return streams, false
+			}
+
+			return filterUpcoming(streams), true
 		},
 		cacheSet: func(cacheCtx context.Context, org string, hours int, streams []*domain.Stream) {
 			h.cacheManager.SetUpcomingStreamsByOrg(cacheCtx, org, hours, streams)
 		},
-		primaryFilter: func(streams []*domain.Stream) []*domain.Stream {
-			return h.filter.FilterUpcomingStreams(filterStreamsByStatus(streams, domain.StreamStatusUpcoming))
-		},
-		fallbackFilter: func(streams []*domain.Stream) []*domain.Stream {
-			return h.filter.FilterUpcomingStreams(filterStreamsByStatus(streams, domain.StreamStatusUpcoming))
-		},
-		retryKey: fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours),
+		primaryFilter:  filterUpcoming,
+		fallbackFilter: filterUpcoming,
+		retryKey:       fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours),
 		retry: func(retryCtx context.Context, org string, hours int) {
 			if _, getUpcomingErr := h.GetUpcomingStreamsByOrg(retryCtx, hours, org); getUpcomingErr != nil && h.logger != nil {
 				h.logger.Warn("holodex upcoming streams retry failed", slog.String("org", org), slog.Int("hours", hours), slog.Any("error", getUpcomingErr))

@@ -428,7 +428,7 @@ func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 
 	err = pool.QueryRow(ctx, mustSQL("repository_job_defer_0082_82.sql"),
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
-		"not_a_code", "TRANSIENT", "detail", time.Now().UTC().Add(200*time.Millisecond), int64(100), int64(1000),
+		"not_a_code", "TRANSIENT", "detail", time.Now().UTC().Add(200*time.Millisecond), int64(100), int64(1000), false,
 	).Scan(&jobKey)
 
 	if !errors.Is(err, pgx.ErrNoRows) {

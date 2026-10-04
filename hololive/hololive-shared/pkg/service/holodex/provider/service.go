@@ -54,6 +54,10 @@ func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, ap
 		return nil, errors.New("holodex config is nil")
 	}
 
+	if err := settings.ValidateHolodexRequestConfig(holodexCfg); err != nil {
+		return nil, fmt.Errorf("validate holodex request config: %w", err)
+	}
+
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, errors.New("holodex api key is required")
 	}
@@ -78,7 +82,11 @@ func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, ap
 		}
 	}
 
-	requester := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter, holodexCfg)
+	requester, err := apiclient.NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter, holodexCfg)
+	if err != nil {
+		return nil, fmt.Errorf("initialize holodex API client: %w", err)
+	}
+
 	service := &Service{
 		requester:    requester,
 		scraper:      scraperService,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/backoff"
 	"github.com/park285/shared-go/v2/pkg/retry"
@@ -13,15 +14,39 @@ import (
 )
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
-	if err := c.rateLimiter.Wait(ctx); err != nil {
-		return fmt.Errorf("rate limiter wait failed: %w", err)
+	// 승인 구간만 직렬화하고 HTTP 전송은 기존 세마포어의 동시성을 유지합니다.
+	select {
+	case c.admissionGate <- struct{}{}:
+		defer func() { <-c.admissionGate }()
+	case <-ctx.Done():
+		return fmt.Errorf("holodex admission canceled: %w", ctx.Err())
 	}
 
-	if err := c.waitForDistributedRateLimiter(ctx, path); err != nil {
-		return fmt.Errorf("wait for distributed rate limiter: %w", err)
-	}
+	for {
+		if err := c.waitForCooldown(ctx); err != nil {
+			return fmt.Errorf("wait for holodex cooldown: %w", err)
+		}
 
-	return nil
+		if delay := time.Until(c.nextRequestAt); delay > 0 && !retry.Sleep(ctx, delay) {
+			return fmt.Errorf("holodex request interval canceled: %w", ctx.Err())
+		}
+
+		if err := c.waitForDistributedRateLimiter(ctx, path); err != nil {
+			return fmt.Errorf("wait for distributed rate limiter: %w", err)
+		}
+
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("holodex admission canceled: %w", err)
+		}
+
+		if c.cooldownRemaining() <= 0 {
+			// 분산 승인이 늦어져도 다음 요청은 이번 승인 완료 시각부터 간격을 지킵니다.
+			c.nextRequestAt = time.Now().Add(c.requestDelay)
+			return nil
+		}
+
+		// 로컬·분산 대기 중 받은 429 이후에는 이전 승인을 재사용하지 않습니다.
+	}
 }
 
 func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path string) error {

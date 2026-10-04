@@ -348,13 +348,19 @@ func (e *collectionExecutor) deferFailedRun(
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.collector.CleanupTimeout)
 	defer cancel()
 
-	retryAt := e.retryAt(err)
+	schedule, scheduleErr := e.retrySchedule(err)
+	if scheduleErr != nil {
+		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(scheduleErr)), collecterr.DiagnosticOf(scheduleErr).Detail(), spec, proof)
+
+		return
+	}
+
 	diagnostic := collecterr.DiagnosticOf(err)
 	code := string(diagnostic.Code())
 	class := string(diagnostic.Class())
 	detail := diagnostic.Detail()
 
-	if deferErr := e.deferLease(cleanupCtx, lease, diagnostic, retryAt); deferErr != nil && !errors.Is(deferErr, collection.ErrFenceLost) {
+	if deferErr := e.deferLease(cleanupCtx, lease, diagnostic, schedule); deferErr != nil && !errors.Is(deferErr, collection.ErrFenceLost) {
 		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 
 		return
@@ -369,13 +375,8 @@ func (e *collectionExecutor) deferLease(
 	ctx context.Context,
 	lease joblease.Lease,
 	diagnostic contract.FailureDiagnostic,
-	retryAt time.Time,
+	schedule collection.RetrySchedule,
 ) error {
-	schedule, err := collection.NewRetryAtSchedule(retryAt)
-	if err != nil {
-		return fmt.Errorf("retry schedule: %w", err)
-	}
-
 	input, err := collection.NewDeferCollectionInput(diagnostic, e.retryBounds, schedule)
 	if err != nil {
 		return fmt.Errorf("defer collection input: %w", err)
@@ -572,7 +573,7 @@ func (e *collectionExecutor) commitCollectResult(
 	)
 
 	if result.Kind() == collection.CollectPartial {
-		retry, retryErr := collection.NewRetryAtSchedule(e.retryAt(resultPartialCause(result)))
+		retry, retryErr := e.retrySchedule(resultPartialCause(result))
 		if retryErr != nil {
 			return fmt.Errorf("retry at: %w", retryErr)
 		}
@@ -618,9 +619,14 @@ func (e *collectionExecutor) deferInvariant(
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.collector.CleanupTimeout)
 	defer cancel()
 
-	retryAt := time.Now().UTC().Add(e.retryBounds.Maximum)
+	schedule, scheduleErr := collection.NewRetryAtSchedule(time.Now().UTC().Add(e.retryBounds.Maximum))
+	if scheduleErr != nil {
+		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(scheduleErr)), collecterr.DiagnosticOf(scheduleErr).Detail(), spec, proof)
 
-	if deferErr := e.deferLease(cleanupCtx, lease, collecterr.DiagnosticOf(err), retryAt); deferErr != nil &&
+		return
+	}
+
+	if deferErr := e.deferLease(cleanupCtx, lease, collecterr.DiagnosticOf(err), schedule); deferErr != nil &&
 		!errors.Is(deferErr, collection.ErrFenceLost) {
 		e.logFailure(ctx, "defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 	}

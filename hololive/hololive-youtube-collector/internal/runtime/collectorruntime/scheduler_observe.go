@@ -181,23 +181,50 @@ func attemptFailureResult(err error) string {
 	}
 }
 
-func (e *collectionExecutor) retryAt(err error) time.Time {
+func (e *collectionExecutor) retrySchedule(err error) (collection.RetrySchedule, error) {
+	if boundsErr := e.retryBounds.Validate(); boundsErr != nil {
+		return collection.RetrySchedule{}, fmt.Errorf("retry bounds: %w", boundsErr)
+	}
+
 	now := time.Now().UTC()
 	bounds := e.retryBounds
 	minAt := now.Add(bounds.Minimum)
 	maxAt := now.Add(bounds.Maximum)
 	hint := collecterr.RetryOf(err)
 
+	var retryAt time.Time
+
 	switch hint.Kind() {
 	case collecterr.RetryAt:
-		return clampRetryAt(hint.At(), minAt, maxAt)
+		retryAt = hint.At()
 	case collecterr.RetryAfter:
-		return clampRetryAt(now.Add(hint.After()), minAt, maxAt)
+		retryAt = now.Add(hint.After())
 	case collecterr.RetryDefault:
-		return now.Add(bounds.Minimum + (bounds.Maximum-bounds.Minimum)/2)
-	default:
-		return now.Add(bounds.Minimum + (bounds.Maximum-bounds.Minimum)/2)
+		retryAt = now.Add(bounds.Minimum + (bounds.Maximum-bounds.Minimum)/2)
 	}
+
+	// HTTP 429/503 및 helper cooldown의 명시적 하한만 보존합니다.
+	// HelperBusy 등 다른 진단의 hint는 기존 일반 backoff 상한을 유지합니다.
+	if (hint.Kind() == collecterr.RetryAt || hint.Kind() == collecterr.RetryAfter) &&
+		collecterr.CodeOf(err) == collecterr.Cooldown && collecterr.ClassOf(err) == collecterr.ClassCooldown {
+		if retryAt.Before(minAt) {
+			retryAt = minAt
+		}
+
+		schedule, scheduleErr := collection.NewRetryNotBeforeSchedule(retryAt)
+		if scheduleErr != nil {
+			return collection.RetrySchedule{}, fmt.Errorf("cooldown schedule: %w", scheduleErr)
+		}
+
+		return schedule, nil
+	}
+
+	schedule, scheduleErr := collection.NewRetryAtSchedule(clampRetryAt(retryAt, minAt, maxAt))
+	if scheduleErr != nil {
+		return collection.RetrySchedule{}, fmt.Errorf("bounded retry schedule: %w", scheduleErr)
+	}
+
+	return schedule, nil
 }
 
 func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
