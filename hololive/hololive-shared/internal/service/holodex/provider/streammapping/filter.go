@@ -70,16 +70,7 @@ func (f *StreamFilter) isAllowedOrgStream(stream *domain.Stream) bool {
 }
 
 func (f *StreamFilter) FilterUpcomingStreams(streams []*domain.Stream) []*domain.Stream {
-	now := time.Now()
-	filtered := make([]*domain.Stream, 0, len(streams))
-
-	for _, stream := range streams {
-		if isUpcomingStream(stream, now) {
-			filtered = append(filtered, stream)
-		}
-	}
-
-	return filtered
+	return f.FilterUpcomingStreamsInWindow(streams, time.Now(), time.Time{})
 }
 
 func isUpcomingStream(stream *domain.Stream, now time.Time) bool {
@@ -88,6 +79,21 @@ func isUpcomingStream(stream *domain.Stream, now time.Time) bool {
 	}
 
 	return stream.StartScheduled == nil || stream.StartScheduled.After(now)
+}
+
+// FilterUpcomingStreamsInWindow는 (now, until]의 예정 방송과 일정 미정 방송을 유지합니다.
+// 호출자가 기준 시각을 한 번 전달하여 목록 전체의 하한과 상한에 같은 시각을 적용합니다.
+// Until이 영 값이면 기존 일정 조회처럼 상한을 적용하지 않습니다.
+func (f *StreamFilter) FilterUpcomingStreamsInWindow(streams []*domain.Stream, now, until time.Time) []*domain.Stream {
+	filtered := make([]*domain.Stream, 0, len(streams))
+
+	for _, stream := range streams {
+		if isUpcomingStream(stream, now) && (until.IsZero() || stream.StartScheduled == nil || !stream.StartScheduled.After(until)) {
+			filtered = append(filtered, stream)
+		}
+	}
+
+	return filtered
 }
 
 func (f *StreamFilter) IsHolostarsChannel(channel *domain.Channel) bool {

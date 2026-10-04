@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
-	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -57,7 +56,11 @@ func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing
 	t.Parallel()
 
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
-	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+
+	client, err := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+	if err != nil {
+		t.Fatalf("NewHolodexAPIClient() error = %v", err)
+	}
 
 	if client == nil {
 		t.Fatal("NewHolodexAPIClient() returned nil")
@@ -152,7 +155,11 @@ func TestNewHolodexAPIClientConfiguresProvidedStandardTransportForHTTP2(t *testi
 
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
 	provided := httputil.NewProfiledClient(httputil.TransportProfile{Timeout: holodexCfg.Timeout})
-	client := NewHolodexAPIClient(provided, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+
+	client, err := NewHolodexAPIClient(provided, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+	if err != nil {
+		t.Fatalf("NewHolodexAPIClient() error = %v", err)
+	}
 
 	if client.httpClient != provided {
 		t.Fatal("NewHolodexAPIClient() replaced the provided client")
@@ -172,10 +179,12 @@ func TestNewHolodexAPIClientConfiguresProvidedStandardTransportForHTTP2(t *testi
 func TestHolodexAPIClientSingleKey(t *testing.T) {
 	logger := slog.Default()
 	client := &APIClient{
-		httpClient: &http.Client{},
-		baseURL:    "https://holodex.net/api/v2",
-		apiKey:     "k1",
-		logger:     logger,
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
+		httpClient:       &http.Client{},
+		baseURL:          "https://holodex.net/api/v2",
+		apiKey:           "k1",
+		logger:           logger,
 	}
 
 	for range 5 {
@@ -188,10 +197,11 @@ func TestHolodexAPIClientSingleKey(t *testing.T) {
 
 func newHolodexTestClient(apiKey string) *APIClient {
 	return &APIClient{
-		httpClient: &http.Client{},
-		baseURL:    "https://holodex.net/api/v2",
-		apiKey:     apiKey,
-		logger:     slog.Default(),
+		admissionGate: make(chan struct{}, 1),
+		httpClient:    &http.Client{},
+		baseURL:       "https://holodex.net/api/v2",
+		apiKey:        apiKey,
+		logger:        slog.Default(),
 		breaker: util.NewBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
 			constants.CircuitBreakerConfig.ResetTimeout,
@@ -203,12 +213,14 @@ func TestHolodexAPIClientDoRequestNoKeys(t *testing.T) {
 	logger := slog.Default()
 	// semaphore 초기화하여 deadlock 방지
 	client := &APIClient{
-		httpClient:  &http.Client{},
-		baseURL:     "https://holodex.net/api/v2",
-		apiKey:      "",
-		logger:      logger,
-		rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
-		semaphore:   make(chan struct{}, 2),
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
+		httpClient:       &http.Client{},
+		baseURL:          "https://holodex.net/api/v2",
+		apiKey:           "",
+		logger:           logger,
+		requestDelay:     10 * time.Millisecond,
+		semaphore:        make(chan struct{}, 2),
 	}
 
 	_, err := client.DoRequest(t.Context(), http.MethodGet, "/live", nil)
@@ -231,11 +243,12 @@ func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
 
 func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 	client := &APIClient{
+		admissionGate:     make(chan struct{}, 1),
+		maxRetryAttempts:  3,
 		httpClient:        &http.Client{Transport: nilResponseTransport{}},
 		baseURL:           "https://holodex.example/api/v2",
 		apiKey:            testAPIKey,
 		logger:            slog.Default(),
-		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: time.Second,
 		breaker: util.NewBreaker(
@@ -260,12 +273,14 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 func newTestClientWithHandler(handler http.HandlerFunc, apiKey string) (*APIClient, *httptest.Server) {
 	server := httptest.NewServer(handler)
 	client := &APIClient{
-		httpClient:  server.Client(),
-		baseURL:     server.URL,
-		apiKey:      apiKey,
-		logger:      slog.Default(),
-		rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
-		semaphore:   make(chan struct{}, 5),
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		apiKey:           apiKey,
+		logger:           slog.Default(),
+		requestDelay:     10 * time.Millisecond,
+		semaphore:        make(chan struct{}, 5),
 	}
 
 	return client, server
@@ -349,11 +364,12 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 	defer server.Close()
 
 	client := &APIClient{
+		admissionGate:     make(chan struct{}, 1),
+		maxRetryAttempts:  3,
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
 		apiKey:            testAPIKey,
 		logger:            slog.Default(),
-		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
 		breaker: util.NewBreaker(
@@ -388,11 +404,12 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 	defer server.Close()
 
 	client := &APIClient{
+		admissionGate:     make(chan struct{}, 1),
+		maxRetryAttempts:  3,
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
 		apiKey:            testAPIKey,
 		logger:            slog.Default(),
-		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
 		breaker: util.NewBreaker(
@@ -434,11 +451,13 @@ func TestPerAttemptTimeout(t *testing.T) {
 	holodexCfg.PerAttemptTimeout = 200 * time.Millisecond
 
 	client := &APIClient{
+		admissionGate:     make(chan struct{}, 1),
+		maxRetryAttempts:  3,
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
 		apiKey:            testAPIKey,
 		logger:            slog.Default(),
-		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
+		requestDelay:      10 * time.Millisecond,
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: holodexCfg.PerAttemptTimeout,
 	}
@@ -468,11 +487,13 @@ func TestTimeoutMaxRetries(t *testing.T) {
 	defer server.Close()
 
 	client := &APIClient{
+		admissionGate:     make(chan struct{}, 1),
+		maxRetryAttempts:  3,
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
 		apiKey:            testAPIKey,
 		logger:            slog.Default(),
-		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
+		requestDelay:      10 * time.Millisecond,
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 100 * time.Millisecond,
 	}
@@ -523,9 +544,10 @@ func (s *stubDistributedLimiter) Allow(_ context.Context, _ string, _ int, _ tim
 	return d, nil
 }
 
-func TestWaitForRateLimiter_DistributedDeniedThenAllowed(t *testing.T) {
+func TestWaitForDistributedRateLimiter_DeniedThenAllowed(t *testing.T) {
 	client := &APIClient{
-		rateLimiter: rate.NewLimiter(rate.Every(0), 1),
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
 		distributed: &stubDistributedLimiter{
 			decisions: []ratelimit.Decision{
 				{Allowed: false, RetryAfter: 5 * time.Millisecond, Current: 10, Limit: 10},
@@ -538,15 +560,16 @@ func TestWaitForRateLimiter_DistributedDeniedThenAllowed(t *testing.T) {
 		},
 	}
 
-	err := client.waitForRateLimiter(t.Context(), "/videos")
+	err := client.waitForDistributedRateLimiter(t.Context(), "/videos")
 	if err != nil {
-		t.Fatalf("waitForRateLimiter() error = %v", err)
+		t.Fatalf("waitForDistributedRateLimiter() error = %v", err)
 	}
 }
 
-func TestWaitForRateLimiter_DistributedDeniedWithoutRetryAfter(t *testing.T) {
+func TestWaitForDistributedRateLimiter_DeniedWithoutRetryAfter(t *testing.T) {
 	client := &APIClient{
-		rateLimiter: rate.NewLimiter(rate.Every(0), 1),
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
 		distributed: &stubDistributedLimiter{
 			decisions: []ratelimit.Decision{
 				{Allowed: false, RetryAfter: 0, Current: 10, Limit: 10},
@@ -558,7 +581,7 @@ func TestWaitForRateLimiter_DistributedDeniedWithoutRetryAfter(t *testing.T) {
 		},
 	}
 
-	err := client.waitForRateLimiter(t.Context(), "/videos")
+	err := client.waitForDistributedRateLimiter(t.Context(), "/videos")
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
@@ -566,7 +589,9 @@ func TestWaitForRateLimiter_DistributedDeniedWithoutRetryAfter(t *testing.T) {
 
 func TestProcessHolodexResponse_ForbiddenDoesNotRetry(t *testing.T) {
 	client := &APIClient{
-		logger: slog.Default(),
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
+		logger:           slog.Default(),
 	}
 
 	_, done, err := client.processHolodexResponse(
@@ -597,7 +622,9 @@ func TestProcessHolodexResponse_ForbiddenDoesNotRetry(t *testing.T) {
 
 func TestProcessHolodexResponse_RateLimitedRetriesBeforeExhaustion(t *testing.T) {
 	client := &APIClient{
-		logger: slog.Default(),
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
+		logger:           slog.Default(),
 	}
 
 	_, done, err := client.processHolodexResponse(
@@ -619,7 +646,9 @@ func TestProcessHolodexResponse_RateLimitedRetriesBeforeExhaustion(t *testing.T)
 
 func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *testing.T) {
 	client := &APIClient{
-		logger: slog.Default(),
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
+		logger:           slog.Default(),
 	}
 
 	_, done, err := client.processHolodexResponse(
@@ -651,6 +680,8 @@ func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *
 func TestDistributedRateLimitBucket(t *testing.T) {
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
 	client := &APIClient{
+		admissionGate:    make(chan struct{}, 1),
+		maxRetryAttempts: 3,
 		distributedRLCfg: holodexCfg.DistributedRateLimit,
 	}
 	got := client.distributedRateLimitBucket("/users/live")
@@ -668,11 +699,13 @@ func TestParentContextCancel(t *testing.T) {
 	defer server.Close()
 
 	client := &APIClient{
+		admissionGate:     make(chan struct{}, 1),
+		maxRetryAttempts:  3,
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
 		apiKey:            testAPIKey,
 		logger:            slog.Default(),
-		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
+		requestDelay:      10 * time.Millisecond,
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
 	}

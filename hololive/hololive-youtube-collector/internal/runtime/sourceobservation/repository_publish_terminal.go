@@ -123,6 +123,7 @@ func deferCollectionJob(
 		schedule.At(),
 		bounds.Minimum.Milliseconds(),
 		bounds.Maximum.Milliseconds(),
+		schedule.IsNotBefore(),
 	).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {

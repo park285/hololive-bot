@@ -90,7 +90,9 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 
 `collection.queue.max_age`의 fixed 상한을 넘긴 로컬 항목은 dequeue 시 lease 취득 전에 폐기합니다. stale discard·경고를 기록하고 queue 표식을 해제한 뒤 다음 항목을 계속 처리하며, DB terminal이나 즉시 재시도는 만들지 않습니다. Collector `internal/config`는 profile-only preflight와 runtime이 동일한 profile 수치 정책을 적용하도록 소유합니다.
 
-Scheduler가 queue·discovery·lifecycle과 worker·queue·batch·cadence 정책을 소유하고, executor는 단일 collector 설정과 검증된 retry bounds로 수집·발행을 실행합니다. Provider gate는 lease 취득 뒤 snapshot 조회와 수집 동안만 점유하며, 수집 함수가 반환하면 검증·DB publish 전에 정확히 한 번 반환합니다. 반환하지 않은 수집 함수는 계속 슬롯을 점유합니다. Admission timeout의 durable 실패·retry 정책은 그대로입니다. Typed defer는 직접 실패와 PARTIAL 발행에 같은 bounds를 쓰며, 저장 adapter의 진단 마스킹과 DB clock clamp를 유지합니다.
+Scheduler가 queue·discovery·lifecycle과 worker·queue·batch·cadence 정책을 소유하고, executor는 단일 collector 설정과 검증된 retry bounds로 수집·발행을 실행합니다. Provider gate는 lease 취득 뒤 snapshot 조회와 수집 동안만 점유하며, 수집 함수가 반환하면 검증·DB publish 전에 정확히 한 번 반환합니다. 반환하지 않은 수집 함수는 계속 슬롯을 점유합니다. Admission timeout의 durable 실패·retry 정책은 그대로입니다. Typed defer는 직접 실패와 PARTIAL 발행에 같은 정책을 쓰며 저장 adapter의 진단 마스킹을 유지합니다.
+
+일반 오류의 재시도는 DB 시계 기준 `RetryMin`·`RetryMax` 범위로 보정합니다. `cooldown/COOLDOWN` 진단에 유효한 명시적 retry hint가 있으면 별도의 not-before schedule로 전달하여 서버가 요구한 시각을 `RetryMax`로 앞당기지 않습니다. HTTP 429 및 `Retry-After`가 있는 503의 초·HTTP 날짜, helper의 명시적 cooldown이 이에 해당합니다. DB 최소 대기는 계속 적용하며, 직접 defer와 PARTIAL의 발행·checkpoint·defer transaction 모두 같은 규칙을 사용합니다. 다른 실패 진단은 not-before 모드를 사용할 수 없습니다. 저장된 대기는 같은 job의 다른 AP와 재시작에도 적용되지만 다른 job이나 공용 API 클라이언트 전체의 요청 예산으로 전파되지는 않습니다. 이 변경은 기존 `retry_not_before` 컬럼을 사용하며 새 migration을 요구하지 않습니다.
 
 Fatal은 first-wins이며 명시적으로 분류된 INTERNAL/PROTOCOL 오류와 runner panic·result invariant·불가능한 queue 상태가 대상입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다. Lease-run join의 `CLEANUP_TIMED_OUT`은 callback이 실제로 합류하지 못한 경우이며, 자체 request timeout을 반환하고 끝난 callback과 구분합니다. Lease supervision timeout만으로 process fatal을 보고하지 않는 기존 정책을 유지하며 함께 보존된 classified fatal 원인은 보고합니다. 아래 helper process cleanup timeout은 별도의 fatal shutdown 경계입니다.
 

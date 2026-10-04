@@ -343,7 +343,7 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 
 // Defer는 executor가 만든 typed 재시도 입력으로 lease를 DEFERRED로 전환합니다.
 // 공개 진단 생성자는 redaction하지 않으므로 adapter 경계에서 detail을 한 번 더 정제하고,
-// retry_not_before는 SQL이 DB 시계 기준 입력 bounds 안으로 보정합니다.
+// retry_not_before는 DB 시계의 최소 대기를 적용하며 일반 backoff에만 최대 대기를 적용합니다.
 func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionInput) error {
 	if err := input.Validate(); err != nil {
 		return fmt.Errorf("defer collection job lease: %w: %w", ErrInvalidJob, err)
@@ -367,7 +367,7 @@ func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionIn
 
 	err := l.repository.pool.QueryRow(ctx, sqlLeaseDefer, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, input.Schedule().At(), code, string(diagnostic.Class()), detail,
-		bounds.Minimum.Milliseconds(), bounds.Maximum.Milliseconds()).Scan(&jobKey)
+		bounds.Minimum.Milliseconds(), bounds.Maximum.Milliseconds(), input.Schedule().IsNotBefore()).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return collection.ErrFenceLost

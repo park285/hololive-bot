@@ -10,7 +10,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 const holodexUserAgent = "hololive-bot (Linux; Holodex API client; +https://github.com/park285/hololive-bot)"
@@ -25,7 +24,7 @@ func (c *APIClient) DoRequest(ctx context.Context, method, path string, params u
 	}
 
 	state := holodexRequestRetryState{
-		maxAttempts:       min(1+constants.RetryConfig.MaxAttempts, 10),
+		maxAttempts:       1 + c.maxRetryAttempts,
 		maxTimeoutRetries: 3,
 	}
 
@@ -85,10 +84,6 @@ func (c *APIClient) prepareHolodexRequestRetry(ctx context.Context, path string,
 }
 
 func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) ([]byte, bool, error) {
-	if waitErr := c.waitForRateLimiter(ctx, path); waitErr != nil {
-		return nil, true, fmt.Errorf("wait for rate limiter: %w", waitErr)
-	}
-
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, true, fmt.Errorf("context canceled before request: %w", ctxErr)
 	}
@@ -98,6 +93,11 @@ func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path s
 	}
 
 	defer c.releaseSemaphore()
+
+	// 세마포어 대기와 429 cooldown 뒤 실제 요청 직전에 로컬 간격을 적용합니다.
+	if err := c.waitForRateLimiter(ctx, path); err != nil {
+		return nil, true, fmt.Errorf("wait for rate limiter: %w", err)
+	}
 
 	out1, out2, err := c.tryHolodexRequest(ctx, method, path, params, attempt, maxAttempts)
 	if err != nil {
@@ -137,6 +137,10 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 	if resp == nil {
 		return nil, true, errors.New("nil Holodex response")
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		c.rememberRetryAfter(resp.Header.Get("Retry-After"))
 	}
 
 	if validateErr := validateHolodexResponse(resp); validateErr != nil {

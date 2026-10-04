@@ -112,6 +112,10 @@ func validateHolodexConfig(config *HolodexConfig) error {
 		return fmt.Errorf("validate holodex timeout: %w", err)
 	}
 
+	if err := ValidateHolodexRequestConfig(config); err != nil {
+		return fmt.Errorf("validate holodex request config: %w", err)
+	}
+
 	return nil
 }
 

@@ -69,7 +69,7 @@ func TestOrdinaryDeferSQLInvalidTupleDoesNotUpdateActiveLease(t *testing.T) {
 	err := pool.QueryRow(ctx, mustSQL("repository_lease_defer_0144_12.sql"),
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		time.Now().UTC().Add(time.Second), "not_a_code", "TRANSIENT", "detail",
-		testRetryBounds.Minimum.Milliseconds(), testRetryBounds.Maximum.Milliseconds(),
+		testRetryBounds.Minimum.Milliseconds(), testRetryBounds.Maximum.Milliseconds(), false,
 	).Scan(&jobKey)
 
 	if !errors.Is(err, pgx.ErrNoRows) {

@@ -16,6 +16,10 @@ func clearRuntimeRoleEnv(t *testing.T) {
 func validRuntimeRoleConfig(t *testing.T) *Config {
 	t.Helper()
 
+	holodexCfg := DefaultHolodexOperationalConfig()
+
+	holodexCfg.APIKey = "x"
+
 	return &Config{
 		Server: ServerConfig{
 			Port:           30001,
@@ -31,10 +35,7 @@ func validRuntimeRoleConfig(t *testing.T) *Config {
 			WebhookToken: "x",
 			BotToken:     "x",
 		},
-		Holodex: HolodexConfig{
-			APIKey:  "x",
-			Timeout: DefaultHolodexOperationalConfig().Timeout,
-		},
+		Holodex:              holodexCfg,
 		Postgres:             PostgresConfig{SSLMode: runtimepolicy.PostgresSSLModeVerifyFull},
 		OfficialSchedule:     DefaultOfficialScheduleConfig(),
 		MaxResponseBodyBytes: DefaultMaxResponseBodyBytes,

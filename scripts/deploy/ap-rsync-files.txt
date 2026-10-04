@@ -95,6 +95,7 @@ hololive/hololive-shared/pkg/config/settings/config_build.go
 hololive/hololive-shared/pkg/config/settings/config_cache.go
 hololive/hololive-shared/pkg/config/settings/config_db.go
 hololive/hololive-shared/pkg/config/settings/config_env_loaders.go
+hololive/hololive-shared/pkg/config/settings/config_holodex_validation.go
 hololive/hololive-shared/pkg/config/settings/config_iris.go
 hololive/hololive-shared/pkg/config/settings/config_kakao.go
 hololive/hololive-shared/pkg/config/settings/config_llm.go

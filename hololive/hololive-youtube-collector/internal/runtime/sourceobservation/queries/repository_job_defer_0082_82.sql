@@ -26,6 +26,7 @@ WITH clock AS MATERIALIZED (
     WHERE vf.error_code = $6::text
       AND vf.failure_class = $7::text
       AND octet_length($8::text) BETWEEN 1 AND 2048
+      AND ($12::boolean = FALSE OR (vf.error_code = 'cooldown' AND vf.failure_class = 'COOLDOWN'))
 ), candidate AS MATERIALIZED (
     SELECT $9::timestamptz AS retry_at,
            clock.now_at,
@@ -38,10 +39,12 @@ WITH clock AS MATERIALIZED (
     SET slot_state = 'DEFERRED',
         owner_instance = NULL,
         lease_expires_at = NULL,
-        retry_not_before = LEAST(
+        retry_not_before = CASE WHEN $12::boolean THEN
+            GREATEST(candidate.retry_at, candidate.now_at + candidate.min_delay)
+        ELSE LEAST(
             candidate.now_at + candidate.max_delay,
             GREATEST(candidate.retry_at, candidate.now_at + candidate.min_delay)
-        ),
+        ) END,
         last_error_code = requested.error_code,
         last_failure_code = requested.error_code,
         last_failure_class = requested.failure_class,
@@ -57,8 +60,9 @@ WITH clock AS MATERIALIZED (
       AND jobs.slot_state = 'ACTIVE'
       AND jobs.lease_expires_at > candidate.failure_at
       AND candidate.retry_at IS NOT NULL
+      AND isfinite(candidate.retry_at)
       AND $10::bigint > 0
-      AND $11::bigint >= $10::bigint
+      AND $11::bigint BETWEEN $10::bigint AND 3600000
     RETURNING jobs.job_key
 )
 SELECT job_key FROM updated;
