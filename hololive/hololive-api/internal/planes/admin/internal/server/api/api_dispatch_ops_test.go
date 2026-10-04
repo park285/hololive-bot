@@ -76,6 +76,7 @@ func dispatchTestRouter(ops DispatchOperations) *gin.Engine {
 	router.GET("/dispatch/deliveries/:id", h.GetDispatchDelivery)
 	router.GET("/dispatch/deliveries/:id/actions", h.GetDispatchActions)
 	router.POST("/dispatch/deliveries/:id/requeue", h.RequeueDispatchDelivery)
+	router.POST("/dispatch/deliveries/:id/settle", h.SettleDispatchDelivery)
 
 	return router
 }
@@ -242,5 +243,42 @@ func TestDispatchFailuresHTTP(t *testing.T) {
 
 	if response.Code != 500 || strings.Contains(response.Body.String(), "private_payload") {
 		t.Fatalf("unsanitized failure: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func (s *dispatchOpsStub) Settle(ctx context.Context, _ string, _ dispatchops.SettleRequest) (dispatchops.RequeueResult, error) {
+	s.record(ctx)
+
+	return dispatchops.RequeueResult{IDs: []string{"9007199254740993"}}, s.err
+}
+
+func TestDispatchHandlerSettlementValidation(t *testing.T) {
+	body := `{"operatorId":"operator-1","reason":"발송 보류","action":"cancel","targets":[{"id":"9007199254740993","updatedAt":"2026-09-18T01:02:03.456789Z"}]}`
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"cancel", body, 200},
+		{"quarantine", strings.Replace(body, "cancel", "quarantine", 1), 200},
+		{"unknown_action", strings.Replace(body, "cancel", "retry", 1), 400},
+		{"missing_reason", strings.Replace(body, "발송 보류", "", 1), 400},
+		{"unknown_field", strings.Replace(body, `"action":`, `"duplicateRiskAck":true,"action":`, 1), 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := &dispatchOpsStub{}
+			response := dispatchRequest(t, dispatchTestRouter(stub), http.MethodPost, "/dispatch/deliveries/9007199254740993/settle", tc.body, dispatchTestContentType)
+
+			if response.Code != tc.status {
+				t.Fatalf("status %d: %s", response.Code, response.Body.String())
+			}
+
+			if tc.status == 200 && (stub.calls != 1 || !stub.deadline) {
+				t.Fatal("missing single bounded call")
+			}
+
+			if tc.status != 200 && stub.calls != 0 {
+				t.Fatal("invalid input dispatched")
+			}
+		})
 	}
 }

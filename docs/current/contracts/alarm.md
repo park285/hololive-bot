@@ -39,6 +39,21 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 - PostgreSQL dispatch outbox (`alarm_dispatch_events`, `alarm_dispatch_deliveries`) for pending, retry, DLQ, quarantine, and terminal state. A payload-free Valkey wakeup list (`alarm:dispatch:wakeup`) only shortens polling; see [Valkey ephemeral contract](valkey_ephemeral_contract.md).
 - The retired Redis dispatch queue keys (`alarm:dispatch:queue`, `alarm:dispatch:retry`, `alarm:dispatch:dlq`) have no reader or writer. Their reserved constants were removed in stack-audit 2026-09-26 T11.
 
+### 관리자 실패 발송 취소·격리
+
+Iris Console 발송 원장은 기존 재처리 외에 `POST /api/holo/dispatch/deliveries/:id/settle`로
+`action=cancel|quarantine`, 필수 사유와 조회한 묶음 전체의 `{id, updatedAt}`를 받습니다.
+Gateway는 운영자 ID를 인증 세션에서 결합합니다. `dlq`·`quarantined`인 최대 100건만
+직렬화 트랜잭션에서 잠그고, 현재 리비전과 전체 구성 일치 후 상태·감사를 함께 커밋합니다.
+발송 중·완료·취소된 묶음, 일부 대상, 오래된 리비전, 이미 전체 격리된 묶음의 재격리는 거절합니다.
+이전 send unit 없는 실패 행도 단일 항목으로 처리할 수 있습니다.
+
+취소는 `cancelled`로 종결하여 재처리를 막고, 격리는 `quarantined`로 보관하여 기존 수동
+재처리 조건을 유지합니다. 두 작업 모두 외부 발송·자동 재실행 없이 식별자·실패 이력을 보존하며,
+구독이나 다른 발송은 변경하지 않습니다. 감사에는 `manual_cancel|manual_quarantine`,
+운영자·사유·변경 전후 상태를 남깁니다. 결과 불명은 상세·감사 재조회로 확인합니다.
+기존 보존 기간은 유지하며 별도 DB migration은 필요하지 않습니다.
+
 ### Iris Markdown admission
 
 Markdown admission retains the exact Iris request ID and polls its reply status.

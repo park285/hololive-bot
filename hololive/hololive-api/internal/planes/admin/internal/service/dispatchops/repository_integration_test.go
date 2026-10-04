@@ -131,6 +131,12 @@ func TestOpsIntegrationAuditFailureRollsBack(t *testing.T) {
 	if _, err := repo.Requeue(ctx, ids[0], requestFromDetail(detail)); err == nil {
 		t.Fatal("audit failure accepted")
 	}
+	for _, action := range []string{"cancel", "quarantine"} {
+		request := SettleRequest{OperatorID: "operator-1", Reason: "감사 실패 원자성 확인", Action: action, Targets: detail.ReplayTargets}
+		if _, err := repo.Settle(ctx, ids[0], request); err == nil {
+			t.Fatalf("%s audit failure accepted", action)
+		}
+	}
 	var failures int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE status='dlq'").Scan(&failures); err != nil {
 		t.Fatal(err)
@@ -141,42 +147,54 @@ func TestOpsIntegrationAuditFailureRollsBack(t *testing.T) {
 }
 
 func TestOpsIntegrationConcurrentReplaySingleWinner(t *testing.T) {
-	repo, pool := setupOpsIntegration(t)
-	ids := seedOpsGroup(t, pool, 2, true)
-	detail, err := repo.Detail(t.Context(), ids[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := requestFromDetail(detail)
-	start := make(chan struct{})
-	results := make(chan error, 2)
-	var wg sync.WaitGroup
-	for range 2 {
-		wg.Add(1)
-		go func() { defer wg.Done(); <-start; _, err := repo.Requeue(t.Context(), ids[0], request); results <- err }()
-	}
-	close(start)
-	wg.Wait()
-	close(results)
-	succeeded, conflicts := 0, 0
-	for err := range results {
-		if err == nil {
-			succeeded++
-		} else if errors.Is(err, ErrConflict) {
-			conflicts++
-		} else {
-			t.Fatal(err)
-		}
-	}
-	if succeeded != 1 || conflicts != 1 {
-		t.Fatalf("success=%d conflict=%d", succeeded, conflicts)
-	}
-	var audits int
-	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_admin_actions").Scan(&audits); err != nil {
-		t.Fatal(err)
-	}
-	if audits != 2 {
-		t.Fatalf("duplicate audits: %d", audits)
+	for _, action := range []string{"requeue", "cancel", "quarantine"} {
+		t.Run(action, func(t *testing.T) {
+			repo, pool := setupOpsIntegration(t)
+			ids := seedOpsGroup(t, pool, 2, true)
+			detail, err := repo.Detail(t.Context(), ids[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := requestFromDetail(detail)
+			start := make(chan struct{})
+			results := make(chan error, 2)
+			var wg sync.WaitGroup
+			for index := range 2 {
+				wg.Go(func() {
+					<-start
+					if index == 1 && action != "requeue" {
+						_, err := repo.Settle(t.Context(), ids[0], SettleRequest{OperatorID: request.OperatorID, Reason: request.Reason, Action: action, Targets: request.Targets})
+						results <- err
+						return
+					}
+					_, err := repo.Requeue(t.Context(), ids[0], request)
+					results <- err
+				})
+			}
+			close(start)
+			wg.Wait()
+			close(results)
+			succeeded, conflicts := 0, 0
+			for err := range results {
+				if err == nil {
+					succeeded++
+				} else if errors.Is(err, ErrConflict) {
+					conflicts++
+				} else {
+					t.Fatal(err)
+				}
+			}
+			if succeeded != 1 || conflicts != 1 {
+				t.Fatalf("success=%d conflict=%d", succeeded, conflicts)
+			}
+			var audits int
+			if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_admin_actions").Scan(&audits); err != nil {
+				t.Fatal(err)
+			}
+			if audits != 2 {
+				t.Fatalf("duplicate audits: %d", audits)
+			}
+		})
 	}
 }
 
