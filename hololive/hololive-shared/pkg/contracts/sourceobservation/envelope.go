@@ -16,6 +16,9 @@ const (
 	MaxSourceEventFutureSkew              = 15 * time.Minute
 )
 
+// MaxProjectionTargetCount는 API와 collector가 공유하는 완전한 projection target 집합 상한입니다.
+const MaxProjectionTargetCount = 10_000
+
 type Provider string
 
 const (

@@ -132,6 +132,19 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - 새 미래 최초공개는 검증된 예정 시각으로 한 번 알립니다. 기준 목록에 있던 최초공개와 공개 전환은 재알림하지 않습니다. 부분 목록은 끝까지 COMPLETE 부재 근거와 구분합니다.
 - 요청 상한 안에서 증거를 확보하지 못하거나 목록 범위를 벗어난 영상의 알림 복구를 보장하지 않습니다. 이 정책은 알림 누락을 감수하고 과거 영상의 오알림을 막습니다.
 
+## Collection projection heartbeat와 eligibility
+
+- migration 261부터 `youtube_collection_projection_generations.valid_until`만 projection 만료의 정본입니다. target의 `valid_until`은 삭제합니다. API의 bot LiveQuery·수집 진단, collector acquire·Publish membership은 모두 유효한 CURRENT header를 요구하며, acquire의 bundle 조회 statement도 만료를 다시 검사합니다.
+- API는 기존 projection guard를 입력 Build **이전**부터 한 번 배타 잠금합니다. READ COMMITTED에서 대기한 writer는 앞선 commit 이후의 입력을 읽으므로 오래된 Build의 역순 활성화를 막습니다. 조회·검증·저장 실패는 transaction을 rollback하며 validity를 연장하지 않습니다.
+- header의 `validity_refreshed_at`은 마지막으로 수락한 supplied refresh 시각입니다. 그보다 최신이거나 PostgreSQL 마이크로초 정밀도에서 같은 시각이면 `valid_until`을 해당 시각+현재 TTL로 대체하여 설정 하향·상향을 모두 반영합니다. 더 과거 시각의 호출만 기존 만료를 보존합니다. migration 이전 시각은 NULL로 남기고 첫 성공 refresh에서 수립하며, 과거 TTL을 추정하지 않습니다. API 재시작 후에도 이 기준은 DB에 유지됩니다.
+- `TestCollectionRealPolicyGuardCancellationAndExpiry`와 `TestCollectionRealPolicySharedGuardLoad`는 실제 PolicyBuilder/rosterReader의 10,000 target·영상 1,000개·현재 검토 500개·과거 영수증 15,000개에 독립 collector 공유 guard 조회 4개를 병행합니다. 실제 lock 대기, reader/writer 취소, 대기 중 header 만료 거부와 회복을 검증하고 30회 refresh의 guard/transaction p95·p99를 기록합니다. 이는 해당 DB 경로의 격리 부하이며 외부 provider부터 intent까지의 전체 지연이나 운영 지속 부하를 뜻하지 않습니다.
+- `LiveCheckVideos` SQL은 구조적 LIVE/지난 일정·출처 미상 UPCOMING과 정확히 일치한 review hash 제외를 cap+1 이전에 적용하고, 같은 statement의 DB 시각과 필요한 사실만 반환합니다. API가 미래/NULL 근거를 거부하고 밀리초 단위 기존 예산으로 positive/availability deadline을 계산합니다. notification/operational/live 입력은 READ COMMITTED의 별도 statement이며 하나의 공통 snapshot이라고 보장하지 않습니다. 지연된 refresh 호출 시각은 기존 header validity를 줄이지 않습니다.
+- 구조 identity(subject/kind/priority/cadence/enabled)가 같으면 generation/hash와 연속 `member_since_generation`·`created_at`을 유지합니다. 실제 `not_before` 변경 row만 UPDATE하고 같은 transaction에서 header의 양수 `eligibility_version`을 한 번 올립니다(새 generation 기본값 1). 변경 없는 heartbeat는 header만 쓰며 target/reason 행을 갱신하지 않습니다. 이유만 바뀌면 기존처럼 이유를 교체하되 eligibility version은 바꾸지 않습니다.
+- collector는 현재 header·target·lease를 같은 후보 statement에서 확인하는 관계형 조회를 유지합니다. 전체 target/lease를 캐시해 AP에서 정렬하는 안은 전송량 회귀로 채택하지 않았으며 target별 eligibility version도 추가하지 않습니다. 기존 상한 10,000 targets/50,000 reasons/1,000 live 입력, membership·lease/fence·DB slot·원자적 Publish와 기존 bounded retention의 CURRENT/STAGING·lease 보호, collector의 reasons/canonical 접근 금지는 유지합니다.
+- 259/260은 이미 적용된 migration이며 수정·재적용하지 않습니다. **261은 rolling 호환 변경이 아닙니다.** 별도 운영 승인 아래 구 API(모든 plane)와 모든 collector를 drain·정지한 상태에서 새 migration을 적용하고, 새 API가 유효한 완전 projection을 만든 뒤 같은 계약의 fleet을 재개해야 합니다. 구 binary만 재시작하는 rollback은 지원하지 않으며 schema와 binary의 호환 복구가 필요합니다. 로컬 구현은 운영 activation·보존 단축 승인이 아닙니다.
+
+- canonical live session의 다섯 writer는 부재 행의 동시 INSERT와 부분 schedule DTO 병합을 위해 기존 `0047` SQL conflict merge를 유지합니다. `0048` head 저장은 18개 mutable 필드 전체의 `IS DISTINCT FROM`으로 같은 근거의 tuple rewrite를 피하며 `updated_at`·review snapshot을 유지합니다. 실제 사실 시계·ignored-absence 변화는 계속 저장합니다. 이는 canonical 정책의 AP 이관이나 no-op SQL/잠금 제거를 뜻하지 않습니다.
+
 ## Observation storage and retention
 
 - 채널 수치 통계·구독자 수 명령·통계 알림은 제거합니다. 채널 profile/photo, 방송·일정과 알림 구독은 유지합니다.

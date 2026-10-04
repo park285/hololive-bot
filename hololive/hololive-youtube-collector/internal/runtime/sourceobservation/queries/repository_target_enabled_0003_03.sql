@@ -1,5 +1,5 @@
 -- 각 관측의 (subject, kind)가 현재 CURRENT에서 활성이고, lease 획득 generation 이전부터 같은 의미로 이어진 대상인지 확인한다.
--- RETIRED target의 valid_until이 남아 있어도 허용하지 않는다.
+-- RETIRED generation의 유효기간이 남아 있어도 허용하지 않는다.
 WITH current_projection AS (
     SELECT generation
     FROM youtube_collection_projection_generations
@@ -22,7 +22,6 @@ SELECT EXISTS (SELECT 1 FROM current_projection)
         WHERE target.subject_key = requested.subject_key
           AND target.observation_kind = requested.observation_kind
           AND target.enabled = TRUE
-          AND target.valid_until > statement_timestamp()
           AND target.member_since_generation BETWEEN 1 AND $1::bigint
     )
 )

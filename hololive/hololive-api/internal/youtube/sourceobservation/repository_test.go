@@ -617,8 +617,8 @@ func seedPublishLease(
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until, member_since_generation
-		) VALUES ($1, $2, $3, 50, 60000, TRUE, NOW() + INTERVAL '1 day', $1)
+			priority, poll_interval_ms, enabled, member_since_generation
+		) VALUES ($1, $2, $3, 50, 60000, TRUE, $1)
 	`, generation, subjectKey, kind); err != nil {
 		tb.Fatalf("seed target: %v", err)
 	}

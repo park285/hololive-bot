@@ -23,7 +23,7 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
     FROM mapping m
     JOIN youtube_collection_targets t ON t.observation_kind = ANY(m.observation_kinds)
     JOIN current_projection g ON g.generation = t.projection_generation
-    WHERE t.enabled AND t.valid_until > statement_timestamp()
+    WHERE t.enabled
     GROUP BY m.kind, m.rpc_per_kind, t.subject_key
 ), leased AS (
     SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, t.eligible_at, l.last_completed_at,

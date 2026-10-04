@@ -100,8 +100,8 @@ func newLongHistoryQueryFixture(b *testing.B, allLive bool) (*Repository, *pgxpo
 	execFixture(b, pool, `UPDATE members SET is_graduated=true,status='graduated';
  INSERT INTO members(slug,channel_id,english_name,org,sync_source)
  SELECT 'perf-'||g,'channel-'||g,'Member '||lpad(g::text,3,'0'),'Hololive','manual' FROM generate_series(0,73) g;
- INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
- SELECT generation,'channel-'||g,kind,20,120000,true,valid_until FROM youtube_collection_projection_generations
+ INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
+ SELECT generation,'channel-'||g,kind,20,120000,true FROM youtube_collection_projection_generations
  CROSS JOIN generate_series(0,73) g CROSS JOIN (VALUES('live_snapshot'),('channel_live_check')) kinds(kind) WHERE status='CURRENT';
  INSERT INTO youtube_channel_live_checks(channel_id,provider,outcome,channel_identity_confirmed,evidence_sha256,scheduled_for,effective_at,observed_at,received_at)
  SELECT 'channel-'||g,'youtubejs','CHANNEL_PAGE',true,repeat('c',64),now(),now(),now(),now() FROM generate_series(0,73) g;

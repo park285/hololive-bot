@@ -16,7 +16,6 @@ WITH requested(kind) AS (
                  AND targets.subject_key = $3
                  AND targets.observation_kind = requested.kind
                  AND targets.enabled = TRUE
-                 AND targets.valid_until > statement_timestamp()
            ) AS enabled
     FROM requested
     LEFT JOIN current_projection ON TRUE

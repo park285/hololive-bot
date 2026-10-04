@@ -86,8 +86,8 @@ func TestCollectionTargetSnapshotDefersSleepingTargets(t *testing.T) {
 	}
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until,created_at,not_before)
-		SELECT generation, subject, 'video_live_check', 20, 120000, true, now()+interval '1 hour', now()-interval '10 minutes', now()+wake
+		INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,created_at,not_before)
+		SELECT generation, subject, 'video_live_check', 20, 120000, true, now()-interval '10 minutes', now()+wake
 		FROM youtube_collection_projection_generations CROSS JOIN (VALUES
 		 ('video-sleeping', interval '2 minutes'),
 		 ('video-awake', interval '-1 minute'),
