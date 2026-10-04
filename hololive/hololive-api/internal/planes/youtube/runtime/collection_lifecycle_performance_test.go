@@ -164,6 +164,7 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 		require.Equal(t, id != "live", upcoming)
 
 		notBefore := facts.notBefore(defaultLiveFreshnessBudget())
+
 		if id == "review-changed" {
 			require.False(t, notBefore.IsZero(), "availability check is freshness evidence for the reopened video")
 		} else {
