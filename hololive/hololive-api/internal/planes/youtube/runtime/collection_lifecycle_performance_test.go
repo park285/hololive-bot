@@ -276,6 +276,13 @@ func seedCollectionLifecycleReceipts(t *testing.T, pool *pgxpool.Pool) {
                encode(sha256(convert_to(jsonb_build_object('historical_revision',revision)::text,'UTF8')),'hex'),
                jsonb_build_object('historical_revision',revision),'{}','closed_unresolved','test-operator','과거 snapshot 검토'
         FROM generate_series(1,500) n CROSS JOIN generate_series(1,30) revision;
+        -- 운영에서 검토된 53개 head의 무시한 부재 이력이 최대 17,006 slot이었다.
+        -- 기록 CAS와 달리 지속 판정은 이 큰 배열을 직렬화하지 않아야 1초 예산을 지킨다.
+        UPDATE youtube_live_reconciliation_heads
+        SET ignored_absence_scheduled_for = ARRAY(
+            SELECT '2026-01-01'::timestamptz + slot * INTERVAL '2 minutes'
+            FROM generate_series(1,17006) slot)
+        WHERE video_id IN (SELECT 'load-'||n FROM generate_series(1,53) n);
         ANALYZE youtube_live_review_receipts;
     `)
 	require.NoError(t, err)
