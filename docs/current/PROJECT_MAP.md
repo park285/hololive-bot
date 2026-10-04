@@ -68,9 +68,9 @@ configuration/path validation assets. The management web runs separately on iris
 | API composition | `hololive/hololive-api/internal/config`, `internal/apifoundation` | API 설정과 plane별 공통 서비스 생성. 각 plane의 인스턴스·DB pool·transport 수명 유지 |
 | API admin HTTP | `hololive/hololive-api/internal/planes/admin/runtime`, `internal/planes/admin/internal/httpapi` | admin 조립·수명과 router·admin 전용 Stream/OAuth/WebSocket handler. 제품 API handler는 `internal/planes/admin/internal/server/api` |
 | API common HTTP | `hololive/hololive-api/internal/httpapi` | bot·LLM이 사용하는 trigger handler와 route 조립 |
-| API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, canonical persist, replay·retention 및 private reducer |
+| API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/canonicalwrite`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, transaction 전용 canonical persist, replay·retention 및 private reducer |
 | Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,dedup,dispatchoutbox,queue}`, `internal/egress/alarmdispatch`, `internal/egress/youtubedispatch/format` | worker 설정·구독 서비스·private cache·dispatch 저장/발행·runner·실제 formatter |
-| Collector | `hololive/hololive-youtube-collector/internal/runtime/sourceobservation`, `internal/runtime/youtubejscollector` | lease/checkpoint/observation publish와 YouTube.js pagination 해석 |
+| Collector | `hololive/hololive-youtube-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |
 | Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/database` | strict 환경 파싱, 순수 정책·시간 계산 및 DB 구성 factory |
 
 Alarm HTTP provider는 worker이며 API bot·admin plane은 `ALARM_INTERNAL_URL`의 client입니다. 내부 HTTP/H3 client는 시작 시 적재한 `Config.InternalH3` 옵션을 명시적으로 받고, transport와 timeout은 각 plane이 소유합니다. Iris URL 파일의 동적 reload는 별도 기존 경로를 유지합니다.

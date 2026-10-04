@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestHTTP014TransportCapEqualsProviderGate(t *testing.T) {

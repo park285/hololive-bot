@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"errors"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
 	"unicode/utf8"
@@ -11,21 +11,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
 func persistContentDecision(
 	ctx context.Context,
 	tx dbx.Tx,
-	writer CanonicalWriter,
+	writer canonicalWriter,
 	observation *Observation,
 	loaded *content.State,
 	decision *content.Decision,
 ) error {
-	if writer == nil {
-		return errors.New("persist content decision: canonical writer is not configured")
-	}
-
 	videos, notifications, tracking := contentArtifacts(observation.EffectiveAt, decision)
 	if err := writer.PersistVideosTx(ctx, tx, videos, notifications, tracking, decision.Watermark); err != nil {
 		return fmt.Errorf("persist videos tx: %w", err)
@@ -43,7 +39,7 @@ func persistContentDecision(
 		return fmt.Errorf("persist content absence: %w", err)
 	}
 
-	if err := persistContentHead(ctx, tx, observation, decision.EarliestCompleteAt); err != nil {
+	if err := persistContentHead(ctx, tx, observation, decision.EarliestCompleteAt, decision.EarliestBaselineAt); err != nil {
 		return fmt.Errorf("persist content head: %w", err)
 	}
 
@@ -94,9 +90,12 @@ func domainNotification(intent *content.NotificationIntent) *domain.YouTubeNotif
 	var payload string
 
 	if intent.Kind == domain.OutboxKindNewShort {
-		payload = polling.BuildShortNotificationPayload(video, intent.ContentID)
+		payload = mustMarshalPayload(youtubeoutbox.Short{
+			VideoFields:     youtubeoutbox.NewVideoFields(video),
+			CanonicalPostID: shortCanonicalPostID(intent.ContentID),
+		})
 	} else {
-		payload = polling.MustMarshalJSON(youtubeoutbox.Video{
+		payload = mustMarshalPayload(youtubeoutbox.Video{
 			VideoFields:      youtubeoutbox.NewVideoFields(video),
 			ScheduledStartAt: intent.Video.ScheduledFor,
 			IsPremiere:       intent.Video.IsPremiere,
@@ -110,6 +109,28 @@ func domainNotification(intent *content.NotificationIntent) *domain.YouTubeNotif
 		Payload:   payload,
 		Status:    domain.OutboxStatusPending,
 	}
+}
+
+// shortCanonicalPostID는 쇼츠 payload의 canonical_post_id를 만든다. 정규화할 수 없는 값은 빈 문자열로 싣고
+// canonical 저장 전 검증이 그 행을 거부한다.
+func shortCanonicalPostID(contentID string) string {
+	canonicalID, err := ytcontentid.ForShort(contentID)
+	if err != nil {
+		return ""
+	}
+
+	return canonicalID
+}
+
+// mustMarshalPayload는 outbox payload 계약 값을 JSON 문자열로 만든다. 계약 타입은 항상 직렬화할 수 있어야 하므로
+// 실패는 프로그래밍 오류로 보고 panic한다.
+func mustMarshalPayload(v any) string {
+	data, err := jsonv2.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(data)
 }
 
 func domainTracking(intent *content.NotificationIntent, detectedAt time.Time) *domain.YouTubeContentAlarmTracking {
@@ -174,13 +195,14 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 	return nil
 }
 
-func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation, earliest *time.Time) error {
+func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation, earliestComplete, earliestBaseline *time.Time) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_content_channel_head_upsert_0041_41.sql"),
 		observation.SubjectKey,
 		observation.ObservationKind,
-		earliest,
+		earliestComplete,
+		earliestBaseline,
 	); err != nil {
 		return fmt.Errorf("upsert content channel head: %w", err)
 	}

@@ -360,6 +360,14 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 		return markErr
 	}
 
+	// MarkSending의 분리된 상태 컨텍스트가 성공해도 발송 컨텍스트는 이미 끝났을 수 있다.
+	// provider 호출 전이므로 같은 attempt와 소유권 fence로 sending을 재대기시킨다.
+	if err := ctx.Err(); err != nil {
+		return r.withStateContext(ctx, func(stateCtx context.Context) error {
+			return r.persistMarkSendingFailure(stateCtx, group.envelopes, err)
+		})
+	}
+
 	if sendErr := r.sendPreparedRequest(ctx, request); sendErr != nil {
 		group.request = request
 		return r.routePostSendingFailure(ctx, group, sendErr)

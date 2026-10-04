@@ -37,19 +37,7 @@ func publishConsumeContentAt(
 ) {
 	t.Helper()
 
-	proof := *base
-
-	proof.FenceEpoch = epoch
-	proof.ScheduledFor = step.at
-
-	if _, err := pool.Exec(ctx, `
-		UPDATE youtube_collection_job_leases
-		SET slot_state = 'ACTIVE', owner_instance = $2, lease_expires_at = NOW() + INTERVAL '1 hour',
-		    retry_not_before = NULL, fence_epoch = $3, scheduled_for = $4, next_due_at = $4
-		WHERE job_key = $1
-	`, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ScheduledFor); err != nil {
-		t.Fatalf("move lease to %s: %v", step.label, err)
-	}
+	proof := moveContentLease(ctx, t, pool, base, epoch, step.at)
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, step.completeness, step.videoIDs...)))
 	if err != nil || len(published.Results) != 1 {
@@ -62,7 +50,7 @@ func publishConsumeContentAt(
 		t.Fatalf("align received_at for %s: %v", step.label, err)
 	}
 
-	if err := newContentTestConsumer(pool, repo, 0).Consume(ctx, contentClaimOptions()); err != nil {
+	if err := NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume %s: %v", step.label, err)
 	}
 }
@@ -305,6 +293,6 @@ func TestContentLoaderKeepsShortsBaselineWithLegacyCatalogOnly(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	publishShortWindow(t, repo, &proof, "new")
-	require.NoError(t, newContentTestConsumer(pool, repo, 0).Consume(ctx, contentClaimOptions()))
+	require.NoError(t, NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()))
 	assertShortWindowOutboxes(t, pool, "new")
 }

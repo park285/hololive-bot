@@ -9,8 +9,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type metricsTransport func(*http.Request) (*http.Response, error)
@@ -19,7 +17,7 @@ func (f metricsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func TestRPCMetricsSeparateLimiterWaitFromHelper(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		limiter := ratelimiter.New(2 * time.Second)
+		limiter := NewRateLimiter(2 * time.Second)
 		if err := limiter.Wait(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -49,7 +47,7 @@ func TestRPCMetricsSeparateLimiterWaitFromHelper(t *testing.T) {
 
 func TestRPCMetricsCanceledAdmissionDoesNotCallHelper(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		limiter := ratelimiter.New(2 * time.Second)
+		limiter := NewRateLimiter(2 * time.Second)
 		if err := limiter.Wait(t.Context()); err != nil {
 			t.Fatal(err)
 		}

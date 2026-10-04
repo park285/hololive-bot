@@ -6,6 +6,7 @@ MODE="${2:---dry-run}"
 ROLLBACK_CHECK_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh"
 RELEASE_PATH_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
 PO_ROLLBACK_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
+NATIVE_CUTOVER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
 
 case "$MODE" in
   --dry-run|--apply) ;;
@@ -74,10 +75,13 @@ REMOTE
   cat "$RELEASE_PATH_LIB"
   cat "$ROLLBACK_CHECK_LIB"
   cat "$PO_ROLLBACK_LIB"
+  cat "$NATIVE_CUTOVER_LIB"
   cat <<'REMOTE'
 set -euo pipefail
 service="$1"
 rollback_started_at="$2"
+native_recovery_require_clear
+native_cutover_claim manual-rollback
 unit="hololive-youtube-collector@${service}.service"
 current="/opt/hololive-bot/youtube-collector/current"
 previous="/opt/hololive-bot/youtube-collector/previous"
@@ -115,6 +119,7 @@ sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
 sudo -n systemctl enable --now "$unit"
 echo "rollback_started_at=$rollback_started_at"
+native_cutover_release_guard
 REMOTE
 } | ap_remote_bash "$service" "$rollback_started_at"
 

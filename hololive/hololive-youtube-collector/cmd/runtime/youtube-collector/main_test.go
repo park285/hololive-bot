@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestYouTubeCollectorLogFileNameUsesExplicitEnv(t *testing.T) {

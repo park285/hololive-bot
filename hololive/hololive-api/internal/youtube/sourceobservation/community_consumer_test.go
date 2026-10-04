@@ -15,7 +15,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -29,7 +28,7 @@ func TestPublishBatchMixedCollisionStillQueuesAndPublishesIndependentObservation
 	assertMixedPublishResult(t, baseID, baseKey, collision, independent, result)
 	assertMixedPersistence(ctx, t, pool, baseID, independent)
 	seedMixedCommunityWatermark(ctx, t, pool)
-	consumeMixedCommunityBatch(ctx, t, pool, repo)
+	consumeMixedCommunityBatch(ctx, t, repo)
 	assertMixedOutbox(ctx, t, pool)
 }
 
@@ -219,11 +218,10 @@ func seedMixedCommunityWatermark(ctx context.Context, t *testing.T, pool *pgxpoo
 	}
 }
 
-func consumeMixedCommunityBatch(ctx context.Context, t *testing.T, pool *pgxpool.Pool, repo *Repository) {
+func consumeMixedCommunityBatch(ctx context.Context, t *testing.T, repo *Repository) {
 	t.Helper()
 
-	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-	if err := NewConsumer(repo, writer, nil).Consume(ctx, claimOptions()); err != nil {
+	if err := NewConsumer(repo).Consume(ctx, claimOptions()); err != nil {
 		t.Fatalf("consume mixed queue: %v", err)
 	}
 }
@@ -308,8 +306,7 @@ func TestConsumerIsolatesInvalidItemAndProcessesLaterBatchItem(t *testing.T) {
 		t.Fatalf("second publish = %#v", second)
 	}
 
-	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-	if err := NewConsumer(repo, writer, nil).Consume(ctx, claimOptions()); err != nil {
+	if err := NewConsumer(repo).Consume(ctx, claimOptions()); err != nil {
 		t.Fatalf("consume: %v", err)
 	}
 
@@ -342,7 +339,11 @@ func TestConsumerTransactionFailureRollsBackCanonicalAndProcessedState(t *testin
 		t.Fatalf("publish: %v", err)
 	}
 
-	err := NewConsumer(repo, failWriter{err: errors.New("canonical write failed")}, nil).Consume(ctx, claimOptions())
+	consumer := NewConsumer(repo)
+
+	consumer.writer = failWriter{err: errors.New("canonical write failed")}
+
+	err := consumer.Consume(ctx, claimOptions())
 	if err == nil {
 		t.Fatal("expected consume error")
 	}
@@ -368,8 +369,7 @@ func TestConsumerReplayDoesNotDuplicateNotificationIntent(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-	consumer := NewConsumer(repo, writer, nil)
+	consumer := NewConsumer(repo)
 
 	proof = bootstrapCommunityWindow(ctx, t, pool, publishkit.NewPublisher(pool), consumer, proof)
 
@@ -469,8 +469,7 @@ func TestConsumerDoesNotRegressCanonicalStateWhenOlderObservationFinishesLast(t 
 
 	setQueueAvailability(ctx, t, pool, oldestID, "1 hour", "defer oldest")
 
-	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-	consumer := NewConsumer(repo, writer, nil)
+	consumer := NewConsumer(repo)
 
 	if err := consumer.Consume(ctx, claimOptions()); err != nil {
 		t.Fatalf("consume newer: %v", err)
@@ -494,8 +493,6 @@ func (w failWriter) PersistTx(context.Context, dbx.Tx, *community.Batch) error {
 	return w.err
 }
 
-func (failWriter) AfterCommit(context.Context, *community.Batch) {}
-
 func (w failWriter) PersistVideosTx(
 	context.Context,
 	dbx.Tx,
@@ -506,5 +503,3 @@ func (w failWriter) PersistVideosTx(
 ) error {
 	return w.err
 }
-
-func (failWriter) AfterCommitVideos(context.Context, []*domain.YouTubeContentAlarmTracking) {}

@@ -1,7 +1,6 @@
 package sourceobservation
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,7 +15,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -27,8 +25,8 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 
 	repo := NewRepository(pool)
 	contentProof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	liveProof := seedPremiereLivePublishLease(ctx, t, pool, &contentProof)
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	liveProof := seedAdditionalLease(t, pool, &contentProof, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &contentProof, scheduled)))
@@ -86,8 +84,8 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 
 	repo := NewRepository(pool)
 	contentProof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	liveProof := seedPremiereLivePublishLease(ctx, t, pool, &contentProof)
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	liveProof := seedAdditionalLease(t, pool, &contentProof, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 	live := liveSession(testVideoID, "LIVE")
 
@@ -127,13 +125,24 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 	}
 }
 
-func TestContentConsumerPremiereIgnoresUnknownAndFalse(t *testing.T) {
+// generation 2에서 Premiere 표시는 player 대기 상태 근거(UPCOMING_PREMIERE)에서만 옵니다. 근거가 없거나 미확정이거나
+// 공개 영상이면 live session을 만들지 않습니다.
+func TestContentConsumerPremiereIgnoresNonPremiereEvidence(t *testing.T) {
 	tests := []struct {
-		name       string
-		isPremiere *bool
+		name string
+		item func(proof *contract.LeaseProof) contract.VideoListItemV1
 	}{
-		{name: "unknown"},
-		{name: "false", isPremiere: new(false)},
+		{name: "missing", item: func(*contract.LeaseProof) contract.VideoListItemV1 { return unresolvedVideoItem(testVideoID) }},
+		{name: "unresolved", item: func(proof *contract.LeaseProof) contract.VideoListItemV1 {
+			item := unresolvedVideoItem(testVideoID)
+
+			item.Publication = &contract.VideoPublicationV1{Status: contract.VideoPublicationUnresolved, CheckedAt: proof.ScheduledFor}
+
+			return item
+		}},
+		{name: "published", item: func(proof *contract.LeaseProof) contract.VideoListItemV1 {
+			return trustedVideoItem(testVideoID, proof.ScheduledFor.Add(-time.Hour), proof.ScheduledFor)
+		}},
 	}
 
 	for _, test := range tests {
@@ -144,10 +153,9 @@ func TestContentConsumerPremiereIgnoresUnknownAndFalse(t *testing.T) {
 
 			repo := NewRepository(pool)
 			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-			consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
-			scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
+			consumer := NewConsumerWithGraces(repo, 0, 0)
 
-			if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(classifiedVideoListEnvelope(t, &proof, scheduled, test.isPremiere))); err != nil {
+			if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListItemsEnvelope(t, &proof, contract.CompletenessComplete, test.item(&proof)))); err != nil {
 				t.Fatalf("publish content: %v", err)
 			}
 
@@ -180,7 +188,7 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 	beforeSession := premiereSessionSnapshot(t, pool)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &proof, scheduled)))
@@ -240,7 +248,7 @@ func TestContentConsumerPremiereAtomicRollback(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &proof, scheduled))); err != nil {
@@ -318,7 +326,7 @@ func TestContentConsumerPremiereKeepsApplicationsWithinFinalizeLimit(t *testing.
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 
 	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(largePremiereVideoListEnvelope(t, &proof, scheduled, 999)))
@@ -383,60 +391,14 @@ func TestContentPremiereFactsBoundLiveTitle(t *testing.T) {
 func premiereVideoListEnvelope(t *testing.T, proof *contract.LeaseProof, scheduled time.Time) *contract.Envelope {
 	t.Helper()
 
-	return classifiedVideoListEnvelope(t, proof, scheduled, new(true))
+	item := premiereVideoItem(testVideoID, scheduled, proof.ScheduledFor)
+
+	item.Title = "Premiere title"
+
+	return videoListItemsEnvelope(t, proof, contract.CompletenessComplete, item)
 }
 
-func classifiedVideoListEnvelope(
-	t *testing.T,
-	proof *contract.LeaseProof,
-	scheduled time.Time,
-	isPremiere *bool,
-) *contract.Envelope {
-	t.Helper()
-
-	published := scheduled.Add(-24 * time.Hour)
-
-	payload, err := contract.MarshalPayloadV1(contract.VideoListV1{
-		ChannelID: testChannelID,
-		Videos: []contract.VideoListItemV1{{
-			VideoID:      testVideoID,
-			ChannelID:    testChannelID,
-			Title:        "Premiere title",
-			PublishedAt:  &published,
-			ScheduledFor: &scheduled,
-			IsPremiere:   isPremiere,
-		}},
-		Coverage: contract.ChannelListCoverageV1{
-			ChannelID:  testChannelID,
-			MaxResults: 10,
-			Exhausted:  true,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal Premiere video list payload: %v", err)
-	}
-
-	envelope, err := contract.PrepareEnvelope(contract.Envelope{
-		Provider:           contract.ProviderYouTubeJS,
-		ObservationKind:    contract.KindVideoList,
-		SubjectKey:         testChannelID,
-		SchemaVersion:      contract.SchemaVersionV1,
-		ContractGeneration: 1,
-		ScheduledFor:       proof.ScheduledFor,
-		ObservedAt:         proof.ScheduledFor.Add(time.Second),
-		Completeness:       contract.CompletenessComplete,
-		Continuity:         contract.ContinuityContiguous,
-		Payload:            payload,
-		CollectorInstance:  proof.OwnerInstance,
-		Lease:              *proof,
-	})
-	if err != nil {
-		t.Fatalf("prepare Premiere video list envelope: %v", err)
-	}
-
-	return &envelope
-}
-
+// largePremiereVideoListEnvelope는 첫 항목만 확인된 Premiere이고 나머지는 player 근거가 없는 목록입니다.
 func largePremiereVideoListEnvelope(
 	t *testing.T,
 	proof *contract.LeaseProof,
@@ -445,20 +407,13 @@ func largePremiereVideoListEnvelope(
 ) *contract.Envelope {
 	t.Helper()
 
-	published := scheduled.Add(-24 * time.Hour)
 	videos := make([]contract.VideoListItemV1, count)
-
 	for i := range count {
-		videos[i] = contract.VideoListItemV1{
-			VideoID:     fmt.Sprintf("vid-%04d", i),
-			ChannelID:   testChannelID,
-			Title:       fmt.Sprintf("Video %d", i),
-			PublishedAt: &published,
-		}
+		videos[i] = unresolvedVideoItem(fmt.Sprintf("vid-%04d", i))
+		videos[i].Title = fmt.Sprintf("Video %d", i)
 	}
 
-	videos[0].ScheduledFor = &scheduled
-	videos[0].IsPremiere = new(true)
+	videos[0] = premiereVideoItem("vid-0000", scheduled, proof.ScheduledFor)
 
 	payload, err := contract.MarshalPayloadV1(contract.VideoListV1{
 		ChannelID: testChannelID,
@@ -473,65 +428,7 @@ func largePremiereVideoListEnvelope(
 		t.Fatalf("marshal large Premiere video list payload: %v", err)
 	}
 
-	envelope, err := contract.PrepareEnvelope(contract.Envelope{
-		Provider:           contract.ProviderYouTubeJS,
-		ObservationKind:    contract.KindVideoList,
-		SubjectKey:         testChannelID,
-		SchemaVersion:      contract.SchemaVersionV1,
-		ContractGeneration: 1,
-		ScheduledFor:       proof.ScheduledFor,
-		ObservedAt:         proof.ScheduledFor.Add(time.Second),
-		Completeness:       contract.CompletenessComplete,
-		Continuity:         contract.ContinuityContiguous,
-		Payload:            payload,
-		CollectorInstance:  proof.OwnerInstance,
-		Lease:              *proof,
-	})
-	if err != nil {
-		t.Fatalf("prepare large Premiere video list envelope: %v", err)
-	}
-
-	return &envelope
-}
-
-func seedPremiereLivePublishLease(
-	ctx context.Context,
-	t *testing.T,
-	pool *pgxpool.Pool,
-	contentProof *contract.LeaseProof,
-) contract.LeaseProof {
-	t.Helper()
-
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, $2, $3, 50, 60000, TRUE, NOW() + INTERVAL '1 day')
-	`, contentProof.ProjectionGeneration, testChannelID, contract.KindLiveSnapshot); err != nil {
-		t.Fatalf("seed live target: %v", err)
-	}
-
-	proof := contract.LeaseProof{
-		JobKey:               "job:youtubejs_channel_live:" + testChannelID,
-		CollectionJobKind:    "youtubejs_channel_live",
-		OwnerInstance:        contentProof.OwnerInstance,
-		FenceEpoch:           1,
-		ProjectionGeneration: contentProof.ProjectionGeneration,
-		ScheduledFor:         contentProof.ScheduledFor,
-	}
-
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_job_leases (
-			job_key, provider, job_class, collection_job_kind, subject_key,
-			projection_generation, poll_interval_ms, slot_state, scheduled_for,
-			next_due_at, fence_epoch, owner_instance, lease_expires_at
-		) VALUES ($1, $2, 'SUBJECT', $3, $4, $5, 60000, 'ACTIVE', $6, $6, $7, $8, NOW() + INTERVAL '1 hour')
-	`, proof.JobKey, contract.ProviderYouTubeJS, proof.CollectionJobKind, testChannelID,
-		proof.ProjectionGeneration, proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance); err != nil {
-		t.Fatalf("seed live lease: %v", err)
-	}
-
-	return proof
+	return prepareContentListEnvelope(t, proof, contract.KindVideoList, contract.VideoListPublicationContractGeneration, contract.CompletenessComplete, payload)
 }
 
 func assertLiveSessionPremiere(t *testing.T, pool *pgxpool.Pool, wantStatus domain.LiveStatus, wantPremiere *bool) {

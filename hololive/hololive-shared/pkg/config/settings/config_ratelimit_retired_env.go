@@ -12,7 +12,7 @@ import (
 // 가드 도입 리비전: stack-audit 2026-09-26(PLN-20260926-stack-audit-refactoring T19).
 //
 // 거절은 limiter 생성 경로가 아니라 LoadConfig runtime의 rejectRetiredRuntimeEnv에서 한다. 분산 limiter를 끈 설정
-// (HOLODEX_/YOUTUBE_DISTRIBUTED_RATELIMIT_ENABLED=false)에서도 키가 남아 있으면 기동을 막기 위해서다.
+// (HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED=false)에서도 키가 남아 있으면 기동을 막기 위해서다.
 //
 // 배포 선행 조건이자 제거 조건: LoadConfig runtime(hololive-api bot·admin plane, alarm-worker)의 env 원천인 중앙
 // compose.env·bot.env·alarm-worker.env, 그 stack-secrets master 사본, 그리고 실행 중 프로세스 env에 INSTANCE_ID가 0건임을

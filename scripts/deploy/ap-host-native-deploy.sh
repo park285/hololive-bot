@@ -115,6 +115,7 @@ mkdir -p "$artifact_dir/bin"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh" "$artifact_dir/bin/ap-host-native-po.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh" "$artifact_dir/bin/ap-host-native-cutover.sh"
 
 native_revision="$(deploy_source_revision "$REPO_ROOT")"
 sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
@@ -172,6 +173,7 @@ REMOTE
 {
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
+  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
   cat "$NODE_VERSION_LIB"
   cat "$READINESS_LIB"
   cat "$REMOTE_APPLY_LIB"

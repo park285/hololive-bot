@@ -2,6 +2,7 @@ package youtubejs
 
 import (
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -63,6 +64,54 @@ func TestLiveCheckRPCBoundsBudgetAndKeepsAbsentFactsDistinct(t *testing.T) {
 			t.Fatalf("%s request = %#v, want bounded live check budget", path, got)
 		}
 	}
+}
+
+// helper의 video_live_check published_at은 정확한 시각으로 decode되고, 없으면 nil로 남아 근거 없음과 구분됩니다.
+// 목록 응답의 content 항목은 is_upcoming 표시만 받고 이전 is_premiere 필드는 계약 불일치로 거부합니다.
+func TestNoveltyFieldsCrossTheHelperBoundaryExactly(t *testing.T) {
+	t.Parallel()
+
+	const video = `{"protocol_version":1,"video_id":"v","channel_id":"UC_TEST","identity_confirmed":true,` +
+		`"is_live":false,"is_upcoming":false,"is_live_content":false,"is_private":false%s,"availability":"PUBLIC","method":"player_public"}`
+
+	var published VideoLiveCheckResult
+
+	if err := decodeTestResponse(t, http.StatusOK, fmt.Sprintf(video, `,"published_at":"2026-09-20T17:00:00.000Z"`),
+		MaxLiveCheckResponseBytes, &published); err != nil {
+		t.Fatal(err)
+	}
+
+	if published.PublishedAt == nil || !published.PublishedAt.Equal(time.Date(2026, time.September, 20, 17, 0, 0, 0, time.UTC)) {
+		t.Fatalf("published_at = %v", published.PublishedAt)
+	}
+
+	var missing VideoLiveCheckResult
+
+	if err := decodeTestResponse(t, http.StatusOK, fmt.Sprintf(video, ""), MaxLiveCheckResponseBytes, &missing); err != nil {
+		t.Fatal(err)
+	}
+
+	if missing.PublishedAt != nil {
+		t.Fatalf("absent published_at decoded as %v", missing.PublishedAt)
+	}
+
+	const content = `{"protocol_version":1,"items":[%s],"page_count":1,"exhausted":true,"continuity":"CONTIGUOUS","termination_reason":"exhausted"}`
+
+	var upcoming ContentResult
+
+	if err := decodeTestResponse(t, http.StatusOK, fmt.Sprintf(content,
+		`{"video_id":"p","channel_id":"UC_TEST","title":"P","is_upcoming":true},{"video_id":"a","channel_id":"UC_TEST","title":"A"}`),
+		1<<20, &upcoming); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(upcoming.Items) != 2 || !upcoming.Items[0].IsUpcoming || upcoming.Items[1].IsUpcoming ||
+		upcoming.Items[0].PublishedAt != nil || upcoming.Items[0].ScheduledFor != nil {
+		t.Fatalf("content items = %#v", upcoming.Items)
+	}
+
+	assertProtocolMismatch(t, decodeTestResponse(t, http.StatusOK,
+		fmt.Sprintf(content, `{"video_id":"p","channel_id":"UC_TEST","title":"P","is_premiere":true}`), 1<<20, &ContentResult{}))
 }
 
 func TestLiveCheckRPCRejectsResultContractViolations(t *testing.T) {

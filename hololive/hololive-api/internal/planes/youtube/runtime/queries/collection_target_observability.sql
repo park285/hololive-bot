@@ -1,5 +1,9 @@
 -- rpc_per_kind: 활성 kind마다 helper RPC를 따로 보내는 job(content 목록 2종)이다.
 -- 나머지 job은 bundle 한 번에 RPC 1회를 보낸다. 방송 탭 snapshot과 채널 /live 확인은 별도 job·슬롯이다.
+-- 수요는 기본 cadence의 명목값이며 재시도와 job 안의 추가 보강 호출은 포함하지 않는다.
+-- $1은 기존 LIVE 신선도 예산(ms)이다. not_before가 미래인 bundle은 신선한 근거로 잠든 대상이라
+-- due·stale·미완료·완료 나이에서 깨어날 때까지 빠지고, 수요는 예산당 최대 1회로 센다.
+-- 미획득 target의 due 기준은 연속 membership 동안 보존되는 created_at이다.
 WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
     VALUES
         ('youtubejs_channel_live', ARRAY['live_snapshot'], FALSE),
@@ -13,23 +17,30 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
     WHERE status = 'CURRENT' AND valid_until > statement_timestamp()
 ), targets AS (
     SELECT m.kind, CASE WHEN m.rpc_per_kind THEN COUNT(t.observation_kind) ELSE 1 END AS rpc_calls, t.subject_key,
-           MIN(t.poll_interval_ms) AS interval_ms, MIN(t.created_at) AS created_at
+           MIN(t.poll_interval_ms) AS interval_ms, MIN(t.created_at) AS created_at,
+           -- bundle 안 한 row라도 확인 가능하면 신규 admission 대상이다.
+           MIN(COALESCE(t.not_before, '-infinity'::timestamptz)) AS eligible_at
     FROM mapping m
     JOIN youtube_collection_targets t ON t.observation_kind = ANY(m.observation_kinds)
     JOIN current_projection g ON g.generation = t.projection_generation
     WHERE t.enabled AND t.valid_until > statement_timestamp()
     GROUP BY m.kind, m.rpc_per_kind, t.subject_key
-), samples AS (
-    SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, l.last_completed_at,
+), leased AS (
+    SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, t.eligible_at, l.last_completed_at,
            CASE
                WHEN l.job_key IS NULL THEN t.created_at
                WHEN l.slot_state = 'IDLE' THEN l.next_due_at
                WHEN l.slot_state = 'DEFERRED' THEN l.retry_not_before
                WHEN l.slot_state = 'ACTIVE' THEN l.lease_expires_at
-           END AS due_at
+           END AS lease_due_at
     FROM targets t
     LEFT JOIN youtube_collection_job_leases l
       ON l.job_key = 'collector:youtubejs:' || t.kind || ':' || t.subject_key
+), samples AS (
+    SELECT kind, rpc_calls, subject_key, interval_ms, eligible_at, last_completed_at,
+           GREATEST(lease_due_at, eligible_at) AS due_at,
+           eligible_at > statement_timestamp() AS sleeping
+    FROM leased
 ), active_live_videos AS (
     SELECT video_id FROM youtube_live_reconciliation_heads WHERE status IN ('LIVE', 'UPCOMING')
     UNION
@@ -82,12 +93,13 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
 ), target_summary AS (
     SELECT m.kind, EXISTS(SELECT 1 FROM current_projection) AS projection_valid,
            COUNT(s.subject_key) AS targets,
-           COUNT(s.subject_key) FILTER (WHERE s.last_completed_at IS NULL) AS never_completed,
-           COUNT(s.subject_key) FILTER (WHERE s.last_completed_at < statement_timestamp() - s.interval_ms * INTERVAL '1 millisecond') AS stale,
-           COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp() - s.last_completed_at), 0)), 0)::double precision AS oldest_completion_age,
+           COUNT(s.subject_key) FILTER (WHERE s.last_completed_at IS NULL AND NOT s.sleeping) AS never_completed,
+           COUNT(s.subject_key) FILTER (WHERE s.last_completed_at IS NOT NULL
+               AND GREATEST(s.last_completed_at + s.interval_ms * INTERVAL '1 millisecond', s.eligible_at) < statement_timestamp()) AS stale,
+           COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp() - s.last_completed_at), 0)) FILTER (WHERE NOT s.sleeping), 0)::double precision AS oldest_completion_age,
            COUNT(s.subject_key) FILTER (WHERE s.due_at <= statement_timestamp()) AS due,
            COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp() - s.due_at), 0)), 0)::double precision AS oldest_due_age,
-           COALESCE(SUM(s.rpc_calls * 1000.0 / s.interval_ms), 0)::double precision AS required_rpc_rate
+           COALESCE(SUM(s.rpc_calls * 1000.0 / CASE WHEN s.sleeping THEN GREATEST(s.interval_ms, $1::bigint) ELSE s.interval_ms END), 0)::double precision AS required_rpc_rate
     FROM mapping m LEFT JOIN samples s ON s.kind = m.kind
     GROUP BY m.kind
 )

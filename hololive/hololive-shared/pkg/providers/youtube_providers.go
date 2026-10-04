@@ -27,56 +27,18 @@ import (
 	"github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
-// ProvideScraperServiceWithOfficialSchedule는 runtime 설정(appConfig.YouTube, OfficialScheduleRuntime)으로
-// 스크래퍼 서비스를 만든다. 패키지 기본값 변형은 두지 않는다.
+// ProvideScraperServiceWithOfficialSchedule는 적재한 공식 일정 runtime 설정(OfficialScheduleRuntime)으로 Holodex
+// 일정 폴백이 쓰는 공식 일정 서비스를 만든다. 패키지 기본값 변형은 두지 않는다.
 func ProvideScraperServiceWithOfficialSchedule(
 	members domain.MemberDataProvider,
-	youtubeConfig settings.YouTubeConfig,
-	sharedRL *ratelimiter.RateLimiter,
 	logger *slog.Logger,
 	official settings.OfficialScheduleRuntimeConfig,
 ) (*htmlscraper.Service, error) {
-	service, err := htmlscraper.NewServiceWithOfficialSchedule(
-		members,
-		scraper.NewClient(youtubeConfig, scraper.WithRateLimiter(sharedRL)),
-		logger,
-		official,
-	)
+	service, err := htmlscraper.NewService(members, nil, logger, official)
 	if err != nil {
 		return nil, fmt.Errorf("provide scraper service: %w", err)
-	}
-
-	return service, nil
-}
-
-// ProvideScraperServiceWithYouTubeClient는 공식 일정 runtime 설정을 env에서 엄격하게 읽어 스크래퍼 서비스를 만든다.
-// 잘못된 값은 기본값으로 바꾸지 않고 오류다.
-func ProvideScraperServiceWithYouTubeClient(
-	members domain.MemberDataProvider,
-	youtubeClient *scraper.Client,
-	logger *slog.Logger,
-) (*htmlscraper.Service, error) {
-	official, err := settings.LoadOfficialScheduleRuntimeConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load official schedule runtime config: %w", err)
-	}
-
-	return ProvideScraperServiceWithYouTubeClientAndSchedule(members, youtubeClient, logger, official)
-}
-
-func ProvideScraperServiceWithYouTubeClientAndSchedule(
-	members domain.MemberDataProvider,
-	youtubeClient *scraper.Client,
-	logger *slog.Logger,
-	official settings.OfficialScheduleRuntimeConfig,
-) (*htmlscraper.Service, error) {
-	service, err := htmlscraper.NewServiceWithOfficialSchedule(members, youtubeClient, logger, official)
-	if err != nil {
-		return nil, fmt.Errorf("provide scraper service with youtube client: %w", err)
 	}
 
 	return service, nil

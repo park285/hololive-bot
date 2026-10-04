@@ -2,7 +2,6 @@ package collectorruntime
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -32,7 +31,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 		return
 	}
 
-	dbCtx, cancel := context.WithTimeout(ctx, s.executor.collector.DBTimeout)
+	dbCtx, cancel := context.WithTimeout(ctx, s.dbTimeout)
 	generation, err := source.CurrentProjectionGeneration(dbCtx)
 
 	cancel()
@@ -54,14 +53,14 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 	start := startCursor % len(runners)
 	outcome := runCapacityAwareCycle(&capacityCycleRequest{
-		runnerIDs: runnerIDs(runners),
-		start:     start,
-		remaining: free,
-		batch:     s.executor.config.AcquisitionBatch,
-		excluded:  excluded,
-		query:     s.queryRunnerPage(ctx, source, generation, runners),
-		enqueue:   func(spec *joblease.JobSpec) EnqueueResult { return s.enqueueDiscovered(ctx, spec) },
-		warnFull:  s.warnQueueFullOnce(),
+		runnerCount: len(runners),
+		start:       start,
+		remaining:   free,
+		batch:       s.acquisitionBatch,
+		excluded:    excluded,
+		query:       s.queryRunnerPage(ctx, source, generation, runners),
+		enqueue:     func(spec *joblease.JobSpec) EnqueueResult { return s.enqueueDiscovered(ctx, spec) },
+		warnFull:    s.warnQueueFullOnce(),
 	})
 	s.recordCycle(started, generation, &outcome, start, len(runners))
 
@@ -72,7 +71,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 func (s *leaseScheduler) enqueueDiscovered(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
 	result := s.enqueue(ctx, spec)
-	s.executor.metrics.ObserveEnqueue(result)
+	s.metrics.ObserveEnqueue(result)
 
 	return result
 }
@@ -81,14 +80,14 @@ func (s *leaseScheduler) warnQueueFullOnce() func() {
 	warned := false
 
 	return func() {
-		if warned || s.executor.logger == nil {
+		if warned || s.logger == nil {
 			return
 		}
 
 		warned = true
 
-		s.executor.logger.Warn("YouTube collector local queue is full",
-			"queue_capacity", s.executor.config.QueueCapacity,
+		s.logger.Warn("YouTube collector local queue is full",
+			"queue_capacity", s.queueCapacity,
 		)
 	}
 }
@@ -114,7 +113,7 @@ func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, start
 
 	queued := len(s.queued)
 
-	free = max(s.executor.config.QueueCapacity-queued, 0)
+	free = max(s.queueCapacity-queued, 0)
 	excluded = make([]string, 0, queued)
 
 	for key := range s.queued {
@@ -127,8 +126,6 @@ func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, start
 
 	startCursor = s.rotationCursor
 	s.cycleMu.Unlock()
-
-	slices.Sort(excluded)
 
 	return free, excluded, startCursor
 }
@@ -230,16 +227,8 @@ func (s *leaseScheduler) logRunnerDiscoveryFailure(ctx context.Context, failure 
 		return
 	}
 
-	for _, runner := range runners {
-		id := runner.Contract().ID()
-		if id.String() != failure.runnerID {
-			continue
-		}
-
-		spec := joblease.JobSpec{Provider: id.Provider, CollectionJobKind: string(id.Kind)}
-		proof := contract.LeaseProof{}
-		s.executor.logFailure(ctx, "candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(failure.err)), collecterr.DiagnosticOf(failure.err).Detail(), &spec, &proof)
-
-		return
-	}
+	id := runners[failure.runner].Contract().ID()
+	spec := joblease.JobSpec{Provider: id.Provider, CollectionJobKind: string(id.Kind)}
+	proof := contract.LeaseProof{}
+	s.executor.logFailure(ctx, "candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(failure.err)), collecterr.DiagnosticOf(failure.err).Detail(), &spec, &proof)
 }

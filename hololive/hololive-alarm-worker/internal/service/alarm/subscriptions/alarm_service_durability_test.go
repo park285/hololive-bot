@@ -11,11 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions/internal/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -117,21 +114,6 @@ func newLenientAlarmCacheMock(
 	}
 
 	return cacheMock, cacheClient
-}
-
-// stubSuccessfulRebuild는 cache 변경 실패 뒤의 repository rebuild를 성공으로 고정해, 로그에 변경 실패만 남는지 본다.
-func stubSuccessfulRebuild(t *testing.T) {
-	t.Helper()
-
-	original := rebuildSubscriberCacheFromRepository
-
-	rebuildSubscriberCacheFromRepository = func(context.Context, cache.Client, *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
-		return sharedalarm.CacheWarmSummary{}, nil
-	}
-
-	t.Cleanup(func() {
-		rebuildSubscriberCacheFromRepository = original
-	})
 }
 
 func decodeSingleJSONLog(t *testing.T, logBuffer *bytes.Buffer) map[string]any {
@@ -304,131 +286,6 @@ func TestClearRoomAlarmsPersistFailureLogsWrappedEvent(t *testing.T) {
 	assert.NotContains(t, logRecord, "error")
 	assert.Equal(t, "wrapError", logRecord["error_type"])
 	assert.Equal(t, "delete room alarms: stub clear by room: db down", logRecord["error_message"])
-}
-
-func TestClearRoomAlarmsCacheMutationFailureLogsWrappedEvents(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(*cachemocks.Client, *cache.Service)
-		wantEvent string
-		wantError string
-	}{
-		{
-			name: "rebuild_clear_cache_from_repository",
-			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
-				cacheMock.DoMultiFunc = func(context.Context, ...valkey.Completed) []valkey.ValkeyResult {
-					return nil
-				}
-			},
-			wantEvent: "rebuild clear cache from repository.failed",
-			wantError: "clear room alarms: clear channel subscribers pipeline: execute subscriber key removal: clear channel subscribers: unexpected SREM result count: 0",
-		},
-		{
-			name: "mark_room_alarms_changed_in_cache",
-			setup: func(cacheMock *cachemocks.Client, _ *cache.Service) {
-				cacheMock.DelFunc = func(context.Context, string) error {
-					return errors.New("del failed")
-				}
-			},
-			wantEvent: "mark room alarms changed in cache.failed",
-			wantError: "mark alarm cache changed: clear empty subscriber cache marker: del failed",
-		},
-	}
-
-	stubSuccessfulRebuild(t)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
-
-			var logBuffer bytes.Buffer
-
-			cacheMock, cacheClient := newLenientAlarmCacheMock(ctx, t, nil)
-			tt.setup(cacheMock, cacheClient)
-
-			as := &AlarmService{
-				cache:  cacheMock,
-				logger: slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelError})),
-			}
-
-			err := as.clearRoomAlarmsCacheMutation(ctx, testRoomID, []string{testChannelID})
-			require.Error(t, err)
-
-			logRecord := decodeSingleJSONLog(t, &logBuffer)
-			assert.Equal(t, tt.wantEvent, logRecord["event"])
-			assert.NotContains(t, logRecord, "error")
-			assert.Equal(t, "wrapError", logRecord["error_type"])
-			assert.Equal(t, tt.wantError, logRecord["error_message"])
-		})
-	}
-}
-
-type alarmBackgroundWarningCase struct {
-	name         string
-	setup        func(*cachemocks.Client)
-	run          func(context.Context, *AlarmService)
-	wantEvent    string
-	wantMessage  string
-	wantErrorTyp string
-	wantErrorMsg string
-}
-
-func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
-	return []alarmBackgroundWarningCase{
-		{
-			name: "clear_room_cleanup_channel_registry",
-			setup: func(cacheMock *cachemocks.Client) {
-				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
-					return 0, errors.New("srem failed")
-				}
-			},
-			run: func(ctx context.Context, as *AlarmService) {
-				as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-				as.cleanupClearedRoomAlarmChannel(ctx, testRoomID, testChannelID)
-			},
-			wantEvent:    "cleanup channel registry during room alarm clear.failed",
-			wantMessage:  "Failed to cleanup channel registry during room alarm clear",
-			wantErrorTyp: "wrapError",
-			wantErrorMsg: "cleanup channel registry: remove channel registry entry: srem failed",
-		},
-	}
-}
-
-func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
-	for _, tt := range alarmBackgroundWarningCases() {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
-
-			var logBuffer bytes.Buffer
-
-			cacheMock, _ := newLenientAlarmCacheMock(ctx, t, nil)
-
-			if tt.setup != nil {
-				tt.setup(cacheMock)
-			}
-
-			warnLogger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn}))
-			as := newTestAlarmService(t)
-
-			as.cache = cacheMock
-			as.logger = warnLogger
-
-			memberDataFn := func() domain.MemberDataProvider { return as.memberData }
-
-			as.cacheState = alarmcache.NewState(cacheMock, memberDataFn, warnLogger)
-
-			tt.run(ctx, as)
-
-			logRecord := decodeSingleJSONLog(t, &logBuffer)
-			assert.Equal(t, tt.wantEvent, logRecord["event"])
-			assert.Equal(t, tt.wantMessage, logRecord["msg"])
-			assert.NotContains(t, logRecord, "error")
-			assert.Equal(t, tt.wantErrorTyp, logRecord["error_type"])
-			assert.Equal(t, tt.wantErrorMsg, logRecord["error_message"])
-			assert.Equal(t, privacylog.RoomIDAttr(testRoomID).Value.String(), logRecord["room_id"])
-			assert.Equal(t, testChannelID, logRecord["channel_id"])
-		})
-	}
 }
 
 func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {

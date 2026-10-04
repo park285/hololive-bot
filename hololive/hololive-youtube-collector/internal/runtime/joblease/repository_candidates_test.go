@@ -9,14 +9,14 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestBuildJobKeyMatchesCandidateSQLExpression(t *testing.T) {
 	t.Parallel()
 
 	subject := "UC_TEST"
-	id := sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "community_collect"}
+	id := collection.JobID{Provider: contract.ProviderYouTubeJS, Kind: "community_collect"}
 
 	key, err := BuildJobKey(id, subject)
 	if err != nil {
@@ -35,7 +35,7 @@ func TestBuildJobKeyMatchesCandidateSQLExpression(t *testing.T) {
 		t.Fatalf("subject candidate SQL must inline BuildJobKey expression %s", expr)
 	}
 
-	globalID := sourceobservation.JobID{Provider: contract.ProviderHolodex, Kind: "holodex_live"}
+	globalID := collection.JobID{Provider: contract.ProviderHolodex, Kind: "holodex_live"}
 	globalKey, err := BuildJobKey(globalID, "global:holodex_live")
 
 	if err != nil || globalKey != "collector:holodex:holodex_live:global" {
@@ -97,7 +97,7 @@ func TestCandidatesForProjectionStaleGeneration(t *testing.T) {
 	job := mustTestJob(t, contract.ProviderYouTubeJS, "community_collect")
 	_, err := repository.CandidatesForProjection(ctx, 1_000_000, job, nil, 4)
 
-	if !errors.Is(err, ErrProjectionStale) {
+	if !errors.Is(err, collection.ErrProjectionStale) {
 		t.Fatalf("stale generation error = %v", err)
 	}
 }
@@ -155,7 +155,7 @@ func TestSCH008GlobalNotDueReturnsEmptyPage(t *testing.T) {
 	repository := newTestRepository(t, pool)
 	spec := JobSpec{
 		JobKey: "collector:hololive_official:official_schedule:global", Provider: contract.ProviderHololiveOfficial,
-		Class: "GLOBAL", CollectionJobKind: "official_schedule",
+		Class: testGlobalClass, CollectionJobKind: "official_schedule",
 		SubjectKey: subjectGlobalSchedule, PollInterval: time.Minute,
 	}
 
@@ -264,11 +264,11 @@ func TestCandidatesForProjectionQueryPlansAreAvailable(t *testing.T) {
 	t.Logf("TRACK candidate EXPLAIN (no performance claim):\n%s", plan.String())
 }
 
-func mustTestJob(t *testing.T, provider contract.Provider, kind string) sourceobservation.JobContract {
+func mustTestJob(t *testing.T, provider contract.Provider, kind string) collection.JobContract {
 	t.Helper()
 
-	job, ok := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
-		Provider: provider, Kind: sourceobservation.JobKind(kind),
+	job, ok := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: provider, Kind: collection.JobKind(kind),
 	})
 	if !ok {
 		t.Fatalf("missing job contract %s/%s", provider, kind)

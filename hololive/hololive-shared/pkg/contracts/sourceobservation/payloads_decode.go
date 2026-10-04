@@ -93,6 +93,10 @@ func decodeCommunityPayload(raw []byte, input payloadDecodeInput) (payload, cove
 }
 
 func decodeVideoListPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
+	if input.contractGeneration != VideoListLegacyContractGeneration && input.contractGeneration != VideoListPublicationContractGeneration {
+		return nil, nil, fmt.Errorf("unsupported video list contract generation %d", input.contractGeneration)
+	}
+
 	value := VideoListV1{}
 	if err := decodeStrictJSON(raw, &value); err != nil {
 		return nil, nil, fmt.Errorf("decode video list payload: %w", err)
@@ -100,6 +104,12 @@ func decodeVideoListPayload(raw []byte, input payloadDecodeInput) (payload, cove
 
 	if err := value.normalizeAndValidate(input.subjectKey); err != nil {
 		return nil, nil, fmt.Errorf("normalize and validate: %w", err)
+	}
+
+	for i := range value.Videos {
+		if err := validateVideoListItemGeneration(&value.Videos[i], input.contractGeneration, input.observedAt); err != nil {
+			return nil, nil, fmt.Errorf("validate video publication: %w", err)
+		}
 	}
 
 	if err := validatePaginatedCompleteness(KindVideoList, input.completeness, value.Coverage.Exhausted); err != nil {
@@ -117,6 +127,12 @@ func decodeShortsListPayload(raw []byte, input payloadDecodeInput) (payload, cov
 
 	if err := value.normalizeAndValidate(input.subjectKey); err != nil {
 		return nil, nil, fmt.Errorf("normalize and validate: %w", err)
+	}
+
+	for i := range value.Videos {
+		if value.Videos[i].Publication != nil {
+			return nil, nil, errors.New("shorts list must not carry video publication evidence")
+		}
 	}
 
 	if err := validatePaginatedCompleteness(KindShortsList, input.completeness, value.Coverage.Exhausted); err != nil {

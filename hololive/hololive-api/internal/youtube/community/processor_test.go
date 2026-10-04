@@ -6,7 +6,6 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
@@ -16,113 +15,7 @@ const (
 	testCanonicalPostID = "community:post-1"
 )
 
-func TestBuildPostArtifactsKeepsCanonicalIDAndNotificationPayload(t *testing.T) {
-	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
-	detectedAt := time.Date(2026, time.August, 13, 8, 0, 0, 0, time.UTC)
-	post, tracking, notification := BuildPostArtifacts(
-		testChannelID,
-		&parser.CommunityPost{
-			PostID:       testPostID,
-			AuthorName:   "Author",
-			ContentText:  "hello world",
-			PublishedAt:  &publishedAt,
-			LikeCount:    1,
-			CommentCount: 2,
-		},
-		true,
-		detectedAt,
-		nil,
-	)
-
-	if post == nil || post.PostID != testCanonicalPostID {
-		t.Fatalf("post = %#v, want canonical community:post-1", post)
-	}
-
-	if tracking == nil || tracking.ContentID != testCanonicalPostID || tracking.DetectedAt != detectedAt {
-		t.Fatalf("tracking = %#v", tracking)
-	}
-
-	if notification == nil {
-		t.Fatal("expected notification")
-	}
-
-	if !strings.Contains(notification.Payload, `"canonical_post_id":"community:post-1"`) {
-		t.Fatalf("notification payload missing canonical id: %s", notification.Payload)
-	}
-
-	if !strings.Contains(notification.Payload, `"post_id":"post-1"`) {
-		t.Fatalf("notification payload missing upstream post id: %s", notification.Payload)
-	}
-
-	if !strings.Contains(notification.Payload, `"published_at":"`+yttimestamp.Format(publishedAt)+`"`) {
-		t.Fatalf("notification payload missing published_at: %s", notification.Payload)
-	}
-}
-
-func TestPayloadFromPostsRoundTripsParserFields(t *testing.T) {
-	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
-	posts := []*parser.CommunityPost{{
-		PostID:         testPostID,
-		UpstreamPostID: "up-1",
-		AuthorID:       "UC_AUTHOR",
-		AuthorName:     "Author",
-		ContentText:    "hello world",
-		PublishedText:  "1 day ago",
-		PublishedAt:    &publishedAt,
-		LikeCount:      3,
-		CommentCount:   4,
-		VideoID:        "video-1",
-		AuthorPhoto:    []parser.Thumbnail{{URL: "https://img.test/a.jpg", Width: 88, Height: 88}},
-	}}
-	payload := PayloadFromPosts(testChannelID, posts, 10, true)
-
-	if payload.ChannelID != testChannelID || len(payload.Posts) != 1 {
-		t.Fatalf("payload = %#v", payload)
-	}
-
-	if payload.Posts[0].ChannelID != testChannelID || payload.Posts[0].PostID != testPostID {
-		t.Fatalf("mapped post = %#v", payload.Posts[0])
-	}
-
-	if payload.Coverage.ChannelID != testChannelID || !payload.Coverage.Exhausted {
-		t.Fatalf("coverage = %#v", payload.Coverage)
-	}
-
-	roundTrip := PostsFromPayload(payload.Posts)
-	if len(roundTrip) != 1 || roundTrip[0].PostID != testPostID || roundTrip[0].VideoID != "video-1" {
-		t.Fatalf("round trip = %#v", roundTrip)
-	}
-}
-
-func TestArtifactsFromPayloadPersistsWholeWindowAndNotifiesOnlyUnknownPosts(t *testing.T) {
-	payload := contract.CommunityPayloadV1{
-		ChannelID: testChannelID,
-		Posts: []contract.CommunityPostV1{
-			{PostID: "pinned", ChannelID: testChannelID},
-			{PostID: "new-post", ChannelID: testChannelID},
-			{PostID: "known-post", ChannelID: testChannelID},
-		},
-	}
-	known := map[string]struct{}{
-		"community:pinned":     {},
-		"community:known-post": {},
-	}
-
-	batch := ArtifactsFromPayload(&payload, true, known, time.Date(2026, time.August, 13, 8, 0, 0, 0, time.UTC), nil)
-	if len(batch.Posts) != 3 {
-		t.Fatalf("persisted posts = %d, want 3", len(batch.Posts))
-	}
-
-	if len(batch.Notifications) != 1 || batch.Notifications[0].ContentID != "community:new-post" {
-		t.Fatalf("notifications = %#v, want new-post only", batch.Notifications)
-	}
-
-	if len(batch.Tracking) != 1 || batch.Tracking[0].ContentID != "community:new-post" {
-		t.Fatalf("tracking = %#v, want new-post only", batch.Tracking)
-	}
-}
-
-func TestArtifactsFromPayloadMatchPollerCanonicalRules(t *testing.T) {
+func TestWindowArtifactsKeepCanonicalIDAndNotificationPayload(t *testing.T) {
 	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 	detectedAt := time.Date(2026, time.August, 13, 8, 0, 0, 0, time.UTC)
 	payload := contract.CommunityPayloadV1{
@@ -137,27 +30,73 @@ func TestArtifactsFromPayloadMatchPollerCanonicalRules(t *testing.T) {
 			CommentCount: 2,
 		}},
 	}
-	batch := ArtifactsFromPayload(&payload, true, nil, detectedAt, nil)
+
+	batch := NormalizeWindow(&payload).Artifacts(true, nil, detectedAt)
 
 	if len(batch.Posts) != 1 || batch.Posts[0].PostID != testCanonicalPostID {
-		t.Fatalf("posts = %#v", batch.Posts)
+		t.Fatalf("posts = %#v, want canonical community:post-1", batch.Posts)
 	}
 
 	if batch.Watermark == nil || batch.Watermark.LastContentID != testCanonicalPostID {
 		t.Fatalf("watermark = %#v, want community:post-1", batch.Watermark)
 	}
 
-	if len(batch.Notifications) != 1 || len(batch.Tracking) != 1 {
-		t.Fatalf("notifications=%d tracking=%d, want 1", len(batch.Notifications), len(batch.Tracking))
+	if len(batch.Tracking) != 1 || batch.Tracking[0].ContentID != testCanonicalPostID || batch.Tracking[0].DetectedAt != detectedAt {
+		t.Fatalf("tracking = %#v", batch.Tracking)
+	}
+
+	if len(batch.Notifications) != 1 {
+		t.Fatalf("notifications = %#v, want one", batch.Notifications)
+	}
+
+	notification := batch.Notifications[0]
+	if !strings.Contains(notification.Payload, `"canonical_post_id":"community:post-1"`) {
+		t.Fatalf("notification payload missing canonical id: %s", notification.Payload)
+	}
+
+	if !strings.Contains(notification.Payload, `"post_id":"post-1"`) {
+		t.Fatalf("notification payload missing upstream post id: %s", notification.Payload)
+	}
+
+	if !strings.Contains(notification.Payload, `"published_at":"`+yttimestamp.Format(publishedAt)+`"`) {
+		t.Fatalf("notification payload missing published_at: %s", notification.Payload)
 	}
 }
 
-func TestArtifactsFromPayloadFirstWindowOmitsNotifications(t *testing.T) {
+func TestWindowArtifactsPersistWholeWindowAndNotifyOnlyUnknownPosts(t *testing.T) {
+	payload := contract.CommunityPayloadV1{
+		ChannelID: testChannelID,
+		Posts: []contract.CommunityPostV1{
+			{PostID: "pinned", ChannelID: testChannelID},
+			{PostID: "new-post", ChannelID: testChannelID},
+			{PostID: "known-post", ChannelID: testChannelID},
+		},
+	}
+	known := map[string]struct{}{
+		"community:pinned":     {},
+		"community:known-post": {},
+	}
+
+	batch := NormalizeWindow(&payload).Artifacts(true, known, time.Date(2026, time.August, 13, 8, 0, 0, 0, time.UTC))
+	if len(batch.Posts) != 3 {
+		t.Fatalf("persisted posts = %d, want 3", len(batch.Posts))
+	}
+
+	if len(batch.Notifications) != 1 || batch.Notifications[0].ContentID != "community:new-post" {
+		t.Fatalf("notifications = %#v, want new-post only", batch.Notifications)
+	}
+
+	if len(batch.Tracking) != 1 || batch.Tracking[0].ContentID != "community:new-post" {
+		t.Fatalf("tracking = %#v, want new-post only", batch.Tracking)
+	}
+}
+
+func TestWindowArtifactsFirstWindowOmitsNotifications(t *testing.T) {
 	payload := contract.CommunityPayloadV1{
 		ChannelID: testChannelID,
 		Posts:     []contract.CommunityPostV1{{PostID: testPostID, ChannelID: testChannelID, ContentText: "hello world"}},
 	}
-	batch := ArtifactsFromPayload(&payload, false, nil, time.Date(2026, time.August, 13, 8, 0, 0, 0, time.UTC), nil)
+	batch := NormalizeWindow(&payload).Artifacts(false, nil, time.Date(2026, time.August, 13, 8, 0, 0, 0, time.UTC))
 
 	if len(batch.Posts) != 1 || batch.Posts[0].PostID != testCanonicalPostID {
 		t.Fatalf("posts = %#v", batch.Posts)
@@ -169,20 +108,5 @@ func TestArtifactsFromPayloadFirstWindowOmitsNotifications(t *testing.T) {
 
 	if batch.Watermark == nil || batch.Watermark.LastContentID != testCanonicalPostID {
 		t.Fatalf("watermark = %#v, want community:post-1", batch.Watermark)
-	}
-}
-
-func TestNormalizeKeywordsAndMatch(t *testing.T) {
-	keywords := NormalizeKeywords([]string{" HoloLive ", "", "STREAM", "stream"})
-	if len(keywords) != 2 || keywords[0] != "hololive" || keywords[1] != "stream" {
-		t.Fatalf("keywords = %#v", keywords)
-	}
-
-	if !MatchesKeywords("Tonight's HOLOLIVE schedule", keywords) {
-		t.Fatal("expected hololive match")
-	}
-
-	if MatchesKeywords("unrelated post", keywords) {
-		t.Fatal("unexpected keyword match")
 	}
 }

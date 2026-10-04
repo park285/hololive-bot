@@ -345,3 +345,74 @@ test("unrecognized playability structures invalidate otherwise valid live facts"
     assert.equal(result.unknown_reason, "structure_unrecognized");
   }
 });
+
+function uploadWithPublishDate(publishDate) {
+  const scenario = videoScenarios.get("no_live_broadcast_details_in_renderer");
+  const raw = structuredClone(scenario.player);
+  raw.microformat.playerMicroformatRenderer.publishDate = publishDate;
+  return { scenario, raw };
+}
+
+test("player publishDate becomes published_at only as an exact RFC3339 instant with an offset", async () => {
+  for (const [publishDate, expected] of [
+    ["2026-09-20T10:00:00-07:00", "2026-09-20T17:00:00.000Z"],
+    ["2026-09-20T17:00:00Z", "2026-09-20T17:00:00.000Z"],
+    ["2026-09-21T02:00:00.250+09:00", "2026-09-20T17:00:00.250Z"],
+  ]) {
+    const { scenario, raw } = uploadWithPublishDate(publishDate);
+    const innertube = fakeInnertube([raw]);
+    const result = await fetchVideoLiveCheck(innertube, scenario.video_id, clock);
+    assert.deepEqual(result, { ...scenario.expected, published_at: expected });
+    assert.equal(innertube.calls.length, 1);
+    assert.deepEqual(validateVideoLiveCheckResponse({ protocol_version: 1, ...result }), {
+      protocol_version: 1,
+      ...scenario.expected,
+      published_at: expected,
+    });
+  }
+});
+
+test("date-only, offsetless, localized or impossible publishDate values are omitted without changing availability", async () => {
+  for (const publishDate of [
+    "2026-09-20",
+    "2026-09-20T10:00:00",
+    "2026-09-20 10:00:00Z",
+    "Sep 20, 2026",
+    "2026-02-30T10:00:00Z",
+    "",
+    1789894800,
+    null,
+    { simpleText: "2026-09-20T10:00:00Z" },
+  ]) {
+    const { scenario, raw } = uploadWithPublishDate(publishDate);
+    const result = await fetchVideoLiveCheck(fakeInnertube([raw]), scenario.video_id, clock);
+    assert.deepEqual(result, scenario.expected, `publishDate ${JSON.stringify(publishDate)}`);
+  }
+});
+
+test("publishDate is never attributed to an unconfirmed or mismatched video", async () => {
+  for (const name of ["video_identity_mismatch", "missing_channel_identity"]) {
+    const scenario = videoScenarios.get(name);
+    const raw = structuredClone(scenario.player);
+    raw.microformat = { playerMicroformatRenderer: { publishDate: "2026-09-20T17:00:00Z" } };
+    const result = await fetchVideoLiveCheck(fakeInnertube([raw]), scenario.video_id, clock);
+    assert.equal(result.identity_confirmed, false);
+    assert.equal(Object.hasOwn(result, "published_at"), false);
+  }
+});
+
+test("video live check response validation keeps published_at canonical and identity-bound", () => {
+  const base = {
+    protocol_version: 1, video_id: "v", channel_id: "UC", identity_confirmed: true,
+    is_private: false, availability: "PUBLIC", method: "player_public",
+  };
+  assert.equal(validateVideoLiveCheckResponse({ ...base, published_at: "2026-09-20T17:00:00.000Z" }).published_at,
+    "2026-09-20T17:00:00.000Z");
+  for (const published_at of ["2026-09-20", "2026-09-20T17:00:00Z", "2026-09-20T10:00:00-07:00", 1789894800]) {
+    assert.throws(() => validateVideoLiveCheckResponse({ ...base, published_at }), (error) => error.code === "parser_drift");
+  }
+  assert.throws(() => validateVideoLiveCheckResponse({
+    protocol_version: 1, video_id: "v", identity_confirmed: false, published_at: "2026-09-20T17:00:00.000Z",
+    availability: "UNKNOWN", method: "unknown", unknown_reason: "identity_missing",
+  }), (error) => error.code === "parser_drift");
+});

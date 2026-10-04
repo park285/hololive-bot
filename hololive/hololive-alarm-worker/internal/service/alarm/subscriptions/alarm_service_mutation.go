@@ -26,7 +26,6 @@ import (
 
 type addAlarmMutation struct {
 	record          *domain.Alarm
-	cacheRecord     domain.Alarm
 	newlyAddedTypes domain.AlarmTypes
 	existing        bool
 }

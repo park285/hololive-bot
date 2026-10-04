@@ -64,52 +64,12 @@ func DefaultHolodexOperationalConfig() HolodexConfig {
 	}
 }
 
-func DefaultYouTubeOperationalConfig() YouTubeConfig {
-	return YouTubeConfig{
-		MaxPageBodyBytes:     8 << 20,
-		ScraperHTTPTimeout:   15 * time.Second,
-		ScraperDialTimeout:   5 * time.Second,
-		ScraperHeaderTimeout: 12 * time.Second,
-		CommunityMissingTTL:  24 * time.Hour,
-		RequestInterval:      3 * time.Second,
-		// BucketBase의 youtube:producer는 2026-08-25 퇴역한 producer 시절 이름이지만, hololive-api와 alarm-worker의
-		// scraping client가 함께 쓰는 분산 rate limit bucket 식별자다. 한쪽만 바꾸면 두 runtime의 rate limit 예산이
-		// 나뉘므로 모든 소비 runtime을 한 release로 바꾸는 전환 계획이 DEC로 확정되기 전에는 바꾸지 않는다
-		// (stack-audit 2026-09-26 C9). 이 접두사를 쓰던 scraper 상태 key(community-missing, channel-health,
-		// snapshot-interval)는 Valkey 책임 축소 A12에서 코드와 함께 지웠다.
-		DistributedRateLimit: DistributedRateLimitConfig{
-			Enabled:    true,
-			Limit:      1,
-			Window:     3 * time.Second,
-			KeyPrefix:  "ratelimit:sliding",
-			BucketBase: "youtube:producer",
-		},
-	}
-}
-
 func DefaultOfficialScheduleConfig() OfficialScheduleConfig {
 	return OfficialScheduleConfig{
 		BaseURL:      "https://schedule.hololive.tv",
 		Timeout:      15 * time.Second,
 		PageCacheTTL: 15 * time.Second,
 	}
-}
-
-func LoadOfficialScheduleRuntimeConfig() (OfficialScheduleRuntimeConfig, error) {
-	officialSchedule, err := loadOfficialScheduleConfig()
-	if err != nil {
-		return OfficialScheduleRuntimeConfig{}, err
-	}
-
-	maxResponseBodyBytes, err := loadMaxResponseBodyBytes()
-	if err != nil {
-		return OfficialScheduleRuntimeConfig{}, err
-	}
-
-	return OfficialScheduleRuntimeConfig{
-		OfficialSchedule:     officialSchedule,
-		MaxResponseBodyBytes: maxResponseBodyBytes,
-	}, nil
 }
 
 func loadMaxResponseBodyBytes() (int64, error) {

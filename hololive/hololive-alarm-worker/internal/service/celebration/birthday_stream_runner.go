@@ -88,7 +88,7 @@ func (r *BirthdayStreamRunner) RunOnce(ctx context.Context) error {
 	errs := make([]error, 0, len(dates))
 
 	for _, kstDay := range dates {
-		if err := r.runForDate(ctx, now, kstDay); err != nil {
+		if err := r.runForDate(ctx, kstDay); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -112,7 +112,7 @@ func kstDayStart(t time.Time) time.Time {
 	return time.Date(kst.Year(), kst.Month(), kst.Day(), 0, 0, 0, 0, kst.Location())
 }
 
-func (r *BirthdayStreamRunner) runForDate(ctx context.Context, now, kstDay time.Time) error {
+func (r *BirthdayStreamRunner) runForDate(ctx context.Context, kstDay time.Time) error {
 	members, err := r.memberRepo.FindMembersWithBirthdayOn(ctx, int(kstDay.Month()), kstDay.Day())
 	if err != nil {
 		return fmt.Errorf("birthday stream runner: find birthday members: %w", err)
@@ -123,13 +123,16 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, now, kstDay time.
 		return nil
 	}
 
+	// 생일 날짜 판정 시각과 관측 조회 시각을 분리해 멤버 조회 중 갱신된 세션도 포함한다.
+	observedUntil := r.effectiveNow()
+
 	sessions, err := r.sessions.FindBirthdaySessions(
 		ctx,
 		memberChannelIDs(members),
 		kstDay.UTC(),
 		kstDay.Add(24*time.Hour).UTC(),
-		now.Add(-r.effectiveFreshness()),
-		now,
+		observedUntil.Add(-r.effectiveFreshness()),
+		observedUntil,
 	)
 	if err != nil {
 		return fmt.Errorf("find birthday sessions: %w", err)

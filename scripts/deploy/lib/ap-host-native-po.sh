@@ -70,8 +70,10 @@ po_snapshot_previous() {
 }
 
 po_restore_previous() {
-  local previous="${1:-}" contract state
-  sudo -n systemctl disable --now "$po_service" "$po_socket" >/dev/null 2>&1 || true
+  local previous="${1:-}" contract state stop_status=0
+  sudo -n systemctl disable --now "$po_service" "$po_socket" >/dev/null 2>&1 || stop_status=$?
+  # 없는 unit의 기존 정리 계약은 유지하되 중단된 systemctl을 완료로 간주하지 않습니다.
+  (( stop_status < 128 )) || return "$stop_status"
   if [[ -z "$previous" ]]; then
     state=absent
   else

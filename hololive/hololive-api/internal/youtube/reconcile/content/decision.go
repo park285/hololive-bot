@@ -7,12 +7,21 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// refreshNotifications는 Shorts는 처음 본 영상과 저장된 기준 목록으로, 일반 영상·Premiere는 신규성 판정 결과로 알림을 만듭니다.
 func refreshNotifications(session *reduceSession) {
 	session.notifications = session.notifications[:0]
 
-	for videoID, entity := range session.applied {
-		state, ok := session.state.Videos[videoID]
-		if !ok || !canNotifyNewContent(session, state.FirstPositiveEffectiveAt) {
+	candidates := session.novel
+	if session.evidence.Kind == contract.KindShortsList {
+		candidates = session.applied
+		if !session.state.Initialized {
+			// 알림 기준 목록은 전체 이력 수집이 아니라 앞선 유효 목록의 저장으로 확정됩니다.
+			candidates = nil
+		}
+	}
+
+	for videoID, entity := range candidates {
+		if _, ok := session.state.Videos[videoID]; !ok {
 			continue
 		}
 
@@ -23,17 +32,6 @@ func refreshNotifications(session *reduceSession) {
 			Video:     entity,
 		})
 	}
-}
-
-func canNotifyNewContent(session *reduceSession, firstPositiveAt time.Time) bool {
-	if session.evidence.Kind == contract.KindShortsList {
-		// 알림 기준 목록은 전체 이력 수집이 아니라 앞선 유효 목록의 저장으로 확정됩니다.
-		return session.state.Initialized
-	}
-
-	earliest := session.state.EarliestCompleteAt
-
-	return earliest != nil && firstPositiveAt.After(*earliest)
 }
 
 func watermarkOf(state *State, evidence *Evidence) *domain.YouTubeContentWatermark {

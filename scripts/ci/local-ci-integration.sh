@@ -8,7 +8,6 @@ INTEGRATION_TEST_PACKAGES=(
 )
 INTEGRATION_TAG_PACKAGES=(
     ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
-    ./hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
 )
 INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}"
 INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11}"

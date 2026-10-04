@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 type Fetcher interface {
@@ -42,37 +42,37 @@ func NewScheduleRunner(client Fetcher) *Runner {
 	}
 }
 
-func (r *Runner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderHolodex, Kind: sourceobservation.JobKind(r.jobKind)}
+func (r *Runner) JobID() collection.JobID {
+	return collection.JobID{Provider: contract.ProviderHolodex, Kind: collection.JobKind(r.jobKind)}
 }
 
-func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func (r *Runner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex client is not configured")
+		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex client is not configured")
 	}
 
 	if input == nil {
-		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
 
 	body, err := r.client.Fetch(ctx)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("fetch: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("fetch: %w", err)
 	}
 
 	rows, err := parseLiveRows(body)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("parse live rows: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("parse live rows: %w", err)
 	}
 
 	envelopes, err := r.buildBatch(input, rows)
 	if err != nil {
-		return collectutil.CollectResult{}, fmt.Errorf("build batch: %w", err)
+		return collection.CollectResult{}, fmt.Errorf("build batch: %w", err)
 	}
 
-	out, err := collectutil.CompleteFromEnvelopes(envelopes, started)
+	out, err := collection.CompleteFromEnvelopes(envelopes, started)
 	if err != nil {
 		return out, fmt.Errorf("complete from envelopes: %w", err)
 	}
@@ -80,7 +80,7 @@ func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (coll
 	return out, nil
 }
 
-func (r *Runner) buildBatch(input *collectutil.RunInput, rows []parsedLive) ([]contract.Envelope, error) {
+func (r *Runner) buildBatch(input *collection.RunInput, rows []parsedLive) ([]contract.Envelope, error) {
 	requested, err := r.requestedIDs(input)
 	if err != nil {
 		return nil, fmt.Errorf("requested IDs: %w", err)
@@ -128,7 +128,7 @@ func groupByRequestedChannel(rows []parsedLive, allowed map[string]struct{}) map
 	return byChannel
 }
 
-func (r *Runner) channelEnvelopes(input *collectutil.RunInput, job sourceobservation.JobContract, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
+func (r *Runner) channelEnvelopes(input *collection.RunInput, job collection.JobContract, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
 	kindCount := 0
 
 	for _, kind := range [...]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindChannelPhoto} {
@@ -153,7 +153,7 @@ func (r *Runner) channelEnvelopes(input *collectutil.RunInput, job sourceobserva
 	return envelopes, nil
 }
 
-func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, job sourceobservation.JobContract, envelopes []contract.Envelope, channelID string, sessions []parsedLive) ([]contract.Envelope, error) {
+func (r *Runner) channelEnvelopesFor(input *collection.RunInput, job collection.JobContract, envelopes []contract.Envelope, channelID string, sessions []parsedLive) ([]contract.Envelope, error) {
 	if job.Emits(contract.KindLiveSnapshot) {
 		if err := input.RequireLiveSnapshotMetadataGeneration(); err != nil {
 			return nil, fmt.Errorf("require live snapshot metadata generation: %w", err)
@@ -190,7 +190,7 @@ func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, job sourceobse
 }
 
 func (r *Runner) appendChannelKind(
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	envelopes []contract.Envelope,
 	kind contract.ObservationKind,
 	channelID string,
@@ -220,7 +220,7 @@ func (r *Runner) appendChannelKind(
 
 //nolint:nilnil // 방출 대상이 아니면 봉투 없이 건너뛴다는 뜻이라 오류가 아니다.
 func (r *Runner) scheduleEnvelope(
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) (*contract.Envelope, error) {
@@ -246,7 +246,7 @@ func (r *Runner) scheduleEnvelope(
 	return &envelope, nil
 }
 
-func (r *Runner) requestedIDs(input *collectutil.RunInput) ([]string, error) {
+func (r *Runner) requestedIDs(input *collection.RunInput) ([]string, error) {
 	var ids []string
 
 	for _, kind := range input.Job().RosterKinds() {
@@ -258,10 +258,33 @@ func (r *Runner) requestedIDs(input *collectutil.RunInput) ([]string, error) {
 		ids = append(ids, subjects...)
 	}
 
-	return collectutil.UniqueSorted(ids), nil
+	return uniqueSorted(ids), nil
 }
 
-func (r *Runner) envelope(input *collectutil.RunInput, kind contract.ObservationKind, subject string, payload any) (contract.Envelope, error) {
+func uniqueSorted(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+
+	slices.Sort(result)
+
+	return result
+}
+
+func (r *Runner) envelope(input *collection.RunInput, kind contract.ObservationKind, subject string, payload any) (contract.Envelope, error) {
 	generation, err := input.Generation(kind)
 	if err != nil {
 		return contract.Envelope{}, fmt.Errorf("generation: %w", err)
@@ -269,7 +292,7 @@ func (r *Runner) envelope(input *collectutil.RunInput, kind contract.Observation
 
 	lease := input.Lease()
 
-	envelope, err := collectutil.Envelope(
+	envelope, err := collection.Envelope(
 		contract.ProviderHolodex,
 		kind,
 		subject,

@@ -1,6 +1,7 @@
 package content
 
 import (
+	"maps"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -22,6 +23,9 @@ type Entity struct {
 	ScheduledFor *time.Time
 	IsPremiere   *bool
 	IsShort      bool
+	// Publication은 video_list generation 2 항목의 player 단건 공개 근거입니다. nil이면 이번 관측에 근거가 없습니다.
+	// 값 digest에는 넣지 않으므로 근거 유무만으로 같은 영상의 값 충돌을 만들지 않습니다.
+	Publication *contract.VideoPublicationV1
 }
 
 type EntityState struct {
@@ -38,6 +42,9 @@ type EntityState struct {
 	LastAbsenceObservationID  int64
 	ConsecutiveAbsenceSlots   int
 	WithdrawnAt               *time.Time
+	// NoveltyPending은 기준 이후 처음 본 video_list 영상인데 결정적인 신규성 근거가 아직 없어 알림을 보류한 상태입니다.
+	// 이후 근거가 오면 한 번만 판정하고 FALSE로 내리므로 같은 영상의 알림이 다시 만들어지지 않습니다.
+	NoveltyPending bool
 }
 
 type AbsenceSlot struct {
@@ -76,6 +83,11 @@ type State struct {
 	Initialized        bool
 	LastContentID      string
 	EarliestCompleteAt *time.Time
+	// EarliestBaselineAt은 video_list의 첫 수락 기준 목록(비어 있지 않거나 COMPLETE인 목록) effective 시각입니다.
+	// complete 근거와 별개이며, 부분 목록은 기준만 세우고 부재 근거가 되지 않습니다.
+	EarliestBaselineAt *time.Time
+	// KnownElsewhere는 이번 관측 영상 중 다른 채널이나 다른 종류(Shorts)로 이미 저장된 영상 ID입니다.
+	KnownElsewhere map[string]struct{}
 	// Videos는 reducer가 읽는 영상(이번 관측의 영상과 clock 보유 영상)만 담는다.
 	Videos map[string]EntityState
 	// AbsenceSlots는 현재 slot과 이번 관측보다 늦은 slot만 scheduled_for 순으로 담는다.
@@ -111,6 +123,7 @@ type Decision struct {
 	Clocks             []EntityState
 	AbsenceSlot        *AbsenceSlot
 	EarliestCompleteAt *time.Time
+	EarliestBaselineAt *time.Time
 	Conflicts          []Conflict
 	Applications       []Application
 }
@@ -133,11 +146,9 @@ func (s *State) clone() State {
 		}
 	}
 
-	if s.EarliestCompleteAt != nil {
-		earliest := *s.EarliestCompleteAt
-
-		cloned.EarliestCompleteAt = &earliest
-	}
+	cloned.EarliestCompleteAt = cloneTime(s.EarliestCompleteAt)
+	cloned.EarliestBaselineAt = cloneTime(s.EarliestBaselineAt)
+	cloned.KnownElsewhere = maps.Clone(s.KnownElsewhere)
 
 	return cloned
 }
@@ -177,6 +188,14 @@ func (e Entity) clone() Entity {
 	cloned.PublishedAt = cloneTime(e.PublishedAt)
 	cloned.ScheduledFor = cloneTime(e.ScheduledFor)
 	cloned.IsPremiere = cloneBool(e.IsPremiere)
+
+	if e.Publication != nil {
+		publication := *e.Publication
+
+		publication.PublishedAt = cloneTime(e.Publication.PublishedAt)
+		publication.ScheduledFor = cloneTime(e.Publication.ScheduledFor)
+		cloned.Publication = &publication
+	}
 
 	return cloned
 }

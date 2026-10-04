@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestCollectionSpanPreservesOutcome(t *testing.T) {
@@ -26,7 +26,7 @@ func TestCollectionSpanPreservesOutcome(t *testing.T) {
 		{"failure", errors.New("private upstream detail"), resultFailed, codes.Error},
 		{"canceled", context.Canceled, "canceled", codes.Error},
 		{"timeout", context.DeadlineExceeded, "timeout", codes.Error},
-		{"fence_lost", joblease.ErrFenceLost, "outcome_unknown", codes.Error},
+		{"fence_lost", collection.ErrFenceLost, "outcome_unknown", codes.Error},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()

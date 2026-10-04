@@ -14,42 +14,42 @@ func (c *Consumer) reconcileContent(
 	ctx context.Context,
 	tx dbx.Tx,
 	claimed *Observation,
-) (content.Decision, ReconcileResult, error) {
+) (ReconcileResult, error) {
 	evidence, err := evidenceFromObservation(claimed)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("evidence from observation: %w", err)
+		return ReconcileResult{}, fmt.Errorf("evidence from observation: %w", err)
 	}
 
 	if lockErr := lockContentSubject(ctx, tx, claimed.ObservationKind, claimed.SubjectKey); lockErr != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
+		return ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
 	}
 
 	state, err := loadContentState(ctx, tx, claimed.ObservationKind, claimed.SubjectKey, &evidence)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("load content state: %w", err)
+		return ReconcileResult{}, fmt.Errorf("load content state: %w", err)
 	}
 
 	decision, err := content.Reduce(state, evidence, c.grace)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("reduce: %w", err)
+		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
 	if persistErr := persistContentDecision(ctx, tx, c.writer, claimed, &state, &decision); persistErr != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
+		return ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
 	}
 
 	premiereApplications, err := mergeContentPremieres(ctx, tx, claimed, &evidence)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
+		return ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
 	}
 
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
+		return ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
 	}
 
 	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
 
-	return decision, ReconcileResult{Applications: applications}, nil
+	return ReconcileResult{Applications: applications}, nil
 }
 
 func mergeContentApplications(contentApplications, premiereApplications []Application) []Application {
@@ -132,6 +132,8 @@ func shortsEvidence(observation *Observation) (content.Evidence, error) {
 	}, nil
 }
 
+// entitiesFromItems는 payload 항목을 reducer 입력으로 옮깁니다. Generation 1 video_list 항목은 Publication이 없으므로
+// 기존 canonical·재처리 반영은 그대로 하되 신규성 근거가 없는 항목으로 판정됩니다.
 func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.Entity {
 	entities := make([]content.Entity, 0, len(items))
 	for i := range items {
@@ -143,6 +145,7 @@ func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.
 			ScheduledFor: items[i].ScheduledFor,
 			IsPremiere:   items[i].IsPremiere,
 			IsShort:      shorts,
+			Publication:  items[i].Publication,
 		})
 	}
 

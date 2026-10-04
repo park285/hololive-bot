@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func TestNewServiceWithOfficialScheduleUsesInjectedConfig(t *testing.T) {
+func TestNewServiceUsesInjectedConfig(t *testing.T) {
 	t.Setenv("OFFICIAL_SCHEDULE_BASE_URL", "https://env-should-not-win.example")
 	t.Setenv("MAX_RESPONSE_BODY_BYTES", "999")
 
@@ -21,9 +21,9 @@ func TestNewServiceWithOfficialScheduleUsesInjectedConfig(t *testing.T) {
 		MaxResponseBodyBytes: 2048,
 	}
 
-	service, err := NewServiceWithOfficialSchedule(nil, nil, slog.New(slog.DiscardHandler), official)
+	service, err := NewService(nil, nil, slog.New(slog.DiscardHandler), official)
 	if err != nil {
-		t.Fatalf("NewServiceWithOfficialSchedule() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
 	}
 
 	if got := service.officialSchedule.BaseURL; got != "https://schedule.injected.example" {
@@ -34,7 +34,7 @@ func TestNewServiceWithOfficialScheduleUsesInjectedConfig(t *testing.T) {
 		t.Fatalf("MaxResponseBodyBytes = %d, want 2048", got)
 	}
 
-	if service.youtubeClient != nil {
-		t.Fatal("nil concrete YouTube client became a typed-nil dependency")
+	if service.httpClient == nil {
+		t.Fatal("nil httpClient must be replaced by the official schedule external API client")
 	}
 }

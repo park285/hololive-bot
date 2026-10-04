@@ -39,7 +39,6 @@ type Config struct {
 	Server       ServerConfig
 	Kakao        KakaoConfig
 	Holodex      HolodexConfig
-	YouTube      YouTubeConfig
 	Ingestion    IngestionConfig
 	Valkey       ValkeyConfig
 	Postgres     PostgresConfig
@@ -72,13 +71,14 @@ type Config struct {
 type LoadOptions struct {
 	Section            func(*Config) error
 	CORSDefaultEnforce bool
-	TracingRuntime     TracingRuntime
+	// TracingEnabledEnv: 이 런타임의 OTEL enable 토글 환경변수 이름이다.
+	TracingEnabledEnv string
 }
 
 func LoadAdminAPIRuntime() (*Config, error) {
 	out, err := LoadConfig((*Config).ValidateAdminAPIRuntime, LoadOptions{
 		CORSDefaultEnforce: true,
-		TracingRuntime:     TracingRuntimeHololiveAPI,
+		TracingEnabledEnv:  envload.TracingHololiveAPIEnabledEnv,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load config validated: %w", err)
@@ -326,39 +326,6 @@ func loadHolodexConfig() (HolodexConfig, error) {
 
 	if err := env.Err(); err != nil {
 		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
-	}
-
-	return config, nil
-}
-
-func loadYouTubeConfig() (YouTubeConfig, error) {
-	if err := rejectRetiredYouTubeConfigEnv(); err != nil {
-		return YouTubeConfig{}, fmt.Errorf("reject retired youtube config env: %w", err)
-	}
-
-	d := DefaultYouTubeOperationalConfig()
-
-	var env envload.StrictEnv
-
-	interval := env.Seconds("YOUTUBE_REQUEST_INTERVAL_SECONDS", d.RequestInterval)
-	config := YouTubeConfig{
-		MaxPageBodyBytes:     env.Int64("YOUTUBE_MAX_PAGE_BODY_BYTES", d.MaxPageBodyBytes),
-		ScraperHTTPTimeout:   env.Seconds("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", d.ScraperHTTPTimeout),
-		ScraperDialTimeout:   env.Seconds("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", d.ScraperDialTimeout),
-		ScraperHeaderTimeout: env.Seconds("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", d.ScraperHeaderTimeout),
-		CommunityMissingTTL:  env.Seconds("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", d.CommunityMissingTTL),
-		RequestInterval:      interval,
-		DistributedRateLimit: DistributedRateLimitConfig{
-			Enabled:    env.Bool("YOUTUBE_DISTRIBUTED_RATELIMIT_ENABLED", d.DistributedRateLimit.Enabled),
-			Limit:      env.Int("YOUTUBE_DISTRIBUTED_RATELIMIT_LIMIT", d.DistributedRateLimit.Limit),
-			Window:     interval,
-			KeyPrefix:  sharedenv.String("YOUTUBE_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.DistributedRateLimit.KeyPrefix),
-			BucketBase: sharedenv.String("YOUTUBE_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.DistributedRateLimit.BucketBase),
-		},
-	}
-
-	if err := env.Err(); err != nil {
-		return YouTubeConfig{}, fmt.Errorf("load youtube config: %w", err)
 	}
 
 	return config, nil

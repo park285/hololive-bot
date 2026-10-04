@@ -8,10 +8,9 @@ import (
 	"sync"
 	"time"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp"
@@ -41,7 +40,7 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 
 	collector := appConfig.Collector
 
-	helper, rpc, err := startYouTubeJSHelper(ctx, &collector, ratelimiter.New(collector.RequestInterval))
+	helper, rpc, err := startYouTubeJSHelper(ctx, &collector, youtubejs.NewRateLimiter(collector.RequestInterval))
 	if err != nil {
 		cleanupDB()
 
@@ -158,7 +157,7 @@ func (i *collectorInfrastructure) closeResources(ctx context.Context) error {
 func startYouTubeJSHelper(
 	ctx context.Context,
 	collector *collectorconfig.Config,
-	limiter *ratelimiter.RateLimiter,
+	limiter *youtubejs.RateLimiter,
 ) (*youtubejs.Helper, *youtubejs.RPC, error) {
 	helper, rpc, err := youtubejs.Start(ctx, &youtubejs.Config{
 		StartupTimeout:    collector.YouTubeJSStartupTimeout,

@@ -3,6 +3,8 @@ package checking
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -135,4 +137,57 @@ func TestYouTubeCheckerCheck_SubscriberDBErrorFailsCheck(t *testing.T) {
 	knownEmpty, err := cacheClient.Exists(t.Context(), sharedalarmkeys.BuildChannelSubscriberEmptyKey(recoveryChannelID, domain.AlarmTypeLive))
 	require.NoError(t, err)
 	require.False(t, knownEmpty)
+}
+
+func TestYouTubeCheckerIncludesObservationReceivedDuringFailedProviderRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	now := time.Now().UTC()
+	startedAt := now.Add(-time.Minute)
+	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{{
+		VideoID: recoveryStreamID, ChannelID: recoveryChannelID, Status: domain.LiveStatusLive,
+		Title: "fresh during provider request", StartedAt: &startedAt, LiveFirstSeenAt: &startedAt,
+		LastSeenAt: now, StatusObservedAt: new(now.Add(-defaultPersistedLiveSessionRecentWindow - time.Second)),
+	}})
+
+	logger := newCheckerTestLogger()
+	repo := sharedalarm.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}, logger)
+	require.NoError(t, repo.Add(ctx, &domain.Alarm{RoomID: testRoomID1, ChannelID: recoveryChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}}))
+
+	updateErrors := make(chan error, 16)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, err := pool.Exec(request.Context(), "UPDATE youtube_live_sessions SET status_observed_at = $1 WHERE video_id = $2", time.Now().UTC(), recoveryStreamID)
+		updateErrors <- err
+
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+
+	cacheClient := newCheckerTestCacheClient(t)
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{recoveryChannelID})
+	require.NoError(t, err)
+
+	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cacheClient, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(
+		cacheClient, holodexService, tier.NewTieredScheduler(logger), dedup.NewService(cacheClient, []int{5}, logger),
+		[]int{5}, 0, &PgYouTubeLiveSessionSource{pool: pool}, pool, logger,
+	)
+	require.NoError(t, err)
+
+	notifications, err := checker.Check(ctx)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	require.Equal(t, recoveryStreamID, notifications[0].Stream.ID)
+	require.Equal(t, testRoomID1, notifications[0].RoomID)
+
+	server.Close()
+	close(updateErrors)
+
+	for updateErr := range updateErrors {
+		require.NoError(t, updateErr)
+	}
 }

@@ -166,11 +166,25 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	}
 
 	envelope.EvidenceSHA256 = evidenceSHA256
-	if err := envelope.Validate(); err != nil {
+	if err := envelope.validatePrepared(canonicalPayload, canonicalScope); err != nil {
 		return Envelope{}, fmt.Errorf("validate: %w", err)
 	}
 
 	return envelope, nil
+}
+
+// validatePrepared는 PrepareEnvelope가 방금 만든 canonical payload·scope를 재정규화 없이 재사용해
+// Validate와 같은 구조·해시 검증을 수행한다. 외부 입력 검증은 항상 Validate를 사용한다.
+func (e *Envelope) validatePrepared(canonicalPayload, canonicalScope []byte) error {
+	if err := e.validateEnvelopeStructure(); err != nil {
+		return fmt.Errorf("validate envelope: %w", err)
+	}
+
+	if err := e.matchCanonicalDigests(canonicalPayload, canonicalScope); err != nil {
+		return fmt.Errorf("validate envelope: verify canonical payload: match canonical digests: %w", err)
+	}
+
+	return nil
 }
 
 func (e *Envelope) Validate() error {
@@ -182,16 +196,8 @@ func (e *Envelope) Validate() error {
 }
 
 func (e *Envelope) ValidateAndCanonicalPayload() ([]byte, error) {
-	if err := e.validateEnvelopeIdentity(); err != nil {
-		return nil, fmt.Errorf("validate envelope identity: %w", err)
-	}
-
-	if err := e.validateEnvelopeClock(); err != nil {
-		return nil, fmt.Errorf("validate envelope clock: %w", err)
-	}
-
-	if err := e.validateEnvelopeLeaseAndHashes(); err != nil {
-		return nil, fmt.Errorf("validate envelope lease and hashes: %w", err)
+	if err := e.validateEnvelopeStructure(); err != nil {
+		return nil, err
 	}
 
 	out, err := e.verifyCanonicalPayload()
@@ -200,6 +206,22 @@ func (e *Envelope) ValidateAndCanonicalPayload() ([]byte, error) {
 	}
 
 	return out, nil
+}
+
+func (e *Envelope) validateEnvelopeStructure() error {
+	if err := e.validateEnvelopeIdentity(); err != nil {
+		return fmt.Errorf("validate envelope identity: %w", err)
+	}
+
+	if err := e.validateEnvelopeClock(); err != nil {
+		return fmt.Errorf("validate envelope clock: %w", err)
+	}
+
+	if err := e.validateEnvelopeLeaseAndHashes(); err != nil {
+		return fmt.Errorf("validate envelope lease and hashes: %w", err)
+	}
+
+	return nil
 }
 
 func (e *Envelope) validateEnvelopeIdentity() error {

@@ -1,15 +1,14 @@
 WITH locked AS MATERIALIZED (
-	SELECT id
+	SELECT id, status, locked_by, lock_expires_at
 	FROM notification_delivery_outbox
 	WHERE id = $4
 	FOR UPDATE
 ), eligible AS MATERIALIZED (
 	SELECT locked.id, clock_timestamp() AS transitioned_at
 	FROM locked
-	JOIN notification_delivery_outbox o ON o.id = locked.id
-	WHERE o.status IN ($5, $6)
-	  AND o.locked_by = $7
-	  AND (o.status = $6 OR o.lock_expires_at > clock_timestamp())
+	WHERE locked.status IN ($5, $6)
+	  AND locked.locked_by = $7
+	  AND (locked.status = $6 OR locked.lock_expires_at > clock_timestamp())
 )
 UPDATE notification_delivery_outbox o
 SET attempt_count = o.attempt_count + 1,

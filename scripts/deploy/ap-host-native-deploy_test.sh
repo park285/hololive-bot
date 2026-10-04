@@ -178,15 +178,23 @@ else
 fi
 
 bash "${ROOT_DIR}/scripts/deploy/ap-host-native-collector-wrapper_test.sh"
+bash "${ROOT_DIR}/scripts/deploy/collector-cutover-failure_test.sh"
+native_test_runtime="/run/user/$(id -u)"
+test -S "${native_test_runtime}/bus"
+env XDG_RUNTIME_DIR="${native_test_runtime}" DBUS_SESSION_BUS_ADDRESS="unix:path=${native_test_runtime}/bus" \
+  systemd-run --user --quiet --wait --pipe --collect \
+  -p Type=exec -p RuntimeMaxSec=45s -p KillMode=control-group \
+  -p "WorkingDirectory=${ROOT_DIR}" \
+  bash "${ROOT_DIR}/scripts/deploy/ap-host-native-cutover_test.sh"
 
 if grep -Fq 'no previous collector release to roll back to; fix forward' "${ROLLBACK}"; then
   pass "ap-host-native rollback refuses hosts without a previous collector release"
 else
   record_fail "ap-host-native rollback must refuse hosts without a previous collector release"
 fi
-native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
+native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^native_restore_recorded_runtime\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^native_cutover_failed\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
 # cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
-cutover_stop_step="$(awk '/^arm_native_cutover_restore$/ { on = 1 } on && /^sudo -n install / { exit } on' "${REMOTE_APPLY}")"
+cutover_stop_step='arm_native_cutover_restore; native_cutover_run stop stop_native_units_and_require_inactive'
 stop_fixture="$(mktemp -d)"
 trap 'rm -rf "${stop_fixture}"' EXIT
 # 가짜 systemctl은 active unit을 파일로 두고 호출을 기록한다. socket stop은 Requires=처럼 service도 멈춘다.
@@ -200,8 +208,17 @@ run_native_units() (
   old_target="${state}/old-release"
   # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 경로다.
   host_env="${state}/host.env" unit_file="${state}/unit" current_link="${state}/current"
+  # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 경로입니다.
   releases_root="${state}/releases" previous_link="${state}/previous"
   mkdir -p "${old_target}"
+  # 기존 unit 순서 fixture는 실제 명령 완료를 동기 실행합니다. 신호/receipt는 별도 실제 child 회귀가 소유합니다.
+  native_cutover_run() {
+    shift
+    # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 완료 상태입니다.
+    native_completion_verified=true
+    ( set -e; "$@"; )
+  }
+  native_cutover_release_guard() { :; }
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
     if [[ "$1" == systemctl ]]; then
@@ -403,12 +420,25 @@ else
   pass "host-native release resolver rejects canonical containment escape"
 fi
 
-resolve_line="$(grep -nF 'native_release_dir_resolve "$releases_root" "$release_id" "$current_link"' "${REMOTE_APPLY}" | tail -1 | cut -d: -f1)"
-delete_line="$(grep -nF 'rm -rf "$release_dir"' "${REMOTE_APPLY}" | tail -1 | cut -d: -f1)"
-if [[ -n "${resolve_line}" && -n "${delete_line}" ]] && (( resolve_line < delete_line )); then
-  pass "remote canonical release guard runs before release deletion"
+mkdir -p "${release_root}/previous-release" "${release_root}/inactive-release"
+printf 'rollback payload\n' > "${release_root}/previous-release/marker"
+ln -s "${release_root}/previous-release" "${tmp}/previous"
+ln -s "${release_root}/previous-release" "${release_root}/previous-alias"
+ln -s "${release_root}/missing-target" "${release_root}/dangling-release"
+printf 'existing artifact\n' > "${release_root}/existing-file"
+for existing_release in previous-release inactive-release previous-alias dangling-release existing-file; do
+  if native_release_dir_resolve "${release_root}" "${existing_release}" "${tmp}/current" >"${tmp}/existing.out" 2>"${tmp}/existing.err"; then
+    record_fail "host-native release resolver must reject existing release path: ${existing_release}"
+  else
+    pass "host-native release resolver rejects existing release path: ${existing_release}"
+  fi
+done
+if [[ "$(cat "${release_root}/previous-release/marker")" == 'rollback payload' ]] &&
+   [[ "$(readlink "${tmp}/previous")" == "${release_root}/previous-release" ]] &&
+   [[ "$(readlink "${tmp}/current")" == "${release_root}/active" ]]; then
+  pass "rejected native release reuse preserves current and rollback artifacts"
 else
-  record_fail "remote canonical release guard must run before release deletion"
+  record_fail "rejected native release reuse must preserve current and rollback artifacts"
 fi
 
 mkdir -p "${tmp}/rollback-bin" "${tmp}/rollback-fixture/bin" \

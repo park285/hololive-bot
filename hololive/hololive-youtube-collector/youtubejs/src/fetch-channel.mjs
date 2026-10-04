@@ -5,9 +5,9 @@ import { textOf, thumbnailsOf } from "./map-posts.mjs";
 import { isVideoLockup, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 import { fetchLiveMetadata } from "./live-metadata.mjs";
 import { assertResponseBudget, EncodedArrayBudget, encodedSize, paginationResult, hasContinuation } from "./pagination.mjs";
+import { hasRFC3339Shape } from "./rfc3339.mjs";
 
 const maxScheduleMetadataLookups = 32;
-const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 const responseReserveBytes = encodedSize({
   protocol_version: 1,
@@ -24,6 +24,7 @@ const responseReserveBytes = encodedSize({
 /**
  * 지정한 live/metadata 범위만 조회합니다. 시각이 가려진 접근 제한 영상은 별도 목록과 WARN으로 남깁니다.
  * @param {YouTubeJSFetchOptions} [options]
+ * @returns {Promise<Omit<import("./contracts.d.ts").ChannelResult, "protocol_version">>}
  */
 export async function fetchChannelFeed({
   channelId,
@@ -323,7 +324,8 @@ function optionalTime(value) {
     return undefined;
   }
   const text = value.trim();
-  if (!rfc3339Pattern.test(text)) {
+  // 생략 정책인 live session 행 시각은 형식만 확인하고 달력 범위는 Date.parse 결과에 맡깁니다.
+  if (!hasRFC3339Shape(text)) {
     return undefined;
   }
   const parsed = Date.parse(text);

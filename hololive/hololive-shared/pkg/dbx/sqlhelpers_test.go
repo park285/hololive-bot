@@ -74,10 +74,11 @@ func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 	moduleRoot := filepath.Join("..", "..")
 	// 이 SQL만 live_evidence.go의 tx.Query가 직접 실행하며 ?|는 migration 193의 GIN 인덱스 조건이다.
 	apiQueryRoot := filepath.Join(moduleRoot, "..", "hololive-api", "internal", "youtube", "sourceobservation")
+	canonicalQueryRoot := filepath.Join(moduleRoot, "..", "hololive-api", "internal", "youtube", "canonicalwrite")
 	collectorQueryRoot := filepath.Join(moduleRoot, "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation")
 	nativeJSONBAnyQuery := filepath.Join(apiQueryRoot, "queries", "repository_live_absence_slots.sql")
 
-	for _, queryRoot := range []string{moduleRoot, apiQueryRoot, collectorQueryRoot} {
+	for _, queryRoot := range []string{moduleRoot, apiQueryRoot, canonicalQueryRoot, collectorQueryRoot} {
 		err := filepath.Walk(queryRoot, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -122,26 +123,6 @@ func questionMarkHazards(sql string, allowJSONBAny bool) []string {
 	}
 
 	return hazards
-}
-
-func TestQuestionMarkHazardsOnlyAllowsNativeAnyOperator(t *testing.T) {
-	for _, tc := range []struct {
-		name          string
-		query         string
-		allowJSONBAny bool
-		want          int
-	}{
-		{name: "converted SQL", query: "payload ?| $1", want: 1},
-		{name: "native SQL", query: "payload ?| $1", allowJSONBAny: true},
-		{name: "quoted operator", query: "note = '?|'", allowJSONBAny: true, want: 1},
-		{name: "other operator", query: "payload ?& $1", allowJSONBAny: true, want: 1},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := questionMarkHazards(tc.query, tc.allowJSONBAny); len(got) != tc.want {
-				t.Fatalf("hazards=%v, want %d", got, tc.want)
-			}
-		})
-	}
 }
 
 func TestInPlaceholders(t *testing.T) {

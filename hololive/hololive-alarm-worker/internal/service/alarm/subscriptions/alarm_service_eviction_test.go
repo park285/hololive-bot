@@ -33,7 +33,7 @@ func TestAddAlarmAfterSubscriberEvictionPreservesEveryRecipient(t *testing.T) {
 			service, pool := newEvictionAlarmService(t)
 			ctx := t.Context()
 
-			for _, room := range []string{"existing-a", "existing-b"} {
+			for _, room := range []string{testExistingRoomA, testExistingRoomB} {
 				_, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: room, ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{kind}})
 				require.NoError(t, err)
 			}
@@ -42,13 +42,13 @@ func TestAddAlarmAfterSubscriberEvictionPreservesEveryRecipient(t *testing.T) {
 			// 빈 구독 표식도 새 구독 뒤에는 정본 조회를 가리면 안 된다.
 			require.NoError(t, service.cache.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(testChannelID, kind), "1", time.Minute))
 
-			added, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "new-c", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{kind}})
+			added, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: testNewRoomC, ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{kind}})
 			require.NoError(t, err)
 			require.True(t, added)
 
 			rooms, err := sharedalarm.ResolveEventSubscribers(ctx, service.cache, pool, testChannelID, "", kind)
 			require.NoError(t, err)
-			require.ElementsMatch(t, []string{"existing-a", "existing-b", "new-c"}, rooms)
+			require.ElementsMatch(t, []string{testExistingRoomA, testExistingRoomB, testNewRoomC}, rooms)
 		})
 	}
 }
@@ -113,9 +113,8 @@ func TestAddAlarmCacheFailureKeepsCommittedRecipients(t *testing.T) {
 	_, err := service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "existing", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
 	require.NoError(t, err)
 
-	// 잘못된 cache 자료형으로 증분 갱신을 실패시켜도, 먼저 commit한 구독은 복구에 포함되어야 한다.
-	key := sharedalarmkeys.BuildChannelSubscriberKey(testChannelID, domain.AlarmTypeLive)
-	require.NoError(t, service.cache.Set(ctx, key, "wrong-type", time.Minute))
+	// commit 뒤 cache 갱신을 잘못된 자료형으로 실패시켜도, 먼저 commit한 구독은 수신 대상에 포함되어야 한다.
+	require.NoError(t, service.cache.Set(ctx, sharedalarmkeys.MemberNameKey, "wrong-type", time.Minute))
 
 	_, err = service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "committed", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
 	require.Error(t, err)

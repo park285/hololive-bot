@@ -9,36 +9,20 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
-type ContractGenerationReader interface {
-	LoadContractGenerations(context.Context, contract.Provider, []contract.ObservationKind) (map[contract.ObservationKind]int64, error)
-}
-
-// ObservationPublisher는 결과의 개수·순서·식별자를 커밋 전에 검증하고,
+// Publisher는 contract generation 조회와 관측 발행 저장소를 직접 소유합니다.
+// 발행 저장소는 결과의 개수·순서·식별자를 커밋 전에 검증하고,
 // 관측 발행과 lease 완료 또는 defer를 하나의 트랜잭션으로 확정합니다.
-type ObservationPublisher interface {
-	PublishBatch(context.Context, *sourceobservation.PublishBatchInput) (sourceobservation.PublishBatchResult, error)
-	PublishBatchAndDefer(context.Context, *sourceobservation.PublishBatchInput, sourceobservation.DeferCollectionInput) (sourceobservation.PublishBatchResult, error)
-}
-
 type Publisher struct {
-	contracts    ContractGenerationReader
-	observations ObservationPublisher
+	contracts    *postgresContractGenerationReader
+	observations *sourceobservation.Repository
 }
 
 func NewPublisher(pool *pgxpool.Pool) *Publisher {
 	return &Publisher{contracts: &postgresContractGenerationReader{pool: pool}, observations: sourceobservation.NewRepository(pool)}
-}
-
-func NewPublisherWithStores(contracts ContractGenerationReader, observations ObservationPublisher) (*Publisher, error) {
-	if contracts == nil || observations == nil {
-		return nil, errors.New("create collector publisher: stores are required")
-	}
-
-	return &Publisher{contracts: contracts, observations: observations}, nil
 }
 
 type postgresContractGenerationReader struct {
@@ -59,7 +43,7 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 		values[i] = string(kinds[i])
 	}
 
-	rows, err := p.pool.Query(ctx, mustSQL("load_contract_generations.sql"), string(provider), values)
+	rows, err := p.pool.Query(ctx, sqlLoadContractGenerations, string(provider), values)
 	if err != nil {
 		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, fmt.Errorf("load observation contract generations: %w", err))
 	}
@@ -78,9 +62,9 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 	return out, nil
 }
 
-func (p *Publisher) LoadContractSnapshot(ctx context.Context, registration RegisteredRunner) (collectutil.ContractSnapshot, error) {
+func (p *Publisher) LoadContractSnapshot(ctx context.Context, registration RegisteredRunner) (collection.ContractSnapshot, error) {
 	if p == nil || p.contracts == nil {
-		return collectutil.ContractSnapshot{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "contract generation reader is not configured")
+		return collection.ContractSnapshot{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "contract generation reader is not configured")
 	}
 
 	job := registration.Contract()
@@ -88,10 +72,10 @@ func (p *Publisher) LoadContractSnapshot(ctx context.Context, registration Regis
 
 	values, err := p.contracts.LoadContractGenerations(ctx, job.ID().Provider, emissions)
 	if err != nil {
-		return collectutil.ContractSnapshot{}, fmt.Errorf("load contract generations: %w", err)
+		return collection.ContractSnapshot{}, fmt.Errorf("load contract generations: %w", err)
 	}
 
-	out, err := collectutil.NewContractSnapshot(emissions, values)
+	out, err := collection.NewContractSnapshot(emissions, values)
 	if err != nil {
 		return out, fmt.Errorf("contract snapshot: %w", err)
 	}
@@ -141,7 +125,7 @@ func requireContractGenerations(result map[contract.ObservationKind]int64, kinds
 	return result, nil
 }
 
-func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeaseProof, output collectutil.RunOutput) (sourceobservation.PublishBatchResult, error) {
+func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeaseProof, output collection.RunOutput) (sourceobservation.PublishBatchResult, error) {
 	if p == nil || p.observations == nil {
 		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "observation publisher is not configured")
 	}
@@ -150,25 +134,11 @@ func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeasePr
 		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "complete publish lease is missing")
 	}
 
-	observations := output.Observations()
-	checkpoints := output.Checkpoints()
-
-	if len(observations) == 0 {
+	if output.Empty() {
 		return sourceobservation.PublishBatchResult{}, nil
 	}
 
-	if len(checkpoints) != len(observations) {
-		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "checkpoint count does not match observation count")
-	}
-
-	input := &sourceobservation.PublishBatchInput{
-		Lease: *lease,
-		Checkpoint: sourceobservation.CheckpointUpdate{
-			Entries:           checkpoints,
-			CollectionLatency: output.CollectionLatency(),
-		},
-		Observations: observations,
-	}
+	input := publishBatchInput(lease, output)
 
 	result, err := p.observations.PublishBatch(ctx, input)
 	if err != nil {
@@ -181,9 +151,9 @@ func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeasePr
 func (p *Publisher) PublishPartial(
 	ctx context.Context,
 	lease *contract.LeaseProof,
-	result *collectutil.CollectResult,
-	schedule sourceobservation.RetrySchedule,
-	bounds sourceobservation.RetryBounds,
+	result *collection.CollectResult,
+	schedule collection.RetrySchedule,
+	bounds collection.RetryBounds,
 ) (sourceobservation.PublishBatchResult, error) {
 	partial, err := validatePartialPublishInput(p, lease, result)
 	if err != nil {
@@ -192,7 +162,7 @@ func (p *Publisher) PublishPartial(
 
 	output := result.Output()
 
-	deferInput, err := sourceobservation.NewDeferCollectionInput(collecterr.DiagnosticOf(partial.Cause()), bounds, schedule)
+	deferInput, err := collection.NewDeferCollectionInput(collecterr.DiagnosticOf(partial.Cause()), bounds, schedule)
 	if err != nil {
 		return sourceobservation.PublishBatchResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
 	}
@@ -210,8 +180,8 @@ func (p *Publisher) PublishPartial(
 func validatePartialPublishInput(
 	publisher *Publisher,
 	lease *contract.LeaseProof,
-	result *collectutil.CollectResult,
-) (*collectutil.PartialFailure, error) {
+	result *collection.CollectResult,
+) (*collection.PartialFailure, error) {
 	partial, ok := result.PartialFailure()
 	if publisher == nil || publisher.observations == nil || lease == nil || !ok {
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial publish input is invalid")
@@ -220,20 +190,42 @@ func validatePartialPublishInput(
 	return partial, nil
 }
 
-func publishBatchInput(lease *contract.LeaseProof, output collectutil.RunOutput) *sourceobservation.PublishBatchInput {
+// publishBatchInput은 수집 결과 하나의 복사본으로 발행 입력을 만듭니다.
+// Checkpoint는 관측과 1:1로 같은 순서이며, runner가 관측과 함께 넘긴 cursor(video_list 공개 근거 이력)만 싣습니다.
+func publishBatchInput(lease *contract.LeaseProof, output collection.RunOutput) *sourceobservation.PublishBatchInput {
+	observations := output.Observations()
+	entries := make([]sourceobservation.CheckpointEntry, len(observations))
+
+	for i := range observations {
+		envelope := &observations[i]
+
+		entries[i] = sourceobservation.CheckpointEntry{
+			Provider:           envelope.Provider,
+			ObservationKind:    envelope.ObservationKind,
+			SubjectKey:         envelope.SubjectKey,
+			ScopeSHA256:        envelope.ScopeSHA256,
+			ContractGeneration: envelope.ContractGeneration,
+			LastObservationKey: envelope.ObservationKey,
+			LastEvidenceSHA256: envelope.EvidenceSHA256,
+			LastScheduledFor:   envelope.ScheduledFor,
+			Continuity:         envelope.Continuity,
+			Cursor:             output.Cursor(i),
+		}
+	}
+
 	return &sourceobservation.PublishBatchInput{
 		Lease: *lease,
 		Checkpoint: sourceobservation.CheckpointUpdate{
-			Entries: output.Checkpoints(), CollectionLatency: output.CollectionLatency(),
+			Entries: entries, CollectionLatency: output.CollectionLatency(),
 		},
-		Observations: output.Observations(),
+		Observations: observations,
 	}
 }
 
 func (p *Publisher) publishPartialBatch(
 	ctx context.Context,
 	input *sourceobservation.PublishBatchInput,
-	deferInput sourceobservation.DeferCollectionInput,
+	deferInput collection.DeferCollectionInput,
 ) (sourceobservation.PublishBatchResult, error) {
 	published, err := p.observations.PublishBatchAndDefer(ctx, input, deferInput)
 	if err != nil {

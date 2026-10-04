@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestClonePublishBatchInputCopiesLeaseObservationsAndCursors(t *testing.T) {
@@ -98,12 +99,12 @@ func preflightBoundsCases() []preflightBoundsCase {
 		},
 		{
 			name:  "observation count at max accepted",
-			input: sizedPublishBatchInput(MaxPublishBatchSize, MaxPublishBatchSize, 0, nil, nil),
+			input: sizedPublishBatchInput(collection.MaxPublishBatchSize, collection.MaxPublishBatchSize, 0, nil, nil),
 		},
 		{
 			name:       "observation count above max",
-			input:      sizedPublishBatchInput(MaxPublishBatchSize+1, MaxPublishBatchSize+1, 0, nil, nil),
-			wantDetail: fmt.Sprintf("observation count must be between 1 and %d", MaxPublishBatchSize),
+			input:      sizedPublishBatchInput(collection.MaxPublishBatchSize+1, collection.MaxPublishBatchSize+1, 0, nil, nil),
+			wantDetail: fmt.Sprintf("observation count must be between 1 and %d", collection.MaxPublishBatchSize),
 		},
 		{
 			name:       "checkpoint count below observation count",
@@ -117,12 +118,12 @@ func preflightBoundsCases() []preflightBoundsCase {
 		},
 		{
 			name:       "checkpoint count above observation count at batch max",
-			input:      sizedPublishBatchInput(MaxPublishBatchSize, MaxCheckpointCount+1, 0, nil, nil),
+			input:      sizedPublishBatchInput(collection.MaxPublishBatchSize, MaxCheckpointCount+1, 0, nil, nil),
 			wantDetail: countDetail,
 		},
 		{
 			name:  "collection latency at max accepted",
-			input: sizedPublishBatchInput(1, 1, MaxCollectionLatency, nil, nil),
+			input: sizedPublishBatchInput(1, 1, collection.MaxCollectionLatency, nil, nil),
 		},
 		{
 			name:       "collection latency negative",
@@ -131,7 +132,7 @@ func preflightBoundsCases() []preflightBoundsCase {
 		},
 		{
 			name:       "collection latency above max",
-			input:      sizedPublishBatchInput(1, 1, MaxCollectionLatency+time.Nanosecond, nil, nil),
+			input:      sizedPublishBatchInput(1, 1, collection.MaxCollectionLatency+time.Nanosecond, nil, nil),
 			wantDetail: latencyDetail,
 		},
 	}
@@ -332,7 +333,7 @@ func compareTestFailureTuple(a, b contract.FailureTuple) int {
 	return 1
 }
 
-func mustTestDeferInput(t *testing.T, code contract.CollectionErrorCode, class contract.FailureClass, detail string) DeferCollectionInput {
+func mustTestDeferInput(t *testing.T, code contract.CollectionErrorCode, class contract.FailureClass, detail string) collection.DeferCollectionInput {
 	t.Helper()
 
 	diagnostic, err := contract.NewFailureDiagnostic(code, class, detail)
@@ -340,12 +341,12 @@ func mustTestDeferInput(t *testing.T, code contract.CollectionErrorCode, class c
 		t.Fatal(err)
 	}
 
-	schedule, err := NewRetryAtSchedule(time.Now().UTC().Add(200 * time.Millisecond).Truncate(time.Millisecond))
+	schedule, err := collection.NewRetryAtSchedule(time.Now().UTC().Add(200 * time.Millisecond).Truncate(time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	input, err := NewDeferCollectionInput(diagnostic, RetryBounds{Minimum: 100 * time.Millisecond, Maximum: time.Second}, schedule)
+	input, err := collection.NewDeferCollectionInput(diagnostic, collection.RetryBounds{Minimum: 100 * time.Millisecond, Maximum: time.Second}, schedule)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,7 +31,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, map[string][]*domain.Stream{}, youtubeLiveCheckEvidence{}, map[string][]string{}, nil
 	}
 
-	dueChannels = c.selectDueYouTubeChannels(ctx, channelIDs, now)
+	dueChannels = c.selectDueYouTubeChannels(ctx, channelIDs, time.Now().UTC())
 
 	if len(dueChannels) == 0 {
 		return nil, map[string][]*domain.Stream{}, youtubeLiveCheckEvidence{}, map[string][]string{}, nil
@@ -50,7 +50,8 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		liveEvidence.currentProviderStreams = cloneCurrentProviderStreams(streamsByChannel)
 	}
 
-	persistedSessions, persistedErr := c.loadPersistedLiveSessions(ctx, dueChannels, now)
+	// 외부 요청 대기 중 도착한 정상 관측을 미래 시각으로 오인하지 않도록 조회 직전에 경계를 잡는다.
+	persistedSessions, persistedErr := c.loadPersistedLiveSessions(ctx, dueChannels, time.Now().UTC())
 	if persistedErr != nil {
 		c.logPersistedLiveSourceError(persistedErr)
 	}

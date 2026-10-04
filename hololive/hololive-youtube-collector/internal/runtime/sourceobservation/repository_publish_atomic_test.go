@@ -14,6 +14,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestPUB001SuccessfulCompletePreservesPriorFailureDiagnostic(t *testing.T) {
@@ -34,7 +35,7 @@ func TestPUB001SuccessfulCompletePreservesPriorFailureDiagnostic(t *testing.T) {
 	assertPublishSideEffects(t, pool, 1, 1, 1)
 
 	got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
-	if got.state != "IDLE" || got.errorCode != "" {
+	if got.state != testSlotStateIdle || got.errorCode != "" {
 		t.Fatalf("successful complete = %#v", got)
 	}
 
@@ -66,7 +67,7 @@ func TestPUB002DuplicateCompleteKeepsQueueIdentity(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 1)
 	assertTableCount(t, pool, "source_observation_queue", 1)
 
-	if got := readLeaseTerminal(ctx, t, pool, proof.JobKey); got.state != "IDLE" {
+	if got := readLeaseTerminal(ctx, t, pool, proof.JobKey); got.state != testSlotStateIdle {
 		t.Fatalf("duplicate complete state = %#v", got)
 	}
 }
@@ -81,7 +82,7 @@ func TestPUB003MixedCollisionCompletesWithDurableDiagnostic(t *testing.T) {
 	assertMixedPersistence(ctx, t, pool, baseID, independent)
 
 	got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
-	if got.state != "IDLE" || got.errorCode != string(contract.ErrorObservationCollision) ||
+	if got.state != testSlotStateIdle || got.errorCode != string(contract.ErrorObservationCollision) ||
 		got.failureCode != string(contract.ErrorObservationCollision) || got.failureClass != string(contract.ClassDataContract) ||
 		got.failureDetail != observationCollisionDetail {
 		t.Fatalf("collision complete diagnostic = %#v", got)
@@ -132,7 +133,7 @@ func TestPUB004PartialOutputDefersAtomically(t *testing.T) {
 	}
 }
 
-func TestPUB005PartialCollisionKeepsIndependentRowsAndPartialDiagnostic(t *testing.T) {
+func TestPUB005PartialCollisionKeepsIndependentRowsAndCompletesSlot(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
@@ -160,7 +161,9 @@ func TestPUB005PartialCollisionKeepsIndependentRowsAndPartialDiagnostic(t *testi
 	assertMixedPersistence(ctx, t, pool, result.Results[0].ObservationID, &input.Observations[1])
 
 	got := readLeaseTerminal(ctx, t, pool, proof.JobKey)
-	if got.state != "DEFERRED" || got.failureCode != string(contract.ErrorParserDrift) || got.errorCode != string(contract.ErrorParserDrift) {
+	if got.state != testSlotStateIdle || got.failureCode != string(contract.ErrorObservationCollision) ||
+		got.failureClass != string(contract.ClassDataContract) || got.errorCode != string(contract.ErrorObservationCollision) ||
+		got.retryAt != nil {
 		t.Fatalf("partial collision diagnostic = %#v", got)
 	}
 }
@@ -173,7 +176,7 @@ func TestPUB006StaleFenceHasNoSideEffects(t *testing.T) {
 
 	_, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 
-	if !errors.Is(err, ErrCollectionFenceLost) {
+	if !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale fence error = %v", err)
 	}
 
@@ -204,7 +207,7 @@ func TestPUB007LeaseExpiredAfterPrepareBeforeTxHasNoSideEffects(t *testing.T) {
 	}
 
 	_, err = NewRepository(pool).runPreparedPublish(ctx, &prepared, NewRepository(pool).completePublishTerminal)
-	if !errors.Is(err, ErrCollectionFenceLost) {
+	if !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("expired-after-prepare error = %v", err)
 	}
 
@@ -260,7 +263,7 @@ func TestPUB009TerminalRowCountZeroRollsBackObservations(t *testing.T) {
 
 	_, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 
-	if !errors.Is(err, ErrCollectionFenceLost) {
+	if !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("zero terminal rows error = %v", err)
 	}
 
@@ -357,12 +360,12 @@ func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			schedule, err := NewRetryAtSchedule(test.at)
+			schedule, err := collection.NewRetryAtSchedule(test.at)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			input, err := NewDeferCollectionInput(diagnostic, RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, schedule)
+			input, err := collection.NewDeferCollectionInput(diagnostic, collection.RetryBounds{Minimum: 200 * time.Millisecond, Maximum: time.Second}, schedule)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -399,7 +402,7 @@ func TestPUB013InvalidTupleAndTerminalFaultRollBack(t *testing.T) {
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	repo := NewRepository(pool)
 
-	_, err := repo.PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), DeferCollectionInput{})
+	_, err := repo.PublishBatchAndDefer(ctx, publishInput(communityEnvelope(t, &proof, "post-1")), collection.DeferCollectionInput{})
 	if err == nil {
 		t.Fatal("invalid defer input must fail before tx")
 	}

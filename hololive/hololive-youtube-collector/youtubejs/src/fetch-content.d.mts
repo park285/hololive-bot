@@ -4,4 +4,4 @@ export function fetchContentFeed(
   options: ContentFetchOptions & {
     innertube?: unknown;
   },
-): Promise<ContentResult>;
+): Promise<Omit<ContentResult, "protocol_version">>;

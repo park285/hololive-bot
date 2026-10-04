@@ -8,13 +8,9 @@ import (
 	"testing"
 	"time"
 
-	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/testutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestRunnerPublishesCompleteScheduleFixture(t *testing.T) {
@@ -151,7 +147,7 @@ func TestRunnerPreservesItemOrderHash(t *testing.T) {
 	}
 }
 
-func mustCollect(t *testing.T, body []byte) collectutil.RunOutput {
+func mustCollect(t *testing.T, body []byte) collection.RunOutput {
 	t.Helper()
 
 	output, err := NewRunner(&staticFetcher{body: body}).Collect(t.Context(), officialInput(t))
@@ -162,7 +158,7 @@ func mustCollect(t *testing.T, body []byte) collectutil.RunOutput {
 	return output.Output()
 }
 
-func mustSingleObservation(t *testing.T, output collectutil.RunOutput) contract.Envelope {
+func mustSingleObservation(t *testing.T, output collection.RunOutput) contract.Envelope {
 	t.Helper()
 
 	observations := output.Observations()
@@ -175,34 +171,32 @@ func mustSingleObservation(t *testing.T, output collectutil.RunOutput) contract.
 	return observations[0]
 }
 
-func officialInput(tb testing.TB) *collectutil.RunInput {
+func officialInput(tb testing.TB) *collection.RunInput {
 	tb.Helper()
 
-	spec := joblease.JobSpec{
-		JobKey: "collector:hololive_official:official_schedule:global", Provider: contract.ProviderHololiveOfficial,
-		Class: "GLOBAL", CollectionJobKind: "official_schedule", SubjectKey: officialScheduleSubject, PollInterval: time.Minute,
-	}
 	lease := contract.LeaseProof{
 		JobKey: "collector:hololive_official:official_schedule:global", CollectionJobKind: "official_schedule",
 		OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
 		ScheduledFor: time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC),
 	}
-	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
+	job, _ := collection.InitialJobContracts().Definition(collection.JobID{
 		Provider: contract.ProviderHololiveOfficial, Kind: "official_schedule",
 	})
 
-	snapshot, err := collectutil.NewContractSnapshot(job.Emissions(), map[contract.ObservationKind]int64{contract.KindSchedule: 1})
+	snapshot, err := collection.NewContractSnapshot(job.Emissions(), map[contract.ObservationKind]int64{contract.KindSchedule: 1})
 	if err != nil {
 		tb.Fatal(err)
 	}
 
-	targets := testutil.TargetSnapshot(tb, dbtest.NewPool(tb), &spec, job, map[contract.ObservationKind][]string{
-		contract.KindSchedule: {officialScheduleSubject},
-	})
+	targets, err := collection.NewExactTargetSnapshot(
+		lease.ProjectionGeneration, officialScheduleSubject, job.RequestedKinds(),
+		map[contract.ObservationKind]bool{contract.KindSchedule: true},
+	)
+	if err != nil {
+		tb.Fatal(err)
+	}
 
-	lease.ProjectionGeneration = targets.Generation()
-
-	input, err := collectutil.NewRunInput(&spec, &lease, snapshot, targets, 1, 1<<20, job)
+	input, err := collection.NewRunInput(job, officialScheduleSubject, &lease, snapshot, targets, 1, 1<<20)
 	if err != nil {
 		tb.Fatal(err)
 	}

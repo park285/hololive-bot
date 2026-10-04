@@ -39,14 +39,14 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 | `hololive-api` YouTube plane | Observation consume, canonical persist, notification intent | External scraping, proactive egress |
 
 Duplicated polling prevention is enforced by PostgreSQL collection leases. Each collector uses a slot-specific Stack Worker Profile v1 with `collection.executor.enabled=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.
-Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
-Collector adapters must not import persist helpers (`batchrepo`, `PersistCommunityPosts`).
+Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery` for proactive egress or call `delivery.NewIrisMessageSender`.
+Canonical 저장 함수는 `hololive-api/internal/youtube/canonicalwrite`에 있으므로 collector에서 import할 수 없습니다.
 
-YouTube outbox dispatcher는 `hololive-alarm-worker/internal/egress/youtubedispatch`에 있으므로 다른 모듈에서 import 자체가 불가능합니다. 즉 이 항목의 1차 보장은 Go `internal/` 컴파일러이고, 게이트의 `outbox\.NewDispatcher`/`OutboxDispatcher` 심볼 denylist는 회귀 방지용 이중화로 유지합니다. 반면 `pkg/service/delivery`는 `hololive-api`(reactive reply)와 `alarm-worker`(proactive egress)의 진성 다중 소비자라 shared에 남으므로, 해당 항목은 게이트가 유일한 보장입니다.
+YouTube outbox dispatcher도 `hololive-alarm-worker/internal/egress/youtubedispatch`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. 삭제된 dispatcher·batchrepo 이름의 재등장을 찾는 grep은 두지 않습니다. 반면 `pkg/service/delivery`는 API의 reactive reply와 worker의 proactive egress가 함께 쓰므로 collector의 직접 사용을 scoped gate로 제한합니다.
 
 ## Compiler and Gate Guarantees
 
-- `outbox.NewDispatcher`, `OutboxDispatcher`, `YouTube outbox dispatcher started`는 dispatcher가 alarm-worker `internal/`에 있으므로 compiler boundary가 1차 보장하고 textual denylist는 잘못된 재도입을 감지합니다.
+- API canonical writer와 worker dispatcher의 module 소유권은 Go `internal/` 컴파일러 경계가 보장합니다.
 - `pkg/service/delivery`, `NewIrisMessageSender`, `ProvideIrisClient`, `iris.WithBaseURL`, `iris.WithBotToken`, `IrisClient:`는 합법적인 shared package 또는 SDK 표면이므로 compiler만으로 runtime capability ownership을 제한할 수 없습니다. scoped architecture gate가 직접 보장합니다.
 - `repository-ownership.allowlist`는 PostgreSQL table의 owner/writer/reader 선언이며 import allowlist가 아닙니다. table 접근은 `check-sql-ownership.py`, module import와 egress capability는 `check-repository-ownership.sh` 및 `ci-notification-egress-gate.sh`가 검증합니다.
 

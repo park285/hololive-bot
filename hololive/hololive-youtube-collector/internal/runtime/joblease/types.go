@@ -8,38 +8,32 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const (
 	MaxAcquisitionBatch = 100
-	MaxWorkerCount      = 64
 	MaxQueueCapacity    = 10_000
 )
 
 var (
-	ErrInvalidConfig   = errors.New("collection job lease configuration is invalid")
-	ErrInvalidJob      = errors.New("collection job is invalid")
-	ErrNotAcquired     = errors.New("collection job was not acquired")
-	ErrFenceLost       = sourceobservation.ErrCollectionFenceLost
-	ErrProjectionStale = sourceobservation.ErrProjectionStale
-	ErrTargetDisabled  = sourceobservation.ErrTargetDisabled
+	ErrInvalidConfig = errors.New("collection job lease configuration is invalid")
+	ErrInvalidJob    = errors.New("collection job is invalid")
+	ErrNotAcquired   = errors.New("collection job was not acquired")
 )
 
+// Config는 lease 저장소가 쓰는 TTL·갱신·DB 예산과 release jitter, 후보 조회의 방어 상한만 담습니다.
+// Worker 수·poll 주기는 scheduler가, 재시도 범위는 executor가 internal/config에서 직접 받습니다.
 type Config struct {
 	LeaseTTL         time.Duration
 	RenewInterval    time.Duration
 	RenewTimeout     time.Duration
 	DBTimeout        time.Duration
 	CleanupTimeout   time.Duration
-	MinRetryDelay    time.Duration
-	MaxRetryDelay    time.Duration
 	MinReleaseJitter time.Duration
 	MaxReleaseJitter time.Duration
 	AcquisitionBatch int
-	WorkerCount      int
 	QueueCapacity    int
-	PollCadence      time.Duration
 }
 
 func (c *Config) Validate() error {
@@ -47,8 +41,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("validate lease budgets: %w", err)
 	}
 
-	if err := c.validateRetryJitter(); err != nil {
-		return fmt.Errorf("validate retry jitter: %w", err)
+	if err := c.validateReleaseJitter(); err != nil {
+		return fmt.Errorf("validate release jitter: %w", err)
 	}
 
 	if err := c.validateAcquisition(); err != nil {
@@ -86,11 +80,7 @@ func invalidRenewBudget(interval, timeout, ttl time.Duration) bool {
 	return interval <= 0 || interval >= ttl || interval+timeout+time.Second >= ttl
 }
 
-func (c *Config) validateRetryJitter() error {
-	if c.MinRetryDelay < 100*time.Millisecond || c.MaxRetryDelay < c.MinRetryDelay || c.MaxRetryDelay > time.Hour {
-		return fmt.Errorf("%w: retry delay bounds are invalid", ErrInvalidConfig)
-	}
-
+func (c *Config) validateReleaseJitter() error {
 	if c.MinReleaseJitter < 10*time.Millisecond || c.MaxReleaseJitter < c.MinReleaseJitter || c.MaxReleaseJitter > time.Minute {
 		return fmt.Errorf("%w: release jitter bounds are invalid", ErrInvalidConfig)
 	}
@@ -103,16 +93,8 @@ func (c *Config) validateAcquisition() error {
 		return fmt.Errorf("%w: acquisition batch must be between 1 and %d", ErrInvalidConfig, MaxAcquisitionBatch)
 	}
 
-	if c.WorkerCount < 1 || c.WorkerCount > MaxWorkerCount {
-		return fmt.Errorf("%w: worker count must be between 1 and %d", ErrInvalidConfig, MaxWorkerCount)
-	}
-
-	if c.QueueCapacity < c.WorkerCount || c.QueueCapacity > MaxQueueCapacity {
-		return fmt.Errorf("%w: queue capacity must be between worker count and %d", ErrInvalidConfig, MaxQueueCapacity)
-	}
-
-	if c.PollCadence < 100*time.Millisecond || c.PollCadence > time.Minute {
-		return fmt.Errorf("%w: poll cadence must be between 100 milliseconds and 1 minute", ErrInvalidConfig)
+	if c.QueueCapacity < 1 || c.QueueCapacity > MaxQueueCapacity {
+		return fmt.Errorf("%w: queue capacity must be between 1 and %d", ErrInvalidConfig, MaxQueueCapacity)
 	}
 
 	return nil
@@ -127,20 +109,20 @@ type JobSpec struct {
 	PollInterval      time.Duration
 }
 
-func (s *JobSpec) validate(contracts sourceobservation.JobContractSet) (sourceobservation.JobContract, []contract.ObservationKind, error) {
+func (s *JobSpec) validate(contracts collection.JobContractSet) (collection.JobContract, []contract.ObservationKind, error) {
 	if invalidJobSpecIdentity(s) {
-		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)
+		return collection.JobContract{}, nil, fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)
 	}
 
-	definition, ok := contracts.Definition(sourceobservation.JobID{Provider: s.Provider, Kind: sourceobservation.JobKind(s.CollectionJobKind)})
+	definition, ok := contracts.Definition(collection.JobID{Provider: s.Provider, Kind: collection.JobKind(s.CollectionJobKind)})
 	if !ok || string(definition.Class()) != s.Class ||
-		definition.Class() == sourceobservation.JobClassGlobal && definition.LeaseSubject() != s.SubjectKey {
-		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: compile-time job contract mismatch", ErrInvalidJob)
+		definition.Class() == collection.JobClassGlobal && definition.LeaseSubject() != s.SubjectKey {
+		return collection.JobContract{}, nil, fmt.Errorf("%w: compile-time job contract mismatch", ErrInvalidJob)
 	}
 
 	kinds := cadenceKindsForProvider(definition, s.Provider)
 	if len(kinds) == 0 {
-		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: provider has no declared cadence kinds", ErrInvalidJob)
+		return collection.JobContract{}, nil, fmt.Errorf("%w: provider has no declared cadence kinds", ErrInvalidJob)
 	}
 
 	return definition, kinds, nil
@@ -162,7 +144,7 @@ func invalidPollInterval(interval time.Duration) bool {
 	return interval < time.Second || interval > 24*time.Hour || interval%time.Millisecond != 0
 }
 
-func cadenceKindsForProvider(definition sourceobservation.JobContract, provider contract.Provider) []contract.ObservationKind {
+func cadenceKindsForProvider(definition collection.JobContract, provider contract.Provider) []contract.ObservationKind {
 	if definition.ID().Provider != provider {
 		return nil
 	}
@@ -174,7 +156,7 @@ type Lease interface {
 	Proof() contract.LeaseProof
 	Renew(ctx context.Context) error
 	CompleteCurrent(ctx context.Context) error
-	Defer(ctx context.Context, retryAt time.Time, code, class, detail string) error
+	Defer(ctx context.Context, input collection.DeferCollectionInput) error
 	Release(ctx context.Context, reason ReleaseReason) error
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 type RunFunc func(ctx context.Context, proof contract.LeaseProof) error
@@ -20,8 +21,11 @@ const (
 	LeaseRunCallbackFailed            LeaseRunOutcome = "CALLBACK_FAILED"
 	LeaseRunReleasedAfterParentCancel LeaseRunOutcome = "RELEASED_AFTER_PARENT_CANCEL"
 	LeaseRunReleasedAfterRenewFailure LeaseRunOutcome = "RELEASED_AFTER_RENEW_FAILURE"
-	LeaseRunFenceLost                 LeaseRunOutcome = "FENCE_LOST"
-	LeaseRunCleanupTimedOut           LeaseRunOutcome = "CLEANUP_TIMED_OUT"
+	// LeaseRunReleasedAfterSuperseded는 소유는 유지됐지만 job membership이 무효가 되어 callback을 취소·join한 뒤
+	// fenced superseded release를 시도한 결과다. 소유 손실(LeaseRunFenceLost)과 구분한다.
+	LeaseRunReleasedAfterSuperseded LeaseRunOutcome = "RELEASED_AFTER_SUPERSEDED"
+	LeaseRunFenceLost               LeaseRunOutcome = "FENCE_LOST"
+	LeaseRunCleanupTimedOut         LeaseRunOutcome = "CLEANUP_TIMED_OUT"
 )
 
 type LeaseRunResult struct {
@@ -157,8 +161,12 @@ func (r *Repository) finishRenewFailure(
 	result <-chan error,
 	err error,
 ) LeaseRunResult {
-	if errors.Is(err, ErrFenceLost) {
+	if errors.Is(err, collection.ErrFenceLost) {
 		return r.finishFenceLoss(runCtx, cancel, result)
+	}
+
+	if supersededRenewError(err) {
+		return r.finishSuperseded(runCtx, cancel, lease, result, err)
 	}
 
 	cancel()
@@ -199,10 +207,70 @@ func (r *Repository) finishFenceLoss(
 
 	joined, runErr := waitRunResult(cleanupCtx, result)
 	if !joined {
-		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", errors.Join(ErrFenceLost, runErr))}
+		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", errors.Join(collection.ErrFenceLost, runErr))}
 	}
 
-	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: errors.Join(ErrFenceLost, runErr)}
+	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: errors.Join(collection.ErrFenceLost, runErr)}
+}
+
+func supersededRenewError(err error) bool {
+	return errors.Is(err, collection.ErrProjectionStale) || errors.Is(err, collection.ErrTargetDisabled)
+}
+
+// finishSuperseded는 callback을 먼저 취소·join하고, join이 끝난 경우에만 자기 증명으로 fenced release한다.
+// Join 기한을 넘기면 callback이 아직 lease를 쓰고 있을 수 있으므로 해제하지 않고 만료에 맡긴다.
+func (r *Repository) finishSuperseded(
+	runCtx context.Context,
+	cancel context.CancelFunc,
+	lease Lease,
+	result <-chan error,
+	err error,
+) LeaseRunResult {
+	select {
+	case runErr := <-result:
+		if runErr == nil {
+			return finishRunResult(cancel, nil)
+		}
+
+		cancel()
+
+		return r.releaseSuperseded(runCtx, lease, err, runErr)
+	default:
+	}
+
+	cancel()
+
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(runCtx), r.config.CleanupTimeout)
+
+	defer cleanupCancel()
+
+	joined, runErr := waitRunResult(cleanupCtx, result)
+	if !joined {
+		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after superseded renew: %w", errors.Join(err, runErr))}
+	}
+
+	// callback이 취소 전에 이미 terminal까지 끝냈다면 lease는 더 이상 ACTIVE가 아니다.
+	if runErr == nil {
+		return LeaseRunResult{Outcome: LeaseRunCallbackCompleted}
+	}
+
+	return r.releaseSuperseded(cleanupCtx, lease, err, runErr)
+}
+
+func (r *Repository) releaseSuperseded(ctx context.Context, lease Lease, renewErr, runErr error) LeaseRunResult {
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.config.CleanupTimeout)
+	defer cancel()
+
+	releaseErr := releaseWithTimeout(releaseCtx, lease, ReleaseSuperseded, r.config.DBTimeout)
+	if errors.Is(releaseErr, collection.ErrFenceLost) {
+		// 판정과 해제 사이에 소유를 잃었다. 다른 소유자의 lease는 건드리지 않았다.
+		releaseErr = nil
+	}
+
+	return LeaseRunResult{
+		Outcome: LeaseRunReleasedAfterSuperseded,
+		Err:     fmt.Errorf("run collection job: superseded renew: %w", errors.Join(renewErr, releaseErr, runErr)),
+	}
 }
 
 func (r *Repository) handleRunCancel(

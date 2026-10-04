@@ -10,11 +10,12 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func (l *JobLease) CompleteCurrent(ctx context.Context) error {
 	if l == nil || l.repository == nil {
-		return fmt.Errorf("complete current collection job lease: %w", ErrFenceLost)
+		return fmt.Errorf("complete current collection job lease: %w", collection.ErrFenceLost)
 	}
 
 	if err := dbx.InPgxTx(ctx, l.repository.pool, func(tx dbx.Tx) error {
@@ -26,18 +27,21 @@ func (l *JobLease) CompleteCurrent(ctx context.Context) error {
 	return nil
 }
 
+// completeCurrentTx는 tab이 없는 정상 empty COMPLETE의 terminal이다. Publish와 같은 순서로 guard(share) → lease
+// (FOR UPDATE)를 잠근 뒤 새 snapshot에서 job membership을 판정한다. Checkpoint는 만들지 않는다.
+// Not_before 같은 입장 조건은 판정하지 않는다.
 func (l *JobLease) completeCurrentTx(ctx context.Context, tx dbx.Tx) error {
+	// CURRENT 부재는 아래 membership 판정이 소유 손실 다음 순위로 보고한다.
+	if _, _, err := lockProjectionGuard(ctx, tx); err != nil {
+		return fmt.Errorf("lock projection guard: %w", err)
+	}
+
 	if err := lockActiveLease(ctx, tx, &l.proof); err != nil {
 		return fmt.Errorf("lock active lease: %w", err)
 	}
 
-	generation, err := lockAcquireProjection(ctx, tx)
-	if err != nil {
-		return fmt.Errorf("lock acquire projection: %w", err)
-	}
-
-	if err := l.verifyCurrentTargets(ctx, tx, generation); err != nil {
-		return fmt.Errorf("verify current targets: %w", err)
+	if err := collection.VerifyLeaseMembership(ctx, tx, &l.proof, l.scope); err != nil {
+		return fmt.Errorf("verify lease membership: %w", err)
 	}
 
 	if err := completeCurrentLease(ctx, tx, &l.proof); err != nil {
@@ -47,31 +51,14 @@ func (l *JobLease) completeCurrentTx(ctx context.Context, tx dbx.Tx) error {
 	return nil
 }
 
-func (l *JobLease) verifyCurrentTargets(ctx context.Context, tx dbx.Tx, generation int64) error {
-	if generation != l.proof.ProjectionGeneration {
-		return ErrProjectionStale
-	}
-
-	err := l.repository.verifyAcquireTargets(ctx, tx, &l.spec, l.contract, l.contract.CadenceKinds(), generation)
-	if errors.Is(err, ErrInvalidJob) {
-		return ErrTargetDisabled
-	}
-
-	if err != nil {
-		return fmt.Errorf("verify acquire targets: %w", err)
-	}
-
-	return nil
-}
-
 func completeCurrentLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof) error {
 	var jobKey string
 
-	err := tx.QueryRow(ctx, mustSQL("repository_lease_complete_0144_11.sql"), proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
+	err := tx.QueryRow(ctx, sqlLeaseComplete, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
 		proof.ProjectionGeneration, proof.ScheduledFor).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {
@@ -89,12 +76,12 @@ func lockActiveLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof)
 
 	err := tx.QueryRow(
 		ctx,
-		mustSQL("repository_lease_failure_lock_0144_14.sql"),
+		sqlLeaseFailureLock,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrFenceLost
+		return collection.ErrFenceLost
 	}
 
 	if err != nil {

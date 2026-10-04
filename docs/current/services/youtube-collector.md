@@ -15,7 +15,7 @@
 
 ## Role
 
-Observation publish/checkpoint/job 계약 구현은 `hololive/hololive-youtube-collector/internal/runtime/sourceobservation`이 소유합니다. 공용 envelope·canonical JSON·hash·lease 값은 shared `pkg/contracts/sourceobservation`, consume·canonical/replay/retention과 private reducer는 API `internal/youtube/`에 있습니다. YouTube.js pagination 해석은 `internal/runtime/youtubejscollector`가 소유합니다.
+순수 job 계약·target snapshot·수집 입력/결과·retry 값은 `hololive/hololive-youtube-collector/internal/runtime/collection`이 소유하며 SQL adapter에 의존하지 않습니다. Lease SQL은 `joblease`, observation publish/checkpoint SQL은 `sourceobservation`이 소유합니다. 공용 envelope·canonical JSON·hash·lease 값은 shared `pkg/contracts/sourceobservation`, consume·canonical/replay/retention과 private reducer는 API `internal/youtube/`에 있습니다. YouTube.js pagination은 `youtubejscollector`, RPC DTO와 로컬 요청 pacing은 `youtubejs`가 소유합니다.
 
 AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normalize와 PostgreSQL collection lease/checkpoint/`source_observations` Publish만 소유합니다. Canonical persist와 notification intent는 `hololive-api` YouTube plane이 소유합니다. `members.photo` product path는 hololive-api admin PhotoSync가 소유합니다.
 
@@ -27,7 +27,7 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 
 ## 라이브 채널·영상 확인
 
-`DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 canonical LIVE의 신선한 positive가 없을 때 projection이 만드는 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check` 경로입니다. 기존 운영 세대의 두 확인 kind는 youtubejs 전용 schema 1/generation 1이며 아래 개정의 별도 cutover 전에는 이를 유지합니다.
+`DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 구조적 LIVE/검토 대상 UPCOMING membership을 유지하고 `not_before`가 지난 대상만 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check`로 확인합니다. 기존 운영 세대의 두 확인 kind는 youtubejs 전용 schema 1/generation 1이며 아래 개정의 별도 cutover 전에는 이를 유지합니다.
 
 수명 정합성 개정의 새 collector는 `live_snapshot` schema 1/generation 3과 `video_live_check` schema 2/generation 2를 요구합니다. `channel_live_check`와 Holodex 세대는 그대로입니다. API는 과거 snapshot generation 2와 영상 확인 generation 1의 의미를 보존합니다. [개정 계획과 검증 기록](../plans/2026-09-30-live-reconciliation-lifecycle.md)을 따르며 실제 세대 전환은 migration bootstrap과 분리한 `hololive/hololive-api/scripts/migrations/manual/youtube_live_lifecycle_cutover.sql`의 승인된 cutover로 수행합니다.
 
@@ -56,15 +56,31 @@ Holodex live/schedule 작업은 채널 통계·사진 payload를 만들지 않�
 
 ## Atomic publish
 
-`PublishBatch`는 `COMPLETE` terminal을 유지합니다. Scheduler는 `PARTIAL` output에 `PublishBatchAndDefer`를 사용하여 observation/checkpoint/queue와 `DEFERRED` 및 typed `last_failure_*`를 같은 PostgreSQL transaction에서 기록합니다. 성공한 `COMPLETE`/`PARTIAL` terminal commit 뒤에는 별도 defer를 수행하지 않습니다. collision complete는 `observation_collision/DATA_CONTRACT` durable diagnostic을 남기고, 성공 complete는 `last_error_code`만 지웁니다. Release는 `shutdown_release`/`renew_failed_release`/`superseded_release` shape이며 `last_failure_*`는 보존합니다. migration 177/189의 `legacy_collector` backfill trigger는 migration 218에서 지웠고, 기존 행의 `legacy_collector` 값은 이력으로 남습니다.
+`PublishBatch`는 `COMPLETE` terminal을 유지합니다. Scheduler는 `PARTIAL` output에 `PublishBatchAndDefer`를 사용하여 observation/checkpoint/queue와 typed `last_failure_*`를 같은 PostgreSQL transaction에서 기록합니다. 충돌이 없는 PARTIAL은 `DEFERRED`로 같은 슬롯을 재시도합니다. 하나라도 `COLLISION`이면 PARTIAL도 `observation_collision/DATA_CONTRACT`로 완료하여 `IDLE`과 다음 due 슬롯으로 전진합니다. 기존 불변 evidence를 덮어쓰지 않으며 독립 관측은 함께 확정합니다. 성공한 `COMPLETE`/`PARTIAL` terminal commit 뒤에는 별도 defer를 수행하지 않습니다. collision complete는 `observation_collision/DATA_CONTRACT` durable diagnostic을 남기고, 성공 complete는 `last_error_code`만 지웁니다. Release는 `shutdown_release`/`renew_failed_release`/`superseded_release` shape이며 `last_failure_*`는 보존합니다. migration 177/189의 `legacy_collector` backfill trigger는 migration 218에서 지웠고, 기존 행의 `legacy_collector` 값은 이력으로 남습니다.
 
 Runner input의 `TargetSnapshot`은 canonical job contract가 요청한 kind를 한 번에 읽는 immutable view입니다. 요청 kind가 누락되면 fail-closed로 오류를 반환하며, 최종 authority는 계속 publish transaction의 lease fence/current projection/enabled target 검증입니다. Snapshot은 fallback이나 publish 검증 대체 경로가 아닙니다.
 
+membership 개정(migration 259)은 CURRENT guard를 잡은 뒤 lease·현재 target의 연속성을 검증합니다. lease 취득 시 전체 job scope의 kind·정확한 subject 여부·개수를 저장하며, `member_since_generation`으로 무관한 projection 교체를 허용하되 자기 target 제거·재추가(ABA)와 policy 변경을 거부합니다. 취득 generation·owner·epoch·scheduled_for·expiry fence는 유지합니다. `not_before`는 새 취득에만 적용하며 이미 진행 중인 작업을 취소하지 않습니다. 갱신은 guard를 역순으로 잠그지 않습니다. superseded는 실행 취소·합류 후 fenced release하며 합류 실패 때 lease를 풀지 않습니다.
+
+수집 결과는 immutable 관측과 latency만 보관합니다. `collectorruntime.Publisher`가 관측을 한 번 복사해 같은 순서·identity의 checkpoint와 저장 입력을 만듭니다. Repository의 독립 payload·cursor·binding 검증과 방어적 복사는 유지합니다. Job 계약 definition은 불변 handle을 공유하되 호출자에게 주는 kind slice와 확장 가능한 계약 map은 독립 소유입니다.
+
 Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다.
 
-Scheduler가 queue·discovery·lifecycle을 소유하고, 구성 시 한 번 생성한 executor가 provider admission·collection·publish·attempt 결과를 소유합니다. fatal은 first-wins이며 명시적으로 분류된 INTERNAL/PROTOCOL 오류와 runner panic·result invariant·불가능한 queue 상태가 대상입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다. Lease-run join의 `CLEANUP_TIMED_OUT`은 callback이 실제로 합류하지 못한 경우이며, 자체 request timeout을 반환하고 끝난 callback과 구분합니다. Lease supervision timeout만으로 process fatal을 보고하지 않는 기존 정책을 유지하며 함께 보존된 classified fatal 원인은 보고합니다. 아래 helper process cleanup timeout은 별도의 fatal shutdown 경계입니다.
+`collection.queue.max_age`의 fixed 상한을 넘긴 로컬 항목은 dequeue 시 lease 취득 전에 폐기합니다. stale discard·경고를 기록하고 queue 표식을 해제한 뒤 다음 항목을 계속 처리하며, DB terminal이나 즉시 재시도는 만들지 않습니다. Collector `internal/config`는 profile-only preflight와 runtime이 동일한 profile 수치 정책을 적용하도록 소유합니다.
+
+Scheduler가 queue·discovery·lifecycle과 worker·queue·batch·cadence 정책을 소유하고, executor는 단일 collector 설정과 검증된 retry bounds로 수집·발행을 실행합니다. Provider gate는 lease 취득 뒤 snapshot 조회와 수집 동안만 점유하며, 수집 함수가 반환하면 검증·DB publish 전에 정확히 한 번 반환합니다. 반환하지 않은 수집 함수는 계속 슬롯을 점유합니다. Admission timeout의 durable 실패·retry 정책은 그대로입니다. Typed defer는 직접 실패와 PARTIAL 발행에 같은 bounds를 쓰며, 저장 adapter의 진단 마스킹과 DB clock clamp를 유지합니다.
+
+Fatal은 first-wins이며 명시적으로 분류된 INTERNAL/PROTOCOL 오류와 runner panic·result invariant·불가능한 queue 상태가 대상입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다. Lease-run join의 `CLEANUP_TIMED_OUT`은 callback이 실제로 합류하지 못한 경우이며, 자체 request timeout을 반환하고 끝난 callback과 구분합니다. Lease supervision timeout만으로 process fatal을 보고하지 않는 기존 정책을 유지하며 함께 보존된 classified fatal 원인은 보고합니다. 아래 helper process cleanup timeout은 별도의 fatal shutdown 경계입니다.
 
 Official Schedule의 mixed-invalid 응답은 유효한 row를 COMPLETE로 발행하고, 모든 row가 잘못된 응답만 parser drift로 처리합니다. API schedule reducer는 관측한 row를 적용하며 응답에 없는 기존 일정의 삭제 근거로 사용하지 않습니다. 이 COMPLETE는 입력의 모든 row가 유효하다는 보장이 아닙니다.
+
+## 일반 영상 신규성 수집
+
+`video_list` generation 2는 항목별 `publication` 증거를 사용합니다. 목록 두 RPC를 먼저 완료하고 기존 limiter를 통과하는 player RPC 최대 두 번으로 신뢰 가능한 게시 시각 또는 새 최초공개 일정을 확인합니다. 목록 helper 내부의 항목별 player 호출과 상대 게시 날짜 추정은 사용하지 않습니다. 네 RPC의 실행 시한은 기존 profile로 계산하며 fleet rate·worker·retry 상한을 늘리지 않습니다.
+
+같은 슬롯에서 이미 수락된 목록은 재수집하지 않습니다. 후속 슬롯의 확인 진척과 최근 증거는 observation/checkpoint와 같은 transaction의 bounded cursor에 보존합니다. 최근 cache 밖의 긴 목록도 순환하며 새 head를 우선합니다. 현재 generation의 손상 cursor는 `parser_drift/DATA_CONTRACT`로 드러내고 과거 없음으로 초기화하지 않습니다. generation 1 cursor는 새 증거 형식으로 재해석하지 않습니다.
+
+player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체는 명시적 UNRESOLVED로 보존합니다. 취소·lease 상실·fatal 오류를 성공으로 바꾸지 않습니다. 알림 기준과 과거 영상 억제는 [API 정책](hololive-api.md#일반-영상최초공개-신규성)이 소유합니다.
 
 ## Provides
 
@@ -121,6 +137,9 @@ Holodex와 Official Schedule fetch는 collector-owned `providerhttp` transport�
 - Health: `https://127.0.0.1:30025/health`
 - Ready: `https://127.0.0.1:30025/ready`
 - Metrics: live-compat publishes `:30096` on `HOLOLIVE_METRICS_PORT_BIND_IP`
+- 취득·갱신·publish의 `superseded`는 phase별로 구분합니다. empty 결과는 durable terminal commit 뒤에만 성공으로 셉니다.
+- `youtube_observation_accept_interval_seconds`는 checkpoint가 실제 전진한 두 수락 사이 간격입니다. 첫 관측·중복·collision은 표본을 만들지 않습니다. `youtube_observation_last_accepted_timestamp_seconds`는 마지막 실제 수락을 기록합니다.
+- API target 지표는 여섯 collection job의 baseline 수요와 due/eligibility를 표현합니다. freshness 때문에 잠든 `video_live_check`는 누락된 필수 metric으로 간주하지 않습니다. `/ready` 성공은 수집 지연이나 queue full 부재의 증명이 아닙니다.
 
 ## Related docs
 

@@ -26,9 +26,7 @@ func buildConfig(
 		return nil, fmt.Errorf("load iris config: %w", err)
 	}
 
-	// LoadConfig runtime(hololive-api, alarm-worker)은 collector instance ID로 tracing 토글을 고르지 않는다. 이전에 넘기던
-	// ScraperConfig.ActiveActive.InstanceID는 퇴역 producer의 잔재로 늘 빈 값이었다.
-	tracingConfig, err := LoadTracingConfig(options.TracingRuntime, "")
+	tracingConfig, err := LoadTracingConfig(options.TracingEnabledEnv)
 	if err != nil {
 		return nil, fmt.Errorf("load tracing config: %w", err)
 	}
@@ -38,11 +36,6 @@ func buildConfig(
 		return nil, fmt.Errorf("load Kakao config: %w", err)
 	}
 
-	youtubeConfig, err := loadYouTubeConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load youtube config: %w", err)
-	}
-
 	config, err := newBaseConfig(corsAllowedOrigins, corsMissingInProduction, options)
 	if err != nil {
 		return nil, fmt.Errorf("load base config: %w", err)
@@ -50,7 +43,6 @@ func buildConfig(
 
 	config.Iris = irisConfig
 	config.Kakao = newKakaoConfig(kakaoConfig.Rooms, kakaoConfig.ACLEnabled, kakaoConfig.ACLMode)
-	config.YouTube = youtubeConfig
 	config.Tracing = tracingConfig
 
 	if options.Section != nil {
@@ -129,7 +121,7 @@ func applyAPIWorkerProfile(config *Config, profile *APIWorkerProfile) {
 
 // newBaseConfig는 공통 구획을 모두 읽은 뒤 오류를 합쳐 돌려준다. 잘못된 env가 이 공통 구획 여러 곳에 있어도
 // 한 번의 기동 실패로 모두 보이도록 첫 오류에서 멈추지 않으며, 오류가 하나라도 있으면 만든 설정은 버린다.
-// 이보다 먼저 buildConfig가 읽는 iris·tracing·kakao·youtube 로더는
+// 이보다 먼저 buildConfig가 읽는 iris·tracing·kakao 로더는
 // 첫 오류에서 반환하므로 여기에 합쳐지지 않는다.
 func newBaseConfig(
 	corsAllowedOrigins []string,

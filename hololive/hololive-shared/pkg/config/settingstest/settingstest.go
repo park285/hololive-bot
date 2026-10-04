@@ -15,8 +15,6 @@ import (
 )
 
 const (
-	CollectorInstanceC = "youtube-collector-c"
-
 	HololiveH3CertPath = "/run/hololive-bot/certs/hololive-h3.crt"
 	HololiveH3KeyPath  = "/run/hololive-bot/certs/hololive-h3.key"
 

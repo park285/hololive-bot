@@ -12,20 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
 type RPC struct {
 	http      *http.Client
 	endpoint  string
-	limiter   *ratelimiter.RateLimiter
+	limiter   *RateLimiter
 	bodyLimit int64
 	metrics   *rpcMetrics
 }
 
-func NewRPC(httpClient *http.Client, endpoint string, limiter *ratelimiter.RateLimiter) *RPC {
+func NewRPC(httpClient *http.Client, endpoint string, limiter *RateLimiter) *RPC {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultHelperTimeout}
 	}
@@ -58,13 +57,13 @@ func (c *RPC) FetchCommunity(ctx context.Context, request CommunityRequest) (Com
 	return *result, nil
 }
 
-func normalizeCommunityPosts(posts []*parser.CommunityPost) {
+func normalizeCommunityPosts(posts []*CommunityPost) {
 	for _, post := range posts {
 		if post == nil || post.PublishedAt != nil || post.PublishedText == "" {
 			continue
 		}
 
-		if publishedAt, ok := parser.NormalizePublishedAtCandidate(post.PublishedText); ok {
+		if publishedAt, ok := yttimestamp.ParsePublishedAt(post.PublishedText); ok {
 			post.PublishedAt = publishedAt
 		}
 	}

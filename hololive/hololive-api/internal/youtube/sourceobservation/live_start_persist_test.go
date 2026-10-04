@@ -75,7 +75,7 @@ func startHolodexLivePersist(t *testing.T) (*pgxpool.Pool, *Repository, *Consume
 		"holodex_live",
 	)
 
-	return pool, repo, newLiveTestConsumer(pool, repo, 0), proof
+	return pool, repo, NewConsumerWithGraces(repo, 0, 0), proof
 }
 
 func replayLiveObservation(t *testing.T, repo *Repository, consumer *Consumer, observationID int64) {
@@ -178,6 +178,8 @@ func requireLiveStartEvidenceConvergence(t *testing.T, providers []contract.Prov
 		"youtubejs_channel_live",
 	)
 
+	finalizeLeaseRosterCount(t, pool, &holodexProof)
+
 	for _, provider := range providers {
 		proof, subjectKey := liveProviderProof(provider, &holodexProof, &youtubeProof)
 
@@ -194,6 +196,30 @@ func requireLiveStartEvidenceConvergence(t *testing.T, providers []contract.Prov
 	}
 
 	requireConfirmedLiveProjection(t, loadLiveStartProjection(t, pool), youtubeProof.ScheduledFor)
+}
+
+// finalizeLeaseRosterCount는 이미 잡은 lease의 membership 수를 현재 projection의 실제 범위로 확정한다.
+// Holodex live lease는 subject를 고정하지 않는 global live_snapshot 범위이므로, 실제 acquire라면 함께 등록된
+// channel live target까지 세었다. 이 fixture는 target을 lease 뒤에 추가하므로 그 acquisition 명단을 여기서 반영한다.
+func finalizeLeaseRosterCount(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
+	t.Helper()
+
+	tag, err := pool.Exec(t.Context(), `
+		UPDATE youtube_collection_job_leases AS job
+		SET membership_target_count = (
+			SELECT count(*)
+			FROM youtube_collection_targets AS target
+			WHERE target.projection_generation = job.projection_generation
+			  AND target.observation_kind = ANY(job.membership_kinds)
+			  AND target.enabled
+			  AND target.valid_until > NOW()
+			  AND (NOT job.membership_exact_subject OR target.subject_key = job.subject_key)
+		)
+		WHERE job.job_key = $1
+	`, proof.JobKey)
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("finalize lease roster count for %s: rows=%d err=%v", proof.JobKey, tag.RowsAffected(), err)
+	}
 }
 
 func liveProviderProof(

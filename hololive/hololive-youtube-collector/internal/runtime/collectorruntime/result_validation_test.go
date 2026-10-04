@@ -7,19 +7,15 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 const testOtherBinding = "other"
 
 func TestValidateCollectResultChecksMetadataBindings(t *testing.T) {
 	input, registration, envelope := resultValidationFixture(t)
-	checkpoint := collectutil.Checkpoint(&envelope)
 
-	checkpoint.Cursor = []byte(`{"next":"page"}`)
-
-	if err := validateFixtureOutput(t, &input, registration, []contract.Envelope{envelope}, []sourceobservation.CheckpointEntry{checkpoint}); err != nil {
+	if err := validateFixtureOutput(t, &input, registration, []contract.Envelope{envelope}); err != nil {
 		t.Fatalf("valid result rejected: %v", err)
 	}
 
@@ -28,25 +24,13 @@ func TestValidateCollectResultChecksMetadataBindings(t *testing.T) {
 			changed := envelope
 			mutate(&changed)
 
-			changedCheckpoint := collectutil.Checkpoint(&changed)
-			err := validateFixtureOutput(t, &input, registration, []contract.Envelope{changed}, []sourceobservation.CheckpointEntry{changedCheckpoint})
-			requireInvariantFailure(t, err)
-		})
-	}
-
-	for name, mutate := range checkpointBindingMutations() {
-		t.Run(name, func(t *testing.T) {
-			changed := checkpoint
-			mutate(&changed)
-
-			err := validateFixtureOutput(t, &input, registration, []contract.Envelope{envelope}, []sourceobservation.CheckpointEntry{changed})
+			err := validateFixtureOutput(t, &input, registration, []contract.Envelope{changed})
 			requireInvariantFailure(t, err)
 		})
 	}
 
 	t.Run("duplicate binding", func(t *testing.T) {
-		err := validateFixtureOutput(t, &input, registration,
-			[]contract.Envelope{envelope, envelope}, []sourceobservation.CheckpointEntry{checkpoint, checkpoint})
+		err := validateFixtureOutput(t, &input, registration, []contract.Envelope{envelope, envelope})
 		requireInvariantFailure(t, err)
 	})
 }
@@ -69,21 +53,7 @@ func envelopeBindingMutations() map[string]func(*contract.Envelope) {
 	}
 }
 
-func checkpointBindingMutations() map[string]func(*sourceobservation.CheckpointEntry) {
-	return map[string]func(*sourceobservation.CheckpointEntry){
-		"checkpoint provider":   func(c *sourceobservation.CheckpointEntry) { c.Provider = contract.ProviderHolodex },
-		"checkpoint kind":       func(c *sourceobservation.CheckpointEntry) { c.ObservationKind = contract.KindVideoList },
-		"checkpoint subject":    func(c *sourceobservation.CheckpointEntry) { c.SubjectKey = "UC_OTHER" },
-		"checkpoint scope":      func(c *sourceobservation.CheckpointEntry) { c.ScopeSHA256 = testOtherBinding },
-		"checkpoint generation": func(c *sourceobservation.CheckpointEntry) { c.ContractGeneration++ },
-		"checkpoint key":        func(c *sourceobservation.CheckpointEntry) { c.LastObservationKey = testOtherBinding },
-		"checkpoint evidence":   func(c *sourceobservation.CheckpointEntry) { c.LastEvidenceSHA256 = testOtherBinding },
-		"checkpoint schedule":   func(c *sourceobservation.CheckpointEntry) { c.LastScheduledFor = c.LastScheduledFor.Add(time.Second) },
-		"checkpoint continuity": func(c *sourceobservation.CheckpointEntry) { c.Continuity = contract.ContinuityNotApplicable },
-	}
-}
-
-func resultValidationFixture(t *testing.T) (collectutil.RunInput, RegisteredRunner, contract.Envelope) {
+func resultValidationFixture(t *testing.T) (collection.RunInput, RegisteredRunner, contract.Envelope) {
 	t.Helper()
 
 	var fatal []error
@@ -119,22 +89,18 @@ func resultValidationFixture(t *testing.T) (collectutil.RunInput, RegisteredRunn
 
 func validateFixtureOutput(
 	t *testing.T,
-	input *collectutil.RunInput,
+	input *collection.RunInput,
 	registration RegisteredRunner,
 	observations []contract.Envelope,
-	checkpoints []sourceobservation.CheckpointEntry,
 ) error {
 	t.Helper()
 
-	output, err := collectutil.NewRunOutput(observations, checkpoints, time.Second)
+	output, err := collection.NewRunOutput(observations, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := collectutil.NewCompleteResult(output)
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := collection.NewCompleteResult(output)
 
 	return ValidateCollectResult(input, registration, &result, nil)
 }
@@ -157,10 +123,7 @@ func TestValidateFatalResultPreservesCollectionFailureBoundary(t *testing.T) {
 		t.Fatalf("fatal with no result was treated as a validation failure: %v", err)
 	}
 
-	result, err := collectutil.NewCompleteResult(collectutil.RunOutput{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	result := collection.NewCompleteResult(collection.RunOutput{})
 
 	requireInvariantFailure(t, ValidateCollectResult(nil, RegisteredRunner{}, &result, cause))
 	requireInvariantFailure(t, ValidateCollectResult(nil, RegisteredRunner{}, nil, nil))

@@ -249,8 +249,10 @@ func TestLiveSameSlotKeepsFirstCoverageAcrossProviders(t *testing.T) {
 		INSERT INTO youtube_collection_job_leases (
 			job_key, provider, job_class, collection_job_kind, subject_key,
 			projection_generation, poll_interval_ms, slot_state, scheduled_for,
-			next_due_at, fence_epoch, owner_instance, lease_expires_at
-		) VALUES ($1, 'holodex', 'GLOBAL', 'holodex_live', $2, $3, 60000, 'ACTIVE', $4, $4, $5, $6, NOW()+INTERVAL '1 hour')
+			next_due_at, fence_epoch, owner_instance, lease_expires_at,
+			membership_kinds, membership_exact_subject, membership_target_count
+		) VALUES ($1, 'holodex', 'GLOBAL', 'holodex_live', $2, $3, 60000, 'ACTIVE', $4, $4, $5, $6, NOW()+INTERVAL '1 hour',
+		          ARRAY['live_snapshot']::text[], FALSE, 1)
 	`, holodexProof.JobKey, testChannelID, proof.ProjectionGeneration, proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance); err != nil {
 		t.Fatal(err)
 	}

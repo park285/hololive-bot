@@ -2,12 +2,19 @@ package dispatchoutbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
 
+// RecoverExpiredLeased는 발송 단위를 분할하지 않는다. 첫 단위가 limit보다 크면 그 단위 전체를
+// 복구하므로 반환 행 수는 최대 maxDeliveriesPerSendUnit-1만큼 상한을 넘을 수 있다.
 func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (int, error) {
-	out, err := r.recoverWithQuery(ctx, mustSQL("repository_maintenance_0010_01.sql"), limit)
+	if limit <= 0 {
+		return 0, errors.New("recover expired leased dispatch deliveries: limit must be positive")
+	}
+
+	out, err := r.recoverWithQuery(ctx, mustSQL("repository_maintenance_0010_01.sql"), limit, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return out, fmt.Errorf("recover with query: %w", err)
 	}

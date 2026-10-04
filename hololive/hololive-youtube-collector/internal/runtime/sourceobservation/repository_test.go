@@ -15,6 +15,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
@@ -105,7 +106,7 @@ func TestPublishBatchSamePayloadNextScheduledSlotCreatesTwoObservations(t *testi
 		t.Fatalf("publish first slot: %v", err)
 	}
 
-	secondProof := advanceLease(t.Context(), t, pool, &firstProof, time.Minute)
+	secondProof := advanceLease(t.Context(), t, pool, &firstProof)
 	second := communityEnvelope(t, &secondProof, "post-1")
 
 	if first.PayloadSHA256 != second.PayloadSHA256 || first.ObservationKey == second.ObservationKey {
@@ -124,14 +125,14 @@ func TestHistoricalViewerPublishEqualValueNextWindowCreatesTwoObservations(t *te
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	firstProof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
-	repo := historicalViewerPublisher(pool)
+	repo := historicalViewerPublisher(t, pool)
 	first := viewerEnvelope(t, &firstProof, 1, 100)
 
 	if _, err := repo.PublishBatch(ctx, publishInput(first)); err != nil {
 		t.Fatalf("publish first sample: %v", err)
 	}
 
-	secondProof := advanceLease(t.Context(), t, pool, &firstProof, time.Minute)
+	secondProof := advanceLease(t.Context(), t, pool, &firstProof)
 	second := viewerEnvelope(t, &secondProof, 1, 100)
 
 	if _, err := repo.PublishBatch(ctx, publishInput(second)); err != nil {
@@ -146,14 +147,7 @@ func TestPublishBatchRejectsUnrelatedCheckpointWithoutWrites(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'UC_OTHER', 'community_page', 50, 60000, TRUE, NOW() + INTERVAL '1 day')
-	`, proof.ProjectionGeneration); err != nil {
-		t.Fatalf("seed unrelated target: %v", err)
-	}
+	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, "UC_OTHER", contract.KindCommunityPage, true)
 
 	oldEvidence := strings.Repeat("c", 64)
 	if _, err := pool.Exec(ctx, `
@@ -225,14 +219,7 @@ func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'UC_TEST', 'channel_photo', 50, 60000, TRUE, NOW() + INTERVAL '1 day')
-	`, proof.ProjectionGeneration); err != nil {
-		t.Fatalf("seed second kind target: %v", err)
-	}
+	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, testChannelID, contract.KindChannelPhoto, true)
 
 	profile := channelProfileEnvelope(t, &proof, 1)
 	photo := channelPhotoEnvelopeFor(t, &proof, testChannelID)
@@ -264,14 +251,7 @@ func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'UC_TEST', 'channel_photo', 50, 60000, TRUE, NOW() + INTERVAL '1 day')
-	`, proof.ProjectionGeneration); err != nil {
-		t.Fatalf("seed second kind target: %v", err)
-	}
+	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, testChannelID, contract.KindChannelPhoto, true)
 
 	profile := channelProfileEnvelope(t, &proof, 1)
 	photo := channelPhotoEnvelopeFor(t, &proof, testChannelID)
@@ -397,9 +377,10 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 		t.Fatal(commitErr)
 	}
 
+	// 새 CURRENT가 이 job의 target을 이어받지 않았으므로 job별 membership 변경(superseded)으로 거절된다.
 	_, err = NewRepository(pool).PublishBatch(ctx, publishInput(envelope))
-	if !errors.Is(err, ErrProjectionStale) {
-		t.Fatalf("disabled mid-fetch error = %v", err)
+	if !errors.Is(err, collection.ErrTargetDisabled) {
+		t.Fatalf("own target removed mid-fetch error = %v", err)
 	}
 
 	assertPublishSideEffects(t, pool, 0, 0, 0)
@@ -420,14 +401,7 @@ func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'UC_OTHER', 'channel_photo', 50, 60000, TRUE, clock_timestamp() + INTERVAL '1 hour')
-	`, proof.ProjectionGeneration); err != nil {
-		t.Fatal(err)
-	}
+	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, "UC_OTHER", contract.KindChannelPhoto, true)
 
 	profile := channelProfileEnvelope(t, &proof, 1)
 	photo := channelPhotoEnvelopeFor(t, &proof, "UC_OTHER")
@@ -440,7 +414,7 @@ func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 		Observations: []contract.Envelope{*profile, *photo},
 	})
 
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("out-of-bundle error = %v", err)
 	}
 
@@ -452,18 +426,11 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, 'video-2', 'viewer_sample', 50, 60000, FALSE, clock_timestamp() + INTERVAL '1 hour')
-	`, proof.ProjectionGeneration); err != nil {
-		t.Fatal(err)
-	}
+	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, "video-2", contract.KindViewerSample, false)
 
 	first := viewerEnvelopeFor(t, &proof, 1, "video-1", 100)
 	second := viewerEnvelopeFor(t, &proof, 1, "video-2", 200)
-	_, err := historicalViewerPublisher(pool).PublishBatch(ctx, &PublishBatchInput{
+	_, err := historicalViewerPublisher(t, pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{checkpointForEnvelope(first), checkpointForEnvelope(second)},
@@ -472,7 +439,7 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 		Observations: []contract.Envelope{*first, *second},
 	})
 
-	if !errors.Is(err, ErrTargetDisabled) {
+	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("global disabled target error = %v", err)
 	}
 
@@ -529,7 +496,7 @@ func TestStaleHolderCannotMutatePublishOrJobState(t *testing.T) {
 
 	close(resumeA)
 
-	if err := <-resultA; !errors.Is(err, ErrCollectionFenceLost) {
+	if err := <-resultA; !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale holder error = %v", err)
 	}
 
@@ -603,7 +570,7 @@ func runStaleHolderCase(t *testing.T, name, postID string) {
 	before := readCollectionJobLeaseState(ctx, t, pool, proofB.JobKey)
 
 	candidate := communityEnvelope(t, &proofA, postID)
-	if _, err := repo.PublishBatch(ctx, publishInput(candidate)); !errors.Is(err, ErrCollectionFenceLost) {
+	if _, err := repo.PublishBatch(ctx, publishInput(candidate)); !errors.Is(err, collection.ErrFenceLost) {
 		t.Fatalf("stale %s error = %v", name, err)
 	}
 
@@ -776,14 +743,7 @@ func seedPublishLease(
 		tb.Fatalf("seed projection: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, $2, $3, 50, 60000, TRUE, NOW() + INTERVAL '1 day')
-	`, generation, subjectKey, kind); err != nil {
-		tb.Fatalf("seed target: %v", err)
-	}
+	insertPublishTarget(ctx, tb, pool, generation, subjectKey, kind, true)
 
 	proof := contract.LeaseProof{
 		JobKey:               "job:" + jobKind + ":" + subjectKey,
@@ -799,18 +759,82 @@ func seedPublishLease(
 		jobClass = "GLOBAL"
 	}
 
+	scope := publishFixtureScope(tb, provider, jobKind)
+
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_job_leases (
 			job_key, provider, job_class, collection_job_kind, subject_key,
 			projection_generation, poll_interval_ms, slot_state, scheduled_for,
-			next_due_at, fence_epoch, owner_instance, lease_expires_at
-		) VALUES ($1, $2, $3, $4, $5, $6, 60000, 'ACTIVE', $7, $7, $8, $9, NOW() + INTERVAL '1 hour')
+			next_due_at, fence_epoch, owner_instance, lease_expires_at,
+			membership_kinds, membership_exact_subject
+		) VALUES ($1, $2, $3, $4, $5, $6, 60000, 'ACTIVE', $7, $7, $8, $9, NOW() + INTERVAL '1 hour', $10::text[], $11)
 	`, proof.JobKey, provider, jobClass, jobKind, subjectKey, generation,
-		proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance); err != nil {
+		proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance, scope.Kinds, scope.ExactSubject); err != nil {
 		tb.Fatalf("seed lease: %v", err)
 	}
 
+	resyncPublishMembership(ctx, tb, pool)
+
 	return proof
+}
+
+// publishFixtureScope는 시드 lease에 acquire와 같은 membership 범위를 기록한다. 과거 viewer 계약까지 포함한 집합에서
+// 찾으며, 계약이 없는 job은 빈 범위로 남겨 fail closed한다.
+func publishFixtureScope(tb testing.TB, provider contract.Provider, jobKind string) collection.MembershipScope {
+	tb.Helper()
+
+	definition, ok := historicalViewerJobContracts(tb).Definition(collection.JobID{Provider: provider, Kind: collection.JobKind(jobKind)})
+	if !ok {
+		return collection.MembershipScope{Kinds: []string{}}
+	}
+
+	return collection.MembershipScopeFor(definition)
+}
+
+// insertPublishTarget은 이 generation부터 이어지는 활성/비활성 대상을 넣고, 획득 시점 roster로 보고 ACTIVE lease의
+// membership 행 수를 다시 맞춘다.
+func insertPublishTarget(
+	ctx context.Context,
+	tb testing.TB,
+	pool *pgxpool.Pool,
+	generation int64,
+	subjectKey string,
+	kind contract.ObservationKind,
+	enabled bool,
+) {
+	tb.Helper()
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO youtube_collection_targets (
+			projection_generation, subject_key, observation_kind,
+			priority, poll_interval_ms, enabled, valid_until, member_since_generation
+		) VALUES ($1, $2, $3, 50, 60000, $4, NOW() + INTERVAL '1 day', $1)
+		ON CONFLICT (projection_generation, subject_key, observation_kind) DO NOTHING
+	`, generation, subjectKey, kind, enabled); err != nil {
+		tb.Fatalf("seed target: %v", err)
+	}
+
+	resyncPublishMembership(ctx, tb, pool)
+}
+
+func resyncPublishMembership(ctx context.Context, tb testing.TB, pool *pgxpool.Pool) {
+	tb.Helper()
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE youtube_collection_job_leases AS job
+		SET membership_target_count = (
+			SELECT count(*)
+			FROM youtube_collection_targets AS target
+			WHERE target.projection_generation = job.projection_generation
+			  AND target.observation_kind = ANY(job.membership_kinds)
+			  AND target.enabled
+			  AND target.valid_until > NOW()
+			  AND (NOT job.membership_exact_subject OR target.subject_key = job.subject_key)
+		)
+		WHERE job.slot_state = 'ACTIVE'
+	`); err != nil {
+		tb.Fatalf("resync lease membership: %v", err)
+	}
 }
 
 func reactivateLease(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
@@ -826,19 +850,19 @@ func reactivateLease(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProo
 	}
 }
 
+// advanceLease는 fence epoch를 올리고 lease를 1분 뒤 다음 slot으로 옮겨 다시 ACTIVE로 만든다.
 func advanceLease(
 	ctx context.Context,
 	tb testing.TB,
 	pool *pgxpool.Pool,
 	proof *contract.LeaseProof,
-	delta time.Duration,
 ) contract.LeaseProof {
 	tb.Helper()
 
 	next := *proof
 	next.FenceEpoch++
 
-	next.ScheduledFor = next.ScheduledFor.Add(delta)
+	next.ScheduledFor = next.ScheduledFor.Add(time.Minute)
 
 	if _, err := pool.Exec(ctx, `
 		UPDATE youtube_collection_job_leases

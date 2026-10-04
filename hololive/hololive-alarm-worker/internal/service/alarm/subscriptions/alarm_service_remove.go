@@ -9,6 +9,7 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
+	"github.com/kapu/hololive-shared/pkg/cleanupctx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
@@ -55,12 +56,20 @@ func (as *AlarmService) removeAlarm(ctx context.Context, roomID, channelID, host
 		return false, nil
 	}
 
+	if err := as.invalidateChannelSubscribers(ctx, channelID, mutation.effectiveRemovalTypes); err != nil {
+		opErr = err
+		return false, fmt.Errorf("invalidate subscribers before removal: %w", err)
+	}
+
 	if persistErr := as.persistRemoveAlarmMutation(ctx, roomID, channelID, mutation); persistErr != nil {
 		opErr = persistErr
 		return false, fmt.Errorf("persist remove alarm mutation: %w", persistErr)
 	}
 
-	if err := as.removeAlarmCacheMutation(ctx, roomID, channelID, mutation); err != nil {
+	cacheCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+	defer cancel()
+
+	if err := as.removeAlarmCacheMutation(cacheCtx, channelID); err != nil {
 		opErr = err
 		return false, fmt.Errorf("remove alarm cache mutation: %w", err)
 	}
@@ -151,16 +160,8 @@ func (as *AlarmService) updateAlarmTypesBeforeCacheRemoval(ctx context.Context, 
 	return nil
 }
 
-func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID, channelID string, mutation removeAlarmMutation) error {
-	var err error
-
-	if mekparkhost.SupportsSubscriptions(channelID) {
-		err = as.refreshRoomChannelSubscriptions(ctx, roomID, channelID)
-	} else {
-		err = as.removeAlarmFromCache(ctx, roomID, channelID, mutation.effectiveRemovalTypes)
-	}
-
-	if err != nil {
+func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, channelID string) error {
+	if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
 
 		return sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild remove cache from repository", opErr)

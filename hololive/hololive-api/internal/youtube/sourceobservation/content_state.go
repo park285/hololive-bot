@@ -57,9 +57,9 @@ func loadContentState(
 }
 
 func loadContentHead(ctx context.Context, tx dbx.Tx, state *content.State) error {
-	var earliest *time.Time
+	var earliestComplete, earliestBaseline *time.Time
 
-	err := tx.QueryRow(ctx, mustSQL("repository_content_channel_head_0040_40.sql"), state.ChannelID, state.Kind).Scan(&earliest)
+	err := tx.QueryRow(ctx, mustSQL("repository_content_channel_head_0040_40.sql"), state.ChannelID, state.Kind).Scan(&earliestComplete, &earliestBaseline)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -69,7 +69,8 @@ func loadContentHead(ctx context.Context, tx dbx.Tx, state *content.State) error
 		return fmt.Errorf("load content channel head: %w", err)
 	}
 
-	state.EarliestCompleteAt = earliest
+	state.EarliestCompleteAt = earliestComplete
+	state.EarliestBaselineAt = earliestBaseline
 
 	return nil
 }
@@ -110,6 +111,46 @@ func loadContentVideos(ctx context.Context, tx dbx.Tx, state *content.State, evi
 
 	if err := loadContentClocks(ctx, tx, state, ids); err != nil {
 		return fmt.Errorf("load content clocks: %w", err)
+	}
+
+	if state.Kind == contract.KindVideoList {
+		if err := loadKnownElsewhere(ctx, tx, state, evidenceIDs); err != nil {
+			return fmt.Errorf("load known elsewhere: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// loadKnownElsewhere는 이번 video_list 영상 중 다른 채널이나 Shorts로 이미 저장된 ID를 읽습니다. 이런 영상은 이 채널 목록에서
+// 처음 보여도 새 업로드 근거가 아니므로 NEW_VIDEO 후보에서 뺍니다. 행을 잠그지 않으며 결과는 이번 관측 영상 수로 제한됩니다.
+func loadKnownElsewhere(ctx context.Context, tx dbx.Tx, state *content.State, evidenceIDs []string) error {
+	if len(evidenceIDs) == 0 {
+		return nil
+	}
+
+	rows, err := tx.Query(ctx, mustSQL("repository_content_known_elsewhere_0087_87.sql"), state.ChannelID, evidenceIDs)
+	if err != nil {
+		return fmt.Errorf("query known elsewhere: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var videoID string
+
+		if err := rows.Scan(&videoID); err != nil {
+			return fmt.Errorf("scan known elsewhere: %w", err)
+		}
+
+		if state.KnownElsewhere == nil {
+			state.KnownElsewhere = map[string]struct{}{}
+		}
+
+		state.KnownElsewhere[videoID] = struct{}{}
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("query known elsewhere: %w", err)
 	}
 
 	return nil

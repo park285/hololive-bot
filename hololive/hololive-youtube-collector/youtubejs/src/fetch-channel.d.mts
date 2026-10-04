@@ -4,4 +4,4 @@ export function fetchChannelFeed(
   options: ChannelFetchOptions & {
     innertube?: unknown;
   },
-): Promise<ChannelResult>;
+): Promise<Omit<ChannelResult, "protocol_version">>;

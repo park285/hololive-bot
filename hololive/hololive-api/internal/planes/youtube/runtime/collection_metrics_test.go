@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 		t.Fatal(err)
 	}
 
-	rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"))
+	rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +75,73 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 	assertCollectionSnapshotMetrics(t, m, now)
 }
 
+// TestCollectionTargetSnapshotDefersSleepingTargets는 not_before가 미래인 영상 확인 target이 due·미완료·stale로
+// 보이지 않고 수요를 신선도 예산당 1회로 세며, 지난 not_before는 즉시 due로 돌아오는지 확인한다.
+func TestCollectionTargetSnapshotDefersSleepingTargets(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, collectionTargetFixture); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until,created_at,not_before)
+		SELECT generation, subject, 'video_live_check', 20, 120000, true, now()+interval '1 hour', now()-interval '10 minutes', now()+wake
+		FROM youtube_collection_projection_generations CROSS JOIN (VALUES
+		 ('video-sleeping', interval '2 minutes'),
+		 ('video-awake', interval '-1 minute'),
+		 ('video-slept', interval '1 minute')
+		) AS seed(subject, wake)
+		WHERE status='CURRENT';
+		-- 완료 뒤 slot 시각은 지났지만 더 새로운 신선도 근거로 잠든 job은 stale·due가 아니다.
+		INSERT INTO youtube_collection_job_leases(job_key,provider,job_class,collection_job_kind,subject_key,
+		projection_generation,poll_interval_ms,slot_state,scheduled_for,next_due_at,last_completed_at)
+		SELECT 'collector:youtubejs:youtubejs_video_live:video-slept','youtubejs','SUBJECT','youtubejs_video_live','video-slept',
+		generation,120000,'IDLE',now()-interval '12 minutes',now()-interval '5 minutes',now()-interval '10 minutes'
+		FROM youtube_collection_projection_generations WHERE status='CURRENT';
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := pool.Query(ctx, mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	samples, err := scanCollectionTargets(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(samples) != collectionTargetJobCount {
+		t.Fatalf("snapshot rows = %d, want %d", len(samples), collectionTargetJobCount)
+	}
+
+	for i := range samples {
+		s := &samples[i]
+		if s.kind != "youtubejs_video_live" {
+			continue
+		}
+
+		// video-stale(fixture)과 video-awake만 확인 가능하고 미완료다. video-slept는 완료 나이가 커도 잠들어 있다.
+		got := [...]int64{s.targets, s.neverCompleted, s.stale, s.due}
+		if got != [...]int64{4, 2, 0, 2} || s.oldestDueAge < 60 || s.oldestCompletionAge != 0 {
+			t.Fatalf("video live snapshot = %+v", s)
+		}
+
+		budget := float64(defaultLiveFreshnessBudget().Milliseconds())
+		if want := 2*1000.0/120000 + 2*1000.0/budget; math.Abs(s.requiredRate-want) > 1e-9 {
+			t.Fatalf("video live required rate = %v, want %v", s.requiredRate, want)
+		}
+
+		return
+	}
+
+	t.Fatal("video live snapshot row is missing")
+}
+
 func assertCollectionSnapshotMetrics(t *testing.T, m *collectionTargetMetrics, now time.Time) {
 	t.Helper()
 
@@ -121,7 +189,7 @@ func TestCollectionTargetSnapshotRejectsInvalidProjection(t *testing.T) {
 				}
 			}
 
-			rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"))
+			rows, err := pool.Query(t.Context(), mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +231,7 @@ func TestCollectionLiveStateWorkExcludesRetainedEndedHistory(t *testing.T) {
 
 	var raw []byte
 
-	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("collection_target_observability.sql")).Scan(&raw); err != nil {
+	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("collection_target_observability.sql"), defaultLiveFreshnessBudget().Milliseconds()).Scan(&raw); err != nil {
 		t.Fatal(err)
 	}
 

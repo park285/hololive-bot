@@ -15,10 +15,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
@@ -33,7 +33,7 @@ type supersededLease struct {
 func (l *supersededLease) Proof() contract.LeaseProof            { return contract.LeaseProof{} }
 func (l *supersededLease) Renew(context.Context) error           { return nil }
 func (l *supersededLease) CompleteCurrent(context.Context) error { return nil }
-func (l *supersededLease) Defer(context.Context, time.Time, string, string, string) error {
+func (l *supersededLease) Defer(context.Context, collection.DeferCollectionInput) error {
 	return nil
 }
 
@@ -70,8 +70,8 @@ func TestExpectedProjectionChurnUsesSupersededAttemptAndPublishMetrics(t *testin
 	t.Parallel()
 
 	for name, sourceErr := range map[string]error{
-		"projection stale": sourceobservation.ErrProjectionStale,
-		"target disabled":  sourceobservation.ErrTargetDisabled,
+		"projection stale": collection.ErrProjectionStale,
+		"target disabled":  collection.ErrTargetDisabled,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -165,10 +165,10 @@ func TestUnknownPublishErrorRemainsFailedAndRejected(t *testing.T) {
 	}
 }
 
-func testRunOutput(t *testing.T, envelopes []contract.Envelope) collectutil.RunOutput {
+func testRunOutput(t *testing.T, envelopes []contract.Envelope) collection.RunOutput {
 	t.Helper()
 
-	output, err := collectutil.OutputFromEnvelopes(envelopes, time.Now())
+	output, err := collection.OutputFromEnvelopes(envelopes, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
 	var output bytes.Buffer
 
 	scheduler := &leaseScheduler{executor: &collectionExecutor{logger: slog.New(slog.NewJSONHandler(&output, nil))}}
-	spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
+	spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 	scheduler.executor.logFailure(t.Context(), "collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
 
 	if strings.Contains(output.String(), "secret-value") {
@@ -330,11 +330,13 @@ func (l *recordingLease) Renew(context.Context) error                           
 func (l *recordingLease) CompleteCurrent(context.Context) error                 { return nil }
 func (l *recordingLease) Release(context.Context, joblease.ReleaseReason) error { return nil }
 
-func (l *recordingLease) Defer(_ context.Context, _ time.Time, code, class, _ string) error {
+func (l *recordingLease) Defer(_ context.Context, input collection.DeferCollectionInput) error {
 	l.deferCalls++
 
-	l.deferCode = code
-	l.deferClass = class
+	diagnostic := input.Diagnostic()
+
+	l.deferCode = string(diagnostic.Code())
+	l.deferClass = string(diagnostic.Class())
 
 	return nil
 }
@@ -345,13 +347,10 @@ func newRunErrorExecutor(fatal *[]error) *collectionExecutor {
 	collector.CleanupTimeout = time.Second
 
 	return &collectionExecutor{
-		logger:    slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
-		metrics:   NewMetrics(prometheus.NewPedanticRegistry()),
-		collector: collector,
-		config: joblease.Config{
-			MinRetryDelay: time.Minute,
-			MaxRetryDelay: 10 * time.Minute,
-		},
+		logger:      slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		metrics:     NewMetrics(prometheus.NewPedanticRegistry()),
+		collector:   collector,
+		retryBounds: collection.RetryBounds{Minimum: time.Minute, Maximum: 10 * time.Minute},
 		reportFatal: func(err error) { *fatal = append(*fatal, err) },
 	}
 }
@@ -372,7 +371,7 @@ func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
 	executor := newRunErrorExecutor(&fatal)
 	lease := &recordingLease{}
 	spec := &joblease.JobSpec{
-		JobKey:            "job",
+		JobKey:            testJobKey,
 		Provider:          contract.ProviderYouTubeJS,
 		CollectionJobKind: testCommunityJobKind,
 		SubjectKey:        testSubjectKey,
@@ -541,7 +540,7 @@ func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing
 
 			executor.metrics = NewMetrics(registerer)
 
-			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
+			spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 
 			handled := executor.handleLeaseRunOutcome(t.Context(), joblease.LeaseRunResult{Outcome: test.outcome, Err: test.err}, spec, &contract.LeaseProof{})
 
@@ -570,7 +569,7 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 	}{
 		{name: "database error", releaseErr: errors.New("release lease: connection reset by peer")},
 		{name: "timeout", releaseErr: fmt.Errorf("release lease: %w", context.DeadlineExceeded)},
-		{name: "fence lost", releaseErr: joblease.ErrFenceLost},
+		{name: "fence lost", releaseErr: collection.ErrFenceLost},
 		{name: "classified internal invariant", releaseErr: collecterr.New(collecterr.Internal, collecterr.ClassInternal, "invariant violated"), wantFatal: true},
 	}
 	for _, test := range tests {
@@ -581,8 +580,8 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 
 			executor := newRunErrorExecutor(&fatal)
 			lease := &supersededLease{releaseErr: test.releaseErr}
-			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
-			runErr := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", sourceobservation.ErrProjectionStale))
+			spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
+			runErr := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", collection.ErrProjectionStale))
 
 			executor.handleRunError(t.Context(), lease, spec, &contract.LeaseProof{}, runErr)
 
@@ -626,10 +625,10 @@ func TestProviderAdmissionPreservesConfiguration(t *testing.T) {
 	calls := 0
 	runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-	runner.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
+	runner.collect = func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
 		calls++
 
-		return collectutil.CollectResult{}, nil
+		return collection.CollectResult{}, nil
 	}
 
 	executor, spec := newExecutorFixture(t, runner, &fatal)
@@ -662,7 +661,7 @@ func TestSupervisionRetainsFatalCallbackAfterCancellation(t *testing.T) {
 
 			executor := newRunErrorExecutor(&fatal)
 			cause := collecterr.New(collecterr.Internal, collecterr.ClassInternal, "callback invariant")
-			err := errors.Join(context.Canceled, joblease.ErrFenceLost, cause)
+			err := errors.Join(context.Canceled, collection.ErrFenceLost, cause)
 
 			if !executor.handleLeaseRunOutcome(t.Context(), joblease.LeaseRunResult{Outcome: outcome, Err: err}, &joblease.JobSpec{}, &contract.LeaseProof{}) {
 				t.Fatal("supervision outcome was not handled")

@@ -11,9 +11,9 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
@@ -25,16 +25,24 @@ func leaseConfigFrom(cfg *collectorconfig.Config) (joblease.Config, error) {
 	lease := joblease.Config{
 		LeaseTTL: cfg.LeaseTTL, RenewInterval: cfg.RenewInterval,
 		RenewTimeout: cfg.RenewTimeout, DBTimeout: cfg.DBTimeout, CleanupTimeout: cfg.CleanupTimeout,
-		MinRetryDelay: cfg.RetryMin, MaxRetryDelay: cfg.RetryMax,
 		MinReleaseJitter: cfg.ReleaseJitterMin, MaxReleaseJitter: cfg.ReleaseJitterMax,
-		AcquisitionBatch: cfg.AcquisitionBatch, WorkerCount: cfg.TotalWorkers,
-		QueueCapacity: cfg.QueueCapacity, PollCadence: cfg.AcquisitionCadence,
+		AcquisitionBatch: cfg.AcquisitionBatch, QueueCapacity: cfg.QueueCapacity,
 	}
 	if err := lease.Validate(); err != nil {
 		return joblease.Config{}, fmt.Errorf("validate: %w", err)
 	}
 
 	return lease, nil
+}
+
+// retryBoundsFrom은 직접 defer와 partial publish가 함께 쓰는 재시도 범위를 구성 시 한 번 검증합니다.
+func retryBoundsFrom(cfg *collectorconfig.Config) (collection.RetryBounds, error) {
+	bounds := collection.RetryBounds{Minimum: cfg.RetryMin, Maximum: cfg.RetryMax}
+	if err := bounds.Validate(); err != nil {
+		return collection.RetryBounds{}, fmt.Errorf("validate: %w", err)
+	}
+
+	return bounds, nil
 }
 
 func buildScheduler(
@@ -101,6 +109,11 @@ func newLeaseScheduler(
 		return nil, fmt.Errorf("collector owner: %w", err)
 	}
 
+	retryBounds, err := retryBoundsFrom(collector)
+	if err != nil {
+		return nil, fmt.Errorf("build youtube collector: retry bounds: %w", err)
+	}
+
 	executor := &collectionExecutor{
 		repository:    repository,
 		registry:      registry,
@@ -108,32 +121,54 @@ func newLeaseScheduler(
 		metrics:       NewMetrics(nil),
 		owner:         owner,
 		logger:        logger,
-		config:        *leaseConfig,
 		collector:     *collector,
+		retryBounds:   retryBounds,
 		gates:         newProviderGates(collector),
 		readiness:     tracker,
 		workerTracker: workercontract.NewExecutorTracker(),
 		workerTotals:  &workercontract.Counters{},
 	}
 
-	return newScheduler(executor, repository), nil
+	return newScheduler(executor, repository, collector), nil
 }
 
-// 실행 의존성은 구성 시 확정하며 모든 worker가 같은 executor와 admission gate를 사용합니다.
-func newScheduler(executor *collectionExecutor, candidates projectionCandidateSource) *leaseScheduler {
+// newScheduler는 worker·queue·discovery 정책을 구성에서 한 번 복사하고, executor와 같은 관측 인스턴스를 공유합니다.
+func newScheduler(executor *collectionExecutor, candidates projectionCandidateSource, cfg *collectorconfig.Config) *leaseScheduler {
 	scheduler := &leaseScheduler{
-		executor:   executor,
-		candidates: candidates,
-		state:      SchedulerNew,
-		queued:     make(map[string]struct{}),
-		queuedAt:   make(map[string]time.Time),
-		queue:      make(chan joblease.JobSpec, executor.config.QueueCapacity),
-		fatal:      make(chan error, 1),
+		executor:         executor,
+		candidates:       candidates,
+		workers:          cfg.TotalWorkers,
+		queueCapacity:    cfg.QueueCapacity,
+		queueMaxAge:      cfg.QueueMaxAge,
+		acquisitionBatch: cfg.AcquisitionBatch,
+		pollCadence:      cfg.AcquisitionCadence,
+		dbTimeout:        cfg.DBTimeout,
+		metrics:          executor.metrics,
+		logger:           executor.logger,
+		workerTracker:    executor.workerTracker,
+		workerTotals:     executor.workerTotals,
+		state:            SchedulerNew,
+		queued:           make(map[string]struct{}),
+		queuedAt:         make(map[string]time.Time),
+		queue:            make(chan joblease.JobSpec, cfg.QueueCapacity),
+		fatal:            make(chan error, 1),
 	}
 
 	executor.reportFatal = scheduler.reportFatal
 
 	return scheduler
+}
+
+// jobMaxUpstreamCalls는 job 실행 한 번이 보내는 helper RPC 수의 상한입니다.
+// Content는 목록 두 종류 RPC에 더해 신규 영상의 공개 시각 근거 확인 RPC(youtubejscollector.ContentPublicationMaxCalls)를
+// 같은 예산 안에서 보냅니다. 방송 탭 snapshot·채널 확인·영상 확인은 각자 RPC 1회입니다.
+func jobMaxUpstreamCalls(id collection.JobID) int {
+	switch string(id.Kind) {
+	case "youtubejs_content":
+		return 2 + youtubejscollector.ContentPublicationMaxCalls
+	default:
+		return 1
+	}
 }
 
 func newCollectorRegistry(
@@ -142,7 +177,7 @@ func newCollectorRegistry(
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,
 ) (*Registry, error) {
-	runners := collectorRunners(infra)
+	runners := collectorRunners(infra, cfg.CollectionOverhead)
 
 	profiles, err := collectorExecutionProfiles(runners, cfg, holodexTimeout, officialTimeout)
 	if err != nil {
@@ -157,12 +192,15 @@ func newCollectorRegistry(
 	return registry, nil
 }
 
-func collectorRunners(infra *collectorInfrastructure) []collectutil.JobRunner {
-	maxResults := collectutil.DefaultMaxResults()
+// collectorRunners는 provider runner를 만든다. Content runner의 신규성 판정은 마지막 durable checkpoint cursor를
+// 읽어야 하므로 발행과 같은 source observation 저장소를 cursor 조회자로 받는다. 공개 근거 조회는 수집 deadline에서
+// 기존 비-RPC 여유(collectionOverhead)를 남기고 끝나야 목록 관측과 cursor가 같은 수집에서 발행된다.
+func collectorRunners(infra *collectorInfrastructure, collectionOverhead time.Duration) []collection.JobRunner {
+	cursors := sourceobservation.NewRepository(infra.postgres.GetPool())
 
-	return []collectutil.JobRunner{
-		youtubejscollector.NewCommunityRunner(infra.youtubejsRPC, maxResults),
-		youtubejscollector.NewContentRunner(infra.youtubejsRPC, maxResults),
+	return []collection.JobRunner{
+		youtubejscollector.NewCommunityRunner(infra.youtubejsRPC),
+		youtubejscollector.NewContentRunner(infra.youtubejsRPC, cursors, collectionOverhead),
 		youtubejscollector.NewChannelLiveRunner(infra.youtubejsRPC),
 		youtubejscollector.NewChannelLiveCheckRunner(infra.youtubejsRPC),
 		youtubejscollector.NewChannelMetadataRunner(infra.youtubejsRPC),
@@ -175,12 +213,12 @@ func collectorRunners(infra *collectorInfrastructure) []collectutil.JobRunner {
 }
 
 func collectorExecutionProfiles(
-	runners []collectutil.JobRunner,
+	runners []collection.JobRunner,
 	cfg *collectorconfig.Config,
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,
-) (map[sourceobservation.JobID]ExecutionProfile, error) {
-	profiles := make(map[sourceobservation.JobID]ExecutionProfile, len(runners))
+) (map[collection.JobID]ExecutionProfile, error) {
+	profiles := make(map[collection.JobID]ExecutionProfile, len(runners))
 	for _, runner := range runners {
 		id := runner.JobID()
 		maxCalls, requestTimeout, rateInterval, inflight := executionProfileInputs(id, cfg, holodexTimeout, officialTimeout)
@@ -197,7 +235,7 @@ func collectorExecutionProfiles(
 }
 
 func executionProfileInputs(
-	id sourceobservation.JobID,
+	id collection.JobID,
 	cfg *collectorconfig.Config,
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,

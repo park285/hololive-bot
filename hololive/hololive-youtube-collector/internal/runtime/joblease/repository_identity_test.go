@@ -23,7 +23,7 @@ func TestVerifyAcquireJobIdentityRejectsEachMismatchedField(t *testing.T) {
 		"provider": func(_ *contract.LeaseProof, identity *acquiredJobIdentity) {
 			identity.provider = string(contract.ProviderHolodex)
 		},
-		"class": func(_ *contract.LeaseProof, identity *acquiredJobIdentity) { identity.class = "GLOBAL" },
+		"class": func(_ *contract.LeaseProof, identity *acquiredJobIdentity) { identity.class = testGlobalClass },
 		"kind": func(proof *contract.LeaseProof, _ *acquiredJobIdentity) {
 			proof.CollectionJobKind = "channel_profile_collect"
 		},

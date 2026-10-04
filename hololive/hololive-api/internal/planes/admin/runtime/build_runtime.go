@@ -55,7 +55,6 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logge
 	}()
 
 	foundation, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
-		YouTube:          appConfig.YouTube,
 		Holodex:          appConfig.Holodex,
 		OfficialSchedule: appConfig.OfficialScheduleRuntime(),
 	}, infra.MemberCache, infra.Cache, logger)

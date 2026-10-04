@@ -12,7 +12,7 @@ import (
 )
 
 // newScraperServiceForTest는 공식 일정 API만 쓰는 scraper facade를 만든다. Holodex 채널·일정·live-status 조회는
-// scraper를 보조 원천으로 쓰지 않으므로 YouTube client를 주입하지 않는다(DEC-20260926-hololive-source-fallbacks-retirement).
+// scraper를 보조 원천으로 쓰지 않는다(DEC-20260926-hololive-source-fallbacks-retirement).
 func newScraperServiceForTest(
 	httpClient *http.Client,
 	logger *slog.Logger,
@@ -22,9 +22,9 @@ func newScraperServiceForTest(
 
 	config.BaseURL = baseURL
 
-	service, err := htmlscraper.NewServiceWithDependencies(
+	service, err := htmlscraper.NewService(
 		testScraperMembers(nil),
-		htmlscraper.ServiceDependencies{HTTP: httpClient},
+		httpClient,
 		logger,
 		settings.OfficialScheduleRuntimeConfig{
 			OfficialSchedule:     config,

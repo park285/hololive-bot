@@ -9,7 +9,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -18,7 +17,7 @@ func TestScheduleConsumerOfficialIsLiveDoesNotFlipLive(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: testVideoID, VideoID: testVideoID, ChannelID: testChannelID, Title: "Official Live",
@@ -56,7 +55,7 @@ func TestScheduleConsumerPersistsOfficialCollaboTalentNames(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: testVideoID, VideoID: testVideoID, ChannelID: testChannelID, Title: "Official Collab",
@@ -97,7 +96,7 @@ func TestScheduleConsumerPreservesPremiereAndDoesNotAdvanceLiveLastSeenAt(t *tes
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: testVideoID, VideoID: testVideoID, ChannelID: testChannelID, Title: "Schedule Title",
@@ -143,7 +142,7 @@ func TestScheduleConsumerDoesNotLockRetainedItemHistory(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: testVideoID, VideoID: testVideoID, ChannelID: testChannelID, Title: "Official Upcoming",
@@ -202,7 +201,7 @@ func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindSchedule, "global:hololive-schedule", "holodex_schedule")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: "holodex-temp", Title: "Temp", ScheduledAt: time.Date(2026, time.August, 14, 9, 0, 0, 0, time.UTC),
@@ -262,7 +261,7 @@ func TestScheduleConsumerArbitratesMetadataByFieldObservation(t *testing.T) {
 			_, err = publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(envelope))
 			require.NoError(t, err)
 
-			consumer := NewConsumerWithGraces(NewRepository(pool), NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+			consumer := NewConsumerWithGraces(NewRepository(pool), 0, 0)
 			require.NoError(t, consumer.Consume(ctx, liveClaimOptions()))
 
 			var title string

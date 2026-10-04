@@ -10,7 +10,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -99,7 +98,7 @@ func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
-	consumer := newLiveTestConsumer(pool, repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &proof, liveSession("vid-new", testStatusLive)))); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -416,11 +415,7 @@ func startLivePersistGrace(t *testing.T, grace time.Duration) (*pgxpool.Pool, *R
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
 
-	return pool, repo, newLiveTestConsumer(pool, repo, grace), proof
-}
-
-func newLiveTestConsumer(pool *pgxpool.Pool, repo *Repository, grace time.Duration) *Consumer {
-	return NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, grace)
+	return pool, repo, NewConsumerWithGraces(repo, 0, grace), proof
 }
 
 func liveClaimOptions() ClaimOptions {

@@ -1,33 +1,17 @@
 package providers
 
 import (
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
-type providerRoundTripFunc func(req *http.Request) (*http.Response, error)
-
-func (f providerRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	out, err := f(req)
-	if err != nil {
-		return nil, fmt.Errorf("f: %w", err)
-	}
-
-	return out, nil
-}
-
-// 조립된 Holodex 서비스는 /users/live 실패를 그대로 돌려주고 YouTube scraper로 live-status를 채우지 않는다
+// 조립된 Holodex 서비스는 /users/live 실패를 그대로 돌려주고 공식 일정 서비스로 live-status를 채우지 않는다
 // (DEC-20260926-hololive-live-status-scraper-fallback-removal).
 func TestProvideHolodexServiceWithConfigHasNoLiveStatusScraperFallback(t *testing.T) {
 	t.Parallel()
@@ -43,27 +27,24 @@ func TestProvideHolodexServiceWithConfigHasNoLiveStatusScraperFallback(t *testin
 	}))
 	t.Cleanup(holodexServer.Close)
 
-	var youtubeRequests atomic.Int32
+	var officialRequests atomic.Int32
 
-	youtubeClient := scraper.NewClient(
-		settings.DefaultYouTubeOperationalConfig(),
-		scraper.WithRateLimiter(ratelimiter.New(0)),
-		scraper.WithHTTPClient(&http.Client{
-			Transport: providerRoundTripFunc(func(*http.Request) (*http.Response, error) {
-				youtubeRequests.Add(1)
+	officialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		officialRequests.Add(1)
+		http.Error(w, "unexpected official schedule request", http.StatusInternalServerError)
+	}))
+	t.Cleanup(officialServer.Close)
 
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header:     make(http.Header),
-					Body:       io.NopCloser(strings.NewReader("<html></html>")),
-				}, nil
-			}),
-		}),
-	)
+	official := settings.OfficialScheduleRuntimeConfig{
+		OfficialSchedule:     settings.DefaultOfficialScheduleConfig(),
+		MaxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
+	}
 
-	scraperService, err := ProvideScraperServiceWithYouTubeClient(nil, youtubeClient, slog.New(slog.DiscardHandler))
+	official.OfficialSchedule.BaseURL = officialServer.URL
+
+	scraperService, err := ProvideScraperServiceWithOfficialSchedule(nil, slog.New(slog.DiscardHandler), official)
 	if err != nil {
-		t.Fatalf("ProvideScraperServiceWithYouTubeClient() error = %v", err)
+		t.Fatalf("ProvideScraperServiceWithOfficialSchedule() error = %v", err)
 	}
 
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
@@ -81,7 +62,7 @@ func TestProvideHolodexServiceWithConfigHasNoLiveStatusScraperFallback(t *testin
 		t.Fatal("GetChannelsLiveStatus() error = nil, want Holodex source failure")
 	}
 
-	if got := youtubeRequests.Load(); got != 0 {
-		t.Fatalf("youtube requests = %d, want 0", got)
+	if got := officialRequests.Load(); got != 0 {
+		t.Fatalf("official schedule requests = %d, want 0", got)
 	}
 }

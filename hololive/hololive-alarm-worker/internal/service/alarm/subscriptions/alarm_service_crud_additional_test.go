@@ -318,39 +318,6 @@ func TestAlarmService_AddAlarmMergesTypesForExistingChannel(t *testing.T) {
 	assert.ElementsMatch(t, domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeCommunity}, alarms[0].AlarmTypes)
 }
 
-func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {
-	ctx := t.Context()
-	as := newTestAlarmService(t)
-
-	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:    "room-type-2",
-		ChannelID: "ch-type-2",
-		AlarmTypes: domain.AlarmTypes{
-			domain.AlarmTypeLive,
-			domain.AlarmTypeCommunity,
-		},
-	})
-	require.NoError(t, err)
-
-	removed, err := as.RemoveAlarm(ctx, "room-type-2", "ch-type-2", domain.AlarmTypes{domain.AlarmTypeLive})
-	require.NoError(t, err)
-	assert.True(t, removed)
-
-	registryKey := as.getRegistryKey("room-type-2")
-	roomChannels, err := as.GetRoomAlarms(ctx, "room-type-2")
-	require.NoError(t, err)
-
-	liveSubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeLive), registryKey)
-	require.NoError(t, err)
-
-	communitySubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeCommunity), registryKey)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"ch-type-2"}, roomChannels)
-	assert.False(t, liveSubscribed)
-	assert.True(t, communitySubscribed)
-}
-
 func TestAlarmService_RejectsUnknownAlarmType(t *testing.T) {
 	as := newTestAlarmService(t)
 

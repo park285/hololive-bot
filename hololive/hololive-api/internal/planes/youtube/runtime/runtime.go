@@ -21,7 +21,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 
 const (
@@ -77,7 +76,9 @@ type Runtime struct {
 	retainer           observationRetainer
 	replayer           observationReplayer
 	builder            targetprojection.Builder
-	now                func() time.Time
+	// liveFreshnessBudget는 builder와 같은 schedule에서 도출한 not_before 예산이며 수요 지표가 씁니다.
+	liveFreshnessBudget time.Duration
+	now                 func() time.Time
 
 	dbSem         chan struct{}
 	workCh        chan sourceobservation.ClaimWork
@@ -190,14 +191,15 @@ func newRuntime(
 		return nil, fmt.Errorf("build youtube plane: %w", err)
 	}
 
-	writer := sourceobservation.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
+	schedules := targetprojection.DefaultPolicySchedules()
+
 	runtime := &Runtime{
 		Config:    *plane,
 		Logger:    logger,
 		pool:      pool,
 		closePool: cleanup,
 		claimer:   repo,
-		consumer: sourceobservation.NewConsumerWithGraces(repo, writer, nil, plane.ContentAbsenceGrace, plane.LiveEndGrace).
+		consumer: sourceobservation.NewConsumerWithGraces(repo, plane.ContentAbsenceGrace, plane.LiveEndGrace).
 			WithChannelPolicy(sourceobservation.ChannelPolicy{
 				ProfileClearMinObservations: plane.ProfileClearMinObservations,
 				ProfileClearStability:       plane.ProfileClearStability,
@@ -211,13 +213,14 @@ func newRuntime(
 		replayer:           repo,
 		builder: targetprojection.PolicyBuilder{
 			Reader:    rosterReader{},
-			Schedules: targetprojection.DefaultPolicySchedules(),
+			Schedules: schedules,
 		},
-		now:           func() time.Time { return time.Now().UTC() },
-		dbSem:         make(chan struct{}, plane.DBOperationConcurrency),
-		workCh:        make(chan sourceobservation.ClaimWork, plane.ConsumerWorkers),
-		workerTracker: workercontract.NewExecutorTracker(),
-		workerTotals:  &workercontract.Counters{},
+		liveFreshnessBudget: targetprojection.LiveFreshnessBudget(schedules[contract.KindLiveSnapshot].PollInterval),
+		now:                 func() time.Time { return time.Now().UTC() },
+		dbSem:               make(chan struct{}, plane.DBOperationConcurrency),
+		workCh:              make(chan sourceobservation.ClaimWork, plane.ConsumerWorkers),
+		workerTracker:       workercontract.NewExecutorTracker(),
+		workerTotals:        &workercontract.Counters{},
 		claim: sourceobservation.ClaimOptions{
 			ConsumerName:  communityConsumerName,
 			LeaseOwner:    communityLeaseOwner,

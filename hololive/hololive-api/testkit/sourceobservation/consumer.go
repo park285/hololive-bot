@@ -10,7 +10,6 @@ import (
 
 	store "github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 
 type ClaimOptions struct {
@@ -26,10 +25,7 @@ type Consumer struct {
 }
 
 func NewConsumer(pool *pgxpool.Pool, liveEndGrace, absenceGrace time.Duration) *Consumer {
-	repository := store.NewRepository(pool)
-	writer := store.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-
-	return &Consumer{consumer: store.NewConsumerWithGraces(repository, writer, nil, absenceGrace, liveEndGrace)}
+	return &Consumer{consumer: store.NewConsumerWithGraces(store.NewRepository(pool), absenceGrace, liveEndGrace)}
 }
 
 func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {

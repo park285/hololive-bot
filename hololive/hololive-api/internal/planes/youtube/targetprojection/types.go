@@ -18,15 +18,15 @@ const (
 	MinValidity          = 5 * time.Second
 	MaxValidity          = 24 * time.Hour
 
-	// MaxInputStaleLiveVideoCount는 한 projection이 받는 영상 확인 후보 상한입니다.
-	// 초과는 입력 이상으로 보고 last-good generation을 유지합니다.
-	MaxInputStaleLiveVideoCount = 1_000
+	// MaxInputLiveCheckVideoCount는 한 projection이 받는 영상 확인 구조 membership 상한입니다.
+	// 초과는 임의 절단 없이 입력 이상으로 거부하고 last-good generation을 유지합니다.
+	MaxInputLiveCheckVideoCount = 1_000
 
 	// LIVE positive 신선도 예산은 min(5분, 2×live_snapshot poll interval+30초)이며 LiveQuery와 같은 경계입니다.
 	maxLiveFreshnessBudget   = 5 * time.Minute
 	liveFreshnessBudgetSlack = 30 * time.Second
 
-	staleLiveVideoReasonKind = "stale_live_session"
+	liveCheckVideoReasonKind = "live_session_check"
 )
 
 var (
@@ -34,12 +34,15 @@ var (
 	ErrInputRead         = errors.New("youtube target projection input read failed")
 )
 
+// TargetSpec의 scheduling 필드(priority, poll interval, enabled)는 projection identity입니다.
+// NotBefore는 identity·hash에 포함하지 않는 다음 신규 확인 가능 시각이며, zero 값은 NULL(즉시 가능)입니다.
 type TargetSpec struct {
 	SubjectKey      string
 	ObservationKind contract.ObservationKind
 	Priority        int16
 	PollInterval    time.Duration
 	Enabled         bool
+	NotBefore       time.Time
 }
 
 type TargetReason struct {
@@ -62,19 +65,21 @@ type Schedule struct {
 type PolicyInputs struct {
 	NotificationChannelIDs []string
 	OperationalChannelIDs  []string
-	StaleLiveVideos        []StaleLiveVideo
+	LiveCheckVideos        []LiveCheckVideo
 }
 
-// StaleLiveVideo는 신선한 positive가 없는 LIVE 또는 지난 일정·출처 미상의 UPCOMING 확인 대상입니다.
-type StaleLiveVideo struct {
+// LiveCheckVideo는 운영 roster의 LIVE 또는 지난 일정·출처 미상 UPCOMING 영상의 구조 membership입니다.
+// 신선도는 membership을 바꾸지 않고 NotBefore로만 표현합니다. NotBefore가 zero면 받아들인 신선도 근거가 없다는 뜻입니다.
+type LiveCheckVideo struct {
 	VideoID    string
 	ChannelID  string
 	IsUpcoming bool
+	NotBefore  time.Time
 }
 
-// StaleLiveVideoQuery는 같은 projection transaction에서 읽은 운영 roster와 신선도 예산을 전달합니다.
-// 판정 시각은 조회 statement의 DB 시각이며, 그보다 미래인 positive 시각은 신선한 것으로 보지 않습니다.
-type StaleLiveVideoQuery struct {
+// LiveCheckVideoQuery는 같은 projection transaction에서 읽은 운영 roster와 신선도 예산을 전달합니다.
+// 판정 시각은 조회 statement의 DB 시각이며, 그보다 미래인 근거 시각은 신선도로 받아들이지 않습니다.
+type LiveCheckVideoQuery struct {
 	OperationalChannelIDs []string
 	FreshnessBudget       time.Duration
 }
@@ -82,7 +87,7 @@ type StaleLiveVideoQuery struct {
 type InputReader interface {
 	NotificationChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
 	OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
-	StaleLiveVideos(ctx context.Context, tx dbx.Tx, query StaleLiveVideoQuery) ([]StaleLiveVideo, error)
+	LiveCheckVideos(ctx context.Context, tx dbx.Tx, query LiveCheckVideoQuery) ([]LiveCheckVideo, error)
 }
 
 type PolicyBuilder struct {
@@ -90,7 +95,7 @@ type PolicyBuilder struct {
 	Schedules map[contract.ObservationKind]Schedule
 }
 
-// Build는 stale LIVE 판정을 조회 시점 DB 시각에 맡기므로 refresh 시각을 입력으로 쓰지 않습니다.
+// Build는 영상 확인 신선도를 조회 시점 DB 시각에 맡기므로 refresh 시각을 입력으로 쓰지 않습니다.
 func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, _ time.Time) ([]TargetSpec, []TargetReason, error) {
 	if b.Reader == nil {
 		return nil, nil, fmt.Errorf("%w: input reader is not configured", ErrInputRead)
@@ -111,18 +116,18 @@ func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, _ time.Time) ([]Tar
 		return nil, nil, fmt.Errorf("%w: load operational channels: %w", ErrInputRead, err)
 	}
 
-	staleVideos, err := b.Reader.StaleLiveVideos(ctx, tx, StaleLiveVideoQuery{
+	videos, err := b.Reader.LiveCheckVideos(ctx, tx, LiveCheckVideoQuery{
 		OperationalChannelIDs: operational,
 		FreshnessBudget:       LiveFreshnessBudget(liveSchedule.PollInterval),
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: load stale live videos: %w", ErrInputRead, err)
+		return nil, nil, fmt.Errorf("%w: load live check videos: %w", ErrInputRead, err)
 	}
 
 	out1, out2, err := BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: notification,
 		OperationalChannelIDs:  operational,
-		StaleLiveVideos:        staleVideos,
+		LiveCheckVideos:        videos,
 	}, b.Schedules)
 	if err != nil {
 		return out1, out2, fmt.Errorf("build policy targets: %w", err)
@@ -141,8 +146,8 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 		return nil, nil, fmt.Errorf("%w: input channel count exceeds %d", ErrInvalidProjection, MaxInputChannelCount)
 	}
 
-	if len(inputs.StaleLiveVideos) > MaxInputStaleLiveVideoCount {
-		return nil, nil, fmt.Errorf("%w: stale live video count exceeds %d", ErrInvalidProjection, MaxInputStaleLiveVideoCount)
+	if len(inputs.LiveCheckVideos) > MaxInputLiveCheckVideoCount {
+		return nil, nil, fmt.Errorf("%w: live check video count exceeds %d", ErrInvalidProjection, MaxInputLiveCheckVideoCount)
 	}
 
 	builder := newPolicyTargetBuilder(schedules)
@@ -154,8 +159,8 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 		return nil, nil, fmt.Errorf("append group: %w", err)
 	}
 
-	if err := builder.appendStaleLiveVideos(inputs.StaleLiveVideos, inputs.OperationalChannelIDs); err != nil {
-		return nil, nil, fmt.Errorf("append stale live videos: %w", err)
+	if err := builder.appendLiveCheckVideos(inputs.LiveCheckVideos, inputs.OperationalChannelIDs); err != nil {
+		return nil, nil, fmt.Errorf("append live check videos: %w", err)
 	}
 
 	if err := builder.appendGlobalSchedule(); err != nil {
@@ -222,9 +227,10 @@ func (b *policyTargetBuilder) appendSubjectKinds(subject string, kinds []contrac
 	return nil
 }
 
-// appendStaleLiveVideos는 운영 roster 채널의 영상별 수명 확인 target을 만듭니다.
+// appendLiveCheckVideos는 운영 roster 채널의 영상별 수명 확인 target을 만듭니다.
 // 근거 key는 영상이 속한 canonical 채널이며, roster 밖 채널의 영상은 입력 오류로 거부합니다.
-func (b *policyTargetBuilder) appendStaleLiveVideos(videos []StaleLiveVideo, operationalChannelIDs []string) error {
+// 신선도 근거는 NotBefore로만 전달해 확인 직후의 출입이 projection identity를 바꾸지 않게 합니다.
+func (b *policyTargetBuilder) appendLiveCheckVideos(videos []LiveCheckVideo, operationalChannelIDs []string) error {
 	if len(videos) == 0 {
 		return nil
 	}
@@ -239,21 +245,24 @@ func (b *policyTargetBuilder) appendStaleLiveVideos(videos []StaleLiveVideo, ope
 		channelID := strings.TrimSpace(video.ChannelID)
 
 		if videoID == "" || channelID == "" {
-			return fmt.Errorf("%w: stale live video identity is empty", ErrInvalidProjection)
+			return fmt.Errorf("%w: live check video identity is empty", ErrInvalidProjection)
 		}
 
 		if _, ok := roster[channelID]; !ok {
-			return fmt.Errorf("%w: stale live video %s channel is outside the operational roster", ErrInvalidProjection, videoID)
+			return fmt.Errorf("%w: live check video %s channel is outside the operational roster", ErrInvalidProjection, videoID)
 		}
 
-		if err := b.appendTarget(videoID, contract.KindVideoLiveCheck, staleLiveVideoReasonKind, channelID); err != nil {
+		if err := b.appendTarget(videoID, contract.KindVideoLiveCheck, liveCheckVideoReasonKind, channelID); err != nil {
 			return fmt.Errorf("append target: %w", err)
 		}
 
-		if video.IsUpcoming {
-			// 같은 영상 확인 budget에서 LIVE가 먼저 실행되도록 새 검토 대상만 낮춘다.
-			target := &b.targets[len(b.targets)-1]
+		target := &b.targets[len(b.targets)-1]
 
+		target.NotBefore = video.NotBefore
+
+		if video.IsUpcoming {
+			// 같은 영상 확인 budget에서 LIVE가 먼저 실행되도록 UPCOMING 대상만 낮춘다.
+			// LIVE↔UPCOMING 전환은 실제 상태 변경이므로 이 target의 membership을 새로 시작한다.
 			target.Priority = max(target.Priority-1, 0)
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
@@ -40,8 +41,8 @@ func LoadRuntime() (*RuntimeConfig, error) {
 	}
 
 	core, err := settings.LoadConfig(validateRuntime, settings.LoadOptions{
-		Section:        loadSections,
-		TracingRuntime: settings.TracingRuntimeAlarmWorker,
+		Section:           loadSections,
+		TracingEnabledEnv: envload.TracingAlarmWorkerEnabledEnv,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load config validated: %w", err)

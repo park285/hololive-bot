@@ -6,20 +6,21 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
+// capacityCycleRequest는 runnerCount개의 런너를 start부터 순환 조회합니다.
+// 조회와 실패 결과의 runner 값은 호출자가 넘긴 런너 목록의 위치입니다.
 type capacityCycleRequest struct {
-	runnerIDs []string
-	start     int
-	remaining int
-	batch     int
-	excluded  []string
-	query     func(runnerID string, excluded []string, limit int) (joblease.CandidatePage, error)
-	enqueue   func(*joblease.JobSpec) EnqueueResult
-	warnFull  func()
+	runnerCount int
+	start       int
+	remaining   int
+	batch       int
+	excluded    []string
+	query       func(runner int, excluded []string, limit int) (joblease.CandidatePage, error)
+	enqueue     func(*joblease.JobSpec) EnqueueResult
+	warnFull    func()
 }
 
 type capacityCycleResult struct {
@@ -38,8 +39,8 @@ type capacityCycleResult struct {
 }
 
 type runnerQueryFailure struct {
-	runnerID string
-	err      error
+	runner int
+	err    error
 }
 
 func runCapacityAwareCycle(req *capacityCycleRequest) capacityCycleResult {
@@ -51,7 +52,7 @@ func runCapacityAwareCycle(req *capacityCycleRequest) capacityCycleResult {
 		remaining: req.remaining,
 		excluded:  slices.Clone(req.excluded),
 	}
-	total := len(req.runnerIDs)
+	total := req.runnerCount
 
 	if total == 0 || state.remaining <= 0 {
 		state.result.queueFull = state.remaining <= 0
@@ -84,10 +85,10 @@ func (s *capacityCycleState) runStep(req *capacityCycleRequest, index, total int
 	page, err := s.queryPage(req, index, total)
 	if err != nil {
 		s.result.queryErr = errors.Join(s.result.queryErr, err)
-		s.result.failures = append(s.result.failures, runnerQueryFailure{runnerID: req.runnerIDs[(req.start+index)%total], err: err})
+		s.result.failures = append(s.result.failures, runnerQueryFailure{runner: (req.start + index) % total, err: err})
 		// 계약 오류는 해당 런너에서만 닫고, 전역 장애와 취소는 뒤 조회를 중단합니다.
 		s.result.globalFailure = !errors.Is(err, joblease.ErrCandidateContract) ||
-			errors.Is(err, joblease.ErrProjectionStale) ||
+			errors.Is(err, collection.ErrProjectionStale) ||
 			errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 
 		return s.result.globalFailure
@@ -107,7 +108,7 @@ func (s *capacityCycleState) queryPage(req *capacityCycleRequest, index, total i
 	s.result.limits = append(s.result.limits, limit)
 	s.result.queried++
 
-	page, err := req.query(req.runnerIDs[(req.start+index)%total], s.excluded, limit)
+	page, err := req.query((req.start+index)%total, s.excluded, limit)
 	if err != nil {
 		return joblease.CandidatePage{}, fmt.Errorf("query: %w", err)
 	}
@@ -234,24 +235,13 @@ func discoveryLimit(remaining, remainingRunners, acquisitionBatch int) int {
 	return limit
 }
 
+// addExcludedKey는 중복 없이 키를 추가합니다. 정렬·정규화는 저장소의 normalizeExcludedJobKeys가 소유합니다.
 func addExcludedKey(excluded []string, key string) []string {
 	if key == "" || slices.Contains(excluded, key) {
 		return excluded
 	}
 
-	excluded = append(excluded, key)
-	slices.Sort(excluded)
-
-	return excluded
-}
-
-func runnerIDs(runners []RegisteredRunner) []string {
-	ids := make([]string, len(runners))
-	for i, runner := range runners {
-		ids[i] = runner.Contract().ID().String()
-	}
-
-	return ids
+	return append(excluded, key)
 }
 
 func (s *leaseScheduler) queryRunnerPage(
@@ -259,27 +249,17 @@ func (s *leaseScheduler) queryRunnerPage(
 	source projectionCandidateSource,
 	generation int64,
 	runners []RegisteredRunner,
-) func(runnerID string, excluded []string, limit int) (joblease.CandidatePage, error) {
-	byID := make(map[string]sourceobservation.JobContract, len(runners))
-	for _, runner := range runners {
-		byID[runner.Contract().ID().String()] = runner.Contract()
-	}
-
-	return func(runnerID string, excluded []string, limit int) (joblease.CandidatePage, error) {
+) func(runner int, excluded []string, limit int) (joblease.CandidatePage, error) {
+	return func(runner int, excluded []string, limit int) (joblease.CandidatePage, error) {
 		if err := ctx.Err(); err != nil {
 			return joblease.CandidatePage{}, fmt.Errorf("query runner page: %w", err)
 		}
 
-		job, ok := byID[runnerID]
-		if !ok {
-			return joblease.CandidatePage{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "discovery cycle: runner identity is missing")
-		}
-
-		dbCtx, cancel := context.WithTimeout(ctx, s.executor.collector.DBTimeout)
+		dbCtx, cancel := context.WithTimeout(ctx, s.dbTimeout)
 
 		defer cancel()
 
-		page, err := source.CandidatesForProjection(dbCtx, generation, job, excluded, limit)
+		page, err := source.CandidatesForProjection(dbCtx, generation, runners[runner].Contract(), excluded, limit)
 
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return joblease.CandidatePage{}, fmt.Errorf("query runner page: %w", errors.Join(err, ctxErr))

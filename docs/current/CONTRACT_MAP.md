@@ -23,7 +23,7 @@
 
 ## Source Observation Ownership
 
-Source observation의 공용 envelope·canonical JSON·hash·lease 계약은 `hololive/hololive-shared/pkg/contracts/sourceobservation`이 소유합니다. Collector `internal/runtime/sourceobservation`은 publish/checkpoint, API `internal/youtube/sourceobservation`은 consume/canonical/replay/retention을 소유합니다. 실제 양 구현을 연결하는 교차 DB 시험은 module-root testkit을 사용하며, upcoming candidate의 canonical clock 시험은 worker `internal/service/alarm/dispatchoutbox`에 있습니다. [Canonical JSON v1](contracts/source-observation-canonical-json-v1.md).
+Source observation의 공용 envelope·canonical JSON·hash·lease 계약은 `hololive/hololive-shared/pkg/contracts/sourceobservation`이 소유합니다. Collector의 순수 수집 계약은 `internal/runtime/collection`, lease SQL은 `joblease`, publish/checkpoint는 `sourceobservation`이 소유합니다. API `internal/youtube/sourceobservation`은 consume/replay/retention을, `internal/youtube/canonicalwrite`는 transaction 전용 canonical 저장을 소유합니다. 실제 양 구현을 연결하는 교차 DB 시험은 module-root testkit을 사용하며, upcoming candidate의 canonical clock 시험은 worker `internal/service/alarm/dispatchoutbox`에 있습니다. [Canonical JSON v1](contracts/source-observation-canonical-json-v1.md).
 
 ## Contract Change Rule
 

@@ -326,7 +326,7 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 	targets, reasons, err := BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: []string{"channel:notify"},
 		OperationalChannelIDs:  []string{"channel:ops"},
-		StaleLiveVideos:        []StaleLiveVideo{{VideoID: "video-stale", ChannelID: "channel:ops"}},
+		LiveCheckVideos:        []LiveCheckVideo{{VideoID: "video-stale", ChannelID: "channel:ops"}},
 	}, schedules)
 	if err != nil {
 		t.Fatal(err)
@@ -359,8 +359,8 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 
 	for _, reason := range reasons {
 		if reason.ObservationKind == contract.KindVideoLiveCheck &&
-			(reason.SubjectKey != "video-stale" || reason.ReasonKind != "stale_live_session" || reason.ReasonKey != "channel:ops") {
-			t.Fatalf("stale video reason = %+v", reason)
+			(reason.SubjectKey != "video-stale" || reason.ReasonKind != "live_session_check" || reason.ReasonKey != "channel:ops") {
+			t.Fatalf("live check video reason = %+v", reason)
 		}
 	}
 }
@@ -368,7 +368,7 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 func TestDefaultLiveChecksShareLiveSnapshotCadence(t *testing.T) {
 	targets, _, err := BuildPolicyTargets(PolicyInputs{
 		OperationalChannelIDs: []string{testOperationalChannelID},
-		StaleLiveVideos:       []StaleLiveVideo{{VideoID: "vid-stale", ChannelID: testOperationalChannelID}},
+		LiveCheckVideos:       []LiveCheckVideo{{VideoID: "vid-stale", ChannelID: testOperationalChannelID}},
 	}, DefaultPolicySchedules())
 	if err != nil {
 		t.Fatal(err)
@@ -413,13 +413,13 @@ func TestLiveFreshnessBudgetMatchesLiveQueryBound(t *testing.T) {
 	}
 }
 
-func TestBuildPolicyTargetsRejectsInvalidStaleLiveVideos(t *testing.T) {
-	overflow := make([]StaleLiveVideo, MaxInputStaleLiveVideoCount+1)
+func TestBuildPolicyTargetsRejectsInvalidLiveCheckVideos(t *testing.T) {
+	overflow := make([]LiveCheckVideo, MaxInputLiveCheckVideoCount+1)
 	for i := range overflow {
-		overflow[i] = StaleLiveVideo{VideoID: fmt.Sprintf("vid-%d", i), ChannelID: testOperationalChannelID}
+		overflow[i] = LiveCheckVideo{VideoID: fmt.Sprintf("vid-%d", i), ChannelID: testOperationalChannelID}
 	}
 
-	for name, videos := range map[string][]StaleLiveVideo{
+	for name, videos := range map[string][]LiveCheckVideo{
 		"outside roster": {{VideoID: "vid-a", ChannelID: "UC_OTHER"}},
 		"empty video":    {{VideoID: " ", ChannelID: testOperationalChannelID}},
 		"empty channel":  {{VideoID: "vid-a", ChannelID: ""}},
@@ -428,7 +428,7 @@ func TestBuildPolicyTargetsRejectsInvalidStaleLiveVideos(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := BuildPolicyTargets(PolicyInputs{
 				OperationalChannelIDs: []string{testOperationalChannelID},
-				StaleLiveVideos:       videos,
+				LiveCheckVideos:       videos,
 			}, DefaultPolicySchedules())
 			if !errors.Is(err, ErrInvalidProjection) {
 				t.Fatalf("BuildPolicyTargets() error = %v, want invalid projection", err)
@@ -437,20 +437,20 @@ func TestBuildPolicyTargetsRejectsInvalidStaleLiveVideos(t *testing.T) {
 	}
 
 	// 상한과 같은 후보 수는 유효한 projection이다.
-	atLimit := overflow[:MaxInputStaleLiveVideoCount]
+	atLimit := overflow[:MaxInputLiveCheckVideoCount]
 	if _, _, err := BuildPolicyTargets(PolicyInputs{
 		OperationalChannelIDs: []string{testOperationalChannelID},
-		StaleLiveVideos:       atLimit,
+		LiveCheckVideos:       atLimit,
 	}, DefaultPolicySchedules()); err != nil {
-		t.Fatalf("stale videos at limit: %v", err)
+		t.Fatalf("live check videos at limit: %v", err)
 	}
 }
 
 type recordingInputReader struct {
 	operational []string
-	stale       []StaleLiveVideo
-	staleErr    error
-	query       *StaleLiveVideoQuery
+	videos      []LiveCheckVideo
+	videosErr   error
+	query       *LiveCheckVideoQuery
 }
 
 func (recordingInputReader) NotificationChannelIDs(context.Context, dbx.Tx) ([]string, error) {
@@ -461,19 +461,19 @@ func (r recordingInputReader) OperationalChannelIDs(context.Context, dbx.Tx) ([]
 	return r.operational, nil
 }
 
-func (r recordingInputReader) StaleLiveVideos(_ context.Context, _ dbx.Tx, query StaleLiveVideoQuery) ([]StaleLiveVideo, error) {
+func (r recordingInputReader) LiveCheckVideos(_ context.Context, _ dbx.Tx, query LiveCheckVideoQuery) ([]LiveCheckVideo, error) {
 	*r.query = query
 
-	return r.stale, r.staleErr
+	return r.videos, r.videosErr
 }
 
-func TestPolicyBuilderQueriesStaleVideosWithRosterAndBudget(t *testing.T) {
-	var query StaleLiveVideoQuery
+func TestPolicyBuilderQueriesLiveCheckVideosWithRosterAndBudget(t *testing.T) {
+	var query LiveCheckVideoQuery
 
 	builder := PolicyBuilder{
 		Reader: recordingInputReader{
 			operational: []string{testOperationalChannelID},
-			stale:       []StaleLiveVideo{{VideoID: "vid-stale", ChannelID: testOperationalChannelID}},
+			videos:      []LiveCheckVideo{{VideoID: "vid-stale", ChannelID: testOperationalChannelID, NotBefore: projectionNow}},
 			query:       &query,
 		},
 		Schedules: DefaultPolicySchedules(),
@@ -486,32 +486,33 @@ func TestPolicyBuilderQueriesStaleVideosWithRosterAndBudget(t *testing.T) {
 
 	if query.FreshnessBudget != 270*time.Second ||
 		len(query.OperationalChannelIDs) != 1 || query.OperationalChannelIDs[0] != testOperationalChannelID {
-		t.Fatalf("stale live video query = %+v", query)
+		t.Fatalf("live check video query = %+v", query)
 	}
 
 	if !slices.ContainsFunc(targets, func(target TargetSpec) bool {
-		return target.SubjectKey == "vid-stale" && target.ObservationKind == contract.KindVideoLiveCheck
+		return target.SubjectKey == "vid-stale" && target.ObservationKind == contract.KindVideoLiveCheck &&
+			target.NotBefore.Equal(projectionNow)
 	}) {
-		t.Fatalf("stale video target missing: %+v", targets)
+		t.Fatalf("live check video target with not_before missing: %+v", targets)
 	}
 }
 
-func TestPolicyBuilderStaleVideoFailuresPreserveLastGood(t *testing.T) {
-	for name, staleErr := range map[string]error{
-		"read failure": errors.New("stale live videos unavailable"),
-		"overflow":     fmt.Errorf("%w: stale live video count exceeds %d", ErrInvalidProjection, MaxInputStaleLiveVideoCount),
+func TestPolicyBuilderLiveCheckVideoFailuresPreserveLastGood(t *testing.T) {
+	for name, videosErr := range map[string]error{
+		"read failure": errors.New("live check videos unavailable"),
+		"overflow":     fmt.Errorf("%w: live check video count exceeds %d", ErrInvalidProjection, MaxInputLiveCheckVideoCount),
 	} {
 		t.Run(name, func(t *testing.T) {
-			var query StaleLiveVideoQuery
+			var query LiveCheckVideoQuery
 
 			builder := PolicyBuilder{
-				Reader:    recordingInputReader{operational: []string{testOperationalChannelID}, staleErr: staleErr, query: &query},
+				Reader:    recordingInputReader{operational: []string{testOperationalChannelID}, videosErr: videosErr, query: &query},
 				Schedules: DefaultPolicySchedules(),
 			}
 
 			// 입력 오류는 runtime이 degraded로 기록하고 last-good generation을 유지하는 ErrInputRead로 분류된다.
-			if _, _, err := builder.Build(t.Context(), nil, projectionNow); !errors.Is(err, ErrInputRead) || !errors.Is(err, staleErr) {
-				t.Fatalf("Build() error = %v, want input read wrapping %v", err, staleErr)
+			if _, _, err := builder.Build(t.Context(), nil, projectionNow); !errors.Is(err, ErrInputRead) || !errors.Is(err, videosErr) {
+				t.Fatalf("Build() error = %v, want input read wrapping %v", err, videosErr)
 			}
 		})
 	}
@@ -519,7 +520,7 @@ func TestPolicyBuilderStaleVideoFailuresPreserveLastGood(t *testing.T) {
 	schedules := DefaultPolicySchedules()
 	delete(schedules, contract.KindLiveSnapshot)
 
-	var query StaleLiveVideoQuery
+	var query LiveCheckVideoQuery
 
 	builder := PolicyBuilder{Reader: recordingInputReader{query: &query}, Schedules: schedules}
 	if _, _, err := builder.Build(t.Context(), nil, projectionNow); !errors.Is(err, ErrInvalidProjection) {

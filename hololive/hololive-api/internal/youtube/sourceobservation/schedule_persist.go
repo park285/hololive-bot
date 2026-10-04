@@ -86,6 +86,7 @@ func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation *Observ
 			item.EndedAt,
 			item.IsLive,
 			persistedCollaboTalentNames(item.CollaboTalentNames),
+			observation.EffectiveAt,
 		); err != nil {
 			return fmt.Errorf("upsert schedule item: %w", err)
 		}

@@ -44,6 +44,11 @@ native_release_dir_resolve() {
     return 1
   fi
 
+  if [[ -e "$release_dir" || -L "$release_dir" ]]; then
+    echo "refusing to reuse existing host-native release: $release_dir" >&2
+    return 1
+  fi
+
   printf '%s\n' "$release_dir"
 }
 

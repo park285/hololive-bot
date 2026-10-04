@@ -10,11 +10,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	store "github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
 // ErrTargetDisabled는 실제 publisher가 발행 job의 emission·target을 거절한 오류다.
-var ErrTargetDisabled = store.ErrTargetDisabled
+var ErrTargetDisabled = collection.ErrTargetDisabled
 
 type CheckpointEntry struct {
 	Provider           contract.Provider
@@ -72,24 +73,24 @@ func NewPublisher(pool *pgxpool.Pool) *Publisher {
 
 // NewHistoricalViewerPublisher는 보존 중인 과거 viewer 계약의 관측을 실제 publisher로 시드합니다.
 func NewHistoricalViewerPublisher(pool *pgxpool.Pool) (*Publisher, error) {
-	jobs := store.InitialJobContracts()
+	jobs := collection.InitialJobContracts()
 	fixtures := []struct {
 		provider          contract.Provider
-		kind              store.JobKind
-		class             store.JobClass
-		membership        store.JobMembership
+		kind              collection.JobKind
+		class             collection.JobClass
+		membership        collection.JobMembership
 		subject           string
 		emissions, roster []contract.ObservationKind
 	}{
-		{contract.ProviderYouTubeJS, "youtubejs_viewer", store.JobClassSubject, store.JobMembershipExactSubject, "", []contract.ObservationKind{contract.KindViewerSample}, nil},
-		{contract.ProviderHolodex, "holodex_live", store.JobClassGlobal, store.JobMembershipCurrentProjection, "global:holodex_live", []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample}, []contract.ObservationKind{contract.KindLiveSnapshot}},
+		{contract.ProviderYouTubeJS, "youtubejs_viewer", collection.JobClassSubject, collection.JobMembershipExactSubject, "", []contract.ObservationKind{contract.KindViewerSample}, nil},
+		{contract.ProviderHolodex, "holodex_live", collection.JobClassGlobal, collection.JobMembershipCurrentProjection, "global:holodex_live", []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample}, []contract.ObservationKind{contract.KindLiveSnapshot}},
 	}
 
 	for i := range fixtures {
 		fixture := &fixtures[i]
-		id := store.JobID{Provider: fixture.provider, Kind: fixture.kind}
+		id := collection.JobID{Provider: fixture.provider, Kind: fixture.kind}
 
-		job, err := store.NewJobContract(id, fixture.class, fixture.membership, fixture.subject, fixture.emissions, fixture.emissions, fixture.roster)
+		job, err := collection.NewJobContract(id, fixture.class, fixture.membership, fixture.subject, fixture.emissions, fixture.emissions, fixture.roster)
 		if err != nil {
 			return nil, fmt.Errorf("create historical viewer job: %w", err)
 		}
@@ -97,7 +98,7 @@ func NewHistoricalViewerPublisher(pool *pgxpool.Pool) (*Publisher, error) {
 		jobs[id] = job
 	}
 
-	return &Publisher{repository: store.NewRepositoryWithContracts(pool, jobs, nil)}, nil
+	return &Publisher{repository: store.NewRepositoryWithContracts(pool, jobs)}, nil
 }
 
 func (p *Publisher) PublishBatch(ctx context.Context, input *PublishBatchInput) (PublishBatchResult, error) {

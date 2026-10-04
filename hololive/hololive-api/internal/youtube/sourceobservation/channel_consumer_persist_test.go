@@ -10,7 +10,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -158,8 +157,8 @@ func seedAdditionalLease(
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		) VALUES ($1, $2, $3, 50, 60000, TRUE, NOW() + INTERVAL '1 day')
+			priority, poll_interval_ms, enabled, valid_until, member_since_generation
+		) VALUES ($1, $2, $3, 50, 60000, TRUE, NOW() + INTERVAL '1 day', $1)
 		ON CONFLICT (projection_generation, subject_key, observation_kind) DO NOTHING
 	`, proof.ProjectionGeneration, subjectKey, kind); err != nil {
 		t.Fatalf("seed additional target: %v", err)
@@ -175,10 +174,17 @@ func seedAdditionalLease(
 		INSERT INTO youtube_collection_job_leases (
 			job_key, provider, job_class, collection_job_kind, subject_key,
 			projection_generation, poll_interval_ms, slot_state, scheduled_for,
-			next_due_at, fence_epoch, owner_instance, lease_expires_at
-		) VALUES ($1, $2, $3, $4, $5, $6, 60000, 'ACTIVE', $7, $7, $8, $9, NOW() + INTERVAL '1 hour')
+			next_due_at, fence_epoch, owner_instance, lease_expires_at,
+			membership_kinds, membership_exact_subject, membership_target_count
+		) VALUES ($1, $2, $3, $4, $5, $6, 60000, 'ACTIVE', $7, $7, $8, $9, NOW() + INTERVAL '1 hour',
+		          CASE $4
+		              WHEN 'youtubejs_content' THEN ARRAY['shorts_list', 'video_list']
+		              WHEN 'youtubejs_channel_metadata' THEN ARRAY['channel_photo', 'channel_profile']
+		              WHEN 'holodex_schedule' THEN ARRAY['live_snapshot', 'schedule_snapshot']
+		              ELSE ARRAY[$10]::text[]
+		          END, $11, 1)
 	`, proof.JobKey, contract.ProviderYouTubeJS, jobClass, jobKind, subjectKey, proof.ProjectionGeneration,
-		proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance); err != nil {
+		proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance, kind, jobKind != "holodex_metadata"); err != nil {
 		t.Fatalf("seed additional lease: %v", err)
 	}
 
@@ -201,7 +207,7 @@ func startChannelPersistPolicy(
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, kind, testChannelID, "youtubejs_channel_metadata")
-	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0).
+	consumer := NewConsumerWithGraces(repo, 0, 0).
 		WithChannelPolicy(policy)
 
 	return pool, repo, consumer, proof

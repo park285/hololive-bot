@@ -12,11 +12,11 @@ import (
 
 	consumekit "github.com/kapu/hololive-api/testkit/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
@@ -104,7 +104,7 @@ func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor
 
 	client := &splitChannelLiveClient{}
 
-	registry, err := NewRegistry(withOverride(
+	registry, err := newTestRegistry(withOverride(
 		youtubejscollector.NewChannelLiveRunner(client),
 		youtubejscollector.NewChannelLiveCheckRunner(client),
 	)...)
@@ -115,7 +115,7 @@ func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor
 	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
-		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
+		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 	}
@@ -160,7 +160,7 @@ func assertCanonicalCheck(t *testing.T, round int, slot time.Time, published *ch
 func channelLiveSlotSpec(jobKind string) joblease.JobSpec {
 	return joblease.JobSpec{
 		JobKey:   "collector:youtubejs:" + jobKind + ":" + testSubjectKey,
-		Provider: contract.ProviderYouTubeJS, Class: string(sourceobservation.JobClassSubject),
+		Provider: contract.ProviderYouTubeJS, Class: string(collection.JobClassSubject),
 		CollectionJobKind: jobKind, SubjectKey: testSubjectKey, PollInterval: time.Second,
 	}
 }

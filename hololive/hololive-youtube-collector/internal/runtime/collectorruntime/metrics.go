@@ -34,16 +34,18 @@ const (
 )
 
 type Metrics struct {
-	attempts     *prometheus.CounterVec
-	duration     *prometheus.HistogramVec
-	lastSuccess  *prometheus.GaugeVec
-	freshness    *prometheus.GaugeVec
-	completeness *prometheus.CounterVec
-	leaseAcquire *prometheus.CounterVec
-	leaseLost    *prometheus.CounterVec
-	publish      *prometheus.CounterVec
-	enqueue      *prometheus.CounterVec
-	invalidTuple *prometheus.CounterVec
+	attempts       *prometheus.CounterVec
+	duration       *prometheus.HistogramVec
+	lastSuccess    *prometheus.GaugeVec
+	freshness      *prometheus.GaugeVec
+	completeness   *prometheus.CounterVec
+	leaseAcquire   *prometheus.CounterVec
+	leaseLost      *prometheus.CounterVec
+	publish        *prometheus.CounterVec
+	acceptInterval *prometheus.HistogramVec
+	lastAccepted   *prometheus.GaugeVec
+	enqueue        *prometheus.CounterVec
+	invalidTuple   *prometheus.CounterVec
 
 	mu            sync.Mutex
 	lastSuccessAt map[string]time.Time
@@ -89,6 +91,17 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		Name: "youtube_observation_publish_total",
 		Help: "YouTube observation publish outcomes.",
 	}, []string{labelProvider, labelKind, "outcome"})
+	// 관측 kind별 실제 durable 수락 간격이다. 같은 checkpoint가 commit으로 전진했을 때만 직전 수락 이후 경과를 기록한다.
+	// subject는 label로 두지 않아 cardinality가 provider×kind로 제한된다.
+	metrics.acceptInterval = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "youtube_observation_accept_interval_seconds",
+		Help:    "Interval between consecutive durable acceptances of the same observation checkpoint.",
+		Buckets: []float64{30, 60, 120, 300, 600, 900, 1200, 1800, 2700, 3600, 7200, 21600, 86400},
+	}, []string{labelProvider, labelKind})
+	metrics.lastAccepted = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "youtube_observation_last_accepted_timestamp_seconds",
+		Help: "Unix timestamp of the last durably committed inserted or duplicate observation by kind.",
+	}, []string{labelProvider, labelKind})
 	metrics.enqueue = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_enqueue_total",
 		Help: "YouTube collection local queue enqueue results.",
@@ -99,8 +112,8 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	}, []string{labelProvider, labelKind})
 	registerer.MustRegister(
 		metrics.attempts, metrics.duration, metrics.lastSuccess, metrics.freshness,
-		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish, metrics.enqueue,
-		metrics.invalidTuple,
+		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish,
+		metrics.acceptInterval, metrics.lastAccepted, metrics.enqueue, metrics.invalidTuple,
 	)
 
 	return metrics
@@ -177,6 +190,19 @@ func (m *Metrics) ObservePublish(provider contract.Provider, kind, outcome strin
 	m.publish.WithLabelValues(string(provider), kind, boundedOutcome(outcome)).Inc()
 }
 
+// ObserveAccepted는 commit된 inserted·duplicate 관측의 수락 시각과, checkpoint가 전진한 경우 직전 수락 이후 간격을 기록한다.
+func (m *Metrics) ObserveAccepted(provider contract.Provider, kind contract.ObservationKind, at time.Time, interval time.Duration, hasInterval bool) {
+	if m == nil {
+		return
+	}
+
+	m.lastAccepted.WithLabelValues(string(provider), string(kind)).Set(float64(at.Unix()))
+
+	if hasInterval {
+		m.acceptInterval.WithLabelValues(string(provider), string(kind)).Observe(interval.Seconds())
+	}
+}
+
 // ObserveInvalidFailureTuple은 호출 코드가 계약 밖 failure tuple을 만든 시도를 센다. 오류 자체는 미분류 Internal로
 // 지연 처리되므로 이 counter가 위반 추세를 드러내는 유일한 신호다.
 func (m *Metrics) ObserveInvalidFailureTuple(provider contract.Provider, kind string) {
@@ -206,7 +232,7 @@ func boundedResult(value string) string {
 
 func boundedAcquire(value string) string {
 	switch value {
-	case resultAcquired, resultNotAcquired, resultError:
+	case resultAcquired, resultNotAcquired, resultSuperseded, resultError:
 		return value
 	default:
 		return resultError

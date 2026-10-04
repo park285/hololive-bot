@@ -32,7 +32,10 @@ export async function fetchCommunityPosts(options = {}) {
   return result.posts;
 }
 
-/** @param {YouTubeJSFetchOptions} [options] */
+/**
+ * @param {YouTubeJSFetchOptions} [options]
+ * @returns {Promise<Omit<import("./contracts.d.ts").CommunityResult, "protocol_version">>}
+ */
 export async function fetchCommunityFeed({
   channelId,
   maxResults,
@@ -87,6 +90,7 @@ export async function fetchCommunityFeed({
   return paged;
 }
 
+/** @returns {Omit<import("./contracts.d.ts").CommunityResult, "protocol_version">} */
 export function emptyCommunityPage() {
   return {
     posts: [],

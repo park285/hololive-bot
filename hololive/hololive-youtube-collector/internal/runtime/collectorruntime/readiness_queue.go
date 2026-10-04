@@ -36,7 +36,7 @@ func (s *postgresQueueStore) LoadHandoffStatuses(ctx context.Context, ids []int6
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "handoff status request exceeds candidate cap")
 	}
 
-	rows, err := s.pool.Query(ctx, mustSQL("observation_handoff_status.sql"), ids)
+	rows, err := s.pool.Query(ctx, sqlObservationHandoffStatus, ids)
 	if err != nil {
 		return nil, fmt.Errorf("load observation handoff status: %w", err)
 	}
@@ -61,7 +61,7 @@ func (s *postgresQueueStore) CountPending(ctx context.Context, limit int) (Bound
 
 	var value int
 
-	if err := s.pool.QueryRow(ctx, mustSQL("pending_observation_count.sql"), limit).Scan(&value); err != nil {
+	if err := s.pool.QueryRow(ctx, sqlPendingObservationCount, limit).Scan(&value); err != nil {
 		return BoundedCount{}, fmt.Errorf("count pending source observations: %w", err)
 	}
 

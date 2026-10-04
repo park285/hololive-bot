@@ -239,6 +239,17 @@ WITH input AS MATERIALIZED (
     FROM observation_write
     ON CONFLICT (observation_id) DO NOTHING
     RETURNING observation_id
+), previous_checkpoint AS MATERIALIZED (
+    -- 같은 statement snapshot은 아래 checkpoint_write의 변경을 보지 않으므로 직전 durable 수락 시각이다.
+    SELECT existing.ordinal,
+           checkpoint.last_success_at
+    FROM existing
+    JOIN source_collection_checkpoints AS checkpoint
+      ON checkpoint.provider = existing.provider
+     AND checkpoint.observation_kind = existing.observation_kind
+     AND checkpoint.subject_key = existing.subject_key
+     AND checkpoint.scope_sha256 = existing.scope_sha256
+    WHERE NOT existing.is_collision
 ), checkpoint_write AS (
     INSERT INTO source_collection_checkpoints (
         provider,
@@ -305,7 +316,7 @@ WITH input AS MATERIALIZED (
         NULL::text,
         NULL::timestamptz
     )
-    RETURNING provider
+    RETURNING provider, observation_kind, subject_key, scope_sha256
 ), effects AS MATERIALIZED (
     SELECT (SELECT count(inserted) FROM collision_write)
          + (SELECT count(observation_id) FROM queue_write)
@@ -317,9 +328,25 @@ SELECT existing.ordinal,
            WHEN existing.is_collision THEN 'COLLISION'
            WHEN existing.existing_id IS NOT NULL THEN 'DUPLICATE'
            ELSE 'INSERTED'
-       END AS outcome
+       END AS outcome,
+       -- checkpoint가 실제로 전진한 관측만 이전 수락과의 간격을 낸다. 최초 checkpoint·충돌·동일 slot 재생은 NULL이다.
+       CASE
+           WHEN checkpoint_write.provider IS NULL OR previous_checkpoint.last_success_at IS NULL THEN NULL
+           ELSE GREATEST(
+               0,
+               floor(EXTRACT(EPOCH FROM (NOW() - previous_checkpoint.last_success_at)) * 1000)
+           )::bigint
+       END AS accepted_interval_ms
 FROM existing
 CROSS JOIN effects
+LEFT JOIN previous_checkpoint
+  ON previous_checkpoint.ordinal = existing.ordinal
+LEFT JOIN checkpoint_write
+  ON NOT existing.is_collision
+ AND checkpoint_write.provider = existing.provider
+ AND checkpoint_write.observation_kind = existing.observation_kind
+ AND checkpoint_write.subject_key = existing.subject_key
+ AND checkpoint_write.scope_sha256 = existing.scope_sha256
 LEFT JOIN observation_write
   ON observation_write.provider = existing.provider
  AND observation_write.observation_kind = existing.observation_kind

@@ -1,4 +1,5 @@
-SELECT earliest_complete_effective_at
+SELECT earliest_complete_effective_at,
+       earliest_baseline_effective_at
 FROM youtube_content_channel_heads
 WHERE channel_id = $1
   AND observation_kind = $2

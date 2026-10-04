@@ -119,10 +119,18 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - 쇼츠 알림 초기화는 `SHORT` watermark와 저장된 canonical 영상이 소유합니다. 비어 있지 않은 유효 목록은 `PARTIAL / GAP_UNRESOLVED`여도 최초 기준 목록으로 저장하며 알리지 않습니다. 빈 부분 목록은 초기화하지 않고, 검증된 complete-empty 목록은 초기화합니다.
 - 현재 writer는 빈 부분 목록만으로 초기화하지 않습니다. T18에서 구버전의 빈 부분 목록 초기화 잔여 행이 0건임을 확인한 뒤 해당 watermark를 미초기화로 되돌리던 분기와 보조 조회를 제거했습니다. 일반 영상으로 먼저 저장된 ID도 유효한 Shorts 기준 목록과 canonical 중복 판정에서 제외하지 않으며, 영상 종류를 강제로 변경하지 않습니다. 이미 저장된 목록이나 complete-empty 기준은 유지합니다.
 - 초기화 이후 새 canonical video ID만 기존 `NEW_SHORT` outbox로 전달합니다. 이미 저장된 쇼츠는 알림 이력이 없어도 자동 backfill하지 않습니다. 기존 영상·watermark·전송 이력을 지우거나 가짜 `SENT`를 만들지 않습니다.
-- `shorts_list` claim은 같은 채널의 더 앞선 `(scheduled_for, id)` 관측이 replay epoch 안에서 유효하고 `PENDING` 또는 `PROCESSING`이면 후속 관측을 선택하지 않습니다. 대기 중인 후속 관측의 attempt는 증가하지 않습니다. 다른 채널과 다른 kind는 이 순서 제약의 대상이 아니며, 기존 retry/lease recovery/dead-letter 정책은 유지합니다.
-- 선행 관측 조회는 기존 queue partial index로 활성 Shorts 집합을 먼저 materialize합니다. 각 후보마다 완료된 관측 이력을 순회하지 않으며, custom/generic plan 모두 보존 이력 증가에 따른 조회 증폭을 회귀 검사합니다.
+- `shorts_list`와 `video_list` claim은 같은 채널·kind의 더 앞선 `(scheduled_for, id)` 관측이 replay epoch 안에서 유효하고 `PENDING` 또는 `PROCESSING`이면 후속 관측을 선택하지 않습니다. 대기 중인 후속 관측의 attempt는 증가하지 않습니다. 다른 채널과 다른 kind는 이 순서 제약의 대상이 아니며, 기존 retry/lease recovery/dead-letter 정책은 유지합니다.
+- 활성 backlog를 한 번 materialize하여 채널·kind별 선행 목록을 선택한 뒤 due 순서로 필요한 queue 행만 잠급니다. 완료 이력을 후보별로 재조회하지 않으며 custom/generic plan에서 전체 backlog 순회와 실제 claim 후보 조회를 따로 제한합니다.
 - 관측 순서 제약을 적용하는 첫 배포에서는 기존 YouTube consumer를 drain한 뒤 교체해야 합니다. 이미 구버전에서 claim된 작업까지 새 claim SQL이 재정렬하지는 않습니다. source replay epoch 변경이나 과거 관측 일괄 replay는 배포 절차에 포함하지 않습니다.
-- 부분 목록은 삭제·비공개 근거가 아니며 `earliest_complete_effective_at`을 채우지 않습니다. 일반 영상과 Premiere의 기존 알림 정책은 변경하지 않습니다. 최초 목록 이전의 관측이나 수집 범위 밖의 영상까지 복구한다는 보장은 하지 않습니다.
+- 부분 목록은 삭제·비공개 근거가 아니며 `earliest_complete_effective_at`을 채우지 않습니다. 최초 목록 이전의 관측이나 수집 범위 밖의 영상까지 복구한다는 보장은 하지 않습니다.
+
+## 일반 영상·최초공개 신규성
+
+- migration 260은 `video_list` generation 2와 `earliest_baseline_effective_at`, 항목별 `novelty_pending`을 도입합니다. generation 1은 보관 관측의 canonical/replay 의미를 유지하지만 신규성 증거로 새 `NEW_VIDEO`를 만들지 않습니다.
+- 첫 유효한 비어 있지 않은 목록은 PARTIAL이어도 조용히 기준을 세웁니다. 빈 부분 목록은 기준이 아니며 complete-empty는 기준입니다. 기존 complete 기준은 보존하고 year-1 first-positive clock을 신뢰 가능한 과거 기준으로 추정하지 않습니다.
+- 기준 이후 처음 발견한 영상은 신뢰 가능한 게시 시각이 기준 이후일 때만 알립니다. 과거에 게시됐지만 처음 목록에 나타난 영상은 알리지 않습니다. 게시 근거가 없으면 pending으로 저장하며 후속 증거가 확인되면 한 번 알립니다. 이미 알려진 canonical ID·다른 채널/Shorts에서 먼저 저장된 ID는 자동 backfill하지 않습니다.
+- 새 미래 최초공개는 검증된 예정 시각으로 한 번 알립니다. 기준 목록에 있던 최초공개와 공개 전환은 재알림하지 않습니다. 부분 목록은 끝까지 COMPLETE 부재 근거와 구분합니다.
+- 요청 상한 안에서 증거를 확보하지 못하거나 목록 범위를 벗어난 영상의 알림 복구를 보장하지 않습니다. 이 정책은 알림 누락을 감수하고 과거 영상의 오알림을 막습니다.
 
 ## Observation storage and retention
 

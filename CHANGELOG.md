@@ -8,10 +8,42 @@
 
 ## 미출시
 
+- 수집기 내부 계약·snapshot·membership 검증의 소유자를 `internal/runtime/collection`으로
+  통합하고, PARTIAL 충돌은 오류를 보존한 terminal completion으로 정산합니다. 동시 실행의
+  RPC 예약은 전체 호출 수와 inflight를 반영하며, content 근거 조회도 기존 limiter를 따릅니다.
+- 일정 항목의 관측 시각(migration 258), ACL 변경 직렬화, 발송 단위 복구와 최신 delivery tuple
+  검증을 합류합니다. 취소된 미발송 작업은 재큐잉하고 이미 발송된 작업의 결과 불명은 유지합니다.
+- API·alarm-worker·shared의 `iris-client-go/v3`를 검증된 v3.0.4로 올려 webhook body timeout의
+  `408` 재시도 계약을 반영합니다.
+- replay epoch의 실제 단일행 제약을 claim planner에도 명시하여 빈 epoch 테이블의 과대 추정과
+  불필요한 JIT 최적화를 제거합니다. 5만 행 backlog 실측은 custom 1,253→161ms,
+  generic 697→160ms이며, 1초 제한·방문 행 예산·JIT 설정은 유지합니다. 실패한 EXPLAIN의
+  원래 오류를 보존하고 rollback 뒤 prepared statement를 정리하여 다음 조회를 오염시키지 않습니다.
+
+- 수집 projection의 구조적 membership과 `not_before` eligibility를 분리합니다. migration 259의 CURRENT guard·job scope·연속 membership fence로 무관한 세대 교체는 진행 중인 수집을 취소하지 않고, 자기 대상 변경·제거/재추가와 이전 owner는 계속 거부합니다. 대상 상한 초과는 잘라서 발행하지 않고 마지막 정상 projection을 유지한 채 오류로 드러냅니다.
+- 일반 영상 목록 generation 2와 migration 260의 부분 목록 기준·항목별 pending 증거를 도입합니다. 목록 두 RPC 뒤 기존 limiter 안에서 player RPC 최대 두 번으로 게시 시각/최초공개를 확인합니다. 첫 기준 목록과 과거 재등장은 조용히 저장하고, 근거가 나중에 확인된 신규 영상·새 최초공개만 한 번 알립니다. 기존 영상·관측을 자동 backfill하지 않습니다.
+- 신규성 근거 조회의 예약 시한과 오류가 겹쳐도 설정·취소·소유권·내부 오류를 정상 목록으로 바꾸지 않습니다. 허용된 요청 실패·timeout은 근거 미확정으로 보존하며, 비강등 오류가 조회 시한 뒤 반환되는 회귀를 추가합니다.
+- 영상/Shorts 목록을 채널·kind별 선행 관측 순서로 소비하고 활성 backlog와 claim 후보 조회 비용을 구분하여 제한합니다. collector는 실제 checkpoint 전진의 수락 간격과 마지막 수락 시각을 기록하고, superseded·empty terminal 결과를 실제 durable 상태와 맞춥니다.
+- 수락 간격 집계가 늘어난 publish 경로에서 단일행 잠금 함수의 기본 cardinality 추정이 반복 JIT를 유발하던 성능 회귀를 고칩니다. migration 259가 UNIQUE 키로 최대 한 행을 반환하는 두 함수에 `ROWS 1`을 지정하며, JIT·성능 예산·잠금/충돌 판정은 유지합니다.
+- migration 259/260과 새 API·collector/helper는 승인된 coordinated cutover가 필요합니다. 기존 lock 함수와 video-list 세대가 바뀌므로 혼합 버전 실행이나 이전 image만의 롤백을 지원하지 않습니다. 이 미출시 변경은 운영 적용을 뜻하지 않습니다.
 - YouTube 방송 제목·예정 시각을 필드별 관측 시각으로 갱신합니다. 늦게 도착한 과거 관측이나 같은 시각의 충돌은 정본 값을 덮지 않습니다. migration 257이 nullable `title_observed_at`을 추가하며 과거 시각은 추정하지 않습니다. 새 API 실행 전에 이 migration이 필요합니다.
 - 알림 구독 set이 유실됐을 때 새 구독 하나로 부분 캐시를 만들지 않고 기존 DB 조회 경로를 유지합니다. 채널 registry 삭제는 DB의 잔여 구독으로 판단하며, registry 자체가 유실되면 전체 DB 구독으로 복구합니다.
 - 방송 checker와 생일 방송 후보 조회가 `last_seen_at` 대신 LIVE의 `status_observed_at`, UPCOMING의 `schedule_observed_at`으로 최신성을 판정합니다. 관측 시각이 없거나 현재보다 미래이면 후보로 사용하지 않으며, 새 일정의 `last_seen_at`에는 예약 시각이 아닌 수신 시각을 기록합니다. LIVE guardrail 로그와 생일 알림 runbook도 실제 관측 시각에 맞춥니다.
+- 구독 변경 전에 종류별 캐시를 무효화하고, DB commit 뒤 후처리를 요청 취소와 분리된 최대 5초 context로 수행합니다. commit 직후 취소·캐시 장애가 나도 오래된 수신자 집합이 남지 않으며, 무효화 실패 시에는 DB를 변경하지 않습니다.
+- Holodex·생일 멤버 조회를 기다린 뒤 관측 최신성 기준 시각을 다시 측정합니다. 대기 중 들어온 정상 관측이 주기 시작 시각보다 늦다는 이유로 제외되던 회귀를 고칩니다.
 - 7.2.0에서 hololive 사본만 바꿨던 NilAway 모델 빌드 입력(`scripts/ci/nilaway-models`)을 stack 정본 `tools/nilaway`와 다시 맞춥니다. stack 계약 검사가 두 사본의 차이로 메타 저장소 게시를 막았습니다. 같은 변경에서 지운 검사가 남긴, 쓰이지 않는 테스트 변수 하나도 지웁니다.
+- YouTube 수집기 내부 상태와 계산을 줄입니다. 검증된 job 계약 집합과 고정 SQL 자산을 한 번만 만들고, 체크포인트는 수집 결과에 따로 저장하지 않고 발행 직전에 관측에서 만듭니다. discovery는 저장소가 이미 정렬·중복 제거하는 제외 키를 다시 정렬하지 않고, `PrepareEnvelope`는 방금 만든 canonical 값으로 최종 검증합니다. 공개 `Validate`, 발행 fence 검증, COMPLETE/PARTIAL 원자성과 식별자·해시 규칙은 그대로입니다.
+- YouTube 수집기가 profile의 `collection.queue.max_age`를 넘긴 로컬 대기 항목을 lease 취득 전에 버리고 다음 항목을 계속 처리합니다. stale discard와 경고를 기록하며 DB terminal은 만들지 않습니다. `--check-worker-profile`은 TTL 30분 상한 등 runtime과 같은 profile 수치 정책을 운영 환경 변수 없이 검증합니다. collector 전용 설정과 profile 로더는 `hololive-youtube-collector/internal/config`가 소유합니다.
+- 로컬 수집 pacing이 Valkey 구현을 가져오지 않도록 공용 rate-limit 판정과 Valkey backend를 분리하고, community RPC DTO를 collector로 옮겨 HTML scraper 의존을 없앱니다. helper raw 반환형에서 RPC 경계가 붙이는 `protocol_version`을 제외하고 소스 문자열 검사 대신 실제 타입·행동 검증을 유지합니다. 반복 exact-key schema와 날짜 판정 primitive를 공유하되 wire 형식과 provider별 실패 정책은 바꾸지 않습니다.
+- 수집 job 계약·target snapshot·입력/결과·retry 값을 SQL에 의존하지 않는 collector `collection` core로 분리합니다. Scheduler가 실행 정책을 소유하고 defer는 typed 입력을 사용합니다. Provider 슬롯은 snapshot 조회·수집 뒤 반환하므로 DB publish의 잠금 대기가 다음 provider 수집을 막지 않습니다. Admission timeout의 durable 정책, 진단 마스킹과 DB clock clamp는 유지합니다.
+- API만 사용하는 canonical 저장을 `internal/youtube/canonicalwrite`의 transaction 전용 함수로 옮깁니다. Shared batch repository·독립 transaction 경로·미사용 latency persister·post-commit 재조립·keyword 분기와 전달 wrapper를 지웁니다. Community는 canonical payload를 한 번 정규화해 조회·저장·알림에 쓰며 ID 병합 순서, NULL·시각·저장 JSON과 replay 중복 방지는 유지합니다.
+- 호출자가 없던 YouTube HTML/RSS scraper·parser·admission·분산 limiter·생성자·설정 필드와 호환 경로를 모두 제거합니다. 로컬 pacing은 collector로 옮기고 사용하지 않는 goquery/gjson 계열 의존성을 정리합니다. 공식 일정·Holodex 경로는 유지합니다. 운영 env 변경이나 배포는 포함하지 않습니다.
+- Collector의 tracing slot 정책과 profile fixture를 collector로 회수하고, shared tracking의 자체 transaction 경로는 기존 `dbx`를 사용합니다. 호출자 없는 transaction helper·cleanupctx와 퇴역 이름 grep·구현 개수 검사는 제거합니다. 공유 worker 계약과 실제 다중 소비자 primitive는 유지합니다.
+- 다중 종류의 정상 발행 테스트가 수집 설정과 같은 운영 lease 예산을 사용합니다. 기존 50ms 갱신 제한은 DB 발행 지연을 갱신 실패로 바꿔 테스트를 불안정하게 만들었습니다. 운영 예산과 갱신 실패 테스트는 변경하지 않습니다.
+
+## v7.2.3 - 2026-10-03
+
+- RETIRED 수집 대상 이력을 정리할 때 120초당 한 배치만 실행하던 처리량 부족을 보완합니다. 배치당 1,000행과 기존 전체 DB 시한 안에서 최대 64개 배치를 독립 commit하고, 진척 없음·오류·취소 시 중단합니다. 7일 보존·CURRENT/lease 보호·수집 대상 선정은 유지하며, 뒤 배치 실패에도 앞서 완료한 삭제 계수를 보존합니다.
 
 ## v7.2.2 - 2026-10-02
 

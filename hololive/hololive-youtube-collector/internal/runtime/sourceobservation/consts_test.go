@@ -6,6 +6,7 @@ const (
 	testReplayOperator  = "test-operator"
 	testMutatedValue    = "mutated"
 	testSlotStateActive = "ACTIVE"
+	testSlotStateIdle   = "IDLE"
 	testStatusLive      = "LIVE"
 	testStatusEnded     = "ENDED"
 	testStatusCanceled  = "CANCELLED" //nolint:misspell // source observation 계약은 영국식 CANCELLED를 사용한다.

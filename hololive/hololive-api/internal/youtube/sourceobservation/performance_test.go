@@ -7,7 +7,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -16,11 +15,7 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 	pool := dbtest.NewPool(b)
 	repository := NewRepository(pool)
 	publisher := publishkit.NewPublisher(pool)
-	consumer := NewConsumer(
-		repository,
-		NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)),
-		nil,
-	)
+	consumer := NewConsumer(repository)
 	proof := seedPublishLease(
 		b.Context(),
 		b,

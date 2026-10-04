@@ -49,10 +49,6 @@ type trackingDB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-type trackingTxBeginner interface {
-	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
-}
-
 type PgxRepository struct {
 	db trackingDB
 

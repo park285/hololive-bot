@@ -18,8 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -33,7 +31,7 @@ func TestClientFetchCommunityDecodesHelperPosts(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewRPC(server.Client(), server.URL, ratelimiter.New(0))
+	client := NewRPC(server.Client(), server.URL, NewRateLimiter(0))
 
 	result, err := client.FetchCommunity(t.Context(), CommunityRequest{
 		ChannelID: "UC_TEST", MaxResults: 10, MaxPages: 1,
@@ -85,7 +83,7 @@ func writeCommunityHelperResult(t *testing.T, w http.ResponseWriter, published t
 
 	if err := jsonv2.MarshalWrite(w, CommunityResult{
 		ProtocolVersion: ProtocolVersion,
-		Posts: []*parser.CommunityPost{{
+		Posts: []*CommunityPost{{
 			PostID: "post-1", UpstreamPostID: "post-1", AuthorID: "UC_TEST",
 			AuthorName: "Author", ContentText: "hello world",
 			PublishedText: published.Format(time.RFC3339), LikeCount: 1200, CommentCount: 7,

@@ -7,6 +7,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 // 방송 탭 snapshot job은 채널 확인을 발행할 수 없다. 공유-job collector의 확인이 새 슬롯 계약을 우회하지 못한다.
@@ -21,8 +22,8 @@ func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {
 	_, err := repo.PublishBatch(ctx, publishInput(channelLiveCheckEnvelope(t, &proof, contract.ChannelLiveCheckV1{
 		Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true,
 	})))
-	if !errors.Is(err, ErrTargetDisabled) {
-		t.Fatalf("channel live check under snapshot job lease: err = %v, want %v", err, ErrTargetDisabled)
+	if !errors.Is(err, collection.ErrTargetDisabled) {
+		t.Fatalf("channel live check under snapshot job lease: err = %v, want %v", err, collection.ErrTargetDisabled)
 	}
 
 	assertTableCount(t, pool, "source_observations", 0)

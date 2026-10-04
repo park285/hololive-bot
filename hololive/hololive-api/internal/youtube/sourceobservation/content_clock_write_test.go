@@ -63,7 +63,7 @@ func contentClockUnchanged(t *testing.T, stored, next *content.EntityState) bool
 	return unchanged
 }
 
-// 0037이 저장하는 값 열 14개 중 하나라도 바뀌면 persist 대상이어야 한다. 비교에서 열이 빠지면 변경이 유실된다.
+// 0037이 저장하는 값 열 15개 중 하나라도 바뀌면 persist 대상이어야 한다. 비교에서 열이 빠지면 변경이 유실된다.
 func TestSameStoredContentClockDetectsEveryPersistedColumn(t *testing.T) {
 	t.Parallel()
 
@@ -83,6 +83,7 @@ func TestSameStoredContentClockDetectsEveryPersistedColumn(t *testing.T) {
 		"missing_since_effective_at":   func(c *content.EntityState) { c.Clock.MissingSinceEffectiveAt = &later },
 		"consecutive_absence_slots":    func(c *content.EntityState) { c.ConsecutiveAbsenceSlots = 1 },
 		"withdrawn_at":                 func(c *content.EntityState) { c.WithdrawnAt = nil },
+		"novelty_pending":              func(c *content.EntityState) { c.NoveltyPending = !c.NoveltyPending },
 	}
 
 	stored := populatedContentClock()

@@ -233,13 +233,18 @@ export interface CommunityPost {
   videoId?: string;
 }
 
+/**
+ * 목록 lockup 항목입니다. videos 탭은 시각을 싣지 않습니다. 공개·예정 시각은 영상별 video_live_check 응답만 근거로 씁니다.
+ * shorts 탭의 선택 시각은 기존 목록 문자열 해석을 유지합니다.
+ */
 export interface ContentItem {
   video_id: string;
   channel_id: string;
   title: string;
   published_at?: string;
   scheduled_for?: string;
-  is_premiere?: boolean;
+  /** videos 탭 lockup의 구조화된 예정 표시가 있을 때만 true로 싣습니다. 시각 근거가 아닙니다. */
+  is_upcoming?: true;
 }
 
 export interface ContentResult extends Pagination {
@@ -347,6 +352,8 @@ export interface VideoLiveCheckResult {
   scheduled_at?: string;
   waiting_state_confirmed?: boolean;
   ended_at?: string;
+  /** player microformat publishDate가 시·분·초와 offset을 가진 RFC3339일 때만 있습니다. */
+  published_at?: string;
   availability: VideoAvailability;
   method: VideoAvailabilityMethod;
   unknown_reason?: VideoLiveCheckUnknownReason;

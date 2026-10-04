@@ -2,6 +2,7 @@ package collectorruntime
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -14,13 +15,13 @@ import (
 
 func (s *leaseScheduler) enqueue(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
 	if !validJobSpec(spec) {
-		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 
 		return EnqueueInvalid
 	}
 
 	if ctx.Err() != nil {
-		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 
 		return EnqueueCanceled
 	}
@@ -41,13 +42,13 @@ func (s *leaseScheduler) enqueue(ctx context.Context, spec *joblease.JobSpec) En
 func (s *leaseScheduler) recordEnqueueAdmission(result EnqueueResult) {
 	switch result {
 	case EnqueueAccepted:
-		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionAccepted)
+		s.workerTotals.RecordAdmission(workercontract.AdmissionAccepted)
 	case EnqueueDeduped:
-		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionDuplicate)
+		s.workerTotals.RecordAdmission(workercontract.AdmissionDuplicate)
 	case EnqueueFull, EnqueueCanceled, EnqueueInvalid:
-		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 	default:
-		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 	}
 }
 
@@ -77,7 +78,7 @@ func (s *leaseScheduler) sendQueued(ctx context.Context, spec *joblease.JobSpec)
 }
 
 func (s *leaseScheduler) worker(ctx context.Context) {
-	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() error {
+	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() error {
 		for {
 			spec, ok := s.nextSpec(ctx)
 			if !ok {
@@ -98,7 +99,7 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) 
 
 	defer s.unmarkQueued(spec.JobKey)
 
-	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-job", func() error {
+	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-job", func() error {
 		s.executor.runSpec(ctx, spec)
 
 		return nil
@@ -107,35 +108,82 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) 
 	}
 }
 
+// nextSpec는 lease 획득 전에 만료 항목을 버리고 실행할 다음 항목을 반환합니다.
+// 반환값 false는 취소 또는 불변식 위반으로 worker가 종료됨을 뜻합니다.
 func (s *leaseScheduler) nextSpec(ctx context.Context) (joblease.JobSpec, bool) {
-	if ctx.Err() != nil {
-		return joblease.JobSpec{}, false
-	}
+	for {
+		if ctx.Err() != nil {
+			return joblease.JobSpec{}, false
+		}
 
-	select {
-	case <-ctx.Done():
-		return joblease.JobSpec{}, false
-	case spec := <-s.queue:
-		return s.acceptDequeued(ctx, &spec)
+		select {
+		case <-ctx.Done():
+			return joblease.JobSpec{}, false
+		case spec := <-s.queue:
+			switch s.acceptDequeued(ctx, &spec) {
+			case dequeueRun:
+				return spec, true
+			case dequeueStale:
+				continue
+			case dequeueStop:
+				return joblease.JobSpec{}, false
+			}
+		}
 	}
 }
 
-func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobSpec) (joblease.JobSpec, bool) {
+type dequeueDecision int
+
+const (
+	dequeueStop dequeueDecision = iota
+	dequeueRun
+	dequeueStale
+)
+
+// acceptDequeued는 lease를 취득하지 않은 만료 항목을 DB terminal 없이 버립니다.
+func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobSpec) dequeueDecision {
 	if spec == nil {
-		return joblease.JobSpec{}, false
+		return dequeueStop
 	}
 
 	if ctx.Err() != nil {
 		s.unmarkQueued(spec.JobKey)
 
-		return joblease.JobSpec{}, false
+		return dequeueStop
 	}
 
+	maxAge := s.queueMaxAge
+
 	s.queueMu.Lock()
+
+	enqueuedAt, tracked := s.queuedAt[spec.JobKey]
+	if !tracked {
+		delete(s.queued, spec.JobKey)
+		s.queueMu.Unlock()
+		s.reportFatal(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "lease scheduler dequeued a job without a queued timestamp"))
+
+		return dequeueStop
+	}
+
+	age := time.Since(enqueuedAt)
+	if age > maxAge {
+		delete(s.queued, spec.JobKey)
+		delete(s.queuedAt, spec.JobKey)
+		s.queueMu.Unlock()
+		s.workerTotals.RecordDiscard(workercontract.DiscardStale)
+		s.logger.Warn("discarded stale queued collection job before lease acquisition",
+			slog.String("job_key", spec.JobKey),
+			slog.Duration("queue_age", age),
+			slog.Duration("max_age", maxAge),
+		)
+
+		return dequeueStale
+	}
+
 	delete(s.queuedAt, spec.JobKey)
 	s.queueMu.Unlock()
 
-	return *spec, true
+	return dequeueRun
 }
 
 func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
@@ -158,7 +206,7 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 	s.queued[jobKey] = struct{}{}
 	s.queuedAt[jobKey] = time.Now()
 
-	overflow := len(s.queued) > s.executor.config.QueueCapacity
+	overflow := len(s.queued) > s.queueCapacity
 
 	if overflow {
 		delete(s.queued, jobKey)

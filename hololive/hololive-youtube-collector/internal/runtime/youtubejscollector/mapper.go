@@ -2,11 +2,10 @@ package youtubejscollector
 
 import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-func communityPayload(channelID string, posts []*parser.CommunityPost, maxResults int, page *youtubejs.Pagination) contract.CommunityPayloadV1 {
+func communityPayload(channelID string, posts []*youtubejs.CommunityPost, maxResults int, page *youtubejs.Pagination) contract.CommunityPayloadV1 {
 	mapped := make([]contract.CommunityPostV1, 0, len(posts))
 	for _, post := range posts {
 		mapped = append(mapped, contract.CommunityPostV1{
@@ -38,29 +37,33 @@ func communityPayload(channelID string, posts []*parser.CommunityPost, maxResult
 	}
 }
 
-func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResults int, page *youtubejs.Pagination, shorts bool) (contract.VideoListV1, contract.ShortsListV1) {
+// videoListPayload는 generation 2 video_list를 만듭니다. 항목 시각·Premiere 표시는 같은 위치의 player 공개 근거에서만 채우고,
+// 근거가 없는 항목은 시각 없이 둡니다. 목록 lockup의 시각은 싣지 않습니다.
+func videoListPayload(
+	channelID string,
+	items []youtubejs.ContentItem,
+	publications []*contract.VideoPublicationV1,
+	maxResults int,
+	page *youtubejs.Pagination,
+) contract.VideoListV1 {
 	videos := make([]contract.VideoListItemV1, 0, len(items))
-	for _, item := range items {
-		videos = append(videos, contract.VideoListItemV1{
-			VideoID:      item.VideoID,
-			ChannelID:    channelID,
-			Title:        item.Title,
-			PublishedAt:  item.PublishedAt,
-			ScheduledFor: item.ScheduledFor,
-			IsPremiere:   item.IsPremiere,
-		})
-	}
+	for i := range items {
+		video := contract.VideoListItemV1{VideoID: items[i].VideoID, ChannelID: channelID, Title: items[i].Title}
 
-	if shorts {
-		return contract.VideoListV1{}, contract.ShortsListV1{
-			ChannelID: channelID,
-			Videos:    videos,
-			Coverage: contract.ShortsListCoverageV1{
-				ChannelID:  channelID,
-				MaxResults: maxResults,
-				Exhausted:  page.Exhausted,
-			},
+		if publication := publications[i]; publication != nil {
+			video.Publication = publication
+
+			switch publication.Status {
+			case contract.VideoPublicationPublished:
+				video.PublishedAt = publication.PublishedAt
+			case contract.VideoPublicationUpcomingPremiere:
+				video.ScheduledFor = publication.ScheduledFor
+				video.IsPremiere = new(true)
+			case contract.VideoPublicationUnresolved:
+			}
 		}
+
+		videos = append(videos, video)
 	}
 
 	return contract.VideoListV1{
@@ -71,7 +74,30 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 			MaxResults: maxResults,
 			Exhausted:  page.Exhausted,
 		},
-	}, contract.ShortsListV1{}
+	}
+}
+
+func shortsListPayload(channelID string, items []youtubejs.ContentItem, maxResults int, page *youtubejs.Pagination) contract.ShortsListV1 {
+	videos := make([]contract.VideoListItemV1, 0, len(items))
+	for i := range items {
+		videos = append(videos, contract.VideoListItemV1{
+			VideoID:      items[i].VideoID,
+			ChannelID:    channelID,
+			Title:        items[i].Title,
+			PublishedAt:  items[i].PublishedAt,
+			ScheduledFor: items[i].ScheduledFor,
+		})
+	}
+
+	return contract.ShortsListV1{
+		ChannelID: channelID,
+		Videos:    videos,
+		Coverage: contract.ShortsListCoverageV1{
+			ChannelID:  channelID,
+			MaxResults: maxResults,
+			Exhausted:  page.Exhausted,
+		},
+	}
 }
 
 func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem, query *contract.LiveSnapshotQueryV1) contract.LiveSnapshotV1 {
@@ -174,7 +200,7 @@ func channelPhotoPayload(channelID string, variants []youtubejs.ChannelPhotoVari
 	}, true
 }
 
-func thumbnails(values []parser.Thumbnail) []contract.Thumbnail {
+func thumbnails(values []youtubejs.CommunityThumbnail) []contract.Thumbnail {
 	if len(values) == 0 {
 		return nil
 	}

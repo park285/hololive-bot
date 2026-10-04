@@ -3,6 +3,7 @@ import test from "node:test";
 import { Mixins, Parser, YTNodes } from "youtubei.js";
 
 import { fetchChannelFeed, mapPhoto, mapProfile } from "./fetch-channel.mjs";
+import { mapContentItems } from "./fetch-content.mjs";
 import { mapPost } from "./map-posts.mjs";
 import { continuationToken, paginate, paginationEnvelopeReserve } from "./pagination.mjs";
 
@@ -146,6 +147,25 @@ test("real single-image attachments preserve their existing representation", () 
     image: { thumbnails: [{ url: "https://img.test/single.jpg", width: 640, height: 480 }] },
   } } });
   assert.deepEqual(mapPost(post).images, [{ url: "https://img.test/single.jpg", width: 640, height: 480 }]);
+});
+
+test("real Video lockups map to videos items without list-derived times", () => {
+  const video = (videoId, extra = {}) => new YTNodes.Video({ videoId, title: { simpleText: videoId }, ...extra });
+  const feed = { videos: [
+    video("future-premiere", { upcomingEventData: { startTime: "4102444800" }, publishedTimeText: { simpleText: "Premieres Jan 1, 2100" } }),
+    // 예정 시각이 지난 대기 영상은 예정 표시를 잃고, collector는 저장된 Premiere 근거를 재사용하지 않고 다시 확인합니다.
+    video("stale-premiere", { upcomingEventData: { startTime: "1758362400" } }),
+    video("relative", { publishedTimeText: { simpleText: "3 hours ago" } }),
+    video("absolute-text", { publishedTimeText: { simpleText: "Premiered Sep 20, 2026" } }),
+  ] };
+  assert.deepEqual(mapContentItems(feed, channelId, "videos"), [
+    { video_id: "future-premiere", channel_id: channelId, title: "future-premiere", is_upcoming: true },
+    { video_id: "stale-premiere", channel_id: channelId, title: "stale-premiere" },
+    { video_id: "relative", channel_id: channelId, title: "relative" },
+    { video_id: "absolute-text", channel_id: channelId, title: "absolute-text" },
+  ]);
+  const [relativeShort] = mapContentItems({ videos: [feed.videos[2]] }, channelId, "shorts");
+  assert.equal(relativeShort.published_at, undefined);
 });
 
 function continuationNode(token, view = false) {

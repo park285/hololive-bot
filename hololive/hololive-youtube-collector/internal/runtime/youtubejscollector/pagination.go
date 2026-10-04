@@ -6,6 +6,9 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
+// maxResultsPerPage는 community·content 목록 요청의 고정 항목 수입니다.
+const maxResultsPerPage = 10
+
 func PaginationOf(page *youtubejs.Pagination) (contract.Completeness, contract.Continuity, error) {
 	if page == nil {
 		return "", "", collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pagination is nil")

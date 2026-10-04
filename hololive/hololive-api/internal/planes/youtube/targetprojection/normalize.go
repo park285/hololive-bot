@@ -81,6 +81,11 @@ func normalizeTargets(targets []TargetSpec) ([]TargetSpec, map[targetIdentity]Ta
 
 func acceptTarget(target TargetSpec, index int, seen map[targetIdentity]TargetSpec) (TargetSpec, bool, error) {
 	target.SubjectKey = strings.TrimSpace(target.SubjectKey)
+	// timestamptz 정밀도와 같은 UTC 마이크로초로 맞춰 중복 비교와 저장 값이 같은 시각을 가리키게 한다.
+	if !target.NotBefore.IsZero() {
+		target.NotBefore = target.NotBefore.UTC().Truncate(time.Microsecond)
+	}
+
 	if err := validateTargetFields(target, index); err != nil {
 		return TargetSpec{}, false, fmt.Errorf("validate target fields: %w", err)
 	}
@@ -200,6 +205,7 @@ func compareTargetReason(left, right TargetReason) int {
 	)
 }
 
+// hashNormalizedTargets는 scheduling identity만 hash합니다. NotBefore 같은 신선도 변화는 generation을 바꾸지 않습니다.
 func hashNormalizedTargets(targets []TargetSpec) (string, error) {
 	hashInput := make([]projectionHashTarget, len(targets))
 	for i := range targets {
