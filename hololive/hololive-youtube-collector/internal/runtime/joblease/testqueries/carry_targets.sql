@@ -5,7 +5,6 @@ INSERT INTO youtube_collection_targets (
     priority,
     poll_interval_ms,
     enabled,
-    valid_until,
     member_since_generation,
     not_before
 )
@@ -15,7 +14,6 @@ SELECT $2,
        priority,
        poll_interval_ms,
        enabled,
-       clock_timestamp() + INTERVAL '1 hour',
        member_since_generation,
        not_before
 FROM youtube_collection_targets

@@ -22,8 +22,8 @@ func queryFixture(tb testing.TB) (*Repository, *pgxpool.Pool) {
  UPDATE youtube_collection_projection_generations SET status='RETIRED' WHERE status='CURRENT';
  INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
  VALUES('CURRENT',2,repeat('a',64),now()+interval '1 hour',now());
- INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
- SELECT generation,'UC_live_query',kind,20,120000,true,valid_until FROM youtube_collection_projection_generations
+ INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
+ SELECT generation,'UC_live_query',kind,20,120000,true FROM youtube_collection_projection_generations
  CROSS JOIN (VALUES('live_snapshot'),('channel_live_check')) kinds(kind) WHERE status='CURRENT';`)
 
 	return &Repository{db: pool}, pool
@@ -124,6 +124,32 @@ func TestRepositoryEvidenceBoundaries(t *testing.T) {
 	}
 }
 
+func TestRepositoryHeaderExpiryAndHeartbeatWithoutTargetWrites(t *testing.T) {
+	repo, pool := queryFixture(t)
+	addCoverage(t, pool)
+	addLive(t, pool)
+
+	var before, after string
+
+	tuples := `SELECT string_agg(xmin::text||':'||ctid::text,',' ORDER BY subject_key,observation_kind) FROM youtube_collection_targets`
+	require.NoError(t, pool.QueryRow(t.Context(), tuples).Scan(&before))
+	execFixture(t, pool, `UPDATE youtube_collection_projection_generations SET valid_until=now()-interval '1 second' WHERE status='CURRENT'`)
+
+	expired, err := repo.Query(t.Context(), Request{Scope: All, Limit: MaxItems})
+	require.NoError(t, err)
+	require.Equal(t, Unavailable, expired.Status)
+	require.Equal(t, InvalidProjection, expired.Channels[0].Reason)
+
+	execFixture(t, pool, `UPDATE youtube_collection_projection_generations SET valid_until=now()+interval '1 hour' WHERE status='CURRENT'`)
+
+	renewed, err := repo.Query(t.Context(), Request{Scope: All, Limit: MaxItems})
+	require.NoError(t, err)
+	require.Equal(t, Complete, renewed.Status)
+	require.Len(t, renewed.Items, 1)
+	require.NoError(t, pool.QueryRow(t.Context(), tuples).Scan(&after))
+	require.Equal(t, before, after, "header renewal must not require target tuple writes")
+}
+
 func TestRepositoryReadsCommittedStateAndCoverageTogether(t *testing.T) {
 	repo, pool := queryFixture(t)
 	addCoverage(t, pool)
@@ -164,7 +190,8 @@ func TestRepositoryScopeSharedChannelAndLimit(t *testing.T) {
 	execFixture(t, pool, `INSERT INTO members(slug,channel_id,english_name,org,sync_source) VALUES
  ('live-query-shared','UC_live_query','Second Name','Hololive','manual'),
  ('live-query-other','UC_other_query','Other Member','VSpo','manual');
- INSERT INTO youtube_collection_targets SELECT projection_generation,'UC_other_query',observation_kind,priority,poll_interval_ms,enabled,valid_until,created_at FROM youtube_collection_targets WHERE subject_key='UC_live_query';
+ INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,created_at)
+ SELECT projection_generation,'UC_other_query',observation_kind,priority,poll_interval_ms,enabled,created_at FROM youtube_collection_targets WHERE subject_key='UC_live_query';
  INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,started_at) VALUES
  ('livequery02','UC_live_query','LIVE','Second stream',now()),('otherquery01','UC_other_query','LIVE','Other stream',now());
  INSERT INTO youtube_live_reconciliation_heads(video_id,status,last_live_positive_at,last_live_positive_seen_at)
@@ -287,8 +314,8 @@ func TestRepositoryAvailabilityEvidenceBoundaries(t *testing.T) {
 			addLive(t, pool)
 			execFixture(t, pool, `UPDATE youtube_live_reconciliation_heads
  SET last_live_positive_at=now()-interval '6 minutes',last_live_positive_seen_at=now()-interval '6 minutes';
- INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
- SELECT generation,'livequery01','video_live_check',20,120000,true,valid_until FROM youtube_collection_projection_generations WHERE status='CURRENT';
+ INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
+ SELECT generation,'livequery01','video_live_check',20,120000,true FROM youtube_collection_projection_generations WHERE status='CURRENT';
  INSERT INTO youtube_video_availability(video_id,channel_id,provider,identity_confirmed,availability,method,evidence_sha256,scheduled_for,effective_at,observed_at,received_at)
  VALUES('livequery01','UC_live_query','youtubejs',true,'PUBLIC_UNAVAILABLE','player_private',repeat('d',64),
  now()-interval '30 seconds',now()-interval '30 seconds',now()-interval '29 seconds',now()-interval '29 seconds');`)
@@ -314,7 +341,8 @@ func seedCrossChannelPending(t *testing.T, pool *pgxpool.Pool, otherOrg, session
 	_, err := pool.Exec(t.Context(), `INSERT INTO members(slug,channel_id,english_name,org,sync_source)
  VALUES('live-query-other','UC_other_query','Other Member',$1,'manual')`, otherOrg)
 	require.NoError(t, err)
-	execFixture(t, pool, `INSERT INTO youtube_collection_targets SELECT projection_generation,'UC_other_query',observation_kind,priority,poll_interval_ms,enabled,valid_until,created_at FROM youtube_collection_targets WHERE subject_key='UC_live_query';
+	execFixture(t, pool, `INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,created_at)
+ SELECT projection_generation,'UC_other_query',observation_kind,priority,poll_interval_ms,enabled,created_at FROM youtube_collection_targets WHERE subject_key='UC_live_query';
  INSERT INTO youtube_channel_live_checks(channel_id,provider,outcome,channel_identity_confirmed,evidence_sha256,scheduled_for,effective_at,observed_at,received_at)
  SELECT 'UC_other_query',provider,outcome,channel_identity_confirmed,evidence_sha256,scheduled_for,effective_at,observed_at,received_at FROM youtube_channel_live_checks WHERE channel_id='UC_live_query'`)
 

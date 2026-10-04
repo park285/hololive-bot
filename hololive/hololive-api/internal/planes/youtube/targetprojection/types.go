@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	MaxTargetCount       = 10_000
+	MaxTargetCount       = contract.MaxProjectionTargetCount
 	MaxReasonCount       = 50_000
 	MaxInputChannelCount = 10_000
 	MinValidity          = 5 * time.Second

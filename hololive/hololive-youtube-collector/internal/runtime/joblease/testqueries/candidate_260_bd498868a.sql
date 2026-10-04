@@ -7,6 +7,7 @@ WITH target_bundles AS (
     WHERE projection_generation = $1
       AND observation_kind = ANY($2::text[])
       AND enabled = TRUE
+      AND valid_until > statement_timestamp()
     GROUP BY subject_key
     -- not_before는 신규 입장 판정에만 쓴다. bundle의 한 행이라도 입장 가능하면 후보다.
     HAVING bool_or(not_before IS NULL OR not_before <= statement_timestamp())

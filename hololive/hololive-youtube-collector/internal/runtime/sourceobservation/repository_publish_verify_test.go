@@ -81,6 +81,11 @@ func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 		excludes string
 	}{
 		{
+			name:     "header_expiry_alone_rolls_back",
+			breakers: []breaker{stalePublishProjection},
+			want:     collection.ErrProjectionStale,
+		},
+		{
 			name:     "fence_before_projection_and_target",
 			breakers: []breaker{breakPublishFence, stalePublishProjection, disablePublishTarget, stalePublishContract},
 			want:     collection.ErrFenceLost,
@@ -132,4 +137,25 @@ func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 			assertPublishSideEffects(t, pool, 0, 0, 0)
 		})
 	}
+}
+
+func TestPublishIgnoresAdmissionOnlyEligibilityChange(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	input := publishInput(communityEnvelope(t, &proof, "post-1"))
+
+	if _, err := pool.Exec(ctx, `WITH changed AS (
+		UPDATE youtube_collection_targets SET not_before=clock_timestamp()+INTERVAL '1 hour'
+		WHERE projection_generation=$1 RETURNING projection_generation
+	) UPDATE youtube_collection_projection_generations SET eligibility_version=eligibility_version+1
+	WHERE generation=$1 AND EXISTS (SELECT 1 FROM changed)`, proof.ProjectionGeneration); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewRepository(pool).PublishBatch(ctx, input); err != nil {
+		t.Fatalf("admitted work rejected after eligibility change: %v", err)
+	}
+
+	assertPublishSideEffects(t, pool, 1, 1, 1)
 }

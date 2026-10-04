@@ -807,8 +807,8 @@ func insertPublishTarget(
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until, member_since_generation
-		) VALUES ($1, $2, $3, 50, 60000, $4, NOW() + INTERVAL '1 day', $1)
+			priority, poll_interval_ms, enabled, member_since_generation
+		) VALUES ($1, $2, $3, 50, 60000, $4, $1)
 		ON CONFLICT (projection_generation, subject_key, observation_kind) DO NOTHING
 	`, generation, subjectKey, kind, enabled); err != nil {
 		tb.Fatalf("seed target: %v", err)
@@ -828,7 +828,6 @@ func resyncPublishMembership(ctx context.Context, tb testing.TB, pool *pgxpool.P
 			WHERE target.projection_generation = job.projection_generation
 			  AND target.observation_kind = ANY(job.membership_kinds)
 			  AND target.enabled
-			  AND target.valid_until > NOW()
 			  AND (NOT job.membership_exact_subject OR target.subject_key = job.subject_key)
 		)
 		WHERE job.slot_state = 'ACTIVE'

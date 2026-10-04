@@ -1,6 +1,11 @@
 -- acquire 전용이다. cadence bundle의 주기·신규 입장 가능 여부와 lease에 기록할 membership 범위를 함께 계산한다.
 -- not_before는 신규 입장에만 쓰며, 이미 획득한 작업의 snapshot·renew·complete·publish는 이 문장을 쓰지 않는다.
-WITH cadence AS (
+WITH current_projection AS (
+    SELECT generation
+    FROM youtube_collection_projection_generations
+    WHERE generation = $1 AND status = 'CURRENT'
+      AND valid_until > statement_timestamp()
+), cadence AS (
     SELECT COUNT(subject_key) AS target_count,
            COALESCE(MIN(poll_interval_ms), 0) AS min_interval_ms,
            COALESCE(MAX(poll_interval_ms), 0) AS max_interval_ms,
@@ -8,10 +13,9 @@ WITH cadence AS (
                WHERE not_before IS NULL OR not_before <= statement_timestamp()
            ) AS admissible_count
     FROM youtube_collection_targets
-    WHERE projection_generation = $1
+    WHERE projection_generation = (SELECT generation FROM current_projection)
       AND observation_kind = ANY($2::text[])
       AND enabled = TRUE
-      AND valid_until > statement_timestamp()
       AND (NOT $3::boolean OR subject_key = $4)
 ), membership AS (
     SELECT COUNT(subject_key) AS member_count,
@@ -20,10 +24,9 @@ WITH cadence AS (
                FALSE
            ) AS members_proven
     FROM youtube_collection_targets
-    WHERE projection_generation = $1
+    WHERE projection_generation = (SELECT generation FROM current_projection)
       AND observation_kind = ANY($5::text[])
       AND enabled = TRUE
-      AND valid_until > statement_timestamp()
       AND (NOT $3::boolean OR subject_key = $4)
 )
 SELECT cadence.target_count,
@@ -31,6 +34,7 @@ SELECT cadence.target_count,
        cadence.max_interval_ms,
        cadence.admissible_count,
        membership.member_count,
-       membership.members_proven
+       membership.members_proven,
+       EXISTS (SELECT 1 FROM current_projection)
 FROM cadence
 CROSS JOIN membership

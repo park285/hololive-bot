@@ -183,8 +183,8 @@ func TestProjectionRetentionCatchesUpWithObservedGenerationVolume(t *testing.T) 
 
 		generations = append(generations, generation)
 		_, err = pool.Exec(ctx, `
-			INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until)
-			SELECT $1,'capacity:'||n,'community_page',50,60000,true,statement_timestamp()-INTERVAL '8 days'
+			INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
+			SELECT $1,'capacity:'||n,'community_page',50,60000,true
 			FROM generate_series(1,600) n;
 		`, generation)
 		require.NoError(t, err)

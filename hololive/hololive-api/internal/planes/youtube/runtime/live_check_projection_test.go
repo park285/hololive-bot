@@ -412,3 +412,63 @@ func currentVideoTarget(t *testing.T, pool *pgxpool.Pool) liveCheckTargetState {
 
 	return state
 }
+
+func TestLiveCheckFreshnessMatchesSQLClockBoundaries(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	asOf := time.Date(2026, time.October, 4, 0, 0, 0, 0, time.UTC)
+	stamp := func(offset time.Duration) pgtype.Timestamptz {
+		return pgtype.Timestamptz{Time: asOf.Add(offset), Valid: true}
+	}
+	budget := 270*time.Second + 999*time.Microsecond
+
+	for _, tc := range []struct {
+		name  string
+		facts liveCheckFreshness
+	}{
+		{name: "null"},
+		{name: "exact_clock", facts: liveCheckFreshness{positiveAt: stamp(0), positiveSeenAt: stamp(0)}},
+		{name: "effective_future", facts: liveCheckFreshness{positiveAt: stamp(time.Microsecond), positiveSeenAt: stamp(0)}},
+		{name: "seen_future", facts: liveCheckFreshness{positiveAt: stamp(0), positiveSeenAt: stamp(time.Microsecond)}},
+		{name: "missing_seen", facts: liveCheckFreshness{positiveAt: stamp(0)}},
+		{name: "earlier_seen", facts: liveCheckFreshness{positiveAt: stamp(-time.Second), positiveSeenAt: stamp(-time.Hour)}},
+		{name: "exact_budget", facts: liveCheckFreshness{positiveAt: stamp(-270 * time.Second), positiveSeenAt: stamp(0)}},
+		{name: "availability_later", facts: liveCheckFreshness{
+			positiveAt: stamp(-time.Hour), positiveSeenAt: stamp(-time.Hour),
+			availabilityAt: stamp(-time.Second), availabilitySeenAt: stamp(-2 * time.Second),
+		}},
+		{name: "invalid_availability", facts: liveCheckFreshness{
+			positiveAt: stamp(-time.Minute), positiveSeenAt: stamp(-time.Minute),
+			availabilityAt: stamp(time.Second), availabilitySeenAt: stamp(0),
+		}},
+		{name: "positive_infinity", facts: liveCheckFreshness{
+			positiveAt: pgtype.Timestamptz{Valid: true, InfinityModifier: pgtype.Infinity}, positiveSeenAt: stamp(0),
+		}},
+		{name: "negative_infinity", facts: liveCheckFreshness{
+			positiveAt: pgtype.Timestamptz{Valid: true, InfinityModifier: pgtype.NegativeInfinity}, positiveSeenAt: stamp(0),
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			facts := tc.facts
+
+			facts.asOf = asOf
+
+			var want pgtype.Timestamptz
+
+			err := pool.QueryRow(t.Context(), `
+				SELECT GREATEST(
+					CASE WHEN $2::timestamptz <= $1 AND $3::timestamptz <= $1
+						THEN LEAST($2::timestamptz,$3::timestamptz)+$6::bigint*INTERVAL '1 millisecond' END,
+					CASE WHEN $4::timestamptz <= $1 AND $5::timestamptz <= $1
+						THEN LEAST($4::timestamptz,$5::timestamptz)+$6::bigint*INTERVAL '1 millisecond' END)`,
+				asOf, facts.positiveAt, facts.positiveSeenAt, facts.availabilityAt, facts.availabilitySeenAt,
+				budget.Milliseconds()).Scan(&want)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := facts.notBefore(budget); !got.Equal(want.Time) {
+				t.Fatalf("deadline = %s, SQL = %s", got, want.Time)
+			}
+		})
+	}
+}

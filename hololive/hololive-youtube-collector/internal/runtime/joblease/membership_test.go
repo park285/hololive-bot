@@ -122,6 +122,12 @@ func applyProjectionChange(t *testing.T, tx pgx.Tx, previous int64, change proje
 		}
 	}
 
+	if _, err := tx.Exec(ctx, `UPDATE youtube_collection_projection_generations
+		SET row_count = (SELECT count(*) FROM youtube_collection_targets WHERE projection_generation=$1)
+		WHERE generation=$1`, next); err != nil {
+		t.Fatalf("update projection row count: %v", err)
+	}
+
 	return next
 }
 
