@@ -35,6 +35,7 @@ func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *api.AlarmHandler) {
 	holoAPI.GET("/dispatch/deliveries/:id", handler.GetDispatchDelivery)
 	holoAPI.GET("/dispatch/deliveries/:id/actions", handler.GetDispatchActions)
 	holoAPI.POST("/dispatch/deliveries/:id/requeue", handler.RequeueDispatchDelivery)
+	holoAPI.POST("/dispatch/deliveries/:id/settle", handler.SettleDispatchDelivery)
 }
 
 func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *api.MemberHandler) {

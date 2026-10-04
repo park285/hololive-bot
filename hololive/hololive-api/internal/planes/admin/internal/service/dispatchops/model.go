@@ -207,7 +207,7 @@ func (r RequeueRequest) Validate(id string) error {
 		return err
 	}
 
-	return r.validateTargets(id)
+	return validateTargets(r.Targets, id)
 }
 
 func (r RequeueRequest) validateAudit() error {
@@ -218,13 +218,13 @@ func (r RequeueRequest) validateAudit() error {
 	return nil
 }
 
-func (r RequeueRequest) validateTargets(addressedID string) error {
-	if len(r.Targets) == 0 || len(r.Targets) > MaxReplaySize {
+func validateTargets(targets []Revision, addressedID string) error {
+	if len(targets) == 0 || len(targets) > MaxReplaySize {
 		return fmt.Errorf("target count: %w", ErrInvalidInput)
 	}
 
-	seen := make(map[string]struct{}, len(r.Targets))
-	for _, target := range r.Targets {
+	seen := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
 		if _, err := ParseID(target.ID); err != nil {
 			return err
 		}
@@ -281,12 +281,20 @@ func replayBlock(group []Delivery) string {
 }
 
 func validateReplay(group []Delivery, request RequeueRequest) error {
-	if replayBlock(group) != "" || len(group) != len(request.Targets) {
+	if replayBlock(group) != "" {
 		return ErrConflict
 	}
 
-	revisions := make(map[string]time.Time, len(request.Targets))
-	for _, target := range request.Targets {
+	return validateRevisions(group, request.Targets)
+}
+
+func validateRevisions(group []Delivery, targets []Revision) error {
+	if len(group) != len(targets) {
+		return ErrConflict
+	}
+
+	revisions := make(map[string]time.Time, len(targets))
+	for _, target := range targets {
 		revisions[target.ID] = target.UpdatedAt
 	}
 

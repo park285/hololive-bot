@@ -24,13 +24,14 @@ const (
 // DispatchOperations는 관리자 API가 사용하는 원장 조회 및 재처리 계약입니다.
 // 구현은 재처리와 감사 기록의 원자성 및 결과 불명 요청의 비재실행을 보장해야 합니다.
 //
-//nolint:interfacebloat // 원장 HTTP 계약의 6개 작업을 한 의존성으로 연결하므로 메서드 수 경고는 오탐입니다.
+//nolint:interfacebloat // 원장 HTTP 계약의 7개 작업을 한 의존성으로 연결하므로 메서드 수 경고는 오탐입니다.
 type DispatchOperations interface {
 	Summary(context.Context) (dispatchops.Summary, error)
 	Failures(context.Context) (dispatchops.FailureBreakdown, error)
 	List(context.Context, dispatchops.Filter) (dispatchops.Page, error)
 	Detail(context.Context, string) (dispatchops.Detail, error)
 	Actions(context.Context, string, string) (dispatchops.ActionPage, error)
+	Settle(context.Context, string, dispatchops.SettleRequest) (dispatchops.RequeueResult, error)
 	Requeue(context.Context, string, dispatchops.RequeueRequest) (dispatchops.RequeueResult, error)
 }
 
@@ -247,48 +248,56 @@ func (h *AlarmHandler) GetDispatchActions(c *gin.Context) {
 	ginjson.Respond(c, 200, result)
 }
 
-// RequeueDispatchDelivery는 명시적인 중복 위험 확인과 운영 사유를 받아 묶음 전체를 재처리합니다.
-// 성공은 retry 등록을 의미합니다. 외부 발송, 자동 재시도, payload 변경이나 삭제는 수행하지 않습니다.
-func (h *AlarmHandler) RequeueDispatchDelivery(c *gin.Context) {
+// decodeDispatchMutation은 변경 입력의 크기·필드·감사 정보·리비전을 실행 전에 검증합니다.
+func (h *AlarmHandler) decodeDispatchMutation(c *gin.Context, request interface{ Validate(string) error }) bool {
 	if !h.dispatchReady(c) {
-		return
+		return false
 	}
 
 	if _, ok := dispatchQuery(c); !ok {
-		return
+		return false
 	}
 
 	id := c.Param("id")
 	if _, err := dispatchops.ParseID(id); err != nil {
 		dispatchError(c, err)
 
-		return
+		return false
 	}
 
 	mediaType, _, mediaErr := mime.ParseMediaType(c.GetHeader("Content-Type"))
 	if mediaErr != nil || mediaType != "application/json" {
 		sharedserver.RespondError(c, 415, "application/json required", nil)
 
-		return
+		return false
 	}
 
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, dispatchOpsMaxBody)
 
-	var request dispatchops.RequeueRequest
-
-	if decodeErr := jsonv2.UnmarshalRead(c.Request.Body, &request, jsonv2.RejectUnknownMembers(true)); decodeErr != nil {
+	if decodeErr := jsonv2.UnmarshalRead(c.Request.Body, request, jsonv2.RejectUnknownMembers(true)); decodeErr != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](decodeErr); ok {
 			sharedserver.RespondError(c, 413, "dispatch request body too large", nil)
 		} else {
 			sharedserver.RespondError(c, 400, "invalid dispatch request body", nil)
 		}
 
-		return
+		return false
 	}
 
 	if validationErr := request.Validate(id); validationErr != nil {
 		dispatchError(c, validationErr)
 
+		return false
+	}
+
+	return true
+}
+
+// RequeueDispatchDelivery는 명시적인 중복 위험 확인과 운영 사유를 받아 묶음 전체를 재처리합니다.
+func (h *AlarmHandler) RequeueDispatchDelivery(c *gin.Context) {
+	var request dispatchops.RequeueRequest
+
+	if !h.decodeDispatchMutation(c, &request) {
 		return
 	}
 
@@ -296,7 +305,29 @@ func (h *AlarmHandler) RequeueDispatchDelivery(c *gin.Context) {
 
 	defer cancel()
 
-	result, err := h.dispatchOps.Requeue(ctx, id, request)
+	result, err := h.dispatchOps.Requeue(ctx, c.Param("id"), request)
+	if err != nil {
+		dispatchError(c, err)
+
+		return
+	}
+
+	ginjson.Respond(c, 200, result)
+}
+
+// SettleDispatchDelivery는 사유와 리비전을 검증한 뒤 외부 발송 없이 실패 묶음을 처리합니다.
+func (h *AlarmHandler) SettleDispatchDelivery(c *gin.Context) {
+	var request dispatchops.SettleRequest
+
+	if !h.decodeDispatchMutation(c, &request) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), dispatchOpsTimeout)
+
+	defer cancel()
+
+	result, err := h.dispatchOps.Settle(ctx, c.Param("id"), request)
 	if err != nil {
 		dispatchError(c, err)
 
