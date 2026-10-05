@@ -299,7 +299,7 @@ Fx v1.24.0은 `hololive-api` 한 바이너리의 process signal과 `Start`/`Wait
 |---|---|---|
 | `Failed to assemble hololive-api runtime` or Fx graph/invoke error | telemetry, aggregate runtime, or Fx graph initialization failed before service start | Redacted error metadata로 실패한 constructor를 확인하고 config/dependency 원인을 수정합니다. 이미 생성된 resource는 reverse order로 once-only cleanup됩니다. |
 | `OnStart hook failed` / `hololive-api Fx start failed` | process lifecycle hook did not complete within the 30-second start budget or Fx start rollback failed | listener bind와 dependency initialization 오류를 확인합니다. 일부 plane만 살아 있는 상태를 정상으로 간주하지 않습니다. |
-| `hololive-api runtime error` | listener/runtime component가 fatal error를 보고하여 Fx shutdown을 요청했습니다 | 최초 runtime error를 원인으로 조사합니다. scheduled job의 자체 처리 오류는 이 경로의 process-fatal이 아닙니다. |
+| `hololive-api runtime error` | listener/runtime component가 fatal error를 보고하여 Fx shutdown을 요청했습니다 | 최초 runtime error를 원인으로 조사합니다. scheduled job의 자체 처리 오류는 이 경로의 process-fatal이 아닙니다. YouTube 관측 Retry·DeadLetter 기록이 일시 오류(DB slot timeout, 연결·잠금 경합)로 실패하면 종료하지 않고 `awaiting lease recovery` ERROR 로그와 `retry_error`·`dead_letter_error` 지표만 남기며, `PROCESSING` 행은 lease 만료 뒤 claim이 회수합니다. 그 밖의 기록 실패는 계속 이 경로로 종료합니다. |
 | `drain runtime planes` with deadline/shutdown errors / `hololive-api Fx stop failed` | 10-second plane drain에서 하나 이상 실패했습니다. 남은 plane과 tail cleanup은 계속 시도됩니다. | bot → admin → llm → YouTube 순서의 shutdown 진단을 확인하고 실패한 plane의 listener 또는 background loop를 조사합니다. |
 | `hololive-api Fx stop timed out` | 전체 30-second process stop cap이 만료되었습니다. | 같은 resource에 concurrent forced cleanup을 실행하지 않습니다. Compose의 45-second grace 이후 종료 결과와 다음 기동 상태를 확인합니다. |
 
