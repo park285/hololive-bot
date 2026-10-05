@@ -45,7 +45,7 @@ func TestStoreMatch_EnforcesSizeBound(t *testing.T) {
 
 	total := matchCacheMaxEntries + 500
 	for i := range total {
-		mm.storeMatch(fmt.Sprintf("match:q-%d", i), &domain.Channel{ID: fmt.Sprintf("ch-%d", i)})
+		mm.storeMatch(fmt.Sprintf("match:q-%d", i), &domain.Channel{ID: fmt.Sprintf("ch-%d", i)}, nil)
 	}
 
 	mm.matchCacheMu.RLock()
@@ -75,7 +75,7 @@ func TestStoreMatch_EvictsOldestWhenFull(t *testing.T) {
 
 	oldestKey := "match:k-0"
 
-	mm.storeMatch("match:overflow", &domain.Channel{ID: "overflow"})
+	mm.storeMatch("match:overflow", &domain.Channel{ID: "overflow"}, nil)
 
 	mm.matchCacheMu.RLock()
 	defer mm.matchCacheMu.RUnlock()
@@ -112,7 +112,7 @@ func TestStoreMatch_PrefersExpiredEviction(t *testing.T) {
 		}
 	}
 
-	mm.storeMatch("match:overflow", &domain.Channel{ID: "overflow"})
+	mm.storeMatch("match:overflow", &domain.Channel{ID: "overflow"}, nil)
 
 	mm.matchCacheMu.RLock()
 	defer mm.matchCacheMu.RUnlock()

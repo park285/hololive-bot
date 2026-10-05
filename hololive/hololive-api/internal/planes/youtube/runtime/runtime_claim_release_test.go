@@ -3,14 +3,13 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -227,19 +226,11 @@ func pauseClaimRegistration(t *testing.T, runtime *Runtime) (<-chan struct{}, fu
 	entered := make(chan struct{})
 	resume := make(chan struct{})
 	unblock := sync.OnceFunc(func() { close(resume) })
-	now := time.Now().UTC()
-	// ClaimBatch 성공 뒤 queue 관측과 inFlight 등록 사이의 스케줄 지연을 재현합니다.
-	// 기존 throttle로 관측 SQL을 건너뛰며, claim 자체는 취소 전에 정상 반환합니다.
-	runtime.pool = &pgxpool.Pool{}
-	runtime.collectionObservation.last.Store(now.UnixNano())
-
-	previousQueueObservation := queueObservation.last.Swap(now.UnixNano())
 
 	t.Cleanup(func() {
 		runtime.stopTasks()
 		unblock()
 		synctest.Wait()
-		queueObservation.last.Store(previousQueueObservation)
 	})
 
 	gate := sync.OnceFunc(func() {
@@ -247,13 +238,27 @@ func pauseClaimRegistration(t *testing.T, runtime *Runtime) (<-chan struct{}, fu
 		<-resume
 	})
 
-	runtime.now = func() time.Time {
-		gate()
-
-		return now
-	}
+	// DB 선점 성공 후 등록 전의 지연을 실제 claimer 경계에서 재현한다.
+	runtime.claimer = &pausedRegistrationClaimer{observationClaimer: runtime.claimer, pause: gate}
 
 	return entered, unblock
+}
+
+type pausedRegistrationClaimer struct {
+	observationClaimer
+
+	pause func()
+}
+
+func (c *pausedRegistrationClaimer) ClaimBatch(ctx context.Context, options sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+	batch, err := c.observationClaimer.ClaimBatch(ctx, options)
+	if err != nil {
+		return sourceobservation.ClaimedBatch{}, fmt.Errorf("claim before registration pause: %w", err)
+	}
+
+	c.pause()
+
+	return batch, nil
 }
 
 func unblockClaimRegistrationAfter(t *testing.T, f *claimRegistrationFixture, delay time.Duration) {

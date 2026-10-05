@@ -183,7 +183,7 @@ func logWorkerDisabled(logger *slog.Logger, message string) {
 func buildDeliveryOutboxDispatcher(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
-	sender delivery.MessageSender,
+	sender delivery.PreparedMessageSender,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) (workerruntime.Scheduler, error) {
@@ -344,7 +344,7 @@ func loadEgressMessageStrings(ctx context.Context, infra *sharedmodules.InfraMod
 func buildYouTubeOutboxDispatcher(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
-	sender delivery.MessageSender,
+	sender delivery.PreparedMessageSender,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -366,7 +366,7 @@ func buildYouTubeOutboxDispatcher(
 func newYouTubeOutboxDispatcher(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
-	sender delivery.MessageSender,
+	sender delivery.PreparedMessageSender,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 ) (*youtubedispatch.Dispatcher, error) {

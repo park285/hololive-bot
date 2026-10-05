@@ -158,6 +158,13 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
 	const defaultReason = lifecycleReasonUnknownError
 
+	// 결합 오류의 확정 실패보다 결과 불명 증거를 먼저 보존한다. 이 판정 전에는 저장 전이를 만들지 않는다.
+	if errors.Is(err, errDeliverySendOutcomeUnknown) || sendoutcome.Classify(err) == sendoutcome.OutcomeUnknown {
+		observeDeliveryOutcomeUnknown(string(defaultReason))
+
+		return ytlifecycle.FailureOutcomeUnknown, lifecycleReasonUnknownError, 0
+	}
+
 	if errors.Is(err, errRequestReissued) {
 		return ytlifecycle.FailureRetryable, lifecycleReasonTransport, 0
 	}
@@ -168,12 +175,6 @@ func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.R
 
 	if errors.Is(err, sendoutcome.ErrHandoffFailed) {
 		return ytlifecycle.FailurePermanent, defaultReason, 0
-	}
-
-	if errors.Is(err, errDeliverySendOutcomeUnknown) {
-		observeDeliveryOutcomeUnknown(string(defaultReason))
-
-		return ytlifecycle.FailureOutcomeUnknown, lifecycleReasonUnknownError, 0
 	}
 
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

@@ -54,6 +54,11 @@ func (mm *Matcher) maybeCleanupMatchCache() {
 // 캐시된 결과가 있으면 반환하고, 없으면 여러 매칭 전략을 시도한다.
 // 매칭에 실패하면 (nil, false, nil)을 반환하며, 이 미발견 결과도 캐시에 저장한다.
 func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, bool, error) {
+	snapshot, err := mm.getSnapshot(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
+	}
+
 	normalizedQuery := stringutil.Normalize(query)
 	cacheKey := fmt.Sprintf("match:%s", normalizedQuery)
 
@@ -64,7 +69,7 @@ func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Cha
 
 	if cacheHit {
 		age := time.Since(cached.Timestamp)
-		if age < mm.matchCacheTTL {
+		if cached.snapshot == snapshot && age < mm.matchCacheTTL {
 			return cached.Channel, cached.Channel != nil, nil
 		}
 
@@ -73,23 +78,17 @@ func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Cha
 		mm.matchCacheMu.Unlock()
 	}
 
-	channel, found, err := mm.findBestMatchImpl(ctx, query)
-	if err == nil {
-		mm.storeMatch(cacheKey, channel)
-	}
+	channel, found := mm.findBestMatchImpl(snapshot, query)
+	mm.storeMatch(cacheKey, channel, snapshot)
 
 	mm.maybeCleanupMatchCache()
-
-	if err != nil {
-		return nil, false, fmt.Errorf("find best match impl: %w", err)
-	}
 
 	return channel, found, nil
 }
 
 // storeMatch 는 matchCache 에 결과를 저장하되, matchCacheMaxEntries 상한을 강제한다.
 // 상한 도달 시 만료 엔트리를 먼저, 없으면 가장 오래된 엔트리를 evict 한다.
-func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel) {
+func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel, snapshot *matcherSnapshot) {
 	now := time.Now()
 
 	mm.matchCacheMu.Lock()
@@ -106,6 +105,7 @@ func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel) {
 	mm.matchCache[cacheKey] = &MatchCacheEntry{
 		Channel:   channel,
 		Timestamp: now,
+		snapshot:  snapshot,
 	}
 }
 
@@ -145,13 +145,8 @@ func (mm *Matcher) evictOneMatchLocked(now time.Time) bool {
 	return false
 }
 
-func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, bool, error) {
+func (mm *Matcher) findBestMatchImpl(snapshot *matcherSnapshot, query string) (*domain.Channel, bool) {
 	queryNorm := normalizeMatcherTerm(query)
-
-	snapshot, err := mm.getSnapshot(ctx)
-	if err != nil {
-		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
-	}
 
 	channel := mm.finalizeCandidate(mm.resolveSnapshotCandidate(snapshot, queryNorm))
 	if channel == nil {
@@ -160,7 +155,7 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 		)
 	}
 
-	return channel, channel != nil, nil
+	return channel, channel != nil
 }
 
 // GetMemberByChannelID는 채널 대표 멤버를 돌려준다. 멤버 데이터 없이 구성한 Matcher는 snapshot과 같이 빈 데이터로 보고

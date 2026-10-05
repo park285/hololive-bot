@@ -15,6 +15,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
@@ -154,6 +155,7 @@ func newFlowTestSendEngine(sender *flowTestSender, timeout time.Duration) *SendE
 
 func flowTestSendRequest(roomID string) deliverySendRequest {
 	return deliverySendRequest{
+		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     roomID,
 		message:    testMessageHello,
 		dedupeKeys: []string{"youtube-notification:NEW_SHORT:" + roomID},
@@ -284,4 +286,12 @@ func TestShouldFallbackGroupedSendSkipsOutcomeUnknown(t *testing.T) {
 	if shouldFallbackGroupedSend(fmt.Errorf("wrap: %w", errors.Join(errDeliverySendOutcomeUnknown, permanent))) {
 		t.Fatal("shouldFallbackGroupedSend() = true for outcome-unknown permanent error, want false")
 	}
+}
+
+func (s *flowTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *flowTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
 }

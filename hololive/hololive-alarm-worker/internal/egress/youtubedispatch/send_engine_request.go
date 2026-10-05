@@ -14,7 +14,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 var (
@@ -48,15 +47,9 @@ func (d *SendEngine) freezeDeliveryRequest(ctx context.Context, rows []domain.Yo
 }
 
 func (d *SendEngine) prepareFrozenRequest(ctx context.Context, request deliverySendRequest) (store.FrozenRequest, error) {
-	body, route := request.message, "sender"
-
-	if sender, ok := d.sender.(delivery.PreparedMessageSender); ok {
-		var err error
-
-		body, route, err = sender.PrepareMessageRequest(ctx, request.roomID, request.message)
-		if err != nil {
-			return store.FrozenRequest{}, fmt.Errorf("prepare frozen request: %w", err)
-		}
+	body, route, err := d.sender.PrepareMessageRequest(ctx, request.roomID, request.message)
+	if err != nil {
+		return store.FrozenRequest{}, fmt.Errorf("prepare frozen request: %w", err)
 	}
 
 	return store.FrozenRequest{BaseID: deliveryClientRequestID(request.roomID, request.dedupeKeys), RoomID: request.roomID, Message: body, Route: route, DedupeKeys: request.dedupeKeys}, nil

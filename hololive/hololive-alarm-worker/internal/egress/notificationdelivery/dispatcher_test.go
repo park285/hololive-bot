@@ -811,3 +811,11 @@ func TestProcessOncePreservesOrderWithinRoom(t *testing.T) {
 		t.Fatal("second notification for a room started before the first completed")
 	}
 }
+
+func (m *mockSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, "text", nil
+}
+
+func (m *mockSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
+	return m.SendMessageWithClientRequestID(ctx, room, body, id)
+}

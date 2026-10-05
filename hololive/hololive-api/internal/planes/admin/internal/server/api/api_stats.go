@@ -38,7 +38,6 @@ import (
 
 	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -57,7 +56,7 @@ type statsResponse struct {
 	Uptime  string `json:"uptime"`
 }
 
-func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Member, alarmKeys []*domain.AlarmEntry, memberErr, alarmErr error) {
+func (h *StatsHandler) collectStats(ctx context.Context) (members, alarmKeys int, memberErr, alarmErr error) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
@@ -65,9 +64,9 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Memb
 			memberErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-members", func() error {
 				var err error
 
-				members, err = h.repository.GetAllMembers(ctx)
+				members, err = h.repository.CountMembers(ctx)
 				if err != nil {
-					return fmt.Errorf("get all members: %w", err)
+					return fmt.Errorf("count members: %w", err)
 				}
 
 				return nil
@@ -79,9 +78,9 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Memb
 			alarmErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-alarms", func() error {
 				var err error
 
-				alarmKeys, err = h.alarm.GetAllAlarmKeys(ctx)
+				alarmKeys, err = h.alarm.CountAlarmEntries(ctx)
 				if err != nil {
-					return fmt.Errorf("get all alarm keys: %w", err)
+					return fmt.Errorf("count alarm entries: %w", err)
 				}
 
 				return nil
@@ -131,8 +130,8 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 
 	ginjson.Respond(c, 200, statsResponse{
 		Status:  "ok",
-		Members: len(members),
-		Alarms:  len(alarmKeys),
+		Members: members,
+		Alarms:  alarmKeys,
 		Rooms:   roomCount,
 		Version: health.GetVersion(),
 		Uptime:  health.GetUptime(),

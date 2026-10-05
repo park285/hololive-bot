@@ -273,3 +273,13 @@ func (s *lifecycleTransitionSpy) recordedPreparedFailures() []string {
 
 	return slices.Clone(s.preparedFailures)
 }
+
+func (s *lifecycleTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *lifecycleTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}
+
+const testPreparedTextRoute = "text"

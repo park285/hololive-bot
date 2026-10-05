@@ -108,7 +108,7 @@ func TestBuildNotificationSenderUsesMarkdownOnlyForOpenChat(t *testing.T) {
 			stub := &clientRequestIDRecordingIrisSender{}
 			irisSender := buildNotificationSender(stub, true, workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom})
 
-			require.NoError(t, irisSender.SendMessage(t.Context(), roomID, "[title](https://example.com/video)"))
+			require.NoError(t, sendPreparedWorkerTestMessage(t.Context(), irisSender, roomID, "[title](https://example.com/video)"))
 
 			if roomID == workerappTestOpenRoom {
 				assert.Equal(t, roomID, stub.markdownRoomID)
@@ -120,7 +120,7 @@ func TestBuildNotificationSenderUsesMarkdownOnlyForOpenChat(t *testing.T) {
 				assert.Empty(t, stub.markdownRoomID)
 			}
 
-			require.NoError(t, irisSender.SendMessageWithClientRequestID(t.Context(), roomID, "**world**", "req-1"))
+			require.NoError(t, sendPreparedWorkerTestMessage(t.Context(), irisSender, roomID, "**world**", "req-1"))
 
 			if roomID == workerappTestOpenRoom {
 				assert.Equal(t, roomID, stub.markdownRoomID)
@@ -139,7 +139,7 @@ func TestBuildNotificationSenderDisablesMarkdownWhenConfigured(t *testing.T) {
 	stub := &clientRequestIDRecordingIrisSender{}
 	irisSender := buildNotificationSender(stub, false, workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom})
 
-	require.NoError(t, irisSender.SendMessage(t.Context(), workerappTestOpenRoom, "[title](https://example.com/video)"))
+	require.NoError(t, sendPreparedWorkerTestMessage(t.Context(), irisSender, workerappTestOpenRoom, "[title](https://example.com/video)"))
 
 	assert.Equal(t, "title( https://example.com/video )", stub.message)
 	assert.Empty(t, stub.markdownRoomID)
@@ -179,7 +179,7 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 	sender := buildNotificationSender(client, true, workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom})
 	clientRequestID := "hololive-alarm:request-123"
 
-	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), workerappTestOpenRoom, "[title](https://example.com/video)", clientRequestID))
+	require.NoError(t, sendPreparedWorkerTestMessage(t.Context(), sender, workerappTestOpenRoom, "[title](https://example.com/video)", clientRequestID))
 	assert.Contains(t, requestBody, `"clientRequestId":"hololive-alarm:request-123"`)
 }
 

@@ -53,7 +53,7 @@ func withTestDispatcherDefaults(config *DispatcherConfig) *DispatcherConfig {
 	}
 }
 
-func mustNewDispatcher(tb testing.TB, repository deliveryRepository, sender delivery.MessageSender, logger *slog.Logger, config *DispatcherConfig) *Dispatcher {
+func mustNewDispatcher(tb testing.TB, repository deliveryRepository, sender delivery.PreparedMessageSender, logger *slog.Logger, config *DispatcherConfig) *Dispatcher {
 	tb.Helper()
 
 	dispatcher, err := NewDispatcher(repository, sender, logger, withTestDispatcherDefaults(config))

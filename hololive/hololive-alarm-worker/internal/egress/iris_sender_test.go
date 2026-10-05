@@ -82,13 +82,13 @@ func TestIrisMessageSenderUsesMarkdownLaneForOpenChat(t *testing.T) {
 		WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}),
 	)
 
-	require.NoError(t, sender.SendMessage(t.Context(), testIrisSenderRoomID, "**hello**"))
+	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**"))
 
 	assert.Empty(t, client.textCalls)
 	require.Len(t, client.markdownCalls, 1)
 	assert.Equal(t, testIrisSenderRoomID, client.markdownCalls[0].roomID)
 	assert.Equal(t, "**hello**", client.markdownCalls[0].message)
-	assert.Zero(t, client.markdownCalls[0].opts)
+	assert.Equal(t, 1, client.markdownCalls[0].opts)
 }
 
 func TestIrisMessageSenderRendersPlainTextForRegularChat(t *testing.T) {
@@ -99,13 +99,13 @@ func TestIrisMessageSenderRendersPlainTextForRegularChat(t *testing.T) {
 		WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: "regular"}),
 	)
 
-	require.NoError(t, sender.SendMessage(t.Context(), testIrisSenderRoomID, "## **hello**"))
+	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "## **hello**"))
 
 	assert.Empty(t, client.markdownCalls)
 	require.Len(t, client.textCalls, 1)
 	assert.Equal(t, testIrisSenderRoomID, client.textCalls[0].roomID)
 	assert.Equal(t, "【𝗵𝗲𝗹𝗹𝗼】", client.textCalls[0].message)
-	assert.Zero(t, client.textCalls[0].opts)
+	assert.Equal(t, 1, client.textCalls[0].opts)
 }
 
 func TestIrisMessageSenderRendersPlainTextForOpenChatWhenMarkdownDisabled(t *testing.T) {
@@ -116,7 +116,7 @@ func TestIrisMessageSenderRendersPlainTextForOpenChatWhenMarkdownDisabled(t *tes
 		WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}),
 	)
 
-	require.NoError(t, sender.SendMessage(t.Context(), testIrisSenderRoomID, "**hello**"))
+	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**"))
 
 	assert.Empty(t, client.markdownCalls)
 	require.Len(t, client.textCalls, 1)
@@ -127,7 +127,7 @@ func TestIrisMessageSenderRendersPlainTextForUnknownRoom(t *testing.T) {
 	client := &irisSenderTestClient{}
 	sender := NewIrisMessageSender(client, WithMarkdownReplies(true), WithMarkdownRoomChat(staticRooms{}))
 
-	require.NoError(t, sender.SendMessage(t.Context(), testIrisSenderRoomID, "**hello**"))
+	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**"))
 
 	assert.Empty(t, client.markdownCalls)
 	require.Len(t, client.textCalls, 1)
@@ -138,7 +138,7 @@ func TestIrisMessageSenderPlainTextPropagatesClientRequestID(t *testing.T) {
 	client := &irisSenderTestClient{}
 	sender := NewIrisMessageSender(client)
 
-	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), testIrisSenderRoomID, "hello", "req-1"))
+	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "hello", "req-1"))
 
 	require.Len(t, client.textCalls, 1)
 	assert.Equal(t, 1, client.textCalls[0].opts)
@@ -152,7 +152,7 @@ func TestIrisMessageSenderMarkdownPropagatesClientRequestID(t *testing.T) {
 		WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}),
 	)
 
-	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), testIrisSenderRoomID, "**hello**", "req-1"))
+	require.NoError(t, sendPreparedTestMessage(t.Context(), sender, "**hello**", "req-1"))
 
 	assert.Empty(t, client.textCalls)
 	require.Len(t, client.markdownCalls, 1)
@@ -167,7 +167,7 @@ func TestIrisMessageSenderMarkdownWrapsError(t *testing.T) {
 		WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}),
 	)
 
-	err := sender.SendMessage(t.Context(), testIrisSenderRoomID, "**hello**")
+	err := sendPreparedTestMessage(t.Context(), sender, "**hello**")
 
 	require.ErrorContains(t, err, "iris send message")
 	require.ErrorIs(t, err, client.markdownErr)
@@ -194,7 +194,7 @@ func TestIrisMessageSenderWaitsThroughEveryInFlightState(t *testing.T) {
 	}
 	sender := newMarkdownTestSender(client)
 
-	err := sender.SendMessage(t.Context(), testIrisSenderRoomID, "**hello**")
+	err := sendPreparedTestMessage(t.Context(), sender, "**hello**")
 
 	require.NoError(t, err)
 	assert.Equal(t, len(states), client.statusCalls)
@@ -213,7 +213,7 @@ func TestIrisMessageSenderRetriesStatusObservationWithoutReposting(t *testing.T)
 	}
 	sender := newMarkdownTestSender(client)
 
-	err := sender.SendMessage(t.Context(), testIrisSenderRoomID, "**hello**")
+	err := sendPreparedTestMessage(t.Context(), sender, "**hello**")
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, client.statusCalls)
@@ -242,7 +242,7 @@ func TestIrisMessageSenderClassifiesTerminalStatus(t *testing.T) {
 			}
 			sender := newMarkdownTestSender(client)
 
-			err := sender.SendMessage(t.Context(), testIrisSenderRoomID, "**hello**")
+			err := sendPreparedTestMessage(t.Context(), sender, "**hello**")
 
 			require.ErrorIs(t, err, tc.want)
 			assert.Equal(t, 1, client.statusCalls)
@@ -265,7 +265,7 @@ func TestIrisMessageSenderPollingDeadlineIsOutcomeUnknown(t *testing.T) {
 
 	defer cancel()
 
-	err := sender.SendMessage(ctx, testIrisSenderRoomID, "**hello**")
+	err := sendPreparedTestMessage(ctx, sender, "**hello**")
 	if err == nil {
 		t.Fatal("SendMessage() error = nil, want outcome unknown")
 	}
@@ -280,6 +280,6 @@ func TestIrisMessageSenderPollingDeadlineIsOutcomeUnknown(t *testing.T) {
 func TestIrisMessageSenderGuardsNilInputs(t *testing.T) {
 	sender := NewIrisMessageSender(nil)
 
-	require.ErrorContains(t, sender.SendMessage(t.Context(), testIrisSenderRoomID, "hello"), "client is nil")
-	require.ErrorContains(t, sender.SendMessageWithClientRequestID(t.Context(), testIrisSenderRoomID, "hello", "req-1"), "client is nil")
+	require.ErrorContains(t, sendPreparedTestMessage(t.Context(), sender, "hello"), "client is nil")
+	require.ErrorContains(t, sendPreparedTestMessage(t.Context(), sender, "hello", "req-1"), "client is nil")
 }

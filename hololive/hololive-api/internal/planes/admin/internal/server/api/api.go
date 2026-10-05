@@ -156,6 +156,7 @@ type SettingsDeps struct {
 // AlarmManager는 관리 목록·통계 조회와 구독 삭제에 필요한 작업만 제공한다.
 type AlarmManager interface {
 	GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error)
+	CountAlarmEntries(ctx context.Context) (int, error)
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
 }
 

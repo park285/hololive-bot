@@ -124,3 +124,11 @@ func TestDispatchDeliveryRowsPreservesCustomPadding(t *testing.T) {
 	require.True(t, strings.HasPrefix(final, "제목"+padding+"\n"))
 	require.Equal(t, 2, strings.Count(final, "https://www.youtube.com/shorts/"))
 }
+
+func (c *seeMoreFoldEgressClient) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (c *seeMoreFoldEgressClient) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return c.SendMessage(ctx, room, body)
+}

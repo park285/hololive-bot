@@ -14,6 +14,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -53,13 +54,9 @@ type IdleWaiter interface {
 	Reset()
 }
 
-// Sender는 alarm dispatch가 쓰는 Text 발송 계약이다. 오픈채팅의 Markdown 선택은 sender가 방 유형으로 정한다.
+// Sender는 다른 발송기와 같은 저장 요청 전송 계약이다. 준비 시 방 유형으로 Text·Markdown을 정한다.
 // Karing template은 보내지 않는다(DEC-20260926-hololive-karing-egress-disposition).
-type Sender interface {
-	PrepareMessageRequest(context.Context, string, string) (string, string, error)
-	SendPreparedMessage(context.Context, string, string, string, string) error
-	SendMessage(ctx context.Context, roomID, message string) error
-}
+type Sender = delivery.PreparedMessageSender
 
 type Runner struct {
 	consumer          Consumer

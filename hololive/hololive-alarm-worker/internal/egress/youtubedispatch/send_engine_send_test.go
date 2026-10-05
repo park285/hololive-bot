@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -401,7 +402,7 @@ func TestSendDeliveryMessageRejectsMissingDedupeKeysWithoutSending(t *testing.T)
 	sender := &testSender{failRoom: map[string]bool{}}
 	d := newTestDispatcherForSend(t, sender)
 
-	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testRoom1, message: "message"})
+	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testRoom1, message: "message"})
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want error")
 	}
@@ -425,6 +426,7 @@ func TestSendDeliveryMessageRejectsBlankDedupeKeyWithoutSending(t *testing.T) {
 	d := newTestDispatcherForSend(t, sender)
 
 	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
+		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     testRoom1,
 		message:    "message",
 		dedupeKeys: []string{testDedupeKeyShortOne, "   "},
@@ -451,6 +453,7 @@ func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 	sender := &testSender{failRoom: map[string]bool{}}
 	dispatcher := newTestDispatcherForSend(t, sender)
 	req := deliverySendRequest{
+		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     testRoom1,
 		message:    "message",
 		dedupeKeys: []string{testDedupeKeyShortOne},
@@ -1601,6 +1604,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 	)
 
 	err := dispatcher.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
+		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     "room-timeout",
 		message:    testMessageHello,
 		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-timeout"},
@@ -1632,6 +1636,7 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 	defer cancel()
 
 	err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
+		frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 		roomID:     "room-parent-timeout",
 		message:    testMessageHello,
 		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-parent-timeout"},
@@ -1667,6 +1672,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 		sender.parentDone = parentCtx.Done()
 
 		err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
+			frozen:     &store.FrozenRequest{Route: testPreparedTextRoute},
 			roomID:     "room-child-timeout-first",
 			message:    testMessageHello,
 			dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-child-timeout-first"},
@@ -1745,7 +1751,7 @@ func outcomeUnknownClaimToken(outbox *domain.YouTubeNotificationOutbox) dispatch
 	return dispatchstate.ClaimToken{Kind: outbox.Kind, PostID: outbox.ContentID, AuthorizedAt: time.Now().UTC()}
 }
 
-func newOutcomeUnknownTestEngine(sender messagedelivery.MessageSender, renderer *template.Renderer, timeout time.Duration) (*SendEngine, *outcomeUnknownClaimSpy) {
+func newOutcomeUnknownTestEngine(sender messagedelivery.PreparedMessageSender, renderer *template.Renderer, timeout time.Duration) (*SendEngine, *outcomeUnknownClaimSpy) {
 	logger := slog.New(slog.DiscardHandler)
 	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
 	spy := &outcomeUnknownClaimSpy{}
@@ -1866,4 +1872,28 @@ func groupedSendFallbackCount(result string) float64 {
 	initOutboxMetrics()
 
 	return testutil.ToFloat64(outboxGroupedSendFallbackTotal.WithLabelValues(result))
+}
+
+func (s *groupedPermanentFailureSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *groupedPermanentFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}
+
+func (s *blockingSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *blockingSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}
+
+func (s *parentDeadlineBeforeReturnSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *parentDeadlineBeforeReturnSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
 }

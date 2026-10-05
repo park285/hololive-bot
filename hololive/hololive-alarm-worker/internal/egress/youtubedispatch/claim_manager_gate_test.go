@@ -1010,3 +1010,11 @@ func TestDeliveryClaimIdentityForOutboxRequiresCanonicalIdentity(t *testing.T) {
 		})
 	}
 }
+
+func (s *claimGateTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *claimGateTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}

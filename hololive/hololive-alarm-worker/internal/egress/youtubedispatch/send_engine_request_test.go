@@ -70,7 +70,7 @@ func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 		require.Len(t, sender.ids, attempt+1, "each delivery attempt must call provider once")
 
 		sender.body = "changed config body"
-		sender.route = "text"
+		sender.route = testPreparedTextRoute
 	}
 
 	require.Equal(t, []string{"markdown", "markdown", "markdown"}, sender.routes)

@@ -929,3 +929,11 @@ func seedIntegrationOutboxItem(t *testing.T, db *pgxpool.Pool, item *domain.YouT
 
 	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 }
+
+func (f *fakeSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, "text", nil
+}
+
+func (f *fakeSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return f.SendMessage(ctx, room, body)
+}

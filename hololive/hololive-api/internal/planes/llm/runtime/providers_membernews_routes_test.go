@@ -41,7 +41,6 @@ import (
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type fakePostgresClient struct{}
@@ -51,10 +50,6 @@ func (f *fakePostgresClient) Ping(context.Context) error {
 	return nil
 }
 func (f *fakePostgresClient) Close() error { return nil }
-
-type fakeSender struct{}
-
-func (fakeSender) SendMessage(context.Context, string, string) error { return nil }
 
 func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	t.Parallel()
@@ -201,7 +196,4 @@ func newMemberNewsRouter(t *testing.T, authConfig httputil.AdminAuthConfig, serv
 	return mux
 }
 
-var (
-	_ database.Client        = (*fakePostgresClient)(nil)
-	_ delivery.MessageSender = (*fakeSender)(nil)
-)
+var _ database.Client = (*fakePostgresClient)(nil)

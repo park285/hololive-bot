@@ -7,6 +7,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// CountAlarmEntries는 관리 목록과 동일하게 host 구독을 방·채널 쌍으로 묶어 센다.
+func (r *Repository) CountAlarmEntries(ctx context.Context) (int, error) {
+	var count int
+
+	if err := r.pool.QueryRow(ctx, mustSQL("count_alarm_entries.sql")).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count alarm entries: %w", err)
+	}
+
+	return count, nil
+}
+
 func (r *Repository) GetAllDistinctRoomIDs(ctx context.Context) ([]string, error) {
 	rows, err := r.pool.Query(ctx, mustSQL("repository_rooms_0009_01.sql"))
 	if err != nil {

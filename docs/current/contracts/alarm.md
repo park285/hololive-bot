@@ -4,9 +4,15 @@
 
 Alarm domain currently has HTTP JSON APIs, the PostgreSQL alarm dispatch outbox, generic notification delivery outbox egress, and the YouTube notification outbox egress path owned by `alarm-worker`.
 
+관리 통계는 인증된 `GET /internal/alarm/count`로 `{"success":true,"data":{"count":3}}`를 받는다. `count`는 `/keys` 목록과 같은 서로 다른 `(room_id, channel_id)` 쌍의 개수이며 host 구독 중복은 한 번만 센다. 누락·null·음수 count는 client가 오류로 거절한다. 이 조회는 이름 캐시와 전체 목록 직렬화를 거치지 않는다. 기존 `/keys`는 관리 목록용으로 유지한다. 새 API를 배포하기 전에 worker의 count route를 먼저 활성화한다.
+
+Generic notification과 YouTube dispatcher는 `PreparedMessageSender`만 받는다. 저장한 본문·text/markdown 경로·client request ID를 그대로 전송하며 일반 SendMessage나 ID만 받는 sender로 내려가지 않는다. 결과 불명 증거는 결합된 확정 실패보다 우선하고 알려진 실패 저장 전이를 만들지 않는다. 2026-10-06 중앙 읽기 전용 확인에서 YouTube 저장 요청 40건은 모두 text였으며 generic outbox는 비어 있었다. 과거 요청 증거가 없는 행의 격리와 send-unit 없는 종단 행 조회는 유지한다.
+
 X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한다. 기존 `LIVE` 구독을 사용하되 YouTube stream payload와 섞지 않는다. 이벤트 키는 `x-space:start:<space-id>`, delivery는 기존 방별 키이며 최초 관측 스냅샷을 사용해 제목 변경에 따른 payload 충돌을 막는다. 발송은 기존 텍스트 egress와 receipt·미상 결과 계약을 따른다. [인증·관측·보존 경계](../services/x-spaces.md).
 
 ## Contract IDs
+
+`GET /internal/alarm/count` 집계 실패는 HTTP 500과 `count_alarm_entries_failed` 코드를 반환하며 개수를 0으로 대체하지 않는다.
 
 - `alarm.http`
 - `alarm.dispatch`

@@ -63,7 +63,7 @@ func TestProviderAttemptTracksActualResultAndPanic(t *testing.T) {
 			var err error
 
 			call := func() {
-				err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
+				err = d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{frozen: &store.FrozenRequest{Route: testPreparedTextRoute}, roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one", "two"}})
 			}
 
 			if tc.panics {
@@ -100,7 +100,7 @@ func TestReissueWaitsForNextDeliveryAttempt(t *testing.T) {
 	d.send.sender = sender
 	d.send.config.MaxRetries = 3
 
-	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:reissue", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: "sender"}}
+	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:reissue", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
 	err := d.send.sendFrozenDelivery(t.Context(), store.StartedOperation{}, req)
 	require.ErrorIs(t, err, errRequestReissued)
 }
@@ -111,13 +111,13 @@ func TestReissueRejectsMixedUnknownAndPreHandoffFailure(t *testing.T) {
 
 	d.send.sender = sender
 
-	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:mixed", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: "sender"}}
+	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:mixed", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
 	err := d.send.sendFrozenDelivery(t.Context(), store.StartedOperation{}, req)
 	require.ErrorIs(t, err, errDeliverySendOutcomeUnknown)
 	require.NotErrorIs(t, err, errRequestReissued)
 }
 
-func TestProviderAttemptSkipsUnsupportedPreparedSender(t *testing.T) {
+func TestProviderAttemptSkipsUnsupportedStoredRoute(t *testing.T) {
 	tracker := workercontract.NewExecutorTracker()
 	sender := &providerAttemptSender{tracker: tracker}
 	d := newTestDispatcherForSend(t, &testSender{})
@@ -127,9 +127,17 @@ func TestProviderAttemptSkipsUnsupportedPreparedSender(t *testing.T) {
 	totals := &workercontract.Counters{}
 	d.SetWorkerInstrumentation(tracker, totals)
 
-	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}, frozen: &store.FrozenRequest{Route: "text"}})
-	require.ErrorContains(t, err, "prepared sender required")
+	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"one"}, frozen: &store.FrozenRequest{Route: "sender"}})
+	require.ErrorContains(t, err, "stored text or markdown request required")
 	require.False(t, sender.seen)
 	require.Zero(t, tracker.Snapshot(time.Now()).InFlight)
 	require.Equal(t, (&workercontract.Counters{}).Snapshot(), totals.Snapshot())
+}
+
+func (s *providerAttemptSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *providerAttemptSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
 }

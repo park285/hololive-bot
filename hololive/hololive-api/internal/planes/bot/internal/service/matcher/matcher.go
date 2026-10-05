@@ -40,6 +40,7 @@ const matchCacheMaxEntries = 1024
 type MatchCacheEntry struct {
 	Channel   *domain.Channel
 	Timestamp time.Time
+	snapshot  *matcherSnapshot
 }
 
 // matchCandidate의 memberName은 검색 일치 판단에 쓰는 english_name 계열 이름이고, 한국어 이름 두 개는 표시 전용이다.

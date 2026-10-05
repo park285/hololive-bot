@@ -41,8 +41,8 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 
 	runtime.Start(t.Context(), make(chan error, 1))
 
-	if runtime.loopCount != 5 {
-		t.Fatalf("loopCount = %d, want 5", runtime.loopCount)
+	if runtime.loopCount != 6 {
+		t.Fatalf("loopCount = %d, want 6", runtime.loopCount)
 	}
 
 	waitForTicks(t, &retentionTicks)
@@ -60,8 +60,8 @@ func TestRetentionAndReplayLoopsStayStoppedWhenDisabled(t *testing.T) {
 	runtime.Config.Replay.Enabled = false
 	runtime.Start(t.Context(), make(chan error, 1))
 
-	if runtime.loopCount != 3 {
-		t.Fatalf("loopCount = %d, want 3 with only claim/projection/live-end", runtime.loopCount)
+	if runtime.loopCount != 4 {
+		t.Fatalf("loopCount = %d, want 4 with claim/projection/live-end/metrics", runtime.loopCount)
 	}
 
 	if err := runtime.Shutdown(t.Context()); err != nil {

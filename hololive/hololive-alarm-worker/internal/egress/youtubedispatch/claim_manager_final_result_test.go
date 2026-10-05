@@ -565,3 +565,11 @@ func assertLogIntField(t *testing.T, entry map[string]any, field string, want in
 		t.Fatalf("log field %q = %d, want %d", field, got, want)
 	}
 }
+
+func (s *finalResultTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *finalResultTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}
