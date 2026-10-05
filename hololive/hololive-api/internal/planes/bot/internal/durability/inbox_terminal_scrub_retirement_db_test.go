@@ -35,7 +35,7 @@ func TestInboxReleasePreservesRetryAndScrubsTerminalWithoutCompatibilityTrigger(
 	t.Run("retry retains payload", func(t *testing.T) {
 		pool, repo := claimedInboxForScrubRetirement(t)
 
-		outcome, err := repo.Release(t.Context(), testMessageID, testClaimToken, 2, time.Second, "retryable")
+		outcome, err := repo.Release(t.Context(), testMessageID, testClaimToken, 1, 2, time.Second, "retryable")
 		require.NoError(t, err)
 		require.Equal(t, InboxReleaseRetried, outcome)
 
@@ -45,7 +45,7 @@ func TestInboxReleasePreservesRetryAndScrubsTerminalWithoutCompatibilityTrigger(
 	t.Run("exhausted attempts scrub payload", func(t *testing.T) {
 		pool, repo := claimedInboxForScrubRetirement(t)
 
-		outcome, err := repo.Release(t.Context(), testMessageID, testClaimToken, 1, time.Second, "exhausted")
+		outcome, err := repo.Release(t.Context(), testMessageID, testClaimToken, 1, 1, time.Second, "exhausted")
 		require.NoError(t, err)
 		require.Equal(t, InboxReleaseAbandoned, outcome)
 

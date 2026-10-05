@@ -32,8 +32,13 @@ var (
 	ErrUnavailable = errors.New("dispatch operations unavailable")
 )
 
+const (
+	statusQuarantined = "quarantined"
+	statusCanceled    = "cancelled" //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
+)
+
 // statuses는 조회 필터로 받는 상태입니다.
-var statuses = [...]string{"pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"} //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
+var statuses = [...]string{"pending", "retry", "leased", "sending", "sent", "dlq", statusQuarantined, statusCanceled}
 
 var errorCodeFilter = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
@@ -260,7 +265,7 @@ func replayBlock(group []Delivery) string {
 	for index := range group {
 		item := &group[index]
 
-		if (item.Status != "dlq" && item.Status != "quarantined") || item.SentAt != nil || item.CancelledAt != nil {
+		if (item.Status != "dlq" && item.Status != statusQuarantined) || item.SentAt != nil || item.CancelledAt != nil {
 			return "group_not_terminal_failure"
 		}
 

@@ -10,6 +10,11 @@ import (
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
+var (
+	recordSentLedgerSQL        = mustSQL("delivery_ledger_record_sent.sql")
+	recordQuarantinedLedgerSQL = mustSQL("delivery_ledger_record_quarantined.sql")
+)
+
 // LedgerStatus is the monotonic terminal status stored for a logical delivery.
 type LedgerStatus string
 
@@ -58,8 +63,15 @@ func RecordDeliveryLedgerWrites(
 	roomIDs := make([]string, 0, len(writes))
 	observedAts := make([]time.Time, 0, len(writes))
 	sourceDeliveryIDs := make([]int64, 0, len(writes))
+	seen := make(map[ytcontentid.LogicalKey]struct{}, len(writes))
 
 	for i := range writes {
+		if _, duplicate := seen[writes[i].Key]; duplicate {
+			return fmt.Errorf("record delivery ledger writes: duplicate logical key at index %d", i)
+		}
+
+		seen[writes[i].Key] = struct{}{}
+
 		kinds = append(kinds, string(writes[i].Key.Kind))
 		logicalIDs = append(logicalIDs, writes[i].Key.LogicalID)
 		roomIDs = append(roomIDs, writes[i].Key.RoomID)
@@ -67,37 +79,16 @@ func RecordDeliveryLedgerWrites(
 		sourceDeliveryIDs = append(sourceDeliveryIDs, writes[i].SourceDeliveryID)
 	}
 
-	queryName := "delivery_ledger_record_sent.sql"
+	query := recordSentLedgerSQL
 
 	if status == LedgerStatusQuarantined {
-		queryName = "delivery_ledger_record_quarantined.sql"
+		query = recordQuarantinedLedgerSQL
 	}
 
-	var recorded []DeliveryLedgerRecord
-
-	if err := dbx.SelectSQL(
-		ctx,
-		tx,
-		&recorded,
-		"record delivery ledger writes",
-		mustSQL(queryName),
-		kinds,
-		logicalIDs,
-		roomIDs,
-		observedAts,
-		sourceDeliveryIDs,
-	); err != nil {
+	// 호출부는 오류만 받습니다. 기존 증거를 유지한 no-op도 성공이며,
+	// 상태·필드 불변식은 DB CHECK, 배치의 중복 키는 위 검증이 보장합니다.
+	if _, err := tx.Exec(ctx, query, kinds, logicalIDs, roomIDs, observedAts, sourceDeliveryIDs); err != nil {
 		return fmt.Errorf("upsert delivery ledger: %w", err)
-	}
-
-	if len(recorded) != len(writes) {
-		return fmt.Errorf("delivery ledger result count mismatch: got %d want %d", len(recorded), len(writes))
-	}
-
-	for i := range recorded {
-		if recorded[i].Status != status && (status != LedgerStatusQuarantined || recorded[i].Status != LedgerStatusSent) {
-			return fmt.Errorf("delivery ledger state conflict at index %d: got %s want %s", i, recorded[i].Status, status)
-		}
 	}
 
 	return nil

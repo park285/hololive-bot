@@ -31,6 +31,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -169,16 +170,22 @@ func (r *TemplateRepository) UpsertWithRevision(
 // revision_prune의 ORDER BY created_at DESC가 뒤집힌다. 그래서 clock_timestamp()는 잠금을
 // 얻은 뒤의 실제 실행 시각을 남겨 순서를 잠금 획득 순서와 일치시킨다.
 func recordRevision(ctx context.Context, tx pgx.Tx, templateID int64, body string, keepRevisions int) error {
-	if _, err := tx.Exec(ctx, revisionInsertAtClockSQL, templateID, body); err != nil {
-		return fmt.Errorf("create revision: %w", err)
-	}
-
 	if keepRevisions <= 0 {
+		if _, err := tx.Exec(ctx, revisionInsertAtClockSQL, templateID, body); err != nil {
+			return fmt.Errorf("create revision: %w", err)
+		}
+
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, revisionPruneSQL, templateID, keepRevisions); err != nil {
-		return fmt.Errorf("prune revisions: %w", err)
+	statements := []dbx.Statement{
+		{SQL: revisionInsertAtClockSQL, Args: []any{templateID, body}, Operation: "create revision"},
+		{SQL: revisionPruneSQL, Args: []any{templateID, keepRevisions}, Operation: "prune revisions"},
+	}
+
+	// 한 번에 전송하되 서로 다른 문장으로 실행해 새 revision의 가시성과 실제 정렬을 보존합니다.
+	if err := dbx.ExecStatements(ctx, tx, statements); err != nil {
+		return fmt.Errorf("record revision: %w", err)
 	}
 
 	return nil

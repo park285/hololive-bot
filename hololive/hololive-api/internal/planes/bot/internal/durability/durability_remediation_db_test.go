@@ -149,7 +149,7 @@ func assertInboxReleaseBoundsLastError(ctx context.Context, t *testing.T, pool *
 	_, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
 	require.NoError(t, err)
 
-	outcome, err := repo.Release(ctx, msg.MessageID, testClaimToken, 3, time.Minute, oversized)
+	outcome, err := repo.Release(ctx, msg.MessageID, testClaimToken, 1, 3, time.Minute, oversized)
 	require.NoError(t, err)
 	require.Equal(t, InboxReleaseRetried, outcome)
 
@@ -550,7 +550,7 @@ func TestLeaseBelowOneMillisecondIsRejected(t *testing.T) {
 	_, err := repo.Claim(ctx, testClaimToken, 500*time.Microsecond)
 	require.ErrorIs(t, err, ErrInvalidArgument, "밀리초 미만 lease는 태어날 때부터 만료다")
 
-	_, err = repo.Release(ctx, "message:m-lease-floor", testClaimToken, 3, 500*time.Microsecond, "boom")
+	_, err = repo.Release(ctx, "message:m-lease-floor", testClaimToken, 1, 3, 500*time.Microsecond, "boom")
 	require.ErrorIs(t, err, ErrInvalidArgument)
 }
 

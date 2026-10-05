@@ -56,7 +56,7 @@ type deliveryOutboxClaimer interface {
 }
 
 type deliveryRequestStore interface {
-	reissueFailedRequest(context.Context, int64, string, *preparedMessage, *preparedMessage, int, time.Duration, string) (bool, error)
+	reissueFailedRequest(context.Context, int64, string, int, *preparedMessage, *preparedMessage, int, time.Duration, string) (bool, error)
 	markPreparationUnsent(context.Context, int64, string) (bool, error)
 	saveRequest(context.Context, int64, string, *preparedMessage, *preparedMessage) (bool, error)
 }
@@ -65,7 +65,7 @@ type deliveryOutboxTransitioner interface {
 	MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
 	MarkSent(ctx context.Context, id int64, workerID string) (bool, error)
 	MarkQuarantined(ctx context.Context, id int64, workerID, reason string) (bool, error)
-	MarkFailed(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 }
 
 type deliveryOutboxMaintainer interface {
@@ -277,7 +277,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	var p outboxPayload
 
 	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
-		d.markItemFailed(ctx, item.ID, "payload unmarshal: "+err.Error())
+		d.markItemFailed(ctx, item, "payload unmarshal: "+err.Error())
 
 		return
 	}
@@ -296,7 +296,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deliveryFinalizeTimeout)
 		defer cancel()
 
-		d.markItemFailed(finalCtx, item.ID, ctx.Err().Error())
+		d.markItemFailed(finalCtx, item, ctx.Err().Error())
 
 		return
 	}
@@ -358,7 +358,7 @@ func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDe
 	case sendoutcome.OutcomeUnknown, sendoutcome.TransportAmbiguous:
 		d.markItemQuarantined(finalCtx, item.ID, err.Error())
 	case sendoutcome.Failed:
-		d.markItemFailed(finalCtx, item.ID, err.Error())
+		d.markItemFailed(finalCtx, item, err.Error())
 	case sendoutcome.Success:
 	}
 }
@@ -422,16 +422,16 @@ func (d *Dispatcher) markItemSent(ctx context.Context, id int64) bool {
 	return true
 }
 
-func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, reason string) {
-	fenced, err := d.repository.MarkFailed(ctx, id, d.workerID, d.config.MaxRetries, d.config.RetryBackoff, reason)
+func (d *Dispatcher) markItemFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, reason string) {
+	fenced, err := d.repository.MarkFailed(ctx, item.ID, d.workerID, item.AttemptCount, d.config.MaxRetries, d.config.RetryBackoff, reason)
 	if err != nil {
-		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", id), slog.String("error", err.Error()))
+		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", item.ID), slog.String("error", err.Error()))
 
 		return
 	}
 
 	if !fenced {
-		d.logger.Warn("Outbox item re-claimed before mark failed; fence skipped transition", slog.Int64("id", id))
+		d.logger.Warn("Outbox item re-claimed before mark failed; fence skipped transition", slog.Int64("id", item.ID))
 	}
 }
 

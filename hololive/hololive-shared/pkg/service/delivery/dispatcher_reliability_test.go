@@ -20,7 +20,7 @@ func TestDispatcherQuarantinesUnknownWithoutRetry(t *testing.T) {
 		for _, saveError := range []error{nil, errors.New("db unavailable")} {
 			failed, quarantined := 0, 0
 			repo := &mockDeliveryRepository{
-				markFailedFn: func(context.Context, int64, string, int, time.Duration, string) (bool, error) {
+				markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) (bool, error) {
 					failed++
 					return true, nil
 				},
@@ -67,7 +67,7 @@ func TestDispatcherAttemptDeadlineAndParentCancellation(t *testing.T) {
 					quarantined = true
 
 					return true, nil
-				}, markFailedFn: func(context.Context, int64, string, int, time.Duration, string) (bool, error) {
+				}, markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) (bool, error) {
 					t.Fatal("ambiguous timeout retried")
 
 					return false, nil
@@ -110,7 +110,7 @@ func TestDispatcherCanceledBeforeSenderDoesNotSend(t *testing.T) {
 }
 
 func TestDispatcherSuccessfulSendDBFailureRemainsUnretried(t *testing.T) {
-	repo := &mockDeliveryRepository{markSentFn: func(context.Context, int64, string) (bool, error) { return false, errors.New("commit response lost") }, markFailedFn: func(context.Context, int64, string, int, time.Duration, string) (bool, error) {
+	repo := &mockDeliveryRepository{markSentFn: func(context.Context, int64, string) (bool, error) { return false, errors.New("commit response lost") }, markFailedFn: func(context.Context, int64, string, int, int, time.Duration, string) (bool, error) {
 		t.Fatal("successful send returned to pending")
 
 		return false, nil

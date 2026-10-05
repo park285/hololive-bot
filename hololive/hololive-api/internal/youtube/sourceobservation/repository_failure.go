@@ -21,18 +21,21 @@ func (r *Repository) Retry(ctx context.Context, input RetryInput) (contract.Stat
 		return "", fmt.Errorf("validate retry input: %w", err)
 	}
 
-	var status string
+	// claim이 반환한 시도 횟수로 정책을 정하고 동일 횟수·token을 DB에서 다시 검증한다.
+	// 추가 SELECT 없이 재시도와 소진 종료를 결정하며 DB 시각에 따른 lease 만료 검증은 유지한다.
+	query := mustSQL("repository_retry_0017_17.sql")
+	target := contract.StatusPending
+	args := []any{input.ObservationID, input.LeaseToken, input.Delay.Milliseconds(), input.ErrorCode, input.ErrorDetail, input.AttemptCount}
 
-	err := r.pool.QueryRow(
-		ctx,
-		mustSQL("repository_retry_0017_17.sql"),
-		input.ObservationID,
-		input.LeaseToken,
-		input.Delay.Milliseconds(),
-		input.ErrorCode,
-		input.ErrorDetail,
-		MaxAttempts,
-	).Scan(&status)
+	if input.AttemptCount >= MaxAttempts {
+		query = mustSQL("repository_retry_exhausted.sql")
+		target = contract.StatusDeadLetter
+		args = []any{input.ObservationID, input.LeaseToken, input.ErrorDetail, input.AttemptCount}
+	}
+
+	var observationID int64
+
+	err := r.pool.QueryRow(ctx, query, args...).Scan(&observationID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrClaimLost
@@ -42,17 +45,16 @@ func (r *Repository) Retry(ctx context.Context, input RetryInput) (contract.Stat
 		return "", fmt.Errorf("retry source observation: %w", err)
 	}
 
-	persisted := contract.Status(status)
-	if persisted != contract.StatusPending && persisted != contract.StatusDeadLetter {
-		return "", fmt.Errorf("retry source observation: invalid persisted status %q", status)
-	}
-
-	return persisted, nil
+	return target, nil
 }
 
 func validateRetryInput(input RetryInput) error {
 	if input.ObservationID <= 0 || !lowercaseHexToken(input.LeaseToken) {
 		return errors.New("validate source observation retry: invalid observation id or lease token")
+	}
+
+	if input.AttemptCount <= 0 || input.AttemptCount > MaxAttempts {
+		return errors.New("validate source observation retry: invalid claimed attempt count")
 	}
 
 	if input.Delay < 0 || input.Delay > 24*time.Hour {
@@ -71,16 +73,15 @@ func (r *Repository) DeadLetter(ctx context.Context, input DeadLetterInput) erro
 		return fmt.Errorf("validate: %w", err)
 	}
 
-	if err := dbx.InPgxTx(ctx, r.pool, func(tx dbx.Tx) error {
-		return deadLetterTx(ctx, tx, input)
-	}); err != nil {
-		return fmt.Errorf("in pgx tx: %w", err)
+	// 단일 fenced UPDATE이므로 별도 BEGIN/COMMIT 왕복 없이 같은 원자성을 얻는다.
+	if err := persistDeadLetter(ctx, r.pool, input); err != nil {
+		return fmt.Errorf("persist dead letter: %w", err)
 	}
 
 	return nil
 }
 
-func deadLetterTx(ctx context.Context, tx dbx.Tx, input DeadLetterInput) error {
+func persistDeadLetter(ctx context.Context, db dbx.Querier, input DeadLetterInput) error {
 	if input.ObservationID <= 0 || !lowercaseHexToken(input.LeaseToken) {
 		return errors.New("validate source observation dead letter: invalid observation id or lease token")
 	}
@@ -91,7 +92,7 @@ func deadLetterTx(ctx context.Context, tx dbx.Tx, input DeadLetterInput) error {
 
 	var observationID int64
 
-	err := tx.QueryRow(
+	err := db.QueryRow(
 		ctx,
 		mustSQL("repository_dead_letter_0018_18.sql"),
 		input.ObservationID,

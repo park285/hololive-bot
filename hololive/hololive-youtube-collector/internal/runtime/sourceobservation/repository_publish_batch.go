@@ -195,24 +195,37 @@ func collectPublishSetRows(rows pgx.Rows, want int) (PublishBatchResult, bool, e
 
 func scanPublishSetRow(rows pgx.Rows) (PublishedObservation, error) {
 	var (
-		row        PublishedObservation
-		intervalMS *int64
+		row                                    PublishedObservation
+		collision, existed, checkpointAdvanced bool
+		previousAcceptedAt                     *time.Time
+		acceptedAt                             time.Time
 	)
 
-	if err := rows.Scan(&row.Ordinal, &row.ObservationID, &row.Outcome, &intervalMS); err != nil {
+	if err := rows.Scan(&row.Ordinal, &row.ObservationID, &collision, &existed,
+		&checkpointAdvanced, &previousAcceptedAt, &acceptedAt); err != nil {
 		return PublishedObservation{}, fmt.Errorf("publish source observation batch: scan set result: %w", err)
 	}
 
-	if intervalMS != nil {
-		if *intervalMS < 0 {
-			return PublishedObservation{}, errors.New("publish source observation batch: accepted interval is negative")
-		}
-
-		row.AcceptedInterval = time.Duration(*intervalMS) * time.Millisecond
+	row.Outcome = publishOutcome(collision, existed)
+	// DB가 반환한 같은 transaction 시각만 사용한다. 최초 수락·동일 slot·충돌에는 간격을 만들지 않는다.
+	if checkpointAdvanced && previousAcceptedAt != nil {
+		row.AcceptedInterval = time.Duration(max(0, acceptedAt.Sub(*previousAcceptedAt).Milliseconds())) * time.Millisecond
 		row.HasAcceptedInterval = true
 	}
 
 	return row, nil
+}
+
+func publishOutcome(collision, existed bool) PublishOutcome {
+	if collision {
+		return PublishCollision
+	}
+
+	if existed {
+		return PublishDuplicate
+	}
+
+	return PublishInserted
 }
 
 func recordPublishSetRow(result *PublishBatchResult, seen []bool, row PublishedObservation, want int) error {

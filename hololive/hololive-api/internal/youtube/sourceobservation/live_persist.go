@@ -13,6 +13,12 @@ import (
 
 const liveSessionBatchSize = 64
 
+var (
+	liveSessionUpsertSQL          = mustSQL("repository_live_session_upsert_0047_47.sql")
+	livePremiereClassificationSQL = mustSQL("repository_live_premiere_classification_upsert.sql")
+	liveHeadUpsertSQL             = mustSQL("repository_live_head_upsert_0048_48.sql")
+)
+
 func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision) error {
 	// 신규 행과 기존 행 모두 기존 consumer의 잠금 획득 순서를 유지한다.
 	slices.SortFunc(decision.Sessions, func(a, b live.SessionState) int { return strings.Compare(a.VideoID, b.VideoID) })
@@ -65,23 +71,7 @@ func liveDecisionStatements(sessions []live.SessionState) []dbx.Statement {
 	return statements
 }
 
-func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
-	if err := executeLiveSessionUpsert(ctx, tx, session, false); err != nil {
-		return fmt.Errorf("execute live session upsert: %w", err)
-	}
-
-	return nil
-}
-
 func upsertConfirmedPremiereSession(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
-	if err := executeLiveSessionUpsert(ctx, tx, session, true); err != nil {
-		return fmt.Errorf("execute confirmed Premiere session upsert: %w", err)
-	}
-
-	return nil
-}
-
-func executeLiveSessionUpsert(ctx context.Context, tx dbx.Tx, session *live.SessionState, classificationOnlyOnConflict bool) error {
 	if session == nil {
 		return errors.New("upsert live session: session state is nil")
 	}
@@ -90,7 +80,7 @@ func executeLiveSessionUpsert(ctx context.Context, tx dbx.Tx, session *live.Sess
 		return nil
 	}
 
-	statement := liveSessionStatement(session, classificationOnlyOnConflict)
+	statement := liveSessionStatement(session, true)
 	if _, err := tx.Exec(ctx, statement.SQL, statement.Args...); err != nil {
 		return fmt.Errorf("upsert live session: %w", err)
 	}
@@ -99,14 +89,20 @@ func executeLiveSessionUpsert(ctx context.Context, tx dbx.Tx, session *live.Sess
 }
 
 func liveSessionStatement(session *live.SessionState, classificationOnlyOnConflict bool) dbx.Statement {
+	query := liveSessionUpsertSQL
+
+	if classificationOnlyOnConflict {
+		query = livePremiereClassificationSQL
+	}
+
 	return dbx.Statement{
 		Operation: "upsert live session",
-		SQL:       mustSQL("repository_live_session_upsert_0047_47.sql"),
+		SQL:       query,
 		Args: []any{
 			session.VideoID, session.ChannelID, string(session.Status), session.Title,
 			session.TopicID, session.ThumbnailURL, session.ScheduledStartTime,
 			session.StartedAt, session.EndedAt, session.LiveFirstSeenAt, session.LastSeenAt,
-			session.IsPremiere, classificationOnlyOnConflict,
+			session.IsPremiere,
 			string(session.LifecycleOrigin),
 			session.StatusObservedAt, session.ScheduleObservedAt, session.TitleObservedAt,
 		},
@@ -129,7 +125,7 @@ func liveHeadStatement(session *live.SessionState) dbx.Statement {
 
 	return dbx.Statement{
 		Operation: "upsert live head",
-		SQL:       mustSQL("repository_live_head_upsert_0048_48.sql"),
+		SQL:       liveHeadUpsertSQL,
 		Args: []any{
 			session.VideoID, string(session.Status),
 			session.Clock.LastUpcomingPositiveAt, session.Clock.LastUpcomingPositiveSeenAt,

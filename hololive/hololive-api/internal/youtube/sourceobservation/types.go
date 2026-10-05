@@ -139,6 +139,8 @@ type ClaimedBatch struct {
 }
 
 type ClaimWork struct {
+	// AttemptCount는 해당 lease를 획득할 때 DB가 반환한 시도 횟수다.
+	AttemptCount    int
 	ObservationID   int64
 	LeaseToken      string
 	ObservationKind contract.ObservationKind
@@ -178,6 +180,8 @@ type ReconcileResult struct {
 }
 
 type RetryInput struct {
+	// ClaimBatch가 반환한 횟수를 그대로 전달하며 저장 시 동일 값인지 검증한다.
+	AttemptCount  int
 	ObservationID int64
 	LeaseToken    string
 	Delay         time.Duration

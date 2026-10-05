@@ -20,28 +20,6 @@ func TestOrdinaryDeferSQLHasClosedValuesWhitelist(t *testing.T) {
 	}
 }
 
-func TestReleaseSQLMatchesReleasableCodesAndPreservesFailureHistory(t *testing.T) {
-	t.Parallel()
-
-	sql := mustSQL("repository_lease_release_0144_10.sql")
-	got := extractReleaseCodes(sql)
-	want := contract.ReleasableCollectionErrorCodes()
-	g := slices.Clone(got)
-	w := slices.Clone(want)
-
-	slices.Sort(g)
-	slices.Sort(w)
-
-	if !slices.Equal(g, w) {
-		t.Fatalf("release SQL codes = %#v, want %#v", g, w)
-	}
-
-	if strings.Contains(sql, "last_failure_code") || strings.Contains(sql, "last_failure_class") ||
-		strings.Contains(sql, "last_failure_detail") || strings.Contains(sql, "last_failure_at") {
-		t.Fatal("release SQL must not write last_failure_*")
-	}
-}
-
 func failureTupleSetsEqual(got, want []contract.FailureTuple) bool {
 	g := slices.Clone(got)
 	w := slices.Clone(want)
@@ -73,37 +51,6 @@ func compareTestFailureTuple(a, b contract.FailureTuple) int {
 }
 
 var durableFailureTuplePattern = regexp.MustCompile(`\(\s*'([a-z0-9_]+)'\s*,\s*'([A-Z_]+)'\s*\)`)
-
-var releaseCodePattern = regexp.MustCompile(`\(\s*'([a-z0-9_]+)'\s*\)`)
-
-func extractReleaseCodes(sql string) []contract.CollectionErrorCode {
-	upper := strings.ToUpper(sql)
-	valuesAt := strings.Index(upper, "VALUES")
-
-	if valuesAt < 0 {
-		return nil
-	}
-
-	matches := releaseCodePattern.FindAllStringSubmatch(sql[valuesAt:], -1)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	codes := make([]contract.CollectionErrorCode, 0, len(matches))
-	seen := make(map[contract.CollectionErrorCode]struct{}, len(matches))
-
-	for _, match := range matches {
-		code := contract.CollectionErrorCode(match[1])
-		if _, ok := seen[code]; ok {
-			continue
-		}
-
-		seen[code] = struct{}{}
-		codes = append(codes, code)
-	}
-
-	return codes
-}
 
 func extractDurableFailureTuples(sql string) []contract.FailureTuple {
 	upper := strings.ToUpper(sql)

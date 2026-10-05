@@ -220,7 +220,7 @@ func TestMarkFailedSchedulesRetryFromDatabaseExecutionTime(t *testing.T) {
 	resultCh := make(chan result, 1)
 
 	go func() {
-		ok, markErr := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 3, time.Second, "retry")
+		ok, markErr := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Second, "retry")
 		resultCh <- result{ok: ok, err: markErr}
 	}()
 

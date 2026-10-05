@@ -239,11 +239,11 @@ func assertInboxReleaseIsFencedAndDefers(
 	_, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
 	require.NoError(t, err)
 
-	outcome, err := repo.Release(ctx, message.MessageID, "token-stale", 3, time.Minute, "boom")
+	outcome, err := repo.Release(ctx, message.MessageID, "token-stale", 1, 3, time.Minute, "boom")
 	require.NoError(t, err)
 	assert.Equal(t, InboxReleaseNotOwned, outcome)
 
-	outcome, err = repo.Release(ctx, message.MessageID, testClaimToken, 3, time.Minute, "boom")
+	outcome, err = repo.Release(ctx, message.MessageID, testClaimToken, 1, 3, time.Minute, "boom")
 	require.NoError(t, err)
 	assert.Equal(t, InboxReleaseRetried, outcome)
 

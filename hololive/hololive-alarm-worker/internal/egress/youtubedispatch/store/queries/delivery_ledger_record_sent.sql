@@ -7,8 +7,8 @@ WITH input AS (
         $4::timestamptz[],
         $5::bigint[]
     ) AS values(kind, logical_id, room_id, observed_at, source_delivery_id)
-), recorded AS (
-    INSERT INTO youtube_notification_delivery_ledger AS current (
+)
+INSERT INTO youtube_notification_delivery_ledger AS current (
         kind,
         logical_id,
         room_id,
@@ -44,10 +44,9 @@ WITH input AS (
             WHEN EXCLUDED.sent_at < current.sent_at THEN EXCLUDED.source_delivery_id
             ELSE COALESCE(current.source_delivery_id, EXCLUDED.source_delivery_id)
         END
-    RETURNING kind, logical_id, room_id, status, first_recorded_at, updated_at,
-              sent_at, quarantined_at, source_delivery_id
-)
-SELECT kind, logical_id, room_id, status, first_recorded_at, updated_at,
-       sent_at, quarantined_at, source_delivery_id
-FROM recorded
-ORDER BY kind, logical_id, room_id;
+    -- 동시 conflict의 최신 행에서 실제로 바뀌는 값이 있을 때만 새 행 버전을 쓴다.
+    WHERE current.status <> 'SENT'
+       OR EXCLUDED.first_recorded_at < current.first_recorded_at
+       OR EXCLUDED.updated_at > current.updated_at
+       OR EXCLUDED.sent_at < current.sent_at
+       OR current.source_delivery_id IS NULL;

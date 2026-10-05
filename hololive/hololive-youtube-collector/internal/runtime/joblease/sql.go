@@ -20,6 +20,7 @@ var (
 	sqlLeaseDefer               = mustSQL("repository_lease_defer_0144_12.sql")
 	sqlLeaseFailureLock         = mustSQL("repository_lease_failure_lock_0144_14.sql")
 	sqlLeaseInsert              = mustSQL("repository_lease_insert_0144_06.sql")
+	sqlLeaseReleaseSuperseded   = mustSQL("repository_lease_release_superseded.sql")
 	sqlLeaseRelease             = mustSQL("repository_lease_release_0144_10.sql")
 	sqlLeaseRenew               = mustSQL("repository_lease_renew_0144_09.sql")
 	sqlProjectionCurrent        = mustSQL("repository_projection_current_0144_01.sql")

@@ -45,7 +45,7 @@ func TestDeferRetryDeadlineUsesDatabaseClockAndPreservesNotBefore(t *testing.T) 
 
 			after := retryDatabaseClock(t, pool)
 
-			stored := readRetryDeadlineWithContract(t, pool, proof)
+			stored := readRetryDeadlineWithContract(t.Context(), t, pool, proof)
 			assertStoredRetryDeadline(t, input, stored, before, after)
 
 			if test.notBefore && !test.past {
@@ -61,7 +61,7 @@ func TestDeferRetryDeadlineUsesDatabaseClockAndPreservesNotBefore(t *testing.T) 
 	}
 }
 
-func readRetryDeadlineWithContract(t *testing.T, pool *pgxpool.Pool, proof contract.LeaseProof) time.Time {
+func readRetryDeadlineWithContract(ctx context.Context, t *testing.T, pool *pgxpool.Pool, proof contract.LeaseProof) time.Time {
 	t.Helper()
 
 	var (
@@ -71,7 +71,7 @@ func readRetryDeadlineWithContract(t *testing.T, pool *pgxpool.Pool, proof contr
 		released           bool
 	)
 
-	if err := pool.QueryRow(t.Context(), `
+	if err := pool.QueryRow(ctx, `
 		SELECT retry_not_before, scheduled_for, slot_state, fence_epoch,
 		       last_failure_code, last_failure_class, owner_instance IS NULL AND lease_expires_at IS NULL
 		FROM youtube_collection_job_leases WHERE job_key = $1

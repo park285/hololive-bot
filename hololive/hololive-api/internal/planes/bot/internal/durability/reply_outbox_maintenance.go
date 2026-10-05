@@ -75,31 +75,6 @@ type ReplyOutboxReclaim struct {
 	SafetyManualReview   int64
 }
 
-func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize int32) (ReplyOutboxReclaim, error) {
-	if err := ensurePool(r.pool); err != nil {
-		return ReplyOutboxReclaim{}, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	if batchSize <= 0 {
-		return ReplyOutboxReclaim{}, errors.Join(ErrInvalidArgument, errors.New("batch size must be positive"))
-	}
-
-	var reclaim ReplyOutboxReclaim
-
-	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
-	if err != nil {
-		return ReplyOutboxReclaim{}, fmt.Errorf("lease milliseconds: %w", err)
-	}
-
-	err = r.pool.QueryRow(ctx, replyOutboxReclaimExpiredSQL, batchSize, r.maxAttempts, replayHorizonMS).
-		Scan(&reclaim.Requeued, &reclaim.AcceptedManualReview, &reclaim.SafetyManualReview)
-	if err != nil {
-		return ReplyOutboxReclaim{}, fmt.Errorf("reclaim expired reply outbox leases: %w", err)
-	}
-
-	return reclaim, nil
-}
-
 func normalizeReplyOutboxEntry(entry *ReplyOutboxEntry) (ReplyOutboxEntry, error) {
 	messageID, err := requireMessageIdentity(entry.MessageID)
 	if err != nil {

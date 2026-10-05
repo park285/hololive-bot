@@ -40,6 +40,7 @@ func TestRetryRequiresUnexpiredClaim(t *testing.T) {
 	expireObservationClaim(t, pool, observation.ObservationID)
 
 	_, err = repo.Retry(ctx, RetryInput{
+		AttemptCount:  observation.AttemptCount,
 		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
 		Delay:         time.Second,
@@ -152,6 +153,7 @@ func startRetryInBackground(ctx context.Context, repo *Repository, claim ClaimWo
 		close(started)
 
 		_, retryErr := repo.Retry(ctx, RetryInput{
+			AttemptCount:  claim.AttemptCount,
 			ObservationID: claim.ObservationID,
 			LeaseToken:    claim.LeaseToken,
 			Delay:         time.Second,

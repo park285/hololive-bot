@@ -137,7 +137,7 @@ func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, saved)
 
-	saved, err = repo.MarkFailed(ctx, id, testWorkerA, 3, time.Minute, "late failure")
+	saved, err = repo.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "late failure")
 	require.NoError(t, err)
 	require.False(t, saved)
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "cas", "room", "changed"))
@@ -176,7 +176,7 @@ func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
 	next := *previous
 
 	next.Generation = 1
-	saved, err = repo.reissueFailedRequest(ctx, items[0].ID, testWorkerA, previous, &next, 3, 0, "pre-handoff failure")
+	saved, err = repo.reissueFailedRequest(ctx, items[0].ID, testWorkerA, items[0].AttemptCount, previous, &next, 3, 0, "pre-handoff failure")
 	require.NoError(t, err)
 	require.True(t, saved)
 

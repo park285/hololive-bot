@@ -323,7 +323,7 @@ func (s *Store) Observe(ctx context.Context, activeRevision int64, code string, 
 		return false, errors.New("invalid X observation error code")
 	}
 
-	result, err := s.pool.Exec(ctx, mustSQL("observe.sql"), activeRevision, state, code, next)
+	result, err := s.pool.Exec(ctx, mustSQL("observe.sql"), activeRevision, state, code, next, code == "")
 	if err != nil {
 		return false, fmt.Errorf("record X session observation: %w", err)
 	}

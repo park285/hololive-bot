@@ -54,7 +54,7 @@ func (r *PgxRepository) MarkSent(ctx context.Context, ids []int64, workerID stri
 }
 
 func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	if err := r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0160_06.sql", "route dispatch delivery failures"); err != nil {
+	if err := r.routeFailureUpdates(ctx, updates, workerID, sqlRouteFailures, "route dispatch delivery failures"); err != nil {
 		return fmt.Errorf("route failure updates: %w", err)
 	}
 
@@ -68,7 +68,7 @@ func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpda
 // RecoverExpiredLeased는 'leased'만 접촉하고 'sending'은 QuarantineStaleSending이
 // 담당하므로 다른 worker의 선점 경쟁이 없다. 종료(terminal) 상태는 status 조건으로 보호된다.
 func (r *PgxRepository) RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	if err := r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0170_07.sql", "route dispatch delivery sending failures"); err != nil {
+	if err := r.routeFailureUpdates(ctx, updates, workerID, sqlRouteSendingFailures, "route dispatch delivery sending failures"); err != nil {
 		return fmt.Errorf("route failure updates: %w", err)
 	}
 
@@ -82,14 +82,14 @@ func (r *PgxRepository) RequeuePreSend(ctx context.Context, updates []FailureUpd
 		}
 	}
 
-	if err := r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0185_08.sql", "requeue pre-send dispatch deliveries"); err != nil {
+	if err := r.routeFailureUpdates(ctx, updates, workerID, sqlRequeuePreSend, "requeue pre-send dispatch deliveries"); err != nil {
 		return fmt.Errorf("route failure updates: %w", err)
 	}
 
 	return nil
 }
 
-func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, queryFile, action string) error {
+func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, query, action string) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -98,7 +98,7 @@ func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []Failu
 		return fmt.Errorf("validate failure updates: %w", err)
 	}
 
-	applied, err := r.applyFailureUpdates(ctx, updates, workerID, queryFile, action)
+	applied, err := r.applyFailureUpdates(ctx, updates, workerID, query, action)
 	if err != nil {
 		return fmt.Errorf("apply failure updates: %w", err)
 	}
@@ -111,7 +111,13 @@ func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []Failu
 }
 
 func validateFailureUpdates(updates []FailureUpdate, action string) error {
+	seen := make(map[int64]struct{}, len(updates))
 	for i := range updates {
+		if _, duplicate := seen[updates[i].ID]; duplicate {
+			return fmt.Errorf("%s: duplicate delivery %d", action, updates[i].ID)
+		}
+
+		seen[updates[i].ID] = struct{}{}
 		if updates[i].TargetStatus != StatusRetry && updates[i].TargetStatus != StatusDLQ {
 			return fmt.Errorf("%s: unsupported target status %q for delivery %d", action, updates[i].TargetStatus, updates[i].ID)
 		}
@@ -120,13 +126,36 @@ func validateFailureUpdates(updates []FailureUpdate, action string) error {
 	return nil
 }
 
-func (r *PgxRepository) applyFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, queryFile, action string) ([]int64, error) {
-	raw, err := jsonv2.Marshal(updates)
+type failureRouteInput struct {
+	*FailureUpdate
+
+	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
+	MarkDLQ       bool       `json:"mark_dlq,omitzero"`
+}
+
+// 상태에 따른 필드 갱신 정책은 코드에서 정한다. SQL의 분기는 DB 시각을 적용하는 저장 연산뿐이다.
+func prepareFailureUpdates(updates []FailureUpdate) []failureRouteInput {
+	inputs := make([]failureRouteInput, len(updates))
+	for i := range updates {
+		update := &updates[i]
+
+		inputs[i] = failureRouteInput{FailureUpdate: update, MarkDLQ: update.TargetStatus == StatusDLQ}
+
+		if update.TargetStatus == StatusRetry {
+			inputs[i].NextAttemptAt = &update.NextAttemptAt
+		}
+	}
+
+	return inputs
+}
+
+func (r *PgxRepository) applyFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, query, action string) ([]int64, error) {
+	raw, err := jsonv2.Marshal(prepareFailureUpdates(updates))
 	if err != nil {
 		return nil, fmt.Errorf("%s: marshal batch: %w", action, err)
 	}
 
-	rows, err := r.pool.Query(ctx, mustSQL(queryFile), jsonbRecordsetParam(raw), workerID)
+	rows, err := r.pool.Query(ctx, query, jsonbRecordsetParam(raw), workerID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)
 	}

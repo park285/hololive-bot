@@ -147,6 +147,9 @@ func TestUpcomingCandidatesLargeFanoutAtomicAndBoundedRecovery(t *testing.T) {
 	seen := make(map[string]bool)
 
 	for _, c := range first {
+		require.Equal(t, c.DedupeKey, BuildDedupeKeyFromEnvelope(&domain.AlarmQueueEnvelope{Notification: c.Notification, Version: 1}),
+			"commit 뒤 해독해도 payload가 해당 방의 후보와 일치해야 한다")
+
 		seen[c.DedupeKey] = true
 	}
 

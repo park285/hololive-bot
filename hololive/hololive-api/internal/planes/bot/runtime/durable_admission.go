@@ -425,7 +425,7 @@ func (r *durableRuntime) deferInboxForClaimedCommand(
 
 	retryAfter = max(retryAfter, r.maintenanceEvery)
 
-	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, r.inboxMaxAttempts, retryAfter,
+	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, claim.Attempts, r.inboxMaxAttempts, retryAfter,
 		durability.InboxFailureCommandAlreadyClaimed)
 	if err != nil {
 		r.logError("defer webhook behind active command claim", err)

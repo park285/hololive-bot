@@ -36,6 +36,7 @@ var (
 	inboxClaimSQL                = mustSQL("inbox_claim.sql")
 	inboxCompleteSQL             = mustSQL("inbox_complete.sql")
 	inboxReleaseSQL              = mustSQL("inbox_release.sql")
+	inboxReleaseRetrySQL         = mustSQL("inbox_release_retry.sql")
 	inboxAbandonSQL              = mustSQL("inbox_abandon.sql")
 	inboxHeartbeatSQL            = mustSQL("inbox_heartbeat.sql")
 	inboxReclaimExpiredSQL       = mustSQL("inbox_reclaim_expired.sql")
@@ -243,10 +244,12 @@ func (r *InboxRepository) Complete(ctx context.Context, messageID, claimToken st
 	return out, nil
 }
 
+// Release는 claim 당시 횟수로 재시도·종료를 선택하고 같은 횟수와 token을 가진 행만 정산합니다.
+// 종료 시 payload 삭제와 다음 ordering head 이동을 동일 트랜잭션에 저장합니다.
 func (r *InboxRepository) Release(
 	ctx context.Context,
 	messageID, claimToken string,
-	maxAttempts int32,
+	attempts, maxAttempts int32,
 	retryAfter time.Duration,
 	lastError string,
 ) (InboxReleaseOutcome, error) {
@@ -259,12 +262,22 @@ func (r *InboxRepository) Release(
 		return InboxReleaseNotOwned, fmt.Errorf("fence args: %w", err)
 	}
 
+	if attempts <= 0 {
+		return InboxReleaseNotOwned, errors.Join(ErrInvalidArgument, errors.New("claimed attempts must be positive"))
+	}
+
 	retryMS, err := validateInboxRelease(maxAttempts, retryAfter)
 	if err != nil {
 		return InboxReleaseNotOwned, fmt.Errorf("validate inbox release: %w", err)
 	}
 
-	status, err := r.releaseLocked(ctx, id, token, retryMS, maxAttempts, lastError)
+	query := inboxReleaseRetrySQL
+
+	if attempts >= maxAttempts {
+		query = inboxReleaseSQL
+	}
+
+	status, err := r.releaseLocked(ctx, query, id, token, retryMS, attempts, lastError)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return InboxReleaseNotOwned, nil
 	}
@@ -280,7 +293,7 @@ func (r *InboxRepository) Release(
 	return InboxReleaseRetried, nil
 }
 
-func (r *InboxRepository) releaseLocked(ctx context.Context, id, token string, retryMS int64, maxAttempts int32, lastError string) (status string, err error) {
+func (r *InboxRepository) releaseLocked(ctx context.Context, query, id, token string, retryMS int64, attempts int32, lastError string) (status string, err error) {
 	tx, err := r.beginLockedMessageTx(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("begin webhook release", id, err))
@@ -288,8 +301,8 @@ func (r *InboxRepository) releaseLocked(ctx context.Context, id, token string, r
 
 	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
 
-	err = tx.QueryRow(ctx, inboxReleaseSQL, id, token, retryMS,
-		normalizeInboxFailureReason(lastError), maxAttempts).Scan(&status)
+	err = tx.QueryRow(ctx, query, id, token, retryMS,
+		normalizeInboxFailureReason(lastError), attempts).Scan(&status)
 	if err != nil {
 		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("release webhook inbox row", id, err))
 	}

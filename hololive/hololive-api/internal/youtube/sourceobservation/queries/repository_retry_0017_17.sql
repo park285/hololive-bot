@@ -1,19 +1,28 @@
-UPDATE source_observation_queue
-SET status = CASE WHEN attempt_count >= $6 THEN 'DEAD_LETTER' ELSE 'PENDING' END,
-    available_at = CASE
-        WHEN attempt_count >= $6 THEN available_at
-        ELSE clock_timestamp() + ($3::bigint * INTERVAL '1 millisecond')
-    END,
+WITH locked AS MATERIALIZED (
+    SELECT observation_id, status, lease_token, attempt_count, lease_expires_at
+    FROM source_observation_queue
+    WHERE observation_id = $1
+    FOR UPDATE
+), timed AS MATERIALIZED (
+    SELECT observation_id, status, lease_token, attempt_count, lease_expires_at,
+           clock_timestamp() AS transitioned_at
+    FROM locked
+)
+UPDATE source_observation_queue AS queue
+SET status = 'PENDING',
+    available_at = timed.transitioned_at + ($3::bigint * INTERVAL '1 millisecond'),
     lease_owner = NULL,
     lease_token = NULL,
     lease_expires_at = NULL,
     processed_at = NULL,
-    dead_lettered_at = CASE WHEN attempt_count >= $6 THEN clock_timestamp() ELSE NULL END,
-    last_error_code = CASE WHEN attempt_count >= $6 THEN 'attempts_exhausted' ELSE $4 END,
+    dead_lettered_at = NULL,
+    last_error_code = $4,
     last_error_detail = NULLIF($5, ''),
-    updated_at = clock_timestamp()
-WHERE observation_id = $1
-  AND status = 'PROCESSING'
-  AND lease_token = $2
-  AND lease_expires_at > clock_timestamp()
-RETURNING status
+    updated_at = timed.transitioned_at
+FROM timed
+WHERE queue.observation_id = timed.observation_id
+  AND timed.status = 'PROCESSING'
+  AND timed.lease_token = $2
+  AND timed.attempt_count = $6
+  AND timed.lease_expires_at > timed.transitioned_at
+RETURNING queue.observation_id

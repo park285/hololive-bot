@@ -1,36 +1,27 @@
-WITH requested AS MATERIALIZED (
-    SELECT reason
-    FROM (
-        VALUES
-            ('shutdown_release'),
-            ('superseded_release'),
-            ('renew_failed_release')
-    ) AS allowed(reason)
-    WHERE reason = $7::text
+WITH locked AS MATERIALIZED (
+    SELECT job_key, owner_instance, fence_epoch, projection_generation,
+           scheduled_for, slot_state, lease_expires_at
+    FROM youtube_collection_job_leases
+    WHERE job_key = $1
+    FOR UPDATE
+), eligible AS MATERIALIZED (
+    SELECT locked.job_key, clock_timestamp() AS transitioned_at
+    FROM locked
+    WHERE locked.job_key = $1
+      AND locked.owner_instance = $2
+      AND locked.fence_epoch = $3
+      AND locked.projection_generation = $4
+      AND locked.scheduled_for = $5
+      AND locked.slot_state = 'ACTIVE'
+      AND locked.lease_expires_at > clock_timestamp()
 )
 UPDATE youtube_collection_job_leases AS jobs
-SET slot_state = CASE requested.reason
-        WHEN 'superseded_release' THEN 'IDLE'
-        ELSE 'DEFERRED'
-    END,
+SET slot_state = 'DEFERRED',
     owner_instance = NULL,
     lease_expires_at = NULL,
-    retry_not_before = CASE requested.reason
-        WHEN 'superseded_release' THEN NULL
-        ELSE clock_timestamp() + ($6::bigint * INTERVAL '1 millisecond')
-    END,
-    last_error_code = requested.reason,
-    next_due_at = CASE requested.reason
-        WHEN 'superseded_release' THEN LEAST(jobs.next_due_at, clock_timestamp())
-        ELSE jobs.next_due_at
-    END,
-    updated_at = clock_timestamp()
-FROM requested
-WHERE jobs.job_key = $1
-  AND jobs.owner_instance = $2
-  AND jobs.fence_epoch = $3
-  AND jobs.projection_generation = $4
-  AND jobs.scheduled_for = $5
-  AND jobs.slot_state = 'ACTIVE'
-  AND jobs.lease_expires_at > clock_timestamp()
+    retry_not_before = eligible.transitioned_at + ($6::bigint * INTERVAL '1 millisecond'),
+    last_error_code = $7,
+    updated_at = eligible.transitioned_at
+FROM eligible
+WHERE jobs.job_key = eligible.job_key
 RETURNING jobs.job_key

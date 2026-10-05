@@ -40,20 +40,28 @@ func TestLiveSessionUpsertSkipsUnchangedEffectiveValues(t *testing.T) {
 	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	scheduled := now.Add(-time.Hour)
-	args := []any{"hotpath-noop", "hotpath-channel", "LIVE", "title", "", "", scheduled, now, nil, now, now, nil, false, "observed", nil, nil, nil}
-	query := mustSQL("repository_live_session_upsert_0047_47.sql")
+	session := live.SessionState{
+		VideoID: "hotpath-noop", ChannelID: "hotpath-channel", Status: domain.LiveStatusLive,
+		Title: "title", ScheduledStartTime: new(scheduled), StartedAt: new(now),
+		LiveFirstSeenAt: new(now), LastSeenAt: now, LifecycleOrigin: live.OriginObserved,
+	}
+	classificationOnly := false
 
 	for step, want := range []int64{1, 0, 1, 1, 0} {
 		switch step {
 		case 1:
-			args[6], args[10] = nil, now.Add(-time.Hour)
+			session.ScheduledStartTime, session.LastSeenAt = nil, now.Add(-time.Hour)
 		case 2:
-			args[10] = now.Add(time.Minute)
+			session.LastSeenAt = now.Add(time.Minute)
 		case 3:
-			args[11], args[12] = true, true
+			session.IsPremiere, classificationOnly = new(true), true
+			session.Status, session.Title = domain.LiveStatusEnded, "classification must not replace title"
+			session.TitleObservedAt, session.LastSeenAt = new(now.Add(time.Hour)), now.Add(time.Hour)
 		}
 
-		tag, err := pool.Exec(ctx, query, args...)
+		statement := liveSessionStatement(&session, classificationOnly)
+
+		tag, err := pool.Exec(ctx, statement.SQL, statement.Args...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,8 +73,18 @@ func TestLiveSessionUpsertSkipsUnchangedEffectiveValues(t *testing.T) {
 
 	var gotScheduled, gotSeen time.Time
 
-	if err := pool.QueryRow(ctx, "SELECT scheduled_start_time, last_seen_at FROM youtube_live_sessions WHERE video_id=$1", args[0]).Scan(&gotScheduled, &gotSeen); err != nil {
+	if err := pool.QueryRow(ctx, "SELECT scheduled_start_time, last_seen_at FROM youtube_live_sessions WHERE video_id=$1", session.VideoID).Scan(&gotScheduled, &gotSeen); err != nil {
 		t.Fatal(err)
+	}
+
+	var status, title string
+
+	if err := pool.QueryRow(ctx, "SELECT status,title FROM youtube_live_sessions WHERE video_id=$1", session.VideoID).Scan(&status, &title); err != nil {
+		t.Fatal(err)
+	}
+
+	if status != "LIVE" || title != "title" {
+		t.Fatal("Premiere classification overwrote lifecycle or metadata")
 	}
 
 	if !gotScheduled.Equal(scheduled) || !gotSeen.Equal(now.Add(time.Minute)) {
@@ -87,7 +105,9 @@ func TestLiveHeadNoopPreservesReviewSnapshotButNewEvidenceInvalidatesIt(t *testi
 	session.Clock.LastUpcomingPositiveAt = new(now)
 	session.Clock.LastUpcomingPositiveSeenAt = new(now)
 
-	if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error { return upsertLiveSession(ctx, tx, &session) }); err != nil {
+	if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
+		return dbx.ExecStatements(ctx, tx, []dbx.Statement{liveSessionStatement(&session, false)})
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,7 +196,9 @@ func TestLiveSessionUpsertRejectsStaleOrUnprovenMetadata(t *testing.T) {
 		LifecycleOrigin: live.OriginObserved,
 	}
 
-	if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error { return upsertLiveSession(ctx, tx, &current) }); err != nil {
+	if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
+		return dbx.ExecStatements(ctx, tx, []dbx.Statement{liveSessionStatement(&current, false)})
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -188,7 +210,9 @@ func TestLiveSessionUpsertRejectsStaleOrUnprovenMetadata(t *testing.T) {
 		incoming.TitleObservedAt, incoming.ScheduleObservedAt = clock, clock
 		incoming.LastSeenAt = now.Add(time.Minute)
 
-		if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error { return upsertLiveSession(ctx, tx, &incoming) }); err != nil {
+		if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
+			return dbx.ExecStatements(ctx, tx, []dbx.Statement{liveSessionStatement(&incoming, false)})
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}

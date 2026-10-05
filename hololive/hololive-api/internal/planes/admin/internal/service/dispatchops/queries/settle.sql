@@ -5,9 +5,9 @@ WITH target AS (
     WHERE id = ANY($1::bigint[]) AND status IN ('dlq', 'quarantined')
 ), updated AS (
     UPDATE alarm_dispatch_deliveries d
-    SET status = CASE WHEN $4 = 'cancel' THEN 'cancelled' ELSE 'quarantined' END,
-        cancelled_at = CASE WHEN $4 = 'cancel' THEN clock_timestamp() ELSE d.cancelled_at END,
-        quarantined_at = CASE WHEN $4 = 'quarantine' AND target.status <> 'quarantined'
+    SET status = $5,
+        cancelled_at = CASE WHEN $6 THEN clock_timestamp() ELSE d.cancelled_at END,
+        quarantined_at = CASE WHEN d.id = ANY($7::bigint[])
                               THEN clock_timestamp() ELSE d.quarantined_at END,
         locked_by = NULL, locked_at = NULL, lock_expires_at = NULL,
         updated_at = GREATEST(clock_timestamp(), d.updated_at + interval '1 microsecond')

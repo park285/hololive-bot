@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
+
+const ledgerTestRoom = "ledger-test-room"
 
 func TestLedgerRecordSentPromotesQuarantineAndPreservesEarliestEvidence(t *testing.T) {
 	ctx := t.Context()
@@ -71,4 +74,76 @@ func readDeliveryLedgerRecord(t *testing.T, pool *pgxpool.Pool, key ytcontentid.
 	))
 
 	return record
+}
+
+func TestLedgerRepeatedEvidenceDoesNotRewriteRow(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+
+	for _, status := range []LedgerStatus{LedgerStatusSent, LedgerStatusQuarantined} {
+		t.Run(string(status), func(t *testing.T) {
+			write := LedgerWrite{
+				Key:        ytcontentid.LogicalKey{Kind: domain.OutboxKindNewVideo, LogicalID: "repeat-" + string(status), RoomID: ledgerTestRoom},
+				ObservedAt: time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC), SourceDeliveryID: 10,
+			}
+			require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, status, []LedgerWrite{write}))
+
+			before := ledgerRowVersion(ctx, t, pool, write.Key)
+			require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, status, []LedgerWrite{write}))
+			require.Equal(t, before, ledgerRowVersion(ctx, t, pool, write.Key), "identical evidence must not create a row version")
+
+			if status == LedgerStatusSent {
+				write.ObservedAt = write.ObservedAt.Add(time.Hour)
+				write.SourceDeliveryID++
+				require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusQuarantined, []LedgerWrite{write}))
+				require.Equal(t, before, ledgerRowVersion(ctx, t, pool, write.Key), "late quarantine must not rewrite SENT")
+			}
+		})
+	}
+}
+
+func ledgerRowVersion(ctx context.Context, t *testing.T, pool *pgxpool.Pool, key ytcontentid.LogicalKey) string {
+	t.Helper()
+
+	var version string
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT xmin::text FROM youtube_notification_delivery_ledger WHERE kind=$1 AND logical_id=$2 AND room_id=$3`, key.Kind, key.LogicalID, key.RoomID).Scan(&version))
+
+	return version
+}
+
+func TestLedgerSentMergesEarlierAndLaterEvidence(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+	start := time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC)
+	write := LedgerWrite{Key: ytcontentid.LogicalKey{Kind: domain.OutboxKindNewVideo, LogicalID: "sent-evidence", RoomID: ledgerTestRoom}}
+
+	for _, minute := range []int64{10, 5, 15} {
+		write.ObservedAt = start.Add(time.Duration(minute) * time.Minute)
+		write.SourceDeliveryID = minute
+		require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusSent, []LedgerWrite{write}))
+	}
+
+	record := readDeliveryLedgerRecord(t, pool, write.Key)
+	require.Equal(t, start.Add(5*time.Minute), record.FirstRecordedAt.UTC())
+	require.NotNil(t, record.SentAt)
+	require.Equal(t, start.Add(5*time.Minute), record.SentAt.UTC())
+	require.Equal(t, start.Add(15*time.Minute), record.UpdatedAt.UTC())
+	require.NotNil(t, record.SourceDeliveryID)
+	require.EqualValues(t, 5, *record.SourceDeliveryID)
+
+	before := ledgerRowVersion(ctx, t, pool, write.Key)
+
+	write.ObservedAt = start.Add(10 * time.Minute)
+	write.SourceDeliveryID = 99
+	require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusSent, []LedgerWrite{write}))
+	require.Equal(t, before, ledgerRowVersion(ctx, t, pool, write.Key), "interior evidence does not change earliest sender")
+
+	_, err := pool.Exec(ctx, `UPDATE youtube_notification_delivery_ledger SET source_delivery_id=NULL WHERE logical_id='sent-evidence'`)
+	require.NoError(t, err)
+	require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusSent, []LedgerWrite{write}))
+
+	record = readDeliveryLedgerRecord(t, pool, write.Key)
+	require.NotNil(t, record.SourceDeliveryID)
+	require.EqualValues(t, 99, *record.SourceDeliveryID)
 }

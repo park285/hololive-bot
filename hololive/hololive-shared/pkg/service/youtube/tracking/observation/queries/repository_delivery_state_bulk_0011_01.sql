@@ -27,7 +27,7 @@ WITH input AS (
 	    END,
 	    alarm_latency_exceeded = CASE
 	        WHEN t.actual_published_at IS NULL THEN NULL
-	        WHEN CAST(ROUND(EXTRACT(EPOCH FROM (i.alarm_sent_at - t.actual_published_at)) * 1000) AS BIGINT) > 120000 THEN TRUE
+	        WHEN CAST(ROUND(EXTRACT(EPOCH FROM (i.alarm_sent_at - t.actual_published_at)) * 1000) AS BIGINT) > $6::bigint THEN TRUE
 	        ELSE FALSE
 	    END,
 	    delivery_status = 'SENT',

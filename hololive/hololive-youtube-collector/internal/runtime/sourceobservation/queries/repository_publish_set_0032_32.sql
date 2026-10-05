@@ -324,19 +324,11 @@ WITH input AS MATERIALIZED (
 )
 SELECT existing.ordinal,
        COALESCE(existing.existing_id, observation_write.id, 0) AS observation_id,
-       CASE
-           WHEN existing.is_collision THEN 'COLLISION'
-           WHEN existing.existing_id IS NOT NULL THEN 'DUPLICATE'
-           ELSE 'INSERTED'
-       END AS outcome,
-       -- checkpoint가 실제로 전진한 관측만 이전 수락과의 간격을 낸다. 최초 checkpoint·충돌·동일 slot 재생은 NULL이다.
-       CASE
-           WHEN checkpoint_write.provider IS NULL OR previous_checkpoint.last_success_at IS NULL THEN NULL
-           ELSE GREATEST(
-               0,
-               floor(EXTRACT(EPOCH FROM (NOW() - previous_checkpoint.last_success_at)) * 1000)
-           )::bigint
-       END AS accepted_interval_ms
+       existing.is_collision,
+       existing.existing_id IS NOT NULL AS existed,
+       checkpoint_write.provider IS NOT NULL AS checkpoint_advanced,
+       previous_checkpoint.last_success_at,
+       NOW() AS accepted_at
 FROM existing
 CROSS JOIN effects
 LEFT JOIN previous_checkpoint

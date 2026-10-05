@@ -67,7 +67,7 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 	if sender, ok := d.sender.(PreparedMessageSender); ok {
 		body, route, err := sender.PrepareMessageRequest(ctx, item.RoomID, payload.Message)
 		if err != nil {
-			d.markPreparationFailed(ctx, item.ID, err)
+			d.markPreparationFailed(ctx, item, err)
 
 			return nil, false
 		}
@@ -127,14 +127,14 @@ func (d *Dispatcher) reissueRequest(ctx context.Context, item *domain.Notificati
 		next.Generation++
 	}
 
-	_, err := d.repository.reissueFailedRequest(ctx, item.ID, d.workerID, request, &next, d.config.MaxRetries, d.config.RetryBackoff, cause.Error())
+	_, err := d.repository.reissueFailedRequest(ctx, item.ID, d.workerID, item.AttemptCount, request, &next, d.config.MaxRetries, d.config.RetryBackoff, cause.Error())
 	if err != nil {
 		d.logger.Error("Failed to save delivery request generation and retry", "id", item.ID, "error", err)
 	}
 }
 
 // 세대 증가와 다음 상태를 같은 commit에 저장해 crash 이후 저장된 새 ID로만 복구합니다.
-func (r *OutboxRepository) reissueFailedRequest(ctx context.Context, id int64, workerID string, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
+func (r *OutboxRepository) reissueFailedRequest(ctx context.Context, id int64, workerID string, attemptCount int, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, fmt.Errorf("reissue failed delivery: %w", err)
 	}
@@ -149,7 +149,17 @@ func (r *OutboxRepository) reissueFailedRequest(ctx context.Context, id int64, w
 		return false, fmt.Errorf("encode reissued delivery request: %w", err)
 	}
 
-	tag, err := r.pool.Exec(ctx, mustSQL("outbox_reissue_failed_request.sql"), id, workerID, string(previousJSON), string(nextJSON), maxRetries, durationMilliseconds(backoff), reason, next.Exhausted)
+	status, err := deliveryFailureStatus(attemptCount, maxRetries)
+	if err != nil {
+		return false, fmt.Errorf("reissue failed delivery policy: %w", err)
+	}
+
+	if next.Exhausted {
+		status = domain.DeliveryStatusFailed
+		reason = "client request ID generations exhausted: " + reason
+	}
+
+	tag, err := r.pool.Exec(ctx, reissueFailedSQL, id, workerID, string(previousJSON), string(nextJSON), status, durationMilliseconds(backoff), reason, status == domain.DeliveryStatusPending, attemptCount)
 	if err != nil {
 		return false, fmt.Errorf("reissue failed delivery: %w", err)
 	}
@@ -157,15 +167,15 @@ func (r *OutboxRepository) reissueFailedRequest(ctx context.Context, id int64, w
 	return tag.RowsAffected() > 0, nil
 }
 
-func (d *Dispatcher) markItemTerminalFailed(ctx context.Context, id int64, reason string) {
-	if _, err := d.repository.MarkFailed(ctx, id, d.workerID, 1, d.config.RetryBackoff, reason); err != nil {
-		d.logger.Error("Failed to finish exhausted delivery request", "id", id, "error", err)
+func (d *Dispatcher) markItemTerminalFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, reason string) {
+	if _, err := d.repository.MarkFailed(ctx, item.ID, d.workerID, item.AttemptCount, 1, d.config.RetryBackoff, reason); err != nil {
+		d.logger.Error("Failed to finish exhausted delivery request", "id", item.ID, "error", err)
 	}
 }
 
 func (d *Dispatcher) validateStoredRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage) (*preparedMessage, bool) {
 	if request.Exhausted {
-		d.markItemTerminalFailed(ctx, item.ID, "client request ID generations exhausted")
+		d.markItemTerminalFailed(ctx, item, "client request ID generations exhausted")
 
 		return nil, false
 	}
@@ -182,16 +192,16 @@ func (d *Dispatcher) validateStoredRequest(ctx context.Context, item *domain.Not
 }
 
 // 준비 실패에는 외부 부수효과가 없다는 증거를 먼저 저장해 legacy retry와 구분합니다.
-func (d *Dispatcher) markPreparationFailed(ctx context.Context, id int64, cause error) {
-	saved, err := d.repository.markPreparationUnsent(ctx, id, d.workerID)
+func (d *Dispatcher) markPreparationFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, cause error) {
+	saved, err := d.repository.markPreparationUnsent(ctx, item.ID, d.workerID)
 	if err != nil {
-		d.logger.Error("Failed to save unsent delivery preparation", "id", id, "error", err)
+		d.logger.Error("Failed to save unsent delivery preparation", "id", item.ID, "error", err)
 
 		return
 	}
 
 	if saved {
-		d.markItemFailed(ctx, id, cause.Error())
+		d.markItemFailed(ctx, item, cause.Error())
 	}
 }
 

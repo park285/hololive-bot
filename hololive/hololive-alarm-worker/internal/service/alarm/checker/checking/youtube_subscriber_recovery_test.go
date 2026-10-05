@@ -35,6 +35,10 @@ var errSubscriberDBUnavailable = errors.New("subscriber db unavailable")
 // failingSubscriberDB는 조회가 일어나면 실패하므로, 조회 여부와 오류 전파를 함께 확인한다.
 type failingSubscriberDB struct{}
 
+func (failingSubscriberDB) Begin(context.Context) (pgx.Tx, error) {
+	return nil, errSubscriberDBUnavailable
+}
+
 func (failingSubscriberDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, errSubscriberDBUnavailable
 }

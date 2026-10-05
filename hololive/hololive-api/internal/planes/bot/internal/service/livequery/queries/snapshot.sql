@@ -139,14 +139,14 @@ WITH clock AS MATERIALIZED (
            jsonb_build_object('retained_orphan_ends', COALESCE(o.retained_orphan_ends, 0),
                               'ended_pending_ends', COALESCE(e.ended_pending_ends, 0),
                               'ended_head_mismatches', COALESCE(m.ended_head_mismatches, 0)) AS diagnostics,
-           CASE WHEN NOT t.projection_valid THEN 'invalid_projection'
-                WHEN NOT t.collected OR NOT t.check_collected THEN 'uncollected'
-                WHEN COALESCE(bool_or(f.inconsistent), false) THEN 'inconsistent'
-                WHEN p.channel_id IS NOT NULL OR COALESCE(bool_or(f.pending AND NOT f.public_unavailable), false) THEN 'confirming_end'
-                WHEN COALESCE(bool_or(f.future_clock), false) THEN 'invalid_clock'
-                WHEN COALESCE(bool_or(f.session_status = 'LIVE' AND NOT COALESCE(f.fresh, false) AND NOT f.public_unavailable), false) THEN 'stale'
-                WHEN c.covered_at IS NULL THEN 'incomplete'
-                ELSE 'covered' END AS reason
+           -- coverageFacts 비트는 projection, collected, inconsistent, pending, future, stale 순서다.
+           -- 관측 사실만 압축하며 사유 우선순위는 Go가 결정한다.
+           t.projection_valid::int
+             | ((t.collected AND t.check_collected)::int << 1)
+             | (COALESCE(bool_or(f.inconsistent), false)::int << 2)
+             | ((p.channel_id IS NOT NULL OR COALESCE(bool_or(f.pending AND NOT f.public_unavailable), false))::int << 3)
+             | (COALESCE(bool_or(f.future_clock), false)::int << 4)
+             | (COALESCE(bool_or(f.session_status = 'LIVE' AND NOT COALESCE(f.fresh, false) AND NOT f.public_unavailable), false)::int << 5) AS facts
     FROM targets t
     LEFT JOIN coverage c USING (channel_id) LEFT JOIN facts f USING (channel_id)
     LEFT JOIN pending_channels p USING (channel_id)
