@@ -83,3 +83,20 @@ YouTube 알림 발송(`GetMemberName`), 생일·기념일 알림(`celebration_ru
 
 - 위 API 변경과 다른 세션 작업의 커밋·PR·중앙 API 배포
 - 9번에서 `alarms.member_name` 컬럼을 지운다면 migration 적용
+
+## 진행 기록(2026-10-05, `fix/member-display-name-ssot-20261005`)
+
+권장 순서 1~6과 사용자 추가 요청(쓰지 않는 표시 자산 정리)을 구현했다. 6은 아래처럼 결정했다.
+
+- 1~5(명령 응답): `domain.Member.DisplayName`(`short_korean_name`→`korean_name`→`english_name`)을 정본으로 두고 [alarm 계약](../contracts/alarm.md)에 "명령 응답 멤버 표시명"을 적었다. matcher는 검색 키와 표시명을 분리해 3~7을 해소한다. `!라이브` SQL은 `short_korean_name`을 먼저 쓰고, `!예정`은 표시 직전 `channel_id`로 members 표시명을 결합한다. 동명이인 후보는 정본 표시명으로 보이고 복사 예시는 검색 키(`QualifiedName`)를 유지한다. 13번 죽은 formatter와 `Channel.GetDisplayName`을 지웠다.
+- 9: `alarms.member_name`을 읽고 쓰지 않는다. 알람 목록은 이름 캐시 미스를 members로 채우고, 멤버 뉴스도 members만 읽는다. 컬럼은 2단계 migration으로 지운다.
+- 10: 방송 알림 이름을 alarm dispatch 렌더 때 members로 정한다(계약 순서와 종단 문구, `hololive_alarm_dispatch_member_name_missing_total`). checker의 Valkey 이름 덮어쓰기를 지웠다.
+- 11: X 스페이스 설정·payload에서 이름을 지우고 렌더 때 members로 정한다. 운영 설정의 `member_name`은 같은 배포에서 지운다(알 수 없는 필드는 시작 오류).
+- 정리: 렌더 경로가 없던 `CMD_ALARM_NOTIFICATION`·`CMD_ALARM_LIVE_STARTED`·`CMD_ALARM_NOTIFICATION_GROUP`을 268 migration과 코드에서 지웠다. 읽지 않게 된 `misc/alarm_unknown_member`는 코드에서 지우고 DB 행은 2단계에서 지운다(구 버전 worker가 기동 때 필수로 검사하므로 롤백 지점을 지키기 위함).
+
+배포 순서:
+
+1. 1단계: 위 코드와 268을 배포한다. 268은 구 버전이 읽지 않는 템플릿 행만 지우므로 롤백해도 안전하다.
+2. 2단계: 1단계 확인 뒤 `alarms.member_name` 컬럼과 `misc/alarm_unknown_member` 행을 지우는 migration을 배포한다. 이후 롤백 지점은 1단계 이미지다.
+
+1단계 검증(마지막 코드 수정 뒤): `bash scripts/ci/local-ci.sh` 통과(vet, staticcheck, golangci-lint, NilAway, Go test, `-race`; integration tag 테스트는 기본값대로 생략). 운영 DB 읽기 전용 점검에서 X 스페이스 대상 5개와 알람 구독 채널 21개 모두 한국어 표시명이 있어 종단 문구로 바뀌는 채널은 없다.
