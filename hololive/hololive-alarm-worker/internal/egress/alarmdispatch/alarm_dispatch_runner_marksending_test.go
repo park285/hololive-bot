@@ -19,6 +19,7 @@ func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt
 	}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{
+		members:  alarmGoldenMembers{},
 		consumer: consumer,
 		sender:   sender,
 		renderer: newAlarmDispatchTestRenderer(t),
@@ -51,6 +52,7 @@ func TestAlarmDispatchRunnerMarkSendingFailureDoesNotExhaustExistingAttempt(t *t
 		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
 	}
 	runner := Runner{
+		members:  alarmGoldenMembers{},
 		consumer: consumer,
 		sender:   &alarmDispatchRunnerTestSender{},
 		renderer: newAlarmDispatchTestRenderer(t),

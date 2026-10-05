@@ -23,12 +23,11 @@ func TestAlarmAddedLogNeverCarriesRoomTitleOrNickname(t *testing.T) {
 	service := &AlarmService{logger: slog.New(slog.NewJSONHandler(&buffer, nil))}
 
 	service.logAlarmAdded(&domain.AddAlarmRequest{
-		RoomID:     roomTitle,
-		UserID:     "1234567890",
-		ChannelID:  "UC-channel",
-		MemberName: "미코",
-		RoomName:   roomTitle,
-		UserName:   nickname,
+		RoomID:    roomTitle,
+		UserID:    "1234567890",
+		ChannelID: "UC-channel",
+		RoomName:  roomTitle,
+		UserName:  nickname,
 	}, domain.AlarmTypes{"live"})
 
 	line := buffer.String()

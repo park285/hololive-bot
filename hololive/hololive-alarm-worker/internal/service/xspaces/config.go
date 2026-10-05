@@ -16,9 +16,8 @@ import (
 
 // Target은 X 개설자와 기존 방송 구독 채널 사이의 명시적 연결이다.
 type Target struct {
-	UserID     string `json:"user_id"`
-	ChannelID  string `json:"channel_id"`
-	MemberName string `json:"member_name"`
+	UserID    string `json:"user_id"`
+	ChannelID string `json:"channel_id"`
 }
 
 // Config는 설정된 경우에만 외부 조회를 활성화한다. 파일에는 인증 값을 넣지 않는다.
@@ -86,7 +85,7 @@ func (c Config) Validate() error {
 	channelPattern := regexp.MustCompile(`^UC[a-zA-Z0-9_-]{22}$`)
 
 	for _, target := range c.Targets {
-		payload := domain.XSpaceDispatchPayload{SpaceID: "validation", CreatorID: target.UserID, ChannelID: target.ChannelID, MemberName: target.MemberName, StartedAt: time.Unix(1, 0)}
+		payload := domain.XSpaceDispatchPayload{SpaceID: "validation", CreatorID: target.UserID, ChannelID: target.ChannelID, StartedAt: time.Unix(1, 0)}
 		if payload.Validate() != nil || !channelPattern.MatchString(target.ChannelID) || seenUsers[target.UserID] || seenChannels[target.ChannelID] {
 			return errors.New("invalid or duplicate X spaces target")
 		}

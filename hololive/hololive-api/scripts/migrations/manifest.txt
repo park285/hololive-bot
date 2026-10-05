@@ -126,3 +126,4 @@
 126 265_bot_manual_replay_lock_clock.sql
 127 266_drop_youtube_collection_job_due_index.sql
 128 267_drop_source_checkpoint_retention_index.sql
+129 268_remove_unused_alarm_command_templates.sql

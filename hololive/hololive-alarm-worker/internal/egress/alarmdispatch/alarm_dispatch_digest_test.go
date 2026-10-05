@@ -21,7 +21,7 @@ func TestAlarmDispatchRunnerSendsPreRenderedDeliveryDigest(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -59,7 +59,7 @@ func TestDeliveryDigestGroupingAndRenderingUsesContentIdentity(t *testing.T) {
 	seen := make(map[string]struct{}, len(groups))
 
 	for i := range groups {
-		message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, messageStrings, groups[i])
+		message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, messageStrings, nil, groups[i])
 		require.NoError(t, err)
 		require.True(t, handled)
 

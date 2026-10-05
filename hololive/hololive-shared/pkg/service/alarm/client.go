@@ -76,7 +76,6 @@ type addAlarmReq struct {
 	UserID     string            `json:"user_id"`
 	ChannelID  string            `json:"channel_id"`
 	HostID     string            `json:"host_id,omitempty"`
-	MemberName string            `json:"member_name"`
 	RoomName   string            `json:"room_name"`
 	UserName   string            `json:"user_name"`
 	AlarmTypes domain.AlarmTypes `json:"alarm_types"`
@@ -136,7 +135,6 @@ func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (boo
 		UserID:     req.UserID,
 		ChannelID:  req.ChannelID,
 		HostID:     req.HostID,
-		MemberName: req.MemberName,
 		RoomName:   req.RoomName,
 		UserName:   req.UserName,
 		AlarmTypes: req.AlarmTypes,

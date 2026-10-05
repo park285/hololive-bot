@@ -22,12 +22,8 @@ package formatter
 
 import (
 	"context"
-	"fmt"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
 type AlarmListEntry struct {
@@ -59,71 +55,6 @@ type alarmListEntryView struct {
 
 type alarmClearedTemplateData struct {
 	Count int
-}
-
-type alarmNotificationTemplateData struct {
-	ChannelName      string
-	MinutesUntil     int
-	Title            string
-	URL              string
-	ScheduleMessage  string
-	ScheduledTimeKST string // "21:00" 형식, MinutesUntil > 0 && StartScheduled != nil 일 때만 세팅
-}
-
-type alarmNotificationGroupEntry struct {
-	ChannelName  string
-	Title        string
-	URL          string
-	ScheduledKST string // "21:00" 형식
-}
-
-func (f *ResponseFormatter) alarmChannelName(ctx context.Context, notification *domain.AlarmNotification) string {
-	if notification == nil {
-		return ""
-	}
-
-	name := alarmBaseChannelName(notification)
-	if name == "" {
-		return ""
-	}
-
-	if stream := notification.Stream; stream != nil {
-		channelID := stream.ChannelID
-		if channelID == "" && notification.Channel != nil {
-			channelID = notification.Channel.ID
-		}
-
-		name = mekparkhost.DisplayName(channelID, stream.Title, name)
-	}
-
-	return f.alarmChannelNameWithOrg(ctx, name, notification.Channel)
-}
-
-func alarmBaseChannelName(notification *domain.AlarmNotification) string {
-	if notification.Channel != nil {
-		if name := stringutil.TrimSpace(notification.Channel.GetDisplayName()); name != "" {
-			return name
-		}
-	}
-
-	if notification.Stream == nil {
-		return ""
-	}
-
-	return stringutil.TrimSpace(notification.Stream.ChannelName)
-}
-
-func (f *ResponseFormatter) alarmChannelNameWithOrg(ctx context.Context, name string, channel *domain.Channel) string {
-	if channel == nil || channel.Org == nil {
-		return name
-	}
-
-	displayOrg := f.formatStreamOrg(ctx, *channel.Org)
-	if displayOrg == "" {
-		return name
-	}
-
-	return fmt.Sprintf("[%s] %s", displayOrg, name)
 }
 
 func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName string, added bool) string {

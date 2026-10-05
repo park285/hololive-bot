@@ -3,8 +3,9 @@ WITH clock AS MATERIALIZED (
 ), roster AS MATERIALIZED (
     SELECT channel_id,
            string_agg(DISTINCT COALESCE(NULLIF(org, ''), 'Hololive'), ' / ' ORDER BY COALESCE(NULLIF(org, ''), 'Hololive')) AS org,
-           string_agg(DISTINCT COALESCE(NULLIF(korean_name, ''), NULLIF(english_name, ''), channel_id), ' / '
-                      ORDER BY COALESCE(NULLIF(korean_name, ''), NULLIF(english_name, ''), channel_id)) AS channel_name
+           -- 명령 응답 표시명 순서(short_korean_name→korean_name→english_name)는 domain.Member.DisplayName과 같다.
+           string_agg(DISTINCT COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), NULLIF(english_name, ''), channel_id), ' / '
+                      ORDER BY COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), NULLIF(english_name, ''), channel_id)) AS channel_name
     FROM members
     WHERE is_graduated = false AND btrim(channel_id) <> ''
       AND (($1 AND (org = 'Hololive' OR org = '')) OR (NOT $1 AND channel_id = $2))

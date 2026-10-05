@@ -19,6 +19,7 @@ func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures
 	}
 	sender := &alarmDispatchRunnerTestSender{messageErr: sendErr}
 	runner := Runner{
+		members:  alarmGoldenMembers{},
 		consumer: consumer,
 		sender:   sender,
 		renderer: newAlarmDispatchTestRenderer(t),
@@ -47,6 +48,7 @@ func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures
 	}
 	sender := &alarmDispatchRunnerTestSender{messageErr: sendErr}
 	runner := Runner{
+		members:  alarmGoldenMembers{},
 		consumer: consumer,
 		sender:   sender,
 		renderer: newAlarmDispatchTestRenderer(t),

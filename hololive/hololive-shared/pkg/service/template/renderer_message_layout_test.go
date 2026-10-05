@@ -17,7 +17,6 @@ func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	keys := []domain.TemplateKey{
 		domain.TemplateKeyCmdLiveStreams, domain.TemplateKeyCmdUpcomingStreams, domain.TemplateKeyCmdChannelSchedule,
-		domain.TemplateKeyCmdAlarmNotification, domain.TemplateKeyCmdAlarmLiveStarted, domain.TemplateKeyCmdAlarmNotificationGroup,
 		domain.TemplateKeyOutboxVideo, domain.TemplateKeyOutboxShorts, domain.TemplateKeyOutboxVideoGroup,
 		domain.TemplateKeyOutboxShortsGroup, domain.TemplateKeyCelebrationBirthdayStream, domain.TemplateKeyXSpaceStarted,
 		domain.TemplateKeyAlarmDispatchNotification, domain.TemplateKeyAlarmDispatchNotificationGroup,

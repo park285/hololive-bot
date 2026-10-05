@@ -26,7 +26,6 @@ type AddAlarmRequest struct {
 	UserID     string
 	ChannelID  string
 	HostID     string
-	MemberName string
 	RoomName   string
 	UserName   string
 	AlarmTypes AlarmTypes

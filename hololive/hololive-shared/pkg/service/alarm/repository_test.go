@@ -61,7 +61,7 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 	requireAlarmRoomIDs(t, subscribers, []string{"room-live", "room-empty"})
 }
 
-// 표시명은 members 정본만 쓴다. 멤버 데이터에 한국어 표시명이 없는 채널은 alarms.member_name이 있어도 빈 값이고 전체 목록에서 빠진다.
+// 표시명은 members 정본만 쓴다. 멤버 데이터에 한국어 표시명이 없는 채널은 빈 값이고 전체 목록에서 빠진다.
 func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 	t.Parallel()
 
@@ -77,11 +77,11 @@ func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 	}
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO alarms (room_id, user_id, channel_id, member_name, alarm_types, created_at)
+		INSERT INTO alarms (room_id, user_id, channel_id, alarm_types, created_at)
 		VALUES
-			('room-display', 'user-display', 'UC_display_name', '', ARRAY['LIVE']::alarm_type[], $1),
-			('room-fallback-old', 'user-fallback-old', 'UC_alarm_fallback', 'Old Fallback', ARRAY['LIVE']::alarm_type[], $2),
-			('room-fallback-new', 'user-fallback-new', 'UC_alarm_fallback', 'New Fallback', ARRAY['LIVE']::alarm_type[], $3)
+			('room-display', 'user-display', 'UC_display_name', ARRAY['LIVE']::alarm_type[], $1),
+			('room-fallback-old', 'user-fallback-old', 'UC_alarm_fallback', ARRAY['LIVE']::alarm_type[], $2),
+			('room-fallback-new', 'user-fallback-new', 'UC_alarm_fallback', ARRAY['LIVE']::alarm_type[], $3)
 	`, time.Date(2026, time.July, 3, 11, 0, 0, 0, time.UTC),
 		time.Date(2026, time.July, 3, 11, 1, 0, 0, time.UTC),
 		time.Date(2026, time.July, 3, 11, 2, 0, 0, time.UTC)); err != nil {
@@ -285,9 +285,9 @@ func insertAlarmForTypeQuery(t *testing.T, db *pgxpool.Pool, roomID, channelID s
 	}
 
 	if _, err := db.Exec(t.Context(), `
-		INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::alarm_type[], $8)
-	`, roomID, roomID+"-user", channelID, roomID+"-member", roomID+"-room", roomID+"-user-name", typesValue, createdAt); err != nil {
+		INSERT INTO alarms (room_id, user_id, channel_id, room_name, user_name, alarm_types, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6::alarm_type[], $7)
+	`, roomID, roomID+"-user", channelID, roomID+"-room", roomID+"-user-name", typesValue, createdAt); err != nil {
 		t.Fatalf("insert alarm %s: %v", roomID, err)
 	}
 }

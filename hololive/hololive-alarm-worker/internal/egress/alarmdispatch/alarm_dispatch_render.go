@@ -1,6 +1,7 @@
 package alarmdispatch
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -17,7 +18,7 @@ import (
 
 // renderAlarmDispatchGroup는 알림을 자동 접기 없이 렌더링하고 사전 렌더된 다이제스트는 그대로 유지한다.
 func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
-	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, group); handled {
+	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, members, group); handled {
 		if err != nil {
 			return message, fmt.Errorf("render alarm dispatch group source: %w", err)
 		}
@@ -42,7 +43,7 @@ func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, 
 	return out, nil
 }
 
-func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (message string, handled bool, err error) {
+func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (message string, handled bool, err error) {
 	if len(group.envelopes) == 0 {
 		return "", false, nil
 	}
@@ -62,7 +63,14 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 					return "", fmt.Errorf("validate x space: %w", validationErr)
 				}
 
-				return renderer.Render(ctx, domain.TemplateKeyXSpaceStarted, "", envelope.XSpace)
+				memberName, nameErr := alarmContractMemberName(ctx, messageStrings, members, envelope.XSpace.ChannelID)
+				if nameErr != nil {
+					return "", fmt.Errorf("resolve x space member name: %w", nameErr)
+				}
+
+				return renderer.Render(ctx, domain.TemplateKeyXSpaceStarted, "", xSpaceStartView{
+					MemberName: memberName, Title: envelope.XSpace.Title, URL: envelope.XSpace.URL(),
+				})
 			},
 		},
 		domain.AlarmDispatchSourceKindCelebration: {
@@ -142,8 +150,13 @@ func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store
 		return alarmDispatchItemView{}, err
 	}
 
+	memberName, err := resolveAlarmDispatchMemberName(ctx, store, members, notification)
+	if err != nil {
+		return alarmDispatchItemView{}, err
+	}
+
 	return alarmDispatchItemView{
-		MemberName:      resolveAlarmDispatchMemberName(ctx, store, notification),
+		MemberName:      memberName,
 		Title:           resolveAlarmDispatchTitle(ctx, store, notification),
 		URL:             resolveAlarmDispatchURL(notification),
 		CollabMembers:   collabMembers,
@@ -265,28 +278,78 @@ func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Ren
 	return message, nil
 }
 
-func resolveAlarmDispatchMemberName(_ context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {
-	var name string
+// xSpaceStartView는 X_SPACE_STARTED 템플릿 자료다. 멤버 이름은 저장된 payload가 아니라 렌더 때 members에서 정한다.
+type xSpaceStartView struct {
+	MemberName string
+	Title      string
+	URL        string
+}
 
-	if notification.Channel != nil && strings.TrimSpace(notification.Channel.Name) != "" {
-		name = strings.TrimSpace(notification.Channel.Name)
-	} else if notification.Stream != nil && strings.TrimSpace(notification.Stream.ChannelName) != "" {
-		name = strings.TrimSpace(notification.Stream.ChannelName)
-	} else {
-		name = store.Text(messagestrings.MiscAlarmUnknownMember)
+// resolveAlarmDispatchMemberName은 방송 알림의 멤버 이름에 호스트 표기를 붙인다. 원천 채널 제목은 쓰지 않는다.
+func resolveAlarmDispatchMemberName(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification) (string, error) {
+	channelID := alarmNotificationChannelID(notification)
+
+	name, err := alarmContractMemberName(ctx, store, members, channelID)
+	if err != nil {
+		return "", fmt.Errorf("resolve alarm member name: %w", err)
 	}
 
-	stream := notification.Stream
-	if stream == nil {
-		return name
+	if notification.Stream == nil {
+		return name, nil
 	}
 
-	channelID := stream.ChannelID
-	if channelID == "" && notification.Channel != nil {
-		channelID = notification.Channel.ID
+	return mekparkhost.DisplayName(channelID, notification.Stream.Title, name), nil
+}
+
+func alarmNotificationChannelID(notification *domain.AlarmNotification) string {
+	if notification.Stream != nil && strings.TrimSpace(notification.Stream.ChannelID) != "" {
+		return strings.TrimSpace(notification.Stream.ChannelID)
 	}
 
-	return mekparkhost.DisplayName(channelID, stream.Title, name)
+	if notification.Channel != nil {
+		return strings.TrimSpace(notification.Channel.ID)
+	}
+
+	return ""
+}
+
+// alarmContractMemberName은 멤버 표시명 예외 계약(members short_korean_name→korean_name→misc/vtuber_fallback)을 따른다.
+// 조회 오류는 다른 이름으로 덮지 않고 렌더 실패(발송 전 재시도)로 돌려준다.
+func alarmContractMemberName(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, channelID string) (string, error) {
+	name, err := alarmDispatchMemberDisplayName(ctx, members, channelID)
+	if err != nil {
+		return "", err
+	}
+
+	if name != "" {
+		return name, nil
+	}
+
+	alarmDispatchMemberNameMissingTotal().Inc()
+
+	return store.Text(messagestrings.MiscVTuberFallback), nil
+}
+
+// alarmDispatchMemberDisplayName은 members에 행이 없거나 한국어 표시명이 모두 비면 빈 문자열을 돌려준다.
+func alarmDispatchMemberDisplayName(ctx context.Context, members domain.MemberDataProvider, channelID string) (string, error) {
+	if members == nil {
+		return "", errors.New("member data provider is not configured")
+	}
+
+	if channelID == "" {
+		return "", nil
+	}
+
+	member, err := members.FindMemberByChannelID(ctx, channelID)
+	if errors.Is(err, domain.ErrMemberNotFound) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("find member %q: %w", channelID, err)
+	}
+
+	return cmp.Or(strings.TrimSpace(member.ShortKoreanName), strings.TrimSpace(member.NameKo)), nil
 }
 
 func resolveAlarmDispatchTitle(_ context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {

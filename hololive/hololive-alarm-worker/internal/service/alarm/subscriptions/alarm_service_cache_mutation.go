@@ -171,7 +171,6 @@ func buildAlarmRecord(req *domain.AddAlarmRequest, alarmTypes domain.AlarmTypes)
 		UserID:     req.UserID,
 		ChannelID:  req.ChannelID,
 		HostID:     req.HostID,
-		MemberName: req.MemberName,
 		RoomName:   req.RoomName,
 		UserName:   req.UserName,
 		AlarmTypes: alarmTypes,
@@ -186,7 +185,6 @@ func (as *AlarmService) logAlarmAdded(req *domain.AddAlarmRequest, alarmTypes do
 	as.logger.Info("Alarm added",
 		privacylog.RoomIDAttr(req.RoomID),
 		slog.String("channel_id", req.ChannelID),
-		slog.String("member_name", req.MemberName),
 		slog.Any("alarm_types", alarmTypes),
 	)
 }

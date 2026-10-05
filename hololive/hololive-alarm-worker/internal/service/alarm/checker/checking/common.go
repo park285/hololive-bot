@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"strings"
 	"sync"
 	"time"
 
@@ -132,62 +131,6 @@ func EnsureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stre
 	updated.StartScheduled = &fallbackUTC
 
 	return updated
-}
-
-func LoadMemberNamesByChannel(ctx context.Context, cacheClient cache.Client, channelIDs []string) (map[string]string, error) {
-	channelIDs = UniqueStrings(channelIDs)
-	if len(channelIDs) == 0 {
-		return map[string]string{}, nil
-	}
-
-	memberNames, err := cacheClient.BatchHGet(ctx, sharedalarmkeys.MemberNameKey, channelIDs)
-	if err != nil {
-		return nil, fmt.Errorf("load member names by channel: %w", err)
-	}
-
-	return memberNames, nil
-}
-
-func ApplyMemberNamesToStreams(streamsByChannel map[string][]*domain.Stream, memberNames map[string]string) {
-	for channelID, streams := range streamsByChannel {
-		memberName := strings.TrimSpace(memberNames[channelID])
-		if memberName == "" {
-			continue
-		}
-
-		for _, stream := range streams {
-			ApplyMemberNameToStream(stream, channelID, memberName)
-		}
-	}
-}
-
-func ApplyMemberNameToStream(stream *domain.Stream, channelID, memberName string) {
-	if stream == nil {
-		return
-	}
-
-	stream.ChannelName = memberName
-	if stream.Channel == nil {
-		stream.Channel = &domain.Channel{ID: channelID}
-	}
-
-	if strings.TrimSpace(stream.Channel.ID) == "" {
-		stream.Channel.ID = channelID
-	}
-
-	stream.Channel.Name = memberName
-}
-
-func ChannelNameForMember(channelID, memberName, fallback string) string {
-	if memberName = strings.TrimSpace(memberName); memberName != "" {
-		return memberName
-	}
-
-	if fallback = strings.TrimSpace(fallback); fallback != "" {
-		return fallback
-	}
-
-	return strings.TrimSpace(channelID)
 }
 
 func RoomNotifications(

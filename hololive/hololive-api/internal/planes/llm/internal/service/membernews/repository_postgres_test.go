@@ -42,15 +42,14 @@ func TestRepositoryPostgres_GetRoomMembersResolvesNamesFromAlarmsAndMembers(t *t
 	}
 
 	_, err = pool.Exec(ctx, `
-		INSERT INTO alarms (room_id, user_id, channel_id, member_name, alarm_types) VALUES
-			($1, 'b20-user', 'UCb20TestKorean00000000',   '',             ARRAY['LIVE']::alarm_type[]),
-			($1, 'b20-user', 'UCb20TestEnglish0000000',   NULL,           ARRAY['COMMUNITY']::alarm_type[]),
-			($1, 'b20-user', 'UCb20TestJapanese000000',   '',             ARRAY['COMMUNITY']::alarm_type[]),
-			($1, 'b20-user', 'UCb20TestDuplicate00000',   '',             ARRAY['LIVE']::alarm_type[]),
-			($1, 'b20-user', 'UCb20TestNoMemberNamed0',   'Alpha Shared', ARRAY['LIVE']::alarm_type[]),
-			($1, 'b20-user', 'UCb20TestNoMemberBlank0',   '',             ARRAY['LIVE']::alarm_type[]),
-			($1, 'b20-user', 'UCb20TestOverride000000',   'Bravo Alarm',  ARRAY['COMMUNITY']::alarm_type[]),
-			($2, 'b20-user', 'UCb20TestOtherRoom00000',   '',             ARRAY['LIVE']::alarm_type[])`,
+		INSERT INTO alarms (room_id, user_id, channel_id, alarm_types) VALUES
+			($1, 'b20-user', 'UCb20TestKorean00000000',   ARRAY['LIVE']::alarm_type[]),
+			($1, 'b20-user', 'UCb20TestEnglish0000000',   ARRAY['COMMUNITY']::alarm_type[]),
+			($1, 'b20-user', 'UCb20TestJapanese000000',   ARRAY['COMMUNITY']::alarm_type[]),
+			($1, 'b20-user', 'UCb20TestDuplicate00000',   ARRAY['LIVE']::alarm_type[]),
+			($1, 'b20-user', 'UCb20TestNoMemberBlank0',   ARRAY['LIVE']::alarm_type[]),
+			($1, 'b20-user', 'UCb20TestOverride000000',   ARRAY['COMMUNITY']::alarm_type[]),
+			($2, 'b20-user', 'UCb20TestOtherRoom00000',   ARRAY['LIVE']::alarm_type[])`,
 		roomID, otherRoom)
 	if err != nil {
 		t.Fatalf("seed alarms: %v", err)
@@ -61,9 +60,9 @@ func TestRepositoryPostgres_GetRoomMembersResolvesNamesFromAlarmsAndMembers(t *t
 		t.Fatalf("GetRoomMembers: %v", err)
 	}
 
-	// 비-LIVE 알람도 포함하고, alarms.member_name이 비면 korean→english→japanese 순으로 대체한다.
-	// members에 없는 채널은 알람 이름이 있을 때만 남고, 같은 이름은 한 번만 나온다.
-	want := []string{"Alpha Shared", "Bravo Alarm", "Delta Korean", "Foxtrot English", "Golf Japanese"}
+	// 비-LIVE 알람도 포함하고, 이름은 members 정본(korean→english→japanese)에서만 읽는다.
+	// members에 없는 채널은 빠진다.
+	want := []string{"Alpha Shared", "Delta Korean", "Foxtrot English", "Golf Japanese", "India Korean"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("GetRoomMembers(%q) = %q, want %q", roomID, got, want)
 	}

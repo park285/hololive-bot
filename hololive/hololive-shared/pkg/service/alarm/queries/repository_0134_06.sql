@@ -1,5 +1,5 @@
 
-		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at, host_id
+		SELECT id, room_id, user_id, channel_id, room_name, user_name, alarm_types, created_at, host_id
 		FROM alarms
 		WHERE channel_id = $1
 		  AND (

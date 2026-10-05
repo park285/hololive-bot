@@ -31,8 +31,8 @@ func newMemberSubscriptionAPIClient(t *testing.T) (*Client, <-chan domain.AddAla
 		},
 		getRoomAlarmsWithTypesFn: func(_ context.Context, roomID string) ([]*domain.Alarm, error) {
 			return []*domain.Alarm{
-				{RoomID: roomID, ChannelID: testUnitBChannel, HostID: testMiraHostID, MemberName: "미라"},
-				{RoomID: roomID, ChannelID: testUnitBChannel, HostID: testNeonHostID, MemberName: "네온"},
+				{RoomID: roomID, ChannelID: testUnitBChannel, HostID: testMiraHostID},
+				{RoomID: roomID, ChannelID: testUnitBChannel, HostID: testNeonHostID},
 			}, nil
 		},
 	}

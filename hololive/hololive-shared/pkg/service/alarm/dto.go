@@ -28,7 +28,6 @@ type AddAlarmRequest struct {
 	UserID     string   `json:"user_id"`
 	ChannelID  string   `json:"channel_id" binding:"required"`
 	HostID     string   `json:"host_id,omitempty"`
-	MemberName string   `json:"member_name"`
 	RoomName   string   `json:"room_name"`
 	UserName   string   `json:"user_name"`
 	AlarmTypes []string `json:"alarm_types"`

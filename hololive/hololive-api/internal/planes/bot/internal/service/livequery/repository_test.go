@@ -183,6 +183,30 @@ UPDATE youtube_channel_live_checks SET effective_at=now(),received_at=now(),sche
 	require.Greater(t, after.Channels[0].CoveredAt.UnixNano(), before.Channels[0].CoveredAt.UnixNano())
 }
 
+func TestRepositoryAllScopeUsesMemberDisplayNameOrder(t *testing.T) {
+	repo, pool := queryFixture(t)
+	addCoverage(t, pool)
+	addLive(t, pool)
+
+	for _, tc := range []struct {
+		name, shortKorean, korean, want string
+	}{
+		{name: "short korean name", shortKorean: "쿼리", korean: "쿼리 멤버", want: "쿼리"},
+		{name: "korean name", korean: "쿼리 멤버", want: "쿼리 멤버"},
+		{name: "english name", want: "Query Member"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := pool.Exec(t.Context(), `UPDATE members SET short_korean_name=$1, korean_name=$2 WHERE channel_id='UC_live_query'`, tc.shortKorean, tc.korean)
+			require.NoError(t, err)
+
+			result, err := repo.Query(t.Context(), Request{Scope: All, Limit: 1})
+			require.NoError(t, err)
+			require.Len(t, result.Items, 1)
+			require.Equal(t, tc.want, result.Items[0].ChannelName)
+		})
+	}
+}
+
 func TestRepositoryScopeSharedChannelAndLimit(t *testing.T) {
 	repo, pool := queryFixture(t)
 	addCoverage(t, pool)

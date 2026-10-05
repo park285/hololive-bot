@@ -97,7 +97,7 @@ func TestAlarmDispatchRunnerCancellationBeforeMarkSending(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	client := &alarmDispatchCancellationIrisClient{}
-	runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client)}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: egress.NewIrisMessageSender(client)}
 	group, request := alarmDispatchCancellationRequest(2)
 
 	require.ErrorIs(t, runner.dispatchPreparedMessageGroup(ctx, group, request), context.Canceled)
@@ -121,7 +121,7 @@ func TestAlarmDispatchRunnerCancellationDuringMarkSendingRequeuesBeforeHandoff(t
 			}}
 			client := &alarmDispatchCancellationIrisClient{}
 			totals := &workercontract.Counters{}
-			runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client), workerTotals: totals}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: egress.NewIrisMessageSender(client), workerTotals: totals}
 			group, request := alarmDispatchCancellationRequest(attempt)
 
 			require.NoError(t, runner.dispatchPreparedMessageGroup(ctx, group, request))
@@ -155,7 +155,7 @@ func TestAlarmDispatchRunnerCancellationCompensationFailureSurfaces(t *testing.T
 		return nil
 	}}
 	client := &alarmDispatchCancellationIrisClient{}
-	runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client)}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: egress.NewIrisMessageSender(client)}
 	group, request := alarmDispatchCancellationRequest(2)
 
 	require.ErrorIs(t, runner.dispatchPreparedMessageGroup(ctx, group, request), stateErr)
@@ -183,7 +183,7 @@ func TestAlarmDispatchRunnerCancellationAfterHandoffKeepsQuarantine(t *testing.T
 
 				return sendCtx.Err()
 			}}
-			runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client)}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: egress.NewIrisMessageSender(client)}
 			group, request := alarmDispatchCancellationRequest(2)
 
 			require.NoError(t, runner.dispatchPreparedMessageGroup(ctx, group, request))
@@ -225,7 +225,7 @@ func TestAlarmDispatchRunnerCancellationCompensationPreservesOwnerAndAttemptFenc
 				return updateErr
 			}}
 			client := &alarmDispatchCancellationIrisClient{}
-			runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client)}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: egress.NewIrisMessageSender(client)}
 
 			err := runner.dispatchPreparedMessageGroup(ctx, group, request)
 

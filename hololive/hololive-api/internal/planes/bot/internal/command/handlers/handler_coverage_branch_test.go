@@ -349,6 +349,7 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		deps := &handlercore.Dependencies{
 			Holodex:   &stubCoverageStreamProvider{},
+			Matcher:   newUpcomingTestMatcher(nil),
 			Formatter: formatter.NewResponseFormatter("!", nil),
 			SendMessage: func(_ context.Context, _, _ string) error {
 				return nil

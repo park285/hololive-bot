@@ -63,9 +63,10 @@ func TestDigestRunPinsCandidateClockAndReadsRoomMembersPerRoom(t *testing.T) {
 	repository, pool := newPeriodCandidatePool(t)
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, `CREATE TABLE alarms(room_id text, channel_id text, member_name text);
+	_, err := pool.Exec(ctx, `CREATE TABLE alarms(room_id text, channel_id text);
   CREATE TABLE members(channel_id text, korean_name text, english_name text, japanese_name text);
-  INSERT INTO alarms VALUES ('room-a','channel','미코'),('room-b','channel','미코');
+  INSERT INTO members VALUES ('channel-miko','미코',NULL,NULL),('channel-aqua','아쿠아',NULL,NULL);
+  INSERT INTO alarms VALUES ('room-a','channel-miko'),('room-b','channel-miko');
   INSERT INTO major_events VALUES
    (1,'news','original September candidate','',ARRAY['미코','아쿠아'],'2026-09-30T14:59:59Z',NULL,'https://hololivepro.com/old','active','unchecked'),
    (2,'news','new October candidate','',ARRAY['미코','아쿠아'],'2026-09-30T15:00:01Z',NULL,'https://hololivepro.com/new','active','unchecked')`)
@@ -93,7 +94,7 @@ func TestDigestRunPinsCandidateClockAndReadsRoomMembersPerRoom(t *testing.T) {
 	}
 
 	_, err = pool.Exec(ctx, `UPDATE major_events SET title='changed after snapshot', pub_date='2026-10-01';
-  UPDATE alarms SET member_name='아쿠아' WHERE room_id='room-b'`)
+  UPDATE alarms SET channel_id='channel-aqua' WHERE room_id='room-b'`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,9 +126,10 @@ func TestManualDigestUsesOneClockAndPreservesNoMemberPriority(t *testing.T) {
 	repository, pool := newPeriodCandidatePool(t)
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, `CREATE TABLE alarms(room_id text, channel_id text, member_name text);
+	_, err := pool.Exec(ctx, `CREATE TABLE alarms(room_id text, channel_id text);
   CREATE TABLE members(channel_id text, korean_name text, english_name text, japanese_name text);
-  INSERT INTO alarms VALUES ('room-a','channel','미코');
+  INSERT INTO members VALUES ('channel-miko','미코',NULL,NULL);
+  INSERT INTO alarms VALUES ('room-a','channel-miko');
   INSERT INTO major_events VALUES (1,'news','September candidate','',ARRAY['미코'],'2026-09-30T14:59:59Z',NULL,'https://hololivepro.com/old','active','unchecked')`)
 	if err != nil {
 		t.Fatal(err)

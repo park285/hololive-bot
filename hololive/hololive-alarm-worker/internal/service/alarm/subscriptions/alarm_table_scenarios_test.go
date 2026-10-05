@@ -145,7 +145,6 @@ func alarmRemovePartialScenarios(baseReq *domain.AddAlarmRequest) []alarmCacheSc
 				secondReq := *baseReq
 
 				secondReq.ChannelID = "UC_TEST_2"
-				secondReq.MemberName = "두번째 멤버"
 
 				added, err = service.AddAlarm(ctx, &secondReq)
 				require.NoError(t, err)
@@ -221,12 +220,11 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 	t.Parallel()
 
 	baseReq := domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testUCChannelID,
-		MemberName: "테스트 멤버",
-		RoomName:   "테스트 방",
-		UserName:   "테스트 사용자",
+		RoomID:    testRoomID,
+		UserID:    testUserID,
+		ChannelID: testUCChannelID,
+		RoomName:  "테스트 방",
+		UserName:  "테스트 사용자",
 	}
 
 	for _, tc := range alarmAddRemoveCacheScenarios(&baseReq) {

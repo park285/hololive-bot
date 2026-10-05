@@ -172,11 +172,7 @@ func snapshotMemberForEntry(entry *snapshotEntry, org string) *domain.Member {
 		return nil
 	}
 
-	return &domain.Member{
-		Name:      entry.candidate.memberName,
-		ChannelID: entry.candidate.channelID,
-		Org:       entry.candidate.org,
-	}
+	return entry.candidate.member()
 }
 
 func (mm *Matcher) findSnapshotCandidates(snapshot *matcherSnapshot, queryNorm string) []*snapshotEntry {

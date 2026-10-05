@@ -30,7 +30,7 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-// members에 표시명이 없으면 요청의 member_name을 대신 쓰지 않고 빈 표시명을 캐시한다. 알림 표시 단계가 종단 문구를 쓴다.
+// members에 표시명이 없으면 빈 표시명을 캐시한다. 알림 표시 단계가 종단 문구를 쓴다.
 func TestAddAlarm_CacheWrite(t *testing.T) {
 	t.Parallel()
 
@@ -41,12 +41,11 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 	ctx := t.Context()
 
 	req := domain.AddAlarmRequest{
-		RoomID:     testAltRoomID,
-		UserID:     "user1",
-		ChannelID:  testUCChannelID,
-		MemberName: "테스트 멤버",
-		RoomName:   "테스트 방",
-		UserName:   "테스트 사용자",
+		RoomID:    testAltRoomID,
+		UserID:    "user1",
+		ChannelID: testUCChannelID,
+		RoomName:  "테스트 방",
+		UserName:  "테스트 사용자",
 	}
 
 	added, err := as.AddAlarm(ctx, &req)
@@ -79,12 +78,11 @@ func TestAddAlarm_CacheWriteUsesShortKoreanMemberName(t *testing.T) {
 	}}}
 
 	added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
-		RoomID:     testAltRoomID,
-		UserID:     "user1",
-		ChannelID:  testUCChannelID,
-		MemberName: "Juufuutei Raden",
-		RoomName:   "테스트 방",
-		UserName:   "테스트 사용자",
+		RoomID:    testAltRoomID,
+		UserID:    "user1",
+		ChannelID: testUCChannelID,
+		RoomName:  "테스트 방",
+		UserName:  "테스트 사용자",
 	})
 	require.NoError(t, err)
 	require.True(t, added)
@@ -127,9 +125,8 @@ func TestAddAlarm_DuplicateReturnsNotAdded(t *testing.T) {
 	ctx := t.Context()
 
 	req := domain.AddAlarmRequest{
-		RoomID:     testAltRoomID,
-		ChannelID:  testUCChannelID,
-		MemberName: "멤버",
+		RoomID:    testAltRoomID,
+		ChannelID: testUCChannelID,
 	}
 
 	added1, err := as.AddAlarm(ctx, &req)
@@ -151,9 +148,8 @@ func TestRemoveAlarm_Success(t *testing.T) {
 	ctx := t.Context()
 
 	req := domain.AddAlarmRequest{
-		RoomID:     testAltRoomID,
-		ChannelID:  testUCChannelID,
-		MemberName: "멤버",
+		RoomID:    testAltRoomID,
+		ChannelID: testUCChannelID,
 	}
 	_, err := as.AddAlarm(ctx, &req)
 	require.NoError(t, err)
@@ -307,9 +303,8 @@ func TestGetAllAlarmKeys(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testAltRoomID,
-		ChannelID:  "UC_A",
-		MemberName: "멤버A",
+		RoomID:    testAltRoomID,
+		ChannelID: "UC_A",
 	})
 	require.NoError(t, err)
 

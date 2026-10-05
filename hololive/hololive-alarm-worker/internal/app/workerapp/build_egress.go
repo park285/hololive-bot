@@ -388,7 +388,7 @@ func newYouTubeOutboxDispatcher(
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: pool, Cache: infra.Cache, Sender: sender,
 		Renderer: template.NewRenderer(pool, logger), MessageStrings: messageStrings,
-		// 표시명은 PostgreSQL 정본(members → alarms.member_name)에서 읽어 Valkey 장애가 알림 이름과 발송을 막지 않게 한다.
+		// 표시명은 PostgreSQL members 정본에서 읽어 Valkey 장애가 알림 이름과 발송을 막지 않게 한다.
 		MemberNames: sharedalarm.NewRepository(infra.Postgres, logger),
 	}, logger, &dispatchConfig)
 	if err != nil {

@@ -59,6 +59,7 @@ X 스페이스 시작 알림은 `source_kind=x_space`와 전용 `x_space` payloa
 `x_space_starts`가 첫 payload를 보존하므로 재관측·재시작·제목 변경으로
 새 이벤트를 만들지 않습니다. 다른 스페이스 및 YouTube 알림과 묶지 않고
 텍스트 경로로 처리합니다. 신규 발송 재시도 경로는 없습니다.
+payload에는 멤버 표시명이 없으며(2026-10-05), 렌더할 때 `channel_id`로 members 정본에서 이름을 정합니다.
 
 ## Settings Changes (No Pub/Sub)
 

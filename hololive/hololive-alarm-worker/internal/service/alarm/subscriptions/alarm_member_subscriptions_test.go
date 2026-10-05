@@ -29,7 +29,7 @@ func seedMemberSubscriptionChoices(t *testing.T, as *AlarmService, choices map[s
 	for hostID, types := range choices {
 		added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
 			RoomID: testRoomID, ChannelID: memberSubscriptionChannel, HostID: hostID,
-			MemberName: "사용자가 보낸 표시명", AlarmTypes: types,
+			AlarmTypes: types,
 		})
 		require.NoError(t, err)
 		require.True(t, added, "new member choice must be reported even when the channel is already cached")
@@ -149,9 +149,9 @@ func TestMemberSubscriptionViewNamesEachSubscribedMember(t *testing.T) {
 		{ChannelID: memberSubscriptionChannel, HostID: memberSubscriptionMiraID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 		{ChannelID: memberSubscriptionChannel, HostID: "yoinagi-neon", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 		{ChannelID: memberSubscriptionChannel, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
-		{ChannelID: "other-channel", MemberName: "페코라", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
+		{ChannelID: "other-channel", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}
-	views := buildAlarmListViews(alarms, map[string]string{memberSubscriptionChannel: "유닛 B"})
+	views := buildAlarmListViews(alarms, map[string]string{memberSubscriptionChannel: "유닛 B", "other-channel": "페코라"})
 	require.Equal(t, "미라[유닛b]", views[0].MemberName)
 	require.Equal(t, "네온[유닛b]", views[1].MemberName)
 	require.Equal(t, "유닛 B", views[2].MemberName)

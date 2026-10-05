@@ -107,8 +107,8 @@ func (mm *Matcher) buildSnapshot(ctx context.Context) (*matcherSnapshot, error) 
 		return nil, fmt.Errorf("get all members: %w", err)
 	}
 
-	entriesByChannel := make(map[string]*snapshotEntry)
-	mm.storeSnapshotMembers(snapshot, entriesByChannel, members)
+	snapshot.byChannel = make(map[string]*snapshotEntry, len(members))
+	mm.storeSnapshotMembers(snapshot, snapshot.byChannel, members)
 
 	return snapshot, nil
 }

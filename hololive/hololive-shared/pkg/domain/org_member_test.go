@@ -154,7 +154,7 @@ func TestMember_GetOrg(t *testing.T) {
 	}
 }
 
-func TestMember_GetDisplayName(t *testing.T) {
+func TestMember_QualifiedName(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -165,14 +165,14 @@ func TestMember_GetDisplayName(t *testing.T) {
 		{
 			// "이름 (그룹)" 형식 반환
 			name:   "Org가 있을 때",
-			member: &domain.Member{Name: "우사다 페코라", Org: "Hololive"},
-			want:   "우사다 페코라 (Hololive)",
+			member: &domain.Member{Name: "Usada Pekora", ShortKoreanName: "페코라", Org: "Hololive"},
+			want:   "Usada Pekora (Hololive)",
 		},
 		{
 			// Org 빈 문자열이면 기본값 "Hololive" 사용
 			name:   "Org 빈 문자열이면 기본값 사용",
-			member: &domain.Member{Name: "테스트 멤버", Org: ""},
-			want:   "테스트 멤버 (Hololive)",
+			member: &domain.Member{Name: "Test Member", Org: ""},
+			want:   "Test Member (Hololive)",
 		},
 	}
 
@@ -180,9 +180,33 @@ func TestMember_GetDisplayName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := tt.member.GetDisplayName()
+			got := tt.member.QualifiedName()
 			if got != tt.want {
-				t.Errorf("GetDisplayName() = %q, want %q", got, tt.want)
+				t.Errorf("QualifiedName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMember_DisplayName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		member *domain.Member
+		want   string
+	}{
+		{name: "짧은 한국어 이름 우선", member: &domain.Member{Name: "Tokino Sora", NameKo: "토키노 소라", ShortKoreanName: "소라", NameJa: "ときのそら"}, want: "소라"},
+		{name: "짧은 이름이 없으면 한국어 이름", member: &domain.Member{Name: "Tokino Sora", NameKo: "토키노 소라"}, want: "토키노 소라"},
+		{name: "한국어 이름이 없으면 영어 이름", member: &domain.Member{Name: "Tokino Sora", NameJa: "ときのそら"}, want: "Tokino Sora"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tt.member.DisplayName(); got != tt.want {
+				t.Errorf("DisplayName() = %q, want %q", got, tt.want)
 			}
 		})
 	}

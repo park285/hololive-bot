@@ -52,7 +52,7 @@ func TestAlarmDispatchTextPathSendsPersistedSendUnitClientRequestID(t *testing.T
 			})
 			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
 			sender := &alarmDispatchRunnerTestSender{}
-			runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: alarmDispatchTestMaxDeliveriesPerSendUnit}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: alarmDispatchTestMaxDeliveriesPerSendUnit}
 
 			processed, err := runner.runOnce(t.Context())
 
@@ -73,7 +73,7 @@ func TestAlarmDispatchRunnerPersistedTextSendUnitRetriesAmbiguousFailure(t *test
 	envelopes := alarmDispatchPersistedTextSendUnitEnvelopes(5, alarmDispatchRunnerIntrinsicTextEnvelope)
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: alarmDispatchTestMaxDeliveriesPerSendUnit}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: alarmDispatchTestMaxDeliveriesPerSendUnit}
 
 	processed, err := runner.runOnce(t.Context())
 

@@ -56,7 +56,7 @@ func TestRunnerReconnectionAndStableStartAcrossRestart(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	collector := &fakeCollector{observations: []Observation{{SpaceID: "1space", CreatorID: "123", Title: "최초 제목", StartedAt: now}}}
-	config := Config{Targets: []Target{{UserID: "123", ChannelID: "UC" + strings.Repeat("a", 22), MemberName: "소라"}}, PollSeconds: 120}
+	config := Config{Targets: []Target{{UserID: "123", ChannelID: "UC" + strings.Repeat("a", 22)}}, PollSeconds: 120}
 	makeRunner := func() *Runner {
 		r, buildErr := NewRunner(config, store, StartStore{Pool: pool}, collector, ledgerPublisher{dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)},
 			func(context.Context, string) ([]string, error) { return []string{"room-a", "room-b"}, nil }, slog.New(slog.DiscardHandler))
@@ -169,7 +169,7 @@ func TestConfigDisabledAndInvalidTargets(t *testing.T) {
 	require.ErrorIs(t, err, ErrDisabled)
 	require.Nil(t, config)
 
-	cfg := Config{Targets: []Target{{UserID: "123", ChannelID: "UC" + strings.Repeat("a", 22), MemberName: "테스트"}}, PollSeconds: 120}
+	cfg := Config{Targets: []Target{{UserID: "123", ChannelID: "UC" + strings.Repeat("a", 22)}}, PollSeconds: 120}
 	require.NoError(t, cfg.Validate())
 
 	cfg.Targets = append(cfg.Targets, cfg.Targets[0])

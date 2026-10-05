@@ -175,7 +175,7 @@ func (s *alarmDispatchRunnerTestSender) SendMessageWithClientRequestID(_ context
 func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -224,7 +224,7 @@ func TestAlarmDispatchRunnerRejectsRetiredStreamProviders(t *testing.T) {
 
 			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 			sender := &alarmDispatchRunnerTestSender{}
-			runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10, logger: slog.New(slog.NewTextHandler(&logs, nil))}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10, logger: slog.New(slog.NewTextHandler(&logs, nil))}
 
 			processed, err := runner.runOnce(t.Context())
 
@@ -252,7 +252,7 @@ func TestAlarmDispatchRunnerQuarantinesReplyHandoffOutcomeUnknownWithoutRetry(t 
 	sender := &alarmDispatchRunnerTestSender{
 		messageErr: errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded),
 	}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -267,7 +267,7 @@ func TestAlarmDispatchRunnerQuarantinesReplyHandoffOutcomeUnknownWithoutRetry(t 
 func TestAlarmDispatchRunnerQuarantinesPGSendFailureAfterMarkSending(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}}}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -285,7 +285,7 @@ func TestAlarmDispatchRunnerRetriesBadGatewayAfterMarkSending(t *testing.T) {
 	sendErr := fmt.Errorf("iris send message: %w", &iris.HTTPError{StatusCode: 502, URL: testIrisReplyPath})
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: sendErr}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -310,7 +310,7 @@ func TestAlarmDispatchRunnerReturnsErrorWhenPostSendQuarantineFails(t *testing.T
 		quarantineErr: quarantineErr,
 	}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -328,7 +328,7 @@ func TestAlarmDispatchRunnerConsumesAttemptForRenderFailureBeforeMarkSending(t *
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -353,7 +353,7 @@ func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testin
 		markDispatchedErr: markErr,
 	}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -374,7 +374,7 @@ func TestAlarmDispatchRunnerRunOnceMovesExhaustedRetryToDLQAndReleasesClaims(t *
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: &iris.HTTPError{StatusCode: 503}}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -394,7 +394,7 @@ func TestAlarmDispatchRunnerKeepsRetryingRetryableCauseBeyondBaseAttemptCap(t *t
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: &iris.HTTPError{StatusCode: 503}}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -420,7 +420,7 @@ func TestAlarmDispatchRunnerRetriesPersistedStreamGroupDeadline(t *testing.T) {
 	sender := &alarmDispatchRunnerTestSender{
 		messageErr: fmt.Errorf("send iris text: %w", context.DeadlineExceeded),
 	}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -440,7 +440,7 @@ func TestAlarmDispatchRunnerRetriesIntrinsicTextTransportFailure(t *testing.T) {
 	envelope := alarmDispatchRunnerIntrinsicTextEnvelope()
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -457,7 +457,7 @@ func TestAlarmDispatchRunnerNonRetryableHTTPFailureStillQuarantines(t *testing.T
 			envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 			sender := &alarmDispatchRunnerTestSender{messageErr: &iris.HTTPError{StatusCode: statusCode}}
-			runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 			processed, err := runner.runOnce(t.Context())
 
@@ -473,7 +473,7 @@ func TestAlarmDispatchRunnerNonRetryableHTTPFailureStillQuarantines(t *testing.T
 func TestAlarmDispatchRunnerWaitsOnIdleWaiterForEmptyPGBatch(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	waiter := &alarmDispatchRunnerTestIdleWaiter{returnValue: false}
-	runner := Runner{consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10, idleWaiter: waiter}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10, idleWaiter: waiter}
 
 	keepGoing := runner.runStep(t.Context())
 
@@ -485,7 +485,7 @@ func TestAlarmDispatchRunnerWaitsOnIdleWaiterForEmptyPGBatch(t *testing.T) {
 func TestAlarmDispatchRunnerResetsIdleWaiterAfterProcessedBatch(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}}}
 	waiter := &alarmDispatchRunnerTestIdleWaiter{returnValue: true}
-	runner := Runner{consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10, idleWaiter: waiter}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: &alarmDispatchRunnerTestSender{}, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10, idleWaiter: waiter}
 
 	keepGoing := runner.runStep(t.Context())
 
@@ -501,6 +501,7 @@ func TestAlarmDispatchRunnerYieldsAfterMaxBatchesPerWake(t *testing.T) {
 	}}
 	yieldCount := 0
 	runner := Runner{
+		members:           alarmGoldenMembers{},
 		consumer:          consumer,
 		sender:            &alarmDispatchRunnerTestSender{},
 		renderer:          newAlarmDispatchTestRenderer(t),
@@ -526,6 +527,7 @@ func TestAlarmDispatchRunnerStartProcessesBatchesUntilIdleWaitStops(t *testing.T
 	waiter := &alarmDispatchRunnerTestIdleWaiter{returnValue: false}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := &Runner{
+		members:    alarmGoldenMembers{},
 		consumer:   consumer,
 		sender:     sender,
 		renderer:   newAlarmDispatchTestRenderer(t),
@@ -551,6 +553,7 @@ func TestAlarmDispatchRunnerRunStepStopsWhenDrainErrorArrivesAfterCancel(t *test
 		onDrain:  cancel,
 	}
 	runner := Runner{
+		members:  alarmGoldenMembers{},
 		consumer: consumer,
 		sender:   &alarmDispatchRunnerTestSender{},
 		maxBatch: 10,
@@ -578,23 +581,15 @@ func TestGroupAlarmDispatchEnvelopesForDeliveryPreservesScheduledMinuteBuckets(t
 
 func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	first := alarmGroupRenderEnvelope(3, "Member1", "abc", "Title1")
+	second := alarmGroupRenderEnvelope(1, "Member2", "def", "Title2")
 
-	first.Notification.MinutesUntil = 3
-	second.Notification.MinutesUntil = 1
-	first.Notification.Channel.Name = "Member1"
-	second.Notification.Channel.Name = "Member2"
-	first.Notification.Stream.ID = "abc"
-	second.Notification.Stream.ID = "def"
-	first.Notification.Stream.Title = "Title1"
-	second.Notification.Stream.Title = "Title2"
 	first.Notification.Stream.StartScheduled = &start
 	second.Notification.Stream.StartScheduled = &start
 
 	group := groupAlarmDispatchEnvelopesForDelivery([]domain.AlarmQueueEnvelope{first, second})[0]
 
-	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
+	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, "", group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 1분 전 · 2개\n\n"+
@@ -604,17 +599,9 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	first := alarmGroupRenderEnvelope(5, "Member1", "abc", "Title1")
+	second := alarmGroupRenderEnvelope(5, "Member2", "def", "Title2")
 
-	first.Notification.MinutesUntil = 5
-	second.Notification.MinutesUntil = 5
-	first.Notification.Channel.Name = "Member1"
-	second.Notification.Channel.Name = "Member2"
-	first.Notification.Stream.ID = "abc"
-	second.Notification.Stream.ID = "def"
-	first.Notification.Stream.Title = "Title1"
-	second.Notification.Stream.Title = "Title2"
 	first.Notification.Stream.StartActual = &start
 	second.Notification.Stream.StartActual = &start
 
@@ -624,7 +611,7 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, "", group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "🔴 방송 시작 · 2개\n\n"+
@@ -634,17 +621,9 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 
 func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	first := alarmGroupRenderEnvelope(5, "LiveMember", "live", "Live Title")
+	second := alarmGroupRenderEnvelope(5, "UpcomingMember", "upcoming", "Upcoming Title")
 
-	first.Notification.MinutesUntil = 5
-	second.Notification.MinutesUntil = 5
-	first.Notification.Channel.Name = "LiveMember"
-	second.Notification.Channel.Name = "UpcomingMember"
-	first.Notification.Stream.ID = "live"
-	second.Notification.Stream.ID = "upcoming"
-	first.Notification.Stream.Title = "Live Title"
-	second.Notification.Stream.Title = "Upcoming Title"
 	first.Notification.Stream.StartActual = &start
 	second.Notification.Stream.StartScheduled = &start
 
@@ -654,7 +633,7 @@ func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, "", group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 5분 전 · 2개\n\n"+
@@ -668,12 +647,13 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 
 	notification.MinutesUntil = 5
 	notification.Channel.Name = testAlarmMemberName
+	notification.Stream.ChannelID = alarmGoldenChannelPrefix + testAlarmMemberName
 	notification.Stream.ID = "live-1"
 	notification.Stream.Title = "Live Title"
 	notification.Stream.StartScheduled = &start
 	notification.Stream.StartActual = &start
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -687,11 +667,12 @@ func TestRenderAlarmDispatchNotificationLiveStatusUsesStartingMessage(t *testing
 
 	notification.MinutesUntil = 5
 	notification.Channel.Name = testAlarmMemberName
+	notification.Stream.ChannelID = alarmGoldenChannelPrefix + testAlarmMemberName
 	notification.Stream.ID = "live-status-1"
 	notification.Stream.Title = "Live Title"
 	notification.Stream.Status = domain.StreamStatusLive
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -705,11 +686,12 @@ func TestRenderAlarmDispatchNotificationUpcomingKeepsPreliveMessage(t *testing.T
 
 	notification.MinutesUntil = 5
 	notification.Channel.Name = testAlarmMemberName
+	notification.Stream.ChannelID = alarmGoldenChannelPrefix + testAlarmMemberName
 	notification.Stream.ID = "upcoming-1"
 	notification.Stream.Title = "Upcoming Title"
 	notification.Stream.Status = domain.StreamStatusUpcoming
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -731,12 +713,13 @@ func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
 
 	notification.MinutesUntil = 5
 	notification.Channel.Name = "비비"
+	notification.Stream.ChannelID = alarmGoldenChannelPrefix + "비비"
 	notification.Stream.ID = "DCW0CvsJAnw"
 	notification.Stream.Title = title
 	notification.Stream.Link = &link
 	notification.Stream.Status = domain.StreamStatusUpcoming
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -750,12 +733,13 @@ func TestRenderAlarmDispatchNotificationOmitsRetiredSimulcastLink(t *testing.T) 
 
 	notification.MinutesUntil = 5
 	notification.Channel.Name = "비비"
+	notification.Stream.ChannelID = alarmGoldenChannelPrefix + "비비"
 	notification.Stream.ID = "integrated-1"
 	notification.Stream.Title = "동시송출 방송"
 	notification.Stream.IsIntegrated = true
 	notification.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/integrated-1"
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -947,6 +931,7 @@ func TestAlarmDispatchRunnerRoutesSendingRetryWithLiveContextAfterAttemptDeadlin
 
 		sender := &alarmDispatchRunnerBlockingSender{}
 		runner := Runner{
+			members:        alarmGoldenMembers{},
 			consumer:       consumer,
 			sender:         sender,
 			maxBatch:       10,
@@ -973,6 +958,7 @@ func TestAlarmDispatchRunnerMarksDispatchedAfterAttemptDeadlineExpires(t *testin
 
 		sender := &alarmDispatchRunnerBlockingSender{succeed: true}
 		runner := Runner{
+			members:        alarmGoldenMembers{},
 			consumer:       consumer,
 			sender:         sender,
 			maxBatch:       10,
@@ -1001,6 +987,7 @@ func TestAlarmDispatchRunnerStopsRemainingGroupsWhenAttemptDeadlineExpires(t *te
 
 		sender := &alarmDispatchRunnerBlockingSender{}
 		runner := Runner{
+			members:        alarmGoldenMembers{},
 			consumer:       consumer,
 			sender:         sender,
 			maxBatch:       10,
@@ -1028,6 +1015,7 @@ func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {
 
 	sender := &alarmDispatchRunnerBlockingSender{onSend: cancel}
 	runner := Runner{
+		members:  alarmGoldenMembers{},
 		consumer: consumer,
 		sender:   sender,
 		maxBatch: 10,
@@ -1040,4 +1028,17 @@ func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {
 	require.Len(t, consumer.quarantined, 1)
 	require.NoError(t, consumer.quarantineCtxErr, "프로세스 종료로 부모가 취소돼도 상태 기록은 완료돼야 한다")
 	assert.True(t, consumer.quarantineDeadline, "취소를 끊은 정리 컨텍스트에도 시간 상한이 있어야 한다")
+}
+
+// alarmGroupRenderEnvelope는 members 정본 이름이 memberName인 채널의 방송 알림 envelope를 만든다.
+func alarmGroupRenderEnvelope(minutesUntil int, memberName, streamID, title string) domain.AlarmQueueEnvelope {
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
+	envelope.Notification.MinutesUntil = minutesUntil
+	envelope.Notification.Channel.Name = memberName
+	envelope.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + memberName
+	envelope.Notification.Stream.ID = streamID
+	envelope.Notification.Stream.Title = title
+
+	return envelope
 }

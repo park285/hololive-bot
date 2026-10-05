@@ -45,16 +45,31 @@ func newAlarmDispatchTestRendering(t *testing.T) (*template.Renderer, *messagest
 	return template.NewRenderer(pool, slog.Default()), store
 }
 
+// alarmGoldenChannelPrefix 뒤의 이름이 members 정본 표시명이다. 원천 채널 제목(Channel.Name)은 표시하지 않는다.
+const alarmGoldenChannelPrefix = "ch-golden-"
+
 func goldenAlarmDispatchMember(n *domain.AlarmNotification) string {
-	if n.Channel != nil && strings.TrimSpace(n.Channel.Name) != "" {
-		return strings.TrimSpace(n.Channel.Name)
+	if n.Channel != nil {
+		if name, ok := strings.CutPrefix(n.Channel.ID, alarmGoldenChannelPrefix); ok && name != "" {
+			return name
+		}
 	}
 
-	if n.Stream != nil && strings.TrimSpace(n.Stream.ChannelName) != "" {
-		return strings.TrimSpace(n.Stream.ChannelName)
+	return "VTuber"
+}
+
+// alarmGoldenMembers는 golden 알림 채널을 짧은 한국어 표시명만 가진 멤버로 찾는다.
+type alarmGoldenMembers struct {
+	collabTestMembers
+}
+
+func (alarmGoldenMembers) FindMemberByChannelID(_ context.Context, channelID string) (*domain.Member, error) {
+	name, ok := strings.CutPrefix(channelID, alarmGoldenChannelPrefix)
+	if !ok || name == "" {
+		return nil, domain.ErrMemberNotFound
 	}
 
-	return "알 수 없는 멤버"
+	return &domain.Member{ChannelID: channelID, Name: "English " + name, ShortKoreanName: name}, nil
 }
 
 func goldenAlarmDispatchTitle(n *domain.AlarmNotification) string {
@@ -190,7 +205,7 @@ func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Strea
 	var channel *domain.Channel
 
 	if name != "" {
-		channel = &domain.Channel{Name: name}
+		channel = &domain.Channel{ID: alarmGoldenChannelPrefix + name, Name: name + " Ch."}
 	}
 
 	return domain.AlarmNotification{
@@ -209,11 +224,11 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 
 	regular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("regular", "Regular Title"))
 
-	item, err := buildAlarmDispatchItemView(t.Context(), nil, nil, &premiere, 5)
+	item, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &premiere, 5)
 	require.NoError(t, err)
 	assert.True(t, item.IsPremiere)
 
-	allPremiere, err := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
+	allPremiere, err := buildAlarmDispatchGroupView(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, premiere},
 	})
@@ -223,7 +238,7 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 	assert.True(t, allPremiere.Entries[0].IsPremiere)
 	assert.True(t, allPremiere.Entries[1].IsPremiere)
 
-	mixed, err := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
+	mixed, err := buildAlarmDispatchGroupView(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, regular},
 	})
@@ -293,7 +308,7 @@ func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) 
 			notification := tc.notification
 			want := goldenAlarmDispatchItem(&notification, -1)
 
-			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, nil, &notification)
+			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, alarmGoldenMembers{}, &notification)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got)
@@ -323,7 +338,7 @@ func TestRenderAlarmDispatchNotificationPreservesScheduleMessageFormatting(t *te
 			notification := tc.notification
 			want := goldenAlarmDispatchItem(&notification, -1)
 
-			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, nil, &notification)
+			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, alarmGoldenMembers{}, &notification)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got)
@@ -434,7 +449,7 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			want := goldenAlarmDispatchGroup(tc.group)
 
-			got, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, "", tc.group)
+			got, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, "", tc.group)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got)
@@ -446,7 +461,7 @@ func TestRenderAlarmDispatchPlaceholderResolvesFromMessageStrings(t *testing.T) 
 	_, store := newAlarmDispatchTestRendering(t)
 
 	require.NoError(t, store.Load(t.Context()))
-	assert.Equal(t, "알 수 없는 멤버", store.Text(messagestrings.MiscAlarmUnknownMember))
+	assert.Equal(t, "VTuber", store.Text(messagestrings.MiscVTuberFallback))
 	assert.Equal(t, "제목 없음", store.Text(messagestrings.MiscAlarmNoTitle))
 	assert.Equal(t, "방송 정보 없음", store.Text(messagestrings.MiscAlarmNoStream))
 }

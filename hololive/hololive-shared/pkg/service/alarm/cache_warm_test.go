@@ -32,7 +32,6 @@ func typeSpecificWarmAlarms() []*domain.Alarm {
 			RoomID:     testCommunityRoomID,
 			UserID:     "user-community",
 			ChannelID:  testWarmChannelA,
-			MemberName: "Member A",
 			RoomName:   "Community Room",
 			UserName:   "Community User",
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
@@ -41,18 +40,16 @@ func typeSpecificWarmAlarms() []*domain.Alarm {
 			RoomID:     "room-shorts",
 			UserID:     "user-shorts",
 			ChannelID:  testWarmChannelA,
-			MemberName: "Member A",
 			RoomName:   "Shorts Room",
 			UserName:   "Shorts User",
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 		},
 		{
-			RoomID:     testDefaultRoomID,
-			UserID:     "user-default",
-			ChannelID:  testWarmChannelB,
-			MemberName: "Member B",
-			RoomName:   "Default Room",
-			UserName:   "Default User",
+			RoomID:    testDefaultRoomID,
+			UserID:    "user-default",
+			ChannelID: testWarmChannelB,
+			RoomName:  "Default Room",
+			UserName:  "Default User",
 		},
 	}
 }
@@ -88,7 +85,7 @@ func stubRebuildLoaders(t *testing.T, alarms []*domain.Alarm, alarmErr error, me
 func TestRebuildSubscriberCacheFromRepository_WritesOnlyTypeSpecificSubscriberCache(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
-	stubRebuildLoaders(t, typeSpecificWarmAlarms(), nil, nil, nil)
+	stubRebuildLoaders(t, typeSpecificWarmAlarms(), nil, map[string]string{testWarmChannelA: "Member A", testWarmChannelB: "Member B"}, nil)
 
 	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.NoError(t, err)
@@ -180,16 +177,15 @@ func TestRebuildSubscriberCacheFromRepository_UsesBatchedWrites(t *testing.T) {
 
 	for i := range 48 {
 		alarms = append(alarms, &domain.Alarm{
-			RoomID:     "room-" + strconv.Itoa(i),
-			UserID:     "user-" + strconv.Itoa(i),
-			ChannelID:  "UC_BATCH",
-			MemberName: "Member " + strconv.Itoa(i),
-			RoomName:   "Room " + strconv.Itoa(i),
-			UserName:   "User " + strconv.Itoa(i),
+			RoomID:    "room-" + strconv.Itoa(i),
+			UserID:    "user-" + strconv.Itoa(i),
+			ChannelID: "UC_BATCH",
+			RoomName:  "Room " + strconv.Itoa(i),
+			UserName:  "User " + strconv.Itoa(i),
 		})
 	}
 
-	stubRebuildLoaders(t, alarms, nil, nil, nil)
+	stubRebuildLoaders(t, alarms, nil, map[string]string{"UC_BATCH": "Batch Member"}, nil)
 
 	summary, err := RebuildSubscriberCacheFromRepository(ctx, countingCache, &Repository{})
 	require.NoError(t, err)
@@ -211,7 +207,6 @@ func TestRebuildSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *te
 			RoomID:     "room-1",
 			UserID:     "user-1",
 			ChannelID:  "UC_RADEN",
-			MemberName: "Juufuutei Raden",
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 		},
 	}, nil, map[string]string{"UC_RADEN": "라덴"}, nil)
@@ -240,7 +235,6 @@ func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorLeavesCacheClea
 			RoomID:     testFreshRoomID,
 			UserID:     "user-fresh",
 			ChannelID:  testFreshChannelID,
-			MemberName: testFreshMemberName,
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 		},
 	}, nil, nil, errors.New("member names unavailable"))
@@ -294,7 +288,6 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 			RoomID:     testFreshRoomID,
 			UserID:     "user-fresh",
 			ChannelID:  testFreshChannelID,
-			MemberName: testFreshMemberName,
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 		},
 	}, nil, map[string]string{testFreshChannelID: testFreshMemberName}, nil)

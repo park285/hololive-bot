@@ -140,12 +140,11 @@ func TestAddAlarm_PersistFailureDoesNotPolluteCache(t *testing.T) {
 
 	ctx := t.Context()
 	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testChannelID,
-		MemberName: testMemberName,
-		RoomName:   "메인방",
-		UserName:   "관리자",
+		RoomID:    testRoomID,
+		UserID:    testUserID,
+		ChannelID: testChannelID,
+		RoomName:  "메인방",
+		UserName:  "관리자",
 	})
 	require.Error(t, err)
 	assert.False(t, added)
@@ -180,12 +179,11 @@ func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
 	}
 
 	added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testChannelID,
-		MemberName: testMemberName,
-		RoomName:   "메인방",
-		UserName:   "관리자",
+		RoomID:    testRoomID,
+		UserID:    testUserID,
+		ChannelID: testChannelID,
+		RoomName:  "메인방",
+		UserName:  "관리자",
 	})
 	require.Error(t, err)
 	assert.False(t, added)
@@ -297,9 +295,8 @@ func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
 
 	ctx := t.Context()
 	_, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		ChannelID:  testChannelID,
-		MemberName: testMemberName,
+		RoomID:    testRoomID,
+		ChannelID: testChannelID,
 	})
 	require.NoError(t, err)
 

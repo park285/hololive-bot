@@ -42,11 +42,14 @@ type MatchCacheEntry struct {
 	Timestamp time.Time
 }
 
+// matchCandidate의 memberName은 검색 일치 판단에 쓰는 english_name 계열 이름이고, 한국어 이름 두 개는 표시 전용이다.
 type matchCandidate struct {
-	channelID  string
-	memberName string
-	org        string
-	source     string
+	channelID       string
+	memberName      string
+	koreanName      string
+	shortKoreanName string
+	org             string
+	source          string
 }
 
 type snapshotEntry struct {
@@ -60,6 +63,7 @@ type matcherSnapshot struct {
 	exactNames   map[string][]*snapshotEntry
 	exactAliases map[string][]*snapshotEntry
 	tokenIndex   map[string][]*snapshotEntry
+	byChannel    map[string]*snapshotEntry
 	entries      []*snapshotEntry
 }
 
