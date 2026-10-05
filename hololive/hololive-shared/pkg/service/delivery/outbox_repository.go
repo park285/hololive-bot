@@ -22,26 +22,21 @@ package delivery
 
 import (
 	"context"
-	"database/sql"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/retry"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-// outboxPayload: outbox에 저장되는 메시지 payload.
+// outboxPayload는 producer가 적재하는 payload다. Message 키만 쓰며, request·known_unsent 키는 alarm-worker
+// notificationdelivery가 claim 이후에 기록한다. 적재 SQL의 rearm 조건이 그 키를 읽으므로 키 이름은 두 저장소의 계약이다.
 type outboxPayload struct {
-	KnownUnsent bool             `json:"known_unsent,omitzero"`
-	Message     string           `json:"message"`
-	Request     *preparedMessage `json:"request,omitempty"`
+	Message string `json:"message"`
 }
 
 type outboxBatchRow struct {
@@ -52,27 +47,14 @@ type outboxBatchRow struct {
 	Payload   outboxPayload             `json:"payload"`
 }
 
-// OutboxRepository는 v2 notification_delivery_outbox의 정본 저장소다. 예전에 v3 ledger로 넘기던 handoff(off/shadow/cutover)는
-// DEC-20260926-hololive-outbox-v3-convergence로 삭제했고, 적재는 이 테이블 하나로만 한다.
+// OutboxRepository는 v2 notification_delivery_outbox의 producer 적재 저장소다. 예전에 v3 ledger로 넘기던
+// handoff(off/shadow/cutover)는 DEC-20260926-hololive-outbox-v3-convergence로 삭제했고, 적재는 이 테이블 하나로만 한다.
+// Claim·발송 정산·stale SENDING 격리·보존 정리는 alarm-worker notificationdelivery.Store가 소유한다. 모든 쓰기가 단일 문장이라
+// 두 저장소에 걸친 트랜잭션은 없고, 동시성은 행 잠금과 status·locked_by·attempt_count 조건으로만 맞춘다.
 type OutboxRepository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
-
-const deliveryStatusSending domain.DeliveryOutboxStatus = "SENDING"
-
-// 결과 불명(stale SENDING)을 FAILED로 회수하면 rearm(outbox_enqueue_batch_upsert.sql의
-// WHERE status='FAILED')이 재발송해 중복 노출 위험이 있어 별도 terminal 상태로 격리한다.
-const deliveryStatusQuarantined domain.DeliveryOutboxStatus = "QUARANTINED"
-
-const staleSendingFailureReason = "stale sending; external send outcome unknown"
-
-const defaultStaleSendingSweepLimit = 100
-
-const (
-	cleanupBatchSize  = 1000
-	cleanupBatchYield = 10 * time.Millisecond
-)
 
 type OutboxItem struct {
 	Kind      domain.DeliveryOutboxKind
@@ -112,6 +94,8 @@ func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutb
 	return nil
 }
 
+// EnqueueBatch는 (kind, content_id) 충돌 시 FAILED 행만 PENDING으로 rearm한다. PENDING·SENDING·SENT·QUARANTINED 행은
+// 그대로 두며, worker가 저장한 request snapshot이 있으면 room_id와 payload를 덮어쓰지 않는다.
 func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem) error {
 	if len(items) == 0 {
 		return nil
@@ -146,323 +130,10 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 	return nil
 }
 
-// FetchAndLock은 lease가 없거나 만료된 PENDING 행만 claim한다. 임대 도입 이전 행(locked_by·lock_expires_at NULL)을
-// lockTimeout으로 회수하던 분기는 T18(2026-09-26)에서 그런 행 0건을 확인해 지웠다(stack-audit 2026-09-26 T11).
-// 현재 writer는 locked_at·locked_by·lock_expires_at을 항상 함께 쓰고 함께 비운다.
-func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
-	if err := r.ensurePool(); err != nil {
-		return nil, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	query := mustSQL("outbox_repository_0129_03.sql")
-
-	rows, err := r.pool.Query(ctx, query,
-		batchSize,
-		workerID,
-		positiveDurationMilliseconds(lease),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch and lock: %w", err)
-	}
-	defer rows.Close()
-
-	items, err := pgx.CollectRows(rows, scanNotificationDeliveryOutbox)
-	if err != nil {
-		return nil, fmt.Errorf("fetch and lock: %w", err)
-	}
-
-	return items, nil
-}
-
-// fetchReadyAndLock은 활성 방을 제외하고 각 방의 첫 due 항목만 임대합니다.
-// 다른 worker가 선행 항목을 처리 중이어도 후행 항목이 앞서 발송되지 않습니다.
-func (r *OutboxRepository) fetchReadyAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration, activeRooms []string, processedIDs []int64) ([]domain.NotificationDeliveryOutbox, error) {
-	if err := r.ensurePool(); err != nil {
-		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, mustSQL("outbox_claim_ready.sql"), batchSize, workerID, positiveDurationMilliseconds(lease), activeRooms, processedIDs)
-	if err != nil {
-		return nil, fmt.Errorf("fetch ready deliveries: %w", err)
-	}
-	defer rows.Close()
-
-	items, err := pgx.CollectRows(rows, scanNotificationDeliveryOutbox)
-	if err != nil {
-		return nil, fmt.Errorf("collect ready deliveries: %w", err)
-	}
-
-	return items, nil
-}
-
-func (r *OutboxRepository) MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error) {
-	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	tag, err := r.pool.Exec(ctx,
-		mustSQL("outbox_repository_0172_04.sql"),
-		deliveryStatusSending, positiveDurationMilliseconds(lease),
-		id, domain.DeliveryStatusPending, workerID,
-	)
-	if err != nil {
-		return false, fmt.Errorf("exec: %w", err)
-	}
-
-	return tag.RowsAffected() > 0, nil
-}
-
-func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, workerID string) (bool, error) {
-	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	tag, err := r.pool.Exec(ctx,
-		mustSQL("outbox_repository_0189_05.sql"),
-		domain.DeliveryStatusSent, id, domain.DeliveryStatusPending, deliveryStatusSending, workerID,
-	)
-	if err != nil {
-		return false, fmt.Errorf("exec: %w", err)
-	}
-
-	return tag.RowsAffected() > 0, nil
-}
-
-// MarkQuarantined는 현재 worker의 SENDING만 격리하며 자동 재발송 가능한 FAILED로 되돌리지 않습니다.
-func (r *OutboxRepository) MarkQuarantined(ctx context.Context, id int64, workerID, reason string) (bool, error) {
-	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("quarantine delivery: %w", err)
-	}
-
-	tag, err := r.pool.Exec(ctx, mustSQL("outbox_mark_quarantined.sql"), id, workerID, reason)
-	if err != nil {
-		return false, fmt.Errorf("quarantine delivery: %w", err)
-	}
-
-	return tag.RowsAffected() > 0, nil
-}
-
-// MarkFailed는 claim 당시 횟수로 실패 정책을 정하고 동일 횟수·소유권인 행에만 적용합니다.
-// 발송 전 lease 만료는 거부하며 발송 후 확정 실패는 기존 SENDING 소유자가 정산할 수 있습니다.
-func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
-	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	status, err := deliveryFailureStatus(attemptCount, maxRetries)
-	if err != nil {
-		return false, fmt.Errorf("mark failed policy: %w", err)
-	}
-
-	query := markFailedSQL
-
-	tag, err := r.pool.Exec(ctx, query,
-		errMsg, status, durationMilliseconds(backoff), id,
-		domain.DeliveryStatusPending, deliveryStatusSending, workerID, attemptCount, status == domain.DeliveryStatusPending,
-	)
-	if err != nil {
-		return false, fmt.Errorf("exec: %w", err)
-	}
-
-	return tag.RowsAffected() > 0, nil
-}
-
-func (r *OutboxRepository) MarkSentBatch(ctx context.Context, ids []int64) error {
-	if len(ids) == 0 {
-		return nil
-	}
-
-	if err := r.ensurePool(); err != nil {
-		return fmt.Errorf("ensure pool: %w", err)
-	}
-
-	_, err := r.pool.Exec(ctx,
-		mustSQL("outbox_repository_0241_07.sql"),
-		domain.DeliveryStatusSent, ids, domain.DeliveryStatusPending,
-	)
-	if err != nil {
-		return fmt.Errorf("mark sent batch: %w", err)
-	}
-
-	return nil
-}
-
-func (r *OutboxRepository) MarkFailedBatch(ctx context.Context, ids []int64, reason string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-
-	if err := r.ensurePool(); err != nil {
-		return fmt.Errorf("ensure pool: %w", err)
-	}
-
-	_, err := r.pool.Exec(ctx,
-		mustSQL("outbox_repository_0261_08.sql"),
-		domain.DeliveryStatusFailed, reason, ids, domain.DeliveryStatusPending,
-	)
-	if err != nil {
-		return fmt.Errorf("mark failed batch: %w", err)
-	}
-
-	return nil
-}
-
-// FAILED/QUARANTINED 항목은 sent_at이 NULL이므로 created_at을 fallback으로 사용.
-func (r *OutboxRepository) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
-	out, err := r.cleanupInBatches(ctx, time.Now().Add(-olderThan), cleanupBatchSize)
-	if err != nil {
-		return out, fmt.Errorf("cleanup in batches: %w", err)
-	}
-
-	return out, nil
-}
-
-func (r *OutboxRepository) cleanupInBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
-	if err := r.ensurePool(); err != nil {
-		return 0, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	var total int64
-
-	for {
-		tag, err := r.pool.Exec(ctx,
-			mustSQL("outbox_repository_0279_09.sql"),
-			domain.DeliveryStatusSent, domain.DeliveryStatusFailed, deliveryStatusQuarantined, cutoff, batchSize,
-		)
-		if err != nil {
-			return total, fmt.Errorf("exec: %w", err)
-		}
-
-		total += tag.RowsAffected()
-		if tag.RowsAffected() < int64(batchSize) {
-			return total, nil
-		}
-
-		if err := yieldBetweenCleanupBatches(ctx); err != nil {
-			return total, fmt.Errorf("yield between cleanup batches: %w", err)
-		}
-	}
-}
-
-func yieldBetweenCleanupBatches(ctx context.Context) error {
-	if retry.Sleep(ctx, cleanupBatchYield) {
-		return nil
-	}
-
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("yield between cleanup batches: %w", err)
-	}
-
-	return nil
-}
-
-func (r *OutboxRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error) {
-	if err := r.ensurePool(); err != nil {
-		return 0, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	if limit <= 0 {
-		limit = defaultStaleSendingSweepLimit
-	}
-
-	if olderThan <= 0 {
-		olderThan = deliveryLease
-	}
-
-	tag, err := r.pool.Exec(ctx,
-		mustSQL("outbox_repository_0301_10.sql"),
-		deliveryStatusSending, positiveDurationMilliseconds(olderThan),
-		limit, deliveryStatusQuarantined, staleSendingFailureReason,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("exec: %w", err)
-	}
-
-	return tag.RowsAffected(), nil
-}
-
-func (r *OutboxRepository) CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error) {
-	if err := r.ensurePool(); err != nil {
-		return 0, fmt.Errorf("ensure pool: %w", err)
-	}
-
-	var count int64
-
-	if err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0330_11.sql"), status).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count by status: %w", err)
-	}
-
-	return count, nil
-}
-
-func durationMilliseconds(value time.Duration) int64 {
-	if value <= 0 {
-		return 0
-	}
-
-	if milliseconds := value.Milliseconds(); milliseconds > 0 {
-		return milliseconds
-	}
-
-	return 1
-}
-
-func positiveDurationMilliseconds(value time.Duration) int64 {
-	if value <= 0 {
-		value = deliveryLease
-	}
-
-	if milliseconds := durationMilliseconds(value); milliseconds > 0 {
-		return milliseconds
-	}
-
-	return 1
-}
-
 func (r *OutboxRepository) ensurePool() error {
 	if r == nil || r.pool == nil {
 		return errors.New("notification delivery outbox repository: postgres pool is required")
 	}
 
 	return nil
-}
-
-func scanNotificationDeliveryOutbox(row pgx.CollectableRow) (domain.NotificationDeliveryOutbox, error) {
-	var (
-		item     domain.NotificationDeliveryOutbox
-		kind     string
-		status   string
-		payload  []byte
-		lockedAt sql.NullTime
-		sentAt   sql.NullTime
-		errText  sql.NullString
-	)
-
-	err := row.Scan(
-		&item.ID,
-		&kind,
-		&item.PeriodKey,
-		&item.RoomID,
-		&item.ContentID,
-		&payload,
-		&status,
-		&item.AttemptCount,
-		&item.NextAttemptAt,
-		&item.CreatedAt,
-		&lockedAt,
-		&sentAt,
-		&errText,
-	)
-	if err != nil {
-		return domain.NotificationDeliveryOutbox{}, fmt.Errorf("scan: %w", err)
-	}
-
-	item.Kind = domain.DeliveryOutboxKind(kind)
-	item.Payload = string(payload)
-	item.Status = domain.DeliveryOutboxStatus(status)
-	item.LockedAt = lockedAt
-	item.SentAt = sentAt
-	item.Error = errText
-
-	return item, nil
 }

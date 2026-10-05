@@ -90,7 +90,7 @@ func runRetryExactOnceCase(t *testing.T, tc retryFinalizeOnceTestCase) {
 	require.Empty(t, firstAttemptMessages)
 
 	retryAt := time.Now().UTC().Add(-time.Second)
-	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{"next_attempt_at": retryAt, "locked_at": nil}, "id = ?", delivery.ID).Error)
+	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{"next_attempt_at": retryAt, "locked_at": nil}, "id = $1", delivery.ID).Error)
 
 	dispatcher.ProcessOnceForTest(ctx)
 	dispatcher.ProcessOnceForTest(ctx)
@@ -100,7 +100,7 @@ func runRetryExactOnceCase(t *testing.T, tc retryFinalizeOnceTestCase) {
 
 	var deliveryRows []deliveryTestDeliveryModel
 
-	require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = ?", item.ID).Error)
+	require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = $1", item.ID).Error)
 	require.Len(t, deliveryRows, 1)
 
 	sender.mu.Lock()
@@ -215,7 +215,7 @@ func assertRetryExactOnceFirstAttemptDeferred(
 
 	var releasedState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &releasedState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &releasedState, "kind = $1 AND post_id = $2", item.Kind, postID).Error)
 	assert.Nil(t, releasedState.AuthorizedAt)
 	assert.Nil(t, releasedState.AlarmSentAt)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, releasedState.DeliveryStatus)
@@ -410,7 +410,7 @@ func staleRetryFinalizeOnceClaim(
 		result := updateDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, map[string]any{
 			"authorized_at": staleAuthorizedAt,
 			"updated_at":    time.Now().UTC(),
-		}, "kind = ? AND post_id = ?", kind, postID)
+		}, "kind = $1 AND post_id = $2", kind, postID)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -451,20 +451,20 @@ func assertRetryFinalizeConflictHeld(
 
 	var pendingTracking deliveryTestTrackingModel
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &pendingTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &pendingTracking, "kind = $1 AND content_id = $2", string(item.Kind), item.ContentID).Error)
 	require.Nil(t, pendingTracking.AlarmSentAt)
 	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusPending), pendingTracking.DeliveryStatus)
 
 	var claimedState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &claimedState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &claimedState, "kind = $1 AND post_id = $2", item.Kind, postID).Error)
 	require.NotNil(t, claimedState.AuthorizedAt)
 	require.Nil(t, claimedState.AlarmSentAt)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, claimedState.DeliveryStatus)
 
 	var deliveryRows []deliveryTestDeliveryModel
 
-	require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = ?", item.ID).Error)
+	require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = $1", item.ID).Error)
 	require.Len(t, deliveryRows, 1)
 }
 

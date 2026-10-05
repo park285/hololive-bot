@@ -7,7 +7,9 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 - 문구의 SSOT는 DB 카탈로그 2개다: `notification_templates`(Go text/template 본문, template_key), `message_strings`(namespace/key/value). 코드 인라인 문구는 허용하지 않으며, 남은 인라인 라벨은 `timefmt` 네임스페이스로 추출한다.
 - `message_strings`는 bot plane·llm plane·alarm-worker가 기동 때 한 번 적재하고, 코드가 쓰는 타입 있는 key(`messagestrings.Key`)와 동적 조회 namespace를 검증한다. 누락되면 기동에 실패하며, 코드 대체 문구·조회 중 재적재·`FallbackSentinel`은 없다. 템플릿 렌더 실패 응답은 `error/command_processing_failed` 문구를 쓰고, 예약 알림은 렌더에 실패하면 발송하지 않는다(`DEC-20260926-hololive-message-strings-startup-validation`). 새 key를 추가하면 `messagestrings` key 목록과 시드 SQL 계약 테스트(format 인자 수 포함)를 함께 갱신한다.
-- 소비 plane은 4곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), llm plane scheduler(`hololive-api/internal/planes/llm/runtime/formatter_llm_scheduler.go`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), shared youtube outbox(`hololive-shared/pkg/service/youtube/outbox/`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
+- 소비 plane은 4곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), llm plane scheduler(`hololive-api/internal/planes/llm/runtime/formatter_llm_scheduler.go`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), alarm-worker YouTube outbox formatter(`hololive-alarm-worker/internal/egress/youtubedispatch/format`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
+- 템플릿 렌더러(`hololive-shared/pkg/service/template`)는 호출마다 현재 template `row_version`을 확인하고, YouTube outbox `FormatMessages`는 `RenderBatch`로 묶음 전체의 버전을 한 SQL 문장에서 확인한다. 본문·렌더 결과는 각각 64KiB, 실행 예산은 1초·100,000 단계·`{{template}}` 중첩 64단계다. 초과나 호출자 `ctx` 취소는 부분 결과 없이 실패한다. 시간·취소는 action 경계에서 확인하므로 실행 중인 Go 함수·method를 강제 중단하는 sandbox는 아니다.
+- 파생 값은 64KiB와 가장 큰 입력 값의 측정 크기 중 큰 값을 상한으로 삼는다. `printf` padding·인자 재사용·미사용 인자 출력, `dict` 중첩, split/join·치환은 결과 확장량을 할당 전에 검사한다. UTF-8 보정·escape처럼 입력의 상수배로 늘어나는 함수는 실행 직후 크기를 확인한다. 임의 Go method나 애플리케이션이 전달한 대형 데이터 자체의 실행·할당은 이 제한의 격리 대상이 아니다.
 
 ## 2. 톤 원칙
 
@@ -108,7 +110,7 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
   - **REAL-SEED**(시드 본문을 실제 렌더/조회 — 바꾸면 깨짐): alarm_dispatch 골든, celebration 골든, `store_test.go` 값 핀, `messages_seed_parity_test.go`(키셋·글리프), 라벨 lookup 테스트.
   - **INLINE-TEMPLATE**(테스트 로컬 본문 주입 — 안 깨지지만 미러가 낡음): formatter/llm/outbox 골든의 로컬 본문 상수는 시드의 의도적 미러이므로 lockstep으로 갱신한다.
 - channel별 override 행(`channel_id IS NOT NULL`)은 보존이 정책이다 — 새 톤이 자동 적용되지 않으므로 재작성 시 키별 override 목록(`GET /api/holo/templates/:key`의 `overrides`, 조회 SQL `hololive-shared/pkg/repository/queries/template_list_overrides.sql`)으로 대상 방을 기록한다.
-- 롤아웃: 템플릿/문자열 캐시는 프로세스별 무기한이므로 `hololive-api`와 `hololive-alarm-worker` **둘 다** 재시작해야 반영된다. (캘린더 PNG 디스크 캐시는 별도 — 렌더러 버전 bump가 담당.)
+- 롤아웃: 문자열 캐시는 프로세스별 무기한이므로 `message_strings` 변경은 `hololive-api`와 `hololive-alarm-worker` **둘 다** 재시작해야 반영된다. 템플릿 본문 변경은 `row_version`이 바뀌어 다음 렌더 호출부터 반영된다. (캘린더 PNG 디스크 캐시는 별도 — 렌더러 버전 bump가 담당.)
 
 ## 11. 소비자 매트릭스 (2026-07 기준)
 

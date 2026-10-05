@@ -218,8 +218,8 @@ func (*mainTestCloser) Close() error {
 
 func mainTestConfig() *apiconfig.RuntimeConfig {
 	return &apiconfig.RuntimeConfig{
-		Bot:   &settings.Config{Server: settings.ServerConfig{Port: 30001}},
-		Admin: &settings.Config{Server: settings.ServerConfig{Port: 30006}},
+		Bot:   &apiconfig.BotPlaneConfig{Server: settings.ServerConfig{Port: 30001}},
+		Admin: &apiconfig.AdminPlaneConfig{Server: settings.ServerConfig{Port: 30006}},
 		LLM:   &apiconfig.LLMSchedulerConfig{Server: settings.ServerConfig{Port: 30003}},
 		Logging: settings.LoggingConfig{
 			Level: "info",

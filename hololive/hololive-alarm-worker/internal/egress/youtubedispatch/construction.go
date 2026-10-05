@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -80,7 +79,10 @@ func NewDispatcher(deps Dependencies, logger *slog.Logger, config *dispatchstate
 		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}
 
-	telemetryRepository := newDispatcherTelemetryRepository(deps.DB)
+	telemetryRepository, err := telemetry.NewRepository(deps.DB)
+	if err != nil {
+		return nil, fmt.Errorf("initialize youtube dispatcher: telemetry repository: %w", err)
+	}
 
 	return assembleDispatcher(deps, logger, validConfig, telemetryRepository, transitionStore), nil
 }
@@ -91,14 +93,6 @@ func dispatcherLogger(logger *slog.Logger) *slog.Logger {
 	}
 
 	return slog.Default()
-}
-
-func newDispatcherTelemetryRepository(querier dbx.Querier) *telemetry.Repository {
-	if querier == nil {
-		return nil
-	}
-
-	return telemetry.NewRepository(querier)
 }
 
 func newDispatcherTransitionStore(

@@ -118,14 +118,12 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 }
 
 func (s *Service) generatePreparedRoomDigest(ctx context.Context, roomID string, period model.Period, now time.Time, members []string, prepared *filter.PreparedCandidates) (*model.Digest, error) {
-	memberProvider := s.membersData
-	if memberProvider != nil {
-		memberProvider = memberProvider.WithContext(ctx)
+	filtered, err := prepared.Filter(ctx, members, s.membersData, s.sourceValidator)
+	if err != nil {
+		return nil, fmt.Errorf("filter member news candidates: %w", err)
 	}
 
-	filtered := prepared.Filter(members, memberProvider, s.sourceValidator)
-
-	filtered, err := filterPromptCandidates(filtered, s.promptGuard, s.logger)
+	filtered, err = filterPromptCandidates(filtered, s.promptGuard, s.logger)
 	if err != nil {
 		return nil, fmt.Errorf("guard member news candidates: %w", err)
 	}

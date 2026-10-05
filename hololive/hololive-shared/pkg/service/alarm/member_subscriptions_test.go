@@ -114,22 +114,22 @@ func TestResolveEventSubscribersUsesMemberUnionAndFailOpen(t *testing.T) {
 		{"community", "", domain.AlarmTypeCommunity, []string{testUnitBWholeRoom, testUnitBMiraRoom, testUnitBNeonRoom, testUnitBSeveralRoom, "community-only"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rooms, err := ResolveEventSubscribers(ctx, nil, pool, testUnitBChannel, tc.title, tc.alarmType)
+			rooms, err := NewSubscriberResolver(nil, pool).ResolveEventSubscribers(ctx, testUnitBChannel, tc.title, tc.alarmType)
 			require.NoError(t, err)
 			require.ElementsMatch(t, tc.rooms, rooms)
 		})
 	}
 
-	rooms, err := ResolveEventSubscribers(ctx, nil, pool, "other-channel", "#玲銘ミラ", domain.AlarmTypeLive)
+	rooms, err := NewSubscriberResolver(nil, pool).ResolveEventSubscribers(ctx, "other-channel", "#玲銘ミラ", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Equal(t, []string{"unrelated"}, rooms)
 
-	_, err = ResolveEventSubscribers(ctx, nil, nil, testUnitBChannel, "?", domain.AlarmTypeLive)
+	_, err = NewSubscriberResolver(nil, nil).ResolveEventSubscribers(ctx, testUnitBChannel, "?", domain.AlarmTypeLive)
 	require.ErrorContains(t, err, "database is nil")
 
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
 
-	_, err = ResolveEventSubscribers(canceled, nil, pool, testUnitBChannel, "?", domain.AlarmTypeLive)
+	_, err = NewSubscriberResolver(nil, pool).ResolveEventSubscribers(canceled, testUnitBChannel, "?", domain.AlarmTypeLive)
 	require.ErrorIs(t, err, context.Canceled)
 }

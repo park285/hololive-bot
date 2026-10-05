@@ -1,0 +1,802 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package notificationdelivery
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"testing"
+	"time"
+
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
+)
+
+const (
+	testWorkerA = "test-worker-A"
+	testWorkerB = "test-worker-B"
+	testLease   = 60 * time.Second
+)
+
+// outboxFixture는 운영과 같은 두 저장소(shared producer 적재 + worker Store)를 한 DB에 묶어 경계 계약을 검증한다.
+type outboxFixture struct {
+	*Store
+	*delivery.OutboxRepository
+}
+
+func testRepository(t *testing.T) *outboxFixture {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+
+	return &outboxFixture{
+		Store:            NewStore(pool),
+		OutboxRepository: delivery.NewOutboxRepositoryFromPool(pool, slog.New(slog.DiscardHandler)),
+	}
+}
+
+func buildOutboxBatchItems(count int) []delivery.OutboxItem {
+	items := make([]delivery.OutboxItem, 0, count)
+	for i := range count {
+		items = append(items, delivery.OutboxItem{
+			Kind:      domain.DeliveryKindMemberNewsWeekly,
+			PeriodKey: "2026-W08",
+			RoomID:    fmt.Sprintf("room-batch-%d", i),
+			Message:   fmt.Sprintf("batch-msg-%d", i),
+		})
+	}
+
+	return items
+}
+
+func claimItems(ctx context.Context, t *testing.T, repository *outboxFixture, workerID string, limit int) []domain.NotificationDeliveryOutbox {
+	t.Helper()
+
+	items, err := repository.fetchReadyAndLock(ctx, workerID, limit, testLease, nil, nil)
+	if err != nil {
+		t.Fatalf("fetch ready and lock: %v", err)
+	}
+
+	return items
+}
+
+func fetchAndLockItems(ctx context.Context, t *testing.T, repository *outboxFixture) []domain.NotificationDeliveryOutbox {
+	t.Helper()
+
+	return claimItems(ctx, t, repository, testWorkerA, 1)
+}
+
+func markOutboxSending(ctx context.Context, t *testing.T, repository *outboxFixture, item *domain.NotificationDeliveryOutbox) {
+	t.Helper()
+
+	ok, err := repository.MarkSending(ctx, item.ID, testWorkerA, testLease)
+	if err != nil {
+		t.Fatalf("mark sending: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("mark sending fenced unexpectedly")
+	}
+}
+
+func countByStatus(ctx context.Context, t *testing.T, repository *outboxFixture, status domain.DeliveryOutboxStatus) int64 {
+	t.Helper()
+
+	count, err := repository.CountByStatus(ctx, status)
+	if err != nil {
+		t.Fatalf("count by status %s: %v", status, err)
+	}
+
+	return count
+}
+
+func TestFetchReadyAndLockClaimsDistinctRooms(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	for i := range 3 {
+		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
+			t.Fatalf("enqueue %d: %v", i, err)
+		}
+	}
+
+	items := claimItems(ctx, t, repository, testWorkerA, 2)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+
+	// locked_at이 설정되어야 함
+	for _, item := range items {
+		if !item.LockedAt.Valid {
+			t.Fatalf("expected locked_at to be set for item %d", item.ID)
+		}
+	}
+}
+
+func TestFetchReadyAndLock_OrdersDueBeforeCreatedAt(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "older-created", "msg"); err != nil {
+		t.Fatalf("enqueue older-created: %v", err)
+	}
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "earlier-due", "msg"); err != nil {
+		t.Fatalf("enqueue earlier-due: %v", err)
+	}
+
+	now := time.Now()
+	if _, err := repository.pool.Exec(ctx, `
+		UPDATE notification_delivery_outbox
+		SET created_at = $1, next_attempt_at = $2
+		WHERE room_id = 'older-created'
+	`, now.Add(-2*time.Hour), now.Add(-5*time.Minute)); err != nil {
+		t.Fatalf("shape older-created due fixture: %v", err)
+	}
+
+	if _, err := repository.pool.Exec(ctx, `
+		UPDATE notification_delivery_outbox
+		SET created_at = $1, next_attempt_at = $2
+		WHERE room_id = 'earlier-due'
+	`, now.Add(-1*time.Hour), now.Add(-10*time.Minute)); err != nil {
+		t.Fatalf("shape earlier-due fixture: %v", err)
+	}
+
+	items := claimItems(ctx, t, repository, testWorkerA, 1)
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+
+	if items[0].RoomID != "earlier-due" {
+		t.Fatalf("claimed room = %q, want earlier-due", items[0].RoomID)
+	}
+}
+
+func TestMarkSent(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+
+	cnt := countByStatus(ctx, t, repository, domain.DeliveryStatusSent)
+	if cnt != 1 {
+		t.Fatalf("expected 1 sent, got %d", cnt)
+	}
+}
+
+func TestMarkSent_FromSending(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	markOutboxSending(ctx, t, repository, &items[0])
+
+	ok, err := repository.MarkSent(ctx, items[0].ID, testWorkerA)
+	if err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("MarkSent must accept SENDING owner transition")
+	}
+
+	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 1 {
+		t.Fatalf("expected 1 sent, got %d", sent)
+	}
+
+	if sending := countByStatus(ctx, t, repository, deliveryStatusSending); sending != 0 {
+		t.Fatalf("expected 0 sending after sent, got %d", sending)
+	}
+}
+
+func TestMarkSent_ClearsLock(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	if !items[0].LockedAt.Valid {
+		t.Fatal("expected locked_at set after claim")
+	}
+
+	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+
+	var clearedLocks int
+
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT count(*) FROM notification_delivery_outbox WHERE id = $1 AND locked_at IS NULL",
+		items[0].ID,
+	).Scan(&clearedLocks); err != nil {
+		t.Fatalf("query locked_at: %v", err)
+	}
+
+	if clearedLocks != 1 {
+		t.Fatalf("MarkSent must clear locked_at, got %d cleared", clearedLocks)
+	}
+}
+
+func TestMarkSent_DoesNotResurrectFailedRow(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	id := items[0].ID
+
+	if _, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET status = 'FAILED', locked_at = NULL WHERE id = $1", id,
+	); err != nil {
+		t.Fatalf("force failed: %v", err)
+	}
+
+	if _, err := repository.MarkSent(ctx, id, testWorkerA); err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+
+	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 0 {
+		t.Fatalf("late MarkSent must not resurrect a FAILED row to SENT, sent=%d", sent)
+	}
+
+	if failed := countByStatus(ctx, t, repository, domain.DeliveryStatusFailed); failed != 1 {
+		t.Fatalf("row must remain FAILED, failed=%d", failed)
+	}
+}
+
+func TestMarkFailed_DoesNotResurrectSentRow(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	id := items[0].ID
+
+	if _, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET status = 'SENT', locked_at = NULL WHERE id = $1", id,
+	); err != nil {
+		t.Fatalf("force sent: %v", err)
+	}
+
+	if _, err := repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "late failure"); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+
+	if failed := countByStatus(ctx, t, repository, domain.DeliveryStatusFailed); failed != 0 {
+		t.Fatalf("late MarkFailed must not resurrect a SENT row, failed=%d", failed)
+	}
+
+	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 1 {
+		t.Fatalf("row must remain SENT, sent=%d", sent)
+	}
+}
+
+func TestMarkFailed_WithBackoff(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	// maxRetries=3, 첫 실패 → 아직 PENDING 유지
+	if _, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error"); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+
+	pending := countByStatus(ctx, t, repository, domain.DeliveryStatusPending)
+	if pending != 1 {
+		t.Fatalf("expected 1 pending after first failure, got %d", pending)
+	}
+}
+
+func TestMarkFailed_FromSending(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	markOutboxSending(ctx, t, repository, &items[0])
+
+	ok, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error")
+	if err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("MarkFailed must accept SENDING owner transition")
+	}
+
+	if pending := countByStatus(ctx, t, repository, domain.DeliveryStatusPending); pending != 1 {
+		t.Fatalf("expected 1 pending after retry, got %d", pending)
+	}
+
+	if sending := countByStatus(ctx, t, repository, deliveryStatusSending); sending != 0 {
+		t.Fatalf("expected 0 sending after retry, got %d", sending)
+	}
+}
+
+func TestCleanup(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	items := fetchAndLockItems(ctx, t, repository)
+	if len(items) == 0 {
+		t.Fatal("no items fetched")
+	}
+
+	if _, err := repository.MarkSent(ctx, items[0].ID, testWorkerA); err != nil {
+		t.Fatalf("mark sent: %v", err)
+	}
+
+	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET sent_at = $1 WHERE id = $2",
+		time.Now().Add(-10*24*time.Hour), items[0].ID); err != nil {
+		t.Fatalf("backdate sent_at: %v", err)
+	}
+
+	cleaned, err := repository.Cleanup(ctx, 7*24*time.Hour)
+	if err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+
+	if cleaned != 1 {
+		t.Fatalf("expected 1 cleaned, got %d", cleaned)
+	}
+}
+
+func TestCleanup_FailedItems(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room-fail", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	_, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET status = 'FAILED', created_at = $1 WHERE content_id = $2",
+		time.Now().Add(-10*24*time.Hour), "2026-W08:room-fail",
+	)
+	if err != nil {
+		t.Fatalf("set old failed status: %v", err)
+	}
+
+	failed := countByStatus(ctx, t, repository, domain.DeliveryStatusFailed)
+	if failed != 1 {
+		t.Fatalf("expected 1 failed, got %d", failed)
+	}
+
+	cleaned, err := repository.Cleanup(ctx, 7*24*time.Hour)
+	if err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+
+	if cleaned != 1 {
+		t.Fatalf("expected 1 failed item cleaned, got %d", cleaned)
+	}
+
+	remaining := countByStatus(ctx, t, repository, domain.DeliveryStatusFailed)
+	if remaining != 0 {
+		t.Fatalf("expected 0 failed after cleanup, got %d", remaining)
+	}
+}
+
+func TestCountByStatus(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	for i := range 3 {
+		if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room"+string(rune('a'+i)), "msg"); err != nil {
+			t.Fatalf("enqueue %d: %v", i, err)
+		}
+	}
+
+	cnt, err := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+
+	if cnt != 3 {
+		t.Fatalf("expected 3 pending, got %d", cnt)
+	}
+}
+
+func expireLease(ctx context.Context, t *testing.T, repository *outboxFixture, id int64) {
+	t.Helper()
+
+	if _, err := repository.pool.Exec(ctx,
+		"UPDATE notification_delivery_outbox SET lock_expires_at = $1 WHERE id = $2",
+		time.Now().Add(-time.Minute), id,
+	); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+}
+
+func lockedByOf(ctx context.Context, t *testing.T, repository *outboxFixture, id int64) *string {
+	t.Helper()
+
+	var lockedBy *string
+
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT locked_by FROM notification_delivery_outbox WHERE id = $1", id,
+	).Scan(&lockedBy); err != nil {
+		t.Fatalf("query locked_by: %v", err)
+	}
+
+	return lockedBy
+}
+
+func reclaimByWorkerB(ctx context.Context, t *testing.T, repository *outboxFixture, id int64) {
+	t.Helper()
+
+	items := claimItems(ctx, t, repository, testWorkerB, 1)
+	if len(items) != 1 || items[0].ID != id {
+		t.Fatalf("worker B must reclaim row %d, got %+v", id, items)
+	}
+}
+
+func TestMarkSent_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(ctx, t, repository)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+
+	id := itemsA[0].ID
+
+	expireLease(ctx, t, repository, id)
+
+	reclaimByWorkerB(ctx, t, repository, id)
+
+	fenced, err := repository.MarkSent(ctx, id, testWorkerA)
+	if err != nil {
+		t.Fatalf("stale worker A mark sent: %v", err)
+	}
+
+	if fenced {
+		t.Fatal("stale MarkSent must be fenced off after reclaim")
+	}
+
+	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 0 {
+		t.Fatalf("stale MarkSent must not mark SENT, sent=%d", sent)
+	}
+
+	if pending := countByStatus(ctx, t, repository, domain.DeliveryStatusPending); pending != 1 {
+		t.Fatalf("row must stay PENDING under B's lease, pending=%d", pending)
+	}
+
+	okFenced, err := repository.MarkSent(ctx, id, testWorkerB)
+	if err != nil {
+		t.Fatalf("worker B mark sent: %v", err)
+	}
+
+	if !okFenced {
+		t.Fatal("current lease holder B MarkSent must succeed")
+	}
+
+	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 1 {
+		t.Fatalf("B MarkSent must mark SENT, sent=%d", sent)
+	}
+}
+
+func TestMarkFailed_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(ctx, t, repository)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+
+	id := itemsA[0].ID
+
+	expireLease(ctx, t, repository, id)
+	reclaimByWorkerB(ctx, t, repository, id)
+
+	fenced, err := repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "stale worker A failure")
+	if err != nil {
+		t.Fatalf("stale worker A mark failed: %v", err)
+	}
+
+	if fenced {
+		t.Fatal("stale MarkFailed must be fenced off after reclaim")
+	}
+
+	var attemptCount int
+
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT attempt_count FROM notification_delivery_outbox WHERE id = $1", id,
+	).Scan(&attemptCount); err != nil {
+		t.Fatalf("query attempt_count: %v", err)
+	}
+
+	if attemptCount != 0 {
+		t.Fatalf("fenced MarkFailed must not bump attempt_count, got %d", attemptCount)
+	}
+}
+
+func TestMarkSent_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(ctx, t, repository)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+
+	id := itemsA[0].ID
+
+	fenced, err := repository.MarkSent(ctx, id, testWorkerB)
+	if err != nil {
+		t.Fatalf("foreign worker mark sent: %v", err)
+	}
+
+	if fenced {
+		t.Fatal("foreign worker MarkSent must be fenced even with a matching locked_at")
+	}
+
+	if sent := countByStatus(ctx, t, repository, domain.DeliveryStatusSent); sent != 0 {
+		t.Fatalf("foreign MarkSent must not mark SENT, sent=%d", sent)
+	}
+
+	okFenced, err := repository.MarkSent(ctx, id, testWorkerA)
+	if err != nil {
+		t.Fatalf("owner mark sent: %v", err)
+	}
+
+	if !okFenced {
+		t.Fatal("owner A MarkSent must succeed")
+	}
+}
+
+func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(ctx, t, repository)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+
+	id := itemsA[0].ID
+
+	fenced, err := repository.MarkFailed(ctx, id, testWorkerB, 0, 3, time.Minute, "foreign failure")
+	if err != nil {
+		t.Fatalf("foreign worker mark failed: %v", err)
+	}
+
+	if fenced {
+		t.Fatal("foreign worker MarkFailed must be fenced even with a matching locked_at")
+	}
+
+	var attemptCount int
+
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT attempt_count FROM notification_delivery_outbox WHERE id = $1", id,
+	).Scan(&attemptCount); err != nil {
+		t.Fatalf("query attempt_count: %v", err)
+	}
+
+	if attemptCount != 0 {
+		t.Fatalf("fenced MarkFailed must not bump attempt_count, got %d", attemptCount)
+	}
+}
+
+func TestMarkSending_Fenced(t *testing.T) {
+	tests := []struct {
+		name   string
+		worker string
+		mutate func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox)
+	}{
+		{
+			name:   "foreign worker locked_by",
+			worker: testWorkerB,
+			mutate: func(*testing.T, *outboxFixture, context.Context, *domain.NotificationDeliveryOutbox) {},
+		},
+		{
+			name:   "expired lease",
+			worker: testWorkerA,
+			mutate: func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+				t.Helper()
+
+				expireLease(ctx, t, repository, item.ID)
+			},
+		},
+		{
+			name:   "non-pending sending",
+			worker: testWorkerA,
+			mutate: func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+				t.Helper()
+
+				markOutboxSending(ctx, t, repository, item)
+			},
+		},
+		{
+			name:   "non-pending failed",
+			worker: testWorkerA,
+			mutate: func(t *testing.T, repository *outboxFixture, ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+				t.Helper()
+
+				if _, err := repository.pool.Exec(ctx,
+					"UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE id = $1", item.ID,
+				); err != nil {
+					t.Fatalf("force failed: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repository := testRepository(t)
+			ctx := t.Context()
+
+			if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+				t.Fatalf("enqueue: %v", err)
+			}
+
+			items := fetchAndLockItems(ctx, t, repository)
+			if len(items) == 0 {
+				t.Fatal("no items fetched")
+			}
+
+			tc.mutate(t, repository, ctx, &items[0])
+
+			ok, err := repository.MarkSending(ctx, items[0].ID, tc.worker, testLease)
+			if err != nil {
+				t.Fatalf("mark sending: %v", err)
+			}
+
+			if ok {
+				t.Fatalf("MarkSending must be fenced for %q", tc.name)
+			}
+		})
+	}
+}
+
+func TestFetchReadyAndLock_ReclaimsExpiredLease(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(ctx, t, repository)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+
+	id := itemsA[0].ID
+
+	if got := claimItems(ctx, t, repository, testWorkerB, 1); len(got) != 0 {
+		t.Fatalf("a valid lease must not be reclaimable, got %d", len(got))
+	}
+
+	expireLease(ctx, t, repository, id)
+	reclaimByWorkerB(ctx, t, repository, id)
+
+	owner := lockedByOf(ctx, t, repository, id)
+	if owner == nil || *owner != testWorkerB {
+		t.Fatalf("expired-lease reclaim must set locked_by=%s, got %v", testWorkerB, owner)
+	}
+}
+
+func TestFetchReadyAndLock_DoesNotReclaimSendingAfterLeaseExpiry(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	itemsA := fetchAndLockItems(ctx, t, repository)
+	if len(itemsA) == 0 {
+		t.Fatal("worker A fetched no items")
+	}
+
+	id := itemsA[0].ID
+	markOutboxSending(ctx, t, repository, &itemsA[0])
+	expireLease(ctx, t, repository, id)
+
+	if got := claimItems(ctx, t, repository, testWorkerB, 1); len(got) != 0 {
+		t.Fatalf("SENDING row must not be reclaimable, got %d", len(got))
+	}
+
+	if sending := countByStatus(ctx, t, repository, deliveryStatusSending); sending != 1 {
+		t.Fatalf("row must remain SENDING, sending=%d", sending)
+	}
+}

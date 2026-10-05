@@ -21,6 +21,9 @@
 package filter
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -38,7 +41,9 @@ func formatMemberText(matchedMembers []string) string {
 	return strings.Join(matchedMembers, ", ")
 }
 
-func buildMemberProfiles(roomMembers []string, membersData domain.MemberDataProvider) []memberProfile {
+// buildMemberProfiles는 방 구독 멤버 표기를 멤버 데이터로 보강한다. 이름·별칭 미존재는 원래 표기만 쓰고, 조회 실패는
+// 보강 없이 진행하지 않고 오류로 돌려준다.
+func buildMemberProfiles(ctx context.Context, roomMembers []string, membersData domain.MemberDataProvider) ([]memberProfile, error) {
 	profiles := make([]memberProfile, 0, len(roomMembers))
 	for _, raw := range roomMembers {
 		display := strings.TrimSpace(raw)
@@ -58,7 +63,10 @@ func buildMemberProfiles(roomMembers []string, membersData domain.MemberDataProv
 
 		appendToken(display)
 
-		display = enrichMemberProfile(display, membersData, appendToken)
+		display, err := enrichMemberProfile(ctx, display, membersData, appendToken)
+		if err != nil {
+			return nil, err
+		}
 
 		tokens := make([]string, 0, len(tokenSet))
 		for token := range tokenSet {
@@ -70,21 +78,21 @@ func buildMemberProfiles(roomMembers []string, membersData domain.MemberDataProv
 		profiles = append(profiles, memberProfile{display: display, tokens: tokens})
 	}
 
-	return profiles
+	return profiles, nil
 }
 
-func enrichMemberProfile(display string, membersData domain.MemberDataProvider, appendToken func(string)) string {
+func enrichMemberProfile(ctx context.Context, display string, membersData domain.MemberDataProvider, appendToken func(string)) (string, error) {
 	if membersData == nil {
-		return display
+		return display, nil
 	}
 
-	member := membersData.FindMemberByName(display)
-	if member == nil {
-		member = membersData.FindMemberByAlias(display)
+	member, err := findProfileMember(ctx, display, membersData)
+	if errors.Is(err, domain.ErrMemberNotFound) {
+		return display, nil
 	}
 
-	if member == nil {
-		return display
+	if err != nil {
+		return "", err
 	}
 
 	if member.NameKo != "" {
@@ -98,7 +106,26 @@ func enrichMemberProfile(display string, membersData domain.MemberDataProvider, 
 	appendToken(member.NameJa)
 	appendMemberAliasTokens(member, appendToken)
 
-	return display
+	return display, nil
+}
+
+// findProfileMember는 이름이 없을 때만 별칭으로 찾는다. 이름 조회 실패는 별칭으로 넘기지 않는다.
+func findProfileMember(ctx context.Context, display string, membersData domain.MemberDataProvider) (*domain.Member, error) {
+	member, err := membersData.FindMemberByName(ctx, display)
+	if err == nil {
+		return member, nil
+	}
+
+	if !errors.Is(err, domain.ErrMemberNotFound) {
+		return nil, fmt.Errorf("find member profile by name: %w", err)
+	}
+
+	member, err = membersData.FindMemberByAlias(ctx, display)
+	if err != nil {
+		return nil, fmt.Errorf("find member profile by alias: %w", err)
+	}
+
+	return member, nil
 }
 
 func appendMemberAliasTokens(member *domain.Member, appendToken func(string)) {

@@ -69,7 +69,7 @@ func outboxRowCount(t *testing.T, db *pgxpool.Pool, id int64) int64 {
 
 	var count int64
 
-	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &count, "id = ?", id).Error)
+	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &count, "id = $1", id).Error)
 
 	return count
 }

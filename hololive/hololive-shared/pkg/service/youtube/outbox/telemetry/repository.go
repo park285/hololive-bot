@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -18,12 +19,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
+// ErrNilQuerier는 NewRepository에 nil 또는 typed-nil Querier가 들어왔을 때 반환된다.
+// 구성 시점에 거절해 이후 메서드가 nil DB로 panic하지 않게 한다.
+var ErrNilQuerier = errors.New("delivery telemetry repository: db is nil")
+
 type Repository struct {
 	db dbx.Querier
 }
 
-func NewRepository(db any) *Repository {
-	return &Repository{db: deliverysql.AsQuerier(db)}
+// NewRepository는 pool·transaction 등 dbx.Querier로 telemetry repository를 만든다.
+// Nil 또는 typed-nil이면 ErrNilQuerier를 반환하므로 호출자는 startup/transaction 오류로 처리해야 한다.
+func NewRepository(db dbx.Querier) (*Repository, error) {
+	if reflectutil.IsNil(db) {
+		return nil, ErrNilQuerier
+	}
+
+	return &Repository{db: db}, nil
 }
 
 func (r *Repository) Enqueue(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
@@ -255,11 +266,7 @@ func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 		return nil
 	}
 
-	now := time.Now().UTC()
-	args := append([]any{now}, dbx.AnyArgs(uniqueIDs)...)
-
-	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
-	`, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql"), time.Now().UTC(), uniqueIDs); err != nil {
 		return fmt.Errorf("mark delivery telemetry logged: %w", err)
 	}
 
@@ -273,10 +280,8 @@ func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff ti
 	}
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
-	args := append([]any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}, dbx.AnyArgs(uniqueIDs)...)
 
-	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
-	`, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql"), nextAttemptAt, deliverysql.TruncateString(errMsg, 500), uniqueIDs); err != nil {
 		return fmt.Errorf("mark delivery telemetry retry: %w", err)
 	}
 

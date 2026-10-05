@@ -59,3 +59,59 @@ func TestLoadRuntimeSelectsAlarmWorkerTracingToggle(t *testing.T) {
 		t.Fatal("TracingConfig.Enabled = false, want true")
 	}
 }
+
+// alarm-worker가 보관하지 않는 공통 구획(LLM·bot 표시·CORS 등)의 잘못된 값도 예전처럼 기동 실패로 드러난다.
+func TestLoadRuntimeRejectsInvalidUnconsumedCommonEnv(t *testing.T) {
+	for key, value := range map[string]string{
+		"MEMBER_NEWS_TEMPERATURE":              "warm",
+		"BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS": "1d",
+		"CORS_ENFORCE":                         "maybe",
+		"EXA_ENABLED":                          "maybe",
+		"PHOTO_SYNC_ENABLED":                   "maybe",
+	} {
+		t.Run(key, func(t *testing.T) {
+			setRuntimeEnv(t)
+			t.Setenv(key, value)
+
+			if _, err := LoadRuntime(); err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("LoadRuntime() error = %v, want %s rejection", err, key)
+			}
+		})
+	}
+}
+
+// alarm-worker는 Iris egress runtime이므로 room ACL seed와 Iris 토큰 입력을 bot plane과 같은 기준으로 요구한다.
+func TestLoadRuntimeRequiresEgressInputs(t *testing.T) {
+	for key, want := range map[string]string{
+		"KAKAO_ROOMS":                    "KAKAO_ROOMS is required",
+		settingstest.IrisWebhookTokenEnv: "IRIS_WEBHOOK_TOKEN is required",
+		"HOLODEX_API_KEY":                "HOLODEX_API_KEY is required",
+	} {
+		t.Run(key, func(t *testing.T) {
+			setRuntimeEnv(t)
+			t.Setenv(key, "")
+
+			if _, err := LoadRuntime(); err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("LoadRuntime() error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestLoadRuntimeReadsMarkdownReplies(t *testing.T) {
+	setRuntimeEnv(t)
+	t.Setenv("BOT_MARKDOWN_REPLIES", "true")
+
+	config, err := LoadRuntime()
+	if err != nil {
+		t.Fatalf("LoadRuntime() error = %v", err)
+	}
+
+	if !config.MarkdownReplies {
+		t.Fatal("MarkdownReplies = false, want BOT_MARKDOWN_REPLIES=true")
+	}
+
+	if config.AlarmWorkerProfile == nil {
+		t.Fatal("AlarmWorkerProfile = nil, want loaded Stack Worker Profile v1")
+	}
+}

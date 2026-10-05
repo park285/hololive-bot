@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -13,7 +13,7 @@ import (
 func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testing.T) {
 	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
 
-	profile, err := settings.LoadAPIWorkerProfile()
+	profile, err := apiconfig.LoadAPIWorkerProfile()
 	if err != nil {
 		t.Fatal(err)
 	}

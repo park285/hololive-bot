@@ -22,18 +22,11 @@ package runtime
 
 import (
 	"bytes"
-	"crypto/tls"
-	"encoding/pem"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/park285/shared-go/v2/pkg/workercontract"
-
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
@@ -443,13 +436,6 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 }
 
 func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
-	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
-	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
-	t.Setenv("IRIS_BASE_URL", newWorkerProfileEnabledIrisServer(t).URL)
-	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
@@ -461,18 +447,9 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 
 	t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
-	workerProfile, err := filepath.Abs(filepath.Join(
-		"..", "..", "..", "..", "..", "hololive-shared", "pkg", "config", "settings", "testdata", "stack-worker-profile-api.json",
-	))
+	appConfig, err := apiconfig.LoadLLMSchedulerRuntime()
 	if err != nil {
-		t.Fatalf("resolve API worker profile fixture: %v", err)
-	}
-
-	t.Setenv(workercontract.ProfileFileEnv, workerProfile)
-
-	appConfig, err := settings.LoadBotRuntime()
-	if err != nil {
-		t.Fatalf("settings.LoadBotRuntime() error = %v", err)
+		t.Fatalf("apiconfig.LoadLLMSchedulerRuntime() error = %v", err)
 	}
 
 	var buf bytes.Buffer
@@ -492,83 +469,6 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	if !strings.Contains(logOutput, "new-model") {
 		t.Error("expected log with new model name")
 	}
-}
-
-func newWorkerProfileEnabledIrisServer(t *testing.T) *httptest.Server {
-	t.Helper()
-
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/diagnostics/runtime" {
-			http.NotFound(w, r)
-
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-
-		if _, err := w.Write([]byte(`{
-			"workers": {
-				"webhook": {
-					"webhookPipeline": {
-						"profileEnabled": true,
-						"profileVersion": 1,
-						"profileId": "llm-runtime-test",
-						"profileHash": "0dfb582b12728e6f72921c63829e8a1276515da1eff0f03fe186b3da020bd63a",
-						"workerProfile": {
-							"version": 1,
-							"profile_id": "llm-runtime-test",
-							"delivery": {
-								"lane_workers": 32,
-								"lane_queue_capacity": 128,
-								"max_global_in_flight": 32,
-								"max_per_endpoint_in_flight": 8,
-								"max_drain_per_tick": 128,
-								"max_attempts": 6,
-								"request_timeout_ms": 30000,
-								"lane_idle_timeout_ms": 750,
-								"breaker_failure_threshold": 5,
-								"breaker_cooldown_ms": 30000
-							},
-							"receive": {
-								"workers": 16,
-								"queue_size": 1000,
-								"enqueue_timeout_ms": 50,
-								"handler_timeout_ms": 30000,
-								"max_body_bytes": 65536,
-								"dedup_ttl_ms": 960000,
-								"dedup_timeout_ms": 200
-							},
-							"bot_pool": {
-								"workers": 10,
-								"queue_size": 100
-							},
-							"validation": {
-								"min_queue_per_endpoint_multiplier": 4,
-								"require_receive_capacity_for_endpoint_burst": true
-							}
-						}
-					}
-				}
-			}
-		}`)); err != nil {
-			t.Errorf("write response: %v", err)
-		}
-	}))
-
-	server.TLS = &tls.Config{NextProtos: []string{"http/1.1"}}
-	server.StartTLS()
-	t.Cleanup(server.Close)
-
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
-	caFile := filepath.Join(t.TempDir(), "iris-diagnostics-ca.pem")
-
-	if err := os.WriteFile(caFile, certPEM, 0o600); err != nil {
-		t.Fatalf("write Iris diagnostics CA failed: %v", err)
-	}
-
-	t.Setenv("SSL_CERT_FILE", caFile)
-
-	return server
 }
 
 func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {

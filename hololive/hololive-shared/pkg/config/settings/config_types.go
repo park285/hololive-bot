@@ -82,18 +82,3 @@ type CORSConfig struct {
 	Enforce             bool
 	MissingInProduction bool
 }
-
-type WebhookConfig struct {
-	WorkerCount    int
-	QueueSize      int
-	EnqueueTimeout time.Duration
-	HandlerTimeout time.Duration
-	MaxBodyBytes   int64
-	DedupTTL       time.Duration
-	DedupTimeout   time.Duration
-}
-
-type WorkerPoolConfig struct {
-	Workers   int
-	QueueSize int
-}

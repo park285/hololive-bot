@@ -22,12 +22,11 @@ func TestRejectRetiredOutboxV3HandoffEnvIsPresenceBased(t *testing.T) {
 	}
 }
 
-func TestLoadBotRuntimeRejectsRetiredOutboxV3HandoffMode(t *testing.T) {
-	setRequiredLoadEnv(t)
+func TestRejectRetiredRuntimeEnvRejectsRetiredOutboxV3HandoffMode(t *testing.T) {
 	// 퇴역 전 운영 기본값이던 off도 존재만으로 거절한다.
 	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "off")
 
-	if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), "YOUTUBE_OUTBOX_V3_HANDOFF_MODE is retired") {
-		t.Fatalf("loadBotRuntimeConfig() error = %v, want retired YOUTUBE_OUTBOX_V3_HANDOFF_MODE rejection", err)
+	if err := RejectRetiredRuntimeEnv(); err == nil || !strings.Contains(err.Error(), "YOUTUBE_OUTBOX_V3_HANDOFF_MODE is retired") {
+		t.Fatalf("RejectRetiredRuntimeEnv() error = %v, want retired YOUTUBE_OUTBOX_V3_HANDOFF_MODE rejection", err)
 	}
 }

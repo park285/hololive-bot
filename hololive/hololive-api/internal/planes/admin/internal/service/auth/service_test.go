@@ -646,7 +646,12 @@ func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 
 	assertAuthCode(t, err, CodeUnauthorized)
 
-	sessionKeys, err := baseCache.ScanKeys(t.Context(), sessionKeyPrefix+"*", 10)
+	var sessionKeys []string
+
+	err = baseCache.ScanKeyPages(t.Context(), sessionKeyPrefix+"*", 10, func(keys []string) error {
+		sessionKeys = append(sessionKeys, keys...)
+		return nil
+	})
 	if err != nil {
 		t.Fatalf("scan session keys: %v", err)
 	}

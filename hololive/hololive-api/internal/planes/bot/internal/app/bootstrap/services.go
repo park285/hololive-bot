@@ -9,16 +9,16 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
+	irisproviders "github.com/kapu/hololive-shared/pkg/providers/iris"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
+func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
 	infra, err := InitInfraResources(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init infra resources: %w", err)
@@ -32,7 +32,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 		}
 	}()
 
-	irisClient, err := providers.ProvideIrisClient(
+	irisClient, err := irisproviders.ProvideIrisClient(
 		&appConfig.Iris,
 		logger,
 		iris.WithBaseURL(appConfig.Iris.BaseURL),
@@ -54,10 +54,10 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 
 func buildBotInfrastructureServices(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
-	irisClient providers.ManagedIrisClient,
+	irisClient irisproviders.ManagedIrisClient,
 	owner *botInfrastructureOwner,
 ) (*BotInfrastructure, error) {
 	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
@@ -72,7 +72,7 @@ func buildBotInfrastructureServices(
 
 	foundation, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
 		Holodex:          appConfig.Holodex,
-		OfficialSchedule: appConfig.OfficialScheduleRuntime(),
+		OfficialSchedule: appConfig.OfficialSchedule,
 	}, infra.MemberCache, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init scraper holodex foundation: %w", err)

@@ -28,25 +28,28 @@ func decodeStrictJSON(raw []byte, destination any) error {
 	return nil
 }
 
+// validateJSONStructure는 token 한 번의 순회로 단일 최상위 값, 중첩 깊이, 문법,
+// 중복 이름, UTF-8 유효성을 검증한다. 미지 member 거부는 뒤따르는 jsonv2.Unmarshal이 맡는다.
 func validateJSONStructure(raw []byte) error {
-	if err := validateSingleJSONValue(raw); err != nil {
-		return fmt.Errorf("validate single JSON value: %w", err)
+	// bytes.Buffer 입력은 decoder가 복사 없이 raw를 직접 읽게 한다. decoder는 입력을 쓰지 않는다.
+	decoder := jsontext.NewDecoder(bytes.NewBuffer(raw))
+
+	for {
+		if _, err := decoder.ReadToken(); err != nil {
+			return fmt.Errorf("decode json: %w", err)
+		}
+
+		depth := decoder.StackDepth()
+		if depth > MaxCanonicalJSONDepth {
+			return fmt.Errorf("json nesting exceeds %d", MaxCanonicalJSONDepth)
+		}
+
+		if depth == 0 {
+			break
+		}
 	}
 
-	if err := validateJSONDepth(raw); err != nil {
-		return fmt.Errorf("validate JSON depth: %w", err)
-	}
-
-	return nil
-}
-
-func validateSingleJSONValue(raw []byte) error {
-	decoder := jsontext.NewDecoder(bytes.NewReader(raw))
-	if _, err := decoder.ReadValue(); err != nil {
-		return fmt.Errorf("decode json: %w", err)
-	}
-
-	if _, err := decoder.ReadValue(); !errors.Is(err, io.EOF) {
+	if _, err := decoder.ReadToken(); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return errors.New("decode json: trailing value")
 		}
@@ -55,24 +58,6 @@ func validateSingleJSONValue(raw []byte) error {
 	}
 
 	return nil
-}
-
-func validateJSONDepth(raw []byte) error {
-	decoder := jsontext.NewDecoder(bytes.NewReader(raw))
-
-	for {
-		if _, err := decoder.ReadToken(); err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-
-			return fmt.Errorf("decode json: %w", err)
-		}
-
-		if decoder.StackDepth() > MaxCanonicalJSONDepth {
-			return fmt.Errorf("json nesting exceeds %d", MaxCanonicalJSONDepth)
-		}
-	}
 }
 
 func canonicalJSON(value any) ([]byte, error) {

@@ -125,7 +125,9 @@ func buildTrackingUpsertQuery(
 	latencyExceededExpr string,
 	deliveryStatusExpr string,
 ) (string, []any) {
-	args := make([]any, 0, len(normalized)*12)
+	const columnsPerRow = 12
+
+	args := make([]any, 0, len(normalized)*columnsPerRow)
 
 	var sb strings.Builder
 
@@ -136,7 +138,7 @@ func buildTrackingUpsertQuery(
 			sb.WriteByte(',')
 		}
 
-		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		writeRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = appendTrackingUpsertValues(args, record, now)
 	}

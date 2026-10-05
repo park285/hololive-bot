@@ -20,12 +20,11 @@ func TestRejectRetiredScraperFetchEnvIsPresenceBased(t *testing.T) {
 	}
 }
 
-func TestLoadBotRuntimeRejectsRetiredScraperFetcherEngine(t *testing.T) {
-	setRequiredLoadEnv(t)
+func TestRejectRetiredRuntimeEnvRejectsRetiredScraperFetcherEngine(t *testing.T) {
 	// 퇴역 전에 유일하게 허용되던 값도 이제는 존재만으로 거절한다.
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "nethttp")
 
-	if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE is retired") {
-		t.Fatalf("loadBotRuntimeConfig() error = %v, want retired SCRAPER_FETCHER_ENGINE rejection", err)
+	if err := RejectRetiredRuntimeEnv(); err == nil || !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE is retired") {
+		t.Fatalf("RejectRetiredRuntimeEnv() error = %v, want retired SCRAPER_FETCHER_ENGINE rejection", err)
 	}
 }

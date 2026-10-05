@@ -19,8 +19,8 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 ## Shared Infrastructure Ownership
 
 - Runtime bootstrap owns env loading and passes typed config into shared infra helpers.
-- `BuildInfraModule(ctx, cfg, logger)` accepts typed config and cleanup ownership remains with the returned module.
-- Iris SDK env fallback in `ProvideIrisClient` is a documented compatibility exception for runtime Iris configuration; it must not be used as a pattern for database/cache ownership.
+- `pkg/providers/modules.BuildInfraModule(ctx, InfraOptions{Valkey, Postgres}, logger)` accepts typed cache/DB config and cleanup ownership remains with the returned module.
+- Iris SDK env fallback in `pkg/providers/iris.ProvideIrisClient` is a documented compatibility exception for runtime Iris configuration; it must not be used as a pattern for database/cache ownership.
 - Shared helpers must not silently override typed database, cache, or repository config from process env.
 
 ## Import Boundary Rules
@@ -39,15 +39,15 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 | `hololive-api` YouTube plane | Observation consume, canonical persist, notification intent | External scraping, proactive egress |
 
 Duplicated polling prevention is enforced by PostgreSQL collection leases. Each collector uses a slot-specific Stack Worker Profile v1 with `collection.executor.enabled=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.
-Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery` for proactive egress or call `delivery.NewIrisMessageSender`.
+Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery`, and the Iris proactive sender `NewIrisMessageSender` exists only in `alarm-worker/internal/egress`.
 Canonical 저장 함수는 `hololive-api/internal/youtube/canonicalwrite`에 있으므로 collector에서 import할 수 없습니다.
 
-YouTube outbox dispatcher도 `hololive-alarm-worker/internal/egress/youtubedispatch`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. 삭제된 dispatcher·batchrepo 이름의 재등장을 찾는 grep은 두지 않습니다. 반면 `pkg/service/delivery`는 API의 reactive reply와 worker의 proactive egress가 함께 쓰므로 collector의 직접 사용을 scoped gate로 제한합니다.
+YouTube outbox dispatcher와 범용 notification delivery dispatcher도 각각 `hololive-alarm-worker/internal/egress/{youtubedispatch,notificationdelivery}`에 있어 Go `internal/` 경계가 교차 module import를 거절합니다. 삭제된 dispatcher·batchrepo 이름의 재등장을 찾는 grep은 두지 않습니다. 반면 `pkg/service/delivery`의 producer enqueue 저장소·sender interface·Iris transport는 API llm plane producer와 worker consumer가 함께 쓰므로 collector의 직접 사용을 scoped gate로 제한합니다.
 
 ## Compiler and Gate Guarantees
 
 - API canonical writer와 worker dispatcher의 module 소유권은 Go `internal/` 컴파일러 경계가 보장합니다.
-- `pkg/service/delivery`, `NewIrisMessageSender`, `ProvideIrisClient`, `iris.WithBaseURL`, `iris.WithBotToken`, `IrisClient:`는 합법적인 shared package 또는 SDK 표면이므로 compiler만으로 runtime capability ownership을 제한할 수 없습니다. scoped architecture gate가 직접 보장합니다.
+- `pkg/service/delivery`, `ProvideIrisClient`, `iris.WithBaseURL`, `iris.WithBotToken`, `IrisClient:`는 합법적인 shared package 또는 SDK 표면이므로 compiler만으로 runtime capability ownership을 제한할 수 없습니다. scoped architecture gate가 직접 보장하며, worker 내부의 `NewIrisMessageSender` 사용 위치도 같은 gate가 `internal/{egress,app}`으로 제한합니다.
 - `repository-ownership.allowlist`는 PostgreSQL table의 owner/writer/reader 선언이며 import allowlist가 아닙니다. table 접근은 `check-sql-ownership.py`, module import와 egress capability는 `check-repository-ownership.sh` 및 `ci-notification-egress-gate.sh`가 검증합니다.
 
 ## Validation

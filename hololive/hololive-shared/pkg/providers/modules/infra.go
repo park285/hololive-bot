@@ -7,8 +7,9 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/providers"
+	cacheproviders "github.com/kapu/hololive-shared/pkg/providers/cache"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
+	memberproviders "github.com/kapu/hololive-shared/pkg/providers/member"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -50,7 +51,7 @@ func BuildInfraModule(ctx context.Context, options InfraOptions, logger *slog.Lo
 
 	cacheService := cacheResources.Service
 	postgresService := databaseResources.Service
-	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
+	memberRepository := member.NewMemberRepository(postgresService, logger)
 
 	memberCache, err := buildInfraMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
@@ -64,8 +65,8 @@ func buildInfraCacheResources(
 	ctx context.Context,
 	valkeyConfig settings.ValkeyConfig,
 	logger *slog.Logger,
-) (*providers.CacheResources, func(), error) {
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, valkeyConfig, logger)
+) (*cacheproviders.CacheResources, func(), error) {
+	cacheResources, cleanupCache, err := cacheproviders.ProvideCacheResources(ctx, valkeyConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide cache resources: %w", err)
 	}
@@ -92,7 +93,7 @@ func buildInfraMemberCache(
 	cacheService cache.Client,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
-	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
+	memberCache, err := memberproviders.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build infra module: provide member cache: %w", err)
 	}

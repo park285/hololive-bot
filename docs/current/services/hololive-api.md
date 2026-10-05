@@ -159,7 +159,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - Iris URL/cert/token configuration
 - PostgreSQL and Valkey availability
 - Internal API base URLs and key configuration for scheduler, trigger, and alarm services
-- Internal HTTP/H3 client options are loaded once into `Config.InternalH3` and passed explicitly; each plane owns timeout and transport cleanup. Iris URL-file dynamic reload remains on its existing path.
+- Internal HTTP/H3 client options are loaded once into `BotPlaneConfig.InternalH3` and `AdminPlaneConfig.InternalH3` and passed explicitly; each plane owns timeout and transport cleanup. Iris URL-file dynamic reload remains on its existing path.
 - CLIPROXY/LLM settings where enabled
 - Uber Fx v1.24.0 is the process lifecycle owner for this binary only. It is an implementation detail, not an operator-selectable mode, and does not change ports, routes, config keys, or dependency readiness requirements.
 

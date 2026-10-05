@@ -159,7 +159,7 @@ func TestManualDigestUsesOneClockAndPreservesNoMemberPriority(t *testing.T) {
 func newSnapshotDigestService(t *testing.T, repository *Repository) (*Service, *snapshotDigestSummarizer, *countingMemberNewsQuerier) {
 	t.Helper()
 
-	validator, err := NewSourceValidator("", nil, nil)
+	validator, err := NewSourceValidator(t.Context(), "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

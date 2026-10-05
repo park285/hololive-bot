@@ -8,7 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/providers"
+	holodexproviders "github.com/kapu/hololive-shared/pkg/providers/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -32,9 +32,10 @@ func BuildScraperHolodex(
 	cacheClient cache.Client,
 	logger *slog.Logger,
 ) (*ScraperHolodexFoundation, error) {
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
+	memberServiceAdapter := member.NewMemberServiceAdapter(memberCache)
 
-	scraperService, err := providers.ProvideScraperServiceWithOfficialSchedule(
+	scraperService, err := holodexproviders.ProvideScraperService(
+		ctx,
 		memberServiceAdapter,
 		logger,
 		options.OfficialSchedule,
@@ -43,7 +44,7 @@ func BuildScraperHolodex(
 		return nil, fmt.Errorf("provide scraper service: %w", err)
 	}
 
-	holodexService, err := providers.ProvideHolodexServiceWithConfig(&options.Holodex, cacheClient, scraperService, logger)
+	holodexService, err := holodexproviders.ProvideHolodexService(&options.Holodex, cacheClient, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}

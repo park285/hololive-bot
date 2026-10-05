@@ -225,7 +225,7 @@ func (r *Repository) parseMemberPhotoRow(row *memberRow) (*domain.Member, error)
 func (r *Repository) querySingleMember(ctx context.Context, query string, args ...any) (*domain.Member, error) {
 	row, err := scanMemberQueryRow(r.pool.QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrMemberNotFound
+		return nil, domain.ErrMemberNotFound
 	}
 
 	if err != nil {
@@ -243,7 +243,7 @@ func (r *Repository) querySingleMember(ctx context.Context, query string, args .
 func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query string, args ...any) (*domain.Member, error) {
 	row, err := scanMemberPhotoQueryRow(r.pool.QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrMemberNotFound
+		return nil, domain.ErrMemberNotFound
 	}
 
 	if err != nil {

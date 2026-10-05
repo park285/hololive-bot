@@ -120,48 +120,63 @@ func newContextAwareMemberProvider(members []*domain.Member) *contextAwareMember
 	}
 }
 
-func (p *contextAwareMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
-	return p.byChannel[channelID]
+func (p *contextAwareMemberProvider) record(ctx context.Context) {
+	p.ctxCapture.contexts = append(p.ctxCapture.contexts, ctx)
 }
 
-func (p *contextAwareMemberProvider) FindMemberByName(name string) *domain.Member {
-	return p.byName[name]
+func (p *contextAwareMemberProvider) FindMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
+	p.record(ctx)
+
+	if member := p.byChannel[channelID]; member != nil {
+		return member, nil
+	}
+
+	return nil, domain.ErrMemberNotFound
 }
 
-func (p *contextAwareMemberProvider) FindMemberByAlias(string) *domain.Member {
-	return nil
+func (p *contextAwareMemberProvider) FindMemberByName(ctx context.Context, name string) (*domain.Member, error) {
+	p.record(ctx)
+
+	if member := p.byName[name]; member != nil {
+		return member, nil
+	}
+
+	return nil, domain.ErrMemberNotFound
 }
 
-func (p *contextAwareMemberProvider) GetChannelIDs() []string {
+func (p *contextAwareMemberProvider) FindMemberByAlias(ctx context.Context, _ string) (*domain.Member, error) {
+	p.record(ctx)
+
+	return nil, domain.ErrMemberNotFound
+}
+
+func (p *contextAwareMemberProvider) GetChannelIDs(ctx context.Context) ([]string, error) {
+	p.record(ctx)
+
 	ids := make([]string, 0, len(p.byChannel))
 	for id := range p.byChannel {
 		ids = append(ids, id)
 	}
 
-	return ids
+	return ids, nil
 }
 
-func (p *contextAwareMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+func (p *contextAwareMemberProvider) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
+	p.record(ctx)
+
 	return p.members, nil
 }
 
-func (p *contextAwareMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
-	p.ctxCapture.contexts = append(p.ctxCapture.contexts, ctx)
+func (p *contextAwareMemberProvider) FindMembersByName(ctx context.Context, _ string) ([]*domain.Member, error) {
+	p.record(ctx)
 
-	return &contextAwareMemberProvider{
-		members:    p.members,
-		byChannel:  p.byChannel,
-		byName:     p.byName,
-		ctxCapture: p.ctxCapture,
-	}
+	return []*domain.Member{}, nil
 }
 
-func (p *contextAwareMemberProvider) FindMembersByName(string) []*domain.Member {
-	return nil
-}
+func (p *contextAwareMemberProvider) FindMembersByAlias(ctx context.Context, _ string) ([]*domain.Member, error) {
+	p.record(ctx)
 
-func (p *contextAwareMemberProvider) FindMembersByAlias(string) []*domain.Member {
-	return nil
+	return []*domain.Member{}, nil
 }
 
 type alarmAddRecorder struct {

@@ -19,9 +19,8 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
+	holodexproviders "github.com/kapu/hololive-shared/pkg/providers/holodex"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -29,6 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 const (
@@ -81,7 +81,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
 ) (runtime *workerruntime.AlarmWorkerRuntime, err error) {
-	foundation, err := buildAlarmFoundation(ctx, appConfig.Config, infra, logger)
+	foundation, err := buildAlarmFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, "alarm foundation", err)
 	}
@@ -91,7 +91,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "worker registry", err)
 	}
 
-	schedulerResult := buildOptionalRuntimeScheduler(appConfig.Config, infra, foundation, logger)
+	schedulerResult := buildOptionalRuntimeScheduler(appConfig, infra, foundation, logger)
 	if schedulerResult.err != nil {
 		return nil, failAlarmWorkerBuild(infra, "scheduler", schedulerResult.err)
 	}
@@ -101,7 +101,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
-	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig.Config, infra, foundation, logger)
+	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, stage, err)
 	}
@@ -110,7 +110,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		servers.Metrics = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey, workerState.registry)
 	}
 
-	runtime = newAlarmWorkerRuntime(appConfig.Config, logger, infra, foundation, alarmWorkerRuntimeParts{
+	runtime = newAlarmWorkerRuntime(appConfig, logger, infra, foundation, alarmWorkerRuntimeParts{
 		scheduler:          schedulerResult.scheduler,
 		notificationEgress: notificationEgress,
 		servers:            servers,
@@ -130,7 +130,7 @@ type alarmWorkerRuntimeParts struct {
 }
 
 func newAlarmWorkerRuntime(
-	appConfig *settings.Config,
+	appConfig *workerconfig.RuntimeConfig,
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
@@ -167,7 +167,7 @@ type optionalRuntimeSchedulerResult struct {
 }
 
 func buildOptionalRuntimeScheduler(
-	appConfig *settings.Config,
+	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
@@ -192,7 +192,7 @@ type alarmWorkerBackgroundRunners struct {
 
 func buildAlarmWorkerHTTPRuntime(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
@@ -283,7 +283,7 @@ func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
 }
 
 func buildRuntimeScheduler(
-	appConfig *settings.Config,
+	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
@@ -348,13 +348,13 @@ func runtimeSchedulerDisabled(runtimeRole, configuredRole string, logger *slog.L
 
 func buildAlarmFoundation(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
-	memberData := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
+	memberData := member.NewMemberServiceAdapter(infra.MemberCache)
 
-	holodexService, err := buildAlarmHolodexService(appConfig, infra, memberData, logger)
+	holodexService, err := buildAlarmHolodexService(ctx, appConfig, infra, memberData, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -383,21 +383,23 @@ func buildAlarmFoundation(
 
 // buildAlarmHolodexService는 runtime이 읽은 공식 일정·Holodex 설정으로 공식 일정 서비스와 Holodex 서비스를 만든다.
 func buildAlarmHolodexService(
-	appConfig *settings.Config,
+	ctx context.Context,
+	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	memberData domain.MemberDataProvider,
 	logger *slog.Logger,
 ) (*holodexprovider.Service, error) {
-	scraperService, err := providers.ProvideScraperServiceWithOfficialSchedule(
+	scraperService, err := holodexproviders.ProvideScraperService(
+		ctx,
 		memberData,
 		logger,
-		appConfig.OfficialScheduleRuntime(),
+		appConfig.OfficialSchedule,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("provide scraper service: %w", err)
 	}
 
-	holodexService, err := providers.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
+	holodexService, err := holodexproviders.ProvideHolodexService(&appConfig.Holodex, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
@@ -414,7 +416,7 @@ func warmAlarmService(ctx context.Context, alarmService *subscriptions.AlarmServ
 }
 
 // 잘못된 batch 한도를 기본값 1000으로 바꾸지 않고 기동 오류로 드러낸다(holo-alarm-worker-envconfig-silent-defaults).
-func loadAlarmDispatchPublishConfig(profile *settings.AlarmWorkerProfile) (queue.PublishConfig, error) {
+func loadAlarmDispatchPublishConfig(profile *workerconfig.AlarmWorkerProfile) (queue.PublishConfig, error) {
 	maxDeliveries, err := envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
 	if err != nil {
 		return queue.PublishConfig{}, fmt.Errorf("alarm dispatch publish config: %w", err)

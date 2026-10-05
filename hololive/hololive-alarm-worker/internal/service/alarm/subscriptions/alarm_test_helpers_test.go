@@ -61,32 +61,38 @@ type mockMemberDataProvider struct {
 	members []*domain.Member
 }
 
-func (m *mockMemberDataProvider) FindMemberByChannelID(channelID string) *domain.Member {
+func (m *mockMemberDataProvider) FindMemberByChannelID(_ context.Context, channelID string) (*domain.Member, error) {
 	for _, member := range m.members {
 		if member.ChannelID == channelID {
-			return member
+			return member, nil
 		}
 	}
 
-	return nil
+	return nil, domain.ErrMemberNotFound
 }
 
-func (m *mockMemberDataProvider) FindMemberByName(_ string) *domain.Member { return nil }
-
-func (m *mockMemberDataProvider) FindMemberByAlias(_ string) *domain.Member { return nil }
-
-func (m *mockMemberDataProvider) GetChannelIDs() []string { return []string{} }
-
-func (m *mockMemberDataProvider) LoadAllMembers() ([]*domain.Member, error) { return m.members, nil }
-
-func (m *mockMemberDataProvider) WithContext(_ context.Context) domain.MemberDataProvider { return m }
-
-func (m *mockMemberDataProvider) FindMembersByName(_ string) []*domain.Member {
-	return []*domain.Member{}
+func (m *mockMemberDataProvider) FindMemberByName(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
 }
 
-func (m *mockMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member {
-	return []*domain.Member{}
+func (m *mockMemberDataProvider) FindMemberByAlias(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (m *mockMemberDataProvider) GetChannelIDs(context.Context) ([]string, error) {
+	return []string{}, nil
+}
+
+func (m *mockMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Member, error) {
+	return m.members, nil
+}
+
+func (m *mockMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+func (m *mockMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
 }
 
 // newTestAlarmService는 격리된 PG(dbtest)와 miniredis를 쓰는 서비스를 만든다. PG가 구독·방 이름의 원천이다.

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -45,7 +46,7 @@ func TestAdminHTTPBuildFailureClosesWholeOwner(t *testing.T) {
 
 			closeErr := errors.New("trigger transport close failed")
 			resources := newAdminResourceFixture(t, &calls, closeErr)
-			config := &settings.Config{}
+			config := &apiconfig.AdminPlaneConfig{}
 
 			if stage == "server" {
 				config.Server = settings.ServerConfig{APIKey: testAPIKey, HTTPTransports: []string{"h3"}, H3Addr: testLoopbackAddr}

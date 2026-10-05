@@ -82,7 +82,7 @@ func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
 
 // buildLLMSchedulerConfig는 모든 구획을 읽은 뒤 오류를 합쳐 돌려준다. 오류가 하나라도 있으면 만든 설정은 버린다.
 func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
-	webhookToken, botToken, _, _ := settings.LoadRuntimeTokensAndCORS()
+	webhookToken, botToken := settings.LoadIrisTokens()
 
 	port, portErr := sharedenv.IntE("LLM_SCHEDULER_PORT", 30003)
 	valkey, valkeyErr := settings.LoadValkeyConfig()

@@ -613,7 +613,7 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 		rows[i].LockedAt = &claimedAt
 		require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{
 			"row_version": 1, "locked_at": claimedAt,
-		}, "id = ?", rows[i].ID).Error)
+		}, "id = $1", rows[i].ID).Error)
 	}
 
 	startedBefore := groupedSendFallbackCount(groupedSendFallbackResultStarted)

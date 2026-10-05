@@ -12,12 +12,12 @@ import (
 // 거절한다. 가드 도입 리비전: stack-audit 2026-09-26(PLN-20260926-stack-audit-refactoring T11,
 // holo-iris-webhook-require-hmac-flag·holo-retired-guard-iris-webhook-require-hmac).
 //
-// 배포 선행 조건이자 제거 조건: settings.LoadConfig를 쓰는 runtime(hololive-api bot·admin plane, alarm-worker)의
+// 배포 선행 조건이자 제거 조건: settings.RejectRetiredRuntimeEnv를 부르는 runtime(hololive-api bot·admin plane, alarm-worker)의
 // 컨테이너 env 원천인 중앙 compose.env(이 release 이전 compose가 x-iris-env로 주입), bot.env(HOLOLIVE_API_ENV_FILE)와
 // alarm-worker.env(HOLOLIVE_ALARM_WORKER_ENV_FILE), 그 stack-secrets master 사본, 그리고 실행 중 프로세스 env에
 // IRIS_WEBHOOK_REQUIRE_HMAC 키가 0건이어야 한다. T18(2026-09-26)은 중앙 compose.env에 이 키가 있음을 확인했으므로
 // hololive-bot-ops가 그 키를 먼저 지우고 0건을 확인한 뒤에 이 가드가 든 release를 배포한다. 배포된 뒤 한 release가 지나면
-// 이 파일, 테스트, rejectRetiredRuntimeEnv(config_build.go)의 호출을 함께 삭제한다. 재검토 기한: remove_after = "2026-12-31".
+// 이 파일, 테스트, RejectRetiredRuntimeEnv(config_build.go)의 호출을 함께 삭제한다. 재검토 기한: remove_after = "2026-12-31".
 var retiredWebhookEnvKeys = []string{
 	"IRIS_WEBHOOK_REQUIRE_HMAC",
 }

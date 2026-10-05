@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,8 +36,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 var (
@@ -85,20 +85,16 @@ func TestIrisDurableContract(t *testing.T) {
 }
 
 // contractTerminalRetention은 runtime이 bot_webhook_inbox.terminal_retention_ms로 받는 종단 보존을
-// API worker profile fixture에서 settings loader를 거쳐 읽는다. DurableLedgerRepository.Maintain은
+// API worker profile fixture에서 역할 소유 loader를 거쳐 읽는다. DurableLedgerRepository.Maintain은
 // inbox·command·reply outbox 종단 행을 같은 terminalRetention으로 정리한다.
 func contractTerminalRetention(t *testing.T) time.Duration {
 	t.Helper()
 
-	fixture, err := filepath.Abs(filepath.Join(
-		"..", "..", "..", "..", "..", "..",
-		"hololive-shared", "pkg", "config", "settings", "testdata", "stack-worker-profile-api.json",
-	))
-	require.NoError(t, err)
+	fixture := settingstest.ProfileFixture(t, "stack-worker-profile-api.json")
 
 	t.Setenv(workercontract.ProfileFileEnv, fixture)
 
-	profile, err := settings.LoadAPIWorkerProfile()
+	profile, err := apiconfig.LoadAPIWorkerProfile()
 	require.NoError(t, err)
 	require.Positive(t, profile.BotWebhookInbox.TerminalRetentionMS)
 

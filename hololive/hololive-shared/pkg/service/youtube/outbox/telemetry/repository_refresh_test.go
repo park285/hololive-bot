@@ -137,7 +137,7 @@ func seedRefreshControlBaseline(ctx context.Context, t *testing.T, counting *exe
 
 func TestRefreshLockedRowsBatchesTargetsAndLeavesOthersUnchanged(t *testing.T) {
 	counting := &execCountingQuerier{inner: dbtest.NewPool(t)}
-	repo := NewRepository(counting)
+	repo := mustNewTestRepository(t, counting)
 	ctx := t.Context()
 	base := time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC)
 

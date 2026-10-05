@@ -28,7 +28,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -64,7 +64,7 @@ func containsWildcard(origins []string) bool {
 	return false
 }
 
-func newAPICORSConfig(appConfig *settings.Config, enforce bool) cors.Config {
+func newAPICORSConfig(appConfig *apiconfig.AdminPlaneConfig, enforce bool) cors.Config {
 	corsConfig := cors.DefaultConfig()
 
 	origins := normalizedOrigins(appConfig.CORS.AllowedOrigins)

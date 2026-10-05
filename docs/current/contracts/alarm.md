@@ -179,7 +179,7 @@ HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service
 전체 채널 해지는 별도로 등록한 멤버 구독을 삭제하지 않는다.
 
 채널별 구독 캐시는 해당 방의 전체·멤버별 구독 합집합이다. UNIT B의 최종 수신 방은
-`alarm.ResolveEventSubscribers`가 DB 구독 행과 제목으로 결정한다. 진행자가 확인되면
+`alarm.SubscriberResolver.ResolveEventSubscribers`가 DB 구독 행과 제목으로 결정한다. 진행자가 확인되면
 해당 멤버와 전체 채널 구독 방을, 미상이면 해당 알림 종류를 구독한 모든 UNIT B 방을 포함한다.
 공동 진행자는 합집합이며 방 ID는 중복을 제거한다. 외부 유닛의 게스트를 UNIT B 진행자로
 취급하지 않는다. 구독 DB 오류나 손상된 outbox payload는 이 fail-open의 대상이 아니다.
@@ -187,14 +187,16 @@ HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service
 `alarm-worker` YouTube checker의 채널별 LIVE 구독 방은 `alarm:channel_subscribers:{channel}` set을 먼저 읽는다.
 set이 비어 있으면 `alarm:channel_subscribers_empty:LIVE:{channel}` marker(30초)가 있는 채널만 구독 0으로 본다.
 marker가 없는 채널은 set 유실(eviction 등)로 보고 해당 주기의 미확정 채널을 한 번의 DB 조회로 확정한다.
-`ResolveChannelSubscribersByType`와 `ResolveUncachedChannelSubscribersByType`의 DB 결과는 이번 조회에만 사용하며 set이나 빈 구독 marker를 쓰지 않는다. 늦은 SADD가 해지를 되돌리거나 늦은 marker가 새 구독을 숨기는 경합을 방지한다. 유실된 set은 다음 전체 rebuild까지 DB에서 확인하며, checker는 주기마다 미확정 채널을 batch 조회 1회로 확정한다.
+`SubscriberResolver`는 cache·DB pool별로 생성하여 재사용한다. 같은 resolver의 동일 채널·종류 조회만 singleflight로 합치며 다른 DB의 결과·오류는 공유하지 않는다. 호출자 취소는 해당 대기만 끝내고, 공유 DB 조회는 기존 5초 예산으로 끝난다.
+
+`ResolveChannelSubscribersByType`와 `ResolveUncachedChannelSubscribersByType` 메서드의 DB 결과는 이번 조회에만 사용하며 set이나 빈 구독 marker를 쓰지 않는다. 늦은 SADD가 해지를 되돌리거나 늦은 marker가 새 구독을 숨기는 경합을 방지한다. 유실된 set은 다음 전체 rebuild까지 DB에서 확인하며, checker는 주기마다 미확정 채널의 empty marker를 한 pipeline으로 확인한 뒤 batch DB 조회 1회로 확정한다.
 set 조회 오류와 이 DB 조회 오류는 해당 check 주기 오류로 반환하며, 확정하지 못한 채널을 구독 0으로 기록하지 않는다.
 
 구독 추가·종류 변경·삭제·전체 해지는 DB 변경 전에 영향받는 종류의 빈 구독 marker를
 먼저 지우고 positive set을 무효화합니다. 무효화를 확인하지 못하면 DB를 변경하지 않습니다.
 추가는 DB 변경 전에 채널을 registry에 등록하고 전역 빈 구독 marker도 지웁니다.
 종류별 set은 부분 갱신하지 않으며, 다음 전체 rebuild까지 기존 DB read-through를 사용합니다.
-변경과 전체 rebuild는 같은 mutation mutex로 직렬화합니다.
+변경과 전체 rebuild는 같은 mutation mutex로 직렬화한다. rebuild는 `ScanKeyPages`로 받은 페이지를 즉시 삭제하고, 모든 삭제가 끝난 뒤 DB snapshot을 적재한다. 키 전체를 메모리에 모으지 않으며 SCAN COUNT는 서버의 hint이므로 실제 페이지 크기는 달라질 수 있다. 이 직렬화는 단일 worker를 전제로 하며, replica를 늘리기 전에는 프로세스 간 변경·rebuild fence가 필요하다.
 
 DB commit 뒤 캐시 후처리와 기존 실패 복구는 요청 취소와 분리된 최대 5초 context를
 사용합니다. 실패는 호출자에게 반환하되 DB 변경을 되돌리지 않습니다. 무효화된 set은
@@ -314,7 +316,7 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 ## Timeout and retry policy
 
 - HTTP client timeout: 10 seconds for alarm client.
-- HTTP/H3 options are passed explicitly from the consuming plane's loaded `Config.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
+- HTTP/H3 options are passed explicitly from the consuming plane's loaded `BotPlaneConfig.InternalH3` or `AdminPlaneConfig.InternalH3`. The client constructor does not reread the environment, and failed HTTPS/H3 configuration is a startup error. Each plane owns transport cleanup.
 - Dispatch claim: the consumer claims due `pending`/`retry` deliveries under a row lease, woken by `alarm:dispatch:wakeup` or its poll interval.
 - Retry: a failed delivery returns to `retry` with `next_attempt_at`; the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
 - `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, or the recovery codes `lease_expired`, `stale_sending`, and `lease_released`. Existing consumers may ignore this optional field.

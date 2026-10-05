@@ -8,11 +8,11 @@ import (
 	"github.com/park285/iris-client-go/v3/valkeydedup"
 	"github.com/park285/iris-client-go/v3/webhook"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 )
 
 func BuildDurableBotWebhookHandler(
-	appConfig *settings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	admitter webhook.MessageAdmitter,
 	deps BotWebhookRuntimeDependencies,
 	logger *slog.Logger,

@@ -137,7 +137,7 @@ type alarmDispatchGroupView struct {
 func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification, groupMinutesUntil int) (alarmDispatchItemView, error) {
 	starting := notification.IsStarting()
 
-	collabMembers, err := formatAlarmDispatchCollabMembers(members, notification.Stream)
+	collabMembers, err := formatAlarmDispatchCollabMembers(ctx, members, notification.Stream)
 	if err != nil {
 		return alarmDispatchItemView{}, err
 	}
@@ -156,12 +156,12 @@ func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store
 }
 
 // 콜라보 표시명에 필요한 멤버를 적재하지 못하면 이름을 빼고 보내지 않고 렌더 실패로 돌려준다(발송 전 실패로 재시도).
-func formatAlarmDispatchCollabMembers(members domain.MemberDataProvider, stream *domain.Stream) (string, error) {
+func formatAlarmDispatchCollabMembers(ctx context.Context, members domain.MemberDataProvider, stream *domain.Stream) (string, error) {
 	if stream == nil {
 		return "", nil
 	}
 
-	names, err := officialidentity.DisplayNames(members, stream.CollaboTalentNames, stream.ChannelID)
+	names, err := officialidentity.DisplayNames(ctx, members, stream.CollaboTalentNames, stream.ChannelID)
 	if err != nil {
 		return "", fmt.Errorf("format collab members: %w", err)
 	}

@@ -7,16 +7,15 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func LoadWorkerProfile() (*settings.AlarmWorkerProfile, error) {
+func LoadWorkerProfile() (*AlarmWorkerProfile, error) {
 	loaded, err := workercontract.LoadProfileFromEnv("hololive", "alarm-worker")
 	if err != nil {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}
 
-	profile := &settings.AlarmWorkerProfile{Loaded: loaded}
+	profile := &AlarmWorkerProfile{Loaded: loaded}
 	if err := workercontract.DecodeWorkerSettings(loaded, "alarm_dispatch", &profile.AlarmDispatch); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
@@ -36,7 +35,7 @@ func LoadWorkerProfile() (*settings.AlarmWorkerProfile, error) {
 	return profile, nil
 }
 
-func validateWorkerProfile(profile *settings.AlarmWorkerProfile) error {
+func validateWorkerProfile(profile *AlarmWorkerProfile) error {
 	if profile == nil {
 		return errors.New("alarm worker profile is nil")
 	}
@@ -59,7 +58,7 @@ func validateWorkerProfile(profile *settings.AlarmWorkerProfile) error {
 	return nil
 }
 
-func positiveValueProblems(profile *settings.AlarmWorkerProfile) []string {
+func positiveValueProblems(profile *AlarmWorkerProfile) []string {
 	return runtimepolicy.PositiveValueProblems(map[string]int64{
 		"alarm_dispatch.lease_ms":                               profile.AlarmDispatch.LeaseMS,
 		"alarm_dispatch.quarantine_threshold_ms":                profile.AlarmDispatch.QuarantineThresholdMS,
@@ -88,7 +87,7 @@ func positiveValueProblems(profile *settings.AlarmWorkerProfile) []string {
 	})
 }
 
-func positiveIntProblems(profile *settings.AlarmWorkerProfile) []string {
+func positiveIntProblems(profile *AlarmWorkerProfile) []string {
 	return runtimepolicy.PositiveIntProblems(map[string]int{
 		"alarm_dispatch.recovery_batch_size":              profile.AlarmDispatch.RecoveryBatchSize,
 		"alarm_dispatch.max_batch":                        profile.AlarmDispatch.MaxBatch,
@@ -103,7 +102,7 @@ func positiveIntProblems(profile *settings.AlarmWorkerProfile) []string {
 	})
 }
 
-func relationshipProblems(profile *settings.AlarmWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
+func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
 	problems := make([]string, 0)
 
 	if profile.AlarmDispatch.IdleBackoffMaxMS < profile.AlarmDispatch.IdleBackoffMinMS {

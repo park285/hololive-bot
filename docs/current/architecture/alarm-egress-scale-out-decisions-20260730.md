@@ -67,7 +67,7 @@ hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go
   validateProductionAlarmWorkerOwnership — egress role은 owner 강제
   requireNotificationRoleEnv(notificationSchedulerRoleEnv, worker, off) — scheduler role 두 값 열거
 
-hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_claim.go
+hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_claim.go
   PgxRepository.ClaimDue — 행 단위 배타성의 실제 소유자
 
 deploy/compose/docker-compose.prod.yml
@@ -83,7 +83,7 @@ scripts/architecture/ci-notification-egress-gate.sh
 
 ### 결정
 
-`hololive-alarm-worker`는 replica=1로 유지합니다. 아래 (a)~(h) 게이트가 모두 해소되기 전에는 replica를 올리지 않습니다.
+`hololive-alarm-worker`는 replica=1로 유지합니다. 아래 (a)~(i) 게이트가 모두 해소되기 전에는 replica를 올리지 않습니다.
 
 이 게이트들은 확장 시점에 해소할 목록이지 현행 배포의 결함 목록이 아닙니다. 단일 인스턴스에서는 아래 불변식이 인스턴스 경계 자체로 성립합니다.
 
@@ -95,11 +95,11 @@ scripts/architecture/ci-notification-egress-gate.sh
 
 alarm-worker는 claim한 봉투를 send unit별로 묶고(`alarmDispatchRegroupKey`), 저장된 send-unit `client_request_id`를 그대로 씁니다(`alarmDispatchClientRequestID`). 그룹 구성(envelope `DispatchOutboxID`와 범위)에서 ID를 파생하던 경로는 지웠습니다(stack-audit 2026-09-26 T17). 저장 ID가 비었거나 한 그룹에 서로 다른 ID가 섞이면 보내지 않고 발송 전 실패로 드러냅니다. karing 경로는 `DEC-20260926-hololive-karing-egress-disposition`에 따라 삭제했습니다(stack-audit 2026-09-26 T19). 모든 방은 message path를 씁니다.
 
-따라서 동시 claim이 한 send unit을 쪼개 서로 다른 `ClientRequestID`를 만드는 경로는 코드와 아래 통합 테스트 기준으로 없습니다. 같은 unit을 다시 보내는 경우(재시도, `RecoverExpiredLeased`의 lease 만료 회수)는 같은 저장 ID를 쓰므로 Iris admission 중복 제거에 기댑니다. replica=1을 유지하는 이유는 이 재발송 구간의 cross-instance 경합이 테스트로 고정되지 않았고 (a)~(h) 게이트가 남아 있기 때문입니다.
+따라서 동시 claim이 한 send unit을 쪼개 서로 다른 `ClientRequestID`를 만드는 경로는 코드와 아래 통합 테스트 기준으로 없습니다. 같은 unit을 다시 보내는 경우(재시도, `RecoverExpiredLeased`의 lease 만료 회수)는 같은 저장 ID를 쓰므로 Iris admission 중복 제거에 기댑니다. replica=1을 유지하는 이유는 이 재발송 구간의 cross-instance 경합이 테스트로 고정되지 않았고 (a)~(i) 게이트가 남아 있기 때문입니다.
 
 ### 근거 테스트
 
-두 테스트 모두 `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_integration_test.go`에 있으며 `//go:build integration` 태그가 붙어 있습니다.
+두 테스트 모두 `hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_integration_test.go`에 있으며 `//go:build integration` 태그가 붙어 있습니다.
 
 - `TestPgxRepositoryClaimDue_ConcurrentWorkersKeepOneCanonicalGroupAtomic` — 같은 room, 같은 minute bucket의 3행(한 send unit)을 worker-1과 worker-2가 각각 `limit=2`로 동시에 claim합니다. 단언은 합집합=3행, 교집합=∅, 행을 가져간 워커는 정확히 1개(한 send unit은 한 워커가 소유).
 - `TestPgxRepositoryClaimDue_ConcurrentWorkersClaimDisjointRows` — 서로 다른 room 10행에서 행 단위 배타성(합집합=전체, 교집합=∅)을 고정합니다.
@@ -127,31 +127,33 @@ alarm-worker 쪽은 `hololive/hololive-alarm-worker/internal/service/dispatchrun
 | 경로 | claim 락 | 동시성 테스트로 확인된 것 |
 |---|---|---|
 | alarm dispatch outbox (`dispatchoutbox`) | `repository_claim_0053_02.sql`의 send unit `FOR UPDATE OF u SKIP LOCKED` | 행 단위 배타성과 동시 claim의 send unit 원자성. 재발송 구간 경합은 미확인 — (a) 참조 |
-| generic notification delivery outbox (`pkg/service/delivery`) | `outbox_repository_0129_03.sql`의 `FOR UPDATE OF o SKIP LOCKED` + `locked_by`/`lock_expires_at` lease | 없음. lease 만료 회수와 stale worker fence는 고정되어 있으나(`TestFetchAndLock_ReclaimsExpiredLease`, `TestMarkSent_FenceRejectsStaleWorkerAfterReclaim`), 두 워커가 동시에 `FetchAndLock`을 호출하는 시나리오를 고정하는 테스트는 없음 |
+| generic notification delivery outbox (`alarm-worker/internal/egress/notificationdelivery`) | `outbox_claim_ready.sql`의 방별 선행 항목 선택과 `FOR UPDATE` + `locked_by`/`lock_expires_at` lease | 방별 순서, lease 만료 회수, stale worker fence, 정산 경합은 해당 패키지의 DB 회귀로 검증한다. 여러 프로세스에서 같은 방의 발송과 독립 maintenance를 함께 수행하는 조건은 확장 전 별도 검증 대상이다. |
 | YouTube delivery lifecycle (`alarm-worker/internal/egress/youtubedispatch/store`) | `transition_claim_pending.sql`의 `FOR UPDATE OF delivery SKIP LOCKED`와 `row_version` fence | 별개 `Dispatcher` 인스턴스 2개가 하나의 DB를 공유해 같은 delivery row를 경합해도 post당 1회만 전송이 시작됨 — `TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOncePerPost`. community post와 short kind에 한함 |
 
 "락이 있다"와 "중복 전송이 불가능하다"는 다른 명제입니다. `dispatchoutbox`의 claim 락은 동시 claim에서 send unit을 쪼개지 않지만, 락이 풀린 뒤의 재발송 구간은 (a)처럼 따로 확인해야 합니다. 세 경로 중 cross-instance 중복 전송 불가가 테스트로 고정된 것은 YouTube outbox 경로뿐이며, 그것도 두 kind에 한정됩니다. egress 전용 인스턴스를 실제로 띄우기 전에 나머지 두 경로를 각각 확인해야 합니다.
 
+**(i) 구독 변경과 cache rebuild의 프로세스 간 직렬화.** 현재 하나의 `AlarmService`가 같은 `cacheMutationMu`로 구독 변경과 전체 rebuild를 보호한다. 구독 변경은 commit 전에 positive set을 무효화하며 checker의 DB read-through는 set을 쓰지 않는다. replica>1에서는 다른 프로세스가 snapshot 이후에 해지를 commit한 뒤 오래된 rebuild가 SADD하는 경합이 가능하므로, 변경과 rebuild 전체를 함께 보호하는 프로세스 간 fence가 선행되어야 한다. SCAN 페이지 처리나 resolver별 singleflight는 이 fence를 대체하지 않는다.
+
 ### 코드 위치
 
 ```text
-hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_claim.go
+hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_claim.go
   PgxRepository.ClaimDue — pool.Query 단일 auto-commit statement
 
-hololive/hololive-shared/pkg/service/delivery/outbox_repository.go
-  OutboxRepository.FetchAndLock — 동일 형태의 단일 statement claim
-hololive/hololive-shared/pkg/service/delivery/queries/outbox_repository_0129_03.sql
+hololive/hololive-alarm-worker/internal/egress/notificationdelivery/store.go
+  Store.fetchReadyAndLock — 방별 첫 due 항목의 단일 statement claim
+hololive/hololive-alarm-worker/internal/egress/notificationdelivery/queries/outbox_claim_ready.sql
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries/transition_claim_pending.sql
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_claim_gate_test.go
   두 Dispatcher 인스턴스 경합 테스트
 
-hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql
+hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql
   send unit FOR UPDATE OF u SKIP LOCKED / unit 경계 LIMIT / 잠근 unit의 due delivery 전체 status='leased' 전이
 
-hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/dispatch_group.go
+hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/dispatch_group.go
   assignSendUnits — dispatch_group_key별 최대 10개 send unit과 client_request_id(hololive-alarm:<hash>) 결정
 
-hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_integration_test.go
+hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_integration_test.go
   send unit 원자성 및 행 배타성 근거 테스트 (//go:build integration)
 
 hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go

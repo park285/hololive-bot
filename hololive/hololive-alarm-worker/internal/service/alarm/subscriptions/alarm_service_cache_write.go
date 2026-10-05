@@ -42,7 +42,12 @@ func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) er
 		return stdErrors.New("alarm is nil")
 	}
 
-	if err := as.CacheMemberName(ctx, record.ChannelID, as.resolveCacheMemberName(ctx, record.ChannelID)); err != nil {
+	name, err := as.resolveCacheMemberName(ctx, record.ChannelID)
+	if err != nil {
+		return fmt.Errorf("resolve alarm member name: %w", err)
+	}
+
+	if err := as.CacheMemberName(ctx, record.ChannelID, name); err != nil {
 		return fmt.Errorf("cache alarm member name: %w", err)
 	}
 

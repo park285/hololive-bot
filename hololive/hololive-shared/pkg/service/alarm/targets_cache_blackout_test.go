@@ -38,7 +38,7 @@ func TestSubscriberLookupCacheErrorIsCounted(t *testing.T) {
 
 	before := cacheErrorCount("lookup")
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cacheClient, db, "UC_blackout_lookup", domain.AlarmTypeShorts)
+	got, err := NewSubscriberResolver(cacheClient, db).ResolveChannelSubscribersByType(t.Context(), "UC_blackout_lookup", domain.AlarmTypeShorts)
 
 	require.NoError(t, err, "a cache blackout must still resolve through the database")
 	require.Equal(t, []string{testDBRoomID}, got)
@@ -68,7 +68,7 @@ func TestSubscriberEmptyMarkerCheckErrorIsCounted(t *testing.T) {
 
 	before := cacheErrorCount("check_empty")
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cacheClient, db, "UC_blackout_empty", domain.AlarmTypeShorts)
+	got, err := NewSubscriberResolver(cacheClient, db).ResolveChannelSubscribersByType(t.Context(), "UC_blackout_empty", domain.AlarmTypeShorts)
 
 	require.NoError(t, err)
 	require.Equal(t, []string{testDBRoomID}, got)

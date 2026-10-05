@@ -1,6 +1,7 @@
 package subscriptions
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,10 +47,13 @@ func TestGetAllAlarmKeysListsDistinctRoomChannelsFromRepository(t *testing.T) {
 	}
 
 	// 관리 목록은 Valkey 방 index가 아니라 PG에서 만든다. subscriber cache를 비워도 목록은 그대로다.
-	cachedKeys, err := as.cache.ScanKeys(ctx, "*", 100)
-	require.NoError(t, err)
+	err := as.cache.ScanKeyPages(ctx, "*", 100, func(keys []string) error {
+		if _, err := as.cache.DelMany(ctx, keys); err != nil {
+			return fmt.Errorf("clear subscriber cache page: %w", err)
+		}
 
-	_, err = as.cache.DelMany(ctx, cachedKeys)
+		return nil
+	})
 	require.NoError(t, err)
 
 	entries, err := as.GetAllAlarmKeys(ctx)

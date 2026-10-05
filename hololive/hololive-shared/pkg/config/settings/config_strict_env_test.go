@@ -8,9 +8,19 @@ import (
 // invalidBoolValue는 shared-go bool 수용 집합(1/0, true/false, yes/no, y/n, on/off)에 없는 값이다.
 const invalidBoolValue = "maybe"
 
+// validateEgressRuntimeEnv는 egress runtime 로더가 역할별 구획을 읽기 전에 거치는 공통 env 단계다.
+func validateEgressRuntimeEnv() error {
+	if err := RejectRetiredRuntimeEnv(); err != nil {
+		return err
+	}
+
+	return ValidateRuntimeEnvSyntax()
+}
+
 // 숫자·bool env의 잘못된 값은 기본값으로 바뀌지 않고 기동 실패로 드러나야 한다(stack audit B4,
-// PLN-20260926-stack-audit-refactoring T10). 각 행은 LoadConfig가 조립하는 로더 하나를 대표한다.
-func TestLoadBotRuntimeRejectsInvalidEnvValues(t *testing.T) {
+// PLN-20260926-stack-audit-refactoring T10). 각 행은 공통 형식 검사가 다시 쓰는 공유 parser 하나를 대표하며,
+// 해당 구획을 보관하지 않는 runtime에서도 같은 거절이 유지된다.
+func TestValidateRuntimeEnvSyntaxRejectsInvalidEnvValues(t *testing.T) {
 	for _, tc := range []struct {
 		key   string
 		value string
@@ -26,8 +36,6 @@ func TestLoadBotRuntimeRejectsInvalidEnvValues(t *testing.T) {
 		{key: "BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", value: "1d"},
 		{key: "BOT_SEE_MORE_FOLD", value: invalidBoolValue},
 		{key: "BOT_MARKDOWN_REPLIES", value: invalidBoolValue},
-		{key: "IRIS_HTTP_TIMEOUT_SECONDS", value: "10s"},
-		{key: "IRIS_HTTP_TIMEOUT_SECONDS", value: "99999999999999999"},
 		{key: "HOLODEX_MAX_RETRY_ATTEMPTS", value: "three"},
 		{key: "HOLODEX_REQUEST_DELAY_MS", value: "500ms"},
 		{key: "HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED", value: invalidBoolValue},
@@ -43,16 +51,15 @@ func TestLoadBotRuntimeRejectsInvalidEnvValues(t *testing.T) {
 		{key: "CORS_ENFORCE", value: invalidBoolValue},
 	} {
 		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
-			setRequiredLoadEnv(t)
 			t.Setenv(tc.key, tc.value)
 
-			_, err := loadBotRuntimeConfig()
+			err := ValidateRuntimeEnvSyntax()
 			if err == nil {
-				t.Fatalf("Load() accepted invalid %s=%q; want a startup error", tc.key, tc.value)
+				t.Fatalf("ValidateRuntimeEnvSyntax() accepted invalid %s=%q; want a startup error", tc.key, tc.value)
 			}
 
 			if !strings.Contains(err.Error(), tc.key) {
-				t.Fatalf("Load() error = %v, want it to name %s", err, tc.key)
+				t.Fatalf("ValidateRuntimeEnvSyntax() error = %v, want it to name %s", err, tc.key)
 			}
 		})
 	}
@@ -60,38 +67,22 @@ func TestLoadBotRuntimeRejectsInvalidEnvValues(t *testing.T) {
 
 // 퇴역한 env 이름은 값을 읽지 않고 존재만으로(빈 값 포함) 거절한다. 제거 조건과 재검토 기한은
 // pkg/config/envload/retired_env_aliases.go와 config_services_retired_env.go 상단 주석이 소유한다.
-func TestLoadBotRuntimeRejectsRetiredEnvAliases(t *testing.T) {
+func TestEgressRuntimeEnvRejectsRetiredEnvAliases(t *testing.T) {
 	for _, key := range []string{"HOLODEX_API_KEY_1", "SERVICES_LLM_SERVER_HEALTH_URL"} {
 		for _, value := range []string{"", "legacy-value"} {
 			t.Run(key+"="+value, func(t *testing.T) {
-				setRequiredLoadEnv(t)
 				t.Setenv(key, value)
 
-				_, err := loadBotRuntimeConfig()
+				err := validateEgressRuntimeEnv()
 				if err == nil {
-					t.Fatalf("Load() accepted retired %s=%q; want presence-based rejection", key, value)
+					t.Fatalf("egress runtime env accepted retired %s=%q; want presence-based rejection", key, value)
 				}
 
 				if !strings.Contains(err.Error(), key) {
-					t.Fatalf("Load() error = %v, want it to name %s", err, key)
+					t.Fatalf("egress runtime env error = %v, want it to name %s", err, key)
 				}
 			})
 		}
-	}
-}
-
-// SERVICES_LLM_SCHEDULER_HEALTH_URL 하나만 정본이다.
-func TestLoadBotRuntimeReadsCanonicalLLMSchedulerHealthURL(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("SERVICES_LLM_SCHEDULER_HEALTH_URL", " https://llm.internal/health ")
-
-	config, err := loadBotRuntimeConfig()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	if config.Services.LLMSchedulerHealthURL != "https://llm.internal/health" {
-		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want canonical value", config.Services.LLMSchedulerHealthURL)
 	}
 }
 
@@ -100,7 +91,7 @@ func TestLoadBotConfigAggregatesFoldAndOtherEnvErrors(t *testing.T) {
 		t.Setenv(key, "invalid")
 	}
 
-	_, err := loadBotConfig()
+	_, err := LoadBotConfig()
 	if err == nil {
 		t.Fatal("invalid settings accepted")
 	}
@@ -108,6 +99,36 @@ func TestLoadBotConfigAggregatesFoldAndOtherEnvErrors(t *testing.T) {
 	for _, key := range []string{"BOT_SEE_MORE_FOLD", "BOT_MARKDOWN_REPLIES", "BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS"} {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("error %v does not include %s", err, key)
+		}
+	}
+}
+
+func TestLoadIrisConfigRejectsInvalidTimeouts(t *testing.T) {
+	for _, value := range []string{"10s", "99999999999999999"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("IRIS_HTTP_TIMEOUT_SECONDS", value)
+
+			if _, err := LoadIrisConfig(); err == nil || !strings.Contains(err.Error(), "IRIS_HTTP_TIMEOUT_SECONDS") {
+				t.Fatalf("LoadIrisConfig() error = %v, want IRIS_HTTP_TIMEOUT_SECONDS rejection", err)
+			}
+		})
+	}
+}
+
+// 공통 구획 여러 곳의 잘못된 숫자 env는 기본값으로 바뀌지 않고, 한 번의 기동 실패가 잘못된 키를 모두 보인다.
+func TestValidateRuntimeEnvSyntaxReportsEveryKey(t *testing.T) {
+	t.Setenv("POSTGRES_PORT", "not-a-number")
+	t.Setenv("CACHE_PORT", "invalid")
+	t.Setenv("SERVER_PORT", "invalid")
+
+	err := ValidateRuntimeEnvSyntax()
+	if err == nil {
+		t.Fatal("ValidateRuntimeEnvSyntax() error = nil, want invalid numeric env rejection")
+	}
+
+	for _, key := range []string{"POSTGRES_PORT", "CACHE_PORT", "SERVER_PORT"} {
+		if !strings.Contains(err.Error(), key) {
+			t.Fatalf("ValidateRuntimeEnvSyntax() error = %v, want it to name %s", err, key)
 		}
 	}
 }

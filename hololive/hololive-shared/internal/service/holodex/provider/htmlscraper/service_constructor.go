@@ -1,6 +1,7 @@
 package htmlscraper
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 // NewService는 적재한 공식 일정 runtime 설정으로 Service를 구성한다. 전달한 HTTP client가 nil이면 공식 일정 timeout을
 // 쓰는 외부 API client를 만든다. 식별 색인용 멤버 데이터를 적재하지 못하면 빈 색인으로 두지 않고 오류를 반환한다.
 func NewService(
+	ctx context.Context,
 	membersData domain.MemberDataProvider,
 	httpClient *http.Client,
 	logger *slog.Logger,
@@ -30,7 +32,7 @@ func NewService(
 		httpClient = httputil.NewExternalAPIClient(runtimeConfig.OfficialSchedule.Timeout)
 	}
 
-	identityIndex, err := buildOfficialScheduleIdentityIndex(membersData)
+	identityIndex, err := buildOfficialScheduleIdentityIndex(ctx, membersData)
 	if err != nil {
 		return nil, fmt.Errorf("new official schedule service: %w", err)
 	}

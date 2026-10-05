@@ -12,11 +12,11 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -35,7 +35,7 @@ type alarmModeComponents struct {
 	AlarmClient alarmProvider
 }
 
-func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
+func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
 	ctx, appConfig, err := normalizeAdminAPIRuntimeInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize admin API runtime inputs: %w", err)
@@ -56,7 +56,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logge
 
 	foundation, err := apifoundation.BuildScraperHolodex(ctx, apifoundation.ScraperHolodexOptions{
 		Holodex:          appConfig.Holodex,
-		OfficialSchedule: appConfig.OfficialScheduleRuntime(),
+		OfficialSchedule: appConfig.OfficialSchedule,
 	}, infra.MemberCache, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin api runtime: foundation: %w", err)
@@ -81,9 +81,9 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logge
 
 func normalizeAdminAPIRuntimeInputs(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,
-) (context.Context, *settings.Config, error) {
+) (context.Context, *apiconfig.AdminPlaneConfig, error) {
 	if appConfig == nil {
 		return nil, nil, errors.New("config must not be nil")
 	}
@@ -98,7 +98,7 @@ func normalizeAdminAPIRuntimeInputs(
 
 func buildAdminAPIRuntimeAfterAlarmMode(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *apifoundation.ScraperHolodexFoundation,
 	alarmMode *alarmModeComponents,
@@ -128,7 +128,10 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 
 	resources.collector = systemCollector
 
-	communityShortsOpsRepository := buildAdminAPICommunityShortsOpsRepository(infra)
+	communityShortsOpsRepository, err := buildAdminAPICommunityShortsOpsRepository(infra)
+	if err != nil {
+		return nil, fmt.Errorf("build admin api runtime: community shorts repository: %w", err)
+	}
 
 	irisRoomClient, err := buildAdminAPIBotRoomLister(appConfig, logger)
 	if err != nil {
@@ -168,7 +171,7 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 
 func buildAdminAPIHTTPRuntime(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
 	authService *authsvc.Service,
 	handler *server.Handler,
@@ -190,7 +193,7 @@ func buildAdminAPIHTTPRuntime(
 
 func newAdminAPIRuntime(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,
 	router *gin.Engine,
 	cleanup func() error,

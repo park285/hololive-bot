@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
@@ -14,7 +14,7 @@ import (
 // ALARM_INTERNAL_URL은 config.LoadRuntime이 필수로 검증하므로 in-process AlarmService 분기는 두지 않고,
 // URL이 비면 오류로 끝낸다.
 func buildAlarmModeComponents(
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,
 ) (*alarmModeComponents, error) {
 	providerURL := strings.TrimSpace(appConfig.AlarmServiceURL)

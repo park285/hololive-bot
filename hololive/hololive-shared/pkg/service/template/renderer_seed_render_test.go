@@ -97,26 +97,7 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 			continue
 		}
 
-		tmpl, err := texttemplate.New(string(key)).Funcs(templateFuncs).Option("missingkey=error").Parse(body)
-		if err != nil {
-			t.Errorf("%s: parse 실패: %v", key, err)
-
-			continue
-		}
-
-		var buf bytes.Buffer
-
-		if err := tmpl.Execute(&buf, data); err != nil {
-			t.Errorf("%s: sample data 렌더 실패: %v", key, err)
-
-			continue
-		}
-
-		if strings.Contains(buf.String(), "<no value>") {
-			t.Errorf("%s: 렌더 결과에 <no value> 노출", key)
-		}
-
-		t.Logf("KAKAO_AUDIT %s\n%s\nEND_AUDIT", key, kakaoformat.Render(buf.String()))
+		auditSeedRender(t, key, body, data)
 	}
 
 	for key := range seeds {
@@ -124,6 +105,38 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 			t.Errorf("시드 키 %s가 GetAllTemplateKeys()에 없음 — 렌더 게이트 밖 키 금지", key)
 		}
 	}
+}
+
+// auditSeedRender는 표준 실행으로 seed를 렌더링해 감사 로그를 남기고, 제한 실행 결과가 한 바이트도 다르지 않은지 확인합니다.
+func auditSeedRender(t *testing.T, key domain.TemplateKey, body string, data any) {
+	t.Helper()
+
+	tmpl, err := texttemplate.New(string(key)).Funcs(templateFuncs).Option("missingkey=error").Parse(body)
+	if err != nil {
+		t.Errorf("%s: parse 실패: %v", key, err)
+
+		return
+	}
+
+	var buf bytes.Buffer
+
+	if execErr := tmpl.Execute(&buf, data); execErr != nil {
+		t.Errorf("%s: sample data 렌더 실패: %v", key, execErr)
+
+		return
+	}
+
+	if strings.Contains(buf.String(), "<no value>") {
+		t.Errorf("%s: 렌더 결과에 <no value> 노출", key)
+	}
+
+	// 실행 예산 계측과 제한판 함수는 기본 seed의 출력을 한 바이트도 바꾸지 않아야 합니다.
+	bounded, err := renderTemplateBody(t.Context(), key, body, data)
+	if err != nil || bounded != buf.String() {
+		t.Errorf("%s: 제한 실행 결과가 다름: err=%v\nbounded=%q\nraw=%q", key, err, bounded, buf.String())
+	}
+
+	t.Logf("KAKAO_AUDIT %s\n%s\nEND_AUDIT", key, kakaoformat.Render(buf.String()))
 }
 
 func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
@@ -365,18 +378,12 @@ func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey) string {
 func renderSeedBody(t *testing.T, key domain.TemplateKey, body string, data any) string {
 	t.Helper()
 
-	tmpl, err := texttemplate.New(string(key)).Funcs(templateFuncs).Option("missingkey=error").Parse(body)
+	out, err := renderTemplateBody(t.Context(), key, body, data)
 	if err != nil {
-		t.Fatalf("%s: parse 실패: %v", key, err)
-	}
-
-	var buf bytes.Buffer
-
-	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("%s: 렌더 실패: %v", key, err)
 	}
 
-	return buf.String()
+	return out
 }
 
 func TestSeedTemplates_CommandHelpMentionsBroadcastHistory(t *testing.T) {

@@ -675,7 +675,7 @@ func seedConcurrentAlarmRows(
 	require.NoError(t, insertDeliveryTestRows(db, delivery).Error)
 
 	t.Cleanup(func() {
-		deleteDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, "kind = ? AND post_id = ?", tc.kind, postID)
+		deleteDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, "kind = $1 AND post_id = $2", tc.kind, postID)
 		deleteDeliveryTestRows(t, db, delivery)
 		deleteDeliveryTestRows(t, db, item)
 	})
@@ -705,7 +705,7 @@ func assertConcurrentAlarmSentOnce(
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", tc.kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", tc.kind, postID).Error)
 	require.Equal(t, postID, state.PostID)
 	require.Equal(t, contentID, state.ContentID)
 	require.NotNil(t, state.AlarmSentAt)
@@ -756,7 +756,7 @@ func TestDispatcher_CompatibilityCleanupPreservesOldFailedRows(t *testing.T) {
 
 	var oldCount int64
 
-	if err := countDeliveryTestRowsWhere(env.db, &domain.YouTubeNotificationOutbox{}, &oldCount, "id = ?", oldFailed.ID).Error; err != nil {
+	if err := countDeliveryTestRowsWhere(env.db, &domain.YouTubeNotificationOutbox{}, &oldCount, "id = $1", oldFailed.ID).Error; err != nil {
 		t.Fatalf("Failed to count old failed item: %v", err)
 	}
 
@@ -766,7 +766,7 @@ func TestDispatcher_CompatibilityCleanupPreservesOldFailedRows(t *testing.T) {
 
 	var recentCount int64
 
-	if err := countDeliveryTestRowsWhere(env.db, &domain.YouTubeNotificationOutbox{}, &recentCount, "id = ?", recentFailed.ID).Error; err != nil {
+	if err := countDeliveryTestRowsWhere(env.db, &domain.YouTubeNotificationOutbox{}, &recentCount, "id = $1", recentFailed.ID).Error; err != nil {
 		t.Fatalf("Failed to count recent failed item: %v", err)
 	}
 
@@ -865,7 +865,7 @@ func fetchDeliveryRows(t *testing.T, db *pgxpool.Pool, outboxID int64) []domain.
 
 	var rows []domain.YouTubeNotificationDelivery
 
-	if err := findDeliveryTestRowsOrderedWhere(db, &rows, "room_id ASC", "outbox_id = ?", outboxID).Error; err != nil {
+	if err := findDeliveryTestRowsOrderedWhere(db, &rows, "room_id ASC", "outbox_id = $1", outboxID).Error; err != nil {
 		t.Fatalf("Failed to fetch delivery rows: %v", err)
 	}
 

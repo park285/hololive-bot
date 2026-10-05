@@ -53,7 +53,7 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 
 	requireAlarmRoomIDs(t, got, []string{"room-live", "room-empty"})
 
-	subscribers, err := loadChannelSubscriberAlarms(ctx, pool, channelID, domain.AlarmTypeLive)
+	subscribers, err := NewSubscriberResolver(nil, pool).loadChannelSubscriberAlarms(ctx, channelID, domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("loadChannelSubscriberAlarms() error = %v", err)
 	}

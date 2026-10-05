@@ -6,7 +6,7 @@ import (
 )
 
 // ScraperConfig는 2026-08-25 퇴역한 youtube producer의 scheduler·poll·snapshot·channel health·backfill 설정과
-// 스크레이퍼 SOCKS5 proxy 토글을 담았다. LoadConfig runtime(hololive-api, alarm-worker)은 proxy 외에는 어느 필드도
+// 스크레이퍼 SOCKS5 proxy 토글을 담았다. RejectRetiredRuntimeEnv runtime(hololive-api, alarm-worker)은 proxy 외에는 어느 필드도
 // 소비하지 않았고, proxy는 운영 env에서 늘 꺼져 있었다(T18 2026-09-26: 모든 youtube-collector.env에 빈 값).
 // DEC-20260926-hololive-legacy-env-config-retirement와 DEC-20260926-hololive-youtube-producer-budget-retired로 ScraperConfig,
 // 그 loader·검증·*OrDefault, proxy client·런타임 토글·admin 설정 API의 scraperProxyEnabled를 지웠다. 키가 남아 있으면
@@ -14,12 +14,12 @@ import (
 // 가드 도입 리비전: stack-audit 2026-09-26(PLN-20260926-stack-audit-refactoring T19, holo-scraper-config-producer-era-fields,
 // holo-api-scraper-proxy-settings-http-field).
 //
-// 배포 선행 조건이자 제거 조건: settings.LoadConfig를 쓰는 runtime(hololive-api bot·admin plane, alarm-worker)의 env 원천인
+// 배포 선행 조건이자 제거 조건: settings.RejectRetiredRuntimeEnv를 부르는 runtime(hololive-api bot·admin plane, alarm-worker)의 env 원천인
 // 중앙 compose.env·bot.env(HOLOLIVE_API_ENV_FILE)·alarm-worker.env(HOLOLIVE_ALARM_WORKER_ENV_FILE), 그 stack-secrets master
 // 사본, 그리고 실행 중 프로세스 env에 아래 키가 0건임을 hololive-bot-ops로 확인한다. SCRAPER_PROXY_ENABLED·SCRAPER_PROXY_URL은
 // youtube-collector도 같은 기준으로 거절하므로(collector/retired_env.go) 모든 youtube-collector.env와 master 사본에서도 먼저
 // 지운다(T18은 이 두 키가 모든 youtube-collector.env에 남아 있음을 확인했다). 이 가드가 든 release가 중앙 호스트에 배포된 뒤
-// 이 파일, 테스트, rejectRetiredRuntimeEnv(config_build.go)의 호출을 함께 삭제한다. 재검토 기한: remove_after = "2026-12-31".
+// 이 파일, 테스트, RejectRetiredRuntimeEnv(config_build.go)의 호출을 함께 삭제한다. 재검토 기한: remove_after = "2026-12-31".
 var retiredScraperConfigEnvKeys = []string{
 	"SCRAPER_PROXY_ENABLED",
 	"SCRAPER_PROXY_URL",

@@ -33,14 +33,14 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type BotRuntime struct {
-	Config *settings.Config
+	Config *apiconfig.BotPlaneConfig
 	Logger *slog.Logger
 
 	Bot *orchestration.Bot
@@ -81,7 +81,7 @@ type BotRuntime struct {
 	httpHandlersOnce   sync.Once
 }
 
-func BuildRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*BotRuntime, error) {
+func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, logger *slog.Logger) (*BotRuntime, error) {
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)

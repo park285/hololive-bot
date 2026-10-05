@@ -21,144 +21,56 @@
 package dbx
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestPostgresPlaceholders(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "empty", in: "", want: ""},
-		{name: "no placeholders", in: "SELECT 1", want: "SELECT 1"},
-		{name: "two placeholders", in: "?,?", want: "$1,$2"},
-		{name: "spaced placeholders", in: "a = ? AND b = ?", want: "a = $1 AND b = $2"},
-		{name: "three placeholders in clause", in: "x IN (?, ?, ?)", want: "x IN ($1, $2, $3)"},
-		{name: "in clause built from InPlaceholders", in: "x IN (" + InPlaceholders(2) + ")", want: "x IN ($1, $2)"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := PostgresPlaceholders(tt.in); got != tt.want {
-				t.Errorf("PostgresPlaceholders(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
-	}
+type sqlHelperRow struct {
+	ID    int    `db:"id"`
+	Value string `db:"value"`
 }
 
-func TestPostgresPlaceholdersRewritesNonPlaceholderQuestionMarks(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "string literal", in: "WHERE note = '?'", want: "WHERE note = '$1'"},
-		{name: "jsonb exists operator", in: "WHERE payload ? 'key'", want: "WHERE payload $1 'key'"},
-		{name: "jsonb any operator", in: "WHERE payload ?| $1", want: "WHERE payload $1| $1"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := PostgresPlaceholders(tt.in); got != tt.want {
-				t.Errorf("PostgresPlaceholders(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
-	}
+// jsonb ? 연산자와 문자열 리터럴 안의 '?'가 native placeholder와 함께 그대로 서버에 도달해야 한다.
+func TestSelectSQLKeepsQuestionMarkOperatorsWithNativePlaceholders(t *testing.T) {
+	ctx := t.Context()
+	pool := newTxTestPool(t)
+
+	_, err := pool.Exec(ctx, `INSERT INTO dbx_tx_test (value) VALUES ('a?'), ('b'), ('c?')`)
+	require.NoError(t, err)
+
+	var rows []sqlHelperRow
+
+	err = SelectSQL(ctx, pool, &rows, "select question mark rows", `
+		SELECT id, value
+		FROM dbx_tx_test
+		WHERE jsonb_build_object('k', 1) ? 'k'
+		  AND value LIKE '%?'
+		  AND value = ANY($1::text[])
+		ORDER BY id
+	`, []string{"a?", "b", "c?"})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "a?", rows[0].Value)
+	require.Equal(t, "c?", rows[1].Value)
 }
 
-func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
-	moduleRoot := filepath.Join("..", "..")
-	// 이 SQL만 live_evidence.go의 tx.Query가 직접 실행하며 ?|는 migration 193의 GIN 인덱스 조건이다.
-	apiQueryRoot := filepath.Join(moduleRoot, "..", "hololive-api", "internal", "youtube", "sourceobservation")
-	canonicalQueryRoot := filepath.Join(moduleRoot, "..", "hololive-api", "internal", "youtube", "canonicalwrite")
-	collectorQueryRoot := filepath.Join(moduleRoot, "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation")
-	nativeJSONBAnyQuery := filepath.Join(apiQueryRoot, "queries", "repository_live_absence_slots.sql")
+func TestExecSQLAndGetSQLUseNativePlaceholders(t *testing.T) {
+	ctx := t.Context()
+	pool := newTxTestPool(t)
 
-	for _, queryRoot := range []string{moduleRoot, apiQueryRoot, canonicalQueryRoot, collectorQueryRoot} {
-		err := filepath.Walk(queryRoot, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
+	affected, err := ExecSQL(ctx, pool, "insert rows", `INSERT INTO dbx_tx_test (value) SELECT unnest($1::text[])`, []string{"x", "y"})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), affected)
 
-			if info.IsDir() || !strings.HasSuffix(path, ".sql") || filepath.Base(filepath.Dir(path)) != "queries" {
-				return nil
-			}
+	var row sqlHelperRow
 
-			data, readErr := os.ReadFile(path) //nolint:gosec // walk 결과 경로만 읽는다.
-			if readErr != nil {
-				return fmt.Errorf("read file: %w", readErr)
-			}
+	found, err := GetSQL(ctx, pool, &row, "get row", `SELECT id, value FROM dbx_tx_test WHERE value = $1`, "y")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "y", row.Value)
 
-			for _, hazard := range questionMarkHazards(string(data), path == nativeJSONBAnyQuery) {
-				t.Errorf("%s: %s: PostgresPlaceholders would rewrite this '?'", path, hazard)
-			}
-
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walk SQL assets: %v", err)
-		}
-	}
-}
-
-func questionMarkHazards(sql string, allowJSONBAny bool) []string {
-	var hazards []string
-
-	quoted := false
-
-	for i := range len(sql) {
-		switch {
-		case sql[i] == '\'':
-			quoted = !quoted
-		case sql[i] != '?':
-		case quoted:
-			hazards = append(hazards, "quoted literal at offset "+strconv.Itoa(i))
-		case i+1 < len(sql) && (sql[i+1] == '&' || sql[i+1] == '|' && !allowJSONBAny):
-			hazards = append(hazards, "jsonb operator at offset "+strconv.Itoa(i))
-		}
-	}
-
-	return hazards
-}
-
-func TestInPlaceholders(t *testing.T) {
-	tests := []struct {
-		name  string
-		count int
-		want  string
-	}{
-		{name: "zero", count: 0, want: ""},
-		{name: "negative", count: -1, want: ""},
-		{name: "one", count: 1, want: "?"},
-		{name: "three", count: 3, want: "?, ?, ?"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := InPlaceholders(tt.count); got != tt.want {
-				t.Errorf("InPlaceholders(%d) = %q, want %q", tt.count, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestAnyArgs(t *testing.T) {
-	got := AnyArgs([]int64{1, 2, 3})
-	if len(got) != 3 {
-		t.Fatalf("AnyArgs len = %d, want 3", len(got))
-	}
-
-	for i, want := range []int64{1, 2, 3} {
-		v, ok := got[i].(int64)
-		if !ok || v != want {
-			t.Errorf("AnyArgs[%d] = %v, want %d", i, got[i], want)
-		}
-	}
-
-	if got := AnyArgs([]string{}); len(got) != 0 {
-		t.Errorf("AnyArgs(empty) len = %d, want 0", len(got))
-	}
+	found, err = GetSQL(ctx, pool, &row, "get missing row", `SELECT id, value FROM dbx_tx_test WHERE value = $1`, "missing")
+	require.NoError(t, err)
+	require.False(t, found)
 }

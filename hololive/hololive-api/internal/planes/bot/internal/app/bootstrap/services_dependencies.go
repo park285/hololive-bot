@@ -4,18 +4,18 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 // BuildBotDependencies는 실제 command/readiness 입력을 한 번 조립한다. 자원 수명은 plane이 소유한다.
 func BuildBotDependencies(
-	appConfig *configsettings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	infra *sharedmodules.InfraModule,
 	foundation *apifoundation.ScraperHolodexFoundation,
 	alarmYouTubeStack *AlarmYouTubeStackComponents,

@@ -59,16 +59,12 @@ func (r *Repository) listPostSendCounts(ctx context.Context, since time.Time) ([
 	query := mustSQL("post_send_counts_0088_01.sql") + postSendCountsSelectSQL() + `
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
-		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?
-		WHERE ` + deliverysql.DeliveryInClause("track.kind", len(postKinds)) + `
-		  AND COALESCE(track.actual_published_at, track.detected_at) >= ?
+		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= $1
+		WHERE track.kind = ANY($2::text[])
+		  AND COALESCE(track.actual_published_at, track.detected_at) >= $1
 	` + postSendCountsGroupOrderSQL()
-	args := []any{since}
 
-	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
-	args = append(args, since)
-
-	if err := dbx.SelectSQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &scanned, "scan rows", query, since, deliverysql.Texts(postKinds)); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}
 

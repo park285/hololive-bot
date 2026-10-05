@@ -84,8 +84,16 @@ func blockGraduatedMember(ctx context.Context, deps *Dependencies, room, channel
 		return false, nil
 	}
 
-	member := deps.Matcher.GetMemberByChannelID(ctx, channelID)
-	if member == nil || !member.IsGraduated {
+	member, err := deps.Matcher.GetMemberByChannelID(ctx, channelID)
+	if errors.Is(err, domain.ErrMemberNotFound) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("get member by channel ID: %w", err)
+	}
+
+	if !member.IsGraduated {
 		return false, nil
 	}
 

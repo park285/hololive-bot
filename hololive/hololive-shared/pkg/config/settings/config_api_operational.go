@@ -82,13 +82,4 @@ func loadMaxResponseBodyBytes() (int64, error) {
 	return maxBytes, nil
 }
 
-// OfficialScheduleRuntime은 이미 적재한 설정에서 공식 일정 runtime 값을 꺼낸다. 설정이 nil이면 env를 다시 읽던
-// 분기는 파싱 오류를 돌려줄 수 없어 지웠다(stack audit B4). 모든 호출자는 적재한 *Config로 부른다.
-func (c *Config) OfficialScheduleRuntime() OfficialScheduleRuntimeConfig {
-	return OfficialScheduleRuntimeConfig{
-		OfficialSchedule:     c.OfficialSchedule,
-		MaxResponseBodyBytes: c.MaxResponseBodyBytes,
-	}
-}
-
 const DefaultMaxResponseBodyBytes int64 = 2 << 20

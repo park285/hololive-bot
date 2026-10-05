@@ -163,13 +163,19 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 	return channel, channel != nil, nil
 }
 
-func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) *domain.Member {
-	provider := mm.providerWithContext(ctx)
-	if provider == nil {
-		return nil
+// GetMemberByChannelID는 채널 대표 멤버를 돌려준다. 멤버 데이터 없이 구성한 Matcher는 snapshot과 같이 빈 데이터로 보고
+// domain.ErrMemberNotFound를, 조회 실패는 그 오류를 돌려준다.
+func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
+	if mm == nil || mm.membersData == nil {
+		return nil, domain.ErrMemberNotFound
 	}
 
-	return provider.FindMemberByChannelID(channelID)
+	member, err := mm.membersData.FindMemberByChannelID(ctx, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("find member by channel ID: %w", err)
+	}
+
+	return member, nil
 }
 
 // "이름 (그룹)" 형식을 파싱하고, 동명이인 발생 시 AmbiguousMatchError를 반환합니다.

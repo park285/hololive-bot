@@ -37,7 +37,7 @@ func TestCollectCelebrationMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) 
 			return nil
 		}},
 		{scan: func(dest ...any) error {
-			scanFullCelebrationRow(dest, 2, "Miko", testChannelUC2, []byte(`{"ko":["미코"]}`))
+			scanFullCelebrationRow(dest, 2, testMemberMiko, testChannelUC2, []byte(`{"ko":["미코"]}`))
 
 			return nil
 		}},
@@ -95,7 +95,7 @@ func TestCollectCalendarEntriesFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 			return nil
 		}},
 		{scan: func(dest ...any) error {
-			scanFullCelebrationRow(dest, 2, "Miko", testChannelUC2, []byte(`{"ko":["미코"]}`))
+			scanFullCelebrationRow(dest, 2, testMemberMiko, testChannelUC2, []byte(`{"ko":["미코"]}`))
 			assignScanDest(dest[20], "birthday")
 			assignScanDest(dest[21], 4)
 

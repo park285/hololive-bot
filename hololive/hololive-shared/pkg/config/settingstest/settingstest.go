@@ -23,7 +23,7 @@ const (
 	IrisBotTokenEnv     = "IRIS_BOT_TOKEN"     //nolint:gosec // G101 오탐: 값은 자격증명이 아니라 환경변수 이름이다.
 )
 
-// ProfileFixture: settings 패키지의 testdata 경로를 하위 패키지에서도 같은 값으로 돌려준다.
+// ProfileFixture: runtime worker profile fixture(settingstest/testdata)의 경로를 모든 소비 패키지에 같은 값으로 돌려준다.
 func ProfileFixture(t *testing.T, name string) string {
 	t.Helper()
 
@@ -32,7 +32,7 @@ func ProfileFixture(t *testing.T, name string) string {
 		t.Fatal("resolve settingstest source path")
 	}
 
-	return filepath.Join(filepath.Dir(file), "..", "settings", "testdata", name)
+	return filepath.Join(filepath.Dir(file), "testdata", name)
 }
 
 func UseProfileFixture(t *testing.T, name string) {

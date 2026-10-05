@@ -10,17 +10,17 @@ func TestLoadKakaoConfigDefaultsWhenACLVariablesAreUnset(t *testing.T) {
 	unsetEnvForTest(t, kakaoACLEnabledEnv)
 	unsetEnvForTest(t, kakaoACLModeEnv)
 
-	config, err := loadKakaoConfig()
+	config, err := LoadKakaoConfig()
 	if err != nil {
-		t.Fatalf("loadKakaoConfig() error = %v", err)
+		t.Fatalf("LoadKakaoConfig() error = %v", err)
 	}
 
 	if !config.ACLEnabled {
-		t.Fatal("loadKakaoConfig() ACLEnabled = false, want true default")
+		t.Fatal("LoadKakaoConfig() ACLEnabled = false, want true default")
 	}
 
 	if config.ACLMode != "whitelist" {
-		t.Fatalf("loadKakaoConfig() ACLMode = %q, want whitelist default", config.ACLMode)
+		t.Fatalf("LoadKakaoConfig() ACLMode = %q, want whitelist default", config.ACLMode)
 	}
 }
 
@@ -29,18 +29,17 @@ func TestLoadKakaoConfigDefaultsWhenACLVariablesAreUnset(t *testing.T) {
 func TestLoadKakaoConfigHasNoRoomDefault(t *testing.T) {
 	unsetEnvForTest(t, "KAKAO_ROOMS")
 
-	config, err := loadKakaoConfig()
+	config, err := LoadKakaoConfig()
 	if err != nil {
-		t.Fatalf("loadKakaoConfig() error = %v", err)
+		t.Fatalf("LoadKakaoConfig() error = %v", err)
 	}
 
 	if len(config.Rooms) != 0 {
-		t.Fatalf("loadKakaoConfig() Rooms = %q, want no default seed", config.Rooms)
+		t.Fatalf("LoadKakaoConfig() Rooms = %q, want no default seed", config.Rooms)
 	}
 
-	cfg := &Config{Kakao: KakaoConfig{Rooms: config.Rooms}}
-	if err := cfg.validateAdminAPIRequiredConfig(); err == nil || err.Error() != "KAKAO_ROOMS is required" {
-		t.Fatalf("validateAdminAPIRequiredConfig() error = %v, want KAKAO_ROOMS is required", err)
+	if err := ValidateKakaoRooms(config.Rooms); err == nil || err.Error() != "KAKAO_ROOMS is required" {
+		t.Fatalf("ValidateKakaoRooms() error = %v, want KAKAO_ROOMS is required", err)
 	}
 }
 
@@ -63,13 +62,13 @@ func TestLoadKakaoConfigRejectsPresentInvalidACLVariables(t *testing.T) {
 			t.Setenv(kakaoACLModeEnv, "whitelist")
 			t.Setenv(tc.key, tc.value)
 
-			config, err := loadKakaoConfig()
+			config, err := LoadKakaoConfig()
 			if err == nil {
-				t.Fatalf("loadKakaoConfig() = %+v, nil error", config)
+				t.Fatalf("LoadKakaoConfig() = %+v, nil error", config)
 			}
 
 			if !strings.Contains(err.Error(), tc.wantError) {
-				t.Fatalf("loadKakaoConfig() error = %v, want %q", err, tc.wantError)
+				t.Fatalf("LoadKakaoConfig() error = %v, want %q", err, tc.wantError)
 			}
 		})
 	}

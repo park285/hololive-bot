@@ -13,6 +13,7 @@ import (
 	"testing/synctest"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
@@ -107,7 +108,7 @@ func TestInitAlarmYouTubeStackStillRejectsMalformedSettingsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stack, err := InitAlarmYouTubeStack(&settings.Config{
+	stack, err := InitAlarmYouTubeStack(&apiconfig.BotPlaneConfig{
 		AlarmServiceURL: "http://127.0.0.1:8081", SettingsFilePath: path,
 		Notification: settings.NotificationConfig{AdvanceMinutes: []int{10, 5, 1}},
 	}, &apifoundation.ScraperHolodexFoundation{MemberServiceAdapter: &membermocks.DataProvider{}}, slog.New(slog.DiscardHandler))

@@ -65,30 +65,78 @@ func (mf *MessageFormatter) DisplayMemberName(name string) string {
 	return mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 }
 
-func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouTubeNotificationOutbox) (string, error) {
-	if item == nil {
-		return "", errors.New("notification outbox item is nil")
+// FormattedMessage는 FormatMessages의 항목별 결과다. Err가 있으면 Message는 비어 있다.
+type FormattedMessage struct {
+	Message string
+	Err     error
+}
+
+// FormatMessages는 outbox 항목을 각 항목의 template과 채널 override로 렌더링한다. Template 버전 확인은 표시명 조회가
+// 끝난 뒤 호출당 한 SQL 문장이며, 호출 시작 전에 끝난 template 저장은 모든 항목에 보인다.
+// 결과는 items와 같은 순서·길이다. 표시명 조회·payload·template 부재·렌더 실패는 항목별 Err이고(대체 문구 없음),
+// renderer 부재·template 버전 조회 실패·취소는 결과 없이 오류다. 호출자는 오류를 모든 항목의 포맷 실패로 다룬다.
+func (mf *MessageFormatter) FormatMessages(ctx context.Context, items []domain.YouTubeNotificationOutbox) ([]FormattedMessage, error) {
+	results := make([]FormattedMessage, len(items))
+	requests := make([]template.RenderRequest, 0, len(items))
+	requestItems := make([]int, 0, len(items))
+
+	for i := range items {
+		data, err := mf.messageTemplateData(ctx, &items[i])
+		if err != nil {
+			results[i].Err = err
+
+			continue
+		}
+
+		requests = append(requests, template.RenderRequest{Key: items[i].Kind.ToTemplateKey(), ChannelID: items[i].ChannelID, Data: data})
+		requestItems = append(requestItems, i)
 	}
 
-	// 조회 오류는 대체 문구로 바꾸지 않고 포맷 실패로 돌려준다. 호출자는 재시도 가능한 실패로 전이한다.
+	// 표시명 조회 중 취소되면 항목별 실패가 아니라 호출 전체가 결과 없이 실패한다.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("format messages: %w", err)
+	}
+
+	if len(requests) == 0 {
+		return results, nil
+	}
+
+	if mf.Renderer == nil {
+		return nil, errors.New("render templates: renderer is nil")
+	}
+
+	rendered, err := mf.Renderer.RenderBatch(ctx, requests)
+	if err != nil {
+		return nil, fmt.Errorf("render templates: %w", err)
+	}
+
+	for j := range rendered {
+		i := requestItems[j]
+		if rendered[j].Err != nil {
+			results[i].Err = fmt.Errorf("render template %s: %w", requests[j].Key, rendered[j].Err)
+
+			continue
+		}
+
+		results[i].Message = rendered[j].Text
+	}
+
+	return results, nil
+}
+
+// messageTemplateData는 단일 항목 template 입력을 만든다. 조회 오류는 대체 문구로 바꾸지 않고 포맷 실패로 돌려준다.
+func (mf *MessageFormatter) messageTemplateData(ctx context.Context, item *domain.YouTubeNotificationOutbox) (TemplateData, error) {
 	memberName, err := mf.GetMemberName(ctx, item.ChannelID)
 	if err != nil {
-		return "", fmt.Errorf("get member name: %w", err)
+		return TemplateData{}, fmt.Errorf("get member name: %w", err)
 	}
 
-	memberName = mf.DisplayMemberName(memberName)
-
-	data, err := mf.BuildTemplateData(memberName, item)
+	data, err := mf.BuildTemplateData(mf.DisplayMemberName(memberName), item)
 	if err != nil {
-		return "", fmt.Errorf("build template data: %w", err)
+		return TemplateData{}, fmt.Errorf("build template data: %w", err)
 	}
 
-	out, err := mf.renderTemplate(ctx, item.Kind.ToTemplateKey(), item.ChannelID, data)
-	if err != nil {
-		return out, fmt.Errorf("render template: %w", err)
-	}
-
-	return out, nil
+	return data, nil
 }
 
 func (mf *MessageFormatter) renderTemplate(ctx context.Context, templateKey domain.TemplateKey, channelID string, data any) (string, error) {

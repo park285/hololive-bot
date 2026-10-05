@@ -14,28 +14,17 @@ func (r *Repository) loadTrackingSnapshots(
 	ctx context.Context,
 	identities map[deliveryTelemetryIdentity]struct{},
 ) (map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot, error) {
-	kinds := make([]domain.OutboxKind, 0, len(identities))
+	kinds := make([]string, 0, len(identities))
 	contentIDs := make([]string, 0, len(identities))
-	kindSeen := make(map[domain.OutboxKind]struct{}, len(identities))
-	contentSeen := make(map[string]struct{}, len(identities))
 
 	for identity := range identities {
-		if _, ok := kindSeen[identity.kind]; !ok {
-			kindSeen[identity.kind] = struct{}{}
-			kinds = append(kinds, identity.kind)
-		}
-
-		if _, ok := contentSeen[identity.contentID]; !ok {
-			contentSeen[identity.contentID] = struct{}{}
-			contentIDs = append(contentIDs, identity.contentID)
-		}
+		kinds = append(kinds, string(identity.kind))
+		contentIDs = append(contentIDs, identity.contentID)
 	}
 
 	var trackingRows []domain.YouTubeContentAlarmTracking
 
-	if err := dbx.SelectSQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", mustSQL("load_0032_01.sql")+deliverysql.DeliveryInClause("kind", len(kinds))+`
-		  AND `+deliverysql.DeliveryInClause("content_id", len(contentIDs))+`
-	`, append(deliverysql.AppendDeliveryOutboxKindArgs(nil, kinds...), dbx.AnyArgs(contentIDs)...)...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &trackingRows, "enrich delivery telemetry context: load tracking rows", mustSQL("load_0032_01.sql"), kinds, contentIDs); err != nil {
 		return nil, fmt.Errorf("enrich delivery telemetry context: load tracking rows: %w", err)
 	}
 

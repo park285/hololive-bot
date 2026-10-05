@@ -23,6 +23,7 @@ func newScraperServiceForTest(
 	config.BaseURL = baseURL
 
 	service, err := htmlscraper.NewService(
+		context.Background(),
 		testScraperMembers(nil),
 		httpClient,
 		logger,
@@ -41,13 +42,28 @@ func newScraperServiceForTest(
 
 type testScraperMembers []*domain.Member
 
-func (members testScraperMembers) LoadAllMembers() ([]*domain.Member, error) { return members, nil }
-func (testScraperMembers) FindMemberByChannelID(string) *domain.Member       { return nil }
-func (testScraperMembers) FindMemberByName(string) *domain.Member            { return nil }
-func (testScraperMembers) FindMemberByAlias(string) *domain.Member           { return nil }
-func (testScraperMembers) GetChannelIDs() []string                           { return nil }
-func (members testScraperMembers) WithContext(context.Context) domain.MemberDataProvider {
-	return members
+func (members testScraperMembers) LoadAllMembers(context.Context) ([]*domain.Member, error) {
+	return members, nil
 }
-func (testScraperMembers) FindMembersByName(string) []*domain.Member  { return nil }
-func (testScraperMembers) FindMembersByAlias(string) []*domain.Member { return nil }
+
+func (testScraperMembers) FindMemberByChannelID(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (testScraperMembers) FindMemberByName(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (testScraperMembers) FindMemberByAlias(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (testScraperMembers) GetChannelIDs(context.Context) ([]string, error) { return []string{}, nil }
+
+func (testScraperMembers) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+func (testScraperMembers) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}

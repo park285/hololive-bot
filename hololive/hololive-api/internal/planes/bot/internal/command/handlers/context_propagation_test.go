@@ -105,47 +105,55 @@ func newTrackedMemberProvider(members ...*domain.Member) *trackedMemberProvider 
 	}
 }
 
-func (p *trackedMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
-	return p.byChannel[channelID]
+func (p *trackedMemberProvider) FindMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
+	p.state.record(ctx)
+
+	if member := p.byChannel[channelID]; member != nil {
+		return member, nil
+	}
+
+	return nil, domain.ErrMemberNotFound
 }
 
-func (p *trackedMemberProvider) FindMemberByName(string) *domain.Member {
-	return nil
+func (p *trackedMemberProvider) FindMemberByName(ctx context.Context, _ string) (*domain.Member, error) {
+	p.state.record(ctx)
+
+	return nil, domain.ErrMemberNotFound
 }
 
-func (p *trackedMemberProvider) FindMemberByAlias(string) *domain.Member {
-	return nil
+func (p *trackedMemberProvider) FindMemberByAlias(ctx context.Context, _ string) (*domain.Member, error) {
+	p.state.record(ctx)
+
+	return nil, domain.ErrMemberNotFound
 }
 
-func (p *trackedMemberProvider) GetChannelIDs() []string {
+func (p *trackedMemberProvider) GetChannelIDs(ctx context.Context) ([]string, error) {
+	p.state.record(ctx)
+
 	ids := make([]string, 0, len(p.byChannel))
 	for id := range p.byChannel {
 		ids = append(ids, id)
 	}
 
-	return ids
+	return ids, nil
 }
 
-func (p *trackedMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+func (p *trackedMemberProvider) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
+	p.state.record(ctx)
+
 	return p.members, nil
 }
 
-func (p *trackedMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+func (p *trackedMemberProvider) FindMembersByName(ctx context.Context, _ string) ([]*domain.Member, error) {
 	p.state.record(ctx)
 
-	return &trackedMemberProvider{
-		state:     p.state,
-		members:   p.members,
-		byChannel: p.byChannel,
-	}
+	return []*domain.Member{}, nil
 }
 
-func (p *trackedMemberProvider) FindMembersByName(string) []*domain.Member {
-	return nil
-}
+func (p *trackedMemberProvider) FindMembersByAlias(ctx context.Context, _ string) ([]*domain.Member, error) {
+	p.state.record(ctx)
 
-func (p *trackedMemberProvider) FindMembersByAlias(string) []*domain.Member {
-	return nil
+	return []*domain.Member{}, nil
 }
 
 func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {

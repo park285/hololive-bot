@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
@@ -130,7 +129,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesByOutboxIDs_Builds
 
 	require.NoError(t, insertDeliveryTestRows(db, postDeliveryTimelineBufferRows(outboxRow, times)).Error)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 
 	rows, err := repository.ListPostDeliveryTimelinesByOutboxIDs(ctx, []int64{outboxRow.ID})
 	require.NoError(t, err)
@@ -366,7 +365,7 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 		NextAttemptAt:     firstAttemptFinishedAt,
 	}).Error)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 	require.NoError(t, repository.PersistPostLatencyClassificationsByIdentities(ctx, []timeline.PostTrackingIdentity{{
 		Kind:      domain.OutboxKindCommunityPost,
 		ContentID: outboxRow.ContentID,
@@ -374,7 +373,7 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 
 	var stored timelineTestTrackingModel
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &stored, "kind = ? AND content_id = ?", string(domain.OutboxKindCommunityPost), outboxRow.ContentID).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &stored, "kind = $1 AND content_id = $2", string(domain.OutboxKindCommunityPost), outboxRow.ContentID).Error)
 	require.Equal(t, string(timeline.PostLatencyClassificationStatusExceeded), stored.LatencyClassificationStatus)
 	require.Equal(t, string(timeline.PostDelaySourceInternalDelivery), stored.DelaySource)
 	require.Equal(t, string(timeline.PostInternalDelayCauseQueueWait), stored.InternalDelayCause)

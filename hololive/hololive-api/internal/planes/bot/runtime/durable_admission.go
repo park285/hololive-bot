@@ -19,10 +19,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -201,7 +201,7 @@ type durableMessageProcessor interface {
 	ProcessMessage(context.Context, *webhook.Message) error
 }
 
-func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pgxpool.Pool, profile *settings.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
+func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
 	if profile == nil {
 		return nil, errors.New("build durable runtime: API worker profile is required")
 	}

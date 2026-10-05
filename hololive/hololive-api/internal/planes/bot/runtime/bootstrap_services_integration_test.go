@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -36,7 +37,7 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 		},
 	}
 
-	config := &settings.Config{Kakao: settings.KakaoConfig{ACLMode: "whitelist"}}
+	config := &apiconfig.BotPlaneConfig{Kakao: settings.KakaoConfig{ACLMode: "whitelist"}}
 	services, err := appbootstrap.InitCoreIntegrationServices(t.Context(), config, infra, logger)
 	require.NoError(t, err)
 	require.NotNil(t, services)
@@ -61,12 +62,12 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		},
 	}
 
-	config := &settings.Config{Kakao: settings.KakaoConfig{ACLMode: "whitelist"}}
+	config := &apiconfig.BotPlaneConfig{Kakao: settings.KakaoConfig{ACLMode: "whitelist"}}
 	integrationServices, err := appbootstrap.InitCoreIntegrationServices(t.Context(), config, infra, logger)
 	require.NoError(t, err)
 
 	deps := appbootstrap.BuildBotDependencies(
-		&settings.Config{},
+		&apiconfig.BotPlaneConfig{},
 		&sharedmodules.InfraModule{},
 		&apifoundation.ScraperHolodexFoundation{},
 		&appbootstrap.AlarmYouTubeStackComponents{AlarmMode: &appbootstrap.AlarmModeComponents{}},

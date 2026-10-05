@@ -27,7 +27,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 	ctx := t.Context()
 	db := openTelemetryLoopTestDB(t)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     701,
 		AttemptOrdinal: 1,
@@ -67,7 +67,7 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 
 	db := openTelemetryLoopTestDB(t)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     702,
 		AttemptOrdinal: 1,
@@ -112,7 +112,7 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 
 	db := openTelemetryLoopTestDB(t)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		telemetryLoopTestRow(703, 803, "short-loop-immediate", "room-loop-immediate"),
 	}))
@@ -206,7 +206,7 @@ func telemetryLoopRowLogged(t *testing.T, db *pgxpool.Pool, deliveryID int64) bo
 
 	var row deliveryTelemetryTestBufferModel
 
-	err := firstDeliveryTestRowWhere(db, &row, "delivery_id = ?", deliveryID).Error
+	err := firstDeliveryTestRowWhere(db, &row, "delivery_id = $1", deliveryID).Error
 	if err != nil {
 		return false
 	}

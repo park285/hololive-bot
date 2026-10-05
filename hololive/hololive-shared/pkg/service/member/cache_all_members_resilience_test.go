@@ -34,8 +34,9 @@ func TestCacheAllMembers_SharedLoadHasOwnedDeadline(t *testing.T) {
 	}
 
 	startedAt := time.Now()
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+	// 호출자 deadline이 길어도 공유 적재는 자기 상한을 쓴다.
+	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
+	defer cancel()
 
 	if _, err := c.AllMembers(ctx); err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
@@ -99,50 +100,44 @@ func TestCacheAllMembers_InvalidateSeparatesInFlightGeneration(t *testing.T) {
 		t.Fatalf("loader calls = %d, want 2 generation-specific loads", calls.Load())
 	}
 
-	if _, ok := c.byName.Load(testMemberNameOld); ok {
+	if got, _ := c.lookupPointInMemory(pointLookupName, testMemberNameOld); got != nil {
 		t.Fatal("obsolete generation resurrected old name key")
 	}
 }
 
-func TestCacheAllMembers_PublishRemovesOnlyOwnedStaleKeys(t *testing.T) {
-	old := &domain.Member{ChannelID: "old-channel", Name: testMemberNameOld}
-	removed := &domain.Member{ChannelID: "removed-channel", Name: "Removed"}
-	newerOwner := &domain.Member{ChannelID: "old-channel", Name: "Independent"}
-	c := &Cache{logger: slog.New(slog.DiscardHandler), snapshotTTL: time.Nanosecond}
+// 새 snapshot 게시는 generation을 올려 이전 generation의 point overlay를 통째로 무효화하고, 새 snapshot 색인만 응답한다.
+func TestCacheAllMembers_PublishSupersedesPointOverlay(t *testing.T) {
+	c := &Cache{logger: slog.New(slog.DiscardHandler)}
+	_, generation := c.allMembersView()
 
-	c.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
-		return []*domain.Member{old, removed}, nil
+	pointOnly := &domain.Member{ID: 7, ChannelID: "point-channel", Name: "PointOnly"}
+	c.cacheMember(pointOnly, generation, true)
+	c.cacheChannelIDs([]string{"point-channel"}, generation)
+
+	if got, _ := c.lookupPointInMemory(pointLookupChannel, "point-channel"); got != pointOnly {
+		t.Fatalf("overlay channel = %+v, want point result before publication", got)
 	}
 
-	if _, err := c.AllMembers(t.Context()); err != nil {
-		t.Fatalf("initial AllMembers() error = %v", err)
+	fresh := &domain.Member{ID: 1, ChannelID: "new-channel", Name: testMemberNameNew}
+	if c.storeAllMembersSnapshot(nil, generation, []*domain.Member{fresh}) == nil {
+		t.Fatal("snapshot was not published")
 	}
 
-	c.byChannelID.Store(old.ChannelID, newerOwner)
-
-	c.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
-		return []*domain.Member{{ChannelID: "new-channel", Name: testMemberNameNew}}, nil
-	}
-	c.allMembersSnapshot.Load().loadedAt = time.Now().Add(-time.Second)
-
-	if _, err := c.AllMembers(t.Context()); err != nil {
-		t.Fatalf("reload AllMembers() error = %v", err)
+	if got, _ := c.lookupPointInMemory(pointLookupChannel, "point-channel"); got != nil {
+		t.Fatalf("overlay channel survived publication: %+v", got)
 	}
 
-	if _, ok := c.byName.Load(old.Name); ok {
-		t.Fatal("renamed member left its old name key behind")
+	if got, _ := c.lookupPointInMemory(pointLookupName, "PointOnly"); got != nil {
+		t.Fatalf("overlay name survived publication: %+v", got)
 	}
 
-	if got, ok := c.byChannelID.Load(old.ChannelID); !ok || got != newerOwner {
-		t.Fatalf("independently owned channel key = %v, %v; want preserved", got, ok)
+	channelIDs, _, ok := c.channelIDsInMemory()
+	if !ok || len(channelIDs) != 1 || channelIDs[0] != "new-channel" {
+		t.Fatalf("channel IDs = %v, %v; want new snapshot list", channelIDs, ok)
 	}
 
-	if _, ok := c.byChannelID.Load(removed.ChannelID); ok {
-		t.Fatal("removed member left its old channel key behind")
-	}
-
-	if _, ok := c.byName.Load(testMemberNameNew); !ok {
-		t.Fatal("new snapshot name key was not published")
+	if got, _ := c.lookupPointInMemory(pointLookupName, testMemberNameNew); got != fresh {
+		t.Fatalf("snapshot name = %+v, want %+v", got, fresh)
 	}
 }
 
@@ -235,18 +230,23 @@ func TestCachePointLookup_PriorGenerationResultIsNotCached(t *testing.T) {
 	c := withTestEpochAuthority(&Cache{logger: slog.New(slog.DiscardHandler)})
 
 	_, lookupGeneration := c.allMembersView()
-	if !c.storeAllMembersSnapshot(nil, lookupGeneration, []*domain.Member{{ID: 2, ChannelID: "fresh-channel", Name: "Fresh"}}) {
+	if c.storeAllMembersSnapshot(nil, lookupGeneration, []*domain.Member{{ID: 2, ChannelID: "fresh-channel", Name: "Fresh"}}) == nil {
 		t.Fatal("snapshot refresh was not published")
 	}
 
 	c.cacheMember(&domain.Member{ID: 1, ChannelID: "stale-channel", Name: "Stale"}, lookupGeneration, true)
+	c.cacheChannelIDs([]string{"stale-channel"}, lookupGeneration)
 
-	if _, ok := c.loadNameFromMemory("Stale"); ok {
+	if got, _ := c.lookupPointInMemory(pointLookupName, "Stale"); got != nil {
 		t.Fatal("point lookup from the prior generation republished a stale name")
 	}
 
-	if _, ok := c.loadChannelFromMemory("stale-channel"); ok {
+	if got, _ := c.lookupPointInMemory(pointLookupChannel, "stale-channel"); got != nil {
 		t.Fatal("point lookup from the prior generation republished a stale channel")
+	}
+
+	if channelIDs, _, _ := c.channelIDsInMemory(); len(channelIDs) != 1 || channelIDs[0] != "fresh-channel" {
+		t.Fatalf("channel IDs = %v, want prior-generation list rejected", channelIDs)
 	}
 }
 
@@ -264,10 +264,7 @@ func TestCacheAllMembers_StaleFallbackDefersRepeatedReloads(t *testing.T) {
 			return nil, errors.New("db outage")
 		},
 	}
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:  stale,
-		loadedAt: time.Now().Add(-2 * time.Minute),
-	})
+	c.allMembersSnapshot.Store(newAllMembersState(stale, 0, time.Now().Add(-2*time.Minute)))
 
 	for attempt := range 2 {
 		got, err := c.AllMembers(t.Context())
@@ -302,11 +299,10 @@ func TestCacheAllMembers_ReloadsAfterRetryBoundaryAndClearsBackoff(t *testing.T)
 			return testMembers(), nil
 		},
 	}
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:    testMembers(),
-		loadedAt:   time.Now().Add(-2 * time.Minute),
-		retryAfter: time.Now().Add(-time.Second),
-	})
+	expired := newAllMembersState(testMembers(), 0, time.Now().Add(-2*time.Minute))
+
+	expired.retryAfter = time.Now().Add(-time.Second)
+	c.allMembersSnapshot.Store(expired)
 
 	got, err := c.AllMembers(t.Context())
 	if err != nil {
@@ -323,5 +319,90 @@ func TestCacheAllMembers_ReloadsAfterRetryBoundaryAndClearsBackoff(t *testing.T)
 
 	if snap := c.allMembersSnapshot.Load(); snap == nil || !snap.retryAfter.IsZero() {
 		t.Fatalf("recovered snapshot retry_after = %v, want zero", snap)
+	}
+}
+
+// singleflight.DoChan은 공유 적재 panic을 새 goroutine에서 다시 던져 프로세스를 끝낸다. 공유 적재 panic은 모든 대기자에게
+// 명시적 실패로 돌아오고, 만료된 성공 snapshot으로 가려지지 않으며, snapshot 상태를 바꾸지 않아 다음 적재가 복구한다.
+func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
+	var (
+		healthy     atomic.Bool
+		panics      atomic.Int64
+		startedOnce sync.Once
+	)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	stale := newAllMembersState(testMembers(), 0, time.Now().Add(-2*time.Minute))
+
+	c := &Cache{
+		logger:      slog.New(slog.DiscardHandler),
+		snapshotTTL: time.Minute,
+		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
+			if healthy.Load() {
+				return []*domain.Member{{ID: 9, Name: testMemberNameNew}}, nil
+			}
+
+			// 첫 적재는 대기자가 합류할 때까지 붙잡고, 이후 적재도 모두 같은 결함으로 panic한다.
+			startedOnce.Do(func() { close(started) })
+			<-release
+			panics.Add(1)
+
+			panic("nil PostgreSQL pool")
+		},
+	}
+	c.allMembersSnapshot.Store(stale)
+
+	const waiters = 4
+
+	errs := make(chan error, waiters)
+
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		_, err := c.AllMembers(t.Context())
+		errs <- err
+	})
+
+	<-started
+
+	for range waiters - 1 {
+		wg.Go(func() {
+			_, err := c.MembersByName(t.Context(), testMemberNameOld)
+			errs <- err
+		})
+	}
+
+	close(release)
+	wg.Wait()
+	close(errs)
+
+	if panics.Load() == 0 {
+		t.Fatal("loader did not panic")
+	}
+
+	for err := range errs {
+		if !errors.Is(err, errAllMembersLoadPanicked) {
+			t.Fatalf("waiter error = %v, want explicit panic failure instead of stale success", err)
+		}
+	}
+
+	if c.allMembersSnapshot.Load() != stale {
+		t.Fatal("panicked load changed the published snapshot state")
+	}
+
+	healthy.Store(true)
+
+	got, err := c.AllMembers(t.Context())
+	if err != nil || len(got) != 1 || got[0].Name != testMemberNameNew {
+		t.Fatalf("AllMembers() after panic = %+v, %v; want recovered reload", got, err)
+	}
+}
+
+// PostgreSQL pool 없는 repository는 첫 조회 panic 대신 구성 오류로 거절한다.
+func TestNewMemberCacheRejectsRepositoryWithoutPool(t *testing.T) {
+	cache, err := NewMemberCache(t.Context(), &Repository{}, nil, slog.New(slog.DiscardHandler), CacheConfig{WarmUp: true})
+	if err == nil || cache != nil {
+		t.Fatalf("NewMemberCache() = %v, %v; want configuration error", cache, err)
 	}
 }

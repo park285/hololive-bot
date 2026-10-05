@@ -20,6 +20,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -41,7 +42,7 @@ func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) error {
 func TestNormalizeRuntimeBuildInputsDefaultsTODOContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(t.Context(), &settings.Config{}, slog.New(slog.DiscardHandler))
+	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(t.Context(), &apiconfig.AdminPlaneConfig{}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NormalizeRuntimeBuildInputs() error = %v", err)
 	}
@@ -58,7 +59,7 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	certFile, keyFile := writeRuntimeTestCertificate(t)
 
-	runtime, err := newAdminAPIRuntime(t.Context(), &settings.Config{
+	runtime, err := newAdminAPIRuntime(t.Context(), &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			HTTPTransports: []string{"h3"},
 			H3Addr:         testLoopbackAddr,
@@ -160,7 +161,7 @@ func TestBuildAdminAPIHTTPRuntimeCleansUpInfraOnRouterFailure(t *testing.T) {
 
 	runtime, err := buildAdminAPIHTTPRuntime(
 		t.Context(),
-		&settings.Config{},
+		&apiconfig.AdminPlaneConfig{},
 		infra,
 		nil,
 		&server.Handler{},
@@ -244,7 +245,7 @@ func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
 	alarmMode := &alarmModeComponents{}
 	logger := slog.New(slog.DiscardHandler)
 
-	applier, triggerClient, err := buildAdminAPISettingsApplier(&settings.Config{}, alarmMode, logger)
+	applier, triggerClient, err := buildAdminAPISettingsApplier(&apiconfig.AdminPlaneConfig{}, alarmMode, logger)
 	if err != nil {
 		t.Fatalf("buildAdminAPISettingsApplier() error = %v", err)
 	}
@@ -262,7 +263,7 @@ func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
 		t.Fatalf("empty URL member news result = %+v", result)
 	}
 
-	applier, triggerClient, err = buildAdminAPISettingsApplier(&settings.Config{
+	applier, triggerClient, err = buildAdminAPISettingsApplier(&apiconfig.AdminPlaneConfig{
 		LLMSchedulerURL: "http://127.0.0.1:1",
 		Server:          settings.ServerConfig{APIKey: testAPIKey},
 	}, alarmMode, logger)
@@ -283,7 +284,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	logger := slog.New(slog.DiscardHandler)
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: testAPIKey},
 		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
 	}
@@ -328,9 +329,8 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 		t.Fatal("buildAdminAPIRouter() returned nil router")
 	}
 
-	repository := buildAdminAPICommunityShortsOpsRepository(infra)
-	if repository != nil {
-		t.Fatal("buildAdminAPICommunityShortsOpsRepository() returned repository for nil pgx pool")
+	if _, err := buildAdminAPICommunityShortsOpsRepository(infra); err == nil {
+		t.Fatal("community shorts repository must reject a missing postgres pool")
 	}
 }
 
@@ -377,12 +377,12 @@ func TestBuildAdminAPIBotRoomListerFailsWithoutInternalH3Options(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 
-	lister, err := buildAdminAPIBotRoomLister(&settings.Config{BotInternalURL: "https://127.0.0.1:30001"}, logger)
+	lister, err := buildAdminAPIBotRoomLister(&apiconfig.AdminPlaneConfig{BotInternalURL: "https://127.0.0.1:30001"}, logger)
 	if err == nil || lister != nil {
 		t.Fatalf("buildAdminAPIBotRoomLister(https) = (%v, %v), want missing internal H3 options error", lister, err)
 	}
 
-	lister, err = buildAdminAPIBotRoomLister(&settings.Config{}, logger)
+	lister, err = buildAdminAPIBotRoomLister(&apiconfig.AdminPlaneConfig{}, logger)
 	if err != nil || lister != nil {
 		t.Fatalf("buildAdminAPIBotRoomLister(unset) = (%v, %v), want disabled without error", lister, err)
 	}

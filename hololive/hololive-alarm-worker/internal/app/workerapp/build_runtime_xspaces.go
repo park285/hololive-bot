@@ -38,11 +38,12 @@ func buildXSpacesRunner(infra *sharedmodules.InfraModule, foundation *alarmFound
 	}
 
 	pub := queue.NewPublisher(infra.Cache, logger, queue.WithOutbox(foundation.Outbox), queue.WithWakeupEnabled(publishConfig.WakeupEnabled), queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch))
+	resolver := sharedalarm.NewSubscriberResolver(infra.Cache, infra.Postgres.GetPool())
 
 	runner, err := xspacesworker.NewRunner(*config, store, xspacesworker.StartStore{Pool: infra.Postgres.GetPool()},
 		xspacesworker.ProcessCollector{}, pub,
 		func(ctx context.Context, channelID string) ([]string, error) {
-			return sharedalarm.ResolveChannelSubscribersByType(ctx, infra.Cache, infra.Postgres.GetPool(), channelID, domain.AlarmTypeLive)
+			return resolver.ResolveChannelSubscribersByType(ctx, channelID, domain.AlarmTypeLive)
 		}, logger)
 	if err != nil {
 		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build X spaces runner: %w", err)}

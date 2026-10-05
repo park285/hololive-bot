@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
@@ -1177,7 +1178,7 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, nil, tc.channelIDs)
+			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, sharedalarm.NewSubscriberResolver(cache, nil), tc.channelIDs)
 			require.NoError(t, loadErr)
 			assert.Len(t, got, tc.wantLen)
 		})

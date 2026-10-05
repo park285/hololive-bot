@@ -23,59 +23,15 @@ package dbx
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 )
 
-// 문자열 리터럴 안의 '?'와 jsonb 연산자 '?', '?|', '?&'까지 전부 $n으로 바꾼다.
-// 이 helper를 타는 SQL에는 placeholder 용도가 아닌 '?'를 넣으면 안 된다.
-func PostgresPlaceholders(query string) string {
-	var out strings.Builder
-
-	index := 1
-
-	for i := range len(query) {
-		if query[i] != '?' {
-			out.WriteByte(query[i])
-
-			continue
-		}
-
-		out.WriteByte('$')
-		out.WriteString(strconv.Itoa(index))
-
-		index++
-	}
-
-	return out.String()
-}
-
-func InPlaceholders(count int) string {
-	if count <= 0 {
-		return ""
-	}
-
-	parts := make([]string, count)
-	for i := range parts {
-		parts[i] = "?"
-	}
-
-	return strings.Join(parts, ", ")
-}
-
-func AnyArgs[T any](values []T) []any {
-	args := make([]any, 0, len(values))
-	for _, value := range values {
-		args = append(args, value)
-	}
-
-	return args
-}
-
+// ExecSQL은 query를 그대로 보낸다. ExecSQL/SelectSQL/GetSQL 모두 PostgreSQL native placeholder($n)만 쓰고,
+// 가변 길이 목록은 IN (...) 대신 ANY($n::type[])에 slice 하나를 바인딩한다.
+// '?'를 $n으로 바꾸던 문자열 치환은 jsonb 연산자 ?, ?|, ?&까지 망가뜨려 폐기했다.
 func ExecSQL(ctx context.Context, db Querier, action, query string, args ...any) (int64, error) {
-	tag, err := db.Exec(ctx, PostgresPlaceholders(query), args...)
+	tag, err := db.Exec(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
@@ -84,7 +40,7 @@ func ExecSQL(ctx context.Context, db Querier, action, query string, args ...any)
 }
 
 func SelectSQL(ctx context.Context, db Querier, dest any, action, query string, args ...any) error {
-	if err := pgxscan.Select(ctx, db, dest, PostgresPlaceholders(query), args...); err != nil {
+	if err := pgxscan.Select(ctx, db, dest, query, args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
 
@@ -92,7 +48,7 @@ func SelectSQL(ctx context.Context, db Querier, dest any, action, query string, 
 }
 
 func GetSQL(ctx context.Context, db Querier, dest any, action, query string, args ...any) (bool, error) {
-	err := pgxscan.Get(ctx, db, dest, PostgresPlaceholders(query), args...)
+	err := pgxscan.Get(ctx, db, dest, query, args...)
 	if err == nil {
 		return true, nil
 	}

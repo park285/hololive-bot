@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
@@ -48,7 +48,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 
-	config, err := settings.LoadBotRuntime()
+	config, err := apiconfig.LoadBotPlaneRuntime()
 	if err != nil {
 		logger.Error("load hololive API runtime config", slog.Any("error", err))
 

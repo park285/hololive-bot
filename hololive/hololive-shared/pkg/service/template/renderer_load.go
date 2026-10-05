@@ -158,9 +158,9 @@ func (r *Renderer) parseTemplate(ck cacheKey, body string) (*template.Template, 
 			return tmpl, nil
 		}
 
-		tmpl, err := template.New(string(ck.templateKey)).Funcs(templateFuncs).Parse(body)
+		tmpl, err := parseTemplateBody(string(ck.templateKey), body, false)
 		if err != nil {
-			return nil, fmt.Errorf("parse template: %w", err)
+			return nil, err
 		}
 
 		r.storeTemplateAt(ck, tmpl, time.Now())

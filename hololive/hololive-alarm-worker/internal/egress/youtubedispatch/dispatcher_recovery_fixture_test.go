@@ -242,7 +242,7 @@ func assertRecoveryInputFixtureTracking(
 
 	var sentTracking deliveryTestTrackingModel
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &sentTracking, "kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &sentTracking, "kind = $1 AND content_id = $2", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).Error)
 	require.Equal(t, fixture.sentPostID, sentTracking.CanonicalContentID)
 	require.NotNil(t, sentTracking.AlarmSentAt)
 	require.Equal(t, spec.alreadySentAt, sentTracking.AlarmSentAt.UTC())
@@ -250,7 +250,7 @@ func assertRecoveryInputFixtureTracking(
 
 	var pendingTracking deliveryTestTrackingModel
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &pendingTracking, "kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &pendingTracking, "kind = $1 AND content_id = $2", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).Error)
 	require.Equal(t, fixture.pendingPostID, pendingTracking.CanonicalContentID)
 	require.Nil(t, pendingTracking.AlarmSentAt)
 	require.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusPending), pendingTracking.DeliveryStatus)
@@ -262,14 +262,14 @@ func assertRecoveryInputFixtureTracking(
 
 	var sentState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &sentState, "kind = ? AND post_id = ?", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &sentState, "kind = $1 AND post_id = $2", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
 	require.NotNil(t, sentState.AlarmSentAt)
 	require.Equal(t, spec.alreadySentAt, sentState.AlarmSentAt.UTC())
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, sentState.DeliveryStatus)
 
 	var pendingState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &pendingState, "kind = ? AND post_id = ?", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &pendingState, "kind = $1 AND post_id = $2", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
 	require.Nil(t, pendingState.AuthorizedAt)
 	require.Nil(t, pendingState.AlarmSentAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, pendingState.DeliveryStatus)
@@ -294,11 +294,11 @@ func assertCommunityShortsPostSent(
 	assert.Equal(t, string(domain.OutboxStatusSent), snapshot.outbox.Status)
 	require.NotNil(t, snapshot.outbox.SentAt)
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &snapshot.tracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &snapshot.tracking, "kind = $1 AND content_id = $2", string(item.Kind), item.ContentID).Error)
 	require.NotNil(t, snapshot.tracking.AlarmSentAt)
 	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), snapshot.tracking.DeliveryStatus)
 
-	require.NoError(t, firstDeliveryTestRow(db, &snapshot.state, "kind = ? AND post_id = ?", item.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &snapshot.state, "kind = $1 AND post_id = $2", item.Kind, postID).Error)
 	assert.Nil(t, snapshot.state.AuthorizedAt)
 	require.NotNil(t, snapshot.state.AlarmSentAt)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, snapshot.state.DeliveryStatus)

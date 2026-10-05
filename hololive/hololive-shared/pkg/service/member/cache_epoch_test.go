@@ -204,7 +204,7 @@ func TestCacheEpoch_InFlightOldLoaderCannotPublishAfterRemoteBump(t *testing.T) 
 		t.Fatalf("AllMembers() = %+v, want only New", got)
 	}
 
-	if _, ok := c.byName.Load(testMemberNameOld); ok {
+	if got, _ := c.lookupPointInMemory(pointLookupName, testMemberNameOld); got != nil {
 		t.Fatal("old loader resurrected a prior-epoch name")
 	}
 }
@@ -213,11 +213,7 @@ func TestCacheEpoch_RemoteBumpRejectsStaleFallbackAfterReloadFailure(t *testing.
 	authority := &fakeMemberEpochAuthority{epoch: 2}
 	c := newEpochTestCache(authority)
 	c.authorityEpoch.Store(1)
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:       []*domain.Member{{Name: testMemberNameOld, ChannelID: "old"}},
-		loadedAt:      time.Now().Add(-2 * time.Minute),
-		hasSuccessful: true,
-	})
+	c.allMembersSnapshot.Store(newAllMembersState([]*domain.Member{{Name: testMemberNameOld, ChannelID: "old"}}, 0, time.Now().Add(-2*time.Minute)))
 
 	wantErr := errors.New("database unavailable")
 
@@ -242,7 +238,7 @@ func TestCacheEpoch_RemoteBumpRejectsStaleFallbackAfterReloadFailure(t *testing.
 func TestCacheEpoch_PeriodicReconciliationRecoversMissedNotification(t *testing.T) {
 	authority := &fakeMemberEpochAuthority{epoch: 1}
 	c := newEpochTestCache(authority)
-	c.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{{Name: testMemberNameOld}}, loadedAt: time.Now(), hasSuccessful: true})
+	c.allMembersSnapshot.Store(newAllMembersState([]*domain.Member{{Name: testMemberNameOld}}, 0, time.Now()))
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -360,11 +356,7 @@ func TestCacheEpoch_MutationSucceedsWhenNotificationFails(t *testing.T) {
 func TestCacheEpoch_UnavailableBypassesStaleSnapshot(t *testing.T) {
 	authority := &fakeMemberEpochAuthority{epoch: 1}
 	c := newEpochTestCache(authority)
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:       []*domain.Member{{Name: "Stale"}},
-		loadedAt:      time.Now(),
-		hasSuccessful: true,
-	})
+	c.allMembersSnapshot.Store(newAllMembersState([]*domain.Member{{Name: "Stale"}}, 0, time.Now()))
 
 	c.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
 		return []*domain.Member{{Name: "Database"}}, nil
@@ -396,7 +388,7 @@ func TestCacheEpoch_RegressionInvalidatesAndKeepsCacheEnabled(t *testing.T) {
 	authority := &fakeMemberEpochAuthority{epoch: 1}
 	c := newEpochTestCache(authority)
 	c.authorityEpoch.Store(5)
-	c.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{{Name: "Stale"}}, loadedAt: time.Now(), hasSuccessful: true})
+	c.allMembersSnapshot.Store(newAllMembersState([]*domain.Member{{Name: "Stale"}}, 0, time.Now()))
 
 	var loads atomic.Int64
 

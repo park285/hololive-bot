@@ -66,21 +66,16 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 
 	var targets []deliveryAlarmSentTarget
 
-	args := dbx.AnyArgs(uniqueIDs)
-
-	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
-
-	statusClause := ""
+	query := mustSQL("delivery_repository_tracking_0066_01.sql")
+	args := []any{uniqueIDs, deliverysql.Texts(postKinds)}
 
 	if status != nil {
-		statusClause = " AND d.status = ?"
+		query += "\t\t  AND d.status = $3\n"
 
 		args = append(args, *status)
 	}
 
-	if err := dbx.SelectSQL(ctx, db, &targets, "query delivery alarm sent targets", mustSQL("delivery_repository_tracking_0066_01.sql")+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+`
-		  AND `+deliverysql.DeliveryInClause("o.kind", len(postKinds))+`
-		`+statusClause, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, db, &targets, "query delivery alarm sent targets", query, args...); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)
 	}
 
@@ -221,7 +216,12 @@ func persistSentTrackingLatencyClassifications(
 		})
 	}
 
-	if err := telemetry.NewRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+	repository, err := telemetry.NewRepository(tx)
+	if err != nil {
+		return fmt.Errorf("persist tracking latency classifications: new telemetry repository: %w", err)
+	}
+
+	if err := repository.PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
 		return fmt.Errorf("persist tracking latency classifications: %w", err)
 	}
 

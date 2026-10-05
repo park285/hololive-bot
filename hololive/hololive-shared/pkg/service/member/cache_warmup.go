@@ -33,15 +33,15 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 		return errors.New("member cache is nil")
 	}
 
-	snap, generation := c.allMembersView()
+	_, generation := c.allMembersView()
 
-	members, err := c.loadAllMembersSnapshot(ctx, snap, generation)
+	snap, err := c.loadAllMembersSnapshot(ctx, generation)
 	if err != nil {
 		return fmt.Errorf("failed to load all members: %w", err)
 	}
 
 	if c.logger != nil {
-		c.logger.Info("Member cache warmed up", slog.Int("total_members", len(members)))
+		c.logger.Info("Member cache warmed up", slog.Int("total_members", len(snap.members)))
 	}
 
 	return nil

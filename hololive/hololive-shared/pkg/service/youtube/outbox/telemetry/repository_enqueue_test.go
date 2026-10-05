@@ -61,7 +61,18 @@ func newTelemetryEnqueueTestRepo(t *testing.T) (*Repository, *execCountingQuerie
 
 	counting := &execCountingQuerier{inner: pool}
 
-	return NewRepository(counting), counting, outboxID
+	return mustNewTestRepository(t, counting), counting, outboxID
+}
+
+func mustNewTestRepository(t *testing.T, db dbx.Querier) *Repository {
+	t.Helper()
+
+	repository, err := NewRepository(db)
+	if err != nil {
+		t.Fatalf("new telemetry repository: %v", err)
+	}
+
+	return repository
 }
 
 func makeEnqueueTestRow(outboxID, deliveryID int64, ordinal int) domain.YouTubeNotificationDeliveryTelemetry {

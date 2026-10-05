@@ -5,5 +5,5 @@
 		       COALESCE(t.internal_delay_cause, '') AS internal_delay_cause,
 		       t.created_at, t.updated_at
 		FROM youtube_content_alarm_tracking t
-		WHERE t.kind = ?
-		  AND t.canonical_content_id = ?
+		WHERE t.kind = $1
+		  AND t.canonical_content_id = $2

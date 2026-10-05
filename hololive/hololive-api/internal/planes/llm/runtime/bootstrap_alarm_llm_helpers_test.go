@@ -37,13 +37,13 @@ import (
 // 내려가지 않고 기동을 실패시킨다(stack audit B5).
 func TestInitMemberNewsSourceValidator(t *testing.T) {
 	t.Run("unset path runs without x allowlist", func(t *testing.T) {
-		validator, err := initMemberNewsSourceValidator("", nil, testRuntimeLogger())
+		validator, err := initMemberNewsSourceValidator(t.Context(), "", nil, testRuntimeLogger())
 		require.NoError(t, err)
 		require.NotNil(t, validator)
 	})
 
 	t.Run("configured missing file fails", func(t *testing.T) {
-		_, err := initMemberNewsSourceValidator(filepath.Join(t.TempDir(), "missing.json"), nil, testRuntimeLogger())
+		_, err := initMemberNewsSourceValidator(t.Context(), filepath.Join(t.TempDir(), "missing.json"), nil, testRuntimeLogger())
 		require.Error(t, err)
 	})
 
@@ -53,7 +53,7 @@ func TestInitMemberNewsSourceValidator(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "configs", "hololive_official_x_accounts.json"), []byte("not json"), 0o600))
 		t.Chdir(dir)
 
-		_, err := initMemberNewsSourceValidator("", nil, testRuntimeLogger())
+		_, err := initMemberNewsSourceValidator(t.Context(), "", nil, testRuntimeLogger())
 		require.NoError(t, err, "a file in ./configs must not be picked up implicitly")
 	})
 
@@ -61,7 +61,7 @@ func TestInitMemberNewsSourceValidator(t *testing.T) {
 		allowlist := filepath.Join(t.TempDir(), "allowlist.json")
 		require.NoError(t, os.WriteFile(allowlist, []byte(`["hololivetv"]`), 0o600))
 
-		_, err := initMemberNewsSourceValidator(allowlist, nil, testRuntimeLogger())
+		_, err := initMemberNewsSourceValidator(t.Context(), allowlist, nil, testRuntimeLogger())
 		require.NoError(t, err)
 	})
 }

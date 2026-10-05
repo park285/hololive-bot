@@ -17,7 +17,7 @@ func TestBuildAlarmDispatchRunnerRejectsInvalidShortLinkOrigin(t *testing.T) {
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
+	scheduler, err := buildAlarmDispatchRunner(config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
 
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
@@ -31,7 +31,7 @@ func TestBuildAlarmDispatchRunnerAcceptsHTTPSShortLinkOrigin(t *testing.T) {
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
+	scheduler, err := buildAlarmDispatchRunner(config, infra, egress.NewIrisMessageSender(nil), nil, nil, state)
 
 	require.NoError(t, err)
 	assert.NotNil(t, scheduler)

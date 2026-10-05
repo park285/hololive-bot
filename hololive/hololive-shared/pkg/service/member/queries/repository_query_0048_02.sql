@@ -3,5 +3,6 @@
 		       status, is_graduated, aliases, org, suborg, sync_source, twitch_user_id, birthday, debut_date, official_link, units, chzzk_channel_id
 		FROM members
 		WHERE english_name = $1
+		ORDER BY id
 		LIMIT 1
 	

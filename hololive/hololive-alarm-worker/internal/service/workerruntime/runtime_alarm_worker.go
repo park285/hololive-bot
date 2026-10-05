@@ -28,8 +28,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -40,7 +40,7 @@ type Scheduler interface {
 type AlarmWorkerRuntime struct {
 	lifecycle.Managed
 
-	Config *settings.Config
+	Config *workerconfig.RuntimeConfig
 	Logger *slog.Logger
 
 	Scheduler            Scheduler

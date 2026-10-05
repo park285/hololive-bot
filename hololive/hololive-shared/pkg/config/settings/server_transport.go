@@ -6,14 +6,6 @@ import (
 	"strings"
 )
 
-func (c *Config) validateServerTransports() error {
-	if err := ValidateServerTransports(&c.Server); err != nil {
-		return fmt.Errorf("validate server transports: %w", err)
-	}
-
-	return nil
-}
-
 // ValidateServerTransports: h3 전용 전송 계약과 인증서 파일 요구를 확인한다.
 func ValidateServerTransports(server *ServerConfig) error {
 	if err := validateServerHTTPTransportNames(server); err != nil {
@@ -55,14 +47,6 @@ func validateH3TransportFiles(server *ServerConfig) error {
 	}
 
 	return nil
-}
-
-func (c *Config) ServerTransportEnabled(name string) bool {
-	if c == nil {
-		return false
-	}
-
-	return c.Server.TransportEnabled(name)
 }
 
 func (s *ServerConfig) TransportEnabled(name string) bool {

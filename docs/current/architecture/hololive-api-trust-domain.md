@@ -27,11 +27,16 @@ surface. `PUT /api/holo/templates/:key`와 `POST /api/holo/templates/:key/previe
 `FuncMap`은 문자열·형식 변환 helper의 고정 allowlist이며 file, network, native command, plugin,
 process primitive를 제공하지 않습니다. They do not provide native command, plugin, or process
 execution. 따라서 이는 user-supplied template interpretation surface이지, 사용자 입력을 전혀
-해석하지 않는 endpoint라는 의미는 아닙니다.
+해석하지 않는 endpoint라는 의미는 아닙니다. 본문·출력은 각각 64KiB, 실행 예산은 1초·100,000 단계·
+`{{template}}` 중첩 64단계이며, 초과하면 부분 결과 없이 실패합니다. 호출자 `ctx` 취소와 시간은 action
+경계에서 확인합니다. 파생 값은 64KiB와 가장 큰 입력의 측정 크기 중 큰 값을 넘지 못하도록 검사하고,
+반복 인자·padding·컨테이너 확장처럼 초선형 할당이 가능한 helper는 실행 전에 크기를 확인합니다.
+입력의 상수배인 UTF-8 보정·escape는 결과를 확인합니다. 이는 app-owned data의 임의 Go method를
+강제 중단하거나 격리하는 sandbox가 아닙니다(`hololive-shared/pkg/service/template`).
 
-Repository security contract tests는 위 Compose listener/network/secret wiring과 production
-Go source의 직접적인 `os/exec` 및 `plugin` import 부재, 그리고 authenticated admin template
-route에서 `req.Body`가 고정 `text/template` parse/execute sink로 이어지는 계약을 검증합니다.
+Repository security contract tests는 Compose listener/network/secret wiring을 검증합니다.
+기존 architecture gate는 production Go source의 직접적인 `os/exec` 및 `plugin` import를 제한하고,
+template 동작 테스트는 인증된 관리 기능이 사용하는 동일한 parse/execute 경로의 예산·오류 계약을 검증합니다.
 
 ## Accepted consequence
 

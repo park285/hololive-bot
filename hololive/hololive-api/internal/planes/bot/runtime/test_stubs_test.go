@@ -45,16 +45,31 @@ func (s *stubIrisClient) Decrypt(context.Context, string) (string, error) { retu
 
 type stubMemberDataProvider struct{}
 
-func (s *stubMemberDataProvider) FindMemberByChannelID(string) *domain.Member { return nil }
-func (s *stubMemberDataProvider) FindMemberByName(string) *domain.Member      { return nil }
-func (s *stubMemberDataProvider) FindMemberByAlias(string) *domain.Member     { return nil }
-func (s *stubMemberDataProvider) GetChannelIDs() []string                     { return nil }
-func (s *stubMemberDataProvider) LoadAllMembers() ([]*domain.Member, error)   { return nil, nil }
-func (s *stubMemberDataProvider) WithContext(context.Context) domain.MemberDataProvider {
-	return s
+func (s *stubMemberDataProvider) FindMemberByChannelID(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
 }
-func (s *stubMemberDataProvider) FindMembersByName(string) []*domain.Member  { return nil }
-func (s *stubMemberDataProvider) FindMembersByAlias(string) []*domain.Member { return nil }
+
+func (s *stubMemberDataProvider) FindMemberByName(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (s *stubMemberDataProvider) FindMemberByAlias(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (s *stubMemberDataProvider) GetChannelIDs(context.Context) ([]string, error) { return nil, nil }
+
+func (s *stubMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Member, error) {
+	return nil, nil
+}
+
+func (s *stubMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return nil, nil
+}
+
+func (s *stubMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return nil, nil
+}
 
 type testAlarmCRUD struct{}
 

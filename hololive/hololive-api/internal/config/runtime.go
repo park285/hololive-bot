@@ -28,8 +28,8 @@ const (
 // YouTube background plane을 담는다. 각 plane은 자체 bounded DB pool을 explicit bulkhead로
 // 유지하고, 프로세스 전역의 logging·GC·signal 처리는 부모 runtime이 소유한다.
 type RuntimeConfig struct {
-	Bot     *settings.Config
-	Admin   *settings.Config
+	Bot     *BotPlaneConfig
+	Admin   *AdminPlaneConfig
 	LLM     *LLMSchedulerConfig
 	YouTube YouTubePlaneConfig
 	Logging settings.LoggingConfig
@@ -37,12 +37,26 @@ type RuntimeConfig struct {
 }
 
 func LoadRuntime() (*RuntimeConfig, error) {
-	botConfig, err := settings.LoadBotRuntime()
+	if err := loadProcessEnv(); err != nil {
+		return nil, err
+	}
+
+	logging, err := settings.LoadLoggingConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load hololive-api logging config: %w", err)
+	}
+
+	tracing, err := settings.LoadTracingConfig(envload.TracingHololiveAPIEnabledEnv)
+	if err != nil {
+		return nil, fmt.Errorf("load hololive-api tracing config: %w", err)
+	}
+
+	botConfig, err := loadBotPlaneConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load hololive-api bot plane: %w", err)
 	}
 
-	adminConfig, err := settings.LoadAdminAPIRuntime()
+	adminConfig, err := loadAdminPlaneConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load hololive-api admin plane: %w", err)
 	}
@@ -68,8 +82,8 @@ func LoadRuntime() (*RuntimeConfig, error) {
 		Admin:   adminConfig,
 		LLM:     llmConfig,
 		YouTube: youtubeConfig,
-		Logging: botConfig.Logging,
-		Tracing: botConfig.Tracing,
+		Logging: logging,
+		Tracing: tracing,
 	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("hololive-api config validation failed: %w", err)
@@ -78,7 +92,7 @@ func LoadRuntime() (*RuntimeConfig, error) {
 	return config, nil
 }
 
-func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *settings.APIWorkerProfile) {
+func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *APIWorkerProfile) {
 	worker := profile.Loaded.Profile.Workers["source_observation"]
 	observation := profile.SourceObservation
 
@@ -92,7 +106,7 @@ func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *se
 	config.ShutdownTimeout = time.Duration(observation.ShutdownTimeoutMS) * time.Millisecond
 }
 
-func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSchedulerConfig) error {
+func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig, llmConfig *LLMSchedulerConfig) error {
 	var env envload.StrictEnv
 
 	adminPort := env.Int("HOLOLIVE_ADMIN_API_PORT", defaultAdminAPIPort)
@@ -137,7 +151,6 @@ func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSche
 	llmLoopbackURL := fmt.Sprintf("https://127.0.0.1:%d", llmPort)
 
 	botConfig.LLMSchedulerURL = llmLoopbackURL
-	botConfig.Services.LLMSchedulerHealthURL = llmLoopbackURL + "/health"
 	adminConfig.LLMSchedulerURL = llmLoopbackURL
 	adminConfig.Services.LLMSchedulerHealthURL = llmLoopbackURL + "/health"
 
@@ -210,11 +223,11 @@ func (c *RuntimeConfig) validateYouTubeBindings() error {
 }
 
 func (c *RuntimeConfig) validatePlaneRuntimes() error {
-	if err := c.Bot.ValidateBotRuntime(); err != nil {
+	if err := c.Bot.Validate(); err != nil {
 		return fmt.Errorf("bot plane: %w", err)
 	}
 
-	if err := c.Admin.ValidateAdminAPIRuntime(); err != nil {
+	if err := c.Admin.Validate(); err != nil {
 		return fmt.Errorf("admin plane: %w", err)
 	}
 

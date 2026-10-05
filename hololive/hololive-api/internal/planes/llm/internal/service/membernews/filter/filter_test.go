@@ -91,33 +91,96 @@ func (v *testSourceValidator) HasCorroboration(text string) bool {
 }
 
 type mockMemberDataForFilter struct {
-	byName  map[string]*domain.Member
-	byAlias map[string]*domain.Member
+	byName    map[string]*domain.Member
+	byAlias   map[string]*domain.Member
+	nameErr   error
+	aliasCall int
 }
 
-func (m *mockMemberDataForFilter) FindMemberByChannelID(_ string) *domain.Member { return nil }
-func (m *mockMemberDataForFilter) FindMemberByName(name string) *domain.Member {
-	if m.byName == nil {
-		return nil
+func (m *mockMemberDataForFilter) FindMemberByChannelID(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (m *mockMemberDataForFilter) FindMemberByName(_ context.Context, name string) (*domain.Member, error) {
+	if m.nameErr != nil {
+		return nil, m.nameErr
 	}
 
-	return m.byName[name]
-}
-
-func (m *mockMemberDataForFilter) FindMemberByAlias(alias string) *domain.Member {
-	if m.byAlias == nil {
-		return nil
+	if member := m.byName[name]; member != nil {
+		return member, nil
 	}
 
-	return m.byAlias[alias]
+	return nil, domain.ErrMemberNotFound
 }
-func (m *mockMemberDataForFilter) GetChannelIDs() []string                   { return nil }
-func (m *mockMemberDataForFilter) LoadAllMembers() ([]*domain.Member, error) { return nil, nil }
-func (m *mockMemberDataForFilter) WithContext(_ context.Context) domain.MemberDataProvider {
-	return m
+
+func (m *mockMemberDataForFilter) FindMemberByAlias(_ context.Context, alias string) (*domain.Member, error) {
+	m.aliasCall++
+
+	if member := m.byAlias[alias]; member != nil {
+		return member, nil
+	}
+
+	return nil, domain.ErrMemberNotFound
 }
-func (m *mockMemberDataForFilter) FindMembersByName(_ string) []*domain.Member  { return nil }
-func (m *mockMemberDataForFilter) FindMembersByAlias(_ string) []*domain.Member { return nil }
+
+func (m *mockMemberDataForFilter) GetChannelIDs(context.Context) ([]string, error) {
+	return []string{}, nil
+}
+
+func (m *mockMemberDataForFilter) LoadAllMembers(context.Context) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+func (m *mockMemberDataForFilter) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+func (m *mockMemberDataForFilter) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+// mustFilterCandidates는 멤버 데이터 없이 주간 기간으로 후보를 고른다.
+func mustFilterCandidates(t *testing.T, candidates []model.Candidate, now time.Time, roomMembers []string, validator model.SourceURLValidator) []model.FilteredCandidate {
+	t.Helper()
+
+	filtered, err := FilterCandidates(t.Context(), candidates, model.PeriodWeekly, now, roomMembers, nil, validator)
+	if err != nil {
+		t.Fatalf("FilterCandidates() error = %v", err)
+	}
+
+	return filtered
+}
+
+func mustBuildMemberProfiles(t *testing.T, roomMembers []string, membersData domain.MemberDataProvider) []memberProfile {
+	t.Helper()
+
+	profiles, err := buildMemberProfiles(t.Context(), roomMembers, membersData)
+	if err != nil {
+		t.Fatalf("buildMemberProfiles() error = %v", err)
+	}
+
+	return profiles
+}
+
+// 이름 조회 실패는 별칭으로 넘기거나 원래 표기로 진행하지 않고, 후보 선별 전체를 오류로 끝낸다.
+func TestFilterCandidates_MemberLookupFailureIsError(t *testing.T) {
+	cause := errors.New("member cache unavailable")
+	mock := &mockMemberDataForFilter{nameErr: cause}
+
+	filtered, err := FilterCandidates(t.Context(), nil, model.PeriodWeekly, time.Now(), []string{testMemberMiko}, mock, &testSourceValidator{})
+	if !errors.Is(err, cause) || filtered != nil {
+		t.Fatalf("FilterCandidates() = %v, %v; want member lookup failure", filtered, err)
+	}
+
+	if mock.aliasCall != 0 {
+		t.Fatalf("alias lookups = %d, want none after a name lookup failure", mock.aliasCall)
+	}
+
+	prepared, err := PrepareCandidates(nil, model.PeriodWeekly, time.Now()).Filter(t.Context(), []string{testMemberMiko}, mock, nil)
+	if !errors.Is(err, cause) || prepared != nil {
+		t.Fatalf("PreparedCandidates.Filter() = %v, %v; want member lookup failure", prepared, err)
+	}
+}
 
 func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	validator := &testSourceValidator{}
@@ -149,7 +212,7 @@ func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{testMemberMiko}, nil, validator)
+	filtered := mustFilterCandidates(t, candidates, now, []string{testMemberMiko}, validator)
 	if len(filtered) != 2 {
 		t.Fatalf("expected 2 candidates in weekly range, got %d", len(filtered))
 	}
@@ -408,7 +471,7 @@ func TestBuildMemberProfiles(t *testing.T) {
 	t.Run("FindMemberByName miss → FindMemberByAlias fallback", testBuildMemberProfilesAliasFallback)
 
 	t.Run("empty roomMembers → empty result", func(t *testing.T) {
-		profiles := buildMemberProfiles(nil, nil)
+		profiles := mustBuildMemberProfiles(t, nil, nil)
 		if len(profiles) != 0 {
 			t.Fatalf("expected 0, got %d", len(profiles))
 		}
@@ -416,7 +479,7 @@ func TestBuildMemberProfiles(t *testing.T) {
 }
 
 func testBuildMemberProfilesDisplayOnly(t *testing.T) {
-	profiles := buildMemberProfiles([]string{testMemberMiko}, nil)
+	profiles := mustBuildMemberProfiles(t, []string{testMemberMiko}, nil)
 	requireSingleProfile(t, profiles, testMemberMiko)
 
 	if len(profiles[0].tokens) != 1 {
@@ -438,7 +501,7 @@ func testBuildMemberProfilesDataHit(t *testing.T) {
 			},
 		},
 	}
-	profiles := buildMemberProfiles([]string{testMemberMiko}, mock)
+	profiles := mustBuildMemberProfiles(t, []string{testMemberMiko}, mock)
 	requireSingleProfile(t, profiles, testMemberMiko)
 	requireAdditionalTokens(t, profiles)
 
@@ -457,7 +520,7 @@ func testBuildMemberProfilesAliasFallback(t *testing.T) {
 			},
 		},
 	}
-	profiles := buildMemberProfiles([]string{"미코치"}, mock)
+	profiles := mustBuildMemberProfiles(t, []string{"미코치"}, mock)
 	requireSingleProfile(t, profiles, testMemberMiko)
 	requireAdditionalTokens(t, profiles)
 }
@@ -493,7 +556,7 @@ func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 		{Title: "사쿠라 미코 event2", EventStartDate: &date, Type: domain.MajorEventTypeEvent, SourceURL: "  "},
 	}
 
-	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{testMemberMiko}, nil, validator)
+	filtered := mustFilterCandidates(t, candidates, now, []string{testMemberMiko}, validator)
 	if len(filtered) != 0 {
 		t.Fatalf("expected 0 (empty sourceURL excluded), got %d", len(filtered))
 	}
@@ -515,7 +578,7 @@ func TestFilterCandidates_CommunityWithoutCorroboration(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{testMemberMiko}, nil, validator)
+	filtered := mustFilterCandidates(t, candidates, now, []string{testMemberMiko}, validator)
 	if len(filtered) != 0 {
 		t.Fatalf("expected 0 (community without corroboration excluded), got %d", len(filtered))
 	}
@@ -546,7 +609,7 @@ func TestFilterCandidates_SortStability(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{testMemberMiko}, nil, validator)
+	filtered := mustFilterCandidates(t, candidates, now, []string{testMemberMiko}, validator)
 	if len(filtered) != 3 {
 		t.Fatalf("expected 3, got %d", len(filtered))
 	}
@@ -581,8 +644,8 @@ func TestFilterCandidates_MultipleMatchedMembers(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, model.PeriodWeekly, now,
-		[]string{testMemberMiko, testMemberSuisei}, nil, validator)
+	filtered := mustFilterCandidates(t, candidates, now,
+		[]string{testMemberMiko, testMemberSuisei}, validator)
 	if len(filtered) != 1 {
 		t.Fatalf("expected 1, got %d", len(filtered))
 	}

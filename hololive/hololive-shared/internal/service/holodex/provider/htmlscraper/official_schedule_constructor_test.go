@@ -21,7 +21,7 @@ func TestNewServiceUsesInjectedConfig(t *testing.T) {
 		MaxResponseBodyBytes: 2048,
 	}
 
-	service, err := NewService(nil, nil, slog.New(slog.DiscardHandler), official)
+	service, err := NewService(t.Context(), nil, nil, slog.New(slog.DiscardHandler), official)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

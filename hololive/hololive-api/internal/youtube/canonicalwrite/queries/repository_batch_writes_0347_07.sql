@@ -1,7 +1,7 @@
 
 		INSERT INTO youtube_content_watermarks
 			(channel_id, watermark_type, initialized, last_content_id, updated_at)
-		VALUES (?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (channel_id, watermark_type) DO UPDATE
 		SET initialized = EXCLUDED.initialized,
 		    last_content_id = EXCLUDED.last_content_id,

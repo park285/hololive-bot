@@ -39,7 +39,7 @@ func countTelemetryRows(ctx context.Context, t *testing.T, pool *pgxpool.Pool) i
 func TestDeleteLoggedBefore_DrainsAllEligibleRowsInBatches(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewRepository(pool)
+	repository := mustNewTestRepository(t, pool)
 	oldEventAt := time.Now().UTC().Add(-100 * 24 * time.Hour)
 	seedLoggedTelemetryRows(ctx, t, pool, 3, oldEventAt)
 
@@ -53,7 +53,7 @@ func TestDeleteLoggedBefore_DrainsAllEligibleRowsInBatches(t *testing.T) {
 func TestDeleteLoggedBefore_KeepsUnloggedAndFreshRows(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewRepository(pool)
+	repository := mustNewTestRepository(t, pool)
 	oldEventAt := time.Now().UTC().Add(-100 * 24 * time.Hour)
 	seedLoggedTelemetryRows(ctx, t, pool, 1, oldEventAt)
 	seedLoggedTelemetryRows(ctx, t, pool, 0, oldEventAt)

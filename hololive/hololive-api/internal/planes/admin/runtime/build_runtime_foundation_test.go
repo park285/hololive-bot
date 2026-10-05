@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -23,7 +24,7 @@ import (
 func TestBuildAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
 	t.Parallel()
 
-	components, err := buildAlarmModeComponents(&settings.Config{}, slog.New(slog.DiscardHandler))
+	components, err := buildAlarmModeComponents(&apiconfig.AdminPlaneConfig{}, slog.New(slog.DiscardHandler))
 
 	require.Nil(t, components)
 	require.EqualError(t, err, "alarm provider URL (ALARM_INTERNAL_URL) is required")
@@ -50,7 +51,7 @@ func TestBuildScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Holodex: settings.DefaultHolodexOperationalConfig(),
 	}
 
@@ -60,7 +61,7 @@ func TestBuildScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 
 	foundation, err := apifoundation.BuildScraperHolodex(
 		t.Context(),
-		apifoundation.ScraperHolodexOptions{Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialScheduleRuntime()},
+		apifoundation.ScraperHolodexOptions{Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialSchedule},
 		newFoundationTestMemberCache(t), cachemocks.NewLenientClient(), slog.New(slog.DiscardHandler),
 	)
 	require.NoError(t, err)

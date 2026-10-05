@@ -12,29 +12,14 @@ func TestLoadOfficialScheduleConfigRejectsRetiredCacheExpiryEnv(t *testing.T) {
 		t.Run("value="+value, func(t *testing.T) {
 			t.Setenv("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", value)
 
-			_, err := loadOfficialScheduleConfig()
+			_, err := LoadOfficialScheduleRuntimeConfig()
 			if err == nil {
-				t.Fatalf("loadOfficialScheduleConfig accepted retired OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS=%q", value)
+				t.Fatalf("LoadOfficialScheduleRuntimeConfig accepted retired OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS=%q", value)
 			}
 
 			if !strings.Contains(err.Error(), "OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS") {
 				t.Fatalf("error = %v, want it to name the retired key", err)
 			}
 		})
-	}
-}
-
-// settings.LoadConfig 경로(hololive-api·alarm-worker)도 같은 가드를 거친다.
-func TestLoadBotRuntimeRejectsRetiredOfficialScheduleCacheExpiryEnv(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", "")
-
-	_, err := loadBotRuntimeConfig()
-	if err == nil {
-		t.Fatal("Load() accepted retired OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS; want presence-based rejection")
-	}
-
-	if !strings.Contains(err.Error(), "OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS") {
-		t.Fatalf("Load() error = %v, want it to name the retired key", err)
 	}
 }

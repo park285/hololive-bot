@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
@@ -73,13 +74,13 @@ func TestValidateAPIRouterInputsRejectsMissingDependencies(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		cfg     *settings.Config
+		cfg     *apiconfig.AdminPlaneConfig
 		domains *server.DomainHandlers
 		auth    *server.AuthHandler
 		wantErr string
 	}{
 		{name: "nil config", cfg: nil, domains: validDomains, auth: validAuth, wantErr: "config must not be nil"},
-		{name: "blank api key", cfg: &settings.Config{}, domains: validDomains, auth: validAuth, wantErr: "API_SECRET_KEY required"},
+		{name: "blank api key", cfg: &apiconfig.AdminPlaneConfig{}, domains: validDomains, auth: validAuth, wantErr: "API_SECRET_KEY required"},
 		{name: "nil domains", cfg: validConfig, domains: nil, auth: validAuth, wantErr: "domain handlers must not be nil"},
 		{name: "nil auth", cfg: validConfig, domains: validDomains, auth: nil, wantErr: "auth handler must not be nil"},
 	}
@@ -145,14 +146,14 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 func TestNewAPICORSConfigModes(t *testing.T) {
 	t.Parallel()
 
-	monitor := newAPICORSConfig(&settings.Config{
+	monitor := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
 		CORS: settings.CORSConfig{AllowedOrigins: []string{"https://allowed.example"}},
 	}, false)
 	if monitor.AllowOriginFunc == nil || !monitor.AllowOriginFunc("https://any.example") {
 		t.Fatal("monitor CORS config should allow any origin")
 	}
 
-	enforced := newAPICORSConfig(&settings.Config{
+	enforced := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
 		CORS: settings.CORSConfig{AllowedOrigins: []string{" https://a.example ", "", "https://a.example", "https://b.example"}},
 	}, true)
 	if !reflect.DeepEqual(enforced.AllowOrigins, []string{"https://a.example", "https://b.example"}) {
@@ -163,7 +164,7 @@ func TestNewAPICORSConfigModes(t *testing.T) {
 		t.Fatal("enforced explicit origin config should not set AllowOriginFunc")
 	}
 
-	wildcard := newAPICORSConfig(&settings.Config{
+	wildcard := newAPICORSConfig(&apiconfig.AdminPlaneConfig{
 		CORS: settings.CORSConfig{AllowedOrigins: []string{"*"}},
 	}, true)
 	if wildcard.AllowOriginFunc == nil || wildcard.AllowOriginFunc("https://allowed.example") {
@@ -212,7 +213,7 @@ func TestNewAPIRouterCORSValidation(t *testing.T) {
 		t.Fatalf("newAPIRouter(nil) router=%v error=%v", router, err)
 	}
 
-	productionWildcard := &settings.Config{
+	productionWildcard := &apiconfig.AdminPlaneConfig{
 		Environment: "production",
 		Server:      settings.ServerConfig{APIKey: "test-key"},
 		CORS: settings.CORSConfig{
@@ -336,7 +337,7 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 	}
 }
 
-func provideTestAPIRouter(t *testing.T, cfg *settings.Config) (*gin.Engine, error) {
+func provideTestAPIRouter(t *testing.T, cfg *apiconfig.AdminPlaneConfig) (*gin.Engine, error) {
 	t.Helper()
 
 	router, err := ProvideAPIRouter(
@@ -354,8 +355,8 @@ func provideTestAPIRouter(t *testing.T, cfg *settings.Config) (*gin.Engine, erro
 	return router, nil
 }
 
-func testRouterConfig() *settings.Config {
-	return &settings.Config{
+func testRouterConfig() *apiconfig.AdminPlaneConfig {
+	return &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: "test-key"},
 		CORS: settings.CORSConfig{
 			AllowedOrigins: []string{"http://localhost:3000"},

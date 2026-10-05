@@ -7,6 +7,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
+const invalidBoolEnvValue = "maybe"
+
 // llm plane 설정도 숫자·bool env의 잘못된 값을 기본값으로 바꾸지 않고 기동 실패로 드러낸다(stack audit B4).
 func TestLoadLLMSchedulerRuntimeRejectsInvalidEnvValues(t *testing.T) {
 	for _, tc := range []struct {
@@ -14,11 +16,11 @@ func TestLoadLLMSchedulerRuntimeRejectsInvalidEnvValues(t *testing.T) {
 		value string
 	}{
 		{key: "LLM_SCHEDULER_PORT", value: "abc"},
-		{key: "GEMINI_ENABLED", value: "maybe"},
-		{key: "CLIPROXY_ENABLED", value: "maybe"},
+		{key: "GEMINI_ENABLED", value: invalidBoolEnvValue},
+		{key: "CLIPROXY_ENABLED", value: invalidBoolEnvValue},
 		{key: "CACHE_PORT", value: "invalid"},
 		{key: "MAJOREVENT_CONSENSUS_CONFIDENCE", value: "high"},
-		{key: "BOT_SEE_MORE_FOLD", value: "maybe"},
+		{key: "BOT_SEE_MORE_FOLD", value: invalidBoolEnvValue},
 	} {
 		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
 			settingstest.ClearIrisAndRoomEnv(t)

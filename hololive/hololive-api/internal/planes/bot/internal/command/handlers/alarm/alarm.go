@@ -218,7 +218,12 @@ func (c *AlarmCommand) resolveAlarmAddMember(ctx context.Context, room, memberNa
 		return nil, handlercore.ErrMemberLookupHandled
 	}
 
-	if !c.isGraduatedMember(ctx, channel.ChannelID) {
+	graduated, err := c.isGraduatedMember(ctx, channel.ChannelID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !graduated {
 		return channel, nil
 	}
 
@@ -312,14 +317,22 @@ func (c *AlarmCommand) replyAlarmMemberNotFound(ctx context.Context, room, membe
 	return nil
 }
 
-func (c *AlarmCommand) isGraduatedMember(ctx context.Context, channelID string) bool {
+// isGraduatedMember는 채널 대표가 졸업했는지 본다. 대표가 없으면 졸업이 아니고, 조회 실패는 추측하지 않고 오류다.
+func (c *AlarmCommand) isGraduatedMember(ctx context.Context, channelID string) (bool, error) {
 	if c.Deps().Matcher == nil {
-		return false
+		return false, nil
 	}
 
-	member := c.Deps().Matcher.GetMemberByChannelID(ctx, channelID)
+	member, err := c.Deps().Matcher.GetMemberByChannelID(ctx, channelID)
+	if stdErrors.Is(err, domain.ErrMemberNotFound) {
+		return false, nil
+	}
 
-	return member != nil && member.IsGraduated
+	if err != nil {
+		return false, fmt.Errorf("check graduated member: %w", err)
+	}
+
+	return member.IsGraduated, nil
 }
 
 func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {

@@ -46,11 +46,7 @@ func (c *Cache) invalidateLocal() error {
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
 
-	c.snapshotGeneration.Add(1)
-	c.byChannelID.Clear()
-	c.byName.Clear()
-	c.allMembers.Clear()
-	c.allMembersSnapshot.Store(nil)
+	c.resetMemoryLocked()
 
 	c.logger.Info("Member cache invalidated", slog.Int("keys_deleted", 0))
 

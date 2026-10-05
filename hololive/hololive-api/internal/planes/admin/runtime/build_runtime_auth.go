@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
 func buildAdminAPIACLService(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*acl.Service, error) {
@@ -38,7 +38,7 @@ func buildAdminAPIACLService(
 }
 
 func buildAdminAPIAuthService(
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*authsvc.Service, error) {

@@ -35,7 +35,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -271,10 +270,11 @@ func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (message, p
 var ErrBatchedSubscriberRoomsUnavailable = errors.New("batched subscriber rooms unavailable")
 
 // LoadSubscriberRoomsByChannel은 채널별 LIVE 구독 방을 반환한다. 구독자가 있는 채널만 결과 map에 담는다.
+// Cache set이 비어 있는 채널은 subscribers resolver의 empty marker와 구독 DB로 확정한다.
 func LoadSubscriberRoomsByChannel(
 	ctx context.Context,
 	cacheClient cache.Client,
-	subscriptionDB dbx.Querier,
+	subscribers *sharedalarm.SubscriberResolver,
 	channelIDs []string,
 ) (map[string][]string, error) {
 	uniqueChannelIDs := UniqueStrings(channelIDs)
@@ -300,7 +300,7 @@ func LoadSubscriberRoomsByChannel(
 
 	// TTL 없는 구독 set은 eviction으로 사라질 수 있어 빈 set을 구독 0으로 단정하면 LIVE 알림이 조용히 빠진다.
 	// empty marker가 없는 채널은 이번 cycle에만 DB로 확정하고 set은 다시 채우지 않는다(read-through).
-	recovered, err := sharedalarm.ResolveUncachedChannelSubscribersByType(ctx, cacheClient, subscriptionDB, uncachedChannelIDs, domain.AlarmTypeLive)
+	recovered, err := subscribers.ResolveUncachedChannelSubscribersByType(ctx, uncachedChannelIDs, domain.AlarmTypeLive)
 	if err != nil {
 		return nil, fmt.Errorf("load subscriber rooms by channel: resolve uncached channels: %w", err)
 	}

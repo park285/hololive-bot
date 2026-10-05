@@ -19,7 +19,7 @@ Iris / Redroid is an external KakaoTalk automation boundary used for webhook ing
 - Service: `bot`
 - Service: `alarm-worker`
 - Usage: Kakao webhook ingress/reply and alarm dispatch send. Proactive alarm egress is owned by `alarm-worker`; exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims on the dispatch/delivery/YouTube outboxes plus the single Compose alarm-worker instance.
-- `hololive-shared/pkg/service/delivery/RuntimeIrisClient` and `providers.ProvideIrisClient` are low-level Iris client construction helpers, not proactive notification sender ownership. CI gates forbid producer runtimes from using them for proactive egress.
+- `hololive-shared/pkg/service/delivery/RuntimeIrisClient` and `pkg/providers/iris.ProvideIrisClient` are low-level Iris client construction helpers, not proactive notification sender ownership. The proactive sender and generic notification delivery dispatcher live in `alarm-worker/internal/egress`. CI gates forbid producer runtimes from using these helpers for proactive egress.
 
 ## Transport
 

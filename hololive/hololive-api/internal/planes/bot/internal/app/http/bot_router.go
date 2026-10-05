@@ -34,9 +34,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 	"github.com/park285/shared-go/v2/pkg/health"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/readiness"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -50,7 +50,7 @@ type IrisRoomLister interface {
 // Admin API 라우트(members, alarms, rooms, stats, settings 등)는 이 라우터에서 제외합니다.
 func ProvideBotRouter(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	logger *slog.Logger,
 	webhookHandler *webhook.Handler,
 	triggerHandler *apiserver.TriggerHandler,

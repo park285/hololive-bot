@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"strings"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
@@ -22,7 +22,7 @@ type adminAPISettings struct {
 }
 
 func buildAdminAPISettings(
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	alarmMode *alarmModeComponents,
 	logger *slog.Logger,
 ) (adminAPISettings, error) {
@@ -40,7 +40,7 @@ func buildAdminAPISettings(
 }
 
 func buildAdminAPISettingsApplier(
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	alarmMode *alarmModeComponents,
 	logger *slog.Logger,
 ) (sharedsettings.SettingsApplier, *triggerclient.Client, error) {
@@ -61,7 +61,7 @@ func buildAdminAPISettingsApplier(
 	return newBotSettingsApplier(localSettingsApplier, majorEventTriggerClient, logger), majorEventTriggerClient, nil
 }
 
-func buildAdminAPISystemCollector(appConfig *settings.Config) *system.Collector {
+func buildAdminAPISystemCollector(appConfig *apiconfig.AdminPlaneConfig) *system.Collector {
 	return system.NewCollector([]system.ServiceEndpoint{
 		{Name: "llm-scheduler", URL: appConfig.Services.LLMSchedulerHealthURL},
 		{Name: "twentyq", URL: appConfig.Services.GameBotTwentyQHealthURL},

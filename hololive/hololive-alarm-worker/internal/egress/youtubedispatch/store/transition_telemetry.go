@@ -96,7 +96,12 @@ func recordAttemptTelemetry(
 		return fmt.Errorf("record attempt telemetry: %w", err)
 	}
 
-	if err := telemetry.NewRepository(tx).Enqueue(ctx, rows); err != nil {
+	repository, err := telemetry.NewRepository(tx)
+	if err != nil {
+		return fmt.Errorf("record attempt telemetry: new telemetry repository: %w", err)
+	}
+
+	if err := repository.Enqueue(ctx, rows); err != nil {
 		return fmt.Errorf("record attempt telemetry: enqueue: %w", err)
 	}
 

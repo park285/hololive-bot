@@ -174,8 +174,8 @@ func (e *pointLookupExpectations) assert(t *testing.T, label string, cache *Cach
 		t.Fatalf("%s GetByName(Twin Name) = %+v, %v", label, got, err)
 	}
 
-	if _, err := cache.FindByAlias(ctx, "없는별칭"); !errors.Is(err, ErrMemberNotFound) {
-		t.Fatalf("%s FindByAlias(missing) error = %v, want ErrMemberNotFound", label, err)
+	if _, err := cache.FindByAlias(ctx, "없는별칭"); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("%s FindByAlias(missing) error = %v, want domain.ErrMemberNotFound", label, err)
 	}
 }
 
@@ -213,4 +213,95 @@ func TestPointLookupsMatchRepositoryWithAndWithoutSnapshot(t *testing.T) {
 	}
 
 	expectations.assert(t, "warm", warm)
+}
+
+// 어댑터 단건 조회는 미존재를 domain.ErrMemberNotFound로, PostgreSQL 실패를 그와 다른 오류로 돌려준다. 미존재는
+// 캐시하지 않으므로 나중에 생긴 행은 곧바로 보인다.
+func TestServiceAdapterSeparatesNotFoundFromRepositoryFailure(t *testing.T) {
+	repo, pool := newPGXRepository(t)
+	ctx := t.Context()
+	adapter := NewMemberServiceAdapter(withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{})))
+
+	_, channelErr := adapter.FindMemberByChannelID(ctx, "UC-missing")
+	_, nameErr := adapter.FindMemberByName(ctx, "Missing")
+	_, aliasErr := adapter.FindMemberByAlias(ctx, "없음")
+
+	for label, err := range map[string]error{"channel": channelErr, "name": nameErr, "alias": aliasErr} {
+		if !errors.Is(err, domain.ErrMemberNotFound) {
+			t.Fatalf("%s missing error = %v, want domain.ErrMemberNotFound", label, err)
+		}
+	}
+
+	if _, err := pool.Exec(ctx, `INSERT INTO members(slug,channel_id,english_name,org,sync_source,aliases)
+ VALUES ('late-row','UC-missing','Missing','Hololive','manual','{"ko":["없음"],"ja":[]}')`); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := adapter.FindMemberByChannelID(ctx, "UC-missing"); err != nil || got.Name != "Missing" {
+		t.Fatalf("late row lookup = %+v, %v; want negative result not cached", got, err)
+	}
+
+	pool.Close()
+
+	_, failure := adapter.FindMemberByAlias(ctx, "없음")
+	if failure == nil || errors.Is(failure, domain.ErrMemberNotFound) {
+		t.Fatalf("closed pool alias error = %v, want repository failure distinct from not-found", failure)
+	}
+}
+
+// 같은 english_name이 여럿이면 repository(SQL ORDER BY id), cold cache, epoch 우회, warm snapshot 모두 가장 작은 영속 ID를
+// 돌려준다. 먼저 넣은 행을 갱신해 heap 순서가 ID 순서와 달라지게 만든다.
+func TestDuplicateNameLookupsAgreeOnSmallestID(t *testing.T) {
+	repo, pool := newPGXRepository(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `INSERT INTO members(slug,channel_id,english_name,org,sync_source,aliases)
+ VALUES ('dup-first','UC-dup-first','Dup Name','Hololive','manual','{}'),
+ ('dup-second','UC-dup-second','Dup Name','Nijisanji','manual','{}')`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, `UPDATE members SET short_korean_name = '갱신' WHERE slug = 'dup-first'`); err != nil {
+		t.Fatal(err)
+	}
+
+	var wantID int
+
+	if err := pool.QueryRow(ctx, `SELECT min(id) FROM members WHERE english_name = 'Dup Name'`).Scan(&wantID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertName := func(label string, got *domain.Member, err error) {
+		t.Helper()
+
+		if err != nil || got.ID != wantID {
+			t.Fatalf("%s GetByName(Dup Name) = %+v, %v; want smallest ID %d", label, got, err, wantID)
+		}
+	}
+
+	got, err := repo.FindByName(ctx, "Dup Name")
+	assertName("repository", got, err)
+
+	cold := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
+
+	got, err = cold.GetByName(ctx, "Dup Name")
+	assertName("cold", got, err)
+
+	bypass := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
+	bypass.authorityHealthy.Store(false)
+
+	got, err = bypass.GetByName(ctx, "Dup Name")
+	assertName("bypass", got, err)
+
+	warm := withTestEpochAuthority(newMemberCache(repo, slog.New(slog.DiscardHandler), CacheConfig{}))
+	if warmErr := warm.WarmUpCache(ctx); warmErr != nil {
+		t.Fatal(warmErr)
+	}
+
+	if _, deleteErr := pool.Exec(ctx, `DELETE FROM members`); deleteErr != nil {
+		t.Fatal(deleteErr)
+	}
+
+	got, err = warm.GetByName(ctx, "Dup Name")
+	assertName("warm snapshot", got, err)
 }

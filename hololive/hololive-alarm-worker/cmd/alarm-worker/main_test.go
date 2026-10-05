@@ -11,7 +11,7 @@ import (
 )
 
 func TestAlarmWorkerTelemetryConfigUsesFixedIdentity(t *testing.T) {
-	appConfig := &settings.Config{
+	appConfig := &workerconfig.RuntimeConfig{
 		Environment: "staging",
 		Tracing: settings.TracingConfig{
 			Enabled:    true,
@@ -21,7 +21,7 @@ func TestAlarmWorkerTelemetryConfigUsesFixedIdentity(t *testing.T) {
 		},
 	}
 
-	got := alarmWorkerTelemetryConfig(&workerconfig.RuntimeConfig{Config: appConfig}, "2.3.4")
+	got := alarmWorkerTelemetryConfig(appConfig, "2.3.4")
 
 	if got.ServiceName != "hololive-alarm-worker" {
 		t.Fatalf("ServiceName = %q, want hololive-alarm-worker", got.ServiceName)

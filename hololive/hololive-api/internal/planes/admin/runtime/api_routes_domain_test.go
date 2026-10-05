@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"testing"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -37,7 +38,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
@@ -70,7 +71,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
 	ctx := t.Context()
 	apiHandler := &server.Handler{}
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{APIKey: testAPIKey},
 		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
 	}

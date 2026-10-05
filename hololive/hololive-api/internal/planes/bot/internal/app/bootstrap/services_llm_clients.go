@@ -6,10 +6,10 @@ import (
 	"io"
 	"log/slog"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 // LLMSchedulerClients는 major event·member news client와 그 H3 transport 소유권이다.
@@ -25,7 +25,7 @@ type LLMSchedulerClients struct {
 // URL이 설정됐는데 client를 만들지 못하면(HOLOLIVE_INTERNAL_H3_* 누락 포함) 명령을 조용히 끄지 않고 오류를 돌려
 // bot plane 기동을 실패시킨다(stack audit 2026-09-26).
 func ResolveLLMSchedulerClients(
-	appConfig *settings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	logger *slog.Logger,
 ) (LLMSchedulerClients, error) {
 	if appConfig.LLMSchedulerURL == "" {

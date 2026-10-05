@@ -49,14 +49,14 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 
 	newConfig := func(shortLinkAddr string) *RuntimeConfig {
 		return &RuntimeConfig{
-			Bot: &settings.Config{Server: settings.ServerConfig{
+			Bot: &BotPlaneConfig{Server: settings.ServerConfig{
 				Port:          30001,
 				H3Addr:        ":30001",
 				ShortLinkAddr: shortLinkAddr,
 				MetricsAddr:   ":30091",
 				PprofAddr:     ":30061",
 			}},
-			Admin: &settings.Config{Server: settings.ServerConfig{Port: 30006, H3Addr: ":30006"}},
+			Admin: &AdminPlaneConfig{Server: settings.ServerConfig{Port: 30006, H3Addr: ":30006"}},
 			LLM:   &LLMSchedulerConfig{Server: settings.ServerConfig{Port: 30003, H3Addr: ":30003"}},
 		}
 	}
@@ -116,8 +116,8 @@ func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {
 	t.Setenv("SERVER_PORT", "31001")
 	t.Setenv("HOLOLIVE_BOT_INTERNAL_URL", "")
 
-	botConfig := &settings.Config{}
-	adminConfig := &settings.Config{}
+	botConfig := &BotPlaneConfig{}
+	adminConfig := &AdminPlaneConfig{}
 	llmConfig := &LLMSchedulerConfig{}
 
 	require.NoError(t, configurePlanes(botConfig, adminConfig, llmConfig))
@@ -129,8 +129,8 @@ func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {
 func TestConfigureHololiveAPIPlanesPreservesBotInternalURLOverride(t *testing.T) {
 	t.Setenv("SERVER_PORT", "31001")
 
-	botConfig := &settings.Config{}
-	adminConfig := &settings.Config{BotInternalURL: "https://bot.internal:3443"}
+	botConfig := &BotPlaneConfig{}
+	adminConfig := &AdminPlaneConfig{BotInternalURL: "https://bot.internal:3443"}
 	llmConfig := &LLMSchedulerConfig{}
 
 	require.NoError(t, configurePlanes(botConfig, adminConfig, llmConfig))

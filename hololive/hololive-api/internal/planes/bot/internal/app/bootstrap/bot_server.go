@@ -13,9 +13,9 @@ import (
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -32,7 +32,7 @@ func BuildShortLinkServer(addr string) *http.Server {
 
 func BuildBotHTTP3Server(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	webhookHandler *webhook.Handler,
 	triggerHandler *apiserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
@@ -49,7 +49,7 @@ func BuildBotHTTP3Server(
 
 func buildBotHTTP3ServerWithReloaderOptions(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	webhookHandler *webhook.Handler,
 	triggerHandler *apiserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,

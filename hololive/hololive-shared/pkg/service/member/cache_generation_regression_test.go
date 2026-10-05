@@ -33,11 +33,7 @@ func TestCacheAllMembers_InvalidateDuringFailedReloadDoesNotReturnOldSnapshot(t 
 			return newMembers, nil
 		},
 	}
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:       old,
-		loadedAt:      time.Now().Add(-2 * time.Minute),
-		hasSuccessful: true,
-	})
+	c.allMembersSnapshot.Store(newAllMembersState(old, 0, time.Now().Add(-2*time.Minute)))
 
 	type result struct {
 		members []*domain.Member
@@ -84,28 +80,28 @@ func TestCachePointLookup_SnapshotReplacementDropsPriorEntries(t *testing.T) {
 	current := &domain.Member{ID: 1, ChannelID: "same-channel", Name: testMemberNameNew}
 	c := withTestEpochAuthority(&Cache{logger: slog.New(slog.DiscardHandler)})
 
-	if !c.storeAllMembersSnapshot(nil, 0, []*domain.Member{stale}) {
+	if c.storeAllMembersSnapshot(nil, 0, []*domain.Member{stale}) == nil {
 		t.Fatal("initial snapshot was not published")
 	}
 
-	if got, _ := c.findAliasInSnapshot("OldAlias"); got != stale {
+	if got, _ := c.lookupPointInMemory(pointLookupAlias, "OldAlias"); got != stale {
 		t.Fatalf("initial alias lookup = %+v, want %+v", got, stale)
 	}
 
 	previous, generation := c.allMembersView()
-	if !c.storeAllMembersSnapshot(previous, generation, []*domain.Member{current}) {
+	if c.storeAllMembersSnapshot(previous, generation, []*domain.Member{current}) == nil {
 		t.Fatal("replacement snapshot was not published")
 	}
 
-	if got, ok := c.loadNameFromMemory(testMemberNameOld); ok {
+	if got, _ := c.lookupPointInMemory(pointLookupName, testMemberNameOld); got != nil {
 		t.Fatalf("stale name lookup = %+v, want miss", got)
 	}
 
-	if got, ok := c.loadChannelFromMemory("same-channel"); !ok || got != current {
+	if got, _ := c.lookupPointInMemory(pointLookupChannel, "same-channel"); got != current {
 		t.Fatalf("channel lookup = %+v, want current member %+v", got, current)
 	}
 
-	if got, _ := c.findAliasInSnapshot("OldAlias"); got != nil {
+	if got, _ := c.lookupPointInMemory(pointLookupAlias, "OldAlias"); got != nil {
 		t.Fatalf("removed alias lookup = %+v, want miss", got)
 	}
 }

@@ -244,7 +244,7 @@ func TestDispatchDeliveryRowsClaimsCommunityPostBeforeSending(t *testing.T) {
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.NotNil(t, state.AuthorizedAt)
 	require.Nil(t, state.AlarmSentAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, state.DeliveryStatus)
@@ -280,7 +280,7 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaim(t *te
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.NotNil(t, state.AuthorizedAt)
 	require.Equal(t, authorizedAt, state.AuthorizedAt.UTC())
 	require.Nil(t, state.AlarmSentAt)
@@ -347,7 +347,7 @@ func TestDispatchDeliveryRowsSkipsAlreadySentTrackingRowWithoutReclaim(t *testin
 
 	var stateCount int64
 
-	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, &stateCount, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, &stateCount, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.Zero(t, stateCount)
 }
 
@@ -370,7 +370,7 @@ func TestDispatchDeliveryRowsReleasesClaimAfterSendFailure(t *testing.T) {
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.Nil(t, state.AuthorizedAt)
 	require.Nil(t, state.AlarmSentAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, state.DeliveryStatus)
@@ -405,7 +405,7 @@ func TestDispatchDeliveryRowsReclaimsStaleLegacyAuthorizationBeforeSending(t *te
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.NotNil(t, state.AuthorizedAt)
 	require.True(t, state.AuthorizedAt.UTC().After(staleAuthorizedAt))
 	require.Nil(t, state.AlarmSentAt)
@@ -514,7 +514,7 @@ func TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOnc
 
 			var state domain.YouTubeCommunityShortsAlarmState
 
-			require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+			require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 			require.Equal(t, postID, state.PostID)
 			require.Equal(t, outbox.ContentID, state.ContentID)
 			require.NotNil(t, state.AuthorizedAt)
@@ -627,13 +627,13 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 
 	var firstState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &firstState, "kind = ? AND post_id = ?", firstOutbox.Kind, firstPostID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &firstState, "kind = $1 AND post_id = $2", firstOutbox.Kind, firstPostID).Error)
 	require.NotNil(t, firstState.AuthorizedAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, firstState.DeliveryStatus)
 
 	var secondState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &secondState, "kind = ? AND post_id = ?", secondOutbox.Kind, secondPostID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &secondState, "kind = $1 AND post_id = $2", secondOutbox.Kind, secondPostID).Error)
 	require.NotNil(t, secondState.AuthorizedAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, secondState.DeliveryStatus)
 }
@@ -671,7 +671,7 @@ func TestDispatchDeliveryRowsSendsAlreadySentPostToRoomWithoutSentRow(t *testing
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.NotNil(t, state.AlarmSentAt)
 	require.Equal(t, alarmSentAt, state.AlarmSentAt.UTC())
 }
@@ -746,7 +746,7 @@ func TestProcessPendingDeliveriesSendsPostToEveryRoomAcrossBatches(t *testing.T)
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.NotNil(t, state.AlarmSentAt, "first batch must complete the post-level alarm-once state")
 
 	require.Equal(t, 1, dispatcher.claim.processPendingDeliveries(ctx))
@@ -802,7 +802,7 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefers
 	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{
 		"row_version": 1,
-	}, "id = ?", row.ID).Error)
+	}, "id = $1", row.ID).Error)
 
 	selection := dispatcher.claim.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, newClaimDecisionCache())
 

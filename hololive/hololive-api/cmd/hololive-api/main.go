@@ -14,7 +14,6 @@ import (
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/fxapp"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
@@ -22,7 +21,7 @@ var Version = "dev"
 
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
-		if _, err := settings.LoadAPIWorkerProfile(); err != nil {
+		if _, err := apiconfig.LoadAPIWorkerProfile(); err != nil {
 			return fmt.Errorf("load api worker profile: %w", err)
 		}
 

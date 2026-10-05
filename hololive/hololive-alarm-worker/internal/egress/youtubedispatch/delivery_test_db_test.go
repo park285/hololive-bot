@@ -3,6 +3,7 @@ package youtubedispatch
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,8 +17,8 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type deliveryTestSQLResult struct {
@@ -29,6 +30,15 @@ func newDeliveryPool(tb testing.TB) *pgxpool.Pool {
 	tb.Helper()
 
 	return dbtest.NewPool(tb)
+}
+
+func newDeliveryTelemetryRepository(tb testing.TB, pool *pgxpool.Pool) *telemetry.Repository {
+	tb.Helper()
+
+	repository, err := telemetry.NewRepository(pool)
+	require.NoError(tb, err)
+
+	return repository
 }
 
 func TestDeliveryPoolKeepsOutboxForeignKey(t *testing.T) {
@@ -101,11 +111,12 @@ func countDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, dest *int64, wher
 		query += " WHERE " + where
 	}
 
-	err := pool.QueryRow(context.Background(), dbx.PostgresPlaceholders(query), args...).Scan(dest)
+	err := pool.QueryRow(context.Background(), query, args...).Scan(dest)
 
 	return deliveryTestSQLResult{Error: err}
 }
 
+// updateDeliveryTestRowsWhere의 where는 args를 $1..$n으로 참조한다. SET 값은 그 뒤 $n+1부터 컬럼 이름 순서로 붙는다.
 func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[string]any, where string, args ...any) deliveryTestSQLResult {
 	table := deliveryTestTableForModel(model)
 	if table == "" {
@@ -116,19 +127,16 @@ func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[strin
 		return deliveryTestSQLResult{}
 	}
 
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-
-	slices.Sort(keys)
+	keys := slices.Sorted(maps.Keys(values))
 
 	assignments := make([]string, 0, len(keys))
 	queryArgs := make([]any, 0, len(values)+len(args))
 
+	queryArgs = append(queryArgs, args...)
+
 	for _, key := range keys {
-		assignments = append(assignments, deliveryTestUpdateAssignment(key))
 		queryArgs = append(queryArgs, values[key])
+		assignments = append(assignments, deliveryTestUpdateAssignment(key, len(queryArgs)))
 	}
 
 	query := "UPDATE " + table + " SET " + strings.Join(assignments, ", ")
@@ -137,9 +145,7 @@ func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[strin
 		query += " WHERE " + where
 	}
 
-	queryArgs = append(queryArgs, args...)
-
-	tag, err := pool.Exec(context.Background(), dbx.PostgresPlaceholders(query), queryArgs...)
+	tag, err := pool.Exec(context.Background(), query, queryArgs...)
 
 	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
 }
@@ -160,7 +166,7 @@ func firstDeliveryTestRowContext(ctx context.Context, pool *pgxpool.Pool, dest a
 
 			args = append(args, conds[1:]...)
 		default:
-			query += " WHERE id = ?"
+			query += " WHERE id = $1"
 
 			args = []any{cond}
 		}
@@ -168,7 +174,7 @@ func firstDeliveryTestRowContext(ctx context.Context, pool *pgxpool.Pool, dest a
 
 	query += " LIMIT 1"
 
-	if err := pgxscan.Get(ctx, pool, dest, dbx.PostgresPlaceholders(query), args...); err != nil {
+	if err := pgxscan.Get(ctx, pool, dest, query, args...); err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
 
@@ -191,7 +197,7 @@ func findDeliveryTestRowsContext(ctx context.Context, pool *pgxpool.Pool, dest a
 		query += " ORDER BY " + order
 	}
 
-	if err := pgxscan.Select(ctx, pool, dest, dbx.PostgresPlaceholders(query), args...); err != nil {
+	if err := pgxscan.Select(ctx, pool, dest, query, args...); err != nil {
 		return fmt.Errorf("select: %w", err)
 	}
 
@@ -743,12 +749,12 @@ func deliveryTestTableForModel(model any) string {
 	}
 }
 
-func deliveryTestUpdateAssignment(column string) string {
+func deliveryTestUpdateAssignment(column string, ordinal int) string {
 	switch column {
 	case "actual_published_at", "alarm_sent_at", "attempt_finished_at", "attempt_started_at", "authorized_at", "created_at", "detected_at", "event_at", "locked_at", "logged_at", "next_attempt_at", "sent_at", "updated_at":
-		return fmt.Sprintf("%s = ?::timestamptz", column)
+		return fmt.Sprintf("%s = $%d::timestamptz", column, ordinal)
 	default:
-		return fmt.Sprintf("%s = ?", column)
+		return fmt.Sprintf("%s = $%d", column, ordinal)
 	}
 }
 

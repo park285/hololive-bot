@@ -153,14 +153,13 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 	return totalDeleted, nil
 }
 
-// KEYS와 달리 Redis를 블로킹하지 않아 대량 키 조회에 안전하다.
-// 단, 비원자적이므로 스캔 중 키 변경 시 누락/중복이 발생할 수 있다.
-func (c *Service) ScanKeys(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
+// ScanKeyPages는 SCAN 응답 page마다 visit를 호출해 전체 key 목록을 메모리에 모으지 않는다.
+// KEYS와 달리 Redis를 블로킹하지 않지만 비원자적이므로 scan 중 바뀐 key는 누락·중복될 수 있다.
+// Visit가 오류를 반환하면 순회를 멈추고 그 오류를 감싸 반환한다. Visit에 넘긴 slice는 호출 뒤 재사용하지 않는다.
+func (c *Service) ScanKeyPages(ctx context.Context, pattern string, batchSize int64, visit func(keys []string) error) error {
 	if batchSize <= 0 {
 		batchSize = 100
 	}
-
-	var keys []string
 
 	cursor := uint64(0)
 
@@ -171,23 +170,25 @@ func (c *Service) ScanKeys(ctx context.Context, pattern string, batchSize int64)
 		if resp.Error() != nil {
 			c.logger.Error("Cache scan failed", slog.String("pattern", pattern), slog.Any("error", resp.Error()))
 
-			return keys, NewCacheError("scan", pattern, resp.Error())
+			return NewCacheError("scan", pattern, resp.Error())
 		}
 
 		entry, err := resp.AsScanEntry()
 		if err != nil {
-			return keys, NewCacheError("scan", pattern, err)
+			return NewCacheError("scan", pattern, err)
 		}
 
-		keys = append(keys, entry.Elements...)
-		cursor = entry.Cursor
+		if len(entry.Elements) > 0 {
+			if err := visit(entry.Elements); err != nil {
+				return fmt.Errorf("scan keys %q: visit page: %w", pattern, err)
+			}
+		}
 
+		cursor = entry.Cursor
 		if cursor == 0 {
-			break
+			return nil
 		}
 	}
-
-	return keys, nil
 }
 
 func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) error {

@@ -30,8 +30,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
@@ -65,7 +65,7 @@ func TestBuildBotRuntime_RejectsNilInfrastructure(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	runtime, err := buildBotRuntime(t.Context(), &settings.Config{}, logger, nil)
+	runtime, err := buildBotRuntime(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "infra is nil")
