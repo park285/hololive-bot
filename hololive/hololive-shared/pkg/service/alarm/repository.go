@@ -74,7 +74,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 
 	_, err = r.pool.Exec(ctx, query,
 		alarm.RoomID, alarm.UserID, alarm.ChannelID,
-		alarm.MemberName, roomName, alarm.UserName,
+		roomName, alarm.UserName,
 		typesValue, alarm.HostID,
 	)
 	if err != nil {
@@ -270,21 +270,21 @@ func (r *Repository) scanAlarms(rows pgx.Rows) ([]*domain.Alarm, error) {
 
 func scanAlarmRow(rows pgx.Rows) (*domain.Alarm, error) {
 	var (
-		alarm                          domain.Alarm
-		memberName, roomName, userName *string
-		alarmTypesStr                  *string
+		alarm              domain.Alarm
+		roomName, userName *string
+		alarmTypesStr      *string
 	)
 
 	err := rows.Scan(
 		&alarm.ID, &alarm.RoomID, &alarm.UserID, &alarm.ChannelID,
-		&memberName, &roomName, &userName, &alarmTypesStr, &alarm.CreatedAt,
+		&roomName, &userName, &alarmTypesStr, &alarm.CreatedAt,
 		&alarm.HostID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan alarm: %w", err)
 	}
 
-	applyAlarmNullableFields(&alarm, memberName, roomName, userName)
+	applyAlarmNullableFields(&alarm, roomName, userName)
 
 	if err := applyAlarmTypes(&alarm, alarmTypesStr); err != nil {
 		return nil, fmt.Errorf("apply alarm types: %w", err)
@@ -293,11 +293,7 @@ func scanAlarmRow(rows pgx.Rows) (*domain.Alarm, error) {
 	return &alarm, nil
 }
 
-func applyAlarmNullableFields(alarm *domain.Alarm, memberName, roomName, userName *string) {
-	if memberName != nil {
-		alarm.MemberName = *memberName
-	}
-
+func applyAlarmNullableFields(alarm *domain.Alarm, roomName, userName *string) {
 	if roomName != nil {
 		alarm.RoomName = *roomName
 	}

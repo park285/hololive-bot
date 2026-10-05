@@ -128,7 +128,7 @@ func newRoundTripAlarmMock(t *testing.T) *mockAlarmCRUD {
 	mock.getRoomAlarmsWithTypesFn = func(_ context.Context, roomID string) ([]*domain.Alarm, error) {
 		assert.Equal(t, testRoomID, roomID)
 
-		return []*domain.Alarm{{RoomID: roomID, ChannelID: testClientChannelID, MemberName: "Miko"}}, nil
+		return []*domain.Alarm{{RoomID: roomID, ChannelID: testClientChannelID}}, nil
 	}
 	mock.listRoomAlarmsViewFn = func(_ context.Context, _ string) ([]domain.AlarmListView, error) {
 		return []domain.AlarmListView{{

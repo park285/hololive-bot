@@ -154,17 +154,14 @@ func TestBuildAlarmListViews(t *testing.T) {
 		[]*domain.Alarm{
 			{
 				ChannelID:  testChannelID,
-				MemberName: "DB 이름",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 			},
 			{
 				ChannelID:  testOtherChannelID,
-				MemberName: "  ",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 			},
 			{
 				ChannelID:  "ch-3",
-				MemberName: "",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 			},
 		},

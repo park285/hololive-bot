@@ -705,7 +705,7 @@ func insertDeliveryTestAlarm(ctx context.Context, pool *pgxpool.Pool, alarm *dom
 		return 0, fmt.Errorf("value: %w", err)
 	}
 
-	err = pool.QueryRow(ctx, `INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7::alarm_type[], $8) RETURNING id`, alarm.RoomID, alarm.UserID, alarm.ChannelID, alarm.MemberName, alarm.RoomName, alarm.UserName, alarmTypes, alarm.CreatedAt).Scan(&alarm.ID)
+	err = pool.QueryRow(ctx, `INSERT INTO alarms (room_id, user_id, channel_id, room_name, user_name, alarm_types, created_at) VALUES ($1, $2, $3, $4, $5, $6::alarm_type[], $7) RETURNING id`, alarm.RoomID, alarm.UserID, alarm.ChannelID, alarm.RoomName, alarm.UserName, alarmTypes, alarm.CreatedAt).Scan(&alarm.ID)
 	if err != nil {
 		return 0, fmt.Errorf("scan: %w", err)
 	}

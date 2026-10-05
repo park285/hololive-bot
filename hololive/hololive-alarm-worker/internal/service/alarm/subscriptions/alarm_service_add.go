@@ -93,7 +93,6 @@ func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequ
 	normalized.UserID = strings.TrimSpace(normalized.UserID)
 	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
 	normalized.HostID = strings.TrimSpace(normalized.HostID)
-	normalized.MemberName = strings.TrimSpace(normalized.MemberName)
 	normalized.RoomName = strings.TrimSpace(normalized.RoomName)
 	normalized.UserName = strings.TrimSpace(normalized.UserName)
 
@@ -102,12 +101,9 @@ func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequ
 	}
 
 	if req.HostID != "" {
-		member, ok := mekparkhost.SubscriptionMember(normalized.ChannelID, normalized.HostID)
-		if !ok {
+		if _, ok := mekparkhost.SubscriptionMember(normalized.ChannelID, normalized.HostID); !ok {
 			return nil, errors.New("invalid member subscription target")
 		}
-
-		normalized.MemberName = member.Name
 	}
 
 	return &normalized, nil

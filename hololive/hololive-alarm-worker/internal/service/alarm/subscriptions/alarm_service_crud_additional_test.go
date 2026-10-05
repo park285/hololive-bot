@@ -71,22 +71,20 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	}
 
 	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testChannelID,
-		MemberName: testMemberName,
-		RoomName:   "메인방",
-		UserName:   "관리자",
+		RoomID:    testRoomID,
+		UserID:    testUserID,
+		ChannelID: testChannelID,
+		RoomName:  "메인방",
+		UserName:  "관리자",
 	})
 	require.NoError(t, err)
 	assert.True(t, added)
 
 	// 중복 등록은 false여야 한다.
 	added, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testChannelID,
-		MemberName: testMemberName,
+		RoomID:    testRoomID,
+		UserID:    testUserID,
+		ChannelID: testChannelID,
 	})
 	require.NoError(t, err)
 	assert.False(t, added)
@@ -125,18 +123,16 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	assert.Equal(t, 0, count)
 
 	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testChannelID,
-		MemberName: "A",
+		RoomID:    testRoomID,
+		UserID:    testUserID,
+		ChannelID: testChannelID,
 	})
 	require.NoError(t, err)
 
 	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     testRoomID,
-		UserID:     testUserID,
-		ChannelID:  testOtherChannelID,
-		MemberName: "B",
+		RoomID:    testRoomID,
+		UserID:    testUserID,
+		ChannelID: testOtherChannelID,
 	})
 	require.NoError(t, err)
 

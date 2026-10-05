@@ -239,7 +239,6 @@ func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *domain.Comm
 		RoomID:     cmdCtx.Room,
 		ChannelID:  channel.ChannelID,
 		HostID:     channel.HostID,
-		MemberName: channel.Name,
 		RoomName:   cmdCtx.RoomName,
 		AlarmTypes: alarmTypes,
 	})

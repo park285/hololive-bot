@@ -19,7 +19,6 @@ func newSubscriberCacheWarmData(alarms []*domain.Alarm) *subscriberCacheWarmData
 		rooms:              make(map[string]struct{}, len(alarms)),
 		channels:           make(map[string]struct{}, len(alarms)),
 		channelSubscribers: make(map[string][]string, len(alarms)),
-		memberNames:        make(map[string]string, len(alarms)),
 		channelRegistry:    make([]string, 0, len(alarms)),
 	}
 }
@@ -32,10 +31,6 @@ func (data *subscriberCacheWarmData) addAlarm(alarmRecord *domain.Alarm) {
 
 	data.channelRegistry = append(data.channelRegistry, channelID)
 	data.addChannelSubscribers(channelID, alarmRecord.RegistryKey(), alarmRecord.AlarmTypes)
-
-	if alarmRecord.HostID == "" && alarmRecord.MemberName != "" {
-		data.memberNames[channelID] = alarmRecord.MemberName
-	}
 
 	data.summary.AlarmCount++
 

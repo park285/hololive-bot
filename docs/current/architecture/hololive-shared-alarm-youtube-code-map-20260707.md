@@ -143,11 +143,10 @@ member 파라미터 확인
 핵심 SQL:
 
 ```sql
-INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO alarms (room_id, user_id, channel_id, room_name, user_name, alarm_types)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (room_id, channel_id) DO UPDATE
-SET member_name = COALESCE(EXCLUDED.member_name, alarms.member_name),
-    room_name = COALESCE(EXCLUDED.room_name, alarms.room_name),
+SET room_name = COALESCE(EXCLUDED.room_name, alarms.room_name),
     user_name = COALESCE(EXCLUDED.user_name, alarms.user_name),
     user_id = EXCLUDED.user_id,
     alarm_types = EXCLUDED.alarm_types
@@ -158,12 +157,12 @@ SET member_name = COALESCE(EXCLUDED.member_name, alarms.member_name),
 - unique key는 `(room_id, channel_id)`다.
 - 같은 방에서 같은 채널을 여러 번 추가해도 row는 하나만 유지된다.
 - 동시에 같은 알람을 추가해도 `ON CONFLICT DO UPDATE`가 경쟁을 흡수한다.
-- `member_name`, `room_name`, `user_name`은 새 값이 비었으면 기존 값을 유지한다.
+- `room_name`, `user_name`은 새 값이 비었으면 기존 값을 유지한다. 멤버 이름은 저장하지 않고 members에서 읽는다(2026-10-05).
 
 알림 대상 방 조회는 `targets_0188_01.sql`에서 수행한다.
 
 ```sql
-SELECT room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types
+SELECT room_id, user_id, channel_id, room_name, user_name, alarm_types
 FROM alarms
 WHERE channel_id = $1
   AND (alarm_types @> ARRAY[$2::alarm_type] OR cardinality(alarm_types) = 0)

@@ -156,11 +156,11 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 
 	cache, cacheStore := newRouteAuditCacheClient()
 	alarms := []*domain.Alarm{
-		{RoomID: "room-shorts-a", ChannelID: "UC_A", MemberName: "A", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
-		{RoomID: "room-community-a", ChannelID: "UC_A", MemberName: "A", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity}},
-		{RoomID: "room-both-b", ChannelID: "UC_B", MemberName: "B", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts, domain.AlarmTypeCommunity}},
-		{RoomID: "room-shorts-b", ChannelID: "UC_B", MemberName: "B", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
-		{RoomID: "room-live-only", ChannelID: "UC_LIVE_ONLY", MemberName: "Live", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
+		{RoomID: "room-shorts-a", ChannelID: "UC_A", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
+		{RoomID: "room-community-a", ChannelID: "UC_A", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity}},
+		{RoomID: "room-both-b", ChannelID: "UC_B", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts, domain.AlarmTypeCommunity}},
+		{RoomID: "room-shorts-b", ChannelID: "UC_B", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
+		{RoomID: "room-live-only", ChannelID: "UC_LIVE_ONLY", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}
 
 	// subscriber cache rebuild가 쓰는 타입별 구독 set을 그대로 채운다.

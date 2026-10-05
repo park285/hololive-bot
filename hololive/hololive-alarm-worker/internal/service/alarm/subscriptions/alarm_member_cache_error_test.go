@@ -58,3 +58,46 @@ func TestCacheAlarmDistinguishesMissingMemberFromLookupFailure(t *testing.T) {
 		})
 	}
 }
+
+// 알람 목록은 이름 캐시에 없는 채널을 members 정본으로 채운다. 조회 실패는 채널 ID 등 다른 이름으로 덮지 않는다.
+func TestListRoomAlarmsViewResolvesCacheMissFromMembers(t *testing.T) {
+	lookupErr := errors.New("member database unavailable")
+
+	for _, tc := range []struct {
+		name     string
+		provider domain.MemberDataProvider
+		wantName string
+		wantErr  error
+	}{
+		{
+			name:     "member display name",
+			provider: &mockMemberDataProvider{members: []*domain.Member{{ChannelID: testChannelID, Name: "Usada Pekora", NameKo: "우사다 페코라", ShortKoreanName: "페코라"}}},
+			wantName: "페코라",
+		},
+		{name: "unknown channel keeps channel id", provider: &mockMemberDataProvider{}, wantName: testChannelID},
+		{name: "lookup failure", provider: failedCacheNameProvider{err: lookupErr}, wantErr: lookupErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			as := newTestAlarmService(t)
+			// members에 없는 채널로 구독해 이름 캐시를 빈 값으로 둔 뒤, 목록 조회 때의 members 상태를 바꾼다.
+			as.memberData = &mockMemberDataProvider{}
+
+			added, err := as.AddAlarm(t.Context(), &domain.AddAlarmRequest{RoomID: testRoomID, ChannelID: testChannelID})
+			require.NoError(t, err)
+			require.True(t, added)
+
+			as.memberData = tc.provider
+
+			views, err := as.ListRoomAlarmsView(t.Context(), testRoomID)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, views, 1)
+			require.Equal(t, tc.wantName, views[0].MemberName)
+		})
+	}
+}

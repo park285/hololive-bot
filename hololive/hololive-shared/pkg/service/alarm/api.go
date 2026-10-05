@@ -134,7 +134,6 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 		UserID:     req.UserID,
 		ChannelID:  req.ChannelID,
 		HostID:     req.HostID,
-		MemberName: req.MemberName,
 		RoomName:   req.RoomName,
 		UserName:   req.UserName,
 		AlarmTypes: alarmTypes,

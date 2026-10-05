@@ -287,7 +287,6 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	requireAlarmRecord(t, db, &domain.Alarm{
 		RoomID:     "room-original",
 		ChannelID:  "UC_pointer_channel",
-		MemberName: "Original Member",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts},
 	})
 
@@ -749,13 +748,12 @@ func requireAlarmRecord(t *testing.T, db *alarmTargetLookupTestDB, alarmRecord *
 	}
 
 	if _, err := db.Exec(t.Context(), `
-		INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::alarm_type[])
+		INSERT INTO alarms (room_id, user_id, channel_id, room_name, user_name, alarm_types)
+		VALUES ($1, $2, $3, $4, $5, $6::alarm_type[])
 	`,
 		alarmRecord.RoomID,
 		alarmRecord.UserID,
 		alarmRecord.ChannelID,
-		alarmRecord.MemberName,
 		alarmRecord.RoomName,
 		alarmRecord.UserName,
 		alarmTypesValue,

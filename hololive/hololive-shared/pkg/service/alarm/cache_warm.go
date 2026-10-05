@@ -79,9 +79,7 @@ func loadSubscriberCacheWarmData(ctx context.Context, repository *Repository) (*
 		return nil, fmt.Errorf("rebuild subscriber cache from repository: load member names: %w", err)
 	}
 
-	if len(memberNames) > 0 {
-		warmData.memberNames = memberNames
-	}
+	warmData.memberNames = memberNames
 
 	return warmData, nil
 }
