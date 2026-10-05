@@ -82,7 +82,7 @@ stack-platform-ops 절차로 `hololive-osaka`의 `holo-postgres`(PostgreSQL 18.6
 - 9회의 출처를 `pg_stat_statements`로 추적했다. 런타임 role(`hololive_runtime`, `hololive_scraper`)에서 `job_key` 동등 조건이 없는 문장은 INSERT, `projection_generation` FK 확인, 보존 삭제뿐이며 이 인덱스를 쓰지 않는다. `slot_state`로 거르는 문장은 `postgres_admin`의 수동 진단 쿼리와 `hololive_migrator`의 사전 점검(2회)뿐이다. 둘 다 1,092행 seq scan으로 충분하다.
 - 쓰기 비용: 42일간 UPDATE 1,410만 건, HOT 0.43%, autovacuum 26,349회(약 2.3분마다), 스냅샷 시점 dead 31.8%. renew가 바꾸는 `lease_expires_at`이 이 인덱스 key라 HOT이 막힌다. 삭제하면 renew는 PK·`projection_generation` 인덱스 key를 바꾸지 않으므로 HOT 대상이 된다.
 - [x] `266_drop_youtube_collection_job_due_index.sql`을 추가하고 manifest와 schema snapshot을 갱신했다. 이 테이블을 읽는 런타임 SQL이 모두 `job_key` PK로 접근함도 코드에서 다시 확인했다.
-- [ ] 운영 적용 후 acquire·renew 지연, `n_tup_hot_upd` 비율, autovacuum 빈도를 비교한다.
+- [x] 운영 적용 후 비교(아래 "운영 반영" 표). HOT 비율이 0%에서 82%로 올랐고 autovacuum 간격은 약 1.2분에서 1.7분으로 늘었다. acquire 평균은 0.376 ms에서 0.329 ms다. renew 문장은 두 구간 모두 호출이 없어 비교하지 못했다.
 
 ### B3. 테이블별 autovacuum 조정 (P2): 변경 불필요로 종료
 
@@ -106,19 +106,20 @@ autovacuum이 따라가지 못하는 대상 테이블은 없었다. 기본값은
 - [x] 누적 삽입·삭제 344만 건은 과거 scope 교체 폭증의 흔적이다. 10분 측정에서 삽입·삭제는 0건, UPDATE는 1,616건(하루 약 23만 건)이고 HOT은 0건이었다.
 - [x] 폭증 모양(한 subject에 scope 2.4만 개, 2.2만 개가 오래됨) dbtest에서 인덱스를 지워도 계획은 hash semi join으로 바뀌고 31.7 ms(인덱스 사용 시 34.5 ms)였으며, 삭제 호출은 50 ms(81 ms)였다. 잠금은 후보 CTE의 `FOR UPDATE SKIP LOCKED`가 LIMIT 안의 후보에만 걸므로 접근 경로와 무관하다.
 - [x] `267_drop_source_checkpoint_retention_index.sql`을 추가했다. 인덱스 사용을 단정하던 `TestCheckpointRetentionCandidatePlanUsesBoundedIndexes`는 후보마다 checkpoint를 다시 seq scan하는 2차 계획을 막는 `TestCheckpointRetentionCandidatePlanReadsCheckpointsOnce`로 바꿨다.
-- [ ] 운영 적용 후 checkpoint `n_tup_hot_upd` 비율과 보존 삭제 시간을 비교한다.
+- [x] 운영 적용 후 checkpoint HOT 비율은 0%에서 99.7%가 됐고 같은 구간 autovacuum은 3회에서 0회다. 보존 삭제 평균은 10.4 ms에서 12.2 ms로 측정 오차 범위다.
 
 ### 참고: projection generation 급증의 잔여분
 
 - 은퇴 generation 32,774개와 그 하위 target 2,022만 행이 남아 있다(`youtube_collection_targets` 3.9 GB, `youtube_collection_target_reasons` 4.8 GB). 일별 생성 수는 09-30 4,601, 10-01 9,299, 10-02 8,814, 10-03 8,307, 10-04 1,693이고, 10-05는 시간당 3~5개다.
 - 행 단위 `valid_until` 갱신 문장이 누적 6.8만 회·5.97억 행을 기록했지만, 조회 사이 약 2분 동안 target UPDATE는 46건만 늘었다. 따라서 #566(heartbeat를 generation 단위로 이동)이 운영에 반영된 것으로 보인다.
 - 잔여 행은 은퇴 보존 기간(`YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS`)이 지나면 보존 작업이 지운다. tick마다 최대 64배치이고 generation 하나에 약 2배치가 들므로, 대상이 되면 하루 2만 개 이상을 지울 수 있다. 실제 운영 설정값은 비밀 파일을 읽어야 해서 확인하지 않았다.
-- [ ] 보존 대상이 된 뒤 삭제량, dead tuple, autovacuum을 확인한다. 디스크 파일 크기는 VACUUM 뒤에도 바로 줄지 않는다.
+- [x] 2026-10-05 11:25 UTC 확인: 은퇴 generation 32,829개 중 7일 보존을 넘긴 것은 09-28분 6개뿐이었다. 11:13 이후 대상이 된 2개와 하위 target·reason 각 1,085행, lease 1행이 삭제돼 보존 경로 작동을 확인했다.
+- [ ] 폭증분(09-30 4,196개, 10-01 9,332개, 10-02 8,847개, 10-03 8,308개, 10-04 2,030개)은 2026-10-07~10-11에 보존 대상이 된다. 그 뒤 `youtube_collection_targets`·`youtube_collection_target_reasons`의 `n_tup_del`, `n_dead_tup`, autovacuum과 `hololive_youtube_plane_retention_deleted_total`을 확인한다. 디스크 파일 크기는 VACUUM 뒤에도 바로 줄지 않는다.
 
 ## 순서와 의존성
 
 1. B2, A1, A2, B4, A3, A4 순서로 코드 작업을 마쳤다(2026-10-05). B1은 완료, B3은 변경 없이 종료했다.
-2. 남은 일은 B2·B4 migration의 운영 적용과 적용 후 비교, Git 발행이다. 모두 별도 승인이 필요하다.
+2. PR #573으로 main(`ab078d31d`)에 병합하고 운영에 반영했다. 남은 일은 10-07 이후 폭증분 보존 삭제 관측뿐이다.
 
 ## 검증
 
@@ -134,7 +135,19 @@ autovacuum이 따라가지 못하는 대상 테이블은 없었다. 기본값은
 - `check-migration-manifest.sh`와 `TestSchemaSnapshotGolden`이 통과했다. snapshot에서는 두 인덱스 줄만 빠졌다.
 - `./build-all.sh --build-only --no-bump`가 local CI(전체 Go test·race test 포함, integration은 기본값대로 생략)와 이미지 빌드를 통과했다. `scripts/ci/pre-push-gate.sh`는 Git 발행 때 실행한다.
 
-## 필요한 승인
+### 2026-10-05 운영 반영
 
-- B2·B4 migration(266, 267)의 운영 적용과 배포 (hololive-bot-ops)
-- Git push와 PR 발행
+- PR #573을 main `ab078d31d`로 병합했다. 중앙 `hololive-osaka`에서 migration 266·267을 적용(`applied=2`)한 뒤 API·alarm-worker를 재생성하고, collector c·issuer는 `po-central-cutover.sh`로 교체했다. AP Seoul(b)·Osaka(a)·Osaka2(d)도 같은 revision으로 배포해 각 완료 검사를 통과했다. 모든 서비스가 healthy이고 배포 뒤 alarm-worker ERROR·WARN 로그는 없었다.
+- 새 발행 지표는 collector 네 대 모두에서 Prometheus로 수집된다. 새 관측 claim SQL은 배포 뒤 평균 0.573 ms(최대 8.9 ms)로 이전 버전(0.583 ms)과 같다.
+- 읽기 전용 통계 비교(적용 전 10:09~10:32 UTC, 적용 후 10:44~11:09 UTC):
+
+  | 지표 | 적용 전(23.6분) | 적용 후(25.7분) |
+  | --- | ---: | ---: |
+  | lease HOT | 0 / 7,226 (0%) | 6,356 / 7,739 (82.1%) |
+  | lease autovacuum | 19회 | 15회 |
+  | lease acquire 평균(scraper) | 0.376 ms | 0.329 ms |
+  | checkpoint HOT | 0 / 3,991 (0%) | 4,192 / 4,206 (99.7%) |
+  | checkpoint autovacuum | 3회 | 0회 |
+  | checkpoint 보존 삭제 평균 | 10.4 ms | 12.2 ms |
+
+- 수용 뒤 이번 배포의 rollback tag(중앙 4개, Seoul 2개)와 전송 staging·백업 디렉터리를 정리했다. native Osaka·Osaka2는 배포 방식대로 직전 release를 `previous`로 보존한다.
