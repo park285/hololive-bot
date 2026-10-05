@@ -127,3 +127,4 @@
 127 266_drop_youtube_collection_job_due_index.sql
 128 267_drop_source_checkpoint_retention_index.sql
 129 268_remove_unused_alarm_command_templates.sql
+130 269_drop_alarms_member_name.sql

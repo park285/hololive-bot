@@ -243,7 +243,7 @@ X 스페이스 payload(`x_space_starts`, dispatch 원장)는 이름을 담지 �
 
 `alarms.member_name`은 2026-10-05부터 읽거나 쓰지 않는다. 알람 목록은 이름 캐시에 없는 채널을 members
 (`short_korean_name`→`korean_name`→`english_name`)로 채우고, members에도 없으면 채널 ID를 보여 준다. 멤버 뉴스 구독 이름도
-members에서만 읽는다. 컬럼과 읽지 않는 `misc/alarm_unknown_member` 문구는 이 변경을 배포·확인한 뒤 후속 migration으로 지운다.
+members에서만 읽는다. 1단계 배포를 확인한 뒤 migration 269가 컬럼과 읽지 않는 `misc/alarm_unknown_member` 문구를 지웠다.
 
 ### 명령 응답 멤버 표시명
 
