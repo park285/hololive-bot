@@ -264,55 +264,6 @@ func TestSeedTemplates_OutboxVideoGroupNumbersRenderedItems(t *testing.T) {
 	}
 }
 
-func TestSeedTemplates_AlarmNotificationGroupSeparateEntries(t *testing.T) {
-	pool := dbtest.NewPool(t)
-
-	const (
-		markerChannel = "**스이세이**_[EN]"
-		markerTitle   = "~~재방송~~ #노래방송"
-		streamURL     = "https://youtu.be/a_b#c"
-	)
-
-	body := seedBody(t, pool, domain.TemplateKeyCmdAlarmNotificationGroup)
-	out := renderSeedBody(t, domain.TemplateKeyCmdAlarmNotificationGroup, body, map[string]any{
-		fieldCount:        3,
-		fieldMinutesUntil: 5,
-		"ScheduledTimes":  []string{"21:00"},
-		"Entries": []map[string]any{
-			{"Index": 1, fieldChannelName: markerChannel, fieldScheduledKST: "21:00", fieldTitle: markerTitle, fieldURL: streamURL},
-			{"Index": 2, fieldChannelName: markerChannel, fieldScheduledKST: "", fieldTitle: markerTitle, fieldURL: ""},
-			{"Index": 3, fieldChannelName: "", fieldScheduledKST: "", fieldTitle: "", fieldURL: streamURL},
-		},
-	})
-
-	safeChannel := util.MarkdownNeutralize(markerChannel)
-	safeTitle := util.MarkdownNeutralize(markerTitle)
-
-	for _, want := range []string{
-		"🔔 방송 알림 · 3개",
-		"⏰ 21:00",
-		"1 · " + safeChannel + " (21:00)",
-		safeTitle,
-		streamURL,
-		"2 · " + safeChannel,
-		safeTitle,
-		"3 · 알 수 없는 채널",
-		streamURL,
-	} {
-		if !hasSeedLine(out, want) {
-			t.Errorf("CMD_ALARM_NOTIFICATION_GROUP: 라인 %q 없음: %q", want, out)
-		}
-	}
-
-	if strings.Contains(out, markerChannel) || strings.Contains(out, markerTitle) {
-		t.Errorf("CMD_ALARM_NOTIFICATION_GROUP: 원본 마커가 그대로 노출: %q", out)
-	}
-
-	if !strings.Contains(out, streamURL) {
-		t.Errorf("CMD_ALARM_NOTIFICATION_GROUP: URL이 변형됨(ZWSP 삽입 금지): %q", out)
-	}
-}
-
 func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 	pool := dbtest.NewPool(t)
 

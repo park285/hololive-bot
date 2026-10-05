@@ -100,28 +100,6 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 	}
 }
 
-func TestSeedTemplates_AlarmKeepsBothProviderURLs(t *testing.T) {
-	pool := dbtest.NewPool(t)
-
-	const urls = "https://youtu.be/a_b#c\nhttps://chzzk.naver.com/live/example"
-
-	for _, key := range []domain.TemplateKey{domain.TemplateKeyCmdAlarmNotification, domain.TemplateKeyCmdAlarmLiveStarted} {
-		data := map[string]any{
-			fieldChannelName: "테스트 채널", fieldTitle: "동시 송출", fieldURL: urls,
-			"ScheduledTimeKST": "", "ScheduleMessage": "시간 미정",
-		}
-		out := kakaoformat.Render(renderSeedBody(t, key, seedBody(t, pool, key), data))
-
-		if !strings.HasSuffix(out, "\n"+urls) {
-			t.Errorf("%s: 동시 송출 URL 변형: %q", key, out)
-		}
-
-		if key == domain.TemplateKeyCmdAlarmNotification && (!hasSeedLine(out, "곧 시작") || !hasSeedLine(out, "시간 미정")) {
-			t.Errorf("미정 일정 안내 소실: %q", out)
-		}
-	}
-}
-
 func TestSeedTemplates_OutboxVideoPremiereLabels(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	body := seedBody(t, pool, domain.TemplateKeyOutboxVideo)

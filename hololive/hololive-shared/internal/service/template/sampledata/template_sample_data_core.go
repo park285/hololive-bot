@@ -227,9 +227,6 @@ func addTemplateCommandAlarmSamples(data map[domain.TemplateKey]any) {
 		fieldPrefix: "!",
 		"Alarms":    []map[string]any{templateAlarmListItem()},
 	}
-	data[domain.TemplateKeyCmdAlarmNotification] = templateAlarmNotificationSample(5)
-	data[domain.TemplateKeyCmdAlarmLiveStarted] = templateAlarmNotificationSample(0)
-	data[domain.TemplateKeyCmdAlarmNotificationGroup] = templateAlarmNotificationGroupSample()
 	data[domain.TemplateKeyCmdAlarmAdded] = map[string]any{
 		fieldEmoji:      map[string]string{fieldBell: "🔔", "Check": "✅"},
 		fieldMemberName: sampleMemberMiko,
@@ -274,30 +271,6 @@ func templateAlarmListItem() map[string]any {
 	return map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		"TypesLabel":    "라이브, 쇼츠",
-	}
-}
-
-func templateAlarmNotificationGroupSample() map[string]any {
-	return map[string]any{
-		fieldCount:        2,
-		fieldMinutesUntil: 5,
-		"ScheduledTimes":  []string{"21:00"},
-		"Entries": []map[string]any{
-			{"Index": 1, fieldChannelName: sampleMemberMiko, "ScheduledKST": "21:00", fieldTitle: "마인크래프트 건축", fieldURL: "https://youtu.be/stream123"},
-			{"Index": 2, fieldChannelName: "호시마치 스이세이", "ScheduledKST": "", fieldTitle: "노래 방송", fieldURL: "https://youtu.be/stream456"},
-		},
-	}
-}
-
-func templateAlarmNotificationSample(minutesUntil int) map[string]any {
-	return map[string]any{
-		fieldEmoji:         map[string]string{fieldBell: "🔔"},
-		fieldChannelName:   sampleMemberMiko,
-		fieldTitle:         "마인크래프트 건축",
-		fieldMinutesUntil:  minutesUntil,
-		fieldURL:           "https://youtu.be/stream123",
-		"ScheduledTimeKST": "21:00",
-		"ScheduleMessage":  "",
 	}
 }
 
