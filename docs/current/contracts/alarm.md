@@ -237,6 +237,20 @@ PostgreSQL 정본을 조회한다(2026-10-02). 조회 오류는 이 예외 계�
 재시도 가능한 `format_message` 실패로 전이하며, grouped 발송이면 group 전체를 같은 실패로 전이한다. 조회 결과가 빈
 문자열일 때만 `misc/vtuber_fallback` 문구를 쓴다.
 
+### 명령 응답 멤버 표시명
+
+봇 명령 응답(`!라이브`, `!예정`, `!일정`, 알람 추가·해제, 방송기록, 동명이인 후보, 캘린더)은 members 정본
+`short_korean_name`→`korean_name`→`english_name` 순서로 멤버 이름을 표시한다(2026-10-05). 알림의 위 예외 계약과 달리
+`english_name`까지 쓰며 종단 문구는 없다. 담당은 `domain.Member.DisplayName`이고, SQL로 이름을 만드는 `!라이브` 목록
+(`livequery/queries/snapshot.sql`)과 방송기록(`broadcast_history_repository_0179_01.sql`)이 같은 순서를 쓴다.
+
+- 식별·검색·dedup은 `channel_id`와 matcher 검색 키로 한다. 동명이인 안내의 복사 예시는 검색 키 형식
+  `english_name (그룹)`(`domain.Member.QualifiedName`)을 유지한다.
+- `!예정`은 Holodex·공식 일정 응답의 채널 이름 대신, 표시 직전에 `channel_id`로 결합한 members 표시명을 쓴다.
+  members에 없는 채널만 응답 이름을 그대로 쓴다. Holodex 캐시 데이터는 바꾸지 않으며, members 조회가 실패하면
+  원천 이름으로 보내지 않고 예정 조회 실패로 응답한다.
+- mekPark 호스트처럼 members 밖 대상은 이 규칙의 대상이 아니다.
+
 ### Live catchup 억제 marker의 실패 처리
 
 upcoming 알림의 최근 전송 marker는 추가 catchup을 줄이는 보조 증거입니다. marker를 읽지 못한 사실을 이미 알림을 받았다는 증거로 쓰지 않습니다. 다음은 기존 동작과 `TestFilterLiveCatchupSuppressedRoomsFailsOpenOnCacheError`·`TestFilterLiveCatchupSuppressedRoomsFailsOpenOnInvalidMarker`가 재현하는 예외입니다.

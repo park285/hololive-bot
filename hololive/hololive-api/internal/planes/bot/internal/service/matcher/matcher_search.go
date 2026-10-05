@@ -217,9 +217,31 @@ func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string
 func (mm *Matcher) memberToChannel(m *domain.Member) *domain.Channel {
 	return &domain.Channel{
 		ID:   m.ChannelID,
-		Name: m.Name,
+		Name: m.DisplayName(),
 		Org:  &m.Org,
 	}
+}
+
+// MemberDisplayNames는 channelIDs 중 members에 등록된 채널의 명령 응답 표시명을 돌려준다. 등록되지 않은 채널은 결과에 넣지 않으므로
+// 호출자가 원천 응답의 이름을 그대로 쓴다. 멤버 snapshot을 만들지 못하면 오류다.
+func (mm *Matcher) MemberDisplayNames(ctx context.Context, channelIDs []string) (map[string]string, error) {
+	snapshot, err := mm.getSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+	}
+
+	names := make(map[string]string, len(channelIDs))
+
+	for _, channelID := range channelIDs {
+		entry := snapshot.byChannel[channelID]
+		if entry == nil || entry.candidate == nil {
+			continue
+		}
+
+		names[channelID] = entry.candidate.member().DisplayName()
+	}
+
+	return names, nil
 }
 
 func (mm *Matcher) normalizeQuery(q string) string {

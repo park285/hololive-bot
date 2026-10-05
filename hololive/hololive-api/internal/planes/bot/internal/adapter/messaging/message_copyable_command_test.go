@@ -60,7 +60,7 @@ func TestAmbiguousMemberExampleCopyPreservesArgument(t *testing.T) {
 			}
 
 			parsed := NewMessageAdapter("#", "").ParseMessage(&webhook.Message{Msg: command})
-			if parsed == nil || parsed.Type != domain.CommandLive || parsed.Params[paramMember] != member.GetDisplayName() {
+			if parsed == nil || parsed.Type != domain.CommandLive || parsed.Params[paramMember] != member.QualifiedName() {
 				t.Errorf("copy example changed member argument: command=%q parsed=%#v", command, parsed)
 			}
 		})

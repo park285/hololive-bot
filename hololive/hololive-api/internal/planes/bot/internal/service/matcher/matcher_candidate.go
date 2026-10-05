@@ -42,10 +42,23 @@ func (mm *Matcher) candidateFromMember(member *domain.Member, source string) *ma
 	}
 
 	return &matchCandidate{
-		channelID:  member.ChannelID,
-		memberName: name,
-		org:        member.GetOrg(),
-		source:     source,
+		channelID:       member.ChannelID,
+		memberName:      name,
+		koreanName:      member.NameKo,
+		shortKoreanName: member.ShortKoreanName,
+		org:             member.GetOrg(),
+		source:          source,
+	}
+}
+
+// member는 후보를 표시·동명이인 안내용 Member로 되돌린다. Name은 검색 키라서 동명이인 안내의 복사 예시가 다시 같은 후보로 해석된다.
+func (c *matchCandidate) member() *domain.Member {
+	return &domain.Member{
+		Name:            c.memberName,
+		NameKo:          c.koreanName,
+		ShortKoreanName: c.shortKoreanName,
+		ChannelID:       c.channelID,
+		Org:             c.org,
 	}
 }
 
@@ -74,7 +87,7 @@ func (mm *Matcher) finalizeCandidate(candidate *matchCandidate) *domain.Channel 
 
 	channel := &domain.Channel{
 		ID:   candidate.channelID,
-		Name: candidate.memberName,
+		Name: candidate.member().DisplayName(),
 	}
 	if candidate.org != "" {
 		channel.Org = toStringPtr(candidate.org)

@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -153,8 +154,8 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 func (c *UpcomingCommand) sendMemberUpcomingStreams(ctx context.Context, roomID string, channel *domain.Channel, hours int) error {
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, hours)
 	if err != nil {
-		if err := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); err != nil {
-			return fmt.Errorf("send error: %w", err)
+		if sendErr := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); sendErr != nil {
+			return fmt.Errorf("send error: %w", sendErr)
 		}
 
 		return nil
@@ -164,7 +165,11 @@ func (c *UpcomingCommand) sendMemberUpcomingStreams(ctx context.Context, roomID 
 		streams = []*domain.Stream{}
 	}
 
-	memberStreams := filterUpcomingStreamsByChannel(streams, channel.ID)
+	memberStreams, err := c.withMemberDisplayNames(ctx, filterUpcomingStreamsByChannel(streams, channel.ID))
+	if err != nil {
+		return c.replyDisplayNameFailure(ctx, roomID, err)
+	}
+
 	if len(memberStreams) == 0 {
 		if err := c.Deps().SendMessage(ctx, roomID, c.Deps().Formatter.FormatMemberNoUpcoming(ctx, channel.Name, hours)); err != nil {
 			return fmt.Errorf("send message: %w", err)
@@ -200,8 +205,8 @@ func filterUpcomingStreamsByChannel(streams []*domain.Stream, channelID string) 
 func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string, options upcomingOptions) error {
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, options.hours)
 	if err != nil {
-		if err := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); err != nil {
-			return fmt.Errorf("send error: %w", err)
+		if sendErr := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); sendErr != nil {
+			return fmt.Errorf("send error: %w", sendErr)
 		}
 
 		return nil
@@ -215,10 +220,59 @@ func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string,
 		streams = streams[:options.displayLimit]
 	}
 
+	streams, err = c.withMemberDisplayNames(ctx, streams)
+	if err != nil {
+		return c.replyDisplayNameFailure(ctx, roomID, err)
+	}
+
 	message := c.Deps().Formatter.UpcomingStreams(ctx, streams, options.hours)
 
 	if err := c.Deps().SendMessage(ctx, roomID, message); err != nil {
 		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
+}
+
+// withMemberDisplayNames는 members에 등록된 채널의 스트림 이름을 명령 응답 표시명으로 바꾼 사본을 돌려준다.
+// Holodex 응답은 캐시와 공유될 수 있어 원본을 고치지 않는다. 등록되지 않은 채널은 기존처럼 응답 이름을 그대로 둔다.
+func (c *UpcomingCommand) withMemberDisplayNames(ctx context.Context, streams []*domain.Stream) ([]*domain.Stream, error) {
+	channelIDs := make([]string, 0, len(streams))
+	for _, stream := range streams {
+		if stream != nil {
+			channelIDs = append(channelIDs, stream.ChannelID)
+		}
+	}
+
+	names, err := c.Deps().Matcher.MemberDisplayNames(ctx, channelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("resolve member display names: %w", err)
+	}
+
+	named := make([]*domain.Stream, len(streams))
+	for i, stream := range streams {
+		named[i] = stream
+		if stream == nil {
+			continue
+		}
+
+		if name, ok := names[stream.ChannelID]; ok {
+			renamed := *stream
+
+			renamed.ChannelName = name
+			named[i] = &renamed
+		}
+	}
+
+	return named, nil
+}
+
+// replyDisplayNameFailure는 표시명 조회 실패를 원천 이름으로 덮지 않고 예정 조회 실패로 알린다.
+func (c *UpcomingCommand) replyDisplayNameFailure(ctx context.Context, roomID string, cause error) error {
+	c.Deps().Logger.Error("Failed to resolve upcoming member display names", slog.Any("error", cause))
+
+	if err := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); err != nil {
+		return fmt.Errorf("send error: %w", err)
 	}
 
 	return nil
@@ -229,7 +283,7 @@ func (c *UpcomingCommand) ensureDeps() error {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Holodex == nil || c.Deps().Formatter == nil {
+	if c.Deps().Holodex == nil || c.Deps().Formatter == nil || c.Deps().Matcher == nil {
 		return errors.New("upcoming command services not configured")
 	}
 

@@ -168,7 +168,7 @@ func channelScheduleName(channel *domain.Channel) string {
 		return ""
 	}
 
-	return channel.GetDisplayName()
+	return channel.Name
 }
 
 func (f *ResponseFormatter) scheduleEntryViews(ctx context.Context, streams []*domain.Stream) []scheduleEntryView {

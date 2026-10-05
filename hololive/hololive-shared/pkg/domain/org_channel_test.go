@@ -26,55 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestChannel_GetDisplayName(t *testing.T) {
-	t.Parallel()
-
-	englishName := "Houshou Marine"
-	emptyEnglish := ""
-
-	tests := []struct {
-		name    string
-		channel *domain.Channel
-		want    string
-	}{
-		{
-			// nil 수신자는 빈 문자열 반환
-			name:    "nil 수신자",
-			channel: nil,
-			want:    "",
-		},
-		{
-			// EnglishName 필드 없음 → Name 반환
-			name:    "영문 이름 없음",
-			channel: &domain.Channel{Name: testNameMarine},
-			want:    testNameMarine,
-		},
-		{
-			// EnglishName 포인터가 빈 문자열 → Name 반환
-			name:    "영문 이름 빈 문자열",
-			channel: &domain.Channel{Name: testNameMarine, EnglishName: &emptyEnglish},
-			want:    testNameMarine,
-		},
-		{
-			// 유효한 EnglishName → 영문 이름 반환
-			name:    "유효한 영문 이름",
-			channel: &domain.Channel{Name: testNameMarine, EnglishName: &englishName},
-			want:    "Houshou Marine",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := tt.channel.GetDisplayName()
-			if got != tt.want {
-				t.Errorf("GetDisplayName() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestChannel_IsHololive(t *testing.T) {
 	t.Parallel()
 

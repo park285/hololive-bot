@@ -76,7 +76,7 @@ func calendarDayViews(month int, entries []domain.CalendarEntry) []calendarDayVi
 		last := len(days) - 1
 
 		days[last].Entries = append(days[last].Entries, calendarEntryView{
-			Name:       calendarMemberDisplayName(e.Member),
+			Name:       e.Member.DisplayName(),
 			IsBirthday: e.Kind == domain.CelebrationKindBirthday,
 			Years:      e.Ordinal,
 		})
@@ -93,20 +93,4 @@ func calendarEntryCount(days []calendarDayView) int {
 	}
 
 	return count
-}
-
-func calendarMemberDisplayName(m *domain.Member) string {
-	if m == nil {
-		return ""
-	}
-
-	if m.ShortKoreanName != "" {
-		return m.ShortKoreanName
-	}
-
-	if m.NameKo != "" {
-		return m.NameKo
-	}
-
-	return m.Name
 }

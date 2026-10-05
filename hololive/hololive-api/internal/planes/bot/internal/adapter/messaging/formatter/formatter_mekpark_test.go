@@ -9,16 +9,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestMekParkStreamAndAlarmDisplays(t *testing.T) {
+func TestMekParkStreamDisplays(t *testing.T) {
 	t.Parallel()
 
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdLiveStreams:            "{{range .Streams}}{{.ChannelName}}|{{.Title}}\n{{end}}",
-		domain.TemplateKeyCmdUpcomingStreams:        "{{range .Streams}}{{.ChannelName}}|{{.Title}}\n{{end}}",
-		domain.TemplateKeyCmdChannelSchedule:        "{{.ChannelName}}\n{{range .Streams}}{{.Title}}\n{{end}}",
-		domain.TemplateKeyCmdAlarmNotification:      "{{.ChannelName}}|{{.Title}}",
-		domain.TemplateKeyCmdAlarmLiveStarted:       "{{.ChannelName}}|{{.Title}}",
-		domain.TemplateKeyCmdAlarmNotificationGroup: cmdAlarmNotificationGroupBody,
+		domain.TemplateKeyCmdLiveStreams:     "{{range .Streams}}{{.ChannelName}}|{{.Title}}\n{{end}}",
+		domain.TemplateKeyCmdUpcomingStreams: "{{range .Streams}}{{.ChannelName}}|{{.Title}}\n{{end}}",
+		domain.TemplateKeyCmdChannelSchedule: "{{.ChannelName}}\n{{range .Streams}}{{.Title}}\n{{end}}",
 	})
 	f := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 	channel := &domain.Channel{ID: "UC3OH5FKQ3qtl4uRme_vZTgA", Name: "유닛 B"}
@@ -32,22 +29,6 @@ func TestMekParkStreamAndAlarmDisplays(t *testing.T) {
 	require.Contains(t, formatLiveStreams(t.Context(), f, streams), "유닛 B · 미라|")
 	require.Contains(t, f.UpcomingStreams(t.Context(), streams, 24), "유닛 B · 미라|")
 	require.Contains(t, f.ChannelSchedule(t.Context(), channel, streams, 7), "유닛 B\n미라 ·")
-
-	notification := &domain.AlarmNotification{Channel: channel, Stream: stream, MinutesUntil: 5}
-	require.Contains(t, f.AlarmNotification(t.Context(), notification), "유닛 B · 미라|")
-
-	notification.MinutesUntil = 0
-	require.Contains(t, f.AlarmNotification(t.Context(), notification), "유닛 B · 미라|")
-
-	second := *stream
-
-	second.ID = "video456"
-	second.Title = "#宵凪ネオン"
-
-	group := []*domain.AlarmNotification{notification, {Channel: channel, Stream: &second, MinutesUntil: 0}}
-	message := f.AlarmNotificationGroup(t.Context(), 0, group)
-	require.Contains(t, message, "유닛 B · 미라")
-	require.Contains(t, message, "유닛 B · 네온")
 	require.Equal(t, original, *stream)
 	require.Equal(t, "유닛 B", channel.Name)
 }

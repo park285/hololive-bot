@@ -31,18 +31,6 @@ type Channel struct {
 	Group       *string `json:"group,omitempty"`
 }
 
-func (c *Channel) GetDisplayName() string {
-	if c == nil {
-		return ""
-	}
-
-	if c.EnglishName != nil && *c.EnglishName != "" {
-		return *c.EnglishName
-	}
-
-	return c.Name
-}
-
 func (c *Channel) IsHololive() bool {
 	if c == nil || c.Org == nil {
 		return false

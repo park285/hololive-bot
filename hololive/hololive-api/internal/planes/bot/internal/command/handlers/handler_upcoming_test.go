@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -70,18 +71,26 @@ func TestUpcomingCommand_Description(t *testing.T) {
 	}
 }
 
+func newUpcomingTestMatcher(members []*domain.Member) *matcher.Matcher {
+	return matcher.NewMatcher(newContextAwareMemberProvider(members), nil, slog.New(slog.DiscardHandler))
+}
+
 func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 	var sentMessage string
 
+	sora := &domain.Stream{ID: "s1", Title: "테스트 방송 1", ChannelID: testChannelSora, ChannelName: "Sora Ch. ときのそら"}
 	holodex := &upcomingStreamProviderStub{
 		upcomingStreams: []*domain.Stream{
-			{ID: "s1", Title: "테스트 방송 1", ChannelName: "미코"},
-			{ID: "s2", Title: "테스트 방송 2", ChannelName: testMemberPekora},
+			sora,
+			{ID: "s2", Title: "테스트 방송 2", ChannelID: "ch-unregistered", ChannelName: "Guest Ch."},
 		},
 	}
 
 	deps := &handlercore.Dependencies{
-		Holodex:   holodex,
+		Holodex: holodex,
+		Matcher: newUpcomingTestMatcher([]*domain.Member{
+			{ChannelID: testChannelSora, Name: "Tokino Sora", NameKo: "토키노 소라", ShortKoreanName: "소라"},
+		}),
 		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -98,8 +107,43 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	if sentMessage == "" {
-		t.Fatal("expected non-empty upcoming message")
+	// members 등록 채널은 정본 표시명, 미등록 채널은 응답 이름을 쓰며 공유될 수 있는 원천 스트림은 바꾸지 않는다.
+	for _, want := range []string{"소라|테스트 방송 1", "Guest Ch.|테스트 방송 2"} {
+		if !strings.Contains(sentMessage, want) {
+			t.Fatalf("upcoming message = %q, want %q", sentMessage, want)
+		}
+	}
+
+	if sora.ChannelName != "Sora Ch. ときのそら" {
+		t.Fatalf("source stream channel name mutated: %q", sora.ChannelName)
+	}
+}
+
+func TestUpcomingCommand_Execute_DisplayNameLookupError(t *testing.T) {
+	var sentError string
+
+	deps := &handlercore.Dependencies{
+		Holodex:   &upcomingStreamProviderStub{upcomingStreams: []*domain.Stream{{ID: "s1", ChannelID: testChannelSora, ChannelName: "Sora Ch."}}},
+		Matcher:   matcher.NewMatcher(&failedMemberDataProvider{err: errors.New("member repository unavailable")}, nil, slog.New(slog.DiscardHandler)),
+		Formatter: formatter.NewResponseFormatter("!", nil),
+		SendMessage: func(_ context.Context, _, _ string) error {
+			t.Fatal("upcoming list must not be sent with source names after display name lookup failure")
+
+			return nil
+		},
+		SendError: func(_ context.Context, _, message string) error {
+			sentError = message
+			return nil
+		},
+		Logger: slog.New(slog.DiscardHandler),
+	}
+
+	if err := NewUpcomingCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{}); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if sentError != messaging.ErrUpcomingStreamQueryFailed {
+		t.Fatalf("sent error %q, want %q", sentError, messaging.ErrUpcomingStreamQueryFailed)
 	}
 }
 
@@ -115,6 +159,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_WithOverflow(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
+		Matcher:   newUpcomingTestMatcher(nil),
 		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
@@ -147,6 +192,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_QueryError(t *testing.T) {
 
 	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
+		Matcher:   newUpcomingTestMatcher(nil),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
