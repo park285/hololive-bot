@@ -71,7 +71,6 @@ WITH input AS MATERIALIZED (
            input.scope_sha256,
            input.completeness,
            input.continuity,
-           input.payload,
            input.payload_sha256,
            input.evidence_sha256,
            input.collector_instance,
@@ -96,11 +95,13 @@ WITH input AS MATERIALIZED (
         input.contract_generation
     ) AS current ON TRUE
 ), payload_keys AS MATERIALIZED (
-    SELECT DISTINCT ON (observation_kind, schema_version, payload_sha256)
-           observation_kind, schema_version, payload_sha256, payload
+    -- payload는 existing에 복사하지 않고 필요한 행만 input에서 ordinal로 다시 읽는다.
+    SELECT DISTINCT ON (existing.observation_kind, existing.schema_version, existing.payload_sha256)
+           existing.observation_kind, existing.schema_version, existing.payload_sha256, input.payload
     FROM existing
-    WHERE existing_id IS NULL AND NOT is_collision
-    ORDER BY observation_kind, schema_version, payload_sha256, ordinal
+    JOIN input ON input.ordinal = existing.ordinal
+    WHERE existing.existing_id IS NULL AND NOT existing.is_collision
+    ORDER BY existing.observation_kind, existing.schema_version, existing.payload_sha256, existing.ordinal
 ), payload_advisory_locks AS MATERIALIZED (
     SELECT pg_advisory_xact_lock(hashtextextended(
         observation_kind || ':' || schema_version::text || ':' || payload_sha256, 1
@@ -137,8 +138,9 @@ WITH input AS MATERIALIZED (
     FROM payload_write
 ), payload_resolution AS MATERIALIZED (
     SELECT existing.ordinal,
-           assert_source_observation_payload_match(payload_resolved.id, payload_resolved.payload, existing.payload) AS id
+           assert_source_observation_payload_match(payload_resolved.id, payload_resolved.payload, input.payload) AS id
     FROM existing
+    JOIN input ON input.ordinal = existing.ordinal
     JOIN payload_resolved
       ON payload_resolved.observation_kind = existing.observation_kind
      AND payload_resolved.schema_version = existing.schema_version

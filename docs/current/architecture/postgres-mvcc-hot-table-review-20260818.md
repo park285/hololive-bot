@@ -253,6 +253,10 @@ DROP INDEX CONCURRENTLY IF EXISTS idx_youtube_collection_job_due;
 
 이 변경은 lease renew의 index write 하나를 제거할 수 있어 실제 write amplification 감소 효과가 큽니다.
 
+2026-10-05 판정에서 남은 사용 9회가 수동 진단과 migrator 사전 점검뿐임을 확인했고,
+`266_drop_youtube_collection_job_due_index.sql`이 이 인덱스를 제거합니다(`docs/current/plans/2026-10-05-db-hotpath-optimization.md` B2).
+운영 적용과 적용 후 비교는 별도 승인 절차를 따릅니다.
+
 ### 4.4 `source_collection_checkpoints`: HOT 가능성을 측정할 대상
 
 checkpoint는 다음 key로 conflict를 판정합니다.
@@ -275,6 +279,11 @@ UPSERT 시 위 key는 유지하고 다음 값들을 갱신합니다.
 
 추가 secondary index가 갱신 컬럼을 포함하지 않는다면 HOT UPDATE가 가능한 형태입니다.
 다만 같은 heap page에 새 tuple을 넣을 공간이 있어야 합니다.
+
+2026-10-05 운영 확인 결과, 보존 삭제용 `idx_source_collection_checkpoints_updated_identity`(migration 186)가
+`updated_at`을 key로 가져 HOT 비율이 2.2%였고, 10분 측정에서는 UPDATE 1,616건 중 HOT이 0건이었습니다.
+보존 삭제는 현행 분포에서 이미 seq scan을 고르므로 `267_drop_source_checkpoint_retention_index.sql`이 이 인덱스를
+제거합니다(같은 계획 B4).
 
 판정 순서:
 

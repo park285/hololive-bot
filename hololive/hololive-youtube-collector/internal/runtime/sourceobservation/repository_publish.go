@@ -325,6 +325,8 @@ func (r *Repository) runPreparedPublish(
 		return out, fmt.Errorf("in pgx tx with result: %w", err)
 	}
 
+	out.EncodedBytes = len(prepared.observations)
+
 	return out, nil
 }
 

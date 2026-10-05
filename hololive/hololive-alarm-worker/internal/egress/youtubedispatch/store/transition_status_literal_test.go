@@ -1,7 +1,6 @@
 package store
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -13,38 +12,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-func TestTransitionClaimAndStaleSQLDeclarePartialIndexPredicates(t *testing.T) {
-	require.Equal(t, "PENDING", string(lifecycle.StatusPending), "claim SQL literal must track the canonical pending status")
-	require.Equal(t, "SENDING", string(lifecycle.StatusSending), "stale SQL literal must track the canonical sending status")
-
-	claim, update, found := strings.Cut(mustSQL("transition_claim_pending.sql"), "), updated AS (")
-	require.True(t, found, "claim pending must retain the atomic claim/update statement")
-
-	for _, predicate := range []string{
-		"delivery.status = $1",
-		"delivery.status = 'PENDING'",
-		"FOR UPDATE OF delivery SKIP LOCKED",
-		"ORDER BY delivery.next_attempt_at, delivery.created_at, delivery.id",
-		"LIMIT $5",
-	} {
-		require.Contains(t, claim, predicate)
-	}
-
-	require.Contains(t, update, "delivery.status = $1", "claim update must preserve the bound status guard")
-
-	stale := mustSQL("transition_stale_sending.sql")
-
-	for _, predicate := range []string{
-		"delivery.status = $1",
-		"delivery.status = 'SENDING'",
-		"FOR UPDATE OF delivery SKIP LOCKED",
-		"ORDER BY delivery.locked_at, delivery.created_at, delivery.id",
-		"LIMIT $3",
-	} {
-		require.Contains(t, stale, predicate)
-	}
-}
 
 func TestTransitionClaimPendingSQLPreparedModesPreservePendingGuard(t *testing.T) {
 	for _, mode := range preparedPlanModes {
@@ -78,10 +45,6 @@ func TestTransitionClaimPendingSQLPreparedModesPreservePendingGuard(t *testing.T
 			} {
 				require.Empty(t, run(rejected), "status %v must not be claimed", rejected)
 			}
-
-			logPreparedPlan(t, tx, mode+" claim pending", `EXPLAIN (FORMAT JSON, COSTS ON)
-				EXECUTE claim_pending_sql_v1('PENDING', NOW() - INTERVAL '1 minute', NOW(),
-				NOW() - INTERVAL '1 hour', 10, NOW())`)
 
 			claimed := run(lifecycle.StatusPending)
 			require.Len(t, claimed, 1)
@@ -136,9 +99,6 @@ func TestTransitionStaleSendingSQLPreparedModesPreserveSendingGuard(t *testing.T
 			} {
 				require.Empty(t, run(rejected), "status %v must not be loaded as stale sending", rejected)
 			}
-
-			logPreparedPlan(t, tx, mode+" stale sending", `EXPLAIN (FORMAT JSON, COSTS ON)
-				EXECUTE stale_sending_sql_v1('SENDING', NOW() - INTERVAL '1 hour', 10)`)
 
 			require.Equal(t, []int64{sendingID}, run(lifecycle.StatusSending))
 

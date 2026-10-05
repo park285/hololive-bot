@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
@@ -106,59 +105,6 @@ func (d *ClaimManager) isCommunityShortsDeliveryAlreadyCompleted(
 	}
 
 	return communityShortsTrackingRowMarkedSent(trackingRow), nil
-}
-
-func (d *ClaimManager) roomAlreadyReceivedPost(
-	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-) (bool, error) {
-	if row == nil || shouldSkipDeliveryClaim(d, outbox) {
-		return false, nil
-	}
-
-	postID, err := ytcontentid.ResolveDeliveryLogicalID(outbox.Kind, outbox.ContentID, outbox.Payload)
-	if err != nil {
-		return false, fmt.Errorf("resolve post id: %w", err)
-	}
-
-	rows, err := d.db.Query(ctx, mustSQL("dispatcher_claim_acquire_0131_01.sql"), string(outbox.Kind), outbox.ContentID, postID, row.RoomID, string(domain.OutboxStatusSent), row.ID)
-	if err != nil {
-		return false, fmt.Errorf("load sent sibling deliveries for room: %w", err)
-	}
-	defer rows.Close()
-
-	out, err := sentSiblingRowsContainPost(rows, outbox.Kind, postID)
-	if err != nil {
-		return out, fmt.Errorf("sent sibling rows contain post: %w", err)
-	}
-
-	return out, nil
-}
-
-func sentSiblingRowsContainPost(rows pgx.Rows, kind domain.OutboxKind, postID string) (bool, error) {
-	for rows.Next() {
-		var contentID, payload string
-
-		if err := rows.Scan(&contentID, &payload); err != nil {
-			return false, fmt.Errorf("scan sent sibling delivery for room: %w", err)
-		}
-
-		siblingPostID, err := ytcontentid.ResolveDeliveryLogicalID(kind, contentID, payload)
-		if err != nil {
-			return false, fmt.Errorf("resolve sent sibling post id: %w", err)
-		}
-
-		if siblingPostID == postID {
-			return true, nil
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("iterate sent sibling deliveries for room: %w", err)
-	}
-
-	return false, nil
 }
 
 func communityShortsAlarmStateMarkedSent(state *domain.YouTubeCommunityShortsAlarmState) bool {

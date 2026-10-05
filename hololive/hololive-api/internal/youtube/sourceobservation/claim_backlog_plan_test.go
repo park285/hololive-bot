@@ -33,10 +33,11 @@ var claimBacklogActiveCTEs = map[string]bool{
 	"CTE active_backlog": true,
 }
 
-// claimBacklogDeadLetterCTEs는 attempts exhausted·replay epoch 만료 분류 CTE다. 두 CTE는 가지로 나누지 않았다.
-// 이 fixture(PG 18.6)에서 exhausted_candidates는 queue를 한 번 순차 스캔해 활성 행 50,001개를 모두 필터로
-// 버리고(수 ms), replay_expired_candidates는 활성 epoch가 없어 행을 읽지 않는다. 두 CTE의 attempt_count·epoch 조건에는
-// 순서 인덱스가 없어 backlog에 선형이지만 claim당 한 번이므로, 테이블마다 한 번 읽는 선형 상한만 고정한다.
+// claimBacklogDeadLetterCTEs는 attempts exhausted·replay epoch 만료 분류 CTE다. 시도 소진 분류(exhausted_candidates)는
+// materialized 활성 backlog에서 due 행을 골라 queue PK로만 잠그므로 queue를 따로 읽지 않는다. 이전 SQL은 queue를 다시
+// 읽어 이 fixture(PG 18.6)에서 활성 행 50,001개를, 활성 20만·PROCESSED 이력 20만 행에서는 이력까지 40만 행을
+// 읽었다(BenchmarkClaimBacklog). 활성 epoch가 없으면 replay_expired_candidates도 행을 읽지 않는다. 그래서 두 CTE에
+// 후보 잠금 상한을 적용한다.
 var claimBacklogDeadLetterCTEs = map[string]bool{
 	"CTE exhausted_candidates":      true,
 	"CTE replay_expired_candidates": true,
@@ -75,10 +76,18 @@ func claimBacklogVisits(node *claimBacklogPlanNode, ctes map[string]bool, inScop
 func seedClaimBacklog(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
-	ctx := t.Context()
+	seedClaimBacklogRows(t, pool, 50000, 0)
+}
+
+// seedClaimBacklogRows는 PENDING 활성 행 active개(앞 4%는 shorts, 채널 200개)와 이미 처리된 PROCESSED 이력
+// history개(4%는 shorts)를 만든다. 이력은 같은 kind·채널의 과거 관측이라 kind 조건으로는 걸러지지 않는다.
+func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int) {
+	tb.Helper()
+
+	ctx := tb.Context()
 	repo := NewRepository(pool)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
-	first := publishShortWindow(t, repo, &proof, "known")
+	proof := seedPublishLease(ctx, tb, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
+	first := publishShortWindow(tb, repo, &proof, "known")
 
 	_, err := pool.Exec(ctx, `
 		INSERT INTO source_observations (
@@ -87,26 +96,33 @@ func seedClaimBacklog(t *testing.T, pool *pgxpool.Pool) {
 			evidence_sha256, collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
 		)
 		SELECT provider,
-			CASE WHEN n <= 2000 THEN 'shorts_list' ELSE 'video_list' END,
+			CASE WHEN n <= $2::int / 25 OR (n > $2::int AND n % 25 = 0) THEN 'shorts_list' ELSE 'video_list' END,
 			'UC_backlog_' || (n % 200), 'backlog-' || n, schema_version, contract_generation,
 			scheduled_for - n * INTERVAL '1 minute', observed_at, scope_sha256,
 			completeness, continuity, payload_id, evidence_sha256,
 			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
-		FROM source_observations CROSS JOIN generate_series(1, 50000) AS n
+		FROM source_observations CROSS JOIN generate_series(1, $2::int + $3::int) AS n
 		WHERE id = $1
-	`, first)
-	require.NoError(t, err)
+	`, first, active, history)
+	require.NoError(tb, err)
 
+	// observation_key 번호가 active보다 큰 행은 처리 끝난 이력이다.
 	_, err = pool.Exec(ctx, `
-		INSERT INTO source_observation_queue (observation_id, available_at)
-		SELECT id, NOW() - INTERVAL '1 hour' + (id % 1000) * INTERVAL '1 second'
-		FROM source_observations
-		WHERE id <> $1
-	`, first)
-	require.NoError(t, err)
+		INSERT INTO source_observation_queue (observation_id, available_at, status, processed_at, attempt_count)
+		SELECT id, NOW() - INTERVAL '1 hour' + (id % 1000) * INTERVAL '1 second',
+		       CASE WHEN is_history THEN 'PROCESSED' ELSE 'PENDING' END,
+		       CASE WHEN is_history THEN NOW() - INTERVAL '30 minutes' END,
+		       CASE WHEN is_history THEN 1 ELSE 0 END
+		FROM (
+			SELECT id, substr(observation_key, length('backlog-') + 1)::int > $2::int AS is_history
+			FROM source_observations
+			WHERE id <> $1
+		) AS seeded
+	`, first, active)
+	require.NoError(tb, err)
 
 	_, err = pool.Exec(ctx, "ANALYZE source_observations; ANALYZE source_observation_queue")
-	require.NoError(t, err)
+	require.NoError(tb, err)
 }
 
 // explainClaimBacklog는 PREPARE/EXECUTE로 plan_cache_mode가 실제 generic plan에도 적용되게 한다.
@@ -114,7 +130,7 @@ func seedClaimBacklog(t *testing.T, pool *pgxpool.Pool) {
 // 같은 트랜잭션 안에서 DEALLOCATE할 수도 없다(25P02). 그래서 전용 연결에서 롤백한 뒤 트랜잭션 밖에서 해제하고,
 // 해제에 실패한 연결은 pool에 돌려주지 않고 닫아 다음 subtest가 같은 이름을 물려받지 않게 한다.
 // 원래 오류와 정리 오류는 모두 보존한다.
-func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode string, kinds []string) (raw []byte, err error) {
+func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode, budget string, kinds []string) (raw []byte, err error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("acquire: %w", err)
@@ -160,7 +176,7 @@ func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode string, k
 		return nil, fmt.Errorf("set plan cache mode: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, "SET LOCAL statement_timeout = '1s'"); err != nil {
+	if _, err := tx.Exec(ctx, "SELECT set_config('statement_timeout', $1, true)", budget); err != nil {
 		return nil, fmt.Errorf("set claim budget: %w", err)
 	}
 
@@ -194,7 +210,7 @@ func TestClaimCandidateSelectionIsBoundedUnderActiveBacklog(t *testing.T) {
 
 	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
 		t.Run(mode, func(t *testing.T) {
-			raw, err := explainClaimBacklog(ctx, pool, mode, kinds)
+			raw, err := explainClaimBacklog(ctx, pool, mode, "1s", kinds)
 			require.NoError(t, err)
 
 			var plans []struct {
@@ -208,10 +224,10 @@ func TestClaimCandidateSelectionIsBoundedUnderActiveBacklog(t *testing.T) {
 				"candidate row-lock lookups must stop near LIMIT; active head selection and sorting have separate linear input budgets")
 			require.LessOrEqual(t, claimBacklogVisits(&plans[0].Plan, claimBacklogActiveCTEs, false), 2*activeRows,
 				"active head materialization must read each table at most once instead of rescanning the backlog per row")
-			require.LessOrEqual(t, claimBacklogVisits(&plans[0].Plan, map[string]bool{"active_backlog": true}, false), 2*activeRows,
-				"head selection and candidate sorting must not rescan materialized active backlog per candidate")
-			require.LessOrEqual(t, claimBacklogVisits(&plans[0].Plan, claimBacklogDeadLetterCTEs, false), 2*activeRows,
-				"dead-letter classification must read each table at most once instead of rescanning the backlog per row")
+			require.LessOrEqual(t, claimBacklogVisits(&plans[0].Plan, map[string]bool{"active_backlog": true}, false), 3*activeRows,
+				"head selection, candidate sorting and exhausted classification must each read materialized active backlog once, not per candidate")
+			require.LessOrEqual(t, claimBacklogVisits(&plans[0].Plan, claimBacklogDeadLetterCTEs, false), float64(claimBacklogCandidateVisitLimit),
+				"dead-letter classification must lock exhausted rows from the active pass instead of rescanning the queue")
 		})
 	}
 

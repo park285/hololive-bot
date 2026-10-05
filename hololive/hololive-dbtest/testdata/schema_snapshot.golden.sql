@@ -588,7 +588,6 @@ TABLE source_collection_checkpoints
   CONSTRAINT source_collection_checkpoints_contract_generation_check CHECK ((contract_generation > 0))
   CONSTRAINT fk_source_checkpoint_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_collection_checkpoints_pkey PRIMARY KEY (provider, observation_kind, subject_key, scope_sha256)
-  INDEX CREATE INDEX idx_source_collection_checkpoints_updated_identity ON public.source_collection_checkpoints USING btree (updated_at, provider, observation_kind, subject_key, scope_sha256)
 
 TABLE source_observation_applications
   OPTIONS autovacuum_vacuum_scale_factor=0.05,autovacuum_vacuum_threshold=500
@@ -1025,7 +1024,6 @@ TABLE youtube_collection_job_leases
   CONSTRAINT youtube_collection_job_leases_slot_state_check CHECK ((slot_state = ANY (ARRAY['IDLE'::text, 'ACTIVE'::text, 'DEFERRED'::text])))
   CONSTRAINT youtube_collection_job_leases_projection_generation_fkey FOREIGN KEY (projection_generation) REFERENCES youtube_collection_projection_generations(generation) ON DELETE RESTRICT
   CONSTRAINT youtube_collection_job_leases_pkey PRIMARY KEY (job_key)
-  INDEX CREATE INDEX idx_youtube_collection_job_due ON public.youtube_collection_job_leases USING btree (slot_state, next_due_at, retry_not_before, lease_expires_at, job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_projection_generation ON public.youtube_collection_job_leases USING btree (projection_generation, job_key)
 
 TABLE youtube_collection_projection_generations
