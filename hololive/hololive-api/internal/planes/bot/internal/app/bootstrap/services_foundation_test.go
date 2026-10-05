@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -39,7 +40,7 @@ func TestInitScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.BotPlaneConfig{
 		Holodex: settings.DefaultHolodexOperationalConfig(),
 	}
 
@@ -49,7 +50,7 @@ func TestInitScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 
 	foundation, err := apifoundation.BuildScraperHolodex(
 		t.Context(),
-		apifoundation.ScraperHolodexOptions{Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialScheduleRuntime()},
+		apifoundation.ScraperHolodexOptions{Holodex: appConfig.Holodex, OfficialSchedule: appConfig.OfficialSchedule},
 		newFoundationTestMemberCache(t), cachemocks.NewLenientClient(),
 		slog.New(slog.DiscardHandler),
 	)

@@ -232,13 +232,18 @@ job_key
 3. stats가 최근 reset된 상태의 `idx_scan=0`은 제거 근거가 아니다.
 4. index 제거는 rollback 시 재생성 비용과 lock/IO 계획이 필요하다.
 
-삭제 migration을 만들기 위한 필수 조건은 다음과 같습니다.
+2026-10-05부터 삭제 판정은 수일간 반복 관측하지 않고 `pg-hotpath-explain-snapshot.sh` 1회 실행으로 합니다.
+PostgreSQL은 정상 재시작 후에도 누적 통계를 유지하고, `last_idx_scan`은 마지막 사용 시각을 직접 기록합니다.
+따라서 누적 구간이 충분하면 한 번의 조회로 사용 여부를 판정할 수 있습니다. `idx_scan`은 그 구간에 planner가
+실제로 고른 계획을 모두 반영하므로 후보 쿼리의 운영 EXPLAIN을 따로 요구하지 않습니다. 같은 날 코드 조사에서
+이 테이블을 읽는 SQL은 모두 `job_key` PK 또는 `projection_generation` 인덱스로 접근했습니다. lease 테이블은
+작아서 판정이 틀려도 `CREATE INDEX CONCURRENTLY`로 짧게 복구할 수 있습니다.
 
-- `pg_stat_database.stats_reset`이 바뀌지 않은 연속 관측 구간
-- 대표 부하가 포함된 최소 수일의 snapshot
-- `idx_youtube_collection_job_due.idx_scan`이 0 또는 무시 가능한 수준
-- subject/global candidate 쿼리의 `EXPLAIN (ANALYZE, BUFFERS)`가 PK lookup으로 안정적
-- index 제거 후 canary에서 acquire latency와 DB write latency가 악화되지 않음
+삭제 migration을 만들기 위한 조건은 다음과 같습니다.
+
+- `mvcc-database-state.txt`의 `stats_reset`이 24시간 이전이다. job 주기 상한이 24시간이므로 이 구간에 모든 job 종류가 한 번 이상 실행된다.
+- `idx_youtube_collection_job_due.idx_scan`이 0이거나 `last_idx_scan`이 NULL이다. 0이 아니면 `pg_stat_statements`에서 사용한 쿼리를 찾은 뒤 다시 판단한다.
+- index 제거 후 canary에서 acquire latency와 DB write latency가 악화되지 않는다.
 
 조건을 만족하면 별도 migration에서 다음을 검토합니다.
 

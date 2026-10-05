@@ -29,11 +29,11 @@ func TestValidateHolodexRequestConfig(t *testing.T) {
 			cfg := DefaultHolodexOperationalConfig()
 			tc.mutate(&cfg)
 
-			err := validateHolodexConfig(&cfg)
+			err := ValidateHolodexRequestConfig(&cfg)
 
 			if tc.wantError == "" {
 				if err != nil {
-					t.Fatalf("validateHolodexConfig() = %v", err)
+					t.Fatalf("ValidateHolodexRequestConfig() = %v", err)
 				}
 
 				return

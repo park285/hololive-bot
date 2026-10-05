@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
 func InitCoreIntegrationServices(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*CoreIntegrationServices, error) {

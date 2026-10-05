@@ -90,7 +90,7 @@ func validatedMatcherSnapshot(value any) (*matcherSnapshot, error) {
 }
 
 func (mm *Matcher) buildSnapshot(ctx context.Context) (*matcherSnapshot, error) {
-	provider := mm.providerWithContext(ctx)
+	provider := mm.membersData
 	snapshot := &matcherSnapshot{
 		builtAt:      time.Now(),
 		exactNames:   make(map[string][]*snapshotEntry),
@@ -102,7 +102,7 @@ func (mm *Matcher) buildSnapshot(ctx context.Context) (*matcherSnapshot, error) 
 		return snapshot, nil
 	}
 
-	members, err := provider.LoadAllMembers()
+	members, err := provider.LoadAllMembers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get all members: %w", err)
 	}

@@ -1,6 +1,8 @@
 package officialidentity
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -14,14 +16,14 @@ type Index map[string][]string
 
 // Build는 멤버 데이터에서 공식 표기명→채널 색인을 만든다. 멤버 적재 실패는 빈 색인으로 바꾸지 않고 오류로 돌려준다
 // (DEC-20260926-hololive-source-fallbacks-retirement). 멤버 데이터 없이 구성한 호출자(membersData nil)는 빈 색인이다.
-func Build(membersData domain.MemberDataProvider) (Index, error) {
+func Build(ctx context.Context, membersData domain.MemberDataProvider) (Index, error) {
 	candidates := make(map[string]map[string]struct{})
 
 	if membersData == nil {
 		return Index{}, nil
 	}
 
-	members, err := membersData.LoadAllMembers()
+	members, err := membersData.LoadAllMembers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("build official identity index: %w", err)
 	}
@@ -54,13 +56,14 @@ func (index Index) Resolve(name string) string {
 	return channelIDs[0]
 }
 
-// DisplayNames는 공식 표기명 목록을 표시명으로 바꾼다. 이름이 없으면 멤버를 적재하지 않는다.
-func DisplayNames(membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) ([]string, error) {
+// DisplayNames는 공식 표기명 목록을 표시명으로 바꾼다. 이름이 없으면 멤버를 적재하지 않는다. 색인의 채널이 멤버 조회에서
+// 없다고 확인되면 공식 표기명을 그대로 쓰지만, 조회 실패는 표시명을 추측하지 않고 오류로 돌려준다.
+func DisplayNames(ctx context.Context, membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) ([]string, error) {
 	if len(officialNames) == 0 {
 		return nil, nil
 	}
 
-	index, err := Build(membersData)
+	index, err := Build(ctx, membersData)
 	if err != nil {
 		return nil, fmt.Errorf("display names: %w", err)
 	}
@@ -71,7 +74,11 @@ func DisplayNames(membersData domain.MemberDataProvider, officialNames []string,
 	seen := make(map[string]struct{}, len(officialNames))
 
 	for _, name := range officialNames {
-		label := displayName(membersData, index, name, hostChannelID)
+		label, err := displayName(ctx, membersData, index, name, hostChannelID)
+		if err != nil {
+			return nil, fmt.Errorf("display names: %w", err)
+		}
+
 		if label == "" {
 			continue
 		}
@@ -91,35 +98,39 @@ func Format(names []string) string {
 	return strings.Join(names, ", ")
 }
 
-func displayName(membersData domain.MemberDataProvider, index Index, officialName, hostChannelID string) string {
+func displayName(ctx context.Context, membersData domain.MemberDataProvider, index Index, officialName, hostChannelID string) (string, error) {
 	name := strings.TrimSpace(officialName)
 	if name == "" {
-		return ""
+		return "", nil
 	}
 
 	channelID := index.Resolve(name)
 	if isHostCollaboChannel(channelID, hostChannelID) {
-		return ""
+		return "", nil
 	}
 
-	return mappedCollaboDisplayName(membersData, channelID, name)
+	return mappedCollaboDisplayName(ctx, membersData, channelID, name)
 }
 
 func isHostCollaboChannel(channelID, hostChannelID string) bool {
 	return channelID != "" && channelID == hostChannelID
 }
 
-func mappedCollaboDisplayName(membersData domain.MemberDataProvider, channelID, officialName string) string {
+func mappedCollaboDisplayName(ctx context.Context, membersData domain.MemberDataProvider, channelID, officialName string) (string, error) {
 	if channelID == "" || membersData == nil {
-		return officialName
+		return officialName, nil
 	}
 
-	member := membersData.FindMemberByChannelID(channelID)
-	if member == nil {
-		return officialName
+	member, err := membersData.FindMemberByChannelID(ctx, channelID)
+	if errors.Is(err, domain.ErrMemberNotFound) {
+		return officialName, nil
 	}
 
-	return firstNonEmptyName(member.ShortKoreanName, member.NameKo, member.Name, officialName)
+	if err != nil {
+		return "", fmt.Errorf("find collabo member %q: %w", channelID, err)
+	}
+
+	return firstNonEmptyName(member.ShortKoreanName, member.NameKo, member.Name, officialName), nil
 }
 
 func firstNonEmptyName(values ...string) string {

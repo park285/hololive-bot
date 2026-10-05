@@ -34,12 +34,12 @@ import (
 type Client struct {
 	Lenient bool
 
-	GetFunc       func(ctx context.Context, key string, dest any) error
-	GetStringFunc func(ctx context.Context, key string) (string, bool, error)
-	SetFunc       func(ctx context.Context, key string, value any, ttl time.Duration) error
-	DelFunc       func(ctx context.Context, key string) error
-	DelManyFunc   func(ctx context.Context, keys []string) (int64, error)
-	ScanKeysFunc  func(ctx context.Context, pattern string, batchSize int64) ([]string, error)
+	GetFunc          func(ctx context.Context, key string, dest any) error
+	GetStringFunc    func(ctx context.Context, key string) (string, bool, error)
+	SetFunc          func(ctx context.Context, key string, value any, ttl time.Duration) error
+	DelFunc          func(ctx context.Context, key string) error
+	DelManyFunc      func(ctx context.Context, keys []string) (int64, error)
+	ScanKeyPagesFunc func(ctx context.Context, pattern string, batchSize int64, visit func(keys []string) error) error
 
 	SAddFunc      func(ctx context.Context, key string, members []string) (int64, error)
 	SRemFunc      func(ctx context.Context, key string, members []string) (int64, error)
@@ -167,19 +167,18 @@ func (m *Client) DelMany(ctx context.Context, keys []string) (int64, error) {
 	return 0, nil
 }
 
-func (m *Client) ScanKeys(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
-	if m.ScanKeysFunc != nil {
-		out, err := m.ScanKeysFunc(ctx, pattern, batchSize)
-		if err != nil {
-			return out, fmt.Errorf("scan keys func: %w", err)
+func (m *Client) ScanKeyPages(ctx context.Context, pattern string, batchSize int64, visit func(keys []string) error) error {
+	if m.ScanKeyPagesFunc != nil {
+		if err := m.ScanKeyPagesFunc(ctx, pattern, batchSize, visit); err != nil {
+			return fmt.Errorf("scan key pages func: %w", err)
 		}
 
-		return out, nil
+		return nil
 	}
 
-	m.panicIfUnset("ScanKeysFunc")
+	m.panicIfUnset("ScanKeyPagesFunc")
 
-	return nil, nil
+	return nil
 }
 
 func (m *Client) SAdd(ctx context.Context, key string, members []string) (int64, error) {

@@ -101,9 +101,9 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 NULL이거나 미래이면 후보에서 제외합니다. LIVE guardrail 로그도 실제로 읽은 시각을
 `status_observed_at` 필드로 기록합니다.
 
-DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다.
+DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다. 구독자 조회는 cache·DB 쌍마다 하나인 shared `alarm.SubscriberResolver`가 담당하며, 여러 채널의 empty marker 확인은 한 번의 pipeline으로 보냅니다. 전체 rebuild는 단일 worker의 구독 mutation mutex 아래에서 `ScanKeyPages`로 page마다 subscriber key를 지운 뒤 DB snapshot을 읽어 다시 씁니다.
 
-범용 delivery의 발송 attempt는 `notification_delivery.executor.attempt_timeout`(기본 10초)을 따르며 더 짧은 부모 deadline을 적용합니다. dispatcher는 profile 값을 기본값으로 바꾸지 않고, 잘못된 설정이면 기동에 실패합니다. 실행 가능한 슬롯 수만큼 방별 첫 due 항목을 claim하고, 실행 중인 방과 다른 owner가 처리 중인 방의 후행 항목은 claim하지 않습니다. 따라서 슬롯·방별 순서를 기다리는 항목의 60초 lease를 미리 소비하지 않습니다. `OUTCOME_UNKNOWN`·handoff 불명·호출 이후 timeout/cancel은 worker/status fence로 QUARANTINED 전이를 시도합니다. 저장 실패 시 SENDING 증거를 유지하여 stale sweep이 처리하며, 확정 성공 후 DB 반영 실패도 일반 미발송 실패로 바꾸지 않습니다. batch가 없어도 기존 tick에서 due maintenance를 실행합니다.
+범용 delivery dispatcher·consumer store·maintenance·SQL은 `internal/egress/notificationdelivery`가 소유하며, shared `pkg/service/delivery`에는 producer enqueue 저장소·sender interface·Iris transport·locker만 남습니다. 발송 attempt는 `notification_delivery.executor.attempt_timeout`(기본 10초)을 따르며 더 짧은 부모 deadline을 적용합니다. dispatcher는 profile 값을 기본값으로 바꾸지 않고, 잘못된 설정이면 기동에 실패합니다. stale SENDING 임계값은 60초 sending lease 이상이어야 합니다. 실행 가능한 슬롯 수만큼 방별 첫 due 항목을 claim하고, 실행 중인 방과 다른 owner가 처리 중인 방의 후행 항목은 claim하지 않습니다. 따라서 슬롯·방별 순서를 기다리는 항목의 60초 lease를 미리 소비하지 않습니다. `OUTCOME_UNKNOWN`·handoff 불명·호출 이후 timeout/cancel은 worker/status fence로 QUARANTINED 전이를 시도합니다. 저장 실패 시 SENDING 증거를 유지하여 stale sweep이 처리하며, 확정 성공 후 DB 반영 실패도 일반 미발송 실패로 바꾸지 않습니다. `Dispatcher.Run(ctx)`은 claim·발송 loop와 bounded maintenance loop(stale SENDING 격리, FAILED 집계, 보존 정리)를 따로 실행하므로 maintenance가 느려도 claim·poll을 막지 않습니다. 한 loop가 panic으로 끝나면 다른 loop도 취소하고 둘 다 join한 뒤 오류를 lifecycle owner에 반환합니다.
 
 YouTube 전송은 `youtube_delivery.executor.attempt_timeout`을 실제 전송 예산으로 사용합니다. 서비스별 `delivery_send_timeout_ms`는 이 값과 같아야 하며, 불일치는 설정 오류로 거절합니다. 기존 두 설정 필드와 기본값은 유지합니다.
 

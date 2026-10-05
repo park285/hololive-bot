@@ -35,15 +35,16 @@ var subscriberCacheStaticKeys = []string{
 	sharedalarmkeys.MemberNameKey,
 }
 
+// RebuildSubscriberCacheFromRepository는 전체 subscriber cache를 정본 구독으로 다시 채운다.
+// 호출자는 모든 구독 변경과 같은 mutation mutex를 보유해야 한다. 현재 단일 alarm-worker의 AlarmService가
+// 이 직렬화를 소유하며, 여러 프로세스에서 같은 cache를 쓰려면 rebuild와 변경을 함께 fence해야 한다.
 func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository) (CacheWarmSummary, error) {
 	if repository == nil {
 		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
 	}
 
-	// clear는 DB 스냅샷보다 먼저 실행해야 한다. 스냅샷→clear 순서에서는 스냅샷 채취 후
-	// 커밋된 구독의 SAdd가 clear에 지워지고 스냅샷에도 없어 다음 rebuild까지 영구
-	// 소실된다. clear→load 순서면 clear 이후의 SAdd는 warm SAdd와 병합되고, clear
-	// 이전의 add는 스냅샷에 포함되어 양쪽 경쟁 창이 모두 닫힌다.
+	// 모든 페이지 삭제를 끝낸 뒤 DB 스냅샷을 읽는다. 일부 삭제가 실패한 경우 오래된 snapshot을 다시 쓰지 않고
+	// 오류를 반환하며, 사라진 set은 구독 조회의 기존 DB read-through로 확정한다.
 	if err := clearSubscriberCacheNamespace(ctx, cacheClient); err != nil {
 		return CacheWarmSummary{}, fmt.Errorf("clear subscriber cache namespace: %w", err)
 	}
@@ -85,43 +86,33 @@ func loadSubscriberCacheWarmData(ctx context.Context, repository *Repository) (*
 	return warmData, nil
 }
 
+// clearSubscriberCacheNamespace는 subscriber cache key를 SCAN page마다 바로 지워 전체 key 목록을 메모리에 모으지 않는다.
+// 모든 page 삭제가 끝난 뒤에만 반환하므로 호출자의 clear→load 순서가 유지되고, 삭제가 SCAN 순회와 겹쳐도 SCAN은
+// 순회 내내 존재한 key를 빠뜨리지 않는다. 순회 중 새로 생긴 key는 이후 load한 DB 스냅샷에도 반영돼 있어 지워져도 복원된다.
 func clearSubscriberCacheNamespace(ctx context.Context, cacheClient cache.Client) error {
 	if cacheClient == nil {
 		return errors.New("rebuild subscriber cache from alarms: cache service is nil")
 	}
 
-	keysToDelete := append([]string(nil), subscriberCacheStaticKeys...)
-
-	patternKeys, err := scanSubscriberCachePatternKeys(ctx, cacheClient)
-	if err != nil {
-		return fmt.Errorf("scan subscriber cache pattern keys: %w", err)
-	}
-
-	keysToDelete = append(keysToDelete, patternKeys...)
-
-	if err := deleteSubscriberCacheKeys(ctx, cacheClient, keysToDelete); err != nil {
-		return fmt.Errorf("delete subscriber cache keys: %w", err)
-	}
-
-	return nil
-}
-
-func scanSubscriberCachePatternKeys(ctx context.Context, cacheClient cache.Client) ([]string, error) {
-	var keysToDelete []string
-
 	for _, pattern := range []string{
 		sharedalarmkeys.ChannelSubscribersKeyPrefix + "*",
 		sharedalarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
 	} {
-		keys, scanErr := cacheClient.ScanKeys(ctx, pattern, cacheScanBatchSize)
-		if scanErr != nil {
-			return nil, fmt.Errorf("rebuild subscriber cache from alarms: scan keys %q: %w", pattern, scanErr)
+		err := cacheClient.ScanKeyPages(ctx, pattern, cacheScanBatchSize, func(keys []string) error {
+			return deleteSubscriberCacheKeys(ctx, cacheClient, keys)
+		})
+		if err != nil {
+			return fmt.Errorf("rebuild subscriber cache from alarms: clear keys %q: %w", pattern, err)
 		}
-
-		keysToDelete = append(keysToDelete, keys...)
 	}
 
-	return keysToDelete, nil
+	// 페이지 순회가 실패하면 이미 존재하는 전체 채널 registry는 보존한다. 구독 set이 일부 지워져도
+	// 대상 채널은 유지되며, 누락된 set은 기존 DB read-through가 확정한다.
+	if err := deleteSubscriberCacheKeys(ctx, cacheClient, subscriberCacheStaticKeys); err != nil {
+		return fmt.Errorf("delete subscriber cache static keys: %w", err)
+	}
+
+	return nil
 }
 
 func deleteSubscriberCacheKeys(ctx context.Context, cacheClient cache.Client, keysToDelete []string) error {

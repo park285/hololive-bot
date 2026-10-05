@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
@@ -36,7 +36,7 @@ import (
 func TestInitAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
 	t.Parallel()
 
-	components, err := InitAlarmModeComponents(&settings.Config{}, &membermocks.DataProvider{}, slog.New(slog.DiscardHandler))
+	components, err := InitAlarmModeComponents(&apiconfig.BotPlaneConfig{}, &membermocks.DataProvider{}, slog.New(slog.DiscardHandler))
 
 	require.Nil(t, components)
 	require.EqualError(t, err, "alarm provider URL (ALARM_INTERNAL_URL) is required")
@@ -48,7 +48,7 @@ func TestInitAlarmModeComponentsUsesAlarmWorkerClient(t *testing.T) {
 	memberProvider := &membermocks.DataProvider{}
 
 	components, err := InitAlarmModeComponents(
-		&settings.Config{AlarmServiceURL: "http://127.0.0.1:8081"},
+		&apiconfig.BotPlaneConfig{AlarmServiceURL: "http://127.0.0.1:8081"},
 		memberProvider,
 		slog.New(slog.DiscardHandler),
 	)

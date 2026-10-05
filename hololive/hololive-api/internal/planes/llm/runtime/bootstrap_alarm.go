@@ -59,7 +59,7 @@ func initMemberNewsService(
 		return nil, fmt.Errorf("provide member news LLM clients: %w", err)
 	}
 
-	validator, err := initMemberNewsSourceValidator(xAllowlistPath, membersData, logger)
+	validator, err := initMemberNewsSourceValidator(ctx, xAllowlistPath, membersData, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init member news source validator: %w", err)
 	}
@@ -162,8 +162,8 @@ func guardLLMClient(client llmclient.Client, guards *llmGuards) llmclient.Client
 // initMemberNewsSourceValidator는 runtime config가 적재한 X allowlist 경로를 받는다. 값이 없으면
 // X allowlist 없이(공식 도메인·YouTube 채널만) 검증한다. 값이 있는데 읽지 못하면 빈 allowlist로 내려가지 않고
 // 오류를 돌려 기동을 실패시킨다. 작업 디렉터리 기준 후보 경로 탐색은 두지 않는다(stack audit B5).
-func initMemberNewsSourceValidator(allowlistPath string, membersData domain.MemberDataProvider, logger *slog.Logger) (*membernews.SourceValidator, error) {
-	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
+func initMemberNewsSourceValidator(ctx context.Context, allowlistPath string, membersData domain.MemberDataProvider, logger *slog.Logger) (*membernews.SourceValidator, error) {
+	validator, err := membernews.NewSourceValidator(ctx, allowlistPath, membersData, logger)
 	if err != nil {
 		return nil, fmt.Errorf("load member news x allowlist: %w", err)
 	}

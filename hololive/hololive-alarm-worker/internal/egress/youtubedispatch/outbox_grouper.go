@@ -24,12 +24,12 @@ func newOutboxGrouper(db dbx.Querier, cacheClient cache.Client, logger *slog.Log
 		logger = slog.Default()
 	}
 
+	resolver := sharedalarm.NewSubscriberResolver(cacheClient, db)
+
 	return &OutboxGrouper{
-		cache: cacheClient,
-		lookupSubscribers: func(ctx context.Context, channelID string, titles []string, alarmType domain.AlarmType) (map[string][]string, error) {
-			return sharedalarm.ResolveEventSubscribersByTitle(ctx, cacheClient, db, channelID, titles, alarmType)
-		},
-		logger: logger,
-		config: *config,
+		cache:             cacheClient,
+		lookupSubscribers: resolver.ResolveEventSubscribersByTitle,
+		logger:            logger,
+		config:            *config,
 	}
 }

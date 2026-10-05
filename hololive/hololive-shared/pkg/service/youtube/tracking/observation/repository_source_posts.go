@@ -67,7 +67,9 @@ func buildSourcePostsBatchUpsert(
 	normalized []*domain.YouTubeCommunityShortsSourcePost,
 	now time.Time,
 ) (string, []any) {
-	args := make([]any, 0, len(normalized)*7)
+	const columnsPerRow = 7
+
+	args := make([]any, 0, len(normalized)*columnsPerRow)
 
 	var sb strings.Builder
 
@@ -78,7 +80,7 @@ func buildSourcePostsBatchUpsert(
 			sb.WriteByte(',')
 		}
 
-		sb.WriteString("(?, ?, ?, ?, ?, ?, ?)")
+		writeRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(args, record.Kind, record.PostID, record.ChannelID, record.ActualPublishedAt, record.DetectedAt, now, now)
 	}

@@ -21,6 +21,7 @@
 package membernews
 
 import (
+	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -45,7 +46,10 @@ type SourceValidator struct {
 	logger          *slog.Logger
 }
 
+// NewSourceValidator는 멤버 채널 ID로 공식 YouTube 허용 목록을 채운다. 채널 ID 적재 실패는 빈 허용 목록으로 바꾸지 않고
+// 오류로 돌려준다.
 func NewSourceValidator(
+	ctx context.Context,
 	xAllowlistPath string,
 	membersData domain.MemberDataProvider,
 	logger *slog.Logger,
@@ -63,7 +67,9 @@ func NewSourceValidator(
 		logger:          logger,
 	}
 
-	validator.seedOfficialYouTubeAllowlist(membersData)
+	if err := validator.seedOfficialYouTubeAllowlist(ctx, membersData); err != nil {
+		return nil, err
+	}
 
 	if strings.TrimSpace(xAllowlistPath) == "" {
 		return validator, nil
@@ -287,12 +293,17 @@ func (v *SourceValidator) isAllowedYouTubeHandle(handle string) bool {
 	return ok
 }
 
-func (v *SourceValidator) seedOfficialYouTubeAllowlist(membersData domain.MemberDataProvider) {
+func (v *SourceValidator) seedOfficialYouTubeAllowlist(ctx context.Context, membersData domain.MemberDataProvider) error {
 	if v == nil || membersData == nil {
-		return
+		return nil
 	}
 
-	for _, channelID := range membersData.GetChannelIDs() {
+	channelIDs, err := membersData.GetChannelIDs(ctx)
+	if err != nil {
+		return fmt.Errorf("seed official youtube allowlist: %w", err)
+	}
+
+	for _, channelID := range channelIDs {
 		trimmed := strings.TrimSpace(channelID)
 		if trimmed == "" {
 			continue
@@ -300,6 +311,8 @@ func (v *SourceValidator) seedOfficialYouTubeAllowlist(membersData domain.Member
 
 		v.ytChannelIDs[trimmed] = struct{}{}
 	}
+
+	return nil
 }
 
 func defaultOfficialDomains() map[string]struct{} {

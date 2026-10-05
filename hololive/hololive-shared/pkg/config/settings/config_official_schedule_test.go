@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestValidateOfficialScheduleConfig(t *testing.T) {
+func TestValidateOfficialScheduleRuntimeConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -43,28 +43,28 @@ func TestValidateOfficialScheduleConfig(t *testing.T) {
 
 			config := DefaultOfficialScheduleConfig()
 			maxBytes := test.mutate(&config)
-			err := validateOfficialScheduleConfig(&config, maxBytes)
+			err := ValidateOfficialScheduleRuntimeConfig(OfficialScheduleRuntimeConfig{
+				OfficialSchedule:     config,
+				MaxResponseBodyBytes: maxBytes,
+			})
 
 			if (err != nil) != test.wantFail {
-				t.Fatalf("validateOfficialScheduleConfig() error = %v, wantFail %v", err, test.wantFail)
+				t.Fatalf("ValidateOfficialScheduleRuntimeConfig() error = %v, wantFail %v", err, test.wantFail)
 			}
 		})
 	}
 }
 
-func TestLoadBotRuntimeReadsOfficialScheduleRuntime(t *testing.T) {
-	setRequiredLoadEnv(t)
+func TestLoadOfficialScheduleRuntimeConfigReadsFields(t *testing.T) {
 	t.Setenv("OFFICIAL_SCHEDULE_BASE_URL", "https://schedule.example")
 	t.Setenv("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", "7")
 	t.Setenv("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", "9")
 	t.Setenv("MAX_RESPONSE_BODY_BYTES", "12345")
 
-	loaded, err := loadBotRuntimeConfig()
+	config, err := LoadOfficialScheduleRuntimeConfig()
 	if err != nil {
-		t.Fatalf("loadBotRuntimeConfig() error = %v", err)
+		t.Fatalf("LoadOfficialScheduleRuntimeConfig() error = %v", err)
 	}
-
-	config := loaded.OfficialScheduleRuntime()
 
 	if config.OfficialSchedule.BaseURL != "https://schedule.example" {
 		t.Fatalf("BaseURL = %q", config.OfficialSchedule.BaseURL)
@@ -80,25 +80,5 @@ func TestLoadBotRuntimeReadsOfficialScheduleRuntime(t *testing.T) {
 
 	if config.MaxResponseBodyBytes != 12345 {
 		t.Fatalf("MaxResponseBodyBytes = %d", config.MaxResponseBodyBytes)
-	}
-}
-
-func TestConfigOfficialScheduleRuntimeUsesLoadedFields(t *testing.T) {
-	cfg := &Config{
-		OfficialSchedule: OfficialScheduleConfig{
-			BaseURL:      "https://schedule.from-config.example",
-			Timeout:      3 * time.Second,
-			PageCacheTTL: 4 * time.Second,
-		},
-		MaxResponseBodyBytes: 8192,
-	}
-	runtime := cfg.OfficialScheduleRuntime()
-
-	if runtime.OfficialSchedule.BaseURL != "https://schedule.from-config.example" {
-		t.Fatalf("BaseURL = %q", runtime.OfficialSchedule.BaseURL)
-	}
-
-	if runtime.MaxResponseBodyBytes != 8192 {
-		t.Fatalf("MaxResponseBodyBytes = %d", runtime.MaxResponseBodyBytes)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -119,7 +120,13 @@ func TestRebuildSubscriberCacheFromRepository_WritesOnlyTypeSpecificSubscriberCa
 	assert.Equal(t, "Member A", memberName)
 
 	// 방 목록·방 이름·사용자 이름은 PG가 원천이라 rebuild가 방 단위 index나 이름 hash를 만들지 않는다.
-	written, err := cacheClient.ScanKeys(ctx, "*", cacheScanBatchSize)
+	var written []string
+
+	err = cacheClient.ScanKeyPages(ctx, "*", cacheScanBatchSize, func(keys []string) error {
+		written = append(written, keys...)
+
+		return nil
+	})
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{
 		sharedalarmkeys.AlarmChannelRegistryKey,
@@ -336,6 +343,127 @@ func TestRebuildSubscriberCacheFromRepository_PreservesNonSubscriberAlarmKeys(t 
 	assert.True(t, wakeupGuardExists)
 }
 
+// rebuild clear는 SCAN page마다 바로 지워 한 번에 붙드는 key가 page 크기를 넘지 않아야 한다. 모든 page를 지운 뒤에만
+// DB 스냅샷을 읽으므로 clear 도중 커밋된 해지는 되살아나지 않고 clear 도중 커밋된 구독은 남는다.
+func TestRebuildSubscriberCacheFromRepository_ClearsInBoundedPagesBeforeLoad(t *testing.T) {
+	ctx := t.Context()
+	cacheClient, ok := newMemoryCacheClient(t).(*cachemocks.Client)
+	require.True(t, ok)
+
+	liveKey := func(channelID string) string {
+		return sharedalarmkeys.BuildChannelSubscriberKey(channelID, domain.AlarmTypeLive)
+	}
+
+	const staleChannels = 3*int(cacheScanBatchSize) + 7
+
+	for i := range staleChannels {
+		_, err := cacheClient.SAdd(ctx, liveKey(fmt.Sprintf("UC_STALE_%04d", i)), []string{"stale-room"})
+		require.NoError(t, err)
+	}
+
+	liveAlarm := func(roomID, channelID string) *domain.Alarm {
+		return &domain.Alarm{RoomID: roomID, ChannelID: channelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}}
+	}
+	dbAlarms := []*domain.Alarm{liveAlarm("room-keep", "UC_KEEP"), liveAlarm("room-gone", "UC_GONE")}
+
+	for _, alarmRecord := range dbAlarms {
+		_, err := cacheClient.SAdd(ctx, liveKey(alarmRecord.ChannelID), []string{alarmRecord.RoomID})
+		require.NoError(t, err)
+	}
+
+	stubRebuildLoaders(t, nil, nil, nil, nil)
+
+	loaded := false
+
+	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
+		loaded = true
+
+		return dbAlarms, nil
+	}
+
+	pageStats := observeRebuildPages(t, cacheClient, &loaded, func() {
+		// clear 도중 커밋된 해지와 구독: DB 변경 뒤 구독 cache 동기화가 일어난다.
+		dbAlarms = []*domain.Alarm{liveAlarm("room-keep", "UC_KEEP"), liveAlarm("room-new", "UC_NEW")}
+
+		_, err := cacheClient.SRem(ctx, liveKey("UC_GONE"), []string{"room-gone"})
+		require.NoError(t, err)
+
+		_, err = cacheClient.SAdd(ctx, liveKey("UC_NEW"), []string{"room-new"})
+		require.NoError(t, err)
+	})
+
+	_, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	require.NoError(t, err)
+	require.True(t, loaded)
+	assert.GreaterOrEqual(t, pageStats.pages, 4)
+	assert.LessOrEqual(t, pageStats.maxDeleteSize, int(cacheScanBatchSize), "a single delete must stay within one scan page")
+
+	for channelID, want := range map[string][]string{
+		"UC_KEEP":       {"room-keep"},
+		"UC_GONE":       nil,
+		"UC_NEW":        {"room-new"},
+		"UC_STALE_0000": nil,
+		"UC_STALE_0300": nil,
+	} {
+		got, err := cacheClient.SMembers(ctx, liveKey(channelID))
+		require.NoError(t, err)
+		assert.ElementsMatch(t, want, got, channelID)
+	}
+}
+
+type rebuildPageObservation struct {
+	deleteCalls, maxDeleteSize, pages int
+}
+
+func observeRebuildPages(t *testing.T, client *cachemocks.Client, loaded *bool, onSecondPage func()) *rebuildPageObservation {
+	t.Helper()
+
+	stats := &rebuildPageObservation{}
+	deleteMany := client.DelManyFunc
+
+	client.DelManyFunc = func(ctx context.Context, keys []string) (int64, error) {
+		stats.deleteCalls++
+
+		stats.maxDeleteSize = max(stats.maxDeleteSize, len(keys))
+
+		return deleteMany(ctx, keys)
+	}
+
+	scanPages := client.ScanKeyPagesFunc
+
+	client.ScanKeyPagesFunc = func(ctx context.Context, pattern string, batchSize int64, visit func([]string) error) error {
+		var matched []string
+
+		require.NoError(t, scanPages(ctx, pattern, batchSize, func(keys []string) error {
+			matched = append(matched, keys...)
+
+			return nil
+		}))
+
+		// 메모리 Valkey의 COUNT 해석과 무관하게 page 경계를 고정해 page별 삭제 순서를 검증한다.
+		for page := range slices.Chunk(matched, int(batchSize)) {
+			require.False(t, *loaded, "the DB snapshot must load only after every page is cleared")
+
+			before := stats.deleteCalls
+
+			if err := visit(page); err != nil {
+				return fmt.Errorf("visit page: %w", err)
+			}
+
+			require.Greater(t, stats.deleteCalls, before, "each page must be deleted before the next page is scanned")
+
+			stats.pages++
+			if stats.pages == 2 {
+				onSecondPage()
+			}
+		}
+
+		return nil
+	}
+
+	return stats
+}
+
 type countingWarmCacheClient struct {
 	cache.Client
 
@@ -456,6 +584,14 @@ func configureMemoryCacheSets(client *cachemocks.Client, rawClient valkey.Client
 
 		return resp.AsStrSlice()
 	}
+	client.SRemFunc = func(ctx context.Context, key string, members []string) (int64, error) {
+		resp := rawClient.Do(ctx, rawClient.B().Srem().Key(key).Member(members...).Build())
+		if resp.Error() != nil {
+			return 0, resp.Error()
+		}
+
+		return resp.AsInt64()
+	}
 }
 
 func configureMemoryCacheHashes(client *cachemocks.Client, rawClient valkey.Client) {
@@ -515,31 +651,33 @@ func configureMemoryCacheStrings(client *cachemocks.Client, rawClient valkey.Cli
 }
 
 func configureMemoryCacheKeys(client *cachemocks.Client, rawClient valkey.Client) {
-	client.ScanKeysFunc = func(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
+	client.ScanKeyPagesFunc = func(ctx context.Context, pattern string, batchSize int64, visit func([]string) error) error {
 		if batchSize <= 0 {
 			batchSize = 100
 		}
-
-		var keys []string
 
 		cursor := uint64(0)
 
 		for {
 			resp := rawClient.Do(ctx, rawClient.B().Scan().Cursor(cursor).Match(pattern).Count(batchSize).Build())
 			if resp.Error() != nil {
-				return nil, resp.Error()
+				return resp.Error()
 			}
 
 			entry, err := resp.AsScanEntry()
 			if err != nil {
-				return nil, fmt.Errorf("as scan entry: %w", err)
+				return fmt.Errorf("as scan entry: %w", err)
 			}
 
-			keys = append(keys, entry.Elements...)
-			cursor = entry.Cursor
+			if len(entry.Elements) > 0 {
+				if err := visit(entry.Elements); err != nil {
+					return fmt.Errorf("visit scan page: %w", err)
+				}
+			}
 
+			cursor = entry.Cursor
 			if cursor == 0 {
-				return keys, nil
+				return nil
 			}
 		}
 	}

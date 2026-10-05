@@ -25,6 +25,7 @@ func newTestServiceWithHTTPClient(
 	config.BaseURL = baseURL
 
 	service, err := NewService(
+		t.Context(),
 		nil,
 		httpClient,
 		logger,

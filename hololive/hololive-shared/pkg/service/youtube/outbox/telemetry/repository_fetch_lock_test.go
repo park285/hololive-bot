@@ -56,7 +56,7 @@ func fetchedTelemetryIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []i
 func TestFetchAndLockPendingLeasesEligibleRowsInEventOrder(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewRepository(pool)
+	repository := mustNewTestRepository(t, pool)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	base := now.Add(-time.Hour)
 	expiredLock := now.Add(-2 * time.Hour)
@@ -112,7 +112,7 @@ func TestFetchAndLockPendingLeasesEligibleRowsInEventOrder(t *testing.T) {
 func TestFetchAndLockPendingSkipsRowsLockedByAnotherTransaction(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	repository := NewRepository(pool)
+	repository := mustNewTestRepository(t, pool)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	base := now.Add(-time.Hour)
 

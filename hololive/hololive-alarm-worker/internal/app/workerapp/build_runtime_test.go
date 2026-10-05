@@ -9,7 +9,6 @@ import (
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -59,8 +58,8 @@ func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
 func TestLoadAlarmDispatchPublishConfigDefaults(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", "")
 
-	appConfig, err := loadAlarmDispatchPublishConfig(&settings.AlarmWorkerProfile{
-		AlarmDispatch: settings.AlarmDispatchWorkerSettings{WakeupEnabled: true},
+	appConfig, err := loadAlarmDispatchPublishConfig(&workerconfig.AlarmWorkerProfile{
+		AlarmDispatch: workerconfig.AlarmDispatchWorkerSettings{WakeupEnabled: true},
 	})
 	require.NoError(t, err)
 	assert.True(t, appConfig.WakeupEnabled)
@@ -73,14 +72,14 @@ func TestLoadAlarmDispatchPublishConfigRejectsInvalidMaxDeliveries(t *testing.T)
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", value)
 
-			_, err := loadAlarmDispatchPublishConfig(&settings.AlarmWorkerProfile{})
+			_, err := loadAlarmDispatchPublishConfig(&workerconfig.AlarmWorkerProfile{})
 			require.ErrorContains(t, err, "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH")
 		})
 	}
 }
 
 func TestRuntimeSchedulerRejectsMissingServiceBeforeInterfaceConversion(t *testing.T) {
-	_, err := buildRuntimeScheduler(&settings.Config{}, nil, &alarmFoundation{}, nil)
+	_, err := buildRuntimeScheduler(&workerconfig.RuntimeConfig{}, nil, &alarmFoundation{}, nil)
 	require.ErrorContains(t, err, "alarm service is required")
 }
 
@@ -93,7 +92,7 @@ func TestRuntimeSchedulerDisabledSkipsDependencyConstruction(t *testing.T) {
 }
 
 func TestRuntimeSchedulerRejectsMissingInfrastructure(t *testing.T) {
-	config := &settings.Config{AlarmWorkerProfile: &settings.AlarmWorkerProfile{}}
+	config := &workerconfig.RuntimeConfig{AlarmWorkerProfile: &workerconfig.AlarmWorkerProfile{}}
 	_, err := buildRuntimeScheduler(config, nil, &alarmFoundation{AlarmService: &subscriptions.AlarmService{}}, nil)
 	require.ErrorContains(t, err, "infrastructure is required")
 }

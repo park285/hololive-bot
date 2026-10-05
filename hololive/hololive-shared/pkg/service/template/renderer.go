@@ -21,14 +21,13 @@
 package template
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -63,19 +62,14 @@ func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
 // Render는 DB에서 현재 버전을 확인한 뒤 파싱 결과를 재사용합니다.
 // 저장 완료 후 시작한 호출은 새 버전을 사용하며, 저장과 겹친 호출은 이전 버전을 사용할 수 있습니다.
 // 템플릿 획득 대기는 최대 5초이며 더 짧은 호출자 deadline을 보존합니다.
+// 실행은 호출자 취소와 출력·단계·시간 예산을 따르며 실패하면 부분 결과 없이 오류를 돌려줍니다.
 func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID string, data any) (string, error) {
 	tmpl, err := r.getTemplate(ctx, key, channelID)
 	if err != nil {
 		return "", fmt.Errorf("get template: %w", err)
 	}
 
-	var buf bytes.Buffer
-
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("execute template: %w", err)
-	}
-
-	return buf.String(), nil
+	return executeTemplate(ctx, tmpl, data)
 }
 
 func (r *Renderer) InvalidateCache(key domain.TemplateKey, channelID string) {
@@ -100,47 +94,41 @@ func (r *Renderer) InvalidateKey(key domain.TemplateKey) {
 	}
 }
 
+// templateFuncs는 공용 함수와 크기를 늘릴 수 있는 builtin(print·printf·println·html·js·urlquery)의 제한판입니다.
+// 결과가 입력보다 커질 수 있는 함수는 모두 파생 값 불변식(renderer_guard.go)을 지키며, 상한 안에서는 원래 함수와
+// 같은 결과를 냅니다. Trim·displayline·default·contains·hasPrefix·formatNumber·timeAgo·add는 결과가 입력 크기를
+// 넘지 않거나 고정 길이입니다.
 var templateFuncs = template.FuncMap{
-	"truncate":       truncateTemplateText,
+	"truncate":       boundedTruncate,
 	"displayline":    normalizeTemplateDisplayLine,
 	"trim":           strings.TrimSpace,
-	"upper":          strings.ToUpper,
-	"lower":          strings.ToLower,
-	"title":          toTitle,
-	"replace":        strings.ReplaceAll,
+	"upper":          guardStringFunc("upper", strings.ToUpper),
+	"lower":          guardStringFunc("lower", strings.ToLower),
+	"title":          guardStringFunc("title", toTitle),
+	"replace":        boundedReplace,
 	"contains":       strings.Contains,
 	"hasPrefix":      strings.HasPrefix,
-	"join":           strings.Join,
-	"split":          strings.Split,
+	"join":           boundedJoin,
+	"split":          boundedSplit,
 	"formatNumber":   formatNumber,
 	"formatNumberKR": formatNumberKR,
 	"timeAgo":        timeAgo,
-	"date":           formatDate,
+	"date":           boundedDate,
 	"default":        defaultValue,
-	"nl2br":          nl2br,
-	"stripTags":      stripTags,
-	"urlEncode":      urlEncode,
-	"mdsafe":         util.MarkdownNeutralize,
+	"nl2br":          guardStringFunc("nl2br", nl2br),
+	"stripTags":      guardStringFunc("stripTags", stripTags),
+	"urlEncode":      guardStringFunc("urlEncode", urlEncode),
+	"mdsafe":         guardStringFunc("mdsafe", util.MarkdownNeutralize),
 	// 복사할 명령어는 숨은 문자를 삽입하지 않고 Markdown 이스케이프로 보호합니다.
-	"mdescape": kakaoformat.EscapeMarkdown,
+	"mdescape": guardStringFunc("mdescape", kakaoformat.EscapeMarkdown),
+	"print":    boundedPrint,
+	"printf":   boundedSprintf,
+	"println":  boundedPrintln,
+	"html":     boundedHTML,
+	"js":       boundedJS,
+	"urlquery": boundedURLQuery,
 	"add":      func(a, b int) int { return a + b },
-	"dict": func(values ...any) (map[string]any, error) {
-		if len(values)%2 != 0 {
-			return nil, errors.New("dict requires even number of arguments")
-		}
-
-		dict := make(map[string]any, len(values)/2)
-		for i := 0; i < len(values); i += 2 {
-			key, ok := values[i].(string)
-			if !ok {
-				return nil, errors.New("dict keys must be strings")
-			}
-
-			dict[key] = values[i+1]
-		}
-
-		return dict, nil
-	},
+	"dict":     boundedDict,
 }
 
 // toInt64는 다양한 타입의 값을 int64로 변환합니다.
@@ -216,9 +204,10 @@ func uintToInt64(u uint64) (int64, bool) {
 	return int64(u), true
 }
 
+// NaN, ±Inf, int64 범위 밖 값은 정수로 바꾸지 않습니다. 호출자는 이 값을 기존과 같이 %v 표기로 출력합니다.
 func floatToInt64(f float64) (int64, bool) {
-	if f > math.MaxInt64 || f < math.MinInt64 {
-		return 0, false // 오버플로우
+	if math.IsNaN(f) || f >= 0x1p63 || f < -0x1p63 {
+		return 0, false
 	}
 
 	return int64(f), true
@@ -237,26 +226,37 @@ func formatNumber(v any) string {
 	return formatNumberInt64(n)
 }
 
+// formatNumberInt64는 세 자리마다 쉼표를 넣습니다. 부호를 문자열에서 분리해 MinInt64도 재귀 없이 처리합니다.
 func formatNumberInt64(n int64) string {
+	digits := strconv.FormatInt(n, 10)
+	sign := ""
+
 	if n < 0 {
-		return "-" + formatNumberInt64(-n)
+		sign, digits = "-", digits[1:]
 	}
 
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
+	if len(digits) <= 3 {
+		return sign + digits
 	}
 
-	parts := make([]string, 0, 4)
+	var b strings.Builder
 
-	for n > 0 {
-		parts = append([]string{fmt.Sprintf("%03d", n%1000)}, parts...)
+	b.Grow(len(sign) + len(digits) + (len(digits)-1)/3)
+	b.WriteString(sign)
 
-		n /= 1000
+	head := len(digits) % 3
+	if head == 0 {
+		head = 3
 	}
 
-	result := strings.Join(parts, ",")
+	b.WriteString(digits[:head])
 
-	return strings.TrimLeft(result, "0,")
+	for i := head; i < len(digits); i += 3 {
+		b.WriteByte(',')
+		b.WriteString(digits[i : i+3])
+	}
+
+	return b.String()
 }
 
 func formatNumberKR(v any) string {
@@ -272,20 +272,28 @@ func formatNumberKR(v any) string {
 	return formatNumberKRInt64(n)
 }
 
+// formatNumberKRInt64는 1000 미만은 정수로, 그 이상은 크기를 float64로 나눠 표기합니다. 부호를 float64에서 뒤집어
+// MinInt64의 크기(2^63)도 overflow 없이 다룹니다.
 func formatNumberKRInt64(n int64) string {
-	if n < 0 {
-		return "-" + formatNumberKRInt64(-n)
+	if n > -1000 && n < 1000 {
+		return strconv.FormatInt(n, 10)
 	}
 
+	if n < 0 {
+		return "-" + formatNumberKRScaled(-float64(n))
+	}
+
+	return formatNumberKRScaled(float64(n))
+}
+
+func formatNumberKRScaled(magnitude float64) string {
 	switch {
-	case n >= 100_000_000:
-		return fmt.Sprintf("%.1f억", float64(n)/100_000_000)
-	case n >= 10_000:
-		return fmt.Sprintf("%.1f만", float64(n)/10_000)
-	case n >= 1000:
-		return fmt.Sprintf("%.1f천", float64(n)/1000)
+	case magnitude >= 100_000_000:
+		return fmt.Sprintf("%.1f억", magnitude/100_000_000)
+	case magnitude >= 10_000:
+		return fmt.Sprintf("%.1f만", magnitude/10_000)
 	default:
-		return fmt.Sprintf("%d", n)
+		return fmt.Sprintf("%.1f천", magnitude/1000)
 	}
 }
 

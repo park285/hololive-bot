@@ -99,29 +99,52 @@ func singleDeliveryBatch(
 	return []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{*outbox}
 }
 
-// preFormatMessages: outbox_id별로 메시지를 1회 포맷하여 캐싱.
+// preFormatMessages: outbox_id별 메시지를 FormatMessages 한 번으로 포맷하여 캐싱한다.
+// 전체 오류는 모든 outbox를 포맷 실패로 표시하고 한 번만 기록한다. 항목별 오류는 그 outbox만 실패로 남긴다.
 func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
 	messages = make(map[int64]string, len(outboxByID))
 	failures = make(map[int64]bool)
 
-	for id := range outboxByID {
-		item := outboxByID[id]
+	if len(outboxByID) == 0 {
+		return messages, failures
+	}
 
-		msg, err := d.formatter.FormatMessage(ctx, &item)
-		if err != nil {
+	ids := make([]int64, 0, len(outboxByID))
+	items := make([]domain.YouTubeNotificationOutbox, 0, len(outboxByID))
+
+	for id := range outboxByID {
+		ids = append(ids, id)
+		items = append(items, outboxByID[id])
+	}
+
+	results, err := d.formatter.FormatMessages(ctx, items)
+	if err != nil {
+		d.logger.Warn("Failed to pre-format outbox messages",
+			slog.Int("outbox_count", len(ids)),
+			slog.Any("error", fmt.Errorf("format messages: %w", err)))
+
+		for _, id := range ids {
+			failures[id] = true
+		}
+
+		return messages, failures
+	}
+
+	for i, id := range ids {
+		if results[i].Err != nil {
 			d.logger.Warn("Failed to pre-format outbox message",
 				slog.Int64("outbox_id", id),
-				slog.Any("error", fmt.Errorf("format message: %w", err)))
+				slog.Any("error", fmt.Errorf("format message: %w", results[i].Err)))
 
 			failures[id] = true
 
 			continue
 		}
 
-		messages[id] = msg
+		messages[id] = results[i].Message
 	}
 
-	return
+	return messages, failures
 }
 
 func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) (sendErr error) {

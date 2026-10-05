@@ -35,12 +35,16 @@ import (
 const (
 	testMemberNameOld = "Old"
 	testMemberNameNew = "New"
+	// TestMemberMiko·testMemberMikoSlug·testMemberPekora는 패키지 테스트가 함께 쓰는 멤버 이름 fixture다.
+	testMemberMiko     = "Miko"
+	testMemberMikoSlug = "miko"
+	testMemberPekora   = "Pekora"
 )
 
 func testMembers() []*domain.Member {
 	return []*domain.Member{
-		{ChannelID: "UC_pekora", Name: "Pekora"},
-		{ChannelID: "UC_miko", Name: "Miko"},
+		{ChannelID: "UC_pekora", Name: testMemberPekora},
+		{ChannelID: "UC_miko", Name: testMemberMiko},
 		{Name: "NameOnly"},
 	}
 }
@@ -74,12 +78,12 @@ func TestCacheAllMembers_ReusesSnapshotAcrossCalls(t *testing.T) {
 		t.Fatalf("loader called %d times, want 1 (steady-state must not reload)", n)
 	}
 
-	if _, ok := c.byChannelID.Load("UC_pekora"); !ok {
-		t.Fatal("snapshot load must backfill byChannelID map")
+	if got, _ := c.lookupPointInMemory(pointLookupChannel, "UC_pekora"); got == nil {
+		t.Fatal("snapshot load must serve channel lookups from memory")
 	}
 
-	if _, ok := c.byName.Load("Miko"); !ok {
-		t.Fatal("snapshot load must backfill byName map")
+	if got, _ := c.lookupPointInMemory(pointLookupName, testMemberMiko); got == nil {
+		t.Fatal("snapshot load must serve name lookups from memory")
 	}
 }
 
@@ -129,10 +133,7 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 		},
 	}
 
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:  testMembers(),
-		loadedAt: time.Now().Add(-2 * time.Minute),
-	})
+	c.allMembersSnapshot.Store(newAllMembersState(testMembers(), 0, time.Now().Add(-2*time.Minute)))
 
 	if _, err := c.AllMembers(t.Context()); err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
@@ -235,10 +236,7 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 			return nil, errors.New("db outage")
 		},
 	}
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:  stale,
-		loadedAt: time.Now().Add(-2 * time.Minute),
-	})
+	c.allMembersSnapshot.Store(newAllMembersState(stale, 0, time.Now().Add(-2*time.Minute)))
 
 	got, err := c.AllMembers(t.Context())
 	if err != nil {
@@ -258,15 +256,117 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 	}
 }
 
-func TestCacheAllMembers_LoadSurvivesCallerCancellation(t *testing.T) {
+// doneObservedContext는 Done을 처음 부를 때 알린다. AllMembers는 공유 적재 대기 select에서만 Done을 부르므로, 대기자가
+// 진행 중인 공유 적재에 합류했다는 시점을 sleep 없이 관측한다.
+type doneObservedContext struct {
+	context.Context //nolint:containedctx // 공유 적재 합류 시점을 관찰하는 Context wrapper이며 원래 취소·값 계약을 그대로 위임한다.
+
+	observed chan struct{}
+	once     sync.Once
+}
+
+func (c *doneObservedContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.observed) })
+
+	return c.Context.Done()
+}
+
+// blockingSnapshotLoader는 release 전까지 공유 적재를 붙잡고, 적재 ctx가 취소된 채 끝났는지 기록한다.
+type blockingSnapshotLoader struct {
+	started       chan struct{}
+	release       chan struct{}
+	calls         atomic.Int64
+	canceledLoads atomic.Int64
+}
+
+func newBlockingSnapshotLoader() *blockingSnapshotLoader {
+	return &blockingSnapshotLoader{started: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (l *blockingSnapshotLoader) load(ctx context.Context) ([]*domain.Member, error) {
+	if l.calls.Add(1) == 1 {
+		close(l.started)
+	}
+
+	<-l.release
+
+	if ctx.Err() != nil {
+		l.canceledLoads.Add(1)
+	}
+
+	return testMembers(), nil
+}
+
+// startAllMembers는 AllMembers를 별도 goroutine에서 실행하고 결과 오류를 돌려준다. 성공했는데 snapshot이 불완전하면 오류다.
+func startAllMembers(ctx context.Context, c *Cache) <-chan error {
+	done := make(chan error, 1)
+
+	go func() {
+		members, err := c.AllMembers(ctx)
+		if err == nil && len(members) != len(testMembers()) {
+			err = errors.New("waiter received an incomplete snapshot")
+		}
+
+		done <- err
+	}()
+
+	return done
+}
+
+// 진행 중인 공유 적재에 합류한 대기자가 취소되면 자기만 즉시 빠지고, 공유 적재는 호출자 취소와 분리된 채 끝나 다른
+// 대기자와 snapshot을 채운다.
+func TestCacheAllMembers_CanceledWaiterLeavesSharedLoadRunning(t *testing.T) {
 	t.Parallel()
 
-	var loaderCtxErr error
+	loader := newBlockingSnapshotLoader()
+	c := &Cache{logger: slog.New(slog.DiscardHandler), loadAllMembers: loader.load}
+
+	ownerDone := startAllMembers(t.Context(), c)
+
+	<-loader.started
+
+	waiterCtx, cancelWaiter := context.WithCancel(t.Context())
+	observed := &doneObservedContext{Context: waiterCtx, observed: make(chan struct{})}
+	waiterDone := startAllMembers(observed, c)
+
+	<-observed.observed
+	cancelWaiter()
+
+	select {
+	case err := <-waiterDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled waiter error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled waiter stayed blocked on the shared load")
+	}
+
+	close(loader.release)
+
+	if err := <-ownerDone; err != nil {
+		t.Fatalf("load owner error = %v, want shared snapshot", err)
+	}
+
+	if loader.canceledLoads.Load() != 0 || loader.calls.Load() != 1 {
+		t.Fatalf("shared load canceled=%d calls=%d, want one uncanceled load", loader.canceledLoads.Load(), loader.calls.Load())
+	}
+
+	if _, err := c.AllMembers(t.Context()); err != nil || loader.calls.Load() != 1 {
+		t.Fatalf("snapshot after canceled waiter = err %v calls %d, want published snapshot reuse", err, loader.calls.Load())
+	}
+}
+
+// 이미 취소된 호출자는 공유 적재를 시작하지 않고 ctx 오류를 받는다.
+func TestCacheAllMembers_PreCanceledCallerDoesNotStartLoad(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
 
 	c := &Cache{
 		logger: slog.New(slog.DiscardHandler),
-		loadAllMembers: func(ctx context.Context) ([]*domain.Member, error) {
-			loaderCtxErr = ctx.Err()
+		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
+			calls.Add(1)
+
 			return testMembers(), nil
 		},
 	}
@@ -274,17 +374,12 @@ func TestCacheAllMembers_LoadSurvivesCallerCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	got, err := c.AllMembers(ctx)
-	if err != nil {
-		t.Fatalf("AllMembers() error = %v, want nil despite canceled caller ctx", err)
+	if _, err := c.AllMembers(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("AllMembers() error = %v, want context.Canceled", err)
 	}
 
-	if len(got) != 3 {
-		t.Fatalf("AllMembers() len = %d, want 3", len(got))
-	}
-
-	if loaderCtxErr != nil {
-		t.Fatalf("loader received ctx err = %v, want nil (caller cancellation must not enter the shared load)", loaderCtxErr)
+	if calls.Load() != 0 {
+		t.Fatalf("loader calls = %d, want 0 for an already canceled caller", calls.Load())
 	}
 }
 

@@ -33,6 +33,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
@@ -265,7 +266,7 @@ func TestLoadSubscriberRoomsByChannelFallsBackToSequentialLookup(t *testing.T) {
 		},
 	}
 
-	got, err := LoadSubscriberRoomsByChannel(t.Context(), cacheClient, nil, []string{testChannelID1, testChannelID2, testChannelID1})
+	got, err := LoadSubscriberRoomsByChannel(t.Context(), cacheClient, sharedalarm.NewSubscriberResolver(cacheClient, nil), []string{testChannelID1, testChannelID2, testChannelID1})
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{testRoomID1, testRoomID2}, got[testChannelID1])
 	assert.ElementsMatch(t, []string{testRoomID3}, got[testChannelID2])

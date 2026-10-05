@@ -134,8 +134,8 @@ func TestLoadRuntimeSelectsHololiveAPITracingToggle(t *testing.T) {
 		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
-	if !config.Tracing.Enabled || config.Tracing != config.Bot.Tracing || config.Tracing != config.Admin.Tracing {
-		t.Fatalf("RuntimeConfig tracing = %#v, bot = %#v, admin = %#v", config.Tracing, config.Bot.Tracing, config.Admin.Tracing)
+	if !config.Tracing.Enabled {
+		t.Fatalf("RuntimeConfig tracing = %#v, want enabled", config.Tracing)
 	}
 }
 

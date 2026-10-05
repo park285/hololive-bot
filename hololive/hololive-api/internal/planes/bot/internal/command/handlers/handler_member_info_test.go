@@ -125,7 +125,7 @@ func TestMemberInfoCommandPrefersRequestedSharedChannelMember(t *testing.T) {
 
 type failedMemberInfoLoader struct{ domain.MemberDataProvider }
 
-func (p failedMemberInfoLoader) LoadAllMembers() ([]*domain.Member, error) {
+func (p failedMemberInfoLoader) LoadAllMembers(context.Context) ([]*domain.Member, error) {
 	return nil, errors.New("member DB unavailable")
 }
 
@@ -147,11 +147,8 @@ func TestMemberInfoDoesNotTurnDatabaseFailureIntoNotFound(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	// WithContext도 error-aware loader 계약을 보존해야 한다.
 	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{"query": "Michiru"})
 	if err == nil || !strings.Contains(err.Error(), "member DB unavailable") {
 		t.Fatalf("error=%v", err)
 	}
 }
-
-func (p failedMemberInfoLoader) WithContext(context.Context) domain.MemberDataProvider { return p }

@@ -305,11 +305,7 @@ func (c *Cache) applyEpoch(epoch uint64, reason string) {
 
 	previous := c.authorityEpoch.Load()
 	if previous != epoch || !c.authorityHealthy.Load() {
-		c.snapshotGeneration.Add(1)
-		c.byChannelID.Clear()
-		c.byName.Clear()
-		c.allMembers.Clear()
-		c.allMembersSnapshot.Store(nil)
+		c.resetMemoryLocked()
 		c.authorityEpoch.Store(epoch)
 	}
 
@@ -323,12 +319,8 @@ func (c *Cache) markEpochUncertain(reason string, err error) {
 	c.snapshotMu.Lock()
 
 	wasHealthy := c.authorityHealthy.Swap(false)
-	if wasHealthy || c.allMembersSnapshot.Load() != nil {
-		c.snapshotGeneration.Add(1)
-		c.byChannelID.Clear()
-		c.byName.Clear()
-		c.allMembers.Clear()
-		c.allMembersSnapshot.Store(nil)
+	if wasHealthy || c.allMembersSnapshot.Load() != nil || c.pointOverlay != nil {
+		c.resetMemoryLocked()
 	}
 
 	c.snapshotMu.Unlock()

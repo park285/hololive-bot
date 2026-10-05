@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestRepositoryMemberInfoPreservesSharedChannelIdentity(t *testing.T) {
@@ -104,7 +106,7 @@ func TestMemberAliasLookupTreatsWildcardsLiterally(t *testing.T) {
 	}
 
 	for _, query := range []string{"%", "_", "Nor%"} {
-		if _, lookupErr := repo.FindByAlias(ctx, query); !errors.Is(lookupErr, ErrMemberNotFound) {
+		if _, lookupErr := repo.FindByAlias(ctx, query); !errors.Is(lookupErr, domain.ErrMemberNotFound) {
 			t.Errorf("query %q error=%v", query, lookupErr)
 		}
 	}

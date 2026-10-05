@@ -92,7 +92,7 @@ func newLenientAlarmCacheMock(
 	cacheMock.GetFunc = cacheClient.Get
 	cacheMock.DelFunc = cacheClient.Del
 	cacheMock.DelManyFunc = cacheClient.DelMany
-	cacheMock.ScanKeysFunc = cacheClient.ScanKeys
+	cacheMock.ScanKeyPagesFunc = cacheClient.ScanKeyPages
 	cacheMock.HDelFunc = cacheClient.HDel
 	cacheMock.HMSetFunc = cacheClient.HMSet
 	cacheMock.ExistsFunc = cacheClient.Exists

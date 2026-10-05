@@ -29,8 +29,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/service/acl"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -42,7 +42,7 @@ type photoSyncTask interface {
 type AdminAPIRuntime struct {
 	lifecycle.Managed
 
-	Config *settings.Config
+	Config *apiconfig.AdminPlaneConfig
 	Logger *slog.Logger
 
 	ServerAddr  string

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
@@ -40,7 +41,7 @@ func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 	formatter := messageformatter.NewResponseFormatter("!", nil)
 	commandBuilders := []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
 
-	appConfig := &configsettings.Config{
+	appConfig := &apiconfig.BotPlaneConfig{
 		Bot: configsettings.BotConfig{
 			SelfUser:              "bot-self",
 			Prefix:                "!",

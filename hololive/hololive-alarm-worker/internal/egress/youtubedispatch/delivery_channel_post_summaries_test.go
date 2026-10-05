@@ -77,7 +77,7 @@ func TestDeliveryTelemetryRepository_ChannelPostDeliverySummariesFromPostSendCou
 		channelPostSummaryStaleTelemetryRows(outboxes, times),
 	)).Error)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 
 	posts, err := repository.ListPostSendCountsSince(ctx, windowStart)
 	require.NoError(t, err)

@@ -6,8 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
@@ -17,7 +17,7 @@ type AlarmYouTubeStackComponents struct {
 }
 
 func InitAlarmYouTubeStack(
-	appConfig *configsettings.Config,
+	appConfig *apiconfig.BotPlaneConfig,
 	foundation *apifoundation.ScraperHolodexFoundation,
 	logger *slog.Logger,
 ) (_ *AlarmYouTubeStackComponents, retErr error) {

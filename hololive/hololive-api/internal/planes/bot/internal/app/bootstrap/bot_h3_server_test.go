@@ -17,6 +17,7 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
@@ -26,7 +27,7 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.BotPlaneConfig{
 		Server: settings.ServerConfig{
 			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,
@@ -95,7 +96,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.BotPlaneConfig{
 		Server: settings.ServerConfig{
 			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,
@@ -141,7 +142,7 @@ func TestBuildBotHTTP3ServerServesCachedCertificateFiles(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.BotPlaneConfig{
 		Server: settings.ServerConfig{
 			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,
@@ -183,7 +184,7 @@ func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.BotPlaneConfig{
 		Server: settings.ServerConfig{
 			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,

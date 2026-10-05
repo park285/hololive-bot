@@ -5,37 +5,33 @@ import (
 	"testing"
 )
 
-func TestServerTransportEnabled_EmptyTransports_DefaultH3(t *testing.T) {
+func TestServerConfigTransportEnabled_EmptyTransports_DefaultH3(t *testing.T) {
 	t.Parallel()
 
-	c := &Config{}
-	if !c.ServerTransportEnabled("h3") {
+	s := &ServerConfig{}
+	if !s.TransportEnabled("h3") {
 		t.Fatal("empty HTTPTransports should default to h3 enabled")
 	}
 }
 
-func TestServerTransportEnabled_InvalidName(t *testing.T) {
+func TestServerConfigTransportEnabled_InvalidName(t *testing.T) {
 	t.Parallel()
 
-	c := &Config{}
-	if c.ServerTransportEnabled("grpc") {
+	s := &ServerConfig{}
+	if s.TransportEnabled("grpc") {
 		t.Fatal("invalid transport name should not be enabled")
 	}
 }
 
-func TestServerTransportEnabled_ExplicitList(t *testing.T) {
+func TestServerConfigTransportEnabled_ExplicitList(t *testing.T) {
 	t.Parallel()
 
-	c := &Config{
-		Server: ServerConfig{
-			HTTPTransports: []string{"h3"},
-		},
-	}
-	if !c.ServerTransportEnabled("http3") {
+	s := &ServerConfig{HTTPTransports: []string{"h3"}}
+	if !s.TransportEnabled("http3") {
 		t.Fatal("http3 alias should match h3")
 	}
 
-	if !c.ServerTransportEnabled("quic") {
+	if !s.TransportEnabled("quic") {
 		t.Fatal("quic alias should match h3")
 	}
 }
@@ -79,90 +75,5 @@ func TestNormalizeServerHTTPTransport(t *testing.T) {
 				t.Fatalf("normalizeServerHTTPTransport(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
-	}
-}
-
-func setAdminAPIRuntimeEnv(t *testing.T) {
-	t.Helper()
-	clearRuntimeRoleEnv(t)
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h3")
-	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
-	t.Setenv("HOLOLIVE_H3_KEY_FILE", hololiveH3KeyPath)
-	t.Setenv("SERVER_PORT", "30006")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
-	t.Setenv(irisWebhookTokenEnv, "")
-	t.Setenv(irisBotTokenEnv, "")
-	t.Setenv("IRIS_BASE_URL", "")
-	t.Setenv("IRIS_BASE_URL_FILE", "")
-	t.Setenv("YOUTUBE_API_KEY", "")
-}
-
-func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
-	setAdminAPIRuntimeEnv(t)
-
-	config, err := LoadAdminAPIRuntime()
-	if err != nil {
-		t.Fatalf("LoadAdminAPIRuntime() error = %v", err)
-	}
-
-	if config.Iris.WebhookToken != "" || config.Iris.BotToken != "" {
-		t.Fatalf("Iris tokens = %q/%q, want empty", config.Iris.WebhookToken, config.Iris.BotToken)
-	}
-
-	server := newIrisRuntimeDiagnosticsServer(t, loadTestWorkerProfileDiagnosticsJSON())
-	t.Setenv("IRIS_BASE_URL", server.URL)
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testURLHostname(t, server.URL))
-	t.Setenv("IRIS_TRANSPORT", "http1")
-	t.Setenv(irisBotTokenEnv, "test-bot-token")
-	useStackWorkerProfileFixture(t, "stack-worker-profile-api.json")
-
-	if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
-		t.Fatalf("Load() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
-	}
-}
-
-func TestLoadAdminAPIRuntime_DefaultEnforcesCORSOrigins_05c4a5ef(t *testing.T) {
-	setAdminAPIRuntimeEnv(t)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "")
-
-	_, err := LoadAdminAPIRuntime()
-	if err == nil {
-		t.Fatal("LoadAdminAPIRuntime() error = nil, want missing CORS_ALLOWED_ORIGINS error")
-	}
-
-	if !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestLoadAdminAPIRuntime_RequiresHolodexKey(t *testing.T) {
-	setAdminAPIRuntimeEnv(t)
-	t.Setenv("HOLODEX_API_KEY", "")
-
-	_, err := LoadAdminAPIRuntime()
-	if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {
-		t.Fatalf("LoadAdminAPIRuntime() error = %v, want HOLODEX_API_KEY is required", err)
-	}
-}
-
-func TestLoadAdminAPIRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
-	setAdminAPIRuntimeEnv(t)
-	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
-
-	if _, err := LoadAdminAPIRuntime(); err != nil {
-		t.Fatalf("LoadAdminAPIRuntime() error = %v, want success when collector env is invalid", err)
-	}
-}
-
-func TestLoadBotRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	setRequiredLoadEnv(t)
-	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
-
-	if _, err := LoadBotRuntime(); err != nil {
-		t.Fatalf("LoadBotRuntime() error = %v, want success when collector env is invalid", err)
 	}
 }

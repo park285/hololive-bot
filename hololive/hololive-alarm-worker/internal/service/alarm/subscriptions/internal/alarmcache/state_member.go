@@ -2,10 +2,12 @@ package alarmcache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -26,22 +28,22 @@ func (s *State) GetMemberName(ctx context.Context, channelID string) (string, er
 	return name, nil
 }
 
-func (s *State) ResolveMemberDataName(ctx context.Context, channelID string) string {
+func (s *State) ResolveMemberDataName(ctx context.Context, channelID string) (string, error) {
 	provider := s.memberData()
 	if provider == nil {
-		return ""
+		return "", nil
 	}
 
-	if scoped := provider.WithContext(ctx); scoped != nil {
-		provider = scoped
+	member, err := provider.FindMemberByChannelID(ctx, channelID)
+	if errors.Is(err, domain.ErrMemberNotFound) {
+		return "", nil
 	}
 
-	member := provider.FindMemberByChannelID(channelID)
-	if member == nil {
-		return ""
+	if err != nil {
+		return "", fmt.Errorf("resolve member data name: %w", err)
 	}
 
-	return FirstMemberName(member.ShortKoreanName, member.NameKo, member.Name)
+	return FirstMemberName(member.ShortKoreanName, member.NameKo, member.Name), nil
 }
 
 func FirstMemberName(candidates ...string) string {

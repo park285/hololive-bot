@@ -177,7 +177,12 @@ def migration_command_asset(path: Path) -> bool:
 
 
 def complete_query_required(path: Path) -> bool:
-    return rel(path).startswith("hololive/hololive-shared/pkg/service/delivery/queries/")
+    return rel(path).startswith(
+        (
+            "hololive/hololive-shared/pkg/service/delivery/queries/",
+            "hololive/hololive-alarm-worker/internal/egress/notificationdelivery/queries/",
+        )
+    )
 
 
 def excerpt(value: str) -> str:

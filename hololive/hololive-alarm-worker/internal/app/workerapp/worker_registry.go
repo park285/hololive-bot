@@ -10,8 +10,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type alarmWorkerRegistryState struct {
@@ -23,7 +23,7 @@ type alarmWorkerRegistryState struct {
 	workers  map[string]workercontract.WorkerProfile
 }
 
-func newAlarmWorkerRegistryState(profile *settings.AlarmWorkerProfile, pool *pgxpool.Pool) (*alarmWorkerRegistryState, error) {
+func newAlarmWorkerRegistryState(profile *workerconfig.AlarmWorkerProfile, pool *pgxpool.Pool) (*alarmWorkerRegistryState, error) {
 	if profile == nil || pool == nil {
 		return nil, errors.New("build alarm worker registry: profile and postgres pool are required")
 	}

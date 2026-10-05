@@ -11,7 +11,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	analytics "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
-	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type postLatencyPeriodInputs struct {
@@ -199,7 +198,7 @@ func TestDeliveryTelemetryRepository_PostLatencyPeriodSummariesFromPostSendCount
 	now := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	withinLatencyMillis, exceededLatencyMillis := seedPostLatencyPeriodTracking(t, db, now)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 
 	posts, err := repository.ListPostSendCountsSince(ctx, now.Add(-24*time.Hour))
 	require.NoError(t, err)

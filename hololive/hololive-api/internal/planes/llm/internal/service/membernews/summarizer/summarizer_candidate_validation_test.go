@@ -73,7 +73,7 @@ func newCandidateValidationSummarizer(t *testing.T, item model.SummaryItem) *sum
 
 	logger := slog.New(slog.DiscardHandler)
 
-	validator, err := membernews.NewSourceValidator("", nil, logger)
+	validator, err := membernews.NewSourceValidator(t.Context(), "", nil, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,16 +125,16 @@ func TestSummarizerPreservesCommaInCanonicalMemberNames(t *testing.T) {
 
 	input.RoomMembers = []string{commaMember, validationMiko}
 
-	validator, err := membernews.NewSourceValidator("", nil, slog.New(slog.DiscardHandler))
+	validator, err := membernews.NewSourceValidator(t.Context(), "", nil, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	input.Candidates = filter.FilterCandidates([]model.Candidate{{
+	input.Candidates, err = filter.FilterCandidates(t.Context(), []model.Candidate{{
 		Title: "Synthetic event", Members: input.RoomMembers, SourceURL: validationMikoURL,
 		EventStartDate: new(input.Now),
 	}}, input.Period, input.Now, input.RoomMembers, nil, validator)
-	if len(input.Candidates) != 1 || len(input.Candidates[0].MatchedMembers) != 2 {
+	if err != nil || len(input.Candidates) != 1 || len(input.Candidates[0].MatchedMembers) != 2 {
 		t.Fatalf("unexpected production-filtered candidates: %+v", input.Candidates)
 	}
 

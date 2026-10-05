@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	membersvc "github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -101,7 +100,7 @@ func (c *MemberInfoCommand) resolveRequestedMember(ctx context.Context, room, ch
 		return nil, handlercore.ErrMemberLookupHandled
 	}
 
-	if err != nil && !errors.Is(err, membersvc.ErrMemberNotFound) {
+	if err != nil && !errors.Is(err, domain.ErrMemberNotFound) {
 		return nil, fmt.Errorf("load requested member: %w", err)
 	}
 
@@ -170,7 +169,7 @@ func (c *MemberInfoCommand) ensureDeps() error {
 }
 
 func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englishName, query string) (*domain.Member, error) {
-	members, err := c.Deps().MembersData.WithContext(ctx).LoadAllMembers()
+	members, err := c.Deps().MembersData.LoadAllMembers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load member information snapshot: %w", err)
 	}
@@ -190,7 +189,7 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 			return candidates[0], nil
 		}
 
-		return nil, membersvc.ErrMemberNotFound
+		return nil, domain.ErrMemberNotFound
 	}
 
 	var representative *domain.Member
@@ -202,7 +201,7 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 	}
 
 	if representative == nil {
-		return nil, membersvc.ErrMemberNotFound
+		return nil, domain.ErrMemberNotFound
 	}
 
 	return representative, nil

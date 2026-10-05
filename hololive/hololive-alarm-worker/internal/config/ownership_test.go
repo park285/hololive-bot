@@ -5,11 +5,10 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
-func alarmWorkerProfileFixture(t *testing.T) *settings.AlarmWorkerProfile {
+func alarmWorkerProfileFixture(t *testing.T) *AlarmWorkerProfile {
 	t.Helper()
 	settingstest.UseProfileFixture(t, "stack-worker-profile-alarm-worker.json")
 

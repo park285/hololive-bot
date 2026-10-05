@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -91,7 +92,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 func TestProvideBotRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &settings.Config{}, logger, nil, nil, nil)
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -121,7 +122,7 @@ func TestProvideBotRouter_SkipsScraperShortLinkWarnings(t *testing.T) {
 
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &settings.Config{}, logger, nil, nil, nil)
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -158,7 +159,7 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 		},
 	})
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &settings.Config{
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{
 		Server: settings.ServerConfig{APIKey: "test-key"},
 	}, logger, nil, nil, nil, probe)
 	if err != nil {
@@ -207,7 +208,7 @@ func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	router, err := apphttp.ProvideBotRouter(t.Context(), &settings.Config{}, logger, nil, triggerHandler, nil)
+	router, err := apphttp.ProvideBotRouter(t.Context(), &apiconfig.BotPlaneConfig{}, logger, nil, triggerHandler, nil)
 	if err == nil {
 		t.Fatal("ProvideBotRouter() error = nil, want non-nil")
 	}

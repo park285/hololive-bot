@@ -80,7 +80,7 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheEmpty(t *testing.T
 		return int64(len(members)), nil
 	}
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_shorts", domain.AlarmTypeShorts)
+	got, err := NewSubscriberResolver(cache, db).ResolveChannelSubscribersByType(t.Context(), "UC_shorts", domain.AlarmTypeShorts)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
@@ -138,11 +138,13 @@ func TestResolveChannelSubscribersByType_DoesNotPoisonOtherTypeCacheFromDBFallba
 		return int64(len(members)), nil
 	}
 
-	liveSubscribers, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_mixed_cache", domain.AlarmTypeLive)
+	resolver := NewSubscriberResolver(cache, db)
+
+	liveSubscribers, err := resolver.ResolveChannelSubscribersByType(t.Context(), "UC_mixed_cache", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"room-both"}, liveSubscribers)
 
-	communitySubscribers, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_mixed_cache", domain.AlarmTypeCommunity)
+	communitySubscribers, err := resolver.ResolveChannelSubscribersByType(t.Context(), "UC_mixed_cache", domain.AlarmTypeCommunity)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"room-both", testCommunityRoomID}, communitySubscribers)
 }
@@ -167,7 +169,7 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheErrors(t *testing.
 		return nil, errors.New("cache unavailable")
 	}
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_community", domain.AlarmTypeCommunity)
+	got, err := NewSubscriberResolver(cache, db).ResolveChannelSubscribersByType(t.Context(), "UC_community", domain.AlarmTypeCommunity)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
@@ -191,7 +193,7 @@ func TestResolveChannelSubscribersByTypeReturnsAuthoritativeEmptyOnlyAfterDBFall
 		return nil, nil
 	}
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_empty", domain.AlarmTypeLive)
+	got, err := NewSubscriberResolver(cache, db).ResolveChannelSubscribersByType(t.Context(), "UC_empty", domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
@@ -212,7 +214,7 @@ func TestResolveChannelSubscribersByTypeUsesExplicitNegativeCache(t *testing.T) 
 		return true, nil
 	}
 
-	got, err := ResolveChannelSubscribersByType(t.Context(), cache, nil, "UC_empty", domain.AlarmTypeLive)
+	got, err := NewSubscriberResolver(cache, nil).ResolveChannelSubscribersByType(t.Context(), "UC_empty", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Empty(t, got)
 }
@@ -244,6 +246,7 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 	const concurrentCalls = 3
 
 	results := make([]result, concurrentCalls)
+	resolver := NewSubscriberResolver(nil, db)
 
 	var wg sync.WaitGroup
 
@@ -251,10 +254,8 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 		wg.Go(func() {
 			<-start
 
-			results[i].subscribers, results[i].err = ResolveChannelSubscribersByType(
+			results[i].subscribers, results[i].err = resolver.ResolveChannelSubscribersByType(
 				t.Context(),
-				nil,
-				db,
 				"UC_batch_channel",
 				domain.AlarmTypeShorts,
 			)
@@ -305,15 +306,17 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 
 	var wg sync.WaitGroup
 
+	resolver := NewSubscriberResolver(nil, db)
+
 	wg.Go(func() {
 		<-start
 
-		first, firstErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel", domain.AlarmTypeLive)
+		first, firstErr = resolver.loadChannelSubscriberAlarms(t.Context(), "UC_pointer_channel", domain.AlarmTypeLive)
 	})
 	wg.Go(func() {
 		<-start
 
-		second, secondErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel", domain.AlarmTypeLive)
+		second, secondErr = resolver.loadChannelSubscriberAlarms(t.Context(), "UC_pointer_channel", domain.AlarmTypeLive)
 	})
 
 	close(start)
@@ -387,8 +390,9 @@ func testChannelSubscriberQueryContext(t *testing.T, channelID string, parentDea
 		defer cancel()
 
 		db := &alarmQueryContextTestDB{entered: make(chan context.Context, 1)}
+		resolver := NewSubscriberResolver(nil, db)
 		startedAt := time.Now()
-		firstDone := startAlarmQueryContextLoad(parent, db, channelID)
+		firstDone := startAlarmQueryContextLoad(parent, resolver, channelID)
 
 		queryCtx := <-db.entered
 		deadline, ok := queryCtx.Deadline()
@@ -397,7 +401,7 @@ func testChannelSubscriberQueryContext(t *testing.T, channelID string, parentDea
 		assert.NotEqual(t, parent.Done(), queryCtx.Done())
 		assert.Same(t, value, queryCtx.Value(queryContextKey{}))
 
-		followerDone := startAlarmQueryContextLoad(t.Context(), db, channelID)
+		followerDone := startAlarmQueryContextLoad(t.Context(), resolver, channelID)
 
 		synctest.Wait()
 
@@ -419,11 +423,11 @@ func testChannelSubscriberQueryContext(t *testing.T, channelID string, parentDea
 	})
 }
 
-func startAlarmQueryContextLoad(ctx context.Context, db *alarmQueryContextTestDB, channelID string) <-chan alarmLoadResult {
+func startAlarmQueryContextLoad(ctx context.Context, resolver *SubscriberResolver, channelID string) <-chan alarmLoadResult {
 	done := make(chan alarmLoadResult, 1)
 
 	go func() {
-		alarms, err := loadChannelSubscriberAlarms(ctx, db, channelID, domain.AlarmTypeLive)
+		alarms, err := resolver.loadChannelSubscriberAlarms(ctx, channelID, domain.AlarmTypeLive)
 		done <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
@@ -508,9 +512,10 @@ func TestLoadChannelSubscriberAlarms_SingleflightIsolatesFollowersFromFirstCalle
 	defer cancel()
 
 	firstDone := make(chan alarmLoadResult, 1)
+	resolver := NewSubscriberResolver(nil, db)
 
 	go func() {
-		alarms, err := loadChannelSubscriberAlarms(shortCtx, db, "UC_mixed_context", domain.AlarmTypeLive)
+		alarms, err := resolver.loadChannelSubscriberAlarms(shortCtx, "UC_mixed_context", domain.AlarmTypeLive)
 		firstDone <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
@@ -519,7 +524,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightIsolatesFollowersFromFirstCalle
 	secondDone := make(chan alarmLoadResult, 1)
 
 	go func() {
-		alarms, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_mixed_context", domain.AlarmTypeLive)
+		alarms, err := resolver.loadChannelSubscriberAlarms(t.Context(), "UC_mixed_context", domain.AlarmTypeLive)
 		secondDone <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
@@ -551,8 +556,10 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 	})
 
+	resolver := NewSubscriberResolver(nil, db)
+
 	hitBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("hit"))
-	_, err := ResolveChannelSubscribersByType(t.Context(), nil, db, "UC_metric", domain.AlarmTypeLive)
+	_, err := resolver.ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeLive)
 	require.NoError(t, err)
 
 	hitAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("hit"))
@@ -560,7 +567,7 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 
 	missBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("miss"))
 
-	_, err = ResolveChannelSubscribersByType(t.Context(), nil, db, "UC_metric", domain.AlarmTypeCommunity)
+	_, err = resolver.ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeCommunity)
 	require.NoError(t, err)
 
 	missAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("miss"))
@@ -568,7 +575,7 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 
 	errorBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("error"))
 
-	_, err = ResolveChannelSubscribersByType(t.Context(), nil, nil, "UC_metric", domain.AlarmTypeLive)
+	_, err = NewSubscriberResolver(nil, nil).ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeLive)
 	require.Error(t, err)
 
 	errorAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("error"))
@@ -591,12 +598,13 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 
 	start := make(chan struct{})
 	done := make(chan error, 2)
+	resolver := NewSubscriberResolver(nil, db)
 
 	for range 2 {
 		go func() {
 			<-start
 
-			_, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_shared_metric", domain.AlarmTypeLive)
+			_, err := resolver.loadChannelSubscriberAlarms(t.Context(), "UC_shared_metric", domain.AlarmTypeLive)
 			done <- err
 		}()
 	}
@@ -612,6 +620,80 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 
 	after := testutil.ToFloat64(alarmSubscriberDBSingleflightSharedTotal)
 	assert.Greater(t, after-before, float64(0))
+}
+
+// 서로 다른 DB(또는 트랜잭션)에 묶인 resolver는 같은 채널·종류를 동시에 조회해도 각자 조회하고 자기 결과만 받아야 한다.
+// 한 DB의 실패가 다른 DB 조회자에게 전달되거나 다른 DB 조회가 생략되면 안 된다.
+func TestSubscriberResolver_DistinctDatabasesNeverShareLoads(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		dbA := &releasedSubscriberQueryDB{err: errors.New("database A failed"), release: make(chan struct{})}
+		dbB := &releasedSubscriberQueryDB{err: errors.New("database B failed"), release: make(chan struct{})}
+		resolverA := NewSubscriberResolver(nil, dbA)
+		resolverB := NewSubscriberResolver(nil, dbB)
+
+		doneA := make(chan alarmLoadResult, 1)
+		doneB := make(chan alarmLoadResult, 1)
+
+		go func() {
+			alarms, err := resolverA.loadChannelSubscriberAlarms(t.Context(), "UC_shared_key", domain.AlarmTypeLive)
+			doneA <- alarmLoadResult{alarms: alarms, err: err}
+		}()
+		go func() {
+			alarms, err := resolverB.loadChannelSubscriberAlarms(t.Context(), "UC_shared_key", domain.AlarmTypeLive)
+			doneB <- alarmLoadResult{alarms: alarms, err: err}
+		}()
+
+		synctest.Wait()
+		assert.Equal(t, int32(1), dbA.calls.Load())
+		assert.Equal(t, int32(1), dbB.calls.Load(), "database B must run its own query while A is in flight")
+
+		close(dbA.release)
+		synctest.Wait()
+
+		resultA := <-doneA
+		require.ErrorIs(t, resultA.err, dbA.err)
+		require.NotErrorIs(t, resultA.err, dbB.err)
+
+		select {
+		case result := <-doneB:
+			t.Fatalf("database B caller finished with database A result: %+v", result)
+		default:
+		}
+
+		close(dbB.release)
+
+		resultB := <-doneB
+		require.ErrorIs(t, resultB.err, dbB.err)
+		require.NotErrorIs(t, resultB.err, dbA.err)
+	})
+}
+
+// releasedSubscriberQueryDB는 release가 닫힐 때까지 조회를 붙잡은 뒤 고유 오류를 돌려준다.
+type releasedSubscriberQueryDB struct {
+	err     error
+	release chan struct{}
+	calls   atomic.Int32
+}
+
+func (db *releasedSubscriberQueryDB) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
+	db.calls.Add(1)
+
+	select {
+	case <-db.release:
+		return nil, db.err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("released subscriber query: %w", ctx.Err())
+	}
+}
+
+func (*releasedSubscriberQueryDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	panic("unexpected subscriber query Exec")
+}
+
+func (*releasedSubscriberQueryDB) QueryRow(context.Context, string, ...any) pgx.Row {
+	panic("unexpected subscriber query QueryRow")
 }
 
 type alarmTargetLookupTestDB struct {

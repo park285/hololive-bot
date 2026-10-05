@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
@@ -17,7 +18,7 @@ import (
 
 func TestAPIRouterPasswordResetUnsupportedPreservesIPAllowlist(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	config := &settings.Config{
+	config := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey, AdminAllowedIPs: []string{"100.100.1.0/24"},
 		},

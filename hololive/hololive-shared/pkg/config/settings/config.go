@@ -28,128 +28,16 @@ import (
 	"time"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-type Config struct {
-	Iris         IrisConfig
-	InternalH3   sharedh3.ClientOptions
-	Server       ServerConfig
-	Kakao        KakaoConfig
-	Holodex      HolodexConfig
-	Ingestion    IngestionConfig
-	Valkey       ValkeyConfig
-	Postgres     PostgresConfig
-	Notification NotificationConfig
-	Logging      LoggingConfig
-	Tracing      TracingConfig
-	Bot          BotConfig
-	Services     ServicesConfig
-	Environment  string
-	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
-	SettingsFilePath     string
-	Webhook              WebhookConfig
-	WorkerPool           WorkerPoolConfig
-	APIWorkerProfile     *APIWorkerProfile
-	AlarmWorkerProfile   *AlarmWorkerProfile
-	CORS                 CORSConfig
-	Cliproxy             CliproxyConfig
-	LLM                  LLMConfig
-	Exa                  ExaConfig
-	OfficialSchedule     OfficialScheduleConfig
-	MaxResponseBodyBytes int64
-	LLMSchedulerURL      string
-	AlarmServiceURL      string
-	BotInternalURL       string
-	Version              string
-}
+// LoadIrisConfig는 Iris egress 클라이언트 입력(IRIS_*)을 읽는다. 필수 여부 판단은 runtime이
+// ValidateIrisEgressInputs로 결정한다.
+func LoadIrisConfig() (IrisConfig, error) {
+	webhookToken, botToken := LoadIrisTokens()
 
-// LoadOptions: plane 패키지가 core Config 로딩을 조립할 때 쓰는 hook이다.
-// Section은 role 전용 구획(worker profile 등)을 채우며 nil이면 건너뛴다.
-type LoadOptions struct {
-	Section            func(*Config) error
-	CORSDefaultEnforce bool
-	// TracingEnabledEnv: 이 런타임의 OTEL enable 토글 환경변수 이름이다.
-	TracingEnabledEnv string
-}
-
-func LoadAdminAPIRuntime() (*Config, error) {
-	out, err := LoadConfig((*Config).ValidateAdminAPIRuntime, LoadOptions{
-		CORSDefaultEnforce: true,
-		TracingEnabledEnv:  envload.TracingHololiveAPIEnabledEnv,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("load config validated: %w", err)
-	}
-
-	return out, nil
-}
-
-// LoadConfig: .env를 읽고 core Config를 만든 뒤 호출자가 준 검증을 적용한다.
-func LoadConfig(validate func(*Config) error, options LoadOptions) (*Config, error) {
-	if err := envload.DotEnv(); err != nil {
-		return nil, fmt.Errorf("load dot env: %w", err)
-	}
-
-	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := LoadRuntimeTokensAndCORS()
-
-	config, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction, options)
-	if err != nil {
-		return nil, fmt.Errorf("build config: %w", err)
-	}
-
-	if err := validate(config); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
-	}
-
-	return config, nil
-}
-
-func newKakaoConfig(rooms []string, enabled bool, mode string) KakaoConfig {
-	return KakaoConfig{Rooms: rooms, ACLEnabled: enabled, ACLMode: mode}
-}
-
-func loadIngestionConfig() (IngestionConfig, error) {
-	photoSyncEnabled, err := sharedenv.BoolE("PHOTO_SYNC_ENABLED", true)
-	if err != nil {
-		return IngestionConfig{}, fmt.Errorf("load ingestion config: %w", err)
-	}
-
-	return IngestionConfig{PhotoSyncEnabled: photoSyncEnabled}, nil
-}
-
-func loadCORSConfig(
-	corsAllowedOrigins []string,
-	corsMissingInProduction bool,
-	options LoadOptions,
-) (CORSConfig, error) {
-	enforce, err := sharedenv.BoolE("CORS_ENFORCE", options.CORSDefaultEnforce)
-	if err != nil {
-		return CORSConfig{}, fmt.Errorf("load CORS config: %w", err)
-	}
-
-	return CORSConfig{
-		AllowedOrigins:      corsAllowedOrigins,
-		Enforce:             enforce,
-		MissingInProduction: corsMissingInProduction,
-	}, nil
-}
-
-func loadServicesConfig() (ServicesConfig, error) {
-	if err := rejectRetiredServicesEnv(); err != nil {
-		return ServicesConfig{}, fmt.Errorf("reject retired services env: %w", err)
-	}
-
-	return ServicesConfig{
-		LLMSchedulerHealthURL:   sharedenv.String("SERVICES_LLM_SCHEDULER_HEALTH_URL", ""),
-		GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-		GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
-	}, nil
-}
-
-func loadIrisConfig(webhookToken, botToken string) (IrisConfig, error) {
 	var env envload.StrictEnv
 
 	config := IrisConfig{
@@ -169,7 +57,8 @@ func loadIrisConfig(webhookToken, botToken string) (IrisConfig, error) {
 	return config, nil
 }
 
-func loadKakaoConfig() (*KakaoConfig, error) {
+// LoadKakaoConfig는 room ACL 초기값을 읽는다. 반환값은 잠금을 포함하므로 호출자는 값 복사 없이 필드를 옮긴다.
+func LoadKakaoConfig() (*KakaoConfig, error) {
 	enabled, err := loadKakaoACLEnabled()
 	if err != nil {
 		return nil, fmt.Errorf("load kakao ACL enabled: %w", err)
@@ -182,7 +71,7 @@ func loadKakaoConfig() (*KakaoConfig, error) {
 
 	// KAKAO_ROOMS는 ACL 첫 초기화 seed이고 항목은 정확한 signed i64 chatID여야 한다(acl.NewACLService가 검증).
 	// 예전 방 이름 기본값은 chatID 단일 식별에서 어떤 방과도 매칭되지 않는 whitelist 행이 되므로 두지 않고,
-	// 값이 없으면 validate*RequiredConfig의 "KAKAO_ROOMS is required"로 기동을 거절한다
+	// 값이 없으면 ValidateKakaoRooms의 "KAKAO_ROOMS is required"로 기동을 거절한다
 	// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
 	return &KakaoConfig{
 		Rooms:      envload.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "")),
@@ -249,47 +138,8 @@ func LoadLoggingConfig() (LoggingConfig, error) {
 	return config, nil
 }
 
-const (
-	seeMoreFoldEnv     = "BOT_SEE_MORE_FOLD"
-	seeMoreFoldDefault = true
-)
-
-// LoadSeeMoreFold는 bot·llm plane이 공유하는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
-// 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다(PLN-20260926-stack-audit-refactoring T10).
-func LoadSeeMoreFold() (bool, error) {
-	var env envload.StrictEnv
-
-	fold := env.Bool(seeMoreFoldEnv, seeMoreFoldDefault)
-	if err := env.Err(); err != nil {
-		return false, fmt.Errorf("load see-more fold: %w", err)
-	}
-
-	return fold, nil
-}
-
-func loadBotConfig() (BotConfig, error) {
-	var env envload.StrictEnv
-
-	seeMoreFold, foldErr := LoadSeeMoreFold()
-
-	config := BotConfig{
-		Prefix:                sharedenv.String("BOT_PREFIX", "!"),
-		SelfUser:              sharedenv.String("BOT_SELF_USER", "iris"),
-		MentionPrefix:         sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
-		CalendarImageCacheDir: sharedenv.String("BOT_CALENDAR_IMAGE_CACHE_DIR", "data/calendar-cache"),
-		CalendarEntryCacheTTL: env.Seconds("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 24*time.Hour),
-		SeeMoreFold:           seeMoreFold,
-		MarkdownReplies:       env.Bool("BOT_MARKDOWN_REPLIES", false),
-	}
-
-	if err := errors.Join(env.Err(), foldErr); err != nil {
-		return BotConfig{}, fmt.Errorf("load bot config: %w", err)
-	}
-
-	return config, nil
-}
-
-func loadHolodexConfig() (HolodexConfig, error) {
+// LoadHolodexConfig는 Holodex 클라이언트 운영값을 읽는다. 범위 검증은 ValidateHolodexConfig가 소유한다.
+func LoadHolodexConfig() (HolodexConfig, error) {
 	apiKey, err := envload.HolodexAPIKey()
 	if err != nil {
 		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
@@ -331,6 +181,22 @@ func loadHolodexConfig() (HolodexConfig, error) {
 	return config, nil
 }
 
+// LoadOfficialScheduleRuntimeConfig는 공식 일정 클라이언트 설정과 응답 본문 상한(MAX_RESPONSE_BODY_BYTES)을 함께 읽는다.
+// 두 값의 오류는 합쳐서 돌려주며, 검증은 ValidateOfficialScheduleRuntimeConfig가 소유한다.
+func LoadOfficialScheduleRuntimeConfig() (OfficialScheduleRuntimeConfig, error) {
+	officialSchedule, officialScheduleErr := loadOfficialScheduleConfig()
+	maxResponseBodyBytes, maxResponseBodyBytesErr := loadMaxResponseBodyBytes()
+
+	if err := errors.Join(officialScheduleErr, maxResponseBodyBytesErr); err != nil {
+		return OfficialScheduleRuntimeConfig{}, err
+	}
+
+	return OfficialScheduleRuntimeConfig{
+		OfficialSchedule:     officialSchedule,
+		MaxResponseBodyBytes: maxResponseBodyBytes,
+	}, nil
+}
+
 func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 	if err := rejectRetiredOfficialScheduleEnv(); err != nil {
 		return OfficialScheduleConfig{}, fmt.Errorf("reject retired official schedule env: %w", err)
@@ -348,6 +214,85 @@ func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 
 	if err := env.Err(); err != nil {
 		return OfficialScheduleConfig{}, fmt.Errorf("load official schedule config: %w", err)
+	}
+
+	return config, nil
+}
+
+// LoadCORSConfig는 CORS 허용 origin과 강제 여부를 읽는다. DefaultEnforce는 CORS_ENFORCE가 없을 때의 runtime별 기본값이다.
+func LoadCORSConfig(defaultEnforce bool) (CORSConfig, error) {
+	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
+		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),
+		runtimepolicy.IsProduction(envload.AppEnvironment()),
+	)
+
+	enforce, err := sharedenv.BoolE("CORS_ENFORCE", defaultEnforce)
+	if err != nil {
+		return CORSConfig{}, fmt.Errorf("load CORS config: %w", err)
+	}
+
+	return CORSConfig{
+		AllowedOrigins:      corsAllowedOrigins,
+		Enforce:             enforce,
+		MissingInProduction: corsMissingInProduction,
+	}, nil
+}
+
+func LoadIngestionConfig() (IngestionConfig, error) {
+	photoSyncEnabled, err := sharedenv.BoolE("PHOTO_SYNC_ENABLED", true)
+	if err != nil {
+		return IngestionConfig{}, fmt.Errorf("load ingestion config: %w", err)
+	}
+
+	return IngestionConfig{PhotoSyncEnabled: photoSyncEnabled}, nil
+}
+
+// LoadServicesConfig는 운영 화면이 조회하는 외부 서비스 health URL을 읽는다.
+// 퇴역 SERVICES_* 키 거절은 RejectRetiredRuntimeEnv가 소유한다.
+func LoadServicesConfig() ServicesConfig {
+	return ServicesConfig{
+		LLMSchedulerHealthURL:   sharedenv.String("SERVICES_LLM_SCHEDULER_HEALTH_URL", ""),
+		GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
+		GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+	}
+}
+
+const (
+	seeMoreFoldEnv     = "BOT_SEE_MORE_FOLD"
+	seeMoreFoldDefault = true
+)
+
+// LoadSeeMoreFold는 bot·llm plane이 공유하는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
+// 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다(PLN-20260926-stack-audit-refactoring T10).
+func LoadSeeMoreFold() (bool, error) {
+	var env envload.StrictEnv
+
+	fold := env.Bool(seeMoreFoldEnv, seeMoreFoldDefault)
+	if err := env.Err(); err != nil {
+		return false, fmt.Errorf("load see-more fold: %w", err)
+	}
+
+	return fold, nil
+}
+
+// LoadBotConfig는 채팅 명령 표시 설정(BOT_*)을 읽고 잘못된 값 오류를 모두 합쳐 돌려준다.
+func LoadBotConfig() (BotConfig, error) {
+	var env envload.StrictEnv
+
+	seeMoreFold, foldErr := LoadSeeMoreFold()
+
+	config := BotConfig{
+		Prefix:                sharedenv.String("BOT_PREFIX", "!"),
+		SelfUser:              sharedenv.String("BOT_SELF_USER", "iris"),
+		MentionPrefix:         sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
+		CalendarImageCacheDir: sharedenv.String("BOT_CALENDAR_IMAGE_CACHE_DIR", "data/calendar-cache"),
+		CalendarEntryCacheTTL: env.Seconds("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 24*time.Hour),
+		SeeMoreFold:           seeMoreFold,
+		MarkdownReplies:       env.Bool("BOT_MARKDOWN_REPLIES", false),
+	}
+
+	if err := errors.Join(env.Err(), foldErr); err != nil {
+		return BotConfig{}, fmt.Errorf("load bot config: %w", err)
 	}
 
 	return config, nil

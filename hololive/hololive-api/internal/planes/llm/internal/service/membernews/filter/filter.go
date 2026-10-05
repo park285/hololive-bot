@@ -21,6 +21,8 @@
 package filter
 
 import (
+	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -41,16 +43,22 @@ type memberProfile struct {
 	tokens  []string
 }
 
+// FilterCandidates는 기간·멤버·출처 조건을 통과한 후보를 돌려준다. 멤버 데이터 조회 실패는 오류다.
 func FilterCandidates(
+	ctx context.Context,
 	candidates []model.Candidate,
 	period model.Period,
 	now time.Time,
 	roomMembers []string,
 	membersData domain.MemberDataProvider,
 	sourceValidator model.SourceURLValidator,
-) []model.FilteredCandidate {
+) ([]model.FilteredCandidate, error) {
 	periodCandidates := applyPeriodFilter(candidates, period, now)
-	profiles := buildMemberProfiles(roomMembers, membersData)
+
+	profiles, err := buildMemberProfiles(ctx, roomMembers, membersData)
+	if err != nil {
+		return nil, fmt.Errorf("build member profiles: %w", err)
+	}
 
 	result := make([]model.FilteredCandidate, 0, len(periodCandidates))
 	for i := range periodCandidates {
@@ -62,5 +70,5 @@ func FilterCandidates(
 
 	slices.SortStableFunc(result, compareFilteredCandidate)
 
-	return result
+	return result, nil
 }

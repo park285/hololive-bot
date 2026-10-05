@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
@@ -35,8 +34,8 @@ func TestConfigurePlanesRejectsInvalidEnvValues(t *testing.T) {
 			clearConfigurePlanesIntEnv(t)
 			t.Setenv(key, "four")
 
-			botConfig := &settings.Config{}
-			adminConfig := &settings.Config{}
+			botConfig := &BotPlaneConfig{}
+			adminConfig := &AdminPlaneConfig{}
 			llmConfig := &LLMSchedulerConfig{}
 
 			err := configurePlanes(botConfig, adminConfig, llmConfig)

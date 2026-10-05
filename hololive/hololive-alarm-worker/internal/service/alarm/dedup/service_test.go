@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"path"
 	"sync"
 	"testing"
 	"time"
@@ -114,25 +113,6 @@ func configureMockDedupKeyDeletion(client *cachemocks.Client, state *mockDedupCa
 		delete(state.strings, key)
 
 		return nil
-	}
-	client.ScanKeysFunc = func(_ context.Context, pattern string, _ int64) ([]string, error) {
-		state.mu.Lock()
-		defer state.mu.Unlock()
-
-		matches := make([]string, 0)
-
-		for key := range state.strings {
-			ok, err := path.Match(pattern, key)
-			if err != nil {
-				return nil, fmt.Errorf("match: %w", err)
-			}
-
-			if ok {
-				matches = append(matches, key)
-			}
-		}
-
-		return matches, nil
 	}
 }
 
@@ -388,30 +368,6 @@ func TestService_DetectScheduleChange(t *testing.T) {
 	message, err = service.DetectScheduleChange(t.Context(), streamID, start.Add(10*time.Second))
 	require.NoError(t, err)
 	assert.Empty(t, message, "분 단위가 같으면 변경으로 보지 않음")
-}
-
-func TestService_DetectNotificationScheduleChange_NoLegacyScanFallback(t *testing.T) {
-	cacheMock, _ := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	var scanCalls int
-
-	cacheMock.ScanKeysFunc = func(_ context.Context, _ string, _ int64) ([]string, error) {
-		scanCalls++
-		return nil, nil
-	}
-
-	currentScheduled := time.Date(2026, time.March, 4, 9, 45, 0, 0, time.UTC)
-	currentStream := &domain.Stream{
-		ID:             "new-waiting-room",
-		Title:          "same title",
-		StartScheduled: &currentScheduled,
-	}
-
-	change, err := service.DetectNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", currentStream)
-	require.NoError(t, err)
-	assert.Nil(t, change)
-	assert.Equal(t, 0, scanCalls, "DetectNotificationScheduleChange must not fall back to wildcard SCAN")
 }
 
 func TestService_DetectNotificationScheduleChange_LogicalWaitingRoomReplacement(t *testing.T) {

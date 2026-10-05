@@ -114,21 +114,17 @@ func loadPersistedOutboxSentState(
 	tx dbx.Querier,
 	inputs []persistedOutboxSentStateInput,
 ) ([]persistedOutboxSentStateRow, error) {
-	args := make([]any, 0, len(inputs)*2)
-
-	var values strings.Builder
-
-	appendValuesPlaceholders(&values, len(inputs), 2)
+	kinds := make([]string, len(inputs))
+	contentIDs := make([]string, len(inputs))
 
 	for i := range inputs {
-		args = append(args, inputs[i].Kind, inputs[i].ContentID)
+		kinds[i] = string(inputs[i].Kind)
+		contentIDs[i] = inputs[i].ContentID
 	}
 
 	var outboxRows []persistedOutboxSentStateRow
 
-	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", `
-		WITH input(kind, content_id) AS (
-			VALUES `+values.String()+mustSQL("repository_batch_persisted_state_0117_01.sql"), args...); err != nil {
+	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", mustSQL("repository_batch_persisted_state_0117_01.sql"), kinds, contentIDs); err != nil {
 		return nil, fmt.Errorf("query outbox rows: %w", err)
 	}
 
@@ -174,13 +170,7 @@ func mergePersistedDeliverySentState(
 
 	var deliveryRows []persistedDeliverySentStateRow
 
-	args := dbx.AnyArgs(outboxIDs)
-
-	args = append(args, domain.OutboxStatusSent)
-
-	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", mustSQL("repository_batch_persisted_state_0162_02.sql")+dbx.InPlaceholders(len(outboxIDs))+`)
-		  AND status = ?
-		  AND sent_at IS NOT NULL`, args...); err != nil {
+	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", mustSQL("repository_batch_persisted_state_0162_02.sql"), outboxIDs, domain.OutboxStatusSent); err != nil {
 		return fmt.Errorf("query sent delivery rows: %w", err)
 	}
 

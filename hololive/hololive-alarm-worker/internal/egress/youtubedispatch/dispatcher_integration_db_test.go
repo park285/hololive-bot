@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -47,7 +46,7 @@ func countDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, dest *int64, wher
 		query += " WHERE " + where
 	}
 
-	err := pool.QueryRow(context.Background(), dbx.PostgresPlaceholders(query), args...).Scan(dest)
+	err := pool.QueryRow(context.Background(), query, args...).Scan(dest)
 
 	return deliveryTestSQLResult{Error: err}
 }
@@ -55,7 +54,7 @@ func countDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, dest *int64, wher
 func execDeliveryTestSQL(tb testing.TB, pool *pgxpool.Pool, query string, args ...any) {
 	tb.Helper()
 
-	tag, err := pool.Exec(tb.Context(), dbx.PostgresPlaceholders(query), args...)
+	tag, err := pool.Exec(tb.Context(), query, args...)
 	require.NoError(tb, err)
 	require.GreaterOrEqual(tb, tag.RowsAffected(), int64(0))
 }
@@ -72,7 +71,7 @@ func deleteDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, where string, ar
 		query += " WHERE " + where
 	}
 
-	tag, err := pool.Exec(context.Background(), dbx.PostgresPlaceholders(query), args...)
+	tag, err := pool.Exec(context.Background(), query, args...)
 
 	return deliveryTestSQLResult{Error: err, RowsAffected: tag.RowsAffected()}
 }
@@ -87,7 +86,7 @@ func deleteDeliveryTestRows(tb testing.TB, pool *pgxpool.Pool, model any) {
 		return
 	}
 
-	result := deleteDeliveryTestRowsWhere(pool, model, "id = ?", id)
+	result := deleteDeliveryTestRowsWhere(pool, model, "id = $1", id)
 	require.NoError(tb, result.Error)
 }
 
@@ -107,7 +106,7 @@ func firstDeliveryIntegrationRow(ctx context.Context, pool *pgxpool.Pool, dest a
 
 			args = append(args, conds[1:]...)
 		default:
-			query += " WHERE id = ?"
+			query += " WHERE id = $1"
 
 			args = []any{cond}
 		}
@@ -115,7 +114,7 @@ func firstDeliveryIntegrationRow(ctx context.Context, pool *pgxpool.Pool, dest a
 
 	query += " LIMIT 1"
 
-	if err := pgxscan.Get(ctx, pool, dest, dbx.PostgresPlaceholders(query), args...); err != nil {
+	if err := pgxscan.Get(ctx, pool, dest, query, args...); err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
 
@@ -138,7 +137,7 @@ func findDeliveryIntegrationRows(ctx context.Context, pool *pgxpool.Pool, dest a
 		query += " ORDER BY " + order
 	}
 
-	if err := pgxscan.Select(ctx, pool, dest, dbx.PostgresPlaceholders(query), args...); err != nil {
+	if err := pgxscan.Select(ctx, pool, dest, query, args...); err != nil {
 		return fmt.Errorf("select: %w", err)
 	}
 

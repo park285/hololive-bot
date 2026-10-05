@@ -58,7 +58,10 @@ func batchUpsertVideos(ctx context.Context, tx dbx.Querier, videos []*domain.You
 
 func upsertVideosChunk(ctx context.Context, tx dbx.Querier, videos []*domain.YouTubeVideo) error {
 	now := time.Now()
-	args := make([]any, 0, len(videos)*12)
+
+	const columnsPerRow = 12
+
+	args := make([]any, 0, len(videos)*columnsPerRow)
 
 	var sb strings.Builder
 
@@ -71,7 +74,7 @@ func upsertVideosChunk(ctx context.Context, tx dbx.Querier, videos []*domain.You
 			sb.WriteByte(',')
 		}
 
-		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		writeRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(
 			args,
@@ -118,7 +121,10 @@ func batchUpsertCommunityPosts(ctx context.Context, tx dbx.Querier, posts []*dom
 
 func upsertCommunityPostsChunk(ctx context.Context, tx dbx.Querier, posts []*domain.YouTubeCommunityPost) error {
 	now := time.Now()
-	args := make([]any, 0, len(posts)*13)
+
+	const columnsPerRow = 13
+
+	args := make([]any, 0, len(posts)*columnsPerRow)
 
 	var sb strings.Builder
 
@@ -131,7 +137,7 @@ func upsertCommunityPostsChunk(ctx context.Context, tx dbx.Querier, posts []*dom
 			sb.WriteByte(',')
 		}
 
-		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		writeRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(
 			args,
@@ -229,7 +235,7 @@ func insertNotificationsSameKindChunk(ctx context.Context, tx dbx.Querier, notif
 		return nil
 	}
 
-	args := make([]any, 0, len(notifications)*8)
+	args := make([]any, 0, len(notifications)*notificationInsertColumns)
 
 	var sb strings.Builder
 
@@ -262,6 +268,8 @@ func notificationIdentityKey(kind domain.OutboxKind, contentID string) string {
 	return fmt.Sprintf("%s::%s", kind, strings.TrimSpace(contentID))
 }
 
+const notificationInsertColumns = 8
+
 func appendNotificationInsertArgs(
 	sb *strings.Builder,
 	args *[]any,
@@ -288,7 +296,7 @@ func appendNotificationInsertArgs(
 		createdAt = now
 	}
 
-	sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?)")
+	writeRowPlaceholders(sb, index, notificationInsertColumns)
 
 	*args = append(
 		*args,

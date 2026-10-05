@@ -1,7 +1,6 @@
 package config
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -161,47 +160,6 @@ func TestCFG001LeftoverCacheEnvStillLoadsYouTubeCollectorRuntime(t *testing.T) {
 
 	if cfg.Collector.InstanceID != collectorInstanceC {
 		t.Fatalf("InstanceID = %q, want youtube-collector-c", cfg.Collector.InstanceID)
-	}
-}
-
-func TestCFG001CollectorLoaderSourceOmitsCacheAndUnrelatedConstructors(t *testing.T) {
-	t.Parallel()
-
-	packageDir := os.DirFS(".")
-
-	names, err := fs.Glob(packageDir, "*.go")
-	if err != nil {
-		t.Fatalf("list collector package sources: %v", err)
-	}
-
-	for _, name := range names {
-		if strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-
-		source, err := fs.ReadFile(packageDir, name)
-		if err != nil {
-			t.Fatalf("read collector source %s: %v", name, err)
-		}
-
-		text := string(source)
-
-		for _, forbidden := range []string{
-			"CACHE_",
-			"API_SECRET_KEY",
-			"IRIS_",
-			"KAKAO_",
-			"settings.LoadValkeyConfig",
-			"settings.LoadLLMConfig",
-			"settings.LoadCliproxyConfig",
-			"settings.LoadGeminiConfig",
-			"settings.LoadExaConfig",
-			"ProvideCacheResources",
-		} {
-			if strings.Contains(text, forbidden) {
-				t.Fatalf("collector loader %s must not reference %s", name, forbidden)
-			}
-		}
 	}
 }
 

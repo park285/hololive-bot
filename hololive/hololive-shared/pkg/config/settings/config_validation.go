@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package settings
 
 import (
@@ -29,83 +9,67 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-func (c *Config) Validate() error {
-	if err := c.validateWithRequired(c.validateRequiredConfig); err != nil {
-		return fmt.Errorf("validate with required: %w", err)
-	}
-
-	return nil
-}
-
-// ValidateAdminAPIRuntime: admin-api는 compose 보안 계약상 nonEgress라
-// Iris egress 토큰을 받을 수 없으므로 IRIS·YouTube 필수 검증을 면제합니다.
-func (c *Config) ValidateAdminAPIRuntime() error {
-	if err := c.validateWithRequired(c.validateAdminAPIRequiredConfig); err != nil {
-		return fmt.Errorf("validate with required: %w", err)
-	}
-
-	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeAdminAPI, envload.TrimmedEnv(runtimepolicy.NotificationEgressRoleEnv), envload.TrimmedEnv(runtimepolicy.NotificationSchedulerRoleEnv)); err != nil {
-		return fmt.Errorf("validate no notification egress ownership: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Config) validateWithRequired(validateRequired func() error) error {
+// ValidateServerRuntime은 HTTP listener를 여는 runtime의 공통 기동 조건을 검사한다.
+// 미지원 legacy env 사용, listener 포트, H3 transport 입력, API 인증 키 순서로 첫 위반을 돌려준다.
+func ValidateServerRuntime(environment string, server *ServerConfig) error {
 	if err := envload.ValidateUnsupportedLegacyEnvUsage(); err != nil {
 		return fmt.Errorf("validate unsupported legacy env usage: %w", err)
 	}
 
-	if c.Server.Port == 0 {
+	if server == nil {
+		return errors.New("server config is required")
+	}
+
+	if server.Port == 0 {
 		return errors.New("SERVER_PORT is required")
 	}
 
-	if err := c.validateServerTransports(); err != nil {
+	if err := ValidateServerTransports(server); err != nil {
 		return fmt.Errorf("validate server transports: %w", err)
 	}
 
-	if err := runtimepolicy.ValidateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
+	if err := runtimepolicy.ValidateAPISecretKey(environment, server.APIKey); err != nil {
 		return fmt.Errorf("validate API secret key: %w", err)
 	}
 
-	if err := validateRequired(); err != nil {
-		return fmt.Errorf("validate required: %w", err)
-	}
+	return nil
+}
 
-	if err := runtimepolicy.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
-		return fmt.Errorf("validate postgres SSL mode: %w", err)
-	}
-
-	if err := c.validateRuntimeConfigs(); err != nil {
-		return fmt.Errorf("validate runtime configs: %w", err)
+// ValidateKakaoRooms는 room ACL seed가 비어 있는 기동을 거절한다.
+func ValidateKakaoRooms(rooms []string) error {
+	if len(rooms) == 0 {
+		return errors.New("KAKAO_ROOMS is required")
 	}
 
 	return nil
 }
 
-func (c *Config) validateRuntimeConfigs() error {
-	if err := ValidateTracingConfig(c.Tracing); err != nil {
-		return fmt.Errorf("validate tracing config: %w", err)
+// ValidateIrisEgressInputs는 Iris로 직접 발송하는 runtime이 webhook·bot 토큰과 base URL 원천을 모두 받았는지 검사한다.
+func ValidateIrisEgressInputs(iris *IrisConfig) error {
+	if iris == nil {
+		return errors.New("iris config is required")
 	}
 
-	if err := validateHolodexConfig(&c.Holodex); err != nil {
-		return fmt.Errorf("validate holodex config: %w", err)
+	if strings.TrimSpace(iris.WebhookToken) == "" {
+		return errors.New("IRIS_WEBHOOK_TOKEN is required")
 	}
 
-	if err := validateOfficialScheduleConfig(&c.OfficialSchedule, c.MaxResponseBodyBytes); err != nil {
-		return fmt.Errorf("validate official schedule config: %w", err)
+	if strings.TrimSpace(iris.BotToken) == "" {
+		return errors.New("IRIS_BOT_TOKEN is required")
 	}
 
-	if err := validateCORSConfig(c.Environment, c.CORS); err != nil {
-		return fmt.Errorf("validate CORS config: %w", err)
+	if strings.TrimSpace(iris.BaseURL) == "" && strings.TrimSpace(iris.BaseURLFile) == "" {
+		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
 	return nil
 }
 
-func validateHolodexConfig(config *HolodexConfig) error {
+// ValidateHolodexConfig는 Holodex 요청 시간·수·간격 설정을 검사한다. API 키 필수 여부는 runtime이
+// runtimepolicy.ValidateHolodexAPIKey로 따로 결정한다.
+func ValidateHolodexConfig(config *HolodexConfig) error {
 	if config == nil {
-		return nil
+		return errors.New("holodex config is required")
 	}
 
 	if err := runtimepolicy.ValidateHolodexTimeout(config.Timeout); err != nil {
@@ -119,67 +83,29 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	return nil
 }
 
-func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseBodyBytes int64) error {
-	if config == nil {
-		return errors.New("official schedule config is required")
-	}
-
-	if err := runtimepolicy.ValidateOfficialScheduleBaseURL(config.BaseURL); err != nil {
+// ValidateOfficialScheduleRuntimeConfig는 공식 일정 클라이언트 설정과 응답 본문 상한을 검사한다.
+func ValidateOfficialScheduleRuntimeConfig(config OfficialScheduleRuntimeConfig) error {
+	if err := runtimepolicy.ValidateOfficialScheduleBaseURL(config.OfficialSchedule.BaseURL); err != nil {
 		return fmt.Errorf("validate official schedule base URL: %w", err)
 	}
 
-	if err := runtimepolicy.ValidateOfficialScheduleTimeout(config.Timeout); err != nil {
+	if err := runtimepolicy.ValidateOfficialScheduleTimeout(config.OfficialSchedule.Timeout); err != nil {
 		return fmt.Errorf("validate official schedule timeout: %w", err)
 	}
 
-	if config.PageCacheTTL < 0 {
+	if config.OfficialSchedule.PageCacheTTL < 0 {
 		return errors.New("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS must be >= 0")
 	}
 
-	if maxResponseBodyBytes <= 0 {
+	if config.MaxResponseBodyBytes <= 0 {
 		return errors.New("MAX_RESPONSE_BODY_BYTES must be positive")
 	}
 
 	return nil
 }
 
-func (c *Config) validateAdminAPIRequiredConfig() error {
-	if len(c.Kakao.Rooms) == 0 {
-		return errors.New("KAKAO_ROOMS is required")
-	}
-
-	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
-		return fmt.Errorf("validate holodex API key: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Config) validateRequiredConfig() error {
-	if len(c.Kakao.Rooms) == 0 {
-		return errors.New("KAKAO_ROOMS is required")
-	}
-
-	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
-		return errors.New("IRIS_WEBHOOK_TOKEN is required")
-	}
-
-	if strings.TrimSpace(c.Iris.BotToken) == "" {
-		return errors.New("IRIS_BOT_TOKEN is required")
-	}
-
-	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
-		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
-	}
-
-	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
-		return fmt.Errorf("validate holodex API key: %w", err)
-	}
-
-	return nil
-}
-
-func validateCORSConfig(environment string, config CORSConfig) error {
+// ValidateCORSConfig는 production에서 CORS를 강제하면서 허용 origin이 하나도 없는 설정을 거절한다.
+func ValidateCORSConfig(environment string, config CORSConfig) error {
 	if runtimepolicy.IsProduction(environment) && config.Enforce && len(config.AllowedOrigins) == 0 {
 		return errors.New("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}

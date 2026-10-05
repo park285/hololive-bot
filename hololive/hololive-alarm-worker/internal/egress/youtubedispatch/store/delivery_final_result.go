@@ -60,17 +60,8 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	var outboxes []domain.YouTubeNotificationOutbox
 
-	if err := dbx.SelectSQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", mustSQL("delivery_final_result_0060_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
-		  AND `+deliverysql.DeliveryInClause("kind", len(postKinds))+`
-		  AND `+deliverysql.DeliveryInClause("status", len(terminalStatuses))+`
-		ORDER BY id ASC
-	`, deliverysql.AppendDeliveryOutboxStatusArgs(
-		deliverysql.AppendDeliveryOutboxKindArgs(
-			dbx.AnyArgs(uniqueIDs),
-			postKinds...,
-		),
-		terminalStatuses...,
-	)...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", mustSQL("delivery_final_result_0060_01.sql"),
+		uniqueIDs, deliverysql.Texts(postKinds), deliverysql.Texts(terminalStatuses)); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts outboxes: %w", err)
 	}
 
@@ -82,9 +73,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	var deliveries []domain.YouTubeNotificationDelivery
 
-	if err := dbx.SelectSQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(outboxResultIDs))+`
-		ORDER BY outbox_id ASC, id ASC
-	`, dbx.AnyArgs(outboxResultIDs)...); err != nil {
+	if err := dbx.SelectSQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql"), outboxResultIDs); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts deliveries: %w", err)
 	}
 

@@ -266,8 +266,7 @@ func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (m
 
 	var rows []domain.YouTubeNotificationOutbox
 
-	if err := dbx.SelectSQL(ctx, d.db, &rows, "load outbox rows by ids", mustSQL("dispatcher_claim_0370_02.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
-	`, dbx.AnyArgs(uniqueIDs)...); err != nil {
+	if err := dbx.SelectSQL(ctx, d.db, &rows, "load outbox rows by ids", mustSQL("dispatcher_claim_0370_02.sql"), uniqueIDs); err != nil {
 		return nil, fmt.Errorf("load outbox rows by ids: %w", err)
 	}
 

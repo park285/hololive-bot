@@ -75,44 +75,52 @@ func newTrackingMemberProvider(members []*domain.Member) *trackingMemberProvider
 	}
 }
 
-func (p *trackingMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
+func (p *trackingMemberProvider) record(ctx context.Context) {
+	*p.ctxCalls = append(*p.ctxCalls, ctx)
+}
+
+func (p *trackingMemberProvider) FindMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
+	p.record(ctx)
+
 	p.channelIDs = append(p.channelIDs, channelID)
-	return p.member
+
+	return p.member, nil
 }
 
-func (p *trackingMemberProvider) FindMemberByName(string) *domain.Member {
-	return p.member
+func (p *trackingMemberProvider) FindMemberByName(ctx context.Context, _ string) (*domain.Member, error) {
+	p.record(ctx)
+
+	return p.member, nil
 }
 
-func (p *trackingMemberProvider) FindMemberByAlias(string) *domain.Member {
-	return p.member
+func (p *trackingMemberProvider) FindMemberByAlias(ctx context.Context, _ string) (*domain.Member, error) {
+	p.record(ctx)
+
+	return p.member, nil
 }
 
-func (p *trackingMemberProvider) GetChannelIDs() []string {
-	return nil
+func (p *trackingMemberProvider) GetChannelIDs(ctx context.Context) ([]string, error) {
+	p.record(ctx)
+
+	return []string{}, nil
 }
 
-func (p *trackingMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+func (p *trackingMemberProvider) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
+	p.record(ctx)
+
 	return p.members, nil
 }
 
-func (p *trackingMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
-	*p.ctxCalls = append(*p.ctxCalls, ctx)
+func (p *trackingMemberProvider) FindMembersByName(ctx context.Context, _ string) ([]*domain.Member, error) {
+	p.record(ctx)
 
-	return &trackingMemberProvider{
-		members:    p.members,
-		member:     p.member,
-		ctxCalls:   p.ctxCalls,
-		channelIDs: p.channelIDs,
-	}
+	return []*domain.Member{}, nil
 }
 
-func (p *trackingMemberProvider) FindMembersByName(string) []*domain.Member {
-	return nil
-}
+func (p *trackingMemberProvider) FindMembersByAlias(ctx context.Context, _ string) ([]*domain.Member, error) {
+	p.record(ctx)
 
-func (p *trackingMemberProvider) FindMembersByAlias(string) []*domain.Member {
-	return nil
+	return []*domain.Member{}, nil
 }
 
 type errorAwareMemberProvider struct {
@@ -133,17 +141,13 @@ func newErrorAwareMemberProvider(members []*domain.Member, failLoads int, loadEr
 	}
 }
 
-func (p *errorAwareMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+func (p *errorAwareMemberProvider) LoadAllMembers(context.Context) ([]*domain.Member, error) {
 	p.loadCalls++
 	if p.loadCalls <= p.failLoads {
 		return nil, p.loadErr
 	}
 
 	return p.members, nil
-}
-
-func (p *errorAwareMemberProvider) WithContext(context.Context) domain.MemberDataProvider {
-	return p
 }
 
 func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
@@ -154,10 +158,40 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 	matcher := NewMatcher(provider, nil, newMatcherTestLogger())
 	reqCtx := context.WithValue(t.Context(), matcherTestContextKey{}, "request")
 
-	member := matcher.GetMemberByChannelID(reqCtx, testChannelID1)
+	member, err := matcher.GetMemberByChannelID(reqCtx, testChannelID1)
+	require.NoError(t, err)
 	require.NotNil(t, member)
 	require.NotEmpty(t, *provider.ctxCalls)
 	assert.Equal(t, reqCtx, (*provider.ctxCalls)[len(*provider.ctxCalls)-1])
+}
+
+// 채널 대표 조회는 미존재와 원천 실패를 구분해 돌려준다.
+func TestGetMemberByChannelID_SeparatesNotFoundFromFailure(t *testing.T) {
+	t.Parallel()
+
+	matcher := NewMatcher(newStubMemberProvider(nil), nil, newMatcherTestLogger())
+
+	if _, err := matcher.GetMemberByChannelID(t.Context(), "missing"); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("missing channel error = %v, want domain.ErrMemberNotFound", err)
+	}
+
+	cause := errors.New("member cache unavailable")
+	failing := NewMatcher(&channelFailureProvider{stubMemberProvider: newStubMemberProvider(nil), err: cause}, nil, newMatcherTestLogger())
+
+	_, err := failing.GetMemberByChannelID(t.Context(), "any")
+	if !errors.Is(err, cause) || errors.Is(err, domain.ErrMemberNotFound) {
+		t.Fatalf("failing lookup error = %v, want backend cause", err)
+	}
+}
+
+type channelFailureProvider struct {
+	*stubMemberProvider
+
+	err error
+}
+
+func (p *channelFailureProvider) FindMemberByChannelID(context.Context, string) (*domain.Member, error) {
+	return nil, p.err
 }
 
 func TestFinalizeCandidate_EmptyChannelID(t *testing.T) {

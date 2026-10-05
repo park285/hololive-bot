@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-api/internal/apifoundation"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	botroomsclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms"
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
@@ -19,7 +20,6 @@ import (
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	"github.com/kapu/hololive-shared/pkg/repository"
@@ -80,7 +80,7 @@ func buildAdminHandler(
 // buildAdminAPIBotRoomLister는 bot 내부 URL이 설정된 경우에만 joined-rooms client를 만든다. 설정된 URL로 client를
 // 만들지 못하면(허용되지 않은 URL, HOLOLIVE_INTERNAL_H3_* 누락 포함) 경고 뒤 endpoint를 끄지 않고 오류로 기동을
 // 실패시킨다(stack audit 2026-09-26).
-func buildAdminAPIBotRoomLister(appConfig *settings.Config, logger *slog.Logger) (server.IrisRoomLister, error) {
+func buildAdminAPIBotRoomLister(appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger) (server.IrisRoomLister, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -118,7 +118,7 @@ func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.L
 
 func buildAdminAPIRouter(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	infra *sharedmodules.InfraModule,
 	authService *authsvc.Service,
 	handler *server.Handler,

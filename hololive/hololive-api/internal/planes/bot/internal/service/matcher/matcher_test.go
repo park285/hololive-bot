@@ -75,41 +75,45 @@ func newStubMemberProvider(members []*domain.Member) *stubMemberProvider {
 	}
 }
 
-func (p *stubMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
-	return p.byChannel[channelID]
+func foundOrNotFound(member *domain.Member) (*domain.Member, error) {
+	if member == nil {
+		return nil, domain.ErrMemberNotFound
+	}
+
+	return member, nil
 }
 
-func (p *stubMemberProvider) FindMemberByName(name string) *domain.Member {
-	return p.byName[name]
+func (p *stubMemberProvider) FindMemberByChannelID(_ context.Context, channelID string) (*domain.Member, error) {
+	return foundOrNotFound(p.byChannel[channelID])
 }
 
-func (p *stubMemberProvider) FindMemberByAlias(alias string) *domain.Member {
-	return p.byAlias[alias]
+func (p *stubMemberProvider) FindMemberByName(_ context.Context, name string) (*domain.Member, error) {
+	return foundOrNotFound(p.byName[name])
 }
 
-func (p *stubMemberProvider) GetChannelIDs() []string {
+func (p *stubMemberProvider) FindMemberByAlias(_ context.Context, alias string) (*domain.Member, error) {
+	return foundOrNotFound(p.byAlias[alias])
+}
+
+func (p *stubMemberProvider) GetChannelIDs(context.Context) ([]string, error) {
 	ids := make([]string, 0, len(p.byChannel))
 	for id := range p.byChannel {
 		ids = append(ids, id)
 	}
 
-	return ids
+	return ids, nil
 }
 
-func (p *stubMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+func (p *stubMemberProvider) LoadAllMembers(context.Context) ([]*domain.Member, error) {
 	return p.members, nil
 }
 
-func (p *stubMemberProvider) WithContext(_ context.Context) domain.MemberDataProvider {
-	return p
+func (p *stubMemberProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
 }
 
-func (p *stubMemberProvider) FindMembersByName(_ string) []*domain.Member {
-	return nil
-}
-
-func (p *stubMemberProvider) FindMembersByAlias(_ string) []*domain.Member {
-	return nil
+func (p *stubMemberProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
 }
 
 func TestCandidateFromMember(t *testing.T) {

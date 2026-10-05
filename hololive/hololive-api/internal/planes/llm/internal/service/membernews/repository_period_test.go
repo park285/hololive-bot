@@ -78,14 +78,14 @@ func TestPeriodCandidateSQLPreservesDatesValuesOrderAndFallback(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			want := filter.FilterCandidates(all, period, now, []string{"미코"}, nil, nil)
-			got := filter.FilterCandidates(selected, period, now, []string{"미코"}, nil, nil)
+			want := filterMikoCandidates(t, all, period, now)
+			got := filterMikoCandidates(t, selected, period, now)
 
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("timezone=%s period=%s values/order differ\ngot=%#v\nwant=%#v", timezone, period, got, want)
 			}
 
-			prepared := filter.PrepareCandidates(selected, period, now).Filter([]string{"미코"}, nil, nil)
+			prepared := filterPreparedMiko(t, filter.PrepareCandidates(selected, period, now))
 			if !reflect.DeepEqual(prepared, want) {
 				t.Fatalf("timezone=%s period=%s prepared values/order differ", timezone, period)
 			}
@@ -139,7 +139,9 @@ func candidateStringsSize(candidates []model.Candidate) int {
 
 func candidateQueryIteration(ctx context.Context, repository *Repository, now time.Time, prepared *filter.PreparedCandidates, variant string) candidateQueryCost {
 	if prepared != nil {
-		return candidateQueryCost{final: len(prepared.Filter([]string{"미코"}, nil, nil))}
+		filtered, err := prepared.Filter(ctx, []string{"미코"}, nil, nil)
+
+		return candidateQueryCost{final: len(filtered), err: err}
 	}
 
 	var (
@@ -157,7 +159,32 @@ func candidateQueryIteration(ctx context.Context, repository *Repository, now ti
 		return candidateQueryCost{err: err}
 	}
 
-	return candidateQueryCost{rows: len(candidates), bytes: candidateStringsSize(candidates), final: len(filter.FilterCandidates(candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil))}
+	filtered, err := filter.FilterCandidates(ctx, candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
+
+	return candidateQueryCost{rows: len(candidates), bytes: candidateStringsSize(candidates), final: len(filtered), err: err}
+}
+
+// filterMikoCandidates와 filterPreparedMiko는 멤버 데이터 없이 "미코" 방 기준으로 후보를 고른다.
+func filterMikoCandidates(tb testing.TB, candidates []model.Candidate, period model.Period, now time.Time) []model.FilteredCandidate {
+	tb.Helper()
+
+	filtered, err := filter.FilterCandidates(tb.Context(), candidates, period, now, []string{"미코"}, nil, nil)
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	return filtered
+}
+
+func filterPreparedMiko(tb testing.TB, prepared *filter.PreparedCandidates) []model.FilteredCandidate {
+	tb.Helper()
+
+	filtered, err := prepared.Filter(tb.Context(), []string{"미코"}, nil, nil)
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	return filtered
 }
 
 func updateConcurrencyPeak(peak *atomic.Int32, current int32) {
@@ -321,9 +348,9 @@ func assertMatrixCandidateEquivalence(tb testing.TB, repository *Repository, now
 		tb.Fatal(err)
 	}
 
-	want := filter.FilterCandidates(all, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
-	got := filter.FilterCandidates(selected, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
-	prepared := filter.PrepareCandidates(selected, model.PeriodWeekly, now).Filter([]string{"미코"}, nil, nil)
+	want := filterMikoCandidates(tb, all, model.PeriodWeekly, now)
+	got := filterMikoCandidates(tb, selected, model.PeriodWeekly, now)
+	prepared := filterPreparedMiko(tb, filter.PrepareCandidates(selected, model.PeriodWeekly, now))
 
 	if !reflect.DeepEqual(want, got) || !reflect.DeepEqual(want, prepared) {
 		tb.Fatal("matrix full/period/prepared full values or order differ")
@@ -403,8 +430,8 @@ func TestPeriodCandidateSQLPreservesFullFiniteDateRangeAndPriority(t *testing.T)
 			t.Fatalf("period finite date scan: %v", err)
 		}
 
-		want := filter.FilterCandidates(all, period, now, []string{"미코"}, nil, nil)
-		got := filter.FilterCandidates(selected, period, now, []string{"미코"}, nil, nil)
+		want := filterMikoCandidates(t, all, period, now)
+		got := filterMikoCandidates(t, selected, period, now)
 
 		if !reflect.DeepEqual(want, got) {
 			t.Fatalf("period=%s full values/order differ", period)

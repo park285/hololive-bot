@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"slices"
@@ -16,9 +17,14 @@ import (
 )
 
 // 최적화 이전의 eager 정규화 결과를 독립적으로 계산하여 값과 stable 순서를 비교한다.
-func eagerFilterCandidates(candidates []model.Candidate, period model.Period, now time.Time, roomMembers []string, membersData domain.MemberDataProvider, validator model.SourceURLValidator) []model.FilteredCandidate {
+func eagerFilterCandidates(ctx context.Context, candidates []model.Candidate, period model.Period, now time.Time, roomMembers []string, membersData domain.MemberDataProvider, validator model.SourceURLValidator) ([]model.FilteredCandidate, error) {
 	dated := applyPeriodFilter(candidates, period, now)
-	profiles := buildMemberProfiles(roomMembers, membersData)
+
+	profiles, err := buildMemberProfiles(ctx, roomMembers, membersData)
+	if err != nil {
+		return nil, err
+	}
+
 	result := make([]model.FilteredCandidate, 0, len(dated))
 
 	for i := range dated {
@@ -52,7 +58,7 @@ func eagerFilterCandidates(candidates []model.Candidate, period model.Period, no
 
 	slices.SortStableFunc(result, compareFilteredCandidate)
 
-	return result
+	return result, nil
 }
 
 func performanceFilterFixture(count, descriptionRepeats int, now time.Time) []model.Candidate {
@@ -104,15 +110,15 @@ func TestPreparedCandidatesPreserveFullValuesAndOrder(t *testing.T) {
 		for _, members := range [][]string{{"미코"}, {"사쿠라 미코", "아쿠아"}, {"미코", "사쿠라미코", "미코"}, {"未知", " "}, nil} {
 			for _, data := range []domain.MemberDataProvider{nil, provider} {
 				for _, validator := range []model.SourceURLValidator{nil, &testSourceValidator{}} {
-					want := eagerFilterCandidates(cs, period, now, members, data, validator)
-					got := prepared.Filter(members, data, validator)
+					want, wantErr := eagerFilterCandidates(t.Context(), cs, period, now, members, data, validator)
+					got, gotErr := prepared.Filter(t.Context(), members, data, validator)
 
-					if !reflect.DeepEqual(want, got) {
+					if wantErr != nil || gotErr != nil || !reflect.DeepEqual(want, got) {
 						t.Fatalf("전체값 또는 순서 불일치 period=%s members=%v provider=%t validator=%t", period, members, data != nil, validator != nil)
 					}
 
-					lazy := FilterCandidates(cs, period, now, members, data, validator)
-					if !reflect.DeepEqual(want, lazy) {
+					lazy, lazyErr := FilterCandidates(t.Context(), cs, period, now, members, data, validator)
+					if lazyErr != nil || !reflect.DeepEqual(want, lazy) {
 						t.Fatalf("lazy 전체값 또는 순서 불일치 period=%s members=%v provider=%t validator=%t", period, members, data != nil, validator != nil)
 					}
 
@@ -154,8 +160,8 @@ func TestPreparedCandidatesOwnInputAndRoomOutput(t *testing.T) {
 	for range 5 {
 		wg.Go(func() {
 			for range 10 {
-				got := prepared.Filter([]string{"미코", "본문으로만 찾는 멤버"}, nil, nil)
-				if len(got) != 2 || got[0].Candidate.Members[0] != "미코" || !got[0].Candidate.PubDate.Equal(now) {
+				got, err := prepared.Filter(t.Context(), []string{"미코", "본문으로만 찾는 멤버"}, nil, nil)
+				if err != nil || len(got) != 2 || got[0].Candidate.Members[0] != "미코" || !got[0].Candidate.PubDate.Equal(now) {
 					t.Errorf("shared candidate changed: %#v", got)
 
 					return
@@ -180,14 +186,14 @@ func benchmarkMetadataBatch(b *testing.B, candidates []model.Candidate, now time
 		prepared = PrepareCandidates(candidates, model.PeriodWeekly, now)
 	}
 
-	run := func() []model.FilteredCandidate {
+	run := func() ([]model.FilteredCandidate, error) {
 		switch variant {
 		case "prepared":
-			return prepared.Filter([]string{"미코"}, nil, nil)
+			return prepared.Filter(b.Context(), []string{"미코"}, nil, nil)
 		case "lazy":
-			return FilterCandidates(candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
+			return FilterCandidates(b.Context(), candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
 		default:
-			return eagerFilterCandidates(candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
+			return eagerFilterCandidates(b.Context(), candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
 		}
 	}
 
@@ -196,8 +202,8 @@ func benchmarkMetadataBatch(b *testing.B, candidates []model.Candidate, now time
 	for range 5 {
 		wg.Go(func() {
 			for range 4 {
-				if got := run(); len(got) != 1000 {
-					b.Errorf("candidate count=%d", len(got))
+				if got, err := run(); err != nil || len(got) != 1000 {
+					b.Errorf("candidate count=%d err=%v", len(got), err)
 				}
 			}
 		})
@@ -226,13 +232,13 @@ func TestPreparedCandidatesObserveAliasProfileForEachRoom(t *testing.T) {
 	prepared := PrepareCandidates(performanceFilterFixture(1, 4, now), model.PeriodWeekly, now)
 	member := &domain.Member{NameKo: "이전 이름", Aliases: &domain.Aliases{Ko: []string{"미코"}}}
 	provider := &mockMemberDataForFilter{byAlias: map[string]*domain.Member{"미코": member}}
-	first := prepared.Filter([]string{"미코"}, provider, nil)
+	first, firstErr := prepared.Filter(t.Context(), []string{"미코"}, provider, nil)
 
 	member.NameKo = "다음 이름"
 
-	second := prepared.Filter([]string{"미코"}, provider, nil)
+	second, secondErr := prepared.Filter(t.Context(), []string{"미코"}, provider, nil)
 
-	if len(first) != 1 || len(second) != 1 || first[0].MemberText != "이전 이름" || second[0].MemberText != "다음 이름" {
+	if firstErr != nil || secondErr != nil || len(first) != 1 || len(second) != 1 || first[0].MemberText != "이전 이름" || second[0].MemberText != "다음 이름" {
 		t.Fatalf("profiles were frozen: first=%v second=%v", first, second)
 	}
 }

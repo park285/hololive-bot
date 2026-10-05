@@ -11,6 +11,7 @@ check_no_imports() {
   local label="$1"
   local path="$2"
   local pattern="$3"
+  shift 3
   local hits
 
   if [[ ! -d "${ROOT_DIR}/${path}" ]]; then
@@ -19,7 +20,7 @@ check_no_imports() {
     return
   fi
 
-  hits="$(rg -n "${pattern}" "${ROOT_DIR}/${path}" -g '*.go' || true)"
+  hits="$(rg -n "${pattern}" "${ROOT_DIR}/${path}" -g '*.go' "$@" || true)"
   if [[ -n "${hits}" ]]; then
     echo "[FAIL] forbidden imports in ${label}"
     echo "${hits}"
@@ -41,6 +42,16 @@ check_no_imports "youtube-collector direct YouTube dispatch" \
 check_no_imports "youtube-collector write-capable alarm repository" \
   "hololive/hololive-youtube-collector" \
   'hololive-shared/pkg/service/alarm"|alarm\.NewRepository'
+
+# API process와 저장 template 실행기는 native process/plugin 실행 권한을 갖지 않는다.
+# 종전 settings 테스트의 import 정책을 같은 경계 gate에서 유지하며 테스트 도구는 제외한다.
+check_no_imports "hololive-api native execution capability" \
+  "hololive/hololive-api" \
+  '"(os/exec|plugin)"' -g '!**/*_test.go'
+
+check_no_imports "shared template native execution capability" \
+  "hololive/hololive-shared/pkg/service/template" \
+  '"(os/exec|plugin)"' -g '!**/*_test.go'
 
 major_event_hits="$(
   rg -n 'majorevent.*repository|repository.*majorevent' \

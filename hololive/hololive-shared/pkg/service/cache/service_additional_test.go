@@ -22,6 +22,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCacheServiceScanKeysAdditional(t *testing.T) {
+func TestCacheServiceScanKeyPagesAdditional(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -67,12 +68,43 @@ func TestCacheServiceScanKeysAdditional(t *testing.T) {
 				require.NoError(t, service.Set(ctx, key, testPayload{Name: key}, 0))
 			}
 
-			got, err := service.ScanKeys(ctx, tt.pattern, 2)
+			var got []string
+
+			err := service.ScanKeyPages(ctx, tt.pattern, 2, func(keys []string) error {
+				require.NotEmpty(t, keys, "empty SCAN pages must not reach visit")
+
+				got = append(got, keys...)
+
+				return nil
+			})
 
 			require.NoError(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
+}
+
+func TestCacheServiceScanKeyPagesStopsOnVisitError(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newTestCacheService(t)
+	ctx := t.Context()
+
+	for i := range 10 {
+		require.NoError(t, service.Set(ctx, fmt.Sprintf("scan:stop:%d", i), testPayload{Name: "stop"}, 0))
+	}
+
+	visitErr := errors.New("stop scan")
+	visits := 0
+
+	err := service.ScanKeyPages(ctx, "scan:stop:*", 1, func([]string) error {
+		visits++
+
+		return visitErr
+	})
+
+	require.ErrorIs(t, err, visitErr)
+	assert.Equal(t, 1, visits, "a visit error must stop the scan before the next page")
 }
 
 func TestCacheServiceDelManyAdditional(t *testing.T) {

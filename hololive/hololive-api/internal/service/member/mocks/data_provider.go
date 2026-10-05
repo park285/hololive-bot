@@ -26,79 +26,72 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// DataProvider는 domain.MemberDataProvider 테스트 대역이다. 함수를 지정하지 않은 단건 조회는 미존재
+// (domain.ErrMemberNotFound), 목록 조회는 빈 결과다.
 type DataProvider struct {
-	FindMemberByChannelIDFunc func(channelID string) *domain.Member
-	FindMemberByNameFunc      func(name string) *domain.Member
-	FindMemberByAliasFunc     func(alias string) *domain.Member
-	GetChannelIDsFunc         func() []string
-	LoadAllMembersFunc        func() ([]*domain.Member, error)
-	WithContextFunc           func(ctx context.Context) domain.MemberDataProvider
-	FindMembersByNameFunc     func(name string) []*domain.Member
-	FindMembersByAliasFunc    func(alias string) []*domain.Member
+	FindMemberByChannelIDFunc func(ctx context.Context, channelID string) (*domain.Member, error)
+	FindMemberByNameFunc      func(ctx context.Context, name string) (*domain.Member, error)
+	FindMemberByAliasFunc     func(ctx context.Context, alias string) (*domain.Member, error)
+	GetChannelIDsFunc         func(ctx context.Context) ([]string, error)
+	LoadAllMembersFunc        func(ctx context.Context) ([]*domain.Member, error)
+	FindMembersByNameFunc     func(ctx context.Context, name string) ([]*domain.Member, error)
+	FindMembersByAliasFunc    func(ctx context.Context, alias string) ([]*domain.Member, error)
 }
 
 var _ domain.MemberDataProvider = (*DataProvider)(nil)
 
-func (m *DataProvider) FindMemberByChannelID(channelID string) *domain.Member {
+func (m *DataProvider) FindMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	if m.FindMemberByChannelIDFunc != nil {
-		return m.FindMemberByChannelIDFunc(channelID)
+		return m.FindMemberByChannelIDFunc(ctx, channelID)
 	}
 
-	return nil
+	return nil, domain.ErrMemberNotFound
 }
 
-func (m *DataProvider) FindMemberByName(name string) *domain.Member {
+func (m *DataProvider) FindMemberByName(ctx context.Context, name string) (*domain.Member, error) {
 	if m.FindMemberByNameFunc != nil {
-		return m.FindMemberByNameFunc(name)
+		return m.FindMemberByNameFunc(ctx, name)
 	}
 
-	return nil
+	return nil, domain.ErrMemberNotFound
 }
 
-func (m *DataProvider) FindMemberByAlias(alias string) *domain.Member {
+func (m *DataProvider) FindMemberByAlias(ctx context.Context, alias string) (*domain.Member, error) {
 	if m.FindMemberByAliasFunc != nil {
-		return m.FindMemberByAliasFunc(alias)
+		return m.FindMemberByAliasFunc(ctx, alias)
 	}
 
-	return nil
+	return nil, domain.ErrMemberNotFound
 }
 
-func (m *DataProvider) GetChannelIDs() []string {
+func (m *DataProvider) GetChannelIDs(ctx context.Context) ([]string, error) {
 	if m.GetChannelIDsFunc != nil {
-		return m.GetChannelIDsFunc()
+		return m.GetChannelIDsFunc(ctx)
 	}
 
-	return nil
+	return []string{}, nil
 }
 
-func (m *DataProvider) LoadAllMembers() ([]*domain.Member, error) {
+func (m *DataProvider) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	if m.LoadAllMembersFunc != nil {
-		return m.LoadAllMembersFunc()
+		return m.LoadAllMembersFunc(ctx)
 	}
 
-	return nil, nil
+	return []*domain.Member{}, nil
 }
 
-func (m *DataProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
-	if m.WithContextFunc != nil {
-		return m.WithContextFunc(ctx)
-	}
-
-	return m
-}
-
-func (m *DataProvider) FindMembersByName(name string) []*domain.Member {
+func (m *DataProvider) FindMembersByName(ctx context.Context, name string) ([]*domain.Member, error) {
 	if m.FindMembersByNameFunc != nil {
-		return m.FindMembersByNameFunc(name)
+		return m.FindMembersByNameFunc(ctx, name)
 	}
 
-	return nil
+	return []*domain.Member{}, nil
 }
 
-func (m *DataProvider) FindMembersByAlias(alias string) []*domain.Member {
+func (m *DataProvider) FindMembersByAlias(ctx context.Context, alias string) ([]*domain.Member, error) {
 	if m.FindMembersByAliasFunc != nil {
-		return m.FindMembersByAliasFunc(alias)
+		return m.FindMembersByAliasFunc(ctx, alias)
 	}
 
-	return nil
+	return []*domain.Member{}, nil
 }

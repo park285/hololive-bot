@@ -64,7 +64,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 
 	var sentCount int64
 
-	require.NoError(t, countDeliveryTestRowsWhere(db, &deliveryTestOutboxModel{}, &sentCount, "status = ?", string(domain.OutboxStatusSent)).Error)
+	require.NoError(t, countDeliveryTestRowsWhere(db, &deliveryTestOutboxModel{}, &sentCount, "status = $1", string(domain.OutboxStatusSent)).Error)
 	require.EqualValues(t, 3, sentCount)
 }
 

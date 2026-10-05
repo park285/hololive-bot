@@ -8,8 +8,9 @@
 
 - YouTube outbox dispatcher는 `hololive-alarm-worker/internal/egress/youtubedispatch`가 소유합니다.
 - poller 구현은 `hololive-youtube-collector/internal/runtime/pollers`가 소유합니다.
-- `service/delivery`는 reactive reply와 proactive egress가 함께 소비하므로 shared에 남습니다.
-- YouTube outbox store/format/deliverysql/dispatchstate와 tracking/observation은 producer와 consumer 또는 shared 내부 다중-runtime 그래프가 함께 사용하므로 자동 이동·삭제하지 않습니다.
+- 범용 notification delivery dispatcher·consumer store·maintenance·SQL은 `hololive-alarm-worker/internal/egress/notificationdelivery`가 소유합니다. shared `service/delivery`에는 API llm plane producer와 worker consumer가 함께 쓰는 producer enqueue 저장소, 요청·결과·sender interface, Iris transport와 locker만 남습니다.
+- runtime 설정 집계는 API `internal/config`(`BotPlaneConfig`·`AdminPlaneConfig`·`APIWorkerProfile`)와 worker `internal/config`(`RuntimeConfig`·`AlarmWorkerProfile`)가 소유하고, shared `config/settings`에는 설정 구획 타입·loader·순수 검증만 남습니다. shared provider는 `providers/{cache,database,holodex,iris,member,modules}` 하위 package만 두며 root `providers` package는 삭제했습니다.
+- YouTube outbox `analytics`/`deliverysql`/`telemetry`/`timeline`과 tracking/observation은 producer와 consumer 또는 shared 내부 다중-runtime 그래프가 함께 사용하므로 shared에 남습니다. YouTube store·format·dispatchstate는 alarm-worker `internal/`이 소유합니다.
 - alarm HTTP provider의 target owner는 alarm-worker이며, hololive-api 등록은 명시된 caller cutover 조건을 가진 compatibility facade입니다.
 - `repository-ownership.allowlist`는 table owner/writer/reader 정본이고 import graph로 재해석하지 않습니다.
 

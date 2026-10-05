@@ -110,7 +110,7 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, title)
 	}
 
-	if collabMembers, err := formatAlarmDispatchCollabMembers(nil, n.Stream); err == nil && collabMembers != "" {
+	if collabMembers, err := formatAlarmDispatchCollabMembers(context.Background(), nil, n.Stream); err == nil && collabMembers != "" {
 		fmt.Fprintf(&b, "\n콜라보: %s", util.MarkdownNeutralize(collabMembers))
 	}
 
@@ -476,25 +476,32 @@ func collabTestMemberList() []*domain.Member {
 	}
 }
 
-func (collabTestMembers) LoadAllMembers() ([]*domain.Member, error) {
+func (collabTestMembers) LoadAllMembers(context.Context) ([]*domain.Member, error) {
 	return collabTestMemberList(), nil
 }
 
-func (collabTestMembers) FindMemberByChannelID(channelID string) *domain.Member {
+func (collabTestMembers) FindMemberByChannelID(_ context.Context, channelID string) (*domain.Member, error) {
 	for _, member := range collabTestMemberList() {
 		if member.ChannelID == channelID {
-			return member
+			return member, nil
 		}
 	}
 
-	return nil
+	return nil, domain.ErrMemberNotFound
 }
 
-func (collabTestMembers) FindMemberByName(string) *domain.Member  { return nil }
-func (collabTestMembers) FindMemberByAlias(string) *domain.Member { return nil }
-func (collabTestMembers) GetChannelIDs() []string                 { return nil }
-func (m collabTestMembers) WithContext(context.Context) domain.MemberDataProvider {
-	return m
+func (collabTestMembers) FindMemberByName(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
 }
-func (collabTestMembers) FindMembersByName(string) []*domain.Member  { return nil }
-func (collabTestMembers) FindMembersByAlias(string) []*domain.Member { return nil }
+
+func (collabTestMembers) FindMemberByAlias(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+func (collabTestMembers) GetChannelIDs(context.Context) ([]string, error) { return nil, nil }
+func (collabTestMembers) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return nil, nil
+}
+
+func (collabTestMembers) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return nil, nil
+}

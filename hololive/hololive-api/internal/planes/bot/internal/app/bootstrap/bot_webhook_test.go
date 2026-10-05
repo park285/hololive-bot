@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
@@ -146,10 +147,10 @@ func buildDurableBotWebhookHandlerForTest(t *testing.T, admitter webhook.Message
 	return handler
 }
 
-func testDurableWebhookConfig() *settings.Config {
-	return &settings.Config{
+func testDurableWebhookConfig() *apiconfig.BotPlaneConfig {
+	return &apiconfig.BotPlaneConfig{
 		Iris: settings.IrisConfig{WebhookToken: "test-token"},
-		Webhook: settings.WebhookConfig{
+		Webhook: apiconfig.WebhookConfig{
 			MaxBodyBytes: 1024,
 			DedupTTL:     time.Minute,
 			DedupTimeout: 500 * time.Millisecond,

@@ -8,7 +8,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
 type upcomingSubscriptionKey struct{ channel, title string }
@@ -74,7 +73,7 @@ func (c *YouTubeChecker) upcomingSubscriptionTermination(ctx context.Context, ca
 		// 취소 판단은 cache 누락이 아닌 현재 DB 구독 사실에만 근거한다.
 		var err error
 
-		rooms, err = sharedalarm.ResolveEventSubscribers(ctx, nil, c.subscriptionDB, key.channel, key.title, domain.AlarmTypeLive)
+		rooms, err = c.pendingSubscribers.ResolveEventSubscribers(ctx, key.channel, key.title, domain.AlarmTypeLive)
 		if err != nil {
 			return "", fmt.Errorf("verify pending subscriptions: %w", err)
 		}

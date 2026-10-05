@@ -25,19 +25,33 @@ type testMemberDataProvider struct {
 	members []*domain.Member
 }
 
-func (p testMemberDataProvider) LoadAllMembers() ([]*domain.Member, error) { return p.members, nil }
+func (p testMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Member, error) {
+	return p.members, nil
+}
 
-func (p testMemberDataProvider) FindMemberByChannelID(string) *domain.Member { return nil }
+func (testMemberDataProvider) FindMemberByChannelID(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
 
-func (p testMemberDataProvider) FindMemberByName(string) *domain.Member { return nil }
+func (testMemberDataProvider) FindMemberByName(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
 
-func (p testMemberDataProvider) FindMemberByAlias(string) *domain.Member { return nil }
+func (testMemberDataProvider) FindMemberByAlias(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
 
-func (p testMemberDataProvider) GetChannelIDs() []string                               { return nil }
-func (p testMemberDataProvider) WithContext(context.Context) domain.MemberDataProvider { return p }
-func (p testMemberDataProvider) FindMembersByName(string) []*domain.Member             { return nil }
+func (testMemberDataProvider) GetChannelIDs(context.Context) ([]string, error) {
+	return []string{}, nil
+}
 
-func (p testMemberDataProvider) FindMembersByAlias(string) []*domain.Member { return nil }
+func (testMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+func (testMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
@@ -83,7 +97,7 @@ func newOfficialScheduleTestService(
 	logger := slog.New(slog.DiscardHandler)
 	service := newTestServiceWithHTTPClient(t, server.Client(), logger, server.URL)
 
-	index, err := buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: members})
+	index, err := buildOfficialScheduleIdentityIndex(t.Context(), testMemberDataProvider{members: members})
 	if err != nil {
 		t.Fatalf("buildOfficialScheduleIdentityIndex() error = %v", err)
 	}
@@ -191,7 +205,7 @@ func assertOfficialScheduleStreams(t *testing.T, streams []*domain.Stream) {
 }
 
 func TestOfficialScheduleIdentityRequiresOneDistinctChannel(t *testing.T) {
-	index, err := buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: []*domain.Member{
+	index, err := buildOfficialScheduleIdentityIndex(t.Context(), testMemberDataProvider{members: []*domain.Member{
 		{Name: "Shared", ChannelID: "channel-1", Aliases: &domain.Aliases{Ko: []string{"공유"}}},
 		{Name: "Shared", ChannelID: "channel-2"},
 		{Name: "Duplicate Same ID", ChannelID: "channel-3", Aliases: &domain.Aliases{Ja: []string{"同じ"}}},

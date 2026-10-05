@@ -80,7 +80,8 @@ func LoadPostgresConfig() (PostgresConfig, error) {
 	return config, nil
 }
 
-func loadServerConfig() (ServerConfig, error) {
+// LoadServerConfig는 API_SECRET_KEY를 인증 키로 쓰는 runtime의 HTTP listener 설정을 읽는다.
+func LoadServerConfig() (ServerConfig, error) {
 	return LoadServerConfigWithAPIKey(sharedenv.String("API_SECRET_KEY", ""))
 }
 
@@ -111,7 +112,7 @@ func LoadServerConfigWithAPIKey(apiKey string) (ServerConfig, error) {
 	return config, nil
 }
 
-func loadNotificationConfig() (NotificationConfig, error) {
+func LoadNotificationConfig() (NotificationConfig, error) {
 	checkInterval, err := envload.StrictDurationUnitEnv("CHECK_INTERVAL_SECONDS", time.Minute, time.Second)
 	if err != nil {
 		return NotificationConfig{}, fmt.Errorf("load notification config: %w", err)
@@ -206,7 +207,8 @@ func LoadExaConfig() (ExaConfig, error) {
 	}, nil
 }
 
-func loadSettingsFilePath() string {
+// LoadSettingsFilePath는 관리 화면이 저장하는 persisted settings(JSON) 경로다. SETTINGS_DIR(기본 data)/settings.json.
+func LoadSettingsFilePath() string {
 	dir := strings.TrimSpace(sharedenv.String("SETTINGS_DIR", ""))
 	if dir == "" {
 		dir = "data"

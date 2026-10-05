@@ -15,12 +15,13 @@ Member cache V2는 멤버 데이터를 각 process의 in-memory snapshot(전체 
 | Legacy namespace | 제거됨(2026-08-06 contraction). unprefixed `member:*` keyspace를 읽지도 쓰지도 삭제하지도 않음 |
 | Reconcile interval | `15s`; `constants.MemberCacheDefaults.EpochReconcileInterval` |
 
-조회 경로:
+조회 경로(모든 조회는 `ctx`를 첫 인자로 받습니다):
 
 - `GetByChannelID`: snapshot의 채널 대표(공유 채널이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByChannelID`
-- `GetByName`: snapshot 이름 index → 없으면 PostgreSQL `FindByName`
-- `FindByAlias`: snapshot 스캔(공식 이름은 대소문자 무시, 명시 별칭은 정확히 일치, 여러 명이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByAlias`
-- snapshot이 아직 없거나 load가 실패하면 PostgreSQL을 직접 조회합니다. PostgreSQL point 조회 결과는 조회 시점 generation의 process 메모리 index에만 남습니다.
+- `GetByName`: snapshot의 `english_name` 정확 일치 index(같은 이름이 여럿이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByName`
+- `FindByAlias`: snapshot index(공식 이름은 대소문자 무시, 명시 별칭은 정확히 일치, 여러 명이면 가장 작은 `members.id`) → 없으면 PostgreSQL `FindByAlias`
+- 단건 조회에서 멤버가 없으면 `domain.ErrMemberNotFound`를 감싼 오류를 돌려주며 `(nil, nil)`은 없습니다. 조회 실패는 그 밖의 오류로 구분합니다. 미존재 결과는 cache하지 않습니다.
+- 게시된 snapshot과 index는 generation 단위로 불변입니다. snapshot이 아직 없거나 load가 실패하면 PostgreSQL을 직접 조회합니다. PostgreSQL point 조회 결과는 조회 시점 generation의 process 메모리 overlay에만 남고, generation이 바뀌면 통째로 무효가 됩니다.
 
 Snapshot loader는 load 시작 시점의 local generation과 publish 직전 durable epoch가 모두 유지될 때만 snapshot을 게시합니다. Epoch read가 실패하거나 value가 invalid하면 local snapshot과 point index를 폐기하고, authority를 다시 읽을 수 있을 때까지 PostgreSQL direct read로 우회합니다. Pub/Sub publish 실패는 이미 성공한 durable epoch bump를 되돌리지 않습니다.
 
@@ -28,14 +29,14 @@ Valkey 재시작 등으로 authority key가 사라지면 다음 reconcile이 `SE
 
 ## Consumer and mutation inventory
 
-다음 runtime은 모두 `providers.ProvideMemberCache` 또는 `providers/modules.BuildInfraModule`을 통해 V2 consumer가 됩니다(2026-09-28 코드 기준 member cache 4개).
+다음 runtime은 모두 `pkg/providers/member.ProvideMemberCache` 또는 `pkg/providers/modules.BuildInfraModule`을 통해 V2 consumer가 됩니다(2026-09-28 코드 기준 member cache 4개).
 
 - `hololive-api`: bot, admin, llm plane의 각각 독립된 `member.Cache`
 - `hololive-alarm-worker`: alarm target/member adapter
 
 `hololive-youtube-collector`는 더 이상 member cache를 만들지 않습니다(`collectorruntime` infrastructure가 `BuildInfraModule`/member cache를 쓰지 않음). 아래 Expand rollout과 Contraction 절의 collector `a`/`b`/`c`/`d` 언급은 2026-08-06 당시 기록입니다.
 
-조회 표면은 `AllMembers`, `GetAllChannelIDs`, `GetByChannelID`, `GetByName`, `FindByAlias`와 이를 감싼 `ServiceAdapter`입니다. Admin plane의 member mutation endpoint만 runtime mutation owner입니다.
+조회 표면은 `AllMembers`, `GetAllChannelIDs`, `GetByChannelID`, `GetByName`, `FindByAlias`, `MembersByName`, `MembersByAlias`와 이를 감싼 `ServiceAdapter`입니다. Admin plane의 member mutation endpoint만 runtime mutation owner입니다.
 
 - create member
 - set graduation status

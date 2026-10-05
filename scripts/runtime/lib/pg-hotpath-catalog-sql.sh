@@ -195,7 +195,10 @@ WHERE stats.schemaname = 'public'
     'youtube_content_evidence_clocks',
     'youtube_community_posts',
     'youtube_content_alarm_tracking',
-    'bot_reply_outbox'
+    'bot_reply_outbox',
+    'bot_webhook_inbox',
+    'bot_command_executions',
+    'youtube_notification_delivery_ledger'
 )
 ORDER BY stats.n_dead_tup DESC, stats.n_tup_upd DESC, stats.relname;
 
@@ -248,7 +251,10 @@ WHERE stats.schemaname = 'public'
     'youtube_content_evidence_clocks',
     'youtube_community_posts',
     'youtube_content_alarm_tracking',
-    'bot_reply_outbox'
+    'bot_reply_outbox',
+    'bot_webhook_inbox',
+    'bot_command_executions',
+    'youtube_notification_delivery_ledger'
 )
 ORDER BY toast.n_dead_tup DESC, stats.relname;
 
@@ -281,7 +287,10 @@ WHERE indexes.schemaname = 'public'
     'youtube_content_evidence_clocks',
     'youtube_community_posts',
     'youtube_content_alarm_tracking',
-    'bot_reply_outbox'
+    'bot_reply_outbox',
+    'bot_webhook_inbox',
+    'bot_command_executions',
+    'youtube_notification_delivery_ledger'
 )
 ORDER BY indexes.relname, indexes.idx_scan, indexes.indexrelname;
 

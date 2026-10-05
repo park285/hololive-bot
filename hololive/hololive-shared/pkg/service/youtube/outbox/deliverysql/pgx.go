@@ -3,11 +3,9 @@ package deliverysql
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -18,48 +16,15 @@ type DeliveryDB interface {
 	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
 }
 
-func AsQuerier(db any) dbx.Querier {
-	if reflectutil.IsNil(db) {
-		return nil
+// Texts는 domain 문자열 타입 목록을 ANY($n::text[])에 바인딩할 []string으로 바꾼다.
+// 순서와 중복은 보존한다.
+func Texts[T ~string](values []T) []string {
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = string(value)
 	}
 
-	if typed, ok := db.(dbx.Querier); ok {
-		return typed
-	}
-
-	return nil
-}
-
-func DeliveryInClause(column string, count int) string {
-	if count <= 0 {
-		return "FALSE"
-	}
-
-	return column + " IN (" + inDeliveryPlaceholders(count) + ")"
-}
-
-func inDeliveryPlaceholders(count int) string {
-	if count <= 0 {
-		return "NULL"
-	}
-
-	return strings.TrimSuffix(strings.Repeat("?, ", count), ", ")
-}
-
-func AppendDeliveryOutboxKindArgs(args []any, values ...domain.OutboxKind) []any {
-	for _, value := range values {
-		args = append(args, string(value))
-	}
-
-	return args
-}
-
-func AppendDeliveryOutboxStatusArgs(args []any, values ...domain.OutboxStatus) []any {
-	for _, value := range values {
-		args = append(args, string(value))
-	}
-
-	return args
+	return out
 }
 
 func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, error) {

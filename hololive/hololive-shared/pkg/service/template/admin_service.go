@@ -21,12 +21,10 @@
 package template
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"text/template"
 
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -88,7 +86,7 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 		return nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
 
-	if err := s.validateTemplate(key, body); err != nil {
+	if err := s.validateTemplate(ctx, key, body); err != nil {
 		return nil, fmt.Errorf("validate template: %w", err)
 	}
 
@@ -126,7 +124,9 @@ func (s *AdminService) DeleteOverride(ctx context.Context, key domain.TemplateKe
 	return nil
 }
 
-func (s *AdminService) Preview(_ context.Context, key domain.TemplateKey, body string) (string, any, error) {
+// Preview는 저장하지 않은 본문을 표본 데이터로 렌더링합니다. 실행은 Render와 같은 취소·출력·단계·시간 예산을 따르며
+// 실패하면 부분 결과 없이 ErrTemplateRenderError를 돌려줍니다.
+func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body string) (string, any, error) {
 	if !sampledata.IsValidTemplateKey(key) {
 		return "", nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
@@ -136,18 +136,12 @@ func (s *AdminService) Preview(_ context.Context, key domain.TemplateKey, body s
 		return "", nil, fmt.Errorf("%w: no sample data for %s", ErrTemplateKeyNotFound, key)
 	}
 
-	tmpl, err := template.New(string(key)).Funcs(templateFuncs).Option("missingkey=error").Parse(body)
+	out, err := renderTemplateBody(ctx, key, body, sampleData)
 	if err != nil {
-		return "", nil, errors.Join(ErrTemplateParseError, fmt.Errorf("parse failed: %w", err))
+		return "", nil, err
 	}
 
-	var buf bytes.Buffer
-
-	if err := tmpl.Execute(&buf, sampleData); err != nil {
-		return "", nil, errors.Join(ErrTemplateRenderError, fmt.Errorf("render failed: %w", err))
-	}
-
-	return buf.String(), sampleData, nil
+	return out, sampleData, nil
 }
 
 func (s *AdminService) GetRevisions(ctx context.Context, key domain.TemplateKey, channelID *string) ([]*domain.NotificationTemplateRevision, error) {
@@ -181,22 +175,32 @@ func (s *AdminService) GetRevisionByID(ctx context.Context, id int64) (*domain.N
 	return &rev, nil
 }
 
-func (s *AdminService) validateTemplate(key domain.TemplateKey, body string) error {
-	tmpl, err := template.New(string(key)).Funcs(templateFuncs).Option("missingkey=error").Parse(body)
-	if err != nil {
-		return errors.Join(ErrTemplateParseError, fmt.Errorf("parse failed: %w", err))
-	}
-
+// validateTemplate는 저장 전 본문을 파싱하고, 표본 데이터가 있으면 Preview와 같은 예산으로 실행해 봅니다.
+func (s *AdminService) validateTemplate(ctx context.Context, key domain.TemplateKey, body string) error {
 	sampleData := sampledata.GetTemplateSampleData(key)
 	if sampleData == nil {
+		if _, err := parseTemplateBody(string(key), body, true); err != nil {
+			return errors.Join(ErrTemplateParseError, fmt.Errorf("parse failed: %w", err))
+		}
+
 		return nil
 	}
 
-	var buf bytes.Buffer
+	_, err := renderTemplateBody(ctx, key, body, sampleData)
 
-	if err := tmpl.Execute(&buf, sampleData); err != nil {
-		return errors.Join(ErrTemplateRenderError, fmt.Errorf("render failed: %w", err))
+	return err
+}
+
+func renderTemplateBody(ctx context.Context, key domain.TemplateKey, body string, data any) (string, error) {
+	tmpl, err := parseTemplateBody(string(key), body, true)
+	if err != nil {
+		return "", errors.Join(ErrTemplateParseError, fmt.Errorf("parse failed: %w", err))
 	}
 
-	return nil
+	out, err := executeTemplate(ctx, tmpl, data)
+	if err != nil {
+		return "", errors.Join(ErrTemplateRenderError, fmt.Errorf("render failed: %w", err))
+	}
+
+	return out, nil
 }

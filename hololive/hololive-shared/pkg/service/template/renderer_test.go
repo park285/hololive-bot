@@ -88,7 +88,7 @@ func TestTemplateFuncs_Dict(t *testing.T) {
 }
 
 func TestTemplateFuncs_Truncate(t *testing.T) {
-	truncateFn, ok := templateFuncs["truncate"].(func(int, string) string)
+	truncateFn, ok := templateFuncs["truncate"].(func(int, string) (string, error))
 	if !ok {
 		t.Fatalf("template func truncate has type %T", templateFuncs["truncate"])
 	}
@@ -107,9 +107,9 @@ func TestTemplateFuncs_Truncate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := truncateFn(tt.maxLen, tt.input)
-		if result != tt.expected {
-			t.Errorf("truncate(%d, %q) = %q, expected %q", tt.maxLen, tt.input, result, tt.expected)
+		result, err := truncateFn(tt.maxLen, tt.input)
+		if err != nil || result != tt.expected {
+			t.Errorf("truncate(%d, %q) = %q, %v, expected %q", tt.maxLen, tt.input, result, err, tt.expected)
 		}
 	}
 }

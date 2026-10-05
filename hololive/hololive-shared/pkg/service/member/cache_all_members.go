@@ -26,8 +26,9 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"sync"
 	"time"
+
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -39,51 +40,83 @@ const (
 	allMembersSnapshotRetryDelay  = time.Minute
 )
 
+// allMembersState는 게시 단위다. 성공 상태는 members와 그 불변 색인 index를 함께 갖고, 재시도 대기 상태는 직전 성공
+// 상태의 members·index를 그대로 공유한다.
 type allMembersState struct {
-	pointIndexOnce sync.Once
-	pointIndex     *memberPointIndex
-	members        []*domain.Member
-	loadedAt       time.Time
-	retryAfter     time.Time
-	loadErr        error
-	generation     uint64
-	hasSuccessful  bool
+	index         *memberSnapshotIndex
+	members       []*domain.Member
+	loadedAt      time.Time
+	retryAfter    time.Time
+	loadErr       error
+	generation    uint64
+	hasSuccessful bool
+}
+
+// newAllMembersState는 적재 결과로 성공 상태를 만든다. Nil 멤버는 snapshot에서 뺀다.
+func newAllMembersState(members []*domain.Member, generation uint64, loadedAt time.Time) *allMembersState {
+	snapshot, index := newMemberSnapshotIndex(members)
+
+	return &allMembersState{
+		index:         index,
+		members:       snapshot,
+		loadedAt:      loadedAt,
+		generation:    generation,
+		hasSuccessful: true,
+	}
 }
 
 var errAllMembersGenerationChanged = errors.New("member snapshot generation changed")
 
+// AllMembers는 전체 멤버 목록을 돌려준다. 돌려준 slice는 호출자 소유다. 공유 적재는 호출자 취소와 분리된 상한 안에서
+// 끝까지 진행하고, 기다리던 호출자만 자기 ctx가 끝나면 즉시 ctx 오류로 빠진다.
 func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
+	snap, err := c.membersSnapshot(ctx, "all_members")
+	if err != nil {
+		return nil, err
+	}
+
+	return cloneMemberSlice(snap.members), nil
+}
+
+// membersSnapshot은 전체 멤버 조회와 다건 조회가 함께 쓰는 snapshot을 돌려준다. Epoch이 불확실하면 게시하지 않는 일회용
+// 상태를 PostgreSQL에서 만들어 같은 색인 규칙으로 답한다.
+func (c *Cache) membersSnapshot(ctx context.Context, operation string) (*allMembersState, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")
 	}
 
 	for {
-		if c.cacheBypassRequired("all_members") {
+		if c.cacheBypassRequired(operation) {
 			return c.loadAllMembersBypass(ctx)
 		}
 
 		snap, generation := c.allMembersView()
-		if members, ready, snapErr := c.snapshotResultAt(snap, time.Now()); ready {
-			return cloneAllMembersResult(members, snapErr)
+		if outcome, ok := c.cachedSnapshotAt(snap, time.Now()); ok {
+			return outcome.result()
 		}
 
-		members, retry, err := c.loadAllMembersResult(ctx, snap, generation)
-		if retry {
+		loaded, err := c.loadAllMembersResult(ctx, snap, generation)
+		if errors.Is(err, errAllMembersGenerationChanged) {
 			continue
 		}
 
-		return cloneAllMembersResult(members, err)
+		if err != nil {
+			return nil, err
+		}
+
+		return loaded, nil
 	}
 }
 
-func (c *Cache) loadAllMembersBypass(ctx context.Context) ([]*domain.Member, error) {
+// loadAllMembersBypass는 epoch 불확실 구간의 직접 조회다. 공유 적재가 아니므로 호출자 취소를 그대로 따르고, 같은
+// 상한 시간을 둔다.
+func (c *Cache) loadAllMembersBypass(ctx context.Context) (*allMembersState, error) {
 	loader, err := c.allMembersLoader()
 	if err != nil {
 		return nil, err
 	}
 
-	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)
-
+	loadCtx, cancel := context.WithTimeout(ctx, allMembersSnapshotLoadTimeout)
 	defer cancel()
 
 	members, err := loader(loadCtx)
@@ -91,75 +124,81 @@ func (c *Cache) loadAllMembersBypass(ctx context.Context) ([]*domain.Member, err
 		return nil, fmt.Errorf("load all members from repository while cache bypassed: %w", err)
 	}
 
-	return cloneMemberSlice(members), nil
+	return newAllMembersState(members, 0, time.Now()), nil
 }
 
-func cloneAllMembersResult(members []*domain.Member, err error) ([]*domain.Member, error) {
-	if err != nil {
-		return nil, err
-	}
-
-	return cloneMemberSlice(members), nil
-}
-
+// loadAllMembersResult는 공유 적재 결과를 돌려준다. ErrAllMembersGenerationChanged는 새 generation에서 다시 시도하라는
+// 신호다. 공유 적재가 실패하면 같은 generation의 직전 성공 snapshot을 stale 결과로 쓴다.
 func (c *Cache) loadAllMembersResult(
 	ctx context.Context,
 	snap *allMembersState,
 	generation uint64,
-) ([]*domain.Member, bool, error) {
-	members, err := c.loadAllMembersSnapshot(ctx, snap, generation)
+) (*allMembersState, error) {
+	loaded, err := c.loadAllMembersSnapshot(ctx, generation)
 	if err == nil {
-		return members, false, nil
+		return loaded, nil
 	}
 
-	if errors.Is(err, errAllMembersGenerationChanged) {
-		return nil, true, nil
+	// 호출자 취소는 공유 적재 실패가 아니므로 stale snapshot으로 바꾸지 않는다. 공유 적재 panic은 결함이므로 stale
+	// 성공으로 가리지 않고 그대로 실패로 돌려준다.
+	if errors.Is(err, errAllMembersGenerationChanged) || ctx.Err() != nil || errors.Is(err, errAllMembersLoadPanicked) {
+		return nil, err
 	}
 
-	stale, retry, usable := c.staleAllMembersResult(snap, generation)
-	if retry {
-		return nil, true, nil
-	}
-
-	if usable {
-		return stale, false, nil
-	}
-
-	return nil, false, err
+	return c.staleAllMembersResult(snap, generation, err)
 }
 
-func (c *Cache) staleAllMembersResult(
-	snap *allMembersState,
-	generation uint64,
-) (members []*domain.Member, retry, usable bool) {
+// staleAllMembersResult는 generation이 그대로이고 직전 성공 snapshot이 있으면 그것을, generation이 바뀌었으면
+// errAllMembersGenerationChanged를, 아니면 적재 오류를 돌려준다.
+func (c *Cache) staleAllMembersResult(snap *allMembersState, generation uint64, loadErr error) (*allMembersState, error) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
 
 	if c.snapshotGeneration.Load() != generation {
-		return nil, true, false
+		return nil, errAllMembersGenerationChanged
 	}
 
-	if snapshotSuccessful(snap) {
-		return snap.members, false, true
+	if !snapshotSuccessful(snap) {
+		return nil, loadErr
 	}
 
-	return nil, false, false
+	return snap, nil
 }
 
-func (c *Cache) snapshotResultAt(snap *allMembersState, now time.Time) ([]*domain.Member, bool, error) {
+// snapshotOutcome은 적재 없이 낼 수 있는 응답이다. 성공 snapshot 또는 재시도 대기 중인 적재 오류 중 하나다.
+type snapshotOutcome struct {
+	snap *allMembersState
+	err  error
+}
+
+func (o snapshotOutcome) result() (*allMembersState, error) {
+	if o.err != nil {
+		return nil, o.err
+	}
+
+	if o.snap == nil {
+		return nil, errors.New("member snapshot outcome has neither snapshot nor error")
+	}
+
+	return o.snap, nil
+}
+
+// cachedSnapshotAt은 적재 없이 답할 수 있으면 ok=true와 응답을 돌려준다. 신선한 snapshot, 재시도 대기 중인 stale
+// snapshot, 재시도 대기 중인 cold 적재 오류가 여기에 해당한다.
+func (c *Cache) cachedSnapshotAt(snap *allMembersState, now time.Time) (snapshotOutcome, bool) {
 	if c.snapshotFreshAt(snap, now) {
-		return snap.members, true, nil
+		return snapshotOutcome{snap: snap}, true
 	}
 
 	if !c.snapshotReloadDeferred(snap, now) {
-		return nil, false, nil
+		return snapshotOutcome{}, false
 	}
 
 	if snapshotSuccessful(snap) {
-		return snap.members, true, nil
+		return snapshotOutcome{snap: snap}, true
 	}
 
-	return nil, true, snap.loadErr
+	return snapshotOutcome{err: snap.loadErr}, true
 }
 
 func (c *Cache) snapshotFreshAt(snap *allMembersState, now time.Time) bool {
@@ -178,28 +217,72 @@ func (*Cache) snapshotReloadDeferred(snap *allMembersState, now time.Time) bool 
 	return snap != nil && !snap.retryAfter.IsZero() && now.Before(snap.retryAfter)
 }
 
-func (c *Cache) loadAllMembersSnapshot(ctx context.Context, _ *allMembersState, generation uint64) ([]*domain.Member, error) {
+// loadAllMembersSnapshot은 generation별 공유 적재를 시작하거나 합류해 결과를 기다린다. 공유 적재는 첫 호출자 ctx의 값만
+// 물려받고 취소와는 분리되며 allMembersSnapshotLoadTimeout 상한을 갖는다. 기다리는 호출자는 각자 ctx가 끝나면 다른
+// 대기자와 공유 적재에 영향 없이 빠진다.
+func (c *Cache) loadAllMembersSnapshot(ctx context.Context, generation uint64) (*allMembersState, error) {
 	loader, err := c.allMembersLoader()
 	if err != nil {
 		return nil, err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("wait for member snapshot: %w", err)
+	}
+
 	groupKey := allMembersSnapshotKey + ":" + strconv.FormatUint(generation, 10)
+	sharedCtx := context.WithoutCancel(ctx)
 
-	result, err, _ := c.allMembersGroup.Do(groupKey, func() (any, error) {
-		return c.reloadAllMembersSnapshot(ctx, loader, generation)
+	results := c.allMembersGroup.DoChan(groupKey, func() (any, error) {
+		return c.guardedReloadAllMembersSnapshot(sharedCtx, loader, generation)
 	})
-	if err != nil {
-		return nil, err
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for member snapshot: %w", ctx.Err())
+	case result := <-results:
+		if result.Err != nil {
+			return nil, result.Err
+		}
+
+		snap, ok := result.Val.(*allMembersState)
+		if !ok || snap == nil {
+			return nil, fmt.Errorf("unexpected all members result type %T", result.Val)
+		}
+
+		return snap, nil
+	}
+}
+
+// errAllMembersLoadPanicked는 공유 적재가 panic으로 끝났다는 실패다. Stale snapshot으로 대체하지 않는다.
+var errAllMembersLoadPanicked = errors.New("member snapshot load panicked")
+
+// guardedReloadAllMembersSnapshot은 공유 적재를 panic 경계 안에서 실행한다. Singleflight.DoChan은 fn panic을 새
+// goroutine에서 다시 던져 어떤 호출자도 복구할 수 없게 하므로(프로세스 종료), 여기서 복구해 명시적 오류로 바꾼다.
+// Panic은 snapshot 상태를 바꾸지 않으므로 다음 조회가 다시 적재를 시도한다.
+func (c *Cache) guardedReloadAllMembersSnapshot(
+	ctx context.Context,
+	loader func(context.Context) ([]*domain.Member, error),
+	generation uint64,
+) (*allMembersState, error) {
+	var (
+		loaded  *allMembersState
+		loadErr error
+	)
+
+	if panicErr := panicguard.RunE(c.logger, panicguard.BackgroundTask, "member-snapshot-load", func() error {
+		loaded, loadErr = c.reloadAllMembersSnapshot(ctx, loader, generation)
+
+		return nil
+	}); panicErr != nil {
+		return nil, fmt.Errorf("%w: %w", errAllMembersLoadPanicked, panicErr)
 	}
 
-	members, ok := result.([]*domain.Member)
-	if !ok {
-		return nil, fmt.Errorf("unexpected all members result type %T", result)
+	if loadErr != nil {
+		return nil, loadErr
 	}
 
-	// 공유 결과의 slice 복사는 공개 AllMembers 경계에서 한 번만 수행한다.
-	return members, nil
+	return loaded, nil
 }
 
 func (c *Cache) allMembersLoader() (func(context.Context) ([]*domain.Member, error), error) {
@@ -218,51 +301,40 @@ func (c *Cache) reloadAllMembersSnapshot(
 	ctx context.Context,
 	loader func(context.Context) ([]*domain.Member, error),
 	generation uint64,
-) ([]*domain.Member, error) {
+) (*allMembersState, error) {
 	current, currentGeneration := c.allMembersView()
 	if currentGeneration != generation {
 		return nil, errAllMembersGenerationChanged
 	}
 
-	if members, ready, err := c.snapshotResultAt(current, time.Now()); ready {
-		out, snapshotErr := completedAllMembersSnapshot(members, err)
-
-		return out, snapshotErr
+	if outcome, ok := c.cachedSnapshotAt(current, time.Now()); ok {
+		return outcome.result()
 	}
 
-	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)
+	loadCtx, cancel := context.WithTimeout(ctx, allMembersSnapshotLoadTimeout)
 	defer cancel()
 
 	members, err := loader(loadCtx)
 	if err != nil {
-		if failureErr := c.handleAllMembersLoadFailure(loadCtx, current, generation, err); failureErr != nil {
-			return nil, failureErr
-		}
-
-		return nil, nil
+		return nil, c.handleAllMembersLoadFailure(loadCtx, current, generation, err)
 	}
 
 	if err := c.confirmEpochAfterLoad(loadCtx, generation); err != nil {
 		return nil, fmt.Errorf("confirm epoch after load: %w", err)
 	}
 
-	if !c.storeAllMembersSnapshot(current, generation, members) {
+	published := c.storeAllMembersSnapshot(current, generation, members)
+	if published == nil {
 		return nil, errAllMembersGenerationChanged
 	}
 
-	c.logAllMembersSnapshotRecovery(current, len(members))
+	c.logAllMembersSnapshotRecovery(current, len(published.members))
 
-	return members, nil
+	return published, nil
 }
 
-func completedAllMembersSnapshot(members []*domain.Member, err error) ([]*domain.Member, error) {
-	if err != nil {
-		return nil, err
-	}
-
-	return members, nil
-}
-
+// handleAllMembersLoadFailure는 항상 오류를 돌려준다. 같은 generation이면 재시도 대기 상태를 게시하고 적재 오류를,
+// 그 사이 generation이 바뀌었으면 재시도 신호를 돌려준다.
 func (c *Cache) handleAllMembersLoadFailure(
 	ctx context.Context,
 	current *allMembersState,
@@ -291,8 +363,8 @@ func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation 
 	}
 
 	if snapshotSuccessful(snap) {
+		deferred.index = snap.index
 		deferred.members = snap.members
-		deferred.pointIndex = snap.pointLookup()
 		deferred.loadedAt = snap.loadedAt
 		deferred.hasSuccessful = true
 	}
@@ -326,72 +398,25 @@ func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount
 	c.logger.Info("member_snapshot_reload_recovered", slog.Int("member_count", memberCount))
 }
 
-func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation uint64, members []*domain.Member) bool {
-	snapshot, channelIDs := prepareAllMembersSnapshot(members)
-	pointIndex := buildMemberPointIndex(snapshot)
+// storeAllMembersSnapshot은 색인을 잠금 밖에서 만든 뒤, 적재를 시작한 generation과 이전 상태가 그대로일 때만 새
+// snapshot을 다음 generation으로 게시한다. Generation이 오르므로 이전 point overlay는 함께 무효가 된다. 게시하지
+// 못하면 nil이다.
+func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation uint64, members []*domain.Member) *allMembersState {
+	nextGeneration := generation + 1
+	next := newAllMembersState(members, nextGeneration, time.Now())
 
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
 
 	if c.snapshotGeneration.Load() != generation || c.allMembersSnapshot.Load() != previous {
-		return false
+		return nil
 	}
 
-	nextGeneration := generation + 1
-	c.replaceMemberSnapshotIndexes(snapshot, generation, nextGeneration)
-	c.allMembers.Store(allChannelIDsKey, channelIDs)
+	c.pointOverlay = nil
 	c.snapshotGeneration.Store(nextGeneration)
-	c.allMembersSnapshot.Store(&allMembersState{
-		pointIndex:    pointIndex,
-		members:       snapshot,
-		loadedAt:      time.Now(),
-		generation:    nextGeneration,
-		hasSuccessful: true,
-	})
+	c.allMembersSnapshot.Store(next)
 
-	return true
-}
-
-func prepareAllMembersSnapshot(members []*domain.Member) (snapshot []*domain.Member, channelIDs []string) {
-	snapshot = make([]*domain.Member, 0, len(members))
-	channelIDs = make([]string, 0, len(members))
-
-	for _, member := range members {
-		if member == nil {
-			continue
-		}
-
-		snapshot = append(snapshot, member)
-		if member.ChannelID != "" {
-			channelIDs = append(channelIDs, member.ChannelID)
-		}
-	}
-
-	return snapshot, channelIDs
-}
-
-func (c *Cache) replaceMemberSnapshotIndexes(members []*domain.Member, generation, nextGeneration uint64) {
-	deleteMemberGeneration(&c.byChannelID, generation)
-	deleteMemberGeneration(&c.byName, generation)
-
-	for _, member := range members {
-		c.byName.Store(member.Name, &memoryMember{member: member, generation: nextGeneration})
-	}
-
-	for channelID, member := range ChannelRepresentatives(members) {
-		c.byChannelID.Store(channelID, &memoryMember{member: member, generation: nextGeneration})
-	}
-}
-
-func deleteMemberGeneration(index *sync.Map, generation uint64) {
-	index.Range(func(key, value any) bool {
-		entry, ok := value.(*memoryMember)
-		if ok && entry.generation == generation {
-			index.CompareAndDelete(key, value)
-		}
-
-		return true
-	})
+	return next
 }
 
 func (c *Cache) allMembersView() (snapshot *allMembersState, generation uint64) {
@@ -402,5 +427,16 @@ func (c *Cache) allMembersView() (snapshot *allMembersState, generation uint64) 
 }
 
 func snapshotSuccessful(snap *allMembersState) bool {
-	return snap != nil && (snap.hasSuccessful || !snap.loadedAt.IsZero())
+	return snap != nil && snap.hasSuccessful
+}
+
+func cloneMemberSlice(in []*domain.Member) []*domain.Member {
+	if len(in) == 0 {
+		return []*domain.Member{}
+	}
+
+	out := make([]*domain.Member, len(in))
+	copy(out, in)
+
+	return out
 }

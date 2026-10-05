@@ -14,6 +14,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
 func TestUpcomingCandidateVirtualTimePreservesSelectedCategoryUntilStart(t *testing.T) {
@@ -72,7 +73,7 @@ func TestUpcomingRecoveryTerminatesRemovedSubscription(t *testing.T) {
 	notification := domain.NewAlarmNotification("removed-room", &domain.Channel{ID: "removed-channel"}, &domain.Stream{ID: "removed-stream", ChannelID: "removed-channel", Status: domain.StreamStatusUpcoming, StartScheduled: &start}, 5, nil, "")
 	require.NoError(t, store.Stage(t.Context(), "removed-channel", now, []*domain.AlarmNotification{notification}))
 
-	checker := &YouTubeChecker{subscriptionDB: pool, upcomingCandidates: store}
+	checker := &YouTubeChecker{pendingSubscribers: sharedalarm.NewSubscriberResolver(nil, pool), upcomingCandidates: store}
 	result, err := checker.recoverUpcomingCandidates(t.Context(), nil, now.Add(65*time.Second))
 	require.NoError(t, err)
 	require.Empty(t, result)
@@ -129,7 +130,7 @@ func TestUpcomingRecoveryPersistsScheduleChangeTermination(t *testing.T) {
 	notification := domain.NewAlarmNotification("changed-room", &domain.Channel{ID: "changed-channel"}, &domain.Stream{ID: "changed-stream", ChannelID: "changed-channel", Status: domain.StreamStatusUpcoming, StartScheduled: &start}, 5, nil, "")
 	require.NoError(t, store.Stage(t.Context(), "changed-channel", now, []*domain.AlarmNotification{notification}))
 
-	checker := &YouTubeChecker{subscriptionDB: pool, upcomingCandidates: store}
+	checker := &YouTubeChecker{pendingSubscribers: sharedalarm.NewSubscriberResolver(nil, pool), upcomingCandidates: store}
 	result, err := checker.recoverUpcomingCandidates(t.Context(), map[string][]*domain.Stream{"changed-channel": {{ID: "changed-stream", Status: domain.StreamStatusUpcoming, StartScheduled: new(start.Add(time.Minute))}}}, now.Add(65*time.Second))
 	require.NoError(t, err)
 	require.Empty(t, result)

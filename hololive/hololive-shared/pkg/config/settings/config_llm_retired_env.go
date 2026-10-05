@@ -15,7 +15,7 @@ import (
 // 그 stack-secrets master 사본, 그리고 실행 중 프로세스 env에 LLM_MONTHLY_TOKEN_CEILING 키가 0건이어야 한다.
 // 중앙 compose.env·AP ap-compose.env는 compose 보간 전용이고 prod compose의 environment 목록에 이 키가 없어
 // 프로세스 env로 가지 않는다. T18(2026-09-26)에서 모든 hololive env에 0건임을 확인했다. 이 가드가 든 release가 중앙 호스트에
-// 배포된 뒤 이 파일, 테스트, LoadConfig·LoadLLMSchedulerRuntime의 호출을 함께 삭제한다.
+// 배포된 뒤 이 파일, 테스트, RejectRetiredRuntimeEnv·LoadLLMSchedulerRuntime의 호출을 함께 삭제한다.
 // 재검토 기한: remove_after = "2026-12-31".
 var retiredLLMEnvKeys = []string{
 	"LLM_MONTHLY_TOKEN_CEILING",

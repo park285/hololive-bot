@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/valkey-io/valkey-go"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -14,7 +15,21 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-var channelSubscriberLoadGroup singleflight.Group
+// SubscriberResolver는 하나의 구독 cache와 구독 DB에 묶인 구독자 조회기다.
+// 같은 resolver로 들어온 같은 채널·알림 종류의 DB 조회만 하나로 합친다. 다른 DB, 다른 트랜잭션에 묶인 resolver와는
+// 조회 결과나 오류를 공유하지 않으므로 pool 조회는 연결 수명 동안 resolver 하나를 재사용하고, 트랜잭션 안의 조회는
+// 그 트랜잭션 전용 resolver를 만든다. CacheClient가 nil이면 cache를 건너뛰고, db가 nil이면 cache로 확정되지 않는
+// 조회를 오류로 반환한다. 복사하지 말고 반환된 포인터를 공유한다.
+type SubscriberResolver struct {
+	cache cache.Client
+	db    dbx.Querier
+	loads singleflight.Group
+}
+
+// NewSubscriberResolver는 cacheClient와 db에 묶인 구독자 조회기를 만든다. 두 인자 모두 nil을 허용한다.
+func NewSubscriberResolver(cacheClient cache.Client, db dbx.Querier) *SubscriberResolver {
+	return &SubscriberResolver{cache: cacheClient, db: db}
+}
 
 func LookupChannelSubscribersByType(
 	ctx context.Context,
@@ -46,10 +61,10 @@ func LookupChannelSubscribersByType(
 	return subscribers, nil
 }
 
-func ResolveChannelSubscribersByType(
+// ResolveChannelSubscribersByType는 채널·알림 종류의 구독 방을 cache에서 찾고, cache로 확정되지 않으면 resolver의
+// DB에서 읽는다. DB 결과는 이번 호출에만 쓰고 cache를 다시 채우지 않는다.
+func (r *SubscriberResolver) ResolveChannelSubscribersByType(
 	ctx context.Context,
-	cacheClient cache.Client,
-	db dbx.Querier,
 	channelID string,
 	alarmType domain.AlarmType,
 ) ([]string, error) {
@@ -58,8 +73,8 @@ func ResolveChannelSubscribersByType(
 		return nil, nil
 	}
 
-	if cacheClient != nil {
-		subscribers, resolved, err := resolveChannelSubscribersFromCache(ctx, cacheClient, normalizedChannelID, alarmType, db == nil)
+	if r.cache != nil {
+		subscribers, resolved, err := resolveChannelSubscribersFromCache(ctx, r.cache, normalizedChannelID, alarmType, r.db == nil)
 		if err != nil {
 			return subscribers, fmt.Errorf("resolve channel subscribers from cache: %w", err)
 		}
@@ -69,7 +84,7 @@ func ResolveChannelSubscribersByType(
 		}
 	}
 
-	out, err := resolveChannelSubscribersFromDB(ctx, db, normalizedChannelID, alarmType)
+	out, err := r.resolveChannelSubscribersFromDB(ctx, normalizedChannelID, alarmType)
 	if err != nil {
 		return out, fmt.Errorf("resolve channel subscribers from DB: %w", err)
 	}
@@ -129,13 +144,12 @@ func resolveKnownEmptySubscriberCache(
 	return false, nil
 }
 
-func resolveChannelSubscribersFromDB(
+func (r *SubscriberResolver) resolveChannelSubscribersFromDB(
 	ctx context.Context,
-	db dbx.Querier,
 	channelID string,
 	alarmType domain.AlarmType,
 ) ([]string, error) {
-	alarms, err := loadChannelSubscriberAlarms(ctx, db, channelID, alarmType)
+	alarms, err := r.loadChannelSubscriberAlarms(ctx, channelID, alarmType)
 	if err != nil {
 		observeAlarmSubscriberDBFallback(subscriberDBFallbackError)
 
@@ -162,14 +176,12 @@ func resolveChannelSubscribersFromDB(
 // 그 사이 커밋된 구독 해지의 SREM보다 늦게 도착해 해지된 방이 set에 되살아날 수 있기 때문이다. 대가로 다른 쓰기 경로
 // (구독 변경 동기화·전체 rebuild)가 set을 다시 채울 때까지 evict된 채널은 매 cycle 이 batch PG 조회 1회를 다시 치른다.
 // 빈 구독 marker도 늦은 조회 결과가 새 구독을 숨길 수 있으므로 read-through에서 기록하지 않는다.
-func ResolveUncachedChannelSubscribersByType(
+func (r *SubscriberResolver) ResolveUncachedChannelSubscribersByType(
 	ctx context.Context,
-	cacheClient cache.Client,
-	db dbx.Querier,
 	channelIDs []string,
 	alarmType domain.AlarmType,
 ) (map[string][]string, error) {
-	pending, err := filterKnownEmptySubscriberChannels(ctx, cacheClient, channelIDs, alarmType, db == nil)
+	pending, err := filterKnownEmptySubscriberChannels(ctx, r.cache, channelIDs, alarmType, r.db == nil)
 	if err != nil {
 		return nil, fmt.Errorf("resolve uncached channel subscribers: %w", err)
 	}
@@ -179,7 +191,7 @@ func ResolveUncachedChannelSubscribersByType(
 		return result, nil
 	}
 
-	alarmsByChannel, err := loadChannelSubscriberAlarmsByChannels(ctx, db, pending, alarmType)
+	alarmsByChannel, err := loadChannelSubscriberAlarmsByChannels(ctx, r.db, pending, alarmType)
 	if err != nil {
 		observeAlarmSubscriberDBFallback(subscriberDBFallbackError)
 
@@ -205,6 +217,7 @@ func ResolveUncachedChannelSubscribersByType(
 }
 
 // filterKnownEmptySubscriberChannels는 empty marker로 구독 0이 확정된 채널을 빼고 DB 확인이 필요한 채널만 남긴다.
+// 정규화·중복 제거한 채널의 marker 확인은 한 번의 pipeline으로 보낸다.
 func filterKnownEmptySubscriberChannels(
 	ctx context.Context,
 	cacheClient cache.Client,
@@ -212,7 +225,7 @@ func filterKnownEmptySubscriberChannels(
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,
 ) ([]string, error) {
-	pending := make([]string, 0, len(channelIDs))
+	unique := make([]string, 0, len(channelIDs))
 	seen := make(map[string]struct{}, len(channelIDs))
 
 	for _, channelID := range channelIDs {
@@ -226,22 +239,79 @@ func filterKnownEmptySubscriberChannels(
 		}
 
 		seen[normalizedChannelID] = struct{}{}
+		unique = append(unique, normalizedChannelID)
+	}
 
-		if cacheClient != nil {
-			knownEmpty, err := resolveKnownEmptySubscriberCache(ctx, cacheClient, normalizedChannelID, alarmType, requireCacheSuccess)
-			if err != nil {
-				return nil, fmt.Errorf("filter known empty subscriber channels: %w", err)
-			}
+	if cacheClient == nil || len(unique) == 0 {
+		return unique, nil
+	}
 
-			if knownEmpty {
-				continue
-			}
+	knownEmpty, err := resolveKnownEmptySubscriberChannels(ctx, cacheClient, unique, alarmType, requireCacheSuccess)
+	if err != nil {
+		return nil, fmt.Errorf("filter known empty subscriber channels: %w", err)
+	}
+
+	pending := unique[:0]
+
+	for i, channelID := range unique {
+		if !knownEmpty[i] {
+			pending = append(pending, channelID)
 		}
-
-		pending = append(pending, normalizedChannelID)
 	}
 
 	return pending, nil
+}
+
+// resolveKnownEmptySubscriberChannels는 채널마다 empty marker EXISTS를 한 번의 DoMulti pipeline으로 보내고 입력과
+// 같은 위치에 marker 존재 여부를 돌려준다. 확인에 실패한 채널은 구독 0으로 단정하지 않는다. DB가 없어 cache 결과만
+// 믿어야 하면(requireCacheSuccess) 실패를 오류로 반환한다.
+func resolveKnownEmptySubscriberChannels(
+	ctx context.Context,
+	cacheClient cache.Client,
+	channelIDs []string,
+	alarmType domain.AlarmType,
+	requireCacheSuccess bool,
+) ([]bool, error) {
+	builder := cacheClient.Builder()
+	cmds := make([]valkey.Completed, len(channelIDs))
+
+	for i, channelID := range channelIDs {
+		cmds[i] = builder.Exists().Key(sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)).Build()
+	}
+
+	knownEmpty := make([]bool, len(channelIDs))
+
+	results := cacheClient.DoMulti(ctx, cmds...)
+	if len(results) != len(cmds) {
+		observeAlarmSubscriberCacheError("check_empty")
+
+		if requireCacheSuccess {
+			return nil, fmt.Errorf(
+				"resolve channel subscribers by type: check empty subscriber cache: unexpected result count %d for %d channels",
+				len(results),
+				len(cmds),
+			)
+		}
+
+		return knownEmpty, nil
+	}
+
+	for i, result := range results {
+		count, err := result.AsInt64()
+		if err != nil {
+			observeAlarmSubscriberCacheError("check_empty")
+
+			if requireCacheSuccess {
+				return nil, fmt.Errorf("resolve channel subscribers by type: check empty subscriber cache: %w", err)
+			}
+
+			continue
+		}
+
+		knownEmpty[i] = count > 0
+	}
+
+	return knownEmpty, nil
 }
 
 func loadChannelSubscriberAlarmsByChannels(
@@ -266,8 +336,12 @@ func loadChannelSubscriberAlarmsByChannels(
 	return out, nil
 }
 
-func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
-	if db == nil {
+func (r *SubscriberResolver) loadChannelSubscriberAlarms(
+	ctx context.Context,
+	channelID string,
+	alarmType domain.AlarmType,
+) ([]*domain.Alarm, error) {
+	if r.db == nil {
 		return nil, errors.New("load channel subscriber alarms: database is nil")
 	}
 
@@ -277,8 +351,8 @@ func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID 
 
 	normalizedChannelID := strings.TrimSpace(channelID)
 	loadKey := normalizedChannelID + "\x00" + string(alarmType)
-	repository := newRepositoryWithQuerier(db)
-	resultCh := channelSubscriberLoadGroup.DoChan(loadKey, func() (any, error) {
+	repository := newRepositoryWithQuerier(r.db)
+	resultCh := r.loads.DoChan(loadKey, func() (any, error) {
 		return repository.loadChannelSubscriberAlarms(ctx, normalizedChannelID, alarmType)
 	})
 

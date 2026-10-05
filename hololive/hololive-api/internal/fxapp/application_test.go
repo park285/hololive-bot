@@ -174,7 +174,7 @@ func TestResourceOwnerClosesInReverseOrderExactlyOnce(t *testing.T) {
 
 func TestHololiveAPITelemetryConfigUsesFixedIdentity(t *testing.T) {
 	config := &apiconfig.RuntimeConfig{
-		Bot: &settings.Config{Environment: "production"},
+		Bot: &apiconfig.BotPlaneConfig{Environment: "production"},
 		Tracing: settings.TracingConfig{
 			Enabled:    true,
 			Endpoint:   "otel-collector:4317",
@@ -252,7 +252,7 @@ func successfulApplicationParams(cleanup *[]string) applicationParams {
 
 	return applicationParams{
 		config: &apiconfig.RuntimeConfig{
-			Bot: &settings.Config{Environment: "test"},
+			Bot: &apiconfig.BotPlaneConfig{Environment: "test"},
 		},
 		logger:  logger,
 		version: "test",

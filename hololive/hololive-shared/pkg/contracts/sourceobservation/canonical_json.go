@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -21,14 +21,27 @@ const (
 
 var maxCanonicalSafeIntegerString = strconv.FormatInt(MaxCanonicalJSONSafeInteger, 10)
 
-type canonicalJSONMember struct {
-	name  string
-	order []uint16
-	value any
+// canonicalJSONMemberSpan은 출력 버퍼에 이미 기록된 object member 한 개의 위치다.
+// Name은 정렬 키로 쓰는 decode된 이름의 names arena 범위이고,
+// member는 출력 버퍼 안의 `"name":value` 범위다.
+type canonicalJSONMemberSpan struct {
+	nameStart, nameEnd     int
+	memberStart, memberEnd int
 }
 
-type canonicalJSONNumber string
+// canonicalJSONWriter는 입력 token을 중간 any/map/slice 트리 없이 출력 버퍼로 바로 흘려 쓴다.
+// Object만 UTF-16 code unit 순서 정렬을 위해 member 범위를 기록했다가 필요할 때 재배치한다.
+// Members와 names는 중첩 object가 stack처럼 쌓고 되돌리는 공유 작업 공간이다.
+type canonicalJSONWriter struct {
+	decoder  *jsontext.Decoder
+	members  []canonicalJSONMemberSpan
+	names    []byte
+	unquoted []byte
+	reorder  []byte
+}
 
+// CanonicalizeJSON은 source-observation-canonical-json-v1 규칙으로 단일 JSON 값을 정규화한다.
+// 중복 이름, 잘못된 UTF-8, 고립 surrogate, 안전 정수 범위 밖 숫자, 128 초과 중첩, 후행 값은 거부한다.
 func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	if len(raw) == 0 {
 		return nil, errors.New("payload is empty")
@@ -38,24 +51,23 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("payload exceeds %d bytes", MaxPayloadBytes)
 	}
 
-	decoder := jsontext.NewDecoder(bytes.NewReader(raw))
+	// bytes.Buffer 입력은 decoder가 복사 없이 raw를 직접 읽게 한다. decoder는 입력을 쓰지 않는다.
+	writer := canonicalJSONWriter{
+		decoder: jsontext.NewDecoder(bytes.NewBuffer(raw)),
+		reorder: []byte{},
+	}
 
-	value, err := readCanonicalJSONValue(decoder, 0)
+	canonical, err := writer.appendValue(make([]byte, 0, len(raw)), 0)
 	if err != nil {
 		return nil, fmt.Errorf("decode json: %w", err)
 	}
 
-	if _, readErr := decoder.ReadToken(); !errors.Is(readErr, io.EOF) {
+	if _, readErr := writer.decoder.ReadToken(); !errors.Is(readErr, io.EOF) {
 		if readErr == nil {
 			return nil, errors.New("decode json: trailing value")
 		}
 
 		return nil, fmt.Errorf("decode json trailing data: %w", readErr)
-	}
-
-	canonical, err := appendCanonicalJSON(make([]byte, 0, len(raw)), value, 0)
-	if err != nil {
-		return nil, fmt.Errorf("append canonical JSON: %w", err)
 	}
 
 	if len(canonical) > MaxPayloadBytes {
@@ -65,337 +77,309 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	return canonical, nil
 }
 
-func readCanonicalJSONValue(decoder *jsontext.Decoder, depth int) (any, error) {
-	token, err := decoder.ReadToken()
+func (w *canonicalJSONWriter) appendValue(destination []byte, depth int) ([]byte, error) {
+	switch w.decoder.PeekKind() {
+	case jsontext.KindBeginArray:
+		return w.appendArray(destination, depth)
+	case jsontext.KindBeginObject:
+		return w.appendObject(destination, depth)
+	case jsontext.KindInvalid, jsontext.KindNull, jsontext.KindFalse, jsontext.KindTrue,
+		jsontext.KindString, jsontext.KindNumber, jsontext.KindEndObject, jsontext.KindEndArray:
+	}
+
+	// Peek 오류는 ReadValue가 같은 오류를 다시 보고한다.
+	return w.appendScalar(destination)
+}
+
+func (w *canonicalJSONWriter) appendScalar(destination []byte) ([]byte, error) {
+	value, err := w.decoder.ReadValue()
 	if err != nil {
-		return nil, fmt.Errorf("read token: %w", err)
+		return nil, fmt.Errorf("read value: %w", err)
 	}
 
-	kind := token.Kind()
-	if kind == jsontext.KindBeginArray {
-		values, arrayErr := readCanonicalJSONArray(decoder, depth)
-		if arrayErr != nil {
-			return nil, fmt.Errorf("read canonical JSON array: %w", arrayErr)
-		}
-
-		return values, nil
+	switch value.Kind() {
+	case jsontext.KindString:
+		return w.appendString(destination, value)
+	case jsontext.KindNumber:
+		return appendCanonicalJSONNumber(destination, value)
+	case jsontext.KindNull, jsontext.KindTrue, jsontext.KindFalse:
+		// literal은 decoder가 검증한 정확한 철자 그대로가 정규형이다.
+		return append(destination, value...), nil
+	case jsontext.KindInvalid, jsontext.KindBeginObject, jsontext.KindEndObject,
+		jsontext.KindBeginArray, jsontext.KindEndArray:
 	}
 
-	if kind == jsontext.KindBeginObject {
-		members, objectErr := readCanonicalJSONObject(decoder, depth)
-		if objectErr != nil {
-			return nil, fmt.Errorf("read canonical JSON object: %w", objectErr)
-		}
-
-		return members, nil
-	}
-
-	scalar, ok := canonicalJSONScalar(token)
-	if !ok {
-		return nil, fmt.Errorf("canonical JSON scalar: unexpected json token %q", kind)
-	}
-
-	return scalar, nil
+	return nil, fmt.Errorf("canonical JSON scalar: unexpected json value %q", value.Kind())
 }
 
-func canonicalJSONScalar(token jsontext.Token) (any, bool) {
-	kind := token.Kind()
-	if kind == jsontext.KindNull {
-		return nil, true
+// appendString은 escape가 없는 문자열을 원문 그대로 복사한다.
+// Decoder가 검증한 escape 없는 JSON 문자열에는 따옴표, 역슬래시, 제어 문자가 없으므로 원문이 곧 정규형이다.
+func (w *canonicalJSONWriter) appendString(destination []byte, quoted jsontext.Value) ([]byte, error) {
+	if bytes.IndexByte(quoted, '\\') < 0 {
+		return append(destination, quoted...), nil
 	}
 
-	if kind == jsontext.KindTrue || kind == jsontext.KindFalse {
-		return token.Bool(), true
+	unquoted, err := jsontext.AppendUnquote(w.unquoted[:0], quoted)
+	if err != nil {
+		return nil, fmt.Errorf("unquote string: %w", err)
 	}
 
-	if kind == jsontext.KindString {
-		return token.String(), true
-	}
+	w.unquoted = unquoted
 
-	if kind == jsontext.KindNumber {
-		return canonicalJSONNumber(token.String()), true
-	}
-
-	return nil, false
+	return appendCanonicalJSONString(destination, unquoted), nil
 }
 
-func readCanonicalJSONArray(decoder *jsontext.Decoder, depth int) ([]any, error) {
+func (w *canonicalJSONWriter) appendArray(destination []byte, depth int) ([]byte, error) {
 	if depth >= MaxCanonicalJSONDepth {
 		return nil, fmt.Errorf("canonical json nesting exceeds %d", MaxCanonicalJSONDepth)
 	}
 
-	values := make([]any, 0)
-
-	for decoder.PeekKind() != jsontext.KindEndArray {
-		value, err := readCanonicalJSONValue(decoder, depth+1)
-		if err != nil {
-			return nil, fmt.Errorf("read canonical JSON value: %w", err)
-		}
-
-		values = append(values, value)
-	}
-
-	if _, err := decoder.ReadToken(); err != nil {
-		return nil, fmt.Errorf("read token: %w", err)
-	}
-
-	return values, nil
-}
-
-func readCanonicalJSONObject(decoder *jsontext.Decoder, depth int) (map[string]any, error) {
-	if depth >= MaxCanonicalJSONDepth {
-		return nil, fmt.Errorf("canonical json nesting exceeds %d", MaxCanonicalJSONDepth)
-	}
-
-	values := make(map[string]any)
-
-	for decoder.PeekKind() != jsontext.KindEndObject {
-		name, value, err := readCanonicalJSONField(decoder, depth)
-		if err != nil {
-			return nil, fmt.Errorf("read canonical JSON field: %w", err)
-		}
-
-		values[name] = value
-	}
-
-	if _, err := decoder.ReadToken(); err != nil {
-		return nil, fmt.Errorf("read token: %w", err)
-	}
-
-	return values, nil
-}
-
-func readCanonicalJSONField(decoder *jsontext.Decoder, depth int) (name string, value any, err error) {
-	nameToken, err := decoder.ReadToken()
-	if err != nil {
-		return "", nil, fmt.Errorf("read token: %w", err)
-	}
-
-	if nameToken.Kind() != jsontext.KindString {
-		return "", nil, errors.New("object field name is not a string")
-	}
-
-	name = nameToken.String()
-
-	value, err = readCanonicalJSONValue(decoder, depth+1)
-	if err != nil {
-		return "", nil, fmt.Errorf("read canonical JSON value: %w", err)
-	}
-
-	return name, value, nil
-}
-
-func appendCanonicalJSON(destination []byte, value any, depth int) ([]byte, error) {
-	switch typed := value.(type) {
-	case nil:
-		return append(destination, "null"...), nil
-	case bool:
-		return appendCanonicalJSONBool(destination, typed), nil
-	case string:
-		return appendCanonicalJSONString(destination, typed), nil
-	default:
-		out, err := appendCanonicalJSONOther(destination, value, depth)
-
-		return out, err
-	}
-}
-
-func appendCanonicalJSONOther(destination []byte, value any, depth int) ([]byte, error) {
-	out, err := appendCanonicalJSONNumberOrComposite(destination, value, depth)
-	if err != nil {
-		return out, fmt.Errorf("append canonical JSON number or composite: %w", err)
-	}
-
-	return out, nil
-}
-
-func appendCanonicalJSONBool(destination []byte, value bool) []byte {
-	if value {
-		return append(destination, "true"...)
-	}
-
-	return append(destination, "false"...)
-}
-
-func appendCanonicalJSONNumberOrComposite(destination []byte, value any, depth int) ([]byte, error) {
-	switch typed := value.(type) {
-	case canonicalJSONNumber:
-		out, err := appendCanonicalNumberValue(destination, typed)
-
-		return out, err
-	case []any:
-		out, err := appendCanonicalArrayValue(destination, typed, depth)
-
-		return out, err
-	case map[string]any:
-		out, err := appendCanonicalObjectValue(destination, typed, depth)
-
-		return out, err
-	default:
-		return nil, errors.New("canonical json contains unsupported value type")
-	}
-}
-
-func appendCanonicalNumberValue(destination []byte, value canonicalJSONNumber) ([]byte, error) {
-	out, err := appendCanonicalJSONNumber(destination, value)
-	if err != nil {
-		return out, fmt.Errorf("append canonical JSON number: %w", err)
-	}
-
-	return out, nil
-}
-
-func appendCanonicalArrayValue(destination []byte, value []any, depth int) ([]byte, error) {
-	out, err := appendCanonicalJSONArray(destination, value, depth)
-	if err != nil {
-		return out, fmt.Errorf("append canonical JSON array: %w", err)
-	}
-
-	return out, nil
-}
-
-func appendCanonicalObjectValue(destination []byte, value map[string]any, depth int) ([]byte, error) {
-	out, err := appendCanonicalJSONObject(destination, value, depth)
-	if err != nil {
-		return out, fmt.Errorf("append canonical JSON object: %w", err)
-	}
-
-	return out, nil
-}
-
-func appendCanonicalJSONNumber(destination []byte, value canonicalJSONNumber) ([]byte, error) {
-	canonical, err := canonicalizeIntegerJSONNumber(string(value))
-	if err != nil {
-		return nil, fmt.Errorf("canonicalize integer JSON number: %w", err)
-	}
-
-	return append(destination, canonical...), nil
-}
-
-func appendCanonicalJSONArray(destination []byte, values []any, depth int) ([]byte, error) {
-	if depth >= MaxCanonicalJSONDepth {
-		return nil, fmt.Errorf("canonical json nesting exceeds %d", MaxCanonicalJSONDepth)
+	if _, err := w.decoder.ReadToken(); err != nil {
+		return nil, fmt.Errorf("read array start: %w", err)
 	}
 
 	destination = append(destination, '[')
 
-	for index := range values {
+	for index := 0; w.decoder.PeekKind() != jsontext.KindEndArray; index++ {
 		if index > 0 {
 			destination = append(destination, ',')
 		}
 
 		var err error
 
-		destination, err = appendCanonicalJSON(destination, values[index], depth+1)
+		destination, err = w.appendValue(destination, depth+1)
 		if err != nil {
-			return nil, fmt.Errorf("append canonical JSON: %w", err)
+			return nil, err
 		}
+	}
+
+	if _, err := w.decoder.ReadToken(); err != nil {
+		return nil, fmt.Errorf("read array end: %w", err)
 	}
 
 	return append(destination, ']'), nil
 }
 
-func appendCanonicalJSONObject(destination []byte, values map[string]any, depth int) ([]byte, error) {
+// appendObject는 member를 입력 순서대로 출력 버퍼에 먼저 쓰고,
+// 입력 순서가 UTF-16 정렬과 다를 때만 해당 object 구간을 재배치한다.
+// 재배치는 구간 길이를 바꾸지 않으므로 바깥 object가 기록한 범위는 계속 유효하다.
+func (w *canonicalJSONWriter) appendObject(destination []byte, depth int) ([]byte, error) {
 	if depth >= MaxCanonicalJSONDepth {
 		return nil, fmt.Errorf("canonical json nesting exceeds %d", MaxCanonicalJSONDepth)
 	}
 
-	members := canonicalObjectMembers(values)
+	if _, err := w.decoder.ReadToken(); err != nil {
+		return nil, fmt.Errorf("read object start: %w", err)
+	}
+
+	objectStart := len(destination)
+	membersBase := len(w.members)
+	namesBase := len(w.names)
 
 	destination = append(destination, '{')
 
-	for index := range members {
+	for w.decoder.PeekKind() != jsontext.KindEndObject {
+		if len(w.members) > membersBase {
+			destination = append(destination, ',')
+		}
+
+		var err error
+
+		destination, err = w.appendMember(destination, depth)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err := w.decoder.ReadToken(); err != nil {
+		return nil, fmt.Errorf("read object end: %w", err)
+	}
+
+	destination = append(destination, '}')
+	destination = w.sortObjectMembers(destination, objectStart, w.members[membersBase:])
+
+	w.members = w.members[:membersBase]
+	w.names = w.names[:namesBase]
+
+	return destination, nil
+}
+
+// appendMember의 이름 중복 검사는 decoder 기본 설정(AllowDuplicateNames=false)이 decode된 이름 기준으로 수행한다.
+func (w *canonicalJSONWriter) appendMember(destination []byte, depth int) ([]byte, error) {
+	quotedName, err := w.decoder.ReadValue()
+	if err != nil {
+		return nil, fmt.Errorf("read object name: %w", err)
+	}
+
+	if len(quotedName) < 2 {
+		return nil, errors.New("read object name: missing quoted name")
+	}
+
+	nameStart := len(w.names)
+
+	if bytes.IndexByte(quotedName, '\\') < 0 {
+		w.names = append(w.names, quotedName[1:len(quotedName)-1]...)
+	} else if w.names, err = jsontext.AppendUnquote(w.names, quotedName); err != nil {
+		return nil, fmt.Errorf("unquote object name: %w", err)
+	}
+
+	nameEnd := len(w.names)
+	memberStart := len(destination)
+
+	destination = appendCanonicalJSONString(destination, w.names[nameStart:nameEnd])
+	destination = append(destination, ':')
+
+	destination, err = w.appendValue(destination, depth+1)
+	if err != nil {
+		return nil, err
+	}
+
+	w.members = append(w.members, canonicalJSONMemberSpan{
+		nameStart: nameStart, nameEnd: nameEnd,
+		memberStart: memberStart, memberEnd: len(destination),
+	})
+
+	return destination, nil
+}
+
+func (w *canonicalJSONWriter) sortObjectMembers(
+	destination []byte,
+	objectStart int,
+	members []canonicalJSONMemberSpan,
+) []byte {
+	compare := func(left, right canonicalJSONMemberSpan) int {
+		return compareJSONNamesUTF16(
+			w.names[left.nameStart:left.nameEnd],
+			w.names[right.nameStart:right.nameEnd],
+		)
+	}
+
+	if slices.IsSortedFunc(members, compare) {
+		return destination
+	}
+
+	slices.SortFunc(members, compare)
+
+	objectSize := len(destination) - objectStart
+
+	w.reorder = slices.Grow(w.reorder[:0], objectSize)[:objectSize]
+	copy(w.reorder, destination[objectStart:])
+
+	destination = append(destination[:objectStart], '{')
+
+	for index, member := range members {
 		if index > 0 {
 			destination = append(destination, ',')
 		}
 
-		destination = appendCanonicalJSONString(destination, members[index].name)
-		destination = append(destination, ':')
+		destination = append(destination, w.reorder[member.memberStart-objectStart:member.memberEnd-objectStart]...)
+	}
 
-		var err error
+	return append(destination, '}')
+}
 
-		destination, err = appendCanonicalJSON(destination, members[index].value, depth+1)
-		if err != nil {
-			return nil, fmt.Errorf("append canonical JSON: %w", err)
+// compareJSONNamesUTF16은 유효한 UTF-8 이름을 UTF-16 code unit 사전순으로 비교한다.
+// 첫 번째로 다른 code point의 UTF-16 순서가 전체 순서를 결정하므로 변환 버퍼 없이 비교한다.
+func compareJSONNamesUTF16(left, right []byte) int {
+	for len(left) > 0 && len(right) > 0 {
+		leftRune, leftSize := utf8.DecodeRune(left)
+		rightRune, rightSize := utf8.DecodeRune(right)
+
+		if leftRune != rightRune {
+			return cmp.Compare(utf16CodeUnitOrder(leftRune), utf16CodeUnitOrder(rightRune))
 		}
+
+		left, right = left[leftSize:], right[rightSize:]
 	}
 
-	return append(destination, '}'), nil
+	return cmp.Compare(len(left), len(right))
 }
 
-func canonicalObjectMembers(values map[string]any) []canonicalJSONMember {
-	members := make([]canonicalJSONMember, 0, len(values))
-	for name, memberValue := range values {
-		members = append(members, canonicalJSONMember{
-			name: name, order: utf16.Encode([]rune(name)), value: memberValue,
-		})
+// utf16CodeUnitOrder는 code point를 UTF-16 code unit 순서와 같은 크기 순서의 키로 바꾼다.
+// U+E000..U+FFFF는 보조 평면의 상위 surrogate(0xD800..0xDBFF)보다 뒤에 정렬되어야 한다.
+func utf16CodeUnitOrder(character rune) rune {
+	if character >= 0xE000 && character <= 0xFFFF {
+		return character + utf8.MaxRune + 1
 	}
 
-	slices.SortFunc(members, func(left, right canonicalJSONMember) int {
-		return slices.Compare(left.order, right.order)
-	})
-
-	return members
+	return character
 }
 
-func appendCanonicalJSONString(destination []byte, value string) []byte {
+// appendCanonicalJSONString은 decode된 유효 UTF-8 문자열을 JCS 규칙으로 따옴표 처리한다.
+// 따옴표, 역슬래시, U+0020 미만 제어 문자만 escape하고 나머지 byte 구간은 그대로 복사한다.
+func appendCanonicalJSONString(destination, value []byte) []byte {
 	destination = append(destination, '"')
 
-	for _, character := range value {
-		destination = appendEscapedJSONRune(destination, character)
+	start := 0
+
+	for index, character := range value {
+		if character >= 0x20 && character != '"' && character != '\\' {
+			continue
+		}
+
+		destination = append(destination, value[start:index]...)
+		destination = appendEscapedJSONByte(destination, character)
+		start = index + 1
 	}
+
+	destination = append(destination, value[start:]...)
 
 	return append(destination, '"')
 }
 
-func appendEscapedJSONRune(destination []byte, character rune) []byte {
+func appendEscapedJSONByte(destination []byte, character byte) []byte {
+	const hexadecimal = "0123456789abcdef"
+
 	switch character {
 	case '"':
 		return append(destination, '\\', '"')
 	case '\\':
 		return append(destination, '\\', '\\')
-	default:
-		return appendEscapedJSONControl(destination, character)
-	}
-}
-
-func appendEscapedJSONControl(destination []byte, character rune) []byte {
-	switch character {
 	case '\b':
 		return append(destination, '\\', 'b')
 	case '\t':
 		return append(destination, '\\', 't')
 	case '\n':
 		return append(destination, '\\', 'n')
-	default:
-		return appendEscapedJSONFormOrCarriageReturn(destination, character)
-	}
-}
-
-func appendEscapedJSONFormOrCarriageReturn(destination []byte, character rune) []byte {
-	switch character {
 	case '\f':
 		return append(destination, '\\', 'f')
 	case '\r':
 		return append(destination, '\\', 'r')
 	default:
-		return appendJSONControlOrRune(destination, character)
+		return append(destination, '\\', 'u', '0', '0', hexadecimal[character>>4], hexadecimal[character&0x0f])
 	}
 }
 
-func appendJSONControlOrRune(destination []byte, character rune) []byte {
-	const hexadecimal = "0123456789abcdef"
-
-	if character < 0x20 {
-		return append(
-			destination,
-			'\\', 'u', '0', '0',
-			hexadecimal[character>>4],
-			hexadecimal[character&0x0f],
-		)
+// appendCanonicalJSONNumber는 decoder가 검증한 JSON number를 안전 정수 정규형으로 붙인다.
+// 소수점/지수가 없는 정수 표기는 문법상 선행 0이 없으므로 -0과 범위만 확인하고 그대로 복사한다.
+func appendCanonicalJSONNumber(destination []byte, raw jsontext.Value) ([]byte, error) {
+	if len(raw) == 0 {
+		return nil, errors.New("canonical JSON number is empty")
 	}
 
-	return utf8.AppendRune(destination, character)
+	if bytes.ContainsAny(raw, ".eE") {
+		canonical, err := canonicalizeIntegerJSONNumber(string(raw))
+		if err != nil {
+			return nil, fmt.Errorf("canonicalize integer JSON number: %w", err)
+		}
+
+		return append(destination, canonical...), nil
+	}
+
+	if string(raw) == "-0" {
+		return append(destination, '0'), nil
+	}
+
+	digits := raw
+	if digits[0] == '-' {
+		digits = digits[1:]
+	}
+
+	if exceedsSafeJSONInteger(string(digits)) {
+		return nil, errors.New("canonical json integer exceeds the safe range")
+	}
+
+	return append(destination, raw...), nil
 }
 
 func canonicalizeIntegerJSONNumber(raw string) (string, error) {

@@ -29,6 +29,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -69,7 +70,7 @@ func TestFailClosedAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			appConfig := &settings.Config{
+			appConfig := &apiconfig.AdminPlaneConfig{
 				Server: settings.ServerConfig{
 					APIKey: tt.apiKey,
 				},
@@ -126,7 +127,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey:          testAPIKey,
 			AdminAllowedIPs: []string{"127.0.0.1"},
@@ -171,7 +172,7 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
@@ -202,7 +203,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
@@ -232,7 +233,7 @@ func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
@@ -282,7 +283,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
@@ -334,7 +335,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},
@@ -365,7 +366,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
-	appConfig := &settings.Config{
+	appConfig := &apiconfig.AdminPlaneConfig{
 		Server: settings.ServerConfig{
 			APIKey: testAPIKey,
 		},

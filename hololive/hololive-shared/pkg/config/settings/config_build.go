@@ -3,60 +3,12 @@ package settings
 import (
 	"errors"
 	"fmt"
-	"time"
-
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
-
-	"github.com/kapu/hololive-shared/pkg/config/envload"
-	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-func buildConfig(
-	webhookToken, botToken string,
-	corsAllowedOrigins []string,
-	corsMissingInProduction bool,
-	options LoadOptions,
-) (*Config, error) {
-	if err := rejectRetiredRuntimeEnv(); err != nil {
-		return nil, err
-	}
-
-	irisConfig, err := loadIrisConfig(webhookToken, botToken)
-	if err != nil {
-		return nil, fmt.Errorf("load iris config: %w", err)
-	}
-
-	tracingConfig, err := LoadTracingConfig(options.TracingEnabledEnv)
-	if err != nil {
-		return nil, fmt.Errorf("load tracing config: %w", err)
-	}
-
-	kakaoConfig, err := loadKakaoConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load Kakao config: %w", err)
-	}
-
-	config, err := newBaseConfig(corsAllowedOrigins, corsMissingInProduction, options)
-	if err != nil {
-		return nil, fmt.Errorf("load base config: %w", err)
-	}
-
-	config.Iris = irisConfig
-	config.Kakao = newKakaoConfig(kakaoConfig.Rooms, kakaoConfig.ACLEnabled, kakaoConfig.ACLMode)
-	config.Tracing = tracingConfig
-
-	if options.Section != nil {
-		if err := options.Section(config); err != nil {
-			return nil, fmt.Errorf("load runtime section: %w", err)
-		}
-	}
-
-	return config, nil
-}
-
-// rejectRetiredRuntimeEnv는 settings.LoadConfig runtime(hololive-api bot·admin plane, alarm-worker)이 읽기 전에 거절하는
+// RejectRetiredRuntimeEnv는 Iris egress runtime(hololive-api bot·admin plane, alarm-worker)이 설정 구획을 읽기 전에 거절하는
 // 퇴역 env 가드를 차례로 실행한다. 각 가드의 제거 조건과 재검토 기한은 해당 config_*_retired_env.go 주석이 소유한다.
-func rejectRetiredRuntimeEnv() error {
+// 런타임 설정 조립은 각 runtime config 패키지가 소유하고, 이 함수는 공통 거절 정책만 제공한다.
+func RejectRetiredRuntimeEnv() error {
 	if err := RejectRetiredLLMEnv(); err != nil {
 		return fmt.Errorf("reject retired LLM env: %w", err)
 	}
@@ -93,86 +45,36 @@ func rejectRetiredRuntimeEnv() error {
 		return fmt.Errorf("reject retired rate limiter instance id env: %w", err)
 	}
 
-	return nil
-}
-
-func loadAPIWorkerProfile(config *Config) error {
-	profile, err := LoadAPIWorkerProfile()
-	if err != nil {
-		return fmt.Errorf("load API worker profile: %w", err)
+	// SERVICES_* 구획은 admin plane만 읽지만, 퇴역 키 거절은 예전처럼 모든 egress runtime 기동에서 유지한다.
+	if err := rejectRetiredServicesEnv(); err != nil {
+		return fmt.Errorf("reject retired services env: %w", err)
 	}
-
-	config.APIWorkerProfile = profile
-	applyAPIWorkerProfile(config, profile)
 
 	return nil
 }
 
-func applyAPIWorkerProfile(config *Config, profile *APIWorkerProfile) {
-	workers := profile.Loaded.Profile.Workers
-	inbox := workers["bot_webhook_inbox"]
+// ValidateRuntimeEnvSyntax는 Iris egress runtime이 공통으로 받는 env 구획의 값 형식을 한 번에 검사한다.
+// 각 runtime config는 자기가 소비하는 값만 보관하지만, 소비하지 않는 공통 구획의 잘못된 숫자·bool 값도 예전처럼
+// 기동 실패로 드러나야 하므로 공유 parser를 그대로 다시 써서 값은 버리고 오류만 합쳐 돌려준다.
+// 범위·필수 검증은 runtime이 소비하는 구획에 대해서만 각 Validate* 정책으로 따로 수행한다.
+func ValidateRuntimeEnvSyntax() error {
+	_, serverErr := LoadServerConfig()
+	_, holodexErr := LoadHolodexConfig()
+	_, valkeyErr := LoadValkeyConfig()
+	_, postgresErr := LoadPostgresConfig()
+	_, notificationErr := LoadNotificationConfig()
+	_, loggingErr := LoadLoggingConfig()
+	_, botErr := LoadBotConfig()
+	_, cliproxyErr := LoadCliproxyConfig()
+	_, llmErr := LoadLLMConfig()
+	_, exaErr := LoadExaConfig()
+	_, officialScheduleErr := LoadOfficialScheduleRuntimeConfig()
+	// CORS_ENFORCE 기본값은 형식 검사 결과에 영향을 주지 않는다.
+	_, corsErr := LoadCORSConfig(false)
+	_, ingestionErr := LoadIngestionConfig()
 
-	config.Webhook.WorkerCount = inbox.Executor.ConfiguredWorkers
-	config.Webhook.HandlerTimeout = runtimepolicy.WorkerDuration(inbox.Executor.AttemptTimeout)
-	config.Webhook.MaxBodyBytes = profile.BotWebhookInbox.MaxBodyBytes
-	config.Webhook.DedupTTL = time.Duration(profile.BotWebhookInbox.DedupTTLMS) * time.Millisecond
-	config.Webhook.DedupTimeout = time.Duration(profile.BotWebhookInbox.DedupTimeoutMS) * time.Millisecond
-}
-
-// newBaseConfig는 공통 구획을 모두 읽은 뒤 오류를 합쳐 돌려준다. 잘못된 env가 이 공통 구획 여러 곳에 있어도
-// 한 번의 기동 실패로 모두 보이도록 첫 오류에서 멈추지 않으며, 오류가 하나라도 있으면 만든 설정은 버린다.
-// 이보다 먼저 buildConfig가 읽는 iris·tracing·kakao 로더는
-// 첫 오류에서 반환하므로 여기에 합쳐지지 않는다.
-func newBaseConfig(
-	corsAllowedOrigins []string,
-	corsMissingInProduction bool,
-	options LoadOptions,
-) (*Config, error) {
-	server, serverErr := loadServerConfig()
-	holodex, holodexErr := loadHolodexConfig()
-	valkey, valkeyErr := LoadValkeyConfig()
-	postgres, postgresErr := LoadPostgresConfig()
-	notification, notificationErr := loadNotificationConfig()
-	logging, loggingErr := LoadLoggingConfig()
-	bot, botErr := loadBotConfig()
-	services, servicesErr := loadServicesConfig()
-	cliproxy, cliproxyErr := LoadCliproxyConfig()
-	llm, llmErr := LoadLLMConfig()
-	exa, exaErr := LoadExaConfig()
-	officialSchedule, officialScheduleErr := loadOfficialScheduleConfig()
-	maxResponseBodyBytes, maxResponseBodyBytesErr := loadMaxResponseBodyBytes()
-	cors, corsErr := loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options)
-	ingestion, ingestionErr := loadIngestionConfig()
-
-	if err := errors.Join(
-		serverErr, holodexErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr, servicesErr,
-		cliproxyErr, llmErr, exaErr, officialScheduleErr, maxResponseBodyBytesErr, corsErr, ingestionErr,
-	); err != nil {
-		return nil, err
-	}
-
-	return &Config{
-		InternalH3:           LoadInternalH3ClientOptions(),
-		Server:               server,
-		Holodex:              holodex,
-		Valkey:               valkey,
-		Postgres:             postgres,
-		Notification:         notification,
-		Logging:              logging,
-		Bot:                  bot,
-		Services:             services,
-		Environment:          envload.AppEnvironment(),
-		SettingsFilePath:     loadSettingsFilePath(),
-		Cliproxy:             cliproxy,
-		LLM:                  llm,
-		Exa:                  exa,
-		OfficialSchedule:     officialSchedule,
-		MaxResponseBodyBytes: maxResponseBodyBytes,
-		LLMSchedulerURL:      sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		AlarmServiceURL:      sharedenv.String("ALARM_INTERNAL_URL", ""),
-		BotInternalURL:       sharedenv.String("HOLOLIVE_BOT_INTERNAL_URL", ""),
-		CORS:                 cors,
-		Ingestion:            ingestion,
-		Version:              sharedenv.String("APP_VERSION", "1.1.0-go"),
-	}, nil
+	return errors.Join(
+		serverErr, holodexErr, valkeyErr, postgresErr, notificationErr, loggingErr, botErr,
+		cliproxyErr, llmErr, exaErr, officialScheduleErr, corsErr, ingestionErr,
+	)
 }

@@ -144,7 +144,7 @@ func failCommittedCacheWrites(client *cachemocks.Client) {
 	client.HDelFunc = func(context.Context, string, ...string) error { return cacheErr }
 	client.HSetFunc = func(context.Context, string, string, string) error { return cacheErr }
 	client.DelFunc = func(context.Context, string) error { return cacheErr }
-	client.ScanKeysFunc = func(context.Context, string, int64) ([]string, error) { return nil, cacheErr }
+	client.ScanKeyPagesFunc = func(context.Context, string, int64, func([]string) error) error { return cacheErr }
 	client.DoMultiFunc = func(context.Context, ...valkey.Completed) []valkey.ValkeyResult { return nil }
 }
 
@@ -193,15 +193,17 @@ func TestSubscriptionCommitBoundaryPreservesRecipients(t *testing.T) {
 func assertCommittedRecipients(t *testing.T, service *AlarmService, pool *pgxpool.Pool, mutation commitMutationCase) {
 	t.Helper()
 
+	resolver := sharedalarm.NewSubscriberResolver(service.cache, pool)
+
 	for kind, expected := range map[domain.AlarmType][]string{
 		domain.AlarmTypeLive: mutation.wantLive, domain.AlarmTypeCommunity: mutation.wantCommunity, domain.AlarmTypeShorts: mutation.wantShorts,
 	} {
-		rooms, err := sharedalarm.ResolveEventSubscribers(t.Context(), service.cache, pool, testChannelID, "", kind)
+		rooms, err := resolver.ResolveEventSubscribers(t.Context(), testChannelID, "", kind)
 		require.NoError(t, err)
 		require.ElementsMatch(t, expected, rooms, "alarm type: %s", kind)
 	}
 
-	rooms, err := sharedalarm.ResolveEventSubscribers(t.Context(), service.cache, pool, "new-channel", "", domain.AlarmTypeLive)
+	rooms, err := resolver.ResolveEventSubscribers(t.Context(), "new-channel", "", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.ElementsMatch(t, mutation.wantNew, rooms)
 
@@ -237,7 +239,7 @@ func TestFailedNegativeInvalidationLeavesDatabaseAndRecipientsUnchanged(t *testi
 	require.NoError(t, err)
 	require.Empty(t, alarms)
 
-	rooms, err := sharedalarm.ResolveEventSubscribers(ctx, client, pool, testChannelID, "", domain.AlarmTypeLive)
+	rooms, err := sharedalarm.NewSubscriberResolver(client, pool).ResolveEventSubscribers(ctx, testChannelID, "", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{testExistingRoomA, testExistingRoomB}, rooms)
 }

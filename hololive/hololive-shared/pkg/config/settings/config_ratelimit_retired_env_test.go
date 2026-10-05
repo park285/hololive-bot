@@ -18,14 +18,13 @@ func TestRejectRetiredRateLimiterInstanceIDEnvIsPresenceBased(t *testing.T) {
 	}
 }
 
-// 분산 limiter를 끄면 limiter 생성 경로가 실행되지 않는다. 그래도 키가 있으면 LoadConfig runtime 기동이 실패해야
+// 분산 limiter를 끄면 limiter 생성 경로가 실행되지 않는다. 그래도 키가 있으면 egress runtime 공통 거절(RejectRetiredRuntimeEnv)이 실패해야
 // 존재 기준 거절이 limiter 설정과 무관하게 유지된다.
-func TestLoadBotRuntimeRejectsRetiredInstanceIDWithDistributedLimiterDisabled(t *testing.T) {
-	setRequiredLoadEnv(t)
+func TestRejectRetiredRuntimeEnvRejectsRetiredInstanceIDWithDistributedLimiterDisabled(t *testing.T) {
 	t.Setenv("HOLODEX_DISTRIBUTED_RATELIMIT_ENABLED", "false")
 	t.Setenv("INSTANCE_ID", "")
 
-	if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), "INSTANCE_ID is retired") {
-		t.Fatalf("loadBotRuntimeConfig() error = %v, want retired INSTANCE_ID rejection", err)
+	if err := RejectRetiredRuntimeEnv(); err == nil || !strings.Contains(err.Error(), "INSTANCE_ID is retired") {
+		t.Fatalf("RejectRetiredRuntimeEnv() error = %v, want retired INSTANCE_ID rejection", err)
 	}
 }

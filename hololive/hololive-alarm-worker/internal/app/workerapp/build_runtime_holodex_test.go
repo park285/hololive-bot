@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -56,7 +57,7 @@ func TestBuildAlarmHolodexServiceUsesRuntimeHolodexConfig(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	appConfig := &settings.Config{
+	appConfig := &workerconfig.RuntimeConfig{
 		Holodex: settings.DefaultHolodexOperationalConfig(),
 	}
 
@@ -65,6 +66,7 @@ func TestBuildAlarmHolodexServiceUsesRuntimeHolodexConfig(t *testing.T) {
 	appConfig.Holodex.DistributedRateLimit.Enabled = false
 
 	holodexService, err := buildAlarmHolodexService(
+		t.Context(),
 		appConfig,
 		&sharedmodules.InfraModule{Cache: cachemocks.NewLenientClient()},
 		nil,

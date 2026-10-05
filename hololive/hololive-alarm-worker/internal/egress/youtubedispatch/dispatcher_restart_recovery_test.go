@@ -233,7 +233,7 @@ func runRestartAlreadySentCase(t *testing.T, tc restartAlreadySentCase, fixedSen
 
 	var deliveryRows []deliveryTestDeliveryModel
 
-	require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = ?", item.ID).Error)
+	require.NoError(t, findDeliveryTestRowsOrderedWhere(db, &deliveryRows, "id ASC", "outbox_id = $1", item.ID).Error)
 	require.Len(t, deliveryRows, 1)
 }
 

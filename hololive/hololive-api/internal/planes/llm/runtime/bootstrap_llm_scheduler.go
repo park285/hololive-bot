@@ -41,8 +41,9 @@ import (
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
+	cacheproviders "github.com/kapu/hololive-shared/pkg/providers/cache"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
+	memberproviders "github.com/kapu/hololive-shared/pkg/providers/member"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -170,7 +171,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LL
 		return nil, errors.New("logger must not be nil")
 	}
 
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, schedulerConfig.Valkey, logger)
+	cacheResources, cleanupCache, err := cacheproviders.ProvideCacheResources(ctx, schedulerConfig.Valkey, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init cache: %w", err)
 	}
@@ -218,9 +219,9 @@ func buildLLMSchedulerComponents(
 		return nil, fmt.Errorf("build LLM guards: %w", err)
 	}
 
-	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
+	memberRepository := member.NewMemberRepository(postgresService, logger)
 
-	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
+	memberCache, err := memberproviders.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init member cache: %w", err)
 	}
@@ -231,7 +232,7 @@ func buildLLMSchedulerComponents(
 		}
 	}()
 
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
+	memberServiceAdapter := member.NewMemberServiceAdapter(memberCache)
 	memberDataProvider := memberServiceAdapter
 
 	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)

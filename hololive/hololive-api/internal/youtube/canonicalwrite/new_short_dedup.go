@@ -25,11 +25,7 @@ func dropAlreadyKnownShortArtifacts(
 
 	var rows []knownShortVideoIDRow
 
-	query := mustSQL("repository_batch_new_short_dedup_0048_01.sql") +
-		dbx.InPlaceholders(len(videoIDs)) +
-		mustSQL("repository_batch_new_short_dedup_0082_02.sql")
-
-	if err := dbx.SelectSQL(ctx, tx, &rows, "query known shorts without outbox", query, dbx.AnyArgs(videoIDs)...); err != nil {
+	if err := dbx.SelectSQL(ctx, tx, &rows, "query known shorts without outbox", mustSQL("repository_batch_new_short_dedup_0048_01.sql"), videoIDs); err != nil {
 		return nil, nil, fmt.Errorf("query known shorts without outbox: %w", err)
 	}
 

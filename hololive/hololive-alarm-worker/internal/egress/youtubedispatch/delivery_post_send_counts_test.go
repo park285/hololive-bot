@@ -117,7 +117,7 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 		postSendCountOtherTelemetryRows(outboxes, times),
 	)).Error)
 
-	repository := telemetry.NewRepository(db)
+	repository := newDeliveryTelemetryRepository(t, db)
 
 	summaries, err := repository.ListPostSendCountsSince(ctx, windowStart)
 	require.NoError(t, err)

@@ -83,10 +83,10 @@ func TestSubscriberReadThroughPreservesConcurrentMutation(t *testing.T) {
 				}
 
 				if batch {
-					_, err := ResolveUncachedChannelSubscribersByType(ctx, client, snapshot, []string{channel}, domain.AlarmTypeLive)
+					_, err := NewSubscriberResolver(client, snapshot).ResolveUncachedChannelSubscribersByType(ctx, []string{channel}, domain.AlarmTypeLive)
 					require.NoError(t, err)
 				} else {
-					_, err := ResolveChannelSubscribersByType(ctx, client, snapshot, channel, domain.AlarmTypeLive)
+					_, err := NewSubscriberResolver(client, snapshot).ResolveChannelSubscribersByType(ctx, channel, domain.AlarmTypeLive)
 					require.NoError(t, err)
 				}
 
@@ -95,7 +95,7 @@ func TestSubscriberReadThroughPreservesConcurrentMutation(t *testing.T) {
 					require.NoError(t, client.Del(ctx, key))
 				}
 
-				next, err := ResolveChannelSubscribersByType(ctx, client, db, channel, domain.AlarmTypeLive)
+				next, err := NewSubscriberResolver(client, db).ResolveChannelSubscribersByType(ctx, channel, domain.AlarmTypeLive)
 				require.NoError(t, err)
 
 				if add {

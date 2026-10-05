@@ -31,9 +31,9 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-api/internal/readiness"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
@@ -42,7 +42,7 @@ import (
 
 func ProvideAPIRouter(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
@@ -76,7 +76,7 @@ func ProvideAPIRouter(
 	return router, nil
 }
 
-func buildAdminAllowedIPs(appConfig *settings.Config) ([]*net.IPNet, error) {
+func buildAdminAllowedIPs(appConfig *apiconfig.AdminPlaneConfig) ([]*net.IPNet, error) {
 	adminAllowedIPs, err := middleware.NewIPAllowList(appConfig.Server.AdminAllowedIPs)
 	if err != nil {
 		return nil, fmt.Errorf("parse admin allowed IPs: %w", err)
@@ -90,7 +90,7 @@ func buildAdminAllowedIPs(appConfig *settings.Config) ([]*net.IPNet, error) {
 }
 
 func validateAPIRouterInputs(
-	appConfig *settings.Config,
+	appConfig *apiconfig.AdminPlaneConfig,
 	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
 ) error {
@@ -141,7 +141,7 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 	return nil
 }
 
-func newAPIRouter(ctx context.Context, appConfig *settings.Config, logger *slog.Logger, readyProbe ...*sharedreadiness.Probe) (*gin.Engine, error) {
+func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger, readyProbe ...*sharedreadiness.Probe) (*gin.Engine, error) {
 	if appConfig == nil {
 		return nil, errors.New("config must not be nil")
 	}
@@ -186,7 +186,7 @@ func newAPIRouter(ctx context.Context, appConfig *settings.Config, logger *slog.
 	return router, nil
 }
 
-func validateAPICORSConfig(appConfig *settings.Config, isProduction bool) error {
+func validateAPICORSConfig(appConfig *apiconfig.AdminPlaneConfig, isProduction bool) error {
 	origins := normalizedOrigins(appConfig.CORS.AllowedOrigins)
 	if isProduction && appConfig.CORS.Enforce && (len(origins) == 0 || containsWildcard(origins)) {
 		return errors.New("explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true")
@@ -195,7 +195,7 @@ func validateAPICORSConfig(appConfig *settings.Config, isProduction bool) error 
 	return nil
 }
 
-func warnMissingProductionCORS(logger *slog.Logger, appConfig *settings.Config, isProduction bool) {
+func warnMissingProductionCORS(logger *slog.Logger, appConfig *apiconfig.AdminPlaneConfig, isProduction bool) {
 	if !isProduction || !appConfig.CORS.MissingInProduction {
 		return
 	}

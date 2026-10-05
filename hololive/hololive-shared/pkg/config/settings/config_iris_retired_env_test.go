@@ -21,7 +21,7 @@ func TestRejectRetiredIrisEnvIsPresenceBased(t *testing.T) {
 
 func TestIrisRuntimeValidationAlwaysValidatesFileStatInProduction(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
-	// 퇴역한 우회 플래그가 프로세스 env에 남아 있어도 검사는 꺼지지 않는다(기동은 buildConfig의 가드가 먼저 막는다).
+	// 퇴역한 우회 플래그가 프로세스 env에 남아 있어도 검사는 꺼지지 않는다(기동은 RejectRetiredRuntimeEnv가 먼저 막는다).
 	t.Setenv("IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS", "true")
 
 	if !LoadIrisRuntimeValidationConfig().ValidateFileStat {

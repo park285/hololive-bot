@@ -24,7 +24,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 )
 
 func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -46,7 +46,7 @@ func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
 	})
 
 	t.Run("nil logger", func(t *testing.T) {
-		runtime, err := BuildRuntime(t.Context(), &settings.Config{}, nil)
+		runtime, err := BuildRuntime(t.Context(), &apiconfig.BotPlaneConfig{}, nil)
 		if err == nil {
 			t.Fatal("BuildRuntime() expected error for nil logger")
 		}

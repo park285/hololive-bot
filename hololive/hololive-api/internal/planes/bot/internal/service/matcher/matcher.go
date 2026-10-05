@@ -107,11 +107,3 @@ func NewMatcher(
 
 	return mm
 }
-
-func (mm *Matcher) providerWithContext(ctx context.Context) domain.MemberDataProvider {
-	if mm == nil || mm.membersData == nil {
-		return nil
-	}
-
-	return mm.membersData.WithContext(ctx)
-}

@@ -84,7 +84,9 @@ func buildAlarmStateUpsertQuery(
 	finalAlarmSentExpr string,
 	deliveryStatusExpr string,
 ) (string, []any) {
-	args := make([]any, 0, len(normalized)*11)
+	const columnsPerRow = 11
+
+	args := make([]any, 0, len(normalized)*columnsPerRow)
 
 	var sb strings.Builder
 
@@ -95,7 +97,7 @@ func buildAlarmStateUpsertQuery(
 			sb.WriteByte(',')
 		}
 
-		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		writeRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(args,
 			record.Kind,

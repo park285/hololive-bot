@@ -46,7 +46,7 @@ func TestAddAlarmAfterSubscriberEvictionPreservesEveryRecipient(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, added)
 
-			rooms, err := sharedalarm.ResolveEventSubscribers(ctx, service.cache, pool, testChannelID, "", kind)
+			rooms, err := sharedalarm.NewSubscriberResolver(service.cache, pool).ResolveEventSubscribers(ctx, testChannelID, "", kind)
 			require.NoError(t, err)
 			require.ElementsMatch(t, []string{testExistingRoomA, testExistingRoomB, testNewRoomC}, rooms)
 		})
@@ -74,7 +74,7 @@ func TestRemoveAlarmAfterSubscriberEvictionKeepsSubscribedChannelDiscoverable(t 
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{testChannelID, testOtherChannelID}, channels)
 
-	rooms, err := sharedalarm.ResolveEventSubscribers(ctx, service.cache, pool, testChannelID, "", domain.AlarmTypeLive)
+	rooms, err := sharedalarm.NewSubscriberResolver(service.cache, pool).ResolveEventSubscribers(ctx, testChannelID, "", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Equal(t, []string{"remaining"}, rooms)
 
@@ -119,7 +119,7 @@ func TestAddAlarmCacheFailureKeepsCommittedRecipients(t *testing.T) {
 	_, err = service.AddAlarm(ctx, &domain.AddAlarmRequest{RoomID: "committed", ChannelID: testChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}})
 	require.Error(t, err)
 
-	rooms, err := sharedalarm.ResolveEventSubscribers(ctx, service.cache, pool, testChannelID, "", domain.AlarmTypeLive)
+	rooms, err := sharedalarm.NewSubscriberResolver(service.cache, pool).ResolveEventSubscribers(ctx, testChannelID, "", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"existing", "committed"}, rooms)
 }

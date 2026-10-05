@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -37,7 +38,7 @@ func TestInitCoreIntegrationServicesReturnsACLInitializationError(t *testing.T) 
 
 	services, err := InitCoreIntegrationServices(
 		t.Context(),
-		&settings.Config{
+		&apiconfig.BotPlaneConfig{
 			Kakao: settings.KakaoConfig{
 				ACLEnabled: true,
 				ACLMode:    "whitelist",
@@ -62,7 +63,7 @@ func TestInitCoreIntegrationServicesRejectsInvalidACLMode(t *testing.T) {
 
 	services, err := InitCoreIntegrationServices(
 		t.Context(),
-		&settings.Config{Kakao: settings.KakaoConfig{ACLMode: "not-a-mode"}},
+		&apiconfig.BotPlaneConfig{Kakao: settings.KakaoConfig{ACLMode: "not-a-mode"}},
 		&sharedmodules.InfraModule{},
 		slog.New(slog.DiscardHandler),
 	)
@@ -77,7 +78,7 @@ func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 
 	services, err := InitCoreIntegrationServices(
 		t.Context(),
-		&settings.Config{
+		&apiconfig.BotPlaneConfig{
 			Kakao: settings.KakaoConfig{
 				ACLEnabled: true,
 				ACLMode:    "whitelist",

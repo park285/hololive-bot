@@ -44,8 +44,8 @@ The current production runtime set is three Go binaries:
 `hololive/hololive-shared/` is the central shared module. It contains:
 
 - domain models under `pkg/domain`;
-- config loading and validation under `pkg/config`;
-- provider wiring under `pkg/providers`;
+- config section types, loaders and pure validators under `pkg/config` (runtime aggregates belong to each module's `internal/config`);
+- typed infra constructors under `pkg/providers/{cache,database,holodex,iris,member,modules}`;
 - shared service implementations under `pkg/service`;
 - runtime contracts under `pkg/contracts`;
 - database/cache integration under internal/shared packages.
@@ -54,9 +54,12 @@ The current production runtime set is three Go binaries:
 `internal/apifoundation`, admin의 `runtime`·`internal/httpapi`, 공통 trigger의 `internal/httpapi`를 사용합니다.
 Observation publish는 collector `internal/runtime/sourceobservation`, consume와 private reducer는 API
 `internal/youtube/{sourceobservation,reconcile,community}`에 있습니다. Worker의 구독 서비스·private cache,
-dedup·queue·dispatchoutbox와 alarm dispatch runner·formatter는 worker의 `internal/`이 소유합니다.
-공용 strict 환경 파싱과 순수 정책은 shared `pkg/config/{envload,runtimepolicy}`, 시간과 target-minute 계산은
-`pkg/timeutil`·`pkg/alarmtiming/targetpolicy`, DB 구성은 `pkg/providers/database`가 담당합니다.
+dedup·queue·dispatchoutbox, alarm dispatch runner·formatter와 범용 notification delivery dispatcher·store·SQL
+(`internal/egress/notificationdelivery`)은 worker의 `internal/`이 소유합니다.
+공용 strict 환경 파싱과 순수 정책은 shared `pkg/config/{envload,runtimepolicy}`, 설정 구획 타입·loader·순수 검증은
+`pkg/config/settings`, 시간과 target-minute 계산은 `pkg/timeutil`·`pkg/alarmtiming/targetpolicy`, DB 구성은
+`pkg/providers/database`가 담당합니다. API `BotPlaneConfig`/`AdminPlaneConfig`/`APIWorkerProfile`과 worker
+`RuntimeConfig`/`AlarmWorkerProfile`은 각 module `internal/config`가 조립합니다.
 
 Sibling `../shared-go/` holds lower-level utilities shared outside the Hololive-specific modules.
 

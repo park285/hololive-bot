@@ -22,6 +22,7 @@ package membernews
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,21 +32,51 @@ import (
 )
 
 type stubMemberDataProvider struct {
-	channelIDs []string
+	channelIDs    []string
+	channelIDsErr error
 }
 
-func (s *stubMemberDataProvider) FindMemberByChannelID(_ string) *domain.Member { return nil }
-func (s *stubMemberDataProvider) FindMemberByName(_ string) *domain.Member      { return nil }
-func (s *stubMemberDataProvider) FindMemberByAlias(_ string) *domain.Member     { return nil }
-func (s *stubMemberDataProvider) GetChannelIDs() []string {
-	return append([]string(nil), s.channelIDs...)
+func (s *stubMemberDataProvider) FindMemberByChannelID(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
 }
-func (s *stubMemberDataProvider) LoadAllMembers() ([]*domain.Member, error) { return nil, nil }
-func (s *stubMemberDataProvider) WithContext(_ context.Context) domain.MemberDataProvider {
-	return s
+
+func (s *stubMemberDataProvider) FindMemberByName(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
 }
-func (s *stubMemberDataProvider) FindMembersByName(_ string) []*domain.Member  { return nil }
-func (s *stubMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member { return nil }
+
+func (s *stubMemberDataProvider) FindMemberByAlias(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
+func (s *stubMemberDataProvider) GetChannelIDs(context.Context) ([]string, error) {
+	if s.channelIDsErr != nil {
+		return nil, s.channelIDsErr
+	}
+
+	return append([]string(nil), s.channelIDs...), nil
+}
+
+func (s *stubMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+func (s *stubMemberDataProvider) FindMembersByName(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+func (s *stubMemberDataProvider) FindMembersByAlias(context.Context, string) ([]*domain.Member, error) {
+	return []*domain.Member{}, nil
+}
+
+// 공식 채널 목록을 적재하지 못하면 빈 허용 목록으로 기동하지 않고 오류다.
+func TestSourceValidator_ChannelIDLoadFailureFailsConstruction(t *testing.T) {
+	cause := errors.New("member cache unavailable")
+
+	validator, err := NewSourceValidator(t.Context(), "", &stubMemberDataProvider{channelIDsErr: cause}, nil)
+	if !errors.Is(err, cause) || validator != nil {
+		t.Fatalf("NewSourceValidator() = %v, %v; want channel ID load failure", validator, err)
+	}
+}
 
 func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	tempDir := t.TempDir()
@@ -55,7 +86,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 		t.Fatalf("write allowlist: %v", err)
 	}
 
-	validator, err := NewSourceValidator(allowlistPath, nil, nil)
+	validator, err := NewSourceValidator(t.Context(), allowlistPath, nil, nil)
 	if err != nil {
 		t.Fatalf("new source validator: %v", err)
 	}
@@ -96,7 +127,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	memberData := &stubMemberDataProvider{channelIDs: []string{"UC_TEST_OFFICIAL"}}
 
-	validator, err := NewSourceValidator("", memberData, nil)
+	validator, err := NewSourceValidator(t.Context(), "", memberData, nil)
 	if err != nil {
 		t.Fatalf("new source validator: %v", err)
 	}
@@ -140,7 +171,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 }
 
 func TestSourceValidator_HasCorroboration(t *testing.T) {
-	validator, err := NewSourceValidator("", nil, nil)
+	validator, err := NewSourceValidator(t.Context(), "", nil, nil)
 	if err != nil {
 		t.Fatalf("new source validator: %v", err)
 	}

@@ -16,20 +16,18 @@ func TestRejectRetiredHolodexLiveStatusFallbackEnvIsPresenceBased(t *testing.T) 
 	}
 }
 
-func TestLoadBotRuntimeRejectsRetiredHolodexLiveStatusFallbackEnv(t *testing.T) {
-	setRequiredLoadEnv(t)
+func TestRejectRetiredRuntimeEnvRejectsRetiredHolodexLiveStatusFallbackEnv(t *testing.T) {
 	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE", "4")
 
-	if _, err := loadBotRuntimeConfig(); err == nil {
-		t.Fatal("loadBotRuntimeConfig must reject retired HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE")
+	if err := RejectRetiredRuntimeEnv(); err == nil {
+		t.Fatal("RejectRetiredRuntimeEnv must reject retired HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE")
 	}
 }
 
-func TestLoadBotRuntimeRejectsRetiredLLMTokenCeilingEnv(t *testing.T) {
-	setRequiredLoadEnv(t)
+func TestRejectRetiredRuntimeEnvRejectsRetiredLLMTokenCeilingEnv(t *testing.T) {
 	t.Setenv("LLM_MONTHLY_TOKEN_CEILING", "0")
 
-	if _, err := loadBotRuntimeConfig(); err == nil {
-		t.Fatal("loadBotRuntimeConfig must reject retired LLM_MONTHLY_TOKEN_CEILING")
+	if err := RejectRetiredRuntimeEnv(); err == nil {
+		t.Fatal("RejectRetiredRuntimeEnv must reject retired LLM_MONTHLY_TOKEN_CEILING")
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 )
 
 func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -20,7 +20,7 @@ func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
 	assert.Nil(t, runtime)
 	require.ErrorContains(t, err, "config must not be nil")
 
-	runtime, err = BuildAdminAPIRuntime(t.Context(), &settings.Config{}, nil)
+	runtime, err = BuildAdminAPIRuntime(t.Context(), &apiconfig.AdminPlaneConfig{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	require.ErrorContains(t, err, "logger must not be nil")
@@ -30,7 +30,7 @@ func TestNormalizeAdminAPIRuntimeInputs_ReturnsValidatedConfig(t *testing.T) {
 	t.Parallel()
 
 	inputCtx := t.Context()
-	appConfig := &settings.Config{}
+	appConfig := &apiconfig.AdminPlaneConfig{}
 	logger := slog.New(slog.DiscardHandler)
 
 	ctx, validatedConfig, err := normalizeAdminAPIRuntimeInputs(inputCtx, appConfig, logger)

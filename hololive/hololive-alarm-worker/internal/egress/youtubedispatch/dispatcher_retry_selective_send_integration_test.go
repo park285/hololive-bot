@@ -158,28 +158,28 @@ func assertRecoverySelectiveSendTracking(
 
 	var updatedSentTracking deliveryTestTrackingModel
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedSentTracking, "kind = ? AND content_id = ?", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedSentTracking, "kind = $1 AND content_id = $2", string(fixture.sentOutbox.Kind), fixture.sentOutbox.ContentID).Error)
 	require.NotNil(t, updatedSentTracking.AlarmSentAt)
 	assert.Equal(t, spec.alreadySentAt, updatedSentTracking.AlarmSentAt.UTC())
 	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedSentTracking.DeliveryStatus)
 
 	var updatedPendingTracking deliveryTestTrackingModel
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedPendingTracking, "kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).Error)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedPendingTracking, "kind = $1 AND content_id = $2", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).Error)
 	require.NotNil(t, updatedPendingTracking.AlarmSentAt)
 	assert.WithinDuration(t, fixedSentAt, updatedPendingTracking.AlarmSentAt.UTC(), 2*time.Minute)
 	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedPendingTracking.DeliveryStatus)
 
 	var updatedSentState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &updatedSentState, "kind = ? AND post_id = ?", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedSentState, "kind = $1 AND post_id = $2", fixture.sentOutbox.Kind, fixture.sentPostID).Error)
 	require.NotNil(t, updatedSentState.AlarmSentAt)
 	assert.Equal(t, spec.alreadySentAt, updatedSentState.AlarmSentAt.UTC())
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedSentState.DeliveryStatus)
 
 	var updatedPendingState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &updatedPendingState, "kind = ? AND post_id = ?", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
+	require.NoError(t, firstDeliveryTestRow(db, &updatedPendingState, "kind = $1 AND post_id = $2", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
 	assert.Nil(t, updatedPendingState.AuthorizedAt)
 	require.NotNil(t, updatedPendingState.AlarmSentAt)
 	assert.WithinDuration(t, fixedSentAt, updatedPendingState.AlarmSentAt.UTC(), 2*time.Minute)

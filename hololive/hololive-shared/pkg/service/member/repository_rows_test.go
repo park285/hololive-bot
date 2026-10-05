@@ -159,11 +159,11 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 		{scan: func(dest ...any) error {
 			assignScanDest(dest[0], 2)
-			assignScanDest(dest[1], "miko")
+			assignScanDest(dest[1], testMemberMikoSlug)
 
 			channelID := testChannelUC2
 			assignScanDest(dest[2], &channelID)
-			assignScanDest(dest[3], "Miko")
+			assignScanDest(dest[3], testMemberMiko)
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
 			assignScanDest[*string](dest[6], nil)
@@ -205,7 +205,7 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 
 			channelID := testChannelUC2
 			assignScanDest(dest[1], &channelID)
-			assignScanDest(dest[2], "Miko")
+			assignScanDest(dest[2], testMemberMiko)
 			assignScanDest[*string](dest[3], nil)
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
@@ -263,11 +263,11 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 		{scan: func(dest ...any) error {
 			assignScanDest(dest[0], 2)
-			assignScanDest(dest[1], "miko")
+			assignScanDest(dest[1], testMemberMikoSlug)
 
 			channelID := testChannelUC2
 			assignScanDest(dest[2], &channelID)
-			assignScanDest(dest[3], "Miko")
+			assignScanDest(dest[3], testMemberMiko)
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
 			assignScanDest[*string](dest[6], nil)
@@ -292,7 +292,7 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		t.Fatalf("members = %#v, want one valid member for UC1", members)
 	}
 
-	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to parse member row", "Miko", "failed to unmarshal aliases"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to parse member row", testMemberMiko, "failed to unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }

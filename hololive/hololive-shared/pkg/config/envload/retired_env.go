@@ -9,7 +9,7 @@ import (
 // 가드 도입 리비전: 9e8f27b03(MEMBER_NEWS_CLIPROXY_MODEL·DB_SSLMODE·DB_QUERY_EXEC_MODE), f1b6ef350(OTEL_ENVIRONMENT).
 // 존재 기준 전환: stack-audit 2026-09-26(PLN-20260926-stack-audit-refactoring T17). 그 전에는 빈 값을 통과시켰다.
 //
-// 배포 선행 조건이자 제거 조건: 이 가드를 부르는 runtime(hololive-api·alarm-worker의 settings.LoadConfig, youtube-collector의
+// 배포 선행 조건이자 제거 조건: 이 가드를 부르는 runtime(hololive-api·alarm-worker의 runtime config 로더, youtube-collector의
 // RuntimeConfig.Validate)의 env 원천인 중앙 compose.env·bot.env·alarm-worker.env, AP ap-compose.env, 모든
 // youtube-collector.env(HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE)와 host-native collector env, 그 stack-secrets master 사본,
 // 실행 중 프로세스 env에 아래 네 키가 0건이어야 한다. T18(2026-09-26)에서 모든 hololive env에 0건임을 확인했다.

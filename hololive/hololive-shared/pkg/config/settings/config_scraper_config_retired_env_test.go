@@ -20,8 +20,8 @@ func TestRejectRetiredScraperConfigEnvIsPresenceBased(t *testing.T) {
 	}
 }
 
-// 이전에는 아래 키를 가드 없이 무시하거나(삭제된 alias) 소비자 없이 파싱했다. 이제는 LoadConfig runtime 기동을 막는다.
-func TestLoadBotRuntimeRejectsRetiredScraperAndIgnoredLegacyEnv(t *testing.T) {
+// 이전에는 아래 키를 가드 없이 무시하거나(삭제된 alias) 소비자 없이 파싱했다. 이제는 egress runtime 공통 거절(RejectRetiredRuntimeEnv)이 기동을 막는다.
+func TestRejectRetiredRuntimeEnvRejectsRetiredScraperAndIgnoredLegacyEnv(t *testing.T) {
 	for _, tc := range []struct{ key, value string }{
 		{"SCRAPER_VIDEOS_SECONDS", "420"},
 		{"SCRAPER_WORKER_COUNT", "6"},
@@ -33,11 +33,10 @@ func TestLoadBotRuntimeRejectsRetiredScraperAndIgnoredLegacyEnv(t *testing.T) {
 		{"SCRAPER_PROXY_URL", ""},
 	} {
 		t.Run(tc.key, func(t *testing.T) {
-			setRequiredLoadEnv(t)
 			t.Setenv(tc.key, tc.value)
 
-			if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), tc.key+" is retired") {
-				t.Fatalf("loadBotRuntimeConfig() error = %v, want retired %s rejection", err, tc.key)
+			if err := RejectRetiredRuntimeEnv(); err == nil || !strings.Contains(err.Error(), tc.key+" is retired") {
+				t.Fatalf("RejectRetiredRuntimeEnv() error = %v, want retired %s rejection", err, tc.key)
 			}
 		})
 	}

@@ -19,11 +19,10 @@ func TestRejectRetiredIngestionEnvIsPresenceBased(t *testing.T) {
 	}
 }
 
-func TestLoadBotRuntimeRejectsRetiredCommunityShortsCutoverEnv(t *testing.T) {
-	setRequiredLoadEnv(t)
+func TestRejectRetiredRuntimeEnvRejectsRetiredCommunityShortsCutoverEnv(t *testing.T) {
 	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10T01:11:12Z")
 
-	if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), "YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT is retired") {
-		t.Fatalf("loadBotRuntimeConfig() error = %v, want retired YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT rejection", err)
+	if err := RejectRetiredRuntimeEnv(); err == nil || !strings.Contains(err.Error(), "YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT is retired") {
+		t.Fatalf("RejectRetiredRuntimeEnv() error = %v, want retired YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT rejection", err)
 	}
 }
