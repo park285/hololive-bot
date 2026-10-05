@@ -581,19 +581,9 @@ func TestGroupAlarmDispatchEnvelopesForDeliveryPreservesScheduledMinuteBuckets(t
 
 func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	first := alarmGroupRenderEnvelope(3, "Member1", "abc", "Title1")
+	second := alarmGroupRenderEnvelope(1, "Member2", "def", "Title2")
 
-	first.Notification.MinutesUntil = 3
-	second.Notification.MinutesUntil = 1
-	first.Notification.Channel.Name = "Member1"
-	first.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + "Member1"
-	second.Notification.Channel.Name = "Member2"
-	second.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + "Member2"
-	first.Notification.Stream.ID = "abc"
-	second.Notification.Stream.ID = "def"
-	first.Notification.Stream.Title = "Title1"
-	second.Notification.Stream.Title = "Title2"
 	first.Notification.Stream.StartScheduled = &start
 	second.Notification.Stream.StartScheduled = &start
 
@@ -609,19 +599,9 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	first := alarmGroupRenderEnvelope(5, "Member1", "abc", "Title1")
+	second := alarmGroupRenderEnvelope(5, "Member2", "def", "Title2")
 
-	first.Notification.MinutesUntil = 5
-	second.Notification.MinutesUntil = 5
-	first.Notification.Channel.Name = "Member1"
-	first.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + "Member1"
-	second.Notification.Channel.Name = "Member2"
-	second.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + "Member2"
-	first.Notification.Stream.ID = "abc"
-	second.Notification.Stream.ID = "def"
-	first.Notification.Stream.Title = "Title1"
-	second.Notification.Stream.Title = "Title2"
 	first.Notification.Stream.StartActual = &start
 	second.Notification.Stream.StartActual = &start
 
@@ -641,19 +621,9 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 
 func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	first := alarmGroupRenderEnvelope(5, "LiveMember", "live", "Live Title")
+	second := alarmGroupRenderEnvelope(5, "UpcomingMember", "upcoming", "Upcoming Title")
 
-	first.Notification.MinutesUntil = 5
-	second.Notification.MinutesUntil = 5
-	first.Notification.Channel.Name = "LiveMember"
-	first.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + "LiveMember"
-	second.Notification.Channel.Name = "UpcomingMember"
-	second.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + "UpcomingMember"
-	first.Notification.Stream.ID = "live"
-	second.Notification.Stream.ID = "upcoming"
-	first.Notification.Stream.Title = "Live Title"
-	second.Notification.Stream.Title = "Upcoming Title"
 	first.Notification.Stream.StartActual = &start
 	second.Notification.Stream.StartScheduled = &start
 
@@ -1058,4 +1028,17 @@ func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {
 	require.Len(t, consumer.quarantined, 1)
 	require.NoError(t, consumer.quarantineCtxErr, "프로세스 종료로 부모가 취소돼도 상태 기록은 완료돼야 한다")
 	assert.True(t, consumer.quarantineDeadline, "취소를 끊은 정리 컨텍스트에도 시간 상한이 있어야 한다")
+}
+
+// alarmGroupRenderEnvelope는 members 정본 이름이 memberName인 채널의 방송 알림 envelope를 만든다.
+func alarmGroupRenderEnvelope(minutesUntil int, memberName, streamID, title string) domain.AlarmQueueEnvelope {
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
+	envelope.Notification.MinutesUntil = minutesUntil
+	envelope.Notification.Channel.Name = memberName
+	envelope.Notification.Stream.ChannelID = alarmGoldenChannelPrefix + memberName
+	envelope.Notification.Stream.ID = streamID
+	envelope.Notification.Stream.Title = title
+
+	return envelope
 }

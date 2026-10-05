@@ -88,14 +88,13 @@ func TestListRoomAlarmsViewResolvesCacheMissFromMembers(t *testing.T) {
 
 			as.memberData = tc.provider
 
-			views, err := as.ListRoomAlarmsView(t.Context(), testRoomID)
-			if tc.wantErr != nil {
-				require.ErrorIs(t, err, tc.wantErr)
+			views, listErr := as.ListRoomAlarmsView(t.Context(), testRoomID)
+			require.ErrorIs(t, listErr, tc.wantErr)
 
+			if tc.wantErr != nil {
 				return
 			}
 
-			require.NoError(t, err)
 			require.Len(t, views, 1)
 			require.Equal(t, tc.wantName, views[0].MemberName)
 		})

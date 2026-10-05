@@ -314,7 +314,7 @@ func alarmNotificationChannelID(notification *domain.AlarmNotification) string {
 }
 
 // alarmContractMemberName은 멤버 표시명 예외 계약(members short_korean_name→korean_name→misc/vtuber_fallback)을 따른다.
-// members 조회 오류는 다른 이름으로 덮지 않고 렌더 실패(발송 전 재시도)로 돌려준다.
+// 조회 오류는 다른 이름으로 덮지 않고 렌더 실패(발송 전 재시도)로 돌려준다.
 func alarmContractMemberName(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, channelID string) (string, error) {
 	name, err := alarmDispatchMemberDisplayName(ctx, members, channelID)
 	if err != nil {

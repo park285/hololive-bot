@@ -53,7 +53,7 @@ func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) (
 }
 
 // resolveMissingMemberNames는 이름 캐시에 없는 채널을 members 정본(short_korean_name→korean_name→english_name)으로 채운다.
-// 조회 오류는 다른 이름으로 덮지 않고 돌려준다. members에도 이름이 없는 채널만 목록에 채널 ID로 남는다.
+// 조회 오류는 다른 이름으로 덮지 않고 돌려준다. 멤버 데이터에도 이름이 없는 채널만 목록에 채널 ID로 남는다.
 func (as *AlarmService) resolveMissingMemberNames(ctx context.Context, alarms []*domain.Alarm, cached map[string]string) (map[string]string, error) {
 	resolved := maps.Clone(cached)
 	if resolved == nil {

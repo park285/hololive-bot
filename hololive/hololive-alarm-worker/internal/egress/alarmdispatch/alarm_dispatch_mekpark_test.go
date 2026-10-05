@@ -52,6 +52,7 @@ func TestMekParkLiveAndUpcomingRendering(t *testing.T) {
 		require.Equal(t, "UNIT B", notification.Stream.ChannelName)
 
 		notification.Stream.ChannelID = ""
+
 		name, err := resolveAlarmDispatchMemberName(t.Context(), store, mekparkTestMembers{}, notification)
 		require.NoError(t, err)
 		require.Equal(t, "유닛 B · 미라", name)
