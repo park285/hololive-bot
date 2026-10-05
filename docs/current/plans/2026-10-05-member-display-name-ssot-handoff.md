@@ -100,3 +100,10 @@ YouTube 알림 발송(`GetMemberName`), 생일·기념일 알림(`celebration_ru
 2. 2단계: 1단계 확인 뒤 `alarms.member_name` 컬럼과 `misc/alarm_unknown_member` 행을 지우는 migration을 배포한다. 이후 롤백 지점은 1단계 이미지다.
 
 1단계 검증(마지막 코드 수정 뒤): `bash scripts/ci/local-ci.sh` 통과(vet, staticcheck, golangci-lint, NilAway, Go test, `-race`; integration tag 테스트는 기본값대로 생략). 운영 DB 읽기 전용 점검에서 X 스페이스 대상 5개와 알람 구독 채널 21개 모두 한국어 표시명이 있어 종단 문구로 바뀌는 채널은 없다.
+
+### 2026-10-05 운영 반영
+
+- PR #578(관측 실패 기록 일시 오류)과 #579(1단계)를 main `bcca48e2f`로 병합했다. 같은 revision에서 local CI를 통과한 뒤 `hololive-api`·`hololive-alarm-worker` arm64 이미지를 빌드해 중앙 `hololive-osaka`로 옮겼다. migration 268을 적용(`applied=1`)하고, stack-secrets master의 X 스페이스 설정에서 `targets[].member_name`을 지워 동기화한 뒤 worker(16:32:25 UTC)와 API(16:32:46 UTC)를 재생성했다. 두 서비스 모두 healthy·재시작 0이었고 ERROR·WARN 로그는 0건이었다. X 스페이스 수집은 새 설정으로 16:33 UTC에 성공했고, 배포 뒤 알람 추가 2건이 새 경로로 저장됐다.
+- PR #580(2단계)을 main `ecdfc7d5a`로 병합하고 API 이미지만 다시 빌드했다(worker 코드는 1단계와 같다). migration 269를 적용(`applied=1`)하고 API를 재생성(16:56:34 UTC)했다. `alarms.member_name`, `idx_alarms_channel_member_latest`, `misc/alarm_unknown_member` 행이 없어졌고 오류 로그는 0건이다.
+- 롤백 지점: `hololive-api:rollback-20261005T161817Z`·`hololive-alarm-worker:rollback-20261005T161817Z`(이전 `ab078d31d`, 269 적용 뒤에는 사용 불가), `hololive-api:rollback-20261005T165559Z`(1단계 `bcca48e2f`). X 스페이스 설정 백업은 kapu에 있다. 수용 뒤 정리는 별도 승인으로 한다.
+- 실제 채팅방에서 명령 응답과 알림 문구를 보는 확인은 하지 않았다. 다음 방송 알림과 명령 사용에서 표시명을 확인한다.
