@@ -198,7 +198,7 @@ func (r *Runner) publish(ctx context.Context, observations []Observation) error 
 
 		payload := domain.XSpaceDispatchPayload{
 			SpaceID: observation.SpaceID, CreatorID: observation.CreatorID,
-			ChannelID: target.ChannelID, MemberName: target.MemberName, Title: observation.Title, StartedAt: observation.StartedAt,
+			ChannelID: target.ChannelID, Title: observation.Title, StartedAt: observation.StartedAt,
 		}
 
 		if err := payload.Validate(); err != nil {

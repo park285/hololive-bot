@@ -24,7 +24,7 @@ func TestBuildAlarmDispatchGroupViewUsesShortLinksForYouTube(t *testing.T) {
 		},
 	}
 
-	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, group, builder)
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, group, builder)
 	require.NoError(t, err)
 
 	require.Len(t, view.Entries, 2)
@@ -39,7 +39,7 @@ func TestBuildAlarmDispatchGroupViewFallsBackForInvalidVideoID(t *testing.T) {
 	require.NoError(t, err)
 
 	notification := alarmShortLinkNotification("invalid", "Fallback")
-	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, alarmDispatchGroup{
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{notification},
 	}, builder)
@@ -60,7 +60,7 @@ func TestBuildAlarmDispatchGroupViewOmitsRetiredSimulcastLink(t *testing.T) {
 	integrated.Stream.IsIntegrated = true
 	integrated.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/channel"
 
-	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, alarmDispatchGroup{
+	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{integrated},
 	}, builder)
@@ -74,7 +74,7 @@ func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {
 	t.Parallel()
 
 	notification := alarmShortLinkNotification("dQw4w9WgXcQ", "Single")
-	view, err := buildAlarmDispatchItemView(t.Context(), nil, nil, &notification, -1)
+	view, err := buildAlarmDispatchItemView(t.Context(), nil, alarmGoldenMembers{}, &notification, -1)
 	require.NoError(t, err)
 
 	assert.Equal(t, domain.YouTubeWatchURL("dQw4w9WgXcQ"), view.URL)
@@ -90,7 +90,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, alarmShortLinkOrigin, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, alarmShortLinkOrigin, group)
 
 	require.NoError(t, err)
 	assert.Contains(t, message, alarmShortLinkOrigin+"/l/dQw4w9WgXcQ")
@@ -108,7 +108,7 @@ func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *te
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, "http://go.example.com", group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, alarmGoldenMembers{}, "http://go.example.com", group)
 
 	require.Error(t, err)
 	assert.Empty(t, message)
@@ -117,7 +117,7 @@ func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *te
 
 func alarmShortLinkNotification(videoID, title string) domain.AlarmNotification {
 	return domain.AlarmNotification{
-		Channel:      &domain.Channel{Name: testAlarmMemberName},
+		Channel:      &domain.Channel{ID: alarmGoldenChannelPrefix + testAlarmMemberName, Name: testAlarmMemberName},
 		Stream:       &domain.Stream{ID: videoID, Title: title},
 		MinutesUntil: 5,
 	}

@@ -22,7 +22,7 @@ func TestAlarmDispatchRunnerMultiEnvelope503StillRetries(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: &iris.HTTPError{StatusCode: 503}}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -50,7 +50,7 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousStreamFailure(t *te
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -84,7 +84,7 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailur
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -136,7 +136,7 @@ func TestAlarmDispatchRunnerRefusesGroupWithoutPersistedSendUnitIdentity(t *test
 
 			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
 			sender := &alarmDispatchRunnerTestSender{}
-			runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10}
 
 			processed, err := runner.runOnce(t.Context())
 

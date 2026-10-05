@@ -49,7 +49,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 
 	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteMarkdown, messageErr: context.DeadlineExceeded}
-	runner := Runner{consumer: consumer, sender: sender, renderer: template.NewRenderer(pool, slog.Default()), maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: template.NewRenderer(pool, slog.Default()), maxBatch: 10}
 
 	_, err = runner.runOnce(ctx)
 	require.NoError(t, err)
@@ -64,7 +64,7 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	sender.route = dispatchoutbox.SendRouteText
 	sender.messageErr = nil
 
-	restarted := Runner{consumer: consumer, sender: sender, maxBatch: 10, shortLinkBaseURL: "https://changed.example"}
+	restarted := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 10, shortLinkBaseURL: "https://changed.example"}
 
 	_, err = restarted.runOnce(ctx)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {
 			require.NoError(t, err)
 
 			sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText, messageErr: &iris.HTTPError{StatusCode: http.StatusConflict, Body: fmt.Sprintf(`{"code":%q}`, code)}}
-			runner := Runner{consumer: consumer, sender: sender, renderer: template.NewRenderer(pool, slog.Default()), maxBatch: 10}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: template.NewRenderer(pool, slog.Default()), maxBatch: 10}
 			attempts := 1
 
 			if code == iris.HTTPErrorCodeClientRequestIDFailed {
@@ -140,7 +140,7 @@ func TestAlarmRequestLegacyAttemptQuarantinesBeforeProvider(t *testing.T) {
 	require.NoError(t, err)
 
 	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText}
-	runner := Runner{consumer: consumer, sender: sender, maxBatch: 10}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 10}
 
 	_, err = runner.runOnce(ctx)
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestAlarmRequestLegacyAttemptQuarantinesBeforeProvider(t *testing.T) {
 
 func TestAlarmRequestPinnedErrorDoesNotPermitAmbiguousRetryWithoutRequest(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	group := alarmDispatchGroup{envelopes: withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})}
 	require.NoError(t, runner.persistPostSendingFailure(t.Context(), group, context.DeadlineExceeded))
 	require.Len(t, consumer.quarantined, 1)
@@ -167,7 +167,7 @@ func (requestClaimReleaser) DelMany(context.Context, []string) (int64, error) { 
 
 func TestAlarmRequestUnknownEvidencePreventsReissueOfJoinedConflict(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes, request: &dispatchoutbox.SendRequest{ClientRequestID: envelopes[0].ClientRequestID}}
 	cause := errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, &iris.HTTPError{StatusCode: http.StatusConflict, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`})
@@ -178,7 +178,7 @@ func TestAlarmRequestUnknownEvidencePreventsReissueOfJoinedConflict(t *testing.T
 
 func TestAlarmRequestTimeoutDoesNotReissueJoinedPreHandoffConflict(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes, request: &dispatchoutbox.SendRequest{ClientRequestID: envelopes[0].ClientRequestID}}
 	cause := errors.Join(context.DeadlineExceeded, &iris.HTTPError{StatusCode: http.StatusConflict, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`})

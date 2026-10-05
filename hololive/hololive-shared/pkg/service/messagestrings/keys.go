@@ -26,11 +26,10 @@ var (
 
 // 이름·제목이 비었을 때 보이는 표시값. 코드 대체 문구가 아니라 DB 정본 문구다.
 var (
-	MiscVTuberFallback     = key(NamespaceMisc, "vtuber_fallback", 0)
-	MiscTimeUnknown        = key(NamespaceMisc, "time_unknown", 0)
-	MiscAlarmUnknownMember = key(NamespaceMisc, "alarm_unknown_member", 0)
-	MiscAlarmNoTitle       = key(NamespaceMisc, "alarm_no_title", 0)
-	MiscAlarmNoStream      = key(NamespaceMisc, "alarm_no_stream", 0)
+	MiscVTuberFallback = key(NamespaceMisc, "vtuber_fallback", 0)
+	MiscTimeUnknown    = key(NamespaceMisc, "time_unknown", 0)
+	MiscAlarmNoTitle   = key(NamespaceMisc, "alarm_no_title", 0)
+	MiscAlarmNoStream  = key(NamespaceMisc, "alarm_no_stream", 0)
 )
 
 // 기념일 카드.
@@ -85,7 +84,7 @@ func NotifyKeys() []Key {
 // 발송 경로와 함께 계약에서 뺐다. DB의 karing 행은 읽는 코드가 없는 보관 데이터다.
 func AlarmWorkerEgressRequirements() Requirements {
 	return Requirements{Keys: []Key{
-		MiscVTuberFallback, MiscAlarmUnknownMember, MiscAlarmNoTitle, MiscAlarmNoStream,
+		MiscVTuberFallback, MiscAlarmNoTitle, MiscAlarmNoStream,
 	}}
 }
 
@@ -96,7 +95,7 @@ func AllKeys() []Key {
 	keys = append(keys, TimeFmtKeys()...)
 	keys = append(keys, CalendarKeys()...)
 	keys = append(keys, NotifyKeys()...)
-	keys = append(keys, MiscVTuberFallback, MiscTimeUnknown, MiscAlarmUnknownMember, MiscAlarmNoTitle, MiscAlarmNoStream, AlarmTypeAll)
+	keys = append(keys, MiscVTuberFallback, MiscTimeUnknown, MiscAlarmNoTitle, MiscAlarmNoStream, AlarmTypeAll)
 
 	return keys
 }

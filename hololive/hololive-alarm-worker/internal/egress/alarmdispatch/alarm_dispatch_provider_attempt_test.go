@@ -51,7 +51,7 @@ func TestAlarmProviderAttemptsRecordProviderResultBeforePersistence(t *testing.T
 			totals := &workercontract.Counters{}
 			sender := &alarmAttemptSender{tracker: tracker, panicValue: tc.panics, messageErr: tc.err}
 			consumer := &alarmDispatchRunnerTestConsumer{}
-			runner := Runner{consumer: consumer, sender: sender, workerTracker: tracker, workerTotals: totals}
+			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, workerTracker: tracker, workerTotals: totals}
 			group := alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})}
 			request := &dispatchoutbox.SendRequest{RoomID: testAlarmRoomID, Body: "body", Route: dispatchoutbox.SendRouteText, ClientRequestID: group.envelopes[0].ClientRequestID}
 			call := func() { require.NoError(t, runner.dispatchPreparedMessageGroup(t.Context(), group, request)) }
@@ -76,7 +76,7 @@ func TestAlarmProviderAttemptsCountGroupsAndSkipPreparation(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	totals := &workercontract.Counters{}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, workerTotals: totals}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, workerTotals: totals}
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes}
 	request := &dispatchoutbox.SendRequest{Body: "body", RoomID: testAlarmRoomID, Route: dispatchoutbox.SendRouteText, ClientRequestID: envelopes[0].ClientRequestID}

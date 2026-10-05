@@ -90,6 +90,15 @@ func (*seeMoreFoldConsumer) Wait(context.Context) bool { return false }
 
 func (*seeMoreFoldConsumer) Reset() {}
 
+// unregisteredMembers는 모든 채널을 members 미등록으로 답한다. 알림 이름은 종단 문구가 되며 접기 판단과 무관하다.
+type unregisteredMembers struct {
+	domain.MemberDataProvider
+}
+
+func (unregisteredMembers) FindMemberByChannelID(context.Context, string) (*domain.Member, error) {
+	return nil, domain.ErrMemberNotFound
+}
+
 func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
 	return domain.AlarmQueueEnvelope{
 		SendUnitID:      1,
@@ -153,7 +162,7 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 	client := &seeMoreFoldIrisClient{}
 	consumer := &seeMoreFoldConsumer{batch: envelopes, cancel: cancel}
 	runner := alarmdispatch.NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, consumer,
-		alarmdispatch.RunnerConfig{MaxBatch: len(envelopes)}, slog.New(slog.DiscardHandler))
+		alarmdispatch.RunnerConfig{MaxBatch: len(envelopes), Members: unregisteredMembers{}}, slog.New(slog.DiscardHandler))
 
 	require.NoError(t, runner.Start(ctx))
 	require.Empty(t, consumer.failures)

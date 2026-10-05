@@ -23,7 +23,7 @@ func TestDefaultRecoveryPreservesImmutableSendUnitMembership(t *testing.T) {
 	require.NoError(t, err)
 
 	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText}
-	runner := Runner{consumer: consumer, sender: sender, maxBatch: 50}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 50}
 
 	for range 2 {
 		_, err = runner.runOnce(ctx)

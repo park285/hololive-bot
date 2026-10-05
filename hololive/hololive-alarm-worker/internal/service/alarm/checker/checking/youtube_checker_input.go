@@ -72,13 +72,6 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, nil, liveEvidence, nil, fmt.Errorf("check youtube streams: classify confirmed premieres: %w", err)
 	}
 
-	memberNames, err := LoadMemberNamesByChannel(ctx, c.cacheClient, dueChannels)
-	if err != nil {
-		return nil, nil, liveEvidence, nil, fmt.Errorf("check youtube streams: load member names: %w", err)
-	}
-
-	ApplyMemberNamesToStreams(streamsByChannel, memberNames)
-
 	subscriberMap, err = LoadSubscriberRoomsByChannel(ctx, c.cacheClient, c.subscribers, dueChannels)
 	if err != nil {
 		return nil, nil, liveEvidence, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)

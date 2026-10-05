@@ -22,7 +22,6 @@ package checking
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -37,125 +36,6 @@ import (
 	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
-
-func TestLoadMemberNamesByChannel(t *testing.T) {
-	t.Parallel()
-
-	t.Run("empty input avoids cache lookup", func(t *testing.T) {
-		t.Parallel()
-
-		got, err := LoadMemberNamesByChannel(t.Context(), cachemocks.NewStrictClient(), []string{"", ""})
-		require.NoError(t, err)
-		assert.Empty(t, got)
-	})
-
-	t.Run("deduplicates channel ids and returns member names", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			gotKey    string
-			gotFields []string
-		)
-
-		cacheClient := &cachemocks.Client{
-			BatchHGetFunc: func(_ context.Context, key string, fields []string) (map[string]string, error) {
-				gotKey = key
-
-				gotFields = append([]string(nil), fields...)
-
-				return map[string]string{testChannelID1: "Member One"}, nil
-			},
-		}
-
-		got, err := LoadMemberNamesByChannel(t.Context(), cacheClient, []string{testChannelID1, testChannelID1, testChannelID2})
-		require.NoError(t, err)
-		assert.Equal(t, alarmkeys.MemberNameKey, gotKey)
-		assert.Equal(t, []string{testChannelID1, testChannelID2}, gotFields)
-		assert.Equal(t, map[string]string{testChannelID1: "Member One"}, got)
-	})
-
-	t.Run("wraps cache error", func(t *testing.T) {
-		t.Parallel()
-
-		cacheClient := &cachemocks.Client{
-			BatchHGetFunc: func(context.Context, string, []string) (map[string]string, error) {
-				return nil, errors.New("batch hget failed")
-			},
-		}
-
-		_, err := LoadMemberNamesByChannel(t.Context(), cacheClient, []string{testChannelID1})
-		require.Error(t, err)
-		require.ErrorContains(t, err, "load member names by channel")
-		assert.ErrorContains(t, err, "batch hget failed")
-	})
-}
-
-func TestApplyMemberNamesToStreams(t *testing.T) {
-	t.Parallel()
-
-	streamWithBlankChannel := &domain.Stream{Channel: &domain.Channel{}}
-	streamWithoutChannel := &domain.Stream{}
-	streamSkipped := &domain.Stream{ChannelName: "Original", Channel: &domain.Channel{ID: testChannelID2, Name: "Original"}}
-	streamsByChannel := map[string][]*domain.Stream{
-		testChannelID1: {streamWithBlankChannel, nil},
-		testChannelID2: {streamSkipped},
-		"channel-3":    {streamWithoutChannel},
-	}
-
-	ApplyMemberNamesToStreams(streamsByChannel, map[string]string{
-		testChannelID1: " Member One ",
-		testChannelID2: "   ",
-		"channel-3":    "Member Three",
-	})
-	ApplyMemberNameToStream(nil, "channel-x", "ignored")
-
-	assert.Equal(t, "Member One", streamWithBlankChannel.ChannelName)
-	require.NotNil(t, streamWithBlankChannel.Channel)
-	assert.Equal(t, testChannelID1, streamWithBlankChannel.Channel.ID)
-	assert.Equal(t, "Member One", streamWithBlankChannel.Channel.Name)
-
-	assert.Equal(t, "Original", streamSkipped.ChannelName)
-	assert.Equal(t, "Original", streamSkipped.Channel.Name)
-
-	assert.Equal(t, "Member Three", streamWithoutChannel.ChannelName)
-	require.NotNil(t, streamWithoutChannel.Channel)
-	assert.Equal(t, "channel-3", streamWithoutChannel.Channel.ID)
-	assert.Equal(t, "Member Three", streamWithoutChannel.Channel.Name)
-}
-
-func TestChannelNameForMember(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		channelID  string
-		memberName string
-		fallback   string
-		want       string
-	}{
-		"uses trimmed member name": {
-			channelID:  testChannelID1,
-			memberName: " Member ",
-			fallback:   "Fallback",
-			want:       "Member",
-		},
-		"uses fallback when member is blank": {
-			channelID: testChannelID1,
-			fallback:  " Fallback ",
-			want:      "Fallback",
-		},
-		"uses trimmed channel id last": {
-			channelID: " channel-1 ",
-			want:      testChannelID1,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, ChannelNameForMember(tc.channelID, tc.memberName, tc.fallback))
-		})
-	}
-}
 
 func TestRoomNotificationsWithScheduleChanges(t *testing.T) {
 	t.Parallel()

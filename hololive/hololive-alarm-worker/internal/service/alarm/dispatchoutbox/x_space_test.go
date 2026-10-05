@@ -11,7 +11,7 @@ import (
 )
 
 func TestXSpaceEventAndRoomDeliveryIdentities(t *testing.T) {
-	payload := &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: "UCtest", MemberName: "소라", Title: "테스트", StartedAt: time.Now().UTC()}
+	payload := &domain.XSpaceDispatchPayload{SpaceID: "1abc", CreatorID: "123", ChannelID: "UCtest", Title: "테스트", StartedAt: time.Now().UTC()}
 	first := domain.AlarmQueueEnvelope{
 		SourceKind: domain.AlarmDispatchSourceKindXSpace, XSpace: payload,
 		Notification: domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-a"}, Version: 1,

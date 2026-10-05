@@ -226,8 +226,8 @@ members 한국어 표시명을 가졌다. 그래서 중간 단계(최신 `alarms
 | Trigger | `members`의 `short_korean_name`·`korean_name`이 모두 비었거나 채널 행이 없음 |
 | 순서 | members(`short_korean_name`→`korean_name`) → 표시 단계 `misc/vtuber_fallback` 문구(종단) |
 | 한도 | 표시 전용. 식별·dedup·라우팅에 쓰지 않고 외부 호출·재시도가 없음. 조회 오류는 trigger가 아님 |
-| Telemetry | `hololive_youtube_outbox_member_name_missing_total`(alarm-worker가 종단 문구로 YouTube 알림을 만든 횟수) |
-| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`의 `GetMemberName`, `hololive-alarm-worker/internal/egress/youtubedispatch/format`의 `DisplayMemberName`) |
+| Telemetry | `hololive_youtube_outbox_member_name_missing_total`(YouTube outbox 알림), `hololive_alarm_dispatch_member_name_missing_total`(방송·X 스페이스 알림)이 종단 문구로 알림을 만든 횟수 |
+| Owner | hololive-bot alarm(`hololive-shared/pkg/service/alarm`의 `GetMemberName`, `hololive-alarm-worker/internal/egress/youtubedispatch/format`의 `DisplayMemberName`, `hololive-alarm-worker/internal/egress/alarmdispatch`의 `alarmContractMemberName`) |
 | 검토 조건 | 지표가 0이 아니면 해당 채널의 members 한국어 표시명을 등록한다. 90일 동안 0이면 종단 문구 대신 포맷 실패로 바꿀지 다시 결정한다 |
 
 코드 근거는 `alarm.Repository.GetMemberName` 주석과 `queries/repository_0155_07.sql`, `queries/repository_0231_10.sql`이다.
@@ -236,6 +236,14 @@ YouTube outbox dispatch의 `MemberNameSource`는 표시명을 Valkey `alarm:memb
 PostgreSQL 정본을 조회한다(2026-10-02). 조회 오류는 이 예외 계약의 trigger가 아니다. 대체 문구로 보내지 않고
 재시도 가능한 `format_message` 실패로 전이하며, grouped 발송이면 group 전체를 같은 실패로 전이한다. 조회 결과가 빈
 문자열일 때만 `misc/vtuber_fallback` 문구를 쓴다.
+
+방송(live·upcoming) 알림과 X 스페이스 시작 알림도 같은 계약을 따른다(2026-10-05). alarm dispatch 렌더가 `channel_id`로
+members를 조회하며, Holodex 채널 제목·Valkey 이름 캐시·X 스페이스 설정의 이름은 쓰지 않는다. 조회 오류는 렌더 실패(발송 전 재시도)다.
+X 스페이스 payload(`x_space_starts`, dispatch 원장)는 이름을 담지 않는다.
+
+`alarms.member_name`은 2026-10-05부터 읽거나 쓰지 않는다. 알람 목록은 이름 캐시에 없는 채널을 members
+(`short_korean_name`→`korean_name`→`english_name`)로 채우고, members에도 없으면 채널 ID를 보여 준다. 멤버 뉴스 구독 이름도
+members에서만 읽는다. 컬럼과 읽지 않는 `misc/alarm_unknown_member` 문구는 이 변경을 배포·확인한 뒤 후속 migration으로 지운다.
 
 ### 명령 응답 멤버 표시명
 

@@ -30,12 +30,12 @@ HTTP 401 또는 X 오류 번호 32/89는 인증 거부다. 일반 403은 접근 
 {
   "poll_seconds": 120,
   "targets": [
-    { "user_id": "X의 숫자 계정 ID", "channel_id": "기존 YouTube 채널 ID", "member_name": "표시할 멤버 이름" }
+    { "user_id": "X의 숫자 계정 ID", "channel_id": "기존 YouTube 채널 ID" }
   ]
 }
 ```
 
-사용자 ID와 채널 매핑은 검증된 실제 값을 넣는다. 최대 100개 계정, 조회 간격 120~3600초이며 계정·채널 중복은 허용하지 않는다. 호스트 `compose.env`의 `HOLOLIVE_X_SPACES_ENABLED=1`로 활성화하면 기존 Compose 진입점이 `deploy/compose/docker-compose.x-spaces.yml`을 추가한다. 기본값은 비활성이며 재부팅·수동 배포에서도 같은 구성을 유지한다. 새 DB migration을 먼저 적용하고 API·worker·관리자 웹의 호환 버전을 함께 배포한다. cookie 자체는 배포 파일에 포함하지 않고 관리자에서 연결한다.
+사용자 ID와 채널 매핑은 검증된 실제 값을 넣는다. 알림의 멤버 이름은 설정에 적지 않고 발송 때 `channel_id`로 members 정본에서 정한다([멤버 표시명 예외 계약](../contracts/alarm.md#멤버-표시명-예외-계약)). 알 수 없는 필드는 시작 오류이므로, 이 변경(2026-10-05)을 배포할 때 운영 설정의 `member_name`을 함께 지운다. 최대 100개 계정, 조회 간격 120~3600초이며 계정·채널 중복은 허용하지 않는다. 호스트 `compose.env`의 `HOLOLIVE_X_SPACES_ENABLED=1`로 활성화하면 기존 Compose 진입점이 `deploy/compose/docker-compose.x-spaces.yml`을 추가한다. 기본값은 비활성이며 재부팅·수동 배포에서도 같은 구성을 유지한다. 새 DB migration을 먼저 적용하고 API·worker·관리자 웹의 호환 버전을 함께 배포한다. cookie 자체는 배포 파일에 포함하지 않고 관리자에서 연결한다.
 
 ## 발송과 실패 경계
 
@@ -43,7 +43,7 @@ HTTP 401 또는 X 오류 번호 32/89는 인증 거부다. 일반 403은 접근 
 
 helper 실패는 고정 오류 코드와 함께 실패 단계 `input`·`library`·`app_shell`·`transaction`·`collect`를 보고한다. 분류되지 않은 예외는 `collector_failed`로 유지하되, JavaScript 내장 오류 종류(그 밖의 이름은 `other`)와 `ENOTFOUND`처럼 Node 오류 코드 형식에 맞는 값만 덧붙인다. 예외 메시지·stack·요청 객체·stderr는 인증 정보를 포함할 수 있으므로 버린다. helper가 결과 문서를 끝내지 못하면 worker가 관측한 종료 상태(예: `signal: killed`)를 `helper_output` 단계로 남긴다. worker는 형식이나 허용 목록을 벗어난 진단을 `invalid_response`로 처리한다. 이 진단은 `X spaces cycle failed` 로그에만 쓰며 세션 상태에 저장하는 오류 코드와 재시도 간격은 바꾸지 않는다. 2026-09-24 요청 ID 초기화 장애는 모든 예외가 같은 `collector_failed`로 보여 로그만으로 실패 단계를 알 수 없었다.
 
-시작 후 15분 이내의 현재 스페이스만 발송 대상으로 삼는다. 장애 중 끝난 스페이스와 오래된 방송은 소급 발송하지 않는다. `x_space_starts`가 최초 제목·멤버 표시명을 고정하고 기존 dispatch 원장이 `x-space:start:<space-id>` 이벤트와 방별 delivery를 중복 제거한다. X 스페이스는 전용 source를 사용하므로 YouTube 알림과 합쳐지지 않으며 텍스트 링크로 보낸다. 발송 결과 불명·재시도는 기존 dispatch 계약을 유지한다. 30일이 지난 최초 관측 자료는 회당 최대 100개 정리한다.
+시작 후 15분 이내의 현재 스페이스만 발송 대상으로 삼는다. 장애 중 끝난 스페이스와 오래된 방송은 소급 발송하지 않는다. `x_space_starts`가 최초 제목을 고정하고 기존 dispatch 원장이 `x-space:start:<space-id>` 이벤트와 방별 delivery를 중복 제거한다. X 스페이스는 전용 source를 사용하므로 YouTube 알림과 합쳐지지 않으며 텍스트 링크로 보낸다. 발송 결과 불명·재시도는 기존 dispatch 계약을 유지한다. 30일이 지난 최초 관측 자료는 회당 최대 100개 정리한다.
 
 Fallback delta: 활성 세션의 첫 인증 거부에 동일한 읽기 경로로 한 번의 확인을 추가한다. 근거는 2026-09-21 15:19 KST authentication으로 정지한 운영 세션이 같은 쿠키를 사용한 진단에서 HTTP 200으로 성공한 사례다. owner는 alarm-worker X 수집기이며, 다음 정규 조회 간격 뒤 확인하고 두 번째 연속 거부에서는 중단한다. 실패 관측은 발송하지 않으며 오래된 관측 차단도 유지한다. `authentication_pending` 및 HTTP 숫자 진단으로 구분하고, 이 경계에서도 오탐이 발생하거나 X 오류 계약이 바뀌면 재검토한다.
 

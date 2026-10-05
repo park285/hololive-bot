@@ -126,7 +126,7 @@ func finalizeFailureDLQEnvelope() domain.AlarmQueueEnvelope {
 
 func TestPersistPreSendFailureCallSequenceHappyPath(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
@@ -145,7 +145,7 @@ func TestPersistPreSendFailureCallSequenceHappyPath(t *testing.T) {
 func TestPersistPreSendFailureRouteFailureFallsBackToRequeue(t *testing.T) {
 	routeErr := errors.New("route down")
 	consumer := &finalizeFailureRecordingConsumer{routeFailuresErr: routeErr}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
@@ -161,7 +161,7 @@ func TestPersistPreSendFailureRouteFailureFallsBackToRequeue(t *testing.T) {
 
 func TestPersistSendingRetryCallSequenceHappyPath(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
@@ -178,7 +178,7 @@ func TestPersistSendingRetryCallSequenceHappyPath(t *testing.T) {
 func TestPersistSendingRetryInfraFailureFallsBackToSendingFenceRequeue(t *testing.T) {
 	routeErr := errors.New("sending route down")
 	consumer := &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{routeErr}}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
@@ -204,7 +204,7 @@ func TestPersistSendingRetryFallbackRequeueFailureWrapPinned(t *testing.T) {
 	routeErr := errors.New("sending route down")
 	requeueErr := errors.New("sending requeue down")
 	consumer := &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{routeErr, requeueErr}}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
@@ -224,7 +224,7 @@ func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *t
 		UnappliedIDs: []int64{finalizeFailureRetryDeliveryID},
 	}
 	consumer := &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{partialErr}}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
@@ -238,7 +238,7 @@ func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *t
 func TestPersistSendingRetryReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 	releaseErr := errors.New("release down")
 	consumer := &finalizeFailureRecordingConsumer{releaseClaimErr: releaseErr}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
@@ -251,7 +251,7 @@ func TestPersistSendingRetryReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 
 func TestPersistSendingRetryNeverFallsBackToLeasedOnlyRouteFailures(t *testing.T) {
 	consumer := &finalizeFailureRecordingConsumer{}
-	runner := Runner{consumer: consumer}
+	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))

@@ -34,10 +34,10 @@ func templateSampleCoreData() map[domain.TemplateKey]any {
 	addTemplateMemberLookupSamples(data)
 	addTemplateCelebrationSamples(data)
 
-	data[domain.TemplateKeyXSpaceStarted] = &domain.XSpaceDispatchPayload{
-		SpaceID:    "1sample",
-		MemberName: "카자마 이로하",
-		Title:      "가볍게 이야기해요",
+	data[domain.TemplateKeyXSpaceStarted] = map[string]any{
+		fieldMemberName: "카자마 이로하",
+		fieldTitle:      "가볍게 이야기해요",
+		fieldURL:        "https://x.com/i/spaces/1sample",
 	}
 
 	return data
