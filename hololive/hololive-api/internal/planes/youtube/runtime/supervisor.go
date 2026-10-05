@@ -390,6 +390,14 @@ func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservatio
 	if deadLetterErr != nil {
 		youtubeConsumeTotal.WithLabelValues("dead_letter_error").Inc()
 
+		if retryableObservationError(deadLetterErr) {
+			// 기록하지 못한 PROCESSING 행은 lease 만료 뒤 기존 claim 경로가 회수합니다.
+			r.Logger.ErrorContext(ctx, "youtube plane dead letter failed; awaiting lease recovery",
+				slog.Int64("observation_id", work.ObservationID), slog.Any("error", deadLetterErr))
+
+			return nil
+		}
+
 		return fmt.Errorf("dead letter observation %d: %w", work.ObservationID, deadLetterErr)
 	}
 
@@ -412,6 +420,14 @@ func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.Cla
 
 	if retryErr != nil {
 		youtubeConsumeTotal.WithLabelValues("retry_error").Inc()
+
+		if retryableObservationError(retryErr) {
+			// 새 재시도를 만들지 않고 기존 lease 만료 회수와 시도 횟수 제한에 맡깁니다.
+			r.Logger.ErrorContext(ctx, "youtube plane retry failed; awaiting lease recovery",
+				slog.Int64("observation_id", work.ObservationID), slog.Any("error", retryErr))
+
+			return nil
+		}
 
 		return fmt.Errorf("retry observation %d: %w", work.ObservationID, retryErr)
 	}
