@@ -117,7 +117,11 @@ autovacuum이 따라가지 못하는 대상 테이블은 없었다. 기본값은
 - [x] 폭증분은 보존 기간을 기다리지 않고 2026-10-05 12:05~12:50 UTC에 사용자 요청으로 지웠다. 운영 보존 작업과 같은 `delete_retired_youtube_collection_job_leases`·`delete_retired_youtube_projection_batch`를 cutoff `now() - 1 hour`, 호출당 1,000행으로 autocommit 실행했다(500회마다 3초 휴지, statement 30초·lock 5초 timeout, 호스트 여유 20 GiB 미만이면 중단).
   - 삭제: lease 645행(현행 대상 밖 subject), generation 32,816개, target·reason 각 20,244,088행. 남은 RETIRED는 최근 1시간분 22개다. 현행 채널 job의 lease는 모두 남았다.
   - 영향: 2코어 호스트의 부하 평균이 약 4.5, IO pressure가 최대 46%까지 올랐다. 그동안 API 보존 tick 8건(`source_observations`·`source_observation_applications` 삭제)과 관측 처리 1건이 `context deadline exceeded`로 실패했다. 해당 관측은 이후 PROCESSED였고 queue에 DEAD_LETTER는 없었다. 삭제가 끝난 뒤 오류는 0건이다.
-  - 사후: autovacuum이 바로 처리해 dead tuple이 target 2개, reason 약 4.7만 개로 줄었다. 파일 크기(target 3.9 GB, reason 4.8 GB, DB 11 GB)는 공간 재사용 상태로 남는다. 반환이 필요하면 별도 승인된 rewrite(VACUUM FULL·pg_repack)가 필요하다. WAL은 `max_wal_size` 안(최대 약 1 GB)이었고 호스트 여유는 56 GiB에서 55 GiB가 됐다.
+  - 사후: autovacuum이 바로 처리해 dead tuple이 target 2개, reason 약 4.7만 개로 줄었다. WAL은 `max_wal_size` 안(최대 약 1 GB)이었고 호스트 여유는 56 GiB에서 55 GiB가 됐다.
+- [x] 사용자 요청으로 13:24~13:26 UTC에 `VACUUM (FULL, ANALYZE)`를 reason, target 순으로 실행했다(`lock_timeout` 5초, 각 약 48초). pgstattuple_approx 기준 빈 공간은 99% 이상이었다. pg_repack은 운영 이미지에 확장이 없고 넣으려면 이미지 재빌드와 `holo-postgres` 재생성이 필요해 쓰지 않았다.
+  - 결과: target 3.9 GB→4.4 MB, reason 4.8 GB→5.6 MB, DB 11 GB→2.6 GB, 호스트 여유 55 GiB→64 GiB.
+  - 영향: target 잠금 동안 API DB 슬롯이 고갈돼 관측 consume과 그 Retry가 `acquire DB slot: context deadline exceeded`로 실패했고, API가 이를 runtime error로 종료해 13:25:26~13:25:35 UTC에 한 번 재시작했다(`restarts=1`). collector c는 수집 job 56건이 실패 뒤 재시도됐다. 해당 관측은 2차 시도로 PROCESSED였고, 같은 시간대 webhook·명령 실행 기록은 없었으며, 13:27 이후 오류는 0건이다.
+  - 다음에 같은 rewrite가 필요하면 API·collector를 먼저 멈추거나 점검 창에서 실행한다. 큰 테이블의 잠금은 consume 실패를 프로세스 종료로 키운다.
 
 ## 순서와 의존성
 
