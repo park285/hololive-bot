@@ -219,7 +219,6 @@ TABLE alarms
   COLUMN room_id character varying(100) NOT NULL
   COLUMN user_id character varying(64) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
-  COLUMN member_name text
   COLUMN room_name character varying(255)
   COLUMN user_name character varying(200)
   COLUMN created_at timestamp with time zone DEFAULT now()
@@ -230,7 +229,6 @@ TABLE alarms
   CONSTRAINT alarms_pkey PRIMARY KEY (id)
   INDEX CREATE INDEX idx_alarms_alarm_types_gin ON public.alarms USING gin (alarm_types)
   INDEX CREATE INDEX idx_alarms_channel_created ON public.alarms USING btree (channel_id, created_at)
-  INDEX CREATE INDEX idx_alarms_channel_member_latest ON public.alarms USING btree (channel_id, created_at DESC) WHERE ((member_name IS NOT NULL) AND (member_name <> ''::text))
   INDEX CREATE UNIQUE INDEX idx_alarms_room_channel_host ON public.alarms USING btree (room_id, channel_id, host_id)
   INDEX CREATE INDEX idx_alarms_room_created ON public.alarms USING btree (room_id, created_at)
 
