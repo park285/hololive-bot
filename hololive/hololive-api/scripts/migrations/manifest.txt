@@ -124,3 +124,5 @@
 124 263_youtube_live_review_bounded_facts.sql
 125 264_youtube_live_review_materialized_snapshot.sql
 126 265_bot_manual_replay_lock_clock.sql
+127 266_drop_youtube_collection_job_due_index.sql
+128 267_drop_source_checkpoint_retention_index.sql

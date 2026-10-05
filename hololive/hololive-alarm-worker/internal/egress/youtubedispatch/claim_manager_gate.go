@@ -27,19 +27,15 @@ const (
 )
 
 type deliveryClaimSelection struct {
-	sendRows               []domain.YouTubeNotificationDelivery
-	sendOutboxes           []domain.YouTubeNotificationOutbox
-	claimTokens            []dispatchstate.ClaimToken
-	rowClaimTokens         [][]dispatchstate.ClaimToken
-	alreadySentDeliveryIDs []int64
-	alreadySentOutboxIDs   []int64
-	alreadySentRows        []domain.YouTubeNotificationDelivery
-	alreadySentOutboxes    []domain.YouTubeNotificationOutbox
-	retryDeliveryIDs       []int64
-	retryOutboxIDs         []int64
-	retryRows              []domain.YouTubeNotificationDelivery
-	retryOutboxes          []domain.YouTubeNotificationOutbox
-	deferredDeliveryIDs    []int64
+	sendRows            []domain.YouTubeNotificationDelivery
+	sendOutboxes        []domain.YouTubeNotificationOutbox
+	claimTokens         []dispatchstate.ClaimToken
+	rowClaimTokens      [][]dispatchstate.ClaimToken
+	retryDeliveryIDs    []int64
+	retryOutboxIDs      []int64
+	retryRows           []domain.YouTubeNotificationDelivery
+	retryOutboxes       []domain.YouTubeNotificationOutbox
+	deferredDeliveryIDs []int64
 }
 
 func (d *ClaimManager) selectClaimedDeliveries(
@@ -100,22 +96,7 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 		return
 	}
 
-	cr := result.Decision
-
-	// post 단위 결정은 reuseCache로 공유되지만 "이 room이 이미 받았는가"는 행마다 다르므로 캐시 밖에서 판정한다.
-	decision := cr.decision
-	if decision == deliveryClaimDecisionAlreadySent {
-		roomDecision, roomErr := d.resolveRoomDeliveryDecision(ctx, row, outbox)
-		if roomErr != nil {
-			d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve per-room community/shorts sent state before send", roomErr)
-
-			return
-		}
-
-		decision = roomDecision
-	}
-
-	d.applyDeliveryClaimDecision(ctx, selection, row, outbox, decision, cr.claimToken, result.Hit)
+	d.applyDeliveryClaimDecision(ctx, selection, row, outbox, result.Decision.decision, result.Decision.claimToken, result.Hit)
 }
 
 func validateDeliveryLogicalIdentity(
@@ -156,25 +137,6 @@ func (d *ClaimManager) claimDeliveryResolver(
 	}
 }
 
-func (d *ClaimManager) resolveRoomDeliveryDecision(
-	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-) (deliveryClaimDecision, error) {
-	received, err := d.roomAlreadyReceivedPost(ctx, row, outbox)
-	if err != nil {
-		return deliveryClaimDecisionRetryLater, fmt.Errorf("room already received post: %w", err)
-	}
-
-	if received {
-		return deliveryClaimDecisionAlreadySent, nil
-	}
-
-	d.logClaimIssue("Proceeding with community/shorts delivery because this room has not received the already-sent post", row, outbox, slog.LevelInfo)
-
-	return deliveryClaimDecisionProceed, nil
-}
-
 func (d *ClaimManager) retryDeliveryClaimSelection(
 	selection *deliveryClaimSelection,
 	row *domain.YouTubeNotificationDelivery,
@@ -203,12 +165,10 @@ func (d *ClaimManager) applyDeliveryClaimDecision(
 	case deliveryClaimDecisionProceed:
 		appendProceedingDeliveryClaim(selection, row, outbox, claimToken, reused)
 	case deliveryClaimDecisionAlreadySent:
-		d.logClaimIssue("Skipped community/shorts delivery because the post was already sent", row, outbox, slog.LevelInfo)
-
-		selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, row.ID)
-		selection.alreadySentOutboxIDs = append(selection.alreadySentOutboxIDs, outbox.ID)
-		selection.alreadySentRows = append(selection.alreadySentRows, *row)
-		selection.alreadySentOutboxes = append(selection.alreadySentOutboxes, *outbox)
+		// post 단위 SENT는 다른 room의 발송일 수 있다. 이 room의 SENT 원장은 PrepareClaimed가 이미 걸렀고,
+		// 그 뒤 기록된 SENT는 BeginSending이 원장을 잠가 conflict로 막으므로 claim token 없이 진행한다.
+		d.logClaimIssue("Proceeding with community/shorts delivery because this room has no sent ledger entry", row, outbox, slog.LevelInfo)
+		appendProceedingDeliveryClaim(selection, row, outbox, nil, reused)
 	case deliveryClaimDecisionRetryLater:
 		d.applyRetryLaterDeliveryClaim(ctx, selection, row, outbox)
 	}

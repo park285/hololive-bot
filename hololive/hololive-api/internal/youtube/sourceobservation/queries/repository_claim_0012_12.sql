@@ -7,19 +7,18 @@ WITH replay_epoch AS MATERIALIZED (
     WHERE singleton
     LIMIT 1
 ), active_backlog AS MATERIALIZED (
-    -- 활성 queue(PENDING·PROCESSING) 행을 한 번만 읽어 claim 판정 재료를 모은다.
+    -- 활성 queue(PENDING·PROCESSING) 행을 한 번만 읽어 claim과 시도 소진 판정 재료를 모은다.
     -- 같은 채널·종류 목록의 선두 판정에는 차단된 후속 목록까지 포함한 활성 행 전체가 필요하므로 이 단일 pass는
     -- 활성 backlog에 선형이다. 보존 이력(PROCESSED·DEAD_LETTER)은 status 조건으로, 다른 kind는 kind 조건으로 버린다.
     SELECT queue.observation_id,
            queue.available_at,
+           queue.attempt_count,
            observation.observation_kind,
            observation.subject_key,
            observation.scheduled_for,
-           queue.attempt_count < $6 AND (
-               (queue.status = 'PENDING' AND queue.available_at <= NOW())
-               OR
-               (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW())
-           ) AS claimable
+           (queue.status = 'PENDING' AND queue.available_at <= NOW())
+           OR
+           (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW()) AS due
     FROM source_observation_queue AS queue
     JOIN source_observations AS observation ON observation.id = queue.observation_id
     WHERE (queue.status = 'PENDING' OR queue.status = 'PROCESSING')
@@ -60,25 +59,31 @@ WITH replay_epoch AS MATERIALIZED (
     WHERE queue.observation_id = replay_expired_candidates.observation_id
     RETURNING queue.observation_id
 ), exhausted_candidates AS MATERIALIZED (
-    SELECT queue.observation_id
-    FROM source_observation_queue AS queue
-    JOIN source_observations AS observation
-      ON observation.id = queue.observation_id
-    WHERE observation.observation_kind = ANY($1::text[])
-      AND queue.attempt_count >= $6
-      AND NOT EXISTS (
-          SELECT 1
-          FROM replay_epoch AS epoch
-          WHERE observation.received_at < epoch.cutoff_received_at
-      )
-      AND (
-          (queue.status = 'PENDING' AND queue.available_at <= NOW())
-          OR
-          (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW())
-      )
-    ORDER BY queue.available_at, queue.observation_id
+    -- 시도를 소진한 due 행도 활성 pass에서 고른다. queue를 따로 읽으면 활성 backlog가 클 때 planner가 queue
+    -- seq scan으로 보존 이력까지 읽는다. 잠금은 candidates와 같이 정렬된 후보마다 queue PK로 요청하고,
+    -- 잠근 최신 버전에 조건을 다시 적용한다.
+    SELECT locked.observation_id
+    FROM (
+        SELECT active.observation_id, active.available_at
+        FROM active_backlog AS active
+        WHERE active.due
+          AND active.attempt_count >= $6
+        ORDER BY active.available_at, active.observation_id
+    ) AS ordered
+    CROSS JOIN LATERAL (
+        SELECT queue.observation_id
+        FROM source_observation_queue AS queue
+        WHERE queue.observation_id = ordered.observation_id
+          AND queue.attempt_count >= $6
+          AND (
+              (queue.status = 'PENDING' AND queue.available_at <= NOW())
+              OR
+              (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW())
+          )
+        FOR UPDATE SKIP LOCKED
+    ) AS locked
+    ORDER BY ordered.available_at, ordered.observation_id
     LIMIT $2
-    FOR UPDATE OF queue SKIP LOCKED
 ), exhausted AS (
     UPDATE source_observation_queue AS queue
     SET status = 'DEAD_LETTER',
@@ -100,7 +105,7 @@ WITH replay_epoch AS MATERIALIZED (
     SELECT DISTINCT ON (active.observation_kind, active.subject_key)
            active.observation_id,
            active.available_at,
-           active.claimable
+           active.due AND active.attempt_count < $6 AS claimable
     FROM active_backlog AS active
     WHERE active.observation_kind IN ('shorts_list', 'video_list')
     ORDER BY active.observation_kind, active.subject_key, active.scheduled_for, active.observation_id
@@ -109,7 +114,8 @@ WITH replay_epoch AS MATERIALIZED (
     -- 건너뛰면 선두 하나를 찾는 비용이 그 채널의 backlog 길이에 비례하므로, 활성 pass에서 후보 집합을 먼저 만든다.
     SELECT active.observation_id, active.available_at
     FROM active_backlog AS active
-    WHERE active.claimable
+    WHERE active.due
+      AND active.attempt_count < $6
       AND active.observation_kind NOT IN ('shorts_list', 'video_list')
     UNION ALL
     SELECT head.observation_id, head.available_at

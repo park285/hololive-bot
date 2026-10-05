@@ -317,19 +317,19 @@ func (w failShortWindowWriter) PersistVideosTx(ctx context.Context, tx dbx.Tx, v
 	return errors.New("injected failure after video persistence")
 }
 
-func publishShortWindow(t *testing.T, repo *Repository, proof *contract.LeaseProof, ids ...string) int64 {
-	t.Helper()
+func publishShortWindow(tb testing.TB, repo *Repository, proof *contract.LeaseProof, ids ...string) int64 {
+	tb.Helper()
 
-	envelope := shortsListEnvelope(t, proof, contract.CompletenessPartial, ids...)
+	envelope := shortsListEnvelope(tb, proof, contract.CompletenessPartial, ids...)
 
 	envelope.Continuity = contract.ContinuityGapUnresolved
 
 	prepared, err := contract.PrepareEnvelope(*envelope)
-	require.NoError(t, err)
+	require.NoError(tb, err)
 
-	published, err := publishkit.NewPublisher(repo.pool).PublishBatch(t.Context(), publishInput(&prepared))
-	require.NoError(t, err)
-	require.Len(t, published.Results, 1)
+	published, err := publishkit.NewPublisher(repo.pool).PublishBatch(tb.Context(), publishInput(&prepared))
+	require.NoError(tb, err)
+	require.Len(tb, published.Results, 1)
 
 	return published.Results[0].ObservationID
 }

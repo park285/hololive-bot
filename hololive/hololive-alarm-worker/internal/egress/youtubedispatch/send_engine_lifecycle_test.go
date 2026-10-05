@@ -68,14 +68,6 @@ func (s *lifecycleTransitionSpy) recordedModes() []string {
 	return append([]string(nil), s.modes...)
 }
 
-func (s *lifecycleTransitionSpy) PrepareClaimed(
-	context.Context,
-	[]domain.YouTubeNotificationDelivery,
-	map[int64]domain.YouTubeNotificationOutbox,
-) (store.PrepareClaimsResult, error) {
-	return store.PrepareClaimsResult{}, nil
-}
-
 func (s *lifecycleTransitionSpy) BeginSending(
 	context.Context,
 	[]domain.YouTubeNotificationDelivery,

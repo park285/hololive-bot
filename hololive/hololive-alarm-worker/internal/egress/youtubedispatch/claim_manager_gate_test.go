@@ -16,6 +16,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
 type claimGateTestSender struct {
@@ -202,28 +203,117 @@ func newShortClaimGateFixture(now time.Time, suffix string) (domain.YouTubeNotif
 	return delivery, outbox, postID
 }
 
-func insertSentSiblingDelivery(t *testing.T, db *pgxpool.Pool, outbox *domain.YouTubeNotificationOutbox, roomID string, sentAt time.Time) {
+// newPendingClaimGateDispatcher는 운영과 같은 TransitionStore로 claim·prepare·발송 전이를 실행한다.
+func newPendingClaimGateDispatcher(t *testing.T, sender *claimGateTestSender) (*Dispatcher, *pgxpool.Pool) {
 	t.Helper()
 
-	sibling := domain.YouTubeNotificationOutbox{
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{DeliveryParallelism: 1})
+
+	dispatcher.send.transition = dispatcher.claim.transition
+
+	return dispatcher, db
+}
+
+// seedPendingClaimGateDelivery는 fanout이 끝난 PENDING outbox와 testRoomCommunity의 delivery 행을 만든다.
+func seedPendingClaimGateDelivery(
+	t *testing.T,
+	db *pgxpool.Pool,
+	outbox *domain.YouTubeNotificationOutbox,
+	at time.Time,
+) domain.YouTubeNotificationDelivery {
+	t.Helper()
+
+	outbox.ID = 0
+	outbox.Status = domain.OutboxStatusPending
+	outbox.NextAttemptAt = at
+	outbox.CreatedAt = at
+	require.NoError(t, insertDeliveryTestRows(db, outbox).Error)
+
+	delivery := domain.YouTubeNotificationDelivery{
+		OutboxID:      outbox.ID,
+		RoomID:        testRoomCommunity,
+		Status:        domain.OutboxStatusPending,
+		NextAttemptAt: at,
+		CreatedAt:     at,
+	}
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
+
+	return delivery
+}
+
+// recordServedClaimGateDelivery는 같은 logical ID의 재등록 outbox가 roomID에 이미 발송되어
+// SENT 행과 SENT 원장을 남긴 상태를 만든다. (kind, content_id) 유니크 때문에 content_id는 canonical 표기를 쓴다.
+func recordServedClaimGateDelivery(
+	t *testing.T,
+	db *pgxpool.Pool,
+	outbox *domain.YouTubeNotificationOutbox,
+	postID, roomID string,
+	sentAt time.Time,
+) {
+	t.Helper()
+
+	served := domain.YouTubeNotificationOutbox{
 		Kind:          outbox.Kind,
 		ChannelID:     outbox.ChannelID,
-		ContentID:     outbox.ContentID,
+		ContentID:     mustCanonicalDeliveryPostID(outbox.Kind, outbox.ContentID),
 		Payload:       outbox.Payload,
 		Status:        domain.OutboxStatusSent,
 		NextAttemptAt: sentAt,
 		CreatedAt:     sentAt.Add(-time.Minute),
-		SentAt:        &sentAt,
+		SentAt:        new(sentAt),
 	}
-	require.NoError(t, insertDeliveryTestRows(db, &sibling).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
-		OutboxID:      sibling.ID,
+	require.NotEqual(t, outbox.ContentID, served.ContentID)
+	require.NoError(t, insertDeliveryTestRows(db, &served).Error)
+
+	delivery := domain.YouTubeNotificationDelivery{
+		OutboxID:      served.ID,
 		RoomID:        roomID,
 		Status:        domain.OutboxStatusSent,
 		NextAttemptAt: sentAt,
 		CreatedAt:     sentAt.Add(-time.Minute),
-		SentAt:        &sentAt,
-	}).Error)
+		SentAt:        new(sentAt),
+	}
+	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
+	recordClaimGateSentLedger(t, db, outbox.Kind, postID, roomID, sentAt, delivery.ID)
+}
+
+func recordClaimGateSentLedger(
+	t *testing.T,
+	db *pgxpool.Pool,
+	kind domain.OutboxKind,
+	postID, roomID string,
+	sentAt time.Time,
+	sourceDeliveryID int64,
+) {
+	t.Helper()
+
+	require.NoError(t, store.RecordDeliveryLedgerWrites(t.Context(), db, store.LedgerStatusSent, []store.LedgerWrite{{
+		Key:        ytcontentid.LogicalKey{Kind: kind, LogicalID: postID, RoomID: roomID},
+		ObservedAt: sentAt, SourceDeliveryID: sourceDeliveryID,
+	}}))
+}
+
+func countClaimGateSentLedger(t *testing.T, db *pgxpool.Pool, kind domain.OutboxKind, postID, roomID string) int {
+	t.Helper()
+
+	var count int
+
+	require.NoError(t, db.QueryRow(t.Context(), `
+		SELECT count(*)
+		FROM youtube_notification_delivery_ledger
+		WHERE kind = $1 AND logical_id = $2 AND room_id = $3 AND status = 'SENT'`,
+		string(kind), postID, roomID).Scan(&count))
+
+	return count
+}
+
+func requireClaimGateDeliverySent(t *testing.T, db *pgxpool.Pool, id int64) {
+	t.Helper()
+
+	row := loadClaimGateDeliveryRow(t, db, id)
+	require.Equal(t, string(domain.OutboxStatusSent), row.Status, row.RoomID)
+	require.NotNil(t, row.SentAt, row.RoomID)
+	require.Nil(t, row.LockedAt, row.RoomID)
 }
 
 func TestDispatchDeliveryRowsClaimsCommunityPostBeforeSending(t *testing.T) {
@@ -286,71 +376,6 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaim(t *te
 	require.Nil(t, state.AlarmSentAt)
 }
 
-func TestDispatchDeliveryRowsSkipsAlreadySentDuplicateWithoutSending(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 11, 1, 11, 12, 0, time.UTC)
-	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{})
-	row, outbox, postID := newCommunityClaimGateFixture(now, "already-sent")
-	authorizedAt := now.Add(-2 * time.Minute)
-	alarmSentAt := now.Add(-90 * time.Second)
-	detectedAt := now.Add(-3 * time.Minute)
-	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeCommunityShortsAlarmState{
-		Kind:           outbox.Kind,
-		PostID:         postID,
-		ContentID:      outbox.ContentID,
-		ChannelID:      outbox.ChannelID,
-		DetectedAt:     detectedAt,
-		AuthorizedAt:   &authorizedAt,
-		AlarmSentAt:    &alarmSentAt,
-		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusSent,
-	}).Error)
-	insertSentSiblingDelivery(t, db, &outbox, row.RoomID, alarmSentAt)
-
-	result := dispatcher.send.dispatchDeliveryRows(t.Context(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
-		outbox.ID: outbox,
-	})
-
-	require.Zero(t, sender.messageCount())
-	require.Equal(t, []int64{row.ID}, result.SuccessDeliveryIDs)
-	require.Zero(t, result.FailedDeliveries)
-}
-
-func TestDispatchDeliveryRowsSkipsAlreadySentTrackingRowWithoutReclaim(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 11, 1, 11, 12, 0, time.UTC)
-	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{})
-	row, outbox, postID := newShortClaimGateFixture(now, "tracking-already-sent")
-	detectedAt := now.Add(-3 * time.Minute)
-	alarmSentAt := now.Add(-90 * time.Second)
-	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeContentAlarmTracking{
-		Kind:               outbox.Kind,
-		ContentID:          outbox.ContentID,
-		CanonicalContentID: postID,
-		ChannelID:          outbox.ChannelID,
-		DetectedAt:         detectedAt,
-		AlarmSentAt:        &alarmSentAt,
-		DeliveryStatus:     domain.YouTubeContentAlarmDeliveryStatusSent,
-	}).Error)
-	insertSentSiblingDelivery(t, db, &outbox, row.RoomID, alarmSentAt)
-
-	result := dispatcher.send.dispatchDeliveryRows(t.Context(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
-		outbox.ID: outbox,
-	})
-
-	require.Zero(t, sender.messageCount())
-	require.Equal(t, []int64{row.ID}, result.SuccessDeliveryIDs)
-	require.Zero(t, result.FailedDeliveries)
-
-	var stateCount int64
-
-	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, &stateCount, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
-	require.Zero(t, stateCount)
-}
-
 func TestDispatchDeliveryRowsReleasesClaimAfterSendFailure(t *testing.T) {
 	t.Parallel()
 
@@ -409,50 +434,6 @@ func TestDispatchDeliveryRowsReclaimsStaleLegacyAuthorizationBeforeSending(t *te
 	require.NotNil(t, state.AuthorizedAt)
 	require.True(t, state.AuthorizedAt.UTC().After(staleAuthorizedAt))
 	require.Nil(t, state.AlarmSentAt)
-}
-
-func TestDispatchDeliveryRowsGroupedSendFiltersOutAlreadySentDuplicate(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.April, 11, 1, 11, 12, 0, time.UTC)
-	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{})
-	firstRow, firstOutbox, firstPostID := newCommunityClaimGateFixture(now, "group-first")
-	secondRow, secondOutbox, _ := newCommunityClaimGateFixture(now, "group-second")
-
-	secondRow.ID = firstRow.ID + 1
-	secondRow.OutboxID = firstOutbox.ID + 1
-	secondOutbox.ID = secondRow.OutboxID
-	secondOutbox.ChannelID = firstOutbox.ChannelID
-	secondRow.RoomID = firstRow.RoomID
-
-	firstAuthorizedAt := now.Add(-2 * time.Minute)
-	firstAlarmSentAt := now.Add(-90 * time.Second)
-	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeCommunityShortsAlarmState{
-		Kind:           firstOutbox.Kind,
-		PostID:         firstPostID,
-		ContentID:      firstOutbox.ContentID,
-		ChannelID:      firstOutbox.ChannelID,
-		DetectedAt:     now.Add(-3 * time.Minute),
-		AuthorizedAt:   &firstAuthorizedAt,
-		AlarmSentAt:    &firstAlarmSentAt,
-		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusSent,
-	}).Error)
-	insertSentSiblingDelivery(t, db, &firstOutbox, firstRow.RoomID, firstAlarmSentAt)
-
-	result := dispatcher.send.dispatchDeliveryRows(t.Context(), []domain.YouTubeNotificationDelivery{firstRow, secondRow}, map[int64]domain.YouTubeNotificationOutbox{
-		firstOutbox.ID:  firstOutbox,
-		secondOutbox.ID: secondOutbox,
-	})
-
-	require.Equal(t, 1, sender.messageCount())
-	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.SuccessDeliveryIDs)
-	require.Zero(t, result.FailedDeliveries)
-
-	messages := sender.allMessages()
-	require.Len(t, messages, 1)
-	require.Contains(t, messages[0], "body-group-second")
-	require.NotContains(t, messages[0], "body-group-first")
 }
 
 func TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOncePerPost(t *testing.T) {
@@ -638,15 +619,118 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, secondState.DeliveryStatus)
 }
 
-func TestDispatchDeliveryRowsSendsAlreadySentPostToRoomWithoutSentRow(t *testing.T) {
+// 같은 room에 SENT 원장이 있으면 post 단위 상태와 무관하게 prepare 단계에서 발송 없이 SENT로 수렴한다.
+func TestProcessPendingDeliveriesSkipsRoomWithSentLedger(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, time.April, 11, 1, 11, 12, 0, time.UTC)
+	testCases := []struct {
+		name    string
+		fixture func(now time.Time, suffix string) (domain.YouTubeNotificationDelivery, domain.YouTubeNotificationOutbox, string)
+		seed    func(t *testing.T, db *pgxpool.Pool, outbox *domain.YouTubeNotificationOutbox, postID string, sentAt time.Time)
+	}{
+		{
+			name:    "community alarm state sent",
+			fixture: newCommunityClaimGateFixture,
+			seed: func(t *testing.T, db *pgxpool.Pool, outbox *domain.YouTubeNotificationOutbox, postID string, sentAt time.Time) {
+				t.Helper()
+
+				authorizedAt := sentAt.Add(-30 * time.Second)
+				require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeCommunityShortsAlarmState{
+					Kind:           outbox.Kind,
+					PostID:         postID,
+					ContentID:      outbox.ContentID,
+					ChannelID:      outbox.ChannelID,
+					DetectedAt:     sentAt.Add(-time.Minute),
+					AuthorizedAt:   &authorizedAt,
+					AlarmSentAt:    &sentAt,
+					DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusSent,
+				}).Error)
+			},
+		},
+		{
+			name:    "short tracking row sent",
+			fixture: newShortClaimGateFixture,
+			seed: func(t *testing.T, db *pgxpool.Pool, outbox *domain.YouTubeNotificationOutbox, postID string, sentAt time.Time) {
+				t.Helper()
+
+				require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeContentAlarmTracking{
+					Kind:               outbox.Kind,
+					ContentID:          outbox.ContentID,
+					CanonicalContentID: postID,
+					ChannelID:          outbox.ChannelID,
+					DetectedAt:         sentAt.Add(-time.Minute),
+					AlarmSentAt:        &sentAt,
+					DeliveryStatus:     domain.YouTubeContentAlarmDeliveryStatusSent,
+				}).Error)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			sender := &claimGateTestSender{failRoom: map[string]bool{}}
+			dispatcher, db := newPendingClaimGateDispatcher(t, sender)
+			_, outbox, postID := tc.fixture(now, "ledger-sent")
+			sentAt := now.Add(-90 * time.Second)
+
+			row := seedPendingClaimGateDelivery(t, db, &outbox, now.Add(-time.Minute))
+			tc.seed(t, db, &outbox, postID, sentAt)
+			recordServedClaimGateDelivery(t, db, &outbox, postID, row.RoomID, sentAt)
+
+			require.Equal(t, 1, dispatcher.claim.processPendingDeliveries(t.Context()))
+			require.Zero(t, sender.messageCount())
+			requireClaimGateDeliverySent(t, db, row.ID)
+
+			var stateCount int64
+
+			require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, &stateCount,
+				"kind = $1 AND post_id = $2 AND alarm_sent_at IS NULL", outbox.Kind, postID).Error)
+			require.Zero(t, stateCount, "fulfilled room must not reclaim the post-level alarm state")
+		})
+	}
+}
+
+// 묶음 발송 후보 중 이 room에 SENT 원장이 있는 post만 빠지고 나머지 post는 발송된다.
+func TestProcessPendingDeliveriesFiltersSentLedgerPostOutOfGroup(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{})
-	row, outbox, postID := newCommunityClaimGateFixture(now, "room-scoped")
+	dispatcher, db := newPendingClaimGateDispatcher(t, sender)
+	_, firstOutbox, firstPostID := newCommunityClaimGateFixture(now, "group-first")
+	_, secondOutbox, _ := newCommunityClaimGateFixture(now, "group-second")
+
+	secondOutbox.ChannelID = firstOutbox.ChannelID
+
+	firstRow := seedPendingClaimGateDelivery(t, db, &firstOutbox, now.Add(-time.Minute))
+	secondRow := seedPendingClaimGateDelivery(t, db, &secondOutbox, now.Add(-time.Minute))
+	recordServedClaimGateDelivery(t, db, &firstOutbox, firstPostID, testRoomCommunity, now.Add(-90*time.Second))
+
+	require.Equal(t, 2, dispatcher.claim.processPendingDeliveries(t.Context()))
+
+	messages := sender.allMessages()
+	require.Len(t, messages, 1)
+	require.Contains(t, messages[0], "body-group-second")
+	require.NotContains(t, messages[0], "body-group-first")
+	requireClaimGateDeliverySent(t, db, firstRow.ID)
+	requireClaimGateDeliverySent(t, db, secondRow.ID)
+}
+
+// post 단위로는 이미 발송됐어도 다른 room만 받았다면 이 room에는 claim token 없이 발송하고 원장을 남긴다.
+func TestProcessPendingDeliveriesSendsSentPostToRoomWithoutLedger(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	sender := &claimGateTestSender{failRoom: map[string]bool{}}
+	dispatcher, db := newPendingClaimGateDispatcher(t, sender)
+	_, outbox, postID := newCommunityClaimGateFixture(now, "room-scoped")
 	authorizedAt := now.Add(-2 * time.Minute)
 	alarmSentAt := now.Add(-90 * time.Second)
+
+	row := seedPendingClaimGateDelivery(t, db, &outbox, now.Add(-time.Minute))
 	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeCommunityShortsAlarmState{
 		Kind:           outbox.Kind,
 		PostID:         postID,
@@ -657,23 +741,61 @@ func TestDispatchDeliveryRowsSendsAlreadySentPostToRoomWithoutSentRow(t *testing
 		AlarmSentAt:    &alarmSentAt,
 		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusSent,
 	}).Error)
-	insertSentSiblingDelivery(t, db, &outbox, "room-other", alarmSentAt)
+	recordServedClaimGateDelivery(t, db, &outbox, postID, "room-other", alarmSentAt)
 
-	result := dispatcher.send.dispatchDeliveryRows(t.Context(), []domain.YouTubeNotificationDelivery{row}, map[int64]domain.YouTubeNotificationOutbox{
-		outbox.ID: outbox,
-	})
-
+	require.Equal(t, 1, dispatcher.claim.processPendingDeliveries(t.Context()))
 	require.Equal(t, 1, sender.messageCount())
 	require.Contains(t, sender.allMessages()[0], row.RoomID+":")
-	require.Equal(t, []int64{row.ID}, result.SuccessDeliveryIDs)
-	require.Empty(t, result.SuccessClaimTokens)
-	require.Zero(t, result.FailedDeliveries)
+	requireClaimGateDeliverySent(t, db, row.ID)
+	require.Equal(t, 1, countClaimGateSentLedger(t, db, outbox.Kind, postID, row.RoomID))
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
 	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = $1 AND post_id = $2", outbox.Kind, postID).Error)
 	require.NotNil(t, state.AlarmSentAt)
 	require.Equal(t, alarmSentAt, state.AlarmSentAt.UTC())
+}
+
+// prepare 뒤 다른 실행이 같은 키를 SENT로 기록하면 BeginSending이 원장을 잠가 발송을 막고,
+// 잠금이 만료된 뒤 다시 claim·prepare할 때 행이 SENT로 수렴한다.
+func TestProcessPendingDeliveriesSentLedgerAfterPrepareBlocksSend(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	sender := &claimGateTestSender{failRoom: map[string]bool{}}
+	dispatcher, db := newPendingClaimGateDispatcher(t, sender)
+	_, outbox, postID := newCommunityClaimGateFixture(now, "ledger-race")
+
+	row := seedPendingClaimGateDelivery(t, db, &outbox, now.Add(-time.Minute))
+
+	claimed, err := dispatcher.claim.transition.ClaimPending(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{outbox.ID: outbox}
+	prepared, err := dispatcher.claim.transition.PrepareClaimed(ctx, claimed, outboxByID)
+	require.NoError(t, err)
+	require.Len(t, prepared.ActiveRows, 1)
+
+	recordServedClaimGateDelivery(t, db, &outbox, postID, row.RoomID, now.Add(-time.Second))
+
+	result := dispatcher.claim.dispatchDeliveryRows(ctx, prepared.ActiveRows, outboxByID)
+
+	require.Zero(t, sender.messageCount())
+	require.Empty(t, result.SuccessDeliveryIDs)
+
+	pending := loadClaimGateDeliveryRow(t, db, row.ID)
+	require.Equal(t, string(domain.OutboxStatusPending), pending.Status)
+	require.NotNil(t, pending.LockedAt)
+
+	// 잠금 만료를 기다리지 않도록 claim 시각만 과거로 옮긴다.
+	_, err = db.Exec(ctx, "UPDATE youtube_notification_delivery SET locked_at = $2 WHERE id = $1", row.ID, now.Add(-time.Hour))
+	require.NoError(t, err)
+
+	require.Equal(t, 1, dispatcher.claim.processPendingDeliveries(ctx))
+	require.Zero(t, sender.messageCount())
+	requireClaimGateDeliverySent(t, db, row.ID)
 }
 
 func newTwoRoomClaimGateOutbox(t *testing.T, db *pgxpool.Pool, suffix string, now time.Time) (outbox domain.YouTubeNotificationOutbox, postID string) {

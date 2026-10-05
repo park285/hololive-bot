@@ -48,10 +48,6 @@ func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
 				require.Empty(t, rows)
 			}
 
-			logPreparedPlan(t, tx, mode+" fanout", `EXPLAIN (FORMAT JSON, COSTS ON)
-				EXECUTE fanout_sql_v2('PENDING', NOW() - INTERVAL '1 minute', NOW(),
-				NOW() - INTERVAL '1 hour', 1, NOW())`)
-
 			claimed := runFanoutSQLTest(t, tx, domain.OutboxStatusPending, at)
 			require.Len(t, claimed, 1)
 			require.Equal(t, id, claimed[0].ID)
@@ -122,15 +118,6 @@ func preparePlanModeSQLTest(t *testing.T, pool *pgxpool.Pool, mode, name, sqlFil
 	})
 
 	return tx
-}
-
-func logPreparedPlan(t *testing.T, tx pgx.Tx, label, explain string) {
-	t.Helper()
-
-	var plan []byte
-
-	require.NoError(t, tx.QueryRow(t.Context(), explain).Scan(&plan))
-	t.Logf("%s plan: %s", label, plan)
 }
 
 func requirePreparedPlanMode(t *testing.T, tx pgx.Tx, name, mode string) {

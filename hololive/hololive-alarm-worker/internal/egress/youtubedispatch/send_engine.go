@@ -44,7 +44,6 @@ type requestTransition interface {
 }
 
 type lifecycleTransition interface {
-	PrepareClaimed(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) (store.PrepareClaimsResult, error)
 	BeginSending(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) (store.StartedOperation, store.ApplyResult, error)
 	ApplyPreparedFailure(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration, store.DeliveryMode) (store.ApplyResult, error)
 	ApplyStartedFailure(context.Context, store.StartedOperation, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration, store.DeliveryMode) (store.ApplyResult, error)

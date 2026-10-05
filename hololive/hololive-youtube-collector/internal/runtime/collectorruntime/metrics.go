@@ -42,6 +42,8 @@ type Metrics struct {
 	leaseAcquire   *prometheus.CounterVec
 	leaseLost      *prometheus.CounterVec
 	publish        *prometheus.CounterVec
+	publishTime    *prometheus.HistogramVec
+	publishBytes   *prometheus.HistogramVec
 	acceptInterval *prometheus.HistogramVec
 	lastAccepted   *prometheus.GaugeVec
 	enqueue        *prometheus.CounterVec
@@ -91,6 +93,7 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		Name: "youtube_observation_publish_total",
 		Help: "YouTube observation publish outcomes.",
 	}, []string{labelProvider, labelKind, "outcome"})
+	metrics.publishTime, metrics.publishBytes = newPublishHistograms()
 	// 관측 kind별 실제 durable 수락 간격이다. 같은 checkpoint가 commit으로 전진했을 때만 직전 수락 이후 경과를 기록한다.
 	// subject는 label로 두지 않아 cardinality가 provider×kind로 제한된다.
 	metrics.acceptInterval = prometheus.NewHistogramVec(prometheus.HistogramOpts{
@@ -113,10 +116,28 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	registerer.MustRegister(
 		metrics.attempts, metrics.duration, metrics.lastSuccess, metrics.freshness,
 		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish,
-		metrics.acceptInterval, metrics.lastAccepted, metrics.enqueue, metrics.invalidTuple,
+		metrics.publishTime, metrics.publishBytes, metrics.acceptInterval, metrics.lastAccepted, metrics.enqueue, metrics.invalidTuple,
 	)
 
 	return metrics
+}
+
+// newPublishHistograms는 job kind별 발행 트랜잭션 소요 시간과 인코딩 크기 histogram을 만든다.
+func newPublishHistograms() (duration, encodedBytes *prometheus.HistogramVec) {
+	// 발행 트랜잭션(fence 확인·관측 저장·lease 종료) 한 번의 소요 시간이다. 결과와 무관하게 모든 발행 시도를 기록한다.
+	duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "youtube_observation_publish_duration_seconds",
+		Help:    "YouTube observation publish transaction duration by provider and job kind.",
+		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	}, []string{labelProvider, labelKind})
+	// 성공한 발행이 SQL에 보낸 관측 JSON 크기다. 8 MiB 배치 상한(MaxPublishBatchBytes) 근접 빈도를 보려고 상단 버킷을 촘촘히 둔다.
+	encodedBytes = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "youtube_observation_publish_encoded_bytes",
+		Help:    "Encoded observation JSON bytes of committed YouTube observation publishes by provider and job kind.",
+		Buckets: []float64{1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10, 1 << 20, 2 << 20, 4 << 20, 6 << 20, 7 << 20, 8 << 20},
+	}, []string{labelProvider, labelKind})
+
+	return duration, encodedBytes
 }
 
 func (m *Metrics) ObserveAttempt(provider contract.Provider, kind, result string, duration time.Duration) {
@@ -188,6 +209,24 @@ func (m *Metrics) ObservePublish(provider contract.Provider, kind, outcome strin
 	}
 
 	m.publish.WithLabelValues(string(provider), kind, boundedOutcome(outcome)).Inc()
+}
+
+// ObservePublishDuration은 job kind별 발행 트랜잭션 한 번의 소요 시간을 기록한다.
+func (m *Metrics) ObservePublishDuration(provider contract.Provider, kind string, duration time.Duration) {
+	if m == nil {
+		return
+	}
+
+	m.publishTime.WithLabelValues(string(provider), kind).Observe(duration.Seconds())
+}
+
+// ObservePublishBytes는 commit된 발행이 SQL에 보낸 관측 JSON 크기를 job kind별로 기록한다.
+func (m *Metrics) ObservePublishBytes(provider contract.Provider, kind string, encodedBytes int) {
+	if m == nil {
+		return
+	}
+
+	m.publishBytes.WithLabelValues(string(provider), kind).Observe(float64(encodedBytes))
 }
 
 // ObserveAccepted는 commit된 inserted·duplicate 관측의 수락 시각과, checkpoint가 전진한 경우 직전 수락 이후 간격을 기록한다.

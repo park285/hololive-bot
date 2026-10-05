@@ -151,33 +151,6 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 			)
 		}
 	}
-
-	if len(selection.alreadySentRows) == 0 {
-		return
-	}
-
-	prepared, err := d.transition.PrepareClaimed(
-		ctx,
-		selection.alreadySentRows,
-		outboxMap(selection.alreadySentOutboxes),
-	)
-	observeLogicalResolutions(prepared.Resolutions)
-
-	if err != nil || len(prepared.ActiveRows) > 0 || len(prepared.Blocked) > 0 {
-		d.logger.Error("Failed to reconcile already-fulfilled logical delivery",
-			slog.Int("delivery_count", len(selection.alreadySentRows)),
-			slog.Int("active_count", len(prepared.ActiveRows)),
-			slog.Int("blocked_count", len(prepared.Blocked)),
-			slog.Any("error", err))
-
-		return
-	}
-
-	appendLifecycleTouched(result, mu, prepared.TouchedOutboxIDs)
-	mu.Lock()
-
-	result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, selection.alreadySentDeliveryIDs...)
-	mu.Unlock()
 }
 
 // lifecycleProviderFailure는 발송 오류를 lifecycle 실패 종류와 사유로 나눈다. 기본 사유는 provider_outcome_unknown이다.

@@ -5,7 +5,7 @@
 2026-10-05 점검에서 미반영 또는 부분 반영으로 확인한 여섯 항목을 처리한다. 각 항목은 측정이나 계약 근거가 있을 때만 바꾸고, 기존 fence·원자성·잠금 순서·관측 시각 계약을 유지한다.
 
 - 운영 DB 조회는 stack-platform-ops를 거친다. 운영 migration 적용·배포는 hololive-bot-ops 절차와 별도 승인이 필요하다.
-- SQL 정책 이관 작업(`2026-10-04-sql-policy-expansion.md`)은 #571로 `origin/main`(`23f6497ec`)에 병합됐다. 모든 단계는 이 커밋 위에서 시작한다. 마지막 migration은 `265_bot_manual_replay_lock_clock.sql`이므로 새 번호는 266 이상이다.
+- SQL 정책 이관 작업(`2026-10-04-sql-policy-expansion.md`)은 #571로 `origin/main`(`23f6497ec`)에 병합됐다. 이 계획 문서와 함께 옮기려던 미커밋 파일 4개는 #572(`0f40d93cc`)에 이미 포함됐으므로, 작업은 `0f40d93cc`에서 만든 worktree(`iris-stack/hololive-hotpath-20261005`, 브랜치 `perf/db-hotpath-20261005`)에서 진행했다. 새 migration은 266, 267이다.
 - 검사는 제품 결함만 잡는다. SQL 문자열 검사나 구조 예산 같은 gate를 새로 만들지 않는다. benchmark는 수동 측정 도구로만 둔다.
 
 ## A. 코드만으로 진행할 작업 (운영 접근 불필요)
@@ -14,35 +14,56 @@
 
 근거: 모든 executor 경로는 `processPendingDeliveriesWithLifecycle`에서 `PrepareClaimed`를 거친 `ActiveRows`만 받는다. `PrepareClaimed`는 `(kind, logical_id, room_id)` 원장을 배치로 읽어 SENT를 Fulfilled로 걸러 내고, `BeginSending`은 발송 직전에 원장을 `FOR UPDATE`로 다시 읽어 Active가 아니면 conflict로 막는다. 원장 키와 방별 조회 키는 같은 `ResolveDeliveryLogicalID`로 만든다. 따라서 `claim_manager_gate.go`의 AlreadySent 분기에서 실행하는 `roomAlreadyReceivedPost`(`dispatcher_claim_acquire_0131_01.sql`)는 같은 사실을 세 번째로 확인한다.
 
-- [ ] post 단위 판정이 AlreadySent이면 방별 조회 없이 claim token 없는 Proceed로 처리한다. 기존 "이 방은 아직 받지 않음" 경로와 같은 결과다.
-- [ ] `roomAlreadyReceivedPost`, `resolveRoomDeliveryDecision`, `sentSiblingRowsContainPost`, `dispatcher_claim_acquire_0131_01.sql`과 이를 읽는 SQL 등록을 삭제한다.
-- [ ] `PrepareClaimed`를 건너뛰고 `dispatchDeliveryRows`를 직접 호출하며 원장 없는 SENT sibling에 기대는 테스트를 운영 순서(`processPendingDeliveries`)와 원장 행 기준으로 바꾼다. 대상은 `claim_manager_gate_test.go`의 `SkipsAlreadySentDuplicateWithoutSending`, `SkipsAlreadySentTrackingRowWithoutReclaim`, `GroupedSendFiltersOutAlreadySentDuplicate`, `SendsAlreadySentPostToRoomWithoutSentRow`다.
-- [ ] 회귀 시험: 같은 방에 SENT 원장이 있으면 발송하지 않는다. 다른 방만 받은 post는 이 방에 발송한다. prepare 이후 다른 실행이 같은 키를 SENT로 기록하면 `BeginSending` conflict로 발송하지 않고, 행이 이후 회수·재준비로 Fulfilled에 수렴한다.
+- [x] post 단위 판정이 AlreadySent이면 방별 조회 없이 claim token 없는 Proceed로 처리한다. 기존 "이 방은 아직 받지 않음" 경로와 같은 결과다.
+- [x] `roomAlreadyReceivedPost`, `resolveRoomDeliveryDecision`, `sentSiblingRowsContainPost`, `dispatcher_claim_acquire_0131_01.sql`과 이를 읽는 SQL 등록을 삭제한다. AlreadySent 행만 모아 다시 `PrepareClaimed`하던 `applyLifecycleClaimSelection`의 경로, `deliveryClaimSelection.alreadySent*` 필드, `lifecycleTransition.PrepareClaimed`도 쓰는 곳이 없어져 함께 지웠다.
+- [x] 4개 테스트를 `processPendingDeliveries`와 `store.RecordDeliveryLedgerWrites`로 남긴 SENT 원장 기준으로 다시 썼다(`TestProcessPendingDeliveriesSkipsRoomWithSentLedger`의 community·short 하위 시험, `FiltersSentLedgerPostOutOfGroup`, `SendsSentPostToRoomWithoutLedger`).
+- [x] 회귀 시험 `TestProcessPendingDeliveriesSentLedgerAfterPrepareBlocksSend`를 추가했다. 원장 기록을 빼면 세 시험이 실패하는 것을 확인했다. 원장 backfill은 migration 227이 적용 시점에 확인하므로 원장 없는 과거 SENT 행에 기대는 경로는 남기지 않는다.
 
 ### A2. 유튜브 claim SQL의 prepared plan 검증 보강 (P2)
 
 근거: `fanout_claim.sql`, `transition_claim_pending.sql`, `transition_stale_sending.sql`은 부분 인덱스를 위한 상수 조건을 갖지만, 테스트는 몇 행짜리 fixture에서 EXPLAIN을 `t.Logf`로 출력만 한다. bot prune 테스트(`ledger_prune_plan_db_test.go`)는 보존 이력과 `auto` 모드 8회 실행으로 인덱스 사용을 단정한다.
 
-- [ ] 세 SQL에 terminal 이력이 많은 fixture를 만들고 `force_custom_plan`과 `auto`(여러 번 실행 후)에서 대상 부분 인덱스(`idx_yno_pending_due_created_id`, `idx_ynd_pending_due_created_id`, `idx_ynd_sending_stale`) 사용과 seq scan 부재를 단정한다. `force_generic_plan`은 실제 결과로 판단해 요구 여부를 정한다.
-- [ ] SQL 문자열만 검사하는 `TestTransitionClaimAndStaleSQLDeclarePartialIndexPredicates`는 plan 단정으로 대체한 뒤 삭제한다(stack AGENTS.md의 text-only test 금지).
-- [ ] 상태 가드 결과 검사(`PreparedModesPreserve*Guard`)는 유지한다.
+- [x] `store/claim_history_plan_test.go`가 terminal 이력 2만 행(outbox SENT, delivery SENT·FAILED)과 후보 5행씩으로 세 SQL을 `force_custom_plan`(1회), `auto`(8회), `force_generic_plan`(1회)에서 `EXPLAIN ANALYZE`한다. 대상 테이블의 인덱스 조회, outbox·delivery seq scan 부재, 대상 테이블에서 읽은 행 40 이하를 단정한다.
+  - 인덱스 이름은 단정하지 않는다. fanout custom plan은 `idx_yno_status_created`(status, created_at)를 골랐지만 status 동등 조건으로 PENDING 15행만 읽어 결과가 같았다.
+  - `force_generic_plan`도 요구한다. `transition_stale_sending.sql`에서 상수 상태 조건을 빼자 generic plan만 seq scan으로 바뀌어 네 단정이 모두 실패했다. 상수 조건이 막는 결함을 이 모드가 잡는다.
+- [x] `TestTransitionClaimAndStaleSQLDeclarePartialIndexPredicates`와 EXPLAIN을 출력만 하던 `logPreparedPlan`을 삭제했다.
+- [x] 상태 가드 결과 검사(`PreparedModesPreserve*Guard`)는 유지했다.
 
 ### A3. 관측 큐 선점의 적체 증가 측정과 dead-letter 분류 정리 (P1)
 
 #571이 `repository_claim_0012_12.sql`에 `attempt_count` 반환을 추가했다. 그 버전 위에서 작업한다.
 
-- [ ] 수동 benchmark를 추가한다. 활성 적체 5천·5만·20만 행과 PROCESSED 이력 유무를 조합해 claim 1회 시간과 CTE별 읽은 행을 기록한다. 결과는 이 계획에 남긴다.
-- [ ] `exhausted_candidates`가 이력이 큰 queue에서 이력 행까지 읽는지 EXPLAIN으로 확인한다. 읽는다면 `active_backlog`에 `attempt_count`와 due 여부를 추가하고, exhausted 후보를 거기서 고른 뒤 `candidates`와 같은 LATERAL PK 잠금으로 바꾼다. 순서·LIMIT·SKIP LOCKED·replay epoch 제외 의미는 그대로 유지한다.
-- [ ] `active_backlog`의 선형 비용 자체는 채널·종류 선두 계약 때문에 유지한다. 측정에서 운영 적체 규모가 1초 예산을 위협할 때만 선두 head 테이블 같은 구조 변경을 별도로 검토한다.
-- 검증: 기존 `claim_backlog_plan_test.go`, `shorts_claim_plan_test.go`, claim 계약 테스트를 custom·generic plan에서 통과시킨다.
+- [x] `BenchmarkClaimBacklog`(`claim_backlog_benchmark_test.go`)를 추가했다. kind는 video_list·shorts_list이고 이력은 PROCESSED 20만 행이다. 수치는 3회 평균 서버 실행 시간(ms)과 CTE별 읽은 행이다. custom·generic plan 차이는 5% 이내라 custom만 적는다.
+
+  | 활성 / 이력 | 변경 전 ms | 변경 후 ms | active_backlog 행 | exhausted 행 (전 → 후) |
+  | --- | ---: | ---: | ---: | ---: |
+  | 5천 / 0 | 13.8 | 13.9 | 10,002 | 5,001 → 0 |
+  | 5천 / 20만 | 62.8 | 62.4 | 210,002 | 5,001 → 0 |
+  | 5만 / 0 | 154.8 | 159.3 | 100,002 | 50,001 → 0 |
+  | 5만 / 20만 | 208.4 | 214.7 | 300,002 | 50,001 → 0 |
+  | 20만 / 0 | 632.6 | 644.8 | 400,002 | 200,001 → 0 |
+  | 20만 / 20만 | 841.2 | 832.6 | 800,002 | 400,001 → 0 |
+
+- [x] 확인 결과 `exhausted_candidates`는 활성 20만 행에서 queue를 seq scan해 이력 포함 40만 행을 읽었다. 계획대로 `active_backlog`에 `attempt_count`와 `due`를 추가하고, 시도 소진 후보를 그 결과에서 고른 뒤 queue PK LATERAL 잠금(`FOR UPDATE SKIP LOCKED`)으로 바꿨다. 읽는 행은 0이 됐지만 실행 시간 차이는 측정 오차 안이다. 시간은 `active_backlog`가 차지한다.
+  - `claim_backlog_plan_test.go`의 dead-letter CTE 상한을 후보 잠금 상한(128)으로 좁혔다. 이전 SQL은 이 단정에서 50,002행으로 실패한다. materialized `active_backlog`를 읽는 CTE가 셋이 되어 그 상한은 활성 행의 3배로 고쳤다.
+  - claim의 시도 소진 분류를 직접 검증하는 시험이 없어 `TestClaimDeadLettersDueExhaustedRowsInQueueOrderSkippingLocked`를 추가했다. 순서, LIMIT, 다른 실행이 잠근 행 건너뛰기, due가 아니거나 lease가 유효한 행 보존을 단정하며 이전 SQL에서도 통과한다.
+- [x] `active_backlog`는 활성 행이 적어도 PROCESSED 이력이 있으면 `source_observations`를 seq scan한다(활성 5천·이력 20만에서 21만 행, 63 ms). 운영 queue는 2026-10-05 기준 활성 1행, PROCESSED 23.2만 행이고 claim 평균은 0.36~0.46 ms(최대 290 ms)라 1초 예산과 거리가 멀다. 구조 변경은 하지 않는다.
+- 검증: `claim_backlog_plan_test.go`(custom·generic), `shorts_claim_plan_test.go`, sourceobservation 패키지 전체를 `-race`로 통과했다.
 
 ### A4. 관측 발행의 payload 처리와 지표 (P2)
 
 #571이 `repository_publish_set_0032_32.sql`의 결과 분류를 Go로 옮겼다. 그 버전 위에서 작업한다.
 
-- [ ] collector에 발행 단계 소요 시간과 인코딩 바이트 histogram을 추가한다(provider·job kind 라벨). 현재는 건수와 수집 전체 시간만 있다.
-- [ ] 큰 payload benchmark(예: 1,024행·8 MiB 근처, 중복·신규 혼합)로 현재 SQL의 시간·메모리를 잰다.
-- [ ] `existing` CTE에서 payload를 빼고, `payload_keys`와 일치 검사에서만 `input`을 ordinal로 다시 읽도록 바꾼 안을 같은 benchmark로 비교한다. 개선이 있을 때만 채택한다. digest 충돌·내용 불일치 검사(`lock_source_observation_payload`, `assert_source_observation_payload_match`)는 유지한다.
+- [x] `youtube_observation_publish_duration_seconds{provider,kind}`(모든 발행 시도)와 `youtube_observation_publish_encoded_bytes{provider,kind}`(commit된 발행, 6·7·8 MiB 버킷 포함)를 추가했다. 인코딩 크기는 `PublishBatchResult.EncodedBytes`로 전달한다. `TestCollectAndPublishRecordsPublishDurationAndEncodedBytes`가 실제 DB 발행으로 확인한다.
+- [x] `BenchmarkPublishSetLargeBatch`(`repository_publish_set_benchmark_test.go`)를 추가했다. 1,024행(subject별 약 7 KB, 인코딩 7.84 MiB) 중 절반은 기존 관측, 절반은 신규이고 발행 SQL만 트랜잭션에서 실행한 뒤 되돌린다.
+- [x] 대안을 같은 benchmark로 비교해 채택했다. 3회 측정 범위는 다음과 같다. digest 충돌·내용 불일치 검사 함수는 그대로이고 `TestPayloadDigestCollisionAndCorruptionFailClosed`가 통과한다.
+
+  | SQL | wall ms | 서버 실행 ms | materialized CTE 저장 합 | Go 할당 |
+  | --- | ---: | ---: | ---: | ---: |
+  | 변경 전 | 394~398 | 361~364 | 99,825 kB | 24.9 MB |
+  | `existing`에서 payload 제외 | 373~377 | 337~343 | 58,541 kB | 24.9 MB |
+
+  CTE 저장 합은 PG 18 EXPLAIN의 `Maximum Storage`를 모든 CTE scan에 대해 더한 비교용 값이며 같은 CTE를 여러 번 읽으면 중복 합산된다.
 - 바이트 기준 배치 분할은 하지 않는다. 발행과 checkpoint를 한 트랜잭션으로 묶는 원자성 계약이 바뀌기 때문이다. 8 MiB·1,024행 상한 거부는 유지하고, 지표로 상한 근접 빈도를 본 뒤 다시 판단한다.
 
 ## B. 운영 증적이 필요한 작업
@@ -60,7 +81,7 @@ stack-platform-ops 절차로 `hololive-osaka`의 `holo-postgres`(PostgreSQL 18.6
 - `idx_youtube_collection_job_due`: `idx_scan=9`, `last_idx_scan=2026-10-03 10:31`, 크기 3.4 MB(행 1,092개). PK는 48억 회 사용됐다.
 - 9회의 출처를 `pg_stat_statements`로 추적했다. 런타임 role(`hololive_runtime`, `hololive_scraper`)에서 `job_key` 동등 조건이 없는 문장은 INSERT, `projection_generation` FK 확인, 보존 삭제뿐이며 이 인덱스를 쓰지 않는다. `slot_state`로 거르는 문장은 `postgres_admin`의 수동 진단 쿼리와 `hololive_migrator`의 사전 점검(2회)뿐이다. 둘 다 1,092행 seq scan으로 충분하다.
 - 쓰기 비용: 42일간 UPDATE 1,410만 건, HOT 0.43%, autovacuum 26,349회(약 2.3분마다), 스냅샷 시점 dead 31.8%. renew가 바꾸는 `lease_expires_at`이 이 인덱스 key라 HOT이 막힌다. 삭제하면 renew는 PK·`projection_generation` 인덱스 key를 바꾸지 않으므로 HOT 대상이 된다.
-- [ ] 새 migration에 `DROP INDEX CONCURRENTLY IF EXISTS idx_youtube_collection_job_due;`를 `BEGIN/COMMIT` 밖에 두고 manifest와 schema snapshot을 갱신한다.
+- [x] `266_drop_youtube_collection_job_due_index.sql`을 추가하고 manifest와 schema snapshot을 갱신했다. 이 테이블을 읽는 런타임 SQL이 모두 `job_key` PK로 접근함도 코드에서 다시 확인했다.
 - [ ] 운영 적용 후 acquire·renew 지연, `n_tup_hot_upd` 비율, autovacuum 빈도를 비교한다.
 
 ### B3. 테이블별 autovacuum 조정 (P2): 변경 불필요로 종료
@@ -81,7 +102,11 @@ autovacuum이 따라가지 못하는 대상 테이블은 없었다. 기본값은
 
 - `idx_source_collection_checkpoints_updated_identity`(`updated_at, provider, observation_kind, subject_key, scope_sha256`, migration 186)는 보존 삭제(`repository_retention_delete_checkpoints_0084_84.sql`)용이다. upsert마다 `updated_at`이 바뀌어 HOT이 2.2%에 그친다. 인덱스는 5.4 MB로 PK(984 kB)보다 크다.
 - 마지막 사용은 2026-09-29 23:19다. 행이 5,530개뿐이라 보존 삭제를 seq scan으로 처리해도 비용이 작다.
-- [ ] 보존 삭제가 최근 실행되지 않은 이유(설정값 또는 후보 없음)를 확인한다. 인덱스 없이 보존 삭제 SQL의 계획과 잠금 범위가 유지되는지 검증한 뒤 삭제를 검토한다.
+- [x] 2026-10-05 09:16 UTC 읽기 전용 조회(가드 `transaction_read_only=on` 확인) 결과, 보존 삭제는 계속 실행 중이었다(runtime 호출 15,432회, 누적 삭제 344만 행). 인덱스를 쓰지 않은 이유는 planner 선택이다. 6,187행 중 5,269행이 2일 cutoff보다 오래되어 조건 선택도가 낮고, 두 테이블 seq scan과 hash semi join을 골라 9 ms에 끝났다(현재 후보 0건).
+- [x] 누적 삽입·삭제 344만 건은 과거 scope 교체 폭증의 흔적이다. 10분 측정에서 삽입·삭제는 0건, UPDATE는 1,616건(하루 약 23만 건)이고 HOT은 0건이었다.
+- [x] 폭증 모양(한 subject에 scope 2.4만 개, 2.2만 개가 오래됨) dbtest에서 인덱스를 지워도 계획은 hash semi join으로 바뀌고 31.7 ms(인덱스 사용 시 34.5 ms)였으며, 삭제 호출은 50 ms(81 ms)였다. 잠금은 후보 CTE의 `FOR UPDATE SKIP LOCKED`가 LIMIT 안의 후보에만 걸므로 접근 경로와 무관하다.
+- [x] `267_drop_source_checkpoint_retention_index.sql`을 추가했다. 인덱스 사용을 단정하던 `TestCheckpointRetentionCandidatePlanUsesBoundedIndexes`는 후보마다 checkpoint를 다시 seq scan하는 2차 계획을 막는 `TestCheckpointRetentionCandidatePlanReadsCheckpointsOnce`로 바꿨다.
+- [ ] 운영 적용 후 checkpoint `n_tup_hot_upd` 비율과 보존 삭제 시간을 비교한다.
 
 ### 참고: projection generation 급증의 잔여분
 
@@ -92,9 +117,8 @@ autovacuum이 따라가지 못하는 대상 테이블은 없었다. 기본값은
 
 ## 순서와 의존성
 
-1. #571 병합으로 선행 조건이 없어졌다. 모든 단계는 `origin/main`에서 만든 별도 worktree에서 진행한다. 기존 checkout들에는 다른 작업의 미커밋 변경이 많으므로 건드리지 않는다.
-2. 권장 순서는 B2, A1, A2, B4, A3, A4다. B2는 운영 판정이 끝났고 A3, A4는 측정이 먼저 필요하다.
-3. B1은 완료됐다. B2는 migration 작업으로 진행할 수 있고, B3은 변경 없이 종료했다. B4는 보존 삭제 경로 확인 뒤 판단한다.
+1. B2, A1, A2, B4, A3, A4 순서로 코드 작업을 마쳤다(2026-10-05). B1은 완료, B3은 변경 없이 종료했다.
+2. 남은 일은 B2·B4 migration의 운영 적용과 적용 후 비교, Git 발행이다. 모두 별도 승인이 필요하다.
 
 ## 검증
 
@@ -103,6 +127,14 @@ autovacuum이 따라가지 못하는 대상 테이블은 없었다. 기본값은
 - migration 단계는 `scripts/architecture/check-migration-manifest.sh`와 `SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest`로 확인한다.
 - Git 발행 시 `scripts/ci/pre-push-gate.sh`를 실행한다.
 
+### 2026-10-05 검증 결과
+
+- `-race` PostgreSQL 테스트: alarm-worker `internal/egress/youtubedispatch/...`·`internal/service/alarm/dispatchoutbox/...`(`-tags=integration`), api `internal/youtube/sourceobservation/...`, `hololive-dbtest/...`, collector `internal/runtime/...`·`testkit/...`가 통과했다. collector의 youtubejs helper 시험은 새 worktree에 `npm ci --ignore-scripts`로 의존성을 설치한 뒤 통과했다.
+- 변경 패키지의 golangci-lint(0 issues), staticcheck, NilAway가 통과했다.
+- `check-migration-manifest.sh`와 `TestSchemaSnapshotGolden`이 통과했다. snapshot에서는 두 인덱스 줄만 빠졌다.
+- `./build-all.sh --build-only --no-bump`가 local CI(전체 Go test·race test 포함, integration은 기본값대로 생략)와 이미지 빌드를 통과했다. `scripts/ci/pre-push-gate.sh`는 Git 발행 때 실행한다.
+
 ## 필요한 승인
 
-- B2(필요하면 B4) migration의 운영 적용과 배포 (hololive-bot-ops)
+- B2·B4 migration(266, 267)의 운영 적용과 배포 (hololive-bot-ops)
+- Git push와 PR 발행

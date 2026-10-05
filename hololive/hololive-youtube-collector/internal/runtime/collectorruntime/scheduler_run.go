@@ -572,6 +572,8 @@ func (e *collectionExecutor) commitCollectResult(
 		err       error
 	)
 
+	publishStarted := time.Now()
+
 	if result.Kind() == collection.CollectPartial {
 		retry, retryErr := e.retrySchedule(resultPartialCause(result))
 		if retryErr != nil {
@@ -583,12 +585,15 @@ func (e *collectionExecutor) commitCollectResult(
 		published, err = e.publisher.PublishComplete(publishCtx, proof, output)
 	}
 
+	e.metrics.ObservePublishDuration(spec.Provider, spec.CollectionJobKind, time.Since(publishStarted))
+
 	if err != nil {
 		e.observePublishError(spec, output, err)
 
 		return markLeasePhase(phasePublish, fmt.Errorf("publish complete: %w", err))
 	}
 
+	e.metrics.ObservePublishBytes(spec.Provider, spec.CollectionJobKind, published.EncodedBytes)
 	e.observePublished(output, published)
 	e.recordTerminalSuccess(&published)
 	e.metrics.ObserveSuccess(spec.Provider, spec.CollectionJobKind, time.Now().UTC())

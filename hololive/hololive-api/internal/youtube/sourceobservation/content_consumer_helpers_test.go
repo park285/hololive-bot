@@ -105,12 +105,12 @@ func contentClaimOptions() ClaimOptions {
 }
 
 func shortsListEnvelope(
-	t *testing.T,
+	tb testing.TB,
 	proof *contract.LeaseProof,
 	completeness contract.Completeness,
 	videoIDs ...string,
 ) *contract.Envelope {
-	t.Helper()
+	tb.Helper()
 
 	published := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
 	videos := make([]contract.VideoListItemV1, 0, len(videoIDs))
@@ -131,27 +131,27 @@ func shortsListEnvelope(
 		},
 	})
 	if err != nil {
-		t.Fatalf("marshal shorts list payload: %v", err)
+		tb.Fatalf("marshal shorts list payload: %v", err)
 	}
 
-	return prepareContentListEnvelope(t, proof, contract.KindShortsList, 1, completeness, payload)
+	return prepareContentListEnvelope(tb, proof, contract.KindShortsList, 1, completeness, payload)
 }
 
 func prepareContentListEnvelope(
-	t *testing.T,
+	tb testing.TB,
 	proof *contract.LeaseProof,
 	kind contract.ObservationKind,
 	generation int64,
 	completeness contract.Completeness,
 	payload []byte,
 ) *contract.Envelope {
-	t.Helper()
+	tb.Helper()
 
-	return prepareChannelListEnvelope(t, proof, testChannelID, kind, generation, completeness, payload)
+	return prepareChannelListEnvelope(tb, proof, testChannelID, kind, generation, completeness, payload)
 }
 
 func prepareChannelListEnvelope(
-	t *testing.T,
+	tb testing.TB,
 	proof *contract.LeaseProof,
 	channelID string,
 	kind contract.ObservationKind,
@@ -159,7 +159,7 @@ func prepareChannelListEnvelope(
 	completeness contract.Completeness,
 	payload []byte,
 ) *contract.Envelope {
-	t.Helper()
+	tb.Helper()
 
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider:           contract.ProviderYouTubeJS,
@@ -176,7 +176,7 @@ func prepareChannelListEnvelope(
 		Lease:              *proof,
 	})
 	if err != nil {
-		t.Fatalf("prepare %s envelope: %v", kind, err)
+		tb.Fatalf("prepare %s envelope: %v", kind, err)
 	}
 
 	return &envelope
