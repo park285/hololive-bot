@@ -389,6 +389,7 @@ hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_failure_lock_0144_14.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_insert_0144_06.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_release_0144_10.sql
+hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_release_superseded.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_renew_0144_09.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_projection_current_0144_01.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_projection_lock_0144_05.sql
