@@ -114,12 +114,15 @@ autovacuum이 따라가지 못하는 대상 테이블은 없었다. 기본값은
 - 행 단위 `valid_until` 갱신 문장이 누적 6.8만 회·5.97억 행을 기록했지만, 조회 사이 약 2분 동안 target UPDATE는 46건만 늘었다. 따라서 #566(heartbeat를 generation 단위로 이동)이 운영에 반영된 것으로 보인다.
 - 잔여 행은 은퇴 보존 기간(`YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS`)이 지나면 보존 작업이 지운다. tick마다 최대 64배치이고 generation 하나에 약 2배치가 들므로, 대상이 되면 하루 2만 개 이상을 지울 수 있다. 실제 운영 설정값은 비밀 파일을 읽어야 해서 확인하지 않았다.
 - [x] 2026-10-05 11:25 UTC 확인: 은퇴 generation 32,829개 중 7일 보존을 넘긴 것은 09-28분 6개뿐이었다. 11:13 이후 대상이 된 2개와 하위 target·reason 각 1,085행, lease 1행이 삭제돼 보존 경로 작동을 확인했다.
-- [ ] 폭증분(09-30 4,196개, 10-01 9,332개, 10-02 8,847개, 10-03 8,308개, 10-04 2,030개)은 2026-10-07~10-11에 보존 대상이 된다. 그 뒤 `youtube_collection_targets`·`youtube_collection_target_reasons`의 `n_tup_del`, `n_dead_tup`, autovacuum과 `hololive_youtube_plane_retention_deleted_total`을 확인한다. 디스크 파일 크기는 VACUUM 뒤에도 바로 줄지 않는다.
+- [x] 폭증분은 보존 기간을 기다리지 않고 2026-10-05 12:05~12:50 UTC에 사용자 요청으로 지웠다. 운영 보존 작업과 같은 `delete_retired_youtube_collection_job_leases`·`delete_retired_youtube_projection_batch`를 cutoff `now() - 1 hour`, 호출당 1,000행으로 autocommit 실행했다(500회마다 3초 휴지, statement 30초·lock 5초 timeout, 호스트 여유 20 GiB 미만이면 중단).
+  - 삭제: lease 645행(현행 대상 밖 subject), generation 32,816개, target·reason 각 20,244,088행. 남은 RETIRED는 최근 1시간분 22개다. 현행 채널 job의 lease는 모두 남았다.
+  - 영향: 2코어 호스트의 부하 평균이 약 4.5, IO pressure가 최대 46%까지 올랐다. 그동안 API 보존 tick 8건(`source_observations`·`source_observation_applications` 삭제)과 관측 처리 1건이 `context deadline exceeded`로 실패했다. 해당 관측은 이후 PROCESSED였고 queue에 DEAD_LETTER는 없었다. 삭제가 끝난 뒤 오류는 0건이다.
+  - 사후: autovacuum이 바로 처리해 dead tuple이 target 2개, reason 약 4.7만 개로 줄었다. 파일 크기(target 3.9 GB, reason 4.8 GB, DB 11 GB)는 공간 재사용 상태로 남는다. 반환이 필요하면 별도 승인된 rewrite(VACUUM FULL·pg_repack)가 필요하다. WAL은 `max_wal_size` 안(최대 약 1 GB)이었고 호스트 여유는 56 GiB에서 55 GiB가 됐다.
 
 ## 순서와 의존성
 
 1. B2, A1, A2, B4, A3, A4 순서로 코드 작업을 마쳤다(2026-10-05). B1은 완료, B3은 변경 없이 종료했다.
-2. PR #573으로 main(`ab078d31d`)에 병합하고 운영에 반영했다. 남은 일은 10-07 이후 폭증분 보존 삭제 관측뿐이다.
+2. PR #573으로 main(`ab078d31d`)에 병합하고 운영에 반영했다. 은퇴 projection 폭증분도 2026-10-05에 정리해 이 계획의 남은 작업은 없다.
 
 ## 검증
 
