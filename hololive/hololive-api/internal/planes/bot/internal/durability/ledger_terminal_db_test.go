@@ -482,7 +482,7 @@ func releaseUntilTerminal(
 		require.Equal(t, poison.MessageID, claim.MessageID,
 			"head-of-line 순서 보장은 poison이 종단에 닿기 전까지 유지돼야 한다")
 
-		outcome, err = repo.Release(ctx, poison.MessageID, testClaimToken, poisonMaxAttempts,
+		outcome, err = repo.Release(ctx, poison.MessageID, testClaimToken, claim.Attempts, poisonMaxAttempts,
 			time.Millisecond, fmt.Sprintf("boom %d", round))
 		require.NoError(t, err)
 
@@ -536,10 +536,10 @@ func assertAbandonBypassesTheAttemptBudget(
 func assertInboxTerminalRejectsInvalidArguments(ctx context.Context, t *testing.T, repo *InboxRepository) {
 	t.Helper()
 
-	_, err := repo.Release(ctx, "message:x", testClaimToken, 0, time.Minute, "boom")
+	_, err := repo.Release(ctx, "message:x", testClaimToken, 1, 0, time.Minute, "boom")
 	require.ErrorIs(t, err, ErrInvalidArgument)
 
-	_, err = repo.Release(ctx, "message:x", testClaimToken, 3, 500*time.Microsecond, "boom")
+	_, err = repo.Release(ctx, "message:x", testClaimToken, 1, 3, 500*time.Microsecond, "boom")
 	require.ErrorIs(t, err, ErrInvalidArgument)
 
 	_, err = repo.Abandon(ctx, "message:x", "  ", "reason")

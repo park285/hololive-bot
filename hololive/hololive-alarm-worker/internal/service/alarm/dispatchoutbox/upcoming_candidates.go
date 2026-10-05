@@ -134,40 +134,6 @@ func (s *UpcomingCandidates) stageChunks(ctx context.Context, channelID string, 
 	return nil
 }
 
-// Pending은 commit된 delivery 상태·hash를 대조하고 현재 미해결 후보만 반환한다.
-// Accepted는 발행 수용을 뜻하며 provider 성공이나 재발송 허가를 뜻하지 않는다.
-func (s *UpcomingCandidates) Pending(ctx context.Context, now time.Time) ([]UpcomingCandidate, error) {
-	rows, err := s.db.Query(ctx, mustSQL("upcoming_candidates_pending.sql"), now, UpcomingCandidateLimit)
-	if err != nil {
-		return nil, fmt.Errorf("load upcoming candidates: %w", err)
-	}
-	defer rows.Close()
-
-	candidates := make([]UpcomingCandidate, 0)
-
-	for rows.Next() {
-		var c UpcomingCandidate
-
-		var raw []byte
-
-		if err := rows.Scan(&c.DedupeKey, &c.ChannelID, &raw, &c.Outcome); err != nil {
-			return nil, fmt.Errorf("scan upcoming candidate: %w", err)
-		}
-
-		if err := jsonv2.Unmarshal(raw, &c.Notification); err != nil {
-			return nil, fmt.Errorf("decode upcoming candidate: %w", err)
-		}
-
-		candidates = append(candidates, c)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate upcoming candidates: %w", err)
-	}
-
-	return candidates, nil
-}
-
 // Finish는 pending만 종료하며 기존 delivery·claim·불명 전송 증거를 수정하지 않는다.
 func (s *UpcomingCandidates) Finish(ctx context.Context, key, outcome string, now time.Time) error {
 	if _, err := s.db.Exec(ctx, mustSQL("upcoming_candidates_finish.sql"), key, outcome, now); err != nil {

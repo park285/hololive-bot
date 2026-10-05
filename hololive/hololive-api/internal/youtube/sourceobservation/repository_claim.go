@@ -130,6 +130,7 @@ func scanClaimWork(row pgx.Row) (ClaimWork, error) {
 		&claim.LeaseToken,
 		&kind,
 		&claim.SubjectKey,
+		&claim.AttemptCount,
 	); err != nil {
 		return ClaimWork{}, fmt.Errorf("claim source observations: scan row: %w", err)
 	}

@@ -49,7 +49,7 @@ func commandExecutionStatus(commandErr error) string {
 }
 
 func (r *durableRuntime) releaseInbox(ctx context.Context, claim *durability.InboxClaim, token string, cause error) {
-	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, r.inboxMaxAttempts, r.inboxRetryAfter, inboxReleaseReason(cause))
+	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, claim.Attempts, r.inboxMaxAttempts, r.inboxRetryAfter, inboxReleaseReason(cause))
 	if err != nil {
 		r.logError("release durable webhook", err)
 

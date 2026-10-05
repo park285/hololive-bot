@@ -386,7 +386,7 @@ func TestMarkFailed_DoesNotResurrectSentRow(t *testing.T) {
 		t.Fatalf("force sent: %v", err)
 	}
 
-	if _, err := repository.MarkFailed(ctx, id, testWorkerA, 3, time.Minute, "late failure"); err != nil {
+	if _, err := repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "late failure"); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
 
@@ -413,7 +413,7 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 	}
 
 	// maxRetries=3, 첫 실패 → 아직 PENDING 유지
-	if _, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 3, time.Minute, "send error"); err != nil {
+	if _, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error"); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
 
@@ -438,7 +438,7 @@ func TestMarkFailed_FromSending(t *testing.T) {
 
 	markOutboxSending(ctx, t, repository, &items[0])
 
-	ok, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 3, time.Minute, "send error")
+	ok, err := repository.MarkFailed(ctx, items[0].ID, testWorkerA, 0, 3, time.Minute, "send error")
 	if err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
@@ -772,7 +772,7 @@ func TestMarkFailed_FenceRejectsStaleWorkerAfterReclaim(t *testing.T) {
 	expireLease(ctx, t, repository, id)
 	reclaimByWorkerB(ctx, t, repository, id)
 
-	fenced, err := repository.MarkFailed(ctx, id, testWorkerA, 3, time.Minute, "stale worker A failure")
+	fenced, err := repository.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Minute, "stale worker A failure")
 	if err != nil {
 		t.Fatalf("stale worker A mark failed: %v", err)
 	}
@@ -847,7 +847,7 @@ func TestMarkFailed_RejectsForeignWorkerHoldingValidLease(t *testing.T) {
 
 	id := itemsA[0].ID
 
-	fenced, err := repository.MarkFailed(ctx, id, testWorkerB, 3, time.Minute, "foreign failure")
+	fenced, err := repository.MarkFailed(ctx, id, testWorkerB, 0, 3, time.Minute, "foreign failure")
 	if err != nil {
 		t.Fatalf("foreign worker mark failed: %v", err)
 	}

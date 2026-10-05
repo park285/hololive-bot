@@ -64,7 +64,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 }
 
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
-	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0095_03.sql"), memberID, isGraduated)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0095_03.sql"), memberID, isGraduated, graduationStatus(isGraduated))
 	if err != nil {
 		return fmt.Errorf("failed to update graduation status: %w", err)
 	}
@@ -143,11 +143,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	// org/sync_source 기본값 설정 (Task 1 요구사항)
 	org := member.GetOrg()
 	syncSource := "manual"
-	status := "active"
-
-	if member.IsGraduated {
-		status = "graduated"
-	}
+	status := graduationStatus(member.IsGraduated)
 
 	_, err = r.pool.Exec(ctx, mustSQL("repository_mutation_0175_06.sql"), slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource, member.Units, member.OfficialURL, member.Birthday, member.DebutDate, member.ShortKoreanName, member.ChzzkChannelID, member.TwitchUserID)
 	if err != nil {
@@ -155,4 +151,12 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	}
 
 	return nil
+}
+
+func graduationStatus(graduated bool) string {
+	if graduated {
+		return "graduated"
+	}
+
+	return "active"
 }

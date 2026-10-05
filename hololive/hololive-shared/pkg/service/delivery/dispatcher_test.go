@@ -51,20 +51,20 @@ type mockDeliveryRepository struct {
 	markSendingFn            func(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
 	markQuarantinedFn        func(context.Context, int64, string, string) (bool, error)
 	markSentFn               func(ctx context.Context, id int64, workerID string) (bool, error)
-	markFailedFn             func(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	markFailedFn             func(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	quarantineStaleSendingFn func(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
 	countByStatusFn          func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	cleanupFn                func(ctx context.Context, olderThan time.Duration) (int64, error)
 	claimedIDs               map[int64]struct{}
 }
 
-func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
+func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, attemptCount int, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
 	saved, err := m.saveRequest(ctx, id, worker, previous, next)
 	if err != nil || !saved {
 		return saved, err
 	}
 
-	return m.MarkFailed(ctx, id, worker, maxRetries, backoff, reason)
+	return m.MarkFailed(ctx, id, worker, attemptCount, maxRetries, backoff, reason)
 }
 
 func (m *mockDeliveryRepository) markPreparationUnsent(context.Context, int64, string) (bool, error) {
@@ -170,9 +170,9 @@ func (m *mockDeliveryRepository) MarkQuarantined(ctx context.Context, id int64, 
 	return true, nil
 }
 
-func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
+func (m *mockDeliveryRepository) MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if m.markFailedFn != nil {
-		out, err := m.markFailedFn(ctx, id, workerID, maxRetries, backoff, errMsg)
+		out, err := m.markFailedFn(ctx, id, workerID, attemptCount, maxRetries, backoff, errMsg)
 		if err != nil {
 			return out, fmt.Errorf("mark failed fn: %w", err)
 		}
@@ -382,7 +382,7 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 				{ID: 10, RoomID: "room-x", Payload: "invalid-json{{{"},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ string, _ int, _ time.Duration, errMsg string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _, _ int, _ time.Duration, errMsg string) (bool, error) {
 			failedID = id
 			failedMsg = errMsg
 
@@ -421,7 +421,7 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 				{ID: 20, RoomID: "room-y", Payload: makePayload(t, "hello")},
 			}, nil
 		},
-		markFailedFn: func(_ context.Context, id int64, _ string, _ int, _ time.Duration, _ string) (bool, error) {
+		markFailedFn: func(_ context.Context, id int64, _ string, _, _ int, _ time.Duration, _ string) (bool, error) {
 			failedID = id
 			return true, nil
 		},
@@ -464,7 +464,7 @@ func TestProcessItem_MarkSendingFenceSkipsSend(t *testing.T) {
 			markSentCalled = true
 			return true, nil
 		},
-		markFailedFn: func(_ context.Context, _ int64, _ string, _ int, _ time.Duration, _ string) (bool, error) {
+		markFailedFn: func(_ context.Context, _ int64, _ string, _, _ int, _ time.Duration, _ string) (bool, error) {
 			markFailedCalled = true
 			return true, nil
 		},

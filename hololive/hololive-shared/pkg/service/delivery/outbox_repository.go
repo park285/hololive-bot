@@ -242,16 +242,23 @@ func (r *OutboxRepository) MarkQuarantined(ctx context.Context, id int64, worker
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
+// MarkFailed는 claim 당시 횟수로 실패 정책을 정하고 동일 횟수·소유권인 행에만 적용합니다.
+// 발송 전 lease 만료는 거부하며 발송 후 확정 실패는 기존 SENDING 소유자가 정산할 수 있습니다.
+func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, fmt.Errorf("ensure pool: %w", err)
 	}
 
-	query := mustSQL("outbox_repository_0209_06.sql")
+	status, err := deliveryFailureStatus(attemptCount, maxRetries)
+	if err != nil {
+		return false, fmt.Errorf("mark failed policy: %w", err)
+	}
+
+	query := markFailedSQL
 
 	tag, err := r.pool.Exec(ctx, query,
-		errMsg, maxRetries, durationMilliseconds(backoff), id,
-		domain.DeliveryStatusPending, deliveryStatusSending, workerID,
+		errMsg, status, durationMilliseconds(backoff), id,
+		domain.DeliveryStatusPending, deliveryStatusSending, workerID, attemptCount, status == domain.DeliveryStatusPending,
 	)
 	if err != nil {
 		return false, fmt.Errorf("exec: %w", err)

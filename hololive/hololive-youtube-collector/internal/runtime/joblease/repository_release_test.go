@@ -10,6 +10,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
 func TestReleaseReasonsUseDistinctShapesAndPreserveFailureHistory(t *testing.T) {
@@ -142,5 +143,59 @@ func assertReleasedLeaseShape(
 
 	if retryAt == nil {
 		t.Fatal("deferred release must set retry_not_before")
+	}
+}
+
+func TestReleaseRejectsInvalidReasonWithoutChangingActiveLease(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
+
+	lease := mustAcquireLease(t, newTestRepository(t, pool), communityJob(), "collector-a")
+
+	var before, after uint32
+
+	if err := pool.QueryRow(t.Context(), "SELECT xmin FROM youtube_collection_job_leases WHERE job_key=$1", lease.Proof().JobKey).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lease.Release(t.Context(), ReleaseReason("not_a_release")); !errors.Is(err, ErrInvalidJob) {
+		t.Fatalf("invalid release: %v", err)
+	}
+
+	if err := pool.QueryRow(t.Context(), "SELECT xmin FROM youtube_collection_job_leases WHERE job_key=$1", lease.Proof().JobKey).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+
+	if before != after {
+		t.Fatal("invalid reason changed active lease")
+	}
+}
+
+func TestReleaseCannotChangeNewOwnerAfterReacquire(t *testing.T) {
+	for _, code := range contract.ReleasableCollectionErrorCodes() {
+		t.Run(string(code), func(t *testing.T) {
+			pool := dbtest.NewPool(t)
+			seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
+
+			repository := newTestRepository(t, pool)
+			first := mustAcquireLease(t, repository, communityJob(), "collector-a")
+
+			if err := first.Release(t.Context(), ReleaseReason(code)); err != nil {
+				t.Fatal(err)
+			}
+
+			if ReleaseReason(code) != ReleaseSuperseded {
+				makeRetryDue(t, pool, communityJob().JobKey)
+			}
+
+			second := mustAcquireLease(t, repository, communityJob(), "collector-b")
+			if err := first.Release(t.Context(), ReleaseReason(code)); !errors.Is(err, collection.ErrFenceLost) {
+				t.Fatalf("stale release: %v", err)
+			}
+
+			if err := second.Renew(t.Context()); err != nil {
+				t.Fatalf("new owner's fence changed: %v", err)
+			}
+		})
 	}
 }

@@ -322,3 +322,18 @@ func assertAcceptedInterval(t *testing.T, got PublishedObservation, outcome Publ
 		t.Fatalf("interval without durable advance: %+v", got)
 	}
 }
+
+func TestPublishAcceptedIntervalClampsFutureCheckpointClock(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	repo := NewRepository(pool)
+	assertAcceptedInterval(t, mustPublishOne(t, repo, communityEnvelope(t, &proof, "post-1")), PublishInserted, false)
+
+	_, err := pool.Exec(t.Context(), "UPDATE source_collection_checkpoints SET last_success_at=clock_timestamp()+interval '1 hour'")
+	require.NoError(t, err)
+
+	next := advanceLease(t.Context(), t, pool, &proof)
+	result := mustPublishOne(t, repo, communityEnvelope(t, &next, "post-2"))
+	assertAcceptedInterval(t, result, PublishInserted, true)
+	require.Zero(t, result.AcceptedInterval)
+}

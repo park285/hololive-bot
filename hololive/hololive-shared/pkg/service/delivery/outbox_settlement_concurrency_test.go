@@ -19,7 +19,7 @@ func TestOutboxSettlementCannotOverwriteConcurrentQuarantine(t *testing.T) {
 			return repo.MarkSent(ctx, id, testWorkerA)
 		}},
 		{name: "failed", settle: func(ctx context.Context, repo *OutboxRepository, id int64) (bool, error) {
-			return repo.MarkFailed(ctx, id, testWorkerA, 3, time.Second, "late known failure")
+			return repo.MarkFailed(ctx, id, testWorkerA, 0, 3, time.Second, "late known failure")
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

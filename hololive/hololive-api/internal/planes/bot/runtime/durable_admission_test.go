@@ -935,7 +935,7 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 		t.Fatal(err)
 	}
 
-	_, err = repo.Release(t.Context(), rawID, "claim-token", durableMaxAttempts, durableRetryAfter, causeText+" "+rawID)
+	_, err = repo.Release(t.Context(), rawID, "claim-token", 1, durableMaxAttempts, durableRetryAfter, causeText+" "+rawID)
 	assertDurableRepositoryFailureSafe(t, err, rawID, causeText)
 
 	var lastError string

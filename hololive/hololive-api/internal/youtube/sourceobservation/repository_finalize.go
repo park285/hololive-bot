@@ -149,7 +149,7 @@ func rejectFinalizeObservation(
 
 	envelope := observation.Envelope()
 	if _, err := envelope.ValidateAndCanonicalPayload(); err != nil {
-		if dlErr := deadLetterTx(ctx, tx, DeadLetterInput{
+		if dlErr := persistDeadLetter(ctx, tx, DeadLetterInput{
 			ObservationID: observation.ID,
 			LeaseToken:    observation.LeaseToken,
 			ErrorCode:     "invalid_payload",
@@ -165,7 +165,7 @@ func rejectFinalizeObservation(
 }
 
 func deadLetterReplayEpochExpired(ctx context.Context, tx dbx.Tx, observation *Observation) error {
-	if err := deadLetterTx(ctx, tx, DeadLetterInput{
+	if err := persistDeadLetter(ctx, tx, DeadLetterInput{
 		ObservationID: observation.ID,
 		LeaseToken:    observation.LeaseToken,
 		ErrorCode:     replayEpochExpiredCode,
@@ -177,7 +177,7 @@ func deadLetterReplayEpochExpired(ctx context.Context, tx dbx.Tx, observation *O
 }
 
 func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation *Observation) error {
-	if err := deadLetterTx(ctx, tx, DeadLetterInput{
+	if err := persistDeadLetter(ctx, tx, DeadLetterInput{
 		ObservationID: observation.ID,
 		LeaseToken:    observation.LeaseToken,
 		ErrorCode:     "unsupported_contract",

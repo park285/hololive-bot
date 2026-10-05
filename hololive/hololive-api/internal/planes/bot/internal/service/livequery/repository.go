@@ -60,13 +60,14 @@ func (r *Repository) Query(ctx context.Context, request Request) (Result, error)
 	var (
 		result          Result
 		channels, items []byte
+		snapshots       []channelSnapshot
 	)
 
 	if err := r.db.QueryRow(queryCtx, snapshotSQL, request.Scope == All, request.ChannelID, request.Limit+1, maxChannels+1).Scan(&result.AsOf, &channels, &items); err != nil {
 		return Result{}, fmt.Errorf("read live query snapshot: %w", err)
 	}
 
-	if err := jsonv2.Unmarshal(channels, &result.Channels); err != nil {
+	if err := jsonv2.Unmarshal(channels, &snapshots); err != nil {
 		return Result{}, fmt.Errorf("decode live query coverage: %w", err)
 	}
 
@@ -74,8 +75,13 @@ func (r *Repository) Query(ctx context.Context, request Request) (Result, error)
 		return Result{}, fmt.Errorf("decode live query items: %w", err)
 	}
 
-	if len(result.Channels) > maxChannels {
+	if len(snapshots) > maxChannels {
 		return Result{}, errors.New("live query roster exceeds channel budget")
+	}
+
+	result.Channels = make([]Channel, len(snapshots))
+	for i, snapshot := range snapshots {
+		result.Channels[i] = snapshot.channel()
 	}
 
 	finishResult(&result, request)

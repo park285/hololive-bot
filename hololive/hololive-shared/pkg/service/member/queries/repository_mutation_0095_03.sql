@@ -1,6 +1,6 @@
 
 		UPDATE members
 		SET is_graduated = $2,
-			status = CASE WHEN $2 THEN 'graduated' ELSE 'active' END
+			status = $3
 		WHERE id = $1
 	

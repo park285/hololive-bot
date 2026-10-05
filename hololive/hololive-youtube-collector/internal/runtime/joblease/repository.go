@@ -389,38 +389,25 @@ func (l *JobLease) Release(ctx context.Context, reason ReleaseReason) error {
 		return fmt.Errorf("release collection job lease: %w", collection.ErrFenceLost)
 	}
 
-	delay := deterministicJitter(&l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
+	// 해제 사유의 상태 결정은 Go가 소유한다. DB 시각·fence 검증과 갱신은 한 문장으로 유지한다.
+	var (
+		jobKey string
+		err    error
+	)
 
 	if reason == ReleaseSuperseded {
-		delay = 0
+		err = l.repository.pool.QueryRow(ctx, sqlLeaseReleaseSuperseded,
+			l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch, l.proof.ProjectionGeneration, l.proof.ScheduledFor,
+			string(reason.ErrorCode()),
+		).Scan(&jobKey)
+	} else {
+		delay := deterministicJitter(&l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
+
+		err = l.repository.pool.QueryRow(ctx, sqlLeaseRelease,
+			l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch, l.proof.ProjectionGeneration, l.proof.ScheduledFor,
+			delay.Milliseconds(), string(reason.ErrorCode()),
+		).Scan(&jobKey)
 	}
-
-	if err := dbx.InPgxTx(ctx, l.repository.pool, func(tx dbx.Tx) error {
-		return releaseLeaseTx(ctx, tx, &l.proof, reason, delay)
-	}); err != nil {
-		return fmt.Errorf("in pgx tx: %w", err)
-	}
-
-	return nil
-}
-
-func releaseLeaseTx(
-	ctx context.Context,
-	tx dbx.Tx,
-	proof *contract.LeaseProof,
-	reason ReleaseReason,
-	delay time.Duration,
-) error {
-	// release는 last_failure_*를 건드리지 않는다. 177 trigger가 DEFERRED release를 legacy_collector로 덮어쓰던 때는 잠근
-	// 사전 값을 되돌렸지만, migration 222가 trigger를 지워 복원 단계도 함께 지웠다(stack-audit 2026-09-26 T17).
-	var jobKey string
-
-	err := tx.QueryRow(
-		ctx,
-		sqlLeaseRelease,
-		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
-		delay.Milliseconds(), string(reason.ErrorCode()),
-	).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return collection.ErrFenceLost

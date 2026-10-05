@@ -163,7 +163,8 @@ WITH replay_epoch AS MATERIALIZED (
 SELECT observation.id,
        claimed.lease_token,
        observation.observation_kind,
-       observation.subject_key
+       observation.subject_key,
+       claimed.attempt_count
 FROM claimed
 JOIN source_observations AS observation
   ON observation.id = claimed.observation_id

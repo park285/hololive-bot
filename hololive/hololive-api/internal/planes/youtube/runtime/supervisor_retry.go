@@ -73,6 +73,7 @@ func (r *Runtime) retryObservation(ctx context.Context, work sourceobservation.C
 
 	if err := r.withDB(retryCtx, func(ctx context.Context) error {
 		status, err := r.claimer.Retry(ctx, sourceobservation.RetryInput{
+			AttemptCount:  work.AttemptCount,
 			ObservationID: work.ObservationID,
 			LeaseToken:    work.LeaseToken,
 			Delay:         r.Config.ClaimInterval,

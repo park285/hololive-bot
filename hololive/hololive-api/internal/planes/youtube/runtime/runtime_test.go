@@ -433,13 +433,15 @@ func TestTransientConsumeErrorUsesBoundedQueueRetry(t *testing.T) {
 		LeaseToken:      strings.Repeat("ab", 32),
 		ObservationKind: contract.KindCommunityPage,
 		SubjectKey:      "UC_RETRY",
+		AttemptCount:    7,
 	}
 
 	if err := runtime.processClaim(t.Context(), observation); err != nil {
 		t.Fatalf("processClaim() error = %v", err)
 	}
 
-	if retryInput.ObservationID != observation.ObservationID || retryInput.Delay != runtime.Config.ClaimInterval {
+	if retryInput.ObservationID != observation.ObservationID || retryInput.Delay != runtime.Config.ClaimInterval ||
+		retryInput.AttemptCount != observation.AttemptCount {
 		t.Fatalf("Retry input = %#v", retryInput)
 	}
 }

@@ -61,15 +61,51 @@ func reclaimExpiredInboxTx(ctx context.Context, tx pgx.Tx, maxAttempts, batchSiz
 		return InboxReclaim{}, fmt.Errorf("lock inbox ordering keys: %w", lockErr)
 	}
 
+	candidates, err := lockedExpiredInboxCandidates(ctx, tx, batchSize, keys)
+	if err != nil {
+		return InboxReclaim{}, err
+	}
+
+	if len(candidates) == 0 {
+		return InboxReclaim{}, nil
+	}
+
+	mutation := newInboxReclaimMutation(candidates, maxAttempts)
+
 	var reclaim InboxReclaim
 
-	err = tx.QueryRow(ctx, inboxReclaimExpiredSQL, maxAttempts, batchSize, keys).
+	err = tx.QueryRow(ctx, inboxReclaimExpiredSQL, mutation.ids, mutation.attempts, mutation.statuses, mutation.terminal).
 		Scan(&reclaim.Requeued, &reclaim.Abandoned)
 	if err != nil {
 		return InboxReclaim{}, fmt.Errorf("reclaim expired webhook inbox leases: %w", err)
 	}
 
+	if reclaim.Requeued+reclaim.Abandoned != int64(len(candidates)) {
+		return InboxReclaim{}, errors.New("reclaim expired webhook inbox: locked candidate count changed")
+	}
+
 	return reclaim, nil
+}
+
+type inboxReclaimCandidate struct {
+	ID       int64
+	Attempts int32
+}
+
+var inboxReclaimCandidatesSQL = mustSQL("inbox_reclaim_candidates.sql")
+
+func lockedExpiredInboxCandidates(ctx context.Context, tx pgx.Tx, batchSize int32, keys []string) ([]inboxReclaimCandidate, error) {
+	rows, err := tx.Query(ctx, inboxReclaimCandidatesSQL, batchSize, keys)
+	if err != nil {
+		return nil, fmt.Errorf("lock expired inbox candidates: %w", err)
+	}
+
+	candidates, err := pgx.CollectRows(rows, pgx.RowToStructByPos[inboxReclaimCandidate])
+	if err != nil {
+		return nil, fmt.Errorf("read expired inbox candidates: %w", err)
+	}
+
+	return candidates, nil
 }
 
 func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimToken string) (applied bool, err error) {
@@ -126,4 +162,36 @@ func (r *InboxRepository) fenceArgs(messageID, claimToken string) (id, token str
 	}
 
 	return id, token, nil
+}
+
+type inboxReclaimMutation struct {
+	ids      []int64
+	attempts []int32
+	statuses []string
+	terminal []bool
+}
+
+func newInboxReclaimMutation(candidates []inboxReclaimCandidate, maxAttempts int32) inboxReclaimMutation {
+	var mutation inboxReclaimMutation
+
+	mutation.ids = make([]int64, 0, len(candidates))
+	mutation.attempts = make([]int32, 0, len(candidates))
+	mutation.statuses = make([]string, 0, len(candidates))
+	mutation.terminal = make([]bool, 0, len(candidates))
+
+	for _, candidate := range candidates {
+		status := "retry"
+		exhausted := candidate.Attempts >= maxAttempts
+
+		if exhausted {
+			status = inboxStatusDead
+		}
+
+		mutation.ids = append(mutation.ids, candidate.ID)
+		mutation.attempts = append(mutation.attempts, candidate.Attempts)
+		mutation.statuses = append(mutation.statuses, status)
+		mutation.terminal = append(mutation.terminal, exhausted)
+	}
+
+	return mutation
 }

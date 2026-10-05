@@ -44,17 +44,13 @@ func (r *Repository) Settle(ctx context.Context, id string, request SettleReques
 		return result, validationErr
 	}
 
-	ids := make([]int64, 0, len(group))
-	for index := range group {
-		parsed, parseErr := ParseID(group[index].ID)
-		if parseErr != nil {
-			return result, fmt.Errorf("stored dispatch id: %w", parseErr)
-		}
-
-		ids = append(ids, parsed)
+	mutation, err := prepareSettlement(group, request.Action)
+	if err != nil {
+		return result, err
 	}
 
-	rows, err := tx.Query(ctx, querySQL("settle"), ids, request.OperatorID, request.Reason, request.Action)
+	rows, err := tx.Query(ctx, querySQL("settle"), mutation.ids, request.OperatorID, request.Reason, request.Action,
+		mutation.status, mutation.cancel, mutation.quarantineIDs)
 	if err != nil {
 		return result, fmt.Errorf("update dispatch settlement group: %w", conflictError(err))
 	}
@@ -76,4 +72,38 @@ func (r *Repository) Settle(ctx context.Context, id string, request SettleReques
 	result.IDs = updated
 
 	return result, nil
+}
+
+type settlementMutation struct {
+	ids, quarantineIDs []int64
+	status             string
+	cancel             bool
+}
+
+func prepareSettlement(group []Delivery, action string) (settlementMutation, error) {
+	mutation := settlementMutation{
+		ids:           make([]int64, 0, len(group)),
+		quarantineIDs: make([]int64, 0, len(group)),
+		status:        statusQuarantined,
+		cancel:        action == "cancel",
+	}
+	if mutation.cancel {
+		mutation.status = statusCanceled
+	}
+
+	for index := range group {
+		item := &group[index]
+
+		id, err := ParseID(item.ID)
+		if err != nil {
+			return settlementMutation{}, fmt.Errorf("stored dispatch id: %w", err)
+		}
+
+		mutation.ids = append(mutation.ids, id)
+		if !mutation.cancel && item.Status != statusQuarantined {
+			mutation.quarantineIDs = append(mutation.quarantineIDs, id)
+		}
+	}
+
+	return mutation, nil
 }
