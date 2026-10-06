@@ -97,7 +97,7 @@ COPY --from=xspaces-runtime --link /usr/local/bin/node /usr/local/bin/node
 COPY --from=xspaces-build --link --chown=1000:1000 /app/xspaces ./xspaces
 
 ENV GOGC=100 \
-    GOMEMLIMIT=320MiB \
+    GOMEMLIMIT=160MiB \
     GIN_MODE=release
 
 EXPOSE 30007/tcp 30007/udp 30097/tcp 30067/tcp

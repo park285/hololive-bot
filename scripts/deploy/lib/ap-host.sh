@@ -39,6 +39,7 @@ ap_host_load() {
     AP_APPROVE_DEPLOY_VAR=""
     AP_APPROVE_ROLLBACK_VAR=""
     AP_BACKUP_PREFIX=""
+    AP_GOAMD64=""
 
     # shellcheck disable=SC1090
     . "$conf"
@@ -70,6 +71,15 @@ ap_host_load() {
         compose|native) ;;
         *)
             echo "AP_RUNTIME_MODE must be compose or native in $conf" >&2
+            return 2
+            ;;
+    esac
+    # native AP 바이너리의 x86-64 마이크로아키텍처 수준이며, 배포 전 대상 CPU 지원을 확인한다.
+    AP_GOAMD64="${AP_GOAMD64:-v1}"
+    case "${AP_GOAMD64}" in
+        v1|v2|v3|v4) ;;
+        *)
+            echo "AP_GOAMD64 must be v1, v2, v3 or v4 in $conf" >&2
             return 2
             ;;
     esac

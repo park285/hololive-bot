@@ -30,6 +30,18 @@ expected_options=(-F /dev/null -i "$fixture_root/KR.key" -o IdentitiesOnly=yes -
 [[ "${AP_SSH_USER}" == ubuntu ]]
 [[ "${AP_SSH[*]}" == "ssh ${expected_options[*]} ubuntu@unreachable.invalid" ]]
 
+[[ "${AP_GOAMD64}" == v1 ]]
+printf 'AP_GOAMD64=v3\n' >> "$fixture_root/scripts/deploy/ap-hosts/osaka.conf"
+SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" osaka
+[[ "${AP_GOAMD64}" == v3 ]]
+sed -i 's/^AP_GOAMD64=v3$/AP_GOAMD64=v9/' "$fixture_root/scripts/deploy/ap-hosts/osaka.conf"
+if SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" osaka 2>/dev/null; then
+  echo "[FAIL] unsupported AP_GOAMD64 must be rejected" >&2
+  exit 1
+fi
+sed -i '/^AP_GOAMD64=/d' "$fixture_root/scripts/deploy/ap-hosts/osaka.conf"
+SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" osaka
+
 rsync_rsh="$(ap_rsync_rsh)"
 read -r -a parsed_rsync_rsh <<<"$rsync_rsh"
 [[ "${parsed_rsync_rsh[*]}" == "ssh ${expected_options[*]}" ]]

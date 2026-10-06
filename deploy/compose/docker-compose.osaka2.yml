@@ -58,7 +58,8 @@ services:
       STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-d.json
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
       POSTGRES_USER: hololive_scraper
-      GOMEMLIMIT: "640MiB"
+      # 768m 상한에서 YouTube.js Node helper(관측 최대 176MiB)에 192MiB와 여유 32MiB를 남긴 값이다.
+      GOMEMLIMIT: "544MiB"
       YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-d"
       YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-d.log"
       SERVER_PORT: 30035
