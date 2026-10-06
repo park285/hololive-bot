@@ -57,12 +57,12 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 
 ## Live metadata contract
 
-`live_snapshot`은 contract generation `2`만 지원합니다. generation `2`는 identity/status/time에 optional `title`, `topic_id`, `thumbnail_url`을 더합니다. generation `1`(identity/status/time만)에서 `2`로의 활성화는 API 선배포, 승인된 internal operation으로 Holodex·YouTube.js current generation `2` 전환, collector fleet 배포 순서로 끝났습니다. 마지막 단계의 제거 조건(generation `1` queue가 비고 replay 필요가 없음)은 2026-09-26 T18에서 current generation `2`, 미처리 generation `1` 관측 0건으로 확인했고, API의 generation `1` decoder·supported contract 항목과 collector의 generation `1` payload 경로를 지웠습니다(stack-audit 2026-09-26 T11 C6).
+현재 `live_snapshot` producer 계약은 Holodex generation `2`, YouTube.js generation `3`입니다. generation `2`는 identity/status/time에 optional `title`, `topic_id`, `thumbnail_url`을 더하며, YouTube.js generation `3`는 query별 관측 근거를 추가합니다. API는 저장된 YouTube.js generation `2` 관측을 읽기 위해 해당 decoder를 유지합니다.
 
-- API는 generation `1` 관측을 unsupported contract로 거부합니다.
-- collector는 DB current generation이 `2`가 아니면 `configuration_error/CONFIGURATION`으로 수집을 끝내고 다른 형식을 내보내지 않습니다.
-- migration `225_live_snapshot_contract_generation_two.sql`은 빈 DB bootstrap과 dbtest의 시드(migration 144의 generation `1`)를 `2`로 맞춥니다. 운영 DB는 이미 `2`라 갱신 대상이 없습니다.
-- 새 generation을 도입할 때는 다시 API-first(API가 두 generation을 모두 지원) → DB generation 전환(별도 운영 승인) → collector 배포 순서를 지킵니다.
+- API는 generation `1` 관측을 unsupported contract로 거부합니다. generation `1` 제거 조건은 2026-09-26 T18에서 당시 current generation `2`와 미처리 generation `1` 관측 0건으로 확인했습니다.
+- collector는 DB current generation이 Holodex `2` 또는 YouTube.js `3`이라는 provider별 계약과 다르면 `configuration_error/CONFIGURATION`으로 수집을 끝내고 다른 형식을 내보내지 않습니다.
+- migration `225_live_snapshot_contract_generation_two.sql`은 빈 DB bootstrap과 dbtest의 시드(migration 144의 generation `1`)를 `2`로 맞춘 과거 전환입니다. 이 migration의 목표값을 현재 운영 generation으로 해석하지 않습니다.
+- 새 generation을 도입할 때는 API-first(API가 두 generation을 모두 지원) → DB generation 전환(별도 운영 승인) → collector 배포 순서를 지킵니다.
 
 ## Live absence evidence activation
 
@@ -187,11 +187,11 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 - 준비 실패·만료·worker 장애에는 stale/cold-start/fallback token을 쓰지 않습니다. 기존 단일 무토큰 player를 그대로 수행하며 재시도나 UNKNOWN의 음성 확정은 추가하지 않습니다. 채널 확인의 resolve 1회+player 최대 1회, 영상 확인의 player 1회 상한도 유지합니다.
 - helper UDS의 `GET /health`에서 `proof.state`, `bootstrap_attempts`, `bootstrap_successes`, `upstream_requests`, `minted_total`, `attached_total`을 확인합니다. `last_error`는 최초 발급·mint 실패를 보존하고, 후속 정리 실패는 별도의 `cleanup_error`에 안전한 오류 코드로 남깁니다. 새 발급 cycle은 두 오류를 초기화합니다. 앱 `/ready` 성공은 PO 준비 완료나 provider 가용성 보장이 아닙니다. token/program/snapshot/visitor data나 원시 worker stderr는 로그·파일에 남기지 않습니다.
 
-빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_PLAN_ID=<승인된 활성 실행 PLN> PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. 중앙의 `compose-redeploy-service.sh youtube-collector`와 `youtube-po-c`도 같은 paired cutover로 연결되며 같은 env가 필요합니다. `PO_META_ROOT`는 해당 PLN을 소유한 meta checkout입니다. 완료된 최초 PO 도입 계획을 재활성화하거나 gate를 생략하지 않습니다. 이 스크립트의 포괄적 `all` 전환은 지원하지 않습니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
+빌드·검증은 kapu에서만 수행합니다. native a/d는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, b는 `ap-deploy.sh seoul`, c는 `PO_C_SSH_TARGET=<승인된 중앙 SSH 대상> APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh deploy`를 사용합니다. 중앙의 `compose-redeploy-service.sh youtube-collector`와 `youtube-po-c`도 같은 paired cutover로 연결되며 같은 env가 필요합니다. 이 스크립트의 포괄적 `all` 전환은 지원하지 않습니다. `build-all.sh --build-only --no-bump`는 계속 로컬 빌드 전용입니다.
 
 native a/d 산출물(collector binary와 issuer rootfs의 `po-broker --version`·`po-sandbox/version`)의 version은 `HOLO_BOT_VERSION`입니다. 값이 없으면 `ap-host-native-deploy.sh`가 12자리 short SHA를 씁니다. 릴리스 배포는 `HOLO_BOT_VERSION="$(xargs <hololive/hololive-api/VERSION)" scripts/deploy/ap-host-native-deploy.sh <ap-host> --apply`처럼 Compose image와 같은 version을 명시합니다.
 
-중앙 paired deploy는 Compose가 해석한 collector·migrator의 DB host/port/database 일치를 먼저 확인합니다. 해당 migrator의 접속·TLS 설정과 읽기 전용 CA mount, network를 쓰는 일회성 PostgreSQL client로 운영 ledger의 `222_drop_youtube_job_lease_legacy_failure_trigger.sql` checksum과 read-only guard `on`을 확인합니다. 로컬 `holo-postgres` socket의 ledger로 외부 DB override를 대신 검증하지 않습니다. client는 로컬에 이미 있는 PostgreSQL image만 사용하며 종료 시 자신이 생성한 container·volume을 제거합니다. 적용 부재·checksum 불일치·조회 실패면 기존 서비스 container·source를 바꾸지 않습니다. 검증된 중앙 `hololive-db-migrate`를 먼저 실행한 뒤 collector를 배포합니다.
+중앙 paired deploy는 Compose가 해석한 collector·migrator의 DB host/port/database 일치를 먼저 확인합니다. 해당 migrator의 접속·TLS 설정과 읽기 전용 CA mount, network를 쓰는 일회성 PostgreSQL client로 운영 ledger의 `222_drop_youtube_job_lease_legacy_failure_trigger.sql` checksum과 read-only guard `on`을 확인합니다. 로컬 `holo-postgres` socket의 ledger로 외부 DB override를 대신 검증하지 않습니다. client는 로컬에 이미 있는 PostgreSQL image만 사용하며 종료 시 자신이 생성한 container·volume을 제거합니다. 적용 부재·checksum 불일치·조회 실패면 기존 서비스 container·source를 바꾸지 않습니다. 이 읽기 전용 검증을 통과하면 issuer와 collector를 순서대로 교체합니다. 이 배포 스크립트는 migration을 실행하지 않으며, 필요한 migration이 미적용 상태라면 별도로 승인된 중앙 migration 절차를 먼저 완료해야 합니다.
 
 issuer를 먼저 기동·검증한 뒤 collector만 `--no-build --no-deps`로 교체합니다. b의 소스는 별도 후보 디렉터리에 전송·대조한 뒤 승격하며, 실패 시 snapshot이 이전 파일 내용·mode·symlink·파일 부재까지 복원합니다. rollback은 이전 VERSION/실행 파일과 collector+issuer image/rootfs를 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
 
