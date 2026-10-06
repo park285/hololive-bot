@@ -176,6 +176,11 @@ func attemptFailureResult(err error) string {
 		return resultCanceled
 	case collecterr.ParserDrift:
 		return resultParserDrift
+	case collecterr.Failed, collecterr.Cooldown, collecterr.Configuration, collecterr.ResponseTooLarge,
+		collecterr.HelperBusy, collecterr.HelperProtocolMismatch, collecterr.Internal, collecterr.TargetRosterTooLarge,
+		collecterr.PublishRejected, contract.ErrorObservationCollision, contract.ErrorShutdownRelease,
+		contract.ErrorSupersededRelease, contract.ErrorRenewFailedRelease:
+		return resultFailed
 	default:
 		return resultFailed
 	}

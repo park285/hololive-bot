@@ -12,8 +12,8 @@ if [ "${CI_PYTHON_RUNTIME_ROOT:-}" != "${repo_root}" ] || [ ! -f "${CI_PYTHON_BI
   exit 1
 fi
 actual_python_version=$("${CI_PYTHON_BIN}" -I -S -c 'import platform; print(platform.python_version())')
-if [ "${actual_python_version}" != "3.14.7" ]; then
-  echo "python-runtime: expected Python 3.14.7, got ${actual_python_version:-unknown}" >&2
+if [ "${actual_python_version}" != "3.14.8" ]; then
+  echo "python-runtime: expected Python 3.14.8, got ${actual_python_version:-unknown}" >&2
   exit 1
 fi
 export CI_PYTHON_BIN CI_PYTHON_RUNTIME_ROOT

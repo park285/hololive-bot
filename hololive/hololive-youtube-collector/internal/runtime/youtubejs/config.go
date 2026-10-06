@@ -294,7 +294,7 @@ func canonicalHelperFile(path, name string) (string, error) {
 		return "", fmt.Errorf("start youtube.js helper: resolve %s path: %w", name, err)
 	}
 
-	info, err := os.Stat(resolved)
+	info, err := os.Stat(resolved) //nolint:gosec // G703 오탐: 신뢰된 운영 설정 경로를 검증하는 호출이다.
 	if err != nil {
 		return "", fmt.Errorf("start youtube.js helper: inspect %s path: %w", name, err)
 	}

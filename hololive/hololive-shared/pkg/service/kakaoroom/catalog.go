@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type irisLister interface {
+type RoomLister interface {
 	GetRooms(ctx context.Context) ([]Facts, error)
 }
 
@@ -20,14 +20,14 @@ type roomStore interface {
 
 type Catalog struct {
 	store  roomStore
-	lister irisLister
+	lister RoomLister
 	logger *slog.Logger
 
 	mu    sync.RWMutex
 	cache map[string]Facts
 }
 
-func New(pool *pgxpool.Pool, lister irisLister, logger *slog.Logger) *Catalog {
+func New(pool *pgxpool.Pool, lister RoomLister, logger *slog.Logger) *Catalog {
 	if logger == nil {
 		logger = slog.Default()
 	}

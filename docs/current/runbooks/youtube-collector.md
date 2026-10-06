@@ -177,7 +177,7 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 ## Isolated PO Token lifecycle
 
-`DEC-20260927-hololive-egress-po-production`에 따라 정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 24.1.3` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Compose issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
+`DEC-20260927-hololive-egress-po-production`에 따라 정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 30.1.2` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Compose issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
 
 - issuer는 요청을 받기 전에 같은 격리 worker에서 신뢰된 SDK import를 완료하고 `loaded` 확인을 기다립니다. 이 기동 준비 단계의 별도 상한은 30초이며, 실패하면 worker와 listener를 종료합니다. HTTP health 성공은 이 준비가 끝난 뒤에만 가능하고 UA/JSDOM 준비·외부 interpreter 실행은 이후 요청이 소유합니다. native 배포/복원은 Compose와 동일한 30회/2초 간격의 health 관측 후 collector를 시작하며, native 완료 검사도 같은 bounded 준비 대기를 사용합니다. 이 관측은 PO 발급이나 upstream 요청을 만들지 않습니다.
 - IPC는 `/run/hololive-youtube-po/worker.sock`만 사용합니다. private protocol 1의 순서는 `session`(UA/JSDOM prepare) → WAA Create → `challenge`(snapshot) → GenerateIT → `activate` → 영상별 `mint`입니다. worker 초기화 완료 전에 challenge를 요청하지 않습니다. collector와 issuer는 반드시 같은 full source SHA로 전환합니다.

@@ -167,6 +167,7 @@ func (s *Store) seal(c Cookies) ([]byte, error) {
 	}
 	defer clear(raw)
 
+	//nolint:gosec // G407 오탐: NewGCMWithRandomNonce는 빈 nonce를 요구하고 Seal마다 무작위 nonce를 붙인다.
 	return s.aead.Seal([]byte{1}, nil, raw, []byte("hololive:x-space-session:v1")), nil
 }
 
