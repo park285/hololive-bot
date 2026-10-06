@@ -18,12 +18,13 @@
 - **CI 정리:** Docker Compose 설치를 `.github/actions/docker-compose` composite action 하나로 합치고 v5.6.0으로,
   Trivy를 0.75.0으로 올렸습니다. security workflow의 sibling checkout을 go.mod와 같은 shared-go v2.9.3·iris-client-go
   v3.0.4로 맞췄습니다.
-- **테스트 정리:** 어떤 게이트에도 연결되지 않은 셸 테스트 12개를 삭제하고, 스크립트 본문만 grep하던 단언을
+- **테스트 정리:** 호출되지 않던 셸 테스트를 삭제하고, 스크립트 본문만 grep하던 단언을
   지웠습니다. 패키지명·문서 경로·퇴역 기한·toolchain 파일 형태·DB 프레임워크 이름 검사도 삭제했습니다.
   전체 모듈 테스트를 재귀 실행하던 workspace 테스트도 삭제했습니다. 권한 상승 방지와 compose 보안 설정 검사는 유지합니다.
 - **퇴역 제공자 드레인 가드 삭제:** authoritative DB에 Twitch·Chzzk 단독 dispatch event가 0건임을 확인하고
   alarm-worker의 드레인 종단 가드를 지웠습니다. `domain.Stream`의 Twitch·Chzzk 필드는 Stream HTTP 응답 계약 확인 전까지
   유지합니다.
+- **AP native 배포 준비:** 잘못된 `RELEASE_ID`를 원격 CPU 확인이나 산출물 생성 전에 거절합니다. CPU 기능 확인 실패 시에도 산출물을 만들지 않는 동작을 SSH fixture로 검증합니다.
 - YouTube.js helper의 `@types/node`를 24.19.1로 올렸습니다.
 
 - 공용 Holodex 클라이언트가 429의 `Retry-After`를 초 또는 HTTP 날짜로 읽고 같은

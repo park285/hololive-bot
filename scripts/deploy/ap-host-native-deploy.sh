@@ -57,6 +57,9 @@ if [[ "$MODE" == "--apply" && "${!AP_APPROVE_DEPLOY_VAR:-}" != "true" ]]; then
   exit 2
 fi
 
+release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)-$AP_NAME}"
+native_release_id_validate "$release_id"
+
 if [[ "$AP_GOAMD64" != v1 ]]; then
   # 지원하지 않는 CPU에서는 새 바이너리가 기동하지 못하므로 빌드·전송 전에 거절합니다.
   if ! ap_remote_bash "$AP_GOAMD64" <<'REMOTE'
@@ -70,8 +73,6 @@ fi
 
 service="${AP_SERVICES[0]}"
 port="${AP_PORTS[0]}"
-release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)-$AP_NAME}"
-native_release_id_validate "$release_id"
 artifact_dir="${ARTIFACT_DIR:-$REPO_ROOT/artifacts/ap-host-native/$release_id}"
 payload_name=".hololive-host-native-${AP_NAME}-${release_id}"
 version="${HOLO_BOT_VERSION:-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)}"

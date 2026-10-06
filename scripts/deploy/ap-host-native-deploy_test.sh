@@ -311,17 +311,48 @@ trap cleanup EXIT
 mkdir -p "${tmp}/bin" "${tmp}/success" "${tmp}/failure"
 touch "${tmp}/KR.key"
 
-if RELEASE_ID='../active' \
+cat > "${tmp}/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+capture_dir="${AP_NATIVE_PROBE_CAPTURE:?}"
+printf '%s\n' "${!#}" > "${capture_dir}/command"
+cat > "${capture_dir}/stdin"
+exit 1
+EOF
+chmod +x "${tmp}/bin/ssh"
+mkdir -p "${tmp}/traversal-probe" "${tmp}/unsupported-probe"
+
+if PATH="${tmp}/bin:${PATH}" \
+   AP_NATIVE_PROBE_CAPTURE="${tmp}/traversal-probe" \
+   RELEASE_ID='../active' \
    ARTIFACT_DIR="${tmp}/traversal-artifact" \
    SSH_KEY="${tmp}/KR.key" \
    "${DEPLOY}" osaka --dry-run >"${tmp}/traversal.out" 2>"${tmp}/traversal.err"; then
   record_fail "ap-host-native deploy must reject RELEASE_ID traversal before building"
 elif [[ -e "${tmp}/traversal-artifact" ]]; then
   record_fail "invalid RELEASE_ID must not create the artifact directory"
+elif [[ -e "${tmp}/traversal-probe/command" ]]; then
+  record_fail "invalid RELEASE_ID must be rejected before remote CPU probing"
 elif grep -Fq 'RELEASE_ID must be one safe path component' "${tmp}/traversal.err"; then
-  pass "ap-host-native deploy rejects RELEASE_ID traversal before artifact creation"
+  pass "ap-host-native deploy rejects RELEASE_ID traversal before remote CPU probing or artifact creation"
 else
   record_fail "invalid RELEASE_ID must report the safe component contract"
+fi
+
+if PATH="${tmp}/bin:${PATH}" \
+   AP_NATIVE_PROBE_CAPTURE="${tmp}/unsupported-probe" \
+   RELEASE_ID='unsupported-cpu' \
+   ARTIFACT_DIR="${tmp}/unsupported-artifact" \
+   SSH_KEY="${tmp}/KR.key" \
+   "${DEPLOY}" osaka --dry-run >"${tmp}/unsupported.out" 2>"${tmp}/unsupported.err"; then
+  record_fail "ap-host-native deploy must reject an unsupported CPU before building"
+elif [[ -e "${tmp}/unsupported-artifact" ]]; then
+  record_fail "unsupported CPU must not create the artifact directory"
+elif [[ "$(cat "${tmp}/unsupported-probe/command")" == 'bash -s -- v3' ]] &&
+     grep -Fq 'host CPU does not report x86-64-v3 support' "${tmp}/unsupported.err"; then
+  pass "ap-host-native deploy rejects unsupported x86-64-v3 before artifact creation"
+else
+  record_fail "unsupported CPU must fail the target capability probe"
 fi
 
 release_root="${tmp}/releases"
