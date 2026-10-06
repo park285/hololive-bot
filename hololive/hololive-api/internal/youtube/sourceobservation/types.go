@@ -45,15 +45,13 @@ func (s StaticSupportedContracts) Supports(version ContractVersion) bool {
 func InitialSupportedContracts() StaticSupportedContracts {
 	result := make(StaticSupportedContracts)
 
-	// 과거 세대의 해석은 유지하고 새 조회 증명·영상 수명 세대를 함께 지원한다. 퇴역 generation 1 live_snapshot은 복원하지 않는다.
+	// 운영 이력 폐기가 완료된 YouTube 구세대는 받지 않는다. Holodex의 현행 generation 2는 유지한다.
 	for _, version := range []ContractVersion{
 		{contract.ProviderYouTubeJS, contract.KindLiveSnapshot, 1, contract.LiveSnapshotQueryContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindVideoLiveCheck, contract.VideoLifecycleSchemaVersion, contract.VideoLifecycleContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindCommunityPage, 1, 1},
-		{contract.ProviderYouTubeJS, contract.KindVideoList, 1, contract.VideoListLegacyContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindVideoList, 1, contract.VideoListPublicationContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindShortsList, 1, 1},
-		{contract.ProviderYouTubeJS, contract.KindLiveSnapshot, 1, contract.LiveSnapshotMetadataContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindViewerSample, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelProfile, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelPhoto, 1, 1},

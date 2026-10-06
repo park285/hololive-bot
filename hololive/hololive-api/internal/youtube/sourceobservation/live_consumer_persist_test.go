@@ -17,11 +17,11 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, "UPCOMING"))
+	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusUpcoming))
 	assertLifecycleOrigin(t, pool, "observed")
 
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusLive))
-	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, "ENDED"))
+	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusEnded))
 
 	if status := liveSessionStatus(t, pool); status != string(domain.LiveStatusEnded) {
 		t.Fatalf("status = %s, want ENDED", status)
@@ -32,11 +32,11 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 	assertLifecycleOrigin(t, pool, "observed")
 }
 
-func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *testing.T) {
+func TestLiveConsumerPersistsMetadataAndPreservesSparseFields(t *testing.T) {
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	metadata := liveSession(testVideoID, "UPCOMING")
+	metadata := liveSession(testVideoID, testStatusUpcoming)
 	scheduledAt := time.Date(2026, time.September, 1, 11, 0, 0, 0, time.UTC)
 
 	metadata.Title = "Minecraft live"
@@ -51,7 +51,7 @@ func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *te
 		publishkit.NewPublisher(pool),
 		consumer,
 		&proof,
-		contract.LiveSnapshotMetadataContractGeneration,
+		contract.LiveSnapshotQueryContractGeneration,
 		metadata,
 	)
 	publishConsumeLiveAtGeneration(
@@ -61,7 +61,7 @@ func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *te
 		publishkit.NewPublisher(pool),
 		consumer,
 		&proof,
-		contract.LiveSnapshotMetadataContractGeneration,
+		contract.LiveSnapshotQueryContractGeneration,
 		liveSession(testVideoID, testStatusLive),
 	)
 
@@ -247,7 +247,7 @@ func TestLiveConsumerNeverLiveUpcomingScopedAbsenceDoesNotEnd(t *testing.T) {
 	pool, _, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, "UPCOMING"))
+	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusUpcoming))
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof)
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof)
 
@@ -261,7 +261,7 @@ func TestLiveConsumerAlreadyEndedLateLiveStaysEnded(t *testing.T) {
 	ctx := t.Context()
 
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusLive))
-	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, "ENDED"))
+	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusEnded))
 
 	seen := liveLastSeen(t, pool)
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusLive))
@@ -289,7 +289,7 @@ func TestLiveConsumerDoesNotStubOverwriteExistingLiveHead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, "ENDED"))
+	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusEnded))
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession("vid-new", testStatusLive))
 
 	var (
@@ -317,7 +317,7 @@ func TestLiveEndFinalizerMissRequeuesOrClearsDueRow(t *testing.T) {
 	ctx := t.Context()
 
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusLive))
-	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, "ENDED"))
+	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusEnded))
 
 	if liveSessionStatus(t, pool) != string(domain.LiveStatusLive) {
 		t.Fatal("explicit end before grace must stay LIVE")
@@ -374,7 +374,7 @@ func TestFinalizerPreservesPremiereWhenEndingAfterGraceWithoutNewObservation(t *
 		t.Fatalf("classify Premiere session: %v", err)
 	}
 
-	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, "ENDED"))
+	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusEnded))
 
 	if liveSessionStatus(t, pool) != string(domain.LiveStatusLive) {
 		t.Fatal("explicit end before grace must stay LIVE")
@@ -419,6 +419,10 @@ func startLivePersistGrace(t *testing.T, grace time.Duration) (*pgxpool.Pool, *R
 		t.Fatal(err)
 	}
 
+	if _, err := pool.Exec(t.Context(), `UPDATE observation_contract_generations SET current_generation=$1 WHERE provider='youtubejs' AND observation_kind='live_snapshot'`, contract.LiveSnapshotQueryContractGeneration); err != nil {
+		t.Fatal(err)
+	}
+
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
 
@@ -442,7 +446,7 @@ func liveSession(videoID, status string) contract.LiveSessionV1 {
 func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...contract.LiveSessionV1) *contract.Envelope {
 	t.Helper()
 
-	return liveSnapshotEnvelopeAtGeneration(t, proof, contract.LiveSnapshotMetadataContractGeneration, sessions...)
+	return liveSnapshotEnvelopeAtGeneration(t, proof, contract.LiveSnapshotQueryContractGeneration, sessions...)
 }
 
 func liveSnapshotEnvelopeAtGeneration(
@@ -486,11 +490,19 @@ func liveSnapshotEnvelopeFromProviderAtGeneration(
 	}
 
 	if len(statuses) == 0 {
-		statuses = []string{testStatusLive, "UPCOMING", "ENDED", "CANCELLED"} //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
+		statuses = []string{testStatusLive, testStatusUpcoming, testStatusEnded, "CANCELLED"} //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
+	}
+
+	var query *contract.LiveSnapshotQueryV1
+
+	if generation == contract.LiveSnapshotQueryContractGeneration {
+		statuses = []string{testStatusEnded, "LIVE", testStatusUpcoming}
+		query = &contract.LiveSnapshotQueryV1{ChannelID: subjectKey, Source: "streams", Statuses: statuses, Exhausted: true, PageCount: 1}
 	}
 
 	payload, err := contract.MarshalPayloadV1(contract.LiveSnapshotV1{
 		Sessions: sessions,
+		Query:    query,
 		Coverage: contract.GlobalChannelCoverageV1{
 			RequestedChannelIDs: []string{testChannelID},
 			Filters:             contract.LiveFiltersV1{Statuses: statuses},
@@ -526,7 +538,13 @@ func publishConsumeLiveFromProvider(
 ) int64 {
 	t.Helper()
 
-	envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, proof, contract.LiveSnapshotMetadataContractGeneration, provider, subjectKey, sessions...)
+	generation := contract.LiveSnapshotQueryContractGeneration
+
+	if provider == contract.ProviderHolodex {
+		generation = contract.LiveSnapshotMetadataContractGeneration
+	}
+
+	envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, proof, generation, provider, subjectKey, sessions...)
 
 	published, err := publisher.PublishBatch(ctx, publishInput(envelope))
 	if err != nil {
@@ -551,7 +569,7 @@ func publishConsumeLive(
 ) contract.LeaseProof {
 	t.Helper()
 
-	return publishConsumeLiveAtGeneration(ctx, t, pool, publisher, consumer, proof, contract.LiveSnapshotMetadataContractGeneration, sessions...)
+	return publishConsumeLiveAtGeneration(ctx, t, pool, publisher, consumer, proof, contract.LiveSnapshotQueryContractGeneration, sessions...)
 }
 
 func publishConsumeLiveAtGeneration(

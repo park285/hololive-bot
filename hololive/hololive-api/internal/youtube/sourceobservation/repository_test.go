@@ -603,6 +603,10 @@ func seedPublishLease(
 ) contract.LeaseProof {
 	tb.Helper()
 
+	if _, err := pool.Exec(ctx, `UPDATE observation_contract_generations SET current_generation=$1 WHERE provider='youtubejs' AND observation_kind='live_snapshot'`, contract.LiveSnapshotQueryContractGeneration); err != nil {
+		tb.Fatal(err)
+	}
+
 	scheduledFor := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
 
 	var generation int64

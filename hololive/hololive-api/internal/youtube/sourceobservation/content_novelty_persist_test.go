@@ -257,55 +257,6 @@ func TestContentNoveltyBaselinePremiereStaysSilentThroughRelease(t *testing.T) {
 	assertNewVideoOutboxes(t, pool)
 }
 
-// generation 1 video_list는 cutover 전 backlog와 replay를 위해 계속 canonical로 반영되지만 공개 근거가 없으므로 알림을 만들지 않습니다.
-// 지원하지 않는 계약으로 dead letter 처리되면 이 backlog가 canonical에서 사라집니다.
-func TestContentConsumerLegacyGenerationAppliesCanonicalWithoutNotification(t *testing.T) {
-	pool, repo, consumer, proof := startContentPersist(t)
-	ctx := t.Context()
-	publishedAt := proof.ScheduledFor.Add(-time.Hour)
-
-	setVideoListContractGeneration(t, pool, contract.VideoListLegacyContractGeneration)
-
-	legacy := channelVideoListEnvelope(t, &proof, testChannelID, contract.VideoListLegacyContractGeneration, contract.CompletenessComplete,
-		contract.VideoListItemV1{VideoID: testVideoID, ChannelID: testChannelID, Title: "legacy", PublishedAt: &publishedAt})
-	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(legacy))
-	require.NoError(t, err)
-	setVideoListContractGeneration(t, pool, contract.VideoListPublicationContractGeneration)
-
-	observationID := published.Results[0].ObservationID
-
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertLegacyCanonical(t, pool, observationID, publishedAt, 0)
-
-	replay, err := repo.RequestReplay(ctx, ReplayInput{ObservationID: observationID, RequestedBy: testReplayOperator, Reason: "legacy generation replay"})
-	require.NoError(t, err)
-	require.True(t, replay.Applied)
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertLegacyCanonical(t, pool, observationID, publishedAt, 1)
-}
-
-func assertLegacyCanonical(t *testing.T, pool *pgxpool.Pool, observationID int64, publishedAt time.Time, wantReplays int) {
-	t.Helper()
-
-	var (
-		status      string
-		replayCount int
-		stored      *time.Time
-	)
-
-	require.NoError(t, pool.QueryRow(t.Context(), `
-		SELECT status, replay_count FROM source_observation_queue WHERE observation_id = $1
-	`, observationID).Scan(&status, &replayCount))
-	require.Equal(t, string(contract.StatusProcessed), status)
-	require.Equal(t, wantReplays, replayCount)
-
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT published_at FROM youtube_videos WHERE video_id = $1`, testVideoID).Scan(&stored))
-	require.NotNil(t, stored)
-	require.True(t, stored.Equal(publishedAt), "published_at = %s, want %s", stored, publishedAt)
-	assertTableCount(t, pool, "youtube_videos", 1)
-	assertNewVideoOutboxes(t, pool)
-}
-
 func publishVideoItems(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -320,17 +271,6 @@ func publishVideoItems(
 	require.Len(t, published.Results, 1)
 
 	return published.Results[0].ObservationID
-}
-
-func setVideoListContractGeneration(t *testing.T, pool *pgxpool.Pool, generation int64) {
-	t.Helper()
-
-	_, err := pool.Exec(t.Context(), `
-		UPDATE observation_contract_generations
-		SET current_generation = $1
-		WHERE provider = 'youtubejs' AND observation_kind = 'video_list'
-	`, generation)
-	require.NoError(t, err)
 }
 
 func observationIDOf(t *testing.T, pool *pgxpool.Pool, kind contract.ObservationKind, subjectKey string, scheduledFor time.Time) int64 {

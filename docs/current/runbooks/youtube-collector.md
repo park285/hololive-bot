@@ -57,7 +57,7 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 
 ## Live metadata contract
 
-현재 `live_snapshot` producer 계약은 Holodex generation `2`, YouTube.js generation `3`입니다. generation `2`는 identity/status/time에 optional `title`, `topic_id`, `thumbnail_url`을 더하며, YouTube.js generation `3`는 query별 관측 근거를 추가합니다. API는 저장된 YouTube.js generation `2` 관측을 읽기 위해 해당 decoder를 유지합니다.
+현재 `live_snapshot` producer 계약은 Holodex generation `2`, YouTube.js generation `3`입니다. generation `2`는 identity/status/time에 optional `title`, `topic_id`, `thumbnail_url`을 더하며, YouTube.js generation `3`는 query별 관측 근거를 추가합니다. 2026-10-06 구형 YouTube.js generation `2` 저장 관측의 안전한 폐기를 완료했으며 API는 이 세대를 더 이상 지원하지 않습니다. 공유 generation `2` decoder는 현행 Holodex 계약에 사용합니다.
 
 - API는 generation `1` 관측을 unsupported contract로 거부합니다. generation `1` 제거 조건은 2026-09-26 T18에서 당시 current generation `2`와 미처리 generation `1` 관측 0건으로 확인했습니다.
 - collector는 DB current generation이 Holodex `2` 또는 YouTube.js `3`이라는 provider별 계약과 다르면 `configuration_error/CONFIGURATION`으로 수집을 끝내고 다른 형식을 내보내지 않습니다.

@@ -229,40 +229,14 @@ func TestVideoListPublicationGenerationCanonicalizesAndReplays(t *testing.T) {
 	requireReplayIdentity(t, prepared)
 }
 
-// generation 1은 이미 저장된 목록 시각 관측을 그대로 다시 받지만 Publication은 어떤 상태로도 실을 수 없습니다.
-// 그래서 legacy backlog가 새 신규성 근거를 몰래 싣지 못합니다.
-func TestVideoListLegacyGenerationReplaysButCannotCarryPublication(t *testing.T) {
-	t.Parallel()
-
-	legacy := VideoListItemV1{
-		VideoID: testVideoID, ChannelID: testChannelID, Title: testTitle,
-		PublishedAt: new(publicationPublished), ScheduledFor: new(publicationScheduled), IsPremiere: new(true),
-	}
-
-	prepared, err := PrepareEnvelope(videoListGenerationEnvelope(t, VideoListLegacyContractGeneration, legacy))
-	if err != nil {
-		t.Fatalf("PrepareEnvelope(legacy) error = %v", err)
-	}
-
-	requireReplayIdentity(t, prepared)
-
-	for name, item := range map[string]VideoListItemV1{
-		"published":  publishedListItem(publicationPublished, publicationCheckedAt),
-		"premiere":   premiereListItem(publicationScheduled, publicationCheckedAt),
-		"unresolved": unresolvedListItem(publicationCheckedAt),
-	} {
-		if _, err := PrepareEnvelope(videoListGenerationEnvelope(t, VideoListLegacyContractGeneration, item)); err == nil {
-			t.Fatalf("legacy generation accepted %s publication", name)
-		}
-	}
-}
-
 // 알 수 없는 video_list 세대는 항목이 없어도 거부합니다.
 func TestVideoListRejectsUnsupportedGeneration(t *testing.T) {
 	t.Parallel()
 
-	if _, err := PrepareEnvelope(videoListGenerationEnvelope(t, VideoListPublicationContractGeneration+1)); err == nil {
-		t.Fatal("PrepareEnvelope() accepted an unsupported empty video list generation")
+	for _, generation := range []int64{1, VideoListPublicationContractGeneration + 1} {
+		if _, err := PrepareEnvelope(videoListGenerationEnvelope(t, generation)); err == nil {
+			t.Fatalf("PrepareEnvelope() accepted unsupported video list generation %d", generation)
+		}
 	}
 }
 
