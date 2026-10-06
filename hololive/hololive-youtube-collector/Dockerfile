@@ -108,7 +108,7 @@ COPY --from=builder --link --chown=1000:1000 /dist ./
 COPY --from=youtubejs-build --chown=1000:1000 /app/youtubejs ./youtubejs
 
 ENV GOGC=100 \
-    GOMEMLIMIT=320MiB \
+    GOMEMLIMIT=160MiB \
     GIN_MODE=release
 
 EXPOSE 30025/tcp 30025/udp 30096/tcp

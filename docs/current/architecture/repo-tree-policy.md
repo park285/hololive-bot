@@ -21,7 +21,6 @@ Allowed at root:
 
 Not at root — these were relocated and must not return:
 
-- Renovate config → `.github/renovate.json`
 - Workspace-level Go contract tests and their fixtures → `internal/workspace/` (with `internal/workspace/testdata/`); only `doc.go` stays at root as the package anchor
 - Local logs, backups, data dumps, generated review bundles, key/pem files, or unclassified design kits (covered by §Local Runtime Data and the artifact gate)
 

@@ -430,7 +430,8 @@ services:
       ALARM_DISPATCH_RETENTION_CANCELLED_DAYS: ${ALARM_DISPATCH_RETENTION_CANCELLED_DAYS:-90}
       ALARM_DISPATCH_RETENTION_EVENT_DAYS: ${ALARM_DISPATCH_RETENTION_EVENT_DAYS:-90}
       LOG_DIR: /app/logs
-      GOMEMLIMIT: "320MiB"
+      # 384m 상한에서 X Spaces Node helper 192MiB와 여유 32MiB를 남긴 값이다.
+      GOMEMLIMIT: "160MiB"
       APP_ENV: "production"
       KAKAO_ROOMS: ${KAKAO_ROOMS:-}
       KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED-true}
@@ -662,7 +663,8 @@ services:
       HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
       PHOTO_SYNC_ENABLED: "false"
       GOGC: "100"
-      GOMEMLIMIT: "320MiB"
+      # 384m 상한에서 YouTube.js Node helper(관측 최대 176MiB)에 192MiB와 여유 32MiB를 남긴 값이다.
+      GOMEMLIMIT: "160MiB"
       GIN_MODE: release
       LOG_DIR: /app/logs
     dns: *tailnet-dns
