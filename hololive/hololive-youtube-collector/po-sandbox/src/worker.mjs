@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { JSDOM, ResourceLoader } from 'jsdom';
+import { JSDOM } from 'jsdom';
 import { BotGuardClient } from 'bgutils-js/botguard';
 import { WebPoMinter } from 'bgutils-js/webpo';
 
@@ -34,7 +34,7 @@ try {
         bounded(message.user_agent, 1024)) {
       dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
         url: 'https://www.youtube.com/', referrer: 'https://www.youtube.com/',
-        resources: new ResourceLoader({ userAgent: message.user_agent }),
+        resources: { userAgent: message.user_agent },
       });
       Object.assign(globalThis, {
         window: dom.window, document: dom.window.document,

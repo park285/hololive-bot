@@ -103,8 +103,10 @@ func TestLLMProviderErrorAttrs_RedactsOpenAIRawJSON(t *testing.T) {
 	apiErr := testOpenAIAPIError(t)
 	wrappedErr := fmt.Errorf("provider failed: %w", apiErr)
 
-	if !strings.Contains(wrappedErr.Error(), "private raw provider response") {
-		t.Fatalf("test setup expected raw provider response in wrapped error, got: %s", wrappedErr.Error())
+	// openai-go v3.71부터 Error()는 원문을 출력하지 않으므로 원문을 보유한 필드로 시험 전제를 확인한다.
+	if !strings.Contains(apiErr.Message, "private raw provider response") ||
+		!strings.Contains(apiErr.RawJSON(), "private raw provider response") {
+		t.Fatalf("test setup expected raw provider response on the API error, got message=%q raw=%q", apiErr.Message, apiErr.RawJSON())
 	}
 
 	var buf bytes.Buffer

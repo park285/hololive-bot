@@ -134,7 +134,7 @@ verified TLS and the CA bundle above.
   attestations that the hosted runner's disposable Docker image store cannot retain. The scanned
   runtime layers and image tags remain the production build targets; ordinary production builds
   keep `provenance: mode=max` and `sbom: true`.
-- BuildKit 활성 Docker Engine — Dockerfile들의 `# syntax=docker/dockerfile:1.24.0@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89`
+- BuildKit 활성 Docker Engine — Dockerfile들의 `# syntax=docker/dockerfile:1.27.1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e`
   (cache mount, `COPY --link`, per-Dockerfile `.dockerignore`) 전제.
 - production Go build는 `GOWORK=off`로 각 `go.mod`의 stable published external pin만 사용한다.
   로컬 sibling checkout은 image source가 아니다.

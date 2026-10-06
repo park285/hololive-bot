@@ -15,7 +15,7 @@ type irisRooms struct {
 	client IrisRooms
 }
 
-func NewIrisLister(client IrisRooms) irisLister {
+func NewIrisLister(client IrisRooms) RoomLister {
 	if client == nil {
 		return nil
 	}

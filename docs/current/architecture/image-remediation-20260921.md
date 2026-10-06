@@ -12,10 +12,10 @@ scanner는 로컬 태그를 불변 image ID로 고정하고, Trivy가 보고한 
 
 ## 소유 경로
 
-- nginx는 공식 `1.31.6-alpine-slim`의 multi-arch index `80149a0e5bc9fa0b8beaff5b8a453f71ba8ba038895d418381297ffa5cd57782`를 사용한다.
+- nginx는 공식 `1.31.6-alpine-slim`의 multi-arch index `f761b94f2cb9e8e05e2943d5f773609596113ef69b54e2433a996d109a8f78b7`를 사용한다.
 - socket-proxy는 공식 `1.13.1` index `3935b709275e4ec35d6ed5a5c4a1f0d01ed31eec5e7234efc3357ecd47689002`를 사용한다.
-- `deploy/images/postgres`는 공식 PostgreSQL 18.6 index `77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873`를 기반으로 한다. gosu 1.19 source `6456aaa0f3c854d199d0f037f068eb97515b7513`를 Go 1.27.1·x/sys v0.48.0으로 재빌드해 `/usr/local/bin/gosu`만 교체한다. 기존 PostgreSQL entrypoint·PGDATA·사용자·initdb contract는 유지한다.
-- `deploy/images/deunhealth`는 upstream source `37e5bd45036a29867fa71e68db3975c0b971c708`를 checksum으로 고정한다. `client.patch`는 Docker/Moby 의존성을 분리된 API v1.56.0·client v0.6.0으로 이행하고 새 client의 기본 API negotiation을 사용한다. daemon 코드와 취약한 x/net graph를 제거하며 OTel은 1.46.0으로 갱신한다. 이벤트/label/health 필터·재시작·취소·healthcheck는 보존한다.
+- `deploy/images/postgres`는 공식 PostgreSQL 18.6 index `77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873`를 기반으로 한다. gosu 1.19 source `6456aaa0f3c854d199d0f037f068eb97515b7513`를 Go 1.27.1·x/sys v0.48.0·moby/sys/user v0.4.1로 재빌드해 `/usr/local/bin/gosu`만 교체한다. 기존 PostgreSQL entrypoint·PGDATA·사용자·initdb contract는 유지한다.
+- `deploy/images/deunhealth`는 upstream source `37e5bd45036a29867fa71e68db3975c0b971c708`를 checksum으로 고정한다. `client.patch`는 Docker/Moby 의존성을 분리된 API v1.56.1·client v0.6.1로 이행하고 새 client의 기본 API negotiation을 사용한다. daemon 코드와 취약한 x/net graph를 제거하며 OTel은 1.47.0으로 갱신한다. 이벤트/label/health 필터·재시작·취소·healthcheck는 보존한다.
 
 `dependencies.mod`·`dependencies.sum`은 재빌드의 module graph 정본이다. upstream module zip은 Go proxy에서 받고 Dockerfile의 SHA-256으로 검증한다. Docker build에서는 `GOTOOLCHAIN=local`, compiler identity 검사, `-mod=readonly`로 추가 버전 선택을 막는다. 업스트림 라이선스는 최종 이미지에 포함한다.
 
