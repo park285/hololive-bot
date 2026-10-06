@@ -22,7 +22,7 @@ import (
 
 const batchFollowerRoom = "batch-follower-room"
 
-func newBatchClaimTestDispatcher(t *testing.T, sender messagedelivery.MessageSender, logger *slog.Logger, grouped bool, parallelism int) (*Dispatcher, *pgxpool.Pool, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) {
+func newBatchClaimTestDispatcher(t *testing.T, sender messagedelivery.PreparedMessageSender, logger *slog.Logger, grouped bool, parallelism int) (*Dispatcher, *pgxpool.Pool, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) {
 	t.Helper()
 
 	pool := newDeliveryPool(t)
@@ -287,4 +287,12 @@ func TestBatchClaimFailureKeepsAlreadySendingConcurrentFollowerProof(t *testing.
 			}
 		})
 	}
+}
+
+func (s *batchFollowerSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *batchFollowerSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
+	return s.SendMessageWithClientRequestID(ctx, room, body, id)
 }

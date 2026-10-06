@@ -218,3 +218,11 @@ func assertAuthSentinelRowsFailed(t *testing.T, db *pgxpool.Pool, outboxID, deli
 		t.Fatalf("outbox status = %q, want %q", updatedOutbox.Status, domain.OutboxStatusFailed)
 	}
 }
+
+func (s sentinelFailureSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s sentinelFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}

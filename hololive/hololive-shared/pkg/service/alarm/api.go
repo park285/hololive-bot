@@ -49,6 +49,7 @@ type alarmHTTPReader interface {
 	GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error)
 	ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error)
 	GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error)
+	CountAlarmEntries(context.Context) (int, error)
 }
 
 // AlarmHTTPService는 실제 알림 HTTP route가 호출하는 작업만 요구한다.
@@ -104,6 +105,19 @@ func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal.PUT(contractsalarm.SettingsRoute, h.UpdateAlarmAdvanceMinutes)
 	internal.PUT(contractsalarm.RoomNameRoute, h.SetRoomName)
 	internal.GET(contractsalarm.KeysRoute, h.GetAllAlarmKeys)
+	internal.GET(contractsalarm.CountRoute, h.CountAlarmEntries)
+}
+
+func (h *Handler) CountAlarmEntries(c *gin.Context) {
+	count, err := h.alarm.CountAlarmEntries(c.Request.Context())
+	if err != nil {
+		h.logger.Error("알람 개수 조회 실패", slog.Any("error", err))
+		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("count_alarm_entries_failed", "count alarm entries failed"))
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: contractsalarm.EntryCount{Count: new(count)}})
 }
 
 // AddAlarm은 선택적인 host_id로 채팅방의 채널 또는 멤버 구독을 등록한다.

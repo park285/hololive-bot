@@ -6,14 +6,13 @@ import (
 	"time"
 )
 
-const queueObservationMinInterval = 5 * time.Second
+const (
+	queueObservationMinInterval = 5 * time.Second
+	queueObservationTimeout     = time.Second
+)
 
 type queueObservationThrottle struct {
 	last atomic.Int64
-}
-
-func (t *queueObservationThrottle) acquire(now time.Time) bool {
-	return t.acquireEvery(now, queueObservationMinInterval)
 }
 
 func (t *queueObservationThrottle) acquireEvery(now time.Time, interval time.Duration) bool {
@@ -25,7 +24,17 @@ func (t *queueObservationThrottle) acquireEvery(now time.Time, interval time.Dur
 	return t.last.CompareAndSwap(last, now.UnixNano())
 }
 
-var queueObservation queueObservationThrottle
+// 통계 지연은 이미 선점한 작업의 전달을 막지 않는다. Supervisor가 이 loop의 취소와 join을 소유한다.
+func (r *Runtime) runQueueObservationLoop(ctx context.Context) {
+	ticker := time.NewTicker(queueObservationMinInterval)
+	defer ticker.Stop()
+
+	r.observePendingQueue(ctx)
+
+	for waitTicker(ctx, ticker) {
+		r.observePendingQueue(ctx)
+	}
+}
 
 func (r *Runtime) observePendingQueue(ctx context.Context) {
 	if r == nil || r.pool == nil {
@@ -40,21 +49,18 @@ func (r *Runtime) observePendingQueue(ctx context.Context) {
 		youtubeWorkQueueUtilization.Set(float64(len(r.workCh)) / float64(cap(r.workCh)))
 	}
 
-	if !queueObservation.acquire(r.now()) {
-		return
-	}
-
 	var (
 		pending          int64
 		processing       int64
 		oldestAgeSeconds float64
 	)
 
-	if err := r.pool.QueryRow(ctx, mustSQL("queue_observability.sql")).Scan(
-		&pending,
-		&processing,
-		&oldestAgeSeconds,
-	); err != nil {
+	queryCtx, cancel := context.WithTimeout(ctx, queueObservationTimeout)
+	defer cancel()
+
+	if err := r.withDB(queryCtx, func(ctx context.Context) error {
+		return r.pool.QueryRow(ctx, mustSQL("queue_observability.sql")).Scan(&pending, &processing, &oldestAgeSeconds)
+	}); err != nil {
 		return
 	}
 

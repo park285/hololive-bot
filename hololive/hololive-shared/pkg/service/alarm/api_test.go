@@ -42,6 +42,7 @@ import (
 
 // 실제 HTTP route의 알림 포트 mock.
 type mockAlarmCRUD struct {
+	countAlarmEntriesFn         func(context.Context) (int, error)
 	addAlarmFn                  func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
 	removeAlarmFn               func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
 	removeHostAlarmFn           func(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error)
@@ -51,6 +52,14 @@ type mockAlarmCRUD struct {
 	updateAlarmAdvanceMinutesFn func(minutes int) (domain.AdvanceMinutesResult, error)
 	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
 	getAllAlarmKeysFn           func(ctx context.Context) ([]*domain.AlarmEntry, error)
+}
+
+func (m *mockAlarmCRUD) CountAlarmEntries(ctx context.Context) (int, error) {
+	if m.countAlarmEntriesFn == nil {
+		return 0, nil
+	}
+
+	return m.countAlarmEntriesFn(ctx)
 }
 
 func (m *mockAlarmCRUD) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {

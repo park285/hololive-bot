@@ -44,7 +44,7 @@ const defaultLogicalGroupScanLimit = 100
 type Dependencies struct {
 	DB             deliverysql.DeliveryDB
 	Cache          cache.Client
-	Sender         delivery.MessageSender
+	Sender         delivery.PreparedMessageSender
 	Renderer       *template.Renderer
 	MessageStrings *messagestrings.Store
 	// MemberNames는 알림 표시명의 PostgreSQL 정본 조회다. Valkey 장애가 표시명을 바꾸거나 발송을 막지 않게 한다.

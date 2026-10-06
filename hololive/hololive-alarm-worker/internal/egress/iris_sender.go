@@ -2,13 +2,11 @@ package egress
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
-	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
@@ -70,19 +68,6 @@ func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *I
 	return sender
 }
 
-func (s *IrisMessageSender) send(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
-	if s.useMarkdown(ctx, roomID) {
-		return s.sendMarkdown(ctx, roomID, message, opts...)
-	}
-
-	message = kakaoformat.Render(message)
-	if err := s.client.SendMessage(ctx, roomID, message, opts...); err != nil {
-		return fmt.Errorf("iris send message: %w", err)
-	}
-
-	return nil
-}
-
 func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
 	accepted, err := s.client.SendMarkdown(ctx, roomID, message, opts...)
 	if err != nil {
@@ -107,33 +92,6 @@ func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message st
 
 func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool {
 	return s != nil && s.markdownReplies && s.markdownRooms != nil && s.markdownRooms.OpenChat(ctx, roomID)
-}
-
-// SendMessage는 방 유형에 따라 오픈채팅 Markdown 또는 Kakao 일반 텍스트로 전송합니다.
-// Markdown은 접수 ID의 handoff 완료까지 확인하며 불명 결과는 성공으로 바꾸지 않습니다.
-func (s *IrisMessageSender) SendMessage(ctx context.Context, roomID, message string) error {
-	if s == nil || s.client == nil {
-		return errors.New("iris message sender: client is nil")
-	}
-
-	if err := s.send(ctx, roomID, message); err != nil {
-		return fmt.Errorf("send: %w", err)
-	}
-
-	return nil
-}
-
-// SendMessageWithClientRequestID는 방 유형별 message lane에 Iris 멱등성 ID를 포함합니다.
-func (s *IrisMessageSender) SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error {
-	if s == nil || s.client == nil {
-		return errors.New("iris message sender: client is nil")
-	}
-
-	if err := s.send(ctx, roomID, message, iris.WithClientRequestID(clientRequestID)); err != nil {
-		return fmt.Errorf("send: %w", err)
-	}
-
-	return nil
 }
 
 func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string, error) {

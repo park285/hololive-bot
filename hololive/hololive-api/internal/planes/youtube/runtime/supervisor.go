@@ -213,8 +213,6 @@ func (r *Runtime) claimTick(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("%w", err)
 	}
 
-	r.observePendingQueue(ctx)
-
 	for i := range batch.Claims {
 		r.remember(batch.Claims[i])
 	}

@@ -29,7 +29,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 func partitionGroupedDeliveries(
@@ -165,11 +164,8 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	defer cancel()
 
-	prepared, preparedOK := d.sender.(messagedelivery.PreparedMessageSender)
-	usePrepared := req.frozen != nil && req.frozen.Route != "sender"
-
-	if usePrepared && !preparedOK {
-		return errors.New("send frozen delivery: prepared sender required")
+	if req.frozen == nil || (req.frozen.Route != "text" && req.frozen.Route != "markdown") {
+		return errors.New("send frozen delivery: stored text or markdown request required")
 	}
 
 	finish := d.beginProviderAttempt()
@@ -177,15 +173,7 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 
 	defer func() { finish(sendErr, completed) }()
 
-	var err error
-
-	if usePrepared {
-		err = prepared.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
-	} else if sender, ok := d.sender.(messagedelivery.ClientRequestMessageSender); ok {
-		err = sender.SendMessageWithClientRequestID(sendCtx, req.roomID, req.message, req.requestID())
-	} else {
-		err = d.sender.SendMessage(sendCtx, req.roomID, req.message)
-	}
+	err := d.sender.SendPreparedMessage(sendCtx, req.roomID, req.message, req.frozen.Route, req.requestID())
 
 	completed = true
 

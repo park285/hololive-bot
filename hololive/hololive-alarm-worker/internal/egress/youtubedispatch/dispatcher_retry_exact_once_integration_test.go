@@ -480,3 +480,11 @@ func assertRetryFinalizeOnceMessages(
 	assert.Contains(t, messages[0], tc.roomID+":")
 	assert.Contains(t, messages[0], tc.expectedMessageMarker)
 }
+
+func (s *postSendFinalizeFailureSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *postSendFinalizeFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}

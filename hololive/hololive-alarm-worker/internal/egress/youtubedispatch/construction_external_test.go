@@ -21,7 +21,7 @@ func newIntegrationDispatcher(
 	tb testing.TB,
 	db *pgxpool.Pool,
 	cacheClient cache.Client,
-	sender delivery.MessageSender,
+	sender delivery.PreparedMessageSender,
 	logger *slog.Logger,
 	config *dispatchstate.Config,
 ) *youtubedispatch.Dispatcher {

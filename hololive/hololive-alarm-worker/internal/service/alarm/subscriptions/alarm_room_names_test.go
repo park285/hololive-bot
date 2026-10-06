@@ -59,6 +59,10 @@ func TestGetAllAlarmKeysListsDistinctRoomChannelsFromRepository(t *testing.T) {
 	entries, err := as.GetAllAlarmKeys(ctx)
 	require.NoError(t, err)
 
+	count, err := as.CountAlarmEntries(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 3, count, "host 구독 두 행을 같은 방·채널 한 쌍으로 집계해야 한다")
+
 	got := make([]domain.AlarmEntry, 0, len(entries))
 	for _, entry := range entries {
 		got = append(got, domain.AlarmEntry{RoomID: entry.RoomID, RoomName: entry.RoomName, ChannelID: entry.ChannelID})

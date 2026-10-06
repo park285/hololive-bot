@@ -26,27 +26,63 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const matcherSnapshotLoadTimeout = 5 * time.Second
+
 func (mm *Matcher) getSnapshot(ctx context.Context) (*matcherSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+	}
+
 	if snapshot := mm.cachedSnapshot(); snapshot != nil {
 		return snapshot, nil
 	}
 
-	value, err, _ := mm.snapshotGroup.Do("member-snapshot", func() (any, error) {
-		return mm.rebuildSnapshot(ctx)
+	// 첫 요청의 취소는 공유 적재에 전파하지 않는다. 각 대기자는 자기 예산으로 빠지고 적재 자체는 유한 예산을 갖는다.
+	sharedCtx := context.WithoutCancel(ctx)
+	results := mm.snapshotGroup.DoChan("member-snapshot", func() (any, error) {
+		loadCtx, cancel := context.WithTimeout(sharedCtx, matcherSnapshotLoadTimeout)
+		defer cancel()
+
+		var loaded *matcherSnapshot
+
+		err := panicguard.RunE(mm.logger, panicguard.BackgroundTask, "matcher-snapshot-load", func() error {
+			if cached := mm.cachedSnapshot(); cached != nil {
+				loaded = cached
+				return nil
+			}
+
+			var err error
+
+			loaded, err = mm.rebuildSnapshot(loadCtx)
+
+			return err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("load matcher snapshot: %w", err)
+		}
+
+		return loaded, nil
 	})
-	if err != nil {
-		return nil, fmt.Errorf("build member matcher snapshot: %w", err)
-	}
 
-	out, err := validatedMatcherSnapshot(value)
-	if err != nil {
-		return nil, fmt.Errorf("validated matcher snapshot: %w", err)
-	}
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for member matcher snapshot: %w", ctx.Err())
+	case result := <-results:
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("wait for member matcher snapshot: %w", err)
+		}
 
-	return out, nil
+		if result.Err != nil {
+			return nil, fmt.Errorf("build member matcher snapshot: %w", result.Err)
+		}
+
+		return validatedMatcherSnapshot(result.Val)
+	}
 }
 
 func (mm *Matcher) cachedSnapshot() *matcherSnapshot {

@@ -9,7 +9,6 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 // outboxPayload는 producer가 적재한 message와 worker가 claim 이후 기록한 known_unsent·request를 함께 읽는다.
@@ -65,18 +64,14 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 		return nil, false
 	}
 
-	request := &preparedMessage{Body: payload.Message, Route: "message", BaseID: notificationDeliveryClientRequestID(item)}
+	body, route, err := d.sender.PrepareMessageRequest(ctx, item.RoomID, payload.Message)
+	if err != nil {
+		d.markPreparationFailed(ctx, item, err)
 
-	if sender, ok := d.sender.(delivery.PreparedMessageSender); ok {
-		body, route, err := sender.PrepareMessageRequest(ctx, item.RoomID, payload.Message)
-		if err != nil {
-			d.markPreparationFailed(ctx, item, err)
-
-			return nil, false
-		}
-
-		request.Body, request.Route = body, route
+		return nil, false
 	}
+
+	request := &preparedMessage{Body: body, Route: route, BaseID: notificationDeliveryClientRequestID(item)}
 
 	saved, err := d.repository.saveRequest(ctx, item.ID, d.workerID, nil, request)
 	if err != nil {
@@ -99,24 +94,8 @@ func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.Notification
 		requestID = id
 	}
 
-	if sender, ok := d.sender.(delivery.PreparedMessageSender); ok {
-		if err := sender.SendPreparedMessage(ctx, item.RoomID, request.Body, request.Route, requestID); err != nil {
-			return fmt.Errorf("send prepared delivery: %w", err)
-		}
-
-		return nil
-	}
-
-	if sender, ok := d.sender.(delivery.ClientRequestMessageSender); ok {
-		if err := sender.SendMessageWithClientRequestID(ctx, item.RoomID, request.Body, requestID); err != nil {
-			return fmt.Errorf("send prepared delivery ID: %w", err)
-		}
-
-		return nil
-	}
-
-	if err := d.sender.SendMessage(ctx, item.RoomID, request.Body); err != nil {
-		return fmt.Errorf("send prepared delivery message: %w", err)
+	if err := d.sender.SendPreparedMessage(ctx, item.RoomID, request.Body, request.Route, requestID); err != nil {
+		return fmt.Errorf("send prepared delivery: %w", err)
 	}
 
 	return nil

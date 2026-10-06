@@ -40,7 +40,7 @@ func TestMarkdownAdmissionWaitsForExactHandoffOutcome(t *testing.T) {
 
 			sender.replyStatusPollInterval = time.Nanosecond
 
-			err := sender.SendMessage(ctx, testIrisSenderRoomID, "synthetic markdown")
+			err := sendPreparedTestMessage(ctx, sender, "synthetic markdown")
 
 			if tc.want == nil {
 				require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestMarkdownMalformedAdmissionCannotReportSuccess(t *testing.T) {
 		client := &irisSenderTestClient{markdownAccepted: accepted, markdownAcceptedSet: true}
 		sender := NewIrisMessageSender(client, WithMarkdownReplies(true),
 			WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
-		err := sender.SendMessage(t.Context(), testIrisSenderRoomID, "synthetic markdown")
+		err := sendPreparedTestMessage(t.Context(), sender, "synthetic markdown")
 		require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
 		require.Zero(t, client.statusCalls)
 		require.Len(t, client.markdownCalls, 1)

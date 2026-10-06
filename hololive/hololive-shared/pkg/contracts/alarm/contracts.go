@@ -38,6 +38,7 @@ const (
 	SettingsRoute = "/settings"
 	RoomNameRoute = "/room-name"
 	KeysRoute     = "/keys"
+	CountRoute    = "/count"
 
 	AddPath      = BasePath + AddRoute
 	RemovePath   = BasePath + RemoveRoute
@@ -45,7 +46,13 @@ const (
 	SettingsPath = BasePath + SettingsRoute
 	RoomNamePath = BasePath + RoomNameRoute
 	KeysPath     = BasePath + KeysRoute
+	CountPath    = BasePath + CountRoute
 )
+
+// EntryCount는 관리 목록과 같은 서로 다른 방·채널 쌍의 개수다. 개별 host 구독 수와 구분한다.
+type EntryCount struct {
+	Count *int `json:"count"`
+}
 
 const QueueEnvelopeVersionV1 uint8 = 1
 

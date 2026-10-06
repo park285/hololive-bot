@@ -102,7 +102,7 @@ type DispatcherConfig struct {
 
 type Dispatcher struct {
 	repository    deliveryRepository
-	sender        delivery.MessageSender
+	sender        delivery.PreparedMessageSender
 	logger        *slog.Logger
 	config        DispatcherConfig
 	workerID      string
@@ -121,13 +121,17 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 
 // NewDispatcher는 "delivery-dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면 다른 이름으로
 // 바꾸지 않고 생성 오류다(DEC-20260926-hololive-legacy-env-config-retirement).
-func NewDispatcher(repository deliveryRepository, sender delivery.MessageSender, logger *slog.Logger, config *DispatcherConfig) (*Dispatcher, error) {
+func NewDispatcher(repository deliveryRepository, sender delivery.PreparedMessageSender, logger *slog.Logger, config *DispatcherConfig) (*Dispatcher, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	if config == nil {
 		return nil, errors.New("new delivery dispatcher: config is required")
+	}
+
+	if sender == nil {
+		return nil, errors.New("new delivery dispatcher: prepared sender is required")
 	}
 
 	cfg := *config

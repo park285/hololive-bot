@@ -390,3 +390,19 @@ func newDispatcherTestCache(t *testing.T) (*cache.Service, *miniredis.Miniredis)
 
 	return service, mini
 }
+
+func (s *testSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *testSender) SendPreparedMessage(ctx context.Context, room, body, _, id string) error {
+	return s.SendMessageWithClientRequestID(ctx, room, body, id)
+}
+
+func (s *failFirstSendTestSender) PrepareMessageRequest(_ context.Context, _, body string) (string, string, error) {
+	return body, testPreparedTextRoute, nil
+}
+
+func (s *failFirstSendTestSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
+	return s.SendMessage(ctx, room, body)
+}

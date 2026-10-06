@@ -18,7 +18,7 @@ import (
 type SendEngine struct {
 	workerTracker   *workercontract.ExecutorTracker
 	workerTotals    *workercontract.Counters
-	sender          messagedelivery.MessageSender
+	sender          messagedelivery.PreparedMessageSender
 	formatter       *format.MessageFormatter
 	logger          *slog.Logger
 	config          dispatchstate.Config
@@ -51,7 +51,7 @@ type lifecycleTransition interface {
 }
 
 func newSendEngine(
-	sender messagedelivery.MessageSender,
+	sender messagedelivery.PreparedMessageSender,
 	formatter *format.MessageFormatter,
 	logger *slog.Logger,
 	config *dispatchstate.Config,

@@ -41,7 +41,7 @@ func TestMarkdownHandoffStaysBoundedWhenStatusCannotFinish(t *testing.T) {
 				}
 
 				started := time.Now()
-				err := sender.SendMessage(ctx, testIrisSenderRoomID, "message")
+				err := sendPreparedTestMessage(ctx, sender, "message")
 				require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
 
 				if cancelParent {

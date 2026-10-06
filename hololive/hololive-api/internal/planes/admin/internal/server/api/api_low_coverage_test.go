@@ -50,8 +50,17 @@ const (
 )
 
 type stubAlarmCRUDForServer struct {
-	getAllAlarmKeys func(context.Context) ([]*domain.AlarmEntry, error)
-	removeAlarm     func(context.Context, string, string, domain.AlarmTypes) (bool, error)
+	countAlarmEntries func(context.Context) (int, error)
+	getAllAlarmKeys   func(context.Context) ([]*domain.AlarmEntry, error)
+	removeAlarm       func(context.Context, string, string, domain.AlarmTypes) (bool, error)
+}
+
+func (s *stubAlarmCRUDForServer) CountAlarmEntries(ctx context.Context) (int, error) {
+	if s.countAlarmEntries == nil {
+		return 0, nil
+	}
+
+	return s.countAlarmEntries(ctx)
 }
 
 func (s *stubAlarmCRUDForServer) RemoveAlarm(

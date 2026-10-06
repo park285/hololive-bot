@@ -315,15 +315,7 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 		})
 	}
 
-	r.loopCount = 2
-	r.startGuarded(runCtx, errCh, "youtube-claim-loop", &r.loopTasks, func() {
-		defer close(r.claimDone)
-
-		r.runClaimLoop(runCtx, errCh)
-	})
-	r.startGuarded(runCtx, errCh, "youtube-projection-loop", &r.loopTasks, func() {
-		r.runProjectionLoop(runCtx, errCh)
-	})
+	r.startCoreLoops(runCtx, errCh)
 
 	if r.Config.LiveEndFinalizer.Enabled {
 		r.loopCount++
@@ -345,6 +337,22 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 			r.runReplayLoop(runCtx, errCh)
 		})
 	}
+}
+
+// startCoreLoops는 Start가 lifecycle 잠금을 소유한 동안 필수 supervisor 작업을 등록한다.
+func (r *Runtime) startCoreLoops(runCtx context.Context, errCh chan<- error) {
+	r.loopCount = 3
+	r.startGuarded(runCtx, errCh, "youtube-claim-loop", &r.loopTasks, func() {
+		defer close(r.claimDone)
+
+		r.runClaimLoop(runCtx, errCh)
+	})
+	r.startGuarded(runCtx, errCh, "youtube-projection-loop", &r.loopTasks, func() {
+		r.runProjectionLoop(runCtx, errCh)
+	})
+	r.startGuarded(runCtx, errCh, "youtube-queue-observation-loop", &r.loopTasks, func() {
+		r.runQueueObservationLoop(runCtx)
+	})
 }
 
 func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name string, group *sync.WaitGroup, run func()) {

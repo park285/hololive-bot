@@ -30,6 +30,7 @@ func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
 		"PUT " + contractsalarm.BasePath + contractsalarm.SettingsRoute,
 		"PUT " + contractsalarm.BasePath + contractsalarm.RoomNameRoute,
 		"GET " + contractsalarm.BasePath + contractsalarm.KeysRoute,
+		"GET " + contractsalarm.CountPath,
 	}
 	assert.ElementsMatch(t, expected, routeKeys(router.Routes()))
 }
@@ -89,6 +90,8 @@ func (fakeAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) {
 func (fakeAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return nil, nil
 }
+
+func (fakeAlarmCRUD) CountAlarmEntries(context.Context) (int, error) { return 0, nil }
 
 func (fakeAlarmCRUD) SetRoomName(context.Context, string, string) error {
 	return nil

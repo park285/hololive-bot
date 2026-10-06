@@ -262,3 +262,17 @@ func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, err
 
 	return entries, nil
 }
+
+// CountAlarmEntries는 목록 본문과 표시명 조회 없이 방·채널 쌍의 개수를 읽는다.
+func (c *Client) CountAlarmEntries(ctx context.Context) (int, error) {
+	result, err := c.getJSON[contractsalarm.EntryCount](ctx, contractsalarm.CountPath)
+	if err != nil {
+		return 0, fmt.Errorf("count alarm entries: %w", err)
+	}
+
+	if result.Count == nil || *result.Count < 0 {
+		return 0, errors.New("count alarm entries: missing or negative count")
+	}
+
+	return *result.Count, nil
+}

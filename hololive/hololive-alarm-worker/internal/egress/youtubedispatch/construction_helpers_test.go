@@ -36,7 +36,7 @@ func newDispatcherForTest(
 	tb testing.TB,
 	db *pgxpool.Pool,
 	cacheClient cache.Client,
-	sender delivery.MessageSender,
+	sender delivery.PreparedMessageSender,
 	renderer *template.Renderer,
 	logger *slog.Logger,
 	config *dispatchstate.Config,

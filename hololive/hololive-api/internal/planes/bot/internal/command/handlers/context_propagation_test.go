@@ -76,12 +76,6 @@ func (s *trackedContextState) saw(want context.Context) bool {
 	return slices.Contains(s.snapshot(), want)
 }
 
-func (s *trackedContextState) sawOnly(want context.Context) bool {
-	seen := s.snapshot()
-
-	return len(seen) > 0 && !slices.ContainsFunc(seen, func(got context.Context) bool { return got != want })
-}
-
 type trackedMemberProvider struct {
 	state     *trackedContextState
 	members   []*domain.Member
@@ -276,5 +270,17 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	require.True(t, streamProvider.state.saw(reqCtx), "live query must observe the request context")
 	require.True(t, sendMessageState.saw(reqCtx), "SendMessage must receive the request context")
 	assert.Equal(t, cmd.Deps().Formatter.FormatMemberNotLive(reqCtx, testMemberAqua), sendMessageMsg)
-	require.True(t, provider.state.sawOnly(reqCtx), "matcher provider must observe only the request context")
+
+	seen := provider.state.snapshot()
+	require.NotEmpty(t, seen)
+
+	for _, observed := range seen {
+		// 공유 snapshot은 호출자 취소를 격리하되 요청 값과 자체 적재 예산을 보존한다.
+		require.Equal(t, reqCtx.Value(commandContextKey{}), observed.Value(commandContextKey{}))
+
+		if observed != reqCtx {
+			_, hasDeadline := observed.Deadline()
+			require.True(t, hasDeadline, "shared matcher load must have its own deadline")
+		}
+	}
 }
