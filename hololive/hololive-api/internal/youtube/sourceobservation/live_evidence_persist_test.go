@@ -188,13 +188,22 @@ func TestLiveEvidenceDBPermutationsConverge(t *testing.T) {
 		orders   [][]int
 	}{
 		{name: "live-ended", statuses: []string{testStatusLive, testStatusEnded}, orders: [][]int{{0, 1}, {1, 0}}},
-		{name: "upcoming-canceled", statuses: []string{"UPCOMING", testStatusCanceled}, orders: [][]int{{0, 1}, {1, 0}}},
+		{name: "upcoming-canceled", statuses: []string{testStatusUpcoming, testStatusCanceled}, orders: [][]int{{0, 1}, {1, 0}}},
 		{name: "live-two-absences", statuses: []string{testStatusLive, "", ""}, orders: [][]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}},
 	} {
+		provider, jobKind, generation := contract.ProviderYouTubeJS, "youtubejs_channel_live", contract.LiveSnapshotQueryContractGeneration
+
+		if test.name == "upcoming-canceled" {
+			provider, jobKind, generation = contract.ProviderHolodex, "holodex_live", contract.LiveSnapshotMetadataContractGeneration
+		}
+
 		for _, order := range test.orders {
 			t.Run(fmt.Sprint(test.name, order), func(t *testing.T) {
-				pool, repo, consumer, proof := startLivePersist(t)
 				ctx := t.Context()
+				pool := dbtest.NewPool(t)
+				repo := NewRepository(pool)
+				consumer := NewConsumerWithGraces(repo, 0, 0)
+				proof := seedPublishLease(ctx, t, pool, provider, contract.KindLiveSnapshot, testChannelID, jobKind)
 				ids := make([]int64, 0, len(test.statuses))
 
 				for _, status := range test.statuses {
@@ -204,7 +213,9 @@ func TestLiveEvidenceDBPermutationsConverge(t *testing.T) {
 						facts = append(facts, liveSession(testVideoID, status))
 					}
 
-					result, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &proof, facts...)))
+					envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, generation, provider, testChannelID, facts...)
+
+					result, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(envelope))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -237,8 +248,6 @@ func TestLiveSameSlotKeepsFirstCoverageAcrossProviders(t *testing.T) {
 	ctx := t.Context()
 
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusLive))
-	// 첫 coverage는 UPCOMING만 포함하므로 이미 LIVE인 영상의 absence가 아니다.
-	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession("other-upcoming", "UPCOMING"))
 
 	holodexProof := proof
 
@@ -261,7 +270,9 @@ func TestLiveSameSlotKeepsFirstCoverageAcrossProviders(t *testing.T) {
 		t.Fatal("fixture must reuse the same slot")
 	}
 
-	publishConsumeLiveFromProvider(ctx, t, publishkit.NewPublisher(pool), consumer, &holodexProof, contract.ProviderHolodex, testChannelID)
+	// Holodex의 첫 coverage는 UPCOMING만 포함한다. 같은 slot의 YouTube 전체 조회가 이를 바꾸지 못한다.
+	publishConsumeLiveFromProvider(ctx, t, publishkit.NewPublisher(pool), consumer, &holodexProof, contract.ProviderHolodex, testChannelID, liveSession("other-upcoming", testStatusUpcoming))
+	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof)
 
 	if slots := liveConsecutiveSlots(t, pool, testVideoID); slots != 0 {
 		t.Fatalf("same slot replaced its first coverage: count=%d", slots)
@@ -280,10 +291,17 @@ func TestLiveSameSlotKeepsFirstCoverageAcrossProviders(t *testing.T) {
 }
 
 func TestLiveEndEvidenceSurvivesRawRetentionAndGrace(t *testing.T) {
-	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	consumer := NewConsumerWithGraces(repo, 0, time.Hour)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderHolodex, contract.KindLiveSnapshot, testChannelID, "holodex_live")
+	// Holodex의 명시적 종료 근거로 원본 삭제 후 grace를 검사한다. streams 전체 coverage의 부재 근거는 섞지 않는다.
+	positiveFact := liveSession(testVideoID, testStatusLive)
 
-	positive, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &proof, liveSession(testVideoID, testStatusLive))))
+	positiveFact.StartedAt = new(proof.ScheduledFor)
+
+	positive, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, contract.LiveSnapshotMetadataContractGeneration, contract.ProviderHolodex, testChannelID, positiveFact)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +313,7 @@ func TestLiveEndEvidenceSurvivesRawRetentionAndGrace(t *testing.T) {
 
 	fact.EndedAt = &endedAt
 
-	negative, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &proof, fact)))
+	negative, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, contract.LiveSnapshotMetadataContractGeneration, contract.ProviderHolodex, testChannelID, fact)))
 	if err != nil {
 		t.Fatal(err)
 	}

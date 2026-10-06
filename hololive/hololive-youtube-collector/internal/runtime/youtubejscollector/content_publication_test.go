@@ -168,7 +168,7 @@ func TestContentRunnerRequiresPublicationContractGeneration(t *testing.T) {
 	t.Parallel()
 
 	input := youtubeInputWithGenerations(t, restrictedTestChannelID, "youtubejs_content",
-		map[contract.ObservationKind]int64{contract.KindVideoList: contract.VideoListLegacyContractGeneration, contract.KindShortsList: 1},
+		map[contract.ObservationKind]int64{contract.KindVideoList: 1, contract.KindShortsList: 1},
 		contract.KindVideoList, contract.KindShortsList)
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: contentList()}}
 

@@ -58,33 +58,22 @@ Fallback delta: 새 fallback은 없다. 구형 video_live_check는 오류로 거
 - 복구 지점: 중앙 API/worker `compose/rollback/legacy-ea5d221e641b512b4af23c6f690b9ad567122f26`, 중앙 c `compose/backups/po-c-20261006T040838Z`, Seoul `backups/seoul-collector-20261006T041015Z`, native a/d는 이전 `ab078d31dc6a` release와 paired issuer를 보존했다.
 - 이번 배포에서 schema migration, 수동 데이터 삭제, 비밀값 변경, 보존기간 변경은 하지 않았다.
 
-## 구형 이력 폐기 준비안
+## 구형 관측 폐기 완료
 
-사용자는 2026-10-06 이력 폐기안 준비와 추가 연결 없이 정리하는 방향을 요청했다. 새 호환 경로·재연결·대체 이력 테이블은 만들지 않는다. 이 절은 삭제 대상·손실·복구 준비안이며 실제 DB 삭제, 보존기간 단축, 데이터 백업·복원은 실행하지 않았다.
+사용자는 폐기안 준비 후 실제 정리를 승인했고, 기존 영상이 새 영상으로 판단되어 재알림되지 않아야 한다고 명시했다. 이에 삭제 범위를 구형 관측으로 한정했다. 새 호환 연결·대체 이력 테이블·자동 백업은 만들지 않았다.
 
-### 대상과 확인 결과
+- [x] 일관된 읽기 전용 snapshot에서 대상 94,326건, application 195,506건, content absence slot 3,029건, content clock 1건과 공유 payload 609건의 복구 자료를 보존하고 압축·JSON·수량·SHA256 검증.
+- [x] 격리 PostgreSQL에서 원본 삭제 후 같은 slot 재수신·다음 slot 수집에도 신규성 기준점과 SENT/FAILED 알림이 유지되는 회귀 시험. LIVE/ENDED 상태와 원본·payload·감사 FK 복원 시험 통과.
+- [x] API·발송 워커를 잠시 정지하고 고정 ID를 500건씩 삭제. queue·PENDING replay·현재 end-candidate 참조가 없고 schema 1의 승인된 두 세대인지 매 배치 재검증.
+- [x] 실제 삭제 93,718건, 기존 retention으로 먼저 소멸한 snapshot 대상 608건, 대상 잔여 0건 확인. 최초 조사 95,984건과의 차이는 실행 전 기존 retention에 따른 감소다.
+- [x] 삭제 전후 영상, 신규성 clock, 채널 기준점, watermark, absence slot, live session/head, notification outbox, delivery/send unit/event의 전체 행 digest 동일 확인. 참조 FK가 NULL로 바뀌는 두 열만 비교에서 제외했다.
+- [x] API 먼저 재개하고 발송 워커 재개 전후 기존 영상 1,975개의 새 NEW_VIDEO 알림 0건 확인. API/worker healthy, 재시작 0, 인증된 worker 호출 count 24, PG/Valkey 연결과 collector readiness 확인.
+- [ ] 구형 video_list generation 1 및 YouTube live_snapshot generation 2 consumer 지원 제거, 현재 계약 회귀 검증과 배포.
 
-중앙 `hololive-osaka`의 `holo-postgres/hololive`에서 `default_transaction_read_only=on`, statement timeout 3초로 확인했다. 수량은 2026-10-06 13시대 KST 조회 시점의 값이며 기존 retention으로 변한다.
+대상은 `source_observations`의 `provider='youtubejs'` 중 `video_list` generation 1과 `live_snapshot` generation 2뿐이다. 영상·신규성 기준점·알림 및 발송 상태는 초기화하지 않았다. payload는 다른 세대와 공유되므로 수동 삭제하지 않고 기존 orphan retention에 맡긴다. application 등 감사 행은 기존 FK의 SET NULL만 적용하며 원래 retention을 유지한다.
 
-| 대상 조건 | 확인 수량 | 삭제 시 사라지는 정보 |
-| --- | ---: | --- |
-| `source_observations`: `provider='youtubejs' AND observation_kind='video_list' AND contract_generation=1` | 10,667 | 9월 29일~10월 4일 수신한 과거 목록 관측 및 재생 근거 |
-| 같은 테이블: `provider='youtubejs' AND observation_kind='live_snapshot' AND contract_generation=2` | 85,317 | 9월 29일~30일 수신한 과거 라이브 관측 및 재생 근거 |
-| `alarm_dispatch_deliveries`: `send_unit_id IS NULL AND status IN ('sent','cancelled')` | sent 343, cancelled 14 | 과거 발송 조회·dedupe 근거. 취소 14건의 실제 종단일은 9월 21일 |
+`send_unit_id IS NULL`인 종단 발송 357건(sent 343, cancelled 14)은 전부 현행 `v2:room:` dedupe key를 사용한다. 현재 InsertBatch 충돌 방지와 findByDedupeKey에 필요한 행이므로 삭제하지 않았고, 해당 조회 분기도 유지한다. 새 연결이나 tombstone으로 대체하지 않는다.
 
-- 관측 두 집합 전체에서 queue·PENDING replay·현재 `end_candidate_observation_id` 참조는 0건이었다. 발송 이력의 admin action 참조·pending upcoming candidate 참조·잠금 필드는 0건이었다. 실행 직전에 같은 조건을 다시 확인한다.
-- 전체 감사 연결 집계는 3초 timeout에 중단했다. 각 관측 10,001건의 제한 표본에는 application 참조가 각각 98,923건·10,599건 있으므로 전체 연결이 없다고 판단하지 않는다. 실행 전 ID 구간별로 끝까지 집계해야 한다.
-- 운영 retention은 관측 7일, sent/cancelled 각각 90일이며 활성화되어 있다. 취소 이력은 생성일이 아니라 `cancelled_at`, 발송 이력은 `sent_at`, 관측은 `received_at`으로 만료를 판정한다. 기본안은 현행 기간을 유지한 순차 소멸이다. 기한 전 일괄 폐기는 별도 조기 삭제 범위다.
+복구 자료는 중앙 root 전용 `compose/backups/legacy-observations-20261006T043300Z`에 보존했다. `manifest.json`에 수량·열·FK·SHA256, `delete-intent-*`와 `delete-applied-*`에 실제 배치 영수증, `protected-before/after.json`에 상태 비교, `RESTORE.txt`에 복구 절차가 있다. 복구 시 실제 삭제 영수증의 ID만 payload → observation → 아직 NULL이고 다른 필드가 동일한 감사 FK 순서로 되돌린다. 변경된 현재 행을 덮어쓰거나 새 queue/replay를 만들지 않는다. 이미지 rollback만으로 DB 이력은 복구되지 않는다. 복구 자료·이전 이미지·volume은 삭제하지 않았다.
 
-### 삭제 순서와 복구 조건
-
-1. **실행 전 범위 고정:** 각 조건의 ID·당시 상태·timestamp·참조를 DB 내부에서 제한 배치로 확정하고, 아직 만료되지 않은 행과 활성 queue/replay/현재 판정 참조가 있는 행은 제외한다. 기존 retention과 동시에 대상을 바꾸지 않도록 해당 유지보수 실행을 조정할 창을 정한다. 전체 참조 집계가 미완료이면 강제 삭제를 시작하지 않는다.
-2. **복구 자료 준비:** 별도 승인된 저장 위치에 같은 일관성 시점의 대상 observation·공유 payload·delivery·필요한 부모 event와 영향받는 자식 행/FK 매핑을 보존한다. payload/hash를 재작성하지 않는다. 방 식별자·본문·운영자 정보는 보고서나 Git에 넣지 않는다. 현재 취소된 자동 백업을 재활성화하지 않는다. 격리 DB에서 복원하여 행 수·참조·hash·구세대 decoder 조회를 검증한 복구 자료가 없으면 삭제하지 않는다.
-3. **한정 삭제:** 관측은 기존 retention의 queue 없음·PENDING replay 없음·현재 end-candidate 참조 없음 조건을 보존하면서 승인된 ID 집합만 최대 1,000행씩 처리한다. 현재 retention 함수는 kind/time 범위여서 구세대 ID 집합만 지정할 수 없으므로, 이를 그대로 호출해 다른 세대까지 지우지 않는다. 조기 폐기를 택하면 같은 불변조건을 갖춘 한정 실행문과 격리 DB 검증을 먼저 준비한다. 발송도 고정 ID와 종단 상태·NULL send unit을 재검사한다. 오류·수량 불일치·잠금 경합에는 중단하고 이미 커밋한 배치를 보고한다.
-4. **관련 데이터 정리:** FK의 `SET NULL`·`CASCADE` 영향을 삭제 영수증에 기록한다. observation 삭제는 application/replay/conflict/profile/photo/availability 등 기존 참조를 NULL로 만들고 queue/viewer evidence를 연쇄 삭제할 수 있다. 새 연결은 만들지 않는다. 감사 행 자체는 소유 retention을 따르고, 이를 즉시 함께 폐기하려면 별도 대상에 포함한다. payload는 새 세대를 포함한 모든 observation에서 참조가 사라진 행만 기존 orphan 정책으로 지운다. event/send unit/현행 generation catalog·projection 상태는 일괄 삭제하지 않는다.
-5. **검증과 코드 제거:** 대상 잔여·의도하지 않은 삭제·고아 참조·중복 발송·readiness를 확인한다. 구세대 저장행뿐 아니라 replay/collision/지원 rollback producer에도 사용이 없을 때만 `video_list` generation 1·YouTube `live_snapshot` generation 2 decoder와 NULL-send-unit 조회 분기를 제거하고 해당 회귀/race 검사를 수행한다. 저장행이 남은 동안에는 현재 읽기 경로를 유지한다.
-6. **복구:** 커밋 전 오류는 transaction rollback으로 취소한다. 커밋 후에는 쓰기·retention·재처리를 통제한 창에서 payload/부모 event → observation/delivery → 실제 삭제된 자식 행 및 NULL로 바뀐 FK 매핑 순서로 복원한다. 현재 행의 변경과 충돌하면 덮어쓰지 않고 중단한다. decoder를 이미 제거했다면 기존 schema와 호환되는 보존 이미지를 먼저 복원한다. 이미지 rollback만으로 삭제된 DB 이력은 돌아오지 않는다. `VACUUM FULL`, volume 축소, 복구 자료 삭제는 이 안의 범위가 아니다.
-
-### 실행 전 필요한 결정
-
-현행 retention 완료를 기다리는 기본안은 현재 기간·서비스를 바꾸지 않는다. 즉시 폐기를 원하면 관측 95,984건과 종단 발송 최대 357건 중 실행 시점의 정확한 집합, 감사 이력의 동반 삭제 여부, 복구 자료 저장 위치·보존 기간 및 필요한 유지보수 창을 확정하여 승인받는다. 기존 배포 승인에는 운영 데이터의 조기 삭제와 백업·복원이 포함되지 않는다.
+현재와 지원 rollback collector `ab078d31dc6a8c4fe8ab72bc7a3b11fb7d864b5a`는 video_list generation 2 및 YouTube live_snapshot generation 3만 생산한다. Holodex live_snapshot generation 2는 현행 계약이므로 공유 decoder를 유지한다. Fallback delta: 새 fallback 없음.

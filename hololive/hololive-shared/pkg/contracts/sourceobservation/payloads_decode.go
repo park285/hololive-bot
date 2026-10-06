@@ -93,7 +93,7 @@ func decodeCommunityPayload(raw []byte, input payloadDecodeInput) (payload, cove
 }
 
 func decodeVideoListPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
-	if input.contractGeneration != VideoListLegacyContractGeneration && input.contractGeneration != VideoListPublicationContractGeneration {
+	if input.contractGeneration != VideoListPublicationContractGeneration {
 		return nil, nil, fmt.Errorf("unsupported video list contract generation %d", input.contractGeneration)
 	}
 
@@ -107,7 +107,7 @@ func decodeVideoListPayload(raw []byte, input payloadDecodeInput) (payload, cove
 	}
 
 	for i := range value.Videos {
-		if err := validateVideoListItemGeneration(&value.Videos[i], input.contractGeneration, input.observedAt); err != nil {
+		if err := validatePublicationItem(&value.Videos[i], input.observedAt); err != nil {
 			return nil, nil, fmt.Errorf("validate video publication: %w", err)
 		}
 	}

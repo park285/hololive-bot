@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-// VideoListLegacyContractGeneration은 출처가 보장되지 않은 목록 시각만 담던 video_list 계약 세대입니다.
-// 이미 저장된 관측의 재처리를 위해 decoder가 계속 받습니다.
-const VideoListLegacyContractGeneration int64 = 1
-
 // VideoListPublicationContractGeneration은 항목별 player 단건 공개 근거(Publication)를 담는 video_list 계약 세대입니다.
 const VideoListPublicationContractGeneration int64 = 2
 
@@ -89,23 +85,6 @@ func normalizeVideoPublication(p *VideoPublicationV1, observedAt time.Time) erro
 	}
 
 	return nil
-}
-
-// validateVideoListItemGeneration은 세대별 항목 시각의 출처를 강제합니다: generation 1은 Publication을 금지하고,
-// generation 2는 항목 시각·Premiere 표시가 Publication과 정확히 같아야 하므로 목록 문자열에서 추정한 값을 받지 않습니다.
-func validateVideoListItemGeneration(item *VideoListItemV1, generation int64, observedAt time.Time) error {
-	switch generation {
-	case VideoListLegacyContractGeneration:
-		if item.Publication != nil {
-			return errors.New("video list generation 1 must not carry publication")
-		}
-
-		return nil
-	case VideoListPublicationContractGeneration:
-		return validatePublicationItem(item, observedAt)
-	default:
-		return fmt.Errorf("unsupported video list contract generation %d", generation)
-	}
 }
 
 func validatePublicationItem(item *VideoListItemV1, observedAt time.Time) error {

@@ -304,7 +304,7 @@ func TestTypedPayloadTimesCanonicalizeToUTC(t *testing.T) {
 	scheduled := published.Add(time.Hour)
 	videoPayload := mustMarshalPayload(t, VideoListV1{
 		ChannelID: testChannelID,
-		Videos:    []VideoListItemV1{{VideoID: testVideoID, ChannelID: testChannelID, Title: testTitle, PublishedAt: &published, ScheduledFor: &scheduled}},
+		Videos:    []VideoListItemV1{{VideoID: testVideoID, ChannelID: testChannelID, Title: testTitle, PublishedAt: &published, Publication: &VideoPublicationV1{Status: VideoPublicationPublished, PublishedAt: &published, CheckedAt: published}}},
 		Coverage: ChannelListCoverageV1{
 			ChannelID: testChannelID, MaxResults: 10,
 			Filters: VideoListFiltersV1{PublishedAfter: &published, PublishedBefore: &scheduled},
@@ -564,7 +564,7 @@ func typedCoverageOutsideCases(t *testing.T) []typedPayloadCase {
 }
 
 func TestTypedCoverageBindsItemTimes(t *testing.T) {
-	windowStart := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
+	windowStart := time.Date(2026, time.August, 14, 0, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(time.Hour)
 
 	for _, tt := range typedCoverageItemTimeOutsideCases(t, windowStart, windowEnd) {
@@ -649,8 +649,8 @@ func typedCoverageItemTimeBoundaryCases(t *testing.T, windowStart, windowEnd tim
 			payload: mustMarshalPayload(t, VideoListV1{
 				ChannelID: testChannelID,
 				Videos: []VideoListItemV1{
-					{VideoID: "video-start", ChannelID: testChannelID, PublishedAt: &windowStart},
-					{VideoID: "video-end", ChannelID: testChannelID, PublishedAt: &windowEnd},
+					{VideoID: "video-start", ChannelID: testChannelID, PublishedAt: &windowStart, Publication: &VideoPublicationV1{Status: VideoPublicationPublished, PublishedAt: &windowStart, CheckedAt: windowEnd}},
+					{VideoID: "video-end", ChannelID: testChannelID, PublishedAt: &windowEnd, Publication: &VideoPublicationV1{Status: VideoPublicationPublished, PublishedAt: &windowEnd, CheckedAt: windowEnd}},
 				},
 				Coverage: ChannelListCoverageV1{
 					ChannelID: testChannelID, MaxResults: 10,
@@ -895,11 +895,18 @@ func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload jsontext.V
 
 	scheduledFor := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
 
-	// live_snapshot은 contract generation 2만 받는다(generation 1 decoder 삭제, stack-audit 2026-09-26 T11 C6).
-	generation := int64(1)
+	// 영상 목록은 공개 근거 세대를 사용하고, 공통 라이브 fixture는 메타데이터 계약을 검사한다.
+	var generation int64
 
-	if kind == KindLiveSnapshot {
+	switch kind {
+	case KindLiveSnapshot:
 		generation = LiveSnapshotMetadataContractGeneration
+	case KindVideoList:
+		generation = VideoListPublicationContractGeneration
+	case KindCommunityPage, KindShortsList, KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule, KindChannelLiveCheck, KindVideoLiveCheck:
+		generation = 1
+	default:
+		t.Fatalf("unsupported fixture kind %s", kind)
 	}
 
 	return Envelope{
