@@ -24,7 +24,6 @@
 - **퇴역 제공자 드레인 가드 삭제:** authoritative DB에 Twitch·Chzzk 단독 dispatch event가 0건임을 확인하고
   alarm-worker의 드레인 종단 가드를 지웠습니다. `domain.Stream`의 Twitch·Chzzk 필드는 Stream HTTP 응답 계약 확인 전까지
   유지합니다.
-- **AP native 배포 준비:** 잘못된 `RELEASE_ID`를 원격 CPU 확인이나 산출물 생성 전에 거절합니다. CPU 기능 확인 실패 시에도 산출물을 만들지 않는 동작을 SSH fixture로 검증합니다.
 - YouTube.js helper의 `@types/node`를 24.19.1로 올렸습니다.
 
 - 공용 Holodex 클라이언트가 429의 `Retry-After`를 초 또는 HTTP 날짜로 읽고 같은
