@@ -29,7 +29,13 @@ ON CONFLICT (video_id) DO UPDATE SET
     first_absence_scheduled_for = excluded.first_absence_scheduled_for,
     second_absence_scheduled_for = excluded.second_absence_scheduled_for,
     last_absence_observation_id = excluded.last_absence_observation_id,
-    ignored_absence_scheduled_for = excluded.ignored_absence_scheduled_for,
+    -- 다른 사실만 바뀌면 같은 큰 배열의 기존 TOAST 값을 유지합니다.
+    ignored_absence_scheduled_for = CASE
+        WHEN youtube_live_reconciliation_heads.ignored_absence_scheduled_for
+             IS DISTINCT FROM excluded.ignored_absence_scheduled_for
+        THEN excluded.ignored_absence_scheduled_for
+        ELSE youtube_live_reconciliation_heads.ignored_absence_scheduled_for
+    END,
     updated_at = NOW()
 WHERE (
     youtube_live_reconciliation_heads.status,
