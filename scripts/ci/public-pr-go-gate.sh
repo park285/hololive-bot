@@ -107,22 +107,17 @@ case "${stage}" in
     jsonl="${work_root}/collector-go-default-json.jsonl"
     echo "[public-pr] module=${module} CGO_ENABLED=0 go test -json -count=1 ./..."
     set +e
-    set +o pipefail
-    CGO_ENABLED=0 go test -json -count=1 ./... | tee "${jsonl}"
-    pipeline_status=("${PIPESTATUS[@]}")
-    test_status="${pipeline_status[0]}"
-    tee_status="${pipeline_status[1]}"
-    set -euo pipefail
-    if [[ "${tee_status}" -ne 0 ]]; then
-      echo "failed to record default JSON test output" >&2
-      exit 1
-    fi
+    CGO_ENABLED=0 go test -json -count=1 ./... >"${jsonl}"
+    test_status=$?
     "${CI_PYTHON_BIN}" "${ROOT_DIR}/scripts/ci/check-go-test-json.py" \
       --input "${jsonl}" \
       --require-pass \
       --allow-skip-file "${ROOT_DIR}/scripts/ci/collector-test-skip-allowlist.txt"
-    if [[ "${test_status}" -ne 0 ]]; then
+    json_status=$?
+    set -e
+    if [[ "${test_status}" -ne 0 || "${json_status}" -ne 0 ]]; then
       echo "::error title=default JSON tests failed::module=${module} stage=${stage}"
+      tail -n 400 "${jsonl}" >&2
       exit 1
     fi
     ;;

@@ -14,9 +14,8 @@ route_resolved=false
 route_exact=false
 cd "${ROOT_DIR}"
 
-# 필요한 보안 patch toolchain을 확보하되, go.mod/go.work 정본은 local-ci의
-# ensure_go_mod_toolchains가 관리한다.
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.1+auto}"
+# Go가 manifest의 요구사항으로 toolchain을 선택하며 명시한 환경값은 유지한다.
+export GOTOOLCHAIN="${GOTOOLCHAIN-auto}"
 
 # hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
@@ -212,7 +211,8 @@ run_content_gates() {
 
   if [[ "${PRE_PUSH_MODE}" == "full" ]] || echo "$changed_files" | grep -q '^hololive/hololive-youtube-collector/'; then
     echo "[pre-push] youtube-collector YouTube.js helper 품질 게이트"
-    bash scripts/ci/public-pr-collector-helper-gate.sh
+    npm --prefix hololive/hololive-youtube-collector/youtubejs run typecheck
+    npm --prefix hololive/hololive-youtube-collector/youtubejs test
   fi
 }
 
