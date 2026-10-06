@@ -191,7 +191,7 @@ run_content_gates() {
     hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries
   run_if_changed scripts/deploy/ap-host-native-deploy_test.sh \
     scripts/deploy/ap-host-native-deploy.sh scripts/deploy/ap-host-native-rollback.sh \
-    scripts/deploy/ap-host-native-deploy_contract_checks.inc.sh scripts/deploy/ap-completion-check.sh \
+    scripts/deploy/ap-completion-check.sh \
     scripts/deploy/lib scripts/logs/ap-host-native-status.sh
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib deploy/compose
@@ -233,7 +233,7 @@ run_dependency_hygiene() {
   govulncheck_bin="$(ensure_govulncheck)"
   for module in . "${GO_WORKSPACE_MODULES[@]}"; do
     echo "[pre-push] dependency hygiene: ${module}"
-    (cd "${module}" && GOWORK=off go list -m -u -mod=readonly all >/dev/null && GOWORK=off "${govulncheck_bin}" ./...)
+    (cd "${module}" && GOWORK=off "${govulncheck_bin}" ./...)
   done
 }
 

@@ -37,7 +37,7 @@ ARG TARGETOS
 ARG TARGETARCH
 # GOAMD64 opt-in: 기본은 v1. 배포 호스트가 AVX2(2013+)면 --build-arg GOAMD64=v3로 활성화한다.
 ARG GOAMD64=v1
-# Release images are PGO-off until a verifiable adoption design is implemented.
+# 검증 가능한 도입 설계가 마련되기 전까지 릴리스 이미지는 PGO를 끈다.
 RUN if [ "${REVISION}" != "unknown" ]; then test "${#REVISION}" -eq 40 && case "${REVISION}" in *[!0-9a-f]*) exit 1;; esac; fi
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group

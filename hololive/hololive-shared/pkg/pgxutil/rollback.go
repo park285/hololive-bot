@@ -29,14 +29,13 @@ import (
 
 const rollbackTimeout = 5 * time.Second
 
-// Rollbacker is the pgx transaction capability needed for cleanup.
+// Rollbacker는 정리에 필요한 pgx 트랜잭션 기능이다.
 type Rollbacker interface {
 	Rollback(ctx context.Context) error
 }
 
-// Rollback detaches cleanup from request cancellation while preserving context
-// values. A bounded timeout prevents a broken connection from blocking cleanup
-// indefinitely.
+// Rollback은 컨텍스트 값을 유지하되 요청 취소와 분리해 실행한다.
+// 연결 장애가 정리를 무한히 막지 않도록 제한 시간을 둔다.
 func Rollback(ctx context.Context, tx Rollbacker) error {
 	if tx == nil {
 		return nil

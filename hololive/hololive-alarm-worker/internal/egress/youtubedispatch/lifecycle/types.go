@@ -1,5 +1,5 @@
-// Package lifecycle owns pure YouTube delivery lifecycle values and policy.
-// It deliberately has no database, clock, provider, logging, or metrics dependency.
+// Package lifecycle은 YouTube 전송 수명주기의 값과 순수 정책을 소유한다.
+// DB·시계·제공자·로그·메트릭에 의존하지 않는다.
 package lifecycle
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// DeliveryStatus is the complete physical delivery state machine.
+// DeliveryStatus는 개별 전송의 상태 집합이다.
 type DeliveryStatus string
 
 const (
@@ -31,7 +31,7 @@ func (s DeliveryStatus) Valid() bool {
 	}
 }
 
-// LedgerStatus is monotonic logical terminal evidence.
+// LedgerStatus는 되돌리지 않는 논리 전송의 종단 증거다.
 type LedgerStatus string
 
 const (
@@ -43,7 +43,7 @@ func (s LedgerStatus) Valid() bool {
 	return s == LedgerSent || s == LedgerQuarantined
 }
 
-// Event identifies a lifecycle transition trigger without encoding policy in a string.
+// Event는 수명주기 전이를 일으킨 사건을 구분한다.
 type Event uint8
 
 const (
@@ -58,7 +58,7 @@ const (
 	EventRevive
 )
 
-// FailureKind separates retryable, permanent, and indeterminate failures.
+// FailureKind는 재시도 가능·영구·결과 미확정 실패를 구분한다.
 type FailureKind uint8
 
 const (
@@ -67,7 +67,7 @@ const (
 	FailureOutcomeUnknown
 )
 
-// RuleID is a stable policy decision identifier used by audit and metrics.
+// RuleID는 감사·메트릭에 사용하는 정책 결정 식별자다.
 type RuleID string
 
 const (
@@ -78,7 +78,7 @@ const (
 	RuleLogicalGroupDeferred RuleID = "youtube_delivery.logical_group_deferred"
 )
 
-// Reason is a bounded semantic failure class. It must never contain raw payloads.
+// Reason은 제한된 실패 분류이며 원본 페이로드를 포함하면 안 된다.
 type Reason string
 
 func NewReason(value string) (Reason, error) {
@@ -94,7 +94,7 @@ func NewReason(value string) (Reason, error) {
 	return Reason(normalized), nil
 }
 
-// CanonicalTime applies the timestamp representation persisted by PostgreSQL.
+// CanonicalTime은 PostgreSQL에 저장되는 시간 표현을 적용한다.
 func CanonicalTime(value time.Time) (time.Time, error) {
 	if value.IsZero() {
 		return time.Time{}, errors.New("canonical lifecycle time is zero")
@@ -103,7 +103,7 @@ func CanonicalTime(value time.Time) (time.Time, error) {
 	return value.UTC().Truncate(time.Microsecond), nil
 }
 
-// PreparationLease proves ownership of one exact claimed PENDING version.
+// PreparationLease는 claim한 특정 PENDING 버전의 소유권이다.
 type PreparationLease struct {
 	deliveryID int64
 	rowVersion int64
@@ -126,7 +126,7 @@ func (l PreparationLease) Valid() bool {
 	return l.deliveryID > 0 && l.rowVersion > 0 && !l.lockedAt.IsZero()
 }
 
-// SendFence proves ownership of one exact durable SENDING version.
+// SendFence는 저장된 특정 SENDING 버전의 소유권이다.
 type SendFence struct {
 	deliveryID int64
 	rowVersion int64
@@ -164,7 +164,7 @@ func validateFence(deliveryID, rowVersion int64, lockedAt time.Time) (time.Time,
 	return canonicalLockedAt, nil
 }
 
-// AlarmClaimToken freezes the exact post-level claim acquired during preparation.
+// AlarmClaimToken은 준비 단계에서 획득한 게시물 claim을 고정한다.
 type AlarmClaimToken struct {
 	kind         domain.OutboxKind
 	postID       string
@@ -193,7 +193,7 @@ func (t AlarmClaimToken) Kind() domain.OutboxKind { return t.kind }
 func (t AlarmClaimToken) PostID() string          { return t.postID }
 func (t AlarmClaimToken) AuthorizedAt() time.Time { return t.authorizedAt }
 
-// TrackingRequirementKind is the closed set of post-level finalization rules.
+// TrackingRequirementKind는 게시물 종료 처리 규칙의 집합이다.
 type TrackingRequirementKind uint8
 
 const (
@@ -251,8 +251,7 @@ func (r RequireAlreadySent) OutboxKind() domain.OutboxKind { return r.kind }
 func (r RequireAlreadySent) PostID() string                { return r.postID }
 func (RequireAlreadySent) trackingRequirement()            {}
 
-// ProviderOutcomeKind prevents an indeterminate external effect from being
-// treated as a known retryable failure.
+// ProviderOutcomeKind는 외부 처리 결과가 미확정일 때 재시도 가능 실패로 오인하지 않게 한다.
 type ProviderOutcomeKind uint8
 
 const (

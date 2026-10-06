@@ -33,7 +33,7 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 			assertAPComposeDoesNotRequireCentralEgressEnvFiles(t, cfg, tt.file)
 
 			for _, service := range apComposeServiceNames(t, cfg, tt.file) {
-				assertCollectorRenderedWithoutValkey(t, cfg, service) // CFG-007
+				assertCollectorRenderedWithoutValkey(t, cfg, service)
 				assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, service)
 			}
 		})
@@ -54,9 +54,9 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 
 	assertLiveCompatRenderedPortsAndModes(t, cfg)
 	assertLiveCompatRenderedPostgres(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector) // CFG-007
+	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-	assertValkeyConsumersIsolated(t, cfg) // CFG-009
+	assertValkeyConsumersIsolated(t, cfg)
 	assertLiveCompatRenderedSecrets(t, cfg)
 	assertLiveCompatRenderedRuntimeConfig(t, cfg)
 }
@@ -256,7 +256,7 @@ func TestRepoComposeLiveCompatOverlayRendersCentralCollector(t *testing.T) {
 
 	assertLiveCompatRenderedEgressAllowedHosts(t, cfg)
 	assertLiveCompatRenderedCollector(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector) // CFG-007
+	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 }
 

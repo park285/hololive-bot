@@ -149,7 +149,6 @@ Current Go runtime services:
 For contract/document changes:
 
 ```bash
-./scripts/architecture/check-doc-links-no-local-paths.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh
 ```
 

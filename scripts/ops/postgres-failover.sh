@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# postgres-failover.sh — PostgreSQL standby promotion watchdog (single evaluation)
+# PostgreSQL standby 승격 조건을 한 번 평가한다.
 #
-# Default mode is --dry-run. --apply requires a trusted fence hook and promotes only
-# after the old primary is fenced and a second read/write probe no longer succeeds.
+# 기본값은 --dry-run이다. --apply는 신뢰한 훅으로 이전 primary를 격리하고
+# 두 번째 읽기·쓰기 확인도 실패했을 때만 승격한다.
 
 set -euo pipefail
 
@@ -200,8 +200,7 @@ fi
 
 validate_apply_hooks
 
-# Close the gap between the threshold probe and the destructive fence. A primary
-# that recovered while hooks were being validated must not be fenced.
+# 훅 검증 중 primary가 복구되었으면 격리하지 않도록 실제 격리 직전에 다시 확인한다.
 if PRIMARY_PRE_FENCE="$(primary_status 2>/dev/null)"; then
   parse_primary_status "${PRIMARY_PRE_FENCE}" || die "old_primary_pre_fence_invalid_output"
   if [[ "${PRIMARY_RECOVERY}" == "f" && "${PRIMARY_READ_ONLY}" == "off" ]]; then

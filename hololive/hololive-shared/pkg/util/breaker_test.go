@@ -185,7 +185,7 @@ func TestBreaker_RecordFailure_ConcurrentTransitionOpensOnce(t *testing.T) {
 	// CAS 전이 검증: threshold 경계에서 다수 goroutine이 동시에 RecordFailure해도
 	// open 전이(true 반환)는 정확히 1회여야 한다(openedAt 오염·중복 전이 방지).
 	b := newTestBreaker(2, 30*time.Second)
-	b.RecordFailure() // failures=1 (threshold-1)
+	b.RecordFailure()
 
 	const goroutines = 64
 

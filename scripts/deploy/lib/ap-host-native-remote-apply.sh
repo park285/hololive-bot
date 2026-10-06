@@ -9,7 +9,7 @@ required_udp_buffer="$6"
 swapfile_size_mib="$7"
 EXPECTED_REVISION="$8"
 [[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'full native release revision required' >&2; exit 1; }
-# The preceding ap-host-native-po.sh fragment owns these values.
+# 앞서 불러온 ap-host-native-po.sh가 이 값을 소유한다.
 po_service="${po_service:?PO helper fragment must be loaded}"
 po_socket="${po_socket:?PO helper fragment must be loaded}"
 po_unit_file="${po_unit_file:?PO helper fragment must be loaded}"

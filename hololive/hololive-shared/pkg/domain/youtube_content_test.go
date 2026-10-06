@@ -35,13 +35,11 @@ func TestOutboxKind_ToAlarmType(t *testing.T) {
 		want domain.AlarmType
 	}{
 		{
-			// NEW_VIDEO → AlarmTypeLive (default)
 			name: "NEW_VIDEO → AlarmTypeLive",
 			kind: domain.OutboxKindNewVideo,
 			want: domain.AlarmTypeLive,
 		},
 		{
-			// NEW_SHORT → AlarmTypeShorts
 			name: "NEW_SHORT → AlarmTypeShorts",
 			kind: domain.OutboxKindNewShort,
 			want: domain.AlarmTypeShorts,
@@ -52,7 +50,6 @@ func TestOutboxKind_ToAlarmType(t *testing.T) {
 			want: domain.AlarmTypeLive,
 		},
 		{
-			// COMMUNITY_POST → AlarmTypeCommunity
 			name: "COMMUNITY_POST → AlarmTypeCommunity",
 			kind: domain.OutboxKindCommunityPost,
 			want: domain.AlarmTypeCommunity,
@@ -80,13 +77,11 @@ func TestOutboxKind_ToTemplateKey(t *testing.T) {
 		want domain.TemplateKey
 	}{
 		{
-			// NEW_VIDEO → TemplateKeyOutboxVideo
 			name: "NEW_VIDEO → TemplateKeyOutboxVideo",
 			kind: domain.OutboxKindNewVideo,
 			want: domain.TemplateKeyOutboxVideo,
 		},
 		{
-			// NEW_SHORT → TemplateKeyOutboxShorts
 			name: "NEW_SHORT → TemplateKeyOutboxShorts",
 			kind: domain.OutboxKindNewShort,
 			want: domain.TemplateKeyOutboxShorts,
@@ -97,7 +92,6 @@ func TestOutboxKind_ToTemplateKey(t *testing.T) {
 			want: domain.TemplateKeyOutboxVideo,
 		},
 		{
-			// COMMUNITY_POST → TemplateKeyOutboxCommunity
 			name: "COMMUNITY_POST → TemplateKeyOutboxCommunity",
 			kind: domain.OutboxKindCommunityPost,
 			want: domain.TemplateKeyOutboxCommunity,

@@ -55,8 +55,7 @@ resolve_optional_workspace_path() {
         return
     fi
 
-    # Producer-only AP hosts do not need this build context. Keep the conventional
-    # absolute candidate so Compose can render; an API image build will fail before
-    # any runtime is stopped if the context is genuinely required and absent.
+    # 수집 전용 AP에는 이 빌드 컨텍스트가 없어도 된다. Compose 렌더링에는 정해진 절대 경로를 제공하며,
+    # 실제 API 이미지 빌드에 필요하면 런타임을 중지하기 전에 누락으로 실패한다.
     printf '%s\n' "${sibling_path}"
 }

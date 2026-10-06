@@ -30,8 +30,7 @@ const (
 	CleanupGuardActiveLogicalGroup CleanupGuardReason = "active_logical_group"
 )
 
-// CleanupCursor advances a fixed-cutoff cleanup scan past guarded outboxes so
-// one old logical group cannot starve later eligible rows.
+// CleanupCursor는 보호된 outbox를 넘어 진행해 오래된 그룹이 후속 정리를 막지 않게 한다.
 type CleanupCursor struct {
 	TerminalAt time.Time
 	OutboxID   int64

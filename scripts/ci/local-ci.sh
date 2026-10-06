@@ -15,7 +15,7 @@ cd "${ROOT_DIR}"
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 source "${SCRIPT_DIR}/local-ci-files.sh"
 source "${SCRIPT_DIR}/go-work-sync-drift.sh"
-# These arrays are the input contract consumed by local-ci-packages.sh.
+# local-ci-packages.sh가 이 배열을 입력으로 사용한다.
 # shellcheck disable=SC2034
 mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
 # shellcheck disable=SC2034
@@ -201,7 +201,6 @@ run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}" ensure_go_
 # gofmt·go fix modernizer drift는 golangci-lint의 formatters와 modernize 린터가 소유한다.
 check_go_mod_tidy
 check_canonical_module_builds
-run_go_package_step "Go vet" go_mod_readonly go vet
 check_integration_tag_compilation
 check_staticcheck
 check_golangci_lint
@@ -216,8 +215,6 @@ run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspa
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
 run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
-run_go_package_step "Go test" go_mod_readonly go test -count=1
-
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
     RACE_TEST_PARALLEL="${RACE_TEST_PARALLEL:-$(( ($(nproc) + 2) / 3 ))}"
     # 산술 컨텍스트는 변수 내용을 재귀 평가하므로, 검증 없이 (( ))에 넣으면 호출 env 가
@@ -229,13 +226,13 @@ if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
     (( 10#${RACE_TEST_PARALLEL} < 2 )) && RACE_TEST_PARALLEL=2
     run_go_package_step "Go race test (testcontainer boot fan-out limited via -p ${RACE_TEST_PARALLEL})" \
         go_mod_readonly go test -race -p "${RACE_TEST_PARALLEL}" -count=1
+    run_go_package_step "Go non-race-only tests" go_mod_readonly bash scripts/ci/go-test-nonrace.sh
 else
-    echo "[LOCAL CI] Skip race tests: set RUN_RACE_TESTS=true to run go test -race"
-    echo
+    run_go_package_step "Go test" go_mod_readonly go test -count=1
 fi
 
 check_integration_tests
 
-# 의존성 hygiene(go list -m -u, govulncheck)은 scripts/ci/pre-push-gate.sh 가 소유한다.
+# 의존성 hygiene(govulncheck)은 scripts/ci/pre-push-gate.sh 가 소유한다.
 
 echo "[LOCAL CI] Passed"

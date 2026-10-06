@@ -1,8 +1,7 @@
-# iris-seoul hot standby (physical streaming replication from the hololive-osaka primary).
+# hololive-osaka primary의 물리 스트리밍 복제를 받는 iris-seoul hot standby다.
 #
-# This file owns both standby steady state and the promoted-node restart posture.
-# Initial pg_basebackup and failover controller activation are documented in
-# docs/current/runbooks/postgres-replication.md.
+# standby 정상 상태와 승격 후 재시작 설정을 소유한다.
+# 초기 복제·failover 활성화: docs/current/runbooks/postgres-replication.md.
 #
 #   docker compose --env-file /etc/stack-secrets/hololive-bot/ap-compose.env \
 #     -f deploy/compose/docker-compose.standby.yml up -d holo-postgres-standby
@@ -59,16 +58,14 @@ services:
       - /etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
       - /var/lib/hololive-postgres-failover:/run/hololive-bot/postgres-failover:ro
     ports:
-      # Keep loopback by default. Automatic routing requires an explicit tailnet bind in
-      # ap-compose.env, e.g. HOLOLIVE_STANDBY_POSTGRES_BIND_IP=<tailnet-seoul>.
+      # 기본값은 loopback이다. 자동 라우팅에는 ap-compose.env에 HOLOLIVE_STANDBY_POSTGRES_BIND_IP를 명시한다.
       - "${HOLOLIVE_STANDBY_POSTGRES_BIND_IP:-127.0.0.1}:${HOLOLIVE_STANDBY_POSTGRES_PORT:-5434}:5432"
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /var/run/postgresql:size=16m,mode=3775,uid=999,gid=999
     healthcheck:
-      # A normal standby must be in recovery and must not carry a promotion signal.
-      # A promoted node is healthy only when the dedicated controller wrote its
-      # host-side durable signal after pg_promote() completed.
+      # standby는 recovery 상태이며 승격 표시가 없어야 한다.
+      # 승격 노드는 전용 제어기가 pg_promote() 완료 뒤 영속 표시를 남겼을 때만 정상이다.
       test:
         - "CMD-SHELL"
         - >-

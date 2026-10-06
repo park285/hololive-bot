@@ -227,7 +227,6 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 	dispatcher.ProcessOnceForTest(ctx)
 	require.Empty(t, senderMessages(sender), "revive 전엔 FAILED 행이 재전달되지 않아야 함")
 
-	// revive → dispatch.
 	dispatcher.reviveOnce(ctx)
 	dispatcher.ProcessOnceForTest(ctx)
 

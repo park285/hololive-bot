@@ -1,6 +1,6 @@
 name: security
 
-# Non-PR security scan. Heavy full verification stays in scripts/ci/pre-push-gate.sh.
+# PR 외 이벤트의 보안 검사다. 전체 검증은 scripts/ci/pre-push-gate.sh가 맡는다.
 on:
   push:
     branches: [main]
@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 36d47654f2c0ee6bc6c88e9d50997de3f1495e51 # v2.8.0
+          ref: 68c3f5be73a9b79731d40459737274e06535f40d # v2.9.3
           path: shared-go
           persist-credentials: false
 
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: d79fccefde283e33f3f738184360310e877c3c80 # v3.0.3
+          ref: b7ddbfb8af464300dae74229bd485643fd04549e # v3.0.4
           path: iris-client-go
           persist-credentials: false
 
@@ -116,10 +116,9 @@ jobs:
             esac
             owned_pkgs+=("${pkg}")
           done
-          for pkg in "${owned_pkgs[@]}"; do
-            echo "nilaway ${pkg}"
-            "${NILAWAY_BIN}" -pretty-print "${pkg}"
-          done
+          # 로컬과 같은 unitchecker로 의존성 분석을 재사용하고 동시 메모리 사용을 제한한다.
+          go vet -p 1 -vettool="${NILAWAY_BIN}" -pretty-print \
+            -include-errors-in-files="${PWD}" "${owned_pkgs[@]}"
 
       - name: govulncheck
         run: |
@@ -129,28 +128,15 @@ jobs:
             (cd "${module}" && govulncheck ./...)
           done
 
-      - name: Install exact Docker Compose
+      - name: Docker Compose
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        env:
-          DOCKER_COMPOSE_VERSION: v5.5.1
-          DOCKER_COMPOSE_LINUX_X86_64_SHA256: db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576
-        run: |
-          compose_dir="${HOME}/.docker/cli-plugins"
-          compose_bin="${compose_dir}/docker-compose"
-          download="${RUNNER_TEMP}/docker-compose-linux-x86_64"
-          mkdir -p "${compose_dir}"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
-            --output "${download}"
-          printf '%s  %s\n' "${DOCKER_COMPOSE_LINUX_X86_64_SHA256}" "${download}" | sha256sum --check -
-          install -m 0755 "${download}" "${compose_bin}"
-          test "$(docker compose version --short)" = "${DOCKER_COMPOSE_VERSION#v}"
+        uses: ./hololive-bot/.github/actions/docker-compose
 
       - name: Install exact Trivy
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
-          TRIVY_VERSION: "0.74.0"
-          TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+          TRIVY_VERSION: "0.75.0"
+          TRIVY_LINUX_AMD64_SHA256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
         run: |
           archive="${RUNNER_TEMP}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           extract_dir="${RUNNER_TEMP}/trivy-extract"
@@ -202,21 +188,8 @@ jobs:
         with:
           working-directory: hololive-bot
 
-      - name: Install exact Docker Compose
-        env:
-          DOCKER_COMPOSE_VERSION: v5.5.1
-          DOCKER_COMPOSE_LINUX_X86_64_SHA256: db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576
-        run: |
-          compose_dir="${HOME}/.docker/cli-plugins"
-          compose_bin="${compose_dir}/docker-compose"
-          download="${RUNNER_TEMP}/docker-compose-linux-x86_64"
-          mkdir -p "${compose_dir}"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
-            --output "${download}"
-          printf '%s  %s\n' "${DOCKER_COMPOSE_LINUX_X86_64_SHA256}" "${download}" | sha256sum --check -
-          install -m 0755 "${download}" "${compose_bin}"
-          test "$(docker compose version --short)" = "${DOCKER_COMPOSE_VERSION#v}"
+      - name: Docker Compose
+        uses: ./hololive-bot/.github/actions/docker-compose
 
       - name: Validate recurring scan inventory
         run: bash scripts/ci/check-recurring-security-scan-contract.sh

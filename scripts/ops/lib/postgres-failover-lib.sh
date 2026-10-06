@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Internal library for postgres-failover.sh. Source only from the root-owned deploy tree.
+# postgres-failover.sh 전용 라이브러리다. root 소유 배포 트리에서만 불러온다.
 journal() {
   local event="$1"
   shift || true
@@ -92,9 +92,8 @@ path_component_is_trusted() {
   mode_hex="$(stat -c '%f' -- "${path}")" || die "trusted_path_stat_failed" "path_label=${label}" "path=${path}"
   mode=$((0x${mode_hex}))
   if (( (mode & 0x0012) != 0 )); then
-    # Test fixtures live below the conventional root-owned sticky /tmp. A sticky
-    # root directory is safe as a parent because every descendant component is
-    # checked separately and hook ownership is checked by validate_hook_script.
+    # 테스트는 root 소유 sticky /tmp 아래에서 실행한다.
+    # 각 하위 경로와 훅 소유권을 따로 검사하므로 이 부모 경로만 허용한다.
     if [[ ! -d "${path}" || "${owner}" != "0" ]] || (( (mode & 0x0200) == 0 )); then
       die "trusted_path_group_or_world_writable" "path_label=${label}" "path=${path}"
     fi
@@ -333,8 +332,7 @@ lsn_lag_bytes() {
   elif (( hi_diff == 1 )); then
     printf '%s\n' "$((4294967296 - behind_lo + ahead_lo))"
   else
-    # The configured budget is capped below 4 GiB, so a larger high-word gap
-    # only needs a stable over-budget sentinel and never risks signed overflow.
+    # 한도가 4GiB 미만이므로 상위 워드 차이가 크면 초과 표시값만 반환해 부호 있는 정수 오버플로를 피한다.
     printf '4294967296\n'
   fi
 }

@@ -314,9 +314,8 @@ func (r *Repository) deleteEvidenceBatch(ctx context.Context, cfg RetentionConfi
 	return out, nil
 }
 
-// A cursor bounds each scan even when most dictionary entries are still live.
-// The FK, row locks and the publisher's KEY SHARE prevent collecting a payload
-// between its lookup and the new observation's INSERT.
+// 대부분의 사전 항목이 사용 중이어도 커서가 스캔 범위를 제한한다.
+// 외래 키·행 잠금·발행자의 KEY SHARE로 조회와 INSERT 사이에 페이로드가 삭제되지 않게 한다.
 func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg RetentionConfig, now time.Time) (int64, error) {
 	if minEvidenceAge(cfg.EvidenceAgeByKind) == 0 {
 		return 0, nil

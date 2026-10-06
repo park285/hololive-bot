@@ -38,7 +38,7 @@ else
   fail "final image manifest must scan arm64 local builds locally and exact arm64 external images remotely"
 fi
 
-# Compose 5.5.1의 build --print는 bake 정의만 출력하고 이미지를 만들지 않아, 빌드한 이미지가 없다는
+# Compose 5.6.0의 build --print는 bake 정의만 출력하고 이미지를 만들지 않아, 빌드한 이미지가 없다는
 # "No services to build" 경고를 항상 낸다(pkg/compose/build.go Build). 출력 전용 경로의 이 한 줄만 거르고
 # 나머지 stderr(미설정 변수 경고 등)는 그대로 보인다.
 print_bake() {

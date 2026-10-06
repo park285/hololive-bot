@@ -8,8 +8,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// Run with -benchtime=30x and compare both cases to the pre-cutover
-// PublishConsume benchmark; WAL and relation bytes include dictionary overhead.
+// -benchtime=30x로 실행해 전환 전 PublishConsume과 비교한다. WAL·테이블 크기에는 사전 비용도 포함된다.
 func BenchmarkPayloadDictionaryPublish(b *testing.B) {
 	for _, scenario := range []struct {
 		name  string

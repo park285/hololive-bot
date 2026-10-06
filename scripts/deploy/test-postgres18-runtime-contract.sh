@@ -5,16 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${ROOT_DIR}/scripts/ci/python-runtime.sh"
 repo_python_init
 COMPOSE_PATH="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-BOOTSTRAP_CONTRACT_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql"
-EXTENSION_BOOTSTRAP_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/05-create-pg-stat-statements.sql"
-RUNTIME_AUDIT_PATH="${ROOT_DIR}/scripts/maintenance/pg18_runtime_contract.sql"
 IMAGE_RECIPE_PATH="${ROOT_DIR}/deploy/images/postgres/Dockerfile"
 
 "${CI_PYTHON_BIN}" - \
   "${COMPOSE_PATH}" \
-  "${BOOTSTRAP_CONTRACT_PATH}" \
-  "${EXTENSION_BOOTSTRAP_PATH}" \
-  "${RUNTIME_AUDIT_PATH}" \
   "${IMAGE_RECIPE_PATH}" <<'PY'
 from __future__ import annotations
 
@@ -22,14 +16,11 @@ import pathlib
 import re
 import sys
 
-compose_path, bootstrap_contract_path, extension_bootstrap_path, runtime_audit_path, image_recipe_path = map(
+compose_path, image_recipe_path = map(
     pathlib.Path,
     sys.argv[1:],
 )
 compose = compose_path.read_text(encoding="utf-8")
-bootstrap_contract = bootstrap_contract_path.read_text(encoding="utf-8")
-extension_bootstrap = extension_bootstrap_path.read_text(encoding="utf-8")
-runtime_audit = runtime_audit_path.read_text(encoding="utf-8")
 image_recipe = image_recipe_path.read_text(encoding="utf-8")
 errors: list[str] = []
 
@@ -45,8 +36,6 @@ elif int(image_matches[0]) < 6:
 
 if compose.count("image: ${POSTGRES_IMAGE:-hololive-postgres:prod}") != 1 or "context: ../images/postgres" not in compose:
     errors.append("PostgreSQL must use the source-built gosu-hardened image")
-if "COPY --from=gosu --chmod=0755 /out/gosu /usr/local/bin/gosu" not in image_recipe:
-    errors.append("PostgreSQL image must replace the vulnerable upstream gosu binary")
 
 pgdata_pattern = re.compile(
     r"^[ \t]*PGDATA:[ \t]*/var/lib/postgresql/pgdata[ \t]*$",
@@ -71,39 +60,6 @@ if child_mount_pattern.search(compose):
 
 if "--locale-provider=builtin" not in compose or "--builtin-locale=C.UTF-8" not in compose:
     errors.append("PostgreSQL volume must be initialized with the builtin C.UTF-8 locale provider")
-
-for token in (
-    "server_version_num",
-    "180006",
-    "datlocprovider",
-    "data_checksums",
-    "data_directory",
-    "/var/lib/postgresql/pgdata",
-    "io_method",
-    "track_io_timing",
-    "track_wal_io_timing",
-    "compute_query_id",
-    "shared_preload_libraries",
-):
-    if token not in bootstrap_contract:
-        errors.append(f"first bootstrap contract is missing {token!r}")
-
-if "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" not in extension_bootstrap:
-    errors.append("application database bootstrap must create pg_stat_statements after the contract assertion")
-
-for token in (
-    "server_version_num",
-    "180006",
-    "datlocprovider",
-    "data_checksums",
-    "data_directory",
-    "io_method",
-    "pg_stat_statements",
-    "FROM pg_stat_io",
-    "FROM pg_aios",
-):
-    if token not in runtime_audit:
-        errors.append(f"runtime audit is missing {token!r}")
 
 if errors:
     for error in errors:

@@ -85,17 +85,7 @@ func (ch *ClientHints) HasClientHints() bool {
 	return ch.Platform != "" || ch.Model != "" || ch.PlatformVersion != ""
 }
 
-// 로그 표시용으로 사람이 읽기 쉬운 형태로 반환합니다.
-//
-// 예시:
-//   - "Android 16 (SM-S928N)"
-//   - "Windows 11 x64"
-//   - "macOS 14"
-//
-// Windows 특수 처리:
-//   - platformVersion 13+ → Windows 11
-//   - platformVersion 1-10 → Windows 10
-//   - (Client Hints에서 Windows 버전은 NT 커널 버전이 아닌 마케팅 버전으로 매핑됨)
+// 로그 표시용 문자열을 반환하며 Windows 버전은 Client Hints의 마케팅 버전으로 변환한다.
 func (ch *ClientHints) Summary() string {
 	if !ch.HasClientHints() {
 		return ""
@@ -154,22 +144,15 @@ func clientHintMajorVersion(version string) string {
 	return version
 }
 
-// translateWindowsVersion: Windows Client Hints platformVersion을 마케팅 버전으로 변환합니다.
-//
-// Client Hints에서 Windows는 다음과 같이 버전을 보고합니다:
-//   - Windows 11: platformVersion = "13.0.0", "14.0.0", "15.0.0" 등 (빌드 22000+)
-//   - Windows 10: platformVersion = "1.0.0" ~ "10.0.0"
-//   - Windows 8.1: platformVersion = "0.3.0"
-//   - Windows 8: platformVersion = "0.2.0"
-//   - Windows 7: platformVersion = "0.1.0"
+// translateWindowsVersion은 Client Hints의 platformVersion을 Windows 제품 버전으로 변환한다.
 func translateWindowsVersion(majorVersion string) string {
 	major := parseLeadingInt(majorVersion)
 
 	switch {
 	case major >= 13:
-		return "11" // Windows 11
+		return "11"
 	case major >= 1 && major <= 10:
-		return "10" // Windows 10
+		return "10"
 	case major == 0:
 		return "8.1 or older" // Windows 8.1 이하
 	default:

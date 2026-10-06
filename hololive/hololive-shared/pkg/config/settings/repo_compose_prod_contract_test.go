@@ -169,9 +169,9 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 
 	assertProdRenderedPostgresIsolation(t, cfg)
 	assertProdRenderedValkeySocketIsolation(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector) // CFG-006
+	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-	assertValkeyConsumersIsolated(t, cfg) // CFG-009
+	assertValkeyConsumersIsolated(t, cfg)
 	assertProdRenderedNonEgressSecretIsolation(t, cfg)
 	assertProdRenderedEgressRuntimeKeys(t, cfg)
 	assertProdRenderedScopedProducerKeys(t, cfg)

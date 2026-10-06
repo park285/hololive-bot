@@ -79,7 +79,6 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 
 	pipelineStart := time.Now()
 
-	// Stage 1: Primary
 	primaryDigest, err := c.primary.Summarize(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("consensus primary: %w", err)
@@ -101,7 +100,6 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 		slog.Int("items", len(primaryDigest.TopItems)),
 	)
 
-	// Stage 2: Review
 	verdict := c.runReview(ctx, input, primaryDigest)
 	if verdict == nil {
 		return primaryDigest, nil
@@ -117,7 +115,6 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 		return primaryDigest, nil
 	}
 
-	// Stage 3: Adjudicate
 	adjDigest := c.runAdjudication(ctx, input, primaryDigest, verdict, pipelineStart)
 	if adjDigest != nil {
 		return adjDigest, nil

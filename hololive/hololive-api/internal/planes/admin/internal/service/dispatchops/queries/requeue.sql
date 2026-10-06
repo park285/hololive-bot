@@ -1,5 +1,5 @@
--- The caller locks every member in ID order in a serializable transaction.
--- External request identity and attempt/error history remain unchanged.
+-- 호출자는 serializable 트랜잭션에서 모든 구성원을 ID 순서로 잠근다.
+-- 외부 요청 식별자와 시도·오류 이력은 변경하지 않는다.
 WITH target AS (
     SELECT id, status
     FROM alarm_dispatch_deliveries

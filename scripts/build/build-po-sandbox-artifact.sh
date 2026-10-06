@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build/export/verify only on kapu. The same tagged image supplies Compose and native rootfs.
+# kapu에서만 빌드·내보내기·검증한다. 같은 이미지로 Compose와 native rootfs를 만든다.
 set -euo pipefail
 [[ "$(hostname -s)" == kapu ]] || { echo 'issuer image build/export/verification is restricted to kapu' >&2; exit 1; }
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -43,7 +43,7 @@ tar -xf "$output/rootfs.tar" -C "$working/rootfs" --no-same-owner --same-permiss
 python3 "$root/scripts/build/po-sandbox-manifest.py" create "$working/rootfs" "$output/rootfs-manifest.json" "$revision" "$arch"
 python3 "$root/scripts/build/po-sandbox-manifest.py" verify "$working/rootfs" "$output/rootfs-manifest.json" "$revision" "$arch"
 (cd "$output" && sha256sum rootfs.tar > rootfs.tar.sha256)
-# The image tar is transferred for Compose only; retain exact image identity before release.
+# 이미지 tar는 Compose 전송에만 쓰며 릴리스 전에 정확한 이미지 식별자를 보존한다.
 docker save --output "$output/image.tar" "$image"
 (cd "$output" && sha256sum image.tar > image.tar.sha256)
 python3 "$root/scripts/build/po-sandbox-manifest.py" image-ids "$output/image.tar" \

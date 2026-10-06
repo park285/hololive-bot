@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Invoked over SSH from the kapu build host as root. Only no-build service-only cutovers.
+# kapu에서 SSH로 호출하며 검증된 서비스의 교체만 수행한다.
 set -Eeuo pipefail
 [[ $# -eq 5 ]] || exit 2
 mode="$1" staging="$2" backup="$3" revision="$4" version="$5"

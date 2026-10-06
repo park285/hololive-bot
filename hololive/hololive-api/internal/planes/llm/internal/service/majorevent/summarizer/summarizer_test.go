@@ -1291,7 +1291,7 @@ func TestNoteTruncation(t *testing.T) {
 	result := truncateNote(longInput)
 	runes := []rune(result)
 
-	if len(runes) != 31 { // 30 + "…" (1 rune)
+	if len(runes) != 31 { // 본문 30자와 생략 부호 1자다.
 		t.Errorf("expected 31 runes (30+…), got %d", len(runes))
 	}
 

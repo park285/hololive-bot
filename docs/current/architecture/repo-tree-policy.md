@@ -22,7 +22,7 @@ Allowed at root:
 Not at root — these were relocated and must not return:
 
 - Renovate config → `.github/renovate.json`
-- Workspace-level Go contract tests and their fixtures → `internal/workspace/` (with `internal/workspace/testdata/`); only `doc.go` stays at root as the package anchor
+- Module tests belong beside their source; `doc.go` stays at root as the workspace package anchor
 - Local logs, backups, data dumps, generated review bundles, key/pem files, or unclassified design kits (covered by §Local Runtime Data and the artifact gate)
 
 ## Docs
@@ -58,13 +58,10 @@ Package refactors must preserve `go.work`, Docker Compose build targets, runtime
 
 - Root packages that are part of an existing import contract should remain small facades or entrypoint wiring when their implementation grows beyond a single responsibility.
 - Implementation files belong under role-specific internal packages such as `delivery`, `polling`, `scraping`, `model`, `settings`, `httpserver`, `botruntime`, `workerapp`, or `reports`.
-- New or moved Go code uses behavior-named packages instead of generic buckets: `scripts/architecture/check-go-generic-internal-package-names.sh` fails on `core`/`servicecore` directories, `package core`/`package servicecore`, and `import core "..."` under `hololive/` and `shared-go/`.
 - Further nested packages should be created by behavior family only when the new package has a stable contract and package-local tests.
 
 ## Validation
 
 ```bash
-./scripts/architecture/check-go-generic-internal-package-names.sh
-./scripts/architecture/check-doc-links-no-local-paths.sh
 ./scripts/architecture/check-tracked-local-artifacts.sh
 ```

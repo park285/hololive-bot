@@ -15,9 +15,8 @@ WITH raw_input AS (
         payload JSONB
     )
 ), input AS (
-    -- INSERT ... ON CONFLICT DO UPDATE cannot affect the same target row twice
-    -- in one statement. Keep one row per conflict key and make duplicate input
-    -- deterministic: the last occurrence in the caller-provided JSON array wins.
+    -- 한 INSERT의 ON CONFLICT DO UPDATE는 같은 행을 두 번 갱신할 수 없다.
+    -- 충돌 키마다 한 행만 남기며 입력 JSON 배열의 마지막 항목을 선택한다.
     SELECT DISTINCT ON (kind, content_id)
         kind,
         period_key,

@@ -15,9 +15,8 @@ func (r *Repository) loadChannelSubscriberAlarms(
 	channelID string,
 	alarmType domain.AlarmType,
 ) ([]*domain.Alarm, error) {
-	// A shared singleflight query must not inherit the first caller's deadline:
-	// a short deadline would fail all followers, while a long deadline would
-	// bypass this bounded repository operation.
+	// 공유 singleflight 쿼리는 첫 호출자의 제한 시간을 상속하지 않는다.
+	// 짧은 요청이 모든 대기자를 실패시키거나 긴 요청이 저장소의 시간 상한을 넘기지 않게 한다.
 	queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelSubscriberLoadTimeout)
 	defer cancel()
 

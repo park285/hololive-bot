@@ -124,7 +124,7 @@ func (m *mockNotificationLocker) Release(_ context.Context, lockKey, _ string) e
 type mockOutboxRepository struct {
 	mu            sync.Mutex
 	enqueuedItems []enqueueRecord
-	enqueueErr    map[string]error // roomID → error
+	enqueueErr    map[string]error
 }
 
 type enqueueRecord struct {
@@ -221,7 +221,7 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 	}{
 		{
 			name: "before monday target same day",
-			now:  time.Date(2026, time.February, 16, 8, 30, 0, 0, timeutil.KSTZone), // Monday
+			now:  time.Date(2026, time.February, 16, 8, 30, 0, 0, timeutil.KSTZone), // 월요일
 			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, timeutil.KSTZone),
 		},
 		{
@@ -231,7 +231,7 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 		},
 		{
 			name: "sunday moves next day monday",
-			now:  time.Date(2026, time.February, 15, 23, 0, 0, 0, timeutil.KSTZone), // Sunday
+			now:  time.Date(2026, time.February, 15, 23, 0, 0, 0, timeutil.KSTZone), // 일요일
 			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, timeutil.KSTZone),
 		},
 	}

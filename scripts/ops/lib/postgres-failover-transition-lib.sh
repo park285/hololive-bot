@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Promotion, fencing, and route transitions for postgres-failover.sh.
+# PostgreSQL 승격·격리·라우팅 전이를 처리한다.
 new_request_id() {
   local id
   id="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || true)"
@@ -110,9 +110,8 @@ promote_local() {
 }
 
 complete_route_state() {
-  # Persist the promoted role before invoking an external route mutation. If the
-  # hook or controller crashes, the next evaluation retries only the route and
-  # can never issue a second pg_promote().
+  # 외부 라우팅 변경 전에 승격 역할을 저장한다.
+  # 중단 후 다음 실행은 라우팅만 재시도하며 pg_promote()를 다시 호출하지 않는다.
   write_promoted_marker "pending" || {
     journal "promoted_marker_write_failed" "route_state=pending"
     return 2

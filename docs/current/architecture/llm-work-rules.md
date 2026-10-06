@@ -40,7 +40,6 @@ LLM이 `hololive-bot` 문서/계약 작업을 수행할 때 지켜야 하는 cur
 ## Required Validation
 
 ```bash
-./scripts/architecture/check-doc-links-no-local-paths.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh
 ```
 

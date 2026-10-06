@@ -50,13 +50,11 @@ func TestChannel_IsHololive(t *testing.T) {
 			want:    false,
 		},
 		{
-			// Org = "Other" → false
 			name:    "Org가 Other",
 			channel: &domain.Channel{Name: testName, Org: &orgOther},
 			want:    false,
 		},
 		{
-			// Org = "Hololive" → true
 			name:    "Org가 Hololive",
 			channel: &domain.Channel{Name: testName, Org: &orgHololive},
 			want:    true,

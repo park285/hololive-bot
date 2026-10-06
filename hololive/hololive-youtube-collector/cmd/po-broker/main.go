@@ -272,8 +272,7 @@ func removeStaleSocket(ctx context.Context, socket string) error {
 		return errors.Join(errSocketActive, conn.Close())
 	}
 
-	// Only a refused connection proves this socket inode has no listener.
-	// Timeouts and permission failures are ambiguous and must not unlink it.
+	// 연결 거부만 소켓의 수신자가 없다는 증거다. 시간 초과·권한 오류에서는 소켓을 삭제하면 안 된다.
 	if !errors.Is(err, syscall.ECONNREFUSED) {
 		return fmt.Errorf("probe socket: %w", err)
 	}

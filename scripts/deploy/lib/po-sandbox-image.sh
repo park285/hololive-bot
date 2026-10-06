@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# Full rootfs/ownership verification and image export occur only on kapu.
-# Runtime hosts inspect the loaded ID/revision/architecture against that reviewed artifact.
+# rootfs·소유권 검증과 이미지 내보내기는 kapu에서만 수행한다.
+# 런타임 호스트는 적재한 이미지의 ID·리비전·아키텍처를 검토된 산출물과 대조한다.
 po_image_id_matches() {
   local actual="$1" identities="$2" expected count=0 matched=false
   [[ "$actual" =~ ^sha256:[0-9a-f]{64}$ && ${#identities} -le 143 ]] || return 1

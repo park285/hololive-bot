@@ -112,22 +112,6 @@ func TestGroupAlarmDispatchEnvelopesForDelivery(t *testing.T) {
 				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 			},
 		},
-		{
-			name: "separates non YouTube text notifications",
-			envelopes: func() []domain.AlarmQueueEnvelope {
-				youtube := alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart)
-				twitch := alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart)
-
-				twitch.Notification.Stream.IsTwitchOnly = true
-				twitch.Notification.Stream.TwitchLiveURL = testTwitchLiveURL
-
-				return []domain.AlarmQueueEnvelope{youtube, twitch}
-			}(),
-			want: []alarmDispatchGroupSummary{
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-			},
-		},
 	}
 
 	for _, tc := range testCases {

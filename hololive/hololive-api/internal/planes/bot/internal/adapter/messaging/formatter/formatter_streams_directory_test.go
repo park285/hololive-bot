@@ -192,7 +192,7 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 		{
 			GroupName: "",
 			Members: []MemberDirectoryEntry{
-				{PrimaryName: "fubuki", SecondaryName: "FUBUKI"}, // ShowBoth false (equal fold)
+				{PrimaryName: "fubuki", SecondaryName: "FUBUKI"},
 			},
 		},
 	}

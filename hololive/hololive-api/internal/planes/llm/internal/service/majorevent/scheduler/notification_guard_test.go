@@ -34,7 +34,7 @@ import (
 
 type mockOutboxRepository struct {
 	enqueuedItems []enqueueRecord
-	enqueueErr    map[string]error // roomID → error
+	enqueueErr    map[string]error
 }
 
 type enqueueRecord struct {

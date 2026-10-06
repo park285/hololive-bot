@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Reference fence backend for postgres-failover.sh.
-# It is deliberately fail-closed: SSH must reach the old primary and the remote
-# fence script must return the exact FENCED acknowledgement.
+# 이전 primary에 SSH로 접근하고 정확한 FENCED 응답을 받아야 격리가 확인된다.
 
 set -euo pipefail
 

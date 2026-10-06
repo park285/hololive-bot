@@ -7,8 +7,7 @@ import (
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 )
 
-// withFixedSentAtNow remains shared by tests for the upstream claim-state clock.
-// Canonical delivery timestamps are now owned and tested by TransitionStore.
+// withFixedSentAtNow는 상위 claim 상태의 시계를 고정한다. 전송 시각 검증은 TransitionStore가 맡는다.
 func withFixedSentAtNow(t *testing.T, fixed time.Time) {
 	t.Helper()
 

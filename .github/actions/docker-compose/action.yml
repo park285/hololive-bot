@@ -1,0 +1,24 @@
+name: Docker Compose
+description: >-
+  고정 버전 Docker Compose CLI plugin을 내려받아 SHA-256을 검증한 뒤 설치하고, 설치된 버전이 핀과 같은지 확인한다.
+  버전과 checksum은 이 action이 소유한다.
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Docker Compose
+      shell: bash
+      env:
+        DOCKER_COMPOSE_VERSION: v5.6.0
+        DOCKER_COMPOSE_LINUX_X86_64_SHA256: 40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a
+      run: |
+        compose_dir="${HOME}/.docker/cli-plugins"
+        compose_bin="${compose_dir}/docker-compose"
+        download="${RUNNER_TEMP}/docker-compose-linux-x86_64"
+        mkdir -p "${compose_dir}"
+        curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+          "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+          --output "${download}"
+        printf '%s  %s\n' "${DOCKER_COMPOSE_LINUX_X86_64_SHA256}" "${download}" | sha256sum --check -
+        install -m 0755 "${download}" "${compose_bin}"
+        test "$(docker compose version --short)" = "${DOCKER_COMPOSE_VERSION#v}"

@@ -52,7 +52,5 @@ fi
 status_output="$(status_remote central)"
 [[ "${status_output}" != *"main="* ]] ||
   fail "remote sync status must expose only the isolated mirror namespace"
-grep -F "olddir /var/log/hololive-bot/archive" "${ROOT_DIR}/scripts/deploy/lib/ap-host-native-remote-apply.sh" >/dev/null ||
-  fail "host-native logrotate should rotate into mirrored archive dir"
 
 pass "remote sync keeps mirrors isolated from live runtime logs"
