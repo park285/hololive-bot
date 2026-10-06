@@ -89,19 +89,19 @@ func TestRetentionTickBoundsLiveAbsenceSlots(t *testing.T) {
 	}
 }
 
-func TestDeleteFirstRetentionBatchRunsEveryTable(t *testing.T) {
+func TestDeleteRetentionBatchesRunsEveryTable(t *testing.T) {
 	t.Parallel()
 
 	var ran []string
 
 	repo := &Repository{}
 
-	result, err := repo.deleteFirstRetentionBatch(10, []retentionStep{
-		{table: "source_observation_queue", run: func() (int64, error) {
+	result, err := repo.deleteRetentionBatches([]retentionStep{
+		{table: "source_observation_queue", age: time.Hour, run: func() (int64, error) {
 			ran = append(ran, "queue")
 			return 1, nil
 		}},
-		{table: "source_observation_collisions", run: func() (int64, error) {
+		{table: "source_observation_collisions", age: time.Hour, run: func() (int64, error) {
 			ran = append(ran, "collisions")
 			return 2, nil
 		}},
@@ -152,6 +152,11 @@ func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
 
 	if result.Deleted != 0 {
 		t.Fatalf("protected evidence deleted: %#v", result)
+	}
+
+	part := retentionPartFor(t, result, "source_observations")
+	if !part.BacklogKnown || part.BacklogAge != 0 {
+		t.Fatalf("protected evidence counted as retention backlog: %#v", part)
 	}
 
 	assertTableCount(t, pool, "source_observations", 3)

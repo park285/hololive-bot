@@ -246,8 +246,22 @@ func addEvidenceRetentionAge(
 func recordRetentionTick(result sourceobservation.RetentionResult, elapsed time.Duration, err error) {
 	youtubeRetentionTickSeconds.Observe(elapsed.Seconds())
 
+	// 앞 단계 실패로 조회하지 못한 테이블도 지난 tick의 적체 값을 남기지 않는다.
+	youtubeRetentionBacklogAgeSeconds.DeleteLabelValues("source_observations")
+	youtubeRetentionBacklogAgeSeconds.DeleteLabelValues("source_observation_applications")
+
 	for _, part := range retentionParts(result) {
-		recordRetentionPart(part, err)
+		recordRetentionPart(part)
+	}
+
+	if err != nil {
+		table := result.FailedTable
+		if table == "" {
+			table = "none"
+		}
+
+		youtubeRetentionErrorsTotal.WithLabelValues(table).Inc()
+		youtubeRetentionBacklogAgeSeconds.DeleteLabelValues(table)
 	}
 }
 
@@ -256,20 +270,12 @@ func retentionParts(result sourceobservation.RetentionResult) []sourceobservatio
 		return result.ByTable
 	}
 
-	return []sourceobservation.RetentionResult{{
-		Table: result.Table, Deleted: result.Deleted, BacklogAge: result.BacklogAge,
-	}}
+	return []sourceobservation.RetentionResult{result}
 }
 
-func recordRetentionPart(part sourceobservation.RetentionResult, err error) {
+func recordRetentionPart(part sourceobservation.RetentionResult) {
 	table := part.Table
 	if table == "" {
-		table = "none"
-	}
-
-	if err != nil {
-		youtubeRetentionErrorsTotal.WithLabelValues(table).Inc()
-
 		return
 	}
 
@@ -277,8 +283,11 @@ func recordRetentionPart(part sourceobservation.RetentionResult, err error) {
 		youtubeRetentionDeletedTotal.WithLabelValues(table).Add(float64(part.Deleted))
 	}
 
-	if part.BacklogAge > 0 {
+	if part.BacklogKnown {
 		youtubeRetentionBacklogAgeSeconds.WithLabelValues(table).Set(part.BacklogAge.Seconds())
+	} else {
+		// 제한 조회로 적체 유무를 확정하지 못한 경우 이전 값을 현재 값처럼 남기지 않는다.
+		youtubeRetentionBacklogAgeSeconds.DeleteLabelValues(table)
 	}
 }
 
