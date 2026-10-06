@@ -36,7 +36,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768m
+          memory: 1g
 
   youtube-po-c:
     profiles: !override ["central-only"]
@@ -66,6 +66,7 @@ services:
       STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-b.json
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
       POSTGRES_USER: hololive_scraper
+      # 상한(1g)은 Go 640MiB에 YouTube.js Node helper(관측 최대 176MiB) 몫 192MiB와 여유 32MiB를 더한 값보다 크게 둔다.
       GOMEMLIMIT: "640MiB"
       YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-b"
       YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-b.log"
@@ -90,7 +91,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768m
+          memory: 1g
 
 volumes:
   youtube-po-b-socket:

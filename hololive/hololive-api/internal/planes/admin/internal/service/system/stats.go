@@ -175,10 +175,15 @@ func (c *Collector) refreshCurrentStats(ctx context.Context, done chan struct{})
 	}
 
 	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+
+	// 원격 수집 중 요청이 취소된 결과를 서비스 장애로 공유하지 않는다.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("collect current stats: %w", err)
+	}
 
 	c.cached = cloneSystemStats(stats)
 	c.cachedAt = time.Now()
-	c.cacheMu.Unlock()
 
 	return stats, nil
 }

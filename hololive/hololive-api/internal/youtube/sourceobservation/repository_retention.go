@@ -23,11 +23,15 @@ type RetentionConfig struct {
 	BatchSize             int
 }
 
+// RetentionResult는 앞 단계의 확정된 삭제량과 실패 대상을 함께 반환한다.
+// BacklogKnown이 참일 때만 BacklogAge가 유효하며, 0은 남은 삭제 후보가 없다는 뜻이다.
 type RetentionResult struct {
-	Table      string
-	Deleted    int64
-	BacklogAge time.Duration
-	ByTable    []RetentionResult
+	Table        string
+	FailedTable  string
+	Deleted      int64
+	BacklogAge   time.Duration
+	BacklogKnown bool
+	ByTable      []RetentionResult
 }
 
 func (c RetentionConfig) Validate() error {
@@ -219,9 +223,13 @@ func (r *Repository) runRetentionSteps(
 		},
 	}
 
-	out, err := r.deleteFirstRetentionBatch(cfg.BatchSize, steps)
+	out, err := r.deleteRetentionBatches(steps)
 	if err != nil {
-		return out, fmt.Errorf("delete first retention batch: %w", err)
+		return out, fmt.Errorf("delete retention batches: %w", err)
+	}
+
+	if err := r.measureRetentionBacklogs(ctx, cfg, now, &out); err != nil {
+		return out, fmt.Errorf("measure retention backlogs: %w", err)
 	}
 
 	return out, nil
@@ -233,16 +241,19 @@ type retentionStep struct {
 	run   func() (int64, error)
 }
 
-func (r *Repository) deleteFirstRetentionBatch(_ int, steps []retentionStep) (RetentionResult, error) {
+func (r *Repository) deleteRetentionBatches(steps []retentionStep) (RetentionResult, error) {
 	var combined RetentionResult
 
 	for _, step := range steps {
 		deleted, err := step.run()
 		if err != nil {
-			return RetentionResult{Table: step.table}, fmt.Errorf("run source observation retention: %s: %w", step.table, err)
+			// 앞 단계는 이미 별도로 커밋됐으므로 뒤 단계 오류에도 삭제량을 보존한다.
+			combined.FailedTable = step.table
+
+			return combined, fmt.Errorf("run source observation retention: %s: %w", step.table, err)
 		}
 
-		if deleted == 0 {
+		if step.age <= 0 {
 			continue
 		}
 
@@ -250,7 +261,7 @@ func (r *Repository) deleteFirstRetentionBatch(_ int, steps []retentionStep) (Re
 
 		combined.ByTable = append(combined.ByTable, RetentionResult{Table: step.table, Deleted: deleted})
 
-		if combined.Table == "" {
+		if combined.Table == "" && deleted > 0 {
 			combined.Table = step.table
 		}
 	}

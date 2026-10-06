@@ -85,10 +85,10 @@ x-deploy-512m: &deploy-512m
     limits:
       memory: 512m
       pids: 256
-x-deploy-384m: &deploy-384m
+x-deploy-768m: &deploy-768m
   resources:
     limits:
-      memory: 384m
+      memory: 768m
       pids: 256
 x-deploy-128m: &deploy-128m
   resources:
@@ -430,6 +430,7 @@ services:
       ALARM_DISPATCH_RETENTION_CANCELLED_DAYS: ${ALARM_DISPATCH_RETENTION_CANCELLED_DAYS:-90}
       ALARM_DISPATCH_RETENTION_EVENT_DAYS: ${ALARM_DISPATCH_RETENTION_EVENT_DAYS:-90}
       LOG_DIR: /app/logs
+      # 상한(768m)은 Go 320MiB에 X Spaces Node helper 몫 192MiB와 여유 32MiB를 더한 값보다 크게 둔다.
       GOMEMLIMIT: "320MiB"
       APP_ENV: "production"
       KAKAO_ROOMS: ${KAKAO_ROOMS:-}
@@ -448,7 +449,7 @@ services:
     extra_hosts: *iris-extra-hosts
     dns: *tailnet-dns
     depends_on: *db-cache-depends
-    deploy: *deploy-384m
+    deploy: *deploy-768m
     healthcheck:
       <<: *go-healthcheck
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30007/health"]
@@ -662,6 +663,7 @@ services:
       HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
       PHOTO_SYNC_ENABLED: "false"
       GOGC: "100"
+      # 상한(768m)은 Go 320MiB에 YouTube.js Node helper(관측 최대 176MiB) 몫 192MiB와 여유 32MiB를 더한 값보다 크게 둔다.
       GOMEMLIMIT: "320MiB"
       GIN_MODE: release
       LOG_DIR: /app/logs
@@ -675,7 +677,7 @@ services:
       - "${HOLOLIVE_RUNTIME_GID:-1002}"
     extra_hosts: *host-extra-hosts
     depends_on: *collector-depends
-    deploy: *deploy-384m
+    deploy: *deploy-768m
     healthcheck:
       <<: *go-healthcheck
       # 이전 인스턴스의 60초 lease 만료와 첫 publish가 끝날 때까지 기동 유예를 적용한다.

@@ -27,12 +27,13 @@ x-osaka-ap-service: &osaka-ap-service
   deploy:
     resources:
       limits:
-        memory: 768m
+        memory: 1g
 
 x-osaka-ap-env-common: &osaka-ap-env-common
   <<: *osaka-ap-db-env
   YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
   POSTGRES_USER: hololive_scraper
+  # 상한(1g)은 Go 640MiB에 YouTube.js Node helper(관측 최대 176MiB) 몫 192MiB와 여유 32MiB를 더한 값보다 크게 둔다.
   GOMEMLIMIT: "640MiB"
 
 services:
@@ -65,7 +66,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768m
+          memory: 1g
 
   youtube-collector-a:
     <<: *osaka-ap-service

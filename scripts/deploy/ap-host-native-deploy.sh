@@ -57,6 +57,17 @@ if [[ "$MODE" == "--apply" && "${!AP_APPROVE_DEPLOY_VAR:-}" != "true" ]]; then
   exit 2
 fi
 
+if [[ "$AP_GOAMD64" != v1 ]]; then
+  # 지원하지 않는 CPU에서는 새 바이너리가 기동하지 못하므로 빌드·전송 전에 거절합니다.
+  if ! ap_remote_bash "$AP_GOAMD64" <<'REMOTE'
+/lib64/ld-linux-x86-64.so.2 --help | grep -Fq "x86-64-$1 (supported"
+REMOTE
+  then
+    echo "Refusing native AP deploy for $AP_NAME: host CPU does not report x86-64-$AP_GOAMD64 support" >&2
+    exit 2
+  fi
+fi
+
 service="${AP_SERVICES[0]}"
 port="${AP_PORTS[0]}"
 release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)-$AP_NAME}"
@@ -97,6 +108,7 @@ write_host_env() {
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
     printf 'POSTGRES_POOL_MAX_CONNS=8\n'
     printf 'POSTGRES_SOCKET_PATH=\n'
+    # 물리 메모리가 956MiB인 호스트라 예산식(768M−Node 192MiB−여유 32MiB)보다 낮게 둔다.
     printf 'GOMEMLIMIT=384MiB\n'
     printf 'GOGC=100\n'
     printf 'GIN_MODE=release\n'
@@ -124,13 +136,13 @@ sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
   --revision "$native_revision" \
   --goos linux \
   --goarch amd64 \
-  --goamd64 "${GOAMD64:-v1}"
+  --goamd64 "$AP_GOAMD64"
 sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_dir" \
   --version "$version" \
   --revision "$native_revision" \
   --goos linux \
   --goarch amd64 \
-  --goamd64 "${GOAMD64:-v1}"
+  --goamd64 "$AP_GOAMD64"
 issuer_artifact="$artifact_dir/po-sandbox-build"
 "$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" amd64 "$native_revision" "$version" "$issuer_artifact"
 mkdir -p "$artifact_dir/po-sandbox"
