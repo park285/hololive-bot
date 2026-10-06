@@ -68,7 +68,7 @@ Fallback delta: 새 fallback은 없다. 구형 video_live_check는 오류로 거
 - [x] 실제 삭제 93,718건, 기존 retention으로 먼저 소멸한 snapshot 대상 608건, 대상 잔여 0건 확인. 최초 조사 95,984건과의 차이는 실행 전 기존 retention에 따른 감소다.
 - [x] 삭제 전후 영상, 신규성 clock, 채널 기준점, watermark, absence slot, live session/head, notification outbox, delivery/send unit/event의 전체 행 digest 동일 확인. 참조 FK가 NULL로 바뀌는 두 열만 비교에서 제외했다.
 - [x] API 먼저 재개하고 발송 워커 재개 전후 기존 영상 1,975개의 새 NEW_VIDEO 알림 0건 확인. API/worker healthy, 재시작 0, 인증된 worker 호출 count 24, PG/Valkey 연결과 collector readiness 확인.
-- [ ] 구형 video_list generation 1 및 YouTube live_snapshot generation 2 consumer 지원 제거, 현재 계약 회귀 검증과 배포.
+- [x] 구형 video_list generation 1 및 YouTube live_snapshot generation 2 consumer 지원 제거, 현재 계약 회귀 검증과 배포.
 
 대상은 `source_observations`의 `provider='youtubejs'` 중 `video_list` generation 1과 `live_snapshot` generation 2뿐이다. 영상·신규성 기준점·알림 및 발송 상태는 초기화하지 않았다. payload는 다른 세대와 공유되므로 수동 삭제하지 않고 기존 orphan retention에 맡긴다. application 등 감사 행은 기존 FK의 SET NULL만 적용하며 원래 retention을 유지한다.
 
@@ -77,3 +77,13 @@ Fallback delta: 새 fallback은 없다. 구형 video_live_check는 오류로 거
 복구 자료는 중앙 root 전용 `compose/backups/legacy-observations-20261006T043300Z`에 보존했다. `manifest.json`에 수량·열·FK·SHA256, `delete-intent-*`와 `delete-applied-*`에 실제 배치 영수증, `protected-before/after.json`에 상태 비교, `RESTORE.txt`에 복구 절차가 있다. 복구 시 실제 삭제 영수증의 ID만 payload → observation → 아직 NULL이고 다른 필드가 동일한 감사 FK 순서로 되돌린다. 변경된 현재 행을 덮어쓰거나 새 queue/replay를 만들지 않는다. 이미지 rollback만으로 DB 이력은 복구되지 않는다. 복구 자료·이전 이미지·volume은 삭제하지 않았다.
 
 현재와 지원 rollback collector `ab078d31dc6a8c4fe8ab72bc7a3b11fb7d864b5a`는 video_list generation 2 및 YouTube live_snapshot generation 3만 생산한다. Holodex live_snapshot generation 2는 현행 계약이므로 공유 decoder를 유지한다. Fallback delta: 새 fallback 없음.
+
+### 구형 관측 지원 제거 배포 완료
+
+- 코드와 운영 기록 PR [#584](https://github.com/park285/hololive-bot/pull/584). 실제 배포 산출물 revision은 `05cd902cca71d63dbf8debe1f91a8b805baa0c1e`이며 이후 완료 기록 변경은 문서만 포함한다.
+- 필수 pre-push 전체 일반/race/NilAway/정적 검사와 dependency hygiene, 코드 revision의 원격 fast-gate가 통과했다. import·호출 취약점은 0건이며 기존 미사용 OpenPGP 모듈 경고만 남는다.
+- 중앙 API/worker 및 a/b/c/d collector·issuer 모두 kapu에서 빌드한 같은 revision으로 반영했다. 중앙·Seoul은 arm64 Compose, Osaka·Osaka2는 amd64 native 산출물이며 원격 빌드는 수행하지 않았다.
+- API image `sha256:23bcd5cbae3961bc178aeab0aa4b94cbae8c747c0d7a7f54f9448f75d7176c44`, worker image `sha256:97a1c7d1de0e525289b4615d2409dafcde5deb7a6b7b78f9107d0e59da0c26bd`가 실제 실행 이미지와 일치한다. 두 서비스 healthy, 인증된 worker 호출 count 24, PG/Valkey 연결과 새 오류 없음 확인.
+- 모든 collector의 first_success, handoff PROCESSED, readiness와 실행 파일/manifest 일치를 확인했다. API/worker/collector 재시작은 0이며 issuer는 정상 generation 교체를 허용하는 종료 코드 0·OOM 없음·healthy 기준을 적용했다.
+- 복구 지점: 중앙 API/worker `compose/rollback/legacy-05cd902cca71d63dbf8debe1f91a8b805baa0c1e`, 중앙 c `compose/backups/po-c-20261006T050602Z`, Seoul `backups/seoul-collector-20261006T050722Z`. Native a/d의 previous는 각각 `20261006T041057Z-ea5d221e641b-osaka`, `20261006T041501Z-ea5d221e641b-osaka2`로 보존했다.
+- 최종 읽기 전용 확인에서도 폐기 대상 관측·충돌 기록 0건, 보호한 기존 영상 1,975개의 새 NEW_VIDEO 알림 0건, NULL-send-unit 발송 이력 sent 343·cancelled 14건 유지.
