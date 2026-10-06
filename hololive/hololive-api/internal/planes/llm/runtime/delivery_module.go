@@ -34,9 +34,7 @@ type DeliveryModule struct {
 	Repository *delivery.OutboxRepository
 }
 
-// BuildDeliveryModule은 digest 발송을 v2 notification_delivery_outbox에만 적재한다. 예전에 v3 ledger로 넘기던
-// DELIVERY_OUTBOX_V3_HANDOFF_MODE는 DEC-20260926-hololive-outbox-v3-convergence로 삭제했고, 키가 남아 있으면
-// settings의 퇴역 가드(config_outbox_v3_handoff_retired_env.go)가 기동을 거절한다.
+// BuildDeliveryModule은 digest 발송을 notification_delivery_outbox에 적재한다. 발송은 alarm-worker가 소유한다.
 func BuildDeliveryModule(
 	cacheClient cache.Client,
 	postgres database.Client,

@@ -13,7 +13,7 @@ networks:
   hololive-net: {}
 YAML
 export COMPOSE_ENV_FILE="$fixture/host.env"
-unset HOLOLIVE_X_SPACES_ENABLED HOLOLIVE_X_SPACES_LOGIN_ENABLED
+unset HOLOLIVE_X_SPACES_ENABLED
 : > "$COMPOSE_ENV_FILE"
 bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --format json > "$fixture/disabled.json"
 jq -e '.services["hololive-api"].environment.X_SPACES_KEY_FILE == null' "$fixture/disabled.json" >/dev/null
@@ -26,18 +26,6 @@ for selection in implicit explicit; do
     .services["hololive-alarm-worker"].environment.X_SPACES_CONFIG_FILE == "/run/hololive-bot/x-spaces/config.json" and
     (.services["hololive-alarm-worker"].volumes | length == 2 and all(.[]; .read_only == true))' "$fixture/$selection.json" >/dev/null
 done
-for login_setting in '' 0 1; do
-  printf 'HOLOLIVE_X_SPACES_ENABLED=1\nHOLOLIVE_X_SPACES_LOGIN_ENABLED=%s\n' "$login_setting" > "$COMPOSE_ENV_FILE"
-  if bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --quiet > "$fixture/login-invalid.log" 2>&1; then
-    echo 'retired X login setting was accepted' >&2
-    exit 1
-  fi
-done
-printf 'HOLOLIVE_X_SPACES_ENABLED=1\n' > "$COMPOSE_ENV_FILE"
-if HOLOLIVE_X_SPACES_LOGIN_ENABLED='' bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --quiet > "$fixture/login-process-env.log" 2>&1; then
-  echo 'retired X login setting in the process env was accepted' >&2
-  exit 1
-fi
 printf 'HOLOLIVE_X_SPACES_ENABLED=invalid\n' > "$COMPOSE_ENV_FILE"
 if bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --quiet > "$fixture/invalid.log" 2>&1; then
   echo 'invalid X Spaces activation was accepted' >&2

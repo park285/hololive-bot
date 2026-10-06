@@ -69,10 +69,6 @@ func LoadRuntime() (*RuntimeConfig, error) {
 }
 
 func buildRuntimeConfig() (*RuntimeConfig, error) {
-	if err := rejectRetiredCollectorEnv(); err != nil {
-		return nil, fmt.Errorf("reject retired collector env: %w", err)
-	}
-
 	workerProfile, err := LoadWorkerProfile()
 	if err != nil {
 		return nil, fmt.Errorf("load youtube collector worker profile: %w", err)
@@ -142,10 +138,7 @@ func loadRuntimeOwnershipConfig() (RuntimeOwnershipConfig, error) {
 }
 
 func loadHolodexConfig() (HolodexConfig, error) {
-	apiKey, err := envload.HolodexAPIKey()
-	if err != nil {
-		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
-	}
+	apiKey := envload.HolodexAPIKey()
 
 	defaults := settings.DefaultHolodexOperationalConfig()
 
@@ -178,10 +171,6 @@ func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
 func (c *RuntimeConfig) Validate() error {
 	if c == nil {
 		return errors.New("youtube collector runtime config is nil")
-	}
-
-	if err := envload.ValidateUnsupportedLegacyEnvUsage(); err != nil {
-		return fmt.Errorf("validate unsupported legacy env usage: %w", err)
 	}
 
 	if err := c.validateServer(); err != nil {

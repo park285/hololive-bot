@@ -76,10 +76,6 @@ func ClearRuntimeRoleEnv(t *testing.T) {
 	for _, key := range []string{
 		runtimepolicy.NotificationEgressRoleEnv,
 		runtimepolicy.NotificationSchedulerRoleEnv,
-		"MEMBER_NEWS_CLIPROXY_MODEL",
-		"DB_SSLMODE",
-		"DB_QUERY_EXEC_MODE",
-		"OTEL_ENVIRONMENT",
 	} {
 		UnsetEnv(t, key)
 	}

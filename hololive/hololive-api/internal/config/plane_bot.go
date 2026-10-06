@@ -43,7 +43,7 @@ type WebhookConfig struct {
 }
 
 // LoadBotPlaneRuntime은 bot plane 설정만 단독으로 읽고 검증한다. 전체 hololive-api 기동은 LoadRuntime을 쓰고,
-// 이 함수는 bot plane DB 설정만 필요한 운영 명령이 같은 env 계약(퇴역 키·형식·tracing·역할 검증)을 거치게 한다.
+// 이 함수는 bot plane DB 설정만 필요한 운영 명령이 같은 env 계약(형식·tracing·역할 검증)을 거치게 한다.
 func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	if err := loadProcessEnv(); err != nil {
 		return nil, err
@@ -81,14 +81,10 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	return config, nil
 }
 
-// loadProcessEnv는 .env를 읽고, bot·admin plane이 공유하는 퇴역 env 거절과 공통 env 형식 검사를 한 번 수행한다.
+// loadProcessEnv는 .env를 읽고, bot·admin plane이 공유하는 공통 env 형식 검사를 한 번 수행한다.
 func loadProcessEnv() error {
 	if err := envload.DotEnv(); err != nil {
 		return fmt.Errorf("load dot env: %w", err)
-	}
-
-	if err := settings.RejectRetiredRuntimeEnv(); err != nil {
-		return fmt.Errorf("reject retired runtime env: %w", err)
 	}
 
 	if err := settings.ValidateRuntimeEnvSyntax(); err != nil {

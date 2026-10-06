@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-// RuntimeConfig는 alarm-worker가 소비하는 설정만 담는다. 공통 env 형식·퇴역 키 거절은 shared settings 정책을 다시 쓰고,
+// RuntimeConfig는 alarm-worker가 소비하는 설정만 담는다. 공통 env 형식 검증은 shared settings 정책을 다시 쓰고,
 // 역할 조립과 검증(worker profile, notification 소유권, dispatch retention)은 이 패키지가 소유한다.
 type RuntimeConfig struct {
 	Environment      string
@@ -37,10 +37,6 @@ const alarmWorkerCORSDefaultEnforce = false
 func LoadRuntime() (*RuntimeConfig, error) {
 	if err := envload.DotEnv(); err != nil {
 		return nil, fmt.Errorf("load dot env: %w", err)
-	}
-
-	if err := settings.RejectRetiredRuntimeEnv(); err != nil {
-		return nil, fmt.Errorf("reject retired runtime env: %w", err)
 	}
 
 	config, err := loadRuntimeConfig()
@@ -133,12 +129,8 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	}, nil
 }
 
-// loadRoleSections는 alarm-worker만 읽는 퇴역 notification egress 가드, worker profile, dispatch retention을 채운다.
+// loadRoleSections는 alarm-worker의 worker profile과 dispatch retention을 채운다.
 func loadRoleSections(config *RuntimeConfig) error {
-	if err := rejectRetiredNotificationEgressEnv(); err != nil {
-		return fmt.Errorf("reject retired notification egress env: %w", err)
-	}
-
 	profile, err := LoadWorkerProfile()
 	if err != nil {
 		return fmt.Errorf("load alarm worker profile: %w", err)

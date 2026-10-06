@@ -27,7 +27,7 @@ API의 `isLive` 값은 live truth로 사용하지 않습니다. 모든 유효한
 | Redirect용 trailing slash | 사용하지 않음 |
 | Timeout | `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS`, 기본 15초 |
 | Body limit | `MAX_RESPONSE_BODY_BYTES`, 기본 2MiB |
-| Cache expiry | 없음. channel schedule 보충 경로와 그 Valkey 캐시를 `DEC-20260926-hololive-source-fallbacks-retirement`로 삭제했습니다. 그 TTL이던 `OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS`는 퇴역 키라 빈 값이어도 기동을 거절합니다 |
+| Cache expiry | 없음. channel schedule 보충 경로와 그 Valkey 캐시를 `DEC-20260926-hololive-source-fallbacks-retirement`로 삭제했습니다. |
 | Process cache | `OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS`, 기본 15초 |
 
 Base URL은 HTTPS origin이어야 하며 userinfo, path, query, fragment를 포함할 수 없습니다. startup validation과 request construction에서 모두 fail closed합니다.
@@ -135,7 +135,7 @@ Holodex 실패를 YouTube channel source나 공식 API로 보충하던 경로, �
 
 ### Live
 
-Holodex live primary가 실패하면 source failure를 반환합니다. 공식 일정의 upcoming-only 결과로 success-empty를 만들지 않습니다. `GetChannelsLiveStatus`의 YouTube live-status scraper fallback은 `DEC-20260926-hololive-live-status-scraper-fallback-removal`로 삭제했으며, alarm-worker는 이 source failure를 받으면 persisted live session으로 판단합니다. `HOLODEX_LIVE_STATUS_FALLBACK_*` env는 존재 기준 퇴역 가드가 기동을 거절합니다.
+Holodex live primary가 실패하면 source failure를 반환합니다. 공식 일정의 upcoming-only 결과로 success-empty를 만들지 않습니다. `GetChannelsLiveStatus`의 YouTube live-status scraper fallback은 `DEC-20260926-hololive-live-status-scraper-fallback-removal`로 삭제했으며, alarm-worker는 이 source failure를 받으면 persisted live session으로 판단합니다.
 
 ## Cache와 동시성
 

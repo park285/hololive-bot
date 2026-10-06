@@ -5,17 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 // ValidateServerRuntime은 HTTP listener를 여는 runtime의 공통 기동 조건을 검사한다.
-// 미지원 legacy env 사용, listener 포트, H3 transport 입력, API 인증 키 순서로 첫 위반을 돌려준다.
+// Listener 포트, H3 transport 입력, API 인증 키 순서로 첫 위반을 돌려준다.
 func ValidateServerRuntime(environment string, server *ServerConfig) error {
-	if err := envload.ValidateUnsupportedLegacyEnvUsage(); err != nil {
-		return fmt.Errorf("validate unsupported legacy env usage: %w", err)
-	}
-
 	if server == nil {
 		return errors.New("server config is required")
 	}

@@ -238,11 +238,6 @@ func assertLiveCompatRenderedRuntimeConfig(t *testing.T, cfg renderedCompose) {
 			t.Fatalf("%s IRIS_BASE_URL_FILE = %q, want /app/runtime-config/iris_base_url", service, env["IRIS_BASE_URL_FILE"])
 		}
 
-		// stat 검사 우회 플래그는 퇴역했다(settings.config_iris_retired_env.go). overlay가 다시 주입하면 기동이 실패한다.
-		if value, ok := env["IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS"]; ok {
-			t.Fatalf("%s must not receive retired IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS (got %q)", service, value)
-		}
-
 		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
 			t.Fatalf("%s IRIS_BASE_URL_ALLOWED_HOSTS = %q, want 100.100.1.5", service, env["IRIS_BASE_URL_ALLOWED_HOSTS"])
 		}
@@ -318,10 +313,6 @@ func assertLiveCompatRenderedCollector(t *testing.T, cfg renderedCompose) {
 		if _, ok := env[key]; !ok {
 			t.Fatalf("youtube-collector missing scoped %s mapping", key)
 		}
-	}
-
-	if _, ok := env["HOLODEX_API_KEY_1"]; ok {
-		t.Fatal("youtube-collector must not receive retired HOLODEX_API_KEY_1 under live overlay")
 	}
 
 	targets := strings.Join(composeVolumeTargets(t, cfg, runtimepolicy.RuntimeYouTubeCollector), "\n")

@@ -1,5 +1,7 @@
 # Source Observation Canonical JSON v1
 
+`youtubejs/video_live_check`는 schema 2·generation 2만 받습니다. 2026-10-06 운영 저장행에 schema 1이 없고 모든 collector 및 native 이전 release가 generation 2만 발행함을 확인해 이전 decoder와 consumer 지원 항목을 제거했습니다. 채널 단위 `channel_live_check`의 schema 1·generation 1은 별도 현행 계약입니다.
+
 ## 상태와 적용 범위
 
 `source-observation-canonical-json-v1`은 `scope_sha256`, `payload_sha256`, `evidence_sha256`과 `observation_key` 입력을 만드는 canonical JSON bytes 계약이다. source observation contract generation `1`은 이 profile을 사용한다.

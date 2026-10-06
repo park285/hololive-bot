@@ -33,3 +33,23 @@ func TestLiveQueryGenerationRequiresProofForCompleteCoverage(t *testing.T) {
 		}
 	}
 }
+
+func TestVideoLifecycleRequiresCurrentSchemaAndGeneration(t *testing.T) {
+	envelope := newLiveCheckEnvelope(t, KindVideoLiveCheck, publicEndedVideoCheck(), CompletenessPartial)
+	if _, err := PrepareEnvelope(envelope); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, version := range []struct {
+		schema     int16
+		generation int64
+	}{{1, 1}, {1, 2}, {2, 1}, {2, 3}} {
+		invalid := envelope
+
+		invalid.SchemaVersion, invalid.ContractGeneration = version.schema, version.generation
+
+		if _, err := PrepareEnvelope(invalid); err == nil {
+			t.Fatalf("unsupported video lifecycle schema=%d generation=%d accepted", version.schema, version.generation)
+		}
+	}
+}

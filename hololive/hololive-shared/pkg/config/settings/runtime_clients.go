@@ -19,7 +19,7 @@ type IrisRuntimeValidationConfig struct {
 // LoadIrisRuntimeValidationConfig는 호출 시점의 URL 검증 설정을 읽는다.
 // APP_ENV=production이면 IRIS_BASE_URL_FILE의 경로·소유·권한 stat 검사를 항상 한다. 우회 플래그
 // IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS(live-compat이 주입하던 값)는 T18(2026-09-26)에서 중앙 runtime-config/iris_base_url이 root 소유 0644로
-// 검사를 통과함을 확인해 지웠다(stack-audit T11 holo-iris-base-url-skip-stat-compat, 퇴역 가드는 config_iris_retired_env.go).
+// 검사를 통과함을 확인해 지웠다(stack-audit T11 holo-iris-base-url-skip-stat-compat).
 func LoadIrisRuntimeValidationConfig() IrisRuntimeValidationConfig {
 	return IrisRuntimeValidationConfig{
 		Transport:        os.Getenv("IRIS_TRANSPORT"),

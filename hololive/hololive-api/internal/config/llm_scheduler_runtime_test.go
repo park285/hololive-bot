@@ -54,19 +54,6 @@ func TestLoadLLMSchedulerRuntimeAllowsMissingIrisInputs(t *testing.T) {
 	}
 }
 
-// llm plane은 DELIVERY_OUTBOX_V3_HANDOFF_MODE를 읽던 delivery module을 소유했다. 퇴역한 키는 빈 값이어도 기동을 거절한다.
-func TestLoadLLMSchedulerRuntimeRejectsRetiredOutboxV3HandoffMode(t *testing.T) {
-	settingstest.ClearIrisAndRoomEnv(t)
-	settingstest.SetRuntimeH3ServerEnv(t)
-	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	t.Setenv("DELIVERY_OUTBOX_V3_HANDOFF_MODE", "")
-
-	_, err := LoadLLMSchedulerRuntime()
-	if err == nil || !strings.Contains(err.Error(), "DELIVERY_OUTBOX_V3_HANDOFF_MODE is retired") {
-		t.Fatalf("LoadLLMSchedulerRuntime() error = %v, want retired DELIVERY_OUTBOX_V3_HANDOFF_MODE rejection", err)
-	}
-}
-
 // 아래 세 테스트는 비-runtime 로더(LoadLLMScheduler, stack-audit 2026-09-26 T11에서 삭제)로 검증하던 동작을 실제 runtime
 // 로더에서 확인한다. 이 로더는 Iris 입력을 받지 않으므로 Iris env를 비운다.
 func TestLoadLLMSchedulerRuntimeProductionRejectsInsecurePostgresSSLMode(t *testing.T) {

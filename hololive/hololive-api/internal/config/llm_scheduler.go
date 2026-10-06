@@ -59,15 +59,6 @@ func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
 		return nil, fmt.Errorf("load dot env: %w", err)
 	}
 
-	if err := settings.RejectRetiredLLMEnv(); err != nil {
-		return nil, fmt.Errorf("reject retired LLM env: %w", err)
-	}
-
-	// DELIVERY_OUTBOX_V3_HANDOFF_MODE를 읽던 llm plane의 delivery module도 이 로더를 거친다.
-	if err := settings.RejectRetiredOutboxV3HandoffEnv(); err != nil {
-		return nil, fmt.Errorf("reject retired outbox v3 handoff env: %w", err)
-	}
-
 	config, err := buildLLMSchedulerConfig()
 	if err != nil {
 		return nil, fmt.Errorf("build llm scheduler config: %w", err)

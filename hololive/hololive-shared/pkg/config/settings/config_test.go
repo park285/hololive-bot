@@ -32,30 +32,10 @@ import (
 )
 
 func TestResolveHolodexAPIKey(t *testing.T) {
-	t.Run("reads only HOLODEX_API_KEY", func(t *testing.T) {
-		t.Setenv("HOLODEX_API_KEY", " primary-key ")
-		settingstest.UnsetEnv(t, "HOLODEX_API_KEY_1")
+	t.Setenv("HOLODEX_API_KEY", " primary-key ")
 
-		got, err := envload.HolodexAPIKey()
-		if err != nil {
-			t.Fatalf("envload.HolodexAPIKey() error = %v", err)
-		}
-
-		if got != "primary-key" {
-			t.Fatalf("envload.HolodexAPIKey() = %q, want %q", got, "primary-key")
-		}
-	})
-
-	// HOLODEX_API_KEY_1은 정본이 비어도 대신 읽지 않고, 빈 값이어도 존재만으로 거절한다.
-	for _, value := range []string{"", "legacy-key"} {
-		t.Run("rejects retired HOLODEX_API_KEY_1="+value, func(t *testing.T) {
-			t.Setenv("HOLODEX_API_KEY", "")
-			t.Setenv("HOLODEX_API_KEY_1", value)
-
-			if _, err := envload.HolodexAPIKey(); err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY_1") {
-				t.Fatalf("envload.HolodexAPIKey() error = %v, want HOLODEX_API_KEY_1 rejection", err)
-			}
-		})
+	if got := envload.HolodexAPIKey(); got != "primary-key" {
+		t.Fatalf("envload.HolodexAPIKey() = %q, want %q", got, "primary-key")
 	}
 }
 
@@ -364,14 +344,6 @@ func TestValidateServerRuntime(t *testing.T) {
 
 	if err := ValidateServerRuntime(runtimepolicy.EnvironmentProduction, &server); err == nil || !strings.Contains(err.Error(), "SERVER_PORT is required") {
 		t.Fatalf("ValidateServerRuntime(no port) error = %v, want SERVER_PORT is required", err)
-	}
-
-	server = valid()
-
-	t.Setenv("DB_SSLMODE", "disable")
-
-	if err := ValidateServerRuntime(runtimepolicy.EnvironmentProduction, &server); err == nil || !strings.Contains(err.Error(), "DB_SSLMODE is retired") {
-		t.Fatalf("ValidateServerRuntime(legacy env) error = %v, want DB_SSLMODE retirement", err)
 	}
 }
 

@@ -449,9 +449,15 @@ func liveCheckEnvelope(
 		t.Fatalf("marshal %s payload: %v", kind, err)
 	}
 
+	schemaVersion, generation := contract.SchemaVersionV1, contract.LiveCheckContractGeneration
+
+	if kind == contract.KindVideoLiveCheck {
+		schemaVersion, generation = contract.VideoLifecycleSchemaVersion, contract.VideoLifecycleContractGeneration
+	}
+
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider: contract.ProviderYouTubeJS, ObservationKind: kind, SubjectKey: subjectKey,
-		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: contract.LiveCheckContractGeneration,
+		SchemaVersion: schemaVersion, ContractGeneration: generation,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: completeness, Continuity: contract.ContinuityNotApplicable,
 		Payload: raw, CollectorInstance: proof.OwnerInstance, Lease: *proof,

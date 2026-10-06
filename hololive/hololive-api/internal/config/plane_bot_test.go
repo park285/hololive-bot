@@ -151,27 +151,6 @@ func TestLoadBotPlaneRuntimeRejectsInvalidServerTransport(t *testing.T) {
 	}
 }
 
-// 미지원 legacy env는 값과 무관하게 기동을 거절한다. MEMBER_NEWS_CLIPROXY_MODEL은 bot plane이 LLM 설정을 보관하지 않아도
-// 같은 거절을 유지한다.
-func TestLoadBotPlaneRuntimeRejectsUnsupportedLegacyEnv(t *testing.T) {
-	for key, value := range map[string]string{
-		"OTEL_ENVIRONMENT":           "development",
-		"DB_SSLMODE":                 "disable",
-		"DB_QUERY_EXEC_MODE":         "describe_exec",
-		"MEMBER_NEWS_CLIPROXY_MODEL": "old-model",
-	} {
-		t.Run(key, func(t *testing.T) {
-			setBotPlaneEnv(t)
-			t.Setenv(key, value)
-
-			_, err := LoadBotPlaneRuntime()
-			if err == nil || !strings.Contains(err.Error(), key+" is retired") {
-				t.Fatalf("LoadBotPlaneRuntime() error = %v, want %s retirement", err, key)
-			}
-		})
-	}
-}
-
 func TestLoadBotPlaneRuntimeProductionPolicies(t *testing.T) {
 	for _, tc := range []struct {
 		name string

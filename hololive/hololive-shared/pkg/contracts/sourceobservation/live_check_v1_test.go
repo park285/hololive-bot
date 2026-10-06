@@ -431,7 +431,7 @@ func TestLiveCheckEnvelopeContract(t *testing.T) {
 	for name, mutate := range map[string]func(*Envelope){
 		"non youtubejs provider": func(e *Envelope) { e.Provider = ProviderHolodex },
 		"contiguous continuity":  func(e *Envelope) { e.Continuity = ContinuityContiguous },
-		"future generation":      func(e *Envelope) { e.ContractGeneration = LiveCheckContractGeneration + 1 },
+		"future generation":      func(e *Envelope) { e.ContractGeneration++ },
 		"source event time":      func(e *Envelope) { e.SourceEventAt = &sourceEventAt },
 	} {
 		for _, kind := range []ObservationKind{KindChannelLiveCheck, KindVideoLiveCheck} {
@@ -567,14 +567,16 @@ func newLiveCheckEnvelope(t *testing.T, kind ObservationKind, payload any, compl
 	t.Helper()
 
 	subject, jobKind := testChannelID, "youtubejs_channel_live_check"
+	schemaVersion, generation := SchemaVersionV1, LiveCheckContractGeneration
 
 	if kind == KindVideoLiveCheck {
 		subject, jobKind = testVideoID, "youtubejs_video_live"
+		schemaVersion, generation = VideoLifecycleSchemaVersion, VideoLifecycleContractGeneration
 	}
 
 	return Envelope{
 		Provider: ProviderYouTubeJS, ObservationKind: kind, SubjectKey: subject,
-		SchemaVersion: SchemaVersionV1, ContractGeneration: LiveCheckContractGeneration,
+		SchemaVersion: schemaVersion, ContractGeneration: generation,
 		ScheduledFor: liveCheckScheduledFor, ObservedAt: liveCheckScheduledFor.Add(time.Second),
 		Completeness: completeness, Continuity: ContinuityNotApplicable,
 		Payload: mustMarshalPayload(t, payload), CollectorInstance: testCollectorInstance,

@@ -261,7 +261,7 @@ func decodeChannelLiveCheckPayload(raw []byte, input payloadDecodeInput) (payloa
 }
 
 func decodeVideoLiveCheckPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
-	if input.contractGeneration != LiveCheckContractGeneration && input.contractGeneration != VideoLifecycleContractGeneration {
+	if input.contractGeneration != VideoLifecycleContractGeneration {
 		return nil, nil, fmt.Errorf("unsupported video live check contract generation %d", input.contractGeneration)
 	}
 
@@ -270,15 +270,11 @@ func decodeVideoLiveCheckPayload(raw []byte, input payloadDecodeInput) (payload,
 		return nil, nil, fmt.Errorf("decode video live check payload: %w", err)
 	}
 
-	if input.contractGeneration == LiveCheckContractGeneration && (value.ScheduledAt != nil || value.WaitingStateConfirmed != nil) {
-		return nil, nil, errors.New("video live check generation 1 cannot carry lifecycle scheduling facts")
-	}
-
-	if input.contractGeneration == VideoLifecycleContractGeneration && input.schemaVersion != VideoLifecycleSchemaVersion {
+	if input.schemaVersion != VideoLifecycleSchemaVersion {
 		return nil, nil, errors.New("video lifecycle generation requires schema 2")
 	}
 
-	if input.contractGeneration == VideoLifecycleContractGeneration && value.LifecycleFactsTrusted() {
+	if value.LifecycleFactsTrusted() {
 		if err := validateVideoLifecycleV2(&value, input.observedAt); err != nil {
 			return nil, nil, fmt.Errorf("validate video lifecycle: %w", err)
 		}

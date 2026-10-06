@@ -140,10 +140,7 @@ func LoadLoggingConfig() (LoggingConfig, error) {
 
 // LoadHolodexConfig는 Holodex 클라이언트 운영값을 읽는다. 범위 검증은 ValidateHolodexConfig가 소유한다.
 func LoadHolodexConfig() (HolodexConfig, error) {
-	apiKey, err := envload.HolodexAPIKey()
-	if err != nil {
-		return HolodexConfig{}, fmt.Errorf("load holodex config: %w", err)
-	}
+	apiKey := envload.HolodexAPIKey()
 
 	d := DefaultHolodexOperationalConfig()
 
@@ -198,10 +195,6 @@ func LoadOfficialScheduleRuntimeConfig() (OfficialScheduleRuntimeConfig, error) 
 }
 
 func loadOfficialScheduleConfig() (OfficialScheduleConfig, error) {
-	if err := rejectRetiredOfficialScheduleEnv(); err != nil {
-		return OfficialScheduleConfig{}, fmt.Errorf("reject retired official schedule env: %w", err)
-	}
-
 	d := DefaultOfficialScheduleConfig()
 
 	var env envload.StrictEnv
@@ -248,7 +241,6 @@ func LoadIngestionConfig() (IngestionConfig, error) {
 }
 
 // LoadServicesConfig는 운영 화면이 조회하는 외부 서비스 health URL을 읽는다.
-// 퇴역 SERVICES_* 키 거절은 RejectRetiredRuntimeEnv가 소유한다.
 func LoadServicesConfig() ServicesConfig {
 	return ServicesConfig{
 		LLMSchedulerHealthURL:   sharedenv.String("SERVICES_LLM_SCHEDULER_HEALTH_URL", ""),
