@@ -33,18 +33,3 @@ func TestLoadRuntimeRejectsInvalidEnvValues(t *testing.T) {
 		})
 	}
 }
-
-// HOLODEX_API_KEY 하나만 정본이다. HOLODEX_API_KEY_1은 빈 값이어도 존재만으로 거절한다.
-func TestLoadRuntimeRejectsRetiredHolodexAPIKeyAlias(t *testing.T) {
-	for _, value := range []string{"", "legacy-key"} {
-		t.Run("HOLODEX_API_KEY_1="+value, func(t *testing.T) {
-			setYouTubeCollectorRuntimeLoadEnv(t)
-			t.Setenv("HOLODEX_API_KEY_1", value)
-
-			_, err := LoadRuntime()
-			if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY_1") {
-				t.Fatalf("LoadRuntime() error = %v, want presence-based HOLODEX_API_KEY_1 rejection", err)
-			}
-		})
-	}
-}

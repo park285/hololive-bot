@@ -58,7 +58,6 @@ func InitialSupportedContracts() StaticSupportedContracts {
 		{contract.ProviderYouTubeJS, contract.KindChannelProfile, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelPhoto, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelLiveCheck, 1, contract.LiveCheckContractGeneration},
-		{contract.ProviderYouTubeJS, contract.KindVideoLiveCheck, 1, contract.LiveCheckContractGeneration},
 		{contract.ProviderHolodex, contract.KindLiveSnapshot, 1, contract.LiveSnapshotMetadataContractGeneration},
 		{contract.ProviderHolodex, contract.KindViewerSample, 1, 1},
 		{contract.ProviderHolodex, contract.KindSchedule, 1, 1},

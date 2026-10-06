@@ -353,11 +353,6 @@ func assertProdRenderedEgressRuntimeKeys(t *testing.T, cfg renderedCompose) {
 			}
 		}
 
-		// 퇴역 가드는 존재만으로 거절하므로 compose가 빈 값으로라도 주입하면 기동이 막힌다.
-		if _, ok := env["HOLODEX_API_KEY_1"]; ok {
-			t.Fatalf("%s must not receive retired HOLODEX_API_KEY_1", service)
-		}
-
 		if env["API_SECRET_KEY"] != "dummy" {
 			t.Fatalf("%s API_SECRET_KEY = %q, want scoped env_file value", service, env["API_SECRET_KEY"])
 		}
@@ -387,10 +382,6 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 
 		if _, ok := env["HOLODEX_API_KEY"]; !ok {
 			t.Fatalf("%s missing scoped HOLODEX_API_KEY mapping", service)
-		}
-
-		if _, ok := env["HOLODEX_API_KEY_1"]; ok {
-			t.Fatalf("%s must not receive retired HOLODEX_API_KEY_1", service)
 		}
 	}
 

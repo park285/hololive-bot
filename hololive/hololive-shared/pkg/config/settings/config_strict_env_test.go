@@ -8,15 +8,6 @@ import (
 // invalidBoolValue는 shared-go bool 수용 집합(1/0, true/false, yes/no, y/n, on/off)에 없는 값이다.
 const invalidBoolValue = "maybe"
 
-// validateEgressRuntimeEnv는 egress runtime 로더가 역할별 구획을 읽기 전에 거치는 공통 env 단계다.
-func validateEgressRuntimeEnv() error {
-	if err := RejectRetiredRuntimeEnv(); err != nil {
-		return err
-	}
-
-	return ValidateRuntimeEnvSyntax()
-}
-
 // 숫자·bool env의 잘못된 값은 기본값으로 바뀌지 않고 기동 실패로 드러나야 한다(stack audit B4,
 // PLN-20260926-stack-audit-refactoring T10). 각 행은 공통 형식 검사가 다시 쓰는 공유 parser 하나를 대표하며,
 // 해당 구획을 보관하지 않는 runtime에서도 같은 거절이 유지된다.
@@ -62,27 +53,6 @@ func TestValidateRuntimeEnvSyntaxRejectsInvalidEnvValues(t *testing.T) {
 				t.Fatalf("ValidateRuntimeEnvSyntax() error = %v, want it to name %s", err, tc.key)
 			}
 		})
-	}
-}
-
-// 퇴역한 env 이름은 값을 읽지 않고 존재만으로(빈 값 포함) 거절한다. 제거 조건과 재검토 기한은
-// pkg/config/envload/retired_env_aliases.go와 config_services_retired_env.go 상단 주석이 소유한다.
-func TestEgressRuntimeEnvRejectsRetiredEnvAliases(t *testing.T) {
-	for _, key := range []string{"HOLODEX_API_KEY_1", "SERVICES_LLM_SERVER_HEALTH_URL"} {
-		for _, value := range []string{"", "legacy-value"} {
-			t.Run(key+"="+value, func(t *testing.T) {
-				t.Setenv(key, value)
-
-				err := validateEgressRuntimeEnv()
-				if err == nil {
-					t.Fatalf("egress runtime env accepted retired %s=%q; want presence-based rejection", key, value)
-				}
-
-				if !strings.Contains(err.Error(), key) {
-					t.Fatalf("egress runtime env error = %v, want it to name %s", err, key)
-				}
-			})
-		}
 	}
 }
 

@@ -412,6 +412,13 @@ func startLivePersistGrace(t *testing.T, grace time.Duration) (*pgxpool.Pool, *R
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(t.Context(), `UPDATE observation_contract_generations
+ SET current_schema_version=$1, current_generation=$2
+ WHERE provider='youtubejs' AND observation_kind='video_live_check'`,
+		contract.VideoLifecycleSchemaVersion, contract.VideoLifecycleContractGeneration); err != nil {
+		t.Fatal(err)
+	}
+
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
 

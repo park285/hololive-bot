@@ -96,7 +96,6 @@ Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-buil
 
 v1 YouTube 알림(`youtube_delivery`, `youtube_notification_delivery`)과 v2 digest(`notification_delivery`, `notification_delivery_outbox`)는 v3 alarm-dispatch ledger로 넘기지 않는 정본 파이프라인이고 각 executor가 direct egress를 소유합니다(`DEC-20260926-hololive-outbox-v3-convergence`). v3 handoff(`off`/`shadow`/`cutover`), 비교 전용 `shadowed` 상태, handoff metric은 삭제했습니다.
 
-`YOUTUBE_OUTBOX_V3_HANDOFF_MODE`와 `DELIVERY_OUTBOX_V3_HANDOFF_MODE`는 퇴역 키입니다. 빈 값이라도 env에 있으면 alarm-worker와 hololive-api가 기동을 거절합니다. 제거 조건과 재검토 기한은 `hololive/hololive-shared/pkg/config/settings/config_outbox_v3_handoff_retired_env.go`가 소유합니다.
 
 ## Common failure modes
 

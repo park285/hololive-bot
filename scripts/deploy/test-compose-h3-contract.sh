@@ -100,15 +100,6 @@ def check(label, ok):
         print(f"[FAIL] {label}", file=sys.stderr)
 
 
-# SCRAPER_* 키는 모두 퇴역했고 runtime은 존재만으로 기동을 거절한다(config_scraper_config_retired_env.go,
-# collector/retired_env.go). compose가 다시 주입하지 않는지 고정한다. HOLOLIVE_SCRAPER_*(DB role)는 접두사가 달라 대상이 아니다.
-def check_no_unused_scraper_env(name, env):
-    offenders = sorted(key for key in env if key.startswith("SCRAPER_"))
-    check(f"{name} has no retired SCRAPER_* env", not offenders)
-    for key in offenders:
-        check(f"{name} does not receive {key}", False)
-
-
 def healthcheck_url(svc):
     test = (svc.get("healthcheck") or {}).get("test") or []
     return test[-1] if test else ""
@@ -196,9 +187,7 @@ if collector is not None:
     check("youtube-collector has no compose profile", not (collector.get("profiles") or []))
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
-    check_no_unused_scraper_env("youtube-collector", env)
     check("youtube-collector receives HOLODEX_API_KEY", env.get("HOLODEX_API_KEY") == "stub")
-    check("youtube-collector does not receive retired HOLODEX_API_KEY_1", "HOLODEX_API_KEY_1" not in env)
     check("youtube-collector receives METRICS_API_KEY", env.get("METRICS_API_KEY") == "stub")
     check("youtube-collector does not receive API_SECRET_KEY", "API_SECRET_KEY" not in env)
 
@@ -256,7 +245,6 @@ if pc is not None:
     env = pc.get("environment") or {}
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
-    check_no_unused_scraper_env("youtube-collector", env)
 
 
 def has_bind_target(svc, target):
@@ -299,7 +287,6 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
     check(f"{name} mounts its Stack Worker Profile", has_bind_target(svc, expected_profile))
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"{name} does not receive {iris_key}", iris_key not in env)
-    check_no_unused_scraper_env(name, env)
     check(f"youtube-collector absent from {name} AP render", "youtube-collector" not in services)
 
 CLEARTEXT_INTERNAL_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")

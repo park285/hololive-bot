@@ -41,16 +41,13 @@ elif (
   elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
        ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
     record_fail "generated host env must use the direct Osaka PostgreSQL endpoint"
-  elif grep -Eq '^(HOLOLIVE_H3_SERVER_NAME|HOLODEX_API_KEY_1)=' "${generated_env}"; then
-    # 내부 H3 client는 HOLOLIVE_INTERNAL_H3_*만 읽고 HOLODEX_API_KEY_1은 퇴역 가드가 거절한다(stack audit T10).
-    record_fail "generated host env must not emit retired alias keys"
   elif ! grep -Eq '^HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=.+' "${generated_env}" ||
        ! grep -Eq '^HOLOLIVE_INTERNAL_H3_SERVER_NAME=.+' "${generated_env}"; then
     record_fail "generated host env must emit both dedicated internal H3 client keys"
   else
     pass "generated host env contents have 0 CACHE lines"
     pass "generated host env contents have 0 SETTINGS_DIR lines"
-    pass "generated host env emits only canonical internal H3 and Holodex key names"
+    pass "generated host env emits the dedicated internal H3 client keys"
   fi
 else
   record_fail "ap-host-native write_host_env did not produce generated env contents"

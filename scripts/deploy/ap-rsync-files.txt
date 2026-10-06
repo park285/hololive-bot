@@ -104,17 +104,6 @@ hololive/hololive-shared/pkg/config/settings/config_parsers.go
 hololive/hololive-shared/pkg/config/settings/config_types.go
 hololive/hololive-shared/pkg/config/settings/config_validation.go
 hololive/hololive-shared/pkg/config/settings/config_youtube.go
-hololive/hololive-shared/pkg/config/settings/config_holodex_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_llm_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_services_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_ingestion_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_iris_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_scraper_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_webhook_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_official_schedule_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_outbox_v3_handoff_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_ratelimit_retired_env.go
-hololive/hololive-shared/pkg/config/settings/config_scraper_config_retired_env.go
 hololive/hololive-shared/pkg/config/settings/runtime_inputs.go
 hololive/hololive-shared/pkg/config/settings/server_transport.go
 hololive/hololive-shared/pkg/config/settings/runtime_clients.go
@@ -335,7 +324,6 @@ hololive/hololive-youtube-collector/po-sandbox/package-lock.json
 hololive/hololive-youtube-collector/po-sandbox/src/worker.mjs
 hololive/hololive-youtube-collector/internal/config/config.go
 hololive/hololive-youtube-collector/internal/config/config_env.go
-hololive/hololive-youtube-collector/internal/config/retired_env.go
 hololive/hololive-youtube-collector/internal/config/runtime.go
 hololive/hololive-youtube-collector/internal/config/tracing.go
 hololive/hololive-youtube-collector/internal/config/worker_profile.go
@@ -454,8 +442,6 @@ hololive/hololive-alarm-worker/go.sum
 hololive/hololive-api/go.mod
 hololive/hololive-api/go.sum
 hololive/hololive-shared/pkg/config/envload/env.go
-hololive/hololive-shared/pkg/config/envload/retired_env.go
-hololive/hololive-shared/pkg/config/envload/retired_env_aliases.go
 hololive/hololive-shared/pkg/config/envload/strict_env.go
 hololive/hololive-shared/pkg/config/envload/tracing_env.go
 hololive/hololive-shared/pkg/config/runtimepolicy/environment.go

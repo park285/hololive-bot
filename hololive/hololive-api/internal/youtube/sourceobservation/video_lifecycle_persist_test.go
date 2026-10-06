@@ -24,43 +24,9 @@ func startUnobservedVideoLifecycle(t *testing.T, origin string) (*pgxpool.Pool, 
 		t.Fatal(err)
 	}
 
-	_, err = pool.Exec(t.Context(), `UPDATE observation_contract_generations SET current_schema_version=2,current_generation=2
-        WHERE provider='youtubejs' AND observation_kind='video_live_check'`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	proof = seedAdditionalLease(t, pool, &proof, contract.KindVideoLiveCheck, testVideoID, "youtubejs_video_live")
 
 	return pool, consumer, proof
-}
-
-func lifecycleVideoEnvelope(t *testing.T, proof *contract.LeaseProof, payload contract.VideoLiveCheckV1) *contract.Envelope {
-	t.Helper()
-
-	raw, err := contract.MarshalPayloadV1(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	completeness := contract.CompletenessPartial
-
-	if payload.Availability == contract.VideoAvailabilityUnknown {
-		completeness = contract.CompletenessUnknown
-	}
-
-	envelope, err := contract.PrepareEnvelope(contract.Envelope{
-		Provider: contract.ProviderYouTubeJS, ObservationKind: contract.KindVideoLiveCheck, SubjectKey: testVideoID,
-		SchemaVersion: contract.VideoLifecycleSchemaVersion, ContractGeneration: contract.VideoLifecycleContractGeneration,
-		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
-		Completeness: completeness, Continuity: contract.ContinuityNotApplicable,
-		Payload: raw, CollectorInstance: proof.OwnerInstance, Lease: *proof,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return &envelope
 }
 
 func TestVideoLifecycleSettlesUnobservedEndWithoutStartOrNotification(t *testing.T) {
@@ -68,7 +34,7 @@ func TestVideoLifecycleSettlesUnobservedEndWithoutStartOrNotification(t *testing
 		t.Run(origin, func(t *testing.T) {
 			pool, consumer, proof := startUnobservedVideoLifecycle(t, origin)
 			ended := proof.ScheduledFor.Add(-time.Minute)
-			id := publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), lifecycleVideoEnvelope(t, &proof, endedVideoCheck(ended)))
+			id := publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, endedVideoCheck(ended)))
 			consumeLiveChecks(t.Context(), t, consumer)
 
 			var (
@@ -110,7 +76,7 @@ func TestVideoLifecycleWaitingRequiresNewScheduleProof(t *testing.T) {
 				payload.ScheduledAt = new(proof.ScheduledFor.Add(time.Hour))
 			}
 
-			publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), lifecycleVideoEnvelope(t, &proof, payload))
+			publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, payload))
 			consumeLiveChecks(t.Context(), t, consumer)
 
 			if confirmed {
@@ -164,7 +130,7 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 				}
 			}
 
-			publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), lifecycleVideoEnvelope(t, &proof, payload))
+			publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, payload))
 			consumeLiveChecks(t.Context(), t, consumer)
 			assertLifecycleOrigin(t, pool, "legacy_unknown")
 
@@ -180,7 +146,7 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 func TestVideoLifecycleUnknownReviewCASAndNewFactsInvalidateReceipt(t *testing.T) {
 	pool, consumer, proof := startUnobservedVideoLifecycle(t, "legacy_unknown")
 	ctx := t.Context()
-	publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), lifecycleVideoEnvelope(t, &proof, unknownVideoCheck(contract.LiveCheckReasonIdentityMissing)))
+	publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, unknownVideoCheck(contract.LiveCheckReasonIdentityMissing)))
 	consumeLiveChecks(ctx, t, consumer)
 
 	var expected string
@@ -218,7 +184,7 @@ func TestVideoLifecycleUnknownReviewCASAndNewFactsInvalidateReceipt(t *testing.T
 	}
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
-	publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), lifecycleVideoEnvelope(t, &proof, endedVideoCheck(proof.ScheduledFor.Add(-time.Second))))
+	publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, endedVideoCheck(proof.ScheduledFor.Add(-time.Second))))
 	consumeLiveChecks(ctx, t, consumer)
 
 	var exempted bool
