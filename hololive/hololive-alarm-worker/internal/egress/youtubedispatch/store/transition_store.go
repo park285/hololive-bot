@@ -27,8 +27,7 @@ type TransitionStore struct {
 	logger *slog.Logger
 	config TransitionConfig
 
-	// afterCommit is a package-private fault-injection hook. It runs only after
-	// PostgreSQL accepted COMMIT and lets tests exercise response-loss read-back.
+	// afterCommit은 PostgreSQL의 COMMIT 성공 뒤 응답 유실과 재조회를 재현하는 비공개 테스트 훅이다.
 	afterCommit func(operation string) error
 }
 

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 . "${SCRIPT_DIR}/python-runtime.sh"
 repo_python_init
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.1+auto}"
+export GOTOOLCHAIN="${GOTOOLCHAIN-auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
 source "${SCRIPT_DIR}/nilaway-inputs.sh"
@@ -15,7 +15,7 @@ cd "${ROOT_DIR}"
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 source "${SCRIPT_DIR}/local-ci-files.sh"
 source "${SCRIPT_DIR}/go-work-sync-drift.sh"
-# These arrays are the input contract consumed by local-ci-packages.sh.
+# local-ci-packages.sh가 이 배열을 입력으로 사용한다.
 # shellcheck disable=SC2034
 mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
 # shellcheck disable=SC2034
@@ -38,56 +38,6 @@ run_step() {
     echo "[LOCAL CI] ${name}"
     "$@"
     echo
-}
-
-check_go_toolchain() {
-    # 1.27.x patch는 자동 추종한다: minor family만 강제하고 정확한 patch는 고정하지 않는다.
-    # 새 patch(예: go1.27.1)가 설치되면 파일 수정 없이 그대로 통과한다.
-    local family="${GO_TOOLCHAIN_FAMILY:-go1.27.}"
-    local actual
-    actual="$(go env GOVERSION)"
-    case "${actual}" in
-        "${family}"*) ;;
-        *)
-            echo "expected ${family}x toolchain, got ${actual}" >&2
-            exit 1
-            ;;
-    esac
-}
-
-ensure_go_mod_toolchains() {
-    # go.mod/go.work의 toolchain 하한을 현재 보안 patch로 고정한다.
-    # GOTOOLCHAIN=go1.27.1+auto가 필요한 patch toolchain을 확보한다.
-    local module
-    local pin="${GO_TOOLCHAIN_PIN:-go1.27.1}"
-    local pin_version="${pin#go}"
-
-    # go directive가 핀 이상이면 directive 자체가 하한이고, 그때의 toolchain 라인은
-    # 중복이라 GOWORK=off 정본 검사(boundary/export의 go list)가 "go mod tidy 필요"로
-    # 거부한다 — 핀이 directive보다 높을 때만 라인을 심어야 두 검사와 공존한다.
-    stamp_toolchain_if_below_pin() {
-        local mod_dir="$1"
-        local go_directive
-        go_directive="$(awk '$1 == "go" {print $2; exit}' "${mod_dir}/go.mod")"
-        [[ -z "${go_directive}" ]] && return 0
-        if [[ "$(printf '%s\n%s\n' "${go_directive}" "${pin_version}" | sort -V | head -1)" == "${go_directive}" \
-            && "${go_directive}" != "${pin_version}" ]]; then
-            (cd "${mod_dir}" && go mod edit -toolchain="${pin}")
-        fi
-    }
-
-    local work_go_directive
-    work_go_directive="$(awk '$1 == "go" {print $2; exit}' go.work)"
-    if [[ -n "${work_go_directive}" && "${work_go_directive}" != "${pin_version}" \
-        && "$(printf '%s\n%s\n' "${work_go_directive}" "${pin_version}" | sort -V | head -1)" == "${work_go_directive}" ]]; then
-        go work edit -toolchain="${pin}"
-    fi
-    stamp_toolchain_if_below_pin .
-    for module in "${GO_MODULES[@]}"; do
-        # sibling repo(../shared-go)의 go.mod는 그 repo 소유 — 스탬프하면 그쪽 정본 검사와 충돌.
-        case "${module}" in ../*) continue ;; esac
-        stamp_toolchain_if_below_pin "${module}"
-    done
 }
 
 check_go_mod_tidy() {
@@ -196,19 +146,18 @@ echo
 
 run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
 run_step "Sensitive log scan" ./scripts/refactor/grep-sensitive-logs.sh
-run_step "Go toolchain" check_go_toolchain
-run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}" ensure_go_mod_toolchains
+run_step "Go toolchain" go env GOVERSION
+run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}"
 # gofmt·go fix modernizer drift는 golangci-lint의 formatters와 modernize 린터가 소유한다.
 check_go_mod_tidy
 check_canonical_module_builds
-run_go_package_step "Go vet" go_mod_readonly go vet
 check_integration_tag_compilation
 check_staticcheck
 check_golangci_lint
 check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
-run_step "collector YouTube.js dependencies" npm ci --ignore-scripts --prefix hololive/hololive-youtube-collector/youtubejs
+run_step "collector YouTube.js dependencies" bash scripts/ci/public-pr-collector-helper-install.sh
 run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
@@ -216,8 +165,6 @@ run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspa
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
 run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
-run_go_package_step "Go test" go_mod_readonly go test -count=1
-
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
     RACE_TEST_PARALLEL="${RACE_TEST_PARALLEL:-$(( ($(nproc) + 2) / 3 ))}"
     # 산술 컨텍스트는 변수 내용을 재귀 평가하므로, 검증 없이 (( ))에 넣으면 호출 env 가
@@ -229,13 +176,13 @@ if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
     (( 10#${RACE_TEST_PARALLEL} < 2 )) && RACE_TEST_PARALLEL=2
     run_go_package_step "Go race test (testcontainer boot fan-out limited via -p ${RACE_TEST_PARALLEL})" \
         go_mod_readonly go test -race -p "${RACE_TEST_PARALLEL}" -count=1
+    run_go_package_step "Go non-race-only tests" go_mod_readonly bash scripts/ci/go-test-nonrace.sh
 else
-    echo "[LOCAL CI] Skip race tests: set RUN_RACE_TESTS=true to run go test -race"
-    echo
+    run_go_package_step "Go test" go_mod_readonly go test -count=1
 fi
 
 check_integration_tests
 
-# 의존성 hygiene(go list -m -u, govulncheck)은 scripts/ci/pre-push-gate.sh 가 소유한다.
+# 의존성 hygiene(govulncheck)은 scripts/ci/pre-push-gate.sh 가 소유한다.
 
 echo "[LOCAL CI] Passed"

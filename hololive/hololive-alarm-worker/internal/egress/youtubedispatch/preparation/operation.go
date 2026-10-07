@@ -215,7 +215,7 @@ func (o PreparedSendOperation) Tracking() []lifecycle.TrackingRequirement {
 func (o PreparedSendOperation) Request() ImmutableSendRequest { return o.request }
 func (o PreparedSendOperation) PreparedAt() time.Time         { return o.preparedAt }
 
-// Coordinator keeps cache use downstream of durable logical resolution.
+// Coordinator는 논리 상태를 영속 저장소에서 확정한 뒤 캐시를 사용한다.
 type Coordinator struct {
 	resolver Resolver
 }
@@ -232,8 +232,8 @@ type PrepareBatchInput struct {
 	ProceedCacheHit bool
 }
 
-// ResolveForPreparation always executes ledger/group resolution. A Proceed
-// cache hit may avoid repeated post-level work later, but never bypasses this gate.
+// ResolveForPreparation은 항상 ledger·그룹 상태를 확인한다.
+// Proceed 캐시는 이후 게시물 작업만 줄이며 이 확인을 생략하지 않는다.
 func (c Coordinator) ResolveForPreparation(input PrepareBatchInput) []Resolution {
 	return c.resolver.ResolveGroups(input.Rows, input.Ledger, input.RequestedKeys, input.At)
 }

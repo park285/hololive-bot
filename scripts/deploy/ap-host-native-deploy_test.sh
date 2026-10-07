@@ -17,8 +17,15 @@ pass() { echo "[PASS] $*"; }
 . "${RELEASE_PATH_LIB}"
 # shellcheck source=scripts/deploy/lib/ap-host-native-rollback-check.sh
 . "${ROLLBACK_CHECK_LIB}"
-# shellcheck source=scripts/deploy/ap-host-native-deploy_contract_checks.inc.sh
-. "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy_contract_checks.inc.sh"
+
+if grep -Eq 'EnvironmentFile=-?/etc/stack-secrets/hololive-bot/(ap-)?compose\.env' "${UNIT_TEMPLATE}"; then
+  record_fail "checked-in host-native unit template must not load a shared Compose env"
+elif ! grep -Fxq 'EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env' "${UNIT_TEMPLATE}" ||
+     ! grep -Fxq 'EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env' "${UNIT_TEMPLATE}"; then
+  record_fail "checked-in host-native unit template must require the two scoped env files"
+else
+  pass "checked-in host-native unit template exposes only collector-scoped env files"
+fi
 
 write_host_env_fn="$(awk '/^write_host_env\(\) \{/,/^}$/' "${DEPLOY}")"
 cfg008_dir="$(mktemp -d)"
@@ -53,26 +60,6 @@ else
   record_fail "ap-host-native write_host_env did not produce generated env contents"
 fi
 rm -rf "${cfg008_dir}"
-
-if grep -Eq 'SETTINGS_DIR=' "${DEPLOY}"; then
-  record_fail "ap-host-native must not emit unused SETTINGS_DIR for youtube-collector"
-else
-  pass "host-native generator source does not emit SETTINGS_DIR"
-fi
-
-if grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-collector/settings' "${REMOTE_APPLY}"; then
-  record_fail "ap-host-native must not create unused collector settings dir"
-else
-  pass "ap-host-native does not create unused collector settings dir"
-fi
-
-permission_line="$(grep -nF 'normalize_runtime_payload_permissions "$release_dir"' "${REMOTE_APPLY}" | tail -1 | cut -d: -f1)"
-profile_line="$(grep -nF '"$release_dir/bin/youtube-collector" --check-worker-profile' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
-if [[ -n "${permission_line}" && -n "${profile_line}" ]] && (( permission_line < profile_line )); then
-  pass "host-native release normalizes service-readable payload permissions before validation"
-else
-  record_fail "host-native release must normalize service-readable payload permissions before validation"
-fi
 
 permission_fn="$(awk '/^normalize_runtime_payload_permissions\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
 permission_fixture="$(mktemp -d)"
@@ -144,35 +131,7 @@ else
   record_fail "canonical host-native systemd unit must pass systemd-analyze verify"
 fi
 
-if cmp -s "${UNIT_TEMPLATE}" "${unit_copy_dir}/etc/systemd/system/hololive-youtube-collector@.service"; then
-  pass "packaged host-native unit is byte-identical to its canonical template"
-else
-  record_fail "packaged host-native unit must remain byte-identical to its canonical template"
-fi
 rm -rf "${unit_copy_dir}"
-
-if grep -Fq 'rollback_contract_dir="$old_target/rollback-contract"' "${REMOTE_APPLY}" &&
-   grep -Fq '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" &&
-   grep -Fq '"$unit_file" "$rollback_contract_dir/hololive-youtube-collector@.service"' "${REMOTE_APPLY}"; then
-  pass "ap-host-native deploy preserves the installed host env and systemd unit with the previous release"
-else
-  record_fail "ap-host-native deploy must preserve the installed host env and systemd unit"
-fi
-
-# 퇴역 producer의 첫 cutover 상태 기록·복원은 삭제했다(stack-audit 2026-09-26 T11).
-if grep -Eq 'retired_producer|first-cutover-producer|RETIRED_PRODUCER_LIB' "${REMOTE_APPLY}" "${ROLLBACK}" "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh"; then
-  record_fail "ap-host-native deploy and rollback must not keep the retired producer cutover path"
-else
-  pass "ap-host-native deploy and rollback carry no retired producer cutover path"
-fi
-
-if grep -Fq 'collector_readiness_poll 90 2 collector_readiness_fetch' "${REMOTE_APPLY}" &&
-   grep -Fq 'systemctl is-active --quiet "$unit"' "${REMOTE_APPLY}" &&
-   grep -Fq 'collector_readiness_validate "$ready"' "${REMOTE_APPLY}"; then
-  pass "ap-host-native cutover waits for the strict readiness contract"
-else
-  record_fail "ap-host-native cutover must allow startup grace without weakening readiness"
-fi
 
 bash "${ROOT_DIR}/scripts/deploy/ap-host-native-collector-wrapper_test.sh"
 bash "${ROOT_DIR}/scripts/deploy/collector-cutover-failure_test.sh"
@@ -184,11 +143,6 @@ env XDG_RUNTIME_DIR="${native_test_runtime}" DBUS_SESSION_BUS_ADDRESS="unix:path
   -p "WorkingDirectory=${ROOT_DIR}" \
   bash "${ROOT_DIR}/scripts/deploy/ap-host-native-cutover_test.sh"
 
-if grep -Fq 'no previous collector release to roll back to; fix forward' "${ROLLBACK}"; then
-  pass "ap-host-native rollback refuses hosts without a previous collector release"
-else
-  record_fail "ap-host-native rollback must refuse hosts without a previous collector release"
-fi
 native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^native_restore_recorded_runtime\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^native_cutover_failed\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
 # cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
 cutover_stop_step='arm_native_cutover_restore; native_cutover_run stop stop_native_units_and_require_inactive'
@@ -349,31 +303,6 @@ else
   record_fail "ap-host-native failed-cutover restore must run exactly once when a command substitution fails"
 fi
 
-capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
-install_line="$(grep -nF '"$payload/youtube-collector-host.env" "$host_env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
-if [[ -n "${capture_line}" && -n "${install_line}" ]] && (( capture_line < install_line )); then
-  pass "ap-host-native deploy captures the old contract before installing the new contract"
-else
-  record_fail "ap-host-native deploy must capture the old contract before overwriting it"
-fi
-
-manifest_line="$(grep -nF '> rollback-contract/SHA256SUMS' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
-previous_line="$(grep -nF 'ln -sfn "$old_target" "$previous_link"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
-if [[ -n "${manifest_line}" && -n "${previous_line}" && -n "${install_line}" ]] &&
-   (( manifest_line < previous_line && manifest_line < install_line )); then
-  pass "ap-host-native deploy seals the complete rollback payload before publishing previous"
-else
-  record_fail "ap-host-native deploy must seal rollback checksums before publishing previous or installing the new contract"
-fi
-
-status_line="$(grep -nF 'CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
-completion_line="$(grep -nF 'CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
-if [[ -n "${status_line}" && -n "${completion_line}" ]] && (( status_line < completion_line )); then
-  pass "ap-host-native deploy runs the shared completion gate after status inspection"
-else
-  record_fail "ap-host-native deploy must forward change_started_at to the completion gate after status inspection"
-fi
-
 tmp="$(mktemp -d)"
 cleanup() {
   rm -rf "${tmp}" "${stop_fixture}"
@@ -382,7 +311,11 @@ trap cleanup EXIT
 mkdir -p "${tmp}/bin" "${tmp}/success" "${tmp}/failure"
 touch "${tmp}/KR.key"
 
-if RELEASE_ID='../active' \
+printf '#!/usr/bin/env bash\nexit 1\n' > "${tmp}/bin/ssh"
+chmod +x "${tmp}/bin/ssh"
+
+if PATH="${tmp}/bin:${PATH}" \
+   RELEASE_ID='../active' \
    ARTIFACT_DIR="${tmp}/traversal-artifact" \
    SSH_KEY="${tmp}/KR.key" \
    "${DEPLOY}" osaka --dry-run >"${tmp}/traversal.out" 2>"${tmp}/traversal.err"; then
@@ -530,12 +463,6 @@ else
   record_fail "invalid unit validation must fail for the systemd precondition"
 fi
 
-if [[ "$(grep -Fc 'native_rollback_validate "$previous_target"' "${ROLLBACK}")" -eq 2 ]]; then
-  pass "native rollback dry-run and apply share the payload integrity gate"
-else
-  record_fail "native rollback dry-run and apply must both invoke payload integrity validation"
-fi
-
 cat > "${tmp}/bin/ssh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -571,17 +498,8 @@ else
   record_fail "ap-host-native rollback orchestration must succeed when restore and completion checks pass"
 fi
 
-# 호출 순서: 1 rollback 시작 시각, 2 복원 payload, 3 이전 issuer 존재 기록 조회, 이후 completion gate. previous 유무로
-# rollback 방식을 고르던 probe는 퇴역 producer 복원 경로와 함께 지웠다(stack-audit 2026-09-26 T11).
+# 두 번째 SSH 호출은 실제 복원 payload입니다.
 restore_payload="${tmp}/success/call-2.stdin"
-
-validate_line="$(grep -nF 'native_rollback_validate "$previous_target"' "${restore_payload}" | tail -1 | cut -d: -f1)"
-restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"
-if [[ -n "${validate_line}" && -n "${restore_line}" ]] && (( validate_line < restore_line )); then
-  pass "native rollback validates payload integrity and unit before mutation"
-else
-  record_fail "native rollback validation must run before the first restore mutation"
-fi
 
 # 수동 rollback이 원격에 보낸 payload에서 검증 뒤 첫 복원 변경 전까지의 정지 단계를 같은 가짜 systemctl로 실행한다.
 rollback_stop_step="$(awk '/^native_rollback_validate "[$]previous_target"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"

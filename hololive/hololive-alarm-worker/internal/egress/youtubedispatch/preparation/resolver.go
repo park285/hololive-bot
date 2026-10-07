@@ -1,5 +1,4 @@
-// Package preparation resolves logical YouTube delivery groups and freezes
-// provider operations before any external effect is allowed.
+// Package preparation은 외부 부수 효과 전에 논리 전송 그룹과 제공자 작업을 확정한다.
 package preparation
 
 import (
@@ -15,8 +14,7 @@ import (
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
-// DeliverySnapshot is one physical row joined with the outbox identity needed
-// to derive its canonical logical key.
+// DeliverySnapshot은 정본 논리 키를 구할 outbox 식별자와 개별 행의 결합이다.
 type DeliverySnapshot struct {
 	DeliveryID     int64
 	OutboxID       int64
@@ -207,8 +205,8 @@ func NewResolver(config ResolverConfig) (Resolver, error) {
 	return Resolver{config: config}, nil
 }
 
-// ResolveGroups performs ledger-first, bounded logical resolution. The caller
-// supplies batch-loaded ledger and retained rows; this function performs no I/O.
+// ResolveGroups는 ledger를 우선해 제한된 범위에서 논리 상태를 확인한다.
+// 호출자가 일괄 조회한 ledger와 보존 행을 전달하며 함수 자체는 I/O를 수행하지 않는다.
 func (r Resolver) ResolveGroups(
 	rows []DeliverySnapshot,
 	ledger []LedgerEvidence,

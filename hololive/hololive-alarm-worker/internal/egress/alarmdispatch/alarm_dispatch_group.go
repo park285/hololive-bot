@@ -221,25 +221,10 @@ func alarmDispatchYouTubeOutboxEnvelopeError(envelope *domain.AlarmQueueEnvelope
 	}
 }
 
-// errAlarmDispatchRetiredStreamProvider는 Twitch/Chzzk 단독 방송을 담은 보관 v3 envelope의 드레인 종단이다.
-// DEC-20260926-youtube-only-stream-providers(e65119bc1)로 비유튜브 제공자를 퇴역했고, 이 봉투는 발송하지 않고 기존
-// 발송 전 실패 경로(재시도 한도 뒤 DLQ)로 보낸다. 렌더러의 같은 분기는 이 가드 뒤라 도달하지 않아 지웠다(stack-audit
-// 2026-09-26 T17). 드레인 표시는 runner의 error 로그와 DLQ last_error다.
-// 제거 조건: authoritative DB에서 alarm_dispatch_events.payload의 notification.stream.is_twitch_only 또는
-// is_chzzk_only가 true이면서 pending·retry·leased·sending delivery가 있는 event가 0건이고, 해당 event가 dispatch
-// retention(기본 90일)으로 소멸한 뒤 이 가드, domain.Stream의 Twitch/Chzzk 필드(외부 Stream API 계약 확인 포함)를 지운다.
-// 재검토 기한: remove_after = "2026-12-31".
-var errAlarmDispatchRetiredStreamProvider = errors.New("non-YouTube stream provider is retired")
-
 func alarmDispatchStreamEnvelopeError(envelope *domain.AlarmQueueEnvelope) error {
 	stream := envelope.Notification.Stream
 	if stream == nil {
 		return errors.New("alarm notification stream is nil")
-	}
-
-	// 보관된 구형 envelope를 YouTube 알림으로 오인해 발송하지 않는다(드레인 종단).
-	if stream.IsTwitchOnly || stream.IsChzzkOnly {
-		return errAlarmDispatchRetiredStreamProvider
 	}
 
 	if !stream.HasYouTubeInfo() {

@@ -1,4 +1,4 @@
-# Explicit opt-in overlay for the current live host bindings.
+# 현재 운영 호스트 연결을 명시적으로 선택하는 overlay다.
 # LIVE_LOGS_PATH: /opt 배포 시 ../../logs가 root 소유 current/logs에 갇히는 문제를 피하기 위한
 # 호스트 로그 절대경로. 개인 경로 하드코딩 대신 필수 변수로 강제한다.
 

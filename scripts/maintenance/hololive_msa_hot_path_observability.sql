@@ -1,6 +1,4 @@
--- hololive_msa_hot_path_observability.sql
--- This file is not a migration. Run manually against a read-only session when
--- checking hot-path and alarm dispatch health.
+-- 읽기 전용 세션에서 주요 쿼리·알람 전송 상태를 수동 확인한다. 마이그레이션이 아니다.
 
 \echo 'alarm_dispatch_deliveries terminal rows'
 SELECT

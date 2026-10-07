@@ -27,8 +27,8 @@ RUN --mount=type=cache,target=/root/.npm chmod u=rwX,go=rX package.json package-
 COPY hololive/hololive-youtube-collector/youtubejs/src ./src
 RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
-# Keep build-time npm execution native, but source the shipped Node binary and libraries from the
-# target platform. This makes x86_64-hosted linux/arm64 release builds architecture-correct.
+# npm은 빌드 호스트에서 실행하고 배포할 Node·라이브러리는 대상 플랫폼에서 가져온다.
+# 따라서 x86_64에서 빌드해도 linux/arm64 릴리스의 아키텍처가 일치한다.
 FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS youtubejs-runtime
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS builder

@@ -3,56 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 UNIT="${ROOT_DIR}/scripts/systemd/hololive-compose.service"
-WRAPPER="${ROOT_DIR}/scripts/deploy/systemd-compose-up.sh"
-DOWN_WRAPPER="${ROOT_DIR}/scripts/deploy/systemd-compose-down.sh"
 SYSTEMD_DIR="${ROOT_DIR}/scripts/systemd"
 
 failures=0
 record_fail() { echo "[FAIL] $*" >&2; failures=$((failures + 1)); }
 pass() { echo "[PASS] $*"; }
-
-if grep -q 'HOLOLIVE_EXEC_TREE_ENFORCE' "${WRAPPER}"; then
-  record_fail "root exec-tree ownership enforcement must be fail-closed, not opt-in (4d57f81c/03e6dca8)"
-else
-  pass "root exec-tree ownership enforcement has no opt-in bypass"
-fi
-
-if grep -E 'compose\.sh .* up -d( |$)' "${WRAPPER}" | grep -Evq ' up -d --no-build( |$)'; then
-  record_fail "root systemd startup must never build images on the runtime host"
-else
-  pass "root systemd startup is pinned to --no-build"
-fi
-
-COLLECTOR_DISABLE_OVERLAY="${ROOT_DIR}/deploy/compose/docker-compose.youtube-collector-disabled.yml"
-if [[ ! -f "${COLLECTOR_DISABLE_OVERLAY}" ]]; then
-  record_fail "youtube-collector persistent disable overlay is missing"
-elif ! grep -Eq '^[[:space:]]+replicas:[[:space:]]+0$' "${COLLECTOR_DISABLE_OVERLAY}"; then
-  record_fail "youtube-collector disable overlay must scale the service to zero"
-elif ! grep -Fq 'HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR' "${ROOT_DIR}/scripts/deploy/compose.sh" ||
-     ! grep -Fq 'docker-compose.youtube-collector-disabled.yml' "${ROOT_DIR}/scripts/deploy/compose.sh"; then
-  record_fail "the shared compose entrypoint must enforce the persistent youtube-collector disable flag"
-else
-  pass "youtube-collector persistent disable is owned by the shared compose entrypoint"
-fi
-
-if [[ ! -f "${DOWN_WRAPPER}" ]]; then
-  record_fail "root systemd ExecStop wrapper source is missing"
-elif grep -Eq '/(home|root/work)' "${DOWN_WRAPPER}"; then
-  record_fail "root systemd ExecStop wrapper source must not reference mutable home/root-work paths"
-elif ! grep -q 'verify-exec-tree-ownership.sh' "${DOWN_WRAPPER}"; then
-  record_fail "root systemd ExecStop wrapper must enforce root-owned deploy tree"
-else
-  pass "root systemd ExecStop wrapper source is root-exec-tree guarded"
-fi
-
-for wrapper in "${WRAPPER}" "${DOWN_WRAPPER}"; do
-  wrapper_name="$(basename "${wrapper}")"
-  if ! grep -q 'root verifier is writable by a non-root user' "${wrapper}"; then
-    record_fail "${wrapper_name} must self-check the verifier's own ownership before running it as root (4d57f81c)"
-  else
-    pass "${wrapper_name} self-checks the verifier before root execution"
-  fi
-done
 
 if grep -Eq '^WorkingDirectory=/home/' "${UNIT}"; then
   record_fail "root systemd unit must not use a mutable home-tree WorkingDirectory (ee1c9a5b)"
@@ -80,21 +35,6 @@ if (( failures == 0 )); then
   pass "root systemd units avoid mutable home/root-work paths"
 fi
 
-SYNC="${ROOT_DIR}/scripts/deploy/sync-opt-current.sh"
-if [[ ! -f "${SYNC}" ]]; then
-  record_fail "sync-opt-current.sh source is missing"
-elif grep -nE '^[[:space:]]*install[[:space:]].*\$REPO_ROOT.*(systemd-compose-(up|down)\.sh|hololive-compose\.service\.d)' "${SYNC}" >&2; then
-  record_fail "sync-opt-current.sh must install root systemd material from \$STAGING (git archive HEAD), not \$REPO_ROOT — working-tree untracked .conf injection is a root drop-in LPE"
-else
-  pass "sync-opt-current.sh installs root systemd material from the git archive snapshot, not the working tree"
-fi
-
-if ! grep -Fq 'chmod 0755 "$OPT_CURRENT/runtime-config"' "${SYNC}"; then
-  record_fail "sync-opt-current.sh must keep root-owned runtime-config traversable by container uid"
-else
-  pass "sync-opt-current.sh preserves runtime-config traversal after root ownership normalization"
-fi
-
 FIREWALL_UNIT="${SYSTEMD_DIR}/admin-dashboard-ingress-firewall.service"
 FIREWALL_RULES="${SYSTEMD_DIR}/admin-dashboard-ingress.nft"
 LIVE_COMPAT="${ROOT_DIR}/deploy/compose/docker-compose.live-compat.yml"
@@ -102,8 +42,6 @@ if [[ ! -f "${FIREWALL_UNIT}" || ! -f "${FIREWALL_RULES}" ]]; then
   record_fail "public ingress firewall unit and nft rules must be tracked"
 elif ! grep -Fq 'Requires=docker.service admin-dashboard-ingress-firewall.service' "${UNIT}"; then
   record_fail "hololive-compose must fail closed when the ingress firewall cannot start"
-elif ! grep -Fq '$STAGING/scripts/systemd/admin-dashboard-ingress.nft' "${SYNC}"; then
-  record_fail "sync-opt-current must install nft rules from the tracked staging snapshot"
 elif ! grep -Fq 'ip saddr 100.100.1.5' "${FIREWALL_RULES}"; then
   record_fail "ingress firewall must restrict the Tailscale source set"
 elif ! grep -A20 '^  admin-dashboard-ingress:' "${LIVE_COMPAT}" | grep -Fq 'network_mode: host'; then

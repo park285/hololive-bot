@@ -43,8 +43,7 @@ func (b *Broker) ExitReason() ExitReason {
 	return b.exitReason
 }
 
-// retire always completes: a cleanup failure never keeps the generation or its
-// listener alive, and is reported only through Serve.
+// retire는 정리에 실패해도 세대와 listener의 수명을 끝낸다. 오류는 Serve에서만 보고한다.
 func (b *Broker) retire(reason ExitReason) {
 	b.retireOnce.Do(func() {
 		b.mu.Lock()

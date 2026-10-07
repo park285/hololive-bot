@@ -17,7 +17,7 @@ const (
 	DeliveryStatusQuarantined domain.OutboxStatus = "QUARANTINED"
 )
 
-// ApplyOutcome is the closed set of results for one immutable lifecycle command.
+// ApplyOutcome은 불변 수명주기 명령 하나의 결과 집합이다.
 type ApplyOutcome uint8
 
 const (
@@ -42,8 +42,7 @@ func (o ApplyOutcome) String() string {
 	}
 }
 
-// ApplyResult reports only durable transition evidence. Aggregate projection is
-// deliberately outside the lifecycle transaction.
+// ApplyResult는 영속 전이 증거만 보고한다. 집계 projection은 수명주기 트랜잭션 밖에서 갱신한다.
 type ApplyResult struct {
 	Outcome            ApplyOutcome
 	TouchedOutboxIDs   []int64
@@ -93,8 +92,8 @@ func (e *commitResponseError) Error() string {
 
 func (e *commitResponseError) Unwrap() error { return e.err }
 
-// AtomicityBreachError means primary state contains a mixed command envelope.
-// Callers must not repair it by guessing or by replaying an external effect.
+// AtomicityBreachError는 원본 상태에 명령 envelope가 섞였음을 나타낸다.
+// 호출자가 추정으로 복구하거나 외부 부수 효과를 재실행하면 안 된다.
 type AtomicityBreachError struct {
 	Operation string
 	Detail    string

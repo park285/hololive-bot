@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Runs on the old primary through a restricted sudo/SSH command.
-# A persistent fence marker blocks hololive-compose.service on later boots. The
-# running consumer containers stay up while Autoheal and PostgreSQL are stopped.
+# 제한된 sudo·SSH 명령으로 이전 primary에서 실행한다.
+# 영속 격리 표시로 재부팅 후 Compose 기동을 막고, 소비자는 유지한 채 Autoheal·PostgreSQL을 중지한다.
 
 set -euo pipefail
 
@@ -99,8 +98,7 @@ fi
 [[ "${STATE_DIR}" == /* ]] || { echo "state dir must be absolute" >&2; exit 2; }
 trusted_executable "Tailscale binary" "${TAILSCALE_PATH}" || exit 1
 
-# The request must name an address actually configured on this host. This keeps a
-# misrouted SSH command from fencing the wrong machine.
+# 잘못 라우팅된 SSH가 다른 호스트를 격리하지 않도록 요청 주소가 이 호스트에 있는지 확인한다.
 if ! ip -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | grep -Fxq -- "${EXPECTED_PRIMARY_HOST}"; then
   echo "expected primary address is not configured on this host" >&2
   exit 1
@@ -137,8 +135,7 @@ atomic_write() {
   sync -f "${STATE_DIR}"
 }
 
-# Persistent boot fencing is part of the acknowledgement contract. Refuse to
-# claim success against an old unit that would restart Compose after reboot.
+# 재부팅 후에도 격리가 유지되어야 성공이다. Compose를 다시 기동하는 구형 unit에서는 거부한다.
 need_daemon_reload="$(systemctl show "${COMPOSE_UNIT}" -p NeedDaemonReload --value)" || {
   echo "cannot inspect reload state for ${COMPOSE_UNIT}" >&2
   exit 1
@@ -321,8 +318,7 @@ if ! "${TAILSCALE_PATH}" serve drain "${TAILSCALE_SERVICE}" >/dev/null 2>&1; the
   exit 1
 fi
 
-# Disable autoheal before stopping PostgreSQL. Consumer containers keep their
-# stable endpoint connections and reconnect after the route moves.
+# PostgreSQL보다 Autoheal을 먼저 중지한다. 소비자는 같은 접속 주소를 유지하며 라우팅 변경 뒤 재연결한다.
 durably_stop_container "${AUTOHEAL_CONTAINER}" 15 || exit 1
 durably_stop_container "${POSTGRES_CONTAINER}" 60 || exit 1
 

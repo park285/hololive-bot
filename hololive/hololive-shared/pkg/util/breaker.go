@@ -33,7 +33,7 @@ import (
 type Breaker struct {
 	transitionMu sync.Mutex
 	open         atomic.Bool
-	openedAt     atomic.Value // time.Time
+	openedAt     atomic.Value
 	failures     atomic.Int32
 	threshold    int32
 	resetTimeout time.Duration

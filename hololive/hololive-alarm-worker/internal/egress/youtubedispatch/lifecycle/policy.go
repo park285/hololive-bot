@@ -53,7 +53,7 @@ func (p RevivePolicy) Enabled() bool                  { return p.enabled }
 func (p RevivePolicy) FreshnessWindow() time.Duration { return p.freshnessWindow }
 func (p RevivePolicy) BatchLimit() int                { return p.batchLimit }
 
-// RowSnapshot is an immutable policy input copied from a database snapshot.
+// RowSnapshot은 DB 스냅샷에서 복사한 불변 정책 입력이다.
 type RowSnapshot struct {
 	DeliveryID    int64
 	Status        DeliveryStatus
@@ -88,8 +88,7 @@ func (r RowSnapshot) Validate() error {
 	return nil
 }
 
-// RowMutation is one exact expected-to-next transition. Its values are frozen
-// so repositories cannot independently recalculate retry or follower policy.
+// RowMutation은 예상 상태에서 다음 상태로의 확정된 전이다. 저장소가 재시도·후속 처리 정책을 재계산하면 안 된다.
 type RowMutation struct {
 	deliveryID       int64
 	expectedStatus   DeliveryStatus
@@ -138,7 +137,7 @@ type (
 	ReviveLogicalGroupDecision struct{ decisionBase }
 )
 
-// EvaluateFailure spends only the deterministic owner's attempt budget.
+// EvaluateFailure는 결정된 소유자의 시도 한도만 소비한다.
 func EvaluateFailure(
 	policy RetryPolicy,
 	owner RowSnapshot,

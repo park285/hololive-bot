@@ -12,16 +12,15 @@ import (
 	"time"
 )
 
-// silentNode never answers, so any progress past it must come from retirement.
+// silentNode는 응답하지 않으므로 이후 진행은 종료 처리로만 가능하다.
 const silentNode = "#!/bin/sh\nsleep 30\n"
 
-// fakeNode writes a shell stand-in for the Node executable into a private
-// test directory and returns its path.
+// fakeNode는 테스트 전용 디렉터리에 Node 대체 실행 파일을 만들고 경로를 반환한다.
 func fakeNode(t *testing.T, name, script string) string {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), name)
-	// startWorker execs this file directly as the VM binary.
+	// startWorker가 VM 실행 파일로 직접 실행한다.
 	//nolint:gosec // G306: the fixture needs owner execute and lives in this test's private t.TempDir.
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
@@ -39,7 +38,7 @@ func initializeTestWorker(t *testing.T, broker *Broker) {
 	}
 }
 
-// errorCode returns the broker error code, or "" when body is not an error.
+// errorCode는 브로커 오류 코드를 반환하며, 오류 본문이 아니면 빈 문자열을 반환한다.
 func errorCode(body map[string]any) string {
 	envelope, ok := body["error"].(map[string]any)
 	if !ok {
@@ -104,8 +103,7 @@ func TestRestartChangesGenerationAndRejectsStaleOperations(t *testing.T) {
 }
 
 func TestExpiredMintRetiresWorkerWithoutIssuing(t *testing.T) {
-	// The executable never supplies a result. Expiry must be decided before
-	// attempting IO, and retiring must kill the entire worker process group.
+	// 응답하지 않는 실행 파일에서 I/O 전 만료 판정과 전체 워커 프로세스 그룹 종료를 확인한다.
 	path := fakeNode(t, "silent-node", silentNode)
 
 	process, err := startWorker(t.Context(), path, "unused")

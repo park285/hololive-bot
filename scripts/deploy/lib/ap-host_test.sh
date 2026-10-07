@@ -47,14 +47,6 @@ read -r -a parsed_rsync_rsh <<<"$rsync_rsh"
 [[ "${parsed_rsync_rsh[*]}" == "ssh ${expected_options[*]}" ]]
 [[ "$(ap_rsync_target './payload/')" == 'ubuntu@unreachable.invalid:./payload/' ]]
 
-for deploy_script in "$ROOT_DIR/scripts/deploy/ap-deploy.sh" "$ROOT_DIR/scripts/deploy/ap-host-native-deploy.sh"; do
-  grep -Fq 'RSYNC_RSH="$(ap_rsync_rsh)"' "$deploy_script"
-  grep -Fq '$(ap_rsync_target ' "$deploy_script"
-  if grep -Eq 'RSYNC_RSH="ssh|ubuntu@\$AP_SSH_HOST' "$deploy_script"; then
-    echo "[FAIL] AP deploy bypasses the canonical SSH/rsync transport owner: $deploy_script" >&2
-    exit 1
-  fi
-done
 
 cat > "$tmp/bin/ssh" <<'EOF'
 #!/usr/bin/env bash

@@ -70,16 +70,6 @@ run_with_failure_tail() {
   rm -f "${output_file}"
 }
 
-prepare_test_environment() {
-  if [[ "${module}" == "." ]]; then
-    # The root package contains a local stack orchestration test that recursively
-    # invokes sibling shared-go/iris-client-go checkouts. PUBLIC PR CI validates
-    # every in-repo module directly; the cross-repository suite remains owned by
-    # the canonical local pre-push workspace gate.
-    export HOLOLIVE_WORKSPACE_MONOREPO_TEST=1
-  fi
-}
-
 case "${stage}" in
   tidy)
     echo "[public-pr] module=${module} go mod tidy -diff"
@@ -92,19 +82,17 @@ case "${stage}" in
     ;;
   test)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
-    prepare_test_environment
     echo "[public-pr] module=${module} go test -count=1 ./..."
     run_with_failure_tail "unit tests" go test -count=1 ./...
     ;;
   race)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
-    prepare_test_environment
     echo "[public-pr] module=${module} go test -race -p 2 -count=1 ./..."
     run_with_failure_tail "race tests" go test -race -p 2 -count=1 ./...
+    run_with_failure_tail "non-race-only tests" bash "${SCRIPT_DIR}/go-test-nonrace.sh" ./...
     ;;
   test-prod)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
-    prepare_test_environment
     if [[ -n "${RUNNER_TEMP:-}" ]]; then
       [[ "${RUNNER_TEMP}" == /* ]] || {
         echo "RUNNER_TEMP must be an absolute path" >&2
@@ -119,22 +107,17 @@ case "${stage}" in
     jsonl="${work_root}/collector-go-default-json.jsonl"
     echo "[public-pr] module=${module} CGO_ENABLED=0 go test -json -count=1 ./..."
     set +e
-    set +o pipefail
-    CGO_ENABLED=0 go test -json -count=1 ./... | tee "${jsonl}"
-    pipeline_status=("${PIPESTATUS[@]}")
-    test_status="${pipeline_status[0]}"
-    tee_status="${pipeline_status[1]}"
-    set -euo pipefail
-    if [[ "${tee_status}" -ne 0 ]]; then
-      echo "failed to record default JSON test output" >&2
-      exit 1
-    fi
+    CGO_ENABLED=0 go test -json -count=1 ./... >"${jsonl}"
+    test_status=$?
     "${CI_PYTHON_BIN}" "${ROOT_DIR}/scripts/ci/check-go-test-json.py" \
       --input "${jsonl}" \
       --require-pass \
       --allow-skip-file "${ROOT_DIR}/scripts/ci/collector-test-skip-allowlist.txt"
-    if [[ "${test_status}" -ne 0 ]]; then
+    json_status=$?
+    set -e
+    if [[ "${test_status}" -ne 0 || "${json_status}" -ne 0 ]]; then
       echo "::error title=default JSON tests failed::module=${module} stage=${stage}"
+      tail -n 400 "${jsonl}" >&2
       exit 1
     fi
     ;;

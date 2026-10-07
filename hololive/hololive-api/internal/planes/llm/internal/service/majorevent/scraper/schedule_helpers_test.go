@@ -39,7 +39,7 @@ func TestCalculateNextRunAtHour(t *testing.T) {
 func TestBuildRetryRuns(t *testing.T) {
 	baseRun := time.Date(2026, time.March, 4, 19, 0, 0, 0, time.UTC)  // KST 04:00
 	failedAt := time.Date(2026, time.March, 4, 19, 5, 0, 0, time.UTC) // KST 04:05
-	crossDay := 21 * time.Hour                                        // KST +21h -> next day 01:00
+	crossDay := 21 * time.Hour                                        // 한국 시각에서 21시간 뒤인 다음 날 01시다.
 	retries := buildRetryRuns(baseRun, failedAt, []time.Duration{30 * time.Minute, 2 * time.Hour, crossDay})
 
 	if len(retries) != 2 {

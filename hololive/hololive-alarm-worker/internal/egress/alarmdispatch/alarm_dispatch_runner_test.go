@@ -1,13 +1,11 @@
 package alarmdispatch
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"testing"
@@ -190,56 +188,6 @@ func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	assert.Len(t, consumer.markDispatched, 1)
 	assert.Empty(t, consumer.scheduledRetry)
 	assert.Empty(t, consumer.movedDLQ)
-}
-
-func TestAlarmDispatchRunnerRejectsRetiredStreamProviders(t *testing.T) {
-	testCases := []struct {
-		name      string
-		configure func(*domain.Stream)
-	}{
-		{
-			name: "twitch only",
-			configure: func(stream *domain.Stream) {
-				stream.IsTwitchOnly = true
-				stream.TwitchLiveURL = testTwitchLiveURL
-			},
-		},
-		{
-			name: "chzzk only",
-			configure: func(stream *domain.Stream) {
-				stream.IsChzzkOnly = true
-				stream.ChzzkLiveURL = "https://chzzk.naver.com/live/member"
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-			tc.configure(envelope.Notification.Stream)
-
-			envelope.Retry = &domain.AlarmQueueRetryMetadata{Attempt: alarmDispatchMaxAttempts}
-
-			var logs bytes.Buffer
-
-			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
-			sender := &alarmDispatchRunnerTestSender{}
-			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), messageStrings: newAlarmDispatchTestMessageStrings(t), maxBatch: 10, logger: slog.New(slog.NewTextHandler(&logs, nil))}
-
-			processed, err := runner.runOnce(t.Context())
-
-			require.NoError(t, err)
-			assert.True(t, processed)
-			assert.Empty(t, sender.messages)
-			assert.Empty(t, consumer.markSending)
-			assert.Empty(t, consumer.markDispatched)
-			require.Len(t, consumer.movedDLQ, 1)
-			assert.Empty(t, consumer.scheduledRetry)
-			// 드레인 종단은 조용히 버리지 않고 error 로그로 드러나야 한다.
-			assert.Contains(t, logs.String(), "level=ERROR")
-			assert.Contains(t, logs.String(), "retired stream provider envelope")
-		})
-	}
 }
 
 func TestAlarmDispatchRunnerQuarantinesReplyHandoffOutcomeUnknownWithoutRetry(t *testing.T) {

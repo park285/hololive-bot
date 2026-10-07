@@ -4,7 +4,6 @@ verify_go_work_sync_drift() (
     set -euo pipefail
 
     local root_dir="$1"
-    local post_sync_hook="${2:-}"
     local temp_root
     local temp_repo
     local file
@@ -27,9 +26,6 @@ verify_go_work_sync_drift() (
 
     cd "${temp_repo}"
     GOWORK="${temp_repo}/go.work" go work sync
-    if [[ -n "${post_sync_hook}" ]]; then
-        "${post_sync_hook}"
-    fi
     cd "${root_dir}"
 
     for file in "${sync_files[@]}"; do

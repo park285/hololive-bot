@@ -9,9 +9,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
-// PostIDLogValue returns the canonical logical ID (contentid.ResolveDeliveryLogicalID) for audit log post_id.
-// An invalid identity is logged as an "invalid:<kind>:<reason>" label instead of a substitute ID, following
-// DedupeKeyLogValue; the label carries only the value-redacted reason.
+// PostIDLogValue는 감사 로그의 post_id에 정본 논리 ID를 사용한다.
+// 잘못된 식별자는 DedupeKeyLogValue와 같은 값 비노출 형식인 invalid:<kind>:<reason>으로 기록한다.
 func PostIDLogValue(kind domain.OutboxKind, contentID, payload string) string {
 	postID, err := contentid.ResolveDeliveryLogicalID(kind, contentID, payload)
 	if err == nil {

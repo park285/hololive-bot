@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Isolated issuer + central collector c: kapu-only builds, verified image transfers, no remote builds.
+# 격리 issuer와 중앙 수집기 c를 kapu에서 빌드하고 검증된 이미지를 전송한다.
 set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$root/scripts/deploy/lib/source-revision.sh"

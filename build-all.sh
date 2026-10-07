@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
-# Build, validate and optionally deploy the production three-runtime topology.
+# 운영 런타임 3종을 빌드·검증하며, 선택한 옵션에 따라 배포한다.
 #
-# Usage:
-#   ./build-all.sh --no-bump            # production build + deploy
-#   ./build-all.sh --build-only
-#   ./build-all.sh --build-only --security-scan
-#   ./build-all.sh --no-bump --remote-cache
-#   ./build-all.sh --build-only --skip-local-ci
-#   ./build-all.sh hololive-api
-#   ./build-all.sh alarm-worker
 
 set -Eeuo pipefail
 
@@ -380,6 +372,7 @@ else
     validate_built_runtime_config_for_deploy
 
     echo "[CUTOVER] Starting the three-runtime topology"
+    # shellcheck disable=SC2034 # 불러온 health-gate.sh가 Compose 호출에 사용한다.
     COMPOSE_FILE_ARGS=("${COMPOSE_FILES[@]}")
     echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID:-1000}:${HOLOLIVE_APP_GID:-1000}"
     if ! cutover_bind_mount_preflight "${REPO_ROOT}"; then

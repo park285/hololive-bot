@@ -8,6 +8,30 @@
 
 ## 미출시
 
+- non-race 테스트 선별은 locale과 무관한 바이트 순서로 비교하며, 목록 수집·정렬·비교 오류를 게이트 실패로 전달합니다.
+- CI에서 최소 지원 버전 이상의 설치된 Go 검사 도구를 재사용하고 collector helper 의존성은 한 번만 설치합니다.
+  운영 Go 테스트의 JSON 검사는 유지하며 성공 로그의 중복 출력을 줄이고 실패 때 진단을 출력합니다.
+- CI의 Go 1.27 강제와 toolchain 스탬프를 제거하고 Go가 manifest 요구사항으로 버전을 선택하게 합니다.
+  `GOTOOLCHAIN` 기본값은 `auto`이며 명시한 환경값을 유지합니다.
+
+## v7.2.4 - 2026-10-06
+
+- CI Python 런타임을 uv 0.12.23과 CPython 3.14.8로 고정했습니다.
+- **CI 중복 제거:** pre-push `local-ci.sh`와 PR CI matrix는 race 테스트를 실행하고 Go가 선택한 테스트 파일을
+  비교해 race 빌드에서 빠지는 테스트가 있는 패키지만 일반 테스트로 보완합니다. golangci govet와 겹치던
+  workspace `go vet`과 결과를 쓰지 않던 `go list -m -u`를 지웠습니다. security workflow의 NilAway도 로컬과
+  같은 `go vet -p 1 -vettool`의 unitchecker로 의존성 분석을 재사용합니다.
+- **CI 정리:** Docker Compose 설치를 `.github/actions/docker-compose` composite action 하나로 합치고 v5.6.0으로,
+  Trivy를 0.75.0으로 올렸습니다. security workflow의 sibling checkout을 go.mod와 같은 shared-go v2.9.3·iris-client-go
+  v3.0.4로 맞췄습니다.
+- **테스트 정리:** 호출되지 않던 셸 테스트를 삭제하고, 스크립트 본문만 grep하던 단언을
+  지웠습니다. 패키지명·문서 경로·퇴역 기한·toolchain 파일 형태·DB 프레임워크 이름 검사도 삭제했습니다.
+  전체 모듈 테스트를 재귀 실행하던 workspace 테스트도 삭제했습니다. 권한 상승 방지와 compose 보안 설정 검사는 유지합니다.
+- **퇴역 제공자 드레인 가드 삭제:** authoritative DB에 Twitch·Chzzk 단독 dispatch event가 0건임을 확인하고
+  alarm-worker의 드레인 종단 가드를 지웠습니다. `domain.Stream`의 Twitch·Chzzk 필드는 Stream HTTP 응답 계약 확인 전까지
+  유지합니다.
+- YouTube.js helper의 `@types/node`를 24.19.1로 올렸습니다.
+
 - 공용 Holodex 클라이언트가 429의 `Retry-After`를 초 또는 HTTP 날짜로 읽고 같은
   클라이언트의 후속 요청에도 대기를 유지합니다. 요청 취소로 서버 대기 시각을 지우지 않습니다.
   `HOLODEX_MAX_RETRY_ATTEMPTS`는 최초 요청 이후 0~9회 재시도에, `HOLODEX_REQUEST_DELAY_MS`는

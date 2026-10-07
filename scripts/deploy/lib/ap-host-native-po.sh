@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Sourced in the bounded native deploy and rollback remote scripts.
+# 시간 상한이 있는 native 배포·롤백 원격 스크립트에서 불러온다.
 po_service=hololive-youtube-po.service
 po_socket=hololive-youtube-po.socket
 po_unit_file=/etc/systemd/system/hololive-youtube-po.service

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs on the AP host against already-reviewed image tags; never builds remotely.
+# AP에서 검토된 이미지 태그로만 롤백한다. 원격 빌드는 하지 않는다.
 set -euo pipefail
 [[ $# -eq 7 ]] || { echo 'expected mode backup compose service container port and started_at' >&2; exit 2; }
 mode="$1" backup="$2" ap_file="$3" service="$4" container="$5" port="$6" started_at="$7"
@@ -62,7 +62,7 @@ if [[ "$mode" == check ]]; then
   exit 0
 fi
 
-# All previous artifacts and config have been verified before changing either service.
+# 두 서비스를 바꾸기 전에 이전 산출물과 설정을 모두 검증한다.
 # 이전 VERSION과 실행 스크립트를 먼저 복원합니다. 후보 checkout의 버전으로 이전 이미지를 렌더링하지 않습니다.
 python3 "$rollback_root/scripts/deploy/lib/ap-source-snapshot.py" restore "$HOME" "$HOME/hololive-bot/$backup"
 compose=("$HOME/hololive-bot/scripts/deploy/compose.sh")

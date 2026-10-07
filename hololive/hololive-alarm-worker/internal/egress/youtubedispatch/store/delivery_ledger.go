@@ -15,7 +15,7 @@ var (
 	recordQuarantinedLedgerSQL = mustSQL("delivery_ledger_record_quarantined.sql")
 )
 
-// LedgerStatus is the monotonic terminal status stored for a logical delivery.
+// LedgerStatus는 논리 전송에 저장하는 단방향 종단 상태다.
 type LedgerStatus string
 
 const (
@@ -23,7 +23,7 @@ const (
 	LedgerStatusQuarantined LedgerStatus = "QUARANTINED"
 )
 
-// DeliveryLedgerRecord is a canonical logical delivery ledger row.
+// DeliveryLedgerRecord는 정본 논리 전송 ledger 행이다.
 type DeliveryLedgerRecord struct {
 	Kind             domain.OutboxKind `db:"kind"`
 	LogicalID        string            `db:"logical_id"`
@@ -36,14 +36,14 @@ type DeliveryLedgerRecord struct {
 	SourceDeliveryID *int64            `db:"source_delivery_id"`
 }
 
-// LedgerWrite records one observed terminal physical delivery for a logical key.
+// LedgerWrite는 논리 키에 대해 관측한 개별 전송의 종단 상태다.
 type LedgerWrite struct {
 	Key              ytcontentid.LogicalKey
 	ObservedAt       time.Time
 	SourceDeliveryID int64
 }
 
-// RecordDeliveryLedgerWrites applies monotonic logical delivery evidence in one batch.
+// RecordDeliveryLedgerWrites는 논리 전송 증거를 되돌리지 않고 일괄 반영한다.
 func RecordDeliveryLedgerWrites(
 	ctx context.Context,
 	tx dbx.Querier,

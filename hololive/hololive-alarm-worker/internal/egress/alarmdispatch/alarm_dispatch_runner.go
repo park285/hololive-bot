@@ -250,13 +250,6 @@ func (r *Runner) routePostSendingFailure(ctx context.Context, group alarmDispatc
 
 func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
 	if err := alarmDispatchGroupError(group); err != nil {
-		if errors.Is(err, errAlarmDispatchRetiredStreamProvider) && r.logger != nil {
-			// 드레인 표시: 퇴역 제공자 봉투가 아직 남아 있다는 신호다. 제거 조건 확인 때 이 로그가 0건이어야 한다.
-			r.logger.Error("alarm dispatch drained a retired stream provider envelope",
-				slog.String("room_id", group.roomID),
-				slog.Int("envelopes", len(group.envelopes)))
-		}
-
 		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
 			return fmt.Errorf("route invalid egress group: %w", routeErr)
 		}

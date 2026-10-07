@@ -64,7 +64,7 @@ func TestGroupOutboxItems(t *testing.T) {
 		{ID: 1, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},
 		{ID: 2, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},
 		{ID: 3, ChannelID: "ch1", Kind: domain.OutboxKindNewShort},
-		{ID: 4, ChannelID: "ch2", Kind: domain.OutboxKindNewVideo}, // no rooms
+		{ID: 4, ChannelID: "ch2", Kind: domain.OutboxKindNewVideo},
 	}
 	roomsByChannel := map[string]channelAlarmRoomTargets{
 		"ch1": {

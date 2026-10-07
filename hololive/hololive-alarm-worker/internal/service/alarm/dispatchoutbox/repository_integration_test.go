@@ -885,7 +885,6 @@ func TestPgxRepositoryRouteSendingFailures_TransitionsSendingToRetry(t *testing.
 	require.Len(t, claimed, 1)
 
 	id := claimed[0].ID
-	// leased → sending
 	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
 
 	var statusAfterSending string

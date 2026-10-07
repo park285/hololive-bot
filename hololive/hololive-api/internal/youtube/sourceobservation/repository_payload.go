@@ -9,8 +9,7 @@ import (
 
 var errStoredPayloadCorrupt = errors.New("source observation payload missing or corrupt")
 
-// The database protects the typed digest and FK; this verifies that the JSONB
-// returned to Go still matches the canonical payload hash used by consumers.
+// DB가 보장하는 digest·외래 키 외에, 소비자가 받은 JSONB와 정본 페이로드 해시도 대조한다.
 func validateStoredObservationPayload(payload []byte, digest string) error {
 	if len(payload) == 0 || len(digest) != 64 {
 		return errStoredPayloadCorrupt

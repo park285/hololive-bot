@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# COMPOSE_CMD and COMPOSE_MODE are output variables consumed by sibling libraries.
+# 형제 라이브러리가 COMPOSE_CMD와 COMPOSE_MODE를 출력값으로 사용한다.
 # shellcheck disable=SC2034
 
 resolve_compose_cmd() {

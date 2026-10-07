@@ -30,9 +30,8 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 )
 
-// reviveStaleFailedOutbox revives a whole logical group only when the ledger is
-// absent, every physical member is eligible, and no active lock or sent outbox
-// evidence exists. Zero-child fanout failures use the same freshness bound.
+// reviveStaleFailedOutbox는 ledger가 없고 모든 구성원이 적격이며 활성 잠금·발송 증거가 없을 때만 그룹을 복구한다.
+// 하위 행이 없는 fanout 실패에도 같은 유효 기간을 적용한다.
 func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWindow time.Duration, batchSize int) (int64, error) {
 	if d == nil || d.transition == nil {
 		return 0, nil

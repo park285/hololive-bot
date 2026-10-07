@@ -12,8 +12,7 @@ const (
 	maxAlarmChannelIDBytes = 64
 )
 
-// ValidateLiveDispatchPersistenceIdentity enforces the fixed-width PostgreSQL
-// ledger fields before this notification joins a shared batch transaction.
+// ValidateLiveDispatchPersistenceIdentity는 공유 배치 트랜잭션에 넣기 전에 PostgreSQL ledger의 고정 길이 필드를 검증한다.
 func (n *AlarmNotification) ValidateLiveDispatchPersistenceIdentity() error {
 	if n == nil {
 		return errors.New("live alarm persistence: notification is nil")

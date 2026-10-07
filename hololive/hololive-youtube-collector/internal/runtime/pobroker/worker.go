@@ -17,7 +17,7 @@ const maxWorkerFrame = 64 << 10
 
 var errWorker = errors.New("worker failed")
 
-// errBeforeDispatch indicates that a canceled request never entered worker IO.
+// errBeforeDispatch는 취소된 요청이 워커 I/O를 시작하지 않았음을 나타낸다.
 var errBeforeDispatch = errors.New("request canceled before worker dispatch")
 
 type worker struct {
@@ -25,7 +25,7 @@ type worker struct {
 	stdin io.WriteCloser
 	out   *bufio.Reader
 	done  chan struct{}
-	// waitErr is written once before done closes and read only after it.
+	// waitErr는 done을 닫기 전에 한 번 쓰고 닫힌 뒤에만 읽는다.
 	waitErr error
 	frame   []byte
 }
@@ -87,8 +87,7 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 
 	cmd.Env = []string{"HOME=/tmp", "TMPDIR=/tmp", "TZ=UTC", "LANG=C.UTF-8"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// A descendant retaining stderr cannot keep Wait (and broker retirement)
-	// blocked after the VM leader exits.
+	// VM 리더가 종료된 뒤 하위 프로세스가 stderr를 보유해도 Wait와 브로커 종료를 막지 못하게 한다.
 	cmd.WaitDelay = 500 * time.Millisecond
 
 	in, err := cmd.StdinPipe()
@@ -102,7 +101,7 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 		return nil, errWorker
 	}
 
-	cmd.Stderr = io.Discard // os/exec drains without preserving or emitting raw stderr.
+	cmd.Stderr = io.Discard // os/exec가 원본 stderr를 저장·출력하지 않고 비운다.
 	if err := cmd.Start(); err != nil {
 		_ = in.Close()
 		_ = out.Close()
@@ -112,7 +111,7 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 
 	w := &worker{cmd: cmd, stdin: in, out: bufio.NewReaderSize(out, 4096), done: make(chan struct{}), frame: make([]byte, 0, maxWorkerFrame)}
 
-	// Any exit, clean or not, closes done and thereby retires the generation.
+	// 정상 여부와 관계없이 done을 닫아 해당 세대를 종료한다.
 	go func() {
 		w.waitErr = cmd.Wait()
 		close(w.done)
@@ -121,8 +120,8 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 	return w, nil
 }
 
-// A dedicated IO goroutine is necessary because pipe reads and writes do not
-// inherit request deadlines. On cancellation the broker kills the process group.
+// 파이프 I/O는 요청 제한 시간을 상속하지 않아 전용 goroutine을 사용한다.
+// 취소되면 브로커가 프로세스 그룹을 종료한다.
 func (w *worker) exchange(ctx context.Context, input, output any) error {
 	if ctx.Err() != nil {
 		return errBeforeDispatch
@@ -160,8 +159,7 @@ func (w *worker) exchange(ctx context.Context, input, output any) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-w.done:
-		// A successful response may already be buffered in the pipe. Nonetheless
-		// worker exit is never a recoverable phase transition.
+		// 성공 응답이 파이프에 남아 있어도 워커 종료를 복구 가능한 전이로 취급하지 않는다.
 		return errWorker
 	}
 }
@@ -213,9 +211,8 @@ func (w *worker) readFrame() ([]byte, error) {
 	}
 }
 
-// stop kills the VM process group with a bounded wait for the leader. The
-// error reports only cleanup the broker could not perform or confirm; it never
-// carries worker output.
+// stop은 VM 프로세스 그룹을 종료하고 제한된 시간 동안 리더 회수를 기다린다.
+// 수행·확인하지 못한 정리만 오류로 보고하며 워커 출력은 포함하지 않는다.
 func (w *worker) stop() error {
 	if w == nil {
 		return nil
@@ -223,8 +220,7 @@ func (w *worker) stop() error {
 
 	var err error
 
-	// Even if the leader exited, surviving members retain the process group.
-	// ESRCH proves no member remains.
+	// 리더가 종료되어도 그룹 구성원이 남을 수 있다. ESRCH여야 모두 사라졌다고 확인할 수 있다.
 	if killErr := syscall.Kill(-w.cmd.Process.Pid, syscall.SIGKILL); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
 		err = fmt.Errorf("kill worker process group: %w", killErr)
 	}
@@ -244,9 +240,8 @@ func (w *worker) stop() error {
 	return err
 }
 
-// reapFailure ignores every ordinary exit: exit statuses, signals and a pipe
-// holder outliving the leader (the group kill removes it) all mean the leader
-// was reaped. Only a failure to reap the leader is a cleanup failure.
+// reapFailure는 종료 코드·신호와 관계없이 리더 회수 여부만 판정한다.
+// 파이프를 보유한 하위 프로세스는 그룹 종료로 제거한다.
 func reapFailure(err error) error {
 	if _, exited := errors.AsType[*exec.ExitError](err); err == nil || exited || errors.Is(err, exec.ErrWaitDelay) {
 		return nil

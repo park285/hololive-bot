@@ -55,7 +55,7 @@ go mod download -json "go.uber.org/nilaway@$source_version" >"$temporary/downloa
 [[ "$(jq -r .Sum "$temporary/download.json")" == "$(jq -r .source_sum profile.json)" ]]
 archive="$(jq -er '.Zip | select(type == "string" and length > 0)' "$temporary/download.json")"
 [[ "$(sha256sum "$archive" | cut -d ' ' -f1)" == "$(jq -r .source_zip_sha256 profile.json)" ]]
-# Extract verified archive bytes instead of trusting a possibly edited module-cache directory.
+# 수정될 수 있는 모듈 캐시 디렉터리 대신 검증된 아카이브를 추출한다.
 unzip -q "$archive" -d "$temporary/unpacked"
 source_dir="$temporary/unpacked/go.uber.org/nilaway@$source_version"
 patch --batch --fuzz=0 -p1 -d "$source_dir" <models.patch >&2
