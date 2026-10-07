@@ -74,6 +74,26 @@ exporter의 public USAGE는 계속 false, 전용 스키마 USAGE는 true이며 C
 기존 앱 container ID와 native AP 프로세스의 기동 상태는 유지했다. 최종 기록은 같은 복구
 디렉터리의 `schema-correction-result.json`, `final-containers.json`, `post-statistics.txt`에 남겼다.
 
+## 서울 이전과 로컬 main 통합 — 2026-10-07
+
+위 Osaka 기록 이후 중앙 DB를 `hololive-seoul`로 이전했습니다. 서울이 기존 중앙 주소
+`100.100.1.8`을 승계했으며 같은 최종 PostgreSQL image revision과 확장 버전·preload·전용
+스키마·권한을 유지합니다. `postgres_exporter` 역할의 실제 읽기와 앱 접근·reset 권한
+차단을 서울에서 다시 확인했습니다. Osaka VM은 삭제하고 이전 시점의 100GB 부트 볼륨을
+분리 보존하므로, 위 복구 디렉터리는 현재 운영 서버 경로가 아닙니다.
+
+`codex/postgres-observability`의 구현·검증·운영 기록을 로컬 main에 통합했습니다.
+기존 서울 이전 문서와 PO issuer 로그 회전 수정을 보존했으며, 활성화·복구 runbook의
+대상과 secret master 경로를 서울로 변경했습니다. 이번 통합은 원격 Git 게시·운영 재배포·
+DB 재시작·백업 재개를 포함하지 않습니다.
+
+통합 후 `scripts/ci/test-infra-images.sh`를 kapu에서 통과했습니다. 격리된 amd64 PostgreSQL을
+root·UID 999로 각각 실행하여 preload 누락 거부, 활성화 재적용, CPU·행 잠금 대기 수집,
+조회 권한 경계, 재시작과 비활성화를 확인했습니다. 스택 DB 영속 볼륨 계약 검사도 통과했습니다.
+통합 Compose의 PG 실행 인자는 서울 운영본과 일치하고, 계측 SQL 세 파일의 SHA-256도
+실행 이미지와 일치합니다. PO issuer의 5 MiB × 3 로그 회전을 보존했습니다. 이번 통합에서
+ARM64를 다시 빌드·실행하지 않았으며, 앞선 ARM64 검증 기록과 변경 없는 운영 이미지를 유지합니다.
+
 ## 검증
 
 기존 인프라 이미지 시험의 root/UID 999 시작과 SQL 검사를 유지한다. 추가 검증은 실제

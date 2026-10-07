@@ -113,13 +113,16 @@ timeline을 그대로 재기동하지 않습니다.
 ## PostgreSQL Observability
 
 2026-10-07 Osaka primary에 `pg_stat_kcache` 2.3.2와 `pg_wait_sampling`
-binary 1.1.11(SQL extension 1.1)을 활성화했습니다. 적용 PostgreSQL image revision은
+binary 1.1.11(SQL extension 1.1)을 활성화한 뒤, 같은 날 서울 중앙으로 이전하면서
+설정·확장·전용 스키마·권한을 보존했습니다. 현재 `hololive-seoul`의 PostgreSQL image revision은
 `af9b2b57cbf2e18b34f9ccecc46b28396e054ba3`이며, 호스트의 비밀 아닌
 `HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES` 설정이 기존 `pg_stat_statements`와 함께 preload합니다.
 새 통계는 `hololive_observability` 스키마에서 기존 `pg_read_all_stats` 역할이 읽습니다.
 exporter의 public USAGE 차단과 앱 역할의 권한은 유지했습니다.
 [적용 기록](plans/2026-10-07-postgres-extensions.md#운영-적용-결과--2026-10-07)과
 [활성화·복구 절차](runbooks/postgres-observability.md)를 따릅니다.
+이후 별도 계측 브랜치의 검증된 소스를 로컬 main에 통합했습니다. 운영 이미지·실행 설정은
+그대로이며, 소스 통합을 이유로 DB를 재생성하거나 확장 활성화 SQL을 다시 실행하지 않습니다.
 
 ## PostgreSQL TLS Baseline
 

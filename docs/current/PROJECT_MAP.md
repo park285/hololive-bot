@@ -39,7 +39,8 @@ configuration/path validation assets. The management web runs separately on iris
 Since 2026-10-07, the central API/worker/collector `c` and primary PostgreSQL run
 on the separate Seoul central VM. It inherited the existing central address;
 Seoul collector `b` and Iris Console remain on their original host. See the
-deployment baseline for the stopped Osaka recovery copy and single-primary fence.
+deployment baseline for the terminated Osaka VM, retained boot-volume recovery copy,
+and single-primary fence.
 
 ## Infra Services
 

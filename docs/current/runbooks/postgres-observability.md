@@ -2,7 +2,7 @@
 
 ## 범위
 
-`hololive-osaka` (`100.100.1.8`)의 `holo-postgres`/`hololive`에
+`hololive-seoul` (`100.100.1.8`)의 `holo-postgres`/`hololive`에
 `pg_stat_kcache` 2.3.2와 `pg_wait_sampling` binary 1.1.11(SQL extension 1.1)을
 선택적으로 활성화하는 절차다. 기본 preload는 계속 `pg_stat_statements` 하나다.
 새 확장과 읽기 view는 `hololive_observability` 스키마를 사용한다. 기존 `public` 스키마의
@@ -17,6 +17,11 @@ Dockerfile은 고정 PostgreSQL 18.6/Alpine PGXS로 두 CPU 아키텍처의 모�
 `hololive-bot-ops`의 현재 no-build 배포 절차로 수행한다. 원격 Git 게시는 별도 범위다.
 기존 volume에 initdb를 재실행하지 않는다. `postgres-replication.md`의 single-primary
 경계와 현재 `DEPLOYMENT_BASELINE.md`를 유지한다.
+
+현재 두 확장은 서울 primary에서 이미 활성화되어 있습니다. 로컬 main으로의 소스 통합은
+재배포·재활성화가 아닙니다. 운영 점검은 아래 읽기 전용 관측 절차를 사용합니다.
+Osaka의 적용 기록은 당시 증거로 보존하되, 해당 VM은 삭제했고 100GB 부트 볼륨만 남았습니다.
+과거 복구 이미지·파일이 서울에 같은 경로로 존재한다고 가정하지 않습니다.
 
 로컬 결과와 재현 명령은 [extension experiments](../../../scripts/experiments/postgres-extensions/README.md)에 있다.
 계측은 DB 안의 쿼리 CPU·대기를 설명하며 Go의 pool 대기·decode·GC 시간을 직접 측정하지 않는다.
@@ -48,8 +53,8 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
    비밀 아닌 설정 값을 복구점으로 기록한다. env 전체나 credentials를 출력하지 않는다.
 2. 검증한 arm64 이미지와 필요한 배포 파일만 전송한다. 새 image의 architecture·전체 SHA와
    Compose config를 대조한다. 기존 이미지와 volume은 보존한다.
-3. `stack-secrets/hosts/hololive-osaka/hololive-bot/compose.env` 마스터에서 아래 비밀 아닌
-   키만 승인 범위에서 갱신한다. `sync-host.sh hololive-osaka --stack hololive-bot` dry-run의
+3. `stack-secrets/hosts/hololive-seoul/hololive-bot/compose.env` 마스터에서 아래 비밀 아닌
+   키만 승인 범위에서 갱신한다. `sync-host.sh hololive-seoul --stack hololive-bot` dry-run의
    파일 범위·삭제 부재를 확인한 뒤 `--apply`로 배포한다. 호스트
    `/etc/stack-secrets/hololive-bot/compose.env`와 마스터의 일치 및 manifest owner/mode를
    검증한다. 수동 명령과 systemd 재시작 모두 같은 값을 읽도록 한다.
