@@ -2,11 +2,11 @@
 		UPDATE members
 		SET aliases =
 			jsonb_set(
-				COALESCE(aliases, '{}'::jsonb),
+				aliases,
 				ARRAY[$2]::text[],
 				CASE
-					WHEN jsonb_exists(COALESCE(aliases -> $2, '[]'::jsonb), $3) THEN COALESCE(aliases -> $2, '[]'::jsonb)
-					ELSE COALESCE(aliases -> $2, '[]'::jsonb) || jsonb_build_array($3::text)
+					WHEN jsonb_exists(aliases -> $2, $3) THEN aliases -> $2
+					ELSE (aliases -> $2) || jsonb_build_array($3::text)
 				END,
 				true
 			)

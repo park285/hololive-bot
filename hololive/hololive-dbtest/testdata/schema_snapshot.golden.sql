@@ -18,7 +18,7 @@ TABLE acl_rooms
   INDEX CREATE UNIQUE INDEX idx_room_list ON public.acl_rooms USING btree (room_id, list_type)
 
 TABLE acl_settings
-  COLUMN id integer NOT NULL DEFAULT nextval('acl_settings_id_seq'::regclass)
+  COLUMN id bigint NOT NULL DEFAULT nextval('acl_settings_id_seq'::regclass)
   COLUMN key character varying(64) NOT NULL
   COLUMN value text
   CONSTRAINT acl_settings_pkey PRIMARY KEY (id)
@@ -461,7 +461,7 @@ TABLE members
   COLUMN korean_name character varying(200)
   COLUMN status text NOT NULL DEFAULT 'active'::character varying
   COLUMN is_graduated boolean NOT NULL DEFAULT false
-  COLUMN aliases jsonb
+  COLUMN aliases jsonb NOT NULL DEFAULT '{"ja": [], "ko": []}'::jsonb
   COLUMN photo text
   COLUMN photo_updated_at timestamp with time zone
   COLUMN org character varying(50) NOT NULL
@@ -474,6 +474,7 @@ TABLE members
   COLUMN debut_date date
   COLUMN units text[] NOT NULL DEFAULT '{}'::text[]
   COLUMN official_link text
+  CONSTRAINT chk_members_aliases_shape CHECK (((jsonb_typeof(aliases) = 'object'::text) AND (aliases ? 'ko'::text) AND (aliases ? 'ja'::text) AND (jsonb_typeof((aliases -> 'ko'::text)) = 'array'::text) AND (jsonb_typeof((aliases -> 'ja'::text)) = 'array'::text)))
   CONSTRAINT chk_members_graduated_sync CHECK ((is_graduated = (status = 'graduated'::text)))
   CONSTRAINT chk_members_status_vocab CHECK ((status = ANY (ARRAY[('active'::character varying)::text, ('graduated'::character varying)::text])))
   CONSTRAINT members_pkey PRIMARY KEY (id)
@@ -507,7 +508,7 @@ TABLE notification_delivery_outbox
   COLUMN content_id character varying(200) NOT NULL
   COLUMN payload jsonb NOT NULL DEFAULT '{}'::jsonb
   COLUMN status text NOT NULL DEFAULT 'PENDING'::character varying
-  COLUMN attempt_count integer NOT NULL DEFAULT 0
+  COLUMN attempt_count bigint NOT NULL DEFAULT 0
   COLUMN next_attempt_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN locked_at timestamp with time zone
@@ -605,7 +606,6 @@ TABLE source_observation_applications
   CONSTRAINT fk_source_observation_application_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_observation_applications_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT source_observation_applications_pkey PRIMARY KEY (id)
-  INDEX CREATE INDEX idx_source_application_live_origin ON public.source_observation_applications USING btree (entity_key) WHERE ((entity_kind = 'youtube_live_session'::text) AND (decision = ANY (ARRAY['APPLIED'::text, 'ENDED'::text])) AND (observation_kind = ANY (ARRAY['live_snapshot'::text, 'video_live_check'::text])))
   INDEX CREATE INDEX idx_source_observation_applications_orphaned_kind_applied_id ON public.source_observation_applications USING btree (observation_kind, applied_at, id) WHERE (observation_id IS NULL)
   INDEX CREATE UNIQUE INDEX uq_source_observation_application_active ON public.source_observation_applications USING btree (observation_id, entity_kind, entity_key) WHERE (observation_id IS NOT NULL)
 
@@ -1553,7 +1553,7 @@ TABLE youtube_videos
 
 SEQUENCE acl_rooms_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY acl_rooms.id
 
-SEQUENCE acl_settings_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY acl_settings.id
+SEQUENCE acl_settings_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY acl_settings.id
 
 SEQUENCE alarm_dispatch_admin_actions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY alarm_dispatch_admin_actions.id
 

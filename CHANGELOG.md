@@ -8,6 +8,16 @@
 
 ## 미출시
 
+- 운영 PostgreSQL과 fresh 재생 사이의 스키마 drift를 맞추는 migration 271–276을 추가했습니다. 적용하면
+  `members.created_at`·`updated_at`(135행의 값 포함)과 `youtube_notification_outbox.dispatched_at` 열, 빈
+  `streams`·`alarm_dispatch_outbox` 테이블과 각 시퀀스, `check_aliases_structure`·`check_status`·
+  `youtube_notification_outbox_status_check` 제약, `idx_source_application_live_origin` 인덱스가 영구히 지워집니다.
+  마지막 전체 DB 복원 검증(2026-10-07) 뒤 백업이 중단됐으므로 적용 전에 `members`의 시각 값을 추출해 보관합니다.
+  `dispatched_at`에 값이 생겼거나 운영 전용 테이블에 행이 있으면 지우지 않고 멈춥니다. 함께
+  `idle_in_transaction_session_timeout=5min`을 다시 선언하고 별명 형식 CHECK·NOT NULL과 template revision FK를 적용하며,
+  별명 없이 만든 멤버는 빈 ko·ja 별명으로 저장합니다. 이름 열 폭 변경 뒤 기존 연결의 캐시된 member 조회가 한 번씩
+  `cached plan must not change result type`로 실패할 수 있으므로 적용 직후 `hololive-api`와 `hololive-alarm-worker`를
+  순차 재기동합니다.
 - 운영: 중앙 API·alarm-worker·collector `c`와 PostgreSQL을 50GB 서울 VM으로 이전하고 기존 중앙 주소를 승계했습니다. AP `a/b/d`와 애플리케이션·DB 계약은 유지하며, 오사카 중앙 VM은 삭제하고 100GB 부트 볼륨만 이전 시점 복구 자료로 보존합니다. 운영 토폴로지·복구·시크릿 소유 문서를 갱신했습니다.
 - 중앙·서울 PO issuer가 공통 `json-file` 5 MiB × 3 로그 회전 설정을 상속하도록 수정했습니다.
 - 운영 중인 PostgreSQL CPU·대기 계측 소스를 로컬 main에 통합했습니다. 고정 버전의 `pg_stat_kcache`·`pg_wait_sampling`, 선택적 preload와 `hololive_observability`의 조회 전용 권한을 유지합니다. 서울 마스터 경로·운영 runbook을 현행화했으며, 이번 소스 통합으로 운영 이미지나 DB를 재배포하지 않습니다.
