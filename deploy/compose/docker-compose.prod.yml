@@ -212,7 +212,7 @@ services:
     # alpine 이미지의 postgres는 uid 70이지만 스택 공통으로 999를 쓴다(TwentyQ·ChatBotGo와 동일).
     # user 지정 시 entrypoint의 root 준비 단계가 빠지므로 소켓 tmpfs에 uid/gid를 직접 준다.
     user: "999:999"
-    # 고정 PostgreSQL base의 취약 gosu만 소유 recipe에서 재빌드한다.
+    # 고정 base의 gosu를 교체하고 PGXS로 빌드한 선택적 계측 모듈을 포함한다.
     image: ${POSTGRES_IMAGE:-hololive-postgres:prod}
     build:
       <<: *go-build-base
@@ -226,7 +226,24 @@ services:
     command:
       - postgres
       - "-c"
-      - "shared_preload_libraries=pg_stat_statements"
+      # 추가 계측은 승인된 재시작에서만 켠다. 절차: docs/current/runbooks/postgres-observability.md
+      - "shared_preload_libraries=${HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES:-pg_stat_statements}"
+      - "-c"
+      - "pg_stat_kcache.track=top"
+      - "-c"
+      - "pg_stat_kcache.track_planning=off"
+      - "-c"
+      - "pg_wait_sampling.profile_pid=off"
+      - "-c"
+      - "pg_wait_sampling.profile_queries=top"
+      - "-c"
+      - "pg_wait_sampling.sample_cpu=off"
+      - "-c"
+      - "pg_wait_sampling.profile_period=20"
+      - "-c"
+      - "pg_wait_sampling.history_period=100"
+      - "-c"
+      - "pg_wait_sampling.history_size=20000"
       - "-c"
       - "pg_stat_statements.track=all"
       - "-c"
