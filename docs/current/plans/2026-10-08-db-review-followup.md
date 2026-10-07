@@ -1,26 +1,30 @@
-# DB 리뷰 후속: 스키마 수렴과 live 상태 적재 축소
+# DB 리뷰 후속: 스키마 수렴, live 상태 적재 축소와 운영 메트릭 개선
 
 2026-10-07 DB 리뷰에서 권고한 항목 중 [PostgreSQL 계측 확장](2026-10-07-postgres-extensions.md)만 운영에
-반영됐다. 남은 구조 개선·기술부채 항목을 로컬에서 구현하고 검증한다. 원격 Git 게시, 운영 migration 적용,
-운영 배포·재시작은 이 범위에 포함하지 않으며 각각 별도 승인이 필요하다. 운영 접근은 읽기 전용 가드를 적용한
-카탈로그·통계·집계 조회로 한정했다.
+반영됐다. 남은 구조 개선·기술부채 항목을 구현하고, 운영 메트릭을 다시 측정해 찾은 개선을 더해 v7.2.5로 릴리스한다.
+2026-10-08 사용자 요청으로 커밋·게시·운영 배포(migration 271–278 적용 포함)까지 진행한다. 운영 측정은 읽기 전용
+가드를 적용한 카탈로그·통계·집계 조회로 한정했다.
 
 ## 브랜치
 
-| 브랜치 | 작업트리 | 내용 |
-|---|---|---|
-| `fix/db-schema-convergence-20261008` | `hololive-bot-db-convergence` | migration 271–276, 운영 형상 업그레이드 시험, members writer 정리, 이 문서 |
-| `perf/live-state-load-scope-20261008` | `hololive-bot-live-state-scope` | live snapshot 적재 범위 축소, 무시 부재 이력의 미적재 타입, 벤치마크 복구 |
+통합 브랜치 `perf/db-review-followup-20261008`은 로컬 main `9bbe24939`(미게시 계측 확장 커밋 7개 포함) 위에 아래
+커밋을 차례로 둔다. 각 변경은 별도 작업트리에서 구현·검토한 뒤 가져왔다.
 
-두 브랜치는 로컬 main `9bbe24939`에서 시작했다. live 상태 변경은 migration이 없어 스키마 수렴과 따로 배포할 수
-있다. 한 브랜치에 묶으면 API 배포가 migration 271–276의 파괴적 변경을 함께 적용하므로 분리했다.
+| 커밋 | 내용 |
+|---|---|
+| 게이트 복구 | 계측 확장 통합 뒤 실패하던 아키텍처 게이트 두 건 |
+| 스키마 수렴 | migration 271–276, 운영 형상 업그레이드 시험, members writer 정리 |
+| live 적재 축소 | live snapshot 적재 범위 축소, 무시 부재 이력의 미적재 타입, 벤치마크 복구 |
+| pending 재기록 중단 | 저장된 `ENDED` 세션의 반복 종료·취소를 pending으로 다시 기록하지 않음 |
+| retention·통계 | migration 277(retention 함수 `jit = off`), 278(heads 배열 통계 끄기) |
+| LIVE 고착 수정 | 지연 positive 때문에 검증된 영상 종료를 거부하던 consumer 비교 범위 축소 |
+| 릴리스 | VERSION 7.2.5(API 7.2.5, alarm-worker 6.1.2), CHANGELOG, 이 문서 |
 
-두 브랜치는 로컬 main의 아키텍처 게이트 실패 두 건을 같은 내용으로 고친다. 계측 확장 준비 커밋 `3c2b20305`(main
-통합은 `20ed0842f`)가 허용 위치 밖에 실험용 SQL을 추가했고, PostgreSQL Dockerfile의 multi-stage `AS` stage를 런타임
-계약 검사가 인식하지 못했다. 실험 SQL은 `scripts/experiments/postgres-extensions/testqueries/`로 옮기고 와일드카드
-조회를 명시 열로 바꿨다. 검사는 postgres 이미지를 이름으로 참조하는 모든 `FROM`(`--platform`·registry 접두사·대소문자
-포함)이 같은 digest 고정 18.6 이상 이미지일 때만 통과한다. ARG로 이미지를 고르는 `FROM`은 해석하지 않는다. 두
-브랜치의 변경이 같으므로 차례로 병합해도 충돌하지 않는다.
+게이트 복구: 계측 확장 준비 커밋 `3c2b20305`(main 통합은 `20ed0842f`)가 허용 위치 밖에 실험용 SQL을 추가했고,
+PostgreSQL Dockerfile의 multi-stage `AS` stage를 런타임 계약 검사가 인식하지 못했다. 실험 SQL은
+`scripts/experiments/postgres-extensions/testqueries/`로 옮기고 와일드카드 조회를 명시 열로 바꿨다. 검사는 postgres
+이미지를 이름으로 참조하는 모든 `FROM`(`--platform`·registry 접두사·대소문자 포함)이 같은 digest 고정 18.6 이상
+이미지일 때만 통과한다. ARG로 이미지를 고르는 `FROM`은 해석하지 않는다.
 
 ## 스키마 수렴 (migration 271–276)
 
@@ -47,11 +51,13 @@ GRANT/ACL은 fresh에 운영 role이 없어 비교하지 않았다. 운영 데�
   `math.MaxInt32` 가드를 제거했다.
 - 설정 소유자는 183과 같은 DB 수준으로 유지했다. compose `-c`로 옮기는 대안은 운영 PostgreSQL 재시작이 필요하다.
 
-### 운영 적용 전 확인할 사항 (승인 필요)
+### 운영 적용 전 확인할 사항
 
 - 274는 운영 `members` 135행의 `created_at`·`updated_at` 값을 지운다. 마지막 전체 DB 복원 검증은 2026-10-07이고 그
-  뒤 백업은 중단됐다([DEPLOYMENT_BASELINE](../DEPLOYMENT_BASELINE.md)). 적용 전에 승인된 읽기 전용 세션에서
-  `id, slug, created_at, updated_at`을 추출해 보관한다.
+  뒤 백업은 중단됐다([DEPLOYMENT_BASELINE](../DEPLOYMENT_BASELINE.md)). 2026-10-07 19:12 UTC 읽기 전용 세션에서
+  `id, slug, created_at, updated_at` 135행을 build-control host의
+  `~/.local/share/hololive-db-backup/manual/20261007T191238Z-members-timestamps-pre-274/`에 CSV와 sha256으로 보관했다.
+  두 열을 쓰는 trigger·view·함수와 운영 문장은 없었다(`pg_stat_statements`, 형제 저장소 검색).
 - 272 대상 인덱스의 누적 `idx_scan`은 5813이고 마지막 스캔(2026-10-06 07:35:59 UTC)의 주체는 확인하지 못했다. 코드에는
   이 부분 술어를 쓰는 조회가 없다. 적용 직전에 일정 구간의 `idx_scan` 증가분이 0인지 다시 확인한다.
 - 274의 이름 열 typmod 변경 뒤 `cache_statement` 연결에서 이름 열을 반환하는 문장이 한 번씩
@@ -78,6 +84,30 @@ GRANT/ACL은 fresh에 운영 role이 없어 비교하지 않았다. 운영 데�
   TOAST 값을 유지하고, 적재된 빈 이력은 기존처럼 배열을 지운다.
 - `BenchmarkLiveIgnoredAbsenceHistory`는 metadata-only 세션 fixture 때문에 실패했다. 초기 세션을 `Reduce`로 만든다.
 
+## 운영 메트릭 기반 추가 개선
+
+2026-10-07 18:34–19:04 UTC 운영 읽기 전용 구간 측정(`pg_stat_statements`·`pg_stat_kcache`·`pg_wait_sampling` 스냅숏
+차이, `pg_stat_user_tables`, Prometheus·Loki)에서 호스트 여유는 충분했다(2 vCPU 중 약 0.45코어, 앱 질의 CPU 약
+0.09코어, iowait 0.2%). 그 안에서 비용이 크거나 결함인 항목을 고쳤다.
+
+- **pending 재기록 중단:** `youtube_live_pending_ends`는 초당 약 24행이 HOT 없이 갱신됐고 84%가 이미 `ENDED`인 세션의
+  행이었다. 저장된 `ENDED` 세션은 positive로 되살아나지 않고 모든 판정 경로가 그 pending을 읽지 않으므로, session 행이
+  있는 `ENDED` 세션의 반복 종료·취소는 다시 보관하지 않는다. 기존 D2 진단 행은 동결되고, session 행이 없거나 head만
+  남은 영상은 그대로 보관한다. due가 아닌 종료 후보가 남은 `ENDED` 세션에서 head 후보 FK 위반(23503)으로 관측 처리가
+  실패하던 경로도 함께 사라진다.
+- **277 retention 함수 JIT 끄기:** 두 retention 함수의 내부 문장은 `generate_subscripts` 행 추정과 정책별 LIMIT이
+  곱해져 추정 비용이 수백만이 되고, 누적 실행 시간의 61–77%(최근 구간 85–96%)가 JIT 컴파일이었다. 시험 DB에서 함수
+  내부 실행이 939.7/131.8 ms에서 624.7/13.9 ms로 줄었고 계획 노드와 비용은 같았다.
+- **278 heads 배열 통계 끄기:** heads autoanalyze가 평균 384 ms(26,174회)였다. 술어에 쓰이지 않는
+  `ignored_absence_scheduled_for` 배열을 매번 detoast했기 때문이다.
+- **LIVE 고착 수정:** LIVE 세션 22개 중 21개가 6시간–7일 동안 positive 없이 LIVE였다(17개 채널). video live check는
+  identity·채널을 확인한 종료 시각을 보고했지만 마지막 positive(20건이 Holodex `live_snapshot`)가 그보다 0.5–3.3분
+  늦어, consumer가 하루 9,475번 `INVALID_END_TIMELINE`으로 거부했다. Holodex positive의 EffectiveAt은 수집 예정
+  시각이다. `ended_at`과 positive의 직접 비교는 grace 없이 끝내는 시작 미관측 terminal 경로에만 두고, LIVE positive
+  clock이 있는 세션은 schema 1과 snapshot 종료처럼 reducer의 일반 명시적 종료 계약(관측 시각 기준 positive 비교와
+  grace)을 따른다. 종료 경로는 알림 outbox·egress를 만들지 않는다. 고착 세션은 배포 뒤 다음 영상 확인에서 실제 종료
+  시각으로 끝나며, 저장된 `ended_at`이 `last_live_positive_at`보다 이를 수 있다.
+
 ## 검증
 
 - 스키마 수렴: 270까지 재생한 DB에 운영 drift 15건을 재현한 뒤(열 순서·CHECK 표기 차이는 재현하지 않음) 271–276을 적용하면
@@ -85,15 +115,27 @@ GRANT/ACL은 fresh에 운영 role이 없어 비교하지 않았다. 운영 데�
   `dispatched_at`·행이 있는 운영 전용 테이블에서 각각 멈추는 것도 실제 PostgreSQL로 확인했다.
 - Live 상태: 전체 적재와 축소 적재의 결정 동일성, 미적재 이력의 오류 반환과 저장 시 보존을 단위·PostgreSQL 시험으로
   확인했다.
-- 각 브랜치에서 대상 패키지 `go vet`·`go test`, golangci-lint, migration manifest·SQL 소유권 검사를 통과했다.
-  두 브랜치 모두 문서 정리를 마친 최종 상태에서 `./build-all.sh --build-only --no-bump`(아키텍처 게이트·staticcheck·
-  golangci-lint·NilAway·race·이미지 빌드)를 통과했다.
+- pending 재기록 중단: ENDED 세션의 종료·취소 표 시험, 세션 없는 영상·head만 남은 영상 대조군, 기존 pending 행의
+  xmin 유지와 FK 회귀를 단위·PostgreSQL 시험으로 확인했다. 가드를 되돌린 변이에서 새 시험이 실패한다.
+- 277·278: 기존 retention 보호·한도 시험, 실제 manifest 재생, golden(두 함수 CONFIG의 `jit=off`만 변경)을 통과했다.
+- LIVE 고착 수정: 지연 positive 뒤 검증된 종료(LIVE·UPCOMING positive), grace 안의 END_CANDIDATE와 finalizer 정산,
+  확인 시각 positive의 보존, 시작 미관측 경로의 거부를 PostgreSQL 시험으로 확인했다. 각 핵심 비교를 지운 변이에서
+  해당 시험이 실패한다.
+- 각 작업트리에서 대상 패키지 `go test`(race 포함), golangci-lint, migration manifest·SQL 소유권 검사를 통과했다.
+  게이트 복구·스키마 수렴·live 적재 축소 브랜치는 `./build-all.sh --build-only --no-bump`(아키텍처 게이트·staticcheck·
+  golangci-lint·NilAway·race·이미지 빌드)를 통과했다. 통합 브랜치의 전체 게이트와 게시 게이트 결과는 배포 기록에 적는다.
 
 ## 남은 후보 (이번 범위 밖)
 
-- `youtube_live_pending_ends`: 5,020행에 누적 UPDATE 6,285만 건(HOT 7.4%). YouTube.js의 과거 `ENDED` 항목이 관측마다
-  pending을 새 observation id로 다시 기록한다. replay 결정이 바뀌므로 별도 설계가 필요하다.
-- `delete_source_observation_retention_batch` 내부 조회: 평균 795ms, 22,192회.
+- `youtube_live_pending_ends`: 저장된 `ENDED` 세션의 pending `FOR UPDATE` 적재와 값이 같은 upsert 호출(초당 약 17–21건)은
+  남는다. 저장 경로의 삭제 keep-list 의미를 바꿔야 하므로 이번 변경의 효과를 측정한 뒤 정한다.
+- `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
+  반복된다. backoff 상한과 검토 영수증 흐름과의 관계를 설계해야 한다.
+- `live_check_videos.sql`(5초 주기)의 검토 영수증 semantic facts 재계산: DB CPU 약 6%이고 projection guard 잠금 대기의
+  원인이다. 새 테이블·trigger·backfill과 review 함수 재작성이 필요하다.
+- collector 1초 주기 후보 탐색과 항상 충돌하는 lease INSERT: DB 질의 CPU 약 23%이나 절대량은 약 0.02코어다.
+- 보존 기간이 지난 `ignored_absence_scheduled_for` 원소 정리, bot durable inbox/outbox의 개별 유휴 폴링, 은퇴
+  projection 세대 보존 기간, `source_observation_queue` retention용 정렬 인덱스, 알림 전달 전이 지표의 빈 sweep 집계.
 - finalizer·video live check에서 비`ENDED` head의 배열까지 생략(설계 문서의 2b). 두 경로도 `ENDED` 배열은 이미
   생략하며, 나머지는 단일 영상 조회라 이득이 작아 제외했다.
 - 시청자 표본(`youtube_live_viewer_samples`, 2026-10-07 리뷰 측정 약 109만 행·150MiB)의 보존·폐기 결정과 큰
