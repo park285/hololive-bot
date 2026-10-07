@@ -7,6 +7,8 @@
 선택적으로 활성화하는 절차다. 기본 preload는 계속 `pg_stat_statements` 하나다.
 Dockerfile은 고정 PostgreSQL 18.6/Alpine PGXS로 두 CPU 아키텍처의 모듈을 빌드하며
 앱 테이블·마이그레이션·initdb를 변경하지 않는다.
+최종 이미지 스캔의 `CVE-2026-58055` 보고를 해소하도록 기존 `nghttp2-libs`만
+`1.69.0-r0`에서 `1.70.0-r0`으로 갱신한다. base digest·다른 OS 패키지는 유지한다.
 
 운영 이미지 전송·설정 쓰기·재시작·CREATE/DROP EXTENSION은 명시적으로 승인된 뒤
 `hololive-bot-ops`의 현재 no-build 배포 절차로 수행한다. 원격 Git 게시는 별도 범위다.
