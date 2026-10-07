@@ -60,6 +60,7 @@ func mergeConfirmedPremiere(state *State, decision *PremiereDecision, fact *Conf
 			ScheduledStartTime: copyOptionalTime(fact.ScheduledAt),
 			LastSeenAt:         fact.ReceivedAt.UTC(),
 			IsPremiere:         new(true),
+			IgnoredAbsences:    LoadedIgnoredAbsences(nil),
 			Present:            true,
 		}
 		if fact.Title != "" {

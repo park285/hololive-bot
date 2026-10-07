@@ -27,6 +27,10 @@
   운영 Go 테스트의 JSON 검사는 유지하며 성공 로그의 중복 출력을 줄이고 실패 때 진단을 출력합니다.
 - CI의 Go 1.27 강제와 toolchain 스탬프를 제거하고 Go가 manifest 요구사항으로 버전을 선택하게 합니다.
   `GOTOOLCHAIN` 기본값은 `auto`이며 명시한 환경값을 유지합니다.
+- YouTube live 상태 적재를 줄였습니다. live snapshot은 채널 범위에서 `UPCOMING`·`LIVE` 세션과 종료 후보(`next_end_check_at`)가
+  남은 `ENDED` 세션만 잠그고, 모든 적재 경로가 session 행이 있는 `ENDED` 세션의 `ignored_absence_scheduled_for` 배열을 읽지 않습니다.
+  배열을 읽지 않은 세션을 저장하면 기존 배열을 유지하고, reducer가 읽지 않은 이력이 필요하면 결정 없이 오류를 반환합니다.
+  코드만 바꾸며 migration은 없습니다.
 
 ## v7.2.4 - 2026-10-06
 

@@ -17,6 +17,15 @@ type reduceSession struct {
 	ignoredAbsences     map[string]map[time.Time]struct{}
 	absenceCoverageSlot *AbsenceSlot
 	absenceCoverage     liveCoverageMatcher
+	// failure는 상태 입력이 결정에 필요한 사실을 담지 않았음을 뜻한다. 첫 실패만 남기고
+	// Reduce는 부분 결정 대신 오류를 반환한다.
+	failure error
+}
+
+func (s *reduceSession) fail(err error) {
+	if s.failure == nil {
+		s.failure = err
+	}
 }
 
 func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time) (Decision, error) {
@@ -43,6 +52,10 @@ func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time
 	}
 
 	applyFacts(&session)
+
+	if session.failure != nil {
+		return Decision{}, fmt.Errorf("reduce live observation %d: %w", evidence.ObservationID, session.failure)
+	}
 
 	return session.decision(), nil
 }
