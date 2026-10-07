@@ -13,7 +13,7 @@
 
 | 역할 | 호스트 | 내용 |
 |---|---|---|
-| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | Compose의 `hololive-api`, `hololive-alarm-worker`, `holo-postgres`, `valkey-cache`, shortlink ingress, autoheal, collector fleet member `youtube-collector` (`c` on 30025)와 격리 issuer `youtube-po-c`. 권위 PostgreSQL이 여기 있습니다. |
+| 서울 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | 서울의 별도 A1 2 OCPU·12GB·50GB VM. Compose의 `hololive-api`, `hololive-alarm-worker`, `holo-postgres`, `valkey-cache`, shortlink ingress, autoheal, collector fleet member `youtube-collector` (`c` on 30025)와 격리 issuer `youtube-po-c`. 권위 PostgreSQL이 여기 있습니다. |
 | 서울 AP·관리 웹 | `<tailnet-seoul-ap>` (`aarch64`) | Compose의 `youtube-collector-b`와 격리 issuer `youtube-po-b`, host service `iris-console.service`의 통합 관리자 웹. PostgreSQL standby나 자동 failover 대상으로 사용하지 않습니다. |
 | Osaka AP `a` | `<tailnet-osaka-a>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-a.service`와 격리 issuer `hololive-youtube-po.service`. |
 | Osaka2 AP `d` | `<tailnet-osaka2-d>` (`x86_64`) | host-native `hololive-youtube-collector@youtube-collector-d.service`와 격리 issuer `hololive-youtube-po.service`. |
@@ -21,20 +21,30 @@
 
 Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용합니다. Osaka `a`·Osaka2 `d`의 Compose overlay는 경로·설정 계약 검증용이며 실제 기동은 native unit이 소유합니다. 실행 방식의 설정은 `scripts/deploy/ap-hosts/{seoul,osaka,osaka2}.conf`의 `AP_RUNTIME_MODE`가 소유합니다.
 
+2026-10-07 중앙 runtime과 PostgreSQL을 Osaka에서 Seoul로 이전했습니다. 새 VM이 기존 중앙
+주소 `100.100.1.8`을 승계했으므로 AP·Iris webhook·관리 gateway·DB exporter·shortlink의
+주소 계약은 그대로입니다. AP `a/b/d`는 기존 호스트에 남고, 새 중앙 `c`만 이전했습니다.
+동일 ARM64 운영 이미지와 전체 PostgreSQL cold copy를 사용했으며 추가 schema migration은 없었습니다.
+이관 검증 후 사용자 승인으로 옛 중앙 VM을 삭제하여 `TERMINATED`를 확인했습니다.
+100GB 부트 볼륨은 분리된 `AVAILABLE` 상태로 디스크·이미지·배포 파일을 보존합니다.
+복구에는 새 VM 생성이 필요하며, 옛 관리 주소 `100.100.1.9`는 현재 접속 가능한 서버가 아닙니다.
+보존 볼륨의 부팅 unit은 disabled이고, 종료 전에 container restart policy를 `no`로 설정했습니다.
+`fence.intent`가 자동 primary 재기동을 막습니다. 서울 쓰기 재개 이후에는 최신 데이터를
+역이관하지 않고 옛 DB를 다시 primary로 켜면 안 됩니다.
+
 `<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, CLIProxy와 observability
 스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
 의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `HOLOLIVE_OTLP_GRPC_ENDPOINT`가
 `<build-control-host>`를 가리키는 것은 이전 누락이 아니라 named exception입니다.
-둘째, 이 호스트의 과거 Hololive DB와 자동 백업은 현재 복구 수단으로 가정하지 않습니다.
-2026-09-05 로컬 `holo-postgres` container·volume과 시간별 dump/restore를 제거했고,
-09-08 재도입한 일일 암호화 백업도 09-28 취소했습니다.
-2026-09-29 metadata 확인에서 `hololive-db-backup.timer`는 disabled/inactive이며,
-`~/.local/share/hololive-db-backup/archive/`는 비어 있고 과거 09-05 static dump는 확인되지 않았습니다.
-`daily/20260927T150006Z-sql-w4-held-dsz7cbp9/`에는 delivery ledger state의 암호화 dump 1,413 bytes와
-manifest/checksum만 남아 있습니다. 별도 `w4-publication-20260928/private-drop-backups/`의
-Hololive ledger-state dump 4,733 bytes도 특정 객체의 복구본이지 전체 DB 백업이 아닙니다.
-최신 전체 복구점은 입증되지 않았습니다. 원문 복호화·새 백업·자동화 재활성화·기존 사본 삭제는
-각 대상과 손실 범위의 승인이 필요합니다. `valkey-cache`와 다른 서비스 사본은 정리 대상이 아닙니다.
+둘째, 원격 primary의 일일 암호화 논리 백업과 주간 격리 복원을 소유합니다.
+과거 로컬 `holo-postgres` container·volume과 시간별 dump/restore는 복구하지 않습니다.
+2026-10-07 전체 DB 복원·Drive 전송 검증 이후 사용자 요청으로 자동·수동 백업과 정기 복원
+검증을 중단했습니다. 관련 timer는 disabled/inactive이며, 이번 중앙 이전에서도 재개하지
+않았습니다. 기존 백업과 개별 ledger-state dump는 보존하되 전체 DB 복구본과 구분합니다.
+전용 백업 SSH 경로의 새 primary 반영·재검증은 백업 재개 승인 때 수행합니다.
+독립 복구키 보관·검증은 사용자 요청으로 제외했으므로 build-control host 전체 유실 시의
+키 가용성은 보장하지 않습니다.
+`valkey-cache`와 다른 서비스 사본은 정리 대상이 아닙니다.
 `<build-control-host>`는 `x86_64`라 현재 `aarch64` primary의 물리 standby 역할을 맡지 않습니다.
 이 호스트의 `hololive-compose.service`는 `disabled`로 두어 재부팅이 두 번째 alarm
 dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결정을 요구합니다.
@@ -42,22 +52,22 @@ dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결�
 `hololive-alarm-worker`의 직접·전체·dependency 경유 기동을 거부합니다. 승인된 롤백에서만
 해당 명령에 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1`을 일시 지정합니다.
 
-2026-09-08 사용자 결정에 따라 Seoul physical standby와 failover controller를 제거했으며,
-Osaka `holo-postgres` 하나만 권위 primary로 운영합니다. 이 결정으로 동기화된 대기 복구와
-자동 승격 역량이 사라졌습니다. Osaka primary 장애 시 새 PostgreSQL과 실제로 보존·검증한
-백업이 있어야 복원할 수 있습니다. 위의 부분 객체 dump를 최신 전체 백업으로 취급하지 않습니다.
+2026-09-08 사용자 결정으로 Seoul physical standby와 failover controller를 제거했습니다.
+2026-10-07 이전 이후에는 새 Seoul 중앙 `holo-postgres` 하나만 권위 primary입니다.
+동기화된 대기 복구나 자동 승격은 없으며, 보존한 Osaka DB는 전환 시점의 정지 사본입니다.
+부분 객체 dump를 전체 백업으로 대체하거나, 오래된 사본을 현재 primary로 오인하지 않습니다.
 
 API, alarm worker와 중앙 collector `c`는 같은 Docker network의 `holo-postgres:5432`에
-직접 연결하고, 원격 collector `a/b/d`는 Osaka Tailscale IP `100.100.1.8:5433`에 직접
+직접 연결하고, 원격 collector `a/b/d`는 Seoul 중앙 Tailscale IP `100.100.1.8:5433`에 직접
 연결합니다. 여섯 consumer 모두 TLS `verify-full`을 유지하며 DB용 Tailscale Service 중계를
 사용하지 않습니다. Seoul의 standby container·전용 PGDATA volume, failover
 timer·service·apply drop-in과 Osaka의 `iris_seoul_standby` physical slot을 제거했습니다.
-Osaka와 Seoul에는 `svc:hololive-postgres` serve route가 없습니다. primary는 재시작하지
-않았으며 DB 접속 설정을 반영한 consumer 여섯 개만 순차 재기동했습니다.
+당시 제거한 `svc:hololive-postgres` serve route는 이번 이전에서도 재생성하지 않았습니다.
+주소를 승계한 새 primary에 consumer들이 직접 재접속하며 TLS `verify-full`을 유지합니다.
 
 `deploy/compose/docker-compose.standby.yml`과 failover 구현은 재활성화 참고 자료로만
 유지합니다. 다시 사용하려면 대상·데이터 비용·fencing·route 영향에 대한 명시적 승인을 새로
-받고, 당시 Osaka primary에서 새 `pg_basebackup`을 생성해 Seoul을 재시딩한 뒤
+받고, 당시의 현재 primary에서 새 `pg_basebackup`을 생성해 standby를 재시딩한 뒤
 `runbooks/postgres-replication.md`의 전체 검증을 통과해야 합니다. 삭제한 PGDATA나 예전
 timeline을 그대로 재기동하지 않습니다.
 
@@ -106,7 +116,7 @@ Production PostgreSQL access is certificate-verified end to end. `holo-postgres`
 loads a server certificate issued by the `iris-stack internal CA` covering
 `holo-postgres`, `host.docker.internal`, `localhost`, the central host name and
 its tailnet FQDN, the central tailnet/private/public IPs, and `127.0.0.1`/`::1`.
-The certificate is a long-lived static file (valid through 2031-08), not an
+The certificate is a long-lived static file (the Seoul leaves are valid through 2031-10), not an
 auto-renewed short-TTL lease: the `stack-secrets` master owns it at
 `hosts/<host>/hololive-bot/postgres-tls/`, `tools/sync-host.sh <host> --apply`
 mirrors it to `/etc/stack-secrets/hololive-bot/postgres-tls/`, and Compose mounts

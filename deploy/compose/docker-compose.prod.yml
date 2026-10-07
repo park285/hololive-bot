@@ -613,6 +613,7 @@ services:
     cpus: 1.0
     mem_limit: 512m
     restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
