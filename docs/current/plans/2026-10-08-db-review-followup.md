@@ -125,6 +125,37 @@ GRANT/ACL은 fresh에 운영 role이 없어 비교하지 않았다. 운영 데�
   게이트 복구·스키마 수렴·live 적재 축소 브랜치는 `./build-all.sh --build-only --no-bump`(아키텍처 게이트·staticcheck·
   golangci-lint·NilAway·race·이미지 빌드)를 통과했다. 통합 브랜치의 전체 게이트와 게시 게이트 결과는 배포 기록에 적는다.
 
+## 게시와 운영 배포 기록
+
+- 통합 브랜치 `5c195b50c`에서 `./build-all.sh --build-only --no-bump`(10분 38초)와 pre-push 게이트를 통과했고, PR #590의
+  CI 11개 항목이 모두 통과했다. squash 병합 커밋 `2ed1a8b63982516cd2aaf9d8d870db843618a2ff`의 트리는 `5c195b50c`와 같다.
+- 병합 커밋의 clean worktree에서 `kapu-multiarch`로 arm64 이미지를 빌드했다. `hololive-api` 7.2.5
+  `sha256:ebe3045272976cdda87fb5b95ec993d218b2fc3c10e66709648ba43984076384`, `hololive-alarm-worker` 6.1.2
+  `sha256:cc7f3ef40835ac74b7fa3ce44a322b12382434bb2bfa857e431a3257cf682d7c`이며 두 이미지의 revision label은 병합 커밋이다.
+  `hololive-seoul`에 `docker load`한 뒤 ID·arch·revision을 다시 확인하고 `:prod`로 승격했다. 원격 빌드는 하지 않았다.
+- 롤백 기준점(change_started_at 2026-10-07T20:10:52Z): 이전 이미지 `hololive-api:rollback-20261007T201052Z`
+  (`b35ca2aaf5fb`, 7.2.3, `4a633ab24`)와 `hololive-alarm-worker:rollback-20261007T201052Z`(`471a7f38702b`, 6.1.1),
+  배포 트리 사본 `/opt/hololive-bot/compose/deploy-backups/pre-v7.2.5-20261007T201052Z/`(data·logs·backups 제외).
+  이전 이미지는 삭제된 열·테이블을 읽거나 쓰지 않으므로 앱만 되돌릴 수 있다. DB 변경은 되돌릴 수 없다.
+- 배포 트리에서는 VERSION 파일 세 개만 바꿨다. migration은 이미지에 내장된 `migrations.FS`를 쓰며, compose가 mount하는
+  배포 트리의 migrations 디렉터리는 비어 있다.
+- 적용 직전 확인(20:11 UTC): 272 대상 인덱스 `idx_scan`이 29분 동안 5813으로 변하지 않았고, `dispatched_at` 값과 운영 전용
+  두 테이블의 행은 0, ledger는 131개, 1분 넘게 열린 트랜잭션은 없었다.
+- `hololive-db-migrate`는 20:11:25–20:11:29 UTC에 `applied=8 skipped=131 total=139`로 끝났다. 곧바로
+  `hololive-alarm-worker`(20:11:38)와 `hololive-api`(20:11:49)를 `up -d --no-build --no-deps`로 차례로 재생성했고 둘 다
+  health gate를 통과했다(재시작 0). 재생성 뒤 두 서비스와 collector `c` 로그에 ERROR·WARN·cached plan 오류는 없었다.
+- DB 확인: 새 세션 `idle_in_transaction_session_timeout=5min`, ledger 139(마지막 278), `members` 시각 열 삭제·이름 열
+  varchar(200)·NOT NULL, `chk_members_aliases_shape`·`acl_settings_key_key` 검증 완료, 운영 전용 제약·테이블·인덱스
+  삭제, 두 retention 함수 `jit=off`, heads 배열 `attstattarget=0`.
+- 효과(배포 뒤 약 6분, 읽기 전용):
+  - `youtube_live_pending_ends` 갱신이 초당 약 24행에서 3.6행으로 줄었다(306초에 1,100행).
+  - heads autoanalyze 1회가 24 ms였다(이전 평균 384 ms). 새 heads `FOR UPDATE` 문장은 512회 평균 3.33 ms였다(이전 9.4–18 ms).
+  - LIVE 세션이 30개에서 13개로 줄었다. 영상 확인 판정은 `ENDED` 17건이며, 종료 시각은 마지막 positive보다 29초–3분 16초
+    이르고 10시간–7일 전이다. 배포 뒤 `youtube_notification_outbox` 행은 0건이다.
+  - 남은 `INVALID_END_TIMELINE` 3건은 모두 LIVE positive clock이 없는 UPCOMING 세션(시작 미관측 경로의 의도된 거부)이다.
+  - 남은 LIVE 13개 중 4개는 positive clock이 있으나 6시간 넘게 갱신되지 않았으며 YouTube identity 미확인이다. 9개는
+    head 없는 `legacy_unknown` 기록으로 시작한 지 126–136일 지났고 이번 변경 전부터 있었다.
+
 ## 남은 후보 (이번 범위 밖)
 
 - `youtube_live_pending_ends`: 저장된 `ENDED` 세션의 pending `FOR UPDATE` 적재와 값이 같은 upsert 호출(초당 약 17–21건)은
@@ -133,6 +164,8 @@ GRANT/ACL은 fresh에 운영 role이 없어 비교하지 않았다. 운영 데�
   반복된다. backoff 상한과 검토 영수증 흐름과의 관계를 설계해야 한다.
 - `live_check_videos.sql`(5초 주기)의 검토 영수증 semantic facts 재계산: DB CPU 약 6%이고 projection guard 잠금 대기의
   원인이다. 새 테이블·trigger·backfill과 review 함수 재작성이 필요하다.
+- head 없는 `legacy_unknown` LIVE 9건(126–136일)과 identity 미확인 고착 LIVE 4건: 영상 확인으로 종료를 증명할 수
+  없으므로 검토 영수증(`closed_unresolved`) 처분을 운영자가 결정해야 한다.
 - collector 1초 주기 후보 탐색과 항상 충돌하는 lease INSERT: DB 질의 CPU 약 23%이나 절대량은 약 0.02코어다.
 - 보존 기간이 지난 `ignored_absence_scheduled_for` 원소 정리, bot durable inbox/outbox의 개별 유휴 폴링, 은퇴
   projection 세대 보존 기간, `source_observation_queue` retention용 정렬 인덱스, 알림 전달 전이 지표의 빈 sweep 집계.

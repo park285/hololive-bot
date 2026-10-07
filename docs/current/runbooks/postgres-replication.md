@@ -31,8 +31,8 @@ Seoul 복제 재구축이나 보존 자료 삭제는 각 대상과 영향에 대
 `pg_dump --create`·`pg_dumpall` 출력과 archive 형식의 `pg_restore --create`에는 포함되지만, `--create` 없는
 `pg_restore`(예: `--clean --if-exists`)로는 빠집니다. `schema_migrations`는 데이터로
 복원되므로 러너는 그 값을 만든 migration을 다시 실행하지 않습니다. 2026-10-08 운영에는 183의
-`idle_in_transaction_session_timeout=5min`이 없었습니다. 이를 다시 선언하는 migration 271을 준비했으며, 운영에
-적용한 뒤 아래 2단계의 새 세션 확인을 통과하기 전까지는 미적용 상태로 봅니다. 2026-08-23 PG 18.6 전환의
+`idle_in_transaction_session_timeout=5min`이 없었습니다. 이를 다시 선언하는 migration 271을 2026-10-07 20:11 UTC에
+적용했고, 아래 2단계의 새 세션 확인에서 `5min`을 확인했습니다. 2026-08-23 PG 18.6 전환의
 `pg_restore` 플래그 기록이 없어 그 복원이 원인이라는 판단은 추론입니다. 물리 복사(cold copy·basebackup)는 이 설정을
 그대로 옮깁니다.
 
