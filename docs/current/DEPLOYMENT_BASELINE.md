@@ -100,6 +100,16 @@ timeline을 그대로 재기동하지 않습니다.
 | Valkey | cache, sessions/rate limit, alarm dispatch wakeup, member epoch Pub/Sub, job locks (no settings/ACL Pub/Sub) | `contracts/valkey_ephemeral_contract.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api` where configured | 검토 필요 |
 
+## PostgreSQL Observability
+
+2026-10-07 Osaka primary에 `pg_stat_kcache` 2.3.2와 `pg_wait_sampling`
+binary 1.1.11(SQL extension 1.1)을 활성화했습니다. 적용 PostgreSQL image revision은
+`edf6f7efc2230de0667a96d5a0e3d06bccfc5004`이며, 호스트의 비밀 아닌
+`HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES` 설정이 기존 `pg_stat_statements`와 함께 preload합니다.
+CPU·대기 통계는 기존 `pg_read_all_stats` 역할만 읽으며 앱 역할은 확장하지 않았습니다.
+[적용 기록](plans/2026-10-07-postgres-extensions.md#운영-적용-결과--2026-10-07)과
+[활성화·복구 절차](runbooks/postgres-observability.md)를 따릅니다.
+
 ## PostgreSQL TLS Baseline
 
 Production PostgreSQL access is certificate-verified end to end. `holo-postgres`

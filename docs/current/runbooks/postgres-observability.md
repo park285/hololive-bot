@@ -5,6 +5,9 @@
 `hololive-osaka` (`100.100.1.8`)의 `holo-postgres`/`hololive`에
 `pg_stat_kcache` 2.3.2와 `pg_wait_sampling` binary 1.1.11(SQL extension 1.1)을
 선택적으로 활성화하는 절차다. 기본 preload는 계속 `pg_stat_statements` 하나다.
+새 확장과 읽기 view는 `hololive_observability` 스키마를 사용한다. 기존 `public` 스키마의
+USAGE가 없는 exporter에도 이 전용 스키마의 USAGE와 통계 객체 SELECT/EXECUTE만 부여한다.
+기존 pg_stat_statements는 public에 유지하며 관리자 소유 view가 필요한 숫자 지표를 제공한다.
 Dockerfile은 고정 PostgreSQL 18.6/Alpine PGXS로 두 CPU 아키텍처의 모듈을 빌드하며
 앱 테이블·마이그레이션·initdb를 변경하지 않는다.
 최종 이미지 스캔의 `CVE-2026-58055` 보고를 해소하도록 기존 `nghttp2-libs`만
@@ -45,8 +48,11 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
    비밀 아닌 설정 값을 복구점으로 기록한다. env 전체나 credentials를 출력하지 않는다.
 2. 검증한 arm64 이미지와 필요한 배포 파일만 전송한다. 새 image의 architecture·전체 SHA와
    Compose config를 대조한다. 기존 이미지와 volume은 보존한다.
-3. 호스트 `/etc/stack-secrets/hololive-bot/compose.env`의 아래 비밀 아닌 키만 승인 범위에서
-   갱신한다. 수동 명령과 systemd 재시작 모두 같은 값을 읽도록 한다.
+3. `stack-secrets/hosts/hololive-osaka/hololive-bot/compose.env` 마스터에서 아래 비밀 아닌
+   키만 승인 범위에서 갱신한다. `sync-host.sh hololive-osaka --stack hololive-bot` dry-run의
+   파일 범위·삭제 부재를 확인한 뒤 `--apply`로 배포한다. 호스트
+   `/etc/stack-secrets/hololive-bot/compose.env`와 마스터의 일치 및 manifest owner/mode를
+   검증한다. 수동 명령과 systemd 재시작 모두 같은 값을 읽도록 한다.
 
    ```dotenv
    HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,pg_stat_kcache,pg_wait_sampling
@@ -65,10 +71,11 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
      -f /usr/local/share/hololive/enable-observability.sql
    ```
 
-   한 transaction에서 preload/version/schema를 검증하고 확장을 생성한다. 새 통계 읽기는
-   `pg_read_all_stats` 구성원에게만 부여하며 reset은 관리자만 가능하다. 기존 앱 역할을
+   한 transaction에서 preload/version/schema를 검증하고 확장을 생성한다. 새 스키마의 통계 읽기는
+   `pg_read_all_stats` 구성원에게만 부여하며 reset은 관리자만 가능하다. public USAGE와 기존 앱 역할을
    확장하지 않는다. 2026-10-07 읽기 확인에서는 `postgres_exporter`, `iris_db_nightly`가
-   이미 이 통계 역할을 상속했다. 적용 직전에 재확인하고 새 역할 GRANT를 추정해서 하지 않는다.
+   이미 이 통계 역할을 상속했다. 적용 직전에 재확인하고 실제 `SET ROLE postgres_exporter` 상태의
+   조회까지 검증한다. 함수/테이블 privilege 플래그만으로 schema USAGE가 있다고 가정하지 않는다.
 6. 실제 running image ID, extension version, preload, CPU/wait 수집, 권한을 확인한다.
    central/API/worker/collector와 각 AP readiness, DB 연결 오류·새 worker crash/OOM을 확인한다.
    장애가 지속되면 승인된 복구 범위로 되돌린다.
@@ -100,6 +107,7 @@ sudo docker exec -e PGOPTIONS='-c default_transaction_read_only=on -c statement_
 
 새 모듈 파일이 있는 이미지가 아직 실행 중일 때 아래 SQL로 두 확장만 제거한다.
 이 작업은 새 계측 통계/객체를 버리고 앱 테이블·기존 pg_stat_statements는 보존한다.
+관리하는 두 읽기 view와 확장을 제거한 뒤 전용 스키마가 비었을 때만 제거한다.
 `RESTRICT`가 외부 의존 객체 때문에 실패하면 중단하고 그 객체를 검토한다. `CASCADE`로 우회하지 않는다.
 
 ```bash

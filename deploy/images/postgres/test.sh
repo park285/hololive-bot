@@ -46,6 +46,9 @@ start_observability() {
 
 # 이미지 설치만으로 활성화되지 않으며 preload 누락 시 SQL 전체가 거부되어야 합니다.
 start_server
+# 운영 public 스키마와 같은 경계로 검증합니다. 모니터는 public USAGE를 받지 않습니다.
+psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
+  -c 'REVOKE USAGE ON SCHEMA public FROM PUBLIC;'
 if psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/enable-observability.sql; then
   printf 'activation unexpectedly succeeded without preload\n' >&2
@@ -67,7 +70,7 @@ SELECT pg_sleep(0.2);
 DO $verify$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM public.pg_stat_kcache() AS kernel
+        SELECT 1 FROM hololive_observability.pg_stat_kcache() AS kernel
         JOIN public.pg_stat_statements AS statement
           ON statement.queryid = kernel.queryid AND statement.dbid = kernel.dbid
          AND statement.userid = kernel.userid AND statement.toplevel = kernel.top
@@ -77,7 +80,7 @@ BEGIN
         RAISE EXCEPTION 'query CPU counters were not collected';
     END IF;
     IF NOT EXISTS (
-        SELECT 1 FROM public.pg_wait_sampling_profile
+        SELECT 1 FROM hololive_observability.pg_wait_sampling_profile
         WHERE pid = 0 AND event = 'PgSleep' AND queryid <> 0 AND count > 0
     ) THEN
         RAISE EXCEPTION 'query wait samples were not collected';
@@ -87,10 +90,13 @@ BEGIN
         CREATE ROLE extension_test_monitor;
         GRANT pg_read_all_stats TO extension_test_monitor;
     END IF;
-    IF has_function_privilege('extension_test_app', 'public.pg_stat_kcache()', 'EXECUTE')
-       OR has_table_privilege('extension_test_app', 'public.pg_wait_sampling_profile', 'SELECT')
-       OR has_function_privilege('extension_test_monitor', 'public.pg_stat_kcache_reset()', 'EXECUTE')
-       OR has_function_privilege('extension_test_monitor', 'public.pg_wait_sampling_reset_profile()', 'EXECUTE') THEN
+    IF has_function_privilege('extension_test_app', 'hololive_observability.pg_stat_kcache()', 'EXECUTE')
+       OR has_table_privilege('extension_test_app', 'hololive_observability.pg_wait_sampling_profile', 'SELECT')
+       OR has_function_privilege('extension_test_monitor', 'hololive_observability.pg_stat_kcache_reset()', 'EXECUTE')
+       OR has_function_privilege('extension_test_monitor', 'hololive_observability.pg_wait_sampling_reset_profile()', 'EXECUTE')
+       OR has_schema_privilege('extension_test_monitor','public','USAGE')
+       OR has_schema_privilege('extension_test_monitor','hololive_observability','CREATE')
+       OR has_schema_privilege('extension_test_app','hololive_observability','USAGE') THEN
         RAISE EXCEPTION 'observability privileges exceed the intended boundary';
     END IF;
 END
@@ -98,8 +104,8 @@ $verify$;
 SET ROLE extension_test_monitor;
 DO $monitor$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.pg_stat_kcache())
-       OR NOT EXISTS (SELECT 1 FROM public.pg_wait_sampling_profile) THEN
+    IF NOT EXISTS (SELECT 1 FROM hololive_observability.pg_stat_kcache())
+       OR NOT EXISTS (SELECT 1 FROM hololive_observability.pg_wait_sampling_profile) THEN
         RAISE EXCEPTION 'monitor role cannot read collected statistics';
     END IF;
 END
@@ -109,13 +115,13 @@ SET ROLE extension_test_app;
 DO $app$
 BEGIN
     BEGIN
-        PERFORM * FROM public.pg_stat_kcache();
+        PERFORM * FROM hololive_observability.pg_stat_kcache();
         RAISE EXCEPTION 'app unexpectedly read kernel statistics';
     EXCEPTION WHEN insufficient_privilege THEN
         NULL;
     END;
     BEGIN
-        PERFORM * FROM public.pg_wait_sampling_profile;
+        PERFORM * FROM hololive_observability.pg_wait_sampling_profile;
         RAISE EXCEPTION 'app unexpectedly read wait statistics';
     EXCEPTION WHEN insufficient_privilege THEN
         NULL;
@@ -144,7 +150,7 @@ wait "$holder"
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
 DO $lock$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.pg_wait_sampling_profile
+    IF NOT EXISTS (SELECT 1 FROM hololive_observability.pg_wait_sampling_profile
                    WHERE event_type='Lock' AND event='transactionid' AND queryid<>0 AND count>0) THEN
         RAISE EXCEPTION 'row lock wait samples were not collected';
     END IF;
@@ -159,10 +165,10 @@ start_observability
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
 DO $restart$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.pg_stat_kcache() WHERE exec_user_time+exec_system_time>0) THEN
+    IF NOT EXISTS (SELECT 1 FROM hololive_observability.pg_stat_kcache() WHERE exec_user_time+exec_system_time>0) THEN
         RAISE EXCEPTION 'kernel counters were not restored after clean restart';
     END IF;
-    IF EXISTS (SELECT 1 FROM public.pg_wait_sampling_profile WHERE event='PgSleep') THEN
+    IF EXISTS (SELECT 1 FROM hololive_observability.pg_wait_sampling_profile WHERE event='PgSleep') THEN
         RAISE EXCEPTION 'old wait profile unexpectedly survived restart';
     END IF;
 END

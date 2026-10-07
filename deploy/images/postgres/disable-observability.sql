@@ -4,6 +4,9 @@ BEGIN;
 SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '10s';
 -- 외부 의존 객체가 있으면 중단합니다. CASCADE로 앱/모니터링 객체를 지우지 않습니다.
+DROP VIEW IF EXISTS hololive_observability.statement_resources RESTRICT;
+DROP VIEW IF EXISTS hololive_observability.statement_info RESTRICT;
 DROP EXTENSION IF EXISTS pg_wait_sampling RESTRICT;
 DROP EXTENSION IF EXISTS pg_stat_kcache RESTRICT;
+DROP SCHEMA IF EXISTS hololive_observability RESTRICT;
 COMMIT;
