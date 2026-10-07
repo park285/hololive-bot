@@ -59,6 +59,21 @@ Compose의 기본 preload는 유지한다. Osaka 운영 호스트는 후속 사�
 `hololive_observability` 전용 스키마와 숫자 지표 view를 제공하도록 수정한다. 로컬 시험도
 public USAGE를 제거한 상태에서 실제 모니터 조회·비활성화를 검증하도록 보강했다.
 
+최종 수정은 revision `af9b2b57cbf2e18b34f9ccecc46b28396e054ba3`의 arm64 이미지
+`sha256:4a23abfb0d1ce0427a71b1fdce4210b6ff223e7fad3c4cd801b938137205cbd6`로 적용했다.
+Postmaster 시작 시각은 `2026-10-07T07:55:48Z`이다. 두 확장을 DROP하지 않고 한 transaction의
+`ALTER EXTENSION ... SET SCHEMA`로 이동했으며, 기존 public 확장이 있는 격리 DB에서 이
+이동과 모니터 조회를 먼저 검증했다. 수정 이미지의 amd64/ARM64 기능 시험과 최신 취약점 DB
+스캔도 통과했다.
+
+`07:57:12Z`에 실제 `SET ROLE postgres_exporter`로 이미지의 읽기 SQL 전체를 통과했다.
+exporter의 public USAGE는 계속 false, 전용 스키마 USAGE는 true이며 CREATE/reset은 false다.
+앱의 전용 스키마 USAGE도 false다. kcache 누적값의 재시작 복원과 wait 표본의 새 수집을
+확인했고, 당시 네트워크 연결 33개 모두 TLSv1.3이었다. 최종 이미지·같은 데이터 volume·중앙 및
+전체 AP readiness를 대조했으며, 최종 재시작 1분 뒤부터 확인 구간의 중앙 추가 오류는 0건이다.
+기존 앱 container ID와 native AP 프로세스의 기동 상태는 유지했다. 최종 기록은 같은 복구
+디렉터리의 `schema-correction-result.json`, `final-containers.json`, `post-statistics.txt`에 남겼다.
+
 ## 검증
 
 기존 인프라 이미지 시험의 root/UID 999 시작과 SQL 검사를 유지한다. 추가 검증은 실제
