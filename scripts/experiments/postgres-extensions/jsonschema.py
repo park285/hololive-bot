@@ -30,7 +30,7 @@ def main():
     try:
         wait_ready(container)
         print(command(["docker", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
-                       "-v", "ON_ERROR_STOP=1", "-f", "/benchmark/jsonschema.sql"]))
+                       "-v", "ON_ERROR_STOP=1", "-f", "/benchmark/testqueries/jsonschema.sql"]))
         results = []
         for trial in range(4):
             for validator in (("builtin", "schema") if trial % 2 == 0 else ("schema", "builtin")):

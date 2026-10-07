@@ -21,7 +21,7 @@ DO $cases$
 DECLARE
     example record;
 BEGIN
-    FOR example IN SELECT * FROM (VALUES
+    FOR example IN SELECT cases.value, cases.expected FROM (VALUES
         (NULL::jsonb, true),
         ('{"ko":[],"ja":[]}'::jsonb, true),
         ('{"ko":["가나다"],"ja":["あいう"]}'::jsonb, true),

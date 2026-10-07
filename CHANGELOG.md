@@ -11,6 +11,7 @@
 - 운영: 중앙 API·alarm-worker·collector `c`와 PostgreSQL을 50GB 서울 VM으로 이전하고 기존 중앙 주소를 승계했습니다. AP `a/b/d`와 애플리케이션·DB 계약은 유지하며, 오사카 중앙 VM은 삭제하고 100GB 부트 볼륨만 이전 시점 복구 자료로 보존합니다. 운영 토폴로지·복구·시크릿 소유 문서를 갱신했습니다.
 - 중앙·서울 PO issuer가 공통 `json-file` 5 MiB × 3 로그 회전 설정을 상속하도록 수정했습니다.
 - 운영 중인 PostgreSQL CPU·대기 계측 소스를 로컬 main에 통합했습니다. 고정 버전의 `pg_stat_kcache`·`pg_wait_sampling`, 선택적 preload와 `hololive_observability`의 조회 전용 권한을 유지합니다. 서울 마스터 경로·운영 runbook을 현행화했으며, 이번 소스 통합으로 운영 이미지나 DB를 재배포하지 않습니다.
+  통합 뒤 실패하던 아키텍처 게이트 두 건을 복구했습니다. 실험용 SQL은 허용 위치인 `testqueries/`로 옮기고, PostgreSQL 18 런타임 검사는 postgres 이미지를 참조하는 모든 `FROM`이 같은 digest 고정 이미지일 때 multi-stage `AS` stage를 인정합니다.
 - non-race 테스트 선별은 locale과 무관한 바이트 순서로 비교하며, 목록 수집·정렬·비교 오류를 게이트 실패로 전달합니다.
 - CI에서 최소 지원 버전 이상의 설치된 Go 검사 도구를 재사용하고 collector helper 의존성은 한 번만 설치합니다.
   운영 Go 테스트의 JSON 검사는 유지하며 성공 로그의 중복 출력을 줄이고 실패 때 진단을 출력합니다.
