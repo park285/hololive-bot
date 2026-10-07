@@ -5,6 +5,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type reduceSession struct {
@@ -108,6 +109,14 @@ func applyNegativeFact(session *reduceSession, fact *SessionFact) {
 	if fact.VerifiedTerminal && session.evidence.Kind == contract.KindVideoLiveCheck && fact.Status == "ENDED" {
 		applyVerifiedVideoEnd(session, fact)
 
+		return
+	}
+
+	// 저장된 ENDED 세션은 positive로 되살아나지 않고 모든 판정 경로가 그 pending을 읽지 않는다.
+	// 반복 종료·취소를 다시 보관하면 결정은 같고 행 쓰기만 늘어난다. 이미 있는 pending은 상태에
+	// 그대로 남아 저장 시 지우지도 바꾸지도 않는다. session 행이 없는 영상은 늦게 도착할 positive에
+	// 대비해 계속 보관하고, head만 남은 영상도 기존처럼 보관한다.
+	if existing, ok := session.state.Sessions[fact.VideoID]; ok && existing.Present && existing.Status == domain.LiveStatusEnded {
 		return
 	}
 
