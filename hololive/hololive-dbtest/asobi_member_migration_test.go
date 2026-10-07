@@ -41,7 +41,7 @@ WHERE slug='asobi-mawaritai' AND birthday IS NULL AND debut_date IS NULL`).Scan(
 		t.Fatalf("group has personal celebration dates: count=%d err=%v", count, err)
 	}
 
-	_, err = pool.Exec(ctx, `UPDATE members SET korean_name='기존 이름', aliases='{"ko":["기존 별칭"]}',
+	_, err = pool.Exec(ctx, `UPDATE members SET korean_name='기존 이름', aliases='{"ko":["기존 별칭"],"ja":[]}',
 status='graduated', is_graduated=true WHERE slug='achichi-mela';
 INSERT INTO alarms(room_id,user_id,channel_id,alarm_types)
 VALUES ('asobi-replay','','UC8eitCE9Z6EwUCs-VUi1blg',ARRAY['LIVE']::alarm_type[]);`)

@@ -232,7 +232,12 @@ func videoLifecycleFact(
 		return live.SessionFact{}, videoLifecycleInvalidEnd
 	}
 
-	if newLifecycle && positiveAtOrAfter(session, endedAt) {
+	// ended_at과 positive의 직접 비교는 grace 없이 바로 끝내는 시작 미관측 terminal 경로에만 둔다.
+	// LIVE positive clock이 있으면 reducer가 관측 시각 기준 positive 비교와 grace로 끝낸다.
+	// Holodex positive의 EffectiveAt은 수집 예정 시각이라 실제 종료보다 늦을 수 있어,
+	// 여기서도 ended_at과 비교하면 검증된 종료를 영구히 거부한다.
+	verifiedTerminal := newLifecycle && session.Clock.LastLivePositiveAt == nil
+	if verifiedTerminal && positiveAtOrAfter(session, endedAt) {
 		return live.SessionFact{}, videoLifecycleInvalidEnd
 	}
 
@@ -241,7 +246,7 @@ func videoLifecycleFact(
 		ChannelID:        session.ChannelID,
 		Status:           string(domain.LiveStatusEnded),
 		EndedAt:          &endedAt,
-		VerifiedTerminal: newLifecycle && session.Clock.LastLivePositiveAt == nil,
+		VerifiedTerminal: verifiedTerminal,
 	}, ""
 }
 

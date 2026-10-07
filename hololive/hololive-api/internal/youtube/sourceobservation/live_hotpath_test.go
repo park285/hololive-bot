@@ -133,22 +133,35 @@ func TestLiveHeadNoopPreservesReviewSnapshotButNewEvidenceInvalidatesIt(t *testi
 
 	assertLiveHeadWrites(t, pool, &session, 0)
 
-	session.IgnoredAbsenceScheduledFor = []time.Time{now.Add(-time.Minute)}
+	session.IgnoredAbsences = live.LoadedIgnoredAbsences([]time.Time{now.Add(-time.Minute)})
 
 	assertLiveHeadWrites(t, pool, &session, 1)
 
-	_, ignoredHash := liveHeadReviewSnapshot(t, pool, session.VideoID)
+	ignoredTuple, ignoredHash := liveHeadReviewSnapshot(t, pool, session.VideoID)
 	if ignoredHash == changedHash {
 		t.Fatal("changed replay evidence did not invalidate review snapshot")
 	}
 
 	assertLiveHeadWrites(t, pool, &session, 0)
 
-	session.IgnoredAbsenceScheduledFor = []time.Time{}
+	// 이력을 적재하지 않은 저장은 배열을 지우지 않고 검토 snapshot도 무효화하지 않는다.
+	session.IgnoredAbsences = live.IgnoredAbsenceHistory{}
+
+	assertLiveHeadWrites(t, pool, &session, 0)
+
+	if tuple, hash := liveHeadReviewSnapshot(t, pool, session.VideoID); tuple != ignoredTuple || hash != ignoredHash {
+		t.Fatal("omitted history rewrote the head or invalidated review snapshot")
+	}
+
+	session.IgnoredAbsences = live.LoadedIgnoredAbsences(nil)
 
 	assertLiveHeadWrites(t, pool, &session, 1)
 
-	session.IgnoredAbsenceScheduledFor = nil
+	session.IgnoredAbsences = live.LoadedIgnoredAbsences([]time.Time{})
+
+	assertLiveHeadWrites(t, pool, &session, 0)
+
+	session.IgnoredAbsences = live.IgnoredAbsenceHistory{}
 
 	assertLiveHeadWrites(t, pool, &session, 0)
 }

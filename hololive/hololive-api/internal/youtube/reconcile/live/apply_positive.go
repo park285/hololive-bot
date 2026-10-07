@@ -131,6 +131,7 @@ func mergeLiveSession(existing *SessionState, fact *SessionFact, evidence *Evide
 }
 
 func newSession(fact *SessionFact, status domain.LiveStatus, evidence *Evidence) SessionState {
+	// 새 세션에는 무시한 부재가 없으므로 미적재가 아니라 적재된 빈 이력으로 시작한다.
 	created := SessionState{
 		VideoID:            fact.VideoID,
 		ChannelID:          fact.ChannelID,
@@ -141,6 +142,7 @@ func newSession(fact *SessionFact, status domain.LiveStatus, evidence *Evidence)
 		ThumbnailURL:       fact.ThumbnailURL,
 		ScheduledStartTime: copyOptionalTime(fact.ScheduledAt),
 		LastSeenAt:         evidence.ReceivedAt.UTC(),
+		IgnoredAbsences:    LoadedIgnoredAbsences(nil),
 		Present:            true,
 	}
 	if fact.Title != "" {

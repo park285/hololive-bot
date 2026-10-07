@@ -8,11 +8,45 @@
 
 ## 미출시
 
+## v7.2.5 - 2026-10-08
+
+- 운영 PostgreSQL과 fresh 재생 사이의 스키마 drift를 맞추는 migration 271–276을 추가했습니다. 적용하면
+  `members.created_at`·`updated_at`(135행의 값 포함)과 `youtube_notification_outbox.dispatched_at` 열, 빈
+  `streams`·`alarm_dispatch_outbox` 테이블과 각 시퀀스, `check_aliases_structure`·`check_status`·
+  `youtube_notification_outbox_status_check` 제약, `idx_source_application_live_origin` 인덱스가 영구히 지워집니다.
+  마지막 전체 DB 복원 검증(2026-10-07) 뒤 백업이 중단됐으므로 적용 전에 `members`의 시각 값을 추출해 보관합니다.
+  `dispatched_at`에 값이 생겼거나 운영 전용 테이블에 행이 있으면 지우지 않고 멈춥니다. 함께
+  `idle_in_transaction_session_timeout=5min`을 다시 선언하고 별명 형식 CHECK·NOT NULL과 template revision FK를 적용하며,
+  별명 없이 만든 멤버는 빈 ko·ja 별명으로 저장합니다. 이름 열 폭 변경 뒤 기존 연결의 캐시된 member 조회가 한 번씩
+  `cached plan must not change result type`로 실패할 수 있으므로 적용 직후 `hololive-api`와 `hololive-alarm-worker`를
+  순차 재기동합니다.
+- 운영: 중앙 API·alarm-worker·collector `c`와 PostgreSQL을 50GB 서울 VM으로 이전하고 기존 중앙 주소를 승계했습니다. AP `a/b/d`와 애플리케이션·DB 계약은 유지하며, 오사카 중앙 VM은 삭제하고 100GB 부트 볼륨만 이전 시점 복구 자료로 보존합니다. 운영 토폴로지·복구·시크릿 소유 문서를 갱신했습니다.
+- 중앙·서울 PO issuer가 공통 `json-file` 5 MiB × 3 로그 회전 설정을 상속하도록 수정했습니다.
+- 운영 중인 PostgreSQL CPU·대기 계측 소스를 main에 통합했습니다. 고정 버전의 `pg_stat_kcache`·`pg_wait_sampling`, 선택적 preload와 `hololive_observability`의 조회 전용 권한을 유지합니다. 서울 마스터 경로·운영 runbook을 현행화했으며, 이번 소스 통합으로 운영 이미지나 DB를 재배포하지 않습니다.
+  통합 뒤 실패하던 아키텍처 게이트 두 건을 복구했습니다. 실험용 SQL은 허용 위치인 `testqueries/`로 옮기고, PostgreSQL 18 런타임 검사는 postgres 이미지를 참조하는 모든 `FROM`이 같은 digest 고정 이미지일 때 multi-stage `AS` stage를 인정합니다.
 - non-race 테스트 선별은 locale과 무관한 바이트 순서로 비교하며, 목록 수집·정렬·비교 오류를 게이트 실패로 전달합니다.
 - CI에서 최소 지원 버전 이상의 설치된 Go 검사 도구를 재사용하고 collector helper 의존성은 한 번만 설치합니다.
   운영 Go 테스트의 JSON 검사는 유지하며 성공 로그의 중복 출력을 줄이고 실패 때 진단을 출력합니다.
 - CI의 Go 1.27 강제와 toolchain 스탬프를 제거하고 Go가 manifest 요구사항으로 버전을 선택하게 합니다.
   `GOTOOLCHAIN` 기본값은 `auto`이며 명시한 환경값을 유지합니다.
+- YouTube live 상태 적재를 줄였습니다. live snapshot은 채널 범위에서 `UPCOMING`·`LIVE` 세션과 종료 후보(`next_end_check_at`)가
+  남은 `ENDED` 세션만 잠그고, 모든 적재 경로가 session 행이 있는 `ENDED` 세션의 `ignored_absence_scheduled_for` 배열을 읽지 않습니다.
+  배열을 읽지 않은 세션을 저장하면 기존 배열을 유지하고, reducer가 읽지 않은 이력이 필요하면 결정 없이 오류를 반환합니다.
+  코드만 바꾸며 migration은 없습니다.
+- YouTube live reducer가 session 행이 있는 `ENDED` 세션에 대한 반복 종료·취소 사실을 `youtube_live_pending_ends`에
+  다시 기록하지 않습니다. 운영에서 초당 약 24행이던 HOT 없는 갱신의 84%가 이 재기록이었습니다. 세션·적용 기록·부재
+  판정은 그대로이며, 기존 D2 진단 행은 지우거나 갱신하지 않고 남깁니다. session 행이 없는 영상과 head만 남은 영상의
+  종료는 지금처럼 보관합니다. head에 아직 due가 아닌 종료 후보가 남은 `ENDED` 세션에서 반복 종료가 pending 관측 ID를
+  바꿔 commit 때 head 후보 FK를 깨던 실패도 사라집니다.
+- 검증된 영상 종료가 거부되어 LIVE 세션이 고착되던 문제를 고쳤습니다. 운영 LIVE 세션 22개 중 21개가 6시간–7일 동안
+  남아 있었습니다. Holodex positive 시각은 수집 예정 시각이라 실제 종료보다 늦을 수 있는데, video live check consumer가
+  이를 YouTube가 확인한 `ended_at`과 직접 비교해 하루 9,475번 `INVALID_END_TIMELINE`으로 거부했기 때문입니다. 이 비교는
+  시작 미관측 terminal 경로에만 두고, LIVE positive clock이 있는 세션은 관측 시각 기준 positive 비교와 grace를 쓰는 일반
+  명시적 종료 계약을 따릅니다. 고착된 세션은 배포 뒤 다음 영상 확인에서 실제 종료 시각으로 끝나며 알림은 만들지 않습니다.
+- migration 277은 source observation·application retention 함수에 `jit = off`를 둡니다. 두 함수 내부 문장의 운영 실행
+  시간 중 61–96%가 JIT 컴파일이었습니다. migration 278은 술어에 쓰이지 않는 heads `ignored_absence_scheduled_for` 배열의
+  통계 수집을 꺼 평균 384 ms이던 autoanalyze 비용을 줄입니다. 질의 결과·계획·잠금은 바뀌지 않습니다.
+- `hololive-api` 7.2.5와 `hololive-alarm-worker` 6.1.2를 함께 릴리스합니다.
 
 ## v7.2.4 - 2026-10-06
 

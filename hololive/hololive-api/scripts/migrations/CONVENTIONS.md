@@ -19,8 +19,9 @@
   `DROP INDEX CONCURRENTLY`를 사용한다. 이미 존재하는 maintenance-only migration을 적용해야 할 때만
   서비스 quiescence를 확인한 전용 점검 창에서 `MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true`를 명시한다.
   빈 DB의 fresh bootstrap은 전체 manifest 재생을 위해 plain drop을 허용한다.
-- 과거에 적용된 파일의 수정은 프로덕션에 영향이 없고(ledger skip) fresh bootstrap/dbtest 경로만 바꾼다.
-  프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다.
+- 적용된 파일은 주석을 포함해 고치지 않는다. 러너는 ledger에 기록된 파일의 sha256을 checksum 원장과 비교하므로,
+  고친 파일에 이르면 skip하지 않고 `migration <file> checksum mismatch`로 실행을 멈춘다(뒤 파일도 적용하지 않는다).
+  프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다(예: 183의 DB 기본값을 다시 선언한 271).
 - 적용 경로는 `db-migrate` 하나다. checksum, epoch residue, atomic baseline ledger 계약은 Go 러너만 소유하므로
   local·production·복구 적용은 모두 `db-migrate`를 사용한다. epoch-2에서 거부만 하던 셸 러너 `apply-all.sh`와
   `bootstrap-and-apply.sh`는 runbook과 호스트 절차에 실행 단계가 없음을 확인해 삭제했다(stack-audit 2026-09-26 T11).
@@ -118,7 +119,8 @@ members 시드의 arbiter는 `idx_members_slug`(UNIQUE, 097 복원)다.
 통합 스키마 문서는 생성물이다. `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`
 (pg_catalog 직렬화 골든 — enum·table·column·constraint·index·reloptions·trigger·sequence·function)이 문서이며 `TestSchemaSnapshotGolden`이
 manifest 전체 적용 결과와의 드리프트를 차단한다. pg_dump 출력이 아니라 catalog 직렬화인 이유:
-dbtest가 PG18→16 폴백을 갖는데 pg_dump 텍스트는 버전 간 비결정적이다.
+pg_dump 텍스트는 patch·도구 버전마다 헤더와 구문이 달라 결정성을 깬다. dbtest는 PG 18.6 이미지 하나만 고정하며
+버전 폴백은 없다.
 갱신: `SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest`.
 
 ## 스키마 표준

@@ -42,9 +42,12 @@ func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string
 		ids = append(ids, videoID)
 	}
 
-	if err := loadLiveHeads(ctx, tx, &state, ids); err != nil {
+	// session 행을 잠근 뒤라 ENDED 판정은 이 트랜잭션 안에서 바뀌지 않는다.
+	if err := loadLiveHeads(ctx, tx, &state, ids, endedSessionIDs(&state)); err != nil {
 		return live.State{}, fmt.Errorf("load live heads: %w", err)
 	}
+
+	markHeadlessHistoriesLoaded(&state)
 
 	if err := loadLivePendingEnds(ctx, tx, &state, ids); err != nil {
 		return live.State{}, fmt.Errorf("load live pending ends: %w", err)
@@ -103,12 +106,40 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 	return session, nil
 }
 
-func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs []string) error {
+// endedSessionIDs는 무시한 부재 이력을 읽지 않을 세션이다. ENDED 세션의 이력은 reducer가
+// 읽거나 늘리지 않으므로 미적재 상태로 두어 저장 시 기존 배열을 유지한다.
+func endedSessionIDs(state *live.State) []string {
+	ids := make([]string, 0)
+
+	for videoID := range state.Sessions {
+		if session := state.Sessions[videoID]; session.Present && session.Status == domain.LiveStatusEnded {
+			ids = append(ids, videoID)
+		}
+	}
+
+	return ids
+}
+
+// markHeadlessHistoriesLoaded는 head 행이 없는 세션의 이력을 적재된 빈 이력으로 둔다.
+// 저장된 head가 없으면 저장된 이력도 없다. 미적재로 남기면 reducer가 부재 적용에서 실패한다.
+func markHeadlessHistoriesLoaded(state *live.State) {
+	for videoID := range state.Sessions {
+		session := state.Sessions[videoID]
+		if session.HeadPresent {
+			continue
+		}
+
+		session.IgnoredAbsences = live.LoadedIgnoredAbsences(nil)
+		state.Sessions[videoID] = session
+	}
+}
+
+func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs, omitIgnoredFor []string) error {
 	if len(videoIDs) == 0 {
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, mustSQL("repository_live_heads_0046_46.sql"), videoIDs)
+	rows, err := tx.Query(ctx, mustSQL("repository_live_heads_0046_46.sql"), videoIDs, omitIgnoredFor)
 	if err != nil {
 		return fmt.Errorf("load live heads: %w", err)
 	}
@@ -148,7 +179,7 @@ func applyLiveHeadRow(rows pgx.Rows, state *live.State) error {
 	existing.FirstAbsenceScheduledFor = head.FirstAbsenceScheduledFor
 	existing.SecondAbsenceScheduledFor = head.SecondAbsenceScheduledFor
 	existing.LastAbsenceObservationID = head.LastAbsenceObservationID
-	existing.IgnoredAbsenceScheduledFor = head.IgnoredAbsenceScheduledFor
+	existing.IgnoredAbsences = head.IgnoredAbsences
 	applyAbsenceSlotHints(&existing)
 
 	state.Sessions[head.VideoID] = existing
@@ -178,6 +209,7 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, error) {
 		candidateID  *int64
 		endReason    *string
 		absenceSched *time.Time
+		ignored      *[]time.Time
 	)
 
 	if err := rows.Scan(
@@ -188,13 +220,18 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, error) {
 		&session.Clock.ConsecutiveAbsenceSlots, &candidate, &candidateID,
 		&session.Clock.NextEndCheckAt, &session.Clock.EndedAt, &endReason,
 		&session.FirstAbsenceScheduledFor, &session.SecondAbsenceScheduledFor,
-		&session.LastAbsenceObservationID, &session.IgnoredAbsenceScheduledFor,
+		&session.LastAbsenceObservationID, &ignored,
 	); err != nil {
 		return live.SessionState{}, fmt.Errorf("scan live head: %w", err)
 	}
 
 	session.Status = domain.LiveStatus(status)
 	session.LastAbsenceScheduledFor = absenceSched
+
+	// 열은 NOT NULL이므로 NULL은 질의가 이력을 생략했다는 뜻이다. 0값(미적재)으로 둔다.
+	if ignored != nil {
+		session.IgnoredAbsences = live.LoadedIgnoredAbsences(*ignored)
+	}
 
 	if endReason != nil {
 		reason := live.EndReason(*endReason)

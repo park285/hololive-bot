@@ -73,6 +73,9 @@ var repositoryEvidenceCases = []struct {
 	{name: "uncollected", sql: `DELETE FROM youtube_collection_targets`, status: Unavailable, reason: Uncollected},
 	{name: "expired projection", sql: `UPDATE youtube_collection_projection_generations SET valid_until=now()-interval '1 second'`, status: Unavailable, reason: InvalidProjection},
 	{name: "metadata cannot renew positive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},
+	{name: "verified end after lagged positive", live: true, sql: `UPDATE youtube_live_sessions SET status='ENDED',ended_at=now()-interval '2 days';
+ UPDATE youtube_live_reconciliation_heads SET status='ENDED',ended_at=now()-interval '2 days',end_reason='EXPLICIT_END',
+ last_live_positive_at=now()-interval '2 days'+interval '2 minutes',last_live_positive_seen_at=now()-interval '2 days'+interval '2 minutes'`, status: Complete, reason: Covered},
 	{name: "missing head", live: true, sql: `DELETE FROM youtube_live_reconciliation_heads`, status: Unavailable, reason: Inconsistent},
 	{name: "pending head without session", live: true, sql: `DELETE FROM youtube_live_sessions;
  INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)

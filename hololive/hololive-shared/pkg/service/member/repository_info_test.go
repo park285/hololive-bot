@@ -16,8 +16,8 @@ func TestRepositoryMemberInfoPreservesSharedChannelIdentity(t *testing.T) {
 	const sharedChannel = "UC-info-shared"
 
 	_, err := pool.Exec(ctx, `INSERT INTO members(slug,channel_id,english_name,org,sync_source,aliases,units,birthday,debut_date,official_link)
- VALUES ('info-a',$1,'Info A','Hololive','manual','{}',ARRAY['AREA15'],NULL,DATE '2025-10-15','https://example.com/a'),
- ('info-b',$1,'Info B','Hololive','manual','{}',ARRAY['Gen 1','GAMERS'],DATE '2000-02-29',DATE '2025-12-30','https://example.com/b')`, sharedChannel)
+ VALUES ('info-a',$1,'Info A','Hololive','manual','{"ko":[],"ja":[]}',ARRAY['AREA15'],NULL,DATE '2025-10-15','https://example.com/a'),
+ ('info-b',$1,'Info B','Hololive','manual','{"ko":[],"ja":[]}',ARRAY['Gen 1','GAMERS'],DATE '2000-02-29',DATE '2025-12-30','https://example.com/b')`, sharedChannel)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestMemberAliasLookupTreatsWildcardsLiterally(t *testing.T) {
 	repo, pool := newPGXRepository(t)
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, `INSERT INTO members(slug,english_name,korean_name,org,sync_source,aliases) VALUES ('wild-normal','Normal','가','Hololive','manual','{}')`)
+	_, err := pool.Exec(ctx, `INSERT INTO members(slug,english_name,korean_name,org,sync_source,aliases) VALUES ('wild-normal','Normal','가','Hololive','manual','{"ko":[],"ja":[]}')`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestMemberAliasLookupTreatsWildcardsLiterally(t *testing.T) {
 		}
 	}
 
-	_, err = pool.Exec(ctx, `INSERT INTO members(slug,english_name,org,sync_source,aliases) VALUES ('wild-literal','100%_literal','Hololive','manual','{}')`)
+	_, err = pool.Exec(ctx, `INSERT INTO members(slug,english_name,org,sync_source,aliases) VALUES ('wild-literal','100%_literal','Hololive','manual','{"ko":[],"ja":[]}')`)
 	if err != nil {
 		t.Fatal(err)
 	}

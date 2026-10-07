@@ -29,12 +29,14 @@ ON CONFLICT (video_id) DO UPDATE SET
     first_absence_scheduled_for = excluded.first_absence_scheduled_for,
     second_absence_scheduled_for = excluded.second_absence_scheduled_for,
     last_absence_observation_id = excluded.last_absence_observation_id,
-    -- 다른 사실만 바뀌면 같은 큰 배열의 기존 TOAST 값을 유지합니다.
+    -- $19가 NULL이면 이력을 적재하지 않은 세션이므로 기존 배열을 유지합니다. 적재된 빈 이력은
+    -- '{}'로 와서 지웁니다. 다른 사실만 바뀌면 같은 큰 배열의 기존 TOAST 값을 유지합니다.
     ignored_absence_scheduled_for = CASE
-        WHEN youtube_live_reconciliation_heads.ignored_absence_scheduled_for
-             IS DISTINCT FROM excluded.ignored_absence_scheduled_for
-        THEN excluded.ignored_absence_scheduled_for
-        ELSE youtube_live_reconciliation_heads.ignored_absence_scheduled_for
+        WHEN $19::timestamptz[] IS NULL
+          OR youtube_live_reconciliation_heads.ignored_absence_scheduled_for
+             IS NOT DISTINCT FROM excluded.ignored_absence_scheduled_for
+        THEN youtube_live_reconciliation_heads.ignored_absence_scheduled_for
+        ELSE excluded.ignored_absence_scheduled_for
     END,
     updated_at = NOW()
 WHERE (
@@ -54,8 +56,7 @@ WHERE (
     youtube_live_reconciliation_heads.end_reason,
     youtube_live_reconciliation_heads.first_absence_scheduled_for,
     youtube_live_reconciliation_heads.second_absence_scheduled_for,
-    youtube_live_reconciliation_heads.last_absence_observation_id,
-    youtube_live_reconciliation_heads.ignored_absence_scheduled_for
+    youtube_live_reconciliation_heads.last_absence_observation_id
 ) IS DISTINCT FROM (
     excluded.status,
     excluded.last_upcoming_positive_at,
@@ -73,6 +74,9 @@ WHERE (
     excluded.end_reason,
     excluded.first_absence_scheduled_for,
     excluded.second_absence_scheduled_for,
-    excluded.last_absence_observation_id,
-    excluded.ignored_absence_scheduled_for
+    excluded.last_absence_observation_id
 )
+-- 미적재 이력은 배열 차이만으로 갱신하지 않습니다. 같은 사실의 재저장은 계속 no-op입니다.
+OR ($19::timestamptz[] IS NOT NULL
+    AND youtube_live_reconciliation_heads.ignored_absence_scheduled_for
+        IS DISTINCT FROM excluded.ignored_absence_scheduled_for)

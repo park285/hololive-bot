@@ -106,7 +106,7 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 
 소스 기본값에서 `youtube_live_absence_slots`는 14일이 지난 `scheduled_for` 행을 retention tick당 최대 1000건 삭제합니다. 과거 positive 재처리는 삭제된 slot을 복원할 수 없으므로 보관 기간 밖의 absence 역재생 결과는 보장하지 않습니다. 이미 session/head에 반영된 absence clock과 `youtube_live_pending_ends`는 이 삭제에 포함되지 않습니다. 오래된 `live_snapshot`이 queue에서 대기·처리 중이거나 replay 요청이 pending이면 slot 삭제를 보류합니다. 오래된 작업이 장기간 남으면 slot 크기가 계속 증가할 수 있으므로 상태를 함께 확인합니다.
 
-운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-osaka/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간, `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
+운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-seoul/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간, `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
 
 `hololive_youtube_plane_retention_backlog_age_seconds`는 삭제 후 `source_observations`와 `source_observation_applications`의 가장 오래된 삭제 가능 행 나이를 초로 표시합니다. 보존기간을 초과한 시간은 아닙니다. 원본은 종류별 인덱스 선두 1,000행에 큐·진행 중 replay·종료 근거 보호를 적용하며, application은 종류별 감사 유예가 지난 orphan 첫 행을 읽습니다. 적격 후보가 없다고 확정하면 0으로 갱신합니다. 원본의 보호된 행이 조회 한도를 채워 뒷부분을 확인할 수 없거나 해당 조회가 실패한 경우 시계열을 생략하므로, 지표 없음은 적체 없음이 아닙니다. 다른 테이블의 적체는 이 지표에서 측정하지 않습니다. 뒤 단계가 실패해도 앞 단계의 커밋된 삭제량은 counter에 남고, 오류 counter는 실패한 테이블에만 증가합니다.
 

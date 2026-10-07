@@ -1,11 +1,15 @@
 package live
 
 import (
+	"errors"
+	"fmt"
 	"slices"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+var errIgnoredAbsencesNotLoaded = errors.New("ignored absence history not loaded")
 
 func pendingFromFact(session *reduceSession, fact *SessionFact, kind EndEvidenceKind) PendingEnd {
 	return PendingEnd{
@@ -85,13 +89,22 @@ func applyAbsenceToKnownSession(session *reduceSession, existing *SessionState, 
 		return
 	}
 
-	ignoredSlots := ignoredAbsenceSlots(session, existing)
+	ignoredSlots, loaded := ignoredAbsenceSlots(session, existing)
+	if !loaded {
+		// 적재하지 않은 이력을 빈 이력으로 보면 이미 무시한 slot을 다시 세거나 저장 시 이력을 잃는다.
+		session.fail(fmt.Errorf("apply absence slot %s to %s: %w",
+			slot.ScheduledFor.UTC().Format(time.RFC3339), existing.VideoID, errIgnoredAbsencesNotLoaded))
+
+		return
+	}
+
 	if _, ignored := ignoredSlots[slot.ScheduledFor.UTC()]; ignored {
 		return
 	}
 
 	if existing.Clock.LastLivePositiveAt == nil {
-		existing.IgnoredAbsenceScheduledFor = append(existing.IgnoredAbsenceScheduledFor, slot.ScheduledFor)
+		existing.IgnoredAbsences.add(slot.ScheduledFor)
+
 		ignoredSlots[slot.ScheduledFor.UTC()] = struct{}{}
 		session.state.Sessions[existing.VideoID] = *existing
 		markDirty(session, existing.VideoID)
@@ -132,7 +145,14 @@ func recordAbsencePending(session *reduceSession, existing *SessionState, slot *
 	reapplyStoredEnds(session, existing.VideoID)
 }
 
-func ignoredAbsenceSlots(session *reduceSession, existing *SessionState) map[time.Time]struct{} {
+// ignoredAbsenceSlots는 무시한 부재 이력의 유일한 읽기 지점이다. 이력을 적재하지 않았으면
+// false를 반환하며, 호출자는 이를 빈 이력으로 해석하지 않는다.
+func ignoredAbsenceSlots(session *reduceSession, existing *SessionState) (map[time.Time]struct{}, bool) {
+	slots, loaded := existing.IgnoredAbsences.Slots()
+	if !loaded {
+		return nil, false
+	}
+
 	if session.ignoredAbsences == nil {
 		session.ignoredAbsences = make(map[string]map[time.Time]struct{})
 	}
@@ -140,15 +160,15 @@ func ignoredAbsenceSlots(session *reduceSession, existing *SessionState) map[tim
 	ignored := session.ignoredAbsences[existing.VideoID]
 	if ignored == nil {
 		// 신규 positive가 긴 이력을 복원할 때 같은 목록을 slot마다 선형 탐색하지 않는다.
-		ignored = make(map[time.Time]struct{}, len(existing.IgnoredAbsenceScheduledFor))
-		for _, at := range existing.IgnoredAbsenceScheduledFor {
+		ignored = make(map[time.Time]struct{}, len(slots))
+		for _, at := range slots {
 			ignored[at.UTC()] = struct{}{}
 		}
 
 		session.ignoredAbsences[existing.VideoID] = ignored
 	}
 
-	return ignored
+	return ignored, true
 }
 
 func replayedAbsence(existing *SessionState, slot *AbsenceSlot) bool {
