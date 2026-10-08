@@ -137,3 +137,4 @@
 137 276_drop_retired_prod_only_tables.sql
 138 277_source_retention_disable_jit.sql
 139 278_live_head_ignored_absence_no_stats.sql
+140 279_youtube_live_review_receipt_facts.sql
