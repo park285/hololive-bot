@@ -355,6 +355,42 @@ v7.2.9 배포 뒤 7개 차원 리뷰와 지적별 3인 반박 검증으로 확�
   시험이 실패함을 확인했다. 계약 v2 251행의 "해석 불가 UNKNOWN은 Reduce를 호출하지 않는다"를 예외와 맞췄고, migration 규약에
   같은 트랜잭션 안 VALIDATE는 ACCESS EXCLUSIVE를 줄이지 못한다는 점을 적었다(280은 3,962행이라 영향 없음).
 
+### v7.2.10 게시와 운영 배포 기록
+
+- 작업 브랜치 `c0ba2393e`에서 `./build-all.sh --build-only --no-bump`(EXIT 0)와 pre-push 게이트를 통과했고, PR #600의 CI
+  11개 항목이 모두 통과했다. squash 병합 커밋은 `a6219fb84abee38bb566eb0325afc5ea5114e163`이다.
+- **API:** 병합 커밋의 clean worktree에서 arm64 `hololive-api` 7.2.10
+  `sha256:90dbc3bebda53d4517cd73df7adde683829812f4680e9257c474ec191a76124c`를 빌드해 `hololive-seoul`에 적재하고 ID·arch·
+  revision을 다시 확인한 뒤 `:prod`로 승격했다. DB migration은 없고(`applied=0 skipped=141`), 11:46:52 UTC에 재생성되어
+  6초 만에 health gate를 통과했다. 롤백 기준점은 `hololive-api:rollback-20261008T114613Z`(`53d752776ed7`, 7.2.9)와 배포 트리
+  사본 `/opt/hololive-bot/compose/deploy-backups/pre-v7.2.10-20261008T114613Z/`이며, 되돌려도 스키마 영향은 없다.
+- **collector fleet:** 네 대 모두 7.2.3(`4a633ab24`)에서 7.2.10으로 교체했다. 그 사이 collector 바이너리에 링크되는 변경은
+  이번 lease SQL뿐이다(shared의 member 저장소 변경은 collector가 링크하지 않는다).
+  - Seoul `b`: `ap-deploy.sh seoul --apply`, 11:51 교체, 완료 확인 통과, 백업 `backups/seoul-collector-20261008T115107Z`.
+  - 중앙 `c`: 첫 시도(change `20261008T114729Z`)는 원격 스냅샷 단계에서 서비스를 바꾸지 않고 중단됐다. 10-08 중앙 VM
+    교체 때 `current` 밖에 있던 issuer 기준 영수증 `/opt/hololive-bot/compose/po-current-c/`가 옮겨지지 않았기 때문이다.
+    Seoul `b`의 10-07 배포 백업(`seoul-collector-20261007T021735Z`)에 같은 7.2.3 issuer 산출물의 kapu 검토 영수증이 남아
+    있었고, 그 이미지 ID 집합(manifest `63aa5e20…`, config `673b22d8…`)이 중앙 실행 issuer의 `docker save` 아카이브에서
+    계산한 값과 같았다. 이 영수증을 원래 경로에 root 0644로 복원하고 `po_verify_image`로 확인한 뒤 다시 실행했다. 11:54:23Z에
+    issuer 우선 cutover가 검증됐고(백업 `backups/po-c-20261008T115407Z`), `/ready`와 instance `youtube-collector-c`를
+    확인했다. issuer는 이전 collector 종료 때 exit 0 재시작 1회를 보였다(runbook의 예상 교체).
+  - Osaka `a`: native release `20261008T115539Z-a6219fb84abe-osaka`, 11:58:01 기동, 완료 확인 통과.
+  - Osaka2 `d`: native release `20261008T115847Z-a6219fb84abe-osaka2`, 12:01:20 기동, 완료 확인 통과. issuer가 12:02:54에
+    `worker_timeout`으로 generation을 한 번 교체했다(exit 0, `Failed with result` 없음). 48시간 기록에서 처음이며 12:18까지
+    재발하지 않았다. issuer 코드는 7.2.3 이후 바뀌지 않았다.
+- **운영 확인(12:18 UTC, 읽기 전용):** API·alarm-worker·collector a/b/c/d의 ERROR·WARN 0, 좀비 LIVE 0, positive보다 이른 잔여
+  추적값 0. UPCOMING 추적 35건은 30분 주기를 유지했고(배포 뒤 결정은 `UNRESOLVABLE_RETAINED` 35건), 그 영상 확인 lease가
+  새 술어로 11:55–12:08에 획득·완료됐다. 네 instance 모두 ACTIVE lease를 소유했고 알림 outbox 생성은 0건이다. 실효 due가
+  `next_due_at`보다 이른 IDLE lease는 이 시점 0건이므로, 주기 단축 재개는 positive가 추적을 지우는 때에 실제로 나타난다.
+  `!라이브`는 roster 74채널 중 covered 63, 미완료 11(최신 `/live`가 `LIVE_VIDEO`인 방송 중 채널과 일치), stale 0이다.
+- 같은 날 GitHub Release [v7.2.10](https://github.com/park285/hololive-bot/releases/tag/v7.2.10)을 annotated tag
+  `v7.2.10`(= `a6219fb84`)과 직전 게시 릴리즈 `v7.2.9` 기준의 GitHub 생성 노트(PR #599–#600)로 게시했다.
+- **롤백 자료:** 서울 중앙은 10-08 VM 교체 때 v7.2.8·v7.2.9의 롤백 태그와 배포 사본이 옮겨지지 않아 이미 없었다. 중앙 `c`
+  첫 시도가 남긴 collector rollback 태그·부분 백업·staging만 삭제했다. 남은 기준점은 API `prod`·`prod-arm64-a6219fb8`·
+  `rollback-20261008T114613Z`와 `deploy-backups/pre-v7.2.10-*`, collector·issuer `rollback-20261008T115407Z`와
+  `backups/po-c-20261008T115407Z`, `po-staging-20261008T115407Z`(rollback 모드가 이 경로를 요구한다)이다. AP 산출물은
+  runbook 보존 규칙에 따라 별도 승인 대상이라 그대로 둔다.
+
 ## 남은 후보 (이번 범위 밖)
 
 - head 없는 `legacy_unknown` LIVE 9건(126–136일): 운영 roster 밖 5채널이라 LiveQuery·알림·영상 확인 대상·지표 밖에
