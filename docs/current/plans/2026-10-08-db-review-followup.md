@@ -256,7 +256,8 @@ v7.2.7은 `!라이브` 판정만 보호했고, 종료 전에 비공개·삭제�
   등 다른 UNKNOWN 사유, 채널 확인을 reducer로 보내는 변경. 두 신호가 동시에 거짓 양성이 되려면 로봇 확인이 player를
   막으면서 같은 채널의 `/live`는 음성을 내고 Holodex·채널 스냅샷 positive도 없어야 하는데, 방송 중인 채널의 `/live`는
   방송으로 이동해 음성을 내지 않는다.
-- **구현:** migration 280(`unresolvable_since` 열, `end_reason` 어휘 CHECK 개명·확장, NOT VALID 뒤 VALIDATE), head
+- **구현:** migration 280(`unresolvable_since` 열, `end_reason` 어휘 CHECK 개명·확장, NOT VALID 뒤 VALIDATE. 같은 트랜잭션
+  안이라 ACCESS EXCLUSIVE가 VALIDATE 스캔까지 유지되므로 잠금 완화 효과는 없으나 3,962행이라 영향이 없었다(v7.2.10 정정)), head
   적재·저장 SQL 열 추가, `live.StatusUnresolvable` 사실과 `applyUnresolvableVideo` 전이, consumer의
   `unresolvableVideoFact`(채널 음성 조회 `repository_channel_live_negative.sql`), 설정값·검증, 계약 v2·services 문서,
   CHANGELOG, VERSION 7.2.8. v7.2.7의 LiveQuery `identity_missing` 제외는 종료 전 브리지로 유지한다.
@@ -271,7 +272,9 @@ v7.2.7은 `!라이브` 판정만 보호했고, 종료 전에 비공개·삭제�
 - 롤백 기준점(change_started_at 2026-10-08T08:18:44Z): `hololive-api:rollback-20261008T081844Z`(`bcd350e8da4d`, 7.2.7)와
   배포 트리 사본 `/opt/hololive-bot/compose/deploy-backups/pre-v7.2.8-20261008T081844Z/`. migration 280은 nullable 열
   추가와 CHECK 어휘 확장뿐이라 앱만 되돌려도 7.2.7 코드가 그대로 동작한다(되돌리면 새 비공개 전환 세션은 다시 LIVE로
-  남고, 이미 `UNRESOLVABLE_VIDEO`로 끝난 세션은 그대로 유지된다).
+  남고, 이미 `UNRESOLVABLE_VIDEO`로 끝난 세션은 그대로 유지된다). v7.2.10 검토 정정: 7.2.7은 positive에서
+  `unresolvable_since`를 지우지 않으므로 롤백 기간의 positive 뒤에도 추적값이 남는다. 7.2.8·7.2.9로 재전진하면 그 잔여값으로
+  지속 시간 없이 끝날 수 있으므로, 7.2.7로 되돌린 뒤에는 positive보다 이른 추적값을 무시하는 7.2.10 이상으로 재전진한다.
 - `hololive-db-migrate`는 08:19:24 UTC에 `280_live_head_unresolvable_end.sql`을 적용했고(`applied=1 skipped=140
   total=141`, 제약 `chk_youtube_live_reconciliation_heads_end_reason_vocab` validated), `hololive-api`는 08:19:30에
   재생성되어 약 5초 만에 health gate를 통과했다(재시작 0, 08:40까지 ERROR·WARN 0, 알림 outbox 0).
@@ -284,10 +287,11 @@ v7.2.7은 `!라이브` 판정만 보호했고, 종료 전에 비공개·삭제�
 
 ## v7.2.9: identity를 확인할 수 없는 UPCOMING 영상 확인의 재확인 주기 backoff
 
-v7.2.8 뒤에도 지난 일정의 UPCOMING 세션 가운데 `identity_missing` 85건(예정 시각 1.5일 뒤~256일 전)과 `identity_mismatch`
-4건(194~258일 전)이 영상 확인 대상(40건 중 35건)으로 남아 2분마다 같은 UNKNOWN만 반복했다(24시간 `IDENTITY_UNCONFIRMED`
-16,527건·57개 영상). UPCOMING은 비공개 예약이 공개로 돌아오면 시작 알림이 필요해 끝낼 수 없고 정리는 검토 영수증이 맡으므로,
-재확인 주기만 추적 기간에 비례해 늦춘다.
+v7.2.8 뒤 UPCOMING 세션 가운데 가용성 최신값이 `identity_missing`인 것이 85건(예정 시각 1.5일 뒤~256일 전),
+`identity_mismatch`인 것이 4건(194~258일 전)이었다. 그중 영상 확인 대상(지난 일정이고 검토 영수증이 없는 UPCOMING)은
+35건(전체 대상 40건 중)이며, 설정 2분·실효 약 4분 주기로 같은 UNKNOWN만 반복했다. 2026-10-08 18:10 KST 기준 24시간
+`IDENTITY_UNCONFIRMED`는 16,527건·57개 영상이었다(v7.2.5 기록 시점의 같은 지표는 17,349건). UPCOMING은 비공개 예약이
+공개로 돌아오면 시작 알림이 필요해 끝낼 수 없고 정리는 검토 영수증이 맡으므로, 재확인 주기만 추적 기간에 비례해 늦춘다.
 
 - **추적:** consumer는 UPCOMING의 `identity_missing`(IDENTITY_UNCONFIRMED)과 채널 불일치(IDENTITY_MISMATCH) 확인을 해소
   불가 사실로 바꾸고, reducer는 `unresolvable_since`를 두거나 유지만 한다(`UNRESOLVABLE_TRACKED`/`UNRESOLVABLE_RETAINED`).
@@ -295,8 +299,9 @@ v7.2.8 뒤에도 지난 일정의 UPCOMING 세션 가운데 `identity_missing` 8
 - **backoff:** `live_check_videos.sql`이 UPCOMING 행에 `unresolvable_since`를 실어 주고(LIVE는 NULL), projection이 추적
   기간에 따라 UPCOMING 영상 확인 target의 `poll_interval_ms`를 기본 주기의 1·5·15·30배(2·10·30·60분, 경계 10분·1시간·24시간)
   로 정한다. cadence 변경은 membership을 새로 시작하므로 단계를 세 번으로 제한했다. 우선순위·NotBefore·LIVE 주기는 그대로다.
-- **효과 추정:** 85+4건이 모두 24시간을 넘긴 상태이므로 하루 약 32,000회의 영상 확인이 약 2,100회로 줄고, 관측·payload·
-  application 행도 같은 비율로 줄어든다. 시작 감지는 채널 스냅샷 positive가 맡으므로 알림 지연은 없다.
+- **효과 추정:** 대상 35건이 실효 약 4분 주기로 하루 약 12,600회(35×360) 확인되던 것이, 모두 24시간 넘게 추적되면
+  1시간 주기로 하루 840회(35×24)로 줄고, 관측·payload·application 행도 같은 비율로 줄어든다. 시작 감지는 채널 스냅샷
+  positive가 맡으므로 알림 지연은 없다.
 
 ### v7.2.9 게시와 운영 배포 기록
 
@@ -313,8 +318,10 @@ v7.2.8 뒤에도 지난 일정의 UPCOMING 세션 가운데 `identity_missing` 8
   outbox 0).
 - 효과(읽기 전용 집계): 배포 뒤 첫 영상 확인이 09:27–09:29 UTC에 UPCOMING 대상 35건 전부를 `UNRESOLVABLE_TRACKED`로
   추적했고, 추적 10분 뒤인 09:35–09:38에 projection이 35건 모두의 target 주기를 2분에서 10분으로 바꿨다(LIVE 대상 8건은
-  2분 유지). 09:45 기준 lease도 10분 주기로 옮겨 가는 중이며(16건), 최근 10분 영상 확인은 분당 8.6회로 배포 전 약 20회에서
-  줄었다. 30분 주기는 추적 1시간 뒤(약 10:25), 1시간 주기는 24시간 뒤에 적용된다. `!라이브` 스냅샷은 roster 74채널 모두
+  2분 유지). 09:45 기준 lease도 10분 주기로 옮겨 가는 중이었다(16건). 30분 주기는 10:26–10:28에 35건 모두 적용됐고,
+  1시간 주기는 추적 24시간 뒤에 적용된다. UPCOMING 영상 확인 결정(`IDENTITY_UNCONFIRMED`·`IDENTITY_MISMATCH`·
+  `UNRESOLVABLE_*`)은 배포 전 08:20–09:20 UTC 분당 9.08회에서 10:30–11:15 UTC 분당 1.16회로 줄었다(v7.2.10 검토 때 재측정.
+  처음 기록한 "배포 전 약 20회"는 LIVE 확인까지 섞은 잘못된 비교라 정정한다). `!라이브` 스냅샷은 roster 74채널 모두
   projection·collected 정상, covered 69·incomplete 5(방송 중)·stale 0이다.
 - 같은 날 GitHub Release [v7.2.9](https://github.com/park285/hololive-bot/releases/tag/v7.2.9)를 annotated tag
   `v7.2.9`(= `9bfa66740`)와 직전 게시 릴리즈 `v7.2.1` 기준의 GitHub 생성 노트(PR #561–#598)로 게시했다. v7.2.2~7.2.8은
@@ -323,10 +330,33 @@ v7.2.8 뒤에도 지난 일정의 UPCOMING 세션 가운데 `identity_missing` 8
   배포 트리 사본 `pre-v7.2.8-*`, `pre-v7.2.9-*`. 10-07~10-08의 rollback 태그 4개, prod-arm64 태그 4개, 배포 사본 3개는
   삭제했다(모두 커밋 SHA로 재빌드 가능).
 
+## v7.2.10: v7.2.8·v7.2.9 검토 후속
+
+v7.2.9 배포 뒤 7개 차원 리뷰와 지적별 3인 반박 검증으로 확정한 10건(모두 low)을 해소했다. 운영 동작을 당장 틀리게 만든 결함은
+없었고, 다음 네 가지는 조건이 갖춰지면 실제로 나타나는 설계 공백이었다.
+
+- **주기 단축 시 IDLE lease 재개 지연(collector):** projection은 positive가 추적을 지우면 target 주기를 다음 refresh에서 2분으로
+  되돌리지만, collector 후보·획득 술어가 IDLE lease의 `next_due_at`(직전 획득 때의 긴 주기로 계산)만 봐서 최대 60분 동안 재확인이
+  없었다. 늦춰진 예약이 공개 방송으로 바뀐 뒤 채널 스냅샷이 PARTIAL이면 종료 확인이 그만큼 늦어진다. 후보 두 SQL과 획득 SQL이
+  실효 due `LEAST(next_due_at, scheduled_for + 현재 target 주기)`를 쓰고, 획득의 `date_bin` 기준점도 같은 값을 쓴다. 기준점이 직전
+  slot보다 늦으므로 `scheduled_for`는 단조 증가하며, 주기가 같거나 늘면 동작은 그대로다. lease 의미는 collector가 소유하므로
+  API 측 우회 대신 collector를 고치고 fleet 4대에 배포한다.
+- **이른 positive의 추적 초기화:** `mergePositiveFields`가 관측 시각과 무관하게 `unresolvable_since`를 지워, 추적 시작보다 이른
+  관측이 늦게 도착하면(시작 미확정 LIVE 포함) 추적이 초기화되고 종료 하한이 밀렸다. 추적 시작 이후 관측만 지운다.
+- **7.2.7 롤백 잔여값:** 7.2.7은 positive에서 추적을 지우지 않으므로 롤백 뒤 재전진하면 지속 시간 없이 끝날 수 있었다. 추적은
+  모든 positive보다 늦게 시작되므로, reducer·consumer(`ActiveUnresolvableSince`)와 projection SQL이 positive보다 이른 값을 추적
+  없음으로 보고 reducer는 다시 추적한다.
+- **head 없는 UPCOMING:** head 저장 조건(`HeadPresent || observed`) 때문에 `metadata_only`·`legacy_unknown` UPCOMING은 추적을
+  저장하지 못한 채 `UNRESOLVABLE_TRACKED`만 반복 기록했다. 미확정 메타데이터는 authoritative head의 근거가 아니라는 기존 설계를
+  유지해 이런 세션은 추적하지 않고 기존 결정 코드를 남긴다(`live.UnresolvableTrackable`). 2026-10-08 운영에는 지난 일정의 head 없는
+  UPCOMING이 `legacy_unknown` 3건뿐이고 모두 영상 확인 대상 밖이었다.
+- **시험·문서:** 관측 이후 positive 보존(`NEWER_POSITIVE_RETAINED`), 채널 `/live` 음성 술어의 부정 사례(identity 미확인 UNKNOWN·
+  다른 영상 LIVE), 잔여 추적값 재시작, head 없는 UPCOMING, 주기 단축·유지 시 lease 재개 시험을 더했다. 각 수정을 되돌리면 해당
+  시험이 실패함을 확인했다. 계약 v2 251행의 "해석 불가 UNKNOWN은 Reduce를 호출하지 않는다"를 예외와 맞췄고, migration 규약에
+  같은 트랜잭션 안 VALIDATE는 ACCESS EXCLUSIVE를 줄이지 못한다는 점을 적었다(280은 3,962행이라 영향 없음).
+
 ## 남은 후보 (이번 범위 밖)
 
-- `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
-  반복된다. backoff 상한과 검토 영수증 흐름과의 관계를 설계해야 한다.
 - head 없는 `legacy_unknown` LIVE 9건(126–136일): 운영 roster 밖 5채널이라 LiveQuery·알림·영상 확인 대상·지표 밖에
   있고 사용자 영향은 없다. 영상 확인 대상이 roster로 한정되어 종료를 증명할 기회가 없다. 대상 확장은 계약 개정이다.
 - 검토 영수증 없이 수백 일 지난 UPCOMING `identity_missing`·`identity_mismatch` 세션(2026-10-08 기준 89건)의 정리:

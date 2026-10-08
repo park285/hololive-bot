@@ -33,7 +33,9 @@ WITH clock AS MATERIALIZED (
            h.last_upcoming_positive_seen_at AS positive_seen_at,
            availability.effective_at AS availability_at,
            availability.observed_at AS availability_seen_at,
-           h.unresolvable_since
+           -- 추적은 모든 positive보다 늦게 시작된다. positive보다 이른 잔여값(이전 바이너리 기간)은 주기 근거가 아니다.
+           CASE WHEN h.unresolvable_since > COALESCE(GREATEST(h.last_upcoming_positive_at, h.last_live_positive_at), '-infinity')
+                THEN h.unresolvable_since END AS unresolvable_since
     FROM youtube_live_sessions s CROSS JOIN clock
     LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id=s.video_id
     LEFT JOIN youtube_video_availability availability ON availability.video_id=s.video_id

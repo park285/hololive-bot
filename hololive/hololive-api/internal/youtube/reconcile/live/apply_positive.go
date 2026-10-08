@@ -198,8 +198,8 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 		merged.LastSeenAt = evidence.ReceivedAt.UTC()
 	}
 
-	// positive는 공급자가 영상을 아직 해석한다는 뜻이므로 해소 불가 추적을 지운다.
-	merged.Clock.UnresolvableSince = nil
+	clearUnresolvableTracking(&merged.Clock, evidence.EffectiveAt)
+
 	merged.Present = true
 
 	return merged

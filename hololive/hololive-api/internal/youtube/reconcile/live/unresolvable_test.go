@@ -133,3 +133,76 @@ func TestReduceUnresolvableVideoTracksUpcomingWithoutEnding(t *testing.T) {
 		t.Fatalf("upcoming positive kept unresolvable tracking: %+v", session)
 	}
 }
+
+// 관측 시각 이후 positive가 있으면 그 identity_missing은 더 오래된 사실이므로 추적을 시작하지 않는다.
+func TestReduceUnresolvableVideoRetainsNewerPositive(t *testing.T) {
+	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), liveA()))
+
+	for _, at := range []time.Time{
+		time.Date(2026, time.August, 14, 2, 0, 0, 0, time.UTC),
+		time.Date(2026, time.August, 14, 1, 59, 0, 0, time.UTC),
+	} {
+		retained, next := reduceAt(t, &state, videoCheckEvidence(40, at, sessionFact(StatusUnresolvable)), 0)
+		if session := next.Sessions[testVideoID]; !hasDecision(&retained, "NEWER_POSITIVE_RETAINED") ||
+			session.Clock.UnresolvableSince != nil || session.Status != domain.LiveStatusLive {
+			t.Fatalf("identity_missing at %s = %+v decisions=%+v, want NEWER_POSITIVE_RETAINED without tracking", at, session, retained.Applications)
+		}
+	}
+}
+
+// 추적 시작보다 이른 관측이 늦게 도착한 positive·시작 미확정 LIVE는 추적을 지우지 않는다.
+func TestReduceUnresolvableVideoKeepsTrackingForOlderPositive(t *testing.T) {
+	state := trackedUnresolvableState(t)
+	olderLive := liveEvidence(41, time.Date(2026, time.August, 14, 2, 5, 0, 0, time.UTC),
+		contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact(testLiveStatus))
+	unconfirmed := sessionFact(testLiveStatus)
+
+	unconfirmed.LiveStartConfirmed = false
+
+	olderUnconfirmed := liveEvidence(42, time.Date(2026, time.August, 14, 1, 50, 0, 0, time.UTC),
+		contract.CompletenessComplete, contract.ContinuityContiguous, unconfirmed)
+
+	for _, evidence := range []Evidence{olderLive, olderUnconfirmed} {
+		_, next := reduceAt(t, &state, evidence, 0)
+		if session := next.Sessions[testVideoID]; session.Clock.UnresolvableSince == nil ||
+			!session.Clock.UnresolvableSince.Equal(unresolvableFirstAt) || session.Status != domain.LiveStatusLive {
+			t.Fatalf("older evidence at %s cleared tracking: %+v", evidence.EffectiveAt, session)
+		}
+	}
+}
+
+// 이전 바이너리 기간에 positive가 지우지 못한 잔여값(positive보다 이른 추적)은 종료 근거가 아니다. 검증된 사실이
+// grace 뒤에 와도 끝내지 않고 이번 관측부터 다시 추적한다.
+func TestReduceUnresolvableVideoRestartsStaleTracking(t *testing.T) {
+	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), liveA()))
+	session := state.Sessions[testVideoID]
+	stale := time.Date(2026, time.August, 14, 1, 30, 0, 0, time.UTC)
+
+	session.Clock.UnresolvableSince = &stale
+	state.Sessions[testVideoID] = session
+
+	verified := sessionFact(StatusUnresolvable)
+
+	verified.VerifiedTerminal = true
+
+	restarted, next := reduceAt(t, &state, videoCheckEvidence(43, unresolvableLaterAt, verified), time.Hour)
+	if got := next.Sessions[testVideoID]; !hasDecision(&restarted, "UNRESOLVABLE_TRACKED") || got.Status != domain.LiveStatusLive ||
+		got.Clock.UnresolvableSince == nil || !got.Clock.UnresolvableSince.Equal(unresolvableLaterAt) {
+		t.Fatalf("stale tracking = %+v decisions=%+v, want tracking restarted at %s", got, restarted.Applications, unresolvableLaterAt)
+	}
+}
+
+// head 없는 metadata_only UPCOMING은 head를 만들 근거가 없으므로 추적을 기록하지 않는다.
+func TestReduceUnresolvableVideoIgnoresHeadlessMetadataUpcoming(t *testing.T) {
+	state := emptyState()
+
+	state.Sessions[testVideoID] = SessionState{
+		VideoID: testVideoID, ChannelID: "UC_TEST", Status: domain.LiveStatusUpcoming,
+		LifecycleOrigin: OriginMetadataOnly, Present: true,
+	}
+
+	ignored, next := reduceAt(t, state, videoCheckEvidence(44, unresolvableFirstAt, sessionFact(StatusUnresolvable)), 0)
+	if got := next.Sessions[testVideoID]; !hasDecision(&ignored, "UNRESOLVABLE_IGNORED") || got.Clock.UnresolvableSince != nil || len(ignored.Sessions) != 0 {
+		t.Fatalf("headless metadata upcoming = %+v decisions=%+v sessions=%d, want ignored without persistence", got, ignored.Applications, len(ignored.Sessions))
+	}
+}
