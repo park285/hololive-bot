@@ -221,6 +221,24 @@ incomplete 1채널(방송 중)이었다. 방송 중인 멤버가 없어지면 �
 바꾸지 않은 것: 비공개·삭제 영상의 LIVE 세션은 수명 상태가 LIVE로 남고 영상 확인도 2분 cadence로 계속된다(LIVE 4건과
 UPCOMING 85건이 `identity_missing`). 채널 스냅샷 scope와 검토 영수증 범위도 그대로다.
 
+### v7.2.7 게시와 운영 배포 기록
+
+- 작업 브랜치 `c648d1e55`에서 `./build-all.sh --build-only --no-bump`(LOCAL CI 47단계)와 pre-push 게이트를 통과했고, PR #594의
+  CI 11개 항목이 모두 통과했다. squash 병합 커밋은 `d0472782478a41031d07c7a2a720ebfd5f25611b`이다.
+- 병합 커밋의 clean worktree에서 arm64 `hololive-api` 7.2.7
+  `sha256:bcd350e8da4ddfebf9402d91c1a9f063cad0224d74318533f0ecd209418c5b91`를 빌드해 `hololive-seoul`에 적재하고 ID·arch·
+  revision을 다시 확인한 뒤 `:prod`로 승격했다. alarm-worker(6.1.2)와 collector, DB migration은 바꾸지 않았다.
+- 롤백 기준점(change_started_at 2026-10-08T06:14:48Z): `hololive-api:rollback-20261008T061448Z`(`ccacfc0303d7`, 7.2.6)와
+  배포 트리 사본 `/opt/hololive-bot/compose/deploy-backups/pre-v7.2.7-20261008T061448Z/`. DB 변경이 없으므로 앱만 되돌리면 된다.
+  되돌리면 `!라이브`는 다시 stale 3채널 때문에 빈 결과를 확정하지 못하고, 이미 `ENDED`로 정리된 세션은 그대로 남는다.
+- `hololive-db-migrate`는 06:15:08–06:15:11 UTC에 `applied=0 skipped=140 total=140`이었고, `hololive-api`는 06:15:22에
+  재생성되어 health gate를 통과했다(재시작 0, 06:20까지 ERROR·WARN 0, 알림 outbox 0).
+- 효과(읽기 전용 스냅샷 SQL): 배포 직전 06:14:31 UTC covered 67·stale 3·confirming_end 1·incomplete 3(방송 중 3채널) →
+  배포 직후 06:15:47 stale 0(covered 70) → 다음 영상 확인(06:19:01 수신)이 보류 중이던 UPCOMING 세션을 06:19:03에 upstream
+  종료 시각(2026-08-20 11:01:09 UTC)으로 `ENDED` 처리하고 pending 행을 지워 06:19:48 covered 71·incomplete 3이 되었다.
+  incomplete 3채널은 모두 현재 방송 중이라 목록으로 표시되므로, 방송이 없으면 전체 `!라이브`가 빈 결과를 확정한다.
+  이전에 stale이던 3채널의 멤버 지정 조회는 covered·0건이다.
+
 ## 남은 후보 (이번 범위 밖)
 
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
