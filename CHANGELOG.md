@@ -8,6 +8,15 @@
 
 ## 미출시
 
+## v7.2.9 - 2026-10-08
+
+- 비공개·삭제된 예약 영상처럼 identity를 확인할 수 없는 UPCOMING 세션의 영상 확인이 2분마다 같은 UNKNOWN만 반복하던
+  부담을 줄입니다. `identity_missing`·`identity_mismatch` 확인은 head의 `unresolvable_since`로 추적만 하고(끝내지 않음),
+  projection이 추적 기간에 따라 그 영상 확인 target의 재확인 주기를 10분·1시간·24시간 경계에서 10분·30분·1시간으로
+  늦춥니다. positive가 오면 다음 projection에서 2분으로 돌아옵니다. 시작 감지는 채널 스냅샷 positive가 맡으므로 시작
+  알림은 늦어지지 않으며, LIVE 영상 확인 주기와 검토 영수증 흐름은 그대로입니다.
+- `hololive-api` 7.2.9만 릴리스하며 DB migration, `hololive-alarm-worker`, collector는 바뀌지 않습니다.
+
 ## v7.2.8 - 2026-10-08
 
 - 종료 전에 비공개·삭제로 바뀐 방송의 LIVE 세션이 영구히 LIVE로 남아 영상 확인을 계속 받던 문제를 끝냅니다. 시작을

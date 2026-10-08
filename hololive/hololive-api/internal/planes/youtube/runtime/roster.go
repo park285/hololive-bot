@@ -62,16 +62,19 @@ func (rosterReader) LiveCheckVideos(
 
 	for rows.Next() {
 		var (
-			video targetprojection.LiveCheckVideo
-			facts liveCheckFreshness
+			video             targetprojection.LiveCheckVideo
+			facts             liveCheckFreshness
+			unresolvableSince pgtype.Timestamptz
 		)
 
 		if err := rows.Scan(&video.VideoID, &video.ChannelID, &video.IsUpcoming, &facts.asOf,
-			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt); err != nil {
+			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt,
+			&unresolvableSince); err != nil {
 			return nil, fmt.Errorf("%w: scan live check video: %w", targetprojection.ErrInputRead, err)
 		}
 
 		video.NotBefore = facts.notBefore(query.FreshnessBudget)
+		video.UnresolvableFor = unresolvableFor(facts.asOf, unresolvableSince)
 
 		videos = append(videos, video)
 	}
@@ -85,6 +88,15 @@ func (rosterReader) LiveCheckVideos(
 	}
 
 	return videos, nil
+}
+
+// unresolvableFor는 identity를 확인할 수 없는 확인이 이어진 기간이다. 미래 시각은 추적 없음과 같다.
+func unresolvableFor(asOf time.Time, since pgtype.Timestamptz) time.Duration {
+	if !since.Valid || !since.Time.Before(asOf) {
+		return 0
+	}
+
+	return asOf.Sub(since.Time)
 }
 
 // liveCheckFreshness는 LIVE positive 또는 UPCOMING positive와 UNKNOWN을 포함한 가용성

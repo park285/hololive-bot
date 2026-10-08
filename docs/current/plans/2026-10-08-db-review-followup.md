@@ -282,14 +282,30 @@ v7.2.7은 `!라이브` 판정만 보호했고, 종료 전에 비공개·삭제�
   추적 중인 LIVE 0건이다. 08:40 스냅샷 SQL은 roster 74채널 모두 projection·collected 정상이며 covered 71·incomplete 3
   (방송 중)·stale 0이다.
 
+## v7.2.9: identity를 확인할 수 없는 UPCOMING 영상 확인의 재확인 주기 backoff
+
+v7.2.8 뒤에도 지난 일정의 UPCOMING 세션 가운데 `identity_missing` 85건(예정 시각 1.5일 뒤~256일 전)과 `identity_mismatch`
+4건(194~258일 전)이 영상 확인 대상(40건 중 35건)으로 남아 2분마다 같은 UNKNOWN만 반복했다(24시간 `IDENTITY_UNCONFIRMED`
+16,527건·57개 영상). UPCOMING은 비공개 예약이 공개로 돌아오면 시작 알림이 필요해 끝낼 수 없고 정리는 검토 영수증이 맡으므로,
+재확인 주기만 추적 기간에 비례해 늦춘다.
+
+- **추적:** consumer는 UPCOMING의 `identity_missing`(IDENTITY_UNCONFIRMED)과 채널 불일치(IDENTITY_MISMATCH) 확인을 해소
+  불가 사실로 바꾸고, reducer는 `unresolvable_since`를 두거나 유지만 한다(`UNRESOLVABLE_TRACKED`/`UNRESOLVABLE_RETAINED`).
+  UPCOMING은 VerifiedTerminal이 와도 끝내지 않으며 positive는 추적을 지운다. LIVE 경로는 v7.2.8 그대로다.
+- **backoff:** `live_check_videos.sql`이 UPCOMING 행에 `unresolvable_since`를 실어 주고(LIVE는 NULL), projection이 추적
+  기간에 따라 UPCOMING 영상 확인 target의 `poll_interval_ms`를 기본 주기의 1·5·15·30배(2·10·30·60분, 경계 10분·1시간·24시간)
+  로 정한다. cadence 변경은 membership을 새로 시작하므로 단계를 세 번으로 제한했다. 우선순위·NotBefore·LIVE 주기는 그대로다.
+- **효과 추정:** 85+4건이 모두 24시간을 넘긴 상태이므로 하루 약 32,000회의 영상 확인이 약 2,100회로 줄고, 관측·payload·
+  application 행도 같은 비율로 줄어든다. 시작 감지는 채널 스냅샷 positive가 맡으므로 알림 지연은 없다.
+
 ## 남은 후보 (이번 범위 밖)
 
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
   반복된다. backoff 상한과 검토 영수증 흐름과의 관계를 설계해야 한다.
 - head 없는 `legacy_unknown` LIVE 9건(126–136일): 운영 roster 밖 5채널이라 LiveQuery·알림·영상 확인 대상·지표 밖에
   있고 사용자 영향은 없다. 영상 확인 대상이 roster로 한정되어 종료를 증명할 기회가 없다. 대상 확장은 계약 개정이다.
-- 시작을 관측하지 못한 UPCOMING `identity_missing` 영상(2026-10-08 기준 85건)의 조용한 기간에 비례한 영상 확인
-  backoff: 계약 v2의 2분 cadence·freshness 공식 개정이 필요하다. v7.2.8의 해소 불가 종료는 LIVE 세션만 대상이다.
+- 검토 영수증 없이 수백 일 지난 UPCOMING `identity_missing`·`identity_mismatch` 세션(2026-10-08 기준 89건)의 정리:
+  v7.2.9는 재확인 주기만 늦춘다. 세션 자체를 닫는 것은 검토 영수증 흐름(운영자 판단)이 맡는다.
 - collector 1초 주기 후보 탐색과 항상 충돌하는 lease INSERT: v7.2.5 뒤 앱 DB CPU의 37%(절대량 약 0.02코어)다. 후보
   질의 buffer의 84%가 468행 `youtube_collection_job_leases`의 흩어진 heap(107페이지) seq scan이다. runner별 next-due 힌트는
   collector 계약·traffic 시험 개정과 AP 포함 4대 배포가 필요하고, UPDATE 우선 lease 획득은 다음 collector 릴리스에 묶는다.

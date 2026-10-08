@@ -270,7 +270,7 @@ func (c *Consumer) videoLifecycleOrUnresolvableFact(
 	session *live.SessionState,
 ) (live.SessionFact, string, error) {
 	fact, skipped := videoLifecycleFact(claimed, payload, session, claimed.ReceivedAt, c.liveGrace)
-	if skipped != videoLifecycleIdentityUnverified || !unresolvableVideoCandidate(claimed, payload, session) {
+	if !unresolvableVideoCandidate(claimed, payload, session, skipped) {
 		return fact, skipped, nil
 	}
 
@@ -282,13 +282,27 @@ func (c *Consumer) videoLifecycleOrUnresolvableFact(
 	return fact, "", nil
 }
 
-// unresolvableVideoCandidate는 시작을 관측한 LIVE 세션의 identity_missing 확인만 해소 불가 추적에 들인다.
-// 비공개·삭제 전환 영상은 익명 player에 videoDetails가 없어 다른 UNKNOWN 사유와 달리 identity_missing만 남긴다.
-// 그 밖의 identity_mismatch·request_failed 등은 수명을 바꾸지 않는 기존 IDENTITY_UNCONFIRMED로 남는다.
-func unresolvableVideoCandidate(observation *Observation, payload *contract.VideoLiveCheckV1, session *live.SessionState) bool {
-	return videoLifecycleGeneration(observation) && !payload.IdentityConfirmed &&
-		payload.UnknownReason == contract.LiveCheckReasonIdentityMissing &&
-		session.Status == domain.LiveStatusLive && session.Clock.LastLivePositiveAt != nil
+// unresolvableVideoCandidate는 identity를 확인할 수 없는 확인을 해소 불가 추적에 들인다. 비공개·삭제 전환 영상은
+// 익명 player에 videoDetails가 없어 다른 UNKNOWN 사유와 달리 identity_missing만 남긴다. 시작을 관측한 LIVE는
+// identity_missing만 대상이며 종료까지 간다. UPCOMING은 identity_missing과 채널 불일치(identity_mismatch)를 추적해
+// 재확인 주기를 늦추는 근거로만 쓰고 끝내지 않는다. 그 밖의 request_failed 등은 기존 IDENTITY_UNCONFIRMED로 남는다.
+func unresolvableVideoCandidate(observation *Observation, payload *contract.VideoLiveCheckV1, session *live.SessionState, skipped string) bool {
+	if !videoLifecycleGeneration(observation) {
+		return false
+	}
+
+	identityMissing := skipped == videoLifecycleIdentityUnverified && payload.UnknownReason == contract.LiveCheckReasonIdentityMissing
+
+	switch session.Status {
+	case domain.LiveStatusLive:
+		return identityMissing && session.Clock.LastLivePositiveAt != nil
+	case domain.LiveStatusUpcoming:
+		return identityMissing || skipped == videoLifecycleIdentityMismatch
+	case domain.LiveStatusEnded:
+		return false
+	default:
+		return false
+	}
 }
 
 // unresolvableVideoFact는 identity_missing 확인을 reducer의 해소 불가 사실로 바꾼다. 첫 추적 뒤 설정된 지속 시간이
@@ -305,7 +319,7 @@ func (c *Consumer) unresolvableVideoFact(
 	fact := live.SessionFact{VideoID: payload.VideoID, ChannelID: session.ChannelID, Status: live.StatusUnresolvable}
 
 	since := session.Clock.UnresolvableSince
-	if since == nil || claimed.EffectiveAt.Before(since.Add(c.unresolvableGrace)) {
+	if session.Status != domain.LiveStatusLive || since == nil || claimed.EffectiveAt.Before(since.Add(c.unresolvableGrace)) {
 		return fact, nil
 	}
 
