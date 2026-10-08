@@ -21,7 +21,9 @@ WITH clock AS MATERIALIZED (
            h.last_live_positive_at AS positive_at,
            h.last_live_positive_seen_at AS positive_seen_at,
            NULL::timestamptz AS availability_at,
-           NULL::timestamptz AS availability_seen_at
+           NULL::timestamptz AS availability_seen_at,
+           -- LIVE는 해소 불가 추적이 10분 안에 종료로 끝나므로 재확인 주기를 늦추지 않는다.
+           NULL::timestamptz AS unresolvable_since
     FROM youtube_live_sessions s CROSS JOIN clock
     LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id=s.video_id
     WHERE s.status='LIVE' AND s.channel_id=ANY($1::text[])
@@ -30,7 +32,8 @@ WITH clock AS MATERIALIZED (
            h.last_upcoming_positive_at AS positive_at,
            h.last_upcoming_positive_seen_at AS positive_seen_at,
            availability.effective_at AS availability_at,
-           availability.observed_at AS availability_seen_at
+           availability.observed_at AS availability_seen_at,
+           h.unresolvable_since
     FROM youtube_live_sessions s CROSS JOIN clock
     LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id=s.video_id
     LEFT JOIN youtube_video_availability availability ON availability.video_id=s.video_id
@@ -39,7 +42,7 @@ WITH clock AS MATERIALIZED (
       AND NOT EXISTS (SELECT 1 FROM reviewed_videos reviewed WHERE reviewed.video_id=s.video_id)
 )
 SELECT video_id,channel_id,is_upcoming,clock.as_of,
-       positive_at,positive_seen_at,availability_at,availability_seen_at
+       positive_at,positive_seen_at,availability_at,availability_seen_at,unresolvable_since
 FROM members CROSS JOIN clock
 ORDER BY video_id COLLATE "C"
 LIMIT $2

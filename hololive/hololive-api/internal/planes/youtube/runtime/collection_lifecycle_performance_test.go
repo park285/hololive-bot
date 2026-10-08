@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -141,6 +142,9 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
         CROSS JOIN LATERAL youtube_live_review_snapshot(session.video_id) snapshot
         WHERE session.video_id IN ('review-current','review-changed');
         UPDATE youtube_live_sessions SET title='changed' WHERE video_id='review-changed';
+        -- 해소 불가 추적은 UPCOMING에서만 재확인 주기 근거로 전달되고 LIVE는 NULL이다.
+        INSERT INTO youtube_live_reconciliation_heads(video_id,status,unresolvable_since)
+        VALUES ('live','LIVE',now() - interval '2 hours'),('unreviewed','UPCOMING',now() - interval '2 hours');
     `)
 	require.NoError(t, err)
 
@@ -153,15 +157,22 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 
 	for rows.Next() {
 		var (
-			id, channel string
-			upcoming    bool
-			facts       liveCheckFreshness
+			id, channel       string
+			upcoming          bool
+			facts             liveCheckFreshness
+			unresolvableSince pgtype.Timestamptz
 		)
 
 		require.NoError(t, rows.Scan(&id, &channel, &upcoming, &facts.asOf,
-			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt))
+			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt, &unresolvableSince))
 		require.Equal(t, "review-channel", channel)
 		require.Equal(t, id != "live", upcoming)
+
+		if unresolved := unresolvableFor(facts.asOf, unresolvableSince); id == "unreviewed" {
+			require.Greater(t, unresolved, time.Hour, "upcoming tracking must reach the projection")
+		} else {
+			require.Zero(t, unresolved, "live tracking must not slow the recheck cadence")
+		}
 
 		notBefore := facts.notBefore(defaultLiveFreshnessBudget())
 

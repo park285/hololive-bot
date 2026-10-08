@@ -157,3 +157,76 @@ func TestVideoLifecycleUnresolvableVideoRequiresIdentityMissingAndClearsOnPositi
 		t.Fatalf("live positive kept unresolvable tracking: since=%v status=%s", since, liveSessionStatus(t, f.pool))
 	}
 }
+
+// startUnresolvableUpcoming은 지난 일정의 UPCOMING 세션과 영상 확인 lease, 해소 불가 grace 0의 consumer다.
+func startUnresolvableUpcoming(t *testing.T) *unresolvableFixture {
+	t.Helper()
+
+	pool, _, consumer, proof := startLivePersist(t)
+	publisher := publishkit.NewPublisher(pool)
+
+	proof = publishConsumeLive(t.Context(), t, pool, publisher, consumer, &proof, liveSession(testVideoID, testStatusUpcoming))
+
+	return &unresolvableFixture{
+		pool: pool, publisher: publisher, consumer: consumer, proof: proof,
+		videoProof: seedAdditionalLease(t, pool, &proof, contract.KindVideoLiveCheck, testVideoID, "youtubejs_video_live"),
+	}
+}
+
+// UPCOMING의 identity_missing은 추적만 하고, grace가 지나고 채널 음성이 있어도 끝내지 않는다. 이후 positive는 추적을 지운다.
+func TestVideoLifecycleUnresolvableUpcomingTracksWithoutEnding(t *testing.T) {
+	f := startUnresolvableUpcoming(t)
+	firstAt := f.videoProof.ScheduledFor
+
+	f.checkVideo(t, 0, contract.LiveCheckReasonIdentityMissing, "UNRESOLVABLE_TRACKED")
+
+	if since := loadUnresolvableSince(t, f.pool); since == nil || !since.Equal(firstAt) || liveSessionStatus(t, f.pool) != testStatusUpcoming {
+		t.Fatalf("upcoming identity_missing: since=%v status=%s, want UPCOMING tracked since %s", since, liveSessionStatus(t, f.pool), firstAt)
+	}
+
+	f.videoProof = advanceLease(t.Context(), t, f.pool, &f.videoProof, 11*time.Minute)
+	f.channelNegative(t)
+	f.checkVideo(t, 0, contract.LiveCheckReasonIdentityMissing, "UNRESOLVABLE_RETAINED")
+
+	if since := loadUnresolvableSince(t, f.pool); since == nil || !since.Equal(firstAt) || liveSessionStatus(t, f.pool) != testStatusUpcoming {
+		t.Fatalf("upcoming identity_missing after grace: since=%v status=%s, want UPCOMING kept", since, liveSessionStatus(t, f.pool))
+	}
+
+	assertTableCount(t, f.pool, "youtube_live_pending_ends", 0)
+
+	f.proof = advanceLease(t.Context(), t, f.pool, &f.proof, 12*time.Minute)
+	publishConsumeLive(t.Context(), t, f.pool, f.publisher, f.consumer, &f.proof, liveSession(testVideoID, testStatusUpcoming))
+
+	if since := loadUnresolvableSince(t, f.pool); since != nil || liveSessionStatus(t, f.pool) != testStatusUpcoming {
+		t.Fatalf("upcoming positive kept unresolvable tracking: since=%v status=%s", since, liveSessionStatus(t, f.pool))
+	}
+}
+
+// UPCOMING의 채널 불일치 확인도 추적하며, 다른 UNKNOWN 사유는 추적하지 않는다.
+func TestVideoLifecycleUnresolvableUpcomingTracksIdentityMismatchOnly(t *testing.T) {
+	f := startUnresolvableUpcoming(t)
+
+	f.checkVideo(t, 0, contract.LiveCheckReasonRequestFailed, videoLifecycleIdentityUnverified)
+
+	if since := loadUnresolvableSince(t, f.pool); since != nil {
+		t.Fatalf("request_failed started upcoming tracking at %s", since)
+	}
+
+	f.videoProof = advanceLease(t.Context(), t, f.pool, &f.videoProof, time.Minute)
+
+	mismatch := liveVideoCheck(contract.VideoAvailabilityPublic)
+
+	mismatch.ChannelID = "UC_OTHER"
+
+	id := publishLiveCheck(t.Context(), t, f.publisher, videoLiveCheckEnvelope(t, &f.videoProof, mismatch))
+	consumeLiveChecks(t.Context(), t, f.consumer)
+	assertApplicationDecision(t, f.pool, id, liveSessionEntityKind, "UNRESOLVABLE_TRACKED")
+
+	if since := loadUnresolvableSince(t, f.pool); since == nil || !since.Equal(f.videoProof.ScheduledFor) || liveSessionStatus(t, f.pool) != testStatusUpcoming {
+		t.Fatalf("identity_mismatch on upcoming: since=%v status=%s, want tracked UPCOMING", since, liveSessionStatus(t, f.pool))
+	}
+
+	if got := loadVideoAvailability(t, f.pool); !sameReason(got.unknownReason, contract.LiveCheckReasonIdentityMismatch) {
+		t.Fatalf("availability = %+v, want identity_mismatch", got)
+	}
+}

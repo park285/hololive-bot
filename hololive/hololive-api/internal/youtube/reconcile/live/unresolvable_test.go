@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -95,20 +96,40 @@ func TestReduceUnresolvableVideoEndsAfterGrace(t *testing.T) {
 	}
 }
 
-// positive는 영상이 아직 해석됨을 뜻하므로 추적을 지우고, 시작을 관측하지 못한 UPCOMING은 추적하지 않는다.
-func TestReduceUnresolvableVideoClearedByPositiveAndIgnoredWithoutLiveStart(t *testing.T) {
+// positive는 영상이 아직 해석됨을 뜻하므로 추적을 지운다.
+func TestReduceUnresolvableVideoClearedByPositive(t *testing.T) {
 	state := trackedUnresolvableState(t)
 
 	cleared, _ := reduceAt(t, &state, lateLiveA(), 0)
 	if session := sessionOf(&cleared); session.Clock.UnresolvableSince != nil || session.Status != domain.LiveStatusLive {
 		t.Fatalf("live positive kept unresolvable tracking: %+v", session)
 	}
+}
 
-	upcoming := stateFromDecision(emptyState(), mustReduce(t, emptyState(), upcomingA()))
+// 시작을 관측하지 못한 UPCOMING은 첫 관측 시각을 추적만 하고, 검증된 사실이 grace 뒤에 와도 끝내지 않는다.
+func TestReduceUnresolvableVideoTracksUpcomingWithoutEnding(t *testing.T) {
+	state := stateFromDecision(emptyState(), mustReduce(t, emptyState(), upcomingA()))
+	verified := sessionFact(StatusUnresolvable)
 
-	ignored, upcoming := reduceAt(t, &upcoming, videoCheckEvidence(33, unresolvableFirstAt, sessionFact(StatusUnresolvable)), 0)
-	if session := upcoming.Sessions[testVideoID]; !hasDecision(&ignored, "UNRESOLVABLE_IGNORED") || session.Clock.UnresolvableSince != nil ||
-		session.Status != domain.LiveStatusUpcoming {
-		t.Fatalf("upcoming identity_missing = %+v decisions=%+v, want ignored", session, ignored.Applications)
+	verified.VerifiedTerminal = true
+
+	tracked, state := reduceAt(t, &state, videoCheckEvidence(33, unresolvableFirstAt, sessionFact(StatusUnresolvable)), 0)
+	if session := sessionOf(&tracked); !hasDecision(&tracked, "UNRESOLVABLE_TRACKED") || session.Clock.UnresolvableSince == nil ||
+		!session.Clock.UnresolvableSince.Equal(unresolvableFirstAt) || session.Status != domain.LiveStatusUpcoming {
+		t.Fatalf("upcoming identity_missing = %+v decisions=%+v, want tracked UPCOMING", session, tracked.Applications)
+	}
+
+	retained, state := reduceAt(t, &state, videoCheckEvidence(34, unresolvableLaterAt, verified), 0)
+	if session := state.Sessions[testVideoID]; !hasDecision(&retained, "UNRESOLVABLE_RETAINED") || session.Status != domain.LiveStatusUpcoming ||
+		session.EndedAt != nil || !session.Clock.UnresolvableSince.Equal(unresolvableFirstAt) {
+		t.Fatalf("verified fact on upcoming = %+v decisions=%+v, want retained UPCOMING", session, retained.Applications)
+	}
+
+	laterUpcoming := liveEvidence(35, time.Date(2026, time.August, 14, 3, 20, 0, 0, time.UTC),
+		contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("UPCOMING"))
+
+	cleared, _ := reduceAt(t, &state, laterUpcoming, 0)
+	if session := sessionOf(&cleared); session.Clock.UnresolvableSince != nil || session.Status != domain.LiveStatusUpcoming {
+		t.Fatalf("upcoming positive kept unresolvable tracking: %+v", session)
 	}
 }
