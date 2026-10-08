@@ -573,8 +573,9 @@ func seedCandidateTrafficState(t *testing.T, pool *pgxpool.Pool, generation int6
 	case "new":
 		return
 	case "not-due":
+		// 완료한 lease의 불변식 next_due_at = scheduled_for + poll_interval을 지킨다. 실효 due는 둘 중 이른 값이다.
 		if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_collection_job_leases (job_key,provider,job_class,collection_job_kind,subject_key,projection_generation,poll_interval_ms,scheduled_for,next_due_at)
-            SELECT 'collector:youtubejs:community_collect:'||subject_key,'youtubejs','SUBJECT','community_collect',subject_key,$1,60000,TIMESTAMPTZ '2000-01-01',TIMESTAMPTZ '2099-01-01'
+            SELECT 'collector:youtubejs:community_collect:'||subject_key,'youtubejs','SUBJECT','community_collect',subject_key,$1,60000,TIMESTAMPTZ '2099-01-01'-INTERVAL '1 minute',TIMESTAMPTZ '2099-01-01'
             FROM youtube_collection_targets WHERE projection_generation=$1`, generation); err != nil {
 			t.Fatal(err)
 		}
@@ -642,7 +643,8 @@ func TestCandidateOrderMatchesRelationalOracle(t *testing.T) {
 	generation := seedCandidateScale(t, pool, 620)
 
 	if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_collection_job_leases (job_key, provider, job_class, collection_job_kind, subject_key, projection_generation, poll_interval_ms, scheduled_for, next_due_at)
-		SELECT 'collector:youtubejs:community_collect:' || subject_key, 'youtubejs', 'SUBJECT', 'community_collect', subject_key, $1, 60000, clock_timestamp(),
+		SELECT 'collector:youtubejs:community_collect:' || subject_key, 'youtubejs', 'SUBJECT', 'community_collect', subject_key, $1, 60000,
+		CASE WHEN right(subject_key,1) IN ('0','1') THEN clock_timestamp()+INTERVAL '59 minutes' ELSE clock_timestamp()-INTERVAL '61 minutes' END,
 		CASE WHEN right(subject_key,1) IN ('0','1') THEN clock_timestamp()+INTERVAL '1 hour' ELSE clock_timestamp()-INTERVAL '1 hour' END
 		FROM youtube_collection_targets WHERE projection_generation=$1 AND right(subject_key,1) NOT IN ('8','9')`, generation); err != nil {
 		t.Fatal(err)

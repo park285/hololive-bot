@@ -75,10 +75,15 @@ func (f *unresolvableFixture) checkVideo(t *testing.T, delta time.Duration, reas
 func (f *unresolvableFixture) channelNegative(t *testing.T) {
 	t.Helper()
 
+	f.channelCheck(t, contract.ChannelLiveCheckV1{Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true})
+}
+
+// channelCheck는 현재 영상 확인 예정 시각 기준의 채널 /live 확인 최신값을 저장한다.
+func (f *unresolvableFixture) channelCheck(t *testing.T, payload contract.ChannelLiveCheckV1) {
+	t.Helper()
+
 	checkProof := seedChannelLiveCheckLease(t, f.pool, &f.videoProof)
-	publishLiveCheck(t.Context(), t, f.publisher, channelLiveCheckEnvelope(t, &checkProof, contract.ChannelLiveCheckV1{
-		Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true,
-	}))
+	publishLiveCheck(t.Context(), t, f.publisher, channelLiveCheckEnvelope(t, &checkProof, payload))
 	consumeLiveChecks(t.Context(), t, f.consumer)
 }
 
@@ -229,4 +234,71 @@ func TestVideoLifecycleUnresolvableUpcomingTracksIdentityMismatchOnly(t *testing
 	if got := loadVideoAvailability(t, f.pool); !sameReason(got.unknownReason, contract.LiveCheckReasonIdentityMismatch) {
 		t.Fatalf("availability = %+v, want identity_mismatch", got)
 	}
+}
+
+// 채널 /live 최신값이 신선해도 identity 미확인 UNKNOWN이나 다른 영상의 LIVE면 음성이 아니므로 끝내지 않는다.
+// 로봇 확인이 /live를 함께 막거나 채널이 다른 영상으로 방송 중인 경우다.
+func TestVideoLifecycleUnresolvableVideoRequiresConfirmedChannelNegative(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload contract.ChannelLiveCheckV1
+	}{
+		{name: "unknown unconfirmed", payload: contract.ChannelLiveCheckV1{
+			Outcome: contract.ChannelLiveCheckUnknown, UnknownReason: contract.LiveCheckReasonRequestFailed,
+		}},
+		{name: "other live video", payload: contract.ChannelLiveCheckV1{
+			Outcome: contract.ChannelLiveCheckLiveVideo, SelectedVideoID: "vid-other-live", ChannelIdentityConfirmed: true,
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := startUnresolvable(t)
+
+			f.checkVideo(t, 0, contract.LiveCheckReasonIdentityMissing, "UNRESOLVABLE_TRACKED")
+			f.checkVideo(t, 10*time.Minute, contract.LiveCheckReasonIdentityMissing, "UNRESOLVABLE_RETAINED")
+			f.channelCheck(t, tc.payload)
+			f.checkVideo(t, time.Minute, contract.LiveCheckReasonIdentityMissing, "UNRESOLVABLE_RETAINED")
+
+			if status := liveSessionStatus(t, f.pool); status != testStatusLive {
+				t.Fatalf("%s channel check ended session: status=%s", tc.name, status)
+			}
+		})
+	}
+}
+
+// 7.2.7 롤백 창처럼 positive가 지우지 못한 잔여 추적값(마지막 positive보다 이른 값)은 지속 시간의 근거가 아니다.
+// 채널 음성과 grace가 갖춰져도 끝내지 않고 이번 관측부터 다시 추적한다.
+func TestVideoLifecycleUnresolvableVideoRestartsStaleTracking(t *testing.T) {
+	f := startUnresolvable(t)
+
+	if _, err := f.pool.Exec(t.Context(), `UPDATE youtube_live_reconciliation_heads
+		SET unresolvable_since = last_live_positive_at - INTERVAL '30 minutes' WHERE video_id=$1`, testVideoID); err != nil {
+		t.Fatal(err)
+	}
+
+	f.videoProof = advanceLease(t.Context(), t, f.pool, &f.videoProof, 11*time.Minute)
+
+	f.channelNegative(t)
+	f.checkVideo(t, 0, contract.LiveCheckReasonIdentityMissing, "UNRESOLVABLE_TRACKED")
+
+	if since := loadUnresolvableSince(t, f.pool); since == nil || !since.Equal(f.videoProof.ScheduledFor) || liveSessionStatus(t, f.pool) != testStatusLive {
+		t.Fatalf("stale tracking: since=%v status=%s, want LIVE tracked again since %s", since, liveSessionStatus(t, f.pool), f.videoProof.ScheduledFor)
+	}
+}
+
+// head 없는 metadata_only UPCOMING은 미확정 메타데이터가 head의 근거가 아니므로 추적하지 않고 기존 결정을 남긴다.
+func TestVideoLifecycleHeadlessMetadataUpcomingKeepsIdentityDecision(t *testing.T) {
+	pool, _, consumer, proof := startLivePersist(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,lifecycle_origin,scheduled_start_time)
+		VALUES ($1,$2,'UPCOMING','','metadata_only',$3)`, testVideoID, testChannelID, proof.ScheduledFor.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	videoProof := seedAdditionalLease(t, pool, &proof, contract.KindVideoLiveCheck, testVideoID, "youtubejs_video_live")
+	id := publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &videoProof, identityMissingVideoCheck(contract.LiveCheckReasonIdentityMissing)))
+
+	consumeLiveChecks(ctx, t, consumer)
+	assertApplicationDecision(t, pool, id, liveSessionEntityKind, videoLifecycleIdentityUnverified)
+	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
 }

@@ -8,6 +8,20 @@
 
 ## 미출시
 
+## v7.2.10 - 2026-10-08
+
+- v7.2.8·v7.2.9 검토 후속입니다. collector는 IDLE lease의 실효 due를 `LEAST(next_due_at, scheduled_for + 현재 target 주기)`로
+  판정해, target 주기가 줄면 이전 긴 주기(최대 60분)의 남은 대기 없이 현재 주기의 다음 slot에서 재개합니다. 늦춰진 UPCOMING
+  영상 확인이 positive 뒤 공개 방송으로 바뀌어도 종료 확인이 최대 60분 늦어지지 않습니다.
+- 해소 불가 추적은 추적 시작 이후에 관측된 positive만 지웁니다. 늦게 도착한 이른 관측이 추적을 초기화해 종료 하한이 밀리던
+  문제를 고쳤습니다. 모든 positive보다 이른 추적값(7.2.7 롤백 기간 잔여값)은 reducer·consumer·projection이 추적 없음으로
+  보고 다시 추적하므로, 롤백 뒤 재전진에서 지속 시간 없이 끝나지 않습니다.
+- head가 없는 `metadata_only`·`legacy_unknown` UPCOMING은 추적을 저장할 수 없어 `UNRESOLVABLE_TRACKED`만 반복 기록하던 것을
+  기존 `IDENTITY_UNCONFIRMED`·`IDENTITY_MISMATCH` 결정으로 되돌렸습니다.
+- 회귀 시험: 관측 이후 positive 보존, 채널 `/live` 음성 술어의 부정 사례, 주기 단축·유지 시 lease 재개. 계약 v2·migration
+  규약(같은 트랜잭션 안 VALIDATE 잠금)·계획 문서 수치를 정정했습니다.
+- `hololive-api`와 `youtube-collector` 7.2.10을 릴리스합니다. DB migration과 `hololive-alarm-worker`는 바뀌지 않습니다.
+
 ## v7.2.9 - 2026-10-08
 
 - 비공개·삭제된 예약 영상처럼 identity를 확인할 수 없는 UPCOMING 세션의 영상 확인이 2분마다 같은 UNKNOWN만 반복하던

@@ -58,6 +58,11 @@ ALTER TABLE t DROP CONSTRAINT t_col_nn;
 
 PG 18에서는 NOT NULL 제약을 `NOT VALID`로 직접 추가해 2단계로 줄일 수 있다.
 
+`VALIDATE CONSTRAINT`의 잠금 완화는 앞 문장과 다른 트랜잭션일 때만 성립한다. PostgreSQL은 잠금을 트랜잭션 끝까지
+유지하므로, 같은 top-level `BEGIN;`/`COMMIT;` 블록 안에서 `ADD COLUMN`·`ADD/DROP CONSTRAINT`가 잡은 ACCESS EXCLUSIVE가
+VALIDATE 전 행 스캔과 COMMIT까지 이어진다. 큰 표에서는 `VALIDATE CONSTRAINT`를 블록 밖 autocommit 문장으로 둔다
+(선례 178). `lock_timeout`은 잠금 획득 대기만 끊고 스캔 시간은 줄이지 않는다. 280은 3,962행 표라 한 트랜잭션으로 적용했다.
+
 ### 대형 backfill — 단일 UPDATE 한 방 금지
 
 문장 하나 = 트랜잭션 하나: 대상 전 행 락을 문장 끝까지 보유(O(N)), WAL 스파이크, dead tuple 일시불.
