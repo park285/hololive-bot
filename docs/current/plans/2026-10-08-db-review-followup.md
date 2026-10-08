@@ -261,6 +261,27 @@ v7.2.7은 `!라이브` 판정만 보호했고, 종료 전에 비공개·삭제�
   `unresolvableVideoFact`(채널 음성 조회 `repository_channel_live_negative.sql`), 설정값·검증, 계약 v2·services 문서,
   CHANGELOG, VERSION 7.2.8. v7.2.7의 LiveQuery `identity_missing` 제외는 종료 전 브리지로 유지한다.
 
+### v7.2.8 게시와 운영 배포 기록
+
+- 작업 브랜치 `e4ce6758a`에서 `./build-all.sh --build-only --no-bump`(LOCAL CI Passed, 이미지 빌드 완료)와 pre-push
+  게이트를 통과했고, PR #596의 CI 항목이 모두 통과했다. squash 병합 커밋은 `5d617748b20ab3047fa637f59d6a4e6680e47ea2`다.
+- 병합 커밋의 clean worktree에서 arm64 `hololive-api` 7.2.8
+  `sha256:3439e070a9fedb605bc23925de75ed156495f5f2e872c9145e16c52d1cc01c00`를 빌드해 `hololive-seoul`에 적재하고 ID·arch·
+  revision을 다시 확인한 뒤 `:prod`로 승격했다. alarm-worker(6.1.2)와 collector는 바꾸지 않았다.
+- 롤백 기준점(change_started_at 2026-10-08T08:18:44Z): `hololive-api:rollback-20261008T081844Z`(`bcd350e8da4d`, 7.2.7)와
+  배포 트리 사본 `/opt/hololive-bot/compose/deploy-backups/pre-v7.2.8-20261008T081844Z/`. migration 280은 nullable 열
+  추가와 CHECK 어휘 확장뿐이라 앱만 되돌려도 7.2.7 코드가 그대로 동작한다(되돌리면 새 비공개 전환 세션은 다시 LIVE로
+  남고, 이미 `UNRESOLVABLE_VIDEO`로 끝난 세션은 그대로 유지된다).
+- `hololive-db-migrate`는 08:19:24 UTC에 `280_live_head_unresolvable_end.sql`을 적용했고(`applied=1 skipped=140
+  total=141`, 제약 `chk_youtube_live_reconciliation_heads_end_reason_vocab` validated), `hololive-api`는 08:19:30에
+  재생성되어 약 5초 만에 health gate를 통과했다(재시작 0, 08:40까지 ERROR·WARN 0, 알림 outbox 0).
+- 효과(읽기 전용 집계): 배포 직후 첫 영상 확인이 좀비 LIVE 4건을 08:20:41–08:21:23 UTC에 `UNRESOLVABLE_TRACKED`로
+  추적했고, 10분 grace 동안 `UNRESOLVABLE_RETAINED` 16건이 쌓인 뒤 08:30:43–08:31:28에 4건 모두 `UNRESOLVABLE_VIDEO`로
+  `ENDED`가 되었다(추적→종료 10분 2–4초, ended_at = 첫 `identity_missing` 시각 4/4, started_at 보존 4/4, session·head
+  ended_at 일치 4/4, pending 0). 영상 확인 대상은 45에서 40으로 줄었고 LIVE 세션 14건 중 `identity_missing`은 0건,
+  추적 중인 LIVE 0건이다. 08:40 스냅샷 SQL은 roster 74채널 모두 projection·collected 정상이며 covered 71·incomplete 3
+  (방송 중)·stale 0이다.
+
 ## 남은 후보 (이번 범위 밖)
 
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
