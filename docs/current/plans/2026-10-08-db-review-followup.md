@@ -156,17 +156,32 @@ GRANT/ACL은 fresh에 운영 role이 없어 비교하지 않았다. 운영 데�
   - 남은 LIVE 13개 중 4개는 positive clock이 있으나 6시간 넘게 갱신되지 않았으며 YouTube identity 미확인이다. 9개는
     head 없는 `legacy_unknown` 기록으로 시작한 지 126–136일 지났고 이번 변경 전부터 있었다.
 
+## v7.2.6: 재측정으로 추가한 개선
+
+v7.2.5 배포 뒤 23:02–23:32 UTC 구간 재측정에서 네 개선이 모두 확인됐다. retention 내부 문장 JIT 0(평균 543→77 ms,
+184→4.5 ms), pending 갱신 24→3.9행/s, heads `FOR UPDATE` 평균 17.4→3.3 ms, heads autoanalyze 384→22 ms, 앱 DB CPU
+0.087→0.059코어, API DB 수신 2.29→0.40 MB/s. 그 위에서 남은 비용 두 가지를 줄인다.
+
+- live 적재는 종료 후보가 없는 저장된 `ENDED` 세션의 pending을 읽거나 잠그지 않는다. 그 행은 어떤 판정 경로도 읽지
+  않고 세션이 dirty가 되지 않아 삭제 keep-list와 무관하므로, 이전에 적어 둔 "keep-list 의미 변경 필요" 전제는 성립하지
+  않았다. 운영에서 pending `FOR UPDATE`가 초당 약 25행, 값이 같은 upsert가 호출의 84%였다.
+- migration 279는 검토 영수증의 의미 사실을 기록 시 저장하고 판정 함수가 저장값과 비교한다. `live_check_videos.sql`
+  27.3 ms 중 24.5 ms가 영수증 쪽 재계산이었고, 시험 DB(영수증 53건)에서 중앙값 24.5→4.0 ms, 판정 53/53 동일이었다.
+
 ## 남은 후보 (이번 범위 밖)
 
-- `youtube_live_pending_ends`: 저장된 `ENDED` 세션의 pending `FOR UPDATE` 적재와 값이 같은 upsert 호출(초당 약 17–21건)은
-  남는다. 저장 경로의 삭제 keep-list 의미를 바꿔야 하므로 이번 변경의 효과를 측정한 뒤 정한다.
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
   반복된다. backoff 상한과 검토 영수증 흐름과의 관계를 설계해야 한다.
-- `live_check_videos.sql`(5초 주기)의 검토 영수증 semantic facts 재계산: DB CPU 약 6%이고 projection guard 잠금 대기의
-  원인이다. 새 테이블·trigger·backfill과 review 함수 재작성이 필요하다.
-- head 없는 `legacy_unknown` LIVE 9건(126–136일)과 identity 미확인 고착 LIVE 4건: 영상 확인으로 종료를 증명할 수
-  없으므로 검토 영수증(`closed_unresolved`) 처분을 운영자가 결정해야 한다.
-- collector 1초 주기 후보 탐색과 항상 충돌하는 lease INSERT: DB 질의 CPU 약 23%이나 절대량은 약 0.02코어다.
+- head 없는 `legacy_unknown` LIVE 9건(126–136일): 운영 roster 밖 5채널이라 LiveQuery·알림·영상 확인 대상·지표 밖에
+  있고 사용자 영향은 없다. 영상 확인 대상이 roster로 한정되어 종료를 증명할 기회가 없다. 대상 확장은 계약 개정이다.
+- identity 미확인 고착 LIVE 4건(마지막 positive 35–157시간 전, `identity_missing`·`MEMBERS_ONLY`): 활성 3채널을 Stale로
+  만들고, 방송 중인 멤버가 없으면 전체 `!라이브`가 "현재 방송 상태를 확인할 수 없습니다."를 반환한다. 계약 v2 252·258행이
+  의도한 동작이고 검토 영수증은 UPCOMING 전용이라 지금은 기록할 수 없다. LIVE 영수증 확장 또는 LiveQuery 판정 개정
+  중 하나를 사용자가 결정해야 한다.
+- `identity_missing` 영상의 조용한 기간에 비례한 영상 확인 backoff: 계약 v2의 2분 cadence·freshness 공식 개정이 필요하다.
+- collector 1초 주기 후보 탐색과 항상 충돌하는 lease INSERT: v7.2.5 뒤 앱 DB CPU의 37%(절대량 약 0.02코어)다. 후보
+  질의 buffer의 84%가 468행 `youtube_collection_job_leases`의 흩어진 heap(107페이지) seq scan이다. runner별 next-due 힌트는
+  collector 계약·traffic 시험 개정과 AP 포함 4대 배포가 필요하고, UPDATE 우선 lease 획득은 다음 collector 릴리스에 묶는다.
 - 보존 기간이 지난 `ignored_absence_scheduled_for` 원소 정리, bot durable inbox/outbox의 개별 유휴 폴링, 은퇴
   projection 세대 보존 기간, `source_observation_queue` retention용 정렬 인덱스, 알림 전달 전이 지표의 빈 sweep 집계.
 - finalizer·video live check에서 비`ENDED` head의 배열까지 생략(설계 문서의 2b). 두 경로도 `ENDED` 배열은 이미

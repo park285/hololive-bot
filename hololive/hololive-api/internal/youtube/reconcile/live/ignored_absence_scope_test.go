@@ -138,7 +138,8 @@ func scopeFullState() State {
 }
 
 // narrowScopeState는 축소 적재 결과를 흉내 낸다. 읽지 않는 행은 payload 밖의 ENDED 중 candidate가
-// 없는 세션과 그 pending이다(dueArm=false면 candidate가 있어도 뺀다). 남은 ENDED는 이력을 적재하지 않는다.
+// 없는 세션과 그 pending이다(dueArm=false면 candidate가 있어도 뺀다). 남은 ENDED는 이력을 적재하지 않고,
+// payload에 오른 candidate 없는 ENDED는 pending도 읽지 않는다.
 func narrowScopeState(full *State, payload []string, dueArm bool) (State, map[string]struct{}) {
 	narrowed := full.clone()
 	omitted := map[string]struct{}{}
@@ -159,6 +160,10 @@ func narrowScopeState(full *State, payload []string, dueArm bool) (State, map[st
 		session.IgnoredAbsences = IgnoredAbsenceHistory{}
 		narrowed.Sessions[videoID] = session
 		omitted[videoID] = struct{}{}
+
+		if session.Clock.EndCandidateObservationID == nil && session.Clock.NextEndCheckAt == nil {
+			delete(narrowed.PendingEnds, videoID)
+		}
 	}
 
 	return narrowed, omitted

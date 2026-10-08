@@ -20,7 +20,11 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-const scopeChannelID = "UC_SCOPE"
+const (
+	scopeChannelID = "UC_SCOPE"
+	// 종료 후보 없이 pending(D2)이 남은 ENDED 세션이다.
+	scopeEndedPendingID = "end-1"
+)
 
 // loadUnscopedLiveState는 축소 전 적재의 oracle이다. 주어진 영상을 상태와 관계없이 모두 읽고
 // 무시한 부재 이력도 생략하지 않는다.
@@ -88,7 +92,21 @@ func seedLiveScopeFixture(t *testing.T, pool *pgxpool.Pool, base time.Time) {
 		       ('end-due', $2, 'EXPLICIT_END', 900, $1, $1, $1, NULL, true, true),
 		       ('end-fut', $2, 'EXPLICIT_END', 901, $1, $1, $1, NULL, true, true),
 		       ('end-7', $2, 'EXPLICIT_END', 902, $1::timestamptz - interval '2 hours', $1::timestamptz - interval '2 hours',
-		        $1::timestamptz - interval '2 hours', NULL, true, true)`, base, scopeChannelID)
+		        $1::timestamptz - interval '2 hours', NULL, true, true),
+		       ('end-3', $2, 'EXPLICIT_END', 903, $1::timestamptz - interval '3 hours', $1::timestamptz - interval '3 hours',
+		        $1::timestamptz - interval '3 hours', NULL, true, true),
+		       ('head-1', $2, 'EXPLICIT_END', 904, $1::timestamptz - interval '1 hour', $1::timestamptz - interval '1 hour',
+		        $1::timestamptz - interval '1 hour', NULL, true, true),
+		       ('orphan-1', $2, 'EXPLICIT_END', 905, $1::timestamptz - interval '1 hour', $1::timestamptz - interval '1 hour',
+		        $1::timestamptz - interval '1 hour', NULL, true, true)`, base, scopeChannelID)
+	// head-1은 session 행 없이 ENDED head만 남은 영상이고 orphan-1은 session·head가 모두 없는 영상(D1)이다.
+	// 둘 다 저장된 session이 없어 종료를 새로 보관하므로 payload에 오르면 pending을 계속 읽는다.
+	seed(`
+		INSERT INTO youtube_live_reconciliation_heads (video_id, status, last_upcoming_positive_at, last_upcoming_positive_seen_at,
+		    last_live_positive_at, last_live_positive_seen_at, ended_at, end_reason, ignored_absence_scheduled_for)
+		VALUES ('head-1', 'ENDED', $1::timestamptz - interval '3 hours', $1::timestamptz - interval '3 hours',
+		        $1::timestamptz - interval '3 hours', $1::timestamptz - interval '3 hours', $1::timestamptz - interval '2 hours',
+		        'EXPLICIT_END', ARRAY[$1::timestamptz - interval '4 hours'])`, base)
 	// end-due는 session이 ENDED인데 head에 due candidate가 남은 행이다. 채널 범위 적재가 이 정리를 놓치면 안 된다.
 	seed(`
 		INSERT INTO youtube_live_reconciliation_heads (video_id, status, last_upcoming_positive_at, last_upcoming_positive_seen_at,
@@ -172,6 +190,10 @@ type liveScopeScenario struct {
 	evidence      live.Evidence
 	payloadEnded  []string
 	unloadedEnded []string
+	// frozenPending는 payload에 오른 종료 후보 없는 ENDED 세션의 pending(D2)이다. 읽거나 잠그지 않는다.
+	frozenPending []string
+	// loadedPending는 종료 후보가 남은 ENDED와 기본 채널 범위 밖에서 payload로 오른 pending이다.
+	loadedPending []string
 }
 
 func liveScopeEvidence(at time.Time, id int64, completeness contract.Completeness, facts ...live.SessionFact) live.Evidence {
@@ -196,13 +218,17 @@ func liveScopeScenarios(base time.Time) []liveScopeScenario {
 		{
 			name: "youtubejs complete with past ended",
 			evidence: liveScopeEvidence(at, 1001, contract.CompletenessComplete,
-				live.SessionFact{VideoID: "end-1", ChannelID: scopeChannelID, Status: testStatusEnded, EndedAt: &ended},
+				live.SessionFact{VideoID: scopeEndedPendingID, ChannelID: scopeChannelID, Status: testStatusEnded, EndedAt: &ended},
 				live.SessionFact{VideoID: "end-2", ChannelID: scopeChannelID, Status: testStatusEnded, EndedAt: &ended},
 				live.SessionFact{VideoID: "live-1", ChannelID: scopeChannelID, Status: testStatusLive, LiveStartConfirmed: true},
 				live.SessionFact{VideoID: "new-1", ChannelID: scopeChannelID, Status: testStatusUpcoming},
+				live.SessionFact{VideoID: "head-1", ChannelID: scopeChannelID, Status: testStatusEnded, EndedAt: &ended},
+				live.SessionFact{VideoID: "orphan-1", ChannelID: scopeChannelID, Status: testStatusEnded, EndedAt: &ended},
 			),
-			payloadEnded:  []string{"end-1", "end-2"},
+			payloadEnded:  []string{scopeEndedPendingID, "end-2"},
 			unloadedEnded: []string{"end-3", "end-7", "end-40"},
+			frozenPending: []string{scopeEndedPendingID},
+			loadedPending: []string{"head-1", "orphan-1"},
 		},
 		{
 			name: "holodex partial late live",
@@ -212,12 +238,13 @@ func liveScopeScenarios(base time.Time) []liveScopeScenario {
 				live.SessionFact{VideoID: "new-2", ChannelID: scopeChannelID, Status: testStatusLive, StartedAt: &started, LiveStartConfirmed: true},
 			),
 			payloadEnded:  []string{"end-3"},
-			unloadedEnded: []string{"end-1", "end-7", "end-40"},
+			unloadedEnded: []string{scopeEndedPendingID, "end-7", "end-40"},
+			frozenPending: []string{"end-3"},
 		},
 		{
 			name:          "complete empty",
 			evidence:      liveScopeEvidence(at, 1003, contract.CompletenessComplete),
-			unloadedEnded: []string{"end-1", "end-7", "end-40"},
+			unloadedEnded: []string{scopeEndedPendingID, "end-7", "end-40"},
 		},
 	}
 }
@@ -235,13 +262,23 @@ func requireNarrowedLiveScope(t *testing.T, narrowed, full *live.State, payload 
 		require.NotContains(t, narrowed.PendingEnds, videoID)
 	}
 
+	for _, videoID := range scenario.frozenPending {
+		require.Contains(t, full.PendingEnds, videoID, "fixture must store frozen pending %s", videoID)
+		require.NotContains(t, narrowed.PendingEnds, videoID, "frozen ENDED pending %s was loaded", videoID)
+	}
+
+	for _, videoID := range slices.Concat([]string{"end-due", "end-fut"}, scenario.loadedPending) {
+		require.Contains(t, narrowed.PendingEnds, videoID, "pending %s was not loaded", videoID)
+		require.Equal(t, full.PendingEnds[videoID], narrowed.PendingEnds[videoID], "pending %s differs", videoID)
+	}
+
 	omitted := map[string]struct{}{}
 
 	for videoID := range narrowed.Sessions {
 		session, fullSession := narrowed.Sessions[videoID], full.Sessions[videoID]
 		slots, loaded := session.IgnoredAbsences.Slots()
 
-		if session.Status == domain.LiveStatusEnded {
+		if session.Present && session.Status == domain.LiveStatusEnded {
 			require.False(t, loaded, "%s: ENDED history must not be loaded", videoID)
 
 			omitted[videoID] = struct{}{}
@@ -303,6 +340,15 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, base time.Time, ch
 	// due candidate 정리로 저장되는 ENDED도 생략한 이력을 지우지 않는다.
 	require.NoError(t, persistLiveDecision(ctx, tx, &narrowedDecision))
 
+	// 읽지 않은 동결 pending은 삭제 keep-list에 없어도 그 세션이 dirty가 아니므로 남는다.
+	for _, videoID := range scenario.frozenPending {
+		var observationID int64
+
+		require.NoError(t, tx.QueryRow(ctx, `SELECT observation_id FROM youtube_live_pending_ends WHERE video_id=$1`, videoID).Scan(&observationID),
+			"frozen pending %s was deleted", videoID)
+		require.Equal(t, full.PendingEnds[videoID].ObservationID, observationID, "frozen pending %s was rewritten", videoID)
+	}
+
 	var dueCleared, dueHistoryKept bool
 
 	require.NoError(t, tx.QueryRow(ctx, `
@@ -313,7 +359,9 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, base time.Time, ch
 }
 
 // 채널 범위 적재는 payload 밖의 candidate 없는 ENDED를 읽지 않고, payload ENDED와 due candidate가
-// 남은 ENDED는 이력 없이 읽는다. 전체 적재 oracle과 같은 결정을 내고, 저장해도 이력을 지우지 않는다.
+// 남은 ENDED는 이력 없이 읽는다. 이때 payload에 오른 candidate 없는 ENDED의 pending은 읽지 않지만
+// candidate가 남은 ENDED·head만 남은 영상·session 없는 영상의 pending은 읽는다. 전체 적재 oracle과 같은 결정을 내고,
+// 저장해도 이력을 지우지 않는다.
 func TestLiveStateLoadSkipsUnmentionedEndedSessions(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)

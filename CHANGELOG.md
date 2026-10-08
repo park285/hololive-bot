@@ -8,6 +8,17 @@
 
 ## 미출시
 
+## v7.2.6 - 2026-10-08
+
+- v7.2.5 배포 뒤 운영 재측정에서 남은 비용 두 가지를 줄였습니다. live 적재는 종료 후보가 없는 저장된 `ENDED` 세션의
+  `youtube_live_pending_ends` 행을 읽거나 `FOR UPDATE`로 잠그지 않습니다(운영 초당 약 25행 잠금, 값이 같은 upsert가
+  호출의 84%). 동결된 D2 행은 어떤 판정도 읽거나 바꾸지 않으며 삭제 대상도 아니므로 결정은 같습니다.
+- migration 279는 검토 영수증의 의미 사실을 기록 시 `youtube_live_review_receipt_facts`에 저장하고,
+  `youtube_live_review_current_receipt`가 영수증 원본을 다시 계산하는 대신 저장값과 비교합니다. projection guard 아래에서
+  5초마다 도는 `live_check_videos.sql`이 운영 평균 25.7 ms(앱 DB CPU 8.5%)였고, 시험 DB에서 영수증 53건 기준 중앙값이
+  24.5 ms에서 4.0 ms로 줄었으며 판정은 같습니다. 기존 영수증은 같은 migration에서 채우고, runtime은 새 표를 조회만 합니다.
+- `hololive-api` 7.2.6만 릴리스하며 `hololive-alarm-worker`와 collector는 바뀌지 않습니다.
+
 ## v7.2.5 - 2026-10-08
 
 - 운영 PostgreSQL과 fresh 재생 사이의 스키마 drift를 맞추는 migration 271–276을 추가했습니다. 적용하면
