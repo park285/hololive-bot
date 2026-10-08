@@ -388,8 +388,21 @@ v7.2.9 배포 뒤 7개 차원 리뷰와 지적별 3인 반박 검증으로 확�
 - **롤백 자료:** 서울 중앙은 10-08 VM 교체 때 v7.2.8·v7.2.9의 롤백 태그와 배포 사본이 옮겨지지 않아 이미 없었다. 중앙 `c`
   첫 시도가 남긴 collector rollback 태그·부분 백업·staging만 삭제했다. 남은 기준점은 API `prod`·`prod-arm64-a6219fb8`·
   `rollback-20261008T114613Z`와 `deploy-backups/pre-v7.2.10-*`, collector·issuer `rollback-20261008T115407Z`와
-  `backups/po-c-20261008T115407Z`, `po-staging-20261008T115407Z`(rollback 모드가 이 경로를 요구한다)이다. AP 산출물은
-  runbook 보존 규칙에 따라 별도 승인 대상이라 그대로 둔다.
+  `backups/po-c-20261008T115407Z`, `po-staging-20261008T115407Z`(rollback 모드가 이 경로를 요구한다)이다.
+- **native AP 산출물 정리(13:30 UTC):** stack `tools/ops/prune-release-artifacts.py --profile native-ap`의 읽기 전용 목록에서
+  나온 2026-10-06 세대 두 개(`ea5d221e6`, `05cd902cc`)의 release와 전송 staging을 사용자가 정확한 경로로 승인했다. 두 소스
+  커밋이 로컬 저장소에 있어 재빌드 복구가 가능함을 확인한 뒤, `--apply --expected-current`와 승인 경로만 넘겨 Osaka·Osaka2에서
+  각 4개를 삭제했다. 루트 여유 공간은 Osaka 32.82→34.10 GB, Osaka2 34.41→35.68 GB(각 약 1.27 GB)로 늘었다. current 7.2.10,
+  previous 7.2.3, 10-06 `340283120` 세대와 각 staging, `.incoming-*`·상태 파일은 남겼다. 삭제 전후 collector PID가 같았고
+  두 호스트의 완료 확인과 issuer 상태(`Result=success`, exit 0)가 통과했으며 오류 표지는 0건이었다. Seoul `b`의 백업과
+  Docker image는 이 도구의 대상이 아니라 그대로 둔다.
+- **재발 방지(PR #602):** 중앙 paired cutover는 issuer 이미지가 있는데 기준 영수증이 없으면 백업·rollback 태그를 만들기 전에
+  `central issuer receipt missing`으로 거절한다. 실패 경로 시험에 이 사례를 더했고(수정 전 스크립트에서는 실패), collector
+  runbook에 호스트 교체 때 영수증을 옮기는 규칙과 이미지 ID가 일치하는 검토 영수증으로만 복원하는 절차를 적었다.
+- **운영 재확인(13:15 UTC):** 좀비 LIVE·잔여 추적값 0, UPCOMING 35건 30분 주기 유지, outbox 생성 0. Seoul `b`·Osaka2 `d`의
+  경고 각 1건은 일시 수집 실패(`TRANSIENT`, `TIMEOUT`)로, 배포 전 24시간 Osaka2 한 대의 같은 경고 208건과 같은 종류다.
+  Osaka2 issuer의 `worker_timeout`은 재발하지 않았다. 주기 단축 재개 경로는 비공개 예약이 다시 공개될 때만 발동해 운영에서는
+  아직 관측되지 않았다.
 
 ## 남은 후보 (이번 범위 밖)
 
