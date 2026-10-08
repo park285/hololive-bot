@@ -116,7 +116,7 @@ func (c *Consumer) reconcileVideoLiveCheck(
 		return ReconcileResult{Applications: applications}, nil
 	}
 
-	fact, skipped := videoLifecycleFact(claimed, &payload, &session)
+	fact, skipped := videoLifecycleFact(claimed, &payload, &session, claimed.ReceivedAt, c.liveGrace)
 	if pending, exists := state.PendingEnds[payload.VideoID]; skipped == "" && exists && pending.EffectiveAt.After(claimed.EffectiveAt) {
 		// 오래된 영상 확인이 더 새롭고 종료 시각 없는 pending을 정산해 슬롯 시각으로 끝내게 하지 않는다.
 		skipped = videoLifecycleNewerEndRetained
@@ -188,6 +188,8 @@ func videoLifecycleFact(
 	observation *Observation,
 	payload *contract.VideoLiveCheckV1,
 	session *live.SessionState,
+	dbNow time.Time,
+	grace time.Duration,
 ) (live.SessionFact, string) {
 	newLifecycle := observation.ContractGeneration == contract.VideoLifecycleContractGeneration && observation.SchemaVersion == contract.VideoLifecycleSchemaVersion
 	if reason := videoLifecycleGate(payload, session, newLifecycle); reason != "" {
@@ -232,12 +234,12 @@ func videoLifecycleFact(
 		return live.SessionFact{}, videoLifecycleInvalidEnd
 	}
 
-	// ended_at과 positive의 직접 비교는 grace 없이 바로 끝내는 시작 미관측 terminal 경로에만 둔다.
 	// LIVE positive clock이 있으면 reducer가 관측 시각 기준 positive 비교와 grace로 끝낸다.
-	// Holodex positive의 EffectiveAt은 수집 예정 시각이라 실제 종료보다 늦을 수 있어,
-	// 여기서도 ended_at과 비교하면 검증된 종료를 영구히 거부한다.
+	// 시작 미관측 terminal 경로는 grace 없이 바로 끝내므로 ended_at 이후의 positive가 grace 안에서
+	// 관측된 동안만 거부한다. provider positive의 EffectiveAt은 수집 예정 시각이라 실제 종료보다
+	// 늦을 수 있어, 신선도 없이 ended_at과 직접 비교하면 검증된 종료를 영구히 거부한다.
 	verifiedTerminal := newLifecycle && session.Clock.LastLivePositiveAt == nil
-	if verifiedTerminal && positiveAtOrAfter(session, endedAt) {
+	if verifiedTerminal && live.TerminalEndBlockedByPositive(&session.Clock, endedAt, dbNow, grace) {
 		return live.SessionFact{}, videoLifecycleInvalidEnd
 	}
 

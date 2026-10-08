@@ -16,7 +16,13 @@ import (
 func startUnobservedVideoLifecycle(t *testing.T, origin string) (*pgxpool.Pool, *Consumer, contract.LeaseProof) {
 	t.Helper()
 
-	pool, _, consumer, proof := startLivePersist(t)
+	return startUnobservedVideoLifecycleGrace(t, origin, 0)
+}
+
+func startUnobservedVideoLifecycleGrace(t *testing.T, origin string, grace time.Duration) (*pgxpool.Pool, *Consumer, contract.LeaseProof) {
+	t.Helper()
+
+	pool, _, consumer, proof := startLivePersistGrace(t, grace)
 
 	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions
         (video_id,channel_id,status,title,scheduled_start_time,lifecycle_origin)
@@ -104,7 +110,13 @@ func TestVideoLifecycleWaitingRequiresNewScheduleProof(t *testing.T) {
 func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.T) {
 	for _, scenario := range []string{"channel mismatch", "private only", "missing end", "newer positive", "positive after end", "newer pending"} {
 		t.Run(scenario, func(t *testing.T) {
-			pool, consumer, proof := startUnobservedVideoLifecycle(t, "legacy_unknown")
+			var grace time.Duration
+
+			if scenario == "positive after end" {
+				grace = time.Hour
+			}
+
+			pool, consumer, proof := startUnobservedVideoLifecycleGrace(t, "legacy_unknown", grace)
 			payload := endedVideoCheck(proof.ScheduledFor.Add(-time.Minute))
 
 			switch scenario {
@@ -124,11 +136,11 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 					t.Fatal(err)
 				}
 			case "positive after end":
-				// 확인 관측보다는 이르지만 ended_at보다 늦은 positive다. live clock이 없는 시작 미관측 경로는
-				// grace 없이 바로 끝내므로 consumer가 ended_at과 직접 비교해 거부해야 한다.
+				// 확인 관측보다는 이르지만 ended_at보다 늦고 grace 안에서 관측된 positive다. live clock이 없는
+				// 시작 미관측 경로는 grace 없이 바로 끝내므로 consumer가 이 positive를 보고 거부해야 한다.
 				if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_reconciliation_heads
                     (video_id,status,last_upcoming_positive_at,last_upcoming_positive_seen_at)
-                    VALUES ($1,'UPCOMING',$2,$2)`, testVideoID, proof.ScheduledFor.Add(-30*time.Second)); err != nil {
+                    VALUES ($1,'UPCOMING',$2,now())`, testVideoID, proof.ScheduledFor.Add(-30*time.Second)); err != nil {
 					t.Fatal(err)
 				}
 			case "newer pending":
@@ -154,6 +166,44 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 			assertTableCount(t, pool, "youtube_notification_outbox", 0)
 		})
 	}
+}
+
+// 시작 미관측 종료는 ended_at 이후의 positive가 grace 안에서 관측된 동안만 미룬다. 1초 송출 뒤 공급자가 잠시
+// UPCOMING을 유지한 영상처럼, grace가 지나도록 더 새로운 positive가 없으면 공급자 지연으로 보고 upstream 종료
+// 시각으로 끝내며 시작·알림을 만들지 않는다.
+func TestVideoLifecycleUnobservedEndAcceptsLaggedPositiveAfterGrace(t *testing.T) {
+	pool, consumer, proof := startUnobservedVideoLifecycleGrace(t, "metadata_only", 2*time.Minute)
+	ended := proof.ScheduledFor.Add(-20 * time.Minute)
+	laggedPositive := ended.Add(time.Minute)
+
+	if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_reconciliation_heads
+        (video_id,status,last_upcoming_positive_at,last_upcoming_positive_seen_at)
+        VALUES ($1,'UPCOMING',$2,$2)`, testVideoID, laggedPositive); err != nil {
+		t.Fatal(err)
+	}
+
+	id := publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, endedVideoCheck(ended)))
+	consumeLiveChecks(t.Context(), t, consumer)
+
+	got := loadVideoLifecycle(t, pool)
+	if got.status != "ENDED" || got.headStatus != "ENDED" || !got.endedAt.Equal(ended) || got.endReason != "EXPLICIT_END" {
+		t.Fatalf("lagged positive outside grace kept terminal end pending: %+v", got)
+	}
+
+	var started *time.Time
+
+	if err := pool.QueryRow(t.Context(), `SELECT started_at FROM youtube_live_sessions WHERE video_id=$1`, testVideoID).Scan(&started); err != nil {
+		t.Fatal(err)
+	}
+
+	if started != nil {
+		t.Fatalf("terminal reconciliation fabricated start %v", started)
+	}
+
+	assertLifecycleOrigin(t, pool, "observed")
+	assertApplicationDecision(t, pool, id, liveSessionEntityKind, "ENDED")
+	assertTableCount(t, pool, "youtube_notification_outbox", 0)
+	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
 }
 
 // startLiveWithLaggedPositive는 시작을 관측한 LIVE를 만들고, 그 마지막 positive보다 30초 이른 검증된

@@ -186,16 +186,49 @@ v7.2.5 배포 뒤 23:02–23:32 UTC 구간 재측정에서 네 개선이 모두 
   같은 no-op이 사라짐), pending `FOR UPDATE` 적재 평균 0.318→0.056 ms, `live_check_videos.sql` 평균 25.7→8.5 ms,
   heads `FOR UPDATE` 3.3 ms 유지.
 
+## v7.2.7: `!라이브` 고착 원인 추적과 판정 개정
+
+2026-10-08 14:17 KST 운영 스냅샷(roster 74채널)은 covered 69, stale 3채널(LIVE 세션 4건), confirming_end 1채널,
+incomplete 1채널(방송 중)이었다. 방송 중인 멤버가 없어지면 전체 `!라이브`가 "현재 방송 상태를 확인할 수 없습니다."로
+답하는 상태였고, 두 가지 원인을 운영 데이터와 코드로 확인했다.
+
+- **비공개·삭제 영상의 LIVE 세션 4건:** YouTube 익명 조회에서 3건은 `LOGIN_REQUIRED`(비공개 동영상), 1건은 `ERROR`
+  (재생 불가)였고, player 응답에 `videoDetails`와 `isPrivate`가 없어 영상 확인은 2분마다 `identity_missing` UNKNOWN만
+  남겼다. 계약이 정한 유일한 면제 경로 `PUBLIC_UNAVAILABLE(player_private)`는 익명 수집에서 도달하지 않는다(계약 v2의
+  "별도 실측 대상"이 이 결과다). 부재 종료(`SCOPED_ABSENCE`)도 불가능하다. 채널별 youtubejs 스냅샷은 `ENDED`까지 scope에
+  넣어 첫 페이지에 continuation이 남으면 PARTIAL이라 최근 1시간 기준 COMPLETE 채널은 8개뿐이었고(PARTIAL 102채널),
+  Holodex 스냅샷은 전부 PARTIAL이었다. 최근 30일 `SCOPED_ABSENCE` 종료 69건은 모두 그 소수 채널에서 나왔고, 고착 3채널은
+  24시간 동안 부재 slot이 하나도 없었다. 즉 대부분 채널에서 종료 전에 비공개로 바뀐 방송은 어떤 경로로도 끝나지 않는다.
+- **UPCOMING 세션의 `EXPLICIT_END` 보류 1건:** 해당 영상은 8-20에 1초간 송출된 뒤 끝난 공개 VOD였다. 공급자 positive
+  (UPCOMING, 수집 예정 시각이 EffectiveAt)가 실제 `ended_at`보다 1분 늦었고, 시작 미관측 경로의 신선도 없는 `ended_at`
+  직접 비교가 9-14부터 매 확인마다 `INVALID_END_TIMELINE`으로 거부해 보류가 영구히 남았다. 검토 영수증은 UPCOMING 전용이고
+  `snapshot.sql`은 영수증을 읽지 않으므로, 영수증을 기록해도 pending 기반 `confirming_end`는 풀리지 않는다(영수증 53건의
+  영상에는 pending 행이 없다).
+
+적용한 변경은 다음과 같다.
+
+- `live.TerminalEndBlockedByPositive`가 시작 미관측 종료의 positive 판정을 소유한다. `ended_at` 이후의 positive는
+  관측(seen) 시각 + grace(운영 2분)가 지나지 않은 동안만 종료를 막고, 그 뒤에는 공급자 지연으로 보고 upstream `ended_at`으로
+  끝낸다. consumer와 reducer가 같은 술어를 쓴다. 관측 시각 이후 positive(`NEWER_END_RETAINED`)와 더 새로운 pending 거부는
+  그대로다. 시작·positive clock·알림은 만들지 않는다.
+- `snapshot.sql`의 stale LIVE 제외 근거에 신선한 `identity_missing` UNKNOWN(identity 미확인)을 추가했다. 기존
+  `PUBLIC_UNAVAILABLE`과 같은 시각 경계(`scheduled/effective/observed/received`가 영상 확인 validity 안, 마지막 positive
+  이후, 신선한 positive 없음)를 적용하며, `identity_mismatch`·`request_failed` 등 다른 UNKNOWN 사유와 만료는 계속 차단한다.
+  로봇 확인이 player를 막아도 채널 `/live` 확인이 음성이면 채널은 방송 중이 아니므로 결과는 바뀌지 않고, 채널 확인이
+  UNKNOWN이면 coverage가 없어 여전히 "확인할 수 없습니다"다.
+- 계약 v2(시작 미관측 종료 규칙, `player_private` 실측, LiveQuery 제외 근거), services/hololive-api.md를 갱신했다.
+
+바꾸지 않은 것: 비공개·삭제 영상의 LIVE 세션은 수명 상태가 LIVE로 남고 영상 확인도 2분 cadence로 계속된다(LIVE 4건과
+UPCOMING 85건이 `identity_missing`). 채널 스냅샷 scope와 검토 영수증 범위도 그대로다.
+
 ## 남은 후보 (이번 범위 밖)
 
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
   반복된다. backoff 상한과 검토 영수증 흐름과의 관계를 설계해야 한다.
 - head 없는 `legacy_unknown` LIVE 9건(126–136일): 운영 roster 밖 5채널이라 LiveQuery·알림·영상 확인 대상·지표 밖에
   있고 사용자 영향은 없다. 영상 확인 대상이 roster로 한정되어 종료를 증명할 기회가 없다. 대상 확장은 계약 개정이다.
-- identity 미확인 고착 LIVE 4건(마지막 positive 35–157시간 전, `identity_missing`·`MEMBERS_ONLY`): 활성 3채널을 Stale로
-  만들고, 방송 중인 멤버가 없으면 전체 `!라이브`가 "현재 방송 상태를 확인할 수 없습니다."를 반환한다. 계약 v2 252·258행이
-  의도한 동작이고 검토 영수증은 UPCOMING 전용이라 지금은 기록할 수 없다. LIVE 영수증 확장 또는 LiveQuery 판정 개정
-  중 하나를 사용자가 결정해야 한다.
+- 비공개·삭제 영상의 LIVE 세션 종료: v7.2.7은 LiveQuery 판정만 개정했고 세션은 LIVE로 남는다. 끝내려면 채널 스냅샷이
+  LIVE/UPCOMING scope를 증명하도록 collector의 `query` 계약을 개정하거나(fleet 배포), LIVE용 검토 영수증을 추가해야 한다.
 - `identity_missing` 영상의 조용한 기간에 비례한 영상 확인 backoff: 계약 v2의 2분 cadence·freshness 공식 개정이 필요하다.
 - collector 1초 주기 후보 탐색과 항상 충돌하는 lease INSERT: v7.2.5 뒤 앱 DB CPU의 37%(절대량 약 0.02코어)다. 후보
   질의 buffer의 84%가 468행 `youtube_collection_job_leases`의 흩어진 heap(107페이지) seq scan이다. runner별 next-due 힌트는
