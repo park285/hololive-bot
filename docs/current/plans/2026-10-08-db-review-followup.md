@@ -168,6 +168,24 @@ v7.2.5 배포 뒤 23:02–23:32 UTC 구간 재측정에서 네 개선이 모두 
 - migration 279는 검토 영수증의 의미 사실을 기록 시 저장하고 판정 함수가 저장값과 비교한다. `live_check_videos.sql`
   27.3 ms 중 24.5 ms가 영수증 쪽 재계산이었고, 시험 DB(영수증 53건)에서 중앙값 24.5→4.0 ms, 판정 53/53 동일이었다.
 
+### v7.2.6 게시와 운영 배포 기록
+
+- 통합 브랜치 `e9f01bd26`에서 `./build-all.sh --build-only --no-bump`(11분 2초)와 pre-push 게이트를 통과했고, PR #592의
+  CI 11개 항목이 모두 통과했다. squash 병합 커밋은 `67d4ab9d92c89b39d6368f0bff3f7251ae212558`이다.
+- 병합 커밋의 clean worktree에서 arm64 `hololive-api` 7.2.6
+  `sha256:ccacfc0303d7627bb458cf3196c4265d6a10ad4da217704fc58726fd7697d34a`를 빌드해 `hololive-seoul`에 적재하고 ID·arch·
+  revision을 다시 확인한 뒤 `:prod`로 승격했다. alarm-worker(6.1.2)와 collector는 바꾸지 않았다.
+- 롤백 기준점(change_started_at 2026-10-08T02:38:56Z): `hololive-api:rollback-20261008T023856Z`(`ebe304527297`, 7.2.5)와
+  배포 트리 사본 `/opt/hololive-bot/compose/deploy-backups/pre-v7.2.6-20261008T023856Z/`. 279는 추가형이고 판정 함수
+  시그니처가 같아 앱만 7.2.5로 되돌릴 수 있다.
+- `hololive-db-migrate`는 02:39:08–02:39:11 UTC에 `applied=1 skipped=139 total=140`으로 끝났고, `hololive-api`는 02:39:22에
+  재생성되어 health gate를 통과했다(재시작 0, 이후 10분 ERROR·WARN 0).
+- DB 확인: ledger 140(마지막 279), `youtube_live_review_receipt_facts` 53행 = 영수증 53건, 면제 영상 53개로 배포 전과 같다.
+  runtime은 새 표 SELECT만 가능하고 INSERT 불가, scraper는 조회 불가다.
+- 효과(배포 뒤 10분 구간 02:39:46–02:50:01 UTC, 읽기 전용): pending upsert 호출 25.1→3.8회/s(갱신 행 3.8/s와 같아져 값이
+  같은 no-op이 사라짐), pending `FOR UPDATE` 적재 평균 0.318→0.056 ms, `live_check_videos.sql` 평균 25.7→8.5 ms,
+  heads `FOR UPDATE` 3.3 ms 유지.
+
 ## 남은 후보 (이번 범위 밖)
 
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
