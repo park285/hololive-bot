@@ -298,6 +298,31 @@ v7.2.8 뒤에도 지난 일정의 UPCOMING 세션 가운데 `identity_missing` 8
 - **효과 추정:** 85+4건이 모두 24시간을 넘긴 상태이므로 하루 약 32,000회의 영상 확인이 약 2,100회로 줄고, 관측·payload·
   application 행도 같은 비율로 줄어든다. 시작 감지는 채널 스냅샷 positive가 맡으므로 알림 지연은 없다.
 
+### v7.2.9 게시와 운영 배포 기록
+
+- 작업 브랜치 `17cf709b4`에서 `./build-all.sh --build-only --no-bump`(LOCAL CI Passed, 이미지 빌드 완료)와 pre-push
+  게이트를 통과했고, PR #598의 CI 항목이 모두 통과했다. squash 병합 커밋은 `9bfa66740a7145ba74c51f0f188fed0d1651fe4c`다.
+- 병합 커밋의 clean worktree에서 arm64 `hololive-api` 7.2.9
+  `sha256:53d752776ed75df773bc6a2e3bc7981b2a806aa3bedee35707febf53761dbf7a`를 빌드해 `hololive-seoul`에 적재하고 ID·arch·
+  revision을 다시 확인한 뒤 `:prod`로 승격했다. DB migration은 없고(`applied=0 skipped=141`), alarm-worker(6.1.2)와
+  collector는 바꾸지 않았다.
+- 롤백 기준점(change_started_at 2026-10-08T09:23:51Z): `hololive-api:rollback-20261008T092351Z`(`3439e070a9fe`, 7.2.8)와
+  배포 트리 사본 `/opt/hololive-bot/compose/deploy-backups/pre-v7.2.9-20261008T092351Z/`. 되돌리면 `unresolvable_since`
+  열은 7.2.8 코드도 그대로 쓰며 UPCOMING target 주기만 2분으로 돌아온다.
+- `hololive-api`는 09:24:45 UTC에 재생성되어 약 5초 만에 health gate를 통과했다(재시작 0, 09:45까지 ERROR·WARN 0, 알림
+  outbox 0).
+- 효과(읽기 전용 집계): 배포 뒤 첫 영상 확인이 09:27–09:29 UTC에 UPCOMING 대상 35건 전부를 `UNRESOLVABLE_TRACKED`로
+  추적했고, 추적 10분 뒤인 09:35–09:38에 projection이 35건 모두의 target 주기를 2분에서 10분으로 바꿨다(LIVE 대상 8건은
+  2분 유지). 09:45 기준 lease도 10분 주기로 옮겨 가는 중이며(16건), 최근 10분 영상 확인은 분당 8.6회로 배포 전 약 20회에서
+  줄었다. 30분 주기는 추적 1시간 뒤(약 10:25), 1시간 주기는 24시간 뒤에 적용된다. `!라이브` 스냅샷은 roster 74채널 모두
+  projection·collected 정상, covered 69·incomplete 5(방송 중)·stale 0이다.
+- 같은 날 GitHub Release [v7.2.9](https://github.com/park285/hololive-bot/releases/tag/v7.2.9)를 annotated tag
+  `v7.2.9`(= `9bfa66740`)와 직전 게시 릴리즈 `v7.2.1` 기준의 GitHub 생성 노트(PR #561–#598)로 게시했다. v7.2.2~7.2.8은
+  중간 태그 없이 이 릴리즈 노트에 포함된다.
+- 서울 호스트의 롤백 자료는 최신 기준점만 남겼다: 이미지 태그 `prod`, `prod-arm64-9bfa6674`, `rollback-20261008T092351Z`와
+  배포 트리 사본 `pre-v7.2.8-*`, `pre-v7.2.9-*`. 10-07~10-08의 rollback 태그 4개, prod-arm64 태그 4개, 배포 사본 3개는
+  삭제했다(모두 커밋 SHA로 재빌드 가능).
+
 ## 남은 후보 (이번 범위 밖)
 
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
