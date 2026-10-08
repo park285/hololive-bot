@@ -243,7 +243,7 @@ const (
 - `/navigation/resolve_url`의 정상 `endpoint`가 `WEB_PAGE_TYPE_CHANNEL`이며 `browseEndpoint.browseId`가 요청 채널과 같을 때만 CHANNEL_PAGE다. watch endpoint는 player의 영상·채널 identity를 확인한다. `isUpcoming=true`, `isLiveNow=false`, LIVE가 아님, 유효한 시작 예정 시각과 `LIVE_STREAM_OFFLINE`/offline slate의 대기 상태가 확인될 때만 UPCOMING_VIDEO다. LIVE 사실이면 LIVE_VIDEO, 그 외는 UNKNOWN이다. 음성은 CHANNEL_PAGE와 UPCOMING_VIDEO뿐이다. LIVE_VIDEO 자체를 reducer로 보내지 않는다.
 - player의 `isLive=true` 또는 `isLiveNow=true`는 현재 LIVE 사실이다. 둘이 명시적으로 반대이거나, LIVE와 upcoming/종료 시각이 공존하거나, 종료가 시작보다 이르거나 관측 시각보다 미래면 UNKNOWN이다. `isLive` 생략과 `isLiveNow=false`, 유효한 `endTimestamp`는 종료 근거다. `isLiveContent=false`와 liveBroadcastDetails의 공존은 최초공개이며 일반 업로드로 버리지 않는다.
 - `UNPLAYABLE`은 LIVE·종료 모두에서 관측되므로 상태 코드로 수명/가용성을 정하지 않는다. 정확한 identity와 구조화된 `playerLegacyDesktopYpcOfferRenderer`는 MEMBERS_ONLY다. 이 renderer와 LOGIN_REQUIRED/ERROR 제한이 없고 원시 `isPrivate=false`가 확인되면 PUBLIC이다. 정확한 identity와 원시 boolean `isPrivate=true`가 확인된 경우만 PUBLIC_UNAVAILABLE(`player_private`)를 수용한다. 이는 pinned parser의 `!!isPrivate`가 아니라 원시 필드 검사다. 2026-10-08 운영 실측에서 익명 응답은 비공개·삭제 영상에 `videoDetails`와 `isPrivate`를 주지 않아 `identity_missing` UNKNOWN만 남겼으므로 익명 수집은 이 분류에 도달하지 않는다. 필드가 없는 비공개·삭제 응답을 이 분류로 승격하지 않는다.
-- `LOGIN_REQUIRED`, `ERROR`, `messages`, 일반 error renderer와 번역된 reason 문자열만으로 PUBLIC_UNAVAILABLE을 만들지 않는다. 로봇 확인·identity 부재·미지 구조는 UNKNOWN이다. PUBLIC_UNAVAILABLE은 LIVE로 승격하거나 ENDED로 바꾸는 근거가 아니다. 확인된 현재 LIVE 또는 identity가 맞고 유효한 ended_at만 기존 positive/명시적 종료 경로로 들어간다. 가용성 필드만 없는 `availability_unclassified`는 이미 확인된 수명 사실을 버리지 않으며, 그 밖의 UNKNOWN 사유는 수명 전이를 허용하지 않는다.
+- `LOGIN_REQUIRED`, `ERROR`, `messages`, 일반 error renderer와 번역된 reason 문자열만으로 PUBLIC_UNAVAILABLE을 만들지 않는다. 로봇 확인·identity 부재·미지 구조는 UNKNOWN이다. PUBLIC_UNAVAILABLE은 LIVE로 승격하거나 ENDED로 바꾸는 근거가 아니다. 확인된 현재 LIVE 또는 identity가 맞고 유효한 ended_at만 기존 positive/명시적 종료 경로로 들어간다. 가용성 필드만 없는 `availability_unclassified`는 이미 확인된 수명 사실을 버리지 않으며, 그 밖의 UNKNOWN 사유는 수명 전이를 허용하지 않는다. 유일한 예외는 해소 불가 영상 종료(2026-10-08 개정, v7.2.8)다. 시작을 관측한 LIVE 세션(`LastLivePositiveAt` 존재)의 영상 확인이 `identity_missing`이면 head의 `unresolvable_since`에 첫 관측 시각(EffectiveAt)을 두고(`UNRESOLVABLE_TRACKED`), 그 뒤 ① 첫 관측부터 `YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS`(기본 600초, 0–24h) 이상 `identity_missing`이 이어지고 ② 같은 채널의 `youtube_channel_live_checks` 최신값이 identity 확인된 `CHANNEL_PAGE`·`UPCOMING_VIDEO`이며 effective_at이 마지막 LIVE positive 이후이고 영상 확인 예정 시각 ±5분 안이며 ③ 관측 시각 이후의 positive가 없고 마지막 LIVE positive의 seen_at + 종료 grace가 지났을 때만 `UNRESOLVABLE_VIDEO`로 끝낸다. ended_at은 첫 `identity_missing` 관측 시각(실제 종료의 하한)이고 started_at·positive clock은 유지하며 알림·pending·absence slot을 만들지 않는다. positive는 `unresolvable_since`를 지운다. `identity_mismatch`·`request_failed` 등 다른 UNKNOWN 사유와 UPCOMING 세션은 대상이 아니며(비공개 예약이 공개로 돌아오면 시작 알림이 필요하다), 채널 확인 최신값은 consumer가 읽기만 하고 reducer로 보내지 않는다. 근거: 비공개·삭제 전환 영상은 익명 player에 `videoDetails`가 없어 `identity_missing`만 남기고, 로봇 확인은 채널 `/live`를 함께 막아 음성을 만들지 못하므로 두 신호의 동시 성립은 그 채널이 지금 공개 방송 중이 아니라는 독립 증거다.
 
 #### canonical·query·retention 경계
 
@@ -255,7 +255,7 @@ const (
 - 새 두 kind의 evidence retention 기본값은 각각 7일이다. `YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS`, `YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS`로 기존 positive-age/승인 검증을 적용한다. 74채널·2분이면 채널 관측은 하루 53,280건, 7일 372,960건이다. 운영 저장 비용은 payload/index를 포함해 릴리스 때 확인한다. canonical 최신값은 evidence 삭제와 별개다.
 - migration은 contract/target/consumer-offset kind CHECK, 두 generation 행, canonical 테이블·FK 인덱스·runtime 최소 DML grant를 추가한다. scraper에는 canonical 권한을 주지 않는다. API의 supported set·claim kinds·retention을 먼저 준비하고 migration/API → collector fleet 순으로 전환한다. 기존 live_snapshot 세대와 decoder는 바꾸지 않는다. migration 211의 LIVE coverage 부분 인덱스는 LiveQuery 전환 및 다른 소비자 부재 확인 뒤 별도 CONCURRENTLY drop migration으로 제거한다.
 
-검증 표본과 해석 한계는 `docs/review/live-absence-evidence-20260926.md`에 기록한다. 공개 불가 판정이 불가능한 private/deleted stale LIVE는 수명 상태가 UNKNOWN으로 남아 종료되지 않지만, 신선한 `identity_missing`과 채널 음성이 갖춰지면 LiveQuery는 빈 결과를 확정한다. 채널별 youtubejs 스냅샷은 `ENDED`까지 scope에 넣어 첫 페이지에 continuation이 남으면 PARTIAL이므로 대부분 채널에서 이런 세션은 부재 종료로도 끝나지 않으며, 영상 확인은 2분 cadence로 계속된다. 실제 배포·migration 적용·fleet 반영·운영 비교 관측은 별도 승인 사항이다.
+검증 표본과 해석 한계는 `docs/review/live-absence-evidence-20260926.md`에 기록한다. 공개 불가 판정이 불가능한 private/deleted LIVE는 신선한 `identity_missing`과 채널 음성이 갖춰지면 LiveQuery가 먼저 빈 결과를 확정하고(v7.2.7), 같은 두 신호가 해소 불가 grace 동안 이어지면 `UNRESOLVABLE_VIDEO`로 끝나 영상 확인 대상에서 빠진다(v7.2.8). 채널별 youtubejs 스냅샷은 `ENDED`까지 scope에 넣어 첫 페이지에 continuation이 남으면 PARTIAL이므로 대부분 채널에서 이런 세션은 부재 종료로는 끝나지 않는다. 시작을 관측하지 못한 UPCOMING의 `identity_missing`은 계속 2분 cadence로 확인한다. 실제 배포·migration 적용·fleet 반영·운영 비교 관측은 별도 승인 사항이다.
 
 ## 4. Observation envelope v2
 
@@ -1197,11 +1197,15 @@ CREATE TABLE youtube_live_reconciliation_heads (
         REFERENCES source_observations(id) ON DELETE RESTRICT,
     next_end_check_at TIMESTAMPTZ,
     ended_at TIMESTAMPTZ,
+    -- 280: UNRESOLVABLE_VIDEO 추가, 제약명 chk_youtube_live_reconciliation_heads_end_reason_vocab
     end_reason TEXT CHECK (end_reason IN (
         'EXPLICIT_END',
         'CANCELLED_BEFORE_LIVE',
-        'SCOPED_ABSENCE'
+        'SCOPED_ABSENCE',
+        'UNRESOLVABLE_VIDEO'
     )),
+    -- 280: 마지막 LIVE positive 이후 identity_missing이 이어진 첫 관측 시각. positive가 지운다.
+    unresolvable_since TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_youtube_live_head_candidate_shape CHECK (
         (end_candidate_kind IS NULL

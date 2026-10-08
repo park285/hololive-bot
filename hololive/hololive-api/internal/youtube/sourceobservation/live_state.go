@@ -243,7 +243,7 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, error) {
 		&session.Clock.ConsecutiveAbsenceSlots, &candidate, &candidateID,
 		&session.Clock.NextEndCheckAt, &session.Clock.EndedAt, &endReason,
 		&session.FirstAbsenceScheduledFor, &session.SecondAbsenceScheduledFor,
-		&session.LastAbsenceObservationID, &ignored,
+		&session.LastAbsenceObservationID, &session.Clock.UnresolvableSince, &ignored,
 	); err != nil {
 		return live.SessionState{}, fmt.Errorf("scan live head: %w", err)
 	}

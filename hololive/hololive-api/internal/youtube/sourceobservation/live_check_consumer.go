@@ -116,7 +116,11 @@ func (c *Consumer) reconcileVideoLiveCheck(
 		return ReconcileResult{Applications: applications}, nil
 	}
 
-	fact, skipped := videoLifecycleFact(claimed, &payload, &session, claimed.ReceivedAt, c.liveGrace)
+	fact, skipped, err := c.videoLifecycleOrUnresolvableFact(ctx, tx, claimed, &payload, &session)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+
 	if pending, exists := state.PendingEnds[payload.VideoID]; skipped == "" && exists && pending.EffectiveAt.After(claimed.EffectiveAt) {
 		// 오래된 영상 확인이 더 새롭고 종료 시각 없는 pending을 정산해 슬롯 시각으로 끝내게 하지 않는다.
 		skipped = videoLifecycleNewerEndRetained
@@ -191,7 +195,7 @@ func videoLifecycleFact(
 	dbNow time.Time,
 	grace time.Duration,
 ) (live.SessionFact, string) {
-	newLifecycle := observation.ContractGeneration == contract.VideoLifecycleContractGeneration && observation.SchemaVersion == contract.VideoLifecycleSchemaVersion
+	newLifecycle := videoLifecycleGeneration(observation)
 	if reason := videoLifecycleGate(payload, session, newLifecycle); reason != "" {
 		return live.SessionFact{}, reason
 	}
@@ -250,6 +254,76 @@ func videoLifecycleFact(
 		EndedAt:          &endedAt,
 		VerifiedTerminal: verifiedTerminal,
 	}, ""
+}
+
+func videoLifecycleGeneration(observation *Observation) bool {
+	return observation.ContractGeneration == contract.VideoLifecycleContractGeneration && observation.SchemaVersion == contract.VideoLifecycleSchemaVersion
+}
+
+// videoLifecycleOrUnresolvableFact는 기존 수명 사실을 먼저 구하고, identity를 확인할 수 없어 건너뛴 확인이
+// 해소 불가 추적 대상이면 해소 불가 사실로 대신한다. 다른 건너뛰기 사유는 그대로 돌려준다.
+func (c *Consumer) videoLifecycleOrUnresolvableFact(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed *Observation,
+	payload *contract.VideoLiveCheckV1,
+	session *live.SessionState,
+) (live.SessionFact, string, error) {
+	fact, skipped := videoLifecycleFact(claimed, payload, session, claimed.ReceivedAt, c.liveGrace)
+	if skipped != videoLifecycleIdentityUnverified || !unresolvableVideoCandidate(claimed, payload, session) {
+		return fact, skipped, nil
+	}
+
+	fact, err := c.unresolvableVideoFact(ctx, tx, claimed, payload, session)
+	if err != nil {
+		return live.SessionFact{}, "", fmt.Errorf("unresolvable video fact: %w", err)
+	}
+
+	return fact, "", nil
+}
+
+// unresolvableVideoCandidate는 시작을 관측한 LIVE 세션의 identity_missing 확인만 해소 불가 추적에 들인다.
+// 비공개·삭제 전환 영상은 익명 player에 videoDetails가 없어 다른 UNKNOWN 사유와 달리 identity_missing만 남긴다.
+// 그 밖의 identity_mismatch·request_failed 등은 수명을 바꾸지 않는 기존 IDENTITY_UNCONFIRMED로 남는다.
+func unresolvableVideoCandidate(observation *Observation, payload *contract.VideoLiveCheckV1, session *live.SessionState) bool {
+	return videoLifecycleGeneration(observation) && !payload.IdentityConfirmed &&
+		payload.UnknownReason == contract.LiveCheckReasonIdentityMissing &&
+		session.Status == domain.LiveStatusLive && session.Clock.LastLivePositiveAt != nil
+}
+
+// unresolvableVideoFact는 identity_missing 확인을 reducer의 해소 불가 사실로 바꾼다. 첫 추적 뒤 설정된 지속 시간이
+// 지났고 같은 채널의 /live 확인이 마지막 positive 이후의 신선한 identity 확인 음성이면 종료를 검증한다(VerifiedTerminal).
+// 채널 확인 최신값은 읽기만 하며 reducer로 보내지 않는다. 로봇 확인이 player를 막아도 방송 중인 채널의 /live는
+// 방송으로 이동해 음성이 나오지 않으므로, 음성은 그 채널이 지금 공개 방송 중이 아니라는 독립 증거다.
+func (c *Consumer) unresolvableVideoFact(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed *Observation,
+	payload *contract.VideoLiveCheckV1,
+	session *live.SessionState,
+) (live.SessionFact, error) {
+	fact := live.SessionFact{VideoID: payload.VideoID, ChannelID: session.ChannelID, Status: live.StatusUnresolvable}
+
+	since := session.Clock.UnresolvableSince
+	if since == nil || claimed.EffectiveAt.Before(since.Add(c.unresolvableGrace)) {
+		return fact, nil
+	}
+
+	var negativeAt time.Time
+
+	err := tx.QueryRow(ctx, mustSQL("repository_channel_live_negative.sql"),
+		session.ChannelID, *session.Clock.LastLivePositiveAt, claimed.EffectiveAt).Scan(&negativeAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fact, nil
+	}
+
+	if err != nil {
+		return live.SessionFact{}, fmt.Errorf("load channel live negative: %w", err)
+	}
+
+	fact.VerifiedTerminal = true
+
+	return fact, nil
 }
 
 func positiveAtOrAfter(session *live.SessionState, at time.Time) bool {

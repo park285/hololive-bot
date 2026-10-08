@@ -1265,11 +1265,12 @@ TABLE youtube_live_reconciliation_heads
   COLUMN second_absence_scheduled_for timestamp with time zone
   COLUMN last_absence_observation_id bigint NOT NULL DEFAULT 0
   COLUMN ignored_absence_scheduled_for timestamp with time zone[] NOT NULL DEFAULT '{}'::timestamp with time zone[]
+  COLUMN unresolvable_since timestamp with time zone
   CONSTRAINT chk_youtube_live_head_candidate_shape CHECK ((((end_candidate_kind IS NULL) AND (end_candidate_observation_id IS NULL) AND (next_end_check_at IS NULL)) OR ((end_candidate_kind IS NOT NULL) AND (end_candidate_observation_id IS NOT NULL) AND (next_end_check_at IS NOT NULL))))
   CONSTRAINT chk_youtube_live_head_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
+  CONSTRAINT chk_youtube_live_reconciliation_heads_end_reason_vocab CHECK ((end_reason = ANY (ARRAY['EXPLICIT_END'::text, 'CANCELLED_BEFORE_LIVE'::text, 'SCOPED_ABSENCE'::text, 'UNRESOLVABLE_VIDEO'::text])))
   CONSTRAINT youtube_live_reconciliation_hea_consecutive_absence_slots_check CHECK (((consecutive_absence_slots >= 0) AND (consecutive_absence_slots <= 32767)))
   CONSTRAINT youtube_live_reconciliation_heads_end_candidate_kind_check CHECK ((end_candidate_kind = ANY (ARRAY['EXPLICIT_END'::text, 'EXPLICIT_CANCEL'::text, 'SCOPED_ABSENCE'::text])))
-  CONSTRAINT youtube_live_reconciliation_heads_end_reason_check CHECK ((end_reason = ANY (ARRAY['EXPLICIT_END'::text, 'CANCELLED_BEFORE_LIVE'::text, 'SCOPED_ABSENCE'::text])))
   CONSTRAINT youtube_live_reconciliation_heads_status_check CHECK ((status = ANY (ARRAY['UPCOMING'::text, 'LIVE'::text, 'ENDED'::text])))
   CONSTRAINT fk_youtube_live_head_pending_end FOREIGN KEY (video_id, end_candidate_observation_id) REFERENCES youtube_live_pending_ends(video_id, observation_id) DEFERRABLE INITIALLY DEFERRED
   CONSTRAINT youtube_live_reconciliation_heads_pkey PRIMARY KEY (video_id)

@@ -13,6 +13,11 @@ func TestDefaultYouTubePlaneConfigValidates(t *testing.T) {
 	t.Parallel()
 
 	cfg := DefaultYouTubePlaneConfig()
+
+	if cfg.LiveUnresolvableGrace != 10*time.Minute {
+		t.Fatalf("default live unresolvable grace = %s", cfg.LiveUnresolvableGrace)
+	}
+
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("default youtube plane config: %v", err)
 	}
@@ -502,6 +507,39 @@ func TestLoadYouTubePlaneConfigLiveEndGraceOverride(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("overridden live end grace: %v", err)
+	}
+}
+
+func TestLoadYouTubePlaneConfigLiveUnresolvableGraceOverride(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS", "300")
+
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+
+	if cfg.LiveUnresolvableGrace != 300*time.Second {
+		t.Fatalf("LiveUnresolvableGrace = %s, want 300s", cfg.LiveUnresolvableGrace)
+	}
+
+	applySourceObservationWorkerProfile(&cfg, mustLoadAPIWorkerProfile(t))
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("overridden live unresolvable grace: %v", err)
+	}
+}
+
+func TestYouTubePlaneConfigRejectsInvalidLiveUnresolvableGrace(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultYouTubePlaneConfig()
+
+	cfg.LiveUnresolvableGrace = 25 * time.Hour
+
+	err := cfg.Validate()
+
+	if err == nil || !strings.Contains(err.Error(), "live unresolvable grace") {
+		t.Fatalf("Validate() = %v", err)
 	}
 }
 
