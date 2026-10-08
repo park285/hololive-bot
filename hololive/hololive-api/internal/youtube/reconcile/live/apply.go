@@ -202,21 +202,24 @@ func setEndCandidate(existing *SessionState, pending *PendingEnd, grace time.Dur
 }
 
 func endSession(existing *SessionState, pending *PendingEnd, dbNow time.Time) {
-	existing.Status = domain.LiveStatusEnded
-	existing.LifecycleOrigin = OriginObserved
-	existing.StatusObservedAt = copyTime(pending.EffectiveAt)
-
+	endedAt := pending.EffectiveAt
 	if pending.EndedAt != nil {
-		existing.EndedAt = copyOptionalTime(pending.EndedAt)
-	} else {
-		existing.EndedAt = copyTime(pending.EffectiveAt)
+		endedAt = *pending.EndedAt
 	}
 
-	reason := endReasonOf(pending.Kind)
+	terminateSession(existing, endedAt, pending.EffectiveAt, endReasonOf(pending.Kind), dbNow)
+}
 
+// terminateSession은 모든 종료 경로가 공유하는 ENDED 전이다. 종료 근거의 관측 시각(effectiveAt)과
+// 실제 종료 시각(endedAt)을 구분해 저장한다.
+func terminateSession(existing *SessionState, endedAt, effectiveAt time.Time, reason EndReason, dbNow time.Time) {
+	existing.Status = domain.LiveStatusEnded
+	existing.LifecycleOrigin = OriginObserved
+	existing.StatusObservedAt = copyTime(effectiveAt)
+	existing.EndedAt = copyTime(endedAt)
 	existing.EndReason = &reason
 	existing.Clock.EndedAt = existing.EndedAt
-	existing.Clock.LastEndEvidenceAt = copyTime(pending.EffectiveAt)
+	existing.Clock.LastEndEvidenceAt = copyTime(effectiveAt)
 	existing.Clock.EndCandidateKind = nil
 	existing.Clock.EndCandidateObservationID = nil
 	existing.Clock.NextEndCheckAt = nil

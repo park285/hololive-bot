@@ -8,6 +8,17 @@
 
 ## 미출시
 
+## v7.2.8 - 2026-10-08
+
+- 종료 전에 비공개·삭제로 바뀐 방송의 LIVE 세션이 영구히 LIVE로 남아 영상 확인을 계속 받던 문제를 끝냅니다. 시작을
+  관측한 LIVE 세션의 영상 확인이 `identity_missing`으로만 `YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS`(기본 600초)
+  이상 이어지고, 같은 채널의 신선한 `/live` identity 확인 음성이 있으며, 신선한 positive가 없으면 `UNRESOLVABLE_VIDEO`
+  사유로 종료합니다. 종료 시각은 첫 `identity_missing` 관측 시각이며 시작 시각·알림은 바꾸지 않습니다. UPCOMING 세션과
+  `identity_mismatch` 등 다른 UNKNOWN 사유는 대상이 아닙니다.
+- migration 280은 `youtube_live_reconciliation_heads`에 `unresolvable_since` 열을 더하고 `end_reason` 어휘 CHECK에
+  `UNRESOLVABLE_VIDEO`를 추가합니다(`chk_youtube_live_reconciliation_heads_end_reason_vocab`로 개명).
+- `hololive-api` 7.2.8과 migration 280을 릴리스하며 `hololive-alarm-worker`와 collector는 바뀌지 않습니다.
+
 ## v7.2.7 - 2026-10-08
 
 - `!라이브`가 방송 중인 멤버가 없을 때 "현재 방송 상태를 확인할 수 없습니다."로만 답하던 원인 두 가지를 고쳤습니다.

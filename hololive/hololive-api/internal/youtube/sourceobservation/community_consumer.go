@@ -19,11 +19,12 @@ type ChannelPolicy struct {
 }
 
 type Consumer struct {
-	repo      observationClaimFinalizer
-	writer    canonicalWriter
-	grace     time.Duration
-	liveGrace time.Duration
-	channel   ChannelPolicy
+	repo              observationClaimFinalizer
+	writer            canonicalWriter
+	grace             time.Duration
+	liveGrace         time.Duration
+	unresolvableGrace time.Duration
+	channel           ChannelPolicy
 }
 
 func NewConsumer(repo observationClaimFinalizer) *Consumer {
@@ -41,6 +42,18 @@ func NewConsumerWithGraces(repo observationClaimFinalizer, grace, liveGrace time
 		grace:     grace,
 		liveGrace: liveGrace,
 	}
+}
+
+// WithLiveUnresolvableGrace는 LIVE 영상의 identity_missing이 이어져야 하는 최소 지속 시간이다.
+// 첫 identity_missing 관측 뒤 이 시간이 지나고 채널 /live 음성이 신선할 때만 UNRESOLVABLE_VIDEO로 끝낸다.
+func (c *Consumer) WithLiveUnresolvableGrace(grace time.Duration) *Consumer {
+	if c == nil {
+		return nil
+	}
+
+	c.unresolvableGrace = grace
+
+	return c
 }
 
 func (c *Consumer) WithChannelPolicy(policy ChannelPolicy) *Consumer {

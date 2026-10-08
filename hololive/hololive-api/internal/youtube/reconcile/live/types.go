@@ -31,7 +31,12 @@ const (
 	EndReasonExplicitEnd         EndReason = "EXPLICIT_END"
 	EndReasonCancelledBeforeLive EndReason = "CANCELLED_BEFORE_LIVE" //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
 	EndReasonScopedAbsence       EndReason = "SCOPED_ABSENCE"
+	EndReasonUnresolvableVideo   EndReason = "UNRESOLVABLE_VIDEO"
 )
+
+// StatusUnresolvable은 익명 영상 확인이 identity를 확인할 수 없게 된 LIVE 영상의 사실이다.
+// 비공개·삭제 전환 영상은 identity_missing만 남겨 명시적 종료도 부재 종료도 받을 수 없다.
+const StatusUnresolvable = "UNRESOLVABLE"
 
 type LiveEvidenceClock struct {
 	LastUpcomingPositiveAt     *time.Time
@@ -45,6 +50,9 @@ type LiveEvidenceClock struct {
 	EndCandidateObservationID  *int64
 	NextEndCheckAt             *time.Time
 	EndedAt                    *time.Time
+	// UnresolvableSince는 마지막 LIVE positive 이후 영상 확인이 identity_missing으로만 이어진 첫 관측 시각이다.
+	// positive가 지우며 UNRESOLVABLE_VIDEO 종료의 ended_at 하한이다.
+	UnresolvableSince *time.Time
 }
 
 type EndEvidence struct {
@@ -257,6 +265,7 @@ func (s *SessionState) clone() SessionState {
 	cloned.Clock.LastCompleteAbsenceAt = copyOptionalTime(s.Clock.LastCompleteAbsenceAt)
 	cloned.Clock.NextEndCheckAt = copyOptionalTime(s.Clock.NextEndCheckAt)
 	cloned.Clock.EndedAt = copyOptionalTime(s.Clock.EndedAt)
+	cloned.Clock.UnresolvableSince = copyOptionalTime(s.Clock.UnresolvableSince)
 	cloned.FirstAbsenceScheduledFor = copyOptionalTime(s.FirstAbsenceScheduledFor)
 	cloned.SecondAbsenceScheduledFor = copyOptionalTime(s.SecondAbsenceScheduledFor)
 	cloned.LastAbsenceScheduledFor = copyOptionalTime(s.LastAbsenceScheduledFor)

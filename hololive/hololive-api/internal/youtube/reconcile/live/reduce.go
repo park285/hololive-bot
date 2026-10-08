@@ -102,6 +102,15 @@ func applySessionFact(session *reduceSession, fact *SessionFact) {
 		return
 	}
 
+	if fact.Status == StatusUnresolvable {
+		// 해소 불가 사실은 영상 확인만 만든다. snapshot 종류는 부재로 처리하지 않는다.
+		if session.evidence.Kind == contract.KindVideoLiveCheck {
+			applyUnresolvableVideo(session, fact)
+		}
+
+		return
+	}
+
 	applyNegativeFact(session, fact)
 }
 

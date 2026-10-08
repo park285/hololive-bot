@@ -200,6 +200,7 @@ func newRuntime(
 		closePool: cleanup,
 		claimer:   repo,
 		consumer: sourceobservation.NewConsumerWithGraces(repo, plane.ContentAbsenceGrace, plane.LiveEndGrace).
+			WithLiveUnresolvableGrace(plane.LiveUnresolvableGrace).
 			WithChannelPolicy(sourceobservation.ChannelPolicy{
 				ProfileClearMinObservations: plane.ProfileClearMinObservations,
 				ProfileClearStability:       plane.ProfileClearStability,

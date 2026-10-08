@@ -76,6 +76,8 @@ type YouTubePlaneConfig struct {
 	LiveEndFinalizer    YouTubePlaneLiveEndFinalizerConfig
 	ContentAbsenceGrace time.Duration
 	LiveEndGrace        time.Duration
+	// LiveUnresolvableGrace는 LIVE 영상의 identity_missing이 UNRESOLVABLE_VIDEO 종료 전에 이어져야 하는 최소 지속 시간이다.
+	LiveUnresolvableGrace time.Duration
 
 	ProfileClearMinObservations int
 	ProfileClearStability       time.Duration
@@ -105,7 +107,8 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 			Enabled:  true,
 			Interval: time.Minute,
 		},
-		LiveEndGrace: 2 * time.Minute,
+		LiveEndGrace:          2 * time.Minute,
+		LiveUnresolvableGrace: 10 * time.Minute,
 	}
 }
 
@@ -144,6 +147,10 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 
 	if err := loadLiveEndGrace(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, fmt.Errorf("load live end grace: %w", err)
+	}
+
+	if err := loadLiveUnresolvableGrace(&config, &defaults); err != nil {
+		return YouTubePlaneConfig{}, fmt.Errorf("load live unresolvable grace: %w", err)
 	}
 
 	if err := loadProfilePhotoStability(&config, &defaults); err != nil {
@@ -196,6 +203,17 @@ func loadContentAbsenceGrace(config, defaults *YouTubePlaneConfig) error {
 	}
 
 	config.ContentAbsenceGrace = value
+
+	return nil
+}
+
+func loadLiveUnresolvableGrace(config, defaults *YouTubePlaneConfig) error {
+	value, err := envload.StrictDurationUnitEnv("YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS", defaults.LiveUnresolvableGrace, time.Second)
+	if err != nil {
+		return fmt.Errorf("strict duration unit env: %w", err)
+	}
+
+	config.LiveUnresolvableGrace = value
 
 	return nil
 }

@@ -39,10 +39,8 @@ func applyVerifiedVideoEnd(session *reduceSession, fact *SessionFact) {
 		return
 	}
 
-	for _, positive := range []*time.Time{existing.Clock.LastUpcomingPositiveAt, existing.Clock.LastLivePositiveAt} {
-		if positive != nil && !positive.Before(session.evidence.EffectiveAt) {
-			return
-		}
+	if anyPositiveAtOrAfter(&existing.Clock, session.evidence.EffectiveAt) {
+		return
 	}
 
 	if TerminalEndBlockedByPositive(&existing.Clock, *fact.EndedAt, session.dbNow, session.grace) {

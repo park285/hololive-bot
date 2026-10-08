@@ -203,12 +203,13 @@ var untrustedVideoCheckCases = []struct {
 		decision: videoLifecycleIdentityMismatch,
 	},
 	{
+		// 시작을 관측한 LIVE의 identity_missing은 수명을 바꾸지 않고 해소 불가 추적만 시작한다.
 		name: "identity missing",
 		payload: func(*contract.LeaseProof) contract.VideoLiveCheckV1 {
 			return unknownVideoCheck(contract.LiveCheckReasonIdentityMissing)
 		},
 		availability: contract.VideoAvailabilityUnknown, reason: contract.LiveCheckReasonIdentityMissing,
-		decision: videoLifecycleIdentityUnverified,
+		decision: "UNRESOLVABLE_TRACKED",
 	},
 	{
 		name: "private live fact alone",

@@ -136,6 +136,7 @@ func liveHeadStatement(session *live.SessionState) dbx.Statement {
 			kind, observationID, nextCheck, session.Clock.EndedAt, reason,
 			session.FirstAbsenceScheduledFor, session.SecondAbsenceScheduledFor,
 			session.LastAbsenceObservationID, ignoredAbsenceArg(&session.IgnoredAbsences),
+			session.Clock.UnresolvableSince,
 		},
 	}
 }

@@ -239,15 +239,36 @@ UPCOMING 85건이 `identity_missing`). 채널 스냅샷 scope와 검토 영수�
   incomplete 3채널은 모두 현재 방송 중이라 목록으로 표시되므로, 방송이 없으면 전체 `!라이브`가 빈 결과를 확정한다.
   이전에 stale이던 3채널의 멤버 지정 조회는 covered·0건이다.
 
+## v7.2.8: 비공개·삭제 영상 LIVE 세션의 해소 불가 종료
+
+v7.2.7은 `!라이브` 판정만 보호했고, 종료 전에 비공개·삭제로 바뀐 방송의 LIVE 세션 4건은 LIVE로 남아 영상 확인을
+약 4분 cadence로 영구히 받았다. 비공개 전환이 생길 때마다 같은 세션이 쌓이고 `!라이브` 보호가 폴링 유지에 의존하는
+구조라, 세션을 끝내는 종료 근거를 API 측에 추가했다. 2026-10-08 운영 확인 기준 roster 안 LIVE `identity_missing` 4건,
+채널 `/live` identity 확인 음성(5분 내) 113채널이었다.
+
+- **종료 근거(`UNRESOLVABLE_VIDEO`):** 시작을 관측한 LIVE 세션의 영상 확인이 `identity_missing`이면 head의
+  `unresolvable_since`에 첫 관측 시각을 둔다. 첫 관측부터 `YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS`(기본 600초)
+  이상 `identity_missing`이 이어지고, 같은 채널의 최신 `youtube_channel_live_checks`가 identity 확인된
+  `CHANNEL_PAGE`·`UPCOMING_VIDEO`이며 마지막 LIVE positive 이후·영상 확인 예정 시각 ±5분 안이고, 관측 이후 positive가
+  없으며 마지막 LIVE positive seen_at + 종료 grace가 지났을 때만 끝낸다. ended_at은 첫 `identity_missing` 시각(실제
+  종료의 하한), started_at·positive clock 유지, 알림·pending·absence slot 없음. positive는 추적을 지운다.
+- **대상 밖:** UPCOMING 세션(비공개 예약이 공개로 돌아오면 시작 알림이 필요하다), `identity_mismatch`·`request_failed`
+  등 다른 UNKNOWN 사유, 채널 확인을 reducer로 보내는 변경. 두 신호가 동시에 거짓 양성이 되려면 로봇 확인이 player를
+  막으면서 같은 채널의 `/live`는 음성을 내고 Holodex·채널 스냅샷 positive도 없어야 하는데, 방송 중인 채널의 `/live`는
+  방송으로 이동해 음성을 내지 않는다.
+- **구현:** migration 280(`unresolvable_since` 열, `end_reason` 어휘 CHECK 개명·확장, NOT VALID 뒤 VALIDATE), head
+  적재·저장 SQL 열 추가, `live.StatusUnresolvable` 사실과 `applyUnresolvableVideo` 전이, consumer의
+  `unresolvableVideoFact`(채널 음성 조회 `repository_channel_live_negative.sql`), 설정값·검증, 계약 v2·services 문서,
+  CHANGELOG, VERSION 7.2.8. v7.2.7의 LiveQuery `identity_missing` 제외는 종료 전 브리지로 유지한다.
+
 ## 남은 후보 (이번 범위 밖)
 
 - `video_live_check`의 `IDENTITY_UNCONFIRMED`: 24시간 17,349건(57개 영상, 대부분 예정 시각이 7일 넘게 지난 UPCOMING)이
   반복된다. backoff 상한과 검토 영수증 흐름과의 관계를 설계해야 한다.
 - head 없는 `legacy_unknown` LIVE 9건(126–136일): 운영 roster 밖 5채널이라 LiveQuery·알림·영상 확인 대상·지표 밖에
   있고 사용자 영향은 없다. 영상 확인 대상이 roster로 한정되어 종료를 증명할 기회가 없다. 대상 확장은 계약 개정이다.
-- 비공개·삭제 영상의 LIVE 세션 종료: v7.2.7은 LiveQuery 판정만 개정했고 세션은 LIVE로 남는다. 끝내려면 채널 스냅샷이
-  LIVE/UPCOMING scope를 증명하도록 collector의 `query` 계약을 개정하거나(fleet 배포), LIVE용 검토 영수증을 추가해야 한다.
-- `identity_missing` 영상의 조용한 기간에 비례한 영상 확인 backoff: 계약 v2의 2분 cadence·freshness 공식 개정이 필요하다.
+- 시작을 관측하지 못한 UPCOMING `identity_missing` 영상(2026-10-08 기준 85건)의 조용한 기간에 비례한 영상 확인
+  backoff: 계약 v2의 2분 cadence·freshness 공식 개정이 필요하다. v7.2.8의 해소 불가 종료는 LIVE 세션만 대상이다.
 - collector 1초 주기 후보 탐색과 항상 충돌하는 lease INSERT: v7.2.5 뒤 앱 DB CPU의 37%(절대량 약 0.02코어)다. 후보
   질의 buffer의 84%가 468행 `youtube_collection_job_leases`의 흩어진 heap(107페이지) seq scan이다. runner별 next-due 힌트는
   collector 계약·traffic 시험 개정과 AP 포함 4대 배포가 필요하고, UPDATE 우선 lease 획득은 다음 collector 릴리스에 묶는다.
