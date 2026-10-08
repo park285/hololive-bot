@@ -8,6 +8,10 @@
 
 ## 미출시
 
+- 중앙 collector paired cutover는 issuer 이미지가 있는데 기준 영수증(`po-current-c`)이 없으면, 백업·rollback 태그를 만들기
+  전에 원인을 출력하고 거절합니다. 이전에는 rollback 태그와 부분 백업을 남긴 뒤 메시지 없이 끝났습니다. 호스트 교체 때
+  영수증을 옮기는 규칙과 유실 시 검토 영수증으로 복원하는 절차를 collector runbook에 추가했습니다.
+
 ## v7.2.10 - 2026-10-08
 
 - v7.2.8·v7.2.9 검토 후속입니다. collector는 IDLE lease의 실효 due를 `LEAST(next_due_at, scheduled_for + 현재 target 주기)`로
