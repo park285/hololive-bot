@@ -321,6 +321,10 @@ func TestRepositoryAvailabilityEvidenceBoundaries(t *testing.T) {
 	}{
 		{name: "fresh unavailable excludes stale live", status: Complete, reason: Covered},
 		{name: "fresh positive wins", sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now(),last_live_positive_seen_at=now()`, status: Complete, reason: Covered, items: 1},
+		{name: "identity missing excludes stale live", sql: `UPDATE youtube_video_availability SET availability='UNKNOWN',method='unknown',unknown_reason='identity_missing',identity_confirmed=false`, status: Complete, reason: Covered},
+		{name: "expired identity missing blocks again", sql: `UPDATE youtube_video_availability SET availability='UNKNOWN',method='unknown',unknown_reason='identity_missing',identity_confirmed=false,
+ effective_at=now()-interval '6 minutes',scheduled_for=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},
+		{name: "identity mismatch cannot exclude", sql: `UPDATE youtube_video_availability SET availability='UNKNOWN',method='unknown',unknown_reason='identity_mismatch',identity_confirmed=false`, status: Unavailable, reason: Stale},
 		{name: "expired unavailable blocks again", sql: `UPDATE youtube_video_availability SET effective_at=now()-interval '6 minutes',scheduled_for=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},
 		{name: "failed recheck blocks again", sql: `UPDATE youtube_video_availability SET availability='UNKNOWN',method='unknown',unknown_reason='request_failed',identity_confirmed=false`, status: Unavailable, reason: Stale},
 		{name: "wrong channel cannot exclude", sql: `UPDATE youtube_video_availability SET channel_id='UC_other'`, status: Unavailable, reason: Stale},

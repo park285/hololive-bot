@@ -8,6 +8,17 @@
 
 ## 미출시
 
+## v7.2.7 - 2026-10-08
+
+- `!라이브`가 방송 중인 멤버가 없을 때 "현재 방송 상태를 확인할 수 없습니다."로만 답하던 원인 두 가지를 고쳤습니다.
+  종료 전에 비공개·삭제로 바뀐 방송은 익명 영상 확인에서 `identity_missing` UNKNOWN만 남겨 영구히 stale LIVE였으므로,
+  LiveQuery는 신선한 `identity_missing`을 기존 공개 불가 사실과 같은 시각 경계에서 stale LIVE 제외 근거로 씁니다. 다른
+  UNKNOWN 사유와 만료는 계속 차단하며 세션의 수명 상태는 바꾸지 않습니다.
+- 시작을 관측하지 못한 세션의 검증된 종료는 `ended_at` 이후의 positive가 grace(기본 2분) 안에서 관측된 동안만 미루고,
+  그 뒤에는 공급자 지연으로 보고 upstream 종료 시각으로 끝냅니다. 1초 송출 뒤 공급자가 잠시 UPCOMING을 유지한 영상이
+  `INVALID_END_TIMELINE`으로 영구히 남아 채널을 `confirming_end`로 막던 문제를 해소합니다. 시작·알림은 만들지 않습니다.
+- `hololive-api` 7.2.7만 릴리스하며 `hololive-alarm-worker`와 collector, DB migration은 바뀌지 않습니다.
+
 ## v7.2.6 - 2026-10-08
 
 - v7.2.5 배포 뒤 운영 재측정에서 남은 비용 두 가지를 줄였습니다. live 적재는 종료 후보가 없는 저장된 `ENDED` 세션의
