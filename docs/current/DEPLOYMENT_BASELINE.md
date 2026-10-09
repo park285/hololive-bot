@@ -43,6 +43,7 @@ schema migration은 실행하지 않았습니다. 새 호스트의 `hololive-com
 사용자의 추가 삭제 승인으로 `TERMINATED`를 확인했습니다. 이 서울 사본에서는 더 이상
 복구할 수 없습니다. Osaka 보존 디스크와 기존 별도 백업은 변경하지 않았으며 정기 백업은 재개하지 않았습니다.
 새 호스트의 Docker socket GID는 `987`이며 secret master와 운영 mirror의 비밀 아닌 값도 일치합니다.
+
 `<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, CLIProxy와 observability
 스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
 의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `HOLOLIVE_OTLP_GRPC_ENDPOINT`가

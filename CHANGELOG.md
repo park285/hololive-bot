@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- 테스트 전용 PostgreSQL을 tmpfs에서 실행하고 내구성 쓰기를 꺼 빌드 호스트의 디스크 쓰기를 줄였습니다.
+  운영 DB와 외부 테스트 DB의 설정은 유지하며, 임시 DB는 crash durability 검증 대상으로 사용하지 않습니다.
 - 중앙 collector paired cutover는 issuer 이미지가 있는데 기준 영수증(`po-current-c`)이 없으면, 백업·rollback 태그를 만들기
   전에 원인을 출력하고 거절합니다. 이전에는 rollback 태그와 부분 백업을 남긴 뒤 메시지 없이 끝났습니다. 호스트 교체 때
   영수증을 옮기는 규칙과 유실 시 검토 영수증으로 복원하는 절차를 collector runbook에 추가했습니다.
