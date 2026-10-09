@@ -67,7 +67,10 @@ provision_integration_test_database() {
         --env POSTGRES_PASSWORD="${postgres_password}" \
         --env POSTGRES_DB="${postgres_database}" \
         --env POSTGRES_INITDB_ARGS="--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8 --data-checksums" \
-        "${INTEGRATION_POSTGRES_IMAGE}")"
+        --tmpfs /var/lib/postgresql \
+        "${INTEGRATION_POSTGRES_IMAGE}" \
+        -c fsync=off -c synchronous_commit=off -c full_page_writes=off)"
+    # 테스트 DB는 보존할 데이터가 없으므로 데이터 디렉터리를 tmpfs에 두고 내구성 쓰기를 끈다(빌드 호스트 SSD 쓰기량 절감).
     trap cleanup_integration_test_services EXIT
 
     for _ in {1..60}; do

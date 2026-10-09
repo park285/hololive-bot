@@ -32,6 +32,18 @@ Seoul `b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 사용�
 `fence.intent`가 자동 primary 재기동을 막습니다. 서울 쓰기 재개 이후에는 최신 데이터를
 역이관하지 않고 옛 DB를 다시 primary로 켜면 안 됩니다.
 
+2026-10-08 서울 중앙을 같은 A1 2 OCPU·12GB·50GB 규격의 새 Ubuntu 26.04.1 LTS VM으로
+교체했습니다. 격리된 DB·앱 시험과 재부팅 검증 후 기존 `hololive-seoul` 이름과 `.8`을
+승계했습니다. 운영 이미지 10개를 그대로 사용하고, clean-stop한 PostgreSQL 전체 파일의
+내용·권한 해시 일치 및 페이지 체크섬 오류 0개를 확인한 뒤 쓰기를 재개했습니다.
+schema migration은 실행하지 않았습니다. 새 호스트의 `hololive-compose-up`은 부팅 때
+승인된 runtime 서비스만 `--no-build --no-deps`로 기동하며 migration one-shot은 제외합니다.
+운영 재부팅 후 중앙·AP `a/b/c/d` readiness, 관리 gateway, 실제 DB TLS, metrics·로그 전달을 확인했습니다.
+옛 24.04 서울 인스턴스는 `TERMINATED`입니다. 초기 보존했던 50GB 부트 볼륨도 같은 날
+사용자의 추가 삭제 승인으로 `TERMINATED`를 확인했습니다. 이 서울 사본에서는 더 이상
+복구할 수 없습니다. Osaka 보존 디스크와 기존 별도 백업은 변경하지 않았으며 정기 백업은 재개하지 않았습니다.
+새 호스트의 Docker socket GID는 `987`이며 secret master와 운영 mirror의 비밀 아닌 값도 일치합니다.
+
 `<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, CLIProxy와 observability
 스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
 의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `HOLOLIVE_OTLP_GRPC_ENDPOINT`가
