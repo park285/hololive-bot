@@ -6,5 +6,5 @@
   "tools_version": "v0.44.1-0.20260420230617-19499e7caabc",
   "tools_sum": "h1:vSv/HN1q9eoPD7lMyJYVJ/GPYnqtqu6adMxUmrxOB78=",
   "tools_zip_sha256": "de02aee967e0900d7f2de648789cd320eafedde5f08762973bb36178e4cbfd94",
-  "go_version": "go1.27.1"
+  "go_version": "go1.27.2"
 }

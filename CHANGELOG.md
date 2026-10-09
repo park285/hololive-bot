@@ -8,6 +8,9 @@
 
 ## 미출시
 
+- **의존성:** 모든 Go 모듈·빌더·분석기 빌드를 Go 1.27.2로 맞추고 `golang.org/x/net` v0.60.0,
+  OpenAI v3.74.0, Prometheus client v1.25.0과 사용 중인 간접 의존성을 갱신했습니다.
+  PostgreSQL의 gosu·deunhealth 빌드 의존성, npm 11.19.1·uv 0.12.24와 lockfile도 갱신하며 운영 배포는 포함하지 않습니다.
 - 테스트 전용 PostgreSQL을 tmpfs에서 실행하고 내구성 쓰기를 꺼 빌드 호스트의 디스크 쓰기를 줄였습니다.
   운영 DB와 외부 테스트 DB의 설정은 유지하며, 임시 DB는 crash durability 검증 대상으로 사용하지 않습니다.
 - 중앙 collector paired cutover는 issuer 이미지가 있는데 기준 영수증(`po-current-c`)이 없으면, 백업·rollback 태그를 만들기
