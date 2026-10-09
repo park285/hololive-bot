@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -134,7 +135,23 @@ func liveHeadStatement(session *live.SessionState) dbx.Statement {
 			session.LastAbsenceScheduledFor, session.Clock.ConsecutiveAbsenceSlots,
 			kind, observationID, nextCheck, session.Clock.EndedAt, reason,
 			session.FirstAbsenceScheduledFor, session.SecondAbsenceScheduledFor,
-			session.LastAbsenceObservationID, session.IgnoredAbsenceScheduledFor,
+			session.LastAbsenceObservationID, ignoredAbsenceArg(&session.IgnoredAbsences),
+			session.Clock.UnresolvableSince,
 		},
 	}
+}
+
+// ignoredAbsenceArg는 미적재 이력을 SQL NULL로 보내 upsert가 기존 배열을 유지하게 한다.
+// 적재된 빈 이력은 nil slice가 NULL로 바뀌지 않도록 '{}'로 보내 기존 배열을 지운다.
+func ignoredAbsenceArg(history *live.IgnoredAbsenceHistory) any {
+	slots, loaded := history.Slots()
+	if !loaded {
+		return nil
+	}
+
+	if slots == nil {
+		return []time.Time{}
+	}
+
+	return slots
 }

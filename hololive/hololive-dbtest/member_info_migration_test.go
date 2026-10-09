@@ -12,7 +12,7 @@ func TestMemberInfoMigrationReplayPreservesIdentityAndSubscriptions(t *testing.T
 	}
 
 	_, err = pool.Exec(ctx, `INSERT INTO members(slug,channel_id,english_name,org,sync_source,aliases,status,is_graduated)
- VALUES ('shirakami-fubuki','preserved-channel','Shirakami Fubuki','Hololive','manual','{}','graduated',true);
+ VALUES ('shirakami-fubuki','preserved-channel','Shirakami Fubuki','Hololive','manual','{"ko":[],"ja":[]}','graduated',true);
  INSERT INTO alarms(room_id,user_id,channel_id,alarm_types) VALUES ('info-replay','','preserved-channel',ARRAY['LIVE']::alarm_type[]);`)
 	if err != nil {
 		t.Fatal(err)
@@ -78,8 +78,8 @@ func TestMemberInfoMigrationBackfillsOnlyMissingVerifiedDates(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := pool.Exec(ctx, `INSERT INTO members(slug,english_name,org,sync_source,aliases,birthday,debut_date,status,is_graduated) VALUES
- ('gawr-gura','Gawr Gura','Hololive','manual','{}',NULL,NULL,'graduated',true),
- ('watson-amelia','Watson Amelia','Hololive','manual','{}',DATE '1999-01-02',DATE '2010-01-02','graduated',true)`)
+ ('gawr-gura','Gawr Gura','Hololive','manual','{"ko":[],"ja":[]}',NULL,NULL,'graduated',true),
+ ('watson-amelia','Watson Amelia','Hololive','manual','{"ko":[],"ja":[]}',DATE '1999-01-02',DATE '2010-01-02','graduated',true)`)
 	if err != nil {
 		t.Fatal(err)
 	}

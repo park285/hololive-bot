@@ -55,6 +55,10 @@ func (c *YouTubePlaneConfig) validateStabilityPolicies() error {
 		return fmt.Errorf("validate live end grace: %w", err)
 	}
 
+	if err := c.validateLiveUnresolvableGrace(); err != nil {
+		return fmt.Errorf("validate live unresolvable grace: %w", err)
+	}
+
 	if err := c.validateProfileClear(); err != nil {
 		return fmt.Errorf("validate profile clear: %w", err)
 	}
@@ -177,6 +181,14 @@ func (c *YouTubePlaneConfig) validateContentAbsenceGrace() error {
 func (c *YouTubePlaneConfig) validateLiveEndGrace() error {
 	if c.LiveEndGrace < 0 || c.LiveEndGrace > 24*time.Hour {
 		return errors.New("youtube plane live end grace must be between 0 and 24h")
+	}
+
+	return nil
+}
+
+func (c *YouTubePlaneConfig) validateLiveUnresolvableGrace() error {
+	if c.LiveUnresolvableGrace < 0 || c.LiveUnresolvableGrace > 24*time.Hour {
+		return errors.New("youtube plane live unresolvable grace must be between 0 and 24h")
 	}
 
 	return nil

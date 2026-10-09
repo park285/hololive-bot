@@ -26,7 +26,7 @@ func TestProvideMemberCache_IgnoresRetiredMemberHash(t *testing.T) {
 
 	pool := dbtest.NewPool(t)
 	if _, err := pool.Exec(ctx, `INSERT INTO members(slug,channel_id,english_name,org,sync_source,aliases)
- VALUES ('b07-colon','UC-b07-colon','Name: With Colon','Hololive','manual','{}')`); err != nil {
+ VALUES ('b07-colon','UC-b07-colon','Name: With Colon','Hololive','manual','{"ko":[],"ja":[]}')`); err != nil {
 		t.Fatalf("seed member: %v", err)
 	}
 

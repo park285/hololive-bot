@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -125,6 +126,7 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
         VALUES ('live','review-channel','LIVE','','observed'),
                ('review-current','review-channel','UPCOMING','','legacy_unknown'),
                ('review-changed','review-channel','UPCOMING','','legacy_unknown'),
+               ('stale-tracking','review-channel','UPCOMING','','legacy_unknown'),
                ('unreviewed','review-channel','UPCOMING','','legacy_unknown');
         -- 검토 영수증은 현재도 검토 가능한(가용성 확인이 있는) 원본에만 적용된다.
         INSERT INTO youtube_video_availability
@@ -141,6 +143,12 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
         CROSS JOIN LATERAL youtube_live_review_snapshot(session.video_id) snapshot
         WHERE session.video_id IN ('review-current','review-changed');
         UPDATE youtube_live_sessions SET title='changed' WHERE video_id='review-changed';
+        -- 해소 불가 추적은 UPCOMING에서만 재확인 주기 근거로 전달되고 LIVE는 NULL이다.
+        INSERT INTO youtube_live_reconciliation_heads(video_id,status,unresolvable_since)
+        VALUES ('live','LIVE',now() - interval '2 hours'),('unreviewed','UPCOMING',now() - interval '2 hours');
+        -- positive보다 이른 추적값은 이전 바이너리 기간의 잔여값이라 주기 근거로 전달하지 않는다.
+        INSERT INTO youtube_live_reconciliation_heads(video_id,status,unresolvable_since,last_upcoming_positive_at,last_upcoming_positive_seen_at)
+        VALUES ('stale-tracking','UPCOMING',now() - interval '2 hours',now() - interval '1 hour',now() - interval '1 hour');
     `)
 	require.NoError(t, err)
 
@@ -153,21 +161,31 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 
 	for rows.Next() {
 		var (
-			id, channel string
-			upcoming    bool
-			facts       liveCheckFreshness
+			id, channel       string
+			upcoming          bool
+			facts             liveCheckFreshness
+			unresolvableSince pgtype.Timestamptz
 		)
 
 		require.NoError(t, rows.Scan(&id, &channel, &upcoming, &facts.asOf,
-			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt))
+			&facts.positiveAt, &facts.positiveSeenAt, &facts.availabilityAt, &facts.availabilitySeenAt, &unresolvableSince))
 		require.Equal(t, "review-channel", channel)
 		require.Equal(t, id != "live", upcoming)
 
+		if unresolved := unresolvableFor(facts.asOf, unresolvableSince); id == "unreviewed" {
+			require.Greater(t, unresolved, time.Hour, "upcoming tracking must reach the projection")
+		} else {
+			require.Zero(t, unresolved, "only active upcoming tracking may slow the recheck cadence (not live or stale tracking)")
+		}
+
 		notBefore := facts.notBefore(defaultLiveFreshnessBudget())
 
-		if id == "review-changed" {
+		switch id {
+		case "review-changed":
 			require.False(t, notBefore.IsZero(), "availability check is freshness evidence for the reopened video")
-		} else {
+		case "stale-tracking":
+			require.False(t, notBefore.IsZero(), "upcoming positive is freshness evidence")
+		default:
 			require.True(t, notBefore.IsZero(), "video without freshness evidence must be immediately eligible")
 		}
 
@@ -175,7 +193,7 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 	}
 
 	require.NoError(t, rows.Err())
-	require.Equal(t, []string{"live", "review-changed", "unreviewed"}, ids)
+	require.Equal(t, []string{"live", "review-changed", "stale-tracking", "unreviewed"}, ids)
 }
 
 // TestLiveCheckOverflowPreservesLastGoodProjection은 구조 membership이 상한을 넘으면 일부를 고정 순서로

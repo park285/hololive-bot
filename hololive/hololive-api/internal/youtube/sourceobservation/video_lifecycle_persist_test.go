@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
@@ -15,7 +16,13 @@ import (
 func startUnobservedVideoLifecycle(t *testing.T, origin string) (*pgxpool.Pool, *Consumer, contract.LeaseProof) {
 	t.Helper()
 
-	pool, _, consumer, proof := startLivePersist(t)
+	return startUnobservedVideoLifecycleGrace(t, origin, 0)
+}
+
+func startUnobservedVideoLifecycleGrace(t *testing.T, origin string, grace time.Duration) (*pgxpool.Pool, *Consumer, contract.LeaseProof) {
+	t.Helper()
+
+	pool, _, consumer, proof := startLivePersistGrace(t, grace)
 
 	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions
         (video_id,channel_id,status,title,scheduled_start_time,lifecycle_origin)
@@ -101,9 +108,15 @@ func TestVideoLifecycleWaitingRequiresNewScheduleProof(t *testing.T) {
 }
 
 func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.T) {
-	for _, scenario := range []string{"channel mismatch", "private only", "missing end", "newer positive", "newer pending"} {
+	for _, scenario := range []string{"channel mismatch", "private only", "missing end", "newer positive", "positive after end", "newer pending"} {
 		t.Run(scenario, func(t *testing.T) {
-			pool, consumer, proof := startUnobservedVideoLifecycle(t, "legacy_unknown")
+			var grace time.Duration
+
+			if scenario == "positive after end" {
+				grace = time.Hour
+			}
+
+			pool, consumer, proof := startUnobservedVideoLifecycleGrace(t, "legacy_unknown", grace)
 			payload := endedVideoCheck(proof.ScheduledFor.Add(-time.Minute))
 
 			switch scenario {
@@ -122,6 +135,14 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
                     VALUES ($1,'UPCOMING',$2,$2)`, testVideoID, proof.ScheduledFor.Add(time.Minute)); err != nil {
 					t.Fatal(err)
 				}
+			case "positive after end":
+				// 확인 관측보다는 이르지만 ended_at보다 늦고 grace 안에서 관측된 positive다. live clock이 없는
+				// 시작 미관측 경로는 grace 없이 바로 끝내므로 consumer가 이 positive를 보고 거부해야 한다.
+				if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_reconciliation_heads
+                    (video_id,status,last_upcoming_positive_at,last_upcoming_positive_seen_at)
+                    VALUES ($1,'UPCOMING',$2,now())`, testVideoID, proof.ScheduledFor.Add(-30*time.Second)); err != nil {
+					t.Fatal(err)
+				}
 			case "newer pending":
 				if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_pending_ends
                     (video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
@@ -130,7 +151,7 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 				}
 			}
 
-			publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, payload))
+			id := publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, payload))
 			consumeLiveChecks(t.Context(), t, consumer)
 			assertLifecycleOrigin(t, pool, "legacy_unknown")
 
@@ -138,9 +159,174 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 				t.Fatalf("ambiguous check changed status: %s", status)
 			}
 
+			if scenario == "positive after end" {
+				assertApplicationDecision(t, pool, id, liveSessionEntityKind, videoLifecycleInvalidEnd)
+			}
+
 			assertTableCount(t, pool, "youtube_notification_outbox", 0)
 		})
 	}
+}
+
+// 시작 미관측 종료는 ended_at 이후의 positive가 grace 안에서 관측된 동안만 미룬다. 1초 송출 뒤 공급자가 잠시
+// UPCOMING을 유지한 영상처럼, grace가 지나도록 더 새로운 positive가 없으면 공급자 지연으로 보고 upstream 종료
+// 시각으로 끝내며 시작·알림을 만들지 않는다.
+func TestVideoLifecycleUnobservedEndAcceptsLaggedPositiveAfterGrace(t *testing.T) {
+	pool, consumer, proof := startUnobservedVideoLifecycleGrace(t, "metadata_only", 2*time.Minute)
+	ended := proof.ScheduledFor.Add(-20 * time.Minute)
+	laggedPositive := ended.Add(time.Minute)
+
+	if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_reconciliation_heads
+        (video_id,status,last_upcoming_positive_at,last_upcoming_positive_seen_at)
+        VALUES ($1,'UPCOMING',$2,$2)`, testVideoID, laggedPositive); err != nil {
+		t.Fatal(err)
+	}
+
+	id := publishLiveCheck(t.Context(), t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &proof, endedVideoCheck(ended)))
+	consumeLiveChecks(t.Context(), t, consumer)
+
+	got := loadVideoLifecycle(t, pool)
+	if got.status != "ENDED" || got.headStatus != "ENDED" || !got.endedAt.Equal(ended) || got.endReason != "EXPLICIT_END" {
+		t.Fatalf("lagged positive outside grace kept terminal end pending: %+v", got)
+	}
+
+	var started *time.Time
+
+	if err := pool.QueryRow(t.Context(), `SELECT started_at FROM youtube_live_sessions WHERE video_id=$1`, testVideoID).Scan(&started); err != nil {
+		t.Fatal(err)
+	}
+
+	if started != nil {
+		t.Fatalf("terminal reconciliation fabricated start %v", started)
+	}
+
+	assertLifecycleOrigin(t, pool, "observed")
+	assertApplicationDecision(t, pool, id, liveSessionEntityKind, "ENDED")
+	assertTableCount(t, pool, "youtube_notification_outbox", 0)
+	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
+}
+
+// startLiveWithLaggedPositive는 시작을 관측한 LIVE를 만들고, 그 마지막 positive보다 30초 이른 검증된
+// ended_at과 positive 다음 슬롯의 영상 확인 lease를 돌려준다. Holodex live_snapshot의 EffectiveAt은 수집 예정
+// 시각이라 positive 시각이 YouTube의 실제 종료보다 늦어지는 운영 순서를 재현한다.
+func startLiveWithLaggedPositive(t *testing.T, grace time.Duration) (*pgxpool.Pool, *Repository, *Consumer, contract.LeaseProof, time.Time) {
+	t.Helper()
+
+	pool, repo, consumer, proof := startLivePersistGrace(t, grace)
+	positiveAt := proof.ScheduledFor
+	positive := liveSession(testVideoID, testStatusLive)
+
+	positive.StartedAt = new(positiveAt.Add(-2 * time.Hour))
+	proof = publishConsumeLive(t.Context(), t, pool, publishkit.NewPublisher(pool), consumer, &proof, positive)
+
+	endedAt := positiveAt.Add(-30 * time.Second)
+	if got := loadVideoLifecycle(t, pool); got.status != testStatusLive || !got.livePositiveAt.After(endedAt) {
+		t.Fatalf("fixture = %+v, want LIVE positive after ended_at %s", got, endedAt)
+	}
+
+	videoProof := seedAdditionalLease(t, pool, &proof, contract.KindVideoLiveCheck, testVideoID, "youtubejs_video_live")
+
+	return pool, repo, consumer, videoProof, endedAt
+}
+
+func TestVideoLifecycleLiveEndAcceptsPositiveAfterEndedAt(t *testing.T) {
+	for _, laggedUpcoming := range []bool{false, true} {
+		t.Run(map[bool]string{false: "lagged live positive", true: "lagged upcoming positive"}[laggedUpcoming], func(t *testing.T) {
+			pool, _, consumer, videoProof, endedAt := startLiveWithLaggedPositive(t, 0)
+			ctx := t.Context()
+
+			if laggedUpcoming {
+				// 시작을 관측한 LIVE의 일반 명시적 종료는 UPCOMING positive를 종료 차단 근거로 보지 않는다.
+				if _, err := pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
+                    SET last_upcoming_positive_at=$2,last_upcoming_positive_seen_at=$2 WHERE video_id=$1`,
+					testVideoID, videoProof.ScheduledFor.Add(-time.Second)); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			id := publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &videoProof, endedVideoCheck(endedAt)))
+			consumeLiveChecks(ctx, t, consumer)
+
+			got := loadVideoLifecycle(t, pool)
+			if got.status != testStatusEnded || got.headStatus != testStatusEnded || !got.endedAt.Equal(endedAt) ||
+				got.endReason != string(live.EndReasonExplicitEnd) {
+				t.Fatalf("lifecycle = %+v, want ENDED at verified %s", got, endedAt)
+			}
+
+			assertApplicationDecision(t, pool, id, liveSessionEntityKind, "ENDED")
+			assertTableCount(t, pool, "youtube_live_pending_ends", 0)
+			assertTableCount(t, pool, "youtube_notification_outbox", 0)
+		})
+	}
+}
+
+// grace 안에 받은 positive는 즉시 종료를 막고, 같은 pending을 기존 finalizer가 검증된 ended_at으로 정산한다.
+func TestVideoLifecycleLiveEndWaitsForGraceAfterLaggedPositive(t *testing.T) {
+	const grace = time.Hour
+
+	pool, repo, consumer, videoProof, endedAt := startLiveWithLaggedPositive(t, grace)
+	ctx := t.Context()
+
+	id := publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &videoProof, endedVideoCheck(endedAt)))
+	consumeLiveChecks(ctx, t, consumer)
+
+	var seenAt, nextCheck *time.Time
+
+	if err := pool.QueryRow(ctx, `SELECT last_live_positive_seen_at,next_end_check_at
+        FROM youtube_live_reconciliation_heads WHERE video_id=$1`, testVideoID).Scan(&seenAt, &nextCheck); err != nil {
+		t.Fatal(err)
+	}
+
+	got := loadVideoLifecycle(t, pool)
+	if got.status != testStatusLive || got.candidate != string(live.EndEvidenceExplicitEnd) ||
+		seenAt == nil || !timeValue(nextCheck).Equal(seenAt.Add(grace)) {
+		t.Fatalf("lifecycle inside grace = %+v next_end_check_at=%v seen=%v", got, nextCheck, seenAt)
+	}
+
+	if pending := loadPendingEnd(t, pool); pending.observationID != id || !pending.effectiveAt.Equal(videoProof.ScheduledFor) || !pending.endedAt.Equal(endedAt) {
+		t.Fatalf("pending end = %+v, want check %d at %s ended %s", pending, id, videoProof.ScheduledFor, endedAt)
+	}
+
+	assertApplicationDecision(t, pool, id, liveSessionEntityKind, "END_CANDIDATE")
+
+	if _, err := pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
+        SET last_live_positive_seen_at=NOW()-INTERVAL '2 hours',next_end_check_at=NOW() WHERE video_id=$1`, testVideoID); err != nil {
+		t.Fatal(err)
+	}
+
+	if processed, err := repo.FinalizeNextDueLiveEnd(ctx, grace); err != nil || !processed {
+		t.Fatalf("finalize due: processed=%t err=%v", processed, err)
+	}
+
+	if got := loadVideoLifecycle(t, pool); got.status != testStatusEnded || got.headStatus != testStatusEnded || !got.endedAt.Equal(endedAt) {
+		t.Fatalf("finalizer lifecycle = %+v, want ENDED at verified %s", got, endedAt)
+	}
+
+	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
+	assertTableCount(t, pool, "youtube_notification_outbox", 0)
+}
+
+// 확인 관측 시각과 같거나 늦은 positive는 확인 뒤에도 방송이 이어졌다는 근거이므로 종료 사실을 버린다.
+func TestVideoLifecycleLiveEndRetainsPositiveAtCheckTime(t *testing.T) {
+	pool, _, consumer, videoProof, endedAt := startLiveWithLaggedPositive(t, 0)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=$2 WHERE video_id=$1`,
+		testVideoID, videoProof.ScheduledFor); err != nil {
+		t.Fatal(err)
+	}
+
+	before := loadVideoLifecycle(t, pool)
+	id := publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &videoProof, endedVideoCheck(endedAt)))
+	consumeLiveChecks(ctx, t, consumer)
+
+	if after := loadVideoLifecycle(t, pool); after != before {
+		t.Fatalf("check at the positive slot changed lifecycle: %+v -> %+v", before, after)
+	}
+
+	assertApplicationDecision(t, pool, id, liveSessionEntityKind, videoLifecycleNewerEndRetained)
+	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
+	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 }
 
 func TestVideoLifecycleUnknownReviewCASAndNewFactsInvalidateReceipt(t *testing.T) {

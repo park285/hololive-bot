@@ -75,6 +75,9 @@ type LiveCheckVideo struct {
 	ChannelID  string
 	IsUpcoming bool
 	NotBefore  time.Time
+	// UnresolvableFor는 identity를 확인할 수 없는 확인(identity_missing·identity_mismatch)이 이어진 기간이다.
+	// 0이면 추적이 없다. UPCOMING 영상 확인의 재확인 주기를 늦추는 근거이며 membership·NotBefore는 바꾸지 않는다.
+	UnresolvableFor time.Duration
 }
 
 // LiveCheckVideoQuery는 같은 projection transaction에서 읽은 운영 roster와 신선도 예산을 전달합니다.
@@ -264,6 +267,7 @@ func (b *policyTargetBuilder) appendLiveCheckVideos(videos []LiveCheckVideo, ope
 			// 같은 영상 확인 budget에서 LIVE가 먼저 실행되도록 UPCOMING 대상만 낮춘다.
 			// LIVE↔UPCOMING 전환은 실제 상태 변경이므로 이 target의 membership을 새로 시작한다.
 			target.Priority = max(target.Priority-1, 0)
+			target.PollInterval = unresolvablePollInterval(target.PollInterval, video.UnresolvableFor)
 		}
 	}
 

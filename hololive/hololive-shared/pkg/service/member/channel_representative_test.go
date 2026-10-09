@@ -16,7 +16,7 @@ func seedSharedReviewMembers(t *testing.T) (*Repository, *domain.Member) {
 	repo, pool := newPGXRepository(t)
 
 	_, err := pool.Exec(t.Context(), `INSERT INTO members(slug,channel_id,english_name,short_korean_name,org,sync_source,aliases)
- VALUES ('review-owner',$1,'holoAN owner','홀로아나','Hololive','manual','{}'),
+ VALUES ('review-owner',$1,'holoAN owner','홀로아나','Hololive','manual','{"ko":[],"ja":[]}'),
  ('review-person',$1,'A Person','개인','Hololive','manual','{"ko":["개인"],"ja":[]}')`, sharedReviewChannel)
 	if err != nil {
 		t.Fatal(err)
@@ -256,8 +256,8 @@ func TestDuplicateNameLookupsAgreeOnSmallestID(t *testing.T) {
 	ctx := t.Context()
 
 	if _, err := pool.Exec(ctx, `INSERT INTO members(slug,channel_id,english_name,org,sync_source,aliases)
- VALUES ('dup-first','UC-dup-first','Dup Name','Hololive','manual','{}'),
- ('dup-second','UC-dup-second','Dup Name','Nijisanji','manual','{}')`); err != nil {
+ VALUES ('dup-first','UC-dup-first','Dup Name','Hololive','manual','{"ko":[],"ja":[]}'),
+ ('dup-second','UC-dup-second','Dup Name','Nijisanji','manual','{"ko":[],"ja":[]}')`); err != nil {
 		t.Fatal(err)
 	}
 

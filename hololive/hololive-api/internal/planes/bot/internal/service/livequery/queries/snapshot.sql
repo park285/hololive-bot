@@ -43,6 +43,8 @@ WITH clock AS MATERIALIZED (
       AND c.received_at BETWEEN t.as_of - t.check_budget AND t.as_of
 ), unavailable AS MATERIALIZED (
     -- 신선한 positive와 비정상 session/head는 가용성으로 덮지 않는다.
+    -- 익명 player는 비공개·삭제 영상에 videoDetails를 주지 않아 identity_missing UNKNOWN만 남기므로,
+    -- 신선한 identity_missing도 공개 불가와 같은 시각 경계로 종료를 증명할 수 없는 stale LIVE를 제외한다.
     SELECT s.video_id
     FROM youtube_live_sessions s JOIN targets t USING (channel_id)
     JOIN youtube_live_reconciliation_heads h USING (video_id)
@@ -55,7 +57,8 @@ WITH clock AS MATERIALIZED (
         SELECT LEAST(INTERVAL '5 minutes', (2 * v.poll_interval_ms + 30000) * INTERVAL '1 millisecond') AS budget
     ) validity
     WHERE s.status = 'LIVE' AND h.status = 'LIVE'
-      AND a.identity_confirmed AND a.availability = 'PUBLIC_UNAVAILABLE' AND a.method = 'player_private'
+      AND ((a.identity_confirmed AND a.availability = 'PUBLIC_UNAVAILABLE' AND a.method = 'player_private')
+           OR (NOT a.identity_confirmed AND a.availability = 'UNKNOWN' AND a.unknown_reason = 'identity_missing'))
       AND a.scheduled_for BETWEEN t.as_of - validity.budget AND t.as_of
       AND a.effective_at BETWEEN t.as_of - validity.budget AND t.as_of
       AND a.observed_at BETWEEN t.as_of - validity.budget AND t.as_of

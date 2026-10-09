@@ -85,7 +85,7 @@ def statistics_snapshot(container, extensions):
 
 def run_workload(container, workload, seconds, extensions):
     base = ["docker", "exec", container, "pgbench", "-n", "-U", "postgres", "-d", "postgres",
-            "-c", "4", "-j", "2", "-M", "prepared", "-f", f"/benchmark/{workload}.sql"]
+            "-c", "4", "-j", "2", "-M", "prepared", "-f", f"/benchmark/testqueries/{workload}.sql"]
     command(base + ["-T", "2"], timeout=15)
     reset_statistics(container, extensions)
     output = command(base + ["-T", str(seconds), "-l", "--log-prefix", f"/tmp/bench-{workload}"],
@@ -136,7 +136,7 @@ def run_variant(image, variant, seconds, trial):
         for extension in extensions:
             sql(container, f"CREATE EXTENSION {extension}")
         command(["docker", "exec", container, "psql", "-X", "-U", "postgres", "-d", "postgres",
-                 "-v", "ON_ERROR_STOP=1", "-f", "/benchmark/fixture.sql"], timeout=120)
+                 "-v", "ON_ERROR_STOP=1", "-f", "/benchmark/testqueries/fixture.sql"], timeout=120)
         results = []
         for workload in WORKLOADS:
             result = {"variant": variant, "trial": trial, "startup_seconds": startup_seconds,

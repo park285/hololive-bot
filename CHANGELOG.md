@@ -8,14 +8,105 @@
 
 ## 미출시
 
+- 중앙 collector paired cutover는 issuer 이미지가 있는데 기준 영수증(`po-current-c`)이 없으면, 백업·rollback 태그를 만들기
+  전에 원인을 출력하고 거절합니다. 이전에는 rollback 태그와 부분 백업을 남긴 뒤 메시지 없이 끝났습니다. 호스트 교체 때
+  영수증을 옮기는 규칙과 유실 시 검토 영수증으로 복원하는 절차를 collector runbook에 추가했습니다.
+
+## v7.2.10 - 2026-10-08
+
+- v7.2.8·v7.2.9 검토 후속입니다. collector는 IDLE lease의 실효 due를 `LEAST(next_due_at, scheduled_for + 현재 target 주기)`로
+  판정해, target 주기가 줄면 이전 긴 주기(최대 60분)의 남은 대기 없이 현재 주기의 다음 slot에서 재개합니다. 늦춰진 UPCOMING
+  영상 확인이 positive 뒤 공개 방송으로 바뀌어도 종료 확인이 최대 60분 늦어지지 않습니다.
+- 해소 불가 추적은 추적 시작 이후에 관측된 positive만 지웁니다. 늦게 도착한 이른 관측이 추적을 초기화해 종료 하한이 밀리던
+  문제를 고쳤습니다. 모든 positive보다 이른 추적값(7.2.7 롤백 기간 잔여값)은 reducer·consumer·projection이 추적 없음으로
+  보고 다시 추적하므로, 롤백 뒤 재전진에서 지속 시간 없이 끝나지 않습니다.
+- head가 없는 `metadata_only`·`legacy_unknown` UPCOMING은 추적을 저장할 수 없어 `UNRESOLVABLE_TRACKED`만 반복 기록하던 것을
+  기존 `IDENTITY_UNCONFIRMED`·`IDENTITY_MISMATCH` 결정으로 되돌렸습니다.
+- 회귀 시험: 관측 이후 positive 보존, 채널 `/live` 음성 술어의 부정 사례, 주기 단축·유지 시 lease 재개. 계약 v2·migration
+  규약(같은 트랜잭션 안 VALIDATE 잠금)·계획 문서 수치를 정정했습니다.
+- `hololive-api`와 `youtube-collector` 7.2.10을 릴리스합니다. DB migration과 `hololive-alarm-worker`는 바뀌지 않습니다.
+
+## v7.2.9 - 2026-10-08
+
+- 비공개·삭제된 예약 영상처럼 identity를 확인할 수 없는 UPCOMING 세션의 영상 확인이 2분마다 같은 UNKNOWN만 반복하던
+  부담을 줄입니다. `identity_missing`·`identity_mismatch` 확인은 head의 `unresolvable_since`로 추적만 하고(끝내지 않음),
+  projection이 추적 기간에 따라 그 영상 확인 target의 재확인 주기를 10분·1시간·24시간 경계에서 10분·30분·1시간으로
+  늦춥니다. positive가 오면 다음 projection에서 2분으로 돌아옵니다. 시작 감지는 채널 스냅샷 positive가 맡으므로 시작
+  알림은 늦어지지 않으며, LIVE 영상 확인 주기와 검토 영수증 흐름은 그대로입니다.
+- `hololive-api` 7.2.9만 릴리스하며 DB migration, `hololive-alarm-worker`, collector는 바뀌지 않습니다.
+
+## v7.2.8 - 2026-10-08
+
+- 종료 전에 비공개·삭제로 바뀐 방송의 LIVE 세션이 영구히 LIVE로 남아 영상 확인을 계속 받던 문제를 끝냅니다. 시작을
+  관측한 LIVE 세션의 영상 확인이 `identity_missing`으로만 `YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS`(기본 600초)
+  이상 이어지고, 같은 채널의 신선한 `/live` identity 확인 음성이 있으며, 신선한 positive가 없으면 `UNRESOLVABLE_VIDEO`
+  사유로 종료합니다. 종료 시각은 첫 `identity_missing` 관측 시각이며 시작 시각·알림은 바꾸지 않습니다. UPCOMING 세션과
+  `identity_mismatch` 등 다른 UNKNOWN 사유는 대상이 아닙니다.
+- migration 280은 `youtube_live_reconciliation_heads`에 `unresolvable_since` 열을 더하고 `end_reason` 어휘 CHECK에
+  `UNRESOLVABLE_VIDEO`를 추가합니다(`chk_youtube_live_reconciliation_heads_end_reason_vocab`로 개명).
+- `hololive-api` 7.2.8과 migration 280을 릴리스하며 `hololive-alarm-worker`와 collector는 바뀌지 않습니다.
+
+## v7.2.7 - 2026-10-08
+
+- `!라이브`가 방송 중인 멤버가 없을 때 "현재 방송 상태를 확인할 수 없습니다."로만 답하던 원인 두 가지를 고쳤습니다.
+  종료 전에 비공개·삭제로 바뀐 방송은 익명 영상 확인에서 `identity_missing` UNKNOWN만 남겨 영구히 stale LIVE였으므로,
+  LiveQuery는 신선한 `identity_missing`을 기존 공개 불가 사실과 같은 시각 경계에서 stale LIVE 제외 근거로 씁니다. 다른
+  UNKNOWN 사유와 만료는 계속 차단하며 세션의 수명 상태는 바꾸지 않습니다.
+- 시작을 관측하지 못한 세션의 검증된 종료는 `ended_at` 이후의 positive가 grace(기본 2분) 안에서 관측된 동안만 미루고,
+  그 뒤에는 공급자 지연으로 보고 upstream 종료 시각으로 끝냅니다. 1초 송출 뒤 공급자가 잠시 UPCOMING을 유지한 영상이
+  `INVALID_END_TIMELINE`으로 영구히 남아 채널을 `confirming_end`로 막던 문제를 해소합니다. 시작·알림은 만들지 않습니다.
+- `hololive-api` 7.2.7만 릴리스하며 `hololive-alarm-worker`와 collector, DB migration은 바뀌지 않습니다.
+
+## v7.2.6 - 2026-10-08
+
+- v7.2.5 배포 뒤 운영 재측정에서 남은 비용 두 가지를 줄였습니다. live 적재는 종료 후보가 없는 저장된 `ENDED` 세션의
+  `youtube_live_pending_ends` 행을 읽거나 `FOR UPDATE`로 잠그지 않습니다(운영 초당 약 25행 잠금, 값이 같은 upsert가
+  호출의 84%). 동결된 D2 행은 어떤 판정도 읽거나 바꾸지 않으며 삭제 대상도 아니므로 결정은 같습니다.
+- migration 279는 검토 영수증의 의미 사실을 기록 시 `youtube_live_review_receipt_facts`에 저장하고,
+  `youtube_live_review_current_receipt`가 영수증 원본을 다시 계산하는 대신 저장값과 비교합니다. projection guard 아래에서
+  5초마다 도는 `live_check_videos.sql`이 운영 평균 25.7 ms(앱 DB CPU 8.5%)였고, 시험 DB에서 영수증 53건 기준 중앙값이
+  24.5 ms에서 4.0 ms로 줄었으며 판정은 같습니다. 기존 영수증은 같은 migration에서 채우고, runtime은 새 표를 조회만 합니다.
+- `hololive-api` 7.2.6만 릴리스하며 `hololive-alarm-worker`와 collector는 바뀌지 않습니다.
+
+## v7.2.5 - 2026-10-08
+
+- 운영 PostgreSQL과 fresh 재생 사이의 스키마 drift를 맞추는 migration 271–276을 추가했습니다. 적용하면
+  `members.created_at`·`updated_at`(135행의 값 포함)과 `youtube_notification_outbox.dispatched_at` 열, 빈
+  `streams`·`alarm_dispatch_outbox` 테이블과 각 시퀀스, `check_aliases_structure`·`check_status`·
+  `youtube_notification_outbox_status_check` 제약, `idx_source_application_live_origin` 인덱스가 영구히 지워집니다.
+  마지막 전체 DB 복원 검증(2026-10-07) 뒤 백업이 중단됐으므로 적용 전에 `members`의 시각 값을 추출해 보관합니다.
+  `dispatched_at`에 값이 생겼거나 운영 전용 테이블에 행이 있으면 지우지 않고 멈춥니다. 함께
+  `idle_in_transaction_session_timeout=5min`을 다시 선언하고 별명 형식 CHECK·NOT NULL과 template revision FK를 적용하며,
+  별명 없이 만든 멤버는 빈 ko·ja 별명으로 저장합니다. 이름 열 폭 변경 뒤 기존 연결의 캐시된 member 조회가 한 번씩
+  `cached plan must not change result type`로 실패할 수 있으므로 적용 직후 `hololive-api`와 `hololive-alarm-worker`를
+  순차 재기동합니다.
 - 운영: 중앙 API·alarm-worker·collector `c`와 PostgreSQL을 50GB 서울 VM으로 이전하고 기존 중앙 주소를 승계했습니다. AP `a/b/d`와 애플리케이션·DB 계약은 유지하며, 오사카 중앙 VM은 삭제하고 100GB 부트 볼륨만 이전 시점 복구 자료로 보존합니다. 운영 토폴로지·복구·시크릿 소유 문서를 갱신했습니다.
 - 중앙·서울 PO issuer가 공통 `json-file` 5 MiB × 3 로그 회전 설정을 상속하도록 수정했습니다.
-- 운영 중인 PostgreSQL CPU·대기 계측 소스를 로컬 main에 통합했습니다. 고정 버전의 `pg_stat_kcache`·`pg_wait_sampling`, 선택적 preload와 `hololive_observability`의 조회 전용 권한을 유지합니다. 서울 마스터 경로·운영 runbook을 현행화했으며, 이번 소스 통합으로 운영 이미지나 DB를 재배포하지 않습니다.
+- 운영 중인 PostgreSQL CPU·대기 계측 소스를 main에 통합했습니다. 고정 버전의 `pg_stat_kcache`·`pg_wait_sampling`, 선택적 preload와 `hololive_observability`의 조회 전용 권한을 유지합니다. 서울 마스터 경로·운영 runbook을 현행화했으며, 이번 소스 통합으로 운영 이미지나 DB를 재배포하지 않습니다.
+  통합 뒤 실패하던 아키텍처 게이트 두 건을 복구했습니다. 실험용 SQL은 허용 위치인 `testqueries/`로 옮기고, PostgreSQL 18 런타임 검사는 postgres 이미지를 참조하는 모든 `FROM`이 같은 digest 고정 이미지일 때 multi-stage `AS` stage를 인정합니다.
 - non-race 테스트 선별은 locale과 무관한 바이트 순서로 비교하며, 목록 수집·정렬·비교 오류를 게이트 실패로 전달합니다.
 - CI에서 최소 지원 버전 이상의 설치된 Go 검사 도구를 재사용하고 collector helper 의존성은 한 번만 설치합니다.
   운영 Go 테스트의 JSON 검사는 유지하며 성공 로그의 중복 출력을 줄이고 실패 때 진단을 출력합니다.
 - CI의 Go 1.27 강제와 toolchain 스탬프를 제거하고 Go가 manifest 요구사항으로 버전을 선택하게 합니다.
   `GOTOOLCHAIN` 기본값은 `auto`이며 명시한 환경값을 유지합니다.
+- YouTube live 상태 적재를 줄였습니다. live snapshot은 채널 범위에서 `UPCOMING`·`LIVE` 세션과 종료 후보(`next_end_check_at`)가
+  남은 `ENDED` 세션만 잠그고, 모든 적재 경로가 session 행이 있는 `ENDED` 세션의 `ignored_absence_scheduled_for` 배열을 읽지 않습니다.
+  배열을 읽지 않은 세션을 저장하면 기존 배열을 유지하고, reducer가 읽지 않은 이력이 필요하면 결정 없이 오류를 반환합니다.
+  코드만 바꾸며 migration은 없습니다.
+- YouTube live reducer가 session 행이 있는 `ENDED` 세션에 대한 반복 종료·취소 사실을 `youtube_live_pending_ends`에
+  다시 기록하지 않습니다. 운영에서 초당 약 24행이던 HOT 없는 갱신의 84%가 이 재기록이었습니다. 세션·적용 기록·부재
+  판정은 그대로이며, 기존 D2 진단 행은 지우거나 갱신하지 않고 남깁니다. session 행이 없는 영상과 head만 남은 영상의
+  종료는 지금처럼 보관합니다. head에 아직 due가 아닌 종료 후보가 남은 `ENDED` 세션에서 반복 종료가 pending 관측 ID를
+  바꿔 commit 때 head 후보 FK를 깨던 실패도 사라집니다.
+- 검증된 영상 종료가 거부되어 LIVE 세션이 고착되던 문제를 고쳤습니다. 운영 LIVE 세션 22개 중 21개가 6시간–7일 동안
+  남아 있었습니다. Holodex positive 시각은 수집 예정 시각이라 실제 종료보다 늦을 수 있는데, video live check consumer가
+  이를 YouTube가 확인한 `ended_at`과 직접 비교해 하루 9,475번 `INVALID_END_TIMELINE`으로 거부했기 때문입니다. 이 비교는
+  시작 미관측 terminal 경로에만 두고, LIVE positive clock이 있는 세션은 관측 시각 기준 positive 비교와 grace를 쓰는 일반
+  명시적 종료 계약을 따릅니다. 고착된 세션은 배포 뒤 다음 영상 확인에서 실제 종료 시각으로 끝나며 알림은 만들지 않습니다.
+- migration 277은 source observation·application retention 함수에 `jit = off`를 둡니다. 두 함수 내부 문장의 운영 실행
+  시간 중 61–96%가 JIT 컴파일이었습니다. migration 278은 술어에 쓰이지 않는 heads `ignored_absence_scheduled_for` 배열의
+  통계 수집을 꺼 평균 384 ms이던 autoanalyze 비용을 줄입니다. 질의 결과·계획·잠금은 바뀌지 않습니다.
+- `hololive-api` 7.2.5와 `hololive-alarm-worker` 6.1.2를 함께 릴리스합니다.
 
 ## v7.2.4 - 2026-10-06
 

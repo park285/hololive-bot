@@ -1,5 +1,5 @@
 -- 운영 roster의 LIVE와 지난 일정·출처 미상 UPCOMING을 신선도와 무관한 구조 membership으로 읽는다.
--- 현재 원본에 적용되는 검토 영수증(youtube_live_review_current_receipt)이 있는 UPCOMING은 제외한다. UNKNOWN은 종료 근거가 아니다.
+-- 현재 원본에 적용되는 검토 영수증(youtube_live_review_current_receipt)이 있는 UPCOMING은 제외한다. UNKNOWN 자체는 대상 선정의 종료 근거가 아니다(해소 불가 종료는 video consumer가 판정한다).
 -- 신선도 정책은 API에서 계산한다. 같은 statement의 DB 시각과 필요한 사실 시각만 반환한다.
 -- 구조 membership 필터 뒤 상한 판정용 $2행을 읽어 미래 일정 때문에 적격 영상이 잘리지 않게 한다.
 WITH clock AS MATERIALIZED (
@@ -21,7 +21,9 @@ WITH clock AS MATERIALIZED (
            h.last_live_positive_at AS positive_at,
            h.last_live_positive_seen_at AS positive_seen_at,
            NULL::timestamptz AS availability_at,
-           NULL::timestamptz AS availability_seen_at
+           NULL::timestamptz AS availability_seen_at,
+           -- LIVE는 해소 불가 추적이 10분 안에 종료로 끝나므로 재확인 주기를 늦추지 않는다.
+           NULL::timestamptz AS unresolvable_since
     FROM youtube_live_sessions s CROSS JOIN clock
     LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id=s.video_id
     WHERE s.status='LIVE' AND s.channel_id=ANY($1::text[])
@@ -30,7 +32,10 @@ WITH clock AS MATERIALIZED (
            h.last_upcoming_positive_at AS positive_at,
            h.last_upcoming_positive_seen_at AS positive_seen_at,
            availability.effective_at AS availability_at,
-           availability.observed_at AS availability_seen_at
+           availability.observed_at AS availability_seen_at,
+           -- 추적은 모든 positive보다 늦게 시작된다. positive보다 이른 잔여값(이전 바이너리 기간)은 주기 근거가 아니다.
+           CASE WHEN h.unresolvable_since > COALESCE(GREATEST(h.last_upcoming_positive_at, h.last_live_positive_at), '-infinity')
+                THEN h.unresolvable_since END AS unresolvable_since
     FROM youtube_live_sessions s CROSS JOIN clock
     LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id=s.video_id
     LEFT JOIN youtube_video_availability availability ON availability.video_id=s.video_id
@@ -39,7 +44,7 @@ WITH clock AS MATERIALIZED (
       AND NOT EXISTS (SELECT 1 FROM reviewed_videos reviewed WHERE reviewed.video_id=s.video_id)
 )
 SELECT video_id,channel_id,is_upcoming,clock.as_of,
-       positive_at,positive_seen_at,availability_at,availability_seen_at
+       positive_at,positive_seen_at,availability_at,availability_seen_at,unresolvable_since
 FROM members CROSS JOIN clock
 ORDER BY video_id COLLATE "C"
 LIMIT $2

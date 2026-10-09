@@ -40,7 +40,11 @@ WITH target_bundle AS (
       AND identity.job_key <> ALL($6::text[])
       AND (
            lease.job_key IS NULL
-        OR (lease.slot_state = 'IDLE' AND lease.next_due_at <= statement_timestamp())
+        -- 주기가 줄었으면 이전 긴 주기로 계산된 next_due_at 대신 현재 주기의 다음 slot을 due로 본다.
+        OR (lease.slot_state = 'IDLE' AND LEAST(
+                lease.next_due_at,
+                lease.scheduled_for + identity.min_interval_ms * INTERVAL '1 millisecond'
+            ) <= statement_timestamp())
         OR (lease.slot_state = 'DEFERRED' AND lease.retry_not_before <= statement_timestamp())
         OR (lease.slot_state = 'ACTIVE' AND lease.lease_expires_at <= statement_timestamp())
       )

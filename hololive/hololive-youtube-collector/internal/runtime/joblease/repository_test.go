@@ -476,6 +476,104 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 	}
 }
 
+// changedCadenceLease는 completedInterval로 완료한 IDLE lease의 직전 slot을 slotAge 전으로 옮기고(next_due_at은
+// 그 slot + completedInterval), target 주기만 currentInterval로 바꾼 새 projection을 활성화한다.
+func changedCadenceLease(
+	t *testing.T,
+	completedInterval, currentInterval, slotAge time.Duration,
+) (*pgxpool.Pool, *Repository, *JobSpec, time.Time) {
+	t.Helper()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	previous := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, completedInterval, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+
+	spec.PollInterval = completedInterval
+
+	lease, err := repository.Acquire(ctx, spec, "collector-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lease.Complete(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var previousSlot time.Time
+
+	if err := pool.QueryRow(ctx, mustTestSQL("shift_idle_slot.sql"), spec.JobKey,
+		slotAge.Milliseconds(), (completedInterval - slotAge).Milliseconds()).Scan(&previousSlot); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, mustTestSQL("retire_projection.sql"), previous); err != nil {
+		t.Fatal(err)
+	}
+
+	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, currentInterval, true}})
+
+	changed := communityJob()
+
+	changed.PollInterval = currentInterval
+
+	return pool, repository, changed, previousSlot
+}
+
+// target 주기가 줄면 IDLE lease는 이전 긴 주기의 next_due_at을 기다리지 않고 현재 주기의 다음 slot에서 다시 후보가 되고
+// 획득된다. 새 slot은 직전 slot보다 늦고 현재 시각 이하이며, 현재 주기 경계에 맞는다.
+func TestShortenedCadenceReacquiresIdleLeaseBeforeOldDue(t *testing.T) {
+	ctx := t.Context()
+	pool, repository, spec, previousSlot := changedCadenceLease(t, time.Hour, time.Minute, 2*time.Minute)
+
+	page := candidatePage(t, repository, contract.ProviderYouTubeJS, spec.CollectionJobKind, nil, 10)
+	if len(page.Jobs) != 1 || page.Jobs[0].SubjectKey != subjectChannelA {
+		t.Fatalf("shortened cadence candidates = %#v, want the idle lease due by the current interval", page)
+	}
+
+	lease, err := repository.Acquire(ctx, spec, "collector-b")
+	if err != nil {
+		t.Fatalf("acquire after cadence shortened: %v", err)
+	}
+
+	slot := lease.Proof().ScheduledFor
+
+	var recent bool
+
+	if err := pool.QueryRow(ctx, mustTestSQL("scheduled_for_is_recent.sql"), slot).Scan(&recent); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slot.After(previousSlot) || !recent || slot.Sub(previousSlot)%time.Minute != 0 {
+		t.Fatalf("reacquired slot = %s after previous %s, want a recent later slot on the 1m grid", slot, previousSlot)
+	}
+}
+
+// 주기가 같거나 늘면 기존 next_due_at이 그대로 due다. 그 전에는 후보도 아니고 획득되지도 않는다.
+func TestUnchangedOrLongerCadenceKeepsIdleLeaseUntilNextDue(t *testing.T) {
+	for _, tc := range []struct {
+		name                       string
+		completed, current, before time.Duration
+	}{
+		{name: "unchanged", completed: time.Hour, current: time.Hour, before: 2 * time.Minute},
+		{name: "longer", completed: time.Minute, current: time.Hour, before: 30 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, repository, spec, _ := changedCadenceLease(t, tc.completed, tc.current, tc.before)
+
+			page := candidatePage(t, repository, contract.ProviderYouTubeJS, spec.CollectionJobKind, nil, 10)
+			if len(page.Jobs) != 0 {
+				t.Fatalf("%s cadence candidates = %#v, want none before next_due_at", tc.name, page)
+			}
+
+			if _, err := repository.Acquire(t.Context(), spec, "collector-b"); !errors.Is(err, ErrNotAcquired) {
+				t.Fatalf("acquire before next_due_at with %s cadence: err = %v, want %v", tc.name, err, ErrNotAcquired)
+			}
+		})
+	}
+}
+
 func TestDeferAndReleasePreserveScheduledSlot(t *testing.T) {
 	for _, action := range []string{"defer", "release"} {
 		t.Run(action, func(t *testing.T) {

@@ -1,6 +1,7 @@
 package live
 
 import (
+	"slices"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -30,7 +31,12 @@ const (
 	EndReasonExplicitEnd         EndReason = "EXPLICIT_END"
 	EndReasonCancelledBeforeLive EndReason = "CANCELLED_BEFORE_LIVE" //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
 	EndReasonScopedAbsence       EndReason = "SCOPED_ABSENCE"
+	EndReasonUnresolvableVideo   EndReason = "UNRESOLVABLE_VIDEO"
 )
+
+// StatusUnresolvable은 익명 영상 확인이 identity를 확인할 수 없게 된 LIVE 영상의 사실이다.
+// 비공개·삭제 전환 영상은 identity_missing만 남겨 명시적 종료도 부재 종료도 받을 수 없다.
+const StatusUnresolvable = "UNRESOLVABLE"
 
 type LiveEvidenceClock struct {
 	LastUpcomingPositiveAt     *time.Time
@@ -44,6 +50,9 @@ type LiveEvidenceClock struct {
 	EndCandidateObservationID  *int64
 	NextEndCheckAt             *time.Time
 	EndedAt                    *time.Time
+	// UnresolvableSince는 마지막 LIVE positive 이후 영상 확인이 identity_missing으로만 이어진 첫 관측 시각이다.
+	// positive가 지우며 UNRESOLVABLE_VIDEO 종료의 ended_at 하한이다.
+	UnresolvableSince *time.Time
 }
 
 type EndEvidence struct {
@@ -71,31 +80,61 @@ type SessionFact struct {
 }
 
 type SessionState struct {
-	VideoID                    string
-	ChannelID                  string
-	Status                     domain.LiveStatus
-	LifecycleOrigin            LifecycleOrigin
-	Title                      string
-	TopicID                    string
-	ThumbnailURL               string
-	ScheduledStartTime         *time.Time
-	StartedAt                  *time.Time
-	EndedAt                    *time.Time
-	LiveFirstSeenAt            *time.Time
-	LastSeenAt                 time.Time
-	IsPremiere                 *bool
-	StatusObservedAt           *time.Time
-	ScheduleObservedAt         *time.Time
-	TitleObservedAt            *time.Time
-	Clock                      LiveEvidenceClock
-	EndReason                  *EndReason
-	FirstAbsenceScheduledFor   *time.Time
-	SecondAbsenceScheduledFor  *time.Time
-	LastAbsenceObservationID   int64
-	LastAbsenceScheduledFor    *time.Time
-	IgnoredAbsenceScheduledFor []time.Time
-	Present                    bool
-	HeadPresent                bool
+	VideoID                   string
+	ChannelID                 string
+	Status                    domain.LiveStatus
+	LifecycleOrigin           LifecycleOrigin
+	Title                     string
+	TopicID                   string
+	ThumbnailURL              string
+	ScheduledStartTime        *time.Time
+	StartedAt                 *time.Time
+	EndedAt                   *time.Time
+	LiveFirstSeenAt           *time.Time
+	LastSeenAt                time.Time
+	IsPremiere                *bool
+	StatusObservedAt          *time.Time
+	ScheduleObservedAt        *time.Time
+	TitleObservedAt           *time.Time
+	Clock                     LiveEvidenceClock
+	EndReason                 *EndReason
+	FirstAbsenceScheduledFor  *time.Time
+	SecondAbsenceScheduledFor *time.Time
+	LastAbsenceObservationID  int64
+	LastAbsenceScheduledFor   *time.Time
+	IgnoredAbsences           IgnoredAbsenceHistory
+	Present                   bool
+	HeadPresent               bool
+}
+
+// IgnoredAbsenceHistory는 첫 LIVE positive 전에 무시한 부재 slot 예정 시각 목록이다.
+// 0값은 "적재하지 않음"이다. 적재하지 않은 이력은 reducer가 읽거나 늘리지 않고 Reduce 오류로
+// 드러내며, 저장 경로는 이를 SQL NULL로 보내 기존 DB 값을 유지한다. 0값을 빈 이력으로 두면
+// 배열을 빼고 읽은 세션 하나만 저장해도 이력이 지워지므로 빈 이력은 LoadedIgnoredAbsences(nil)로만 만든다.
+type IgnoredAbsenceHistory struct {
+	slots  []time.Time
+	loaded bool
+}
+
+// LoadedIgnoredAbsences는 적재했거나 새로 만든 세션의 이력이다. 인자 nil은 빈 이력이며
+// 이 함수가 slots의 소유권을 넘겨받는다.
+func LoadedIgnoredAbsences(slots []time.Time) IgnoredAbsenceHistory {
+	return IgnoredAbsenceHistory{slots: slots, loaded: true}
+}
+
+// Slots는 이력과 적재 여부를 반환한다. 적재하지 않은 이력(false)을 빈 이력으로 해석하지 않는다.
+// 반환 slice는 읽기 전용이다.
+func (h *IgnoredAbsenceHistory) Slots() ([]time.Time, bool) {
+	return slices.Clip(h.slots), h.loaded
+}
+
+// add는 reducer만 호출하며 호출 전에 적재 여부를 확인한다.
+func (h *IgnoredAbsenceHistory) add(at time.Time) {
+	h.slots = append(h.slots, at)
+}
+
+func (h *IgnoredAbsenceHistory) clone() IgnoredAbsenceHistory {
+	return IgnoredAbsenceHistory{slots: slices.Clone(h.slots), loaded: h.loaded}
 }
 
 type AbsenceSlot struct {
@@ -226,13 +265,14 @@ func (s *SessionState) clone() SessionState {
 	cloned.Clock.LastCompleteAbsenceAt = copyOptionalTime(s.Clock.LastCompleteAbsenceAt)
 	cloned.Clock.NextEndCheckAt = copyOptionalTime(s.Clock.NextEndCheckAt)
 	cloned.Clock.EndedAt = copyOptionalTime(s.Clock.EndedAt)
+	cloned.Clock.UnresolvableSince = copyOptionalTime(s.Clock.UnresolvableSince)
 	cloned.FirstAbsenceScheduledFor = copyOptionalTime(s.FirstAbsenceScheduledFor)
 	cloned.SecondAbsenceScheduledFor = copyOptionalTime(s.SecondAbsenceScheduledFor)
 	cloned.LastAbsenceScheduledFor = copyOptionalTime(s.LastAbsenceScheduledFor)
 	cloned.EndReason = cloneEndReason(s.EndReason)
 	cloned.Clock.EndCandidateKind = cloneEndEvidenceKind(s.Clock.EndCandidateKind)
 	cloned.Clock.EndCandidateObservationID = cloneInt64(s.Clock.EndCandidateObservationID)
-	cloned.IgnoredAbsenceScheduledFor = append([]time.Time(nil), s.IgnoredAbsenceScheduledFor...)
+	cloned.IgnoredAbsences = s.IgnoredAbsences.clone()
 
 	return cloned
 }

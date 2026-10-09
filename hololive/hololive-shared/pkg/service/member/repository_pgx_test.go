@@ -37,6 +37,61 @@ func TestRepositoryPGXMutationsPreserveMemberSemantics(t *testing.T) {
 	assertMutationErrorsOnMissingTargets(t, repository, memberID)
 }
 
+// 별명 없이 만든 멤버도 ko·ja 배열 객체로 저장되어 별명 추가·삭제와 별명 조회가 그대로 동작한다.
+func TestRepositoryPGXCreateMemberWithoutAliasesAcceptsAliasMutations(t *testing.T) {
+	repository, pool := newPGXRepository(t)
+	ctx := t.Context()
+
+	member := &domain.Member{Name: "Alias Less Member"}
+	if err := repository.CreateMember(ctx, member); err != nil {
+		t.Fatalf("CreateMember(without aliases) error = %v, want nil", err)
+	}
+
+	var (
+		memberID int
+		created  string
+	)
+
+	if err := pool.QueryRow(ctx, `SELECT id, aliases::text FROM members WHERE slug = $1`, member.Name).Scan(&memberID, &created); err != nil {
+		t.Fatalf("query created member aliases: %v", err)
+	}
+
+	if created != `{"ja": [], "ko": []}` {
+		t.Fatalf("created aliases = %s, want empty ko/ja arrays", created)
+	}
+
+	if err := repository.AddAlias(ctx, memberID, "ja", "エイリアス"); err != nil {
+		t.Fatalf("AddAlias() error = %v, want nil", err)
+	}
+
+	if err := repository.RemoveAlias(ctx, memberID, "ko", "없음"); err != nil {
+		t.Fatalf("RemoveAlias(absent) error = %v, want nil", err)
+	}
+
+	var mutated string
+
+	if err := pool.QueryRow(ctx, `SELECT aliases::text FROM members WHERE id = $1`, memberID).Scan(&mutated); err != nil {
+		t.Fatalf("query mutated aliases: %v", err)
+	}
+
+	if mutated != `{"ja": ["エイリアス"], "ko": []}` {
+		t.Fatalf("mutated aliases = %s, want ja alias and empty ko", mutated)
+	}
+
+	found, err := repository.FindByAlias(ctx, "エイリアス")
+	if err != nil {
+		t.Fatalf("FindByAlias() error = %v, want nil", err)
+	}
+
+	if found == nil || found.ID != memberID || found.Aliases == nil {
+		t.Fatalf("FindByAlias() = %+v, want member %d with aliases", found, memberID)
+	}
+
+	if !slices.Equal(found.Aliases.Ja, []string{"エイリアス"}) || len(found.Aliases.Ko) != 0 {
+		t.Fatalf("FindByAlias() aliases = %+v, want only the added ja alias", found.Aliases)
+	}
+}
+
 func assertCreatedMemberDefaults(t *testing.T, repository *Repository, pool *pgxpool.Pool) int {
 	t.Helper()
 

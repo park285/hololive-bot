@@ -21,6 +21,7 @@
 package member
 
 import (
+	"cmp"
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
@@ -108,7 +109,8 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 		return errors.New("member is required")
 	}
 
-	aliasesJSON, err := jsonv2.Marshal(member.Aliases)
+	// aliases 계약(chk_members_aliases_shape)은 ko·ja 배열을 가진 객체다. 별명 없이 만들면 JSON null 대신 빈 객체를 저장한다.
+	aliasesJSON, err := jsonv2.Marshal(cmp.Or(member.Aliases, &domain.Aliases{}))
 	if err != nil {
 		return fmt.Errorf("failed to marshal aliases: %w", err)
 	}

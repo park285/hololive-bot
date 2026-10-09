@@ -25,6 +25,24 @@ disabled/inactive입니다. 남은 09-27 암호화 dump와 별도 09-28 dump는 
 복구 시점은 실제 검증한 백업 세대의 생성 시각에 따릅니다. 새 복구본·자동 백업 재활성화,
 Seoul 복제 재구축이나 보존 자료 삭제는 각 대상과 영향에 대한 명시적 승인이 필요합니다.
 
+## Logical restore check: database-level settings
+
+논리 복원으로 클러스터나 `hololive` DB를 새로 만들 때 `ALTER DATABASE ... SET` 기본값은 평문
+`pg_dump --create`·`pg_dumpall` 출력과 archive 형식의 `pg_restore --create`에는 포함되지만, `--create` 없는
+`pg_restore`(예: `--clean --if-exists`)로는 빠집니다. `schema_migrations`는 데이터로
+복원되므로 러너는 그 값을 만든 migration을 다시 실행하지 않습니다. 2026-10-08 운영에는 183의
+`idle_in_transaction_session_timeout=5min`이 없었습니다. 이를 다시 선언하는 migration 271을 2026-10-07 20:11 UTC에
+적용했고, 아래 2단계의 새 세션 확인에서 `5min`을 확인했습니다. 2026-08-23 PG 18.6 전환의
+`pg_restore` 플래그 기록이 없어 그 복원이 원인이라는 판단은 추론입니다. 물리 복사(cold copy·basebackup)는 이 설정을
+그대로 옮깁니다.
+
+1. archive는 `pg_restore --create`로 복원합니다. `--create` 없이 복원했다면 승인된 복원 작업 안에서 DB
+   owner(`hololive_migrator`)로 `ALTER DATABASE hololive SET idle_in_transaction_session_timeout = '5min';`을 다시
+   실행합니다.
+2. 애플리케이션 role로 **새 세션**을 열어 확인합니다. `SHOW idle_in_transaction_session_timeout`이 `5min`이고
+   `SELECT source FROM pg_settings WHERE name = 'idle_in_transaction_session_timeout'`가 `database`여야 합니다.
+   기존 pool connection은 이전 값을 유지하므로 확인 뒤 애플리케이션 pool을 순차 재기동합니다.
+
 ## Current single-primary decision
 
 2026-09-08 제거와 검증을 마친 운영 기준은 다음과 같습니다.

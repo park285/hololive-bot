@@ -211,6 +211,12 @@ require_collector_lease_migration
 [[ -r "$staging/image.tar" && -r "$staging/image.tar.sha256" && -r "$staging/image-id" &&
    -r "$staging/collector-image.tar" && -r "$staging/collector-image.tar.sha256" && -r "$staging/collector-image-id" &&
    -r "$staging/rootfs-manifest.json" && -r "$staging/collector-manifest.json" ]] || exit 1
+# issuer 기준 영수증(po-current-c)은 current 밖의 호스트 상태다. issuer 이미지가 있는데 영수증이 없으면 이전 pair를
+# 복원할 근거가 없으므로, 백업·rollback 태그를 만들기 전에 원인을 남기고 거절한다(호스트 교체 때 누락된 사례).
+if docker image inspect "$issuer" >/dev/null 2>&1 && [[ ! -r "$current/$manifest" || ! -r "$current/$image_id_file" ]]; then
+  echo "central issuer receipt missing: restore the reviewed $current/$manifest and $current/$image_id_file before cutover" >&2
+  exit 1
+fi
 [[ ! -e "$backup" ]] || { echo 'central backup path already exists' >&2; exit 1; }
 install -d -m 0700 -o root -g root "$backup/previous-files"
 [[ "$(docker inspect -f '{{.Image}}' "$collector_container")" == "$(docker image inspect -f '{{.Id}}' "$collector")" ]] || exit 1

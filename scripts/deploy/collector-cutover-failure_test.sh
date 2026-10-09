@@ -226,7 +226,7 @@ def manifest(revision, identity):
 central_cases = (
     'success', 'substitution_failure', 'deploy_logs_issuer', 'deploy_logs_collector',
     'deploy_error_log', 'deploy_grep_failure', 'restore_failure',
-    'signal_INT', 'signal_TERM', 'signal_HUP', 'rollback',
+    'signal_INT', 'signal_TERM', 'signal_HUP', 'rollback', 'missing_receipt',
     'check_success', 'check_logs_issuer', 'check_logs_collector', 'check_error_log', 'check_grep_failure',
 )
 for case in central_cases:
@@ -254,8 +254,9 @@ for case in central_cases:
             (staging / ('rootfs-manifest.json' if issuer else 'collector-manifest.json')).write_text(manifest(new_revision, new_id))
         live_po = state / 'po-current-c'
         live_po.mkdir()
-        (live_po / 'rootfs-manifest.json').write_text(manifest(new_revision if initial == 'new' else old_revision, new_id if initial == 'new' else old_id))
-        (live_po / 'image-id').write_text(new_id if initial == 'new' else old_id)
+        if case != 'missing_receipt':
+            (live_po / 'rootfs-manifest.json').write_text(manifest(new_revision if initial == 'new' else old_revision, new_id if initial == 'new' else old_id))
+            (live_po / 'image-id').write_text(new_id if initial == 'new' else old_id)
         if is_check or is_rollback:
             backup.mkdir()
             (backup / 'snapshot-complete').touch()
@@ -271,10 +272,15 @@ for case in central_cases:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('old')
         result = run(central_setup + central_config + central_functions + '\n' + central_main, state, case)
-        expected_status = 0 if case in ('success', 'rollback', 'check_success') else {'signal_INT': 130, 'signal_TERM': 143, 'signal_HUP': 129}.get(case, 2 if case.endswith('grep_failure') else 1 if 'error_log' in case else 5)
+        expected_status = 0 if case in ('success', 'rollback', 'check_success') else {'signal_INT': 130, 'signal_TERM': 143, 'signal_HUP': 129, 'missing_receipt': 1}.get(case, 2 if case.endswith('grep_failure') else 1 if 'error_log' in case else 5)
         require(result.returncode == expected_status, f'central {case}: original status', result)
         calls = (state / 'calls').read_text().splitlines()
-        restore_count = 0 if is_check or case == 'success' else 1
+        restore_count = 0 if is_check or case in ('success', 'missing_receipt') else 1
+        if case == 'missing_receipt':
+            # 영수증이 없으면 원격 상태를 바꾸기 전에 원인을 남기고 멈춘다.
+            require('central issuer receipt missing' in result.stderr, f'central {case}: cause reported', result)
+            require(not backup.exists(), f'central {case}: no partial backup', result)
+            require(all(not call.startswith(('docker tag ', 'docker load ', 'compose up ')) for call in calls), f'central {case}: no rollback tag or cutover', result)
         require(calls.count('docker stop hololive-youtube-po-c') == restore_count, f'central {case}: one restore', result)
         require(('automatic restoration failed' in result.stderr) == (case == 'restore_failure'), f'central {case}: restoration warning', result)
         expected_runtime = 'new' if is_check or case == 'success' or case == 'restore_failure' else 'old'

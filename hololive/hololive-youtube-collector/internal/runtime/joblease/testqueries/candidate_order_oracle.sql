@@ -9,7 +9,7 @@ WITH target_bundles AS (
 ), due AS (
     SELECT target.subject_key, target.min_interval_ms, target.max_interval_ms, target.max_priority, lease.job_key,
            CASE WHEN lease.job_key IS NULL THEN '-infinity'::timestamptz
-                WHEN lease.slot_state = 'IDLE' THEN lease.next_due_at
+                WHEN lease.slot_state = 'IDLE' THEN LEAST(lease.next_due_at, lease.scheduled_for + target.min_interval_ms * INTERVAL '1 millisecond')
                 WHEN lease.slot_state = 'DEFERRED' THEN lease.retry_not_before
                 ELSE lease.lease_expires_at END AS effective_due_at
     FROM target_bundles AS target
@@ -17,7 +17,8 @@ WITH target_bundles AS (
       ON lease.job_key = 'collector:' || $3 || ':' || $4 || ':' || target.subject_key
     WHERE ('collector:' || $3 || ':' || $4 || ':' || target.subject_key) <> ALL($5::text[])
       AND (lease.job_key IS NULL
-        OR (lease.slot_state = 'IDLE' AND lease.next_due_at <= statement_timestamp())
+        OR (lease.slot_state = 'IDLE'
+            AND LEAST(lease.next_due_at, lease.scheduled_for + target.min_interval_ms * INTERVAL '1 millisecond') <= statement_timestamp())
         OR (lease.slot_state = 'DEFERRED' AND lease.retry_not_before <= statement_timestamp())
         OR (lease.slot_state = 'ACTIVE' AND lease.lease_expires_at <= statement_timestamp()))
 ), projection AS (

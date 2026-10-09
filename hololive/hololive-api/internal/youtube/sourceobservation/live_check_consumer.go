@@ -116,7 +116,11 @@ func (c *Consumer) reconcileVideoLiveCheck(
 		return ReconcileResult{Applications: applications}, nil
 	}
 
-	fact, skipped := videoLifecycleFact(claimed, &payload, &session)
+	fact, skipped, err := c.videoLifecycleOrUnresolvableFact(ctx, tx, claimed, &payload, &session)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+
 	if pending, exists := state.PendingEnds[payload.VideoID]; skipped == "" && exists && pending.EffectiveAt.After(claimed.EffectiveAt) {
 		// 오래된 영상 확인이 더 새롭고 종료 시각 없는 pending을 정산해 슬롯 시각으로 끝내게 하지 않는다.
 		skipped = videoLifecycleNewerEndRetained
@@ -188,8 +192,10 @@ func videoLifecycleFact(
 	observation *Observation,
 	payload *contract.VideoLiveCheckV1,
 	session *live.SessionState,
+	dbNow time.Time,
+	grace time.Duration,
 ) (live.SessionFact, string) {
-	newLifecycle := observation.ContractGeneration == contract.VideoLifecycleContractGeneration && observation.SchemaVersion == contract.VideoLifecycleSchemaVersion
+	newLifecycle := videoLifecycleGeneration(observation)
 	if reason := videoLifecycleGate(payload, session, newLifecycle); reason != "" {
 		return live.SessionFact{}, reason
 	}
@@ -232,7 +238,12 @@ func videoLifecycleFact(
 		return live.SessionFact{}, videoLifecycleInvalidEnd
 	}
 
-	if newLifecycle && positiveAtOrAfter(session, endedAt) {
+	// LIVE positive clock이 있으면 reducer가 관측 시각 기준 positive 비교와 grace로 끝낸다.
+	// 시작 미관측 terminal 경로는 grace 없이 바로 끝내므로 ended_at 이후의 positive가 grace 안에서
+	// 관측된 동안만 거부한다. provider positive의 EffectiveAt은 수집 예정 시각이라 실제 종료보다
+	// 늦을 수 있어, 신선도 없이 ended_at과 직접 비교하면 검증된 종료를 영구히 거부한다.
+	verifiedTerminal := newLifecycle && session.Clock.LastLivePositiveAt == nil
+	if verifiedTerminal && live.TerminalEndBlockedByPositive(&session.Clock, endedAt, dbNow, grace) {
 		return live.SessionFact{}, videoLifecycleInvalidEnd
 	}
 
@@ -241,8 +252,88 @@ func videoLifecycleFact(
 		ChannelID:        session.ChannelID,
 		Status:           string(domain.LiveStatusEnded),
 		EndedAt:          &endedAt,
-		VerifiedTerminal: newLifecycle && session.Clock.LastLivePositiveAt == nil,
+		VerifiedTerminal: verifiedTerminal,
 	}, ""
+}
+
+func videoLifecycleGeneration(observation *Observation) bool {
+	return observation.ContractGeneration == contract.VideoLifecycleContractGeneration && observation.SchemaVersion == contract.VideoLifecycleSchemaVersion
+}
+
+// videoLifecycleOrUnresolvableFact는 기존 수명 사실을 먼저 구하고, identity를 확인할 수 없어 건너뛴 확인이
+// 해소 불가 추적 대상이면 해소 불가 사실로 대신한다. 다른 건너뛰기 사유는 그대로 돌려준다.
+func (c *Consumer) videoLifecycleOrUnresolvableFact(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed *Observation,
+	payload *contract.VideoLiveCheckV1,
+	session *live.SessionState,
+) (live.SessionFact, string, error) {
+	fact, skipped := videoLifecycleFact(claimed, payload, session, claimed.ReceivedAt, c.liveGrace)
+	if !unresolvableVideoCandidate(claimed, payload, session, skipped) {
+		return fact, skipped, nil
+	}
+
+	fact, err := c.unresolvableVideoFact(ctx, tx, claimed, payload, session)
+	if err != nil {
+		return live.SessionFact{}, "", fmt.Errorf("unresolvable video fact: %w", err)
+	}
+
+	return fact, "", nil
+}
+
+// unresolvableVideoCandidate는 identity를 확인할 수 없는 확인을 해소 불가 추적에 들인다. 비공개·삭제 전환 영상은
+// 익명 player에 videoDetails가 없어 다른 UNKNOWN 사유와 달리 identity_missing만 남긴다. 시작을 관측한 LIVE는
+// identity_missing만 대상이며 종료까지 간다. UPCOMING은 identity_missing과 채널 불일치(identity_mismatch)를 추적해
+// 재확인 주기를 늦추는 근거로만 쓰고 끝내지 않는다. 추적을 저장할 수 없는 세션(live.UnresolvableTrackable)과
+// 그 밖의 request_failed 등은 기존 IDENTITY_UNCONFIRMED·IDENTITY_MISMATCH 결정으로 남는다.
+func unresolvableVideoCandidate(observation *Observation, payload *contract.VideoLiveCheckV1, session *live.SessionState, skipped string) bool {
+	if !videoLifecycleGeneration(observation) || !live.UnresolvableTrackable(session) {
+		return false
+	}
+
+	identityMissing := skipped == videoLifecycleIdentityUnverified && payload.UnknownReason == contract.LiveCheckReasonIdentityMissing
+
+	if session.Status == domain.LiveStatusUpcoming {
+		return identityMissing || skipped == videoLifecycleIdentityMismatch
+	}
+
+	return identityMissing
+}
+
+// unresolvableVideoFact는 identity_missing 확인을 reducer의 해소 불가 사실로 바꾼다. 첫 추적 뒤 설정된 지속 시간이
+// 지났고 같은 채널의 /live 확인이 마지막 positive 이후의 신선한 identity 확인 음성이면 종료를 검증한다(VerifiedTerminal).
+// 채널 확인 최신값은 읽기만 하며 reducer로 보내지 않는다. 로봇 확인이 player를 막아도 방송 중인 채널의 /live는
+// 방송으로 이동해 음성이 나오지 않으므로, 음성은 그 채널이 지금 공개 방송 중이 아니라는 독립 증거다.
+func (c *Consumer) unresolvableVideoFact(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed *Observation,
+	payload *contract.VideoLiveCheckV1,
+	session *live.SessionState,
+) (live.SessionFact, error) {
+	fact := live.SessionFact{VideoID: payload.VideoID, ChannelID: session.ChannelID, Status: live.StatusUnresolvable}
+
+	since := session.Clock.ActiveUnresolvableSince()
+	if session.Status != domain.LiveStatusLive || since == nil || claimed.EffectiveAt.Before(since.Add(c.unresolvableGrace)) {
+		return fact, nil
+	}
+
+	var negativeAt time.Time
+
+	err := tx.QueryRow(ctx, mustSQL("repository_channel_live_negative.sql"),
+		session.ChannelID, *session.Clock.LastLivePositiveAt, claimed.EffectiveAt).Scan(&negativeAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fact, nil
+	}
+
+	if err != nil {
+		return live.SessionFact{}, fmt.Errorf("load channel live negative: %w", err)
+	}
+
+	fact.VerifiedTerminal = true
+
+	return fact, nil
 }
 
 func positiveAtOrAfter(session *live.SessionState, at time.Time) bool {
