@@ -17,7 +17,7 @@ jq -e 'keys == ["go_version", "staticcheck_release", "staticcheck_sum", "staticc
     "staticcheck_zip_sha256", "tools_sum", "tools_version", "tools_zip_sha256"]
   and (.staticcheck_version | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
   and (.staticcheck_release | test("^[0-9]{4}\\.[0-9]+\\.[0-9]+$"))
-  and (.tools_version | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-0\\.[0-9]{14}-[0-9a-f]{12}$"))
+  and (.tools_version | test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-0\\.[0-9]{14}-[0-9a-f]{12})?$"))
   and ([.staticcheck_sum, .tools_sum] | all(test("^h1:[A-Za-z0-9+/]+=$")))
   and ([.staticcheck_zip_sha256, .tools_zip_sha256] | all(test("^[0-9a-f]{64}$")))
   and (.go_version | test("^go[0-9]+\\.[0-9]+\\.[0-9]+$"))' profile.json >/dev/null
@@ -78,17 +78,12 @@ verified_archive staticcheck honnef.co/go/tools "$staticcheck_version"
 verified_archive tools golang.org/x/tools "$tools_version"
 source_dir="$temporary/unpacked/honnef.co/go/tools@$staticcheck_version"
 tools_dir="$temporary/unpacked/golang.org/x/tools@$tools_version"
-# 패치는 staticcheck가 원래 선택하는 x/tools revision에만 적용하며 revision 자체는 바꾸지 않는다.
-[[ "$(go -C "$source_dir" mod edit -json |
-  jq -r '[.Require[] | select(.Path == "golang.org/x/tools") | .Version] | join(" ")')" == "$tools_version" ]] || {
-  echo 'staticcheck no longer requires the pinned x/tools revision' >&2; exit 1;
-}
-grep -Fqx "golang.org/x/tools $tools_version $(jq -r .tools_sum profile.json)" "$source_dir/go.sum" || {
-  echo 'staticcheck go.sum does not bind the pinned x/tools sum' >&2; exit 1;
-}
+# Go 1.27.2의 export data v5를 읽는 x/tools를 명시적으로 선택한다.
+# source/export generic method 순서 보정은 이 고정 소스에만 적용한다.
 patch --batch --fuzz=0 -p1 -d "$tools_dir" <objectpath.patch >&2
 install -m 0644 files/stack_profile_version.go.in "$source_dir/cmd/staticcheck/stack_profile_version.go"
-go -C "$source_dir" mod edit -replace "golang.org/x/tools=$tools_dir"
+go -C "$source_dir" mod edit -require "golang.org/x/tools@$tools_version" -replace "golang.org/x/tools=$tools_dir"
+go -C "$source_dir" mod tidy
 go -C "$source_dir" build -trimpath -buildvcs=false -o "$temporary/staticcheck" \
   -ldflags="-X main.stackStaticcheckVersion=$staticcheck_version -X main.stackToolsVersion=$tools_version -X main.stackFactsProfile=$profile_id" \
   ./cmd/staticcheck

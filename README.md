@@ -76,6 +76,11 @@ go test ../shared-go/... \
   ```
 * 로컬 통합 품질 게이트: `./scripts/ci/local-ci.sh`
 
+`hololive-dbtest`와 로컬 CI가 생성하는 임시 PostgreSQL은 `/var/lib/postgresql`을 tmpfs에 두고
+`fsync`·`synchronous_commit`·`full_page_writes`를 끕니다. 빌드 호스트의 디스크 쓰기를 줄이는
+테스트 전용 설정이며, 컨테이너 중지 시 데이터가 사라지고 crash durability 검증에는 사용할 수 없습니다.
+외부 `TEST_DATABASE_URL`과 운영 PostgreSQL 설정은 변경하지 않습니다.
+
 배포 스크립트(`./build-all.sh`) 기동 시, Docker 이미지 빌드 단계 진입 전에 `local-ci.sh` 품질 게이트가 자동으로 선행 수행됩니다. 해당 품질 검사(린트, NilAway, 경합 테스트, staticcheck 등) 중 하나라도 실패하면 빌드 프로세스가 강제 차단됩니다. 의존성 취약점 진단(`govulncheck`)과 배포 스크립트 테스트는 `scripts/ci/pre-push-gate.sh`가 push 시점에 실행합니다.
 
 ---
