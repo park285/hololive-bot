@@ -37,11 +37,12 @@ jobs:
           path: hololive-bot
           persist-credentials: false
 
+      # 스택에서 검증·게시한 sibling snapshot을 고정합니다. 과거 release tag의 취약한 의존성으로 되돌리지 않습니다.
       - name: Checkout shared-go
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 68c3f5be73a9b79731d40459737274e06535f40d # v2.9.3
+          ref: 1ff1bf6b0a945abe075fa5765711d45af3d5af8f # v2.10.0, verified release provenance
           path: shared-go
           persist-credentials: false
 
@@ -49,7 +50,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: b7ddbfb8af464300dae74229bd485643fd04549e # v3.0.4
+          ref: 99265df804c4b0eaa59848f02e2c8d2e60bdbd6f # v3.1.0, verified release provenance
           path: iris-client-go
           persist-credentials: false
 

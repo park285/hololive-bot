@@ -25,6 +25,11 @@ NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분
 `scripts/ci/check-recurring-security-scan-contract.sh`는 보안 설정을 검사하고,
 실제 이미지 스캔은 빌드된 모든 운영 이미지를 검사합니다. 발견 결과는 숨기지 않습니다.
 
+`security.yml`의 SDK·shared-go 체크아웃은 스택에서 검증·게시한 commit SHA로 고정합니다.
+과거 release tag를 그대로 쓰면 sibling을 단독으로 검사할 때 보안 패치 전 의존성이 선택될 수 있습니다.
+현재 입력은 Go 1.27.2·`x/net v0.60.0`을 사용하며 runtime `go.mod`와 릴리스 태그는 변경하지 않습니다.
+`govulncheck`는 기존대로 `go.work`의 모든 모듈을 검사하고, 도달 가능한 취약점이 있으면 실패합니다.
+
 ## 주요 코드 경계
 
 | 검사 | 스크립트 | 실패 조건 |
