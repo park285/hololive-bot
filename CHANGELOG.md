@@ -8,6 +8,9 @@
 
 ## 미출시
 
+- **보안 CI:** SDK·shared-go 체크아웃을 스택에서 검증·게시한 commit SHA로 맞췄습니다. 과거 release tag의
+  단독 모듈 manifest가 `x/net v0.59.0`을 선택하던 문제를 고칩니다. 모든 workspace 모듈의 취약점 검사와
+  실패 조건은 유지하며, runtime `go.mod`·릴리스 태그·운영 배포는 바꾸지 않습니다.
 - **의존성:** 모든 Go 모듈·빌더·분석기 빌드를 Go 1.27.2로 맞추고 `golang.org/x/net` v0.60.0,
   OpenAI v3.74.0, Prometheus client v1.25.0과 사용 중인 간접 의존성을 갱신했습니다.
   PostgreSQL의 gosu·deunhealth 빌드 의존성, npm 11.19.1·uv 0.12.24와 lockfile도 갱신하며 운영 배포는 포함하지 않습니다.
