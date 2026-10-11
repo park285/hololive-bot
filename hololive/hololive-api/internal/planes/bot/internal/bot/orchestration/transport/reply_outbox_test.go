@@ -30,6 +30,8 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 type recordingReplyOutbox struct {
@@ -153,11 +155,7 @@ func TestReplyOutboxPersistsImageContentType(t *testing.T) {
 func TestDispatchStoredReplyReissuesFailedConflictWithStoredPayload(t *testing.T) {
 	t.Parallel()
 
-	failed := &iris.HTTPError{
-		StatusCode: http.StatusConflict,
-		URL:        "https://iris/reply",
-		Body:       `{"code":"CLIENT_REQUEST_ID_FAILED"}`,
-	}
+	failed := testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)
 	client := &storedReplyReissueClient{acceptErrors: []error{failed, nil}}
 	payload := []byte(`{"kind":"text","message":"persisted payload"}`)
 	originalPayload := append([]byte(nil), payload...)

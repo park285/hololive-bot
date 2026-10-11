@@ -16,6 +16,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 type immutableRequestSender struct {
@@ -90,7 +91,7 @@ func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {
 			consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("reissue-owner"))
 			require.NoError(t, err)
 
-			sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText, messageErr: &iris.HTTPError{StatusCode: http.StatusConflict, Body: fmt.Sprintf(`{"code":%q}`, code)}}
+			sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText, messageErr: testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, fmt.Sprintf(`{"code":%q}`, code))}
 			runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, renderer: template.NewRenderer(pool, slog.Default()), maxBatch: 10}
 			attempts := 1
 
@@ -170,7 +171,7 @@ func TestAlarmRequestUnknownEvidencePreventsReissueOfJoinedConflict(t *testing.T
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes, request: &dispatchoutbox.SendRequest{ClientRequestID: envelopes[0].ClientRequestID}}
-	cause := errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, &iris.HTTPError{StatusCode: http.StatusConflict, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`})
+	cause := errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))
 	require.NoError(t, runner.persistPostSendingFailure(t.Context(), group, cause))
 	require.Zero(t, consumer.reissueCalls)
 	require.Len(t, consumer.quarantined, 1)
@@ -181,7 +182,7 @@ func TestAlarmRequestTimeoutDoesNotReissueJoinedPreHandoffConflict(t *testing.T)
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}
 	envelopes := withAlarmDispatchTestSendUnitIdentity([]domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)})
 	group := alarmDispatchGroup{envelopes: envelopes, request: &dispatchoutbox.SendRequest{ClientRequestID: envelopes[0].ClientRequestID}}
-	cause := errors.Join(context.DeadlineExceeded, &iris.HTTPError{StatusCode: http.StatusConflict, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`})
+	cause := errors.Join(context.DeadlineExceeded, testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))
 	require.NoError(t, runner.persistPostSendingFailure(t.Context(), group, cause))
 	require.Zero(t, consumer.reissueCalls)
 	require.Len(t, consumer.scheduledSendingRetry, 1)

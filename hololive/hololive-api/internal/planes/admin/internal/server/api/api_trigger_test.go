@@ -37,24 +37,24 @@ type stubMajorEventScheduler struct {
 	err error
 }
 
-func (s *stubMajorEventScheduler) SendWeeklyNotification(_ context.Context) error {
-	return s.err
+func (s *stubMajorEventScheduler) SendWeeklyNotification(_ context.Context) (triggercontracts.Result, error) {
+	return triggercontracts.NewResult(1, 0, 0), s.err
 }
 
 type stubMajorEventMonthlyScheduler struct {
 	err error
 }
 
-func (s *stubMajorEventMonthlyScheduler) SendMonthlyNotification(_ context.Context) error {
-	return s.err
+func (s *stubMajorEventMonthlyScheduler) SendMonthlyNotification(_ context.Context) (triggercontracts.Result, error) {
+	return triggercontracts.NewResult(1, 0, 0), s.err
 }
 
 type stubMemberNewsWeeklyScheduler struct {
 	err error
 }
 
-func (s *stubMemberNewsWeeklyScheduler) SendWeeklyDigest(_ context.Context) error {
-	return s.err
+func (s *stubMemberNewsWeeklyScheduler) SendWeeklyDigest(_ context.Context) (triggercontracts.Result, error) {
+	return triggercontracts.NewResult(1, 0, 0), s.err
 }
 
 func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {

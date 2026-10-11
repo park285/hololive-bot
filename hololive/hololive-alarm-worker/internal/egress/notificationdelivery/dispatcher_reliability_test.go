@@ -7,16 +7,16 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestDispatcherQuarantinesUnknownWithoutRetry(t *testing.T) {
-	for _, cause := range []error{sendoutcome.ErrHandoffOutcomeUnknown, &iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`}} {
+	for _, cause := range []error{sendoutcome.ErrHandoffOutcomeUnknown, testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`)} {
 		for _, saveError := range []error{nil, errors.New("db unavailable")} {
 			failed, quarantined := 0, 0
 			repo := &mockDeliveryRepository{

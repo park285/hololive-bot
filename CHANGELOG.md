@@ -8,6 +8,14 @@
 
 ## 미출시
 
+## v8.0.0 - 2026-10-11
+
+- **공유 payload:** producer·worker가 notification delivery의 저장 payload/request 계약을 한 곳에서 사용합니다. 기존 JSON 바이트·고정 request·재무장 CAS·exhaustion fence와 runtime/ledger 책임 분리는 유지합니다.
+- **trigger 계약 변경:** weekly/monthly/membernews 결과를 `queued`·`skipped`·`partial` 및 건수로 반환하고 admin client·run-now 소비자가 본문을 보존합니다. enqueue를 delivered로 표현하거나 partial 전체를 자동 재전송하지 않습니다. 구형 결과 본문 호환 분기는 두지 않습니다.
+- **digest 수명:** 15분 lock TTL 안에 14분 협조적 실행 예산을 두되 기존 HTTP 5분처럼 더 짧은 deadline은 유지합니다. Stop은 취소 후 실제 join하며, 비협조적 외부 호출의 TTL 초과를 막는 lease 갱신/fencing을 추가한 것은 아닙니다.
+- **SDK 통합 검증:** `iris-client-go/v3 v3.1.0`·`shared-go/v2 v2.10.0`을 pin하고 남아 있던 합성 오류 fixture를 실제 SDK HTTP 응답으로 이관했습니다. transport의 안전 재발급·종단 거절·이미지 경로가 새 오류 출처 계약을 검증합니다.
+- **검증:** 관련 HTTP·scheduler·저장소 회귀와 격리 PostgreSQL 검사를 통과했습니다. 별도 실행 파일로 실제 handler/admin client의 결과·단일 호출, 14분/기존 5분 deadline, cancel-then-join, 실제 migration/enqueue·고정 request 재무장·exhaustion fence를 확인했습니다. 운영 배포·실제 알림 발송은 수행하지 않았습니다.
+
 - **보안 CI:** SDK·shared-go 체크아웃을 스택에서 검증·게시한 commit SHA로 맞췄습니다. 과거 release tag의
   단독 모듈 manifest가 `x/net v0.59.0`을 선택하던 문제를 고칩니다. 모든 workspace 모듈의 취약점 검사와
   실패 조건은 유지하며, runtime `go.mod`·릴리스 태그·운영 배포는 바꾸지 않습니다.

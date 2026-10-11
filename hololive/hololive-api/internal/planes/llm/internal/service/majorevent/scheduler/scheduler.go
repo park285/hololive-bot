@@ -134,7 +134,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 		StopLog:          "Scheduler stopped",
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
-			if err := s.SendWeeklyNotification(ctx); err != nil {
+			if _, err := s.SendWeeklyNotification(ctx); err != nil {
 				s.digest.Logger.Error("Failed to send weekly notification", slog.String("error", err.Error()))
 			}
 		},
@@ -170,9 +170,10 @@ type weeklyCollected struct {
 	events []*domain.MajorEvent
 }
 
-func (s *Scheduler) SendWeeklyNotification(ctx context.Context) error {
+func (s *Scheduler) SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error) {
 	weekStart, weekEnd := GetWeekRange(s.digest.Clock())
 	weekKey := weekStart.Format(time.DateOnly)
+	result := triggercontracts.NewResult(0, 0, 0)
 
 	if err := s.digest.RunDigest(ctx, schedulerkit.DigestOp[weeklyCollected]{
 		LockKey:           fmt.Sprintf("majorevent:lock:weekly:%s", weekKey),
@@ -181,13 +182,17 @@ func (s *Scheduler) SendWeeklyNotification(ctx context.Context) error {
 			return s.weeklyNotificationInputs(ctx, weekStart, weekEnd, weekKey)
 		},
 		Execute: func(ctx context.Context, c weeklyCollected) error {
-			return s.executeWeeklyNotification(ctx, c, weekKey)
+			var err error
+
+			result, err = s.executeWeeklyNotification(ctx, c, weekKey)
+
+			return err
 		},
 	}); err != nil {
-		return fmt.Errorf("run digest: %w", err)
+		return result, fmt.Errorf("run digest: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 func (s *Scheduler) weeklyNotificationInputs(
@@ -228,15 +233,15 @@ func (s *Scheduler) weeklyNotificationInputs(
 	return weeklyCollected{rooms: rooms, events: events}, true, nil
 }
 
-func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) error {
+func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) (triggercontracts.Result, error) {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 
 	message, err := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
 	if err != nil {
-		return fmt.Errorf("execute weekly notification: format message: %w", err)
+		return triggercontracts.Result{}, fmt.Errorf("execute weekly notification: format message: %w", err)
 	}
 
-	shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
+	counts, shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
 		outboxRepository: s.outboxRepository,
 		outputGuard:      s.outputGuard,
 		logger:           s.digest.Logger,
@@ -248,19 +253,21 @@ func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyColle
 		enqueueLogMsg:    "Weekly notification enqueue result",
 		deferLogMsg:      "Partial room enqueue failure, deferring event marking",
 	})
+	result := triggercontracts.NewResult(counts.Sent, counts.Skipped, counts.Failed)
+
 	if err != nil {
-		return fmt.Errorf("execute weekly notification: %w", err)
+		return result, fmt.Errorf("execute weekly notification: %w", err)
 	}
 
 	if !shouldMark {
-		return nil
+		return result, nil
 	}
 
 	if err := s.repository.MarkEventsAsNotified(ctx, eventIDs, weekKey); err != nil {
 		s.digest.Logger.Error("Failed to mark events as notified", slog.String("error", err.Error()))
 	}
 
-	return nil
+	return result, nil
 }
 
 func toDomainEventsAndIDs(events []*domain.MajorEvent) (domainEvents []domain.MajorEvent, eventIDs []int) {

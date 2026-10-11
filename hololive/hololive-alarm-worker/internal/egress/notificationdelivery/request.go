@@ -8,26 +8,11 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// outboxPayload는 producer가 적재한 message와 worker가 claim 이후 기록한 known_unsent·request를 함께 읽는다.
-// 키 이름은 hololive-shared delivery의 적재 SQL rearm 조건과 공유하는 계약이다.
-type outboxPayload struct {
-	KnownUnsent bool             `json:"known_unsent,omitzero"`
-	Message     string           `json:"message"`
-	Request     *preparedMessage `json:"request,omitempty"`
-}
-
-type preparedMessage struct {
-	Body       string `json:"body"`
-	Route      string `json:"route"`
-	BaseID     string `json:"base_id"`
-	Generation int    `json:"generation"`
-	Exhausted  bool   `json:"exhausted,omitzero"`
-}
-
-func (r *Store) saveRequest(ctx context.Context, id int64, workerID string, previous, next *preparedMessage) (bool, error) {
+func (r *Store) saveRequest(ctx context.Context, id int64, workerID string, previous, next *deliverypayload.Request) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, fmt.Errorf("save delivery request: %w", err)
 	}
@@ -50,7 +35,7 @@ func (r *Store) saveRequest(ctx context.Context, id int64, workerID string, prev
 	return tag.RowsAffected() > 0, nil
 }
 
-func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, payload outboxPayload) (*preparedMessage, bool) {
+func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, payload deliverypayload.Payload) (*deliverypayload.Request, bool) {
 	if payload.Request != nil {
 		return d.validateStoredRequest(ctx, item, payload.Request)
 	}
@@ -71,7 +56,7 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 		return nil, false
 	}
 
-	request := &preparedMessage{Body: body, Route: route, BaseID: notificationDeliveryClientRequestID(item)}
+	request := &deliverypayload.Request{Body: body, Route: route, BaseID: notificationDeliveryClientRequestID(item)}
 
 	saved, err := d.repository.saveRequest(ctx, item.ID, d.workerID, nil, request)
 	if err != nil {
@@ -83,7 +68,7 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 	return request, saved
 }
 
-func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage) error {
+func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) error {
 	requestID := request.BaseID
 	if request.Generation > 0 {
 		id, err := iris.ReissuedClientRequestID(request.BaseID, request.Generation)
@@ -101,7 +86,7 @@ func (d *Dispatcher) sendPrepared(ctx context.Context, item *domain.Notification
 	return nil
 }
 
-func (d *Dispatcher) reissueRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage, cause error) {
+func (d *Dispatcher) reissueRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, cause error) {
 	next := *request
 	if request.Generation >= iris.ReplyReissueMaxGenerations {
 		next.Exhausted = true
@@ -116,7 +101,7 @@ func (d *Dispatcher) reissueRequest(ctx context.Context, item *domain.Notificati
 }
 
 // 세대 증가와 다음 상태를 같은 commit에 저장해 crash 이후 저장된 새 ID로만 복구합니다.
-func (r *Store) reissueFailedRequest(ctx context.Context, id int64, workerID string, attemptCount int, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
+func (r *Store) reissueFailedRequest(ctx context.Context, id int64, workerID string, attemptCount int, previous, next *deliverypayload.Request, maxRetries int, backoff time.Duration, reason string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
 		return false, fmt.Errorf("reissue failed delivery: %w", err)
 	}
@@ -155,7 +140,7 @@ func (d *Dispatcher) markItemTerminalFailed(ctx context.Context, item *domain.No
 	}
 }
 
-func (d *Dispatcher) validateStoredRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage) (*preparedMessage, bool) {
+func (d *Dispatcher) validateStoredRequest(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) (*deliverypayload.Request, bool) {
 	if request.Exhausted {
 		d.markItemTerminalFailed(ctx, item, "client request ID generations exhausted")
 

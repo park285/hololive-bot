@@ -93,7 +93,7 @@ func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendMonthlyDigest(t.Context()); err != nil {
+	if _, err := scheduler.SendMonthlyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error when lock held, got %v", err)
 	}
 
@@ -119,7 +119,7 @@ func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendMonthlyDigest(t.Context()); err != nil {
+	if _, err := scheduler.SendMonthlyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error for partial failure, got %v", err)
 	}
 

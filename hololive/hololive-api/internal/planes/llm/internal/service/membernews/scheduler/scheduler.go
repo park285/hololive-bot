@@ -31,6 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
@@ -107,7 +108,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 		StopLog:          "Member news scheduler stopped",
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
-			if err := s.SendWeeklyDigest(ctx); err != nil {
+			if _, err := s.SendWeeklyDigest(ctx); err != nil {
 				s.digest.Logger.Error("Member news weekly send failed", slog.String("error", err.Error()))
 			}
 		},
@@ -138,19 +139,19 @@ func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
 	return target
 }
 
-func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
+func (s *Scheduler) SendWeeklyDigest(ctx context.Context) (triggercontracts.Result, error) {
 	if s == nil {
-		return errors.New("member news scheduler is nil")
+		return triggercontracts.Result{}, errors.New("member news scheduler is nil")
 	}
 
 	if s.service == nil {
-		return errors.New("member news service is nil")
+		return triggercontracts.Result{}, errors.New("member news service is nil")
 	}
 
 	now := s.digest.Clock()
 	weekKey := startOfWeek(now).Format(time.DateOnly)
 
-	if err := runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
+	result, err := runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
 		period:           model.PeriodWeekly,
 		now:              now,
 		periodKey:        weekKey,
@@ -160,11 +161,12 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 		lockKey:          fmt.Sprintf("membernews:lock:weekly:%s", weekKey),
 		skipMessage:      "Member news weekly skipped: no subscribed room",
 		lockSkipMessage:  "Member news weekly execution skipped: lock already acquired",
-	}); err != nil {
-		return fmt.Errorf("run member news digest: %w", err)
+	})
+	if err != nil {
+		return result, fmt.Errorf("run member news digest: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 func (s *Scheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, weekKey, roomID string) delivery.SendResult {

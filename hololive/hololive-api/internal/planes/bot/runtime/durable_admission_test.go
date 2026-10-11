@@ -24,6 +24,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	dbtest "github.com/kapu/hololive-dbtest"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 const (
@@ -84,7 +85,7 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 		{name: "pre-dispatch", attempts: 1, err: iris.ErrRetryable, want: durability.ReplyOutboxRetryablePreDispatch},
 		{name: "unknown local error", err: errors.New("bug"), want: durability.ReplyOutboxDead},
 		{name: "invalid stored payload", err: transport.ErrStoredReplyInvalid, want: durability.ReplyOutboxManualReview},
-		{name: "reissue ladder exhausted conflict", err: &iris.HTTPError{StatusCode: http.StatusConflict, URL: "https://iris/reply", Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`}, want: durability.ReplyOutboxPermanentConflict},
+		{name: "reissue ladder exhausted conflict", err: sharedtestutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), want: durability.ReplyOutboxPermanentConflict},
 		{name: "retry exhausted", attempts: durableMaxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
 		{name: "unknown", err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxOutcomeUnknown},
 		{name: "unknown exhausted", attempts: durableMaxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},

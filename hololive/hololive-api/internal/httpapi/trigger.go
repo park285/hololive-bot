@@ -39,7 +39,6 @@ import (
 const (
 	TriggerExecutionTimeout = 5 * time.Minute
 	responseKeyMessage      = "message"
-	responseKeyStatus       = "status"
 )
 
 // 알림 발송은 중간에 끊기면 부분 전송으로 남으므로 호출측 연결 취소와 분리하고
@@ -49,15 +48,15 @@ func triggerExecutionContext(c *gin.Context) (context.Context, context.CancelFun
 }
 
 type MajorEventScheduler interface {
-	SendWeeklyNotification(ctx context.Context) error
+	SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error)
 }
 
 type MajorEventMonthlyScheduler interface {
-	SendMonthlyNotification(ctx context.Context) error
+	SendMonthlyNotification(ctx context.Context) (triggercontracts.Result, error)
 }
 
 type MemberNewsWeeklyScheduler interface {
-	SendWeeklyDigest(ctx context.Context) error
+	SendWeeklyDigest(ctx context.Context) (triggercontracts.Result, error)
 }
 
 type TriggerHandler struct {
@@ -107,7 +106,8 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 	ctx, cancel := triggerExecutionContext(c)
 	defer cancel()
 
-	if err := h.majorEvent.SendWeeklyNotification(ctx); err != nil {
+	result, err := h.majorEvent.SendWeeklyNotification(ctx)
+	if err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			sharedserver.RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{responseKeyMessage: "notification already in progress"})
 
@@ -125,7 +125,7 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, gin.H{responseKeyStatus: "weekly notification sent"})
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
@@ -138,7 +138,8 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 	ctx, cancel := triggerExecutionContext(c)
 	defer cancel()
 
-	if err := h.majorEventMonthly.SendMonthlyNotification(ctx); err != nil {
+	result, err := h.majorEventMonthly.SendMonthlyNotification(ctx)
+	if err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			sharedserver.RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{responseKeyMessage: "notification already in progress"})
 
@@ -156,7 +157,7 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, gin.H{responseKeyStatus: "monthly notification sent"})
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
@@ -169,7 +170,8 @@ func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 	ctx, cancel := triggerExecutionContext(c)
 	defer cancel()
 
-	if err := h.memberNewsWeekly.SendWeeklyDigest(ctx); err != nil {
+	result, err := h.memberNewsWeekly.SendWeeklyDigest(ctx)
+	if err != nil {
 		sharedserver.RespondInternalError(
 			h.logger,
 			c,
@@ -181,5 +183,5 @@ func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, gin.H{responseKeyStatus: "member news weekly digest sent"})
+	ginjson.Respond(c, http.StatusOK, result)
 }

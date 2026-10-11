@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestDeliveryFailureReason_ClassifiesIrisSentinels(t *testing.T) {
@@ -103,7 +104,7 @@ func TestDeliverySendOutcomeUnknown_Classification(t *testing.T) {
 		{"transport-post", fmt.Errorf("wrap: %w", &iris.TransportError{Op: testTransportOpPost, Err: io.ErrUnexpectedEOF}), true},
 		{"transport-dial", &iris.TransportError{Op: testTransportOpPost, Err: &net.OpError{Op: "dial", Err: errors.New("connection refused")}}, false},
 		{"transport-dns", &iris.TransportError{Op: testTransportOpPost, Err: &net.DNSError{Err: "no such host", IsNotFound: true}}, false},
-		{"http-outcome-unknown", &iris.HTTPError{StatusCode: 409, Body: fmt.Sprintf(`{"code":%q}`, iris.HTTPErrorCodeClientRequestIDOutcomeUnknown)}, true},
+		{"http-outcome-unknown", testutil.IrisHTTPError(t.Context(), t, 409, fmt.Sprintf(`{"code":%q}`, iris.HTTPErrorCodeClientRequestIDOutcomeUnknown)), true},
 		{"http-rate-limited", &iris.HTTPError{StatusCode: 429}, false},
 		{"http-server-error", &iris.HTTPError{StatusCode: 500}, false},
 		{"http-permanent", &iris.HTTPError{StatusCode: 400}, false},

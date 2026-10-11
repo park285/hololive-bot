@@ -40,6 +40,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -52,9 +53,9 @@ type deliveryOutboxClaimer interface {
 }
 
 type deliveryRequestStore interface {
-	reissueFailedRequest(context.Context, int64, string, int, *preparedMessage, *preparedMessage, int, time.Duration, string) (bool, error)
+	reissueFailedRequest(context.Context, int64, string, int, *deliverypayload.Request, *deliverypayload.Request, int, time.Duration, string) (bool, error)
 	markPreparationUnsent(context.Context, int64, string) (bool, error)
-	saveRequest(context.Context, int64, string, *preparedMessage, *preparedMessage) (bool, error)
+	saveRequest(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) (bool, error)
 }
 
 type deliveryOutboxTransitioner interface {
@@ -262,7 +263,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
-	var p outboxPayload
+	var p deliverypayload.Payload
 
 	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
 		d.markItemFailed(ctx, item, "payload unmarshal: "+err.Error())
@@ -293,7 +294,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	d.finishSend(ctx, item, request, err)
 }
 
-func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage) error {
+func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request) error {
 	attemptCtx, cancel := context.WithTimeout(ctx, d.config.AttemptTimeout)
 
 	defer cancel()
@@ -323,7 +324,7 @@ func (d *Dispatcher) attemptSend(ctx context.Context, item *domain.NotificationD
 	return err
 }
 
-func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *preparedMessage, err error) {
+func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDeliveryOutbox, request *deliverypayload.Request, err error) {
 	// 부모 취소 뒤에도 결과를 저장하되 예산을 제한합니다. 저장 실패는 SENDING으로 남겨 sweep이 격리합니다.
 	finalCtx, finalizeCancel := context.WithTimeout(context.WithoutCancel(ctx), deliveryFinalizeTimeout)
 	defer finalizeCancel()

@@ -22,6 +22,7 @@ package trigger
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,11 +43,15 @@ func TestClientSendWeeklyNotificationSuccess(t *testing.T) {
 		gotPath = r.URL.Path
 
 		w.WriteHeader(http.StatusOK)
+
+		if _, err := io.WriteString(w, `{"status":"queued","queued":1,"skipped":0,"failed":0}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	t.Cleanup(srv.Close)
 
 	client := newTestClient(t, srv.URL+"/", "")
-	if err := client.SendWeeklyNotification(t.Context()); err != nil {
+	if _, err := client.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 
@@ -65,7 +70,7 @@ func TestClientSendMonthlyNotificationConflict(t *testing.T) {
 
 	client := newTestClient(t, srv.URL, "")
 
-	err := client.SendMonthlyNotification(t.Context())
+	_, err := client.SendMonthlyNotification(t.Context())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 		t.Fatalf("SendMonthlyNotification() error = %v, want ErrNotificationInProgress", err)
 	}
@@ -86,7 +91,7 @@ func TestClientSendMemberNewsWeeklyNon2xx(t *testing.T) {
 
 	client := newTestClient(t, srv.URL, "")
 
-	err := client.SendMemberNewsWeekly(t.Context())
+	_, err := client.SendMemberNewsWeekly(t.Context())
 	if err == nil {
 		t.Fatal("SendMemberNewsWeekly() error = nil, want non-nil")
 	}
@@ -109,11 +114,15 @@ func TestClientSendMemberNewsWeeklySuccess(t *testing.T) {
 		gotPath = r.URL.Path
 
 		w.WriteHeader(http.StatusOK)
+
+		if _, err := io.WriteString(w, `{"status":"queued","queued":1,"skipped":0,"failed":0}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	t.Cleanup(srv.Close)
 
 	client := newTestClient(t, srv.URL, "")
-	if err := client.SendMemberNewsWeekly(t.Context()); err != nil {
+	if _, err := client.SendMemberNewsWeekly(t.Context()); err != nil {
 		t.Fatalf("SendMemberNewsWeekly() error = %v", err)
 	}
 
@@ -133,11 +142,15 @@ func TestClientSendWeeklyNotificationWithAPIKey(t *testing.T) {
 		gotHeader = r.Header.Get(commoncontracts.APIKeyHeader)
 
 		w.WriteHeader(http.StatusOK)
+
+		if _, err := io.WriteString(w, `{"status":"queued","queued":1,"skipped":0,"failed":0}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	t.Cleanup(srv.Close)
 
 	client := newTestClient(t, srv.URL, apiKey)
-	if err := client.SendWeeklyNotification(t.Context()); err != nil {
+	if _, err := client.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 

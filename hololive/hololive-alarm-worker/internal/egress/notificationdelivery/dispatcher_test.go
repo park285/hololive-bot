@@ -35,6 +35,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -46,7 +47,7 @@ const (
 
 // mockDeliveryRepository: deliveryRepository mock 구현.
 type mockDeliveryRepository struct {
-	saveRequestFn            func(context.Context, int64, string, *preparedMessage, *preparedMessage) (bool, error)
+	saveRequestFn            func(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) (bool, error)
 	fetchAndLockFn           func(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
 	markSendingFn            func(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
 	markQuarantinedFn        func(context.Context, int64, string, string) (bool, error)
@@ -58,7 +59,7 @@ type mockDeliveryRepository struct {
 	claimedIDs               map[int64]struct{}
 }
 
-func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, attemptCount int, previous, next *preparedMessage, maxRetries int, backoff time.Duration, reason string) (bool, error) {
+func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id int64, worker string, attemptCount int, previous, next *deliverypayload.Request, maxRetries int, backoff time.Duration, reason string) (bool, error) {
 	saved, err := m.saveRequest(ctx, id, worker, previous, next)
 	if err != nil || !saved {
 		return saved, err
@@ -71,7 +72,7 @@ func (m *mockDeliveryRepository) markPreparationUnsent(context.Context, int64, s
 	return true, nil
 }
 
-func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, previous, next *preparedMessage) (bool, error) {
+func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, previous, next *deliverypayload.Request) (bool, error) {
 	if m.saveRequestFn != nil {
 		return m.saveRequestFn(ctx, id, worker, previous, next)
 	}
@@ -259,7 +260,7 @@ func (m *mockSender) SendMessageWithClientRequestID(ctx context.Context, roomID,
 func makePayload(t *testing.T, msg string) string {
 	t.Helper()
 
-	b, err := jsonv2.Marshal(outboxPayload{Message: msg})
+	b, err := jsonv2.Marshal(deliverypayload.Payload{Message: msg})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}

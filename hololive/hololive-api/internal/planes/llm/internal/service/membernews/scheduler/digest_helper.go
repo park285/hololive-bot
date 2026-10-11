@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -139,6 +140,10 @@ func failedRoomResult(roomID string) delivery.SendResult {
 }
 
 func acquireDigestSlot(ctx context.Context, sem chan struct{}) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+
 	select {
 	case sem <- struct{}{}:
 		return true
@@ -158,6 +163,10 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 	for i := range rooms {
 		if !acquireDigestSlot(ctx, sem) {
 			wg.Wait()
+
+			for _, room := range rooms[i:] {
+				result.Merge(failedRoomResult(room.RoomID))
+			}
 
 			return result
 		}
@@ -195,12 +204,13 @@ func runMemberNewsDigest(
 	service model.DigestService,
 	processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult,
 	config *digestDispatchConfig,
-) error {
-	if err := digest.RunDigest(ctx, buildDigestOp(digest, service, processRoom, config)); err != nil {
-		return fmt.Errorf("run digest: %w", err)
+) (triggercontracts.Result, error) {
+	result := triggercontracts.NewResult(0, 0, 0)
+	if err := digest.RunDigest(ctx, buildDigestOp(digest, service, processRoom, config, &result)); err != nil {
+		return result, fmt.Errorf("run digest: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 func buildDigestOp(
@@ -208,6 +218,7 @@ func buildDigestOp(
 	service model.DigestService,
 	processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult,
 	config *digestDispatchConfig,
+	result *triggercontracts.Result,
 ) schedulerkit.DigestOp[[]model.SubscribedRoom] {
 	return schedulerkit.DigestOp[[]model.SubscribedRoom]{
 		LockKey: config.lockKey,
@@ -217,7 +228,7 @@ func buildDigestOp(
 			return nil
 		},
 		Collect: collectSubscribedRooms(service, digest.Logger, config, processRoom),
-		Execute: executeDigestDispatch(digest.Logger, config),
+		Execute: executeDigestDispatch(digest.Logger, config, result),
 	}
 }
 
@@ -251,10 +262,12 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, co
 	}
 }
 
-func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig) func(context.Context, []model.SubscribedRoom) error {
+func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig, outcome *triggercontracts.Result) func(context.Context, []model.SubscribedRoom) error {
 	return func(ctx context.Context, rooms []model.SubscribedRoom) error {
 		result := dispatchDigestRooms(ctx, rooms, config)
 		logDigestResult(logger, config, result)
+
+		*outcome = triggercontracts.NewResult(result.Sent, result.Skipped, result.Failed)
 
 		if result.Sent == 0 && result.Failed > 0 {
 			return fmt.Errorf(config.allFailedMessage, result.Failed)

@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sharedserver "github.com/kapu/hololive-api/internal/server/settings"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 type trackingSettingsApplier struct {
@@ -57,11 +58,12 @@ func (a *trackingSettingsApplier) SettingsRuntimeState() sharedserver.SettingsRu
 type trackingMemberNewsRunNowTrigger struct {
 	called int
 	err    error
+	result triggercontracts.Result
 }
 
-func (t *trackingMemberNewsRunNowTrigger) SendMemberNewsWeekly(context.Context) error {
+func (t *trackingMemberNewsRunNowTrigger) SendMemberNewsWeekly(context.Context) (triggercontracts.Result, error) {
 	t.called++
-	return t.err
+	return t.result, t.err
 }
 
 func testAppLogger() *slog.Logger {
@@ -142,7 +144,7 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
-		trigger := &trackingMemberNewsRunNowTrigger{}
+		trigger := &trackingMemberNewsRunNowTrigger{result: triggercontracts.NewResult(1, 0, 0)}
 		applier := &botSettingsApplier{
 			memberNewsRunNow: trigger,
 			logger:           testAppLogger(),
@@ -154,7 +156,24 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 		assert.True(t, result.Applied)
 		assert.Equal(t, "member_news_trigger", result.Source)
 		assert.Empty(t, result.Error)
+		require.NotNil(t, result.Trigger)
+		assert.Equal(t, trigger.result, *result.Trigger)
 	})
+}
+
+func TestRunNowPreservesPartialAndSkippedResults(t *testing.T) {
+	for _, outcome := range []triggercontracts.Result{
+		triggercontracts.NewResult(2, 0, 1),
+		triggercontracts.NewResult(0, 3, 0),
+	} {
+		trigger := &trackingMemberNewsRunNowTrigger{result: outcome}
+		applier := &botSettingsApplier{memberNewsRunNow: trigger, logger: testAppLogger()}
+		result := applier.ApplyMemberNewsWeeklyRunNow(t.Context())
+		require.True(t, result.Applied)
+		require.NotNil(t, result.Trigger)
+		require.Equal(t, outcome, *result.Trigger)
+		require.Equal(t, 1, trigger.called)
+	}
 }
 
 var (

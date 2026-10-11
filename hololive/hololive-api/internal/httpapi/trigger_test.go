@@ -38,22 +38,31 @@ import (
 const testResponseKeyError = "error"
 
 type stubMajorEvent struct {
-	err error
+	err    error
+	result triggercontracts.Result
 }
 
-func (s *stubMajorEvent) SendWeeklyNotification(_ context.Context) error { return s.err }
+func (s *stubMajorEvent) SendWeeklyNotification(_ context.Context) (triggercontracts.Result, error) {
+	return s.result, s.err
+}
 
 type stubMajorEventMonthly struct {
-	err error
+	err    error
+	result triggercontracts.Result
 }
 
-func (s *stubMajorEventMonthly) SendMonthlyNotification(_ context.Context) error { return s.err }
+func (s *stubMajorEventMonthly) SendMonthlyNotification(_ context.Context) (triggercontracts.Result, error) {
+	return s.result, s.err
+}
 
 type stubMemberNewsWeekly struct {
-	err error
+	err    error
+	result triggercontracts.Result
 }
 
-func (s *stubMemberNewsWeekly) SendWeeklyDigest(_ context.Context) error { return s.err }
+func (s *stubMemberNewsWeekly) SendWeeklyDigest(_ context.Context) (triggercontracts.Result, error) {
+	return s.result, s.err
+}
 
 func newDiscardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
@@ -112,10 +121,10 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 		},
 		{
 			name:        "정상 실행 → 200",
-			scheduler:   &stubMajorEvent{err: nil},
+			scheduler:   &stubMajorEvent{result: triggercontracts.NewResult(1, 0, 0)},
 			wantStatus:  http.StatusOK,
 			wantBodyKey: "status",
-			wantBodyVal: "weekly notification sent",
+			wantBodyVal: "queued",
 		},
 		{
 			name:        "이미 진행 중 → 409",
@@ -173,10 +182,10 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 		},
 		{
 			name:        "정상 실행 → 200",
-			scheduler:   &stubMajorEventMonthly{err: nil},
+			scheduler:   &stubMajorEventMonthly{result: triggercontracts.NewResult(1, 0, 0)},
 			wantStatus:  http.StatusOK,
 			wantBodyKey: "status",
-			wantBodyVal: "monthly notification sent",
+			wantBodyVal: "queued",
 		},
 		{
 			name:        "이미 진행 중 → 409",
@@ -234,10 +243,10 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 		},
 		{
 			name:        "정상 실행 → 200",
-			scheduler:   &stubMemberNewsWeekly{err: nil},
+			scheduler:   &stubMemberNewsWeekly{result: triggercontracts.NewResult(1, 0, 0)},
 			wantStatus:  http.StatusOK,
 			wantBodyKey: "status",
-			wantBodyVal: "member news weekly digest sent",
+			wantBodyVal: "queued",
 		},
 		{
 			name:        "오류 발생 → 500",
@@ -333,5 +342,39 @@ func TestRegisterInternalRoutesWithAuth(t *testing.T) {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestTriggerReportsEnqueueOutcomeForEveryRoute(t *testing.T) {
+	for _, result := range []triggercontracts.Result{
+		triggercontracts.NewResult(2, 0, 0),
+		triggercontracts.NewResult(0, 3, 0),
+		triggercontracts.NewResult(2, 1, 1),
+	} {
+		for _, path := range []string{
+			triggercontracts.MajorEventWeeklyPath,
+			triggercontracts.MajorEventMonthlyPath,
+			triggercontracts.MemberNewsWeeklyPath,
+		} {
+			t.Run(path+"/"+result.Status, func(t *testing.T) {
+				handler := NewTriggerHandler(
+					&stubMajorEvent{result: result},
+					&stubMajorEventMonthly{result: result},
+					&stubMemberNewsWeekly{result: result},
+					newDiscardLogger(),
+				)
+				response := postTrigger(t, newTriggerRouter(handler), path)
+
+				var got triggercontracts.Result
+
+				if err := jsonv2.Unmarshal(response.Body.Bytes(), &got); err != nil {
+					t.Fatal(err)
+				}
+
+				if response.Code != http.StatusOK || got != result {
+					t.Fatalf("HTTP %d result=%+v, want %+v", response.Code, got, result)
+				}
+			})
+		}
 	}
 }

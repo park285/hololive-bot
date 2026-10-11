@@ -12,8 +12,10 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
 
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 const (
@@ -49,7 +51,7 @@ func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", "source"))
 
-	conflict := &iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`}
+	conflict := testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)
 	sender := &preparedSenderSpy{body: "original final body", route: testPreparedMarkdown, err: conflict}
 	cfg := testDispatcherConfig()
 
@@ -112,7 +114,7 @@ func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 	require.Len(t, items, 1)
 
 	id := items[0].ID
-	request := &preparedMessage{Body: "pinned", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
+	request := &deliverypayload.Request{Body: "pinned", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
 	saved, err := repo.saveRequest(ctx, id, testWorkerB, nil, request)
 	require.NoError(t, err)
 	require.False(t, saved)
@@ -167,7 +169,7 @@ func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
 	items := fetchAndLockItems(ctx, t, repo)
 	require.Len(t, items, 1)
 
-	previous := &preparedMessage{Body: "pinned", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
+	previous := &deliverypayload.Request{Body: "pinned", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
 	saved, err := repo.saveRequest(ctx, items[0].ID, testWorkerA, nil, previous)
 	require.NoError(t, err)
 	require.True(t, saved)
@@ -190,13 +192,13 @@ func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
 }
 
 func TestGenericPayloadMismatchDoesNotReissue(t *testing.T) {
-	var snapshots []*preparedMessage
+	var snapshots []*deliverypayload.Request
 
-	repo := &mockDeliveryRepository{saveRequestFn: func(_ context.Context, _ int64, _ string, _, next *preparedMessage) (bool, error) {
+	repo := &mockDeliveryRepository{saveRequestFn: func(_ context.Context, _ int64, _ string, _, next *deliverypayload.Request) (bool, error) {
 		snapshots = append(snapshots, next)
 		return true, nil
 	}}
-	sender := &preparedSenderSpy{body: "body", route: testPreparedText, err: &iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH"}`}}
+	sender := &preparedSenderSpy{body: "body", route: testPreparedText, err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH"}`)}
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 	d.processItem(t.Context(), &domain.NotificationDeliveryOutbox{ID: 1, Payload: makePayload(t, "source")})
 	require.Len(t, snapshots, 1)
@@ -212,7 +214,7 @@ func TestGenericRequestGenerationCASRejectsStaleWriter(t *testing.T) {
 	require.Len(t, items, 1)
 
 	id := items[0].ID
-	previous := &preparedMessage{Body: "body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
+	previous := &deliverypayload.Request{Body: "body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(&items[0])}
 	saved, err := repo.saveRequest(ctx, id, testWorkerA, nil, previous)
 	require.NoError(t, err)
 	require.True(t, saved)
@@ -242,7 +244,7 @@ func TestGenericRequestGenerationCASRejectsStaleWriter(t *testing.T) {
 
 	require.NoError(t, repo.pool.QueryRow(ctx, "SELECT payload FROM notification_delivery_outbox WHERE id=$1", id).Scan(&raw))
 
-	var p outboxPayload
+	var p deliverypayload.Payload
 
 	require.NoError(t, jsonv2.Unmarshal(raw, &p))
 	require.Equal(t, 1, p.Request.Generation)
@@ -318,7 +320,7 @@ func TestGenericPreparationFailureKeepsUnsentEvidenceForRetry(t *testing.T) {
 func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 	for _, unknown := range []error{
 		sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded, context.Canceled,
-		&iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`},
+		testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`),
 		errors.Join(sendoutcome.ErrHandoffFailed, &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}),
 	} {
 		t.Run(unknown.Error(), func(t *testing.T) {
@@ -326,7 +328,7 @@ func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 			ctx := t.Context()
 			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "joined-conflict", "room", "source"))
 
-			sender := &preparedSenderSpy{body: "pinned", route: testPreparedText, err: errors.Join(&iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`}, unknown)}
+			sender := &preparedSenderSpy{body: "pinned", route: testPreparedText, err: errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), unknown)}
 			d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 			d.processReady(ctx)
 			d.processReady(ctx)

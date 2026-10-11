@@ -201,7 +201,7 @@ func TestScheduler_Interface(t *testing.T) {
 	var _ interface {
 		Start(ctx context.Context)
 		Stop()
-		SendWeeklyNotification(ctx context.Context) error
+		SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error)
 	}
 
 	t.Log("Scheduler interface verified")
@@ -290,9 +290,13 @@ func TestSendWeeklyNotification_AllSuccess_MarksEvents(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	err := scheduler.SendWeeklyNotification(t.Context())
+	result, err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result != triggercontracts.NewResult(2, 0, 0) {
+		t.Fatalf("enqueue result = %+v", result)
 	}
 
 	if !repository.markedWeekly {
@@ -320,9 +324,13 @@ func TestSendWeeklyNotification_PartialEnqueueFailure_NoMarking(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	err := scheduler.SendWeeklyNotification(t.Context())
+	result, err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error (partial failure returns nil): %v", err)
+	}
+
+	if result != triggercontracts.NewResult(2, 0, 1) {
+		t.Fatalf("partial enqueue result = %+v", result)
 	}
 
 	if repository.markedWeekly {
@@ -343,7 +351,7 @@ func TestSendWeeklyNotification_AllEnqueueFail_ReturnsError(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	err := scheduler.SendWeeklyNotification(t.Context())
+	_, err := scheduler.SendWeeklyNotification(t.Context())
 	if err == nil {
 		t.Fatal("expected error when all rooms fail to enqueue")
 	}
@@ -361,9 +369,13 @@ func TestSendWeeklyNotification_NoEvents_ReturnsNil(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendWeeklyNotification(t.Context())
+	result, err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Status != "skipped" || result.Queued != 0 {
+		t.Fatalf("empty event result = %+v", result)
 	}
 
 	if repository.markedWeekly {
@@ -378,9 +390,13 @@ func TestSendWeeklyNotification_NoRooms_ReturnsNil(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendWeeklyNotification(t.Context())
+	result, err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Status != "skipped" || result.Queued != 0 {
+		t.Fatalf("empty room result = %+v", result)
 	}
 }
 
@@ -405,9 +421,13 @@ func TestSendMonthlyNotification_AllSuccess_MarksEvents(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestMonthlyScheduler(repository, outbox, locker)
 
-	err := scheduler.SendMonthlyNotification(t.Context())
+	result, err := scheduler.SendMonthlyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result != triggercontracts.NewResult(2, 0, 0) {
+		t.Fatalf("enqueue result = %+v", result)
 	}
 
 	if !repository.markedMonthly {
@@ -431,9 +451,13 @@ func TestSendMonthlyNotification_PartialFailure_NoMarking(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestMonthlyScheduler(repository, outbox, locker)
 
-	err := scheduler.SendMonthlyNotification(t.Context())
+	result, err := scheduler.SendMonthlyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error (partial failure returns nil): %v", err)
+	}
+
+	if result != triggercontracts.NewResult(1, 0, 1) {
+		t.Fatalf("partial enqueue result = %+v", result)
 	}
 
 	if repository.markedMonthly {
@@ -449,7 +473,7 @@ func TestSendWeeklyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing.
 
 	scheduler := newTestScheduler(nil, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendWeeklyNotification(t.Context())
+	_, err := scheduler.SendWeeklyNotification(t.Context())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 		t.Errorf("expected ErrNotificationInProgress, got: %v", err)
 	}
@@ -463,7 +487,7 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 
 	scheduler := newTestMonthlyScheduler(nil, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendMonthlyNotification(t.Context())
+	_, err := scheduler.SendMonthlyNotification(t.Context())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 		t.Errorf("expected ErrNotificationInProgress, got: %v", err)
 	}
@@ -478,7 +502,7 @@ func TestSendWeeklyNotification_EnqueueMarking_AllSuccess_Marks(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	if err := scheduler.SendWeeklyNotification(t.Context()); err != nil {
+	if _, err := scheduler.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 
@@ -499,7 +523,7 @@ func TestSendWeeklyNotification_EnqueueMarking_PartialFail_NoMark(t *testing.T) 
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	if err := scheduler.SendWeeklyNotification(t.Context()); err != nil {
+	if _, err := scheduler.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 
@@ -535,7 +559,7 @@ func TestSendWeeklyNotification_FormatFailure_DoesNotEnqueueOrMark(t *testing.T)
 		WithGuards(newMajorEventPromptGuardForSchedulerTest(), outputguard.NewGuard()),
 	)
 
-	if err := scheduler.SendWeeklyNotification(t.Context()); err == nil {
+	if _, err := scheduler.SendWeeklyNotification(t.Context()); err == nil {
 		t.Fatal("SendWeeklyNotification() error = nil, want format failure")
 	}
 

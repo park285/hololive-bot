@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -83,7 +84,7 @@ func TestDeliveryReissuePreservesRequestOnStaleAttemptAndExhaustsGeneration(t *t
 	require.Len(t, items, 1)
 
 	item := &items[0]
-	previous := &preparedMessage{Body: "immutable request body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(item)}
+	previous := &deliverypayload.Request{Body: "immutable request body", Route: testPreparedText, BaseID: notificationDeliveryClientRequestID(item)}
 	ok, err := repo.saveRequest(ctx, item.ID, testWorkerA, nil, previous)
 	require.NoError(t, err)
 	require.True(t, ok)
