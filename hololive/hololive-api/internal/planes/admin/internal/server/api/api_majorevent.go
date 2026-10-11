@@ -32,22 +32,18 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-type statusResponse struct {
-	Status string `json:"status"`
-}
-
 type MajorEventScheduler interface {
-	SendWeeklyNotification(ctx context.Context) error
+	SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error)
 }
 
 type MajorEventMonthlyScheduler interface {
-	SendMonthlyNotification(ctx context.Context) error
+	SendMonthlyNotification(ctx context.Context) (triggercontracts.Result, error)
 }
 
 func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
 	ready := h != nil && h.Handler != nil && h.majorEventScheduler != nil
 
-	var send func(context.Context) error
+	var send func(context.Context) (triggercontracts.Result, error)
 
 	if ready {
 		send = h.majorEventScheduler.SendWeeklyNotification
@@ -55,14 +51,13 @@ func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
 
 	h.triggerNotification(c, ready, send,
 		"major event scheduler not initialized",
-		"failed to send weekly major event notification",
-		"weekly notification sent")
+		"failed to enqueue weekly major event notification")
 }
 
 func (h *MajorEventHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
 	ready := h != nil && h.Handler != nil && h.majorEventMonthlyScheduler != nil
 
-	var send func(context.Context) error
+	var send func(context.Context) (triggercontracts.Result, error)
 
 	if ready {
 		send = h.majorEventMonthlyScheduler.SendMonthlyNotification
@@ -70,17 +65,15 @@ func (h *MajorEventHandler) TriggerMajorEventMonthlyNotification(c *gin.Context)
 
 	h.triggerNotification(c, ready, send,
 		"major event monthly scheduler not initialized",
-		"failed to send monthly major event notification",
-		"monthly notification sent")
+		"failed to enqueue monthly major event notification")
 }
 
 func (h *MajorEventHandler) triggerNotification(
 	c *gin.Context,
 	ready bool,
-	send func(context.Context) error,
+	send func(context.Context) (triggercontracts.Result, error),
 	notInitMessage string,
 	logMessage string,
-	successStatus string,
 ) {
 	if !ready {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, notInitMessage, nil)
@@ -88,7 +81,8 @@ func (h *MajorEventHandler) triggerNotification(
 		return
 	}
 
-	if err := send(c.Request.Context()); err != nil {
+	result, err := send(c.Request.Context())
+	if err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			sharedserver.RespondError(c, http.StatusConflict, "notification already in progress", nil)
 
@@ -100,5 +94,5 @@ func (h *MajorEventHandler) triggerNotification(
 		return
 	}
 
-	ginjson.Respond(c, http.StatusOK, statusResponse{Status: successStatus})
+	ginjson.Respond(c, http.StatusOK, result)
 }

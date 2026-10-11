@@ -51,7 +51,7 @@ type notificationEnqueue struct {
 	deferLogMsg      string
 }
 
-func enqueueNotification(ctx context.Context, notification notificationEnqueue) (bool, error) {
+func enqueueNotification(ctx context.Context, notification notificationEnqueue) (delivery.SendResult, bool, error) {
 	result := enqueueToRooms(
 		ctx,
 		notification.outboxRepository,
@@ -71,7 +71,7 @@ func enqueueNotification(ctx context.Context, notification notificationEnqueue) 
 
 	shouldMark, err := schedulerkit.ShouldMark(result)
 	if err != nil {
-		return false, fmt.Errorf("should mark: %w", err)
+		return result, false, fmt.Errorf("should mark: %w", err)
 	}
 
 	if !shouldMark {
@@ -81,7 +81,7 @@ func enqueueNotification(ctx context.Context, notification notificationEnqueue) 
 			slog.Any("failed_rooms", result.FailedRooms))
 	}
 
-	return shouldMark, nil
+	return result, shouldMark, nil
 }
 
 // enqueueToRooms: Room별 outbox enqueue (claim 없이 DB UNIQUE로 dedup).

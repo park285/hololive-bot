@@ -96,7 +96,7 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 		StopLog:          "Monthly scheduler stopped",
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
-			if err := s.SendMonthlyNotification(ctx); err != nil {
+			if _, err := s.SendMonthlyNotification(ctx); err != nil {
 				s.digest.Logger.Error("Failed to send monthly notification", slog.String("error", err.Error()))
 			}
 		},
@@ -130,8 +130,9 @@ type monthlyCollected struct {
 	events []*domain.MajorEvent
 }
 
-func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
+func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) (triggercontracts.Result, error) {
 	monthKey := s.getMonthKey()
+	result := triggercontracts.NewResult(0, 0, 0)
 
 	if err := s.digest.RunDigest(ctx, schedulerkit.DigestOp[monthlyCollected]{
 		LockKey:           fmt.Sprintf("majorevent:lock:monthly:%s", monthKey),
@@ -140,13 +141,17 @@ func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 			return s.monthlyNotificationInputs(ctx, monthKey)
 		},
 		Execute: func(ctx context.Context, c monthlyCollected) error {
-			return s.executeMonthlyNotification(ctx, c, monthKey)
+			var err error
+
+			result, err = s.executeMonthlyNotification(ctx, c, monthKey)
+
+			return err
 		},
 	}); err != nil {
-		return fmt.Errorf("run digest: %w", err)
+		return result, fmt.Errorf("run digest: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 func (s *MonthlyScheduler) monthlyNotificationInputs(
@@ -188,15 +193,15 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 	return monthlyCollected{rooms: rooms, events: events}, true, nil
 }
 
-func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) error {
+func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) (triggercontracts.Result, error) {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 
 	message, err := s.monthlyNotificationMessage(ctx, domainEvents, monthKey)
 	if err != nil {
-		return fmt.Errorf("execute monthly notification: format message: %w", err)
+		return triggercontracts.Result{}, fmt.Errorf("execute monthly notification: format message: %w", err)
 	}
 
-	shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
+	counts, shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
 		outboxRepository: s.outboxRepository,
 		outputGuard:      s.outputGuard,
 		logger:           s.digest.Logger,
@@ -208,19 +213,21 @@ func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c mon
 		enqueueLogMsg:    "Monthly notification enqueue result",
 		deferLogMsg:      "Partial room enqueue failure, deferring monthly event marking",
 	})
+	result := triggercontracts.NewResult(counts.Sent, counts.Skipped, counts.Failed)
+
 	if err != nil {
-		return fmt.Errorf("execute monthly notification: %w", err)
+		return result, fmt.Errorf("execute monthly notification: %w", err)
 	}
 
 	if !shouldMark {
-		return nil
+		return result, nil
 	}
 
 	if err := s.repository.MarkEventsAsMonthlyNotified(ctx, eventIDs, monthKey); err != nil {
 		s.digest.Logger.Error("Failed to mark events as monthly notified", slog.String("error", err.Error()))
 	}
 
-	return nil
+	return result, nil
 }
 
 func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, events []domain.MajorEvent, monthKey string) (string, error) {

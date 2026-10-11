@@ -98,6 +98,30 @@ func TestEnqueue_Idempotent_PendingNoOp(t *testing.T) {
 	}
 }
 
+func TestEnqueuePersistsOnlyProducerMessage(t *testing.T) {
+	repository := testRepository(t)
+	ctx := t.Context()
+
+	const message = "알림\n<&>"
+
+	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "payload-contract", "room", message); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	var matches bool
+
+	if err := repository.pool.QueryRow(ctx,
+		"SELECT payload = jsonb_build_object('message', $2::text) FROM notification_delivery_outbox WHERE content_id = $1",
+		"payload-contract:room", message,
+	).Scan(&matches); err != nil {
+		t.Fatalf("read persisted payload: %v", err)
+	}
+
+	if !matches {
+		t.Fatal("producer must preserve the message without worker request or preparation keys")
+	}
+}
+
 func TestEnqueue_FailedRetry(t *testing.T) {
 	repository := testRepository(t)
 	ctx := t.Context()

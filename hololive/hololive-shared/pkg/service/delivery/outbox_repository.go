@@ -29,28 +29,22 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
-
-// outboxPayload는 producer가 적재하는 payload다. Message 키만 쓰며, request·known_unsent 키는 alarm-worker
-// notificationdelivery가 claim 이후에 기록한다. 적재 SQL의 rearm 조건이 그 키를 읽으므로 키 이름은 두 저장소의 계약이다.
-type outboxPayload struct {
-	Message string `json:"message"`
-}
 
 type outboxBatchRow struct {
 	Kind      domain.DeliveryOutboxKind `json:"kind"`
 	PeriodKey string                    `json:"period_key"`
 	RoomID    string                    `json:"room_id"`
 	ContentID string                    `json:"content_id"`
-	Payload   outboxPayload             `json:"payload"`
+	Payload   deliverypayload.Payload   `json:"payload"`
 }
 
-// OutboxRepository는 v2 notification_delivery_outbox의 producer 적재 저장소다. 예전에 v3 ledger로 넘기던
-// handoff(off/shadow/cutover)는 DEC-20260926-hololive-outbox-v3-convergence로 삭제했고, 적재는 이 테이블 하나로만 한다.
-// Claim·발송 정산·stale SENDING 격리·보존 정리는 alarm-worker notificationdelivery.Store가 소유한다. 모든 쓰기가 단일 문장이라
-// 두 저장소에 걸친 트랜잭션은 없고, 동시성은 행 잠금과 status·locked_by·attempt_count 조건으로만 맞춘다.
+// OutboxRepository는 notification_delivery_outbox의 producer 적재를 소유한다.
+// Claim·발송 정산·격리·보존 정리는 alarm-worker notificationdelivery.Store가 맡는다.
+// 단일 문장 쓰기와 행 잠금·status·locked_by·attempt_count 조건으로 동시성을 제어한다.
 type OutboxRepository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
@@ -114,7 +108,7 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 			PeriodKey: item.PeriodKey,
 			RoomID:    item.RoomID,
 			ContentID: contentID,
-			Payload:   outboxPayload{Message: item.Message},
+			Payload:   deliverypayload.Payload{Message: item.Message},
 		})
 	}
 

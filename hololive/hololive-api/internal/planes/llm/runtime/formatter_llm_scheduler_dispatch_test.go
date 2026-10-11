@@ -67,11 +67,11 @@ func TestWhitespaceEventTemplatesDoNotEnqueueOrMark(t *testing.T) {
 			if key == domain.TemplateKeyCmdMajorEventWeeklySummary {
 				scheduler := eventscheduler.NewScheduler(repository, f, nil, renderFailureLocker{}, outbox, logger, eventscheduler.WithGuards(guard, outputguard.NewGuard()))
 
-				err = scheduler.SendWeeklyNotification(t.Context())
+				_, err = scheduler.SendWeeklyNotification(t.Context())
 			} else {
 				scheduler := eventscheduler.NewMonthlyScheduler(repository, f, nil, renderFailureLocker{}, outbox, logger, eventscheduler.WithMonthlyGuards(guard, outputguard.NewGuard()))
 
-				err = scheduler.SendMonthlyNotification(t.Context())
+				_, err = scheduler.SendMonthlyNotification(t.Context())
 			}
 
 			require.ErrorContains(t, err, "template rendered empty")

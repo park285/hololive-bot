@@ -23,10 +23,10 @@ package delivery
 import "time"
 
 type SendResult struct {
-	Attempted   int      // claim 획득하여 발송 시도한 room 수
-	Sent        int      // 발송 성공 (enqueue 성공)
-	Skipped     int      // 이미 claim됨 (기 발송) → skip
-	Failed      int      // 발송 실패
+	Attempted   int      // 적재 처리 대상 room 수 (취소로 시작하지 못한 실패 포함)
+	Sent        int      // intent 적재 수락 수; 멱등 no-op 포함, 발송·handoff 증거가 아님
+	Skipped     int      // 구독 멤버 없음 등으로 적재하지 않은 room 수
+	Failed      int      // 적재 처리 실패 room 수; 실제 발송 상태와 별개
 	FailedRooms []string // 실패 room ID 목록
 }
 

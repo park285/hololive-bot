@@ -8,6 +8,14 @@
 
 ## 미출시
 
+## v8.0.0 - 2026-10-11
+
+- **공유 payload:** producer·worker가 notification delivery의 저장 payload/request 계약을 한 곳에서 사용합니다. 기존 JSON 바이트·고정 request·재무장 CAS·exhaustion fence와 runtime/ledger 책임 분리는 유지합니다.
+- **trigger 계약 변경:** weekly/monthly/membernews 결과를 `queued`·`skipped`·`partial` 및 건수로 반환하고 admin client·run-now 소비자가 본문을 보존합니다. enqueue를 delivered로 표현하거나 partial 전체를 자동 재전송하지 않습니다. 구형 결과 본문 호환 분기는 두지 않습니다.
+- **digest 수명:** 15분 lock TTL 안에 14분 협조적 실행 예산을 두되 기존 HTTP 5분처럼 더 짧은 deadline은 유지합니다. Stop은 취소 후 실제 join하며, 비협조적 외부 호출의 TTL 초과를 막는 lease 갱신/fencing을 추가한 것은 아닙니다.
+- **SDK 통합 검증:** `iris-client-go/v3 v3.1.0`·`shared-go/v2 v2.10.0`을 pin하고 남아 있던 합성 오류 fixture를 실제 SDK HTTP 응답으로 이관했습니다. transport의 안전 재발급·종단 거절·이미지 경로가 새 오류 출처 계약을 검증합니다.
+- **검증:** 관련 HTTP·scheduler·저장소 회귀와 격리 PostgreSQL 검사를 통과했습니다. 별도 실행 파일로 실제 handler/admin client의 결과·단일 호출, 14분/기존 5분 deadline, cancel-then-join, 실제 migration/enqueue·고정 request 재무장·exhaustion fence를 확인했습니다. 운영 배포·실제 알림 발송은 수행하지 않았습니다.
+
 - **의존성:** 모든 Go 모듈·빌더·분석기 빌드를 Go 1.27.2로 맞추고 `golang.org/x/net` v0.60.0,
   OpenAI v3.74.0, Prometheus client v1.25.0과 사용 중인 간접 의존성을 갱신했습니다.
   PostgreSQL의 gosu·deunhealth 빌드 의존성, npm 11.19.1·uv 0.12.24와 lockfile도 갱신하며 운영 배포는 포함하지 않습니다.

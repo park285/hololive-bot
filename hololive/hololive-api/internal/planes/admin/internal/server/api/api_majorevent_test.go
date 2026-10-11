@@ -38,22 +38,22 @@ type majorEventContextKey struct{}
 
 type weeklyMajorEventSchedulerFunc func(context.Context) error
 
-func (f weeklyMajorEventSchedulerFunc) SendWeeklyNotification(ctx context.Context) error {
+func (f weeklyMajorEventSchedulerFunc) SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error) {
 	if err := f(ctx); err != nil {
-		return fmt.Errorf("f: %w", err)
+		return triggercontracts.Result{}, fmt.Errorf("f: %w", err)
 	}
 
-	return nil
+	return triggercontracts.NewResult(1, 0, 0), nil
 }
 
 type monthlyMajorEventSchedulerFunc func(context.Context) error
 
-func (f monthlyMajorEventSchedulerFunc) SendMonthlyNotification(ctx context.Context) error {
+func (f monthlyMajorEventSchedulerFunc) SendMonthlyNotification(ctx context.Context) (triggercontracts.Result, error) {
 	if err := f(ctx); err != nil {
-		return fmt.Errorf("f: %w", err)
+		return triggercontracts.Result{}, fmt.Errorf("f: %w", err)
 	}
 
-	return nil
+	return triggercontracts.NewResult(1, 0, 0), nil
 }
 
 func TestMajorEventHandler_HandlerSignatures(t *testing.T) {
@@ -160,7 +160,7 @@ func TestMajorEventHandler_WeeklyNotificationUsesRequestContext(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, "weekly", <-gotValue)
-	assert.JSONEq(t, `{"status":"weekly notification sent"}`, rec.Body.String())
+	assert.JSONEq(t, `{"status":"queued","queued":1,"skipped":0,"failed":0}`, rec.Body.String())
 }
 
 func TestMajorEventHandler_MonthlyNotificationDependencyErrors(t *testing.T) {
@@ -258,5 +258,44 @@ func TestMajorEventHandler_MonthlyNotificationUsesRequestContext(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, "monthly", <-gotValue)
-	assert.JSONEq(t, `{"status":"monthly notification sent"}`, rec.Body.String())
+	assert.JSONEq(t, `{"status":"queued","queued":1,"skipped":0,"failed":0}`, rec.Body.String())
+}
+
+type enqueueResultScheduler struct {
+	result triggercontracts.Result
+}
+
+func (s enqueueResultScheduler) SendWeeklyNotification(context.Context) (triggercontracts.Result, error) {
+	return s.result, nil
+}
+
+func (s enqueueResultScheduler) SendMonthlyNotification(context.Context) (triggercontracts.Result, error) {
+	return s.result, nil
+}
+
+func TestMajorEventHandlerPreservesPartialAndSkippedOutcomes(t *testing.T) {
+	for _, tc := range []struct {
+		result triggercontracts.Result
+		wire   string
+	}{
+		{triggercontracts.NewResult(2, 0, 1), `{"status":"partial","queued":2,"skipped":0,"failed":1}`},
+		{triggercontracts.NewResult(0, 0, 0), `{"status":"skipped","queued":0,"skipped":0,"failed":0}`},
+	} {
+		scheduler := enqueueResultScheduler{result: tc.result}
+		handler := &MajorEventHandler{Handler: &Handler{
+			logger:                     newDiscardLogger(),
+			majorEventScheduler:        scheduler,
+			majorEventMonthlyScheduler: scheduler,
+		}}
+
+		for _, trigger := range []gin.HandlerFunc{
+			handler.TriggerMajorEventNotification,
+			handler.TriggerMajorEventMonthlyNotification,
+		} {
+			ctx, response := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
+			trigger(ctx)
+			require.Equal(t, http.StatusOK, response.Code)
+			assert.JSONEq(t, tc.wire, response.Body.String())
+		}
+	}
 }

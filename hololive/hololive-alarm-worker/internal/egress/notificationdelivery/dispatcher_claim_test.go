@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -68,7 +69,7 @@ func TestDispatcherClaimsOnlyWhenDeliveryCanStart(t *testing.T) {
 
 				var expired, sent atomic.Int32
 
-				repo.saveRequestFn = func(_ context.Context, id int64, _ string, _, _ *preparedMessage) (bool, error) {
+				repo.saveRequestFn = func(_ context.Context, id int64, _ string, _, _ *deliverypayload.Request) (bool, error) {
 					repo.mu.Lock()
 
 					valid := repo.expires[id].After(time.Now())

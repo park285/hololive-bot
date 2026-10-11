@@ -34,6 +34,7 @@ type Runtime struct {
 	stopCh   chan struct{}
 	stopOnce *sync.Once
 	started  bool
+	cancel   context.CancelFunc
 
 	wg sync.WaitGroup
 }
@@ -91,10 +92,16 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
+	r.cancel = cancel
+
 	stopCh := r.stopCh
 
 	r.started = true
 	r.wg.Go(func() {
+		defer cancel()
+
 		var reason StopReason
 
 		panicguard.Run(logger, panicguard.BackgroundTask, "schedulerkit-runtime", func() {
@@ -122,12 +129,14 @@ func (r *Runtime) Stop() {
 	stopOnce := r.stopOnce
 	stopCh := r.stopCh
 	started := r.started
+	cancel := r.cancel
 	r.mu.Unlock()
 
 	if started {
 		stopOnce.Do(func() {
 			close(stopCh)
 		})
+		cancel()
 	}
 
 	r.wg.Wait()
@@ -161,6 +170,15 @@ func waitRuntimeTick(
 ) (StopReason, bool) {
 	select {
 	case <-ctx.Done():
+		select {
+		case <-stopCh:
+			stopTimer(timer)
+			logger.Info(config.StopLog)
+
+			return StopReasonManual, true
+		default:
+		}
+
 		stopTimer(timer)
 		logger.Info(config.ContextStopLog)
 
@@ -196,6 +214,7 @@ func (r *Runtime) finishRun(stopCh chan struct{}) {
 	r.started = false
 	if r.stopCh == stopCh {
 		r.stopCh = make(chan struct{})
+		r.cancel = nil
 		r.stopOnce = &sync.Once{}
 	}
 }

@@ -186,7 +186,7 @@ func newMarkdownTestSender(client *irisSenderTestClient) *IrisMessageSender {
 }
 
 func TestIrisMessageSenderWaitsThroughEveryInFlightState(t *testing.T) {
-	states := []string{"queued", "preparing", "prepared", "sending", "handoff_completed"}
+	states := []string{"queued", "preparing", "prepared", "sending", " QUEUED ", " Preparing ", "PREPARED", " Sending ", " HANDOFF_COMPLETED "}
 	client := &irisSenderTestClient{
 		getStatus: func(call int, requestID string) (*iris.ReplyStatusSnapshot, error) {
 			return replyTestStatus(requestID, states[call-1]), nil
@@ -228,6 +228,9 @@ func TestIrisMessageSenderClassifiesTerminalStatus(t *testing.T) {
 	}{
 		{name: "failed", status: replyTestStatus("markdown-request-1", "failed"), want: sendoutcome.ErrHandoffFailed},
 		{name: "outcome unknown", status: replyTestStatus("markdown-request-1", "outcome_unknown"), want: sendoutcome.ErrHandoffOutcomeUnknown},
+		{name: "normalized failed", status: replyTestStatus("markdown-request-1", " FAILED "), want: sendoutcome.ErrHandoffFailed},
+		{name: "normalized unknown", status: replyTestStatus("markdown-request-1", " OUTCOME_UNKNOWN "), want: sendoutcome.ErrHandoffOutcomeUnknown},
+		{name: "delivered is not handoff", status: replyTestStatus("markdown-request-1", "delivered"), want: sendoutcome.ErrHandoffOutcomeUnknown},
 		{name: "unknown state", status: replyTestStatus("markdown-request-1", "mystery"), want: sendoutcome.ErrHandoffOutcomeUnknown},
 		{name: "empty status", want: sendoutcome.ErrHandoffOutcomeUnknown},
 		{name: "request mismatch", status: replyTestStatus("another-request", "handoff_completed"), want: sendoutcome.ErrHandoffOutcomeUnknown},

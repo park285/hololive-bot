@@ -5,10 +5,11 @@ import (
 	"log/slog"
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 type memberNewsWeeklyRunNowTrigger interface {
-	SendMemberNewsWeekly(ctx context.Context) error
+	SendMemberNewsWeekly(ctx context.Context) (triggercontracts.Result, error)
 }
 
 type botSettingsApplier struct {
@@ -42,7 +43,8 @@ func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sh
 		}
 	}
 
-	if err := a.memberNewsRunNow.SendMemberNewsWeekly(ctx); err != nil {
+	result, err := a.memberNewsRunNow.SendMemberNewsWeekly(ctx)
+	if err != nil {
 		a.logger.Warn("Failed to trigger member news weekly run-now", slog.Any("error", err))
 
 		return sharedsettings.MemberNewsWeeklyRunNowResult{
@@ -55,5 +57,6 @@ func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sh
 	return sharedsettings.MemberNewsWeeklyRunNowResult{
 		Applied: true,
 		Source:  "member_news_trigger",
+		Trigger: &result,
 	}
 }

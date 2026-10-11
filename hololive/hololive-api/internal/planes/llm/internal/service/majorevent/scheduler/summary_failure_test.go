@@ -35,7 +35,7 @@ func TestSendWeeklyNotification_SummaryFailure_DoesNotEnqueueOrMark(t *testing.T
 		WithGuards(newMajorEventPromptGuardForSchedulerTest(), outputguard.NewGuard()),
 	)
 
-	if err := scheduler.SendWeeklyNotification(t.Context()); err == nil {
+	if _, err := scheduler.SendWeeklyNotification(t.Context()); err == nil {
 		t.Fatal("SendWeeklyNotification() error = nil, want summary failure")
 	}
 
@@ -64,7 +64,7 @@ func TestSendMonthlyNotification_SummaryFailure_DoesNotEnqueueOrMark(t *testing.
 		WithMonthlyGuards(newMajorEventPromptGuardForSchedulerTest(), outputguard.NewGuard()),
 	)
 
-	if err := scheduler.SendMonthlyNotification(t.Context()); err == nil {
+	if _, err := scheduler.SendMonthlyNotification(t.Context()); err == nil {
 		t.Fatal("SendMonthlyNotification() error = nil, want summary failure")
 	}
 

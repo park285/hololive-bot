@@ -31,6 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
@@ -101,7 +102,7 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 		StopLog:          "Member news monthly scheduler stopped",
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
-			if err := s.SendMonthlyDigest(ctx); err != nil {
+			if _, err := s.SendMonthlyDigest(ctx); err != nil {
 				s.digest.Logger.Error("Member news monthly send failed", slog.String("error", err.Error()))
 			}
 		},
@@ -131,20 +132,20 @@ func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
 	return target
 }
 
-func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
+func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) (triggercontracts.Result, error) {
 	if s == nil {
-		return errors.New("member news monthly scheduler is nil")
+		return triggercontracts.Result{}, errors.New("member news monthly scheduler is nil")
 	}
 
 	if s.service == nil {
-		return errors.New("member news service is nil")
+		return triggercontracts.Result{}, errors.New("member news service is nil")
 	}
 
 	now := s.digest.Clock()
 	nowKST := now.In(timeutil.KSTZone)
 	monthKey := fmt.Sprintf("%d-%02d", nowKST.Year(), nowKST.Month())
 
-	if err := runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
+	result, err := runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
 		period:           model.PeriodMonthly,
 		now:              now,
 		periodKey:        monthKey,
@@ -154,11 +155,12 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 		lockKey:          fmt.Sprintf("membernews:lock:monthly:%s", monthKey),
 		skipMessage:      "Member news monthly skipped: no subscribed room",
 		lockSkipMessage:  "Member news monthly execution skipped: lock already acquired",
-	}); err != nil {
-		return fmt.Errorf("run member news digest: %w", err)
+	})
+	if err != nil {
+		return result, fmt.Errorf("run member news digest: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, monthKey, roomID string) delivery.SendResult {

@@ -31,12 +31,12 @@ func TestSchedulersPrepareOneRunAndUseCapturedClock(t *testing.T) {
 				scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 				scheduler.SetClock(clock)
 
-				err = scheduler.SendWeeklyDigest(t.Context())
+				_, err = scheduler.SendWeeklyDigest(t.Context())
 			} else {
 				scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 				scheduler.SetClock(clock)
 
-				err = scheduler.SendMonthlyDigest(t.Context())
+				_, err = scheduler.SendMonthlyDigest(t.Context())
 			}
 
 			if err != nil {
@@ -60,7 +60,7 @@ func TestSchedulerCommonPreparationFailureStopsRoomsAndReleasesLock(t *testing.T
 	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
-	err := scheduler.SendWeeklyDigest(t.Context())
+	_, err := scheduler.SendWeeklyDigest(t.Context())
 
 	if !errors.Is(err, cause) || service.prepareCalls != 1 || len(outbox.enqueuedItems) != 0 || len(locker.releaseCalls) != 1 {
 		t.Fatalf("error=%v prepares=%d enqueues=%d releases=%d", err, service.prepareCalls, len(outbox.enqueuedItems), len(locker.releaseCalls))
@@ -73,7 +73,7 @@ func TestSchedulerNoRoomsOrLockSkipDoesNotPrepareRun(t *testing.T) {
 		locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: acquired}
 		scheduler := NewScheduler(service, mockFormatter{}, locker, newMockOutboxRepository(), nil)
 
-		if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
+		if _, err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 

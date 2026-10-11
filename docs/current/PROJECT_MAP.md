@@ -14,12 +14,18 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `hololive-youtube-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30035 |
 | `hololive-shared` | Go 1.27 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.27 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
-| `iris-console` | TypeScript gateway / React SSR | `../iris-console/` (iris-stack submodule) | Unified Iris/ChatBotGo/Hololive app with account scopes and one PWA; host control API `iris-admin` belongs to Iris | 8878 (loopback) |
+| `iris-console` | Go gateway + Android Kotlin | `../iris-console/` (iris-stack submodule) | Unified Iris/ChatBotGo/Hololive app source with account scopes; this technology inventory does not assert deployment completion. Host control API `iris-admin` belongs to Iris | 8878 (loopback) |
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Central production Compose service definitions; used with the live-compat overlay | - |
 | `deploy/compose/docker-compose.live-compat.yml` | YAML | `deploy/compose/docker-compose.live-compat.yml` | Required central host wiring and shortlink ingress | - |
 | `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.seoul.yml` | YAML | `deploy/compose/docker-compose.seoul.yml` | Seoul Compose AP (`youtube-collector-b` + isolated issuer `youtube-po-b`) | - |
+
+The Console module row describes the current Go gateway + Android Kotlin source.
+It does not replace deployed-generation evidence: the previously recorded
+Node/React SSR generation has not been reverified here, and Go/Android runtime
+acceptance is unknown. Runtime/deployment records, staged acceptance gates, and
+rollback requirements remain authoritative and unchanged.
 
 ## Runtime Operations Inventory
 
@@ -78,6 +84,14 @@ and single-primary fence.
 | Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,dedup,dispatchoutbox,queue}`, `internal/egress/{alarmdispatch,notificationdelivery}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache·dispatch 저장/발행·runner, 범용 notification delivery dispatcher·store·SQL, 실제 formatter |
 | Collector | `hololive/hololive-youtube-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |
 | Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{cache,database,holodex,iris,member,modules}` | strict 환경 파싱, 설정 구획 타입·loader·순수 검증, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계는 각 module `internal/config`가 소유 |
+
+`hololive-shared/pkg/contracts/notificationdelivery` owns only the persisted
+`notification_delivery_outbox` JSON envelope and immutable request snapshot.
+The producer in `pkg/service/delivery` writes the message; worker
+`internal/egress/notificationdelivery` owns preparation evidence, claim, request
+generations, retry, quarantine, and settlement. This contract does not merge
+the notification delivery and alarm dispatch ledgers or move collector/API/worker
+responsibilities.
 
 Alarm HTTP provider는 worker이며 API bot·admin plane은 `ALARM_INTERNAL_URL`의 client입니다. 내부 HTTP/H3 client는 시작 시 적재한 `BotPlaneConfig.InternalH3`·`AdminPlaneConfig.InternalH3` 옵션을 명시적으로 받고, transport와 timeout은 각 plane이 소유합니다. Iris URL 파일의 동적 reload는 별도 기존 경로를 유지합니다.
 

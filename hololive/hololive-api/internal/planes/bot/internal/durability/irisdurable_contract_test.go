@@ -39,6 +39,7 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 var (
@@ -73,8 +74,8 @@ func TestIrisDurableContract(t *testing.T) {
 				Derive:         iris.ReissuedClientRequestID,
 			},
 			PreHandoffConflict:    iris.IsPreHandoffClientRequestIDConflict,
-			NewPreHandoffConflict: func() error { return contractIrisConflict(iris.HTTPErrorCodeClientRequestIDFailed) },
-			NewTerminalConflict:   func() error { return contractIrisConflict(iris.HTTPErrorCodeClientRequestIDOutcomeUnknown) },
+			NewPreHandoffConflict: func() error { return contractIrisConflict(t, iris.HTTPErrorCodeClientRequestIDFailed) },
+			NewTerminalConflict:   func() error { return contractIrisConflict(t, iris.HTTPErrorCodeClientRequestIDOutcomeUnknown) },
 		},
 		Retention: &contracttest.RetentionFixture{
 			ReplyOutboxRetention:   terminalRetention,
@@ -101,12 +102,10 @@ func contractTerminalRetention(t *testing.T) time.Duration {
 	return time.Duration(profile.BotWebhookInbox.TerminalRetentionMS) * time.Millisecond
 }
 
-func contractIrisConflict(code string) error {
-	return &iris.HTTPError{
-		StatusCode: http.StatusConflict,
-		URL:        "https://iris/reply",
-		Body:       fmt.Sprintf(`{"code":%q}`, code),
-	}
+func contractIrisConflict(t *testing.T, code string) error {
+	t.Helper()
+
+	return fmt.Errorf("iris contract conflict: %w", testutil.IrisHTTPError(t, http.StatusConflict, fmt.Sprintf(`{"code":%q}`, code)))
 }
 
 func contractUniqueID(kind string) string {

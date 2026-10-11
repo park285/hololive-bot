@@ -148,34 +148,24 @@ func assessReplyHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot, 
 		return false, fmt.Errorf("%w: reply status response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
-	if err := validateReplyHandoffStatus(requestID, status); err != nil {
-		return false, err
-	}
-
-	return normalizedReplyState(status.State) == "handoff_completed", nil
-}
-
-func validateReplyHandoffStatus(requestID string, status *iris.ReplyStatusSnapshot) error {
-	if status == nil {
-		return fmt.Errorf("%w: reply status response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
-	}
-
 	if strings.TrimSpace(status.RequestID) != requestID {
-		return fmt.Errorf("%w: reply status request id does not match", sendoutcome.ErrHandoffOutcomeUnknown)
+		return false, fmt.Errorf("%w: reply status request id does not match", sendoutcome.ErrHandoffOutcomeUnknown)
 	}
 
-	switch normalizedReplyState(status.State) {
-	case "queued", "preparing", "prepared", "sending", "handoff_completed":
-		return nil
-	case "failed":
-		return sendoutcome.ErrHandoffFailed
-	case "outcome_unknown":
-		return sendoutcome.ErrHandoffOutcomeUnknown
-	default:
-		return fmt.Errorf("%w: reply status state is not recognized", sendoutcome.ErrHandoffOutcomeUnknown)
+	// 대소문자·공백 허용은 기존 bot 정책이며 SDK의 정확한 wire 분류와 분리한다.
+	state := strings.ToLower(strings.TrimSpace(status.State))
+	switch iris.ClassifyReplyStatus(state) {
+	case iris.ReplyStatusPending:
+		return false, nil
+	case iris.ReplyStatusHandoffCompleted:
+		return true, nil
+	case iris.ReplyStatusFailed:
+		return false, sendoutcome.ErrHandoffFailed
+	case iris.ReplyStatusUnknown:
+		if state == "outcome_unknown" {
+			return false, sendoutcome.ErrHandoffOutcomeUnknown
+		}
 	}
-}
 
-func normalizedReplyState(state string) string {
-	return strings.ToLower(strings.TrimSpace(state))
+	return false, fmt.Errorf("%w: reply status state is not recognized", sendoutcome.ErrHandoffOutcomeUnknown)
 }

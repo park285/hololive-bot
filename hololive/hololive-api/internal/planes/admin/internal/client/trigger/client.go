@@ -71,60 +71,64 @@ func NewClient(schedulerURL, apiKey string, logger *slog.Logger, options sharedh
 }
 
 // SendWeeklyNotification은 주간 major event 알림 트리거를 호출한다.
-func (c *Client) SendWeeklyNotification(ctx context.Context) error {
-	if err := c.postTrigger(ctx, triggercontracts.MajorEventWeeklyPath); err != nil {
-		return fmt.Errorf("send weekly notification: %w", err)
+func (c *Client) SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error) {
+	result, err := c.postTrigger(ctx, triggercontracts.MajorEventWeeklyPath)
+	if err != nil {
+		return result, fmt.Errorf("send weekly notification: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 // SendMonthlyNotification은 월간 major event 알림 트리거를 호출한다.
-func (c *Client) SendMonthlyNotification(ctx context.Context) error {
-	if err := c.postTrigger(ctx, triggercontracts.MajorEventMonthlyPath); err != nil {
-		return fmt.Errorf("send monthly notification: %w", err)
+func (c *Client) SendMonthlyNotification(ctx context.Context) (triggercontracts.Result, error) {
+	result, err := c.postTrigger(ctx, triggercontracts.MajorEventMonthlyPath)
+	if err != nil {
+		return result, fmt.Errorf("send monthly notification: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 // SendMemberNewsWeekly는 주간 member news 알림 트리거를 호출한다.
-func (c *Client) SendMemberNewsWeekly(ctx context.Context) error {
-	if err := c.postTrigger(ctx, triggercontracts.MemberNewsWeeklyPath); err != nil {
-		return fmt.Errorf("send member news weekly notification: %w", err)
+func (c *Client) SendMemberNewsWeekly(ctx context.Context) (triggercontracts.Result, error) {
+	result, err := c.postTrigger(ctx, triggercontracts.MemberNewsWeeklyPath)
+	if err != nil {
+		return result, fmt.Errorf("send member news weekly notification: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
-func (c *Client) postTrigger(ctx context.Context, path string) error {
+func (c *Client) postTrigger(ctx context.Context, path string) (triggercontracts.Result, error) {
 	if err := c.validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
+		return triggercontracts.Result{}, fmt.Errorf("validate: %w", err)
 	}
 
 	req, err := c.httpClient.NewRequest(ctx, http.MethodPost, path)
 	if err != nil {
-		return fmt.Errorf("post trigger: new request %s: %w", path, err)
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: new request %s: %w", path, err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("post trigger: request %s: %w", path, err)
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: request %s: %w", path, err)
 	}
 
 	if resp == nil {
-		return fmt.Errorf("post trigger: request %s: response is nil", path)
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: request %s: response is nil", path)
 	}
 
 	if resp.Body == nil {
-		return fmt.Errorf("post trigger: request %s: response body is nil", path)
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: request %s: response body is nil", path)
 	}
 
-	if err := c.handleTriggerResponse(resp, path); err != nil {
-		return fmt.Errorf("handle trigger response: %w", err)
+	result, err := c.handleTriggerResponse(resp, path)
+	if err != nil {
+		return result, fmt.Errorf("handle trigger response: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
 func (c *Client) validate() error {
@@ -139,43 +143,50 @@ func (c *Client) validate() error {
 	return nil
 }
 
-func (c *Client) handleTriggerResponse(resp *http.Response, path string) error {
+func (c *Client) handleTriggerResponse(resp *http.Response, path string) (triggercontracts.Result, error) {
 	if resp == nil {
-		return fmt.Errorf("post trigger: request %s: response is nil", path)
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: request %s: response is nil", path)
 	}
 
 	if resp.Body == nil {
-		return fmt.Errorf("post trigger: request %s: response body is nil", path)
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: request %s: response body is nil", path)
 	}
 
 	handled, err := c.handleTriggerConflict(resp, path)
 	if err != nil {
-		return fmt.Errorf("handle trigger conflict: %w", err)
+		return triggercontracts.Result{}, fmt.Errorf("handle trigger conflict: %w", err)
 	}
 
 	if handled {
-		return nil
+		return triggercontracts.Result{}, nil
 	}
 
-	if err := c.httpClient.CheckStatus(resp); err != nil {
+	if err = c.httpClient.CheckStatus(resp); err != nil {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close response body: %w", closeErr))
 		}
 
-		return fmt.Errorf(
+		return triggercontracts.Result{}, fmt.Errorf(
 			"post trigger: request failed %s: %w",
 			path,
 			err,
 		)
 	}
 
-	if err := c.httpClient.DiscardBody(resp); err != nil {
-		return fmt.Errorf("post trigger: discard response body %s: %w", path, err)
+	result, err := c.httpClient.DecodeJSON[triggercontracts.Result](resp)
+	if err != nil {
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: decode response %s: %w", path, err)
+	}
+
+	if result.Queued < 0 || result.Skipped < 0 || result.Failed < 0 ||
+		result.Status != triggercontracts.NewResult(result.Queued, result.Skipped, result.Failed).Status ||
+		result.Status == "failed" {
+		return triggercontracts.Result{}, fmt.Errorf("post trigger: invalid enqueue result %s", path)
 	}
 
 	c.logger.Debug("Trigger request succeeded", slog.String("path", path), slog.Int("status", resp.StatusCode))
 
-	return nil
+	return result, nil
 }
 
 func (c *Client) handleTriggerConflict(resp *http.Response, path string) (bool, error) {

@@ -73,6 +73,11 @@ func (d *DigestScheduler) RunDigest[C any](ctx context.Context, op DigestOp[C]) 
 		return errors.New("run digest: notification locker is not configured")
 	}
 
+	// 락 TTL보다 먼저 협력적 취소를 요청한다. 호출자가 더 짧은 deadline을 주면 유지한다.
+	// 취소를 무시하는 외부 호출의 종료나 락 만료 전 join을 보장하는 fencing은 아니다.
+	ctx, cancel := context.WithTimeout(ctx, delivery.DefaultExecutionLockTTL-time.Minute)
+	defer cancel()
+
 	token, acquired, err := d.Locker.TryAcquire(ctx, op.LockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)

@@ -24,6 +24,7 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
@@ -34,9 +35,9 @@ type memberNewsRunNowStub struct {
 	err   error
 }
 
-func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) error {
+func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) (triggercontracts.Result, error) {
 	s.calls++
-	return s.err
+	return triggercontracts.NewResult(1, 0, 0), s.err
 }
 
 func TestNormalizeRuntimeBuildInputsDefaultsTODOContext(t *testing.T) {

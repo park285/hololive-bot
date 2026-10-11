@@ -20,6 +20,8 @@
 
 package settings
 
+import triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+
 type AlarmAdvanceMinutesApplyResult struct {
 	AlarmRequestedAdvanceMinutes int    `json:"alarm_requested_advance_minutes"`
 	AlarmApplied                 bool   `json:"alarm_applied"`
@@ -44,10 +46,11 @@ func (r AlarmAdvanceMinutesApplyResult) AsMap() map[string]any {
 }
 
 type MemberNewsWeeklyRunNowResult struct {
-	Applied bool   `json:"applied"`
-	Reason  string `json:"reason,omitempty"`
-	Error   string `json:"error,omitempty"`
-	Source  string `json:"source,omitempty"`
+	Applied bool                     `json:"applied"`
+	Reason  string                   `json:"reason,omitempty"`
+	Error   string                   `json:"error,omitempty"`
+	Source  string                   `json:"source,omitempty"`
+	Trigger *triggercontracts.Result `json:"trigger,omitempty"`
 }
 
 func (r MemberNewsWeeklyRunNowResult) AsMap() map[string]any {
@@ -64,6 +67,10 @@ func (r MemberNewsWeeklyRunNowResult) AsMap() map[string]any {
 
 	if r.Source != "" {
 		out["source"] = r.Source
+	}
+
+	if r.Trigger != nil {
+		out["trigger"] = *r.Trigger
 	}
 
 	return out

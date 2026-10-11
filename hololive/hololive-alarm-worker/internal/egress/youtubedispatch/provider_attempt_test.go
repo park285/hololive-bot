@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 const (
@@ -88,13 +89,13 @@ func TestProviderAttemptTracksActualResultAndPanic(t *testing.T) {
 
 func TestGroupedAdmissionConflictsDoNotSplitRequest(t *testing.T) {
 	for _, code := range []string{"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH", "CLIENT_REQUEST_ID_ALREADY_EXISTS", "CLIENT_REQUEST_ID_OUTCOME_UNKNOWN", "CLIENT_REQUEST_ID_FAILED", ""} {
-		err := &iris.HTTPError{StatusCode: 409, Body: `{"code":"` + code + `"}`}
+		err := testutil.IrisHTTPError(t, 409, `{"code":"`+code+`"}`)
 		require.False(t, shouldFallbackGroupedSend(errors.Join(iris.ErrPermanent, err)))
 	}
 }
 
 func TestReissueWaitsForNextDeliveryAttempt(t *testing.T) {
-	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: &iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`}}
+	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
 	d := newTestDispatcherForSend(t, &testSender{})
 
 	d.send.sender = sender
@@ -106,7 +107,7 @@ func TestReissueWaitsForNextDeliveryAttempt(t *testing.T) {
 }
 
 func TestReissueRejectsMixedUnknownAndPreHandoffFailure(t *testing.T) {
-	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, &iris.HTTPError{StatusCode: 409, Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`})}
+	sender := &providerAttemptSender{tracker: workercontract.NewExecutorTracker(), err: errors.Join(sendoutcome.ErrHandoffOutcomeUnknown, testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`))}
 	d := newTestDispatcherForSend(t, &testSender{})
 
 	d.send.sender = sender

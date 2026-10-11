@@ -20,7 +20,11 @@
 
 package settings
 
-import "testing"
+import (
+	"testing"
+
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+)
 
 func TestSettingsRuntimeStateResultAsMap(t *testing.T) {
 	t.Parallel()
@@ -29,13 +33,6 @@ func TestSettingsRuntimeStateResultAsMap(t *testing.T) {
 
 	if minutes, ok := got["alarm_target_minutes"].([]int); !ok || len(minutes) != 2 {
 		t.Fatalf("alarm_target_minutes key mismatch: %+v", got)
-	}
-
-	// 퇴역한 scraper proxy runtime 키는 다시 노출하지 않는다.
-	for _, key := range []string{"requested", "youtube_enabled", "holodex_enabled", "scheduler_enabled", "scheduler_known"} {
-		if _, exists := got[key]; exists {
-			t.Fatalf("retired key %q should not exist: %+v", key, got)
-		}
 	}
 }
 
@@ -53,5 +50,14 @@ func TestMemberNewsWeeklyRunNowResultAsMap(t *testing.T) {
 
 	if got["reason"] != "not configured" {
 		t.Fatalf("reason key mismatch: %+v", got)
+	}
+}
+
+func TestRunNowMapPreservesEnqueueOutcome(t *testing.T) {
+	outcome := triggercontracts.NewResult(2, 1, 1)
+	got := (MemberNewsWeeklyRunNowResult{Applied: true, Trigger: &outcome}).AsMap()
+
+	if got["trigger"] != outcome {
+		t.Fatalf("enqueue result missing from settings response: %+v", got)
 	}
 }

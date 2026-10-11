@@ -34,14 +34,14 @@ type llmHTTPTriggerScheduler struct {
 	release chan struct{}
 }
 
-func (s *llmHTTPTriggerScheduler) SendWeeklyNotification(ctx context.Context) error {
+func (s *llmHTTPTriggerScheduler) SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error) {
 	s.entered <- ctx
 
 	select {
 	case <-s.release:
-		return nil
+		return triggercontracts.NewResult(1, 0, 0), nil
 	case <-ctx.Done():
-		return fmt.Errorf("trigger execution: %w", ctx.Err())
+		return triggercontracts.Result{}, fmt.Errorf("trigger execution: %w", ctx.Err())
 	}
 }
 

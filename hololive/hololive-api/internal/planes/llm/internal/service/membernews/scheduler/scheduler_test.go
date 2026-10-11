@@ -167,7 +167,7 @@ func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
+	if _, err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error when lock held, got %v", err)
 	}
 
@@ -185,7 +185,7 @@ func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
+	if _, err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -206,7 +206,7 @@ func TestScheduler_AllEnqueueFailureReturnsError(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(t.Context()); err == nil {
+	if _, err := scheduler.SendWeeklyDigest(t.Context()); err == nil {
 		t.Fatal("expected error when all rooms fail to enqueue")
 	}
 }
@@ -271,8 +271,13 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
+	result, err := scheduler.SendWeeklyDigest(t.Context())
+	if err != nil {
 		t.Fatalf("expected no error for partial failure with at least one success, got %v", err)
+	}
+
+	if result.Status != "partial" || result.Queued != 1 || result.Failed != 1 {
+		t.Fatalf("partial enqueue result = %+v", result)
 	}
 
 	if len(outbox.enqueuedItems) != 1 {
@@ -294,8 +299,13 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
+	result, err := scheduler.SendWeeklyDigest(t.Context())
+	if err != nil {
 		t.Fatalf("expected no error for all-skip(no members), got %v", err)
+	}
+
+	if result.Status != "skipped" || result.Queued != 0 || result.Skipped != 1 {
+		t.Fatalf("skipped enqueue result = %+v", result)
 	}
 
 	if len(outbox.enqueuedItems) != 0 {
@@ -312,7 +322,7 @@ func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
+	if _, err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyDigest() error = %v", err)
 	}
 
@@ -332,7 +342,7 @@ func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
+	if _, err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error with graceful degradation, got %v", err)
 	}
 
