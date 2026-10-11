@@ -51,7 +51,7 @@ func TestGenericRequestSnapshotAndBoundedReissueSurviveRestart(t *testing.T) {
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "snapshot", "room", "source"))
 
-	conflict := testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)
+	conflict := testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)
 	sender := &preparedSenderSpy{body: "original final body", route: testPreparedMarkdown, err: conflict}
 	cfg := testDispatcherConfig()
 
@@ -198,7 +198,7 @@ func TestGenericPayloadMismatchDoesNotReissue(t *testing.T) {
 		snapshots = append(snapshots, next)
 		return true, nil
 	}}
-	sender := &preparedSenderSpy{body: "body", route: testPreparedText, err: testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH"}`)}
+	sender := &preparedSenderSpy{body: "body", route: testPreparedText, err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH"}`)}
 	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 	d.processItem(t.Context(), &domain.NotificationDeliveryOutbox{ID: 1, Payload: makePayload(t, "source")})
 	require.Len(t, snapshots, 1)
@@ -320,7 +320,7 @@ func TestGenericPreparationFailureKeepsUnsentEvidenceForRetry(t *testing.T) {
 func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 	for _, unknown := range []error{
 		sendoutcome.ErrHandoffOutcomeUnknown, context.DeadlineExceeded, context.Canceled,
-		testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`),
+		testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`),
 		errors.Join(sendoutcome.ErrHandoffFailed, &iris.TransportError{Op: "post", Err: io.ErrUnexpectedEOF}),
 	} {
 		t.Run(unknown.Error(), func(t *testing.T) {
@@ -328,7 +328,7 @@ func TestGenericUnknownEvidencePreventsJoinedConflictReissue(t *testing.T) {
 			ctx := t.Context()
 			require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "joined-conflict", "room", "source"))
 
-			sender := &preparedSenderSpy{body: "pinned", route: testPreparedText, err: errors.Join(testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), unknown)}
+			sender := &preparedSenderSpy{body: "pinned", route: testPreparedText, err: errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), unknown)}
 			d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
 			d.processReady(ctx)
 			d.processReady(ctx)

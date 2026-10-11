@@ -107,7 +107,7 @@ func lostAdmissionResponseError() error {
 	return fmt.Errorf("post /reply: %w", iris.ErrTransport)
 }
 
-func irisConflictWithCode(t *testing.T, code string) error {
+func irisConflictWithCode(ctx context.Context, t *testing.T, code string) error {
 	t.Helper()
 
 	body := "{}"
@@ -116,7 +116,7 @@ func irisConflictWithCode(t *testing.T, code string) error {
 		body = fmt.Sprintf(`{"code":%q}`, code)
 	}
 
-	return fmt.Errorf("iris conflict response: %w", testutil.IrisHTTPError(t, http.StatusConflict, body))
+	return fmt.Errorf("iris conflict response: %w", testutil.IrisHTTPError(ctx, t, http.StatusConflict, body))
 }
 
 func replyLanesUnderTest() map[string]func(*stubAcceptedSender) replyLane {
@@ -835,7 +835,7 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 	t.Run("failed conflict reissues once and succeeds", func(t *testing.T) {
 		s := &stubAcceptedSender{
 			snap:      &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted},
-			acceptErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed),
+			acceptErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed),
 		}
 
 		s.onAccept = func(call int) {
@@ -854,7 +854,7 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 	})
 
 	t.Run("failed conflict exhausts two reissue generations", func(t *testing.T) {
-		s := &stubAcceptedSender{acceptErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed)}
+		s := &stubAcceptedSender{acceptErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 		require.Error(t, err)
@@ -870,11 +870,11 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 	})
 
 	t.Run("already exists on a reissued generation is terminal", func(t *testing.T) {
-		s := &stubAcceptedSender{acceptErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed)}
+		s := &stubAcceptedSender{acceptErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		s.onAccept = func(call int) {
 			if call == 2 {
-				s.acceptErr = irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDAlreadyExists)
+				s.acceptErr = irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDAlreadyExists)
 			}
 		}
 
@@ -904,7 +904,7 @@ func testSendReplyConflictReissueTerminal(t *testing.T, newLane func(*stubAccept
 			"",
 		} {
 			t.Run(code, func(t *testing.T) {
-				s := &stubAcceptedSender{acceptErr: irisConflictWithCode(t, code)}
+				s := &stubAcceptedSender{acceptErr: irisConflictWithCode(ctx, t, code)}
 				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 				require.Error(t, err)
 				assert.Equal(t, code, iris.HTTPErrorCode(err))
@@ -922,7 +922,7 @@ func testSendReplyConflictReissueTerminal(t *testing.T, newLane func(*stubAccept
 		s.onAccept = func(call int) {
 			switch call {
 			case 2:
-				s.acceptErr = irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed)
+				s.acceptErr = irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed)
 			case 3:
 				s.acceptErr = nil
 			}
@@ -1296,7 +1296,7 @@ func TestCommandTransportSendImageConflictReissue(t *testing.T) {
 		t.Parallel()
 
 		data := []byte("image-payload")
-		c := &stubBotClient{imageErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed)}
+		c := &stubBotClient{imageErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		c.onImage = func(call int) {
 			if call == 2 {
@@ -1319,7 +1319,7 @@ func TestCommandTransportSendImageConflictReissue(t *testing.T) {
 	t.Run("failed conflict exhausts two image reissue generations", func(t *testing.T) {
 		t.Parallel()
 
-		c := &stubBotClient{imageErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed)}
+		c := &stubBotClient{imageErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("image-payload"))
 		require.Error(t, err)
@@ -1342,7 +1342,7 @@ func TestCommandTransportSendImageConflictReissue(t *testing.T) {
 	t.Run("other image conflicts remain terminal without reissue", func(t *testing.T) {
 		t.Parallel()
 
-		c := &stubBotClient{imageErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDOutcomeUnknown)}
+		c := &stubBotClient{imageErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDOutcomeUnknown)}
 
 		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("image-payload"))
 		require.Error(t, err)
@@ -1456,7 +1456,7 @@ func TestCommandTransportSendImagesFailures(t *testing.T) {
 		t.Parallel()
 
 		images := [][]byte{[]byte("one"), []byte("two")}
-		c := &stubBotClient{multiErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed)}
+		c := &stubBotClient{multiErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		c.onMultiImage = func(call int) {
 			if call == 2 {
@@ -1485,7 +1485,7 @@ func TestCommandTransportSendImagesReissueExhaustion(t *testing.T) {
 	t.Run("failed conflict exhausts two album reissue generations", func(t *testing.T) {
 		t.Parallel()
 
-		c := &stubBotClient{multiErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDFailed)}
+		c := &stubBotClient{multiErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
 		require.Error(t, err)
@@ -1508,7 +1508,7 @@ func TestCommandTransportSendImagesReissueExhaustion(t *testing.T) {
 	t.Run("other album conflicts remain terminal without reissue", func(t *testing.T) {
 		t.Parallel()
 
-		c := &stubBotClient{multiErr: irisConflictWithCode(t, iris.HTTPErrorCodeClientRequestIDPayloadMismatch)}
+		c := &stubBotClient{multiErr: irisConflictWithCode(ctx, t, iris.HTTPErrorCodeClientRequestIDPayloadMismatch)}
 
 		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
 		require.Error(t, err)

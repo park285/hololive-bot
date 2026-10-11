@@ -26,9 +26,9 @@ func TestClassifyPreservesDeliveryEvidence(t *testing.T) {
 	}{
 		{"success", nil, Success},
 		{"handoff unknown dominates timeout", errors.Join(ErrHandoffOutcomeUnknown, context.DeadlineExceeded), OutcomeUnknown},
-		{"structured unknown", testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`), OutcomeUnknown},
+		{"structured unknown", testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`), OutcomeUnknown},
 		{"handoff failed", ErrHandoffFailed, Failed},
-		{"later structured unknown dominates failed", errors.Join(testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`)), OutcomeUnknown},
+		{"later structured unknown dominates failed", errors.Join(testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_OUTCOME_UNKNOWN"}`)), OutcomeUnknown},
 		{"timeout", context.DeadlineExceeded, TransportAmbiguous},
 		{"joined timeout dominates failure", errors.Join(ErrHandoffFailed, context.DeadlineExceeded), TransportAmbiguous},
 		{"canceled after invocation", context.Canceled, TransportAmbiguous},
@@ -45,12 +45,12 @@ func TestClassifyPreservesDeliveryEvidence(t *testing.T) {
 		)}, TransportAmbiguous},
 		{"joined pre-handoff failures remain known", errors.Join(
 			&iris.TransportError{Op: testPostOperation, Err: &net.OpError{Op: testDialOperation, Err: errors.New("refused")}},
-			testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`),
+			testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`),
 		), Failed},
 		{"transport joined dial and dns failures remain known", &iris.TransportError{Op: testPostOperation, Err: errors.Join(
 			&net.OpError{Op: testDialOperation, Err: errors.New("refused")}, &net.DNSError{Err: "no host"},
 		)}, Failed},
-		{"payload mismatch", testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH"}`), Failed},
+		{"payload mismatch", testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_PAYLOAD_MISMATCH"}`), Failed},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -105,7 +105,7 @@ func contractTerminalRetention(t *testing.T) time.Duration {
 func contractIrisConflict(t *testing.T, code string) error {
 	t.Helper()
 
-	return fmt.Errorf("iris contract conflict: %w", testutil.IrisHTTPError(t, http.StatusConflict, fmt.Sprintf(`{"code":%q}`, code)))
+	return fmt.Errorf("iris contract conflict: %w", testutil.IrisHTTPError(t.Context(), t, http.StatusConflict, fmt.Sprintf(`{"code":%q}`, code)))
 }
 
 func contractUniqueID(kind string) string {

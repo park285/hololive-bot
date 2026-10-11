@@ -49,7 +49,7 @@ func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 	transition, err := store.NewTransitionStore(pool, slog.Default(), store.TransitionConfig{MaxRetries: 3, RetryBackoff: time.Millisecond, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
 	require.NoError(t, err)
 
-	sender := &frozenProviderSender{body: "final body", route: "markdown", err: testutil.IrisHTTPError(t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
+	sender := &frozenProviderSender{body: "final body", route: "markdown", err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
 	engine := &SendEngine{sender: sender, transition: transition, config: config, logger: slog.New(slog.DiscardHandler)}
 
 	var outboxID int64
