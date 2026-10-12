@@ -178,7 +178,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **migration 282(06:50Z):** 사용자 결정으로 실제 발송 관측을 기다리지 않고 적용했다. 지우기 직전 두 행을 백업의 `message_strings-error-retired.json`(root 600)에 저장했고, `db-migrate`가 282만 적용했다(applied=1, skipped=142, total=143). 두 행 0건, error namespace 29행, api·worker healthy, 이후 오류 표식 0건.
 - **rollback 정리:** 282 뒤 v8.0.0은 시드 2행이 없어 기동 검증에 실패하므로 rollback 대상에서 뺐다. v8.0.0 rollback tag 2개와 tree 백업 `pre-v9.0.0-20261012T045543Z`(git `0b5955bc1`의 15개 파일과 같음을 확인)를 지웠다. 이미지 자체는 `release-0b5955bc1646-r1-arm64` tag로 남아 있다. 원격 staging 사본도 지웠다.
 - **현재 rollback:** api만 `hololive-api:rollback-20261012T055700Z`(v9.0.0)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. v9.0.0도 두 key를 읽지 않으므로 시드 복원과 migration 실행은 필요 없다. worker는 v9.0.0 그대로다.
-- **수용 상태(06:50Z 기준):** v9.0.0 전환 뒤 새 dispatch event가 아직 없어 새 worker의 실제 발송은 관측 전이다. 다음 구독 방송 알림은 07:55Z·09:10Z 예정이다. hash 충돌 기록 0건, 두 서비스 재시작 0회.
+- **수용 확인(09:36Z 기준):** 06:50Z에는 v9.0.0 전환 뒤 새 dispatch event가 없어 새 worker의 실제 발송을 관측하지 못했다. 이후 LIVE event 5건(07:25Z~08:55Z)이 생겼고 delivery 5건이 모두 `sent`로 끝났다. event 생성에서 발송까지 34~75 ms였고, 전환 뒤 worker notifier 요약의 `failed`는 모두 0이다. 같은 구간 hash 충돌 기록 0건, api·worker 오류 표식 0건, 두 서비스 재시작 0회다.
 - **남은 일:**
   - F17은 2026-11-08 이후 다시 확인한다.
   - 이번 작업 전부터 있던 rollback tag(`hololive-api:rollback-20261008T114613Z`, `*:rollback-20261011-review`, `hololive-api:prod-arm64-a6219fb8`)와 `deploy-backups/pre-v7.2.10-20261008T114613Z`는 현재 ledger보다 오래돼 rollback 대상이 아니지만, 이번 작업 산출물이 아니어서 두었다.
