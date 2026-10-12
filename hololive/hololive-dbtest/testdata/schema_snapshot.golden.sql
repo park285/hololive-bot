@@ -232,16 +232,6 @@ TABLE alarms
   INDEX CREATE UNIQUE INDEX idx_alarms_room_channel_host ON public.alarms USING btree (room_id, channel_id, host_id)
   INDEX CREATE INDEX idx_alarms_room_created ON public.alarms USING btree (room_id, created_at)
 
-TABLE auth_password_reset_tokens
-  COLUMN token_hash text NOT NULL
-  COLUMN user_id text NOT NULL
-  COLUMN expires_at timestamp with time zone NOT NULL
-  COLUMN used_at timestamp with time zone
-  COLUMN created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
-  CONSTRAINT auth_password_reset_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth_users(id) ON DELETE CASCADE
-  CONSTRAINT auth_password_reset_tokens_pkey PRIMARY KEY (token_hash)
-  INDEX CREATE INDEX idx_auth_reset_tokens_user_unused ON public.auth_password_reset_tokens USING btree (user_id) WHERE (used_at IS NULL)
-
 TABLE auth_users
   COLUMN id text NOT NULL
   COLUMN email text NOT NULL
