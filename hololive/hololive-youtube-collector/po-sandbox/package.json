@@ -10,5 +10,5 @@
     "bgutils-js": "4.0.3",
     "jsdom": "30.1.2"
   },
-  "packageManager": "npm@11.19.1+sha512.cedb312b1b7f92421a02cfb68b4194e88f8346651dacd6acc5364a25ef5309d4a32b19616a1ff8aff865e7280c0fa5c0835a99f5cd93368991e2a80ec9da75d2"
+  "packageManager": "npm@11.21.0+sha512.668bfc2a16a63677a22dd10bb63e5800bb4d9895b82f87c22d3ce37e9cd71b6c3a3121dc7f453181d94ae6e9680ae92c593fbb986514ef08bbf5c3ba46a8af3e"
 }

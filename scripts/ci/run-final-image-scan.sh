@@ -7,7 +7,7 @@ root_dir="$(git rev-parse --show-toplevel)"
 manifest="${1:-$root_dir/scripts/ci/final-image-scan-manifest.txt}"
 . "$root_dir/scripts/ci/go-tooling.sh"
 . "$root_dir/scripts/ci/final-image-scan-policy.sh"
-GOVULNCHECK_VERSION=v1.8.0
+GOVULNCHECK_VERSION=v1.9.0
 govulncheck_bin="$(ensure_govulncheck)"
 report_dir="$(mktemp -d "${TMPDIR:-/tmp}/hololive-image-scan.XXXXXX")"
 container_id=

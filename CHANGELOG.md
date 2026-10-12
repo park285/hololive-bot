@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- CI Python을 CPython 3.15.0과 uv 0.13.0(runner 최소 버전·GitHub bootstrap)으로, govulncheck를 v1.9.0으로, `actions/setup-node`를 v7.1.0으로, collector helper npm을 11.21.0으로 갱신하고 Go 빌더 이미지 `golang:1.27.2-alpine3.24` digest를 현재 게시본으로 맞췄습니다.
+
 ## v9.0.1 - 2026-10-12
 
 - **오류 문구 시드 정리:** v9.0.0부터 읽지 않는 `external_api_call_failed`·`cache_connection_failed` 시드 행을 migration 282로 지웁니다. v9.0.0 운영 배포 뒤 적용하며, 이후 v8.0.0으로 되돌리려면 두 행을 다시 넣어야 합니다. hololive-api만 다시 릴리스하고 alarm-worker는 9.0.0을 유지합니다.
