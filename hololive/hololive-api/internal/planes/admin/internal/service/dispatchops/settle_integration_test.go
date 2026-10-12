@@ -10,7 +10,7 @@ import (
 func TestOpsIntegrationSettlement(t *testing.T) {
 	for _, action := range []string{"cancel", "quarantine"} {
 		for _, grouped := range []bool{true, false} {
-			t.Run(action+map[bool]string{true: "_group", false: "_legacy"}[grouped], func(t *testing.T) {
+			t.Run(action+map[bool]string{true: "_group", false: "_single"}[grouped], func(t *testing.T) {
 				repo, pool := setupOpsIntegration(t)
 				ids := seedOpsGroup(t, pool, 2, grouped)
 				detail, err := repo.Detail(t.Context(), ids[0])

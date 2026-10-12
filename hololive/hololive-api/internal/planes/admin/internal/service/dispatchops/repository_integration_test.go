@@ -32,20 +32,27 @@ func seedOpsGroup(t *testing.T, pool *pgxpool.Pool, count int, grouped bool) []s
 	if err != nil {
 		t.Fatal(err)
 	}
-	var unit any
-	var group any
-	if grouped {
+	// grouped면 모든 행이 한 send unit을 공유하고, 아니면 행마다 send unit을 따로 둔다(send_unit_id는 NOT NULL).
+	insertUnit := func(key, group, request string) int64 {
 		var id int64
 		err := pool.QueryRow(ctx, `INSERT INTO alarm_dispatch_send_units(unit_key,dispatch_group_key,room_id,client_request_id)
-   VALUES(repeat('b',64),'ops-group','9007199254740993','ops-test-request-0001') RETURNING id`).Scan(&id)
+   VALUES($1,$2,'9007199254740993',$3) RETURNING id`, key, group, request).Scan(&id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		unit = id
-		group = "ops-group"
+		return id
+	}
+	group := "ops-group"
+	unit := int64(0)
+	if grouped {
+		unit = insertUnit(strings.Repeat("b", 64), group, "ops-test-request-0001")
 	}
 	ids := make([]string, 0, count)
 	for i := 0; i < count; i++ {
+		if !grouped {
+			group = fmt.Sprintf("ops-single-%d", i)
+			unit = insertUnit(fmt.Sprintf("%064x", i), group, fmt.Sprintf("ops-single-request-%04d", i))
+		}
 		var id string
 		err := pool.QueryRow(ctx, `INSERT INTO alarm_dispatch_deliveries
    (event_id,room_id,dedupe_key,dispatch_group_key,send_unit_id,status,attempt_count,dlq_at,last_error,last_error_code)

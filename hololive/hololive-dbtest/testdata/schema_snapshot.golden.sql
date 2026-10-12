@@ -87,8 +87,7 @@ TABLE alarm_dispatch_deliveries
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN dispatch_group_key text
-  COLUMN send_unit_id bigint
-  CONSTRAINT alarm_dispatch_deliveries_active_send_unit_check CHECK (((send_unit_id IS NOT NULL) OR (status <> ALL (ARRAY['pending'::text, 'retry'::text, 'leased'::text, 'sending'::text]))))
+  COLUMN send_unit_id bigint NOT NULL
   CONSTRAINT alarm_dispatch_deliveries_attempt_check CHECK ((attempt_count >= 0))
   CONSTRAINT alarm_dispatch_deliveries_dedupe_key_check CHECK (((length(dedupe_key) > 0) AND (length(dedupe_key) <= 768)))
   CONSTRAINT alarm_dispatch_deliveries_dispatch_group_key_check CHECK (((dispatch_group_key IS NULL) OR ((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768))))

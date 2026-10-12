@@ -227,8 +227,7 @@ func seedAlarmDispatchRetentionDLQ(t *testing.T, pool *pgxpool.Pool, eventID int
 
 	var deliveryID int64
 
-	// requeue는 dlq 행을 활성(retry)으로 되돌리므로, 운영 행처럼 저장된 send unit과 dispatch group을 함께 둡니다.
-	// 활성 delivery에 send unit을 요구하는 CHECK가 걸리면 send unit 없는 행의 requeue UPDATE는 거절되기 때문입니다.
+	// 운영 행처럼 send unit과 dispatch group을 함께 둡니다(send_unit_id는 NOT NULL).
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		WITH unit AS (
 			INSERT INTO alarm_dispatch_send_units (unit_key, dispatch_group_key, room_id, client_request_id)

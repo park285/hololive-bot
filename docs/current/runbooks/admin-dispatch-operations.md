@@ -92,24 +92,8 @@ backend가 사용자 세션을 검증한 값이라는 의미가 아닙니다. Ir
 
 같은 send unit의 **모든 항목**이 DLQ 또는 격리 상태여야 합니다. 이미 전송되거나 취소된
 표식이 남은 항목도 차단합니다. 일부만 선택하거나 리비전이 달라진 요청은 409입니다.
-send unit이 없는 migration 141 이전 발송은 조회만 단일 항목으로 보여 주고 재처리는 `replayBlocked: "group_identity_mismatch"`로
-막습니다. worker claim은 send unit 없는 행을 읽지 않고, migration 224의 `alarm_dispatch_deliveries_active_send_unit_check`가
-send unit 없는 행의 pending·retry·leased·sending 기록을 거절합니다. `scripts/runtime/alarm-dispatch-outbox-requeue.sh`로
-이런 행을 되돌리려 해도 같은 CHECK 위반(SQLSTATE 23514)으로 실패합니다(2026-09-26 T18에서 활성 행 0건 확인). 여러 독립
-묶음을 한 요청에 섞을 수 없습니다.
-
-migration 224 적용 전 확인과 종단 NULL 행 소멸 확인은 authoritative DB의 read-only 세션에서 건수만 봅니다.
-
-```sql
-SELECT status, count(*), max(created_at)
-FROM alarm_dispatch_deliveries
-WHERE send_unit_id IS NULL
-GROUP BY status
-ORDER BY status;
-```
-
-pending·retry·leased·sending 행이 있으면 migration 224의 VALIDATE가 실패하므로 원인을 조사해 종단으로 정리한 뒤 적용합니다.
-모든 행이 사라지면 조회용 단일 항목 분기의 제거 조건(계획 T11 `holo-api-dispatchops-legacy-send-unit`)이 충족됩니다.
+모든 delivery는 send unit을 가집니다. migration 301이 send unit 없는 migration 141 이전 종단 행을 지우고
+`alarm_dispatch_deliveries.send_unit_id`를 NOT NULL로 바꿨습니다. 여러 독립 묶음을 한 요청에 섞을 수 없습니다.
 
 직렬화 트랜잭션에서 ID 순서로 행을 잠그고 현재 리비전을 비교한 후, 상태 전환과
 항목별 `manual_requeue` 감사를 같은 트랜잭션으로 커밋합니다. 감사 INSERT가 실패하면

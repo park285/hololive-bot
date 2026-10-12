@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 활성 delivery는 저장된 send unit 없이 기록할 수 없으며 종단 행을 활성 상태로 되돌릴 때도 CHECK가 거절해야 합니다.
-func TestAlarmDispatchDeliveriesRequirePersistedSendUnitWhileActive(t *testing.T) {
+// delivery는 상태와 무관하게 send unit 없이 기록할 수 없습니다(migration 301 NOT NULL).
+func TestAlarmDispatchDeliveriesRequireSendUnit(t *testing.T) {
 	pool := NewPool(t)
 
 	var eventID int64
@@ -19,38 +19,20 @@ func TestAlarmDispatchDeliveriesRequirePersistedSendUnitWhileActive(t *testing.T
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		INSERT INTO alarm_dispatch_events (
 			event_key, payload_hash, alarm_type, channel_id, stream_id, category, payload
-		) VALUES ($1, repeat('a', 64), 'LIVE', 'legacy-channel', 'legacy-stream', 'legacy', '{}'::jsonb)
-		RETURNING id`, "legacy-event-"+fmt.Sprint(time.Now().UnixNano())).Scan(&eventID))
+		) VALUES ($1, repeat('a', 64), 'LIVE', 'unitless-channel', 'unitless-stream', 'unitless', '{}'::jsonb)
+		RETURNING id`, "unitless-event-"+fmt.Sprint(time.Now().UnixNano())).Scan(&eventID))
 
-	for _, status := range []string{"pending", "retry"} {
+	for _, status := range []string{"pending", "dlq", "sent"} {
 		_, err := pool.Exec(t.Context(), `
-			INSERT INTO alarm_dispatch_deliveries (event_id, room_id, dedupe_key, status, next_attempt_at)
-			VALUES ($1, 'room-legacy', $2, $3, NOW() - INTERVAL '1 minute')`,
-			eventID, "legacy-active-"+status, status)
-		requireActiveSendUnitViolation(t, err)
+			INSERT INTO alarm_dispatch_deliveries (event_id, room_id, dedupe_key, status, next_attempt_at, dlq_at, sent_at)
+			VALUES ($1, 'room-unitless', $2, $3, NOW(), NOW(), NOW())`,
+			eventID, "unitless-"+status, status)
+
+		pgErr, ok := errors.AsType[*pgconn.PgError](err)
+		require.True(t, ok, "%s: want not-null violation, got %v", status, err)
+		require.Equal(t, "23502", pgErr.Code, status)
+		require.Equal(t, "send_unit_id", pgErr.ColumnName, status)
 	}
-
-	var terminalID int64
-
-	require.NoError(t, pool.QueryRow(t.Context(), `
-		INSERT INTO alarm_dispatch_deliveries (event_id, room_id, dedupe_key, status, dlq_at)
-		VALUES ($1, 'room-legacy', 'legacy-terminal-dlq', 'dlq', NOW())
-		RETURNING id`, eventID).Scan(&terminalID))
-
-	_, err := pool.Exec(t.Context(), `
-		UPDATE alarm_dispatch_deliveries
-		SET status = 'retry', next_attempt_at = NOW()
-		WHERE id = $1`, terminalID)
-	requireActiveSendUnitViolation(t, err)
-}
-
-func requireActiveSendUnitViolation(t *testing.T, err error) {
-	t.Helper()
-
-	pgErr, ok := errors.AsType[*pgconn.PgError](err)
-	require.True(t, ok, "want active send unit check violation, got %v", err)
-	require.Equal(t, "23514", pgErr.Code)
-	require.Equal(t, "alarm_dispatch_deliveries_active_send_unit_check", pgErr.ConstraintName)
 }
 
 // migration 226이 비교 전용 shadowed 상태를 CHECK에서 제거했습니다.
@@ -64,8 +46,15 @@ func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {
         VALUES('status-check',repeat('a',64),'LIVE','channel-status','stream-status','status','{}'::jsonb)
         RETURNING id`).Scan(&eventID))
 
-	_, err := pool.Exec(t.Context(), `INSERT INTO alarm_dispatch_deliveries(event_id,room_id,dedupe_key,status,sent_at)
-        VALUES($1,'room-status','status-check','sent',now())`, eventID)
+	var unitID int64
+
+	require.NoError(t, pool.QueryRow(t.Context(), `
+        INSERT INTO alarm_dispatch_send_units(unit_key,dispatch_group_key,room_id,client_request_id)
+        VALUES(repeat('c',64),'status-group','room-status','status-check-request')
+        RETURNING id`).Scan(&unitID))
+
+	_, err := pool.Exec(t.Context(), `INSERT INTO alarm_dispatch_deliveries(event_id,room_id,dedupe_key,dispatch_group_key,send_unit_id,status,sent_at)
+        VALUES($1,'room-status','status-check','status-group',$2,'sent',now())`, eventID, unitID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(t.Context(), `UPDATE alarm_dispatch_deliveries SET status = 'shadowed'`)
