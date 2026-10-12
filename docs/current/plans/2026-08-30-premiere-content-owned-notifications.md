@@ -35,3 +35,24 @@
 - **수용 증거:** worker healthy, 재시작 0회, 시작 로그 `version=9.2.0`, 실행 compose 파일 4개 동일. 교체 뒤 약 3분 파일 로그 26줄은 모두 INFO(WARN·ERROR 0)이며 다른 컨테이너는 재시작되지 않았다. 최초공개 분 전 알림의 실제 발송은 다음 최초공개에서 `alarm_upcoming_candidates`와 발송 기록으로 확인한다.
 - **현재 rollback:** `rollback-20261012T145705Z`를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-alarm-worker`로 다시 띄운다. 최초공개 분 전 알림이 다시 빠진다.
 - **남은 공백:** 분류 전에 선정된 후보는 `방송 N분 전` 문구로 나갈 수 있고, collector live 경로가 먼저 분류한 뒤 공개 직전에 안내가 생기면 두 알림이 겹칠 수 있다(runbook `alarm-worker.md` 7). 템플릿 용어(`선행공개`)는 outbox(`최초공개`)와 다르다.
+
+## v9.3.0: 발견 시 알림 제거, 공개 전 알림은 live가 소유 (2026-10-13)
+
+v9.2.0은 발견 시 `N분 후 공개 예정`을 유지한 채 분 전 알림을 더했지만, 의도한 정책은 발견 시 알리지 않고 공개 5분 전에만 알리는 것이었다. 현재 계약은 `docs/current/contracts/alarm.md`가 소유한다.
+
+- **바뀐 계약:**
+  - hololive-api는 예정 최초공개(`UPCOMING_PREMIERE`)에 `NEW_VIDEO`를 만들지 않고, 공개 전환 뒤에도 만들지 않는다.
+  - alarm-worker는 최초공개도 일반 방송처럼 분 전·일정 변경 알림을 보내고, 분 전 target을 모두 지난 뒤 발견돼 분 전 알림을 받지 못한 방에는 live catchup 시작 알림(`선행공개 시작`)을 보낸다.
+  - v9.2.0의 공개 예정 안내 중복 생략(`PremiereNoticeAt`, Pending의 outbox join)은 지웠다.
+- **게시:** #628 `ba85a5664`. CI 11개 통과, 병합 tree는 검증한 브랜치와 같다. v9.2.2(#627, 생일 방송)를 먼저 배포한 뒤 그 main에 맞췄고, 그사이 병합된 #631의 CHANGELOG `미출시` 줄을 v9.3.0 절로 옮겼다. annotated tag `v9.3.0`과 GitHub Release(`publish-release.sh v9.3.0 v9.2.2`)를 게시했다.
+- **배포:**
+  - `hololive-api:release-ba85a56641a8-r1-arm64`(`sha256:73e11914…`)와 `hololive-alarm-worker:release-ba85a56641a8-r1-arm64`(`sha256:4f10fbcf…`)를 빌드했다. 둘 다 arm64, 9.3.0이다. 원격에 load해 같은 ID·revision을 확인했다.
+  - api 9.2.1과 worker 9.2.2를 각각 `rollback-20261012T181446Z`로 보존하고, VERSION 3개를 `deploy-backups/pre-v9.3.0-20261012T181446Z`에 백업했다. 원격 tree에서 이번에 바꾼 파일은 이 3개뿐이다.
+  - api는 `change_started_at=2026-10-12T18:15:29Z`에, worker는 `2026-10-12T18:15:45Z`에 각각 `up -d --no-build --no-deps`로 교체했다. 둘 다 health gate를 6초에 통과했다. migration은 없다.
+- **수용 증거:** 두 서비스 모두 healthy, 재시작 0회, 시작 로그 `version=9.3.0`이다. 교체 뒤 약 3분 파일 로그(api 83줄, worker 26줄)는 모두 INFO이고 오류 표식은 0건이다. 다른 컨테이너는 재시작되지 않았다. 실제 최초공개의 분 전 알림 발송은 다음 최초공개 때 확인한다.
+- **현재 rollback:**
+  - 두 이미지의 `rollback-20261012T181446Z`를 `prod`로 되돌리고, 백업 tar로 VERSION 3개를 복원한 뒤 `--no-build --no-deps`로 다시 띄운다.
+  - api만 되돌리면 발견 시 알림이 다시 나간다. worker만 되돌리면 분 전 target 뒤에 발견된 최초공개의 시작 알림이 빠진다.
+- **남은 공백:**
+  - 분류 전에 선정된 후보는 `방송 N분 전` 문구로 나갈 수 있다.
+  - outbox formatter와 템플릿의 공개 예정 분기는 새로 만들어지는 행에서 쓰이지 않는다. 지우려면 템플릿 migration이 필요하다.
