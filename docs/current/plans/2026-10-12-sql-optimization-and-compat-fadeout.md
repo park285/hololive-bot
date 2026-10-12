@@ -166,12 +166,23 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
   - 교체 직후 notifier 3회는 `sent=0, skipped=2/2/4, failed=0`이었다. 같은 05:00 방송 2건의 5분 전 알림을 이전 worker가 04:54에 보냈고(delivery 2건 SENT), 이후 3분·1분 선정은 중복 방지로 건너뛰었다. 그 upcoming 후보 4건은 이전 날들과 같은 방식으로 `expired`로 끝났다.
   - 교체 뒤 새 dispatch event는 아직 없어 실제 발송 경로는 관측하지 못했다.
 - **범위 밖:** 중앙 collector `c`와 AP `a`·`b`·`d`는 동작 변경이 없어(alias 치환) 다시 배포하지 않았다. 중앙 `hololive-youtube-po-c`의 재시작은 이번 작업 전(약 04:43Z)이다.
-- **rollback:** rollback tag를 `prod`로 되돌리고 백업 tar로 tree 15개 파일을 복원한 뒤 두 서비스만 `--no-build --no-deps`로 다시 띄운다. 이전 이미지는 재설정 테이블을 읽지 않지만, 이전 이미지의 `db-migrate`는 281이 기록된 ledger를 거부하므로 rollback 때 migration을 실행하지 않는다.
+- **v8.0.0 rollback 경로(v9.0.1 적용 뒤 폐기):** v9.0.0 전환 직후에는 v8.0.0 rollback tag와 tree 15개 파일 백업으로 api·worker를 함께 되돌릴 수 있었다. 이전 이미지의 `db-migrate`는 281이 기록된 ledger를 거부하므로 그때도 이미지만 되돌리는 경로였다.
+
+## 게시와 배포 (v9.0.1, 2026-10-12)
+
+오류 문구 시드 2행 삭제(2단계)를 사용자 요청("끝까지 완결")으로 이어서 진행했다.
+
+- **게시:** #611 `f5fda7953`(migration 282, 시드 parity 시험의 삭제 대기 목록 제거, 루트·hololive-api VERSION 9.0.1). CI 11개 통과, 병합 tree는 리뷰한 브랜치와 같다. annotated tag `v9.0.1`과 GitHub Release(`publish-release.sh v9.0.1 v9.0.0`)를 게시했다. alarm-worker는 9.0.0을 유지한다.
+- **사전 검증:** `TestErrorSeedHasNoOrphanKeys`가 282 포함 시 통과하고, manifest에서 282를 뺀 상태에서는 두 key를 orphan으로 잡아 실패함을 확인했다. `hololive-dbtest` 전체, `internal/migrationrunner`, `cmd/db-migrate`, `check-migration-manifest.sh`, `check-release-version.sh`가 통과했다.
+- **api 전환:** `hololive-api:release-f5fda7953d18-r1-arm64`(`sha256:e534546f…`, arm64, 9.0.1)를 load해 같은 ID·revision을 확인했다. v9.0.0 api를 `rollback-20261012T055700Z`로 보존하고 VERSION 2개를 백업(`deploy-backups/pre-v9.0.1-20261012T055700Z`)한 뒤 교체했다. `change_started_at=2026-10-12T05:57:06Z`, health gate 통과, `APP_VERSION=9.0.1`, health·ready·admin·llm endpoint OK.
+- **migration 282(06:50Z):** 사용자 결정으로 실제 발송 관측을 기다리지 않고 적용했다. 지우기 직전 두 행을 백업의 `message_strings-error-retired.json`(root 600)에 저장했고, `db-migrate`가 282만 적용했다(applied=1, skipped=142, total=143). 두 행 0건, error namespace 29행, api·worker healthy, 이후 오류 표식 0건.
+- **rollback 정리:** 282 뒤 v8.0.0은 시드 2행이 없어 기동 검증에 실패하므로 rollback 대상에서 뺐다. v8.0.0 rollback tag 2개와 tree 백업 `pre-v9.0.0-20261012T045543Z`(git `0b5955bc1`의 15개 파일과 같음을 확인)를 지웠다. 이미지 자체는 `release-0b5955bc1646-r1-arm64` tag로 남아 있다. 원격 staging 사본도 지웠다.
+- **현재 rollback:** api만 `hololive-api:rollback-20261012T055700Z`(v9.0.0)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. v9.0.0도 두 key를 읽지 않으므로 시드 복원과 migration 실행은 필요 없다. worker는 v9.0.0 그대로다.
+- **수용 상태(06:50Z 기준):** v9.0.0 전환 뒤 새 dispatch event가 아직 없어 새 worker의 실제 발송은 관측 전이다. 다음 구독 방송 알림은 07:55Z·09:10Z 예정이다. hash 충돌 기록 0건, 두 서비스 재시작 0회.
 - **남은 일:**
-  - 오류 문구 key 2개(`external_api_call_failed`·`cache_connection_failed`)의 시드 행은 v9.0.1의 migration 282가 지운다. `seedErrorKeysPendingDeletion`도 함께 지워 `TestErrorSeedHasNoOrphanKeys`가 두 행이 남으면 실패한다. v8.0.0 이미지는 기동 때 이 key를 검증하므로, 282는 v9.0.0의 실제 발송을 확인한 뒤 적용한다.
   - F17은 2026-11-08 이후 다시 확인한다.
-  - rollback tag, tree 백업, 원격 staging `/opt/hololive-bot/compose/deploy-staging-v9.0.0-20261012T045543Z`의 정리는 수용 뒤 별도 승인으로 한다.
-  - 원 checkout `/home/kapu/work/iris-stack/hololive-bot`의 미커밋 합류분은 로컬 백업 브랜치에 보존한 뒤 main으로 맞췄다. 메타 저장소 hololive-bot 포인터는 `858b21b36`으로 게시했다.
+  - 이번 작업 전부터 있던 rollback tag(`hololive-api:rollback-20261008T114613Z`, `*:rollback-20261011-review`, `hololive-api:prod-arm64-a6219fb8`)와 `deploy-backups/pre-v7.2.10-20261008T114613Z`는 현재 ledger보다 오래돼 rollback 대상이 아니지만, 이번 작업 산출물이 아니어서 두었다.
+  - 원 checkout `/home/kapu/work/iris-stack/hololive-bot`의 미커밋 합류분은 로컬 백업 브랜치에 보존한 뒤 main으로 맞췄다. 메타 저장소 hololive-bot 포인터는 v9.0.0 반영 `858b21b36` 뒤 이 기록까지 갱신한다.
 
 ## 1. SQL 최적화
 
