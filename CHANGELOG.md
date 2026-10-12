@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **native AP 로그 회전:** Osaka·Osaka2 host-native 배포가 설치하는 `/etc/logrotate.d/hololive-bot`에서 `daily`와 함께 쓰던 `size 10M`을 `maxsize 10M`으로 바꿉니다. `size`가 `daily`를 덮어써 10M 전에는 회전하지 않았고, 두 호스트의 archive는 비어 있었습니다. 이제 매일 회전해 14개를 보관합니다. `copytruncate`에서 효과가 없던 `create`를 지웁니다.
+
 ## v9.2.1 - 2026-10-13
 
 - **queue 보존 삭제 인덱스:** migration 302·303이 `source_observation_queue`에 만료 판정용 부분 인덱스 `(processed_at, observation_id) WHERE status = 'PROCESSED'`, `(dead_lettered_at, observation_id) WHERE status = 'DEAD_LETTER'`를 `CREATE INDEX CONCURRENTLY`로 만듭니다. 보존 삭제가 PROCESSED 이력 전체 대신 만료 행만 읽습니다(운영 2026-10-12: 약 22만 행, 평균 166 ms·최대 9.2초). SQL은 바꾸지 않습니다.
