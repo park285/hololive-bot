@@ -287,6 +287,23 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **runbook:** `admin-dispatch-operations.md`의 legacy 단일 항목 설명과 NULL 행 확인 조회를 현재 계약으로 바꿨다.
 - **배포 조건:** migration을 api 교체보다 먼저 적용한다. v9.1.1 api와 alarm-worker 9.0.0은 NULL 없는 테이블에서 그대로 동작하므로 api만 다시 릴리스한다. 지운 legacy 행은 rollback으로 돌아오지 않는다.
 
+## 게시와 배포 (v9.1.2, 2026-10-12)
+
+- **게시:** #620 `8435b01c6`. CI 11개가 통과했고 병합 tree는 검증한 브랜치와 같다. annotated tag `v9.1.2`와 GitHub Release(`publish-release.sh v9.1.2 v9.1.1`)를 게시했다.
+- **산출물:** `hololive-api:release-8435b01c6c73-r1-arm64`(`sha256:972ba82e…`, arm64, 9.1.2)를 원격에 load해 같은 ID·revision을 확인했다.
+- **전환:**
+  - v9.1.1 api를 `hololive-api:rollback-20261012T141203Z`로 보존하고 VERSION 2개를 `deploy-backups/pre-v9.1.2-20261012T141203Z`에 백업했다.
+  - 지울 legacy 308행을 같은 디렉터리의 `legacy-deliveries-without-send-unit.csv`(root 600, sha256 동봉)로 읽기 전용 COPY했다. 내용은 원격에만 두었다.
+  - 후보를 `prod`로 tag한 뒤 migration 301을 14:12:13~14:12:16Z에 적용했다(applied=1, skipped=161, total=162). `change_started_at=2026-10-12T14:12:17Z`에 api를 `up -d --no-build --no-deps hololive-api`로 교체했고 health gate를 6초에 통과했다.
+- **수용 증거:**
+  - 적용 전에는 delivery 1,295행에 legacy가 `cancelled` 14·`sent` 294행이었고 `send_unit_id`는 NULL을 허용했다. 적용 후 987행(정확히 308행 감소), legacy 0행, `send_unit_id` NOT NULL, 224 CHECK 없음, 미검증 제약 0이다.
+  - api 9.1.2 healthy, 재시작 0회, `APP_VERSION=9.1.2`다. 교체 뒤 api·worker 오류 표식(23502 포함)은 0건이다.
+  - 새 묶음 조회 SQL(`group.sql`)을 운영 DB에서 읽기 전용으로 실행했다. `idx_alarm_dispatch_deliveries_send_unit`로 0.9 ms였다.
+  - 원격 tree 112개 파일이 v9.1.2와 같다.
+- **현재 rollback:** api만 `hololive-api:rollback-20261012T141203Z`(v9.1.1)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. NOT NULL은 v9.1.1과 worker 9.0.0에 영향이 없어 그대로 둔다. legacy 행이 필요하면 백업 CSV에서 되살린다.
+- **정리:** 이전 rollback 산출물(`hololive-api:rollback-20261012T121704Z` tag, `deploy-backups/pre-v9.1.1-20261012T121704Z`)을 지웠다. v9.1.0 api 이미지는 `release-48f856815431-r1-arm64` tag로 남아 있다.
+- **남은 일:** 이 계획의 F 항목 중 운영 조건을 기다리는 것은 없다. legacy CSV 백업은 필요 없다고 판단되면 지운다.
+
 ## 1. SQL 최적화
 
 측정 근거와 조사 방법은 부록에 있다.
