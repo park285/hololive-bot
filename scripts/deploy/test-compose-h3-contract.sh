@@ -223,8 +223,7 @@ def has_tcp_published(svc, target_port, published_port, host_ip=None):
     return False
 
 
-# 중앙 youtube-collector-c는 prod+live-compat 기본 render의 youtube-collector다. 빈 main-ap overlay 2종은 지웠다
-# (stack-audit 2026-09-26 T11 holo-main-ap-empty-overlays).
+# 중앙 collector-c는 prod+live-compat의 youtube-collector다.
 pc = default_services.get("youtube-collector")
 check("youtube-collector present in default central render", pc is not None)
 if pc is not None:

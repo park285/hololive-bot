@@ -739,8 +739,7 @@ func assertRetainedDiagnostics(t *testing.T, row, deferred leaseDiagnostics) {
 	}
 }
 
-// 177/189의 legacy_collector backfill 트리거는 222에서 지웠다(stack-audit 2026-09-26 T17). 이제 typed failure 없이
-// DEFERRED로 바꾸는 이전 collector 형태의 갱신은 더 이상 진단을 합성하지 않고 기존 typed 진단을 그대로 둔다.
+// typed failure 없이 DEFERRED로 바꾸는 이전 collector 형태의 갱신은 진단을 합성하지 않고 기존 typed 진단을 그대로 둔다.
 func TestLegacyShapedDeferNoLongerSynthesizesDiagnostics(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -1066,7 +1065,7 @@ func TestLoadProjectionTargetSnapshotPreservesEmptyAndEnforcesCap(t *testing.T) 
 		t.Fatalf("schedule sentinel = %#v, %v", schedule, err)
 	}
 
-	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 1); collecterr.CodeOf(err) != collecterr.TargetRosterTooLarge {
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, &spec, job, 1); collecterr.CodeOf(err) != contract.ErrorTargetRosterTooLarge {
 		t.Fatalf("roster cap error = %v", err)
 	}
 }

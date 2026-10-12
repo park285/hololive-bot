@@ -13,7 +13,6 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
@@ -176,7 +175,7 @@ func assertContentTabTerminal(t *testing.T, pool *pgxpool.Pool, jobKey string, d
 	}
 
 	if drift {
-		if state != "DEFERRED" || code != string(collecterr.ParserDrift) || class != string(collecterr.ClassDataContract) {
+		if state != "DEFERRED" || code != string(contract.ErrorParserDrift) || class != string(contract.ClassDataContract) {
 			t.Fatalf("parser drift terminal = %s %s/%s, want DEFERRED parser_drift/DATA_CONTRACT", state, code, class)
 		}
 	} else if state != "IDLE" || code != "" || class != "" {

@@ -7,7 +7,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 )
 
-// runner 스위치의 잘못된 값은 "꺼짐"으로 읽히지 않고 기동 오류로 드러나야 한다(stack audit B4).
+// runner 스위치의 잘못된 값은 "꺼짐"으로 읽히지 않고 기동 오류로 드러나야 한다.
 func TestBackgroundRunnerSwitchRejectsInvalidValue(t *testing.T) {
 	for _, tc := range []struct {
 		key   string
@@ -50,7 +50,7 @@ func TestBackgroundRunnerSwitchRejectsInvalidValue(t *testing.T) {
 	}
 }
 
-// runner 설정 env의 잘못된 값은 기본값으로 바뀌지 않고 기동 오류로 드러나야 한다(holo-alarm-worker-envconfig-silent-defaults).
+// runner 설정 env의 잘못된 값은 기본값으로 바뀌지 않고 기동 오류로 드러나야 한다.
 func TestBackgroundRunnerConfigRejectsInvalidValues(t *testing.T) {
 	for _, tc := range []struct {
 		switchKey string

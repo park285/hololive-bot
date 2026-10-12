@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -257,7 +258,7 @@ func withRemainingTimeout(ctx context.Context, limit time.Duration) (context.Con
 
 func newBoundedCount(value, limit int) (BoundedCount, error) {
 	if value < 0 || value > limit+1 {
-		return BoundedCount{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pending queue count is outside bounds")
+		return BoundedCount{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "pending queue count is outside bounds")
 	}
 
 	if value == limit+1 {

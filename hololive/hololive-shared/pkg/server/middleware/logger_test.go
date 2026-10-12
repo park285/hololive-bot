@@ -216,17 +216,6 @@ func TestLoggerMiddleware_TruncatesOverlongForwardedHeaders(t *testing.T) {
 	}
 }
 
-func TestLogDebugf_NoPanic(t *testing.T) {
-	t.Parallel()
-
-	// 패닉 없이 실행되는지만 검증 (스모크 테스트)
-	logger := slog.Default()
-	ctx := t.Context()
-
-	// 패닉 발생 시 테스트가 실패하므로 별도 assertion 불필요
-	LogDebugf(ctx, logger, "테스트 메시지", slog.String("key", "value"))
-}
-
 func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 	t.Parallel()
 

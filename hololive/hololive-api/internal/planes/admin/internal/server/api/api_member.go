@@ -103,14 +103,11 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.invalidateMemberIndex()
 		h.safeLogger().Error("Failed to refresh cache after graduation update", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
-
-	h.invalidateMemberIndex()
 
 	h.respondGraduationSuccess(c, memberID, isGraduated)
 }
@@ -177,14 +174,11 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.invalidateMemberIndex()
 		h.safeLogger().Error("Failed to refresh member cache", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
-
-	h.invalidateMemberIndex()
 
 	h.logActivity("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
 

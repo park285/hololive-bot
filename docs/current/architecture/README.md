@@ -20,10 +20,6 @@
 - `youtube-egress-lifecycle-commit-adjudication-20260831.md` - effect 인접 transaction의 commit ambiguity, primary read-back과 금지 retry 규약
 - `youtube-egress-lifecycle-library-review-20260831.md` - 직접 planner와 Go FSM/persistence 후보의 hard gate, 비용, 재검토 조건
 
-## Gate Assets
-
-- `../../architecture/shared-go-package-allowlist.txt`
-
 ## Rule
 
 - 현재 governance 자산은 이 인덱스에서 추적 가능해야 합니다.

@@ -15,7 +15,7 @@ func TestManualReviewReplayChecksCutoffAfterLockWait(t *testing.T) {
 
 	defer cancel()
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:replay-lock-cutoff", 0, `{"body":"stored"}`)
 	_, err := repo.Insert(ctx, entry)
 	require.NoError(t, err)

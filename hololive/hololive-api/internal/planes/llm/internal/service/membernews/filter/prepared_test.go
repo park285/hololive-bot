@@ -117,18 +117,13 @@ func TestPreparedCandidatesPreserveFullValuesAndOrder(t *testing.T) {
 						t.Fatalf("전체값 또는 순서 불일치 period=%s members=%v provider=%t validator=%t", period, members, data != nil, validator != nil)
 					}
 
-					lazy, lazyErr := FilterCandidates(t.Context(), cs, period, now, members, data, validator)
-					if lazyErr != nil || !reflect.DeepEqual(want, lazy) {
-						t.Fatalf("lazy 전체값 또는 순서 불일치 period=%s members=%v provider=%t validator=%t", period, members, data != nil, validator != nil)
-					}
-
 					cases++
 				}
 			}
 		}
 	}
 
-	t.Logf("metadata_equality input_candidates=%d cases=%d prototypes=prepared,lazy comparison=reflect.DeepEqual full_values_and_order=true", len(cs), cases)
+	t.Logf("metadata_equality input_candidates=%d cases=%d prototypes=prepared comparison=reflect.DeepEqual full_values_and_order=true", len(cs), cases)
 }
 
 func TestExactMemberTokensBypassBodyNormalization(t *testing.T) {
@@ -190,8 +185,6 @@ func benchmarkMetadataBatch(b *testing.B, candidates []model.Candidate, now time
 		switch variant {
 		case "prepared":
 			return prepared.Filter(b.Context(), []string{"미코"}, nil, nil)
-		case "lazy":
-			return FilterCandidates(b.Context(), candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
 		default:
 			return eagerFilterCandidates(b.Context(), candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
 		}
@@ -216,7 +209,7 @@ func BenchmarkCandidateMetadata(b *testing.B) {
 	now := time.Date(2026, time.October, 2, 12, 0, 0, 0, kst)
 	candidates := performanceFilterFixture(1000, 64, now)
 
-	for _, variant := range []string{"eager", "lazy", "prepared"} {
+	for _, variant := range []string{"eager", "prepared"} {
 		b.Run(variant, func(b *testing.B) {
 			b.ReportAllocs()
 

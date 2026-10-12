@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -22,7 +23,7 @@ const (
 
 func localCandidateFailure() error {
 	return fmt.Errorf("%w: %w", joblease.ErrCandidateContract,
-		collecterr.New(collecterr.Internal, collecterr.ClassInternal, "target bundle has mixed poll intervals"))
+		collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "target bundle has mixed poll intervals"))
 }
 
 func TestDiscoveryRepeatedLocalFailurePreservesHealthyProgress(t *testing.T) {
@@ -233,7 +234,7 @@ func TestDiscoveryRecordsFailureWhileAdvancingCursor(t *testing.T) {
 
 	if !strings.Contains(logged.String(), "job_kind="+string(runners[0].Contract().ID().Kind)) ||
 		!strings.Contains(logged.String(), "phase=candidate_load") ||
-		!strings.Contains(logged.String(), "error_class="+string(collecterr.ClassInternal)) {
+		!strings.Contains(logged.String(), "error_class="+string(contract.ClassInternal)) {
 		t.Fatalf("runner failure diagnostic missing: %s", logged.String())
 	}
 

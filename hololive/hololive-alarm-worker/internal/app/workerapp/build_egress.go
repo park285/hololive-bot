@@ -69,8 +69,7 @@ func buildNotificationEgress(
 }
 
 func buildNotificationSender(client egress.IrisClient, markdownReplies bool, rooms egress.OpenChat) *egress.IrisMessageSender {
-	// 방 정본은 오픈채팅 Markdown 판정에만 쓴다. alarm-worker는 Karing template을 보내지 않는다
-	// (DEC-20260926-hololive-karing-egress-disposition).
+	// 방 정본은 오픈채팅 Markdown 판정에만 쓴다. alarm-worker는 Karing template을 보내지 않는다.
 	return egress.NewIrisMessageSender(
 		client,
 		egress.WithMarkdownReplies(markdownReplies),
@@ -96,7 +95,7 @@ func buildEgressRunners(
 		Scheduler: alarmdispatch.NewMaintenanceRunner(infra, appConfig.DispatchRetention, logger),
 	})
 
-	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다(DEC-20260926-hololive-outbox-v3-convergence).
+	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다.
 	if alarmWorkerExecutorEnabled(appConfig, "youtube_delivery") {
 		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig, infra, irisSender, messageStrings, logger, workerState)
 		if buildErr != nil {
@@ -233,7 +232,7 @@ func notificationDeliveryDispatcherConfig(appConfig *workerconfig.RuntimeConfig)
 func buildAlarmDispatchRunner(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
-	sender alarmdispatch.Sender,
+	sender delivery.PreparedMessageSender,
 	messageStrings *messagestrings.Store,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -318,7 +317,7 @@ func alarmDispatchRunnerConfig(appConfig *workerconfig.RuntimeConfig) alarmdispa
 }
 
 // loadEgressMessageStrings는 알림 발송 runner들이 함께 쓰는 message_strings를 기동 때 한 번 적재하고
-// 발송 계약 key를 검증한다. 실패하면 기동을 실패시킨다(DEC-20260926-hololive-message-strings-startup-validation).
+// 발송 계약 key를 검증한다. 실패하면 기동을 실패시킨다.
 func loadEgressMessageStrings(ctx context.Context, infra *sharedmodules.InfraModule, logger *slog.Logger) (*messagestrings.Store, error) {
 	if infra == nil || infra.Postgres == nil {
 		return nil, errors.New("postgres is required")

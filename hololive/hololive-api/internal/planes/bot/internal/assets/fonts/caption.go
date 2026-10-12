@@ -64,15 +64,6 @@ func CaptionFaceSized(size float64) (font.Face, error) {
 	return out, nil
 }
 
-func CaptionBoldFaceSized(size float64) (font.Face, error) {
-	out, err := captionFace("semibold", size)
-	if err != nil {
-		return nil, fmt.Errorf("caption face: %w", err)
-	}
-
-	return out, nil
-}
-
 func captionFace(weight string, size float64) (font.Face, error) {
 	if size <= 0 {
 		size = 24

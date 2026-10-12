@@ -19,7 +19,7 @@ func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	overrideChannel := "UC_override"
 
-	if _, err := repository.NewTemplateRepository(db, logger).Upsert(t.Context(), domain.TemplateKeyOutboxShorts, &overrideChannel, "OVERRIDE {{.MemberName}} {{.VideoID}}"); err != nil {
+	if _, _, err := repository.NewTemplateRepository(db, logger).UpsertWithRevision(t.Context(), domain.TemplateKeyOutboxShorts, &overrideChannel, "OVERRIDE {{.MemberName}} {{.VideoID}}", 0); err != nil {
 		t.Fatalf("upsert override: %v", err)
 	}
 

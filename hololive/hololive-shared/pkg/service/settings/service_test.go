@@ -27,7 +27,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -63,28 +62,33 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 	if got.AlarmAdvanceMinutes != 12 || !slices.Equal(got.TargetMinutes, updated.TargetMinutes) {
 		t.Fatalf("persisted settings = %+v, want %+v", got, updated)
 	}
+}
+
+// 저장 파일의 알 수 없는 필드는 기동을 막지 않고, Update가 다시 쓴 파일에는 남지 않는다.
+func TestSettingsService_IgnoresUnknownStoredFieldsAndDropsThemOnUpdate(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+
+	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"unknownToggle":true,"targetMinutes":[5,1]}`), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	service := mustNewSettingsService(t, filePath, Settings{}, slog.New(slog.DiscardHandler))
+	if got := service.Get(); got.AlarmAdvanceMinutes != 5 || !slices.Equal(got.TargetMinutes, []int{5, 1}) {
+		t.Fatalf("settings = %+v, want alarmAdvanceMinutes=5 targetMinutes=[5 1]", got)
+	}
+
+	if err := service.Update(Settings{AlarmAdvanceMinutes: 7, TargetMinutes: []int{7}}); err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
 
 	raw, err := fs.ReadFile(os.DirFS(dir), "settings.json")
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}
 
-	// scraper proxy 토글은 퇴역했으므로 저장 파일에 다시 쓰지 않는다(DEC-20260926-hololive-legacy-env-config-retirement).
-	if strings.Contains(string(raw), "scraperProxyEnabled") {
-		t.Fatalf("persisted settings still carry the retired scraperProxyEnabled key: %s", raw)
-	}
-}
-
-// 퇴역 전 파일에 남은 scraperProxyEnabled는 json/v2 기본 decode가 모르는 멤버로 무시하고, 나머지 값은 그대로 읽는다.
-func TestSettingsService_ReadsFileWithRetiredScraperProxyKey(t *testing.T) {
-	filePath := filepath.Join(t.TempDir(), "settings.json")
-	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":true,"targetMinutes":[5,1]}`), 0o600); err != nil {
-		t.Fatalf("write settings: %v", err)
-	}
-
-	got := mustNewSettingsService(t, filePath, Settings{}, slog.New(slog.DiscardHandler)).Get()
-	if got.AlarmAdvanceMinutes != 5 || !slices.Equal(got.TargetMinutes, []int{5, 1}) {
-		t.Fatalf("settings = %+v, want alarmAdvanceMinutes=5 targetMinutes=[5 1]", got)
+	if bytes.Contains(raw, []byte("unknownToggle")) {
+		t.Fatalf("updated settings file kept an unknown field: %s", raw)
 	}
 }
 
@@ -245,7 +249,7 @@ func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOn
 }
 
 // 저장 파일은 settings.ReadFile 하나가 해석한다. 구형 형식(targetMinutes 없음)이나 읽을 수 없는 파일을 기본값으로 대신하지
-// 않고 기동 오류로 드러낸다(stack-audit 2026-09-26 T11 holo-settings-file-legacy-format-and-dual-reader).
+// 않고 기동 오류로 드러낸다.
 func TestSettingsService_RejectsUnsupportedStoredFile(t *testing.T) {
 	for name, content := range map[string]string{
 		"legacy advance-only format": `{"alarmAdvanceMinutes":1}`,

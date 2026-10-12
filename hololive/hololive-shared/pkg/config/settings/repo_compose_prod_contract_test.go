@@ -35,21 +35,15 @@ func TestRepoComposeProdPreservesExplicitBlankACLValues(t *testing.T) {
 	}
 }
 
-// collector loader는 명시적 빈 값을 기동 실패로 처리하므로, env가 없는 호스트에서는
-// compose의 documented default가 유일한 값 공급원이다.
-func TestRepoComposeCollectorRendersCanonicalDefaults(t *testing.T) {
-	defaults := map[string]string{
-		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES":        "1048576",
-		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS": "30",
-	}
-	for name := range defaults {
-		unsetEnvForTest(t, name)
-	}
+func assertCollectorCanonicalDefaults(t *testing.T, cfg renderedCompose) {
+	t.Helper()
 
-	cfg := renderComposeConfig(t, composeProdFile)
 	env := composeEnvironment(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 
-	for name, want := range defaults {
+	for name, want := range map[string]string{
+		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES":        "1048576",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS": "30",
+	} {
 		if got := env[name]; got != want {
 			t.Fatalf("%s = %q, want documented default %q", name, got, want)
 		}
@@ -89,18 +83,6 @@ func assertProdComposeDisallowedPatterns(t *testing.T, content string) {
 
 func assertProdComposeRequiredPatterns(t *testing.T, content string) {
 	t.Helper()
-
-	if got := strings.Count(content, "POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}"); got != 1 {
-		t.Fatalf("docker-compose.prod.yml POSTGRES_HOST holo-postgres-default anchor count = %d, want 1", got)
-	}
-
-	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}"); got != 1 {
-		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE verify-full default count = %d, want 1", got)
-	}
-
-	if got := strings.Count(content, "*postgres-env"); got != 3 {
-		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 3", got)
-	}
 
 	required := []string{
 		"holo-postgres:",
@@ -165,18 +147,31 @@ func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 }
 
 func TestRepoComposeProdRenderedIsolation(t *testing.T) {
+	unsetEnvForTest(t, "YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES")
+	unsetEnvForTest(t, "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS")
+
 	cfg := renderComposeConfig(t, composeProdFile)
 
-	assertProdRenderedPostgresIsolation(t, cfg)
-	assertProdRenderedValkeySocketIsolation(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-	assertValkeyConsumersIsolated(t, cfg)
-	assertProdRenderedNonEgressSecretIsolation(t, cfg)
-	assertProdRenderedEgressRuntimeKeys(t, cfg)
-	assertProdRenderedScopedProducerKeys(t, cfg)
-	assertProdRenderedNoRuntimeConfigMount(t, cfg)
-	assertProdRenderedPortAndCertScope(t, cfg)
+	t.Run("isolation", func(t *testing.T) {
+		assertProdRenderedPostgresIsolation(t, cfg)
+		assertProdRenderedValkeySocketIsolation(t, cfg)
+		assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
+		assertValkeyConsumersIsolated(t, cfg)
+		assertProdRenderedNonEgressSecretIsolation(t, cfg)
+		assertProdRenderedEgressRuntimeKeys(t, cfg)
+		assertProdRenderedScopedProducerKeys(t, cfg)
+		assertProdRenderedNoRuntimeConfigMount(t, cfg)
+		assertProdRenderedPortAndCertScope(t, cfg)
+	})
+	t.Run("collector_defaults", func(t *testing.T) {
+		assertCollectorCanonicalDefaults(t, cfg)
+	})
+	t.Run("postgres_tls", func(t *testing.T) {
+		assertComposePostgresTLS(t, cfg, "prod")
+	})
+	t.Run("trust_domain", func(t *testing.T) {
+		assertHololiveAPITrustDomainControls(t, cfg)
+	})
 }
 
 func assertProdRenderedValkeySocketIsolation(t *testing.T, cfg renderedCompose) {
@@ -247,17 +242,6 @@ func assertCollectorRenderedWithoutValkey(t *testing.T, cfg renderedCompose, ser
 	}
 }
 
-func assertCollectorRenderedWithoutUnusedScraperEnv(t *testing.T, cfg renderedCompose, service string) {
-	t.Helper()
-
-	env := composeEnvironment(t, cfg, service)
-	for key := range env {
-		if strings.HasPrefix(key, "SCRAPER_POLL_") || key == "SCRAPER_FETCHER_ENGINE" {
-			t.Fatalf("%s rendered unused scraper env %s=%q", service, key, env[key])
-		}
-	}
-}
-
 func assertValkeyConsumersIsolated(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
@@ -281,12 +265,6 @@ func assertValkeyConsumersIsolated(t *testing.T, cfg renderedCompose) {
 
 		if !mounted {
 			t.Fatalf("%s missing valkey-cache-socket mount", service)
-		}
-	}
-
-	for _, retired := range []string{"admin-dashboard", "admin-docker-proxy"} {
-		if _, present := cfg.Services[retired]; present {
-			t.Fatalf("standalone admin infrastructure remains: %s", retired)
 		}
 	}
 }

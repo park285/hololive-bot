@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,7 @@ func TestClientAdvanceUsesRealWorkerAndConfirmedRejections(t *testing.T) {
 	server := httptest.NewServer(newAdvanceRouter(service, "test-key"))
 	t.Cleanup(server.Close)
 
-	client := alarm.NewClientWithAPIKey(server.URL, "test-key", nil)
+	client := newStrictAlarmClient(t, server.URL, "test-key")
 
 	result, err := client.UpdateAlarmAdvanceMinutes(t.Context(), 10)
 	require.NoError(t, err)
@@ -77,7 +78,7 @@ func TestClientAdvanceUsesRealWorkerAndConfirmedRejections(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, err := alarm.NewClientWithAPIKey(server.URL, tc.key, nil).UpdateAlarmAdvanceMinutes(t.Context(), tc.minutes)
+			result, err := newStrictAlarmClient(t, server.URL, tc.key).UpdateAlarmAdvanceMinutes(t.Context(), tc.minutes)
 			require.Error(t, err)
 			assert.Equal(t, domain.ApplyRejected, result.Outcome)
 			assert.Empty(t, result.TargetMinutes)
@@ -123,7 +124,7 @@ func TestClientAdvanceAppliedThenResponseLostIsUnknown(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := alarm.NewClient(server.URL, nil)
+	client := newStrictAlarmClient(t, server.URL, "")
 
 	result, err := client.UpdateAlarmAdvanceMinutes(t.Context(), 12)
 	require.ErrorIs(t, err, io.EOF)
@@ -133,4 +134,14 @@ func TestClientAdvanceAppliedThenResponseLostIsUnknown(t *testing.T) {
 	assert.Empty(t, client.GetTargetMinutes())
 	assert.Equal(t, []int{12, 3, 1}, service.GetTargetMinutes())
 	assert.Equal(t, int32(1), calls.Load())
+}
+
+// newStrictAlarmClient는 admin·bot plane과 같은 운영 생성자로 httptest worker client를 만든다.
+func newStrictAlarmClient(t *testing.T, baseURL, apiKey string) *alarm.Client {
+	t.Helper()
+
+	client, err := alarm.NewClientWithAPIKeyStrict(baseURL, apiKey, nil, sharedh3.ClientOptions{})
+	require.NoError(t, err)
+
+	return client
 }

@@ -33,7 +33,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 )
 
-// DEC-20260926-stack-llm-instruction-layering-sole-path: hololive client는 지시를 계층으로만 보내며,
+// hololive client는 지시를 계층으로만 보내며,
 // provider 요청 본문에는 단일 system prompt 경로(Responses `instructions`)가 나타나지 않는다.
 
 const testWireUserInput = "user input"

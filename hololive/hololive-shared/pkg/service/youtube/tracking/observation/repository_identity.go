@@ -27,8 +27,7 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 		return nil, fmt.Errorf("find tracking by identity: canonical identity: %w", err)
 	}
 
-	// 행은 기본 키 (kind, canonical_content_id) 하나로 찾는다. raw content_id를 후보로 함께 찾던 분기는 T18(2026-09-26)에서
-	// content_id와 canonical_content_id가 다른 행이 0건임을 확인해 지웠다(stack-audit T11 holo-tracking-raw-content-id-candidates).
+	// 행은 기본 키 (kind, canonical_content_id) 하나로 찾는다.
 	var records []domain.YouTubeContentAlarmTracking
 
 	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row",

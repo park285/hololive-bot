@@ -242,5 +242,5 @@ func validateFailedKinds(
 }
 
 func invariantError(message string) error {
-	return collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, fmt.Errorf("collection_internal_invariant: %s", message))
+	return collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, fmt.Errorf("collection_internal_invariant: %s", message))
 }

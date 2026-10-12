@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -16,7 +17,7 @@ func ParseHolodexBaseURL(raw string) (*url.URL, error) {
 	}
 
 	if !validHolodexPath(parsed.Path) {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex base URL path prefix is invalid")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "holodex base URL path prefix is invalid")
 	}
 
 	return parsed, nil
@@ -29,7 +30,7 @@ func ParseOfficialScheduleBaseURL(raw string) (*url.URL, error) {
 	}
 
 	if parsed.Path != "" && parsed.Path != "/" {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule base URL must be an HTTPS origin")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "official schedule base URL must be an HTTPS origin")
 	}
 
 	return parsed, nil
@@ -38,19 +39,19 @@ func ParseOfficialScheduleBaseURL(raw string) (*url.URL, error) {
 func parseProviderBaseURL(raw, name string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL is invalid")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, name+" base URL is invalid")
 	}
 
 	if parsed.User != nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must not include userinfo")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, name+" base URL must not include userinfo")
 	}
 
 	if !isHTTPSProviderURL(parsed) {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must be HTTPS")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, name+" base URL must be HTTPS")
 	}
 
 	if hasDisallowedProviderURLParts(parsed) {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must not include query, fragment, or escaped path")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, name+" base URL must not include query, fragment, or escaped path")
 	}
 
 	copied := *parsed

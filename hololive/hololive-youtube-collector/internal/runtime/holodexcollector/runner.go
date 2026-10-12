@@ -48,11 +48,11 @@ func (r *Runner) JobID() collection.JobID {
 
 func (r *Runner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "holodex client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
@@ -303,7 +303,7 @@ func (r *Runner) envelope(input *collection.RunInput, kind contract.ObservationK
 		payload,
 	)
 	if err != nil {
-		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
+		return contract.Envelope{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, err)
 	}
 
 	return envelope, nil

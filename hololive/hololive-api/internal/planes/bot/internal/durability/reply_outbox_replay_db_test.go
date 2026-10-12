@@ -33,7 +33,7 @@ import (
 
 func TestReplyOutboxDivergentReplayDoesNotBlockDelivery(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
@@ -58,7 +58,7 @@ func TestReplyOutboxDivergentReplayDoesNotBlockDelivery(t *testing.T) {
 
 func TestReplyOutboxOutcomeUnknownIsResendable(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
@@ -86,7 +86,7 @@ func TestReplyOutboxOutcomeUnknownIsResendable(t *testing.T) {
 
 func TestReplyOutboxConsecutiveOutcomeUnknownBacksOffThenRequiresManualReview(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
@@ -150,7 +150,7 @@ func TestReplyOutboxConsecutiveOutcomeUnknownBacksOffThenRequiresManualReview(t 
 
 func TestReplyOutboxAutomaticReplayStopsAtSafetyBoundaries(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	t.Run("replay horizon moves an ambiguous row to manual review", func(t *testing.T) {
@@ -271,7 +271,7 @@ func mustInsertReply(ctx context.Context, t *testing.T, repo *ReplyOutboxReposit
 
 func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	t.Run("an expired submitting lease returns the stored payload to the queue", func(t *testing.T) {
@@ -324,7 +324,7 @@ func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
 
 func TestReplyOutboxTerminalSettlementDropsTheBody(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	t.Run("a completed handoff keeps the identity row without the body", func(t *testing.T) {

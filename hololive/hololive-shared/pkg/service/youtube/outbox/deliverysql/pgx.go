@@ -51,28 +51,6 @@ func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, er
 	return item, nil
 }
 
-func ScanDeliveryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDelivery, error) {
-	var item domain.YouTubeNotificationDelivery
-
-	err := row.Scan(
-		&item.ID,
-		&item.OutboxID,
-		&item.RoomID,
-		&item.Status,
-		&item.AttemptCount,
-		&item.NextAttemptAt,
-		&item.CreatedAt,
-		&item.LockedAt,
-		&item.SentAt,
-		&item.Error,
-	)
-	if err != nil {
-		return item, fmt.Errorf("scan delivery row: %w", err)
-	}
-
-	return item, nil
-}
-
 const deleteBatchYield = 10 * time.Millisecond
 
 func YieldBetweenDeleteBatches(ctx context.Context) error {

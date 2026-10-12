@@ -12,8 +12,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// delivery telemetry는 lifecycle 전이 트랜잭션 안에서 owner 시도 하나당 한 행만 기록한다
-// (DEC-20260926-hololive-delivery-telemetry-single-path). 팔로워(follower)는 시도가 아니라 기록하지 않는다.
+// delivery telemetry는 lifecycle 전이 트랜잭션 안에서 owner 시도 하나당 한 행만 기록한다.
+// 팔로워(follower)는 시도가 아니라 기록하지 않는다.
 type transitionTelemetryRow struct {
 	DeliveryID     int64
 	AttemptOrdinal int
@@ -101,8 +101,7 @@ func TestTransitionAttemptTelemetryOrdinalKeepsAttemptCountAfterRetention(t *tes
 	require.Equal(t, 4, rows[0].AttemptOrdinal)
 }
 
-// 결과 불명 시도는 공백으로 두지 않는다(DEC-20260731-reply-outcome-unknown-fail-closed). 격리 sweep의
-// 트랜잭션이 owner 시도를 outcome_unknown으로 기록한다.
+// 결과 불명 시도는 공백으로 두지 않는다. 격리 sweep의 트랜잭션이 owner 시도를 outcome_unknown으로 기록한다.
 func TestTransitionQuarantineRecordsOutcomeUnknownAttempt(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

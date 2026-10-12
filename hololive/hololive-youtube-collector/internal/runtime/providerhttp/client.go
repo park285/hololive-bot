@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -29,7 +30,7 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "http.DefaultTransport is not *http.Transport")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "http.DefaultTransport is not *http.Transport")
 	}
 
 	transport := base.Clone()
@@ -56,7 +57,7 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 
 func WrapProviderHTTPDoer(doer HTTPDoer) (*ProviderHTTPClient, error) {
 	if doer == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP doer is nil")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider HTTP doer is nil")
 	}
 
 	if client, ok := doer.(*http.Client); ok {
@@ -76,11 +77,11 @@ func rejectRedirect(_ *http.Request, _ []*http.Request) error {
 
 func (c *ProviderHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if c == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP client is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider HTTP client is not configured")
 	}
 
 	if req == nil {
-		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "provider HTTP request is nil")
+		return nil, collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, "provider HTTP request is nil")
 	}
 
 	if c.doer != nil {
@@ -93,7 +94,7 @@ func (c *ProviderHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	if c.client == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP client is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider HTTP client is not configured")
 	}
 
 	out, err := c.client.Do(req)

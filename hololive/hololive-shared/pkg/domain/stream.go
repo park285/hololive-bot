@@ -67,20 +67,6 @@ type Stream struct {
 	ViewerCount        *int         `json:"viewer_count,omitempty"`
 	IsPremiere         bool         `json:"is_premiere"`
 	CollaboTalentNames []string     `json:"collabo_talent_names,omitempty"`
-
-	// 기존 Stream HTTP 응답과 보관된 dispatch payload의 필드다. 제공자 조회에는 사용하지 않는다.
-	ChzzkChannelID string `json:"chzzk_channel_id,omitempty"` // Chzzk 채널 ID
-	ChzzkLiveID    int    `json:"chzzk_live_id"`              // Chzzk 예약 방송 ID (0이면 예고 없는 OPEN)
-	ChzzkLiveURL   string `json:"chzzk_live_url,omitempty"`   // Chzzk 라이브 URL
-	IsIntegrated   bool   `json:"is_integrated"`              // 동시 송출 여부 (YouTube + Chzzk)
-	IsChzzkOnly    bool   `json:"is_chzzk_only"`              // Chzzk 단독 여부
-
-	// Twitch 관련 필드
-	TwitchUserID    string `json:"twitch_user_id,omitempty"`    // Twitch 사용자 ID
-	TwitchUserLogin string `json:"twitch_user_login,omitempty"` // Twitch 사용자 로그인 (소문자)
-	TwitchStreamID  string `json:"twitch_stream_id,omitempty"`  // Twitch 스트림 ID
-	TwitchLiveURL   string `json:"twitch_live_url,omitempty"`   // Twitch 라이브 URL
-	IsTwitchOnly    bool   `json:"is_twitch_only"`              // Twitch 단독 여부
 }
 
 func (s *Stream) IsLive() bool {

@@ -140,15 +140,14 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 	}
 }
 
-// 계약 밖 failure tuple은 기본 class로 수리하지 않는다. 미분류 Internal로 지연 처리하고 위반 counter로만 드러낸다
-// (stack-audit 2026-09-26 T11 holo-collector-failure-class-repair).
+// 계약 밖 failure tuple은 기본 class로 수리하지 않는다. 미분류 Internal로 지연 처리하고 위반 counter로만 드러낸다.
 func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 	var fatal []error
 
 	runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
 	runner.collect = func(context.Context, *collection.RunInput) (collection.CollectResult, error) {
-		return collection.CollectResult{}, collecterr.New(collecterr.Failed, collecterr.ClassTimeout, "impossible tuple")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorCollectionFailed, contract.ClassTimeout, "impossible tuple")
 	}
 
 	executor, spec := newExecutorFixture(t, runner, &fatal)
@@ -189,8 +188,8 @@ func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 
 func TestCollectDeadlinePreservesClassifiedRunnerFailure(t *testing.T) {
 	for _, cause := range []error{
-		collecterr.New(collecterr.Internal, collecterr.ClassInternal, "runner invariant"),
-		collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "runner protocol"),
+		collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "runner invariant"),
+		collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "runner protocol"),
 	} {
 		t.Run(string(collecterr.ClassOf(cause)), func(t *testing.T) {
 			var fatal []error
@@ -241,7 +240,7 @@ func TestSchedulerReusesExecutorAndPreservesFatalCauses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cause := collecterr.New(collecterr.Internal, collecterr.ClassInternal, "executor invariant")
+	cause := collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "executor invariant")
 	executor.reportFatal(errors.Join(cause, context.DeadlineExceeded))
 
 	select {

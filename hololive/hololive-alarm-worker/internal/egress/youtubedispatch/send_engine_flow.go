@@ -147,16 +147,6 @@ func deliveryFailureReason(err error) string {
 	return deliveryReasonSendMessage
 }
 
-func deliveryFailureReasonIsPermanent(reason string) bool {
-	for _, item := range deliveryFailureReasonBySentinel {
-		if item.reason == reason {
-			return item.permanent
-		}
-	}
-
-	return false
-}
-
 func shouldFallbackGroupedSend(err error) bool {
 	// 모든 admission 충돌은 새 singleton ID로 우회하지 않는다.
 	if httpErr, ok := errors.AsType[*iris.HTTPError](err); ok && httpErr.StatusCode == http.StatusConflict {

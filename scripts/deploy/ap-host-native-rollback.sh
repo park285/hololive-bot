@@ -36,9 +36,7 @@ fi
 
 service="${AP_SERVICES[0]}"
 
-# rollback 기준점은 previous collector release 하나다. previous가 없을 때 퇴역 producer의 첫 cutover 상태를 복원하던 경로는
-# T18(2026-09-26)에서 osaka1·osaka2의 current·previous가 모두 collector release이고 producer unit이 0개임을 확인해
-# 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling). previous가 없으면 되돌릴 대상이 없으므로 거절한다.
+# rollback 기준점은 previous collector release다. previous가 없으면 거절한다.
 if [[ "$MODE" == "--dry-run" ]]; then
   {
     cat "$RELEASE_PATH_LIB"

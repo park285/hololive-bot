@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# 퇴역 admin-dashboard BFF(admin-dashboard/backend)는 저장소에 없으므로 scan 대상에서 뺐다(stack-audit 2026-09-26 T19).
 SCAN_ROOTS = (ROOT / "hololive",)
 EXCLUDED_DIRS = {
     ".git",
@@ -119,37 +118,27 @@ def iter_go_literals(source: str):
         i += 1
 
 
-def should_skip_dir(path: Path) -> bool:
-    try:
-        parts = path.relative_to(ROOT).parts
-    except ValueError:
-        return True
-    return any(part in EXCLUDED_DIRS for part in parts)
+def scan_files(roots: tuple[Path, ...]):
+    for root in roots:
+        for directory, dirs, files in root.walk():
+            dirs[:] = [name for name in dirs if name not in EXCLUDED_DIRS]
+            for name in files:
+                path = directory / name
+                if path.is_file():
+                    yield path
 
 
 def source_files() -> list[Path]:
-    result: list[Path] = []
-    for root in SCAN_ROOTS:
-        if not root.exists():
-            continue
-        for path in root.rglob("*.go"):
-            if not path.is_file() or should_skip_dir(path.parent):
-                continue
-            if path.name.endswith("_test.go"):
-                continue
-            result.append(path)
-    return result
+    return [
+        path for path in scan_files(SCAN_ROOTS)
+        if path.suffix == ".go" and not path.name.endswith("_test.go")
+    ]
 
 
 def sql_asset_files() -> list[Path]:
     return [
-        path
-        for root in SCAN_ROOTS + (ROOT / "scripts",)
-        if root.exists()
-        for path in root.rglob("*")
-        if path.is_file()
-        and not should_skip_dir(path.parent)
-        and (path.name.endswith(".sql") or path.name.endswith(".sql.tpl"))
+        path for path in scan_files(SCAN_ROOTS + (ROOT / "scripts",))
+        if path.name.endswith((".sql", ".sql.tpl"))
     ]
 
 
@@ -360,22 +349,14 @@ def check_source_literals() -> list[Finding]:
     return findings
 
 
-def check_sql_asset_locations() -> list[Finding]:
+def check_sql_assets() -> list[Finding]:
     findings: list[Finding] = []
     for path in sql_asset_files():
         text = path.read_text(encoding="utf-8")
         if not allowed_sql_asset(path):
             findings.append(Finding(path, 1, "SQL asset is outside allowed locations", ""))
-            continue
-        if "queries" in path.relative_to(ROOT).parts and DDL_RE.search(text) and not migration_command_asset(path):
+        elif "queries" in path.relative_to(ROOT).parts and DDL_RE.search(text) and not migration_command_asset(path):
             findings.append(Finding(path, 1, "runtime query asset contains DDL/operator SQL", excerpt(text)))
-    return findings
-
-
-def check_sql_asset_shape() -> list[Finding]:
-    findings: list[Finding] = []
-    for path in sql_asset_files():
-        text = path.read_text(encoding="utf-8")
         findings.extend(check_sql_wildcards(path, 1, text))
 
         stripped = text.strip().rstrip(";").strip()
@@ -392,7 +373,7 @@ def check_sql_asset_shape() -> list[Finding]:
 
 
 def main() -> int:
-    findings = check_source_literals() + check_sql_asset_locations() + check_sql_asset_shape()
+    findings = check_source_literals() + check_sql_assets()
     if not findings:
         print("SQL ownership check passed")
         return 0

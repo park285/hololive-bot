@@ -53,8 +53,7 @@ func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *d
 	return nil
 }
 
-// memberDirectoryMessage는 멤버 목록 응답을 만든다. 멤버 적재 실패는 "멤버 정보 없음" 응답으로 바꾸지 않고 오류로 돌려준다
-// (DEC-20260926-hololive-source-fallbacks-retirement).
+// memberDirectoryMessage는 멤버 목록 응답을 만든다. 멤버 적재 실패는 "멤버 정보 없음" 응답으로 바꾸지 않고 오류로 돌려준다.
 func (c *MemberInfoCommand) memberDirectoryMessage(ctx context.Context) (string, string, error) {
 	members, err := c.Deps().MembersData.LoadAllMembers(ctx)
 	if err != nil {

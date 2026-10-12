@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
-// llm plane 기동 검증 계약은 운영 시드로 통과해야 한다(DEC-20260926-hololive-message-strings-startup-validation).
+// llm plane 기동 검증 계약은 운영 시드로 통과해야 한다.
 func TestLLMMessageStringRequirementsSatisfiedBySeed(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 	require.NoError(t, store.Load(t.Context()))

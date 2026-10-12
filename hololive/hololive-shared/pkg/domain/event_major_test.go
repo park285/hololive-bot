@@ -25,78 +25,6 @@ import (
 	"time"
 )
 
-func TestNewMajorEvent(t *testing.T) {
-	title := "hololive SUPER EXPO 2026"
-	link := "https://example.com/event"
-	pubDate := time.Now()
-
-	event := NewMajorEvent(title, link, pubDate)
-
-	if event.Title != title {
-		t.Errorf("expected title %q, got %q", title, event.Title)
-	}
-
-	if event.Link != link {
-		t.Errorf("expected link %q, got %q", link, event.Link)
-	}
-
-	if event.ExternalID != link {
-		t.Errorf("expected externalID %q, got %q", link, event.ExternalID)
-	}
-
-	if event.PubDate == nil || !event.PubDate.Equal(pubDate) {
-		t.Errorf("expected pubDate %v, got %v", pubDate, event.PubDate)
-	}
-
-	if event.Status != MajorEventStatusActive {
-		t.Errorf("expected status %q, got %q", MajorEventStatusActive, event.Status)
-	}
-
-	if event.Type != MajorEventTypeEvent {
-		t.Errorf("expected type %q, got %q", MajorEventTypeEvent, event.Type)
-	}
-
-	if event.LinkStatus != MajorEventLinkStatusUnchecked {
-		t.Errorf("expected link status %q, got %q", MajorEventLinkStatusUnchecked, event.LinkStatus)
-	}
-}
-
-func TestNewMajorNews(t *testing.T) {
-	title := "ホロライブ新商品発売"
-	link := "https://example.com/news"
-	pubDate := time.Now()
-
-	news := NewMajorNews(title, link, pubDate)
-
-	if news.Title != title {
-		t.Errorf("expected title %q, got %q", title, news.Title)
-	}
-
-	if news.Link != link {
-		t.Errorf("expected link %q, got %q", link, news.Link)
-	}
-
-	if news.ExternalID != link {
-		t.Errorf("expected externalID %q, got %q", link, news.ExternalID)
-	}
-
-	if news.PubDate == nil || !news.PubDate.Equal(pubDate) {
-		t.Errorf("expected pubDate %v, got %v", pubDate, news.PubDate)
-	}
-
-	if news.Status != MajorEventStatusActive {
-		t.Errorf("expected status %q, got %q", MajorEventStatusActive, news.Status)
-	}
-
-	if news.Type != MajorEventTypeNews {
-		t.Errorf("expected type %q, got %q", MajorEventTypeNews, news.Type)
-	}
-
-	if news.LinkStatus != MajorEventLinkStatusUnchecked {
-		t.Errorf("expected link status %q, got %q", MajorEventLinkStatusUnchecked, news.LinkStatus)
-	}
-}
-
 func TestMajorEvent_HasEventDates(t *testing.T) {
 	now := time.Now()
 	tests := []struct {
@@ -238,25 +166,6 @@ func TestMajorEvent_TableName(t *testing.T) {
 
 	if got := event.TableName(); got != expected {
 		t.Errorf("expected table name %q, got %q", expected, got)
-	}
-}
-
-func TestNewEventRoomSubscription(t *testing.T) {
-	roomID := "room123"
-	roomName := "테스트방"
-
-	sub := NewEventRoomSubscription(roomID, roomName)
-
-	if sub.RoomID != roomID {
-		t.Errorf("expected roomID %q, got %q", roomID, sub.RoomID)
-	}
-
-	if sub.RoomName != roomName {
-		t.Errorf("expected roomName %q, got %q", roomName, sub.RoomName)
-	}
-
-	if sub.CreatedAt.IsZero() {
-		t.Error("expected CreatedAt to be set")
 	}
 }
 

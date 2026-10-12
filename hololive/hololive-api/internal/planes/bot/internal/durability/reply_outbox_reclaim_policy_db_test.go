@@ -12,7 +12,7 @@ import (
 
 func TestReplyReclaimPreservesAcceptedSafetyGrantsAndLockedRows(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	cases := []struct {
 		name, status, want string
@@ -88,7 +88,7 @@ func grantReclaimReplay(ctx context.Context, t *testing.T, pool *pgxpool.Pool, r
 
 func TestReplyReclaimRollsBackBatchWhenHorizonPassesBeforeWrite(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 
 	defer cancel()

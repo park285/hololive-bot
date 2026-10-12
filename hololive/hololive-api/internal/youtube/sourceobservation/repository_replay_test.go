@@ -14,7 +14,7 @@ func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	consumer := NewConsumer(repo)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	proof = bootstrapCommunityWindow(ctx, t, pool, publishkit.NewPublisher(pool), consumer, proof)
 

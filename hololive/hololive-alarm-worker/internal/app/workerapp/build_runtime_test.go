@@ -66,7 +66,7 @@ func TestLoadAlarmDispatchPublishConfigDefaults(t *testing.T) {
 	assert.Equal(t, 1000, appConfig.MaxDeliveriesPerBatch)
 }
 
-// 잘못된 batch 한도는 기본값 1000으로 바뀌지 않고 설정 오류가 된다(holo-alarm-worker-envconfig-silent-defaults).
+// 잘못된 batch 한도는 기본값 1000으로 바뀌지 않고 설정 오류가 된다.
 func TestLoadAlarmDispatchPublishConfigRejectsInvalidMaxDeliveries(t *testing.T) {
 	for _, value := range []string{"many", "0", "-10"} {
 		t.Run(value, func(t *testing.T) {

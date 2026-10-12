@@ -42,7 +42,7 @@ func TestInstanceIDIncludesPidForSameHostUniqueness(t *testing.T) {
 	}
 }
 
-// hostname을 얻지 못하면 "unknown-host"로 바꾸지 않고 오류다(DEC-20260926-hololive-legacy-env-config-retirement).
+// hostname을 얻지 못하면 "unknown-host"로 바꾸지 않고 오류다.
 // 여러 host의 worker가 같은 lease owner를 쓰면 claim 소유 판정이 어긋나기 때문이다.
 func TestInstanceIDRejectsHostnameFailure(t *testing.T) {
 	cases := map[string]func() (string, error){

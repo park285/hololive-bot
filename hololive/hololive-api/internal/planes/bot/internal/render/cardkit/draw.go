@@ -21,11 +21,6 @@ func DrawText(img *image.RGBA, face font.Face, x, y int, col color.Color, text s
 	d.DrawString(text)
 }
 
-func DrawCenteredText(img *image.RGBA, face font.Face, cx, y int, col color.Color, text string) {
-	w := MeasureText(face, text)
-	DrawText(img, face, cx-w/2, y, col, text)
-}
-
 func MeasureText(face font.Face, text string) int {
 	d := &font.Drawer{Face: face}
 	return d.MeasureString(text).Ceil()

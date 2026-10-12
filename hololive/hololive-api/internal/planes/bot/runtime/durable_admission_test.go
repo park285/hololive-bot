@@ -19,6 +19,7 @@ import (
 	"github.com/park285/iris-client-go/v3/webhook"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
@@ -97,8 +98,8 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := replyOutboxSettlementStatus(tc.accepted, tc.attempts, tc.err); got != tc.want {
-				t.Fatalf("replyOutboxSettlementStatus() = %q, want %q", got, tc.want)
+			if got := replyOutboxSettlementStatusWithMaxAttempts(tc.accepted, tc.attempts, durability.ReplyOutboxMaxAttempts, tc.err); got != tc.want {
+				t.Fatalf("replyOutboxSettlementStatusWithMaxAttempts() = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -110,7 +111,7 @@ func TestReplyOutboxOutcomeUnknownRetryDelayIncreasesByAttempt(t *testing.T) {
 	previous := time.Duration(0)
 
 	for attempt := int32(1); attempt < durableMaxAttempts; attempt++ {
-		delay := replyOutboxRetryAfter(durability.ReplyOutboxOutcomeUnknown, attempt)
+		delay := replyOutboxRetryAfterWithBase(durability.ReplyOutboxOutcomeUnknown, attempt, time.Second)
 		if delay <= previous {
 			t.Fatalf("attempt %d retry delay = %s, previous = %s", attempt, delay, previous)
 		}
@@ -118,7 +119,7 @@ func TestReplyOutboxOutcomeUnknownRetryDelayIncreasesByAttempt(t *testing.T) {
 		previous = delay
 	}
 
-	if got := replyOutboxRetryAfter(durability.ReplyOutboxManualReview, durableMaxAttempts); got != 0 {
+	if got := replyOutboxRetryAfterWithBase(durability.ReplyOutboxManualReview, durableMaxAttempts, time.Second); got != 0 {
 		t.Fatalf("manual review retry delay = %s, want 0", got)
 	}
 }
@@ -149,7 +150,7 @@ func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repo := durability.NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(t, pool)
 
 	_, err = repo.Insert(t.Context(), &durability.ReplyOutboxEntry{
 		MessageID: "message:metric", Phase: transport.ReplyPhase, RoomID: testRoomID,
@@ -742,7 +743,7 @@ func TestDurableIdleBackoffIsBounded(t *testing.T) {
 	delay := durablePollEvery
 
 	for range 20 {
-		delay = nextDurableIdleDelay(delay)
+		delay = nextDurableIdleDelayFrom(delay, durablePollEvery)
 	}
 
 	if delay != durablePollMax {
@@ -1081,4 +1082,13 @@ func TestAdmitMessageRejectsWithoutOptionalCounters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rejected admission returned error: %v", err)
 	}
+}
+
+func newTestReplyOutboxRepository(t *testing.T, pool *pgxpool.Pool) *durability.ReplyOutboxRepository {
+	t.Helper()
+
+	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(pool, durability.ReplyOutboxMaxAttempts, durability.ReplyOutboxAutomaticReplayHorizon)
+	require.NoError(t, err)
+
+	return repository
 }

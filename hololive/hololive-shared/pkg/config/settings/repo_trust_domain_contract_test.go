@@ -26,8 +26,9 @@ func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
 	}
 }
 
-func TestRepoHololiveAPITrustDomainControls(t *testing.T) {
-	cfg := renderComposeConfig(t, composeProdFile)
+func assertHololiveAPITrustDomainControls(t *testing.T, cfg renderedCompose) {
+	t.Helper()
+
 	service := composeService(t, cfg, serviceHololiveAPI)
 	env := composeEnvironment(t, cfg, serviceHololiveAPI)
 

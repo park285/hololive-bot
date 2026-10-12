@@ -234,7 +234,7 @@ func TestInboxAdmitRacingTerminalTransitionPreservesSuccessorHead(t *testing.T) 
 
 func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	for _, status := range []string{ReplyOutboxOutcomeUnknown, ReplyOutboxRetryablePreDispatch} {
@@ -297,7 +297,7 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 
 func TestReplyOutboxClaimsPreserveRoomOrderWhileOtherRoomsProgress(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 

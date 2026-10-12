@@ -62,6 +62,3 @@ SET period_key = EXCLUDED.period_key,
     error = NULL
 WHERE notification_delivery_outbox.status = 'FAILED'
   AND COALESCE(notification_delivery_outbox.payload->'request'->>'exhausted', 'false') <> 'true'
-  AND (notification_delivery_outbox.payload->'request' IS NOT NULL
-       OR notification_delivery_outbox.attempt_count = 0
-       OR notification_delivery_outbox.payload->>'known_unsent' = 'true')

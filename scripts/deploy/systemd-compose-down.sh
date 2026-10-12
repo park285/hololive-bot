@@ -48,8 +48,7 @@ fi
 
 export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
-# up과 같은 파일 조합으로 내린다. 빈 main-ap overlay 2종과 서비스가 없는 main-ap profile, 항상 켜져 있던
-# HOLOLIVE_ENABLE_LIVE_COMPAT 분기는 지웠다(stack-audit 2026-09-26 T11).
+# up과 같은 파일 조합으로 내린다.
 down_files=(
   -f deploy/compose/docker-compose.prod.yml
   -f deploy/compose/docker-compose.live-compat.yml

@@ -27,14 +27,6 @@ type Consumer struct {
 	channel           ChannelPolicy
 }
 
-func NewConsumer(repo observationClaimFinalizer) *Consumer {
-	return NewConsumerWithAbsenceGrace(repo, 0)
-}
-
-func NewConsumerWithAbsenceGrace(repo observationClaimFinalizer, grace time.Duration) *Consumer {
-	return NewConsumerWithGraces(repo, grace, 0)
-}
-
 func NewConsumerWithGraces(repo observationClaimFinalizer, grace, liveGrace time.Duration) *Consumer {
 	return &Consumer{
 		repo:      repo,

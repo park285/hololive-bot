@@ -107,9 +107,8 @@ func buildBotInfrastructureServices(
 	}, nil
 }
 
-// loadBotMessageStrings는 bot plane이 쓰는 message_strings를 기동 때 한 번 적재하고 formatter·오류 응답·기념일 카드
-// key를 검증한다. 실패하면 기동을 실패시킨다. 운영 중 재적재와 코드 대체 문구는 없다
-// (DEC-20260926-hololive-message-strings-startup-validation).
+// loadBotMessageStrings는 기동 시 message_strings를 적재하고 formatter·오류·기념일 key를 검증한다.
+// 검증 실패는 기동 오류이며 운영 중 재적재는 지원하지 않는다.
 func loadBotMessageStrings(ctx context.Context, infra *sharedmodules.InfraModule, logger *slog.Logger) (*messagestrings.Store, error) {
 	messageStrings := messagestrings.NewStore(infra.Postgres.GetPool(), logger)
 	if err := messageStrings.Load(ctx); err != nil {

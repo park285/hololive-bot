@@ -54,7 +54,8 @@ func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
 	}
 }
 
-func TestBuildLedgerRows_DefaultsEmptyAlarmTypeToLive(t *testing.T) {
+// 알림 종류가 비어 있으면 Live로 추정하지 않고 적재를 거절한다. 다른 종류의 알림을 Live 문구로 보내지 않기 위해서다.
+func TestBuildLedgerRows_RejectsEmptyAlarmType(t *testing.T) {
 	t.Parallel()
 
 	start := time.Date(2026, time.May, 12, 3, 0, 0, 0, time.UTC)
@@ -67,13 +68,8 @@ func TestBuildLedgerRows_DefaultsEmptyAlarmTypeToLive(t *testing.T) {
 		Version: 1,
 	}
 
-	event, _, err := buildLedgerRows(&envelope)
-	if err != nil {
-		t.Fatalf("buildLedgerRows() error = %v", err)
-	}
-
-	if event.AlarmType != domain.AlarmTypeLive {
-		t.Fatalf("event alarm type = %q, want %q", event.AlarmType, domain.AlarmTypeLive)
+	if _, _, err := buildLedgerRows(&envelope); err == nil {
+		t.Fatal("buildLedgerRows() accepted an envelope without alarm type")
 	}
 }
 

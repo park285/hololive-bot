@@ -55,10 +55,6 @@ type PublishedObservation struct {
 	Ordinal       int
 }
 
-func NewPublishedObservation(observationID int64, outcome PublishOutcome, ordinal int) PublishedObservation {
-	return PublishedObservation{ObservationID: observationID, Outcome: outcome, Ordinal: ordinal}
-}
-
 type PublishBatchResult struct {
 	Results []PublishedObservation
 }

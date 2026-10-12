@@ -69,10 +69,7 @@ func LoadKakaoConfig() (*KakaoConfig, error) {
 		return nil, fmt.Errorf("load kakao ACL mode: %w", err)
 	}
 
-	// KAKAO_ROOMS는 ACL 첫 초기화 seed이고 항목은 정확한 signed i64 chatID여야 한다(acl.NewACLService가 검증).
-	// 예전 방 이름 기본값은 chatID 단일 식별에서 어떤 방과도 매칭되지 않는 whitelist 행이 되므로 두지 않고,
-	// 값이 없으면 ValidateKakaoRooms의 "KAKAO_ROOMS is required"로 기동을 거절한다
-	// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
+	// KAKAO_ROOMS는 ACL 초기 seed이며 정규 signed i64 chatID 목록이 필수다.
 	return &KakaoConfig{
 		Rooms:      envload.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "")),
 		ACLEnabled: enabled,
@@ -255,7 +252,7 @@ const (
 )
 
 // LoadSeeMoreFold는 bot·llm plane이 공유하는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
-// 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다(PLN-20260926-stack-audit-refactoring T10).
+// 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다.
 func LoadSeeMoreFold() (bool, error) {
 	var env envload.StrictEnv
 

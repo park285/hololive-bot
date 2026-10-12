@@ -134,8 +134,7 @@ func TestNewClientAllowsConfiguredInternalHosts(t *testing.T) {
 	}
 }
 
-// https bot 내부 URL은 H3 전용 서버다. 명시한 H3 options가 없으면 TCP client로 내려가지 않고 오류다
-// (stack audit 2026-09-26).
+// https bot 내부 URL은 H3 전용 서버다. 명시한 H3 options가 없으면 TCP client로 내려가지 않고 오류다.
 func TestNewClientRequiresInternalH3OptionsForHTTPS(t *testing.T) {
 	t.Parallel()
 

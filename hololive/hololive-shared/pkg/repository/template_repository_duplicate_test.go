@@ -28,7 +28,7 @@ func TestTemplateRepository_UpsertResolvesCommittedDuplicateRow(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	tmpl, err := repository.Upsert(ctx, key, nil, "resolved body")
+	tmpl, _, err := repository.UpsertWithRevision(ctx, key, nil, "resolved body", 0)
 	require.NoError(t, err)
 	require.NotNil(t, tmpl)
 	assert.Equal(t, "resolved body", tmpl.Body)
@@ -56,7 +56,7 @@ func TestTemplateRepository_UpsertResolvesCommittedDuplicateOverrideRow(t *testi
 	)
 	require.NoError(t, err)
 
-	tmpl, err := repository.Upsert(ctx, key, &channelID, "resolved body")
+	tmpl, _, err := repository.UpsertWithRevision(ctx, key, &channelID, "resolved body", 0)
 	require.NoError(t, err)
 	require.NotNil(t, tmpl)
 	assert.Equal(t, "resolved body", tmpl.Body)

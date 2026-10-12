@@ -130,11 +130,11 @@ func TestEnqueue_FailedRetry(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET status = 'FAILED' WHERE content_id = $1", "2026-W08:room1"); err != nil {
+	if _, err := repository.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET status = 'FAILED', attempt_count = 3 WHERE content_id = $1", "2026-W08:room1"); err != nil {
 		t.Fatalf("set failed status: %v", err)
 	}
 
-	// 재 Enqueue → FAILED이므로 갱신
+	// 고정 요청 없이 FAILED가 된 행은 발송 전 실패이므로 시도 횟수와 무관하게 새 payload로 다시 적재한다.
 	if err := repository.Enqueue(ctx, domain.DeliveryKindMajorEventWeekly, "2026-W08", "room1", "retry-msg"); err != nil {
 		t.Fatalf("retry enqueue: %v", err)
 	}

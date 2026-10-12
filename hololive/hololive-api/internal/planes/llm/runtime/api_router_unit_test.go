@@ -29,13 +29,13 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
@@ -72,14 +72,14 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 	assert.Equal(t, "pong", strings.TrimSpace(rr.Body.String()))
 }
 
-func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
+func TestBuildLLMSchedulerRouter_Endpoints(t *testing.T) {
 	prevMode := gin.Mode()
 
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
 	})
 
-	router, err := buildHealthOnlyRouter(t.Context(), newDiscardLogger(), httputil.AdminAuthConfig{Disabled: true})
+	router, err := buildLLMSchedulerRouter(t.Context(), newDiscardLogger(), nil, "test-key", nil, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
@@ -99,32 +99,20 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 		assert.Equal(t, "ok", payload["status"])
 	})
 
-	t.Run("metrics", func(t *testing.T) {
+	t.Run("metrics require api key", func(t *testing.T) {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.NotEmpty(t, rr.Body.String())
-		assert.Contains(t, rr.Header().Get("Content-Type"), "text/plain")
-	})
-
-	t.Run("metrics require api key when configured", func(t *testing.T) {
-		protectedRouter, err := buildHealthOnlyRouter(t.Context(), newDiscardLogger(), httputil.AdminAuthConfig{APIKey: "test-key"})
-		require.NoError(t, err)
-
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
-		rr := httptest.NewRecorder()
-		protectedRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
 		reqWithKey := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 		reqWithKey.Header.Set(common.APIKeyHeader, "test-key")
 
 		rrWithKey := httptest.NewRecorder()
-		protectedRouter.ServeHTTP(rrWithKey, reqWithKey)
+		router.ServeHTTP(rrWithKey, reqWithKey)
 		assert.Equal(t, http.StatusOK, rrWithKey.Code)
 		assert.NotEmpty(t, rrWithKey.Body.String())
+		assert.Contains(t, rrWithKey.Header().Get("Content-Type"), "text/plain")
 	})
 
 	t.Run("ready", func(t *testing.T) {
@@ -148,7 +136,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 }
 
-func TestBuildLLMSchedulerHTTPServer_FailsClosedWithoutAPIKey(t *testing.T) {
+func TestBuildLLMSchedulerHTTPServers_FailsClosedWithoutAPIKey(t *testing.T) {
 	prevMode := gin.Mode()
 
 	t.Cleanup(func() {
@@ -158,21 +146,13 @@ func TestBuildLLMSchedulerHTTPServer_FailsClosedWithoutAPIKey(t *testing.T) {
 	logger := newDiscardLogger()
 	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	server, err := buildLLMSchedulerHTTPServer(
-		t.Context(),
-		32005,
-		logger,
-		triggerHandler,
-		"",
-		nil,
-		nil,
-	)
+	servers, err := buildLLMSchedulerHTTPServers(t.Context(), &settings.ServerConfig{}, logger, triggerHandler, "", nil, nil, nil)
 	require.Error(t, err)
-	assert.Nil(t, server)
+	assert.Nil(t, servers)
 	assert.Contains(t, err.Error(), "API_SECRET_KEY required")
 }
 
-func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
+func TestBuildLLMSchedulerRouter_WithAPIKey(t *testing.T) {
 	prevMode := gin.Mode()
 
 	t.Cleanup(func() {
@@ -182,32 +162,24 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	logger := newDiscardLogger()
 	triggerHandler := apiserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	server, err := buildLLMSchedulerHTTPServer(
-		t.Context(),
-		32006,
-		logger,
-		triggerHandler,
-		"test-key",
-		nil,
-		nil,
-	)
+	router, err := buildLLMSchedulerRouter(t.Context(), logger, triggerHandler, "test-key", nil, nil, nil)
 	require.NoError(t, err)
-	require.NotNil(t, server)
+	require.NotNil(t, router)
 
 	withoutKeyReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	withoutKeyRR := httptest.NewRecorder()
-	server.Handler.ServeHTTP(withoutKeyRR, withoutKeyReq)
+	router.ServeHTTP(withoutKeyRR, withoutKeyReq)
 	assert.Equal(t, http.StatusUnauthorized, withoutKeyRR.Code)
 
 	withKeyReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	withKeyReq.Header.Set(common.APIKeyHeader, "test-key")
 
 	withKeyRR := httptest.NewRecorder()
-	server.Handler.ServeHTTP(withKeyRR, withKeyReq)
+	router.ServeHTTP(withKeyRR, withKeyReq)
 	assert.Equal(t, http.StatusServiceUnavailable, withKeyRR.Code)
 }
 
-func TestBuildLLMSchedulerHTTPServer_FailsClosedForInternalDataRoutesWithoutAPIKey(t *testing.T) {
+func TestBuildLLMSchedulerRouter_FailsClosedForInternalDataRoutesWithoutAPIKey(t *testing.T) {
 	prevMode := gin.Mode()
 
 	t.Cleanup(func() {
@@ -216,16 +188,8 @@ func TestBuildLLMSchedulerHTTPServer_FailsClosedForInternalDataRoutesWithoutAPIK
 
 	logger := newDiscardLogger()
 
-	server, err := buildLLMSchedulerHTTPServer(
-		t.Context(),
-		32007,
-		logger,
-		nil,
-		"",
-		&majorevent.Repository{},
-		membernewssvc.NewService(nil, nil, nil, nil, logger),
-	)
+	router, err := buildLLMSchedulerRouter(t.Context(), logger, nil, "", &majorevent.Repository{}, membernewssvc.NewService(nil, nil, nil, nil, logger), nil)
 	require.Error(t, err)
-	assert.Nil(t, server)
+	assert.Nil(t, router)
 	assert.Contains(t, err.Error(), "API_SECRET_KEY required")
 }

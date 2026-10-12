@@ -110,7 +110,7 @@ func TestChannelRunnerRejectsInvalidUnavailableSessions(t *testing.T) {
 
 			result, err := NewChannelLiveRunner(&channelFake{result: response}).Collect(t.Context(),
 				channelLiveInput(t))
-			if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !result.IsZero() {
+			if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !result.IsZero() {
 				t.Fatalf("invalid unresolved identity was published: result=%#v err=%v", result, err)
 			}
 		})

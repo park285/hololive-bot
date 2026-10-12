@@ -34,13 +34,13 @@ func registerAndLogin(t *testing.T, service *Service, email string) (*User, stri
 		t.Fatalf("register %s: %v", email, err)
 	}
 
-	return login(t, service, email, "Password1")
+	return login(t, service, email)
 }
 
-func login(t *testing.T, service *Service, email, password string) (*User, string) {
+func login(t *testing.T, service *Service, email string) (*User, string) {
 	t.Helper()
 
-	session, user, err := service.Login(t.Context(), email, password, "127.0.0.1")
+	session, user, err := service.Login(t.Context(), email, "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login %s: %v", email, err)
 	}
@@ -48,16 +48,12 @@ func login(t *testing.T, service *Service, email, password string) (*User, strin
 	return user, session.Token
 }
 
-func resetPassword(t *testing.T, service *Service, email, newPassword string) {
+// bumpSessionGeneration은 운영자가 한 사용자의 세션을 폐기할 때처럼 PG 세션 세대를 올린다.
+func bumpSessionGeneration(t *testing.T, service *Service, userID string) {
 	t.Helper()
 
-	resetToken, err := service.RequestPasswordReset(t.Context(), email, "127.0.0.1")
-	if err != nil {
-		t.Fatalf("request password reset: %v", err)
-	}
-
-	if err := service.ResetPassword(t.Context(), resetToken, newPassword); err != nil {
-		t.Fatalf("reset password: %v", err)
+	if _, err := service.db.Exec(t.Context(), `UPDATE auth_users SET session_generation = session_generation + 1 WHERE id = $1`, userID); err != nil {
+		t.Fatalf("bump session generation: %v", err)
 	}
 }
 
@@ -86,20 +82,20 @@ func assertSessionKeyGone(t *testing.T, cacheClient cache.Client, token string) 
 	}
 }
 
-// reset은 해당 사용자의 기존 세션을 Me·Refresh 모두에서 거부하고 키를 지우지만,
-// 다른 사용자 세션과 reset 이후 새로 로그인한 세션은 그대로 쓸 수 있어야 한다.
-func TestPasswordReset_RejectsExistingSessionsOnMeAndRefresh(t *testing.T) {
+// 세대가 오르면 해당 사용자의 기존 세션을 Me·Refresh 모두에서 거부하고 키를 지우지만,
+// 다른 사용자 세션과 그 뒤 새로 로그인한 세션은 그대로 쓸 수 있어야 한다.
+func TestSessionGenerationBump_RejectsExistingSessionsOnMeAndRefresh(t *testing.T) {
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 	service := newGenerationTestService(t, cacheClient)
 
 	target, meToken := registerAndLogin(t, service, "target@example.com")
-	_, refreshToken := login(t, service, "target@example.com", "Password1")
+	_, refreshToken := login(t, service, "target@example.com")
 	_, otherToken := registerAndLogin(t, service, "other@example.com")
 
-	resetPassword(t, service, "target@example.com", "NewPassw0rd1")
+	bumpSessionGeneration(t, service, target.ID)
 
 	if got := storedSessionGeneration(t, service, target.ID); got != 1 {
-		t.Fatalf("session generation after reset: got=%d want=1", got)
+		t.Fatalf("session generation after bump: got=%d want=1", got)
 	}
 
 	_, err := service.Me(t.Context(), meToken)
@@ -111,82 +107,77 @@ func TestPasswordReset_RejectsExistingSessionsOnMeAndRefresh(t *testing.T) {
 	assertSessionKeyGone(t, cacheClient, refreshToken)
 
 	if _, meErr := service.Me(t.Context(), otherToken); meErr != nil {
-		t.Fatalf("other user's session must survive reset (Me): %v", meErr)
+		t.Fatalf("other user's session must survive bump (Me): %v", meErr)
 	}
 
 	if _, refreshErr := service.Refresh(t.Context(), otherToken); refreshErr != nil {
-		t.Fatalf("other user's session must survive reset (Refresh): %v", refreshErr)
+		t.Fatalf("other user's session must survive bump (Refresh): %v", refreshErr)
 	}
 
-	_, freshToken := login(t, service, "target@example.com", "NewPassw0rd1")
+	_, freshToken := login(t, service, "target@example.com")
 
 	refreshed, err := service.Refresh(t.Context(), freshToken)
 	if err != nil {
-		t.Fatalf("refresh of post-reset session: %v", err)
+		t.Fatalf("refresh of post-bump session: %v", err)
 	}
 
 	if _, err := service.Me(t.Context(), refreshed.Token); err != nil {
-		t.Fatalf("me of refreshed post-reset session: %v", err)
+		t.Fatalf("me of refreshed post-bump session: %v", err)
 	}
 }
 
-// raceRefreshWithReset은 Refresh가 PG 세대를 확인한 뒤 claim하기 직전에 비밀번호 reset을 커밋시킨다.
-func raceRefreshWithReset(t *testing.T, service *Service, racingCache *failingCacheClient, token, email, newPassword string) *Session {
+// raceRefreshWithGenerationBump은 Refresh가 PG 세대를 확인한 뒤 claim하기 직전에 세대를 올린다.
+func raceRefreshWithGenerationBump(t *testing.T, service *Service, racingCache *failingCacheClient, token, userID string) *Session {
 	t.Helper()
 
-	resetToken, err := service.RequestPasswordReset(t.Context(), email, "127.0.0.1")
-	if err != nil {
-		t.Fatalf("request password reset: %v", err)
-	}
-
 	racingCache.beforeCompareAndDelete = func() {
-		if resetErr := service.ResetPassword(t.Context(), resetToken, newPassword); resetErr != nil {
-			t.Errorf("reset password during refresh: %v", resetErr)
+		if _, err := service.db.Exec(t.Context(), `UPDATE auth_users SET session_generation = session_generation + 1 WHERE id = $1`, userID); err != nil {
+			t.Errorf("bump session generation during refresh: %v", err)
 		}
 	}
 
 	raced, err := service.Refresh(t.Context(), token)
 	if err != nil {
-		t.Fatalf("refresh racing reset: %v", err)
+		t.Fatalf("refresh racing generation bump: %v", err)
 	}
 
 	if racingCache.beforeCompareAndDelete != nil {
-		t.Fatal("expected reset to run between generation check and claim")
+		t.Fatal("expected generation bump to run between generation check and claim")
 	}
 
 	return raced
 }
 
-// Refresh의 세대 확인과 claim 사이에 reset이 커밋되면 새 세션은 이전 세대를 담는다.
+// Refresh의 세대 확인과 claim 사이에 세대가 오르면 새 세션은 이전 세대를 담는다.
 // 그 세션도 다음 Me·Refresh에서 거부되어야 한다.
-func TestRefresh_SessionIssuedAcrossConcurrentResetIsRejected(t *testing.T) {
+func TestRefresh_SessionIssuedAcrossConcurrentGenerationBumpIsRejected(t *testing.T) {
 	baseCache := testutil.NewTestCacheService(t.Context(), t)
 	racingCache := &failingCacheClient{Client: baseCache}
 	service := newGenerationTestService(t, racingCache)
 
-	_, token := registerAndLogin(t, service, "user@example.com")
+	user, token := registerAndLogin(t, service, "user@example.com")
 
-	racedForMe := raceRefreshWithReset(t, service, racingCache, token, "user@example.com", "NewPassw0rd1")
+	racedForMe := raceRefreshWithGenerationBump(t, service, racingCache, token, user.ID)
 
 	_, err := service.Me(t.Context(), racedForMe.Token)
 	assertAuthCode(t, err, CodeUnauthorized)
 	assertSessionKeyGone(t, baseCache, racedForMe.Token)
 
-	_, token = login(t, service, "user@example.com", "NewPassw0rd1")
+	_, token = login(t, service, "user@example.com")
 
-	racedForRefresh := raceRefreshWithReset(t, service, racingCache, token, "user@example.com", "NewPassw0rd2")
+	racedForRefresh := raceRefreshWithGenerationBump(t, service, racingCache, token, user.ID)
 
 	_, err = service.Refresh(t.Context(), racedForRefresh.Token)
 	assertAuthCode(t, err, CodeUnauthorized)
 	assertSessionKeyGone(t, baseCache, racedForRefresh.Token)
 
-	if _, _, err := service.Login(t.Context(), "user@example.com", "NewPassw0rd2", "127.0.0.1"); err != nil {
-		t.Fatalf("login after second reset: %v", err)
+	if got := storedSessionGeneration(t, service, user.ID); got != 2 {
+		t.Fatalf("session generation after two bumps: got=%d want=2", got)
 	}
 }
 
-// migration 231 이전에 발급된 payload에는 세대 필드가 없다. 0으로 해석되어 reset 전까지 유효하고 reset 후 거부된다.
-func TestSessionWithoutGenerationField_ValidUntilFirstReset(t *testing.T) {
+// migration 231 이전에 발급된 payload에는 세대 필드가 없다. 0으로 해석되어 세대가 처음 오르기 전까지 유효하고 그 뒤 거부된다.
+func TestSessionWithoutGenerationField_ValidUntilFirstGenerationBump(t *testing.T) {
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 	service := newGenerationTestService(t, cacheClient)
 
@@ -209,10 +200,10 @@ func TestSessionWithoutGenerationField_ValidUntilFirstReset(t *testing.T) {
 	storeLegacySession("sess_legacy_refresh")
 
 	if _, err := service.Me(t.Context(), "sess_legacy_me"); err != nil {
-		t.Fatalf("legacy session must be valid before reset: %v", err)
+		t.Fatalf("legacy session must be valid before generation bump: %v", err)
 	}
 
-	resetPassword(t, service, "user@example.com", "NewPassw0rd1")
+	bumpSessionGeneration(t, service, user.ID)
 
 	_, err := service.Me(t.Context(), "sess_legacy_me")
 	assertAuthCode(t, err, CodeUnauthorized)

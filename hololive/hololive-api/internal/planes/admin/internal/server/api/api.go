@@ -27,7 +27,6 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
@@ -68,7 +67,6 @@ type Handler struct {
 	majorEventScheduler        MajorEventScheduler
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler
 	startTime                  time.Time
-	streamState                *adminhandlers.StreamState
 	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
 	xSpaceSessions             *xspaces.Store
 }
@@ -85,17 +83,9 @@ type IrisRoomLister interface {
 	GetRooms(ctx context.Context) (*iris.RoomListResponse, error)
 }
 
-func newStreamState() *adminhandlers.StreamState {
-	return adminhandlers.NewStreamState()
-}
-
 func (h *Handler) ensureDefaults() *Handler {
 	if h == nil {
 		h = &Handler{}
-	}
-
-	if h.streamState == nil {
-		h.streamState = newStreamState()
 	}
 
 	if h.memberIndexLoader == nil && h.repository != nil {
@@ -107,23 +97,6 @@ func (h *Handler) ensureDefaults() *Handler {
 	}
 
 	return h
-}
-
-// streamState 접근자. 생성자에서 반드시 초기화되므로 nil이 될 수 없다.
-func (h *Handler) ensureStreamState() *adminhandlers.StreamState {
-	if h == nil {
-		return newStreamState()
-	}
-
-	if h.streamState == nil {
-		h.streamState = newStreamState()
-	}
-
-	return h.streamState
-}
-
-func (h *Handler) HasCommunityShortsOpsRepository() bool {
-	return h != nil && h.communityShortsOps != nil
 }
 
 type CommonDeps struct {
@@ -213,7 +186,6 @@ func NewHandler(deps *HandlerDeps) *Handler {
 		majorEventMonthlyScheduler: deps.MajorEvent.MonthlyScheduler,
 		logger:                     deps.Common.Logger,
 		startTime:                  time.Now(),
-		streamState:                newStreamState(),
 		memberIndexLoader:          memberIndexLoader,
 	}).ensureDefaults()
 }

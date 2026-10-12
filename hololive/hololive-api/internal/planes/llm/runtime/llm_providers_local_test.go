@@ -233,7 +233,7 @@ func TestProvideMemberNewsLLMClient_EmptyBaseURL(t *testing.T) {
 		},
 		nil, logger,
 	)
-	// provider가 켜져 있는데 설정이 불완전하면 기동 실패 대상 오류다(stack audit B5).
+	// provider가 켜져 있는데 설정이 불완전하면 기동 실패 대상 오류다.
 	if client != nil || err == nil || isLLMFeatureDisabled(err) {
 		t.Fatalf("got (%v, %v), want initialization error", client, err)
 	}

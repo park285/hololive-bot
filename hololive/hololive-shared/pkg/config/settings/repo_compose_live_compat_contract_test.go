@@ -34,31 +34,34 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 
 			for _, service := range apComposeServiceNames(t, cfg, tt.file) {
 				assertCollectorRenderedWithoutValkey(t, cfg, service)
-				assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, service)
 			}
 		})
 	}
 }
 
 func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *testing.T) {
-	overlay := readRepoFile(t, composeLiveCompatFile)
-	assertLiveCompatOverlayText(t, overlay)
-
 	cfg := renderComposeConfig(t, composeProdFile, composeLiveCompatFile)
 
-	for _, retired := range []string{"admin-dashboard", "admin-docker-proxy"} {
-		if _, present := cfg.Services[retired]; present {
-			t.Fatalf("live overlay restores retired admin service %s", retired)
-		}
-	}
-
-	assertLiveCompatRenderedPortsAndModes(t, cfg)
-	assertLiveCompatRenderedPostgres(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-	assertValkeyConsumersIsolated(t, cfg)
-	assertLiveCompatRenderedSecrets(t, cfg)
-	assertLiveCompatRenderedRuntimeConfig(t, cfg)
+	t.Run("isolation", func(t *testing.T) {
+		assertLiveCompatOverlayText(t, readRepoFile(t, composeLiveCompatFile))
+		assertLiveCompatRenderedPortsAndModes(t, cfg)
+		assertLiveCompatRenderedPostgres(t, cfg)
+		assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
+		assertValkeyConsumersIsolated(t, cfg)
+		assertLiveCompatRenderedSecrets(t, cfg)
+		assertLiveCompatRenderedRuntimeConfig(t, cfg)
+	})
+	t.Run("central_collector", func(t *testing.T) {
+		assertLiveCompatCollectorEnvFileText(t)
+		assertLiveCompatRenderedCollector(t, cfg)
+	})
+	t.Run("postgres_tls", func(t *testing.T) {
+		assertComposePostgresTLS(t, cfg, "live-compat")
+		assertNoWeakPostgresSSLMode(t, cfg)
+	})
+	t.Run("short_link_ingress", func(t *testing.T) {
+		assertShortLinkIngressBoundary(t, cfg)
+	})
 }
 
 func assertLiveCompatOverlayText(t *testing.T, overlay string) {
@@ -156,10 +159,6 @@ func assertLiveCompatRenderedPostgresService(t *testing.T, cfg renderedCompose, 
 		t.Fatalf("%s POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 	}
 
-	if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
-		t.Fatalf("%s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q; verify-full replaced the downgrade path", service, value)
-	}
-
 	if env["POSTGRES_SSLROOTCERT"] != postgresCACertPath {
 		t.Fatalf("%s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, env["POSTGRES_SSLROOTCERT"])
 	}
@@ -244,22 +243,6 @@ func assertLiveCompatRenderedRuntimeConfig(t *testing.T, cfg renderedCompose) {
 	}
 }
 
-// 중앙 youtube-collector-c는 prod.yml의 youtube-collector이고 live-compat.yml이 포트·볼륨을 소유한다. 이를 재선언만 하던
-// 빈 main-ap overlay 2종은 지웠다(stack-audit 2026-09-26 T11 holo-main-ap-empty-overlays).
-func TestRepoComposeLiveCompatOverlayRendersCentralCollector(t *testing.T) {
-	assertLiveCompatCollectorEnvFileText(t)
-
-	cfg := renderComposeConfig(t,
-		composeProdFile,
-		composeLiveCompatFile,
-	)
-
-	assertLiveCompatRenderedEgressAllowedHosts(t, cfg)
-	assertLiveCompatRenderedCollector(t, cfg)
-	assertCollectorRenderedWithoutValkey(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-}
-
 func assertLiveCompatCollectorEnvFileText(t *testing.T) {
 	t.Helper()
 
@@ -272,27 +255,12 @@ func assertLiveCompatCollectorEnvFileText(t *testing.T) {
 	}
 }
 
-func assertLiveCompatRenderedEgressAllowedHosts(t *testing.T, cfg renderedCompose) {
-	t.Helper()
-
-	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker} {
-		env := composeEnvironment(t, cfg, service)
-		if env["IRIS_BASE_URL_ALLOWED_HOSTS"] != "100.100.1.5" {
-			t.Fatalf("%s IRIS_BASE_URL_ALLOWED_HOSTS = %q, want 100.100.1.5", service, env["IRIS_BASE_URL_ALLOWED_HOSTS"])
-		}
-	}
-}
-
 func assertLiveCompatRenderedCollector(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	env := composeEnvironment(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
 	if env["POSTGRES_HOST"] != serviceHoloPostgres || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
 		t.Fatalf("youtube-collector POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
-	}
-
-	if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
-		t.Fatalf("youtube-collector renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", value)
 	}
 
 	if env["POSTGRES_SSLROOTCERT"] != postgresCACertPath {

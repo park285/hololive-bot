@@ -179,7 +179,7 @@ func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, processed)
-	// YouTube 방송 알림도 Text 경로로 저장된 send-unit ID를 붙여 보낸다(DEC-20260926-hololive-karing-egress-disposition).
+	// YouTube 방송 알림도 Text 경로로 저장된 send-unit ID를 붙여 보낸다.
 	assert.Equal(t, testAlarmRoomID, sender.roomID)
 	require.Len(t, sender.messages, 1)
 	require.Len(t, sender.clientRequestIDs, 1)
@@ -672,27 +672,6 @@ func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t,
 		fmt.Sprintf("⏰ 비비 방송 5분 전\n%s%s\n%s", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(string([]rune(strings.ReplaceAll(title, util.KakaoZeroWidthSpace, ""))[:61])+"..."), streamURL),
-		got,
-	)
-}
-
-func TestRenderAlarmDispatchNotificationOmitsRetiredSimulcastLink(t *testing.T) {
-	notification := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
-
-	notification.MinutesUntil = 5
-	notification.Channel.Name = "비비"
-	notification.Stream.ChannelID = alarmGoldenChannelPrefix + "비비"
-	notification.Stream.ID = "integrated-1"
-	notification.Stream.Title = "동시송출 방송"
-	notification.Stream.IsIntegrated = true
-	notification.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/integrated-1"
-
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmGoldenMembers{}, &notification)
-
-	require.NoError(t, err)
-	assert.Equal(t,
-		"⏰ 비비 방송 5분 전\n"+util.KakaoZeroWidthSpace+
-			"동시송출 방송\nhttps://youtube.com/watch?v=integrated-1",
 		got,
 	)
 }

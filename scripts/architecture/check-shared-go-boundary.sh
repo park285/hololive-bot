@@ -23,13 +23,14 @@ cleanup() {
 trap cleanup EXIT
 
 pushd "${SHARED_GO_DIR}" >/dev/null
-GOWORK=off go list -f '{{if not .Standard}}{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{end}}' ./... \
+# 테스트 전용 import까지 실제 모듈 그래프로 검사한다.
+GOWORK=off go list -test -f '{{if not .Standard}}{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{end}}' ./... \
   | awk '
       $1 != "" {
         from = $1
         for (i = 2; i <= NF; i++) {
           to = $i
-          if (to ~ /^github.com\/kapu\/hololive-/) {
+          if (to ~ /^github.com\/kapu\/hololive-/ || to ~ /^github.com\/park285\/llm-kakao-bots\/hololive/) {
             printf "%s -> %s\n", from, to
           }
         }

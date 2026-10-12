@@ -35,12 +35,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetChannelsLiveStatus는 Holodex /users/live 한 번으로 채널들의 live+upcoming stream을 돌려준다.
-// 조직·상태·정렬(org/status/sort) 필터는 적용하지 않는다. 사용 시나리오: 알림 체크, 대시보드 상태 표시 등 빠른 상태 확인.
-// 결과는 캐시하지 않는다(요청 채널 집합별 30초 캐시는 적중이 거의 없어 Valkey 책임 축소 A10에서 지웠다).
-// 호출마다 Holodex requester의 기존 rate limiter를 거쳐 upstream을 조회한다. 원천 실패는 오류로 그대로 돌려준다. YouTube scraper 2차 경로는
-// DEC-20260926-hololive-live-status-scraper-fallback-removal로 삭제했고, alarm-worker는 이 오류를 받으면
-// persisted live session으로 판단한다.
+// GetChannelsLiveStatus는 org/status/sort 필터 없이 Holodex /users/live를 한 번 조회한다.
+// 호출마다 requester의 rate limiter를 거치며 결과를 캐시하지 않는다.
+// 원천 오류는 그대로 반환하고 alarm-worker가 persisted live session으로 판단한다.
 func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
 	if len(channelIDs) == 0 {
 		return []*domain.Stream{}, nil

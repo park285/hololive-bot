@@ -23,7 +23,7 @@ type LLMSchedulerClients struct {
 
 // ResolveLLMSchedulerClients는 LLM_SCHEDULER_INTERNAL_URL이 설정된 경우에만 major event·member news client를 만든다.
 // URL이 설정됐는데 client를 만들지 못하면(HOLOLIVE_INTERNAL_H3_* 누락 포함) 명령을 조용히 끄지 않고 오류를 돌려
-// bot plane 기동을 실패시킨다(stack audit 2026-09-26).
+// bot plane 기동을 실패시킨다.
 func ResolveLLMSchedulerClients(
 	appConfig *apiconfig.BotPlaneConfig,
 	logger *slog.Logger,

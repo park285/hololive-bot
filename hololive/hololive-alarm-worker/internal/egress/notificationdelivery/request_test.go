@@ -146,21 +146,6 @@ func TestGenericRequestSnapshotCASAndQuarantineFence(t *testing.T) {
 	require.EqualValues(t, 1, countByStatus(ctx, t, repo, deliveryStatusQuarantined))
 }
 
-func TestGenericLegacyAttemptDoesNotInventPriorRequest(t *testing.T) {
-	repo := testRepository(t)
-	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "legacy", "room", "source"))
-
-	_, err := repo.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET attempt_count=1")
-	require.NoError(t, err)
-
-	sender := &preparedSenderSpy{body: "current template", route: testPreparedText}
-	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
-	d.processReady(ctx)
-	require.Empty(t, sender.ids)
-	require.EqualValues(t, 1, countByStatus(ctx, t, repo, deliveryStatusQuarantined))
-}
-
 func TestGenericGenerationSavedBeforeRetryCanBeReplayed(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
@@ -271,31 +256,7 @@ func TestGenericPinnedFailedRearmPreservesOriginalRoom(t *testing.T) {
 	require.Equal(t, "room", room)
 }
 
-func TestGenericLegacyFailedRearmCannotDiscardPriorAttemptEvidence(t *testing.T) {
-	repo := testRepository(t)
-	ctx := t.Context()
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "legacy-failed", "room", "old source"))
-
-	_, err := repo.pool.Exec(ctx, "UPDATE notification_delivery_outbox SET status='FAILED', attempt_count=3")
-	require.NoError(t, err)
-	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "legacy-failed", "room", "new source"))
-
-	var (
-		status   string
-		attempts int
-	)
-
-	require.NoError(t, repo.pool.QueryRow(ctx, "SELECT status, attempt_count FROM notification_delivery_outbox").Scan(&status, &attempts))
-	require.Equal(t, "FAILED", status)
-	require.Equal(t, 3, attempts)
-
-	sender := &preparedSenderSpy{body: "new config", route: testPreparedText}
-	d := mustNewDispatcher(t, repo, sender, dispatcherLogger(), nil)
-	d.processReady(ctx)
-	require.Empty(t, sender.ids)
-}
-
-func TestGenericPreparationFailureKeepsUnsentEvidenceForRetry(t *testing.T) {
+func TestGenericPreparationFailureRetriesWithoutSending(t *testing.T) {
 	repo := testRepository(t)
 	ctx := t.Context()
 	require.NoError(t, repo.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "prepare-retry", "room", "source"))

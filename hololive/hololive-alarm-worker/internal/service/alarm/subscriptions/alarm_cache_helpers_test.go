@@ -77,17 +77,6 @@ func TestChannelSubscribersKeyByType(t *testing.T) {
 	}
 }
 
-func TestChannelContentAlarmTargetKeysMatchSharedSchema(t *testing.T) {
-	t.Parallel()
-
-	as := &AlarmService{}
-	targets := sharedalarmkeys.BuildChannelContentAlarmTargetKeys("UC_bundle")
-
-	assert.Equal(t, targets.CommunitySubscribersKey, as.channelSubscribersKeyByType("UC_bundle", domain.AlarmTypeCommunity))
-	assert.Equal(t, targets.ShortsSubscribersKey, as.channelSubscribersKeyByType("UC_bundle", domain.AlarmTypeShorts))
-	assert.Empty(t, targets.KeyFor(domain.AlarmTypeLive))
-}
-
 func TestBuildTitleFingerprint(t *testing.T) {
 	t.Parallel()
 

@@ -9,7 +9,7 @@ import (
 
 const invalidBoolEnvValue = "maybe"
 
-// llm plane 설정도 숫자·bool env의 잘못된 값을 기본값으로 바꾸지 않고 기동 실패로 드러낸다(stack audit B4).
+// llm plane 설정도 숫자·bool env의 잘못된 값을 기본값으로 바꾸지 않고 기동 실패로 드러낸다.
 func TestLoadLLMSchedulerRuntimeRejectsInvalidEnvValues(t *testing.T) {
 	for _, tc := range []struct {
 		key   string

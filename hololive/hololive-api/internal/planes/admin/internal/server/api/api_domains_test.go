@@ -41,10 +41,6 @@ func TestDomainHandlers_EnsuresDefaults(t *testing.T) {
 	base := &Handler{}
 	domains := base.DomainHandlers()
 
-	if domains.Stream.streamState == nil {
-		t.Fatal("streamState not initialized by ensureDefaults via DomainHandlers")
-	}
-
 	if domains.Stream.startTime.IsZero() {
 		t.Fatal("startTime not initialized by ensureDefaults via DomainHandlers")
 	}

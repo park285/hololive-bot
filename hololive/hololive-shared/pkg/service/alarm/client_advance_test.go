@@ -38,7 +38,7 @@ func newBlockedAdvanceClient(t *testing.T) (*Client, func(), *atomic.Int32) {
 	t.Cleanup(release)
 
 	sent := new(atomic.Int32)
-	client := NewClient("https://alarm.example", nil)
+	client := newTestClient("https://alarm.example", "", nil)
 
 	client.httpClient.Transport = advanceTransportFunc(func(*http.Request) (*http.Response, error) {
 		if sent.Add(1) == 1 {
@@ -149,7 +149,7 @@ func TestClientAdvancePreservesTransportAndCancellationErrors(t *testing.T) {
 
 			var sent atomic.Int32
 
-			client := NewClient("https://alarm.example", nil)
+			client := newTestClient("https://alarm.example", "", nil)
 			client.setTargetMinutes([]int{5, 3, 1})
 
 			client.httpClient.Transport = advanceTransportFunc(func(*http.Request) (*http.Response, error) {
@@ -194,7 +194,7 @@ func TestClientAdvancePreservesTransportAndCancellationErrors(t *testing.T) {
 func TestClientAdvanceRejectsInvalidOriginBeforeSending(t *testing.T) {
 	t.Parallel()
 
-	client := NewClient("/relative", nil)
+	client := newTestClient("/relative", "", nil)
 
 	var sent atomic.Int32
 
@@ -245,7 +245,7 @@ func TestClientAdvanceClassifiesUnconfirmedResponses(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			client := NewClient(server.URL, nil)
+			client := newTestClient(server.URL, "", nil)
 			client.setTargetMinutes([]int{5, 3, 1})
 
 			result, err := client.UpdateAlarmAdvanceMinutes(t.Context(), 10)

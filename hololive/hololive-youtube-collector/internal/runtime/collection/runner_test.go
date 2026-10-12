@@ -70,8 +70,8 @@ func TestPartialResultRejectsFatalOnlyClasses(t *testing.T) {
 
 	for _, cause := range []error{
 		context.Canceled,
-		collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "protocol"),
-		collecterr.New(collecterr.Internal, collecterr.ClassInternal, "internal"),
+		collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "protocol"),
+		collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "internal"),
 	} {
 		if result, resultErr := NewPartialResult(output, cause, contract.KindShortsList); resultErr == nil || !result.IsZero() {
 			t.Fatalf("fatal-only cause accepted as PARTIAL: %v", cause)
@@ -111,7 +111,7 @@ func TestNewRunInputBindsJobSubjectLeaseAndTargets(t *testing.T) {
 				return
 			}
 
-			if err == nil || collecterr.CodeOf(err) != collecterr.Internal || collecterr.ClassOf(err) != collecterr.ClassInternal {
+			if err == nil || collecterr.CodeOf(err) != contract.ErrorInternalInvariant || collecterr.ClassOf(err) != contract.ClassInternal {
 				t.Fatalf("mismatched input error = %v", err)
 			}
 

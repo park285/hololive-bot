@@ -28,10 +28,6 @@ type NotificationDeliveryWorkerSettings struct {
 	StaleSendingSweepLimit      int   `json:"stale_sending_sweep_limit"`
 }
 
-// YouTubeDeliveryWorkerSettings의 telemetry_backfill_batch는 delivery 테이블 역산 backfill과 함께 삭제했다
-// (DEC-20260926-hololive-delivery-telemetry-single-path). DecodeWorkerSettings가 profile 키와 필드의 정확한 일치를
-// 요구하므로, 운영 alarm-worker profile에서 이 키를 지우는 작업은 이 필드를 지운 alarm-worker 배포와 같은 유지보수
-// 단계에서 한다.
 type YouTubeDeliveryWorkerSettings struct {
 	BatchSize                   int   `json:"batch_size"`
 	LockTimeoutMS               int64 `json:"lock_timeout_ms"`

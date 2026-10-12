@@ -440,7 +440,7 @@ func liveMediaRequestOptions(ctx context.Context, opts []iris.SendOption) (clien
 }
 
 // SendError는 message_strings error namespace 문구로 응답한다. 응답 formatter가 없으면 코드 대체 문구를 보내지 않고
-// 조립 결함으로 오류를 돌려준다(DEC-20260926-hololive-message-strings-startup-validation).
+// 조립 결함으로 오류를 돌려준다.
 func (t *CommandTransport) SendError(ctx context.Context, room, key string) error {
 	if t == nil || t.formatter == nil {
 		return errors.New("send error message: response formatter is not configured")

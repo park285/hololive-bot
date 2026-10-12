@@ -71,7 +71,7 @@ func TestParseLiveRowsFailsWhenEveryRowIsInvalid(t *testing.T) {
 		t.Fatalf("fully invalid response parsed as %#v", rows)
 	}
 
-	if collecterr.CodeOf(err) != collecterr.ParserDrift || collecterr.ClassOf(err) != collecterr.ClassDataContract {
+	if collecterr.CodeOf(err) != contract.ErrorParserDrift || collecterr.ClassOf(err) != contract.ClassDataContract {
 		t.Fatalf("code=%q class=%q err=%v", collecterr.CodeOf(err), collecterr.ClassOf(err), err)
 	}
 
@@ -98,7 +98,7 @@ func TestParseLiveRowsFailsOnBrokenResponse(t *testing.T) {
 				t.Fatalf("broken response parsed as %#v", rows)
 			}
 
-			if collecterr.CodeOf(err) != collecterr.ParserDrift {
+			if collecterr.CodeOf(err) != contract.ErrorParserDrift {
 				t.Fatalf("code = %q, err = %v", collecterr.CodeOf(err), err)
 			}
 		})

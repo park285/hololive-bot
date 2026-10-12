@@ -3,6 +3,7 @@ package youtubejscollector
 import (
 	"testing"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
@@ -20,7 +21,7 @@ func TestPaginationOfRejectsImpossibleTupleAsProtocolFault(t *testing.T) {
 		t.Fatal("empty continuity must fail closed")
 	}
 
-	if collecterr.CodeOf(err) != collecterr.HelperProtocolMismatch {
+	if collecterr.CodeOf(err) != contract.ErrorHelperProtocolMismatch {
 		t.Fatalf("error code = %q, want helper protocol mismatch", collecterr.CodeOf(err))
 	}
 }

@@ -1221,7 +1221,7 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsResult(t *testing.T)
 	}
 }
 
-// 시도 telemetry는 TransitionStore가 전이 트랜잭션 안에서 한 번 기록한다(DEC-20260926-hololive-delivery-telemetry-single-path).
+// 시도 telemetry는 TransitionStore가 전이 트랜잭션 안에서 한 번 기록한다.
 // 발송 경로는 발송 방식만 넘기고, commit 뒤 직접 audit 로그나 telemetry enqueue를 남기지 않는다.
 func TestDispatchDeliveryRows_PerRoomSuccessPassesPerRoomModeToTransition(t *testing.T) {
 	t.Parallel()
@@ -1737,10 +1737,6 @@ func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows
 	}
 
 	return selection
-}
-
-func (s *outcomeUnknownClaimSpy) releaseDeliveryClaims(context.Context, []dispatchstate.ClaimToken) error {
-	return nil
 }
 
 func (s *outcomeUnknownClaimSpy) releaseDeliveryClaimsWithWarning(context.Context, []dispatchstate.ClaimToken, string, ...any) {

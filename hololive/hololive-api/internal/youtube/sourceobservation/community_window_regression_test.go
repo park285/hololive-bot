@@ -18,7 +18,7 @@ func TestCommunityWindowBaselinePreventsPinnedPostReorderBurst(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
-	consumer := NewConsumer(repo)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	baseline := publishCommunityWindow(ctx, t, publishkit.NewPublisher(pool), &proof, "pinned", "known-a", "known-b")
 	consumeCommunityWindow(ctx, t, consumer)

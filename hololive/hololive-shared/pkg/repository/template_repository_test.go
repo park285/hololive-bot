@@ -58,12 +58,12 @@ func TestTemplateRepository_List(t *testing.T) {
 	})
 
 	t.Run("with data and filters", func(t *testing.T) {
-		_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, nil, "default body")
+		_, err := upsertTemplate(ctx, repo, domain.TemplateKeyOutboxShorts, nil, "default body")
 		require.NoError(t, err)
 
 		channelID := "room_123"
 
-		_, err = repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, &channelID, "override body")
+		_, err = upsertTemplate(ctx, repo, domain.TemplateKeyOutboxShorts, &channelID, "override body")
 		require.NoError(t, err)
 
 		templates, err := repo.List(ctx, nil, nil)
@@ -88,7 +88,7 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("insert default", func(t *testing.T) {
-		tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, nil, "new body")
+		tmpl, err := upsertTemplate(ctx, repo, domain.TemplateKeyOutboxShorts, nil, "new body")
 		require.NoError(t, err)
 		assert.NotZero(t, tmpl.ID)
 		assert.Equal(t, domain.TemplateKeyOutboxShorts, tmpl.TemplateKey)
@@ -97,7 +97,7 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 	})
 
 	t.Run("update default", func(t *testing.T) {
-		_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, nil, "updated body")
+		_, err := upsertTemplate(ctx, repo, domain.TemplateKeyOutboxShorts, nil, "updated body")
 		require.NoError(t, err)
 
 		tmpl, found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
@@ -108,7 +108,7 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 
 	t.Run("insert override", func(t *testing.T) {
 		channelID := "room_abc"
-		tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, &channelID, "override body")
+		tmpl, err := upsertTemplate(ctx, repo, domain.TemplateKeyOutboxShorts, &channelID, "override body")
 		require.NoError(t, err)
 		assert.NotZero(t, tmpl.ID)
 		assert.Equal(t, "room_abc", *tmpl.ChannelID)
@@ -116,7 +116,7 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 
 	t.Run("update override", func(t *testing.T) {
 		channelID := "room_abc"
-		_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, &channelID, "override updated")
+		_, err := upsertTemplate(ctx, repo, domain.TemplateKeyOutboxShorts, &channelID, "override updated")
 		require.NoError(t, err)
 
 		tmpl, found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, &channelID)
@@ -137,7 +137,7 @@ func TestTemplateRepository_Upsert_RecoversFromDuplicateKey(t *testing.T) {
 
 	for _, body := range []string{"racing body", "resolved body"} {
 		wg.Go(func() {
-			tmpl, err := repo.Upsert(ctx, key, nil, body)
+			tmpl, err := upsertTemplate(ctx, repo, key, nil, body)
 			if err != nil {
 				results <- err
 				return
@@ -170,7 +170,7 @@ func TestTemplateRepository_DeleteOverride(t *testing.T) {
 	ctx := t.Context()
 
 	channelID := "room_del"
-	_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxCommunity, &channelID, "to delete")
+	_, err := upsertTemplate(ctx, repo, domain.TemplateKeyOutboxCommunity, &channelID, "to delete")
 	require.NoError(t, err)
 
 	err = repo.DeleteOverride(ctx, domain.TemplateKeyOutboxCommunity, channelID)
@@ -185,17 +185,17 @@ func TestTemplateRepository_GetByKey(t *testing.T) {
 	repo := newTemplateRepository(t)
 	ctx := t.Context()
 
-	_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxVideo, nil, "default video")
+	_, err := upsertTemplate(ctx, repo, domain.TemplateKeyOutboxVideo, nil, "default video")
 	require.NoError(t, err)
 
 	ch1 := "room_1"
 
-	_, err = repo.Upsert(ctx, domain.TemplateKeyOutboxVideo, &ch1, "override 1")
+	_, err = upsertTemplate(ctx, repo, domain.TemplateKeyOutboxVideo, &ch1, "override 1")
 	require.NoError(t, err)
 
 	ch2 := "room_2"
 
-	_, err = repo.Upsert(ctx, domain.TemplateKeyOutboxVideo, &ch2, "override 2")
+	_, err = upsertTemplate(ctx, repo, domain.TemplateKeyOutboxVideo, &ch2, "override 2")
 	require.NoError(t, err)
 
 	defaultTmpl, overrides, err := repo.GetByKey(ctx, domain.TemplateKeyOutboxVideo)
@@ -208,17 +208,14 @@ func TestTemplateRepository_GetByKey(t *testing.T) {
 }
 
 func TestTemplateRepository_Revisions(t *testing.T) {
-	repo := newTemplateRepository(t)
+	repo, pool := newTemplateRepositoryWithPool(t)
 	ctx := t.Context()
 
-	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxCommunity, nil, "v1")
+	tmpl, err := upsertTemplate(ctx, repo, domain.TemplateKey("REVISION_LIST"), nil, "v1")
 	require.NoError(t, err)
 
-	err = repo.CreateRevision(ctx, tmpl.ID, "v0 old body")
-	require.NoError(t, err)
-
-	err = repo.CreateRevision(ctx, tmpl.ID, "v0.5 older body")
-	require.NoError(t, err)
+	insertTemplateRevision(t, pool, tmpl.ID, "v0 old body")
+	insertTemplateRevision(t, pool, tmpl.ID, "v0.5 older body")
 
 	revisions, err := repo.GetRevisions(ctx, tmpl.ID, 5)
 	require.NoError(t, err)
@@ -229,46 +226,6 @@ func TestTemplateRepository_Revisions(t *testing.T) {
 	assert.True(t, found)
 }
 
-func TestTemplateRepository_PruneOldRevisions(t *testing.T) {
-	repo := newTemplateRepository(t)
-	ctx := t.Context()
-
-	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")
-	require.NoError(t, err)
-
-	for range 10 {
-		err = repo.CreateRevision(ctx, tmpl.ID, "revision body")
-		require.NoError(t, err)
-	}
-
-	err = repo.PruneOldRevisions(ctx, tmpl.ID, 5)
-	require.NoError(t, err)
-
-	revisions, err := repo.GetRevisions(ctx, tmpl.ID, 100)
-	require.NoError(t, err)
-	assert.Len(t, revisions, 5)
-}
-
-func TestTemplateRepository_PruneOldRevisions_KeepZeroNoop(t *testing.T) {
-	repo := newTemplateRepository(t)
-	ctx := t.Context()
-
-	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")
-	require.NoError(t, err)
-
-	for range 3 {
-		err = repo.CreateRevision(ctx, tmpl.ID, "revision body")
-		require.NoError(t, err)
-	}
-
-	err = repo.PruneOldRevisions(ctx, tmpl.ID, 0)
-	require.NoError(t, err)
-
-	revisions, err := repo.GetRevisions(ctx, tmpl.ID, 100)
-	require.NoError(t, err)
-	assert.Len(t, revisions, 3)
-}
-
 func newTemplateRepositoryWithPool(t *testing.T) (*repository.TemplateRepository, *pgxpool.Pool) {
 	t.Helper()
 
@@ -276,6 +233,24 @@ func newTemplateRepositoryWithPool(t *testing.T) (*repository.TemplateRepository
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	return repository.NewTemplateRepository(pool, logger), pool
+}
+
+// upsertTemplate는 운영 저장 경로(UpsertWithRevision)로 템플릿을 쓴다. 보존 개수 정리는 하지 않는다.
+func upsertTemplate(ctx context.Context, repo *repository.TemplateRepository, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
+	tmpl, _, err := repo.UpsertWithRevision(ctx, key, channelID, body, 0)
+	if err != nil {
+		return nil, fmt.Errorf("upsert template: %w", err)
+	}
+
+	return tmpl, nil
+}
+
+// insertTemplateRevision은 시험용 과거 revision을 직접 넣는다.
+func insertTemplateRevision(t *testing.T, pool *pgxpool.Pool, templateID int64, body string) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `INSERT INTO notification_template_revisions (template_id, body) VALUES ($1, $2)`, templateID, body)
+	require.NoError(t, err)
 }
 
 func blockRevisionInserts(t *testing.T, pool *pgxpool.Pool) {
@@ -439,7 +414,7 @@ func TestTemplateRepository_UpsertWithRevision_CanceledContextWritesNothing(t *t
 }
 
 func TestTemplateRepository_UpsertWithRevision_PrunesInSameTransaction(t *testing.T) {
-	repo := newTemplateRepository(t)
+	repo, pool := newTemplateRepositoryWithPool(t)
 	ctx := t.Context()
 	key := domain.TemplateKey("I06_PRUNE")
 
@@ -447,7 +422,7 @@ func TestTemplateRepository_UpsertWithRevision_PrunesInSameTransaction(t *testin
 	require.NoError(t, err)
 
 	for i := range 10 {
-		require.NoError(t, repo.CreateRevision(ctx, seeded.ID, fmt.Sprintf("old-%d", i)))
+		insertTemplateRevision(t, pool, seeded.ID, fmt.Sprintf("old-%d", i))
 	}
 
 	updated, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, "v2", 3)
@@ -462,7 +437,7 @@ func TestTemplateRepository_UpsertWithRevision_PrunesInSameTransaction(t *testin
 }
 
 func TestTemplateRepository_UpsertWithRevision_KeepZeroSkipsPrune(t *testing.T) {
-	repo := newTemplateRepository(t)
+	repo, pool := newTemplateRepositoryWithPool(t)
 	ctx := t.Context()
 	key := domain.TemplateKey("I06_PRUNE_ZERO")
 
@@ -470,7 +445,7 @@ func TestTemplateRepository_UpsertWithRevision_KeepZeroSkipsPrune(t *testing.T) 
 	require.NoError(t, err)
 
 	for i := range 3 {
-		require.NoError(t, repo.CreateRevision(ctx, seeded.ID, fmt.Sprintf("old-%d", i)))
+		insertTemplateRevision(t, pool, seeded.ID, fmt.Sprintf("old-%d", i))
 	}
 
 	updated, _, err := repo.UpsertWithRevision(ctx, key, nil, "v2", 0)

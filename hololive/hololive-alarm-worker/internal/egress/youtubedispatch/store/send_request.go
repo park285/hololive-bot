@@ -72,8 +72,8 @@ func (s *TransitionStore) LoadFrozenRequests(ctx context.Context, deliveryIDs []
 	return requests, nil
 }
 
-// FreezeRequest는 준비 fence를 잠근 상태에서 최초 요청만 저장한다. 전송 가능성이 있는
-// legacy 행에는 현재 템플릿을 과거 요청의 증거로 사용하지 않는다.
+// FreezeRequest는 준비 fence를 잠근 상태에서 최초 요청만 저장한다. 이미 고정된 요청이 있으면
+// 현재 템플릿으로 다시 만들지 않고 저장된 요청을 돌려준다.
 func (s *TransitionStore) FreezeRequest(ctx context.Context, deliveries []domain.YouTubeNotificationDelivery, request FrozenRequest) (FrozenRequest, error) {
 	var frozen FrozenRequest
 

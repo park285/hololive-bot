@@ -29,7 +29,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -140,18 +139,6 @@ func appendMemberAliasTokens(member *domain.Member, appendToken func(string)) {
 	for _, alias := range member.Aliases.Ja {
 		appendToken(alias)
 	}
-}
-
-func matchMembers(candidate *model.Candidate, profiles []memberProfile) []string {
-	if len(profiles) == 0 {
-		return nil
-	}
-
-	memberTokenSet := buildCandidateMemberTokenSet(candidate.Members)
-
-	return matchPreparedMembers(profiles, memberTokenSet, func() string {
-		return stringutil.NormalizeKey(candidate.Title + " " + candidate.Description)
-	})
 }
 
 func matchPreparedMembers(profiles []memberProfile, memberTokenSet map[string]struct{}, body func() string) []string {

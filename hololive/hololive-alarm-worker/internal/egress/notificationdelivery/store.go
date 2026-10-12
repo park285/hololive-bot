@@ -16,17 +16,13 @@ import (
 
 // Store는 alarm-worker만 쓰는 notification_delivery_outbox의 claim·발송 정산·stale SENDING 격리·보존 정리 저장소다.
 // 적재는 hololive-shared delivery.OutboxRepository가 소유하며, 두 저장소는 같은 테이블·status 값·payload 키(message,
-// request, known_unsent)를 계약으로 공유한다. 모든 전이가 단일 SQL 문장이라 두 저장소에 걸친 트랜잭션은 없고,
+// request)를 계약으로 공유한다. 모든 전이가 단일 SQL 문장이라 두 저장소에 걸친 트랜잭션은 없고,
 // 적재 rearm(FAILED 전용)과 이 저장소의 전이는 행 잠금과 status·locked_by·attempt_count 조건으로만 직렬화된다.
 type Store struct {
 	pool *pgxpool.Pool
 }
 
 const deliveryStatusSending domain.DeliveryOutboxStatus = "SENDING"
-
-// 결과 불명(stale SENDING)을 FAILED로 회수하면 rearm(outbox_enqueue_batch_upsert.sql의
-// WHERE status='FAILED')이 재발송해 중복 노출 위험이 있어 별도 terminal 상태로 격리한다.
-const deliveryStatusQuarantined domain.DeliveryOutboxStatus = "QUARANTINED"
 
 const staleSendingFailureReason = "stale sending; external send outcome unknown"
 
@@ -152,10 +148,7 @@ func (r *Store) cleanupInBatches(ctx context.Context, cutoff time.Time, batchSiz
 	var total int64
 
 	for {
-		tag, err := r.pool.Exec(ctx,
-			mustSQL("outbox_repository_0279_09.sql"),
-			domain.DeliveryStatusSent, domain.DeliveryStatusFailed, deliveryStatusQuarantined, cutoff, batchSize,
-		)
+		tag, err := r.pool.Exec(ctx, mustSQL("outbox_repository_0279_09.sql"), cutoff, batchSize)
 		if err != nil {
 			return total, fmt.Errorf("exec: %w", err)
 		}
@@ -198,8 +191,7 @@ func (r *Store) QuarantineStaleSending(ctx context.Context, olderThan time.Durat
 
 	tag, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0301_10.sql"),
-		deliveryStatusSending, positiveDurationMilliseconds(olderThan),
-		limit, deliveryStatusQuarantined, staleSendingFailureReason,
+		positiveDurationMilliseconds(olderThan), limit, staleSendingFailureReason,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
@@ -208,15 +200,15 @@ func (r *Store) QuarantineStaleSending(ctx context.Context, olderThan time.Durat
 	return tag.RowsAffected(), nil
 }
 
-func (r *Store) CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error) {
+func (r *Store) CountFailed(ctx context.Context) (int64, error) {
 	if err := r.ensurePool(); err != nil {
 		return 0, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	var count int64
 
-	if err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0330_11.sql"), status).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count by status: %w", err)
+	if err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0330_11.sql")).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count failed: %w", err)
 	}
 
 	return count, nil

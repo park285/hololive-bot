@@ -26,16 +26,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
-func FirstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-
-	return ""
-}
-
 // hololive-kakao-bot-go 전용 함수입니다.
 func NormalizeSuffix(s string) string {
 	normalized := stringutil.Normalize(s)

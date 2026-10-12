@@ -14,7 +14,7 @@ import (
 const replyStatusPollInterval = 250 * time.Millisecond
 
 // IrisClient는 alarm-worker가 알림 전송과 Markdown handoff 확인에 사용하는 Iris 계약입니다.
-// Karing template은 보내지 않습니다(DEC-20260926-hololive-karing-egress-disposition).
+// Karing template은 보내지 않습니다.
 type IrisClient interface {
 	SendMessage(ctx context.Context, roomID, message string, opts ...iris.SendOption) error
 	SendMarkdown(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)

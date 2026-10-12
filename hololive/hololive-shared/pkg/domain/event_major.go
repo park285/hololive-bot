@@ -80,30 +80,6 @@ func (*MajorEvent) TableName() string {
 	return "major_events"
 }
 
-func NewMajorEvent(title, link string, pubDate time.Time) *MajorEvent {
-	return &MajorEvent{
-		Title:      title,
-		Link:       link,
-		ExternalID: link, // 기본적으로 link를 external_id로 사용
-		PubDate:    &pubDate,
-		Type:       MajorEventTypeEvent,
-		Status:     MajorEventStatusActive,
-		LinkStatus: MajorEventLinkStatusUnchecked,
-	}
-}
-
-func NewMajorNews(title, link string, pubDate time.Time) *MajorEvent {
-	return &MajorEvent{
-		Title:      title,
-		Link:       link,
-		ExternalID: link,
-		PubDate:    &pubDate,
-		Type:       MajorEventTypeNews,
-		Status:     MajorEventStatusActive,
-		LinkStatus: MajorEventLinkStatusUnchecked,
-	}
-}
-
 func (e *MajorEvent) HasEventDates() bool {
 	return e.EventStartDate != nil || len(e.EventDates) > 0
 }
@@ -142,12 +118,4 @@ type EventRoomSubscription struct {
 
 func (EventRoomSubscription) TableName() string {
 	return "major_event_subscriptions"
-}
-
-func NewEventRoomSubscription(roomID, roomName string) *EventRoomSubscription {
-	return &EventRoomSubscription{
-		RoomID:    roomID,
-		RoomName:  roomName,
-		CreatedAt: time.Now(),
-	}
 }

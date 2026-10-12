@@ -144,15 +144,6 @@ type ReplyOutboxRepository struct {
 	automaticReplayHorizon time.Duration
 }
 
-func NewReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
-	repository, err := NewReplyOutboxRepositoryWithPolicy(pool, ReplyOutboxMaxAttempts, ReplyOutboxAutomaticReplayHorizon)
-	if err != nil {
-		panic(err)
-	}
-
-	return repository
-}
-
 func NewReplyOutboxRepositoryWithPolicy(pool *pgxpool.Pool, maxAttempts int32, automaticReplayHorizon time.Duration) (*ReplyOutboxRepository, error) {
 	if maxAttempts < 1 {
 		return nil, errors.Join(ErrInvalidArgument, errors.New("reply outbox max attempts must be positive"))

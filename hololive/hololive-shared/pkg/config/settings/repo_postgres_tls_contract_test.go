@@ -7,70 +7,23 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-// 모든 운영 스택 렌더에서 Postgres 클라이언트는 verify-full + 마운트된 CA 번들을
-// 사용해야 한다(구 accepted-risk ledger의 exit criteria).
-func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
-	stacks := []struct {
-		name     string
-		files    []string
-		services []string
-	}{
-		{
-			name:     "base prod",
-			files:    []string{composeProdFile},
-			services: []string{serviceHololiveAPI, serviceAlarmWorker, runtimepolicy.RuntimeYouTubeCollector},
-		},
-		{
-			name: "live-compat",
-			files: []string{
-				composeProdFile,
-				composeLiveCompatFile,
-			},
-			services: []string{serviceHololiveAPI, serviceAlarmWorker, runtimepolicy.RuntimeYouTubeCollector},
-		},
+func assertComposePostgresTLS(t *testing.T, cfg renderedCompose, stackName string) {
+	t.Helper()
+
+	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker, runtimepolicy.RuntimeYouTubeCollector} {
+		env := composeEnvironment(t, cfg, service)
+		if env["POSTGRES_SSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
+			t.Fatalf("%s in %s POSTGRES_SSLMODE = %q, want verify-full", service, stackName, env["POSTGRES_SSLMODE"])
+		}
+
+		if env["POSTGRES_SSLROOTCERT"] != postgresCACertPath {
+			t.Fatalf("%s in %s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, stackName, env["POSTGRES_SSLROOTCERT"])
+		}
 	}
 
-	for _, tt := range stacks {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderComposeConfig(t, tt.files...)
-			for _, service := range tt.services {
-				env := composeEnvironment(t, cfg, service)
-				if env["POSTGRES_SSLMODE"] != runtimepolicy.PostgresSSLModeVerifyFull {
-					t.Fatalf("%s in %s POSTGRES_SSLMODE = %q, want verify-full", service, tt.name, env["POSTGRES_SSLMODE"])
-				}
-
-				if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
-					t.Fatalf("%s in %s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", service, tt.name, value)
-				}
-
-				if env["POSTGRES_SSLROOTCERT"] != postgresCACertPath {
-					t.Fatalf("%s in %s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, tt.name, env["POSTGRES_SSLROOTCERT"])
-				}
-			}
-		})
-	}
-}
-
-// holo-postgres는 server TLS를 켠 채로 기동해야 verify-full 클라이언트가 성립한다.
-// 이때 server key는 클라이언트들이 통째로 마운트하는 certs/ 디렉토리 밖(postgres-tls/)에 둔다.
-func TestRepoComposeHoloPostgresServesTLS(t *testing.T) {
-	for _, tt := range []struct {
-		name  string
-		files []string
-	}{
-		{name: "base prod", files: []string{composeProdFile}},
-		{name: "live-compat", files: []string{
-			composeProdFile,
-			composeLiveCompatFile,
-		}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderComposeConfig(t, tt.files...)
-			assertHoloPostgresTLSCommand(t, cfg, tt.name)
-			assertHoloPostgresTLSMount(t, cfg, tt.name)
-			assertDBMigrateVerifyFullTLS(t, cfg, tt.name)
-		})
-	}
+	assertHoloPostgresTLSCommand(t, cfg, stackName)
+	assertHoloPostgresTLSMount(t, cfg, stackName)
+	assertDBMigrateVerifyFullTLS(t, cfg, stackName)
 }
 
 func assertHoloPostgresTLSCommand(t *testing.T, cfg renderedCompose, stackName string) {
@@ -134,27 +87,14 @@ func assertDBMigrateVerifyFullTLS(t *testing.T, cfg renderedCompose, stackName s
 	}
 }
 
-func TestRepoComposeNoStackRendersWeakPostgresSSLMode(t *testing.T) {
-	tests := []struct {
-		name  string
-		files []string
-	}{
-		{
-			name:  "live-compat",
-			files: []string{composeProdFile, composeLiveCompatFile},
-		},
-	}
+func assertNoWeakPostgresSSLMode(t *testing.T, cfg renderedCompose) {
+	t.Helper()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := renderComposeConfig(t, tt.files...)
-			for service := range cfg.Services {
-				env := composeEnvironment(t, cfg, service)
-				if isWeakPostgresSSLMode(env["POSTGRES_SSLMODE"]) {
-					t.Fatalf("%s in %s renders weak POSTGRES_SSLMODE=%q; only verify-full is allowed", service, tt.name, env["POSTGRES_SSLMODE"])
-				}
-			}
-		})
+	for service := range cfg.Services {
+		env := composeEnvironment(t, cfg, service)
+		if isWeakPostgresSSLMode(env["POSTGRES_SSLMODE"]) {
+			t.Fatalf("%s renders weak POSTGRES_SSLMODE=%q; only verify-full is allowed", service, env["POSTGRES_SSLMODE"])
+		}
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -44,7 +43,7 @@ func TestSettingsAPIHandler_UpdateSettings_PersistenceFailurePreservesStateAndSk
 		Logger:          newDiscardLogger(),
 		Settings:        service,
 		Activity:        activity,
-		SettingsApplier: sharedsettings.NewLocalSettingsApplier(alarm.NewClient(worker.URL, newDiscardLogger())),
+		SettingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, worker.URL)),
 	}
 
 	if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // G302: 쓰기 불가 디렉터리 재현용 모드

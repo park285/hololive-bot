@@ -41,15 +41,6 @@ const (
 	ACLModeBlacklist ACLMode = "blacklist"
 )
 
-func ParseACLMode(s string) ACLMode {
-	switch stringutil.Normalize(s) {
-	case string(ACLModeBlacklist):
-		return ACLModeBlacklist
-	default:
-		return ACLModeWhitelist
-	}
-}
-
 // ParseACLModeStrict는 invalid 값을 whitelist 기본값으로 바꾸지 않는 검증 경계용 parser다.
 func ParseACLModeStrict(s string) (ACLMode, error) {
 	out, err := parseACLModeStrict(s)
@@ -92,10 +83,8 @@ func parseACLEnabledStrict(s string) (bool, error) {
 	}
 }
 
-// ErrInvalidRoomChatID는 새 ACL 등록값이 정확한 signed i64 chatID 문자열이 아님을 뜻한다.
-// IsRoomAllowed는 chatID만 비교하므로 방 이름 같은 값은 어떤 방과도 매칭되지 않고, 그런 값이 들어가면
-// whitelist는 조용히 모든 방을 막고 blacklist는 조용히 차단을 놓친다. 그래서 저장 전에 거절한다.
-// 이미 저장된 비-chatID 값은 조회·제거만 할 수 있다(DEC-20260926-stack-hololive-room-acl-and-console-contract).
+// ErrInvalidRoomChatID는 새 ACL 값이 정규 signed i64 chatID가 아님을 뜻한다.
+// 기존 비-chatID 값은 조회·제거만 허용한다.
 var ErrInvalidRoomChatID = errors.New("ACL room must be a canonical signed 64-bit chat ID")
 
 // validateRoomChatID는 console roomRegistration(canonicalI64)과 같은 규칙으로 부호·앞자리 0·범위를 본다.
@@ -281,9 +270,7 @@ func (s *Service) roomsMapForMode(mode ACLMode) map[string]struct{} {
 	return s.whitelistRooms
 }
 
-// IsRoomAllowed는 방 접근 허용 여부를 chatID 하나로 판정한다(빠른 메모리 조회).
-// 방 이름은 같은 이름의 방을 모두 허용하는 비결정적 식별자라 매칭하지 않는다
-// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
+// IsRoomAllowed는 chatID로 방 접근 허용 여부를 메모리에서 판정한다.
 func (s *Service) IsRoomAllowed(chatID string) bool {
 	chatID = stringutil.TrimSpace(chatID)
 

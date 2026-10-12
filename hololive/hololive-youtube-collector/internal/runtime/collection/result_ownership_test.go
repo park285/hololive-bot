@@ -50,7 +50,7 @@ func checkResultOwnership(t *testing.T, kind CollectResultKind) {
 	result := NewCompleteResult(output)
 
 	if kind == CollectPartial {
-		result, err = NewPartialResult(output, collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, cause), failed...)
+		result, err = NewPartialResult(output, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, cause), failed...)
 	}
 
 	if err != nil {

@@ -29,9 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-// DEC-20260926-stack-shared-go-compat-api-retirement: hololive는 적재한 POSTGRES_SSLROOTCERT 값을
-// pgxdb Config.SSLRootCert로 직접 넘긴다. 이후 shared-go pgxdb의 env 폴백이 사라져도 CA 경로가 유지되어야 한다.
-// DSN 해석 단계에서 pgx가 sslrootcert 파일을 읽으므로, 없는 경로를 주면 네트워크 연결 전에 그 경로로 실패한다.
+// 설정의 CA 경로가 pgxdb.Config.SSLRootCert로 전달되는지 확인한다.
+// 없는 CA 파일은 pgx의 DSN 해석 단계에서 네트워크 연결 전에 실패한다.
 func TestProvideDatabaseResourcesPassesSSLRootCertExplicitly(t *testing.T) {
 	t.Setenv("POSTGRES_SSLROOTCERT", "")
 

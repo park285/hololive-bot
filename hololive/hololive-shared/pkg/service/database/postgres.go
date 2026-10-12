@@ -39,7 +39,7 @@ type PostgresService struct {
 }
 
 // PostgresConfig의 SSLRootCert는 pgxdb Config.SSLRootCert로 그대로 넘긴다. 이 경로는 shared-go pgxdb의
-// POSTGRES_SSLROOTCERT env 폴백에 기대지 않는다(DEC-20260926-stack-shared-go-compat-api-retirement).
+// POSTGRES_SSLROOTCERT env 폴백에 기대지 않는다.
 type PostgresConfig struct {
 	Host          string
 	Port          int

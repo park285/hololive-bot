@@ -49,27 +49,6 @@ func TestBuildAlarmDispatchGroupViewFallsBackForInvalidVideoID(t *testing.T) {
 	assert.Equal(t, domain.YouTubeWatchURL("invalid"), view.Entries[0].URL)
 }
 
-func TestBuildAlarmDispatchGroupViewOmitsRetiredSimulcastLink(t *testing.T) {
-	t.Parallel()
-
-	builder, err := shortlinkservice.NewYouTubeBuilder("https://go.example.com")
-	require.NoError(t, err)
-
-	integrated := alarmShortLinkNotification("dQw4w9WgXcQ", "Integrated")
-
-	integrated.Stream.IsIntegrated = true
-	integrated.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/channel"
-
-	view, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
-		minutesUntil:  5,
-		notifications: []domain.AlarmNotification{integrated},
-	}, builder)
-	require.NoError(t, err)
-
-	require.Len(t, view.Entries, 1)
-	assert.Equal(t, "https://go.example.com/l/dQw4w9WgXcQ", view.Entries[0].URL)
-}
-
 func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {
 	t.Parallel()
 

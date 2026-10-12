@@ -22,7 +22,7 @@ func TestShortsWindowClaimsCannotOvertakePendingOrProcessingBaseline(t *testing.
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	consumer := NewConsumerWithAbsenceGrace(repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	first := publishShortWindow(t, repo, &proof, "known")
 
@@ -84,7 +84,7 @@ func TestShortsWindowBaselineWithExistingVideoKind(t *testing.T) {
 	require.NoError(t, err)
 
 	repo := NewRepository(pool)
-	consumer := NewConsumerWithAbsenceGrace(repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	publishShortWindow(t, repo, &proof, "known")
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
@@ -92,7 +92,7 @@ func TestShortsWindowBaselineWithExistingVideoKind(t *testing.T) {
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 	publishShortWindow(t, repo, &proof, "known", "new")
-	require.NoError(t, NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()))
+	require.NoError(t, NewConsumerWithGraces(repo, 0, 0).Consume(ctx, contentClaimOptions()))
 	assertShortWindowOutboxes(t, pool, "new")
 	assertTableCount(t, pool, "youtube_community_shorts_alarm_states", 1)
 
@@ -125,7 +125,7 @@ func TestShortsWindowExistingPartialCatalogDoesNotBackfill(t *testing.T) {
 	require.NoError(t, err)
 
 	repo := NewRepository(pool)
-	consumer := NewConsumerWithAbsenceGrace(repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	first := publishShortWindow(t, repo, &proof, "old-1", "old-2", "new")
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
@@ -135,7 +135,7 @@ func TestShortsWindowExistingPartialCatalogDoesNotBackfill(t *testing.T) {
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 	publishShortWindow(t, repo, &proof, "new", "old-49", "old-1")
-	require.NoError(t, NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()))
+	require.NoError(t, NewConsumerWithGraces(repo, 0, 0).Consume(ctx, contentClaimOptions()))
 
 	replay, err := repo.RequestReplay(ctx, ReplayInput{ObservationID: first, RequestedBy: testReplayOperator, Reason: "existing catalog must not backfill"})
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestShortsWindowPersistenceFailureRollsBackNotificationAndCatalog(t *testin
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	consumer := NewConsumerWithAbsenceGrace(repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	publishShortWindow(t, repo, &proof, "known")
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
@@ -156,7 +156,7 @@ func TestShortsWindowPersistenceFailureRollsBackNotificationAndCatalog(t *testin
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 
 	next := publishShortWindow(t, repo, &proof, "new", "known")
-	failing := NewConsumer(repo)
+	failing := NewConsumerWithGraces(repo, 0, 0)
 
 	failing.writer = failShortWindowWriter{canonicalWriter: canonicalTxWriter{}}
 
@@ -214,7 +214,7 @@ func TestShortsWindowOrderingIsChannelScopedAndTerminalDoesNotBlock(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, batch.Claims, 1)
 	require.Equal(t, other.Results[0].ObservationID, batch.Claims[0].ObservationID)
-	require.NoError(t, NewConsumerWithAbsenceGrace(repo, 0).ConsumeClaim(ctx, batch.Claims[0].Claim(batch.ConsumerName)))
+	require.NoError(t, NewConsumerWithGraces(repo, 0, 0).ConsumeClaim(ctx, batch.Claims[0].Claim(batch.ConsumerName)))
 
 	_, err = pool.Exec(ctx, `UPDATE source_observation_queue SET attempt_count = $2, available_at = NOW() - INTERVAL '1 second' WHERE observation_id = $1`, first, MaxAttempts)
 	require.NoError(t, err)

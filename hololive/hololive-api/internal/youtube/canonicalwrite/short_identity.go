@@ -27,10 +27,8 @@ import (
 )
 
 // canonicalizeShortContentIDs는 NEW_SHORT outbox·tracking 행의 content_id를 'short:' canonical 형식으로 맞춘다.
-// 이전에는 같은 영상의 raw 형식(접두사 없는) 기존 행을 두 테이블에서 찾아 그 content_id를 재사용했다. T18(2026-09-26)에서
-// youtube_notification_outbox와 youtube_content_alarm_tracking의 raw 형식 NEW_SHORT 행이 0건임을 확인해 그 조회를
-// 지웠다(stack-audit T11 holo-batchrepo-short-raw-identity-alias). 정규화할 수 없는 값은 이전처럼 공백만 걷어 두고,
-// 판정은 저장 전 검증과 DB 제약이 맡는다.
+// 접두사 없는 raw 형식의 기존 행을 찾아 재사용하지 않는다. 정규화할 수 없는 값은 공백만 걷어 두고, 판정은 저장 전
+// 검증과 DB 제약이 맡는다.
 func canonicalizeShortContentIDs(
 	notifications []*domain.YouTubeNotificationOutbox,
 	trackingRows []*domain.YouTubeContentAlarmTracking,

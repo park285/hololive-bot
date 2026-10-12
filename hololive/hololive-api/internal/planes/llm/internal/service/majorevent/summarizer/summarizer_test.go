@@ -375,7 +375,7 @@ func TestEventSummarizer_Summarize_SingleHighlightRunsFinalReview(t *testing.T) 
 	assertContains(t, result, "Simple Event")
 }
 
-// 요약 실패는 빈 요약이 아니라 오류다(DEC-20260926-hololive-source-fallbacks-retirement).
+// 요약 실패는 빈 요약이 아니라 오류다.
 func TestEventSummarizer_Summarize_InvalidJSON_ReturnsError(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "not json"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
@@ -1205,17 +1205,17 @@ func TestSystemPrompt_ContainsDateAuthority(t *testing.T) {
 }
 
 func TestGraduatedMembersLoad(t *testing.T) {
-	dc := getDomainContext()
+	dc := buildMemberFilterSection()
 	if !strings.Contains(dc, "天音かなた") {
-		t.Error("domainContext should contain graduated member 天音かなた")
+		t.Error("member filter section should contain graduated member 天音かなた")
 	}
 
 	if !strings.Contains(dc, "Gawr Gura") {
-		t.Error("domainContext should contain graduated member Gawr Gura")
+		t.Error("member filter section should contain graduated member Gawr Gura")
 	}
 
 	if !strings.Contains(dc, "hololive CN") {
-		t.Error("domainContext should mention dissolved hololive CN branch")
+		t.Error("member filter section should mention dissolved hololive CN branch")
 	}
 
 	// 전체 졸업 멤버 수 > 0 확인

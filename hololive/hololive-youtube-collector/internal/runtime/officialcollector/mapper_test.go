@@ -55,7 +55,7 @@ func TestParseScheduleRowRejectsInvalidCollaboTalentsType(t *testing.T) {
 		"name":"Host Talent",
 		"collaboTalents":{"name":"not-an-array"}
 	}`)
-	if _, err := parseScheduleRow(rawRow); err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift {
+	if _, err := parseScheduleRow(rawRow); err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -81,7 +81,7 @@ func TestParseScheduleRowRejectsCollaboTalentNamesOverflow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := parseScheduleRow(rawRow); err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift {
+	if _, err := parseScheduleRow(rawRow); err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -104,7 +104,7 @@ func TestParseScheduleRowRejectsOversizeCollaboTalentName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := parseScheduleRow(rawRow); err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift {
+	if _, err := parseScheduleRow(rawRow); err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift {
 		t.Fatalf("error = %v", err)
 	}
 }

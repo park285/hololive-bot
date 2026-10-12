@@ -67,8 +67,8 @@ type SettingsHandler struct {
 	operations    settingsOperationGate
 }
 
-// updateSettingsRequest의 scraperProxyEnabled 필드는 DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 소비자인
-// iris-console이 먼저 이 필드를 보내지 않고 요청에 넣으면 거절하도록 바뀌었다.
+// updateSettingsRequest는 alarmAdvanceMinutes만 받는다. 소비자인 iris-console은 scraperProxyEnabled를 보내지 않고
+// 요청에 들어오면 거절한다.
 type updateSettingsRequest struct {
 	AlarmAdvanceMinutes *int `json:"alarmAdvanceMinutes"`
 }

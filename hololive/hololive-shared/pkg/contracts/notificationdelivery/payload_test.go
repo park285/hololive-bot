@@ -24,11 +24,6 @@ func TestPayloadPreservesStoredWireBytes(t *testing.T) {
 			wire:    `{"message":""}`,
 		},
 		{
-			name:    "preparation failure evidence",
-			payload: Payload{KnownUnsent: true, Message: "source"},
-			wire:    `{"known_unsent":true,"message":"source"}`,
-		},
-		{
 			name: "pinned initial request",
 			payload: Payload{Message: "source", Request: &Request{
 				Body: `{"text":"알림"}`, Route: "markdown", BaseID: "delivery:1",
@@ -36,11 +31,11 @@ func TestPayloadPreservesStoredWireBytes(t *testing.T) {
 			wire: `{"message":"source","request":{"body":"{\"text\":\"알림\"}","route":"markdown","base_id":"delivery:1","generation":0}}`,
 		},
 		{
-			name: "exhausted request retains preparation evidence",
-			payload: Payload{KnownUnsent: true, Message: "source", Request: &Request{
+			name: "exhausted request",
+			payload: Payload{Message: "source", Request: &Request{
 				Body: "pinned", Route: "text", BaseID: "delivery:1", Generation: 2, Exhausted: true,
 			}},
-			wire: `{"known_unsent":true,"message":"source","request":{"body":"pinned","route":"text","base_id":"delivery:1","generation":2,"exhausted":true}}`,
+			wire: `{"message":"source","request":{"body":"pinned","route":"text","base_id":"delivery:1","generation":2,"exhausted":true}}`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -48,7 +48,7 @@ func ReadProviderJSONDocument(
 	provider contract.Provider,
 ) (body []byte, err error) {
 	if resp == nil || resp.Body == nil {
-		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" response is nil")
+		return nil, collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, string(provider)+" response is nil")
 	}
 
 	defer func() {
@@ -93,15 +93,15 @@ func cleanupProviderResponse(ctx context.Context, body io.ReadCloser, maxDrainBy
 
 func (policy ProviderResponsePolicy) validate() error {
 	if policy.SuccessStatus <= 0 {
-		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider success status is invalid")
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider success status is invalid")
 	}
 
 	if len(policy.SuccessContentTypes) == 0 {
-		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider success content types are required")
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider success content types are required")
 	}
 
 	if policy.MaxSuccessBodyBytes < 0 || policy.MaxErrorBodyBytes < 0 || policy.MaxDrainBytes < 0 {
-		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider body limits are invalid")
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider body limits are invalid")
 	}
 
 	return nil
@@ -122,11 +122,11 @@ func readProviderError(ctx context.Context, resp *http.Response, policy Provider
 
 func validateSuccessHeaders(resp *http.Response, policy ProviderResponsePolicy, provider contract.Provider) error {
 	if remainingContentEncoding(resp) != "" {
-		return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" content encoding is unsupported")
+		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, string(provider)+" content encoding is unsupported")
 	}
 
 	if !allowedSuccessContentType(resp.Header.Get("Content-Type"), policy.SuccessContentTypes) {
-		return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" content type is not JSON")
+		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, string(provider)+" content type is not JSON")
 	}
 
 	return nil
@@ -135,7 +135,7 @@ func validateSuccessHeaders(resp *http.Response, policy ProviderResponsePolicy, 
 func readProviderSuccess(ctx context.Context, body io.Reader, policy ProviderResponsePolicy, provider contract.Provider) ([]byte, error) {
 	data, err := sharedhttputil.ReadAllLimited(&ctxReader{ctx: ctx, r: body}, policy.MaxSuccessBodyBytes)
 	if errors.Is(err, sharedhttputil.ErrResponseBodyTooLarge) {
-		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, string(provider)+" response exceeds body limit")
+		return nil, collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, string(provider)+" response exceeds body limit")
 	}
 
 	if err != nil {
@@ -143,7 +143,7 @@ func readProviderSuccess(ctx context.Context, body io.Reader, policy ProviderRes
 	}
 
 	if !jsontext.Value(data).IsValid() {
-		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" response is not a single JSON document")
+		return nil, collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, string(provider)+" response is not a single JSON document")
 	}
 
 	return data, nil

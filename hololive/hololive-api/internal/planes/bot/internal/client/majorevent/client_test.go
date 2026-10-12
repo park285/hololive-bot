@@ -420,7 +420,7 @@ func newTestClient(t *testing.T, baseURL, apiKey string) *majorevent.Client {
 }
 
 // https llm-scheduler URL은 H3 전용 내부 서버다. H3 options가 없으면 TCP client로 내려가지 않고
-// 오류다(stack audit 2026-09-26).
+// 오류다.
 func TestNewRequiresInternalH3EnvForHTTPS(t *testing.T) {
 	client, err := majorevent.New("https://127.0.0.1:30003", testAPIKey, sharedh3.ClientOptions{})
 	if err == nil || client != nil {

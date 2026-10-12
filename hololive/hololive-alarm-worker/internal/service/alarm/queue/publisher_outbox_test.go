@@ -88,27 +88,8 @@ func (r *fakeOutboxRepository) InsertBatch(_ context.Context, input dispatchoutb
 	return result, nil
 }
 
-func TestPublisherDoesNotPushLegacyQueue(t *testing.T) {
-	cacheClient, mini := newTestCacheClient(t)
-	repository := &fakeOutboxRepository{}
-	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
-		WithOutbox(repository),
-		WithWakeupEnabled(false),
-	)
-
-	_, err := publisher.Publish(t.Context(), &domain.AlarmNotification{
-		AlarmType: domain.AlarmTypeLive,
-		RoomID:    "room-pg-first",
-	}, nil)
-	require.NoError(t, err)
-
-	assert.Empty(t, queueItemsOrEmpty(t, mini))
-	assert.Equal(t, 1, repository.insertBatchCalls)
-	assert.Equal(t, 0, repository.insertPendingCalls)
-}
-
 func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
-	cacheClient, mini := newTestCacheClient(t)
+	cacheClient, _ := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{batchResult: dispatchoutbox.PublishBatchResult{
 		RequestedEvents:     1,
 		ProcessedDeliveries: 1,
@@ -128,8 +109,6 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 		RoomID:    "room-duplicate",
 	}, nil)
 	require.NoError(t, err)
-
-	assert.Empty(t, queueItemsOrEmpty(t, mini))
 	assert.Equal(t, 1, repository.insertBatchCalls)
 	assert.Equal(t, 0, repository.insertPendingCalls)
 	assert.Equal(t, 1, result.ProcessedDeliveries)
@@ -175,8 +154,6 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-3", Channel: channel, Stream: stream, MinutesUntil: 10},
 	}, [][]string{{"claim:event"}, {"claim:event"}, {"claim:event"}})
 	require.NoError(t, err)
-
-	assert.Empty(t, queueItemsOrEmpty(t, mini))
 	assert.Equal(t, 1, repository.insertBatchCalls)
 	assert.Equal(t, 0, repository.insertPendingCalls)
 	assert.Len(t, repository.lastBatchInput.Envelopes, 3)

@@ -39,7 +39,7 @@ func newMemberSubscriptionAPIClient(t *testing.T) (*Client, <-chan domain.AddAla
 	server := httptest.NewServer(newTestHandler(t, mock))
 	t.Cleanup(server.Close)
 
-	client := NewClient(server.URL, slog.New(slog.DiscardHandler))
+	client := newTestClient(server.URL, "", slog.New(slog.DiscardHandler))
 
 	return client, added, removed
 }

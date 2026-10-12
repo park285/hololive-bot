@@ -15,36 +15,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-type (
-	ErrorCode    = contract.CollectionErrorCode
-	FailureClass = contract.FailureClass
-)
-
 const (
-	Timeout                = contract.ErrorCollectionTimeout
-	Canceled               = contract.ErrorCollectionCanceled
-	ParserDrift            = contract.ErrorParserDrift
-	Cooldown               = contract.ErrorCooldown
-	PublishRejected        = contract.ErrorPublishRejected
-	Failed                 = contract.ErrorCollectionFailed
-	ResponseTooLarge       = contract.ErrorResponseTooLarge
-	Configuration          = contract.ErrorConfiguration
-	HelperBusy             = contract.ErrorHelperBusy
-	HelperProtocolMismatch = contract.ErrorHelperProtocolMismatch
-	Internal               = contract.ErrorInternalInvariant
-	TargetRosterTooLarge   = contract.ErrorTargetRosterTooLarge
-
-	ClassTransient     = contract.ClassTransient
-	ClassTimeout       = contract.ClassTimeout
-	ClassCanceled      = contract.ClassCanceled
-	ClassCooldown      = contract.ClassCooldown
-	ClassDataContract  = contract.ClassDataContract
-	ClassResourceLimit = contract.ClassResourceLimit
-	ClassConfiguration = contract.ClassConfiguration
-	ClassProtocol      = contract.ClassProtocol
-	ClassSuperseded    = contract.ClassSuperseded
-	ClassInternal      = contract.ClassInternal
-
 	UnknownClass   = "unknown_error"
 	MaxDetailBytes = 2048
 )
@@ -54,8 +25,8 @@ const (
 var ErrInvalidFailureTuple = errors.New("invalid collection failure tuple")
 
 type Error struct {
-	code         ErrorCode
-	class        FailureClass
+	code         contract.CollectionErrorCode
+	class        contract.FailureClass
 	retry        RetryHint
 	err          error
 	unclassified bool
@@ -81,11 +52,11 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
-func New(code ErrorCode, class FailureClass, message string) error {
+func New(code contract.CollectionErrorCode, class contract.FailureClass, message string) error {
 	return newError(code, class, defaultRetryHint(), fmt.Errorf("%s", message))
 }
 
-func Wrap(code ErrorCode, class FailureClass, err error) error {
+func Wrap(code contract.CollectionErrorCode, class contract.FailureClass, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -101,7 +72,7 @@ func WithRetry(err error, hint RetryHint) error {
 	normalized := Normalize(err)
 
 	if hint.Validate() != nil {
-		degraded := newError(Internal, ClassInternal, defaultRetryHint(), err)
+		degraded := newError(contract.ErrorInternalInvariant, contract.ClassInternal, defaultRetryHint(), err)
 
 		degraded.unclassified = normalized.unclassified
 
@@ -127,34 +98,34 @@ func Normalize(err error) *Error {
 	}
 
 	if errors.Is(err, context.DeadlineExceeded) {
-		return &Error{code: Timeout, class: ClassTimeout, retry: defaultRetryHint(), err: err}
+		return &Error{code: contract.ErrorCollectionTimeout, class: contract.ClassTimeout, retry: defaultRetryHint(), err: err}
 	}
 
 	if errors.Is(err, context.Canceled) {
-		return &Error{code: Canceled, class: ClassCanceled, retry: defaultRetryHint(), err: err}
+		return &Error{code: contract.ErrorCollectionCanceled, class: contract.ClassCanceled, retry: defaultRetryHint(), err: err}
 	}
 
 	if recognizedTransientNetwork(err) {
-		return &Error{code: Failed, class: ClassTransient, retry: defaultRetryHint(), err: err}
+		return &Error{code: contract.ErrorCollectionFailed, class: contract.ClassTransient, retry: defaultRetryHint(), err: err}
 	}
 
-	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: err, unclassified: true}
+	return &Error{code: contract.ErrorInternalInvariant, class: contract.ClassInternal, retry: defaultRetryHint(), err: err, unclassified: true}
 }
 
-func CodeOf(err error) ErrorCode {
+func CodeOf(err error) contract.CollectionErrorCode {
 	if normalized := Normalize(err); normalized != nil {
 		return normalized.code
 	}
 
-	return Internal
+	return contract.ErrorInternalInvariant
 }
 
-func ClassOf(err error) FailureClass {
+func ClassOf(err error) contract.FailureClass {
 	if normalized := Normalize(err); normalized != nil {
 		return normalized.class
 	}
 
-	return ClassInternal
+	return contract.ClassInternal
 }
 
 func RetryOf(err error) RetryHint {
@@ -168,7 +139,7 @@ func RetryOf(err error) RetryHint {
 func DiagnosticOf(err error) contract.FailureDiagnostic {
 	normalized := Normalize(err)
 	if normalized == nil {
-		diagnostic, diagErr := contract.NewFailureDiagnostic(Internal, ClassInternal, string(Internal))
+		diagnostic, diagErr := contract.NewFailureDiagnostic(contract.ErrorInternalInvariant, contract.ClassInternal, string(contract.ErrorInternalInvariant))
 		if diagErr != nil {
 			return contract.FailureDiagnostic{}
 		}
@@ -183,7 +154,7 @@ func DiagnosticOf(err error) contract.FailureDiagnostic {
 
 	diagnostic, diagErr := contract.NewFailureDiagnostic(normalized.code, normalized.class, detail)
 	if diagErr != nil {
-		fallback, fallbackErr := contract.NewFailureDiagnostic(Internal, ClassInternal, string(Internal))
+		fallback, fallbackErr := contract.NewFailureDiagnostic(contract.ErrorInternalInvariant, contract.ClassInternal, string(contract.ErrorInternalInvariant))
 		if fallbackErr != nil {
 			return contract.FailureDiagnostic{}
 		}
@@ -216,15 +187,15 @@ func FromContext(err error) error {
 	}
 
 	if errors.Is(err, context.DeadlineExceeded) {
-		return Wrap(Timeout, ClassTimeout, err)
+		return Wrap(contract.ErrorCollectionTimeout, contract.ClassTimeout, err)
 	}
 
 	if errors.Is(err, context.Canceled) {
-		return Wrap(Canceled, ClassCanceled, err)
+		return Wrap(contract.ErrorCollectionCanceled, contract.ClassCanceled, err)
 	}
 
 	if recognizedTransientNetwork(err) {
-		return Wrap(Failed, ClassTransient, err)
+		return Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, err)
 	}
 
 	return unclassifiedError(err)
@@ -233,7 +204,7 @@ func FromContext(err error) error {
 // unclassifiedError는 collecterr가 원인을 인식하지 못해 기본 버킷으로 떨어뜨린 오류를 만든다.
 // 진단 tuple은 Internal/ClassInternal 그대로지만, 호출자가 명시적으로 붙인 것과 구별된다.
 func unclassifiedError(err error) error {
-	typed := newError(Internal, ClassInternal, defaultRetryHint(), err)
+	typed := newError(contract.ErrorInternalInvariant, contract.ClassInternal, defaultRetryHint(), err)
 
 	typed.unclassified = true
 
@@ -248,11 +219,11 @@ func IsUnclassified(err error) bool {
 	return normalized != nil && normalized.unclassified
 }
 
-func newError(code ErrorCode, class FailureClass, hint RetryHint, cause error) *Error {
+func newError(code contract.CollectionErrorCode, class contract.FailureClass, hint RetryHint, cause error) *Error {
 	typed := &Error{code: code, class: class, retry: hint, err: cause}
 	if hint.Validate() != nil {
-		typed.code = Internal
-		typed.class = ClassInternal
+		typed.code = contract.ErrorInternalInvariant
+		typed.class = contract.ClassInternal
 		typed.retry = defaultRetryHint()
 
 		return typed
@@ -262,12 +233,12 @@ func newError(code ErrorCode, class FailureClass, hint RetryHint, cause error) *
 		return typed
 	}
 
-	// 계약 밖 code/class tuple은 code의 기본 class로 조용히 고치지 않는다(구 helper class 수리, stack-audit 2026-09-26 T11
-	// holo-collector-failure-class-repair에서 삭제). helper 응답은 youtubejs.mapHelperFailure가 고정 tuple로만 옮기므로
-	// 여기 닿는 비정규 tuple은 호출 코드 결함이다. 호출자가 붙인 분류를 믿을 수 없으므로 미분류 Internal로 닫아(치명이 아닌
-	// 지연 처리) 원래 tuple을 원인에 남기고, scheduler가 ErrInvalidFailureTuple로 위반 metric을 센다.
-	typed.code = Internal
-	typed.class = ClassInternal
+	// 계약 밖 code/class tuple은 code의 기본 class로 조용히 고치지 않는다. helper 응답은 youtubejs.mapHelperFailure가
+	// 고정 tuple로만 옮기므로 여기 닿는 비정규 tuple은 호출 코드 결함이다. 호출자가 붙인 분류를 믿을 수 없으므로
+	// 미분류 Internal로 닫아(치명이 아닌 지연 처리) 원래 tuple을 원인에 남기고, scheduler가 ErrInvalidFailureTuple로
+	// 위반 metric을 센다.
+	typed.code = contract.ErrorInternalInvariant
+	typed.class = contract.ClassInternal
 	typed.retry = defaultRetryHint()
 	typed.err = fmt.Errorf("%w %s/%s: %w", ErrInvalidFailureTuple, code, class, cause)
 	typed.unclassified = true
@@ -290,14 +261,14 @@ func (e *Error) normalized() *Error {
 	}
 
 	if errors.Is(e.err, context.DeadlineExceeded) {
-		return &Error{code: Timeout, class: ClassTimeout, retry: defaultRetryHint(), err: e.err}
+		return &Error{code: contract.ErrorCollectionTimeout, class: contract.ClassTimeout, retry: defaultRetryHint(), err: e.err}
 	}
 
 	if errors.Is(e.err, context.Canceled) {
-		return &Error{code: Canceled, class: ClassCanceled, retry: defaultRetryHint(), err: e.err}
+		return &Error{code: contract.ErrorCollectionCanceled, class: contract.ClassCanceled, retry: defaultRetryHint(), err: e.err}
 	}
 
-	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: e.err, unclassified: e.unclassified}
+	return &Error{code: contract.ErrorInternalInvariant, class: contract.ClassInternal, retry: defaultRetryHint(), err: e.err, unclassified: e.unclassified}
 }
 
 func recognizedTransientNetwork(err error) bool {

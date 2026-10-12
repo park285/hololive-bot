@@ -35,7 +35,7 @@ import (
 )
 
 // renderFailureMessage는 시드 message_strings error/command_processing_failed 문구다. 템플릿 렌더 실패 응답은
-// 코드 대체 문구 대신 이 DB 정본 문구를 쓴다(DEC-20260926-hololive-message-strings-startup-validation).
+// 코드 대체 문구 대신 이 DB 정본 문구를 쓴다.
 const renderFailureMessage = "❌ 명령 처리 중 오류가 발생했습니다."
 
 func setupFormatterTestStore(t *testing.T) *messagestrings.Store {

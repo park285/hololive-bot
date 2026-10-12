@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// hostname을 얻지 못하면 random이나 "local"로 바꾸지 않고 오류다(DEC-20260926-hololive-legacy-env-config-retirement).
+// hostname을 얻지 못하면 random이나 "local"로 바꾸지 않고 오류다.
 func TestResolveInstanceIDRejectsHostnameFailure(t *testing.T) {
 	cases := map[string]func() (string, error){
 		"error": func() (string, error) { return "", errors.New("uname failed") },

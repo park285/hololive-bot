@@ -150,13 +150,6 @@ func (s *retryScheduler) stop() {
 	s.wg.Wait()
 }
 
-func (s *retryScheduler) pendingCount() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return len(s.pending)
-}
-
 func isRetryContext(ctx context.Context) bool {
 	isRetry, ok := ctx.Value(retryContextKey{}).(bool)
 

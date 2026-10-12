@@ -273,8 +273,7 @@ else
   [[ -z \$(docker ps -q --filter 'name=^hololive-youtube-po-b$') ]]
   printf 'absent\n' > '$backup_dir/po-sandbox-prechange.state'
 fi
-# compose 파일은 deploy/compose 아래 한 경로만 읽는다. repo 루트 사본으로 내려가던 폴백은 T18(2026-09-26)에서
-# compose AP 루트에 docker-compose*.yml이 없음을 확인해 지웠다(stack-audit T11 holo-ap-legacy-compose-path-fallback).
+# compose 파일은 deploy/compose에서 읽는다.
 prod_prechange_file='$PROD_COMPOSE_FILE'
 ap_prechange_file='$AP_COMPOSE_FILE'
 test -r \"\$prod_prechange_file\"
@@ -337,10 +336,8 @@ restore_after_failed_deploy() {
   fi
   exit "$status"
 }
-# 기준점이 없는 첫 배포는 새 container·image tag·active receipt만 제거하고 source snapshot을 복원해
-# 다음 첫 배포의 사전 검증이 다시 성립하게 한다(stack-audit T05). rollback archive·volume은 보존한다.
-# 퇴역 producer 상태 복원은 T18(2026-09-26)의 부재 증거에 따라 제거한 채 유지한다
-# (stack-audit T11 holo-collector-retired-producer-cutover-tooling).
+# 첫 배포 실패는 새 container·image tag·active receipt를 제거하고 source snapshot을 복원한다.
+# rollback archive·volume은 보존한다.
 stop_failed_first_deploy() {
   remote "set -euo pipefail
 cd ~/hololive-bot
@@ -394,8 +391,7 @@ rsync -ai "$issuer_build_root/issuer/image-id" \
   -e "$RSYNC_RSH" "$(ap_rsync_target "./$po_remote_dir/po-sandbox-candidate.image-id")"
 
 
-# 기준점이 있는 재배포가 cutover 뒤 실패하면 ap-rollback.sh가 이전 collector와 issuer를 함께 복원해 AP에 collector가
-# 남는다(stack-audit T05, paired issuer rollback). 기준점이 없는 첫 배포 실패는 stop_failed_first_deploy가 처리한다.
+# cutover 실패 시 이전 collector·issuer를 함께 복원한다. 첫 배포 실패는 stop_failed_first_deploy가 처리한다.
 cutover_armed=true
 remote "set -euo pipefail
 cd ~/hololive-bot

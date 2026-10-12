@@ -42,7 +42,7 @@ func TestManualReviewDiscardWithoutReplay(t *testing.T) {
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:manual-discard", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
@@ -157,7 +157,7 @@ func TestManualReviewDiscardRejectsInvalidInput(t *testing.T) {
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	manual := newReplyOutboxEntry("message:manual-discard-invalid", 0, `{"body":"stored"}`)
 	pending := newReplyOutboxEntry("message:manual-discard-pending", 0, `{"body":"pending"}`)
 
@@ -216,7 +216,7 @@ func TestManualReviewDiscardIsExactlyOnceUnderConcurrency(t *testing.T) {
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:manual-discard-concurrent", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
@@ -275,7 +275,7 @@ func TestManualReviewDiscardIsExactlyOnceUnderConcurrency(t *testing.T) {
 func TestManualReviewResolutionAuditRuntimePrivileges(t *testing.T) {
 	ownerPool, runtimePool, runtimeRole := newAuditPrivilegePools(t)
 	ctx := t.Context()
-	ownerRepo := NewReplyOutboxRepository(ownerPool)
+	ownerRepo := newTestReplyOutboxRepository(ownerPool)
 	entry := newReplyOutboxEntry("message:manual-discard-runtime-privileges", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, ownerRepo, entry))
 

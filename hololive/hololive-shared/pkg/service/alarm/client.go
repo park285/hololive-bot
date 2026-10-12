@@ -30,9 +30,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
-
-	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -50,26 +47,6 @@ type Client struct {
 }
 
 var _ AlarmHTTPService = (*Client)(nil)
-
-func NewClient(baseURL string, logger *slog.Logger) *Client {
-	return NewClientWithAPIKey(baseURL, "", logger)
-}
-
-func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
-	baseURL = strings.TrimRight(baseURL, "/")
-
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	return &Client{
-		baseURL:         baseURL,
-		apiKey:          strings.TrimSpace(apiKey),
-		httpClient:      httputil.NewInternalServiceClient(10 * time.Second),
-		logger:          logger,
-		advanceRequests: make(chan struct{}, 1),
-	}
-}
 
 type addAlarmReq struct {
 	RoomID     string            `json:"room_id"`

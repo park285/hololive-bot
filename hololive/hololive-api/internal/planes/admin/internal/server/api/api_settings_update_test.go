@@ -14,7 +14,6 @@ import (
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -85,7 +84,7 @@ func newSettingsUpdateAPIHandler(t *testing.T, workerURL string) (*SettingsAPIHa
 		logger:          newDiscardLogger(),
 		activity:        newActivityLoggerForTest(t),
 		settings:        writer,
-		settingsApplier: sharedsettings.NewLocalSettingsApplier(alarm.NewClient(workerURL, newDiscardLogger())),
+		settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, workerURL)),
 	}}
 
 	return handler, writer

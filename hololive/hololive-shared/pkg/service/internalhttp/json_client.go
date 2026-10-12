@@ -32,8 +32,8 @@ func (c *JSONClient) Close() error {
 
 // NewJSONClient는 내부 서비스 URL scheme에 맞는 JSON client를 생성합니다.
 // 내부 URL이 https일 때 H3 client를 구성하지 못하면(HOLOLIVE_INTERNAL_H3_* 누락 포함) TCP client로 바꾸지 않고
-// 오류를 돌려줍니다. 호출자는 이 오류로 기동을 실패시킵니다. 경고 뒤 기본 client로 내려가던 폴백은 H3 전용 서버에 대한
-// 요청을 런타임 실패로 미뤘기 때문에 지웠습니다(stack audit 2026-09-26).
+// 오류를 돌려줍니다. 호출자는 이 오류로 기동을 실패시킵니다. 기본 client로 내려가면 H3 전용 서버에 대한 요청이
+// 런타임에야 실패하기 때문입니다.
 func NewJSONClient(baseURL, apiKey string, timeout time.Duration, options sharedh3.ClientOptions) (*JSONClient, error) {
 	client, err := NewClientForURLStrict(baseURL, timeout, options)
 	if err != nil {

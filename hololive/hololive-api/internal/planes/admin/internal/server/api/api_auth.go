@@ -328,13 +328,3 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		},
 	})
 }
-
-// ResetRequest는 재설정 링크 전달 수단이 없어 토큰을 발급하지 않고 미지원으로 응답한다.
-func (h *AuthHandler) ResetRequest(c *gin.Context) {
-	writeAuthError(c, http.StatusServiceUnavailable, authsvc.CodeInternal)
-}
-
-// ResetPassword는 재설정 기능 미지원 동안 토큰을 소비하거나 비밀번호를 변경하지 않는다.
-func (h *AuthHandler) ResetPassword(c *gin.Context) {
-	writeAuthError(c, http.StatusServiceUnavailable, authsvc.CodeInternal)
-}

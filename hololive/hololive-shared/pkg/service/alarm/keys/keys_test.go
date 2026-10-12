@@ -1,7 +1,6 @@
 package keys
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -51,95 +50,6 @@ func TestBuildChannelSubscriberKey(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestBuildChannelContentAlarmTargetKeys(t *testing.T) {
-	t.Parallel()
-
-	targets := BuildChannelContentAlarmTargetKeys("UCtarget")
-
-	if targets.ChannelID != "UCtarget" {
-		t.Fatalf("ChannelID = %q, want %q", targets.ChannelID, "UCtarget")
-	}
-
-	if targets.CommunitySubscribersKey != ChannelSubscribersCommunityPrefix+"UCtarget" {
-		t.Fatalf("CommunitySubscribersKey = %q", targets.CommunitySubscribersKey)
-	}
-
-	if targets.ShortsSubscribersKey != ChannelSubscribersShortsPrefix+"UCtarget" {
-		t.Fatalf("ShortsSubscribersKey = %q", targets.ShortsSubscribersKey)
-	}
-
-	if got := targets.KeyFor(domain.AlarmTypeCommunity); got != targets.CommunitySubscribersKey {
-		t.Fatalf("KeyFor(COMMUNITY) = %q, want %q", got, targets.CommunitySubscribersKey)
-	}
-
-	if got := targets.KeyFor(domain.AlarmTypeShorts); got != targets.ShortsSubscribersKey {
-		t.Fatalf("KeyFor(SHORTS) = %q, want %q", got, targets.ShortsSubscribersKey)
-	}
-
-	if got := targets.KeyFor(domain.AlarmTypeLive); got != "" {
-		t.Fatalf("KeyFor(LIVE) = %q, want empty", got)
-	}
-}
-
-func TestValidateChannelContentAlarmTargetDefinitions(t *testing.T) {
-	t.Parallel()
-
-	t.Run("valid definitions", func(t *testing.T) {
-		t.Parallel()
-
-		err := ValidateChannelContentAlarmTargetDefinitions([]ChannelContentAlarmTargetDefinition{
-			{OwnerLabel: "Pekora", ChannelID: "UCpekora"},
-			{OwnerLabel: "Miko", ChannelID: "UCmiko"},
-		})
-		if err != nil {
-			t.Fatalf("ValidateChannelContentAlarmTargetDefinitions() error = %v", err)
-		}
-	})
-
-	t.Run("missing channel id is reported", func(t *testing.T) {
-		t.Parallel()
-
-		err := ValidateChannelContentAlarmTargetDefinitions([]ChannelContentAlarmTargetDefinition{
-			{OwnerLabel: "Pekora", ChannelID: ""},
-		})
-		if err == nil {
-			t.Fatal("expected error for missing channel id")
-		}
-
-		if !strings.Contains(err.Error(), "missing operating channel targets") {
-			t.Fatalf("error = %q, want missing operating channel targets", err)
-		}
-
-		if !strings.Contains(err.Error(), "Pekora") {
-			t.Fatalf("error = %q, want owner label", err)
-		}
-	})
-
-	t.Run("duplicate channel target keys are reported", func(t *testing.T) {
-		t.Parallel()
-
-		err := ValidateChannelContentAlarmTargetDefinitions([]ChannelContentAlarmTargetDefinition{
-			{OwnerLabel: "Pekora", ChannelID: "UCdup"},
-			{OwnerLabel: "Miko", ChannelID: "UCdup"},
-		})
-		if err == nil {
-			t.Fatal("expected error for duplicate channel targets")
-		}
-
-		if !strings.Contains(err.Error(), "duplicate deployment targets") {
-			t.Fatalf("error = %q, want duplicate deployment targets", err)
-		}
-
-		if !strings.Contains(err.Error(), "Miko:community duplicates Pekora:community") {
-			t.Fatalf("error = %q, want duplicate owner details", err)
-		}
-
-		if !strings.Contains(err.Error(), "Miko:shorts duplicates Pekora:shorts") {
-			t.Fatalf("error = %q, want duplicate shorts details", err)
-		}
-	})
 }
 
 func TestBuildTitleFingerprint_FullWidthPunctuationEquivalence(t *testing.T) {

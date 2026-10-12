@@ -292,8 +292,8 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unmarshal alarm queue envelope: %w", err)
 	}
 
-	// 저장 payload는 발행 시점에 alarm_type을 채운다. 누락을 Live로 간주하던 구형 payload 호환은 T18(2026-09-26)에서
-	// 누락 0건을 확인해 지웠으므로, 누락은 다른 알림 종류로 오인해 보내지 않도록 decode 오류로 드러낸다.
+	// 저장 payload는 발행 시점에 alarm_type을 채운다. 누락을 Live로 간주하지 않고, 다른 알림 종류로 오인해 보내지 않도록
+	// decode 오류로 드러낸다.
 	if wire.Notification.AlarmType == "" {
 		return errors.New("unmarshal alarm queue envelope: notification.alarm_type is empty")
 	}

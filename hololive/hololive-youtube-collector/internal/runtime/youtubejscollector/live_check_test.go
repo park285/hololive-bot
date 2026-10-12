@@ -61,10 +61,10 @@ func TestChannelLiveJobsEmitOnlyOwnKind(t *testing.T) {
 func TestChannelLiveRunnerDoesNotPublishFailedSnapshot(t *testing.T) {
 	t.Parallel()
 
-	fake := &channelFake{err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "channel tab timeout")}
+	fake := &channelFake{err: collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "channel tab timeout")}
 
 	result, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t))
-	if err == nil || collecterr.ClassOf(err) != collecterr.ClassTimeout || !result.IsZero() || fake.checkCalls != 0 {
+	if err == nil || collecterr.ClassOf(err) != contract.ClassTimeout || !result.IsZero() || fake.checkCalls != 0 {
 		t.Fatalf("failed snapshot result=%#v err=%v check calls=%d", result, err, fake.checkCalls)
 	}
 }
@@ -77,9 +77,9 @@ func TestChannelLiveCheckRunnerRecordsRequestFailureAsUnknown(t *testing.T) {
 		check    youtubejs.ChannelLiveCheckResult
 		checkErr error
 	}{
-		{"transient", youtubejs.ChannelLiveCheckResult{}, collecterr.New(collecterr.Failed, collecterr.ClassTransient, "upstream failed")},
-		{"cooldown", youtubejs.ChannelLiveCheckResult{}, collecterr.New(collecterr.Cooldown, collecterr.ClassCooldown, "limited")},
-		{"protocol mismatch", youtubejs.ChannelLiveCheckResult{}, collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "mismatch")},
+		{"transient", youtubejs.ChannelLiveCheckResult{}, collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "upstream failed")},
+		{"cooldown", youtubejs.ChannelLiveCheckResult{}, collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, "limited")},
+		{"protocol mismatch", youtubejs.ChannelLiveCheckResult{}, collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "mismatch")},
 		{"invalid negative shape", youtubejs.ChannelLiveCheckResult{ChannelID: restrictedTestChannelID, Outcome: contract.ChannelLiveCheckUpcomingVideo, ChannelIdentityConfirmed: true}, nil},
 		{"other subject", channelPageCheck("UC_OTHER"), nil},
 	}
@@ -172,10 +172,10 @@ func TestVideoLiveCheckRunnerRecordsRequestFailureAsUnknown(t *testing.T) {
 		result youtubejs.VideoLiveCheckResult
 		err    error
 	}{
-		{"transient", youtubejs.VideoLiveCheckResult{}, collecterr.New(collecterr.Failed, collecterr.ClassTransient, "upstream failed")},
-		{"request timeout", youtubejs.VideoLiveCheckResult{}, collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "helper timeout")},
-		{"response too large", youtubejs.VideoLiveCheckResult{}, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "too large")},
-		{"protocol mismatch", youtubejs.VideoLiveCheckResult{}, collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "mismatch")},
+		{"transient", youtubejs.VideoLiveCheckResult{}, collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "upstream failed")},
+		{"request timeout", youtubejs.VideoLiveCheckResult{}, collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "helper timeout")},
+		{"response too large", youtubejs.VideoLiveCheckResult{}, collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, "too large")},
+		{"protocol mismatch", youtubejs.VideoLiveCheckResult{}, collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "mismatch")},
 		{"invalid public fact", youtubejs.VideoLiveCheckResult{VideoID: liveCheckTestVideoID, ChannelID: restrictedTestChannelID, IdentityConfirmed: true, Availability: contract.VideoAvailabilityPublic, Method: contract.VideoAvailabilityMethodPlayerPublic}, nil},
 		{"other subject", youtubejs.VideoLiveCheckResult{
 			VideoID: "video-other", ChannelID: restrictedTestChannelID, IdentityConfirmed: true, IsPrivate: new(false),
@@ -282,8 +282,8 @@ func stopCheckCases() []stopCheckCase {
 
 			return ctx
 		}, collecterr.FromContext(context.DeadlineExceeded)},
-		{"helper canceled", live, collecterr.New(collecterr.Canceled, collecterr.ClassCanceled, "helper canceled")},
-		{"internal invariant", live, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "broken")},
+		{"helper canceled", live, collecterr.New(contract.ErrorCollectionCanceled, contract.ClassCanceled, "helper canceled")},
+		{"internal invariant", live, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "broken")},
 	}
 }
 

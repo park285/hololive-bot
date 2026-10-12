@@ -24,9 +24,6 @@ func NewRetryPolicy(maxRetries int, retryBackoff time.Duration) (RetryPolicy, er
 	return RetryPolicy{maxRetries: maxRetries, retryBackoff: retryBackoff}, nil
 }
 
-func (p RetryPolicy) MaxRetries() int             { return p.maxRetries }
-func (p RetryPolicy) RetryBackoff() time.Duration { return p.retryBackoff }
-
 type RevivePolicy struct {
 	enabled         bool
 	freshnessWindow time.Duration

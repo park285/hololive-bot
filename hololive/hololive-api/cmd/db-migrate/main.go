@@ -95,8 +95,7 @@ func run() error {
 }
 
 // postgresConnString은 migrator 접속 문자열을 만든다. PGPASSWORD(compose의 HOLOLIVE_MIGRATOR_PASSWORD)는 필수다.
-// 예전에 compose가 admin DB_PASSWORD로 채우던 폴백을 지웠으므로, 비어 있으면 비밀번호 없는 접속을 시도하지 않고
-// 원인을 알 수 있게 바로 실패한다(stack audit 2026-09-26).
+// 비어 있으면 admin DB_PASSWORD로 대신하거나 비밀번호 없는 접속을 시도하지 않고, 원인을 알 수 있게 바로 실패한다.
 func postgresConnString() (string, error) {
 	password := os.Getenv("PGPASSWORD")
 	if strings.TrimSpace(password) == "" {

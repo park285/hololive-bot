@@ -183,7 +183,7 @@ func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 				d = nil
 			}
 
-			_, err := NewYouTubeChecker(c, h, ts, d, []int{5}, 0, logger)
+			_, err := NewYouTubeCheckerWithPersistedLiveSource(c, h, ts, d, []int{5}, 0, nil, nil, logger)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErr)
 		})
@@ -200,7 +200,7 @@ func TestYouTubeCheckerCheck_EmptyChannelRegistry(t *testing.T) {
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	notifications, checkErr := checker.Check(t.Context())
@@ -279,7 +279,7 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	setupCtx := t.Context()
@@ -422,7 +422,7 @@ func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *tes
 	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	ctx := t.Context()
@@ -717,7 +717,7 @@ func TestYouTubeChecker_RecoversRecentCappedFiveMinuteAlarm(t *testing.T) {
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 75*time.Second, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 75*time.Second, nil, nil, logger)
 	require.NoError(t, err)
 
 	now := time.Date(2026, time.April, 9, 11, 56, 0, 0, time.UTC)
@@ -750,7 +750,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_FallsBackToThreeMinuteTarget(
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	window := targetpolicy.EvaluationWindow{
@@ -781,7 +781,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_PrefersRecoveredFiveMinuteTar
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	window := targetpolicy.EvaluationWindow{
@@ -813,7 +813,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DoesNotInventThreeMinuteTarge
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	window := targetpolicy.EvaluationWindow{
@@ -843,7 +843,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_SendsScheduleDelayOnNonTarget
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
@@ -879,7 +879,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_TargetReminderDoesNotCarrySch
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
@@ -916,7 +916,7 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DetectsReplacedWaitingRoomSch
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
@@ -961,7 +961,7 @@ func TestYouTubeChecker_DetectRoomScheduleChangesDeduplicatesRoomsAndUsesChannel
 	holodexService, err := holodexprovider.NewHolodexService("http://unused", "k", cache, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, nil, nil, logger)
 	require.NoError(t, err)
 
 	previousScheduled := time.Date(2026, time.May, 22, 12, 0, 0, 0, time.UTC)

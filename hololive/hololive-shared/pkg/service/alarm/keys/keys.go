@@ -54,12 +54,6 @@ const (
 	NotificationCategoryLiveCatchup    = "live_catchup"
 )
 
-type ChannelContentAlarmTargetKeys struct {
-	ChannelID               string `json:"channel_id"`
-	CommunitySubscribersKey string `json:"community_subscribers_key"`
-	ShortsSubscribersKey    string `json:"shorts_subscribers_key"`
-}
-
 func BuildChannelSubscriberKey(channelID string, alarmType domain.AlarmType) string {
 	switch alarmType {
 	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
@@ -73,29 +67,8 @@ func BuildChannelSubscriberKey(channelID string, alarmType domain.AlarmType) str
 	}
 }
 
-func BuildChannelContentAlarmTargetKeys(channelID string) ChannelContentAlarmTargetKeys {
-	return ChannelContentAlarmTargetKeys{
-		ChannelID:               channelID,
-		CommunitySubscribersKey: BuildChannelSubscriberKey(channelID, domain.AlarmTypeCommunity),
-		ShortsSubscribersKey:    BuildChannelSubscriberKey(channelID, domain.AlarmTypeShorts),
-	}
-}
-
 func BuildChannelSubscriberEmptyKey(channelID string, alarmType domain.AlarmType) string {
 	return ChannelSubscribersEmptyKeyPrefix + string(alarmType) + ":" + channelID
-}
-
-func (k ChannelContentAlarmTargetKeys) KeyFor(alarmType domain.AlarmType) string {
-	switch alarmType {
-	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
-		return ""
-	case domain.AlarmTypeCommunity:
-		return k.CommunitySubscribersKey
-	case domain.AlarmTypeShorts:
-		return k.ShortsSubscribersKey
-	default:
-		return ""
-	}
 }
 
 func NotifiedKey(streamID string) string {

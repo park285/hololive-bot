@@ -11,7 +11,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
@@ -92,7 +92,7 @@ func assertPartialCollectionSpans(t *testing.T, spans []sdktrace.ReadOnlySpan) {
 
 		if want == "partial" {
 			require.Equal(t, codes.Error, span.Status().Code, span.Name())
-			require.Equal(t, string(collecterr.ClassTimeout), attrs["error.type"], span.Name())
+			require.Equal(t, string(contract.ClassTimeout), attrs["error.type"], span.Name())
 		} else {
 			require.Equal(t, codes.Ok, span.Status().Code, span.Name())
 		}

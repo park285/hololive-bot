@@ -23,10 +23,8 @@ package httpserver
 import (
 	"context"
 	"log/slog"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/health"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
@@ -58,24 +56,4 @@ func ApplyBaseMiddleware(ctx context.Context, router *gin.Engine, logger *slog.L
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RequestIDMiddleware())
 	router.Use(middleware.MaxBodySizeMiddleware(maxBodyBytes))
-}
-
-func RegisterHealthRoutes(router gin.IRoutes) {
-	if router == nil {
-		return
-	}
-
-	router.GET("/health", func(c *gin.Context) {
-		respondJSON(c, http.StatusOK, health.Get())
-	})
-	router.GET("/ready", func(c *gin.Context) {
-		response, ready := health.GetReadiness()
-		status := http.StatusOK
-
-		if !ready {
-			status = http.StatusServiceUnavailable
-		}
-
-		respondJSON(c, status, response)
-	})
 }

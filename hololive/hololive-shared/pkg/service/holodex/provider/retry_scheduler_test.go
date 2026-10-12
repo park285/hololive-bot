@@ -298,3 +298,10 @@ func TestRetryScheduler_Stop_CancelsExecutingContext(t *testing.T) {
 		}
 	})
 }
+
+func (s *retryScheduler) pendingCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return len(s.pending)
+}

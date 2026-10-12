@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
@@ -143,9 +145,9 @@ func (m *mockMemberDataForFilter) FindMembersByAlias(context.Context, string) ([
 func mustFilterCandidates(t *testing.T, candidates []model.Candidate, now time.Time, roomMembers []string, validator model.SourceURLValidator) []model.FilteredCandidate {
 	t.Helper()
 
-	filtered, err := FilterCandidates(t.Context(), candidates, model.PeriodWeekly, now, roomMembers, nil, validator)
+	filtered, err := PrepareCandidates(candidates, model.PeriodWeekly, now).Filter(t.Context(), roomMembers, nil, validator)
 	if err != nil {
-		t.Fatalf("FilterCandidates() error = %v", err)
+		t.Fatalf("Filter() error = %v", err)
 	}
 
 	return filtered
@@ -167,9 +169,9 @@ func TestFilterCandidates_MemberLookupFailureIsError(t *testing.T) {
 	cause := errors.New("member cache unavailable")
 	mock := &mockMemberDataForFilter{nameErr: cause}
 
-	filtered, err := FilterCandidates(t.Context(), nil, model.PeriodWeekly, time.Now(), []string{testMemberMiko}, mock, &testSourceValidator{})
+	filtered, err := PrepareCandidates(nil, model.PeriodWeekly, time.Now()).Filter(t.Context(), []string{testMemberMiko}, mock, &testSourceValidator{})
 	if !errors.Is(err, cause) || filtered != nil {
-		t.Fatalf("FilterCandidates() = %v, %v; want member lookup failure", filtered, err)
+		t.Fatalf("Filter() = %v, %v; want member lookup failure", filtered, err)
 	}
 
 	if mock.aliasCall != 0 {
@@ -352,7 +354,9 @@ func matchMembersCases() []matchMembersCase {
 func TestMatchMembers(t *testing.T) {
 	for _, tt := range matchMembersCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchMembers(&tt.candidate, tt.profiles)
+			got := matchPreparedMembers(tt.profiles, buildCandidateMemberTokenSet(tt.candidate.Members), func() string {
+				return stringutil.NormalizeKey(tt.candidate.Title + " " + tt.candidate.Description)
+			})
 			if len(got) != tt.wantLen {
 				t.Fatalf("len = %d %v, want %d", len(got), got, tt.wantLen)
 			}

@@ -25,7 +25,7 @@ func TestAcceptedReplySettlementAfterCancellationReleasesRoomQueue(t *testing.T)
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
-			repository := durability.NewReplyOutboxRepository(pool)
+			repository := newTestReplyOutboxRepository(t, pool)
 
 			for ordinal := range uint64(2) {
 				_, err := repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
@@ -85,7 +85,7 @@ func TestAcceptedReplyLostSettlementClaimRecordsUnknownAttempt(t *testing.T) {
 
 func TestReplySettlementKeepsBoundedBudgetAfterCallerCancellation(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	repository := durability.NewReplyOutboxRepository(pool)
+	repository := newTestReplyOutboxRepository(t, pool)
 	_, err := repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
 		MessageID: "message:blocked-settlement", Phase: transport.ReplyPhase, RoomID: testRoomID,
 		Payload: []byte(`{"kind":"text","message":"answer"}`), ClientRequestID: transport.ReplyClientRequestID("message:blocked-settlement", 0),

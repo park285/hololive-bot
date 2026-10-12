@@ -56,12 +56,6 @@ func (b *batchClaimResolver) selectClaimedDeliveries(ctx context.Context, rows [
 	return selection
 }
 
-func (b *batchClaimResolver) releaseDeliveryClaims(_ context.Context, tokens []dispatchstate.ClaimToken) error {
-	b.queueRelease(tokens)
-
-	return nil
-}
-
 func (b *batchClaimResolver) queueRelease(tokens []dispatchstate.ClaimToken) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

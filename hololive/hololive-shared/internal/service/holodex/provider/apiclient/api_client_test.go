@@ -325,7 +325,7 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 	}
 
 	// openedAt을 과거로 설정하여 reset 트리거
-	client.forceOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
+	client.breaker.SetOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
 
 	if client.IsCircuitOpen() {
 		t.Fatal("expected circuit to be closed after timeout")
@@ -427,7 +427,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		t.Fatal("should be open after threshold")
 	}
 
-	client.forceOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
+	client.breaker.SetOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
 
 	if !client.breaker.Allow() {
 		t.Fatal("should allow after timeout")

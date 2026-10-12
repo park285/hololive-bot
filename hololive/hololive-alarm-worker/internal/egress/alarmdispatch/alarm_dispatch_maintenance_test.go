@@ -312,6 +312,6 @@ func (s *alarmDispatchMaintenanceTestStore) DeleteOrphanSendUnits(context.Contex
 }
 
 func alarmDispatchMaintenanceStatusIsDeletable(status dispatchoutbox.Status) bool {
-	_, ok := alarmDispatchTerminalTimestampColumn(status)
+	_, ok := alarmDispatchRetentionDeleteSQL[status]
 	return ok
 }

@@ -1574,3 +1574,8 @@ func tr(c iris.BotClient) *CommandTransport {
 func inboundCtx(ctx context.Context) context.Context {
 	return WithRoomChat(WithReplyIdentity(ctx, "message:m-1"), "OM", "")
 }
+
+func isReplyStatusFailed(err error) bool {
+	_, ok := errors.AsType[replyStatusFailedError](err)
+	return ok
+}

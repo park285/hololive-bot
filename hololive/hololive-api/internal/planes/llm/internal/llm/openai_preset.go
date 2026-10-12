@@ -33,8 +33,7 @@ import (
 
 var _ Client = (*presetClient)(nil)
 
-// presetClient는 openaipreset의 계층 경로(GenerateJSONAs)로 JSON 원문을 받는다. 단일 system prompt를
-// 받던 openaipreset GenerateJSON 경로는 DEC-20260926-stack-llm-instruction-layering-sole-path로 퇴역했다.
+// presetClient는 openaipreset의 계층 경로(GenerateJSONAs)로만 JSON 원문을 받는다. 단일 system prompt 경로는 없다.
 type presetClient struct {
 	client *openaipreset.Client
 	// task는 요청의 task·schema 이름이자 prompt cache key 접미사다.

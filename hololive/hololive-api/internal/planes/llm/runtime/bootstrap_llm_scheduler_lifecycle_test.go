@@ -122,24 +122,15 @@ func TestLLMSchedulerRuntimeStartReportsServerErrorAndCloses(t *testing.T) {
 	require.NoError(t, runtime.CloseContext(t.Context()))
 }
 
-func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
-	server, err := buildLLMSchedulerHTTPServer(
-		t.Context(),
-		32077,
-		testRuntimeLogger(),
-		nil,
-		"",
-		nil,
-		nil,
-	)
+func TestBuildLLMSchedulerRouter_WithoutTriggerHandler(t *testing.T) {
+	router, err := buildLLMSchedulerRouter(t.Context(), testRuntimeLogger(), nil, "", nil, nil, nil)
 	require.NoError(t, err)
-	require.NotNil(t, server)
-	assert.Equal(t, ":32077", server.Addr)
+	require.NotNil(t, router)
 
 	t.Run("health available", func(t *testing.T) {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 		rr := httptest.NewRecorder()
-		server.Handler.ServeHTTP(rr, req)
+		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 	})
@@ -147,7 +138,7 @@ func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 	t.Run("trigger route not registered", func(t *testing.T) {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 		rr := httptest.NewRecorder()
-		server.Handler.ServeHTTP(rr, req)
+		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusNotFound, rr.Code)
 	})

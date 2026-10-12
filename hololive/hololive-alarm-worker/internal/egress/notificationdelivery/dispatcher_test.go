@@ -54,7 +54,7 @@ type mockDeliveryRepository struct {
 	markSentFn               func(ctx context.Context, id int64, workerID string) (bool, error)
 	markFailedFn             func(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 	quarantineStaleSendingFn func(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
-	countByStatusFn          func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
+	countFailedFn            func(ctx context.Context) (int64, error)
 	cleanupFn                func(ctx context.Context, olderThan time.Duration) (int64, error)
 	claimedIDs               map[int64]struct{}
 }
@@ -66,10 +66,6 @@ func (m *mockDeliveryRepository) reissueFailedRequest(ctx context.Context, id in
 	}
 
 	return m.MarkFailed(ctx, id, worker, attemptCount, maxRetries, backoff, reason)
-}
-
-func (m *mockDeliveryRepository) markPreparationUnsent(context.Context, int64, string) (bool, error) {
-	return true, nil
 }
 
 func (m *mockDeliveryRepository) saveRequest(ctx context.Context, id int64, worker string, previous, next *deliverypayload.Request) (bool, error) {
@@ -197,11 +193,11 @@ func (m *mockDeliveryRepository) QuarantineStaleSending(ctx context.Context, old
 	return 0, nil
 }
 
-func (m *mockDeliveryRepository) CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error) {
-	if m.countByStatusFn != nil {
-		out, err := m.countByStatusFn(ctx, status)
+func (m *mockDeliveryRepository) CountFailed(ctx context.Context) (int64, error) {
+	if m.countFailedFn != nil {
+		out, err := m.countFailedFn(ctx)
 		if err != nil {
-			return out, fmt.Errorf("count by status fn: %w", err)
+			return out, fmt.Errorf("count failed fn: %w", err)
 		}
 
 		return out, nil
@@ -338,7 +334,7 @@ func TestProcessOnce_E2E(t *testing.T) {
 
 			return true, nil
 		},
-		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
+		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
 		},
 		cleanupFn: func(_ context.Context, _ time.Duration) (int64, error) {
@@ -389,7 +385,7 @@ func TestProcessOnce_UnmarshalFailure_MarkFailed(t *testing.T) {
 
 			return true, nil
 		},
-		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
+		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
 		},
 		cleanupFn: func(_ context.Context, _ time.Duration) (int64, error) {
@@ -426,7 +422,7 @@ func TestProcessOnce_SenderFailure_MarkFailed(t *testing.T) {
 			failedID = id
 			return true, nil
 		},
-		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
+		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
 		},
 		cleanupFn: func(_ context.Context, _ time.Duration) (int64, error) {
@@ -709,7 +705,7 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 
 			return true, nil
 		},
-		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
+		countFailedFn: func(context.Context) (int64, error) {
 			return 0, nil
 		},
 		cleanupFn: func(_ context.Context, _ time.Duration) (int64, error) {

@@ -101,7 +101,7 @@ func TestProjectionTargetSnapshotPreservesEmptyRosterAndCap(t *testing.T) {
 		contract.KindLiveSnapshot: {subjectUCA, subjectUCB},
 		contract.KindSchedule:     {"schedule"},
 	}, 2)
-	if collecterr.CodeOf(err) != collecterr.TargetRosterTooLarge || collecterr.ClassOf(err) != collecterr.ClassResourceLimit {
+	if collecterr.CodeOf(err) != contract.ErrorTargetRosterTooLarge || collecterr.ClassOf(err) != contract.ClassResourceLimit {
 		t.Fatalf("cap error = %v", err)
 	}
 }
@@ -112,24 +112,24 @@ func TestTargetSnapshotRejectsDuplicatesMissingKindsAndInvalidGeneration(t *test
 	_, err := NewProjectionTargetSnapshot(1, []contract.ObservationKind{contract.KindLiveSnapshot}, map[contract.ObservationKind][]string{
 		contract.KindLiveSnapshot: {subjectUCA, subjectUCA},
 	}, 2)
-	if collecterr.ClassOf(err) != collecterr.ClassInternal {
+	if collecterr.ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("duplicate error = %v", err)
 	}
 
 	_, err = NewProjectionTargetSnapshot(1, []contract.ObservationKind{contract.KindLiveSnapshot}, map[contract.ObservationKind][]string{}, 2)
-	if collecterr.ClassOf(err) != collecterr.ClassInternal {
+	if collecterr.ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("missing kind error = %v", err)
 	}
 
 	_, err = NewExactTargetSnapshot(0, subjectUCA, []contract.ObservationKind{contract.KindLiveSnapshot}, nil)
-	if collecterr.ClassOf(err) != collecterr.ClassInternal {
+	if collecterr.ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("generation error = %v", err)
 	}
 
 	_, err = NewExactTargetSnapshot(1, subjectUCA, []contract.ObservationKind{
 		contract.KindLiveSnapshot, contract.KindLiveSnapshot,
 	}, nil)
-	if collecterr.ClassOf(err) != collecterr.ClassInternal {
+	if collecterr.ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("requested duplicate error = %v", err)
 	}
 }

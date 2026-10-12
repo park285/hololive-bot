@@ -35,7 +35,7 @@ func TestNewClientForURLStrictKeepsPlainHTTPClient(t *testing.T) {
 }
 
 // https 내부 URL의 JSON client는 HOLOLIVE_INTERNAL_H3_* 누락을 오류로 돌려준다. 경고 뒤 TCP client로 내려가면
-// 기동은 성공하고 H3 전용 내부 서버 요청만 런타임에 실패하므로 그 폴백은 두지 않는다(stack audit 2026-09-26).
+// 기동은 성공하고 H3 전용 내부 서버 요청만 런타임에 실패하므로 그 폴백은 두지 않는다.
 func TestNewJSONClientRequiresExplicitH3OptionsForHTTPS(t *testing.T) {
 	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")

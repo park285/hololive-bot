@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 전체 멤버 적재 실패는 빈 결과가 아니라 오류다(DEC-20260926-hololive-source-fallbacks-retirement).
+// 전체 멤버 적재 실패는 빈 결과가 아니라 오류다.
 func TestServiceAdapter_LoadAllMembers_ReturnsError(t *testing.T) {
 	adapter := NewMemberServiceAdapter(&Cache{})
 

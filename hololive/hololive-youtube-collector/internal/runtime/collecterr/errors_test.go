@@ -43,15 +43,15 @@ func TestERR005UnknownErrorNormalizesToInternalInvariant(t *testing.T) {
 	t.Parallel()
 
 	err := errors.New("mystery helper boom")
-	if CodeOf(err) != Internal || ClassOf(err) != ClassInternal {
+	if CodeOf(err) != contract.ErrorInternalInvariant || ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("CodeOf/ClassOf = %s/%s", CodeOf(err), ClassOf(err))
 	}
 
-	if normalized := Normalize(err); normalized == nil || normalized.code != Internal || normalized.class != ClassInternal {
+	if normalized := Normalize(err); normalized == nil || normalized.code != contract.ErrorInternalInvariant || normalized.class != contract.ClassInternal {
 		t.Fatalf("Normalize = %#v", normalized)
 	}
 
-	if CodeOf(FromContext(err)) != Internal {
+	if CodeOf(FromContext(err)) != contract.ErrorInternalInvariant {
 		t.Fatal("FromContext must not guess TRANSIENT")
 	}
 }
@@ -60,7 +60,7 @@ func TestERR006WrapWithRetryNormalizePreserveErrorChain(t *testing.T) {
 	t.Parallel()
 
 	cause := errors.New("root-cause")
-	wrapped := Wrap(Failed, ClassTransient, cause)
+	wrapped := Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, cause)
 
 	if !errors.Is(wrapped, cause) {
 		t.Fatal("Wrap lost cause")
@@ -89,8 +89,8 @@ func TestERR007RejectsImpossibleCodeClassRetryDiagnosticTuple(t *testing.T) {
 	t.Parallel()
 
 	// 알려진 code라도 계약 밖 class는 기본 class로 고치지 않고 Internal로 닫으며 원래 tuple을 원인에 남긴다.
-	err := New(Failed, ClassTimeout, "impossible")
-	if CodeOf(err) != Internal || ClassOf(err) != ClassInternal {
+	err := New(contract.ErrorCollectionFailed, contract.ClassTimeout, "impossible")
+	if CodeOf(err) != contract.ErrorInternalInvariant || ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("known code with impossible class = %s/%s, want fail-closed internal", CodeOf(err), ClassOf(err))
 	}
 
@@ -98,17 +98,17 @@ func TestERR007RejectsImpossibleCodeClassRetryDiagnosticTuple(t *testing.T) {
 		t.Fatalf("impossible tuple error = %q, want original tuple preserved", err.Error())
 	}
 
-	unknown := New(ErrorCode("not_a_real_code"), ClassTransient, "unknown")
-	if CodeOf(unknown) != Internal || ClassOf(unknown) != ClassInternal {
+	unknown := New(contract.CollectionErrorCode("not_a_real_code"), contract.ClassTransient, "unknown")
+	if CodeOf(unknown) != contract.ErrorInternalInvariant || ClassOf(unknown) != contract.ClassInternal {
 		t.Fatalf("unknown code = %s/%s", CodeOf(unknown), ClassOf(unknown))
 	}
 
 	invalidHint := RetryHint{kind: RetryAfter, after: -time.Second}
-	if CodeOf(WithRetry(New(Failed, ClassTransient, "ok"), invalidHint)) != Internal {
+	if CodeOf(WithRetry(New(contract.ErrorCollectionFailed, contract.ClassTransient, "ok"), invalidHint)) != contract.ErrorInternalInvariant {
 		t.Fatal("invalid retry hint must close to INTERNAL")
 	}
 
-	if _, diagErr := contract.NewFailureDiagnostic(Failed, ClassTimeout, "impossible"); diagErr == nil {
+	if _, diagErr := contract.NewFailureDiagnostic(contract.ErrorCollectionFailed, contract.ClassTimeout, "impossible"); diagErr == nil {
 		t.Fatal("shared constructor must reject impossible tuple")
 	}
 }
@@ -116,19 +116,19 @@ func TestERR007RejectsImpossibleCodeClassRetryDiagnosticTuple(t *testing.T) {
 func TestERR008ContextDeadlineAndCancelMapping(t *testing.T) {
 	t.Parallel()
 
-	if CodeOf(context.DeadlineExceeded) != Timeout || ClassOf(context.DeadlineExceeded) != ClassTimeout {
+	if CodeOf(context.DeadlineExceeded) != contract.ErrorCollectionTimeout || ClassOf(context.DeadlineExceeded) != contract.ClassTimeout {
 		t.Fatal("deadline mapping")
 	}
 
-	if CodeOf(context.Canceled) != Canceled || ClassOf(context.Canceled) != ClassCanceled {
+	if CodeOf(context.Canceled) != contract.ErrorCollectionCanceled || ClassOf(context.Canceled) != contract.ClassCanceled {
 		t.Fatal("cancel mapping")
 	}
 
-	if CodeOf(FromContext(context.DeadlineExceeded)) != Timeout {
+	if CodeOf(FromContext(context.DeadlineExceeded)) != contract.ErrorCollectionTimeout {
 		t.Fatal("FromContext deadline")
 	}
 
-	if CodeOf(FromContext(context.Canceled)) != Canceled {
+	if CodeOf(FromContext(context.Canceled)) != contract.ErrorCollectionCanceled {
 		t.Fatal("FromContext cancel")
 	}
 }
@@ -139,7 +139,7 @@ func TestERR009RetryAfterDeltaSecondsAndHTTPDate(t *testing.T) {
 	now := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
 	delta := FromStatus("holodex", http.StatusTooManyRequests, "12", now)
 
-	if CodeOf(delta) != Cooldown || RetryOf(delta).Kind() != RetryAfter || RetryOf(delta).After() != 12*time.Second {
+	if CodeOf(delta) != contract.ErrorCooldown || RetryOf(delta).Kind() != RetryAfter || RetryOf(delta).After() != 12*time.Second {
 		t.Fatalf("delta-seconds hint = %s/%v", CodeOf(delta), RetryOf(delta))
 	}
 
@@ -151,12 +151,12 @@ func TestERR009RetryAfterDeltaSecondsAndHTTPDate(t *testing.T) {
 	}
 
 	overflow := FromStatus("holodex", http.StatusTooManyRequests, "2147483648", now)
-	if CodeOf(overflow) != Cooldown || RetryOf(overflow).Kind() != RetryDefault {
+	if CodeOf(overflow) != contract.ErrorCooldown || RetryOf(overflow).Kind() != RetryDefault {
 		t.Fatalf("overflow = %s/%v", CodeOf(overflow), RetryOf(overflow))
 	}
 
 	invalid := FromStatus("holodex", http.StatusTooManyRequests, "not-a-date", now)
-	if CodeOf(invalid) != Cooldown || RetryOf(invalid).Kind() != RetryDefault {
+	if CodeOf(invalid) != contract.ErrorCooldown || RetryOf(invalid).Kind() != RetryDefault {
 		t.Fatalf("invalid = %s/%v", CodeOf(invalid), RetryOf(invalid))
 	}
 
@@ -166,12 +166,12 @@ func TestERR009RetryAfterDeltaSecondsAndHTTPDate(t *testing.T) {
 	}
 
 	svc := FromStatus("holodex", http.StatusServiceUnavailable, "5", now)
-	if CodeOf(svc) != Cooldown || RetryOf(svc).Kind() != RetryAfter {
+	if CodeOf(svc) != contract.ErrorCooldown || RetryOf(svc).Kind() != RetryAfter {
 		t.Fatalf("503 + Retry-After = %s/%v", CodeOf(svc), RetryOf(svc))
 	}
 
 	bare503 := FromStatus("holodex", http.StatusServiceUnavailable, "", now)
-	if CodeOf(bare503) != Failed || ClassOf(bare503) != ClassTransient {
+	if CodeOf(bare503) != contract.ErrorCollectionFailed || ClassOf(bare503) != contract.ClassTransient {
 		t.Fatalf("503 without Retry-After = %s/%s", CodeOf(bare503), ClassOf(bare503))
 	}
 }
@@ -218,12 +218,12 @@ func TestERR011SanitizeDetailRedactsSecretsBoundsUTF8AndIsIdempotent(t *testing.
 func TestERR015NewWriterRejectsLegacyHelperClassNames(t *testing.T) {
 	t.Parallel()
 
-	err := New(Failed, FailureClass("InnertubeError"), "innertube down")
-	if CodeOf(err) != Internal || ClassOf(err) != ClassInternal {
+	err := New(contract.ErrorCollectionFailed, contract.FailureClass("InnertubeError"), "innertube down")
+	if CodeOf(err) != contract.ErrorInternalInvariant || ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("legacy helper class = %s/%s, want fail-closed internal", CodeOf(err), ClassOf(err))
 	}
 
-	if _, diagErr := contract.NewFailureDiagnostic(Failed, FailureClass("InnertubeError"), "innertube down"); diagErr == nil {
+	if _, diagErr := contract.NewFailureDiagnostic(contract.ErrorCollectionFailed, contract.FailureClass("InnertubeError"), "innertube down"); diagErr == nil {
 		t.Fatal("new writer must not persist InnertubeError")
 	}
 }
@@ -232,22 +232,22 @@ func TestERR015bKnownCodeLegacyClassFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	// 구 helper class 이름을 code 기본 class로 수리하던 경로는 지웠다. 알려진 code라도 durable 진단은 Internal이다.
-	parser := New(ParserDrift, FailureClass("RpcResponseError"), "parser drift")
-	if CodeOf(parser) != Internal || ClassOf(parser) != ClassInternal {
+	parser := New(contract.ErrorParserDrift, contract.FailureClass("RpcResponseError"), "parser drift")
+	if CodeOf(parser) != contract.ErrorInternalInvariant || ClassOf(parser) != contract.ClassInternal {
 		t.Fatalf("parser_drift+RpcResponseError = %s/%s, want fail-closed internal", CodeOf(parser), ClassOf(parser))
 	}
 
-	if DiagnosticOf(parser).Code() != Internal || DiagnosticOf(parser).Class() != ClassInternal {
+	if DiagnosticOf(parser).Code() != contract.ErrorInternalInvariant || DiagnosticOf(parser).Class() != contract.ClassInternal {
 		t.Fatalf("DiagnosticOf parser = %s/%s", DiagnosticOf(parser).Code(), DiagnosticOf(parser).Class())
 	}
 
-	failed := New(Failed, FailureClass("InnertubeError"), "innertube down")
-	if DiagnosticOf(failed).Code() != Internal || DiagnosticOf(failed).Class() != ClassInternal {
+	failed := New(contract.ErrorCollectionFailed, contract.FailureClass("InnertubeError"), "innertube down")
+	if DiagnosticOf(failed).Code() != contract.ErrorInternalInvariant || DiagnosticOf(failed).Class() != contract.ClassInternal {
 		t.Fatalf("DiagnosticOf failed = %s/%s", DiagnosticOf(failed).Code(), DiagnosticOf(failed).Class())
 	}
 
-	leftover := New(ErrorCode("pagination_gap"), FailureClass("HelperError"), "gap")
-	if CodeOf(leftover) != Internal || DiagnosticOf(leftover).Code() != Internal {
+	leftover := New(contract.CollectionErrorCode("pagination_gap"), contract.FailureClass("HelperError"), "gap")
+	if CodeOf(leftover) != contract.ErrorInternalInvariant || DiagnosticOf(leftover).Code() != contract.ErrorInternalInvariant {
 		t.Fatalf("leftover Normalize/DiagnosticOf = %s/%s", CodeOf(leftover), DiagnosticOf(leftover).Code())
 	}
 }
@@ -255,14 +255,14 @@ func TestERR015bKnownCodeLegacyClassFailsClosed(t *testing.T) {
 func TestERR016EmptySanitizedDetailFallsBackToCodeString(t *testing.T) {
 	t.Parallel()
 
-	err := New(Failed, ClassTransient, "")
+	err := New(contract.ErrorCollectionFailed, contract.ClassTransient, "")
 	diagnostic := DiagnosticOf(err)
 
 	if err := diagnostic.Validate(); err != nil {
 		t.Fatal(err)
 	}
 
-	if diagnostic.Detail() != string(Failed) {
+	if diagnostic.Detail() != string(contract.ErrorCollectionFailed) {
 		t.Fatalf("detail = %q, want code fallback", diagnostic.Detail())
 	}
 
@@ -275,11 +275,11 @@ func TestRecognizedNetworkNormalizesToTransient(t *testing.T) {
 	t.Parallel()
 
 	err := &net.OpError{Op: "read", Err: syscall.ECONNRESET}
-	if CodeOf(err) != Failed || ClassOf(err) != ClassTransient {
+	if CodeOf(err) != contract.ErrorCollectionFailed || ClassOf(err) != contract.ClassTransient {
 		t.Fatalf("reset = %s/%s", CodeOf(err), ClassOf(err))
 	}
 
-	if CodeOf(io.EOF) != Failed || ClassOf(io.EOF) != ClassTransient {
+	if CodeOf(io.EOF) != contract.ErrorCollectionFailed || ClassOf(io.EOF) != contract.ClassTransient {
 		t.Fatalf("EOF = %s/%s", CodeOf(io.EOF), ClassOf(io.EOF))
 	}
 }

@@ -8,6 +8,13 @@
 
 ## 미출시
 
+- **계약 변경 — 관리자 비밀번호 재설정 제거:** 2026-10-02부터 503만 반환하던 `POST /api/auth/password/reset-request`·`POST /api/auth/password/reset`과 재설정 서비스를 지웠습니다. 두 경로는 이제 NoRoute 응답(API key 없음 401, 맞으면 404)을 받습니다. migration 281이 빈 `auth_password_reset_tokens`를 지우고, 행이 남아 있으면 지우지 않고 실패합니다.
+- **계약 변경 — Stream JSON의 Chzzk·Twitch 필드 제거:** 채우는 생산자가 없던 10개 키가 Stream HTTP 응답과 alarm dispatch event payload에서 빠집니다. event payload hash가 바뀌므로 alarm-worker는 처리 중인 dispatch event가 없을 때 교체합니다.
+- **notification delivery 재적재:** 고정 요청 없이 FAILED가 된 행은 발송된 적이 없으므로 시도 횟수와 무관하게 생산자가 새 payload로 다시 적재합니다. 쓰지 않게 된 `known_unsent` 표시를 지웠습니다. api와 alarm-worker는 같은 배포에서 교체합니다.
+- **alarm dispatch:** 빈 `alarm_type`을 Live로 간주하던 숨은 기본값을 지우고 오류로 거부합니다. 운영 생산자는 모두 종류를 채웁니다.
+- **SQL:** 상태 상수를 부분 인덱스 조건과 맞추고, dispatch retention 삭제를 상태별 문장으로 나눠 만료 행 전체를 읽지 않게 했습니다. 결과는 같습니다.
+- **오류 문구:** 운영에서 쓰이지 않던 `external_api_call_failed`·`cache_connection_failed`를 코드와 기동 검증에서 뺐습니다. 시드 행은 rollback 호환을 위해 다음 배포 뒤 별도 migration으로 지웁니다.
+
 ## v8.0.0 - 2026-10-11
 
 - **공유 payload:** producer·worker가 notification delivery의 저장 payload/request 계약을 한 곳에서 사용합니다. 기존 JSON 바이트·고정 request·재무장 CAS·exhaustion fence와 runtime/ledger 책임 분리는 유지합니다.

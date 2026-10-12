@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -56,8 +57,8 @@ func TestMapRequestErrorKeepsUnclassifiedMarker(t *testing.T) {
 				t.Fatalf("IsUnclassified(%v) = false, want true", err)
 			}
 
-			if collecterr.CodeOf(err) != collecterr.Internal || collecterr.ClassOf(err) != collecterr.ClassInternal {
-				t.Fatalf("error = %s/%s, want %s/%s", collecterr.CodeOf(err), collecterr.ClassOf(err), collecterr.Internal, collecterr.ClassInternal)
+			if collecterr.CodeOf(err) != contract.ErrorInternalInvariant || collecterr.ClassOf(err) != contract.ClassInternal {
+				t.Fatalf("error = %s/%s, want %s/%s", collecterr.CodeOf(err), collecterr.ClassOf(err), contract.ErrorInternalInvariant, contract.ClassInternal)
 			}
 
 			if text := err.Error(); strings.Contains(text, "secret-key") || !strings.HasPrefix(text, "request holodex live: ") {
@@ -73,12 +74,12 @@ func TestMapRequestErrorKeepsExplicitClassification(t *testing.T) {
 	tests := []struct {
 		name  string
 		err   error
-		code  collecterr.ErrorCode
-		class collecterr.FailureClass
+		code  contract.CollectionErrorCode
+		class contract.FailureClass
 	}{
-		{name: "timeout", err: context.DeadlineExceeded, code: collecterr.Timeout, class: collecterr.ClassTimeout},
-		{name: "canceled", err: context.Canceled, code: collecterr.Canceled, class: collecterr.ClassCanceled},
-		{name: "transient", err: dialError(syscall.ECONNRESET), code: collecterr.Failed, class: collecterr.ClassTransient},
+		{name: "timeout", err: context.DeadlineExceeded, code: contract.ErrorCollectionTimeout, class: contract.ClassTimeout},
+		{name: "canceled", err: context.Canceled, code: contract.ErrorCollectionCanceled, class: contract.ClassCanceled},
+		{name: "transient", err: dialError(syscall.ECONNRESET), code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -121,7 +122,7 @@ func TestRedactErrorKeepsUnclassifiedMarker(t *testing.T) {
 				t.Fatalf("IsUnclassified(%v) = false, want true", redacted)
 			}
 
-			if collecterr.CodeOf(redacted) != collecterr.Internal || collecterr.ClassOf(redacted) != collecterr.ClassInternal {
+			if collecterr.CodeOf(redacted) != contract.ErrorInternalInvariant || collecterr.ClassOf(redacted) != contract.ClassInternal {
 				t.Fatalf("error = %s/%s", collecterr.CodeOf(redacted), collecterr.ClassOf(redacted))
 			}
 
@@ -142,12 +143,12 @@ func TestRedactErrorKeepsExplicitClassification(t *testing.T) {
 	tests := []struct {
 		name  string
 		err   error
-		code  collecterr.ErrorCode
-		class collecterr.FailureClass
+		code  contract.CollectionErrorCode
+		class contract.FailureClass
 	}{
-		{name: "internal", err: collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, errors.New("invariant key=secret-key")), code: collecterr.Internal, class: collecterr.ClassInternal},
-		{name: "protocol", err: collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, errors.New("bad body key=secret-key")), code: collecterr.Failed, class: collecterr.ClassProtocol},
-		{name: "configuration", err: collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "bad key secret-key"), code: collecterr.Configuration, class: collecterr.ClassConfiguration},
+		{name: "internal", err: collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, errors.New("invariant key=secret-key")), code: contract.ErrorInternalInvariant, class: contract.ClassInternal},
+		{name: "protocol", err: collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassProtocol, errors.New("bad body key=secret-key")), code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+		{name: "configuration", err: collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "bad key secret-key"), code: contract.ErrorConfiguration, class: contract.ClassConfiguration},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

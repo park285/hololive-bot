@@ -130,10 +130,10 @@ func TestSummarizerPreservesCommaInCanonicalMemberNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	input.Candidates, err = filter.FilterCandidates(t.Context(), []model.Candidate{{
+	input.Candidates, err = filter.PrepareCandidates([]model.Candidate{{
 		Title: "Synthetic event", Members: input.RoomMembers, SourceURL: validationMikoURL,
 		EventStartDate: new(input.Now),
-	}}, input.Period, input.Now, input.RoomMembers, nil, validator)
+	}}, input.Period, input.Now).Filter(t.Context(), input.RoomMembers, nil, validator)
 	if err != nil || len(input.Candidates) != 1 || len(input.Candidates[0].MatchedMembers) != 2 {
 		t.Fatalf("unexpected production-filtered candidates: %+v", input.Candidates)
 	}

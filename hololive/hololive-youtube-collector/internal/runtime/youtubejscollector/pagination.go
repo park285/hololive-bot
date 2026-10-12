@@ -11,12 +11,12 @@ const maxResultsPerPage = 10
 
 func PaginationOf(page *youtubejs.Pagination) (contract.Completeness, contract.Continuity, error) {
 	if page == nil {
-		return "", "", collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pagination is nil")
+		return "", "", collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "pagination is nil")
 	}
 
 	completeness, continuity, err := page.Quality()
 	if err != nil {
-		return "", "", collecterr.Wrap(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, err)
+		return "", "", collecterr.Wrap(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, err)
 	}
 
 	return completeness, continuity, nil

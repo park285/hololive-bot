@@ -110,7 +110,7 @@ func projectionSnapshotSubjects(
 
 		total += len(values)
 		if total > maxRows {
-			return nil, collecterr.New(collecterr.TargetRosterTooLarge, collecterr.ClassResourceLimit, "target roster exceeds configured limit")
+			return nil, collecterr.New(contract.ErrorTargetRosterTooLarge, contract.ClassResourceLimit, "target roster exceeds configured limit")
 		}
 
 		subjects[kind] = values
@@ -185,7 +185,7 @@ func invalidSubject(value string) bool {
 }
 
 func snapshotInvariant(message string) error {
-	return collecterr.New(collecterr.Internal, collecterr.ClassInternal, message)
+	return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, message)
 }
 
 func (s TargetSnapshot) Generation() int64 {

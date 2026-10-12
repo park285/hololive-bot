@@ -53,38 +53,39 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
 		tierScheduler := tier.NewTieredScheduler(newCheckerTestLogger())
 
-		_, err := NewYouTubeChecker(nil, &holodexprovider.Service{}, tierScheduler, dedupService, []int{5}, 0, newCheckerTestLogger())
+		_, err := NewYouTubeCheckerWithPersistedLiveSource(nil, &holodexprovider.Service{}, tierScheduler, dedupService, []int{5}, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache service is nil")
 
-		_, err = NewYouTubeChecker(cacheClient, nil, tierScheduler, dedupService, []int{5}, 0, newCheckerTestLogger())
+		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, nil, tierScheduler, dedupService, []int{5}, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "holodex service is nil")
 
-		_, err = NewYouTubeChecker(cacheClient, &holodexprovider.Service{}, nil, dedupService, []int{5}, 0, newCheckerTestLogger())
+		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, &holodexprovider.Service{}, nil, dedupService, []int{5}, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "tier scheduler is nil")
 
-		_, err = NewYouTubeChecker(cacheClient, &holodexprovider.Service{}, tierScheduler, nil, []int{5}, 0, newCheckerTestLogger())
+		_, err = NewYouTubeCheckerWithPersistedLiveSource(cacheClient, &holodexprovider.Service{}, tierScheduler, nil, []int{5}, 0, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dedup service is nil")
 
-		checker, err := NewYouTubeChecker(
+		checker, err := NewYouTubeCheckerWithPersistedLiveSource(
 			cacheClient,
 			&holodexprovider.Service{},
 			tierScheduler,
 			dedupService,
 			[]int{10, 0, 10},
 			0,
-			newCheckerTestLogger(),
-		)
+			nil,
+			nil,
+			newCheckerTestLogger())
 		require.NoError(t, err)
 		require.NotNil(t, checker)
-		assert.Equal(t, []int{10, 1}, checker.targetMinutesSnapshot())
+		assert.Equal(t, []int{10, 1}, checker.targetPolicySnapshot().Clone())
 		assert.Equal(t, 75*time.Second, checker.evaluationWindowCap)
 
 		checker.UpdateTargetMinutes([]int{15, 0, 15, 3})
-		assert.Equal(t, []int{15, 3, 1}, checker.targetMinutesSnapshot())
+		assert.Equal(t, []int{15, 3, 1}, checker.targetPolicySnapshot().Clone())
 	})
 }
 
@@ -826,13 +827,13 @@ func TestYouTubeCheckerUsesDedupEvidenceWhenPgDispatchMissing(t *testing.T) {
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	require.NoError(t, dedupService.MarkAsNotified(ctx, "stream-dedup-evidence", start, 5))
 
-	dispatched, err := checker.recentlyDispatchedOrNotifiedLiveStreamIDs(
+	evidence, err := checker.recentLiveDispatchEvidence(
 		ctx,
 		[]string{"stream-dedup-evidence"},
 		start.Add(-24*time.Hour),
 	)
 	require.NoError(t, err)
-	assert.Contains(t, dispatched, "stream-dedup-evidence")
+	assert.Contains(t, evidence.valkeyNotifiedStreamIDs, "stream-dedup-evidence")
 }
 
 func TestRecentLiveDispatchEvidenceIncludesSentRooms(t *testing.T) {

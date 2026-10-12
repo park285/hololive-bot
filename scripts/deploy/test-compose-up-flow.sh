@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# compose.sh up 경로의 단계 순서와 대상별 preflight를 고정한다. 퇴역 runtime 부재 단언(removed-runtimes.sh)과 그 검사는
-# DEC-20260926-hololive-retired-rollback-tooling에 따라 stack-audit 2026-09-26 T19(holo-removed-runtimes-cleanup-guard)에서
-# 지웠고, 이 파일은 옛 test-removed-runtimes.sh에서 퇴역 runtime과 무관한 up 경로 검사만 옮겼다.
+# compose.sh up의 단계 순서와 대상별 preflight를 검증한다.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 tmpdir="$(mktemp -d)"

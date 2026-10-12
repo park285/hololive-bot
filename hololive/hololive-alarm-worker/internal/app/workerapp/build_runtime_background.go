@@ -21,7 +21,7 @@ func buildCelebrationRunnerScheduler(
 	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
 ) optionalRuntimeSchedulerResult {
-	// 잘못된 스위치 값을 "꺼짐"으로 읽고 넘어가지 않고 기동 오류로 드러낸다(stack audit B4).
+	// 잘못된 스위치 값을 "꺼짐"으로 읽고 넘어가지 않고 기동 오류로 드러낸다.
 	enabled, err := envutil.BoolE("CELEBRATION_RUNNER_ENABLED", false)
 	if err != nil {
 		return optionalRuntimeSchedulerResult{err: fmt.Errorf("celebration runner enabled: %w", err)}

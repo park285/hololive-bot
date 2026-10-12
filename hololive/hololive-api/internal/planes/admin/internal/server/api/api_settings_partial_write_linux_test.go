@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -65,7 +64,7 @@ func testSettingsPartialWrite(t *testing.T) {
 
 	require.NoError(t, err)
 
-	h := &SettingsHandler{Logger: newDiscardLogger(), Activity: testActivityLogger{}, Settings: service, SettingsApplier: sharedsettings.NewLocalSettingsApplier(alarm.NewClient(worker.URL, newDiscardLogger()))}
+	h := &SettingsHandler{Logger: newDiscardLogger(), Activity: testActivityLogger{}, Settings: service, SettingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, worker.URL))}
 
 	var original syscall.Rlimit
 

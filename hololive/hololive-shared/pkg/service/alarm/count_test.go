@@ -22,7 +22,7 @@ func TestCountHTTPRoundTripDoesNotLoadAlarmList(t *testing.T) {
 		server := httptest.NewServer(newTestHandler(t, mock))
 		t.Cleanup(server.Close)
 
-		client := NewClient(server.URL, nil)
+		client := newTestClient(server.URL, "", nil)
 		count, err := client.CountAlarmEntries(t.Context())
 
 		if fail {
@@ -45,7 +45,7 @@ func TestCountClientRejectsMissingNullAndNegativeValues(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
-		_, err := NewClient(server.URL, nil).CountAlarmEntries(t.Context())
+		_, err := newTestClient(server.URL, "", nil).CountAlarmEntries(t.Context())
 		require.Error(t, err)
 	}
 }

@@ -142,8 +142,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 	return result, nil
 }
 
-// PublishDispatchBatch는 envelope을 pending delivery로 저장한다. 비교 전용 shadowed 행을 쓰던 PublishShadowDispatchBatch는
-// v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence).
+// PublishDispatchBatch는 envelope을 pending delivery로 저장한다.
 func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
 

@@ -16,7 +16,6 @@ type DeliveryExecutor interface {
 
 type ClaimResolver interface {
 	selectClaimedDeliveries(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, reuseCache *claimDecisionCache) deliveryClaimSelection
-	releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error
 	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
 }
 

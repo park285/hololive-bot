@@ -23,12 +23,13 @@ const (
 	alarmDispatchRetentionLockKey  = 781512042
 )
 
-// shadowed 행 retention은 v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence, migration 226).
-var alarmDispatchTerminalTimestampColumns = map[dispatchoutbox.Status]string{
-	dispatchoutbox.StatusSent:        "sent_at",
-	dispatchoutbox.StatusDLQ:         "dlq_at",
-	dispatchoutbox.StatusQuarantined: "quarantined_at",
-	dispatchoutbox.StatusCancelled:   "cancelled_at", //nolint:misspell // alarm_dispatch_deliveries의 실제 컬럼명이 영국식 cancelled_at이라 canceled로 바꾸면 쿼리가 깨진다.
+// 종료 상태마다 상태와 보존 시각 열을 상수로 쓴 삭제 SQL을 둔다. 상태를 파라미터로 받으면 generic plan이
+// 상태별 보존 부분 인덱스를 쓰지 못하고 해당 상태 전체를 읽는다.
+var alarmDispatchRetentionDeleteSQL = map[dispatchoutbox.Status]string{
+	dispatchoutbox.StatusSent:        mustSQL("alarm_dispatch_retention_delete_sent.sql"),
+	dispatchoutbox.StatusDLQ:         mustSQL("alarm_dispatch_retention_delete_dlq.sql"),
+	dispatchoutbox.StatusQuarantined: mustSQL("alarm_dispatch_retention_delete_quarantined.sql"),
+	dispatchoutbox.StatusCancelled:   mustSQL("alarm_dispatch_retention_delete_cancelled.sql"), //nolint:misspell // 파일명이 실제 상태값 cancelled를 따른다.
 }
 
 type alarmDispatchMaintenanceStore interface {
@@ -252,11 +253,6 @@ type alarmDispatchRetentionTarget struct {
 	retentionDays int
 }
 
-func alarmDispatchTerminalTimestampColumn(status dispatchoutbox.Status) (string, bool) {
-	column, ok := alarmDispatchTerminalTimestampColumns[status]
-	return column, ok
-}
-
 func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 	ctx context.Context,
 	key int64,
@@ -389,16 +385,14 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 	status dispatchoutbox.Status,
 	retentionDays, limit int,
 ) (int64, error) {
-	column, ok := alarmDispatchTerminalTimestampColumn(status)
+	query, ok := alarmDispatchRetentionDeleteSQL[status]
 	if !ok {
 		return 0, fmt.Errorf("unsupported alarm dispatch retention status: %s", status)
 	}
 
 	// picked CTE는 행을 잠그지 않고 EvalPlanQual 때 다시 계산되지 않습니다. 바깥 DELETE가 status와
 	// 보존 시각을 다시 검사해야 대기 중에 requeue로 commit된 행을 최신 버전 기준으로 건너뜁니다.
-	query := fmt.Sprintf(mustSQL("alarm_dispatch_maintenance_0348_04.sql"), column, column, column)
-
-	tag, err := s.db.Exec(ctx, query, string(status), retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	tag, err := s.db.Exec(ctx, query, retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}

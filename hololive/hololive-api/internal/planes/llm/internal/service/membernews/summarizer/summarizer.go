@@ -58,13 +58,13 @@ var normalizedCategories = map[string]model.Category{
 // ErrLLMUnavailable은 요약 LLM client 없이 Summarize가 호출됐음을 뜻한다.
 // ErrNoValidatedItems는 LLM 출력이 재검증에서 모두 버려졌음을 뜻한다.
 // 요약기는 결정적 digest를 스스로 만들지 않고 이 오류들을 돌려준다. 결정적 fallback digest는 membernews.Service가
-// 한 곳에서 소유한다(stack audit B5).
+// 한 곳에서 소유한다.
 var (
 	ErrLLMUnavailable   = errors.New("member news summarizer LLM unavailable")
 	ErrNoValidatedItems = errors.New("member news summary has no validated items")
 )
 
-// LLMClient는 지시를 계층으로만 받는다(DEC-20260926-stack-llm-instruction-layering-sole-path).
+// LLMClient는 지시를 계층으로만 받는다.
 // 요약·검토·판정 지시는 작업 절차·출력 형식이라 developer 계층이고, 후보·검색 결과는 user 계층이다.
 type LLMClient interface {
 	GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error)

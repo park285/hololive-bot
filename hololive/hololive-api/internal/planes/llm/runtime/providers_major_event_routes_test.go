@@ -42,7 +42,7 @@ func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
 
 	registerMajorEventInternalRoutes(nil, httputil.AdminAuthConfig{Disabled: true}, nil)
 
-	engine, err := buildHealthOnlyRouter(t.Context(), slog.New(slog.DiscardHandler), httputil.AdminAuthConfig{Disabled: true})
+	engine, err := buildTriggerRouter(t.Context(), slog.New(slog.DiscardHandler), nil, "")
 	require.NoError(t, err)
 
 	registerMajorEventInternalRoutes(engine, httputil.AdminAuthConfig{Disabled: true}, nil)
@@ -150,7 +150,7 @@ func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, want strin
 func newMajorEventRouter(t *testing.T, authConfig httputil.AdminAuthConfig, repository *majorevent.Repository) *http.ServeMux {
 	t.Helper()
 
-	engine, err := buildHealthOnlyRouter(t.Context(), slog.New(slog.DiscardHandler), httputil.AdminAuthConfig{Disabled: true})
+	engine, err := buildTriggerRouter(t.Context(), slog.New(slog.DiscardHandler), nil, "")
 	require.NoError(t, err)
 
 	registerMajorEventInternalRoutes(engine, authConfig, repository)

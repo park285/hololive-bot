@@ -28,48 +28,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 )
 
-func TestUnique(t *testing.T) {
-	t.Parallel()
-
-	got := Unique([]int{3, 1, 3, 2, 1, 4, 2})
-	want := []int{3, 1, 2, 4}
-
-	if len(got) != len(want) {
-		t.Fatalf("len(Unique()) = %d, want %d", len(got), len(want))
-	}
-
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("Unique()[%d] = %d, want %d", i, got[i], want[i])
-		}
-	}
-}
-
-func TestFormatKoreanNumber(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name string
-		in   int64
-		want string
-	}{
-		{name: "less than ten-thousand", in: 500, want: "500"},
-		{name: "exact ten-thousand", in: 10000, want: "1만"},
-		{name: "with remainder", in: 12345, want: "1만 2345"},
-		{name: "large exact", in: 250000, want: "25만"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := FormatKoreanNumber(tc.in); got != tc.want {
-				t.Fatalf("FormatKoreanNumber(%d) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestNormalizeSuffix(t *testing.T) {
 	t.Parallel()
 

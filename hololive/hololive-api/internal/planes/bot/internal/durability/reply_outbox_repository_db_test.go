@@ -62,7 +62,7 @@ func replyOutboxRow(ctx context.Context, t *testing.T, pool *pgxpool.Pool, clien
 
 func TestReplyOutboxRepositoryInsert(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	t.Run("payload is immutable for a message phase ordinal key", func(t *testing.T) {
@@ -287,7 +287,7 @@ func assertReplyOutboxRejectsInvalidEntries(ctx context.Context, t *testing.T, r
 
 func TestReplyOutboxRepositoryTransitions(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	entry := newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`)
@@ -425,7 +425,7 @@ func assertReplyOutboxClaimReturnsNoRowOnEmptyOutbox(
 }
 
 func TestReplyOutboxRepositoryWithoutPool(t *testing.T) {
-	repo := NewReplyOutboxRepository(nil)
+	repo := newTestReplyOutboxRepository(nil)
 
 	_, err := repo.Insert(t.Context(), newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`))
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
@@ -460,4 +460,10 @@ func claimOne(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, en
 	require.NotNil(t, claim)
 
 	return claim
+}
+
+// newTestReplyOutboxRepository는 운영 기본 정책(ReplyOutboxMaxAttempts, ReplyOutboxAutomaticReplayHorizon)으로
+// 저장소를 만든다. 두 상수는 NewReplyOutboxRepositoryWithPolicy 검증을 통과하는 값이다.
+func newTestReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
+	return &ReplyOutboxRepository{pool: pool, maxAttempts: ReplyOutboxMaxAttempts, automaticReplayHorizon: ReplyOutboxAutomaticReplayHorizon}
 }

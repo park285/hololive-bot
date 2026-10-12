@@ -21,13 +21,9 @@
 package filter
 
 import (
-	"context"
-	"fmt"
-	"slices"
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -41,34 +37,4 @@ type datedCandidate struct {
 type memberProfile struct {
 	display string
 	tokens  []string
-}
-
-// FilterCandidates는 기간·멤버·출처 조건을 통과한 후보를 돌려준다. 멤버 데이터 조회 실패는 오류다.
-func FilterCandidates(
-	ctx context.Context,
-	candidates []model.Candidate,
-	period model.Period,
-	now time.Time,
-	roomMembers []string,
-	membersData domain.MemberDataProvider,
-	sourceValidator model.SourceURLValidator,
-) ([]model.FilteredCandidate, error) {
-	periodCandidates := applyPeriodFilter(candidates, period, now)
-
-	profiles, err := buildMemberProfiles(ctx, roomMembers, membersData)
-	if err != nil {
-		return nil, fmt.Errorf("build member profiles: %w", err)
-	}
-
-	result := make([]model.FilteredCandidate, 0, len(periodCandidates))
-	for i := range periodCandidates {
-		filtered, ok := buildFilteredCandidate(&periodCandidates[i], profiles, sourceValidator)
-		if ok {
-			result = append(result, filtered)
-		}
-	}
-
-	slices.SortStableFunc(result, compareFilteredCandidate)
-
-	return result, nil
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
@@ -14,12 +15,12 @@ func TestWrapPublishFailurePreservesFailureSemantics(t *testing.T) {
 	tests := []struct {
 		name      string
 		source    error
-		wantCode  collecterr.ErrorCode
-		wantClass collecterr.FailureClass
+		wantCode  contract.CollectionErrorCode
+		wantClass contract.FailureClass
 	}{
-		{name: "invalid envelope", source: sourceobservation.ErrInvalidEnvelope, wantCode: collecterr.Internal, wantClass: collecterr.ClassInternal},
-		{name: "stale contract", source: sourceobservation.ErrStaleContract, wantCode: collecterr.PublishRejected, wantClass: collecterr.ClassProtocol},
-		{name: "database failure", source: errors.New("database unavailable"), wantCode: collecterr.PublishRejected, wantClass: collecterr.ClassTransient},
+		{name: "invalid envelope", source: sourceobservation.ErrInvalidEnvelope, wantCode: contract.ErrorInternalInvariant, wantClass: contract.ClassInternal},
+		{name: "stale contract", source: sourceobservation.ErrStaleContract, wantCode: contract.ErrorPublishRejected, wantClass: contract.ClassProtocol},
+		{name: "database failure", source: errors.New("database unavailable"), wantCode: contract.ErrorPublishRejected, wantClass: contract.ClassTransient},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

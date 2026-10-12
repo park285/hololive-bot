@@ -66,7 +66,7 @@ func (t fixedResponseTransport) RoundTrip(*http.Request) (*http.Response, error)
 }
 
 func TestClientDoRequestNilResponse(t *testing.T) {
-	client := NewClient("https://alarm.example", nil)
+	client := newTestClient("https://alarm.example", "", nil)
 
 	client.httpClient.Transport = nilResponseTransport{}
 
@@ -85,7 +85,7 @@ func TestClientDoRequestNilResponse(t *testing.T) {
 
 func TestClientDoRequestClosesRejectedResponse(t *testing.T) {
 	body := &trackingBody{}
-	client := NewClient("https://alarm.example", nil)
+	client := newTestClient("https://alarm.example", "", nil)
 
 	client.httpClient.Transport = fixedResponseTransport{response: &http.Response{
 		StatusCode: http.StatusInternalServerError,
@@ -102,7 +102,7 @@ func TestClientDoRequestClosesRejectedResponse(t *testing.T) {
 }
 
 func TestClientRejectsNilAddRequest(t *testing.T) {
-	client := NewClient("https://alarm.example", nil)
+	client := newTestClient("https://alarm.example", "", nil)
 	added, err := client.AddAlarm(t.Context(), nil)
 	require.Error(t, err)
 	assert.False(t, added)
@@ -164,7 +164,7 @@ func TestClientRoundTripWithRealHandlerEnvelope(t *testing.T) {
 	server := httptest.NewServer(newTestHandler(t, newRoundTripAlarmMock(t)))
 	t.Cleanup(server.Close)
 
-	client := NewClient(server.URL, nil)
+	client := newTestClient(server.URL, "", nil)
 
 	added, err := client.AddAlarm(t.Context(), &domain.AddAlarmRequest{RoomID: testRoomID, ChannelID: testClientChannelID})
 	require.NoError(t, err)
@@ -213,7 +213,7 @@ func TestClientRejectsUnsuccessfulEnvelope(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewClient(server.URL, nil)
+	client := newTestClient(server.URL, "", nil)
 	_, err := client.AddAlarm(t.Context(), &domain.AddAlarmRequest{RoomID: testRoomID, ChannelID: testClientChannelID})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "add failed")
@@ -227,7 +227,7 @@ func TestClientSendsAPIKeyHeader(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewClientWithAPIKey(server.URL, "secret-key", nil)
+	client := newTestClient(server.URL, "secret-key", nil)
 	added, err := client.AddAlarm(t.Context(), &domain.AddAlarmRequest{RoomID: testRoomID, ChannelID: testClientChannelID})
 	require.NoError(t, err)
 	assert.True(t, added)
@@ -249,7 +249,7 @@ func TestClientPutNoDataIgnoresDataAndSurfacesEnvelopeFailure(t *testing.T) {
 		assert.NoError(t, jsonv2.MarshalWrite(w, APIResponse{Success: true, Data: map[string]string{"ignored": "value"}}))
 	}))
 	t.Cleanup(ok.Close)
-	require.NoError(t, NewClient(ok.URL, nil).SetRoomName(t.Context(), testRoomID, "Room One"))
+	require.NoError(t, newTestClient(ok.URL, "", nil).SetRoomName(t.Context(), testRoomID, "Room One"))
 
 	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -257,7 +257,7 @@ func TestClientPutNoDataIgnoresDataAndSurfacesEnvelopeFailure(t *testing.T) {
 	}))
 	t.Cleanup(failing.Close)
 
-	err := NewClient(failing.URL, nil).SetRoomName(t.Context(), testRoomID, "Room One")
+	err := newTestClient(failing.URL, "", nil).SetRoomName(t.Context(), testRoomID, "Room One")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rename failed")
 }

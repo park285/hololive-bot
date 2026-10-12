@@ -12,7 +12,7 @@ import (
 	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
-// DEC-20260926-hololive-source-fallbacks-retirement: /api/holo rate limit 판정 실패는 요청을 통과시키지 않는다.
+// /api/holo rate limit 판정 실패는 요청을 통과시키지 않는다.
 func TestAPIRateLimitHandlerFailsClosedOnCheckError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

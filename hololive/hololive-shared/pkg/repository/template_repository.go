@@ -97,35 +97,6 @@ func (r *TemplateRepository) FindByKeyAndChannel(ctx context.Context, key domain
 	return tmpl, true, nil
 }
 
-// Upsert는 default(ux_notification_templates_default)와
-// override(ux_notification_templates_channel) 부분 유니크 인덱스를 각각 arbiter로
-// 쓴다. 하나의 INSERT는 인덱스 하나만 추론할 수 있어 변형이 둘로 나뉜다.
-func (r *TemplateRepository) Upsert(ctx context.Context, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
-	tmpl, _, err := upsertTemplateRow(ctx, r.pool, key, channelID, body)
-	if err != nil {
-		return nil, fmt.Errorf("upsert template row: %w", err)
-	}
-
-	return tmpl, nil
-}
-
-// UpsertWithPreviousBody는 PostgreSQL 18 RETURNING OLD/NEW로 실제 덮어쓴 본문을
-// 같은 UPSERT 결과에서 돌려준다. 호출자는 별도 선행 SELECT 없이 정확한 revision을
-// 만들 수 있다.
-func (r *TemplateRepository) UpsertWithPreviousBody(
-	ctx context.Context,
-	key domain.TemplateKey,
-	channelID *string,
-	body string,
-) (*domain.NotificationTemplate, *string, error) {
-	out1, out2, err := upsertTemplateRow(ctx, r.pool, key, channelID, body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("upsert template row: %w", err)
-	}
-
-	return out1, out2, nil
-}
-
 // UpsertWithRevision은 본문 교체와 직전 본문 revision 기록, 보존 개수 정리를 한
 // 트랜잭션에 묶는다. UPSERT가 잡은 템플릿 행 잠금이 커밋까지 유지되므로 동시 저장이
 // 서로의 revision 사이에 끼어들지 못한다.
@@ -195,6 +166,9 @@ type rowQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+// upsertTemplateRow는 default(ux_notification_templates_default)와 override(ux_notification_templates_channel)
+// 부분 유니크 인덱스를 각각 arbiter로 쓴다. 하나의 INSERT는 인덱스 하나만 추론할 수 있어 변형이 둘로 나뉜다.
+// PostgreSQL 18 RETURNING OLD/NEW로 실제 덮어쓴 본문을 같은 결과에서 돌려준다.
 func upsertTemplateRow(
 	ctx context.Context,
 	q rowQuerier,
@@ -286,18 +260,6 @@ func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKe
 	return defaultTmpl, overrides, nil
 }
 
-func (r *TemplateRepository) CreateRevision(ctx context.Context, templateID int64, body string) error {
-	if _, err := r.pool.Exec(ctx,
-		revisionInsertSQL,
-		templateID,
-		body,
-	); err != nil {
-		return fmt.Errorf("create revision: %w", err)
-	}
-
-	return nil
-}
-
 func (r *TemplateRepository) GetRevisions(ctx context.Context, templateID int64, limit int) ([]*domain.NotificationTemplateRevision, error) {
 	var revisions []*domain.NotificationTemplateRevision
 
@@ -329,20 +291,4 @@ func (r *TemplateRepository) GetRevisionByID(ctx context.Context, id int64) (dom
 	}
 
 	return revision, true, nil
-}
-
-func (r *TemplateRepository) PruneOldRevisions(ctx context.Context, templateID int64, keepCount int) error {
-	if keepCount <= 0 {
-		return nil
-	}
-
-	if _, err := r.pool.Exec(ctx,
-		revisionPruneSQL,
-		templateID,
-		keepCount,
-	); err != nil {
-		return fmt.Errorf("prune revisions: %w", err)
-	}
-
-	return nil
 }

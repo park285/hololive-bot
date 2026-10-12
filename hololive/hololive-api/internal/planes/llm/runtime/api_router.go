@@ -28,25 +28,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	"github.com/kapu/hololive-api/internal/readiness"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
-
-func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, authConfig httputil.AdminAuthConfig) (*gin.Engine, error) {
-	out, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
-		APIKey:             authConfig.APIKey,
-		DisableMetricsAuth: authConfig.Disabled,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("runtime router: %w", err)
-	}
-
-	return out, nil
-}
 
 func buildTriggerRouter(
 	ctx context.Context,

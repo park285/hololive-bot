@@ -76,7 +76,7 @@ func TestExpectedProjectionChurnUsesSupersededAttemptAndPublishMetrics(t *testin
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", sourceErr))
+			err := collecterr.Wrap(contract.ErrorPublishRejected, contract.ClassTransient, fmt.Errorf("publish fence: %w", sourceErr))
 			if got := attemptResult(err); got != resultSuperseded {
 				t.Fatalf("attemptResult() = %q, want %q", got, resultSuperseded)
 			}
@@ -129,7 +129,7 @@ func TestExpectedProjectionChurnUsesSupersededAttemptAndPublishMetrics(t *testin
 func TestUnknownPublishErrorRemainsFailedAndRejected(t *testing.T) {
 	t.Parallel()
 
-	err := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, errors.New("database unavailable"))
+	err := collecterr.Wrap(contract.ErrorPublishRejected, contract.ClassTransient, errors.New("database unavailable"))
 	if got := attemptResult(err); got != resultFailed {
 		t.Fatalf("attemptResult() = %q, want %q", got, resultFailed)
 	}
@@ -221,10 +221,10 @@ func TestAttemptFailureResultMapsCanonicalCodes(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "timeout", err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "timeout"), want: resultTimeout},
-		{name: "canceled", err: collecterr.New(collecterr.Canceled, collecterr.ClassCanceled, "canceled"), want: resultCanceled},
-		{name: "parser drift", err: collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "drift"), want: resultParserDrift},
-		{name: "failed", err: collecterr.New(collecterr.Failed, collecterr.ClassTransient, "failed"), want: resultFailed},
+		{name: "timeout", err: collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "timeout"), want: resultTimeout},
+		{name: "canceled", err: collecterr.New(contract.ErrorCollectionCanceled, contract.ClassCanceled, "canceled"), want: resultCanceled},
+		{name: "parser drift", err: collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "drift"), want: resultParserDrift},
+		{name: "failed", err: collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "failed"), want: resultFailed},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -244,7 +244,7 @@ func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
 
 	scheduler := &leaseScheduler{executor: &collectionExecutor{logger: slog.New(slog.NewJSONHandler(&output, nil))}}
 	spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
-	scheduler.executor.logFailure(t.Context(), "collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
+	scheduler.executor.logFailure(t.Context(), "collect", string(contract.ErrorCollectionFailed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
 
 	if strings.Contains(output.String(), "secret-value") {
 		t.Fatalf("structured log leaked diagnostic credential: %s", output.String())
@@ -359,8 +359,8 @@ type handleRunErrorCase struct {
 	name      string
 	err       error
 	wantFatal bool
-	wantCode  collecterr.ErrorCode
-	wantClass collecterr.FailureClass
+	wantCode  contract.CollectionErrorCode
+	wantClass contract.FailureClass
 }
 
 func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
@@ -418,72 +418,72 @@ func TestHandleRunErrorPromotesOnlyClassifiedFatalErrors(t *testing.T) {
 			name:      "unclassified database failure",
 			err:       errors.New("acquire connection: connection reset by peer"),
 			wantFatal: false,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			name:      "unclassified deadlock",
 			err:       fmt.Errorf("load target snapshot: %w", errors.New("SQLSTATE 40P01 deadlock detected")),
 			wantFatal: false,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			name:      "unclassified maintenance page body",
 			err:       fmt.Errorf("decode response: %w", errors.New("invalid character '<' looking for beginning of value")),
 			wantFatal: false,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			name:      "helper read deadline through FromContext",
 			err:       collecterr.FromContext(fmt.Errorf("read youtube.js helper: %w", os.ErrDeadlineExceeded)),
 			wantFatal: false,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			name:      "provider body read failure through FromContext",
 			err:       collecterr.FromContext(fmt.Errorf("read holodex: %w", syscall.ECONNREFUSED)),
 			wantFatal: false,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			name:      "classified transient failure",
-			err:       collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, errors.New("upstream unavailable")),
+			err:       collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, errors.New("upstream unavailable")),
 			wantFatal: false,
-			wantCode:  collecterr.Failed,
-			wantClass: collecterr.ClassTransient,
+			wantCode:  contract.ErrorCollectionFailed,
+			wantClass: contract.ClassTransient,
 		},
 		{
 			name:      "classified internal invariant",
-			err:       collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure is missing"),
+			err:       collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial result failure is missing"),
 			wantFatal: true,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			name:      "wrapped classified internal invariant",
-			err:       fmt.Errorf("collect and publish: %w", collecterr.New(collecterr.Internal, collecterr.ClassInternal, "invariant violated")),
+			err:       fmt.Errorf("collect and publish: %w", collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "invariant violated")),
 			wantFatal: true,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			// 계약 밖 tuple은 호출 코드 결함이지만 기본 class로 수리하지 않고 미분류 Internal로 닫아 지연 처리한다.
 			name:      "invalid failure tuple from caller",
-			err:       collecterr.New(collecterr.Failed, collecterr.ClassTimeout, "impossible tuple"),
+			err:       collecterr.New(contract.ErrorCollectionFailed, contract.ClassTimeout, "impossible tuple"),
 			wantFatal: false,
-			wantCode:  collecterr.Internal,
-			wantClass: collecterr.ClassInternal,
+			wantCode:  contract.ErrorInternalInvariant,
+			wantClass: contract.ClassInternal,
 		},
 		{
 			name:      "classified helper protocol mismatch",
-			err:       collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "helper protocol mismatch"),
+			err:       collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "helper protocol mismatch"),
 			wantFatal: true,
-			wantCode:  collecterr.HelperProtocolMismatch,
-			wantClass: collecterr.ClassProtocol,
+			wantCode:  contract.ErrorHelperProtocolMismatch,
+			wantClass: contract.ClassProtocol,
 		},
 	}
 	for _, test := range tests {
@@ -524,7 +524,7 @@ func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing
 		{
 			name:          "renew failure joined with classified internal invariant",
 			outcome:       joblease.LeaseRunReleasedAfterRenewFailure,
-			err:           fmt.Errorf("run collection job: renew lease: %w", errors.Join(context.DeadlineExceeded, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "invariant violated"))),
+			err:           fmt.Errorf("run collection job: renew lease: %w", errors.Join(context.DeadlineExceeded, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "invariant violated"))),
 			wantFatal:     true,
 			wantRenewLost: 1,
 		},
@@ -570,7 +570,7 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 		{name: "database error", releaseErr: errors.New("release lease: connection reset by peer")},
 		{name: "timeout", releaseErr: fmt.Errorf("release lease: %w", context.DeadlineExceeded)},
 		{name: "fence lost", releaseErr: collection.ErrFenceLost},
-		{name: "classified internal invariant", releaseErr: collecterr.New(collecterr.Internal, collecterr.ClassInternal, "invariant violated"), wantFatal: true},
+		{name: "classified internal invariant", releaseErr: collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "invariant violated"), wantFatal: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -581,7 +581,7 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 			executor := newRunErrorExecutor(&fatal)
 			lease := &supersededLease{releaseErr: test.releaseErr}
 			spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
-			runErr := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", collection.ErrProjectionStale))
+			runErr := collecterr.Wrap(contract.ErrorPublishRejected, contract.ClassTransient, fmt.Errorf("publish fence: %w", collection.ErrProjectionStale))
 
 			executor.handleRunError(t.Context(), lease, spec, &contract.LeaseProof{}, runErr)
 
@@ -645,7 +645,7 @@ func TestProviderAdmissionPreservesConfiguration(t *testing.T) {
 
 	_, err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
 
-	if collecterr.CodeOf(err) != collecterr.Configuration || collecterr.IsUnclassified(err) {
+	if collecterr.CodeOf(err) != contract.ErrorConfiguration || collecterr.IsUnclassified(err) {
 		t.Fatalf("missing gate = %v (%s), want classified configuration before runner access", err, collecterr.CodeOf(err))
 	}
 
@@ -660,7 +660,7 @@ func TestSupervisionRetainsFatalCallbackAfterCancellation(t *testing.T) {
 			var fatal []error
 
 			executor := newRunErrorExecutor(&fatal)
-			cause := collecterr.New(collecterr.Internal, collecterr.ClassInternal, "callback invariant")
+			cause := collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "callback invariant")
 			err := errors.Join(context.Canceled, collection.ErrFenceLost, cause)
 
 			if !executor.handleLeaseRunOutcome(t.Context(), joblease.LeaseRunResult{Outcome: outcome, Err: err}, &joblease.JobSpec{}, &contract.LeaseProof{}) {
@@ -673,8 +673,8 @@ func TestSupervisionRetainsFatalCallbackAfterCancellation(t *testing.T) {
 }
 
 func TestFatalCollectionErrorInspectsAllJoinedCauses(t *testing.T) {
-	cause := collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "callback protocol")
-	transient := collecterr.New(collecterr.Failed, collecterr.ClassTransient, "release failure")
+	cause := collecterr.New(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, "callback protocol")
+	transient := collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "release failure")
 
 	for _, err := range []error{errors.Join(transient, cause), errors.Join(cause, transient), fmt.Errorf("supervision: %w", errors.Join(transient, cause))} {
 		if !fatalCollectionError(err) {

@@ -43,16 +43,6 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	return testutil.NewTestCacheServiceWithMini(t.Context(), t)
 }
 
-// retiredRedisDispatchQueueKey는 퇴역한 Redis dispatch queue 키다. 상수는 지웠고(stack-audit 2026-09-26 T11), 발행 경로가
-// 그 키에 다시 쓰지 않는지만 확인한다.
-const retiredRedisDispatchQueueKey = "alarm:dispatch:queue"
-
-func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
-	t.Helper()
-
-	return queueItemsByKeyOrEmpty(t, mini, retiredRedisDispatchQueueKey)
-}
-
 func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string) []string {
 	t.Helper()
 
@@ -69,7 +59,7 @@ func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string)
 }
 
 func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
-	cacheClient, mini := newTestCacheClient(t)
+	cacheClient, _ := newTestCacheClient(t)
 	repository := &fakeOutboxRepository{}
 	publisher := NewPublisher(cacheClient, sharedlogging.NewTestLogger(),
 		WithOutbox(repository),
@@ -86,8 +76,6 @@ func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 
 	_, err := publisher.Publish(t.Context(), notification, claimKeys)
 	require.NoError(t, err)
-
-	assert.Empty(t, queueItemsOrEmpty(t, mini))
 	require.Equal(t, 1, repository.insertBatchCalls)
 	require.Len(t, repository.lastBatchInput.Envelopes, 1)
 
@@ -150,8 +138,6 @@ func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *tes
 	assert.Equal(t, 1, result.RequestedDeliveries)
 }
 
-// 발행자는 버전이 없는 envelope을 V1으로 채우지 않는다. 모든 생산자가 버전을 명시하므로 0은 검증 오류다
-// (stack-audit 2026-09-26 T11 holo-alarm-publisher-version-zero-default).
 func TestPublisherPublishDispatchBatchRejectsMissingEnvelopeVersion(t *testing.T) {
 	t.Parallel()
 

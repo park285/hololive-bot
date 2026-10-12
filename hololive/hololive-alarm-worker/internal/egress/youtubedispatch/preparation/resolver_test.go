@@ -170,20 +170,6 @@ func TestMultipleSendingRowsIsBreach(t *testing.T) {
 	require.Equal(t, InvariantMultipleSending, result[0].InvariantReason())
 }
 
-func TestProceedCacheHitStillResolvesLogicalGroup(t *testing.T) {
-	t.Parallel()
-
-	row := testDelivery(t, 1, lifecycle.StatusPending, resolverTestNow, true)
-	key := mustKey(t, row)
-	coordinator := NewCoordinator(testResolver(t, 10))
-	result := coordinator.ResolveForPreparation(PrepareBatchInput{
-		Rows: []DeliverySnapshot{row}, Ledger: []LedgerEvidence{{Key: key, Status: lifecycle.LedgerQuarantined}},
-		At: resolverTestNow, ProceedCacheHit: true,
-	})
-	require.Equal(t, LogicalUnresolved, result[0].Kind())
-	require.False(t, result[0].ProviderAllowed())
-}
-
 func TestLogicalGroupOverflowFailsClosed(t *testing.T) {
 	t.Parallel()
 

@@ -64,7 +64,7 @@ func seedTerminalInboxAndCommand(ctx context.Context, t *testing.T, pool *pgxpoo
 func seedTerminalAndManualReviewOutbox(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
-	outbox := NewReplyOutboxRepository(pool)
+	outbox := newTestReplyOutboxRepository(pool)
 
 	entry := newReplyOutboxEntry("message:retention-reply", 0, `{"kind":"text","message":"answer"}`)
 	claimReply := claimOne(ctx, t, outbox, entry)

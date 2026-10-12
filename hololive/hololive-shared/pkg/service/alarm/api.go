@@ -88,13 +88,6 @@ func NewHandler(alarm AlarmHTTPService, logger *slog.Logger) *Handler {
 	}
 }
 
-func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
-	h.RegisterInternalRoutes(rg)
-
-	rg.GET("/health", h.Health)
-	rg.GET("/ready", h.Ready)
-}
-
 func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal := rg.Group(contractsalarm.BasePath)
 	internal.POST(contractsalarm.AddRoute, h.AddAlarm)
@@ -330,12 +323,4 @@ func (h *Handler) GetAllAlarmKeys(c *gin.Context) {
 	}
 
 	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: keys})
-}
-
-func (h *Handler) Health(c *gin.Context) {
-	ginjson.Respond(c, http.StatusOK, gin.H{"status": "ok"})
-}
-
-func (h *Handler) Ready(c *gin.Context) {
-	ginjson.Respond(c, http.StatusOK, gin.H{"status": "ready"})
 }

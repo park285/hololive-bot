@@ -50,7 +50,7 @@ func TestParseReadsValidValues(t *testing.T) {
 	assert.Equal(t, 0, hour)
 }
 
-// 잘못된 값은 기본값으로 바뀌지 않고 key를 담은 오류가 된다(holo-alarm-worker-envconfig-silent-defaults).
+// 잘못된 값은 기본값으로 바뀌지 않고 key를 담은 오류가 된다.
 func TestParseRejectsInvalidValues(t *testing.T) {
 	parsers := map[string]func() error{
 		"positive int": func() error {

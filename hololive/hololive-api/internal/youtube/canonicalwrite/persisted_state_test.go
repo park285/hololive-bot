@@ -304,7 +304,7 @@ func duplicatePollShortCase() duplicatePollClaimCase {
 		seed: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt, authorizedAt time.Time) {
 			t.Helper()
 
-			// 운영의 NEW_SHORT 행은 모두 canonical content_id다(T18 2026-09-26 raw 형식 0건).
+			// NEW_SHORT 행은 canonical content_id로 저장된다.
 			seedOutbox(t, pool, &domain.YouTubeNotificationOutbox{
 				Kind:          domain.OutboxKindNewShort,
 				ChannelID:     testChannelID,

@@ -30,54 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestGroupAlarmDispatchEnvelopesByRegularKey(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name      string
-		envelopes []domain.AlarmQueueEnvelope
-		want      []alarmDispatchGroupSummary
-	}{
-		{
-			name: "empty input",
-			want: []alarmDispatchGroupSummary{},
-		},
-		{
-			name: "single envelope",
-			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 5),
-			},
-			want: []alarmDispatchGroupSummary{
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-			},
-		},
-		{
-			name: "multiple envelopes grouped by key",
-			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 10),
-				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 10),
-				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 5),
-				alarmDispatchGroupTestEnvelope("room-2", domain.AlarmTypeLive, 10),
-			},
-			want: []alarmDispatchGroupSummary{
-				{roomID: testAlarmRoomID, minutesUntil: 10, envelopeCount: 2, notificationCount: 2},
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-				{roomID: "room-2", minutesUntil: 10, envelopeCount: 1, notificationCount: 1},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			groups := groupAlarmDispatchEnvelopesByKey(tc.envelopes, alarmDispatchGroupKey)
-
-			assert.Equal(t, tc.want, summarizeAlarmDispatchGroups(groups))
-		})
-	}
-}
-
 func TestGroupAlarmDispatchEnvelopesForDelivery(t *testing.T) {
 	t.Parallel()
 
@@ -130,7 +82,7 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 
 	start := time.Date(2026, time.May, 14, 10, 0, 30, 0, time.FixedZone("KST", 9*60*60))
 	minuteBucket := start.UTC().Unix() / 60
-	youtubeOutbox := alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeShorts, 0)
+	youtubeOutbox := alarmDispatchGroupTestEnvelope(domain.AlarmTypeShorts, 0)
 
 	youtubeOutbox.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	youtubeOutbox.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
@@ -160,7 +112,7 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 		},
 		{
 			name:     "fallback to minutes",
-			envelope: alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 15),
+			envelope: alarmDispatchGroupTestEnvelope(domain.AlarmTypeLive, 15),
 			want:     "room-1|minutes|15",
 		},
 	}
@@ -219,8 +171,8 @@ func summarizeAlarmDispatchGroups(groups []alarmDispatchGroup) []alarmDispatchGr
 	return summaries
 }
 
-func alarmDispatchGroupTestEnvelope(roomID string, alarmType domain.AlarmType, minutesUntil int) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchRunnerTestEnvelope(roomID, nil)
+func alarmDispatchGroupTestEnvelope(alarmType domain.AlarmType, minutesUntil int) domain.AlarmQueueEnvelope {
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 	envelope.Notification.AlarmType = alarmType
 	envelope.Notification.MinutesUntil = minutesUntil
@@ -233,7 +185,7 @@ func alarmDispatchGroupTestScheduledEnvelope(
 	minutesUntil int,
 	start time.Time,
 ) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchGroupTestEnvelope(testAlarmRoomID, alarmType, minutesUntil)
+	envelope := alarmDispatchGroupTestEnvelope(alarmType, minutesUntil)
 
 	envelope.Notification.Stream.StartScheduled = &start
 
@@ -245,7 +197,7 @@ func alarmDispatchGroupTestStartedEnvelope(
 	minutesUntil int,
 	start time.Time,
 ) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchGroupTestEnvelope(testAlarmRoomID, alarmType, minutesUntil)
+	envelope := alarmDispatchGroupTestEnvelope(alarmType, minutesUntil)
 
 	envelope.Notification.Stream.StartActual = &start
 

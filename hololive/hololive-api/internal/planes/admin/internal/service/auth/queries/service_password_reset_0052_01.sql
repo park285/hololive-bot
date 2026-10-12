@@ -1,1 +1,0 @@
-DELETE FROM auth_password_reset_tokens WHERE user_id = $1 AND used_at IS NULL

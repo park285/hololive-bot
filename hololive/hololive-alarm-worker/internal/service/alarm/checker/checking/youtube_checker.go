@@ -75,34 +75,6 @@ type YouTubeChecker struct {
 	logger              *slog.Logger
 }
 
-// NewYouTubeChecker는 YouTube 체커를 생성한다.
-func NewYouTubeChecker(
-	cacheClient cache.Client,
-	holodexService *holodexprovider.Service,
-	tierScheduler *tier.TieredScheduler,
-	dedupService *dedup.Service,
-	targetMinutes []int,
-	evaluationWindowCap time.Duration,
-	logger *slog.Logger,
-) (*YouTubeChecker, error) {
-	out, err := NewYouTubeCheckerWithPersistedLiveSource(
-		cacheClient,
-		holodexService,
-		tierScheduler,
-		dedupService,
-		targetMinutes,
-		evaluationWindowCap,
-		nil,
-		nil,
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("youtube checker with persisted live source: %w", err)
-	}
-
-	return out, nil
-}
-
 // NewYouTubeCheckerWithPersistedLiveSource는 저장된 방송 근거와 구독 DB를 사용하는 체커를 생성한다.
 // 구독 DB인 subscriptionDB가 없으면 UNIT B 멤버별 대상 선정과 구독 cache가 비어 있는 채널의 구독 확정은 오류로 처리한다.
 func NewYouTubeCheckerWithPersistedLiveSource(
@@ -315,10 +287,6 @@ func (c *YouTubeChecker) prepareYouTubeChannelWork(
 		subscriberRooms: subscriberRooms,
 		window:          targetpolicy.ResolveEvaluationWindow(prevCheckedAt, now, c.evaluationWindowCap),
 	}, true
-}
-
-func (c *YouTubeChecker) targetMinutesSnapshot() []int {
-	return c.targetPolicySnapshot().Clone()
 }
 
 func (c *YouTubeChecker) targetPolicySnapshot() targetpolicy.TargetMinutePolicy {

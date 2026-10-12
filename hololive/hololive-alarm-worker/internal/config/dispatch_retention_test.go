@@ -78,7 +78,7 @@ func TestLoadAlarmDispatchRetentionConfigRejectsInvalidValues(t *testing.T) {
 	}
 }
 
-// bool 스위치도 잘못된 값을 기본값(true)으로 바꾸지 않고 오류로 드러낸다(stack audit B4).
+// bool 스위치도 잘못된 값을 기본값(true)으로 바꾸지 않고 오류로 드러낸다.
 func TestLoadAlarmDispatchRetentionConfigRejectsInvalidEnabled(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_RETENTION_ENABLED", "maybe")
 

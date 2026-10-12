@@ -50,15 +50,6 @@ func NewTargetMinutePolicyFromConfigured(targetMinutes []int) TargetMinutePolicy
 	return TargetMinutePolicy{targetMinutes: slices.Clone(normalized)}
 }
 
-// NewTargetMinutePolicyFromPersisted는 저장된 명시 값을 보존하고, 값이 없을 때만 runtime 기본값을 만든다.
-func NewTargetMinutePolicyFromPersisted(alarmAdvanceMinutes int, targetMinutes []int) TargetMinutePolicy {
-	if len(targetMinutes) == 0 {
-		return NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes)
-	}
-
-	return NewTargetMinutePolicy(targetMinutes)
-}
-
 func (p TargetMinutePolicy) Clone() []int {
 	if len(p.targetMinutes) == 0 {
 		return cloneDefaultTargetMinutes()

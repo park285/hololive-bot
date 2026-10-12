@@ -67,23 +67,6 @@ func joinIndexCleanupError(ctx context.Context, conn *pgxpool.Conn, targets []co
 	return execErr
 }
 
-func concurrentIndexNames(content string) []string {
-	targets, _ := concurrentIndexTargets(content)
-	names := make([]string, 0, len(targets))
-	seen := make(map[string]struct{}, len(targets))
-
-	for _, target := range targets {
-		if _, exists := seen[target.indexName]; exists {
-			continue
-		}
-
-		seen[target.indexName] = struct{}{}
-		names = append(names, target.indexName)
-	}
-
-	return names
-}
-
 func concurrentIndexTargets(content string) ([]concurrentIndexTarget, bool) {
 	statements := sqlsplit.Statements(content)
 	targets := make([]concurrentIndexTarget, 0, len(statements))

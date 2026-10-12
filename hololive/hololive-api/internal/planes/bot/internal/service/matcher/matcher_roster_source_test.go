@@ -11,8 +11,8 @@ import (
 
 const rosterTestMemberName = "Hoshimachi Suisei"
 
-// DEC-20260926-hololive-source-fallbacks-retirement: 부분 일치 결과의 채널명은 roster 정본에서 나온다. Holodex 조회나
-// Valkey 알림 멤버명 캐시(HGet)로 채우는 폴백 체인을 거치지 않는다. HGetFunc를 두지 않아 호출되면 mock이 실패한다.
+// 부분 일치 결과의 채널명은 roster 정본에서 나온다. Holodex 조회나 Valkey 알림 멤버명 캐시(HGet)로 채우는 폴백
+// 체인을 거치지 않는다. HGetFunc를 두지 않아 호출되면 mock이 실패한다.
 func TestFindBestMatchUsesRosterNameWithoutCachedNameFallback(t *testing.T) {
 	t.Parallel()
 

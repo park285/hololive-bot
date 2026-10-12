@@ -5,8 +5,6 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"golang.org/x/crypto/bcrypt"
-
-	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func storedPasswordHash(t *testing.T, service *Service) string {
@@ -66,45 +64,5 @@ func TestRegister_UsesConfiguredBcryptCost(t *testing.T) {
 	// 해시/검증 일관성: 동일 비밀번호가 검증을 통과해야 한다.
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("Password1")); err != nil {
 		t.Fatalf("password verification failed: %v", err)
-	}
-}
-
-// ResetPassword도 config.BcryptCost로 새 비밀번호를 해시해야 한다.
-func TestResetPassword_UsesConfiguredBcryptCost(t *testing.T) {
-	t.Parallel()
-
-	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t.Context(), t)
-	cfg := DefaultConfig()
-
-	cfg.BcryptCost = 13
-
-	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), cfg)
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	if _, registerErr2 := service.Register(t.Context(), "user@example.com", "Password1", "User"); registerErr2 != nil {
-		t.Fatalf("register failed: %v", registerErr2)
-	}
-
-	resetToken, err := service.RequestPasswordReset(t.Context(), "user@example.com", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("reset request failed: %v", err)
-	}
-
-	if resetErr := service.ResetPassword(t.Context(), resetToken, "NewPassw0rd1"); resetErr != nil {
-		t.Fatalf("reset failed: %v", resetErr)
-	}
-
-	hash := storedPasswordHash(t, service)
-
-	cost, err := bcrypt.Cost([]byte(hash))
-	if err != nil {
-		t.Fatalf("bcrypt.Cost: %v", err)
-	}
-
-	if cost != 13 {
-		t.Fatalf("reset hash cost = %d, want 13", cost)
 	}
 }

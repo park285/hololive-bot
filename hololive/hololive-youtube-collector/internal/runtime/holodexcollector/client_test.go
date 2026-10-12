@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp"
 )
@@ -27,7 +28,7 @@ func TestClientRespectsRetryAfter(t *testing.T) {
 	client := holodexTestClient(t, server, "key")
 	_, err := client.Fetch(t.Context())
 
-	if collecterr.CodeOf(err) != collecterr.Cooldown {
+	if collecterr.CodeOf(err) != contract.ErrorCooldown {
 		t.Fatalf("error = %v", err)
 	}
 
@@ -143,7 +144,7 @@ func TestHTTP006HolodexRedirectDoesNotForwardAPIKey(t *testing.T) {
 	client := holodexTestClient(t, first, "test-key")
 	_, err := client.Fetch(t.Context())
 
-	if collecterr.ClassOf(err) != collecterr.ClassProtocol {
+	if collecterr.ClassOf(err) != contract.ClassProtocol {
 		t.Fatalf("redirect = %v", err)
 	}
 
@@ -166,7 +167,7 @@ func TestHTTP007HolodexUnauthorizedIsConfiguration(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	_, err := holodexTestClient(t, server, "key").Fetch(t.Context())
-	if collecterr.CodeOf(err) != collecterr.Configuration || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+	if collecterr.CodeOf(err) != contract.ErrorConfiguration || collecterr.ClassOf(err) != contract.ClassConfiguration {
 		t.Fatalf("401 = %v", err)
 	}
 }
@@ -191,7 +192,7 @@ func TestHTTP009HolodexGzipBombHitsDecompressedCap(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	_, err := holodexTestClient(t, server, "key").Fetch(t.Context())
-	if collecterr.CodeOf(err) != collecterr.ResponseTooLarge || collecterr.ClassOf(err) != collecterr.ClassResourceLimit {
+	if collecterr.CodeOf(err) != contract.ErrorResponseTooLarge || collecterr.ClassOf(err) != contract.ClassResourceLimit {
 		t.Fatalf("gzip bomb = %v", err)
 	}
 }

@@ -104,9 +104,7 @@ done
 
 export COMPOSE_ENV_FILE
 
-# 중앙 호스트는 live-compat overlay 없이 띄우면 valkey/postgres가 ${bind_ip}에서 빠진다(2026-06-27 incident). 그래서
-# overlay를 항상 넣는다. 이 판정을 대신하던 HOLOLIVE_ENABLE_LIVE_COMPAT drop-in 토글은 항상 켜져 있어 지웠다
-# (stack-audit 2026-09-26 T11 holo-live-compat-toggle-dead-branch).
+# live-compat이 없으면 중앙 valkey/postgres의 bind 주소가 빠지므로 항상 적용한다.
 base_files=(
   -f deploy/compose/docker-compose.prod.yml
   -f deploy/compose/docker-compose.live-compat.yml

@@ -64,7 +64,7 @@ func normalizeCommandPrefix(prefix string) string {
 	return trimmed
 }
 
-func trimLegacyLeading(text string) string {
+func trimLeadingSpaceAndZeroWidth(text string) string {
 	return strings.TrimLeftFunc(text, func(r rune) bool {
 		if unicode.IsSpace(r) {
 			return true
@@ -80,7 +80,7 @@ func trimLegacyLeading(text string) string {
 }
 
 func (ma *MessageAdapter) extractCommandText(raw string) (normalized, commandText string, ok bool) {
-	text := trimLegacyLeading(raw)
+	text := trimLeadingSpaceAndZeroWidth(raw)
 
 	text = stringutil.TrimSpace(text)
 	if text == "" {

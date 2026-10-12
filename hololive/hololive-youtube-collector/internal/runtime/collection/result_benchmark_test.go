@@ -18,7 +18,7 @@ func BenchmarkCollectResult(b *testing.B) {
 					ObservationKind: contract.KindVideoList,
 					Payload:         bytes.Repeat([]byte("x"), size),
 				}}
-				cause := collecterr.New(collecterr.Failed, collecterr.ClassTransient, "shorts failed")
+				cause := collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "shorts failed")
 
 				b.ReportAllocs()
 

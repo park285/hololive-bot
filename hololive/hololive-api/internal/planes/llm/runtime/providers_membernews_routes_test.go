@@ -186,7 +186,7 @@ func newMemberNewsRouter(t *testing.T, authConfig httputil.AdminAuthConfig, serv
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
-	engine, err := buildHealthOnlyRouter(t.Context(), sharedlogging.NewTestLogger(), httputil.AdminAuthConfig{Disabled: true})
+	engine, err := buildTriggerRouter(t.Context(), sharedlogging.NewTestLogger(), nil, "")
 	require.NoError(t, err)
 	registerMemberNewsInternalRoutes(engine, authConfig, service)
 

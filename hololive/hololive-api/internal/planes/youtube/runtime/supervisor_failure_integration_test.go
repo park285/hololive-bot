@@ -52,7 +52,7 @@ func testFailureRecordingTimeoutRecovery(t *testing.T, operation string) {
 				return cause
 			}
 
-			if err := sourceobservation.NewConsumer(repo).ConsumeClaim(ctx, claim); err != nil {
+			if err := sourceobservation.NewConsumerWithGraces(repo, 0, 0).ConsumeClaim(ctx, claim); err != nil {
 				return fmt.Errorf("consume recovered observation: %w", err)
 			}
 

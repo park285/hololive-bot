@@ -224,7 +224,7 @@ func (r *exactTargetRows) add(kind contract.ObservationKind, enabled bool) error
 
 	r.enabledCount++
 	if r.enabledCount > r.maxRosterRows {
-		return collecterr.New(collecterr.TargetRosterTooLarge, collecterr.ClassResourceLimit, "target roster exceeds configured limit")
+		return collecterr.New(contract.ErrorTargetRosterTooLarge, contract.ClassResourceLimit, "target roster exceeds configured limit")
 	}
 
 	return nil
@@ -322,5 +322,5 @@ func scanProjectionTargetRow(rows pgx.Rows) (contract.ObservationKind, *string, 
 }
 
 func snapshotInvariant(message string) error {
-	return collecterr.New(collecterr.Internal, collecterr.ClassInternal, message)
+	return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, message)
 }

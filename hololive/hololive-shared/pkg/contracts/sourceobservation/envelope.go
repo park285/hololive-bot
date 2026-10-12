@@ -120,24 +120,6 @@ type ObservationClock struct {
 
 var lowercaseSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-func DecodeEnvelopeStrict(raw []byte) (Envelope, error) {
-	if len(raw) == 0 || len(raw) > MaxPayloadBytes+8192 {
-		return Envelope{}, errors.New("decode source observation envelope: size is outside the accepted range")
-	}
-
-	var envelope Envelope
-
-	if err := decodeStrictJSON(raw, &envelope); err != nil {
-		return Envelope{}, fmt.Errorf("decode source observation envelope: %w", err)
-	}
-
-	if err := envelope.Validate(); err != nil {
-		return Envelope{}, fmt.Errorf("validate: %w", err)
-	}
-
-	return envelope, nil
-}
-
 func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(&envelope)
 	if err != nil {

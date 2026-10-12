@@ -820,7 +820,6 @@ MarkSending 실패는 발송 전이지만 UPDATE가 이미 커밋된 'sending' �
 중요 규칙:
 
 - 모든 source는 message path를 쓴다. 저장된 send unit(`send_unit_id`)이 발송 경계이며, send unit이 없는 봉투는 source/시간 그룹 키로 묶이지만 발송하지 않는다.
-- Twitch/Chzzk-only 보관 봉투는 발송하지 않고 pre-send failure(드레인 종단)로 보낸다.
 - 오픈채팅은 sender가 Markdown을 선택하고 방 유형 미확인은 일반 텍스트를 사용한다.
 
 `alarmDispatchNotificationIsStarting` 기준:
@@ -848,9 +847,8 @@ schedule change message
 URL resolve 순서도 코드에 들어 있다.
 
 ```text
-직접 Twitch/Chzzk URL
-integrated URL
-YouTube watch URL
+YouTube 정보가 있으면 YouTube watch URL
+그룹 렌더에서 short link가 설정돼 있으면 그 URL
 ```
 
 ## 11. shared-go 기반 로커와 migration 기초

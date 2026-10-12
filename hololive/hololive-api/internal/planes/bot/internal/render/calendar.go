@@ -375,7 +375,7 @@ func entryDisplayName(ctx context.Context, m *calendarMetrics, member *domain.Me
 }
 
 // 기념일 카드 문구는 message_strings calendar namespace(DB 정본)에서만 읽는다. 기동 때 bot plane 검증이 key를
-// 보장하므로 코드 대체 문구를 두지 않는다(DEC-20260926-hololive-message-strings-startup-validation).
+// 보장하므로 코드 대체 문구를 두지 않는다.
 func (m *calendarMetrics) calStr(key messagestrings.Key) string {
 	return m.strings.Text(key)
 }

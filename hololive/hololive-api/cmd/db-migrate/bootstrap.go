@@ -18,8 +18,8 @@ import (
 // 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로 admin 접속을 시도해 순수
 // migrate가 깨지기 때문이다. 참고로 compose는 POSTGRES_ADMIN_PASSWORD를 항상 설정한다.
 //
-// 역할 bootstrap을 할 때 HOLOLIVE_SCRAPER_PASSWORD는 필수다. 비어 있을 때 admin 비밀번호로 scraper role을 매 실행
-// ALTER하던 폴백은 역할 분리를 깨므로 두지 않는다(stack audit 2026-09-26, T18에서 운영 env에 키 확인).
+// 역할 bootstrap을 할 때 HOLOLIVE_SCRAPER_PASSWORD는 필수다. 비어 있을 때 admin 비밀번호로 scraper role을 ALTER하면
+// 역할 분리가 깨지므로, 대신할 값을 찾지 않고 실패한다.
 func bootstrapScraperRole(ctx context.Context) error {
 	adminPassword := os.Getenv("POSTGRES_ADMIN_PASSWORD")
 	if strings.TrimSpace(adminPassword) == "" {

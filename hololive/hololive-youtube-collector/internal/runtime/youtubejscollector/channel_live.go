@@ -26,11 +26,11 @@ func (r *ChannelLiveRunner) JobID() collection.JobID {
 
 func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js channel client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
@@ -87,7 +87,7 @@ func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *col
 	if result.LiveQuery == nil || result.LiveQuery.ChannelID != input.Subject() ||
 		result.LiveQuery.PageCount != result.PageCount || result.LiveQuery.Exhausted != result.Exhausted ||
 		result.LiveQuery.AccessRestricted != (len(result.UnavailableLiveSessions) > 0) {
-		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "live query proof does not match helper pagination and restrictions")
+		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "live query proof does not match helper pagination and restrictions")
 	}
 
 	payload := liveSnapshotPayload(input.Subject(), result.LiveSessions, result.LiveQuery)

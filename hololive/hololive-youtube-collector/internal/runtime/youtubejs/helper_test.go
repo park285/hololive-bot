@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -134,7 +135,7 @@ func TestClientFetchPreservesHelperErrorClass(t *testing.T) {
 	client := NewRPC(server.Client(), server.URL, nil)
 	_, err := client.FetchCommunity(t.Context(), CommunityRequest{ChannelID: "UC_FAIL"})
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.Failed || collecterr.ClassOf(err) != collecterr.ClassTransient {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorCollectionFailed || collecterr.ClassOf(err) != contract.ClassTransient {
 		t.Fatalf("FetchCommunity code/class = %q/%q, error = %v", collecterr.CodeOf(err), collecterr.ClassOf(err), err)
 	}
 }
@@ -402,7 +403,7 @@ func TestHLP005(t *testing.T) {
 		t.Fatal("Start must fail on protocol mismatch")
 	}
 
-	if collecterr.CodeOf(err) != collecterr.HelperProtocolMismatch {
+	if collecterr.CodeOf(err) != contract.ErrorHelperProtocolMismatch {
 		t.Fatalf("error = %v, want protocol mismatch", err)
 	}
 

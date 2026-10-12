@@ -70,7 +70,7 @@ func registerAPIRoutes(
 	// 모바일 앱에서 localhost 리디렉션이 불가능하므로 서버가 프록시 역할
 	router.GET("/oauth/callback", domains.OAuth.OAuthCallbackHandler)
 
-	// Session 기반 인증 API. Login/password reset은 외부 진입점이고,
+	// Session 기반 인증 API. Login은 외부 진입점이고,
 	// register는 관리자 계정 생성면이므로 API key로 보호한다.
 	// admin-api는 Tailscale 직결이므로 RemoteAddr 기준 ip_allowlist로 추가 차단한다.
 	authAPI := router.Group("/api/auth")
@@ -79,8 +79,6 @@ func registerAPIRoutes(
 	authAPI.POST("/logout", authHandler.Logout)
 	authAPI.POST("/refresh", authHandler.Refresh)
 	authAPI.GET("/me", authHandler.Me)
-	authAPI.POST("/password/reset-request", authHandler.ResetRequest)
-	authAPI.POST("/password/reset", authHandler.ResetPassword)
 
 	authAdminAPI := router.Group("/api/auth")
 	authAdminAPI.Use(middleware.AdminIPAllowMiddleware(adminAllowedIPs, logger))
@@ -113,9 +111,8 @@ func registerAPIRoutes(
 	return nil
 }
 
-// apiRateLimitMiddleware는 /api/holo의 IP rate limit을 만든다. Rate limit이 켜져 있으면 cache 없음과 limiter 초기화
-// 실패는 기동 오류다. 판정 실패는 요청을 통과시키지 않고 503으로 거절한다(fail-closed,
-// DEC-20260926-hololive-source-fallbacks-retirement). 예전 fail-open 경로와 hololive_admin_rate_limit_fail_open_total은 지웠다.
+// apiRateLimitMiddleware는 /api/holo의 IP rate limit을 적용한다.
+// 활성 상태의 cache·limiter 초기화 실패는 기동 오류, 요청 판정 실패는 503이다.
 func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) (gin.HandlerFunc, error) {
 	if logger == nil {
 		logger = slog.Default()

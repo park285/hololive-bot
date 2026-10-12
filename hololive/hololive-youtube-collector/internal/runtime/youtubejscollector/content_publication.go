@@ -338,11 +338,11 @@ func (r *ContentRunner) loadPublicationCursor(ctx context.Context, channelID str
 	var cursor publicationCursor
 
 	if decodeErr := jsonv2.Unmarshal(raw, &cursor, jsonv2.RejectUnknownMembers(true)); decodeErr != nil {
-		return storedPublicationCursor{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode publication cursor: %w", decodeErr))
+		return storedPublicationCursor{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode publication cursor: %w", decodeErr))
 	}
 
 	if !validPublicationCursorShape(len(raw), &cursor) {
-		return storedPublicationCursor{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "publication cursor shape is invalid")
+		return storedPublicationCursor{}, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "publication cursor shape is invalid")
 	}
 
 	entries, err := publicationCursorEntries(cursor.Entries, time.Now().UTC())
@@ -370,16 +370,16 @@ func publicationCursorEntries(stored []publicationCursorEntry, now time.Time) (m
 	for i := range stored {
 		entry := stored[i]
 		if entry.VideoID == "" || len(entry.VideoID) > 128 || entry.AttemptedAt.IsZero() || entry.AttemptedAt.After(now) {
-			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "publication cursor entry is invalid")
+			return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "publication cursor entry is invalid")
 		}
 
 		if _, duplicate := entries[entry.VideoID]; duplicate {
-			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "publication cursor repeats a video")
+			return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "publication cursor repeats a video")
 		}
 
 		if entry.Publication != nil {
 			if err := entry.Publication.Validate(now); err != nil {
-				return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("validate cached publication: %w", err))
+				return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("validate cached publication: %w", err))
 			}
 		}
 
@@ -410,7 +410,7 @@ func marshalPublicationCursor(cursor publicationCursor) (jsontext.Value, error) 
 		}
 
 		if len(cursor.Entries) == 0 {
-			return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "publication cursor exceeds storage limit")
+			return nil, collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, "publication cursor exceeds storage limit")
 		}
 
 		cursor.Entries = cursor.Entries[:len(cursor.Entries)-1]

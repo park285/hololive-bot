@@ -35,7 +35,7 @@ func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contr
 
 	gate := e.gates[provider]
 	if gate == nil {
-		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider gate is not configured")
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider gate is not configured")
 	}
 
 	select {
@@ -170,15 +170,15 @@ func supersededError(err error) bool {
 
 func attemptFailureResult(err error) string {
 	switch collecterr.CodeOf(err) {
-	case collecterr.Timeout:
+	case contract.ErrorCollectionTimeout:
 		return resultTimeout
-	case collecterr.Canceled:
+	case contract.ErrorCollectionCanceled:
 		return resultCanceled
-	case collecterr.ParserDrift:
+	case contract.ErrorParserDrift:
 		return resultParserDrift
-	case collecterr.Failed, collecterr.Cooldown, collecterr.Configuration, collecterr.ResponseTooLarge,
-		collecterr.HelperBusy, collecterr.HelperProtocolMismatch, collecterr.Internal, collecterr.TargetRosterTooLarge,
-		collecterr.PublishRejected, contract.ErrorObservationCollision, contract.ErrorShutdownRelease,
+	case contract.ErrorCollectionFailed, contract.ErrorCooldown, contract.ErrorConfiguration, contract.ErrorResponseTooLarge,
+		contract.ErrorHelperBusy, contract.ErrorHelperProtocolMismatch, contract.ErrorInternalInvariant, contract.ErrorTargetRosterTooLarge,
+		contract.ErrorPublishRejected, contract.ErrorObservationCollision, contract.ErrorShutdownRelease,
 		contract.ErrorSupersededRelease, contract.ErrorRenewFailedRelease:
 		return resultFailed
 	default:
@@ -211,7 +211,7 @@ func (e *collectionExecutor) retrySchedule(err error) (collection.RetrySchedule,
 	// HTTP 429/503 및 helper cooldown의 명시적 하한만 보존합니다.
 	// HelperBusy 등 다른 진단의 hint는 기존 일반 backoff 상한을 유지합니다.
 	if (hint.Kind() == collecterr.RetryAt || hint.Kind() == collecterr.RetryAfter) &&
-		collecterr.CodeOf(err) == collecterr.Cooldown && collecterr.ClassOf(err) == collecterr.ClassCooldown {
+		collecterr.CodeOf(err) == contract.ErrorCooldown && collecterr.ClassOf(err) == contract.ClassCooldown {
 		if retryAt.Before(minAt) {
 			retryAt = minAt
 		}

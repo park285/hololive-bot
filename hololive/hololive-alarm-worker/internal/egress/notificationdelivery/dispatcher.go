@@ -54,7 +54,6 @@ type deliveryOutboxClaimer interface {
 
 type deliveryRequestStore interface {
 	reissueFailedRequest(context.Context, int64, string, int, *deliverypayload.Request, *deliverypayload.Request, int, time.Duration, string) (bool, error)
-	markPreparationUnsent(context.Context, int64, string) (bool, error)
 	saveRequest(context.Context, int64, string, *deliverypayload.Request, *deliverypayload.Request) (bool, error)
 }
 
@@ -67,7 +66,7 @@ type deliveryOutboxTransitioner interface {
 
 type deliveryOutboxMaintainer interface {
 	QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
-	CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
+	CountFailed(ctx context.Context) (int64, error)
 	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
@@ -121,7 +120,7 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 }
 
 // NewDispatcher는 "delivery-dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면 다른 이름으로
-// 바꾸지 않고 생성 오류다(DEC-20260926-hololive-legacy-env-config-retirement).
+// 바꾸지 않고 생성 오류다.
 func NewDispatcher(repository deliveryRepository, sender delivery.PreparedMessageSender, logger *slog.Logger, config *DispatcherConfig) (*Dispatcher, error) {
 	if logger == nil {
 		logger = slog.Default()

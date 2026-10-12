@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
@@ -174,11 +175,11 @@ func (c *RPC) successLimit(requested int) (int, error) {
 
 func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, successLimit int64) (result *T, resultErr error) {
 	if c == nil || c.http == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js client is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js client is not configured")
 	}
 
 	if successLimit < minimumSuccessResponseBytes(path) {
-		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "youtube.js helper success response metadata exceeds requested limit")
+		return nil, collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, "youtube.js helper success response metadata exceeds requested limit")
 	}
 
 	if err := c.observeLimiterWait(ctx, path); err != nil {
@@ -203,7 +204,7 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 	}
 
 	if invalidHelperHTTPResponse(resp) {
-		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "youtube.js helper response is nil")
+		return nil, collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, "youtube.js helper response is nil")
 	}
 
 	response := new(T)
@@ -246,12 +247,12 @@ func minimumSuccessResponseBytes(path string) int64 {
 func (c *RPC) newJSONRequest(ctx context.Context, path string, request any) (*http.Request, error) {
 	raw, err := jsonv2.Marshal(request)
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, fmt.Errorf("marshal youtube.js helper request: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassProtocol, fmt.Errorf("marshal youtube.js helper request: %w", err))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+path, bytes.NewReader(raw))
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, fmt.Errorf("build youtube.js helper request: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassProtocol, fmt.Errorf("build youtube.js helper request: %w", err))
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -261,7 +262,7 @@ func (c *RPC) newJSONRequest(ctx context.Context, path string, request any) (*ht
 
 func decodeHelperResponse(resp *http.Response, limit int64, response any) error {
 	if resp == nil || resp.Body == nil {
-		return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "youtube.js helper response is nil")
+		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, "youtube.js helper response is nil")
 	}
 
 	if err := validateJSONContentType(resp.Header.Get("Content-Type")); err != nil {
@@ -309,7 +310,7 @@ func readHelperBody(resp *http.Response, limit int64) ([]byte, error) {
 
 func oversizedHelperResponse(status int) error {
 	if status == http.StatusOK {
-		return collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "youtube.js helper success response exceeds body limit")
+		return collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, "youtube.js helper success response exceeds body limit")
 	}
 
 	return protocolMismatch(errors.New("youtube.js helper error response exceeds body limit"))
@@ -329,7 +330,7 @@ func decodeHelperSuccess(payload []byte, response any) error {
 
 	success, ok := response.(helperSuccess)
 	if !ok {
-		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "youtube.js helper success response type has no result contract")
+		return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "youtube.js helper success response type has no result contract")
 	}
 
 	if success.protocolMetadata().ProtocolVersion != ProtocolVersion {

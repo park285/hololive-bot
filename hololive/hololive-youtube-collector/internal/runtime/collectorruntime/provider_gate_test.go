@@ -314,7 +314,7 @@ func TestDeferFailedRunKeepsLeaseActiveForNonDeferableDiagnostic(t *testing.T) {
 	lease := mustAcquireGateLease(t, executor, spec)
 
 	proof := lease.Proof()
-	cause := collecterr.New(contract.ErrorObservationCollision, collecterr.ClassDataContract, "observation collision")
+	cause := collecterr.New(contract.ErrorObservationCollision, contract.ClassDataContract, "observation collision")
 
 	executor.deferFailedRun(ctx, lease, spec, &proof, cause)
 

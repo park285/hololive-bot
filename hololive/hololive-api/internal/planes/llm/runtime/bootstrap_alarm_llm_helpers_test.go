@@ -34,7 +34,7 @@ import (
 )
 
 // X allowlist 경로는 MEMBER_NEWS_X_ALLOWLIST_PATH 하나로만 받는다. 설정했는데 읽지 못하면 빈 allowlist로
-// 내려가지 않고 기동을 실패시킨다(stack audit B5).
+// 내려가지 않고 기동을 실패시킨다.
 func TestInitMemberNewsSourceValidator(t *testing.T) {
 	t.Run("unset path runs without x allowlist", func(t *testing.T) {
 		validator, err := initMemberNewsSourceValidator(t.Context(), "", nil, testRuntimeLogger())

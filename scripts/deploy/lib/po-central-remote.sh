@@ -10,8 +10,7 @@ mode="$1" staging="$2" backup="$3" revision="$4" version="$5"
 current=/opt/hololive-bot/compose/current
 manifest=../po-current-c/rootfs-manifest.json
 image_id_file=../po-current-c/image-id
-# 중앙 collector-c는 prod.yml의 youtube-collector다. 서비스를 재선언만 하던 빈 main-ap overlay 2종과 profile은
-# 지웠으므로(stack-audit 2026-09-26 T11 holo-main-ap-empty-overlays) prod+live-compat 조합만 쓴다.
+# 중앙 collector-c는 prod+live-compat의 youtube-collector다.
 files=(hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION
        deploy/compose/docker-compose.prod.yml deploy/compose/docker-compose.live-compat.yml
        scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh)

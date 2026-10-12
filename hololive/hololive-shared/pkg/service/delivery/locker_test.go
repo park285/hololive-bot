@@ -119,8 +119,7 @@ func TestTryAcquire_AlreadyHeld(t *testing.T) {
 	}
 }
 
-// Valkey 오류를 경고만 남기고 lock 없이 진행하던 폴백을 지웠다(stack-audit 2026-09-26 T19
-// holo-delivery-valkey-locker-warn-proceed). 오류가 호출자에게 돌아가 digest 실행이 실패로 남아야 한다.
+// Valkey 오류는 경고 뒤 lock 없이 진행하지 않는다. 오류가 호출자에게 돌아가 digest 실행이 실패로 남아야 한다.
 var errLockCacheDown = errors.New("connection refused")
 
 func TestTryAcquire_ValkeyError_ReturnsError(t *testing.T) {

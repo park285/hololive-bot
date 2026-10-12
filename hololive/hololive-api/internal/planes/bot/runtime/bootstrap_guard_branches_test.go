@@ -103,7 +103,7 @@ func TestResolveLLMSchedulerClients_Guards(t *testing.T) {
 }
 
 // https LLM scheduler URL이 설정됐는데 내부 H3 env가 없으면 명령을 조용히 끄거나 TCP client로 내려가지 않고
-// 기동 오류다(stack audit 2026-09-26).
+// 기동 오류다.
 func TestResolveLLMSchedulerClientsFailsWithoutInternalH3Options(t *testing.T) {
 	clients, err := appbootstrap.ResolveLLMSchedulerClients(&apiconfig.BotPlaneConfig{
 		LLMSchedulerURL: "https://127.0.0.1:30003",

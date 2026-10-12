@@ -226,3 +226,13 @@ func (s sentinelFailureSender) PrepareMessageRequest(_ context.Context, _, body 
 func (s sentinelFailureSender) SendPreparedMessage(ctx context.Context, room, body, _, _ string) error {
 	return s.SendMessage(ctx, room, body)
 }
+
+func deliveryFailureReasonIsPermanent(reason string) bool {
+	for _, item := range deliveryFailureReasonBySentinel {
+		if item.reason == reason {
+			return item.permanent
+		}
+	}
+
+	return false
+}

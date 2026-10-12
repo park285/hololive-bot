@@ -43,7 +43,7 @@ func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 
 	buffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(buffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrs(&row)...)
+	logger.Info(deliveryAuditLogMessage, buildDeliveryAuditLogAttrsWithClassification(&row, &timeline.PostLatencyClassificationResult{})...)
 
 	logLine := buffer.String()
 	require.Contains(t, logLine, `"alarm_type":"COMMUNITY"`)

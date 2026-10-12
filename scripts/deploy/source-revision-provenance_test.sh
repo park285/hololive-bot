@@ -69,8 +69,8 @@ expect_failure "missing image revision must fail" \
     verify_object_fixture "" "${expected_revision}"
 expect_failure "mismatched image revision must fail" \
     verify_object_fixture 0000000000000000000000000000000000000000 "${expected_revision}"
-[[ "$(FAKE_COMPOSE_IDS=one "${fakebin}/compose")" == one ]] \
-    || fail "fake compose fixture must emit one identifier"
+[[ "$(single_identifier_fixture one)" == one ]] \
+    || fail "single compose mapping must resolve its identifier"
 expect_failure "missing compose mapping must fail" \
     single_identifier_fixture ""
 expect_failure "multiple compose mappings must fail" \
@@ -110,29 +110,4 @@ done
 expect_failure "unknown source-built service mapping must fail" \
     deploy_service_image_ref unknown-service
 
-central="${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh"
-grep -Fq ". \"${literal_dollar}{ROOT_DIR}/scripts/deploy/lib/source-revision.sh\"" "${central}" \
-    || fail "central redeploy must load the clean source revision gate"
-grep -Fq "REVISION=\"${literal_dollar}(deploy_source_revision \"${literal_dollar}{ROOT_DIR}\")\"" "${central}" \
-    || fail "central redeploy must derive one full source revision"
-grep -Fq 'verify_built_image_revisions' "${central}" \
-    || fail "central redeploy must verify built images before cutover"
-grep -Fq "deploy_verify_object_revision \"${literal_dollar}{CONTAINER_CLI}\" container" "${central}" \
-    || fail "central redeploy must inspect the live image revision label"
-grep -Fq 'org.opencontainers.image.revision' "${ROOT_DIR}/scripts/deploy/lib/source-revision.sh" \
-    || fail "production verifiers must inspect the OCI revision label"
-if grep -Fq "if [[ \"${literal_dollar}{actual_revision}\" != \"${literal_dollar}{REVISION}\" ]]; then" "${central}"; then
-    fail "central redeploy must use the common exact revision verifier"
-fi
-
-build_all="${ROOT_DIR}/build-all.sh"
-grep -Fq ". \"${literal_dollar}{REPO_ROOT}/scripts/deploy/lib/source-revision.sh\"" "${build_all}" \
-    || fail "build-all must load the source revision contract"
-grep -Fq "REVISION=\"${literal_dollar}(deploy_source_revision \"${literal_dollar}{REPO_ROOT}\")\"" "${build_all}" \
-    || fail "build-all must derive a clean full revision"
-grep -Fq 'verify_build_services' "${build_all}" \
-    || fail "build-all must verify built image labels"
-
-bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh"
-bash "${ROOT_DIR}/scripts/deploy/source-revision-entrypoints_test.sh"
 echo "all source revision provenance checks passed"

@@ -292,7 +292,7 @@ type splitChannelLiveClient struct {
 func (c *splitChannelLiveClient) FetchChannel(context.Context, youtubejs.ChannelRequest) (youtubejs.ChannelResult, error) {
 	c.channelCalls.Add(1)
 
-	return youtubejs.ChannelResult{}, collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "channel tab timeout")
+	return youtubejs.ChannelResult{}, collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "channel tab timeout")
 }
 
 func (c *splitChannelLiveClient) FetchChannelLiveCheck(

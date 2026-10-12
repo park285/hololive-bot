@@ -18,9 +18,7 @@ INSERT INTO youtube_notification_delivery_ledger_state (
 ) VALUES (true, 1, 0, 0, 0, 0, 0, now(), now(), now(), %s, now())`
 )
 
-// migration 227은 alarm-worker의 ledger 완료 gate(ensureReady)를 대신해 적용 시점에 backfill 완료를 확인한다
-// (DEC-20260926-hololive-retired-rollback-tooling). 완료되지 않은 state나 backfill 없이 190을 지난 DB는 거절하고,
-// 빈 DB와 완료된 운영 DB는 통과해야 한다.
+// Migration 227은 빈 DB와 backfill 완료 DB를 허용하고, 미완료 또는 backfill을 건너뛴 DB를 거절한다.
 func TestLedgerBackfillClosedMigrationGuardsCompletion(t *testing.T) {
 	dir, err := resolveMigrationsDir()
 	if err != nil {

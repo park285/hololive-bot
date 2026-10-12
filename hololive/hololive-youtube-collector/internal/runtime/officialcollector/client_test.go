@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp"
 )
@@ -24,7 +25,7 @@ func TestClientRespectsRetryAfter(t *testing.T) {
 	client := officialTestClient(t, server, 1024)
 	_, err := client.Fetch(t.Context())
 
-	if collecterr.CodeOf(err) != collecterr.Cooldown {
+	if collecterr.CodeOf(err) != contract.ErrorCooldown {
 		t.Fatalf("error = %v", err)
 	}
 
@@ -97,7 +98,7 @@ func TestHTTP007OfficialForbiddenIsConfiguration(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	_, err := officialTestClient(t, server, 1024).Fetch(t.Context())
-	if collecterr.CodeOf(err) != collecterr.Configuration || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+	if collecterr.CodeOf(err) != contract.ErrorConfiguration || collecterr.ClassOf(err) != contract.ClassConfiguration {
 		t.Fatalf("403 = %v", err)
 	}
 }
@@ -113,7 +114,7 @@ func TestHTTP008OfficialRetryAfterCooldown(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	_, err := officialTestClient(t, server, 1024).Fetch(t.Context())
-	if collecterr.CodeOf(err) != collecterr.Cooldown || collecterr.RetryOf(err).After() != 5*time.Second {
+	if collecterr.CodeOf(err) != contract.ErrorCooldown || collecterr.RetryOf(err).After() != 5*time.Second {
 		t.Fatalf("503 = %v hint=%v", err, collecterr.RetryOf(err))
 	}
 }

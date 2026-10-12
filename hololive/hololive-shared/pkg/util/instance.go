@@ -7,9 +7,8 @@ import (
 	"strings"
 )
 
-// InstanceID는 lease owner 등 worker 식별자를 "prefix:hostname:pid"로 만든다. 호스트 이름을 얻지 못하면
-// "unknown-host"로 바꾸지 않고 오류다(DEC-20260926-hololive-legacy-env-config-retirement). 여러 host의 worker가 같은
-// 식별자를 쓰면 claim 소유 판정이 어긋나기 때문이다.
+// InstanceID는 lease owner를 "prefix:hostname:pid"로 만든다. 호스트 이름 조회 실패는 오류다.
+// 여러 호스트가 같은 ID를 사용하면 claim 소유 판정이 어긋난다.
 func InstanceID(prefix string) (string, error) {
 	return instanceIDWithHostname(prefix, os.Hostname)
 }

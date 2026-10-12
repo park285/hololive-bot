@@ -36,7 +36,7 @@ func (*resolveStatementCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.Tr
 func upsertTestTemplate(t *testing.T, repo *repository.TemplateRepository, key domain.TemplateKey, channelID *string, body string) {
 	t.Helper()
 
-	if _, err := repo.Upsert(t.Context(), key, channelID, body); err != nil {
+	if _, _, err := repo.UpsertWithRevision(t.Context(), key, channelID, body, 0); err != nil {
 		t.Fatalf("upsert %s: %v", key, err)
 	}
 }

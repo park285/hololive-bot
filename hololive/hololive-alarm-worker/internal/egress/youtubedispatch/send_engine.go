@@ -28,8 +28,7 @@ type SendEngine struct {
 	transition      deliveryTransition
 }
 
-// deliveryTransition의 실패·완료 전이는 같은 트랜잭션 안에서 시도 telemetry도 기록한다. 호출자는 발송 방식만 넘긴다
-// (DEC-20260926-hololive-delivery-telemetry-single-path).
+// deliveryTransition의 실패·완료 전이는 같은 트랜잭션 안에서 시도 telemetry도 기록한다. 호출자는 발송 방식만 넘긴다.
 type deliveryTransition interface {
 	requestTransition
 	lifecycleTransition

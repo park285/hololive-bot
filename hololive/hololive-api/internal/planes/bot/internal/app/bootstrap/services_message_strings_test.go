@@ -9,7 +9,7 @@ import (
 )
 
 // bot plane 기동 검증 계약은 운영 시드(baseline과 이후 migration)로 통과해야 한다. 이 검증이 실패하면 bot plane은
-// 기동에 실패한다(DEC-20260926-hololive-message-strings-startup-validation).
+// 기동에 실패한다.
 func TestBotMessageStringRequirementsSatisfiedBySeed(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 	if err := store.Load(t.Context()); err != nil {

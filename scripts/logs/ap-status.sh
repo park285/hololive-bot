@@ -77,7 +77,6 @@ REMOTE
 echo
 echo "== Recent youtube-collector signals =="
 for container in "${AP_CONTAINERS[@]}"; do
-  # AP에는 youtube-collector만 돈다. alarm-worker egress 신호, photo sync·pre-send claim 신호, split-host 볼륨 진단은
-  # 중앙 전용이거나 퇴역한 경로라 지웠다(stack-audit 2026-09-26 T11 holo-ap-status-stale-probes).
+  # AP의 youtube-collector 상태를 확인한다.
   signals "$container" 'Cache store connected|postgres_pool_connected|job_claim|ERR|panic|permission denied'
 done

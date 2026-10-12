@@ -154,7 +154,6 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 }
 
 // lifecycleProviderFailure는 발송 오류를 lifecycle 실패 종류와 사유로 나눈다. 기본 사유는 provider_outcome_unknown이다.
-// Karing 경로가 넘기던 karing_send 기본 사유는 Karing 발송 삭제와 함께 없어졌다(DEC-20260926-hololive-karing-egress-disposition).
 func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
 	const defaultReason = lifecycleReasonUnknownError
 

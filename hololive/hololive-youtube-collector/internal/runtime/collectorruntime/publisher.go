@@ -35,7 +35,7 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 	kinds []contract.ObservationKind,
 ) (map[contract.ObservationKind]int64, error) {
 	if p == nil || p.pool == nil || !provider.Valid() || len(kinds) == 0 {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "load observation contract generations: request is invalid")
+		return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "load observation contract generations: request is invalid")
 	}
 
 	values := make([]string, len(kinds))
@@ -45,7 +45,7 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 
 	rows, err := p.pool.Query(ctx, sqlLoadContractGenerations, string(provider), values)
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, fmt.Errorf("load observation contract generations: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, fmt.Errorf("load observation contract generations: %w", err))
 	}
 	defer rows.Close()
 
@@ -64,7 +64,7 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 
 func (p *Publisher) LoadContractSnapshot(ctx context.Context, registration RegisteredRunner) (collection.ContractSnapshot, error) {
 	if p == nil || p.contracts == nil {
-		return collection.ContractSnapshot{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "contract generation reader is not configured")
+		return collection.ContractSnapshot{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "contract generation reader is not configured")
 	}
 
 	job := registration.Contract()
@@ -98,18 +98,18 @@ func scanContractGenerations(rows interface {
 		)
 
 		if err := rows.Scan(&kind, &generation); err != nil {
-			return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, fmt.Errorf("scan observation contract generation: %w", err))
+			return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, fmt.Errorf("scan observation contract generation: %w", err))
 		}
 
 		if generation <= 0 {
-			return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation contract generation must be positive")
+			return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation contract generation must be positive")
 		}
 
 		result[kind] = generation
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, fmt.Errorf("read observation contract generations: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, fmt.Errorf("read observation contract generations: %w", err))
 	}
 
 	return result, nil
@@ -118,7 +118,7 @@ func scanContractGenerations(rows interface {
 func requireContractGenerations(result map[contract.ObservationKind]int64, kinds []contract.ObservationKind) (map[contract.ObservationKind]int64, error) {
 	for _, kind := range kinds {
 		if _, ok := result[kind]; !ok {
-			return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation contract generation is missing for "+string(kind))
+			return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation contract generation is missing for "+string(kind))
 		}
 	}
 
@@ -127,11 +127,11 @@ func requireContractGenerations(result map[contract.ObservationKind]int64, kinds
 
 func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeaseProof, output collection.RunOutput) (sourceobservation.PublishBatchResult, error) {
 	if p == nil || p.observations == nil {
-		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "observation publisher is not configured")
+		return sourceobservation.PublishBatchResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "observation publisher is not configured")
 	}
 
 	if lease == nil {
-		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "complete publish lease is missing")
+		return sourceobservation.PublishBatchResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "complete publish lease is missing")
 	}
 
 	if output.Empty() {
@@ -164,7 +164,7 @@ func (p *Publisher) PublishPartial(
 
 	deferInput, err := collection.NewDeferCollectionInput(collecterr.DiagnosticOf(partial.Cause()), bounds, schedule)
 	if err != nil {
-		return sourceobservation.PublishBatchResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+		return sourceobservation.PublishBatchResult{}, collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err)
 	}
 
 	input := publishBatchInput(lease, output)
@@ -184,7 +184,7 @@ func validatePartialPublishInput(
 ) (*collection.PartialFailure, error) {
 	partial, ok := result.PartialFailure()
 	if publisher == nil || publisher.observations == nil || lease == nil || !ok {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial publish input is invalid")
+		return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial publish input is invalid")
 	}
 
 	return partial, nil
@@ -236,15 +236,15 @@ func (p *Publisher) publishPartialBatch(
 }
 
 func wrapPublishFailure(action string, err error) error {
-	code := collecterr.PublishRejected
-	class := collecterr.ClassTransient
+	code := contract.ErrorPublishRejected
+	class := contract.ClassTransient
 
 	switch {
 	case errors.Is(err, sourceobservation.ErrInvalidEnvelope):
-		code = collecterr.Internal
-		class = collecterr.ClassInternal
+		code = contract.ErrorInternalInvariant
+		class = contract.ClassInternal
 	case errors.Is(err, sourceobservation.ErrStaleContract):
-		class = collecterr.ClassProtocol
+		class = contract.ClassProtocol
 	}
 
 	return collecterr.Wrap(code, class, fmt.Errorf("%s: %w", action, err))

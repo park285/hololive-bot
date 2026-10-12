@@ -92,7 +92,7 @@ func TestContentRunnerKeepsListAndShortsWhenEnrichmentFails(t *testing.T) {
 	)
 	fake := &contentFake{
 		results:   map[string]youtubejs.ContentResult{contentTabVideos: list, contentTabShorts: shorts},
-		videoErrs: map[string]error{"failed": collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "player timeout")},
+		videoErrs: map[string]error{"failed": collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "player timeout")},
 	}
 
 	result, err := NewContentRunner(fake, &cursorFake{}, 0).Collect(t.Context(), contentInput(t))
@@ -133,11 +133,11 @@ func TestContentRunnerStopsOnNonDegradableEnrichmentFailure(t *testing.T) {
 			contentTabVideos: contentList(youtubejs.ContentItem{VideoID: "a", ChannelID: restrictedTestChannelID}),
 			contentTabShorts: {MissingTab: true},
 		},
-		videoErrs: map[string]error{"a": collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "helper configuration")},
+		videoErrs: map[string]error{"a": collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "helper configuration")},
 	}
 
 	result, err := NewContentRunner(fake, &cursorFake{}, 0).Collect(t.Context(), contentInput(t))
-	if err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+	if err == nil || !result.IsZero() || collecterr.ClassOf(err) != contract.ClassConfiguration {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 }
@@ -151,7 +151,7 @@ func TestContentRunnerPreservesNonDegradableErrorAfterEnrichmentDeadline(t *test
 			contentTabShorts: {MissingTab: true},
 		},
 		videoBlock: map[string]bool{"blocked": true},
-		videoErrs:  map[string]error{"blocked": collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "helper configuration")},
+		videoErrs:  map[string]error{"blocked": collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "helper configuration")},
 	}
 	input := contentInput(t)
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
@@ -159,7 +159,7 @@ func TestContentRunnerPreservesNonDegradableErrorAfterEnrichmentDeadline(t *test
 	defer cancel()
 
 	result, err := NewContentRunner(fake, &cursorFake{}, time.Hour-200*time.Millisecond).Collect(ctx, input)
-	if ctx.Err() != nil || err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+	if ctx.Err() != nil || err == nil || !result.IsZero() || collecterr.ClassOf(err) != contract.ClassConfiguration {
 		t.Fatalf("parent=%v zero=%t kind=%s err=%v", ctx.Err(), result.IsZero(), result.Kind(), err)
 	}
 }
@@ -173,7 +173,7 @@ func TestContentRunnerRequiresPublicationContractGeneration(t *testing.T) {
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: contentList()}}
 
 	result, err := NewContentRunner(fake, &cursorFake{}, 0).Collect(t.Context(), input)
-	if err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+	if err == nil || !result.IsZero() || collecterr.ClassOf(err) != contract.ClassConfiguration {
 		t.Fatalf("legacy generation collected: result=%#v err=%v", result, err)
 	}
 }
@@ -597,7 +597,7 @@ func TestContentRunnerProgressesFairlyAcrossPolls(t *testing.T) {
 	}
 
 	list := contentList(items...)
-	failing := map[string]error{"v1": collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "player timeout")}
+	failing := map[string]error{"v1": collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "player timeout")}
 
 	var cursor []byte
 
@@ -642,7 +642,7 @@ func TestContentRunnerSameSlotRetryCollectsOnlyUnacceptedKinds(t *testing.T) {
 	)
 	first := &contentFake{
 		results:   map[string]youtubejs.ContentResult{contentTabVideos: list},
-		errByKind: map[string]error{contentTabShorts: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "shorts timeout")},
+		errByKind: map[string]error{contentTabShorts: collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "shorts timeout")},
 	}
 
 	partial, err := NewContentRunner(first, &cursorFake{}, 0).Collect(t.Context(), contentInput(t))

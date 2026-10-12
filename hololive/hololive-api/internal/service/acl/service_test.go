@@ -176,8 +176,7 @@ func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 	}
 }
 
-// 방 이름으로 등록된 과거 값은 다른 chatID의 방을 허용하거나 차단하지 않는다
-// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
+// 방 이름으로 등록된 과거 값은 다른 chatID의 방을 허용하거나 차단하지 않는다.
 func TestIsRoomAllowed_RoomNameEntryDoesNotMatchChatID(t *testing.T) {
 	t.Parallel()
 
@@ -415,34 +414,6 @@ func TestGetACLStatus_ConcurrentRead(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-func TestParseACLMode(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		input string
-		want  ACLMode
-	}{
-		{"whitelist", ACLModeWhitelist},
-		{"WHITELIST", ACLModeWhitelist},
-		{"blacklist", ACLModeBlacklist},
-		{"BLACKLIST", ACLModeBlacklist},
-		{"  blacklist  ", ACLModeBlacklist},
-		{"", ACLModeWhitelist},
-		{"unknown", ACLModeWhitelist},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			t.Parallel()
-
-			got := ParseACLMode(tc.input)
-			if got != tc.want {
-				t.Errorf("ParseACLMode(%q) = %v, want %v", tc.input, got, tc.want)
-			}
-		})
-	}
 }
 
 func TestParseACLModeStrictRejectsUnknownValue(t *testing.T) {

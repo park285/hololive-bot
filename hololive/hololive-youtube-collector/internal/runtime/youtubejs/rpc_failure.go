@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -32,8 +33,8 @@ func helperStatusError(status int, payload []byte) error {
 }
 
 type mappedFailure struct {
-	code  collecterr.ErrorCode
-	class collecterr.FailureClass
+	code  contract.CollectionErrorCode
+	class contract.FailureClass
 }
 
 var helperFailureMap = map[RPCErrorCode]struct {
@@ -41,19 +42,19 @@ var helperFailureMap = map[RPCErrorCode]struct {
 	statuses map[int]struct{}
 	mapped   mappedFailure
 }{
-	"invalid_request":           {"PROTOCOL", statusSet(400, 404), mappedFailure{collecterr.HelperProtocolMismatch, collecterr.ClassProtocol}},
-	"request_too_large":         {"PROTOCOL", statusSet(413), mappedFailure{collecterr.HelperProtocolMismatch, collecterr.ClassProtocol}},
-	"helper_not_ready":          {"PROTOCOL", statusSet(503), mappedFailure{collecterr.HelperProtocolMismatch, collecterr.ClassProtocol}},
-	"helper_busy":               {"TRANSIENT", statusSet(503), mappedFailure{collecterr.HelperBusy, collecterr.ClassTransient}},
-	"collection_canceled":       {"CANCELED", statusSet(408), mappedFailure{collecterr.Canceled, collecterr.ClassCanceled}},
-	"collection_timeout":        {"TIMEOUT", statusSet(408, 504), mappedFailure{collecterr.Timeout, collecterr.ClassTimeout}},
-	"cooldown":                  {"COOLDOWN", statusSet(429), mappedFailure{collecterr.Cooldown, collecterr.ClassCooldown}},
-	"parser_drift":              {"DATA_CONTRACT", statusSet(422), mappedFailure{collecterr.ParserDrift, collecterr.ClassDataContract}},
-	"configuration_error":       {"CONFIGURATION", statusSet(502), mappedFailure{collecterr.Configuration, collecterr.ClassConfiguration}},
-	"response_too_large":        {"RESOURCE_LIMIT", statusSet(422), mappedFailure{collecterr.ResponseTooLarge, collecterr.ClassResourceLimit}},
-	"helper_protocol_mismatch":  {"PROTOCOL", statusSet(409), mappedFailure{collecterr.HelperProtocolMismatch, collecterr.ClassProtocol}},
-	"helper_internal_invariant": {"INTERNAL", statusSet(500), mappedFailure{collecterr.Internal, collecterr.ClassInternal}},
-	"collection_failed":         {"TRANSIENT", statusSet(502), mappedFailure{collecterr.Failed, collecterr.ClassTransient}},
+	"invalid_request":           {"PROTOCOL", statusSet(400, 404), mappedFailure{contract.ErrorHelperProtocolMismatch, contract.ClassProtocol}},
+	"request_too_large":         {"PROTOCOL", statusSet(413), mappedFailure{contract.ErrorHelperProtocolMismatch, contract.ClassProtocol}},
+	"helper_not_ready":          {"PROTOCOL", statusSet(503), mappedFailure{contract.ErrorHelperProtocolMismatch, contract.ClassProtocol}},
+	"helper_busy":               {"TRANSIENT", statusSet(503), mappedFailure{contract.ErrorHelperBusy, contract.ClassTransient}},
+	"collection_canceled":       {"CANCELED", statusSet(408), mappedFailure{contract.ErrorCollectionCanceled, contract.ClassCanceled}},
+	"collection_timeout":        {"TIMEOUT", statusSet(408, 504), mappedFailure{contract.ErrorCollectionTimeout, contract.ClassTimeout}},
+	"cooldown":                  {"COOLDOWN", statusSet(429), mappedFailure{contract.ErrorCooldown, contract.ClassCooldown}},
+	"parser_drift":              {"DATA_CONTRACT", statusSet(422), mappedFailure{contract.ErrorParserDrift, contract.ClassDataContract}},
+	"configuration_error":       {"CONFIGURATION", statusSet(502), mappedFailure{contract.ErrorConfiguration, contract.ClassConfiguration}},
+	"response_too_large":        {"RESOURCE_LIMIT", statusSet(422), mappedFailure{contract.ErrorResponseTooLarge, contract.ClassResourceLimit}},
+	"helper_protocol_mismatch":  {"PROTOCOL", statusSet(409), mappedFailure{contract.ErrorHelperProtocolMismatch, contract.ClassProtocol}},
+	"helper_internal_invariant": {"INTERNAL", statusSet(500), mappedFailure{contract.ErrorInternalInvariant, contract.ClassInternal}},
+	"collection_failed":         {"TRANSIENT", statusSet(502), mappedFailure{contract.ErrorCollectionFailed, contract.ClassTransient}},
 }
 
 func statusSet(statuses ...int) map[int]struct{} {
@@ -150,7 +151,7 @@ func applyAtRetry(base error, retry RPCRetryHint) error {
 }
 
 func protocolMismatch(err error) error {
-	return collecterr.Wrap(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, err)
+	return collecterr.Wrap(contract.ErrorHelperProtocolMismatch, contract.ClassProtocol, err)
 }
 
 func boundedFailureMessage(message string) string {

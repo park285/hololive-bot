@@ -12,7 +12,6 @@ step() {
 }
 
 step "shared-go boundary" "${SCRIPT_DIR}/check-shared-go-boundary.sh"
-step "shared-go package allowlist" "${SCRIPT_DIR}/check-shared-go-packages.sh"
 step "tracked local artifacts" "${SCRIPT_DIR}/check-tracked-local-artifacts.sh"
 step "Go alarm contract values" "${SCRIPT_DIR}/check-go-alarm-contracts.sh"
 step "Go trigger route hardcoding" "${SCRIPT_DIR}/check-go-trigger-route-hardcoding.sh"

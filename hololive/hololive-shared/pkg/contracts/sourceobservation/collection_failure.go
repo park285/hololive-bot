@@ -175,10 +175,6 @@ func AllCollectionErrorCodes() []CollectionErrorCode {
 	return cloneCodes(allCollectionErrorCodes)
 }
 
-func AllFailureClasses() []FailureClass {
-	return cloneClasses(allFailureClasses)
-}
-
 func DeferFailureTuples() []FailureTuple {
 	return cloneTuples(deferFailureTuples)
 }

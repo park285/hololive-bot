@@ -9,9 +9,7 @@ import (
 
 var bulkApplyAlarmSentMarksSQL = mustSQL("repository_delivery_state_bulk_0011_01.sql")
 
-// bulkAlarmSentMarkInputs는 tracking 행을 기본 키 (kind, canonical_content_id)로만 찾는다. 요청 content_id나 raw
-// content_id로도 찾던 OR 분기는 T18(2026-09-26)에서 content_id와 canonical_content_id가 다른 행이 0건임을 확인해
-// 지웠다(stack-audit T11 holo-tracking-raw-content-id-candidates).
+// bulkAlarmSentMarkInputs는 tracking 행을 기본 키 (kind, canonical_content_id)로만 찾는다.
 type bulkAlarmSentMarkInputs struct {
 	kinds               []string
 	canonicalContentIDs []string
