@@ -65,3 +65,19 @@
 - producer: operational/notification target 분리, single batch registration, 40개 chunk, runtime snapshot·budget replacement, provider 미구성 제한 모드, multi-chunk fallback 공정성
 - worker: exact birthday audience, 다른 멤버 audience 격리, empty/failure fail-closed, known event republish, late sent room, 신규 event cap
 - PostgreSQL: 실제 dispatch event/delivery ledger에서 sent room만 반환하는 integration test
+
+## v9.2.2: 제목 판정과 현지 생일 창 (2026-10-13)
+
+위 설계의 "생일 당일 본인 채널 방송은 전부 유효"와 KST 하루 창은 v9.2.2(#627)에서 바뀌었다. 현재 계약은 `docs/current/contracts/alarm.md`가 소유한다.
+
+- **바뀐 계약:** 판정 창(KST 생일 전날 21:00 ~ 다음 날 17:00) 안에서 제목에 생일 키워드가 있는 와꾸만 생일 방송이다. 멤버·일자 상한 3건과 제목 변경 뒤 재평가는 저장 제목이 생일로 판정되는 기발행 event만 세며, 저장 제목이 생일과 무관한 기발행 event는 다시 보내지 않는다. 다른 KST 날짜 방송은 `01/02 15:04`로 표시한다.
+- **이유:** 2026-10-13 크레이지 올리(ID) 생일 00:27에 카운트다운과 함께 hololive Dreams 스폰서 방송·SARUSHIMA VLOG 최초공개가 생일 방송으로 나가 상한 3건을 모두 썼다. 9.2.0이 계속 돌았다면 그날의 실제 생일 방송 알림은 막혔다. KST 하루 창은 ID·EN 멤버의 현지 생일 저녁 방송도 놓쳤다.
+- **리뷰:** 서브에이전트 적대적 리뷰 2건(정합성, 운영·계약)에서 blocker·major는 없었다. 반영한 minor는 잘못 발행된 event의 재발송 차단, 키워드 보강(`バースディ`·`たんじょうび`·`誕生会`), 카운트다운 서술 축소, event key 표기 정정, runbook 진단·롤백 보강, 상한 경계·DB prefix·앞쪽 창 표시 테스트다.
+- **게시:** #627 `1875c7083`. CI 11개 통과, 병합 tree는 검증한 브랜치와 같다. annotated tag `v9.2.2`와 GitHub Release(`publish-release.sh v9.2.2 v9.2.1`)를 게시했다. 같은 릴리스에 #625(문서)와 #626(native AP logrotate)이 포함된다.
+- **배포:**
+  - `hololive-alarm-worker:release-1875c708391a-r1-arm64`(`sha256:1f14ebcb…`, arm64, 9.2.2)를 원격에 load해 같은 ID·revision을 확인했다.
+  - 9.2.0 worker를 `hololive-alarm-worker:rollback-20261012T172106Z`로 보존하고 VERSION 2개를 `deploy-backups/pre-v9.2.2-20261012T172106Z`(tar·sha256)에 백업했다. 원격 tree에서 바뀌는 파일은 이 2개뿐이며 소유자·모드(664·644)를 유지했다.
+  - `change_started_at=2026-10-12T17:21:13Z`에 `up -d --no-build --no-deps hololive-alarm-worker`로 교체했고 health gate를 6초에 통과했다. migration 없음.
+- **수용 증거:** worker healthy, 재시작 0회, 시작 로그 `version=9.2.2`, 실행 compose 파일 4개 동일, 교체 뒤 로그는 모두 INFO(ERROR·panic 0)이며 다른 컨테이너는 재시작되지 않았다. 첫 tick에서 올리의 `【Ollie's Ramen Birthday Party - VRCHAT】`(21:00 KST)를 새 생일 방송으로 발행해 생일축하를 받은 3개 방에 모두 전송했고, 카운트다운은 재평가 중복으로 끝났으며 Dreams·VLOG는 다시 나가지 않았다(read-only guard 조회).
+- **현재 rollback:** `rollback-20261012T172106Z`를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-alarm-worker`로 다시 띄운다. 제목 판정과 확장 창이 사라지고, 저장 제목이 생일과 무관한 event가 다시 상한을 차지한다.
+- **남은 공백:** 키워드 없는 생일 방송은 알리지 않는다. 같은 `channel_id`를 쓰는 멤버의 생일이 인접하면 확장 창이 겹쳐 같은 방송이 두 멤버 생일로 나갈 수 있다(저장소 데이터상 UNIT B는 멤버 한 행이라 해당 없음, 운영 DB 중복 여부는 미확인). tick 실행 시간만큼 다음 날 17시 경계 직전 세션을 놓칠 수 있다(기존 자정 경계와 같은 성질).
