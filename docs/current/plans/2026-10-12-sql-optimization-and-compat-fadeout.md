@@ -359,7 +359,12 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
   - central: `hololive-api:rollback-20261012T161459Z` tag(9.1.2 이미지는 `release-8435b01c6c73-r1-arm64`로 남는다), `hololive-youtube-collector:rollback-20261012T162312Z`·`hololive-youtube-po-sandbox:rollback-20261012T162312Z`(v8.0.0 이미지 `95644d3038ad`·`3bf902703778` 삭제), `deploy-backups/pre-v9.2.1-20261012T161459Z`, `deploy-backups/collector-gomod-20261012T113752Z`, `po-staging-20261012T162312Z`(이미지 tar와 live `po-current-c`와 같은 영수증 사본)를 지웠다. 영수증이 든 `backups/po-c-*`와 다른 세션의 `pre-v9.2.0`·`pre-v9.2.2` 및 worker rollback tag는 남겼다. 정리 뒤 central 컨테이너 4개가 healthy다.
   - Seoul: `hololive-youtube-collector:rollback-20261012T162535Z`·`hololive-youtube-po-sandbox:rollback-20261012T162535Z`(v8.0.0 이미지)를 지웠다. 현재 issuer 검토 영수증이 든 `backups/seoul-collector-20261012T162535Z`는 남겼다. collector-b·po-b는 9.2.1 healthy다.
   - Osaka·Osaka2의 previous release(v8.0.0)는 보존 절차가 항상 남기므로 그대로 둔다.
-  - 범위 밖으로 남긴 것: Seoul에는 2026-06부터 쌓인 백업 디렉터리 100여 개와 이전 rollback 이미지 tag 8개가 있어 디스크 사용률이 60%다. 일부는 issuer 영수증 복구 근거로 쓰이므로, 정리하려면 보존 기준을 따로 정해야 한다.
+- **Seoul(iris-seoul) 누적 산출물 (사용자 승인):** 2026-06부터 쌓인 hololive 배포 백업과 rollback 이미지를 아래 보존 기준으로 정리했다. iris-seoul은 Iris(redroid·authelia·nginx 등)와 함께 쓰는 호스트라 대상은 `/home/ubuntu/hololive-bot/backups`와 hololive collector·issuer 이미지로 한정했다.
+  - 보존 기준: 현재 issuer 영수증(`po-sandbox-current-b.json`·`.image-id`), 현재 issuer 검토 영수증이 든 최신 배포 백업(`seoul-collector-20261012T162535Z`), 플랫폼 소유 DB 설정 백업(`postgres-standby-bind-20260828T181820Z`)만 남긴다.
+  - 지운 백업 101개: `seoul-active-active-*` 78개(2026-06~08), 이전 `seoul-collector-*` 17개(2026-09-29~10-11), `seoul-reliability-20260930T*` 2개, `stack-release-20261004-bd498868a987`, `warnings-20261004-5657fae2eda1`, `seoul-goscrapy-canary-20260608T024325Z`, `po-metadata-pre-fix-20260930T102954Z`.
+  - 지운 이미지: `hololive-youtube-collector`·`hololive-youtube-po-sandbox`의 `rollback-20261006T121950Z`·`20261007T021735Z`·`20261008T115107Z`·`20261011T164916Z` tag 8개와, hololive 라벨이 붙은 dangling 이미지 2개(revision `73947390f`). 모두 컨테이너가 참조하지 않음을 확인했다. Iris·authelia 등 다른 서비스의 이미지와 정지 컨테이너는 그대로 두었다.
+  - 결과: 디스크 사용 27G→25G(60%→56%), 이미지 28→18개. collector-b·po-b는 9.2.1 healthy이고 완료 검사가 통과했다. Seoul `b`의 이전 collector로는 되돌릴 수 없다.
+- **central tree 정렬:** v9.3.0(#628) 배포 뒤 central `current`의 `scripts/deploy/lib/ap-host-native-remote-apply.sh`(#626·#631로 바뀐 파일)와 `runtime-config/README.md`(2026-08-09 이전 판, OpenBao Agent 안내)가 v9.3.0과 달랐다. 둘 다 runtime이 읽지 않는 파일이며, 소유자·mode(root 664, root 644)를 유지하고 v9.3.0 내용으로 바꿨다. 이후 대조 목록 112개와 README를 합친 113개 파일이 v9.3.0과 hash가 같다.
 
 ## 1. SQL 최적화
 
