@@ -79,71 +79,28 @@ func TestApplyConfirmedPremiereClassificationFailsClosedOnLookupError(t *testing
 	assert.ErrorContains(t, err, "load confirmed premiere ids")
 }
 
-func TestYouTubeCheckerBuildUpcomingNotificationsPremiereFiveMinuteNotice(t *testing.T) {
-	t.Parallel()
-
-	const videoID = "premiere-upcoming"
-
-	// 시작 5분 전 target을 지나는 창이다. 가장 이른 target 시각은 now와 같다.
-	for name, tc := range map[string]struct {
-		noticeAt map[string]time.Time
-		want     int
-	}{
-		"notice missing after retention": {want: 1},
-		"notice days before":             {noticeAt: map[string]time.Time{videoID: time.Date(2026, time.March, 2, 6, 0, 0, 0, time.UTC)}, want: 1},
-		"notice just before target":      {noticeAt: map[string]time.Time{videoID: time.Date(2026, time.March, 5, 5, 59, 59, 0, time.UTC)}, want: 1},
-		"notice at target boundary":      {noticeAt: map[string]time.Time{videoID: time.Date(2026, time.March, 5, 6, 0, 0, 0, time.UTC)}, want: 0},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			checker, _, now := newYouTubeBuilderFixture(t)
-
-			checker.upcomingCandidates = premiereNoticeStore{noticeAt: tc.noticeAt}
-
-			start := now.Add(5 * time.Minute)
-			window := targetpolicy.EvaluationWindow{
-				Start: now.Add(-75 * time.Second),
-				End:   now,
-			}
-
-			notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
-				ID:             videoID,
-				ChannelID:      testChIDShort1,
-				Status:         domain.StreamStatusUpcoming,
-				StartScheduled: &start,
-				IsPremiere:     true,
-				Channel:        &domain.Channel{ID: testChIDShort1, Name: testChannelName1},
-			}, []string{testRoomShort1}, window)
-			require.NoError(t, err)
-			require.Len(t, notifications, tc.want)
-
-			if tc.want > 0 {
-				assert.Equal(t, 5, notifications[0].MinutesUntil)
-				assert.True(t, notifications[0].Stream.IsPremiere)
-			}
-		})
-	}
-}
-
-func TestYouTubeCheckerBuildUpcomingNotificationsPremiereNoticeLookupErrorFails(t *testing.T) {
+func TestYouTubeCheckerBuildUpcomingNotificationsSelectsPremiereFiveMinuteCandidate(t *testing.T) {
 	t.Parallel()
 
 	checker, _, now := newYouTubeBuilderFixture(t)
-
-	checker.upcomingCandidates = premiereNoticeStore{err: errors.New("notice lookup failed")}
-
 	start := now.Add(5 * time.Minute)
+	window := targetpolicy.EvaluationWindow{
+		Start: now.Add(-75 * time.Second),
+		End:   now,
+	}
 
-	_, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
-		ID:             "premiere-notice-error",
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+		ID:             "premiere-upcoming",
 		ChannelID:      testChIDShort1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &start,
 		IsPremiere:     true,
 		Channel:        &domain.Channel{ID: testChIDShort1, Name: testChannelName1},
-	}, []string{testRoomShort1}, targetpolicy.EvaluationWindow{Start: now.Add(-75 * time.Second), End: now})
-	require.ErrorContains(t, err, "load premiere content notice")
+	}, []string{testRoomShort1}, window)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 5, notifications[0].MinutesUntil)
+	assert.True(t, notifications[0].Stream.IsPremiere)
 }
 
 func TestYouTubeCheckerBuildUpcomingNotificationsKeepsOrdinaryFiveMinuteCandidate(t *testing.T) {
@@ -172,9 +129,6 @@ func TestYouTubeCheckerBuildUpcomingNotificationsReportsPremiereScheduleChange(t
 	t.Parallel()
 
 	checker, dedupService, now := newYouTubeBuilderFixture(t)
-	// 일정 변경은 이미 보낸 분 전 알림을 정정하므로 공개 예정 안내 시각과 무관하게 보낸다.
-	checker.upcomingCandidates = premiereNoticeStore{noticeAt: map[string]time.Time{"premiere-delay": now}}
-
 	previousScheduled := now.Add(5 * time.Minute)
 	currentScheduled := now.Add(12 * time.Minute)
 
@@ -198,42 +152,31 @@ func TestYouTubeCheckerBuildUpcomingNotificationsReportsPremiereScheduleChange(t
 	assert.NotEmpty(t, notifications[0].ScheduleChangeMessage)
 }
 
-func TestYouTubeCheckerBuildLiveCatchupNotificationsSkipsPremiere(t *testing.T) {
+// 분 전 target을 모두 지난 뒤 발견된 Premiere는 발견 시 알림이 없으므로 일반 방송처럼 시작 알림을 받는다.
+func TestYouTubeCheckerBuildLiveCatchupNotificationsIncludesPremiere(t *testing.T) {
 	t.Parallel()
 
-	checker, _, now := newYouTubeBuilderFixture(t)
-	start := now.Add(-3 * time.Minute)
+	for name, premiere := range map[string]bool{"premiere": true, "ordinary": false} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	notifications, err := checker.buildLiveCatchupNotifications(t.Context(), testChIDLive, &domain.Stream{
-		ID:             "premiere-live",
-		Title:          "premiere live",
-		ChannelID:      testChIDLive,
-		Status:         domain.StreamStatusLive,
-		StartScheduled: &start,
-		StartActual:    &start,
-		IsPremiere:     true,
-		Channel:        &domain.Channel{ID: testChIDLive, Name: testChannelName1},
-	}, []string{testRoomShort1}, now, nil)
-	require.NoError(t, err)
-	assert.Nil(t, notifications)
-}
+			checker, _, now := newYouTubeBuilderFixture(t)
+			start := now.Add(-3 * time.Minute)
 
-func TestYouTubeCheckerBuildLiveCatchupNotificationsKeepsOrdinaryLive(t *testing.T) {
-	t.Parallel()
-
-	checker, _, now := newYouTubeBuilderFixture(t)
-	start := now.Add(-3 * time.Minute)
-
-	notifications, err := checker.buildLiveCatchupNotifications(t.Context(), testChIDLive, &domain.Stream{
-		ID:             "ordinary-live",
-		Title:          "ordinary live",
-		ChannelID:      testChIDLive,
-		Status:         domain.StreamStatusLive,
-		StartScheduled: &start,
-		StartActual:    &start,
-		Channel:        &domain.Channel{ID: testChIDLive, Name: testChannelName1},
-	}, []string{testRoomShort1}, now, nil)
-	require.NoError(t, err)
-	require.Len(t, notifications, 1)
-	assert.Equal(t, 5, notifications[0].MinutesUntil)
+			notifications, err := checker.buildLiveCatchupNotifications(t.Context(), testChIDLive, &domain.Stream{
+				ID:             name + "-live",
+				Title:          name + " live",
+				ChannelID:      testChIDLive,
+				Status:         domain.StreamStatusLive,
+				StartScheduled: &start,
+				StartActual:    &start,
+				IsPremiere:     premiere,
+				Channel:        &domain.Channel{ID: testChIDLive, Name: testChannelName1},
+			}, []string{testRoomShort1}, now, nil)
+			require.NoError(t, err)
+			require.Len(t, notifications, 1)
+			assert.Equal(t, 5, notifications[0].MinutesUntil)
+			assert.Equal(t, premiere, notifications[0].Stream.IsPremiere)
+		})
+	}
 }

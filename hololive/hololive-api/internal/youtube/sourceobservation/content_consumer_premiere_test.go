@@ -57,7 +57,7 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 
 	assertTableCount(t, pool, "youtube_live_sessions", 1)
 	assertTableCount(t, pool, "youtube_live_reconciliation_heads", 0)
-	assertTableCount(t, pool, "youtube_notification_outbox", 1)
+	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 	assertTableCount(t, pool, "source_reconciliation_conflicts", 0)
 
 	live := liveSession(testVideoID, "LIVE")

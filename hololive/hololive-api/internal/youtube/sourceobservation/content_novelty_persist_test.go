@@ -210,27 +210,27 @@ func TestContentVideoListClaimsKeepSameChannelOrder(t *testing.T) {
 	require.Equal(t, second, batch.Claims[0].ObservationID)
 }
 
-// 기준 이후 발견한 예정 Premiere는 발견 때 한 번 알리고, 공개 전환 관측과 발견 관측 replay는 다시 알리지 않습니다.
-func TestContentNoveltyPremiereNotifiesOnceAndReleaseIsSilent(t *testing.T) {
+// 기준 이후 발견한 예정 Premiere는 live 투영만 하고 발견 때 알리지 않으며, 공개 전환 관측과 발견 관측 replay에서도 알리지 않습니다.
+func TestContentNoveltyPremiereStaysSilentFromDiscoveryThroughRelease(t *testing.T) {
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
 	scheduled := proof.ScheduledFor.Add(2 * time.Hour)
 
 	discovered := publishVideoItems(t, pool, &proof, contract.CompletenessComplete, premiereVideoItem(testVideoID, scheduled, proof.ScheduledFor))
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertNewVideoOutboxes(t, pool, testVideoID)
+	assertNewVideoOutboxes(t, pool)
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusUpcoming, new(true))
 
 	proof = advanceLease(ctx, t, pool, &proof, 3*time.Hour)
 	publishVideoItems(t, pool, &proof, contract.CompletenessComplete, trustedVideoItem(testVideoID, scheduled, proof.ScheduledFor))
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertNewVideoOutboxes(t, pool, testVideoID)
+	assertNewVideoOutboxes(t, pool)
 
 	replay, err := repo.RequestReplay(ctx, ReplayInput{ObservationID: discovered, RequestedBy: testReplayOperator, Reason: "Premiere discovery replay"})
 	require.NoError(t, err)
 	require.True(t, replay.Applied)
 	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertNewVideoOutboxes(t, pool, testVideoID)
+	assertNewVideoOutboxes(t, pool)
 }
 
 // 첫 기준 목록에 있던 예정 Premiere는 live 투영은 하되 알리지 않고, 공개 전환 뒤에도 알리지 않습니다.

@@ -130,7 +130,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - migration 260은 `video_list` generation 2와 `earliest_baseline_effective_at`, 항목별 `novelty_pending`을 도입합니다. generation 1은 보관 관측의 canonical/replay 의미를 유지하지만 신규성 증거로 새 `NEW_VIDEO`를 만들지 않습니다.
 - 첫 유효한 비어 있지 않은 목록은 PARTIAL이어도 조용히 기준을 세웁니다. 빈 부분 목록은 기준이 아니며 complete-empty는 기준입니다. 기존 complete 기준은 보존하고 year-1 first-positive clock을 신뢰 가능한 과거 기준으로 추정하지 않습니다.
 - 기준 이후 처음 발견한 영상은 신뢰 가능한 게시 시각이 기준 이후일 때만 알립니다. 과거에 게시됐지만 처음 목록에 나타난 영상은 알리지 않습니다. 게시 근거가 없으면 pending으로 저장하며 후속 증거가 확인되면 한 번 알립니다. 이미 알려진 canonical ID·다른 채널/Shorts에서 먼저 저장된 ID는 자동 backfill하지 않습니다.
-- 새 미래 최초공개는 검증된 예정 시각으로 한 번 알립니다. 기준 목록에 있던 최초공개와 공개 전환은 재알림하지 않습니다. 부분 목록은 끝까지 COMPLETE 부재 근거와 구분합니다.
+- 새 미래 최초공개는 검증된 예정 시각으로 신규성만 닫고 발견 시 `NEW_VIDEO`를 만들지 않습니다. 같은 관측으로 확정한 live 세션(`is_premiere=true`)의 분 전·시작 알림이 공개 알림을 소유합니다(`contracts/alarm.md`). 기준 목록에 있던 최초공개와 공개 전환도 알리지 않습니다. 부분 목록은 끝까지 COMPLETE 부재 근거와 구분합니다.
 - 요청 상한 안에서 증거를 확보하지 못하거나 목록 범위를 벗어난 영상의 알림 복구를 보장하지 않습니다. 이 정책은 알림 누락을 감수하고 과거 영상의 오알림을 막습니다.
 
 ## Collection projection heartbeat와 eligibility

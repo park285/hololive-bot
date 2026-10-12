@@ -159,19 +159,20 @@ func TestNoveltyPendingCandidateSeenBeforeBaselineResolvesSilently(t *testing.T)
 	}
 }
 
-// 기준 이후 처음 본 예정 Premiere는 발견 시 한 번 알리고, 공개 전환 뒤 공개 근거가 와도 다시 알리지 않습니다.
-func TestNoveltyUpcomingPremiereNotifiesOnceAndReleaseIsSilent(t *testing.T) {
+// 기준 이후 처음 본 예정 Premiere는 신규성을 판정하되 발견 시 알리지 않고, 공개 전환 뒤 공개 근거가 와도 알리지 않습니다.
+// 같은 시점에 들어온 일반 업로드는 그대로 알립니다.
+func TestNoveltyUpcomingPremiereStaysSilentThroughRelease(t *testing.T) {
 	t.Parallel()
 
 	_, state := reduceStep(t, unanchoredState(), partialList(1, noveltyBaselineAt, unresolvedEntity("known")))
 
 	scheduled := noveltyLatestAt.Add(time.Hour)
-	discovered, state := reduceStep(t, &state, partialList(2, noveltyLaterAt, premiereEntity("premiere", scheduled)))
-	assertNotifications(t, discovered, "premiere")
+	discovered, state := reduceStep(t, &state, partialList(2, noveltyLaterAt,
+		premiereEntity("premiere", scheduled), publishedEntity("upload", "U", noveltyBaselineAt.Add(2*time.Minute))))
+	assertNotifications(t, discovered, "upload")
 
-	video := discovered.Notifications[0].Video
-	if video.IsPremiere == nil || !*video.IsPremiere || video.ScheduledFor == nil || !video.ScheduledFor.Equal(scheduled) {
-		t.Fatalf("premiere notification = %#v", video)
+	if state.Videos["premiere"].NoveltyPending {
+		t.Fatal("upcoming premiere novelty must be decided at discovery")
 	}
 
 	released, _ := reduceStep(t, &state, partialList(3, noveltyLatestAt, publishedEntity("premiere", "premiere", scheduled)))

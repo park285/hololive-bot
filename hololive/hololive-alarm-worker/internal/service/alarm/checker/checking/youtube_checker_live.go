@@ -22,12 +22,6 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	sentRooms map[string]struct{},
 	observedAt ...*time.Time,
 ) ([]*domain.AlarmNotification, error) {
-	if stream != nil && stream.IsLive() && stream.IsPremiere {
-		observeYouTubeLiveCatchup("premiere_content_owned")
-
-		return nil, nil
-	}
-
 	if !isLiveCatchupCandidate(stream) {
 		return nil, nil
 	}
@@ -52,8 +46,9 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	return c.finalizeLiveCatchupNotifications(ctx, stream, startAt, now, notifications, suppressedRooms), nil
 }
 
+// 예정 Premiere도 발견 시 NEW_VIDEO가 없으므로 분 전 알림을 놓친 방에는 일반 방송처럼 시작 알림을 보낸다.
 func isLiveCatchupCandidate(stream *domain.Stream) bool {
-	return stream != nil && stream.IsLive() && !stream.IsPremiere
+	return stream != nil && stream.IsLive()
 }
 
 func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time, observedAt ...*time.Time) (*time.Time, bool) {

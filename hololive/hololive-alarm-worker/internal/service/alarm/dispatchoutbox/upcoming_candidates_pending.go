@@ -20,11 +20,9 @@ type upcomingCandidateFacts struct {
 	ScheduledAt        time.Time
 	SelectedAt         time.Time
 	LiveStatus         *string
-	IsPremiere         *bool
 	StatusObservedAt   *time.Time
 	ScheduleObservedAt *time.Time
 	LiveScheduledAt    *time.Time
-	ContentNoticeAt    *time.Time
 }
 
 // 원장 증거가 만료·방송 관측보다 우선한다. 불명 전송을 재발행 가능한 후보로 되돌리지 않는다.
@@ -41,10 +39,6 @@ func (f upcomingCandidateFacts) outcome(now time.Time) string {
 		return "expired"
 	}
 
-	if f.premiereNoticeAfterSelection() {
-		return "stream_ended"
-	}
-
 	if f.StatusObservedAt != nil && f.StatusObservedAt.After(f.SelectedAt) && f.LiveStatus != nil &&
 		(*f.LiveStatus == "LIVE" || *f.LiveStatus == "ENDED") {
 		return "stream_ended"
@@ -56,12 +50,6 @@ func (f upcomingCandidateFacts) outcome(now time.Time) string {
 	}
 
 	return "pending"
-}
-
-// 선정 뒤에 생긴 최초공개 NEW_VIDEO "공개 예정" 안내가 이미 공개 직전 알림을 대신한다.
-// 선정 전부터 있던 안내는 미리 받은 공지이므로 분 전 알림을 그대로 보낸다. 종료 사유는 기존 outcome 어휘를 쓴다.
-func (f upcomingCandidateFacts) premiereNoticeAfterSelection() bool {
-	return f.IsPremiere != nil && *f.IsPremiere && f.ContentNoticeAt != nil && f.ContentNoticeAt.After(f.SelectedAt)
 }
 
 func upcomingDeliveryOutcome(status Status) string {
@@ -144,8 +132,7 @@ func evaluateUpcomingCandidates(ctx context.Context, tx pgx.Tx, now time.Time) (
 
 		if err := rows.Scan(&c.DedupeKey, &c.ChannelID, &raw,
 			&f.PayloadHash, &f.EventPayloadHash, &f.DeliveryStatus, &f.ScheduledAt, &f.SelectedAt,
-			&f.LiveStatus, &f.IsPremiere, &f.StatusObservedAt, &f.ScheduleObservedAt, &f.LiveScheduledAt,
-			&f.ContentNoticeAt); err != nil {
+			&f.LiveStatus, &f.StatusObservedAt, &f.ScheduleObservedAt, &f.LiveScheduledAt); err != nil {
 			return nil, fmt.Errorf("scan upcoming candidate facts: %w", err)
 		}
 

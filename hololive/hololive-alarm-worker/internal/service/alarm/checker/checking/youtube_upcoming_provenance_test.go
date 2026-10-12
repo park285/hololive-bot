@@ -39,35 +39,18 @@ func TestUpcomingRecoverySeparatesCurrentProviderFromStaleCanonical(t *testing.T
 	}
 }
 
-func TestUpcomingRecoveryPremiereNoticeDecidesStagedCandidate(t *testing.T) {
-	// 후보 선정은 now-2s다. 그 뒤 생긴 공개 예정 안내만 분 전 알림을 대신하고, 이미 받은 이른 공지는 분 전 알림을 막지 않는다.
-	for name, noticeOffset := range map[string]time.Duration{
-		"notice after selection":  0,
-		"notice before selection": -time.Hour,
-	} {
-		t.Run(name, func(t *testing.T) {
-			result := runStagedUpcomingCandidateCheck(t, func(pool *pgxpool.Pool, stream *domain.Stream, now time.Time) (string, time.Duration) {
-				_, err := pool.Exec(t.Context(), `UPDATE youtube_live_sessions SET scheduled_start_time=$1,is_premiere=true WHERE video_id=$2`, stream.StartScheduled, stream.ID)
-				require.NoError(t, err)
+// 선정 뒤 확정된 Premiere 분류는 후보를 종료하지 않는다. 발견 시 알림이 없으므로 분 전 알림을 그대로 복구한다.
+func TestUpcomingRecoveryKeepsStagedPremiereCandidate(t *testing.T) {
+	result := runStagedUpcomingCandidateCheck(t, func(pool *pgxpool.Pool, stream *domain.Stream, _ time.Time) (string, time.Duration) {
+		_, err := pool.Exec(t.Context(), `UPDATE youtube_live_sessions SET scheduled_start_time=$1,is_premiere=true WHERE video_id=$2`, stream.StartScheduled, stream.ID)
+		require.NoError(t, err)
 
-				_, err = pool.Exec(t.Context(), `INSERT INTO youtube_notification_outbox(kind,channel_id,content_id,payload,status,created_at,terminal_at) VALUES('NEW_VIDEO',$1,$2,'{}','SENT',$3,$3)`, stream.ChannelID, stream.ID, now.Add(noticeOffset))
-				require.NoError(t, err)
+		return "ok", 5 * time.Minute
+	})
 
-				return "ok", 5 * time.Minute
-			})
-
-			if noticeOffset == 0 {
-				require.Equal(t, "stream_ended", result.outcome)
-				require.Empty(t, result.recovered)
-
-				return
-			}
-
-			require.Equal(t, "pending", result.outcome)
-			require.Len(t, result.recovered, 1)
-			require.True(t, result.recovered[0].Stream.StartScheduled.Equal(result.selectedStart))
-		})
-	}
+	require.Equal(t, "pending", result.outcome)
+	require.Len(t, result.recovered, 1)
+	require.True(t, result.recovered[0].Stream.StartScheduled.Equal(result.selectedStart))
 }
 
 type stagedUpcomingCandidateResult struct {

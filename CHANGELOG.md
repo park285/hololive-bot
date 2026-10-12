@@ -8,6 +8,11 @@
 
 ## 미출시
 
+## v9.3.0 - 2026-10-13
+
+- **최초공개는 공개 5분 전에만 알림:** 예정 최초공개는 발견 시 `NEW_VIDEO` "N분 후 공개 예정"을 만들지 않고(hololive-api), 공개 전환 뒤에도 영상 알림을 만들지 않습니다. 구독자는 일반 방송과 같은 분 전 target(`선행공개 N분 전`)과 일정 변경 알림을 받고, 분 전 target을 모두 지난 뒤 발견된 경우 분 전 알림을 받지 못한 방에만 시작 알림(`선행공개 시작`)을 받습니다(alarm-worker). v9.2.0의 공개 예정 안내 중복 생략과 그 조회는 쓸모가 없어져 지웠습니다.
+- **배포:** migration은 없습니다. hololive-api를 먼저 교체한 뒤 alarm-worker를 교체합니다. api만 v9.2.1로 되돌리면 발견 시 알림이 다시 나가고, worker만 9.2.0으로 되돌리면 분 전 target 뒤에 발견된 최초공개의 시작 알림이 빠집니다.
+
 ## v9.2.1 - 2026-10-13
 
 - **queue 보존 삭제 인덱스:** migration 302·303이 `source_observation_queue`에 만료 판정용 부분 인덱스 `(processed_at, observation_id) WHERE status = 'PROCESSED'`, `(dead_lettered_at, observation_id) WHERE status = 'DEAD_LETTER'`를 `CREATE INDEX CONCURRENTLY`로 만듭니다. 보존 삭제가 PROCESSED 이력 전체 대신 만료 행만 읽습니다(운영 2026-10-12: 약 22만 행, 평균 166 ms·최대 9.2초). SQL은 바꾸지 않습니다.
