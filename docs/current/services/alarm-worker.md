@@ -25,7 +25,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send under the `youtube_delivery` profile executor
 - v1 YouTube outbox는 v3 ledger로 넘기지 않고 `youtube_delivery` dispatcher가 direct egress까지 소유 (`DEC-20260926-hololive-outbox-v3-convergence`로 `shadow|cutover` handoff 삭제)
-- Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room.
+- Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room. Only sessions whose title contains a birthday keyword count as birthday streams.
 
 방송·콘텐츠·축하·생일 방송·X 스페이스 알림에는 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. worker의 렌더러와 dispatch 설정에는 접기 옵션이 없습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 표시를 제어하며, worker는 공통 설정 로딩에서 값 형식만 검증합니다. 사용자 template/채널 override의 직접 패딩, 기존 예약 본문과 pinned request의 본문·route·ID는 유지합니다.
 

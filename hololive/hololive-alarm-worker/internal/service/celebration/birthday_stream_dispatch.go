@@ -1,6 +1,8 @@
 package celebration
 
 import (
+	"time"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -85,7 +87,7 @@ func birthdayStreamEnvelope(
 			VideoID:           candidate.session.VideoID,
 			StreamTitle:       candidate.session.Title,
 			StreamURL:         domain.YouTubeWatchURL(candidate.session.VideoID),
-			ScheduledStartKST: birthdayStreamScheduledStartKST(&candidate.session),
+			ScheduledStartKST: birthdayStreamScheduledStartKST(&candidate.session, dateStr),
 		},
 		Version: contractsalarm.QueueEnvelopeVersionV1,
 	}
@@ -99,15 +101,6 @@ func birthdayStreamEnvelopeFromPublished(
 	published.Notification.Users = nil
 
 	return published
-}
-
-func birthdayStreamCandidateEventKeys(candidates []birthdayStreamCandidate, dateStr string) []string {
-	eventKeys := make([]string, 0, len(candidates))
-	for _, candidate := range candidates {
-		eventKeys = append(eventKeys, birthdayStreamEventKey(candidate.member.ID, dateStr, candidate.session.VideoID))
-	}
-
-	return eventKeys
 }
 
 func birthdayGreetingEventKeys(candidates []birthdayStreamCandidate, dateStr string) []string {
@@ -149,10 +142,16 @@ func countBirthdayStreamAudienceRooms(roomsByEventKey map[string][]string) int {
 	return len(seen)
 }
 
-func birthdayStreamScheduledStartKST(session *BirthdayStreamSession) string {
+// 판정 창이 KST 생일 당일 앞뒤로 넓으므로 다른 KST 날짜에 시작하는 방송은 날짜를 붙여
+// 생일 당일 시각으로 오해하지 않게 한다.
+func birthdayStreamScheduledStartKST(session *BirthdayStreamSession, dateStr string) string {
 	start := timeutil.FirstNonNilTime(session.ScheduledStart, session.StartedAt)
 	if start == nil {
 		return ""
+	}
+
+	if timeutil.FormatKST(*start, time.DateOnly) != dateStr {
+		return timeutil.FormatKST(*start, "01/02 15:04")
 	}
 
 	return timeutil.FormatKST(*start, "15:04")

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -17,6 +18,15 @@ import (
 )
 
 const birthdayStreamMaxPublishedPerMemberDay = 3
+
+// 멤버 생일은 현지 날짜라서 판정 창을 KST 생일 당일 앞뒤로 넓힌다. KST보다 늦은 지역의 생일 저녁
+// 방송은 KST 다음 날로 넘어가고(ID 2시간, 미국 서부 최대 17시간), KST보다 이른 지역(호주 동부 최대
+// 2시간)과 KST 자정 직전 카운트다운은 전날에 시작한다. 전날 시작한 방송은 생일축하 발송 뒤에도 예정·진행
+// 상태일 때만 알린다. 창이 넓어도 제목 판정과 일일 상한이 오탐을 막는다.
+const (
+	birthdayStreamWindowLeading  = 3 * time.Hour
+	birthdayStreamWindowTrailing = 17 * time.Hour
+)
 
 type BirthdayMemberRepository interface {
 	FindMembersWithBirthdayOn(ctx context.Context, month, day int) ([]*domain.Member, error)
@@ -96,15 +106,25 @@ func (r *BirthdayStreamRunner) RunOnce(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// 어제 생일의 판정 창은 오늘 KST 17시까지 이어진다. 직전 tick 이후 그 창이 열려 있었으면 어제도
+// 평가해 마지막 tick 뒤에 생긴 세션을 놓치지 않는다. 내일 생일은 축하 발송 전이라 대상 방이 없으므로
+// 평가하지 않는다.
 func birthdayStreamEvaluationDates(now time.Time, tickInterval time.Duration) []time.Time {
 	current := kstDayStart(now)
-	previous := kstDayStart(now.Add(-tickInterval))
 
-	if previous.Equal(current) {
-		return []time.Time{current}
+	if now.Add(-tickInterval).Before(birthdayStreamWindowEnd(current.AddDate(0, 0, -1))) {
+		return []time.Time{current.AddDate(0, 0, -1), current}
 	}
 
-	return []time.Time{previous, current}
+	return []time.Time{current}
+}
+
+func birthdayStreamWindowStart(kstDay time.Time) time.Time {
+	return kstDay.Add(-birthdayStreamWindowLeading)
+}
+
+func birthdayStreamWindowEnd(kstDay time.Time) time.Time {
+	return kstDay.AddDate(0, 0, 1).Add(birthdayStreamWindowTrailing)
 }
 
 func kstDayStart(t time.Time) time.Time {
@@ -129,8 +149,8 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, kstDay time.Time)
 	sessions, err := r.sessions.FindBirthdaySessions(
 		ctx,
 		memberChannelIDs(members),
-		kstDay.UTC(),
-		kstDay.Add(24*time.Hour).UTC(),
+		birthdayStreamWindowStart(kstDay).UTC(),
+		birthdayStreamWindowEnd(kstDay).UTC(),
 		observedUntil.Add(-r.effectiveFreshness()),
 		observedUntil,
 	)
@@ -144,7 +164,7 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, kstDay time.Time)
 
 	dateStr := kstDay.Format(time.DateOnly)
 
-	candidates, err := r.selectPublishableSessions(ctx, members, sessions, dateStr)
+	candidates, publishedEvents, err := r.selectPublishableSessions(ctx, members, sessions, dateStr)
 	if err != nil {
 		return fmt.Errorf("select publishable sessions: %w", err)
 	}
@@ -153,7 +173,7 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, kstDay time.Time)
 		return nil
 	}
 
-	if err := r.publishCandidates(ctx, candidates, dateStr, len(members)); err != nil {
+	if err := r.publishCandidates(ctx, candidates, publishedEvents, dateStr, len(members)); err != nil {
 		return fmt.Errorf("publish candidates: %w", err)
 	}
 
@@ -163,6 +183,7 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, kstDay time.Time)
 func (r *BirthdayStreamRunner) publishCandidates(
 	ctx context.Context,
 	candidates []birthdayStreamCandidate,
+	publishedEvents map[string]domain.AlarmQueueEnvelope,
 	dateStr string,
 	memberCount int,
 ) error {
@@ -181,14 +202,6 @@ func (r *BirthdayStreamRunner) publishCandidates(
 	// 해석되는지 먼저 확인한다. 불일치나 decode 실패는 audience를 믿을 수 없다는 뜻이라 발행하지 않고 오류로 끝낸다.
 	if _, verifyErr := r.sessions.FindPublishedCelebrationEvents(ctx, birthdayEventKeys); verifyErr != nil {
 		return fmt.Errorf("birthday stream runner: verify published birthday events: %w", verifyErr)
-	}
-
-	publishedEvents, err := r.sessions.FindPublishedBirthdayStreamEvents(
-		ctx,
-		birthdayStreamCandidateEventKeys(candidates, dateStr),
-	)
-	if err != nil {
-		return fmt.Errorf("birthday stream runner: find published events: %w", err)
 	}
 
 	envelopes := buildBirthdayStreamEnvelopes(candidates, roomsByEventKey, publishedEvents, dateStr)
@@ -249,12 +262,14 @@ type birthdayStreamCandidate struct {
 	session BirthdayStreamSession
 }
 
+// selectPublishableSessions는 후보와 함께 후보 멤버들의 기발행 event payload를 돌려준다.
+// 재발행은 이 payload를 그대로 써야 같은 event key의 hash 충돌 없이 새 방 delivery만 추가된다.
 func (r *BirthdayStreamRunner) selectPublishableSessions(
 	ctx context.Context,
 	members []*domain.Member,
 	sessions []BirthdayStreamSession,
 	dateStr string,
-) ([]birthdayStreamCandidate, error) {
+) ([]birthdayStreamCandidate, map[string]domain.AlarmQueueEnvelope, error) {
 	byChannel := make(map[string][]BirthdayStreamSession, len(members))
 
 	for _, session := range sessions {
@@ -262,6 +277,7 @@ func (r *BirthdayStreamRunner) selectPublishableSessions(
 	}
 
 	candidates := make([]birthdayStreamCandidate, 0, len(sessions))
+	publishedEvents := make(map[string]domain.AlarmQueueEnvelope)
 
 	for _, m := range members {
 		channelSessions := byChannel[m.ChannelID]
@@ -269,66 +285,66 @@ func (r *BirthdayStreamRunner) selectPublishableSessions(
 			continue
 		}
 
-		selected, err := r.selectNewSessionsForMember(ctx, m, channelSessions, dateStr)
+		published, err := r.sessions.ListPublishedBirthdayStreamEvents(ctx, birthdayStreamEventKeyPrefix(m.ID, dateStr))
 		if err != nil {
-			return nil, fmt.Errorf("select new sessions for member: %w", err)
+			return nil, nil, fmt.Errorf("select birthday stream sessions: member %d: %w", m.ID, err)
 		}
 
-		for _, session := range selected {
+		maps.Copy(publishedEvents, published)
+
+		for _, session := range selectBirthdayStreamSessionsWithinDailyCap(m.ID, dateStr, channelSessions, published) {
 			candidates = append(candidates, birthdayStreamCandidate{member: m, session: session})
 		}
 	}
 
-	return candidates, nil
+	return candidates, publishedEvents, nil
 }
 
-func (r *BirthdayStreamRunner) selectNewSessionsForMember(
-	ctx context.Context,
-	member *domain.Member,
-	sessions []BirthdayStreamSession,
-	dateStr string,
-) ([]BirthdayStreamSession, error) {
-	publishedKeys, err := r.sessions.ListPublishedEventKeys(ctx, birthdayStreamEventKeyPrefix(member.ID, dateStr))
-	if err != nil {
-		return nil, fmt.Errorf("list published event keys: %w", err)
-	}
-
-	published := make(map[string]struct{}, len(publishedKeys))
-	for _, key := range publishedKeys {
-		published[key] = struct{}{}
-	}
-
-	return selectBirthdayStreamSessionsWithinDailyCap(member.ID, dateStr, sessions, published), nil
-}
-
+// 상한과 재평가 대상은 저장 제목이 생일 방송으로 판정되는 기발행 event만 센다. 저장 제목이
+// 생일과 무관한 기발행 event는 같은 날의 실제 생일 방송을 막지 않도록 상한에서 빼고, 현재 제목과
+// 관계없이 다시 보내지 않는다. 재발행은 저장 payload를 쓰므로 생일과 무관한 제목이 다시 나가기 때문이다.
 func selectBirthdayStreamSessionsWithinDailyCap(
 	memberID int,
 	dateStr string,
 	sessions []BirthdayStreamSession,
-	published map[string]struct{},
+	published map[string]domain.AlarmQueueEnvelope,
 ) []BirthdayStreamSession {
-	remaining := max(birthdayStreamMaxPublishedPerMemberDay-len(published), 0)
+	counted := 0
 
-	ordered := append([]BirthdayStreamSession(nil), sessions...)
+	for eventKey := range published {
+		if isPublishedBirthdayStream(published[eventKey].Celebration) {
+			counted++
+		}
+	}
+
+	remaining := max(birthdayStreamMaxPublishedPerMemberDay-counted, 0)
+
+	ordered := slices.Clone(sessions)
 	sortBirthdayStreamSessions(ordered)
 
 	selected := make([]BirthdayStreamSession, 0, min(len(ordered), birthdayStreamMaxPublishedPerMemberDay))
 	for _, session := range ordered {
-		if _, ok := published[birthdayStreamEventKey(memberID, dateStr, session.VideoID)]; ok {
-			if len(selected) < birthdayStreamMaxPublishedPerMemberDay {
+		eventKey := birthdayStreamEventKey(memberID, dateStr, session.VideoID)
+		if _, ok := published[eventKey]; ok {
+			// 이미 생일 방송으로 발행한 event는 이후 제목이 바뀌어도 늦게 생일축하를 받은 방을 위해 재평가한다.
+			if isPublishedBirthdayStream(published[eventKey].Celebration) && len(selected) < birthdayStreamMaxPublishedPerMemberDay {
 				selected = append(selected, session)
 			}
 
 			continue
 		}
 
-		if remaining > 0 && len(selected) < birthdayStreamMaxPublishedPerMemberDay {
+		if remaining > 0 && len(selected) < birthdayStreamMaxPublishedPerMemberDay && isBirthdayStreamTitle(session.Title) {
 			selected = append(selected, session)
 			remaining--
 		}
 	}
 
 	return selected
+}
+
+func isPublishedBirthdayStream(payload *domain.CelebrationDispatchPayload) bool {
+	return payload != nil && isBirthdayStreamTitle(payload.StreamTitle)
 }
 
 func sortBirthdayStreamSessions(sessions []BirthdayStreamSession) {
