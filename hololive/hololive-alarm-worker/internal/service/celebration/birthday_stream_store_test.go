@@ -80,6 +80,45 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey(testMissingMemberID, testBirthdayDate))
 }
 
+func TestPgxStoreListPublishedBirthdayStreamEventsMatchesMemberDatePrefix(t *testing.T) {
+	t.Parallel()
+
+	pool := dbtest.NewPool(t)
+	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+
+	const prefixSharingMemberID = 1010
+
+	streamEnvelope := func(memberID int, dateStr, videoID string) domain.AlarmQueueEnvelope {
+		return birthdayStreamEnvelope(&birthdayStreamCandidate{
+			member:  &domain.Member{ID: memberID, ChannelID: testChannelA, Name: testMemberName},
+			session: BirthdayStreamSession{VideoID: videoID, ChannelID: testChannelA, Title: testBirthdayTitle},
+		}, testMemberName, testRoom1, dateStr)
+	}
+
+	_, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
+		Envelopes: []domain.AlarmQueueEnvelope{
+			streamEnvelope(testMemberIDA, testBirthdayDate, testVideoA),
+			streamEnvelope(prefixSharingMemberID, testBirthdayDate, "vid-other-member"),
+			streamEnvelope(testMemberIDA, testNextDate, "vid-other-date"),
+			birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, testRoom1),
+		},
+	})
+	require.NoError(t, err)
+
+	events, err := NewPgxStore(pool).ListPublishedBirthdayStreamEvents(
+		t.Context(),
+		birthdayStreamEventKeyPrefix(testMemberIDA, testBirthdayDate),
+	)
+	require.NoError(t, err)
+
+	streamEventKey := birthdayStreamEventKey(testMemberIDA, testBirthdayDate, testVideoA)
+
+	require.Len(t, events, 1)
+	require.Contains(t, events, streamEventKey)
+	require.NotNil(t, events[streamEventKey].Celebration)
+	assert.Equal(t, testBirthdayTitle, events[streamEventKey].Celebration.StreamTitle)
+}
+
 func TestBirthdayStreamRunnerReusesPublishedPayloadWhenTitleChanges(t *testing.T) {
 	t.Parallel()
 
@@ -134,7 +173,7 @@ func seedBirthdayStreamTitleDrift(
 		INSERT INTO youtube_live_sessions (
 			video_id, channel_id, status, title, scheduled_start_time, last_seen_at, schedule_observed_at
 		) VALUES ($1, $2, 'UPCOMING', $3, $4, $5, $5)
-	`, testVideoA, testChannelA, "original title", scheduledAt, now)
+	`, testVideoA, testChannelA, "original birthday title", scheduledAt, now)
 	require.NoError(t, err)
 
 	_, err = repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
@@ -206,7 +245,7 @@ func assertBirthdayStreamCanonicalState(t *testing.T, pool *pgxpool.Pool) {
 	`, streamEventKey).Scan(&collisionCount)
 	require.NoError(t, err)
 
-	assert.Equal(t, "original title", persistedTitle)
+	assert.Equal(t, "original birthday title", persistedTitle)
 	assert.Equal(t, 2, deliveryCount)
 	assert.Zero(t, collisionCount)
 }
@@ -249,11 +288,11 @@ func TestBirthdaySessionsRequireFreshStateSpecificObservation(t *testing.T) {
 		{name: "future", clock: new(now.Add(time.Microsecond))},
 		{name: "unknown"},
 	} {
-		for _, status := range []string{"LIVE", "UPCOMING"} {
+		for _, status := range []string{testStatusLive, testStatusUpcoming} {
 			id := status + "-" + observation.name
 			statusClock, scheduleClock := new(now), new(now)
 
-			if status == "LIVE" {
+			if status == testStatusLive {
 				statusClock = observation.clock
 			} else {
 				scheduleClock = observation.clock
