@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
@@ -36,12 +37,6 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	subscriberRooms []string,
 	window targetpolicy.EvaluationWindow,
 ) ([]*domain.AlarmNotification, error) {
-	if stream != nil && stream.IsPremiere {
-		observeYouTubeUpcomingNoMinuteDecision("premiere_content_owned", window)
-
-		return nil, nil
-	}
-
 	if !isUpcomingNotificationCandidate(stream, window) {
 		return nil, nil
 	}
@@ -55,6 +50,17 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 		return nil, nil
 	}
 
+	covered, err := c.premiereContentNoticeCoversTarget(ctx, stream, selection)
+	if err != nil {
+		return nil, fmt.Errorf("check premiere content notice: %w", err)
+	}
+
+	if covered {
+		observeYouTubeUpcomingDecision("premiere_content_notice_covered", selection.minutesUntil, selection.label, window)
+
+		return nil, nil
+	}
+
 	notifications := buildYouTubeUpcomingRoomNotifications(stream, subscriberRooms, selection)
 
 	observeYouTubeUpcomingDecision("selected", selection.minutesUntil, selection.label, window)
@@ -64,7 +70,33 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 }
 
 func isUpcomingNotificationCandidate(stream *domain.Stream, window targetpolicy.EvaluationWindow) bool {
-	return stream != nil && !stream.IsPremiere && stream.IsUpcoming() && stream.StartScheduled != nil && stream.StartScheduled.After(window.End)
+	return stream != nil && stream.IsUpcoming() && stream.StartScheduled != nil && stream.StartScheduled.After(window.End)
+}
+
+// 최초공개는 발견 시 NEW_VIDEO "N분 후 공개 예정"이 먼저 나간다. 그 안내가 가장 이른 target 이후에
+// 만들어졌다면 이미 공개 직전 안내를 받은 것이므로 분 전 알림을 중복으로 보내지 않는다.
+// 일정 변경 알림은 이미 보낸 분 전 알림을 정정하므로 이 판정과 무관하다.
+func (c *YouTubeChecker) premiereContentNoticeCoversTarget(
+	ctx context.Context,
+	stream *domain.Stream,
+	selection youtubeUpcomingSelection,
+) (bool, error) {
+	if !stream.IsPremiere || !selection.targetCrossed || c.upcomingCandidates == nil {
+		return false, nil
+	}
+
+	noticeAt, ok, err := c.upcomingCandidates.PremiereNoticeAt(ctx, stream.ID)
+	if err != nil {
+		return false, fmt.Errorf("load premiere content notice: %w", err)
+	}
+
+	if !ok {
+		return false, nil
+	}
+
+	earliestTarget := stream.StartScheduled.Add(-time.Duration(c.targetPolicySnapshot().PrimaryAdvanceMinute()) * time.Minute)
+
+	return !noticeAt.Before(earliestTarget), nil
 }
 
 type youtubeUpcomingSelection struct {

@@ -8,6 +8,11 @@
 
 ## 미출시
 
+## v9.2.0 - 2026-10-12
+
+- **최초공개 분 전 알림:** 확정 최초공개도 일반 방송과 같은 분 전 target에서 `선행공개 N분 전` 알림을 보내고, 그 알림을 받은 방에는 일정 변경 알림도 보냅니다. 발견 시 나가는 `NEW_VIDEO` `N분 후 공개 예정` 안내가 가장 이른 target 시각 이후에 생성됐다면 그 안내가 공개 직전 알림을 대신하므로 분 전 알림을 보내지 않습니다. 대기 후보는 선정 뒤에 실패하지 않은 안내가 생겼을 때만 `stream_ended`로 종료합니다. 최초공개의 live catchup 시작 알림은 계속 보내지 않습니다.
+- **배포:** migration은 없습니다. alarm-worker만 다시 릴리스하고 hololive-api는 9.1.2를 유지합니다. 9.0.0으로 되돌리면 최초공개 분 전 알림이 다시 빠집니다.
+
 ## v9.1.2 - 2026-10-12
 
 - **send unit 없는 legacy delivery 정리:** migration 301이 send unit 도입(141) 전에 만든 종료 delivery(`sent`·`cancelled`)를 지우고 `alarm_dispatch_deliveries.send_unit_id`를 NOT NULL로 바꿉니다. 처리되지 않은 dlq·quarantined legacy 행이 있으면 지우지 않고 실패합니다. 같은 조건을 포함하게 된 활성 상태 CHECK(224)는 지웁니다.

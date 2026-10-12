@@ -644,11 +644,13 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 	assert.InDelta(t, continuedBefore+1, testutil.ToFloat64(youtubePersistedLiveTotal.WithLabelValues("holodex_error_continued", "all")), 0)
 }
 
-func TestYouTubeCheckerCheck_SkipsHolodexUpcomingWhenConfirmedPremiere(t *testing.T) {
+func TestYouTubeCheckerCheck_SelectsHolodexUpcomingAsConfirmedPremiere(t *testing.T) {
 	t.Parallel()
 
 	notifications := checkYouTubeUpcomingWithConfirmedPremieres(t, map[string]struct{}{"stream-confirmed-premiere": {}})
-	assert.Empty(t, notifications)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 5, notifications[0].MinutesUntil)
+	assert.True(t, notifications[0].Stream.IsPremiere)
 }
 
 func TestYouTubeCheckerCheck_KeepsHolodexUpcomingWithoutConfirmedPremiere(t *testing.T) {
@@ -657,6 +659,7 @@ func TestYouTubeCheckerCheck_KeepsHolodexUpcomingWithoutConfirmedPremiere(t *tes
 	notifications := checkYouTubeUpcomingWithConfirmedPremieres(t, map[string]struct{}{})
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
+	assert.False(t, notifications[0].Stream.IsPremiere)
 }
 
 func checkYouTubeUpcomingWithConfirmedPremieres(t *testing.T, confirmedPremiereIDs map[string]struct{}) []*domain.AlarmNotification {
