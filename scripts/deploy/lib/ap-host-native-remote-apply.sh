@@ -63,13 +63,13 @@ sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
 sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
 sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
-# 매일 회전해 14개를 보관한다. size는 daily를 덮어써 10M 전에는 회전하지 않으므로 10M 상한은 daily와 함께 동작하는
-# maxsize로 둔다. copytruncate는 원본 파일을 그대로 두므로 create는 효과가 없어 두지 않는다.
+# collector 로그는 앱(shared-go logging의 lumberjack)이 LOG_MAX_SIZE_MB(기본 5)마다 회전하고 압축 백업을 archive로
+# 옮긴다. 이 설정은 앱 회전이 멈춰 파일이 10M를 넘었을 때만 회전하는 안전망이다. daily나 maxsize를 두면 앱 회전과
+# 별도로 매일 copytruncate 회전이 일어나므로 size만 둔다. copytruncate에서는 create가 효과가 없어 두지 않는다.
 sudo -n tee /etc/logrotate.d/hololive-bot >/dev/null <<'LOGROTATE'
 /var/log/hololive-bot/*.log {
-    daily
+    size 10M
     rotate 14
-    maxsize 10M
     missingok
     notifempty
     olddir /var/log/hololive-bot/archive
