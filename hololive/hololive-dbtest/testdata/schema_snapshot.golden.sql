@@ -681,7 +681,9 @@ TABLE source_observation_queue
   CONSTRAINT source_observation_queue_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE CASCADE
   CONSTRAINT source_observation_queue_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_source_observation_queue_claim ON public.source_observation_queue USING btree (available_at, observation_id) WHERE (status = 'PENDING'::text)
+  INDEX CREATE INDEX idx_source_observation_queue_dead_letter_retention ON public.source_observation_queue USING btree (dead_lettered_at, observation_id) WHERE (status = 'DEAD_LETTER'::text)
   INDEX CREATE INDEX idx_source_observation_queue_lease_recovery ON public.source_observation_queue USING btree (lease_expires_at, observation_id) WHERE (status = 'PROCESSING'::text)
+  INDEX CREATE INDEX idx_source_observation_queue_processed_retention ON public.source_observation_queue USING btree (processed_at, observation_id) WHERE (status = 'PROCESSED'::text)
 
 TABLE source_observation_replay_epoch
   COLUMN singleton boolean NOT NULL DEFAULT true

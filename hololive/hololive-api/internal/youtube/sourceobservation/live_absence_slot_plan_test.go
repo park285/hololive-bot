@@ -37,7 +37,7 @@ func TestLiveAbsenceCurrentSlotLookupIsBoundedBySlotNotChannelHistory(t *testing
 	_, err = pool.Exec(ctx, "ANALYZE youtube_live_absence_slots")
 	require.NoError(t, err)
 
-	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+	for _, mode := range planCacheModes {
 		t.Run(mode, func(t *testing.T) {
 			tx, err := pool.Begin(ctx)
 			require.NoError(t, err)

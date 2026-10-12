@@ -304,6 +304,16 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **정리:** 이전 rollback 산출물(`hololive-api:rollback-20261012T121704Z` tag, `deploy-backups/pre-v9.1.1-20261012T121704Z`)을 지웠다. v9.1.0 api 이미지는 `release-48f856815431-r1-arm64` tag로 남아 있다.
 - **남은 일:** 이 계획의 F 항목 중 운영 조건을 기다리는 것은 없다. legacy CSV 백업은 필요 없다고 판단되면 지운다.
 
+## B3와 F1 collector 배포 (v9.2.1, 2026-10-13)
+
+사용자 결정으로 범위 밖에 두었던 B3를 추가하고, F1이 들어간 collector를 배포한다. 같은 결정으로 legacy CSV 백업(`pre-v9.1.2-20261012T141203Z/legacy-deliveries-without-send-unit.csv`)을 hash 확인 뒤 지웠고, VERSION 백업 tar는 rollback용으로 남겼다.
+
+- **B3 근거(운영, 2026-10-12):** `source_observation_queue`는 PROCESSED 219,580행·28 MB이고, 보존 삭제 SQL(`repository_retention_delete_queue_0076_76.sql`)은 20,998회 호출에 평균 166 ms·최대 9.2초였다.
+- **migration 302·303:** `(processed_at, observation_id) WHERE status = 'PROCESSED'`, `(dead_lettered_at, observation_id) WHERE status = 'DEAD_LETTER'`를 각각 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`로 만든다. SQL은 바꾸지 않는다.
+- **시험:** `TestQueueRetentionDeleteReadsOnlyExpiredRows`는 이력 2만 행 중 만료 401행에서 custom·generic plan 모두 두 부분 인덱스를 쓰고 seq scan 없이 만료 행만 읽는지 확인한다. 후보 CTE와 바깥 DELETE가 한 번씩 읽어 802행이다. 302·303 없이 실행하면 두 plan 모두 seq scan으로 실패한다.
+- **F1 collector 범위:** 실행 중인 collector(a·b·c·d)는 v8.0.0(`0b5955bc1`)이다. main까지 collector 바이너리에 들어가는 변경은 #608(F1 alias 치환, 쓰지 않는 공유 함수 삭제, 주석, 오류 문구 1건)과 #613(Go builder 이미지 digest, npm 11.21.0)뿐이고 동작 변화는 없다. Go 의존성 갱신(#604)은 이미 v8.0.0에 들어 있다. collector와 PO issuer는 같은 full SHA로 함께 전환한다.
+- **다른 세션과의 조정:** v9.2.0(#622, alarm-worker만)을 배포한 세션에 원격 작업이 끝났고 계획도 없음을 확인했다. 그 세션의 `pre-v9.2.0` 백업과 worker rollback tag는 건드리지 않는다.
+
 ## 1. SQL 최적화
 
 측정 근거와 조사 방법은 부록에 있다.
