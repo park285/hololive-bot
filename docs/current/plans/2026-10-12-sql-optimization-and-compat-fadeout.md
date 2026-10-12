@@ -314,6 +314,33 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **F1 collector 범위:** 실행 중인 collector(a·b·c·d)는 v8.0.0(`0b5955bc1`)이다. main까지 collector 바이너리에 들어가는 변경은 #608(F1 alias 치환, 쓰지 않는 공유 함수 삭제, 주석, 오류 문구 1건)과 #613(Go builder 이미지 digest, npm 11.21.0)뿐이고 동작 변화는 없다. Go 의존성 갱신(#604)은 이미 v8.0.0에 들어 있다. collector와 PO issuer는 같은 full SHA로 함께 전환한다.
 - **다른 세션과의 조정:** v9.2.0(#622, alarm-worker만)을 배포한 세션에 원격 작업이 끝났고 계획도 없음을 확인했다. 그 세션의 `pre-v9.2.0` 백업과 worker rollback tag는 건드리지 않는다.
 
+## 게시와 배포 (v9.2.1, 2026-10-13)
+
+시각은 UTC(2026-10-12)다.
+
+- **게시:** #624 `b482dfd03`. 그 사이 병합된 #623(문서)을 GitHub update-branch로 합친 뒤 CI 11개가 다시 통과했다. 병합 결과와 검증한 커밋의 차이는 #623 문서 하나다. annotated tag `v9.2.1`과 GitHub Release(`publish-release.sh v9.2.1 v9.2.0`)를 게시했다.
+- **산출물:** `hololive-api:release-b482dfd03f3f-r1-arm64`(`sha256:f87b4722…`, arm64, 9.2.1)를 원격에 load해 같은 ID·revision을 확인했다. collector·PO issuer는 각 배포 스크립트가 같은 revision으로 kapu에서 빌드했다(c·b는 arm64 이미지, a·d는 amd64 rootfs).
+- **api 전환:**
+  - 9.1.2 api를 `hololive-api:rollback-20261012T161459Z`로 보존하고 VERSION 2개를 `deploy-backups/pre-v9.2.1-20261012T161459Z`에 백업했다.
+  - 5분 넘게 열린 트랜잭션이 없음을 확인하고 migration 302·303을 16:15:08~16:15:12Z에 적용했다(applied=2, skipped=162, total=164). `change_started_at=2026-10-12T16:15:13Z`에 api를 `up -d --no-build --no-deps hololive-api`로 교체했고 health gate를 6초에 통과했다.
+- **collector 전환(모두 `b482dfd03`, 9.2.1):**
+  - 중앙 `c`: `po-central-cutover.sh deploy`(change `20261012T162312Z`). 16:23:43Z에 issuer 우선 cutover가 검증됐고 백업은 `backups/po-c-20261012T162312Z`다. 새 issuer는 이전 collector 종료 때 exit 0 재시작 1회(`reason=session_closed`)로, runbook의 예상 교체다. 이전 issuer 컨테이너의 exit 143은 recreate의 SIGTERM이다. `/ready`가 성공했고 instance는 `youtube-collector-c`다.
+  - Seoul `b`: `ap-deploy.sh seoul --apply`. 16:25:57Z에 기동해 완료 검사를 통과했고 백업은 `backups/seoul-collector-20261012T162535Z`다. collector·issuer 재시작 0회.
+  - Osaka `a`: release `20261012T162653Z-b482dfd03f3f-osaka`(previous `20261011T164902Z-0b5955bc1646-osaka`). 16:29:08Z에 기동해 완료 검사를 통과했다.
+  - Osaka2 `d`: release `20261012T163017Z-b482dfd03f3f-osaka2`(previous `20261011T165311Z-0b5955bc1646-osaka2`). 16:32:36Z에 기동해 완료 검사를 통과했다.
+  - native 두 대의 issuer는 `Result=success`, `ExecMainStatus=0`, `NRestarts=0`이다.
+- **수용 증거:**
+  - 적용 전 보존 삭제 계획은 custom·generic 모두 `source_observation_queue` Seq Scan이었다. 적용 후 두 인덱스가 valid(PROCESSED 6.9 MB, DEAD_LETTER 8 kB, DEAD_LETTER 행 없음)이고 INVALID 인덱스는 0개이며, 두 계획 모두 두 부분 인덱스의 Bitmap Index Scan이다.
+  - 배포 뒤 보존 삭제 6회(16:22~16:33Z, 1,825행 삭제)의 평균은 1.69 ms다. 배포 전 누적 평균은 166 ms(21,020회)였다. 두 인덱스의 `idx_scan`은 16:33Z까지 각각 20회다.
+  - api 9.2.1 healthy, 재시작 0회, `APP_VERSION=9.2.1`이다. 16:15:13Z 이후 api·worker·collector-c·po-c 오류 표식은 0건이다.
+  - 원격 tree 112개 파일이 v9.2.1과 같다.
+- **iris-console:** Android 디코더가 빈 `sendUnitId`를 계약 위반으로 거절하고, 상세 화면의 "없음" 대체 표시를 지웠다(iris-console `cdb32a7`, main 직접 반영, `verify-all.sh` 통과). 앱 릴리스는 하지 않았다.
+- **현재 rollback:**
+  - api: `hololive-api:rollback-20261012T161459Z`(9.1.2)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 302·303 인덱스는 남겨도 9.1.2에 영향이 없다.
+  - collector: c는 `po-central-cutover.sh rollback backups/po-c-20261012T162312Z`, b는 `ap-rollback.sh seoul`, a·d는 `ap-host-native-rollback.sh <ap>`(previous release)다.
+- **다른 세션:** iris-console-28 세션이 v9.2.1 위에 v9.2.2(alarm-worker만, migration 없음)를 준비하고 있다. 중앙 작업이 끝났음을 알렸고, 그 세션은 위 rollback 기준점을 건드리지 않는다.
+- **남은 일:** 이전 rollback 산출물(`hololive-api:rollback-20261012T141203Z`, `deploy-backups/pre-v9.1.2-20261012T141203Z`의 VERSION 백업)과 이번 기준점의 정리는 수용 뒤 따로 정한다.
+
 ## 1. SQL 최적화
 
 측정 근거와 조사 방법은 부록에 있다.

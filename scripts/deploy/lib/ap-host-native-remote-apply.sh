@@ -63,18 +63,19 @@ sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
 sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
 sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
+# 매일 회전해 14개를 보관한다. size는 daily를 덮어써 10M 전에는 회전하지 않으므로 10M 상한은 daily와 함께 동작하는
+# maxsize로 둔다. copytruncate는 원본 파일을 그대로 두므로 create는 효과가 없어 두지 않는다.
 sudo -n tee /etc/logrotate.d/hololive-bot >/dev/null <<'LOGROTATE'
 /var/log/hololive-bot/*.log {
     daily
     rotate 14
-    size 10M
+    maxsize 10M
     missingok
     notifempty
     olddir /var/log/hololive-bot/archive
     compress
     delaycompress
     copytruncate
-    create 0640 hololive opc
 }
 LOGROTATE
 if command -v logrotate >/dev/null 2>&1; then
