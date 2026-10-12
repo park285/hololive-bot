@@ -107,7 +107,6 @@ TABLE alarm_dispatch_deliveries
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_event_id ON public.alarm_dispatch_deliveries USING btree (event_id)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_leased_expired ON public.alarm_dispatch_deliveries USING btree (lock_expires_at, id) WHERE (status = 'leased'::text)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_quarantined_retention ON public.alarm_dispatch_deliveries USING btree (quarantined_at, id) WHERE (status = 'quarantined'::text)
-  INDEX CREATE INDEX idx_alarm_dispatch_deliveries_room_created ON public.alarm_dispatch_deliveries USING btree (room_id, created_at DESC)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_send_unit ON public.alarm_dispatch_deliveries USING btree (send_unit_id) WHERE (send_unit_id IS NOT NULL)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_send_unit_due ON public.alarm_dispatch_deliveries USING btree (send_unit_id, next_attempt_at, id) WHERE ((send_unit_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'retry'::text])))
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_sending_stale ON public.alarm_dispatch_deliveries USING btree (sending_started_at, id) WHERE (status = 'sending'::text)
@@ -1100,8 +1099,6 @@ TABLE youtube_community_shorts_alarm_states
   CONSTRAINT chk_youtube_community_shorts_alarm_states_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text])))
   CONSTRAINT youtube_community_shorts_alarm_states_pkey PRIMARY KEY (kind, post_id)
   INDEX CREATE INDEX idx_ycsas_authorized_at ON public.youtube_community_shorts_alarm_states USING btree (authorized_at DESC) WHERE (authorized_at IS NOT NULL)
-  INDEX CREATE INDEX idx_ycsas_delivery_status ON public.youtube_community_shorts_alarm_states USING btree (delivery_status, detected_at DESC)
-  INDEX CREATE INDEX idx_ycsas_detected_at ON public.youtube_community_shorts_alarm_states USING btree (detected_at DESC)
   INDEX CREATE UNIQUE INDEX idx_ycsas_kind_content ON public.youtube_community_shorts_alarm_states USING btree (kind, content_id)
 
 TABLE youtube_community_shorts_source_posts
@@ -1114,7 +1111,6 @@ TABLE youtube_community_shorts_source_posts
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_youtube_community_shorts_source_posts_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text])))
   CONSTRAINT youtube_community_shorts_source_posts_pkey PRIMARY KEY (kind, post_id)
-  INDEX CREATE INDEX idx_ycssp_channel_detected ON public.youtube_community_shorts_source_posts USING btree (channel_id, detected_at DESC)
 
 TABLE youtube_content_absence_slots
   COLUMN channel_id character varying(50) NOT NULL
@@ -1154,9 +1150,6 @@ TABLE youtube_content_alarm_tracking
   CONSTRAINT chk_youtube_content_alarm_tracking_delivery_status_vocab CHECK ((delivery_status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENT'::character varying)::text])))
   CONSTRAINT chk_youtube_content_alarm_tracking_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text])))
   CONSTRAINT youtube_content_alarm_tracking_pkey PRIMARY KEY (kind, canonical_content_id)
-  INDEX CREATE INDEX idx_ycat_channel_detected ON public.youtube_content_alarm_tracking USING btree (channel_id, detected_at DESC)
-  INDEX CREATE INDEX idx_ycat_delivery_status ON public.youtube_content_alarm_tracking USING btree (delivery_status, detected_at DESC)
-  INDEX CREATE INDEX idx_ycat_detected_at ON public.youtube_content_alarm_tracking USING btree (detected_at DESC)
   INDEX CREATE INDEX idx_ycat_kind_content ON public.youtube_content_alarm_tracking USING btree (kind, content_id)
 
 TABLE youtube_content_channel_heads
@@ -1299,6 +1292,7 @@ TABLE youtube_live_review_receipts
   TRIGGER CREATE TRIGGER youtube_live_review_receipts_store_facts AFTER INSERT ON youtube_live_review_receipts FOR EACH ROW EXECUTE FUNCTION store_youtube_live_review_receipt_facts()
 
 TABLE youtube_live_sessions
+  OPTIONS fillfactor=90
   COLUMN video_id character varying(20) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN status text NOT NULL
@@ -1315,15 +1309,15 @@ TABLE youtube_live_sessions
   COLUMN status_observed_at timestamp with time zone
   COLUMN schedule_observed_at timestamp with time zone
   COLUMN title_observed_at timestamp with time zone
+  COLUMN history_sort_at timestamp with time zone GENERATED ALWAYS AS (COALESCE(ended_at, started_at, scheduled_start_time, last_seen_at)) STORED
   CONSTRAINT chk_youtube_live_sessions_lifecycle_origin_vocab CHECK ((lifecycle_origin = ANY (ARRAY['metadata_only'::text, 'observed'::text, 'legacy_unknown'::text])))
   CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK ((status = ANY (ARRAY[('UPCOMING'::character varying)::text, ('LIVE'::character varying)::text, ('ENDED'::character varying)::text])))
   CONSTRAINT youtube_live_sessions_pkey PRIMARY KEY (video_id)
-  INDEX CREATE INDEX idx_yls_channel_last_seen ON public.youtube_live_sessions USING btree (channel_id, last_seen_at DESC)
-  INDEX CREATE INDEX idx_yls_ended_channel_sort_video ON public.youtube_live_sessions USING btree (channel_id, COALESCE(ended_at, started_at, scheduled_start_time, last_seen_at) DESC, video_id DESC) WHERE (status = 'ENDED'::text)
-  INDEX CREATE INDEX idx_yls_ended_cleanup ON public.youtube_live_sessions USING btree (ended_at, video_id) WHERE ((status = 'ENDED'::text) AND (ended_at IS NOT NULL))
-  INDEX CREATE INDEX idx_yls_ended_sort_video ON public.youtube_live_sessions USING btree (COALESCE(ended_at, started_at, scheduled_start_time, last_seen_at) DESC, video_id DESC) WHERE (status = 'ENDED'::text)
+  INDEX CREATE INDEX idx_yls_channel ON public.youtube_live_sessions USING btree (channel_id)
+  INDEX CREATE INDEX idx_yls_ended_channel_history_sort ON public.youtube_live_sessions USING btree (channel_id, history_sort_at DESC, video_id DESC) WHERE (status = 'ENDED'::text)
+  INDEX CREATE INDEX idx_yls_ended_history_sort ON public.youtube_live_sessions USING btree (history_sort_at DESC, video_id DESC) WHERE (status = 'ENDED'::text)
   INDEX CREATE INDEX idx_yls_live_first_seen ON public.youtube_live_sessions USING btree (live_first_seen_at, channel_id) WHERE (status = 'LIVE'::text)
-  INDEX CREATE INDEX idx_yls_status_last_seen ON public.youtube_live_sessions USING btree (status, last_seen_at DESC)
+  INDEX CREATE INDEX idx_yls_status ON public.youtube_live_sessions USING btree (status)
 
 TABLE youtube_live_viewer_sample_evidence
   COLUMN video_id text NOT NULL
@@ -1550,7 +1544,6 @@ TABLE youtube_videos
   COLUMN first_seen_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN last_seen_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT youtube_videos_pkey PRIMARY KEY (video_id)
-  INDEX CREATE INDEX idx_yv_channel_first_seen ON public.youtube_videos USING btree (channel_id, first_seen_at DESC)
   INDEX CREATE INDEX idx_yv_channel_is_short ON public.youtube_videos USING btree (channel_id, is_short)
 
 SEQUENCE acl_rooms_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY acl_rooms.id

@@ -8,6 +8,11 @@
 
 ## 미출시
 
+## v9.1.0 - 2026-10-12
+
+- **쓰지 않는 인덱스 삭제:** 런타임 조회가 쓰지 않는 인덱스 8개(`youtube_content_alarm_tracking` 3개, `youtube_community_shorts_alarm_states` 2개, `youtube_community_shorts_source_posts`·`youtube_videos`·`alarm_dispatch_deliveries` 각 1개)를 migration 283~290으로 지웁니다.
+- **live 세션 HOT 갱신:** 방송 이력 정렬값을 `youtube_live_sessions.history_sort_at` 저장 생성 열로 두고 fillfactor를 90으로 낮춥니다(291). 정렬·채널·상태 인덱스를 `last_seen_at` 없이 새로 만들고(292~295) 기존 인덱스 5개를 지웁니다(296~300). 같은 상태의 반복 관측이 `last_seen_at`만 바꿀 때 인덱스를 다시 쓰지 않습니다. 방송 이력의 결과와 페이지 순서는 같습니다.
+- **배포 순서:** migration을 먼저 적용한 뒤 hololive-api를 교체합니다. 291은 ACCESS EXCLUSIVE로 테이블을 다시 씁니다(운영 약 1만 행). alarm-worker는 9.0.0을 유지합니다. v9.0.1 api로 되돌려도 동작하지만, 그 이미지의 방송 이력 조회는 정렬 인덱스 없이 실행됩니다.
 - CI Python을 CPython 3.15.0과 uv 0.13.0(runner 최소 버전·GitHub bootstrap)으로, govulncheck를 v1.9.0으로, `actions/setup-node`를 v7.1.0으로, collector helper npm을 11.21.0으로 갱신하고 Go 빌더 이미지 `golang:1.27.2-alpine3.24` digest를 현재 게시본으로 맞췄습니다.
 
 ## v9.0.1 - 2026-10-12

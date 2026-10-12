@@ -379,6 +379,8 @@ func broadcastHistoryEntryMatches(query *handlercore.BroadcastHistoryQuery, entr
 	return true
 }
 
+// 다음 페이지 커서 시각입니다. 이 우선순위가 youtube_live_sessions.history_sort_at(migration 291 생성 열)과 같아야
+// 페이지 경계의 행이 겹치거나 빠지지 않습니다.
 func broadcastHistorySortTime(entry *handlercore.BroadcastHistoryEntry) time.Time {
 	switch {
 	case entry.EndedAt != nil:
