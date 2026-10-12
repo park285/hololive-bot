@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.27.1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine3.24@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS gosu
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine3.24@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS gosu
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 ADD --checksum=sha256:b7d2124c326cc8f2c891044b708483ce2f10c360b0b254a0ddfce345f97b6e19 https://proxy.golang.org/github.com/tianon/gosu/@v/v0.0.0-20250923190938-6456aaa0f3c8.zip /tmp/gosu.zip
 RUN unzip -q /tmp/gosu.zip -d /src

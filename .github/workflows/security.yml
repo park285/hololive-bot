@@ -18,7 +18,7 @@ concurrency:
 env:
   GOCACHE: /tmp/go-cache
   GOTMPDIR: /tmp
-  GOVULNCHECK_VERSION: v1.8.0
+  GOVULNCHECK_VERSION: v1.9.0
   GOSEC_VERSION: v2.29.0
   NILAWAY_VERSION: v0.0.0-20260918162853-acb8859b9031
 
@@ -177,7 +177,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.21.0"
           cache: npm
