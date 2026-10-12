@@ -57,7 +57,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 
 ## 진행 기록 (코드 단계, 2026-10-12)
 
-커밋하지 않은 작업 트리 상태다. 검증 결과는 각 단계 직후 값이다.
+코드 단계의 기록이다. 검증 결과는 각 단계 직후 값이며, 게시와 배포는 아래 "게시와 배포"에 적었다.
 
 - **원 checkout 변경 합류:** 사용자 결정으로 원 checkout의 미커밋 변경 90개 파일을 그대로 가져왔다(원 checkout은 그대로 둠). 주석 축약 외에 게이트 정리(`check-migration-manifest.sh` Python 재작성, `check-shared-go-packages.sh`·`check-pgo-default.sh`·`normalize-epoch2-baseline.py`·`pg-hotpath-explain-snapshot_test.sh` 삭제, 중첩 배포 시험 호출을 `pre-push-gate.sh`의 `run_if_changed`로 이동)와 퇴역 가드 시험 삭제가 들어 있다. 영향 패키지 31개 `-race -tags=integration`, `hololive-dbtest`, migration manifest·경계 게이트·SQL ownership, 배포 스크립트 시험 10개가 통과했다.
 - **A1:** recordset의 `send_unit_key`를 `CHARACTER(64)`로 선언했다. `TestInsertDeliveryBatchLooksUpSendUnitsByUnitKey`(send unit 2만 행)는 수정 전 두 모드에서 2만 행 seq scan으로 실패했고 수정 뒤 통과한다. 64자를 넘는 키는 잘리지 않고 `value too long` 오류가 된다. 수천 행에서는 형식이 맞아도 planner가 seq scan을 고를 수 있어 fixture를 2만 행으로 늘렸다.
@@ -133,14 +133,45 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
   - `seedErrorKeysPendingDeletion`은 시험의 허용 목록이며 제거 조건이 있다.
 - worktree에 `youtubejs/node_modules`가 없어 helper 시험이 실패해, 잠금 파일 그대로 `npm ci --offline`으로 설치했다(추적 파일 변경 없음).
 - `scripts/deploy/ap-rsync-files.txt`에서 지운 파일 3개(`alarm/keys/validation.go`, `database/pgx_helpers.go`, `util/math.go`)를 뺐다. `check-ap-rsync-manifest.sh`와 `test-compose-services.sh`가 통과한다.
-- 인덱스에는 `git rm`으로 지운 파일 13개의 삭제와 `api_password_reset_test.go` → `api_auth_allowlist_test.go` 이름 변경(`git mv`)이 스테이징돼 있다. 나머지 삭제·수정과 새 파일은 작업 트리에만 있다. 스테이징을 되돌리는 명령은 거부됐다.
 - **최종 검증(F15·F16까지 마지막 코드 수정 뒤):**
   - `scripts/ci/local-ci.sh` 통과(golangci-lint 0 issues). 범위는 architecture gate(migration manifest·SQL ownership 포함), go mod tidy, `GOWORK=off` canonical vet, integration 태그 vet, staticcheck, golangci-lint, NilAway, 빌드, 전체 race 시험과 non-race 시험, collector·X Spaces helper, 운영 workspace·AP rsync·PostgreSQL 용량·YouTube 성능 예산 gate다. 앞선 실행들의 지적(golangci-lint 17건, 삭제 뒤 형식·unparam·wsl 33건, AP rsync 목록의 지운 파일 경로)은 고친 뒤 처음부터 다시 돌렸다.
   - `RUN_INTEGRATION_TESTS=true scripts/ci/local-ci.sh --integration-tests-only` 통과.
   - `./build-all.sh --build-only --no-bump --skip-local-ci hololive-api hololive-alarm-worker youtube-collector` 통과.
   - 전체 target 빌드는 `deunhealth`가 `cmd/app/main.go:155:3: unknown field BuildDate in struct literal of type gosplash.Settings`로 실패했다. `deploy/`는 이번 작업에서 바뀌지 않았으므로 기존 문제다.
   - deadcode v0.51.0 재실행: 운영 도달 불가 34개, 시험 포함 미사용은 인터페이스 mock 메서드 2개.
-  - 게시 전 `scripts/ci/pre-push-gate.sh`는 실행하지 않았다(커밋·게시 요청 없음).
+  - `scripts/ci/pre-push-gate.sh`는 각 push의 hook에서 통과했다(아래 게시와 배포).
+
+## 게시와 배포 (v9.0.0, 2026-10-12)
+
+사용자 요청("완결해줘 끝까지", "배포까지 끝까지")으로 게시와 중앙 배포까지 진행했다.
+
+- **게시:** 저장소가 squash 병합만 허용해, 코드 삭제와 테이블 DROP을 별도 커밋으로 남기려고 PR을 둘로 나눴다.
+  - #608 `8ad084b06`: 코드·문서 정리. #609 `f4828e538`: migration 281과 v9.0.0 버전·CHANGELOG. 두 PR 모두 CI 11개 통과, 병합 tree는 리뷰한 브랜치와 같다.
+  - 각 push의 hook에서 `pre-push-gate.sh`가 통과했다(govulncheck 취약점 없음).
+  - annotated tag `v9.0.0` → `f4828e5386b10e13d6caa4c952f685b1ca1e671d`. hook이 tag push에 `ALLOW_TAG_PUSH=1` opt-in을 요구해 붙였다.
+  - GitHub Release는 `scripts/publish-release.sh v9.0.0 v8.0.0` preview 뒤 `create`로 게시했다(자동 생성 본문).
+- **산출물:** kapu의 `kapu-multiarch` buildx로 `linux/arm64`, version 9.0.0, revision `f4828e5…`를 빌드했다.
+  - `hololive-api:release-f4828e5386b1-r1-arm64` `sha256:9e47a0cf…`, `hololive-alarm-worker:release-f4828e5386b1-r1-arm64` `sha256:7311dd96…`. 원격 load 뒤 ID·arch·revision이 같았다.
+  - 배포 정적 계약 5개(`test-three-runtime-topology`, `test-compose-services`, `ap-deploy-version_test`, `ap-host-native-deploy_test`, `systemd-compose-up_test`)가 통과했다.
+- **사전 점검(hololive-seoul, read-only guard `on`):** ledger 141·마지막 280, `auth_password_reset_tokens` 0행, upcoming `pending` 0건, 최근 1일 충돌 0건. 원격 deploy tree에서 바뀌는 15개 파일은 배포 중이던 `0b5955bc1`과 같아 drift가 없었다.
+- **전환:**
+  - rollback tag `hololive-api:rollback-20261012T045543Z`(`a585e2a8…`, v8.0.0)와 `hololive-alarm-worker:rollback-20261012T045543Z`(`b24ec179…`)를 보존했다.
+  - 바뀐 deploy tree 15개 파일을 `/opt/hololive-bot/compose/deploy-backups/pre-v9.0.0-20261012T045543Z/tree-files.tar`로 백업한 뒤 같은 소유자·mode로 교체했고, `compose config --quiet`가 통과했다.
+  - 직전 upcoming `pending` 0건을 다시 확인하고 `change_started_at=2026-10-12T04:56:15Z`에 api·alarm-worker를 `up -d --no-build --no-deps`로 함께 교체했다. 두 서비스 모두 health gate를 통과했다.
+  - 코드 교체를 확인한 뒤 migration을 따로 적용했다. 직전 0행을 다시 확인했고, `hololive-db-migrate`가 281만 적용했다(applied=1, skipped=141, total=142). 테이블·인덱스가 없어졌고 `auth_users`는 그대로다.
+- **수용 증거(교체 후 약 15분):**
+  - 두 container가 새 이미지 ID·revision·version으로 실행 중이다. `StartedAt`은 `change_started_at` 이후, healthy, 재시작 0회, OOM 없음.
+  - api `/health`·`/ready`, admin `30006`, llm `30003`, worker `/health`·`/ready`가 모두 OK다. Postgres·Valkey 연결 표식이 있고, 교체 이후 로그의 panic·permission denied·x509·no such file·OOM·ERROR 표식은 0건이다.
+  - 교체 이후 `alarm_dispatch_event_collisions` 새 행 0건.
+  - 교체 직후 notifier 3회는 `sent=0, skipped=2/2/4, failed=0`이었다. 같은 05:00 방송 2건의 5분 전 알림을 이전 worker가 04:54에 보냈고(delivery 2건 SENT), 이후 3분·1분 선정은 중복 방지로 건너뛰었다. 그 upcoming 후보 4건은 이전 날들과 같은 방식으로 `expired`로 끝났다.
+  - 교체 뒤 새 dispatch event는 아직 없어 실제 발송 경로는 관측하지 못했다.
+- **범위 밖:** 중앙 collector `c`와 AP `a`·`b`·`d`는 동작 변경이 없어(alias 치환) 다시 배포하지 않았다. 중앙 `hololive-youtube-po-c`의 재시작은 이번 작업 전(약 04:43Z)이다.
+- **rollback:** rollback tag를 `prod`로 되돌리고 백업 tar로 tree 15개 파일을 복원한 뒤 두 서비스만 `--no-build --no-deps`로 다시 띄운다. 이전 이미지는 재설정 테이블을 읽지 않지만, 이전 이미지의 `db-migrate`는 281이 기록된 ledger를 거부하므로 rollback 때 migration을 실행하지 않는다.
+- **남은 일:**
+  - 오류 문구 key 2개(`external_api_call_failed`·`cache_connection_failed`) 시드 행 삭제 migration은, v9.0.0이 수용되고 rollback 대상이 v8.0.0이 아니게 된 뒤 추가한다. v8.0.0 이미지는 기동 때 이 key를 검증한다.
+  - F17은 2026-11-08 이후 다시 확인한다.
+  - rollback tag, tree 백업, 원격 staging `/opt/hololive-bot/compose/deploy-staging-v9.0.0-20261012T045543Z`의 정리는 수용 뒤 별도 승인으로 한다.
+  - 원 checkout `/home/kapu/work/iris-stack/hololive-bot`의 미커밋 변경은 이번 게시에 포함된 합류분이다(가져온 patch와 비교해 다른 것은 같은 내용의 `go.work.sum`뿐). 다른 작업이 쓰는 checkout이라 건드리지 않았다. 메타 저장소의 hololive-bot 포인터도 다른 submodule 변경이 섞여 있어 갱신하지 않았다.
 
 ## 1. SQL 최적화
 
