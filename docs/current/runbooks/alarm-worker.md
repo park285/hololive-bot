@@ -48,11 +48,11 @@ Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kaka
 
 | Room / notification | Egress |
 |---|---|
-| 일반채팅의 broadcast/video/Shorts/community 및 통합 방송 | `kakaoformat.Render` 일반 텍스트 |
+| 일반채팅의 broadcast/video/Shorts/community | `kakaoformat.Render` 일반 텍스트 |
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=true` | Markdown 원문 (`[title](url)` 링크 유지) |
 | 오픈채팅 + `BOT_MARKDOWN_REPLIES=false` | `kakaoformat.Render` 일반 텍스트 |
 | 방 유형 미확인 | 일반 텍스트 |
-| Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
+| celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용 |
 
 일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown resolver는 오픈채팅 여부만 제공합니다. Karing 선택 분기, chunk planner, Karing sender는 삭제했고, Markdown lane이 쓰는 handoff 확인(`sendoutcome.ErrHandoffOutcomeUnknown`, `sendoutcome.ErrHandoffFailed`)만 남아 있습니다.
 
