@@ -339,7 +339,20 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
   - api: `hololive-api:rollback-20261012T161459Z`(9.1.2)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 302·303 인덱스는 남겨도 9.1.2에 영향이 없다.
   - collector: c는 `po-central-cutover.sh rollback backups/po-c-20261012T162312Z`, b는 `ap-rollback.sh seoul`, a·d는 `ap-host-native-rollback.sh <ap>`(previous release)다.
 - **다른 세션:** iris-console-28 세션이 v9.2.1 위에 v9.2.2(alarm-worker만, migration 없음)를 준비하고 있다. 중앙 작업이 끝났음을 알렸고, 그 세션은 위 rollback 기준점을 건드리지 않는다.
-- **남은 일:** 이전 rollback 산출물(`hololive-api:rollback-20261012T141203Z`, `deploy-backups/pre-v9.1.2-20261012T141203Z`의 VERSION 백업)과 이번 기준점의 정리는 수용 뒤 따로 정한다.
+- **남은 일:** v9.2.1 rollback 기준점(위 api tag·VERSION 백업, `backups/po-c-20261012T162312Z`, AP 백업과 previous release)은 수용 뒤 따로 정한다. 이전 기준점은 아래 "후속 정리"에서 지웠다.
+
+### 후속 정리 (2026-10-13)
+
+사용자 결정("기존 이슈도 해결", 정리 승인)으로 진행했다. 시각은 UTC(2026-10-12)다.
+
+- **native AP logrotate:** #626 `5addd76ce`. Osaka·Osaka2 host-native 배포가 설치하는 `/etc/logrotate.d/hololive-bot`이 `daily`와 `size 10M`을 함께 써서, `size`가 `daily`를 덮어써 10M 전에는 회전하지 않았다(두 호스트 모두 archive가 비어 있었고 collector 로그는 약 4 MB). `maxsize 10M`으로 바꿔 매일 회전하고 14개를 보관한다. `copytruncate`에서 효과가 없던 `create`를 지웠다.
+  - 16:57:30Z에 osaka1·osaka2의 파일을 병합된 stanza(sha256 `896a407d…`, root 0644)로 바꿨다. 이전 파일은 `/var/backups/hololive-bot-logrotate/hololive-bot.20261012T165730Z`에 있다.
+  - 두 호스트의 `logrotate -d`는 경고 없이 collector 로그를 회전 대상으로 판정한다. 실제 첫 회전은 다음 `logrotate.timer`(2026-10-13 00:00Z)라 이 기록 시점에는 관측하지 않았다. 퇴역 producer 로그(`youtube-producer-a.log`·`-d.log`, 8/16 이후 기록 없음)도 그때 한 번 archive로 옮겨진다.
+- **central 이전 rollback 기준점:** `hololive-api:rollback-20261012T141203Z` tag를 지웠다(v9.1.1 이미지 `c919f0faade7`은 `release-51990ac5f4c9-r1-arm64` tag로 남는다). `deploy-backups/pre-v9.1.2-20261012T141203Z`(VERSION tar, Git v9.1.1과 같은 내용)를 지웠다. 다른 세션의 `pre-v9.2.0-20261012T145705Z`와 `collector-gomod-20261012T113752Z`는 남겼다. api·worker는 healthy다.
+- **native AP 배포 산출물:** [보존 절차](../../../../docs/ops/release-artifact-retention.md)의 후보를 승인받아 `prune-release-artifacts.py --apply`로 호스트마다 4개를 지웠다.
+  - Osaka: `/home/ubuntu/.hololive-host-native-osaka-20261006T121252Z-340283120621-osaka`, `...-20261007T020647Z-4a633ab24e8c-osaka`, `releases/20261006T121252Z-340283120621-osaka`, `releases/20261007T020647Z-4a633ab24e8c-osaka`. 사용량 16G→14G.
+  - Osaka2: 같은 두 세대(`20261006T121616Z-340283120621`, `20261007T021336Z-4a633ab24e8c`)의 staging·release. 사용량 13G→12G.
+  - 남은 release는 current(v9.2.1), previous(v8.0.0), `a6219fb84abe`(7.2.10)다. `.incoming-*`와 소유 불명 파일은 남겼다. 정리 뒤 두 호스트의 완료 검사가 통과했고 collector는 active다.
 
 ## 1. SQL 최적화
 
