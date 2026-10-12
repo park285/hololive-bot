@@ -203,7 +203,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 
 ### 정리 (2026-10-12)
 
-- 사용자 요청("완결할것")으로 이번 작업 전부터 있던 rollback 산출물을 지웠다. 대상은 `hololive-api:rollback-20261008T114613Z`(7.2.9), 같은 이미지인 `hololive-api:rollback-20261011-review`·`hololive-api:prod-arm64-a6219fb8`(7.2.10), `hololive-alarm-worker:rollback-20261011-review`(6.1.2), `deploy-backups/pre-v7.2.10-20261008T114613Z`다. 지우기 전에 이미지 ID와 컨테이너 미사용을 다시 확인했다. v8.0.0 이미지(`release-0b5955bc1646-r1-arm64`)와 collector·po rollback tag는 대상이 아니어서 남겼다.
+- 사용자 요청("완결할것")으로 이번 작업 전부터 있던 rollback 산출물을 지웠다. 대상은 `hololive-api:rollback-20261008T114613Z`(7.2.9), 같은 이미지인 `hololive-api:rollback-20261011-review`·`hololive-api:prod-arm64-a6219fb8`(7.2.10), `hololive-alarm-worker:rollback-20261011-review`(6.1.2), `deploy-backups/pre-v7.2.10-20261008T114613Z`다. 지우기 전에 이미지 ID와 컨테이너 미사용을 다시 확인했다. v8.0.0 이미지(`release-0b5955bc1646-r1-arm64`)와 collector·po rollback tag는 대상이 아니어서 남겼다(뒤에 별도 승인으로 지웠다. "게시와 배포 (v9.1.1)" 절의 정리 참고).
 - 로컬 백업 브랜치 `backup/orig-checkout-merged-20261012`(`a64b893d0`)를 지웠다. main에 합쳐 보면 바뀌는 파일은 그 뒤 main이 의도적으로 고친 3개뿐이었다.
 - **F17 날짜 정정:** 대상 308행 중 `sent` 294행의 최신 `sent_at`은 2026-08-10이지만, `cancelled` 14행은 `cancelled_at`이 2026-09-21 07:17Z다. 보존 삭제는 상태별 종료 시각 기준 90일이므로 0건이 되는 것은 2026-12-20 07:17Z 이후다. 코드의 재검토 기한 2026-12-31 안이다.
 
@@ -264,6 +264,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **수용 증거:** api 9.1.1 healthy, 재시작 0회, `APP_VERSION=9.1.1`, ledger 161건 그대로다. 교체 뒤 api·worker 오류 표식은 0건이다. 배포 뒤 같은 계획 확인에서 8개 경우 모두 걸러낸 행이 없었다. 원격 tree 112개 파일이 v9.1.1과 같다.
 - **현재 rollback:** api만 `hololive-api:rollback-20261012T121704Z`(v9.1.0)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 스키마 변경이 없어 다른 단계는 없다.
 - **정리:** 수용 뒤 이전 rollback 산출물(`hololive-api:rollback-20261012T105146Z` tag, `deploy-backups/pre-v9.1.0-20261012T105146Z`)을 지웠다. v9.0.1 api 이미지는 `release-f5fda7953d18-r1-arm64` tag로 남아 있다.
+- **이미지 정리:** 사용자 승인("이미지 승인")으로 central의 이미지 6개를 지웠다. 대상은 v8.0.0 `hololive-api`·`hololive-alarm-worker:release-0b5955bc1646-r1-arm64`와 `hololive-youtube-collector`·`hololive-youtube-po-sandbox`의 `rollback-20261008T115407Z`(7.2.3)·`rollback-20261011T164739Z`(7.2.10)다. 지우기 직전에 ID·버전 label, 컨테이너 미사용, compose·systemd 설정에서 참조하지 않음을 확인했다. 모두 tag가 하나뿐이라 이미지가 삭제됐다. 실행 중인 collector·po `prod`(8.0.0)는 남겼다. 이제 collector-c·po-c는 central에 rollback 이미지가 없으므로, 되돌리려면 이전 revision에서 다시 build해 옮겨야 한다. Seoul·Osaka 이미지는 확인하지 않았다.
 - **남은 일:** F17은 2026-12-20 이후 다시 확인한다.
 
 ## 1. SQL 최적화
