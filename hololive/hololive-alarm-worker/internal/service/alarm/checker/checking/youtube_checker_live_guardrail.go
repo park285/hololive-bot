@@ -43,7 +43,7 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 
 	metas := persistedLiveGuardrailMetas(sessions, subscriberMap, now)
 	for _, meta := range metas {
-		// 병합 후 확정된 Premiere 분류까지 LIVE 알림 생성과 같은 기준으로 반영한다.
+		// 병합 후 상태를 LIVE 알림 생성과 같은 기준으로 반영한다. 확정 Premiere도 시작 알림 대상이다.
 		stream := findYouTubeStreamByID(streamsByChannel[meta.channelID], meta.streamID)
 		if stream != nil && !isLiveCatchupCandidate(stream) {
 			continue

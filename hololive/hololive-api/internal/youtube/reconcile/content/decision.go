@@ -7,7 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// refreshNotifications는 Shorts는 처음 본 영상과 저장된 기준 목록으로, 일반 영상·Premiere는 신규성 판정 결과로 알림을 만듭니다.
+// refreshNotifications는 Shorts는 처음 본 영상과 저장된 기준 목록으로, 일반 영상은 신규성 판정 결과로 알림을 만듭니다.
 func refreshNotifications(session *reduceSession) {
 	session.notifications = session.notifications[:0]
 
@@ -22,6 +22,12 @@ func refreshNotifications(session *reduceSession) {
 
 	for videoID, entity := range candidates {
 		if _, ok := session.state.Videos[videoID]; !ok {
+			continue
+		}
+
+		// 예정 Premiere는 발견 시 알리지 않는다. 같은 근거로 확정되는 live 세션의 분 전·시작 알림이 공개 알림을 소유하며,
+		// 신규성 판정은 이미 끝났으므로 공개 전환 뒤에도 NEW_VIDEO를 만들지 않는다.
+		if entity.IsPremiere != nil && *entity.IsPremiere {
 			continue
 		}
 

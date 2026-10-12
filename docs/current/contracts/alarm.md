@@ -100,8 +100,7 @@ checkpoint와 함께 저장합니다. staging commit부터 복구를 보장하�
 미발행을 방송 전체 dedup으로 가리지 않습니다. 기존 target minutes와 조회 lookback은 유지합니다.
 Canonical 상태·일정의 최신성은 실제 `status_observed_at`·`schedule_observed_at`으로만
 판정하며 과거에 예정 시각도 기록했던 `last_seen_at`은 사용하지 않습니다. 과거 관측 시각을
-추정 backfill하지 않습니다. 확정된 `is_premiere=true` 후보는 선정 시각보다 늦게 생성된
-실패하지 않은 `NEW_VIDEO` 안내가 있을 때만 `stream_ended`로 종료합니다.
+추정 backfill하지 않습니다. 확정된 `is_premiere=true` 분류만으로는 후보를 종료하지 않습니다.
 
 방송 checker와 생일 방송 후보 조회도 LIVE에는 `status_observed_at`, UPCOMING에는
 `schedule_observed_at`을 사용합니다. 각 조회의 최신성 하한부터 현재 시각까지의 관측만
@@ -169,7 +168,7 @@ type AlarmQueueRetryMetadata struct {
 ```
 
 Live alarm notifications keep using `Notification` and `ValidateLiveDispatchRoute`.
-YouTube 최초공개(`youtube_live_sessions.is_premiere=true`)는 발견 시 `NEW_VIDEO` outbox의 `N분 후 공개 예정`/`최초공개`를 보내고, live upcoming의 분 전 알림(`선행공개 N분 전`)과 일정 변경 알림도 일반 방송과 같은 target으로 보낸다. 단, 실패하지 않은 `NEW_VIDEO` 안내가 가장 이른 target 시각(예정 시각 − 최대 target 분) 이후에 생성됐다면 그 안내가 공개 직전 알림을 대신하므로 분 전 알림을 보내지 않는다. 보존 기간이 지나 안내 행이 없으면 분 전 알림을 보낸다. 최초공개는 live catchup 시작 알림 후보가 아니다. 이 계약은 `DEC-20260830-hololive-premiere-content-owned-notifications`의 upcoming 제외를 대체한다.
+YouTube 예정 최초공개는 발견 시 알리지 않는다. hololive-api는 `UPCOMING_PREMIERE` 영상에 `NEW_VIDEO` outbox를 만들지 않으며, 공개 전환 뒤에도 만들지 않는다. 구독자 알림은 live 세션(`youtube_live_sessions.is_premiere=true`)이 일반 방송과 같은 규칙으로 소유한다: upcoming 분 전 알림(`선행공개 N분 전`)과 일정 변경 알림, 그리고 분 전 target을 모두 지난 뒤 발견돼 분 전 알림을 받지 못한 방의 live catchup 시작 알림(`선행공개 시작`)이다. 이 계약은 `DEC-20260830-hololive-premiere-content-owned-notifications`의 `NEW_VIDEO` 소유와 live 후보 제외를 대체한다.
 Major event/member news rows are produced in `notification_delivery_outbox`; `alarm-worker` claims those rows and sends them through Iris/Kakao. YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with `internal/egress/youtubedispatch/format`, sends through Iris/Kakao, and writes per-room delivery state. Alarm dispatch uses the same formatter implementation directly from `internal/egress/alarmdispatch`.
 
 Birthday stream notifications use `SourceKind=celebration`, `AlarmType=BIRTHDAY`, and `Celebration.Kind=birthday_stream`. Their recipient contract is the set of rooms whose matching `celebration:birthday:member-{memberID}:{date}` delivery is already `sent`; an audience lookup failure must not widen delivery to other rooms. Re-publishing a known birthday stream event is permitted so a newly eligible room can add its missing delivery through the existing event/delivery dedupe keys. The birthday window for a KST birthday date runs from 21:00 KST on the previous day to 17:00 KST on the following day so that members in time zones behind or ahead of KST keep their local birthday streams. The runner evaluates a date only from KST midnight and keeps evaluating the previous date until that window closes, so a session that started before midnight is announced only while it is still `UPCOMING` or `LIVE` after the greeting is sent. A stream starting on another KST date shows its start as `01/02 15:04`. A session on the birthday member's own channel inside that window becomes a birthday stream only when its NFKC-normalized, lower-cased title contains a birthday keyword (`birthday`, `bday`, `b-day`, `誕生日`, `誕生祭`, `誕生会`, `生誕`, `たんじょうび`, `バースデー`, `バースデイ`, `バースディ`, `생일`, `ulang tahun`, `ultah`); birthday streams without such a keyword are not announced. The per-member, per-day cap of three counts only published events whose stored title passes the same check, and only those events are re-evaluated after a later title change. A published event whose stored title fails the check is never re-sent, even if the current title later passes.

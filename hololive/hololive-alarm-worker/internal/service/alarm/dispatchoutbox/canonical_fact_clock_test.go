@@ -14,7 +14,7 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-func TestQueuedPremiereClassificationRetiresStagedCandidate(t *testing.T) {
+func TestQueuedPremiereClassificationKeepsStagedCandidate(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	clockSeedContentWatermark(t, pool)
@@ -61,14 +61,16 @@ func TestQueuedPremiereClassificationRetiresStagedCandidate(t *testing.T) {
 	require.True(t, isPremiere)
 	require.True(t, actualSeen.Equal(seen), "classification must preserve existing last_seen_at")
 
+	// 예정 Premiere는 발견 시 NEW_VIDEO를 만들지 않으므로 분 전 알림이 유일한 공개 전 알림이다.
+	var notices int
+
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM youtube_notification_outbox WHERE content_id=$1", clockVideoID).Scan(&notices))
+	require.Zero(t, notices)
+
 	pending, err := store.Pending(ctx, now.Add(time.Second))
 	require.NoError(t, err)
-	require.Empty(t, pending)
-
-	var outcome string
-
-	require.NoError(t, pool.QueryRow(ctx, "SELECT outcome FROM alarm_upcoming_candidates WHERE room_id=$1", notification.RoomID).Scan(&outcome))
-	require.Equal(t, "stream_ended", outcome)
+	require.Len(t, pending, 1)
+	require.Equal(t, "pending", pending[0].Outcome)
 }
 
 func TestScheduleWriterUsesObservationClockForCandidateChanges(t *testing.T) {

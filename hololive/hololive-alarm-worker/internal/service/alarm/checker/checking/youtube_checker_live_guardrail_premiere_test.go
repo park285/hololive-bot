@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestObservePersistedLiveGuardrailsExcludesConfirmedPremiere(t *testing.T) {
+func TestObservePersistedLiveGuardrailsIncludesConfirmedPremiere(t *testing.T) {
 	t.Parallel()
 
 	for name, persistedPremiere := range map[string]bool{
@@ -44,7 +44,7 @@ func TestObservePersistedLiveGuardrailsExcludesConfirmedPremiere(t *testing.T) {
 
 			assert.Contains(t, logs.String(), "alarm.youtube.live_guardrail.missing_dispatch")
 			assert.Contains(t, logs.String(), "stream_id=ordinary-live")
-			assert.NotContains(t, logs.String(), "stream_id=premiere-live")
+			assert.Contains(t, logs.String(), "stream_id=premiere-live")
 		})
 	}
 }

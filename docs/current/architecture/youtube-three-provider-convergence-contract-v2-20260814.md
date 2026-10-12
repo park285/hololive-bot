@@ -1531,7 +1531,7 @@ type ContentEvidenceClock struct {
 
 `video_list` generation 2는 항목별 `publication` 근거를 사용합니다. `PUBLISHED`는 같은 영상·채널의 player `publishDate`가 시간대가 있는 정확한 RFC3339일 때, `UPCOMING_PREMIERE`는 live 콘텐츠가 아닌 예정 영상의 기계가독 예정 시각이 확인됐을 때만 만듭니다. 목록 상대 문자열, 정렬 순서, first-seen 시각을 게시 시각으로 추정하지 않습니다. 근거의 `checked_at`은 envelope observed 시각 이하이고, 공개 시각은 확인 시각보다 미래일 수 없습니다. 항목의 공개/예정 시각과 Premiere 표시는 근거와 일치해야 합니다.
 
-채널의 처음 수락된 비어 있지 않은 목록 또는 COMPLETE 빈 목록은 `earliest_baseline_effective_at`으로 저장하고 알리지 않습니다. PARTIAL은 complete anchor나 부재 근거를 만들지 않습니다. 기존 complete anchor가 더 이르면 이를 유지하고, year-1 레거시 clock·이미 저장된 영상·다른 채널이나 Shorts로 알려진 ID는 새 알림 기준으로 승격하지 않습니다. 기준 이후 처음 본 후보는 신규성 근거가 없으면 canonical과 `novelty_pending`만 보존합니다. 나중에 기준 이후의 유효 공개 시각 또는 미래 예정 최초공개 근거가 생기면 한 번만 NEW_VIDEO를 만들고 pending을 닫습니다. 오래된 공개 시각이 확인되면 무알림으로 닫습니다. 첫 기준에 포함된 최초공개와 이미 알린 최초공개의 공개 전환은 다시 알리지 않습니다.
+채널의 처음 수락된 비어 있지 않은 목록 또는 COMPLETE 빈 목록은 `earliest_baseline_effective_at`으로 저장하고 알리지 않습니다. PARTIAL은 complete anchor나 부재 근거를 만들지 않습니다. 기존 complete anchor가 더 이르면 이를 유지하고, year-1 레거시 clock·이미 저장된 영상·다른 채널이나 Shorts로 알려진 ID는 새 알림 기준으로 승격하지 않습니다. 기준 이후 처음 본 후보는 신규성 근거가 없으면 canonical과 `novelty_pending`만 보존합니다. 나중에 기준 이후의 유효 공개 시각이 생기면 한 번만 NEW_VIDEO를 만들고 pending을 닫습니다. 기준 이후의 미래 예정 최초공개 근거는 pending만 닫고 NEW_VIDEO를 만들지 않습니다(공개 알림은 아래 최초공개 알림 소유권). 오래된 공개 시각이 확인되면 무알림으로 닫습니다. 첫 기준에 포함된 최초공개와 신규성을 닫은 최초공개의 공개 전환도 NEW_VIDEO를 만들지 않습니다.
 
 generation 1은 보존 관측의 canonical consume/replay를 위해 해석하지만 `publication`을 실을 수 없고 그 관측만으로 NEW_VIDEO를 새로 생성하지 않습니다. video_list도 같은 채널의 진행 가능한 앞선 목록을 먼저 claim합니다. 뒤늦게 삽입된 관측·DLQ/replay까지 임의 도착 순서로 재정렬하거나 과거 누락을 자동 backfill하는 보장은 없습니다.
 
@@ -1546,7 +1546,7 @@ generation 1은 보존 관측의 canonical consume/replay를 위해 해석하지
 
 #### 최초공개 알림 소유권
 
-`DEC-20260830-hololive-premiere-content-owned-notifications`가 live alarm의 읽기 경로를 연다. `youtube_live_sessions.is_premiere=true`는 구독자 live upcoming과 live catchup 후보에서 제외하는 분류다. 구독자 최초공개 알림은 `NEW_VIDEO` outbox가 소유한다. content→live premiere 병합은 계속 새 schema/table을 만들지 않으며, 그 병합 범위에는 alarm-side join을 넣지 않는다는 기존 경계를 유지한다. live alarm은 이번 틱의 video_id 집합으로 확정 최초공개 여부를 직접 읽고, `LoadRecentSessions`의 `last_seen` 창에 의존하지 않는다.
+v9.3.0부터 구독자 최초공개 알림은 live alarm이 소유한다. 예정 최초공개는 발견 시 `NEW_VIDEO`를 만들지 않고, `youtube_live_sessions.is_premiere=true` 세션도 일반 방송과 같은 live upcoming 분 전 알림·일정 변경 알림과, 분 전 알림을 놓친 방의 live catchup 시작 알림 후보다. `is_premiere`는 알림 후보 제외가 아니라 `선행공개` 문구 분류로 쓰인다. 이 소유권은 `DEC-20260830-hololive-premiere-content-owned-notifications`의 `NEW_VIDEO` 소유를 대체한다. content→live premiere 병합은 계속 새 schema/table을 만들지 않으며, 그 병합 범위에는 alarm-side join을 넣지 않는다는 기존 경계를 유지한다. live alarm은 이번 틱의 video_id 집합으로 확정 최초공개 여부를 직접 읽고, `LoadRecentSessions`의 `last_seen` 창에 의존하지 않는다.
 
 ### 13.3 Live state
 

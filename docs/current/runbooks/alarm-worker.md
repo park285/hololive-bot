@@ -232,24 +232,24 @@ Mitigation:
 Rollback:
 - 수정 전 image로 rollback하면 같은 증상이 다시 열리므로, 이 결함만으로는 rollback하지 않고 current revision을 fix-forward한다.
 
-### 7. 최초공개 알림이 빠지거나 공개 직전에 겹침
+### 7. 최초공개가 발견 시 알려지거나 공개 전 알림이 빠짐
 
 Symptoms:
-- 공개 전에 발견된 최초공개에 `선행공개 5분 전`이 없다.
-- 또는 공개 직전에 발견된 최초공개에 `N분 후 공개 예정`과 `선행공개 N분 전`이 함께 나갔다.
-- 또는 같은 `stream_id`에 최초공개 live catchup 시작 알림이 있다.
+- 공개 전에 발견된 최초공개에 `N분 후 공개 예정`(`NEW_VIDEO`)이 나갔다.
+- 또는 공개 전에 발견된 최초공개에 `선행공개 N분 전`도 `선행공개 시작`도 없다.
+- 또는 `선행공개 N분 전`을 받은 방에 같은 `stream_id`의 시작 알림이 또 나갔다.
 
 Diagnosis:
-- `youtube_notification_outbox`에서 해당 `video_id`의 `NEW_VIDEO` `created_at`·`status`와 `youtube_live_sessions.scheduled_start_time`을 비교한다. 실패하지 않은 안내가 예정 시각 − 최대 target 분 이후에 생성됐다면 분 전 알림 생략이 정상이다.
-- 그보다 이른 안내만 있거나 안내 행이 없는데 분 전 알림이 없다면 `alarm_upcoming_candidates`의 해당 `stream_id` outcome을 본다. 후보가 아예 없으면 Holodex/저장 세션의 `UPCOMING` 예정 시각이 target 창 안에 있었는지 확인한다.
-- `is_premiere`가 아직 분류되지 않은 상태에서 선정된 후보는 일반 방송 문구(`방송 5분 전`)로 나갈 수 있다. collector live 경로가 먼저 분류해 안내 행이 없을 때 선정된 뒤, 이어서 생긴 공개 예정 안내와 겹치는 것도 남은 공백이다.
-- 최초공개 live catchup은 계약 위반이다. `buildLiveCatchupNotifications`의 최초공개 제외가 빠진 revision인지 확인한다.
+- 예정 최초공개의 `NEW_VIDEO`는 계약 위반이다. `youtube_notification_outbox`의 `created_at`이 v9.3.0 hololive-api 교체 이후인지 보고, 이후라면 `refreshNotifications`의 예정 Premiere 제외가 빠진 revision인지 확인한다. 교체 전에 만들어진 행은 이전 계약의 정상 결과다.
+- 분 전 알림이 없으면 `alarm_upcoming_candidates`의 해당 `stream_id` outcome을 본다. 후보가 아예 없으면 Holodex/저장 세션의 `UPCOMING` 예정 시각이 target 창 안에 있었는지 확인한다. 가장 늦은 target 이후에 발견됐다면 시작 알림이 대신 나가야 한다.
+- 시작 알림 중복은 live catchup 억제 marker(`LiveCatchupSuppressWindow`) 조회 실패·만료 경로를 본다(`contracts/alarm.md`의 Live catchup 억제 marker의 실패 처리).
+- `is_premiere`가 아직 분류되지 않은 상태에서 선정된 후보는 일반 방송 문구(`방송 5분 전`)로 나갈 수 있다. 남은 공백이며 계약 위반이 아니다.
 
 Mitigation:
-- 계약 위반이 확인되면 수정 revision으로 fix-forward한다. 남은 공백에 해당하는 단건 중복은 재발송·삭제하지 않는다.
+- 계약 위반이 확인되면 수정 revision으로 fix-forward한다. 남은 공백에 해당하는 단건 문구 차이·중복은 재발송·삭제하지 않는다.
 
 Rollback:
-- v9.2.0(alarm-worker 9.2.0) 이전 image로 rollback하면 최초공개 분 전 알림이 다시 사라지므로, 이 증상만으로는 rollback하지 않는다.
+- v9.3.0 이전 hololive-api로 rollback하면 예정 최초공개의 발견 시 `NEW_VIDEO`가 다시 생긴다. alarm-worker만 9.2.2 이하로 rollback하면 발견 시 알림 없이 분 전 target을 지난 최초공개의 시작 알림이 빠진다. 이 증상만으로는 rollback하지 않는다.
 
 ## Smoke test
 
