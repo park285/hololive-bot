@@ -14,8 +14,7 @@ import (
 
 type birthdayStreamSessionStore interface {
 	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, observedSince, observedUntil time.Time) ([]BirthdayStreamSession, error)
-	ListPublishedEventKeys(ctx context.Context, keyPrefix string) ([]string, error)
-	FindPublishedBirthdayStreamEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
+	ListPublishedBirthdayStreamEvents(ctx context.Context, keyPrefix string) (map[string]domain.AlarmQueueEnvelope, error)
 	FindPublishedCelebrationEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
 	FindSentRoomsByEventKeys(ctx context.Context, eventKeys []string) (map[string][]string, error)
 }
@@ -71,41 +70,17 @@ func (s *PgxStore) FindBirthdaySessions(
 
 var birthdayStreamLikeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-func (s *PgxStore) ListPublishedEventKeys(ctx context.Context, keyPrefix string) ([]string, error) {
+// ListPublishedBirthdayStreamEvents는 멤버·일자 prefix로 이미 발행된 생일 방송 event의 저장 payload를 돌려준다.
+// 생일 방송 runner는 저장 제목으로 상한 집계와 재평가 대상을 정하고, 재발행 시 이 payload를 그대로 재사용한다.
+func (s *PgxStore) ListPublishedBirthdayStreamEvents(
+	ctx context.Context,
+	keyPrefix string,
+) (map[string]domain.AlarmQueueEnvelope, error) {
 	pattern := birthdayStreamLikeEscaper.Replace(keyPrefix) + "%"
 
-	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0081_02.sql"), pattern)
+	events, err := s.findPublishedCelebrationEvents(ctx, "birthday_stream_runner_0081_02.sql", pattern, validatePublishedBirthdayStreamEvent)
 	if err != nil {
-		return nil, fmt.Errorf("birthday stream runner: query published event keys: %w", err)
-	}
-	defer rows.Close()
-
-	var keys []string
-
-	for rows.Next() {
-		var key string
-
-		if err := rows.Scan(&key); err != nil {
-			return nil, fmt.Errorf("birthday stream runner: scan published event key: %w", err)
-		}
-
-		keys = append(keys, key)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("birthday stream runner: iterate published event keys: %w", err)
-	}
-
-	return keys, nil
-}
-
-func (s *PgxStore) FindPublishedBirthdayStreamEvents(
-	ctx context.Context,
-	eventKeys []string,
-) (map[string]domain.AlarmQueueEnvelope, error) {
-	events, err := s.findPublishedCelebrationEvents(ctx, "birthday_stream_runner_0108_04.sql", eventKeys, validatePublishedBirthdayStreamEvent)
-	if err != nil {
-		return nil, fmt.Errorf("find published birthday stream events: %w", err)
+		return nil, fmt.Errorf("list published birthday stream events: %w", err)
 	}
 
 	return events, nil
@@ -115,6 +90,10 @@ func (s *PgxStore) FindPublishedCelebrationEvents(
 	ctx context.Context,
 	eventKeys []string,
 ) (map[string]domain.AlarmQueueEnvelope, error) {
+	if len(eventKeys) == 0 {
+		return map[string]domain.AlarmQueueEnvelope{}, nil
+	}
+
 	events, err := s.findPublishedCelebrationEvents(ctx, "celebration_runner_0108_01.sql", eventKeys, validatePublishedCelebrationEvent)
 	if err != nil {
 		return nil, fmt.Errorf("find published celebration events: %w", err)
@@ -126,15 +105,12 @@ func (s *PgxStore) FindPublishedCelebrationEvents(
 func (s *PgxStore) findPublishedCelebrationEvents(
 	ctx context.Context,
 	queryName string,
-	eventKeys []string,
+	queryArg any,
 	validate func(string, *domain.AlarmQueueEnvelope) error,
 ) (map[string]domain.AlarmQueueEnvelope, error) {
-	events := make(map[string]domain.AlarmQueueEnvelope, len(eventKeys))
-	if len(eventKeys) == 0 {
-		return events, nil
-	}
+	events := make(map[string]domain.AlarmQueueEnvelope)
 
-	rows, err := s.db.Query(ctx, mustSQL(queryName), eventKeys)
+	rows, err := s.db.Query(ctx, mustSQL(queryName), queryArg)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query published events: %w", err)
 	}
