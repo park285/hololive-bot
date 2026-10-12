@@ -339,7 +339,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
   - api: `hololive-api:rollback-20261012T161459Z`(9.1.2)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 302·303 인덱스는 남겨도 9.1.2에 영향이 없다.
   - collector: c는 `po-central-cutover.sh rollback backups/po-c-20261012T162312Z`, b는 `ap-rollback.sh seoul`, a·d는 `ap-host-native-rollback.sh <ap>`(previous release)다.
 - **다른 세션:** iris-console-28 세션이 v9.2.1 위에 v9.2.2(alarm-worker만, migration 없음)를 준비하고 있다. 중앙 작업이 끝났음을 알렸고, 그 세션은 위 rollback 기준점을 건드리지 않는다.
-- **남은 일:** v9.2.1 rollback 기준점(위 api tag·VERSION 백업, `backups/po-c-20261012T162312Z`, AP 백업과 previous release)은 수용 뒤 따로 정한다. 이전 기준점은 아래 "후속 정리"에서 지웠다.
+- **남은 일:** 없음. 이전 기준점과 v9.2.1 rollback 산출물은 아래 "후속 정리"에서 지웠다.
 
 ### 후속 정리 (2026-10-13)
 
@@ -355,6 +355,11 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
   - Osaka: `/home/ubuntu/.hololive-host-native-osaka-20261006T121252Z-340283120621-osaka`, `...-20261007T020647Z-4a633ab24e8c-osaka`, `releases/20261006T121252Z-340283120621-osaka`, `releases/20261007T020647Z-4a633ab24e8c-osaka`. 사용량 16G→14G.
   - Osaka2: 같은 두 세대(`20261006T121616Z-340283120621`, `20261007T021336Z-4a633ab24e8c`)의 staging·release. 사용량 13G→12G.
   - 남은 release는 current(v9.2.1), previous(v8.0.0), `a6219fb84abe`(7.2.10)다. `.incoming-*`와 소유 불명 파일은 남겼다. 정리 뒤 두 호스트의 완료 검사가 통과했고 collector는 active다.
+- **v9.2.1 rollback 산출물 (사용자 승인):** 수용 뒤 정리했다. 이제 9.1.2 api·v8.0.0 collector로 되돌리려면 release tag 이미지를 다시 쓰거나 다시 빌드해야 한다.
+  - central: `hololive-api:rollback-20261012T161459Z` tag(9.1.2 이미지는 `release-8435b01c6c73-r1-arm64`로 남는다), `hololive-youtube-collector:rollback-20261012T162312Z`·`hololive-youtube-po-sandbox:rollback-20261012T162312Z`(v8.0.0 이미지 `95644d3038ad`·`3bf902703778` 삭제), `deploy-backups/pre-v9.2.1-20261012T161459Z`, `deploy-backups/collector-gomod-20261012T113752Z`, `po-staging-20261012T162312Z`(이미지 tar와 live `po-current-c`와 같은 영수증 사본)를 지웠다. 영수증이 든 `backups/po-c-*`와 다른 세션의 `pre-v9.2.0`·`pre-v9.2.2` 및 worker rollback tag는 남겼다. 정리 뒤 central 컨테이너 4개가 healthy다.
+  - Seoul: `hololive-youtube-collector:rollback-20261012T162535Z`·`hololive-youtube-po-sandbox:rollback-20261012T162535Z`(v8.0.0 이미지)를 지웠다. 현재 issuer 검토 영수증이 든 `backups/seoul-collector-20261012T162535Z`는 남겼다. collector-b·po-b는 9.2.1 healthy다.
+  - Osaka·Osaka2의 previous release(v8.0.0)는 보존 절차가 항상 남기므로 그대로 둔다.
+  - 범위 밖으로 남긴 것: Seoul에는 2026-06부터 쌓인 백업 디렉터리 100여 개와 이전 rollback 이미지 tag 8개가 있어 디스크 사용률이 60%다. 일부는 issuer 영수증 복구 근거로 쓰이므로, 정리하려면 보존 기준을 따로 정해야 한다.
 
 ## 1. SQL 최적화
 
