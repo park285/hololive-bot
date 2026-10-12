@@ -19,7 +19,7 @@ hololive-bot의 SQL·로직 개선 작업에서 2026-10-12에 확정한 범위�
 
 | 단계 | 대상 | 이유 |
 | --- | --- | --- |
-| 운영 읽기 전용 조회 | 중앙 `holo-postgres` | stack-platform-ops 절차. 2026-10-11 완료, F17 재확인만 남음 |
+| 운영 읽기 전용 조회 | 중앙 `holo-postgres` | stack-platform-ops 절차. 2026-10-11 완료. F17은 기다리지 않고 migration 301로 종결("F17 종결" 절) |
 | 공개 계약 변경 | 관리 API `/password/reset-request`, `/password/reset` 삭제(F15) | 503 stub이지만 route가 사라진다 |
 | 데이터 삭제 | `auth_password_reset_tokens` DROP(F15) | 복구 불가. 사용하지 않는 테이블이어도 데이터가 사라진다 |
 | migration 적용·배포 | B1, B2, F15 migration과 api·alarm-worker·collector 배포 | hololive-bot-ops 절차 |
@@ -41,7 +41,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 | B1 | 아래 B1 표 | 7개 모두 런타임 미사용 확인. 합계 약 770 kB이고, 대상 테이블의 HOT 비율은 이미 99.8% 이상이라 효과는 쓰기 증폭 소폭 감소뿐이다 |
 | B2 | `youtube_live_sessions` 9,837행(6.8 MB), 누적 UPDATE 475만 건 중 HOT 6.1%, autovacuum 2,689회. 아래 B2 측정 | 진행 |
 | F15 | `auth_password_reset_tokens` 0행(24 kB) | DROP으로 잃는 데이터 없음 |
-| F17 | `send_unit_id IS NULL` delivery 308건, 모두 종료(`sent` 294, `cancelled` 14), 최신 2026-08-10 | 조건 미충족. `cancelled` 14행의 `cancelled_at`이 2026-09-21이라 보존 기간(90일)이 지난 2026-12-20 이후 다시 확인(2026-10-12 정정) |
+| F17 | `send_unit_id IS NULL` delivery 308건, 모두 종료(`sent` 294, `cancelled` 14), 최신 2026-08-10 | 조건 미충족. `cancelled` 14행의 `cancelled_at`이 2026-09-21이라 보존 기간(90일)이 지난 2026-12-20 이후 다시 확인(2026-10-12 정정). 같은 날 migration 301로 지우고 종결 |
 | F18 | 본문 고정 없이 발송을 시도한 send unit 564개, 진행 중 delivery 0건. 마지막 비고정 시도 2026-09-30 12:25, 고정 시도는 2026-09-30 12:54부터 202개 | 충족. 새 행은 생기지 않고, 남은 delivery는 `sent`·`cancelled`라 관리 재처리(`dlq`·`quarantined`만 대상)로 되살아나지 않는다 |
 | F19 | `youtube_notification_delivery` 64행, `send_request_id IS NULL` 0행 | 충족 |
 | F20 | `notification_delivery_outbox` 0행 | 충족 |
@@ -267,6 +267,26 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **이미지 정리:** 사용자 승인("이미지 승인")으로 central의 이미지 6개를 지웠다. 대상은 v8.0.0 `hololive-api`·`hololive-alarm-worker:release-0b5955bc1646-r1-arm64`와 `hololive-youtube-collector`·`hololive-youtube-po-sandbox`의 `rollback-20261008T115407Z`(7.2.3)·`rollback-20261011T164739Z`(7.2.10)다. 지우기 직전에 ID·버전 label, 컨테이너 미사용, compose·systemd 설정에서 참조하지 않음을 확인했다. 모두 tag가 하나뿐이라 이미지가 삭제됐다. 실행 중인 collector·po `prod`(8.0.0)는 남겼다. 이제 collector-c·po-c는 central에 rollback 이미지가 없으므로, 되돌리려면 이전 revision에서 다시 build해 옮겨야 한다. Seoul·Osaka 이미지는 확인하지 않았다.
 - **남은 일:** F17은 2026-12-20 이후 다시 확인한다.
 
+## F17 종결 (v9.1.2, 2026-10-12)
+
+사용자 결정으로 보존 삭제(2026-12-20 완료 예정)를 기다리지 않고 send unit 없는 legacy delivery를 지우고 분기를 없앴다.
+
+- **운영 조회(읽기 전용, 2026-10-12):** `send_unit_id IS NULL` 행은 `sent` 294(최신 `sent_at` 2026-08-10), `cancelled` 14(최신 `cancelled_at` 2026-09-21)였다. 이 행을 가리키는 관리자 작업은 0건이고 테이블 전체는 1,294행·1.5 MB다.
+- **migration 301:**
+  - 처음부터 ACCESS EXCLUSIVE를 잡고 `sent`·`cancelled` NULL 행만 지운다. dlq·quarantined NULL 행이 있으면 운영자가 처리할 실패 기록이므로 지우지 않고 실패한다.
+  - 이어서 NOT VALID CHECK를 VALIDATE한 뒤 `send_unit_id`를 NOT NULL로 바꾼다. 같은 조건을 포함하게 된 224의 `alarm_dispatch_deliveries_active_send_unit_check`는 지운다.
+  - `alarm_dispatch_admin_actions.delivery_id`는 보존 삭제와 같이 ON DELETE SET NULL이 적용된다.
+- **코드:**
+  - `group.sql`·`group_locked.sql`의 `send_unit_id IS NULL` 단일 행 분기를 지웠다.
+  - 네 조회 SQL의 `COALESCE(send_unit_id::text, '')`와 `replayBlock`의 빈 send unit 조건, 제거 조건 주석도 지웠다.
+  - `sendUnitId` JSON 필드는 그대로이고 항상 값이 있다. iris-console Android의 빈 값 표시("없음")는 쓰이지 않게 되지만 동작은 같다.
+- **시험:**
+  - `TestSendUnitRequiredMigrationDeletesSettledLegacyRowsOnly`: 301 전 형태에서 dlq legacy 행이 있으면 실패하고 아무것도 지우지 않는다. 종료 legacy 행만 남으면 그 행만 지운다. 그 뒤 NOT NULL·224 CHECK 삭제·관리자 작업 보존과 재적용 멱등을 확인한다.
+  - `TestAlarmDispatchDeliveriesRequireSendUnit`가 224 CHECK 시험을 대신해, 상태와 무관하게 send unit 없는 기록이 23502로 거부됨을 확인한다.
+  - send unit 없는 행을 seed하던 dispatchops·worker 보존 삭제 계획·상태 CHECK 시험은 send unit을 쓰게 바꿨다. legacy 행과 비교하지 않음을 지키던 worker 시험(`DoesNotCompareLegacyDedupeKey`)은 그 행이 존재할 수 없게 되어 지웠다.
+- **runbook:** `admin-dispatch-operations.md`의 legacy 단일 항목 설명과 NULL 행 확인 조회를 현재 계약으로 바꿨다.
+- **배포 조건:** migration을 api 교체보다 먼저 적용한다. v9.1.1 api와 alarm-worker 9.0.0은 NULL 없는 테이블에서 그대로 동작하므로 api만 다시 릴리스한다. 지운 legacy 행은 rollback으로 돌아오지 않는다.
+
 ## 1. SQL 최적화
 
 측정 근거와 조사 방법은 부록에 있다.
@@ -381,7 +401,7 @@ live 세션 upsert는 더 늦은 관측마다 `last_seen_at`을 갱신한다. `l
 
 | ID | 대상 | 확인한 조건 | 상태 |
 | --- | --- | --- | --- |
-| F17 | `dispatchops/model.go:272-279`의 `send_unit_id IS NULL` 분기 | `alarm_dispatch_deliveries.send_unit_id IS NULL` 행 0건 | 미충족(308건). `sent` 294행은 2026-11-08, `cancelled` 14행은 2026-12-20 07:17Z에 보존 기간이 끝난다. 2026-12-20 이후 다시 확인. 재검토 기한 2026-12-31 |
+| F17 | `dispatchops/model.go:272-279`의 `send_unit_id IS NULL` 분기 | `alarm_dispatch_deliveries.send_unit_id IS NULL` 행 0건 | 종결. 308건(`sent` 294, `cancelled` 14)은 보존 삭제(2026-12-20 완료 예정)를 기다리지 않고 migration 301로 지웠다("F17 종결" 절) |
 | F18 | `dispatchoutbox.ErrLegacySendRequest`(D2)와 runner의 분기 | `request_body_hash IS NULL`인 send unit에 `sending_started_at`이 있는 진행 중 delivery 0건이고, 새 비고정 시도가 생기지 않음 | 충족. 코드 단계로 옮긴다 |
 | F19 | `youtubedispatch/store/send_request.go`의 구형 request 증거 경로(D3) | `youtube_notification_delivery.send_request_id IS NULL` 0건 | 충족. 코드 단계로 옮긴다 |
 | F20 | `notificationdelivery/request.go:43-50`의 legacy 격리(D1, #607 뒤 위치) | `notification_delivery_outbox` 구형 행(request 없이 시도) 0건 | 충족(테이블 0행). 코드 단계로 옮긴다 |
@@ -398,7 +418,7 @@ F18~F20은 삭제할 때 각 분기를 직접 시험하던 테스트도 함께 �
 ## 3. 단계와 의존성
 
 1. **코드 단계(운영 접근 없음):** A1, A2(A3 포함), F1~F10, F12~F14, F18~F20을 영역별 커밋으로 진행한다. F11은 현행 runbook artifact라 제외한다. F5~F10 뒤 deadcode를 다시 돌려 새로 도달 불가가 된 함수가 남지 않았는지 확인한다.
-2. **운영 읽기 전용 조회:** 2026-10-11에 완료했다. F17만 2026-11-08 이후 다시 조회한다.
+2. **운영 읽기 전용 조회:** 2026-10-11에 완료했다. F17은 재조회 대신 migration 301로 종결했다.
 3. **migration·계약 단계(승인 필요):** B1 삭제(필요하면 B3 추가), B2 열·인덱스, F15 코드 삭제와 테이블 DROP. F16은 진행 조건 확인 뒤 결정한다.
 4. **배포와 사후 측정(hololive-bot-ops):**
    - alarm-worker: A1, A2, A3, F2, F3, F5, F10 일부, F16, F18, F19, F20.
@@ -466,7 +486,7 @@ F18~F20은 삭제할 때 각 분기를 직접 시험하던 테스트도 함께 �
 ## 한계
 
 - 운영 측정은 2026-10-11 한 시점의 누적 통계와 10분 구간 차이다. 누적값은 통계가 유지된 약 49일 구간 기준이다.
-- F17은 2026-12-20 이후 다시 조회해야 한다.
+- F17은 보존 삭제를 기다리지 않고 migration 301로 legacy 행을 지워 종결했다. 그 행의 발송 기록은 복원하지 않는다.
 - 변경 검증 결과는 각 진행 기록 절에 있다.
 - 조각·템플릿 SQL 29개는 조립된 최종 문장으로 계획을 보지 않았다. A2는 템플릿을 직접 읽어 판단했다.
 - deadcode는 reflection·문자열 등록 경로를 놓칠 수 있으므로 F10은 삭제 전에 호출부를 다시 확인한다.

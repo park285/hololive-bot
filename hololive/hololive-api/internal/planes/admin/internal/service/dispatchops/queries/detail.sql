@@ -1,4 +1,4 @@
-SELECT d.id::text, d.event_id::text, d.room_id, COALESCE(d.send_unit_id::text, ''),
+SELECT d.id::text, d.event_id::text, d.room_id, d.send_unit_id::text,
        e.alarm_type::text, e.channel_id, e.stream_id, d.status, d.attempt_count,
        CASE WHEN d.last_error_code ~ '^[A-Za-z0-9_.:-]{1,128}$'
             THEN d.last_error_code WHEN d.last_error_code = '' THEN '' ELSE 'unclassified' END,

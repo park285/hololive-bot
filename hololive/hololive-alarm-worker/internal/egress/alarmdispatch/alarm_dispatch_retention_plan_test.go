@@ -52,18 +52,26 @@ func seedAlarmDispatchRetentionPlanHistory(t *testing.T, pool *pgxpool.Pool) {
 	ctx := t.Context()
 	eventID := seedAlarmDispatchRetentionEvent(t, pool)
 
+	var unitID int64
+
+	require.NoError(t, pool.QueryRow(ctx, `
+		INSERT INTO alarm_dispatch_send_units (unit_key, dispatch_group_key, room_id, client_request_id)
+		VALUES (repeat('d', 64), 'retention-plan-group', 'retention-plan-room', 'retention-plan-unit')
+		RETURNING id`).Scan(&unitID))
+
 	for status := range alarmDispatchRetentionDeleteSQL {
 		// 종료 상태의 시각 열 이름은 "<status>_at"이다.
 		column := string(status) + "_at"
 		_, err := pool.Exec(ctx, fmt.Sprintf(`INSERT INTO alarm_dispatch_deliveries (
-				event_id, room_id, dedupe_key, status, %s, created_at, updated_at
+				event_id, room_id, dedupe_key, dispatch_group_key, send_unit_id, status, %s, created_at, updated_at
 			)
-			SELECT $1, 'retention-plan-room', 'retention-plan-' || $2::text || '-' || n, $2::text, at, at, at
+			SELECT $1, 'retention-plan-room', 'retention-plan-' || $2::text || '-' || n,
+			       'retention-plan-group', $4, $2::text, at, at, at
 			FROM generate_series(1, $3::int) AS n
 			CROSS JOIN LATERAL (
 				SELECT NOW() - CASE WHEN n %% 2 = 0 THEN INTERVAL '200 days' ELSE INTERVAL '1 day' END
 				       - n * INTERVAL '1 second' AS at
-			) AS ts`, column), eventID, string(status), retentionPlanRowsPerStatus)
+			) AS ts`, column), eventID, string(status), retentionPlanRowsPerStatus, unitID)
 		require.NoError(t, err, "seed %s history", status)
 	}
 

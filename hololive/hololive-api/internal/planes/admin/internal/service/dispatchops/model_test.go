@@ -187,8 +187,6 @@ func TestReplayBlocksMixedAndOversizedGroups(t *testing.T) {
 		{"sent_member", []Delivery{delivery("1", "10", "dlq"), delivery("2", "10", "sent")}, "group_not_terminal_failure"},
 		{"different_room", []Delivery{delivery("1", "10", "dlq"), {ID: "2", RoomID: "other", SendUnitID: "10", Status: "dlq"}}, "group_identity_mismatch"},
 		{"different_unit", []Delivery{delivery("1", "10", "dlq"), delivery("2", "11", "dlq")}, "group_identity_mismatch"},
-		{"multiple_legacy", []Delivery{delivery("1", "", "dlq"), delivery("2", "", "dlq")}, "group_identity_mismatch"},
-		{"single_legacy_without_send_unit", []Delivery{delivery("1", "", "dlq")}, "group_identity_mismatch"},
 		{"oversized", make([]Delivery, MaxReplaySize+1), "group_too_large"},
 	}
 	for _, test := range tests {

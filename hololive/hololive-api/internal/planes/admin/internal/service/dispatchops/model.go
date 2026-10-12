@@ -269,15 +269,8 @@ func replayBlock(group []Delivery) string {
 			return "group_not_terminal_failure"
 		}
 
-		// 서로 다른 발송 식별자를 섞지 않습니다. send unit이 없는 migration 141 이전 행은 worker claim이 더 이상 읽지
-		// 않고 활성 상태로 되돌리면 migration 224 CHECK가 거절하므로,
-		// 저장된 외부 발송 식별자가 없다는 뜻으로 같은 차단 사유를 씁니다.
-		// 조회용 단일 행 묶음(group.sql·group_locked.sql의 send_unit_id IS NULL 분기)은 이 행들의 드레인 종단입니다
-		// (분기 도입 2088fa5f0, send unit 도입 333665c1a). 제거 조건: authoritative DB의 alarm_dispatch_deliveries에서
-		// send_unit_id IS NULL 행이 0건이다(2026-09-26 기준 종단 437건, 최신 created_at 2026-08-10, sent·취소
-		// 상태 90일 retention으로 소멸 예정). 그 뒤 두 분기와 이 조건의 NULL
-		// 표현을 지웁니다. 재검토 기한: remove_after = "2026-12-31".
-		if item.RoomID != first.RoomID || item.SendUnitID != first.SendUnitID || first.SendUnitID == "" {
+		// 서로 다른 발송 식별자를 섞지 않습니다. send_unit_id는 migration 301부터 NOT NULL입니다.
+		if item.RoomID != first.RoomID || item.SendUnitID != first.SendUnitID {
 			return "group_identity_mismatch"
 		}
 	}

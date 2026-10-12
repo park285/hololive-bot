@@ -8,6 +8,12 @@
 
 ## 미출시
 
+## v9.1.2 - 2026-10-12
+
+- **send unit 없는 legacy delivery 정리:** migration 301이 send unit 도입(141) 전에 만든 종료 delivery(`sent`·`cancelled`)를 지우고 `alarm_dispatch_deliveries.send_unit_id`를 NOT NULL로 바꿉니다. 처리되지 않은 dlq·quarantined legacy 행이 있으면 지우지 않고 실패합니다. 같은 조건을 포함하게 된 활성 상태 CHECK(224)는 지웁니다.
+- **관리자 발송 조회:** send unit 없는 행을 단일 항목으로 보여 주던 묶음 조회 분기를 지웠습니다. `sendUnitId`는 항상 값이 있습니다.
+- **배포 순서:** migration을 먼저 적용한 뒤 hololive-api를 교체합니다. alarm-worker는 9.0.0을 유지합니다. 지운 legacy 행은 rollback으로 돌아오지 않습니다.
+
 ## v9.1.1 - 2026-10-12
 
 - **방송 이력 다음 페이지·채널 조회:** since·커서 조건을 행 비교 범위로 바꾸고 전체·채널 목록 문장을 나눴습니다. 다음 페이지와 prepared statement의 generic plan에서도 정렬 인덱스에서 한 페이지만 읽습니다. 결과와 페이지 순서는 같고 migration은 없습니다. hololive-api만 다시 릴리스하고 alarm-worker는 9.0.0을 유지합니다.

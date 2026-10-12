@@ -1,4 +1,4 @@
-SELECT d.id::text, d.event_id::text, d.room_id, COALESCE(d.send_unit_id::text, ''),
+SELECT d.id::text, d.event_id::text, d.room_id, d.send_unit_id::text,
        e.alarm_type::text, e.channel_id, e.stream_id, d.status, d.attempt_count,
        {{errorCodeExpression}},
        d.next_attempt_at, d.created_at, d.updated_at, d.lock_expires_at,
