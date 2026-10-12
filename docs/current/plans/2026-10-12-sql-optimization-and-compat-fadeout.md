@@ -168,10 +168,10 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **범위 밖:** 중앙 collector `c`와 AP `a`·`b`·`d`는 동작 변경이 없어(alias 치환) 다시 배포하지 않았다. 중앙 `hololive-youtube-po-c`의 재시작은 이번 작업 전(약 04:43Z)이다.
 - **rollback:** rollback tag를 `prod`로 되돌리고 백업 tar로 tree 15개 파일을 복원한 뒤 두 서비스만 `--no-build --no-deps`로 다시 띄운다. 이전 이미지는 재설정 테이블을 읽지 않지만, 이전 이미지의 `db-migrate`는 281이 기록된 ledger를 거부하므로 rollback 때 migration을 실행하지 않는다.
 - **남은 일:**
-  - 오류 문구 key 2개(`external_api_call_failed`·`cache_connection_failed`) 시드 행 삭제 migration은, v9.0.0이 수용되고 rollback 대상이 v8.0.0이 아니게 된 뒤 추가한다. v8.0.0 이미지는 기동 때 이 key를 검증한다.
+  - 오류 문구 key 2개(`external_api_call_failed`·`cache_connection_failed`)의 시드 행은 v9.0.1의 migration 282가 지운다. `seedErrorKeysPendingDeletion`도 함께 지워 `TestErrorSeedHasNoOrphanKeys`가 두 행이 남으면 실패한다. v8.0.0 이미지는 기동 때 이 key를 검증하므로, 282는 v9.0.0의 실제 발송을 확인한 뒤 적용한다.
   - F17은 2026-11-08 이후 다시 확인한다.
   - rollback tag, tree 백업, 원격 staging `/opt/hololive-bot/compose/deploy-staging-v9.0.0-20261012T045543Z`의 정리는 수용 뒤 별도 승인으로 한다.
-  - 원 checkout `/home/kapu/work/iris-stack/hololive-bot`의 미커밋 변경은 이번 게시에 포함된 합류분이다(가져온 patch와 비교해 다른 것은 같은 내용의 `go.work.sum`뿐). 다른 작업이 쓰는 checkout이라 건드리지 않았다. 메타 저장소의 hololive-bot 포인터도 다른 submodule 변경이 섞여 있어 갱신하지 않았다.
+  - 원 checkout `/home/kapu/work/iris-stack/hololive-bot`의 미커밋 합류분은 로컬 백업 브랜치에 보존한 뒤 main으로 맞췄다. 메타 저장소 hololive-bot 포인터는 `858b21b36`으로 게시했다.
 
 ## 1. SQL 최적화
 

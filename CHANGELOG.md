@@ -8,6 +8,10 @@
 
 ## 미출시
 
+## v9.0.1 - 2026-10-12
+
+- **오류 문구 시드 정리:** v9.0.0부터 읽지 않는 `external_api_call_failed`·`cache_connection_failed` 시드 행을 migration 282로 지웁니다. v9.0.0 운영 배포 뒤 적용하며, 이후 v8.0.0으로 되돌리려면 두 행을 다시 넣어야 합니다. hololive-api만 다시 릴리스하고 alarm-worker는 9.0.0을 유지합니다.
+
 ## v9.0.0 - 2026-10-12
 
 - **계약 변경 — 관리자 비밀번호 재설정 제거:** 2026-10-02부터 503만 반환하던 `POST /api/auth/password/reset-request`·`POST /api/auth/password/reset`과 재설정 서비스를 지웠습니다. 두 경로는 이제 NoRoute 응답(API key 없음 401, 맞으면 404)을 받습니다. migration 281이 빈 `auth_password_reset_tokens`를 지우고, 행이 남아 있으면 지우지 않고 실패합니다.
