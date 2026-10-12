@@ -207,6 +207,32 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - 로컬 백업 브랜치 `backup/orig-checkout-merged-20261012`(`a64b893d0`)를 지웠다. main에 합쳐 보면 바뀌는 파일은 그 뒤 main이 의도적으로 고친 3개뿐이었다.
 - **F17 날짜 정정:** 대상 308행 중 `sent` 294행의 최신 `sent_at`은 2026-08-10이지만, `cancelled` 14행은 `cancelled_at`이 2026-09-21 07:17Z다. 보존 삭제는 상태별 종료 시각 기준 90일이므로 0건이 되는 것은 2026-12-20 07:17Z 이후다. 코드의 재검토 기한 2026-12-31 안이다.
 
+## 게시와 배포 (v9.1.0, 2026-10-12)
+
+- **게시:** #615 `48f856815`. CI 11개가 통과했고 병합 tree는 리뷰한 브랜치와 같다. annotated tag `v9.1.0`과 GitHub Release(`publish-release.sh v9.1.0 v9.0.1`)를 게시했다.
+- **산출물:** `hololive-api:release-48f856815431-r1-arm64`(`sha256:e9da9816…`, arm64, 9.1.0)를 원격에 load해 같은 ID·revision을 확인했다.
+- **사전 점검:** 원격 deploy tree 112개 파일 중 v9.1.0과 다른 것은 VERSION 2개와 collector `go.mod`였다. `go.mod`는 2026-10-06 #585 시점 파일이고 v9.0.1과 v9.1.0 사이에 바뀌지 않아, 이번 api 배포 대상이 아니므로 두었다. 5분 넘게 열린 트랜잭션은 0건이었다.
+- **전환:**
+  - v9.0.1 api를 `hololive-api:rollback-20261012T105146Z`로 보존하고 VERSION 2개를 `deploy-backups/pre-v9.1.0-20261012T105146Z`에 백업한 뒤 교체했다.
+  - `db-migrate`가 `hololive-api:prod` 이미지로 실행되므로 후보를 `prod`로 tag한 뒤 migration을 적용했다. 283~300이 11:02:13~11:02:16Z에 적용됐다(applied=18, skipped=143, total=161).
+  - `change_started_at=2026-10-12T11:02:16Z`에 api를 `up -d --no-build --no-deps hololive-api`로 교체했고 health gate를 6초에 통과했다. 이전 api가 새 스키마에서 돈 시간은 약 3초다.
+- **수용 증거:**
+  - api 9.1.0 healthy, 재시작 0회, `APP_VERSION=9.1.0`이다. ledger 161건(마지막 300), invalid 인덱스 0, 지운 인덱스 13개 잔존 0, `fillfactor=90`, 생성 열 값 불일치 0행이다.
+  - 운영 DB에서 방송 이력 첫 페이지 계획은 `idx_yls_ended_history_sort`로 101행만 읽고 4.6 ms였다.
+  - 교체 이후 api 오류 표식 0건이다. worker 오류 1건은 11:06:25Z의 Holodex 라이브 상태 요청 시간 초과다. 외부 API 경로이고 worker는 교체하지 않았으며, worker 기동(04:56Z) 이후 유일한 건이고 재발하지 않았다.
+- **사후 측정(`youtube_live_sessions`):**
+
+| 구간 | UPDATE | HOT | 새 페이지 갱신 | autovacuum |
+| --- | ---: | ---: | ---: | --- |
+| 배포 전 10:51:46~11:02:00Z | 1,094 | 142 (13.0%) | 29 | 1회(11:01:55, 직전 10:39:54) |
+| 배포 후 11:03:26~11:13:30Z | 1,092 | 1,085 (99.4%) | 1 | 0회 |
+
+  - 테이블은 316 페이지에서 385 페이지가 됐다(fillfactor 90과 생성 열). 인덱스를 포함한 전체 크기는 7.0 MB에서 4.9 MB로 줄었다.
+  - autovacuum은 배포 전 약 22분 간격이었고, 배포 뒤 측정 구간에는 실행되지 않았다(`n_dead_tup` 66). 간격의 장기 변화는 이 10분 구간으로 판단하지 않았다.
+- **현재 rollback:** api만 `hololive-api:rollback-20261012T105146Z`(v9.0.1)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 스키마는 그대로 두며, v9.0.1의 방송 이력 조회는 정렬 인덱스 없이 동작한다.
+- **정리:** 수용 뒤 이번 작업이 만든 이전 rollback 산출물(`hololive-api:rollback-20261012T055700Z` tag, `deploy-backups/pre-v9.0.1-20261012T055700Z`)을 지웠다. v9.0.0 api 이미지는 `release-f4828e5386b1-r1-arm64` tag로 남아 있다.
+- **남은 일:** F17은 2026-12-20 이후 다시 확인한다.
+
 ## 1. SQL 최적화
 
 측정 근거와 조사 방법은 부록에 있다.
