@@ -8,6 +8,11 @@
 
 ## 미출시
 
+## v9.2.1 - 2026-10-13
+
+- **queue 보존 삭제 인덱스:** migration 302·303이 `source_observation_queue`에 만료 판정용 부분 인덱스 `(processed_at, observation_id) WHERE status = 'PROCESSED'`, `(dead_lettered_at, observation_id) WHERE status = 'DEAD_LETTER'`를 `CREATE INDEX CONCURRENTLY`로 만듭니다. 보존 삭제가 PROCESSED 이력 전체 대신 만료 행만 읽습니다(운영 2026-10-12: 약 22만 행, 평균 166 ms·최대 9.2초). SQL은 바꾸지 않습니다.
+- **배포:** migration을 먼저 적용한 뒤 hololive-api를 교체합니다. youtube-collector와 PO issuer는 v8.0.0 이후의 collector 변경(오류 어휘 alias 정리, 쓰지 않는 공유 함수 삭제, Go builder 이미지 digest와 npm 갱신, 동작 변화 없음)을 반영하려고 같은 revision으로 a·b·c·d 모두 다시 배포합니다. alarm-worker는 9.2.0을 유지합니다.
+
 ## v9.2.0 - 2026-10-12
 
 - **최초공개 분 전 알림:** 확정 최초공개도 일반 방송과 같은 분 전 target에서 `선행공개 N분 전` 알림을 보내고, 그 알림을 받은 방에는 일정 변경 알림도 보냅니다. 발견 시 나가는 `NEW_VIDEO` `N분 후 공개 예정` 안내가 가장 이른 target 시각 이후에 생성됐다면 그 안내가 공개 직전 알림을 대신하므로 분 전 알림을 보내지 않습니다. 대기 후보는 선정 뒤에 실패하지 않은 안내가 생겼을 때만 `stream_ended`로 종료합니다. 최초공개의 live catchup 시작 알림은 계속 보내지 않습니다.

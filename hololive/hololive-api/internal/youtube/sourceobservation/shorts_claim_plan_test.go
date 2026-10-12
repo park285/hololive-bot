@@ -60,7 +60,7 @@ func TestShortsClaimWorkIsBoundedByActiveQueueNotRetainedHistory(t *testing.T) {
 	_, err = pool.Exec(ctx, "ANALYZE source_observations; ANALYZE source_observation_queue")
 	require.NoError(t, err)
 
-	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+	for _, mode := range planCacheModes {
 		t.Run(mode, func(t *testing.T) {
 			tx, err := pool.Begin(ctx)
 			require.NoError(t, err)

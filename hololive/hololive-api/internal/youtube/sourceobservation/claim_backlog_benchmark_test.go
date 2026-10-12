@@ -29,7 +29,7 @@ func BenchmarkClaimBacklog(b *testing.B) {
 				pool := dbtest.NewPool(b)
 				seedClaimBacklogRows(b, pool, active, history)
 
-				for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+				for _, mode := range planCacheModes {
 					b.Run(mode, func(b *testing.B) {
 						var (
 							plan        claimBacklogPlanNode

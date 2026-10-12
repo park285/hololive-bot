@@ -208,7 +208,7 @@ func TestClaimCandidateSelectionIsBoundedUnderActiveBacklog(t *testing.T) {
 	// 두 목록 kind의 채널별 선두 선택을 함께 검증한다. 실제 plane은 다른 kind도 같은 claim에 포함한다.
 	kinds := []string{"video_list", "shorts_list"}
 
-	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+	for _, mode := range planCacheModes {
 		t.Run(mode, func(t *testing.T) {
 			raw, err := explainClaimBacklog(ctx, pool, mode, "1s", kinds)
 			require.NoError(t, err)
