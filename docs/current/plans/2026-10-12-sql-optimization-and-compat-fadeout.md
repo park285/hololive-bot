@@ -197,7 +197,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **시험:**
   - `TestLiveSessionRepeatedObservationIsHeapOnlyUpdate`: 같은 상태의 반복 관측 5회가 모두 HOT이어야 한다. 291~300 없이 실행하면 HOT 0회로 실패하고, 적용하면 통과한다.
   - `TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks`: 종료·시작·예정·`last_seen_at` 우선순위, 같은 시각의 `video_id` 역순, 페이지 경계 분할을 확인한다. 수정 전 SQL과 스키마에서도 같은 결과로 통과했다.
-  - `TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory`: 종료 세션 2만 행에서 첫 페이지와 다음 페이지가 새 정렬 인덱스를 쓰고 seq scan을 하지 않는지 확인한다. 292·293 없이 실행하면 실패한다. 다음 페이지는 커서 조건이 OR라 커서보다 새 행을 인덱스 앞에서부터 건너뛰며 읽는다. 수정 전 SQL도 같은 성질이라 이번 범위에서 바꾸지 않았다.
+  - `TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory`: 종료 세션 2만 행에서 첫 페이지와 다음 페이지가 새 정렬 인덱스를 쓰고 seq scan을 하지 않는지 확인한다. 292·293 없이 실행하면 실패한다. 다음 페이지는 커서 조건이 OR라 커서보다 새 행을 인덱스 앞에서부터 건너뛰며 읽는다. 수정 전 SQL도 같은 성질이라 이 단계에서는 바꾸지 않았고, "방송 이력 커서·채널 조건" 절에서 고쳤다.
 - **검증:** `scripts/ci/local-ci.sh`(lint 0건)와 `--integration-tests-only`, `check-migration-manifest.sh`, `check-release-version.sh`가 통과했다. schema golden은 인덱스·`fillfactor`·생성 열만 바뀌었다.
 - **배포 조건:** 새 SQL이 생성 열을 읽으므로 migration을 api 교체보다 먼저 적용한다. 기존 인덱스 삭제도 같은 실행에 들어가므로, 교체 전 몇 분 동안 v9.0.1 api의 방송 이력 조회는 정렬 인덱스 없이 실행된다. 종료 세션이 약 1만 행이라 영향은 작다고 판단했다. v9.0.1로 되돌려도 같은 이유로 동작한다.
 
@@ -232,6 +232,16 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **현재 rollback:** api만 `hololive-api:rollback-20261012T105146Z`(v9.0.1)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 스키마는 그대로 두며, v9.0.1의 방송 이력 조회는 정렬 인덱스 없이 동작한다.
 - **정리:** 수용 뒤 이번 작업이 만든 이전 rollback 산출물(`hololive-api:rollback-20261012T055700Z` tag, `deploy-backups/pre-v9.0.1-20261012T055700Z`)을 지웠다. v9.0.0 api 이미지는 `release-f4828e5386b1-r1-arm64` tag로 남아 있다.
 - **남은 일:** F17은 2026-12-20 이후 다시 확인한다.
+
+## 방송 이력 커서·채널 조건 (2026-10-12)
+
+사용자 요청("추가이슈도 수정")으로 v9.1.0 보고에 남긴 후속 항목을 고쳤다.
+
+- **커서 조건:** 다음 페이지 조건 `($3 IS NULL OR 정렬값 < $3 OR (정렬값 = $3 AND video_id < $4))`는 인덱스 시작 위치가 되지 못한다. 그래서 다음 페이지가 커서보다 새 행을 인덱스 앞에서부터 건너뛰며 읽었다(2만 행 시험의 전체 목록 다음 페이지에서 161행). since·커서를 `history_sort_at >= COALESCE($2, '-infinity')`와 행 비교 `(history_sort_at, video_id) < (COALESCE($3, 'infinity'), $4)`로 바꿨다. 두 조건이 정렬 인덱스의 Index Cond가 되어 다음 페이지도 101행만 읽는다. NULL since·커서는 무한대 경계이고, 정렬값이 무한대인 행은 없으므로 결과와 순서는 같다.
+- **채널 조건:** `($1 = '' OR s.channel_id = $1)`은 custom plan에서는 값이 접혀 채널 정렬 인덱스를 쓴다. 그러나 generic plan에서는 채널 조건이 Filter로 남아, 전체 정렬 인덱스에서 다른 채널 행을 건너뛰며 읽었다(2만 행·40채널 시험에서 3,927행 제거). 운영 풀은 `cache_statement`라 같은 연결에서 반복 실행되면 generic plan으로 바뀔 수 있다. 전체·채널 목록을 `{{channelPredicate}}`로 나눈 두 문장으로 준비한다. 이 결함은 이번 확인에서 새로 찾았다.
+- **시험:** `TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory`를 이름 있는 prepared statement로 바꿨다. 이제 custom·generic plan 모두에서 4개 경우가 정렬 인덱스로 한 페이지만 읽는지 확인한다. 이전 커서 조건으로 되돌리면 다음 페이지 4개가, 이전 채널 조건으로 되돌리면 generic plan의 채널 경우 2개가 실패한다. 페이지 경계 시험(`TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks`)은 그대로 통과한다.
+- **운영 영향:** 방송 이력 조회는 드물고(2026-10-11 기준 49일 동안 정렬 인덱스 사용 약 1,050회) 종료 세션이 약 1만 행이라, 고치기 전에도 체감 지연은 작았다. migration은 없다.
+- **central deploy tree:** collector `go.mod`가 2026-10-06 #585 시점 파일로 남아 실행 중인 `collector-c`(v8.0.0, `0b5955bc1`)와도 맞지 않았다. `0b5955bc1`과 v9.1.0의 내용이 같음을 확인하고 그 내용으로 바꿨다(원본은 `deploy-backups/collector-gomod-20261012T113752Z`). `--no-build` 배포에서는 읽지 않는 파일이다. 교체 뒤 tree 112개 파일이 모두 v9.1.0과 같음을 hash로 확인했다.
 
 ## 1. SQL 최적화
 

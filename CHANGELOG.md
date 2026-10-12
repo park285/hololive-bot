@@ -8,6 +8,10 @@
 
 ## 미출시
 
+## v9.1.1 - 2026-10-12
+
+- **방송 이력 다음 페이지·채널 조회:** since·커서 조건을 행 비교 범위로 바꾸고 전체·채널 목록 문장을 나눴습니다. 다음 페이지와 prepared statement의 generic plan에서도 정렬 인덱스에서 한 페이지만 읽습니다. 결과와 페이지 순서는 같고 migration은 없습니다. hololive-api만 다시 릴리스하고 alarm-worker는 9.0.0을 유지합니다.
+
 ## v9.1.0 - 2026-10-12
 
 - **쓰지 않는 인덱스 삭제:** 런타임 조회가 쓰지 않는 인덱스 8개(`youtube_content_alarm_tracking` 3개, `youtube_community_shorts_alarm_states` 2개, `youtube_community_shorts_source_posts`·`youtube_videos`·`alarm_dispatch_deliveries` 각 1개)를 migration 283~290으로 지웁니다.

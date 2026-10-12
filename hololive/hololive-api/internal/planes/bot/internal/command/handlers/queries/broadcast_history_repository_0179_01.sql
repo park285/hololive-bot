@@ -28,14 +28,11 @@
 		LIMIT 1
 	) e ON TRUE
 	WHERE s.status = 'ENDED'
-	  AND ($1 = '' OR s.channel_id = $1)
-	  AND ($2::timestamptz IS NULL OR s.history_sort_at >= $2)
-	  AND ($3::timestamptz IS NULL
-	       OR s.history_sort_at < $3
-	       OR (
-	           s.history_sort_at = $3
-	           AND s.video_id < $4
-	       ))
+	  AND {{channelPredicate}}
+	  -- since·cursor를 OR 없는 범위로 써야 generic plan에서도 정렬 인덱스의 시작·끝 위치가 된다.
+	  -- NULL since·cursor는 무한대 경계다. 행 비교는 (정렬 시각, video_id) 역순 페이지의 다음 위치다.
+	  AND s.history_sort_at >= COALESCE($2::timestamptz, '-infinity'::timestamptz)
+	  AND (s.history_sort_at, s.video_id) < (COALESCE($3::timestamptz, 'infinity'::timestamptz), $4::text)
 	  AND ($5 = ''
 	       OR octet_length(COALESCE(NULLIF(s.topic_id, ''), NULLIF(e.topic_id, ''), '')) <>
 	          char_length(COALESCE(NULLIF(s.topic_id, ''), NULLIF(e.topic_id, ''), ''))

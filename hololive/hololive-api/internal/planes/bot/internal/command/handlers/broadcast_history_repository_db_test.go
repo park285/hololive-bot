@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"testing"
 	"time"
 
@@ -97,7 +99,9 @@ type historyPlanNode struct {
 }
 
 // 방송 이력 페이지는 종료 세션 전체를 정렬하지 않고 history_sort_at 정렬 인덱스에서 한 페이지만 읽어야 한다.
-// 종료 세션은 보존 삭제가 없어 계속 늘어난다.
+// 종료 세션은 보존 삭제가 없어 계속 늘어난다. 운영 풀은 prepared statement를 쓰므로 같은 연결에서 반복되면
+// generic plan으로 바뀔 수 있다. 커서·since·채널 조건이 매개변수 값과 무관하게 인덱스 범위가 되어야 다음 페이지가
+// 커서보다 새 행이나 다른 채널 행을 건너뛰며 읽지 않는다.
 func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -127,46 +131,64 @@ func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 		"one channel first page":  {channelID: "plan-channel-7", wantIndex: "idx_yls_ended_channel_history_sort"},
 		"one channel next page":   {channelID: "plan-channel-7", cursorAt: &cursorAt, wantIndex: "idx_yls_ended_channel_history_sort"},
 	} {
-		t.Run(name, func(t *testing.T) {
-			tx, err := pool.Begin(ctx)
-			require.NoError(t, err)
+		for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+			t.Run(name+"/"+mode, func(t *testing.T) {
+				stats := explainHistoryPage(t, pool, mode, tc.channelID, since, tc.cursorAt)
 
-			defer func() { require.NoError(t, tx.Rollback(ctx)) }()
-
-			_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = force_custom_plan")
-			require.NoError(t, err)
-
-			var raw []byte
-
-			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+broadcastHistoryListPageSQL,
-				tc.channelID, since, tc.cursorAt, "", "", historyPlanPageSize).Scan(&raw)
-			require.NoError(t, err)
-
-			var plans []struct {
-				Plan historyPlanNode `json:"Plan"`
-			}
-
-			require.NoError(t, jsonv2.Unmarshal(raw, &plans))
-			require.Len(t, plans, 1)
-
-			// 커서 조건은 OR라 인덱스 시작 위치를 정하지 못하고, 다음 페이지는 커서보다 새 행을 앞에서부터 건너뛴다.
-			// 그 행과 한 페이지를 넘어 읽으면 종료 이력 전체를 읽는 계획으로 바뀐 것이다.
-			var newer int
-
-			err = tx.QueryRow(ctx, `
-				SELECT count(*) FROM youtube_live_sessions
-				WHERE status = 'ENDED' AND ($1 = '' OR channel_id = $1)
-				  AND $2::timestamptz IS NOT NULL AND history_sort_at >= $2
-			`, tc.channelID, tc.cursorAt).Scan(&newer)
-			require.NoError(t, err)
-
-			stats := collectHistoryPlanStats(plans[0].Plan)
-			require.False(t, stats.seqScan, "history page sequentially scanned youtube_live_sessions")
-			require.Contains(t, stats.indexes, tc.wantIndex)
-			require.LessOrEqual(t, stats.examined, float64(newer+historyPlanPageSize),
-				"history page examined sessions beyond the cursor window and one page")
-		})
+				require.False(t, stats.seqScan, "history page sequentially scanned youtube_live_sessions")
+				require.Contains(t, stats.indexes, tc.wantIndex)
+				require.LessOrEqual(t, stats.examined, float64(historyPlanPageSize),
+					"history page examined sessions outside one page")
+			})
+		}
 	}
+}
+
+// explainHistoryPage는 운영 풀처럼 이름 있는 prepared statement로 실행한다. 매개변수를 EXPLAIN에 바로 넘기면
+// 값을 아는 상태로 계획해 plan_cache_mode가 generic plan을 강제하지 못한다.
+func explainHistoryPage(t *testing.T, pool *pgxpool.Pool, mode, channelID string, since time.Time, cursorAt *time.Time) historyPlanStats {
+	t.Helper()
+
+	ctx := t.Context()
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+
+	defer conn.Release()
+
+	cursor := "NULL"
+
+	if cursorAt != nil {
+		cursor = "'" + cursorAt.Format(time.RFC3339) + "'"
+	}
+
+	for _, statement := range []string{
+		"SET plan_cache_mode = " + mode,
+		"PREPARE history_page_plan(text, timestamptz, timestamptz, text, text, integer) AS " + broadcastHistoryPageSQL(channelID),
+	} {
+		_, err = conn.Exec(ctx, statement)
+		require.NoError(t, err)
+	}
+
+	defer func() {
+		_, resetErr := conn.Exec(context.WithoutCancel(ctx), "DEALLOCATE history_page_plan; RESET plan_cache_mode")
+		require.NoError(t, resetErr)
+	}()
+
+	var raw []byte
+
+	err = conn.QueryRow(ctx, fmt.Sprintf("EXPLAIN (ANALYZE, FORMAT JSON) EXECUTE history_page_plan('%s', '%s', %s, '', '', %d)",
+		channelID, since.Format(time.RFC3339), cursor, historyPlanPageSize)).Scan(&raw)
+	require.NoError(t, err)
+
+	var plans []struct {
+		Plan historyPlanNode `json:"Plan"`
+	}
+
+	require.NoError(t, jsonv2.Unmarshal(raw, &plans))
+	require.Len(t, plans, 1)
+
+	return collectHistoryPlanStats(plans[0].Plan)
 }
 
 type historyPlanStats struct {
