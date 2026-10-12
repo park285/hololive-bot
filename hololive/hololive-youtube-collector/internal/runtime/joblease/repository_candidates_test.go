@@ -184,7 +184,7 @@ func TestCandidatesForProjectionMixedIntervalIsInternal(t *testing.T) {
 
 	_, err = repository.CandidatesForProjection(ctx, generation, job, nil, 4)
 
-	if collecterr.ClassOf(err) != collecterr.ClassInternal {
+	if collecterr.ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("mixed cadence error = %v", err)
 	}
 }

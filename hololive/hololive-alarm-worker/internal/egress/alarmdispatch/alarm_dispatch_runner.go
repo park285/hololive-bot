@@ -54,13 +54,9 @@ type IdleWaiter interface {
 	Reset()
 }
 
-// Sender는 다른 발송기와 같은 저장 요청 전송 계약이다. 준비 시 방 유형으로 Text·Markdown을 정한다.
-// Karing template은 보내지 않는다(DEC-20260926-hololive-karing-egress-disposition).
-type Sender = delivery.PreparedMessageSender
-
 type Runner struct {
 	consumer          Consumer
-	sender            Sender
+	sender            delivery.PreparedMessageSender
 	renderer          *template.Renderer
 	messageStrings    *messagestrings.Store
 	idleWaiter        IdleWaiter
@@ -88,7 +84,7 @@ type RunnerConfig struct {
 
 func NewRunner(
 	consumer Consumer,
-	sender Sender,
+	sender delivery.PreparedMessageSender,
 	renderer *template.Renderer,
 	messageStrings *messagestrings.Store,
 	idleWaiter IdleWaiter,
@@ -284,7 +280,7 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 
 	request, err := r.prepareGroupRequest(ctx, group)
 	if err != nil {
-		if errors.Is(err, dispatchoutbox.ErrLegacySendRequest) || errors.Is(err, dispatchoutbox.ErrSendRequestFence) {
+		if errors.Is(err, dispatchoutbox.ErrSendRequestFence) {
 			return r.withStateContext(ctx, func(stateCtx context.Context) error {
 				return r.consumer.Quarantine(stateCtx, group.envelopes, err)
 			})

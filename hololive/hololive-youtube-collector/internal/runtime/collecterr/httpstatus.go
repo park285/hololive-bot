@@ -7,12 +7,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
 func FromStatus(source string, status int, retryAfter string, now time.Time) error {
 	message := fmt.Sprintf("%s status %d", source, status)
 	if status == http.StatusTooManyRequests {
-		if err := WithRetry(New(Cooldown, ClassCooldown, message), ParseRetryAfter(retryAfter, now)); err != nil {
+		if err := WithRetry(New(contract.ErrorCooldown, contract.ClassCooldown, message), ParseRetryAfter(retryAfter, now)); err != nil {
 			return fmt.Errorf("with retry: %w", err)
 		}
 
@@ -22,10 +24,10 @@ func FromStatus(source string, status int, retryAfter string, now time.Time) err
 	if status == http.StatusServiceUnavailable {
 		hint := ParseRetryAfter(retryAfter, now)
 		if hint.Kind() == RetryDefault {
-			return New(Failed, ClassTransient, message)
+			return New(contract.ErrorCollectionFailed, contract.ClassTransient, message)
 		}
 
-		if err := WithRetry(New(Cooldown, ClassCooldown, message), hint); err != nil {
+		if err := WithRetry(New(contract.ErrorCooldown, contract.ClassCooldown, message), hint); err != nil {
 			return fmt.Errorf("with retry: %w", err)
 		}
 
@@ -37,20 +39,20 @@ func FromStatus(source string, status int, retryAfter string, now time.Time) err
 	return New(code, class, message)
 }
 
-func statusFailure(status int) (code ErrorCode, class FailureClass) {
+func statusFailure(status int) (code contract.CollectionErrorCode, class contract.FailureClass) {
 	switch status {
 	case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusInternalServerError,
 		http.StatusBadGateway, http.StatusGatewayTimeout:
-		return Failed, ClassTransient
+		return contract.ErrorCollectionFailed, contract.ClassTransient
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return Configuration, ClassConfiguration
+		return contract.ErrorConfiguration, contract.ClassConfiguration
 	}
 
 	if status >= 300 && status < 400 {
-		return Failed, ClassProtocol
+		return contract.ErrorCollectionFailed, contract.ClassProtocol
 	}
 
-	return Internal, ClassInternal
+	return contract.ErrorInternalInvariant, contract.ClassInternal
 }
 
 func ParseRetryAfter(value string, _ time.Time) RetryHint {

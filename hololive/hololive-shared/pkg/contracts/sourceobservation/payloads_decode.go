@@ -167,7 +167,7 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 
 func validateLiveSnapshotQueryProof(value *LiveSnapshotV1, input payloadDecodeInput) error {
 	if input.contractGeneration == LiveSnapshotMetadataContractGeneration && value.Query != nil {
-		return errors.New("legacy live snapshot cannot carry query proof")
+		return errors.New("metadata-generation live snapshot cannot carry query proof")
 	}
 
 	if input.contractGeneration == LiveSnapshotQueryContractGeneration {

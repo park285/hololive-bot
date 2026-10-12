@@ -10,6 +10,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -107,7 +108,7 @@ type leaseScheduler struct {
 
 func (s *leaseScheduler) Start(parent context.Context) error {
 	if s == nil || s.executor == nil || s.executor.repository == nil || s.executor.registry == nil {
-		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: scheduler is not configured")
+		return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "start lease scheduler: scheduler is not configured")
 	}
 
 	s.lifecycleMu.Lock()
@@ -115,7 +116,7 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 	if s.lifecycleState() != SchedulerNew {
 		s.lifecycleMu.Unlock()
 
-		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: instance is not NEW")
+		return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "start lease scheduler: instance is not NEW")
 	}
 
 	runCtx, cancel := context.WithCancel(parent)
@@ -204,7 +205,7 @@ func (s *leaseScheduler) prepareStop() (schedulerStopPlan, error) {
 		return schedulerStopPlan{done: s.done, wait: true}, nil
 	}
 
-	return schedulerStopPlan{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "stop lease scheduler: state is invalid")
+	return schedulerStopPlan{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "stop lease scheduler: state is invalid")
 }
 
 func (s *leaseScheduler) waitDone(ctx context.Context, done chan struct{}) error {
@@ -244,7 +245,7 @@ func (s *leaseScheduler) discover(ctx context.Context) {
 
 		return nil
 	}); err != nil {
-		s.reportFatal(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+		s.reportFatal(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 }
 
@@ -254,7 +255,7 @@ func (s *leaseScheduler) pollGuarded(ctx context.Context) {
 
 		return nil
 	}); err != nil {
-		s.reportFatal(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+		s.reportFatal(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 }
 

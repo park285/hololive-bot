@@ -335,8 +335,7 @@ func TestAlarmTypesValueStaysString(t *testing.T) {
 	}
 }
 
-// 저장 payload의 notification.alarm_type 누락을 Live로 채우던 decode 기본값은 T18(2026-09-26)에서 alarm_dispatch_events
-// 1034건 중 누락 0건을 확인해 지웠다(stack-audit T11 holo-alarm-envelope-empty-type-defaults-live). 누락은 decode 오류다.
+// 저장 payload의 notification.alarm_type 누락은 Live로 채우지 않고 decode 오류다.
 func TestAlarmQueueEnvelope_UnmarshalRejectsMissingAlarmType(t *testing.T) {
 	t.Parallel()
 

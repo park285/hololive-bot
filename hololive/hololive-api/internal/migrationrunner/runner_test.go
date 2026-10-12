@@ -930,8 +930,7 @@ func TestRealManifestPartialAt160AppliesOnlyRemainingSuffix(t *testing.T) {
 	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", true)
 }
 
-// epoch-1 ledger 잔재를 182가 같은 실행에서 지우도록 허용하던 창은 닫혔다(DEC-20260926-hololive-retired-rollback-tooling).
-// 182 적용 전 DB라도 잔재가 있으면 SQL을 실행하기 전에 거부한다.
+// 182 적용 전 DB라도 epoch-1 ledger 잔재가 있으면 SQL을 실행하기 전에 거부한다.
 func TestRealManifestLegacyResidueBeforeCleanupRefuses(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	entries := manifestEntries(t)

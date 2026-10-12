@@ -35,11 +35,11 @@ func (r *ChannelLiveCheckRunner) JobID() collection.JobID {
 
 func (r *ChannelLiveCheckRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel live check client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js channel live check client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
@@ -82,11 +82,11 @@ func (r *VideoLiveCheckRunner) JobID() collection.JobID {
 
 func (r *VideoLiveCheckRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js video live check client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js video live check client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
@@ -120,7 +120,7 @@ func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input
 	}
 
 	if generation != contract.VideoLifecycleContractGeneration {
-		return contract.Envelope{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "video lifecycle collector requires generation 2")
+		return contract.Envelope{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "video lifecycle collector requires generation 2")
 	}
 
 	subject := input.Subject()
@@ -149,7 +149,7 @@ func (r *VideoLiveCheckRunner) videoLiveCheckEnvelope(ctx context.Context, input
 	}
 
 	envelope, err := subjectEnvelope(input, contract.KindVideoLiveCheck, completeness, contract.ContinuityNotApplicable, payload)
-	if err != nil && ctx.Err() == nil && collecterr.ClassOf(err) == collecterr.ClassDataContract {
+	if err != nil && ctx.Err() == nil && collecterr.ClassOf(err) == contract.ClassDataContract {
 		return subjectEnvelope(input, contract.KindVideoLiveCheck, contract.CompletenessUnknown, contract.ContinuityNotApplicable, failedVideoLiveCheck(subject))
 	}
 
@@ -184,7 +184,7 @@ func channelLiveCheckEnvelope(ctx context.Context, client ChannelLiveCheckClient
 	}
 
 	envelope, err := subjectEnvelope(input, contract.KindChannelLiveCheck, completeness, contract.ContinuityNotApplicable, payload)
-	if err != nil && ctx.Err() == nil && collecterr.ClassOf(err) == collecterr.ClassDataContract {
+	if err != nil && ctx.Err() == nil && collecterr.ClassOf(err) == contract.ClassDataContract {
 		return subjectEnvelope(input, contract.KindChannelLiveCheck, contract.CompletenessUnknown, contract.ContinuityNotApplicable, failedChannelLiveCheck(subject))
 	}
 
@@ -204,11 +204,11 @@ func liveCheckRequestFailed(ctx context.Context, err error) bool {
 	}
 
 	switch collecterr.ClassOf(err) {
-	case collecterr.ClassTransient, collecterr.ClassTimeout, collecterr.ClassCooldown,
-		collecterr.ClassResourceLimit, collecterr.ClassDataContract, collecterr.ClassProtocol:
+	case contract.ClassTransient, contract.ClassTimeout, contract.ClassCooldown,
+		contract.ClassResourceLimit, contract.ClassDataContract, contract.ClassProtocol:
 		return true
-	case collecterr.ClassCanceled, collecterr.ClassConfiguration,
-		collecterr.ClassSuperseded, collecterr.ClassInternal:
+	case contract.ClassCanceled, contract.ClassConfiguration,
+		contract.ClassSuperseded, contract.ClassInternal:
 		return false
 	default:
 		return false
@@ -219,7 +219,7 @@ func liveCheckRequestFailed(ctx context.Context, err error) bool {
 // 판정이 UNKNOWN이어도 다른 subject의 응답은 이 subject의 관측이 아닙니다.
 func validateLiveCheckSubject(field, requested, returned string) error {
 	if returned != requested {
-		return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract,
+		return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract,
 			"youtube.js "+field+" live check response identity does not match request")
 	}
 

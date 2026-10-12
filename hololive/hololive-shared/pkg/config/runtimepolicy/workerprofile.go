@@ -5,8 +5,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 // PositiveValueProblems: 밀리초 설정이 1..30일 범위를 벗어나면 문제로 보고한다.
@@ -52,12 +50,4 @@ func JoinWorkerProfileProblems(role string, problems []string) error {
 	slices.Sort(problems)
 
 	return fmt.Errorf("validate Hololive %s worker profile: %s", role, strings.Join(problems, "; "))
-}
-
-func WorkerDuration(policy workercontract.DurationPolicy) time.Duration {
-	if policy.Milliseconds == nil {
-		return 0
-	}
-
-	return time.Duration(*policy.Milliseconds) * time.Millisecond
 }

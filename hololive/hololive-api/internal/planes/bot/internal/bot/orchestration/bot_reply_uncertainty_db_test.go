@@ -13,7 +13,6 @@ import (
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -41,7 +40,7 @@ func (w *lostReplyReceiptWriter) RecordReply(ctx context.Context, entry *transpo
 func TestBotCommittedReplyWithLostReceiptDoesNotStageErrorResponse(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	cause := errors.New("reply commit acknowledgement lost")
-	writer := &lostReplyReceiptWriter{repo: durability.NewReplyOutboxRepository(pool), cause: cause}
+	writer := &lostReplyReceiptWriter{repo: newTestReplyOutboxRepository(t, pool), cause: cause}
 	registry := command.NewRegistry()
 	bot := &Bot{
 		logger:          newBotTestLogger(),

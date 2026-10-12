@@ -160,8 +160,8 @@ func TestBuildLedgerRowsYouTubeOutboxPersistsLiteralKeys(t *testing.T) {
 	}
 }
 
-// 비정규 YouTube source identity는 해시로 감싸 받지 않고 저장 전에 거절한다(stack-audit 2026-09-26 T11
-// holo-dispatch-raw-youtube-identity-hash). 다른 source kind의 식별자 형식은 이 검사 대상이 아니다.
+// 비정규 YouTube source identity는 해시로 감싸 받지 않고 저장 전에 거절한다.
+// 다른 source kind의 식별자 형식은 이 검사 대상이 아니다.
 func TestValidateSourceIdentityRejectsNonCanonicalYouTubeIdentity(t *testing.T) {
 	canonical := "sha256:" + strings.Repeat("0123456789abcdef", 4)
 

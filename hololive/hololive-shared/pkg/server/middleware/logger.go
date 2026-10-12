@@ -217,9 +217,3 @@ func truncateUA(ua string) string {
 
 	return ua
 }
-
-func LogDebugf(ctx context.Context, logger *slog.Logger, msg string, attrs ...any) {
-	if logger.Enabled(ctx, slog.LevelDebug) {
-		logger.Debug(msg, attrs...)
-	}
-}

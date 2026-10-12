@@ -53,9 +53,7 @@ const (
 	SummaryTypeMonthly SummaryType = "monthly"
 )
 
-// promptsResult의 invariant는 web_search_context를 데이터로만 다루라는 신뢰 경계이고, weekly·monthly는
-// 작업 절차·출력 형식이다. 둘을 한 developer 문자열로 합치지 않고 PromptLayers의 Invariant·Developer로
-// 따로 보낸다(DEC-20260926-stack-llm-instruction-layering-sole-path, 2026-07-11 canonical purpose model).
+// promptsResult는 검색 내용의 신뢰 경계를 Invariant로, 작업 절차·출력 형식을 Developer로 분리한다.
 type promptsResult struct {
 	invariant string
 	weekly    string
@@ -282,19 +280,6 @@ func writeDissolvedBranches(sb *strings.Builder) {
 		sb.WriteString(strings.Join(d.Members, ", "))
 		sb.WriteByte('\n')
 	}
-}
-
-func getDomainContext() string {
-	if r := initPrompts(); r.err != nil {
-		return ""
-	}
-
-	templates, err := loadPromptTemplates()
-	if err != nil {
-		return ""
-	}
-
-	return templates.domainContextPart1 + buildMemberFilterSection() + "\n\n" + templates.domainContextPart2
 }
 
 // getInvariantPrompt는 요약 생성 요청의 invariant 계층(신뢰 경계)을 돌려준다.

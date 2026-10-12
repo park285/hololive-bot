@@ -191,23 +191,6 @@ type recentLiveDispatchEvidence struct {
 	deliveryCheckFailed     bool
 }
 
-func (c *YouTubeChecker) recentlyDispatchedOrNotifiedLiveStreamIDs(
-	ctx context.Context,
-	streamIDs []string,
-	since time.Time,
-) (map[string]struct{}, error) {
-	evidence, err := c.recentLiveDispatchEvidence(ctx, streamIDs, since)
-	if err != nil {
-		return nil, fmt.Errorf("recent live dispatch evidence: %w", err)
-	}
-
-	result := make(map[string]struct{}, len(evidence.pgDispatchedStreamIDs)+len(evidence.valkeyNotifiedStreamIDs))
-	mergeStringSet(result, evidence.pgDispatchedStreamIDs)
-	mergeStringSet(result, evidence.valkeyNotifiedStreamIDs)
-
-	return result, nil
-}
-
 func (c *YouTubeChecker) recentLiveDispatchEvidence(
 	ctx context.Context,
 	streamIDs []string,

@@ -55,9 +55,6 @@ assert_equals() {
   fi
 }
 
-# 퇴역한 Redis dispatch queue 키(alarm:dispatch:queue/retry/dlq)의 리터럴 고정은 지웠다. 발송은 PostgreSQL
-# dispatch outbox가 소유하고 T18(2026-09-26)에서 운영 Valkey의 alarm:dispatch:* 키가 0건이었다(stack-audit T11
-# holo-retired-redis-dispatch-queue-tooling). keys.go의 세 상수는 읽기 제외 필터로만 남아 있다.
 go_claim="$(extract_go_string_const "${GO_KEYS_FILE}" "NotifyClaimKeyPrefix")"
 go_logical_claim="$(extract_go_string_const "${GO_KEYS_FILE}" "NotifyLogicalClaimKeyPrefix")"
 go_envelope_version="$(extract_go_numeric_const "${GO_CONTRACT_FILE}" "QueueEnvelopeVersionV1")"

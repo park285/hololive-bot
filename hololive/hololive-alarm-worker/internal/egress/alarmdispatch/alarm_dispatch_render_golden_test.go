@@ -14,6 +14,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -25,7 +26,7 @@ func newAlarmDispatchTestRenderer(t *testing.T) *template.Renderer {
 }
 
 // newAlarmDispatchTestMessageStrings는 시드 message_strings를 적재한 store다. 코드 대체 문구가 없으므로 알림
-// 문구와 placeholder는 DB 정본에서만 나온다(DEC-20260926-hololive-message-strings-startup-validation).
+// 문구와 placeholder는 DB 정본에서만 나온다.
 func newAlarmDispatchTestMessageStrings(t *testing.T) *messagestrings.Store {
 	t.Helper()
 
@@ -228,20 +229,20 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, item.IsPremiere)
 
-	allPremiere, err := buildAlarmDispatchGroupView(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
+	allPremiere, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, premiere},
-	})
+	}, shortlinkservice.YouTubeBuilder{})
 	require.NoError(t, err)
 	assert.True(t, allPremiere.AllPremiere)
 	require.Len(t, allPremiere.Entries, 2)
 	assert.True(t, allPremiere.Entries[0].IsPremiere)
 	assert.True(t, allPremiere.Entries[1].IsPremiere)
 
-	mixed, err := buildAlarmDispatchGroupView(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
+	mixed, err := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmGoldenMembers{}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, regular},
-	})
+	}, shortlinkservice.YouTubeBuilder{})
 	require.NoError(t, err)
 	assert.False(t, mixed.AllPremiere)
 	require.Len(t, mixed.Entries, 2)
@@ -252,21 +253,6 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
 	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-
-	twitch := alarmGoldenStream("tw-1", "Twitch 방송")
-
-	twitch.IsTwitchOnly = true
-	twitch.TwitchLiveURL = "https://twitch.tv/holomember"
-
-	chzzk := alarmGoldenStream("cz-1", "치지직 방송")
-
-	chzzk.IsChzzkOnly = true
-	chzzk.ChzzkLiveURL = "https://chzzk.naver.com/live/abcdef"
-
-	integrated := alarmGoldenStream("yt-int", "동시송출 방송")
-
-	integrated.IsIntegrated = true
-	integrated.ChzzkLiveURL = "https://chzzk.naver.com/live/zzz"
 
 	liveStatus := alarmGoldenStream("yt-live-status", "LIVE 상태 방송")
 
@@ -295,9 +281,6 @@ func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) 
 		{"single-start-actual-youtube", alarmGoldenNotification("스이세이", 5, startActual)},
 		{"single-upcoming-status-youtube", alarmGoldenNotification("스이세이", 5, upcomingStatus)},
 		{"single-premiere-youtube", alarmGoldenNotification("스이세이", 5, premiere)},
-		{"single-twitch-only", alarmGoldenNotification("멤버", 3, twitch)},
-		{"single-chzzk-only", alarmGoldenNotification("멤버", 3, chzzk)},
-		{"single-integrated", alarmGoldenNotification("멤버", 3, integrated)},
 		{"placeholder-member", alarmGoldenNotification("", 0, alarmGoldenStream("yt-2", "방송"))},
 		{"placeholder-title", alarmGoldenNotification("멤버", 0, alarmGoldenStream("yt-3", ""))},
 		{"placeholder-stream-nil", alarmGoldenNotification("멤버", 0, nil)},

@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
 func TestWrapProviderHTTPDoerRejectsNil(t *testing.T) {
 	t.Parallel()
 
-	if _, err := WrapProviderHTTPDoer(nil); err == nil || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+	if _, err := WrapProviderHTTPDoer(nil); err == nil || collecterr.ClassOf(err) != contract.ClassConfiguration {
 		t.Fatalf("nil doer = %v", err)
 	}
 }
@@ -29,7 +30,7 @@ func TestNewProviderHTTPClientRejectsNonPositiveTimeouts(t *testing.T) {
 
 	_, err := NewProviderHTTPClient(cfg)
 
-	if err == nil || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+	if err == nil || collecterr.ClassOf(err) != contract.ClassConfiguration {
 		t.Fatalf("zero RequestTimeout = %v", err)
 	}
 }

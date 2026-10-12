@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -35,7 +36,7 @@ func TestRPC003MapsCooldownRetryHint(t *testing.T) {
 	err := decodeTestResponse(t, http.StatusTooManyRequests,
 		`{"protocol_version":1,"error":{"code":"cooldown","class":"COOLDOWN","retry":{"kind":"after","after_ms":30000},"message":"limited"}}`,
 		1<<20, &CommunityResult{})
-	if collecterr.CodeOf(err) != collecterr.Cooldown || collecterr.ClassOf(err) != collecterr.ClassCooldown {
+	if collecterr.CodeOf(err) != contract.ErrorCooldown || collecterr.ClassOf(err) != contract.ClassCooldown {
 		t.Fatalf("code/class = %q/%q, error = %v", collecterr.CodeOf(err), collecterr.ClassOf(err), err)
 	}
 
@@ -76,7 +77,7 @@ func TestRPC007ContainsOversizedSuccess(t *testing.T) {
 	t.Parallel()
 
 	err := decodeTestResponse(t, http.StatusOK, strings.Repeat("x", 65), 64, &CommunityResult{})
-	if collecterr.CodeOf(err) != collecterr.ResponseTooLarge {
+	if collecterr.CodeOf(err) != contract.ErrorResponseTooLarge {
 		t.Fatalf("code = %q, error = %v", collecterr.CodeOf(err), err)
 	}
 }
@@ -121,7 +122,7 @@ func TestRPCMappingLockstepAndInternalInvariant(t *testing.T) {
 	internal := helperStatusError(http.StatusInternalServerError, []byte(
 		`{"protocol_version":1,"error":{"code":"helper_internal_invariant","class":"INTERNAL","retry":{"kind":"default"},"message":"broken"}}`,
 	))
-	if collecterr.CodeOf(internal) != collecterr.Internal || collecterr.ClassOf(internal) != collecterr.ClassInternal {
+	if collecterr.CodeOf(internal) != contract.ErrorInternalInvariant || collecterr.ClassOf(internal) != contract.ClassInternal {
 		t.Fatalf("code/class = %q/%q, error = %v", collecterr.CodeOf(internal), collecterr.ClassOf(internal), internal)
 	}
 }
@@ -155,7 +156,7 @@ func decodeTestResponse(t *testing.T, status int, body string, limit int64, resp
 func assertProtocolMismatch(t *testing.T, err error) {
 	t.Helper()
 
-	if collecterr.CodeOf(err) != collecterr.HelperProtocolMismatch || collecterr.ClassOf(err) != collecterr.ClassProtocol {
+	if collecterr.CodeOf(err) != contract.ErrorHelperProtocolMismatch || collecterr.ClassOf(err) != contract.ClassProtocol {
 		t.Fatalf("code/class = %q/%q, error = %v", collecterr.CodeOf(err), collecterr.ClassOf(err), err)
 	}
 }

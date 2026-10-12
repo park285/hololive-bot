@@ -157,11 +157,11 @@ func TestRuntimeIrisClientRejectsDialOutsideInitialBaseURLAllowset(t *testing.T)
 		}
 	})
 
-	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
+	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
 		t.Fatalf("h3DialGuard(allowed IP) error = %v", err)
 	}
 
-	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.11")); err == nil {
+	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.11")); err == nil {
 		t.Fatal("h3DialGuard(disallowed IP) error = nil")
 	}
 }
@@ -182,20 +182,20 @@ func TestRuntimeIrisClientDialGuardFollowsRotatedBaseURL(t *testing.T) {
 		}
 	})
 
-	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
-		t.Fatalf("allowH3Dial(initial IP) error = %v", err)
+	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
+		t.Fatalf("h3DialGuard.allow(initial IP) error = %v", err)
 	}
 
 	if err := os.WriteFile(baseURLFilePath, []byte("https://192.0.2.11:3001"), 0o600); err != nil {
 		t.Fatalf("write rotated base URL: %v", err)
 	}
 
-	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.11")); err != nil {
-		t.Fatalf("allowH3Dial(rotated IP) error = %v", err)
+	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.11")); err != nil {
+		t.Fatalf("h3DialGuard.allow(rotated IP) error = %v", err)
 	}
 
-	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.10")); err == nil {
-		t.Fatal("allowH3Dial(stale IP) error = nil")
+	if err := client.h3DialGuard.allow(t.Context(), net.ParseIP("192.0.2.10")); err == nil {
+		t.Fatal("h3DialGuard.allow(stale IP) error = nil")
 	}
 }
 

@@ -191,9 +191,7 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 		args = appendTelemetryRowArgs(args, &rows[i])
 	}
 
-	// (delivery_id, attempt_ordinal) 중복을 건너뛰던 ON CONFLICT DO NOTHING은 지웠다. 시도는 lifecycle 전이 트랜잭션이 한
-	// 번만 기록하므로 중복은 결함이고, unique 위반으로 드러나 그 트랜잭션을 rollback한다
-	// (DEC-20260926-hololive-delivery-telemetry-single-path).
+	// 시도 식별자 중복은 unique 위반으로 lifecycle 전이 트랜잭션 전체를 rollback한다.
 
 	if _, err := r.db.Exec(ctx, sb.String(), args...); err != nil {
 		return fmt.Errorf("enqueue delivery telemetry: %w", err)

@@ -22,7 +22,6 @@ package youtubedispatch
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -53,47 +52,6 @@ func TestTruncateString(t *testing.T) {
 				t.Fatalf("deliverysql.TruncateString(%q, %d) = %q, want %q", tt.in, tt.maxLen, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestGroupOutboxItems(t *testing.T) {
-	t.Parallel()
-
-	grouper := newOutboxGrouper(nil, nil, nil, withTestDispatchConfigDefaults(nil))
-	items := []domain.YouTubeNotificationOutbox{
-		{ID: 1, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},
-		{ID: 2, ChannelID: "ch1", Kind: domain.OutboxKindNewVideo},
-		{ID: 3, ChannelID: "ch1", Kind: domain.OutboxKindNewShort},
-		{ID: 4, ChannelID: "ch2", Kind: domain.OutboxKindNewVideo},
-	}
-	roomsByChannel := map[string]channelAlarmRoomTargets{
-		"ch1": {
-			domain.AlarmTypeLive:   {testRoom1: true, testRoom2: true},
-			domain.AlarmTypeShorts: {testRoom1: true, testRoom2: true},
-		},
-	}
-
-	groups := grouper.groupOutboxItems(items, roomsByChannel)
-	if len(groups) != 4 {
-		t.Fatalf("groupOutboxItems count = %d, want 4", len(groups))
-	}
-
-	summary := make(map[string]int)
-
-	for _, g := range groups {
-		key := strings.Join([]string{g.roomID, g.channelID, string(g.kind)}, "|")
-
-		summary[key] = len(g.items)
-	}
-
-	want := map[string]int{
-		"room1|ch1|NEW_VIDEO": 2,
-		"room2|ch1|NEW_VIDEO": 2,
-		"room1|ch1|NEW_SHORT": 1,
-		"room2|ch1|NEW_SHORT": 1,
-	}
-	if !reflect.DeepEqual(summary, want) {
-		t.Fatalf("group summary = %#v, want %#v", summary, want)
 	}
 }
 

@@ -125,9 +125,5 @@ func (resolver unitClaimResolver) selectClaimedDeliveries(
 	return selection
 }
 
-func (unitClaimResolver) releaseDeliveryClaims(context.Context, []dispatchstate.ClaimToken) error {
-	return nil
-}
-
 func (unitClaimResolver) releaseDeliveryClaimsWithWarning(context.Context, []dispatchstate.ClaimToken, string, ...any) {
 }

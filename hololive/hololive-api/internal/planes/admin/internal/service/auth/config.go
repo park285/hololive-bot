@@ -23,11 +23,9 @@ package auth
 import "time"
 
 type Config struct {
-	SessionTTL    time.Duration
-	ResetTokenTTL time.Duration
+	SessionTTL time.Duration
 
-	LoginRateLimitPerMinute                int64
-	PasswordResetRequestRateLimitPerMinute int64
+	LoginRateLimitPerMinute int64
 
 	LoginFailLimit    int64
 	LoginFailWindow   time.Duration
@@ -43,13 +41,11 @@ const DefaultBcryptCost = 12
 
 func DefaultConfig() Config {
 	return Config{
-		SessionTTL:                             7 * 24 * time.Hour,
-		ResetTokenTTL:                          60 * time.Minute,
-		LoginRateLimitPerMinute:                30,
-		PasswordResetRequestRateLimitPerMinute: 10,
-		LoginFailLimit:                         5,
-		LoginFailWindow:                        15 * time.Minute,
-		LoginLockDuration:                      15 * time.Minute,
-		BcryptCost:                             DefaultBcryptCost,
+		SessionTTL:              7 * 24 * time.Hour,
+		LoginRateLimitPerMinute: 30,
+		LoginFailLimit:          5,
+		LoginFailWindow:         15 * time.Minute,
+		LoginLockDuration:       15 * time.Minute,
+		BcryptCost:              DefaultBcryptCost,
 	}
 }

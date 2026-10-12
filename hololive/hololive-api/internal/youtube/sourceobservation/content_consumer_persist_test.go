@@ -24,7 +24,7 @@ func TestContentConsumerDoesNotRewriteAbsentCatalogRow(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithAbsenceGrace(repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-new"))); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -54,7 +54,7 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
-	consumer := NewConsumerWithAbsenceGrace(repo, 0)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if _, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, contract.CompletenessComplete, "vid-s"))); err != nil {
 		t.Fatalf("publish first: %v", err)
@@ -256,7 +256,7 @@ func startContentPersistGrace(t *testing.T, grace time.Duration) (*pgxpool.Pool,
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
 
-	return pool, repo, NewConsumerWithAbsenceGrace(repo, grace), proof
+	return pool, repo, NewConsumerWithGraces(repo, grace, 0), proof
 }
 
 func publishConsumeVideos(

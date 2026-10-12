@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"strings"
 	"time"
 
@@ -75,14 +74,6 @@ func NewRuntimeIrisClient(
 func (c *RuntimeIrisClient) ValidateBaseURL() error {
 	if _, err := c.resolver.resolve(); err != nil {
 		return fmt.Errorf("resolve base URL: %w", err)
-	}
-
-	return nil
-}
-
-func (c *RuntimeIrisClient) allowH3Dial(ctx context.Context, ip net.IP) error {
-	if err := c.h3DialGuard.allow(ctx, ip); err != nil {
-		return fmt.Errorf("allow: %w", err)
 	}
 
 	return nil

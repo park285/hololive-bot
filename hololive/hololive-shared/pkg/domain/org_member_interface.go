@@ -37,9 +37,7 @@ type MemberDataProvider interface {
 
 	// GetChannelIDs는 채널 ID 목록이다. 조회 실패는 빈 목록이 아니라 오류다.
 	GetChannelIDs(ctx context.Context) ([]string, error)
-	// LoadAllMembers는 전체 멤버 순회 계약이다. repository·cache 실패는 빈 결과로 바꾸지 않고 오류로 돌려준다.
-	// 오류를 흡수하던 GetAllMembers와 선택적 MemberDataLoader 병존은 DEC-20260926-hololive-source-fallbacks-retirement로
-	// 이 메서드 하나로 합쳤다.
+	// LoadAllMembers는 전체 멤버를 반환하며 repository·cache 실패를 오류로 전달한다.
 	LoadAllMembers(ctx context.Context) ([]*Member, error)
 }
 

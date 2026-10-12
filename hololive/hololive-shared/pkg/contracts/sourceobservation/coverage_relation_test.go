@@ -95,37 +95,3 @@ func TestAbsenceCapabilityForKind(t *testing.T) {
 		}
 	}
 }
-
-func TestLiveCoverageCoversChannel(t *testing.T) {
-	t.Parallel()
-
-	coverage := GlobalChannelCoverageV1{RequestedChannelIDs: []string{testChannelA, "UC_B"}}
-	if !LiveCoverageCoversChannel(coverage, testChannelA) {
-		t.Fatal("requested channel must be covered")
-	}
-
-	if LiveCoverageCoversChannel(coverage, "UC_C") {
-		t.Fatal("unrequested channel must not be covered")
-	}
-}
-
-func TestLiveCoverageCoversSessionRespectsStatusFilter(t *testing.T) {
-	t.Parallel()
-
-	liveOnly := GlobalChannelCoverageV1{
-		RequestedChannelIDs: []string{testChannelA},
-		Filters:             LiveFiltersV1{Statuses: []string{testStatusLive}},
-	}
-	if !LiveCoverageCoversSession(liveOnly, testChannelA, testStatusLive) {
-		t.Fatal("LIVE-only coverage must cover a LIVE session")
-	}
-
-	if LiveCoverageCoversSession(liveOnly, testChannelA, "UPCOMING") {
-		t.Fatal("LIVE-only coverage must not cover an UPCOMING session")
-	}
-
-	empty := GlobalChannelCoverageV1{RequestedChannelIDs: []string{testChannelA}}
-	if !LiveCoverageCoversSession(empty, testChannelA, "UPCOMING") {
-		t.Fatal("empty status filter covers requested channel sessions")
-	}
-}

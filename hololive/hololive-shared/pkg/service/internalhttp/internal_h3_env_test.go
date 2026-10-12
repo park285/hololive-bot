@@ -50,7 +50,7 @@ func writeTestCACertificate(t *testing.T) string {
 }
 
 // 내부 H3 client는 전용 HOLOLIVE_INTERNAL_H3_* 두 키만 쓴다. 공통 서버 키(HOLOLIVE_H3_CERT_FILE,
-// HOLOLIVE_H3_SERVER_NAME)로 내려가는 폴백은 두지 않는다(stack audit 2026-09-26).
+// HOLOLIVE_H3_SERVER_NAME)로 내려가는 폴백은 두지 않는다.
 func TestNewClientForURLStrictUsesExplicitOptionsWithoutEnvironmentFallback(t *testing.T) {
 	serverCert := writeTestCACertificate(t)
 

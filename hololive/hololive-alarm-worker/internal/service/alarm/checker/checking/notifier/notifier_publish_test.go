@@ -50,7 +50,6 @@ func TestNotifierPublishBatchAndMarkEmpty(t *testing.T) {
 	processed, err := notifier.publishBatchAndMark(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Zero(t, processed)
-	assert.Zero(t, readDispatchQueueSize(t, cache))
 }
 
 func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
@@ -78,7 +77,6 @@ func TestNotifierPublishBatchAndMarkSuccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, processed)
 	assert.Equal(t, 1, outbox.insertBatchCalls)
-	assert.Zero(t, readDispatchQueueSize(t, cache))
 
 	alreadyNotified, err := dedupService.IsAlreadyNotifiedForSchedule(t.Context(), "stream-success", start, 10)
 	require.NoError(t, err)

@@ -1,8 +1,6 @@
 package messagestrings
 
-// Key는 message_strings 한 행을 가리키는 타입 있는 key다. Args는 값에 들어 있어야 하는 format 인자 수이며,
-// 시드 SQL 기반 테스트가 이 수와 시드 값의 verb 수를 맞춰 본다
-// (DEC-20260926-hololive-message-strings-startup-validation).
+// Key는 message_strings 행의 key이며, Args는 값에 필요한 format 인자 수다.
 type Key struct {
 	Namespace string
 	Name      string
@@ -79,23 +77,9 @@ func NotifyKeys() []Key {
 	}
 }
 
-// AlarmWorkerEgressRequirements는 alarm-worker 알림 발송(알람 dispatch, YouTube outbox)이 기동 때 확인하는
-// message_strings 계약이다. Karing 문구(namespace karing)는 DEC-20260926-hololive-karing-egress-disposition에 따라
-// 발송 경로와 함께 계약에서 뺐다. DB의 karing 행은 읽는 코드가 없는 보관 데이터다.
+// AlarmWorkerEgressRequirements는 alarm-worker가 기동 시 확인하는 알람·YouTube 발송 문구 계약이다.
 func AlarmWorkerEgressRequirements() Requirements {
 	return Requirements{Keys: []Key{
 		MiscVTuberFallback, MiscAlarmNoTitle, MiscAlarmNoStream,
 	}}
-}
-
-// AllKeys는 이 패키지가 정의한 타입 있는 key 전체다. 시드 SQL 계약 테스트가 사용한다.
-func AllKeys() []Key {
-	keys := make([]Key, 0, 64)
-
-	keys = append(keys, TimeFmtKeys()...)
-	keys = append(keys, CalendarKeys()...)
-	keys = append(keys, NotifyKeys()...)
-	keys = append(keys, MiscVTuberFallback, MiscTimeUnknown, MiscAlarmNoTitle, MiscAlarmNoStream, AlarmTypeAll)
-
-	return keys
 }

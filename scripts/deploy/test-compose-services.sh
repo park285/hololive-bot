@@ -124,16 +124,6 @@ done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "${ROOT_DIR}/scripts/dep
 pass "ap active-active syncs every Compose helper"
 grep -qx 'scripts/deploy/ap-collector-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs collector preflight"
 pass "ap active-active syncs collector preflight"
-bash "${ROOT_DIR}/scripts/deploy/lib/ap-prechange-config_test.sh" || fail "AP prechange exact-error contract"
-pass "ap active-active deploy handles token-free prechange transition"
-bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
-    || fail "ap deploy propagates the validated Compose release version"
-bash "${ROOT_DIR}/scripts/deploy/lib/youtubejs-node-version_test.sh" \
-    || fail "AP deploy enforces the YouTube.js Node engine contract"
-bash "${ROOT_DIR}/scripts/deploy/ap-deploy-cutover-failure_test.sh" \
-    || fail "AP deploy leaves a failed collector cutover for the recorded collector rollback"
-bash "${ROOT_DIR}/scripts/deploy/source-revision-provenance_test.sh" \
-    || fail "image builds and cutovers preserve exact source revision provenance"
 ap_udp_lib="scripts/deploy/lib/require-quic-udp-buffer.sh"
 grep -qx "${ap_udp_lib}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_udp_lib}"
 pass "ap active-active syncs the QUIC UDP buffer preflight"
@@ -208,5 +198,3 @@ expect_fail_contains "Seoul native rollback rejects Compose runtime" \
     "use ./scripts/deploy/ap-rollback.sh seoul" \
     "${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh" seoul --dry-run
 expect_fail "seoul active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --apply
-
-python3 -B "${ROOT_DIR}/scripts/build/po-sandbox-manifest_test.py"

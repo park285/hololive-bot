@@ -20,9 +20,7 @@
 
 package messaging
 
-// 값은 사용자-facing 문구가 아니라 message_strings(error ns) 조회 key다. SendError가 해석하며 코드 대체 문구는
-// 없다. 기동 때 bot plane 검증이 ErrorMessageKeys 전체의 값을 확인한다
-// (DEC-20260926-hololive-message-strings-startup-validation).
+// SendError가 해석하는 message_strings(error ns) key이며, ErrorMessageKeys는 기동 시 검증한다.
 const (
 	ErrMemberProfileLoadFailed  = "member_profile_load_failed"
 	ErrMemberProfileBuildFailed = "member_profile_build_failed"
@@ -56,8 +54,6 @@ const (
 	ErrMemberNewsSubscriptionFailed    = "member_news_subscription_failed"
 
 	ErrUnknownCommand          = "unknown_command"
-	ErrExternalAPICallFailed   = "external_api_call_failed"
-	ErrCacheConnectionFailed   = "cache_connection_failed"
 	ErrIrisConnectionFailed    = "iris_connection_failed"
 	ErrCommandProcessingFailed = "command_processing_failed"
 )
@@ -74,7 +70,7 @@ func ErrorMessageKeys() []string {
 		ErrMajorEventServiceNotInitialized, ErrMajorEventStatusCheckFailed, ErrMajorEventSubscribeFailed,
 		ErrMajorEventUnsubscribeFailed,
 		ErrMemberNewsServiceNotInitialized, ErrMemberNewsQueryFailed, ErrMemberNewsSubscriptionFailed,
-		ErrUnknownCommand, ErrExternalAPICallFailed, ErrCacheConnectionFailed, ErrIrisConnectionFailed,
+		ErrUnknownCommand, ErrIrisConnectionFailed,
 		ErrCommandProcessingFailed,
 	}
 }

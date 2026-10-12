@@ -95,21 +95,5 @@ func (b *Bot) getErrorMessage(err error) string {
 		return messaging.ErrIrisConnectionFailed
 	}
 
-	if _, ok := errors.AsType[*appErrors.APIError](err); ok {
-		return messaging.ErrExternalAPICallFailed
-	}
-
-	if _, ok := errors.AsType[*appErrors.KeyRotationError](err); ok {
-		return messaging.ErrExternalAPICallFailed
-	}
-
-	if _, ok := errors.AsType[*appErrors.CacheError](err); ok {
-		return messaging.ErrCacheConnectionFailed
-	}
-
-	if _, ok := errors.AsType[*appErrors.ValidationError](err); ok {
-		return messaging.ErrCommandProcessingFailed
-	}
-
 	return messaging.ErrCommandProcessingFailed
 }

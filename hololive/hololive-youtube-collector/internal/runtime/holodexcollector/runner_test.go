@@ -119,7 +119,7 @@ func TestRunnerRejectsUnsupportedLiveGenerations(t *testing.T) {
 			input := holodexInputWithLiveGeneration(t, "holodex_live", []string{channelA, channelB}, generation)
 			_, err := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(t.Context(), input)
 
-			if err == nil || collecterr.CodeOf(err) != collecterr.Configuration {
+			if err == nil || collecterr.CodeOf(err) != contract.ErrorConfiguration {
 				t.Fatalf("Collect(generation %d) error = %v, want configuration error", generation, err)
 			}
 		})
@@ -238,10 +238,10 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 func TestRunnerDoesNotPublishOnTimeout(t *testing.T) {
 	t.Parallel()
 
-	output, err := NewLiveRunner(&staticFetcher{err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "timeout")}).Collect(
+	output, err := NewLiveRunner(&staticFetcher{err: collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "timeout")}).Collect(
 		t.Context(), holodexInput(t, []string{channelA}),
 	)
-	if err == nil || collecterr.CodeOf(err) != collecterr.Timeout || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorCollectionTimeout || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -250,7 +250,7 @@ func TestRunnerRejectsMalformedSchema(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewLiveRunner(&staticFetcher{body: []byte(`{"id":"x"}`)}).Collect(t.Context(), holodexInput(t, []string{channelA}))
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -266,7 +266,7 @@ func TestRunnerRejectsConflictingChannelIdentity(t *testing.T) {
 		t.Context(), holodexInput(t, []string{channelA, channelB}),
 	)
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -282,7 +282,7 @@ func TestMetadataRunnerRejectsConflictingPhotos(t *testing.T) {
 		t.Context(), holodexInputFor(t, "holodex_metadata", []string{channelA}),
 	)
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -491,7 +491,7 @@ func TestRunnerDoesNotBuildUnrequestedChannelMetadata(t *testing.T) {
 			result, err := runner.Collect(t.Context(), input)
 
 			if kind == "holodex_metadata" {
-				if collecterr.CodeOf(err) != collecterr.ParserDrift {
+				if collecterr.CodeOf(err) != contract.ErrorParserDrift {
 					t.Fatalf("conflicting requested metadata error = %v", err)
 				}
 

@@ -193,9 +193,7 @@ func TestEnqueuePreparedChunkBoundaries(t *testing.T) {
 	}
 }
 
-// 시도 식별자(delivery_id, attempt_ordinal)는 lifecycle 전이 트랜잭션이 한 번만 기록한다
-// (DEC-20260926-hololive-delivery-telemetry-single-path). 중복을 조용히 건너뛰던 ON CONFLICT DO NOTHING은 지웠고,
-// 중복은 오류로 드러나 전이 트랜잭션을 rollback해야 한다.
+// 시도 식별자 중복은 lifecycle 전이 트랜잭션 전체를 rollback해야 한다.
 func TestEnqueuePreparedRejectsDuplicateAttemptWithinBatch(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()

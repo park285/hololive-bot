@@ -235,3 +235,8 @@ func TestClassifyBroadcastSource(t *testing.T) {
 		})
 	}
 }
+
+// ClassifyBroadcast는 주제와 제목의 근거로 방송 유형을 반환하며 외부 상태를 변경하지 않는다.
+func ClassifyBroadcast(topicID, title string) broadcasttype.Type {
+	return ClassifyBroadcastWithSource(topicID, title).Type
+}

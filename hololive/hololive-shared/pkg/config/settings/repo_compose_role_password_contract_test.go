@@ -7,7 +7,7 @@ import (
 )
 
 // 역할별 DB 비밀번호는 전용 키 하나만 쓴다. 비어 있을 때 admin DB_PASSWORD나 다른 역할 비밀번호로 내려가는
-// compose 치환 폴백을 다시 넣지 않도록 고정한다(stack audit 2026-09-26, T18에서 운영 env 키 확인).
+// compose 치환 폴백을 다시 넣지 않도록 고정한다.
 func TestRepoComposeRolePasswordsHaveNoFallbackChain(t *testing.T) {
 	compose := readRepoFile(t, "deploy/compose/docker-compose.prod.yml")
 

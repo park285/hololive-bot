@@ -65,7 +65,9 @@ func TestRepoEnvExample_DefaultsToProductionAppEnv(t *testing.T) {
 	}
 }
 
-func TestRepoShortLinkIngressBoundary(t *testing.T) {
+func assertShortLinkIngressBoundary(t *testing.T, cfg renderedCompose) {
+	t.Helper()
+
 	content := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf.template")
 	listener := "listen " + centralIngressBindPlaceholder + ":30192;"
 	server := nginxBlockContaining(t, content, "server {", listener)
@@ -75,7 +77,6 @@ func TestRepoShortLinkIngressBoundary(t *testing.T) {
 
 	locationAnchor := "location ^~ " + shortlinkcontracts.YouTubePathPrefix
 	location := nginxBlockContaining(t, server, locationAnchor, "proxy_pass")
-	cfg := renderComposeConfig(t, composeProdFile, composeLiveCompatFile)
 	listenerAddr := composeEnvironment(t, cfg, serviceHololiveAPI)["HOLOLIVE_SHORT_LINK_ADDR"]
 	wantProxy := "http://127.0.0.1" + listenerAddr
 	assertExactNginxDirectives(t, location, "proxy_pass", []string{wantProxy})

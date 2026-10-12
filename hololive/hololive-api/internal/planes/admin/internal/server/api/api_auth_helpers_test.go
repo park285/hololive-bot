@@ -22,7 +22,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -184,59 +183,5 @@ func TestAuthHandler_EarlyValidationBranches(t *testing.T) {
 				t.Fatalf("expected error code %s in body: %s", tt.wantCode, rec.Body.String())
 			}
 		})
-	}
-}
-
-func TestAuthHandler_PasswordResetUnavailable(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	for _, service := range []struct {
-		name string
-		auth *authsvc.Service
-	}{
-		{name: "no service"},
-		{name: "service without DB", auth: &authsvc.Service{}},
-	} {
-		h := NewAuthHandler(service.auth, nil)
-		router := gin.New()
-		router.POST("/reset-request", h.ResetRequest)
-		router.POST("/reset", h.ResetPassword)
-
-		for _, tt := range []struct {
-			name string
-			path string
-			body string
-		}{
-			{name: "request valid email", path: "/reset-request", body: `{"email":"user@example.com"}`},
-			{name: "request other email", path: "/reset-request", body: `{"email":"missing@example.com"}`},
-			{name: "request malformed body", path: "/reset-request", body: "{"},
-			{name: "request empty body", path: "/reset-request"},
-			{name: "reset valid input", path: "/reset", body: `{"token":"reset_test","newPassword":"NewPassw0rd1"}`},
-			{name: "reset malformed body", path: "/reset", body: "{"},
-			{name: "reset empty body", path: "/reset"},
-		} {
-			t.Run(service.name+"/"+tt.name, func(t *testing.T) {
-				// DB 없는 서비스로도 응답하여 토큰 발급·소비 경로에 진입하지 않음을 확인한다.
-				req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, tt.path, bytes.NewBufferString(tt.body))
-				req.Header.Set("Content-Type", "application/json")
-
-				rec := httptest.NewRecorder()
-				router.ServeHTTP(rec, req)
-
-				if rec.Code != http.StatusServiceUnavailable {
-					t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-				}
-
-				var payload map[string]any
-
-				if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-					t.Fatalf("decode response: %v", err)
-				}
-
-				if len(payload) != 2 || payload["success"] != false || payload["error"] != string(authsvc.CodeInternal) {
-					t.Fatalf("unexpected unavailable response: %s", rec.Body.String())
-				}
-			})
-		}
 	}
 }

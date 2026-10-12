@@ -159,7 +159,7 @@ func candidateQueryIteration(ctx context.Context, repository *Repository, now ti
 		return candidateQueryCost{err: err}
 	}
 
-	filtered, err := filter.FilterCandidates(ctx, candidates, model.PeriodWeekly, now, []string{"미코"}, nil, nil)
+	filtered, err := filter.PrepareCandidates(candidates, model.PeriodWeekly, now).Filter(ctx, []string{"미코"}, nil, nil)
 
 	return candidateQueryCost{rows: len(candidates), bytes: candidateStringsSize(candidates), final: len(filtered), err: err}
 }
@@ -168,7 +168,7 @@ func candidateQueryIteration(ctx context.Context, repository *Repository, now ti
 func filterMikoCandidates(tb testing.TB, candidates []model.Candidate, period model.Period, now time.Time) []model.FilteredCandidate {
 	tb.Helper()
 
-	filtered, err := filter.FilterCandidates(tb.Context(), candidates, period, now, []string{"미코"}, nil, nil)
+	filtered, err := filter.PrepareCandidates(candidates, period, now).Filter(tb.Context(), []string{"미코"}, nil, nil)
 	if err != nil {
 		tb.Fatal(err)
 	}

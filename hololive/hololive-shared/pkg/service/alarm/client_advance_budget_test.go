@@ -35,7 +35,7 @@ func startAdvanceBudgetRequest(ctx context.Context, client *Client, minutes int)
 }
 
 func newAdvanceBudgetClient(timeout time.Duration, sends *atomic.Int32) *Client {
-	client := NewClient("http://alarm.test", nil)
+	client := newTestClient("http://alarm.test", "", nil)
 
 	client.httpClient.Timeout = timeout
 

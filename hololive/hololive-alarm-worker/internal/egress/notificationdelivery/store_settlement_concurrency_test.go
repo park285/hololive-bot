@@ -43,7 +43,7 @@ func TestOutboxSettlementCannotOverwriteConcurrentQuarantine(t *testing.T) {
 			_, err = tx.Exec(ctx, `UPDATE notification_delivery_outbox SET sending_started_at=clock_timestamp()-INTERVAL '10 minutes' WHERE id=$1`, id)
 			require.NoError(t, err)
 
-			tag, err := tx.Exec(ctx, mustSQL("outbox_repository_0301_10.sql"), deliveryStatusSending, float64(time.Minute.Milliseconds()), 1, deliveryStatusQuarantined, "stale sending")
+			tag, err := tx.Exec(ctx, mustSQL("outbox_repository_0301_10.sql"), float64(time.Minute.Milliseconds()), 1, "stale sending")
 			require.NoError(t, err)
 			require.EqualValues(t, 1, tag.RowsAffected())
 

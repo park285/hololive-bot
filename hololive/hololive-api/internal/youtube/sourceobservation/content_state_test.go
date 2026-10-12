@@ -50,7 +50,7 @@ func publishConsumeContentAt(
 		t.Fatalf("align received_at for %s: %v", step.label, err)
 	}
 
-	if err := NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()); err != nil {
+	if err := NewConsumerWithGraces(repo, 0, 0).Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume %s: %v", step.label, err)
 	}
 }
@@ -274,8 +274,7 @@ func TestContentLoaderLeavesUnusedHistoryUnlocked(t *testing.T) {
 	assertContentMissing(t, pool, testVideoID, false)
 }
 
-// 로더가 clock 없는 레거시 shorts를 싣지 않아도 initialized watermark는 기준 목록으로 유지돼 새 shorts를 알린다
-// (빈 PARTIAL watermark를 되돌리던 reducer 분기는 stack-audit 2026-09-26 T11에서 삭제).
+// 로더가 clock 없는 레거시 shorts를 싣지 않아도 initialized watermark는 기준 목록으로 유지돼 새 shorts를 알린다.
 func TestContentLoaderKeepsShortsBaselineWithLegacyCatalogOnly(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -293,6 +292,6 @@ func TestContentLoaderKeepsShortsBaselineWithLegacyCatalogOnly(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	publishShortWindow(t, repo, &proof, "new")
-	require.NoError(t, NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()))
+	require.NoError(t, NewConsumerWithGraces(repo, 0, 0).Consume(ctx, contentClaimOptions()))
 	assertShortWindowOutboxes(t, pool, "new")
 }

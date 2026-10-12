@@ -37,11 +37,11 @@ func (r *ChannelRunner) JobID() collection.JobID {
 // Collect는 수집 범위에 맞는 observation과 checkpoint를 구성하며 실제 DB 저장은 publisher에 맡깁니다.
 func (r *ChannelRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js channel client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
@@ -223,7 +223,7 @@ func generationEnvelope(
 		payload,
 	)
 	if err != nil {
-		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
+		return contract.Envelope{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, err)
 	}
 
 	return envelope, nil

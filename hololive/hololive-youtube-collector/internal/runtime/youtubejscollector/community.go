@@ -29,11 +29,11 @@ func (r *CommunityRunner) JobID() collection.JobID {
 
 func (r *CommunityRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if invalidCommunityRunner(r) {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js community client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js community client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()

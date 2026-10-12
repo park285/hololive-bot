@@ -64,10 +64,7 @@ func buildRawEventKey(input *DedupeInput) string {
 		return "celebration:" + input.SourceIdentity
 	}
 
-	// YouTube source identity는 domain.YouTubeOutboxDispatchPayload.CanonicalIdentity(sha256:<64hex>)다. 저장 경로는 envelope
-	// 검증 뒤 payload에서 이 값을 다시 계산하고 validateSourceIdentity로 형식을 확인한다. 비정규(legacy raw) 식별자를 해시로
-	// 감싸 받던 분기는 지웠다(stack-audit 2026-09-26 T11 holo-dispatch-raw-youtube-identity-hash). 정규 식별자의 key는
-	// 바뀌지 않는다.
+	// YouTube source identity는 payload에서 다시 계산한 CanonicalIdentity(sha256:<64hex>)만 허용한다.
 	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
 		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + input.SourceIdentity
 	}
@@ -77,9 +74,6 @@ func buildRawEventKey(input *DedupeInput) string {
 	}
 
 	alarmType := input.AlarmType
-	if alarmType == "" {
-		alarmType = domain.AlarmTypeLive
-	}
 
 	category := strings.TrimSpace(input.Category)
 	if category == "" {

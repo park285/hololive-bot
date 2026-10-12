@@ -90,14 +90,11 @@ func (h *MemberHandler) updateMemberField[T any](c *gin.Context, spec memberFiel
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.invalidateMemberIndex()
 		h.safeLogger().Error(spec.cacheErrorLog, slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
-
-	h.invalidateMemberIndex()
 
 	h.safeLogger().Info(spec.successLog,
 		slog.Int("member_id", memberID),

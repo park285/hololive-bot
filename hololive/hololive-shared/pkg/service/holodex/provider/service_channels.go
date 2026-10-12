@@ -43,8 +43,7 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 
 	statusStr := channelScheduleStatus(includeLive)
 
-	// Holodex /live 실패는 YouTube scraper·공식 일정으로 보충하거나 그 결과를 캐시하지 않고 그대로 돌려준다
-	// (DEC-20260926-hololive-source-fallbacks-retirement).
+	// Holodex /live 실패는 YouTube scraper·공식 일정으로 보충하거나 그 결과를 캐시하지 않고 그대로 돌려준다.
 	body, err := h.requester.DoRequest(ctx, http.MethodGet, "/live", channelScheduleParams(channelID, hours, statusStr))
 	if err != nil {
 		h.logger.Error("Failed to get channel schedule",

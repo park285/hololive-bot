@@ -54,8 +54,7 @@ func TestLoadLLMSchedulerRuntimeAllowsMissingIrisInputs(t *testing.T) {
 	}
 }
 
-// 아래 세 테스트는 비-runtime 로더(LoadLLMScheduler, stack-audit 2026-09-26 T11에서 삭제)로 검증하던 동작을 실제 runtime
-// 로더에서 확인한다. 이 로더는 Iris 입력을 받지 않으므로 Iris env를 비운다.
+// 아래 세 테스트는 llm scheduler runtime 로더의 설정 검증을 확인한다. 이 로더는 Iris 입력을 받지 않으므로 Iris env를 비운다.
 func TestLoadLLMSchedulerRuntimeProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	settingstest.ClearIrisAndRoomEnv(t)
 	settingstest.SetRuntimeH3ServerEnv(t)

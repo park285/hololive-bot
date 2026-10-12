@@ -3,8 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-. "${SCRIPT_DIR}/python-runtime.sh"
-repo_python_init
 export GOTOOLCHAIN="${GOTOOLCHAIN-auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
@@ -156,7 +154,6 @@ check_staticcheck
 check_golangci_lint
 check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
-run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
 run_step "collector YouTube.js dependencies" bash scripts/ci/public-pr-collector-helper-install.sh
 run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod

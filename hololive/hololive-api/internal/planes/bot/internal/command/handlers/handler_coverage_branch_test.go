@@ -295,7 +295,7 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateMemberLookupDependencies(tc.deps)
+			err := handlercore.ValidateMemberLookupDependencies(tc.deps)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("expected nil error, got %v", err)

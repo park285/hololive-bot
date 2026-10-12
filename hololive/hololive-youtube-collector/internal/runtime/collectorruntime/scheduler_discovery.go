@@ -26,7 +26,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 	source := s.projectionSource()
 	if source == nil {
-		s.failCycle(ctx, started, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "discovery cycle: candidate source is missing"))
+		s.failCycle(ctx, started, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "discovery cycle: candidate source is missing"))
 
 		return
 	}

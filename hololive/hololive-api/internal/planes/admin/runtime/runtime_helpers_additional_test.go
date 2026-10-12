@@ -372,7 +372,7 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 }
 
 // 설정된 bot 내부 URL로 joined-rooms client를 만들지 못하면 endpoint를 조용히 끄지 않고 기동 오류다. 내부 H3 env는
-// https URL에 명시적으로 전달한다(stack audit 2026-09-26).
+// https URL에 명시적으로 전달한다.
 func TestBuildAdminAPIBotRoomListerFailsWithoutInternalH3Options(t *testing.T) {
 	t.Parallel()
 

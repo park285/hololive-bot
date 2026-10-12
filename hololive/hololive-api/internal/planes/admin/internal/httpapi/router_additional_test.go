@@ -57,12 +57,6 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 			t.Fatalf("missing route %s", route)
 		}
 	}
-
-	for _, route := range router.Routes() {
-		if route.Path == "/api/holo/profiles" || route.Path == "/api/holo/profiles/name" {
-			t.Fatalf("retired profile route remains: %s", route.Path)
-		}
-	}
 }
 
 func TestValidateAPIRouterInputsRejectsMissingDependencies(t *testing.T) {

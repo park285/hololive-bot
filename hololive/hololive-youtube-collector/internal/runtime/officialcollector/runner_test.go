@@ -82,7 +82,7 @@ func TestRunnerRejectsSchemaDrift(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewRunner(&staticFetcher{body: []byte(`{"foo":[]}`)}).Collect(t.Context(), officialInput(t))
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestRunnerRejectsNonEmptyPayloadWhenAllRowsInvalid(t *testing.T) {
 	]}]}`)
 	output, err := NewRunner(&staticFetcher{body: body}).Collect(t.Context(), officialInput(t))
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -125,8 +125,8 @@ func TestRunnerRejectsNonEmptyPayloadWhenAllRowsInvalid(t *testing.T) {
 func TestRunnerDoesNotPublishOnTimeout(t *testing.T) {
 	t.Parallel()
 
-	output, err := NewRunner(&staticFetcher{err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "timeout")}).Collect(t.Context(), officialInput(t))
-	if err == nil || collecterr.CodeOf(err) != collecterr.Timeout || !output.IsZero() {
+	output, err := NewRunner(&staticFetcher{err: collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "timeout")}).Collect(t.Context(), officialInput(t))
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorCollectionTimeout || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }

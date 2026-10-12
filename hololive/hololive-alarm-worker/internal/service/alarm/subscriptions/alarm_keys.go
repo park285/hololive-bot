@@ -25,15 +25,6 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-// getRegistryKey: 방 기반 레지스트리 키 (room_id가 PRIMARY).
-func (as *AlarmService) getRegistryKey(roomID string) string {
-	return roomID
-}
-
-func (as *AlarmService) channelSubscribersKey(channelID string) string {
-	return sharedalarmkeys.BuildChannelSubscriberKey(channelID, domain.AlarmTypeLive)
-}
-
 func (as *AlarmService) channelSubscribersKeyByType(channelID string, alarmType domain.AlarmType) string {
 	return sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
 }

@@ -49,21 +49,6 @@ func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool
 	return count > s.config.LoginRateLimitPerMinute, nil
 }
 
-func (s *Service) isPasswordResetRequestRateLimited(ctx context.Context, clientIP string) (bool, error) {
-	if clientIP == "" || s.cacheClient == nil {
-		return false, nil
-	}
-
-	key := resetReqRateLimitPrefix + clientIP
-
-	count, err := incrWithTTL(ctx, s.cacheClient, key, time.Minute)
-	if err != nil {
-		return false, fmt.Errorf("incr with TTL: %w", err)
-	}
-
-	return count > s.config.PasswordResetRequestRateLimitPerMinute, nil
-}
-
 func (s *Service) isAccountLocked(ctx context.Context, email string) (bool, error) {
 	if s.cacheClient == nil {
 		return false, nil

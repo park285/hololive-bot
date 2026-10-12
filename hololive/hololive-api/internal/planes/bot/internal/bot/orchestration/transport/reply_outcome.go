@@ -117,11 +117,6 @@ func (e replyStatusFailedError) Error() string {
 
 func (e replyStatusFailedError) Is(target error) bool { return target == ErrReplyStatusFailed }
 
-func isReplyStatusFailed(err error) bool {
-	_, ok := errors.AsType[replyStatusFailedError](err)
-	return ok
-}
-
 func IsReplyStatusFailed(err error) bool {
 	return errors.Is(err, ErrReplyStatusFailed)
 }

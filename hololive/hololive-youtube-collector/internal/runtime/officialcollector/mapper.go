@@ -71,7 +71,7 @@ func parseScheduleItems(body []byte) ([]contract.ScheduleItemV1, error) {
 	}
 
 	if totalRows > 0 && validRows == 0 {
-		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule has no valid rows")
+		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule has no valid rows")
 	}
 
 	return items, nil
@@ -80,24 +80,24 @@ func parseScheduleItems(body []byte) ([]contract.ScheduleItemV1, error) {
 func decodeScheduleGroups(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
 	if !jsontext.Value(trimmed).IsValid() || len(trimmed) == 0 || trimmed[0] != '{' {
-		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule response is not a JSON object")
+		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule response is not a JSON object")
 	}
 
 	var root map[string]jsontext.Value
 
 	if err := jsonv2.Unmarshal(trimmed, &root); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode official schedule: %w", err))
 	}
 
 	rawGroups, ok := root["dateGroupList"]
 	if !ok || bytes.Equal(bytes.TrimSpace(rawGroups), []byte("null")) {
-		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule dateGroupList is missing")
+		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule dateGroupList is missing")
 	}
 
 	var groups []jsontext.Value
 
 	if err := jsonv2.Unmarshal(rawGroups, &groups); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule dateGroupList: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode official schedule dateGroupList: %w", err))
 	}
 
 	return groups, nil
@@ -137,18 +137,18 @@ func decodeScheduleRows(rawGroup jsontext.Value, index int) ([]jsontext.Value, e
 	var group map[string]jsontext.Value
 
 	if err := jsonv2.Unmarshal(rawGroup, &group); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule group %d: %w", index, err))
+		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode official schedule group %d: %w", index, err))
 	}
 
 	rawRows, ok := group["videoList"]
 	if !ok || bytes.Equal(bytes.TrimSpace(rawRows), []byte("null")) {
-		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule videoList is missing")
+		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule videoList is missing")
 	}
 
 	var rows []jsontext.Value
 
 	if err := jsonv2.Unmarshal(rawRows, &rows); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule videoList: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode official schedule videoList: %w", err))
 	}
 
 	return rows, nil
@@ -158,7 +158,7 @@ func parseScheduleRow(rawRow jsontext.Value) (contract.ScheduleItemV1, error) {
 	var row scheduleVideoRow
 
 	if err := jsonv2.Unmarshal(rawRow, &row); err != nil {
-		return contract.ScheduleItemV1{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule row: %w", err))
+		return contract.ScheduleItemV1{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode official schedule row: %w", err))
 	}
 
 	videoID, err := parseScheduleVideoID(row.URL)
@@ -168,7 +168,7 @@ func parseScheduleRow(rawRow jsontext.Value) (contract.ScheduleItemV1, error) {
 
 	scheduledAt, err := time.ParseInLocation(officialDatetimeLayout, strings.TrimSpace(row.Datetime), officialScheduleJST)
 	if err != nil {
-		return contract.ScheduleItemV1{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("parse official schedule datetime: %w", err))
+		return contract.ScheduleItemV1{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("parse official schedule datetime: %w", err))
 	}
 
 	title := strings.TrimSpace(row.Title)
@@ -181,7 +181,7 @@ func parseScheduleRow(rawRow jsontext.Value) (contract.ScheduleItemV1, error) {
 	}
 
 	if title == "" {
-		return contract.ScheduleItemV1{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule row title is empty")
+		return contract.ScheduleItemV1{}, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule row title is empty")
 	}
 
 	collaboTalentNames, err := parseCollaboTalentNames(row.CollaboTalents, row.Name, row.Talent.Name)
@@ -224,7 +224,7 @@ func decodeCollaboTalentNames(raw jsontext.Value) ([]string, error) {
 	}
 
 	if err := jsonv2.Unmarshal(trimmed, &talents); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule collaboTalents: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode official schedule collaboTalents: %w", err))
 	}
 
 	names := make([]string, 0, len(talents))
@@ -262,7 +262,7 @@ func collectCollaboTalentNames(names []string, skipped map[string]struct{}) ([]s
 
 		out = append(out, collected)
 		if len(out) > contract.MaxScheduleCollaboTalentNames {
-			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule collaboTalents exceeds contract limit")
+			return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule collaboTalents exceeds contract limit")
 		}
 	}
 
@@ -276,7 +276,7 @@ func collectCollaboTalentName(name string, skipped, seen map[string]struct{}) (c
 	}
 
 	if len(trimmed) > contract.MaxScheduleCollaboTalentNameBytes {
-		return "", false, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule collabo talent name exceeds contract limit")
+		return "", false, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule collabo talent name exceeds contract limit")
 	}
 
 	key := stringutil.Normalize(trimmed)
@@ -296,17 +296,17 @@ func collectCollaboTalentName(name string, skipped, seen map[string]struct{}) (c
 func parseScheduleVideoID(rawURL string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
-		return "", collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("parse official schedule url: %w", err))
+		return "", collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("parse official schedule url: %w", err))
 	}
 
 	host := strings.ToLower(parsed.Hostname())
 	if parsed.Scheme != "https" || (host != "youtube.com" && host != "www.youtube.com") || parsed.Path != "/watch" {
-		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule url is not a YouTube watch URL")
+		return "", collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule url is not a YouTube watch URL")
 	}
 
 	videoID := strings.TrimSpace(parsed.Query().Get("v"))
 	if !validVideoID(videoID) {
-		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule video id is invalid")
+		return "", collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "official schedule video id is invalid")
 	}
 
 	return videoID, nil

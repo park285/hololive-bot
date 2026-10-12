@@ -79,19 +79,3 @@ type ChannelSelection struct {
 	Confidence    float64 `json:"confidence"`
 	Reasoning     string  `json:"reasoning"`
 }
-
-func (pr *ParseResults) IsSingle() bool {
-	return pr.Single != nil
-}
-
-func (pr *ParseResults) IsMultiple() bool {
-	return len(pr.Multiple) > 0
-}
-
-func (pr *ParseResults) GetCommands() []*ParseResult {
-	if pr.IsSingle() {
-		return []*ParseResult{pr.Single}
-	}
-
-	return pr.Multiple
-}

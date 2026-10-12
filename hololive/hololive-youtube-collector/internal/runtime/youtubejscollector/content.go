@@ -65,11 +65,11 @@ func (r *ContentRunner) JobID() collection.JobID {
 
 func (r *ContentRunner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil || r.cursors == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js content client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js content client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	out, err := r.collectAllowedKinds(ctx, input, time.Now())
@@ -297,7 +297,7 @@ func (r *ContentRunner) fetchKind(
 	}
 
 	if observationKind == contract.KindVideoList && generation != contract.VideoListPublicationContractGeneration {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "video list collector requires publication contract generation 2")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "video list collector requires publication contract generation 2")
 	}
 
 	result, err := r.client.FetchContent(ctx, youtubejs.ContentRequest{
@@ -370,7 +370,7 @@ func (r *ContentRunner) videoListObservation(
 
 	rawCursor, err := marshalPublicationCursor(cursor)
 	if err != nil {
-		return contentObservation{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+		return contentObservation{}, collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err)
 	}
 
 	return contentObservation{envelope: envelope, cursor: rawCursor}, nil

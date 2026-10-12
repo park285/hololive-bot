@@ -40,7 +40,7 @@ func TestMaintenanceStallDoesNotBlockClaimOrOverlap(t *testing.T) {
 
 				return 0, ctx.Err()
 			},
-			countByStatusFn: func(context.Context, domain.DeliveryOutboxStatus) (int64, error) {
+			countFailedFn: func(context.Context) (int64, error) {
 				enter()
 
 				defer maintenanceInFlight.Add(-1)
@@ -108,11 +108,7 @@ func (p *maintenanceCadenceProbe) repository(t *testing.T, cfg *DispatcherConfig
 
 			return failFirst(p.cleanups.Add(1))
 		},
-		countByStatusFn: func(_ context.Context, status domain.DeliveryOutboxStatus) (int64, error) {
-			if status != domain.DeliveryStatusFailed {
-				t.Errorf("count status = %s, want FAILED", status)
-			}
-
+		countFailedFn: func(context.Context) (int64, error) {
 			p.counts.Add(1)
 
 			return 0, nil
@@ -188,7 +184,7 @@ func TestRunReturnsLoopPanicAfterStoppingSibling(t *testing.T) {
 		var fetches atomic.Int32
 
 		repo := &mockDeliveryRepository{
-			countByStatusFn: func(context.Context, domain.DeliveryOutboxStatus) (int64, error) {
+			countFailedFn: func(context.Context) (int64, error) {
 				panic("maintenance panic")
 			},
 			fetchAndLockFn: func(context.Context, string, int, time.Duration) ([]domain.NotificationDeliveryOutbox, error) {

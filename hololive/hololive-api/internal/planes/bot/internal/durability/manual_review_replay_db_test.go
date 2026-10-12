@@ -48,7 +48,7 @@ func assertManualReplayCutoff(ctx context.Context, t *testing.T, pool *pgxpool.P
 	t.Helper()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:manual-replay", 0, `{"body":"stored"}`)
 	outcome, err := repo.Insert(ctx, entry)
 	require.NoError(t, err)
@@ -158,8 +158,8 @@ func assertGrantedReplayIsClaimableAndAudited(
 func TestManualReplayAuditRuntimePrivileges(t *testing.T) {
 	ownerPool, runtimePool, runtimeRole := newAuditPrivilegePools(t)
 	ctx := t.Context()
-	ownerRepo := NewReplyOutboxRepository(ownerPool)
-	runtimeRepo := NewReplyOutboxRepository(runtimePool)
+	ownerRepo := newTestReplyOutboxRepository(ownerPool)
+	runtimeRepo := newTestReplyOutboxRepository(runtimePool)
 	entry := newReplyOutboxEntry("message:manual-replay-runtime-privileges", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, ownerRepo, entry))
 
@@ -233,7 +233,7 @@ func TestManualReplayAuditRuntimePrivileges(t *testing.T) {
 func TestManualReplayClaimRejectsMissingGrantAudit(t *testing.T) {
 	pool := newDurabilityPool(t)
 	ctx := t.Context()
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:manual-replay-missing-grant", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
@@ -269,7 +269,7 @@ func TestManualReviewReplayRejectsUnboundedOrUnsafeMetadata(t *testing.T) {
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:manual-replay-metadata", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
@@ -312,7 +312,7 @@ func TestManualReviewReplayGrantsExactlyOnceUnderConcurrency(t *testing.T) {
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:manual-replay-concurrent", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
@@ -432,7 +432,7 @@ func TestManualReviewReplayGrantAllowsRetryableReclaimWithoutDuplicateAudit(t *t
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:manual-replay-retryable", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 

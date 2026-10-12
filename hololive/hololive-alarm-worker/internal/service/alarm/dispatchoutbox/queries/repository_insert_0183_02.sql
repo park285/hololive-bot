@@ -8,7 +8,8 @@
 				claim_keys JSONB,
 				delivery_context JSONB,
 				dispatch_group_key TEXT,
-				send_unit_key TEXT,
+				-- unit_key와 같은 형식이어야 조인이 UNIQUE (unit_key) 인덱스로 send unit을 찾는다.
+				send_unit_key CHARACTER(64),
 				client_request_id TEXT
 			)
 		), normalized AS (

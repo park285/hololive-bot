@@ -68,23 +68,3 @@ func TestCaptionFaceSized_RoutesKanaToFallback(t *testing.T) {
 		t.Error("가나가 primary에 없는데 fallback으로도 렌더되지 않음")
 	}
 }
-
-func TestCaptionBoldFaceSized_Loads(t *testing.T) {
-	face, err := CaptionBoldFaceSized(30)
-	if err != nil {
-		t.Fatalf("CaptionBoldFaceSized: %v", err)
-	}
-
-	if _, ok := face.GlyphAdvance('가'); !ok {
-		t.Error("SemiBold face에 한글 글리프 없음")
-	}
-
-	regular, err := CaptionFaceSized(30)
-	if err != nil {
-		t.Fatalf("CaptionFaceSized: %v", err)
-	}
-
-	if regular == face {
-		t.Error("regular와 semibold가 동일 face 인스턴스")
-	}
-}

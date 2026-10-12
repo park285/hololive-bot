@@ -13,13 +13,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
-// DeliveryMode는 시도 telemetry에 남기는 발송 방식이다. 호출자는 per_room 또는 grouped만 넘긴다.
-//
-// 시도 telemetry는 lifecycle 전이 트랜잭션 안에서 TransitionStore가 한 번만 기록한다
-// (DEC-20260926-hololive-delivery-telemetry-single-path). 그래서 commit 뒤 metrics recorder의 직접 enqueue와 delivery 테이블을
-// 역산하던 backfill은 삭제했다. 이 기록이 실패하면 전이 트랜잭션 전체가 rollback된다. CompleteSent가 이렇게
-// 실패하면 provider가 이미 받은 발송이 SENDING으로 남고 stale sweep이 QUARANTINED로 격리하므로, 재발송 대신 결과 불명으로
-// 드러나는 fail-closed 비용을 받아들인다.
+// DeliveryMode는 발송 방식(per_room/grouped)이다. TransitionStore가 lifecycle 전이와 함께 시도를 기록한다.
+// 기록 실패는 전이도 rollback한다. 이미 발송한 CompleteSent가 실패하면 SENDING을 유지하고
+// stale sweep이 QUARANTINED로 격리해 재발송 대신 결과 불명을 드러낸다.
 type DeliveryMode string
 
 const (
@@ -44,8 +40,7 @@ func (m DeliveryMode) validateCallerMode() error {
 const (
 	attemptResultSuccess = "success"
 	attemptResultFailure = "failure"
-	// 결과 불명(outcome_unknown)은 provider 결과를 알 수 없어 격리한 시도다. DEC-20260731-reply-outcome-unknown-fail-closed에
-	// 따라 공백으로 두지 않고 기록하며, 통계에서는 success가 아닌 시도로 센다.
+	// 결과 불명(outcome_unknown)은 성공이 아닌 시도로 기록한다.
 	attemptResultOutcomeUnknown = "outcome_unknown"
 )
 

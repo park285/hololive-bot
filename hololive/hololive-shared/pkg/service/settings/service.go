@@ -34,9 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 )
 
-// Settings는 관리 화면이 바꾸는 알림 설정이다. 예전의 scraper proxy 토글(scraperProxyEnabled)은
-// DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 기본 json/v2 decode는 모르는 멤버를 무시하므로 예전 파일에
-// 남은 scraperProxyEnabled는 읽지 않고, 다음 Update가 파일을 두 값만으로 다시 쓴다(T18 2026-09-26: 운영 settings 파일 없음).
+// Settings는 관리 화면에서 변경하는 알림 설정이다. 알 수 없는 JSON 필드는 무시하며 Update 시 저장하지 않는다.
 type Settings struct {
 	AlarmAdvanceMinutes int   `json:"alarmAdvanceMinutes"`
 	TargetMinutes       []int `json:"targetMinutes,omitempty"`
@@ -107,11 +105,8 @@ func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger)
 	return s, nil
 }
 
-// ReadFile은 저장된 settings 파일의 유일한 파서다(hololive-api settings 서비스와 alarm-worker 기동이 함께 쓴다). 파일이 없으면
-// found=false를 돌려준다. 읽기·decode 실패, 양수 alarmAdvanceMinutes가 없거나 양수 targetMinutes가 없는 파일은 오류다.
-// 예전에 targetMinutes 없이 alarmAdvanceMinutes만 있는 구형 형식을 기본 알림 시점으로 해석하던 경로와, 정규화 결과가
-// 저장값과 다를 때 파일을 다시 쓰던 자가 치유는 T18(2026-09-26)에서 운영 settings 파일이 없음을 확인해 지웠다(stack-audit
-// 2026-09-26 T11 holo-settings-file-legacy-format-and-dual-reader). Update가 쓰는 파일은 항상 두 값을 담는다.
+// ReadFile은 API와 worker가 공유하는 settings 파서다. 파일이 없으면 found=false를 반환한다.
+// 읽기·decode 실패나 양수 alarmAdvanceMinutes·targetMinutes 누락은 오류다. 파일을 수정하지 않는다.
 func ReadFile(filePath string) (stored Settings, found bool, err error) {
 	// #nosec G304 -- filePath는 운영 설정의 SettingsFilePath에서만 유도된다.
 	file, err := os.Open(filePath)

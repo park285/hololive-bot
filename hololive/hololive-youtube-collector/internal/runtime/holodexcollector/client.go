@@ -21,7 +21,7 @@ type Client struct {
 
 func NewClient(httpClient *providerhttp.ProviderHTTPClient, baseURL, apiKey string, maxBody int64) (*Client, error) {
 	if httpClient == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex HTTP client is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "holodex HTTP client is not configured")
 	}
 
 	parsed, err := providerhttp.ParseHolodexBaseURL(baseURL)
@@ -51,11 +51,11 @@ func (c *Client) Close() error {
 
 func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 	if c == nil || c.http == nil || c.base == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex client is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "holodex client is not configured")
 	}
 
 	if c.apiKey == "" {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex api key is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "holodex api key is not configured")
 	}
 
 	endpoint := c.base.JoinPath("live")
@@ -89,7 +89,7 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 }
 
 func (c *Client) redactedBuildRequestError(cause error) error {
-	err := collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, fmt.Errorf("build holodex request: %w", cause))
+	err := collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassProtocol, fmt.Errorf("build holodex request: %w", cause))
 	if redacted := providerhttp.RedactError(err, c.apiKey); redacted != nil {
 		return fmt.Errorf("redact error: %w", redacted)
 	}

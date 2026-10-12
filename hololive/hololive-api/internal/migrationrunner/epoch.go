@@ -124,11 +124,7 @@ func recordBaselineEntry(ctx context.Context, fsys fs.FS, ledger dbmigrate.Ledge
 	return nil
 }
 
-// 현재 manifest 밖 ledger 항목은 출처를 증명할 수 없으므로 존재하면 즉시 거부한다. 빈 ledger는 reconcileBaseline이 다룬다.
-// 예전에는 epoch-1 ledger 잔재를 182_epoch2_legacy_ledger_cleanup.sql이 같은 실행 안에서 지우도록 182 적용 전까지 허용하고
-// epoch-1 checkpoint baseline도 받았다. T18(2026-09-26)에서 운영 schema_migrations에 001·182가 기록되고 epoch-1 파일명
-// 행이 0건임을 확인했고, DEC-20260926-hololive-retired-rollback-tooling이 epoch-1 rollback 창을 닫아 그 허용 분기를
-// 지웠다(stack-audit 2026-09-26 T17). 이 거부는 드레인 종단이 아니라 ledger 무결성 계약이라 제거 조건이 없다.
+// manifest 밖 ledger 항목은 출처를 증명할 수 없어 거절한다. 빈 ledger는 reconcileBaseline이 처리한다.
 func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate.Ledger, entries []string) error {
 	if len(entries) == 0 {
 		return nil

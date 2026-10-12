@@ -21,8 +21,6 @@ PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니
 - 표준 진입점: `./scripts/architecture/ci-boundary-gate.sh`
 - 세부 체크:
   - `check-shared-go-boundary.sh`
-  - `check-shared-go-packages.sh`
-  - `check-go-compat-adapters.sh`
   - `check-go-alarm-contracts.sh`
   - `check-go-trigger-route-hardcoding.sh`
 

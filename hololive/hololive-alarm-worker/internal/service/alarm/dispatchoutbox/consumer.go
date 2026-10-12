@@ -67,7 +67,7 @@ func WithRecoveryBatchSize(size int) ConsumerOption {
 }
 
 // NewConsumer는 WithWorkerID가 없으면 "dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면
-// 다른 이름으로 바꾸지 않고 생성 오류다(DEC-20260926-hololive-legacy-env-config-retirement).
+// 다른 이름으로 바꾸지 않고 생성 오류다.
 func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *slog.Logger, opts ...ConsumerOption) (*Consumer, error) {
 	if logger == nil {
 		logger = slog.Default()

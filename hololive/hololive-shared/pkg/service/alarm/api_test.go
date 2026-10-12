@@ -146,7 +146,7 @@ func newTestHandler(t *testing.T, mock *mockAlarmCRUD) *gin.Engine {
 	h := NewHandler(mock, logger)
 
 	r := gin.New()
-	h.RegisterRoutes(&r.RouterGroup)
+	h.RegisterInternalRoutes(&r.RouterGroup)
 
 	return r
 }
@@ -580,31 +580,6 @@ func TestGetAllAlarmKeys(t *testing.T) {
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
-			}
-		})
-	}
-}
-
-func TestHealthAndReady(t *testing.T) {
-	mock := &mockAlarmCRUD{}
-	r := newTestHandler(t, mock)
-
-	tests := []struct {
-		name string
-		path string
-	}{
-		{"health", "/health"},
-		{"ready", "/ready"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, http.NoBody)
-			r.ServeHTTP(rec, req)
-
-			if rec.Code != http.StatusOK {
-				t.Errorf("%s: status = %d, want %d", tt.name, rec.Code, http.StatusOK)
 			}
 		})
 	}

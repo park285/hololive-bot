@@ -28,20 +28,20 @@ func TestProviderStatusClassification(t *testing.T) {
 	tests := []struct {
 		name   string
 		status int
-		code   collecterr.ErrorCode
-		class  collecterr.FailureClass
+		code   contract.CollectionErrorCode
+		class  contract.FailureClass
 	}{
-		{name: "redirect", status: http.StatusFound, code: collecterr.Failed, class: collecterr.ClassProtocol},
-		{name: "bad request", status: http.StatusBadRequest, code: collecterr.Failed, class: collecterr.ClassProtocol},
-		{name: "unauthorized", status: http.StatusUnauthorized, code: collecterr.Configuration, class: collecterr.ClassConfiguration},
-		{name: "request timeout", status: http.StatusRequestTimeout, code: collecterr.Failed, class: collecterr.ClassTransient},
-		{name: "too early", status: http.StatusTooEarly, code: collecterr.Failed, class: collecterr.ClassTransient},
-		{name: "rate limited", status: http.StatusTooManyRequests, code: collecterr.Cooldown, class: collecterr.ClassCooldown},
-		{name: "server error", status: http.StatusInternalServerError, code: collecterr.Failed, class: collecterr.ClassTransient},
-		{name: "not implemented", status: http.StatusNotImplemented, code: collecterr.Failed, class: collecterr.ClassProtocol},
-		{name: "unknown client error", status: 499, code: collecterr.Failed, class: collecterr.ClassProtocol},
-		{name: "unknown server error", status: 599, code: collecterr.Failed, class: collecterr.ClassTransient},
-		{name: "unexpected success", status: http.StatusCreated, code: collecterr.Failed, class: collecterr.ClassProtocol},
+		{name: "redirect", status: http.StatusFound, code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+		{name: "bad request", status: http.StatusBadRequest, code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+		{name: "unauthorized", status: http.StatusUnauthorized, code: contract.ErrorConfiguration, class: contract.ClassConfiguration},
+		{name: "request timeout", status: http.StatusRequestTimeout, code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "too early", status: http.StatusTooEarly, code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "rate limited", status: http.StatusTooManyRequests, code: contract.ErrorCooldown, class: contract.ClassCooldown},
+		{name: "server error", status: http.StatusInternalServerError, code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "not implemented", status: http.StatusNotImplemented, code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+		{name: "unknown client error", status: 499, code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+		{name: "unknown server error", status: 599, code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "unexpected success", status: http.StatusCreated, code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -61,13 +61,13 @@ func TestMapRequestErrorPreservesKnownFailureClass(t *testing.T) {
 	tests := []struct {
 		name  string
 		err   error
-		code  collecterr.ErrorCode
-		class collecterr.FailureClass
+		code  contract.CollectionErrorCode
+		class contract.FailureClass
 	}{
-		{name: "timeout", err: context.DeadlineExceeded, code: collecterr.Timeout, class: collecterr.ClassTimeout},
-		{name: "canceled", err: context.Canceled, code: collecterr.Canceled, class: collecterr.ClassCanceled},
-		{name: "transient", err: syscall.ECONNRESET, code: collecterr.Failed, class: collecterr.ClassTransient},
-		{name: "unknown", err: errors.New("unknown"), code: collecterr.Internal, class: collecterr.ClassInternal},
+		{name: "timeout", err: context.DeadlineExceeded, code: contract.ErrorCollectionTimeout, class: contract.ClassTimeout},
+		{name: "canceled", err: context.Canceled, code: contract.ErrorCollectionCanceled, class: contract.ClassCanceled},
+		{name: "transient", err: syscall.ECONNRESET, code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "unknown", err: errors.New("unknown"), code: contract.ErrorInternalInvariant, class: contract.ClassInternal},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestHTTP007UnauthorizedAndForbiddenAreConfiguration(t *testing.T) {
 
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		err := readStatus(t, status, "", `{"error":"no"}`)
-		if collecterr.CodeOf(err) != collecterr.Configuration || collecterr.ClassOf(err) != collecterr.ClassConfiguration {
+		if collecterr.CodeOf(err) != contract.ErrorConfiguration || collecterr.ClassOf(err) != contract.ClassConfiguration {
 			t.Fatalf("status %d = %s/%s", status, collecterr.CodeOf(err), collecterr.ClassOf(err))
 		}
 	}
@@ -96,17 +96,17 @@ func TestHTTP008RetryAfterCooldownHints(t *testing.T) {
 	t.Parallel()
 
 	tooMany := readStatus(t, http.StatusTooManyRequests, "12", `{"error":"slow"}`)
-	if collecterr.CodeOf(tooMany) != collecterr.Cooldown || collecterr.RetryOf(tooMany).After() != 12*time.Second {
+	if collecterr.CodeOf(tooMany) != contract.ErrorCooldown || collecterr.RetryOf(tooMany).After() != 12*time.Second {
 		t.Fatalf("429 = %s/%v", collecterr.CodeOf(tooMany), collecterr.RetryOf(tooMany))
 	}
 
 	svc := readStatus(t, http.StatusServiceUnavailable, "5", `{"error":"wait"}`)
-	if collecterr.CodeOf(svc) != collecterr.Cooldown || collecterr.RetryOf(svc).After() != 5*time.Second {
+	if collecterr.CodeOf(svc) != contract.ErrorCooldown || collecterr.RetryOf(svc).After() != 5*time.Second {
 		t.Fatalf("503+Retry-After = %s/%v", collecterr.CodeOf(svc), collecterr.RetryOf(svc))
 	}
 
 	bare := readStatus(t, http.StatusServiceUnavailable, "", `{"error":"down"}`)
-	if collecterr.CodeOf(bare) != collecterr.Failed || collecterr.ClassOf(bare) != collecterr.ClassTransient {
+	if collecterr.CodeOf(bare) != contract.ErrorCollectionFailed || collecterr.ClassOf(bare) != contract.ClassTransient {
 		t.Fatalf("bare 503 = %s/%s", collecterr.CodeOf(bare), collecterr.ClassOf(bare))
 	}
 }
@@ -142,7 +142,7 @@ func TestHTTP009GzipBombHitsDecompressedCap(t *testing.T) {
 	resp.Header.Set("Content-Type", "application/json")
 
 	_, err := ReadProviderJSONDocument(t.Context(), resp, DefaultJSONPolicy(1024), contract.ProviderHolodex)
-	if collecterr.CodeOf(err) != collecterr.ResponseTooLarge || collecterr.ClassOf(err) != collecterr.ClassResourceLimit {
+	if collecterr.CodeOf(err) != contract.ErrorResponseTooLarge || collecterr.ClassOf(err) != contract.ClassResourceLimit {
 		t.Fatalf("gzip bomb = %v", err)
 	}
 }
@@ -172,7 +172,7 @@ func TestHTTP010NonSuccessHugeBodyIsCappedAndSanitized(t *testing.T) {
 		t.Fatal("500 response returned nil error")
 	}
 
-	if collecterr.ClassOf(err) != collecterr.ClassTransient {
+	if collecterr.ClassOf(err) != contract.ClassTransient {
 		t.Fatalf("500 = %v", err)
 	}
 
@@ -209,7 +209,7 @@ func TestProviderResponseDrainsBoundedRemainder(t *testing.T) {
 	resp.Header.Set("Content-Type", "application/json")
 
 	err := readResponse(t, resp, policy)
-	if collecterr.CodeOf(err) != collecterr.ResponseTooLarge {
+	if collecterr.CodeOf(err) != contract.ErrorResponseTooLarge {
 		t.Fatalf("oversized response = %v", err)
 	}
 
@@ -243,7 +243,7 @@ func TestProviderResponseSuccessBodyLimitEdges(t *testing.T) {
 			body, err := ReadProviderJSONDocument(t.Context(), resp, policy, contract.ProviderHolodex)
 
 			if limit < 2 {
-				if body != nil || collecterr.CodeOf(err) != collecterr.ResponseTooLarge {
+				if body != nil || collecterr.CodeOf(err) != contract.ErrorResponseTooLarge {
 					t.Fatalf("body = %q, error = %v", body, err)
 				}
 
@@ -283,7 +283,7 @@ func TestProviderResponseTruncatesErrorExcerpt(t *testing.T) {
 			}
 
 			err := readResponse(t, resp, policy)
-			if collecterr.CodeOf(err) != collecterr.Cooldown || collecterr.RetryOf(err).After() != 15*time.Second {
+			if collecterr.CodeOf(err) != contract.ErrorCooldown || collecterr.RetryOf(err).After() != 15*time.Second {
 				t.Fatalf("error = %v", err)
 			}
 
@@ -317,12 +317,12 @@ func TestProviderResponsePreservesReadDrainAndCloseErrors(t *testing.T) {
 		name    string
 		status  int
 		payload string
-		code    collecterr.ErrorCode
-		class   collecterr.FailureClass
+		code    contract.CollectionErrorCode
+		class   contract.FailureClass
 	}{
-		{name: "success read", status: http.StatusOK, payload: "[", code: collecterr.Failed, class: collecterr.ClassTransient},
-		{name: "error read", status: http.StatusBadGateway, payload: "no", code: collecterr.Failed, class: collecterr.ClassTransient},
-		{name: "error drain", status: http.StatusTooManyRequests, payload: "abcdef", code: collecterr.Cooldown, class: collecterr.ClassCooldown},
+		{name: "success read", status: http.StatusOK, payload: "[", code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "error read", status: http.StatusBadGateway, payload: "no", code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "error drain", status: http.StatusTooManyRequests, payload: "abcdef", code: contract.ErrorCooldown, class: contract.ClassCooldown},
 	}
 
 	for _, test := range tests {
@@ -416,7 +416,7 @@ func TestProviderResponseDrainsForConnectionReuse(t *testing.T) {
 	client := server.Client()
 	firstErr := readTestProviderResponse(t, client, server.URL)
 
-	if collecterr.ClassOf(firstErr) != collecterr.ClassProtocol {
+	if collecterr.ClassOf(firstErr) != contract.ClassProtocol {
 		t.Fatalf("first response = %v", firstErr)
 	}
 
@@ -471,7 +471,7 @@ func TestHTTP011CanceledBodyDoesNotDrainAndClosesOnce(t *testing.T) {
 	resp.Header.Set("Content-Type", "application/json")
 
 	_, err := ReadProviderJSONDocument(ctx, resp, DefaultJSONPolicy(1<<20), contract.ProviderHolodex)
-	if collecterr.CodeOf(err) != collecterr.Canceled {
+	if collecterr.CodeOf(err) != contract.ErrorCollectionCanceled {
 		t.Fatalf("canceled = %v", err)
 	}
 
@@ -509,7 +509,7 @@ func TestProviderResponseCanceledAtReadLimit(t *testing.T) {
 	policy.MaxSuccessBodyBytes = 0
 
 	_, err := ReadProviderJSONDocument(ctx, resp, policy, contract.ProviderHolodex)
-	if collecterr.CodeOf(err) != collecterr.Canceled || !errors.Is(err, context.Canceled) {
+	if collecterr.CodeOf(err) != contract.ErrorCollectionCanceled || !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled at read limit = %v", err)
 	}
 
@@ -529,7 +529,7 @@ func TestHTTP015InvalidContentTypeAndTrailingJSON(t *testing.T) {
 	plain.Header.Set("Content-Type", "text/plain")
 
 	err := readResponse(t, plain, DefaultJSONPolicy(1024))
-	if collecterr.ClassOf(err) != collecterr.ClassProtocol {
+	if collecterr.ClassOf(err) != contract.ClassProtocol {
 		t.Fatalf("content-type = %v", err)
 	}
 
@@ -541,7 +541,7 @@ func TestHTTP015InvalidContentTypeAndTrailingJSON(t *testing.T) {
 	trailing.Header.Set("Content-Type", "application/json")
 
 	err = readResponse(t, trailing, DefaultJSONPolicy(1024))
-	if collecterr.ClassOf(err) != collecterr.ClassProtocol {
+	if collecterr.ClassOf(err) != contract.ClassProtocol {
 		t.Fatalf("trailing JSON = %v", err)
 	}
 }

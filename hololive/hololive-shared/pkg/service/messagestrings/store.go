@@ -51,10 +51,8 @@ type queryRunner interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// Store는 message_strings(DB 정본)를 기동 때 한 번 적재해 두고 조회한다.
-// DEC-20260926-hololive-message-strings-startup-validation: 운영 중 쓰기 경로와 재적재 호출자가 없으므로
-// 조회 시 lazy 재적재와 코드 대체 문구를 두지 않는다. 각 runtime은 기동 때 Load와 Validate를 호출하고,
-// 실패하면 기동에 실패한다.
+// Store는 message_strings를 기동 시 한 번 적재하고 조회한다. 운영 중 재적재나 코드 대체 문구는 없다.
+// 각 runtime은 Load·Validate 실패 시 기동을 거절한다.
 type Store struct {
 	pool   queryRunner
 	logger *slog.Logger

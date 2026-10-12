@@ -65,7 +65,7 @@ type testMembers struct {
 	lookupErr error
 }
 
-// 멤버 적재 실패는 빈 색인이나 원문 표기로 바꾸지 않고 오류다(DEC-20260926-hololive-source-fallbacks-retirement).
+// 멤버 적재 실패는 빈 색인이나 원문 표기로 바꾸지 않고 오류다.
 func TestDisplayNamesReturnsMemberLoadError(t *testing.T) {
 	t.Parallel()
 

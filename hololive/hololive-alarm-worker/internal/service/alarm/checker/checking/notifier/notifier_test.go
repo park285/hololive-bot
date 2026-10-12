@@ -122,10 +122,6 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 	if result.Sent != 0 || result.Skipped != 1 || result.Failed != 0 {
 		t.Fatalf("unexpected result: %+v", result)
 	}
-
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
-		t.Fatalf("expected empty dispatch queue, got %d", queueSize)
-	}
 }
 
 func TestNotifierClaimsLiveCatchupSeparatelyAndAcrossScheduleDrift(t *testing.T) {
@@ -222,10 +218,6 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 
 	assertPublishQueueOutboxState(t, result, outbox)
 
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
-		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
-	}
-
 	assertNotifiedHashCache(t, cacheClient, stream.ID)
 }
 
@@ -266,66 +258,6 @@ func assertNotifiedHashCache(t *testing.T, cacheClient cache.Client, streamID st
 
 	if minuteSent != "1" {
 		t.Fatalf("expected minute field to be 1, got %q", minuteSent)
-	}
-}
-
-func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
-	t.Parallel()
-
-	cacheClient := newCheckerTestCacheClient(t)
-	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, newCheckerTestLogger())
-	outbox := &notifierBatchOutbox{}
-
-	notifier, err := NewNotifier(
-		dedupService,
-		queue.NewPublisher(cacheClient, newCheckerTestLogger(),
-			queue.WithOutbox(outbox),
-			queue.WithWakeupEnabled(false),
-		),
-		tier.NewTieredScheduler(newCheckerTestLogger()),
-		newCheckerTestLogger(),
-	)
-	require.NoError(t, err)
-
-	start := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Minute)
-	chzzkStream := &domain.Stream{
-		ID:             "chzzk-live",
-		Title:          "치지직 라이브",
-		ChannelID:      "UC_CHZZK",
-		Status:         domain.StreamStatusLive,
-		StartScheduled: &start,
-		StartActual:    &start,
-		Channel:        &domain.Channel{ID: "UC_CHZZK", Name: "치지직 채널"},
-		ChzzkChannelID: "chzzk-channel",
-		ChzzkLiveURL:   "https://chzzk.naver.com/live/chzzk-channel",
-		IsChzzkOnly:    true,
-	}
-	twitchStream := &domain.Stream{
-		ID:              "twitch-live",
-		Title:           "트위치 라이브",
-		ChannelID:       "UC_TWITCH",
-		Status:          domain.StreamStatusLive,
-		StartScheduled:  &start,
-		StartActual:     &start,
-		Channel:         &domain.Channel{ID: "UC_TWITCH", Name: "트위치 채널"},
-		TwitchUserLogin: "twitch-login",
-		TwitchLiveURL:   "https://www.twitch.tv/twitch-login",
-		IsTwitchOnly:    true,
-	}
-	notifications := []*domain.AlarmNotification{
-		domain.NewAlarmNotification("room-chzzk", chzzkStream.Channel, chzzkStream, 0, []string{}, ""),
-		domain.NewAlarmNotification("room-twitch", twitchStream.Channel, twitchStream, 0, []string{}, ""),
-	}
-
-	result, sendErr := notifier.Send(t.Context(), notifications)
-	require.NoError(t, sendErr)
-	assert.Equal(t, SendResult{Sent: 2}, result)
-
-	require.Equal(t, 1, outbox.insertBatchCalls)
-	assert.Len(t, outbox.lastBatchInput.Envelopes, 2)
-
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
-		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
 	}
 }
 
@@ -477,10 +409,6 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 
 	if got := len(outbox.lastBatchInput.Envelopes); got != 2 {
 		t.Fatalf("expected two published envelopes, got %d", got)
-	}
-
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
-		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
 	}
 }
 
@@ -654,24 +582,4 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 
 	assert.False(t, claimAgain(notifications[0]))
 	assert.True(t, claimAgain(notifications[1]))
-}
-
-// retiredRedisDispatchQueueKey는 퇴역한 Redis dispatch queue 키다. 상수는 지웠고(stack-audit 2026-09-26 T11), notifier가
-// 그 키에 다시 쓰지 않는지만 확인한다.
-const retiredRedisDispatchQueueKey = "alarm:dispatch:queue"
-
-func readDispatchQueueSize(t *testing.T, cacheClient cache.Client) int64 {
-	t.Helper()
-
-	client := cacheClient.GetClient()
-	require.NotNil(t, client)
-
-	resp := client.Do(t.Context(), cacheClient.B().Llen().Key(retiredRedisDispatchQueueKey).Build())
-
-	size, err := resp.AsInt64()
-	if err != nil {
-		t.Fatalf("queue size lookup failed: %v", err)
-	}
-
-	return size
 }

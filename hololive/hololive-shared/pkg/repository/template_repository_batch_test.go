@@ -12,9 +12,9 @@ func TestTemplateRevisionBatchPruneFailureRollsBackBodyAndRevision(t *testing.T)
 	repo, pool := newTemplateRepositoryWithPool(t)
 	ctx := t.Context()
 	key := domain.TemplateKey("BATCH_PRUNE_ROLLBACK")
-	created, err := repo.Upsert(ctx, key, nil, "current")
+	created, err := upsertTemplate(ctx, repo, key, nil, "current")
 	require.NoError(t, err)
-	require.NoError(t, repo.CreateRevision(ctx, created.ID, "older"))
+	insertTemplateRevision(t, pool, created.ID, "older")
 
 	_, err = pool.Exec(ctx, `CREATE FUNCTION reject_test_revision_delete() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN RAISE EXCEPTION 'revision prune rejected'; END $$;
@@ -42,7 +42,7 @@ func TestTemplateRevisionBatchPrunesByPersistedOrderIncludingNewRevision(t *test
 	repo, pool := newTemplateRepositoryWithPool(t)
 	ctx := t.Context()
 	key := domain.TemplateKey("BATCH_PRUNE_FUTURE")
-	created, err := repo.Upsert(ctx, key, nil, "current")
+	created, err := upsertTemplate(ctx, repo, key, nil, "current")
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `INSERT INTO notification_template_revisions(template_id,body,created_at)

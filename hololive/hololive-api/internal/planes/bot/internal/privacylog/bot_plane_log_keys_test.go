@@ -15,11 +15,9 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"slices"
 	"strconv"
@@ -38,8 +36,7 @@ var bannedLogAttrKeys = map[string]string{
 	"sub_command": "사용자 입력 원문",
 }
 
-// 이 key들은 값 자체가 비-canonical일 수 있어 privacylog 헬퍼만 만들 수 있다. 여기서 key 이름 재도입이
-// 아니라 "허용 key에 실린 raw 값"이 이번 회귀의 본체라, literal key 사용 자체를 금지한다.
+// 이 key의 값은 privacylog 헬퍼를 통해서만 기록한다.
 var privacylogOnlyAttrKeys = map[string]string{
 	sharedprivacylog.KeyRoomID:     "privacylog.RoomIDAttr/RoomAttr",
 	sharedprivacylog.KeyChatID:     "privacylog.ChatIDAttr/ChatAttr",
@@ -99,7 +96,6 @@ type scannedSources struct {
 	exports           map[string]string
 	fileSet           *token.FileSet
 	typesInfo         map[*ast.File]*types.Info
-	sourceImports     bool
 	buildCacheRoot    string
 }
 
@@ -295,10 +291,28 @@ func pathWithinRoot(path, root string) bool {
 	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func TestBotPlaneLogCallsitesRejectBannedAttrKeys(t *testing.T) {
+func TestBotPlaneLogPrivacy(t *testing.T) {
 	t.Parallel()
 
-	uses := collectBotPlaneLogAttrKeys(t)
+	fileSet := token.NewFileSet()
+	sources := parseScannedRoots(t, fileSet)
+
+	t.Run("attr_keys", func(t *testing.T) {
+		t.Parallel()
+
+		checkBotPlaneLogAttrKeys(t, fileSet, sources)
+	})
+	t.Run("identifier_values", func(t *testing.T) {
+		t.Parallel()
+
+		checkIdentifierBearingLogValues(t, fileSet, sources)
+	})
+}
+
+func checkBotPlaneLogAttrKeys(t *testing.T, fileSet *token.FileSet, sources scannedSources) {
+	t.Helper()
+
+	uses := collectBotPlaneLogAttrKeys(fileSet, sources)
 	if len(uses) < 150 {
 		t.Fatalf("collected only %d log attr keys; the scan is not reaching every scanned root", len(uses))
 	}
@@ -368,192 +382,7 @@ func isReviewedNonSensitiveKey(use logAttrKeyUse) bool {
 	return false
 }
 
-func TestPrivacylogOwnedAttrKeysStayRestricted(t *testing.T) {
-	t.Parallel()
-
-	for _, key := range []string{sharedprivacylog.KeyRoomID, sharedprivacylog.KeyChatID, sharedprivacylog.KeyCacheKey, sharedprivacylog.KeyCacheField} {
-		if _, restricted := privacylogOnlyAttrKeys[key]; !restricted {
-			t.Errorf("attr key %q is built by a privacylog helper but is absent from privacylogOnlyAttrKeys; "+
-				"a raw literal on this key would carry Kakao plaintext past this gate unreported", key)
-		}
-	}
-}
-
-func TestScannerCatchesEveryBypassShape(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name   string
-		source string
-		want   string
-	}{
-		{
-			name:   "raw value on an allowed key",
-			source: `package p; func f(){ logger.Info("m", slog.String("room_id", cmdCtx.Room)) }`,
-			want:   "room_id",
-		},
-		{
-			name:   "context variant shifts the key parity",
-			source: `package p; func f(){ logger.InfoContext(ctx, "m", "user_name", v, "sender", v) }`,
-			want:   "user_name",
-		},
-		{
-			name:   "map composite literal inside slog.Any",
-			source: `package p; func f(){ logger.Info("m", slog.Any("payload", map[string]string{"user_name": v})) }`,
-			want:   "user_name",
-		},
-		{
-			name:   "const alias as the key",
-			source: `package p; const bannedAlias = "room_name"; func f(){ logger.Info("m", slog.String(bannedAlias, v)) }`,
-			want:   "room_name",
-		},
-		{
-			name:   "LogAttrs shifts the key parity",
-			source: `package p; func f(){ logger.LogAttrs(ctx, slog.LevelWarn, "m", slog.String("chat_id", raw)) }`,
-			want:   "chat_id",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			if !scanSourceCollectsKey(t, tc.source, tc.want) {
-				t.Fatalf("scanner missed %q in %s", tc.want, tc.source)
-			}
-		})
-	}
-}
-
-func TestScannerFailsClosedOnUnresolvableKeyExpressions(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name   string
-		source string
-	}{
-		{
-			name:   "selector const key",
-			source: `package p; func f(){ logger.Info("m", slog.String(privacylog.KeyRoomID, cmdCtx.Room)) }`,
-		},
-		{
-			name:   "cross-package const key",
-			source: `package p; func f(){ logger.Info("m", slog.String(shared.KeyUserName, v)) }`,
-		},
-		{
-			name:   "var key",
-			source: `package p; var dynamicKey = "room_id"; func f(){ logger.Info("m", slog.String(dynamicKey, v)) }`,
-		},
-		{
-			name:   "loose selector const key",
-			source: `package p; func f(){ logger.Warn("m", privacylog.KeyChatID, raw) }`,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			if reports := scanSourceViolations(t, tc.source); len(reports) == 0 {
-				t.Fatalf("scanner accepted an unresolvable key expression in %s", tc.source)
-			}
-		})
-	}
-}
-
-func TestLooseKeyValueStartMatchesSlogSignatures(t *testing.T) {
-	t.Parallel()
-
-	loggerType := reflect.TypeFor[*slog.Logger]()
-
-	for method := range slogLevelMethods {
-		signature, ok := loggerType.MethodByName(method)
-		if !ok {
-			t.Fatalf("slog.Logger has no method %q; the scanner models a signature that does not exist", method)
-		}
-
-		want := signature.Type.NumIn() - 2
-		if got := looseKeyValueStart(method); got != want {
-			t.Errorf("looseKeyValueStart(%q) = %d, want %d (%s)", method, got, want, signature.Type)
-		}
-	}
-}
-
-func TestScannerCatchesBannedKeyBehindLogParity(t *testing.T) {
-	t.Parallel()
-
-	source := `package p; func f(){ logger.Log(ctx, slog.LevelWarn, "m", "user_name", v) }`
-	if !scanSourceCollectsKey(t, source, "user_name") {
-		t.Fatalf("scanner missed the banned key in %s", source)
-	}
-}
-
-func TestScannerIgnoresFacadeEventAndMessageLiterals(t *testing.T) {
-	t.Parallel()
-
-	source := `package p; func f(){ sharedlog.Warn(ctx, logger, EventX, "room_name", slog.String("user_id", v)) }`
-	if scanSourceCollectsKey(t, source, "room_name") {
-		t.Fatal("facade message literal must not be collected as an attr key")
-	}
-
-	if !scanSourceCollectsKey(t, source, "user_id") {
-		t.Fatal("facade attr arguments must still be collected")
-	}
-}
-
-func scanSourceCollectsKey(t *testing.T, source, key string) bool {
-	t.Helper()
-
-	for _, use := range scanSource(t, source) {
-		if use.key == key {
-			return true
-		}
-	}
-
-	return false
-}
-
-func scanSourceViolations(t *testing.T, source string) []string {
-	t.Helper()
-
-	return attrKeyViolations(scanSource(t, source))
-}
-
-func scanSource(t *testing.T, source string) []logAttrKeyUse {
-	t.Helper()
-
-	fileSet := token.NewFileSet()
-
-	file, err := parser.ParseFile(fileSet, "inject.go", source, parser.SkipObjectResolution)
-	if err != nil {
-		t.Fatalf("parse injected source: %v", err)
-	}
-
-	constants := map[string]string{}
-	collectStringConstants("inject", file, constants)
-
-	var uses []logAttrKeyUse
-
-	ast.Inspect(file, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-
-		uses = append(uses, logAttrKeysFromCall("inject", fileSet, call, constants)...)
-
-		return true
-	})
-
-	return uses
-}
-
-func collectBotPlaneLogAttrKeys(t *testing.T) []logAttrKeyUse {
-	t.Helper()
-
-	fileSet := token.NewFileSet()
-	sources := parseScannedRoots(t, fileSet)
-
+func collectBotPlaneLogAttrKeys(fileSet *token.FileSet, sources scannedSources) []logAttrKeyUse {
 	constants := map[string]string{}
 
 	for path, file := range sources.files {

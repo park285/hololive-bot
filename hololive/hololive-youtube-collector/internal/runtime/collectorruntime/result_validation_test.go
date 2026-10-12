@@ -109,7 +109,7 @@ func requireInvariantFailure(t *testing.T, err error) {
 	t.Helper()
 
 	if _, ok := errors.AsType[*collecterr.Error](err); !ok ||
-		collecterr.CodeOf(err) != collecterr.Internal || collecterr.ClassOf(err) != collecterr.ClassInternal ||
+		collecterr.CodeOf(err) != contract.ErrorInternalInvariant || collecterr.ClassOf(err) != contract.ClassInternal ||
 		!fatalCollectionError(err) {
 		t.Fatalf("validation error = %v, want identifiable fatal internal invariant", err)
 	}

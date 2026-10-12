@@ -22,7 +22,7 @@ package apiclient
 
 import "fmt"
 
-// (기존 hololive-shared/pkg/errors.APIError 의존 제거를 위한 로컬 타입).
+// APIError는 Holodex 요청이 성공 응답을 받지 못했을 때 요청 대상과 HTTP 상태를 담는다.
 type APIError struct {
 	Operation  string
 	StatusCode int

@@ -39,6 +39,8 @@ const (
 )
 
 // outboxFixture는 운영과 같은 두 저장소(shared producer 적재 + worker Store)를 한 DB에 묶어 경계 계약을 검증한다.
+const deliveryStatusQuarantined domain.DeliveryOutboxStatus = "QUARANTINED"
+
 type outboxFixture struct {
 	*Store
 	*delivery.OutboxRepository
@@ -102,7 +104,9 @@ func markOutboxSending(ctx context.Context, t *testing.T, repository *outboxFixt
 func countByStatus(ctx context.Context, t *testing.T, repository *outboxFixture, status domain.DeliveryOutboxStatus) int64 {
 	t.Helper()
 
-	count, err := repository.CountByStatus(ctx, status)
+	var count int64
+
+	err := repository.pool.QueryRow(ctx, "SELECT count(id) FROM notification_delivery_outbox WHERE status = $1", status).Scan(&count)
 	if err != nil {
 		t.Fatalf("count by status %s: %v", status, err)
 	}
@@ -466,12 +470,7 @@ func TestCountByStatus(t *testing.T) {
 		}
 	}
 
-	cnt, err := repository.CountByStatus(ctx, domain.DeliveryStatusPending)
-	if err != nil {
-		t.Fatalf("count: %v", err)
-	}
-
-	if cnt != 3 {
+	if cnt := countByStatus(ctx, t, repository, domain.DeliveryStatusPending); cnt != 3 {
 		t.Fatalf("expected 3 pending, got %d", cnt)
 	}
 }

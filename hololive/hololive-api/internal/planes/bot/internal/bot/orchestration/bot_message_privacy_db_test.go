@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -53,7 +54,7 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	var logs bytes.Buffer
 
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	writer := repositoryReplyOutboxWriter{repo: durability.NewReplyOutboxRepository(pool)}
+	writer := repositoryReplyOutboxWriter{repo: newTestReplyOutboxRepository(t, pool)}
 	// 오류 응답 문구는 message_strings(DB 정본)에서만 나온다. formatter 없이 보내는 코드 대체 문구는 없다.
 	messageStrings := messagestrings.NewStore(pool, slog.New(slog.DiscardHandler))
 	require.NoError(t, messageStrings.Load(t.Context()))
@@ -80,4 +81,13 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 		"bot_message_handler -> sharedlog.ErrorAttrs exposed repository cause: %s", logs.String())
 	require.Contains(t, logs.String(), `"error_message":"send error reply: send error message: record reply: reply staging failed: insert: insert reply outbox row: message_token=anon:`)
 	require.Contains(t, logs.String(), `reason=database_operation_failed`)
+}
+
+func newTestReplyOutboxRepository(t *testing.T, pool *pgxpool.Pool) *durability.ReplyOutboxRepository {
+	t.Helper()
+
+	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(pool, durability.ReplyOutboxMaxAttempts, durability.ReplyOutboxAutomaticReplayHorizon)
+	require.NoError(t, err)
+
+	return repository
 }

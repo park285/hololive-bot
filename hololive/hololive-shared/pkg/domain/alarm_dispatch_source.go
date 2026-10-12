@@ -304,12 +304,7 @@ func (e *AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
 }
 
 func (e *AlarmQueueEnvelope) validateLiveDispatch() error {
-	alarmType := e.Notification.AlarmType
-	if alarmType == "" {
-		alarmType = AlarmTypeLive
-	}
-
-	if err := validateLiveDispatchAlarmType(alarmType); err != nil {
+	if err := validateLiveDispatchAlarmType(e.Notification.AlarmType); err != nil {
 		return fmt.Errorf("validate live dispatch alarm type: %w", err)
 	}
 

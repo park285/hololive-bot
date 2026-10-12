@@ -34,7 +34,6 @@ type SendRequest struct {
 
 var (
 	ErrSendRequestUnpinned = errors.New("alarm send request not yet pinned")
-	ErrLegacySendRequest   = errors.New("alarm send request missing for previously attempted unit")
 	ErrSendRequestFence    = errors.New("alarm send request ownership or membership changed")
 )
 
@@ -72,9 +71,8 @@ func (r *PgxRepository) prepareSendRequest(ctx context.Context, unitID int64, id
 		return nil, err
 	}
 
-	attempted, err := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased")
-	if err != nil {
-		return nil, err
+	if fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased"); fenceErr != nil {
+		return nil, fenceErr
 	}
 
 	if request.BodyHash != "" {
@@ -83,10 +81,6 @@ func (r *PgxRepository) prepareSendRequest(ctx context.Context, unitID int64, id
 		}
 
 		return request, nil
-	}
-
-	if attempted {
-		return nil, ErrLegacySendRequest
 	}
 
 	if candidate == nil {
@@ -129,16 +123,15 @@ func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest
 	return &request, nil
 }
 
-func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64, worker, status string) (bool, error) {
+func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64, worker, status string) error {
 	rows, err := tx.Query(ctx, mustSQL("send_request_members.sql"), unitID)
 	if err != nil {
-		return false, fmt.Errorf("lock send request members: %w", err)
+		return fmt.Errorf("lock send request members: %w", err)
 	}
 	defer rows.Close()
 
 	var actual []int64
 
-	attempted := false
 	valid := true
 
 	for rows.Next() {
@@ -146,26 +139,25 @@ func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64,
 
 		var rowStatus, owner string
 
-		var owned, started bool
+		var owned bool
 
-		if err := rows.Scan(&id, &rowStatus, &owner, &owned, &started); err != nil {
-			return false, fmt.Errorf("scan send request members: %w", err)
+		if err := rows.Scan(&id, &rowStatus, &owner, &owned); err != nil {
+			return fmt.Errorf("scan send request members: %w", err)
 		}
 
 		actual = append(actual, id)
 		valid = valid && rowStatus == status && owner == worker && (status == "sending" || owned)
-		attempted = attempted || started
 	}
 
 	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("read send request members: %w", err)
+		return fmt.Errorf("read send request members: %w", err)
 	}
 
 	if !valid || len(ids) == 0 || !sameDeliveryIDs(actual, ids) {
-		return false, ErrSendRequestFence
+		return ErrSendRequestFence
 	}
 
-	return attempted, nil
+	return nil
 }
 
 func sameDeliveryIDs(left, right []int64) bool {
@@ -191,7 +183,7 @@ func (r *PgxRepository) ReissueSendRequest(ctx context.Context, unitID int64, id
 		return false, err
 	}
 
-	if _, fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "sending"); fenceErr != nil {
+	if fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "sending"); fenceErr != nil {
 		return false, fenceErr
 	}
 
@@ -242,7 +234,7 @@ func (r *PgxRepository) BeginSendRequest(ctx context.Context, unitID int64, ids 
 		return err
 	}
 
-	if _, fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased"); fenceErr != nil {
+	if fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased"); fenceErr != nil {
 		return fenceErr
 	}
 

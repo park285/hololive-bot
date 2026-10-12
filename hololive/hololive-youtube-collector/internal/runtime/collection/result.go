@@ -32,7 +32,7 @@ func NewCompleteResult(output RunOutput) CollectResult {
 
 func NewPartialResult(output RunOutput, cause error, failedKinds ...contract.ObservationKind) (CollectResult, error) {
 	if output.Empty() || len(failedKinds) == 0 || cause == nil {
-		return CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result is incomplete")
+		return CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial result is incomplete")
 	}
 
 	normalized, err := normalizePartialCause(cause)
@@ -56,12 +56,12 @@ func NewPartialResult(output RunOutput, cause error, failedKinds ...contract.Obs
 
 func normalizePartialCause(cause error) (normalized *collecterr.Error, validationErr error) {
 	if cause == nil {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure class is not allowed")
+		return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial result failure class is not allowed")
 	}
 
 	normalized = collecterr.Normalize(cause)
 	if !PartialFailureClassAllowed(collecterr.ClassOf(normalized)) {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure class is not allowed")
+		return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial result failure class is not allowed")
 	}
 
 	return normalized, nil
@@ -75,11 +75,11 @@ func validatePartialKinds(observations []contract.Envelope, failed []contract.Ob
 
 	for _, kind := range failed {
 		if !kind.Valid() {
-			return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result contains invalid failed kind")
+			return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial result contains invalid failed kind")
 		}
 
 		if _, ok := emitted[kind]; ok {
-			return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failed and emitted kinds overlap")
+			return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial result failed and emitted kinds overlap")
 		}
 	}
 
@@ -88,10 +88,10 @@ func validatePartialKinds(observations []contract.Envelope, failed []contract.Ob
 
 func PartialFailureClassAllowed(class contract.FailureClass) bool {
 	switch class {
-	case collecterr.ClassTransient, collecterr.ClassTimeout, collecterr.ClassCooldown,
-		collecterr.ClassDataContract, collecterr.ClassResourceLimit, collecterr.ClassConfiguration:
+	case contract.ClassTransient, contract.ClassTimeout, contract.ClassCooldown,
+		contract.ClassDataContract, contract.ClassResourceLimit, contract.ClassConfiguration:
 		return true
-	case collecterr.ClassCanceled, collecterr.ClassProtocol, collecterr.ClassSuperseded, collecterr.ClassInternal:
+	case contract.ClassCanceled, contract.ClassProtocol, contract.ClassSuperseded, contract.ClassInternal:
 		return false
 	default:
 		return false

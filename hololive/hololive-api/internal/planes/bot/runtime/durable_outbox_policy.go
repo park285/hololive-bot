@@ -11,20 +11,12 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 )
 
-func replyOutboxRetryAfter(status string, attempts int32) time.Duration {
-	return replyOutboxRetryAfterWithBase(status, attempts, time.Second)
-}
-
 func replyOutboxRetryAfterWithBase(status string, attempts int32, base time.Duration) time.Duration {
 	if status != durability.ReplyOutboxRetryablePreDispatch && status != durability.ReplyOutboxOutcomeUnknown {
 		return 0
 	}
 
 	return backoff.ComputeExponentialBackoff(max(int(attempts)-1, 0), base, time.Minute, base/2)
-}
-
-func replyOutboxSettlementStatus(accepted bool, attempts int32, err error) string {
-	return replyOutboxSettlementStatusWithMaxAttempts(accepted, attempts, durability.ReplyOutboxMaxAttempts, err)
 }
 
 func replyOutboxSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAttempts int32, err error) string {

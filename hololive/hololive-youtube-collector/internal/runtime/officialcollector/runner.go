@@ -28,11 +28,11 @@ func (r *Runner) JobID() collection.JobID {
 
 func (r *Runner) Collect(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule client is not configured")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "official schedule client is not configured")
 	}
 
 	if input == nil {
-		return collection.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return collection.CollectResult{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	started := time.Now()
@@ -65,7 +65,7 @@ func (r *Runner) Collect(ctx context.Context, input *collection.RunInput) (colle
 		payload,
 	)
 	if err != nil {
-		return collection.CollectResult{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
+		return collection.CollectResult{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, err)
 	}
 
 	out, err := collection.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)

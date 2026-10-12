@@ -50,7 +50,7 @@ func NewContractSnapshot(required []contract.ObservationKind, values map[contrac
 func (s ContractSnapshot) Generation(kind contract.ObservationKind) (int64, error) {
 	generation := s.generations[kind]
 	if generation <= 0 {
-		return 0, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation contract generation is missing")
+		return 0, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation contract generation is missing")
 	}
 
 	return generation, nil
@@ -119,11 +119,11 @@ func NewRunInput(
 	}
 
 	if targets.Generation() != lease.ProjectionGeneration || targets.Membership() != job.Membership() {
-		return RunInput{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection target snapshot identity does not match")
+		return RunInput{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection target snapshot identity does not match")
 	}
 
 	if subjectMismatch(job, subject, &targets) {
-		return RunInput{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run subject does not match")
+		return RunInput{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run subject does not match")
 	}
 
 	if err := targets.ValidateRequested(job.RequestedKinds()); err != nil {
@@ -166,7 +166,7 @@ func subjectMismatch(job JobContract, subject string, targets *TargetSnapshot) b
 }
 
 func invalidRunInputError() error {
-	return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is invalid")
+	return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is invalid")
 }
 
 // Subject는 lease가 고정한 job subject입니다. GLOBAL job은 계약의 lease subject입니다.
@@ -196,7 +196,7 @@ func (i *RunInput) Job() JobContract {
 
 func (i *RunInput) Generation(kind contract.ObservationKind) (int64, error) {
 	if i == nil {
-		return 0, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
+		return 0, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is nil")
 	}
 
 	out, err := i.contracts.Generation(kind)
@@ -224,13 +224,13 @@ func (i *RunInput) RequireLiveSnapshotMetadataGeneration() error {
 		expected = contract.LiveSnapshotMetadataContractGeneration
 	case contract.ProviderHololiveOfficial:
 		// 공식 일정 provider는 방송 snapshot을 발행하지 않습니다.
-		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "live snapshot provider is unsupported")
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "live snapshot provider is unsupported")
 	default:
-		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "live snapshot provider is unsupported")
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "live snapshot provider is unsupported")
 	}
 
 	if generation != expected {
-		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, fmt.Sprintf(
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, fmt.Sprintf(
 			"live snapshot contract generation %d is unsupported; collector emits generation %d",
 			generation, expected,
 		))
@@ -241,11 +241,11 @@ func (i *RunInput) RequireLiveSnapshotMetadataGeneration() error {
 
 func (i *RunInput) Allows(kind contract.ObservationKind, subject string) (bool, error) {
 	if i == nil || !kind.Valid() || subject == "" {
-		return false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection target lookup is invalid")
+		return false, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection target lookup is invalid")
 	}
 
 	if !i.job.Emits(kind) {
-		return false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "runner requested non-emission kind")
+		return false, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "runner requested non-emission kind")
 	}
 
 	out, err := i.targets.Allows(kind, subject)
@@ -258,11 +258,11 @@ func (i *RunInput) Allows(kind contract.ObservationKind, subject string) (bool, 
 
 func (i *RunInput) Roster(kind contract.ObservationKind) ([]string, error) {
 	if i == nil || !kind.Valid() {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection roster lookup is invalid")
+		return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection roster lookup is invalid")
 	}
 
 	if !i.job.UsesRoster(kind) {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "runner requested non-roster kind")
+		return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "runner requested non-roster kind")
 	}
 
 	out, err := i.targets.Roster(kind)
@@ -292,11 +292,11 @@ func (i *RunInput) MaxSuccessResponseBytes() int {
 // NewRunOutput은 payload와 source event 시각을 포함한 입력의 소유권을 복사로 확보합니다.
 func NewRunOutput(observations []contract.Envelope, latency time.Duration) (RunOutput, error) {
 	if len(observations) > MaxPublishBatchSize {
-		return RunOutput{}, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "observation batch exceeds publish limit")
+		return RunOutput{}, collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, "observation batch exceeds publish limit")
 	}
 
 	if latency < 0 || latency > MaxCollectionLatency {
-		return RunOutput{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection output is invalid")
+		return RunOutput{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection output is invalid")
 	}
 
 	return RunOutput{
@@ -309,7 +309,7 @@ func NewRunOutput(observations []contract.Envelope, latency time.Duration) (RunO
 // 빈 cursor는 해당 관측의 checkpoint가 cursor 없이 관측 식별자만 기록한다는 뜻입니다.
 func NewRunOutputWithCursors(observations []contract.Envelope, cursors []jsontext.Value, latency time.Duration) (RunOutput, error) {
 	if len(cursors) != len(observations) {
-		return RunOutput{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection output cursor count is invalid")
+		return RunOutput{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection output cursor count is invalid")
 	}
 
 	out, err := NewRunOutput(observations, latency)

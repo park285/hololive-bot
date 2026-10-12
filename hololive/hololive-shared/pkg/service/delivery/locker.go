@@ -44,8 +44,7 @@ type NotificationLocker interface {
 }
 
 // NewLocker는 Valkey 기반 locker만 만든다. 캐시가 없으면 dedup을 끈 채 진행하던 noop locker로 내려가지 않고 생성
-// 오류를 돌려준다(stack-audit 2026-09-26 T11 holo-delivery-noop-locker-fallback). 중복 발송 방지가 꺼진 상태를 기동
-// 성공으로 숨기지 않기 위해서다.
+// 오류를 돌려준다. 중복 발송 방지가 꺼진 상태를 기동 성공으로 숨기지 않기 위해서다.
 func NewLocker(cache lockCache, logger *slog.Logger) (NotificationLocker, error) {
 	if cache == nil {
 		return nil, errors.New("new notification locker: cache is nil")
@@ -55,8 +54,7 @@ func NewLocker(cache lockCache, logger *slog.Logger) (NotificationLocker, error)
 }
 
 // valkeyNotificationLocker: Valkey 기반 NotificationLocker 구현.
-// Valkey 오류는 모두 호출자에게 돌려준다. 경고만 남기고 lock·claim 없이 진행하던 graceful degradation은 계약 없는
-// 폴백이라 지웠다(stack-audit 2026-09-26 T19 holo-delivery-valkey-locker-warn-proceed). 이제 lock 획득 실패는 digest 실행
+// Valkey 오류는 모두 호출자에게 돌려주며, 경고만 남기고 lock·claim 없이 진행하지 않는다. 획득에 실패하면 digest 실행
 // 실패로 남아 다음 주기에 다시 시도되고, 해제 실패는 lock이 TTL로 만료될 때까지 같은 작업을 막는다.
 type valkeyNotificationLocker struct {
 	cache  lockCache

@@ -71,39 +71,24 @@ func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 	}
 }
 
-func TestSendRequestRejectsLegacyAttemptAndPartialMembership(t *testing.T) {
-	for _, attempted := range []bool{false, true} {
-		t.Run(fmt.Sprint(attempted), func(t *testing.T) {
-			pool := dbtest.NewPool(t)
-			repository := NewPgxRepositoryFromPool(pool, nil)
-			ctx := t.Context()
-			_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("legacy-room", "legacy")}})
-			require.NoError(t, err)
+func TestSendRequestMustBePinnedBeforeSending(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	repository := NewPgxRepositoryFromPool(pool, nil)
+	ctx := t.Context()
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{receiptEnvelope("pin-room", "pin")}})
+	require.NoError(t, err)
 
-			if attempted {
-				_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET attempt_count=1, sending_started_at=NOW()`)
-				require.NoError(t, err)
-			}
+	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
 
-			records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
-			require.NoError(t, err)
-			require.Len(t, records, 1)
+	ids := []int64{records[0].ID}
+	unit := records[0].SendUnitID
+	require.ErrorIs(t, repository.BeginSendRequest(ctx, unit, ids, "owner", records[0].ClientRequestID, time.Minute), ErrSendRequestFence)
 
-			ids := []int64{records[0].ID}
-			unit := records[0].SendUnitID
-			require.ErrorIs(t, repository.BeginSendRequest(ctx, unit, ids, "owner", records[0].ClientRequestID, time.Minute), ErrSendRequestFence)
-
-			request, err := repository.PinSendRequest(ctx, unit, ids, "owner", SendRequest{Body: "new", Route: SendRouteText})
-
-			if attempted {
-				require.ErrorIs(t, err, ErrLegacySendRequest)
-				require.Nil(t, request)
-			} else {
-				require.NoError(t, err)
-				require.NotNil(t, request)
-			}
-		})
-	}
+	request, err := repository.PinSendRequest(ctx, unit, ids, "owner", SendRequest{Body: "new", Route: SendRouteText})
+	require.NoError(t, err)
+	require.NotNil(t, request)
 }
 
 func TestSendRequestCanPinAfterKnownUnsentFailure(t *testing.T) {

@@ -52,10 +52,6 @@ func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 		t.Fatal("embedded Handler should be initialized")
 	}
 
-	if got.Member.streamState == nil {
-		t.Fatal("embedded Handler streamState should be initialized")
-	}
-
 	if got.Member.startTime.IsZero() {
 		t.Fatal("embedded Handler startTime should be initialized")
 	}
@@ -71,10 +67,6 @@ func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 		t.Fatal("expected all domain handlers to reference original Handler")
 	}
 
-	if wired.Member.streamState == nil {
-		t.Fatal("zero-value Handler should gain streamState defaults")
-	}
-
 	if wired.Member.startTime.IsZero() {
 		t.Fatal("zero-value Handler should gain startTime defaults")
 	}
@@ -88,16 +80,8 @@ func TestNewHandler_BasicInitialization(t *testing.T) {
 		t.Fatal("NewHandler returned nil")
 	}
 
-	if h.streamState == nil {
-		t.Fatal("streamState should be initialized")
-	}
-
 	if h.memberIndexLoader != nil {
 		t.Fatal("memberIndexLoader should be nil when repository is nil")
-	}
-
-	if h.ensureStreamState() != h.streamState {
-		t.Fatal("ensureStreamState should return same streamState pointer")
 	}
 
 	repoBacked := NewHandler(&HandlerDeps{
@@ -110,10 +94,6 @@ func TestNewHandler_BasicInitialization(t *testing.T) {
 
 func TestHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
 	h := (&Handler{}).ensureDefaults()
-	if h.streamState == nil {
-		t.Fatal("streamState should be initialized")
-	}
-
 	if h.startTime.IsZero() {
 		t.Fatal("startTime should be initialized")
 	}

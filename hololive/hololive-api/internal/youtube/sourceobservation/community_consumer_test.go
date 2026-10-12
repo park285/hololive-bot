@@ -221,7 +221,7 @@ func seedMixedCommunityWatermark(ctx context.Context, t *testing.T, pool *pgxpoo
 func consumeMixedCommunityBatch(ctx context.Context, t *testing.T, repo *Repository) {
 	t.Helper()
 
-	if err := NewConsumer(repo).Consume(ctx, claimOptions()); err != nil {
+	if err := NewConsumerWithGraces(repo, 0, 0).Consume(ctx, claimOptions()); err != nil {
 		t.Fatalf("consume mixed queue: %v", err)
 	}
 }
@@ -306,7 +306,7 @@ func TestConsumerIsolatesInvalidItemAndProcessesLaterBatchItem(t *testing.T) {
 		t.Fatalf("second publish = %#v", second)
 	}
 
-	if err := NewConsumer(repo).Consume(ctx, claimOptions()); err != nil {
+	if err := NewConsumerWithGraces(repo, 0, 0).Consume(ctx, claimOptions()); err != nil {
 		t.Fatalf("consume: %v", err)
 	}
 
@@ -339,7 +339,7 @@ func TestConsumerTransactionFailureRollsBackCanonicalAndProcessedState(t *testin
 		t.Fatalf("publish: %v", err)
 	}
 
-	consumer := NewConsumer(repo)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	consumer.writer = failWriter{err: errors.New("canonical write failed")}
 
@@ -369,7 +369,7 @@ func TestConsumerReplayDoesNotDuplicateNotificationIntent(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	consumer := NewConsumer(repo)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	proof = bootstrapCommunityWindow(ctx, t, pool, publishkit.NewPublisher(pool), consumer, proof)
 
@@ -469,7 +469,7 @@ func TestConsumerDoesNotRegressCanonicalStateWhenOlderObservationFinishesLast(t 
 
 	setQueueAvailability(ctx, t, pool, oldestID, "1 hour", "defer oldest")
 
-	consumer := NewConsumer(repo)
+	consumer := NewConsumerWithGraces(repo, 0, 0)
 
 	if err := consumer.Consume(ctx, claimOptions()); err != nil {
 		t.Fatalf("consume newer: %v", err)

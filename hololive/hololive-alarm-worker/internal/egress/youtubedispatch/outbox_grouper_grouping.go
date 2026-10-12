@@ -22,7 +22,6 @@ package youtubedispatch
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
@@ -30,14 +29,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-// outboxItemGroup: Outbox 알림 그룹 (동일 Room + Channel + Kind 묶음).
-type outboxItemGroup struct {
-	roomID    string
-	channelID string
-	kind      domain.OutboxKind
-	items     []domain.YouTubeNotificationOutbox
-}
 
 type channelAlarmRoomTargets map[domain.AlarmType]map[string]bool
 
@@ -72,52 +63,6 @@ func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item *domai
 	}
 
 	return rooms, true
-}
-
-func outboxItemGroupKey(roomID string, item *domain.YouTubeNotificationOutbox) string {
-	return fmt.Sprintf("%s|%s|%s", roomID, item.ChannelID, item.Kind)
-}
-
-func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, roomID string, item *domain.YouTubeNotificationOutbox) []*outboxItemGroup {
-	key := outboxItemGroupKey(roomID, item)
-	if idx, exists := index[key]; exists {
-		groups[idx].items = append(groups[idx].items, *item)
-		return groups
-	}
-
-	groups = append(groups, &outboxItemGroup{
-		roomID:    roomID,
-		channelID: item.ChannelID,
-		kind:      item.Kind,
-		items:     []domain.YouTubeNotificationOutbox{*item},
-	})
-	index[key] = len(groups) - 1
-
-	return groups
-}
-
-func (g *OutboxGrouper) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) []*outboxItemGroup {
-	if len(items) == 0 {
-		return nil
-	}
-
-	groups := make([]*outboxItemGroup, 0)
-	index := make(map[string]int)
-
-	for i := range items {
-		item := &items[i]
-		rooms, ok := roomsForItem(roomsByChannel, item)
-
-		if !ok || len(rooms) == 0 {
-			continue
-		}
-
-		for roomID := range rooms {
-			groups = appendOutboxItemGroup(groups, index, roomID, item)
-		}
-	}
-
-	return groups
 }
 
 func (g *OutboxGrouper) channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []channelAlarmEntry {

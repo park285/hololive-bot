@@ -76,9 +76,8 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-// renderNotification은 예약 알림 본문을 렌더한다. 렌더에 실패하면 코드 대체 문구를 구독 방에 보내지 않고
-// 오류를 돌려준다. 호출자는 enqueue하지 않고 알림을 미표시로 남겨 다음 주기에 다시 시도한다
-// (DEC-20260926-hololive-message-strings-startup-validation).
+// renderNotification은 예약 알림을 렌더한다. 실패하면 호출자가 enqueue하지 않고
+// 알림을 미표시로 남겨 다음 주기에 다시 시도한다.
 func (f *llmSchedulerFormatter) renderNotification(ctx context.Context, key domain.TemplateKey, data any, failureMsg string, foldEligible bool) (string, error) {
 	rendered, err := f.render(ctx, key, data)
 	if err == nil && strings.TrimSpace(rendered) == "" {

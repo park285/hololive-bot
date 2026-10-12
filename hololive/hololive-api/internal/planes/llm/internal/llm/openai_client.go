@@ -117,16 +117,6 @@ func resolveWebSearch(o *Options) bool {
 	return webSearch
 }
 
-// recordUsage는 provider 응답의 토큰 사용량을 cost tracker에 누적한다. 다만 tracker가 없거나 토큰이 0이면 no-op이다.
-// LLM 응답 경로에서 호출되므로 에러를 전파하지 않는다.
-func (c *OpenAIClient) recordUsage(ctx context.Context, tokens int64) {
-	if c == nil || c.costTracker == nil || tokens <= 0 {
-		return
-	}
-
-	c.costTracker.RecordUsage(ctx, "openai", c.model, tokens)
-}
-
 type costTrackerUsageReporter struct {
 	tracker CostTracker
 }

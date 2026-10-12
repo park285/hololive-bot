@@ -124,9 +124,8 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.We
 	return s
 }
 
-// Summarize는 LLM 요약 본문을 돌려준다. LLM이 비활성(nil)이거나 이벤트가 없으면 빈 문자열과 nil 오류이고, formatter는
-// 이벤트 목록만 보낸다(설정된 모드). 활성 LLM의 요약 실패·빈 결과·외부 내용 guard 실패는 오류로 돌려주며, 빈 요약으로 바꿔
-// 이벤트 목록만 보내지 않는다(DEC-20260926-hololive-source-fallbacks-retirement).
+// Summarize는 LLM 요약을 반환한다. LLM 비활성 또는 이벤트 없음은 빈 문자열과 nil 오류다.
+// 활성 LLM의 실패·빈 결과·외부 내용 guard 실패는 오류로 반환한다.
 func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) (string, error) {
 	result, err := s.SummarizeResult(ctx, events, summaryType, periodKey)
 	if err != nil {

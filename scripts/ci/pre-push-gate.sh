@@ -9,7 +9,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 . "${SCRIPT_DIR}/python-runtime.sh"
 repo_python_init
-release_checked=false
 route_resolved=false
 route_exact=false
 cd "${ROOT_DIR}"
@@ -137,15 +136,8 @@ run_if_changed() {
   esac
 }
 
-run_release_check() {
-  if [[ "${release_checked}" == "false" ]]; then
-    bash scripts/check-release-version.sh
-    release_checked=true
-  fi
-}
-
 run_content_gates() {
-  run_release_check
+  bash scripts/check-release-version.sh
   resolve_route
   if is_docs_only_route; then
     echo "[pre-push] docs-only change detected; skipping Go gate"
@@ -168,6 +160,18 @@ run_content_gates() {
     hololive/hololive-alarm-worker/Dockerfile
   run_if_changed scripts/deploy/lib/ap-prechange-config_test.sh \
     scripts/deploy/lib/ap-prechange-config.sh scripts/deploy/ap-deploy.sh scripts/deploy/ap-rollback.sh
+  run_if_changed scripts/deploy/ap-deploy-version_test.sh \
+    scripts/deploy/lib/ap-compose-version.sh scripts/deploy/check-ap-rsync-preview.sh
+  run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
+  run_if_changed scripts/deploy/ap-deploy-cutover-failure_test.sh \
+    scripts/deploy/ap-deploy.sh scripts/deploy/lib
+  run_if_changed scripts/deploy/source-revision-provenance_test.sh \
+    scripts/deploy/lib/source-revision.sh deploy/compose/docker-compose.prod.yml \
+    hololive/hololive-api/Dockerfile hololive/hololive-alarm-worker/Dockerfile hololive/hololive-youtube-collector/Dockerfile
+  run_if_changed scripts/deploy/source-revision-entrypoints_test.sh \
+    build-all.sh scripts/deploy/compose-redeploy-service.sh scripts/deploy/lib
+  run_if_changed scripts/build/po-sandbox-manifest_test.py \
+    scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
   run_if_changed scripts/deploy/test-postgres-capacity-entrypoints.sh \
     scripts/ci/check-postgres-capacity.sh scripts/deploy/compose-redeploy-service.sh \
     scripts/deploy/compose.sh scripts/deploy/lib/postgres-capacity.sh deploy/compose/docker-compose.prod.yml
@@ -184,10 +188,6 @@ run_content_gates() {
   run_if_changed scripts/deploy/x-spaces-overlay_test.sh \
     scripts/deploy/compose.sh scripts/deploy/lib deploy/compose/docker-compose.x-spaces.yml
   run_if_changed scripts/runtime/set-iris-base-url_test.sh scripts/runtime/set-iris-base-url.sh
-  run_if_changed scripts/runtime/pg-hotpath-explain-snapshot_test.sh \
-    scripts/runtime/pg-hotpath-explain-snapshot.sh scripts/runtime/lib \
-    hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries \
-    hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries
   run_if_changed scripts/deploy/ap-host-native-deploy_test.sh \
     scripts/deploy/ap-host-native-deploy.sh scripts/deploy/ap-host-native-rollback.sh \
     scripts/deploy/ap-completion-check.sh \
@@ -195,8 +195,6 @@ run_content_gates() {
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib deploy/compose
 
-  # Go 시험의 Ryuk 회수는 프로세스 종료 뒤에도 interface를 제거합니다. Chromium이
-  # ERR_NETWORK_CHANGED로 중단됐으므로 독립적인 브라우저 검사를 그보다 먼저 완료합니다.
   if echo "$changed_files" | grep -qE '^(admin-dashboard/|deploy/compose/|scripts/ci/public-pr-frontend-gate.sh)'; then
     bash scripts/ci/public-pr-frontend-gate.sh
   fi
@@ -216,8 +214,7 @@ run_content_gates() {
   fi
 }
 
-# 시간이 지나면 부패하는 advisory 데이터. 주기 security workflow 는 merge 전 검증을
-# 대신하지 않으므로 docs-only push 만 면제한다(DEC-20260711 offline fail-closed 유지).
+# 취약점 데이터는 계속 바뀌므로 docs-only push 외에는 매번 검사한다.
 run_dependency_hygiene() {
   local module govulncheck_bin
   resolve_route

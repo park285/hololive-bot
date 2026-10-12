@@ -79,12 +79,9 @@ func LoadTracingConfig(enabledEnv string) (TracingConfig, error) {
 	return config, nil
 }
 
-// RejectStandardOTLPEndpointEnv는 퇴역 가드가 아니라 영구 계약이다(DEC-20260926-hololive-legacy-env-config-retirement).
-// OpenTelemetry 표준 endpoint env는 URL 문법을 자동 적용하므로 Hololive runtime은 gRPC host:port 형식의
-// HOLOLIVE_OTLP_GRPC_ENDPOINT 하나만 읽고 표준 이름은 받지 않는다(도입 eabc150b9). 표준 이름이라 운영에서 사라질
-// 날이 오지 않으므로 제거 조건과 재검토 기한을 두지 않는다. 판정은 OTel 명세가 빈 값을 미설정으로 다루는 것에
-// 맞춰 non-empty로 한다(프로젝트 퇴역 키의 존재 기준과 다른 이유).
-// LoadTracingConfig가 먼저 호출하며, 토글 이름을 고르기 전에 실패해야 하는 런타임은 직접 먼저 호출한다.
+// RejectStandardOTLPEndpointEnv는 값이 있는 표준 OTel endpoint env를 거절한다.
+// URL을 자동 적용하는 표준 env 대신 gRPC host:port 형식의 HOLOLIVE_OTLP_GRPC_ENDPOINT만 읽는다.
+// LoadTracingConfig가 먼저 호출하며, 토글 선택 전 검증이 필요한 runtime은 직접 호출한다.
 func RejectStandardOTLPEndpointEnv() error {
 	for _, standardEnv := range []string{envload.OTLPEndpointEnv, envload.OTLPTracesEndpointEnv} {
 		if strings.TrimSpace(sharedenv.String(standardEnv, "")) != "" {

@@ -11,32 +11,32 @@ import (
 )
 
 type providerStatusClassification struct {
-	code  collecterr.ErrorCode
-	class collecterr.FailureClass
+	code  contract.CollectionErrorCode
+	class contract.FailureClass
 }
 
 var fixedProviderStatuses = map[int]providerStatusClassification{
-	http.StatusMovedPermanently:        {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusFound:                   {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusSeeOther:                {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusTemporaryRedirect:       {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusPermanentRedirect:       {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusBadRequest:              {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusNotFound:                {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusMethodNotAllowed:        {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusConflict:                {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusGone:                    {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusUnsupportedMediaType:    {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusUnprocessableEntity:     {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusUnauthorized:            {code: collecterr.Configuration, class: collecterr.ClassConfiguration},
-	http.StatusForbidden:               {code: collecterr.Configuration, class: collecterr.ClassConfiguration},
-	http.StatusRequestTimeout:          {code: collecterr.Failed, class: collecterr.ClassTransient},
-	http.StatusTooEarly:                {code: collecterr.Failed, class: collecterr.ClassTransient},
-	http.StatusInternalServerError:     {code: collecterr.Failed, class: collecterr.ClassTransient},
-	http.StatusBadGateway:              {code: collecterr.Failed, class: collecterr.ClassTransient},
-	http.StatusGatewayTimeout:          {code: collecterr.Failed, class: collecterr.ClassTransient},
-	http.StatusNotImplemented:          {code: collecterr.Failed, class: collecterr.ClassProtocol},
-	http.StatusHTTPVersionNotSupported: {code: collecterr.Failed, class: collecterr.ClassProtocol},
+	http.StatusMovedPermanently:        {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusFound:                   {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusSeeOther:                {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusTemporaryRedirect:       {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusPermanentRedirect:       {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusBadRequest:              {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusNotFound:                {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusMethodNotAllowed:        {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusConflict:                {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusGone:                    {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusUnsupportedMediaType:    {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusUnprocessableEntity:     {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusUnauthorized:            {code: contract.ErrorConfiguration, class: contract.ClassConfiguration},
+	http.StatusForbidden:               {code: contract.ErrorConfiguration, class: contract.ClassConfiguration},
+	http.StatusRequestTimeout:          {code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+	http.StatusTooEarly:                {code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+	http.StatusInternalServerError:     {code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+	http.StatusBadGateway:              {code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+	http.StatusGatewayTimeout:          {code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+	http.StatusNotImplemented:          {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
+	http.StatusHTTPVersionNotSupported: {code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
 }
 
 func mapProviderStatus(provider contract.Provider, status int, retryAfter, diagnostic string) error {
@@ -46,7 +46,7 @@ func mapProviderStatus(provider contract.Provider, status int, retryAfter, diagn
 	}
 
 	if status == http.StatusTooManyRequests {
-		if err := withRetryHint(collecterr.New(collecterr.Cooldown, collecterr.ClassCooldown, message), retryAfter); err != nil {
+		if err := withRetryHint(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), retryAfter); err != nil {
 			return fmt.Errorf("with retry hint: %w", err)
 		}
 
@@ -70,19 +70,19 @@ func mapProviderStatus(provider contract.Provider, status int, retryAfter, diagn
 
 func mapUnknownProviderStatus(status int, message string) error {
 	if status >= 500 && status < 600 {
-		return collecterr.New(collecterr.Failed, collecterr.ClassTransient, message)
+		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, message)
 	}
 
-	return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, message)
+	return collecterr.New(contract.ErrorCollectionFailed, contract.ClassProtocol, message)
 }
 
 func mapServiceUnavailable(message, retryAfter string) error {
 	hint := collecterr.ParseRetryAfter(retryAfter, time.Time{})
 	if hint.Kind() == collecterr.RetryDefault {
-		return collecterr.New(collecterr.Failed, collecterr.ClassTransient, message)
+		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, message)
 	}
 
-	if err := collecterr.WithRetry(collecterr.New(collecterr.Cooldown, collecterr.ClassCooldown, message), hint); err != nil {
+	if err := collecterr.WithRetry(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), hint); err != nil {
 		return fmt.Errorf("with retry: %w", err)
 	}
 
@@ -117,23 +117,23 @@ func MapRequestError(action string, err error, secrets ...string) error {
 	cause := fmt.Errorf("%s: %s", action, redactRequestText(err.Error(), secrets...))
 	normalized := collecterr.FromContext(err)
 
-	if collecterr.CodeOf(normalized) == collecterr.Timeout {
-		return collecterr.Wrap(collecterr.Timeout, collecterr.ClassTimeout, cause)
+	if collecterr.CodeOf(normalized) == contract.ErrorCollectionTimeout {
+		return collecterr.Wrap(contract.ErrorCollectionTimeout, contract.ClassTimeout, cause)
 	}
 
-	if collecterr.CodeOf(normalized) == collecterr.Canceled {
-		return collecterr.Wrap(collecterr.Canceled, collecterr.ClassCanceled, cause)
+	if collecterr.CodeOf(normalized) == contract.ErrorCollectionCanceled {
+		return collecterr.Wrap(contract.ErrorCollectionCanceled, contract.ClassCanceled, cause)
 	}
 
-	if collecterr.CodeOf(normalized) == collecterr.Failed && collecterr.ClassOf(normalized) == collecterr.ClassTransient {
-		return collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, cause)
+	if collecterr.CodeOf(normalized) == contract.ErrorCollectionFailed && collecterr.ClassOf(normalized) == contract.ClassTransient {
+		return collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, cause)
 	}
 
 	if collecterr.IsUnclassified(normalized) {
 		return unclassifiedRedacted(cause)
 	}
 
-	return collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, cause)
+	return collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, cause)
 }
 
 func RedactError(err error, secrets ...string) error {

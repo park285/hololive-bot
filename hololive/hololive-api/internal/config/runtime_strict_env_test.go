@@ -7,7 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
-// configurePlanes가 읽는 포트·pool env. 잘못된 값은 기본값이나 0으로 바뀌지 않고 기동 실패가 된다(stack audit B4).
+// configurePlanes가 읽는 포트·pool env. 잘못된 값은 기본값이나 0으로 바뀌지 않고 기동 실패가 된다.
 var configurePlanesIntEnvKeys = []string{
 	"HOLOLIVE_ADMIN_API_PORT",
 	"ADMIN_API_POSTGRES_POOL_MIN_CONNS",

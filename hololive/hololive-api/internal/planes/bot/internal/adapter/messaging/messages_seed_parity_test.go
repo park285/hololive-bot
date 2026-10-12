@@ -36,6 +36,14 @@ var nonConstantErrorKeys = []string{
 	"async_command_backpressure",
 }
 
+// seedErrorKeysPendingDeletion은 Go 소비자와 기동 검증에서 빠졌지만 아직 시드에 남은 key다. 이전 이미지로
+// rollback해도 기동 검증이 통과하도록 행은 다음 배포까지 둔다. 제거 조건: 이 key를 읽지 않는 hololive-api가
+// 운영에 배포된 뒤 두 행을 지우는 migration을 추가할 때 이 목록도 함께 지운다.
+var seedErrorKeysPendingDeletion = []string{
+	"external_api_call_failed",
+	"cache_connection_failed",
+}
+
 func TestErrorKeyConstantsResolveInSeed(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
 	if err := store.Load(t.Context()); err != nil {
@@ -78,6 +86,10 @@ func TestErrorSeedHasNoOrphanKeys(t *testing.T) {
 	}
 
 	for _, key := range nonConstantErrorKeys {
+		expected[key] = true
+	}
+
+	for _, key := range seedErrorKeysPendingDeletion {
 		expected[key] = true
 	}
 

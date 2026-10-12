@@ -9,8 +9,6 @@ import (
 
 type Status string
 
-// shadowed(비교 전용 행)는 v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence). DB CHECK에서도
-// migration 226이 뺀다.
 const (
 	StatusPending     Status = "pending"
 	StatusLeased      Status = "leased"

@@ -276,9 +276,7 @@ func (c *GeminiClient) GenerateJSON(ctx context.Context, prompts openaipreset.Pr
 	return text, nil
 }
 
-// geminiSystemInstruction은 invariant·developer 계층을 Gemini의 단일 system instruction으로 묶는다.
-// 섹션 순서·라벨·순서 위반 거절은 shared-go canonical adapter가 소유한다
-// (DEC-20260926-stack-llm-instruction-layering-sole-path의 Gemini 매핑).
+// geminiSystemInstruction은 shared-go의 순서·라벨·검증에 따라 invariant·developer를 묶는다.
 func geminiSystemInstruction(prompts openaipreset.PromptLayers) (string, error) {
 	messages, err := sharedllm.AdaptInstructionMessages([]sharedllm.Message{
 		{Role: "system", Content: prompts.Invariant},

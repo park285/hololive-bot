@@ -129,12 +129,12 @@ func TestRetryScheduleKeepsOrdinaryAndInvalidHintsBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, code := range []collecterr.ErrorCode{collecterr.Failed, collecterr.HelperBusy} {
-		cause := collecterr.WithRetry(collecterr.New(code, collecterr.ClassTransient, "ordinary failure"), hint)
+	for _, code := range []contract.CollectionErrorCode{contract.ErrorCollectionFailed, contract.ErrorHelperBusy} {
+		cause := collecterr.WithRetry(collecterr.New(code, contract.ClassTransient, "ordinary failure"), hint)
 		assertOrdinaryRetryDelay(t, executor, cause, cfg.RetryMax)
 	}
 
-	assertOrdinaryRetryDelay(t, executor, collecterr.New(collecterr.Failed, collecterr.ClassTransient, "ordinary failure"), cfg.RetryMin+(cfg.RetryMax-cfg.RetryMin)/2)
+	assertOrdinaryRetryDelay(t, executor, collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, "ordinary failure"), cfg.RetryMin+(cfg.RetryMax-cfg.RetryMin)/2)
 }
 
 func assertOrdinaryRetryDelay(t *testing.T, executor *collectionExecutor, cause error, delay time.Duration) {

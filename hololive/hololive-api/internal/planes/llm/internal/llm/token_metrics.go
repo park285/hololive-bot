@@ -33,8 +33,8 @@ var (
 	llmCostTokensTotal *prometheus.CounterVec
 )
 
-// hololive_llm_cost_tokens_total 이름과 provider 라벨은 대시보드 연속성 계약이라 바꾸지 않는다
-// (DEC-20260926-hololive-llm-token-ceiling-retirement). 여러 프로세스의 합산은 Prometheus가 수집 단계에서 한다.
+// hololive_llm_cost_tokens_total 이름과 provider 라벨은 대시보드 연속성 계약이라 바꾸지 않는다.
+// 여러 프로세스의 합산은 Prometheus가 수집 단계에서 한다.
 func initTokenMetrics() {
 	tokenMetricsOnce.Do(func() {
 		llmCostTokensTotal = promauto.NewCounterVec(
@@ -48,7 +48,7 @@ func initTokenMetrics() {
 }
 
 // TokenMetricsRecorder는 provider 응답의 토큰 사용량을 Prometheus counter로만 기록한다.
-// 월 상한·공유 저장소 카운터·차단은 두지 않는다(DEC-20260926-hololive-llm-token-ceiling-retirement).
+// 월 상한·공유 저장소 카운터·차단은 두지 않는다.
 type TokenMetricsRecorder struct{}
 
 var _ CostTracker = TokenMetricsRecorder{}

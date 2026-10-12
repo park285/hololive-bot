@@ -98,8 +98,7 @@ func TestReleaseClaimKeysSkipsNonPrefixedKeys(t *testing.T) {
 	}
 }
 
-// releaser가 없을 때 조용히 no-op로 TTL 만료에 기대던 이중 경로는 지웠다(stack-audit 2026-09-26 T11
-// holo-dispatch-claim-releaser-optional-noop). 구성 누락은 해제 실패로 드러나야 한다.
+// releaser가 없으면 no-op로 TTL 만료에 기대지 않는다. 구성 누락은 해제 실패로 드러나야 한다.
 func TestReleaseClaimKeysRejectsMissingReleaser(t *testing.T) {
 	t.Parallel()
 

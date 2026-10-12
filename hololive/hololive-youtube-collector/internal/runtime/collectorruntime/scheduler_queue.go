@@ -9,6 +9,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
@@ -88,7 +89,7 @@ func (s *leaseScheduler) worker(ctx context.Context) {
 			s.runQueued(ctx, &spec)
 		}
 	}); err != nil {
-		s.reportFatal(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+		s.reportFatal(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 }
 
@@ -104,7 +105,7 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) 
 
 		return nil
 	}); err != nil {
-		s.reportFatal(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+		s.reportFatal(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 }
 
@@ -160,7 +161,7 @@ func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobS
 	if !tracked {
 		delete(s.queued, spec.JobKey)
 		s.queueMu.Unlock()
-		s.reportFatal(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "lease scheduler dequeued a job without a queued timestamp"))
+		s.reportFatal(collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "lease scheduler dequeued a job without a queued timestamp"))
 
 		return dequeueStop
 	}
@@ -216,7 +217,7 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 	s.queueMu.Unlock()
 
 	if overflow {
-		s.reportFatal(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "lease scheduler queued set exceeded queue capacity"))
+		s.reportFatal(collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "lease scheduler queued set exceeded queue capacity"))
 
 		return EnqueueInvalid, false
 	}

@@ -171,7 +171,7 @@ func emptyDigest(period model.Period) *model.Digest {
 }
 
 // summarizeRoomDigest는 결정적 fallback digest를 만드는 유일한 곳이다. 요약기(summarizer)는 실패를 오류로만 알리고,
-// 여기서 사유를 bounded enum으로 분류해 result_type과 함께 metric과 로그에 남긴다(stack audit B5).
+// 여기서 사유를 bounded enum으로 분류해 result_type과 함께 metric과 로그에 남긴다.
 // 호출자 context가 끝났으면 fallback digest를 만들지 않고 취소를 돌려준다.
 func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate, now time.Time) (*model.Digest, error) {
 	if s.summarizer == nil {

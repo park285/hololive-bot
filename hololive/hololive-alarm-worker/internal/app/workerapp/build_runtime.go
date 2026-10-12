@@ -415,7 +415,7 @@ func warmAlarmService(ctx context.Context, alarmService *subscriptions.AlarmServ
 	}
 }
 
-// 잘못된 batch 한도를 기본값 1000으로 바꾸지 않고 기동 오류로 드러낸다(holo-alarm-worker-envconfig-silent-defaults).
+// 잘못된 batch 한도를 기본값 1000으로 바꾸지 않고 기동 오류로 드러낸다.
 func loadAlarmDispatchPublishConfig(profile *workerconfig.AlarmWorkerProfile) (queue.PublishConfig, error) {
 	maxDeliveries, err := envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
 	if err != nil {

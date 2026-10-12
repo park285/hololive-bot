@@ -58,7 +58,7 @@ func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec
 
 		operationErr = errors.New("collection runner registration missing")
 
-		e.logFailure(ctx, "collect", string(collecterr.Failed), collecterr.UnknownClass, "", spec, &proof)
+		e.logFailure(ctx, "collect", string(contract.ErrorCollectionFailed), collecterr.UnknownClass, "", spec, &proof)
 
 		return
 	}
@@ -262,7 +262,7 @@ func fatalCollectionError(err error) bool {
 	}
 
 	class := collecterr.ClassOf(err)
-	if !collecterr.IsUnclassified(err) && (class == collecterr.ClassInternal || class == collecterr.ClassProtocol) {
+	if !collecterr.IsUnclassified(err) && (class == contract.ClassInternal || class == contract.ClassProtocol) {
 		return true
 	}
 
@@ -486,7 +486,7 @@ func (e *collectionExecutor) runCollector(ctx context.Context, runner collection
 	})
 	// 반환 오류의 분류는 provider가 소유합니다. 실제 panic만 실행 불변 위반으로 분류합니다.
 	if !returned {
-		return collection.CollectResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, recoveredErr)
+		return collection.CollectResult{}, collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, recoveredErr)
 	}
 
 	if collectErr != nil {
@@ -604,7 +604,7 @@ func (e *collectionExecutor) commitCollectResult(
 func resultPartialCause(result *collection.CollectResult) error {
 	partial, _ := result.PartialFailure()
 	if partial == nil {
-		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure is missing")
+		return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "partial result failure is missing")
 	}
 
 	if err := partial.Cause(); err != nil {

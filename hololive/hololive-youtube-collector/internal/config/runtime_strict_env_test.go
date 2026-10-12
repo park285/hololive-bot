@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// collector runtime도 숫자·bool env의 잘못된 값을 기본값으로 바꾸지 않고 기동 실패로 드러낸다(stack audit B4).
+// collector runtime도 숫자·bool env의 잘못된 값을 기본값으로 바꾸지 않고 기동 실패로 드러낸다.
 func TestLoadRuntimeRejectsInvalidEnvValues(t *testing.T) {
 	for _, tc := range []struct {
 		key   string

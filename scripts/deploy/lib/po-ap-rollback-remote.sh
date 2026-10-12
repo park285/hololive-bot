@@ -16,8 +16,7 @@ old_prod="$backup/$prod_file.prechange"
 old_ap="$backup/$ap_file.prechange"
 prod_source="$(cat "$backup/prod-compose-source-path")"
 ap_source="$(cat "$backup/ap-compose-source-path")"
-# compose 파일은 deploy/compose 아래 한 경로만 쓴다. repo 루트 사본 폴백은 T18(2026-09-26)에서 지웠다
-# (stack-audit T11 holo-ap-legacy-compose-path-fallback).
+# compose 파일은 deploy/compose에서 읽는다.
 [[ "$prod_source" == "$prod_file" && "$ap_source" == "$ap_file" ]] || exit 2
 compose=("$rollback_root/scripts/deploy/compose.sh" --project-directory "$HOME/hololive-bot/$(dirname "$prod_source")")
 old_collector_tag=''
@@ -25,9 +24,7 @@ old_po_tag=''
 po_state="$(cat "$backup/po-sandbox-prechange.state")"
 [[ "$po_state" == present || "$po_state" == absent ]] || exit 1
 [[ -r "$old_prod" && -r "$old_ap" ]] || exit 1
-# rollback 기준점은 기록된 이전 collector image다. 퇴역 producer 상태 복원 경로는 T18(2026-09-26)에서 producer 런타임이
-# 0개임을 확인해 지웠다(stack-audit T11 holo-collector-retired-producer-cutover-tooling). 기준점이 없는 백업은 되돌릴 이전
-# collector가 없다는 뜻이라 거절한다.
+# 이전 collector image가 기록된 백업만 rollback할 수 있다.
 if [[ ! -r "$backup/rollback-image-tag" ]]; then
   echo 'backup has no rollback-image-tag: no previous collector image to roll back to; fix forward' >&2
   exit 1

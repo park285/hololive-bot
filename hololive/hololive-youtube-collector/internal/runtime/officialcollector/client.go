@@ -19,7 +19,7 @@ type Client struct {
 
 func NewClient(httpClient *providerhttp.ProviderHTTPClient, baseURL string, maxBody int64) (*Client, error) {
 	if httpClient == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule HTTP client is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "official schedule HTTP client is not configured")
 	}
 
 	parsed, err := providerhttp.ParseOfficialScheduleBaseURL(baseURL)
@@ -48,14 +48,14 @@ func (c *Client) Close() error {
 
 func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 	if c == nil || c.http == nil || c.base == nil {
-		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule client is not configured")
+		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "official schedule client is not configured")
 	}
 
 	endpoint := c.base.JoinPath("api", "list", "2")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), http.NoBody)
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, fmt.Errorf("build official schedule request: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassProtocol, fmt.Errorf("build official schedule request: %w", err))
 	}
 
 	req.Header.Set("Accept", "application/json")

@@ -431,7 +431,7 @@ func collectYouTubeJSPartialVideoList(_ context.Context, input *collection.RunIn
 
 	partial, err := collection.NewPartialResult(
 		output,
-		collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "shorts timeout"),
+		collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "shorts timeout"),
 		contract.KindShortsList,
 	)
 	if err != nil {

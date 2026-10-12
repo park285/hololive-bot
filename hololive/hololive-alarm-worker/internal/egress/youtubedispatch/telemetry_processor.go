@@ -94,8 +94,7 @@ func (tp *TelemetryProcessor) cleanup(ctx context.Context) {
 	}
 }
 
-// processDeliveryTelemetry는 lifecycle 전이 트랜잭션이 기록한 시도 행만 로그로 내보낸다. 이전에 delivery 테이블을 역산해 버퍼를
-// 채우던 backfill은 DEC-20260926-hololive-delivery-telemetry-single-path로 삭제했다.
+// processDeliveryTelemetry는 lifecycle 전이 트랜잭션이 기록한 시도 행을 로그로 내보낸다.
 func (tp *TelemetryProcessor) processDeliveryTelemetry(ctx context.Context) {
 	if tp == nil || tp.telemetry == nil {
 		return

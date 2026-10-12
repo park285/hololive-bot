@@ -62,9 +62,7 @@ func (c *matchCandidate) member() *domain.Member {
 	}
 }
 
-// finalizeCandidate는 멤버 데이터 snapshot 후보에서 채널을 만든다. 채널명 정본은 roster다.
-// Holodex GetChannel로 보강하던 경로와, 그 실패 시 후보명·Valkey 알림 멤버명 캐시로 채우던 폴백 체인은
-// DEC-20260926-hololive-source-fallbacks-retirement로 지웠다. 정확 일치 경로(memberToChannel)와 같은 roster 값을 쓴다.
+// finalizeCandidate는 roster snapshot의 후보와 채널명을 반환한다.
 func (mm *Matcher) finalizeCandidate(candidate *matchCandidate) *domain.Channel {
 	if candidate == nil {
 		return nil

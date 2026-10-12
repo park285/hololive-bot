@@ -34,7 +34,7 @@ import (
 )
 
 // GetChannel은 Holodex /channels/{id} 하나만 원천으로 쓴다. 실패는 그대로 돌려주고, YouTube scraper로 만든 부분
-// Channel로 보충하거나 캐시하지 않는다(DEC-20260926-hololive-source-fallbacks-retirement).
+// Channel로 보충하거나 캐시하지 않는다.
 func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Channel, error) {
 	if cached, found := h.cacheManager.GetChannel(ctx, channelID); found {
 		return cached, nil

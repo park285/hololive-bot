@@ -163,7 +163,7 @@ func TestLiveCheckRPCContainsOversizedSuccessWithinOwnBudget(t *testing.T) {
 	})}, "http://helper", nil)
 
 	_, err := client.FetchVideoLiveCheck(t.Context(), VideoLiveCheckRequest{VideoID: "v", MaxSuccessResponseBytes: 1 << 20})
-	if collecterr.CodeOf(err) != collecterr.ResponseTooLarge || collecterr.ClassOf(err) != collecterr.ClassResourceLimit {
+	if collecterr.CodeOf(err) != contract.ErrorResponseTooLarge || collecterr.ClassOf(err) != contract.ClassResourceLimit {
 		t.Fatalf("code/class = %q/%q, error = %v", collecterr.CodeOf(err), collecterr.ClassOf(err), err)
 	}
 }

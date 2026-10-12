@@ -99,8 +99,6 @@ func expectedAdminAPIDomainRoutes() map[string][]string {
 			"POST /api/auth/logout",
 			"POST /api/auth/refresh",
 			"GET /api/auth/me",
-			"POST /api/auth/password/reset-request",
-			"POST /api/auth/password/reset",
 		},
 		"member": {
 			"GET /api/holo/members",

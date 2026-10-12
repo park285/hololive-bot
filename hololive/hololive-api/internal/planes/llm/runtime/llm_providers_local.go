@@ -32,7 +32,7 @@ import (
 )
 
 // errSelectedLLMProviderDisabled와 errConsensusLLMDisabled는 기능이 설정으로 꺼져 있음을 알리는 sentinel이다.
-// 초기화 실패와 구분해야 기능 활성 시의 실패만 기동 실패로 올릴 수 있다(stack audit B5).
+// 초기화 실패와 구분해야 기능 활성 시의 실패만 기동 실패로 올릴 수 있다.
 var (
 	errSelectedLLMProviderDisabled = errors.New("selected LLM provider is disabled")
 	errConsensusLLMDisabled        = errors.New("consensus LLM is disabled")
@@ -66,7 +66,7 @@ type consensusClientSpec struct {
 }
 
 // ProvideLLMCostTracker는 토큰 사용량을 항상 메트릭으로 기록하는 recorder를 돌려준다.
-// 월 상한과 Valkey 월 카운터는 DEC-20260926-hololive-llm-token-ceiling-retirement로 퇴역했다.
+// 월 상한과 공유 저장소 카운터는 두지 않는다.
 func ProvideLLMCostTracker() llm.CostTracker {
 	return llm.NewTokenMetricsRecorder()
 }

@@ -25,45 +25,15 @@ import (
 	stdErrors "errors"
 	"log/slog"
 	"strings"
-	"sync/atomic"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
-	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
-
-const (
-	MemberIndexCacheTTL = 1 * time.Minute
-
-	MemberIndexRefreshTimeout = 30 * time.Second
-)
-
-// 저장 즉시 불변으로 취급하고 통째로 교체한다. 필드를 제자리 수정하면
-// 이미 반환된 스냅샷을 공유하는 호출자에게 data race가 발생한다.
-type memberIndexSnapshot struct {
-	channelIDs   []string
-	channelNames map[string]string
-	expiresAt    time.Time
-}
-
-type StreamState struct {
-	memberIndex           atomic.Pointer[memberIndexSnapshot]
-	memberIndexBuildGroup singleflight.Group
-}
-
-func NewStreamState() *StreamState {
-	return &StreamState{}
-}
-
-func (s *StreamState) InvalidateMemberIndex() {
-	s.memberIndex.Store(nil)
-}
 
 type StreamMemberRepository interface {
 	GetMembersWithPhoto(ctx context.Context, channelIDs []string) (map[string]*domain.Member, error)
@@ -77,18 +47,8 @@ type StreamHandler struct {
 	Logger               *slog.Logger
 	Holodex              *holodexprovider.Service
 	MemberRepository     StreamMemberRepository
-	MemberIndexLoader    func(context.Context) ([]*domain.Member, error)
-	State                *StreamState
 	RespondError         StreamRespondErrorFunc
 	RespondInternalError StreamRespondInternalErrorFunc
-}
-
-func (h *StreamHandler) ensureState() *StreamState {
-	if h.State == nil {
-		h.State = NewStreamState()
-	}
-
-	return h.State
 }
 
 func (h *StreamHandler) respondBadRequest(c *gin.Context, message string, extra gin.H) {

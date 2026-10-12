@@ -44,7 +44,7 @@ func TestLiveSnapshotGenerationFollowsProviderContract(t *testing.T) {
 					return
 				}
 
-				if err == nil || collecterr.CodeOf(err) != collecterr.Configuration {
+				if err == nil || collecterr.CodeOf(err) != contract.ErrorConfiguration {
 					t.Fatalf("unsupported provider generation accepted: %v", err)
 				}
 			})

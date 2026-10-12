@@ -57,7 +57,7 @@ func TestContentConsumerPersistsUTF8TitleAndNotification(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	if err := NewConsumerWithAbsenceGrace(repo, 0).Consume(ctx, contentClaimOptions()); err != nil {
+	if err := NewConsumerWithGraces(repo, 0, 0).Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume: %v", err)
 	}
 

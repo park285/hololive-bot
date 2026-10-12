@@ -17,7 +17,7 @@ func (failingSummaryLLM) GenerateJSON(context.Context, openaipreset.PromptLayers
 	return "", errors.New("llm unavailable")
 }
 
-// DEC-20260926-hololive-source-fallbacks-retirement: LLM 요약 실패를 빈 요약으로 바꿔 이벤트 목록만 보내지 않는다.
+// LLM 요약 실패를 빈 요약으로 바꿔 이벤트 목록만 보내지 않는다.
 // 요약 실패는 스케줄러 오류이고, 구독 방에는 아무것도 보내지 않으며 이벤트는 다음 실행에서 다시 시도하도록 미표시로 남는다.
 func TestSendWeeklyNotification_SummaryFailure_DoesNotEnqueueOrMark(t *testing.T) {
 	repository := &mockEventRepository{

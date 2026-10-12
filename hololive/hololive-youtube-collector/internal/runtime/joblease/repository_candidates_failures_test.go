@@ -24,7 +24,7 @@ func TestMixedBundleFailureIsLocalAndPreservesHealthyRunner(t *testing.T) {
 
 	for range 4 {
 		page, err := repository.CandidatesForProjection(t.Context(), generation, broken, nil, 4)
-		if !errors.Is(err, ErrCandidateContract) || collecterr.ClassOf(err) != collecterr.ClassInternal || len(page.Jobs) != 0 {
+		if !errors.Is(err, ErrCandidateContract) || collecterr.ClassOf(err) != contract.ClassInternal || len(page.Jobs) != 0 {
 			t.Fatalf("invalid bundle: page=%+v err=%v", page, err)
 		}
 
@@ -87,7 +87,7 @@ func TestGlobalRunnerMixedBundleFailureIsLocal(t *testing.T) {
 	job := mustTestJob(t, contract.ProviderHolodex, "holodex_live")
 	page, err := repository.CandidatesForProjection(t.Context(), generation, job, nil, 4)
 
-	if !errors.Is(err, ErrCandidateContract) || collecterr.ClassOf(err) != collecterr.ClassInternal || len(page.Jobs) != 0 {
+	if !errors.Is(err, ErrCandidateContract) || collecterr.ClassOf(err) != contract.ClassInternal || len(page.Jobs) != 0 {
 		t.Fatalf("invalid global bundle: page=%+v err=%v", page, err)
 	}
 }

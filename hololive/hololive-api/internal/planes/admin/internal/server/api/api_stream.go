@@ -21,8 +21,6 @@
 package api
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -40,7 +38,6 @@ func (h *StreamHandler) sharedStreamHandler() *adminhandlers.StreamHandler {
 
 	handler := &adminhandlers.StreamHandler{
 		Logger:       api.safeLogger(),
-		State:        api.ensureStreamState(),
 		RespondError: sharedserver.RespondError,
 		RespondInternalError: func(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr) {
 			sharedserver.RespondInternalError(api.safeLogger(), c, userMessage, logMessage, err, attrs...)
@@ -50,7 +47,6 @@ func (h *StreamHandler) sharedStreamHandler() *adminhandlers.StreamHandler {
 	if api != nil {
 		handler.Holodex = api.holodex
 		handler.MemberRepository = api.repository
-		handler.MemberIndexLoader = api.memberIndexLoader
 	}
 
 	return handler
@@ -62,19 +58,6 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 
 func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetUpcomingStreams(c)
-}
-
-func (h *StreamHandler) getActiveMemberIndex(ctx context.Context) (ids []string, names map[string]string, err error) {
-	ids, names, err = h.sharedStreamHandler().GetActiveMemberIndex(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("get active member index: %w", err)
-	}
-
-	return ids, names, nil
-}
-
-func (h *MemberHandler) invalidateMemberIndex() {
-	h.ensureStreamState().InvalidateMemberIndex()
 }
 
 func (h *StreamHandler) GetChannel(c *gin.Context) {

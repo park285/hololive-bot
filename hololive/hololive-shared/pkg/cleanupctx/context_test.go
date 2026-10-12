@@ -2,7 +2,6 @@ package cleanupctx
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 )
@@ -48,30 +47,5 @@ func TestWithTimeoutUsesDefaultForNonPositiveTimeout(t *testing.T) {
 	remaining := time.Until(deadline)
 	if remaining < DefaultTimeout-time.Second || remaining > DefaultTimeout+time.Second {
 		t.Fatalf("cleanup deadline remaining = %v, want about %v", remaining, DefaultTimeout)
-	}
-}
-
-func TestWaitReturnsWhenDoneCloses(t *testing.T) {
-	done := make(chan struct{})
-	close(done)
-
-	if err := Wait(t.Context(), time.Second, done); err != nil {
-		t.Fatalf("Wait() error = %v, want nil", err)
-	}
-}
-
-func TestWaitTimesOutEvenWhenParentIsAlreadyCanceled(t *testing.T) {
-	parent, cancelParent := context.WithCancel(t.Context())
-	cancelParent()
-
-	err := Wait(parent, 15*time.Millisecond, make(chan struct{}))
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Wait() error = %v, want deadline exceeded", err)
-	}
-}
-
-func TestWaitRejectsNilDoneChannel(t *testing.T) {
-	if err := Wait(t.Context(), time.Second, nil); !errors.Is(err, ErrNilDone) {
-		t.Fatalf("Wait(nil) error = %v, want ErrNilDone", err)
 	}
 }

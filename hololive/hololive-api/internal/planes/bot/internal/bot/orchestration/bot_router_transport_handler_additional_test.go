@@ -630,18 +630,6 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		irisServiceErr := appErrors.NewServiceError("msg", serviceNameIris, "send_message", errors.New("down"))
 		assert.Equal(t, messaging.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr))
 
-		apiErr := appErrors.NewAPIError("api", 500, "fetch")
-		assert.Equal(t, messaging.ErrExternalAPICallFailed, b.getErrorMessage(apiErr))
-
-		keyRotationErr := appErrors.NewKeyRotationError("https://example.com", 429)
-		assert.Equal(t, messaging.ErrExternalAPICallFailed, b.getErrorMessage(keyRotationErr))
-
-		cacheErr := appErrors.NewCacheError("cache", "get", "k1", errors.New("down"))
-		assert.Equal(t, messaging.ErrCacheConnectionFailed, b.getErrorMessage(cacheErr))
-
-		validationErr := appErrors.NewValidationError("invalid input", "field")
-		assert.Equal(t, messaging.ErrCommandProcessingFailed, b.getErrorMessage(validationErr))
-
 		assert.Equal(t, messaging.ErrCommandProcessingFailed, b.getErrorMessage(errors.New("generic error")))
 	})
 }

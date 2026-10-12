@@ -132,7 +132,7 @@ func TestContentRunnerReturnsExplicitPartialAfterShortsTimeout(t *testing.T) {
 	fake := &contentFake{
 		results: map[string]youtubejs.ContentResult{contentTabVideos: videos},
 		errByKind: map[string]error{
-			contentTabShorts: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "shorts timeout"),
+			contentTabShorts: collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "shorts timeout"),
 		},
 	}
 
@@ -163,9 +163,9 @@ func TestContentRunnerDoesNotPublishPartialForNonDegradableFailures(t *testing.T
 		name string
 		err  error
 	}{
-		{name: "parser drift", err: collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "shorts parser drift")},
-		{name: "configuration", err: collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "helper configuration")},
-		{name: "internal", err: collecterr.New(collecterr.Internal, collecterr.ClassInternal, "helper invariant")},
+		{name: "parser drift", err: collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "shorts parser drift")},
+		{name: "configuration", err: collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "helper configuration")},
+		{name: "internal", err: collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "helper invariant")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -284,8 +284,7 @@ func TestChannelLiveRunnerPublishesMetadataWithGenerationThree(t *testing.T) {
 	}
 }
 
-// live_snapshot generation 1 payload 경로는 지웠다(계획 T11 C6). DB current generation이 1이면 다른 형식으로 내보내지 않고
-// 구성 오류로 끝난다.
+// DB current generation이 1이면 live_snapshot을 다른 형식으로 내보내지 않고 구성 오류로 끝난다.
 func TestChannelLiveRunnerRejectsRetiredLiveGenerationOne(t *testing.T) {
 	t.Parallel()
 
@@ -296,7 +295,7 @@ func TestChannelLiveRunnerRejectsRetiredLiveGenerationOne(t *testing.T) {
 	input := youtubeInputWithLiveGeneration(t, "UC_TEST", "youtubejs_channel_live", 1, contract.KindLiveSnapshot)
 
 	_, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), input)
-	if err == nil || collecterr.CodeOf(err) != collecterr.Configuration {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorConfiguration {
 		t.Fatalf("Collect(generation 1) error = %v, want configuration error", err)
 	}
 }
@@ -312,7 +311,7 @@ func TestChannelLiveRunnerRejectsIncompleteUpcomingWithoutOutput(t *testing.T) {
 
 	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t))
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -468,7 +467,7 @@ func TestContentRunnerRejectsMismatchedResponseIdentity(t *testing.T) {
 		t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
 	)
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -484,7 +483,7 @@ func TestChannelRunnerRejectsMismatchedLiveIdentity(t *testing.T) {
 
 	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t))
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -501,7 +500,7 @@ func TestCommunityRunnerRejectsNullRows(t *testing.T) {
 		t.Context(), youtubeInput(t, restrictedTestChannelID, "community_collect", contract.KindCommunityPage),
 	)
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -509,10 +508,10 @@ func TestCommunityRunnerRejectsNullRows(t *testing.T) {
 func TestContentRunnerDoesNotPublishOnParserDrift(t *testing.T) {
 	t.Parallel()
 
-	runner := NewContentRunner(&contentFake{err: collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "content row is missing video id")}, &cursorFake{}, 0)
+	runner := NewContentRunner(&contentFake{err: collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "content row is missing video id")}, &cursorFake{}, 0)
 	output, err := runner.Collect(t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -520,10 +519,10 @@ func TestContentRunnerDoesNotPublishOnParserDrift(t *testing.T) {
 func TestCommunityRunnerDoesNotPublishOnFetchError(t *testing.T) {
 	t.Parallel()
 
-	runner := NewCommunityRunner(&communityFake{err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "helper timeout")})
+	runner := NewCommunityRunner(&communityFake{err: collecterr.New(contract.ErrorCollectionTimeout, contract.ClassTimeout, "helper timeout")})
 	output, err := runner.Collect(t.Context(), youtubeInput(t, "UC_FAIL", "community_collect", contract.KindCommunityPage))
 
-	if err == nil || collecterr.CodeOf(err) != collecterr.Timeout || !output.IsZero() {
+	if err == nil || collecterr.CodeOf(err) != contract.ErrorCollectionTimeout || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -635,7 +634,7 @@ func exactTargets(
 	return targets
 }
 
-// channelLiveInput은 collector가 유일하게 만드는 live_snapshot generation 2 입력이다(generation 1 경로는 계획 T11 C6에서 삭제).
+// channelLiveInput은 collector가 유일하게 만드는 live_snapshot generation 2 입력이다.
 func channelLiveInput(tb testing.TB) *collection.RunInput {
 	tb.Helper()
 
@@ -738,7 +737,7 @@ func (f *contentFake) FetchVideoLiveCheck(ctx context.Context, request youtubejs
 			return youtubejs.VideoLiveCheckResult{}, err
 		}
 
-		return youtubejs.VideoLiveCheckResult{}, collecterr.Wrap(collecterr.Timeout, collecterr.ClassTimeout, ctx.Err())
+		return youtubejs.VideoLiveCheckResult{}, collecterr.Wrap(contract.ErrorCollectionTimeout, contract.ClassTimeout, ctx.Err())
 	}
 
 	if err := f.videoErrs[request.VideoID]; err != nil {

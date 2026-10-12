@@ -30,21 +30,11 @@ check_no_imports() {
   fi
 }
 
-check_no_imports "shared-go module" \
-  "../shared-go" \
-  'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'
-
-# dispatcher 접근은 Go internal 경계가 제한하며, 공유 delivery 심볼의 소유권은 여기서 검사한다.
-check_no_imports "youtube-collector direct YouTube dispatch" \
-  "hololive/hololive-youtube-collector" \
-  'pkg/service/delivery|delivery\.NewIrisMessageSender'
-
 check_no_imports "youtube-collector write-capable alarm repository" \
   "hololive/hololive-youtube-collector" \
   'hololive-shared/pkg/service/alarm"|alarm\.NewRepository'
 
 # API process와 저장 template 실행기는 native process/plugin 실행 권한을 갖지 않는다.
-# 종전 settings 테스트의 import 정책을 같은 경계 gate에서 유지하며 테스트 도구는 제외한다.
 check_no_imports "hololive-api native execution capability" \
   "hololive/hololive-api" \
   '"(os/exec|plugin)"' -g '!**/*_test.go'

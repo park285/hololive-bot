@@ -79,7 +79,7 @@ func buildAdminHandler(
 
 // buildAdminAPIBotRoomLister는 bot 내부 URL이 설정된 경우에만 joined-rooms client를 만든다. 설정된 URL로 client를
 // 만들지 못하면(허용되지 않은 URL, HOLOLIVE_INTERNAL_H3_* 누락 포함) 경고 뒤 endpoint를 끄지 않고 오류로 기동을
-// 실패시킨다(stack audit 2026-09-26).
+// 실패시킨다.
 func buildAdminAPIBotRoomLister(appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger) (server.IrisRoomLister, error) {
 	if logger == nil {
 		logger = slog.Default()

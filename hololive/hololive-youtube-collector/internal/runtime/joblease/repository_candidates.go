@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
@@ -96,11 +97,11 @@ func (r *Repository) validateCandidateRequest(generation int64, job collection.J
 	}
 
 	if err := job.Validate(); err != nil {
-		return candidateContractError(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+		return candidateContractError(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 
 	if !r.isCanonicalJob(job) {
-		return candidateContractError(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: job contract is not canonical"))
+		return candidateContractError(collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "list collection job candidates: job contract is not canonical"))
 	}
 
 	return nil
@@ -151,12 +152,12 @@ func (r *Repository) globalCandidatesForProjection(
 ) (CandidatePage, error) {
 	subject, err := ExpectedLeaseSubject(job, "")
 	if err != nil {
-		return CandidatePage{}, candidateContractError(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+		return CandidatePage{}, candidateContractError(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 
 	jobKey, err := BuildJobKey(job.ID(), subject)
 	if err != nil {
-		return CandidatePage{}, candidateContractError(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+		return CandidatePage{}, candidateContractError(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 
 	rows, err := r.pool.Query(
@@ -224,7 +225,7 @@ func collectCandidatePage(
 	}
 
 	if !sawRow {
-		return CandidatePage{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: candidate page is missing projection status")
+		return CandidatePage{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "list collection job candidates: candidate page is missing projection status")
 	}
 
 	if !projectionCurrent {
@@ -281,16 +282,16 @@ func scanCandidateRow(rows interface{ Scan(dest ...any) error }) (candidateRow, 
 
 func specFromCandidateRow(job collection.JobContract, row candidateRow) (JobSpec, error) {
 	if row.minMS <= 0 {
-		return JobSpec{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: target bundle has no poll interval")
+		return JobSpec{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "list collection job candidates: target bundle has no poll interval")
 	}
 
 	if row.minMS != row.maxMS {
-		return JobSpec{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: target bundle has mixed poll intervals")
+		return JobSpec{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "list collection job candidates: target bundle has mixed poll intervals")
 	}
 
 	jobKey, err := BuildJobKey(job.ID(), row.subject)
 	if err != nil {
-		return JobSpec{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+		return JobSpec{}, collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err)
 	}
 
 	return JobSpec{
@@ -306,7 +307,7 @@ func specFromCandidateRow(job collection.JobContract, row candidateRow) (JobSpec
 func cadenceKindValues(job collection.JobContract) ([]string, error) {
 	kinds := job.CadenceKinds()
 	if len(kinds) == 0 {
-		return nil, candidateContractError(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: cadence kinds are empty"))
+		return nil, candidateContractError(collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "list collection job candidates: cadence kinds are empty"))
 	}
 
 	values := make([]string, len(kinds))

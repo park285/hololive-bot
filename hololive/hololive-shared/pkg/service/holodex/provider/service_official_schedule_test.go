@@ -205,9 +205,7 @@ func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
 	}
 }
 
-// live-status는 Holodex /users/live 하나만 원천으로 쓴다. YouTube scraper 2차 경로는
-// DEC-20260926-hololive-live-status-scraper-fallback-removal로 삭제됐고, 실패는 alarm-worker가
-// persisted live session으로 판단하도록 그대로 돌려준다.
+// Holodex /users/live 실패는 호출자가 저장된 live session으로 판정하도록 반환한다.
 func TestGetChannelsLiveStatusDoesNotUseAnySecondarySource(t *testing.T) {
 	var officialRequests atomic.Int32
 

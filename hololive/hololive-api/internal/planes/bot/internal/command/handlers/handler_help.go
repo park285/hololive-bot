@@ -61,7 +61,7 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	}
 
 	// 도움말 내용을 만들지 못하면 코드 대체 문구를 보내지 않고 오류를 돌려준다. bot의 공통 오류 경로가
-	// message_strings의 명령 실패 문구로 응답한다(DEC-20260926-hololive-message-strings-startup-validation).
+	// message_strings의 명령 실패 문구로 응답한다.
 	content, contentErr := c.deps.Formatter.FormatHelpContent(ctx)
 	if contentErr != nil {
 		return fmt.Errorf("format help content: %w", contentErr)

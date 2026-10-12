@@ -15,7 +15,7 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 	pool := dbtest.NewPool(b)
 	repository := NewRepository(pool)
 	publisher := publishkit.NewPublisher(pool)
-	consumer := NewConsumer(repository)
+	consumer := NewConsumerWithGraces(repository, 0, 0)
 	proof := seedPublishLease(
 		b.Context(),
 		b,

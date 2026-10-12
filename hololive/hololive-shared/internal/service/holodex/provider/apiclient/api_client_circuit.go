@@ -2,7 +2,6 @@ package apiclient
 
 import (
 	"log/slog"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -39,8 +38,4 @@ func (c *APIClient) openCircuit() {
 
 func (c *APIClient) resetCircuit() {
 	c.breaker.RecordSuccess()
-}
-
-func (c *APIClient) forceOpenedAtForTest(t time.Time) {
-	c.breaker.SetOpenedAtForTest(t)
 }

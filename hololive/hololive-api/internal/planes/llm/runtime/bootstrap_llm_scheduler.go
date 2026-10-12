@@ -25,10 +25,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 	"sync"
 
+	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
@@ -369,34 +369,6 @@ func buildLLMSchedulerDeliveryModule(
 	return out, nil
 }
 
-func buildLLMSchedulerHTTPServer(
-	ctx context.Context,
-	port int,
-	logger *slog.Logger,
-	triggerHandler *apiserver.TriggerHandler,
-	apiKey string,
-	majorEventRepository *majorevent.Repository,
-	memberNewsService *membernews.Service,
-) (*http.Server, error) {
-	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
-		return nil, errors.New(llmSchedulerAPISecretRequired)
-	}
-
-	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey)
-	if err != nil {
-		return nil, fmt.Errorf("build llm scheduler router: %w", err)
-	}
-
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMajorEventInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, majorEventRepository)
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
-
-	addr := fmt.Sprintf(":%d", port)
-
-	return sharedserver.NewHTTPServer(addr, router, "hololive-llm-sched.http", sharedserver.LocalPlaneTraceFilter), nil
-}
-
 func buildLLMSchedulerHTTPServers(
 	ctx context.Context,
 	serverConfig *settings.ServerConfig,
@@ -411,6 +383,30 @@ func buildLLMSchedulerHTTPServers(
 		serverConfig = &settings.ServerConfig{}
 	}
 
+	router, err := buildLLMSchedulerRouter(ctx, logger, triggerHandler, apiKey, majorEventRepository, memberNewsService, readyProbe)
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, "hololive-llm-sched.http",
+		nil, sharedserver.LocalPlaneTraceFilter)
+	if err != nil {
+		return nil, fmt.Errorf("runtime HTTP servers: %w", err)
+	}
+
+	return out, nil
+}
+
+// buildLLMSchedulerRouter는 trigger·내부 데이터 경로가 하나라도 열리면 API key 없이 기동하지 않는다.
+func buildLLMSchedulerRouter(
+	ctx context.Context,
+	logger *slog.Logger,
+	triggerHandler *apiserver.TriggerHandler,
+	apiKey string,
+	majorEventRepository *majorevent.Repository,
+	memberNewsService *membernews.Service,
+	readyProbe *sharedreadiness.Probe,
+) (*gin.Engine, error) {
 	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
 		return nil, errors.New(llmSchedulerAPISecretRequired)
 	}
@@ -425,17 +421,11 @@ func buildLLMSchedulerHTTPServers(
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
 	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
 
-	out, err := sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, "hololive-llm-sched.http",
-		nil, sharedserver.LocalPlaneTraceFilter)
-	if err != nil {
-		return nil, fmt.Errorf("runtime HTTP servers: %w", err)
-	}
-
-	return out, nil
+	return router, nil
 }
 
 // loadLLMMessageStrings는 llm plane formatter가 쓰는 message_strings를 기동 때 적재하고 뉴스 분류 namespace를
-// 검증한다. 실패하면 기동을 실패시킨다(DEC-20260926-hololive-message-strings-startup-validation).
+// 검증한다. 실패하면 기동을 실패시킨다.
 func loadLLMMessageStrings(ctx context.Context, postgresService database.Client, logger *slog.Logger) (*messagestrings.Store, error) {
 	store := messagestrings.NewStore(postgresService.GetPool(), logger)
 	if err := store.Load(ctx); err != nil {

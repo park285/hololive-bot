@@ -107,9 +107,7 @@ func (f *ResponseFormatter) Prefix() string {
 	return "!"
 }
 
-// ResolveError는 message_strings error namespace의 문구를 돌려준다. 인자 key는 messaging.Err* 상수이며 bot plane
-// 기동 검증이 모든 상수의 값을 보장한다. 코드 대체 문구는 두지 않는다
-// (DEC-20260926-hololive-message-strings-startup-validation).
+// ResolveError는 기동 시 검증된 messaging.Err* key의 message_strings 문구를 반환한다.
 func (f *ResponseFormatter) ResolveError(_ context.Context, key string) string {
 	if f == nil {
 		return ""

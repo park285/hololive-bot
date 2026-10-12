@@ -18,8 +18,7 @@ type alarmDispatchGroup struct {
 	envelopeErr error
 }
 
-// alarm dispatch는 모든 봉투를 Text 경로(오픈채팅은 sender가 Markdown으로 보냄)로 보낸다. 방 유형에 따라 Karing template을
-// 고르던 분기와 Karing chunk 분할은 DEC-20260926-hololive-karing-egress-disposition에 따라 삭제했다.
+// 모든 봉투를 Text 경로로 보낸다. 오픈채팅은 sender가 Markdown으로 전송한다.
 func groupAlarmDispatchEnvelopesForDelivery(envelopes []domain.AlarmQueueEnvelope) []alarmDispatchGroup {
 	grouped := make([]alarmDispatchGroup, 0, len(envelopes))
 	index := map[string]int{}
@@ -67,34 +66,8 @@ func alarmDispatchDeliveryGroupKey(envelope *domain.AlarmQueueEnvelope, envelope
 	return alarmDispatchGroupKey(envelope)
 }
 
-func groupAlarmDispatchEnvelopesByKey(
-	envelopes []domain.AlarmQueueEnvelope,
-	keyFunc func(*domain.AlarmQueueEnvelope) string,
-) []alarmDispatchGroup {
-	groups := make([]alarmDispatchGroup, 0, len(envelopes))
-	index := map[string]int{}
-
-	for i := range envelopes {
-		envelope := &envelopes[i]
-		key := alarmDispatchRegroupKey(envelope, keyFunc)
-		groupIndex, ok := index[key]
-
-		if !ok {
-			index[key] = len(groups)
-			groups = append(groups, newAlarmDispatchGroup(envelope))
-
-			continue
-		}
-
-		appendAlarmDispatchEnvelope(&groups[groupIndex], envelope)
-	}
-
-	return groups
-}
-
 // 저장된 send unit이 발송 경계다. 저장된 send unit이 없는 봉투는 keyFunc로 묶이지만 Text 경로는 저장된 client_request_id가
-// 없으면 발송하지 않는다(errAlarmDispatchSendUnitIdentityMissing). 파생 ID를 고정하려고 재시도 봉투를 solo로 떼던
-// 분기는 파생 ID와 함께 지웠다(stack-audit 2026-09-26 T17).
+// 없으면 발송하지 않는다(errAlarmDispatchSendUnitIdentityMissing).
 func alarmDispatchRegroupKey(envelope *domain.AlarmQueueEnvelope, keyFunc func(*domain.AlarmQueueEnvelope) string) string {
 	if envelope != nil && envelope.SendUnitID > 0 {
 		return fmt.Sprintf("send-unit|%d", envelope.SendUnitID)

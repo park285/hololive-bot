@@ -26,8 +26,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 )
 
-// Client는 LLM 지시를 invariant/developer/user 계층으로만 받는다
-// (DEC-20260926-stack-llm-instruction-layering-sole-path). 단일 system prompt 경로는 없다.
+// Client는 LLM 지시를 invariant/developer/user 계층으로만 받는다.
+// 단일 system prompt 경로는 없다.
 type Client interface {
 	GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error)
 }

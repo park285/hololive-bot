@@ -66,7 +66,7 @@ func TestIrisDurableContract(t *testing.T) {
 
 			pool := newDurabilityPool(t)
 
-			return &contractReplyOutbox{pool: pool, repo: NewReplyOutboxRepository(pool)}
+			return &contractReplyOutbox{pool: pool, repo: newTestReplyOutboxRepository(pool)}
 		},
 		Reissue: &contracttest.ReissueFixture{
 			Ladder: irisdurable.ReissueLadder{

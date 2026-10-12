@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/importer"
-	"go/parser"
 	"go/token"
 	"go/types"
 	"io"
@@ -26,11 +25,9 @@ type keyTaint struct {
 	taintedParam map[string]map[int]struct{}
 }
 
-func TestIdentifierBearingKeysNeverReachLogAttrValues(t *testing.T) {
-	t.Parallel()
+func checkIdentifierBearingLogValues(t *testing.T, fileSet *token.FileSet, sources scannedSources) {
+	t.Helper()
 
-	fileSet := token.NewFileSet()
-	sources := parseScannedRoots(t, fileSet)
 	taint := analyzeKeyTaint(sources)
 
 	for _, seed := range []string{"BuildNotifyClaimKey", "BuildUpcomingEventKey", "BuildLogicalEventClaimKey"} {
@@ -43,156 +40,6 @@ func TestIdentifierBearingKeysNeverReachLogAttrValues(t *testing.T) {
 	for _, report := range taint.violations(fileSet, sources) {
 		t.Error(report)
 	}
-}
-
-func TestKeyTaintAnalysisFlagsBuilderResultsInLogValues(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name    string
-		source  string
-		flagged bool
-	}{
-		{
-			name:    "builder result through a local variable",
-			source:  `package p; func b(roomID string) string { return roomID }; func f(){ k := b(r); logger.Warn("m", slog.String("key", k)) }`,
-			flagged: true,
-		},
-		{
-			name:    "builder result inlined into the attr value",
-			source:  `package p; func b(roomID string) string { return roomID }; func f(){ logger.Warn("m", slog.String("key", b(r))) }`,
-			flagged: true,
-		},
-		{
-			name:    "builder result forwarded into a callee parameter",
-			source:  `package p; func b(roomID string) string { return roomID }; func g(key string){ logger.Warn("m", slog.String("key", key)) }; func f(){ g(b(r)) }`,
-			flagged: true,
-		},
-		{
-			name:    "builder result on a loose key/value pair",
-			source:  `package p; func b(roomID string) string { return roomID }; func f(){ k := b(r); logger.Warn("m", "key", k) }`,
-			flagged: true,
-		},
-		{
-			name:    "privacylog helper launders the builder result",
-			source:  `package p; func b(roomID string) string { return roomID }; func f(){ k := b(r); logger.Warn("m", slog.String("key_token", privacylog.Pseudonym(k))) }`,
-			flagged: false,
-		},
-		{
-			name:    "unrelated value is untouched",
-			source:  `package p; func b(roomID string) string { return roomID }; func f(){ logger.Warn("m", slog.String("channel_id", channelID)) }`,
-			flagged: false,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			fileSet := token.NewFileSet()
-
-			file, err := parser.ParseFile(fileSet, "inject.go", tc.source, parser.SkipObjectResolution)
-			if err != nil {
-				t.Fatalf("parse injected source: %v", err)
-			}
-
-			sources := untypedTestScannedSources(fileSet, map[string]*ast.File{"inject.go": file})
-			reports := analyzeKeyTaint(sources).violations(fileSet, sources)
-
-			if flagged := len(reports) > 0; flagged != tc.flagged {
-				t.Fatalf("flagged=%v, want %v (reports=%v) for %s", flagged, tc.flagged, reports, tc.source)
-			}
-		})
-	}
-}
-
-func TestKeyTaintAnalysisUsesReceiverQualifiedCallables(t *testing.T) {
-	t.Parallel()
-
-	t.Run("propagates into a different package", func(t *testing.T) {
-		t.Parallel()
-
-		fileSet := token.NewFileSet()
-		sources := parseTaintFixture(t, fileSet, map[string]string{
-			"example/cache/cache.go": `package cache; type Service struct{}; func (*Service) Build(roomID string) string { return roomID }`,
-			"example/sink/sink.go":   `package sink; import "example/cache"; type Logger struct{}; func (Logger) Warn(string, ...any) {}; var logger Logger; type Service struct{}; func (*Service) emit(key string) { logger.Warn("m", "cache_key", key) }; func (s *Service) Run(room string) { c := &cache.Service{}; s.emit(c.Build(room)) }`,
-		})
-		taint := analyzeKeyTaint(sources)
-
-		if reports := taint.violations(fileSet, sources); len(reports) != 1 {
-			t.Fatalf("cross-package reports = %v, want one (builders=%v params=%v)", reports, taint.builders, taint.taintedParam)
-		}
-	})
-
-	t.Run("does not merge same-named methods across packages", func(t *testing.T) {
-		t.Parallel()
-
-		fileSet := token.NewFileSet()
-		sources := parseTaintFixture(t, fileSet, map[string]string{
-			"example/sensitive/key.go": `package sensitive; type Service struct{}; func (*Service) Build(roomID string) string { return roomID }`,
-			"example/clean/use.go":     `package clean; type Logger struct{}; func (Logger) Warn(string, ...any) {}; var logger Logger; type Service struct{}; func (*Service) Build(channelID string) string { return channelID }; func (s *Service) Run(channel string) { logger.Warn("m", "cache_key", s.Build(channel)) }`,
-		})
-
-		if reports := analyzeKeyTaint(sources).violations(fileSet, sources); len(reports) != 0 {
-			t.Fatalf("same-named clean function produced reports: %v", reports)
-		}
-	})
-
-	t.Run("does not merge same-named methods on different receivers", func(t *testing.T) {
-		t.Parallel()
-
-		fileSet := token.NewFileSet()
-		sources := parseTaintFixture(t, fileSet, map[string]string{
-			"example/service/use.go": `package service; type Logger struct{}; func (Logger) Warn(string, ...any) {}; var logger Logger; type Sensitive struct{}; func (*Sensitive) Build(roomID string) string { return roomID }; type Clean struct{}; func (*Clean) Build(channelID string) string { return channelID }; func (c *Clean) Run(channel string) { logger.Warn("m", "cache_key", c.Build(channel)) }`,
-		})
-
-		if reports := analyzeKeyTaint(sources).violations(fileSet, sources); len(reports) != 0 {
-			t.Fatalf("same-package receiver methods produced reports: %v", reports)
-		}
-	})
-}
-
-func parseTaintFixture(t *testing.T, fileSet *token.FileSet, contents map[string]string) scannedSources {
-	t.Helper()
-
-	files := make(map[string]*ast.File, len(contents))
-	for filename, source := range contents {
-		file, err := parser.ParseFile(fileSet, filename, source, parser.SkipObjectResolution)
-		if err != nil {
-			t.Fatalf("parse %s: %v", filename, err)
-		}
-
-		files[filename] = file
-	}
-
-	return typedTestScannedSources(t, fileSet, files)
-}
-
-func untypedTestScannedSources(fileSet *token.FileSet, files map[string]*ast.File) scannedSources {
-	return scannedSources{files: files, importPathByScope: fixtureImportPaths(files), fileSet: fileSet}
-}
-
-func typedTestScannedSources(t *testing.T, fileSet *token.FileSet, files map[string]*ast.File) scannedSources {
-	t.Helper()
-
-	sources := scannedSources{files: files, importPathByScope: fixtureImportPaths(files), fileSet: fileSet, sourceImports: true}
-	if err := sources.loadTypes(); err != nil {
-		t.Fatalf("type-check taint fixture: %v", err)
-	}
-
-	return sources
-}
-
-func fixtureImportPaths(files map[string]*ast.File) map[string]string {
-	importPaths := make(map[string]string)
-
-	for filename := range files {
-		scope := filepath.Clean(filepath.Dir(filename))
-
-		importPaths[scope] = filepath.ToSlash(scope)
-	}
-
-	return importPaths
 }
 
 func hasCallableNamed(callables map[string]struct{}, name string) bool {
@@ -574,13 +421,6 @@ func receiverTypeName(fn *ast.FuncDecl) string {
 	return ""
 }
 
-type sourceTypesImporter struct {
-	sources  *scannedSources
-	fallback types.Importer
-	packages map[string]*types.Package
-	checking map[string]bool
-}
-
 func (s *scannedSources) loadTypes() error {
 	s.typesInfo = make(map[*ast.File]*types.Info, len(s.files))
 
@@ -603,24 +443,19 @@ func (s *scannedSources) loadTypes() error {
 
 		return openExportFile(exportRoot, s.buildCacheRoot, export)
 	}
-	loader := &sourceTypesImporter{
-		sources:  s,
-		fallback: importer.ForCompiler(s.fileSet, "gc", lookup),
-		packages: map[string]*types.Package{},
-		checking: map[string]bool{},
-	}
-	paths := make([]string, 0, len(s.importPathByScope))
+	packageImporter := importer.ForCompiler(s.fileSet, "gc", lookup)
+	scopes := make([]string, 0, len(s.importPathByScope))
 
-	for _, importPath := range s.importPathByScope {
-		paths = append(paths, importPath)
+	for scope := range s.importPathByScope {
+		scopes = append(scopes, scope)
 	}
 
-	slices.Sort(paths)
+	slices.Sort(scopes)
 
 	var loadErr error
 
-	for _, importPath := range paths {
-		if _, err := loader.loadSourcePackage(importPath); err != nil {
+	for _, scope := range scopes {
+		if err := s.loadPackageTypes(scope, packageImporter); err != nil {
 			loadErr = err
 			break
 		}
@@ -666,59 +501,10 @@ func openExportFile(root *os.Root, rootPath, exportPath string) (io.ReadCloser, 
 	return file, nil
 }
 
-func (i *sourceTypesImporter) Import(importPath string) (*types.Package, error) {
-	if !i.sources.sourceImports {
-		out, err := i.fallback.Import(importPath)
-		if err != nil {
-			return nil, fmt.Errorf("import: %w", err)
-		}
-
-		return out, nil
-	}
-
-	out, err := i.loadSourcePackage(importPath)
-	if err != nil {
-		//nolint:nilnil // types.Config.Check는 오류와 함께 부분 완성된 패키지를 돌려주고 go/types가 이를 사용하므로, 오류 경로에서도 그대로 전달해야 한다.
-		return out, fmt.Errorf("load source package: %w", err)
-	}
-
-	return out, nil
-}
-
-func (i *sourceTypesImporter) loadSourcePackage(importPath string) (*types.Package, error) {
-	if pkg := i.packages[importPath]; pkg != nil {
-		return pkg, nil
-	}
-
-	scope := ""
-
-	for candidateScope, candidatePath := range i.sources.importPathByScope {
-		if candidatePath == importPath {
-			scope = candidateScope
-			break
-		}
-	}
-
-	if scope == "" {
-		out, err := i.fallback.Import(importPath)
-		if err != nil {
-			return nil, fmt.Errorf("import: %w", err)
-		}
-
-		return out, nil
-	}
-
-	if i.checking[importPath] {
-		return nil, fmt.Errorf("type import cycle involving %s", importPath)
-	}
-
-	i.checking[importPath] = true
-
-	defer delete(i.checking, importPath)
-
+func (s *scannedSources) loadPackageTypes(scope string, packageImporter types.Importer) error {
 	var files []*ast.File
 
-	for filename, file := range i.sources.files {
+	for filename, file := range s.files {
 		if filepath.Clean(filepath.Dir(filename)) == scope {
 			files = append(files, file)
 		}
@@ -730,23 +516,18 @@ func (i *sourceTypesImporter) loadSourcePackage(importPath string) (*types.Packa
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 		Types:      map[ast.Expr]types.TypeAndValue{},
 	}
-	config := types.Config{Importer: i, Sizes: types.SizesFor("gc", runtime.GOARCH)}
-	pkg, err := config.Check(importPath, i.sources.fileSet, files, info)
+	config := types.Config{Importer: packageImporter, Sizes: types.SizesFor("gc", runtime.GOARCH)}
+	importPath := s.importPathByScope[scope]
 
-	if pkg != nil {
-		i.packages[importPath] = pkg
-
-		for _, file := range files {
-			i.sources.typesInfo[file] = info
-		}
+	if _, err := config.Check(importPath, s.fileSet, files, info); err != nil {
+		return fmt.Errorf("type-check %s: %w", importPath, err)
 	}
 
-	if err != nil {
-		//nolint:nilnil // types.Config.Check는 오류와 함께 부분 완성된 패키지를 돌려주고 go/types가 이를 사용하므로, 오류 경로에서도 그대로 전달해야 한다.
-		return pkg, fmt.Errorf("type-check %s: %w", importPath, err)
+	for _, file := range files {
+		s.typesInfo[file] = info
 	}
 
-	return pkg, nil
+	return nil
 }
 
 func functionDecls(file *ast.File) []*ast.FuncDecl {

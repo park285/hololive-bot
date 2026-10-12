@@ -28,19 +28,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func newDiscardAlarmLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
-}
-
-func TestAlarmKeyHelpers(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	assert.Equal(t, testRoomID, as.getRegistryKey(testRoomID))
-	assert.Equal(t, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChannelID, as.channelSubscribersKey(testChannelID))
 }
 
 func TestTargetMinutesUpdatesReturnConfirmedResult(t *testing.T) {

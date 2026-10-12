@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const (
@@ -93,7 +91,7 @@ func (d *Dispatcher) runMaintenanceTask(ctx context.Context, task *maintenanceTa
 }
 
 func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) error {
-	cnt, err := d.repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
+	cnt, err := d.repository.CountFailed(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to count delivery outbox failures", slog.String("error", err.Error()))
 

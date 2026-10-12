@@ -17,7 +17,7 @@ func validateUnavailableLiveSessions(channelID, kind string, result *youtubejs.C
 	}
 
 	if kind != channelKindLive || result.MissingTab || len(unavailable) > maxUnavailableLiveSessions {
-		return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js unavailable live sessions are outside the collection scope")
+		return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js unavailable live sessions are outside the collection scope")
 	}
 
 	seen := make(map[string]struct{}, len(result.LiveSessions)+len(unavailable))
@@ -27,11 +27,11 @@ func validateUnavailableLiveSessions(channelID, kind string, result *youtubejs.C
 
 	for _, item := range unavailable {
 		if item.ChannelID != channelID || strings.TrimSpace(item.VideoID) == "" || item.Reason != "access_restricted" {
-			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js unavailable live session identity or reason is invalid")
+			return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js unavailable live session identity or reason is invalid")
 		}
 
 		if _, exists := seen[item.VideoID]; exists {
-			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js unavailable live session overlaps another row")
+			return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js unavailable live session overlaps another row")
 		}
 
 		seen[item.VideoID] = struct{}{}
@@ -43,7 +43,7 @@ func validateUnavailableLiveSessions(channelID, kind string, result *youtubejs.C
 func validateContentIdentity(requestedChannelID string, items []youtubejs.ContentItem) error {
 	for i := range items {
 		if items[i].ChannelID != requestedChannelID {
-			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js content response identity does not match request")
+			return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js content response identity does not match request")
 		}
 	}
 
@@ -53,7 +53,7 @@ func validateContentIdentity(requestedChannelID string, items []youtubejs.Conten
 func validateLiveIdentity(requestedChannelID string, sessions []youtubejs.LiveSessionItem) error {
 	for i := range sessions {
 		if sessions[i].ChannelID != requestedChannelID {
-			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js live response identity does not match request")
+			return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js live response identity does not match request")
 		}
 	}
 
@@ -64,7 +64,7 @@ func validateLiveSchedules(sessions []youtubejs.LiveSessionItem) error {
 	for i := range sessions {
 		if sessions[i].Status == "UPCOMING" &&
 			(sessions[i].ScheduledAt == nil || sessions[i].ScheduledAt.IsZero()) {
-			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js upcoming live response is missing scheduled time")
+			return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js upcoming live response is missing scheduled time")
 		}
 	}
 
@@ -74,7 +74,7 @@ func validateLiveSchedules(sessions []youtubejs.LiveSessionItem) error {
 func validateCommunityRows(posts []*youtubejs.CommunityPost) error {
 	for _, post := range posts {
 		if post == nil {
-			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js community response contains a null row")
+			return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js community response contains a null row")
 		}
 	}
 
@@ -83,10 +83,10 @@ func validateCommunityRows(posts []*youtubejs.CommunityPost) error {
 
 func contentPartialFailureAllowed(class contract.FailureClass) bool {
 	switch class {
-	case collecterr.ClassTransient, collecterr.ClassTimeout, collecterr.ClassCooldown, collecterr.ClassResourceLimit:
+	case contract.ClassTransient, contract.ClassTimeout, contract.ClassCooldown, contract.ClassResourceLimit:
 		return true
-	case collecterr.ClassCanceled, collecterr.ClassDataContract, collecterr.ClassConfiguration,
-		collecterr.ClassProtocol, collecterr.ClassSuperseded, collecterr.ClassInternal:
+	case contract.ClassCanceled, contract.ClassDataContract, contract.ClassConfiguration,
+		contract.ClassProtocol, contract.ClassSuperseded, contract.ClassInternal:
 		return false
 	}
 

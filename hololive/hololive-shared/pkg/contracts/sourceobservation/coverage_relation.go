@@ -1,7 +1,6 @@
 package sourceobservation
 
 import (
-	"slices"
 	"time"
 )
 
@@ -106,26 +105,6 @@ func ShortsListCoversVideo(coverage ShortsListCoverageV1, video VideoListItemV1)
 
 func CoverageAllowsAbsence(relation CoverageRelation) bool {
 	return relation == CoverageEqual || relation == CoverageCovers
-}
-
-func LiveCoverageCoversChannel(coverage GlobalChannelCoverageV1, channelID string) bool {
-	if channelID == "" {
-		return false
-	}
-
-	return slices.Contains(coverage.RequestedChannelIDs, channelID)
-}
-
-func LiveCoverageCoversSession(coverage GlobalChannelCoverageV1, channelID, status string) bool {
-	if !LiveCoverageCoversChannel(coverage, channelID) {
-		return false
-	}
-
-	if len(coverage.Filters.Statuses) == 0 {
-		return true
-	}
-
-	return slices.Contains(coverage.Filters.Statuses, status)
 }
 
 func upcomingOnly(video VideoListItemV1) bool {

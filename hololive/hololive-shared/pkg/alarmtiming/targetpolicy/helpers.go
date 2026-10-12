@@ -100,19 +100,6 @@ func BuildRuntimeTargetMinutes(alarmAdvanceMinutes int) []int {
 	return NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes).Clone()
 }
 
-func ResolveConfiguredTargetMinutes(targetMinutes []int) []int {
-	return NewTargetMinutePolicyFromConfigured(targetMinutes).Clone()
-}
-
-func ResolvePersistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) []int {
-	return NewTargetMinutePolicyFromPersisted(alarmAdvanceMinutes, targetMinutes).Clone()
-}
-
-// IsTargetMinute는 minutesUntil 값이 targetMinutes에 포함되는지 확인한다.
-func IsTargetMinute(targetMinutes []int, minutesUntil int) bool {
-	return slices.Contains(targetMinutes, minutesUntil)
-}
-
 type EvaluationWindow struct {
 	Start time.Time
 	End   time.Time
@@ -158,13 +145,4 @@ func ResolveEvaluationWindow(prevCheckedAt, now time.Time, maxLookback time.Dura
 	}
 
 	return window
-}
-
-func HighestCrossedTarget(targetMinutes []int, startScheduled time.Time, window EvaluationWindow) (int, bool) {
-	resolvedTargets := normalizeExplicitTargetMinutes(targetMinutes)
-	if len(resolvedTargets) == 0 {
-		resolvedTargets = cloneDefaultTargetMinutes()
-	}
-
-	return NewTargetMinutePolicy(resolvedTargets).HighestCrossed(startScheduled, window)
 }

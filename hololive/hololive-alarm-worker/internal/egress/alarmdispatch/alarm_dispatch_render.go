@@ -210,10 +210,6 @@ func alarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
 	return true
 }
 
-func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (alarmDispatchGroupView, error) {
-	return buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortlinkservice.YouTubeBuilder{})
-}
-
 func buildAlarmDispatchGroupViewWithShortLinks(
 	ctx context.Context,
 	store *messagestrings.Store,

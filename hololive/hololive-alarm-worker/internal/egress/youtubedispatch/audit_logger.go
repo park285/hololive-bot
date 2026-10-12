@@ -25,9 +25,8 @@ const (
 	deliveryModePerRoom = string(store.DeliveryModePerRoom)
 )
 
-// AuditLogger는 시도 시작·결과 요약·최종 결과 로그만 남긴다. 시도 telemetry 행은 TransitionStore가 lifecycle 전이
-// 트랜잭션 안에서 한 번 기록하며, 여기서 하던 prepare·enqueue·direct_fallback 로그와 commit 뒤 분류 재저장은
-// DEC-20260926-hololive-delivery-telemetry-single-path로 삭제했다.
+// AuditLogger는 시도 시작·결과 요약·최종 결과를 기록한다.
+// 시도 telemetry 행은 TransitionStore가 lifecycle 전이 트랜잭션에서 기록한다.
 type AuditLogger struct {
 	telemetry *telemetry.Repository
 	delivery  *store.DeliveryRepository

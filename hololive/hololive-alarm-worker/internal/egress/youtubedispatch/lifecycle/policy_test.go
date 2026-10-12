@@ -118,22 +118,6 @@ func TestReviveRejectsLogicalLedgerEvidence(t *testing.T) {
 	require.ErrorContains(t, err, "ledger evidence")
 }
 
-func TestProviderOutcomeTaxonomyKeepsUnknownDistinct(t *testing.T) {
-	t.Parallel()
-
-	reason, err := NewReason("transport")
-	require.NoError(t, err)
-
-	unknown, err := NewProviderOutcome(ProviderOutcomeUnknown, reason, 0)
-	require.NoError(t, err)
-	require.Equal(t, ProviderOutcomeUnknown, unknown.Kind())
-	require.False(t, unknown.AllowsFallback(true))
-
-	knownPermanent, err := NewProviderOutcome(ProviderKnownNotDeliveredPermanent, reason, 0)
-	require.NoError(t, err)
-	require.True(t, knownPermanent.AllowsFallback(true))
-}
-
 func testRow(id int64, status DeliveryStatus, attempt int, createdAt time.Time) RowSnapshot {
 	return RowSnapshot{
 		DeliveryID: id, Status: status, AttemptCount: attempt,

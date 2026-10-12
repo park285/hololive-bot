@@ -135,17 +135,6 @@ func URLHostname(t *testing.T, raw string) string {
 	return parsed.Hostname()
 }
 
-func WriteIrisBaseURLFile(t *testing.T, raw string) string {
-	t.Helper()
-
-	path := t.TempDir() + "/iris_base_url"
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write IRIS_BASE_URL_FILE failed: %v", err)
-	}
-
-	return path
-}
-
 func WorkerProfileDiagnosticsJSON() string {
 	return `{
 		"state": "running",

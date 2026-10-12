@@ -11,6 +11,7 @@ import (
 	"testing/iotest"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -18,7 +19,7 @@ func TestHelperRetryPreservesCauseAndHint(t *testing.T) {
 	t.Parallel()
 
 	cause := errors.New("provider limited")
-	base := collecterr.Wrap(collecterr.Cooldown, collecterr.ClassCooldown, cause)
+	base := collecterr.Wrap(contract.ErrorCooldown, contract.ClassCooldown, cause)
 	at := time.Date(2026, time.October, 2, 1, 2, 3, 0, time.UTC)
 	tests := []struct {
 		retry RPCRetryHint
@@ -34,7 +35,7 @@ func TestHelperRetryPreservesCauseAndHint(t *testing.T) {
 			t.Parallel()
 
 			err := applyHelperRetry(base, test.retry)
-			if !errors.Is(err, cause) || collecterr.CodeOf(err) != collecterr.Cooldown || collecterr.IsUnclassified(err) {
+			if !errors.Is(err, cause) || collecterr.CodeOf(err) != contract.ErrorCooldown || collecterr.IsUnclassified(err) {
 				t.Fatalf("lost classified cause: %v", err)
 			}
 
@@ -71,7 +72,7 @@ func TestHelperStatusErrorKeepsProtocolCauseAndMasksMessage(t *testing.T) {
 	err := helperStatusError(http.StatusTooManyRequests, []byte(fmt.Sprintf(
 		`{"protocol_version":1,"error":{"code":"cooldown","class":"COOLDOWN","retry":{"kind":"default"},"message":"https://example.test/path?token=%s"}}`, secret,
 	)))
-	if collecterr.CodeOf(err) != collecterr.Cooldown || collecterr.ClassOf(err) != collecterr.ClassCooldown || collecterr.IsUnclassified(err) {
+	if collecterr.CodeOf(err) != contract.ErrorCooldown || collecterr.ClassOf(err) != contract.ClassCooldown || collecterr.IsUnclassified(err) {
 		t.Fatalf("lost explicit helper failure: %v", err)
 	}
 
@@ -92,7 +93,7 @@ func TestHelperBodyReadFailurePreservesCloseError(t *testing.T) {
 	}
 
 	err := decodeHelperResponse(resp, 1024, &CommunityResult{})
-	if collecterr.CodeOf(err) != collecterr.Timeout || !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, closeErr) {
+	if collecterr.CodeOf(err) != contract.ErrorCollectionTimeout || !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, closeErr) {
 		t.Fatalf("lost body read or close failure: %v", err)
 	}
 

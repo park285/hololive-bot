@@ -30,8 +30,7 @@ func BuildSettingsService(settingsPath string, targetMinutes []int, logger *slog
 
 // ResolvePersistedTargetMinutes는 alarm-worker 기동 때 관리 화면이 저장한 알림 시점을 읽는다. 파일이 없을 때만 설정값을
 // 쓴다. 파일 해석은 settings.ReadFile 하나가 소유하므로, targetMinutes 없는 구형 형식이나 읽기·decode 실패는 설정값으로
-// 대신하지 않고 오류로 드러난다(stack-audit 2026-09-26 T11 holo-api-persisted-settings-legacy-format,
-// holo-settings-file-legacy-format-and-dual-reader).
+// 대신하지 않고 오류로 드러난다.
 func ResolvePersistedTargetMinutes(settingsPath string, targetMinutes []int, logger *slog.Logger) ([]int, error) {
 	stored, found, err := settings.ReadFile(settingsPath)
 	if err != nil {

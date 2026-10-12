@@ -17,9 +17,7 @@ type IrisRuntimeValidationConfig struct {
 }
 
 // LoadIrisRuntimeValidationConfig는 호출 시점의 URL 검증 설정을 읽는다.
-// APP_ENV=production이면 IRIS_BASE_URL_FILE의 경로·소유·권한 stat 검사를 항상 한다. 우회 플래그
-// IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS(live-compat이 주입하던 값)는 T18(2026-09-26)에서 중앙 runtime-config/iris_base_url이 root 소유 0644로
-// 검사를 통과함을 확인해 지웠다(stack-audit T11 holo-iris-base-url-skip-stat-compat).
+// APP_ENV=production이면 IRIS_BASE_URL_FILE의 경로·소유·권한을 항상 검사한다.
 func LoadIrisRuntimeValidationConfig() IrisRuntimeValidationConfig {
 	return IrisRuntimeValidationConfig{
 		Transport:        os.Getenv("IRIS_TRANSPORT"),
@@ -35,7 +33,7 @@ func (c IrisRuntimeValidationConfig) HostAllowlistConfigured() bool {
 }
 
 // LoadInternalH3ClientOptions는 내부 서비스 H3 client의 TLS 경로와 이름을 전용 키 두 개에서만 읽는다.
-// 공통 서버 키(HOLOLIVE_H3_CERT_FILE, HOLOLIVE_H3_SERVER_NAME)로 내려가던 폴백은 지웠다(stack audit 2026-09-26).
+// 공통 서버 키(HOLOLIVE_H3_CERT_FILE, HOLOLIVE_H3_SERVER_NAME)로 대신하지 않는다.
 // 빈 값의 HTTPS 거절과 파일 검증은 client 생성자가 소유하여 HTTP-only runtime 기동을 보존한다.
 func LoadInternalH3ClientOptions() sharedh3.ClientOptions {
 	return sharedh3.ClientOptions{

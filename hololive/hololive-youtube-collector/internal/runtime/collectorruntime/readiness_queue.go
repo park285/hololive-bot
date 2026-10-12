@@ -33,7 +33,7 @@ func (s *postgresQueueStore) LoadHandoffStatuses(ctx context.Context, ids []int6
 	}
 
 	if len(ids) > maxHandoffCandidates {
-		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "handoff status request exceeds candidate cap")
+		return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "handoff status request exceeds candidate cap")
 	}
 
 	rows, err := s.pool.Query(ctx, sqlObservationHandoffStatus, ids)
@@ -56,7 +56,7 @@ func (s *postgresQueueStore) CountPending(ctx context.Context, limit int) (Bound
 	}
 
 	if limit < 1 {
-		return BoundedCount{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pending queue cap is invalid")
+		return BoundedCount{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "pending queue cap is invalid")
 	}
 
 	var value int
@@ -88,7 +88,7 @@ func scanHandoffStatuses(rows interface {
 		}
 
 		if len(out) >= len(ids) {
-			return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status row count is invalid")
+			return nil, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation handoff status row count is invalid")
 		}
 
 		out = append(out, item)
@@ -121,7 +121,7 @@ func scanHandoffRow(rows interface{ Scan(dest ...any) error }) (handoffStatus, e
 
 	status := contract.Status(*raw)
 	if !status.Valid() {
-		return handoffStatus{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status is unknown")
+		return handoffStatus{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation handoff status is unknown")
 	}
 
 	return handoffStatus{ObservationID: id, Status: &status}, nil

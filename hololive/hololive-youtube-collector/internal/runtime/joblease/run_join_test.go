@@ -164,7 +164,7 @@ func TestFenceLossPreservesCallbackAfterCancel(t *testing.T) {
 }
 
 func TestParentCancelPreservesClassifiedCallbackJoinedWithCancel(t *testing.T) {
-	cause := collecterr.New(collecterr.Internal, collecterr.ClassInternal, "callback invariant")
+	cause := collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "callback invariant")
 
 	for _, buffered := range []bool{false, true} {
 		t.Run(fmt.Sprintf("buffered=%t", buffered), func(t *testing.T) {
@@ -208,7 +208,7 @@ func TestRenewBufferedCallbackHonorsParentCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	cause := collecterr.New(collecterr.Internal, collecterr.ClassInternal, "callback invariant")
+	cause := collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "callback invariant")
 	result := make(chan error, 1)
 
 	result <- errors.Join(context.Canceled, cause)

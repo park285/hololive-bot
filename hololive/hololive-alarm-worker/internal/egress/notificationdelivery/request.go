@@ -40,15 +40,6 @@ func (d *Dispatcher) prepareRequest(ctx context.Context, item *domain.Notificati
 		return d.validateStoredRequest(ctx, item, payload.Request)
 	}
 
-	// 한 번이라도 전송한 legacy 행의 과거 본문과 lane은 현재 설정으로 추정하지 않습니다.
-	if item.AttemptCount > 0 && !payload.KnownUnsent {
-		if d.markItemSending(ctx, item.ID) {
-			d.markItemQuarantined(ctx, item.ID, "legacy delivery request missing; prior send cannot be reconstructed")
-		}
-
-		return nil, false
-	}
-
 	body, route, err := d.sender.PrepareMessageRequest(ctx, item.RoomID, payload.Message)
 	if err != nil {
 		d.markPreparationFailed(ctx, item, err)
@@ -158,29 +149,7 @@ func (d *Dispatcher) validateStoredRequest(ctx context.Context, item *domain.Not
 	return request, true
 }
 
-// 준비 실패에는 외부 부수효과가 없다는 증거를 먼저 저장해 legacy retry와 구분합니다.
+// 준비 실패는 요청을 고정하기 전이라 외부 부수효과가 없으므로 일반 실패로 재시도한다.
 func (d *Dispatcher) markPreparationFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, cause error) {
-	saved, err := d.repository.markPreparationUnsent(ctx, item.ID, d.workerID)
-	if err != nil {
-		d.logger.Error("Failed to save unsent delivery preparation", "id", item.ID, "error", err)
-
-		return
-	}
-
-	if saved {
-		d.markItemFailed(ctx, item, cause.Error())
-	}
-}
-
-func (r *Store) markPreparationUnsent(ctx context.Context, id int64, workerID string) (bool, error) {
-	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("mark unsent preparation: %w", err)
-	}
-
-	tag, err := r.pool.Exec(ctx, mustSQL("outbox_mark_preparation_unsent.sql"), id, workerID)
-	if err != nil {
-		return false, fmt.Errorf("mark unsent preparation: %w", err)
-	}
-
-	return tag.RowsAffected() > 0, nil
+	d.markItemFailed(ctx, item, cause.Error())
 }

@@ -197,10 +197,6 @@ func dispatchErrorReason(err error) string {
 	}
 }
 
-func nextDurableIdleDelay(current time.Duration) time.Duration {
-	return nextDurableIdleDelayFrom(current, durablePollEvery)
-}
-
 func nextDurableIdleDelayFrom(current, minimum time.Duration) time.Duration {
 	if current < minimum {
 		return minimum

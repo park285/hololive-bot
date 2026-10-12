@@ -75,7 +75,7 @@ func (t *readinessTracker) Snapshot() readinessTrackerSnapshot {
 
 func (t *readinessTracker) ApplyHandoff(snap readinessTrackerSnapshot, statuses []handoffStatus) (HandoffState, error) {
 	if t == nil {
-		return HandoffNone, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "apply observation handoff: tracker is nil")
+		return HandoffNone, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "apply observation handoff: tracker is nil")
 	}
 
 	t.mu.Lock()
@@ -194,12 +194,12 @@ func (t *handoffTracker) retainHandoffCandidates(keep map[int64]bool) {
 
 func requireHandoffShape(ids []int64, statuses []handoffStatus) error {
 	if len(statuses) != len(ids) {
-		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status row count is invalid")
+		return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation handoff status row count is invalid")
 	}
 
 	for i, item := range statuses {
 		if item.ObservationID != ids[i] {
-			return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status order is invalid")
+			return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation handoff status order is invalid")
 		}
 	}
 
@@ -228,7 +228,7 @@ func classifyHandoffRow(item handoffStatus) (HandoffState, bool, error) {
 		return HandoffProcessing, false, nil
 	}
 
-	return HandoffNone, false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status is unknown")
+	return HandoffNone, false, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "observation handoff status is unknown")
 }
 
 func higherHandoff(current, next HandoffState) HandoffState {

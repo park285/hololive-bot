@@ -51,14 +51,6 @@ root_go_package_patterns() {
     printf '%s\n' "${package_patterns[@]}" | awk 'NF && !seen[$0]++'
 }
 
-go_source_files() {
-    local file
-    git ls-files --cached --others --exclude-standard '*.go' | while IFS= read -r file; do
-        is_go_scope_excluded_file "${file}" && continue
-        [[ -f "${file}" ]] && printf '%s\n' "${file}"
-    done
-}
-
 workspace_metadata_files() {
     {
         git ls-files --cached --others --exclude-standard \
@@ -75,15 +67,4 @@ workspace_metadata_files() {
             esac
         done
     } | awk 'NF && !seen[$0]++'
-}
-
-snapshot_files() {
-    local file
-    while IFS= read -r file; do
-        if [[ -f "${file}" ]]; then
-            sha256sum "${file}"
-        else
-            printf 'missing  %s\n' "${file}"
-        fi
-    done | sort
 }

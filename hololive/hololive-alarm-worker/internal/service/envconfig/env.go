@@ -9,7 +9,7 @@ import (
 )
 
 // 값이 없거나 공백뿐이면 def를 쓴다. 값이 있으면 정수여야 하고 각 함수의 범위를 지켜야 하며, 어긋나면 기본값으로
-// 바꾸지 않고 설정 오류를 돌려준다(stack audit holo-alarm-worker-envconfig-silent-defaults). 오류에는 값을 넣지 않는다.
+// 바꾸지 않고 설정 오류를 돌려준다. 오류에는 값을 넣지 않는다.
 
 // ParsePositiveInt는 key의 값을 양의 정수로 읽는다.
 func ParsePositiveInt(key string, def int) (int, error) {

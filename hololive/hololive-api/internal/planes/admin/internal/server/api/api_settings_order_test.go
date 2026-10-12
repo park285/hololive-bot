@@ -23,7 +23,6 @@ import (
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -322,7 +321,7 @@ func TestSettingsAPIHandlerSaveApplyOrderingWithActualWorker(t *testing.T) {
 
 	defer release()
 
-	h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: sharedsettings.NewLocalSettingsApplier(alarm.NewClient(server.URL, newDiscardLogger()))}}
+	h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, server.URL))}}
 
 	firstDone, firstRec := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 

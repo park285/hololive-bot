@@ -7,6 +7,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
 func TestIsUnclassifiedSeparatesDefaultBucketFromExplicitClass(t *testing.T) {
@@ -21,19 +23,19 @@ func TestIsUnclassifiedSeparatesDefaultBucketFromExplicitClass(t *testing.T) {
 		want bool
 	}{
 		{name: "nil", err: nil, want: false},
-		{name: "explicit internal invariant", err: Wrap(Internal, ClassInternal, errors.New("invariant")), want: false},
-		{name: "explicit transient", err: Wrap(Failed, ClassTransient, errors.New("upstream")), want: false},
+		{name: "explicit internal invariant", err: Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, errors.New("invariant")), want: false},
+		{name: "explicit transient", err: Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, errors.New("upstream")), want: false},
 		{name: "raw deadline is classified as timeout", err: context.DeadlineExceeded, want: false},
 		{name: "raw eof is classified as transient", err: io.EOF, want: false},
 		{name: "raw unknown", err: errors.New("acquire connection"), want: true},
 		{name: "FromContext catch-all", err: FromContext(errors.New("read body")), want: true},
 		{name: "FromContext socket deadline", err: FromContext(os.ErrDeadlineExceeded), want: true},
 		{name: "WithRetry keeps unclassified base", err: WithRetry(FromContext(errors.New("read body")), hint), want: true},
-		{name: "WithRetry keeps classified base", err: WithRetry(Wrap(Internal, ClassInternal, errors.New("invariant")), hint), want: false},
+		{name: "WithRetry keeps classified base", err: WithRetry(Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, errors.New("invariant")), hint), want: false},
 		{name: "WithRetry with invalid hint keeps unclassified base", err: WithRetry(FromContext(errors.New("read body")), RetryHint{}), want: true},
 		{name: "wrapped unclassified", err: errors.Join(errors.New("outer"), FromContext(errors.New("read body"))), want: true},
-		{name: "invalid failure tuple", err: New(Failed, ClassTimeout, "impossible"), want: true},
-		{name: "WithRetry keeps invalid failure tuple unclassified", err: WithRetry(New(Failed, ClassTimeout, "impossible"), hint), want: true},
+		{name: "invalid failure tuple", err: New(contract.ErrorCollectionFailed, contract.ClassTimeout, "impossible"), want: true},
+		{name: "WithRetry keeps invalid failure tuple unclassified", err: WithRetry(New(contract.ErrorCollectionFailed, contract.ClassTimeout, "impossible"), hint), want: true},
 	}
 
 	for _, test := range tests {
@@ -48,8 +50,8 @@ func TestIsUnclassifiedSeparatesDefaultBucketFromExplicitClass(t *testing.T) {
 func TestUnclassifiedErrorsKeepDurableFailureTuple(t *testing.T) {
 	diagnostic := DiagnosticOf(FromContext(errors.New("read body")))
 
-	if diagnostic.Code() != Internal || diagnostic.Class() != ClassInternal {
+	if diagnostic.Code() != contract.ErrorInternalInvariant || diagnostic.Class() != contract.ClassInternal {
 		t.Fatalf("DiagnosticOf() = %s/%s, want %s/%s — 미분류 표식이 계약 tuple을 바꿨다",
-			diagnostic.Code(), diagnostic.Class(), Internal, ClassInternal)
+			diagnostic.Code(), diagnostic.Class(), contract.ErrorInternalInvariant, contract.ClassInternal)
 	}
 }

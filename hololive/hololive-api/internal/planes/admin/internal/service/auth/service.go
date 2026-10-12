@@ -40,11 +40,9 @@ import (
 
 const (
 	sessionTokenPrefix = "sess_"
-	resetTokenPrefix   = "reset_"
 
 	sessionKeyPrefix        = "auth:sess:"
 	loginRateLimitKeyPrefix = "auth:rl:login:"
-	resetReqRateLimitPrefix = "auth:rl:reset_req:"
 	loginFailKeyPrefix      = "auth:login_fail:"
 	accountLockKeyPrefix    = "auth:lock:"
 )

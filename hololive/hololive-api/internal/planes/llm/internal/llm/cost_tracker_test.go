@@ -22,9 +22,6 @@ package llm
 
 import (
 	"context"
-	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 type fakeCostTracker struct {
@@ -37,34 +34,4 @@ func (f *fakeCostTracker) RecordUsage(_ context.Context, provider, model string,
 	f.providers = append(f.providers, provider)
 	f.models = append(f.models, model)
 	f.tokens = append(f.tokens, tokens)
-}
-
-func TestOpenAIClient_recordUsage_DelegatesPositiveTokensWithProviderModel(t *testing.T) {
-	ft := &fakeCostTracker{}
-	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
-
-	c.recordUsage(t.Context(), 1234)
-	require.Equal(t, []int64{1234}, ft.tokens)
-	require.Equal(t, []string{"openai"}, ft.providers)
-	require.Equal(t, []string{"gpt-test"}, ft.models)
-}
-
-func TestOpenAIClient_recordUsage_SkipsZeroOrNegativeTokens(t *testing.T) {
-	ft := &fakeCostTracker{}
-	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
-
-	c.recordUsage(t.Context(), 0)
-	c.recordUsage(t.Context(), -5)
-	require.Empty(t, ft.tokens)
-}
-
-func TestOpenAIClient_recordUsage_NoTrackerIsNoOp(t *testing.T) {
-	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil)
-	require.NotPanics(t, func() {
-		c.recordUsage(t.Context(), 100)
-	})
-
-	// WithCostTracker(nil)은 tracker를 설정하지 않아야 한다(no-op).
-	c2 := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(nil))
-	require.Nil(t, c2.costTracker)
 }

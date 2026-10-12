@@ -12,7 +12,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/alarmtestkit"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -27,7 +26,7 @@ func TestSettingsAPIHandlerAppliedThenResponseLostPreservesSavedSettings(t *test
 		logger:          newDiscardLogger(),
 		activity:        newActivityLoggerForTest(t),
 		settings:        writer,
-		settingsApplier: sharedsettings.NewLocalSettingsApplier(alarm.NewClient(server.URL, newDiscardLogger())),
+		settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, server.URL)),
 	}}
 
 	firstCtx, firstRec := newAPITestContext(http.MethodPost, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":10}`))

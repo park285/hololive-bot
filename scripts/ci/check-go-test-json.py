@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 PANIC_RE = re.compile(r"(?m)^\s*panic:")
@@ -27,35 +28,30 @@ def load_allowlist(path: Path | None) -> set[str]:
     return allowed
 
 
-def parse_jsonl(path: Path) -> list[dict[str, object]]:
-    raw = path.read_text(encoding="utf-8")
-    if raw == "":
-        return []
+def parse_jsonl(path: Path) -> Iterator[dict[str, object]]:
     decoder = json.JSONDecoder()
-    events: list[dict[str, object]] = []
-    for lineno, line in enumerate(raw.splitlines(), 1):
-        if line.strip() == "":
-            continue
-        try:
-            obj, end = decoder.raw_decode(line)
-        except json.JSONDecodeError as exc:
-            raise CheckError(f"JSON parse error at line {lineno}: {exc}") from exc
-        trailing = line[end:]
-        if trailing.strip():
-            raise CheckError(f"trailing garbage at line {lineno}")
-        if not isinstance(obj, dict):
-            raise CheckError(f"JSON object required at line {lineno}")
-        events.append(obj)
-    return events
+    with path.open(encoding="utf-8") as source:
+        for lineno, line in enumerate(source, 1):
+            if line.strip() == "":
+                continue
+            try:
+                obj, end = decoder.raw_decode(line)
+            except json.JSONDecodeError as exc:
+                raise CheckError(f"JSON parse error at line {lineno}: {exc}") from exc
+            if line[end:].strip():
+                raise CheckError(f"trailing garbage at line {lineno}")
+            if not isinstance(obj, dict):
+                raise CheckError(f"JSON object required at line {lineno}")
+            yield obj
 
 
 def evaluate(
-    events: list[dict[str, object]],
+    events: Iterable[dict[str, object]],
     allow_skip: set[str],
     require_pass: bool,
 ) -> None:
-    packages: dict[str, str] = {}
-    tests: dict[tuple[str, str], str] = {}
+    packages: set[str] = set()
+    tests: set[tuple[str, str]] = set()
     seen_packages: set[str] = set()
     started_tests: set[tuple[str, str]] = set()
     panics: list[str] = []
@@ -86,7 +82,7 @@ def evaluate(
         if action not in {"pass", "fail", "skip"}:
             continue
         if package_name and test_name:
-            tests[(package_name, test_name)] = action
+            tests.add((package_name, test_name))
             key = f"{package_name}/{test_name}"
             if action == "fail":
                 failures.append(key)
@@ -94,7 +90,7 @@ def evaluate(
                 unexpected_skips.append(key)
             continue
         if package_name:
-            packages[package_name] = action
+            packages.add(package_name)
             if action == "fail":
                 failures.append(package_name)
             if (
@@ -104,8 +100,8 @@ def evaluate(
             ):
                 unexpected_skips.append(package_name)
 
-    missing_package = sorted(seen_packages - set(packages))
-    missing_tests = sorted(started_tests - set(tests))
+    missing_package = sorted(seen_packages - packages)
+    missing_tests = sorted(started_tests - tests)
     errors: list[str] = []
     if panics:
         errors.append("panic: " + ", ".join(panics))

@@ -98,11 +98,6 @@ var broadcastTitleOverrideStrengths = map[broadcasttype.Type]map[broadcastTitleS
 	},
 }
 
-// ClassifyBroadcast는 주제와 제목의 근거로 방송 유형을 반환하며 외부 상태를 변경하지 않는다.
-func ClassifyBroadcast(topicID, title string) broadcasttype.Type {
-	return ClassifyBroadcastWithSource(topicID, title).Type
-}
-
 // ClassifyBroadcastWithSource는 주제·제목 우선순위에 따라 유형과 근거를 반환한다.
 // 명시적인 멤버 한정 제목은 다른 주제보다 우선하며, 근거가 없으면 unknown을 유지한다.
 func ClassifyBroadcastWithSource(topicID, title string) BroadcastClassification {

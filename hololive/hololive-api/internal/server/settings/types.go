@@ -22,8 +22,7 @@ package settings
 
 import "context"
 
-// SettingsApplier는 관리 화면의 설정 변경을 runtime에 적용한다. 예전의 scraper proxy 토글과 그 runtime 상태 조회는
-// DEC-20260926-hololive-legacy-env-config-retirement로 지웠다.
+// SettingsApplier는 관리 화면의 설정 변경을 runtime에 적용한다.
 type SettingsApplier interface {
 	ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) (AlarmAdvanceMinutesApplyResult, error)
 	ApplyMemberNewsWeeklyRunNow(ctx context.Context) MemberNewsWeeklyRunNowResult

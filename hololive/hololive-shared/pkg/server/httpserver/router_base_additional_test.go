@@ -42,11 +42,10 @@ func TestApplyBaseMiddleware_PreservesIncomingRequestID(t *testing.T) {
 	}
 }
 
-func TestApplyBaseMiddlewareAndRegisterHealthRoutes_NilInputsNoPanic(t *testing.T) {
+func TestApplyBaseMiddleware_NilInputsNoPanic(t *testing.T) {
 	t.Parallel()
 
 	ApplyBaseMiddleware(t.Context(), nil, nil, BaseMiddlewareOptions{})
-	RegisterHealthRoutes(nil)
 }
 
 func TestApplyBaseMiddleware_RecoversHandlerPanic(t *testing.T) {

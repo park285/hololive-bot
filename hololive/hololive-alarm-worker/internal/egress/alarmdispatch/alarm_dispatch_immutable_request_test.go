@@ -123,36 +123,6 @@ func TestAlarmRequestOnlyReissuesConfirmedPreHandoffFailure(t *testing.T) {
 	}
 }
 
-func TestAlarmRequestLegacyAttemptQuarantinesBeforeProvider(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	ctx := t.Context()
-	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-
-	envelope.Notification.Channel.ID = "request-channel"
-
-	_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
-	require.NoError(t, err)
-
-	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET sending_started_at=NOW(),attempt_count=1`)
-	require.NoError(t, err)
-
-	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("legacy-owner"))
-	require.NoError(t, err)
-
-	sender := &immutableRequestSender{route: dispatchoutbox.SendRouteText}
-	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 10}
-
-	_, err = runner.runOnce(ctx)
-	require.NoError(t, err)
-	require.Empty(t, sender.messages)
-
-	var status string
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM alarm_dispatch_deliveries`).Scan(&status))
-	require.Equal(t, "quarantined", status)
-}
-
 func TestAlarmRequestPinnedErrorDoesNotPermitAmbiguousRetryWithoutRequest(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{}
 	runner := Runner{members: alarmGoldenMembers{}, consumer: consumer}

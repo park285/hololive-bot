@@ -38,6 +38,7 @@
 - `plans/2026-07-10-birthday-stream-alarm.md` - superseded birthday stream alarm v2 plan
 - `youtube-convergence/handoffs/` - completed YouTube convergence implementation handoffs
 - `runbooks/` - completed incident and operational review records
+- `runbooks/IRIS_CLIENT_GO_V3_WEBHOOK_INBOX_DRAIN_20260928.md` - one-time webhook inbox drain before the iris-client-go v3 cutover
 - `hardening-evidence/` - historical PR hardening command and result captures
 
 ### Plan kits

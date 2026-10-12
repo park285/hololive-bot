@@ -71,7 +71,7 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 	}
 
 	if len(rawRows) > 0 && validRows == 0 {
-		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response has no valid rows")
+		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "holodex live response has no valid rows")
 	}
 
 	return rows, nil
@@ -80,13 +80,13 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 func decodeLiveRows(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) == 0 || trimmed[0] != '[' {
-		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response is not a JSON array")
+		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "holodex live response is not a JSON array")
 	}
 
 	var rawRows []jsontext.Value
 
 	if err := jsonv2.Unmarshal(trimmed, &rawRows); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex live: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode holodex live: %w", err))
 	}
 
 	return rawRows, nil
@@ -96,11 +96,11 @@ func parseLiveRow(raw jsontext.Value) (parsedLive, error) {
 	var row liveRow
 
 	if err := jsonv2.Unmarshal(raw, &row); err != nil {
-		return parsedLive{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex live row: %w", err))
+		return parsedLive{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("decode holodex live row: %w", err))
 	}
 
 	if strings.TrimSpace(row.ID) == "" {
-		return parsedLive{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row id is empty")
+		return parsedLive{}, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "holodex live row id is empty")
 	}
 
 	status, err := mapLiveStatus(row.Status)
@@ -131,7 +131,7 @@ func liveChannelID(row *liveRow) (string, error) {
 	nestedChannelID := strings.TrimSpace(row.Channel.ID)
 
 	if channelID != "" && nestedChannelID != "" && channelID != nestedChannelID {
-		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row has conflicting channel identity")
+		return "", collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "holodex live row has conflicting channel identity")
 	}
 
 	if channelID == "" {
@@ -139,7 +139,7 @@ func liveChannelID(row *liveRow) (string, error) {
 	}
 
 	if channelID == "" {
-		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row channel id is empty")
+		return "", collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "holodex live row channel id is empty")
 	}
 
 	return channelID, nil
@@ -173,7 +173,7 @@ func mapLiveStatus(raw string) (string, error) {
 	case "past":
 		return "ENDED", nil
 	default:
-		unsupported := collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live status is unsupported")
+		unsupported := collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "holodex live status is unsupported")
 
 		return "", fmt.Errorf("map live status: %w", unsupported)
 	}
@@ -192,7 +192,7 @@ func parseOptionalTime(raw string) (*time.Time, error) {
 	}
 
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("parse holodex timestamp: %w", err))
+		return nil, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, fmt.Errorf("parse holodex timestamp: %w", err))
 	}
 
 	utc := parsed.UTC()
@@ -279,7 +279,7 @@ func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1,
 		}
 
 		if selected != "" && selected != photoURL {
-			return contract.ChannelPhotoV1{}, false, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel photo metadata conflicts across rows")
+			return contract.ChannelPhotoV1{}, false, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "holodex channel photo metadata conflicts across rows")
 		}
 
 		selected = photoURL

@@ -54,7 +54,7 @@ case "$status" in
 esac
 
 # picked CTE는 행을 잠그지 않으므로, 바깥 DELETE가 status와 보존 시각을 다시 검사해야
-# 잠금 대기 중 requeue로 commit된 행을 건너뜁니다(worker의 0348_04와 같은 재검사).
+# 잠금 대기 중 requeue로 commit된 행을 건너뜁니다(worker의 alarm_dispatch_retention_delete_*.sql과 같은 재검사).
 psql "$DATABASE_URL" \
   -v ON_ERROR_STOP=1 \
   -v status="$status" \

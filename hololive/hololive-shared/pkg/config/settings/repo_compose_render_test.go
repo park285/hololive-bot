@@ -325,9 +325,7 @@ func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) stri
 	return sourceName
 }
 
-// writeCollectorEnvFile은 youtube-collector가 읽는 키만 담는다. 퇴역 producer 키(HOLODEX_API_KEY_2~5,
-// YOUTUBE_ENABLE_QUOTA_BUILDING)를 env_file 공유 증거로 요구하던 단언은 지웠다(stack-audit 2026-09-26 T11).
-// 퇴역한 SCRAPER_PROXY_ENABLED는 collector가 존재만으로 거절하므로 담지 않는다(T19).
+// writeCollectorEnvFile은 youtube-collector가 읽는 설정만 담는다.
 func writeCollectorEnvFile(t *testing.T) string {
 	t.Helper()
 
@@ -418,9 +416,6 @@ func assertAPComposeServiceEnvIsolation(t *testing.T, cfg renderedCompose, compo
 	t.Helper()
 
 	env := composeEnvironment(t, cfg, service)
-	if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
-		t.Fatalf("%s %s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", composeFile, service, value)
-	}
 
 	if env["POSTGRES_SSLROOTCERT"] != postgresCACertPath {
 		t.Fatalf("%s %s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", composeFile, service, env["POSTGRES_SSLROOTCERT"])

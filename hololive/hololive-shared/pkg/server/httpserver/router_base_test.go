@@ -29,7 +29,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestApplyBaseMiddlewareAndRegisterHealthRoutes(t *testing.T) {
+func TestApplyBaseMiddlewareSetsSecurityAndRequestIDHeaders(t *testing.T) {
 	prevMode := gin.Mode()
 
 	t.Cleanup(func() {
@@ -41,7 +41,10 @@ func TestApplyBaseMiddlewareAndRegisterHealthRoutes(t *testing.T) {
 	ApplyBaseMiddleware(t.Context(), router, slog.New(slog.DiscardHandler), BaseMiddlewareOptions{
 		SkipLogPaths: []string{"/health", "/ready"},
 	})
-	RegisterHealthRoutes(router)
+
+	for _, path := range []string{"/health", "/ready"} {
+		router.GET(path, func(c *gin.Context) { c.Status(http.StatusOK) })
+	}
 
 	for _, path := range []string{"/health", "/ready"} {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)

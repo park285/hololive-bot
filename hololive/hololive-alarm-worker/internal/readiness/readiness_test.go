@@ -49,7 +49,7 @@ func TestInternalResponseNotReadyWhenDependencyFails(t *testing.T) {
 	}
 }
 
-func TestPublicResponseOmitsDependencyAndFlagDetails(t *testing.T) {
+func TestPublicResponseOmitsDependencyDetails(t *testing.T) {
 	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}))
 
 	statusCode, payload := publicResponse(t.Context(), probe)
@@ -60,10 +60,6 @@ func TestPublicResponseOmitsDependencyAndFlagDetails(t *testing.T) {
 
 	if _, ok := payload["dependencies"]; ok {
 		t.Fatalf("publicResponse exposed dependencies: %v", payload)
-	}
-
-	if _, ok := payload["egress_flags"]; ok {
-		t.Fatalf("publicResponse exposed egress_flags: %v", payload)
 	}
 }
 

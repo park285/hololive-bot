@@ -56,13 +56,13 @@ func TestGenerateToken_DifferentPrefixes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, len(sessToken), len("sess_"))
 
-	resetToken, err := generateToken("reset_", 32)
+	otherToken, err := generateToken("other_", 32)
 	require.NoError(t, err)
-	assert.Greater(t, len(resetToken), len("reset_"))
+	assert.Greater(t, len(otherToken), len("other_"))
 
 	// 접두사가 올바른지 확인
 	assert.Contains(t, sessToken, "sess_")
-	assert.Contains(t, resetToken, "reset_")
+	assert.Contains(t, otherToken, "other_")
 }
 
 func TestGenerateToken_InvalidByteLen(t *testing.T) {

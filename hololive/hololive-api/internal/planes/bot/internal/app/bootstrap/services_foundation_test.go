@@ -70,7 +70,7 @@ func TestInitScraperHolodexFoundationUsesRuntimeHolodexConfig(t *testing.T) {
 }
 
 // newFoundationTestMemberCache는 migration 시드 DB를 읽는 member cache다. 공식 일정 식별 색인은 멤버 적재에 실패하면
-// 기동 오류이므로(DEC-20260926-hololive-source-fallbacks-retirement) foundation 테스트도 실제 멤버 원천을 준다.
+// 기동 오류이므로 foundation 테스트도 실제 멤버 원천을 준다.
 func newFoundationTestMemberCache(t *testing.T) *member.Cache {
 	t.Helper()
 

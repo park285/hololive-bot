@@ -57,8 +57,8 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 
 // Refresh는 세션을 원자적으로 회전한다. 기존 토큰을 compare-and-delete로 먼저 claim한 뒤
 // 새 세션을 발급하므로, 동일 토큰에 대한 동시/연속 refresh는 정확히 한 번만 성공한다(replay 차단).
-// Claim 전에 PG의 현재 세션 세대를 확인해 비밀번호 reset 이전 세션은 회전하지 않는다. 확인과 발급 사이에
-// reset이 커밋되면 새 세션은 이전 세대를 담지만, Me·Refresh가 사용할 때마다 PG 세대와 다시 비교하므로 거부된다.
+// Claim 전에 PG의 현재 세션 세대를 확인해 폐기된 세대의 세션은 회전하지 않는다. 확인과 발급 사이에
+// 세대가 오르면 새 세션은 이전 세대를 담지만, Me·Refresh가 사용할 때마다 PG 세대와 다시 비교하므로 거부된다.
 func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
 	if s.cacheClient == nil {
 		return nil, newError(CodeInternal, "cache service not configured", nil)
@@ -153,7 +153,7 @@ func (s *Service) findSessionGeneration(ctx context.Context, userID string) (int
 }
 
 // rejectRevokedSession은 세션 payload의 세대가 PG 현재 세대와 다르면 세션 키를 지우고 CodeUnauthorized를 돌려준다.
-// 세대는 비밀번호 reset마다 증가하므로, 불일치는 발급 이후 reset이 커밋됐다는 뜻이다.
+// 불일치는 발급 이후 auth_users.session_generation이 올라 그 사용자의 세션이 폐기됐다는 뜻이다.
 func (s *Service) rejectRevokedSession(ctx context.Context, key string, sessionGeneration, currentGeneration int64) error {
 	if sessionGeneration == currentGeneration {
 		return nil
@@ -200,7 +200,7 @@ type sessionData struct {
 	CreatedAt time.Time `json:"createdAt"`
 	// SessionGeneration은 발급 당시 auth_users.session_generation이다. 이 필드가 없는 payload(migration 231
 	// 배포 전 발급 세션)는 0으로 해석된다. 이는 migration 231의 DEFAULT 0과 같은 값이라 호환 경로가 아니며,
-	// 그런 세션은 첫 비밀번호 reset 전까지 유효하고 reset 후 무효로 수렴한다.
+	// 그런 세션은 세대가 처음 오르기 전까지 유효하고 그 뒤 무효로 수렴한다.
 	SessionGeneration int64 `json:"sessionGeneration"`
 }
 

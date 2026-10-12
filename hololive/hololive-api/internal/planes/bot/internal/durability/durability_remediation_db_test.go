@@ -42,7 +42,7 @@ func inboxMessage(messageID, roomID, orderingKey string) InboxMessage {
 
 func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	t.Run("accepted rows never return to the claim queue as pre-dispatch", func(t *testing.T) {
@@ -167,7 +167,7 @@ func assertOutboxSettleTruncatesLastError(ctx context.Context, t *testing.T, poo
 	t.Helper()
 	truncateDurabilityTables(ctx, t, pool)
 
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry("message:m-clamp", 0, `{"body":"x"}`)
 	claim := claimOne(ctx, t, repo, entry)
 
@@ -444,7 +444,7 @@ func TestCommandExecutionClaimOwnership(t *testing.T) {
 
 func TestReplyOutboxInsertDistinguishesReplayFromDivergence(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
 	t.Run("an identical replay is an idempotent no-op", func(t *testing.T) {
@@ -482,7 +482,7 @@ func TestReplyOutboxInsertDistinguishesReplayFromDivergence(t *testing.T) {
 
 func TestReplyOutboxOrdinalSharesTheTransportDomain(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
@@ -502,7 +502,7 @@ func TestReplyOutboxOrdinalSharesTheTransportDomain(t *testing.T) {
 
 func TestReplyOutboxInsertDoesNotShareThePayloadBuffer(t *testing.T) {
 	pool := newDurabilityPool(t)
-	repo := NewReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
@@ -583,7 +583,7 @@ func TestMessageIdentityIsOneKeySpaceAcrossTheThreeLedgers(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, claimed)
 
-	outbox := NewReplyOutboxRepository(pool)
+	outbox := newTestReplyOutboxRepository(pool)
 	entry := newReplyOutboxEntry(prefixed, 0, `{"body":"x"}`)
 	outcome, err := outbox.Insert(ctx, entry)
 	require.NoError(t, err)

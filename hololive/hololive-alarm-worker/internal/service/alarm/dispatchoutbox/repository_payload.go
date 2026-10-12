@@ -45,13 +45,6 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope) (eventInsert, delivery
 	}
 
 	alarmType := input.AlarmType
-
-	if alarmType == "" {
-		alarmType = domain.AlarmTypeLive
-		input.AlarmType = alarmType
-		envelope.Notification.AlarmType = alarmType
-	}
-
 	eventKey := BuildEventKey(input)
 	dedupeKey := buildDedupeKey(input.RoomID, eventKey)
 
