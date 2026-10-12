@@ -2,7 +2,7 @@
 
 ## 목표와 범위
 
-hololive-bot의 SQL·로직 개선 작업에서 2026-10-12에 확정한 범위를 실행 순서와 조건으로 정리한다. 이 문서는 계획이며 코드·migration은 아직 바꾸지 않았다.
+hololive-bot의 SQL·로직 개선 작업에서 2026-10-12에 확정한 범위를 실행 순서와 조건으로 정리한다. 계획 뒤의 진행·게시·배포 기록은 아래 각 절에 적는다.
 
 - **SQL 최적화:** A1(send unit 조인), A2(alarm dispatch 보존 삭제, A3 포함), B1(코드가 쓰지 않는 인덱스), B2(`youtube_live_sessions` HOT 차단).
 - **호환 경로 fadeout:** 전환용 alias·re-export, 호환 shim·fallback, 연결되지 않은 구형 구현, 퇴역 가드, 퇴역 연대기 주석과 문서. 운영 데이터 조건이 걸린 경로는 조건을 확인한 뒤 제거한다.
@@ -41,7 +41,7 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 | B1 | 아래 B1 표 | 7개 모두 런타임 미사용 확인. 합계 약 770 kB이고, 대상 테이블의 HOT 비율은 이미 99.8% 이상이라 효과는 쓰기 증폭 소폭 감소뿐이다 |
 | B2 | `youtube_live_sessions` 9,837행(6.8 MB), 누적 UPDATE 475만 건 중 HOT 6.1%, autovacuum 2,689회. 아래 B2 측정 | 진행 |
 | F15 | `auth_password_reset_tokens` 0행(24 kB) | DROP으로 잃는 데이터 없음 |
-| F17 | `send_unit_id IS NULL` delivery 308건, 모두 종료(`sent` 294, `cancelled` 14), 최신 2026-08-10 | 조건 미충족. 보존 기간이 지난 2026-11-08 이후 다시 확인 |
+| F17 | `send_unit_id IS NULL` delivery 308건, 모두 종료(`sent` 294, `cancelled` 14), 최신 2026-08-10 | 조건 미충족. `cancelled` 14행의 `cancelled_at`이 2026-09-21이라 보존 기간(90일)이 지난 2026-12-20 이후 다시 확인(2026-10-12 정정) |
 | F18 | 본문 고정 없이 발송을 시도한 send unit 564개, 진행 중 delivery 0건. 마지막 비고정 시도 2026-09-30 12:25, 고정 시도는 2026-09-30 12:54부터 202개 | 충족. 새 행은 생기지 않고, 남은 delivery는 `sent`·`cancelled`라 관리 재처리(`dlq`·`quarantined`만 대상)로 되살아나지 않는다 |
 | F19 | `youtube_notification_delivery` 64행, `send_request_id IS NULL` 0행 | 충족 |
 | F20 | `notification_delivery_outbox` 0행 | 충족 |
@@ -180,9 +180,32 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **현재 rollback:** api만 `hololive-api:rollback-20261012T055700Z`(v9.0.0)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. v9.0.0도 두 key를 읽지 않으므로 시드 복원과 migration 실행은 필요 없다. worker는 v9.0.0 그대로다.
 - **수용 확인(09:36Z 기준):** 06:50Z에는 v9.0.0 전환 뒤 새 dispatch event가 없어 새 worker의 실제 발송을 관측하지 못했다. 이후 LIVE event 5건(07:25Z~08:55Z)이 생겼고 delivery 5건이 모두 `sent`로 끝났다. event 생성에서 발송까지 34~75 ms였고, 전환 뒤 worker notifier 요약의 `failed`는 모두 0이다. 같은 구간 hash 충돌 기록 0건, api·worker 오류 표식 0건, 두 서비스 재시작 0회다.
 - **남은 일:**
-  - F17은 2026-11-08 이후 다시 확인한다.
-  - 이번 작업 전부터 있던 rollback tag(`hololive-api:rollback-20261008T114613Z`, `*:rollback-20261011-review`, `hololive-api:prod-arm64-a6219fb8`)와 `deploy-backups/pre-v7.2.10-20261008T114613Z`는 현재 ledger보다 오래돼 rollback 대상이 아니지만, 이번 작업 산출물이 아니어서 두었다.
+  - F17은 2026-12-20 이후 다시 확인한다(아래 "정리"의 날짜 정정).
+  - 이번 작업 전부터 있던 rollback tag(`hololive-api:rollback-20261008T114613Z`, `*:rollback-20261011-review`, `hololive-api:prod-arm64-a6219fb8`)와 `deploy-backups/pre-v7.2.10-20261008T114613Z`는 현재 ledger보다 오래돼 rollback 대상이 아니다. 이번 작업 산출물이 아니어서 두었다가, 사용자 요청으로 지웠다(아래 "정리").
   - 원 checkout `/home/kapu/work/iris-stack/hololive-bot`의 미커밋 합류분은 로컬 백업 브랜치에 보존한 뒤 main으로 맞췄다. 메타 저장소 hololive-bot 포인터는 v9.0.0 반영 `858b21b36` 뒤 이 기록까지 갱신한다.
+
+## B1·B2 구현 (v9.1.0, 2026-10-12)
+
+첫 단계에서 승인 필요로 빼 두었던 B1·B2를 사용자 결정("B1·B2 모두 진행")으로 진행했다. B3는 범위 밖으로 남겼다.
+
+- **B1:** migration 283~290이 인덱스 8개를 `DROP INDEX CONCURRENTLY` 단일 문장으로 지운다. 확인 필요였던 `idx_alarm_dispatch_deliveries_room_created`도 지웠다. delivery를 room으로 거르는 조회는 관리 목록뿐이고, 이 목록은 상태 조건과 `d.id` 역순으로 읽어 `(room_id, created_at)` 순서를 쓰지 않는다.
+- **B2:**
+  - 291이 `fillfactor = 90`과 `history_sort_at` 저장 생성 열을 한 `ALTER TABLE`로 적용한다. rewrite는 한 번이고 `lock_timeout`은 3초다. PostgreSQL 18.6 임시 컨테이너에서 같은 형태의 rewrite가 fillfactor를 적용함을 pgstattuple로 확인했다(여유 공간: 열 추가만 0.6%, 묶은 경우 10.6%).
+  - 292~295가 `idx_yls_ended_history_sort`, `idx_yls_ended_channel_history_sort`, `idx_yls_channel`, `idx_yls_status`를 만든다. 296~300이 기존 정렬 식 인덱스 2개와 `idx_yls_channel_last_seen`, `idx_yls_status_last_seen`, `idx_yls_ended_cleanup`을 지운다.
+  - 방송 이력 목록 SQL(`0179_01`)의 정렬·커서 식을 `history_sort_at`으로 바꿨다. 단건 조회(`0242_02`)는 정렬식을 쓰지 않는다. Go 커서 계산(`broadcastHistorySortTime`)은 생성 열과 같은 우선순위라 주석으로 계약만 남겼다.
+  - 세션 테이블을 쓰는 다른 런타임 SQL은 모두 열 이름을 명시한다. 행 전체를 쓰는 review snapshot(`to_jsonb(session)`)은 영수증 비교에 지정 필드만 쓰므로 열 추가가 판정을 바꾸지 않는다. collector는 이 테이블을 직접 쓰지 않는다.
+- **시험:**
+  - `TestLiveSessionRepeatedObservationIsHeapOnlyUpdate`: 같은 상태의 반복 관측 5회가 모두 HOT이어야 한다. 291~300 없이 실행하면 HOT 0회로 실패하고, 적용하면 통과한다.
+  - `TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks`: 종료·시작·예정·`last_seen_at` 우선순위, 같은 시각의 `video_id` 역순, 페이지 경계 분할을 확인한다. 수정 전 SQL과 스키마에서도 같은 결과로 통과했다.
+  - `TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory`: 종료 세션 2만 행에서 첫 페이지와 다음 페이지가 새 정렬 인덱스를 쓰고 seq scan을 하지 않는지 확인한다. 292·293 없이 실행하면 실패한다. 다음 페이지는 커서 조건이 OR라 커서보다 새 행을 인덱스 앞에서부터 건너뛰며 읽는다. 수정 전 SQL도 같은 성질이라 이번 범위에서 바꾸지 않았다.
+- **검증:** `scripts/ci/local-ci.sh`(lint 0건)와 `--integration-tests-only`, `check-migration-manifest.sh`, `check-release-version.sh`가 통과했다. schema golden은 인덱스·`fillfactor`·생성 열만 바뀌었다.
+- **배포 조건:** 새 SQL이 생성 열을 읽으므로 migration을 api 교체보다 먼저 적용한다. 기존 인덱스 삭제도 같은 실행에 들어가므로, 교체 전 몇 분 동안 v9.0.1 api의 방송 이력 조회는 정렬 인덱스 없이 실행된다. 종료 세션이 약 1만 행이라 영향은 작다고 판단했다. v9.0.1로 되돌려도 같은 이유로 동작한다.
+
+### 정리 (2026-10-12)
+
+- 사용자 요청("완결할것")으로 이번 작업 전부터 있던 rollback 산출물을 지웠다. 대상은 `hololive-api:rollback-20261008T114613Z`(7.2.9), 같은 이미지인 `hololive-api:rollback-20261011-review`·`hololive-api:prod-arm64-a6219fb8`(7.2.10), `hololive-alarm-worker:rollback-20261011-review`(6.1.2), `deploy-backups/pre-v7.2.10-20261008T114613Z`다. 지우기 전에 이미지 ID와 컨테이너 미사용을 다시 확인했다. v8.0.0 이미지(`release-0b5955bc1646-r1-arm64`)와 collector·po rollback tag는 대상이 아니어서 남겼다.
+- 로컬 백업 브랜치 `backup/orig-checkout-merged-20261012`(`a64b893d0`)를 지웠다. main에 합쳐 보면 바뀌는 파일은 그 뒤 main이 의도적으로 고친 3개뿐이었다.
+- **F17 날짜 정정:** 대상 308행 중 `sent` 294행의 최신 `sent_at`은 2026-08-10이지만, `cancelled` 14행은 `cancelled_at`이 2026-09-21 07:17Z다. 보존 삭제는 상태별 종료 시각 기준 90일이므로 0건이 되는 것은 2026-12-20 07:17Z 이후다. 코드의 재검토 기한 2026-12-31 안이다.
 
 ## 1. SQL 최적화
 
@@ -192,17 +215,17 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 
 `hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries/repository_insert_0183_02.sql`은 `alarm_dispatch_send_units.unit_key`(`character(64)`)를 `jsonb_to_recordset`이 만든 `text`와 비교한다. 비교가 `(u.unit_key)::text = x.send_unit_key`가 되어 `UNIQUE (unit_key)`를 쓰지 못하고, delivery를 넣을 때마다 send unit 전체를 읽는다. 10만 행에서 39 ms였고 입력을 `character(64)`로 맞추면 0.5~0.7 ms였다.
 
-- [ ] 조인을 `u.unit_key = n.send_unit_key::character(64)`로 바꾸거나 recordset 열을 `CHARACTER(64)`로 선언한다. `unit_key`는 CHECK로 64자리 hex만 허용하므로 일치 의미는 같다.
-- [ ] send unit 수천 행 fixture에서 `force_custom_plan`·`force_generic_plan` 모두 send unit 쪽이 인덱스 조회이고 읽은 행이 입력 수 이하임을 단정한다. 현재 SQL에서 실패하는지 먼저 확인한다.
+- [x] 조인을 `u.unit_key = n.send_unit_key::character(64)`로 바꾸거나 recordset 열을 `CHARACTER(64)`로 선언한다. `unit_key`는 CHECK로 64자리 hex만 허용하므로 일치 의미는 같다.
+- [x] send unit 수천 행 fixture에서 `force_custom_plan`·`force_generic_plan` 모두 send unit 쪽이 인덱스 조회이고 읽은 행이 입력 수 이하임을 단정한다. 현재 SQL에서 실패하는지 먼저 확인한다.
 - 반영: alarm-worker 재배포. migration 없음.
 
 ### A2. alarm dispatch 보존 삭제의 상태 파라미터 (A3 포함)
 
 `alarm_dispatch_maintenance_0348_04.sql`은 상태를 `$1`로 받는다. 보존용 인덱스는 상태 상수를 조건으로 둔 부분 인덱스 4개(`idx_alarm_dispatch_deliveries_{sent,cancelled,dlq,quarantined}_retention`)라서 generic plan은 이를 쓸 수 없고, `(status, created_at)` 인덱스로 해당 상태 전체를 읽고 정렬하게 된다. `plan_cache_mode=auto`가 지금은 custom plan을 유지할 가능성이 크지만 보장되지 않는다.
 
-- [ ] `alarmDispatchTerminalTimestampColumn`이 상태마다 시각 열을 고정하는 자리에서 상태 상수도 넣도록 바꾸거나, 상태별 SQL 네 개로 나눈다. 바깥 `DELETE`의 상태·시각 재검사는 유지한다(EvalPlanQual 주석의 계약).
-- [ ] 종료 이력 수만 행 fixture에서 `force_generic_plan`으로 상태별 보존 인덱스 사용과 읽은 행 상한을 단정한다(2026-10-05 `claim_history_plan_test.go`와 같은 방식).
-- [ ] A3: `notificationdelivery`의 `outbox_repository_0279_09.sql`, `0301_10`, `0330_11`도 Go가 항상 넘기는 상수 상태를 SQL에 직접 쓴다. 테이블은 digest 4종만 담아 작으므로 성능 시험은 추가하지 않는다.
+- [x] `alarmDispatchTerminalTimestampColumn`이 상태마다 시각 열을 고정하는 자리에서 상태 상수도 넣도록 바꾸거나, 상태별 SQL 네 개로 나눈다. 바깥 `DELETE`의 상태·시각 재검사는 유지한다(EvalPlanQual 주석의 계약).
+- [x] 종료 이력 수만 행 fixture에서 `force_generic_plan`으로 상태별 보존 인덱스 사용과 읽은 행 상한을 단정한다(2026-10-05 `claim_history_plan_test.go`와 같은 방식).
+- [x] A3: `notificationdelivery`의 `outbox_repository_0279_09.sql`, `0301_10`, `0330_11`도 Go가 항상 넘기는 상수 상태를 SQL에 직접 쓴다. 테이블은 digest 4종만 담아 작으므로 성능 시험은 추가하지 않는다.
 - 반영: alarm-worker 재배포. migration 없음.
 
 ### B1. 코드가 쓰지 않는 인덱스 삭제
@@ -220,17 +243,17 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 | `idx_ycsas_detected_at` | 48 kB | 2 | 2026-09-21 | 삭제 |
 | `idx_ycssp_channel_detected` | 112 kB | 0 | - | 삭제 |
 | `idx_yv_channel_first_seen` | 360 kB | 4 | 2026-09-21 | 삭제 |
-| `idx_alarm_dispatch_deliveries_room_created` | 104 kB | 0 | - | 삭제 후보. 관리 목록 `{}` 템플릿의 room 필터 계획을 확인한 뒤 결정 |
+| `idx_alarm_dispatch_deliveries_room_created` | 104 kB | 0 | - | 삭제(290). 관리 목록은 상태 조건과 `d.id` 역순으로 읽어 이 순서를 쓰지 않는다 |
 | `idx_alarm_dispatch_event_collisions_existing_event` | 16 kB | 405 | 2026-10-11 | 유지 |
-| `idx_yls_ended_cleanup` | 432 kB | 10 | 2026-09-26 | 런타임 문장에서 쓰는 곳을 찾지 못했다. B2와 함께 다시 판단 |
+| `idx_yls_ended_cleanup` | 432 kB | 10 | 2026-09-26 | 삭제(300). 코드에 이 술어를 쓰는 조회가 없다 |
 | `idx_ndo_terminal_cleanup` | 16 kB | 0 | - | 유지. 테이블이 비어 있고 A3 뒤 보존 삭제가 쓴다 |
 
 - 같은 기간 런타임 role(`hololive_runtime`)은 이 테이블들에 수십만~수백만 번 접근했다(`youtube_videos` 54만, `youtube_content_alarm_tracking` 57만, `youtube_community_shorts_source_posts` 49만 회). 2~4회 사용은 `postgres_admin` 수동 진단이나 `hololive_migrator` 문장에서 나온 것으로 판단한다. `idx_ycsas_detected_at`과 `idx_yv_channel_first_seen`의 마지막 사용 시각이 2026-09-21 12:38:27.956으로 같다.
 - 대상 테이블의 HOT 비율은 `youtube_content_alarm_tracking` 99.9%(37.9만 건 중), `youtube_community_shorts_source_posts` 99.8%(290만 건 중)라서, 앞에서 추정한 `delivery_status` 인덱스의 HOT 차단은 운영에서 거의 나타나지 않는다.
 
 - [x] 운영 조회로 `idx_scan`, `last_idx_scan`, 크기, 통계 구간을 확인했다(2026-10-11).
-- [ ] 삭제 대상 인덱스마다 `DROP INDEX CONCURRENTLY` 단일 문장 migration(281부터)을 만들고 manifest와 schema snapshot을 갱신한다.
-- [ ] B3를 묶는다면 같은 묶음에 `(processed_at, observation_id) WHERE status = 'PROCESSED'`, `(dead_lettered_at, observation_id) WHERE status = 'DEAD_LETTER'`를 `CREATE INDEX CONCURRENTLY`로 추가한다. SQL은 바꾸지 않는다.
+- [x] 삭제 대상 인덱스마다 `DROP INDEX CONCURRENTLY` 단일 문장 migration(281부터)을 만들고 manifest와 schema snapshot을 갱신한다.
+- B3는 이번 묶음에 넣지 않았다(범위 밖). 묶는다면 같은 묶음에 `(processed_at, observation_id) WHERE status = 'PROCESSED'`, `(dead_lettered_at, observation_id) WHERE status = 'DEAD_LETTER'`를 `CREATE INDEX CONCURRENTLY`로 추가한다. SQL은 바꾸지 않는다.
 - 반영: migration 적용. 앱 재배포 불필요.
 
 ### B2. `youtube_live_sessions`의 HOT 차단 해소
@@ -243,7 +266,7 @@ live 세션 upsert는 더 늦은 관측마다 `last_seen_at`을 갱신한다. `l
 2. `(history_sort_at DESC, video_id DESC) WHERE status = 'ENDED'`, `(channel_id, history_sort_at DESC, video_id DESC) WHERE status = 'ENDED'`를 새로 만든다.
 3. 방송 이력 SQL(`broadcast_history_repository_0179_01.sql`, `0242_02.sql`)의 정렬·커서 식을 `history_sort_at`으로 바꾼다.
 4. `idx_yls_channel_last_seen`을 `(channel_id)`로, `idx_yls_status_last_seen`을 `(status)`로 바꾼다. 두 인덱스를 쓰는 런타임 SQL은 `channel_id`·`status` 조건만 쓴다.
-5. 앱 반영 뒤 기존 인덱스 4개를 `DROP INDEX CONCURRENTLY`로 지운다.
+5. 앱 반영 뒤 기존 인덱스 4개를 `DROP INDEX CONCURRENTLY`로 지운다(구현에서는 같은 migration 실행에 넣었다. "B1·B2 구현" 절의 배포 조건 참고).
 
 운영 기준값(2026-10-11):
 
@@ -261,10 +284,10 @@ live 세션 upsert는 더 늦은 관측마다 `last_seen_at`을 갱신한다. `l
 - 절대 비용은 작다(초당 1.7건, 테이블 6.8 MB). 효과는 non-HOT 인덱스 쓰기와 23~26분마다 도는 autovacuum을 줄이는 것이며, 2026-10-05 B2·B4와 같은 방식으로 적용 후 HOT 비율과 autovacuum 간격을 비교한다.
 
 - [x] 운영 기준값을 확인했다. 갱신이 초당 1행 이상이라 진행 조건을 충족한다.
-- [ ] migration을 나눈다: `fillfactor` 지정과 열 추가(테이블 rewrite와 ACCESS EXCLUSIVE, 313 페이지라 짧지만 upsert가 초당 수 회이므로 `lock_timeout`을 둔다), 새 인덱스 각각 `CREATE INDEX CONCURRENTLY`, 앱 반영 뒤 기존 인덱스 삭제.
-- [ ] `idx_yls_ended_cleanup`(10회, 마지막 2026-09-26)을 쓰는 런타임 문장을 찾지 못했다. 같은 단계에서 코드 경로를 다시 확인하고, 런타임 사용이 없으면 함께 지운다.
-- [ ] 방송 이력 정렬·페이지 커서 결과가 바뀌지 않음을 기존 시험과 열 추가 전후 비교 시험으로 확인한다. 세션 upsert를 반복한 뒤 `pg_stat_user_tables.n_tup_hot_upd`가 늘어나는지 dbtest에서 확인한다.
-- 반영: migration(열·인덱스) → api 재배포 → 기존 인덱스 삭제 migration. 적용 후 HOT 비율과 autovacuum 간격을 다시 잰다.
+- [x] migration을 나눈다: `fillfactor` 지정과 열 추가(테이블 rewrite와 ACCESS EXCLUSIVE, 313 페이지라 짧지만 upsert가 초당 수 회이므로 `lock_timeout`을 둔다), 새 인덱스 각각 `CREATE INDEX CONCURRENTLY`, 기존 인덱스 삭제(구현에서는 같은 migration 실행에 넣었다. "B1·B2 구현" 절의 배포 조건 참고).
+- [x] `idx_yls_ended_cleanup`(10회, 마지막 2026-09-26)을 쓰는 런타임 문장을 찾지 못했다. 같은 단계에서 코드 경로를 다시 확인하고, 런타임 사용이 없으면 함께 지운다.
+- [x] 방송 이력 정렬·페이지 커서 결과가 바뀌지 않음을 기존 시험과 열 추가 전후 비교 시험으로 확인한다. 세션 upsert를 반복한 뒤 `pg_stat_user_tables.n_tup_hot_upd`가 늘어나는지 dbtest에서 확인한다.
+- 반영: migration(열·인덱스·기존 인덱스 삭제) → api 재배포. 적용 후 HOT 비율과 autovacuum 간격을 다시 잰다.
 
 ## 2. 호환 경로 fadeout
 
@@ -298,7 +321,7 @@ live 세션 upsert는 더 늦은 관측마다 `last_seen_at`을 갱신한다. `l
 
 | ID | 대상 | 확인한 조건 | 상태 |
 | --- | --- | --- | --- |
-| F17 | `dispatchops/model.go:272-279`의 `send_unit_id IS NULL` 분기 | `alarm_dispatch_deliveries.send_unit_id IS NULL` 행 0건 | 미충족(308건, 최신 2026-08-10). 2026-11-08 이후 다시 확인. 재검토 기한 2026-12-31 |
+| F17 | `dispatchops/model.go:272-279`의 `send_unit_id IS NULL` 분기 | `alarm_dispatch_deliveries.send_unit_id IS NULL` 행 0건 | 미충족(308건). `sent` 294행은 2026-11-08, `cancelled` 14행은 2026-12-20 07:17Z에 보존 기간이 끝난다. 2026-12-20 이후 다시 확인. 재검토 기한 2026-12-31 |
 | F18 | `dispatchoutbox.ErrLegacySendRequest`(D2)와 runner의 분기 | `request_body_hash IS NULL`인 send unit에 `sending_started_at`이 있는 진행 중 delivery 0건이고, 새 비고정 시도가 생기지 않음 | 충족. 코드 단계로 옮긴다 |
 | F19 | `youtubedispatch/store/send_request.go`의 구형 request 증거 경로(D3) | `youtube_notification_delivery.send_request_id IS NULL` 0건 | 충족. 코드 단계로 옮긴다 |
 | F20 | `notificationdelivery/request.go:43-50`의 legacy 격리(D1, #607 뒤 위치) | `notification_delivery_outbox` 구형 행(request 없이 시도) 0건 | 충족(테이블 0행). 코드 단계로 옮긴다 |
@@ -321,7 +344,7 @@ F18~F20은 삭제할 때 각 분기를 직접 시험하던 테스트도 함께 �
    - alarm-worker: A1, A2, A3, F2, F3, F5, F10 일부, F16, F18, F19, F20.
    - api: B2 SQL, F6, F7, F9, F11, F15, F17.
    - collector: F1. collector 바이너리가 바뀌면 AP 포함 4대를 배포해야 하므로 다음 collector 릴리스에 묶는다.
-   - B2는 열 추가 migration → api 재배포 → 기존 인덱스 삭제 순서를 지킨다. B1은 앱과 무관하게 적용할 수 있다.
+   - B2는 열 추가 migration을 api 재배포보다 먼저 적용한다. 기존 인덱스 삭제는 같은 실행에 넣었다("B1·B2 구현" 절의 배포 조건). B1은 앱과 무관하게 적용할 수 있다.
    - 적용 후 A1 문장의 평균 시간, B1 대상 테이블 쓰기 비용, B2 HOT 비율·autovacuum 간격을 적용 전 값과 비교한다.
 
 ## 4. 검증
@@ -383,8 +406,8 @@ F18~F20은 삭제할 때 각 분기를 직접 시험하던 테스트도 함께 �
 ## 한계
 
 - 운영 측정은 2026-10-11 한 시점의 누적 통계와 10분 구간 차이다. 누적값은 통계가 유지된 약 49일 구간 기준이다.
-- F17은 2026-11-08 이후 다시 조회해야 한다.
-- 코드 변경 전이라 변경 검증은 아직 없다. 준비 점검에서 `0b5955bc1` 기준 workspace 빌드·vet과 계획 시험 선례 1건만 실행했다.
+- F17은 2026-12-20 이후 다시 조회해야 한다.
+- 변경 검증 결과는 각 진행 기록 절에 있다.
 - 조각·템플릿 SQL 29개는 조립된 최종 문장으로 계획을 보지 않았다. A2는 템플릿을 직접 읽어 판단했다.
 - deadcode는 reflection·문자열 등록 경로를 놓칠 수 있으므로 F10은 삭제 전에 호출부를 다시 확인한다.
 
