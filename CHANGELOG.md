@@ -11,7 +11,8 @@
 ## v9.3.0 - 2026-10-13
 
 - **최초공개는 공개 5분 전에만 알림:** 예정 최초공개는 발견 시 `NEW_VIDEO` "N분 후 공개 예정"을 만들지 않고(hololive-api), 공개 전환 뒤에도 영상 알림을 만들지 않습니다. 구독자는 일반 방송과 같은 분 전 target(`선행공개 N분 전`)과 일정 변경 알림을 받고, 분 전 target을 모두 지난 뒤 발견된 경우 분 전 알림을 받지 못한 방에만 시작 알림(`선행공개 시작`)을 받습니다(alarm-worker). v9.2.0의 공개 예정 안내 중복 생략과 그 조회는 쓸모가 없어져 지웠습니다.
-- **배포:** migration은 없습니다. hololive-api를 먼저 교체한 뒤 alarm-worker를 교체합니다. api만 v9.2.1로 되돌리면 발견 시 알림이 다시 나가고, worker만 9.2.2로 되돌리면 분 전 target 뒤에 발견된 최초공개의 시작 알림이 빠집니다.
+- **native AP 로그 회전 정정:** v9.2.2의 `maxsize 10M`·`daily` 설정을 `size 10M`만 남기도록 바로잡습니다. collector 로그는 앱(lumberjack)이 기본 5 MB마다 회전하고 압축 백업을 archive로 옮기므로, 호스트 logrotate는 앱 회전이 멈췄을 때만 10M에서 회전하는 안전망입니다. `daily`나 `maxsize`가 있으면 앱 회전과 별도로 매일 copytruncate 회전이 일어납니다. Osaka·Osaka2의 설정 파일은 v9.2.2 설정의 첫 일일 실행(2026-10-13 00:00 UTC) 전에 이 내용으로 바꿨습니다.
+- **배포:** migration은 없습니다. hololive-api를 먼저 교체한 뒤 alarm-worker를 교체합니다. native AP 로그 회전 정정은 Osaka·Osaka2의 logrotate 설정 파일에 이미 반영했고 이미지를 교체하지 않습니다. api만 v9.2.1로 되돌리면 발견 시 알림이 다시 나가고, worker만 9.2.2로 되돌리면 분 전 target 뒤에 발견된 최초공개의 시작 알림이 빠집니다.
 
 ## v9.2.2 - 2026-10-13
 

@@ -339,20 +339,27 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
   - api: `hololive-api:rollback-20261012T161459Z`(9.1.2)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 302·303 인덱스는 남겨도 9.1.2에 영향이 없다.
   - collector: c는 `po-central-cutover.sh rollback backups/po-c-20261012T162312Z`, b는 `ap-rollback.sh seoul`, a·d는 `ap-host-native-rollback.sh <ap>`(previous release)다.
 - **다른 세션:** iris-console-28 세션이 v9.2.1 위에 v9.2.2(alarm-worker만, migration 없음)를 준비하고 있다. 중앙 작업이 끝났음을 알렸고, 그 세션은 위 rollback 기준점을 건드리지 않는다.
-- **남은 일:** v9.2.1 rollback 기준점(위 api tag·VERSION 백업, `backups/po-c-20261012T162312Z`, AP 백업과 previous release)은 수용 뒤 따로 정한다. 이전 기준점은 아래 "후속 정리"에서 지웠다.
+- **남은 일:** 없음. 이전 기준점과 v9.2.1 rollback 산출물은 아래 "후속 정리"에서 지웠다.
 
 ### 후속 정리 (2026-10-13)
 
 사용자 결정("기존 이슈도 해결", 정리 승인)으로 진행했다. 시각은 UTC(2026-10-12)다.
 
-- **native AP logrotate:** #626 `5addd76ce`. Osaka·Osaka2 host-native 배포가 설치하는 `/etc/logrotate.d/hololive-bot`이 `daily`와 `size 10M`을 함께 써서, `size`가 `daily`를 덮어써 10M 전에는 회전하지 않았다(두 호스트 모두 archive가 비어 있었고 collector 로그는 약 4 MB). `maxsize 10M`으로 바꿔 매일 회전하고 14개를 보관한다. `copytruncate`에서 효과가 없던 `create`를 지웠다.
-  - 16:57:30Z에 osaka1·osaka2의 파일을 병합된 stanza(sha256 `896a407d…`, root 0644)로 바꿨다. 이전 파일은 `/var/backups/hololive-bot-logrotate/hololive-bot.20261012T165730Z`에 있다.
-  - 두 호스트의 `logrotate -d`는 경고 없이 collector 로그를 회전 대상으로 판정한다. 실제 첫 회전은 다음 `logrotate.timer`(2026-10-13 00:00Z)라 이 기록 시점에는 관측하지 않았다. 퇴역 producer 로그(`youtube-producer-a.log`·`-d.log`, 8/16 이후 기록 없음)도 그때 한 번 archive로 옮겨진다.
+- **native AP logrotate:** Osaka·Osaka2 host-native 배포가 설치하는 `/etc/logrotate.d/hololive-bot`은 `daily`·`rotate 14`·`size 10M`을 함께 써서 배포 때 `'size' overrides previously specified 'daily'` 경고가 났다.
+  - 처음에는 `daily`가 의도라고 보고 #626 `5addd76ce`에서 `maxsize 10M`으로 바꿔 16:57:30Z에 두 호스트에 반영했다. 이 변경은 v9.2.2에 포함되어 게시됐다.
+  - 그 뒤 확인해 보니 collector 로그는 앱(shared-go logging의 lumberjack)이 `LOG_MAX_SIZE_MB`(기본 5, native 호스트는 기본값)마다 회전하고 압축 백업을 같은 `archive`로 옮긴다. 원래 `size 10M`은 앱 회전이 멈췄을 때만 동작하는 안전망이었고, 두 호스트의 archive가 비어 있던 것은 로그가 아직 5 MB에 이르지 않았기 때문이다. `maxsize`·`daily`를 두면 앱 회전과 별도로 매일 copytruncate 회전이 일어난다.
+  - 정정: `size 10M`만 남기고 `daily`를 지웠다(`create`는 copytruncate에서 효과가 없어 계속 두지 않는다). 첫 일일 실행(2026-10-13 00:00Z) 전인 17:33:14Z에 두 호스트의 파일을 이 내용(sha256 `dcdb1268…`, root 0644)으로 바꿨다. 이전 파일은 `/var/backups/hololive-bot-logrotate/hololive-bot.20261012T165730Z`(원래 설정)와 `hololive-bot.20261012T173314Z`(maxsize 설정)에 있다.
+  - 두 호스트의 `logrotate -d`는 경고 없이 `log does not need rotating (log size is below the 'size' threshold)`이다. kapu logrotate로 3 MB는 회전하지 않고 11 MB는 회전함을 확인했다.
 - **central 이전 rollback 기준점:** `hololive-api:rollback-20261012T141203Z` tag를 지웠다(v9.1.1 이미지 `c919f0faade7`은 `release-51990ac5f4c9-r1-arm64` tag로 남는다). `deploy-backups/pre-v9.1.2-20261012T141203Z`(VERSION tar, Git v9.1.1과 같은 내용)를 지웠다. 다른 세션의 `pre-v9.2.0-20261012T145705Z`와 `collector-gomod-20261012T113752Z`는 남겼다. api·worker는 healthy다.
 - **native AP 배포 산출물:** [보존 절차](../../../../docs/ops/release-artifact-retention.md)의 후보를 승인받아 `prune-release-artifacts.py --apply`로 호스트마다 4개를 지웠다.
   - Osaka: `/home/ubuntu/.hololive-host-native-osaka-20261006T121252Z-340283120621-osaka`, `...-20261007T020647Z-4a633ab24e8c-osaka`, `releases/20261006T121252Z-340283120621-osaka`, `releases/20261007T020647Z-4a633ab24e8c-osaka`. 사용량 16G→14G.
   - Osaka2: 같은 두 세대(`20261006T121616Z-340283120621`, `20261007T021336Z-4a633ab24e8c`)의 staging·release. 사용량 13G→12G.
   - 남은 release는 current(v9.2.1), previous(v8.0.0), `a6219fb84abe`(7.2.10)다. `.incoming-*`와 소유 불명 파일은 남겼다. 정리 뒤 두 호스트의 완료 검사가 통과했고 collector는 active다.
+- **v9.2.1 rollback 산출물 (사용자 승인):** 수용 뒤 정리했다. 이제 9.1.2 api·v8.0.0 collector로 되돌리려면 release tag 이미지를 다시 쓰거나 다시 빌드해야 한다.
+  - central: `hololive-api:rollback-20261012T161459Z` tag(9.1.2 이미지는 `release-8435b01c6c73-r1-arm64`로 남는다), `hololive-youtube-collector:rollback-20261012T162312Z`·`hololive-youtube-po-sandbox:rollback-20261012T162312Z`(v8.0.0 이미지 `95644d3038ad`·`3bf902703778` 삭제), `deploy-backups/pre-v9.2.1-20261012T161459Z`, `deploy-backups/collector-gomod-20261012T113752Z`, `po-staging-20261012T162312Z`(이미지 tar와 live `po-current-c`와 같은 영수증 사본)를 지웠다. 영수증이 든 `backups/po-c-*`와 다른 세션의 `pre-v9.2.0`·`pre-v9.2.2` 및 worker rollback tag는 남겼다. 정리 뒤 central 컨테이너 4개가 healthy다.
+  - Seoul: `hololive-youtube-collector:rollback-20261012T162535Z`·`hololive-youtube-po-sandbox:rollback-20261012T162535Z`(v8.0.0 이미지)를 지웠다. 현재 issuer 검토 영수증이 든 `backups/seoul-collector-20261012T162535Z`는 남겼다. collector-b·po-b는 9.2.1 healthy다.
+  - Osaka·Osaka2의 previous release(v8.0.0)는 보존 절차가 항상 남기므로 그대로 둔다.
+  - 범위 밖으로 남긴 것: Seoul에는 2026-06부터 쌓인 백업 디렉터리 100여 개와 이전 rollback 이미지 tag 8개가 있어 디스크 사용률이 60%다. 일부는 issuer 영수증 복구 근거로 쓰이므로, 정리하려면 보존 기준을 따로 정해야 한다.
 
 ## 1. SQL 최적화
 
