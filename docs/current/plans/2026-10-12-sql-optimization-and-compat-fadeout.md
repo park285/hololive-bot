@@ -243,6 +243,29 @@ stack-platform-ops 절차로 `hololive-seoul`(`100.100.1.8`)의 `holo-postgres`(
 - **운영 영향:** 방송 이력 조회는 드물고(2026-10-11 기준 49일 동안 정렬 인덱스 사용 약 1,050회) 종료 세션이 약 1만 행이라, 고치기 전에도 체감 지연은 작았다. migration은 없다.
 - **central deploy tree:** collector `go.mod`가 2026-10-06 #585 시점 파일로 남아 실행 중인 `collector-c`(v8.0.0, `0b5955bc1`)와도 맞지 않았다. `0b5955bc1`과 v9.1.0의 내용이 같음을 확인하고 그 내용으로 바꿨다(원본은 `deploy-backups/collector-gomod-20261012T113752Z`). `--no-build` 배포에서는 읽지 않는 파일이다. 교체 뒤 tree 112개 파일이 모두 v9.1.0과 같음을 hash로 확인했다.
 
+## 게시와 배포 (v9.1.1, 2026-10-12)
+
+사용자 결정("v9.1.1 게시·배포까지")으로 위 수정을 운영에 반영했다.
+
+- **게시:** #617 `51990ac5f`. CI 11개가 통과했고 병합 tree는 검증한 브랜치와 같다. annotated tag `v9.1.1`과 GitHub Release(`publish-release.sh v9.1.1 v9.1.0`)를 게시했다.
+- **산출물:** `hololive-api:release-51990ac5f4c9-r1-arm64`(`sha256:c919f0fa…`, arm64, 9.1.1)를 원격에 load해 같은 ID·revision을 확인했다.
+- **사전 확인(운영 DB, 읽기 전용):** 종료 세션이 가장 많은 채널과 전체 목록 301번째 행의 시각을 커서로 두고, 두 SQL을 prepared statement로 custom·generic plan 모두에서 실행했다.
+
+| 경우 | v9.1.0 SQL이 걸러낸 행(custom / generic) | v9.1.1 SQL |
+| --- | ---: | ---: |
+| 전체 첫 페이지 | 0 / 0 | 0 / 0 |
+| 전체 다음 페이지 | 301 / 301 | 0 / 0 |
+| 채널 첫 페이지 | 0 / 4,395 | 0 / 0 |
+| 채널 다음 페이지 | 8 / 4,457 | 0 / 0 |
+
+  - v9.1.0 SQL의 generic plan 채널 조회는 전체 정렬 인덱스를 써서 4천여 페이지를 읽었다(5.9~8.2 ms). v9.1.1 SQL은 8개 경우 모두 since·커서·채널이 Index Cond가 되어 95~99 페이지만 읽었다(0.7~2.2 ms).
+  - 같은 입력의 결과는 4개 경우 모두 101행으로 두 SQL이 같았다(내용은 저장하지 않고 hash만 비교했다).
+- **전환:** v9.1.0 api를 `hololive-api:rollback-20261012T121704Z`로 보존하고 VERSION 2개를 `deploy-backups/pre-v9.1.1-20261012T121704Z`에 백업한 뒤 교체했다. ledger가 161건(마지막 300)임을 확인하고 migration 없이 `change_started_at=2026-10-12T12:17:11Z`에 api를 `up -d --no-build --no-deps hololive-api`로 교체했다. health gate는 6초에 통과했다.
+- **수용 증거:** api 9.1.1 healthy, 재시작 0회, `APP_VERSION=9.1.1`, ledger 161건 그대로다. 교체 뒤 api·worker 오류 표식은 0건이다. 배포 뒤 같은 계획 확인에서 8개 경우 모두 걸러낸 행이 없었다. 원격 tree 112개 파일이 v9.1.1과 같다.
+- **현재 rollback:** api만 `hololive-api:rollback-20261012T121704Z`(v9.1.0)를 `prod`로 되돌리고 백업 tar로 VERSION 2개를 복원한 뒤 `--no-build --no-deps hololive-api`로 다시 띄운다. 스키마 변경이 없어 다른 단계는 없다.
+- **정리:** 수용 뒤 이전 rollback 산출물(`hololive-api:rollback-20261012T105146Z` tag, `deploy-backups/pre-v9.1.0-20261012T105146Z`)을 지웠다. v9.0.1 api 이미지는 `release-f5fda7953d18-r1-arm64` tag로 남아 있다.
+- **남은 일:** F17은 2026-12-20 이후 다시 확인한다.
+
 ## 1. SQL 최적화
 
 측정 근거와 조사 방법은 부록에 있다.
