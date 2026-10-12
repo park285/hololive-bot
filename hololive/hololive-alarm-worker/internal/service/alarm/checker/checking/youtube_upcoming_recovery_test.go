@@ -57,6 +57,28 @@ func (failedCandidateStore) Pending(context.Context, time.Time) ([]dispatchoutbo
 }
 func (failedCandidateStore) Finish(context.Context, string, string, time.Time) error { return nil }
 
+func (failedCandidateStore) PremiereNoticeAt(context.Context, string) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
+
+// premiereNoticeStore는 선정 단계의 공개 예정 안내 조회만 흉내 낸다.
+type premiereNoticeStore struct {
+	failedCandidateStore
+
+	noticeAt map[string]time.Time
+	err      error
+}
+
+func (s premiereNoticeStore) PremiereNoticeAt(_ context.Context, videoID string) (time.Time, bool, error) {
+	if s.err != nil {
+		return time.Time{}, false, s.err
+	}
+
+	noticeAt, ok := s.noticeAt[videoID]
+
+	return noticeAt, ok, nil
+}
+
 func TestYouTubeCandidateStagingFailureDoesNotAdvanceEvaluation(t *testing.T) {
 	scheduler := tier.NewTieredScheduler(newCheckerTestLogger())
 	checker := &YouTubeChecker{tierScheduler: scheduler, upcomingCandidates: failedCandidateStore{}, logger: newCheckerTestLogger()}

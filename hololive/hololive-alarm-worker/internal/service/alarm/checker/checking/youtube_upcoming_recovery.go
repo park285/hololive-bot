@@ -99,7 +99,7 @@ func upcomingCandidateTermination(candidate *dispatchoutbox.UpcomingCandidate, s
 			continue
 		}
 
-		if current.IsLive() || current.IsPast() || current.IsPremiere {
+		if current.IsLive() || current.IsPast() {
 			return "stream_ended"
 		}
 

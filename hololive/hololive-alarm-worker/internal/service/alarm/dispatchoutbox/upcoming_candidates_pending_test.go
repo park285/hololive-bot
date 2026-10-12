@@ -33,8 +33,6 @@ func TestUpcomingCandidateOutcomePriorityAndFactClocks(t *testing.T) {
 		{"sent beats expiry", func(f *upcomingCandidateFacts) { f.DeliveryStatus = new(StatusSent); f.ScheduledAt = now }, "accepted"},
 		{"quarantine beats expiry", func(f *upcomingCandidateFacts) { f.DeliveryStatus = new(StatusQuarantined); f.ScheduledAt = now }, "rejected_terminal"},
 		{"unknown delivery stays terminal", func(f *upcomingCandidateFacts) { f.DeliveryStatus = new(Status("unknown")) }, "rejected_terminal"},
-		{"expiry boundary beats premiere", func(f *upcomingCandidateFacts) { f.ScheduledAt = now; f.IsPremiere = new(true) }, "expired"},
-		{"premiere needs no clock", func(f *upcomingCandidateFacts) { f.IsPremiere = new(true) }, "stream_ended"},
 		{"live without clock stays pending", func(f *upcomingCandidateFacts) { f.LiveStatus = new("LIVE") }, string(StatusPending)},
 		{"equal status clock stays pending", func(f *upcomingCandidateFacts) { f.LiveStatus = new("ENDED"); f.StatusObservedAt = &f.SelectedAt }, string(StatusPending)},
 		{"new live ends candidate", func(f *upcomingCandidateFacts) { f.LiveStatus = new("LIVE"); f.StatusObservedAt = &now }, "stream_ended"},
@@ -67,6 +65,72 @@ func TestUpcomingCandidateOutcomePriorityAndFactClocks(t *testing.T) {
 
 		facts.DeliveryStatus = &status
 		require.Equal(t, "accepted", facts.outcome(now), status)
+	}
+}
+
+func TestUpcomingCandidateOutcomePremiereNotice(t *testing.T) {
+	now := time.Date(2026, time.October, 4, 0, 0, 0, 0, time.UTC)
+	selected := now.Add(-time.Minute)
+
+	for _, tc := range []struct {
+		name     string
+		premiere bool
+		notice   *time.Time
+		start    time.Time
+		want     string
+	}{
+		{"premiere without notice stays pending", true, nil, now.Add(time.Minute), string(StatusPending)},
+		{"notice before selection stays pending", true, new(selected.Add(-time.Hour)), now.Add(time.Minute), string(StatusPending)},
+		{"notice at selection stays pending", true, &selected, now.Add(time.Minute), string(StatusPending)},
+		{"notice after selection ends candidate", true, &now, now.Add(time.Minute), "stream_ended"},
+		{"ordinary stream ignores notice", false, &now, now.Add(time.Minute), string(StatusPending)},
+		{"expiry beats notice", true, &now, now, "expired"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			facts := upcomingCandidateFacts{
+				PayloadHash:     "original",
+				ScheduledAt:     tc.start,
+				SelectedAt:      selected,
+				IsPremiere:      new(tc.premiere),
+				ContentNoticeAt: tc.notice,
+			}
+			require.Equal(t, tc.want, facts.outcome(now))
+		})
+	}
+}
+
+func TestUpcomingCandidatesPremiereNoticeAt(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	createdAt := time.Date(2026, time.May, 14, 9, 0, 0, 0, time.UTC)
+
+	for _, row := range []struct{ kind, content, status string }{
+		{"NEW_VIDEO", "notice-sent", "SENT"},
+		{"NEW_VIDEO", "notice-pending", "PENDING"},
+		{"NEW_VIDEO", "notice-failed", "FAILED"},
+		{"NEW_SHORT", "notice-short", "SENT"},
+	} {
+		_, err := pool.Exec(t.Context(), `INSERT INTO youtube_notification_outbox(kind,channel_id,content_id,payload,status,created_at,terminal_at)
+ VALUES ($1,'notice-channel',$2,'{}',$3::text,$4::timestamptz,CASE WHEN $3::text = 'PENDING' THEN NULL ELSE $4::timestamptz END)`,
+			row.kind, row.content, row.status, createdAt)
+		require.NoError(t, err)
+	}
+
+	store := NewUpcomingCandidates(pool)
+
+	for videoID, wantOK := range map[string]bool{
+		"notice-sent":    true,
+		"notice-pending": true,
+		"notice-failed":  false,
+		"notice-short":   false,
+		"notice-missing": false,
+	} {
+		noticeAt, ok, err := store.PremiereNoticeAt(t.Context(), videoID)
+		require.NoError(t, err)
+		require.Equal(t, wantOK, ok, videoID)
+
+		if wantOK {
+			require.True(t, noticeAt.Equal(createdAt), videoID)
+		}
 	}
 }
 

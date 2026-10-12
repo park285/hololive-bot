@@ -30,6 +30,7 @@ type UpcomingCandidateStore interface {
 	Stage(context.Context, string, time.Time, []*domain.AlarmNotification) error
 	Pending(context.Context, time.Time) ([]UpcomingCandidate, error)
 	Finish(context.Context, string, string, time.Time) error
+	PremiereNoticeAt(context.Context, string) (time.Time, bool, error)
 }
 
 // UpcomingCandidates는 dispatch ledger와 같은 PostgreSQL의 선정 후보 저장소다.
@@ -141,6 +142,26 @@ func (s *UpcomingCandidates) Finish(ctx context.Context, key, outcome string, no
 	}
 
 	return nil
+}
+
+// PremiereNoticeAt은 최초공개 video의 실패하지 않은 NEW_VIDEO 안내 생성 시각을 돌려준다.
+// Pending과 같은 근거로 선정 단계의 공개 직전 중복을 판정한다. 보존 기간이 지나 행이 없으면 ok=false다.
+func (s *UpcomingCandidates) PremiereNoticeAt(ctx context.Context, videoID string) (time.Time, bool, error) {
+	rows, err := s.db.Query(ctx, mustSQL("upcoming_candidates_premiere_notice.sql"), videoID)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("load premiere notice: %w", err)
+	}
+
+	noticeAt, err := pgx.CollectOneRow(rows, pgx.RowTo[time.Time])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("load premiere notice: %w", err)
+	}
+
+	return noticeAt.UTC(), true, nil
 }
 
 // Cleanup은 기존 dispatch event 보존 기간·배치 상한으로 종료 후보만 제거한다.
