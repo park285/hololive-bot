@@ -139,3 +139,4 @@
 139 278_live_head_ignored_absence_no_stats.sql
 140 279_youtube_live_review_receipt_facts.sql
 141 280_live_head_unresolvable_end.sql
+142 281_drop_auth_password_reset_tokens.sql
