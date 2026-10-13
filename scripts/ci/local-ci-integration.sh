@@ -62,6 +62,7 @@ provision_integration_test_database() {
     local owner_token
 
     INTEGRATION_TEST_DB_CONTAINER="$(docker run --detach --rm \
+        --label io.iris.observability.logs=exclude \
         --publish 127.0.0.1::5432 \
         --env POSTGRES_USER="${postgres_user}" \
         --env POSTGRES_PASSWORD="${postgres_password}" \
@@ -113,6 +114,7 @@ provision_integration_test_valkey() {
     local published_port
 
     INTEGRATION_TEST_VALKEY_CONTAINER="$(docker run --detach --rm \
+        --label io.iris.observability.logs=exclude \
         --publish 127.0.0.1::6379 \
         "${INTEGRATION_VALKEY_IMAGE}")"
     trap cleanup_integration_test_services EXIT
