@@ -8,6 +8,12 @@
 
 ## 미출시
 
+## v9.3.1 - 2026-10-13
+
+- **관측:** 공용 metrics server/router에서 stdout 사본 drop/truncate counter를 노출합니다. 기존 인증·worker 진단은 유지하며 API·alarm-worker·shared·collector·DB 테스트 모듈을 게시된 `shared-go/v2 v2.12.0`으로 고정합니다.
+- **CI:** 일회용 DB·Valkey·이미지/ingress 검증 컨테이너에 `io.iris.observability.logs=exclude`를 명시해 중앙 stream churn을 줄입니다. 백업·운영 컨테이너와 로컬 진단 출력은 유지합니다.
+- **릴리스 범위:** 루트·API·alarm-worker 버전을 `9.3.1`로 맞추고 API·alarm-worker·collector a·b·c·d를 같은 source snapshot으로 릴리스합니다. 이번 변경에 DB migration은 없으며 실제 배포·수용 검증과는 구분합니다.
+
 ## v9.3.0 - 2026-10-13
 
 - **최초공개는 공개 5분 전에만 알림:** 예정 최초공개는 발견 시 `NEW_VIDEO` "N분 후 공개 예정"을 만들지 않고(hololive-api), 공개 전환 뒤에도 영상 알림을 만들지 않습니다. 구독자는 일반 방송과 같은 분 전 target(`선행공개 N분 전`)과 일정 변경 알림을 받고, 분 전 target을 모두 지난 뒤 발견된 경우 분 전 알림을 받지 못한 방에만 시작 알림(`선행공개 시작`)을 받습니다(alarm-worker). v9.2.0의 공개 예정 안내 중복 생략과 그 조회는 쓸모가 없어져 지웠습니다.

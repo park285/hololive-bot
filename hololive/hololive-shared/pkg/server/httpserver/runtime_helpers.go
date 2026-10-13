@@ -13,7 +13,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-shared/internal/workerobservability"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -109,11 +108,10 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRou
 		Disabled: opts.DisableMetricsAuth,
 	}))
 
+	metrics.GET("/metrics", gin.WrapH(runtimeMetricsHandler(opts.WorkerRegistry)))
+
 	if opts.WorkerRegistry != nil {
-		metrics.GET("/metrics", gin.WrapH(promhttp.HandlerFor(workerobservability.NewGatherer(opts.WorkerRegistry), promhttp.HandlerOpts{})))
 		metrics.GET("/diagnostics/workers", gin.WrapH(workerobservability.DiagnosticsHandler(opts.WorkerRegistry)))
-	} else {
-		metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	}
 
 	if opts.RegisterRoutes != nil {

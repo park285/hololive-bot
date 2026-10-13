@@ -76,7 +76,7 @@ check_stage() {
   docker buildx build --quiet --load --provenance=false --target "${target}" --tag "${tag}" \
     --file "${checkout}/${dockerfile}" "${checkout}" >/dev/null ||
     fail "${dockerfile} --target ${target} build failed"
-  if ! docker run --rm --network none --user "${user}" --entrypoint /usr/local/bin/node "${tag}" \
+  if ! docker run --rm --label io.iris.observability.logs=exclude --network none --user "${user}" --entrypoint /usr/local/bin/node "${tag}" \
     -e "${walker}" "${tree}"; then
     fail "${dockerfile} ${target}: ${tree} is not readable by runtime user ${user} after a umask 077 checkout"
   fi

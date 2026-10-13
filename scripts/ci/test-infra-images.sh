@@ -15,6 +15,7 @@ docker buildx build --platform linux/amd64 --build-arg REVISION=test \
 
 for user in 0:0 999:999; do
   docker run --rm --platform linux/amd64 --network none --read-only --memory 256m --pids-limit 128 --user "$user" \
+    --label io.iris.observability.logs=exclude \
     --tmpfs /var/lib/postgresql:rw,uid=999,gid=999,mode=0755 \
     --tmpfs /var/run/postgresql:rw,uid=999,gid=999,mode=0755 \
     --tmpfs /tmp:rw,mode=1777 \

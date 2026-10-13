@@ -11,6 +11,7 @@ cleanup() {
 }
 trap cleanup EXIT
 cid=$(docker run -d --pull=never --name "$name" --network=none --memory=512m --cpus=2 \
+  --label io.iris.observability.logs=exclude \
   --tmpfs /var/lib/postgresql -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=hololive postgres:18.6-alpine)
 ready=false
 for ((i=0;i<60;i++)); do

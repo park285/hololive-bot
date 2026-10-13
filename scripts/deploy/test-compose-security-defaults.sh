@@ -152,6 +152,7 @@ HOLOLIVE_INGRESS_CONF="${nginx_test_dir}/admin-dashboard-ingress.conf" \
   prepare_admin_dashboard_ingress_bind_mount "${ROOT_DIR}" \
   || fail "could not render admin-dashboard-ingress config from the template"
 docker run --rm --platform linux/amd64 \
+  --label io.iris.observability.logs=exclude \
   --network host \
   --read-only \
   --tmpfs /tmp:size=16m \
@@ -167,6 +168,7 @@ pass "admin-dashboard-ingress config passes nginx -t with the pinned image"
 sed '/location \^~ \/l\//i\        location = /__client { return 200 "$shortlink_client"; }' \
   "${nginx_test_dir}/admin-dashboard-ingress.conf" >"${nginx_test_dir}/admin-client.test.conf"
 timeout 30 docker run --rm --platform linux/amd64 --network none --read-only \
+  --label io.iris.observability.logs=exclude \
   --tmpfs /tmp:size=16m --tmpfs /var/cache/nginx:size=16m --tmpfs /var/run:size=1m \
   -v "${nginx_test_dir}/admin-client.test.conf:/etc/nginx/admin-client.test.conf:ro" \
   --entrypoint sh "${nginx_image}" -ec '
@@ -210,6 +212,7 @@ printf '%s\n' \
   '}' \
   >"${nginx_test_dir}/holoshi-public-test.conf"
 docker run --rm --platform linux/amd64 \
+  --label io.iris.observability.logs=exclude \
   --network host \
   --read-only \
   --tmpfs /tmp:size=16m \
