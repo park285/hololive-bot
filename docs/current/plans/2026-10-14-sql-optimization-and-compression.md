@@ -1,5 +1,7 @@
 # Hololive SQL 최적화 및 압축 플랜 (2026-10-14)
 
+**상태: 계획 항목 구현·운영 적용 완료.** 운영 릴리스는 `10.0.0`, source revision은 `97206d67787f9f8643c7937784eef6bb900bab85`다. 본문의 기대 효과는 수행 전 추정이며 실제 수용 결과·미실행 게이트·미달한 추정치는 마지막 절에 구분한다.
+
 ## 목표와 범위
 
 `hololive-bot` 운영 PostgreSQL(`holo-postgres`, PG 18.6, v9.3.2 / migration 303 기준)의 읽기 전용 실측을 바탕으로, **SQL 실행 계획·잠금 최적화(S1~S5)**와 **데이터 압축·공간 회수(C1~C3)**의 실행 순서와 의존성을 정리한다.
@@ -39,8 +41,8 @@
   1. `live_states` CTE가 `targets`(통계 없음 → `kind = 'youtubejs_channel_live'`를 1행으로 오판, 실제 119행)에서 시작해 `youtube_live_sessions`의 `idx_yls_channel` Bitmap Heap Scan을 119회 반복하며 **과거 `ENDED` 세션을 포함한 전체 10,002행(`8,553` 블록, 전체 읽기의 78.5%)**을 읽은 뒤 `active_live_videos`(215행)와 Hash Join하며 9,800행을 버린다.
   2. `live_reviews` CTE가 53개 영수증 영상마다 `youtube_live_review_current_receipt(video.video_id)`를 상관 SubPlan(`loops=53`, `951` 블록)으로 실행해 이미 읽은 테이블을 다시 53번씩 조회하고 `youtube_live_review_receipt_facts`(7페이지)를 53회 Seq Scan(`371` 블록)한다.
 - **변경:**
-  - [ ] `active_live_videos`를 `MATERIALIZED`로 고정하고, 채널 대상 여부는 `EXISTS (SELECT 1 FROM targets t WHERE t.kind = 'youtubejs_channel_live' AND t.subject_key = product.channel_id)`로 검사해 활성 영상(~215행)만 PK로 조회하게 한다.
-  - [ ] `live_reviews`는 S2의 집합형 판정(또는 `live_states`와 `youtube_live_review_receipt_facts`의 직접 조인)으로 바꿔 53회 상관 SubPlan을 제거한다.
+  - [x] `active_live_videos`와 활성 product/head/availability 입력을 `MATERIALIZED`로 고정하고, `EXISTS`로 채널 membership을 검사한다. 과거 종료 세션에서 시작하는 채널 조인을 제거했다.
+  - [x] `live_reviews`를 S2의 집합형 판정으로 바꿔 영상별 상관 함수 호출과 영수증 표 반복 조회를 제거했다.
 - **기대 효과:** 호출당 블록 읽기 **10,895 → ~450 블록(-95.9%)**, 실행 시간 **27~77 ms → ~2~3 ms**.
 
 ### S2. `live_check_videos.sql` 및 `youtube_live_review_current_receipt` — Projection Guard 내부 5초 주기 비용 축소 (P1)
@@ -49,7 +51,7 @@
   - `youtube_live_review_current_receipt(p_video_id)`가 `to_jsonb(session)` 등으로 전체 스냅샷 JSONB를 만든 뒤(19개 `timestamptz`를 문자열로 직렬화), `youtube_live_review_semantic_facts(snapshot)`에서 다시 19개 문자열을 `::timestamptz`로 파싱해 `extract(epoch FROM ...)`를 구하는 이중 변환을 매 호출 53번 수행한다.
   - `youtube_live_review_receipt_facts`가 53행(7페이지)이라 인덱스를 쓰지 않고 매번 7페이지 Seq Scan × 53회 = `371` 블록을 읽는다.
 - **변경:**
-  - [ ] 현재 원본의 의미 사실 JSONB를 `to_jsonb` 문자열 재파싱 없이 SQL `timestamptz` 열에서 직접 `extract(epoch FROM ...)`로 구성하거나(판정 결과 100% 동등성 검증), `review_videos` 집합 전체에 대해 1회 Hash Join으로 판정하도록 개선한다.
+  - [x] 현재 의미 사실은 SQL `timestamptz` 열에서 직접 epoch를 구성하고, 영수증 집합을 한 번 비교한다. NULL·시간대·소수초·최신 일치 영수증·재검토 조건의 동등성 시험을 통과했다.
 - **기대 효과:** 호출당 블록 읽기 **1,387 → ~280 블록(-80%)**, 실행 시간 **8.5 ms → ~1.5 ms**, Projection Guard 잠금 보유 시간 단축.
 
 ### S3. `extend_targets.sql` 및 `replaceReasonsIfChanged` — Heartbeat 시 587회 B-Tree 탐색 및 Reasons 재조회 제거 (P1)
@@ -58,8 +60,8 @@
   - `extend_targets.sql` (`3047231863221814013`): 164,562회 호출, 평균 변경 행은 **1.05행**인데 호출당 **1,998.2 블록(~16 MB)**을 읽는다. 플래너가 `unnest($2, $3, $4)`를 10행으로 추정해 `youtube_collection_targets_pkey`를 587번 Nested Loop Index Scan(`587 × 3.4 = 1,998` 블록)하기 때문이다.
   - `load_reasons.sql` (`-6846211758071134799`): 5초마다 target 해시가 동일한 `extendUnchangedGeneration` 안에서도 현재 세대의 `youtube_collection_target_reasons` 587행을 매번 읽어 Go로 전송·비교한다.
 - **변경:**
-  - [ ] `extend_targets.sql`에서 현재 세대(`WHERE projection_generation = $1`, PK 연속 범위 ~20 블록)를 먼저 읽고 `unnest` 입력과 조인해 `not_before IS DISTINCT FROM`인 행만 `ctid`(또는 PK)로 `UPDATE`하거나, Go `Refresher`에서 실제로 `not_before`가 바뀐 대상만 전달한다.
-  - [ ] `Refresher`가 현재 활성 `generation`과 마지막으로 확인한 `reasons` 해시를 메모리에 기억해, 같은 세대에서 `reasons`가 그대로면 `load_reasons.sql` 조회를 생략한다.
+  - [x] `extend_targets.sql`은 현재 세대 범위를 먼저 materialize하고 입력과 비교한 뒤 실제 `not_before` 변경 행만 `ctid`로 갱신한다.
+  - [x] `Refresher`는 커밋된 generation·header MVCC 버전·정규화 reasons 해시를 기억한다. 같은 세대의 외부 writer, rollback·commit 실패·panic은 캐시를 무효화한다.
 - **기대 효과:** `extend_targets.sql` 호출당 블록 읽기 **1,998 → ~20 블록(-99%)**, 무변경 heartbeat의 `load_reasons.sql` 조회 0회.
 
 ### S4. Live 관측 소비 경로 — `PARTIAL` 관측의 불필요한 TOAST 배열 적재 및 Absence GIN 스캔 제거 (P1)
@@ -70,9 +72,9 @@
   - `lifecycle_origin IN ('metadata_only', 'legacy_unknown')`이고 positive clock이 없는 `UPCOMING` 55행(원소 57.7만 개, 3.1 MB)도 `applyAbsenceToKnownSession` 초입에서 바로 반환되어 배열을 쓰지 않지만 매번 적재된다.
   - `loadLiveAbsenceSlots`는 `len(channelIDs) == 0`일 때도 단일 `OR` 쿼리(`repository_live_absence_slots.sql`)에 빈 배열 `$1 = '{}'`을 넘겨 generic plan에서 `BitmapOr`(GIN 인덱스 포함)를 수행한다.
 - **변경:**
-  - [ ] `!scopedNegative(&evidence) && !needsPositiveAbsenceReplay(&state, &evidence)`인 관측에서는 모든 영상을 `omitIgnoredFor`(`$2`)에 넣고 `loadLiveAbsenceSlots` 호출을 건너뛴다.
-  - [ ] positive clock이 없는 `metadata_only`·`legacy_unknown` 세션도 항상 `omitIgnoredFor`에 포함한다.
-  - [ ] `loadLiveAbsenceSlots`에서 `len(channelIDs) == 0`일 때는 `WHERE scheduled_for = $1 AND (coverage -> 'requested_channel_ids') ?| $2::text[]` 전용 문장으로 분리해 `idx_youtube_live_absence_slots_scheduled_for`만 사용한다.
+  - [x] 먼저 scalar head를 잠근 뒤 scoped negative·첫 positive replay 필요 여부를 판단한다. 일반 `PARTIAL`은 ignored 배열과 absence slot을 모두 읽지 않는다.
+  - [x] positive clock이 없는 `metadata_only`·`legacy_unknown`은 배열을 생략한다. 단, 이번 positive로 observed가 되어 replay에 참여하는 세션의 기존 이력은 정확도를 위해 읽는다.
+  - [x] replay 채널이 없으면 `scheduled_for`와 현재 coverage만 검사하는 전용 SQL을 사용하며 custom/generic plan 시험을 통과했다.
 - **기대 효과:** `repository_live_heads_0046_46.sql` 평균 시간 **3.29~5.46 ms → ~0.2 ms(-94%)**, 일반 `PARTIAL` 관측의 TOAST 배열 읽기 및 absence slot 조회 0회.
 
 ### S5. Collector Lease 획득(`acquireTx`) 및 후보 조회 — 무의미한 `INSERT` 제거와 WAN 왕복 축소 (P2)
@@ -82,8 +84,8 @@
   - `acquireTx`가 `youtube_collection_projection_guard`를 `FOR SHARE`로 잡은 채 4번의 순차 SQL 왕복(`lockProjectionGuard` → `verifyAcquireTargets` → `insertAcquireJobRow` → `acquireLeaseProof`)을 수행해, 원격 AP(`osaka`, `osaka2`)가 WAN RTT 동안 공유 잠금을 보유한다. 그 영향으로 중앙 API의 `SELECT guard_key ... FOR UPDATE`(`-7931210353652924045`)가 3블록만 읽으면서도 평균 **19.08 ms**(15초 구간 **65.68 ms**) 대기한다.
   - `repository_target_bundle_0144_04.sql`(`6395284297819869485`)은 `cadence`와 `membership` 두 CTE가 같은 `youtube_collection_targets`를 두 번 읽고 `(NOT $3::boolean OR subject_key = $4)`로 인해 generic plan에서 `subject_key` PK 조건을 활용하지 못한다.
 - **변경:**
-  - [ ] `acquireTx`에서 `verifyAcquireTargets` + 조건부 행 생성 + `UPDATE` 선점을 단일 SQL(또는 기존 행 `UPDATE` 우선 시도 후 행이 없을 때만 `INSERT`)로 합쳐 **99.99%의 무의미한 `INSERT`와 트랜잭션 내 WAN 왕복 2회를 제거**한다.
-  - [ ] `repository_target_bundle_0144_04.sql`의 `cadence`·`membership` 집계를 단일 스캔(`FILTER` 절)으로 합치고 `ExactSubject` 여부에 따라 문장을 분리한다.
+  - [x] 기존 job 획득은 guard + 통합 admission/acquire SQL 두 문장이다. INSERT는 실제 누락 행에만 시도하며, 최초 생성 성공에만 추가 UPDATE로 충돌 대기 이후의 slot·TTL을 확정한다.
+  - [x] cadence·membership을 `FILTER` 집계 한 번으로 합치고 ExactSubject SQL을 분리했다. 4개 collector 경쟁·wire traffic·기존 행 INSERT 금지·최초 생성 rollback 경합 시험을 통과했다.
 - **기대 효과:** 무의미한 `INSERT` 제거, 원격 collector의 `projection_guard` 잠금 보유 시간 50% 이상 단축.
 
 ---
@@ -95,9 +97,9 @@
 1. **`C1-1` `youtube_live_reconciliation_heads` 종료(`ENDED`) 세션 배열 비우기 및 `lz4` 전환 (~104 MB 절감)**
    - **근거:** `youtube_live_reconciliation_heads`(114 MB 중 TOAST **113 MB**)에서 이미 종료된 `ENDED` 2,655행이 **1,459.5만 개 원소(압축 76 MB)**를 가지고 있다. `ENDED` 세션의 배열은 어떤 런타임 경로도 읽지 않고 검토 영수증 대상(`UPCOMING` 전용)도 아니다.
    - **조치:**
-     - [ ] 코드에서 `ENDED` 상태로 저장할 때 `ignored_absence_scheduled_for`를 빈 배열(`'{}'`)로 비운다.
-     - [ ] migration에서 `ALTER TABLE youtube_live_reconciliation_heads ALTER COLUMN ignored_absence_scheduled_for SET COMPRESSION lz4;` 적용 및 기존 `ENDED` 행의 비어 있지 않은 배열을 keyset 배치로 `'{}'`로 비운다.
-     - [ ] `VACUUM (FULL, ANALYZE) youtube_live_reconciliation_heads`(4,463행, ~1 MB라 짧은 잠금으로 즉시 완료)로 TOAST 약 100 MB를 OS에 반환한다.
+     - [x] 저장되는 `ENDED` head의 배열을 비우며, 활성 세션의 미적재 이력은 유지한다.
+     - [x] 305가 `lz4`를 지정하고 종료 배열을 keyset 배치 정리한다. canonical `LIVE`/`UPCOMING`과 ENDED head가 불일치하면 canonical 상태를 우선하여 이력을 보존한다.
+     - [x] 점검 창에서 `VACUUM (FULL, ANALYZE)`를 실행했다. 전체 relation 크기는 119,660,544 → 13,623,296 bytes다.
 
 2. **`C1-2` `youtube_live_absence_slots`·`youtube_collection_job_leases`·`youtube_live_pending_ends` 블로트 회수 (~285 MB 절감 + 후보 조회 가속)**
    - **근거:**
@@ -105,28 +107,28 @@
      - `youtube_collection_job_leases`: 505행(186.6 kB)인데 Heap이 856 kB(107페이지, 빈 공간 69.8%)이고 `idx_youtube_collection_job_projection_generation`이 3,064 kB(삭제 페이지 87.1%)다. 이 Heap 블로트 때문에 초당 25회 실행되는 `repository_candidates_0144_02.sql`이 매번 107페이지를 Seq Scan한다.
      - `youtube_live_pending_ends`: 5,028행(3.0 MB) 중 **3,859행(76.8%)**은 2026-10-07 v7.2.5 배포 이전에 쌓인 동결 `ENDED` 세션의 행으로, 현재 코드는 읽지도 쓰지도 않는다.
    - **조치:**
-     - [ ] migration으로 `youtube_live_pending_ends`에서 종료 후보(`end_candidate_observation_id`, `next_end_check_at`)가 없는 `ENDED` 세션의 잔재 3,859행을 정리한다.
-     - [ ] 작은 두 테이블(`youtube_collection_job_leases` 505행, `youtube_live_pending_ends` 1,169행)에 짧은 `lock_timeout`으로 `VACUUM (FULL, ANALYZE)`를 수행해 `repository_candidates_0144_02.sql`의 호출당 블록 읽기를 **112.6 → ~28 블록(-75%)**으로 줄인다.
-     - [ ] `youtube_live_absence_slots`는 `coverage` 열에 `SET COMPRESSION lz4` 적용 후 점검 창에서 `VACUUM (FULL, ANALYZE)`를 수행해 **~275 MB**를 회수한다(무중단 우선 시 `REINDEX INDEX CONCURRENTLY`로 인덱스 ~28 MB 선회수 가능).
+     - [x] 305가 종료 후보가 없는 canonical `ENDED`의 동결 pending 잔재를 정리했다. 적용 후 해당 잔재는 0건이다.
+     - [x] job lease와 pending-end에 `lock_timeout=3s`로 `VACUUM (FULL, ANALYZE)`를 실행했다. 실제 회수량은 마지막 표에 기록한다.
+     - [x] absence coverage에 `lz4`를 지정하고 점검 창의 `VACUUM (FULL, ANALYZE)`를 완료했다. 전체 relation 크기는 332,726,272 → 30,228,480 bytes다.
 
 3. **`C1-3` 퇴역 테이블 5종(`viewer_sample` 3종 + 구 통계 2종) 완전 제거 (~151 MB 절감, 데이터 삭제 승인 필요)**
    - **근거:**
      - `youtube_live_viewer_samples`(150 MB, 1,089,579행), `youtube_live_viewer_sample_heads`(552 kB, 2,913행), `youtube_live_viewer_sample_evidence`(24 kB, 0행), `youtube_stream_stats`(160 kB, 944행), `youtube_channel_latest_stats`(40 kB, 125행).
      - 2026-09-25 이후 신규 수집이 없고(`source_observations`·`youtube_collection_targets` 내 `viewer_sample` 0건), 런타임 조회 코드가 전무하다.
    - **조치:**
-     - [ ] `reconcileViewer` 소비자(`viewer_consumer.go`, `viewer_persist.go`, `internal/youtube/reconcile/viewer`, `repository_viewer_*.sql`)와 미사용 도메인 모델(`YouTubeLiveViewerSample`, `YouTubeStreamStats`)을 제거한다.
-     - [ ] 새 migration에서 5개 테이블을 `DROP TABLE`하고 `viewer_sample` 계약 어휘를 정리한다.
+     - [x] viewer 소비자·persist·reducer·SQL·미사용 도메인 모델 및 현재 계약 어휘를 제거했다.
+     - [x] 306이 5개 테이블과 퇴역 체크포인트·offset을 제거했다. 활성 관측·재처리·projection·lease 보호 검사를 유지하며 적용 후 5개 테이블은 모두 없다.
 
 4. **`C1-4` 퇴역 Projection 보존 기간 조정 선택지 (7일 → 1~2일 시 ~330~400 MB 추가 절감, 정책 선택)**
    - **근거:** `youtube_collection_targets`(209 MB) + `youtube_collection_target_reasons`(257 MB) = **466 MB**는 7일치 `RETIRED` 세대(1,647세대)다.
-   - **조치:** `YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS`를 7일에서 1~2일로 줄이면 정상 크기가 **~70~130 MB**로 수렴한다(7일 감사 보존이 필요하면 현행 유지).
+   - **완료:** 승인된 **2일**을 코드·Compose·정적 master/mirror·실행 중 API에 반영했다. 기존 제한된 보존 함수로 1,201세대와 target/reason 각각 719,714행, 퇴역 lease 55행을 배치 삭제했다. 후속 읽기 전용 확인에서 2일 초과 RETIRED는 0건이었다.
 
 ### C2. TOAST 및 가변 길이 열 `lz4` 압축 표준화
 
 - **근거:** 운영 DB의 `default_toast_compression`이 `pglz`이고, `source_observation_payloads.payload` 외의 모든 JSONB·텍스트·배열 열이 `pglz`를 쓰고 있다. PG 18에서 `lz4`는 `pglz` 대비 압축·해제 CPU 비용이 훨씬 낮고 압축률도 대등하거나 우수하다.
 - **조치:**
-  - [ ] migration에서 `ALTER DATABASE hololive SET default_toast_compression = 'lz4';`를 선언한다(271 선례와 동일하게 현재 DB 이름 동적 조회).
-  - [ ] 주요 TOAST 대상 열(`youtube_live_reconciliation_heads.ignored_absence_scheduled_for`, `youtube_live_absence_slots.coverage`, `youtube_content_absence_slots.coverage`, `youtube_live_review_receipts.original_snapshot`, `youtube_live_review_receipt_facts.facts`, `alarm_dispatch_events.payload`, `alarm_upcoming_candidates.notification`, `bot_webhook_inbox.payload`, `bot_reply_outbox.payload`)에 `SET COMPRESSION lz4`를 명시한다.
+  - [x] 305가 현재 DB 이름을 동적으로 조회하여 `default_toast_compression='lz4'`를 설정했다. 새 운영 세션에서 `lz4`를 확인했다.
+  - [x] 계획의 주요 TOAST 9열에 명시한 `lz4`를 운영 카탈로그 `attcompression='l'`로 확인했다. 설정 변경만으로 기존 TOAST 값 전체가 재압축되는 것은 아니다.
 
 ### C3. `source_observation_applications`(1,789 MB) 및 `source_observations`(1,030 MB) 구조·표현 압축 (중기: **약 600 MB ~ 1.1 GB 절감**)
 
@@ -142,6 +144,7 @@
 
 2. **`C3-2` SHA-256 해시 열의 64자 hex `text`(65 B) → 32바이트 `bytea`(33 B) 전환 (~230 MB 절감)**
    - **근거:** `source_observation_payloads.payload_sha256`과 달리 `source_observations`(`scope_sha256`, `evidence_sha256`: 109만 행 × 130 B = 141 MB)와 `source_observation_applications`(`evidence_sha256`: 487만 행 × 65 B = 317 MB)는 64자 hex 텍스트를 저장한다. 32바이트 `bytea`로 바꾸면 행당 32~64 B가 줄어든다(`C3-1`에서 `applications.evidence_sha256` 열 자체를 제거하면 `source_observations` 등만 전환).
+   - **완료:** 307로 안 A를 적용했고 application에는 `id, observation_id, entity_kind, entity_key, decision, applied_at`만 남는다. `observation_id`는 NOT NULL·CASCADE이며 고아 보존 함수·인덱스·유예 설정을 제거했다. 308은 source 관측·live/content absence의 해시 6열을 `bytea`로 바꾸되 공개 hex 표현과 dedup·replay 계약은 유지한다.
 
 ---
 
@@ -199,9 +202,58 @@
 - 실제 `db-migrate` 명령의 빈 PostgreSQL 18.6 재생: **170 적용 / 0 생략**, 종료 코드 0. 전체 `hololive-dbtest` 및 schema golden 갱신 시험 통과(**46.456s**).
 - 계획 fixture(ENDED 10,000·활성 215·영수증 53): custom/generic 모두 observability **312블록**, live-check **260블록**. 최초 SQL 수정은 11,533/1,131블록으로 상한을 넘었으며, 활성 원본·head·availability 입력 및 집합 함수 인수를 고정한 뒤 같은 상한 1,000/400을 통과했다.
 - 별도 `psql` smoke(테스트 함수가 아닌 실제 SQL 파일 실행): custom/generic observability **315블록 / 6행**, live-check **263블록 / 163행**, 현재 일치 영수증 **52건**. 600 CURRENT + 48,000 RETIRED의 1행 heartbeat 변경은 양쪽 **62블록**. ExactSubject generic plan은 PK의 generation·subject·kind 조건으로 **1행 / 1 loop**였다.
-- targetprojection·live reducer·collector joblease·publisher 패키지 시험 통과. source consumer 통합 중 오래된 보존 fixture와 잘못된 `effective_at` 열 조회를 수정했고 해당 두 시험은 통과했다. 전체 CI·통합 전용 게이트·이미지 빌드와 운영 수용은 아직 남아 있다.
+- targetprojection·live reducer·collector joblease·publisher 패키지 시험 통과. source consumer 통합 중 오래된 보존 fixture와 잘못된 `effective_at` 열 조회를 수정했고 해당 두 시험은 통과했다. 이후 전체 CI·통합 전용 게이트·이미지 빌드·운영 수용까지 완료했다.
 - 배포 진입점의 topology·Compose 서비스·AP version·native deploy·systemd 검사 통과. 삭제/추가된 lease SQL에 맞춰 AP 전송 manifest도 갱신했다.
-- 정적 설정은 중앙 master와 mirror를 일치시켰으며 파일 mode/owner **0640 0:1002**를 확인했다. Projection 2일 및 제거된 두 retention 키가 반영되었지만 프로세스 재기동은 아직 하지 않았다.
+- 정적 설정은 중앙 master와 mirror가 일치하며 파일 mode/owner는 **0640 0:1002**다. 재기동한 API 환경에서도 Projection **2일**, 폐기한 audit-grace/viewer 설정의 부재를 확인했다.
 
+## 7. 최종 검증 및 운영 수용 결과
+
+### 검증
+
+- 구현 6명 → 독립 검토 2명 → 통합 lint 수정 3명의 세 wave를 실행했다. 빌드·시험·운영 적용은 통합 소유자가 실행했다.
+- `scripts/architecture/check-migration-manifest.sh`, schema golden 갱신 및 전체 `hololive-dbtest`, `scripts/ci/local-ci.sh`의 architecture·vet·staticcheck·golangci-lint·NilAway·race·non-race 검사를 통과했다. lint 억제나 검사 상한 변경은 없으며, 발견한 SQL 문자열 wiring-only 시험은 제거하고 보존 동작 시험을 유지했다.
+- 마지막 wiring-only 시험 제거 후 `go test -count=1 ./hololive/hololive-api/internal/planes/youtube/targetprojection`도 통과했다(**6.373s**).
+- workspace `check-stack-db-access-policy.sh`는 통과했다. `check-stack-retry-contract.sh`는 `Iris/native/**`를 스캔하므로 stack 지침의 해당 경로 스캔 금지에 따라 실행하지 않았다. 이 교차 저장소 게이트 통과를 주장하지 않으며, 변경된 YouTube 경로의 보존·dedup·replay·경쟁 동작은 위 패키지/통합 시험으로 검증했다.
+- `RUN_INTEGRATION_TESTS=true scripts/ci/local-ci.sh --integration-tests-only` 통과. 실제 임시 PostgreSQL·Valkey의 dispatchoutbox, summarizer, YouTube dispatch 및 joblease 시험을 실행했다.
+- `./build-all.sh --build-only --no-bump hololive-api hololive-alarm-worker youtube-collector` 통과. API·worker·collector·issuer ARM64 이미지의 full revision과 version을 확인했다. native a/d는 kapu에서 amd64/v3로 빌드·검증했다. 원격 빌드는 없다.
+- 배포 전후 `pg-hotpath-explain-snapshot.sh --stats-window-seconds 60`을 통과했다. 이 게이트의 두 claim `EXPLAIN ANALYZE`는 실제 UPDATE 뒤 ROLLBACK하므로 별도 사용자 승인을 받았다. 일반 카탈로그·행·계획 조회는 계속 `transaction_read_only=on`이다.
+
+### 적용과 복구 경계
+
+- 점검 시작 **2026-10-14 03:07:03 UTC**. API·worker·collector a/b/c/d와 issuer를 중지하고, 승인된 `db-migrate`가 **6 적용 / 164 생략 / 총 170**으로 완료됐다. 새 6개 migration checksum은 검토된 로컬 원본과 모두 일치한다.
+- 기존 keyset 보존 함수로 2일 정책을 적용하고 다음 7개 relation에 `VACUUM (FULL, ANALYZE)`를 완료했다: job leases, pending ends, reconciliation heads, live absence slots, source applications, target reasons, targets.
+- API·worker는 **03:16 UTC**, native a/d는 **03:17 UTC**, Compose c/b는 **03:19~03:20 UTC**에 새 revision으로 기동했다. 마지막 b의 `StartedAt`은 **03:20:11 UTC**다.
+- 중앙 API의 bot/admin health·인증된 LLM readiness, worker health, a/b/c/d의 READY·first_success·PROCESSED handoff를 확인했다. Osaka·Osaka2·Seoul의 `ap-completion-check.sh`가 모두 통과했고 중앙/Seoul 컨테이너는 healthy·RestartCount 0이었다. 중앙 새 로그에 ERROR/FATAL/PANIC 또는 연결 실패가 없고 PostgreSQL·Valkey 연결을 확인했다.
+- 새 DB 백업은 생성하지 않았다. 이전 image tag `rollback-sql-compression-20261014T025442Z`, 중앙 `/opt/hololive-bot/compose/sql-compression-20261014T025442Z/previous/`, Seoul `~/hololive-bot/backups/sql-compression-20261014T025442Z/previous/`, native 이전 immutable release와 `previous` 링크를 보존했다. **이 자료만으로 삭제 데이터나 구 schema를 복원할 수 없으며 image-only rollback은 지원하지 않는다.**
+- Git 원격 push/tag/Release는 수행하지 않았다. 배포 revision은 위 source SHA이며 마지막 문서·시험 정리 commit과 구분한다.
+
+### 물리 공간 회수
+
+단위는 bytes다. 점검 직전과 물리 회수 직후를 비교하며, 재기동 후 정상 쓰기로 DB가 다시 조금 증가한 값은 별도다.
+
+| 대상 | 적용 전 | 회수 직후 |
+| --- | ---: | ---: |
+| 전체 DB | 4,299,347,647 | 1,881,298,623 |
+| source applications | 1,875,853,312 | 714,170,368 |
+| source observations | 1,080,565,760 | 784,269,312 |
+| live absence slots | 332,726,272 | 30,228,480 |
+| target reasons | 271,163,392 | 65,478,656 |
+| targets | 220,143,616 | 51,355,648 |
+| reconciliation heads | 119,660,544 | 13,623,296 |
+| job leases | 4,276,224 | 327,680 |
+| pending ends | 3,096,576 | 294,912 |
+
+전체 회수는 **2,418,049,024 bytes = 2.418 GB, 56.24%**다. 재기동 후 후속 조회는 DB **1,885,116,095 bytes**, CURRENT 1세대, RETIRED 443세대, 2일 초과 RETIRED 0건이었다. 종료 배열·동결 pending 잔재와 퇴역 5개 테이블도 0건이다.
+
+### 성능 실측과 남는 한계
+
+| 운영 SQL | custom 블록 | generic 블록 | custom 실행 ms | generic 실행 ms |
+| --- | ---: | ---: | ---: | ---: |
+| collection observability | 1,075 | 1,075 | 15.437 | 14.650 |
+| live-check videos | 776 | 776 | 7.009 | 7.452 |
+
+- 계획의 명시적 fixture 상한 **1,000 / 400 / 100블록**은 모두 통과했다(S1 312, S2 260, S3 62). 운영 데이터의 단발 실측은 최초 관측 대비 S1 블록 **90.13%**, S2 블록 **44.05%** 감소했지만, 수행 전 추정인 **450/280블록 및 2~3/1.5ms에는 도달하지 않았다**. 운영과 fixture의 행 배치·분포·동시 부하가 달라 둘을 같은 성능 결과로 취급하지 않는다.
+- 일반 PARTIAL의 배열/absence 조회 생략, reasons cache 무조회 및 collector 왕복 감소는 실제 DB 소비·경쟁·wire 시험으로 검증했다. S4 운영 평균 0.2ms, S5 WAN 잠금 50% 감소는 별도 통제 전후 실측이 아니므로 달성으로 주장하지 않는다.
+- 기존 TOAST 값 전체 재압축, 장기 WAL/공간 증가율, 외부 provider의 모든 채널 최신성은 이번 수용 시험의 증명 범위가 아니다. 수집·보존 보호 조건과 새 재시도/호환 fallback 없음은 유지한다.
 
 Fallback delta: 새 재시도·대체 경로를 추가하지 않는다.
