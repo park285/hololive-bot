@@ -45,8 +45,8 @@ func loadLivePendingEnds(ctx context.Context, tx dbx.Tx, state *live.State, vide
 	return nil
 }
 
-// 먼저 잠근 positive clock으로 부재 평가 여부를 정한다. 일반 PARTIAL은 이력과 slot 모두
-// 읽지 않고, scoped negative와 신규 positive·첫 LIVE의 replay만 필요한 이력을 읽는다.
+// 먼저 잠근 positive clock으로 과거 부재 replay 여부를 정한다. 일반 PARTIAL도 현재 slot의
+// 저장된 coverage는 복원하되, 그 slot에서 보인 영상의 무시 이력은 읽지 않는다.
 func loadLiveAbsencesForPositive(ctx context.Context, tx dbx.Tx, state *live.State, evidence *live.Evidence) error {
 	var (
 		channels              []string
@@ -71,7 +71,7 @@ func loadLiveAbsencesForPositive(ctx context.Context, tx dbx.Tx, state *live.Sta
 	}
 
 	if len(channels) == 0 && !scopedLiveNegative(evidence) {
-		return nil
+		return loadLiveCurrentAbsences(ctx, tx, state, evidence)
 	}
 
 	if err := loadLiveIgnoredAbsences(ctx, tx, state, liveIgnoredAbsenceLoadIDs(state, evidence)); err != nil {
@@ -89,6 +89,33 @@ func loadLiveAbsencesForPositive(ctx context.Context, tx dbx.Tx, state *live.Sta
 	}
 
 	return loadLiveAbsenceSlots(ctx, tx, state, channels, after, evidence.ScheduledFor, evidence.Coverage.RequestedChannelIDs)
+}
+
+func loadLiveCurrentAbsences(ctx context.Context, tx dbx.Tx, state *live.State, evidence *live.Evidence) error {
+	if err := loadLiveAbsenceSlots(ctx, tx, state, nil, nil, evidence.ScheduledFor, evidence.Coverage.RequestedChannelIDs); err != nil {
+		return err
+	}
+
+	if len(state.AbsenceSlots) == 0 {
+		return nil
+	}
+
+	// PARTIAL 자체는 부재를 만들지 않지만 다른 kind의 늦은 positive 뒤에는 저장된 slot이
+	// 처음 적용될 수 있다. reducer가 현재 slot에서 건너뛰는 payload 영상만 이력을 생략한다.
+	seen := make(map[string]struct{}, len(evidence.Sessions))
+	for i := range evidence.Sessions {
+		seen[evidence.Sessions[i].VideoID] = struct{}{}
+	}
+
+	ids := slices.DeleteFunc(liveIgnoredAbsenceLoadIDs(state, evidence), func(videoID string) bool {
+		_, present := seen[videoID]
+		return present
+	})
+	if err := loadLiveIgnoredAbsences(ctx, tx, state, ids); err != nil {
+		return fmt.Errorf("load current slot ignored absences: %w", err)
+	}
+
+	return nil
 }
 
 func scopedLiveNegative(evidence *live.Evidence) bool {

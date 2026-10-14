@@ -68,14 +68,14 @@
 
 - **실측 근거:**
   - 운영 `live_snapshot` 관측의 **94.2%(`653,021 / 692,985`)는 `PARTIAL`**이다.
-  - 신규 `UPCOMING`이나 첫 `LIVE` positive가 없는 일반 `PARTIAL` 관측에서는 reducer가 부재(`applyAbsenceToKnownSession`)를 전혀 평가하지 않는데도, `repository_live_heads_0046_46.sql`(`8119211535387059239`, 평균 **3.29 ms**, 15초 구간 **5.46 ms**, 런타임 총 실행 시간 1위)이 채널의 모든 `UPCOMING` 세션(196행, 원소 218만 개 = 압축 11.7 MB)의 `ignored_absence_scheduled_for` 배열을 매번 TOAST에서 읽는다.
+  - `repository_live_heads_0046_46.sql`(`8119211535387059239`, 평균 **3.29 ms**, 15초 구간 **5.46 ms**, 런타임 총 실행 시간 1위)이 채널의 모든 `UPCOMING` 세션(196행, 원소 218만 개 = 압축 11.7 MB)의 `ignored_absence_scheduled_for` 배열을 매번 TOAST에서 읽었다. 일반 `PARTIAL`은 부재를 전혀 평가하지 않는다는 최초 전제는 §14에서 반증됐다. 다른 kind의 지연된 positive가 중간에 수명을 승격하면 저장된 현재 slot을 재평가해야 한다.
   - `lifecycle_origin IN ('metadata_only', 'legacy_unknown')`이고 positive clock이 없는 `UPCOMING` 55행(원소 57.7만 개, 3.1 MB)도 `applyAbsenceToKnownSession` 초입에서 바로 반환되어 배열을 쓰지 않지만 매번 적재된다.
   - `loadLiveAbsenceSlots`는 `len(channelIDs) == 0`일 때도 단일 `OR` 쿼리(`repository_live_absence_slots.sql`)에 빈 배열 `$1 = '{}'`을 넘겨 generic plan에서 `BitmapOr`(GIN 인덱스 포함)를 수행한다.
 - **변경:**
-  - [x] 먼저 scalar head를 잠근 뒤 scoped negative·첫 positive replay 필요 여부를 판단한다. 일반 `PARTIAL`은 ignored 배열과 absence slot을 모두 읽지 않는다.
+  - [x] 먼저 scalar head를 잠근 뒤 scoped negative·첫 positive replay 필요 여부를 판단한다. 일반 `PARTIAL`도 저장된 현재 slot을 시간 인덱스로 조회하며, slot이 없으면 ignored 배열을 읽지 않는다. slot이 있으면 현재 payload에 나타나지 않은 재평가 대상의 이력만 읽는다.
   - [x] positive clock이 없는 `metadata_only`·`legacy_unknown`은 배열을 생략한다. 단, 이번 positive로 observed가 되어 replay에 참여하는 세션의 기존 이력은 정확도를 위해 읽는다.
   - [x] replay 채널이 없으면 `scheduled_for`와 현재 coverage만 검사하는 전용 SQL을 사용하며 custom/generic plan 시험을 통과했다.
-- **기대 효과:** `repository_live_heads_0046_46.sql` 평균 시간 **3.29~5.46 ms → ~0.2 ms(-94%)**, 일반 `PARTIAL` 관측의 TOAST 배열 읽기 및 absence slot 조회 0회.
+- **기대 효과와 경계:** `repository_live_heads_0046_46.sql` 평균 **~0.2 ms** 목표는 운영 미검증이다. 일반 `PARTIAL`의 과거 이력 GIN 스캔과 불필요한 TOAST 적재는 피하되, 정확성을 위해 현재 slot의 한정 조회를 유지한다. 모든 일반 `PARTIAL`의 absence 조회가 0회라는 보장은 폐기한다.
 
 ### S5. Collector Lease 획득(`acquireTx`) 및 후보 조회 — 무의미한 `INSERT` 제거와 WAN 왕복 축소 (P2)
 
@@ -363,5 +363,17 @@
 - **수용 완료:** custom/generic 모두 S1 **450블록·평균 3ms**, S2 **280블록·평균 1.5ms** 이하다. S1 custom 최대값은 3ms를 넘고 평균도 상한에 가까우므로, 모든 요청의 3ms 상한이나 장기 SLA를 달성했다고 주장하지 않는다. 동기 쓰기의 직렬화·쓰기 비용은 §10/§12의 실측대로 남으며, S4 0.2ms·S5 WAN 잠금 50% 감소와 전체 기존 TOAST 재압축은 검증 범위 밖이다.
 - 313 직전 복구점은 `hololive-api:rollback-target-bundles-20261014t094909z`(312 포함 `14e102dca`, image `sha256:6fe6aa39f3a87de372772b58933125abe91a694df360319f2d5365452d185508`)와 `/opt/hololive-bot/compose/sql-target-bundles-20261014T094909Z/previous/`의 manifest다. 둘의 존재를 확인했으며 삭제하지 않는다. 이 API의 313 잠금 호환성과 별개로 이전 migration runner는 새 ledger에 실행하지 않는다. 312 이전 writer로의 image-only rollback과 삭제 데이터 복원은 보장하지 않으며 원본 보존·guard-first 전진 복구 경계를 유지한다.
 - 새 DB 백업·원격 Git push/tag/Release는 하지 않았다. 문서 정리 commit은 배포 소스 revision과 구분한다.
+
+## 14. 구현 리뷰 회귀 수정 — 로컬 검증, 운영 미적용
+
+- 영역별 검토 4명과 독립 반증 2명으로 확정한 P2 두 건을 사용자가 수정하도록 승인했다. 구현 2명과 수정 독립 검토 2명으로 분리하고 실행 검증은 통합 소유자가 수행했다.
+- **S4:** `metadata_only UPCOMING`일 때 건너뛴 COMPLETE slot이 지연된 `video_live_check` 승격 뒤에도 누락됐다. 일반 PARTIAL의 조기 반환 대신 기존 current-slot SQL을 사용하고, 실제 저장 slot이 있을 때 보이지 않은 대상의 ignored 이력을 복원한다. PARTIAL에 부재 coverage를 만들거나 video-check 의미를 바꾸지 않는다. 절대 0-query assertion과 기록용 wrapper는 제거하고 TOAST·중복·grace 회귀를 유지한다.
+- **기록 역할:** 310의 generated-column decoder는 invoker 권한을 검사하지만 기존 별도 기록 역할의 EXECUTE가 누락됐다. 새 `314_youtube_live_review_recorder_decoder_acl.sql`이 기록 함수의 기존 ACL grantee에 decoder EXECUTE만 부여한다. 새 기록 역할에는 기존 기록 의존 권한, guard 및 decoder EXECUTE를 별도로 구성해야 한다. 배포된 migration은 변경하지 않았다.
+- **실제 로컬 smoke:** PostgreSQL 18.6과 운영 init-db 역할을 사용했다. 실제 `db-migrate`로 310 이전 **170 적용 / 0 생략**, 별도 NOINHERIT·NOSUPERUSER 역할의 기록 성공, 310~314 **5 적용 / 170 생략**, 재실행 **0 적용 / 175 생략**을 확인했다. 이전·이후 영수증의 generated facts와 runtime 검토 시각이 일치했고 미승인 역할은 SQLSTATE `42501`로 거절되어 영수증 수가 유지됐다.
+- 같은 DB에서 합성 관측을 queue에 넣고 실제 runtime 역할의 Claim·Finalize·Consumer를 실행했다. COMPLETE T → 지연된 video-check T−1분 → 다른 LIVE 영상만 포함한 비어 있지 않은 Holodex PARTIAL T → COMPLETE T+2분 순서에서 부재가 **0 → 0 → 1 → 2**, 마지막 상태가 **ENDED**였다(grace 0). 수정 전 동일 시나리오는 부재 1회·LIVE로 남았다.
+- **회귀 시험:** 실제 publisher·consumer로 같은 slot 재처리, ignored UPCOMING 이력·TOAST 보존, 새 coverage 없는 PARTIAL, grace 0의 종료와 grace 1시간의 종료 후보를 검증했다. 별도 기록 역할은 310 이전 성공부터 314 및 SQL 본문 재적용 뒤 기록·facts·runtime 판정과 미승인 거절까지 검증한다. 초기 UTC/KST 표현 비교 실패와 트랜잭션 callback의 fatal assertion으로 인한 정리 대기는 시각 값 비교·트랜잭션 밖 assertion으로 수정했다. lint가 지적한 긴 시험은 동작 단계별 helper로 나누고 불필요해진 고정 영상 인자를 모든 caller에서 제거했다.
+- **최종 게이트:** `env -u TEST_DATABASE_URL GOEXPERIMENT=jsonv2 LOCAL_CI_GO_SCOPE=changed BASE_REF=HEAD HEAD_REF=HEAD bash scripts/ci/local-ci.sh`가 **352.33초**에 통과했다. 영향 Go 범위는 API·dbtest이며 architecture·manifest·SQL 소유권·vet·staticcheck·golangci-lint(0 issues)·NilAway·build·race/non-race를 포함한다. race 결과는 sourceobservation **62.087초**, dbtest **78.596초**였다. stack DB access policy도 통과했다. 별도 integration-only 실행은 하지 않았다.
+- 수정 독립 검토 2건에서 추가 확정 결함이 없었다. 임시 PostgreSQL·SQL/Go smoke·overlay·시험 인증 상태를 제거했다. 314는 기존 함수의 ACL만 보충하므로 schema golden은 변경하지 않았다.
+- 이 후속 수정의 운영 migration·배포·Git 발행은 수행하지 않았다. §13의 운영 성능 수치를 새 코드의 측정치로 재사용하지 않는다.
 
 Fallback delta: 새 재시도·대체 경로를 추가하지 않는다.

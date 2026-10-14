@@ -238,7 +238,7 @@ func TestLiveConsumerOneScopedAbsenceDoesNotEnd(t *testing.T) {
 		t.Fatal("one scoped absence must not end")
 	}
 
-	if slots := liveConsecutiveSlots(t, pool, testVideoID); slots != 1 {
+	if slots := liveConsecutiveSlots(t, pool); slots != 1 {
 		t.Fatalf("consecutive = %d, want 1", slots)
 	}
 }
@@ -619,14 +619,14 @@ func liveLastSeen(t *testing.T, pool *pgxpool.Pool) time.Time {
 	return seen
 }
 
-func liveConsecutiveSlots(t *testing.T, pool *pgxpool.Pool, videoID string) int {
+func liveConsecutiveSlots(t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()
 
 	var slots int
 
 	if err := pool.QueryRow(t.Context(), `
 		SELECT consecutive_absence_slots FROM youtube_live_reconciliation_heads WHERE video_id = $1
-	`, videoID).Scan(&slots); err != nil {
+	`, testVideoID).Scan(&slots); err != nil {
 		t.Fatalf("load consecutive slots: %v", err)
 	}
 

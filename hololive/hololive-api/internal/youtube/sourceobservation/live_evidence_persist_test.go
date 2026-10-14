@@ -275,14 +275,14 @@ func TestLiveSameSlotKeepsFirstCoverageAcrossProviders(t *testing.T) {
 	publishConsumeLiveFromProvider(ctx, t, publishkit.NewPublisher(pool), consumer, &holodexProof, contract.ProviderHolodex, testChannelID, liveSession("other-upcoming", testStatusUpcoming))
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof)
 
-	if slots := liveConsecutiveSlots(t, pool, testVideoID); slots != 0 {
+	if slots := liveConsecutiveSlots(t, pool); slots != 0 {
 		t.Fatalf("same slot replaced its first coverage: count=%d", slots)
 	}
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof)
 
-	if slots := liveConsecutiveSlots(t, pool, testVideoID); slots != 1 {
+	if slots := liveConsecutiveSlots(t, pool); slots != 1 {
 		t.Fatalf("distinct slot count=%d, want one", slots)
 	}
 

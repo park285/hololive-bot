@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -358,21 +357,17 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, channelVideoIDs []
 	narrowed, err := loadLiveState(ctx, tx, scenario.evidence.Coverage.RequestedChannelIDs, payload)
 	require.NoError(t, err)
 
-	recording := &liveScopeQueryTx{Tx: tx}
-	require.NoError(t, loadLiveAbsencesForPositive(ctx, recording, &narrowed, &scenario.evidence))
-
-	if scenario.omitActiveHistory {
-		require.Zero(t, recording.queries, "ordinary PARTIAL must not query arrays or absence slots")
-	}
+	require.NoError(t, loadLiveAbsencesForPositive(ctx, tx, &narrowed, &scenario.evidence))
 
 	full, err := loadUnscopedLiveState(ctx, tx, slices.Concat(channelVideoIDs, payload))
 	require.NoError(t, err)
-	require.NoError(t, loadLiveAbsencesForPositive(ctx, tx, &full, &scenario.evidence))
 
 	if scenario.omitActiveHistory {
 		// 축소 전 소비자는 positive replay가 없어도 현재 slot을 읽었다.
 		require.NoError(t, loadLiveAbsenceSlots(ctx, tx, &full, nil, nil,
 			scenario.evidence.ScheduledFor, scenario.evidence.Coverage.RequestedChannelIDs))
+	} else {
+		require.NoError(t, loadLiveAbsencesForPositive(ctx, tx, &full, &scenario.evidence))
 	}
 
 	omitted := requireNarrowedLiveScope(t, &narrowed, &full, payload, scenario)
@@ -516,23 +511,6 @@ func liveHeadCandidateCleared(t *testing.T, pool *pgxpool.Pool, videoID string) 
 		videoID).Scan(&cleared))
 
 	return cleared
-}
-
-type liveScopeQueryTx struct {
-	dbx.Tx
-
-	queries int
-}
-
-func (tx *liveScopeQueryTx) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
-	tx.queries++
-
-	rows, err := tx.Tx.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("record live scope query: %w", err)
-	}
-
-	return rows, nil
 }
 
 // 신규·첫 positive는 PARTIAL이어도 과거 부재를 복원하고, positive 없는 메타데이터는 그대로 둔다.
@@ -756,4 +734,180 @@ func fullyLoadedPartialDecision(t *testing.T, pool *pgxpool.Pool, evidence *live
 	require.NoError(t, tx.Rollback(ctx))
 
 	return want, decision
+}
+
+// 다른 kind의 늦은 LIVE 뒤 같은 slot의 PARTIAL은 이미 저장된 COMPLETE 부재만 재적용한다.
+// 새 부재를 만들지 않으며 이미 센 slot과 UPCOMING 때 무시한 slot은 재계산하지 않는다.
+func TestLivePartialCurrentSlotReplaysAfterDelayedVideoCheck(t *testing.T) {
+	for _, grace := range []time.Duration{0, time.Hour} {
+		t.Run(grace.String(), func(t *testing.T) {
+			pool, repo, _, holodexProof := startHolodexLivePersist(t)
+			ctx := t.Context()
+			consumer := NewConsumerWithGraces(repo, 0, grace)
+			publisher := publishkit.NewPublisher(pool)
+			proof := seedAdditionalLease(t, pool, &holodexProof, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
+			videoProof := seedAdditionalLease(t, pool, &proof, contract.KindVideoLiveCheck, testVideoID, "youtubejs_video_live")
+
+			videoProof = advanceLease(ctx, t, pool, &videoProof, -time.Minute)
+			finalizeLeaseRosterCount(t, pool, &holodexProof)
+
+			completeID := seedDelayedLivePromotion(t, pool, publisher, consumer, &proof, &videoProof)
+			at := proof.ScheduledFor
+			base := at.Add(-time.Hour)
+			companion := liveSession("partial-live", testStatusLive)
+
+			companion.StartedAt = &base
+
+			observation := publishHolodexReplayPartial(t, publisher, &holodexProof, companion)
+			before := assertPartialCurrentSlotReplay(t, pool, consumer, observation, completeID)
+
+			replayLiveObservation(t, repo, consumer, observation.ID)
+			require.Equal(t, 1, liveConsecutiveSlots(t, pool), "same-slot replay must not count twice")
+			require.True(t, storedIgnoredEquals(t, pool, "partial-up", slices.Concat(
+				toastIgnoredHistory(base.Add(-17000*time.Minute)), []time.Time{at})), "ignored current slot must not be appended twice")
+			require.Equal(t, before, liveHeadToastIDs(t, pool))
+			assertTableCount(t, pool, "youtube_live_absence_slots", 1)
+
+			// 다음 PARTIAL에는 저장된 slot이 없으므로 빠진 LIVE를 새 부재로 세지 않는다.
+			holodexProof = advanceLease(ctx, t, pool, &holodexProof, time.Minute)
+			publishHolodexReplayPartial(t, publisher, &holodexProof, companion)
+			require.NoError(t, consumer.Consume(ctx, liveClaimOptions()))
+			require.Equal(t, 1, liveConsecutiveSlots(t, pool), "PARTIAL cannot supply a new absence slot")
+			require.Equal(t, before, liveHeadToastIDs(t, pool))
+			assertTableCount(t, pool, "youtube_live_absence_slots", 1)
+
+			proof = advanceLease(ctx, t, pool, &proof, 2*time.Minute)
+
+			lastID := publishConsumeLiveFromProvider(ctx, t, publisher, consumer, &proof,
+				contract.ProviderYouTubeJS, testChannelID)
+			require.Equal(t, 2, liveConsecutiveSlots(t, pool))
+			assertTableCount(t, pool, "youtube_live_absence_slots", 2)
+			assertLiveAbsenceEndOutcome(t, pool, at, lastID, grace)
+		})
+	}
+}
+
+func seedDelayedLivePromotion(t *testing.T, pool *pgxpool.Pool, publisher *publishkit.Publisher,
+	consumer *Consumer, proof, videoProof *contract.LeaseProof,
+) int64 {
+	t.Helper()
+
+	ctx := t.Context()
+	_, err := pool.Exec(ctx, `UPDATE observation_contract_generations
+		SET current_schema_version=$1, current_generation=$2
+		WHERE provider='youtubejs' AND observation_kind='video_live_check'`,
+		contract.VideoLifecycleSchemaVersion, contract.VideoLifecycleContractGeneration)
+	require.NoError(t, err)
+
+	base := proof.ScheduledFor.Add(-time.Hour)
+	seedConsumedPartialFixture(t, pool, base)
+
+	_, err = pool.Exec(ctx, `INSERT INTO youtube_live_sessions
+		(video_id, channel_id, status, title, last_seen_at, lifecycle_origin)
+		VALUES ($1, $2, 'UPCOMING', 'metadata', $3, 'metadata_only')`, testVideoID, testChannelID, base)
+	require.NoError(t, err)
+
+	completeID := publishConsumeLiveFromProvider(ctx, t, publisher, consumer, proof,
+		contract.ProviderYouTubeJS, testChannelID)
+	assertTableCount(t, pool, "youtube_live_absence_slots", 1)
+	require.Equal(t, testStatusUpcoming, liveSessionStatus(t, pool))
+
+	// 지원되는 schema/generation의 영상 확인을 실제 Claim/Finalize로 뒤늦게 소비한다.
+	publishLiveCheck(ctx, t, publisher, videoLiveCheckEnvelope(t, videoProof, liveVideoCheck(contract.VideoAvailabilityPublic)))
+	consumeLiveChecks(ctx, t, consumer)
+	require.Equal(t, testStatusLive, liveSessionStatus(t, pool))
+	require.Zero(t, liveConsecutiveSlots(t, pool))
+	assertLifecycleOrigin(t, pool, string(live.OriginObserved))
+	assertTableCount(t, pool, "youtube_live_absence_slots", 1)
+
+	return completeID
+}
+
+func publishHolodexReplayPartial(t *testing.T, publisher *publishkit.Publisher, proof *contract.LeaseProof,
+	companion contract.LiveSessionV1,
+) Observation {
+	t.Helper()
+
+	envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, proof,
+		contract.LiveSnapshotMetadataContractGeneration, contract.ProviderHolodex, testHolodexLiveKey, companion)
+
+	envelope.Completeness = contract.CompletenessPartial
+
+	prepared, err := contract.PrepareEnvelope(*envelope)
+	require.NoError(t, err)
+
+	published, err := publisher.PublishBatch(t.Context(), publishInput(&prepared))
+	require.NoError(t, err)
+	require.Len(t, published.Results, 1)
+
+	return Observation{
+		ID: published.Results[0].ObservationID, Provider: prepared.Provider, ObservationKind: prepared.ObservationKind,
+		ObservationKey: prepared.ObservationKey, ScopeSHA256: prepared.ScopeSHA256, EvidenceSHA256: prepared.EvidenceSHA256,
+		ScheduledFor: prepared.ScheduledFor, Completeness: prepared.Completeness, Continuity: prepared.Continuity, Payload: prepared.Payload,
+	}
+}
+
+func assertPartialCurrentSlotReplay(t *testing.T, pool *pgxpool.Pool, consumer *Consumer,
+	observation Observation, completeID int64,
+) []int64 {
+	t.Helper()
+
+	ctx := t.Context()
+	require.NoError(t, pool.QueryRow(ctx, `SELECT scheduled_for, received_at FROM source_observations WHERE id=$1`,
+		observation.ID).Scan(&observation.EffectiveAt, &observation.ReceivedAt))
+
+	evidence, err := liveEvidenceFromObservation(&observation)
+	require.NoError(t, err)
+
+	ids := []string{testVideoID, "partial-up", "partial-live", "partial-meta"}
+	want, _ := fullyLoadedPartialDecision(t, pool, &evidence, ids)
+	require.Equal(t, 1, want.Sessions[testVideoID].Clock.ConsecutiveAbsenceSlots)
+
+	before := liveHeadToastIDs(t, pool)
+	require.NotEmpty(t, before)
+	require.NoError(t, consumer.Consume(ctx, liveClaimOptions()))
+
+	got, err := dbx.InPgxTxWithResult(ctx, pool, func(tx dbx.Tx) (live.State, error) {
+		return loadUnscopedLiveState(ctx, tx, ids)
+	})
+	require.NoError(t, err)
+	require.Equal(t, want, got, "current-slot replay must match the fully loaded oracle")
+
+	session := got.Sessions[testVideoID]
+	require.NotNil(t, session.FirstAbsenceScheduledFor)
+	require.True(t, observation.ScheduledFor.Equal(*session.FirstAbsenceScheduledFor))
+	require.Equal(t, completeID, session.LastAbsenceObservationID, "PARTIAL must use the stored COMPLETE evidence")
+	require.Nil(t, session.Clock.EndCandidateObservationID)
+	require.Equal(t, before, liveHeadToastIDs(t, pool), "unchanged ignored history must retain its TOAST storage")
+	assertTableCount(t, pool, "youtube_live_absence_slots", 1)
+
+	return before
+}
+
+func assertLiveAbsenceEndOutcome(t *testing.T, pool *pgxpool.Pool, at time.Time, lastID int64, grace time.Duration) {
+	t.Helper()
+
+	ctx := t.Context()
+	state, err := dbx.InPgxTxWithResult(ctx, pool, func(tx dbx.Tx) (live.State, error) {
+		return loadUnscopedLiveState(ctx, tx, []string{testVideoID})
+	})
+	require.NoError(t, err)
+
+	session := state.Sessions[testVideoID]
+	require.NotNil(t, session.FirstAbsenceScheduledFor)
+	require.NotNil(t, session.SecondAbsenceScheduledFor)
+	require.True(t, at.Equal(*session.FirstAbsenceScheduledFor))
+	require.True(t, at.Add(2*time.Minute).Equal(*session.SecondAbsenceScheduledFor))
+
+	if grace == 0 {
+		require.Equal(t, domain.LiveStatusEnded, session.Status)
+		require.Equal(t, new(live.EndReasonScopedAbsence), session.EndReason)
+		require.Nil(t, session.Clock.EndCandidateObservationID)
+		require.Empty(t, state.PendingEnds)
+	} else {
+		require.Equal(t, domain.LiveStatusLive, session.Status)
+		require.Equal(t, new(lastID), session.Clock.EndCandidateObservationID)
+		require.Equal(t, new(live.EndEvidenceScopedAbsence), session.Clock.EndCandidateKind)
+		require.NotNil(t, session.Clock.NextEndCheckAt)
+	}
 }
