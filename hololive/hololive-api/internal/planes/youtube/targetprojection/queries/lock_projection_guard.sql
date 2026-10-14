@@ -1,4 +1,1 @@
-SELECT guard_key
-FROM youtube_collection_projection_guard
-WHERE guard_key
-FOR UPDATE
+SELECT public.lock_youtube_collection_runtime_bundles()

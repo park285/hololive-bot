@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	jsonv2 "encoding/json/v2"
 	"testing"
 	"time"
 
@@ -59,61 +58,6 @@ func TestCollectionLifecycleSnapshotWithinRuntimeBudget(t *testing.T) {
 			require.Zero(t, samples[0].stateMismatch)
 		})
 	}
-}
-
-func TestLiveCheckReviewWorkIsBoundedByReviewedVideos(t *testing.T) {
-	for _, withReceipts := range []bool{false, true} {
-		name := "zero_receipts"
-
-		if withReceipts {
-			name = "many_receipts"
-		}
-
-		t.Run(name, func(t *testing.T) {
-			pool := dbtest.NewPool(t)
-			seedCollectionLifecyclePopulation(t, pool)
-
-			var reviewed int
-
-			if withReceipts {
-				seedCollectionLifecycleReceipts(t, pool)
-
-				reviewed = collectionLifecycleReviewed
-			}
-
-			var raw []byte
-
-			require.NoError(t, pool.QueryRow(t.Context(), "EXPLAIN (ANALYZE, FORMAT JSON) "+mustSQL("live_check_videos.sql"),
-				[]string{"load-channel"}, 101).Scan(&raw))
-
-			var plans []struct {
-				Plan collectionStatePlanNode `json:"Plan"`
-			}
-
-			require.NoError(t, jsonv2.Unmarshal(raw, &plans))
-			require.Len(t, plans, 1)
-
-			// pending ends는 검토 snapshot만 읽습니다. 영수증 없는 영상과 과거
-			// 영수증 세대 수가 현재 snapshot 계산 횟수를 늘리면 안 됩니다.
-			lookups := liveReviewPendingEndLookups(plans[0].Plan)
-			t.Logf("reviewed videos=%d, pending-end lookups=%.0f", reviewed, lookups)
-			require.LessOrEqual(t, lookups, float64(reviewed))
-		})
-	}
-}
-
-func liveReviewPendingEndLookups(node collectionStatePlanNode) float64 {
-	var lookups float64
-
-	if node.Relation == "youtube_live_pending_ends" {
-		lookups = node.Loops
-	}
-
-	for _, child := range node.Plans {
-		lookups += liveReviewPendingEndLookups(child)
-	}
-
-	return lookups
 }
 
 // TestLiveCheckVideosExcludeOnlyMatchedReviews는 현재 원본에 적용되는 검토 영수증만 UPCOMING을

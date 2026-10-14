@@ -315,10 +315,8 @@ func promoteStagingGeneration(ctx context.Context, tx dbx.Tx, current currentPro
 }
 
 func lockProjectionGuard(ctx context.Context, tx dbx.Tx) error {
-	var guard bool
-
-	// guard row는 migration이 만든 singleton입니다. 없으면 collector와의 직렬화가 깨지므로 진행하지 않습니다.
-	if err := tx.QueryRow(ctx, mustSQL("lock_projection_guard.sql")).Scan(&guard); err != nil {
+	// 기존 singleton을 실제로 갱신하여 collector와 직렬화하고 오래된 MVCC snapshot을 거부한다.
+	if _, err := tx.Exec(ctx, mustSQL("lock_projection_guard.sql")); err != nil {
 		return fmt.Errorf("refresh youtube target projection: lock projection guard: %w", err)
 	}
 

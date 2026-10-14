@@ -15,6 +15,8 @@ BEGIN;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '3s';
 SET LOCAL TIME ZONE 'UTC';
+-- 스냅샷·session·head보다 먼저 guard를 잡아 정상 writer와 같은 순서로 복구한다.
+SELECT public.lock_youtube_live_runtime_state();
 SELECT set_config('iris.live_head_repair.expected_count', :'expected_count', true);
 SELECT set_config('iris.live_head_repair.expected_digest', :'expected_digest', true);
 DO $$
@@ -27,10 +29,31 @@ BEGIN
        OR current_setting('iris.live_head_repair.expected_digest') !~ '^[0-9a-f]{32}$' THEN
         RAISE EXCEPTION 'invalid bounded snapshot precondition';
     END IF;
-    IF EXISTS (SELECT 1 FROM pg_trigger
-               WHERE tgrelid IN ('public.youtube_live_sessions'::regclass,
-                                 'public.youtube_live_reconciliation_heads'::regclass)
-                 AND NOT tgisinternal AND tgenabled <> 'D')
+    IF EXISTS (SELECT 1 FROM pg_trigger t
+               WHERE t.tgrelid IN ('public.youtube_live_sessions'::regclass,
+                                   'public.youtube_live_reconciliation_heads'::regclass)
+                 AND NOT t.tgisinternal AND t.tgenabled <> 'D'
+                 AND NOT EXISTS (
+                     -- 동기 read model migration에서 검토한 문장 trigger 정의만 허용한다.
+                     SELECT 1 FROM (VALUES
+                         ('youtube_live_runtime_guard', 62,
+                          'public.guard_youtube_live_runtime_state()'::regprocedure, NULL::name, NULL::name),
+                         ('youtube_live_runtime_insert', 4,
+                          'public.refresh_youtube_live_runtime_state_statement()'::regprocedure, NULL::name, 'runtime_new'::name),
+                         ('youtube_live_runtime_update', 16,
+                          'public.refresh_youtube_live_runtime_state_statement()'::regprocedure, 'runtime_old'::name, 'runtime_new'::name),
+                         ('youtube_live_runtime_delete', 8,
+                          'public.refresh_youtube_live_runtime_state_statement()'::regprocedure, 'runtime_old'::name, NULL::name),
+                         ('youtube_live_runtime_truncate', 32,
+                          'public.refresh_youtube_live_runtime_state_statement()'::regprocedure, NULL::name, NULL::name)
+                     ) reviewed(trigger_name, trigger_type, trigger_function, old_table, new_table)
+                     WHERE t.tgname = reviewed.trigger_name AND t.tgtype = reviewed.trigger_type
+                       AND t.tgfoid = reviewed.trigger_function AND t.tgenabled = 'O'
+                       AND t.tgoldtable IS NOT DISTINCT FROM reviewed.old_table
+                       AND t.tgnewtable IS NOT DISTINCT FROM reviewed.new_table
+                       AND t.tgnargs = 0 AND t.tgqual IS NULL AND t.tgattr = ''::int2vector
+                       AND t.tgconstraint = 0
+                 ))
        OR EXISTS (SELECT 1 FROM pg_rules WHERE schemaname = 'public'
                   AND tablename IN ('youtube_live_sessions', 'youtube_live_reconciliation_heads')) THEN
         RAISE EXCEPTION 'unreviewed trigger or rule on repair tables';
@@ -55,7 +78,7 @@ DECLARE
     actual_digest text;
     changed integer;
 BEGIN
-    -- 정상 writer와 같은 순서: 정본 session → head, 각 단계는 video_id 순서.
+    -- guard를 잡은 뒤 정본 session → head, 각 단계는 video_id 순서.
     PERFORM p.video_id FROM public.youtube_live_sessions p
     JOIN terminal_head_repair t USING (video_id) ORDER BY p.video_id FOR UPDATE OF p;
     PERFORM h.video_id FROM public.youtube_live_reconciliation_heads h

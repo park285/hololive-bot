@@ -121,6 +121,12 @@ func TestCollectionRealPolicyGuardCancellationAndExpiry(t *testing.T) {
 
 	defer cancel()
 
+	var before time.Time
+
+	// header 쓰기도 guard를 따르므로 writer가 잠그기 전에 만료를 예약한다.
+	require.NoError(t, pool.QueryRow(ctx, `UPDATE youtube_collection_projection_generations
+		SET valid_until=clock_timestamp()+interval '5 seconds' WHERE status='CURRENT' RETURNING valid_until`).Scan(&before))
+
 	entered := make(chan struct{})
 	writerCtx, cancelWriter := context.WithCancel(ctx)
 
@@ -147,14 +153,8 @@ func TestCollectionRealPolicyGuardCancellationAndExpiry(t *testing.T) {
 
 	waitCollectionGuardReaders(ctx, t, pool, pids[:])
 
-	// 모든 reader statement가 시작된 뒤 만료시킵니다. 잠금 대기 전 statement 시각을
-	// 재사용하면 이 header를 유효하다고 오판하므로 실제 DB 함수의 clock 계약을 검증합니다.
-	_, err := pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET valid_until=clock_timestamp() WHERE status='CURRENT'`)
-	require.NoError(t, err)
-
-	var before time.Time
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT valid_until FROM youtube_collection_projection_generations WHERE status='CURRENT'`).Scan(&before))
+	// 대기 reader의 statement가 만료 전에 시작했음을 확인하고 DB 시각의 자연 만료를 기다린다.
+	waitCollectionHeaderExpiry(ctx, t, pool, pids[:], before)
 	cancelReader()
 
 	canceled := awaitCollectionGuardSample(ctx, t, done[0])
@@ -258,6 +258,35 @@ func waitCollectionGuardReaders(ctx context.Context, t *testing.T, pool *pgxpool
 		case <-ticker.C:
 		case <-ctx.Done():
 			t.Fatalf("공유 guard reader 대기=%d/%d: %v", waiting, len(pids), ctx.Err())
+		}
+	}
+}
+
+func waitCollectionHeaderExpiry(ctx context.Context, t *testing.T, pool *pgxpool.Pool, pids []int32, expiresAt time.Time) {
+	t.Helper()
+
+	var beganBeforeExpiry bool
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*)=cardinality($1::int[]) AND bool_and(query_start<$2)
+		FROM pg_stat_activity WHERE pid=ANY($1::int[])`, pids, expiresAt).Scan(&beganBeforeExpiry))
+	require.True(t, beganBeforeExpiry, "reader statement는 header 만료 전에 시작해야 합니다")
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		var expired bool
+
+		require.NoError(t, pool.QueryRow(ctx, `SELECT clock_timestamp()>$1`, expiresAt).Scan(&expired))
+
+		if expired {
+			return
+		}
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
 		}
 	}
 }
