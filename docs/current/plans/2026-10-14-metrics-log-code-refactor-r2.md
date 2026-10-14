@@ -84,3 +84,16 @@ Fallback delta: none.
 
 - migration 311이 `alarm_upcoming_checkpoints`를 지운다. 이전 worker가 이 표에 쓰므로 중앙 cutover 순서는 새 image 적재 → alarm-worker 재생성 → migration 311 → hololive-api·collector `c` 재생성이다. 그다음 Seoul `b`, Osaka `a`, Osaka2 `d` 순서로 교체한다.
 - 311 적용 뒤 10.0.0 이하 worker image로 rollback하면 upcoming 후보 저장이 실패한다. rollback이 필요하면 표를 다시 만드는 migration을 먼저 적용한다.
+
+### 운영 배포 결과 (2026-10-14, UTC)
+
+- **revision:** `c98d54f2c80bc96905101096fb590703b331a9ea`(10.1.0). local CI·`hololive-dbtest`·pre-push gate를 통과한 뒤 PR #636으로 게시했다. tag와 GitHub Release는 만들지 않았다.
+- **중앙:**
+  - `hololive-api:rollback-20261014T073158Z`, `hololive-alarm-worker:rollback-20261014T073158Z`를 보존했고, 바뀐 트리 파일 6개는 `deploy-backups/pre-v10.1.0-20261014T073158Z/deploy-files.tar`에 있다.
+  - 07:33:00Z worker 교체 → migration 311(applied=1, skipped=171, total=172) → 07:33:25Z api 교체 순서로 진행했다. 표 삭제를 확인했다.
+  - collector `c`와 issuer는 `po-central-cutover.sh`로 07:34Z에 교체했다. 백업은 `backups/po-c-20261014T073337Z`다.
+- **AP:**
+  - Seoul `b`의 첫 시도는 rsync 권한 오류로 cutover 전에 멈췄고 실행 중인 컨테이너는 바뀌지 않았다. 원인은 10.0.0 배포 때 root로 풀린 manifest 범위 경로 39개다. 오늘 이전 상태처럼 ubuntu 소유로 되돌린 뒤 다시 배포했고 07:36Z에 기동했다. 되돌린 목록은 `backups/seoul-collector-20261014T073445Z/root-owned-before-chown.txt`에 있다.
+  - Osaka `a`는 release `20261014T073649Z-c98d54f2c80b-osaka`, Osaka2 `d`는 `20261014T074005Z-c98d54f2c80b-osaka2`로 완료 검사를 통과했다.
+- **수용:** 중앙 4개 컨테이너와 AP 3대가 같은 revision이고 healthy이며 재시작은 0회다. 교체 이후 중앙 오류 표식은 0건이다. `hololive_db_pool_*`, `hololive_http_client_*`, slot wait, retention `phase` 지표가 수집된다.
+- **rollback:** api·worker는 위 rollback tag를 `prod`로 되돌리고 트리 백업을 복원한다. 단 worker를 10.0.0으로 되돌리려면 `alarm_upcoming_checkpoints`를 먼저 다시 만들어야 한다. collector c는 `po-central-cutover.sh rollback backups/po-c-20261014T073337Z`, b는 `ap-rollback.sh seoul`, a·d는 `ap-host-native-rollback.sh <ap>`다.
