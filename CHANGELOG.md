@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **관리자 통계 중복 수집 수정:** 캐시 miss 뒤 다른 수집이 완료되면 늦게 시작한 singleflight leader가 유효한 snapshot을 다시 사용합니다. TTL 안의 CPU·메모리·원격 health 재수집을 막고, 호출자별 복사본·취소·만료 후 재수집 계약은 유지합니다.
 - **deunhealth 이미지 빌드:** 의존성 일괄 갱신(#604)이 `gosplash`를 upstream이 쓰지 않는 v0.2.0으로 올려 `BuildDate` 필드가 없어 빌드가 실패했습니다. upstream 고정값 v0.1.0으로 되돌립니다. 실행 중인 deunhealth에는 변경이 없습니다.
 - **수명 동기 읽기 모델:** migration 312가 활성 session 또는 head의 좁은 상태와 현재 일치하는 최신 검토 시각을 `youtube_live_runtime_state`에 유지합니다. observability·live-check는 이 표를 직접 읽으며 시간 경과·신선도·미래 일정 필터는 조회 시 계산합니다. 원본·영수증 의미 사실과 불일치 진단은 보존합니다.
 - **쓰기 직렬화:** API 관측 확정·종료 finalizer·증거 보존 삭제·수동 영수증·head 복구가 claim/원본 행보다 먼저 공통 MVCC guard를 잡습니다. 문장 trigger는 원본·영수증 변경과 같은 트랜잭션에서 모델을 갱신하고 삭제·FK·롤백을 반영합니다. 오래된 REPEATABLE READ/SERIALIZABLE snapshot은 직렬화 오류로 종료하며 새 재시도를 추가하지 않습니다. 모든 관측 확정이 직렬화되므로 쓰기 처리량과 잠금 대기 비용이 늘 수 있습니다.
