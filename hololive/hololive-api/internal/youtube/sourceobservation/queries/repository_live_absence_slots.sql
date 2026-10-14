@@ -1,4 +1,4 @@
-SELECT observation_id, scheduled_for, evidence_sha256, effective_at, received_at, scope_sha256, coverage
+SELECT observation_id, scheduled_for, encode(evidence_sha256, 'hex'), effective_at, received_at, encode(scope_sha256, 'hex'), coverage
 FROM youtube_live_absence_slots
 WHERE ((coverage -> 'requested_channel_ids') ?| $1::text[]
        AND ($2::timestamptz IS NULL OR effective_at > $2))

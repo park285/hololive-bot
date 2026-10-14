@@ -8,7 +8,7 @@ import (
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
-	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -65,7 +65,7 @@ func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time, obser
 		return nil, false
 	}
 
-	if now.Sub(*startAt) > sharedconstants.LiveCatchupWindow {
+	if now.Sub(*startAt) > tier.LiveCatchupWindow {
 		if liveObservedRecently(observedAt, now) {
 			return startAt, true
 		}
@@ -85,7 +85,7 @@ func liveObservedRecently(observedAt []*time.Time, now time.Time) bool {
 
 	observed := observedAt[0].UTC()
 
-	return !observed.After(now) && now.Sub(observed) <= sharedconstants.LiveCatchupWindow
+	return !observed.After(now) && now.Sub(observed) <= tier.LiveCatchupWindow
 }
 
 func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
@@ -114,7 +114,7 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 			c.logger.Warn("live catchup dedup check failed, skipping room",
 				privacylog.RoomIDAttr(roomID),
 				slog.String("channel_id", channelID),
-				slog.String("error", err.Error()))
+				slog.Any("error", err))
 
 			continue
 		}
@@ -136,7 +136,7 @@ func (c *YouTubeChecker) roomHasRecentUpcomingNotification(ctx context.Context, 
 		roomID,
 		channelID,
 		stream,
-		sharedconstants.LiveCatchupSuppressWindow,
+		tier.LiveCatchupSuppressWindow,
 	)
 	if err != nil {
 		return false, fmt.Errorf("build live catchup notifications: check upcoming suppress window: %w", err)

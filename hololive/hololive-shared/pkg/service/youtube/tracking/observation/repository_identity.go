@@ -90,31 +90,10 @@ func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.
 }
 
 func normalizeTrackingBatchRecords(records []*domain.YouTubeContentAlarmTracking) ([]*domain.YouTubeContentAlarmTracking, error) {
-	normalizedByIdentity := make(map[string]*domain.YouTubeContentAlarmTracking, len(records))
-	normalizedOrder := make([]string, 0, len(records))
-
-	for i, record := range records {
-		normalizedRecord, err := normalizeRecord(record)
-		if err != nil {
-			return nil, fmt.Errorf("upsert tracking batch: normalize record at index %d: %w", i, err)
-		}
-
-		identityKey := trackingCanonicalKey(normalizedRecord.Kind, normalizedRecord.CanonicalContentID)
-		if existing, ok := normalizedByIdentity[identityKey]; ok {
-			normalizedByIdentity[identityKey] = mergeNormalizedTrackingRecord(existing, normalizedRecord)
-			continue
-		}
-
-		normalizedByIdentity[identityKey] = normalizedRecord
-		normalizedOrder = append(normalizedOrder, identityKey)
-	}
-
-	normalized := make([]*domain.YouTubeContentAlarmTracking, 0, len(normalizedOrder))
-	for _, identityKey := range normalizedOrder {
-		normalized = append(normalized, normalizedByIdentity[identityKey])
-	}
-
-	return normalized, nil
+	return normalizeBatchRecords(records, "upsert tracking batch", normalizeRecord,
+		func(record *domain.YouTubeContentAlarmTracking) string {
+			return trackingCanonicalKey(record.Kind, record.CanonicalContentID)
+		}, mergeNormalizedTrackingRecord)
 }
 
 func buildTrackingUpsertQuery(

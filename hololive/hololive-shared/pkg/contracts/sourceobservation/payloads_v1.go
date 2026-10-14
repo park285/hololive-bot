@@ -58,15 +58,6 @@ type LiveSnapshotV1 struct {
 	Query    *LiveSnapshotQueryV1    `json:"query,omitempty"`
 }
 
-type ViewerSampleV1 struct {
-	VideoID             string                 `json:"video_id"`
-	ViewerCount         *int64                 `json:"viewer_count,omitempty"`
-	Availability        string                 `json:"availability"`
-	SampleWindowStart   time.Time              `json:"sample_window_start"`
-	SampleWindowSeconds int                    `json:"sample_window_seconds"`
-	Coverage            ViewerSampleCoverageV1 `json:"coverage"`
-}
-
 type FieldValue[T any] struct {
 	Present bool `json:"present"`
 	Value   T    `json:"value"`

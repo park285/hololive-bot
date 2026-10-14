@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	databasesvc "github.com/kapu/hololive-shared/pkg/service/database"
 )
@@ -16,8 +18,15 @@ type DatabaseResources struct {
 	Close   func()
 }
 
-// ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함).
-func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
+// ProvideDatabaseResources는 PostgreSQL pool을 열고 정리 함수를 함께 돌려준다.
+// 빈 문자열이 아닌 poolName은 pool 통계를 hololive_db_pool_*{pool=poolName}으로 기본 registry에 등록하고 정리 때 해제한다.
+// 한 프로세스의 pool마다 다른 이름을 써야 하며, 이름이 겹치면 생성이 실패한다.
+func ProvideDatabaseResources(
+	ctx context.Context,
+	postgresConfig *settings.PostgresConfig,
+	poolName string,
+	logger *slog.Logger,
+) (*DatabaseResources, func(), error) {
 	if postgresConfig == nil {
 		return nil, nil, errors.New("postgres config is nil")
 	}
@@ -36,12 +45,19 @@ func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 		PoolMaxConns:  postgresConfig.PoolMaxConns,
 	}, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create database resources: %w", err)
+		return nil, nil, fmt.Errorf("create database resources: %w", err)
+	}
+
+	unregisterStats, err := registerPoolStats(prometheus.DefaultRegisterer, dbService.GetPool(), poolName)
+	if err != nil {
+		return nil, nil, errors.Join(fmt.Errorf("create database resources: %w", err), dbService.Close())
 	}
 
 	resources := &DatabaseResources{
 		Service: dbService,
 		Close: func() {
+			unregisterStats()
+
 			if err := dbService.Close(); err != nil && logger != nil {
 				logger.Warn("close database resources failed", slog.Any("error", err))
 			}

@@ -218,6 +218,11 @@ func (r *PgxRepository) ReissueSendRequest(ctx context.Context, unitID int64, id
 
 // BeginSendRequest는 고정된 전체 membership을 다시 검증한 뒤 단일 트랜잭션으로 발송 상태에 진입한다.
 func (r *PgxRepository) BeginSendRequest(ctx context.Context, unitID int64, ids []int64, worker, expectedID string, lease time.Duration) error {
+	leaseSeconds, err := wholeSeconds(lease)
+	if err != nil {
+		return fmt.Errorf("begin prepared send: lease: %w", err)
+	}
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin prepared send: %w", err)
@@ -242,7 +247,7 @@ func (r *PgxRepository) BeginSendRequest(ctx context.Context, unitID int64, ids 
 		return ErrSendRequestFence
 	}
 
-	tag, err := tx.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, max(1, int(lease.Seconds())), worker)
+	tag, err := tx.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, leaseSeconds, worker)
 	if err != nil {
 		return fmt.Errorf("begin prepared delivery send: %w", err)
 	}

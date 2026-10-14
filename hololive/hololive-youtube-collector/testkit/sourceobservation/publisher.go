@@ -67,36 +67,6 @@ func NewPublisher(pool *pgxpool.Pool) *Publisher {
 	return &Publisher{repository: store.NewRepository(pool)}
 }
 
-// NewHistoricalViewerPublisher는 보존 중인 과거 viewer 계약의 관측을 실제 publisher로 시드합니다.
-func NewHistoricalViewerPublisher(pool *pgxpool.Pool) (*Publisher, error) {
-	jobs := collection.InitialJobContracts()
-	fixtures := []struct {
-		provider          contract.Provider
-		kind              collection.JobKind
-		class             collection.JobClass
-		membership        collection.JobMembership
-		subject           string
-		emissions, roster []contract.ObservationKind
-	}{
-		{contract.ProviderYouTubeJS, "youtubejs_viewer", collection.JobClassSubject, collection.JobMembershipExactSubject, "", []contract.ObservationKind{contract.KindViewerSample}, nil},
-		{contract.ProviderHolodex, "holodex_live", collection.JobClassGlobal, collection.JobMembershipCurrentProjection, "global:holodex_live", []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample}, []contract.ObservationKind{contract.KindLiveSnapshot}},
-	}
-
-	for i := range fixtures {
-		fixture := &fixtures[i]
-		id := collection.JobID{Provider: fixture.provider, Kind: fixture.kind}
-
-		job, err := collection.NewJobContract(id, fixture.class, fixture.membership, fixture.subject, fixture.emissions, fixture.emissions, fixture.roster)
-		if err != nil {
-			return nil, fmt.Errorf("create historical viewer job: %w", err)
-		}
-
-		jobs[id] = job
-	}
-
-	return &Publisher{repository: store.NewRepositoryWithContracts(pool, jobs)}, nil
-}
-
 func (p *Publisher) PublishBatch(ctx context.Context, input *PublishBatchInput) (PublishBatchResult, error) {
 	var converted *store.PublishBatchInput
 

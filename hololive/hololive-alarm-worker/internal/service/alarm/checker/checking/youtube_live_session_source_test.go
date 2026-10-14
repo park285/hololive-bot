@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
-	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -264,7 +264,7 @@ func TestPgYouTubeLiveSessionSourceLiveRecentWindowIndependentFromCatchupWindow(
 
 	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	start := now.Add(-30 * time.Minute)
-	lastSeenOutsideCatchup := now.Add(-(sharedconstants.LiveCatchupWindow + time.Minute))
+	lastSeenOutsideCatchup := now.Add(-(tier.LiveCatchupWindow + time.Minute))
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{{
 		VideoID:          "live-window-indep",

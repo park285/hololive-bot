@@ -65,7 +65,7 @@ func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 
 func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *domain.CommandContext) error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.repository == nil {
@@ -126,7 +126,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 	return handlercore.NewSubscriptionFlow(&handlercore.SubscriptionFlowConfig{
 		Port: c.repository,
 		OnCheckError: func(ctx context.Context, err error) error {
-			c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))
+			c.Deps().Logger.Error("Failed to check subscription", slog.Any("error", err))
 
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventStatusCheckFailed)
 		},
@@ -134,7 +134,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventAlreadySubscribed(ctx))
 		},
 		OnSubscribeError: func(ctx context.Context, err error) error {
-			c.Deps().Logger.Error("Failed to subscribe", slog.String("error", err.Error()))
+			c.Deps().Logger.Error("Failed to subscribe", slog.Any("error", err))
 
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventSubscribeFailed)
 		},
@@ -145,7 +145,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventNotSubscribed(ctx))
 		},
 		OnUnsubscribeError: func(ctx context.Context, err error) error {
-			c.Deps().Logger.Error("Failed to unsubscribe", slog.String("error", err.Error()))
+			c.Deps().Logger.Error("Failed to unsubscribe", slog.Any("error", err))
 
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventUnsubscribeFailed)
 		},

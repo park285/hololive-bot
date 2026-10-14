@@ -22,7 +22,7 @@ type ReplyOutboxManualReplay struct {
 
 func (r *ReplyOutboxRepository) ReplayManualReview(ctx context.Context, replay ReplyOutboxManualReplay) (string, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return "", fmt.Errorf("ensure pool: %w", err)
+		return "", err
 	}
 
 	if replay.OutboxID <= 0 {
@@ -51,7 +51,7 @@ func (r *ReplyOutboxRepository) ReplayManualReview(ctx context.Context, replay R
 
 func (r *ReplyOutboxRepository) ManualReviewStats(ctx context.Context) (ReplyOutboxManualReviewStats, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReplyOutboxManualReviewStats{}, fmt.Errorf("ensure pool: %w", err)
+		return ReplyOutboxManualReviewStats{}, err
 	}
 
 	var (
@@ -78,12 +78,12 @@ type ReplyOutboxReclaim struct {
 func normalizeReplyOutboxEntry(entry *ReplyOutboxEntry) (ReplyOutboxEntry, error) {
 	messageID, err := requireMessageIdentity(entry.MessageID)
 	if err != nil {
-		return ReplyOutboxEntry{}, fmt.Errorf("require message identity: %w", err)
+		return ReplyOutboxEntry{}, err
 	}
 
 	phase, err := requireBoundedIdentity("phase", entry.Phase, phaseRuneLimit)
 	if err != nil {
-		return ReplyOutboxEntry{}, fmt.Errorf("require bounded identity: %w", err)
+		return ReplyOutboxEntry{}, err
 	}
 
 	roomID, err := requireRoomID(entry.RoomID)

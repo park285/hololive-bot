@@ -12,15 +12,14 @@ import (
 const MaxRetentionBatchSize = 1000
 
 type RetentionConfig struct {
-	QueueProcessedAge     time.Duration
-	QueueDLQAge           time.Duration
-	EvidenceAgeByKind     map[contract.ObservationKind]time.Duration
-	CollisionAge          time.Duration
-	ReplayAuditAge        time.Duration
-	ApplicationAuditGrace time.Duration
-	LiveAbsenceSlotAge    time.Duration
-	CheckpointHistoryAge  time.Duration
-	BatchSize             int
+	QueueProcessedAge    time.Duration
+	QueueDLQAge          time.Duration
+	EvidenceAgeByKind    map[contract.ObservationKind]time.Duration
+	CollisionAge         time.Duration
+	ReplayAuditAge       time.Duration
+	LiveAbsenceSlotAge   time.Duration
+	CheckpointHistoryAge time.Duration
+	BatchSize            int
 }
 
 // RetentionResult는 앞 단계의 확정된 삭제량과 실패 대상을 함께 반환한다.
@@ -47,22 +46,12 @@ func (c RetentionConfig) Validate() error {
 		return fmt.Errorf("validate evidence ages: %w", err)
 	}
 
-	for _, age := range c.EvidenceAgeByKind {
-		if retentionApplicationAgeOverflows(age, c.ApplicationAuditGrace) {
-			return errors.New("retention application audit age overflows")
-		}
-	}
-
 	return nil
 }
 
 func (c RetentionConfig) hasNegativeAge() bool {
 	return c.QueueProcessedAge < 0 || c.QueueDLQAge < 0 || c.CollisionAge < 0 || c.ReplayAuditAge < 0 ||
-		c.ApplicationAuditGrace < 0 || c.LiveAbsenceSlotAge < 0 || c.CheckpointHistoryAge < 0
-}
-
-func retentionApplicationAgeOverflows(age, grace time.Duration) bool {
-	return age > 0 && grace > 0 && age > time.Duration(1<<63-1)-grace
+		c.LiveAbsenceSlotAge < 0 || c.CheckpointHistoryAge < 0
 }
 
 func validateEvidenceAges(ages map[contract.ObservationKind]time.Duration) error {
@@ -166,7 +155,37 @@ func (r *Repository) runRetentionSteps(
 	cfg RetentionConfig,
 	now time.Time,
 ) (RetentionResult, error) {
-	steps := []retentionStep{
+	out, err := r.deleteRetentionBatches(r.retentionSteps(ctx, cfg, now))
+	if err != nil {
+		return out, fmt.Errorf("delete retention batches: %w", err)
+	}
+
+	if err := r.measureRetentionBacklogs(ctx, cfg, now, &out); err != nil {
+		return out, fmt.Errorf("measure retention backlogs: %w", err)
+	}
+
+	return out, nil
+}
+
+// RetentionTables는 RunRetentionTick이 ByTable·FailedTable로 보고하는 테이블 이름을 실행 순서대로 돌려준다.
+// 지표 소비자가 같은 목록을 따로 적지 않도록 실행 단계 정의에서 이름만 읽으며, 단계 함수는 실행하지 않는다.
+func RetentionTables() []string {
+	steps := (*Repository)(nil).retentionSteps(context.Background(), RetentionConfig{}, time.Time{})
+	tables := make([]string, 0, len(steps))
+
+	for _, step := range steps {
+		tables = append(tables, step.table)
+	}
+
+	return tables
+}
+
+func (r *Repository) retentionSteps(
+	ctx context.Context,
+	cfg RetentionConfig,
+	now time.Time,
+) []retentionStep {
+	return []retentionStep{
 		{
 			table: "source_observation_queue",
 			age:   minPositiveDuration(cfg.QueueProcessedAge, cfg.QueueDLQAge),
@@ -197,11 +216,6 @@ func (r *Repository) runRetentionSteps(
 			run:   func() (int64, error) { return r.deleteUnreferencedPayloadBatch(ctx, cfg, now) },
 		},
 		{
-			table: "source_observation_applications",
-			age:   minApplicationAuditAge(cfg),
-			run:   func() (int64, error) { return r.deleteApplicationBatch(ctx, cfg, now) },
-		},
-		{
 			table: "youtube_live_absence_slots",
 			age:   cfg.LiveAbsenceSlotAge,
 			run: func() (int64, error) {
@@ -222,17 +236,6 @@ func (r *Repository) runRetentionSteps(
 			},
 		},
 	}
-
-	out, err := r.deleteRetentionBatches(steps)
-	if err != nil {
-		return out, fmt.Errorf("delete retention batches: %w", err)
-	}
-
-	if err := r.measureRetentionBacklogs(ctx, cfg, now, &out); err != nil {
-		return out, fmt.Errorf("measure retention backlogs: %w", err)
-	}
-
-	return out, nil
 }
 
 type retentionStep struct {
@@ -346,20 +349,6 @@ func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg Ret
 	return removed, nil
 }
 
-func (r *Repository) deleteApplicationBatch(ctx context.Context, cfg RetentionConfig, now time.Time) (int64, error) {
-	kinds, cutoffs := applicationAuditPolicies(cfg.EvidenceAgeByKind, cfg.ApplicationAuditGrace, now)
-	if len(kinds) == 0 {
-		return 0, nil
-	}
-
-	out, err := r.execDelete(ctx, "repository_retention_delete_applications_0083_83.sql", kinds, cutoffs, cfg.BatchSize)
-	if err != nil {
-		return out, fmt.Errorf("exec delete: %w", err)
-	}
-
-	return out, nil
-}
-
 func (r *Repository) execDelete(ctx context.Context, name string, args ...any) (int64, error) {
 	tag, err := r.pool.Exec(ctx, mustSQL(name), args...)
 	if err != nil {
@@ -388,30 +377,6 @@ func evidencePolicies(ages map[contract.ObservationKind]time.Duration, now time.
 
 		kinds = append(kinds, string(kind))
 		cutoffs = append(cutoffs, now.Add(-age))
-	}
-
-	return kinds, cutoffs
-}
-
-func applicationAuditPolicies(
-	ages map[contract.ObservationKind]time.Duration,
-	grace time.Duration,
-	now time.Time,
-) ([]string, []time.Time) {
-	if grace <= 0 {
-		return nil, nil
-	}
-
-	kinds := make([]string, 0, len(ages))
-	cutoffs := make([]time.Time, 0, len(ages))
-
-	for kind, age := range ages {
-		if age <= 0 || !kind.Valid() {
-			continue
-		}
-
-		kinds = append(kinds, string(kind))
-		cutoffs = append(cutoffs, now.Add(-(age + grace)))
 	}
 
 	return kinds, cutoffs
@@ -447,13 +412,4 @@ func minEvidenceAge(ages map[contract.ObservationKind]time.Duration) time.Durati
 	}
 
 	return minimum
-}
-
-func minApplicationAuditAge(cfg RetentionConfig) time.Duration {
-	evidenceAge := minEvidenceAge(cfg.EvidenceAgeByKind)
-	if evidenceAge <= 0 || cfg.ApplicationAuditGrace <= 0 {
-		return 0
-	}
-
-	return evidenceAge + cfg.ApplicationAuditGrace
 }

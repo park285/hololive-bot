@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -126,8 +127,8 @@ func TestLiveSteadyConsumeAndFinalizerDoNotReloadOldAbsenceHistory(t *testing.T)
 	// 오래된 slot 10,000개의 필터 decode 오류가 현재 session과 확정 candidate에 전파되면 안 된다.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_absence_slots
-		SELECT 1000000+g, $1::timestamptz-g*INTERVAL '1 minute', repeat('a',64),
-		       $1::timestamptz-g*INTERVAL '1 minute', $1, repeat('b',64),
+		SELECT 1000000+g, $1::timestamptz-g*INTERVAL '1 minute', decode(repeat('a',64),'hex'),
+		       $1::timestamptz-g*INTERVAL '1 minute', $1, decode(repeat('b',64),'hex'),
 		       jsonb_build_object('requested_channel_ids',jsonb_build_array($2::text),'filters','invalid')
 		FROM generate_series(1,10000) AS g
 	`, proof.ScheduledFor.Add(-time.Hour), testChannelID); err != nil {
@@ -295,46 +296,16 @@ func TestLiveEndEvidenceSurvivesRawRetentionAndGrace(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	consumer := NewConsumerWithGraces(repo, 0, time.Hour)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderHolodex, contract.KindLiveSnapshot, testChannelID, "holodex_live")
-	// Holodex의 명시적 종료 근거로 원본 삭제 후 grace를 검사한다. streams 전체 coverage의 부재 근거는 섞지 않는다.
-	positiveFact := liveSession(testVideoID, testStatusLive)
-
-	positiveFact.StartedAt = new(proof.ScheduledFor)
-
-	positive, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, contract.LiveSnapshotMetadataContractGeneration, contract.ProviderHolodex, testChannelID, positiveFact)))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
-
-	endedAt := proof.ScheduledFor.Add(-15 * time.Second)
-	fact := liveSession(testVideoID, testStatusEnded)
-
-	fact.EndedAt = &endedAt
-
-	negative, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, contract.LiveSnapshotMetadataContractGeneration, contract.ProviderHolodex, testChannelID, fact)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	positiveID, negativeID, endedAt := seedRetainedLiveEndEvidence(t, pool)
 
 	batch, err := repo.ClaimBatch(ctx, liveClaimOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	consumeLiveClaim(ctx, t, consumer, batch, negative.Results[0].ObservationID)
-
-	if _, err = pool.Exec(ctx, "DELETE FROM source_observation_queue WHERE observation_id=$1", negative.Results[0].ObservationID); err != nil {
-		t.Fatal(err)
-	}
-
-	deleted, err := repo.deleteEvidenceBatch(ctx, RetentionConfig{EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindLiveSnapshot: time.Hour}, BatchSize: 10}, time.Now().Add(2*time.Hour))
-	if err != nil || deleted != 1 {
-		t.Fatalf("retention deleted=%d err=%v", deleted, err)
-	}
-
-	consumeLiveClaim(ctx, t, consumer, batch, positive.Results[0].ObservationID)
+	consumeLiveClaim(ctx, t, consumer, batch, negativeID)
+	deleteRetainedLiveEndEvidence(t, pool, repo, negativeID)
+	consumeLiveClaim(ctx, t, consumer, batch, positiveID)
 
 	if _, err = pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads SET last_live_positive_seen_at=NOW()-INTERVAL '2 hours', next_end_check_at=NOW() WHERE video_id=$1`, testVideoID); err != nil {
 		t.Fatal(err)
@@ -356,6 +327,57 @@ func TestLiveEndEvidenceSurvivesRawRetentionAndGrace(t *testing.T) {
 	}
 
 	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
+}
+
+func seedRetainedLiveEndEvidence(t *testing.T, pool *pgxpool.Pool) (positiveID, negativeID int64, endedAt time.Time) {
+	t.Helper()
+
+	ctx := t.Context()
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderHolodex, contract.KindLiveSnapshot, testChannelID, "holodex_live")
+	// Holodex의 명시적 종료 근거로 원본 삭제 후 grace를 검사한다. streams 전체 coverage의 부재 근거는 섞지 않는다.
+	positiveFact := liveSession(testVideoID, testStatusLive)
+
+	positiveFact.StartedAt = new(proof.ScheduledFor)
+
+	positive, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, contract.LiveSnapshotMetadataContractGeneration, contract.ProviderHolodex, testChannelID, positiveFact)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
+	endedAt = proof.ScheduledFor.Add(-15 * time.Second)
+
+	fact := liveSession(testVideoID, testStatusEnded)
+
+	fact.EndedAt = &endedAt
+
+	negative, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, contract.LiveSnapshotMetadataContractGeneration, contract.ProviderHolodex, testChannelID, fact)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return positive.Results[0].ObservationID, negative.Results[0].ObservationID, endedAt
+}
+
+func deleteRetainedLiveEndEvidence(t *testing.T, pool *pgxpool.Pool, repo *Repository, observationID int64) {
+	t.Helper()
+
+	ctx := t.Context()
+	if _, err := pool.Exec(ctx, "DELETE FROM source_observation_queue WHERE observation_id=$1", observationID); err != nil {
+		t.Fatal(err)
+	}
+
+	// 보존이 허용되는 퇴역 세대·비활성 lease로 전환한 뒤 원시 종료 근거를 삭제합니다.
+	// 아직 처리하지 않은 positive는 큐가 보호하므로 나중에 같은 근거로 grace를 평가할 수 있습니다.
+	if _, err := pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET status='RETIRED';
+		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL`); err != nil {
+		t.Fatal(err)
+	}
+
+	deleted, err := repo.deleteEvidenceBatch(ctx, RetentionConfig{EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindLiveSnapshot: time.Hour}, BatchSize: 10}, time.Now().Add(2*time.Hour))
+	if err != nil || deleted != 1 {
+		t.Fatalf("retention deleted=%d err=%v", deleted, err)
+	}
 }
 
 func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {

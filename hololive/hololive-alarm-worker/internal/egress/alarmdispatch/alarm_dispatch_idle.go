@@ -9,10 +9,10 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/backoff"
 	"github.com/park285/shared-go/v2/pkg/retry"
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type alarmDispatchWakeupWaitResult string
@@ -152,7 +152,7 @@ func (w *WakeupWaiter) waitForValkeyWakeup(ctx context.Context, timeout time.Dur
 
 	values, err := results[0].AsStrSlice()
 	if err != nil {
-		if util.IsValkeyNil(err) {
+		if errors.Is(err, valkey.Nil) {
 			return alarmDispatchWakeupTimeout, nil
 		}
 

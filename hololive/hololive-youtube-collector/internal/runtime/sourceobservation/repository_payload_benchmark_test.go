@@ -20,7 +20,7 @@ func BenchmarkPayloadDictionaryPublish(b *testing.B) {
 			ctx := b.Context()
 			pool := dbtest.NewPool(b)
 			repo := NewRepository(pool)
-			proof := seedPublishLease(ctx, b, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			proof := seedPublishLease(ctx, b, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 			var (
 				firstBytes, lastBytes int64

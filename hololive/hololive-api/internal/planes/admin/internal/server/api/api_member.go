@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -43,14 +44,14 @@ func (h *MemberHandler) parsePositiveMemberID(c *gin.Context) (int, bool) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.safeLogger().Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "Invalid member ID", nil)
 
 		return 0, false
 	}
 
 	if memberID <= 0 {
 		h.safeLogger().Warn("Member ID must be positive", slog.Int("id", memberID))
-		sharedserver.RespondError(c, 400, "Member ID must be positive", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "Member ID must be positive", nil)
 
 		return 0, false
 	}
@@ -74,14 +75,14 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
 
 	if req.IsGraduated == nil {
 		h.safeLogger().Warn("Missing graduation status")
-		sharedserver.RespondError(c, 400, "isGraduated is required", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "isGraduated is required", nil)
 
 		return
 	}
@@ -97,14 +98,13 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 			slog.Bool("is_graduated", isGraduated),
 			slog.Any("error", err),
 		)
-		sharedserver.RespondError(c, 500, "Failed to set graduation status", nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to set graduation status", nil)
 
 		return
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.safeLogger().Error("Failed to refresh cache after graduation update", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", "Failed to refresh cache after graduation update", err)
 
 		return
 	}
@@ -129,7 +129,7 @@ func (h *MemberHandler) respondGraduationSuccess(c *gin.Context, memberID int, i
 		"is_graduated": isGraduated,
 	})
 
-	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Graduation status updated successfully"})
+	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Graduation status updated successfully"})
 }
 
 func (h *MemberHandler) GetMembers(c *gin.Context) {
@@ -142,13 +142,12 @@ func (h *MemberHandler) GetMembers(c *gin.Context) {
 
 	members, err := h.repository.GetAllMembers(ctx)
 	if err != nil {
-		h.safeLogger().Error("Failed to get members", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to get members", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to get members", "Failed to get members", err)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, memberListResponse{Status: "ok", Members: members})
+	ginjson.Respond(c, http.StatusOK, memberListResponse{Status: "ok", Members: members})
 }
 
 func (h *MemberHandler) AddMember(c *gin.Context) {
@@ -156,7 +155,7 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -167,20 +166,18 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	if err := h.repository.CreateMember(ctx, &req); err != nil {
-		h.safeLogger().Error("Failed to add member", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to add member", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to add member", "Failed to add member", err)
 
 		return
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.safeLogger().Error("Failed to refresh member cache", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", "Failed to refresh member cache", err)
 
 		return
 	}
 
 	h.logActivity("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
 
-	ginjson.Respond(c, 201, statusMessageResponse{Status: "ok", Message: "Member added successfully"})
+	ginjson.Respond(c, http.StatusCreated, statusMessageResponse{Status: "ok", Message: "Member added successfully"})
 }

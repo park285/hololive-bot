@@ -17,8 +17,8 @@ func TestHTTP014TransportCapEqualsProviderGate(t *testing.T) {
 	collector.OfficialMaxInflight = 2
 
 	gates := newProviderGates(&collector)
-	holodex := providerTransportConfig(25*time.Second, collector.HolodexMaxInflight)
-	official := providerTransportConfig(15*time.Second, collector.OfficialMaxInflight)
+	holodex := providerTransportConfig(contract.ProviderHolodex, 25*time.Second, collector.HolodexMaxInflight)
+	official := providerTransportConfig(contract.ProviderHololiveOfficial, 15*time.Second, collector.OfficialMaxInflight)
 
 	if holodex.MaxConnsPerHost != cap(gates[contract.ProviderHolodex]) {
 		t.Fatalf("holodex cap %d != gate %d", holodex.MaxConnsPerHost, cap(gates[contract.ProviderHolodex]))

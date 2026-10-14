@@ -296,12 +296,7 @@ func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName
 		return "", err
 	}
 
-	out, err := mf.renderTemplate(ctx, templateKey, channelID, data)
-	if err != nil {
-		return out, fmt.Errorf("render template: %w", err)
-	}
-
-	return out, nil
+	return mf.renderTemplate(ctx, templateKey, channelID, data)
 }
 
 func groupedTemplateKey(kind domain.OutboxKind) (domain.TemplateKey, error) {

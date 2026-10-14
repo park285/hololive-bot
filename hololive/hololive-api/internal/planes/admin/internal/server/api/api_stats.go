@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -60,31 +61,27 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members, alarmKeys int
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		panicguard.Run(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-members", func() {
-			memberErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-members", func() error {
-				var err error
+		memberErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-members", func() error {
+			var err error
 
-				members, err = h.repository.CountMembers(ctx)
-				if err != nil {
-					return fmt.Errorf("count members: %w", err)
-				}
+			members, err = h.repository.CountMembers(ctx)
+			if err != nil {
+				return fmt.Errorf("count members: %w", err)
+			}
 
-				return nil
-			})
+			return nil
 		})
 	})
 	wg.Go(func() {
-		panicguard.Run(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-alarms", func() {
-			alarmErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-alarms", func() error {
-				var err error
+		alarmErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-alarms", func() error {
+			var err error
 
-				alarmKeys, err = h.alarm.CountAlarmEntries(ctx)
-				if err != nil {
-					return fmt.Errorf("count alarm entries: %w", err)
-				}
+			alarmKeys, err = h.alarm.CountAlarmEntries(ctx)
+			if err != nil {
+				return fmt.Errorf("count alarm entries: %w", err)
+			}
 
-				return nil
-			})
+			return nil
 		})
 	})
 
@@ -114,7 +111,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 		h.safeLogger().Error("failed to collect stats",
 			slog.Any("member_error", memberErr),
 			slog.Any("alarm_error", alarmErr))
-		sharedserver.RespondError(c, 500, "failed to collect stats", nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, "failed to collect stats", nil)
 
 		return
 	}
@@ -128,7 +125,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 		roomCount = len(rooms)
 	}
 
-	ginjson.Respond(c, 200, statsResponse{
+	ginjson.Respond(c, http.StatusOK, statsResponse{
 		Status:  "ok",
 		Members: members,
 		Alarms:  alarmKeys,
@@ -141,7 +138,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 // 5초마다 CPU/메모리 통계를 전송합니다.
 func (h *StatsHandler) StreamSystemStats(c *gin.Context) {
 	if h == nil || h.Handler == nil || h.systemStats == nil {
-		sharedserver.RespondError(c, 400, "System stats collector not available", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "System stats collector not available", nil)
 
 		return
 	}
@@ -149,7 +146,7 @@ func (h *StatsHandler) StreamSystemStats(c *gin.Context) {
 	conn, err := adminhandlers.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.safeLogger().Warn("failed to upgrade websocket", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "failed to upgrade websocket connection", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "failed to upgrade websocket connection", nil)
 
 		return
 	}

@@ -36,6 +36,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
@@ -363,13 +364,13 @@ func (c *GeminiClient) newInteractionRequest(ctx context.Context, prompts openai
 }
 
 func readGeminiResponse(body io.Reader) ([]byte, error) {
-	raw, err := io.ReadAll(io.LimitReader(body, maxGeminiResponseBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read gemini interaction response: %w", err)
+	raw, err := httputil.ReadAllLimited(body, maxGeminiResponseBytes)
+	if errors.Is(err, httputil.ErrResponseBodyTooLarge) {
+		return nil, errors.New("gemini interaction response exceeds size limit")
 	}
 
-	if len(raw) > maxGeminiResponseBytes {
-		return nil, errors.New("gemini interaction response exceeds size limit")
+	if err != nil {
+		return nil, fmt.Errorf("read gemini interaction response: %w", err)
 	}
 
 	return raw, nil

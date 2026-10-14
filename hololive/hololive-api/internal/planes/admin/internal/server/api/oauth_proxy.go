@@ -21,6 +21,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	adminhandlers "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi/handlers"
@@ -37,5 +39,5 @@ func (h *OAuthHandler) OAuthCallbackHandler(c *gin.Context) {
 	deepLinkURL := adminhandlers.BuildOAuthDeepLinkURL(code, state, errorParam, errorDesc)
 	htmlResponse := adminhandlers.BuildOAuthRedirectHTML(deepLinkURL, errorParam != "")
 
-	c.Data(200, "text/html; charset=utf-8", []byte(htmlResponse))
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(htmlResponse))
 }

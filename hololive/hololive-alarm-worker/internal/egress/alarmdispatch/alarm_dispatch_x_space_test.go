@@ -10,8 +10,8 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func TestXSpaceRenderingAndIsolation(t *testing.T) {
@@ -83,10 +83,10 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 			link := payload.URL()
 
 			if title != "" {
-				link = util.KakaoZeroWidthSpace + util.MarkdownNeutralize(title) + "\n" + link
+				link = kakaotext.ZeroWidthSpace + kakaotext.MarkdownNeutralize(title) + "\n" + link
 			}
 
-			require.Equal(t, "🔴 "+util.MarkdownNeutralize(markdownMemberName)+" 스페이스 시작\n"+link, message)
+			require.Equal(t, "🔴 "+kakaotext.MarkdownNeutralize(markdownMemberName)+" 스페이스 시작\n"+link, message)
 		})
 	}
 }

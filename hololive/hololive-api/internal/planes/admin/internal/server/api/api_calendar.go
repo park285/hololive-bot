@@ -38,11 +38,8 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 
 	result, err := h.repository.FindMembersWithCelebrationsInMonth(ctx, month, year)
 	if err != nil {
-		h.safeLogger().Error("Failed to get calendar entries",
-			slog.Int("month", month), slog.Int("year", year),
-			slog.Any("error", err),
-		)
-		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to get calendar", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to get calendar", "Failed to get calendar entries", err,
+			slog.Int("month", month), slog.Int("year", year))
 
 		return
 	}

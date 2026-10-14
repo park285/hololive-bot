@@ -247,6 +247,7 @@ func TestHTTP016TLSFailureDoesNotLeakAPIKey(t *testing.T) {
 	key := "holodex-test-key"
 
 	owned, err := providerhttp.NewProviderHTTPClient(providerhttp.ProviderTransportConfig{
+		MetricsClient:         "holodex",
 		RequestTimeout:        time.Second,
 		DialTimeout:           time.Second,
 		TLSHandshakeTimeout:   time.Second,

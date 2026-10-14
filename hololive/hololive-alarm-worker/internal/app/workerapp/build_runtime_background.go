@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/celebration"
-	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -59,12 +59,12 @@ func buildCelebrationRunnerScheduler(
 
 // runner 설정은 infra 확인보다 먼저 읽어, 켜진 runner의 잘못된 값이 기본값으로 바뀌지 않고 기동 오류가 되게 한다.
 func loadCelebrationRunnerConfig() (celebration.RunnerConfig, error) {
-	checkHour, err := envconfig.ParseHourOfDay("CELEBRATION_CHECK_HOUR_KST", 0)
+	checkHour, err := parseHourOfDayEnv("CELEBRATION_CHECK_HOUR_KST", 0)
 	if err != nil {
 		return celebration.RunnerConfig{}, fmt.Errorf("celebration runner config: %w", err)
 	}
 
-	runInterval, err := envconfig.ParsePositiveDurationMS("CELEBRATION_RUN_INTERVAL_MS", time.Hour)
+	runInterval, err := envload.RequiredMillisDurationEnv("CELEBRATION_RUN_INTERVAL_MS", time.Hour)
 	if err != nil {
 		return celebration.RunnerConfig{}, fmt.Errorf("celebration runner config: %w", err)
 	}
@@ -119,12 +119,12 @@ func buildBirthdayStreamRunnerScheduler(
 }
 
 func loadBirthdayStreamRunnerConfig() (celebration.BirthdayStreamRunnerConfig, error) {
-	runInterval, err := envconfig.ParsePositiveDurationMS("BIRTHDAY_STREAM_POLL_INTERVAL_MS", 30*time.Minute)
+	runInterval, err := envload.RequiredMillisDurationEnv("BIRTHDAY_STREAM_POLL_INTERVAL_MS", 30*time.Minute)
 	if err != nil {
 		return celebration.BirthdayStreamRunnerConfig{}, fmt.Errorf("birthday stream runner config: %w", err)
 	}
 
-	sessionFreshness, err := envconfig.ParsePositiveDurationMS("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", 30*time.Minute)
+	sessionFreshness, err := envload.RequiredMillisDurationEnv("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", 30*time.Minute)
 	if err != nil {
 		return celebration.BirthdayStreamRunnerConfig{}, fmt.Errorf("birthday stream runner config: %w", err)
 	}

@@ -8,7 +8,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 const testMixedMemberName = "미코 Miko"
@@ -33,7 +33,7 @@ func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
 				const url = "https://youtu.be/a_b#c"
 
 				out := kakaoformat.Render(renderSeedBody(t, key, body, literalTitleData(title, url)))
-				visible := strings.ReplaceAll(out, util.KakaoZeroWidthSpace, "")
+				visible := strings.ReplaceAll(out, kakaotext.ZeroWidthSpace, "")
 				want := strings.NewReplacer("\r\n", " ", "\t", " ").Replace(title)
 
 				if !strings.Contains(visible, want) || !hasSeedLine(out, url) {
@@ -86,7 +86,7 @@ func TestSeedTemplates_WorkerCompositeURLsAndScheduleLines(t *testing.T) {
 
 	out := kakaoformat.Render(renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotification,
 		seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotification), data))
-	visible := strings.ReplaceAll(out, util.KakaoZeroWidthSpace, "")
+	visible := strings.ReplaceAll(out, kakaotext.ZeroWidthSpace, "")
 
 	if !strings.HasSuffix(out, primary+"\n"+secondary) || !strings.Contains(visible, "콜라보: 미코, 스이세이\n변경 안내\n- 다음 시간에 시작") {
 		t.Errorf("composite URL, collab, or schedule text changed: %q", out)

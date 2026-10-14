@@ -1,8 +1,11 @@
 package celebration
 
 import (
+	"bytes"
 	"context"
+	"encoding/json/v2"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -160,7 +163,9 @@ func (s *birthdayStreamTestStore) FindSentRoomsByEventKeys(_ context.Context, ev
 	roomsByEventKey := make(map[string][]string, len(eventKeys))
 	for _, eventKey := range eventKeys {
 		rooms, ok := s.sentRoomsByEventKey[eventKey]
-		if !ok {
+		// defaultSentRooms는 생일축하 greeting의 audience만 흉내 낸다. 생일 방송 event의 sent 방은
+		// 시험이 sentRoomsByEventKey로 직접 지정해야 한다.
+		if !ok && !strings.HasPrefix(eventKey, "celebration:"+string(domain.CelebrationKindBirthdayStream)+":") {
 			rooms = s.defaultSentRooms
 		}
 
@@ -756,6 +761,147 @@ func TestBirthdayStreamRunOnceRepublishesKnownEventForLateSentRoom(t *testing.T)
 	assert.Equal(t, "original birthday title", publisher.batches[1][0].Celebration.StreamTitle)
 	assert.Equal(t, "original birthday title", publisher.batches[1][1].Celebration.StreamTitle)
 	assert.Equal(t, []string{prefix, prefix}, store.listCalls)
+}
+
+// 기발행 생일 방송의 재평가는 이미 sent로 받은 방을 다시 envelope으로 만들지 않고, 늦게 축하받은 방만 보낸다.
+func TestBirthdayStreamRunOnceRepublishSkipsRoomsAlreadySentStream(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
+	greetingKey := birthdayGreetingEventKey(testMemberIDA, testBirthdayDate)
+	streamKey := birthdayStreamEventKey(testMemberIDA, testBirthdayDate, testVideoA)
+	memberRepo := &birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
+		{7, 10}: {{ID: testMemberIDA, ChannelID: testChannelA, Name: "A"}},
+	}}
+	store := &birthdayStreamTestStore{
+		sessions:        []BirthdayStreamSession{{VideoID: testVideoA, ChannelID: testChannelA, Title: testBirthdayTitle, Status: testStatusUpcoming}},
+		publishedEvents: testPublishedBirthdayStreams(map[string]string{testVideoA: testBirthdayTitle}),
+		sentRoomsByEventKey: map[string][]string{
+			greetingKey: {testRoom1, testRoom2},
+			streamKey:   {testRoom1},
+		},
+	}
+	publisher := &birthdayStreamTestPublisher{}
+	runner := newBirthdayStreamTestRunner(memberRepo, store, publisher, nil, now)
+
+	require.NoError(t, runner.RunOnce(t.Context()))
+
+	require.Equal(t, [][]string{{greetingKey}, {streamKey}}, store.sentRoomsEventKeyCalls)
+
+	envelopes := publisher.allEnvelopes()
+	require.Len(t, envelopes, 1)
+	assert.Equal(t, testRoom2, envelopes[0].Notification.RoomID)
+	assert.Equal(t, testVideoA, envelopes[0].Celebration.VideoID)
+}
+
+// 모든 audience 방이 이미 생일 방송을 받았으면 발행 tx를 열지 않는다.
+func TestBirthdayStreamRunOnceRepublishAllRoomsSentSkipsPublish(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
+	memberRepo := &birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
+		{7, 10}: {{ID: testMemberIDA, ChannelID: testChannelA, Name: "A"}},
+	}}
+	store := &birthdayStreamTestStore{
+		sessions:        []BirthdayStreamSession{{VideoID: testVideoA, ChannelID: testChannelA, Title: testBirthdayTitle, Status: testStatusUpcoming}},
+		publishedEvents: testPublishedBirthdayStreams(map[string]string{testVideoA: testBirthdayTitle}),
+		sentRoomsByEventKey: map[string][]string{
+			birthdayGreetingEventKey(testMemberIDA, testBirthdayDate):           {testRoom1, testRoom2},
+			birthdayStreamEventKey(testMemberIDA, testBirthdayDate, testVideoA): {testRoom2, testRoom1},
+		},
+	}
+	publisher := &birthdayStreamTestPublisher{}
+	runner := newBirthdayStreamTestRunner(memberRepo, store, publisher, nil, now)
+
+	require.NoError(t, runner.RunOnce(t.Context()))
+
+	assert.Empty(t, publisher.batches)
+}
+
+// 기발행 생일 방송의 sent 방 조회가 실패하면 audience 전체로 재발행하지 않고 오류로 끝낸다.
+func TestBirthdayStreamRunOnceSentStreamRoomLookupFailureFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
+	memberRepo := &birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
+		{7, 10}: {{ID: testMemberIDA, ChannelID: testChannelA, Name: "A"}},
+	}}
+	lookupErr := errors.New("stream ledger unavailable")
+	store := &birthdayStreamFailingStreamLookupStore{
+		sessions:        []BirthdayStreamSession{{VideoID: testVideoA, ChannelID: testChannelA, Title: testBirthdayTitle, Status: testStatusUpcoming}},
+		publishedEvents: testPublishedBirthdayStreams(map[string]string{testVideoA: testBirthdayTitle}),
+		streamErr:       lookupErr,
+	}
+	publisher := &birthdayStreamTestPublisher{}
+	runner := newBirthdayStreamTestRunner(memberRepo, &store.birthdayStreamTestStore, publisher, []string{testRoom1}, now)
+
+	runner.sessions = store
+
+	err := runner.RunOnce(t.Context())
+
+	require.ErrorIs(t, err, lookupErr)
+	assert.Empty(t, publisher.batches)
+}
+
+// birthdayStreamFailingStreamLookupStore는 생일 방송 event_key 조회만 실패시킨다.
+type birthdayStreamFailingStreamLookupStore struct {
+	birthdayStreamTestStore
+
+	streamErr error
+}
+
+func (s *birthdayStreamFailingStreamLookupStore) FindSentRoomsByEventKeys(ctx context.Context, eventKeys []string) (map[string][]string, error) {
+	if len(eventKeys) > 0 && eventKeys[0] != birthdayGreetingEventKey(testMemberIDA, testBirthdayDate) {
+		return nil, s.streamErr
+	}
+
+	return s.birthdayStreamTestStore.FindSentRoomsByEventKeys(ctx, eventKeys)
+}
+
+// 모든 envelope이 dedupe로 끝난 실행은 운영 INFO에 남기지 않고, 실제로 delivery를 추가한 실행만 INFO로 남긴다.
+func TestBirthdayStreamRunOncePublishLogLevelFollowsInsertedRows(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result dispatchoutbox.PublishBatchResult
+		want   slog.Level
+	}{
+		{name: "all deduped", result: dispatchoutbox.PublishBatchResult{DuplicateEvents: 1}, want: slog.LevelDebug},
+		{name: "late room delivery", result: dispatchoutbox.PublishBatchResult{InsertedDeliveries: 1, DuplicateEvents: 1}, want: slog.LevelInfo},
+		{name: "new event", result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1}, want: slog.LevelInfo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
+			memberRepo := &birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
+				{7, 10}: {{ID: testMemberIDA, ChannelID: testChannelA, Name: "A"}},
+			}}
+			store := &birthdayStreamTestStore{
+				sessions: []BirthdayStreamSession{{VideoID: testVideoA, ChannelID: testChannelA, Title: testBirthdayTitle, Status: testStatusUpcoming}},
+			}
+			publisher := &birthdayStreamTestPublisher{result: tt.result}
+			runner := newBirthdayStreamTestRunner(memberRepo, store, publisher, []string{testRoom1}, now)
+
+			var logs bytes.Buffer
+
+			runner.logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+			require.NoError(t, runner.RunOnce(t.Context()))
+
+			var record struct {
+				Level string `json:"level"`
+				Msg   string `json:"msg"`
+			}
+
+			require.NoError(t, json.Unmarshal(logs.Bytes(), &record))
+			assert.Equal(t, "Birthday stream runner published", record.Msg)
+			assert.Equal(t, tt.want.String(), record.Level)
+		})
+	}
 }
 
 func TestBirthdayStreamRunOnceSkipsNonBirthdayTitles(t *testing.T) {

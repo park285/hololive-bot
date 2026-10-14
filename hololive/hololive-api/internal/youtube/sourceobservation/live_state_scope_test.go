@@ -4,11 +4,13 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -24,6 +26,9 @@ const (
 	scopeChannelID = "UC_SCOPE"
 	// 종료 후보 없이 pending(D2)이 남은 ENDED 세션이다.
 	scopeEndedPendingID = "end-1"
+	scopeEndedSeventhID = "end-7"
+	scopeEndedLastID    = "end-40"
+	scopeNewUpcomingID  = "new-up"
 )
 
 // loadUnscopedLiveState는 축소 전 적재의 oracle이다. 주어진 영상을 상태와 관계없이 모두 읽고
@@ -66,6 +71,7 @@ func seedLiveScopeFixture(t *testing.T, pool *pgxpool.Pool, base time.Time) {
 		  ('live-1', $2, 'LIVE', 'l1', $1, $1, NULL, $1, $1, 'observed', $1),
 		  ('live-2', $2, 'LIVE', 'l2', $1, $1, NULL, $1, $1, 'observed', $1),
 		  ('meta-1', $2, 'UPCOMING', 'm', $1::timestamptz + interval '5 hours', NULL, NULL, $1, NULL, 'metadata_only', NULL),
+		  ('legacy-1', $2, 'UPCOMING', 'g', $1::timestamptz + interval '5 hours', NULL, NULL, $1, NULL, 'legacy_unknown', NULL),
 		  ('end-due', $2, 'ENDED', 'd', $1, $1, $1, $1, $1, 'observed', $1),
 		  ('end-fut', $2, 'ENDED', 'f', $1, $1, $1, $1, $1, 'observed', $1),
 		  ('oth-1', 'UC_OTHER', 'LIVE', 'o', $1, $1, NULL, $1, $1, 'observed', $1)`, base, scopeChannelID)
@@ -126,10 +132,14 @@ func seedLiveScopeFixture(t *testing.T, pool *pgxpool.Pool, base time.Time) {
 		      'EXPLICIT_END', 901, $1::timestamptz + interval '100 days', 0, NULL, NULL, 0, '{}'),
 		  ('oth-1', 'LIVE', $1, $1, $1, $1, NULL, NULL, NULL, 0, NULL, NULL, 0, '{}')`, base)
 	seed(`
+		INSERT INTO youtube_live_reconciliation_heads (video_id, status, ignored_absence_scheduled_for)
+		VALUES ('meta-1', 'UPCOMING', ARRAY[$1::timestamptz - interval '10 minutes']),
+		       ('legacy-1', 'UPCOMING', ARRAY[$1::timestamptz - interval '10 minutes'])`, base)
+	seed(`
 		INSERT INTO youtube_live_absence_slots (observation_id, scheduled_for, evidence_sha256, effective_at, received_at,
 		    scope_sha256, coverage)
-		SELECT 700 + g, $1::timestamptz + g * interval '10 minutes', repeat('a', 64), $1::timestamptz + g * interval '10 minutes',
-		       $1::timestamptz + g * interval '10 minutes', repeat('b', 64),
+		SELECT 700 + g, $1::timestamptz + g * interval '10 minutes', decode(repeat('a', 64), 'hex'), $1::timestamptz + g * interval '10 minutes',
+		       $1::timestamptz + g * interval '10 minutes', decode(repeat('b', 64), 'hex'),
 		       jsonb_build_object('requested_channel_ids', jsonb_build_array($2::text),
 		           'filters', jsonb_build_object('statuses', jsonb_build_array('ENDED', 'LIVE', 'UPCOMING')))
 		FROM generate_series(1, 3) AS g`, base, scopeChannelID)
@@ -193,7 +203,8 @@ type liveScopeScenario struct {
 	// frozenPending는 payload에 오른 종료 후보 없는 ENDED 세션의 pending(D2)이다. 읽거나 잠그지 않는다.
 	frozenPending []string
 	// loadedPending는 종료 후보가 남은 ENDED와 기본 채널 범위 밖에서 payload로 오른 pending이다.
-	loadedPending []string
+	loadedPending     []string
+	omitActiveHistory bool
 }
 
 func liveScopeEvidence(at time.Time, id int64, completeness contract.Completeness, facts ...live.SessionFact) live.Evidence {
@@ -226,7 +237,7 @@ func liveScopeScenarios(base time.Time) []liveScopeScenario {
 				live.SessionFact{VideoID: "orphan-1", ChannelID: scopeChannelID, Status: testStatusEnded, EndedAt: &ended},
 			),
 			payloadEnded:  []string{scopeEndedPendingID, "end-2"},
-			unloadedEnded: []string{"end-3", "end-7", "end-40"},
+			unloadedEnded: []string{"end-3", scopeEndedSeventhID, scopeEndedLastID},
 			frozenPending: []string{scopeEndedPendingID},
 			loadedPending: []string{"head-1", "orphan-1"},
 		},
@@ -238,18 +249,41 @@ func liveScopeScenarios(base time.Time) []liveScopeScenario {
 				live.SessionFact{VideoID: "new-2", ChannelID: scopeChannelID, Status: testStatusLive, StartedAt: &started, LiveStartConfirmed: true},
 			),
 			payloadEnded:  []string{"end-3"},
-			unloadedEnded: []string{scopeEndedPendingID, "end-7", "end-40"},
+			unloadedEnded: []string{scopeEndedPendingID, scopeEndedSeventhID, scopeEndedLastID},
 			frozenPending: []string{"end-3"},
 		},
 		{
 			name:          "complete empty",
 			evidence:      liveScopeEvidence(at, 1003, contract.CompletenessComplete),
-			unloadedEnded: []string{scopeEndedPendingID, "end-7", "end-40"},
+			unloadedEnded: []string{scopeEndedPendingID, scopeEndedSeventhID, scopeEndedLastID},
+		},
+		{
+			name: "partial existing positives",
+			evidence: liveScopeEvidence(at, 1004, contract.CompletenessPartial,
+				live.SessionFact{VideoID: "up-1", ChannelID: scopeChannelID, Status: testStatusUpcoming},
+				live.SessionFact{VideoID: "live-1", ChannelID: scopeChannelID, Status: testStatusLive, LiveStartConfirmed: true},
+			),
+			unloadedEnded:     []string{scopeEndedPendingID, scopeEndedSeventhID, scopeEndedLastID},
+			omitActiveHistory: true,
+		},
+		{
+			name: "partial new upcoming replays history",
+			evidence: liveScopeEvidence(at, 1005, contract.CompletenessPartial,
+				live.SessionFact{VideoID: scopeNewUpcomingID, ChannelID: scopeChannelID, Status: testStatusUpcoming},
+			),
+			unloadedEnded: []string{scopeEndedPendingID, scopeEndedSeventhID, scopeEndedLastID},
+		},
+		{
+			name: "partial first live replays history",
+			evidence: liveScopeEvidence(at, 1006, contract.CompletenessPartial,
+				live.SessionFact{VideoID: "up-1", ChannelID: scopeChannelID, Status: testStatusLive, LiveStartConfirmed: true},
+			),
+			unloadedEnded: []string{scopeEndedPendingID, scopeEndedSeventhID, scopeEndedLastID},
 		},
 	}
 }
 
-// requireNarrowedLiveScope는 축소 적재가 읽은 행과 이력 적재 여부를 확인하고, ENDED 세션 ID를 돌려준다.
+// requireNarrowedLiveScope는 축소 적재가 읽은 행과 이력 적재 여부를 확인하고, 이력을 생략한 영상 ID를 돌려준다.
 func requireNarrowedLiveScope(t *testing.T, narrowed, full *live.State, payload []string, scenario *liveScopeScenario) map[string]struct{} {
 	t.Helper()
 
@@ -278,8 +312,10 @@ func requireNarrowedLiveScope(t *testing.T, narrowed, full *live.State, payload 
 		session, fullSession := narrowed.Sessions[videoID], full.Sessions[videoID]
 		slots, loaded := session.IgnoredAbsences.Slots()
 
-		if session.Present && session.Status == domain.LiveStatusEnded {
-			require.False(t, loaded, "%s: ENDED history must not be loaded", videoID)
+		metadataWithoutPositive := (session.LifecycleOrigin == live.OriginMetadataOnly || session.LifecycleOrigin == live.OriginLegacyUnknown) &&
+			session.Clock.LastUpcomingPositiveAt == nil && session.Clock.LastLivePositiveAt == nil
+		if session.HeadPresent && (session.Status == domain.LiveStatusEnded || metadataWithoutPositive || scenario.omitActiveHistory) {
+			require.False(t, loaded, "%s: irrelevant history must not be loaded", videoID)
 
 			omitted[videoID] = struct{}{}
 
@@ -307,7 +343,7 @@ func requireNarrowedLiveScope(t *testing.T, narrowed, full *live.State, payload 
 	return omitted
 }
 
-func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, base time.Time, channelVideoIDs []string, scenario *liveScopeScenario) {
+func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, channelVideoIDs []string, scenario *liveScopeScenario) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -321,11 +357,23 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, base time.Time, ch
 
 	narrowed, err := loadLiveState(ctx, tx, scenario.evidence.Coverage.RequestedChannelIDs, payload)
 	require.NoError(t, err)
-	require.NoError(t, loadLiveAbsencesForPositive(ctx, tx, &narrowed, &scenario.evidence))
+
+	recording := &liveScopeQueryTx{Tx: tx}
+	require.NoError(t, loadLiveAbsencesForPositive(ctx, recording, &narrowed, &scenario.evidence))
+
+	if scenario.omitActiveHistory {
+		require.Zero(t, recording.queries, "ordinary PARTIAL must not query arrays or absence slots")
+	}
 
 	full, err := loadUnscopedLiveState(ctx, tx, slices.Concat(channelVideoIDs, payload))
 	require.NoError(t, err)
 	require.NoError(t, loadLiveAbsencesForPositive(ctx, tx, &full, &scenario.evidence))
+
+	if scenario.omitActiveHistory {
+		// 축소 전 소비자는 positive replay가 없어도 현재 slot을 읽었다.
+		require.NoError(t, loadLiveAbsenceSlots(ctx, tx, &full, nil, nil,
+			scenario.evidence.ScheduledFor, scenario.evidence.Coverage.RequestedChannelIDs))
+	}
 
 	omitted := requireNarrowedLiveScope(t, &narrowed, &full, payload, scenario)
 
@@ -337,7 +385,7 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, base time.Time, ch
 
 	requireSameLiveDecision(t, &full, fullDecision, narrowedDecision, omitted)
 
-	// due candidate 정리로 저장되는 ENDED도 생략한 이력을 지우지 않는다.
+	// due candidate 정리로 저장되는 ENDED는 생략한 이력도 비운다.
 	require.NoError(t, persistLiveDecision(ctx, tx, &narrowedDecision))
 
 	// 읽지 않은 동결 pending은 삭제 keep-list에 없어도 그 세션이 dirty가 아니므로 남는다.
@@ -349,19 +397,19 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, base time.Time, ch
 		require.Equal(t, full.PendingEnds[videoID].ObservationID, observationID, "frozen pending %s was rewritten", videoID)
 	}
 
-	var dueCleared, dueHistoryKept bool
+	var dueCleared, dueHistoryCleared bool
 
 	require.NoError(t, tx.QueryRow(ctx, `
-		SELECT next_end_check_at IS NULL, ignored_absence_scheduled_for = ARRAY[$2::timestamptz - interval '3 hours']
-		FROM youtube_live_reconciliation_heads WHERE video_id=$1`, "end-due", base).Scan(&dueCleared, &dueHistoryKept))
+		SELECT next_end_check_at IS NULL, ignored_absence_scheduled_for = '{}'::timestamptz[]
+		FROM youtube_live_reconciliation_heads WHERE video_id=$1`, "end-due").Scan(&dueCleared, &dueHistoryCleared))
 	require.True(t, dueCleared, "due candidate on ENDED was not cleared")
-	require.True(t, dueHistoryKept, "saving an ENDED session without loaded history erased it")
+	require.True(t, dueHistoryCleared, "saving an ENDED session must clear its unused history")
 }
 
 // 채널 범위 적재는 payload 밖의 candidate 없는 ENDED를 읽지 않고, payload ENDED와 due candidate가
 // 남은 ENDED는 이력 없이 읽는다. 이때 payload에 오른 candidate 없는 ENDED의 pending은 읽지 않지만
 // candidate가 남은 ENDED·head만 남은 영상·session 없는 영상의 pending은 읽는다. 전체 적재 oracle과 같은 결정을 내고,
-// 저장해도 이력을 지우지 않는다.
+// 활성 이력은 보존하고 저장되는 ENDED 이력은 비운다.
 func TestLiveStateLoadSkipsUnmentionedEndedSessions(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
@@ -375,7 +423,7 @@ func TestLiveStateLoadSkipsUnmentionedEndedSessions(t *testing.T) {
 
 	for _, scenario := range liveScopeScenarios(base) {
 		t.Run(scenario.name, func(t *testing.T) {
-			checkLiveScopeScenario(t, pool, base, channelVideoIDs, &scenario)
+			checkLiveScopeScenario(t, pool, channelVideoIDs, &scenario)
 		})
 	}
 }
@@ -419,9 +467,9 @@ func seedEndedHistoryFixture(t *testing.T, pool *pgxpool.Pool, base time.Time, h
 		VALUES ('up-hist', 'UPCOMING', $1, $1, $2)`, base, activeHistory)
 }
 
-// 이력 없이 읽은 ENDED 세션의 due candidate를 finalizer와 YouTube.js consumer가 정리해도
-// 큰 배열과 TOAST 값은 그대로 남는다. 적재한 활성 세션의 이력은 계속 늘어난다.
-func TestLiveEndedSessionSaveKeepsIgnoredHistory(t *testing.T) {
+// 이력 없이 읽은 ENDED의 due candidate를 정리할 때 큰 배열도 비운다.
+// 적재한 활성 세션의 이력은 계속 늘어난다.
+func TestLiveEndedSessionSaveClearsIgnoredHistory(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-3 * time.Hour)
@@ -448,10 +496,10 @@ func TestLiveEndedSessionSaveKeepsIgnoredHistory(t *testing.T) {
 	require.True(t, liveHeadCandidateCleared(t, pool, "end-con"))
 
 	for _, videoID := range []string{"end-fin", "end-con"} {
-		require.True(t, storedIgnoredEquals(t, pool, videoID, history), "%s: saving without loaded history erased it", videoID)
+		require.True(t, storedIgnoredEquals(t, pool, videoID, []time.Time{}), "%s: ENDED history must be cleared", videoID)
 	}
 
-	require.Equal(t, before, liveHeadToastIDs(t, pool), "omitted histories must keep their TOAST values")
+	require.Empty(t, liveHeadToastIDs(t, pool), "saving ENDED heads must release their TOAST values")
 
 	var activeCount int
 
@@ -468,4 +516,244 @@ func liveHeadCandidateCleared(t *testing.T, pool *pgxpool.Pool, videoID string) 
 		videoID).Scan(&cleared))
 
 	return cleared
+}
+
+type liveScopeQueryTx struct {
+	dbx.Tx
+
+	queries int
+}
+
+func (tx *liveScopeQueryTx) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
+	tx.queries++
+
+	rows, err := tx.Tx.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("record live scope query: %w", err)
+	}
+
+	return rows, nil
+}
+
+// 신규·첫 positive는 PARTIAL이어도 과거 부재를 복원하고, positive 없는 메타데이터는 그대로 둔다.
+func TestLivePartialFirstPositiveReplaysAbsences(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	base := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
+	seedLiveScopeFixture(t, pool, base)
+
+	for _, test := range []struct {
+		name    string
+		videoID string
+		status  string
+	}{
+		{name: "new upcoming", videoID: scopeNewUpcomingID, status: testStatusUpcoming},
+		{name: "observed first live", videoID: "up-1", status: testStatusLive},
+		{name: "metadata first live", videoID: "meta-1", status: testStatusLive},
+		{name: "legacy first live", videoID: "legacy-1", status: testStatusLive},
+		{name: "metadata upcoming promoted during replay", videoID: "meta-1", status: testStatusUpcoming},
+		{name: "legacy upcoming promoted during replay", videoID: "legacy-1", status: testStatusUpcoming},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := t.Context()
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+
+			defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(ctx))) }()
+
+			if test.status == testStatusLive {
+				// 첫 LIVE 직후에도 이미 무시한 과거 slot은 다시 세지 않는다.
+				_, err = tx.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
+					SET ignored_absence_scheduled_for=ARRAY[$2::timestamptz]
+					WHERE video_id=$1`, test.videoID, base.Add(10*time.Minute))
+				require.NoError(t, err)
+			}
+
+			evidence := liveScopeEvidence(base.Add(5*time.Minute), 1100, contract.CompletenessPartial,
+				live.SessionFact{VideoID: test.videoID, ChannelID: scopeChannelID, Status: test.status, LiveStartConfirmed: true})
+			if test.status == testStatusUpcoming && test.videoID != scopeNewUpcomingID {
+				evidence.Sessions = append(evidence.Sessions,
+					live.SessionFact{VideoID: scopeNewUpcomingID, ChannelID: scopeChannelID, Status: testStatusUpcoming})
+			}
+
+			state, err := loadLiveState(ctx, tx, []string{scopeChannelID}, videoIDsOf(&evidence))
+			require.NoError(t, err)
+			require.NoError(t, loadLiveAbsencesForPositive(ctx, tx, &state, &evidence))
+			require.Len(t, state.AbsenceSlots, 3, "first positive must load later retained absence slots")
+
+			got := requirePartialReplayMatchesFullState(t, tx, &state, &evidence)
+
+			idx := slices.IndexFunc(got.Sessions, func(session live.SessionState) bool { return session.VideoID == test.videoID })
+			require.NotEqual(t, -1, idx)
+
+			requireFirstPositiveReplay(t, &got.Sessions[idx], test.status, base)
+		})
+	}
+}
+
+func TestLiveConsumedPartialMatchesFullyLoadedDecision(t *testing.T) {
+	pool, _, consumer, proof := startHolodexLivePersist(t)
+	ctx := t.Context()
+	base := proof.ScheduledFor.Add(-time.Hour)
+	seedConsumedPartialFixture(t, pool, base)
+
+	fact := liveSession("partial-live", testStatusLive)
+
+	fact.StartedAt = &base
+
+	envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, &proof, contract.LiveSnapshotMetadataContractGeneration,
+		contract.ProviderHolodex, testHolodexLiveKey, liveSession("partial-up", testStatusUpcoming), fact)
+
+	envelope.Completeness = contract.CompletenessPartial
+
+	prepared, err := contract.PrepareEnvelope(*envelope)
+	require.NoError(t, err)
+
+	published, err := publishkit.NewPublisher(pool).PublishBatch(ctx, publishInput(&prepared))
+	require.NoError(t, err)
+	require.Len(t, published.Results, 1)
+
+	observation := Observation{
+		ID: published.Results[0].ObservationID, Provider: prepared.Provider, ObservationKind: prepared.ObservationKind,
+		ObservationKey: prepared.ObservationKey, ScopeSHA256: prepared.ScopeSHA256, EvidenceSHA256: prepared.EvidenceSHA256,
+		ScheduledFor: prepared.ScheduledFor, Completeness: prepared.Completeness, Continuity: prepared.Continuity, Payload: prepared.Payload,
+	}
+	require.NoError(t, pool.QueryRow(ctx, `SELECT scheduled_for, received_at FROM source_observations WHERE id=$1`,
+		observation.ID).Scan(&observation.EffectiveAt, &observation.ReceivedAt))
+
+	evidence, err := liveEvidenceFromObservation(&observation)
+	require.NoError(t, err)
+
+	// 같은 slot의 정본 coverage가 이미 있어도 PARTIAL은 부재를 새로 만들거나 덮어쓰지 않는다.
+	_, err = pool.Exec(ctx, `
+		INSERT INTO youtube_live_absence_slots
+		    (observation_id, scheduled_for, evidence_sha256, effective_at, received_at, scope_sha256, coverage)
+		VALUES (1900, $1, decode(repeat('a', 64), 'hex'), $1, $2, decode(repeat('b', 64), 'hex'),
+		    jsonb_build_object('requested_channel_ids', jsonb_build_array($3::text),
+		        'filters', jsonb_build_object('statuses', jsonb_build_array('UPCOMING', 'LIVE'))))`,
+		evidence.ScheduledFor, evidence.ReceivedAt, testChannelID)
+	require.NoError(t, err)
+
+	ids := []string{"partial-up", "partial-live", "partial-meta"}
+	want, decision := fullyLoadedPartialDecision(t, pool, &evidence, ids)
+
+	before := liveHeadToastIDs(t, pool)
+	require.NotEmpty(t, before)
+	require.NoError(t, consumer.Consume(ctx, liveClaimOptions()))
+	require.NoError(t, dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
+		got, err := loadUnscopedLiveState(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
+
+		require.Equal(t, want, got, "consumed PARTIAL must match the fully loaded reducer and persistence")
+
+		return nil
+	}))
+	require.Equal(t, before, liveHeadToastIDs(t, pool), "ordinary PARTIAL must preserve existing TOAST values")
+	assertTableCount(t, pool, "youtube_live_absence_slots", 1)
+
+	for _, application := range decision.Applications {
+		var stored string
+
+		require.NoError(t, pool.QueryRow(ctx, `
+			SELECT decision FROM source_observation_applications
+			WHERE observation_id=$1 AND entity_kind=$2 AND entity_key=$3`,
+			observation.ID, application.EntityKind, application.EntityKey).Scan(&stored))
+		require.Equal(t, application.Decision, stored)
+	}
+}
+
+func requirePartialReplayMatchesFullState(t *testing.T, tx dbx.Tx, state *live.State, evidence *live.Evidence) live.Decision {
+	t.Helper()
+
+	full, err := loadUnscopedLiveState(t.Context(), tx, slices.Sorted(maps.Keys(state.Sessions)))
+	require.NoError(t, err)
+
+	full.AbsenceSlots = state.AbsenceSlots
+
+	omitted := map[string]struct{}{}
+
+	for videoID := range state.Sessions {
+		session := state.Sessions[videoID]
+		if _, loaded := session.IgnoredAbsences.Slots(); !loaded {
+			omitted[videoID] = struct{}{}
+		}
+	}
+
+	want, err := live.Reduce(full, *evidence, time.Hour, evidence.ReceivedAt)
+	require.NoError(t, err)
+
+	got, err := live.Reduce(*state, *evidence, time.Hour, evidence.ReceivedAt)
+	require.NoError(t, err)
+	requireSameLiveDecision(t, &full, want, got, omitted)
+
+	return got
+}
+
+func requireFirstPositiveReplay(t *testing.T, session *live.SessionState, status string, base time.Time) {
+	t.Helper()
+
+	if status == testStatusUpcoming {
+		slots, loaded := session.IgnoredAbsences.Slots()
+		require.True(t, loaded)
+
+		wantSlots := 3
+
+		if session.VideoID != scopeNewUpcomingID {
+			wantSlots++
+		}
+
+		require.Len(t, slots, wantSlots)
+	} else {
+		require.Equal(t, 2, session.Clock.ConsecutiveAbsenceSlots)
+		require.EqualValues(t, 703, session.LastAbsenceObservationID)
+		require.Equal(t, new(base.Add(20*time.Minute)), session.FirstAbsenceScheduledFor)
+		require.NotNil(t, session.Clock.EndCandidateObservationID)
+	}
+}
+
+func seedConsumedPartialFixture(t *testing.T, pool *pgxpool.Pool, base time.Time) {
+	t.Helper()
+
+	ctx := t.Context()
+	history := toastIgnoredHistory(base.Add(-17000 * time.Minute))
+	_, err := pool.Exec(ctx, `
+		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at, lifecycle_origin)
+		VALUES ('partial-up', $1, 'UPCOMING', 'up', $2, 'observed'),
+		       ('partial-live', $1, 'LIVE', 'live', $2, 'observed'),
+		       ('partial-meta', $1, 'UPCOMING', 'meta', $2, 'metadata_only')`, testChannelID, base)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO youtube_live_reconciliation_heads
+		    (video_id, status, last_upcoming_positive_at, last_live_positive_at, last_live_positive_seen_at, ignored_absence_scheduled_for)
+		VALUES ('partial-up', 'UPCOMING', $1, NULL, NULL, $2),
+		       ('partial-live', 'LIVE', $1, $1, $1, $2),
+		       ('partial-meta', 'UPCOMING', NULL, NULL, NULL, $2)`, base, history)
+	require.NoError(t, err)
+}
+
+func fullyLoadedPartialDecision(t *testing.T, pool *pgxpool.Pool, evidence *live.Evidence, ids []string) (live.State, live.Decision) {
+	t.Helper()
+
+	ctx := t.Context()
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+
+	defer rollbackPublishTestTx(context.WithoutCancel(ctx), t, tx, "fully loaded PARTIAL oracle")
+
+	full, err := loadUnscopedLiveState(ctx, tx, ids)
+	require.NoError(t, err)
+	require.NoError(t, loadLiveAbsenceSlots(ctx, tx, &full, nil, nil, evidence.ScheduledFor, evidence.Coverage.RequestedChannelIDs))
+	require.Len(t, full.AbsenceSlots, 1, "the fully loaded oracle must replay the existing current slot")
+
+	decision, err := live.Reduce(full, *evidence, 0, evidence.ReceivedAt)
+	require.NoError(t, err)
+	require.NoError(t, persistLiveDecision(ctx, tx, &decision))
+
+	want, err := loadUnscopedLiveState(ctx, tx, ids)
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback(ctx))
+
+	return want, decision
 }

@@ -54,7 +54,7 @@ func (h *AlarmHandler) dispatchReady(c *gin.Context) bool {
 func dispatchQuery(c *gin.Context, allowed ...string) (url.Values, bool) {
 	query, err := url.ParseQuery(c.Request.URL.RawQuery)
 	if err != nil {
-		sharedserver.RespondError(c, 400, "invalid dispatch query", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid dispatch query", nil)
 
 		return nil, false
 	}
@@ -66,7 +66,7 @@ func dispatchQuery(c *gin.Context, allowed ...string) (url.Values, bool) {
 
 	for key, values := range query {
 		if !keys[key] || len(values) != 1 || values[0] == "" {
-			sharedserver.RespondError(c, 400, "invalid dispatch query", nil)
+			sharedserver.RespondError(c, http.StatusBadRequest, "invalid dispatch query", nil)
 
 			return nil, false
 		}
@@ -114,7 +114,7 @@ func (h *AlarmHandler) GetDispatchSummary(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, result)
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 // GetDispatchFailures는 실패 보관·격리 원장의 상위 원인 분포를 조회합니다.
@@ -138,7 +138,7 @@ func (h *AlarmHandler) GetDispatchFailures(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, result)
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 // GetDispatchDeliveries는 상태·채팅방·채널·알림 유형·오류 코드와 ID 커서로 최대 50건을 조회합니다.
@@ -173,7 +173,7 @@ func (h *AlarmHandler) GetDispatchDeliveries(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, result)
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 // GetDispatchDelivery는 본문 없이 상태와 재처리 묶음 전체의 리비전을 반환합니다.
@@ -204,7 +204,7 @@ func (h *AlarmHandler) GetDispatchDelivery(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, result)
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 // GetDispatchActions는 해당 발송 항목의 감사 이력을 최대 50건 반환합니다.
@@ -245,7 +245,7 @@ func (h *AlarmHandler) GetDispatchActions(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, result)
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 // decodeDispatchMutation은 변경 입력의 크기·필드·감사 정보·리비전을 실행 전에 검증합니다.
@@ -267,7 +267,7 @@ func (h *AlarmHandler) decodeDispatchMutation(c *gin.Context, request interface{
 
 	mediaType, _, mediaErr := mime.ParseMediaType(c.GetHeader("Content-Type"))
 	if mediaErr != nil || mediaType != "application/json" {
-		sharedserver.RespondError(c, 415, "application/json required", nil)
+		sharedserver.RespondError(c, http.StatusUnsupportedMediaType, "application/json required", nil)
 
 		return false
 	}
@@ -276,9 +276,9 @@ func (h *AlarmHandler) decodeDispatchMutation(c *gin.Context, request interface{
 
 	if decodeErr := jsonv2.UnmarshalRead(c.Request.Body, request, jsonv2.RejectUnknownMembers(true)); decodeErr != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](decodeErr); ok {
-			sharedserver.RespondError(c, 413, "dispatch request body too large", nil)
+			sharedserver.RespondError(c, http.StatusRequestEntityTooLarge, "dispatch request body too large", nil)
 		} else {
-			sharedserver.RespondError(c, 400, "invalid dispatch request body", nil)
+			sharedserver.RespondError(c, http.StatusBadRequest, "invalid dispatch request body", nil)
 		}
 
 		return false
@@ -312,7 +312,7 @@ func (h *AlarmHandler) RequeueDispatchDelivery(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, result)
+	ginjson.Respond(c, http.StatusOK, result)
 }
 
 // SettleDispatchDelivery는 사유와 리비전을 검증한 뒤 외부 발송 없이 실패 묶음을 처리합니다.
@@ -334,5 +334,5 @@ func (h *AlarmHandler) SettleDispatchDelivery(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, result)
+	ginjson.Respond(c, http.StatusOK, result)
 }

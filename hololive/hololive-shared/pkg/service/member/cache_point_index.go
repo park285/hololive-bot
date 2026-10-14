@@ -29,7 +29,7 @@ import (
 )
 
 // memberSnapshotIndex는 snapshot 멤버 목록에서 한 번 만들어 snapshot과 함께 불변으로 게시하는 조회 색인이다. 게시 뒤에는
-// 읽기만 하므로 잠금 없이 공유한다. 각 색인은 예전 전체 순회 규칙과 같은 결과를 내도록 만든다.
+// 읽기만 하므로 잠금 없이 공유한다. 각 색인이 맞추는 PostgreSQL 조회 규칙은 필드 주석에 적는다.
 type memberSnapshotIndex struct {
 	// channelRepresentatives는 채널별 가장 작은 영속 ID 멤버다(repository_query_0032_01.sql의 ORDER BY id).
 	channelRepresentatives map[string]*domain.Member

@@ -32,7 +32,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 // 런타임 renderer는 missingkey 옵션 없이 파싱해 map 데이터의 키 누락이 `<no value>`로
@@ -152,7 +152,7 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 		fieldMemberName: markerName,
 	})
 
-	if !strings.Contains(notFound, util.MarkdownNeutralize(markerName)) {
+	if !strings.Contains(notFound, kakaotext.MarkdownNeutralize(markerName)) {
 		t.Errorf("CMD_MEMBER_NOT_FOUND: mdsafe 미적용: %q", notFound)
 	}
 
@@ -168,7 +168,7 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 		},
 	})
 
-	wantTitleURL := util.MarkdownNeutralize(markerName) + "\n" + markerURL
+	wantTitleURL := kakaotext.MarkdownNeutralize(markerName) + "\n" + markerURL
 	if !strings.Contains(live, wantTitleURL) {
 		t.Errorf("CMD_LIVE_STREAMS: 제목과 URL 분리 %q 없음: %q", wantTitleURL, live)
 	}
@@ -199,8 +199,8 @@ func TestSeedTemplates_OutboxVideoSeparateTitleURLBranches(t *testing.T) {
 		})
 	}
 
-	safeMember := util.MarkdownNeutralize(markerMember)
-	safeTitle := util.MarkdownNeutralize(markerTitle)
+	safeMember := kakaotext.MarkdownNeutralize(markerMember)
+	safeTitle := kakaotext.MarkdownNeutralize(markerTitle)
 	wantHeader := "🔔 " + safeMember + " 새 영상"
 
 	both := render(markerTitle, videoURL)
@@ -292,7 +292,7 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 		},
 	})
 
-	if !hasSeedLine(out, util.MarkdownNeutralize(markerTitle)) || !hasSeedLine(out, shortURL) {
+	if !hasSeedLine(out, kakaotext.MarkdownNeutralize(markerTitle)) || !hasSeedLine(out, shortURL) {
 		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: 제목 또는 원본 short-link 줄 없음: %q", out)
 	}
 
@@ -303,7 +303,7 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 
 func hasSeedLine(out, want string) bool {
 	for line := range strings.SplitSeq(out, "\n") {
-		if strings.TrimPrefix(line, util.KakaoZeroWidthSpace) == want {
+		if strings.TrimPrefix(line, kakaotext.ZeroWidthSpace) == want {
 			return true
 		}
 	}

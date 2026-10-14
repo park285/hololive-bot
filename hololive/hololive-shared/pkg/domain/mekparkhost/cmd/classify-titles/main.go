@@ -25,7 +25,7 @@ type classifiedTitle struct {
 
 func main() {
 	if err := classifyTitles(os.Stdin, os.Stdout); err != nil {
-		slog.Error("classify title corpus", "error", err)
+		slog.Error("classify title corpus", slog.Any("error", err))
 		os.Exit(1)
 	}
 }

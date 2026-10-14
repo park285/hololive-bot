@@ -85,7 +85,7 @@ func newTestMemberRepository() *Repository {
 	return &Repository{logger: slog.New(slog.DiscardHandler)}
 }
 
-func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
+func TestCollectMembersFromRows_All_PreservesShortKoreanName(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
@@ -119,9 +119,9 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectAllMembersFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
 	if err != nil {
-		t.Fatalf("collectAllMembersFromRows error = %v, want nil", err)
+		t.Fatalf("collectMembersFromRows error = %v, want nil", err)
 	}
 
 	if len(members) != 1 || members[0] == nil {
@@ -133,7 +133,7 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 	}
 }
 
-func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
+func TestCollectMembersFromRows_All_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
@@ -180,16 +180,16 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectAllMembersFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
 	if err == nil {
-		t.Fatal("collectAllMembersFromRows error = nil, want non-nil")
+		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
 
 	if len(members) != 1 || members[0] == nil || members[0].ChannelID != testChannelUC2 {
 		t.Fatalf("members = %#v, want one valid member for UC2", members)
 	}
 
-	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to parse member row", "Suisei", "failed to unmarshal aliases"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"parse member row", "Suisei", "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }
@@ -233,12 +233,12 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		t.Fatalf("members = %#v, want UC2 photo member", members)
 	}
 
-	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to scan member row", "scan mismatch"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"scan member row", "scan mismatch"}) {
 		t.Fatalf("error = %q, want joined scan error context", got)
 	}
 }
 
-func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
+func TestCollectMembersFromRows_ByName_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
@@ -283,16 +283,16 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectMembersByNameFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberQueryRow)
 	if err == nil {
-		t.Fatal("collectMembersByNameFromRows error = nil, want non-nil")
+		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
 
 	if len(members) != 1 || members[0] == nil || members[0].ChannelID != testChannelUC1 {
 		t.Fatalf("members = %#v, want one valid member for UC1", members)
 	}
 
-	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to parse member row", testMemberMiko, "failed to unmarshal aliases"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"parse member row", testMemberMiko, "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }

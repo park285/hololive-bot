@@ -21,7 +21,7 @@ func (c *Consumer) reconcileContent(
 	}
 
 	if lockErr := lockContentSubject(ctx, tx, claimed.ObservationKind, claimed.SubjectKey); lockErr != nil {
-		return ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
+		return ReconcileResult{}, lockErr
 	}
 
 	state, err := loadContentState(ctx, tx, claimed.ObservationKind, claimed.SubjectKey, &evidence)
@@ -44,7 +44,7 @@ func (c *Consumer) reconcileContent(
 	}
 
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-		return ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
+		return ReconcileResult{}, err
 	}
 
 	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
@@ -93,20 +93,7 @@ func videoEvidence(observation *Observation) (content.Evidence, error) {
 		return content.Evidence{}, fmt.Errorf("decode video list payload: %w", err)
 	}
 
-	return content.Evidence{
-		Kind:           observation.ObservationKind,
-		ObservationID:  observation.ID,
-		ObservationKey: observation.ObservationKey,
-		EvidenceSHA256: observation.EvidenceSHA256,
-		ScopeSHA256:    observation.ScopeSHA256,
-		ScheduledFor:   observation.ScheduledFor,
-		EffectiveAt:    observation.EffectiveAt,
-		ReceivedAt:     observation.ReceivedAt,
-		Completeness:   observation.Completeness,
-		Continuity:     observation.Continuity,
-		Videos:         entitiesFromItems(payload.Videos, false),
-		Coverage:       content.VideoCoverage(&payload.Coverage),
-	}, nil
+	return listEvidence(observation, entitiesFromItems(payload.Videos, false), content.VideoCoverage(&payload.Coverage)), nil
 }
 
 func shortsEvidence(observation *Observation) (content.Evidence, error) {
@@ -116,6 +103,11 @@ func shortsEvidence(observation *Observation) (content.Evidence, error) {
 		return content.Evidence{}, fmt.Errorf("decode shorts list payload: %w", err)
 	}
 
+	return listEvidence(observation, entitiesFromItems(payload.Videos, true), content.ShortsCoverage(&payload.Coverage)), nil
+}
+
+// listEvidence는 video_list·shorts_list 관측의 공통 메타데이터를 reducer 입력으로 옮긴다.
+func listEvidence(observation *Observation, videos []content.Entity, coverage content.CoverageValue) content.Evidence {
 	return content.Evidence{
 		Kind:           observation.ObservationKind,
 		ObservationID:  observation.ID,
@@ -127,9 +119,9 @@ func shortsEvidence(observation *Observation) (content.Evidence, error) {
 		ReceivedAt:     observation.ReceivedAt,
 		Completeness:   observation.Completeness,
 		Continuity:     observation.Continuity,
-		Videos:         entitiesFromItems(payload.Videos, true),
-		Coverage:       content.ShortsCoverage(&payload.Coverage),
-	}, nil
+		Videos:         videos,
+		Coverage:       coverage,
+	}
 }
 
 // entitiesFromItems는 payload 항목을 reducer 입력으로 옮깁니다. Generation 1 video_list 항목은 Publication이 없으므로

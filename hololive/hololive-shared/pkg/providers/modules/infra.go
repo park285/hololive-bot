@@ -25,9 +25,11 @@ type InfraModule struct {
 }
 
 // InfraOptions는 infra 생성이 실제로 소비하는 cache·DB 설정만 담는다.
+// PoolName은 DB pool 통계 지표의 pool 라벨이며, 한 프로세스 안에서 pool마다 달라야 한다.
 type InfraOptions struct {
 	Valkey   settings.ValkeyConfig
 	Postgres settings.PostgresConfig
+	PoolName string
 }
 
 func BuildInfraModule(ctx context.Context, options InfraOptions, logger *slog.Logger) (_ *InfraModule, retErr error) {
@@ -40,7 +42,7 @@ func BuildInfraModule(ctx context.Context, options InfraOptions, logger *slog.Lo
 		cleanupInfraOnError(retErr, cleanupCache)
 	}()
 
-	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, &options.Postgres, logger)
+	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, &options.Postgres, options.PoolName, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build infra database resources: %w", err)
 	}
@@ -77,9 +79,10 @@ func buildInfraCacheResources(
 func buildInfraDatabaseResources(
 	ctx context.Context,
 	postgresConfig *settings.PostgresConfig,
+	poolName string,
 	logger *slog.Logger,
 ) (*databaseproviders.DatabaseResources, func(), error) {
-	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, postgresConfig, logger)
+	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, postgresConfig, poolName, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide database resources: %w", err)
 	}

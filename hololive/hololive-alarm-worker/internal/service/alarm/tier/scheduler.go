@@ -25,9 +25,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+// dueCheckSlack은 정렬 tick이 깨어나는 지연이 tick마다 달라도 같은 주기의 점검을 놓치지 않게 하는 비교 허용치다.
+// 다음 tick 시작이 이전 tick 시작+간격보다 몇 ms 이르면 Tier1(1분) 채널이 한 tick을 건너뛰고 2분마다 점검된다.
+// 평가 창 slack(scheduler 패키지)과 같은 근거(tick 깨어남 지연 흡수)로 두며, 가장 짧은 Tier 간격(1분)보다 충분히 작아
+// 3분 이상 간격의 채널을 한 tick 앞당겨 점검하지 않는다.
+const dueCheckSlack = 15 * time.Second
+
+func reachedWithSlack(now, at time.Time) bool {
+	return !now.Add(dueCheckSlack).Before(at)
+}
 
 // 채널별 Tier 스케줄 상태.
 type channelScheduleState struct {
@@ -40,7 +49,7 @@ type channelScheduleState struct {
 }
 
 func (s *channelScheduleState) isDue(now time.Time) bool {
-	return s.forceDue || !now.Before(s.nextCheckAt)
+	return s.forceDue || reachedWithSlack(now, s.nextCheckAt)
 }
 
 type TieredScheduler struct {
@@ -58,16 +67,15 @@ func NewTieredScheduler(logger *slog.Logger) *TieredScheduler {
 	}
 }
 
-// fullRefreshAt이 지나면 모든 채널을 반환하고 타이머를 재설정한다.
-func (ts *TieredScheduler) SelectDueChannels(channelIDs []string) []string {
-	now := time.Now()
-
+// SelectDueChannels는 호출자의 iteration 시각 now로 due를 판정한다. UpdateChannelState도 같은 now를 받아야
+// 다음 점검 시각이 처리 시간만큼 밀리지 않는다. 전체 갱신 시각(fullRefreshAt)이 지나면 모든 채널을 반환하고 타이머를 재설정한다.
+func (ts *TieredScheduler) SelectDueChannels(now time.Time, channelIDs []string) []string {
 	ts.mu.Lock()
 
 	forceAll := false
 
-	if !now.Before(ts.fullRefreshAt) {
-		ts.fullRefreshAt = now.Add(constants.FullRefreshInterval)
+	if reachedWithSlack(now, ts.fullRefreshAt) {
+		ts.fullRefreshAt = now.Add(fullRefreshInterval)
 		forceAll = true
 	}
 
@@ -99,8 +107,8 @@ func (ts *TieredScheduler) SelectDueChannels(channelIDs []string) []string {
 	return due
 }
 
-func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domain.Stream) {
-	now := time.Now()
+// UpdateChannelState는 평가를 끝낸 채널의 다음 점검 시각을 now(평가한 iteration 시각) 기준으로 정한다.
+func (ts *TieredScheduler) UpdateChannelState(now time.Time, channelID string, streams []*domain.Stream) {
 	nearest := nearestUpcomingStart(streams, now)
 
 	ts.mu.Lock()
@@ -113,7 +121,7 @@ func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domai
 		lastNotifiedAt = existing.lastNotifiedAt
 	}
 
-	nextAt := ComputeNextCheckAt(nearest, lastNotifiedAt)
+	nextAt := ComputeNextCheckAt(now, nearest, lastNotifiedAt)
 
 	ts.states[channelID] = &channelScheduleState{
 		nextCheckAt:      nextAt,

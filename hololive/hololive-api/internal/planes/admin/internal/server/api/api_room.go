@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -66,7 +67,7 @@ func (h *RoomHandler) GetRooms(c *gin.Context) {
 	}
 
 	aclEnabled, mode, rooms := h.acl.GetACLStatus()
-	ginjson.Respond(c, 200, roomListResponse{
+	ginjson.Respond(c, http.StatusOK, roomListResponse{
 		Status:     "ok",
 		Rooms:      rooms,
 		ACLEnabled: aclEnabled,
@@ -94,19 +95,19 @@ func (h *RoomHandler) GetJoinedRooms(c *gin.Context) {
 	resp, err := h.iris.GetRooms(c.Request.Context())
 	if err != nil {
 		h.safeLogger().Error("Failed to list joined rooms from Iris", slog.Any("error", err))
-		sharedserver.RespondError(c, 502, "Failed to list joined rooms", nil)
+		sharedserver.RespondError(c, http.StatusBadGateway, "Failed to list joined rooms", nil)
 
 		return
 	}
 
 	if resp == nil {
 		h.safeLogger().Error("Failed to list joined rooms from Iris", slog.String("error", "nil response"))
-		sharedserver.RespondError(c, 502, "Failed to list joined rooms", nil)
+		sharedserver.RespondError(c, http.StatusBadGateway, "Failed to list joined rooms", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, joinedRoomListResponse{Status: "ok", Rooms: joinedRoomsFromIris(resp.Rooms)})
+	ginjson.Respond(c, http.StatusOK, joinedRoomListResponse{Status: "ok", Rooms: joinedRoomsFromIris(resp.Rooms)})
 }
 
 func joinedRoomsFromIris(summaries []iris.RoomSummary) []joinedRoom {
@@ -146,7 +147,7 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -156,7 +157,7 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 	added, err := h.acl.AddRoom(ctx, req.Room)
 	if errors.Is(err, acl.ErrInvalidRoomChatID) {
 		// 방 이름 같은 비-chatID 값은 저장해도 어떤 방에도 적용되지 않으므로 입력 오류로 돌려준다.
-		sharedserver.RespondError(c, 400, "room must be a chat ID (signed 64-bit integer)", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)", nil)
 
 		return
 	}
@@ -173,12 +174,12 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 	}
 
 	if !added {
-		sharedserver.RespondError(c, 409, "Room already exists", nil)
+		sharedserver.RespondError(c, http.StatusConflict, "Room already exists", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
+	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
 }
 
 func (h *RoomHandler) RemoveRoom(c *gin.Context) {
@@ -192,7 +193,7 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -212,12 +213,12 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 	}
 
 	if !removed {
-		sharedserver.RespondError(c, 404, "Room not found", nil)
+		sharedserver.RespondError(c, http.StatusNotFound, "Room not found", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
+	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
 }
 
 // respondACLMutationError는 ACL mutation 오류를 500으로 응답한다. 봇 plane 재동기화 실패는 저장 실패와 구분되는
@@ -227,7 +228,7 @@ func (h *RoomHandler) respondACLMutationError(ctx context.Context, c *gin.Contex
 
 	if errors.Is(err, acl.ErrACLPropagation) {
 		h.safeLogger().LogAttrs(ctx, slog.LevelError, "ACL bot-plane resync failed", attrs...)
-		sharedserver.RespondError(c, 500, aclBotResyncFailedCode, gin.H{
+		sharedserver.RespondError(c, http.StatusInternalServerError, aclBotResyncFailedCode, gin.H{
 			"message": "the bot has not applied the current ACL (the requested change may already be saved); retry the same request",
 		})
 
@@ -235,7 +236,7 @@ func (h *RoomHandler) respondACLMutationError(ctx context.Context, c *gin.Contex
 	}
 
 	h.safeLogger().LogAttrs(ctx, slog.LevelError, failMessage, attrs...)
-	sharedserver.RespondError(c, 500, failMessage, nil)
+	sharedserver.RespondError(c, http.StatusInternalServerError, failMessage, nil)
 }
 
 func (h *RoomHandler) SetACL(c *gin.Context) {
@@ -260,13 +261,13 @@ func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return setACLRequest{}, false
 	}
 
 	if req.Enabled == nil && req.Mode == nil {
-		sharedserver.RespondError(c, 400, "at least one of 'enabled' or 'mode' must be provided", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "at least one of 'enabled' or 'mode' must be provided", nil)
 
 		return setACLRequest{}, false
 	}
@@ -313,7 +314,7 @@ func (h *RoomHandler) parseACLMode(c *gin.Context, rawMode *string) (acl.ACLMode
 	mode, err := acl.ParseACLModeStrict(*rawMode)
 	if err != nil {
 		h.safeLogger().Warn("Invalid ACL mode", slog.String("mode", *rawMode), slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid ACL mode", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid ACL mode", nil)
 
 		return "", false
 	}
@@ -354,7 +355,7 @@ func (h *RoomHandler) respondSetACL(c *gin.Context) {
 	h.safeLogger().Info("Room ACL updated", slog.Bool("enabled", enabled), slog.String("mode", string(mode)))
 
 	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s", enabled, mode), map[string]any{"enabled": enabled, "mode": string(mode)})
-	ginjson.Respond(c, 200, setACLResponse{
+	ginjson.Respond(c, http.StatusOK, setACLResponse{
 		Status:  "ok",
 		Message: "ACL setting updated successfully",
 		Enabled: enabled,

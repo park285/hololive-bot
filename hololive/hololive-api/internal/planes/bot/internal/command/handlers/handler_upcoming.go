@@ -49,7 +49,7 @@ func (c *UpcomingCommand) Description() string {
 
 func (c *UpcomingCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("failed to ensure dependencies: %w", err)
+		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	options := parseUpcomingOptions(params)
@@ -137,7 +137,7 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+		return fmt.Errorf("find member: %w", err)
 	}
 
 	if channel == nil {
@@ -280,7 +280,7 @@ func (c *UpcomingCommand) replyDisplayNameFailure(ctx context.Context, roomID st
 
 func (c *UpcomingCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.Deps().Holodex == nil || c.Deps().Formatter == nil || c.Deps().Matcher == nil {

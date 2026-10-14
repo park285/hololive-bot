@@ -148,8 +148,6 @@ type restartAlreadySentCase struct {
 
 func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherRestart(t *testing.T) {
 	fixedSentAt := time.Now().UTC().Truncate(time.Millisecond)
-	withFixedSentAtNow(t, fixedSentAt)
-
 	detectedAt := fixedSentAt.Add(-time.Minute)
 	publishedAt := time.Date(2026, time.April, 10, 1, 12, 0, 0, time.UTC)
 	testCases := []restartAlreadySentCase{
@@ -192,7 +190,7 @@ func runRestartAlreadySentCase(t *testing.T, tc restartAlreadySentCase, fixedSen
 	item, delivery, postID := seedRestartAlreadySentFixture(t, db, tc)
 
 	firstSender := &testSender{failRoom: map[string]bool{}}
-	firstDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	firstDispatcher := newFixedClockDispatcherForTest(t, db, firstSender, fixedSentAt, &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -213,7 +211,7 @@ func runRestartAlreadySentCase(t *testing.T, tc restartAlreadySentCase, fixedSen
 	assertCommunityShortsSentAt(t, assertCommunityShortsPostSent(t, db, item, delivery.ID, postID), fixedSentAt)
 
 	secondSender := &testSender{failRoom: map[string]bool{}}
-	secondDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	secondDispatcher := newFixedClockDispatcherForTest(t, db, secondSender, fixedSentAt, &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -282,8 +280,6 @@ func seedRestartAlreadySentFixture(
 
 func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactlyOnce(t *testing.T) {
 	fixedSentAt := time.Now().UTC().Truncate(time.Millisecond)
-	withFixedSentAtNow(t, fixedSentAt)
-
 	testCases := newRecoverySelectiveSendCases(fixedSentAt, recoverySelectiveSendNaming{
 		communityChannelID: "UC_restart_recovery_community",
 		shortsChannelID:    "UC_restart_recovery_shorts",
@@ -310,7 +306,7 @@ func runRestartRecoverySelectiveCase(t *testing.T, tc recoverySelectiveSendCase,
 	fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 	firstSender := &testSender{failRoom: map[string]bool{}}
-	firstDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), firstSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	firstDispatcher := newFixedClockDispatcherForTest(t, db, firstSender, fixedSentAt, &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -331,7 +327,7 @@ func runRestartRecoverySelectiveCase(t *testing.T, tc recoverySelectiveSendCase,
 	assert.NotContains(t, firstMessages[0], tc.sentMarker)
 
 	secondSender := &testSender{failRoom: map[string]bool{}}
-	secondDispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), secondSender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	secondDispatcher := newFixedClockDispatcherForTest(t, db, secondSender, fixedSentAt, &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

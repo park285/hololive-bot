@@ -17,12 +17,10 @@ type CacheWarmSummary struct {
 	ChannelCount int
 }
 
-var loadAllAlarmsFromRepository = func(ctx context.Context, repository *Repository) ([]*domain.Alarm, error) {
-	return repository.LoadAll(ctx)
-}
-
-var loadMemberNamesFromRepository = func(ctx context.Context, repository *Repository) (map[string]string, error) {
-	return repository.GetAllMemberNames(ctx)
+// subscriberCacheWarmSource는 rebuild가 읽는 정본 구독·멤버 표시명 스냅샷이다. *Repository가 구현한다.
+type subscriberCacheWarmSource interface {
+	LoadAll(ctx context.Context) ([]*domain.Alarm, error)
+	GetAllMemberNames(ctx context.Context) (map[string]string, error)
 }
 
 const cacheScanBatchSize int64 = 100
@@ -43,13 +41,17 @@ func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache
 		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
 	}
 
+	return rebuildSubscriberCache(ctx, cacheClient, repository)
+}
+
+func rebuildSubscriberCache(ctx context.Context, cacheClient cache.Client, source subscriberCacheWarmSource) (CacheWarmSummary, error) {
 	// 모든 페이지 삭제를 끝낸 뒤 DB 스냅샷을 읽는다. 일부 삭제가 실패한 경우 오래된 snapshot을 다시 쓰지 않고
 	// 오류를 반환하며, 사라진 set은 구독 조회의 기존 DB read-through로 확정한다.
 	if err := clearSubscriberCacheNamespace(ctx, cacheClient); err != nil {
 		return CacheWarmSummary{}, fmt.Errorf("clear subscriber cache namespace: %w", err)
 	}
 
-	warmData, err := loadSubscriberCacheWarmData(ctx, repository)
+	warmData, err := loadSubscriberCacheWarmData(ctx, source)
 	if err != nil {
 		return CacheWarmSummary{}, fmt.Errorf("load subscriber cache warm data: %w", err)
 	}
@@ -61,8 +63,8 @@ func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache
 	return warmData.summary, nil
 }
 
-func loadSubscriberCacheWarmData(ctx context.Context, repository *Repository) (*subscriberCacheWarmData, error) {
-	alarms, err := loadAllAlarmsFromRepository(ctx, repository)
+func loadSubscriberCacheWarmData(ctx context.Context, source subscriberCacheWarmSource) (*subscriberCacheWarmData, error) {
+	alarms, err := source.LoadAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("rebuild subscriber cache from repository: load alarms: %w", err)
 	}
@@ -74,7 +76,7 @@ func loadSubscriberCacheWarmData(ctx context.Context, repository *Repository) (*
 
 	warmData.summary = warmData.finish()
 
-	memberNames, err := loadMemberNamesFromRepository(ctx, repository)
+	memberNames, err := source.GetAllMemberNames(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("rebuild subscriber cache from repository: load member names: %w", err)
 	}

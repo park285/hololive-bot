@@ -71,7 +71,7 @@ func (s *EventSummarizer) reviewConsensusVerdict(
 	verdict, err := s.reviewSummary(reviewCtx, events, summaryType, periodKey, primary)
 	if err != nil {
 		s.logger.Warn("major event consensus review failed; keep primary",
-			slog.String("error", err.Error()))
+			slog.Any("error", err))
 
 		return nil, false
 	}
@@ -113,7 +113,7 @@ func (s *EventSummarizer) applyConsensusAdjudication(
 	adjusted, err := s.adjudicateSummary(adjCtx, events, summaryType, periodKey, searchContext, primary, verdict)
 	if err != nil {
 		s.logger.Warn("major event consensus adjudication failed; keep primary",
-			slog.String("error", err.Error()))
+			slog.Any("error", err))
 
 		return primary, false
 	}
@@ -235,7 +235,7 @@ func (s *EventSummarizer) runFinalOutputReview(
 	userPrompt, err := buildFinalOutputReviewUserPrompt(events, summaryType, periodKey, trimmed)
 	if err != nil {
 		s.logger.Warn("major event final output review prompt failed; keep assembled",
-			slog.String("error", err.Error()))
+			slog.Any("error", err))
 
 		return assembled, false
 	}
@@ -250,7 +250,7 @@ func (s *EventSummarizer) runFinalOutputReview(
 	)
 	if err != nil {
 		s.logger.Warn("major event final output review failed; keep assembled",
-			slog.String("error", err.Error()))
+			slog.Any("error", err))
 
 		return assembled, false
 	}
@@ -259,7 +259,7 @@ func (s *EventSummarizer) runFinalOutputReview(
 
 	if err := jsonv2.Unmarshal([]byte(raw), &reviewed); err != nil {
 		s.logger.Warn("major event final output review parse failed; keep assembled",
-			slog.String("error", err.Error()))
+			slog.Any("error", err))
 
 		return assembled, false
 	}

@@ -109,8 +109,8 @@ type SessionState struct {
 
 // IgnoredAbsenceHistory는 첫 LIVE positive 전에 무시한 부재 slot 예정 시각 목록이다.
 // 0값은 "적재하지 않음"이다. 적재하지 않은 이력은 reducer가 읽거나 늘리지 않고 Reduce 오류로
-// 드러내며, 저장 경로는 이를 SQL NULL로 보내 기존 DB 값을 유지한다. 0값을 빈 이력으로 두면
-// 배열을 빼고 읽은 세션 하나만 저장해도 이력이 지워지므로 빈 이력은 LoadedIgnoredAbsences(nil)로만 만든다.
+// 드러내며, 저장 경로는 활성 세션의 이력을 SQL NULL로 보내 기존 DB 값을 유지한다.
+// ENDED 이력은 저장 때 비운다. 적재된 빈 이력은 LoadedIgnoredAbsences(nil)로만 만든다.
 type IgnoredAbsenceHistory struct {
 	slots  []time.Time
 	loaded bool

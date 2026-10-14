@@ -31,6 +31,10 @@ const (
 	outcomeEmpty        = "empty"
 	labelProvider       = "provider"
 	labelKind           = "kind"
+	labelResult         = "result"
+
+	discoveryCycleOK                  = "ok"
+	discoveryCycleCandidateLoadFailed = "candidate_load_failed"
 )
 
 type Metrics struct {
@@ -48,6 +52,7 @@ type Metrics struct {
 	lastAccepted   *prometheus.GaugeVec
 	enqueue        *prometheus.CounterVec
 	invalidTuple   *prometheus.CounterVec
+	discoveryCycle *prometheus.CounterVec
 
 	mu            sync.Mutex
 	lastSuccessAt map[string]time.Time
@@ -63,7 +68,7 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	metrics.attempts = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_attempts_total",
 		Help: "YouTube collection attempts by provider, kind, and bounded result.",
-	}, []string{labelProvider, labelKind, "result"})
+	}, []string{labelProvider, labelKind, labelResult})
 	metrics.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_collection_duration_seconds",
 		Help:    "YouTube collection duration by provider and kind.",
@@ -84,7 +89,7 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	metrics.leaseAcquire = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_lease_acquire_total",
 		Help: "YouTube collection lease acquire attempts.",
-	}, []string{labelProvider, labelKind, "result"})
+	}, []string{labelProvider, labelKind, labelResult})
 	metrics.leaseLost = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_lease_lost_total",
 		Help: "YouTube collection lease losses by phase.",
@@ -108,18 +113,34 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	metrics.enqueue = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_enqueue_total",
 		Help: "YouTube collection local queue enqueue results.",
-	}, []string{"result"})
+	}, []string{labelResult})
 	metrics.invalidTuple = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_invalid_failure_tuple_total",
 		Help: "YouTube collection attempts that ended with a code/class tuple outside the durable failure contract.",
 	}, []string{labelProvider, labelKind})
+	metrics.discoveryCycle = newDiscoveryCycleCounter()
 	registerer.MustRegister(
 		metrics.attempts, metrics.duration, metrics.lastSuccess, metrics.freshness,
 		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish,
 		metrics.publishTime, metrics.publishBytes, metrics.acceptInterval, metrics.lastAccepted, metrics.enqueue, metrics.invalidTuple,
+		metrics.discoveryCycle,
 	)
 
 	return metrics
+}
+
+// newDiscoveryCycleCounter는 후보 탐색 cycle 결과 counter를 만든다. 실패 로그는 연속 실패 동안 주기적으로만 남기므로
+// 매 cycle의 실패는 이 counter가 드러낸다. 두 결과 시리즈를 미리 만들어 첫 실패가 increase()에서 사라지지 않게 한다.
+// 투영 세대 교체(superseded)만 있는 cycle은 정상 종료라 ok로 센다.
+func newDiscoveryCycleCounter() *prometheus.CounterVec {
+	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_collection_discovery_cycles_total",
+		Help: "YouTube collection candidate discovery cycles by bounded result.",
+	}, []string{labelResult})
+	counter.WithLabelValues(discoveryCycleOK)
+	counter.WithLabelValues(discoveryCycleCandidateLoadFailed)
+
+	return counter
 }
 
 // newPublishHistograms는 job kind별 발행 트랜잭션 소요 시간과 인코딩 크기 histogram을 만든다.
@@ -258,6 +279,21 @@ func (m *Metrics) ObserveEnqueue(result EnqueueResult) {
 	}
 
 	m.enqueue.WithLabelValues(boundedEnqueue(string(result))).Inc()
+}
+
+// ObserveDiscoveryCycle은 끝난 후보 탐색 cycle 하나의 결과를 센다.
+func (m *Metrics) ObserveDiscoveryCycle(failed bool) {
+	if m == nil {
+		return
+	}
+
+	result := discoveryCycleOK
+
+	if failed {
+		result = discoveryCycleCandidateLoadFailed
+	}
+
+	m.discoveryCycle.WithLabelValues(result).Inc()
 }
 
 func boundedResult(value string) string {

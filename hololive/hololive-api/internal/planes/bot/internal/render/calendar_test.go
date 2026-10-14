@@ -344,13 +344,10 @@ func TestFetchMemberPhotoRequestsHighResolutionThumbnail(t *testing.T) {
 		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	})))
 
-	photos := make(map[string]image.Image)
 	photoURL := testAvatarURL
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; !ok {
+	if !stored {
 		t.Fatal("photo was not stored")
 	}
 

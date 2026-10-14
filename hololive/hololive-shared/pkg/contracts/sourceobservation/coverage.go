@@ -65,12 +65,6 @@ type GlobalChannelCoverageV1 struct {
 	Filters             LiveFiltersV1 `json:"filters"`
 }
 
-type ViewerSampleCoverageV1 struct {
-	VideoID             string    `json:"video_id"`
-	SampleWindowStart   time.Time `json:"sample_window_start"`
-	SampleWindowSeconds int       `json:"sample_window_seconds"`
-}
-
 type ChannelProfileCoverageV1 struct {
 	ChannelID string   `json:"channel_id"`
 	Fields    []string `json:"fields"`
@@ -218,24 +212,6 @@ func (c *GlobalChannelCoverageV1) normalizeAndValidate(subject string) error {
 	}
 
 	c.Filters.Statuses = statuses
-
-	return nil
-}
-
-func (c *ViewerSampleCoverageV1) normalizeAndValidate(subject string) error {
-	if c.VideoID != subject {
-		return errors.New("viewer coverage video does not match subject")
-	}
-
-	if err := validateIdentifier("viewer coverage video", c.VideoID, 128); err != nil {
-		return fmt.Errorf("validate identifier: %w", err)
-	}
-
-	if c.SampleWindowStart.IsZero() || c.SampleWindowSeconds < 1 || c.SampleWindowSeconds > 86400 {
-		return errors.New("viewer sample window is invalid")
-	}
-
-	c.SampleWindowStart = c.SampleWindowStart.UTC()
 
 	return nil
 }

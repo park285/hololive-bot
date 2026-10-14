@@ -81,19 +81,14 @@ func (s *Service) detectNotificationScheduleChange(ctx context.Context, roomID, 
 
 	change, ok, err := s.detectStreamScheduleChange(ctx, stream.ID, *stream.StartScheduled)
 	if err != nil {
-		return ScheduleChange{}, false, fmt.Errorf("detect stream schedule change: %w", err)
+		return ScheduleChange{}, false, err
 	}
 
 	if ok {
 		return change, true, nil
 	}
 
-	logical, logicalOK, err := s.detectLogicalScheduleChange(ctx, roomID, channelID, stream)
-	if err != nil {
-		return ScheduleChange{}, false, fmt.Errorf("detect logical schedule change: %w", err)
-	}
-
-	return logical, logicalOK, nil
+	return s.detectLogicalScheduleChange(ctx, roomID, channelID, stream)
 }
 
 func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream, previousScheduled string) ([]string, bool, error) {

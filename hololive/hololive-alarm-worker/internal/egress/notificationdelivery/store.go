@@ -61,7 +61,7 @@ func (r *Store) fetchReadyAndLock(ctx context.Context, workerID string, batchSiz
 
 func (r *Store) MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error) {
 	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	tag, err := r.pool.Exec(ctx,
@@ -78,7 +78,7 @@ func (r *Store) MarkSending(ctx context.Context, id int64, workerID string, leas
 
 func (r *Store) MarkSent(ctx context.Context, id int64, workerID string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	tag, err := r.pool.Exec(ctx,
@@ -110,7 +110,7 @@ func (r *Store) MarkQuarantined(ctx context.Context, id int64, workerID, reason 
 // 발송 전 lease 만료는 거부하며 발송 후 확정 실패는 기존 SENDING 소유자가 정산할 수 있습니다.
 func (r *Store) MarkFailed(ctx context.Context, id int64, workerID string, attemptCount, maxRetries int, backoff time.Duration, errMsg string) (bool, error) {
 	if err := r.ensurePool(); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	status, err := deliveryFailureStatus(attemptCount, maxRetries)
@@ -142,7 +142,7 @@ func (r *Store) Cleanup(ctx context.Context, olderThan time.Duration) (int64, er
 
 func (r *Store) cleanupInBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	if err := r.ensurePool(); err != nil {
-		return 0, fmt.Errorf("ensure pool: %w", err)
+		return 0, err
 	}
 
 	var total int64
@@ -159,7 +159,7 @@ func (r *Store) cleanupInBatches(ctx context.Context, cutoff time.Time, batchSiz
 		}
 
 		if err := yieldBetweenCleanupBatches(ctx); err != nil {
-			return total, fmt.Errorf("yield between cleanup batches: %w", err)
+			return total, err
 		}
 	}
 }
@@ -178,7 +178,7 @@ func yieldBetweenCleanupBatches(ctx context.Context) error {
 
 func (r *Store) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error) {
 	if err := r.ensurePool(); err != nil {
-		return 0, fmt.Errorf("ensure pool: %w", err)
+		return 0, err
 	}
 
 	if limit <= 0 {
@@ -202,7 +202,7 @@ func (r *Store) QuarantineStaleSending(ctx context.Context, olderThan time.Durat
 
 func (r *Store) CountFailed(ctx context.Context) (int64, error) {
 	if err := r.ensurePool(); err != nil {
-		return 0, fmt.Errorf("ensure pool: %w", err)
+		return 0, err
 	}
 
 	var count int64

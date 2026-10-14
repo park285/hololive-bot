@@ -30,6 +30,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -104,7 +105,7 @@ func enqueueToRooms(
 	evaluation, err := guardrail.ValidateGeneratedOutput(outputGuard, message, "majorevent_notification")
 	if err != nil {
 		logger.Error("Major event notification output blocked",
-			slog.String("error", err.Error()),
+			slog.Any("error", err),
 			slog.String("decision", string(evaluation.Decision)),
 			slog.Any("reasons", evaluation.ReasonCodes),
 			slog.Any("rules", evaluation.RuleIDs),
@@ -125,8 +126,8 @@ func enqueueToRooms(
 
 		if err := outboxRepository.Enqueue(ctx, kind, periodKey, room.roomID, message); err != nil {
 			logger.Error("Failed to enqueue notification",
-				slog.String("room_id", room.roomID),
-				slog.String("error", err.Error()))
+				sharedprivacylog.RoomIDAttr(room.roomID),
+				slog.Any("error", err))
 
 			result.Failed++
 
@@ -138,7 +139,7 @@ func enqueueToRooms(
 		result.Sent++
 
 		logger.Info("Enqueued notification",
-			slog.String("room_id", room.roomID))
+			sharedprivacylog.RoomIDAttr(room.roomID))
 	}
 
 	return result

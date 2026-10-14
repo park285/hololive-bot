@@ -150,7 +150,7 @@ func (h apiRateLimitHandler) Handle(c *gin.Context) {
 
 	decision, err := h.limiter.Allow(c.Request.Context(), ip, h.limit, h.window)
 	if err != nil {
-		h.logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.String("error", err.Error()))
+		h.logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.Any("error", err))
 		apiRateLimitCheckFailuresTotal.Inc()
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, "rate limit unavailable", nil)
 		c.Abort()

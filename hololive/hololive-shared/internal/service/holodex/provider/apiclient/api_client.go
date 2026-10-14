@@ -44,9 +44,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type Requester interface {
@@ -62,7 +60,7 @@ type APIClient struct {
 	baseURL              string
 	apiKey               string
 	logger               *slog.Logger
-	breaker              *util.Breaker
+	breaker              *circuitBreaker
 	admissionGate        chan struct{}
 	requestDelay         time.Duration
 	nextRequestAt        time.Time
@@ -118,9 +116,9 @@ func NewHolodexAPIClient(
 		baseURL:          baseURL,
 		apiKey:           apiKey,
 		logger:           logger,
-		breaker: util.NewBreaker(
-			constants.CircuitBreakerConfig.FailureThreshold,
-			constants.CircuitBreakerConfig.ResetTimeout,
+		breaker: newCircuitBreaker(
+			circuitFailureThreshold,
+			circuitResetTimeout,
 		),
 		admissionGate:        make(chan struct{}, 1),
 		requestDelay:         holodexCfg.Concurrency.RequestDelay,

@@ -19,11 +19,7 @@ var (
 )
 
 func lockScheduleSubject(ctx context.Context, tx dbx.Tx, groupKey string) error {
-	if err := lockLiveSubject(ctx, tx, "schedule:"+groupKey); err != nil {
-		return fmt.Errorf("lock live subject: %w", err)
-	}
-
-	return nil
+	return lockLiveSubject(ctx, tx, "schedule:"+groupKey)
 }
 
 // loadScheduleState는 reducer가 읽는 live session만 적재한다. 누적 schedule item은 reducer가 읽지 않고,

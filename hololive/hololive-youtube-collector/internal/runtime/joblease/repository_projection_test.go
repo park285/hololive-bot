@@ -42,7 +42,7 @@ func TestAcquireBundleRechecksHeaderExpiryAfterGuard(t *testing.T) {
 	spec := communityJob()
 	scope := collection.MembershipScope{ExactSubject: true, Kinds: []string{string(contract.KindCommunityPage)}}
 
-	if _, err := verifyAcquireTargets(t.Context(), tx, spec, []contract.ObservationKind{contract.KindCommunityPage}, scope, generation); !errors.Is(err, collection.ErrProjectionStale) {
+	if _, _, err := acquireLeaseProof(t.Context(), tx, spec, "collector-a", generation, time.Minute, []contract.ObservationKind{contract.KindCommunityPage}, scope); !errors.Is(err, collection.ErrProjectionStale) {
 		t.Fatalf("bundle accepted expired header: %v", err)
 	}
 }
@@ -122,7 +122,12 @@ func TestFourCollectorsCompeteAndRestartFromDurableLease(t *testing.T) {
 
 	for i, lease := range leases {
 		if lease != nil {
+			if lease.Proof().FenceEpoch != 1 {
+				t.Fatalf("collector %d first fence = %d, want 1", i, lease.Proof().FenceEpoch)
+			}
+
 			winners++
+
 			continue
 		}
 
@@ -201,5 +206,138 @@ func TestCandidatesIncludeLastMaximumLegalSubject(t *testing.T) {
 
 	if len(page.Jobs) != 1 || len(page.Jobs[0].SubjectKey) != 256 || page.Jobs[0].SubjectKey[:13] != "channel:10000" || page.Truncated {
 		t.Fatalf("최대 대상 집합의 마지막 후보를 놓쳤습니다: %+v", page)
+	}
+}
+
+// 만료된 기존 행이 잠겨 있어도 missing으로 오인해 INSERT 충돌을 기다려서는 안 된다.
+func TestAcquireSkipsLockedExpiredLease(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
+
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+	mustAcquireLease(t, repository, spec, "collector-a")
+
+	if _, err := pool.Exec(t.Context(), mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if err := tx.Rollback(context.WithoutCancel(t.Context())); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			t.Errorf("rollback locked lease: %v", err)
+		}
+	}()
+
+	var jobKey string
+
+	if err := tx.QueryRow(t.Context(), `SELECT job_key FROM youtube_collection_job_leases
+		WHERE job_key=$1 FOR UPDATE`, spec.JobKey).Scan(&jobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	if _, err := repository.Acquire(ctx, spec, "collector-b"); !errors.Is(err, ErrNotAcquired) {
+		t.Fatalf("locked eligible lease: %v, want ErrNotAcquired without waiting", err)
+	}
+}
+
+// 최초 행 생성의 유일 키 대기가 TTL보다 길어도 rollback 후 얻은 lease에는 온전한 새 TTL이 있어야 한다.
+func TestAcquireCreationTTLStartsAfterConflictingCreatorRollback(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	generation := seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+
+	defer cancel()
+
+	locker, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTestLease(ctx, t, locker)
+
+	if _, err := locker.Exec(ctx, `INSERT INTO youtube_collection_job_leases (
+		job_key, provider, job_class, collection_job_kind, subject_key,
+		projection_generation, poll_interval_ms, scheduled_for, next_due_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp(), clock_timestamp())`,
+		spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
+		generation, spec.PollInterval.Milliseconds()); err != nil {
+		t.Fatal(err)
+	}
+
+	type acquireResult struct {
+		lease *JobLease
+		err   error
+	}
+
+	done := make(chan acquireResult, 1)
+
+	go func() {
+		lease, err := repository.Acquire(ctx, spec, "collector-b")
+		done <- acquireResult{lease: lease, err: err}
+	}()
+
+	waitForLeaseQueryLock(ctx, t, pool, locker.Conn().PgConn().PID())
+
+	if _, err := pool.Exec(ctx, `SELECT pg_sleep($1::double precision)`, repository.config.LeaseTTL.Seconds()+0.1); err != nil {
+		t.Fatal(err)
+	}
+
+	releasedAt := retryDatabaseClock(t, pool)
+
+	if err := locker.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var result acquireResult
+
+	select {
+	case result = <-done:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+
+	if result.err != nil || result.lease == nil {
+		t.Fatalf("acquire after creator rollback: lease=%v err=%v", result.lease, result.err)
+	}
+
+	assertFreshCreatedLease(ctx, t, pool, spec.JobKey, result.lease, releasedAt)
+}
+
+func assertFreshCreatedLease(ctx context.Context, t *testing.T, pool *pgxpool.Pool, jobKey string, lease *JobLease, releasedAt time.Time) {
+	t.Helper()
+
+	proof := lease.Proof()
+	ttl := lease.repository.config.LeaseTTL
+
+	var (
+		expiresAt, scheduledFor time.Time
+		unexpired               bool
+	)
+
+	if err := pool.QueryRow(ctx, `SELECT lease_expires_at, scheduled_for, lease_expires_at > clock_timestamp()
+		FROM youtube_collection_job_leases WHERE job_key=$1`, jobKey).Scan(&expiresAt, &scheduledFor, &unexpired); err != nil {
+		t.Fatal(err)
+	}
+
+	if !unexpired || expiresAt.Before(releasedAt.Add(ttl)) {
+		t.Fatalf("unique-key waiting consumed TTL: released=%s expires=%s ttl=%s unexpired=%t",
+			releasedAt, expiresAt, ttl, unexpired)
+	}
+
+	if proof.FenceEpoch != 1 || !proof.ScheduledFor.Equal(scheduledFor) {
+		t.Fatalf("created proof=%+v, stored slot=%s", proof, scheduledFor)
+	}
+
+	if err := lease.Renew(ctx); err != nil {
+		t.Fatalf("new lease lost ownership after creator rollback: %v", err)
 	}
 }

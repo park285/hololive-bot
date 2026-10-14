@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/httpclientmetrics"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -47,9 +48,10 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 	return &ProviderHTTPClient{
 		client: &http.Client{
 			Timeout:       cfg.RequestTimeout,
-			Transport:     transport,
+			Transport:     httpclientmetrics.Instrument(cfg.MetricsClient, transport),
 			CheckRedirect: rejectRedirect,
 		},
+		// Close는 계측 wrapper가 아니라 실제 연결을 가진 *http.Transport의 유휴 연결을 닫는다.
 		transport: transport,
 		owned:     true,
 	}, nil

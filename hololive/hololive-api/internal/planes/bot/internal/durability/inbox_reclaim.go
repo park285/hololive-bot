@@ -17,7 +17,7 @@ type InboxReclaim struct {
 // 0 rows가 된다 — 전이 쿼리에 lease_until 술어를 따로 두지 않는 이유다.
 func (r *InboxRepository) ReclaimExpired(ctx context.Context, maxAttempts, batchSize int32) (reclaim InboxReclaim, err error) {
 	if poolErr := ensurePool(r.pool); poolErr != nil {
-		return InboxReclaim{}, fmt.Errorf("ensure pool: %w", poolErr)
+		return InboxReclaim{}, poolErr
 	}
 
 	if maxAttempts <= 0 {
@@ -110,7 +110,7 @@ func lockedExpiredInboxCandidates(ctx context.Context, tx pgx.Tx, batchSize int3
 
 func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimToken string) (applied bool, err error) {
 	if poolErr := ensurePool(r.pool); poolErr != nil {
-		return false, fmt.Errorf("ensure pool: %w", poolErr)
+		return false, poolErr
 	}
 
 	id, token, err := r.fenceArgs(messageID, claimToken)
@@ -124,7 +124,7 @@ func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimTok
 	}
 
 	if err != nil {
-		return false, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("begin webhook settlement", id, err))
+		return false, safeMessageRepositoryError("begin webhook settlement", id, err)
 	}
 
 	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
@@ -140,11 +140,11 @@ func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimTok
 func settleInboxTx(ctx context.Context, tx pgx.Tx, query, id, token string) (applied bool, err error) {
 	err = tx.QueryRow(ctx, query, id, token).Scan(&applied)
 	if err != nil {
-		return false, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("settle webhook inbox row", id, err))
+		return false, safeMessageRepositoryError("settle webhook inbox row", id, err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("commit webhook settlement", id, err))
+		return false, safeMessageRepositoryError("commit webhook settlement", id, err)
 	}
 
 	return applied, nil
@@ -153,12 +153,12 @@ func settleInboxTx(ctx context.Context, tx pgx.Tx, query, id, token string) (app
 func (r *InboxRepository) fenceArgs(messageID, claimToken string) (id, token string, err error) {
 	id, err = requireMessageIdentity(messageID)
 	if err != nil {
-		return "", "", fmt.Errorf("require message identity: %w", err)
+		return "", "", err
 	}
 
 	token, err = requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return "", "", fmt.Errorf("require bounded identity: %w", err)
+		return "", "", err
 	}
 
 	return id, token, nil

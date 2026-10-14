@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type MemberInfoCommand struct {
@@ -54,7 +53,7 @@ func (c *MemberInfoCommand) Description() string {
 // 쿼리가 없으면 멤버 디렉터리를, 있으면 개별 기본 정보를 표시합니다.
 func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("failed to ensure dependencies: %w", err)
+		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	rawQuery := getStringParam(params, "query")
@@ -157,7 +156,7 @@ func (c *MemberInfoCommand) sendMemberNotFound(ctx context.Context, room, englis
 
 func (c *MemberInfoCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.Deps().MembersData == nil ||
@@ -270,7 +269,7 @@ func memberInfoMatchRank(member *domain.Member, query string) int {
 }
 
 func normalizeMemberInfoTerm(value string) string {
-	return strings.Join(strings.Fields(util.NormalizeSuffix(value)), " ")
+	return strings.Join(strings.Fields(matcher.NormalizeSuffix(value)), " ")
 }
 
 func getStringParam(params map[string]any, key string) string {

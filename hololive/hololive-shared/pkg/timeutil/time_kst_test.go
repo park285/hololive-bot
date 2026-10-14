@@ -15,8 +15,8 @@ func TestToKST(t *testing.T) {
 		t.Fatalf("ToKST(2025-06-15T00:00Z).Hour() = %d, want 9", got.Hour())
 	}
 
-	if got.Location().String() != "Asia/Seoul" && got.Location().String() != "KST" {
-		t.Fatalf("ToKST().Location() = %q, want Asia/Seoul or KST", got.Location().String())
+	if got.Location() != KSTZone {
+		t.Fatalf("ToKST().Location() = %q, want KSTZone", got.Location().String())
 	}
 }
 
@@ -42,8 +42,7 @@ func TestNowKST(t *testing.T) {
 		t.Fatalf("NowKST() = %v, outside [%v, %v] window", got, before, after)
 	}
 
-	loc := got.Location().String()
-	if loc != "Asia/Seoul" && loc != "KST" {
-		t.Fatalf("NowKST().Location() = %q, want Asia/Seoul or KST", loc)
+	if got.Location() != KSTZone {
+		t.Fatalf("NowKST().Location() = %q, want KSTZone", got.Location().String())
 	}
 }

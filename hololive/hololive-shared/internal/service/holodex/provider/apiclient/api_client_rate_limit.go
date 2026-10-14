@@ -9,7 +9,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/backoff"
 	"github.com/park285/shared-go/v2/pkg/retry"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
@@ -126,7 +125,7 @@ func (c *APIClient) distributedRateLimitBucket(path string) string {
 }
 
 func (c *APIClient) waitBackoff(ctx context.Context, attempt int) error {
-	delay := backoff.ComputeExponentialBackoff(attempt, constants.RetryConfig.BaseDelay, 0, constants.RetryConfig.Jitter)
+	delay := backoff.ComputeExponentialBackoff(attempt, retryBaseDelay, 0, retryJitter)
 	if !retry.Sleep(ctx, delay) {
 		return fmt.Errorf("context canceled during backoff: %w", ctx.Err())
 	}

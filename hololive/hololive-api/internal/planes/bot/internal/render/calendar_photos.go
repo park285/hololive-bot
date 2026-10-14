@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/image/webp"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -25,21 +27,24 @@ var photoClient = newCalendarPhotoHTTPClient()
 const (
 	photoFetchBudget           = 15 * time.Second
 	calendarPhotoMaxFetches    = 24
+	calendarPhotoFetchWorkers  = 4
 	calendarPhotoThumbnailSize = 1024
 	calendarPhotoMaxBytes      = 2 << 20
 	calendarPhotoMaxDimension  = 4096
 	calendarPhotoMaxPixels     = 8 << 20
 )
 
-type calendarPhotoFetchState struct {
-	attempted   map[string]struct{}
-	fetches     int
-	cachePolicy calendarCachePolicy
-}
-
 type calendarPhotoFetchResult struct {
 	photos      map[string]image.Image
 	cachePolicy calendarCachePolicy
+}
+
+// calendarPhotoFetchSlot은 사진 하나의 다운로드 결과다. 각 goroutine은 자기 index의 slot에만 쓰고, 쓰지 못한 slot의
+// zero value는 실패로 집계된다.
+type calendarPhotoFetchSlot struct {
+	image         image.Image
+	ok            bool
+	budgetExpired bool
 }
 
 func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
@@ -55,74 +60,105 @@ func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (
 	return out, nil
 }
 
+// fetchMemberPhotosWithinBudget은 entries의 고유 사진을 최대 calendarPhotoMaxFetches장까지 calendarPhotoFetchWorkers개씩
+// 동시에 받는다. 캐시 정책은 다음과 같다. 상한을 넘는 사진이 있거나 예산이 끝난 뒤 실패한 사진이 있으면 메모리·디스크
+// 캐시를 모두 막고, 그 밖의 개별 실패는 디스크 캐시만 막는다. 부모 ctx 취소는 오류로 돌려준다.
 func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
-	result := calendarPhotoFetchResult{photos: make(map[string]image.Image)}
-	state := newCalendarPhotoFetchState()
+	result := calendarPhotoFetchResult{
+		photos: make(map[string]image.Image),
+		cachePolicy: calendarCachePolicy{
+			memoryCacheable: true,
+			diskCacheable:   true,
+		},
+	}
 
-	for _, e := range entries {
-		if err := parent.Err(); err != nil {
-			return result, fmt.Errorf("before member photo download: %w", err)
-		}
+	if err := parent.Err(); err != nil {
+		return result, fmt.Errorf("before member photo download: %w", err)
+	}
 
-		if budgetCtx.Err() != nil {
-			state.markUncacheable()
+	photoURLs, truncated := uniqueCalendarPhotoURLs(entries, calendarPhotoMaxFetches)
+	if truncated {
+		result.cachePolicy.markUncacheable()
+	}
 
-			break
-		}
+	slots := make([]calendarPhotoFetchSlot, len(photoURLs))
 
-		if state.wouldTruncate(e, result.photos) {
-			state.markUncacheable()
+	// 개별 다운로드 실패는 slot에만 남는다. group에는 context를 묶지 않으므로 한 장의 실패나 panic이 나머지 다운로드를
+	// 멈추지 않는다.
+	var group errgroup.Group
 
-			break
-		}
+	group.SetLimit(calendarPhotoFetchWorkers)
 
-		state.fetch(budgetCtx, e, result.photos)
+	for i, photoURL := range photoURLs {
+		group.Go(func() error {
+			return panicguard.RunE(nil, panicguard.BackgroundTask, "calendar-photo-fetch", func() error {
+				slots[i] = fetchCalendarPhotoSlot(budgetCtx, photoURL)
+
+				return nil
+			})
+		})
+	}
+
+	// panic은 panicguard가 stack과 함께 기록했고, 그 사진의 slot은 실패로 남아 아래에서 디스크 캐시를 막는다.
+	if err := group.Wait(); err != nil {
+		result.cachePolicy.markDiskUncacheable()
 	}
 
 	if err := parent.Err(); err != nil {
 		return result, fmt.Errorf("after member photo downloads: %w", err)
 	}
 
-	result.cachePolicy = state.cachePolicy
+	for i, photoURL := range photoURLs {
+		slot := slots[i]
+		if slot.ok {
+			result.photos[photoURL] = slot.image
+
+			continue
+		}
+
+		result.cachePolicy.markDiskUncacheable()
+
+		if slot.budgetExpired {
+			result.cachePolicy.markUncacheable()
+		}
+	}
 
 	return result, nil
 }
 
-func newCalendarPhotoFetchState() *calendarPhotoFetchState {
-	return &calendarPhotoFetchState{
-		attempted: make(map[string]struct{}),
-		cachePolicy: calendarCachePolicy{
-			memoryCacheable: true,
-			diskCacheable:   true,
-		},
-	}
-}
+// uniqueCalendarPhotoURLs는 entries 순서대로 고유 사진 URL을 limit개까지 모은다. 상한 limit을 넘는 고유 URL이 있으면
+// truncated가 참이다. 이미 모은 URL의 중복과 사진 없는 항목은 상한을 넘긴 것으로 보지 않는다.
+func uniqueCalendarPhotoURLs(entries []domain.CalendarEntry, limit int) (photoURLs []string, truncated bool) {
+	seen := make(map[string]struct{}, min(len(entries), limit))
 
-func (s *calendarPhotoFetchState) wouldTruncate(e domain.CalendarEntry, photos map[string]image.Image) bool {
-	return s.needsFetch(e, photos) && s.fetches >= calendarPhotoMaxFetches
-}
-
-func (s *calendarPhotoFetchState) needsFetch(e domain.CalendarEntry, photos map[string]image.Image) bool {
-	photoURL, ok := calendarEntryPhotoURL(e)
-	return ok && !s.alreadyFetchedOrAttempted(photoURL, photos)
-}
-
-func (s *calendarPhotoFetchState) fetch(ctx context.Context, e domain.CalendarEntry, photos map[string]image.Image) {
-	photoURL, ok := calendarEntryPhotoURL(e)
-	if !ok || s.alreadyFetchedOrAttempted(photoURL, photos) {
-		return
-	}
-
-	s.attempted[photoURL] = struct{}{}
-	s.fetches++
-
-	if !fetchMemberPhotoWithContext(ctx, e, photos) {
-		s.markDiskUncacheable()
-
-		if ctx.Err() != nil {
-			s.markUncacheable()
+	for _, e := range entries {
+		photoURL, ok := calendarEntryPhotoURL(e)
+		if !ok {
+			continue
 		}
+
+		if _, ok := seen[photoURL]; ok {
+			continue
+		}
+
+		if len(photoURLs) >= limit {
+			return photoURLs, true
+		}
+
+		seen[photoURL] = struct{}{}
+		photoURLs = append(photoURLs, photoURL)
 	}
+
+	return photoURLs, false
+}
+
+func fetchCalendarPhotoSlot(ctx context.Context, photoURL string) calendarPhotoFetchSlot {
+	img, ok := fetchMemberPhoto(ctx, photoURL)
+	if !ok {
+		return calendarPhotoFetchSlot{budgetExpired: ctx.Err() != nil}
+	}
+
+	return calendarPhotoFetchSlot{image: img, ok: true}
 }
 
 func calendarEntryPhotoURL(e domain.CalendarEntry) (string, bool) {
@@ -133,35 +169,19 @@ func calendarEntryPhotoURL(e domain.CalendarEntry) (string, bool) {
 	return e.Member.Photo, true
 }
 
-func (s *calendarPhotoFetchState) alreadyFetchedOrAttempted(photoURL string, photos map[string]image.Image) bool {
-	if _, ok := photos[photoURL]; ok {
-		return true
-	}
-
-	_, ok := s.attempted[photoURL]
-
-	return ok
+func (p *calendarCachePolicy) markDiskUncacheable() {
+	p.diskCacheable = false
 }
 
-func (s *calendarPhotoFetchState) markDiskUncacheable() {
-	s.cachePolicy.diskCacheable = false
+func (p *calendarCachePolicy) markUncacheable() {
+	p.memoryCacheable = false
+	p.diskCacheable = false
 }
 
-func (s *calendarPhotoFetchState) markUncacheable() {
-	s.cachePolicy.memoryCacheable = false
-	s.cachePolicy.diskCacheable = false
-}
-
-func fetchMemberPhotoWithContext(ctx context.Context, e domain.CalendarEntry, photos map[string]image.Image) bool {
-	if e.Member == nil || e.Member.Photo == "" {
-		return true
-	}
-
-	if _, ok := photos[e.Member.Photo]; ok {
-		return true
-	}
-
-	url := thumbnailURL(e.Member.Photo, calendarPhotoThumbnailSize)
+// fetchMemberPhoto는 사진 URL의 고해상도 썸네일을 받아 디코드한다. 실패는 calendar에서 사진 없이 그리는 정상 경로라
+// Debug로만 남긴다.
+func fetchMemberPhoto(ctx context.Context, photoURL string) (image.Image, bool) {
+	url := thumbnailURL(photoURL, calendarPhotoThumbnailSize)
 
 	img, err := fetchImageWithContext(ctx, url)
 	if err != nil {
@@ -170,12 +190,10 @@ func fetchMemberPhotoWithContext(ctx context.Context, e domain.CalendarEntry, ph
 			slog.String("err", err.Error()),
 		)
 
-		return false
+		return nil, false
 	}
 
-	photos[e.Member.Photo] = img
-
-	return true
+	return img, true
 }
 
 func fetchImageWithContext(ctx context.Context, url string) (image.Image, error) {

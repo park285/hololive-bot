@@ -21,7 +21,7 @@ func NewTriggerRuntimeRouter(
 ) (*gin.Engine, error) {
 	options := sharedserver.RuntimeRouterOptions{
 		APIKey:         apiKey,
-		RegisterRoutes: triggerRuntimeRouteRegistrar(triggerHandler, apiKey),
+		RegisterRoutes: TriggerRouteRegistrar(triggerHandler, apiKey),
 	}
 	applyRuntimeRouterOptions(&options, opts)
 
@@ -33,7 +33,9 @@ func NewTriggerRuntimeRouter(
 	return out, nil
 }
 
-func triggerRuntimeRouteRegistrar(triggerHandler *TriggerHandler, apiKey string) func(*gin.Engine) error {
+// TriggerRouteRegistrar는 trigger 내부 라우트를 API 키 인증 아래 등록하는 함수를 돌려준다. 인자 handler가 nil이면
+// 아무것도 등록하지 않고, handler가 있는데 API 키가 비어 있으면 인증 없는 내부 라우트가 열리지 않도록 등록을 거부한다.
+func TriggerRouteRegistrar(triggerHandler *TriggerHandler, apiKey string) func(*gin.Engine) error {
 	return func(router *gin.Engine) error {
 		if triggerHandler == nil {
 			return nil

@@ -30,28 +30,6 @@ var AppTimeout = struct {
 	Shutdown: 10 * time.Second,
 }
 
-var ServerTimeout = struct {
-	ReadHeader     time.Duration
-	Read           time.Duration
-	Write          time.Duration
-	Idle           time.Duration
-	MaxHeaderBytes int
-}{
-	ReadHeader:     5 * time.Second,
-	Read:           15 * time.Second,
-	Write:          60 * time.Second,
-	Idle:           60 * time.Second,
-	MaxHeaderBytes: 1 << 20, // 1MiB
-}
-
-var ServerConfig = struct {
-	TrustedProxies []string
-	MaxBodyBytes   int64 // 요청 본문 최대 크기 (바이트)
-}{
-	TrustedProxies: []string{"127.0.0.1", "::1"},
-	MaxBodyBytes:   1 << 20, // 1MiB
-}
-
 var CORSConfig = struct {
 	AllowMethods []string
 	AllowHeaders []string
@@ -105,9 +83,6 @@ var IrisConnection = struct {
 	RetryInterval: 2 * time.Second,
 	PingTimeout:   3 * time.Second,
 }
-
-// Iris 측 재시도(단기)에서 동일 메시지 ID를 스킵하기 위한 목적입니다.
-var IrisWebhookDedupTTL = 60 * time.Second
 
 // ACK 지연이 Iris 재시도/백프레셔로 이어지지 않도록 짧게 유지합니다.
 var IrisWebhookDedupTimeout = 200 * time.Millisecond

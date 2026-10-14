@@ -114,7 +114,7 @@ func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			pool := dbtest.NewPool(t)
-			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 			input := publishInput(communityEnvelope(t, &proof, "post-1"))
 
 			for _, apply := range tc.breakers {
@@ -142,7 +142,7 @@ func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 func TestPublishIgnoresAdmissionOnlyEligibilityChange(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	input := publishInput(communityEnvelope(t, &proof, "post-1"))
 
 	if _, err := pool.Exec(ctx, `WITH changed AS (

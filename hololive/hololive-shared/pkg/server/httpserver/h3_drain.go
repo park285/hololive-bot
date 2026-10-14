@@ -48,9 +48,9 @@ func (d *h3RequestDrain) drained() bool {
 }
 
 // shutdownH3Server는 quic-go Shutdown으로 GOAWAY를 보내고 client가 연결을 닫기를 ctx 안에서 기다린다.
-// 요청이 끝나도 quic-go는 client가 닫지 않은 연결을 기다린다. 같은 compose stop에서 먼저 끝난 client(v7.0.0 cutover의
-// hololive-api)는 CONNECTION_CLOSE 없이 사라져 그 연결이 QUIC idle timeout(60s)까지 남고, 종료 시한(10s)을 넘겨
-// 정상 정지가 exit 1이 됐다. 시한이 끝난 순간 실행 중인 요청이 없으면 남은 것은 idle 연결뿐이므로 닫고 성공한다.
+// 요청이 끝나도 quic-go는 client가 닫지 않은 연결을 기다린다. CONNECTION_CLOSE 없이 사라진 client 연결은 QUIC idle
+// timeout(60s)까지 남아 종료 시한(10s)을 넘길 수 있다. 시한이 끝난 순간 실행 중인 요청이 없으면 남은 것은 idle 연결뿐이므로
+// 닫고 성공한다.
 // 그때 요청이 실행 중이면 그 요청을 끊으므로 ctx 오류를 종료 실패로 돌려준다. HEADERS를 파싱 중인 요청은 세지
 // 않는다(h3RequestDrain 참고).
 func shutdownH3Server(ctx context.Context, server *http3.Server, drain *h3RequestDrain) error {

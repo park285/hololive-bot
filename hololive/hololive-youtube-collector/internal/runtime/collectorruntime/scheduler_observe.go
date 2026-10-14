@@ -244,13 +244,14 @@ func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
 	return retryAt.UTC()
 }
 
+// logFailure는 job 단위 실패를 기록한다. 종료로 scheduler context가 취소된 뒤의 CANCELED는 자체 취소라 INFO로 남긴다.
+// 호출자는 attempt metric과 durable 진단을 그대로 CANCELED로 기록한다.
 func (e *collectionExecutor) logFailure(ctx context.Context, phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	if e.logger == nil {
 		return
 	}
 
-	detail = collecterr.SanitizeDetail(detail)
-	e.logger.WarnContext(ctx, "YouTube collection job failed",
+	attrs := []slog.Attr{
 		slog.String("job_key", spec.JobKey),
 		slog.String("provider", string(spec.Provider)),
 		slog.String("job_kind", spec.CollectionJobKind),
@@ -259,7 +260,15 @@ func (e *collectionExecutor) logFailure(ctx context.Context, phase, code, class,
 		slog.Int64("projection_generation", proof.ProjectionGeneration),
 		slog.String("error_code", code),
 		slog.String("error_class", class),
-		slog.String("error_detail", detail),
+		slog.String("error_detail", collecterr.SanitizeDetail(detail)),
 		slog.String("phase", phase),
-	)
+	}
+
+	if canceledByShutdown(ctx, class) {
+		e.logger.LogAttrs(ctx, slog.LevelInfo, "YouTube collection job canceled by shutdown", attrs...)
+
+		return
+	}
+
+	e.logger.LogAttrs(ctx, slog.LevelWarn, "YouTube collection job failed", attrs...)
 }

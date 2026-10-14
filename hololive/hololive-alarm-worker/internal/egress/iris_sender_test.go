@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
 const (
@@ -276,8 +276,34 @@ func TestIrisMessageSenderPollingDeadlineIsOutcomeUnknown(t *testing.T) {
 	require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.NotContains(t, err.Error(), "markdown-request-1")
+	assert.Contains(t, err.Error(), "last status query error: GET /reply-status/<request_id> failed")
 	assert.GreaterOrEqual(t, client.statusCalls, 1)
 	assert.Len(t, client.markdownCalls, 1)
+}
+
+// 조회는 성공했지만 handoff가 끝나지 않은 채 deadline에 닿으면 조회 오류 문맥을 붙이지 않는다.
+func TestIrisMessageSenderPollingDeadlineWithoutQueryErrorHasNoQueryDetail(t *testing.T) {
+	client := &irisSenderTestClient{
+		getStatus: func(_ int, requestID string) (*iris.ReplyStatusSnapshot, error) {
+			return replyTestStatus(requestID, "sending"), nil
+		},
+	}
+	sender := newMarkdownTestSender(client)
+
+	sender.replyStatusPollInterval = time.Millisecond
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Millisecond)
+
+	defer cancel()
+
+	err := sendPreparedTestMessage(ctx, sender, "**hello**")
+	if err == nil {
+		t.Fatal("expected handoff outcome unknown error")
+	}
+
+	require.ErrorIs(t, err, sendoutcome.ErrHandoffOutcomeUnknown)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.NotContains(t, err.Error(), "last status query error")
 }
 
 func TestIrisMessageSenderGuardsNilInputs(t *testing.T) {

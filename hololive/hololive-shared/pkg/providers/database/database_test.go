@@ -47,7 +47,7 @@ func TestProvideDatabaseResourcesPassesSSLRootCertExplicitly(t *testing.T) {
 		PoolMaxConns: 1,
 	}
 
-	resources, cleanup, err := ProvideDatabaseResources(t.Context(), config, slog.New(slog.DiscardHandler))
+	resources, cleanup, err := ProvideDatabaseResources(t.Context(), config, "", slog.New(slog.DiscardHandler))
 	if err == nil {
 		cleanup()
 		t.Fatalf("ProvideDatabaseResources() = %v, want CA file read failure", resources)

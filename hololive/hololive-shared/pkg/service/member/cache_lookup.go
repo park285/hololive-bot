@@ -39,7 +39,7 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 	return c.lookupPoint(ctx, pointLookupName, name)
 }
 
-// FindByAlias는 게시된 snapshot에서 별칭을 먼저 찾는다. Snapshot이 없거나 snapshot에 없는 별칭은 예전 L2 miss와 같이
+// FindByAlias는 게시된 snapshot에서 별칭을 먼저 찾는다. Snapshot이 없거나 snapshot에 없는 별칭은
 // PostgreSQL을 조회한다(epoch 무효화 없이 바뀐 행도 곧바로 보이도록 음성 결과는 캐시하지 않는다). 없으면
 // domain.ErrMemberNotFound를 감싼 오류다.
 func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
@@ -94,7 +94,7 @@ func (c *Cache) lookupPoint(ctx context.Context, kind pointLookupKind, key strin
 }
 
 // lookupPointInMemory는 같은 잠금 안에서 게시된 snapshot, point overlay 순으로 찾고, miss면 PostgreSQL 결과를 게시할 때
-// 쓸 generation을 함께 돌려준다. 별칭은 snapshot 규칙만 쓰고 overlay를 보지 않는다(예전 동작 유지).
+// 쓸 generation을 함께 돌려준다. 별칭은 snapshot 규칙만 쓰고 overlay를 보지 않는다.
 func (c *Cache) lookupPointInMemory(kind pointLookupKind, key string) (*domain.Member, uint64) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()

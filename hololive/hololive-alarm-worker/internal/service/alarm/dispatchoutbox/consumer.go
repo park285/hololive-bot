@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type Consumer struct {
@@ -67,7 +67,7 @@ func WithRecoveryBatchSize(size int) ConsumerOption {
 }
 
 // NewConsumer는 WithWorkerID가 없으면 "dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면
-// 다른 이름으로 바꾸지 않고 생성 오류다.
+// 다른 이름으로 바꾸지 않고 생성 오류다. SQL interval이 초 단위만 쓰므로 lease가 1초 미만이어도 생성 오류다.
 func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *slog.Logger, opts ...ConsumerOption) (*Consumer, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -87,8 +87,12 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 		opt(consumer)
 	}
 
+	if consumer.lease < time.Second {
+		return nil, fmt.Errorf("new dispatch outbox consumer: lease must be at least 1s: %s", consumer.lease)
+	}
+
 	if consumer.workerID == "" {
-		workerID, err := util.InstanceID("dispatcher")
+		workerID, err := leaseowner.InstanceID("dispatcher")
 		if err != nil {
 			return nil, fmt.Errorf("new dispatch outbox consumer: %w", err)
 		}

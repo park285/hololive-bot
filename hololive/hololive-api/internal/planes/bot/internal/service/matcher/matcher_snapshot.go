@@ -35,7 +35,7 @@ const matcherSnapshotLoadTimeout = 5 * time.Second
 
 func (mm *Matcher) getSnapshot(ctx context.Context) (*matcherSnapshot, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+		return nil, fmt.Errorf("request member matcher snapshot: %w", err)
 	}
 
 	if snapshot := mm.cachedSnapshot(); snapshot != nil {

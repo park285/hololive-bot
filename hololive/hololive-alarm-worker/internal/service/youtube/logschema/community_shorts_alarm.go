@@ -9,7 +9,6 @@ const (
 	CommunityShortsDeliveryAuditMessage   = "YouTube community/shorts delivery audit"
 	FieldDeliveryID                       = "delivery_id"
 	FieldOutboxID                         = "outbox_id"
-	FieldRoomID                           = "room_id"
 	FieldChannelID                        = "channel_id"
 	FieldPostID                           = "post_id"
 	FieldContentID                        = "content_id"

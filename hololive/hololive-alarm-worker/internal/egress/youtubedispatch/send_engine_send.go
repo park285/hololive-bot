@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (d *SendEngine) dispatchDeliveryRows(
@@ -466,7 +467,7 @@ func (d *SendEngine) logGroupedSendFallback(
 	sendErr error,
 ) {
 	d.logger.Warn("Grouped delivery send failed, falling back to version-fenced individual deliveries",
-		slog.String("room_id", group.roomID),
+		privacylog.RoomIDAttr(group.roomID),
 		slog.String("channel_id", group.channelID),
 		slog.String("kind", string(group.kind)),
 		slog.Int("count", len(rows)),

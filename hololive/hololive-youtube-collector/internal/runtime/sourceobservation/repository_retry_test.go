@@ -27,7 +27,7 @@ func TestPartialCooldownPreservesNotBefore(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
-			proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+			proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 			var before, after time.Time
 
@@ -92,7 +92,7 @@ func partialCooldownInput(t *testing.T, at time.Time) collection.DeferCollection
 
 func TestPartialCooldownCancellationRollsBackTerminalAndObservations(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	repo := NewRepository(pool)
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -133,7 +133,7 @@ func TestPartialCooldownCancellationRollsBackTerminalAndObservations(t *testing.
 
 func TestPartialDeferSQLRejectsNonCooldownNotBefore(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 	var jobKey string
 

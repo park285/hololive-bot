@@ -8,7 +8,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
 // Provider 호출 하나를 추적한다. Grouped의 방별 결과 및 DB finalization과 분리한다.

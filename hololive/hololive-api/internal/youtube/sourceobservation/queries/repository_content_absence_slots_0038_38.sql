@@ -1,9 +1,9 @@
 SELECT scheduled_for,
        observation_id,
-       evidence_sha256,
+       encode(evidence_sha256, 'hex') AS evidence_sha256,
        effective_at,
        received_at,
-       scope_sha256,
+       encode(scope_sha256, 'hex') AS scope_sha256,
        coverage
 FROM youtube_content_absence_slots
 WHERE channel_id = $1

@@ -50,31 +50,10 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
 }
 
 func normalizeAlarmStateBatchRecords(records []*domain.YouTubeCommunityShortsAlarmState) ([]*domain.YouTubeCommunityShortsAlarmState, error) {
-	normalizedByIdentity := make(map[string]*domain.YouTubeCommunityShortsAlarmState, len(records))
-	normalizedOrder := make([]string, 0, len(records))
-
-	for i, record := range records {
-		normalizedRecord, err := normalizeAlarmState(record)
-		if err != nil {
-			return nil, fmt.Errorf("upsert alarm state batch: normalize record at index %d: %w", i, err)
-		}
-
-		identityKey := alarmStateCanonicalKey(normalizedRecord.Kind, normalizedRecord.PostID)
-		if existing, ok := normalizedByIdentity[identityKey]; ok {
-			normalizedByIdentity[identityKey] = mergeNormalizedAlarmState(existing, normalizedRecord)
-			continue
-		}
-
-		normalizedByIdentity[identityKey] = normalizedRecord
-		normalizedOrder = append(normalizedOrder, identityKey)
-	}
-
-	normalized := make([]*domain.YouTubeCommunityShortsAlarmState, 0, len(normalizedOrder))
-	for _, identityKey := range normalizedOrder {
-		normalized = append(normalized, normalizedByIdentity[identityKey])
-	}
-
-	return normalized, nil
+	return normalizeBatchRecords(records, "upsert alarm state batch", normalizeAlarmState,
+		func(record *domain.YouTubeCommunityShortsAlarmState) string {
+			return alarmStateCanonicalKey(record.Kind, record.PostID)
+		}, mergeNormalizedAlarmState)
 }
 
 func buildAlarmStateUpsertQuery(

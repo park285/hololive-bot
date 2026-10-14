@@ -16,7 +16,7 @@ func TestProviderAndObservationKindVocabulary(t *testing.T) {
 
 	for _, kind := range []ObservationKind{
 		KindCommunityPage, KindVideoList, KindShortsList, KindLiveSnapshot,
-		KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule,
+		KindChannelProfile, KindChannelPhoto, KindSchedule,
 		KindChannelLiveCheck, KindVideoLiveCheck,
 	} {
 		if !kind.Valid() {
@@ -103,37 +103,6 @@ func TestSnapshotObservationIdentityPreservesNextSlot(t *testing.T) {
 
 	if first.ObservationKey == second.ObservationKey {
 		t.Fatal("next scheduled slot must create a new identity")
-	}
-}
-
-func TestViewerSampleIdentityPreservesEqualValueInNextWindow(t *testing.T) {
-	window := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
-	first := newViewerEnvelope(t, window, 123)
-
-	first, err := PrepareEnvelope(first)
-	if err != nil {
-		t.Fatalf("prepare first: %v", err)
-	}
-
-	second := newViewerEnvelope(t, window.Add(time.Minute), 123)
-
-	second, err = PrepareEnvelope(second)
-	if err != nil {
-		t.Fatalf("prepare second: %v", err)
-	}
-
-	if first.ObservationKey == second.ObservationKey {
-		t.Fatal("next viewer sample window must create a new identity")
-	}
-}
-
-func TestViewerSampleIdentityRejectsMalformedPayload(t *testing.T) {
-	envelope := newViewerEnvelope(t, time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC), 123)
-
-	envelope.Payload = jsontext.Value(`{"channel_id":"UC_TEST"}`)
-
-	if _, err := ObservationKeyForEnvelope(&envelope, []byte(`{"channel_id":"UC_TEST"}`)); err == nil || !strings.Contains(err.Error(), "build viewer sample observation key") {
-		t.Fatalf("ObservationKeyForEnvelope() error = %v, want viewer identity error", err)
 	}
 }
 
@@ -854,31 +823,6 @@ func newCommunityEnvelope(t *testing.T, scheduledFor time.Time) Envelope {
 	}
 }
 
-func newViewerEnvelope(t *testing.T, window time.Time, count int64) Envelope {
-	t.Helper()
-
-	payload, err := MarshalPayloadV1(ViewerSampleV1{
-		VideoID: testVideoID, ViewerCount: &count, Availability: "AVAILABLE",
-		SampleWindowStart: window, SampleWindowSeconds: 60,
-		Coverage: ViewerSampleCoverageV1{VideoID: testVideoID, SampleWindowStart: window, SampleWindowSeconds: 60},
-	})
-	if err != nil {
-		t.Fatalf("marshal viewer payload: %v", err)
-	}
-
-	return Envelope{
-		Provider: ProviderHolodex, ObservationKind: KindViewerSample,
-		SubjectKey: testVideoID, SchemaVersion: SchemaVersionV1, ContractGeneration: 1,
-		ScheduledFor: window, ObservedAt: window.Add(time.Second),
-		Completeness: CompletenessComplete, Continuity: ContinuityNotApplicable,
-		Payload: payload, CollectorInstance: testCollectorInstance,
-		Lease: LeaseProof{
-			JobKey: "collector:holodex:holodex_live:global", CollectionJobKind: "holodex_live",
-			OwnerInstance: testCollectorInstance, FenceEpoch: 1, ProjectionGeneration: 1, ScheduledFor: window,
-		},
-	}
-}
-
 func mustMarshalPayload(t *testing.T, value any) jsontext.Value {
 	t.Helper()
 
@@ -903,7 +847,7 @@ func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload jsontext.V
 		generation = LiveSnapshotMetadataContractGeneration
 	case KindVideoList:
 		generation = VideoListPublicationContractGeneration
-	case KindCommunityPage, KindShortsList, KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule, KindChannelLiveCheck, KindVideoLiveCheck:
+	case KindCommunityPage, KindShortsList, KindChannelProfile, KindChannelPhoto, KindSchedule, KindChannelLiveCheck, KindVideoLiveCheck:
 		generation = 1
 	default:
 		t.Fatalf("unsupported fixture kind %s", kind)

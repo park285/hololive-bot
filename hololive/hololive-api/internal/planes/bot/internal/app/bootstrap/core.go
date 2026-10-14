@@ -10,7 +10,7 @@ import (
 )
 
 func InitInfraResources(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, logger *slog.Logger) (*sharedmodules.InfraModule, error) {
-	module, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres}, logger)
+	module, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres, PoolName: "bot"}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide infra resources: %w", err)
 	}

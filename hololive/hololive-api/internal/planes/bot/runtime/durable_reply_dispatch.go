@@ -15,25 +15,10 @@ import (
 )
 
 func (r *durableRuntime) runOutboxWorker(ctx context.Context) {
-	idleDelay := r.outboxPollEvery
-
-	for ctx.Err() == nil {
-		if r.processNextOutbox(ctx) {
-			idleDelay = r.outboxPollEvery
-			continue
-		}
-
-		durableClaimIdleTotal.WithLabelValues("outbox").Inc()
-
-		if !waitDurableWake(ctx, idleDelay, r.outboxWake) {
-			return
-		}
-
-		idleDelay = nextDurableIdleDelayFrom(idleDelay, r.outboxPollEvery)
-	}
+	runDurableWorker(ctx, "outbox", r.processNextOutbox, r.outboxWake, r.outboxPollSlot, r.outboxPollEvery)
 }
 
-func (r *durableRuntime) processNextOutbox(ctx context.Context) bool {
+func (r *durableRuntime) processNextOutbox(ctx context.Context, claimed func()) bool {
 	token := rand.Text()
 
 	claim, err := r.outbox.Claim(ctx, token, r.outboxClaimLease)
@@ -46,6 +31,8 @@ func (r *durableRuntime) processNextOutbox(ctx context.Context) bool {
 	if claim == nil {
 		return false
 	}
+
+	claimed()
 
 	attemptID := r.outboxTracker.BeginAttempt(time.Now())
 	r.dispatchOutboxClaim(ctx, claim, token)

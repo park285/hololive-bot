@@ -56,7 +56,7 @@ func (mm *Matcher) maybeCleanupMatchCache() {
 func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, bool, error) {
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
+		return nil, false, err
 	}
 
 	normalizedQuery := stringutil.Normalize(query)
@@ -184,7 +184,7 @@ func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string
 
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
+		return nil, false, err
 	}
 
 	candidates := mm.exactNameMembers(snapshot, nameNorm, org)
@@ -222,7 +222,7 @@ func (mm *Matcher) memberToChannel(m *domain.Member) *domain.Channel {
 func (mm *Matcher) MemberDisplayNames(ctx context.Context, channelIDs []string) (map[string]string, error) {
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+		return nil, err
 	}
 
 	names := make(map[string]string, len(channelIDs))

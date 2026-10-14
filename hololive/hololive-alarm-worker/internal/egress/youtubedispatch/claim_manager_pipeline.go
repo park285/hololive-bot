@@ -22,7 +22,6 @@ package youtubedispatch
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -34,10 +33,6 @@ import (
 )
 
 func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
-	if d == nil || d.fanout == nil {
-		return nil, errors.New("claim outboxes for fanout: lifecycle fanout service is unavailable")
-	}
-
 	out, err := d.fanout.Claim(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("claim outboxes for fanout: %w", err)
@@ -47,10 +42,6 @@ func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNo
 }
 
 func (d *ClaimManager) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) int {
-	if d == nil || d.fanout == nil {
-		return 0
-	}
-
 	stats := d.fanout.materialize(ctx, outboxItems)
 	d.recordOutboxEnqueueStats(len(outboxItems), stats)
 
@@ -58,10 +49,6 @@ func (d *ClaimManager) processPerRoomBatch(ctx context.Context, outboxItems []do
 }
 
 func (d *ClaimManager) reconcileTerminalOutboxStatuses(ctx context.Context) {
-	if d == nil || d.delivery == nil {
-		return
-	}
-
 	projector := d.projector
 	if projector == nil {
 		projector = newOutboxAggregateProjector(d.delivery)
@@ -133,10 +120,6 @@ func (d *ClaimManager) recordOutboxEnqueueStats(claimed int, stats outboxEnqueue
 }
 
 func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
-	if d == nil || d.transition == nil {
-		return 0
-	}
-
 	return d.processPendingDeliveriesWithLifecycle(ctx)
 }
 

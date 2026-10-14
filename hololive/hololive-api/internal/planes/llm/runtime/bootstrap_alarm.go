@@ -107,7 +107,7 @@ func initMemberNewsService(
 	service := membernews.NewService(repository, summarizer, validator, membersData, logger, membernews.WithPromptGuard(promptGuard))
 	// 구독 목록 조회는 기동 확인용이다. DB 일시 오류로 기동을 막지 않도록 경고만 남긴다.
 	if _, err := service.ListSubscribedRooms(ctx); err != nil {
-		logger.Warn("Member news subscription check failed", slog.String("error", err.Error()))
+		logger.Warn("Member news subscription check failed", slog.Any("error", err))
 	}
 
 	return service, nil

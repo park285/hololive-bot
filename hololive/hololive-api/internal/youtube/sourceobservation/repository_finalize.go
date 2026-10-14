@@ -232,8 +232,7 @@ func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Obse
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_application_insert_0014_14.sql"),
-		observation.ID, observation.Provider, observation.ObservationKind, observation.SubjectKey,
-		observation.EvidenceSHA256, kinds, keys, decisions, observation.EffectiveAt,
+		observation.ID, kinds, keys, decisions,
 	); err != nil {
 		return fmt.Errorf("finalize source observation: insert application audit batch: %w", err)
 	}

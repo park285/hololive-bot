@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 //go:embed queries/*.sql
@@ -319,12 +321,9 @@ func loadGroup(ctx context.Context, tx pgx.Tx, id int64, lock bool) ([]Delivery,
 }
 
 func rollback(ctx context.Context, tx pgx.Tx) {
-	// 취소된 HTTP 요청에도 연결을 정리하되 무제한 대기를 만들지 않습니다.
-	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
-	defer cancel()
-
-	if err := tx.Rollback(cleanup); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-		slog.Error("dispatch operation rollback failed")
+	// pgxutil.Rollback은 취소된 HTTP 요청에서도 요청 취소와 분리된 제한 시간 안에 연결을 정리합니다.
+	if err := pgxutil.Rollback(ctx, tx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		slog.Error("dispatch operation rollback failed", slog.Any("error", err))
 	}
 }
 

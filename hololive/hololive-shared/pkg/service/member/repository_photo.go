@@ -33,7 +33,7 @@ import (
 func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string) error {
 	now := time.Now()
 	if _, err := r.pool.Exec(ctx, mustSQL("repository_photo_0035_01.sql"), channelID, photoURL, now); err != nil {
-		return fmt.Errorf("failed to update photo: %w", err)
+		return fmt.Errorf("update photo: %w", err)
 	}
 
 	return nil
@@ -48,7 +48,7 @@ func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) 
 			return "", nil
 		}
 
-		return "", fmt.Errorf("failed to get photo: %w", err)
+		return "", fmt.Errorf("get photo: %w", err)
 	}
 
 	if photo == nil {
@@ -64,7 +64,7 @@ func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThresh
 
 	rows, err := r.pool.Query(ctx, mustSQL("repository_photo_0073_03.sql"), staleTime)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get members needing photo sync: %w", err)
+		return nil, fmt.Errorf("get members needing photo sync: %w", err)
 	}
 	defer rows.Close()
 
@@ -74,7 +74,7 @@ func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThresh
 		var channelID string
 
 		if err := rows.Scan(&channelID); err != nil {
-			return nil, fmt.Errorf("failed to scan channel id needing photo sync: %w", err)
+			return nil, fmt.Errorf("scan channel id needing photo sync: %w", err)
 		}
 
 		channelIDs = append(channelIDs, channelID)

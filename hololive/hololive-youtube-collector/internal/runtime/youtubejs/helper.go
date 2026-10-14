@@ -175,7 +175,7 @@ func (h *Helper) spawn(cfg *Config) error {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start youtube.js helper: %w", err)
+		return fmt.Errorf("start helper process: %w", err)
 	}
 
 	h.cmd = cmd
@@ -222,7 +222,7 @@ func (h *Helper) waitForSocket(ctx context.Context) error {
 func (h *Helper) waitForSocketEvent(ctx context.Context, tick <-chan time.Time) (bool, error) {
 	select {
 	case <-ctx.Done():
-		return false, fmt.Errorf("start youtube.js helper: wait for socket: %w", ctx.Err())
+		return false, fmt.Errorf("wait for socket: %w", ctx.Err())
 	case <-h.waited:
 		return false, fmt.Errorf("helper exited before ready: %w", helperExitedBeforeReady(h.waitErr))
 	case <-tick:
@@ -272,11 +272,11 @@ func helperSocketReady(socketPath string) (bool, error) {
 			return false, nil
 		}
 
-		return false, fmt.Errorf("start youtube.js helper: inspect socket: %w", err)
+		return false, fmt.Errorf("inspect socket: %w", err)
 	}
 
 	if info.Mode().Type() != os.ModeSocket && !info.Mode().IsRegular() {
-		return false, errors.New("start youtube.js helper: unexpected socket path type")
+		return false, errors.New("unexpected socket path type")
 	}
 
 	return true, nil
@@ -285,7 +285,7 @@ func helperSocketReady(socketPath string) (bool, error) {
 func createRuntimeDir(base string) (runtimeDir, socketPath string, resultErr error) {
 	dir, err := os.MkdirTemp(base, helperRuntimeDirPrefix)
 	if err != nil {
-		return "", "", fmt.Errorf("start youtube.js helper: create runtime dir: %w", err)
+		return "", "", fmt.Errorf("create runtime dir: %w", err)
 	}
 
 	if err := finalizeRuntimeDir(dir); err != nil {
@@ -294,13 +294,13 @@ func createRuntimeDir(base string) (runtimeDir, socketPath string, resultErr err
 
 	socketPath = filepath.Join(dir, helperSocketName)
 	if _, err := os.Lstat(socketPath); err == nil {
-		return "", "", errors.Join(errors.New("start youtube.js helper: socket path already exists"), removeRuntimeDir(dir))
+		return "", "", errors.Join(errors.New("socket path already exists"), removeRuntimeDir(dir))
 	} else if !os.IsNotExist(err) {
-		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: inspect socket path: %w", err), removeRuntimeDir(dir))
+		return "", "", errors.Join(fmt.Errorf("inspect socket path: %w", err), removeRuntimeDir(dir))
 	}
 
 	if len(socketPath) > maxUnixSocketPathBytes {
-		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: socket path exceeds %d bytes", maxUnixSocketPathBytes), removeRuntimeDir(dir))
+		return "", "", errors.Join(fmt.Errorf("socket path exceeds %d bytes", maxUnixSocketPathBytes), removeRuntimeDir(dir))
 	}
 
 	return dir, socketPath, nil
@@ -316,16 +316,16 @@ func removeRuntimeDir(dir string) error {
 
 func finalizeRuntimeDir(dir string) error {
 	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // 비공개 디렉터리 탐색에는 소유자 실행 권한이 필요하다.
-		return fmt.Errorf("start youtube.js helper: chmod runtime dir: %w", err)
+		return fmt.Errorf("chmod runtime dir: %w", err)
 	}
 
 	resolved, err := filepath.EvalSymlinks(dir)
 	if err != nil {
-		return fmt.Errorf("start youtube.js helper: resolve runtime dir: %w", err)
+		return fmt.Errorf("resolve runtime dir: %w", err)
 	}
 
 	if resolved != dir {
-		return errors.New("start youtube.js helper: runtime dir must not be a symlink")
+		return errors.New("runtime dir must not be a symlink")
 	}
 
 	return nil
@@ -354,10 +354,10 @@ func helperStarting(err error) bool {
 
 func helperExitedBeforeReady(waitErr error) error {
 	if waitErr == nil {
-		return errors.New("start youtube.js helper: process exited before ready")
+		return errors.New("process exited before ready")
 	}
 
-	return fmt.Errorf("start youtube.js helper: process exited before ready: %w", waitErr)
+	return fmt.Errorf("process exited before ready: %w", waitErr)
 }
 
 func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

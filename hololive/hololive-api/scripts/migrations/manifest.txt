@@ -162,3 +162,11 @@
 162 301_alarm_dispatch_deliveries_require_send_unit.sql
 163 302_source_observation_queue_processed_retention_index.sql
 164 303_source_observation_queue_dead_letter_retention_index.sql
+165 304_youtube_live_review_set_comparison.sql
+166 305_live_storage_cleanup_and_lz4.sql
+167 306_remove_retired_viewer_storage.sql
+168 309_drop_source_application_orphan_index.sql
+169 307_source_application_cascade.sql
+170 308_source_binary_hashes.sql
+171 310_youtube_live_review_shared_sources.sql
+172 311_drop_alarm_upcoming_checkpoints.sql

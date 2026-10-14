@@ -16,9 +16,9 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // seeMoreFoldEgressClient는 실제 egress.IrisMessageSender가 Kakao 텍스트 lane에 넘긴 최종 payload만 기록한다.
@@ -105,7 +105,7 @@ func TestDispatchDeliveryRowsKeepsShortsUnfoldedAtFinalPayload(t *testing.T) {
 			t.Parallel()
 
 			final := runDirectGroupedShortsFinalPayload(t, count, nil)
-			require.NotContains(t, final, util.KakaoZeroWidthSpace+util.KakaoZeroWidthSpace, "alarm text must not carry see-more padding (consecutive ZWSP)")
+			require.NotContains(t, final, kakaotext.ZeroWidthSpace+kakaotext.ZeroWidthSpace, "alarm text must not carry see-more padding (consecutive ZWSP)")
 			require.Equal(t, count, strings.Count(final, "https://www.youtube.com/shorts/"))
 			require.Contains(t, final, "[Announcement]")
 
@@ -117,7 +117,7 @@ func TestDispatchDeliveryRowsKeepsShortsUnfoldedAtFinalPayload(t *testing.T) {
 }
 
 func TestDispatchDeliveryRowsPreservesCustomPadding(t *testing.T) {
-	padding := strings.Repeat(util.KakaoZeroWidthSpace, 500)
+	padding := strings.Repeat(kakaotext.ZeroWidthSpace, 500)
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "제목"+padding+"\n{{range .Items}}{{.Title}}\n{{.URL}}\n{{end}}")
 	final := runDirectGroupedShortsFinalPayload(t, 2, renderer)
 	require.Equal(t, 1, strings.Count(final, padding))

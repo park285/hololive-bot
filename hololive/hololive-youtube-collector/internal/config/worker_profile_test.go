@@ -45,7 +45,7 @@ func TestLoadWorkerProfileRejectsRuntimeInvalidPolicyWithoutRuntimeEnv(t *testin
 		},
 		{
 			name: "db timeout above 1m", old: `"db_timeout_ms": 5000`, replacement: `"db_timeout_ms": 120000`,
-			wantSub: "phase timeout bounds are invalid",
+			wantSub: "collection.settings.db_timeout_ms must be between 100ms and 1m0s",
 		},
 		{
 			name: "acquisition cadence above 1m", old: `"acquisition_cadence_ms": 1000`, replacement: `"acquisition_cadence_ms": 120000`,

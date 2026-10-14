@@ -28,7 +28,7 @@ func scanFullCelebrationRow(dest []any, id int, name, channelID string, aliases 
 	assignScanDest[*time.Time](dest[16], nil)
 }
 
-func TestCollectCelebrationMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
+func TestCollectMembersFromRows_Celebration_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
@@ -43,21 +43,21 @@ func TestCollectCelebrationMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) 
 		}},
 	}}
 
-	members, err := repository.collectCelebrationMembersFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member", scanMemberFullRow)
 	if err == nil {
-		t.Fatal("collectCelebrationMembersFromRows error = nil, want non-nil")
+		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
 
 	if len(members) != 1 || members[0] == nil || members[0].ChannelID != testChannelUC2 {
 		t.Fatalf("members = %#v, want one valid member for UC2", members)
 	}
 
-	if got := err.Error(); !containsAll(got, []string{"parse celebration member row", "Suisei", "failed to unmarshal aliases"}) {
+	if got := err.Error(); !containsAll(got, []string{"parse celebration member row", "Suisei", "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }
 
-func TestCollectCelebrationMembersFromRows_JoinsRowsErr(t *testing.T) {
+func TestCollectMembersFromRows_Celebration_JoinsRowsErr(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{
 		err: errors.New("connection reset"),
@@ -70,9 +70,9 @@ func TestCollectCelebrationMembersFromRows_JoinsRowsErr(t *testing.T) {
 		},
 	}
 
-	members, err := repository.collectCelebrationMembersFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member", scanMemberFullRow)
 	if err == nil {
-		t.Fatal("collectCelebrationMembersFromRows error = nil, want non-nil")
+		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
 
 	if len(members) != 1 || members[0].ChannelID != testChannelUC1 {
@@ -116,7 +116,7 @@ func TestCollectCalendarEntriesFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		t.Fatalf("entries[0].Day = %d, want 4", entries[0].Day)
 	}
 
-	if got := err.Error(); !containsAll(got, []string{"parse calendar member row", "Suisei", "failed to unmarshal aliases"}) {
+	if got := err.Error(); !containsAll(got, []string{"parse calendar member row", "Suisei", "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }

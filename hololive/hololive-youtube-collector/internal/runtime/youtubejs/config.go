@@ -46,7 +46,7 @@ type Config struct {
 
 func resolveConfig(config *Config) (Config, error) {
 	if config == nil {
-		return Config{}, errors.New("start youtube.js helper: config is not configured")
+		return Config{}, errors.New("config is not configured")
 	}
 
 	cfg := *config
@@ -96,19 +96,19 @@ func applyConfigDefaults(cfg *Config) {
 
 func validateResolvedConfig(cfg *Config) error {
 	if cfg.NodePath == "" {
-		return errors.New("start youtube.js helper: node binary is not configured")
+		return errors.New("node binary is not configured")
 	}
 
 	if cfg.ScriptPath == "" {
-		return errors.New("start youtube.js helper: helper script is not configured")
+		return errors.New("helper script is not configured")
 	}
 
 	if cfg.MaxInflight < 1 || cfg.MaxInflight > maxHelperInflight {
-		return fmt.Errorf("start youtube.js helper: max inflight must be between 1 and %d", maxHelperInflight)
+		return fmt.Errorf("max inflight must be between 1 and %d", maxHelperInflight)
 	}
 
 	if cfg.RequestBodyLimit <= 0 || cfg.ResponseBodyLimit <= 0 {
-		return errors.New("start youtube.js helper: body limits must be positive")
+		return errors.New("body limits must be positive")
 	}
 
 	if err := validateRuntimeBaseDir(cfg.RuntimeBaseDir); err != nil {
@@ -121,33 +121,33 @@ func validateResolvedConfig(cfg *Config) error {
 func validateRuntimeBaseDir(path string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return errors.New("start youtube.js helper: runtime base dir is not configured")
+		return errors.New("runtime base dir is not configured")
 	}
 
 	if !filepath.IsAbs(path) {
 		abs, err := filepath.Abs(path)
 		if err != nil {
-			return fmt.Errorf("start youtube.js helper: resolve runtime base dir: %w", err)
+			return fmt.Errorf("resolve runtime base dir: %w", err)
 		}
 
 		path = abs
 	}
 
 	if filepath.Clean(path) != path {
-		return errors.New("start youtube.js helper: runtime base dir path must be clean")
+		return errors.New("runtime base dir path must be clean")
 	}
 
 	info, err := os.Lstat(path)
 	if err != nil {
-		return fmt.Errorf("start youtube.js helper: inspect runtime base dir: %w", err)
+		return fmt.Errorf("inspect runtime base dir: %w", err)
 	}
 
 	if info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("start youtube.js helper: runtime base dir must not be a symlink")
+		return errors.New("runtime base dir must not be a symlink")
 	}
 
 	if !info.IsDir() {
-		return errors.New("start youtube.js helper: runtime base dir must be a directory")
+		return errors.New("runtime base dir must be a directory")
 	}
 
 	return nil
@@ -223,7 +223,7 @@ func absolutizeHelperPath(value *string, name string) error {
 
 	abs, err := filepath.Abs(*value)
 	if err != nil {
-		return fmt.Errorf("start youtube.js helper: resolve %s: %w", name, err)
+		return fmt.Errorf("resolve %s: %w", name, err)
 	}
 
 	*value = abs
@@ -286,21 +286,21 @@ func firstExisting(paths ...string) string {
 
 func canonicalHelperFile(path, name string) (string, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return "", fmt.Errorf("start youtube.js helper: %s path must be absolute and clean", name)
+		return "", fmt.Errorf("%s path must be absolute and clean", name)
 	}
 
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return "", fmt.Errorf("start youtube.js helper: resolve %s path: %w", name, err)
+		return "", fmt.Errorf("resolve %s path: %w", name, err)
 	}
 
 	info, err := os.Stat(resolved) //nolint:gosec // G703 오탐: 신뢰된 운영 설정 경로를 검증하는 호출이다.
 	if err != nil {
-		return "", fmt.Errorf("start youtube.js helper: inspect %s path: %w", name, err)
+		return "", fmt.Errorf("inspect %s path: %w", name, err)
 	}
 
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("start youtube.js helper: %s path is not a regular file", name)
+		return "", fmt.Errorf("%s path is not a regular file", name)
 	}
 
 	return resolved, nil

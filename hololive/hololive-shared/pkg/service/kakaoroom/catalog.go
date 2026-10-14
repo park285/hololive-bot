@@ -144,7 +144,7 @@ func (c *Catalog) warn(ctx context.Context, msg string, err error) {
 		return
 	}
 
-	c.logger.LogAttrs(ctx, slog.LevelWarn, msg, slog.String("error", err.Error()))
+	c.logger.LogAttrs(ctx, slog.LevelWarn, msg, slog.Any("error", err))
 }
 
 func (c *Catalog) remember(facts Facts) {

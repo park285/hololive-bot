@@ -25,7 +25,7 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 func TestTemplateFuncs_MdSafe(t *testing.T) {
@@ -53,11 +53,11 @@ func TestTemplateFuncs_MdSafe(t *testing.T) {
 		t.Errorf("markdown 마커가 무력화되지 않음: %q", got)
 	}
 
-	if want := "제목: " + util.MarkdownNeutralize(data.Title); got != want {
+	if want := "제목: " + kakaotext.MarkdownNeutralize(data.Title); got != want {
 		t.Errorf("mdsafe 출력 = %q, want %q", got, want)
 	}
 
-	if stripped := strings.ReplaceAll(got, util.KakaoZeroWidthSpace, ""); stripped != "제목: "+data.Title {
+	if stripped := strings.ReplaceAll(got, kakaotext.ZeroWidthSpace, ""); stripped != "제목: "+data.Title {
 		t.Errorf("가시 문자 변형됨: %q", stripped)
 	}
 }

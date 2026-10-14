@@ -36,20 +36,6 @@ var CacheTTL = struct {
 	NotificationSent: 24 * time.Hour,   // 24시간 - 알림 발송 기록
 }
 
-var MemberCacheDefaults = struct {
-	EpochReconcileInterval time.Duration
-}{
-	EpochReconcileInterval: 15 * time.Second,
-}
-
-var WebSocketConfig = struct {
-	MaxReconnectAttempts int
-	ReconnectDelay       time.Duration
-}{
-	MaxReconnectAttempts: 5,
-	ReconnectDelay:       5 * time.Second,
-}
-
 var ValkeyConfig = struct {
 	ReadyTimeout      time.Duration
 	BlockingPoolSize  int

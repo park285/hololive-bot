@@ -7,7 +7,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -42,8 +45,8 @@ func loadLivePendingEnds(ctx context.Context, tx dbx.Tx, state *live.State, vide
 	return nil
 }
 
-// 이미 확인된 LIVE의 absence 효과는 session/head에 저장되어 있다. 신규 positive와 첫 LIVE
-// 확인에만 과거 slot을 재적용하며 finalizer는 pending 사실만 사용한다.
+// 먼저 잠근 positive clock으로 부재 평가 여부를 정한다. 일반 PARTIAL은 이력과 slot 모두
+// 읽지 않고, scoped negative와 신규 positive·첫 LIVE의 replay만 필요한 이력을 읽는다.
 func loadLiveAbsencesForPositive(ctx context.Context, tx dbx.Tx, state *live.State, evidence *live.Evidence) error {
 	var (
 		channels              []string
@@ -67,6 +70,14 @@ func loadLiveAbsencesForPositive(ctx context.Context, tx dbx.Tx, state *live.Sta
 		}
 	}
 
+	if len(channels) == 0 && !scopedLiveNegative(evidence) {
+		return nil
+	}
+
+	if err := loadLiveIgnoredAbsences(ctx, tx, state, liveIgnoredAbsenceLoadIDs(state, evidence)); err != nil {
+		return fmt.Errorf("load ignored absences: %w", err)
+	}
+
 	slices.Sort(channels)
 
 	channels = slices.Compact(channels)
@@ -80,6 +91,45 @@ func loadLiveAbsencesForPositive(ctx context.Context, tx dbx.Tx, state *live.Sta
 	return loadLiveAbsenceSlots(ctx, tx, state, channels, after, evidence.ScheduledFor, evidence.Coverage.RequestedChannelIDs)
 }
 
+func scopedLiveNegative(evidence *live.Evidence) bool {
+	return contract.NegativeEligible(evidence.Completeness, evidence.Continuity) &&
+		contract.AbsenceCapabilityFor(evidence.Kind) == contract.AbsenceScoped
+}
+
+func liveIgnoredAbsenceLoadIDs(state *live.State, evidence *live.Evidence) []string {
+	var ids []string
+
+	for videoID := range state.Sessions {
+		session := state.Sessions[videoID]
+
+		if !session.HeadPresent || session.Status == domain.LiveStatusEnded {
+			continue
+		}
+
+		if _, loaded := session.IgnoredAbsences.Slots(); loaded {
+			continue
+		}
+
+		if (session.LifecycleOrigin == live.OriginMetadataOnly || session.LifecycleOrigin == live.OriginLegacyUnknown) &&
+			session.Clock.LastUpcomingPositiveAt == nil && session.Clock.LastLivePositiveAt == nil {
+			// positive 적용 뒤에는 metadata도 observed가 되어 replay 대상이 된다.
+			// 승격되는 영상의 기존 이력을 빈 배열로 간주하거나 생략하면 안 된다.
+			promoted := slices.ContainsFunc(evidence.Sessions, func(fact live.SessionFact) bool {
+				return fact.VideoID == videoID &&
+					((fact.Status == "UPCOMING" && session.Status != domain.LiveStatusLive) ||
+						(fact.Status == "LIVE" && fact.LiveStartConfirmed))
+			})
+			if !promoted {
+				continue
+			}
+		}
+
+		ids = append(ids, videoID)
+	}
+
+	return ids
+}
+
 func loadLiveAbsenceSlots(ctx context.Context, tx dbx.Tx, state *live.State, channelIDs []string, after *time.Time,
 	scheduledFor time.Time, currentChannels []string,
 ) error {
@@ -88,10 +138,21 @@ func loadLiveAbsenceSlots(ctx context.Context, tx dbx.Tx, state *live.State, cha
 	}
 
 	// 현재 slot은 이미 처리된 coverage가 정본이다. history를 생략해도 같은 slot을 새로 세면 안 된다.
-	rows, err := tx.Query(ctx, mustSQL("repository_live_absence_slots.sql"), channelIDs, after, scheduledFor, currentChannels)
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	if len(channelIDs) == 0 {
+		rows, err = tx.Query(ctx, mustSQL("repository_live_absence_current_slot.sql"), scheduledFor, currentChannels)
+	} else {
+		rows, err = tx.Query(ctx, mustSQL("repository_live_absence_slots.sql"), channelIDs, after, scheduledFor, currentChannels)
+	}
+
 	if err != nil {
 		return fmt.Errorf("query absence slots: %w", err)
 	}
+
 	defer rows.Close()
 
 	for rows.Next() {

@@ -59,12 +59,7 @@ func decodeOfficialScheduleGroups(body []byte) ([]jsontext.Value, error) {
 }
 
 func officialScheduleDecodeError(reason officialScheduleReason, cause error) error {
-	err := newOfficialScheduleSourceError(reason, 0, cause)
-	if err != nil {
-		return fmt.Errorf("official schedule source error: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("official schedule source error: %w", newOfficialScheduleSourceError(reason, 0, cause))
 }
 
 func decodeOfficialScheduleRows(groups []jsontext.Value) ([]jsontext.Value, error) {
@@ -105,21 +100,13 @@ func decodeOfficialScheduleGroup(rawGroup jsontext.Value, index int) ([]jsontext
 func decodeRawJSONArray(raw jsontext.Value, field string) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		if err := newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("official schedule field %s must be an array", field)); err != nil {
-			return nil, fmt.Errorf("official schedule source error: %w", err)
-		}
-
-		return nil, nil
+		return nil, officialScheduleDecodeError(officialScheduleReasonSchema, fmt.Errorf("official schedule field %s must be an array", field))
 	}
 
 	var values []jsontext.Value
 
 	if err := jsonv2.Unmarshal(trimmed, &values); err != nil {
-		if newOfficialScheduleErr := newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("decode official schedule field %s: %w", field, err)); newOfficialScheduleErr != nil {
-			return nil, fmt.Errorf("official schedule source error: %w", newOfficialScheduleErr)
-		}
-
-		return nil, nil
+		return nil, officialScheduleDecodeError(officialScheduleReasonSchema, fmt.Errorf("decode official schedule field %s: %w", field, err))
 	}
 
 	return values, nil

@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
@@ -21,7 +22,7 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 	failedAt := time.Now()
 
 	mr.logger.Warn("Failed to build grouped delivery request",
-		slog.String("room_id", roomID),
+		privacylog.RoomIDAttr(roomID),
 		slog.String("channel_id", channelID),
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validOutboxes)),
@@ -47,7 +48,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	failedAt := time.Now()
 	reason := deliveryFailureReason(sendErr)
 	mr.logger.Warn("Failed to send grouped delivery",
-		slog.String("room_id", roomID),
+		privacylog.RoomIDAttr(roomID),
 		slog.String("channel_id", channelID),
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),
@@ -73,7 +74,7 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	sentAt := time.Now()
 
 	mr.logger.Info("Sent grouped delivery",
-		slog.String("room_id", roomID),
+		privacylog.RoomIDAttr(roomID),
 		slog.String("channel_id", channelID),
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),
@@ -111,7 +112,7 @@ func (mr *MetricsRecorder) recordGroupedFormatFailure(
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
 	mr.logger.Warn("Failed to format grouped delivery",
-		slog.String("room_id", roomID),
+		privacylog.RoomIDAttr(roomID),
 		slog.String("channel_id", channelID),
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validOutboxes)),

@@ -210,20 +210,14 @@ func validateOfficialScheduleAPIBaseURL(baseURL *url.URL) error {
 
 func (s *Service) executeOfficialScheduleAPIRequest(req *http.Request) ([]byte, error) {
 	if s.httpClient == nil {
-		if err := newOfficialScheduleSourceError(officialScheduleReasonTransport, 0, errors.New("official schedule HTTP client is nil")); err != nil {
-			return nil, fmt.Errorf("official schedule source error: %w", err)
-		}
+		sourceErr := newOfficialScheduleSourceError(officialScheduleReasonTransport, 0, errors.New("official schedule HTTP client is nil"))
 
-		return nil, nil
+		return nil, fmt.Errorf("official schedule source error: %w", sourceErr)
 	}
 
 	resp, err := s.httpClient.Do(req) //nolint:bodyclose // downstream helpers own every non-nil response body path
 	if err != nil {
-		if officialErr := officialScheduleRequestFailure(resp, err); officialErr != nil {
-			return nil, fmt.Errorf("official schedule request failure: %w", officialErr)
-		}
-
-		return nil, nil
+		return nil, fmt.Errorf("official schedule request failure: %w", officialScheduleRequestFailure(resp, err))
 	}
 
 	if validateOfficialErr := validateOfficialScheduleResponse(resp); validateOfficialErr != nil {
@@ -249,28 +243,22 @@ func officialScheduleRequestFailure(resp *http.Response, requestErr error) error
 		reason = officialScheduleReasonContext
 	}
 
-	if err := newOfficialScheduleSourceError(reason, 0, fmt.Errorf("request official schedule API: %w", requestErr)); err != nil {
-		return fmt.Errorf("official schedule source error: %w", err)
-	}
+	sourceErr := newOfficialScheduleSourceError(reason, 0, fmt.Errorf("request official schedule API: %w", requestErr))
 
-	return nil
+	return fmt.Errorf("official schedule source error: %w", sourceErr)
 }
 
 func validateOfficialScheduleResponse(resp *http.Response) error {
 	if resp == nil {
-		if err := newOfficialScheduleSourceError(officialScheduleReasonTransport, 0, errors.New("request official schedule API: nil response")); err != nil {
-			return fmt.Errorf("official schedule source error: %w", err)
-		}
+		sourceErr := newOfficialScheduleSourceError(officialScheduleReasonTransport, 0, errors.New("request official schedule API: nil response"))
 
-		return nil
+		return fmt.Errorf("official schedule source error: %w", sourceErr)
 	}
 
 	if resp.Body == nil {
-		if err := newOfficialScheduleSourceError(officialScheduleReasonTransport, resp.StatusCode, errors.New("request official schedule API: nil response body")); err != nil {
-			return fmt.Errorf("official schedule source error: %w", err)
-		}
+		sourceErr := newOfficialScheduleSourceError(officialScheduleReasonTransport, resp.StatusCode, errors.New("request official schedule API: nil response body"))
 
-		return nil
+		return fmt.Errorf("official schedule source error: %w", sourceErr)
 	}
 
 	return nil
@@ -295,11 +283,7 @@ func (s *Service) readOfficialScheduleAPIResponse(resp *http.Response) ([]byte, 
 
 func validateOfficialScheduleStatus(resp *http.Response) error {
 	if resp == nil || resp.Body == nil {
-		if err := validateOfficialScheduleResponse(resp); err != nil {
-			return fmt.Errorf("validate official schedule response: %w", err)
-		}
-
-		return nil
+		return fmt.Errorf("validate official schedule response: %w", validateOfficialScheduleResponse(resp))
 	}
 
 	if resp.StatusCode == http.StatusOK {
@@ -309,29 +293,21 @@ func validateOfficialScheduleStatus(resp *http.Response) error {
 	closeErr := httputil.DrainAndClose(resp.Body, httputil.DefaultDrainLimit)
 	statusErr := fmt.Errorf("official schedule API returned status %d", resp.StatusCode)
 
-	if err := newOfficialScheduleSourceError(officialScheduleReasonStatus, resp.StatusCode, errors.Join(statusErr, closeErr)); err != nil {
-		return fmt.Errorf("official schedule source error: %w", err)
-	}
+	sourceErr := newOfficialScheduleSourceError(officialScheduleReasonStatus, resp.StatusCode, errors.Join(statusErr, closeErr))
 
-	return nil
+	return fmt.Errorf("official schedule source error: %w", sourceErr)
 }
 
 func validateOfficialScheduleResponseContentType(resp *http.Response) error {
 	if resp == nil || resp.Body == nil {
-		if err := validateOfficialScheduleResponse(resp); err != nil {
-			return fmt.Errorf("validate official schedule response: %w", err)
-		}
-
-		return nil
+		return fmt.Errorf("validate official schedule response: %w", validateOfficialScheduleResponse(resp))
 	}
 
 	if err := validateOfficialScheduleContentType(resp.Header.Get("Content-Type")); err != nil {
 		closeErr := httputil.DrainAndClose(resp.Body, httputil.DefaultDrainLimit)
-		if newOfficialScheduleSourceErr := newOfficialScheduleSourceError(officialScheduleReasonContentType, resp.StatusCode, errors.Join(err, closeErr)); newOfficialScheduleSourceErr != nil {
-			return fmt.Errorf("official schedule source error: %w", newOfficialScheduleSourceErr)
-		}
+		sourceErr := newOfficialScheduleSourceError(officialScheduleReasonContentType, resp.StatusCode, errors.Join(err, closeErr))
 
-		return nil
+		return fmt.Errorf("official schedule source error: %w", sourceErr)
 	}
 
 	return nil
@@ -339,24 +315,18 @@ func validateOfficialScheduleResponseContentType(resp *http.Response) error {
 
 func (s *Service) readOfficialScheduleResponseBody(resp *http.Response) ([]byte, error) {
 	if resp == nil || resp.Body == nil {
-		if err := validateOfficialScheduleResponse(resp); err != nil {
-			return nil, fmt.Errorf("validate official schedule response: %w", err)
-		}
-
-		return nil, nil
+		return nil, fmt.Errorf("validate official schedule response: %w", validateOfficialScheduleResponse(resp))
 	}
 
 	body, err := httputil.ReadAllAndClose(resp.Body, s.maxResponseBodyBytes)
 	if err != nil {
-		if newErr2 := newOfficialScheduleSourceError(
+		sourceErr := newOfficialScheduleSourceError(
 			officialScheduleBodyReadReason(err),
 			resp.StatusCode,
 			fmt.Errorf("read official schedule API response: %w", err),
-		); newErr2 != nil {
-			return nil, fmt.Errorf("official schedule source error: %w", newErr2)
-		}
+		)
 
-		return nil, nil
+		return nil, fmt.Errorf("official schedule source error: %w", sourceErr)
 	}
 
 	observeOfficialScheduleResponseBytes(len(body))
@@ -389,11 +359,8 @@ func validateOfficialScheduleContentType(contentType string) error {
 	return nil
 }
 
+// newOfficialScheduleSourceError는 항상 non-nil 원인을 받아 분류 사유를 붙인 오류를 만든다.
 func newOfficialScheduleSourceError(reason officialScheduleReason, statusCode int, err error) error {
-	if err == nil {
-		return nil
-	}
-
 	return &officialScheduleSourceError{reason: reason, statusCode: statusCode, err: err}
 }
 

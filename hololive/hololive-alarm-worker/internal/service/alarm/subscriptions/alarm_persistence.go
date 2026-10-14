@@ -97,19 +97,11 @@ func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alar
 }
 
 func persistUpdatedAlarmTypes(ctx context.Context, writer alarmTypesUpdater, alarm *domain.Alarm) error {
-	if err := updateAlarmTypesWithWriter(ctx, writer, alarm); err != nil {
-		return fmt.Errorf("update alarm types with writer: %w", err)
-	}
-
-	return nil
+	return updateAlarmTypesWithWriter(ctx, writer, alarm)
 }
 
 func persistUpsertedAlarmTypes(ctx context.Context, writer alarmUpsertWriter, alarm *domain.Alarm) error {
-	if err := upsertAlarmTypeUpdate(ctx, writer, alarm); err != nil {
-		return fmt.Errorf("upsert alarm type update: %w", err)
-	}
-
-	return nil
+	return upsertAlarmTypeUpdate(ctx, writer, alarm)
 }
 
 func updateAlarmTypesWithWriter(ctx context.Context, writer alarmTypesUpdater, alarm *domain.Alarm) error {
@@ -122,7 +114,7 @@ func updateAlarmTypesWithWriter(ctx context.Context, writer alarmTypesUpdater, a
 
 func upsertAlarmTypeUpdate(ctx context.Context, writer alarmUpsertWriter, alarm *domain.Alarm) error {
 	if err := writer.Upsert(ctx, alarm); err != nil {
-		return fmt.Errorf("upsert alarm type update: %w", err)
+		return fmt.Errorf("upsert alarm types: %w", err)
 	}
 
 	return nil

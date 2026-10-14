@@ -11,7 +11,7 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 func TestSeedTemplates_KakaoReadabilitySamples(t *testing.T) {
@@ -84,7 +84,7 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 			}
 
 			for line := range strings.SplitSeq(out, "\n") {
-				line = strings.TrimPrefix(line, util.KakaoZeroWidthSpace)
+				line = strings.TrimPrefix(line, kakaotext.ZeroWidthSpace)
 
 				if strings.HasPrefix(line, "긴 한글") || strings.HasPrefix(line, "長い日本語") || strings.HasPrefix(line, "A long") {
 					if utf8.RuneCountInString(line) > 64 || !strings.HasSuffix(line, "...") {
@@ -93,7 +93,7 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 				}
 			}
 
-			if strings.Contains(title, "\r\n") && !strings.Contains(rendered, util.MarkdownNeutralize(strings.ReplaceAll(title, "\r\n", " "))) {
+			if strings.Contains(title, "\r\n") && !strings.Contains(rendered, kakaotext.MarkdownNeutralize(strings.ReplaceAll(title, "\r\n", " "))) {
 				t.Errorf("제목 줄 정리 또는 Markdown 무력화 누락: %q", out)
 			}
 		})

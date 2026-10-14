@@ -24,12 +24,12 @@ func (c *Consumer) reconcileCommunity(
 	}
 
 	if lockErr := lockCommunitySubject(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID); lockErr != nil {
-		return ReconcileResult{}, fmt.Errorf("lock community subject: %w", lockErr)
+		return ReconcileResult{}, lockErr
 	}
 
 	head, err := loadCommunitySubjectHead(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID)
 	if err != nil {
-		return ReconcileResult{}, fmt.Errorf("load community subject head: %w", err)
+		return ReconcileResult{}, err
 	}
 
 	if head.supersedes(claimed) {
@@ -65,7 +65,7 @@ func (c *Consumer) reconcileCommunity(
 	}
 
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-		return ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
+		return ReconcileResult{}, err
 	}
 
 	return ReconcileResult{Applications: communityApplications(payload.ChannelID, &persisted)}, nil

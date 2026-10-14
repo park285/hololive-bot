@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
@@ -33,7 +34,7 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 		return nil, errors.New("build collector infra: config is nil")
 	}
 
-	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &appConfig.Postgres, "collector", logger)
 	if err != nil {
 		return nil, fmt.Errorf("build collector infra: %w", err)
 	}
@@ -44,7 +45,7 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 	if err != nil {
 		cleanupDB()
 
-		return nil, fmt.Errorf("start youtube JS helper: %w", err)
+		return nil, err
 	}
 
 	collectorInfra := &collectorInfrastructure{
@@ -69,6 +70,7 @@ func (i *collectorInfrastructure) buildProviderClients(
 	maxBody := int64(collector.MaxSuccessResponseBytes)
 
 	holodexHTTP, err := providerhttp.NewProviderHTTPClient(providerTransportConfig(
+		contract.ProviderHolodex,
 		appConfig.Holodex.Transport.Timeout,
 		collector.HolodexMaxInflight,
 	))
@@ -84,6 +86,7 @@ func (i *collectorInfrastructure) buildProviderClients(
 	i.holodex = holodex
 
 	officialHTTP, err := providerhttp.NewProviderHTTPClient(providerTransportConfig(
+		contract.ProviderHololiveOfficial,
 		appConfig.OfficialSchedule.Transport.Timeout,
 		collector.OfficialMaxInflight,
 	))
@@ -101,7 +104,11 @@ func (i *collectorInfrastructure) buildProviderClients(
 	return nil
 }
 
-func providerTransportConfig(requestTimeout time.Duration, maxConns int) providerhttp.ProviderTransportConfig {
+func providerTransportConfig(
+	provider contract.Provider,
+	requestTimeout time.Duration,
+	maxConns int,
+) providerhttp.ProviderTransportConfig {
 	idle := min(maxConns, 8)
 	headerTimeout := 10 * time.Second
 
@@ -110,6 +117,7 @@ func providerTransportConfig(requestTimeout time.Duration, maxConns int) provide
 	}
 
 	return providerhttp.ProviderTransportConfig{
+		MetricsClient:         string(provider),
 		RequestTimeout:        requestTimeout,
 		DialTimeout:           5 * time.Second,
 		TLSHandshakeTimeout:   5 * time.Second,

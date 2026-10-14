@@ -24,7 +24,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func (mm *Matcher) candidateFromMember(member *domain.Member, source string) *matchCandidate {
@@ -105,5 +104,5 @@ func toStringPtr(value string) *string {
 }
 
 func normalizeMatcherTerm(value string) string {
-	return util.NormalizeSuffix(value)
+	return NormalizeSuffix(value)
 }

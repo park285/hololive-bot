@@ -61,11 +61,12 @@ func (r *Runtime) retainSource(ctx context.Context) error {
 		return nil
 	}
 
-	started := time.Now()
-
 	var result sourceobservation.RetentionResult
 
-	err := r.withRetainDB(ctx, func(ctx context.Context) error {
+	err := r.withBudgetDB(ctx, dbOperationRetentionSource, func(ctx context.Context) error {
+		// 슬롯 대기는 db_slot_wait_seconds가 맡고, tick 시간은 획득 뒤 실행분만 잰다.
+		defer observeSeconds(youtubeRetentionTickSeconds, retentionPhaseSource, time.Now())
+
 		var tickErr error
 
 		result, tickErr = r.retainer.RunRetentionTick(ctx, planeRetentionConfig(&r.Config.Retention), r.now())
@@ -75,10 +76,10 @@ func (r *Runtime) retainSource(ctx context.Context) error {
 
 		return nil
 	})
-	recordRetentionTick(result, time.Since(started), err)
+	recordRetentionTick(result, err)
 
 	if err != nil {
-		return fmt.Errorf("with retain DB: %w", err)
+		return fmt.Errorf("retain source observations: %w", err)
 	}
 
 	return nil
@@ -89,43 +90,38 @@ func (r *Runtime) retainProjections(ctx context.Context) error {
 		return nil
 	}
 
-	started := time.Now()
-
 	var result targetprojection.RetentionResult
 
-	err := r.withRetainDB(ctx, func(ctx context.Context) error {
+	err := r.withBudgetDB(ctx, dbOperationRetentionProjection, func(ctx context.Context) error {
+		defer observeSeconds(youtubeRetentionTickSeconds, retentionPhaseProjection, time.Now())
+
 		var retainErr error
 
 		result, retainErr = r.retainProjectionBatches(ctx, r.now())
-		if retainErr != nil {
-			return fmt.Errorf("retain projections: %w", retainErr)
-		}
 
-		return nil
+		return retainErr
 	})
-	recordProjectionRetention(result, time.Since(started), err)
+	recordProjectionRetention(result, err)
 
 	if err != nil {
-		return fmt.Errorf("with retain DB: %w", err)
+		return fmt.Errorf("retain target projections: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Runtime) withRetainDB(ctx context.Context, fn func(context.Context) error) error {
+// withBudgetDB는 슬롯 대기와 fn 실행을 합쳐 TransactionTimeout 안에 끝내도록 묶는다.
+// 멈춘 문장이 슬롯을 무기한 보유하지 않고 DeadlineExceeded로 드러나며, 호출 loop의 기존 오류 분류가 처리한다.
+func (r *Runtime) withBudgetDB(ctx context.Context, operation dbOperation, fn func(context.Context) error) error {
 	if r.Config.TransactionTimeout <= 0 {
 		return errors.New("youtube plane transaction timeout must be positive")
 	}
 
-	retainCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
+	budgetCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
 
 	defer cancel()
 
-	if err := r.withDB(retainCtx, fn); err != nil {
-		return fmt.Errorf("with DB: %w", err)
-	}
-
-	return nil
+	return r.withDB(budgetCtx, operation, fn)
 }
 
 func (r *Runtime) runReplayLoop(ctx context.Context, errCh chan<- error) {
@@ -186,7 +182,7 @@ func (r *Runtime) replayTick(ctx context.Context) error {
 func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
 	var processed bool
 
-	err := r.withDB(ctx, func(ctx context.Context) error {
+	err := r.withBudgetDB(ctx, dbOperationReplay, func(ctx context.Context) error {
 		var tickErr error
 
 		processed, tickErr = r.replayer.ProcessNextReplay(ctx)
@@ -197,7 +193,7 @@ func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("with DB: %w", err)
+		return false, err
 	}
 
 	return processed, nil
@@ -205,15 +201,14 @@ func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
 
 func planeRetentionConfig(cfg *apiconfig.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
 	return sourceobservation.RetentionConfig{
-		QueueProcessedAge:     cfg.QueueProcessedAge,
-		QueueDLQAge:           cfg.QueueDLQAge,
-		CollisionAge:          cfg.CollisionAge,
-		ReplayAuditAge:        cfg.ReplayAuditAge,
-		ApplicationAuditGrace: cfg.ApplicationAuditGrace,
-		LiveAbsenceSlotAge:    cfg.LiveAbsenceSlotAge,
-		CheckpointHistoryAge:  cfg.CheckpointHistoryAge,
-		EvidenceAgeByKind:     evidenceRetentionAges(cfg),
-		BatchSize:             cfg.BatchSize,
+		QueueProcessedAge:    cfg.QueueProcessedAge,
+		QueueDLQAge:          cfg.QueueDLQAge,
+		CollisionAge:         cfg.CollisionAge,
+		ReplayAuditAge:       cfg.ReplayAuditAge,
+		LiveAbsenceSlotAge:   cfg.LiveAbsenceSlotAge,
+		CheckpointHistoryAge: cfg.CheckpointHistoryAge,
+		EvidenceAgeByKind:    evidenceRetentionAges(cfg),
+		BatchSize:            cfg.BatchSize,
 	}
 }
 
@@ -223,7 +218,6 @@ func evidenceRetentionAges(cfg *apiconfig.YouTubePlaneRetentionConfig) map[contr
 	addEvidenceRetentionAge(ages, contract.KindVideoList, cfg.VideoListAge)
 	addEvidenceRetentionAge(ages, contract.KindShortsList, cfg.ShortsListAge)
 	addEvidenceRetentionAge(ages, contract.KindLiveSnapshot, cfg.LiveSnapshotAge)
-	addEvidenceRetentionAge(ages, contract.KindViewerSample, cfg.ViewerSampleAge)
 	addEvidenceRetentionAge(ages, contract.KindChannelProfile, cfg.ChannelProfileAge)
 	addEvidenceRetentionAge(ages, contract.KindChannelPhoto, cfg.ChannelPhotoAge)
 	addEvidenceRetentionAge(ages, contract.KindSchedule, cfg.ScheduleSnapshotAge)
@@ -243,12 +237,9 @@ func addEvidenceRetentionAge(
 	}
 }
 
-func recordRetentionTick(result sourceobservation.RetentionResult, elapsed time.Duration, err error) {
-	youtubeRetentionTickSeconds.Observe(elapsed.Seconds())
-
+func recordRetentionTick(result sourceobservation.RetentionResult, err error) {
 	// 앞 단계 실패로 조회하지 못한 테이블도 지난 tick의 적체 값을 남기지 않는다.
 	youtubeRetentionBacklogAgeSeconds.DeleteLabelValues("source_observations")
-	youtubeRetentionBacklogAgeSeconds.DeleteLabelValues("source_observation_applications")
 
 	for _, part := range retentionParts(result) {
 		recordRetentionPart(part)
@@ -257,7 +248,7 @@ func recordRetentionTick(result sourceobservation.RetentionResult, elapsed time.
 	if err != nil {
 		table := result.FailedTable
 		if table == "" {
-			table = "none"
+			table = retentionUnknownTable
 		}
 
 		youtubeRetentionErrorsTotal.WithLabelValues(table).Inc()
@@ -291,26 +282,24 @@ func recordRetentionPart(part sourceobservation.RetentionResult) {
 	}
 }
 
-func recordProjectionRetention(result targetprojection.RetentionResult, elapsed time.Duration, err error) {
-	youtubeRetentionTickSeconds.Observe(elapsed.Seconds())
-
+func recordProjectionRetention(result targetprojection.RetentionResult, err error) {
 	if err != nil {
-		youtubeRetentionErrorsTotal.WithLabelValues("youtube_collection_projection_generations").Inc()
+		youtubeRetentionErrorsTotal.WithLabelValues(projectionRetentionGenerationsTable).Inc()
 	}
 
 	if result.LeasesDeleted > 0 {
-		youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_job_leases").Add(float64(result.LeasesDeleted))
+		youtubeRetentionDeletedTotal.WithLabelValues(projectionRetentionLeasesTable).Add(float64(result.LeasesDeleted))
 	}
 
 	if result.ReasonsDeleted > 0 {
-		youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_target_reasons").Add(float64(result.ReasonsDeleted))
+		youtubeRetentionDeletedTotal.WithLabelValues(projectionRetentionReasonsTable).Add(float64(result.ReasonsDeleted))
 	}
 
 	if result.TargetsDeleted > 0 {
-		youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_targets").Add(float64(result.TargetsDeleted))
+		youtubeRetentionDeletedTotal.WithLabelValues(projectionRetentionTargetsTable).Add(float64(result.TargetsDeleted))
 	}
 
 	if result.GenerationsDeleted > 0 {
-		youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_projection_generations").Add(float64(result.GenerationsDeleted))
+		youtubeRetentionDeletedTotal.WithLabelValues(projectionRetentionGenerationsTable).Add(float64(result.GenerationsDeleted))
 	}
 }

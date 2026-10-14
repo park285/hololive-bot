@@ -25,12 +25,12 @@ func (h *Handler) GetXSpaceSession(c *gin.Context) {
 
 	status, err := h.xSpaceSessions.Status(ctx)
 	if err != nil {
-		sharedserver.RespondError(c, 503, "X session status unavailable", nil)
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "X session status unavailable", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, xSpaceSessionResponse{Status: "ok", Connection: status})
+	ginjson.Respond(c, http.StatusOK, xSpaceSessionResponse{Status: "ok", Connection: status})
 }
 
 // SubmitXSpaceSession은 후보를 암호화하여 저장한다. 검증과 실제 교체는 worker가 수행한다.
@@ -45,14 +45,14 @@ func (h *Handler) SubmitXSpaceSession(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 
 	if err := bindJSON(c, &request); err != nil {
-		sharedserver.RespondError(c, 400, "invalid X session request", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid X session request", nil)
 
 		return
 	}
 
 	cookies := xspaces.Cookies{AuthToken: request.AuthToken, CSRFToken: request.CSRFToken}
 	if err := cookies.Validate(); err != nil {
-		sharedserver.RespondError(c, 400, "invalid X session cookies", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid X session cookies", nil)
 
 		return
 	}
@@ -68,7 +68,7 @@ func (h *Handler) SubmitXSpaceSession(c *gin.Context) {
 
 		accepted, err = h.xSpaceSessions.Submit(ctx, cookies, request.ExpectedRevision)
 		if err != nil {
-			sharedserver.RespondError(c, 503, "X session submission outcome unconfirmed; read status", nil)
+			sharedserver.RespondError(c, http.StatusServiceUnavailable, "X session submission outcome unconfirmed; read status", nil)
 
 			return
 		}
@@ -76,10 +76,10 @@ func (h *Handler) SubmitXSpaceSession(c *gin.Context) {
 
 	status, err := h.xSpaceSessions.Status(ctx)
 	if err != nil {
-		sharedserver.RespondError(c, 503, "X session submission outcome unconfirmed; read status", nil)
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "X session submission outcome unconfirmed; read status", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, xSpaceSessionResponse{Status: "ok", Connection: status, Accepted: accepted})
+	ginjson.Respond(c, http.StatusOK, xSpaceSessionResponse{Status: "ok", Connection: status, Accepted: accepted})
 }

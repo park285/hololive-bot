@@ -57,7 +57,7 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 	var rawStreams []streammapping.StreamRaw
 
 	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal channel schedule: %w", err)
+		return nil, fmt.Errorf("unmarshal channel schedule: %w", err)
 	}
 
 	result := h.buildChannelSchedule(rawStreams, includeLive)

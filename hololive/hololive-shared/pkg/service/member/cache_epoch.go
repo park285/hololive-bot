@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -171,7 +172,7 @@ func (c *Cache) runEpochReconciliation(ctx context.Context) {
 			return
 		}
 
-		if !waitForEpochReconnect(ctx) {
+		if !retry.Sleep(ctx, epochReconnectDelay) {
 			return
 		}
 	}
@@ -199,18 +200,6 @@ func (c *Cache) runEpochSubscription(ctx context.Context, triggers chan<- string
 
 func epochSubscriptionStopped(ctx context.Context, err error) bool {
 	return ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, valkey.ErrClosing)
-}
-
-func waitForEpochReconnect(ctx context.Context) bool {
-	timer := time.NewTimer(epochReconnectDelay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
 }
 
 func signalEpochReconcile(triggers chan<- string, reason string) {

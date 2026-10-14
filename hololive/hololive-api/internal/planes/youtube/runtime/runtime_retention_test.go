@@ -111,7 +111,6 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 		VideoListAge:        2 * day,
 		ShortsListAge:       3 * day,
 		LiveSnapshotAge:     4 * day,
-		ViewerSampleAge:     5 * day,
 		ChannelProfileAge:   7 * day,
 		ChannelPhotoAge:     8 * day,
 		ScheduleSnapshotAge: 9 * day,
@@ -124,7 +123,6 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 		contract.KindVideoList:        cfg.VideoListAge,
 		contract.KindShortsList:       cfg.ShortsListAge,
 		contract.KindLiveSnapshot:     cfg.LiveSnapshotAge,
-		contract.KindViewerSample:     cfg.ViewerSampleAge,
 		contract.KindChannelProfile:   cfg.ChannelProfileAge,
 		contract.KindChannelPhoto:     cfg.ChannelPhotoAge,
 		contract.KindSchedule:         cfg.ScheduleSnapshotAge,
@@ -153,22 +151,15 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 
 func TestPlaneRetentionConfigIncludesDependentRetention(t *testing.T) {
 	cfg := apiconfig.YouTubePlaneRetentionConfig{
-		ApplicationAuditGrace: 60 * 24 * time.Hour,
-		LiveAbsenceSlotAge:    30 * 24 * time.Hour,
-		CheckpointHistoryAge:  7 * 24 * time.Hour,
-		ViewerSampleAge:       30 * 24 * time.Hour,
-		BatchSize:             1000,
+		LiveAbsenceSlotAge:   30 * 24 * time.Hour,
+		CheckpointHistoryAge: 7 * 24 * time.Hour,
+		BatchSize:            1000,
 	}
 	got := planeRetentionConfig(&cfg)
 
-	if got.ApplicationAuditGrace != cfg.ApplicationAuditGrace ||
-		got.LiveAbsenceSlotAge != cfg.LiveAbsenceSlotAge ||
+	if got.LiveAbsenceSlotAge != cfg.LiveAbsenceSlotAge ||
 		got.CheckpointHistoryAge != cfg.CheckpointHistoryAge {
 		t.Fatalf("dependent retention config = %#v", got)
-	}
-
-	if got.EvidenceAgeByKind[contract.KindViewerSample] != cfg.ViewerSampleAge {
-		t.Fatalf("viewer evidence age = %s", got.EvidenceAgeByKind[contract.KindViewerSample])
 	}
 }
 

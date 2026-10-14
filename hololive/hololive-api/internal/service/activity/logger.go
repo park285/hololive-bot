@@ -171,7 +171,7 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 			return []LogEntry{}, nil
 		}
 
-		return nil, fmt.Errorf("failed to open activity log: %w", err)
+		return nil, fmt.Errorf("open activity log: %w", err)
 	}
 
 	defer func() {
@@ -191,7 +191,7 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 func tailRecentLogEntries(f *os.File, limit int) ([]LogEntry, error) {
 	info, err := f.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat activity log: %w", err)
+		return nil, fmt.Errorf("stat activity log: %w", err)
 	}
 
 	entries := make([]LogEntry, 0, limit)
@@ -211,7 +211,7 @@ func tailRecentLogEntries(f *os.File, limit int) ([]LogEntry, error) {
 
 		chunk := make([]byte, chunkSize, chunkSize+int64(len(carry)))
 		if _, err := f.ReadAt(chunk, offset); err != nil {
-			return nil, fmt.Errorf("failed to read activity log: %w", err)
+			return nil, fmt.Errorf("read activity log: %w", err)
 		}
 
 		var lines [][]byte

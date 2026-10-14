@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 // 실패 기록 wrapper는 claim 해제(DB 상태 변경)를 먼저 수행하고, 확정된 결과만 MetricsRecorder에 넘긴다.
@@ -22,7 +23,7 @@ func (d *SendEngine) releasePerRoomClaims(ctx context.Context, row *domain.YouTu
 func (d *SendEngine) releaseGroupedClaims(ctx context.Context, group *deliveryGroup, claimTokens []dispatchstate.ClaimToken, cause string) {
 	roomID, channelID, _ := groupedDeliveryFields(group)
 	d.claims.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after "+cause,
-		slog.String("room_id", roomID),
+		privacylog.RoomIDAttr(roomID),
 		slog.String("channel_id", channelID),
 	)
 }

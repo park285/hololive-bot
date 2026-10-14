@@ -18,7 +18,6 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 const (
@@ -54,40 +53,45 @@ func typeSpecificWarmAlarms() []*domain.Alarm {
 	}
 }
 
-// stubRebuildLoaders는 rebuild가 읽을 PG 스냅샷을 고정한다. 전역 loader를 바꾸므로 호출하는 테스트는 병렬로 돌리지 않는다.
-func stubRebuildLoaders(t *testing.T, alarms []*domain.Alarm, alarmErr error, memberNames map[string]string, memberErr error) {
-	t.Helper()
+// stubWarmSource는 rebuild가 읽을 PG 스냅샷을 고정한다.
+type stubWarmSource struct {
+	loadAlarms  func(context.Context) ([]*domain.Alarm, error)
+	memberNames map[string]string
+	memberErr   error
+}
 
-	originalLoader := loadAllAlarmsFromRepository
-	originalMemberNameLoader := loadMemberNamesFromRepository
+func newStubWarmSource(alarms []*domain.Alarm, alarmErr error, memberNames map[string]string, memberErr error) *stubWarmSource {
+	return &stubWarmSource{
+		loadAlarms: func(context.Context) ([]*domain.Alarm, error) {
+			if alarmErr != nil {
+				return nil, alarmErr
+			}
 
-	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
-		if alarmErr != nil {
-			return nil, alarmErr
-		}
-
-		return alarms, nil
+			return alarms, nil
+		},
+		memberNames: memberNames,
+		memberErr:   memberErr,
 	}
-	loadMemberNamesFromRepository = func(context.Context, *Repository) (map[string]string, error) {
-		if memberErr != nil {
-			return nil, memberErr
-		}
+}
 
-		return memberNames, nil
+func (s *stubWarmSource) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
+	return s.loadAlarms(ctx)
+}
+
+func (s *stubWarmSource) GetAllMemberNames(context.Context) (map[string]string, error) {
+	if s.memberErr != nil {
+		return nil, s.memberErr
 	}
 
-	t.Cleanup(func() {
-		loadAllAlarmsFromRepository = originalLoader
-		loadMemberNamesFromRepository = originalMemberNameLoader
-	})
+	return s.memberNames, nil
 }
 
 func TestRebuildSubscriberCacheFromRepository_WritesOnlyTypeSpecificSubscriberCache(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
-	stubRebuildLoaders(t, typeSpecificWarmAlarms(), nil, map[string]string{testWarmChannelA: "Member A", testWarmChannelB: "Member B"}, nil)
+	source := newStubWarmSource(typeSpecificWarmAlarms(), nil, map[string]string{testWarmChannelA: "Member A", testWarmChannelB: "Member B"}, nil)
 
-	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	summary, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 3, RoomCount: 3, ChannelCount: 2}, summary)
 
@@ -139,9 +143,9 @@ func TestRebuildSubscriberCacheFromRepository_WritesOnlyTypeSpecificSubscriberCa
 func TestRebuildSubscriberCacheFromRepository_MarksEmptyCacheState(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
-	stubRebuildLoaders(t, nil, nil, nil, nil)
+	source := newStubWarmSource(nil, nil, nil, nil)
 
-	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	summary, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{}, summary)
 
@@ -158,9 +162,10 @@ func TestRebuildSubscriberCacheFromRepository_ClearsEmptyCacheMarkerWhenAlarmsEx
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
 	require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
-	stubRebuildLoaders(t, []*domain.Alarm{{RoomID: "room-1", UserID: "user-1", ChannelID: "UC_ONE"}}, nil, nil, nil)
 
-	_, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	source := newStubWarmSource([]*domain.Alarm{{RoomID: "room-1", UserID: "user-1", ChannelID: "UC_ONE"}}, nil, nil, nil)
+
+	_, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
 
 	emptyMarkerExists, err := cacheClient.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
@@ -185,9 +190,9 @@ func TestRebuildSubscriberCacheFromRepository_UsesBatchedWrites(t *testing.T) {
 		})
 	}
 
-	stubRebuildLoaders(t, alarms, nil, map[string]string{"UC_BATCH": "Batch Member"}, nil)
+	source := newStubWarmSource(alarms, nil, map[string]string{"UC_BATCH": "Batch Member"}, nil)
 
-	summary, err := RebuildSubscriberCacheFromRepository(ctx, countingCache, &Repository{})
+	summary, err := rebuildSubscriberCache(ctx, countingCache, source)
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 48, RoomCount: 48, ChannelCount: 1}, summary)
 	assert.Less(t, countingCache.sAddCalls, len(alarms)*(1+len(domain.DefaultAlarmTypes)))
@@ -202,7 +207,7 @@ func TestRebuildSubscriberCacheFromRepository_UsesBatchedWrites(t *testing.T) {
 func TestRebuildSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
-	stubRebuildLoaders(t, []*domain.Alarm{
+	source := newStubWarmSource([]*domain.Alarm{
 		{
 			RoomID:     "room-1",
 			UserID:     "user-1",
@@ -211,7 +216,7 @@ func TestRebuildSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *te
 		},
 	}, nil, map[string]string{"UC_RADEN": "라덴"}, nil)
 
-	_, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	_, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
 
 	memberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_RADEN")
@@ -220,9 +225,9 @@ func TestRebuildSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *te
 }
 
 func TestRebuildSubscriberCacheFromRepository_LoadError(t *testing.T) {
-	stubRebuildLoaders(t, nil, errors.New("load failed"), nil, nil)
+	source := newStubWarmSource(nil, errors.New("load failed"), nil, nil)
 
-	_, err := RebuildSubscriberCacheFromRepository(t.Context(), newMemoryCacheClient(t), &Repository{})
+	_, err := rebuildSubscriberCache(t.Context(), newMemoryCacheClient(t), source)
 	require.ErrorContains(t, err, "rebuild subscriber cache from repository: load alarms")
 	assert.ErrorContains(t, err, "load failed")
 }
@@ -230,7 +235,7 @@ func TestRebuildSubscriberCacheFromRepository_LoadError(t *testing.T) {
 func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorLeavesCacheCleared(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
-	stubRebuildLoaders(t, []*domain.Alarm{
+	source := newStubWarmSource([]*domain.Alarm{
 		{
 			RoomID:     testFreshRoomID,
 			UserID:     "user-fresh",
@@ -246,7 +251,7 @@ func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorLeavesCacheClea
 	require.NoError(t, err)
 	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, testExistingChannel, "Existing Member"))
 
-	_, err = RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	_, err = rebuildSubscriberCache(ctx, cacheClient, source)
 	require.ErrorContains(t, err, "rebuild subscriber cache from repository: load member names")
 
 	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
@@ -283,7 +288,7 @@ func seedStaleSubscriberCache(t *testing.T, cacheClient cache.Client) {
 func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
-	stubRebuildLoaders(t, []*domain.Alarm{
+	source := newStubWarmSource([]*domain.Alarm{
 		{
 			RoomID:     testFreshRoomID,
 			UserID:     "user-fresh",
@@ -294,7 +299,7 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 
 	seedStaleSubscriberCache(t, cacheClient)
 
-	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	summary, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, summary)
 
@@ -322,13 +327,13 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 func TestRebuildSubscriberCacheFromRepository_PreservesNonSubscriberAlarmKeys(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
-	stubRebuildLoaders(t, []*domain.Alarm{
+	source := newStubWarmSource([]*domain.Alarm{
 		{RoomID: testFreshRoomID, UserID: "user-fresh", ChannelID: testFreshChannelID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}, nil, nil, nil)
 
 	require.NoError(t, cacheClient.Set(ctx, "alarm:dispatch:wakeup:guard", "wakeup-marker", 0))
 
-	_, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	_, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
 
 	wakeupGuardExists, err := cacheClient.Exists(ctx, "alarm:dispatch:wakeup:guard")
@@ -364,11 +369,11 @@ func TestRebuildSubscriberCacheFromRepository_ClearsInBoundedPagesBeforeLoad(t *
 		require.NoError(t, err)
 	}
 
-	stubRebuildLoaders(t, nil, nil, nil, nil)
+	source := newStubWarmSource(nil, nil, nil, nil)
 
 	loaded := false
 
-	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
+	source.loadAlarms = func(context.Context) ([]*domain.Alarm, error) {
 		loaded = true
 
 		return dbAlarms, nil
@@ -385,7 +390,7 @@ func TestRebuildSubscriberCacheFromRepository_ClearsInBoundedPagesBeforeLoad(t *
 		require.NoError(t, err)
 	})
 
-	_, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
+	_, err := rebuildSubscriberCache(ctx, cacheClient, source)
 	require.NoError(t, err)
 	require.True(t, loaded)
 	assert.GreaterOrEqual(t, pageStats.pages, 4)
@@ -606,7 +611,7 @@ func configureMemoryCacheHashes(client *cachemocks.Client, rawClient valkey.Clie
 	}
 	client.HGetFunc = func(ctx context.Context, key, field string) (string, error) {
 		resp := rawClient.Do(ctx, rawClient.B().Hget().Key(key).Field(field).Build())
-		if util.IsValkeyNil(resp.Error()) {
+		if errors.Is(resp.Error(), valkey.Nil) {
 			return "", nil
 		}
 

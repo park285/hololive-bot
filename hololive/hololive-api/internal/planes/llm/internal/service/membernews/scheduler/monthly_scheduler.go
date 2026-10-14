@@ -103,7 +103,7 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if _, err := s.SendMonthlyDigest(ctx); err != nil {
-				s.digest.Logger.Error("Member news monthly send failed", slog.String("error", err.Error()))
+				s.digest.Logger.Error("Member news monthly send failed", slog.Any("error", err))
 			}
 		},
 	})

@@ -70,7 +70,7 @@ func normalizeEventForUpsert(event *domain.MajorEvent) (domain.MajorEventType, d
 
 func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if err := r.requirePool("subscribe major event"); err != nil {
-		return fmt.Errorf("require pool: %w", err)
+		return err
 	}
 
 	query := mustSQL("repository_0080_02.sql")
@@ -85,7 +85,7 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 
 func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	if err := r.requirePool("unsubscribe major event"); err != nil {
-		return fmt.Errorf("require pool: %w", err)
+		return err
 	}
 
 	query := mustSQL("repository_0099_03.sql")
@@ -100,7 +100,7 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 
 func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	if err := r.requirePool("check subscription"); err != nil {
-		return false, fmt.Errorf("require pool: %w", err)
+		return false, err
 	}
 
 	query := mustSQL("repository_0112_04.sql")
@@ -117,7 +117,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 
 func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error) {
 	if err := r.requirePool("get subscribed rooms"); err != nil {
-		return nil, fmt.Errorf("require pool: %w", err)
+		return nil, err
 	}
 
 	query := mustSQL("repository_0127_05.sql")

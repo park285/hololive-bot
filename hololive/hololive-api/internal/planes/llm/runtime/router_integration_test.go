@@ -46,8 +46,8 @@ func TestBuildTriggerRouter_Integration(t *testing.T) {
 		t.Fatal("buildTriggerRouter() router = non-nil, want nil")
 	}
 
-	if err.Error() != "runtime router: register routes: API_SECRET_KEY required" {
-		t.Fatalf("buildTriggerRouter() error = %q, want %q", err.Error(), "runtime router: register routes: API_SECRET_KEY required")
+	if err.Error() != "build trigger router: runtime router: register routes: API_SECRET_KEY required" {
+		t.Fatalf("buildTriggerRouter() error = %q, want %q", err.Error(), "build trigger router: runtime router: register routes: API_SECRET_KEY required")
 	}
 }
 

@@ -48,6 +48,29 @@ func TestPgxTxRollsBackOnError(t *testing.T) {
 		return wantErr
 	})
 	require.ErrorIs(t, err, wantErr)
+	require.EqualError(t, err, "run pgx transaction: stop")
+
+	var count int
+
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM dbx_tx_test").Scan(&count))
+	require.Zero(t, count)
+}
+
+// 결과형 helper도 같은 트랜잭션 실패를 한 단계로만 감싸야 호출자가 붙인 동작 접두 뒤에 원인이 바로 보인다.
+func TestPgxTxWithResultRollsBackWithSingleTransactionPrefix(t *testing.T) {
+	ctx := t.Context()
+	pool := newTxTestPool(t)
+	wantErr := errors.New("stop")
+
+	got, err := InPgxTxWithResult(ctx, pool, func(tx Tx) (int, error) {
+		_, execErr := tx.Exec(ctx, "INSERT INTO dbx_tx_test (value) VALUES ($1)", "rolled-back")
+		require.NoError(t, execErr)
+
+		return 7, wantErr
+	})
+	require.ErrorIs(t, err, wantErr)
+	require.EqualError(t, err, "run pgx transaction: stop")
+	require.Equal(t, 7, got)
 
 	var count int
 

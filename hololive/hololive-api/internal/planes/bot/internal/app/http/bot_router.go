@@ -95,7 +95,7 @@ func botRouteRegistrar(
 			return fmt.Errorf("register iris room route: %w", err)
 		}
 
-		return registerTriggerRoutes(router, apiKey, triggerHandler)
+		return apiserver.TriggerRouteRegistrar(triggerHandler, apiKey)(router)
 	}
 }
 
@@ -148,22 +148,4 @@ func handleIrisRooms(roomLister IrisRoomLister, logger *slog.Logger) gin.Handler
 
 		ginjson.Respond(c, http.StatusOK, resp)
 	}
-}
-
-func registerTriggerRoutes(
-	router *gin.Engine,
-	apiKey string,
-	triggerHandler *apiserver.TriggerHandler,
-) error {
-	if triggerHandler == nil {
-		return nil
-	}
-
-	if strings.TrimSpace(apiKey) == "" {
-		return errors.New("API_SECRET_KEY required")
-	}
-
-	triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
-
-	return nil
 }

@@ -14,7 +14,7 @@ import (
 func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, "youtubejs_channel_live")
 	ctx := t.Context()
 
 	seedAdditionalLease(t, pool, &proof, contract.ProviderYouTubeJS, contract.KindChannelLiveCheck, testChannelID, "youtubejs_channel_live_check")

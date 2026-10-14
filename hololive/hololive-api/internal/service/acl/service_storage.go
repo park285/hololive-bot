@@ -59,7 +59,7 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 func (s *Service) loadEnabledSetting(ctx context.Context, defaultEnabled bool) (bool, error) {
 	value, found, err := s.store.GetSetting(ctx, dbKeyEnabled)
 	if err != nil {
-		return false, fmt.Errorf("failed to load ACL enabled setting: %w", err)
+		return false, fmt.Errorf("load ACL enabled setting: %w", err)
 	}
 
 	isFirstInit := !found
@@ -68,7 +68,7 @@ func (s *Service) loadEnabledSetting(ctx context.Context, defaultEnabled bool) (
 	case isFirstInit:
 		s.enabled = defaultEnabled
 		if err := s.store.CreateSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", defaultEnabled)); err != nil {
-			return false, fmt.Errorf("failed to initialize ACL enabled setting: %w", err)
+			return false, fmt.Errorf("initialize ACL enabled setting: %w", err)
 		}
 	default:
 		enabled, parseErr := parseACLEnabledStrict(value)
@@ -85,7 +85,7 @@ func (s *Service) loadEnabledSetting(ctx context.Context, defaultEnabled bool) (
 func (s *Service) loadModeSetting(ctx context.Context, defaultMode ACLMode) error {
 	value, found, err := s.store.GetSetting(ctx, dbKeyMode)
 	if err != nil {
-		return fmt.Errorf("failed to load ACL mode setting: %w", err)
+		return fmt.Errorf("load ACL mode setting: %w", err)
 	}
 
 	if !found {
@@ -111,7 +111,7 @@ func (s *Service) initializeModeSetting(ctx context.Context, defaultMode ACLMode
 
 	s.mode = normalizedMode
 	if err := s.store.CreateSetting(ctx, dbKeyMode, string(normalizedMode)); err != nil {
-		return fmt.Errorf("failed to initialize ACL mode setting: %w", err)
+		return fmt.Errorf("initialize ACL mode setting: %w", err)
 	}
 
 	return nil
@@ -131,7 +131,7 @@ func (s *Service) applyModeSetting(value string) error {
 func (s *Service) loadRoomsFromDatabase(ctx context.Context) ([]Room, error) {
 	rooms, err := s.store.ListRooms(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load ACL rooms: %w", err)
+		return nil, fmt.Errorf("load ACL rooms: %w", err)
 	}
 
 	if err := validateRoomListTypes(rooms); err != nil {
@@ -187,7 +187,7 @@ func (s *Service) initializeDefaultRooms(ctx context.Context, defaultRooms []str
 
 	for _, room := range normalizeRoomList(defaultRooms) {
 		if err := s.store.CreateRoom(ctx, room, listType); err != nil {
-			return fmt.Errorf("failed to initialize ACL room %q: %w", room, err)
+			return fmt.Errorf("initialize ACL room %q: %w", room, err)
 		}
 
 		targetRooms[room] = struct{}{}

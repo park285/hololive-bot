@@ -180,7 +180,7 @@ var errEmptyMajorEventSummary = errors.New("llm summary is empty")
 func (s *EventSummarizer) summaryCacheKey(events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
 	cacheKey, err := buildSummaryCacheKey(events, summaryType, periodKey)
 	if err != nil {
-		s.logger.Warn("LLM 요약 캐시 키 생성 실패", slog.String("error", err.Error()))
+		s.logger.Warn("LLM 요약 캐시 키 생성 실패", slog.Any("error", err))
 	}
 
 	return cacheKey
@@ -254,7 +254,7 @@ func (s *EventSummarizer) storeSummaryResult(ctx context.Context, cacheKey, resu
 	}
 
 	if err := s.cache.Set(ctx, cacheKey, result, summaryCacheTTL); err != nil {
-		s.logger.Warn("LLM 요약 캐시 저장 실패", slog.String("error", err.Error()))
+		s.logger.Warn("LLM 요약 캐시 저장 실패", slog.Any("error", err))
 	}
 }
 
@@ -293,7 +293,7 @@ func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query, warnMess
 
 	results, err := s.searcher.Search(searchCtx, query)
 	if err != nil {
-		s.logger.Warn(warnMessage, slog.String("error", err.Error()))
+		s.logger.Warn(warnMessage, slog.Any("error", err))
 
 		return nil, false
 	}

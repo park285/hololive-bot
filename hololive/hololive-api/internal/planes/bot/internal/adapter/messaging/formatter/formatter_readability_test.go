@@ -13,9 +13,9 @@ import (
 	"github.com/kapu/hololive-api/internal/templateview"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func TestDefaultStreamLayoutsReportDisplayLimitAndKeepFold(t *testing.T) {
@@ -46,7 +46,7 @@ func TestDefaultStreamLayoutsReportDisplayLimitAndKeepFold(t *testing.T) {
 				t.Error("multi-stream item separators lost or widened after final conversion")
 			}
 
-			padding := strings.Repeat(util.KakaoZeroWidthSpace, templateview.KakaoSeeMorePadding)
+			padding := strings.Repeat(kakaotext.ZeroWidthSpace, templateview.KakaoSeeMorePadding)
 			if strings.Count(out, padding) != 1 || templateview.FoldForSeeMore(out) != out {
 				t.Error("fold padding lost or duplicated")
 			}
@@ -76,7 +76,7 @@ func TestBroadcastHistoryFinalTextKeepsBoundariesAndCopyableShortcut(t *testing.
 		{MemberName: "다음 채널", TypeLabel: "게임", Title: strings.Repeat("긴 제목 ", 40), Time: time.Unix(1, 0)},
 	}
 	out := kakaoformat.Render(f.BroadcastHistory(t.Context(), BroadcastHistoryFilter{Days: 7}, entries))
-	visible := strings.ReplaceAll(out, util.KakaoZeroWidthSpace, "")
+	visible := strings.ReplaceAll(out, kakaotext.ZeroWidthSpace, "")
 
 	for _, want := range []string{"1 · [노래] 미코 Miko", title, "\n" + url + "\n", "썸네일: !썸네일 " + videoID, "_\n──────────\n2 · [게임] 다음 채널"} {
 		if !strings.Contains(visible, want) {
@@ -96,7 +96,7 @@ func TestStreamTitlesNormalizeBeforeFirstTruncation(t *testing.T) {
 
 	for name, padding := range map[string]string{
 		"spaces":    strings.Repeat(" ", 100),
-		"invisible": strings.Repeat(util.KakaoZeroWidthSpace, 100),
+		"invisible": strings.Repeat(kakaotext.ZeroWidthSpace, 100),
 	} {
 		t.Run(name, func(t *testing.T) {
 			const title = "노래 방송 첫 줄 다음 줄"
@@ -136,7 +136,7 @@ func TestLiveQueryKeepsTruncationNoticeAboveFold(t *testing.T) {
 		Items: items, Status: livequery.Partial, Truncated: true, AsOf: time.Unix(1, 0),
 	}, ""))
 
-	padding := strings.Repeat(util.KakaoZeroWidthSpace, templateview.KakaoSeeMorePadding)
+	padding := strings.Repeat(kakaotext.ZeroWidthSpace, templateview.KakaoSeeMorePadding)
 	if notice := strings.Index(out, "표시 한도를 초과한 방송이 있습니다."); notice < 0 || notice > strings.Index(out, padding) {
 		t.Errorf("truncation notice folded away: %q", out[:min(len(out), 160)])
 	}

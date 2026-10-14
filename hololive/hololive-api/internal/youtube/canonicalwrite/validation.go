@@ -23,6 +23,7 @@ package canonicalwrite
 import (
 	jsonv2 "encoding/json/v2"
 	"fmt"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -118,23 +119,29 @@ func validateShortPublishedAtNotification(videosByID map[string]*domain.YouTubeV
 }
 
 func validateShortPublishedAtPayload(video *domain.YouTubeVideo, payload *youtubeoutbox.Short) error {
-	if video.PublishedAt == nil {
-		if payload.PublishedAt != nil {
-			return fmt.Errorf("video %s: payload published_at set while video record is empty", video.VideoID)
+	return validatePublishedAtPayload("video", video.VideoID, video.PublishedAt, payload.PublishedAt)
+}
+
+// validatePublishedAtPayload는 canonical 레코드와 outbox payload의 published_at이 같은 canonical 표기인지 확인한다.
+// 레코드에 값이 없으면 payload에도 없어야 하고, 있으면 payload가 같은 시각을 담아야 한다.
+func validatePublishedAtPayload(label, id string, recordPublishedAt, payloadPublishedAt *time.Time) error {
+	if recordPublishedAt == nil {
+		if payloadPublishedAt != nil {
+			return fmt.Errorf("%s %s: payload published_at set while %s record is empty", label, id, label)
 		}
 
 		return nil
 	}
 
-	if payload.PublishedAt == nil {
-		return fmt.Errorf("video %s: payload missing published_at", video.VideoID)
+	if payloadPublishedAt == nil {
+		return fmt.Errorf("%s %s: payload missing published_at", label, id)
 	}
 
-	wantPublishedAt := yttimestamp.Format(*video.PublishedAt)
-	gotPublishedAt := payload.PublishedAt.Format(yttimestamp.Canonical.Layout)
+	wantPublishedAt := yttimestamp.Format(*recordPublishedAt)
+	gotPublishedAt := payloadPublishedAt.Format(yttimestamp.Canonical.Layout)
 
 	if gotPublishedAt != wantPublishedAt {
-		return fmt.Errorf("video %s: payload published_at mismatch: got %s want %s", video.VideoID, gotPublishedAt, wantPublishedAt)
+		return fmt.Errorf("%s %s: payload published_at mismatch: got %s want %s", label, id, gotPublishedAt, wantPublishedAt)
 	}
 
 	return nil
@@ -200,24 +207,5 @@ func validateCommunityPublishedAtNotification(postsByID map[string]*domain.YouTu
 }
 
 func validateCommunityPublishedAtPayload(post *domain.YouTubeCommunityPost, payload *youtubeoutbox.Community) error {
-	if post.PublishedAt == nil {
-		if payload.PublishedAt != nil {
-			return fmt.Errorf("post %s: payload published_at set while post record is empty", post.PostID)
-		}
-
-		return nil
-	}
-
-	if payload.PublishedAt == nil {
-		return fmt.Errorf("post %s: payload missing published_at", post.PostID)
-	}
-
-	wantPublishedAt := yttimestamp.Format(*post.PublishedAt)
-	gotPublishedAt := payload.PublishedAt.Format(yttimestamp.Canonical.Layout)
-
-	if gotPublishedAt != wantPublishedAt {
-		return fmt.Errorf("post %s: payload published_at mismatch: got %s want %s", post.PostID, gotPublishedAt, wantPublishedAt)
-	}
-
-	return nil
+	return validatePublishedAtPayload("post", post.PostID, post.PublishedAt, payload.PublishedAt)
 }

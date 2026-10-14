@@ -29,6 +29,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func partitionGroupedDeliveries(
@@ -207,7 +208,7 @@ func (d *SendEngine) recordPerRoomSendOutcomeUnknown(
 	d.logger.Warn("Per-room delivery send outcome unknown, holding row for stale sending quarantine",
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
-		slog.String("room_id", row.RoomID),
+		privacylog.RoomIDAttr(row.RoomID),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
 }
@@ -220,7 +221,7 @@ func (d *SendEngine) recordGroupedSendOutcomeUnknown(
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
 	d.logger.Warn("Grouped delivery send outcome unknown, holding rows for stale sending quarantine",
-		slog.String("room_id", roomID),
+		privacylog.RoomIDAttr(roomID),
 		slog.String("channel_id", channelID),
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),

@@ -27,20 +27,10 @@ func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, 
 	}
 
 	if len(group.notifications) == 1 {
-		out, err := renderAlarmDispatchNotification(ctx, renderer, messageStrings, members, &group.notifications[0])
-		if err != nil {
-			return out, fmt.Errorf("render alarm dispatch notification: %w", err)
-		}
-
-		return out, nil
+		return renderAlarmDispatchNotification(ctx, renderer, messageStrings, members, &group.notifications[0])
 	}
 
-	out, err := renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, shortLinkBaseURL, group)
-	if err != nil {
-		return out, fmt.Errorf("render alarm dispatch notification group: %w", err)
-	}
-
-	return out, nil
+	return renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, shortLinkBaseURL, group)
 }
 
 func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (message string, handled bool, err error) {

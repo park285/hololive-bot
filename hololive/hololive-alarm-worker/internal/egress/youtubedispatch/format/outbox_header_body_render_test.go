@@ -7,8 +7,8 @@ import (
 	"text/template"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	sharedtemplate "github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 var outboxRenderFuncs = template.FuncMap{
@@ -25,10 +25,10 @@ var outboxRenderFuncs = template.FuncMap{
 		return string(runes[:maxLen-3]) + "..."
 	},
 	"add":    func(a, b int) int { return a + b },
-	"mdsafe": util.MarkdownNeutralize,
+	"mdsafe": kakaotext.MarkdownNeutralize,
 }
 
-const zwsp = util.KakaoZeroWidthSpace
+const zwsp = kakaotext.ZeroWidthSpace
 
 const (
 	outboxBodyVideo = `{{if eq .Kind "LIVE_STREAM"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else if .IsUpcomingPremiere}}🔔 **{{mdsafe .MemberName}}** {{.MinutesUntilPremiere}}분 후 공개 예정{{else if .IsPremiere}}🔔 **{{mdsafe .MemberName}}** 최초공개{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}

@@ -28,6 +28,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+)
+
+// 요청 로그 한 줄이 헤더 값에 끌려 커지지 않게 rune 단위로 자른다. 잘린 값 끝에는 "..."가 붙는다.
+const (
+	maxLoggedUserAgentRunes = 80
+	maxLoggedHeaderRunes    = 128
 )
 
 // skipPaths는 다음 형식을 지원합니다:
@@ -151,25 +158,15 @@ func requestDeviceInfo(c *gin.Context) string {
 		return deviceInfo
 	}
 
-	return truncateUA(c.Request.UserAgent())
+	return stringutil.TruncateString(c.Request.UserAgent(), maxLoggedUserAgentRunes)
 }
 
 func appendOptionalHeaderAttr(attrs []slog.Attr, key, value string) []slog.Attr {
 	if trimmed := strings.TrimSpace(value); trimmed != "" {
-		return append(attrs, slog.String(key, truncateHeader(trimmed)))
+		return append(attrs, slog.String(key, stringutil.TruncateString(trimmed, maxLoggedHeaderRunes)))
 	}
 
 	return attrs
-}
-
-func truncateHeader(value string) string {
-	const maxLen = 128
-
-	if len(value) > maxLen {
-		return value[:maxLen] + "..."
-	}
-
-	return value
 }
 
 // shouldSkipPath: 경로가 스킵 대상인지 확인합니다.
@@ -205,15 +202,4 @@ func hasAnySuffix(path string, suffixes []string) bool {
 	}
 
 	return false
-}
-
-// truncateUA: User-Agent를 적절한 길이로 자름 (로그 가독성).
-func truncateUA(ua string) string {
-	const maxLen = 80
-
-	if len(ua) > maxLen {
-		return ua[:maxLen] + "..."
-	}
-
-	return ua
 }

@@ -171,7 +171,7 @@ func (c *LinkChecker) logEventLinkCheckFailure(check eventLinkCheck) {
 		"Major event link check failed",
 		slog.String("link", redactLinkForLog(check.event.Link)),
 		slog.String("status", string(check.status)),
-		slog.String("error", check.err.Error()),
+		slog.Any("error", check.err),
 	)
 }
 

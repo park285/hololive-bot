@@ -22,7 +22,7 @@ func TestLiveAbsenceSlotRetentionWaitsForActiveOldSnapshot(t *testing.T) {
 		INSERT INTO public.youtube_live_absence_slots (
 			observation_id, scheduled_for, evidence_sha256, effective_at,
 			received_at, scope_sha256, coverage
-		) VALUES (91004, $1, repeat('a', 64), $1, $1, repeat('b', 64),
+		) VALUES (91004, $1, decode(repeat('a', 64), 'hex'), $1, $1, decode(repeat('b', 64), 'hex'),
 			'{"requested_channel_ids": ["UC_TEST"]}'::jsonb)
 	`, old); err != nil {
 		t.Fatalf("insert old absence slot: %v", err)

@@ -59,16 +59,16 @@ func buildBotOptionalServers(ctx context.Context, appConfig *apiconfig.BotPlaneC
 
 func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (_ *BotRuntime, retErr error) {
 	if appConfig == nil {
-		return nil, errors.New("build bot runtime: app config is nil")
+		return nil, errors.New("app config is nil")
 	}
 
 	if infra == nil {
-		return nil, errors.New("build bot runtime: infra is nil")
+		return nil, errors.New("infra is nil")
 	}
 
 	botBot, err := orchestration.NewBot(infra.Deps)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create bot: %w", err)
+		return nil, fmt.Errorf("create bot: %w", err)
 	}
 
 	durable, err := buildDurableRuntime(infra, botBot, appConfig.APIWorkerProfile, logger)
@@ -86,7 +86,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		totals: durable.inboxTotals,
 	}, appbootstrap.BotWebhookRuntimeDependencies{Cache: infra.Cache}, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
+		return nil, fmt.Errorf("build webhook handler: %w", err)
 	}
 
 	defer func() {
@@ -152,7 +152,7 @@ func configureDurableReplyWriter(bot *orchestration.Bot, durable *durableRuntime
 
 func buildDurableRuntime(infra *appbootstrap.BotInfrastructure, bot *orchestration.Bot, profile *apiconfig.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
 	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
-		return nil, errors.New("build bot runtime: durable postgres pool is nil")
+		return nil, errors.New("durable postgres pool is nil")
 	}
 
 	out, err := newDurableRuntime(bot, infra.Deps.Client, infra.Postgres.GetPool(), profile, logger)

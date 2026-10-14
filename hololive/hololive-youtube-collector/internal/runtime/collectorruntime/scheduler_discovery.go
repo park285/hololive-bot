@@ -2,6 +2,7 @@ package collectorruntime
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -20,6 +21,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 	if free == 0 {
 		s.finishCycle(started, collecterr.OperationCode(""), false)
+		s.metrics.ObserveDiscoveryCycle(false)
 
 		return
 	}
@@ -43,10 +45,12 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 	}
 
 	s.setProjection(generation)
+	s.recoverDiscovery(ctx, []string{globalDiscoveryKey})
 
 	runners := s.discoveryRunners()
 	if len(runners) == 0 {
 		s.finishCycle(started, collecterr.OperationCode(""), true)
+		s.metrics.ObserveDiscoveryCycle(false)
 
 		return
 	}
@@ -64,9 +68,15 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 	})
 	s.recordCycle(started, generation, &outcome, start, len(runners))
 
+	failed := false
+
 	for _, failure := range outcome.failures {
+		failed = failed || !supersededError(failure.err)
 		s.logRunnerDiscoveryFailure(ctx, failure, runners)
 	}
+
+	s.recoverDiscovery(ctx, succeededRunnerKeys(runners, start, &outcome))
+	s.metrics.ObserveDiscoveryCycle(failed)
 }
 
 func (s *leaseScheduler) enqueueDiscovered(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
@@ -209,26 +219,39 @@ func (s *leaseScheduler) failCycle(ctx context.Context, started time.Time, err e
 	s.lastCycleCompletedAt = time.Now().UTC()
 	s.lastCycleOperationCode = collecterr.OperationCandidateLoadFailed
 	s.cycleMu.Unlock()
-	s.logDiscoveryFailure(ctx, err)
-}
-
-func (s *leaseScheduler) logDiscoveryFailure(ctx context.Context, err error) {
-	if supersededError(err) {
-		return
-	}
-
-	spec := joblease.JobSpec{}
-	proof := contract.LeaseProof{}
-	s.executor.logFailure(ctx, "candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), &spec, &proof)
+	s.metrics.ObserveDiscoveryCycle(!supersededError(err))
+	s.reportDiscoveryFailure(ctx, globalDiscoveryKey, nil, err)
 }
 
 func (s *leaseScheduler) logRunnerDiscoveryFailure(ctx context.Context, failure runnerQueryFailure, runners []RegisteredRunner) {
-	if supersededError(failure.err) {
-		return
+	id := runners[failure.runner].Contract().ID()
+	s.reportDiscoveryFailure(ctx, id.String(), []slog.Attr{
+		slog.String("provider", string(id.Provider)),
+		slog.String("job_kind", string(id.Kind)),
+	}, failure.err)
+}
+
+// succeededRunnerKeys는 이번 cycle에서 실제로 조회했고 실패하지 않은 runner의 ID를 돌려준다.
+func succeededRunnerKeys(runners []RegisteredRunner, start int, outcome *capacityCycleResult) []string {
+	if len(runners) == 0 || outcome.queried == 0 {
+		return nil
 	}
 
-	id := runners[failure.runner].Contract().ID()
-	spec := joblease.JobSpec{Provider: id.Provider, CollectionJobKind: string(id.Kind)}
-	proof := contract.LeaseProof{}
-	s.executor.logFailure(ctx, "candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(failure.err)), collecterr.DiagnosticOf(failure.err).Detail(), &spec, &proof)
+	failed := make(map[int]struct{}, len(outcome.failures))
+	for _, failure := range outcome.failures {
+		failed[failure.runner] = struct{}{}
+	}
+
+	keys := make([]string, 0, outcome.queried)
+
+	for offset := range min(outcome.queried, len(runners)) {
+		index := (start + offset) % len(runners)
+		if _, ok := failed[index]; ok {
+			continue
+		}
+
+		keys = append(keys, runners[index].Contract().ID().String())
+	}
+
+	return keys
 }

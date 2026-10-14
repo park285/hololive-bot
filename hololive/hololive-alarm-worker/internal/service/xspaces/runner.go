@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/retry"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -63,10 +65,8 @@ func (r *Runner) Start(ctx context.Context) error {
 			r.logger.Warn("X spaces cycle failed", slog.Any("error", err))
 		}
 
-		select {
-		case <-ctx.Done():
+		if !retry.Sleep(ctx, 15*time.Second) {
 			return nil
-		case <-time.After(15 * time.Second):
 		}
 	}
 

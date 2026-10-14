@@ -12,11 +12,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -186,11 +187,7 @@ func (r *Runner) withStateContext(ctx context.Context, fn func(context.Context) 
 	stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), alarmDispatchStateTimeout)
 	defer cancel()
 
-	if err := fn(stateCtx); err != nil {
-		return fmt.Errorf("fn: %w", err)
-	}
-
-	return nil
+	return fn(stateCtx)
 }
 
 func (r *Runner) markSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (proceed bool, err error) {
@@ -204,44 +201,32 @@ func (r *Runner) markSending(ctx context.Context, envelopes []domain.AlarmQueueE
 	if err := r.withStateContext(ctx, func(stateCtx context.Context) error {
 		return r.persistMarkSendingFailure(stateCtx, envelopes, markErr)
 	}); err != nil {
-		return false, fmt.Errorf("with state context: %w", err)
+		return false, err
 	}
 
 	return false, nil
 }
 
 func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	if err := r.withStateContext(ctx, func(stateCtx context.Context) error {
+	return r.withStateContext(ctx, func(stateCtx context.Context) error {
 		if err := r.consumer.MarkDispatched(stateCtx, envelopes); err != nil {
 			return fmt.Errorf("mark alarm dispatch sent: %w", err)
 		}
 
 		return nil
-	}); err != nil {
-		return fmt.Errorf("with state context: %w", err)
-	}
-
-	return nil
+	})
 }
 
 func (r *Runner) routePreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	if err := r.withStateContext(ctx, func(stateCtx context.Context) error {
+	return r.withStateContext(ctx, func(stateCtx context.Context) error {
 		return r.persistPreSendFailure(stateCtx, envelopes, cause)
-	}); err != nil {
-		return fmt.Errorf("with state context: %w", err)
-	}
-
-	return nil
+	})
 }
 
 func (r *Runner) routePostSendingFailure(ctx context.Context, group alarmDispatchGroup, cause error) error {
-	if err := r.withStateContext(ctx, func(stateCtx context.Context) error {
+	return r.withStateContext(ctx, func(stateCtx context.Context) error {
 		return r.persistPostSendingFailure(stateCtx, group, cause)
-	}); err != nil {
-		return fmt.Errorf("with state context: %w", err)
-	}
-
-	return nil
+	})
 }
 
 func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
@@ -266,7 +251,7 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 		// 드레인 종단이 아니라 위반 표시다. 운영에서 보이면 저장된 send-unit 식별자가 비었거나 섞인 그룹이 claim됐다는 뜻이다.
 		if r.logger != nil {
 			r.logger.Error("alarm dispatch group lacks a persisted send unit; not sending",
-				slog.String("room_id", group.roomID),
+				privacylog.RoomIDAttr(group.roomID),
 				slog.Int("envelopes", len(group.envelopes)),
 				slog.Any("error", err))
 		}

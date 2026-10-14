@@ -40,7 +40,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
-`ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`·`BIRTHDAY_STREAM_*_MS`(양의 밀리초)는 값이 없거나 비어 있으면 기본값을 씁니다. 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. celebration·birthday stream 키는 해당 runner가 켜졌을 때만 읽습니다.
+`ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`·`BIRTHDAY_STREAM_*_MS`(양의 밀리초)는 키가 없으면 기본값을 씁니다. 키가 있는데 비어 있거나 공백뿐이면, 또는 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. `ALARM_DISPATCH_RETENTION_*` 키와 같은 규칙입니다. 배포 전에 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다. celebration·birthday stream 키는 해당 runner가 켜졌을 때만 읽습니다.
 
 ## Notification egress
 
@@ -90,6 +90,8 @@ Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-buil
 - `alarm_dispatch_pg_oldest_unreviewed_quarantined_age_seconds`: 검토가 필요한 격리 중 가장 오래된 격리 시점부터의 경과.
 - `alarm_dispatch_pg_backlog_snapshot_success`: 마지막 발송·격리 집계 조회의 성공 여부. receipt 조회 실패도 실패이며, 0이면 건수·경과의 이전 값을 현재 상태로 해석하지 않는다.
 - `alarm_dispatch_pg_backlog_snapshot_last_success_timestamp_seconds`: 마지막으로 성공한 발송·격리 집계 조회의 Unix 시각. 실패하면 갱신하지 않으므로, 경과가 관측 주기보다 크게 벌어지면 건수·경과를 현재 상태로 해석하지 않는다.
+- `hololive_db_pool_*{pool="alarm_worker"}`: DB pool의 획득 횟수·대기·빈 pool 대기와 상태별 연결 수, 최대 연결 수. 이름과 해석은 [hololive-api runbook](hololive-api.md#db-poolyoutube-plane-db-슬롯-지표)과 같다.
+- `hololive_http_client_requests_total{client="holodex"}`, `hololive_http_client_request_duration_seconds{client="holodex"}`: Holodex HTTP 요청의 상태 코드별 수(응답 없음은 `code="error"`)와 응답 헤더까지의 지연. 해석은 [hololive-api runbook](hololive-api.md#외부-http-호출-지표)과 같다.
 
 발송 backlog(`alarm_dispatch_pg_backlog_rows`, `alarm_dispatch_pg_oldest_*_age_seconds`)·격리 gauge와 두 snapshot 지표는 retention 주기(`ALARM_DISPATCH_RETENTION_INTERVAL_MS`)와 별개로 60초마다(조회 시한 10초) 갱신한다. 조회 실패는 runner를 멈추지 않고 `alarm_dispatch_pg_backlog_observation_failed_total`과 경고 로그로 남는다.
 
@@ -205,7 +207,7 @@ Diagnosis:
 - `celebration:birthday:member-{memberID}:{date}` event와 그 delivery의 `status`, `sent_at`을 확인합니다. `sent`가 아닌 방은 의도적으로 대상이 아닙니다.
 - 같은 `channelID`의 `youtube_live_sessions`가 판정 창(KST 생일 전날 21:00부터 다음 날 17:00 전까지) 안에서 `UPCOMING` 또는 `LIVE`인지 확인합니다. 생일 날짜는 KST 0시부터 평가하고 다음 날 17시까지 계속 평가하므로, 전날 시작한 방송은 생일축하 발송 뒤에도 예정·진행 상태여야 합니다. 다른 KST 날짜에 시작하는 방송은 `01/02 15:04`로 표시합니다. 제목에 생일 키워드(`birthday`·`bday`·`b-day`·`誕生日`·`誕生祭`·`誕生会`·`生誕`·`たんじょうび`·`バースデー`·`バースデイ`·`バースディ`·`생일`·`ulang tahun`·`ultah`, NFKC·대소문자 무시)가 없으면 생일 방송으로 보지 않습니다. UPCOMING은 `schedule_observed_at`, LIVE는 `status_observed_at`이 runner의 freshness 하한부터 현재 시각 사이에 있어야 합니다. NULL·미래 관측은 제외하며 `last_seen_at`이나 예정 시작 시각으로 최신성을 판단하지 않습니다.
 - `Birthday stream runner failed` 로그가 있으면 audience SQL 오류를 먼저 해결합니다. 이 경로는 실패 시 전체 방으로 fallback하지 않습니다. `list published birthday stream events` 오류는 그 멤버의 기발행 생일 방송 event payload가 decode·검증을 통과하지 못한 것이며, 같은 생일 날짜의 다른 멤버 처리도 멈추므로 해당 `event_key`의 payload를 먼저 확인합니다.
-- 이미 `celebration:birthday_stream:member-{memberID}:{date}:{videoID}` event가 있어도 현재 세션이면 다음 tick에서 재평가됩니다. 이때 최초 event의 canonical payload를 재사용하므로 이후 title·photo·schedule 표시값 변경은 event payload를 바꾸지 않고, 새 방 delivery만 outbox dedupe를 통과합니다. 멤버·일자 상한 3건과 이 재평가는 저장 제목이 생일 키워드를 포함하는 event만 셉니다. 저장 제목에 생일 키워드가 없는 기발행 event는 현재 제목이 바뀌어도 다시 보내지 않습니다.
+- 이미 `celebration:birthday_stream:member-{memberID}:{date}:{videoID}` event가 있어도 현재 세션이면 다음 tick에서 재평가됩니다. 이때 최초 event의 canonical payload를 재사용하므로 이후 title·photo·schedule 표시값 변경은 event payload를 바꾸지 않습니다. 그 event를 이미 `sent`로 받은 방은 envelope에서 빼고, 늦게 생일축하를 받은 방(과 pending·failed 방)만 발행해 outbox dedupe에 맡깁니다. 이 조회가 실패하면 전체 방으로 재발행하지 않고 `Birthday stream runner failed`로 끝납니다. 새 event·delivery가 없는 실행의 `Birthday stream runner published`는 Debug 로그입니다. 멤버·일자 상한 3건과 이 재평가는 저장 제목이 생일 키워드를 포함하는 event만 셉니다. 저장 제목에 생일 키워드가 없는 기발행 event는 현재 제목이 바뀌어도 다시 보내지 않습니다.
 
 Mitigation:
 - producer의 full-roster LIVE discovery부터 복구한 뒤 runner를 재평가합니다.

@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	"github.com/kapu/hololive-api/internal/service/activity"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
@@ -154,6 +155,48 @@ func TestSettingsHandler_SetRoomName_BlankNameClearsBoundsAndMissingNameIsReject
 				}
 			}
 		})
+	}
+}
+
+// 관리자 방 이름 로그는 room_id를 privacylog 규칙으로 기록한다. 숫자가 아닌 방 ID는 원문 대신 가명으로 남는다.
+func TestSettingsHandler_SetRoomName_LogsMaskedRoomID(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	const rawRoomID = "private-room-slug"
+
+	for _, body := range []string{
+		`{"roomId":"` + rawRoomID + `","roomName":"관리 방"}`,
+		`{"roomId":"` + rawRoomID + `","roomName":" "}`,
+	} {
+		var logs bytes.Buffer
+
+		logger := slog.New(slog.NewJSONHandler(&logs, nil))
+		// 운영 배선과 같은 stdout 전용 activity logger라 activity 줄도 같은 버퍼에서 함께 검사한다.
+		handler := &SettingsHandler{
+			Logger:   logger,
+			Activity: activity.NewActivityLogger("", logger),
+			Alarm:    &roomNameRecordingAlarm{},
+		}
+
+		ctx, rec := newSettingsTestContext(t, []byte(body))
+		handler.SetRoomName(ctx)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		if !strings.Contains(logs.String(), `"room_id":`) {
+			t.Fatalf("room name log has no room_id attribute: %s", logs.String())
+		}
+
+		if !strings.Contains(logs.String(), `"msg":"activity"`) {
+			t.Fatalf("room name change wrote no activity line: %s", logs.String())
+		}
+
+		if strings.Contains(logs.String(), rawRoomID) {
+			t.Fatalf("room name log exposed raw room id: %s", logs.String())
+		}
 	}
 }
 

@@ -59,6 +59,9 @@ func main() {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}
 
+			// slog.Default()로 기록하는 의존성(otel export 오류 등)도 같은 JSON 파일과 마스킹 경로로 보낸다.
+			slog.SetDefault(logger)
+
 			return logger, closer, nil
 		},
 		LoggerFileName: youtubeCollectorLogFileName(),

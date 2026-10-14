@@ -274,53 +274,6 @@ func normalizeLiveSessionTimes(session *LiveSessionV1) error {
 	return nil
 }
 
-func (p *ViewerSampleV1) normalizeAndValidate(subject string) error {
-	if p.VideoID != subject || p.VideoID != p.Coverage.VideoID {
-		return errors.New("viewer sample video does not match subject or coverage")
-	}
-
-	if err := p.Coverage.normalizeAndValidate(subject); err != nil {
-		return fmt.Errorf("normalize and validate: %w", err)
-	}
-
-	if err := validateViewerSampleWindow(p); err != nil {
-		return fmt.Errorf("validate viewer sample window: %w", err)
-	}
-
-	if err := validateViewerAvailability(p); err != nil {
-		return fmt.Errorf("validate viewer availability: %w", err)
-	}
-
-	p.SampleWindowStart = p.SampleWindowStart.UTC()
-
-	return nil
-}
-
-func validateViewerSampleWindow(p *ViewerSampleV1) error {
-	if p.SampleWindowStart.IsZero() || !p.SampleWindowStart.Equal(p.Coverage.SampleWindowStart) ||
-		p.SampleWindowSeconds != p.Coverage.SampleWindowSeconds {
-		return errors.New("viewer sample window does not match coverage")
-	}
-
-	return nil
-}
-
-func validateViewerAvailability(p *ViewerSampleV1) error {
-	if p.Availability != "AVAILABLE" && p.Availability != "HIDDEN" && p.Availability != "UNAVAILABLE" {
-		return fmt.Errorf("unsupported viewer availability %q", p.Availability)
-	}
-
-	if p.Availability == "AVAILABLE" && (p.ViewerCount == nil || *p.ViewerCount < 0) {
-		return errors.New("available viewer sample requires a non-negative count")
-	}
-
-	if p.Availability != "AVAILABLE" && p.ViewerCount != nil {
-		return errors.New("hidden or unavailable viewer sample must not contain a count")
-	}
-
-	return nil
-}
-
 func requireCoveredField(covered map[string]struct{}, field string, present bool) error {
 	if !present {
 		return nil

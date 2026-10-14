@@ -35,6 +35,21 @@ func TestNewProviderHTTPClientRejectsNonPositiveTimeouts(t *testing.T) {
 	}
 }
 
+// client 라벨 없이 만든 client는 외부 요청 메트릭을 provider별로 나눌 수 없으므로 설정 오류로 거절한다.
+func TestNewProviderHTTPClientRequiresMetricsClient(t *testing.T) {
+	t.Parallel()
+
+	cfg := testTransportConfig()
+
+	cfg.MetricsClient = " "
+
+	_, err := NewProviderHTTPClient(cfg)
+
+	if err == nil || collecterr.ClassOf(err) != contract.ClassConfiguration {
+		t.Fatalf("blank MetricsClient = %v", err)
+	}
+}
+
 func TestNewProviderHTTPClientAppliesCapsAndRedirectPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -214,6 +229,7 @@ func (t closeCountingTransport) CloseIdleConnections() {
 
 func testTransportConfig() ProviderTransportConfig {
 	return ProviderTransportConfig{
+		MetricsClient:         "test",
 		RequestTimeout:        time.Second,
 		DialTimeout:           time.Second,
 		TLSHandshakeTimeout:   time.Second,

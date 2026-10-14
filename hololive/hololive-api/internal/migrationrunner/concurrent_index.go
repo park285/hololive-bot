@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	createIndexConcurrentlyPattern = regexp.MustCompile(mustPattern("create_index_concurrently.re"))
+	createIndexConcurrentlyPattern = regexp.MustCompile(`(?is)\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b`)
 	concurrentIndexTargetPattern   = regexp.MustCompile(`(?i)^CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:"((?:""|[^"])*)"|([A-Za-z_][A-Za-z0-9_$]*))\s+ON\s+(?:ONLY\s+)?(?:(?:"((?:""|[^"])*)"|([A-Za-z_][A-Za-z0-9_$]*))\s*\.\s*)?(?:"((?:""|[^"])*)"|([A-Za-z_][A-Za-z0-9_$]*))(?:\s|\(|$)`)
 )
 

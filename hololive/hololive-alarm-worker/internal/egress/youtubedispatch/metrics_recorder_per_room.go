@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (mr *MetricsRecorder) recordPerRoomFormatFailure(
@@ -43,7 +44,7 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 	mr.logger.Warn("Failed to build per-room delivery request",
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
-		slog.String("room_id", row.RoomID),
+		privacylog.RoomIDAttr(row.RoomID),
 		dedupeKeyLogAttrForOutboxes([]domain.YouTubeNotificationOutbox{*outbox}),
 		slog.Any("error", err))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "dedupe key")
@@ -64,7 +65,7 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 	mr.logger.Warn("Failed to send per-room delivery",
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
-		slog.String("room_id", row.RoomID),
+		privacylog.RoomIDAttr(row.RoomID),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", reason)
@@ -82,10 +83,10 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 ) {
 	sentAt := time.Now()
 
-	mr.logger.Info("Sent per-room delivery",
+	mr.logger.Debug("Sent per-room delivery",
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
-		slog.String("room_id", row.RoomID),
+		privacylog.RoomIDAttr(row.RoomID),
 		dedupeKeyLogAttr(sendReq.dedupeKeys))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, "per_room", "success", "")
 

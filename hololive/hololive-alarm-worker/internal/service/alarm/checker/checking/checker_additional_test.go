@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
-	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -605,7 +604,7 @@ func TestResolveEligibleLiveCatchupStartUsesLiveCatchupWindow(t *testing.T) {
 
 	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 
-	inWindow := now.Add(-sharedconstants.LiveCatchupWindow)
+	inWindow := now.Add(-tier.LiveCatchupWindow)
 	stream := &domain.Stream{
 		ID:             "live-in-window",
 		Status:         domain.StreamStatusLive,
@@ -616,7 +615,7 @@ func TestResolveEligibleLiveCatchupStartUsesLiveCatchupWindow(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, got)
 
-	outside := now.Add(-(sharedconstants.LiveCatchupWindow + time.Second))
+	outside := now.Add(-(tier.LiveCatchupWindow + time.Second))
 
 	stream.StartScheduled = &outside
 
@@ -629,7 +628,7 @@ func TestResolveEligibleLiveCatchupStartUsesRecentObservedAt(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	oldStart := now.Add(-(sharedconstants.LiveCatchupWindow + time.Hour))
+	oldStart := now.Add(-(tier.LiveCatchupWindow + time.Hour))
 	recentObserved := now.Add(-time.Minute)
 	stream := &domain.Stream{
 		ID:             "live-observed-recently",

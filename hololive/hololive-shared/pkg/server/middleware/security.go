@@ -26,8 +26,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 // SecurityHeadersMiddleware 보안 헤더 추가 미들웨어.
@@ -94,11 +92,14 @@ func sanitizedRequestID(raw string) string {
 	return raw
 }
 
+// defaultMaxBodyBytes는 호출자가 본문 한도를 지정하지 않았을 때 쓰는 요청 본문 최대 크기입니다.
+const defaultMaxBodyBytes int64 = 1 << 20 // 1MiB
+
 // MaxBodySizeMiddleware 요청 본문 크기를 제한하는 미들웨어.
-// 설정된 maxBytes를 초과하면 413 Payload Too Large를 반환한다.
+// 설정된 maxBytes를 초과하면 413 Payload Too Large를 반환하고, maxBytes가 0 이하이면 defaultMaxBodyBytes를 쓴다.
 func MaxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
 	if maxBytes <= 0 {
-		maxBytes = constants.ServerConfig.MaxBodyBytes
+		maxBytes = defaultMaxBodyBytes
 	}
 
 	return func(c *gin.Context) {

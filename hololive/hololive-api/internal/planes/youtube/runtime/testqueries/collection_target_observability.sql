@@ -1,6 +1,6 @@
 INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
 VALUES('CURRENT',14,repeat('a',64),now()+interval '1 hour',now()),
-      ('RETIRED',3,repeat('b',64),now()-interval '1 second',now()-interval '1 hour');
+      ('RETIRED',2,repeat('b',64),now()-interval '1 second',now()-interval '1 hour');
 INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,created_at)
 SELECT generation, subject, kind,20,120000,enabled,now()-interval '10 minutes'
 FROM youtube_collection_projection_generations CROSS JOIN (VALUES
@@ -23,7 +23,7 @@ WHERE status='CURRENT';
 INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
 SELECT generation,subject,kind,20,120000,true
 FROM youtube_collection_projection_generations CROSS JOIN (VALUES
- ('historical-viewer','viewer_sample'),('retired','live_snapshot'),('expired','live_snapshot')
+ ('retired','live_snapshot'),('expired','live_snapshot')
 ) AS seed(subject,kind)
 WHERE status='RETIRED';
 INSERT INTO youtube_live_reconciliation_heads(video_id,status)

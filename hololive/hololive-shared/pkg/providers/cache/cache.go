@@ -45,7 +45,7 @@ func ProvideCacheResources(ctx context.Context, valkeyConfig settings.ValkeyConf
 		SocketPath: valkeyConfig.SocketPath,
 	}, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create cache resources: %w", err)
+		return nil, nil, fmt.Errorf("create cache resources: %w", err)
 	}
 
 	resources := &CacheResources{

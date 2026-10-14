@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
@@ -137,7 +138,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -146,7 +147,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	if err != nil {
 		h.safeLogger().Warn("Invalid room name request", slog.Any("error", err))
 
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -160,34 +161,35 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	defer cancel()
 
 	if err := h.Alarm.SetRoomName(ctx, roomID, roomName); err != nil {
-		h.safeLogger().Error("Failed to set room name", slog.Any("error", err))
-
-		sharedserver.RespondError(c, 500, "Failed to set room name", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to set room name", "Failed to set room name", err)
 
 		return
 	}
 
 	if roomName == "" {
-		h.safeLogger().Info("Room name cleared", slog.String("room_id", roomID))
+		h.safeLogger().Info("Room name cleared", sharedprivacylog.RoomIDAttr(roomID))
 
-		h.logActivity("name_update", "Room name cleared: "+roomID, map[string]any{"room_id": roomID})
+		roomToken := sharedprivacylog.IdentifierToken(roomID)
+		h.logActivity("name_update", "Room name cleared: "+roomToken, map[string]any{"room_id": roomToken})
 
-		ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room name cleared"})
+		ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room name cleared"})
 
 		return
 	}
 
 	h.safeLogger().Info("Room name set",
-		slog.String("room_id", roomID),
+		sharedprivacylog.RoomIDAttr(roomID),
 		slog.String("room_name", roomName),
 	)
 
-	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", roomID, roomName), map[string]any{
-		"room_id":   roomID,
+	// activity는 운영에서 같은 logger의 stdout으로 나가므로 room_id도 privacylog 규칙으로 기록한다.
+	roomToken := sharedprivacylog.IdentifierToken(roomID)
+	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", roomToken, roomName), map[string]any{
+		"room_id":   roomToken,
 		"room_name": roomName,
 	})
 
-	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room name set successfully"})
+	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room name set successfully"})
 }
 
 func (h *SettingsHandler) GetLogs(c *gin.Context) {
@@ -199,14 +201,12 @@ func (h *SettingsHandler) GetLogs(c *gin.Context) {
 
 	logs, err := h.ReadRecentLogs(100)
 	if err != nil {
-		h.safeLogger().Error("Failed to get logs", slog.Any("error", err))
-
-		sharedserver.RespondError(c, 500, "Failed to get logs", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to get logs", "Failed to get logs", err)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, logsResponse{Status: "ok", Logs: logs})
+	ginjson.Respond(c, http.StatusOK, logsResponse{Status: "ok", Logs: logs})
 }
 
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
@@ -241,7 +241,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 
 	runtime := h.SettingsRuntimeState().AsMap()
 
-	ginjson.Respond(c, 200, settingsResponse{Status: "ok", Settings: s, Runtime: runtime})
+	ginjson.Respond(c, http.StatusOK, settingsResponse{Status: "ok", Settings: s, Runtime: runtime})
 }
 
 func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
@@ -284,9 +284,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 
 	if alarmAdvanceUpdated {
 		if err := h.Settings.Update(current); err != nil {
-			h.safeLogger().Error("Failed to update settings", slog.Any("error", err))
-
-			sharedserver.RespondError(c, 500, "Failed to update settings", nil)
+			sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to update settings", "Failed to update settings", err)
 
 			return
 		}
@@ -298,7 +296,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		h.logSettingsUpdate(current, runtime)
 	}
 
-	ginjson.Respond(c, 200, settingsUpdateResponse{Status: "ok", Message: "Settings updated", Settings: current, Runtime: runtime})
+	ginjson.Respond(c, http.StatusOK, settingsUpdateResponse{Status: "ok", Message: "Settings updated", Settings: current, Runtime: runtime})
 }
 
 func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSettingsRequest, bool) {
@@ -307,7 +305,7 @@ func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSetti
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return req, false
 	}
@@ -315,7 +313,7 @@ func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSetti
 	if !validAlarmAdvanceMinutes(req.AlarmAdvanceMinutes) {
 		sharedserver.RespondError(
 			c,
-			400,
+			http.StatusBadRequest,
 			fmt.Sprintf("alarmAdvanceMinutes must be between %d and %d", minAlarmAdvanceMinutes, maxAlarmAdvanceMinutes),
 			nil,
 		)
@@ -396,7 +394,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 		"runtime": runtime,
 	})
 
-	ginjson.Respond(c, 200, llmSettingsResponse{
+	ginjson.Respond(c, http.StatusOK, llmSettingsResponse{
 		Status:  "ok",
 		Message: "LLM settings updated",
 		Runtime: runtime,
@@ -409,7 +407,7 @@ func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLL
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return req, false
 	}
@@ -419,13 +417,13 @@ func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLL
 
 func (req updateLLMSettingsRequest) validate(c *gin.Context) bool {
 	if req.MemberNewsWeeklyRunNow == nil {
-		sharedserver.RespondError(c, 400, "at least one llm setting field is required", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "at least one llm setting field is required", nil)
 
 		return false
 	}
 
 	if req.MemberNewsWeeklyRunNow != nil && !*req.MemberNewsWeeklyRunNow {
-		sharedserver.RespondError(c, 400, "memberNewsWeeklyRunNow must be true when provided", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "memberNewsWeeklyRunNow must be true when provided", nil)
 
 		return false
 	}

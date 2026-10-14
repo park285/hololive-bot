@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -100,7 +101,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	defer cancel()
 
 	if h == nil || h.Handler == nil || h.communityShortsOps == nil {
-		sharedserver.RespondError(c, 503, "YouTube community/shorts ops repository not available", nil)
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "YouTube community/shorts ops repository not available", nil)
 
 		return
 	}
@@ -110,16 +111,14 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 
 	posts, err := h.communityShortsOps.ListPostSendCountsSince(ctx, windowStart)
 	if err != nil {
-		h.safeLogger().Error("Failed to load YouTube community/shorts ops posts", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to load YouTube community/shorts ops posts", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to load YouTube community/shorts ops posts", "Failed to load YouTube community/shorts ops posts", err)
 
 		return
 	}
 
 	channelSummaries, err := analytics.BuildChannelPostDeliverySummaries(posts)
 	if err != nil {
-		h.safeLogger().Error("Failed to build YouTube community/shorts channel summaries", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts channel summaries", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to build YouTube community/shorts channel summaries", "Failed to build YouTube community/shorts channel summaries", err)
 
 		return
 	}
@@ -129,16 +128,14 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 		youtubeCommunityShortsOpsLatencyPeriods(windowStart, now),
 	)
 	if err != nil {
-		h.safeLogger().Error("Failed to build YouTube community/shorts latency summaries", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts latency summaries", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to build YouTube community/shorts latency summaries", "Failed to build YouTube community/shorts latency summaries", err)
 
 		return
 	}
 
 	channelLatencySummaries, err := buildYouTubeCommunityShortsChannelLatencySummaries(posts)
 	if err != nil {
-		h.safeLogger().Error("Failed to build YouTube community/shorts channel latency summaries", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts channel latency summaries", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to build YouTube community/shorts channel latency summaries", "Failed to build YouTube community/shorts channel latency summaries", err)
 
 		return
 	}
@@ -146,7 +143,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	memberNames := h.loadYouTubeCommunityShortsMemberNames(ctx)
 	latencySummary := firstYouTubeCommunityShortsOpsLatencySummary(latencySummaries)
 
-	ginjson.Respond(c, 200, buildYouTubeCommunityShortsOpsResponse(
+	ginjson.Respond(c, http.StatusOK, buildYouTubeCommunityShortsOpsResponse(
 		now, windowStart, channelSummaries, channelLatencySummaries, memberNames, &latencySummary,
 	))
 }

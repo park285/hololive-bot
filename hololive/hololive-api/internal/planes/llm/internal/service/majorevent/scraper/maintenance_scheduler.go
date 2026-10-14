@@ -199,7 +199,7 @@ func (s *MaintenanceScheduler) runExpiredUpdate(ctx context.Context) {
 
 	updated, err := s.repository.UpdateExpiredEvents(runCtx)
 	if err != nil {
-		s.logger.Warn("Major event expired update failed", slog.String("error", err.Error()))
+		s.logger.Warn("Major event expired update failed", slog.Any("error", err))
 
 		return
 	}
@@ -215,7 +215,7 @@ func (s *MaintenanceScheduler) runLinkCheck(ctx context.Context) {
 
 	events, err := s.repository.GetAllActiveEvents(runCtx)
 	if err != nil {
-		s.logger.Warn("Major event active event load failed for link check", slog.String("error", err.Error()))
+		s.logger.Warn("Major event active event load failed for link check", slog.Any("error", err))
 
 		return
 	}
@@ -226,14 +226,14 @@ func (s *MaintenanceScheduler) runLinkCheck(ctx context.Context) {
 
 	result, err := s.linkChecker.CheckEvents(runCtx, events)
 	if err != nil {
-		s.logger.Warn("Major event link check failed", slog.String("error", err.Error()))
+		s.logger.Warn("Major event link check failed", slog.Any("error", err))
 
 		return
 	}
 
 	persisted, err := s.repository.UpdateEventLinkStatuses(runCtx, events)
 	if err != nil {
-		s.logger.Warn("Major event link status persist failed", slog.String("error", err.Error()))
+		s.logger.Warn("Major event link status persist failed", slog.Any("error", err))
 	}
 
 	s.logger.Info(

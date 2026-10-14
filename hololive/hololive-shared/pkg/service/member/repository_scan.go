@@ -258,16 +258,29 @@ func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query strin
 	return out, nil
 }
 
-func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	out, err := collectJoinedRows(rows, "rows iteration error", func(rows pgx.Rows) (*domain.Member, error) {
-		row, err := scanMemberFullRow(rows)
+// rows.Err 오류 접두는 조회 경로별로 기존 문구를 유지합니다.
+const (
+	memberIterLabel            = "rows iteration error"
+	celebrationMemberIterLabel = "celebration member rows iteration"
+)
+
+// collectMembersFromRows는 rowLabel로 행 단위 scan/parse 오류를, iterLabel로 rows.Err 오류를 구분해 감쌉니다.
+// 한 행이 실패해도 나머지 행은 계속 수집하고, 오류는 errors.Join으로 함께 반환합니다.
+func (r *Repository) collectMembersFromRows(
+	rows pgx.Rows,
+	iterLabel string,
+	rowLabel string,
+	scan func(memberRowScanner) (memberRow, error),
+) ([]*domain.Member, error) {
+	out, err := collectJoinedRows(rows, iterLabel, func(rows pgx.Rows) (*domain.Member, error) {
+		row, err := scan(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan member row: %w", err)
+			return nil, fmt.Errorf("scan %s row: %w", rowLabel, err)
 		}
 
 		member, err := r.parseMemberRow(&row)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
+			return nil, fmt.Errorf("parse %s row %q: %w", rowLabel, row.englishName, err)
 		}
 
 		return member, nil
@@ -313,12 +326,12 @@ func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]
 func (r *Repository) collectMemberWithPhotoRow(rows pgx.Rows) (*string, *domain.Member, error) {
 	row, err := scanMemberPhotoQueryRow(rows)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to scan member row: %w", err)
+		return nil, nil, fmt.Errorf("scan member row: %w", err)
 	}
 
 	member, err := r.parseMemberPhotoRow(&row)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
+		return nil, nil, fmt.Errorf("parse member row %q: %w", row.englishName, err)
 	}
 
 	return row.channelID, member, nil
@@ -370,7 +383,7 @@ func (r *Repository) scanMemberWithPhoto(
 	var aliases domain.Aliases
 
 	if err := jsonv2.Unmarshal(aliasesJSON, &aliases); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal aliases: %w", err)
+		return nil, fmt.Errorf("unmarshal aliases: %w", err)
 	}
 
 	member := &domain.Member{
@@ -411,25 +424,4 @@ func (r *Repository) scanMemberWithPhoto(
 	}
 
 	return member, nil
-}
-
-func (r *Repository) collectMembersByNameFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	out, err := collectJoinedRows(rows, "rows iteration error", func(rows pgx.Rows) (*domain.Member, error) {
-		row, err := scanMemberQueryRow(rows)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan member row: %w", err)
-		}
-
-		member, err := r.parseMemberRow(&row)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
-		}
-
-		return member, nil
-	})
-	if err != nil {
-		return out, fmt.Errorf("collect joined rows: %w", err)
-	}
-
-	return out, nil
 }

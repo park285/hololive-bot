@@ -24,7 +24,7 @@ type replyReclaimCandidate struct {
 // Accepted는 재발송하지 않으며, 재시도 지평이 저장 전에 끝나면 배치 전체를 롤백합니다.
 func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize int32) (ReplyOutboxReclaim, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReplyOutboxReclaim{}, fmt.Errorf("ensure pool: %w", err)
+		return ReplyOutboxReclaim{}, err
 	}
 
 	if batchSize <= 0 {
@@ -33,7 +33,7 @@ func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize in
 
 	horizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
-		return ReplyOutboxReclaim{}, fmt.Errorf("lease milliseconds: %w", err)
+		return ReplyOutboxReclaim{}, err
 	}
 
 	var result ReplyOutboxReclaim

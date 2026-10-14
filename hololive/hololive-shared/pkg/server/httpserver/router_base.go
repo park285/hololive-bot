@@ -26,7 +26,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
@@ -46,14 +45,9 @@ func ApplyBaseMiddleware(ctx context.Context, router *gin.Engine, logger *slog.L
 		return
 	}
 
-	maxBodyBytes := opts.MaxBodyBytes
-	if maxBodyBytes <= 0 {
-		maxBodyBytes = constants.ServerConfig.MaxBodyBytes
-	}
-
 	router.Use(middleware.RecoveryMiddleware(ctx, logger))
 	router.Use(middleware.LoggerMiddleware(ctx, logger, opts.SkipLogPaths...))
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RequestIDMiddleware())
-	router.Use(middleware.MaxBodySizeMiddleware(maxBodyBytes))
+	router.Use(middleware.MaxBodySizeMiddleware(opts.MaxBodyBytes))
 }

@@ -181,7 +181,7 @@ func photoProductThumbnails(product map[string]photo.Canonical) (avatarThumbnail
 
 func persistPhotoConflicts(ctx context.Context, tx dbx.Tx, observation *Observation, decision *photo.Decision) error {
 	for i := range decision.Conflicts {
-		if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_photo", observation.SubjectKey, decision.Conflicts[i].FieldName, decision.Conflicts[i].ExistingValueSHA256, decision.Conflicts[i].AttemptedValueSHA256, "KEEP_EXISTING"); err != nil {
+		if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_photo", observation.SubjectKey, decision.Conflicts[i].FieldName, decision.Conflicts[i].ExistingValueSHA256, decision.Conflicts[i].AttemptedValueSHA256); err != nil {
 			return fmt.Errorf("insert channel photo reconciliation conflict: %w", err)
 		}
 	}

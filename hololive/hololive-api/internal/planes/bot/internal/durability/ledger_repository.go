@@ -30,17 +30,17 @@ func (r *DurableLedgerRepository) Maintain(
 	batchSize int32,
 ) (DurableLedgerMaintenance, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return DurableLedgerMaintenance{}, fmt.Errorf("ensure pool: %w", err)
+		return DurableLedgerMaintenance{}, err
 	}
 
 	terminalMS, err := leaseMilliseconds(terminalRetention)
 	if err != nil {
-		return DurableLedgerMaintenance{}, fmt.Errorf("lease milliseconds: %w", err)
+		return DurableLedgerMaintenance{}, err
 	}
 
 	manualReviewMS, err := leaseMilliseconds(manualReviewRetention)
 	if err != nil {
-		return DurableLedgerMaintenance{}, fmt.Errorf("lease milliseconds: %w", err)
+		return DurableLedgerMaintenance{}, err
 	}
 
 	if manualReviewRetention < terminalRetention {

@@ -22,6 +22,7 @@ package handlers
 
 import (
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
@@ -70,7 +71,7 @@ func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 		return
 	}
 
-	ginjson.Respond(c, 200, gin.H{"status": "ok", "channels": channelResponses(channelsMap)})
+	ginjson.Respond(c, http.StatusOK, gin.H{"status": "ok", "channels": channelResponses(channelsMap)})
 }
 
 func (h *StreamHandler) respondChannelQueryError(c *gin.Context) {
@@ -126,5 +127,5 @@ func (h *StreamHandler) SearchChannels(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, gin.H{"status": "ok", "channels": channels})
+	ginjson.Respond(c, http.StatusOK, gin.H{"status": "ok", "channels": channels})
 }

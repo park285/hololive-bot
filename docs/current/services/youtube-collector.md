@@ -58,9 +58,9 @@ generation 3 snapshot의 `query`는 helper의 `streams` 질의 범위·페이지
 
 ## 시청자 수 전용 수집
 
-`DEC-20260925-hololive-viewer-collection-retirement`에 따라 신규 `viewer_sample`을 수집하지 않습니다. YouTube.js의 `youtubejs_viewer` 작업과 `/v1/viewer` RPC를 제거했으며, `holodex_live`는 `live_snapshot`만 발행합니다. Holodex의 기존 `/live` 조회와 방송 상태·일정·채널 메타데이터는 유지합니다. 응답에 포함된 시청자 수를 표본으로 만드는 비용은 별개이므로 더 이상 viewer envelope·checkpoint·queue를 생성하지 않습니다.
+시청자 표본의 생산·소비·재처리 계약은 없습니다. YouTube.js의 전용 작업과 RPC, 공유 viewer payload·identity, canonical reducer와 저장 경로를 제거했으며 `holodex_live`는 `live_snapshot`만 발행합니다. Holodex의 기존 `/live` 조회와 방송 상태·일정·채널 메타데이터는 유지합니다.
 
-공유 viewer payload/소비·재처리 경로는 이미 저장된 관측과 기존 큐를 처리하는 계약입니다. 현재 publisher는 양 공급자의 신규 viewer 발행을 거절하며, 기존 consumer는 보관 기간 안의 과거 관측을 처리할 수 있습니다. 저장 축소 변경의 viewer 원본 기본 보관 기간은 7일이며, 제품 samples 삭제는 이 변경에 포함하지 않습니다.
+Migration 306은 승인된 `youtube_live_viewer_samples`, `youtube_live_viewer_sample_heads`, `youtube_live_viewer_sample_evidence`, `youtube_stream_stats`, `youtube_channel_latest_stats`를 영구 삭제합니다. 퇴역 kind의 checkpoint·consumer offset과 비활성 전용 lease만 정리하며, 예상 밖 원본·payload·replay·충돌·projection 이력이나 활성 의무가 있으면 실패합니다. 과거 viewer 관측을 읽는 호환 경로나 별도 보관 기간은 없습니다. 중앙/API/worker와 모든 AP를 완전히 정지한 상태에서 migration을 적용하고 같은 새 revision으로 재시작해야 합니다.
 
 사용자용 라이브 템플릿과 미리보기에는 `ViewerCount`가 없습니다. 미지원 변수는 기존 템플릿 오류로 거절하고 0명으로 대체하지 않습니다. 별도 Holodex 조회를 쓰는 Go Stream API의 `viewer_count`와 Twitch/Chzzk 데이터는 그대로입니다.
 
@@ -164,6 +164,9 @@ Holodex와 Official Schedule fetch는 collector-owned `providerhttp` transport�
 - 취득·갱신·publish의 `superseded`는 phase별로 구분합니다. empty 결과는 durable terminal commit 뒤에만 성공으로 셉니다.
 - `youtube_observation_publish_duration_seconds{provider,kind}`는 job kind별 발행 트랜잭션(fence 확인·관측 저장·lease 종료) 한 번의 소요 시간이며 결과와 무관하게 모든 발행 시도를 기록합니다. `youtube_observation_publish_encoded_bytes{provider,kind}`는 commit된 발행이 SQL에 보낸 관측 JSON 크기이며, 상단 버킷(6·7·8 MiB)으로 8 MiB 배치 상한 근접 빈도를 봅니다.
 - `youtube_observation_accept_interval_seconds`는 checkpoint가 실제 전진한 두 수락 사이 간격입니다. 첫 관측·중복·collision은 표본을 만들지 않습니다. `youtube_observation_last_accepted_timestamp_seconds`는 마지막 실제 수락을 기록합니다.
+- `youtube_collection_discovery_cycles_total{result}`는 후보 탐색 cycle 결과(`ok`, `candidate_load_failed`)입니다. 투영 세대 교체(superseded)만 있는 cycle은 `ok`입니다. 탐색 실패 WARN `YouTube collection candidate discovery failed`는 job 필드 없이 runner 실패에만 `provider`·`job_kind`를 붙이며, 같은 대상의 연속 실패 동안 첫 건과 1분 간격 요약(`since`, `suppressed_cycles`)만 남깁니다. 복구되면 `YouTube collection candidate discovery recovered` INFO 한 건을 남깁니다.
+- 종료나 fatal로 scheduler context가 취소된 뒤 생긴 `CANCELED`는 `YouTube collection job canceled by shutdown`(후보 탐색은 `YouTube collection candidate discovery canceled by shutdown`) INFO로 기록합니다. attempt metric과 durable 진단은 그대로 canceled이며, 바깥 context가 살아 있는 취소(renew 실패 등)는 실패 WARN입니다.
+- 연결 거부·호스트/네트워크 경로 없음(DB와 provider HTTP 공통)과 PostgreSQL SQLSTATE class `08`·`57P01`~`57P03`은 `collection_failed/TRANSIENT`, 연결 dial 타임아웃은 `collection_timeout/TIMEOUT`입니다. 인증 실패나 TLS 검증 실패 같은 그 밖의 연결 오류는 미분류 `collection_internal_invariant/INTERNAL`로 남습니다. 두 분류 모두 fatal이 아닙니다.
 - API target 지표는 여섯 collection job의 baseline 수요와 due/eligibility를 표현합니다. freshness 때문에 잠든 `video_live_check`는 누락된 필수 metric으로 간주하지 않습니다. `/ready` 성공은 수집 지연이나 queue full 부재의 증명이 아닙니다.
 
 ## Related docs

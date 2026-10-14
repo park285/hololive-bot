@@ -93,7 +93,7 @@ func (d *Dispatcher) runMaintenanceTask(ctx context.Context, task *maintenanceTa
 func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) error {
 	cnt, err := d.repository.CountFailed(ctx)
 	if err != nil {
-		d.logger.Warn("Failed to count delivery outbox failures", slog.String("error", err.Error()))
+		d.logger.Warn("Failed to count delivery outbox failures", slog.Any("error", err))
 
 		return fmt.Errorf("count failed deliveries: %w", err)
 	}
@@ -108,7 +108,7 @@ func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) error {
 func (d *Dispatcher) cleanup(ctx context.Context) error {
 	cleaned, err := d.repository.Cleanup(ctx, d.config.CleanupAfter)
 	if err != nil {
-		d.logger.Warn("Outbox cleanup failed", slog.String("error", err.Error()))
+		d.logger.Warn("Outbox cleanup failed", slog.Any("error", err))
 
 		return fmt.Errorf("cleanup deliveries: %w", err)
 	}
@@ -123,7 +123,7 @@ func (d *Dispatcher) cleanup(ctx context.Context) error {
 func (d *Dispatcher) quarantineStaleSending(ctx context.Context) error {
 	quarantined, err := d.repository.QuarantineStaleSending(ctx, d.config.StaleSendingAfter, d.config.StaleSendingSweepLimit)
 	if err != nil {
-		d.logger.Warn("Stale sending outbox sweep failed", slog.String("error", err.Error()))
+		d.logger.Warn("Stale sending outbox sweep failed", slog.Any("error", err))
 
 		return fmt.Errorf("quarantine stale sending deliveries: %w", err)
 	}

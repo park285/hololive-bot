@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -76,9 +77,9 @@ func processDigestForRoom(
 	message, err := renderDigestMessage(ctx, fmtr, digest)
 	if err != nil {
 		logger.Error("Member news digest render failed",
-			slog.String("room_id", roomID),
+			sharedprivacylog.RoomIDAttr(roomID),
 			slog.String("period", string(period)),
-			slog.String("error", err.Error()))
+			slog.Any("error", err))
 
 		return failedRoomResult(roomID)
 	}
@@ -89,9 +90,9 @@ func processDigestForRoom(
 
 	if err := outbox.Enqueue(ctx, kind, periodKey, roomID, message); err != nil {
 		logger.Error("Failed to enqueue member news",
-			slog.String("room_id", roomID),
+			sharedprivacylog.RoomIDAttr(roomID),
 			slog.String("period", string(period)),
-			slog.String("error", err.Error()))
+			slog.Any("error", err))
 
 		return failedRoomResult(roomID)
 	}
@@ -102,7 +103,7 @@ func processDigestForRoom(
 func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Period, err error) delivery.SendResult {
 	if errors.Is(err, model.ErrNoSubscribedMembers) {
 		logger.Info("Member news skip: room has no alarm members",
-			slog.String("room_id", roomID),
+			sharedprivacylog.RoomIDAttr(roomID),
 			slog.String("period", string(period)),
 		)
 
@@ -110,9 +111,9 @@ func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Pe
 	}
 
 	logger.Error("Member news digest generation failed",
-		slog.String("room_id", roomID),
+		sharedprivacylog.RoomIDAttr(roomID),
 		slog.String("period", string(period)),
-		slog.String("error", err.Error()))
+		slog.Any("error", err))
 
 	return failedRoomResult(roomID)
 }
@@ -124,9 +125,9 @@ func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logge
 	}
 
 	logger.Error("Member news notification output blocked",
-		slog.String("room_id", roomID),
+		sharedprivacylog.RoomIDAttr(roomID),
 		slog.String("period", string(period)),
-		slog.String("error", err.Error()),
+		slog.Any("error", err),
 		slog.String("decision", string(evaluation.Decision)),
 		slog.Any("reasons", evaluation.ReasonCodes),
 		slog.Any("rules", evaluation.RuleIDs),
@@ -236,7 +237,7 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, co
 	return func(ctx context.Context) ([]model.SubscribedRoom, bool, error) {
 		rooms, err := service.ListSubscribedRooms(ctx)
 		if err != nil {
-			return nil, false, fmt.Errorf("list subscribed rooms: %w", err)
+			return nil, false, fmt.Errorf("collect digest subscribed rooms: %w", err)
 		}
 
 		if len(rooms) == 0 {

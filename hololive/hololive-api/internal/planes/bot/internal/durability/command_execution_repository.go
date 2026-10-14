@@ -60,17 +60,17 @@ func NewCommandExecutionRepository(pool *pgxpool.Pool) *CommandExecutionReposito
 
 func (r *CommandExecutionRepository) Claim(ctx context.Context, messageID, commandKind, claimToken string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	id, err := requireMessageIdentity(messageID)
 	if err != nil {
-		return false, fmt.Errorf("require message identity: %w", err)
+		return false, err
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return false, fmt.Errorf("require bounded identity: %w", err)
+		return false, err
 	}
 
 	kind, err := requireBoundedCommandKind(commandKind)
@@ -88,17 +88,17 @@ func (r *CommandExecutionRepository) Claim(ctx context.Context, messageID, comma
 
 func (r *CommandExecutionRepository) Complete(ctx context.Context, messageID, claimToken, status string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	id, err := requireMessageIdentity(messageID)
 	if err != nil {
-		return false, fmt.Errorf("require message identity: %w", err)
+		return false, err
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return false, fmt.Errorf("require bounded identity: %w", err)
+		return false, err
 	}
 
 	if statusErr := requireCommandExecutionStatus(status); statusErr != nil {
@@ -107,7 +107,7 @@ func (r *CommandExecutionRepository) Complete(ctx context.Context, messageID, cl
 
 	tag, err := r.pool.Exec(ctx, commandExecutionCompleteSQL, id, token, status)
 	if err != nil {
-		return false, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("complete command execution", id, err))
+		return false, safeMessageRepositoryError("complete command execution", id, err)
 	}
 
 	return tag.RowsAffected() == 1, nil
@@ -123,17 +123,17 @@ func requireCommandExecutionStatus(status string) error {
 
 func (r *CommandExecutionRepository) Heartbeat(ctx context.Context, messageID, claimToken string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	id, err := requireMessageIdentity(messageID)
 	if err != nil {
-		return false, fmt.Errorf("require message identity: %w", err)
+		return false, err
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return false, fmt.Errorf("require bounded identity: %w", err)
+		return false, err
 	}
 
 	tag, err := r.pool.Exec(ctx, commandExecutionHeartbeatSQL, id, token)
@@ -146,12 +146,12 @@ func (r *CommandExecutionRepository) Heartbeat(ctx context.Context, messageID, c
 
 func (r *CommandExecutionRepository) State(ctx context.Context, messageID string) (*CommandExecutionState, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return nil, fmt.Errorf("ensure pool: %w", err)
+		return nil, err
 	}
 
 	id, err := requireMessageIdentity(messageID)
 	if err != nil {
-		return nil, fmt.Errorf("require message identity: %w", err)
+		return nil, err
 	}
 
 	var state CommandExecutionState
@@ -171,12 +171,12 @@ func (r *CommandExecutionRepository) State(ctx context.Context, messageID string
 
 func (r *CommandExecutionRepository) ExpireStaleClaims(ctx context.Context, olderThan time.Duration, batchSize int32) (int64, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return 0, fmt.Errorf("ensure pool: %w", err)
+		return 0, err
 	}
 
 	ageMS, err := leaseMilliseconds(olderThan)
 	if err != nil {
-		return 0, fmt.Errorf("lease milliseconds: %w", err)
+		return 0, err
 	}
 
 	if batchSize <= 0 {

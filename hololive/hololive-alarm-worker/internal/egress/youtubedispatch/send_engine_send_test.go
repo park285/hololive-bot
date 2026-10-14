@@ -24,6 +24,7 @@ import (
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -912,6 +913,7 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsDedupeKey(t *testing.T) {
 
 	entry := findLogEntryByMessage(t, logBuffer, "Sent per-room delivery")
 	assertLogDedupeKeys(t, entry, []string{testDedupeKeyShortOne})
+	assertLogRoomIDPseudonymized(t, entry)
 }
 
 func TestDispatchDeliveryRows_GroupedSuccessLogsDedupeKey(t *testing.T) {
@@ -941,6 +943,21 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsDedupeKey(t *testing.T) {
 		testDedupeKeyShortOne,
 		"youtube-notification:NEW_SHORT:short-2",
 	})
+	assertLogRoomIDPseudonymized(t, entry)
+}
+
+// 숫자 canonical ID가 아닌 방 식별자(testRoom1)는 로그에 원문으로 남지 않고 가명으로 바뀌어야 한다.
+func assertLogRoomIDPseudonymized(t *testing.T, entry map[string]any) {
+	t.Helper()
+
+	roomID, ok := entry["room_id"].(string)
+	if !ok {
+		t.Fatalf("room_id = %#v, want string", entry["room_id"])
+	}
+
+	if roomID == testRoom1 || !strings.HasPrefix(roomID, privacylog.PseudonymPrefix) {
+		t.Fatalf("room_id = %q, want pseudonym of non-canonical room id", roomID)
+	}
 }
 
 func TestDispatchDeliveryRows_GroupedSendFailureLogsDedupeKey(t *testing.T) {
@@ -1018,7 +1035,7 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAttemptStarted(t 
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
 	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
 	assertSendLogStringField(t, entry, deliveryDedupeKeyLogField, testDedupeKeyShortOne)
-	assertSendLogStringField(t, entry, logschema.FieldRoomID, testRoom1)
+	assertLogRoomIDPseudonymized(t, entry)
 	assertSendLogIntField(t, entry, logschema.FieldAttemptOrdinal, 3)
 
 	startedAt := readSendLogTimeField(t, entry, deliveryAttemptStartedAtLogField)
@@ -1069,7 +1086,7 @@ func assertGroupedAttemptStartedEntries(t *testing.T, entries []map[string]any, 
 	for i := range entries {
 		assertSendLogStringField(t, entries[i], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-		assertSendLogStringField(t, entries[i], logschema.FieldRoomID, testRoom1)
+		assertLogRoomIDPseudonymized(t, entries[i])
 		assertSendLogIntField(t, entries[i], logschema.FieldAttemptOrdinal, 2)
 
 		startedAt := readSendLogTimeField(t, entries[i], deliveryAttemptStartedAtLogField)
@@ -1154,7 +1171,7 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsCommunityShortsResult(t *testing
 	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
 	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModeGrouped)
-	assertSendLogStringField(t, entry, logschema.FieldRoomID, testRoom1)
+	assertLogRoomIDPseudonymized(t, entry)
 	assertSendLogIntField(t, entry, logschema.FieldTargetAlarmCount, 2)
 	assertSendLogIntField(t, entry, logschema.FieldSuccessfulAlarmCount, 2)
 	assertSendLogIntField(t, entry, logschema.FieldFailedAlarmCount, 0)
@@ -1188,7 +1205,7 @@ func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing
 	assertSendLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonRateLimited)
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
 	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
-	assertSendLogStringField(t, entry, logschema.FieldRoomID, testRoom1)
+	assertLogRoomIDPseudonymized(t, entry)
 	assertSendLogIntField(t, entry, logschema.FieldTargetAlarmCount, 1)
 	assertSendLogIntField(t, entry, logschema.FieldSuccessfulAlarmCount, 0)
 	assertSendLogIntField(t, entry, logschema.FieldFailedAlarmCount, 1)

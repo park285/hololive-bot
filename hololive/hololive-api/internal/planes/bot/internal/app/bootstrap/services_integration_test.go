@@ -54,7 +54,7 @@ func TestInitCoreIntegrationServicesReturnsACLInitializationError(t *testing.T) 
 
 	require.Nil(t, services)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create ACL service")
+	require.ErrorContains(t, err, "create ACL service")
 	assert.ErrorContains(t, err, "postgres service is nil")
 }
 

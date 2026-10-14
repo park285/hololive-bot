@@ -37,7 +37,7 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType, alia
 
 	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0037_01.sql"), memberID, aliasType, alias)
 	if err != nil {
-		return fmt.Errorf("failed to add alias: %w", err)
+		return fmt.Errorf("add alias: %w", err)
 	}
 
 	if tag.RowsAffected() == 0 {
@@ -54,7 +54,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 
 	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0066_02.sql"), memberID, aliasType, alias)
 	if err != nil {
-		return fmt.Errorf("failed to remove alias: %w", err)
+		return fmt.Errorf("remove alias: %w", err)
 	}
 
 	if tag.RowsAffected() == 0 {
@@ -67,7 +67,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
 	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0095_03.sql"), memberID, isGraduated, graduationStatus(isGraduated))
 	if err != nil {
-		return fmt.Errorf("failed to update graduation status: %w", err)
+		return fmt.Errorf("update graduation status: %w", err)
 	}
 
 	if tag.RowsAffected() == 0 {
@@ -80,7 +80,7 @@ func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduate
 func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelID string) error {
 	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0111_04.sql"), memberID, channelID)
 	if err != nil {
-		return fmt.Errorf("failed to update channel ID: %w", err)
+		return fmt.Errorf("update channel ID: %w", err)
 	}
 
 	if tag.RowsAffected() == 0 {
@@ -93,7 +93,7 @@ func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelI
 func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name string) error {
 	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0126_05.sql"), memberID, name)
 	if err != nil {
-		return fmt.Errorf("failed to update member name: %w", err)
+		return fmt.Errorf("update member name: %w", err)
 	}
 
 	if tag.RowsAffected() == 0 {
@@ -112,7 +112,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	// aliases 계약(chk_members_aliases_shape)은 ko·ja 배열을 가진 객체다. 별명 없이 만들면 JSON null 대신 빈 객체를 저장한다.
 	aliasesJSON, err := jsonv2.Marshal(cmp.Or(member.Aliases, &domain.Aliases{}))
 	if err != nil {
-		return fmt.Errorf("failed to marshal aliases: %w", err)
+		return fmt.Errorf("marshal aliases: %w", err)
 	}
 
 	// domain.Member가 Slug를 노출하지 않으므로 Name을 Slug로 사용함
@@ -149,7 +149,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 
 	_, err = r.pool.Exec(ctx, mustSQL("repository_mutation_0175_06.sql"), slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource, member.Units, member.OfficialURL, member.Birthday, member.DebutDate, member.ShortKoreanName, member.ChzzkChannelID, member.TwitchUserID)
 	if err != nil {
-		return fmt.Errorf("failed to create member: %w", err)
+		return fmt.Errorf("create member: %w", err)
 	}
 
 	return nil

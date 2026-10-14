@@ -31,6 +31,8 @@ import (
 type candidateTraffic struct {
 	rx         atomic.Int64
 	tx         atomic.Int64
+	writes     atomic.Int64
+	statements atomic.Int64
 	headers    atomic.Int64
 	candidates atomic.Int64
 	oracle     atomic.Int64
@@ -52,6 +54,7 @@ func (c *candidateTrafficConn) Read(p []byte) (int, error) {
 func (c *candidateTrafficConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 	c.traffic.tx.Add(int64(n))
+	c.traffic.writes.Add(1)
 
 	if err != nil {
 		return n, fmt.Errorf("write measured candidate connection: %w", err)
@@ -61,6 +64,8 @@ func (c *candidateTrafficConn) Write(p []byte) (int, error) {
 }
 
 func (c *candidateTraffic) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	c.statements.Add(1)
+
 	switch data.SQL {
 	case sqlProjectionCurrent, mustTestSQL("projection_260_bd498868a.sql"):
 		c.headers.Add(1)
@@ -76,6 +81,8 @@ func (*candidateTraffic) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQuer
 func (c *candidateTraffic) reset() {
 	c.rx.Store(0)
 	c.tx.Store(0)
+	c.writes.Store(0)
+	c.statements.Store(0)
 	c.headers.Store(0)
 	c.candidates.Store(0)
 	c.oracle.Store(0)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 func TestBroadcastHistoryShowsLimitFilter(t *testing.T) {
@@ -75,7 +75,7 @@ func TestBroadcastHistoryOmitsRedundantMembershipTitleTag(t *testing.T) {
 		},
 	})
 
-	if want := util.KakaoZeroWidthSpace + util.MarkdownNeutralize("ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】"); !strings.Contains(got, want) {
+	if want := kakaotext.ZeroWidthSpace + kakaotext.MarkdownNeutralize("ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】"); !strings.Contains(got, want) {
 		t.Fatalf("BroadcastHistory() missing cleaned membership title %q in:\n%s", want, got)
 	}
 

@@ -76,7 +76,7 @@ func (r *Runtime) observeCollectionTargets(ctx context.Context) {
 
 	var samples []collectionTargetSample
 
-	err := r.withDB(ctx, func(ctx context.Context) error {
+	err := r.withDB(ctx, dbOperationCollectionSnapshot, func(ctx context.Context) error {
 		rows, err := r.pool.Query(ctx, mustSQL("collection_target_observability.sql"), r.liveFreshnessBudget.Milliseconds())
 		if err != nil {
 			return fmt.Errorf("query collection target snapshot: %w", err)

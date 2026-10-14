@@ -67,7 +67,7 @@ func TestReduceVideoLiveCheckWithoutFactsIsNotAbsence(t *testing.T) {
 }
 
 func TestReduceRejectsKindsWithoutLifecycleFacts(t *testing.T) {
-	for _, kind := range []contract.ObservationKind{contract.KindChannelLiveCheck, contract.KindViewerSample} {
+	for _, kind := range []contract.ObservationKind{contract.KindChannelLiveCheck, contract.KindChannelProfile} {
 		evidence := liveA()
 
 		evidence.Kind = kind

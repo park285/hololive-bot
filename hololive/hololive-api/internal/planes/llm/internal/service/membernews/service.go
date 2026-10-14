@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	newssummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 type Service struct {
@@ -100,7 +101,7 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 
 	members, err := s.repository.GetRoomMembers(ctx, roomID)
 	if err != nil {
-		return nil, fmt.Errorf("get room members: %w", err)
+		return nil, fmt.Errorf("load digest room members: %w", err)
 	}
 
 	if len(members) == 0 {
@@ -220,13 +221,13 @@ func (s *Service) fallbackDigest(roomID string, period model.Period, filtered []
 	observeDigestResult(digest.ResultType, reason)
 
 	attrs := []any{
-		slog.String("room_id", roomID),
+		sharedprivacylog.RoomIDAttr(roomID),
 		slog.String("period", string(period)),
 		slog.String("reason", reason),
 	}
 
 	if cause != nil {
-		attrs = append(attrs, slog.String("error", cause.Error()))
+		attrs = append(attrs, slog.Any("error", cause))
 	}
 
 	s.logger.Warn("Member news digest uses deterministic fallback", attrs...)

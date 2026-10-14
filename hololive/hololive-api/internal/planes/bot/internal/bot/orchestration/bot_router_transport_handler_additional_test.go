@@ -36,11 +36,11 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	appErrors "github.com/kapu/hololive-api/internal/planes/bot/internal/apperrors"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	bottransport "github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	dbtest "github.com/kapu/hololive-dbtest"
-	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -332,7 +332,7 @@ func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 
 		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to send unknown command message")
+		assert.Contains(t, err.Error(), "send unknown command message")
 	})
 }
 
@@ -612,7 +612,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 			MessageID: "m-1",
 		},
 	})
-	require.EqualError(t, err, "execute command: failed to execute command help: boom")
+	require.EqualError(t, err, "execute command: command help: boom")
 
 	select {
 	case msg := <-msgCh:

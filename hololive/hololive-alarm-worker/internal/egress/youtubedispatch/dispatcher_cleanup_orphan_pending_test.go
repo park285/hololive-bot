@@ -55,13 +55,8 @@ func cleanupTestClaimManager(t *testing.T, db *pgxpool.Pool, cfg *dispatchstate.
 	})
 	require.NoError(t, err)
 
-	return &ClaimManager{
-		db:         store.AsDeliveryDB(db),
-		config:     *cfg,
-		logger:     logger,
-		delivery:   store.NewDeliveryRepository(db, logger),
-		transition: transition,
-	}
+	// cleanup 경로는 executor·grouper·audit logger를 쓰지 않는다.
+	return newClaimManager(store.AsDeliveryDB(db), logger, cfg, store.NewDeliveryRepository(db, logger, time.Now), transition, nil, nil, nil)
 }
 
 func outboxRowCount(t *testing.T, db *pgxpool.Pool, id int64) int64 {

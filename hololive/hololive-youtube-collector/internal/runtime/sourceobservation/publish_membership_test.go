@@ -66,7 +66,7 @@ func transitionPublishProjection(ctx context.Context, t *testing.T, q projection
 func TestPublishAcceptsUnrelatedProjectionChange(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	current := transitionPublishProjection(ctx, t, pool, proof.ProjectionGeneration, false)
 
 	insertPublishTarget(ctx, t, pool, current, "UC_OTHER", contract.KindCommunityPage, true)
@@ -87,7 +87,7 @@ func TestPublishAcceptsUnrelatedProjectionChange(t *testing.T) {
 func TestPublishRejectsReaddedOwnTarget(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 	transitionPublishProjection(ctx, t, pool, proof.ProjectionGeneration, true)
 
@@ -103,7 +103,7 @@ func TestPublishRejectsReaddedOwnTarget(t *testing.T) {
 func TestPublishRejectsRetiredGenerationWithoutCurrent(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 	if _, err := pool.Exec(ctx, `
 		UPDATE youtube_collection_projection_generations SET status = 'RETIRED' WHERE generation = $1
@@ -123,7 +123,7 @@ func TestPublishRejectsRetiredGenerationWithoutCurrent(t *testing.T) {
 func TestPublishWaitsForProjectionGuardAndSeesCarriedMembership(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -183,7 +183,7 @@ func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *te
 
 	defer cancel()
 
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	seedPriorLeaseFailure(ctx, t, pool, proof.JobKey)
 
 	beforeTerminal := readLeaseTerminal(ctx, t, pool, proof.JobKey)
@@ -250,7 +250,7 @@ func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *te
 func TestPublishAcceptedIntervalOnlyForAdvancingCheckpoint(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	repo := NewRepository(pool)
 	first := communityEnvelope(t, &proof, "post-1")
 
@@ -270,7 +270,7 @@ func TestPublishAcceptedIntervalOnlyForAdvancingCheckpoint(t *testing.T) {
 func TestLatestCheckpointCursorReturnsDurableCursor(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	repo := NewRepository(pool)
 
 	cursor, err := repo.LatestCheckpointCursor(ctx, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID)
@@ -325,7 +325,7 @@ func assertAcceptedInterval(t *testing.T, got PublishedObservation, outcome Publ
 
 func TestPublishAcceptedIntervalClampsFutureCheckpointClock(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	repo := NewRepository(pool)
 	assertAcceptedInterval(t, mustPublishOne(t, repo, communityEnvelope(t, &proof, "post-1")), PublishInserted, false)
 

@@ -6,3 +6,4 @@ SET valid_until = CASE WHEN validity_refreshed_at IS NULL OR validity_refreshed_
     validity_refreshed_at = GREATEST(validity_refreshed_at, $4),
     eligibility_version = eligibility_version + CASE WHEN $3::boolean THEN 1 ELSE 0 END
 WHERE generation = $1 AND status = 'CURRENT'
+RETURNING (pg_current_xact_id()::text::bigint >> 32)::text || ':' || xmin::text

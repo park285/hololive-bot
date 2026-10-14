@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
@@ -68,7 +69,7 @@ func (h *MemberHandler) updateMemberField[T any](c *gin.Context, spec memberFiel
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -84,14 +85,13 @@ func (h *MemberHandler) updateMemberField[T any](c *gin.Context, spec memberFiel
 			slog.String(spec.logFieldKey, value),
 			slog.Any("error", err),
 		)
-		sharedserver.RespondError(c, 500, spec.repoErrorResponse, nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, spec.repoErrorResponse, nil)
 
 		return
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.safeLogger().Error(spec.cacheErrorLog, slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", spec.cacheErrorLog, err)
 
 		return
 	}
@@ -106,7 +106,7 @@ func (h *MemberHandler) updateMemberField[T any](c *gin.Context, spec memberFiel
 		spec.activityValueKey: value,
 	})
 
-	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: spec.successMessage})
+	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: spec.successMessage})
 }
 
 func (h *MemberHandler) UpdateChannelID(c *gin.Context) {

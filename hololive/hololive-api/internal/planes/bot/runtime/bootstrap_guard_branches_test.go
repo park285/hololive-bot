@@ -82,7 +82,7 @@ func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	runtime, err := buildBotRuntime(t.Context(), &apiconfig.BotPlaneConfig{}, testBootstrapGuardLogger(), &appbootstrap.BotInfrastructure{})
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Contains(t, err.Error(), "failed to create bot")
+	assert.Contains(t, err.Error(), "create bot")
 }
 
 func TestResolveLLMSchedulerClients_Guards(t *testing.T) {

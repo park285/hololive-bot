@@ -24,7 +24,7 @@ func lockLiveSubject(ctx context.Context, tx dbx.Tx, subjectKey string) error {
 func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string) (live.State, error) {
 	state := live.State{Sessions: map[string]live.SessionState{}, PendingEnds: map[string]live.PendingEnd{}}
 	if err := loadLiveSessions(ctx, tx, &state, channelIDs, videoIDs); err != nil {
-		return live.State{}, fmt.Errorf("load live sessions: %w", err)
+		return live.State{}, err
 	}
 
 	ids := make([]string, 0, len(state.Sessions)+len(videoIDs))
@@ -43,8 +43,9 @@ func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string
 		ids = append(ids, videoID)
 	}
 
-	// session 행을 잠근 뒤라 ENDED 판정은 이 트랜잭션 안에서 바뀌지 않는다.
-	if err := loadLiveHeads(ctx, tx, &state, ids, endedSessionIDs(&state)); err != nil {
+	// positive clock을 잠근 뒤에만 replay 필요 여부를 알 수 있다. 먼저 scalar만 읽고,
+	// 부재를 평가하는 관측만 loadLiveAbsencesForPositive에서 필요한 이력을 적재한다.
+	if err := loadLiveHeads(ctx, tx, &state, ids, ids); err != nil {
 		return live.State{}, fmt.Errorf("load live heads: %w", err)
 	}
 
@@ -129,20 +130,6 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 	return session, nil
 }
 
-// endedSessionIDs는 무시한 부재 이력을 읽지 않을 세션이다. ENDED 세션의 이력은 reducer가
-// 읽거나 늘리지 않으므로 미적재 상태로 두어 저장 시 기존 배열을 유지한다.
-func endedSessionIDs(state *live.State) []string {
-	ids := make([]string, 0)
-
-	for videoID := range state.Sessions {
-		if session := state.Sessions[videoID]; session.Present && session.Status == domain.LiveStatusEnded {
-			ids = append(ids, videoID)
-		}
-	}
-
-	return ids
-}
-
 // markHeadlessHistoriesLoaded는 head 행이 없는 세션의 이력을 적재된 빈 이력으로 둔다.
 // 저장된 head가 없으면 저장된 이력도 없다. 미적재로 남기면 reducer가 부재 적용에서 실패한다.
 func markHeadlessHistoriesLoaded(state *live.State) {
@@ -176,6 +163,41 @@ func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs, 
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("load live heads: %w", err)
+	}
+
+	return nil
+}
+
+// loadLiveIgnoredAbsences는 이미 잠근 head의 이력만 읽는다. 미적재와 적재된 빈 배열을 구분한다.
+func loadLiveIgnoredAbsences(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs []string) error {
+	if len(videoIDs) == 0 {
+		return nil
+	}
+
+	rows, err := tx.Query(ctx, mustSQL("repository_live_ignored_absences.sql"), videoIDs)
+	if err != nil {
+		return fmt.Errorf("query ignored absences: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			videoID string
+			slots   []time.Time
+		)
+
+		if err := rows.Scan(&videoID, &slots); err != nil {
+			return fmt.Errorf("scan ignored absences: %w", err)
+		}
+
+		session := state.Sessions[videoID]
+
+		session.IgnoredAbsences = live.LoadedIgnoredAbsences(slots)
+		state.Sessions[videoID] = session
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate ignored absences: %w", err)
 	}
 
 	return nil

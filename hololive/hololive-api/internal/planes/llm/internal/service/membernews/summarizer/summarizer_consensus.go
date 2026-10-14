@@ -155,7 +155,7 @@ func (c *ConsensusSummarizer) runReview(
 	// 결정표 우선순위 1: reviewer 호출 실패
 	if err != nil {
 		c.logger.Warn("Consensus stage 2: reviewer failed, returning primary",
-			slog.String("error", err.Error()),
+			slog.Any("error", err),
 			slog.Duration("latency", reviewLatency),
 		)
 
@@ -210,7 +210,7 @@ func (c *ConsensusSummarizer) runAdjudication(
 
 	if err != nil {
 		c.logger.Warn("Consensus stage 3: adjudicator failed, returning primary",
-			slog.String("error", err.Error()), slog.Duration("latency", adjLatency))
+			slog.Any("error", err), slog.Duration("latency", adjLatency))
 
 		return nil
 	}
@@ -267,7 +267,7 @@ func (c *ConsensusSummarizer) review(
 
 	if err := jsonv2.Unmarshal([]byte(raw), &verdict); err != nil {
 		c.logger.Warn("Consensus review: JSON parse failed",
-			slog.String("error", err.Error()),
+			slog.Any("error", err),
 		)
 
 		return nil, fmt.Errorf("unmarshal review verdict: %w: %w", errReviewVerdictParse, err)
@@ -309,7 +309,7 @@ func (c *ConsensusSummarizer) adjudicate(
 
 	if err := jsonv2.Unmarshal([]byte(raw), &response); err != nil {
 		c.logger.Warn("Consensus adjudicator: JSON parse failed",
-			slog.String("error", err.Error()),
+			slog.Any("error", err),
 		)
 
 		return nil, fmt.Errorf("unmarshal adjudicator response: %w: %w", errAdjudicatorResponseParse, err)

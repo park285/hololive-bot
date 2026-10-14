@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
@@ -49,6 +50,8 @@ type Dependencies struct {
 	MessageStrings *messagestrings.Store
 	// MemberNames는 알림 표시명의 PostgreSQL 정본 조회다. Valkey 장애가 표시명을 바꾸거나 발송을 막지 않게 한다.
 	MemberNames format.MemberNameSource
+	// Now는 outbox 집계 sent_at 시계다. nil이면 실시계(time.Now)를 쓴다.
+	Now func() time.Time
 }
 
 // NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
@@ -119,7 +122,12 @@ func assembleDispatcher(
 	telemetryRepository *telemetry.Repository,
 	transitionStore *store.TransitionStore,
 ) *Dispatcher {
-	deliveryRepo := store.NewDeliveryRepository(deps.DB, logger)
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
+
+	deliveryRepo := store.NewDeliveryRepository(deps.DB, logger, now)
 
 	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config)
@@ -134,13 +142,14 @@ func assembleDispatcher(
 	claimManager.setExecutor(sendEngine)
 
 	return &Dispatcher{
-		claim:     claimManager,
-		send:      sendEngine,
-		telemetry: tp,
-		audit:     al,
-		metrics:   metricsRecorder,
-		grouper:   grouper,
-		logger:    logger,
-		config:    config,
+		claim:           claimManager,
+		send:            sendEngine,
+		telemetry:       tp,
+		audit:           al,
+		metrics:         metricsRecorder,
+		grouper:         grouper,
+		logger:          logger,
+		config:          config,
+		cleanupInterval: outboxCleanupLoopInterval,
 	}
 }

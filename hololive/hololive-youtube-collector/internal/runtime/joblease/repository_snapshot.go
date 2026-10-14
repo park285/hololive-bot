@@ -33,7 +33,7 @@ func (r *Repository) LoadTargetSnapshot(
 		return loadTargetSnapshotTx(ctx, tx, proof, spec, job, maxRosterRows)
 	})
 	if err != nil {
-		return collection.TargetSnapshot{}, fmt.Errorf("in pgx tx with result: %w", err)
+		return collection.TargetSnapshot{}, fmt.Errorf("read lease target roster: %w", err)
 	}
 
 	return out, nil

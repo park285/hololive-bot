@@ -11,7 +11,7 @@ func persistReconcileConflict(
 	ctx context.Context,
 	tx dbx.Tx,
 	observation *Observation,
-	entityKind, entityKey, fieldName, existingSHA, attemptedSHA, decision string,
+	entityKind, entityKey, fieldName, existingSHA, attemptedSHA string,
 ) error {
 	_, err := tx.Exec(
 		ctx,
@@ -28,7 +28,7 @@ func persistReconcileConflict(
 		observation.EffectiveAt,
 		existingSHA,
 		attemptedSHA,
-		decision,
+		"KEEP_EXISTING",
 	)
 	if err != nil {
 		return fmt.Errorf("insert reconcile conflict: %w", err)

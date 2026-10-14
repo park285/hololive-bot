@@ -36,20 +36,23 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-var outboxCleanupLoopInterval = 1 * time.Hour
+// outboxCleanupLoopInterval은 운영 dispatcher의 완료 알림 정리 주기다.
+const outboxCleanupLoopInterval = 1 * time.Hour
 
 type Dispatcher struct {
-	claim         *ClaimManager
-	send          *SendEngine
-	telemetry     *TelemetryProcessor
-	audit         *AuditLogger
-	metrics       *MetricsRecorder
-	grouper       *OutboxGrouper
-	logger        *slog.Logger
-	config        dispatchstate.Config
-	started       atomic.Bool
-	workerTracker *workercontract.ExecutorTracker
-	workerTotals  *workercontract.Counters
+	claim     *ClaimManager
+	send      *SendEngine
+	telemetry *TelemetryProcessor
+	audit     *AuditLogger
+	metrics   *MetricsRecorder
+	grouper   *OutboxGrouper
+	logger    *slog.Logger
+	config    dispatchstate.Config
+	// cleanupInterval은 cleanupLoop 주기다. assembleDispatcher가 outboxCleanupLoopInterval로 채운다.
+	cleanupInterval time.Duration
+	started         atomic.Bool
+	workerTracker   *workercontract.ExecutorTracker
+	workerTotals    *workercontract.Counters
 
 	testHooks dispatcherTestHooks
 }
@@ -69,7 +72,7 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
-	if d == nil || d.claim == nil {
+	if d == nil {
 		return
 	}
 
@@ -191,10 +194,6 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 }
 
 func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
-	if d == nil || d.claim == nil {
-		return
-	}
-
 	if maxRounds <= 0 {
 		maxRounds = 1
 	}
@@ -208,10 +207,6 @@ func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
 }
 
 func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (processed, ok bool) {
-	if d == nil || d.claim == nil {
-		return false, false
-	}
-
 	outboxItems, err := d.claim.claimOutboxBatch(ctx)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
@@ -225,10 +220,6 @@ func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (proc
 }
 
 func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, round int) int {
-	if d == nil || d.claim == nil {
-		return 0
-	}
-
 	var processed int
 
 	if len(outboxItems) == 0 {
@@ -257,10 +248,6 @@ func (d *Dispatcher) reviveLoop(ctx context.Context) {
 }
 
 func (d *Dispatcher) reviveOnce(ctx context.Context) {
-	if d == nil || d.claim == nil {
-		return
-	}
-
 	revived, err := d.claim.reviveStaleFailedOutbox(ctx, d.config.ReviveFreshnessWindow, d.config.BatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to revive stale failed outbox items", slog.Any("error", err))
@@ -277,7 +264,7 @@ func (d *Dispatcher) reviveOnce(ctx context.Context) {
 
 // cleanupLoop: 오래된 완료 알림 정리 루프.
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
-	if err := lifecycle.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
+	if err := lifecycle.RunTickerLoop(ctx, d.cleanupInterval, func(context.Context) error {
 		d.cleanup(ctx)
 		d.testHooks.fireCleanup()
 

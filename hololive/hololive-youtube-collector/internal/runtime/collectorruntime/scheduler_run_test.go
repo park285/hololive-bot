@@ -443,11 +443,11 @@ func TestHandleRunErrorPromotesOnlyClassifiedFatalErrors(t *testing.T) {
 			wantClass: contract.ClassInternal,
 		},
 		{
-			name:      "provider body read failure through FromContext",
+			name:      "provider connection refused through FromContext is transient",
 			err:       collecterr.FromContext(fmt.Errorf("read holodex: %w", syscall.ECONNREFUSED)),
 			wantFatal: false,
-			wantCode:  contract.ErrorInternalInvariant,
-			wantClass: contract.ClassInternal,
+			wantCode:  contract.ErrorCollectionFailed,
+			wantClass: contract.ClassTransient,
 		},
 		{
 			name:      "classified transient failure",

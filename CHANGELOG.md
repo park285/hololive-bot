@@ -8,6 +8,31 @@
 
 ## 미출시
 
+## v10.1.0 - 2026-10-14
+
+- **검토 SQL 원본 공유:** observability·live-check가 활성 session/head/availability의 scalar 원본을 함께 쓰고, live-check는 미래 UPCOMING을 보조 원본 조회 전에 제외합니다. 판정 결과·신선도·한도·불일치 진단은 유지합니다.
+- **불변 영수증 타입 투영:** migration 310이 기존 영수증 `facts`에서 비교용 `semantic_value`를 저장 생성 열로 만듭니다. 현재 원본은 캐시하지 않습니다. JSON의 누락/추가 키·다른 scalar 타입은 정확한 왕복 검사로 비일치 처리하며, 숫자 정밀도·NULL object·최신 일치 영수증 의미를 유지합니다. 타입/열 충돌은 migration을 중단합니다.
+- **적용 경계:** 310은 작은 영수증 사실 표를 `ACCESS EXCLUSIVE`로 다시 쓰며 `lock_timeout=3s`를 유지합니다. 새 API보다 먼저 적용하고 원본 영수증은 수정·삭제하지 않습니다. collector·worker에는 변경이 없습니다.
+- **알림 시각 수정(alarm-worker):** tier 스케줄러가 채널 점검 판정과 상태 갱신에 서로 다른 시각을 써서 Tier1 채널을 격번 tick마다 건너뛰었습니다. 그래서 5분 전 알림의 절반 가까이가 약 60초 늦거나 빠졌습니다. 이제 iteration 시각 하나를 씁니다.
+- **생일 방송 중복 발행 제거(alarm-worker):** 30분마다 재평가할 때 이미 `sent`로 받은 방은 다시 발행하지 않습니다. 이전에는 publish의 69%가 dedupe로 버려지는 중복이었습니다.
+- **`alarm_upcoming_checkpoints` 삭제:** worker는 더 이상 이 표에 쓰지 않고, migration 311이 표를 지웁니다. 읽는 곳은 없었습니다. 이 표에 쓰는 10.0.0 이하 worker가 실행 중이면 upcoming 후보 저장이 실패하므로, 새 worker로 바꾼 뒤 311을 적용합니다. 적용 뒤 worker를 10.0.0 이하로 되돌리려면 표를 먼저 다시 만들어야 합니다.
+- **bot durable worker(hololive-api):** 유휴 worker 중 하나만 polling하고 나머지는 wake를 기다립니다. 유휴 claim이 약 16/s에서 줄어듭니다. 행을 잡으면 처리 전에 다음 worker를 깨워 polling 안전망이 끊기지 않습니다.
+- **설정(alarm-worker):** `ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`, `CELEBRATION_CHECK_HOUR_KST`, `CELEBRATION_RUN_INTERVAL_MS`, `BIRTHDAY_STREAM_*_MS`는 키가 있는데 비어 있거나 공백뿐이면 기본값 대신 기동에 실패합니다. 배포 전 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다.
+- **YouTube plane DB 시간 예산(hololive-api):** claim·live end·projection refresh·replay도 `TransactionTimeout`(기본 10초) 안에서 끝나야 하며, 넘으면 슬롯을 돌려주고 오류로 드러냅니다. 기동 중 첫 projection refresh가 이 시한을 넘으면 YouTube plane 생성이 실패합니다.
+- **관측:** `hololive_db_pool_*`, `hololive_http_client_*`, `hololive_youtube_plane_db_slot_wait_seconds`·`_hold_seconds`를 추가합니다. `hololive_youtube_plane_retention_tick_seconds`에 `phase`(source, projection) 라벨이 붙습니다. YouTube plane consume·retention 카운터의 알려진 라벨을 0으로 미리 만들어 첫 사건도 `increase()`에 잡힙니다. `hololive_alarm_subscriber_db_fallback_total`은 cache가 있는데 확정하지 못한 DB 조회만 셉니다.
+- **collector 로그·분류:** 수송 타임아웃과 DB 연결 실패(연결 거부, SQLSTATE 08·57P01~03)를 내부 불변식 위반이 아닌 timeout·일시 장애로 분류합니다. DB 장애 때 1초마다 반복되던 후보 탐색 WARN을 묶어 남기고, 종료 중 스스로 취소한 잡은 실패로 기록하지 않습니다.
+- **성능:** calendar 명령이 멤버 사진을 4개씩 병렬로 받습니다. 첫 렌더가 6.7 s였습니다. admin 통계 수집은 singleflight로 합칩니다.
+- **정리:** 오류 문구를 `action: context` 형식으로, slog error 속성을 한 형태로 맞춥니다. 관리자 activity 로그를 포함해 room_id를 가명화합니다. shared `pkg/util`을 해체하고, 한 모듈만 쓰던 shared 패키지·상수(`apperrors`, `imagehost`, `cleanupctx`, `sendoutcome`, alarm tier 시각 등)를 소유 모듈로 옮기며 중복 구현을 공용 facility로 바꿉니다.
+
+## v10.0.0 - 2026-10-14
+
+- **YouTube SQL hot path:** 활성 방송 집합을 과거 종료 이력과 분리하고, 검토 영수증은 typed timestamp의 의미 사실을 집합으로 비교합니다. Projection heartbeat는 현재 세대 범위에서 바뀐 `not_before`만 갱신하며, 커밋된 세대·header 버전·reasons 해시가 같으면 reasons 재조회를 생략합니다.
+- **Live 관측:** 일반 `PARTIAL`은 쓰지 않는 ignored-absence 배열과 absence slot을 읽지 않습니다. 최초 positive replay와 scoped negative는 필요한 이력을 계속 읽고, 종료 head 저장은 배열을 비웁니다. 현재 slot만 필요한 조회는 시간 인덱스를 사용하는 별도 SQL입니다.
+- **Collector lease:** 기존 job의 획득은 projection guard와 통합 admission/acquire SQL로 처리하며 무의미한 INSERT를 없앱니다. 최초 생성에 성공한 경우에만 추가 UPDATE로 충돌 대기 이후의 새 TTL을 부여합니다. 잠금·membership·fence·오류 판정은 유지합니다.
+- **감사·퇴역 데이터 계약 변경:** application은 원본 삭제 시 `ON DELETE CASCADE`로 즉시 삭제하며 고아 3일 유예·중복 5열·별도 고아 보존 경로를 제거합니다. 퇴역 viewer 소비·재처리 계약과 viewer 표본 3종·구 통계 2종을 제거합니다. 살아 있는 관측·재처리·projection·lease 의무가 남으면 삭제 migration이 중단됩니다.
+- **저장 공간:** source 관측과 live/content absence의 두 SHA-256 열은 `bytea(32 bytes)`로 저장하고 Go·공개 해시 표현은 소문자 hex를 유지합니다. 종료 배열·동결 pending 잔재를 배치 정리하고, 주요 TOAST 열 및 DB 기본 압축을 `lz4`로 지정합니다. 기존 TOAST 값이 설정 변경만으로 재압축되는 것은 아닙니다. 퇴역 Projection 보존은 승인된 **2일**이며 활성 보호 조건은 유지합니다.
+- **배포 경계:** migration 순서는 `304 → 305 → 306 → 309 → 307 → 308`입니다. `309`는 고아 인덱스를 제거하는 단일 concurrent 문장입니다. 구 publisher/consumer를 모두 중지한 점검 창에서 스키마를 변경하고 새 API·worker·collector/issuer fleet를 시작해야 합니다. 삭제 데이터와 부분 완료된 binary-type cutover는 구 이미지로 되돌릴 수 없습니다. 이번 작업은 사용자가 새 DB 백업 없이 적용하도록 승인했습니다.
+
 ## v9.3.2 - 2026-10-14
 
 - **발송 backlog 관측 주기 분리(alarm-worker):** 발송 backlog·격리 집계 조회를 retention runner에서 떼어 별도 runner가 60초마다(조회 시한 10초) 실행합니다. 이전에는 retention 주기(운영 기본 1시간)에만 갱신되어 `HololiveOutboxStale` 같은 경보가 최대 1시간 묵은 값을 평가했습니다. retention 주기·설정은 바꾸지 않으며, 관측 실패는 runner를 멈추지 않고 실패 counter·`alarm_dispatch_pg_backlog_snapshot_success=0`으로 드러납니다.

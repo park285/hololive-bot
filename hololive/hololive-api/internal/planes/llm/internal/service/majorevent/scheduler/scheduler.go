@@ -135,7 +135,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if _, err := s.SendWeeklyNotification(ctx); err != nil {
-				s.digest.Logger.Error("Failed to send weekly notification", slog.String("error", err.Error()))
+				s.digest.Logger.Error("Failed to send weekly notification", slog.Any("error", err))
 			}
 		},
 	})
@@ -203,7 +203,7 @@ func (s *Scheduler) weeklyNotificationInputs(
 ) (weeklyCollected, bool, error) {
 	rooms, err := s.repository.GetSubscribedRooms(ctx)
 	if err != nil {
-		return weeklyCollected{}, false, fmt.Errorf("get subscribed rooms: %w", err)
+		return weeklyCollected{}, false, fmt.Errorf("collect weekly subscribed rooms: %w", err)
 	}
 
 	if len(rooms) == 0 {
@@ -234,37 +234,74 @@ func (s *Scheduler) weeklyNotificationInputs(
 }
 
 func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) (triggercontracts.Result, error) {
-	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
-
-	message, err := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
-	if err != nil {
-		return triggercontracts.Result{}, fmt.Errorf("execute weekly notification: format message: %w", err)
-	}
-
-	counts, shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
+	return executePeriodNotification(ctx, periodNotification{
 		outboxRepository: s.outboxRepository,
 		outputGuard:      s.outputGuard,
 		logger:           s.digest.Logger,
 		rooms:            c.rooms,
-		kind:             domain.DeliveryKindMajorEventWeekly,
+		events:           c.events,
 		periodKey:        weekKey,
-		message:          message,
-		eventCount:       len(c.events),
+		kind:             domain.DeliveryKindMajorEventWeekly,
+		message:          s.weeklyNotificationMessage,
+		mark:             s.repository.MarkEventsAsNotified,
+		errorPrefix:      "execute weekly notification",
 		enqueueLogMsg:    "Weekly notification enqueue result",
 		deferLogMsg:      "Partial room enqueue failure, deferring event marking",
+		markErrorLog:     "Failed to mark events as notified",
+	})
+}
+
+// periodNotification은 주간·월간 주요 일정 알림이 공유하는 실행 흐름(메시지 생성, 방별 enqueue, 이벤트 표시)의 차이점이다.
+type periodNotification struct {
+	outboxRepository outboxEnqueuer
+	outputGuard      *outputguard.Guard
+	logger           *slog.Logger
+	rooms            []*domain.EventRoomSubscription
+	events           []*domain.MajorEvent
+	periodKey        string
+	kind             domain.DeliveryOutboxKind
+	message          func(ctx context.Context, events []domain.MajorEvent, periodKey string) (string, error)
+	mark             func(ctx context.Context, eventIDs []int, periodKey string) error
+	errorPrefix      string
+	enqueueLogMsg    string
+	deferLogMsg      string
+	markErrorLog     string
+}
+
+// executePeriodNotification은 enqueue 결과를 Result로 돌려주고, 일부 방 enqueue가 실패하면 이벤트 표시를 미룬다.
+// 표시 실패는 이미 enqueue된 알림을 되돌릴 수 없으므로 오류 대신 로그로만 남긴다.
+func executePeriodNotification(ctx context.Context, n periodNotification) (triggercontracts.Result, error) {
+	domainEvents, eventIDs := toDomainEventsAndIDs(n.events)
+
+	message, err := n.message(ctx, domainEvents, n.periodKey)
+	if err != nil {
+		return triggercontracts.Result{}, fmt.Errorf("%s: format message: %w", n.errorPrefix, err)
+	}
+
+	counts, shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
+		outboxRepository: n.outboxRepository,
+		outputGuard:      n.outputGuard,
+		logger:           n.logger,
+		rooms:            n.rooms,
+		kind:             n.kind,
+		periodKey:        n.periodKey,
+		message:          message,
+		eventCount:       len(n.events),
+		enqueueLogMsg:    n.enqueueLogMsg,
+		deferLogMsg:      n.deferLogMsg,
 	})
 	result := triggercontracts.NewResult(counts.Sent, counts.Skipped, counts.Failed)
 
 	if err != nil {
-		return result, fmt.Errorf("execute weekly notification: %w", err)
+		return result, fmt.Errorf("%s: %w", n.errorPrefix, err)
 	}
 
 	if !shouldMark {
 		return result, nil
 	}
 
-	if err := s.repository.MarkEventsAsNotified(ctx, eventIDs, weekKey); err != nil {
-		s.digest.Logger.Error("Failed to mark events as notified", slog.String("error", err.Error()))
+	if err := n.mark(ctx, eventIDs, n.periodKey); err != nil {
+		n.logger.Error(n.markErrorLog, slog.Any("error", err))
 	}
 
 	return result, nil

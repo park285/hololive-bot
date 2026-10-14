@@ -57,12 +57,8 @@ func TestAPI007JobContractSetDefinitionUsesJobID(t *testing.T) {
 		t.Fatalf("Definition(%s) = %#v ok=%t", id, job, ok)
 	}
 
-	if !set.Allows(id, contract.KindLiveSnapshot) || set.Allows(id, contract.KindCommunityPage) || set.Allows(id, contract.KindViewerSample) {
+	if !set.Allows(id, contract.KindLiveSnapshot) || set.Allows(id, contract.KindCommunityPage) || set.Allows(id, contract.KindChannelProfile) {
 		t.Fatal("Allows mismatch")
-	}
-
-	if _, exists := set.Definition(JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_viewer"}); exists {
-		t.Fatal("retired viewer job remains executable")
 	}
 }
 

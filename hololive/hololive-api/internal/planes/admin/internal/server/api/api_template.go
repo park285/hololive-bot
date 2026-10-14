@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -92,12 +93,12 @@ func (h *TemplateHandler) GetTemplates(c *gin.Context) {
 
 	templates, err := h.templateAdmin.List(ctx, keyPtr, channelPtr)
 	if err != nil {
-		sharedserver.RespondError(c, 500, "failed to list templates", nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, "failed to list templates", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, templateListResponse{Templates: templates})
+	ginjson.Respond(c, http.StatusOK, templateListResponse{Templates: templates})
 }
 
 func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
@@ -113,18 +114,17 @@ func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
 	defaultTmpl, overrides, err := h.templateAdmin.GetByKey(ctx, key)
 	if err != nil {
 		if errors.Is(err, template.ErrTemplateKeyNotFound) {
-			sharedserver.RespondError(c, 404, "template not found", nil)
+			sharedserver.RespondError(c, http.StatusNotFound, "template not found", nil)
 
 			return
 		}
 
-		h.safeLogger().Error("Failed to get template", slog.String("key", string(key)), slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "failed to get template", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "failed to get template", "Failed to get template", err, slog.String("key", string(key)))
 
 		return
 	}
 
-	ginjson.Respond(c, 200, templateDetailResponse{
+	ginjson.Respond(c, http.StatusOK, templateDetailResponse{
 		TemplateKey: key,
 		Default:     defaultTmpl,
 		Overrides:   overrides,
@@ -136,7 +136,7 @@ func (h *TemplateHandler) UpsertTemplate(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -163,7 +163,7 @@ func (h *TemplateHandler) UpsertTemplate(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, tmpl)
+	ginjson.Respond(c, http.StatusOK, tmpl)
 }
 
 func (h *TemplateHandler) respondTemplateSaveError(c *gin.Context, key domain.TemplateKey, err error) {
@@ -185,17 +185,17 @@ func (h *TemplateHandler) DeleteTemplateOverride(c *gin.Context) {
 	err := h.templateAdmin.DeleteOverride(ctx, key, channelID)
 	if err != nil {
 		if errors.Is(err, template.ErrChannelIDRequired) {
-			sharedserver.RespondError(c, 400, "channel_id required for delete (cannot delete default template)", nil)
+			sharedserver.RespondError(c, http.StatusBadRequest, "channel_id required for delete (cannot delete default template)", nil)
 
 			return
 		}
 
-		sharedserver.RespondError(c, 500, "failed to delete override", nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, "failed to delete override", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, messageResponse{Message: "override deleted; default template is now active"})
+	ginjson.Respond(c, http.StatusOK, messageResponse{Message: "override deleted; default template is now active"})
 }
 
 func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
@@ -203,7 +203,7 @@ func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -224,7 +224,7 @@ func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, templatePreviewResponse{
+	ginjson.Respond(c, http.StatusOK, templatePreviewResponse{
 		Rendered:       rendered,
 		SampleDataUsed: sampleData,
 	})
@@ -238,13 +238,13 @@ func (h *TemplateHandler) respondTemplatePreviewError(c *gin.Context, key domain
 func respondTemplateMutationError(c *gin.Context, err error, defaultMessage string) {
 	switch {
 	case errors.Is(err, template.ErrTemplateKeyNotFound):
-		sharedserver.RespondError(c, 404, "template not found", nil)
+		sharedserver.RespondError(c, http.StatusNotFound, "template not found", nil)
 	case errors.Is(err, template.ErrTemplateParseError):
-		sharedserver.RespondError(c, 400, "template parse error", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "template parse error", nil)
 	case errors.Is(err, template.ErrTemplateRenderError):
-		sharedserver.RespondError(c, 400, "template render error", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "template render error", nil)
 	default:
-		sharedserver.RespondError(c, 500, defaultMessage, nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, defaultMessage, nil)
 	}
 }
 
@@ -266,12 +266,12 @@ func (h *TemplateHandler) GetTemplateRevisions(c *gin.Context) {
 
 	revisions, err := h.templateAdmin.GetRevisions(ctx, key, channelPtr)
 	if err != nil {
-		sharedserver.RespondError(c, 500, "failed to get revisions", nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, "failed to get revisions", nil)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, templateRevisionsResponse{
+	ginjson.Respond(c, http.StatusOK, templateRevisionsResponse{
 		TemplateKey: key,
 		ChannelID:   channelPtr,
 		Revisions:   revisions,
@@ -290,7 +290,7 @@ func (h *TemplateHandler) GetTemplateRevision(c *gin.Context) {
 
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		sharedserver.RespondError(c, 400, "invalid revision id", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid revision id", nil)
 
 		return
 	}
@@ -298,16 +298,15 @@ func (h *TemplateHandler) GetTemplateRevision(c *gin.Context) {
 	revision, err := h.templateAdmin.GetRevisionByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, template.ErrRevisionNotFound) {
-			sharedserver.RespondError(c, 404, "revision not found", nil)
+			sharedserver.RespondError(c, http.StatusNotFound, "revision not found", nil)
 
 			return
 		}
 
-		h.safeLogger().Error("Failed to get revision", slog.Int64("id", id), slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "failed to get revision", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "failed to get revision", "Failed to get revision", err, slog.Int64("id", id))
 
 		return
 	}
 
-	ginjson.Respond(c, 200, revision)
+	ginjson.Respond(c, http.StatusOK, revision)
 }

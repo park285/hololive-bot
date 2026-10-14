@@ -15,7 +15,7 @@ import (
 func TestRepeatedPartialCollisionAdvancesSlotAndKeepsFreshVideos(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, testChannelID, "youtubejs_content")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "youtubejs_content")
 	leases := partialSlotLeaseRepository(t, pool)
 	repo := NewRepository(pool)
 	spec := joblease.JobSpec{

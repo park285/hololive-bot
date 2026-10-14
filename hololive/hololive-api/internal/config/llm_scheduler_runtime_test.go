@@ -130,7 +130,7 @@ func TestLoadRuntimeCapturesInternalClientAndMemberNewsInputs(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 	settingstest.SetRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "development")
-	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
+	t.Setenv("ALARM_INTERNAL_URL", " http://127.0.0.1:30007 ")
 	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", " /internal-ca.crt ")
 	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", " internal.example ")
 	t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", " /member-news-accounts.json ")
@@ -151,5 +151,9 @@ func TestLoadRuntimeCapturesInternalClientAndMemberNewsInputs(t *testing.T) {
 
 	if config.LLM.MemberNewsXAllowlistPath != "/member-news-accounts.json" {
 		t.Fatalf("LLM member news allowlist path = %q, want trimmed startup path", config.LLM.MemberNewsXAllowlistPath)
+	}
+
+	if config.Bot.AlarmServiceURL != "http://127.0.0.1:30007" || config.Admin.AlarmServiceURL != config.Bot.AlarmServiceURL {
+		t.Fatalf("alarm service URL bot=%q admin=%q, want the same trimmed startup value", config.Bot.AlarmServiceURL, config.Admin.AlarmServiceURL)
 	}
 }

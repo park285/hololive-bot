@@ -261,7 +261,7 @@ func clockLiveClaimOptions() consumekit.ClaimOptions {
 	return consumekit.ClaimOptions{
 		ConsumerName:  "youtube-live-processor",
 		LeaseOwner:    clockAPILeaseOwner,
-		Kinds:         []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindSchedule},
+		Kinds:         []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindSchedule},
 		Limit:         10,
 		LeaseDuration: 30 * time.Second,
 	}

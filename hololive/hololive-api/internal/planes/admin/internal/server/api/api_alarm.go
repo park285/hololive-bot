@@ -24,12 +24,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -54,13 +56,12 @@ func (h *AlarmHandler) GetAlarms(c *gin.Context) {
 	// 관리 목록은 alarm-worker가 PG에서 (방, 채널) 단위로 만든다.
 	alarmKeys, err := h.alarm.GetAllAlarmKeys(ctx)
 	if err != nil {
-		h.safeLogger().Error("Failed to get alarm keys", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to get alarms", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to get alarms", "Failed to get alarm keys", err)
 
 		return
 	}
 
-	ginjson.Respond(c, 200, alarmListResponse{Status: "ok", Alarms: alarmKeys})
+	ginjson.Respond(c, http.StatusOK, alarmListResponse{Status: "ok", Alarms: alarmKeys})
 }
 
 func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
@@ -71,7 +72,7 @@ func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
@@ -85,16 +86,16 @@ func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
 
 	removed, err := h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, nil)
 	if err != nil {
-		h.safeLogger().Error("Failed to delete alarm", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to delete alarm", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to delete alarm", "Failed to delete alarm", err)
 
 		return
 	}
 
-	h.logActivity("alarm_delete", fmt.Sprintf("Alarm deleted: room=%s channel=%s", req.RoomID, req.ChannelID), map[string]any{
-		"room_id":    req.RoomID,
+	roomToken := sharedprivacylog.IdentifierToken(req.RoomID)
+	h.logActivity("alarm_delete", fmt.Sprintf("Alarm deleted: room=%s channel=%s", roomToken, req.ChannelID), map[string]any{
+		"room_id":    roomToken,
 		"channel_id": req.ChannelID,
 	})
 
-	ginjson.Respond(c, 200, alarmDeleteResponse{Status: "ok", Removed: removed})
+	ginjson.Respond(c, http.StatusOK, alarmDeleteResponse{Status: "ok", Removed: removed})
 }

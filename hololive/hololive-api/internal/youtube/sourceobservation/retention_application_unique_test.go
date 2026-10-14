@@ -3,55 +3,35 @@ package sourceobservation
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-func TestApplicationPartialUniqueKeepsActiveIdempotenceAndOrphanHistory(t *testing.T) {
+func TestApplicationIdempotenceAndCascade(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ids := publishProcessedObservations(t.Context(), t, pool, NewRepository(pool), 2)
-	insert := `
-		INSERT INTO source_observation_applications (
-			observation_id, provider, observation_kind, subject_key, evidence_sha256,
-			entity_kind, entity_key, decision, effective_at
-		) VALUES ($1, 'youtubejs', 'community_page', 'UC_RETENTION', repeat('a', 64),
-			'retention_test', 'same-entity', 'APPLIED', NOW())
+	insert := `INSERT INTO source_observation_applications
+		(observation_id, entity_kind, entity_key, decision)
+		VALUES ($1, 'retention_test', 'same-entity', 'APPLIED')
 		ON CONFLICT (observation_id, entity_kind, entity_key)
-			WHERE observation_id IS NOT NULL DO NOTHING`
+		WHERE observation_id IS NOT NULL DO NOTHING`
 
-	first, err := pool.Exec(t.Context(), insert, ids[0])
-	if err != nil || first.RowsAffected() != 1 {
-		t.Fatalf("first active application: %v rows=%d", err, first.RowsAffected())
+	for i, id := range []int64{ids[0], ids[0], ids[1]} {
+		tag, err := pool.Exec(t.Context(), insert, id)
+		require.NoError(t, err)
+		require.EqualValues(t, []int{1, 0, 1}[i], tag.RowsAffected())
 	}
 
-	duplicate, err := pool.Exec(t.Context(), insert, ids[0])
-	if err != nil || duplicate.RowsAffected() != 0 {
-		t.Fatalf("duplicate active application: %v rows=%d", err, duplicate.RowsAffected())
-	}
+	_, err := pool.Exec(t.Context(), insert, nil)
+	require.Error(t, err, "감사는 원본 없이 생성할 수 없다")
 
-	second, err := pool.Exec(t.Context(), insert, ids[1])
-	if err != nil || second.RowsAffected() != 1 {
-		t.Fatalf("second observation application: %v rows=%d", err, second.RowsAffected())
-	}
+	_, err = pool.Exec(t.Context(), `DELETE FROM source_observations WHERE id=$1`, ids[0])
+	require.NoError(t, err)
 
-	for range 2 {
-		orphan, err := pool.Exec(t.Context(), insert, nil)
-		if err != nil || orphan.RowsAffected() != 1 {
-			t.Fatalf("orphan history insert: %v rows=%d", err, orphan.RowsAffected())
-		}
-	}
+	var remaining int
 
-	var active, orphan int
-
-	if err := pool.QueryRow(t.Context(), `
-		SELECT count(*) FILTER (WHERE observation_id IS NOT NULL),
-		       count(*) FILTER (WHERE observation_id IS NULL)
-		FROM source_observation_applications
-		WHERE entity_kind='retention_test' AND entity_key='same-entity'
-	`).Scan(&active, &orphan); err != nil {
-		t.Fatal(err)
-	}
-
-	if active != 2 || orphan != 2 {
-		t.Fatalf("applications: active=%d orphan=%d, want 2 each", active, orphan)
-	}
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM source_observation_applications
+		WHERE entity_kind='retention_test' AND entity_key='same-entity'`).Scan(&remaining))
+	require.Equal(t, 1, remaining)
 }

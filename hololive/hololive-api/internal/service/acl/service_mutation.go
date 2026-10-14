@@ -44,7 +44,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	}
 
 	if err := s.store.UpsertSetting(ctx, dbKeyEnabled, fmt.Sprintf("%t", enabled)); err != nil {
-		return fmt.Errorf("failed to save ACL enabled setting: %w", err)
+		return fmt.Errorf("save ACL enabled setting: %w", err)
 	}
 
 	s.mu.Lock()
@@ -79,7 +79,7 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	}
 
 	if err := s.store.UpsertSetting(ctx, dbKeyMode, string(normalizedMode)); err != nil {
-		return fmt.Errorf("failed to save ACL mode setting: %w", err)
+		return fmt.Errorf("save ACL mode setting: %w", err)
 	}
 
 	s.mu.Lock()
@@ -125,7 +125,7 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	s.mu.Unlock()
 
 	if err := s.store.CreateRoom(ctx, room, listType); err != nil {
-		return false, fmt.Errorf("failed to add room to database: %w", err)
+		return false, fmt.Errorf("add room to database: %w", err)
 	}
 
 	s.mu.Lock()
@@ -177,7 +177,7 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	}
 
 	if err := s.store.DeleteRoom(ctx, room, listType); err != nil {
-		return false, fmt.Errorf("failed to remove room from database: %w", err)
+		return false, fmt.Errorf("remove room from database: %w", err)
 	}
 
 	s.mu.Lock()

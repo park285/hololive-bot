@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -118,7 +118,7 @@ func TestFilterLiveCatchupSuppressedRoomsFailsOpenOnInvalidMarker(t *testing.T) 
 
 func TestFilterLiveCatchupSuppressedRoomsLeavesNotCoveredUncounted(t *testing.T) {
 	item, scheduledAt := newLiveCatchupSuppressionItem(t)
-	expiredAt := time.Now().UTC().Add(-constants.LiveCatchupSuppressWindow - time.Minute).Format(time.RFC3339)
+	expiredAt := time.Now().UTC().Add(-tier.LiveCatchupSuppressWindow - time.Minute).Format(time.RFC3339)
 	markers := map[string]string{
 		"room-empty":   "",
 		"room-expired": expiredAt,
