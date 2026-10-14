@@ -96,7 +96,6 @@ func persistPremiereDecision(
 			conflict.FieldName,
 			conflict.ExistingValueSHA256,
 			conflict.AttemptedValueSHA256,
-			"KEEP_EXISTING",
 		); err != nil {
 			return fmt.Errorf("persist Premiere conflict: %w", err)
 		}

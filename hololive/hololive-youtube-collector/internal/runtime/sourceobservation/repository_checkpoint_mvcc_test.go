@@ -21,13 +21,7 @@ type checkpointTupleVersion struct {
 func TestPublishBatchDuplicateDoesNotRewriteCheckpointTuple(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t,
-		pool,
-		contract.ProviderYouTubeJS,
-		contract.KindCommunityPage,
-		testChannelID,
-		"community_collect",
-	)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	envelope := communityEnvelope(t, &proof, "post-1")
 	repo := NewRepository(pool)
 
@@ -62,13 +56,7 @@ func TestPublishBatchDuplicateDoesNotRewriteCheckpointTuple(t *testing.T) {
 func TestPublishBatchDuplicateUpdatesChangedCheckpointMetadata(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t,
-		pool,
-		contract.ProviderYouTubeJS,
-		contract.KindCommunityPage,
-		testChannelID,
-		"community_collect",
-	)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	envelope := communityEnvelope(t, &proof, "post-1")
 	input := publishInput(envelope)
 	repo := NewRepository(pool)
@@ -119,13 +107,7 @@ func TestPublishBatchDuplicateUpdatesChangedCheckpointMetadata(t *testing.T) {
 func TestPublishBatchDuplicateClearsCheckpointErrorState(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(ctx, t,
-		pool,
-		contract.ProviderYouTubeJS,
-		contract.KindCommunityPage,
-		testChannelID,
-		"community_collect",
-	)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	envelope := communityEnvelope(t, &proof, "post-1")
 	input := publishInput(envelope)
 	repo := NewRepository(pool)

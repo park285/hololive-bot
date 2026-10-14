@@ -88,6 +88,7 @@ func buildAndRefreshProjection(ctx context.Context, tx dbx.Tx, builder Builder, 
 	}
 
 	reasonsHash := hashNormalizedReasons(reasons)
+
 	out, err := refreshTx(ctx, tx, targets, reasons, hash, now, validUntil, cache, reasonsHash)
 	if err != nil {
 		return out, fmt.Errorf("%w", err)

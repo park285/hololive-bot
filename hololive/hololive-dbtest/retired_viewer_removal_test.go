@@ -13,6 +13,7 @@ func TestRetiredViewerRemovalPreservesActiveCollectionAndReplays(t *testing.T) {
 	pool, dir := projectionMigrationPoolBefore(t, retiredViewerRemovalMigration)
 	seedRetiredViewerProducts(t, pool)
 	seedViewerRemovalObservation(t, pool, "live_snapshot")
+
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO source_observation_queue(observation_id,status,lease_owner,lease_token,lease_expires_at)
 		SELECT id,'PROCESSING','consumer',repeat('a',64),now()+interval '1 hour' FROM source_observations;
@@ -37,6 +38,7 @@ func TestRetiredViewerRemovalPreservesActiveCollectionAndReplays(t *testing.T) {
 		require.NoError(t, applyMigrationFile(t.Context(), pool, dir, retiredViewerRemovalMigration), attempt)
 
 		var tables, registrations, observations, processing, replay, targets, projections, leases int
+
 		require.NoError(t, pool.QueryRow(t.Context(), `SELECT
 			(SELECT count(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN (
 				'youtube_live_viewer_samples','youtube_live_viewer_sample_heads','youtube_live_viewer_sample_evidence',
@@ -121,6 +123,7 @@ func TestRetiredViewerRemovalRejectsUnapprovedHistoryAtomically(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			pool, dir := projectionMigrationPoolBefore(t, retiredViewerRemovalMigration)
 			seedRetiredViewerProducts(t, pool)
+
 			_, err := pool.Exec(t.Context(), seed)
 			require.NoError(t, err)
 			require.Error(t, applyMigrationFile(t.Context(), pool, dir, retiredViewerRemovalMigration))
@@ -133,6 +136,7 @@ func TestRetiredViewerRemovalKeepsPendingObservation(t *testing.T) {
 	pool, dir := projectionMigrationPoolBefore(t, retiredViewerRemovalMigration)
 	seedRetiredViewerProducts(t, pool)
 	seedViewerRemovalObservation(t, pool, "viewer_sample")
+
 	_, err := pool.Exec(t.Context(), `INSERT INTO source_observation_queue(observation_id) SELECT id FROM source_observations`)
 	require.NoError(t, err)
 	require.ErrorContains(t, applyMigrationFile(t.Context(), pool, dir, retiredViewerRemovalMigration), "retained history in public.source_observations")
@@ -178,6 +182,7 @@ func assertRetiredViewerProductsKept(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
 	var samples, heads, evidence, streams, channels, contracts int
+
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM youtube_live_viewer_samples),
 		(SELECT count(*) FROM youtube_live_viewer_sample_heads),

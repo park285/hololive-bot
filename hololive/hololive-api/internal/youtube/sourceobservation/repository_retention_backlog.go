@@ -14,8 +14,11 @@ func (r *Repository) measureRetentionBacklogs(ctx context.Context, cfg Retention
 		return nil
 	}
 
-	var oldest *time.Time
-	var known bool
+	var (
+		oldest *time.Time
+		known  bool
+	)
+
 	if err := r.pool.QueryRow(ctx, mustSQL("repository_retention_backlog_evidence.sql"), kinds, cutoffs, MaxRetentionBatchSize).Scan(&oldest, &known); err != nil {
 		result.FailedTable = "source_observations"
 		return fmt.Errorf("read retention backlog: source_observations: %w", err)
@@ -26,10 +29,12 @@ func (r *Repository) measureRetentionBacklogs(ctx context.Context, cfg Retention
 		if part.Table != "source_observations" {
 			continue
 		}
+
 		part.BacklogKnown = known
 		if known && oldest != nil {
 			part.BacklogAge = now.Sub(*oldest)
 		}
 	}
+
 	return nil
 }

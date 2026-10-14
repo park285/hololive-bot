@@ -17,7 +17,7 @@ func TestPayloadNullOrMissingReferenceIsRejected(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "same-post")))
 	if err != nil {
@@ -46,7 +46,7 @@ func TestPayloadConcurrentPublishSeesCommittedDictionaryAfterWaiting(t *testing.
 
 	defer cancel()
 
-	firstProof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindChannelPhoto, testChannelID, "youtubejs_channel_metadata")
+	firstProof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindChannelPhoto, "youtubejs_channel_metadata")
 	secondProof := seedAdditionalLease(t, pool, &firstProof, contract.ProviderHolodex, contract.KindChannelPhoto, testChannelID, "holodex_metadata")
 	first := channelPhotoEnvelopeFor(t, &firstProof, testChannelID)
 	second := *first

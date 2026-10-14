@@ -221,7 +221,6 @@ func persistContentConflicts(ctx context.Context, tx dbx.Tx, observation *Observ
 			conflicts[i].FieldName,
 			conflicts[i].ExistingValueSHA256,
 			conflicts[i].AttemptedValueSHA256,
-			"KEEP_EXISTING",
 		); err != nil {
 			return fmt.Errorf("insert content reconciliation conflict: %w", err)
 		}

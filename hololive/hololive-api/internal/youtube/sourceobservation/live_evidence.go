@@ -99,7 +99,9 @@ func scopedLiveNegative(evidence *live.Evidence) bool {
 func liveIgnoredAbsenceLoadIDs(state *live.State, evidence *live.Evidence) []string {
 	var ids []string
 
-	for videoID, session := range state.Sessions {
+	for videoID := range state.Sessions {
+		session := state.Sessions[videoID]
+
 		if !session.HeadPresent || session.Status == domain.LiveStatusEnded {
 			continue
 		}
@@ -136,17 +138,21 @@ func loadLiveAbsenceSlots(ctx context.Context, tx dbx.Tx, state *live.State, cha
 	}
 
 	// 현재 slot은 이미 처리된 coverage가 정본이다. history를 생략해도 같은 slot을 새로 세면 안 된다.
-	var rows pgx.Rows
-	var err error
+	var (
+		rows pgx.Rows
+		err  error
+	)
 
 	if len(channelIDs) == 0 {
 		rows, err = tx.Query(ctx, mustSQL("repository_live_absence_current_slot.sql"), scheduledFor, currentChannels)
 	} else {
 		rows, err = tx.Query(ctx, mustSQL("repository_live_absence_slots.sql"), channelIDs, after, scheduledFor, currentChannels)
 	}
+
 	if err != nil {
 		return fmt.Errorf("query absence slots: %w", err)
 	}
+
 	defer rows.Close()
 
 	for rows.Next() {

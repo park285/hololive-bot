@@ -48,6 +48,7 @@ func TestLiveStorageCleanupPreservesActiveAndCandidateEvidence(t *testing.T) {
 		require.NoError(t, applyMigrationFile(ctx, pool, dir, migration))
 
 		var cleared, preserved int
+
 		require.NoError(t, pool.QueryRow(ctx, `
 			SELECT count(*) FILTER (WHERE status='ENDED' AND cardinality(ignored_absence_scheduled_for)=0),
 			       count(*) FILTER (WHERE ignored_absence_scheduled_for=
@@ -57,6 +58,7 @@ func TestLiveStorageCleanupPreservesActiveAndCandidateEvidence(t *testing.T) {
 		require.Equal(t, 5, preserved, "canonical 활성 상태가 ENDED head보다 우선하며 종료 후보도 보존해야 합니다")
 
 		var pendingIDs []string
+
 		require.NoError(t, pool.QueryRow(ctx, `
 			SELECT array_agg(video_id ORDER BY video_id) FROM youtube_live_pending_ends`).Scan(&pendingIDs))
 		require.Equal(t, []string{"active-live", "active-upcoming", "candidate-ended", "headless-pending", "mismatch-live", "mismatch-upcoming"}, pendingIDs)

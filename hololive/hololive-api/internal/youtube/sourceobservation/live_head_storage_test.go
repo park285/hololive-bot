@@ -89,6 +89,7 @@ func TestLiveEndedHeadClearsLoadedAndOmittedHistory(t *testing.T) {
 			require.EqualValues(t, 1, execLiveHead(t, pool, &state))
 
 			state.Status = testStatusEnded
+
 			if name == "omitted" {
 				state.IgnoredAbsences = live.IgnoredAbsenceHistory{}
 			}

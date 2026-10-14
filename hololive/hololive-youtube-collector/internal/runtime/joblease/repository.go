@@ -198,6 +198,7 @@ func acquireLeaseProof(
 	}
 
 	query := sqlLeaseAcquire
+
 	if scope.ExactSubject {
 		query = sqlLeaseAcquireExact
 	}
@@ -223,14 +224,9 @@ func acquireLeaseProof(
 	if err != nil {
 		return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: admit and acquire job row: %w", err)
 	}
-	if !current {
-		return contract.LeaseProof{}, acquiredJobIdentity{}, collection.ErrProjectionStale
-	}
-	if _, err := bundle.admit(spec); err != nil {
-		return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("verify acquire targets: %w", err)
-	}
-	if !jobKey.Valid {
-		return contract.LeaseProof{}, acquiredJobIdentity{}, ErrNotAcquired
+
+	if err := validateAcquisition(spec, &bundle, current, jobKey.Valid); err != nil {
+		return contract.LeaseProof{}, acquiredJobIdentity{}, err
 	}
 
 	proof := contract.LeaseProof{
@@ -239,6 +235,7 @@ func acquireLeaseProof(
 		ProjectionGeneration: projection.Int64, ScheduledFor: scheduled.Time,
 	}
 	identity := acquiredJobIdentity{provider: provider.String, class: class.String, subjectKey: subject.String}
+
 	if created {
 		// INSERT의 유일 키 대기가 끝난 뒤 DB 시계로 최초 slot과 TTL을 확정한다.
 		// 기존 행 획득에는 이 문장이 없고, 방금 생성해 잠근 행만 한 번 갱신한다.
@@ -248,9 +245,26 @@ func acquireLeaseProof(
 			return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: initialize created lease: %w", err)
 		}
 	}
+
 	proof.ScheduledFor = proof.ScheduledFor.UTC()
 
 	return proof, identity, nil
+}
+
+func validateAcquisition(spec *JobSpec, bundle *acquireTargetBundle, current, acquired bool) error {
+	if !current {
+		return collection.ErrProjectionStale
+	}
+
+	if _, err := bundle.admit(spec); err != nil {
+		return fmt.Errorf("verify acquire targets: %w", err)
+	}
+
+	if !acquired {
+		return ErrNotAcquired
+	}
+
+	return nil
 }
 
 type JobLease struct {

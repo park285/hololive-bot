@@ -34,7 +34,7 @@ func TestLiveReviewSetMigrationPreservesDecisions(t *testing.T) {
 
 		require.NoError(t, pool.QueryRow(t.Context(), `
 			WITH reviewed AS MATERIALIZED (
-			    SELECT * FROM youtube_live_review_current_receipts(ARRAY(SELECT video_id FROM youtube_live_sessions))
+			    SELECT video_id, reviewed_at FROM youtube_live_review_current_receipts(ARRAY(SELECT video_id FROM youtube_live_sessions))
 			)
 			SELECT jsonb_object_agg(session.video_id,reviewed.reviewed_at)::text
 			FROM youtube_live_sessions session LEFT JOIN reviewed USING(video_id)`).Scan(&setResults))
@@ -53,40 +53,14 @@ func TestLiveReviewSetMigrationPreservesDecisions(t *testing.T) {
 
 	for _, zone := range []string{"UTC", "Asia/Seoul", "America/New_York"} {
 		t.Run(zone, func(t *testing.T) {
-			tx, err := pool.Begin(t.Context())
-			require.NoError(t, err)
-			defer rollbackLiveReviewReceiptFactsTx(t, tx)
-
-			_, err = tx.Exec(t.Context(), `SELECT set_config('TimeZone',$1,true)`, zone)
-			require.NoError(t, err)
-
-			var compared int
-			var equal bool
-
-			// 전체 원본 JSON 경로는 최적화 함수와 독립적인 262/279 의미 사실 oracle이다.
-			require.NoError(t, tx.QueryRow(t.Context(), `
-				SELECT count(*),bool_and(current.facts = youtube_live_review_semantic_facts(
-				    jsonb_build_object('session',to_jsonb(session),'head',to_jsonb(head),
-				        'pending',to_jsonb(pending),'availability',to_jsonb(availability.availability)))
-				    AND current.reviewable IS NOT DISTINCT FROM (
-				        session.status='UPCOMING'
-				        AND (head.video_id IS NULL OR head.status=session.status)
-				        AND (session.lifecycle_origin<>'observed' OR head.video_id IS NOT NULL)
-				        AND availability.video_id IS NOT NULL
-				        AND NOT COALESCE(GREATEST(head.last_upcoming_positive_at,head.last_live_positive_at)
-				            >= availability.effective_at,false)))
-				FROM youtube_live_review_current_facts(ARRAY(SELECT video_id FROM youtube_live_sessions)) current
-				JOIN youtube_live_sessions session USING(video_id)
-				LEFT JOIN youtube_live_reconciliation_heads head USING(video_id)
-				LEFT JOIN youtube_live_pending_ends pending USING(video_id)
-				LEFT JOIN youtube_video_availability availability USING(video_id)`).Scan(&compared, &equal))
-			require.GreaterOrEqual(t, compared, 14)
-			require.True(t, equal, "typed 사실은 NULL 행·NULL 열·시간대·소수초를 보존해야 합니다")
+			assertLiveReviewTypedFactsForZone(t, pool, zone)
 		})
 	}
 
-	var emptyCount, missingCount int
-	var missingReviewed bool
+	var (
+		emptyCount, missingCount int
+		missingReviewed          bool
+	)
 
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		SELECT (SELECT count(*) FROM youtube_live_review_current_receipts('{}'::text[])),
@@ -105,6 +79,43 @@ func TestLiveReviewSetMigrationPreservesDecisions(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT reviewed_at IS NULL FROM youtube_live_review_current_receipt('typed-full')`).Scan(&reopened))
 	require.True(t, reopened)
+}
+
+func assertLiveReviewTypedFactsForZone(t *testing.T, pool *pgxpool.Pool, zone string) {
+	t.Helper()
+
+	tx, err := pool.Begin(t.Context())
+	require.NoError(t, err)
+
+	defer rollbackLiveReviewReceiptFactsTx(t, tx)
+
+	_, err = tx.Exec(t.Context(), `SELECT set_config('TimeZone',$1,true)`, zone)
+	require.NoError(t, err)
+
+	var (
+		compared int
+		equal    bool
+	)
+
+	// 전체 원본 JSON 경로는 최적화 함수와 독립적인 의미 사실 oracle이다.
+	require.NoError(t, tx.QueryRow(t.Context(), `
+		SELECT count(current.video_id),bool_and(current.facts = youtube_live_review_semantic_facts(
+		    jsonb_build_object('session',to_jsonb(session),'head',to_jsonb(head),
+		        'pending',to_jsonb(pending),'availability',to_jsonb(availability.availability)))
+		    AND current.reviewable IS NOT DISTINCT FROM (
+		        session.status='UPCOMING'
+		        AND (head.video_id IS NULL OR head.status=session.status)
+		        AND (session.lifecycle_origin<>'observed' OR head.video_id IS NOT NULL)
+		        AND availability.video_id IS NOT NULL
+		        AND NOT COALESCE(GREATEST(head.last_upcoming_positive_at,head.last_live_positive_at)
+		            >= availability.effective_at,false)))
+		FROM youtube_live_review_current_facts(ARRAY(SELECT video_id FROM youtube_live_sessions)) current
+		JOIN youtube_live_sessions session USING(video_id)
+		LEFT JOIN youtube_live_reconciliation_heads head USING(video_id)
+		LEFT JOIN youtube_live_pending_ends pending USING(video_id)
+		LEFT JOIN youtube_video_availability availability USING(video_id)`).Scan(&compared, &equal))
+	require.GreaterOrEqual(t, compared, 14)
+	require.True(t, equal, "typed 사실은 NULL 행·NULL 열·시간대·소수초를 보존해야 합니다")
 }
 
 func seedLiveReviewTypedFacts(t *testing.T, pool *pgxpool.Pool) {
@@ -181,6 +192,7 @@ func TestLiveReviewSetMigrationPrivileges(t *testing.T) {
 
 	raw, err := fs.ReadFile(os.DirFS(dir), liveReviewSetMigration)
 	require.NoError(t, err)
+
 	migration := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
 	require.NoError(t, applyMigrationContent(t.Context(), pool, liveReviewSetMigration, migration))
 	seedLiveReviewComparison(t, pool)
@@ -196,6 +208,7 @@ func TestLiveReviewSetMigrationPrivileges(t *testing.T) {
 
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
+
 	defer rollbackLiveReviewReceiptFactsTx(t, tx)
 
 	_, err = tx.Exec(t.Context(), "SET LOCAL ROLE "+runtime)

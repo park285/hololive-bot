@@ -181,14 +181,17 @@ func loadLiveIgnoredAbsences(ctx context.Context, tx dbx.Tx, state *live.State, 
 	defer rows.Close()
 
 	for rows.Next() {
-		var videoID string
-		var slots []time.Time
+		var (
+			videoID string
+			slots   []time.Time
+		)
 
 		if err := rows.Scan(&videoID, &slots); err != nil {
 			return fmt.Errorf("scan ignored absences: %w", err)
 		}
 
 		session := state.Sessions[videoID]
+
 		session.IgnoredAbsences = live.LoadedIgnoredAbsences(slots)
 		state.Sessions[videoID] = session
 	}

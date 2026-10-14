@@ -65,6 +65,7 @@ func (c *candidateTrafficConn) Write(p []byte) (int, error) {
 
 func (c *candidateTraffic) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	c.statements.Add(1)
+
 	switch data.SQL {
 	case sqlProjectionCurrent, mustTestSQL("projection_260_bd498868a.sql"):
 		c.headers.Add(1)

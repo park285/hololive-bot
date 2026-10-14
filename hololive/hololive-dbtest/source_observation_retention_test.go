@@ -453,9 +453,11 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	ids := make([]int64, 0, 5)
+
 	for _, key := range []string{"current", "staging", "leased", "live", "upcoming"} {
 		ids = append(ids, insertRetentionObservation(t, pool, communityPageKind, base, key))
 	}
+
 	eligible := insertRetentionObservation(t, pool, communityPageKind, base, "eligible")
 	// generation 번호를 명시하여 세 가지 보호를 서로 독립적으로 검증한다.
 	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_collection_projection_generations
@@ -478,23 +480,30 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{base.Add(time.Hour)}, 1000); len(got) != 1 || got[0] != eligible {
 		t.Fatalf("protected retention deleted %v, want only %d", got, eligible)
 	}
+
 	assertRetentionObservationsExist(t, pool, ids)
+
 	_, err = pool.Exec(t.Context(), `UPDATE youtube_collection_projection_generations SET status='RETIRED',activated_at=now();
 		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL;
 		UPDATE youtube_live_sessions SET status='ENDED'`)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{base.Add(time.Hour)}, 1000); len(got) != len(ids) {
 		t.Fatalf("released retention deleted %v, want %v", got, ids)
 	}
+
 	var applications int
+
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM source_observation_applications`).Scan(&applications); err != nil {
 		t.Fatal(err)
 	}
+
 	if applications != 0 {
 		t.Fatalf("applications remain after parents expire: %d", applications)
 	}

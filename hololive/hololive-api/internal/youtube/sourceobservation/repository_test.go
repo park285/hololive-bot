@@ -333,6 +333,7 @@ func TestFinalizeFutureSourceEventFallsBackToScheduledSlot(t *testing.T) {
 		if !claimed.SourceEventFallback || !claimed.EffectiveAt.Equal(claimed.ScheduledFor) {
 			t.Fatalf("claimed clock = %#v", claimed)
 		}
+
 		if claimed.ScopeSHA256 != prepared.ScopeSHA256 || claimed.EvidenceSHA256 != prepared.EvidenceSHA256 {
 			t.Fatalf("claim changed public hex hashes: scope=%s evidence=%s", claimed.ScopeSHA256, claimed.EvidenceSHA256)
 		}

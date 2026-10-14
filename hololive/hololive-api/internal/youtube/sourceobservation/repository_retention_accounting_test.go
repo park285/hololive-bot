@@ -42,23 +42,28 @@ func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
 	ageObservations(t, pool, ids[:1], 100*24*time.Hour)
 	ageObservations(t, pool, ids[1:2], 95*24*time.Hour)
 	ageObservations(t, pool, ids[2:], 89*24*time.Hour)
+
 	_, err := pool.Exec(ctx, `DELETE FROM source_observation_queue;
 		UPDATE youtube_collection_projection_generations SET status='RETIRED';
 		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL`)
 	require.NoError(t, err)
+
 	cfg := RetentionConfig{
 		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindCommunityPage: 90 * 24 * time.Hour},
 		BatchSize:         1,
 	}
 	result, err := repo.RunRetentionTick(ctx, cfg, now)
 	require.NoError(t, err)
-	part := retentionPartFor(t, result, "source_observations")
+
+	part := evidenceRetentionPart(t, result)
 	require.True(t, part.BacklogKnown)
 	require.InDelta(t, (95 * 24 * time.Hour).Seconds(), part.BacklogAge.Seconds(), 1)
 	require.EqualValues(t, 1, part.Deleted)
+
 	result, err = repo.RunRetentionTick(ctx, cfg, now)
 	require.NoError(t, err)
-	part = retentionPartFor(t, result, "source_observations")
+
+	part = evidenceRetentionPart(t, result)
 	require.True(t, part.BacklogKnown)
 	require.Zero(t, part.BacklogAge)
 	assertTableCount(t, pool, "source_observations", 1)
@@ -76,6 +81,7 @@ func TestRetentionBacklogDoesNotClaimEmptyBeyondProtectedScanLimit(t *testing.T)
 
 	_, err := pool.Exec(ctx, `DELETE FROM source_observation_queue WHERE observation_id=$1`, ids[2])
 	require.NoError(t, err)
+
 	_, err = pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET status='RETIRED';
 		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL`)
 	require.NoError(t, err)
@@ -103,16 +109,16 @@ func TestRetentionBacklogDoesNotClaimEmptyBeyondProtectedScanLimit(t *testing.T)
 	}
 }
 
-func retentionPartFor(t *testing.T, result RetentionResult, table string) RetentionResult {
+func evidenceRetentionPart(t *testing.T, result RetentionResult) RetentionResult {
 	t.Helper()
 
 	for _, part := range result.ByTable {
-		if part.Table == table {
+		if part.Table == "source_observations" {
 			return part
 		}
 	}
 
-	t.Fatalf("missing retention table %s in %+v", table, result)
+	t.Fatalf("missing source_observations retention table in %+v", result)
 
 	return RetentionResult{}
 }

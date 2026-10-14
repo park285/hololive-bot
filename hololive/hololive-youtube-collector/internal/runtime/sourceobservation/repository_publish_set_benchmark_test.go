@@ -26,7 +26,7 @@ import (
 func BenchmarkPublishSetLargeBatch(b *testing.B) {
 	ctx := b.Context()
 	pool := dbtest.NewPool(b)
-	proof := seedPublishLease(ctx, b, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(ctx, b, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	observations := make([]contract.Envelope, collection.MaxPublishBatchSize)
 	entries := make([]CheckpointEntry, len(observations))
 

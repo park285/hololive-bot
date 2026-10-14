@@ -154,7 +154,7 @@ func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
 		t.Fatalf("protected evidence deleted: %#v", result)
 	}
 
-	part := retentionPartFor(t, result, "source_observations")
+	part := evidenceRetentionPart(t, result)
 	if !part.BacklogKnown || part.BacklogAge != 0 {
 		t.Fatalf("protected evidence counted as retention backlog: %#v", part)
 	}
@@ -318,11 +318,13 @@ func TestRetentionTickCascadesApplicationsWithParent(t *testing.T) {
 	ids := publishProcessedObservations(ctx, t, pool, repo, 1)
 	insertRetentionApplication(t, pool, ids[0], "retained", 120*24*time.Hour)
 	ageObservations(t, pool, ids, 48*time.Hour)
+
 	if _, err := pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET status='RETIRED';
 		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL;
 		DELETE FROM source_observation_queue`); err != nil {
 		t.Fatal(err)
 	}
+
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
 		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindCommunityPage: 24 * time.Hour},
 		BatchSize:         10,
@@ -330,9 +332,11 @@ func TestRetentionTickCascadesApplicationsWithParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
-	if retentionPartFor(t, result, "source_observations").Deleted != 1 {
+
+	if evidenceRetentionPart(t, result).Deleted != 1 {
 		t.Fatalf("result = %#v, want one parent", result)
 	}
+
 	assertRetentionApplication(t, pool, "retained", false)
 }
 

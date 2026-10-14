@@ -21,7 +21,7 @@ import (
 func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	envelope := communityEnvelope(t, &proof, "post-1")
 	repo := NewRepository(pool)
 
@@ -48,13 +48,17 @@ func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 1)
 	assertTableCount(t, pool, "source_observation_queue", 1)
 
-	var scope, evidence string
-	var scopeBytes, evidenceBytes int
+	var (
+		scope, evidence           string
+		scopeBytes, evidenceBytes int
+	)
+
 	if err := pool.QueryRow(ctx, `SELECT encode(scope_sha256,'hex'),encode(evidence_sha256,'hex'),
 		octet_length(scope_sha256),octet_length(evidence_sha256) FROM source_observations WHERE id=$1`,
 		first.Results[0].ObservationID).Scan(&scope, &evidence, &scopeBytes, &evidenceBytes); err != nil {
 		t.Fatal(err)
 	}
+
 	if scope != envelope.ScopeSHA256 || evidence != envelope.EvidenceSHA256 || scopeBytes != 32 || evidenceBytes != 32 {
 		t.Fatalf("binary hashes: scope=%s evidence=%s bytes=%d/%d", scope, evidence, scopeBytes, evidenceBytes)
 	}
@@ -63,7 +67,7 @@ func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
 func TestPublishBatchSemanticCollisionAuditsWithoutMutatingEvidenceQueueOrCheckpoint(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	base := communityEnvelope(t, &proof, "post-1")
 	repo := NewRepository(pool)
 
@@ -109,7 +113,7 @@ func TestPublishBatchSemanticCollisionAuditsWithoutMutatingEvidenceQueueOrCheckp
 func TestPublishBatchSamePayloadNextScheduledSlotCreatesTwoObservations(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	firstProof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	firstProof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	repo := NewRepository(pool)
 	first := communityEnvelope(t, &firstProof, "post-1")
 
@@ -135,7 +139,7 @@ func TestPublishBatchSamePayloadNextScheduledSlotCreatesTwoObservations(t *testi
 func TestPublishBatchRejectsUnrelatedCheckpointWithoutWrites(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, "UC_OTHER", contract.KindCommunityPage, true)
 
@@ -188,7 +192,7 @@ func TestPublishBatchRejectsUnrelatedCheckpointWithoutWrites(t *testing.T) {
 func TestPublishBatchRejectsMissingCheckpointWithoutWrites(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	input := publishInput(communityEnvelope(t, &proof, "post-1"))
 
 	input.Checkpoint.Entries = nil
@@ -207,7 +211,7 @@ func TestPublishBatchRejectsMissingCheckpointWithoutWrites(t *testing.T) {
 func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, "youtubejs_channel_metadata")
 
 	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, testChannelID, contract.KindChannelPhoto, true)
 
@@ -239,7 +243,7 @@ func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, "youtubejs_channel_metadata")
 
 	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, testChannelID, contract.KindChannelPhoto, true)
 
@@ -267,7 +271,7 @@ func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 func TestPublishBatchRejectsStaleContract(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	envelope := communityEnvelope(t, &proof, "post-1")
 
 	if _, err := pool.Exec(ctx, `
@@ -289,7 +293,7 @@ func TestPublishBatchRejectsStaleContract(t *testing.T) {
 func TestPublishBatchRollsBackEvidenceAndCheckpointWhenQueueInsertFails(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 
 	if _, err := pool.Exec(ctx, `
 		CREATE FUNCTION source_observation_fail_queue_insert() RETURNS trigger AS $$
@@ -343,7 +347,7 @@ func TestPublishSetCollisionWriteKeepsInsertOnlyPrivilege(t *testing.T) {
 func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	envelope := communityEnvelope(t, &proof, "post-1")
 
 	tx, err := pool.Begin(ctx)
@@ -389,7 +393,7 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, testChannelID, "youtubejs_channel_metadata")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindChannelProfile, "youtubejs_channel_metadata")
 
 	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, "UC_OTHER", contract.KindChannelPhoto, true)
 
@@ -414,14 +418,16 @@ func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindChannelPhoto, testChannelID, "holodex_metadata")
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindChannelPhoto, "holodex_metadata")
 
 	insertPublishTarget(ctx, t, pool, proof.ProjectionGeneration, "UC_OTHER", contract.KindChannelPhoto, false)
 
 	first := channelPhotoEnvelopeFor(t, &proof, testChannelID)
 	second := channelPhotoEnvelopeFor(t, &proof, "UC_OTHER")
+
 	for _, envelope := range []*contract.Envelope{first, second} {
 		envelope.Provider = contract.ProviderHolodex
+
 		prepared, err := contract.PrepareEnvelope(*envelope)
 		if err != nil {
 			t.Fatal(err)
@@ -449,7 +455,7 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 func TestStaleHolderCannotMutatePublishOrJobState(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proofA := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proofA := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	envelopeA := communityEnvelope(t, &proofA, "post-a")
 	resumeA := make(chan struct{})
 	resultA := make(chan error, 1)
@@ -559,7 +565,7 @@ func runStaleHolderCase(t *testing.T, name, postID string) {
 
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	proofA := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	proofA := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "community_collect")
 	repo := NewRepository(pool)
 
 	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proofA, "post-a"))); err != nil {
@@ -725,7 +731,6 @@ func seedPublishLease(
 	pool *pgxpool.Pool,
 	provider contract.Provider,
 	kind contract.ObservationKind,
-	subjectKey string,
 	jobKind string,
 ) contract.LeaseProof {
 	tb.Helper()
@@ -743,10 +748,10 @@ func seedPublishLease(
 		tb.Fatalf("seed projection: %v", err)
 	}
 
-	insertPublishTarget(ctx, tb, pool, generation, subjectKey, kind, true)
+	insertPublishTarget(ctx, tb, pool, generation, testChannelID, kind, true)
 
 	proof := contract.LeaseProof{
-		JobKey:               "job:" + jobKind + ":" + subjectKey,
+		JobKey:               "job:" + jobKind + ":" + testChannelID,
 		CollectionJobKind:    jobKind,
 		OwnerInstance:        "collector-a",
 		FenceEpoch:           1,
@@ -768,7 +773,7 @@ func seedPublishLease(
 			next_due_at, fence_epoch, owner_instance, lease_expires_at,
 			membership_kinds, membership_exact_subject
 		) VALUES ($1, $2, $3, $4, $5, $6, 60000, 'ACTIVE', $7, $7, $8, $9, NOW() + INTERVAL '1 hour', $10::text[], $11)
-	`, proof.JobKey, provider, jobClass, jobKind, subjectKey, generation,
+	`, proof.JobKey, provider, jobClass, jobKind, testChannelID, generation,
 		proof.ScheduledFor, proof.FenceEpoch, proof.OwnerInstance, scope.Kinds, scope.ExactSubject); err != nil {
 		tb.Fatalf("seed lease: %v", err)
 	}

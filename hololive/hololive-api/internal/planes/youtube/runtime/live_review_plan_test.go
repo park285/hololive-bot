@@ -30,73 +30,104 @@ func TestLiveReviewQueriesBoundedPlans(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			tx, err := pool.Begin(t.Context())
 			require.NoError(t, err)
+
 			defer rollbackLiveReviewTx(t, tx)
 
-			_, err = tx.Exec(t.Context(), "SET LOCAL plan_cache_mode = "+mode)
-			require.NoError(t, err)
+			prepareLiveReviewPlans(t, tx, mode)
 
-			// SQL PREPARE/EXECUTE로 두 캐시 모드를 실제 매개변수 계획에 적용한다.
-			_, err = tx.Exec(t.Context(), "PREPARE review_observability(bigint) AS "+mustSQL("collection_target_observability.sql"))
-			require.NoError(t, err)
-			_, err = tx.Exec(t.Context(), "PREPARE review_live_check(text[],bigint) AS "+mustSQL("live_check_videos.sql"))
-			require.NoError(t, err)
 			defer func() {
-				_, err := tx.Exec(t.Context(), "DEALLOCATE review_observability; DEALLOCATE review_live_check")
-				require.NoError(t, err)
+				_, deallocateErr := tx.Exec(t.Context(), "DEALLOCATE review_observability; DEALLOCATE review_live_check")
+				require.NoError(t, deallocateErr)
 			}()
 
 			observability := fmt.Sprintf("EXECUTE review_observability(%d)", defaultLiveFreshnessBudget().Milliseconds())
 			liveCheck := "EXECUTE review_live_check(ARRAY[" + strings.Join(channelLiterals, ",") + "],1000)"
+
 			assertLiveReviewPlanBlocks(t, tx, observability, 1000)
 			assertLiveReviewPlanBlocks(t, tx, liveCheck, 400)
 
-			rows, err := tx.Query(t.Context(), observability)
-			require.NoError(t, err)
-			samples, err := scanCollectionTargets(rows)
-			rows.Close()
-			require.NoError(t, err)
-			require.Len(t, samples, collectionTargetJobCount)
-
-			for _, sample := range samples {
-				require.EqualValues(t, 215, sample.retainedTotal)
-				require.EqualValues(t, 200, sample.upcoming)
-				require.EqualValues(t, 15, sample.live)
-				require.EqualValues(t, 52, sample.closedUnresolved)
-				require.Zero(t, sample.stateMismatch)
-			}
-
-			rows, err = tx.Query(t.Context(), liveCheck)
-			require.NoError(t, err)
-			var actual []string
-
-			for rows.Next() {
-				values, err := rows.Values()
-				require.NoError(t, err)
-				actual = append(actual, values[0].(string))
-			}
-			require.NoError(t, rows.Err())
-			rows.Close()
-
-			// 기존 snapshot→의미 사실 경로를 oracle로 써 새 집합 판정과 membership 전체를 비교한다.
-			rows, err = tx.Query(t.Context(), `
-				SELECT session.video_id FROM youtube_live_sessions session
-				WHERE session.channel_id=ANY($1::text[]) AND (
-				    session.status='LIVE' OR (session.status='UPCOMING'
-				        AND (session.scheduled_start_time<statement_timestamp()
-				             OR (session.lifecycle_origin='legacy_unknown' AND session.scheduled_start_time IS NULL))
-				        AND NOT EXISTS (
-				            SELECT 1 FROM youtube_live_review_snapshot(session.video_id) current
-				            JOIN youtube_live_review_receipt_facts receipt ON receipt.video_id=session.video_id
-				                AND receipt.facts=youtube_live_review_semantic_facts(current.original_snapshot)
-				            WHERE current.reviewable)))
-				ORDER BY session.video_id COLLATE "C"`, channels)
-			require.NoError(t, err)
-			want, err := pgx.CollectRows(rows, pgx.RowTo[string])
-			require.NoError(t, err)
-			require.Len(t, want, 163)
-			require.Equal(t, want, actual)
+			assertLiveReviewObservability(t, tx, observability)
+			assertLiveReviewMembership(t, tx, liveCheck, channels)
 		})
 	}
+}
+
+func prepareLiveReviewPlans(t *testing.T, tx pgx.Tx, mode string) {
+	t.Helper()
+
+	_, err := tx.Exec(t.Context(), "SET LOCAL plan_cache_mode = "+mode)
+	require.NoError(t, err)
+
+	// SQL PREPARE/EXECUTE로 두 캐시 모드를 실제 매개변수 계획에 적용한다.
+	_, err = tx.Exec(t.Context(), "PREPARE review_observability(bigint) AS "+mustSQL("collection_target_observability.sql"))
+	require.NoError(t, err)
+
+	_, err = tx.Exec(t.Context(), "PREPARE review_live_check(text[],bigint) AS "+mustSQL("live_check_videos.sql"))
+	require.NoError(t, err)
+}
+
+func assertLiveReviewObservability(t *testing.T, tx pgx.Tx, query string) {
+	t.Helper()
+
+	rows, err := tx.Query(t.Context(), query)
+	require.NoError(t, err)
+
+	samples, err := scanCollectionTargets(rows)
+	rows.Close()
+	require.NoError(t, err)
+	require.Len(t, samples, collectionTargetJobCount)
+
+	for i := range samples {
+		sample := &samples[i]
+
+		require.EqualValues(t, 215, sample.retainedTotal)
+		require.EqualValues(t, 200, sample.upcoming)
+		require.EqualValues(t, 15, sample.live)
+		require.EqualValues(t, 52, sample.closedUnresolved)
+		require.Zero(t, sample.stateMismatch)
+	}
+}
+
+func assertLiveReviewMembership(t *testing.T, tx pgx.Tx, query string, channels []string) {
+	t.Helper()
+
+	rows, err := tx.Query(t.Context(), query)
+	require.NoError(t, err)
+
+	var actual []string
+
+	for rows.Next() {
+		values, valuesErr := rows.Values()
+		require.NoError(t, valuesErr)
+
+		videoID, ok := values[0].(string)
+		require.True(t, ok, "live-check video ID must be a string")
+
+		actual = append(actual, videoID)
+	}
+
+	require.NoError(t, rows.Err())
+	rows.Close()
+
+	// 기존 snapshot→의미 사실 경로를 oracle로 써 새 집합 판정과 membership 전체를 비교한다.
+	rows, err = tx.Query(t.Context(), `
+		SELECT session.video_id FROM youtube_live_sessions session
+		WHERE session.channel_id=ANY($1::text[]) AND (
+		    session.status='LIVE' OR (session.status='UPCOMING'
+		        AND (session.scheduled_start_time<statement_timestamp()
+		             OR (session.lifecycle_origin='legacy_unknown' AND session.scheduled_start_time IS NULL))
+		        AND NOT EXISTS (
+		            SELECT 1 FROM youtube_live_review_snapshot(session.video_id) current
+		            JOIN youtube_live_review_receipt_facts receipt ON receipt.video_id=session.video_id
+		                AND receipt.facts=youtube_live_review_semantic_facts(current.original_snapshot)
+		            WHERE current.reviewable)))
+		ORDER BY session.video_id COLLATE "C"`, channels)
+	require.NoError(t, err)
+
+	want, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	require.Len(t, want, 163)
+	require.Equal(t, want, actual)
 }
 
 func assertLiveReviewPlanBlocks(t *testing.T, tx pgx.Tx, query string, maximum int64) {
@@ -115,6 +146,7 @@ func assertLiveReviewPlanBlocks(t *testing.T, tx pgx.Tx, query string, maximum i
 
 	require.NoError(t, jsonv2.Unmarshal(raw, &plans))
 	require.Len(t, plans, 1)
+
 	blocks := plans[0].Plan.Hits + plans[0].Plan.Reads
 	t.Logf("%s: shared hit+read blocks=%d", query, blocks)
 	require.LessOrEqual(t, blocks, maximum, "%s\n%s", query, raw)

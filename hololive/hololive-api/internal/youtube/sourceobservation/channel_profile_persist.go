@@ -105,7 +105,7 @@ func persistProfileHead(ctx context.Context, tx dbx.Tx, decision *profile.Decisi
 func persistProfileConflicts(ctx context.Context, tx dbx.Tx, observation *Observation, decision *profile.Decision) error {
 	for i := range decision.Conflicts {
 		conflict := decision.Conflicts[i]
-		if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_profile", observation.SubjectKey, conflict.FieldName, conflict.ExistingValueSHA256, conflict.AttemptedValueSHA256, "KEEP_EXISTING"); err != nil {
+		if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_profile", observation.SubjectKey, conflict.FieldName, conflict.ExistingValueSHA256, conflict.AttemptedValueSHA256); err != nil {
 			return fmt.Errorf("insert channel profile reconciliation conflict: %w", err)
 		}
 	}

@@ -11,19 +11,24 @@ func TestApplicationAuditCascadesWithSourceObservation(t *testing.T) {
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	id := insertRetentionObservation(t, pool, communityPageKind, base, "audit-cascade")
+
 	if _, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications
 		(observation_id,entity_kind,entity_key,decision)
 		VALUES ($1,'community_window','audit-cascade','APPLIED')`, id); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{base.Add(time.Hour)}, 1); len(got) != 1 || got[0] != id {
 		t.Fatalf("deleted observations = %v, want [%d]", got, id)
 	}
+
 	var remaining int
+
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM source_observation_applications
 		WHERE entity_key='audit-cascade'`).Scan(&remaining); err != nil {
 		t.Fatal(err)
 	}
+
 	if remaining != 0 {
 		t.Fatalf("remaining audit rows = %d, want 0", remaining)
 	}

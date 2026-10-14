@@ -3,6 +3,7 @@ package targetprojection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -15,6 +16,8 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
+
+const projectionCommitSQL = "commit"
 
 type projectionCommitTraceKey struct{}
 
@@ -29,7 +32,8 @@ func (tr *projectionCacheTracer) TraceQueryStart(ctx context.Context, _ *pgx.Con
 	if data.SQL == mustSQL("load_reasons.sql") {
 		tr.loads.Add(1)
 	}
-	if data.SQL == "commit" {
+
+	if data.SQL == projectionCommitSQL {
 		return context.WithValue(ctx, projectionCommitTraceKey{}, true)
 	}
 
@@ -43,6 +47,7 @@ func (tr *projectionCacheTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn,
 
 	// 서버 commit 이후, Refresh가 결과를 받아 캐시를 공개하기 전의 경합을 재현한다.
 	close(tr.committed)
+
 	select {
 	case <-tr.release:
 	case <-ctx.Done():
@@ -54,10 +59,13 @@ func tracedProjectionRefresher(t *testing.T, pool *pgxpool.Pool) (*Refresher, *p
 
 	tr := &projectionCacheTracer{committed: make(chan struct{}), release: make(chan struct{})}
 	cfg := pool.Config()
+
 	cfg.ConnConfig.Tracer = tr
+
 	traced, err := pgxpool.NewWithConfig(t.Context(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(traced.Close)
+
 	refresher, err := NewRefresher(traced, time.Hour)
 	require.NoError(t, err)
 
@@ -78,6 +86,7 @@ func TestReasonsCacheSkipsOnlyConfirmedGenerationAndReasons(t *testing.T) {
 	require.Equal(t, int64(1), tr.loads.Load())
 
 	reasons[0].ReasonKey = "updated"
+
 	got := mustRefresh(t, refresher, input, projectionNow.Add(2*time.Second), "same generation reasons change")
 	require.Equal(t, first.Generation, got.Generation)
 	require.False(t, got.Changed)
@@ -96,6 +105,7 @@ func TestReasonsCacheSkipsOnlyConfirmedGenerationAndReasons(t *testing.T) {
 	require.Equal(t, int64(3), tr.loads.Load())
 
 	targets[0].Priority++
+
 	rotated := mustRefresh(t, refresher, input, projectionNow.Add(6*time.Second), "new generation")
 	require.NotEqual(t, first.Generation, rotated.Generation)
 	require.Equal(t, int64(4), tr.loads.Load(), "new staging always verifies even with the same reasons hash")
@@ -108,11 +118,14 @@ func TestReasonsCacheInvalidatesOtherRefresherAtSameHeartbeatClock(t *testing.T)
 	refresher, tr := tracedProjectionRefresher(t, pool)
 	other, err := NewRefresher(pool, time.Hour)
 	require.NoError(t, err)
+
 	targets, reasons := capacityTargets(1)
 	input := staticBuilder{targets: targets, reasons: reasons}
 	first := mustRefresh(t, refresher, input, projectionNow, "initial")
 	foreign := staticBuilder{targets: targets, reasons: slices.Clone(reasons)}
+
 	foreign.reasons[0].ReasonKey = "other writer"
+
 	got := mustRefresh(t, other, foreign, projectionNow, "same timestamp foreign write")
 	require.Equal(t, first.Generation, got.Generation)
 	requireValidityRefreshedAt(t, pool, got.Generation, projectionNow)
@@ -130,8 +143,10 @@ func TestReasonsCacheInvalidatesOtherRefresherAtSameHeartbeatClock(t *testing.T)
 	rotatedInput := staticBuilder{targets: slices.Clone(targets), reasons: foreign.reasons}
 	rotatedInput.targets[0].Priority++
 	mustRefresh(t, other, rotatedInput, projectionNow, "foreign structural change")
+
 	restored := mustRefresh(t, other, foreign, projectionNow, "foreign structural return")
 	require.NotEqual(t, first.Generation, restored.Generation)
+
 	got = mustRefresh(t, refresher, input, projectionNow, "same hash on another generation")
 	require.Equal(t, restored.Generation, got.Generation)
 	require.Equal(t, int64(3), tr.loads.Load())
@@ -139,7 +154,7 @@ func TestReasonsCacheInvalidatesOtherRefresherAtSameHeartbeatClock(t *testing.T)
 }
 
 func TestReasonsCacheDiscardsFailedCommitAndRollback(t *testing.T) {
-	for _, failure := range []string{"statement", "commit", "connection", "panic"} {
+	for _, failure := range []string{"statement", projectionCommitSQL, "connection", "panic"} {
 		t.Run(failure, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
 			refresher, tr := tracedProjectionRefresher(t, pool)
@@ -148,33 +163,21 @@ func TestReasonsCacheDiscardsFailedCommitAndRollback(t *testing.T) {
 			first := mustRefresh(t, refresher, input, projectionNow, "initial")
 			before := projectionTupleVersions(t, pool)
 			failed := staticBuilder{targets: slices.Clone(targets), reasons: slices.Clone(reasons)}
+
 			failed.targets[0].NotBefore = projectionNow.Add(time.Minute)
 			failed.reasons[0].ReasonKey = "uncommitted"
 
 			switch failure {
-			case "statement", "commit":
-				_, err := pool.Exec(t.Context(), `CREATE FUNCTION reject_cached_reason_test() RETURNS trigger LANGUAGE plpgsql AS $$
-					BEGIN RAISE EXCEPTION 'injected cached reason failure'; END; $$`)
-				require.NoError(t, err)
-				trigger := `CREATE TRIGGER reject_cached_reason_test BEFORE INSERT ON youtube_collection_target_reasons
-					FOR EACH ROW EXECUTE FUNCTION reject_cached_reason_test()`
-				if failure == "commit" {
-					trigger = `CREATE CONSTRAINT TRIGGER reject_cached_reason_test AFTER INSERT ON youtube_collection_target_reasons
-						DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_cached_reason_test()`
-				}
-				_, err = pool.Exec(t.Context(), trigger)
-				require.NoError(t, err)
-				_, err = refresher.Refresh(t.Context(), failed, projectionNow.Add(time.Second))
-				require.ErrorContains(t, err, "injected cached reason failure")
-				if failure == "commit" {
-					require.ErrorContains(t, err, "commit pgx transaction")
-				}
-				_, err = pool.Exec(t.Context(), `DROP TRIGGER reject_cached_reason_test ON youtube_collection_target_reasons`)
-				require.NoError(t, err)
+			case "statement", projectionCommitSQL:
+				failReasonsRefreshWithTrigger(t, pool, refresher, failed, failure == projectionCommitSQL)
 			case "connection":
 				broken := projectionBuilderFunc(func(ctx context.Context, tx dbx.Tx, _ time.Time) ([]TargetSpec, []TargetReason, error) {
 					_, err := tx.Exec(ctx, `SELECT pg_terminate_backend(pg_backend_pid())`)
-					return nil, nil, err
+					if err != nil {
+						return nil, nil, fmt.Errorf("terminate projection backend: %w", err)
+					}
+
+					return nil, nil, nil
 				})
 				_, err := refresher.Refresh(t.Context(), broken, projectionNow.Add(time.Second))
 				require.Error(t, err)
@@ -182,11 +185,17 @@ func TestReasonsCacheDiscardsFailedCommitAndRollback(t *testing.T) {
 				broken := projectionBuilderFunc(func(context.Context, dbx.Tx, time.Time) ([]TargetSpec, []TargetReason, error) {
 					panic("injected builder panic")
 				})
-				require.Panics(t, func() { _, _ = refresher.Refresh(t.Context(), broken, projectionNow.Add(time.Second)) })
+
+				require.Panics(t, func() {
+					_, refreshErr := refresher.Refresh(t.Context(), broken, projectionNow.Add(time.Second))
+					require.NoError(t, refreshErr)
+				})
 			}
 
 			require.Equal(t, before, projectionTupleVersions(t, pool), "failed refresh must not publish target, reason, or header changes")
+
 			loads := tr.loads.Load()
+
 			mustRefresh(t, refresher, input, projectionNow.Add(2*time.Second), "reload after uncertain cache")
 			require.Equal(t, loads+1, tr.loads.Load(), "failure must discard even the preceding committed cache")
 			requireStoredReasons(t, pool, first.Generation, reasons)
@@ -199,45 +208,85 @@ func TestReasonsCacheDiscardsFailedCommitAndRollback(t *testing.T) {
 	}
 }
 
+func failReasonsRefreshWithTrigger(t *testing.T, pool *pgxpool.Pool, refresher *Refresher, failed staticBuilder, atCommit bool) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `CREATE FUNCTION reject_cached_reason_test() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'injected cached reason failure'; END; $$`)
+	require.NoError(t, err)
+
+	trigger := `CREATE TRIGGER reject_cached_reason_test BEFORE INSERT ON youtube_collection_target_reasons
+		FOR EACH ROW EXECUTE FUNCTION reject_cached_reason_test()`
+
+	if atCommit {
+		trigger = `CREATE CONSTRAINT TRIGGER reject_cached_reason_test AFTER INSERT ON youtube_collection_target_reasons
+			DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_cached_reason_test()`
+	}
+
+	_, err = pool.Exec(t.Context(), trigger)
+	require.NoError(t, err)
+
+	_, err = refresher.Refresh(t.Context(), failed, projectionNow.Add(time.Second))
+	require.ErrorContains(t, err, "injected cached reason failure")
+
+	if atCommit {
+		require.ErrorContains(t, err, "commit pgx transaction")
+	}
+
+	_, err = pool.Exec(t.Context(), `DROP TRIGGER reject_cached_reason_test ON youtube_collection_target_reasons`)
+	require.NoError(t, err)
+}
+
 func TestReasonsCacheSerializesPublicationAcrossInterleavedCallers(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	refresher, tr := tracedProjectionRefresher(t, pool)
 	other, err := NewRefresher(pool, time.Hour)
 	require.NoError(t, err)
+
 	targets, reasons := capacityTargets(1)
 	input := staticBuilder{targets: targets, reasons: reasons}
 	first := mustRefresh(t, refresher, input, projectionNow, "initial")
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+
 	defer cancel()
+
 	tr.pauseNext.Store(true)
+
 	firstDone := make(chan error, 1)
+
 	go func() {
-		_, err := refresher.Refresh(ctx, input, projectionNow.Add(time.Second))
-		firstDone <- err
+		_, refreshErr := refresher.Refresh(ctx, input, projectionNow.Add(time.Second))
+		firstDone <- refreshErr
 	}()
+
 	select {
 	case <-tr.committed:
-	case err := <-firstDone:
-		t.Fatalf("heartbeat returned before commit barrier: %v", err)
+	case refreshErr := <-firstDone:
+		t.Fatalf("heartbeat returned before commit barrier: %v", refreshErr)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
 
 	// 다른 인스턴스는 DB guard가 풀린 즉시 같은 세대를 바꿀 수 있다.
 	foreign := staticBuilder{targets: targets, reasons: slices.Clone(reasons)}
+
 	foreign.reasons[0].ReasonKey = "interleaved foreign writer"
 	_, err = other.Refresh(ctx, foreign, projectionNow.Add(time.Second))
 	require.NoError(t, err)
+
 	secondBuilt := make(chan struct{})
 	secondDone := make(chan error, 1)
 	second := projectionBuilderFunc(func(context.Context, dbx.Tx, time.Time) ([]TargetSpec, []TargetReason, error) {
 		close(secondBuilt)
+
 		return targets, reasons, nil
 	})
+
 	go func() {
-		_, err := refresher.Refresh(ctx, second, projectionNow.Add(2*time.Second))
-		secondDone <- err
+		_, refreshErr := refresher.Refresh(ctx, second, projectionNow.Add(2*time.Second))
+		secondDone <- refreshErr
 	}()
+
 	select {
 	case <-secondBuilt:
 		t.Fatal("same refresher entered before the preceding commit was published")
@@ -245,6 +294,7 @@ func TestReasonsCacheSerializesPublicationAcrossInterleavedCallers(t *testing.T)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
+
 	close(tr.release)
 	require.NoError(t, <-firstDone)
 	require.NoError(t, <-secondDone)
@@ -260,6 +310,7 @@ func TestReasonsCacheBuildFailureForcesReconfirmation(t *testing.T) {
 	targets, reasons := capacityTargets(1)
 	input := staticBuilder{targets: targets, reasons: reasons}
 	mustRefresh(t, refresher, input, projectionNow, "initial")
+
 	_, err := refresher.Refresh(t.Context(), staticBuilder{err: errors.New("input unavailable")}, projectionNow)
 	require.Error(t, err)
 	mustRefresh(t, refresher, input, projectionNow, "reconfirm after failure")
@@ -268,9 +319,16 @@ func TestReasonsCacheBuildFailureForcesReconfirmation(t *testing.T) {
 
 func requireStoredReasons(t *testing.T, pool *pgxpool.Pool, generation int64, want []TargetReason) {
 	t.Helper()
+
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(t.Context()) }()
+
+	defer func() {
+		if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Error(rollbackErr)
+		}
+	}()
+
 	got, err := loadReasons(t.Context(), tx, generation)
 	require.NoError(t, err)
 	require.ElementsMatch(t, want, got)
