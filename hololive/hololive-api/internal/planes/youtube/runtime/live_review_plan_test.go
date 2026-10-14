@@ -156,6 +156,7 @@ func assertLiveReviewPlanBlocks(t *testing.T, tx pgx.Tx, query string, maximum i
 	}
 
 	require.NoError(t, jsonv2.Unmarshal(raw, &states))
+	require.Len(t, states, 1)
 	require.Less(t, collectionStateVisits(states[0].Plan), float64(10000), "종료 이력 전체 scan은 허용하지 않습니다: %s", raw)
 	assertLiveReviewReceiptScans(t, states[0].Plan)
 }
