@@ -197,7 +197,7 @@ func (ps *PhotoSyncService) photoSyncChannelIDs(ctx context.Context, forceAll bo
 func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]string, error) {
 	allChannels, err := ps.holodex.fetchHololiveChannelList(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch Hololive channel list: %w", err)
+		return nil, fmt.Errorf("fetch Hololive channel list: %w", err)
 	}
 
 	photoMap := make(map[string]string, len(allChannels))

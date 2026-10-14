@@ -36,7 +36,7 @@ func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 		PoolMaxConns:  postgresConfig.PoolMaxConns,
 	}, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create database resources: %w", err)
+		return nil, nil, fmt.Errorf("create database resources: %w", err)
 	}
 
 	resources := &DatabaseResources{

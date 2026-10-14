@@ -1,4 +1,4 @@
-package util
+package apiclient
 
 import (
 	"sync"
@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-func newTestBreaker(threshold int, resetTimeout time.Duration) *Breaker {
-	return NewBreaker(threshold, resetTimeout)
+func newTestBreaker(threshold int, resetTimeout time.Duration) *circuitBreaker {
+	return newCircuitBreaker(threshold, resetTimeout)
 }
 
 func TestBreaker_ClosedByDefault(t *testing.T) {
@@ -128,18 +128,18 @@ func TestBreaker_RetryAfter(t *testing.T) {
 }
 
 func TestBreaker_NilSafe(t *testing.T) {
-	var b *Breaker
+	var b *circuitBreaker
 
 	if b.IsOpen() {
-		t.Fatal("nil Breaker.IsOpen() should be false")
+		t.Fatal("nil circuitBreaker.IsOpen() should be false")
 	}
 
 	if !b.Allow() {
-		t.Fatal("nil Breaker.Allow() should be true")
+		t.Fatal("nil circuitBreaker.Allow() should be true")
 	}
 
 	if got := b.RetryAfter(); got != 0 {
-		t.Fatalf("nil Breaker.RetryAfter() = %v, want 0", got)
+		t.Fatalf("nil circuitBreaker.RetryAfter() = %v, want 0", got)
 	}
 
 	b.RecordFailure()

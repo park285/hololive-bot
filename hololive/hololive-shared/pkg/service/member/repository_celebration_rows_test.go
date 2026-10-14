@@ -52,7 +52,7 @@ func TestCollectCelebrationMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) 
 		t.Fatalf("members = %#v, want one valid member for UC2", members)
 	}
 
-	if got := err.Error(); !containsAll(got, []string{"parse celebration member row", "Suisei", "failed to unmarshal aliases"}) {
+	if got := err.Error(); !containsAll(got, []string{"parse celebration member row", "Suisei", "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }
@@ -116,7 +116,7 @@ func TestCollectCalendarEntriesFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		t.Fatalf("entries[0].Day = %d, want 4", entries[0].Day)
 	}
 
-	if got := err.Error(); !containsAll(got, []string{"parse calendar member row", "Suisei", "failed to unmarshal aliases"}) {
+	if got := err.Error(); !containsAll(got, []string{"parse calendar member row", "Suisei", "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }

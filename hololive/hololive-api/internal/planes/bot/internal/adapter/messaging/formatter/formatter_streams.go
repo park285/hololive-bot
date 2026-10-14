@@ -31,9 +31,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type liveStreamView struct {
@@ -207,7 +207,7 @@ func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domai
 
 func (f *ResponseFormatter) truncateTitle(title string) string {
 	// 표시용 공백을 먼저 정리해야 선행 패딩이 제목의 길이 예산을 소모하지 않습니다.
-	title = strings.Join(strings.Fields(strings.ReplaceAll(title, util.KakaoZeroWidthSpace, "")), " ")
+	title = strings.Join(strings.Fields(strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, "")), " ")
 
 	return stringutil.TruncateString(title, constants.StringLimits.StreamTitle)
 }

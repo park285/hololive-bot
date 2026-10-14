@@ -13,10 +13,10 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func newAlarmDispatchTestRenderer(t *testing.T) *template.Renderer {
@@ -102,8 +102,8 @@ func goldenAlarmDispatchNotificationIsStarting(n *domain.AlarmNotification) bool
 }
 
 func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int) string {
-	member := util.MarkdownNeutralize(goldenAlarmDispatchMember(n))
-	title := util.MarkdownNeutralize(goldenAlarmDispatchTitle(n))
+	member := kakaotext.MarkdownNeutralize(goldenAlarmDispatchMember(n))
+	title := kakaotext.MarkdownNeutralize(goldenAlarmDispatchTitle(n))
 	url := resolveAlarmDispatchURL(n)
 	label := "방송"
 
@@ -123,15 +123,15 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	}
 
 	if title != "" {
-		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, title)
+		fmt.Fprintf(&b, "\n%s%s", kakaotext.ZeroWidthSpace, title)
 	}
 
 	if collabMembers, err := formatAlarmDispatchCollabMembers(context.Background(), nil, n.Stream); err == nil && collabMembers != "" {
-		fmt.Fprintf(&b, "\n콜라보: %s", util.MarkdownNeutralize(collabMembers))
+		fmt.Fprintf(&b, "\n콜라보: %s", kakaotext.MarkdownNeutralize(collabMembers))
 	}
 
 	if scheduleMessage := strings.TrimSpace(n.ScheduleChangeMessage); scheduleMessage != "" {
-		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(scheduleMessage))
+		fmt.Fprintf(&b, "\n%s%s", kakaotext.ZeroWidthSpace, kakaotext.MarkdownNeutralize(scheduleMessage))
 	}
 
 	if url != "" {

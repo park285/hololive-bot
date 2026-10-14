@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package util
+package kakaotext
 
 import "strings"
 
@@ -34,7 +34,7 @@ func MarkdownNeutralize(s string) string {
 	}
 
 	if hasZeroWidth {
-		s = strings.ReplaceAll(s, KakaoZeroWidthSpace, "")
+		s = strings.ReplaceAll(s, ZeroWidthSpace, "")
 	}
 
 	return insertZeroWidthAfterMarkers(s, inserts)
@@ -47,14 +47,14 @@ func insertZeroWidthAfterMarkers(s string, inserts int) string {
 
 	var b strings.Builder
 
-	b.Grow(len(s) + inserts*len(KakaoZeroWidthSpace))
+	b.Grow(len(s) + inserts*len(ZeroWidthSpace))
 
 	start := 0
 
 	for i := range len(s) {
 		if isMarkdownMarker(s[i]) {
 			b.WriteString(s[start : i+1])
-			b.WriteString(KakaoZeroWidthSpace)
+			b.WriteString(ZeroWidthSpace)
 
 			start = i + 1
 		}
@@ -67,10 +67,10 @@ func insertZeroWidthAfterMarkers(s string, inserts int) string {
 
 func markdownScan(s string) (inserts int, hasZeroWidth bool) {
 	for i := 0; i < len(s); {
-		if strings.HasPrefix(s[i:], KakaoZeroWidthSpace) {
+		if strings.HasPrefix(s[i:], ZeroWidthSpace) {
 			hasZeroWidth = true
 
-			i += len(KakaoZeroWidthSpace)
+			i += len(ZeroWidthSpace)
 
 			continue
 		}

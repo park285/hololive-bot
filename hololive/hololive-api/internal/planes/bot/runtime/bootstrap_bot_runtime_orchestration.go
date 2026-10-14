@@ -68,7 +68,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 
 	botBot, err := orchestration.NewBot(infra.Deps)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create bot: %w", err)
+		return nil, fmt.Errorf("create bot: %w", err)
 	}
 
 	durable, err := buildDurableRuntime(infra, botBot, appConfig.APIWorkerProfile, logger)

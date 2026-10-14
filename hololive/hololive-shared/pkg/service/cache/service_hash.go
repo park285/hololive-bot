@@ -2,13 +2,13 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func (c *Service) HSet(ctx context.Context, key, field, value string) error {
@@ -43,7 +43,7 @@ func (c *Service) HMSet(ctx context.Context, key string, fields map[string]any) 
 
 func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 	resp := c.client.Do(ctx, c.client.B().Hget().Key(key).Field(field).Build())
-	if util.IsValkeyNil(resp.Error()) {
+	if errors.Is(resp.Error(), valkey.Nil) {
 		return "", nil // 필드가 존재하지 않음 - 에러 아님
 	}
 
@@ -90,7 +90,7 @@ func (c *Service) BatchHGet(ctx context.Context, key string, fields []string) (m
 
 func (c *Service) batchHGetValue(key string, result valkey.ValkeyResult) (string, bool, error) {
 	if callErr := result.Error(); callErr != nil {
-		if util.IsValkeyNil(callErr) {
+		if errors.Is(callErr, valkey.Nil) {
 			return "", false, nil
 		}
 

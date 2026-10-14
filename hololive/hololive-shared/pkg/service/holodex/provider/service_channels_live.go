@@ -68,7 +68,7 @@ func (h *Service) mapChannelsLiveStatus(channelIDs []string, body []byte) ([]*do
 	var rawStreams []streammapping.StreamRaw
 
 	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal channels live status: %w", err)
+		return nil, fmt.Errorf("unmarshal channels live status: %w", err)
 	}
 
 	streams := h.mapper.MapStreamsResponse(rawStreams)

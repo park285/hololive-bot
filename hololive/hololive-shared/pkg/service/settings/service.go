@@ -67,7 +67,7 @@ func ensureParentDir(filePath string) error {
 	}
 
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("failed to create settings directory: %w", err)
+		return fmt.Errorf("create settings directory: %w", err)
 	}
 
 	return nil
@@ -196,7 +196,7 @@ func (s *Service) persistSettings(candidate Settings) (err error) {
 		}
 
 		if removeErr := os.Remove(tempPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			err = errors.Join(err, fmt.Errorf("failed to remove temp settings file: %w", removeErr))
+			err = errors.Join(err, fmt.Errorf("remove temp settings file: %w", removeErr))
 		}
 	}()
 
@@ -205,7 +205,7 @@ func (s *Service) persistSettings(candidate Settings) (err error) {
 	}
 
 	if err = os.Rename(tempPath, s.filePath); err != nil {
-		return fmt.Errorf("failed to replace settings file: %w", err)
+		return fmt.Errorf("replace settings file: %w", err)
 	}
 
 	return nil
@@ -214,21 +214,21 @@ func (s *Service) persistSettings(candidate Settings) (err error) {
 func (s *Service) writeSettingsTempFile(candidate Settings) (path string, err error) {
 	temp, err := os.CreateTemp(filepath.Dir(s.filePath), filepath.Base(s.filePath)+".tmp-*")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp settings file: %w", err)
+		return "", fmt.Errorf("create temp settings file: %w", err)
 	}
 
 	defer func() {
 		if closeErr := temp.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("failed to close temp settings file: %w", closeErr)
+			err = fmt.Errorf("close temp settings file: %w", closeErr)
 		}
 	}()
 
 	if encodeErr := jsonv2.MarshalWrite(temp, candidate); encodeErr != nil {
-		return temp.Name(), fmt.Errorf("failed to write settings: %w", encodeErr)
+		return temp.Name(), fmt.Errorf("write settings: %w", encodeErr)
 	}
 
 	if syncErr := temp.Sync(); syncErr != nil {
-		return temp.Name(), fmt.Errorf("failed to sync settings: %w", syncErr)
+		return temp.Name(), fmt.Errorf("sync settings: %w", syncErr)
 	}
 
 	return temp.Name(), nil

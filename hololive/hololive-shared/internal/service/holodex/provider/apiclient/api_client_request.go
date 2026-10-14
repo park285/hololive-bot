@@ -130,7 +130,7 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		done, handleErr := c.handleHolodexRequestError(ctx, err, resp == nil, attempt, maxAttempts)
+		done, handleErr := c.handleHolodexRequestError(ctx, err, attempt, maxAttempts)
 
 		return nil, done, fmt.Errorf("handle holodex request error: %w", handleErr)
 	}
@@ -156,7 +156,7 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 	body, readErr := httputil.ReadAllLimited(resp.Body, maxBody)
 	if readErr != nil {
-		return nil, false, fmt.Errorf("failed to read response: %w", readErr)
+		return nil, false, fmt.Errorf("read response: %w", readErr)
 	}
 
 	out1, out2, err := c.processHolodexResponse(ctx, resp.StatusCode, body, reqURL, attempt, maxAttempts)
@@ -176,14 +176,9 @@ func (c *APIClient) closeHolodexResponse(resp *http.Response) {
 func (c *APIClient) handleHolodexRequestError(
 	ctx context.Context,
 	err error,
-	nilResponse bool,
 	attempt int,
 	maxAttempts int,
 ) (bool, error) {
-	if nilResponse {
-		err = fmt.Errorf("nil response: %w", err)
-	}
-
 	if c.retryAfterNetworkFailure(ctx, err, attempt, maxAttempts) {
 		return false, fmt.Errorf("HTTP request failed (retrying): %w", err)
 	}
@@ -216,7 +211,7 @@ func (c *APIClient) buildRequestURL(path string, params url.Values) string {
 func (c *APIClient) newRequest(ctx context.Context, method, reqURL, apiKey string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")

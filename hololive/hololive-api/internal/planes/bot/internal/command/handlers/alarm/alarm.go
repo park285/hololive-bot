@@ -61,7 +61,7 @@ func (c *AlarmCommand) Description() string {
 
 func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("failed to ensure dependencies: %w", err)
+		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	if c.Deps().Alarm == nil {
@@ -149,7 +149,7 @@ func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.Command
 
 func (c *AlarmCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.Deps().Matcher == nil || c.Deps().Formatter == nil {
@@ -159,8 +159,34 @@ func (c *AlarmCommand) ensureDeps() error {
 	return nil
 }
 
+// alarmMutation은 알람 추가·삭제 명령이 공유하는 흐름(멤버 이름 요구, 유형 파싱, 멤버 해석, 적용·응답)의 차이점이다.
+type alarmMutation struct {
+	needMemberNameMessage string
+	requestedLog          string
+	resolve               func(ctx context.Context, room, memberName string) (*alarmTarget, error)
+	apply                 func(ctx context.Context, cmdCtx *domain.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error
+}
+
 func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-	memberName, err := c.requiredAlarmMemberName(ctx, cmdCtx.Room, params, messaging.ErrAlarmNeedMemberNameAdd)
+	return c.handleAlarmMutation(ctx, cmdCtx, params, alarmMutation{
+		needMemberNameMessage: messaging.ErrAlarmNeedMemberNameAdd,
+		requestedLog:          "Alarm add requested",
+		resolve:               c.resolveAlarmAddMember,
+		apply:                 c.addAlarmAndReply,
+	})
+}
+
+func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+	return c.handleAlarmMutation(ctx, cmdCtx, params, alarmMutation{
+		needMemberNameMessage: messaging.ErrAlarmNeedMemberNameRemove,
+		requestedLog:          "Alarm remove requested",
+		resolve:               c.resolveAlarmMember,
+		apply:                 c.removeAlarmAndReply,
+	})
+}
+
+func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, mutation alarmMutation) error {
+	memberName, err := c.requiredAlarmMemberName(ctx, cmdCtx.Room, params, mutation.needMemberNameMessage)
 	if err != nil {
 		return fmt.Errorf("require alarm member name: %w", err)
 	}
@@ -171,11 +197,11 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 
 	alarmTypes := c.parseAlarmTypes(params)
 
-	c.Deps().Logger.Debug("Alarm add requested",
+	c.Deps().Logger.Debug(mutation.requestedLog,
 		sharedprivacylog.RoomIDAttr(cmdCtx.Room),
 		slog.Any("types", alarmTypes))
 
-	channel, err := c.resolveAlarmAddMember(ctx, cmdCtx.Room, memberName)
+	channel, err := mutation.resolve(ctx, cmdCtx.Room, memberName)
 	if stdErrors.Is(err, handlercore.ErrMemberLookupHandled) {
 		return nil
 	}
@@ -188,8 +214,8 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 		return nil
 	}
 
-	if err := c.addAlarmAndReply(ctx, cmdCtx, channel, alarmTypes); err != nil {
-		return fmt.Errorf("add alarm and reply: %w", err)
+	if err := mutation.apply(ctx, cmdCtx, channel, alarmTypes); err != nil {
+		return fmt.Errorf("apply alarm mutation: %w", err)
 	}
 
 	return nil
@@ -332,42 +358,6 @@ func (c *AlarmCommand) isGraduatedMember(ctx context.Context, channelID string) 
 	}
 
 	return member.IsGraduated, nil
-}
-
-func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-	memberName, err := c.requiredAlarmMemberName(ctx, cmdCtx.Room, params, messaging.ErrAlarmNeedMemberNameRemove)
-	if err != nil {
-		return fmt.Errorf("require alarm member name: %w", err)
-	}
-
-	if memberName == "" {
-		return nil
-	}
-
-	alarmTypes := c.parseAlarmTypes(params)
-
-	c.Deps().Logger.Debug("Alarm remove requested",
-		sharedprivacylog.RoomIDAttr(cmdCtx.Room),
-		slog.Any("types", alarmTypes))
-
-	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)
-	if stdErrors.Is(err, handlercore.ErrMemberLookupHandled) {
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("resolve alarm member: %w", err)
-	}
-
-	if channel == nil {
-		return nil
-	}
-
-	if err := c.removeAlarmAndReply(ctx, cmdCtx, channel, alarmTypes); err != nil {
-		return fmt.Errorf("remove alarm and reply: %w", err)
-	}
-
-	return nil
 }
 
 func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {

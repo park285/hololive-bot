@@ -32,9 +32,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/templateview"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type BroadcastHistoryFilter struct {
@@ -107,18 +107,18 @@ func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *s
 func writeBroadcastHistoryTitle(b *strings.Builder, broadcastType, title string) {
 	title = broadcastHistoryDisplayTitle(broadcastType, title)
 	if title != "" {
-		title = strings.Join(strings.Fields(strings.ReplaceAll(title, util.KakaoZeroWidthSpace, "")), " ")
+		title = strings.Join(strings.Fields(strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, "")), " ")
 		if utf8.RuneCountInString(title) > 64 {
 			title = stringutil.TruncateString(title, 61)
 		}
 
 		// 줄 첫 위치의 번호·인용 기호도 표시 문자로 보존합니다.
-		fmt.Fprintf(b, "%s%s\n", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(title))
+		fmt.Fprintf(b, "%s%s\n", kakaotext.ZeroWidthSpace, kakaotext.MarkdownNeutralize(title))
 	}
 }
 
 func broadcastHistoryDisplayLine(value string) string {
-	return util.MarkdownNeutralize(strings.Join(strings.Fields(value), " "))
+	return kakaotext.MarkdownNeutralize(strings.Join(strings.Fields(value), " "))
 }
 
 func broadcastHistoryDisplayTitle(broadcastType, title string) string {

@@ -18,23 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package util
+package kakaotext
 
-import (
-	"errors"
-
-	"github.com/valkey-io/valkey-go"
-)
-
-// 여러 단계로 래핑된 에러도 루프를 통해 언랩하여 판별한다.
-func IsValkeyNil(err error) bool {
-	for err != nil {
-		if valkey.IsValkeyNil(err) {
-			return true
-		}
-
-		err = errors.Unwrap(err)
-	}
-
-	return false
-}
+// ZeroWidthSpace는 제목 보호와 카카오톡 표시 제어에 쓰는 공백이다.
+const ZeroWidthSpace = "\u200b"

@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package util
+package kakaotext
 
 import (
 	"strings"
@@ -73,12 +73,12 @@ func TestMarkdownNeutralize(t *testing.T) {
 		t.Parallel()
 
 		got := MarkdownNeutralize("a*b_c`d~e]f#g")
-		want := "a*" + KakaoZeroWidthSpace +
-			"b_" + KakaoZeroWidthSpace +
-			"c`" + KakaoZeroWidthSpace +
-			"d~" + KakaoZeroWidthSpace +
-			"e]" + KakaoZeroWidthSpace +
-			"f#" + KakaoZeroWidthSpace + "g"
+		want := "a*" + ZeroWidthSpace +
+			"b_" + ZeroWidthSpace +
+			"c`" + ZeroWidthSpace +
+			"d~" + ZeroWidthSpace +
+			"e]" + ZeroWidthSpace +
+			"f#" + ZeroWidthSpace + "g"
 
 		if got != want {
 			t.Errorf("MarkdownNeutralize = %q, want %q", got, want)
@@ -98,7 +98,7 @@ func TestMarkdownNeutralize_PreservesVisibleRunes(t *testing.T) {
 
 	for _, in := range inputs {
 		got := MarkdownNeutralize(in)
-		if stripped := strings.ReplaceAll(got, KakaoZeroWidthSpace, ""); stripped != in {
+		if stripped := strings.ReplaceAll(got, ZeroWidthSpace, ""); stripped != in {
 			t.Errorf("visible text changed: got %q, want %q", stripped, in)
 		}
 	}
@@ -111,12 +111,12 @@ func TestMarkdownNeutralize_NoConsecutiveZeroWidth(t *testing.T) {
 		"***",
 		"**굵게** ~~취소선~~",
 		"]]]###",
-		"마커 뒤 ZWSP 이미 존재: *" + KakaoZeroWidthSpace + "텍스트",
+		"마커 뒤 ZWSP 이미 존재: *" + ZeroWidthSpace + "텍스트",
 	}
 
 	for _, in := range inputs {
 		got := MarkdownNeutralize(in)
-		if strings.Contains(got, KakaoZeroWidthSpace+KakaoZeroWidthSpace) {
+		if strings.Contains(got, ZeroWidthSpace+ZeroWidthSpace) {
 			t.Errorf("MarkdownNeutralize(%q) produced consecutive ZWSP: %q", in, got)
 		}
 	}
@@ -136,14 +136,14 @@ func TestMarkdownNeutralize_Idempotent(t *testing.T) {
 func TestMarkdownNeutralize_StripsIncomingZeroWidth(t *testing.T) {
 	t.Parallel()
 
-	run2 := KakaoZeroWidthSpace + KakaoZeroWidthSpace
+	run2 := ZeroWidthSpace + ZeroWidthSpace
 
 	inputs := []string{
 		"제목" + run2 + "스타일링",
 		run2 + "선행 런",
 		"마커 없는 본문" + run2,
 		"**굵게**" + run2 + "[제목](https://example.com)",
-		strings.Repeat(KakaoZeroWidthSpace, 500),
+		strings.Repeat(ZeroWidthSpace, 500),
 	}
 
 	for _, in := range inputs {
@@ -159,12 +159,12 @@ func TestMarkdownNeutralize_ConcatenationClosed(t *testing.T) {
 
 	fields := []string{
 		"끝이 마커*",
-		KakaoZeroWidthSpace + "선행 ZWSP로 시작",
+		ZeroWidthSpace + "선행 ZWSP로 시작",
 		"**굵게**",
 		"평범한 제목",
 		"",
 		"#",
-		"끝이 ZWSP" + KakaoZeroWidthSpace,
+		"끝이 ZWSP" + ZeroWidthSpace,
 	}
 
 	outs := make([]string, 0, len(fields))
@@ -174,7 +174,7 @@ func TestMarkdownNeutralize_ConcatenationClosed(t *testing.T) {
 
 	for i, a := range outs {
 		for j, b := range outs {
-			if strings.Contains(a+b, KakaoZeroWidthSpace+KakaoZeroWidthSpace) {
+			if strings.Contains(a+b, ZeroWidthSpace+ZeroWidthSpace) {
 				t.Errorf("연결 [%d]+[%d]에서 연속 ZWSP 발생: %q + %q", i, j, a, b)
 			}
 		}

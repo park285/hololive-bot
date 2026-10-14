@@ -36,7 +36,7 @@ func generateToken(prefix string, byteLen int) (string, error) {
 
 	b := make([]byte, byteLen)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("failed to read random bytes: %w", err)
+		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 
 	return prefix + base64.RawURLEncoding.EncodeToString(b), nil

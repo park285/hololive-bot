@@ -51,7 +51,7 @@ func (c *ScheduleCommand) Description() string {
 
 func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("failed to ensure dependencies: %w", err)
+		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	rawCommandToken := popRawScheduleCommandToken(params)
@@ -85,7 +85,7 @@ func (c *ScheduleCommand) executeMemberSchedule(ctx context.Context, room, membe
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+		return fmt.Errorf("find member: %w", err)
 	}
 
 	if channel == nil {
@@ -162,7 +162,7 @@ func clampScheduleDays(days int) int {
 
 func (c *ScheduleCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.Deps().Matcher == nil || c.Deps().Holodex == nil || c.Deps().Formatter == nil {

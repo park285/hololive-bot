@@ -23,7 +23,7 @@ package templateview
 import (
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 const (
@@ -42,7 +42,7 @@ func ShouldFoldItems(displayCount int) bool { return displayCount >= 2 }
 // 빈 본문·한 줄짜리·이미 패딩된 텍스트는 그대로 반환한다(멱등).
 func FoldForSeeMore(text string) string {
 	// 단발 ZWSP는 MarkdownNeutralize가 남긴 것이므로, 패딩 판정은 연속 2개 이상으로만 한다.
-	if strings.Contains(text, util.KakaoZeroWidthSpace+util.KakaoZeroWidthSpace) {
+	if strings.Contains(text, kakaotext.ZeroWidthSpace+kakaotext.ZeroWidthSpace) {
 		return text
 	}
 
@@ -52,7 +52,7 @@ func FoldForSeeMore(text string) string {
 	}
 
 	// 패딩을 머리 문단 마지막 줄에 붙여야 접힌 화면에 빈 줄이 따로 생기지 않는다.
-	return head + strings.Repeat(util.KakaoZeroWidthSpace, KakaoSeeMorePadding) + "\n" + rest
+	return head + strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding) + "\n" + rest
 }
 
 // 개수·기간·표시 한도 안내가 제목 다음 줄에 있어도 접힌 화면에 남도록 머리 문단 단위로 자른다.

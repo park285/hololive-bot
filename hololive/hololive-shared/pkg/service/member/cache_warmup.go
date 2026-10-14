@@ -37,7 +37,7 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 
 	snap, err := c.loadAllMembersSnapshot(ctx, generation)
 	if err != nil {
-		return fmt.Errorf("failed to load all members: %w", err)
+		return fmt.Errorf("load all members: %w", err)
 	}
 
 	if c.logger != nil {

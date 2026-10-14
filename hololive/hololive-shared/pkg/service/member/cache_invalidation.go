@@ -96,7 +96,7 @@ func (c *Cache) publishEpochNotification(ctx context.Context, epoch uint64) {
 
 func (c *Cache) Refresh(ctx context.Context) error {
 	if err := c.InvalidateAll(ctx); err != nil {
-		return fmt.Errorf("failed to invalidate cache: %w", err)
+		return fmt.Errorf("invalidate cache: %w", err)
 	}
 
 	if err := c.WarmUpCache(ctx); err != nil {
@@ -108,7 +108,7 @@ func (c *Cache) Refresh(ctx context.Context) error {
 
 func (c *Cache) InvalidateAliasCache(ctx context.Context, alias string) error {
 	if err := c.InvalidateAll(ctx); err != nil {
-		return fmt.Errorf("failed to invalidate alias cache: %w", err)
+		return fmt.Errorf("invalidate alias cache: %w", err)
 	}
 
 	c.logger.Info("Alias cache invalidated", slog.String("alias", alias))

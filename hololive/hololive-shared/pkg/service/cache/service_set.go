@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -12,19 +14,7 @@ func (c *Service) SAdd(ctx context.Context, key string, members []string) (int64
 		return 0, nil
 	}
 
-	resp := c.client.Do(ctx, c.client.B().Sadd().Key(key).Member(members...).Build())
-	if resp.Error() != nil {
-		c.logger.Error("Cache sadd failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
-
-		return 0, NewCacheError("sadd", key, resp.Error())
-	}
-
-	added, err := resp.AsInt64()
-	if err != nil {
-		return 0, NewCacheError("sadd", key, err)
-	}
-
-	return added, nil
+	return c.setMembersMutation(ctx, "sadd", key, c.client.B().Sadd().Key(key).Member(members...).Build())
 }
 
 func (c *Service) SRem(ctx context.Context, key string, members []string) (int64, error) {
@@ -32,19 +22,24 @@ func (c *Service) SRem(ctx context.Context, key string, members []string) (int64
 		return 0, nil
 	}
 
-	resp := c.client.Do(ctx, c.client.B().Srem().Key(key).Member(members...).Build())
+	return c.setMembersMutation(ctx, "srem", key, c.client.B().Srem().Key(key).Member(members...).Build())
+}
+
+// setMembersMutation은 SADD·SREM처럼 바뀐 원소 수를 돌려주는 집합 명령을 실행한다.
+func (c *Service) setMembersMutation(ctx context.Context, op, key string, cmd valkey.Completed) (int64, error) {
+	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {
-		c.logger.Error("Cache srem failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache "+op+" failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
 
-		return 0, NewCacheError("srem", key, resp.Error())
+		return 0, NewCacheError(op, key, resp.Error())
 	}
 
-	removed, err := resp.AsInt64()
+	changed, err := resp.AsInt64()
 	if err != nil {
-		return 0, NewCacheError("srem", key, err)
+		return 0, NewCacheError(op, key, err)
 	}
 
-	return removed, nil
+	return changed, nil
 }
 
 func (c *Service) SMembers(ctx context.Context, key string) ([]string, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ func TestIsUnclassifiedSeparatesDefaultBucketFromExplicitClass(t *testing.T) {
 		{name: "raw unknown", err: errors.New("acquire connection"), want: true},
 		{name: "FromContext catch-all", err: FromContext(errors.New("read body")), want: true},
 		{name: "FromContext socket deadline", err: FromContext(os.ErrDeadlineExceeded), want: true},
+		{name: "FromContext transport timeout is classified as timeout", err: FromContext(&url.Error{Op: "Get", URL: "https://holodex.example", Err: os.ErrDeadlineExceeded}), want: false},
 		{name: "WithRetry keeps unclassified base", err: WithRetry(FromContext(errors.New("read body")), hint), want: true},
 		{name: "WithRetry keeps classified base", err: WithRetry(Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, errors.New("invariant")), hint), want: false},
 		{name: "WithRetry with invalid hint keeps unclassified base", err: WithRetry(FromContext(errors.New("read body")), RetryHint{}), want: true},

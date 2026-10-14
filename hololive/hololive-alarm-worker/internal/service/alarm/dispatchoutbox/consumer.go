@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type Consumer struct {
@@ -88,7 +88,7 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 	}
 
 	if consumer.workerID == "" {
-		workerID, err := util.InstanceID("dispatcher")
+		workerID, err := leaseowner.InstanceID("dispatcher")
 		if err != nil {
 			return nil, fmt.Errorf("new dispatch outbox consumer: %w", err)
 		}

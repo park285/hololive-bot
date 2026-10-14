@@ -161,6 +161,8 @@ type durableRuntime struct {
 	handlerTimeout         time.Duration
 	inboxWake              chan struct{}
 	outboxWake             chan struct{}
+	inboxPollSlot          chan struct{}
+	outboxPollSlot         chan struct{}
 	cancel                 context.CancelFunc
 	wg                     sync.WaitGroup
 	lifecycleMu            sync.Mutex
@@ -227,6 +229,7 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 		inboxEnabled: inboxProfile.Executor.Enabled, outboxEnabled: outboxProfile.Executor.Enabled,
 		handlerTimeout: time.Duration(*inboxProfile.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
 		inboxWake:      make(chan struct{}, 1), outboxWake: make(chan struct{}, 1),
+		inboxPollSlot: newDurablePollSlot(), outboxPollSlot: newDurablePollSlot(),
 		dispatchBudget:        time.Duration(profile.BotReplyOutbox.DispatchBudgetMS) * time.Millisecond,
 		outboxClaimLease:      time.Duration(profile.BotReplyOutbox.ClaimLeaseMS) * time.Millisecond,
 		heartbeatEvery:        time.Duration(profile.BotWebhookInbox.HeartbeatIntervalMS) * time.Millisecond,
@@ -272,22 +275,7 @@ func newDurableQueueSampler(
 }
 
 func (r *durableRuntime) runInboxWorker(ctx context.Context) {
-	idleDelay := r.inboxPollEvery
-
-	for ctx.Err() == nil {
-		if r.processNextInbox(ctx) {
-			idleDelay = r.inboxPollEvery
-			continue
-		}
-
-		durableClaimIdleTotal.WithLabelValues("inbox").Inc()
-
-		if !waitDurableWake(ctx, idleDelay, r.inboxWake) {
-			return
-		}
-
-		idleDelay = nextDurableIdleDelayFrom(idleDelay, r.inboxPollEvery)
-	}
+	runDurableWorker(ctx, "inbox", r.processNextInbox, r.inboxWake, r.inboxPollSlot, r.inboxPollEvery)
 }
 
 func (r *durableRuntime) processNextInbox(ctx context.Context) bool {

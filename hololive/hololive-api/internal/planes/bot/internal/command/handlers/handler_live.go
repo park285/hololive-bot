@@ -51,7 +51,7 @@ func (c *LiveCommand) Description() string {
 // 특정 멤버 이름이 파라미터로 주어진 경우, 해당 멤버의 방송만 필터링한다.
 func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("failed to ensure dependencies: %w", err)
+		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	memberName, hasMember := params[paramMember].(string)
@@ -77,7 +77,7 @@ func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.Comm
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+		return fmt.Errorf("find member: %w", err)
 	}
 
 	if channel == nil {
@@ -134,7 +134,7 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 
 func (c *LiveCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.Deps().Matcher == nil || c.Deps().LiveQuery == nil || c.Deps().Formatter == nil {

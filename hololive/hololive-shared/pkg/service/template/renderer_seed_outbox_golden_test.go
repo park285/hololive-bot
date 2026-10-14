@@ -7,14 +7,14 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 // YouTube outbox seed template을 예시 값으로 렌더링한 최종 본문을 고정한다. 이 패키지가 template 본문을 소유하므로
 // 렌더러(alarm-worker) 쪽 테스트는 본문을 복사해 렌더링 결과를 검증하지 않는다.
 func TestSeedTemplates_OutboxRenderGoldens(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	zwsp := util.KakaoZeroWidthSpace
+	zwsp := kakaotext.ZeroWidthSpace
 	groupSeparator := "──────────"
 
 	cases := []struct {

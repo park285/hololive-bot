@@ -20,9 +20,9 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 const (
@@ -173,7 +173,7 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 }
 
 func seeMoreFoldPadding() string {
-	return strings.Repeat(util.KakaoZeroWidthSpace, 500)
+	return strings.Repeat(kakaotext.ZeroWidthSpace, 500)
 }
 
 // requireNoAutoPadding은 접기 패딩 판정과 같은 기준(연속 ZWSP)으로 확인해, 길이가 다른 패딩이 다시 생겨도 잡는다.
@@ -181,7 +181,7 @@ func seeMoreFoldPadding() string {
 func requireNoAutoPadding(t *testing.T, final string) {
 	t.Helper()
 
-	require.NotContains(t, final, util.KakaoZeroWidthSpace+util.KakaoZeroWidthSpace)
+	require.NotContains(t, final, kakaotext.ZeroWidthSpace+kakaotext.ZeroWidthSpace)
 }
 
 func seeMoreFoldVideoPayload(t *testing.T, videoID, title string) string {

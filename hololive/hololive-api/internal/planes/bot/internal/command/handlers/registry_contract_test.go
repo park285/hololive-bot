@@ -83,7 +83,7 @@ func TestRegistryExecuteWrapsHandlerFailure(t *testing.T) {
 		t.Fatalf("error = %v, want handler sentinel in chain", err)
 	}
 
-	if !strings.Contains(err.Error(), "failed to execute command live") {
+	if !strings.Contains(err.Error(), "execute command live") {
 		t.Fatalf("error = %q, want command name in wrapping", err)
 	}
 }

@@ -39,7 +39,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 const testAPIKey = "test-key"
@@ -202,7 +201,7 @@ func newHolodexTestClient(apiKey string) *APIClient {
 		baseURL:       "https://holodex.net/api/v2",
 		apiKey:        apiKey,
 		logger:        slog.Default(),
-		breaker: util.NewBreaker(
+		breaker: newCircuitBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
 			constants.CircuitBreakerConfig.ResetTimeout,
 		),
@@ -251,7 +250,7 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 		logger:            slog.Default(),
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: time.Second,
-		breaker: util.NewBreaker(
+		breaker: newCircuitBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
 			constants.CircuitBreakerConfig.ResetTimeout,
 		),
@@ -262,8 +261,8 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 		t.Fatal("expected error for nil HTTP response")
 	}
 
-	if got := err.Error(); !strings.Contains(got, "nil response") {
-		t.Fatalf("error = %q, want nil response context", got)
+	if got := err.Error(); !strings.Contains(got, "nil *Response") {
+		t.Fatalf("error = %q, want net/http nil *Response cause", got)
 	}
 }
 
@@ -372,7 +371,7 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 		logger:            slog.Default(),
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
-		breaker: util.NewBreaker(
+		breaker: newCircuitBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
 			constants.CircuitBreakerConfig.ResetTimeout,
 		),
@@ -412,7 +411,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		logger:            slog.Default(),
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
-		breaker: util.NewBreaker(
+		breaker: newCircuitBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
 			constants.CircuitBreakerConfig.ResetTimeout,
 		),

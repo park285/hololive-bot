@@ -324,7 +324,7 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 
-		if err.Error() != "failed to ensure base dependencies: message callbacks not configured" {
+		if err.Error() != "ensure base dependencies: message callbacks not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -379,7 +379,7 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 
-		if err.Error() != "failed to ensure base dependencies: message callbacks not configured" {
+		if err.Error() != "ensure base dependencies: message callbacks not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

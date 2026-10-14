@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -105,6 +106,10 @@ func Normalize(err error) *Error {
 		return &Error{code: contract.ErrorCollectionCanceled, class: contract.ClassCanceled, retry: defaultRetryHint(), err: err}
 	}
 
+	if recognizedTransportTimeout(err) {
+		return &Error{code: contract.ErrorCollectionTimeout, class: contract.ClassTimeout, retry: defaultRetryHint(), err: err}
+	}
+
 	if recognizedTransientNetwork(err) {
 		return &Error{code: contract.ErrorCollectionFailed, class: contract.ClassTransient, retry: defaultRetryHint(), err: err}
 	}
@@ -194,6 +199,10 @@ func FromContext(err error) error {
 		return Wrap(contract.ErrorCollectionCanceled, contract.ClassCanceled, err)
 	}
 
+	if recognizedTransportTimeout(err) {
+		return Wrap(contract.ErrorCollectionTimeout, contract.ClassTimeout, err)
+	}
+
 	if recognizedTransientNetwork(err) {
 		return Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, err)
 	}
@@ -269,6 +278,15 @@ func (e *Error) normalized() *Error {
 	}
 
 	return &Error{code: contract.ErrorInternalInvariant, class: contract.ClassInternal, retry: defaultRetryHint(), err: e.err, unclassified: e.unclassified}
+}
+
+// recognizedTransportTimeout은 net/http client가 *url.Error로 돌려준 수송 계층 타임아웃(dial·TLS handshake·
+// response header·Client.Timeout)을 알린다. 앞 단계가 context deadline을 먼저 분류하고, HTTP 요청 밖에서 생긴
+// socket deadline(os.ErrDeadlineExceeded)은 원인이 모호해 계속 미분류로 남긴다.
+func recognizedTransportTimeout(err error) bool {
+	urlErr, ok := errors.AsType[*url.Error](err)
+
+	return ok && urlErr != nil && urlErr.Timeout()
 }
 
 func recognizedTransientNetwork(err error) bool {

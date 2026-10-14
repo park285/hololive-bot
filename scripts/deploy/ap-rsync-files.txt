@@ -301,12 +301,6 @@ hololive/hololive-shared/pkg/service/ratelimit/valkey/sliding_window.go
 hololive/hololive-shared/pkg/service/youtube/alarmtiming/timing.go
 hololive/hololive-shared/pkg/service/youtube/timestamp/canonical.go
 hololive/hololive-shared/pkg/sqlassets/sqlassets.go
-hololive/hololive-shared/pkg/util/breaker.go
-hololive/hololive-shared/pkg/util/instance.go
-hololive/hololive-shared/pkg/util/kakao.go
-hololive/hololive-shared/pkg/util/markdown.go
-hololive/hololive-shared/pkg/util/string.go
-hololive/hololive-shared/pkg/util/valkey.go
 hololive/hololive-youtube-collector/Dockerfile
 hololive/hololive-youtube-collector/Dockerfile.dockerignore
 hololive/hololive-youtube-collector/Dockerfile.po-sandbox

@@ -40,12 +40,12 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type deliveryOutboxClaimer interface {
@@ -139,7 +139,7 @@ func NewDispatcher(repository deliveryRepository, sender delivery.PreparedMessag
 		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
 	}
 
-	workerID, err := util.InstanceID("delivery-dispatcher")
+	workerID, err := leaseowner.InstanceID("delivery-dispatcher")
 	if err != nil {
 		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
 	}

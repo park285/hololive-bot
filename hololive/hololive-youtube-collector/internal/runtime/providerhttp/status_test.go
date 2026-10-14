@@ -277,3 +277,68 @@ func TestMapRequestErrorFromRealClientTLSVerifyFailure(t *testing.T) {
 		t.Fatalf("error text leaks secret: %q", mapped.Error())
 	}
 }
+
+// Holodex·official 응답이 ResponseHeaderTimeout 안에 header를 보내지 않으면 net/http는 Timeout()이 참인 *url.Error를
+// 돌려준다. 운영 로그에서 가장 흔한 provider 실패라 INTERNAL 불변식이 아니라 TIMEOUT으로 기록돼야 한다.
+func TestMapRequestErrorFromRealClientResponseHeaderTimeout(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+
+	t.Cleanup(func() { close(release) })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := testTransportConfig()
+
+	cfg.ResponseHeaderTimeout = 50 * time.Millisecond
+	cfg.RequestTimeout = 5 * time.Second
+
+	client, err := NewProviderHTTPClient(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if closeErr := client.Close(); closeErr != nil {
+			t.Errorf("close client: %v", closeErr)
+		}
+	})
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/live?key=secret-key", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, doErr := client.Do(req)
+	if doErr == nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Errorf("close body: %v", closeErr)
+		}
+
+		t.Fatal("expected response header timeout")
+	}
+
+	mapped := MapRequestError("request holodex live", doErr, "secret-key")
+
+	if collecterr.CodeOf(mapped) != contract.ErrorCollectionTimeout || collecterr.ClassOf(mapped) != contract.ClassTimeout {
+		t.Fatalf("CodeOf/ClassOf(%v) = %s/%s, want %s/%s", mapped, collecterr.CodeOf(mapped), collecterr.ClassOf(mapped),
+			contract.ErrorCollectionTimeout, contract.ClassTimeout)
+	}
+
+	if collecterr.IsUnclassified(mapped) {
+		t.Fatalf("IsUnclassified(%v) = true, want explicit timeout", mapped)
+	}
+
+	if strings.Contains(mapped.Error(), "secret-key") {
+		t.Fatalf("error text leaks secret: %q", mapped.Error())
+	}
+}

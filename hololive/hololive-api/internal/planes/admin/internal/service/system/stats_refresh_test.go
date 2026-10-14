@@ -315,7 +315,7 @@ func TestCollector_GetCurrentStats_FailedRefreshDoesNotPublishOrBlockNextCaller(
 		t.Fatalf("failed refresh=(%+v, %v) want=(nil, wrapped missing proc file)", stats, err)
 	}
 
-	if !strings.HasPrefix(err.Error(), "collect current stats: failed to get memory stats: ") {
+	if !strings.HasPrefix(err.Error(), "collect current stats: get memory stats: ") {
 		t.Fatalf("collection error context changed: %v", err)
 	}
 

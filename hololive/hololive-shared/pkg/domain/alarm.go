@@ -112,7 +112,7 @@ func alarmTypesString(value any) (string, error) {
 	case string:
 		return v, nil
 	default:
-		return "", fmt.Errorf("failed to scan AlarmTypes: expected string or []byte, got %T", value)
+		return "", fmt.Errorf("scan AlarmTypes: expected string or []byte, got %T", value)
 	}
 }
 

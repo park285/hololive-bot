@@ -65,7 +65,7 @@ func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 
 func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *domain.CommandContext) error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.repository == nil {

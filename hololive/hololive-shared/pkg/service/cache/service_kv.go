@@ -12,7 +12,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func (c *Service) Get(ctx context.Context, key string, dest any) error {
@@ -46,7 +45,7 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 
 func (c *Service) GetString(ctx context.Context, key string) (string, bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
-	if util.IsValkeyNil(resp.Error()) {
+	if errors.Is(resp.Error(), valkey.Nil) {
 		return "", false, nil
 	}
 
@@ -238,7 +237,7 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 	}
 
 	resp := c.client.Do(ctx, cmd)
-	if util.IsValkeyNil(resp.Error()) {
+	if errors.Is(resp.Error(), valkey.Nil) {
 		return false, nil // 키가 이미 존재 - 락 획득 실패
 	}
 

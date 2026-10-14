@@ -39,7 +39,7 @@ func ProvideMemberCache(
 ) (*membersvc.Cache, error) {
 	memberCache, err := membersvc.NewMemberCache(ctx, repository, cacheClient, logger, membersvc.CacheConfig{WarmUp: true})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create member cache: %w", err)
+		return nil, fmt.Errorf("create member cache: %w", err)
 	}
 
 	return memberCache, nil

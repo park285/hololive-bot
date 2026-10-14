@@ -57,7 +57,7 @@ func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*do
 	var rawChannel streammapping.ChannelRaw
 
 	if err := jsonv2.Unmarshal(body, &rawChannel); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal channel: %w", err)
+		return nil, fmt.Errorf("unmarshal channel: %w", err)
 	}
 
 	channel := h.mapper.MapChannelResponse(&rawChannel)

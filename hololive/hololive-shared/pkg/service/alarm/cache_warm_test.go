@@ -18,7 +18,6 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 const (
@@ -606,7 +605,7 @@ func configureMemoryCacheHashes(client *cachemocks.Client, rawClient valkey.Clie
 	}
 	client.HGetFunc = func(ctx context.Context, key, field string) (string, error) {
 		resp := rawClient.Do(ctx, rawClient.B().Hget().Key(key).Field(field).Build())
-		if util.IsValkeyNil(resp.Error()) {
+		if errors.Is(resp.Error(), valkey.Nil) {
 			return "", nil
 		}
 

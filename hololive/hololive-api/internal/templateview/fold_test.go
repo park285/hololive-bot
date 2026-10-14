@@ -24,13 +24,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 func TestFoldForSeeMore(t *testing.T) {
 	t.Parallel()
 
-	padding := strings.Repeat(util.KakaoZeroWidthSpace, KakaoSeeMorePadding)
+	padding := strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)
 	longRest := strings.Repeat("가", 300)
 	multi := "헤더 라인\n" + longRest
 
@@ -62,7 +62,7 @@ func TestFoldForSeeMore(t *testing.T) {
 func TestFoldForSeeMoreKeepsHeadParagraph(t *testing.T) {
 	t.Parallel()
 
-	padding := strings.Repeat(util.KakaoZeroWidthSpace, KakaoSeeMorePadding)
+	padding := strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)
 	body := "1 · 채널\n" + strings.Repeat("긴 제목 ", 60)
 
 	tests := []struct {
@@ -87,7 +87,7 @@ func TestFoldForSeeMoreKeepsHeadParagraph(t *testing.T) {
 				t.Fatalf("head paragraph not kept: %q", got[:min(len(got), 80)])
 			}
 
-			if strings.ReplaceAll(got, util.KakaoZeroWidthSpace, "") != text {
+			if strings.ReplaceAll(got, kakaotext.ZeroWidthSpace, "") != text {
 				t.Error("visible text changed")
 			}
 		})
@@ -97,7 +97,7 @@ func TestFoldForSeeMoreKeepsHeadParagraph(t *testing.T) {
 func TestFoldForSeeMoreFallsBackToFirstLineForLongHead(t *testing.T) {
 	t.Parallel()
 
-	padding := strings.Repeat(util.KakaoZeroWidthSpace, KakaoSeeMorePadding)
+	padding := strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)
 	lines := make([]string, seeMoreHeadMaxLines+1)
 
 	for i := range lines {
@@ -115,11 +115,11 @@ func TestFoldForSeeMoreFallsBackToFirstLineForLongHead(t *testing.T) {
 func TestMarkdownNeutralize_StrippedBodyStillFolds(t *testing.T) {
 	t.Parallel()
 
-	title := "라이브" + strings.Repeat(util.KakaoZeroWidthSpace, 4) + "제목"
+	title := "라이브" + strings.Repeat(kakaotext.ZeroWidthSpace, 4) + "제목"
 	body := title + "\n" + strings.Repeat("가나다라마바사아자차카타파하", 25)
 
-	folded := FoldForSeeMore(util.MarkdownNeutralize(body))
-	if !strings.Contains(folded, strings.Repeat(util.KakaoZeroWidthSpace, KakaoSeeMorePadding)) {
+	folded := FoldForSeeMore(kakaotext.MarkdownNeutralize(body))
+	if !strings.Contains(folded, strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)) {
 		t.Errorf("외부 유입 ZWSP run 때문에 fold가 억제됨: %q", folded[:60])
 	}
 }
@@ -128,9 +128,9 @@ func TestFoldSurvivesNeutralizedBody(t *testing.T) {
 	t.Parallel()
 
 	body := "**헤더 라인**\n" + strings.Repeat("가~나*다_라#마]바`사", 40)
-	neutralized := util.MarkdownNeutralize(body)
+	neutralized := kakaotext.MarkdownNeutralize(body)
 
-	if !strings.Contains(neutralized, util.KakaoZeroWidthSpace) {
+	if !strings.Contains(neutralized, kakaotext.ZeroWidthSpace) {
 		t.Fatal("전제 실패: neutralize 결과에 ZWSP가 없음")
 	}
 
@@ -139,11 +139,11 @@ func TestFoldSurvivesNeutralizedBody(t *testing.T) {
 		t.Fatal("neutralize된 본문이 fold되지 않음")
 	}
 
-	if !strings.Contains(folded, strings.Repeat(util.KakaoZeroWidthSpace, KakaoSeeMorePadding)) {
+	if !strings.Contains(folded, strings.Repeat(kakaotext.ZeroWidthSpace, KakaoSeeMorePadding)) {
 		t.Errorf("ZWSP %d-run 패딩이 삽입되지 않음", KakaoSeeMorePadding)
 	}
 
-	head := "*" + util.KakaoZeroWidthSpace + "*" + util.KakaoZeroWidthSpace + "헤더 라인"
+	head := "*" + kakaotext.ZeroWidthSpace + "*" + kakaotext.ZeroWidthSpace + "헤더 라인"
 	if !strings.HasPrefix(folded, head) {
 		t.Error("첫 줄이 보존되지 않음")
 	}
@@ -165,7 +165,7 @@ func TestShouldFoldItems(t *testing.T) {
 }
 
 func TestFoldForSeeMorePreservesEmptyAndExistingPadding(t *testing.T) {
-	for _, body := range []string{"", " \n\t", "한 줄", "헤더" + strings.Repeat(util.KakaoZeroWidthSpace, 500) + "\n본문", "헤더" + strings.Repeat(util.KakaoZeroWidthSpace, 2) + "\n본문"} {
+	for _, body := range []string{"", " \n\t", "한 줄", "헤더" + strings.Repeat(kakaotext.ZeroWidthSpace, 500) + "\n본문", "헤더" + strings.Repeat(kakaotext.ZeroWidthSpace, 2) + "\n본문"} {
 		if got := FoldForSeeMore(body); got != body {
 			t.Errorf("existing body changed: %q", got)
 		}

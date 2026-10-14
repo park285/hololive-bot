@@ -332,7 +332,7 @@ func TestCommandRouterUnknownCommandMessage(t *testing.T) {
 
 		err := router.Execute(t.Context(), cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to send unknown command message")
+		assert.Contains(t, err.Error(), "send unknown command message")
 	})
 }
 
@@ -612,7 +612,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 			MessageID: "m-1",
 		},
 	})
-	require.EqualError(t, err, "execute command: failed to execute command help: boom")
+	require.EqualError(t, err, "execute command: execute command help: boom")
 
 	select {
 	case msg := <-msgCh:

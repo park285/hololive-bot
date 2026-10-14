@@ -80,7 +80,7 @@ func TestClientDoRequestNilResponse(t *testing.T) {
 	}
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "nil response")
+	assert.Contains(t, err.Error(), "nil *Response")
 }
 
 func TestClientDoRequestClosesRejectedResponse(t *testing.T) {

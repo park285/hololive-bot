@@ -71,7 +71,7 @@ func (c *BroadcastHistoryCommand) Description() string {
 
 func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("failed to ensure dependencies: %w", err)
+		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	query, filter, err := c.buildQuery(ctx, cmdCtx, params)
@@ -180,7 +180,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Contex
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+		return fmt.Errorf("find member: %w", err)
 	}
 
 	if channel == nil {
@@ -195,7 +195,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Contex
 
 func (c *BroadcastHistoryCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.Deps().BroadcastHistory == nil || c.Deps().Formatter == nil {
@@ -215,7 +215,7 @@ func (c *BroadcastThumbnailCommand) Description() string {
 
 func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
-		return fmt.Errorf("failed to ensure dependencies: %w", err)
+		return fmt.Errorf("ensure dependencies: %w", err)
 	}
 
 	videoID := stringParam(params, "video_id")
@@ -308,7 +308,7 @@ func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Conte
 
 func (c *BroadcastThumbnailCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
-		return fmt.Errorf("failed to ensure base dependencies: %w", err)
+		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
 	if c.Deps().BroadcastHistory == nil || c.Deps().ThumbnailDownloader == nil || c.Deps().SendImage == nil {

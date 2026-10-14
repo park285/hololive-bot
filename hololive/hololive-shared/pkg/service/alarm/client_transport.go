@@ -141,10 +141,6 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	if err != nil {
 		c.closeResponseBody(resp, path)
 
-		if resp == nil {
-			err = fmt.Errorf("nil response: %w", err)
-		}
-
 		return nil, fmt.Errorf("alarm-api: %s: %w", path, err)
 	}
 

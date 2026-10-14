@@ -123,7 +123,7 @@ func (r *CommandRouter) executeRegisteredCommand(
 		}
 
 		if sendErr := r.sendMessage(ctx, cmdCtx.Room, unknownMessage); sendErr != nil {
-			return registeredCommandResult{handled: true, err: fmt.Errorf("failed to send unknown command message: %w", sendErr)}
+			return registeredCommandResult{handled: true, err: fmt.Errorf("send unknown command message: %w", sendErr)}
 		}
 
 		return registeredCommandResult{handled: true}

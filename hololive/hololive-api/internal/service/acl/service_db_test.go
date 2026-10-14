@@ -409,7 +409,7 @@ func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatal("expected SetEnabled error")
 	}
 
-	if !strings.Contains(err.Error(), "failed to save ACL enabled setting") {
+	if !strings.Contains(err.Error(), "save ACL enabled setting") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -444,7 +444,7 @@ func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
 		t.Fatal("expected SetMode error")
 	}
 
-	if !strings.Contains(err.Error(), "failed to save ACL mode setting") {
+	if !strings.Contains(err.Error(), "save ACL mode setting") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -544,7 +544,7 @@ func aclLoadFromDatabaseInitCreateErrorTests() []aclLoadFromDatabaseInitCreateEr
 					return nil
 				}
 			},
-			wantErr: "failed to initialize ACL enabled setting",
+			wantErr: "initialize ACL enabled setting",
 		},
 		{
 			name: "mode setting create failure",
@@ -557,7 +557,7 @@ func aclLoadFromDatabaseInitCreateErrorTests() []aclLoadFromDatabaseInitCreateEr
 					return nil
 				}
 			},
-			wantErr: "failed to initialize ACL mode setting",
+			wantErr: "initialize ACL mode setting",
 		},
 		{
 			name: "room create failure",
@@ -566,7 +566,7 @@ func aclLoadFromDatabaseInitCreateErrorTests() []aclLoadFromDatabaseInitCreateEr
 					return errors.New("forced room create failure")
 				}
 			},
-			wantErr: "failed to initialize ACL room",
+			wantErr: "initialize ACL room",
 		},
 	}
 }

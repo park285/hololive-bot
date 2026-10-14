@@ -26,7 +26,7 @@ func ProvideACLService(
 		kakaoRooms,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ACL service: %w", err)
+		return nil, fmt.Errorf("create ACL service: %w", err)
 	}
 
 	return service, nil

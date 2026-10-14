@@ -82,183 +82,45 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 	return nil
 }
 
+// youtubePlaneRetentionAgeEnv는 일 단위 보존 기간 env 하나와 그 값을 담는 필드를 잇는다.
+type youtubePlaneRetentionAgeEnv struct {
+	key string
+	age *time.Duration
+}
+
+// youtubePlaneRetentionAgeEnvs는 보존 기간 env와 필드의 대응을 한 곳에서 정한다. 적재 함수와 production 검증이 같은 표를 쓴다.
+func youtubePlaneRetentionAgeEnvs(retention *YouTubePlaneRetentionConfig) []youtubePlaneRetentionAgeEnv {
+	return []youtubePlaneRetentionAgeEnv{
+		{"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS", &retention.QueueProcessedAge},
+		{"YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS", &retention.QueueDLQAge},
+		{"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", &retention.CollisionAge},
+		{"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", &retention.ReplayAuditAge},
+		{"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", &retention.LiveAbsenceSlotAge},
+		{"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", &retention.CheckpointHistoryAge},
+		{"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", &retention.ProjectionRetiredAge},
+		{"YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS", &retention.CommunityPageAge},
+		{"YOUTUBE_PLANE_RETENTION_VIDEO_LIST_DAYS", &retention.VideoListAge},
+		{"YOUTUBE_PLANE_RETENTION_SHORTS_LIST_DAYS", &retention.ShortsListAge},
+		{"YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS", &retention.LiveSnapshotAge},
+		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS", &retention.ChannelProfileAge},
+		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS", &retention.ChannelPhotoAge},
+		{"YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS", &retention.ScheduleSnapshotAge},
+		{"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS", &retention.ChannelLiveCheckAge},
+		{"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS", &retention.VideoLiveCheckAge},
+	}
+}
+
 func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
-	var err error
+	targets := youtubePlaneRetentionAgeEnvs(&config.Retention)
+	fallbacks := youtubePlaneRetentionAgeEnvs(defaults)
 
-	if config.Retention.QueueProcessedAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS",
-		defaults.QueueProcessedAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
+	for i, target := range targets {
+		value, err := envload.StrictDurationUnitEnv(target.key, *fallbacks[i].age, youtubePlaneRetentionDay)
+		if err != nil {
+			return fmt.Errorf("strict duration unit env: %w", err)
+		}
 
-	if config.Retention.QueueDLQAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS",
-		defaults.QueueDLQAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.CollisionAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS",
-		defaults.CollisionAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.ReplayAuditAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS",
-		defaults.ReplayAuditAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if err := loadYouTubePlaneRetentionSupportAges(config, defaults); err != nil {
-		return fmt.Errorf("load youtube plane retention support ages: %w", err)
-	}
-
-	return nil
-}
-
-func loadYouTubePlaneRetentionSupportAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
-	var err error
-
-	if config.Retention.LiveAbsenceSlotAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS",
-		defaults.LiveAbsenceSlotAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.CheckpointHistoryAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS",
-		defaults.CheckpointHistoryAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.ProjectionRetiredAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS",
-		defaults.ProjectionRetiredAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if err := loadYouTubePlaneEvidenceAges(config, defaults); err != nil {
-		return fmt.Errorf("load youtube plane evidence ages: %w", err)
-	}
-
-	return nil
-}
-
-func loadYouTubePlaneEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
-	if err := loadYouTubePlaneContentEvidenceAges(config, defaults); err != nil {
-		return fmt.Errorf("load youtube plane content evidence ages: %w", err)
-	}
-
-	if err := loadYouTubePlaneChannelEvidenceAges(config, defaults); err != nil {
-		return fmt.Errorf("load youtube plane channel evidence ages: %w", err)
-	}
-
-	if err := loadYouTubePlaneLiveCheckEvidenceAges(config, defaults); err != nil {
-		return fmt.Errorf("load youtube plane live check evidence ages: %w", err)
-	}
-
-	return nil
-}
-
-func loadYouTubePlaneLiveCheckEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
-	var err error
-
-	if config.Retention.ChannelLiveCheckAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS",
-		defaults.ChannelLiveCheckAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.VideoLiveCheckAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS",
-		defaults.VideoLiveCheckAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	return nil
-}
-
-func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
-	var err error
-
-	if config.Retention.CommunityPageAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS",
-		defaults.CommunityPageAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.VideoListAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_VIDEO_LIST_DAYS",
-		defaults.VideoListAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.ShortsListAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_SHORTS_LIST_DAYS",
-		defaults.ShortsListAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.LiveSnapshotAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS",
-		defaults.LiveSnapshotAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	return nil
-}
-
-func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
-	var err error
-
-	if config.Retention.ChannelProfileAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS",
-		defaults.ChannelProfileAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.ChannelPhotoAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS",
-		defaults.ChannelPhotoAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if config.Retention.ScheduleSnapshotAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS",
-		defaults.ScheduleSnapshotAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		*target.age = value
 	}
 
 	return nil
@@ -404,29 +266,8 @@ func (c *YouTubePlaneConfig) validateProductionRetention(environment string) err
 		return errors.New("YOUTUBE_PLANE_RETENTION_POLICY_APPROVED=true is required in production")
 	}
 
-	ages := []struct {
-		key string
-		age time.Duration
-	}{
-		{"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS", c.Retention.QueueProcessedAge},
-		{"YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS", c.Retention.QueueDLQAge},
-		{"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", c.Retention.CollisionAge},
-		{"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", c.Retention.ReplayAuditAge},
-		{"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", c.Retention.LiveAbsenceSlotAge},
-		{"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", c.Retention.CheckpointHistoryAge},
-		{"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", c.Retention.ProjectionRetiredAge},
-		{"YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS", c.Retention.CommunityPageAge},
-		{"YOUTUBE_PLANE_RETENTION_VIDEO_LIST_DAYS", c.Retention.VideoListAge},
-		{"YOUTUBE_PLANE_RETENTION_SHORTS_LIST_DAYS", c.Retention.ShortsListAge},
-		{"YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS", c.Retention.LiveSnapshotAge},
-		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS", c.Retention.ChannelProfileAge},
-		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS", c.Retention.ChannelPhotoAge},
-		{"YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS", c.Retention.ScheduleSnapshotAge},
-		{"YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS", c.Retention.ChannelLiveCheckAge},
-		{"YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS", c.Retention.VideoLiveCheckAge},
-	}
-	for _, item := range ages {
-		if item.age <= 0 {
+	for _, item := range youtubePlaneRetentionAgeEnvs(&c.Retention) {
+		if *item.age <= 0 {
 			return fmt.Errorf("%s must be positive in production", item.key)
 		}
 	}

@@ -18,8 +18,8 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
-	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 var errAlarmDispatchRunnerTestSend = errors.New("send failed")
@@ -650,9 +650,9 @@ func TestRenderAlarmDispatchNotificationUpcomingKeepsPreliveMessage(t *testing.T
 
 func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
 	const (
-		title = "【ホロライブ ドリームス】水着きちゃ!音ゲー初心者!hololive Dreamsやってみる!【#" + util.KakaoZeroWidthSpace +
-			"綺々羅々ヴィヴィ #" + util.KakaoZeroWidthSpace + "hololiveDEV_" + util.KakaoZeroWidthSpace +
-			"IS #" + util.KakaoZeroWidthSpace + "FLOWGLOW】"
+		title = "【ホロライブ ドリームス】水着きちゃ!音ゲー初心者!hololive Dreamsやってみる!【#" + kakaotext.ZeroWidthSpace +
+			"綺々羅々ヴィヴィ #" + kakaotext.ZeroWidthSpace + "hololiveDEV_" + kakaotext.ZeroWidthSpace +
+			"IS #" + kakaotext.ZeroWidthSpace + "FLOWGLOW】"
 		streamURL = "https://www.youtube.com/watch?v=DCW0CvsJAnw"
 	)
 
@@ -671,7 +671,7 @@ func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		fmt.Sprintf("⏰ 비비 방송 5분 전\n%s%s\n%s", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(string([]rune(strings.ReplaceAll(title, util.KakaoZeroWidthSpace, ""))[:61])+"..."), streamURL),
+		fmt.Sprintf("⏰ 비비 방송 5분 전\n%s%s\n%s", kakaotext.ZeroWidthSpace, kakaotext.MarkdownNeutralize(string([]rune(strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, ""))[:61])+"..."), streamURL),
 		got,
 	)
 }

@@ -79,23 +79,6 @@ func buildCalendarEntry(kindStr string, member *domain.Member, day, referenceYea
 	return entry
 }
 
-func scanCelebrationMemberRow(scanner memberRowScanner) (memberRow, error) {
-	var row memberRow
-
-	err := scanner.Scan(
-		&row.id, &row.slug, &row.channelID,
-		&row.englishName, &row.japaneseName, &row.koreanName, &row.shortKoreanName,
-		&row.status, &row.isGraduated, &row.aliasesJSON, &row.photo,
-		&row.org, &row.suborg, &row.syncSource, &row.twitchUserID,
-		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
-	)
-	if err != nil {
-		return row, fmt.Errorf("scan celebration member columns: %w", err)
-	}
-
-	return row, nil
-}
-
 const celebrationMemberColumns = `id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 	status, is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id,
 	birthday, debut_date, official_link, units, chzzk_channel_id`
@@ -136,7 +119,7 @@ func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, da
 
 func (r *Repository) collectCelebrationMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
 	out, err := collectJoinedRows(rows, "celebration member rows iteration", func(rows pgx.Rows) (*domain.Member, error) {
-		row, err := scanCelebrationMemberRow(rows)
+		row, err := scanMemberFullRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan celebration member row: %w", err)
 		}

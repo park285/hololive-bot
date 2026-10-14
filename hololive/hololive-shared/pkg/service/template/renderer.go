@@ -39,7 +39,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
 
 type Renderer struct {
@@ -118,7 +118,7 @@ var templateFuncs = template.FuncMap{
 	"nl2br":          guardStringFunc("nl2br", nl2br),
 	"stripTags":      guardStringFunc("stripTags", stripTags),
 	"urlEncode":      guardStringFunc("urlEncode", urlEncode),
-	"mdsafe":         guardStringFunc("mdsafe", util.MarkdownNeutralize),
+	"mdsafe":         guardStringFunc("mdsafe", kakaotext.MarkdownNeutralize),
 	// 복사할 명령어는 숨은 문자를 삽입하지 않고 Markdown 이스케이프로 보호합니다.
 	"mdescape": guardStringFunc("mdescape", kakaoformat.EscapeMarkdown),
 	"print":    boundedPrint,

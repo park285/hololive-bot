@@ -3,9 +3,12 @@ package collecterr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -281,5 +284,37 @@ func TestRecognizedNetworkNormalizesToTransient(t *testing.T) {
 
 	if CodeOf(io.EOF) != contract.ErrorCollectionFailed || ClassOf(io.EOF) != contract.ClassTransient {
 		t.Fatalf("EOF = %s/%s", CodeOf(io.EOF), ClassOf(io.EOF))
+	}
+}
+
+// net/http client가 돌려준 수송 계층 타임아웃(response header·dial·Client.Timeout)은 *url.Error의 Timeout()으로
+// 드러난다. 이를 TIMEOUT으로 분류해야 운영 로그가 외부 지연을 내부 불변식 위반으로 기록하지 않는다.
+func TestERR012TransportTimeoutClassifiesAsCollectionTimeout(t *testing.T) {
+	t.Parallel()
+
+	transportTimeout := &url.Error{Op: "Get", URL: "https://holodex.example/api/v2/live", Err: os.ErrDeadlineExceeded}
+
+	for name, err := range map[string]error{
+		"normalize":   transportTimeout,
+		"fromContext": FromContext(transportTimeout),
+		"wrapped":     fmt.Errorf("request holodex live: %w", transportTimeout),
+	} {
+		if CodeOf(err) != contract.ErrorCollectionTimeout || ClassOf(err) != contract.ClassTimeout {
+			t.Fatalf("%s: CodeOf/ClassOf = %s/%s, want %s/%s", name, CodeOf(err), ClassOf(err), contract.ErrorCollectionTimeout, contract.ClassTimeout)
+		}
+
+		if IsUnclassified(err) {
+			t.Fatalf("%s: IsUnclassified = true, want explicit timeout", name)
+		}
+	}
+
+	// HTTP 요청 밖의 socket deadline과 타임아웃이 아닌 *url.Error는 기존대로 미분류다.
+	for name, err := range map[string]error{
+		"bare socket deadline":      os.ErrDeadlineExceeded,
+		"url error without timeout": &url.Error{Op: "Get", URL: "https://holodex.example", Err: errors.New("unexpected EOF reading trailer")},
+	} {
+		if !IsUnclassified(FromContext(err)) {
+			t.Fatalf("%s: IsUnclassified(FromContext) = false, want true", name)
+		}
 	}
 }

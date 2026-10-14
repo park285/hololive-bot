@@ -189,7 +189,7 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		t.Fatalf("members = %#v, want one valid member for UC2", members)
 	}
 
-	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to parse member row", "Suisei", "failed to unmarshal aliases"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"parse member row", "Suisei", "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }
@@ -233,7 +233,7 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		t.Fatalf("members = %#v, want UC2 photo member", members)
 	}
 
-	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to scan member row", "scan mismatch"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"scan member row", "scan mismatch"}) {
 		t.Fatalf("error = %q, want joined scan error context", got)
 	}
 }
@@ -292,7 +292,7 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		t.Fatalf("members = %#v, want one valid member for UC1", members)
 	}
 
-	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to parse member row", testMemberMiko, "failed to unmarshal aliases"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"parse member row", testMemberMiko, "unmarshal aliases"}) {
 		t.Fatalf("error = %q, want joined parse error context", got)
 	}
 }

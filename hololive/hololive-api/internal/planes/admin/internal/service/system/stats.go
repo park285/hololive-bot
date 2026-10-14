@@ -191,13 +191,13 @@ func (c *Collector) refreshCurrentStats(ctx context.Context, done chan struct{})
 func (c *Collector) collectCurrentStats(ctx context.Context) (*SystemStats, error) {
 	v, err := mem.VirtualMemoryWithContext(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get memory stats: %w", err)
+		return nil, fmt.Errorf("get memory stats: %w", err)
 	}
 
 	// CPU 사용률 (즉시 반환)
 	cpus, err := cpu.PercentWithContext(ctx, 0, false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get cpu stats: %w", err)
+		return nil, fmt.Errorf("get cpu stats: %w", err)
 	}
 
 	var cpuUsage float64

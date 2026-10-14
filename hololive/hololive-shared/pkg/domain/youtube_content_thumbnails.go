@@ -56,7 +56,7 @@ func (t *ThumbnailsJSON) Scan(value any) error {
 
 	bytes, ok := value.([]byte)
 	if !ok {
-		return fmt.Errorf("failed to scan ThumbnailsJSON: expected []byte, got %T", value)
+		return fmt.Errorf("scan ThumbnailsJSON: expected []byte, got %T", value)
 	}
 
 	if err := jsonv2.Unmarshal(bytes, t); err != nil {

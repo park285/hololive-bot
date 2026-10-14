@@ -72,7 +72,7 @@ func (h *Service) fetchHololiveChannelListPage(ctx context.Context, pageSize, of
 	var rawChannels []streammapping.ChannelRaw
 
 	if err := jsonv2.Unmarshal(body, &rawChannels); err != nil {
-		return nil, 0, fmt.Errorf("failed to unmarshal channel list: %w", err)
+		return nil, 0, fmt.Errorf("unmarshal channel list: %w", err)
 	}
 
 	return h.mapper.MapChannelsResponse(rawChannels), len(rawChannels), nil

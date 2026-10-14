@@ -17,8 +17,8 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
-	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
+	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	holodexproviders "github.com/kapu/hololive-shared/pkg/providers/holodex"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -417,7 +417,7 @@ func warmAlarmService(ctx context.Context, alarmService *subscriptions.AlarmServ
 
 // 잘못된 batch 한도를 기본값 1000으로 바꾸지 않고 기동 오류로 드러낸다.
 func loadAlarmDispatchPublishConfig(profile *workerconfig.AlarmWorkerProfile) (queue.PublishConfig, error) {
-	maxDeliveries, err := envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
+	maxDeliveries, err := envload.RequiredPositiveIntEnv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
 	if err != nil {
 		return queue.PublishConfig{}, fmt.Errorf("alarm dispatch publish config: %w", err)
 	}

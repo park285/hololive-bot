@@ -87,7 +87,7 @@ func TestProvideACLServiceWrapsInitializationError(t *testing.T) {
 		t.Fatal("ProvideACLService() error = nil, want initialization error")
 	}
 
-	if !strings.Contains(err.Error(), "failed to create ACL service") || !strings.Contains(err.Error(), "postgres service is nil") {
+	if !strings.Contains(err.Error(), "create ACL service") || !strings.Contains(err.Error(), "postgres service is nil") {
 		t.Fatalf("ProvideACLService() error = %q, want wrapped postgres initialization failure", err)
 	}
 }
