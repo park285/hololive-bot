@@ -322,4 +322,25 @@
 - 최종 `scripts/ci/local-ci.sh`는 **589.21s**에 통과했다(전체 lint·NilAway·race/non-race 포함). 별도 integration-only 게이트도 **82.91s**에 통과했다. 실제 publish/consume benchmark의 fleet 36건 추정은 **415.15ms / 3,600ms 예산**이었다. stack DB access policy도 통과했다. 운영 읽기 전용 사전 표본은 최근 5분 **702건 PROCESSED**, 그 시점 queue 상태는 PROCESSED뿐이었다. 로컬 포화 쓰기 시험을 운영 처리량 보장으로 바꾸어 해석하지 않는다.
 - 운영 전환은 새 이미지 검증 후 **API 정지 → migration 312 → 신규 API만 시작**한다. migration은 source_observations에도 쓰기 배제를 잡아 collector INSERT가 잠깐 대기할 수 있다. `lock_timeout=3s`는 획득 대기 상한이지 전체 backfill 시간 상한이 아니다. 구 API와 새 영수증 writer는 잠금 순서가 달라 image-only rollback을 허용하지 않고 원본 보존·guard-first 수정 이미지로 전진 복구한다. 새 백업·원격 Git 발행은 하지 않는다.
 
+## 11. 운영 312 수용과 S1 target 집계 보완
+
+- `14e102dca17b4e0ed2d7c9bbe0f647da125006aa`의 ARM64 API를 kapu에서 빌드·검증했다. **2026-10-14 08:45:13 UTC** API 정지 창에서 `312`를 **1 적용 / 172 생략 / 총 173**으로 적용했고 **08:45:20.491 UTC** 신규 API가 시작됐다. 세 health/readiness·RestartCount 0·새 ERROR/FATAL/PANIC 0건·PostgreSQL/Valkey/Iris 연결과 기동 후 76건 PROCESSED를 확인했다. worker·collector c의 image/StartedAt은 그대로다.
+- 312 checksum은 `6d7e79605a7b4604964251480338a5a7c0b05683a7d243875f7c2d15bb5cc6c5`로 일치하며 이제 수정 금지다. 모델 228행·현재 일치 영수증 53건, 실제 runtime 역할의 모델 쓰기/내부 refresh 권한 거부를 확인했다. 두 SQL의 동일 statement/snapshot 양방향 결과 차이는 **0행**이다.
+- 각 모드 첫 회 예열 후 10회 평균: S2 custom/generic **5블록·0.3176/0.3094ms**로 수용했다. S1은 **68블록·3.4366/3.1847ms**로 시간 목표 미달이다. 목표를 완화하지 않는다.
+- S1 단일-use CTE·집계 후 빈 kind 보충·rate bucket·직접 roster·clock 비교 등의 읽기 전용 후보를 검증했다. 일부 표본은 2.9ms였지만 반복 평균은 3ms를 넘었고 변동을 숨기지 않는다. 이 후보들은 적용하지 않으며 원래 timestamp/numeric 집계식을 유지한다.
+- 남은 구조 집계는 승인된 동기 쓰기 경로 확대 안에서 **기존 projection guard**를 재사용해 CURRENT/STAGING target bundle에만 저장한다. 새 전역 잠금·collector 변경·lease/현재 시각 cache는 없다. mapping은 DB view 한 곳으로 이동하고 `kind/subject`별 RPC 수·최소 cadence/created/not_before만 원본 target과 같은 트랜잭션에서 확정한다. RETIRED bundle은 보관하지 않는다.
+- 다음 단계: 313 및 원자적 refresh/retention 잠금 전환 → 기존 S3의 600 CURRENT/48,000 RETIRED·1행 변경 **100블록** 상한과 동시성/권한/의미 시험 → 실제 SQL smoke·독립 검토·영향 게이트 → 승인된 API-only migration/배포 → S1/S2 운영 custom/generic 수용. target 변경은 영향받은 bundle key만 갱신하며 header 기술적 heartbeat는 전체 bundle을 다시 쓰지 않는다.
+- 복구 자료: `hololive-api:rollback-live-readmodel-20261014t084251z`, `/opt/hololive-bot/compose/sql-live-readmodel-20261014T084251Z/previous/`. 초기 파일 준비에서 일반 사용자 디렉터리 권한과 원래 없던 maintenance 경로를 확인해, 성공한 이미지 tag·기존 manifest 보존을 반복하지 않고 준비만 완료했다. migration/기동은 한 번 성공했으며 새 백업·원격 Git 발행은 없다.
+
+## 12. Target bundle 동기화 검증
+
+- 313 구현과 회귀 시험을 2명, 동시성/의미와 권한/배포 독립 검토를 2명으로 분리했다. 두 검토 모두 남은 구체적 결함이 없었으며 실행 검증은 통합 소유자가 담당했다.
+- 기존 singleton 누락의 fail-closed 계약을 유지했다. 자동 재생성 제안은 채택하지 않았다. 통합 시험에서 PL/pgSQL OLD/NEW와 transition alias의 이름 충돌을 발견해 별칭을 분리했다. 오류 문구 고정 assertion은 제거하고 실제 거절·원본 미변경·guard 미복구를 검증한다.
+- 새 동시성·권한·backfill·rollback·retention 시험은 **9.019s**, 전체 targetprojection은 **6.872s**에 통과했다. 기존 S3 **100블록** 상한은 그대로다. schema golden을 생성했다. 실제 migrator 역할의 `db-migrate`는 **1 적용 / 173 생략 / 총 174**, 다음 실행은 **0 적용 / 174 생략**으로 성공했다.
+- 운영의 observation kind별 개수/간격만 집계해 합성 fixture를 **592 target / 451 bundle**로 확장했다(운영 원문·ID 복제 없음). 동일 SQL snapshot 차이는 0행이었다. 로컬 S1 custom/generic은 구조 집계 전 **42블록·2.0523/1.9976ms**에서 동기 bundle 조회 **41블록·1.5616/1.5997ms**였다. 첫 회 예열 후 10회 전부를 사용했으며 운영 수용 수치로 취급하지 않는다.
+- 별도 실제 SQL smoke에서 IDLE/ACTIVE/DEFERRED·missing lease·전부 sleeping·NULL 완료·±infinity·빈 kind·만료된 projection의 구·신규 결과 차이는 모두 **0행**이다. 운영 판단에 쓰는 timestamp/numeric 식은 변경하지 않았다.
+- Target 쓰기 비용(4 clients, 각 250건): 기존 guard+target 갱신 **0.822ms / 4,868.15 tx/s**, 동기 bundle **3.267ms / 1,224.37 tx/s**, 양쪽 **실패 0/1,000**. 이후 구·신규 조회 차이도 0행이었다. 이 역시 tmpfs·fsync off 로컬 표본으로 운영 처리량을 보장하지 않는다.
+- 전체 CI의 race 단계는 두 기존 fixture의 새 잠금 계약 불일치를 잡았다. 역사적 권한 fixture에 현재 guard 함수와 열별 최소 권한을 적용했고, guard를 쥔 writer 밖에서 header를 갱신하던 만료 시험은 사전 만료 예약·reader statement 시각 검증·자연 만료로 바꿨다. 20초 timeout과 대기 후 만료 거절 요구는 그대로다. 해당 race 시험은 runtime **26.546s**, dbtest **5.570s**에 통과했고 영향 lint도 통과했다.
+- 원본 checkout은 별도 원격 통합으로 `376afe702f5bcdb59740f1387291457d595614a2`가 됐으며, 작업 base 대비 차이는 deunhealth 의존성 복구 2파일과 changelog뿐이었다. 이 별도 변경을 보존해 최종 로컬 통합하며 원격 Git 발행은 하지 않는다.
+
 Fallback delta: 새 재시도·대체 경로를 추가하지 않는다.

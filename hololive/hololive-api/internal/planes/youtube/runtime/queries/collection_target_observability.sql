@@ -4,32 +4,17 @@
 -- $1은 기존 LIVE 신선도 예산(ms)이다. not_before가 미래인 bundle은 신선한 근거로 잠든 대상이라
 -- due·stale·미완료·완료 나이에서 깨어날 때까지 빠지고, 수요는 예산당 최대 1회로 센다.
 -- 미획득 target의 due 기준은 연속 membership 동안 보존되는 created_at이다.
-WITH mapped_observations(kind, observation_kind, rpc_per_kind) AS (
-    VALUES
-        ('youtubejs_channel_live', 'live_snapshot', FALSE),
-        ('youtubejs_channel_live_check', 'channel_live_check', FALSE),
-        ('youtubejs_video_live', 'video_live_check', FALSE),
-        ('community_collect', 'community_page', FALSE),
-        ('youtubejs_content', 'video_list', TRUE),
-        ('youtubejs_content', 'shorts_list', TRUE),
-        ('youtubejs_channel_metadata', 'channel_profile', FALSE),
-        ('youtubejs_channel_metadata', 'channel_photo', FALSE)
-), mapping AS (
-    SELECT DISTINCT kind,rpc_per_kind FROM mapped_observations
+WITH mapping AS (
+    SELECT DISTINCT kind,rpc_per_kind FROM youtube_collection_runtime_kinds
 ), current_projection AS (
     SELECT generation FROM youtube_collection_projection_generations
     WHERE status = 'CURRENT' AND valid_until > statement_timestamp()
 ), targets AS (
-    -- 내부 식별자는 bytewise로 묶되 최종 출력 순서는 DB 기본 collation을 유지한다.
-    SELECT m.kind COLLATE "C" AS kind,CASE WHEN m.rpc_per_kind THEN COUNT(t.observation_kind) ELSE 1 END AS rpc_calls,
-           t.subject_key COLLATE "C" AS subject_key,
-           MIN(t.poll_interval_ms) AS interval_ms,MIN(t.created_at) AS created_at,
-           MIN(COALESCE(t.not_before,'-infinity'::timestamptz)) AS eligible_at
-    FROM mapped_observations m
-    JOIN youtube_collection_targets t ON t.observation_kind=m.observation_kind
-    JOIN current_projection g ON g.generation=t.projection_generation
-    WHERE t.enabled
-    GROUP BY m.kind COLLATE "C",m.rpc_per_kind,t.subject_key COLLATE "C"
+    -- 원본 target과 같은 트랜잭션에서 집계한 구조만 읽는다. 세대 만료·lease 시각은 지금 판정한다.
+    SELECT bundle.kind COLLATE "C" AS kind,bundle.rpc_calls,
+           bundle.subject_key COLLATE "C" AS subject_key,bundle.interval_ms,bundle.created_at,bundle.eligible_at
+    FROM youtube_collection_runtime_bundles bundle
+    JOIN current_projection generation ON generation.generation=bundle.projection_generation
 ), leased AS (
     SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, t.eligible_at, l.last_completed_at,
            CASE

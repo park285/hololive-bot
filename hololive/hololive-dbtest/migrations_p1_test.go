@@ -203,6 +203,7 @@ var observationGrantPostBaselineMigrations = []string{
 	retiredViewerRemovalMigration,
 	applicationCascadeMigration,
 	binaryHashesMigration,
+	collectionRuntimeBundlesMigration,
 }
 
 // 이어 붙이는 순서가 grant/revoke 결과를 결정하므로 파일 번호순이 아니라 적용 순서대로 나열한다.
@@ -505,7 +506,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"observation_contract_generations":          observationPrivileges("SELECT"),
 			"youtube_collection_projection_generations": observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_targets":                observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
-			"youtube_collection_projection_guard":       observationPrivileges("SELECT", "UPDATE"),
+			"youtube_collection_projection_guard":       observationPrivileges("SELECT"),
 			"youtube_collection_target_reasons":         observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_job_leases":             observationPrivileges("SELECT"),
 			"source_observations":                       observationPrivileges("SELECT", "DELETE"),
@@ -1028,14 +1029,21 @@ func assertRuntimeProjectionGuardAccess(t *testing.T, pool *pgxpool.Pool, role, 
 		failObservationRoleTx(t, tx, role, "set runtime projection guard role: %v", err)
 	}
 
-	var guard bool
-
-	if err := tx.QueryRow(ctx, refreshSQL).Scan(&guard); err != nil {
+	if _, err := tx.Exec(ctx, refreshSQL); err != nil {
 		failObservationRoleTx(t, tx, role, "lock projection guard as runtime: %v", err)
 	}
 
-	if !guard {
-		failObservationRoleTx(t, tx, role, "runtime locked guard_key = false, want singleton true row")
+	var oldColumnWritable, writerColumnWritable bool
+
+	if err := tx.QueryRow(ctx, `SELECT
+		has_column_privilege(current_user,'youtube_collection_projection_guard','guard_key','UPDATE'),
+		has_column_privilege(current_user,'youtube_collection_projection_guard','runtime_writer','UPDATE')`).
+		Scan(&oldColumnWritable, &writerColumnWritable); err != nil {
+		failObservationRoleTx(t, tx, role, "read projection guard column privileges: %v", err)
+	}
+
+	if !oldColumnWritable || writerColumnWritable {
+		failObservationRoleTx(t, tx, role, "guard column privileges: guard_key=%t runtime_writer=%t", oldColumnWritable, writerColumnWritable)
 	}
 
 	for _, query := range []string{
