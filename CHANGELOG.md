@@ -8,6 +8,10 @@
 
 ## 미출시
 
+- **검토 SQL 원본 공유:** observability·live-check가 활성 session/head/availability의 scalar 원본을 함께 쓰고, live-check는 미래 UPCOMING을 보조 원본 조회 전에 제외합니다. 판정 결과·신선도·한도·불일치 진단은 유지합니다.
+- **불변 영수증 타입 투영:** migration 310이 기존 영수증 `facts`에서 비교용 `semantic_value`를 저장 생성 열로 만듭니다. 현재 원본은 캐시하지 않습니다. JSON의 누락/추가 키·다른 scalar 타입은 정확한 왕복 검사로 비일치 처리하며, 숫자 정밀도·NULL object·최신 일치 영수증 의미를 유지합니다. 타입/열 충돌은 migration을 중단합니다.
+- **적용 경계:** 310은 작은 영수증 사실 표를 `ACCESS EXCLUSIVE`로 다시 쓰며 `lock_timeout=3s`를 유지합니다. 새 API보다 먼저 적용하고 원본 영수증은 수정·삭제하지 않습니다. collector·worker에는 변경이 없습니다.
+
 ## v10.0.0 - 2026-10-14
 
 - **YouTube SQL hot path:** 활성 방송 집합을 과거 종료 이력과 분리하고, 검토 영수증은 typed timestamp의 의미 사실을 집합으로 비교합니다. Projection heartbeat는 현재 세대 범위에서 바뀐 `not_before`만 갱신하며, 커밋된 세대·header 버전·reasons 해시가 같으면 reasons 재조회를 생략합니다.

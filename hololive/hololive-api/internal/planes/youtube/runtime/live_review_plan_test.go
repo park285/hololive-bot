@@ -43,11 +43,12 @@ func TestLiveReviewQueriesBoundedPlans(t *testing.T) {
 			observability := fmt.Sprintf("EXECUTE review_observability(%d)", defaultLiveFreshnessBudget().Milliseconds())
 			liveCheck := "EXECUTE review_live_check(ARRAY[" + strings.Join(channelLiterals, ",") + "],1000)"
 
-			assertLiveReviewPlanBlocks(t, tx, observability, 1000)
-			assertLiveReviewPlanBlocks(t, tx, liveCheck, 400)
+			assertLiveReviewPlanBlocks(t, tx, observability, 450)
+			assertLiveReviewPlanBlocks(t, tx, liveCheck, 280)
 
 			assertLiveReviewObservability(t, tx, observability)
 			assertLiveReviewMembership(t, tx, liveCheck, channels)
+			assertLiveReviewQuerySemanticEquivalence(t, tx, channels, 52)
 		})
 	}
 }
@@ -81,10 +82,11 @@ func assertLiveReviewObservability(t *testing.T, tx pgx.Tx, query string) {
 		sample := &samples[i]
 
 		require.EqualValues(t, 215, sample.retainedTotal)
-		require.EqualValues(t, 200, sample.upcoming)
-		require.EqualValues(t, 15, sample.live)
+		require.EqualValues(t, 197, sample.upcoming)
+		require.EqualValues(t, 9, sample.live)
 		require.EqualValues(t, 52, sample.closedUnresolved)
-		require.Zero(t, sample.stateMismatch)
+		require.EqualValues(t, 9, sample.other)
+		require.EqualValues(t, 6, sample.stateMismatch)
 	}
 }
 
@@ -184,28 +186,56 @@ func seedLiveReviewPlanPopulation(t *testing.T, pool *pgxpool.Pool) {
 		(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled)
 		SELECT generation,'plan-channel-'||n,'live_snapshot',20,120000,true
 		FROM youtube_collection_projection_generations CROSS JOIN generate_series(1,119) n;
-		INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,lifecycle_origin)
-		SELECT 'plan-ended-'||n,'plan-channel-'||(1+n%119),'ENDED',repeat('e',500),'observed'
-		FROM generate_series(1,10000) n;
+		-- 활성 행을 종료 이력 사이에 흩어 놓아 연속 heap·순차 키의 우연한 재사용을 피합니다.
 		INSERT INTO youtube_live_sessions(video_id,channel_id,status,title,scheduled_start_time,lifecycle_origin)
-		SELECT 'plan-active-'||n,'plan-channel-'||(1+n%119),CASE WHEN n<=200 THEN 'UPCOMING' ELSE 'LIVE' END,
-		       repeat('a',100),now()-interval '2 days',CASE WHEN n<=200 THEN 'legacy_unknown' ELSE 'observed' END
-		FROM generate_series(1,215) n;
+		SELECT video_id,channel_id,status,title,scheduled_start_time,lifecycle_origin
+		FROM (
+		    SELECT substr(md5('plan-ended-'||n),1,11) AS video_id,'plan-channel-'||(1+n%119) AS channel_id,
+		           'ENDED' AS status,repeat('e',107) AS title,NULL::timestamptz AS scheduled_start_time,
+		           'observed' AS lifecycle_origin
+		    FROM generate_series(1,10000) n
+		    UNION ALL
+		    SELECT substr(md5('plan-active-'||n),1,11),'plan-channel-'||(1+n%119),
+		           CASE WHEN n<=200 THEN 'UPCOMING' ELSE 'LIVE' END,repeat('a',71),now()-interval '2 days',
+		           CASE WHEN n<=200 THEN 'legacy_unknown' ELSE 'observed' END
+		    FROM generate_series(1,215) n
+		) population
+		ORDER BY md5('session-'||video_id);
+		-- 합성 데이터의 규모·제목 폭만 운영 집계에 맞춥니다. 원본 내용이나 ID는 사용하지 않습니다.
+		-- head 4471·가용성 757·pending 1169행은 독립 순서로 적재해 활성 전용 작은 표를 피합니다.
 		INSERT INTO youtube_live_reconciliation_heads(video_id,status)
-		SELECT video_id,status FROM youtube_live_sessions WHERE status<>'ENDED';
+		SELECT video_id,status FROM youtube_live_sessions
+		WHERE video_id IN (
+		    SELECT substr(md5('plan-ended-'||n),1,11) FROM generate_series(1,4265) n
+		    UNION ALL
+		    SELECT substr(md5('plan-active-'||n),1,11) FROM generate_series(1,209) n WHERE n<=197 OR n>200
+		)
+		ORDER BY md5('head-'||video_id);
 		INSERT INTO youtube_video_availability
 		(video_id,channel_id,provider,identity_confirmed,availability,method,unknown_reason,evidence_sha256,
 		 scheduled_for,effective_at,observed_at,received_at)
 		SELECT video_id,channel_id,'youtubejs',false,'UNKNOWN','unknown','identity_missing',repeat('a',64),
 		       now()-interval '1 day',now()-interval '1 day',now()-interval '1 day',now()-interval '1 day'
-		FROM youtube_live_sessions WHERE status='UPCOMING';
+		FROM youtube_live_sessions
+		WHERE video_id IN (
+		    SELECT substr(md5('plan-ended-'||n),1,11) FROM generate_series(1,664) n
+		    UNION ALL
+		    SELECT substr(md5('plan-active-'||n),1,11) FROM generate_series(1,202) n WHERE n<=91 OR n>200
+		)
+		ORDER BY md5('availability-'||video_id);
+		INSERT INTO youtube_live_pending_ends
+		(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
+		SELECT substr(md5('plan-ended-'||n),1,11),'plan-channel-'||(1+n%119),'SCOPED_ABSENCE',n,
+		       now()-interval '3 days',now()-interval '3 days',now()-interval '3 days',true,true
+		FROM generate_series(1,1169) n ORDER BY md5('pending-'||n);
 		INSERT INTO youtube_live_review_receipts
 		(receipt_id,video_id,snapshot_sha256,original_snapshot,evidence_refs,disposition,operator_id,reason)
-		SELECT md5('plan-active-'||n)::uuid,'plan-active-'||n,snapshot.snapshot_sha256,snapshot.original_snapshot,
+		SELECT md5('plan-active-'||n)::uuid,substr(md5('plan-active-'||n),1,11),
+		       snapshot.snapshot_sha256,snapshot.original_snapshot,
 		       snapshot.evidence_refs,'closed_unresolved','test-operator','집합 검토 계획'
 		FROM generate_series(1,53) n
-		CROSS JOIN LATERAL youtube_live_review_snapshot('plan-active-'||n) snapshot;
-		UPDATE youtube_live_sessions SET title='검토 뒤 변경' WHERE video_id='plan-active-1';
+		CROSS JOIN LATERAL youtube_live_review_snapshot(substr(md5('plan-active-'||n),1,11)) snapshot;
+		UPDATE youtube_live_sessions SET title='검토 뒤 변경' WHERE video_id=substr(md5('plan-active-1'),1,11);
 		ANALYZE youtube_collection_projection_generations;
 		ANALYZE youtube_collection_targets;
 		ANALYZE youtube_collection_job_leases;
