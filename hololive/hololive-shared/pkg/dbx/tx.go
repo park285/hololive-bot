@@ -61,11 +61,7 @@ func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) erro
 
 	defer rollbackPgxTxOnPanic(ctx, tx)
 
-	if err := finishPgxTx(ctx, tx, fn(tx)); err != nil {
-		return fmt.Errorf("finish pgx tx: %w", err)
-	}
-
-	return nil
+	return finishPgxTx(ctx, tx, fn(tx))
 }
 
 func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
@@ -83,10 +79,10 @@ func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
 func finishPgxTx(ctx context.Context, tx Tx, fnErr error) error {
 	if fnErr != nil {
 		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
+			return fmt.Errorf("run pgx transaction and roll back: %w", errors.Join(fnErr, rollbackErr))
 		}
 
-		return fmt.Errorf("pgx transaction failed: %w", fnErr)
+		return fmt.Errorf("run pgx transaction: %w", fnErr)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -114,11 +110,8 @@ func InPgxTxWithResult[T any](ctx context.Context, pool *pgxpool.Pool, fn func(t
 
 		return txErr
 	})
-	if err != nil {
-		return result, fmt.Errorf("in pgx tx: %w", err)
-	}
 
-	return result, nil
+	return result, err
 }
 
 const maxHotpathBatchStatements = 128

@@ -7,8 +7,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// 공식 일정 fallback의 metric 이름과 label은 범용 실행기(internal/service/fallback)를 합치기 전과 같다.
-// 이제 service label은 holodex 하나뿐이고, trigger는 "primary가 비었고 실패한 org가 있음" 하나뿐이다.
+// 공식 일정 fallback metric의 service label은 holodex로, trigger label은 "primary가 비었고 실패한 org가 있음"을 뜻하는
+// on_empty_primary_with_error로 고정한다.
 const (
 	streamFallbackServiceLabel = "holodex"
 	streamFallbackTriggerLabel = "on_empty_primary_with_error"

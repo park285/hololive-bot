@@ -6,11 +6,12 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"mime"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -276,10 +277,6 @@ func decodeHelperResponse(resp *http.Response, limit int64, response any) error 
 		return fmt.Errorf("read helper body: %w", err)
 	}
 
-	if int64(len(payload)) > bodyLimit {
-		return oversizedHelperResponse(resp.StatusCode)
-	}
-
 	if resp.StatusCode == http.StatusOK {
 		return decodeHelperSuccess(payload, response)
 	}
@@ -300,8 +297,15 @@ func helperResponseLimit(status int, requested int64) int64 {
 }
 
 func readHelperBody(resp *http.Response, limit int64) ([]byte, error) {
-	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err := errors.Join(readErr, resp.Body.Close()); err != nil {
+	payload, readErr := httputil.ReadAllLimited(resp.Body, limit)
+	closeErr := resp.Body.Close()
+
+	// 상한 초과는 수송 실패가 아니라 응답 크기 계약 위반이므로 문맥 분류 대신 status별 오류로 남긴다.
+	if errors.Is(readErr, httputil.ErrResponseBodyTooLarge) {
+		return nil, oversizedHelperResponse(resp.StatusCode)
+	}
+
+	if err := errors.Join(readErr, closeErr); err != nil {
 		return nil, collecterr.FromContext(fmt.Errorf("read youtube.js helper: %w", err))
 	}
 

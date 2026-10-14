@@ -31,7 +31,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
+	appErrors "github.com/kapu/hololive-api/internal/planes/bot/internal/apperrors"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
@@ -123,7 +123,7 @@ func (t *CommandTransport) dispatchMessage(ctx context.Context, room, message st
 	}
 
 	if err := t.sendMessage(ctx, room, message, emission.clientRequestID, useMarkdown, opts...); err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
+		serviceErr := appErrors.NewServiceError("iris send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message: %w", serviceErr)
 	}
 
@@ -367,7 +367,7 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	}
 
 	if err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send image", serviceNameIris, "send_image", err)
+		serviceErr := appErrors.NewServiceError("iris send image", serviceNameIris, "send_image", err)
 		return fmt.Errorf("send image: %w", serviceErr)
 	}
 
@@ -421,7 +421,7 @@ func (t *CommandTransport) sendMultipleImages(ctx context.Context, room string, 
 	}
 
 	if err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send images", serviceNameIris, "send_images", err)
+		serviceErr := appErrors.NewServiceError("iris send images", serviceNameIris, "send_images", err)
 		return fmt.Errorf("send images: %w", serviceErr)
 	}
 

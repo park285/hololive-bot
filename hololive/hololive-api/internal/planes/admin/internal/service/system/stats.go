@@ -34,6 +34,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
@@ -59,7 +60,10 @@ type ServiceEndpoint struct {
 	URL  string
 }
 
-const defaultLocalServiceName = "hololive-admin-api"
+const (
+	defaultLocalServiceName = "hololive-admin-api"
+	currentStatsFlightKey   = "current"
+)
 
 type Collector struct {
 	httpClient  *http.Client
@@ -69,10 +73,9 @@ type Collector struct {
 	cacheTTL    time.Duration
 	serviceName string
 	cacheMu     sync.RWMutex
-	refreshMu   sync.Mutex
-	refreshDone chan struct{}
 	cachedAt    time.Time
 	cached      *SystemStats
+	flights     singleflight.Group
 }
 
 type CollectorOption func(*Collector)
@@ -119,68 +122,65 @@ func (c *Collector) Close() error {
 	return nil
 }
 
+// GetCurrentStats는 캐시가 유효하면 복사본을 돌려주고, 아니면 동시 요청을 하나의 수집으로 합친다. 수집은 요청 취소와
+// 분리되어 끝까지 진행하고 성공 결과만 캐시에 남기므로, 먼저 이탈한 요청이 있어도 뒤 요청은 같은 결과를 받는다. 원격
+// 조회 상한은 health client의 요청 timeout이 정한다. 대기자는 실패를 공유하지만 실패는 캐시하지 않으므로 다음 호출이
+// 새로 수집한다.
 func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
-	for {
-		if stats := c.getCachedStats(); stats != nil {
-			return stats, nil
-		}
-
-		c.refreshMu.Lock()
-
-		if stats := c.getCachedStats(); stats != nil {
-			c.refreshMu.Unlock()
-
-			return stats, nil
-		}
-
-		if c.refreshDone == nil {
-			done := make(chan struct{})
-
-			c.refreshDone = done
-			c.refreshMu.Unlock()
-
-			return c.refreshCurrentStats(ctx, done)
-		}
-
-		done := c.refreshDone
-		c.refreshMu.Unlock()
-
-		// 다른 요청의 수집은 유지하고 이 요청의 대기만 취소한다.
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("wait for current stats refresh: %w", ctx.Err())
-		case <-done:
-			if err := ctx.Err(); err != nil {
-				return nil, fmt.Errorf("wait for current stats refresh: %w", err)
-			}
-
-			// 실패 결과는 공유하지 않고 다음 수집의 소유권을 다시 확인한다.
-		}
+	if stats := c.getCachedStats(); stats != nil {
+		return stats, nil
 	}
+
+	resultCh := c.flights.DoChan(currentStatsFlightKey, func() (any, error) {
+		return c.refreshCurrentStats(context.WithoutCancel(ctx))
+	})
+
+	var result singleflight.Result
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for current stats refresh: %w", ctx.Err())
+	case result = <-resultCh:
+	}
+
+	// 수집 완료와 취소가 겹치면 이 요청은 취소로 끝낸다. 수집 결과는 이미 캐시에 남았다.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("wait for current stats refresh: %w", err)
+	}
+
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	stats, ok := result.Val.(*SystemStats)
+	if !ok {
+		return nil, fmt.Errorf("current stats refresh returned %T", result.Val)
+	}
+
+	return cloneSystemStats(stats), nil
 }
 
-func (c *Collector) refreshCurrentStats(ctx context.Context, done chan struct{}) (*SystemStats, error) {
-	defer func() {
-		c.refreshMu.Lock()
+func (c *Collector) refreshCurrentStats(ctx context.Context) (*SystemStats, error) {
+	var (
+		stats      *SystemStats
+		collectErr error
+	)
 
-		c.refreshDone = nil
+	// DoChan goroutine의 panic은 호출자의 복구 경계 밖이므로 공유 수집 안에서 오류로 바꾼다.
+	if err := panicguard.RunE(nil, panicguard.BackgroundTask, "system-stats-refresh", func() error {
+		stats, collectErr = c.collectCurrentStats(ctx)
 
-		close(done)
-		c.refreshMu.Unlock()
-	}()
-
-	stats, err := c.collectCurrentStats(ctx)
-	if err != nil {
+		return nil
+	}); err != nil {
 		return nil, fmt.Errorf("collect current stats: %w", err)
+	}
+
+	if collectErr != nil {
+		return nil, fmt.Errorf("collect current stats: %w", collectErr)
 	}
 
 	c.cacheMu.Lock()
 	defer c.cacheMu.Unlock()
-
-	// 원격 수집 중 요청이 취소된 결과를 서비스 장애로 공유하지 않는다.
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("collect current stats: %w", err)
-	}
 
 	c.cached = cloneSystemStats(stats)
 	c.cachedAt = time.Now()
@@ -282,21 +282,19 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 		}
 
 		wg.Go(func() {
-			panicguard.Run(nil, panicguard.BackgroundTask, "system-stats-service-goroutines", func() {
-				if err := panicguard.RunE(nil, panicguard.BackgroundTask, "system-stats-service-goroutines", func() error {
-					goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
+			if err := panicguard.RunE(nil, panicguard.BackgroundTask, "system-stats-service-goroutines", func() error {
+				goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
 
-					results[i] = ServiceGoroutines{
-						Name:       ep.Name,
-						Goroutines: goroutines,
-						Available:  ok,
-					}
-
-					return nil
-				}); err != nil {
-					results[i] = ServiceGoroutines{Name: ep.Name, Available: false}
+				results[i] = ServiceGoroutines{
+					Name:       ep.Name,
+					Goroutines: goroutines,
+					Available:  ok,
 				}
-			})
+
+				return nil
+			}); err != nil {
+				results[i] = ServiceGoroutines{Name: ep.Name, Available: false}
+			}
 		})
 	}
 

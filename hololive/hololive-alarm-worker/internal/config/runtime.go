@@ -45,7 +45,7 @@ func LoadRuntime() (*RuntimeConfig, error) {
 	}
 
 	if err := config.validate(); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
+		return nil, fmt.Errorf("validate config: %w", err)
 	}
 
 	return config, nil

@@ -41,7 +41,7 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	var data sessionData
 
 	if err := s.cacheClient.Get(ctx, key, &data); err != nil {
-		return newError(CodeInternal, "failed to read session", err)
+		return newError(CodeInternal, "read session", err)
 	}
 
 	if data.UserID == "" {
@@ -49,7 +49,7 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	}
 
 	if err := s.cacheClient.Del(ctx, key); err != nil {
-		return newError(CodeInternal, "failed to delete session", err)
+		return newError(CodeInternal, "delete session", err)
 	}
 
 	return nil
@@ -99,7 +99,7 @@ func (s *Service) claimSessionForRotation(ctx context.Context, token string) (st
 
 	deleted, err := s.cacheClient.CompareAndDelete(ctx, key, rawPayload)
 	if err != nil {
-		return "", 0, newError(CodeInternal, "failed to claim session for rotation", err)
+		return "", 0, newError(CodeInternal, "claim session for rotation", err)
 	}
 
 	if !deleted {
@@ -115,7 +115,7 @@ func (s *Service) claimSessionForRotation(ctx context.Context, token string) (st
 func (s *Service) loadValidSessionPayload(ctx context.Context, key string) (string, sessionData, error) {
 	rawPayload, hit, err := s.cacheClient.GetString(ctx, key)
 	if err != nil {
-		return "", sessionData{}, newError(CodeInternal, "failed to read session", err)
+		return "", sessionData{}, newError(CodeInternal, "read session", err)
 	}
 
 	if !hit {
@@ -125,7 +125,7 @@ func (s *Service) loadValidSessionPayload(ctx context.Context, key string) (stri
 	var data sessionData
 
 	if err := jsonv2.Unmarshal([]byte(rawPayload), &data); err != nil {
-		return "", sessionData{}, newError(CodeInternal, "failed to decode session", err)
+		return "", sessionData{}, newError(CodeInternal, "decode session", err)
 	}
 
 	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
@@ -146,7 +146,7 @@ func (s *Service) findSessionGeneration(ctx context.Context, userID string) (int
 			return 0, newError(CodeUnauthorized, "user not found", nil)
 		}
 
-		return 0, newError(CodeInternal, "failed to query session generation", err)
+		return 0, newError(CodeInternal, "query session generation", err)
 	}
 
 	return generation, nil
@@ -184,7 +184,7 @@ func (s *Service) Me(ctx context.Context, token string) (*User, error) {
 			return nil, newError(CodeUnauthorized, "user not found", nil)
 		}
 
-		return nil, newError(CodeInternal, "failed to query user", err)
+		return nil, newError(CodeInternal, "query user", err)
 	}
 
 	if err := s.rejectRevokedSession(ctx, key, data.SessionGeneration, user.SessionGeneration); err != nil {
@@ -219,7 +219,7 @@ func (s *Service) validateSession(ctx context.Context, token string) (string, se
 	var data sessionData
 
 	if err := s.cacheClient.Get(ctx, key, &data); err != nil {
-		return "", sessionData{}, newError(CodeInternal, "failed to read session", err)
+		return "", sessionData{}, newError(CodeInternal, "read session", err)
 	}
 
 	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
@@ -252,7 +252,7 @@ func (s *Service) createSession(ctx context.Context, userID string, generation i
 
 	payload, err := jsonv2.Marshal(&data)
 	if err != nil {
-		return nil, newError(CodeInternal, "failed to marshal session", err)
+		return nil, newError(CodeInternal, "marshal session", err)
 	}
 
 	token, err := s.allocateSessionToken(ctx, string(payload))
@@ -271,12 +271,12 @@ func (s *Service) allocateSessionToken(ctx context.Context, payload string) (str
 	for range 3 {
 		raw, err := generateToken(sessionTokenPrefix, 32)
 		if err != nil {
-			return "", newError(CodeInternal, "failed to generate session token", err)
+			return "", newError(CodeInternal, "generate session token", err)
 		}
 
 		acquired, err := s.cacheClient.SetNX(ctx, sessionKeyPrefix+sha256Hex(raw), payload, s.config.SessionTTL)
 		if err != nil {
-			return "", newError(CodeInternal, "failed to store session", err)
+			return "", newError(CodeInternal, "store session", err)
 		}
 
 		if acquired {
@@ -284,5 +284,5 @@ func (s *Service) allocateSessionToken(ctx context.Context, payload string) (str
 		}
 	}
 
-	return "", newError(CodeInternal, "failed to allocate unique session token", nil)
+	return "", newError(CodeInternal, "allocate unique session token", nil)
 }

@@ -32,13 +32,21 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
+const (
+	// 프로필 사진은 자주 바뀌지 않으므로 주기와 재동기화 기준을 같은 7일로 둔다.
+	photoSyncInterval       = 7 * 24 * time.Hour
+	photoSyncStaleThreshold = 7 * 24 * time.Hour
+	// 기동 직후 다른 Holodex 호출과 겹치지 않도록 첫 동기화를 미룬다.
+	photoSyncInitialDelay = 10 * time.Second
+)
+
 type PhotoSyncService struct {
 	holodex          *Service
 	memberRepository photoSyncMemberRepository
 	logger           *slog.Logger
 
-	syncInterval   time.Duration // 동기화 주기 (기본: 24시간)
-	staleThreshold time.Duration // 이 기간 이상 지난 photo는 재동기화 (기본: 24시간)
+	syncInterval   time.Duration
+	staleThreshold time.Duration // 이 기간 이상 지난 photo는 재동기화한다.
 }
 
 type photoSyncMemberRepository interface {
@@ -56,8 +64,8 @@ func NewPhotoSyncService(
 		holodex:          holodex,
 		memberRepository: memberRepository,
 		logger:           logger.With(slog.String("service", "photo_sync")),
-		syncInterval:     7 * 24 * time.Hour, // 7일마다 동기화 (프로필은 자주 변하지 않음)
-		staleThreshold:   7 * 24 * time.Hour, // 7일 이상 된 photo는 재동기화
+		syncInterval:     photoSyncInterval,
+		staleThreshold:   photoSyncStaleThreshold,
 	}
 }
 
@@ -76,14 +84,11 @@ func (ps *PhotoSyncService) Start(ctx context.Context) {
 }
 
 func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
-	ps.logger.Debug("Waiting 10 seconds before initial sync to avoid API contention")
+	ps.logger.Debug("Waiting before initial sync to avoid API contention",
+		slog.Duration("delay", photoSyncInitialDelay),
+	)
 
-	select {
-	case <-ctx.Done():
-		return false
-	case <-time.After(10 * time.Second):
-		return true
-	}
+	return retry.Sleep(ctx, photoSyncInitialDelay)
 }
 
 func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
@@ -104,34 +109,28 @@ func photoSyncRetryOptions() retry.RetryOptions {
 	}
 }
 
+// syncWithRetry는 중간 실패를 재시도 직전에 Warn으로 남기고, 시도를 모두 쓴 최종 실패만 Error로 한 번 남긴다.
+// 호출자 context가 취소돼 끝난 경우는 종료 경로이므로 Error를 남기지 않는다.
 func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, options retry.RetryOptions) {
-	attempt := 0
-
 	options.OnRetry = func(attempt int, err error, _ time.Duration) {
 		ps.logger.Warn("Photo sync failed, will retry",
 			slog.Any("error", err),
 			slog.Int("attempt", attempt),
-			slog.Int("max_retries", options.MaxAttempts),
+			slog.Int("max_attempts", options.MaxAttempts),
 		)
 	}
 
 	lastErr := retry.WithRetry(ctx, options, func(ctx context.Context) error {
-		attempt++
-
 		return ps.doSync(ctx, false)
 	})
-	if lastErr == nil {
+	if lastErr == nil || ctx.Err() != nil {
 		return
 	}
 
-	if attempt == options.MaxAttempts {
-		ps.logger.Warn("Photo sync failed, will retry",
-			slog.Any("error", lastErr),
-			slog.Int("attempt", attempt),
-			slog.Int("max_retries", options.MaxAttempts),
-		)
-		ps.logger.Error("Photo sync failed after all retries", slog.Int("max_retries", options.MaxAttempts))
-	}
+	ps.logger.Error("Photo sync failed after all retries",
+		slog.Any("error", lastErr),
+		slog.Int("max_attempts", options.MaxAttempts),
+	)
 }
 
 func (ps *PhotoSyncService) SyncAll(ctx context.Context) error {

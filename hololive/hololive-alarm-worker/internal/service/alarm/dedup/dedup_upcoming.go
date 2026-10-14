@@ -67,7 +67,7 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 		s.logger.Warn("upcoming event notified timestamp corrupted, treating as not notified",
 			slog.String("upcoming_key_token", privacylog.Pseudonym(key)),
 			slog.String("notified_at", data.NotifiedAt),
-			slog.String("error", err.Error()),
+			slog.Any("error", err),
 		)
 
 		return false, nil

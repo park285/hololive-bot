@@ -89,12 +89,12 @@ func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, logg
 
 	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, logger)
 	if err != nil {
-		return nil, fmt.Errorf("initialize runtime: init bot infrastructure: %w", err)
+		return nil, fmt.Errorf("init bot infrastructure: %w", err)
 	}
 
 	runtime, err := buildBotRuntime(ctx, appConfig, logger, infra)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("initialize runtime: build bot runtime: %w", err), infra.Cleanup())
+		return nil, errors.Join(fmt.Errorf("build bot runtime: %w", err), infra.Cleanup())
 	}
 
 	runtime.cleanup = infra.Cleanup

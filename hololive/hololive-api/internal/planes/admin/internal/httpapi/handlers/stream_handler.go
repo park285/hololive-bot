@@ -24,6 +24,7 @@ import (
 	"context"
 	stdErrors "errors"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -53,12 +54,12 @@ type StreamHandler struct {
 
 func (h *StreamHandler) respondBadRequest(c *gin.Context, message string, extra gin.H) {
 	if h.RespondError != nil {
-		h.RespondError(c, 400, message, extra)
+		h.RespondError(c, http.StatusBadRequest, message, extra)
 
 		return
 	}
 
-	sharedserver.RespondError(c, 400, message, extra)
+	sharedserver.RespondError(c, http.StatusBadRequest, message, extra)
 }
 
 func (h *StreamHandler) respondInternalError(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr) {
@@ -103,7 +104,7 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, gin.H{"status": "ok", "org": org, "streams": streams})
+	ginjson.Respond(c, http.StatusOK, gin.H{"status": "ok", "org": org, "streams": streams})
 }
 
 func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
@@ -138,5 +139,5 @@ func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 		return
 	}
 
-	ginjson.Respond(c, 200, gin.H{"status": "ok", "org": org, "streams": streams})
+	ginjson.Respond(c, http.StatusOK, gin.H{"status": "ok", "org": org, "streams": streams})
 }

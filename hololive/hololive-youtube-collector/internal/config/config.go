@@ -25,6 +25,9 @@ const (
 	youtubeCollectorDefaultRetryCeiling = 5 * time.Minute
 	youtubeCollectorDefaultQueueMaxAge  = time.Hour
 	youtubeCollectorMaxQueueMaxAge      = workercontract.MaxFixedDurationMS * time.Millisecond
+
+	minCollectorPhaseTimeout = 100 * time.Millisecond
+	maxYouTubeJSTimeout      = 10 * time.Minute
 )
 
 var youtubeCollectorInstanceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
@@ -191,39 +194,64 @@ func (c *Config) validateLeaseTiming() error {
 	return nil
 }
 
+// validateProfilePhaseTimeouts는 profile이 소유한 단계별 예산을 검사 순서대로 확인하고, 처음 벗어난 필드의
+// profile 키와 허용 범위를 오류에 남긴다.
 func (c *Config) validateProfilePhaseTimeouts() error {
-	if !validCollectorPhaseTimeout(c.DBTimeout, time.Minute) ||
-		!validCollectorPhaseTimeout(c.CleanupTimeout, time.Minute) {
-		return errors.New("YOUTUBE_COLLECTOR phase timeout bounds are invalid")
+	if err := validatePhaseTimeout("collection.settings.db_timeout_ms", c.DBTimeout, time.Minute); err != nil {
+		return err
 	}
 
-	if !validCollectorPhaseTimeout(c.ProviderAdmissionTimeout, 10*time.Minute) ||
-		c.CollectionOverhead <= 0 ||
-		!validCollectorPhaseTimeout(c.PublishTimeout, 5*time.Minute) {
-		return errors.New("YOUTUBE_COLLECTOR phase timeout bounds are invalid")
+	if err := validatePhaseTimeout("collection.settings.cleanup_timeout_ms", c.CleanupTimeout, time.Minute); err != nil {
+		return err
 	}
 
-	return nil
+	if err := validatePhaseTimeout("collection.settings.provider_admission_timeout_ms", c.ProviderAdmissionTimeout, 10*time.Minute); err != nil {
+		return err
+	}
+
+	if c.CollectionOverhead <= 0 {
+		return errors.New("collection.settings.collection_overhead_ms must be positive")
+	}
+
+	return validatePhaseTimeout("collection.settings.publish_timeout_ms", c.PublishTimeout, 5*time.Minute)
 }
 
 func (c *Config) validateEnvPhaseTimeouts() error {
-	if !validCollectorPhaseTimeout(c.ReadinessTimeout, 10*time.Second) ||
-		c.HelperHealthTimeout < 100*time.Millisecond || c.HelperHealthTimeout >= c.ReadinessTimeout {
-		return errors.New("YOUTUBE_COLLECTOR phase timeout bounds are invalid")
+	if err := validatePhaseTimeout("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", c.ReadinessTimeout, 10*time.Second); err != nil {
+		return err
+	}
+
+	// helper health 검사는 readiness 응답 예산 안에서 끝나야 하므로 readiness timeout보다 짧아야 한다.
+	if c.HelperHealthTimeout < minCollectorPhaseTimeout || c.HelperHealthTimeout >= c.ReadinessTimeout {
+		return fmt.Errorf("YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS must be at least %s and less than YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS (%s)",
+			minCollectorPhaseTimeout, c.ReadinessTimeout)
 	}
 
 	return nil
 }
 
-func validCollectorPhaseTimeout(value, maximum time.Duration) bool {
-	return value >= 100*time.Millisecond && value <= maximum
+// validatePhaseTimeout은 단계 예산이 [minCollectorPhaseTimeout, maximum] 안에 있는지 확인하고, 벗어나면 설정 이름과
+// 허용 범위를 담은 오류를 돌려준다.
+func validatePhaseTimeout(name string, value, maximum time.Duration) error {
+	if value < minCollectorPhaseTimeout || value > maximum {
+		return fmt.Errorf("%s must be between %s and %s", name, minCollectorPhaseTimeout, maximum)
+	}
+
+	return nil
 }
 
 func (c *Config) validateYouTubeJSTimeouts() error {
-	if c.YouTubeJSRequestTimeout <= 0 || c.YouTubeJSRequestTimeout > 10*time.Minute ||
-		c.YouTubeJSStartupTimeout <= 0 || c.YouTubeJSStartupTimeout > 10*time.Minute ||
-		c.YouTubeJSShutdownTimeout <= 0 || c.YouTubeJSShutdownTimeout > 10*time.Minute {
-		return errors.New("YOUTUBE_COLLECTOR youtube.js timeouts must be positive")
+	for _, timeout := range []struct {
+		name  string
+		value time.Duration
+	}{
+		{name: "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS", value: c.YouTubeJSRequestTimeout},
+		{name: "YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS", value: c.YouTubeJSStartupTimeout},
+		{name: "YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS", value: c.YouTubeJSShutdownTimeout},
+	} {
+		if timeout.value <= 0 || timeout.value > maxYouTubeJSTimeout {
+			return fmt.Errorf("%s must be positive and at most %s", timeout.name, maxYouTubeJSTimeout)
+		}
 	}
 
 	return nil

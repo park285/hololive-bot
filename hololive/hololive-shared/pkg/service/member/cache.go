@@ -32,7 +32,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -64,6 +63,9 @@ type Cache struct {
 	epochRuntimeCancel     context.CancelFunc
 	epochRuntimeDone       <-chan struct{}
 }
+
+// defaultEpochReconcileInterval은 CacheConfig.EpochReconcileInterval이 0일 때 쓰는 authority epoch 재확인 주기입니다.
+const defaultEpochReconcileInterval = 15 * time.Second
 
 type CacheConfig struct {
 	EpochReconcileInterval time.Duration
@@ -107,7 +109,7 @@ func memberEpochRuntimeContext(ctx context.Context) context.Context {
 
 func normalizeMemberCacheConfig(config CacheConfig) CacheConfig {
 	if config.EpochReconcileInterval == 0 {
-		config.EpochReconcileInterval = constants.MemberCacheDefaults.EpochReconcileInterval
+		config.EpochReconcileInterval = defaultEpochReconcileInterval
 	}
 
 	return config

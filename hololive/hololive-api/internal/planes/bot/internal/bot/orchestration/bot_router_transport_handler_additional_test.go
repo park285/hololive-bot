@@ -36,11 +36,11 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	appErrors "github.com/kapu/hololive-api/internal/planes/bot/internal/apperrors"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	bottransport "github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	dbtest "github.com/kapu/hololive-dbtest"
-	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -612,7 +612,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 			MessageID: "m-1",
 		},
 	})
-	require.EqualError(t, err, "execute command: execute command help: boom")
+	require.EqualError(t, err, "execute command: command help: boom")
 
 	select {
 	case msg := <-msgCh:

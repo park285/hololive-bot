@@ -92,7 +92,7 @@ func requireIdentity(name, value string) (string, error) {
 func requireBoundedIdentity(name, value string, runeLimit int) (string, error) {
 	trimmed, err := requireIdentity(name, value)
 	if err != nil {
-		return "", fmt.Errorf("require identity: %w", err)
+		return "", err
 	}
 
 	if utf8.RuneCountInString(trimmed) > runeLimit {
@@ -120,7 +120,7 @@ func requireMessageIdentity(value string) (string, error) {
 func requireRoomID(value string) (string, error) {
 	out, err := requireBoundedIdentity("room id", value, roomIDRuneLimit)
 	if err != nil {
-		return out, fmt.Errorf("require bounded identity: %w", err)
+		return out, err
 	}
 
 	return out, nil
@@ -139,7 +139,7 @@ func requireBoundedCommandKind(value string) (string, error) {
 func requireClientRequestID(value string) (string, error) {
 	trimmed, err := requireIdentity("client request id", value)
 	if err != nil {
-		return "", fmt.Errorf("require identity: %w", err)
+		return "", err
 	}
 
 	if !clientRequestIDPattern.MatchString(trimmed) {
@@ -153,7 +153,7 @@ func requireClientRequestID(value string) (string, error) {
 func requireOperatorActor(value string) (string, error) {
 	actor, err := requireBoundedIdentity("operator actor", value, operatorActorRuneLimit)
 	if err != nil {
-		return "", fmt.Errorf("require bounded identity: %w", err)
+		return "", err
 	}
 
 	if !operatorActorPattern.MatchString(actor) {
@@ -167,7 +167,7 @@ func requireOperatorActor(value string) (string, error) {
 func requireOperatorReason(value string) (string, error) {
 	reason, err := requireIdentity("operator reason", value)
 	if err != nil {
-		return "", fmt.Errorf("require identity: %w", err)
+		return "", err
 	}
 
 	if len(reason) > operatorReasonByteLimit {

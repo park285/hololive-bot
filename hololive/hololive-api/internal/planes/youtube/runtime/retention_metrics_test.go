@@ -24,7 +24,7 @@ func TestRetentionMetricsKeepPartialSuccessAndOnlyMarkFailedTable(t *testing.T) 
 	recordRetentionTick(sourceobservation.RetentionResult{
 		Table: completed, FailedTable: failed, Deleted: 3,
 		ByTable: []sourceobservation.RetentionResult{{Table: completed, Deleted: 3}},
-	}, time.Second, errors.New("later table failed"))
+	}, errors.New("later table failed"))
 
 	require.InDelta(t, beforeDeleted+3, testutil.ToFloat64(deleted), 0)
 	require.InDelta(t, beforeCompletedErrors, testutil.ToFloat64(completedErrors), 0)

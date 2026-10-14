@@ -11,17 +11,12 @@ import (
 
 // FormatYouTubeOutboxPayload는 dispatch payload를 최종 알림 본문으로 렌더링한다. 알림에는 자동 접기 패딩을 넣지 않는다.
 func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
-	out, err := (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings}).FormatYouTubeOutboxPayload(ctx, payload)
-	if err != nil {
-		return out, fmt.Errorf("format youtube outbox payload: %w", err)
-	}
-
-	return out, nil
+	return (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings}).FormatYouTubeOutboxPayload(ctx, payload)
 }
 
 func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
 	if err := payload.Validate(); err != nil {
-		return "", fmt.Errorf("format youtube outbox payload: %w", err)
+		return "", fmt.Errorf("validate payload: %w", err)
 	}
 
 	memberName := mf.DisplayMemberName(payload.MemberName)
@@ -47,12 +42,7 @@ func (mf *MessageFormatter) formatSingleOutboxItem(ctx context.Context, memberNa
 		return "", fmt.Errorf("build template data: %w", err)
 	}
 
-	out, err := mf.renderTemplate(ctx, item.Kind.ToTemplateKey(), item.ChannelID, data)
-	if err != nil {
-		return out, fmt.Errorf("render template: %w", err)
-	}
-
-	return out, nil
+	return mf.renderTemplate(ctx, item.Kind.ToTemplateKey(), item.ChannelID, data)
 }
 
 func notificationOutboxItemsFromDispatchPayload(payload *domain.YouTubeOutboxDispatchPayload) []domain.YouTubeNotificationOutbox {

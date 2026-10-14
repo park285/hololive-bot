@@ -51,9 +51,8 @@ func newRepositoryWithQuerier(querier dbx.Querier) *Repository {
 }
 
 // Add는 방·채널·멤버 구독별 알림 종류를 저장하며 빈 HostID는 전체 채널 구독이다.
-// Iris webhook은 방 제목을 싣지 않는다. 지금 bot(v7.0.1)은 모르는 이름을 빈 문자열로 넘기지만, 옛 bot(v7.0.0까지)은
-// 방 ID를 RoomName으로 넘겼고 worker를 API보다 먼저 배포하는 동안 옛 API가 계속 보낸다. 방 ID와 같은 이름은 Kakao 방
-// 이름이 아니므로 빈 이름으로 저장해 upsert가 기존 Kakao 방 이름과 room_name_updated_at을 방 ID로 덮어쓰지 않게 한다.
+// Iris webhook은 방 제목을 싣지 않는다. 방 ID와 같은 RoomName은 Kakao 방 이름이 아니므로 빈 이름으로 저장해 upsert가
+// 기존 Kakao 방 이름과 room_name_updated_at을 방 ID로 덮어쓰지 않게 한다.
 func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	alarmTypes := alarm.AlarmTypes
 	if len(alarmTypes) == 0 {
@@ -166,7 +165,7 @@ func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*do
 }
 
 func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
-	query := mustSQL("repository_0134_06.sql")
+	query := mustSQL("targets_0188_01.sql")
 
 	rows, err := r.pool.Query(ctx, query, channelID, string(alarmType))
 	if err != nil {
@@ -183,8 +182,7 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 }
 
 // GetMemberName은 members 정본의 한국어 표시명(short_korean_name→korean_name)을 돌려준다. 행이 없거나 두 값이 모두
-// 비면 빈 문자열이며, 알림 표시 단계가 misc/vtuber_fallback 문구를 쓴다. 과거의 alarms.member_name·호출자 값 대체 단계는
-// 제거 조건(두 지표 30일 0, 구독 채널 21개 모두 한국어 표시명 보유)을 확인하고 2026-10-02에 지웠다.
+// 비면 빈 문자열이며, 알림 표시 단계가 misc/vtuber_fallback 문구를 쓴다.
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
 	query := mustSQL("repository_0155_07.sql")
 

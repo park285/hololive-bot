@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/retry"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 )
 
 func (r *durableRuntime) runMaintenance(ctx context.Context) {
-	for waitDurable(ctx, r.maintenanceEvery) {
+	for retry.Sleep(ctx, r.maintenanceEvery) {
 		r.maintainDurability(ctx)
 	}
 }
@@ -161,18 +162,6 @@ func runtimeErrorReason(err error) string {
 		return "context_deadline_exceeded"
 	default:
 		return "operation_failed"
-	}
-}
-
-func waitDurable(ctx context.Context, delay time.Duration) bool {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
 	}
 }
 

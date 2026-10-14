@@ -555,30 +555,42 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 	})
 
-	resolver := NewSubscriberResolver(nil, db)
+	fallback := func(result string) float64 {
+		return testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues(result))
+	}
 
-	hitBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("hit"))
+	// 빈 cache는 구독 set도 empty marker도 없어 확정하지 못하므로 DB를 읽고, 그 결과를 센다.
+	resolver := NewSubscriberResolver(newMemoryCacheClient(t), db)
+
+	hitBefore := fallback("hit")
+
 	_, err := resolver.ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeLive)
 	require.NoError(t, err)
+	assert.InDelta(t, float64(1), fallback("hit")-hitBefore, 1e-9)
 
-	hitAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("hit"))
-	assert.InDelta(t, float64(1), hitAfter-hitBefore, 1e-9)
-
-	missBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("miss"))
+	missBefore := fallback("miss")
 
 	_, err = resolver.ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeCommunity)
 	require.NoError(t, err)
+	assert.InDelta(t, float64(1), fallback("miss")-missBefore, 1e-9)
 
-	missAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("miss"))
-	assert.InDelta(t, float64(1), missAfter-missBefore, 1e-9)
+	errorBefore := fallback("error")
 
-	errorBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("error"))
-
-	_, err = NewSubscriberResolver(nil, nil).ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeLive)
+	_, err = NewSubscriberResolver(newMemoryCacheClient(t), nil).ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeLive)
 	require.Error(t, err)
+	assert.InDelta(t, float64(1), fallback("error")-errorBefore, 1e-9)
 
-	errorAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("error"))
-	assert.InDelta(t, float64(1), errorAfter-errorBefore, 1e-9)
+	// cache 없이 만든 resolver는 DB가 기본 경로라 fallback으로 세지 않는다.
+	hitBefore, missBefore = fallback("hit"), fallback("miss")
+
+	subscribers, err := NewSubscriberResolver(nil, db).ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeLive)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"room-hit"}, subscribers)
+
+	_, err = NewSubscriberResolver(nil, db).ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeCommunity)
+	require.NoError(t, err)
+	assert.InDelta(t, float64(0), fallback("hit")-hitBefore, 1e-9)
+	assert.InDelta(t, float64(0), fallback("miss")-missBefore, 1e-9)
 }
 
 func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {

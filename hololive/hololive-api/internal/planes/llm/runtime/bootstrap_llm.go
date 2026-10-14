@@ -77,7 +77,7 @@ func buildMajorEventComponents(
 
 	majorEventScraperScheduler, err := mescraper.NewRuntimeScheduler(majorEventRepository, logger)
 	if err != nil {
-		logger.Error("Failed to initialize major event scraper runtime scheduler", slog.String("error", err.Error()))
+		logger.Error("Failed to initialize major event scraper runtime scheduler", slog.Any("error", err))
 
 		majorEventScraperScheduler = nil
 	}

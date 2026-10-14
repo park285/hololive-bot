@@ -97,7 +97,7 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if _, err := s.SendMonthlyNotification(ctx); err != nil {
-				s.digest.Logger.Error("Failed to send monthly notification", slog.String("error", err.Error()))
+				s.digest.Logger.Error("Failed to send monthly notification", slog.Any("error", err))
 			}
 		},
 	})
@@ -160,7 +160,7 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 ) (monthlyCollected, bool, error) {
 	rooms, err := s.repository.GetSubscribedRooms(ctx)
 	if err != nil {
-		return monthlyCollected{}, false, fmt.Errorf("get subscribed rooms: %w", err)
+		return monthlyCollected{}, false, fmt.Errorf("collect monthly subscribed rooms: %w", err)
 	}
 
 	if len(rooms) == 0 {

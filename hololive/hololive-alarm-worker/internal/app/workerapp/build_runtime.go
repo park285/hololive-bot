@@ -62,7 +62,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *workerconfig.Runtim
 		return nil, errors.New("config must not be nil")
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres}, logger)
+	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres, PoolName: "alarm_worker"}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build alarm worker runtime: build infra module: %w", err)
 	}

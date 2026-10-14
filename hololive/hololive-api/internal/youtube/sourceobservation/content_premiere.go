@@ -26,12 +26,12 @@ func mergeContentPremieres(
 	}
 
 	if err := lockLiveSubject(ctx, tx, observation.SubjectKey); err != nil {
-		return nil, fmt.Errorf("lock live subject: %w", err)
+		return nil, err
 	}
 
 	state := live.State{Sessions: map[string]live.SessionState{}}
 	if err := loadLiveSessions(ctx, tx, &state, nil, premiereVideoIDs(facts)); err != nil {
-		return nil, fmt.Errorf("load live sessions: %w", err)
+		return nil, err
 	}
 
 	decision := live.MergeConfirmedPremieres(state, facts)

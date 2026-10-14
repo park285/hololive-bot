@@ -29,7 +29,7 @@ func (w repositoryReplyOutboxWriter) RecordReply(ctx context.Context, entry *tra
 		MessageID: entry.MessageID, Phase: entry.Phase, Ordinal: entry.Ordinal,
 		RoomID: entry.Room, Payload: []byte(entry.Payload), ClientRequestID: entry.ClientRequestID,
 	}); err != nil {
-		return fmt.Errorf("insert: %w", err)
+		return fmt.Errorf("persist reply: %w", err)
 	}
 
 	return nil
@@ -79,7 +79,7 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	require.Contains(t, err.Error(), "reason=database_operation_failed")
 	require.False(t, strings.Contains(logs.String(), rawID) || strings.Contains(logs.String(), causeText),
 		"bot_message_handler -> sharedlog.ErrorAttrs exposed repository cause: %s", logs.String())
-	require.Contains(t, logs.String(), `"error_message":"send error reply: send error message: record reply: reply staging failed: insert: insert reply outbox row: message_token=anon:`)
+	require.Contains(t, logs.String(), `"error_message":"send error reply: send error message: record reply: reply staging failed: persist reply: insert reply outbox row: message_token=anon:`)
 	require.Contains(t, logs.String(), `reason=database_operation_failed`)
 }
 

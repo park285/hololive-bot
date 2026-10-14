@@ -27,6 +27,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +37,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -58,11 +58,12 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 	require.NotNil(t, server)
 
 	assert.Equal(t, ":32004", server.Addr)
-	assert.Equal(t, constants.ServerTimeout.ReadHeader, server.ReadHeaderTimeout)
-	assert.Equal(t, constants.ServerTimeout.Read, server.ReadTimeout)
-	assert.Equal(t, constants.ServerTimeout.Write, server.WriteTimeout)
-	assert.Equal(t, constants.ServerTimeout.Idle, server.IdleTimeout)
-	assert.Equal(t, constants.ServerTimeout.MaxHeaderBytes, server.MaxHeaderBytes)
+	// httpserver.NewHTTPServer가 공개 런타임 서버에 거는 연결 제한입니다.
+	assert.Equal(t, 5*time.Second, server.ReadHeaderTimeout)
+	assert.Equal(t, 15*time.Second, server.ReadTimeout)
+	assert.Equal(t, 60*time.Second, server.WriteTimeout)
+	assert.Equal(t, 60*time.Second, server.IdleTimeout)
+	assert.Equal(t, 1<<20, server.MaxHeaderBytes)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ping", http.NoBody)
 	rr := httptest.NewRecorder()

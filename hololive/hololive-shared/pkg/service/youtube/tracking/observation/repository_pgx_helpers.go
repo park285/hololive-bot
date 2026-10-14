@@ -36,11 +36,7 @@ func writeRowPlaceholders(sb *strings.Builder, rowIndex, columns int) {
 func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) error {
 	switch typed := db.(type) {
 	case pgx.Tx:
-		if err := fn(typed); err != nil {
-			return fmt.Errorf("fn: %w", err)
-		}
-
-		return nil
+		return fn(typed)
 	case *pgxpool.Pool:
 		if err := dbx.InPgxTx(ctx, typed, func(tx dbx.Tx) error { return fn(tx) }); err != nil {
 			return fmt.Errorf("tracking pgx tx: %w", err)

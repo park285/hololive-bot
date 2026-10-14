@@ -70,7 +70,7 @@ func (r *Repository) Acquire(ctx context.Context, spec *JobSpec, owner string) (
 		return r.acquireTx(ctx, tx, spec, owner, kinds, scope)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("in pgx tx with result: %w", err)
+		return nil, fmt.Errorf("acquire collection job lease: %w", err)
 	}
 
 	return &JobLease{repository: r, spec: *spec, contract: definition, scope: scope, proof: proof}, nil

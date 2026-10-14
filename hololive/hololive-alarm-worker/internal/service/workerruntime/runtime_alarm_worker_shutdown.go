@@ -55,7 +55,7 @@ func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) error {
 	}
 
 	if shutdownErr != nil {
-		return fmt.Errorf("shutdown: %w", shutdownErr)
+		return fmt.Errorf("shut down alarm worker: %w", shutdownErr)
 	}
 
 	return nil
@@ -67,7 +67,7 @@ func (r *AlarmWorkerRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	}
 
 	if err := r.HTTPServers.Shutdown(ctx); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
+		return fmt.Errorf("shut down HTTP servers: %w", err)
 	}
 
 	return nil

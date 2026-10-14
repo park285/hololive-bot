@@ -119,7 +119,7 @@ func Build(ctx context.Context, plane *apiconfig.YouTubePlaneConfig, postgresCon
 	postgres.PoolMinConns = config.PostgresPoolMinConns
 	postgres.PoolMaxConns = config.PostgresPoolMaxConns
 
-	resources, cleanup, err := databaseproviders.ProvideDatabaseResources(ctx, postgres, logger)
+	resources, cleanup, err := databaseproviders.ProvideDatabaseResources(ctx, postgres, "youtube_plane", logger)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: dedicated pool: %w", err)
 	}
@@ -260,7 +260,7 @@ func (r *Runtime) sampleReadyQueue(ctx context.Context) (workercontract.QueueVal
 }
 
 func (r *Runtime) prepare(ctx context.Context) error {
-	if err := r.withDB(ctx, func(ctx context.Context) error {
+	if err := r.withDB(ctx, dbOperationProbe, func(ctx context.Context) error {
 		return r.claimer.ProbeClaim(ctx, r.claim)
 	}); err != nil {
 		return fmt.Errorf("build youtube plane: probe claim: %w", err)
@@ -596,10 +596,17 @@ func (r *Runtime) Degraded() bool {
 	return r != nil && r.degraded.Load()
 }
 
-func (r *Runtime) withDB(ctx context.Context, fn func(context.Context) error) error {
+// withDB는 DBOperationConcurrency 슬롯 하나를 잡고 fn을 실행한다. 슬롯 대기는 획득에 실패해도,
+// 보유는 획득부터 반환까지 operation별 히스토그램에 남긴다.
+func (r *Runtime) withDB(ctx context.Context, operation dbOperation, fn func(context.Context) error) error {
+	waitStarted := time.Now()
+
 	select {
 	case r.dbSem <- struct{}{}:
+		observeSeconds(youtubeDBSlotWaitSeconds, string(operation), waitStarted)
 	case <-ctx.Done():
+		observeSeconds(youtubeDBSlotWaitSeconds, string(operation), waitStarted)
+
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("acquire DB slot: %w", err)
 		}
@@ -607,13 +614,14 @@ func (r *Runtime) withDB(ctx context.Context, fn func(context.Context) error) er
 		return nil
 	}
 
-	defer func() { <-r.dbSem }()
+	acquired := time.Now()
 
-	if err := fn(ctx); err != nil {
-		return fmt.Errorf("fn: %w", err)
-	}
+	defer func() {
+		observeSeconds(youtubeDBSlotHoldSeconds, string(operation), acquired)
+		<-r.dbSem
+	}()
 
-	return nil
+	return fn(ctx)
 }
 
 func (r *Runtime) publishHealth() {

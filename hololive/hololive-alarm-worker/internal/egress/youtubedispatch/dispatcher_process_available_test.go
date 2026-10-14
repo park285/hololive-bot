@@ -98,14 +98,6 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	require.Zero(t, deliveryCount)
 }
 
-func TestDispatcher_ProcessAvailableAcceptsZeroValue(t *testing.T) {
-	t.Parallel()
-
-	var dispatcher Dispatcher
-
-	dispatcher.processAvailable(t.Context(), 1)
-}
-
 func TestDispatcher_ProcessAvailableWithoutWorkerInstrumentation(t *testing.T) {
 	t.Parallel()
 

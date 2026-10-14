@@ -85,7 +85,7 @@ func newTestMemberRepository() *Repository {
 	return &Repository{logger: slog.New(slog.DiscardHandler)}
 }
 
-func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
+func TestCollectMembersFromRows_All_PreservesShortKoreanName(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
@@ -119,9 +119,9 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectAllMembersFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
 	if err != nil {
-		t.Fatalf("collectAllMembersFromRows error = %v, want nil", err)
+		t.Fatalf("collectMembersFromRows error = %v, want nil", err)
 	}
 
 	if len(members) != 1 || members[0] == nil {
@@ -133,7 +133,7 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 	}
 }
 
-func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
+func TestCollectMembersFromRows_All_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
@@ -180,9 +180,9 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectAllMembersFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
 	if err == nil {
-		t.Fatal("collectAllMembersFromRows error = nil, want non-nil")
+		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
 
 	if len(members) != 1 || members[0] == nil || members[0].ChannelID != testChannelUC2 {
@@ -238,7 +238,7 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	}
 }
 
-func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
+func TestCollectMembersFromRows_ByName_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
@@ -283,9 +283,9 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 		}},
 	}}
 
-	members, err := repository.collectMembersByNameFromRows(rows)
+	members, err := repository.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberQueryRow)
 	if err == nil {
-		t.Fatal("collectMembersByNameFromRows error = nil, want non-nil")
+		t.Fatal("collectMembersFromRows error = nil, want non-nil")
 	}
 
 	if len(members) != 1 || members[0] == nil || members[0].ChannelID != testChannelUC1 {

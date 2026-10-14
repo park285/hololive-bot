@@ -1,6 +1,7 @@
 package celebration
 
 import (
+	"slices"
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
@@ -41,6 +42,7 @@ func buildBirthdayStreamEnvelopes(
 	candidates []birthdayStreamCandidate,
 	roomsByBirthdayEventKey map[string][]string,
 	publishedEvents map[string]domain.AlarmQueueEnvelope,
+	sentRoomsByStreamEventKey map[string][]string,
 	dateStr string,
 ) []domain.AlarmQueueEnvelope {
 	var envelopes []domain.AlarmQueueEnvelope
@@ -48,10 +50,16 @@ func buildBirthdayStreamEnvelopes(
 	for _, candidate := range candidates {
 		displayName := resolveCelebrationMemberName(candidate.member)
 		rooms := roomsByBirthdayEventKey[birthdayGreetingEventKey(candidate.member.ID, dateStr)]
-		published, wasPublished := publishedBirthdayStreamEvent(candidate, publishedEvents, dateStr)
+		streamEventKey := birthdayStreamEventKey(candidate.member.ID, dateStr, candidate.session.VideoID)
+		published, wasPublished := publishedEvents[streamEventKey]
+		sentRooms := sentRoomsByStreamEventKey[streamEventKey]
 
 		for _, roomID := range rooms {
 			if wasPublished {
+				if slices.Contains(sentRooms, roomID) {
+					continue
+				}
+
 				envelopes = append(envelopes, birthdayStreamEnvelopeFromPublished(published, roomID))
 
 				continue
@@ -118,16 +126,6 @@ func birthdayGreetingEventKeys(candidates []birthdayStreamCandidate, dateStr str
 	}
 
 	return eventKeys
-}
-
-func publishedBirthdayStreamEvent(
-	candidate birthdayStreamCandidate,
-	publishedEvents map[string]domain.AlarmQueueEnvelope,
-	dateStr string,
-) (domain.AlarmQueueEnvelope, bool) {
-	published, ok := publishedEvents[birthdayStreamEventKey(candidate.member.ID, dateStr, candidate.session.VideoID)]
-
-	return published, ok
 }
 
 func countBirthdayStreamAudienceRooms(roomsByEventKey map[string][]string) int {

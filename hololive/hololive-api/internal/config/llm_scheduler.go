@@ -75,7 +75,7 @@ func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
 func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
 	webhookToken, botToken := settings.LoadIrisTokens()
 
-	port, portErr := sharedenv.IntE("LLM_SCHEDULER_PORT", 30003)
+	port, portErr := sharedenv.IntE("LLM_SCHEDULER_PORT", defaultLLMPort)
 	valkey, valkeyErr := settings.LoadValkeyConfig()
 	postgres, postgresErr := settings.LoadPostgresConfig()
 	logging, loggingErr := settings.LoadLoggingConfig()

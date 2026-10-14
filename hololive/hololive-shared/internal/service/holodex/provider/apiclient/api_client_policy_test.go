@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
@@ -82,7 +81,7 @@ func TestAPIClientRetryAfter(t *testing.T) {
 
 				start := time.Now()
 				header := ""
-				minimum := constants.RetryConfig.BaseDelay
+				minimum := retryBaseDelay
 
 				switch name {
 				case "seconds":
@@ -117,7 +116,7 @@ func TestAPIClientRetryAfter(t *testing.T) {
 					t.Fatalf("requests = %d, want 2", calls)
 				}
 
-				if (name == "missing" || name == "malformed") && time.Since(start) > constants.RetryConfig.BaseDelay+constants.RetryConfig.Jitter {
+				if (name == "missing" || name == "malformed") && time.Since(start) > retryBaseDelay+retryJitter {
 					t.Fatalf("fallback backoff = %s", time.Since(start))
 				}
 			})
@@ -444,8 +443,8 @@ func TestAPIClientConfiguredRetriesPreserveFailureLimits(t *testing.T) {
 					t.Fatal("expected failure")
 				}
 
-				if calls != constants.CircuitBreakerConfig.FailureThreshold {
-					t.Fatalf("requests = %d, want circuit threshold %d", calls, constants.CircuitBreakerConfig.FailureThreshold)
+				if calls != circuitFailureThreshold {
+					t.Fatalf("requests = %d, want circuit threshold %d", calls, circuitFailureThreshold)
 				}
 			})
 		})

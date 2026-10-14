@@ -75,13 +75,6 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 		errs = n.publishPreparedBatch(ctx, prepared, &result, errs)
 	}
 
-	n.logger.Info("notification batch completed",
-		slog.Int("total", len(notifications)),
-		slog.Int("sent", result.Sent),
-		slog.Int("skipped", result.Skipped),
-		slog.Int("failed", result.Failed),
-	)
-
 	return result, errors.Join(errs...)
 }
 

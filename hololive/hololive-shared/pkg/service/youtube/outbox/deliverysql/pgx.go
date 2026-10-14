@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/retry"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -54,17 +55,11 @@ func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, er
 const deleteBatchYield = 10 * time.Millisecond
 
 func YieldBetweenDeleteBatches(ctx context.Context) error {
-	timer := time.NewTimer(deleteBatchYield)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
+	if !retry.Sleep(ctx, deleteBatchYield) {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("yield between delete batches: %w", err)
 		}
-
-		return nil
-	case <-timer.C:
-		return nil
 	}
+
+	return nil
 }

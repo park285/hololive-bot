@@ -132,7 +132,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 			return nil, newError(CodeEmailExists, "email already exists", err)
 		}
 
-		return nil, newError(CodeInternal, "failed to create user", err)
+		return nil, newError(CodeInternal, "create user", err)
 	}
 
 	return toUser(model), nil
@@ -227,7 +227,7 @@ func (s *Service) findLoginUser(ctx context.Context, email, password string) (us
 		return user, newError(CodeInvalidCredentials, "invalid credentials", nil)
 	}
 
-	return user, newError(CodeInternal, "failed to query user", err)
+	return user, newError(CodeInternal, "query user", err)
 }
 
 type rowScanner interface {

@@ -178,7 +178,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LL
 
 	cacheService := cacheResources.Service
 
-	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, logger)
+	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, "llm_scheduler", logger)
 	if err != nil {
 		cleanupCache()
 

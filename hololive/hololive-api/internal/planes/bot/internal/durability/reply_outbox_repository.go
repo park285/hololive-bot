@@ -158,12 +158,12 @@ func NewReplyOutboxRepositoryWithPolicy(pool *pgxpool.Pool, maxAttempts int32, a
 
 func (r *ReplyOutboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReadyQueueSnapshot{}, fmt.Errorf("ensure pool: %w", err)
+		return ReadyQueueSnapshot{}, err
 	}
 
 	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
-		return ReadyQueueSnapshot{}, fmt.Errorf("lease milliseconds: %w", err)
+		return ReadyQueueSnapshot{}, err
 	}
 
 	var (
@@ -183,7 +183,7 @@ func (r *ReplyOutboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSn
 
 func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEntry) (ReplyOutboxInsertOutcome, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReplyOutboxInserted, fmt.Errorf("ensure pool: %w", err)
+		return ReplyOutboxInserted, err
 	}
 
 	if entry == nil {
@@ -245,24 +245,24 @@ func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, ent
 
 func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, lease time.Duration) (*ReplyOutboxClaim, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return nil, fmt.Errorf("ensure pool: %w", err)
+		return nil, err
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return nil, fmt.Errorf("require bounded identity: %w", err)
+		return nil, err
 	}
 
 	leaseMS, err := leaseMilliseconds(lease)
 	if err != nil {
-		return nil, fmt.Errorf("lease milliseconds: %w", err)
+		return nil, err
 	}
 
 	var claim ReplyOutboxClaim
 
 	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
-		return nil, fmt.Errorf("lease milliseconds: %w", err)
+		return nil, err
 	}
 
 	row := r.pool.QueryRow(ctx, replyOutboxClaimSQL, token, leaseMS, r.maxAttempts, replayHorizonMS)
@@ -283,17 +283,17 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 
 func (r *ReplyOutboxRepository) MarkAccepted(ctx context.Context, id int64, claimToken, irisRequestID string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return false, fmt.Errorf("require bounded identity: %w", err)
+		return false, err
 	}
 
 	requestID, err := requireIdentity("iris request id", irisRequestID)
 	if err != nil {
-		return false, fmt.Errorf("require identity: %w", err)
+		return false, err
 	}
 
 	tag, err := r.pool.Exec(ctx, replyOutboxMarkAcceptedSQL, id, token, requestID)
@@ -306,12 +306,12 @@ func (r *ReplyOutboxRepository) MarkAccepted(ctx context.Context, id int64, clai
 
 func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutboxSettlement) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, fmt.Errorf("ensure pool: %w", err)
+		return false, err
 	}
 
 	token, err := requireBoundedIdentity("claim token", settlement.ClaimToken, claimTokenRuneLimit)
 	if err != nil {
-		return false, fmt.Errorf("require bounded identity: %w", err)
+		return false, err
 	}
 
 	policy, ok := replyOutboxSettlementPolicies[settlement.Status]
@@ -347,7 +347,7 @@ func replyOutboxRetryMilliseconds(retryAfter time.Duration) (int64, error) {
 
 	out, err := leaseMilliseconds(retryAfter)
 	if err != nil {
-		return out, fmt.Errorf("lease milliseconds: %w", err)
+		return out, err
 	}
 
 	return out, nil

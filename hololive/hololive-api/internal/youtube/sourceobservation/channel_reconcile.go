@@ -29,7 +29,7 @@ func (steps channelReconcileSteps[E, S, D]) reconcile(
 
 	subject := steps.subject(evidence)
 	if lockErr := lockLiveSubject(ctx, tx, steps.name+":"+subject); lockErr != nil {
-		return ReconcileResult{}, fmt.Errorf("lock live subject: %w", lockErr)
+		return ReconcileResult{}, lockErr
 	}
 
 	state, err := steps.loadState(ctx, tx, subject)

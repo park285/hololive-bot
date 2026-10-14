@@ -24,7 +24,7 @@ func lockLiveSubject(ctx context.Context, tx dbx.Tx, subjectKey string) error {
 func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string) (live.State, error) {
 	state := live.State{Sessions: map[string]live.SessionState{}, PendingEnds: map[string]live.PendingEnd{}}
 	if err := loadLiveSessions(ctx, tx, &state, channelIDs, videoIDs); err != nil {
-		return live.State{}, fmt.Errorf("load live sessions: %w", err)
+		return live.State{}, err
 	}
 
 	ids := make([]string, 0, len(state.Sessions)+len(videoIDs))

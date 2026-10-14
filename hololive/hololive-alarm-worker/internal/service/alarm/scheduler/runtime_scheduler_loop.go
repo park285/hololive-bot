@@ -56,7 +56,7 @@ func (s *RuntimeScheduler) runLoop(
 
 	for {
 		if err := s.waitForLoopTick(ctx, name, next); err != nil {
-			return fmt.Errorf("wait for loop tick: %w", err)
+			return err
 		}
 
 		s.runLoopIteration(ctx, name, timeout, run)
@@ -237,7 +237,7 @@ func (s *RuntimeScheduler) dispatchNotifications(
 		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
 		sharedlog.Warn(ctx, s.logger, EventAlarmNotificationDispatchFailed, "alarm notification dispatch failed", attrs...)
 
-		return fmt.Errorf("dispatch notifications: send notifications partially failed: %w", err)
+		return fmt.Errorf("send notifications: sent=%d failed=%d: %w", sendResult.Sent, sendResult.Failed, err)
 	}
 
 	sharedlog.Info(ctx, s.logger, EventAlarmNotificationDispatchSucceeded, "alarm notifications dispatched",

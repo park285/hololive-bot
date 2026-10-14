@@ -140,15 +140,15 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	}
 
 	if err := loadContentAbsenceGrace(&config, &defaults); err != nil {
-		return YouTubePlaneConfig{}, fmt.Errorf("load content absence grace: %w", err)
+		return YouTubePlaneConfig{}, err
 	}
 
 	if err := loadLiveEndGrace(&config, &defaults); err != nil {
-		return YouTubePlaneConfig{}, fmt.Errorf("load live end grace: %w", err)
+		return YouTubePlaneConfig{}, err
 	}
 
 	if err := loadLiveUnresolvableGrace(&config, &defaults); err != nil {
-		return YouTubePlaneConfig{}, fmt.Errorf("load live unresolvable grace: %w", err)
+		return YouTubePlaneConfig{}, err
 	}
 
 	if err := loadProfilePhotoStability(&config, &defaults); err != nil {
@@ -162,11 +162,11 @@ func loadYouTubePlanePool(config, defaults *YouTubePlaneConfig) error {
 	var err error
 
 	if config.PostgresPoolMinConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MIN_CONNS", defaults.PostgresPoolMinConns); err != nil {
-		return fmt.Errorf("read int env: %w", err)
+		return fmt.Errorf("load postgres pool min conns: %w", err)
 	}
 
 	if config.PostgresPoolMaxConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS", defaults.PostgresPoolMaxConns); err != nil {
-		return fmt.Errorf("read int env: %w", err)
+		return fmt.Errorf("load postgres pool max conns: %w", err)
 	}
 
 	return nil
@@ -176,19 +176,19 @@ func loadYouTubePlaneSchedules(config, defaults *YouTubePlaneConfig) error {
 	var err error
 
 	if config.TargetProjection.Interval, err = envload.StrictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_INTERVAL_MS", defaults.TargetProjection.Interval, time.Millisecond); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load target projection interval: %w", err)
 	}
 
 	if config.TargetProjection.Validity, err = envload.StrictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_VALIDITY_SECONDS", defaults.TargetProjection.Validity, time.Second); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load target projection validity: %w", err)
 	}
 
 	if config.LiveEndFinalizer.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_LIVE_END_FINALIZER_ENABLED", defaults.LiveEndFinalizer.Enabled); err != nil {
-		return fmt.Errorf("read bool env: %w", err)
+		return fmt.Errorf("load live end finalizer enabled: %w", err)
 	}
 
 	if config.LiveEndFinalizer.Interval, err = envload.StrictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_FINALIZER_INTERVAL_SECONDS", defaults.LiveEndFinalizer.Interval, time.Second); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load live end finalizer interval: %w", err)
 	}
 
 	return nil
@@ -197,7 +197,7 @@ func loadYouTubePlaneSchedules(config, defaults *YouTubePlaneConfig) error {
 func loadContentAbsenceGrace(config, defaults *YouTubePlaneConfig) error {
 	value, err := envload.StrictDurationUnitEnv("YOUTUBE_PLANE_CONTENT_ABSENCE_GRACE_SECONDS", defaults.ContentAbsenceGrace, time.Second)
 	if err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load content absence grace: %w", err)
 	}
 
 	config.ContentAbsenceGrace = value
@@ -208,7 +208,7 @@ func loadContentAbsenceGrace(config, defaults *YouTubePlaneConfig) error {
 func loadLiveUnresolvableGrace(config, defaults *YouTubePlaneConfig) error {
 	value, err := envload.StrictDurationUnitEnv("YOUTUBE_PLANE_LIVE_UNRESOLVABLE_GRACE_SECONDS", defaults.LiveUnresolvableGrace, time.Second)
 	if err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load live unresolvable grace: %w", err)
 	}
 
 	config.LiveUnresolvableGrace = value
@@ -219,7 +219,7 @@ func loadLiveUnresolvableGrace(config, defaults *YouTubePlaneConfig) error {
 func loadLiveEndGrace(config, defaults *YouTubePlaneConfig) error {
 	value, err := envload.StrictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_GRACE_SECONDS", defaults.LiveEndGrace, time.Second)
 	if err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load live end grace: %w", err)
 	}
 
 	config.LiveEndGrace = value
@@ -234,7 +234,7 @@ func loadProfilePhotoStability(config, defaults *YouTubePlaneConfig) error {
 		"YOUTUBE_PLANE_PROFILE_CLEAR_MIN_OBSERVATIONS",
 		defaults.ProfileClearMinObservations,
 	); err != nil {
-		return fmt.Errorf("read int env: %w", err)
+		return fmt.Errorf("load profile clear min observations: %w", err)
 	}
 
 	if config.ProfileClearStability, err = envload.StrictDurationUnitEnv(
@@ -242,14 +242,14 @@ func loadProfilePhotoStability(config, defaults *YouTubePlaneConfig) error {
 		defaults.ProfileClearStability,
 		time.Second,
 	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load profile clear stability: %w", err)
 	}
 
 	if config.PhotoChangeMinObservations, err = sharedenv.IntE(
 		"YOUTUBE_PLANE_PHOTO_CHANGE_MIN_OBSERVATIONS",
 		defaults.PhotoChangeMinObservations,
 	); err != nil {
-		return fmt.Errorf("read int env: %w", err)
+		return fmt.Errorf("load photo change min observations: %w", err)
 	}
 
 	if config.PhotoChangeStability, err = envload.StrictDurationUnitEnv(
@@ -257,7 +257,7 @@ func loadProfilePhotoStability(config, defaults *YouTubePlaneConfig) error {
 		defaults.PhotoChangeStability,
 		time.Second,
 	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load photo change stability: %w", err)
 	}
 
 	return nil

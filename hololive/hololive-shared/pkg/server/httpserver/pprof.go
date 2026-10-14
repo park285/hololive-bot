@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
@@ -33,8 +32,8 @@ func NewPprofServer(ctx context.Context, addr, apiKey string) *http.Server {
 		Handler: router,
 		// /debug/pprof/profile?seconds=N은 N초간 블로킹 응답을 스트리밍하므로
 		// Read/WriteTimeout을 두면 프로파일이 잘린다. ReadHeaderTimeout만 건다.
-		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
-		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		MaxHeaderBytes:    serverMaxHeaderBytes,
 	}
 }
 

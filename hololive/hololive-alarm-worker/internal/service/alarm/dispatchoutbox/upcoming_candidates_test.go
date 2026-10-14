@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,7 @@ func (db lostStageResponseDB) Exec(ctx context.Context, sql string, args ...any)
 	return tag, errors.New("response lost after commit")
 }
 
-func TestUpcomingCandidatesCommitResponseLossAndAtomicCheckpoint(t *testing.T) {
+func TestUpcomingCandidatesCommitResponseLossAndConstraintFailure(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	now := time.Now().UTC().Truncate(time.Second)
 	notification := candidateNotification("stage-response", now.Add(5*time.Minute))
@@ -76,18 +77,39 @@ func TestUpcomingCandidatesCommitResponseLossAndAtomicCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, recovered, 1)
 
-	var checkpoint time.Time
-
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT evaluated_at FROM alarm_upcoming_checkpoints WHERE channel_id = 'staged-channel'").Scan(&checkpoint))
-	require.True(t, checkpoint.Equal(now))
-
-	// DB constraint 실패는 같은 문장의 checkpoint도 전진시키지 않는다.
+	// DB constraint 실패는 오류로 드러나고 후보를 남기지 않는다.
 	invalid := candidateNotification(strings.Repeat("r", 101), now.Add(5*time.Minute))
 
 	err = NewUpcomingCandidates(pool).Stage(t.Context(), "staged-channel", now.Add(time.Minute), []*domain.AlarmNotification{invalid})
 	require.Error(t, err)
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT evaluated_at FROM alarm_upcoming_checkpoints WHERE channel_id = 'staged-channel'").Scan(&checkpoint))
-	require.True(t, checkpoint.Equal(now))
+
+	var count int
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_upcoming_candidates").Scan(&count))
+	require.Equal(t, 1, count)
+}
+
+type unexpectedStageDB struct{}
+
+func (unexpectedStageDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errors.New("unexpected exec")
+}
+
+func (unexpectedStageDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errors.New("unexpected query")
+}
+
+// 알림이 없는 채널 평가는 매 cycle 반복되므로 DB 왕복 없이 끝나야 한다.
+func TestUpcomingCandidatesStageWithoutUpcomingCandidatesSkipsDatabase(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	live := candidateNotification("stage-live", now.Add(5*time.Minute))
+
+	live.Stream.Status = domain.StreamStatusLive
+
+	store := NewUpcomingCandidates(unexpectedStageDB{})
+
+	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, nil))
+	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{nil, live}))
 }
 
 func TestUpcomingCandidatesRejectCollision(t *testing.T) {
@@ -130,8 +152,6 @@ func TestUpcomingCandidatesLargeFanoutAtomicAndBoundedRecovery(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_upcoming_candidates").Scan(&count))
 	require.Zero(t, count)
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_upcoming_checkpoints").Scan(&count))
-	require.Zero(t, count)
 
 	notifications[len(notifications)-1].RoomID = "fanout-last"
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, notifications))
@@ -160,7 +180,7 @@ func TestUpcomingCandidatesLargeFanoutAtomicAndBoundedRecovery(t *testing.T) {
 	require.Len(t, seen, UpcomingCandidateLimit+1)
 }
 
-func TestUpcomingCandidatesCleanupPreservesPendingAndCheckpoint(t *testing.T) {
+func TestUpcomingCandidatesCleanupPreservesPending(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	now := time.Now().UTC().Truncate(time.Second)
 	store := NewUpcomingCandidates(pool)
@@ -177,8 +197,6 @@ func TestUpcomingCandidatesCleanupPreservesPendingAndCheckpoint(t *testing.T) {
 	var count int
 
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_upcoming_candidates WHERE outcome = 'pending'").Scan(&count))
-	require.Equal(t, 1, count)
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_upcoming_checkpoints").Scan(&count))
 	require.Equal(t, 1, count)
 }
 

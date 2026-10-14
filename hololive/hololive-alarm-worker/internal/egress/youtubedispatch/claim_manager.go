@@ -63,10 +63,9 @@ func newClaimManager(
 	return manager
 }
 
+// setExecutor는 SendEngine과 ClaimManager의 상호 참조 때문에 assembleDispatcher가 생성 직후 한 번 호출한다.
 func (d *ClaimManager) setExecutor(executor DeliveryExecutor) {
-	if d != nil {
-		d.executor = executor
-	}
+	d.executor = executor
 }
 
 func (d *ClaimManager) dispatchDeliveryRows(
@@ -74,14 +73,5 @@ func (d *ClaimManager) dispatchDeliveryRows(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) dispatchstate.DispatchResult {
-	if d == nil || d.executor == nil {
-		return dispatchstate.DispatchResult{
-			SuccessDeliveryIDs: make([]int64, 0, len(rows)),
-			TouchedOutboxIDs:   make([]int64, 0, len(rows)),
-			SuccessClaimTokens: make([]dispatchstate.ClaimToken, 0, len(rows)),
-			FailureBuckets:     make(map[string][]int64),
-		}
-	}
-
 	return d.executor.dispatchDeliveryRows(ctx, rows, outboxByID)
 }

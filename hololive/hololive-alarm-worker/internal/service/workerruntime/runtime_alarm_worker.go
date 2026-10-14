@@ -117,7 +117,7 @@ func (r youtubeOutboxDispatcherRunner) Start(ctx context.Context) error {
 	}
 
 	if err := r.dispatcher.Run(ctx); err != nil {
-		return fmt.Errorf("run: %w", err)
+		return fmt.Errorf("run youtube outbox dispatcher: %w", err)
 	}
 
 	return nil

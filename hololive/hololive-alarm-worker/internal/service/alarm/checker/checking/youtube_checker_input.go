@@ -31,7 +31,8 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, map[string][]*domain.Stream{}, youtubeLiveCheckEvidence{}, map[string][]string{}, nil
 	}
 
-	dueChannels = c.selectDueYouTubeChannels(ctx, channelIDs, time.Now().UTC())
+	// due 판정과 UpdateChannelState가 같은 iteration 시각을 써야 Tier1 채널이 tick마다 due가 된다.
+	dueChannels = c.selectDueYouTubeChannels(ctx, channelIDs, now)
 
 	if len(dueChannels) == 0 {
 		return nil, map[string][]*domain.Stream{}, youtubeLiveCheckEvidence{}, map[string][]string{}, nil
@@ -61,6 +62,11 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 	}
 
 	if holodexErr != nil {
+		// Holodex 실패는 여기서 한 번만 기록한다. 계속하지 못하는 경우는 반환 오류를 scheduler가 기록한다.
+		c.logger.Warn("YouTube Holodex live status source failed; continuing with persisted live sessions",
+			slog.Int("channel_count", len(dueChannels)),
+			slog.Any("error", holodexErr),
+		)
 		// Holodex 실패 뒤 persisted 세션만으로 이번 주기를 계속한 횟수다. 예외 계약(contracts/alarm.md)의 telemetry다.
 		observeYouTubePersistedLiveSessions("holodex_error_continued", "all", 1)
 	}
@@ -85,7 +91,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 }
 
 func (c *YouTubeChecker) selectDueYouTubeChannels(ctx context.Context, channelIDs []string, now time.Time) []string {
-	dueChannels := c.tierScheduler.SelectDueChannels(channelIDs)
+	dueChannels := c.tierScheduler.SelectDueChannels(now, channelIDs)
 
 	persistedLiveChannels, err := c.loadPersistedLiveChannelIDs(ctx, channelIDs, now)
 	if err != nil {
@@ -151,17 +157,11 @@ func (c *YouTubeChecker) loadHolodexStreamsByChannel(
 	defer cancel()
 
 	streams, err := c.holodexService.GetChannelsLiveStatus(holodexCtx, dueChannels)
-	if err == nil {
-		return groupStreamsByChannel(streams), nil
+	if err != nil {
+		return nil, fmt.Errorf("fetch channels live status: %w", err)
 	}
 
-	if c.persistedLiveSource != nil {
-		c.logger.Warn("YouTube Holodex live status source failed; continuing with persisted live sessions",
-			slog.Any("error", err),
-		)
-	}
-
-	return nil, fmt.Errorf("fetch channels live status: %w", err)
+	return groupStreamsByChannel(streams), nil
 }
 
 func (c *YouTubeChecker) shouldFailAfterHolodexError(

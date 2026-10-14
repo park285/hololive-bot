@@ -679,3 +679,36 @@ func TestLoadYouTubePlaneConfigPreservesExplicitInvalidBounds(t *testing.T) {
 		t.Fatal("Validate() error = nil, want invalid explicit bound")
 	}
 }
+
+// 잘못된 env 값은 기동 오류에 설정 단계·설정값·env 키를 한 번씩만 남긴다.
+func TestLoadYouTubePlaneConfigNamesInvalidEnvSetting(t *testing.T) {
+	tests := []struct {
+		key     string
+		stage   string
+		setting string
+	}{
+		{key: "YOUTUBE_PLANE_TARGET_PROJECTION_INTERVAL_MS", stage: "load youtube plane schedules: ", setting: "load target projection interval"},
+		{key: "YOUTUBE_PLANE_RETENTION_BATCH_SIZE", stage: "load youtube plane retention: ", setting: "load retention batch size"},
+		{key: "YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS", stage: "load youtube plane retention: ", setting: "load retention age"},
+		{key: "YOUTUBE_PLANE_LIVE_END_GRACE_SECONDS", setting: "load live end grace"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			t.Setenv(tt.key, "not-a-number")
+
+			_, err := loadYouTubePlaneConfig()
+			if err == nil {
+				t.Fatal("loadYouTubePlaneConfig() error = nil, want invalid env error")
+			}
+
+			msg := err.Error()
+			if !strings.HasPrefix(msg, tt.stage+tt.setting+": ") || !strings.Contains(msg, tt.key) {
+				t.Fatalf("loadYouTubePlaneConfig() error = %q, want prefix %q and key %s", msg, tt.stage+tt.setting, tt.key)
+			}
+
+			if strings.Count(msg, tt.setting) != 1 {
+				t.Fatalf("loadYouTubePlaneConfig() error = %q, want %q once", msg, tt.setting)
+			}
+		})
+	}
+}

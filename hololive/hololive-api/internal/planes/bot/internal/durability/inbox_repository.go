@@ -106,7 +106,7 @@ func NewInboxRepository(pool *pgxpool.Pool) *InboxRepository {
 
 func (r *InboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReadyQueueSnapshot{}, fmt.Errorf("ensure pool: %w", err)
+		return ReadyQueueSnapshot{}, err
 	}
 
 	var (
@@ -134,7 +134,7 @@ func (r *InboxRepository) Admit(ctx context.Context, msg InboxMessage) (admitted
 
 func (r *InboxRepository) AdmitResult(ctx context.Context, msg InboxMessage) (result workercontract.AdmissionResult, err error) {
 	if poolErr := ensurePool(r.pool); poolErr != nil {
-		return workercontract.AdmissionFailed, fmt.Errorf("ensure pool: %w", poolErr)
+		return workercontract.AdmissionFailed, poolErr
 	}
 
 	normalized, err := normalizeInboxMessage(msg)
@@ -144,7 +144,7 @@ func (r *InboxRepository) AdmitResult(ctx context.Context, msg InboxMessage) (re
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return workercontract.AdmissionFailed, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("begin webhook admission", normalized.MessageID, err))
+		return workercontract.AdmissionFailed, safeMessageRepositoryError("begin webhook admission", normalized.MessageID, err)
 	}
 
 	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
@@ -159,18 +159,18 @@ func (r *InboxRepository) AdmitResult(ctx context.Context, msg InboxMessage) (re
 
 func admitInboxTx(ctx context.Context, tx pgx.Tx, normalized InboxMessage) (workercontract.AdmissionResult, error) {
 	if lockErr := lockInboxOrderingKey(ctx, tx, normalized.OrderingKey); lockErr != nil {
-		return workercontract.AdmissionFailed, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("lock webhook admission ordering", normalized.MessageID, lockErr))
+		return workercontract.AdmissionFailed, safeMessageRepositoryError("lock webhook admission ordering", normalized.MessageID, lockErr)
 	}
 
 	var admitted bool
 
 	err := tx.QueryRow(ctx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, jsonbParam(normalized.Payload)).Scan(&admitted)
 	if err != nil {
-		return workercontract.AdmissionFailed, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err))
+		return workercontract.AdmissionFailed, safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return workercontract.AdmissionOutcomeUnknown, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("commit webhook admission", normalized.MessageID, err))
+		return workercontract.AdmissionOutcomeUnknown, safeMessageRepositoryError("commit webhook admission", normalized.MessageID, err)
 	}
 
 	if !admitted {
@@ -183,7 +183,7 @@ func admitInboxTx(ctx context.Context, tx pgx.Tx, normalized InboxMessage) (work
 func normalizeInboxMessage(msg InboxMessage) (InboxMessage, error) {
 	messageID, err := requireMessageIdentity(msg.MessageID)
 	if err != nil {
-		return InboxMessage{}, fmt.Errorf("require message identity: %w", err)
+		return InboxMessage{}, err
 	}
 
 	roomID, err := requireRoomID(msg.RoomID)
@@ -193,7 +193,7 @@ func normalizeInboxMessage(msg InboxMessage) (InboxMessage, error) {
 
 	orderingKey, err := requireBoundedIdentity("ordering key", msg.OrderingKey, orderingKeyRuneLimit)
 	if err != nil {
-		return InboxMessage{}, fmt.Errorf("require bounded identity: %w", err)
+		return InboxMessage{}, err
 	}
 
 	if len(msg.Payload) == 0 {
@@ -205,17 +205,17 @@ func normalizeInboxMessage(msg InboxMessage) (InboxMessage, error) {
 
 func (r *InboxRepository) Claim(ctx context.Context, claimToken string, lease time.Duration) (*InboxClaim, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return nil, fmt.Errorf("ensure pool: %w", err)
+		return nil, err
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return nil, fmt.Errorf("require bounded identity: %w", err)
+		return nil, err
 	}
 
 	leaseMS, err := leaseMilliseconds(lease)
 	if err != nil {
-		return nil, fmt.Errorf("lease milliseconds: %w", err)
+		return nil, err
 	}
 
 	var claim InboxClaim
@@ -254,7 +254,7 @@ func (r *InboxRepository) Release(
 	lastError string,
 ) (InboxReleaseOutcome, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return InboxReleaseNotOwned, fmt.Errorf("ensure pool: %w", err)
+		return InboxReleaseNotOwned, err
 	}
 
 	id, token, err := r.fenceArgs(messageID, claimToken)
@@ -296,7 +296,7 @@ func (r *InboxRepository) Release(
 func (r *InboxRepository) releaseLocked(ctx context.Context, query, id, token string, retryMS int64, attempts int32, lastError string) (status string, err error) {
 	tx, err := r.beginLockedMessageTx(ctx, id)
 	if err != nil {
-		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("begin webhook release", id, err))
+		return "", safeMessageRepositoryError("begin webhook release", id, err)
 	}
 
 	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
@@ -304,11 +304,11 @@ func (r *InboxRepository) releaseLocked(ctx context.Context, query, id, token st
 	err = tx.QueryRow(ctx, query, id, token, retryMS,
 		normalizeInboxFailureReason(lastError), attempts).Scan(&status)
 	if err != nil {
-		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("release webhook inbox row", id, err))
+		return "", safeMessageRepositoryError("release webhook inbox row", id, err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("commit webhook release", id, err))
+		return "", safeMessageRepositoryError("commit webhook release", id, err)
 	}
 
 	return status, nil
@@ -333,7 +333,7 @@ func validateInboxRelease(maxAttempts int32, retryAfter time.Duration) (int64, e
 
 	out, err := leaseMilliseconds(retryAfter)
 	if err != nil {
-		return out, fmt.Errorf("lease milliseconds: %w", err)
+		return out, err
 	}
 
 	return out, nil
@@ -341,7 +341,7 @@ func validateInboxRelease(maxAttempts int32, retryAfter time.Duration) (int64, e
 
 func (r *InboxRepository) Abandon(ctx context.Context, messageID, claimToken, reason string) (applied bool, err error) {
 	if poolErr := ensurePool(r.pool); poolErr != nil {
-		return false, fmt.Errorf("ensure pool: %w", poolErr)
+		return false, poolErr
 	}
 
 	id, token, err := r.fenceArgs(messageID, claimToken)
@@ -351,7 +351,7 @@ func (r *InboxRepository) Abandon(ctx context.Context, messageID, claimToken, re
 
 	terminalReason, err := requireIdentity("terminal reason", reason)
 	if err != nil {
-		return false, fmt.Errorf("require identity: %w", err)
+		return false, err
 	}
 
 	tx, err := r.beginLockedMessageTx(ctx, id)
@@ -377,11 +377,11 @@ func abandonInboxTx(ctx context.Context, tx pgx.Tx, id, token, terminalReason st
 	err = tx.QueryRow(ctx, inboxAbandonSQL, id, token,
 		clampColumnText(terminalReason, terminalReasonByteLimit)).Scan(&applied)
 	if err != nil {
-		return false, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("abandon webhook inbox row", id, err))
+		return false, safeMessageRepositoryError("abandon webhook inbox row", id, err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("commit webhook abandon", id, err))
+		return false, safeMessageRepositoryError("commit webhook abandon", id, err)
 	}
 
 	return applied, nil
@@ -389,7 +389,7 @@ func abandonInboxTx(ctx context.Context, tx pgx.Tx, id, token, terminalReason st
 
 func (r *InboxRepository) Heartbeat(ctx context.Context, messageID, claimToken string, lease time.Duration) (time.Time, bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return time.Time{}, false, fmt.Errorf("ensure pool: %w", err)
+		return time.Time{}, false, err
 	}
 
 	id, token, err := r.fenceArgs(messageID, claimToken)
@@ -399,7 +399,7 @@ func (r *InboxRepository) Heartbeat(ctx context.Context, messageID, claimToken s
 
 	leaseMS, err := leaseMilliseconds(lease)
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("lease milliseconds: %w", err)
+		return time.Time{}, false, err
 	}
 
 	var leaseUntil time.Time

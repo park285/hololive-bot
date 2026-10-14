@@ -192,9 +192,9 @@ func (r *Runtime) Run() error {
 				slog.String("signal", sig.String()),
 			)
 		},
+		// 종료 원인은 Run의 반환값으로만 전달한다. bootstrap이 반환 오류를 ERROR로 한 번 기록한다.
 		OnError: func(err error) {
 			runtimeErr = err
-			r.Logger.Error("Server error", slog.String("runtime", runtimeName), slog.Any("error", err))
 		},
 		Shutdown: r.shutdown,
 	})

@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"unicode/utf8"
 
@@ -76,14 +77,13 @@ func (h *MemberHandler) handleAliasOperation(
 			slog.String("alias", req.Alias),
 			slog.Any("error", err),
 		)
-		sharedserver.RespondError(c, 500, "Failed to "+operationName+" alias", nil)
+		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to "+operationName+" alias", nil)
 
 		return
 	}
 
 	if err := h.memberCache.InvalidateAliasCache(ctx, req.Alias); err != nil {
-		h.safeLogger().Error("Failed to invalidate alias cache", slog.Any("error", err))
-		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", "Failed to invalidate alias cache", err)
 
 		return
 	}
@@ -96,7 +96,7 @@ func (h *MemberHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return aliasRequest{}, false
 	}
@@ -104,14 +104,14 @@ func (h *MemberHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
 	req.Alias = normalizeAliasInput(req.Alias)
 	if req.Alias == "" {
 		h.safeLogger().Warn("Alias must not be empty after normalization")
-		sharedserver.RespondError(c, 400, "Alias must not be empty", nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, "Alias must not be empty", nil)
 
 		return aliasRequest{}, false
 	}
 
 	if utf8.RuneCountInString(req.Alias) > aliasMaxLength {
 		h.safeLogger().Warn("Alias exceeds max length", slog.Int("max", aliasMaxLength))
-		sharedserver.RespondError(c, 400, fmt.Sprintf("Alias must be at most %d characters", aliasMaxLength), nil)
+		sharedserver.RespondError(c, http.StatusBadRequest, fmt.Sprintf("Alias must be at most %d characters", aliasMaxLength), nil)
 
 		return aliasRequest{}, false
 	}
@@ -132,7 +132,7 @@ func (h *MemberHandler) respondAliasOperationSuccess(c *gin.Context, memberID in
 		"alias":     alias,
 	})
 
-	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Alias " + operationName + " successfully"})
+	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Alias " + operationName + " successfully"})
 }
 
 func (h *MemberHandler) AddAlias(c *gin.Context) {

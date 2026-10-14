@@ -33,7 +33,7 @@ func (r *AlarmWorkerRuntime) Run() error {
 	}
 
 	if err := applifecycle.Run(r.Logger, r.Start, r.Shutdown); err != nil {
-		return fmt.Errorf("run: %w", err)
+		return fmt.Errorf("run alarm worker lifecycle: %w", err)
 	}
 
 	return nil

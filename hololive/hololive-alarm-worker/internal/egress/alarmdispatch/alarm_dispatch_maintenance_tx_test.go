@@ -15,42 +15,55 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-type recordingAlarmDispatchRollbackTx struct {
-	pgx.Tx
+func TestAlarmDispatchMaintenancePGWithAdvisoryLockRollsBackCallbackError(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
+	eventID := seedAlarmDispatchRetentionEvent(t, pool)
+	callbackErr := errors.New("callback failed after delete")
 
-	rollbackCtxErr      error
-	rollbackHasDeadline bool
-	rollbackErr         error
+	// 콜백이 같은 트랜잭션에서 지운 행은 콜백 오류와 함께 되돌아가야 한다.
+	err := store.WithAdvisoryLock(t.Context(), 42, func(ctx context.Context, locked alarmDispatchMaintenanceDataStore) error {
+		pgStore, ok := locked.(alarmDispatchMaintenancePgxStore)
+		require.True(t, ok)
+
+		tag, execErr := pgStore.db.Exec(ctx, "DELETE FROM alarm_dispatch_events WHERE id = $1", eventID)
+		require.NoError(t, execErr)
+		require.EqualValues(t, 1, tag.RowsAffected())
+
+		return callbackErr
+	})
+	require.ErrorIs(t, err, callbackErr)
+
+	var remaining int
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_events WHERE id = $1", eventID).Scan(&remaining))
+	require.Equal(t, 1, remaining)
 }
 
-func (tx *recordingAlarmDispatchRollbackTx) Rollback(ctx context.Context) error {
-	tx.rollbackCtxErr = ctx.Err()
-	_, tx.rollbackHasDeadline = ctx.Deadline()
+func TestAlarmDispatchMaintenancePGWithAdvisoryLockSkipsCallbackWhileLockHeld(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
 
-	return tx.rollbackErr
-}
+	holder, err := pool.Begin(t.Context())
+	require.NoError(t, err)
 
-func TestRollbackAlarmDispatchTxOnPanicPreservesPanicWhenRollbackFails(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+	t.Cleanup(func() {
+		if rollbackErr := holder.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback lock holder: %v", rollbackErr)
+		}
+	})
 
-	tx := &recordingAlarmDispatchRollbackTx{rollbackErr: errors.New("rollback failed")}
-	panicValue := &struct{ message string }{message: "alarm dispatch panic"}
+	_, err = holder.Exec(t.Context(), "SELECT pg_advisory_xact_lock($1)", int64(42))
+	require.NoError(t, err)
 
-	var recovered any
+	called := false
 
-	func() {
-		defer func() {
-			recovered = recover()
-		}()
-		defer rollbackAlarmDispatchTxOnPanic(ctx, tx)
+	require.NoError(t, store.WithAdvisoryLock(t.Context(), 42, func(context.Context, alarmDispatchMaintenanceDataStore) error {
+		called = true
 
-		panic(panicValue)
-	}()
-
-	require.Same(t, panicValue, recovered)
-	require.NoError(t, tx.rollbackCtxErr)
-	require.True(t, tx.rollbackHasDeadline)
+		return nil
+	}))
+	require.False(t, called, "다른 트랜잭션이 lock을 잡고 있으면 retention을 건너뛴다")
 }
 
 func TestAlarmDispatchMaintenancePGRetentionDeletesEveryTargetInLockedTransaction(t *testing.T) {

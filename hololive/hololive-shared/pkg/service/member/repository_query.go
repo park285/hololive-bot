@@ -100,7 +100,7 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 	}
 	defer rows.Close()
 
-	out, err := r.collectAllMembersFromRows(rows)
+	out, err := r.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberFullRow)
 	if err != nil {
 		return out, fmt.Errorf("collect all members from rows: %w", err)
 	}
@@ -162,7 +162,7 @@ func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.
 	}
 	defer rows.Close()
 
-	out, err := r.collectMembersByNameFromRows(rows)
+	out, err := r.collectMembersFromRows(rows, memberIterLabel, "member", scanMemberQueryRow)
 	if err != nil {
 		return out, fmt.Errorf("collect members by name from rows: %w", err)
 	}

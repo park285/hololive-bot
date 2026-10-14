@@ -11,7 +11,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-shared/internal/workerobservability"
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 // 운영 표면이 H3 전용이라 Prometheus가 직접 scrape하지 못해,
@@ -40,11 +39,11 @@ func NewMetricsServer(ctx context.Context, addr, metricsKey string, registries .
 	return &http.Server{
 		Addr:              addr,
 		Handler:           router,
-		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
-		ReadTimeout:       constants.ServerTimeout.Read,
-		WriteTimeout:      constants.ServerTimeout.Write,
-		IdleTimeout:       constants.ServerTimeout.Idle,
-		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
+		MaxHeaderBytes:    serverMaxHeaderBytes,
 	}
 }
 

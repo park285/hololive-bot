@@ -92,7 +92,7 @@ func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day i
 	}
 	defer rows.Close()
 
-	out, err := r.collectCelebrationMembersFromRows(rows)
+	out, err := r.collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member", scanMemberFullRow)
 	if err != nil {
 		return out, fmt.Errorf("collect celebration members from rows: %w", err)
 	}
@@ -109,30 +109,9 @@ func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, da
 	}
 	defer rows.Close()
 
-	out, err := r.collectCelebrationMembersFromRows(rows)
+	out, err := r.collectMembersFromRows(rows, celebrationMemberIterLabel, "celebration member", scanMemberFullRow)
 	if err != nil {
 		return out, fmt.Errorf("collect celebration members from rows: %w", err)
-	}
-
-	return out, nil
-}
-
-func (r *Repository) collectCelebrationMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	out, err := collectJoinedRows(rows, "celebration member rows iteration", func(rows pgx.Rows) (*domain.Member, error) {
-		row, err := scanMemberFullRow(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan celebration member row: %w", err)
-		}
-
-		member, err := r.parseMemberRow(&row)
-		if err != nil {
-			return nil, fmt.Errorf("parse celebration member row %q: %w", row.englishName, err)
-		}
-
-		return member, nil
-	})
-	if err != nil {
-		return out, fmt.Errorf("collect joined rows: %w", err)
 	}
 
 	return out, nil

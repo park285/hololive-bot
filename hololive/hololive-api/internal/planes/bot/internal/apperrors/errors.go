@@ -18,16 +18,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package dispatchstate
+package apperrors
 
 import (
-	"time"
-
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
+	"fmt"
+	"strings"
 )
 
-var SentAtNow = time.Now
+type ServiceError struct {
+	Service   string
+	Operation string
+	Message   string
+	Err       error
+}
 
-func CanonicalSentAtNow() time.Time {
-	return yttimestamp.Normalize(SentAtNow())
+func (e *ServiceError) Error() string {
+	message := strings.TrimSpace(e.Message)
+	if message == "" {
+		message = "service error"
+	}
+
+	if e.Err == nil {
+		return fmt.Sprintf("%s service=%s operation=%s", message, e.Service, e.Operation)
+	}
+
+	return fmt.Sprintf("%s service=%s operation=%s: %v", message, e.Service, e.Operation, e.Err)
+}
+
+func (e *ServiceError) Unwrap() error { return e.Err }
+
+func NewServiceError(message, service, operation string, cause error) *ServiceError {
+	return &ServiceError{
+		Service:   service,
+		Operation: operation,
+		Message:   message,
+		Err:       cause,
+	}
 }

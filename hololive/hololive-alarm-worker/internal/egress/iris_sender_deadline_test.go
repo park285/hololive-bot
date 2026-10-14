@@ -10,7 +10,7 @@ import (
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
 func TestMarkdownHandoffStaysBoundedWhenStatusCannotFinish(t *testing.T) {

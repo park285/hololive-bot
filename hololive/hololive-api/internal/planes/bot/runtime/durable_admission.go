@@ -122,7 +122,7 @@ func (w durableReplyWriter) RecordReply(ctx context.Context, entry *transport.Re
 	if err != nil {
 		w.totals.RecordAdmission(workercontract.AdmissionOutcomeUnknown)
 
-		return fmt.Errorf("insert: %w", err)
+		return fmt.Errorf("persist reply: %w", err)
 	}
 
 	if outcome == durability.ReplyOutboxInserted {
@@ -278,7 +278,7 @@ func (r *durableRuntime) runInboxWorker(ctx context.Context) {
 	runDurableWorker(ctx, "inbox", r.processNextInbox, r.inboxWake, r.inboxPollSlot, r.inboxPollEvery)
 }
 
-func (r *durableRuntime) processNextInbox(ctx context.Context) bool {
+func (r *durableRuntime) processNextInbox(ctx context.Context, claimed func()) bool {
 	token := rand.Text()
 
 	claim, err := r.inbox.Claim(ctx, token, r.claimLeaseDuration())
@@ -291,6 +291,8 @@ func (r *durableRuntime) processNextInbox(ctx context.Context) bool {
 	if claim == nil {
 		return false
 	}
+
+	claimed()
 
 	attemptID := r.inboxTracker.BeginAttempt(time.Now())
 

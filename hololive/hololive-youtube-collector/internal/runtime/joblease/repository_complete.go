@@ -21,7 +21,7 @@ func (l *JobLease) CompleteCurrent(ctx context.Context) error {
 	if err := dbx.InPgxTx(ctx, l.repository.pool, func(tx dbx.Tx) error {
 		return l.completeCurrentTx(ctx, tx)
 	}); err != nil {
-		return fmt.Errorf("in pgx tx: %w", err)
+		return fmt.Errorf("complete current collection job lease: %w", err)
 	}
 
 	return nil

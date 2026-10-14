@@ -27,6 +27,14 @@ import (
 	"time"
 )
 
+// 실패한 요청의 지연 재시도 기본값입니다. 지연은 apiclient circuit의 resetTimeout(30초)보다 5초 길게 두어
+// circuit이 닫힌 뒤 재시도하고, 대기 상한은 3개 org × 2개 조회 메서드에 여유를 더한 값입니다.
+const (
+	retrySchedulerDelay   = 35 * time.Second
+	retrySchedulerTimeout = 30 * time.Second
+	retrySchedulerMaxSize = 10
+)
+
 type retryContextKey struct{}
 
 type retryTask struct {

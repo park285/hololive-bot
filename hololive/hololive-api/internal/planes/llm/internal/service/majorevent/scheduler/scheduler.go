@@ -135,7 +135,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if _, err := s.SendWeeklyNotification(ctx); err != nil {
-				s.digest.Logger.Error("Failed to send weekly notification", slog.String("error", err.Error()))
+				s.digest.Logger.Error("Failed to send weekly notification", slog.Any("error", err))
 			}
 		},
 	})
@@ -203,7 +203,7 @@ func (s *Scheduler) weeklyNotificationInputs(
 ) (weeklyCollected, bool, error) {
 	rooms, err := s.repository.GetSubscribedRooms(ctx)
 	if err != nil {
-		return weeklyCollected{}, false, fmt.Errorf("get subscribed rooms: %w", err)
+		return weeklyCollected{}, false, fmt.Errorf("collect weekly subscribed rooms: %w", err)
 	}
 
 	if len(rooms) == 0 {
@@ -301,7 +301,7 @@ func executePeriodNotification(ctx context.Context, n periodNotification) (trigg
 	}
 
 	if err := n.mark(ctx, eventIDs, n.periodKey); err != nil {
-		n.logger.Error(n.markErrorLog, slog.String("error", err.Error()))
+		n.logger.Error(n.markErrorLog, slog.Any("error", err))
 	}
 
 	return result, nil

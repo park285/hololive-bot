@@ -211,7 +211,8 @@ func TestDiscoveryRecordsFailureWhileAdvancingCursor(t *testing.T) {
 
 	var logged bytes.Buffer
 
-	scheduler.executor.logger = slog.New(slog.NewTextHandler(&logged, nil))
+	scheduler.logger = slog.New(slog.NewTextHandler(&logged, nil))
+	scheduler.executor.logger = scheduler.logger
 
 	source := &runnerFailureSource{stubCandidateSource: newEmptyCandidateStub(t), failedID: ids[0], cause: localCandidateFailure()}
 

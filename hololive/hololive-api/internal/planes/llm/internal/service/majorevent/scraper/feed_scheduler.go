@@ -188,7 +188,7 @@ func (s *FeedScheduler) handleFailedScrape(
 			"Major event feed retry scrape failed",
 			slog.String("scheduled_run_kst", formatKST(scheduledAt)),
 			slog.String("failed_at_kst", formatKST(completedAt)),
-			slog.String("error", scrapeErr.Error()),
+			slog.Any("error", scrapeErr),
 			slog.Int("remaining_retries", s.retryRunCount()),
 		)
 
@@ -202,7 +202,7 @@ func (s *FeedScheduler) handleFailedScrape(
 		"Major event feed scrape failed",
 		slog.String("scheduled_run_kst", formatKST(scheduledAt)),
 		slog.String("failed_at_kst", formatKST(completedAt)),
-		slog.String("error", scrapeErr.Error()),
+		slog.Any("error", scrapeErr),
 		slog.Int("retry_count", len(retryRuns)),
 	)
 }

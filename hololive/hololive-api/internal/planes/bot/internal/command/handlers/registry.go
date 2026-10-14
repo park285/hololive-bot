@@ -69,7 +69,7 @@ func (r *Registry) Execute(ctx context.Context, cmdCtx *domain.CommandContext, k
 	}
 
 	if err := handler.Execute(ctx, cmdCtx, params); err != nil {
-		return fmt.Errorf("execute command %s: %w", key, err)
+		return fmt.Errorf("command %s: %w", key, err)
 	}
 
 	return nil

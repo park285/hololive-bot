@@ -53,11 +53,11 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 	var err error
 
 	if config.Retention.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_RETENTION_ENABLED", false); err != nil {
-		return fmt.Errorf("read bool env: %w", err)
+		return fmt.Errorf("load retention enabled: %w", err)
 	}
 
 	if config.Retention.PolicyApproved, err = sharedenv.BoolE("YOUTUBE_PLANE_RETENTION_POLICY_APPROVED", false); err != nil {
-		return fmt.Errorf("read bool env: %w", err)
+		return fmt.Errorf("load retention policy approval: %w", err)
 	}
 
 	if config.Retention.Interval, err = envload.StrictDurationUnitEnv(
@@ -65,18 +65,18 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 		defaults.Interval,
 		time.Second,
 	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load retention interval: %w", err)
 	}
 
 	if config.Retention.BatchSize, err = sharedenv.IntE(
 		"YOUTUBE_PLANE_RETENTION_BATCH_SIZE",
 		defaults.BatchSize,
 	); err != nil {
-		return fmt.Errorf("read int env: %w", err)
+		return fmt.Errorf("load retention batch size: %w", err)
 	}
 
 	if err := loadYouTubePlaneRetentionAges(config, &defaults); err != nil {
-		return fmt.Errorf("load youtube plane retention ages: %w", err)
+		return err
 	}
 
 	return nil
@@ -117,7 +117,7 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTube
 	for i, target := range targets {
 		value, err := envload.StrictDurationUnitEnv(target.key, *fallbacks[i].age, youtubePlaneRetentionDay)
 		if err != nil {
-			return fmt.Errorf("strict duration unit env: %w", err)
+			return fmt.Errorf("load retention age: %w", err)
 		}
 
 		*target.age = value
@@ -132,7 +132,7 @@ func loadYouTubePlaneReplay(config *YouTubePlaneConfig) error {
 	var err error
 
 	if config.Replay.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_REPLAY_ENABLED", false); err != nil {
-		return fmt.Errorf("read bool env: %w", err)
+		return fmt.Errorf("load replay enabled: %w", err)
 	}
 
 	if config.Replay.Interval, err = envload.StrictDurationUnitEnv(
@@ -140,14 +140,14 @@ func loadYouTubePlaneReplay(config *YouTubePlaneConfig) error {
 		defaults.Interval,
 		time.Second,
 	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
+		return fmt.Errorf("load replay interval: %w", err)
 	}
 
 	if config.Replay.BatchSize, err = sharedenv.IntE(
 		"YOUTUBE_PLANE_REPLAY_BATCH_SIZE",
 		defaults.BatchSize,
 	); err != nil {
-		return fmt.Errorf("read int env: %w", err)
+		return fmt.Errorf("load replay batch size: %w", err)
 	}
 
 	return nil

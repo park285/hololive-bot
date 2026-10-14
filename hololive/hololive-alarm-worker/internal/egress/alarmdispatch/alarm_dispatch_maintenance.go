@@ -2,7 +2,6 @@ package alarmdispatch
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -14,7 +13,7 @@ import (
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
@@ -151,7 +150,7 @@ func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
 	defer cancelDelete()
 
 	if err := r.store.WithAdvisoryLock(deleteCtx, r.retentionLockKey, r.deleteRetainedRows); err != nil {
-		return fmt.Errorf("with advisory lock: %w", err)
+		return fmt.Errorf("sweep alarm dispatch retention: %w", err)
 	}
 
 	return nil
@@ -198,74 +197,40 @@ type alarmDispatchRetentionTarget struct {
 	retentionDays int
 }
 
+// WithAdvisoryLock은 트랜잭션 advisory lock을 얻은 경우에만 fn을 같은 트랜잭션에서 실행한다.
+// 다른 인스턴스가 lock을 잡고 있으면 fn 없이 성공으로 끝난다.
 func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 	ctx context.Context,
 	key int64,
 	fn func(context.Context, alarmDispatchMaintenanceDataStore) error,
 ) error {
-	if s.beginner == nil {
-		return errors.New("alarm dispatch maintenance pgx pool is nil")
-	}
+	err := dbx.InPgxTx(ctx, s.beginner, func(tx dbx.Tx) error {
+		locked, err := acquireAlarmDispatchLock(ctx, tx, key)
+		if err != nil {
+			return fmt.Errorf("acquire alarm dispatch lock: %w", err)
+		}
 
-	tx, err := s.beginner.BeginTx(ctx, pgx.TxOptions{})
+		if !locked || fn == nil {
+			return nil
+		}
+
+		return fn(ctx, alarmDispatchMaintenancePgxStore{db: tx})
+	})
 	if err != nil {
-		return fmt.Errorf("begin alarm dispatch retention transaction: %w", err)
-	}
-
-	defer rollbackAlarmDispatchTxOnPanic(ctx, tx)
-
-	locked, err := acquireAlarmDispatchLock(ctx, tx, key)
-	if err != nil {
-		return fmt.Errorf("acquire alarm dispatch lock: %w", err)
-	}
-
-	if locked && fn != nil {
-		err = fn(ctx, alarmDispatchMaintenancePgxStore{db: tx})
-	}
-
-	if err != nil {
-		return rollbackAlarmDispatchTx(ctx, tx, err, "alarm dispatch retention transaction failed and rollback failed: %w")
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit alarm dispatch retention transaction: %w", err)
+		return fmt.Errorf("run alarm dispatch retention transaction: %w", err)
 	}
 
 	return nil
 }
 
-func rollbackAlarmDispatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
-	if p := recover(); p != nil {
-		rollbackErr := pgxutil.Rollback(ctx, tx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			slog.Default().Warn("alarm dispatch retention transaction rollback after panic failed", slog.Any("error", rollbackErr))
-		}
-
-		panic(p)
-	}
-}
-
-func acquireAlarmDispatchLock(ctx context.Context, tx pgx.Tx, key int64) (bool, error) {
+func acquireAlarmDispatchLock(ctx context.Context, tx dbx.Tx, key int64) (bool, error) {
 	var locked bool
 
-	err := tx.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0275_01.sql"), key).Scan(&locked)
-	if err == nil {
-		return locked, nil
+	if err := tx.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0275_01.sql"), key).Scan(&locked); err != nil {
+		return false, fmt.Errorf("scan: %w", err)
 	}
 
-	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-		return false, fmt.Errorf("acquire alarm dispatch retention transaction lock and rollback failed: %w", errors.Join(err, rollbackErr))
-	}
-
-	return false, fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
-}
-
-func rollbackAlarmDispatchTx(ctx context.Context, tx pgx.Tx, cause error, joinFmt string) error {
-	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-		return fmt.Errorf(joinFmt, errors.Join(cause, rollbackErr))
-	}
-
-	return cause
+	return locked, nil
 }
 
 func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {

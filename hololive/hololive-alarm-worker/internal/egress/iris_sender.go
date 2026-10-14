@@ -8,7 +8,7 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
 const replyStatusPollInterval = 250 * time.Millisecond
@@ -115,35 +115,51 @@ func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID s
 
 	ticks := time.Tick(interval)
 
+	// 상태 조회 실패는 handoff 실패가 아니므로 bounded context까지 재조회하고,
+	// polling이 끝나면 마지막 조회 오류를 진단 문맥으로 남긴다.
+	var lastPollErr error
+
 	for {
 		status, pollErr := s.client.GetReplyStatus(ctx, requestID)
+		if pollErr != nil {
+			lastPollErr = pollErr
+		} else {
+			complete, statusErr := assessReplyHandoffPoll(requestID, status)
+			if statusErr != nil {
+				return statusErr
+			}
 
-		complete, statusErr := assessReplyHandoffPoll(requestID, status, pollErr)
-		if statusErr != nil {
-			return statusErr
-		}
-
-		if complete {
-			return nil
+			if complete {
+				return nil
+			}
 		}
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf(
-				"%w: status polling ended before handoff: %w",
-				sendoutcome.ErrHandoffOutcomeUnknown,
-				ctx.Err(),
-			)
+			return replyPollingEndedError(ctx.Err(), requestID, lastPollErr)
 		case <-ticks:
 		}
 	}
 }
 
-func assessReplyHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot, pollErr error) (bool, error) {
-	if pollErr != nil {
-		return false, nil //nolint:nilerr // 상태 조회 실패는 handoff 실패가 아니므로 bounded context까지 재조회합니다.
+// 조회 오류는 %v로만 붙여 errors.Is 분류를 ErrHandoffOutcomeUnknown과 ctx 오류로 유지한다.
+// 반환 오류에는 request id를 남기지 않는 계약이라 조회 오류 문구 속 request id도 가린다.
+func replyPollingEndedError(ctxErr error, requestID string, lastPollErr error) error {
+	if lastPollErr == nil {
+		return fmt.Errorf("%w: status polling ended before handoff: %w", sendoutcome.ErrHandoffOutcomeUnknown, ctxErr)
 	}
 
+	lastPollDetail := strings.ReplaceAll(lastPollErr.Error(), requestID, "<request_id>")
+
+	return fmt.Errorf(
+		"%w: status polling ended before handoff: %w (last status query error: %v)",
+		sendoutcome.ErrHandoffOutcomeUnknown,
+		ctxErr,
+		lastPollDetail,
+	)
+}
+
+func assessReplyHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot) (bool, error) {
 	if status == nil {
 		return false, fmt.Errorf("%w: reply status response is empty", sendoutcome.ErrHandoffOutcomeUnknown)
 	}

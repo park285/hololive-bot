@@ -175,14 +175,6 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 }
 
 func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
-	oldInterval := outboxCleanupLoopInterval
-
-	outboxCleanupLoopInterval = 10 * time.Millisecond
-
-	t.Cleanup(func() {
-		outboxCleanupLoopInterval = oldInterval
-	})
-
 	probe := newDispatcherTickProbe(1)
 	db := openDispatcherStartTestDB(t, "dispatcher_cleanup_tick")
 
@@ -197,6 +189,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	})
 
 	dispatcher.telemetry = nil
+	dispatcher.cleanupInterval = 10 * time.Millisecond
 	dispatcher.setOnCleanup(probe.tick)
 
 	ctx, cancel := context.WithCancel(t.Context())

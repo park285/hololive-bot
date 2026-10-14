@@ -126,7 +126,7 @@ func (r *Runtime) liveEndTick(ctx context.Context) error {
 func (r *Runtime) finalizeNextDueLiveEnd(ctx context.Context) (bool, error) {
 	var processed bool
 
-	err := r.withDB(ctx, func(ctx context.Context) error {
+	err := r.withBudgetDB(ctx, dbOperationLiveEnd, func(ctx context.Context) error {
 		var tickErr error
 
 		processed, tickErr = r.finalizer.FinalizeNextDueLiveEnd(ctx, r.Config.LiveEndGrace)
@@ -137,7 +137,7 @@ func (r *Runtime) finalizeNextDueLiveEnd(ctx context.Context) (bool, error) {
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("with DB: %w", err)
+		return false, err
 	}
 
 	return processed, nil
@@ -229,7 +229,7 @@ func (r *Runtime) claimTick(ctx context.Context) (bool, error) {
 func (r *Runtime) claimObservationBatch(ctx context.Context) (sourceobservation.ClaimedBatch, error) {
 	var batch sourceobservation.ClaimedBatch
 
-	if err := r.withDB(ctx, func(ctx context.Context) error {
+	if err := r.withBudgetDB(ctx, dbOperationClaim, func(ctx context.Context) error {
 		var err error
 
 		batch, err = r.claimer.ClaimBatch(ctx, r.claim)
@@ -286,7 +286,7 @@ func (r *Runtime) processClaim(ctx context.Context, work sourceobservation.Claim
 		outcome = workercontract.AttemptSuccess
 
 		youtubeFinalizeTotal.Inc()
-		youtubeConsumeTotal.WithLabelValues("success").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultSuccess).Inc()
 		r.forget(work)
 
 		return nil
@@ -314,10 +314,7 @@ func (r *Runtime) processClaim(ctx context.Context, work sourceobservation.Claim
 }
 
 func (r *Runtime) consumeClaim(ctx context.Context, work sourceobservation.ClaimWork) error {
-	txCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
-	defer cancel()
-
-	if err := r.withDB(txCtx, func(ctx context.Context) error {
+	if err := r.withBudgetDB(ctx, dbOperationConsume, func(ctx context.Context) error {
 		claim := work.Claim(r.claim.ConsumerName)
 		if err := r.claimer.EnsureClaimBudget(ctx, claim, r.Config.TransactionTimeout); err != nil {
 			return fmt.Errorf("ensure claim budget: %w", err)
@@ -325,7 +322,7 @@ func (r *Runtime) consumeClaim(ctx context.Context, work sourceobservation.Claim
 
 		return r.consumer.ConsumeClaim(ctx, claim)
 	}); err != nil {
-		return fmt.Errorf("with DB: %w", err)
+		return fmt.Errorf("consume observation: %w", err)
 	}
 
 	return nil
@@ -337,7 +334,7 @@ func (r *Runtime) forgetLostClaim(err error, work sourceobservation.ClaimWork) b
 	}
 
 	youtubeClaimLostTotal.Inc()
-	youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
+	youtubeConsumeTotal.WithLabelValues(consumeResultClaimLost).Inc()
 	r.forget(work)
 
 	return true
@@ -369,7 +366,7 @@ func (r *Runtime) handleConsumeFailure(ctx context.Context, work sourceobservati
 func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
 	deadLetterer, ok := r.claimer.(observationDeadLetterer)
 	if !ok {
-		youtubeConsumeTotal.WithLabelValues("fatal").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultFatal).Inc()
 		r.forget(work)
 
 		return cause
@@ -380,13 +377,13 @@ func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservatio
 
 	if errors.Is(deadLetterErr, sourceobservation.ErrClaimLost) {
 		youtubeClaimLostTotal.Inc()
-		youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultClaimLost).Inc()
 
 		return nil
 	}
 
 	if deadLetterErr != nil {
-		youtubeConsumeTotal.WithLabelValues("dead_letter_error").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultDeadLetterError).Inc()
 
 		if retryableObservationError(deadLetterErr) {
 			// 기록하지 못한 PROCESSING 행은 lease 만료 뒤 기존 claim 경로가 회수합니다.
@@ -399,7 +396,7 @@ func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservatio
 		return fmt.Errorf("dead letter observation %d: %w", work.ObservationID, deadLetterErr)
 	}
 
-	youtubeConsumeTotal.WithLabelValues("fatal").Inc()
+	youtubeConsumeTotal.WithLabelValues(consumeResultFatal).Inc()
 	r.markDeadLettered()
 
 	return nil
@@ -409,7 +406,7 @@ func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.Cla
 	retryErr := r.retryObservation(ctx, work, cause)
 	if errors.Is(retryErr, sourceobservation.ErrClaimLost) {
 		youtubeClaimLostTotal.Inc()
-		youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultClaimLost).Inc()
 
 		retryErr = nil
 	}
@@ -417,7 +414,7 @@ func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.Cla
 	r.forget(work)
 
 	if retryErr != nil {
-		youtubeConsumeTotal.WithLabelValues("retry_error").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultRetryError).Inc()
 
 		if retryableObservationError(retryErr) {
 			// 새 재시도를 만들지 않고 기존 lease 만료 회수와 시도 횟수 제한에 맡깁니다.
@@ -434,7 +431,7 @@ func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.Cla
 }
 
 func (r *Runtime) refreshProjection(ctx context.Context) error {
-	err := r.withDB(ctx, func(ctx context.Context) error {
+	err := r.withBudgetDB(ctx, dbOperationProjectionRefresh, func(ctx context.Context) error {
 		if _, refreshErr := r.refresher.Refresh(ctx, r.builder, r.now()); refreshErr != nil {
 			return fmt.Errorf("refresh target projection: %w", refreshErr)
 		}
@@ -457,5 +454,5 @@ func (r *Runtime) refreshProjection(ctx context.Context) error {
 		r.publishHealth()
 	}
 
-	return fmt.Errorf("with DB: %w", err)
+	return err
 }

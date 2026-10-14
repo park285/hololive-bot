@@ -29,7 +29,7 @@ func (r deliveryOutboxDispatcherRunner) Start(ctx context.Context) error {
 	}
 
 	if err := r.dispatcher.Run(ctx); err != nil {
-		return fmt.Errorf("run: %w", err)
+		return fmt.Errorf("run notification delivery dispatcher: %w", err)
 	}
 
 	return nil

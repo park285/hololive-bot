@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/retry"
 
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -231,7 +232,7 @@ func (r *durableRuntime) waitHeartbeat(ctx context.Context, delay time.Duration)
 		return r.heartbeatWait(ctx, delay)
 	}
 
-	return waitDurable(ctx, delay)
+	return retry.Sleep(ctx, delay)
 }
 
 func (r *durableRuntime) ownershipDeadline(leaseUntil time.Time) time.Time {

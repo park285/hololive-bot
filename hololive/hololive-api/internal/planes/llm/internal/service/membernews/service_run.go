@@ -54,7 +54,7 @@ func (r *digestRun) GenerateRoomDigest(ctx context.Context, roomID string, perio
 
 	members, err := r.service.repository.GetRoomMembers(ctx, roomID)
 	if err != nil {
-		return nil, fmt.Errorf("get room members: %w", err)
+		return nil, fmt.Errorf("load digest room members: %w", err)
 	}
 
 	if len(members) == 0 {

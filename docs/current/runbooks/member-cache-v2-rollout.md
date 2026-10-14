@@ -13,7 +13,7 @@ Member cache V2는 멤버 데이터를 각 process의 in-memory snapshot(전체 
 | Notification payload | `{"version":2,"epoch":<integer>}` |
 | Member data in Valkey | 없음(2026-09-28 제거). 과거 `member-cache:v2:data:<epoch>:member:{channel,name,alias}:...` L2 key는 읽지도 쓰지도 않으며, 배포 시점에 남은 key는 기존 30분 TTL로 자기 소멸 |
 | Legacy namespace | 제거됨(2026-08-06 contraction). unprefixed `member:*` keyspace를 읽지도 쓰지도 삭제하지도 않음 |
-| Reconcile interval | `15s`; `constants.MemberCacheDefaults.EpochReconcileInterval` |
+| Reconcile interval | `15s`; `hololive-shared/pkg/service/member` `defaultEpochReconcileInterval`(`CacheConfig.EpochReconcileInterval`이 0일 때) |
 
 조회 경로(모든 조회는 `ctx`를 첫 인자로 받습니다):
 

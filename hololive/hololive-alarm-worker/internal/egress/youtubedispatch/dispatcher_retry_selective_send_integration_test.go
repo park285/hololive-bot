@@ -1,7 +1,6 @@
 package youtubedispatch
 
 import (
-	"log/slog"
 	"testing"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 type recoverySelectiveSendCase struct {
@@ -23,8 +21,6 @@ type recoverySelectiveSendCase struct {
 
 func TestProcessOnce_RetrySkipsAlreadySentCommunityShortsPostAndResendsOnlyPendingPost(t *testing.T) {
 	fixedSentAt := time.Now().UTC().Truncate(time.Millisecond)
-	withFixedSentAtNow(t, fixedSentAt)
-
 	testCases := newRecoverySelectiveSendCases(fixedSentAt, recoverySelectiveSendNaming{
 		communityChannelID: "UC_retry_selective_community",
 		shortsChannelID:    "UC_retry_selective_shorts",
@@ -51,7 +47,7 @@ func runRetrySelectiveSendCase(t *testing.T, tc recoverySelectiveSendCase, fixed
 	fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newFixedClockDispatcherForTest(t, db, sender, fixedSentAt, &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

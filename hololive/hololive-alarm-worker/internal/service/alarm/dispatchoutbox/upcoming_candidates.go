@@ -25,7 +25,7 @@ type UpcomingCandidate struct {
 	Outcome      string
 }
 
-// UpcomingCandidateStore는 발행 전 후보와 평가 완료를 같은 저장 경계에서 관리한다.
+// UpcomingCandidateStore는 발행 전 선정 후보를 저장하고 복구·종료한다.
 type UpcomingCandidateStore interface {
 	Stage(context.Context, string, time.Time, []*domain.AlarmNotification) error
 	Pending(context.Context, time.Time) ([]UpcomingCandidate, error)
@@ -54,8 +54,9 @@ type upcomingCandidateInput struct {
 	Notification *domain.AlarmNotification `json:"notification"`
 }
 
-// Stage는 저장 응답이 불명확하면 checkpoint 성공을 반환하지 않는다.
+// Stage는 저장 응답이 불명확하면 성공을 반환하지 않는다.
 // Commit 뒤 응답 소실은 동일 key 재선정 또는 Pending의 ledger 조회로 복구한다.
+// 저장할 upcoming 후보가 없으면 DB를 호출하지 않는다.
 func (s *UpcomingCandidates) Stage(ctx context.Context, channelID string, now time.Time, notifications []*domain.AlarmNotification) error {
 	if s.db == nil {
 		return errors.New("stage upcoming candidates: database is nil")
@@ -81,6 +82,10 @@ func (s *UpcomingCandidates) Stage(ctx context.Context, channelID string, now ti
 		inputs = append(inputs, upcomingCandidateInput{DedupeKey: delivery.DedupeKey, EventKey: event.EventKey, PayloadHash: event.PayloadHash, StreamID: event.StreamID, RoomID: n.RoomID, ScheduledAt: *n.Stream.StartScheduled, Notification: n})
 	}
 
+	if len(inputs) == 0 {
+		return nil
+	}
+
 	if len(inputs) > UpcomingCandidateLimit {
 		return s.stageChunks(ctx, channelID, now, inputs)
 	}
@@ -95,13 +100,13 @@ func stageUpcomingInputs(ctx context.Context, db upcomingCandidateDB, channelID 
 	}
 
 	if _, err := db.Exec(ctx, mustSQL("upcoming_candidates_stage.sql"), string(raw), channelID, now); err != nil {
-		return fmt.Errorf("stage upcoming candidates: commit candidates and checkpoint: %w", err)
+		return fmt.Errorf("stage upcoming candidates: insert candidates: %w", err)
 	}
 
 	return nil
 }
 
-// 큰 fanout도 기존 publish batch 크기로 나누되 checkpoint는 모든 chunk와 함께 commit한다.
+// 큰 fanout도 기존 publish batch 크기로 나누되 모든 chunk를 한 transaction으로 commit해 일부만 저장되지 않게 한다.
 func (s *UpcomingCandidates) stageChunks(ctx context.Context, channelID string, now time.Time, inputs []upcomingCandidateInput) (resultErr error) {
 	beginner, ok := s.db.(interface {
 		Begin(context.Context) (pgx.Tx, error)

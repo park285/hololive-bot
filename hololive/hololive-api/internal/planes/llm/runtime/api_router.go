@@ -22,10 +22,8 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -42,31 +40,18 @@ func buildTriggerRouter(
 	apiKey string,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*gin.Engine, error) {
-	routerOptions := &sharedserver.RuntimeRouterOptions{
-		APIKey: apiKey,
-		RegisterRoutes: func(router *gin.Engine) error {
-			if triggerHandler == nil {
-				return nil
-			}
-
-			if strings.TrimSpace(apiKey) == "" {
-				return errors.New("API_SECRET_KEY required")
-			}
-
-			triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
-
-			return nil
-		},
-	}
+	var opts []func(*sharedserver.RuntimeRouterOptions)
 
 	if probe := readiness.Pick(readyProbe...); probe != nil {
-		routerOptions.InternalReadyResponder = readiness.GinHandler(ctx, probe)
+		opts = append(opts, func(o *sharedserver.RuntimeRouterOptions) {
+			o.InternalReadyResponder = readiness.GinHandler(ctx, probe)
+		})
 	}
 
-	out, err := sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)
+	router, err := apiserver.NewTriggerRuntimeRouter(ctx, logger, triggerHandler, apiKey, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("runtime router: %w", err)
+		return nil, fmt.Errorf("build trigger router: %w", err)
 	}
 
-	return out, nil
+	return router, nil
 }

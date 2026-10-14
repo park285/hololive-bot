@@ -21,7 +21,7 @@ func (c *Consumer) reconcileContent(
 	}
 
 	if lockErr := lockContentSubject(ctx, tx, claimed.ObservationKind, claimed.SubjectKey); lockErr != nil {
-		return ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
+		return ReconcileResult{}, lockErr
 	}
 
 	state, err := loadContentState(ctx, tx, claimed.ObservationKind, claimed.SubjectKey, &evidence)
@@ -44,7 +44,7 @@ func (c *Consumer) reconcileContent(
 	}
 
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-		return ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
+		return ReconcileResult{}, err
 	}
 
 	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)

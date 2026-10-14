@@ -20,16 +20,10 @@
 
 package tier
 
-import (
-	"time"
+import "time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
-)
-
-// nearestStart가 nil이면 예정 없음 로직을 적용한다.
-func ComputeNextCheckAt(nearestStart, lastNotifiedAt *time.Time) time.Time {
-	now := time.Now()
-
+// ComputeNextCheckAt은 now(평가 시각) 기준 다음 점검 시각을 정한다. 가장 가까운 예정 시작(nearestStart)이 nil이면 예정 없음 로직을 적용한다.
+func ComputeNextCheckAt(now time.Time, nearestStart, lastNotifiedAt *time.Time) time.Time {
 	if nearestStart == nil {
 		return nextCheckAtWithoutUpcoming(now, lastNotifiedAt)
 	}
@@ -41,25 +35,25 @@ func ComputeNextCheckAt(nearestStart, lastNotifiedAt *time.Time) time.Time {
 
 func nextCheckAtWithoutUpcoming(now time.Time, lastNotifiedAt *time.Time) time.Time {
 	if isRecentlyNotified(now, lastNotifiedAt) {
-		return now.Add(min(constants.Tier2Interval, constants.NoUpcomingInterval))
+		return now.Add(min(tier2Interval, noUpcomingInterval))
 	}
 
-	return now.Add(constants.NoUpcomingInterval)
+	return now.Add(noUpcomingInterval)
 }
 
 func isRecentlyNotified(now time.Time, lastNotifiedAt *time.Time) bool {
-	return lastNotifiedAt != nil && now.Sub(*lastNotifiedAt) <= constants.RecentlyNotifiedWindow
+	return lastNotifiedAt != nil && now.Sub(*lastNotifiedAt) <= recentlyNotifiedWindow
 }
 
 func nextCheckAtForTimeToStart(now time.Time, timeToStart time.Duration) time.Time {
 	switch {
-	case timeToStart <= constants.Tier1Window:
-		return now.Add(constants.Tier1Interval)
-	case timeToStart <= constants.Tier2Window:
-		return now.Add(constants.Tier2Interval)
-	case timeToStart <= constants.Tier3Window:
-		return now.Add(constants.Tier3Interval)
+	case timeToStart <= tier1Window:
+		return now.Add(tier1Interval)
+	case timeToStart <= tier2Window:
+		return now.Add(tier2Interval)
+	case timeToStart <= tier3Window:
+		return now.Add(tier3Interval)
 	default:
-		return now.Add(constants.Tier4Interval)
+		return now.Add(tier4Interval)
 	}
 }

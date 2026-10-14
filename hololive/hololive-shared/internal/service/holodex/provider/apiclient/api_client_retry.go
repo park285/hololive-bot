@@ -49,10 +49,10 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 		return false
 	}
 
-	errorType := "network"
+	failureKind := "network"
 
 	if IsTimeoutError(err) {
-		errorType = "timeout"
+		failureKind = "timeout"
 	}
 
 	c.openCircuit()
@@ -62,9 +62,10 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 	}
 
 	if attempt < maxAttempts-1 {
-		c.logger.Warn("Request failed, retrying",
+		// 중간 시도는 진단용이다. 재시도가 끝내 실패하면 오류를 받은 호출자가 한 번만 기록한다.
+		c.logger.Debug("Request failed, retrying",
 			slog.Any("error", err),
-			slog.String("error_type", errorType),
+			slog.String("failure_kind", failureKind),
 			slog.Int("attempt", attempt+1),
 		)
 

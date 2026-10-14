@@ -21,7 +21,7 @@ func (c *Consumer) reconcileLive(
 	}
 
 	if lockErr := lockLiveSubject(ctx, tx, claimed.SubjectKey); lockErr != nil {
-		return ReconcileResult{}, fmt.Errorf("lock live subject: %w", lockErr)
+		return ReconcileResult{}, lockErr
 	}
 
 	state, err := loadLiveState(ctx, tx, evidence.Coverage.RequestedChannelIDs, videoIDsOf(&evidence))

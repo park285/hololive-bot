@@ -155,7 +155,37 @@ func (r *Repository) runRetentionSteps(
 	cfg RetentionConfig,
 	now time.Time,
 ) (RetentionResult, error) {
-	steps := []retentionStep{
+	out, err := r.deleteRetentionBatches(r.retentionSteps(ctx, cfg, now))
+	if err != nil {
+		return out, fmt.Errorf("delete retention batches: %w", err)
+	}
+
+	if err := r.measureRetentionBacklogs(ctx, cfg, now, &out); err != nil {
+		return out, fmt.Errorf("measure retention backlogs: %w", err)
+	}
+
+	return out, nil
+}
+
+// RetentionTables는 RunRetentionTick이 ByTable·FailedTable로 보고하는 테이블 이름을 실행 순서대로 돌려준다.
+// 지표 소비자가 같은 목록을 따로 적지 않도록 실행 단계 정의에서 이름만 읽으며, 단계 함수는 실행하지 않는다.
+func RetentionTables() []string {
+	steps := (*Repository)(nil).retentionSteps(context.Background(), RetentionConfig{}, time.Time{})
+	tables := make([]string, 0, len(steps))
+
+	for _, step := range steps {
+		tables = append(tables, step.table)
+	}
+
+	return tables
+}
+
+func (r *Repository) retentionSteps(
+	ctx context.Context,
+	cfg RetentionConfig,
+	now time.Time,
+) []retentionStep {
+	return []retentionStep{
 		{
 			table: "source_observation_queue",
 			age:   minPositiveDuration(cfg.QueueProcessedAge, cfg.QueueDLQAge),
@@ -206,17 +236,6 @@ func (r *Repository) runRetentionSteps(
 			},
 		},
 	}
-
-	out, err := r.deleteRetentionBatches(steps)
-	if err != nil {
-		return out, fmt.Errorf("delete retention batches: %w", err)
-	}
-
-	if err := r.measureRetentionBacklogs(ctx, cfg, now, &out); err != nil {
-		return out, fmt.Errorf("measure retention backlogs: %w", err)
-	}
-
-	return out, nil
 }
 
 type retentionStep struct {

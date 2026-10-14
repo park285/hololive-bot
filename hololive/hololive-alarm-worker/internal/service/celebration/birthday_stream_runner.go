@@ -204,7 +204,12 @@ func (r *BirthdayStreamRunner) publishCandidates(
 		return fmt.Errorf("birthday stream runner: verify published birthday events: %w", verifyErr)
 	}
 
-	envelopes := buildBirthdayStreamEnvelopes(candidates, roomsByEventKey, publishedEvents, dateStr)
+	sentRoomsByStreamEventKey, err := r.findSentRoomsForPublishedStreams(ctx, candidates, publishedEvents, dateStr)
+	if err != nil {
+		return err
+	}
+
+	envelopes := buildBirthdayStreamEnvelopes(candidates, roomsByEventKey, publishedEvents, sentRoomsByStreamEventKey, dateStr)
 	if len(envelopes) == 0 {
 		return nil
 	}
@@ -215,7 +220,14 @@ func (r *BirthdayStreamRunner) publishCandidates(
 	}
 
 	if r.logger != nil {
-		r.logger.Info("Birthday stream runner published",
+		// 새 event나 delivery가 없는 실행은 모든 envelope이 dedupe로 끝난 재평가라 Debug로만 남긴다.
+		level := slog.LevelDebug
+
+		if result.InsertedEvents > 0 || result.InsertedDeliveries > 0 {
+			level = slog.LevelInfo
+		}
+
+		r.logger.Log(ctx, level, "Birthday stream runner published",
 			slog.String("date", dateStr),
 			slog.Int("birthday_members", memberCount),
 			slog.Int("videos", len(candidates)),
@@ -228,6 +240,36 @@ func (r *BirthdayStreamRunner) publishCandidates(
 	}
 
 	return nil
+}
+
+// findSentRoomsForPublishedStreams는 이미 발행한 생일 방송 event가 sent로 끝난 방을 돌려준다.
+// 재평가는 늦게 생일축하를 받은 방을 찾기 위한 것이므로, 이미 받은 방은 envelope에서 빼서
+// 매 실행마다 dedupe로 버려질 delivery를 만들지 않는다. 상태가 pending·failed인 방은 envelope을 다시 만들어 dedupe에 맡긴다.
+func (r *BirthdayStreamRunner) findSentRoomsForPublishedStreams(
+	ctx context.Context,
+	candidates []birthdayStreamCandidate,
+	publishedEvents map[string]domain.AlarmQueueEnvelope,
+	dateStr string,
+) (map[string][]string, error) {
+	streamEventKeys := make([]string, 0, len(candidates))
+
+	for _, candidate := range candidates {
+		eventKey := birthdayStreamEventKey(candidate.member.ID, dateStr, candidate.session.VideoID)
+		if _, ok := publishedEvents[eventKey]; ok {
+			streamEventKeys = append(streamEventKeys, eventKey)
+		}
+	}
+
+	if len(streamEventKeys) == 0 {
+		return map[string][]string{}, nil
+	}
+
+	sentRooms, err := r.sessions.FindSentRoomsByEventKeys(ctx, streamEventKeys)
+	if err != nil {
+		return nil, fmt.Errorf("birthday stream runner: find sent birthday stream rooms: %w", err)
+	}
+
+	return sentRooms, nil
 }
 
 func (r *BirthdayStreamRunner) filterMembersWithChannel(members []*domain.Member) []*domain.Member {

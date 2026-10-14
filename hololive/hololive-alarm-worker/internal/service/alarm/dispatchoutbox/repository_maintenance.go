@@ -23,9 +23,9 @@ func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (in
 }
 
 func (r *PgxRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int, error) {
-	seconds := int(olderThan.Seconds())
-	if seconds <= 0 {
-		seconds = 300
+	seconds, err := wholeSeconds(olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("quarantine stale sending dispatch deliveries: older than: %w", err)
 	}
 
 	out, err := r.recoverWithQuery(ctx, mustSQL("repository_maintenance_0035_02.sql"), limit, seconds)
@@ -36,12 +36,8 @@ func (r *PgxRepository) QuarantineStaleSending(ctx context.Context, olderThan ti
 	return out, nil
 }
 
-func (r *PgxRepository) recoverWithQuery(ctx context.Context, query string, args ...any) (int, error) {
-	if len(args) == 0 {
-		args = append(args, 100)
-	}
-
-	tag, err := r.pool.Exec(ctx, query, args...)
+func (r *PgxRepository) recoverWithQuery(ctx context.Context, query string, limit, seconds int) (int, error) {
+	tag, err := r.pool.Exec(ctx, query, limit, seconds)
 	if err != nil {
 		return 0, fmt.Errorf("recover dispatch deliveries: %w", err)
 	}

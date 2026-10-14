@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
@@ -74,7 +75,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 		al.logger.Info(deliveryAttemptStartedLogMessage,
 			slog.Int64(logschema.FieldDeliveryID, limitedRows[i].ID),
 			slog.Int64(logschema.FieldOutboxID, outbox.ID),
-			slog.String(logschema.FieldRoomID, limitedRows[i].RoomID),
+			privacylog.RoomIDAttr(limitedRows[i].RoomID),
 			slog.String(logschema.FieldChannelID, outbox.ChannelID),
 			slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
 			slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
@@ -133,7 +134,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 	}
 	if roomCount == 1 {
 		for roomID := range summary.uniqueRooms {
-			attrs = append(attrs, slog.String(logschema.FieldRoomID, roomID))
+			attrs = append(attrs, privacylog.RoomIDAttr(roomID))
 			break
 		}
 	}

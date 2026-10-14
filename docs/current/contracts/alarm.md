@@ -93,8 +93,8 @@ receipts satisfy publishing; collision and other terminal outcomes do not. A lat
 failure preserves earlier committed receipts. `InsertPending` returns
 `ErrEventPayloadConflict` and no existing record for a conflicting single input.
 
-선정된 upcoming 알람의 방별 payload/category는 `alarm_upcoming_candidates`에 채널 평가
-checkpoint와 함께 저장합니다. staging commit부터 복구를 보장하며 예정 시작 이후에는
+선정된 upcoming 알람의 방별 payload/category는 `alarm_upcoming_candidates`에 저장합니다.
+후보가 없는 채널 평가는 저장하지 않습니다. staging commit부터 복구를 보장하며 예정 시작 이후에는
 분 전 알람을 만료합니다. 확인된 최신 일정 변경·방송 종료·구독 해제는 사유 종료하고
 목록 누락만으로 취소하지 않습니다. 발행 성공은 방별 receipt로 확인하여 다른 방의
 미발행을 방송 전체 dedup으로 가리지 않습니다. 기존 target minutes와 조회 lookback은 유지합니다.
@@ -292,7 +292,7 @@ live checker는 Holodex live 상태와 collector가 저장한 `youtube_live_sess
 | Trigger | 이번 주기의 Holodex `GetChannelsLiveStatus` 오류 |
 | 한도 | Holodex 조회는 주기 안에서 최대 25초(`youtubeHolodexLiveStatusBudget`)이며, 나머지 예산을 저장 세션 조회와 후속 단계에 남긴다. 이번 주기의 due 채널에서 최근 15분 안에 LIVE로 관측된 세션과, 최근 15분 안에 관측됐고 30분 안에 시작할 UPCOMING 세션만 쓴다. Holodex 응답이 없으므로 provider 응답으로 후보를 취소하지 않는다. 추가 외부 호출·재시도는 없다. |
 | 종단 | persisted source가 없거나, 세션 조회가 실패했거나, 세션이 0건이면 Holodex 오류를 그 check 주기의 오류로 반환한다. |
-| Telemetry | `hololive_alarm_youtube_persisted_live_sessions_total{result="holodex_error_continued",status="all"}`와 Warn 로그 "YouTube Holodex live status source failed; continuing with persisted live sessions" |
+| Telemetry | `hololive_alarm_youtube_persisted_live_sessions_total{result="holodex_error_continued",status="all"}`와 Warn 로그 "YouTube Holodex live status source failed; continuing with persisted live sessions"(`channel_count` 포함). 두 기록은 실제로 계속한 주기에만 남고, 종단 조건이면 반환된 check 주기 오류만 기록된다. Holodex provider는 같은 실패를 따로 WARN/ERROR로 남기지 않고, 재시도 계층은 수송 실패의 중간 재시도를 Debug로 남긴다. 재시도 상한 도달·429·5xx 응답·circuit 전이는 재시도 계층이 별도 WARN/ERROR로 남긴다. |
 | Owner | hololive-bot alarm-worker live checker(`internal/service/alarm/checker/checking`) |
 | 검토 조건 | Holodex 없이 live 상태를 판정하는 단일 원천이 생기면 이 예외를 지운다. `holodex_error_continued`가 늘어나는데 알림 누락 보고가 있으면 한도(15분·30분)를 다시 검토한다. |
 

@@ -13,6 +13,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
@@ -21,7 +22,7 @@ func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificatio
 	attrs := []any{
 		slog.Int64(logschema.FieldDeliveryID, row.DeliveryID),
 		slog.Int64(logschema.FieldOutboxID, row.OutboxID),
-		slog.String(logschema.FieldRoomID, row.RoomID),
+		privacylog.RoomIDAttr(row.RoomID),
 		slog.String(logschema.FieldChannelID, row.ChannelID),
 		slog.String(deliveryAuditPostIDLogField, row.PostID),
 		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(row.ContentID)),

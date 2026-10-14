@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-// Breaker는 atomic 연산 기반 경량 circuit breaker입니다.
+// circuitBreaker는 atomic 연산 기반 경량 circuit breaker입니다.
 // 시간 기반 reset 전용으로, HALF_OPEN 상태 없이 open→closed 직접 전이합니다.
 // 로그는 provider가 책임지므로 circuitBreaker 내부에서 emit하지 않습니다.
 type circuitBreaker struct {
@@ -39,7 +39,7 @@ type circuitBreaker struct {
 	resetTimeout time.Duration
 }
 
-// NewBreaker는 새 Breaker를 생성합니다.
+// newCircuitBreaker는 threshold를 1..MaxInt32로 정규화한 닫힌 상태의 circuitBreaker를 만듭니다.
 func newCircuitBreaker(threshold int, resetTimeout time.Duration) *circuitBreaker {
 	b := &circuitBreaker{
 		threshold:    normalizeBreakerThreshold(threshold),

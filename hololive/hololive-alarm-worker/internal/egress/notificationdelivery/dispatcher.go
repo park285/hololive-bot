@@ -40,12 +40,12 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	deliverypayload "github.com/kapu/hololive-shared/pkg/contracts/notificationdelivery"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
 )
 
 type deliveryOutboxClaimer interface {
@@ -249,7 +249,7 @@ func (d *Dispatcher) runSendLoop(ctx context.Context) {
 
 		return nil
 	}); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-		d.logger.Warn("Delivery dispatcher ticker stopped with error", slog.String("error", err.Error()))
+		d.logger.Warn("Delivery dispatcher ticker stopped with error", slog.Any("error", err))
 	}
 }
 
@@ -340,7 +340,7 @@ func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDe
 		return
 	}
 
-	d.logger.Error("Failed to send outbox message", slog.Int64("id", item.ID), privacylog.RoomIDAttr(item.RoomID), slog.String("error", err.Error()))
+	d.logger.Error("Failed to send outbox message", slog.Int64("id", item.ID), privacylog.RoomIDAttr(item.RoomID), slog.Any("error", err))
 
 	switch sendoutcome.Classify(err) {
 	case sendoutcome.OutcomeUnknown, sendoutcome.TransportAmbiguous:
@@ -354,7 +354,7 @@ func (d *Dispatcher) finishSend(ctx context.Context, item *domain.NotificationDe
 func (d *Dispatcher) markItemQuarantined(ctx context.Context, id int64, reason string) {
 	fenced, err := d.repository.MarkQuarantined(ctx, id, d.workerID, reason)
 	if err != nil {
-		d.logger.Error("Failed to quarantine outbox item", slog.Int64("id", id), slog.String("error", err.Error()))
+		d.logger.Error("Failed to quarantine outbox item", slog.Int64("id", id), slog.Any("error", err))
 
 		return
 	}
@@ -379,7 +379,7 @@ func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
 func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
 	fenced, err := d.repository.MarkSending(ctx, id, d.workerID, deliveryLease)
 	if err != nil {
-		d.logger.Error("Failed to mark outbox item sending", slog.Int64("id", id), slog.String("error", err.Error()))
+		d.logger.Error("Failed to mark outbox item sending", slog.Int64("id", id), slog.Any("error", err))
 
 		return false
 	}
@@ -396,7 +396,7 @@ func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
 func (d *Dispatcher) markItemSent(ctx context.Context, id int64) bool {
 	fenced, err := d.repository.MarkSent(ctx, id, d.workerID)
 	if err != nil {
-		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.String("error", err.Error()))
+		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.Any("error", err))
 
 		return false
 	}
@@ -413,7 +413,7 @@ func (d *Dispatcher) markItemSent(ctx context.Context, id int64) bool {
 func (d *Dispatcher) markItemFailed(ctx context.Context, item *domain.NotificationDeliveryOutbox, reason string) {
 	fenced, err := d.repository.MarkFailed(ctx, item.ID, d.workerID, item.AttemptCount, d.config.MaxRetries, d.config.RetryBackoff, reason)
 	if err != nil {
-		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", item.ID), slog.String("error", err.Error()))
+		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", item.ID), slog.Any("error", err))
 
 		return
 	}

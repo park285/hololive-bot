@@ -127,6 +127,8 @@ Worker count, local queue capacity and fixed `queue.max_age`, acquisition cadenc
 
 - `youtubejs_rpc_phase_duration_seconds{operation,phase,outcome}`: `rate_limit` 대기와 `helper` 수행·응답 해석을 분리한 histogram. helper 내부의 외부 응답·파싱 시간은 합산입니다. operation은 community/content/channel/unknown, outcome은 success/timeout/canceled/error입니다.
 - `youtubejs_rpc_phase_in_flight{operation,phase}`와 `youtubejs_rpc_request_interval_seconds`: 현재 기다리는 호출, 수행 중인 호출과 설정된 호출 간격입니다. helper phase count는 제한을 통과한 RPC 시도 수입니다.
+- `hololive_db_pool_*{pool="collector"}`: collector DB pool의 획득 횟수·대기·빈 pool 대기와 상태별 연결 수, 최대 연결 수입니다. 이름과 해석은 [hololive-api runbook](hololive-api.md#db-poolyoutube-plane-db-슬롯-지표)과 같습니다.
+- `hololive_http_client_requests_total{client="holodex"|"hololive_official",code,method}`, `hololive_http_client_request_duration_seconds{client,method}`: provider HTTP 요청의 상태 코드별 수(응답 없음은 `code="error"`)와 응답 헤더까지의 지연입니다. `youtube_collection_attempts_total`이 job 단위라면 이 지표는 HTTP 요청 단위입니다. youtube.js helper 호출은 포함하지 않습니다. 해석은 [hololive-api runbook](hololive-api.md#외부-http-호출-지표)과 같습니다.
 - `youtube_collection_duration_seconds`: 15/30/60/120/300초 버킷까지 포함합니다. 기존 10초 상한을 넘는 content job의 p95를 10초로 해석하지 않습니다. 롤링 배포 중에는 AP별 histogram을 확인하고 모든 AP가 같은 버킷으로 전환되기 전 fleet 합산 quantile을 해석하지 않습니다.
 - API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target을 community/content/channel-live/channel-live-check/channel-metadata/video-live 여섯 작업으로 묶어 집계합니다. `targets`, `stale_targets`, `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. `not_before`가 미래인 영상 확인은 잠든 membership이며 stale/due 수요로 세지 않습니다. due는 lease와 eligibility 중 늦은 시각을 따르고, lease가 없으면 세대가 바뀌어도 보존한 논리 target 생성 시각을 사용합니다. baseline RPC 수요는 retry·publication enrichment를 포함하지 않습니다. 퇴역 viewer 작업의 과거 lease·지표는 현재 수요에 포함하지 않습니다.
 - `hololive_youtube_collection_live_states{state}`와 `live_state_review_targets{reason}`는 현재 유효한 `live_snapshot` 채널 대상에 속한 서로 다른 영상 중 head 또는 서비스 상태가 LIVE/UPCOMING인 집합을 진단합니다. 상태는 head 기준이며 missing/그 밖의 상태는 other입니다. 양방향 상태 불일치를 포함하고, 채널 식별자가 없는 head-only 항목과 양쪽 모두 종료된 이력은 제외합니다. state_mismatch, scheduled_before_now, scheduled_overdue_7d는 겹칠 수 있으며 종료 증거가 아닙니다.
@@ -271,10 +273,13 @@ Mitigation:
 ### 2. Projection/lease load failure
 
 Symptoms:
-- collector logs contain `phase=candidate_load` or lease acquire failures
+- collector logs contain `YouTube collection candidate discovery failed`(`phase=candidate_load`) or lease acquire failures
+- `youtube_collection_discovery_cycles_total{result="candidate_load_failed"}` increases
 - no new `source_observations` / `source_observation_queue` rows
 
 Diagnosis:
+- 후보 탐색 실패 WARN은 같은 대상(projection 조회 또는 runner)의 연속 실패 동안 첫 건과 1분 간격 요약(`since`, `suppressed_cycles`)만 남습니다. cycle별 실패 빈도는 `youtube_collection_discovery_cycles_total`과 `/diagnostics/workers`로 보고, 복구는 `YouTube collection candidate discovery recovered` INFO(`failed_for`, `failed_cycles`)로 확인합니다.
+- DB 연결 거부·경로 없음과 PostgreSQL SQLSTATE class `08`·`57P01`~`57P03`은 `error_class=TRANSIENT`, 연결 dial 타임아웃은 `TIMEOUT`입니다. 인증 실패(`28P01`) 같은 다른 연결 오류는 `INTERNAL`로 남으므로 계정·grant 설정을 먼저 봅니다.
 - SSOT manifest의 migration `144`–`174` 적용 여부와 collection projection/target/lease 상태를 확인합니다.
 - `POSTGRES_USER=hololive_scraper` grant를 확인합니다.
 

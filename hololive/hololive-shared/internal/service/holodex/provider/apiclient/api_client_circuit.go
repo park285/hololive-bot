@@ -1,10 +1,6 @@
 package apiclient
 
-import (
-	"log/slog"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
-)
+import "log/slog"
 
 // rejectIfCircuitOpen은 Allow() 기반으로 동작합니다.
 // 지정한 timeout이 경과하면 reset side-effect가 발생하므로 자동 reset 후
@@ -31,7 +27,7 @@ func (c *APIClient) openCircuit() {
 	if opened := c.breaker.RecordFailure(); opened {
 		c.logger.Error("Holodex circuit breaker opened",
 			slog.Int("failure_count", int(c.breaker.Failures())),
-			slog.Duration("reset_timeout", constants.CircuitBreakerConfig.ResetTimeout),
+			slog.Duration("reset_timeout", circuitResetTimeout),
 		)
 	}
 }

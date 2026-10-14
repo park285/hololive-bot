@@ -87,7 +87,7 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 
 소스 기본값에서 `youtube_live_absence_slots`는 14일이 지난 `scheduled_for` 행을 retention tick당 최대 1000건 삭제합니다. 과거 positive 재처리는 삭제된 slot을 복원할 수 없으므로 보관 기간 밖의 absence 역재생 결과는 보장하지 않습니다. 이미 session/head에 반영된 absence clock과 `youtube_live_pending_ends`는 이 삭제에 포함되지 않습니다. 오래된 `live_snapshot`이 queue에서 대기·처리 중이거나 replay 요청이 pending이면 slot 삭제를 보류합니다. 오래된 작업이 장기간 남으면 slot 크기가 계속 증가할 수 있으므로 상태를 함께 확인합니다.
 
-운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-seoul/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간, `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
+운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-seoul/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간(`hololive_youtube_plane_retention_tick_seconds{phase=source|projection}`, 슬롯 획득 뒤 실행분만 포함하며 슬롯을 얻지 못한 phase는 오류로만 셉니다), `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
 
 `hololive_youtube_plane_retention_backlog_age_seconds`는 삭제 후 `source_observations`의 가장 오래된 삭제 가능 행 나이를 초로 표시합니다. 보존기간을 초과한 시간은 아닙니다. 종류별 인덱스 선두 1,000행에 큐·pending replay·종료 근거, CURRENT/STAGING generation·ACTIVE lease·활성 세션 보호를 적용합니다. application은 원본과 CASCADE 삭제되므로 별도 backlog/delete counter 대상이 아닙니다. 적격 후보가 없다고 확정하면 0으로 갱신합니다. 보호된 행이 조회 한도를 채우거나 조회가 실패하면 시계열을 생략하므로 지표 없음은 적체 없음이 아닙니다. 뒤 단계가 실패해도 앞 단계의 커밋된 삭제량은 counter에 남고 오류 counter는 실패한 테이블에만 증가합니다.
 
@@ -158,6 +158,17 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(docker exec hololive-api
 
 - GC 압력은 `go_gc_duration_seconds`(pause 합) 증가율과 `go_memstats_heap_inuse_bytes`가 `GOMEMLIMIT`(1024MiB)에 근접하는지로 본다. GC-CPU 비중 metric의 정확한 이름은 빌드된 client_golang 버전에 따라 다르므로 `curl … | grep go_` 로 실제 노출 항목을 먼저 확인한다(검증 필요).
 - pprof는 `:30061`(`HOLOLIVE_API_PPROF_ADDR`)에 있고 동일하게 `X-API-Key`가 필요하다.
+
+### DB pool·YouTube plane DB 슬롯 지표
+
+- `hololive_db_pool_*{pool}`: pgxpool 통계를 scrape마다 읽습니다. API는 `bot`·`admin`·`llm_scheduler`·`youtube_plane`, alarm-worker는 `alarm_worker`, collector는 `collector` pool을 냅니다. 일회성 CLI(`source-observation-replay-epoch`)는 내지 않습니다. counter는 `acquires_total`, `acquire_duration_seconds_total`, `empty_acquires_total`(idle 연결이 없어 기다린 획득), `empty_acquire_wait_seconds_total`, `canceled_acquires_total`이고, gauge는 `conns{state=acquired|idle|constructing}`, `max_conns`입니다. pool 포화는 `conns{state="acquired"} / max_conns`, 빈 pool 대기는 `rate(…_empty_acquire_wait_seconds_total[5m]) / rate(…_empty_acquires_total[5m])`로 봅니다.
+- `hololive_youtube_plane_db_slot_wait_seconds{operation}`, `hololive_youtube_plane_db_slot_hold_seconds{operation}`: YouTube plane 앱 DB 슬롯(`DBOperationConcurrency`)의 대기와 보유 시간입니다. operation은 `probe`, `claim`, `consume`, `retry`, `dead_letter`, `live_end`, `projection_refresh`, `replay`, `retention_source`, `retention_projection`, `queue_snapshot`, `collection_snapshot`입니다. 대기는 획득에 실패한 경우(`acquire DB slot: context deadline exceeded`)도 포함하고, 보유는 획득한 작업만 기록합니다. 전용 pool의 최대 연결 수가 슬롯 수보다 커서 슬롯 포화는 `pool="youtube_plane"` 지표에 드러나지 않으므로, 슬롯 고갈은 이 두 지표의 operation별 분포로 진단합니다.
+- 슬롯을 잡는 claim·consume·retry·dead letter·live end·projection refresh·replay·retention은 슬롯 대기와 실행을 합쳐 `TransactionTimeout`(기본 10초) 안에 끝나야 합니다. 넘으면 슬롯을 돌려주고 `context deadline exceeded` 오류를 남기며, 각 loop는 기존 분류대로 오류 로그를 남기고 다음 주기를 계속합니다. 기동 중 첫 projection refresh가 이 시한을 넘으면 YouTube plane 생성이 실패합니다. startup claim probe와 queue·collection 관측 조회는 이 시한을 쓰지 않습니다.
+- `hololive_youtube_plane_consume_total{result}`, `hololive_youtube_plane_retention_errors_total{table}`, `hololive_youtube_plane_retention_deleted_total{table}`는 알려진 라벨 값을 기동 때 0으로 노출하므로, 재시작 뒤 첫 retry·dead letter·retention 실패도 `increase()`에 잡힙니다.
+
+### 외부 HTTP 호출 지표
+
+- `hololive_http_client_requests_total{client,code,method}`, `hololive_http_client_request_duration_seconds{client,method}`: 외부 API HTTP 요청마다 전송 계층에서 기록합니다. API와 alarm-worker의 Holodex client는 `client="holodex"`, collector는 provider 이름(`holodex`, `hololive_official`)을 씁니다. `code`는 응답 상태 코드이고, 응답을 받지 못한 요청(연결 거부·timeout·취소)은 `code="error"`입니다. 재시도한 시도도 각각 셉니다. 지연은 응답 헤더 도착이나 전송 실패까지이며 본문 읽기는 포함하지 않습니다. 오류율은 `sum by (client) (rate(hololive_http_client_requests_total{code=~"5..|error"}[5m])) / sum by (client) (rate(hololive_http_client_requests_total[5m]))`로 봅니다. 공식 일정 페이지 scraper와 collector의 youtube.js helper 호출은 이 지표에 포함하지 않습니다(helper는 `youtubejs_rpc_phase_duration_seconds`).
 
 ### PostgreSQL connections (PG18)
 

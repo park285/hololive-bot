@@ -205,6 +205,43 @@ func TestYouTubeCollectorConfigRejectsInvalidBudgets(t *testing.T) {
 	}
 }
 
+// 단계별 timeout 검증 오류는 운영자가 고칠 설정 이름을 가리켜야 한다. 같은 함수가 검사하는 다른 필드로
+// 원인을 오인하지 않도록 필드마다 고유한 이름이 오류에 남는지 확인한다.
+func TestYouTubeCollectorConfigPhaseTimeoutErrorsNameField(t *testing.T) {
+	base := DefaultConfig()
+
+	base.InstanceID = collectorInstanceC
+
+	holodex := 25 * time.Second
+	official := 15 * time.Second
+	tests := []struct {
+		name    string
+		mutate  func(*Config)
+		wantSub string
+	}{
+		{name: "cleanup above 1m", mutate: func(c *Config) { c.CleanupTimeout = 2 * time.Minute }, wantSub: "collection.settings.cleanup_timeout_ms must be between 100ms and 1m0s"},
+		{name: "admission below bound", mutate: func(c *Config) { c.ProviderAdmissionTimeout = time.Millisecond }, wantSub: "collection.settings.provider_admission_timeout_ms must be between 100ms and 10m0s"},
+		{name: "overhead zero", mutate: func(c *Config) { c.CollectionOverhead = 0 }, wantSub: "collection.settings.collection_overhead_ms must be positive"},
+		{name: "publish above 5m", mutate: func(c *Config) { c.PublishTimeout = 6 * time.Minute }, wantSub: "collection.settings.publish_timeout_ms must be between 100ms and 5m0s"},
+		{name: "readiness above 10s", mutate: func(c *Config) { c.ReadinessTimeout = 11 * time.Second }, wantSub: "YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS must be between 100ms and 10s"},
+		{name: "helper health not below readiness", mutate: func(c *Config) { c.HelperHealthTimeout = c.ReadinessTimeout }, wantSub: "YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS must be at least 100ms and less than"},
+		{name: "youtubejs request above 10m", mutate: func(c *Config) { c.YouTubeJSRequestTimeout = 11 * time.Minute }, wantSub: "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS must be positive and at most 10m0s"},
+		{name: "youtubejs startup zero", mutate: func(c *Config) { c.YouTubeJSStartupTimeout = 0 }, wantSub: "YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS must be positive"},
+		{name: "youtubejs shutdown above 10m", mutate: func(c *Config) { c.YouTubeJSShutdownTimeout = time.Hour }, wantSub: "YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS must be positive and at most 10m0s"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := base
+			test.mutate(&cfg)
+
+			if err := cfg.Validate(holodex, official); err == nil || !strings.Contains(err.Error(), test.wantSub) {
+				t.Fatalf("Validate() error = %v, want substring %q", err, test.wantSub)
+			}
+		})
+	}
+}
+
 func TestRDY015ProductionInstanceIDRejectedWhenEmptyOrInvalid(t *testing.T) {
 	holodex := settings.DefaultHolodexOperationalConfig().Timeout
 	official := settings.DefaultOfficialScheduleConfig().Timeout

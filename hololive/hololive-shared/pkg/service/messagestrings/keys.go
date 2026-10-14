@@ -15,7 +15,7 @@ func key(namespace, name string, args int) Key {
 	return Key{Namespace: namespace, Name: name, Args: args}
 }
 
-// 시간 표기. `timefmt/relative_*` 시드는 다음 방송 표시(migration 233에서 제거)만 썼으므로 필수 key가 아니다.
+// 시간 표기. `timefmt/relative_*` 시드는 코드가 조회하지 않으므로 필수 key가 아니다.
 var (
 	TimeFmtStreamTimeDays         = key(NamespaceTimeFmt, "stream_time_days", 2)
 	TimeFmtStreamTimeHoursMinutes = key(NamespaceTimeFmt, "stream_time_hours_minutes", 3)

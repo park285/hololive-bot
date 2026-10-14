@@ -79,21 +79,11 @@ func RequiredPositiveIntEnv(key string, fallback int) (int, error) {
 }
 
 func RequiredSecondsDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
-	out, err := requiredPositiveDurationUnitEnv(key, fallback, time.Second)
-	if err != nil {
-		return out, fmt.Errorf("required positive duration unit env: %w", err)
-	}
-
-	return out, nil
+	return requiredPositiveDurationUnitEnv(key, fallback, time.Second)
 }
 
 func RequiredMillisDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
-	out, err := requiredPositiveDurationUnitEnv(key, fallback, time.Millisecond)
-	if err != nil {
-		return out, fmt.Errorf("required positive duration unit env: %w", err)
-	}
-
-	return out, nil
+	return requiredPositiveDurationUnitEnv(key, fallback, time.Millisecond)
 }
 
 func requiredPositiveDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
@@ -108,7 +98,7 @@ func requiredPositiveDurationUnitEnv(key string, fallback, unit time.Duration) (
 
 	value, err := StrictDurationUnitEnv(key, fallback, unit)
 	if err != nil {
-		return 0, fmt.Errorf("strict duration unit env: %w", err)
+		return 0, err
 	}
 
 	if value <= 0 {
@@ -122,7 +112,7 @@ func requiredPositiveDurationUnitEnv(key string, fallback, unit time.Duration) (
 func StrictDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
 	value, err := sharedenv.Int64E(key, int64(fallback/unit))
 	if err != nil {
-		return 0, fmt.Errorf("int64 e: %w", err)
+		return 0, fmt.Errorf("read int64 env: %w", err)
 	}
 
 	const (

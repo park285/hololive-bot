@@ -13,8 +13,8 @@ import (
 	"github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"
 	"github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/httpclientmetrics"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
@@ -87,6 +87,10 @@ func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, ap
 		return nil, fmt.Errorf("initialize holodex API client: %w", err)
 	}
 
+	// API client가 *http.Transport에 HTTP/2 설정을 적용한 뒤 감싼다. 같은 *http.Client를 공유하므로
+	// 이후 모든 Holodex 요청이 hololive_http_client_*{client="holodex"}에 기록된다.
+	httpClient.Transport = httpclientmetrics.Instrument("holodex", httpClient.Transport)
+
 	service := &Service{
 		requester:    requester,
 		scraper:      scraperService,
@@ -97,7 +101,7 @@ func NewHolodexServiceWithConfig(holodexCfg *settings.HolodexConfig, baseURL, ap
 		concurrency:  holodexCfg.Concurrency,
 	}
 
-	service.retry = newRetryScheduler(constants.RetrySchedulerConfig.Delay, constants.RetrySchedulerConfig.Timeout, constants.RetrySchedulerConfig.MaxSize, logger)
+	service.retry = newRetryScheduler(retrySchedulerDelay, retrySchedulerTimeout, retrySchedulerMaxSize, logger)
 
 	return service, nil
 }

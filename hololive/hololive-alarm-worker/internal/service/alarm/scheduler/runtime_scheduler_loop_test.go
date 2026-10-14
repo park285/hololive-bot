@@ -175,7 +175,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 		err := s.dispatchNotifications(t.Context(), notifications)
 
 		require.ErrorIs(t, err, sendErr)
-		assert.Contains(t, err.Error(), "partially failed")
+		assert.Contains(t, err.Error(), "send notifications: sent=1 failed=1:")
 		assert.Equal(t, int32(1), calls.Load())
 	})
 }

@@ -2,6 +2,7 @@ package botruntime
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -80,37 +81,83 @@ func TestWaitDurableIdleStopsOnCancel(t *testing.T) {
 				t.Fatalf("waiter = %+v, want ok=false after cancel", got)
 			}
 		}
+
+		select {
+		case <-slot:
+		default:
+			t.Fatal("poll slot was not returned after cancel")
+		}
 	})
 }
 
-// claim에 성공한 worker는 wake를 한 번 더 보내 다른 유휴 worker가 남은 행을 이어 받게 한다. 1시간짜리 polling 주기가
-// 오기 전에 세 번째 claim이 일어나는 것이 연쇄의 증거다.
-func TestRunDurableWorkerWakesNextWorkerAfterClaim(t *testing.T) {
+// 폴링 담당 worker가 행 A를 잡아 오래 처리하는 동안에도, 시간이 지나 claimable해진 행 B는 다른 worker가
+// 폴링 주기 안에 잡아야 한다. 행을 잡은 직후 보낸 wake가 다른 worker를 깨우고, 그 worker가 비어 있는 pollSlot을
+// 이어 받아 폴링을 계속하는 것이 이 안전망의 계약이다.
+func TestRunDurableWorkerKeepsPollingWhileClaimIsProcessed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		const (
+			rowAReadyAfter = 500 * time.Millisecond
+			rowBReadyAfter = time.Second
+			rowAProcessing = 20 * time.Second
+		)
+
 		ctx, cancel := context.WithCancel(t.Context())
 		wake := make(chan struct{}, 1)
+		slot := newDurablePollSlot()
+		start := time.Now()
 
-		var calls atomic.Int32
+		var rowATaken, rowBTaken atomic.Bool
 
-		process := func(context.Context) bool {
-			return calls.Add(1) == 1
+		var rowBClaimedAfter atomic.Int64
+
+		process := func(ctx context.Context, claimed func()) bool {
+			elapsed := time.Since(start)
+
+			if elapsed >= rowAReadyAfter && rowATaken.CompareAndSwap(false, true) {
+				claimed()
+
+				select {
+				case <-ctx.Done():
+				case <-time.After(rowAProcessing):
+				}
+
+				return true
+			}
+
+			if elapsed >= rowBReadyAfter && rowBTaken.CompareAndSwap(false, true) {
+				rowBClaimedAfter.Store(int64(elapsed))
+				claimed()
+
+				return true
+			}
+
+			return false
 		}
 
-		done := make(chan struct{})
+		var workers sync.WaitGroup
 
-		go func() {
-			defer close(done)
+		for range 2 {
+			workers.Go(func() {
+				runDurableWorker(ctx, "inbox", process, wake, slot, 100*time.Millisecond)
+			})
+		}
 
-			runDurableWorker(ctx, "inbox", process, wake, newDurablePollSlot(), time.Hour)
-		}()
-
+		time.Sleep(5 * time.Second)
 		synctest.Wait()
 
-		if got := calls.Load(); got != 3 {
-			t.Fatalf("process calls = %d, want 3 (claim, chained wake, idle)", got)
+		if !rowATaken.Load() {
+			t.Fatal("row A was never claimed")
+		}
+
+		if !rowBTaken.Load() {
+			t.Fatalf("row B was not claimed while row A was processing (%s)", rowAProcessing)
+		}
+
+		if got, limit := time.Duration(rowBClaimedAfter.Load()), rowBReadyAfter+durablePollMax; got > limit {
+			t.Fatalf("row B claimed after %s, want within %s", got, limit)
 		}
 
 		cancel()
-		<-done
+		workers.Wait()
 	})
 }

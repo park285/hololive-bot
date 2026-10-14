@@ -41,7 +41,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 		return nil, fmt.Errorf("normalize admin API runtime inputs: %w", err)
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres}, logger)
+	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres, PoolName: "admin"}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build admin api runtime: build infra module: %w", err)
 	}

@@ -6,9 +6,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -81,7 +82,7 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 
 	if err := g.cache.Get(ctx, key, &data); err != nil {
 		g.logger.Warn("Failed to read live catchup upcoming suppression marker",
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", channelID),
 			slog.String("video_id", payload.VideoID),
 			slog.Any("error", err))
@@ -97,7 +98,7 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 	notifiedAt, err := time.Parse(time.RFC3339, data.NotifiedAt)
 	if err != nil {
 		g.logger.Warn("Invalid live catchup upcoming suppression marker",
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", channelID),
 			slog.String("video_id", payload.VideoID),
 			slog.String("notified_at", data.NotifiedAt),
@@ -107,7 +108,7 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 		return false
 	}
 
-	if time.Since(notifiedAt) > constants.LiveCatchupSuppressWindow {
+	if time.Since(notifiedAt) > tier.LiveCatchupSuppressWindow {
 		return false
 	}
 

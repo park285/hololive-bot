@@ -15,7 +15,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/internal/workerobservability"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
@@ -74,11 +73,11 @@ func NewHTTPServer(addr string, handler http.Handler, operation string,
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
-		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
-		ReadTimeout:       constants.ServerTimeout.Read,
-		WriteTimeout:      constants.ServerTimeout.Write,
-		IdleTimeout:       constants.ServerTimeout.Idle,
-		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
+		MaxHeaderBytes:    serverMaxHeaderBytes,
 	}
 
 	return srv
@@ -138,7 +137,7 @@ func configureRuntimeClientIPTrust(router *gin.Engine, trustRemoteAddrOnly bool)
 		return nil
 	}
 
-	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
+	if err := router.SetTrustedProxies(trustedProxies); err != nil {
 		return fmt.Errorf("set trusted proxies: %w", err)
 	}
 

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
 	"io"
 	"net"
 	"net/http"
@@ -33,12 +32,9 @@ func TestFetchMemberPhotoBlocksHTTPLoopback(t *testing.T) {
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	photoURL := "http://127.0.0.1/avatar=s88-c"
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; ok {
+	if stored {
 		t.Fatal("blocked photo URL was stored")
 	}
 
@@ -89,12 +85,9 @@ func TestFetchMemberPhotoBlocksUnsafeURLsBeforeRoundTrip(t *testing.T) {
 			recorder := &calledRoundTripper{body: pngData, contentType: calendarPhotoContentTypePNG}
 			withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
-			photos := make(map[string]image.Image)
-			fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-				Member: &domain.Member{Photo: tt.photoURL},
-			}, photos)
+			_, stored := fetchMemberPhoto(t.Context(), tt.photoURL)
 
-			if _, ok := photos[tt.photoURL]; ok {
+			if stored {
 				t.Fatal("blocked photo URL was stored")
 			}
 
@@ -190,12 +183,9 @@ func TestFetchMemberPhotoBlocksRedirectToPrivateHost(t *testing.T) {
 	withCalendarPhotoClient(t, client)
 
 	photoURL := testAvatarURL
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; ok {
+	if stored {
 		t.Fatal("redirected private photo URL was stored")
 	}
 
@@ -221,12 +211,9 @@ func TestFetchMemberPhotoBlocksRedirectWithUserinfo(t *testing.T) {
 	withCalendarPhotoClient(t, client)
 
 	photoURL := testAvatarURL
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; ok {
+	if stored {
 		t.Fatal("redirect to userinfo url was stored")
 	}
 
@@ -252,12 +239,9 @@ func TestFetchMemberPhotoBlocksRedirectToNon443Port(t *testing.T) {
 	withCalendarPhotoClient(t, client)
 
 	photoURL := testAvatarURL
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; ok {
+	if stored {
 		t.Fatal("redirected non-443 photo URL was stored")
 	}
 
@@ -292,12 +276,9 @@ func TestFetchMemberPhotoBlocksThirdRedirect(t *testing.T) {
 	withCalendarPhotoClient(t, client)
 
 	photoURL := testAvatarURL
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; ok {
+	if stored {
 		t.Fatal("photo behind third redirect was stored")
 	}
 
@@ -332,12 +313,9 @@ func TestFetchMemberPhotoBlocksAllowlistedHostResolvingToBlockedIPs(t *testing.T
 			withCalendarPhotoClient(t, newCalendarPhotoHTTPClient())
 
 			photoURL := testAvatarURL
-			photos := make(map[string]image.Image)
-			fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-				Member: &domain.Member{Photo: photoURL},
-			}, photos)
+			_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-			if _, ok := photos[photoURL]; ok {
+			if stored {
 				t.Fatal("allowlisted host resolving to blocked IP was stored")
 			}
 
@@ -357,12 +335,9 @@ func TestFetchMemberPhotoBlocksWrongContentType(t *testing.T) {
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	photoURL := testAvatarURL
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; ok {
+	if stored {
 		t.Fatal("wrong content type photo was stored")
 	}
 
@@ -377,12 +352,9 @@ func TestFetchMemberPhotoBlocksOversizedBody(t *testing.T) {
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	photoURL := testAvatarURL
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; ok {
+	if stored {
 		t.Fatal("oversized photo body was stored")
 	}
 
@@ -396,12 +368,9 @@ func TestFetchMemberPhotoAcceptsAllowlistedHTTPSPNG(t *testing.T) {
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	photoURL := testAvatarURL
-	photos := make(map[string]image.Image)
-	fetchMemberPhotoWithContext(t.Context(), domain.CalendarEntry{
-		Member: &domain.Member{Photo: photoURL},
-	}, photos)
+	_, stored := fetchMemberPhoto(t.Context(), photoURL)
 
-	if _, ok := photos[photoURL]; !ok {
+	if !stored {
 		t.Fatal("allowlisted HTTPS PNG photo was not stored")
 	}
 

@@ -24,24 +24,28 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 type DeliveryRepository struct {
 	db     deliverysql.DeliveryDB
 	logger *slog.Logger
+	now    func() time.Time
 }
 
-func NewDeliveryRepository(db any, logger *slog.Logger) *DeliveryRepository {
+// NewDeliveryRepository의 now는 outbox 집계가 sent로 확정할 때 기록하는 sent_at 시계다.
+func NewDeliveryRepository(db any, logger *slog.Logger, now func() time.Time) *DeliveryRepository {
 	return &DeliveryRepository{
 		db:     AsDeliveryDB(db),
 		logger: logger,
+		now:    now,
 	}
 }
 
@@ -58,11 +62,7 @@ func AsDeliveryDB(db any) deliverysql.DeliveryDB {
 }
 
 func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, outboxID int64) error {
-	if err := r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}); err != nil {
-		return fmt.Errorf("update outbox aggregate statuses: %w", err)
-	}
-
-	return nil
+	return r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID})
 }
 
 const outboxAggregateFailedErrorText = "per-room delivery failed"
@@ -82,7 +82,7 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 		domain.OutboxStatusFailed,
 		DeliveryStatusQuarantined,
 		domain.OutboxStatusSent,
-		dispatchstate.CanonicalSentAtNow(),
+		yttimestamp.Normalize(r.now()),
 		outboxAggregateFailedErrorText,
 	); err != nil {
 		return fmt.Errorf("update outbox aggregate statuses: %w", err)

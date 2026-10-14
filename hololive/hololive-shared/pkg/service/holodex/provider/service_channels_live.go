@@ -37,7 +37,7 @@ import (
 
 // GetChannelsLiveStatus는 org/status/sort 필터 없이 Holodex /users/live를 한 번 조회한다.
 // 호출마다 requester의 rate limiter를 거치며 결과를 캐시하지 않는다.
-// 원천 오류는 그대로 반환하고 alarm-worker가 persisted live session으로 판단한다.
+// 원천 오류는 기록하지 않고 감싸서 반환한다. 기록과 persisted live session 판단은 처리 경계인 alarm-worker가 맡는다.
 func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
 	if len(channelIDs) == 0 {
 		return []*domain.Stream{}, nil
@@ -48,12 +48,7 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 
 	body, err := h.requester.DoRequest(ctx, http.MethodGet, usersLivePath, params)
 	if err != nil {
-		h.logger.Error("Failed to get channels live status",
-			slog.Int("channel_count", len(channelIDs)),
-			slog.Any("error", err),
-		)
-
-		return nil, fmt.Errorf("get channels live status: %w", err)
+		return nil, fmt.Errorf("get channels live status: channels=%d: %w", len(channelIDs), err)
 	}
 
 	streams, err := h.mapChannelsLiveStatus(channelIDs, body)

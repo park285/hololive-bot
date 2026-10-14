@@ -237,15 +237,15 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 				liveObservedAtByStreamID,
 			)
 			if err != nil {
-				return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", work.channelID, err)
+				return fmt.Errorf("build channel notifications for %s: %w", work.channelID, err)
 			}
 
 			if err := c.stageUpcomingChannel(ctx, work, now, channelNotifications); err != nil {
-				return fmt.Errorf("check youtube streams: stage selected candidates: %w", err)
+				return fmt.Errorf("stage selected candidates: %w", err)
 			}
 
 			// 조회 시각은 선정 후보의 durable commit 이후에만 평가 완료로 인정한다.
-			c.tierScheduler.UpdateChannelState(work.channelID, work.streams)
+			c.tierScheduler.UpdateChannelState(now, work.channelID, work.streams)
 
 			appendYouTubeChannelNotifications(mu, notifications, channelNotifications)
 
@@ -276,7 +276,7 @@ func (c *YouTubeChecker) prepareYouTubeChannelWork(
 	subscriberRooms := subscriberMap[channelID]
 
 	if len(subscriberRooms) == 0 {
-		c.tierScheduler.UpdateChannelState(channelID, channelStreams)
+		c.tierScheduler.UpdateChannelState(now, channelID, channelStreams)
 
 		return youtubeChannelCheckWork{}, false
 	}

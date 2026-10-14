@@ -93,77 +93,37 @@ func TestShouldSkipPath(t *testing.T) {
 	}
 }
 
-func TestTruncateUA(t *testing.T) {
+// 멀티바이트 User-Agent는 바이트 중간이 아니라 rune 경계에서 잘려 로그에 대체 문자가 남지 않아야 한다.
+func TestLoggerMiddleware_TruncatesMultibyteUserAgentAtRuneBoundary(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		ua   string
-		want string
-	}{
-		{
-			name: "짧은 UA → 그대로 반환",
-			ua:   "Mozilla/5.0",
-			want: "Mozilla/5.0",
-		},
-		{
-			name: "정확히 80자 → 그대로 반환",
-			ua:   strings.Repeat("a", 80),
-			want: strings.Repeat("a", 80),
-		},
-		{
-			name: "81자 초과 → 80자 잘라 '...' 추가",
-			ua:   strings.Repeat("b", 100),
-			want: strings.Repeat("b", 80) + "...",
-		},
+	gin.SetMode(gin.ReleaseMode)
+
+	var buf bytes.Buffer
+
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	router := gin.New()
+	router.Use(LoggerMiddleware(t.Context(), logger))
+	router.GET("/inspect", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/inspect", http.NoBody)
+	req.Header.Set("User-Agent", strings.Repeat("가", 81))
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	var entry map[string]any
+
+	if err := jsonv2.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
+		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := truncateUA(tt.ua)
-			if got != tt.want {
-				t.Fatalf("truncateUA(%q) = %q, want %q", tt.ua, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestTruncateHeader(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		value string
-		want  string
-	}{
-		{
-			name:  "짧은 값 → 그대로 반환",
-			value: "203.0.113.10",
-			want:  "203.0.113.10",
-		},
-		{
-			name:  "정확히 128자 → 그대로 반환",
-			value: strings.Repeat("a", 128),
-			want:  strings.Repeat("a", 128),
-		},
-		{
-			name:  "128자 초과 → 128자 잘라 '...' 추가",
-			value: strings.Repeat("b", 300),
-			want:  strings.Repeat("b", 128) + "...",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := truncateHeader(tt.value)
-			if got != tt.want {
-				t.Fatalf("truncateHeader(len=%d) = %q, want %q", len(tt.value), got, tt.want)
-			}
-		})
+	want := strings.Repeat("가", 80) + "..."
+	if got := entry["ua"]; got != want {
+		t.Fatalf("ua = %v, want %q", got, want)
 	}
 }
 
@@ -203,7 +163,7 @@ func TestLoggerMiddleware_TruncatesOverlongForwardedHeaders(t *testing.T) {
 		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
 	}
 
-	wantTruncated := truncateHeader(overlongXFF)
+	wantTruncated := strings.Repeat("9", 128) + "..."
 	gotXFF, ok := entry["x_forwarded_for"].(string)
 
 	if !ok || gotXFF != wantTruncated {

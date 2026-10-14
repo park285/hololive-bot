@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -281,14 +282,22 @@ func (e *Error) normalized() *Error {
 }
 
 // recognizedTransportTimeout은 net/http client가 *url.Error로 돌려준 수송 계층 타임아웃(dial·TLS handshake·
-// response header·Client.Timeout)을 알린다. 앞 단계가 context deadline을 먼저 분류하고, HTTP 요청 밖에서 생긴
-// socket deadline(os.ErrDeadlineExceeded)은 원인이 모호해 계속 미분류로 남긴다.
+// response header·Client.Timeout)과 DB 연결의 dial 타임아웃(*net.OpError Op "dial")을 알린다. 앞 단계가 context
+// deadline을 먼저 분류하고, 연결 단계 밖에서 생긴 socket deadline(os.ErrDeadlineExceeded)은 원인이 모호해 계속
+// 미분류로 남긴다.
 func recognizedTransportTimeout(err error) bool {
-	urlErr, ok := errors.AsType[*url.Error](err)
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && urlErr != nil && urlErr.Timeout() {
+		return true
+	}
 
-	return ok && urlErr != nil && urlErr.Timeout()
+	opErr, ok := errors.AsType[*net.OpError](err)
+
+	return ok && opErr != nil && opErr.Op == "dial" && opErr.Timeout()
 }
 
+// recognizedTransientNetwork는 상대 쪽 연결 종료·거부·경로 없음과 PostgreSQL의 연결 예외·관리자 종료를 일시 장애로
+// 알린다. 연결 실패(pgconn.ConnectError) 전체를 일시 장애로 보지는 않는다. 인증 실패(28P01) 같은 설정 결함은
+// 미분류로 남겨 장애 집계에 섞이지 않게 한다.
 func recognizedTransientNetwork(err error) bool {
 	if err == nil {
 		return false
@@ -302,7 +311,30 @@ func recognizedTransientNetwork(err error) bool {
 		return true
 	}
 
+	if transientPostgresError(err) {
+		return true
+	}
+
 	return errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNABORTED) ||
-		errors.Is(err, syscall.EPIPE)
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, syscall.EHOSTUNREACH) ||
+		errors.Is(err, syscall.ENETUNREACH)
+}
+
+// transientPostgresError는 SQLSTATE class 08(connection exception)과 57P01·57P02·57P03(관리자 종료·crash 종료·
+// 기동 또는 종료 중 연결 거부)을 알린다. 이 코드들은 DB 재시작·장애 조치 동안 나타나고 연결을 다시 맺으면 해소된다.
+func transientPostgresError(err error) bool {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok || pgErr == nil {
+		return false
+	}
+
+	switch pgErr.Code {
+	case "57P01", "57P02", "57P03":
+		return true
+	default:
+		return strings.HasPrefix(pgErr.Code, "08")
+	}
 }

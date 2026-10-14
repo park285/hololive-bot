@@ -43,8 +43,7 @@ func TestMapRequestErrorKeepsUnclassifiedMarker(t *testing.T) {
 		name string
 		err  error
 	}{
-		{name: "connection refused", err: dialError(syscall.ECONNREFUSED)},
-		{name: "host unreachable", err: dialError(syscall.EHOSTUNREACH)},
+		{name: "dial permission denied", err: dialError(syscall.EACCES)},
 		{name: "x509 unknown authority", err: tlsVerifyError()},
 		{name: "tls handshake timeout", err: &url.Error{Op: "Get", URL: "https://holodex.net/live", Err: errors.New("net/http: TLS handshake timeout")}},
 	}
@@ -80,6 +79,8 @@ func TestMapRequestErrorKeepsExplicitClassification(t *testing.T) {
 		{name: "timeout", err: context.DeadlineExceeded, code: contract.ErrorCollectionTimeout, class: contract.ClassTimeout},
 		{name: "canceled", err: context.Canceled, code: contract.ErrorCollectionCanceled, class: contract.ClassCanceled},
 		{name: "transient", err: dialError(syscall.ECONNRESET), code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "connection refused", err: dialError(syscall.ECONNREFUSED), code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
+		{name: "host unreachable", err: dialError(syscall.EHOSTUNREACH), code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -109,9 +110,9 @@ func TestRedactErrorKeepsUnclassifiedMarker(t *testing.T) {
 		name string
 		err  error
 	}{
-		{name: "dial error", err: collecterr.FromContext(fmt.Errorf("read holodex: %w", dialError(syscall.ECONNREFUSED)))},
+		{name: "dial error", err: collecterr.FromContext(fmt.Errorf("read holodex: %w", dialError(syscall.EACCES)))},
 		{name: "tls error", err: collecterr.FromContext(fmt.Errorf("read holodex: %w", tlsVerifyError()))},
-		{name: "dial error with retry hint", err: collecterr.WithRetry(collecterr.FromContext(dialError(syscall.ECONNREFUSED)), hint)},
+		{name: "dial error with retry hint", err: collecterr.WithRetry(collecterr.FromContext(dialError(syscall.EACCES)), hint)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -149,6 +150,7 @@ func TestRedactErrorKeepsExplicitClassification(t *testing.T) {
 		{name: "internal", err: collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, errors.New("invariant key=secret-key")), code: contract.ErrorInternalInvariant, class: contract.ClassInternal},
 		{name: "protocol", err: collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassProtocol, errors.New("bad body key=secret-key")), code: contract.ErrorCollectionFailed, class: contract.ClassProtocol},
 		{name: "configuration", err: collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "bad key secret-key"), code: contract.ErrorConfiguration, class: contract.ClassConfiguration},
+		{name: "connection refused", err: collecterr.FromContext(fmt.Errorf("read holodex: %w", dialError(syscall.ECONNREFUSED))), code: contract.ErrorCollectionFailed, class: contract.ClassTransient},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -221,9 +223,11 @@ func TestMapRequestErrorFromRealClientDialRefused(t *testing.T) {
 		t.Skipf("closed port did not yield ECONNREFUSED: %v", doErr)
 	}
 
+	// 상대가 연결을 거부하면 일시 장애다. 미분류 INTERNAL로 두면 외부 장애가 코드 결함으로 집계된다.
 	mapped := MapRequestError("request holodex live", doErr, "secret-key")
-	if !collecterr.IsUnclassified(mapped) {
-		t.Fatalf("IsUnclassified(%v) = false, want true", mapped)
+	if collecterr.IsUnclassified(mapped) ||
+		collecterr.CodeOf(mapped) != contract.ErrorCollectionFailed || collecterr.ClassOf(mapped) != contract.ClassTransient {
+		t.Fatalf("mapped = %v (%s/%s), want classified %s/%s", mapped, collecterr.CodeOf(mapped), collecterr.ClassOf(mapped), contract.ErrorCollectionFailed, contract.ClassTransient)
 	}
 
 	if strings.Contains(mapped.Error(), "secret-key") {

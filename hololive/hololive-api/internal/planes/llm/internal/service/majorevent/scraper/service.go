@@ -149,7 +149,7 @@ func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 			s.logger.Warn(
 				"Major event upsert failed",
 				slog.String("external_id", event.ExternalID),
-				slog.String("error", err.Error()),
+				slog.Any("error", err),
 			)
 
 			continue

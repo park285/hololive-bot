@@ -9,7 +9,7 @@ import (
 
 	"github.com/park285/iris-client-go/v3/iris"
 
-	"github.com/kapu/hololive-shared/pkg/service/sendoutcome"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
 type alarmDispatchRetryableCase struct {

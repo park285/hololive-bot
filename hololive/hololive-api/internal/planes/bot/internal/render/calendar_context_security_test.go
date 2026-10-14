@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"image"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -72,53 +76,107 @@ func TestCalendarCardRendererCancelledRenderDoesNotFetchOrPoisonCache(t *testing
 	}
 }
 
+// 예산이 끝나기 전에 받은 사진은 남기고, 예산 만료로 실패한 사진이 있으면 결과 전체를 캐시하지 않는다.
 func TestFetchMemberPhotosBudgetExpiryReturnsPartialPhotos(t *testing.T) {
-	parent := t.Context()
+	synctest.Test(t, func(t *testing.T) {
+		parent := t.Context()
 
-	pngData := tinyPNG(t)
-	requests := 0
-	firstPhotoURL := "https://yt3.googleusercontent.com/first=s88-c"
-	secondPhotoURL := "https://yt3.googleusercontent.com/second=s88-c"
-	entries := []domain.CalendarEntry{
-		{Member: &domain.Member{Photo: firstPhotoURL}},
-		{Member: &domain.Member{Photo: secondPhotoURL}},
-	}
-
-	budgetCtx, cancel := context.WithCancel(parent)
-	defer cancel()
-
-	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		requests++
-		if requests == 1 {
-			return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
+		pngData := tinyPNG(t)
+		firstPhotoURL := "https://yt3.googleusercontent.com/first=s88-c"
+		secondPhotoURL := "https://yt3.googleusercontent.com/second=s88-c"
+		entries := []domain.CalendarEntry{
+			{Member: &domain.Member{Photo: firstPhotoURL}},
+			{Member: &domain.Member{Photo: secondPhotoURL}},
 		}
 
-		cancel()
-		<-req.Context().Done()
+		budgetCtx, cancel := context.WithCancel(parent)
+		defer cancel()
 
-		return nil, req.Context().Err()
-	})))
+		withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if strings.HasPrefix(req.URL.Path, "/first=") {
+				return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
+			}
 
-	result, err := fetchMemberPhotosWithinBudget(parent, budgetCtx, entries)
-	if err != nil {
-		t.Fatalf("fetchMemberPhotosWithinBudget() error = %v", err)
-	}
+			// 첫 사진의 다운로드·디코드가 끝난 뒤에 예산을 끝낸다.
+			time.Sleep(time.Second)
+			cancel()
+			<-req.Context().Done()
 
-	if _, ok := result.photos[firstPhotoURL]; !ok {
-		t.Fatal("completed photo was discarded after budget expiry")
-	}
+			return nil, req.Context().Err()
+		})))
 
-	if _, ok := result.photos[secondPhotoURL]; ok {
-		t.Fatal("timed-out photo was stored")
-	}
+		result, err := fetchMemberPhotosWithinBudget(parent, budgetCtx, entries)
+		if err != nil {
+			t.Fatalf("fetchMemberPhotosWithinBudget() error = %v", err)
+		}
 
-	if result.cachePolicy.memoryCacheable {
-		t.Fatal("partial photo result should not be memory-cacheable")
-	}
+		if _, ok := result.photos[firstPhotoURL]; !ok {
+			t.Fatal("completed photo was discarded after budget expiry")
+		}
 
-	if result.cachePolicy.diskCacheable {
-		t.Fatal("partial photo result should not be disk-cacheable")
-	}
+		if _, ok := result.photos[secondPhotoURL]; ok {
+			t.Fatal("timed-out photo was stored")
+		}
+
+		if result.cachePolicy.memoryCacheable {
+			t.Fatal("partial photo result should not be memory-cacheable")
+		}
+
+		if result.cachePolicy.diskCacheable {
+			t.Fatal("partial photo result should not be disk-cacheable")
+		}
+	})
+}
+
+// 고유 사진은 calendarPhotoFetchWorkers개까지 동시에 받는다. 콜드 렌더 시간이 사진 수만큼의 왕복 합이 되지 않게 한다.
+func TestFetchMemberPhotosDownloadsConcurrentlyWithinWorkerLimit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const requestLatency = time.Second
+
+		pngData := tinyPNG(t)
+
+		var inFlight, maxInFlight atomic.Int32
+
+		withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			current := inFlight.Add(1)
+			defer inFlight.Add(-1)
+
+			for {
+				seen := maxInFlight.Load()
+				if current <= seen || maxInFlight.CompareAndSwap(seen, current) {
+					break
+				}
+			}
+
+			time.Sleep(requestLatency)
+
+			return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
+		})))
+
+		entries := calendarEntriesWithUniquePhotos(calendarPhotoMaxFetches)
+		start := time.Now()
+
+		result, err := fetchMemberPhotos(t.Context(), entries)
+		if err != nil {
+			t.Fatalf("fetchMemberPhotos() error = %v", err)
+		}
+
+		if got, want := len(result.photos), calendarPhotoMaxFetches; got != want {
+			t.Fatalf("photos = %d, want %d", got, want)
+		}
+
+		if got := maxInFlight.Load(); got != calendarPhotoFetchWorkers {
+			t.Fatalf("max concurrent photo requests = %d, want %d", got, calendarPhotoFetchWorkers)
+		}
+
+		if got, want := time.Since(start), requestLatency*calendarPhotoMaxFetches/calendarPhotoFetchWorkers; got != want {
+			t.Fatalf("photo download took %s, want %s", got, want)
+		}
+
+		if !result.cachePolicy.memoryCacheable || !result.cachePolicy.diskCacheable {
+			t.Fatalf("complete result cachePolicy = %+v, want fully cacheable", result.cachePolicy)
+		}
+	})
 }
 
 func TestFetchMemberPhotosParentCancellationReturnsError(t *testing.T) {
@@ -135,10 +193,12 @@ func TestFetchMemberPhotosParentCancellationReturnsError(t *testing.T) {
 
 func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *testing.T) {
 	pngData := tinyPNG(t)
-	requests := 0
+
+	var requests atomic.Int32
 
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		requests++
+		requests.Add(1)
+
 		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	})))
 
@@ -179,7 +239,7 @@ func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *
 
 	assertValidPNG(t, second)
 
-	if got, want := requests, calendarPhotoMaxFetches*2; got != want {
+	if got, want := requests.Load(), int32(calendarPhotoMaxFetches*2); got != want {
 		t.Fatalf("photo requests = %d, want %d; same-key render did not refetch", got, want)
 	}
 }

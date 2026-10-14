@@ -164,6 +164,9 @@ Holodex와 Official Schedule fetch는 collector-owned `providerhttp` transport�
 - 취득·갱신·publish의 `superseded`는 phase별로 구분합니다. empty 결과는 durable terminal commit 뒤에만 성공으로 셉니다.
 - `youtube_observation_publish_duration_seconds{provider,kind}`는 job kind별 발행 트랜잭션(fence 확인·관측 저장·lease 종료) 한 번의 소요 시간이며 결과와 무관하게 모든 발행 시도를 기록합니다. `youtube_observation_publish_encoded_bytes{provider,kind}`는 commit된 발행이 SQL에 보낸 관측 JSON 크기이며, 상단 버킷(6·7·8 MiB)으로 8 MiB 배치 상한 근접 빈도를 봅니다.
 - `youtube_observation_accept_interval_seconds`는 checkpoint가 실제 전진한 두 수락 사이 간격입니다. 첫 관측·중복·collision은 표본을 만들지 않습니다. `youtube_observation_last_accepted_timestamp_seconds`는 마지막 실제 수락을 기록합니다.
+- `youtube_collection_discovery_cycles_total{result}`는 후보 탐색 cycle 결과(`ok`, `candidate_load_failed`)입니다. 투영 세대 교체(superseded)만 있는 cycle은 `ok`입니다. 탐색 실패 WARN `YouTube collection candidate discovery failed`는 job 필드 없이 runner 실패에만 `provider`·`job_kind`를 붙이며, 같은 대상의 연속 실패 동안 첫 건과 1분 간격 요약(`since`, `suppressed_cycles`)만 남깁니다. 복구되면 `YouTube collection candidate discovery recovered` INFO 한 건을 남깁니다.
+- 종료나 fatal로 scheduler context가 취소된 뒤 생긴 `CANCELED`는 `YouTube collection job canceled by shutdown`(후보 탐색은 `YouTube collection candidate discovery canceled by shutdown`) INFO로 기록합니다. attempt metric과 durable 진단은 그대로 canceled이며, 바깥 context가 살아 있는 취소(renew 실패 등)는 실패 WARN입니다.
+- 연결 거부·호스트/네트워크 경로 없음(DB와 provider HTTP 공통)과 PostgreSQL SQLSTATE class `08`·`57P01`~`57P03`은 `collection_failed/TRANSIENT`, 연결 dial 타임아웃은 `collection_timeout/TIMEOUT`입니다. 인증 실패나 TLS 검증 실패 같은 그 밖의 연결 오류는 미분류 `collection_internal_invariant/INTERNAL`로 남습니다. 두 분류 모두 fatal이 아닙니다.
 - API target 지표는 여섯 collection job의 baseline 수요와 due/eligibility를 표현합니다. freshness 때문에 잠든 `video_live_check`는 누락된 필수 metric으로 간주하지 않습니다. `/ready` 성공은 수집 지연이나 queue full 부재의 증명이 아닙니다.
 
 ## Related docs

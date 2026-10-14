@@ -62,7 +62,8 @@ func LookupChannelSubscribersByType(
 }
 
 // ResolveChannelSubscribersByType는 채널·알림 종류의 구독 방을 cache에서 찾고, cache로 확정되지 않으면 resolver의
-// DB에서 읽는다. DB 결과는 이번 호출에만 쓰고 cache를 다시 채우지 않는다.
+// DB에서 읽는다. DB 결과는 이번 호출에만 쓰고 cache를 다시 채우지 않는다. 구독 cache가 있는데 확정하지 못해 DB를
+// 읽은 경우만 fallback 카운터로 센다. 구독 cache 없이 만든 resolver는 DB가 기본 경로라 세지 않는다.
 func (r *SubscriberResolver) ResolveChannelSubscribersByType(
 	ctx context.Context,
 	channelID string,
@@ -84,7 +85,7 @@ func (r *SubscriberResolver) ResolveChannelSubscribersByType(
 		}
 	}
 
-	out, err := r.resolveChannelSubscribersFromDB(ctx, normalizedChannelID, alarmType)
+	out, err := r.resolveChannelSubscribersFromDB(ctx, normalizedChannelID, alarmType, r.cache != nil)
 	if err != nil {
 		return out, fmt.Errorf("resolve channel subscribers from DB: %w", err)
 	}
@@ -148,22 +149,29 @@ func (r *SubscriberResolver) resolveChannelSubscribersFromDB(
 	ctx context.Context,
 	channelID string,
 	alarmType domain.AlarmType,
+	countFallback bool,
 ) ([]string, error) {
+	observe := func(result string) {
+		if countFallback {
+			observeAlarmSubscriberDBFallback(result)
+		}
+	}
+
 	alarms, err := r.loadChannelSubscriberAlarms(ctx, channelID, alarmType)
 	if err != nil {
-		observeAlarmSubscriberDBFallback(subscriberDBFallbackError)
+		observe(subscriberDBFallbackError)
 
 		return nil, fmt.Errorf("resolve channel subscribers by type: %w", err)
 	}
 
 	subscribers := extractSubscriberIDsByType(alarms, alarmType)
 	if len(subscribers) == 0 {
-		observeAlarmSubscriberDBFallback(subscriberDBFallbackMiss)
+		observe(subscriberDBFallbackMiss)
 
 		return nil, nil
 	}
 
-	observeAlarmSubscriberDBFallback(subscriberDBFallbackHit)
+	observe(subscriberDBFallbackHit)
 
 	return subscribers, nil
 }

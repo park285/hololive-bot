@@ -235,7 +235,12 @@ func TestPhotoSyncWithRetryLogsFinalFailureOnce(t *testing.T) {
 		t.Fatalf("retry sleeps = %d, want 2", sleepCount)
 	}
 
-	assertPhotoSyncRetryLogCounts(t, logs.String(), 3, 1)
+	// 재시도 직전 실패 2번만 "will retry"이고, 마지막 실패는 원인 오류를 담은 Error 한 줄이다.
+	assertPhotoSyncRetryLogCounts(t, logs.String(), 2, 1)
+
+	if !strings.Contains(logs.String(), "third failure") {
+		t.Fatalf("final failure log does not carry the last error; logs = %q", logs.String())
+	}
 }
 
 func TestPhotoSyncWithRetryStopsOnCancellation(t *testing.T) {

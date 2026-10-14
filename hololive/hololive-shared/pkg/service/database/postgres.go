@@ -59,8 +59,8 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		return nil, errors.New("postgres config is nil")
 	}
 
-	// pgxdb는 빈 sslmode를 거부(fail-closed)하므로, 예전 dbx가 DSN 생성 시 적용하던
-	// verify-full 기본값을 호출측인 여기서 명시적으로 해소한다. TLS posture는 절대 낮추지 않는다.
+	// pgxdb는 빈 sslmode를 거부(fail-closed)하므로, 설정이 비면 verify-full 기본값을
+	// 호출측인 여기서 명시적으로 해소한다. TLS posture는 절대 낮추지 않는다.
 	sslMode := strings.TrimSpace(config.SSLMode)
 	if sslMode == "" {
 		sslMode = "verify-full"

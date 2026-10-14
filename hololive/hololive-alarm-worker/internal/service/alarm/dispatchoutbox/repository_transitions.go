@@ -10,14 +10,24 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// wholeSeconds는 SQL interval 인자로 넘길 초 단위 값을 만든다. 1초 미만은 설정 오류라 기본값으로 바꾸지 않고
+// 오류로 돌려준다. 전이마다 같은 lease가 되도록 claim·발송 진입·quarantine이 이 변환을 함께 쓴다.
+func wholeSeconds(d time.Duration) (int, error) {
+	if d < time.Second {
+		return 0, fmt.Errorf("duration must be at least 1s: %s", d)
+	}
+
+	return int(d.Seconds()), nil
+}
+
 func (r *PgxRepository) MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error {
 	if len(ids) == 0 {
 		return nil
 	}
 
-	seconds := int(extendLease.Seconds())
-	if seconds <= 0 {
-		seconds = 60
+	seconds, err := wholeSeconds(extendLease)
+	if err != nil {
+		return fmt.Errorf("mark dispatch deliveries sending: lease: %w", err)
 	}
 
 	tag, err := r.pool.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, seconds, workerID)

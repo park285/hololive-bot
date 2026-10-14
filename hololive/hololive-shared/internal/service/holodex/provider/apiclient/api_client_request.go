@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
@@ -40,9 +42,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, method, path string,
 	for attempt := range state.maxAttempts {
 		body, done, err := c.runHolodexRequestAttempt(ctx, method, path, params, attempt, state.maxAttempts)
 		if done {
-			out, finishErr := c.finishHolodexRequestResult(body, err)
-
-			return out, finishErr
+			return c.finishHolodexRequestAttempt(body, err)
 		}
 
 		stop, retryErr := c.prepareHolodexRequestRetry(ctx, path, attempt, err, &state)
@@ -60,15 +60,6 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, method, path string,
 	}
 
 	return nil, fmt.Errorf("holodex request failed after %d attempts", state.maxAttempts)
-}
-
-func (c *APIClient) finishHolodexRequestResult(body []byte, attemptErr error) ([]byte, error) {
-	out, err := c.finishHolodexRequestAttempt(body, attemptErr)
-	if err != nil {
-		return nil, fmt.Errorf("finish holodex request attempt: %w", err)
-	}
-
-	return out, nil
 }
 
 func (c *APIClient) prepareHolodexRequestRetry(ctx context.Context, path string, attempt int, attemptErr error, state *holodexRequestRetryState) (bool, error) {
@@ -99,12 +90,7 @@ func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path s
 		return nil, true, fmt.Errorf("wait for rate limiter: %w", err)
 	}
 
-	out1, out2, err := c.tryHolodexRequest(ctx, method, path, params, attempt, maxAttempts)
-	if err != nil {
-		return out1, out2, fmt.Errorf("try holodex request: %w", err)
-	}
-
-	return out1, out2, nil
+	return c.tryHolodexRequest(ctx, method, path, params, attempt, maxAttempts)
 }
 
 func (c *APIClient) finishHolodexRequestAttempt(body []byte, err error) ([]byte, error) {
@@ -130,9 +116,9 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		done, handleErr := c.handleHolodexRequestError(ctx, err, attempt, maxAttempts)
+		done, handleErr := c.handleHolodexRequestError(ctx, redactRequestURLQuery(err), attempt, maxAttempts)
 
-		return nil, done, fmt.Errorf("handle holodex request error: %w", handleErr)
+		return nil, done, handleErr
 	}
 
 	if resp == nil {
@@ -169,7 +155,7 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 
 func (c *APIClient) closeHolodexResponse(resp *http.Response) {
 	if closeErr := resp.Body.Close(); closeErr != nil && c.logger != nil {
-		c.logger.Warn("Failed to close Holodex response body", "error", closeErr)
+		c.logger.Warn("Failed to close Holodex response body", slog.Any("error", closeErr))
 	}
 }
 
@@ -184,6 +170,23 @@ func (c *APIClient) handleHolodexRequestError(
 	}
 
 	return true, fmt.Errorf("HTTP request failed: %w", err)
+}
+
+// http.Client.Do는 *url.Error를 최상위로 돌려주고 그 URL에는 채널 목록 같은 query 전체가 들어 있다.
+// 오류가 로그로 퍼질 때 수백 자 query가 붙지 않도록 query만 떼고, Op·Err는 그대로 두어
+// *url.Error 타입과 Timeout() 판정을 보존한다.
+func redactRequestURLQuery(err error) error {
+	urlErr, ok := errors.AsType[*url.Error](err)
+	if !ok {
+		return err
+	}
+
+	pathOnly, _, hasQuery := strings.Cut(urlErr.URL, "?")
+	if !hasQuery {
+		return err
+	}
+
+	return &url.Error{Op: urlErr.Op, URL: pathOnly, Err: urlErr.Err}
 }
 
 func validateHolodexResponse(resp *http.Response) error {

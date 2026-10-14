@@ -34,7 +34,7 @@ func (d *Dispatcher) processReady(ctx context.Context) {
 
 			items, err := d.repository.fetchReadyAndLock(ctx, d.workerID, available, deliveryLease, excludedRooms, processedIDs)
 			if err != nil {
-				d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
+				d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 
 				return
 			}

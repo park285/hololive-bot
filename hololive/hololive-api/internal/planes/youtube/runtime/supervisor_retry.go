@@ -63,15 +63,7 @@ func (r *Runtime) releaseInFlight(ctx context.Context) error {
 }
 
 func (r *Runtime) retryObservation(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
-	if r.Config.TransactionTimeout <= 0 {
-		return errors.New("youtube plane transaction timeout must be positive")
-	}
-
-	retryCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
-
-	defer cancel()
-
-	if err := r.withDB(retryCtx, func(ctx context.Context) error {
+	if err := r.withBudgetDB(ctx, dbOperationRetry, func(ctx context.Context) error {
 		status, err := r.claimer.Retry(ctx, sourceobservation.RetryInput{
 			AttemptCount:  work.AttemptCount,
 			ObservationID: work.ObservationID,
@@ -86,7 +78,7 @@ func (r *Runtime) retryObservation(ctx context.Context, work sourceobservation.C
 
 		return r.applyRetryStatus(work.ObservationID, status)
 	}); err != nil {
-		return fmt.Errorf("with DB: %w", err)
+		return err
 	}
 
 	return nil
@@ -94,13 +86,13 @@ func (r *Runtime) retryObservation(ctx context.Context, work sourceobservation.C
 
 func (r *Runtime) applyRetryStatus(observationID int64, status contract.Status) error {
 	if status == contract.StatusPending {
-		youtubeConsumeTotal.WithLabelValues("retry").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultRetry).Inc()
 
 		return nil
 	}
 
 	if status == contract.StatusDeadLetter {
-		youtubeConsumeTotal.WithLabelValues("dead_letter").Inc()
+		youtubeConsumeTotal.WithLabelValues(consumeResultDeadLetter).Inc()
 		r.markDeadLettered()
 
 		return nil
@@ -124,15 +116,7 @@ type observationDeadLetterer interface {
 var _ observationDeadLetterer = (*sourceobservation.Repository)(nil)
 
 func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observationDeadLetterer, work sourceobservation.ClaimWork, cause error) error {
-	if r.Config.TransactionTimeout <= 0 {
-		return errors.New("youtube plane transaction timeout must be positive")
-	}
-
-	deadLetterCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
-
-	defer cancel()
-
-	if err := r.withDB(deadLetterCtx, func(ctx context.Context) error {
+	if err := r.withBudgetDB(ctx, dbOperationDeadLetter, func(ctx context.Context) error {
 		return deadLetterer.DeadLetter(ctx, sourceobservation.DeadLetterInput{
 			ObservationID: work.ObservationID,
 			LeaseToken:    work.LeaseToken,
@@ -140,7 +124,7 @@ func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observ
 			ErrorDetail:   boundedError(cause),
 		})
 	}); err != nil {
-		return fmt.Errorf("with DB: %w", err)
+		return err
 	}
 
 	return nil

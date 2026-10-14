@@ -74,6 +74,9 @@ func main() {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}
 
+			// otel export 오류처럼 slog.Default()로 기록하는 라이브러리 경로도 같은 JSON 파일·sanitize lane을 타게 한다.
+			slog.SetDefault(logger)
+
 			return logger, closer, nil
 		},
 		LoggerFileName: "alarm-worker.log",

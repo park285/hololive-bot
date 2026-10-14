@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,7 +38,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
@@ -202,8 +202,8 @@ func newHolodexTestClient(apiKey string) *APIClient {
 		apiKey:        apiKey,
 		logger:        slog.Default(),
 		breaker: newCircuitBreaker(
-			constants.CircuitBreakerConfig.FailureThreshold,
-			constants.CircuitBreakerConfig.ResetTimeout,
+			circuitFailureThreshold,
+			circuitResetTimeout,
 		),
 	}
 }
@@ -251,8 +251,8 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: time.Second,
 		breaker: newCircuitBreaker(
-			constants.CircuitBreakerConfig.FailureThreshold,
-			constants.CircuitBreakerConfig.ResetTimeout,
+			circuitFailureThreshold,
+			circuitResetTimeout,
 		),
 	}
 
@@ -314,7 +314,7 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 	}
 
 	// threshold 횟수만큼 실패 → 서킷 열기
-	for range constants.CircuitBreakerConfig.FailureThreshold {
+	for range circuitFailureThreshold {
 		client.openCircuit()
 	}
 
@@ -324,7 +324,7 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 	}
 
 	// openedAt을 과거로 설정하여 reset 트리거
-	client.breaker.SetOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
+	client.breaker.SetOpenedAtForTest(time.Now().Add(-circuitResetTimeout - time.Second))
 
 	if client.IsCircuitOpen() {
 		t.Fatal("expected circuit to be closed after timeout")
@@ -335,11 +335,11 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	client := newHolodexTestClient("k1")
 
 	// threshold 횟수(3회) 미만에서는 circuit이 열리지 않아야 함
-	for i := 1; i < constants.CircuitBreakerConfig.FailureThreshold; i++ {
+	for i := 1; i < circuitFailureThreshold; i++ {
 		client.openCircuit()
 
 		if client.IsCircuitOpen() {
-			t.Errorf("circuit opened after %d failures (threshold=%d)", i, constants.CircuitBreakerConfig.FailureThreshold)
+			t.Errorf("circuit opened after %d failures (threshold=%d)", i, circuitFailureThreshold)
 		}
 	}
 
@@ -347,7 +347,7 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	client.openCircuit()
 
 	if !client.IsCircuitOpen() {
-		t.Errorf("circuit should be open after %d failures", constants.CircuitBreakerConfig.FailureThreshold)
+		t.Errorf("circuit should be open after %d failures", circuitFailureThreshold)
 	}
 }
 
@@ -372,8 +372,8 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
 		breaker: newCircuitBreaker(
-			constants.CircuitBreakerConfig.FailureThreshold,
-			constants.CircuitBreakerConfig.ResetTimeout,
+			circuitFailureThreshold,
+			circuitResetTimeout,
 		),
 	}
 
@@ -385,9 +385,9 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 	// threshold(3)회 요청 후 circuit이 열려 즉시 중단해야 합니다.
 	// maxAttempts = 1 + RetryConfig.MaxAttempts(3) = 4이지만
 	// threshold(3) 도달 시 4번째 시도 전에 중단해야 합니다.
-	if requestCount != constants.CircuitBreakerConfig.FailureThreshold {
+	if requestCount != circuitFailureThreshold {
 		t.Errorf("expected exactly %d requests (threshold), got %d",
-			constants.CircuitBreakerConfig.FailureThreshold, requestCount)
+			circuitFailureThreshold, requestCount)
 	}
 
 	if !client.IsCircuitOpen() {
@@ -412,13 +412,13 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
 		breaker: newCircuitBreaker(
-			constants.CircuitBreakerConfig.FailureThreshold,
-			constants.CircuitBreakerConfig.ResetTimeout,
+			circuitFailureThreshold,
+			circuitResetTimeout,
 		),
 	}
 
 	// threshold 도달 → circuit open
-	for range constants.CircuitBreakerConfig.FailureThreshold {
+	for range circuitFailureThreshold {
 		client.openCircuit()
 	}
 
@@ -426,7 +426,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		t.Fatal("should be open after threshold")
 	}
 
-	client.breaker.SetOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
+	client.breaker.SetOpenedAtForTest(time.Now().Add(-circuitResetTimeout - time.Second))
 
 	if !client.breaker.Allow() {
 		t.Fatal("should allow after timeout")
@@ -435,7 +435,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 	client.openCircuit()
 
 	if client.IsCircuitOpen() {
-		t.Fatalf("single failure after reset must not re-open (threshold=%d)", constants.CircuitBreakerConfig.FailureThreshold)
+		t.Fatalf("single failure after reset must not re-open (threshold=%d)", circuitFailureThreshold)
 	}
 }
 
@@ -787,5 +787,48 @@ func TestIsTimeoutError(t *testing.T) {
 				t.Errorf("isTimeoutError(%v) = %v, want %v", tt.err, got, tt.expected)
 			}
 		})
+	}
+}
+
+// 요청 실패 오류는 채널 목록 query를 싣지 않지만, *url.Error 타입과 timeout 분류는 유지해야 한다.
+func TestDoRequestTimeoutErrorOmitsQueryAndKeepsTimeoutClassification(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	client := &APIClient{
+		admissionGate:     make(chan struct{}, 1),
+		httpClient:        server.Client(),
+		baseURL:           server.URL,
+		apiKey:            testAPIKey,
+		logger:            slog.Default(),
+		semaphore:         make(chan struct{}, 1),
+		perAttemptTimeout: 50 * time.Millisecond,
+	}
+
+	params := url.Values{}
+	params.Set("channels", "UC_channel_a,UC_channel_b")
+
+	_, err := client.DoRequest(t.Context(), http.MethodGet, "/users/live", params)
+	if err == nil {
+		t.Fatal("timeout 에러가 발생해야 한다")
+	}
+
+	if msg := err.Error(); strings.Contains(msg, "channels=") || strings.Contains(msg, "UC_channel_a") {
+		t.Fatalf("error = %q, query가 남으면 안 된다", msg)
+	}
+
+	if !strings.Contains(err.Error(), server.URL+"/users/live") {
+		t.Fatalf("error = %q, 요청 경로는 남아야 한다", err.Error())
+	}
+
+	if !IsTimeoutError(err) {
+		t.Fatalf("IsTimeoutError(%v) = false, want true", err)
+	}
+
+	urlErr, ok := errors.AsType[*url.Error](err)
+	if !ok || !urlErr.Timeout() {
+		t.Fatalf("error = %#v, want timeout *url.Error", err)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
@@ -19,10 +20,6 @@ import (
 const outboxCleanupBatchSize = 1000
 
 func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
-	if d == nil || d.db == nil || d.transition == nil {
-		return
-	}
-
 	d.expirePendingDeliveries(ctx)
 
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
@@ -118,10 +115,6 @@ func (d *ClaimManager) orphanPendingCutoff() time.Duration {
 }
 
 func (d *ClaimManager) quarantineStaleSendingDeliveries(ctx context.Context) {
-	if d == nil || d.transition == nil {
-		return
-	}
-
 	d.quarantineStaleLogicalGroups(ctx)
 }
 
@@ -164,7 +157,7 @@ func (d *ClaimManager) quarantineStaleLogicalGroups(ctx context.Context) {
 }
 
 func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error {
-	if d == nil || d.db == nil || len(claims) == 0 {
+	if len(claims) == 0 {
 		return nil
 	}
 
@@ -214,10 +207,6 @@ func (d *ClaimManager) logClaimIssue(
 	level slog.Level,
 	attrs ...any,
 ) {
-	if d == nil || d.logger == nil {
-		return
-	}
-
 	baseAttrs := deliveryClaimLogAttrs(row, outbox, attrs...)
 	logClaimIssueAtLevel(d.logger, level, message, baseAttrs...)
 }
@@ -232,7 +221,7 @@ func deliveryClaimLogAttrs(
 	baseAttrs = append(baseAttrs,
 		slog.Int64(logschema.FieldDeliveryID, row.ID),
 		slog.Int64(logschema.FieldOutboxID, outbox.ID),
-		slog.String(logschema.FieldRoomID, row.RoomID),
+		privacylog.RoomIDAttr(row.RoomID),
 		slog.String(logschema.FieldChannelID, outbox.ChannelID),
 		slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
 		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),

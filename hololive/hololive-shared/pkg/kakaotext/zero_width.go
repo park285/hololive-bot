@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package kakaotext는 카카오톡 표시용 zero-width space와 Markdown 마커 중화를 제공합니다.
 package kakaotext
 
 // ZeroWidthSpace는 제목 보호와 카카오톡 표시 제어에 쓰는 공백이다.

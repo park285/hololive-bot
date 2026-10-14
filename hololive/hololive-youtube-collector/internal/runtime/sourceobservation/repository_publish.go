@@ -279,12 +279,7 @@ func (r *Repository) PublishBatch(
 		return PublishBatchResult{}, fmt.Errorf("prepare publish batch: %w", err)
 	}
 
-	out, err := r.runPreparedPublish(ctx, &prepared, r.completePublishTerminal)
-	if err != nil {
-		return out, fmt.Errorf("run prepared publish: %w", err)
-	}
-
-	return out, nil
+	return r.runPreparedPublish(ctx, &prepared, r.completePublishTerminal)
 }
 
 func (r *Repository) PublishBatchAndDefer(
@@ -305,12 +300,7 @@ func (r *Repository) PublishBatchAndDefer(
 		return PublishBatchResult{}, fmt.Errorf("prepare publish batch: %w", err)
 	}
 
-	out, err := r.runPreparedPublish(ctx, &prepared, r.deferPublishTerminal(deferInput))
-	if err != nil {
-		return out, fmt.Errorf("run prepared publish: %w", err)
-	}
-
-	return out, nil
+	return r.runPreparedPublish(ctx, &prepared, r.deferPublishTerminal(deferInput))
 }
 
 func (r *Repository) runPreparedPublish(
@@ -322,7 +312,7 @@ func (r *Repository) runPreparedPublish(
 		return r.publishPreparedTx(ctx, tx, prepared, terminal)
 	})
 	if err != nil {
-		return out, fmt.Errorf("in pgx tx with result: %w", err)
+		return out, fmt.Errorf("publish prepared batch: %w", err)
 	}
 
 	out.EncodedBytes = len(prepared.observations)
