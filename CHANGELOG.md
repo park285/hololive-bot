@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **deunhealth 이미지 빌드:** 의존성 일괄 갱신(#604)이 `gosplash`를 upstream이 쓰지 않는 v0.2.0으로 올려 `BuildDate` 필드가 없어 빌드가 실패했습니다. upstream 고정값 v0.1.0으로 되돌립니다. 실행 중인 deunhealth에는 변경이 없습니다.
+
 ## v10.1.0 - 2026-10-14
 
 - **검토 SQL 원본 공유:** observability·live-check가 활성 session/head/availability의 scalar 원본을 함께 쓰고, live-check는 미래 UPCOMING을 보조 원본 조회 전에 제외합니다. 판정 결과·신선도·한도·불일치 진단은 유지합니다.
