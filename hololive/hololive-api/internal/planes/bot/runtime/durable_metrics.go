@@ -34,4 +34,12 @@ var (
 		Name: "bot_reply_outbox_manual_review_observation_failures_total",
 		Help: "Failures while observing reply outbox manual-review backlog.",
 	})
+	replyOutboxManualReviewSnapshotSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "bot_reply_outbox_manual_review_snapshot_success",
+		Help: "Whether the latest reply outbox manual-review observation succeeded; counts keep the last successful values on failure.",
+	})
+	replyOutboxManualReviewSnapshotLastSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "bot_reply_outbox_manual_review_snapshot_last_success_timestamp_seconds",
+		Help: "Unix time of the last successful reply outbox manual-review observation.",
+	})
 )

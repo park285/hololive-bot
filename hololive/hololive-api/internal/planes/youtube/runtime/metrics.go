@@ -30,6 +30,16 @@ var youtubeQueueOldestAgeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Age of the oldest pending or processing source observation.",
 })
 
+var youtubeQueueSnapshotSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "hololive_youtube_plane_queue_snapshot_success",
+	Help: "Whether the latest YouTube plane queue observation succeeded; pending/processing/oldest age keep the last successful values on failure.",
+})
+
+var youtubeQueueSnapshotLastSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "hololive_youtube_plane_queue_snapshot_last_success_timestamp_seconds",
+	Help: "Unix time of the last successful YouTube plane queue observation.",
+})
+
 var youtubeWorkQueueUtilization = promauto.NewGauge(prometheus.GaugeOpts{
 	Name: "hololive_youtube_plane_work_queue_utilization_ratio",
 	Help: "Fraction of the bounded in-process YouTube plane work queue currently occupied.",

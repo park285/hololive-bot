@@ -30,8 +30,17 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
 
-	if body := recorder.Body.String(); !strings.Contains(body, "go_goroutines") {
-		t.Fatalf("body missing go_goroutines:\n%.300s", body)
+	body := recorder.Body.String()
+	// 중앙 경보가 이 이름으로 공용 로깅 유실·실패를 판정한다.
+	for _, name := range []string{
+		"go_goroutines",
+		"iris_stack_logging_stdout_dropped_total",
+		"iris_stack_logging_stdout_truncated_total",
+		"iris_stack_logging_file_write_failed_total",
+	} {
+		if !strings.Contains(body, "\n"+name+" ") {
+			t.Fatalf("body missing %s:\n%.300s", name, body)
+		}
 	}
 }
 

@@ -19,7 +19,6 @@ func TestAlarmDispatchMaintenanceSkipsRetentionWhenAdvisoryLockUnavailable(t *te
 	store := &alarmDispatchMaintenanceTestStore{locked: false}
 	runner := &alarmDispatchMaintenanceRunner{
 		store:            store,
-		observerStore:    store,
 		retentionEnabled: true,
 		queryTimeout:     time.Second,
 		limit:            1000,
@@ -49,7 +48,6 @@ func TestAlarmDispatchMaintenanceDeletesTerminalRowsAndOrphanEventsInChunks(t *t
 	}
 	runner := &alarmDispatchMaintenanceRunner{
 		store:            store,
-		observerStore:    store,
 		retentionEnabled: true,
 		queryTimeout:     time.Second,
 		limit:            1000,
@@ -87,11 +85,10 @@ func TestAlarmDispatchMaintenanceClampsRetentionLimit(t *testing.T) {
 }
 
 func TestAlarmDispatchMaintenanceUsesQueryTimeout(t *testing.T) {
-	store := &alarmDispatchMaintenanceTestStore{locked: true, expectDeadline: true}
+	store := &alarmDispatchMaintenanceTestStore{locked: true}
 	runner := &alarmDispatchMaintenanceRunner{
 		store:            store,
-		observerStore:    store,
-		retentionEnabled: false,
+		retentionEnabled: true,
 		queryTimeout:     time.Second,
 		limit:            1000,
 	}
@@ -105,7 +102,6 @@ func TestAlarmDispatchMaintenanceReturnsRetentionDeleteErrors(t *testing.T) {
 	store := &alarmDispatchMaintenanceTestStore{locked: true, deleteErr: deleteErr}
 	runner := &alarmDispatchMaintenanceRunner{
 		store:            store,
-		observerStore:    store,
 		retentionEnabled: true,
 		queryTimeout:     time.Second,
 		limit:            1000,
@@ -123,90 +119,31 @@ func TestAlarmDispatchMaintenanceReturnsRetentionDeleteErrors(t *testing.T) {
 	assert.ErrorIs(t, err, deleteErr)
 }
 
-func TestAlarmDispatchMaintenanceObservationFailuresDoNotBlockDeletion(t *testing.T) {
-	tests := []struct {
-		name           string
-		observationErr error
-		waitForTimeout bool
-	}{
-		{name: "immediate error", observationErr: errors.New("observe failed")},
-		{name: "timeout", waitForTimeout: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			store := &alarmDispatchMaintenanceTestStore{
-				locked:         true,
-				observationErr: tt.observationErr,
-				waitForTimeout: tt.waitForTimeout,
-			}
-			runner := &alarmDispatchMaintenanceRunner{
-				store:            store,
-				observerStore:    store,
-				retentionEnabled: true,
-				queryTimeout:     20 * time.Millisecond,
-				limit:            1000,
-				sentDays:         90,
-				dlqDays:          180,
-				quarantinedDays:  180,
-				cancelledDays:    90,
-				eventDays:        90,
-				retentionLockKey: 42,
-			}
-
-			require.NotPanics(t, func() {
-				require.NoError(t, runner.RunOnce(t.Context()))
-			})
-			assert.Len(t, store.deletedTerminal, 4)
-			assert.Equal(t, 1, store.deletedSendUnits)
-			assert.Equal(t, 1, store.deletedEvents)
-			require.NotNil(t, store.observationDone)
-			require.NotNil(t, store.deletionDone)
-			assert.NotEqual(t, store.observationDone, store.deletionDone)
-			assert.NoError(t, store.deletionCtxErr)
-		})
-	}
-}
-
 func TestAlarmDispatchMaintenanceParentCancellationIsNotCountedAsFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	store := &alarmDispatchMaintenanceTestStore{
-		locked:            true,
-		cancelObservation: cancel,
-		waitForTimeout:    true,
+		locked:     true,
+		cancelLock: cancel,
 	}
 
 	var logs bytes.Buffer
 
 	runner := &alarmDispatchMaintenanceRunner{
 		store:            store,
-		observerStore:    store,
 		retentionEnabled: true,
 		queryTimeout:     time.Second,
 		interval:         time.Hour,
 		logger:           slog.New(slog.NewTextHandler(&logs, nil)),
 	}
-	beforeObservation := alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total")
 	beforeRetention := alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_retention_failed_total")
 
 	err := runner.Start(ctx)
 
 	require.NoError(t, err)
-	assert.Zero(t, store.lockCalls)
+	assert.Equal(t, 1, store.lockCalls)
 	assert.Empty(t, store.deletedTerminal)
-	assert.Zero(t, store.deletedSendUnits)
-	assert.Zero(t, store.deletedEvents)
-	assert.InDelta(t, beforeObservation, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total"), 0)
 	assert.InDelta(t, beforeRetention, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_retention_failed_total"), 0)
 	assert.Empty(t, logs.String())
-}
-
-func TestAlarmDispatchMaintenanceNilStoreReturnsWithoutObservation(t *testing.T) {
-	observer := &alarmDispatchMaintenanceTestStore{observationErr: errors.New("must not run")}
-	runner := &alarmDispatchMaintenanceRunner{observerStore: observer}
-
-	require.NoError(t, runner.RunOnce(t.Context()))
-	assert.Zero(t, observer.observationCalls)
 }
 
 type alarmDispatchMaintenanceTestStore struct {
@@ -218,15 +155,8 @@ type alarmDispatchMaintenanceTestStore struct {
 	deleteTerminalRows map[dispatchoutbox.Status]int64
 	deleteEventRows    int64
 	deleteErr          error
-	observationErr     error
-	waitForTimeout     bool
-	cancelObservation  context.CancelFunc
-	observationCalls   int
-	expectDeadline     bool
+	cancelLock         context.CancelFunc
 	sawDeadline        bool
-	observationDone    <-chan struct{}
-	deletionDone       <-chan struct{}
-	deletionCtxErr     error
 }
 
 func (s *alarmDispatchMaintenanceTestStore) WithAdvisoryLock(
@@ -235,6 +165,15 @@ func (s *alarmDispatchMaintenanceTestStore) WithAdvisoryLock(
 	fn func(context.Context, alarmDispatchMaintenanceDataStore) error,
 ) error {
 	s.lockCalls++
+
+	_, s.sawDeadline = ctx.Deadline()
+
+	if s.cancelLock != nil {
+		s.cancelLock()
+
+		return fmt.Errorf("lock wait: %w", ctx.Err())
+	}
+
 	if !s.locked {
 		return nil
 	}
@@ -246,48 +185,7 @@ func (s *alarmDispatchMaintenanceTestStore) WithAdvisoryLock(
 	return nil
 }
 
-func (s *alarmDispatchMaintenanceTestStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {
-	s.observationCalls++
-
-	s.observationDone = ctx.Done()
-
-	if s.expectDeadline {
-		_, s.sawDeadline = ctx.Deadline()
-	}
-
-	if s.cancelObservation != nil {
-		s.cancelObservation()
-	}
-
-	if s.waitForTimeout {
-		<-ctx.Done()
-
-		if err := ctx.Err(); err != nil {
-			return alarmDispatchBacklogSnapshot{}, fmt.Errorf("blocked backlog query: %w", err)
-		}
-
-		return alarmDispatchBacklogSnapshot{}, nil
-	}
-
-	if s.observationErr != nil {
-		return alarmDispatchBacklogSnapshot{}, s.observationErr
-	}
-
-	return alarmDispatchBacklogSnapshot{
-		RowsByStatus: map[dispatchoutbox.Status]int64{
-			dispatchoutbox.StatusPending: 1,
-			dispatchoutbox.StatusRetry:   2,
-		},
-		OldestPendingAgeSeconds: 3,
-		OldestRetryAgeSeconds:   4,
-		OldestSendingAgeSeconds: 5,
-	}, nil
-}
-
-func (s *alarmDispatchMaintenanceTestStore) DeleteTerminal(ctx context.Context, status dispatchoutbox.Status, _, _ int) (int64, error) {
-	s.deletionDone = ctx.Done()
-	s.deletionCtxErr = ctx.Err()
-
+func (s *alarmDispatchMaintenanceTestStore) DeleteTerminal(_ context.Context, status dispatchoutbox.Status, _, _ int) (int64, error) {
 	if s.deleteErr != nil {
 		return 0, s.deleteErr
 	}

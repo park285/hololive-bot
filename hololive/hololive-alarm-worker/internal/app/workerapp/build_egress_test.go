@@ -266,7 +266,7 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 		names = append(names, runner.Name)
 	}
 
-	assert.Equal(t, []string{"alarm-dispatch-maintenance"}, names)
+	assert.Equal(t, []string{"alarm-dispatch-maintenance", "alarm-dispatch-backlog-observer"}, names)
 }
 
 func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
@@ -287,10 +287,12 @@ func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
 	assert.Equal(t, []string{
 		"alarm-dispatch",
 		"alarm-dispatch-maintenance",
+		"alarm-dispatch-backlog-observer",
 		"youtube-outbox",
 		"notification-delivery-outbox",
 	}, names)
 	assert.True(t, scheduled["alarm-dispatch"])
+	assert.True(t, scheduled["alarm-dispatch-backlog-observer"])
 	assert.True(t, scheduled["youtube-outbox"])
 	assert.True(t, scheduled["notification-delivery-outbox"])
 }

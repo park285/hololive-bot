@@ -165,7 +165,8 @@ func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := &durableRuntime{outbox: repo}
+	observedAt := time.Unix(1_800_000_000, 0)
+	r := &durableRuntime{outbox: repo, now: func() time.Time { return observedAt }}
 	r.observeReplyOutboxManualReview(t.Context())
 
 	if got := testutil.ToFloat64(replyOutboxManualReviewBacklog); got != 1 {
@@ -174,6 +175,52 @@ func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
 
 	if got := testutil.ToFloat64(replyOutboxManualReviewOldestAgeSeconds); got < 9 {
 		t.Fatalf("manual review oldest age = %v", got)
+	}
+
+	if got := testutil.ToFloat64(replyOutboxManualReviewSnapshotSuccess); got != 1 {
+		t.Fatalf("manual review snapshot success = %v", got)
+	}
+
+	if got := testutil.ToFloat64(replyOutboxManualReviewSnapshotLastSuccess); got != float64(observedAt.Unix()) {
+		t.Fatalf("manual review snapshot last success = %v", got)
+	}
+}
+
+// 조회 실패는 마지막 건수·경과를 0으로 덮지 않고 success만 내린다. 마지막 성공 시각도 유지한다.
+func TestManualReviewObservationFailureKeepsLastValues(t *testing.T) {
+	const lastSuccess = 1_800_000_000
+
+	replyOutboxManualReviewBacklog.Set(3)
+	replyOutboxManualReviewOldestAgeSeconds.Set(120)
+	replyOutboxManualReviewSnapshotSuccess.Set(1)
+	replyOutboxManualReviewSnapshotLastSuccess.Set(lastSuccess)
+
+	beforeFailures := testutil.ToFloat64(replyOutboxManualReviewObservationFailuresTotal)
+	r := &durableRuntime{
+		outbox: &durability.ReplyOutboxRepository{},
+		now:    func() time.Time { return time.Unix(lastSuccess+600, 0) },
+	}
+
+	r.observeReplyOutboxManualReview(t.Context())
+
+	if got := testutil.ToFloat64(replyOutboxManualReviewObservationFailuresTotal) - beforeFailures; got != 1 {
+		t.Fatalf("manual review observation failures delta = %v", got)
+	}
+
+	if got := testutil.ToFloat64(replyOutboxManualReviewSnapshotSuccess); got != 0 {
+		t.Fatalf("manual review snapshot success = %v", got)
+	}
+
+	if got := testutil.ToFloat64(replyOutboxManualReviewBacklog); got != 3 {
+		t.Fatalf("manual review backlog = %v", got)
+	}
+
+	if got := testutil.ToFloat64(replyOutboxManualReviewOldestAgeSeconds); got != 120 {
+		t.Fatalf("manual review oldest age = %v", got)
+	}
+
+	if got := testutil.ToFloat64(replyOutboxManualReviewSnapshotLastSuccess); got != lastSuccess {
+		t.Fatalf("manual review snapshot last success = %v", got)
 	}
 }
 

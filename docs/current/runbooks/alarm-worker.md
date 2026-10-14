@@ -89,6 +89,9 @@ Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-buil
 - `alarm_dispatch_pg_unreviewed_quarantined_rows`: 처분 검토가 필요한 격리 알림 수. [closeout receipt](alarm-dispatch-quarantine-closeout.md)의 같은 send unit·대상 ID 항목이 행의 현재 `updated_at`·상태·시도 횟수·격리/발송/취소 시각과 정확히 일치할 때만 뺀다. receipt가 있어도 재처리·재격리로 바뀐 행은 다시 센다.
 - `alarm_dispatch_pg_oldest_unreviewed_quarantined_age_seconds`: 검토가 필요한 격리 중 가장 오래된 격리 시점부터의 경과.
 - `alarm_dispatch_pg_backlog_snapshot_success`: 마지막 발송·격리 집계 조회의 성공 여부. receipt 조회 실패도 실패이며, 0이면 건수·경과의 이전 값을 현재 상태로 해석하지 않는다.
+- `alarm_dispatch_pg_backlog_snapshot_last_success_timestamp_seconds`: 마지막으로 성공한 발송·격리 집계 조회의 Unix 시각. 실패하면 갱신하지 않으므로, 경과가 관측 주기보다 크게 벌어지면 건수·경과를 현재 상태로 해석하지 않는다.
+
+발송 backlog(`alarm_dispatch_pg_backlog_rows`, `alarm_dispatch_pg_oldest_*_age_seconds`)·격리 gauge와 두 snapshot 지표는 retention 주기(`ALARM_DISPATCH_RETENTION_INTERVAL_MS`)와 별개로 60초마다(조회 시한 10초) 갱신한다. 조회 실패는 runner를 멈추지 않고 `alarm_dispatch_pg_backlog_observation_failed_total`과 경고 로그로 남는다.
 
 격리 현황은 Grafana Bot Drilldown에서 확인한다. 검토 대상 건수 경보는 전송 증거 검토를 위한 알림이며 자동 재발송·삭제 권한을 부여하지 않는다. closeout receipt는 보존 총량을 줄이지 않으며 기존 보존 기간과 처분 계약을 유지한다.
 

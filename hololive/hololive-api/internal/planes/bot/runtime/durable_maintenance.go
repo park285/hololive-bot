@@ -79,6 +79,8 @@ func (r *durableRuntime) observeReplyOutboxManualReview(ctx context.Context) {
 	stats, err := r.outbox.ManualReviewStats(ctx)
 	if err != nil {
 		replyOutboxManualReviewObservationFailuresTotal.Inc()
+		// 이전 건수·경과를 0으로 덮지 않고 유효성만 내린다. 마지막 성공 시각도 유지해 관측 공백을 드러낸다.
+		replyOutboxManualReviewSnapshotSuccess.Set(0)
 		r.logError("observe reply outbox manual review backlog", err)
 
 		return
@@ -86,6 +88,8 @@ func (r *durableRuntime) observeReplyOutboxManualReview(ctx context.Context) {
 
 	replyOutboxManualReviewBacklog.Set(float64(stats.Backlog))
 	replyOutboxManualReviewOldestAgeSeconds.Set(stats.OldestAge.Seconds())
+	replyOutboxManualReviewSnapshotLastSuccess.Set(float64(r.nowTime().Unix()))
+	replyOutboxManualReviewSnapshotSuccess.Set(1)
 }
 
 func (r *durableRuntime) logError(message string, err error) {
