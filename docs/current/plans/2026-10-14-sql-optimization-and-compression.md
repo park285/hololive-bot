@@ -1,6 +1,6 @@
 # Hololive SQL 최적화 및 압축 플랜 (2026-10-14)
 
-**상태: 추가 구현·운영 배포 완료, 시간 목표 미달.** 공간 회수와 S1/S2 운영 블록 목표는 달성했다. 이 작업의 직접 검증·배포 revision은 `8dd380cfc28962d364e26ddd9715d016c8d5110d`다. 이후 별도 작업의 `c98d54f2c80bc96905101096fb590703b331a9ea`가 이를 상속해 운영 API·worker를 교체했으며, 아래에 두 검증 범위를 구분한다.
+**상태: 구현·검증·운영 적용 완료.** S1~S5·C1~C3를 적용했고, 추가 승인된 동기 읽기 모델로 S1/S2의 운영 custom/generic 블록·평균 시간 목표도 모두 충족했다. 최종 API 배포 revision은 `98b579e5c7a4910c440a79c20295f441f2de74ff`(10.1.0, migration 313)다. 최종 수용 근거와 변동 범위는 §13, 공간 회수는 §7에 기록한다. 이전 미달 결과와 별도 작업의 배포 이력은 아래에 구분해 보존한다.
 
 ## 목표와 범위
 
@@ -41,8 +41,8 @@
   1. `live_states` CTE가 `targets`(통계 없음 → `kind = 'youtubejs_channel_live'`를 1행으로 오판, 실제 119행)에서 시작해 `youtube_live_sessions`의 `idx_yls_channel` Bitmap Heap Scan을 119회 반복하며 **과거 `ENDED` 세션을 포함한 전체 10,002행(`8,553` 블록, 전체 읽기의 78.5%)**을 읽은 뒤 `active_live_videos`(215행)와 Hash Join하며 9,800행을 버린다.
   2. `live_reviews` CTE가 53개 영수증 영상마다 `youtube_live_review_current_receipt(video.video_id)`를 상관 SubPlan(`loops=53`, `951` 블록)으로 실행해 이미 읽은 테이블을 다시 53번씩 조회하고 `youtube_live_review_receipt_facts`(7페이지)를 53회 Seq Scan(`371` 블록)한다.
 - **변경:**
-  - [x] `active_live_videos`와 활성 product/head/availability 입력을 `MATERIALIZED`로 고정하고, `EXISTS`로 채널 membership을 검사한다. 과거 종료 세션에서 시작하는 채널 조인을 제거했다.
-  - [x] `live_reviews`를 S2의 집합형 판정으로 바꿔 영상별 상관 함수 호출과 영수증 표 반복 조회를 제거했다.
+  - [x] migration 312의 동기 `youtube_live_runtime_state`를 직접 읽어 과거 종료 세션 재조회와 상관 영수증 반복 조회를 제거했다. 원본·영수증 변경과 같은 트랜잭션에서 현재 일치 검토 시각을 갱신한다.
+  - [x] migration 313의 CURRENT/STAGING target bundle로 구조 집계를 쓰기 시 확정한다. 세대 만료·lease·현재 시각·신선도 조건은 조회 시 평가한다.
 - **기대 효과:** 호출당 블록 읽기 **10,895 → ~450 블록(-95.9%)**, 실행 시간 **27~77 ms → ~2~3 ms**.
 
 ### S2. `live_check_videos.sql` 및 `youtube_live_review_current_receipt` — Projection Guard 내부 5초 주기 비용 축소 (P1)
@@ -51,7 +51,7 @@
   - `youtube_live_review_current_receipt(p_video_id)`가 `to_jsonb(session)` 등으로 전체 스냅샷 JSONB를 만든 뒤(19개 `timestamptz`를 문자열로 직렬화), `youtube_live_review_semantic_facts(snapshot)`에서 다시 19개 문자열을 `::timestamptz`로 파싱해 `extract(epoch FROM ...)`를 구하는 이중 변환을 매 호출 53번 수행한다.
   - `youtube_live_review_receipt_facts`가 53행(7페이지)이라 인덱스를 쓰지 않고 매번 7페이지 Seq Scan × 53회 = `371` 블록을 읽는다.
 - **변경:**
-  - [x] 현재 의미 사실은 SQL `timestamptz` 열에서 직접 epoch를 구성하고, 영수증 집합을 한 번 비교한다. NULL·시간대·소수초·최신 일치 영수증·재검토 조건의 동등성 시험을 통과했다.
+  - [x] 310의 typed 영수증 사실과 현재 SQL scalar 값의 의미 비교를 312 동기 쓰기로 옮기고 live-check는 좁은 상태를 직접 읽는다. NULL·시간대·소수초·최신 일치 영수증·재검토 조건의 동등성 시험을 통과했다.
 - **기대 효과:** 호출당 블록 읽기 **1,387 → ~280 블록(-80%)**, 실행 시간 **8.5 ms → ~1.5 ms**, Projection Guard 잠금 보유 시간 단축.
 
 ### S3. `extend_targets.sql` 및 `replaceReasonsIfChanged` — Heartbeat 시 587회 B-Tree 탐색 및 Reasons 재조회 제거 (P1)
@@ -206,7 +206,7 @@
 - 배포 진입점의 topology·Compose 서비스·AP version·native deploy·systemd 검사 통과. 삭제/추가된 lease SQL에 맞춰 AP 전송 manifest도 갱신했다.
 - 정적 설정은 중앙 master와 mirror가 일치하며 파일 mode/owner는 **0640 0:1002**다. 재기동한 API 환경에서도 Projection **2일**, 폐기한 audit-grace/viewer 설정의 부재를 확인했다.
 
-## 7. 최종 검증 및 운영 수용 결과
+## 7. 1차 검증 및 운영 수용 결과
 
 ### 검증
 
@@ -298,7 +298,7 @@
 - 설계 기준: 관련 writer는 공통 DB guard를 **claim/source 행 잠금보다 먼저** 획득한다. guard는 실제 MVCC 쓰기를 통해 오래된 REPEATABLE READ/SERIALIZABLE snapshot의 충돌을 드러낸다. 수동 영수증 기록의 SERIALIZABLE·CAS·append-only·불명 결과 처리 계약을 유지한다.
 - 원본 session/head/pending/availability 및 영수증 변화는 같은 트랜잭션의 동기 파생 상태로 반영한다. 원본이 없거나 양쪽 상태가 비활성이면 읽기 모델의 행도 정리한다. 원본 대형 ignored 배열은 복사하지 않는다. 직접 DML·삭제·FK 효과 및 기존 maintenance 경로도 writer 목록에 포함하며 기술적 변경과 판정/신선도 변경을 구분한다.
 - 먼저 guard·refresh 시점·다중 영상 잠금 순서의 반례를 검증한다. 원본을 읽기 전에 획득한 잠금과 별도 fresh snapshot 없이 단순 trigger/upsert만 추가하는 설계는 채택하지 않는다. 쓰기 비용·경합도 읽기 성능과 함께 측정한다.
-- 남은 작업: (1) writer/retention/receipt 소유권과 순서 확정, (2) 스키마·원자적 갱신·모든 writer 전환, (3) consumer SQL의 직접 read model 조회 전환, (4) NULL/시간대/정밀도/동시 변경/rollback/삭제/재기록/격리 충돌 검증, (5) 독립 검토·전체 게이트·실제 smoke, (6) 승인된 API writer 정지 창에서 migration·신규 API 시작·운영 목표 수용.
+- 실행 항목(§10~13에서 완료): (1) writer/retention/receipt 소유권과 순서 확정, (2) 스키마·원자적 갱신·모든 writer 전환, (3) consumer SQL의 직접 read model 조회 전환, (4) NULL/시간대/정밀도/동시 변경/rollback/삭제/재기록/격리 충돌 검증, (5) 독립 검토·전체 게이트·실제 smoke, (6) 승인된 API writer 정지 창에서 migration·신규 API 시작·운영 목표 수용.
 - 새 원본/쓰기 규약을 적용한 뒤에는 구 API 이미지만의 롤백을 안전하다고 가정하지 않는다. 배포 전에 원본 보존·전진 복구 절차와 실제 새/구 바이너리 호환 경계를 확인한다. 기존 새 백업 중단과 원격 Git 미발행 경계를 유지한다.
 
 ## 10. 동기 읽기 모델 구현 및 로컬 검증
@@ -324,12 +324,12 @@
 
 ## 11. 운영 312 수용과 S1 target 집계 보완
 
-- `14e102dca17b4e0ed2d7c9bbe0f647da125006aa`의 ARM64 API를 kapu에서 빌드·검증했다. **2026-10-14 08:45:13 UTC** API 정지 창에서 `312`를 **1 적용 / 172 생략 / 총 173**으로 적용했고 **08:45:20.491 UTC** 신규 API가 시작됐다. 세 health/readiness·RestartCount 0·새 ERROR/FATAL/PANIC 0건·PostgreSQL/Valkey/Iris 연결과 기동 후 76건 PROCESSED를 확인했다. worker·collector c의 image/StartedAt은 그대로다.
+- `14e102dca17b4e0ed2d7c9bbe0f647da125006aa`의 ARM64 API를 kapu에서 빌드·검증했다. **2026-10-14 08:45:13 UTC** API 정지 창에서 `312`를 **1 적용 / 172 생략 / 총 173**으로 적용했고 **08:45:20.491 UTC** 신규 API가 시작됐다. 세 health/readiness·RestartCount 0·새 ERROR/FATAL/PANIC 0건·PostgreSQL/Valkey/Iris 연결과 변경 시작 후 76건 PROCESSED를 확인했다. worker·collector c의 image/StartedAt은 그대로다.
 - 312 checksum은 `6d7e79605a7b4604964251480338a5a7c0b05683a7d243875f7c2d15bb5cc6c5`로 일치하며 이제 수정 금지다. 모델 228행·현재 일치 영수증 53건, 실제 runtime 역할의 모델 쓰기/내부 refresh 권한 거부를 확인했다. 두 SQL의 동일 statement/snapshot 양방향 결과 차이는 **0행**이다.
 - 각 모드 첫 회 예열 후 10회 평균: S2 custom/generic **5블록·0.3176/0.3094ms**로 수용했다. S1은 **68블록·3.4366/3.1847ms**로 시간 목표 미달이다. 목표를 완화하지 않는다.
 - S1 단일-use CTE·집계 후 빈 kind 보충·rate bucket·직접 roster·clock 비교 등의 읽기 전용 후보를 검증했다. 일부 표본은 2.9ms였지만 반복 평균은 3ms를 넘었고 변동을 숨기지 않는다. 이 후보들은 적용하지 않으며 원래 timestamp/numeric 집계식을 유지한다.
 - 남은 구조 집계는 승인된 동기 쓰기 경로 확대 안에서 **기존 projection guard**를 재사용해 CURRENT/STAGING target bundle에만 저장한다. 새 전역 잠금·collector 변경·lease/현재 시각 cache는 없다. mapping은 DB view 한 곳으로 이동하고 `kind/subject`별 RPC 수·최소 cadence/created/not_before만 원본 target과 같은 트랜잭션에서 확정한다. RETIRED bundle은 보관하지 않는다.
-- 다음 단계: 313 및 원자적 refresh/retention 잠금 전환 → 기존 S3의 600 CURRENT/48,000 RETIRED·1행 변경 **100블록** 상한과 동시성/권한/의미 시험 → 실제 SQL smoke·독립 검토·영향 게이트 → 승인된 API-only migration/배포 → S1/S2 운영 custom/generic 수용. target 변경은 영향받은 bundle key만 갱신하며 header 기술적 heartbeat는 전체 bundle을 다시 쓰지 않는다.
+- 실행 순서(§12~13에서 완료): 313 및 원자적 refresh/retention 잠금 전환 → 기존 S3의 600 CURRENT/48,000 RETIRED·1행 변경 **100블록** 상한과 동시성/권한/의미 시험 → 실제 SQL smoke·독립 검토·영향 게이트 → 승인된 API-only migration/배포 → S1/S2 운영 custom/generic 수용. target 변경은 영향받은 bundle key만 갱신하며 header 기술적 heartbeat는 전체 bundle을 다시 쓰지 않는다.
 - 복구 자료: `hololive-api:rollback-live-readmodel-20261014t084251z`, `/opt/hololive-bot/compose/sql-live-readmodel-20261014T084251Z/previous/`. 초기 파일 준비에서 일반 사용자 디렉터리 권한과 원래 없던 maintenance 경로를 확인해, 성공한 이미지 tag·기존 manifest 보존을 반복하지 않고 준비만 완료했다. migration/기동은 한 번 성공했으며 새 백업·원격 Git 발행은 없다.
 
 ## 12. Target bundle 동기화 검증
@@ -342,5 +342,26 @@
 - Target 쓰기 비용(4 clients, 각 250건): 기존 guard+target 갱신 **0.822ms / 4,868.15 tx/s**, 동기 bundle **3.267ms / 1,224.37 tx/s**, 양쪽 **실패 0/1,000**. 이후 구·신규 조회 차이도 0행이었다. 이 역시 tmpfs·fsync off 로컬 표본으로 운영 처리량을 보장하지 않는다.
 - 전체 CI의 race 단계는 두 기존 fixture의 새 잠금 계약 불일치를 잡았다. 역사적 권한 fixture에 현재 guard 함수와 열별 최소 권한을 적용했고, guard를 쥔 writer 밖에서 header를 갱신하던 만료 시험은 사전 만료 예약·reader statement 시각 검증·자연 만료로 바꿨다. 20초 timeout과 대기 후 만료 거절 요구는 그대로다. 해당 race 시험은 runtime **26.546s**, dbtest **5.570s**에 통과했고 영향 lint도 통과했다.
 - 원본 checkout은 별도 원격 통합으로 `376afe702f5bcdb59740f1387291457d595614a2`가 됐으며, 작업 base 대비 차이는 deunhealth 의존성 복구 2파일과 changelog뿐이었다. 이 별도 변경을 보존해 최종 로컬 통합하며 원격 Git 발행은 하지 않는다.
+
+## 13. 최종 운영 목표 수용 (2026-10-14)
+
+- 별도 deunhealth 복구를 보존해 통합한 `98b579e5c7a4910c440a79c20295f441f2de74ff`에서 전체 `scripts/ci/local-ci.sh`가 **483.49s**에 통과했다(architecture·lint·NilAway·race/non-race). 최종 313 소스의 `RUN_INTEGRATION_TESTS=true scripts/ci/local-ci.sh --integration-tests-only`도 **70.66s**에 통과했다. 실제 임시 PostgreSQL·Valkey로 dispatchoutbox·summarizer·YouTube dispatch·collector joblease를 실행했다.
+- kapu에서 10.1.0 ARM64 API 이미지를 빌드·검증·전송했다. 운영 image ID는 `sha256:7b71ba69f3fa2dfdbaab115c2c6ae13f1cc7966ebc1b0be5941250512a45f9ae`이며 revision이 위 소스와 일치한다. **09:50:13 UTC** API 정지 창에서 313을 **1 적용 / 173 생략 / 총 174**로 적용했고 새 API는 **09:50:20.189 UTC** 시작됐다. 원격 빌드·worker/collector 재기동은 하지 않았다.
+- 313 배포 파일 SHA-256은 `828e4ac51add62cc220642db5f8619503ee3a4aae1d409f7f7420f2572e7a9df`로 로컬 원본과 일치한다. ledger 적용 시각은 **09:50:17.142 UTC**이며 **313은 이제 수정 금지**다.
+- 실제 API bot/admin health·인증된 LLM readiness, healthy·RestartCount 0, PostgreSQL/Valkey/Iris 연결을 확인했다. 새 컨테이너 로그에 ERROR/FATAL/PANIC·권한·인증서·OOM 오류가 없었다. worker와 collector c는 기존 `c98d54f2c` 이미지와 **07:33:00 / 07:34:17 UTC** 기동 시각을 유지했다.
+- 읽기 전용 guard `on`의 수용 표본에서 신규 API 시작 이후 **349건 PROCESSED**, queue는 **PENDING 1건 / PROCESSING·DEAD_LETTER 0건**이었다. 전환 사전 확인 ID 이후 a/b/c/d 네 collector 모두 새 관측을 보냈다. 5초 초과 DB lock wait는 0건이었다. 이 단기 표본을 장기 처리량 보장으로 해석하지 않는다.
+- runtime 역할로 원본 target의 독립 mapping 집계와 동기 bundle을 같은 statement/snapshot에서 비교해 양방향 차이 **0행**을 확인했다. bundle은 **451행**, RETIRED bundle은 **0행**, 유효 CURRENT는 **1세대**, live model은 **232행**이었다. 실제 구·신규 S1/S2 SQL의 양방향 결과 차이도 각각 **0행**이었다.
+- 운영 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`는 각 SQL·모드에서 첫 회 예열 후 이어지는 **10회 전부**를 집계했다. 읽기 전용 guard와 기존 runtime 역할을 유지했고 블록은 shared hit+read 합이다.
+
+| 최종 운영 SQL | 계획 모드 | shared hit+read 블록 | 평균 ms | 최소 ms | 최대 ms |
+| --- | --- | ---: | ---: | ---: | ---: |
+| S1 observability | custom | 55 | 2.9860 | 2.347 | 4.963 |
+| S1 observability | generic | 55 | 2.4347 | 2.313 | 2.668 |
+| S2 live-check | custom | 5 | 0.3039 | 0.265 | 0.345 |
+| S2 live-check | generic | 5 | 0.3100 | 0.283 | 0.358 |
+
+- **수용 완료:** custom/generic 모두 S1 **450블록·평균 3ms**, S2 **280블록·평균 1.5ms** 이하다. S1 custom 최대값은 3ms를 넘고 평균도 상한에 가까우므로, 모든 요청의 3ms 상한이나 장기 SLA를 달성했다고 주장하지 않는다. 동기 쓰기의 직렬화·쓰기 비용은 §10/§12의 실측대로 남으며, S4 0.2ms·S5 WAN 잠금 50% 감소와 전체 기존 TOAST 재압축은 검증 범위 밖이다.
+- 313 직전 복구점은 `hololive-api:rollback-target-bundles-20261014t094909z`(312 포함 `14e102dca`, image `sha256:6fe6aa39f3a87de372772b58933125abe91a694df360319f2d5365452d185508`)와 `/opt/hololive-bot/compose/sql-target-bundles-20261014T094909Z/previous/`의 manifest다. 둘의 존재를 확인했으며 삭제하지 않는다. 이 API의 313 잠금 호환성과 별개로 이전 migration runner는 새 ledger에 실행하지 않는다. 312 이전 writer로의 image-only rollback과 삭제 데이터 복원은 보장하지 않으며 원본 보존·guard-first 전진 복구 경계를 유지한다.
+- 새 DB 백업·원격 Git push/tag/Release는 하지 않았다. 문서 정리 commit은 배포 소스 revision과 구분한다.
 
 Fallback delta: 새 재시도·대체 경로를 추가하지 않는다.
