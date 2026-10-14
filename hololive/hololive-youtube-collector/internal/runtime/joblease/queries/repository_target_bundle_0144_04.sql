@@ -6,14 +6,14 @@ WITH current_projection AS (
     WHERE generation = $1 AND status = 'CURRENT'
       AND valid_until > statement_timestamp()
 )
-SELECT COUNT(*) FILTER (WHERE observation_kind = ANY($2::text[])) AS target_count,
+SELECT COUNT(observation_kind) FILTER (WHERE observation_kind = ANY($2::text[])) AS target_count,
        COALESCE(MIN(poll_interval_ms) FILTER (WHERE observation_kind = ANY($2::text[])), 0) AS min_interval_ms,
        COALESCE(MAX(poll_interval_ms) FILTER (WHERE observation_kind = ANY($2::text[])), 0) AS max_interval_ms,
-       COUNT(*) FILTER (
+       COUNT(observation_kind) FILTER (
            WHERE observation_kind = ANY($2::text[])
              AND (not_before IS NULL OR not_before <= statement_timestamp())
        ) AS admissible_count,
-       COUNT(*) FILTER (WHERE observation_kind = ANY($3::text[])) AS member_count,
+       COUNT(observation_kind) FILTER (WHERE observation_kind = ANY($3::text[])) AS member_count,
        COALESCE(bool_and(COALESCE(member_since_generation BETWEEN 1 AND $1, FALSE))
            FILTER (WHERE observation_kind = ANY($3::text[])), FALSE) AS members_proven,
        EXISTS (SELECT 1 FROM current_projection) AS current

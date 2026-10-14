@@ -2,6 +2,7 @@ package joblease
 
 import (
 	"embed"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -15,8 +16,8 @@ var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
 var (
 	sqlCandidates               = mustSQL("repository_candidates_0144_02.sql")
 	sqlCandidatesGlobal         = mustSQL("repository_candidates_global_0144_17.sql")
-	sqlLeaseAcquire             = "WITH bundle AS MATERIALIZED (\n" + mustSQL("repository_target_bundle_0144_04.sql") + "\n),\n" + mustSQL("repository_lease_acquire_0144_08.sql")
-	sqlLeaseAcquireExact        = "WITH bundle AS MATERIALIZED (\n" + mustSQL("repository_target_bundle_exact.sql") + "\n),\n" + mustSQL("repository_lease_acquire_0144_08.sql")
+	sqlLeaseAcquire             = fmt.Sprintf(mustSQL("repository_lease_acquire.sql.tpl"), mustSQL("repository_target_bundle_0144_04.sql"))
+	sqlLeaseAcquireExact        = fmt.Sprintf(mustSQL("repository_lease_acquire.sql.tpl"), mustSQL("repository_target_bundle_exact.sql"))
 	sqlLeaseInitialize          = mustSQL("repository_lease_initialize.sql")
 	sqlLeaseComplete            = mustSQL("repository_lease_complete_0144_11.sql")
 	sqlLeaseDefer               = mustSQL("repository_lease_defer_0144_12.sql")

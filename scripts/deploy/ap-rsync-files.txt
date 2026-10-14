@@ -360,7 +360,7 @@ hololive/hololive-youtube-collector/internal/runtime/holodexcollector/mapper.go
 hololive/hololive-youtube-collector/internal/runtime/holodexcollector/runner.go
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_candidates_0144_02.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_candidates_global_0144_17.sql
-hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_acquire_0144_08.sql
+hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_acquire.sql.tpl
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_complete_0144_11.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_defer_0144_12.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_failure_lock_0144_14.sql

@@ -1,6 +1,9 @@
--- 범위별 bundle CTE 뒤에 결합한다. 거절 사유는 bundle을 그대로 반환해 Go에서 순서대로 판정한다.
+-- 범위별 bundle SQL을 고정 자산에서 채운다. 거절 사유는 Go에서 순서대로 판정한다.
 -- guard share 잠금 이후에만 실행하며 기존 행은 SKIP LOCKED로 선점한다.
 -- 잠겨 있거나 아직 due가 아닌 기존 행은 missing이 아니므로 INSERT에 도달하지 않는다.
+WITH bundle AS MATERIALIZED (
+%s
+),
 admission AS MATERIALIZED (
     SELECT member_count::integer AS member_count
     FROM bundle
@@ -74,9 +77,11 @@ admission AS MATERIALIZED (
     RETURNING job_key, provider, job_class, collection_job_kind, subject_key,
               owner_instance, fence_epoch, projection_generation, scheduled_for
 ), acquired AS (
-    SELECT updated.*, FALSE AS created FROM updated
+    SELECT job_key, provider, job_class, collection_job_kind, subject_key,
+           owner_instance, fence_epoch, projection_generation, scheduled_for, FALSE AS created FROM updated
     UNION ALL
-    SELECT inserted.*, TRUE AS created FROM inserted
+    SELECT job_key, provider, job_class, collection_job_kind, subject_key,
+           owner_instance, fence_epoch, projection_generation, scheduled_for, TRUE AS created FROM inserted
 )
 SELECT bundle.target_count, bundle.min_interval_ms, bundle.max_interval_ms,
        bundle.admissible_count, bundle.member_count, bundle.members_proven, bundle.current,

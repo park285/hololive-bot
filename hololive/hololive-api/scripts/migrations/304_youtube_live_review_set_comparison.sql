@@ -75,7 +75,7 @@ WITH receipts AS MATERIALIZED (
     -- SubLink를 함수 인수에서 분리해 typed 사실 조회도 호출 문장 안에서 인라인되게 합니다.
     SELECT ARRAY(SELECT DISTINCT receipt.video_id FROM receipts receipt) AS video_ids
 ), current_facts AS MATERIALIZED (
-    SELECT current.*
+    SELECT current.video_id, current.facts, current.reviewable
     FROM current_input input
     CROSS JOIN LATERAL public.youtube_live_review_current_facts(input.video_ids) current
 )
