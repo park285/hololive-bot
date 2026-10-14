@@ -87,6 +87,10 @@ func (r *Repository) finalizeTx(
 	claim Claim,
 	reconcile ReconcileWrite,
 ) (ReconcileResult, error) {
+	if err := lockLiveRuntimeState(ctx, tx); err != nil {
+		return ReconcileResult{}, err
+	}
+
 	observation, err := lockClaim(ctx, tx, claim)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("lock claim: %w", err)

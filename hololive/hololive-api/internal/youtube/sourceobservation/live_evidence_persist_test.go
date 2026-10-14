@@ -398,8 +398,7 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 
 	defer rollbackPublishTestTx(ctx, t, consumerTx, "live consumer")
 
-	_, err = consumerTx.Exec(ctx, mustSQL("repository_live_sessions_0045_45.sql"), []string{testChannelID}, []string{testVideoID})
-	require.NoError(t, err)
+	require.NoError(t, lockLiveRuntimeState(ctx, consumerTx))
 
 	finalizerTx, err := pool.Begin(ctx)
 	require.NoError(t, err)
@@ -434,20 +433,27 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 
 		select {
 		case finalizeErr := <-done:
-			t.Fatalf("finalizer did not wait for session: %v", finalizeErr)
+			t.Fatalf("finalizer did not wait for runtime guard: %v", finalizeErr)
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		case <-ticker.C:
 		}
 	}
 
-	// finalizer가 session을 기다리는 동안 consumer가 head를 갱신할 수 있어야 한다.
-	_, err = consumerTx.Exec(ctx, `UPDATE youtube_live_reconciliation_heads SET next_end_check_at=NOW()+INTERVAL '1 hour' WHERE video_id=$1`, testVideoID)
+	// guard 대기 중에는 finalizer가 session이나 후보 head를 선잠그지 않아야 한다.
+	_, err = consumerTx.Exec(ctx, `SELECT video_id FROM youtube_live_sessions WHERE video_id=$1 FOR UPDATE NOWAIT`, testVideoID)
+	require.NoError(t, err)
+
+	_, err = consumerTx.Exec(ctx, `SELECT video_id FROM youtube_live_reconciliation_heads WHERE video_id=$1 FOR UPDATE NOWAIT`, testVideoID)
+	require.NoError(t, err)
+
+	// guard 대기 중 due가 된 항목은 트랜잭션 시작 시각 기준으로 다음 호출까지 남긴다.
+	_, err = consumerTx.Exec(ctx, `UPDATE youtube_live_reconciliation_heads SET next_end_check_at=clock_timestamp() WHERE video_id=$1`, testVideoID)
 	require.NoError(t, err)
 
 	require.NoError(t, consumerTx.Commit(ctx))
 	require.NoError(t, <-done)
-	require.False(t, processed, "finalizer used the stale due selection after acquiring locks")
+	require.False(t, processed, "finalizer included a candidate that became due during the guard wait")
 	require.NoError(t, finalizerTx.Commit(ctx))
 }
 

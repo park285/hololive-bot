@@ -2,6 +2,7 @@
 set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 maintenance_dir=$(cd "$script_dir/../maintenance" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
 work=$(mktemp -d)
 name="iris-terminal-head-test-$$"
 cid=
@@ -23,22 +24,31 @@ for ((i=0;i<60;i++)); do
 done
 [[ "$ready" == true ]]
 psql_test() { docker exec -i "$cid" psql -U postgres -d hololive -X -qAt -v ON_ERROR_STOP=1 "$@"; }
+# 운영과 같은 runner로 guard·transition trigger·FK를 적용한다. loopback trust DB의 비밀번호는 사용되지 않는다.
+(cd "$repo_root" && CGO_ENABLED=0 go build -trimpath -o "$work/db-migrate" ./hololive/hololive-api/cmd/db-migrate)
+docker cp "$work/db-migrate" "$cid:/tmp/db-migrate"
+docker exec -e PGHOST=127.0.0.1 -e PGPORT=5432 -e PGDATABASE=hololive -e PGUSER=postgres \
+  -e PGPASSWORD=unused-local-trust -e PGSSLMODE=disable "$cid" /tmp/db-migrate >"$work/migration.log" 2>&1 || {
+  cat "$work/migration.log" >&2
+  exit 1
+}
 psql_test <<'SQL'
-CREATE TABLE youtube_live_sessions(video_id text PRIMARY KEY, status text, ended_at timestamptz, payload text);
-CREATE TABLE youtube_live_reconciliation_heads(
- video_id text PRIMARY KEY, status text, ended_at timestamptz, updated_at timestamptz,
- last_live_positive_at timestamptz, last_upcoming_positive_at timestamptz,
- end_reason text, end_candidate_kind text, end_candidate_observation_id bigint,
- next_end_check_at timestamptz, sentinel jsonb);
-CREATE TABLE alarm_dispatch_deliveries(id integer PRIMARY KEY, status text);
-INSERT INTO alarm_dispatch_deliveries VALUES(1,'quarantined');
-INSERT INTO youtube_live_sessions VALUES
- ('a','ENDED','2026-08-16','preserve a'),('b','ENDED','2026-08-16','preserve b'),
- ('live','LIVE',NULL,'preserve live'),('upcoming','UPCOMING',NULL,'preserve upcoming'),
- ('conflict','ENDED','2026-08-16','preserve conflict'),('recent','ENDED','2026-08-16','preserve recent'),
- ('candidate','ENDED','2026-08-16','preserve candidate');
-INSERT INTO youtube_live_reconciliation_heads(video_id,status,updated_at,last_live_positive_at,sentinel)
-SELECT video_id,'LIVE','2026-08-16','2026-08-15','{"evidence":"preserve"}' FROM youtube_live_sessions WHERE video_id<>'upcoming';
+INSERT INTO alarm_dispatch_events(event_key,payload_hash,alarm_type,payload)
+VALUES('repair-protected-event',repeat('a',64),'LIVE','{}');
+INSERT INTO alarm_dispatch_send_units(unit_key,dispatch_group_key,room_id,client_request_id)
+VALUES(repeat('b',64),'repair-protected-group','repair-room','repair-protected-request');
+INSERT INTO alarm_dispatch_deliveries(id,event_id,room_id,dedupe_key,dispatch_group_key,send_unit_id,status,quarantined_at)
+SELECT 1,e.id,'repair-room','repair-protected-delivery','repair-protected-group',u.id,'quarantined',now()
+FROM alarm_dispatch_events e CROSS JOIN alarm_dispatch_send_units u;
+INSERT INTO youtube_live_sessions(video_id,channel_id,status,ended_at,title) VALUES
+ ('a','repair-channel','ENDED','2026-08-16','preserve a'),('b','repair-channel','ENDED','2026-08-16','preserve b'),
+ ('live','repair-channel','LIVE',NULL,'preserve live'),('upcoming','repair-channel','UPCOMING',NULL,'preserve upcoming'),
+ ('conflict','repair-channel','ENDED','2026-08-16','preserve conflict'),('recent','repair-channel','ENDED','2026-08-16','preserve recent'),
+ ('candidate','repair-channel','ENDED','2026-08-16','preserve candidate');
+INSERT INTO youtube_live_reconciliation_heads(video_id,status,updated_at,last_live_positive_at,last_live_positive_seen_at)
+SELECT video_id,'LIVE','2026-08-16','2026-08-15','2026-08-15 00:01:00+00' FROM youtube_live_sessions WHERE video_id<>'upcoming';
+INSERT INTO youtube_live_pending_ends(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,ended_at,negative_eligible,scope_covers)
+VALUES('candidate','repair-channel','EXPLICIT_END',1,'2026-08-16','2026-08-16','2026-08-16','2026-08-16',true,true);
 UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-18' WHERE video_id='conflict';
 UPDATE youtube_live_reconciliation_heads SET updated_at='2026-09-01' WHERE video_id='recent';
 UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='EXPLICIT_END',end_candidate_observation_id=1,next_end_check_at='2026-08-16' WHERE video_id='candidate';
@@ -52,11 +62,21 @@ print(d['count'],d['digest'])
 PY
 )
 baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")
+runtime_baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(s) ORDER BY video_id)::text) FROM youtube_live_runtime_state s")
+# 검토된 함수라도 등록 이름이 다른 trigger까지 포괄 허용해서는 안 된다.
+psql_test -c 'CREATE TRIGGER unreviewed_runtime_guard BEFORE UPDATE ON youtube_live_reconciliation_heads FOR EACH STATEMENT EXECUTE FUNCTION public.guard_youtube_live_runtime_state()'
+if psql_test -v expected_count="$count" -v expected_digest="$digest" \
+  <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
+  echo 'unreviewed trigger was accepted' >&2; exit 1
+fi
+psql_test -c 'DROP TRIGGER unreviewed_runtime_guard ON youtube_live_reconciliation_heads'
+test "$baseline" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")"
 if psql_test -v expected_count=2 -v expected_digest=00000000000000000000000000000000 \
   <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'stale digest was accepted' >&2; exit 1
 fi
 test "$baseline" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")"
+test "$runtime_baseline" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(s) ORDER BY video_id)::text) FROM youtube_live_runtime_state s")"
 if psql_test -v expected_count=1 -v expected_digest="$digest" \
   <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'wrong count was accepted' >&2; exit 1
@@ -71,8 +91,11 @@ test "$(psql_test -c "SELECT count(*) FROM youtube_live_reconciliation_heads WHE
 psql_test -c "UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-15' WHERE video_id='a'"
 protected=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(p) ORDER BY video_id)::text) FROM youtube_live_sessions p")
 others=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h WHERE video_id NOT IN('a','b')")
+runtime_others=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(s) ORDER BY video_id)::text) FROM youtube_live_runtime_state s WHERE video_id NOT IN('a','b')")
 psql_test -v expected_count="$count" -v expected_digest="$digest" <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/applied"
-test "$(psql_test -c "SELECT count(*) FROM youtube_live_reconciliation_heads WHERE status='ENDED' AND ended_at='2026-08-16' AND end_reason IS NULL AND sentinel->>'evidence'='preserve'")" = 2
+test "$(psql_test -c "SELECT count(*) FROM youtube_live_reconciliation_heads WHERE status='ENDED' AND ended_at='2026-08-16' AND end_reason IS NULL AND last_live_positive_seen_at='2026-08-15 00:01:00+00'")" = 2
+test "$(psql_test -c "SELECT count(*) FROM youtube_live_runtime_state WHERE video_id IN('a','b')")" = 0
+test "$runtime_others" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(s) ORDER BY video_id)::text) FROM youtube_live_runtime_state s WHERE video_id NOT IN('a','b')")"
 test "$protected" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(p) ORDER BY video_id)::text) FROM youtube_live_sessions p")"
 test "$others" = "$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h WHERE video_id NOT IN('a','b')")"
 test "$(psql_test -c "SELECT status FROM alarm_dispatch_deliveries WHERE id=1")" = quarantined
@@ -80,4 +103,4 @@ if psql_test -v expected_count="$count" -v expected_digest="$digest" \
   <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'already applied snapshot was accepted' >&2; exit 1
 fi
-echo 'PASS: exact repair, stale/count/new-positive refusal, canonical/non-target/dispatch preservation'
+echo 'PASS: exact repair and synchronous state, stale/count/new-positive/unreviewed-trigger refusal, canonical/non-target/dispatch preservation'

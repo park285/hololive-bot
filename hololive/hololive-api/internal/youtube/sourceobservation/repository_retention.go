@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 const MaxRetentionBatchSize = 1000
@@ -320,9 +321,21 @@ func (r *Repository) deleteEvidenceBatch(ctx context.Context, cfg RetentionConfi
 		return 0, nil
 	}
 
-	out, err := r.execDelete(ctx, "repository_retention_delete_evidence_0079_79.sql", kinds, cutoffs, cfg.BatchSize)
+	// 원본 삭제의 FK SET NULL도 availability를 갱신하므로 후보 행을 잠그기 전에 guard를 잡는다.
+	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (int64, error) {
+		if err := lockLiveRuntimeState(ctx, tx); err != nil {
+			return 0, err
+		}
+
+		tag, err := tx.Exec(ctx, mustSQL("repository_retention_delete_evidence_0079_79.sql"), kinds, cutoffs, cfg.BatchSize)
+		if err != nil {
+			return 0, fmt.Errorf("delete source observation evidence: %w", err)
+		}
+
+		return tag.RowsAffected(), nil
+	})
 	if err != nil {
-		return out, fmt.Errorf("exec delete: %w", err)
+		return out, fmt.Errorf("delete evidence transaction: %w", err)
 	}
 
 	return out, nil

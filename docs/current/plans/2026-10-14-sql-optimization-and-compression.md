@@ -1,6 +1,6 @@
 # Hololive SQL 최적화 및 압축 플랜 (2026-10-14)
 
-**상태: 운영 성능 목표 보완 진행 중.** 1차 구현·공간 회수·운영 배포는 완료했지만 S1/S2의 운영 성능 목표는 미완료다. 현재 운영 릴리스는 `10.0.0`, source revision은 `97206d67787f9f8643c7937784eef6bb900bab85`다. 1차 수용 결과와 후속 작업을 구분해 기록한다.
+**상태: 추가 구현·운영 배포 완료, 시간 목표 미달.** 공간 회수와 S1/S2 운영 블록 목표는 달성했다. 이 작업의 직접 검증·배포 revision은 `8dd380cfc28962d364e26ddd9715d016c8d5110d`다. 이후 별도 작업의 `c98d54f2c80bc96905101096fb590703b331a9ea`가 이를 상속해 운영 API·worker를 교체했으며, 아래에 두 검증 범위를 구분한다.
 
 ## 목표와 범위
 
@@ -274,5 +274,52 @@
 - 310 이후 후보 SQL의 운영 실행계획은 여전히 약 7.1/3.0ms였다. API 활성화 전에 읽기 전용 후보 비교를 계속했고, S1은 active 원본 FULL JOIN과 누락 상대편 batch, S2는 좁은 typed frame과 `bool_or` 집계로 정리했다. 두 소비자는 영수증 세대를 한 번 조인하며 S1은 최신 **일치** 시각을 선택한다.
 - 선택한 후속 후보는 운영에서 약 **S1 6.2ms / 372블록, S2 2.3ms / 259블록**이었다. 같은 statement/snapshot에서 기존·신규 결과의 양방향 차이는 각각 **0행**이다. 전체 runtime 시험 **34.540s** 및 두 독립 검토를 통과했다. full-aux scan·숫자 quotient bucket·window·과도한 inlining 실험은 이득이 없거나 더 느려 채택하지 않았다.
 - 노드 계측을 끈 비교와 EXPLAIN 없는 40회 prepared SELECT도 별도 수행했다. 후자의 한 표본은 S1 약 4.2~4.9ms, S2 약 1.6~1.8ms였지만 **이를 기존 EXPLAIN 수용 기준과 바꿔 목표 달성으로 표시하지 않는다.** 블록 목표와 시간 목표를 분리해 후자의 미완료를 유지한다.
+- 최종 API 후보 `8dd380cfc28962d364e26ddd9715d016c8d5110d`도 전체 local CI·NilAway·race/non-race와 ARM64 빌드를 통과했다. **2026-10-14 06:26:52 UTC**에 API만 새 이미지로 기동했고, bot/admin health·인증된 LLM readiness·RestartCount 0을 확인했다. 새 로그의 ERROR/FATAL/PANIC은 0건이며 PostgreSQL·Valkey·Iris 연결과 기동 후 관측 **156건 PROCESSED**를 확인했다. worker·collector c의 이미지와 기동 시각은 그대로다.
+- 적용 명령에서 migration one-shot이 shell script의 상속 stdin을 소비하여 뒤의 API `up`이 실행되지 않은 것을 revision 검증이 잡았다. migration은 이미 성공했으므로 반복하지 않고, stdin을 닫은 별도 `up -d --no-build --no-deps --wait`를 실행해 위 새 revision을 확인했다. 마지막 이미지의 migration 재검증 결과는 **0 적용 / 171 생략**이다.
+- 최종 운영 수용은 각 모드에서 첫 회를 별도 예열로 구분하고 이어지는 **10회 전부**를 집계했다. 읽기 전용 guard와 기존 runtime 역할을 유지했다. startup/동시 부하의 변동을 숨기지 않는다.
+
+| 배포 후 SQL | 계획 모드 | shared hit+read 블록 | 평균 ms | 최소 ms | 최대 ms |
+| --- | --- | ---: | ---: | ---: | ---: |
+| S1 observability | custom | 387 | 8.3713 | 6.556 | 14.210 |
+| S1 observability | generic | 387 | 6.5813 | 6.034 | 7.345 |
+| S2 live-check | custom | 260 | 3.5409 | 2.456 | 5.435 |
+| S2 live-check | generic | 260 | 2.7891 | 2.264 | 3.427 |
+
+- **수용 상태: 블록 목표 달성, 시간 목표 미달.** 최초 추가 작업 전 동일 SQL의 별도 5회 예열 후 표본은 S1 custom/generic **12.6708/12.354ms·1,112블록**, S2 **5.2302/5.5356ms·786블록**이었다. 데이터·동시 부하가 고정된 장기 벤치마크가 아니므로 감소율을 SLA로 취급하지 않는다.
+- 복구점: `hololive-api:rollback-sql-performance-20261014t043829z`, `/opt/hololive-bot/compose/sql-performance-closure-20261014T043829Z/previous/`. 310의 원본 보존으로 이전 API 이미지는 계속 작동하지만, 이전 이미지의 migration runner를 새 ledger에 실행하지 않는다. 새 DB 백업·원격 Git push/tag/Release는 없었다. 로컬 임시 PostgreSQL·baseline overlay·시험 인증 상태는 제거했다.
+- 후속 동기 read model의 `8dd380cfc` 기준 정적 잠금 조사에서는 모든 쓰기를 덮는 공통 video/channel 잠금이 없음을 확인했다. live subject, `schedule:<group>`, 기존 행 잠금만 쓰는 video-check/finalizer, missing-row upsert가 서로 다르며 수동 영수증 기록은 **SERIALIZABLE**을 요구한다. 현재 트랜잭션 helper는 DB 격리 기본값을 상속한다.
+- **[INFERENCE]** 원본 변경 후 파생 상태를 미리 계산하고 나중에 잠그면 서로 다른 원본 표를 갱신하는 트랜잭션이 오래된 혼합 상태를 덮어쓸 수 있다. 새 동기 파생 상태에는 잠금 뒤의 신선한 snapshot, 여러 영상의 일관된 잠금 순서, SERIALIZABLE 기록·삭제 경로의 충돌 규약이 필요하다. 단순 SQL 조정이나 immutable 영수증 열 추가와 다른 쓰기 경로 계약 확대이므로, 사용자 결정 없이 구현하지 않는다. 현재 시간 목표를 낮추거나 충족한 것으로 처리하지 않는다.
+- 수용 문서 통합 전 별도 `refactor/metrics-log-code-20261014-r3` fast-forward로 checkout HEAD가 `c98d54f2c80bc96905101096fb590703b331a9ea`로 바뀌었다. 이 작업의 두 SQL과 310은 변경되지 않았고, 별도 변경에는 311과 `10.1.0` 릴리스가 포함됐다. 읽기 전용 확인에서 API **07:33:25 UTC**, worker **07:33:00 UTC** 기동의 `c98d54f2c`가 healthy였다. 이를 이 작업의 배포나 전체 검증 결과로 주장하지 않으며 다시 이전 이미지로 덮어쓰지 않았다. 단일 checkout writer 경계를 지키기 위해 추가 Git ref 변경을 중단하고, 이 수용 기록은 작업 트리에 보존한다. 새 revision과 섞일 수 있는 추가 writer 목록 조사는 중단했다.
+
+## 9. 승인된 쓰기 경로 확대
+
+- 사용자가 **쓰기 경로까지 확대**를 선택했다. 동기 read model의 설계·구현·동시성 검증·운영 적용을 포함하며, S1 450블록/3ms와 S2 280블록/1.5ms 목표를 유지한다. 지연 허용 캐시·재시도·fallback으로 정확도를 낮추지 않는다.
+- 작업 위치는 `../hololive-bot-live-readmodel`, branch `perf/sql-live-readmodel-20261014`, base `db35db809801830c4ac4ed1a03a60fa85203054c`다. `db35db8`은 `c98d54f2c` 이후 운영 기록만 추가한 commit이다. 원래 checkout의 별도 작업과 메모를 건드리지 않는다. 310·311은 수정하지 않고 새 migration부터 적용한다.
+- 설계 기준: 관련 writer는 공통 DB guard를 **claim/source 행 잠금보다 먼저** 획득한다. guard는 실제 MVCC 쓰기를 통해 오래된 REPEATABLE READ/SERIALIZABLE snapshot의 충돌을 드러낸다. 수동 영수증 기록의 SERIALIZABLE·CAS·append-only·불명 결과 처리 계약을 유지한다.
+- 원본 session/head/pending/availability 및 영수증 변화는 같은 트랜잭션의 동기 파생 상태로 반영한다. 원본이 없거나 양쪽 상태가 비활성이면 읽기 모델의 행도 정리한다. 원본 대형 ignored 배열은 복사하지 않는다. 직접 DML·삭제·FK 효과 및 기존 maintenance 경로도 writer 목록에 포함하며 기술적 변경과 판정/신선도 변경을 구분한다.
+- 먼저 guard·refresh 시점·다중 영상 잠금 순서의 반례를 검증한다. 원본을 읽기 전에 획득한 잠금과 별도 fresh snapshot 없이 단순 trigger/upsert만 추가하는 설계는 채택하지 않는다. 쓰기 비용·경합도 읽기 성능과 함께 측정한다.
+- 남은 작업: (1) writer/retention/receipt 소유권과 순서 확정, (2) 스키마·원자적 갱신·모든 writer 전환, (3) consumer SQL의 직접 read model 조회 전환, (4) NULL/시간대/정밀도/동시 변경/rollback/삭제/재기록/격리 충돌 검증, (5) 독립 검토·전체 게이트·실제 smoke, (6) 승인된 API writer 정지 창에서 migration·신규 API 시작·운영 목표 수용.
+- 새 원본/쓰기 규약을 적용한 뒤에는 구 API 이미지만의 롤백을 안전하다고 가정하지 않는다. 배포 전에 원본 보존·전진 복구 절차와 실제 새/구 바이너리 호환 경계를 확인한다. 기존 새 백업 중단과 원격 Git 미발행 경계를 유지한다.
+
+## 10. 동기 읽기 모델 구현 및 로컬 검증
+
+- 구현 2명(스키마·writer), 독립 검토 2명(동시성/의미·권한/배포)으로 분리했다. 소비 SQL·실행 검증·운영 적용은 통합 소유자가 담당한다.
+- 312는 `youtube_live_runtime_state`와 singleton `xid8` guard를 추가한다. session/head의 활성 합집합만 유지하며 ENDED 상대 행·고아 head를 보존한다. 큰 ignored 배열은 저장하지 않는다. 현재 검토 가능하고 310 typed 사실이 일치하는 영수증 중 최대 `recorded_at`을 저장하며 시간 경과 조건은 저장하지 않는다.
+- 모든 관측 확정의 `finalizeTx`는 claim보다 먼저 guard를 획득한다. 별도 종료 finalizer는 후보 잠금 전, 증거 retention은 원본/FK 잠금 전, 수동 검토와 head 복구는 source snapshot/잠금 전에 획득한다. 기존 NOW transaction cutoff·SERIALIZABLE/CAS·append-only·실패 결과 의미를 유지한다.
+- 직접 DML의 BEFORE STATEMENT guard와 VOLATILE AFTER STATEMENT refresh는 fresh snapshot으로 갱신한다. 원본 변경·동기 모델·삭제·TRUNCATE·FK 효과는 같은 트랜잭션이며 실제 값이 같으면 모델 행을 다시 쓰지 않는다. runtime은 모델 SELECT와 guard EXECUTE만 허용하고 내부 SECURITY DEFINER 함수의 넓은 기본 권한은 회수한다.
+- 실제 로컬 `db-migrate`는 PostgreSQL 18.6과 운영 init-db 역할/기본 ACL을 사용해 **173 적용 / 0 생략**으로 성공했다. schema golden을 생성했다. 전체 dbtest **59.682s**, sourceobservation **50.261s**, runtime **67.761s**, targetprojection **11.226s**를 통과했다. 실제 migration을 적용한 head 복구 CLI도 동기 상태·비대상 보존과 stale/count/new-positive/미검토 trigger 거절을 통과했다.
+- 실제 SQL 파일을 runtime 역할로 실행한 동일 statement/snapshot의 구·신규 양방향 차이는 두 SQL 모두 **0행**이었다. 합성 fixture는 10,000 종료 이력·215 활성·53 영수증(현재 일치 52건)이며 운영 데이터 복제는 없다. 각 모드 첫 회 예열 후 10회 전부를 집계했다.
+
+| 로컬 SQL | 모드 | shared hit+read | 평균 ms | 최소 ms | 최대 ms |
+| --- | --- | ---: | ---: | ---: | ---: |
+| S1 observability | custom | 11 | 0.8366 | 0.809 | 0.865 |
+| S1 observability | generic | 11 | 0.8384 | 0.773 | 1.007 |
+| S2 live-check | custom | 8 | 0.2352 | 0.214 | 0.328 |
+| S2 live-check | generic | 8 | 0.2454 | 0.228 | 0.301 |
+
+- **쓰기 비용:** 같은 합성 DB의 4 clients·prepared·각 250건(session+head 갱신)에서 기존 경로는 평균 **0.349ms / 11,475.13 tx/s**, 동기 경로는 **15.979ms / 250.32 tx/s**, 양쪽 실패 **0/1,000**이었다. 전역 직렬화와 갱신 비용을 감추지 않는다. tmpfs·fsync off의 로컬 표본으로 운영 처리량/SLA를 보장하지 않는다. 이후 모델 읽기는 **11블록 / 0.773ms**, 원본 결과 차이는 여전히 **0행**이었다.
+- CI가 지적한 Go 내 SQL literal은 소유 query 파일로 옮겼고, 새 경쟁 시험의 유지보수성/whitespace는 동작을 유지한 helper 분리로 수정했다. 영수증 loop 같은 폐기 구현 세부 assertion은 삭제하고 의미·블록 상한 시험은 유지했다.
+- 최종 `scripts/ci/local-ci.sh`는 **589.21s**에 통과했다(전체 lint·NilAway·race/non-race 포함). 별도 integration-only 게이트도 **82.91s**에 통과했다. 실제 publish/consume benchmark의 fleet 36건 추정은 **415.15ms / 3,600ms 예산**이었다. stack DB access policy도 통과했다. 운영 읽기 전용 사전 표본은 최근 5분 **702건 PROCESSED**, 그 시점 queue 상태는 PROCESSED뿐이었다. 로컬 포화 쓰기 시험을 운영 처리량 보장으로 바꾸어 해석하지 않는다.
+- 운영 전환은 새 이미지 검증 후 **API 정지 → migration 312 → 신규 API만 시작**한다. migration은 source_observations에도 쓰기 배제를 잡아 collector INSERT가 잠깐 대기할 수 있다. `lock_timeout=3s`는 획득 대기 상한이지 전체 backfill 시간 상한이 아니다. 구 API와 새 영수증 writer는 잠금 순서가 달라 image-only rollback을 허용하지 않고 원본 보존·guard-first 수정 이미지로 전진 복구한다. 새 백업·원격 Git 발행은 하지 않는다.
 
 Fallback delta: 새 재시도·대체 경로를 추가하지 않는다.

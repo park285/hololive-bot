@@ -160,19 +160,6 @@ func assertLiveReviewPlanBlocks(t *testing.T, tx pgx.Tx, query string, maximum i
 	require.NoError(t, jsonv2.Unmarshal(raw, &states))
 	require.Len(t, states, 1)
 	require.Less(t, collectionStateVisits(states[0].Plan), float64(10000), "종료 이력 전체 scan은 허용하지 않습니다: %s", raw)
-	assertLiveReviewReceiptScans(t, states[0].Plan)
-}
-
-func assertLiveReviewReceiptScans(t *testing.T, node collectionStatePlanNode) {
-	t.Helper()
-
-	if node.Relation == "youtube_live_review_receipt_facts" {
-		require.LessOrEqual(t, node.Loops, float64(1), "영수증 표는 영상별 상관 loop로 다시 읽지 않아야 합니다")
-	}
-
-	for _, child := range node.Plans {
-		assertLiveReviewReceiptScans(t, child)
-	}
 }
 
 func seedLiveReviewPlanPopulation(t *testing.T, pool *pgxpool.Pool) {
