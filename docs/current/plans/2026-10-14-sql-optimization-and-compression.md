@@ -270,5 +270,9 @@
 - 전체 runtime 시험에서 기존 30,000 활성 세션 사례의 1초 제한과 영수증 0건의 pending 무조회가 실패했다. 별도 실행계획은 두 UNION ALL 원본의 통계 손실로 30,000행을 4,503,000행으로 추정하고, 총 2,320ms 중 JIT에 1,981ms를 쓰는 원인을 보였다. unique 원본을 먼저 조인하고 완성된 프레임을 UNION하도록 바꾸고 빈 영수증 guard를 추가했다. 이후 실제 SQL은 **234.906ms, JIT 없음**이었고 전체 runtime 시험을 **52.818s**에 통과했다. JIT 설정·시험 제한은 바꾸지 않았다.
 - 독립 의미 검토·운영 migration 검토 모두 남은 구체적 결함이 없음을 확인했다. 두 검토자는 시험을 실행하지 않았고, 검증 실행은 통합 소유자가 담당했다. 전체 dbtest도 **52.818s**에 통과했다. CI가 지적한 wildcard SQL·새 시험의 유지보수성·shadow/whitespace는 억제 없이 수정했다.
 - 배포 후보는 API와 310만 변경한다. worker·collector a/b/c/d는 현재 revision을 유지한다. 310은 원본·facts를 변경/삭제하지 않아 기존 API SQL도 작동하며, 이전 API 이미지와 배포 파일을 보존한다. 운영 성능 수용 전에는 목표 달성으로 표시하지 않는다.
+- `40127146d17ef0d6a5c24bc1f5b8a4c94c37dcfb`의 전체 local CI·NilAway·race/non-race와 API ARM64 빌드를 통과했다. 통합 전용 게이트도 통과했다. 승인된 운영 `db-migrate`는 **1 적용 / 170 생략 / 총 171**로 310을 적용했고 checksum `439a086a0b98a1c3f35cf84cf6afae24aacedbeb7676b1f8260b4bae1c0830de`가 일치한다. 원본 사실 53건 모두 typed 값의 JSON 왕복과 일치했다. **310은 이 시점부터 수정 금지**다.
+- 310 이후 후보 SQL의 운영 실행계획은 여전히 약 7.1/3.0ms였다. API 활성화 전에 읽기 전용 후보 비교를 계속했고, S1은 active 원본 FULL JOIN과 누락 상대편 batch, S2는 좁은 typed frame과 `bool_or` 집계로 정리했다. 두 소비자는 영수증 세대를 한 번 조인하며 S1은 최신 **일치** 시각을 선택한다.
+- 선택한 후속 후보는 운영에서 약 **S1 6.2ms / 372블록, S2 2.3ms / 259블록**이었다. 같은 statement/snapshot에서 기존·신규 결과의 양방향 차이는 각각 **0행**이다. 전체 runtime 시험 **34.540s** 및 두 독립 검토를 통과했다. full-aux scan·숫자 quotient bucket·window·과도한 inlining 실험은 이득이 없거나 더 느려 채택하지 않았다.
+- 노드 계측을 끈 비교와 EXPLAIN 없는 40회 prepared SELECT도 별도 수행했다. 후자의 한 표본은 S1 약 4.2~4.9ms, S2 약 1.6~1.8ms였지만 **이를 기존 EXPLAIN 수용 기준과 바꿔 목표 달성으로 표시하지 않는다.** 블록 목표와 시간 목표를 분리해 후자의 미완료를 유지한다.
 
 Fallback delta: 새 재시도·대체 경로를 추가하지 않는다.
