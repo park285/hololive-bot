@@ -207,11 +207,6 @@ TABLE alarm_upcoming_candidates
   INDEX CREATE INDEX idx_alarm_upcoming_candidates_pending ON public.alarm_upcoming_candidates USING btree (checked_at, dedupe_key) WHERE (outcome = 'pending'::text)
   INDEX CREATE INDEX idx_alarm_upcoming_candidates_terminal ON public.alarm_upcoming_candidates USING btree (terminal_at) WHERE (terminal_at IS NOT NULL)
 
-TABLE alarm_upcoming_checkpoints
-  COLUMN channel_id character varying(64) NOT NULL
-  COLUMN evaluated_at timestamp with time zone NOT NULL
-  CONSTRAINT alarm_upcoming_checkpoints_pkey PRIMARY KEY (channel_id)
-
 TABLE alarms
   COLUMN id integer NOT NULL DEFAULT nextval('alarms_id_seq'::regclass)
   COLUMN room_id character varying(100) NOT NULL

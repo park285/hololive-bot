@@ -79,3 +79,8 @@ Fallback delta: none.
 - 이어지는 이미지 bake는 main과 같은 기존 결함으로 실패했다(`deploy/images/deunhealth` `cmd/app/main.go:155: unknown field BuildDate`).
 - `--skip-local-ci hololive-api alarm-worker youtube-collector`로 변경 서비스 이미지(api, worker, collector, po-sandbox) 빌드는 성공했다.
 - 운영 효과는 배포 뒤 확인한다. 확인할 지표: `hololive_alarm_youtube_upcoming_decisions_total{selection}` 비율, 생일 방송 publish duplicate 수, `hololive_db_pool_*`, 슬롯 대기·보유 히스토그램.
+
+## 릴리스·배포 (v10.1.0, 2026-10-14 사용자 승인: push·PR, 로컬 main 통합, 운영 배포, checkpoint 테이블 DROP)
+
+- migration 311이 `alarm_upcoming_checkpoints`를 지운다. 이전 worker가 이 표에 쓰므로 중앙 cutover 순서는 새 image 적재 → alarm-worker 재생성 → migration 311 → hololive-api·collector `c` 재생성이다. 그다음 Seoul `b`, Osaka `a`, Osaka2 `d` 순서로 교체한다.
+- 311 적용 뒤 10.0.0 이하 worker image로 rollback하면 upcoming 후보 저장이 실패한다. rollback이 필요하면 표를 다시 만드는 migration을 먼저 적용한다.
