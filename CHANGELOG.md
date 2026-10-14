@@ -8,6 +8,13 @@
 
 ## 미출시
 
+## v9.3.2 - 2026-10-14
+
+- **발송 backlog 관측 주기 분리(alarm-worker):** 발송 backlog·격리 집계 조회를 retention runner에서 떼어 별도 runner가 60초마다(조회 시한 10초) 실행합니다. 이전에는 retention 주기(운영 기본 1시간)에만 갱신되어 `HololiveOutboxStale` 같은 경보가 최대 1시간 묵은 값을 평가했습니다. retention 주기·설정은 바꾸지 않으며, 관측 실패는 runner를 멈추지 않고 실패 counter·`alarm_dispatch_pg_backlog_snapshot_success=0`으로 드러납니다.
+- **관측 최신성 지표:** `alarm_dispatch_pg_backlog_snapshot_last_success_timestamp_seconds`(alarm-worker), `bot_reply_outbox_manual_review_snapshot_success`·`_last_success_timestamp_seconds`, `hololive_youtube_plane_queue_snapshot_success`·`_last_success_timestamp_seconds`(hololive-api)를 추가합니다. 조회가 실패하면 건수·경과는 마지막 성공 값을 유지하고 success만 0으로 내립니다. 이전에는 manual review와 YouTube plane queue 조회 실패가 이전 값을 현재 값처럼 남겼습니다.
+- **stdout 사본 비동기화:** alarm-worker와 youtube-collector도 hololive-api처럼 stdout 사본을 bounded queue로 씁니다. stdout sink가 막혀도 로깅 호출이 멈추지 않고, 큐가 가득 차면 stdout 사본 줄만 버립니다. 파일 로그는 그대로 동기 기록하며, 유실은 기존 `iris_stack_logging_stdout_dropped_total`/`_truncated_total`로 드러납니다.
+- **의존성·관측:** API·alarm-worker·shared·collector·DB 테스트 모듈을 게시된 `shared-go/v2 v2.13.0`으로 올리고, 공용 metrics server가 파일 로그 쓰기 실패 counter `iris_stack_logging_file_write_failed_total`을 노출합니다.
+
 ## v9.3.1 - 2026-10-13
 
 - **관측:** 공용 metrics server/router에서 stdout 사본 drop/truncate counter를 노출합니다. 기존 인증·worker 진단은 유지하며 API·alarm-worker·shared·collector·DB 테스트 모듈을 게시된 `shared-go/v2 v2.12.0`으로 고정합니다.

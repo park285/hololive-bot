@@ -30,6 +30,7 @@ var (
 	alarmDispatchPGUnreviewedQuarantinedRows     prometheus.Gauge
 	alarmDispatchPGOldestUnreviewedAgeSeconds    prometheus.Gauge
 	alarmDispatchPGBacklogSnapshotSuccess        prometheus.Gauge
+	alarmDispatchPGBacklogSnapshotLastSuccess    prometheus.Gauge
 )
 
 func initAlarmDispatchRunnerMetrics() {
@@ -56,6 +57,10 @@ func initAlarmDispatchRunnerMetrics() {
 		alarmDispatchPGBacklogSnapshotSuccess = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "alarm_dispatch_pg_backlog_snapshot_success",
 			Help: "Whether the latest alarm dispatch backlog observation succeeded.",
+		})
+		alarmDispatchPGBacklogSnapshotLastSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "alarm_dispatch_pg_backlog_snapshot_last_success_timestamp_seconds",
+			Help: "Unix time of the last successful alarm dispatch backlog observation.",
 		})
 
 		alarmDispatchPGBacklogRows = promauto.NewGaugeVec(
@@ -248,20 +253,25 @@ func observeAlarmDispatchQuarantine(snapshot *alarmDispatchBacklogSnapshot) {
 	alarmDispatchPGOldestUnreviewedAgeSeconds.Set(snapshot.OldestUnreviewedQuarantinedAgeSeconds)
 }
 
-func observeAlarmDispatchBacklogSnapshotSuccess(success bool) {
+func observeAlarmDispatchBacklogSnapshotSucceeded(observedAt time.Time) {
+	initAlarmDispatchRunnerMetrics()
+
+	if alarmDispatchPGBacklogSnapshotSuccess == nil || alarmDispatchPGBacklogSnapshotLastSuccess == nil {
+		return
+	}
+
+	alarmDispatchPGBacklogSnapshotLastSuccess.Set(float64(observedAt.Unix()))
+	alarmDispatchPGBacklogSnapshotSuccess.Set(1)
+}
+
+// 실패 시 이전 관측값과 마지막 성공 시각을 덮지 않고 유효성만 내린다.
+func observeAlarmDispatchBacklogSnapshotFailed() {
 	initAlarmDispatchRunnerMetrics()
 
 	if alarmDispatchPGBacklogSnapshotSuccess == nil {
 		return
 	}
 
-	if success {
-		alarmDispatchPGBacklogSnapshotSuccess.Set(1)
-
-		return
-	}
-
-	// 실패 시 이전 관측값을 0으로 덮지 않고 유효성만 내린다.
 	alarmDispatchPGBacklogSnapshotSuccess.Set(0)
 }
 

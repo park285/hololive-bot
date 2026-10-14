@@ -58,13 +58,24 @@ func (r *Runtime) observePendingQueue(ctx context.Context) {
 	queryCtx, cancel := context.WithTimeout(ctx, queueObservationTimeout)
 	defer cancel()
 
-	if err := r.withDB(queryCtx, func(ctx context.Context) error {
+	err := r.withDB(queryCtx, func(ctx context.Context) error {
 		return r.pool.QueryRow(ctx, mustSQL("queue_observability.sql")).Scan(&pending, &processing, &oldestAgeSeconds)
-	}); err != nil {
+	})
+
+	recordQueueObservation(pending, processing, oldestAgeSeconds, r.now(), err)
+}
+
+// 실패는 이전 깊이·경과를 덮지 않고 success만 내린다. 5초 주기라 로그 대신 상태 gauge와 마지막 성공 시각으로 드러낸다.
+func recordQueueObservation(pending, processing int64, oldestAgeSeconds float64, observedAt time.Time, err error) {
+	if err != nil {
+		youtubeQueueSnapshotSuccess.Set(0)
+
 		return
 	}
 
 	youtubePendingQueue.Set(float64(pending))
 	youtubeProcessingQueue.Set(float64(processing))
 	youtubeQueueOldestAgeSeconds.Set(oldestAgeSeconds)
+	youtubeQueueSnapshotLastSuccess.Set(float64(observedAt.Unix()))
+	youtubeQueueSnapshotSuccess.Set(1)
 }

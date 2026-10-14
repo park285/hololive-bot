@@ -90,10 +90,16 @@ func buildEgressRunners(
 		return nil, fmt.Errorf("append alarm dispatch runner: %w", err)
 	}
 
-	runners = append(runners, workerruntime.NamedScheduler{
-		Name:      "alarm-dispatch-maintenance",
-		Scheduler: alarmdispatch.NewMaintenanceRunner(infra, appConfig.DispatchRetention, logger),
-	})
+	runners = append(runners,
+		workerruntime.NamedScheduler{
+			Name:      "alarm-dispatch-maintenance",
+			Scheduler: alarmdispatch.NewMaintenanceRunner(infra, appConfig.DispatchRetention, logger),
+		},
+		workerruntime.NamedScheduler{
+			Name:      "alarm-dispatch-backlog-observer",
+			Scheduler: alarmdispatch.NewBacklogObserver(infra, logger),
+		},
+	)
 
 	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다.
 	if alarmWorkerExecutorEnabled(appConfig, "youtube_delivery") {

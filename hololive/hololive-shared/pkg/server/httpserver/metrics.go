@@ -65,6 +65,10 @@ func runtimeMetricsHandler(registry *workercontract.Registry) http.Handler {
 			Name: "iris_stack_logging_stdout_truncated_total",
 			Help: "Log records shortened in the stdout copy.",
 		}, func() float64 { return float64(logging.SnapshotStdout().Truncated) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{
+			Name: "iris_stack_logging_file_write_failed_total",
+			Help: "File log writes that returned an error or short write.",
+		}, func() float64 { return float64(logging.SnapshotFile().WriteFailed) }),
 	)
 
 	return promhttp.HandlerFor(prometheus.Gatherers{gatherer, logMetrics}, promhttp.HandlerOpts{})

@@ -54,7 +54,7 @@ func main() {
 				MaxBackups: appConfig.Logging.MaxBackups,
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
-			}, youtubeCollectorLogFileName(), sharedlogging.Options{OTel: appConfig.Tracing.Enabled})
+			}, youtubeCollectorLogFileName(), sharedlogging.Options{OTel: appConfig.Tracing.Enabled, AsyncStdout: true})
 			if err != nil {
 				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
 			}

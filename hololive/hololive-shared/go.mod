@@ -13,7 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/park285/iris-client-go/v3 v3.1.0
-	github.com/park285/shared-go/v2 v2.12.0
+	github.com/park285/shared-go/v2 v2.13.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.63.0
 	github.com/stretchr/testify v1.12.1

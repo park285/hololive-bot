@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -23,8 +24,9 @@ func (o quarantineSnapshotObserver) BacklogSnapshot(context.Context) (alarmDispa
 }
 
 func TestQuarantineObservationPreservesValuesOnFailureAndClearsOnEmptySuccess(t *testing.T) {
-	runner := &alarmDispatchMaintenanceRunner{}
-	require.NoError(t, runner.observeBacklog(t.Context(), quarantineSnapshotObserver{
+	before := time.Now().Unix()
+
+	require.NoError(t, observeQuarantineSnapshot(t.Context(), quarantineSnapshotObserver{
 		snapshot: alarmDispatchBacklogSnapshot{
 			QuarantinedRows: 55, OldestQuarantinedAgeSeconds: 86400,
 			UnreviewedQuarantinedRows: 3, OldestUnreviewedQuarantinedAgeSeconds: 3600,
@@ -33,13 +35,21 @@ func TestQuarantineObservationPreservesValuesOnFailureAndClearsOnEmptySuccess(t 
 	requireQuarantineGauges(t, 55, 86400, 3, 3600)
 	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess), 0.000001)
 
-	require.Error(t, runner.observeBacklog(t.Context(), quarantineSnapshotObserver{err: errors.New("read failed")}))
+	lastSuccess := testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess)
+	require.GreaterOrEqual(t, lastSuccess, float64(before))
+	require.LessOrEqual(t, lastSuccess, float64(time.Now().Unix()))
+
+	// 실패는 마지막 성공 시각을 갱신하지 않으므로 경과 시간으로 현재 관측이 아님을 드러낸다.
+	alarmDispatchPGBacklogSnapshotLastSuccess.Set(float64(before - 600))
+	require.Error(t, observeQuarantineSnapshot(t.Context(), quarantineSnapshotObserver{err: errors.New("read failed")}))
 	requireQuarantineGauges(t, 55, 86400, 3, 3600)
 	require.Zero(t, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess))
+	require.InDelta(t, float64(before-600), testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess), 0.000001)
 
-	require.NoError(t, runner.observeBacklog(t.Context(), quarantineSnapshotObserver{}))
+	require.NoError(t, observeQuarantineSnapshot(t.Context(), quarantineSnapshotObserver{}))
 	requireQuarantineGauges(t, 0, 0, 0, 0)
 	require.InDelta(t, 1, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess), 0.000001)
+	require.GreaterOrEqual(t, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotLastSuccess), float64(before))
 }
 
 func TestBacklogSnapshotCountsRetainedQuarantineWithoutChangingActiveBacklog(t *testing.T) {
@@ -142,16 +152,19 @@ func TestBacklogSnapshotReceiptFailureKeepsPreviousQuarantineValues(t *testing.T
 		VALUES (1, 'quarantined', 10, 1, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')`)
 	require.NoError(t, err)
 
-	runner := &alarmDispatchMaintenanceRunner{}
-	require.NoError(t, runner.observeBacklog(ctx, store))
+	require.NoError(t, observeQuarantineSnapshot(ctx, store))
 	requireQuarantineGaugeCounts(t, 1, 1)
 
 	_, err = conn.Exec(ctx, `ALTER TABLE pg_temp.alarm_dispatch_closeout_receipts RENAME COLUMN status_metadata TO hidden_metadata`)
 	require.NoError(t, err)
 
-	require.Error(t, runner.observeBacklog(ctx, store))
+	require.Error(t, observeQuarantineSnapshot(ctx, store))
 	requireQuarantineGaugeCounts(t, 1, 1)
 	require.Zero(t, testutil.ToFloat64(alarmDispatchPGBacklogSnapshotSuccess))
+}
+
+func observeQuarantineSnapshot(ctx context.Context, store alarmDispatchBacklogSnapshotStore) error {
+	return (&alarmDispatchBacklogObserver{store: store}).observeBacklog(ctx)
 }
 
 func newQuarantineReviewStore(t *testing.T) (alarmDispatchMaintenancePgxStore, *pgxpool.Conn) {

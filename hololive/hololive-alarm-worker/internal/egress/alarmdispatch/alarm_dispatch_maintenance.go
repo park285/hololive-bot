@@ -36,10 +36,6 @@ type alarmDispatchMaintenanceStore interface {
 	WithAdvisoryLock(ctx context.Context, key int64, fn func(context.Context, alarmDispatchMaintenanceDataStore) error) error
 }
 
-type alarmDispatchMaintenanceObserverStore interface {
-	BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error)
-}
-
 type alarmDispatchMaintenanceDataStore interface {
 	DeleteTerminal(ctx context.Context, status dispatchoutbox.Status, retentionDays, limit int) (int64, error)
 	DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error)
@@ -59,7 +55,6 @@ type alarmDispatchBacklogSnapshot struct {
 
 type alarmDispatchMaintenanceRunner struct {
 	store            alarmDispatchMaintenanceStore
-	observerStore    alarmDispatchMaintenanceObserverStore
 	retentionEnabled bool
 	interval         time.Duration
 	queryTimeout     time.Duration
@@ -98,11 +93,8 @@ func NewMaintenanceRunner(
 		return nil
 	}
 
-	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
-
 	return &alarmDispatchMaintenanceRunner{
-		store:            store,
-		observerStore:    store,
+		store:            alarmDispatchMaintenancePgxStore{db: pool, beginner: pool},
 		retentionEnabled: retentionConfig.Enabled,
 		interval:         retentionConfig.Interval,
 		queryTimeout:     retentionConfig.QueryTimeout,
@@ -146,13 +138,11 @@ func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
 		return nil
 	}
 
-	r.observeBacklogOnce(ctx)
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("retention sweep aborted: %w", err)
+	}
 
-	if !r.retentionEnabled || ctx.Err() != nil {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("retention sweep aborted: %w", err)
-		}
-
+	if !r.retentionEnabled {
 		return nil
 	}
 
@@ -165,23 +155,6 @@ func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (r *alarmDispatchMaintenanceRunner) observeBacklogOnce(ctx context.Context) {
-	if r.observerStore != nil {
-		observeCtx, cancelObserve := context.WithTimeout(ctx, r.queryTimeout)
-		err := r.observeBacklog(observeCtx, r.observerStore)
-
-		cancelObserve()
-
-		if err != nil && ctx.Err() == nil {
-			observeAlarmDispatchBacklogObservationFailure()
-
-			if r.logger != nil {
-				r.logger.Warn("alarm dispatch backlog observation failed", slog.Any("error", err))
-			}
-		}
-	}
 }
 
 func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context, store alarmDispatchMaintenanceDataStore) error {
@@ -207,34 +180,6 @@ func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context,
 	}
 
 	observeAlarmDispatchRetentionDeletedRows("event", rows)
-
-	return nil
-}
-
-func (r *alarmDispatchMaintenanceRunner) observeBacklog(ctx context.Context, store alarmDispatchMaintenanceObserverStore) error {
-	snapshot, err := store.BacklogSnapshot(ctx)
-	if err != nil {
-		observeAlarmDispatchBacklogSnapshotSuccess(false)
-
-		return fmt.Errorf("backlog snapshot: %w", err)
-	}
-
-	for _, status := range []dispatchoutbox.Status{
-		dispatchoutbox.StatusPending,
-		dispatchoutbox.StatusRetry,
-		dispatchoutbox.StatusLeased,
-		dispatchoutbox.StatusSending,
-	} {
-		observeAlarmDispatchBacklogStatus(string(status), snapshot.RowsByStatus[status])
-	}
-
-	observeAlarmDispatchOldestAges(
-		snapshot.OldestPendingAgeSeconds,
-		snapshot.OldestRetryAgeSeconds,
-		snapshot.OldestSendingAgeSeconds,
-	)
-	observeAlarmDispatchQuarantine(&snapshot)
-	observeAlarmDispatchBacklogSnapshotSuccess(true)
 
 	return nil
 }

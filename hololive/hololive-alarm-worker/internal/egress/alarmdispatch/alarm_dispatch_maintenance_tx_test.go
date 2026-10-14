@@ -53,45 +53,28 @@ func TestRollbackAlarmDispatchTxOnPanicPreservesPanicWhenRollbackFails(t *testin
 	require.True(t, tx.rollbackHasDeadline)
 }
 
-func TestAlarmDispatchMaintenancePGObservationFailureDoesNotContaminateDeletionTransaction(t *testing.T) {
-	tests := []struct {
-		name    string
-		timeout bool
-	}{
-		{name: "immediate error"},
-		{name: "timeout", timeout: true},
+func TestAlarmDispatchMaintenancePGRetentionDeletesEveryTargetInLockedTransaction(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	pgStore := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
+	store := &recordingAlarmDispatchMaintenanceStore{store: pgStore}
+	runner := &alarmDispatchMaintenanceRunner{
+		store:            store,
+		retentionEnabled: true,
+		queryTimeout:     5 * time.Second,
+		limit:            1000,
+		sentDays:         90,
+		dlqDays:          180,
+		quarantinedDays:  180,
+		cancelledDays:    90,
+		eventDays:        90,
+		retentionLockKey: 42,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pool := dbtest.NewPool(t)
-			// 관측과 삭제가 각자 idle 연결을 쓰게 미리 연다. timeout 관측은 자기 연결을 파기하므로,
-			// 예열이 없으면 삭제 250ms 예산에 새 DB로의 dial 비용이 섞여 SQL 경계가 아닌 연결 지연을 검증하게 된다.
-			warmAlarmDispatchPool(t, pool, 2)
-
-			pgStore := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
-			store := &recordingAlarmDispatchMaintenanceStore{store: pgStore}
-			runner := &alarmDispatchMaintenanceRunner{
-				store:            store,
-				observerStore:    failingAlarmDispatchPGObserver{pool: pool, timeout: tt.timeout},
-				retentionEnabled: true,
-				queryTimeout:     250 * time.Millisecond,
-				limit:            1000,
-				sentDays:         90,
-				dlqDays:          180,
-				quarantinedDays:  180,
-				cancelledDays:    90,
-				eventDays:        90,
-				retentionLockKey: 42,
-			}
-
-			require.NoError(t, runner.RunOnce(t.Context()))
-			// 종단 상태 네 개(sent·dlq·quarantined·취소)마다 한 번씩 지운다. shadowed 대상은 migration 226과 함께 없어졌다.
-			require.Equal(t, 4, store.deletedTerminal)
-			require.Equal(t, 1, store.deletedSendUnits)
-			require.Equal(t, 1, store.deletedEvents)
-		})
-	}
+	require.NoError(t, runner.RunOnce(t.Context()))
+	// 종단 상태 네 개(sent·dlq·quarantined·취소)마다 한 번씩 지운다.
+	require.Equal(t, 4, store.deletedTerminal)
+	require.Equal(t, 1, store.deletedSendUnits)
+	require.Equal(t, 1, store.deletedEvents)
 }
 
 func TestAlarmDispatchMaintenanceDeletesOnlyOrphanSendUnits(t *testing.T) {
@@ -243,46 +226,6 @@ func seedAlarmDispatchRetentionDLQ(t *testing.T, pool *pgxpool.Pool, eventID int
 	`, eventID, dedupeKey, dlqAt).Scan(&deliveryID))
 
 	return deliveryID
-}
-
-// warmAlarmDispatchPool은 연결 n개를 동시에 잡았다 반납해 pool에 서로 다른 idle 연결 n개를 남긴다.
-func warmAlarmDispatchPool(t *testing.T, pool *pgxpool.Pool, n int) {
-	t.Helper()
-
-	conns := make([]*pgxpool.Conn, 0, n)
-	for range n {
-		conn, err := pool.Acquire(t.Context())
-		require.NoError(t, err)
-
-		conns = append(conns, conn)
-	}
-
-	for _, conn := range conns {
-		conn.Release()
-	}
-}
-
-type failingAlarmDispatchPGObserver struct {
-	pool    *pgxpool.Pool
-	timeout bool
-}
-
-func (s failingAlarmDispatchPGObserver) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {
-	if s.timeout {
-		var ignored any
-
-		if err := s.pool.QueryRow(ctx, "SELECT pg_sleep(1)").Scan(&ignored); err != nil {
-			return alarmDispatchBacklogSnapshot{}, fmt.Errorf("observe alarm dispatch backlog with sleep: %w", err)
-		}
-
-		return alarmDispatchBacklogSnapshot{}, nil
-	}
-
-	if _, err := s.pool.Exec(ctx, "SELECT 1 / 0"); err != nil {
-		return alarmDispatchBacklogSnapshot{}, fmt.Errorf("observe alarm dispatch backlog: %w", err)
-	}
-
-	return alarmDispatchBacklogSnapshot{}, nil
 }
 
 type recordingAlarmDispatchMaintenanceStore struct {
