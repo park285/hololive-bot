@@ -319,29 +319,3 @@ type YouTubeLiveSession struct {
 func (YouTubeLiveSession) TableName() string {
 	return "youtube_live_sessions"
 }
-
-type YouTubeLiveViewerSample struct {
-	VideoID           string    `db:"video_id" json:"video_id"`
-	CapturedAt        time.Time `db:"captured_at" json:"captured_at"`
-	ChannelID         string    `db:"channel_id" json:"channel_id"`
-	ConcurrentViewers int       `json:"concurrent_viewers"`
-}
-
-func (YouTubeLiveViewerSample) TableName() string {
-	return "youtube_live_viewer_samples"
-}
-
-type YouTubeStreamStats struct {
-	VideoID              string     `db:"video_id" json:"video_id"`
-	ChannelID            string     `db:"channel_id" json:"channel_id"`
-	StartedAt            *time.Time `json:"started_at,omitempty"`
-	EndedAt              *time.Time `db:"ended_at" json:"ended_at,omitempty"`
-	MaxConcurrentViewers int        `json:"max_concurrent_viewers"`
-	AvgConcurrentViewers int        `json:"avg_concurrent_viewers"`
-	SampleCount          int        `db:"sample_count" json:"sample_count"`
-	UpdatedAt            time.Time  `db:"updated_at" json:"updated_at"`
-}
-
-func (YouTubeStreamStats) TableName() string {
-	return "youtube_stream_stats"
-}

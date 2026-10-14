@@ -23,7 +23,6 @@ var payloadDecoders = map[ObservationKind]payloadDecoder{
 	KindVideoList:        decodeVideoListPayload,
 	KindShortsList:       decodeShortsListPayload,
 	KindLiveSnapshot:     decodeLiveSnapshotPayload,
-	KindViewerSample:     decodeViewerSamplePayload,
 	KindChannelProfile:   decodeChannelProfilePayload,
 	KindChannelPhoto:     decodeChannelPhotoPayload,
 	KindSchedule:         decodeSchedulePayload,
@@ -189,19 +188,6 @@ func validateLiveSnapshotQueryProof(value *LiveSnapshotV1, input payloadDecodeIn
 	}
 
 	return nil
-}
-
-func decodeViewerSamplePayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
-	value := ViewerSampleV1{}
-	if err := decodeStrictJSON(raw, &value); err != nil {
-		return nil, nil, fmt.Errorf("decode viewer sample payload: %w", err)
-	}
-
-	if err := value.normalizeAndValidate(input.subjectKey); err != nil {
-		return nil, nil, fmt.Errorf("normalize and validate: %w", err)
-	}
-
-	return value, value.Coverage, nil
 }
 
 func decodeChannelProfilePayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {

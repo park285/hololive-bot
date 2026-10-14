@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,8 @@ type Result struct {
 type Refresher struct {
 	pool     *pgxpool.Pool
 	validity time.Duration
+	mu       sync.Mutex
+	reasons  reasonsCache
 }
 
 func NewRefresher(pool *pgxpool.Pool, validity time.Duration) (*Refresher, error) {
@@ -43,21 +46,31 @@ func (r *Refresher) Refresh(ctx context.Context, builder Builder, now time.Time)
 		return Result{}, errors.New("refresh youtube target projection: invalid refresher, builder, or time")
 	}
 
+	// commit과 캐시 공개까지 직렬화하여 늦게 끝난 호출이 새 캐시를 덮어쓰지 않게 한다.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cache := r.reasons
+	// rollback·commit 결과 불명 모두 확인된 캐시를 폐기한다.
+	r.reasons = reasonsCache{}
+
 	now = now.UTC()
 
 	validUntil := now.Add(r.validity)
 
 	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (Result, error) {
-		return buildAndRefreshProjection(ctx, tx, builder, now, validUntil)
+		return buildAndRefreshProjection(ctx, tx, builder, now, validUntil, &cache)
 	})
 	if err != nil {
 		return out, fmt.Errorf("in pgx tx with result: %w", err)
 	}
 
+	r.reasons = cache
+
 	return out, nil
 }
 
-func buildAndRefreshProjection(ctx context.Context, tx dbx.Tx, builder Builder, now, validUntil time.Time) (Result, error) {
+func buildAndRefreshProjection(ctx context.Context, tx dbx.Tx, builder Builder, now, validUntil time.Time, cache *reasonsCache) (Result, error) {
 	// 입력 조회 전에 guard를 잠가 오래된 Build 결과가 뒤늦게 CURRENT를 덮어쓰지 않게 합니다.
 	// READ COMMITTED에서 대기 이후의 Build statement는 앞선 writer의 commit을 봅니다.
 	if err := lockProjectionGuard(ctx, tx); err != nil {
@@ -74,10 +87,14 @@ func buildAndRefreshProjection(ctx context.Context, tx dbx.Tx, builder Builder, 
 		return Result{}, fmt.Errorf("refresh youtube target projection: normalize: %w", err)
 	}
 
-	out, err := refreshTx(ctx, tx, targets, reasons, hash, now, validUntil)
+	reasonsHash := hashNormalizedReasons(reasons)
+	out, err := refreshTx(ctx, tx, targets, reasons, hash, now, validUntil, cache, reasonsHash)
 	if err != nil {
 		return out, fmt.Errorf("%w", err)
 	}
+
+	cache.generation = out.Generation
+	cache.hash = reasonsHash
 
 	return out, nil
 }
@@ -86,18 +103,19 @@ type currentProjection struct {
 	generation int64
 	rowCount   int
 	hash       string
+	version    string
 	found      bool
 }
 
 // refreshTx는 buildAndRefreshProjection이 이미 획득한 guard 안에서 CURRENT를 조회·전환합니다.
-func refreshTx(ctx context.Context, tx dbx.Tx, targets []TargetSpec, reasons []TargetReason, hash string, now, validUntil time.Time) (Result, error) {
+func refreshTx(ctx context.Context, tx dbx.Tx, targets []TargetSpec, reasons []TargetReason, hash string, now, validUntil time.Time, cache *reasonsCache, reasonsHash [32]byte) (Result, error) {
 	current, err := lockCurrent(ctx, tx)
 	if err != nil {
 		return Result{}, fmt.Errorf("lock current: %w", err)
 	}
 
 	if sameProjection(current, targets, hash) {
-		out, extendErr := extendUnchangedGeneration(ctx, tx, current, targets, reasons, hash, now, validUntil)
+		out, extendErr := extendUnchangedGeneration(ctx, tx, current, targets, reasons, hash, now, validUntil, cache, reasonsHash)
 		if extendErr != nil {
 			return out, fmt.Errorf("extend unchanged generation: %w", extendErr)
 		}
@@ -105,7 +123,7 @@ func refreshTx(ctx context.Context, tx dbx.Tx, targets []TargetSpec, reasons []T
 		return out, nil
 	}
 
-	out, err := activateStagingGeneration(ctx, tx, current, targets, reasons, hash, now, validUntil)
+	out, err := activateStagingGeneration(ctx, tx, current, targets, reasons, hash, now, validUntil, cache)
 	if err != nil {
 		return out, fmt.Errorf("activate staging generation: %w", err)
 	}
@@ -127,18 +145,23 @@ func extendUnchangedGeneration(
 	reasons []TargetReason,
 	hash string,
 	now, validUntil time.Time,
+	cache *reasonsCache,
+	reasonsHash [32]byte,
 ) (Result, error) {
 	eligibilityChanged, err := extendTargets(ctx, tx, current.generation, targets)
 	if err != nil {
 		return Result{}, fmt.Errorf("extend targets: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("extend_generation_validity.sql"), current.generation, validUntil, eligibilityChanged, now); err != nil {
+	skipReasons := cache.matches(current, reasonsHash)
+	if err := tx.QueryRow(ctx, mustSQL("extend_generation_validity.sql"), current.generation, validUntil, eligibilityChanged, now).Scan(&cache.version); err != nil {
 		return Result{}, fmt.Errorf("refresh youtube target projection: extend generation validity: %w", err)
 	}
 
-	if err := replaceReasonsIfChanged(ctx, tx, current.generation, reasons); err != nil {
-		return Result{}, fmt.Errorf("replace reasons if changed: %w", err)
+	if !skipReasons {
+		if err := replaceReasonsIfChanged(ctx, tx, current.generation, reasons); err != nil {
+			return Result{}, fmt.Errorf("replace reasons if changed: %w", err)
+		}
 	}
 
 	return Result{Generation: current.generation, RowCount: len(targets), SHA256: hash}, nil
@@ -198,6 +221,7 @@ func activateStagingGeneration(
 	reasons []TargetReason,
 	hash string,
 	now, validUntil time.Time,
+	cache *reasonsCache,
 ) (Result, error) {
 	generation, err := insertStagingProjection(ctx, tx, current, targets, reasons, hash, now, validUntil)
 	if err != nil {
@@ -208,7 +232,7 @@ func activateStagingGeneration(
 		return Result{}, fmt.Errorf("verify staging projection: %w", err)
 	}
 
-	if err := promoteStagingGeneration(ctx, tx, current, generation, now); err != nil {
+	if err := promoteStagingGeneration(ctx, tx, current, generation, now, &cache.version); err != nil {
 		return Result{}, fmt.Errorf("promote staging generation: %w", err)
 	}
 
@@ -275,14 +299,14 @@ func verifyStagingProjection(
 	return nil
 }
 
-func promoteStagingGeneration(ctx context.Context, tx dbx.Tx, current currentProjection, generation int64, now time.Time) error {
+func promoteStagingGeneration(ctx context.Context, tx dbx.Tx, current currentProjection, generation int64, now time.Time, version *string) error {
 	if current.found {
 		if _, err := tx.Exec(ctx, mustSQL("retire_current_generation.sql"), current.generation); err != nil {
 			return fmt.Errorf("refresh youtube target projection: retire current generation: %w", err)
 		}
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("activate_staging_generation.sql"), generation, now); err != nil {
+	if err := tx.QueryRow(ctx, mustSQL("activate_staging_generation.sql"), generation, now).Scan(version); err != nil {
 		return fmt.Errorf("refresh youtube target projection: activate staging generation: %w", err)
 	}
 
@@ -303,7 +327,7 @@ func lockProjectionGuard(ctx context.Context, tx dbx.Tx) error {
 func lockCurrent(ctx context.Context, tx dbx.Tx) (currentProjection, error) {
 	var current currentProjection
 
-	err := tx.QueryRow(ctx, mustSQL("lock_current_generation.sql")).Scan(&current.generation, &current.rowCount, &current.hash)
+	err := tx.QueryRow(ctx, mustSQL("lock_current_generation.sql")).Scan(&current.generation, &current.rowCount, &current.hash, &current.version)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return current, nil

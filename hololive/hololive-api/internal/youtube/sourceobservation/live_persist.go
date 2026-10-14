@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const liveSessionBatchSize = 64
@@ -135,16 +136,20 @@ func liveHeadStatement(session *live.SessionState) dbx.Statement {
 			session.LastAbsenceScheduledFor, session.Clock.ConsecutiveAbsenceSlots,
 			kind, observationID, nextCheck, session.Clock.EndedAt, reason,
 			session.FirstAbsenceScheduledFor, session.SecondAbsenceScheduledFor,
-			session.LastAbsenceObservationID, ignoredAbsenceArg(&session.IgnoredAbsences),
+			session.LastAbsenceObservationID, ignoredAbsenceArg(session),
 			session.Clock.UnresolvableSince,
 		},
 	}
 }
 
-// ignoredAbsenceArg는 미적재 이력을 SQL NULL로 보내 upsert가 기존 배열을 유지하게 한다.
-// 적재된 빈 이력은 nil slice가 NULL로 바뀌지 않도록 '{}'로 보내 기존 배열을 지운다.
-func ignoredAbsenceArg(history *live.IgnoredAbsenceHistory) any {
-	slots, loaded := history.Slots()
+// ENDED 이력은 다시 판정에 쓰이지 않으므로 적재 여부와 무관하게 비운다.
+// 활성 세션의 미적재 이력은 SQL NULL로 보내 보존하고, 적재된 빈 이력만 명시적으로 지운다.
+func ignoredAbsenceArg(session *live.SessionState) any {
+	if session.Status == domain.LiveStatusEnded {
+		return []time.Time{}
+	}
+
+	slots, loaded := session.IgnoredAbsences.Slots()
 	if !loaded {
 		return nil
 	}

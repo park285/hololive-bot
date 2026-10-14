@@ -67,5 +67,5 @@ var youtubeRetentionTickSeconds = promauto.NewHistogram(prometheus.HistogramOpts
 
 var youtubeRetentionBacklogAgeSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "hololive_youtube_plane_retention_backlog_age_seconds",
-	Help: "Age of the oldest eligible row after retention in source_observations or source_observation_applications; zero when empty, absent when unknown.",
+	Help: "Age of the oldest eligible source observation after retention; zero when empty, absent when unknown.",
 }, []string{"table"})

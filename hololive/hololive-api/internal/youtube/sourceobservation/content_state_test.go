@@ -180,7 +180,7 @@ func TestContentLoaderReplaysAbsenceSlotsInScheduledOrder(t *testing.T) {
 		_, err = pool.Exec(ctx, `
 			INSERT INTO youtube_content_absence_slots (
 				channel_id, observation_kind, scheduled_for, evidence_sha256, effective_at, received_at, scope_sha256, coverage
-			) VALUES ($1, 'video_list', $2, $3, $2, $2, $3, $4)
+			) VALUES ($1, 'video_list', $2, decode($3, 'hex'), $2, $2, decode($3, 'hex'), $4)
 		`, testChannelID, at, strings.Repeat("ee", 32), rawCoverage)
 		require.NoError(t, err)
 	}
@@ -248,7 +248,7 @@ func TestContentLoaderLeavesUnusedHistoryUnlocked(t *testing.T) {
 		INSERT INTO youtube_content_absence_slots (
 			channel_id, observation_kind, scheduled_for, evidence_sha256, effective_at, received_at, scope_sha256, coverage
 		)
-		SELECT $1, 'video_list', at, $2, at, at, $2, $3
+		SELECT $1, 'video_list', at, decode($2, 'hex'), at, at, decode($2, 'hex'), $3
 		FROM generate_series(TIMESTAMPTZ '2026-08-01 00:00:00Z', TIMESTAMPTZ '2026-08-01 19:00:00Z', INTERVAL '1 hour') AS at
 	`, testChannelID, strings.Repeat("ee", 32), coverage)
 	require.NoError(t, err)

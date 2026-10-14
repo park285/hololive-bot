@@ -34,7 +34,6 @@ const (
 	KindVideoList        ObservationKind = "video_list"
 	KindShortsList       ObservationKind = "shorts_list"
 	KindLiveSnapshot     ObservationKind = "live_snapshot"
-	KindViewerSample     ObservationKind = "viewer_sample"
 	KindChannelProfile   ObservationKind = "channel_profile"
 	KindChannelPhoto     ObservationKind = "channel_photo"
 	KindSchedule         ObservationKind = "schedule_snapshot"

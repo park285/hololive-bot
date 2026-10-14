@@ -19,26 +19,24 @@ const (
 
 func defaultYouTubePlaneRetentionConfig() YouTubePlaneRetentionConfig {
 	return YouTubePlaneRetentionConfig{
-		Interval:              120 * time.Second,
-		BatchSize:             youtubePlaneRetentionMaxBatchSize,
-		QueueProcessedAge:     youtubePlaneRetentionDay,
-		QueueDLQAge:           14 * youtubePlaneRetentionDay,
-		CollisionAge:          30 * youtubePlaneRetentionDay,
-		ReplayAuditAge:        30 * youtubePlaneRetentionDay,
-		ApplicationAuditGrace: 3 * youtubePlaneRetentionDay,
-		LiveAbsenceSlotAge:    14 * youtubePlaneRetentionDay,
-		CheckpointHistoryAge:  2 * youtubePlaneRetentionDay,
-		ProjectionRetiredAge:  7 * youtubePlaneRetentionDay,
-		CommunityPageAge:      7 * youtubePlaneRetentionDay,
-		VideoListAge:          7 * youtubePlaneRetentionDay,
-		ShortsListAge:         7 * youtubePlaneRetentionDay,
-		LiveSnapshotAge:       7 * youtubePlaneRetentionDay,
-		ViewerSampleAge:       7 * youtubePlaneRetentionDay,
-		ChannelProfileAge:     30 * youtubePlaneRetentionDay,
-		ChannelPhotoAge:       30 * youtubePlaneRetentionDay,
-		ScheduleSnapshotAge:   14 * youtubePlaneRetentionDay,
-		ChannelLiveCheckAge:   2 * youtubePlaneRetentionDay,
-		VideoLiveCheckAge:     2 * youtubePlaneRetentionDay,
+		Interval:             120 * time.Second,
+		BatchSize:            youtubePlaneRetentionMaxBatchSize,
+		QueueProcessedAge:    youtubePlaneRetentionDay,
+		QueueDLQAge:          14 * youtubePlaneRetentionDay,
+		CollisionAge:         30 * youtubePlaneRetentionDay,
+		ReplayAuditAge:       30 * youtubePlaneRetentionDay,
+		LiveAbsenceSlotAge:   14 * youtubePlaneRetentionDay,
+		CheckpointHistoryAge: 2 * youtubePlaneRetentionDay,
+		ProjectionRetiredAge: 2 * youtubePlaneRetentionDay,
+		CommunityPageAge:     7 * youtubePlaneRetentionDay,
+		VideoListAge:         7 * youtubePlaneRetentionDay,
+		ShortsListAge:        7 * youtubePlaneRetentionDay,
+		LiveSnapshotAge:      7 * youtubePlaneRetentionDay,
+		ChannelProfileAge:    30 * youtubePlaneRetentionDay,
+		ChannelPhotoAge:      30 * youtubePlaneRetentionDay,
+		ScheduleSnapshotAge:  14 * youtubePlaneRetentionDay,
+		ChannelLiveCheckAge:  2 * youtubePlaneRetentionDay,
+		VideoLiveCheckAge:    2 * youtubePlaneRetentionDay,
 	}
 }
 
@@ -128,14 +126,6 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTube
 
 func loadYouTubePlaneRetentionSupportAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
-
-	if config.Retention.ApplicationAuditGrace, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS",
-		defaults.ApplicationAuditGrace,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
 
 	if config.Retention.LiveAbsenceSlotAge, err = envload.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS",
@@ -247,14 +237,6 @@ func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 
-	if config.Retention.ViewerSampleAge, err = envload.StrictDurationUnitEnv(
-		"YOUTUBE_PLANE_RETENTION_VIEWER_SAMPLE_DAYS",
-		defaults.ViewerSampleAge,
-		youtubePlaneRetentionDay,
-	); err != nil {
-		return fmt.Errorf("strict duration unit env: %w", err)
-	}
-
 	if config.Retention.ChannelProfileAge, err = envload.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS",
 		defaults.ChannelProfileAge,
@@ -355,7 +337,6 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 		{"queue dlq", cfg.QueueDLQAge},
 		{"collision", cfg.CollisionAge},
 		{"replay audit", cfg.ReplayAuditAge},
-		{"application audit grace", cfg.ApplicationAuditGrace},
 		{"live absence slots", cfg.LiveAbsenceSlotAge},
 		{"checkpoint history", cfg.CheckpointHistoryAge},
 		{"retired projection", cfg.ProjectionRetiredAge},
@@ -363,7 +344,6 @@ func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 		{"video list", cfg.VideoListAge},
 		{"shorts list", cfg.ShortsListAge},
 		{"live snapshot", cfg.LiveSnapshotAge},
-		{"viewer sample", cfg.ViewerSampleAge},
 		{"channel profile", cfg.ChannelProfileAge},
 		{"channel photo", cfg.ChannelPhotoAge},
 		{"schedule snapshot", cfg.ScheduleSnapshotAge},
@@ -385,7 +365,6 @@ func maxEvidenceRetentionAge(cfg *YouTubePlaneRetentionConfig) time.Duration {
 		cfg.VideoListAge,
 		cfg.ShortsListAge,
 		cfg.LiveSnapshotAge,
-		cfg.ViewerSampleAge,
 		cfg.ChannelProfileAge,
 		cfg.ChannelPhotoAge,
 		cfg.ScheduleSnapshotAge,
@@ -433,7 +412,6 @@ func (c *YouTubePlaneConfig) validateProductionRetention(environment string) err
 		{"YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS", c.Retention.QueueDLQAge},
 		{"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", c.Retention.CollisionAge},
 		{"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", c.Retention.ReplayAuditAge},
-		{"YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS", c.Retention.ApplicationAuditGrace},
 		{"YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS", c.Retention.LiveAbsenceSlotAge},
 		{"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS", c.Retention.CheckpointHistoryAge},
 		{"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS", c.Retention.ProjectionRetiredAge},
@@ -441,7 +419,6 @@ func (c *YouTubePlaneConfig) validateProductionRetention(environment string) err
 		{"YOUTUBE_PLANE_RETENTION_VIDEO_LIST_DAYS", c.Retention.VideoListAge},
 		{"YOUTUBE_PLANE_RETENTION_SHORTS_LIST_DAYS", c.Retention.ShortsListAge},
 		{"YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS", c.Retention.LiveSnapshotAge},
-		{"YOUTUBE_PLANE_RETENTION_VIEWER_SAMPLE_DAYS", c.Retention.ViewerSampleAge},
 		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS", c.Retention.ChannelProfileAge},
 		{"YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS", c.Retention.ChannelPhotoAge},
 		{"YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS", c.Retention.ScheduleSnapshotAge},

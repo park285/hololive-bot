@@ -38,7 +38,7 @@ func (p Provider) Valid() bool {
 func (k ObservationKind) Valid() bool {
 	switch k {
 	case KindCommunityPage, KindVideoList, KindShortsList, KindLiveSnapshot,
-		KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule,
+		KindChannelProfile, KindChannelPhoto, KindSchedule,
 		KindChannelLiveCheck, KindVideoLiveCheck:
 		return true
 	default:
@@ -65,7 +65,7 @@ func NegativeEligible(completeness Completeness, continuity Continuity) bool {
 
 func KindAllowsSourceEventTime(kind ObservationKind) bool {
 	switch kind {
-	case KindCommunityPage, KindLiveSnapshot, KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule:
+	case KindCommunityPage, KindLiveSnapshot, KindChannelProfile, KindChannelPhoto, KindSchedule:
 		return true
 	case KindVideoList, KindShortsList, KindChannelLiveCheck, KindVideoLiveCheck:
 		return false

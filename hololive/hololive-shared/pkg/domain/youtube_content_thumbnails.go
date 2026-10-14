@@ -78,6 +78,4 @@ var YouTubeModels = []any{
 	&YouTubeNotificationDeliveryTelemetry{},
 	&YouTubeNotificationDelivery{},
 	&YouTubeLiveSession{},
-	&YouTubeLiveViewerSample{},
-	&YouTubeStreamStats{},
 }

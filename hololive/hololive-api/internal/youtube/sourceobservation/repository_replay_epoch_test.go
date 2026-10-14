@@ -235,7 +235,7 @@ func insertPendingReplayRequest(t *testing.T, pool *pgxpool.Pool, observationID 
 		       observation.observation_kind,
 		       observation.subject_key,
 		       observation.observation_key,
-		       observation.evidence_sha256,
+		       encode(observation.evidence_sha256, 'hex'),
 		       $2,
 		       $3,
 		       queue.attempt_count

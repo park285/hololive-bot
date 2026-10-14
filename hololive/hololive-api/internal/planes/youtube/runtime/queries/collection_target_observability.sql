@@ -41,28 +41,48 @@ WITH mapping(kind, observation_kinds, rpc_per_kind) AS (
            GREATEST(lease_due_at, eligible_at) AS due_at,
            eligible_at > statement_timestamp() AS sleeping
     FROM leased
-), active_live_videos AS (
+), active_live_videos AS MATERIALIZED (
     SELECT video_id FROM youtube_live_reconciliation_heads WHERE status IN ('LIVE', 'UPCOMING')
     UNION
     SELECT video_id FROM youtube_live_sessions WHERE status IN ('LIVE', 'UPCOMING')
+), active_live_products AS MATERIALIZED (
+    -- target kind의 행 수를 과소 추정해도 채널 인덱스로 ENDED 이력을 먼저 읽을 수 없게
+    -- 활성 영상 PK 집합의 원본을 채널 membership 판정 전에 고정합니다.
+    SELECT product.video_id, product.channel_id, product.status,
+           product.scheduled_start_time, product.lifecycle_origin
+    FROM youtube_live_sessions product
+    WHERE product.video_id = ANY(ARRAY(SELECT video_id FROM active_live_videos))
+), active_live_heads AS MATERIALIZED (
+    -- 과소 추정된 채널 membership 뒤 영상별 PK loop가 생기지 않게 보조 사실도 집합으로 읽습니다.
+    SELECT video_id, status
+    FROM youtube_live_reconciliation_heads
+    WHERE video_id = ANY(ARRAY(SELECT video_id FROM active_live_products))
+), active_live_availability AS MATERIALIZED (
+    SELECT video_id, observed_at
+    FROM youtube_video_availability
+    WHERE video_id = ANY(ARRAY(SELECT video_id FROM active_live_products))
 ), live_states AS MATERIALIZED (
-    SELECT v.video_id, h.status AS state, product.status AS product_state, product.scheduled_start_time, product.lifecycle_origin,
+    SELECT product.video_id, h.status AS state, product.status AS product_state, product.scheduled_start_time, product.lifecycle_origin,
            availability.observed_at AS checked_at
-    FROM active_live_videos v
-    JOIN youtube_live_sessions product ON product.video_id = v.video_id
-    JOIN targets t ON t.kind = 'youtubejs_channel_live' AND t.subject_key = product.channel_id
-    LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id = v.video_id
-    LEFT JOIN youtube_video_availability availability ON availability.video_id=v.video_id
+    FROM active_live_products product
+    LEFT JOIN active_live_heads h ON h.video_id = product.video_id
+    LEFT JOIN active_live_availability availability ON availability.video_id = product.video_id
+    WHERE EXISTS (
+        SELECT 1 FROM targets t
+        WHERE t.kind = 'youtubejs_channel_live' AND t.subject_key = product.channel_id
+    )
 ), live_review_videos AS MATERIALIZED (
-    -- 영수증이 있는 현재 영상만 고정해 빈 영수증 집합에서 snapshot 계산을 건너뜁니다.
-    SELECT receipt.video_id FROM (SELECT DISTINCT video_id FROM youtube_live_review_receipts) receipt
+    -- 영수증이 있는 현재 영상만 고정해 빈 영수증 집합에서 사실 계산을 건너뜁니다.
+    SELECT receipt.video_id FROM (SELECT DISTINCT video_id FROM youtube_live_review_receipt_facts) receipt
     WHERE EXISTS (SELECT 1 FROM live_states state WHERE state.video_id=receipt.video_id)
+), live_review_input AS MATERIALIZED (
+    -- SubLink 인수가 SQL 집합 함수의 인라이닝을 막지 않도록 배열을 관계 열로 고정합니다.
+    SELECT ARRAY(SELECT video_id FROM live_review_videos) AS video_ids
 ), live_reviews AS MATERIALIZED (
-    -- 영상별 현재 원본 판정을 한 번만 계산합니다. 기술적 갱신 시각·무시한 부재 slot은 검토를
-    -- 다시 열지 않고, 상태·일정·가용성·positive 등 의미 사실이 바뀐 영수증은 미상을 닫지 않습니다.
-    SELECT video.video_id,
-           (SELECT review.reviewed_at FROM youtube_live_review_current_receipt(video.video_id) review) AS reviewed_at
-    FROM live_review_videos video
+    -- 현재 의미 사실과 저장 영수증을 집합으로 비교해 영상마다 같은 표를 다시 읽지 않습니다.
+    SELECT review.video_id, review.reviewed_at
+    FROM live_review_input input
+    CROSS JOIN LATERAL youtube_live_review_current_receipts(input.video_ids) review
 ), reviewed_live_states AS (
     -- recorded_at은 NOT NULL이므로 현재 원본에 적용되는 영수증 존재와 같은 판정입니다.
     SELECT state.video_id, state.state, state.product_state, state.scheduled_start_time,

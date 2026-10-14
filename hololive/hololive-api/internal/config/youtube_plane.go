@@ -16,28 +16,26 @@ const (
 )
 
 type YouTubePlaneRetentionConfig struct {
-	Enabled               bool
-	PolicyApproved        bool
-	Interval              time.Duration
-	BatchSize             int
-	QueueProcessedAge     time.Duration
-	QueueDLQAge           time.Duration
-	CollisionAge          time.Duration
-	ReplayAuditAge        time.Duration
-	ApplicationAuditGrace time.Duration
-	LiveAbsenceSlotAge    time.Duration
-	CheckpointHistoryAge  time.Duration
-	ProjectionRetiredAge  time.Duration
-	CommunityPageAge      time.Duration
-	VideoListAge          time.Duration
-	ShortsListAge         time.Duration
-	LiveSnapshotAge       time.Duration
-	ViewerSampleAge       time.Duration
-	ChannelProfileAge     time.Duration
-	ChannelPhotoAge       time.Duration
-	ScheduleSnapshotAge   time.Duration
-	ChannelLiveCheckAge   time.Duration
-	VideoLiveCheckAge     time.Duration
+	Enabled              bool
+	PolicyApproved       bool
+	Interval             time.Duration
+	BatchSize            int
+	QueueProcessedAge    time.Duration
+	QueueDLQAge          time.Duration
+	CollisionAge         time.Duration
+	ReplayAuditAge       time.Duration
+	LiveAbsenceSlotAge   time.Duration
+	CheckpointHistoryAge time.Duration
+	ProjectionRetiredAge time.Duration
+	CommunityPageAge     time.Duration
+	VideoListAge         time.Duration
+	ShortsListAge        time.Duration
+	LiveSnapshotAge      time.Duration
+	ChannelProfileAge    time.Duration
+	ChannelPhotoAge      time.Duration
+	ScheduleSnapshotAge  time.Duration
+	ChannelLiveCheckAge  time.Duration
+	VideoLiveCheckAge    time.Duration
 }
 
 type YouTubePlaneReplayConfig struct {

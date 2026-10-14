@@ -58,7 +58,7 @@ func TestRetentionTickBoundsLiveAbsenceSlots(t *testing.T) {
 			INSERT INTO youtube_live_absence_slots (
 				observation_id, scheduled_for, evidence_sha256, effective_at,
 				received_at, scope_sha256, coverage
-			) VALUES ($1, $2, repeat('a', 64), $2, $2, repeat('b', 64),
+			) VALUES ($1, $2, decode(repeat('a', 64), 'hex'), $2, $2, decode(repeat('b', 64), 'hex'),
 				'{"requested_channel_ids": ["UC_TEST"]}'::jsonb)
 		`, slot.id, at); err != nil {
 			t.Fatalf("insert slot %d: %v", slot.id, err)
@@ -311,33 +311,29 @@ func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
 	assertQueueStatus(t, pool, dlqID, string(contract.StatusDeadLetter))
 }
 
-func TestRetentionTickDeletesOnlyOrphanedApplicationsAfterAuditGrace(t *testing.T) {
+func TestRetentionTickCascadesApplicationsWithParent(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
 	ids := publishProcessedObservations(ctx, t, pool, repo, 1)
-	insertRetentionApplication(t, pool, nil, "eligible-orphan", 91*24*time.Hour)
-	insertRetentionApplication(t, pool, nil, "recent-orphan", 89*24*time.Hour)
-	insertRetentionApplication(t, pool, ids[0], "referenced", 120*24*time.Hour)
-
+	insertRetentionApplication(t, pool, ids[0], "retained", 120*24*time.Hour)
+	ageObservations(t, pool, ids, 48*time.Hour)
+	if _, err := pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET status='RETIRED';
+		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL;
+		DELETE FROM source_observation_queue`); err != nil {
+		t.Fatal(err)
+	}
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
-		ApplicationAuditGrace: 60 * 24 * time.Hour,
-		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{
-			contract.KindCommunityPage: 30 * 24 * time.Hour,
-		},
-		BatchSize: 10,
+		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindCommunityPage: 24 * time.Hour},
+		BatchSize:         10,
 	}, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
-
-	if result.Table != "source_observation_applications" || result.Deleted != 1 {
-		t.Fatalf("result = %#v, want one application", result)
+	if retentionPartFor(t, result, "source_observations").Deleted != 1 {
+		t.Fatalf("result = %#v, want one parent", result)
 	}
-
-	assertRetentionApplication(t, pool, "eligible-orphan", false)
-	assertRetentionApplication(t, pool, "recent-orphan", true)
-	assertRetentionApplication(t, pool, "referenced", true)
+	assertRetentionApplication(t, pool, "retained", false)
 }
 
 func TestRetentionTickKeepsLatestCheckpointPerLogicalIdentity(t *testing.T) {
@@ -482,7 +478,7 @@ func insertAppliedReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) 
 			evidence_sha256, requested_by, reason, previous_attempt_count, status, applied_at
 		)
 		SELECT id, provider, observation_kind, subject_key, observation_key,
-		       evidence_sha256, 'test-operator', 'count replay', 0, 'APPLIED', NOW()
+		       encode(evidence_sha256, 'hex'), 'test-operator', 'count replay', 0, 'APPLIED', NOW()
 		FROM source_observations
 		WHERE id = $1
 	`, observationID); err != nil {
@@ -512,7 +508,7 @@ func insertPendingReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) 
 			evidence_sha256, requested_by, reason, previous_attempt_count
 		)
 		SELECT id, provider, observation_kind, subject_key, observation_key,
-		       evidence_sha256, 'test-operator', 'hold evidence', 0
+		       encode(evidence_sha256, 'hex'), 'test-operator', 'hold evidence', 0
 		FROM source_observations
 		WHERE id = $1
 	`, observationID); err != nil {
@@ -523,7 +519,7 @@ func insertPendingReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) 
 func insertRetentionApplication(
 	t *testing.T,
 	pool *pgxpool.Pool,
-	observationID any,
+	observationID int64,
 	entityKey string,
 	age time.Duration,
 ) {
@@ -531,11 +527,9 @@ func insertRetentionApplication(
 
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO source_observation_applications (
-			observation_id, provider, observation_kind, subject_key, evidence_sha256,
-			entity_kind, entity_key, decision, effective_at, applied_at
+			observation_id, entity_kind, entity_key, decision, applied_at
 		) VALUES (
-			$1, 'youtubejs', 'community_page', 'UC_RETENTION', repeat('a', 64),
-			'retention_test', $2, 'APPLIED', NOW(), NOW() - ($3 * INTERVAL '1 millisecond')
+			$1, 'retention_test', $2, 'APPLIED', NOW() - ($3 * INTERVAL '1 millisecond')
 		)
 	`, observationID, entityKey, age.Milliseconds()); err != nil {
 		t.Fatalf("insert retention application %q: %v", entityKey, err)
@@ -575,7 +569,7 @@ func insertRetentionCheckpoint(
 			last_observation_key, last_evidence_sha256, last_scheduled_for, last_success_at,
 			collection_latency_ms, continuity, created_at, updated_at
 		) VALUES (
-			'youtubejs', 'viewer_sample', $1, repeat($2, 64), 1,
+			'youtubejs', 'video_list', $1, repeat($2, 64), 1,
 			$1 || ':' || $2, repeat('b', 64), NOW(), NOW(), 1, 'NOT_APPLICABLE',
 			NOW() - ($3 * INTERVAL '1 millisecond'),
 			NOW() - ($3 * INTERVAL '1 millisecond')

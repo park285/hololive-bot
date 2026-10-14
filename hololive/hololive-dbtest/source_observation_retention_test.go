@@ -34,7 +34,7 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 			evidence_sha256, requested_by, reason, previous_attempt_count
 		)
 		SELECT id, provider, observation_kind, subject_key, observation_key,
-		       evidence_sha256, 'dbtest', 'retention protection', 0
+		       encode(evidence_sha256, 'hex'), 'dbtest', 'retention protection', 0
 		FROM public.source_observations
 		WHERE id = $1`, replayProtected); err != nil {
 		t.Fatalf("protect retention observation with replay row: %v", err)
@@ -153,8 +153,8 @@ const retentionPlanSeedObservationsSQL = `
 		)
 		SELECT 'youtubejs', seed.observation_kind, seed.observation_key, seed.observation_key,
 		       1, 1, seed.received_at, seed.received_at, seed.received_at,
-		       pg_catalog.repeat('a', 64), 'COMPLETE', 'CONTIGUOUS', payloads.id,
-		       pg_catalog.repeat('c', 64),
+		       decode(pg_catalog.repeat('a', 64), 'hex'), 'COMPLETE', 'CONTIGUOUS', payloads.id,
+		       decode(pg_catalog.repeat('c', 64), 'hex'),
 		       'dbtest', seed.observation_key, seed.observation_kind, 1, 1
 		FROM (
 			SELECT 'community_page'::text AS observation_kind,
@@ -192,18 +192,7 @@ const retentionCandidateExplainSQL = `
 				FROM public.source_observations AS observation
 				WHERE observation.observation_kind = policy.observation_kind
 				  AND observation.received_at < policy.cutoff
-				  AND NOT EXISTS (
-					  SELECT 1 FROM public.source_observation_queue AS queue
-					  WHERE queue.observation_id = observation.id
-				  )
-				  AND NOT EXISTS (
-					  SELECT 1 FROM public.source_observation_replay_requests AS replay
-					  WHERE replay.observation_id = observation.id AND replay.status = 'PENDING'
-				  )
-				  AND NOT EXISTS (
-					  SELECT 1 FROM public.youtube_live_reconciliation_heads AS head
-					  WHERE head.end_candidate_observation_id = observation.id
-				  )
+				  AND NOT public.source_observation_retention_protected(observation.id)
 				ORDER BY observation.received_at, observation.id
 				LIMIT $3
 				FOR UPDATE OF observation SKIP LOCKED
@@ -312,10 +301,10 @@ func insertRetentionObservation(
 			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
 		) VALUES (
 			$1, $2, $3, $3, 1, 1, $4, $4, $4,
-			pg_catalog.repeat('a', 64), 'COMPLETE', 'CONTIGUOUS',
+			decode(pg_catalog.repeat('a', 64), 'hex'), 'COMPLETE', 'CONTIGUOUS',
 			(SELECT id FROM public.source_observation_payloads WHERE observation_kind=$2 AND schema_version=1
 			 AND canonical_profile='source-observation-canonical-json-v1' AND payload_sha256=decode(repeat('b',64),'hex')),
-			pg_catalog.repeat('c', 64),
+			decode(pg_catalog.repeat('c', 64), 'hex'),
 			'dbtest', $3, $2, 1, 1
 		)
 		RETURNING id`, provider, kind, key, receivedAt).Scan(&id); err != nil {
@@ -458,4 +447,55 @@ func repeatedTimes(value time.Time, count int) []time.Time {
 	}
 
 	return values
+}
+
+func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
+	pool := NewPool(t)
+	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	ids := make([]int64, 0, 5)
+	for _, key := range []string{"current", "staging", "leased", "live", "upcoming"} {
+		ids = append(ids, insertRetentionObservation(t, pool, communityPageKind, base, key))
+	}
+	eligible := insertRetentionObservation(t, pool, communityPageKind, base, "eligible")
+	// generation 번호를 명시하여 세 가지 보호를 서로 독립적으로 검증한다.
+	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_collection_projection_generations
+		(generation,status,row_count,projection_sha256,valid_until,activated_at) OVERRIDING SYSTEM VALUE
+		VALUES (9001,'CURRENT',0,repeat('a',64),now(),now()),
+		       (9002,'STAGING',0,repeat('b',64),now(),NULL),
+		       (9003,'RETIRED',0,repeat('c',64),now(),now());
+		UPDATE source_observations SET projection_generation=CASE subject_key WHEN 'current' THEN 9001
+			WHEN 'staging' THEN 9002 ELSE 9003 END;
+		INSERT INTO youtube_collection_job_leases
+			(job_key,provider,job_class,collection_job_kind,subject_key,projection_generation,poll_interval_ms,
+			 slot_state,scheduled_for,next_due_at,owner_instance,lease_expires_at)
+		VALUES ('leased','youtubejs','SUBJECT','community_collect','leased',9003,120000,
+			'ACTIVE',now(),now(),'collector',now()+interval '1 minute');
+		INSERT INTO youtube_live_sessions(video_id,channel_id,status)
+		VALUES ('retention-live','UC_retention','LIVE'),('retention-upcoming','UC_retention','UPCOMING');
+		INSERT INTO source_observation_applications(observation_id,entity_kind,entity_key,decision)
+		SELECT id,'youtube_live_session','retention-'||subject_key,'APPLIED' FROM source_observations
+		WHERE subject_key IN ('live','upcoming')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{base.Add(time.Hour)}, 1000); len(got) != 1 || got[0] != eligible {
+		t.Fatalf("protected retention deleted %v, want only %d", got, eligible)
+	}
+	assertRetentionObservationsExist(t, pool, ids)
+	_, err = pool.Exec(t.Context(), `UPDATE youtube_collection_projection_generations SET status='RETIRED',activated_at=now();
+		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL;
+		UPDATE youtube_live_sessions SET status='ENDED'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{base.Add(time.Hour)}, 1000); len(got) != len(ids) {
+		t.Fatalf("released retention deleted %v, want %v", got, ids)
+	}
+	var applications int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM source_observation_applications`).Scan(&applications); err != nil {
+		t.Fatal(err)
+	}
+	if applications != 0 {
+		t.Fatalf("applications remain after parents expire: %d", applications)
+	}
 }

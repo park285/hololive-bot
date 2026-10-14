@@ -145,10 +145,6 @@ func (c *Consumer) liveReconcile(kind contract.ObservationKind) (func(context.Co
 		return c.reconcileLive, true
 	}
 
-	if kind == contract.KindViewerSample {
-		return c.reconcileViewer, true
-	}
-
 	if kind == contract.KindSchedule {
 		return c.reconcileSchedule, true
 	}

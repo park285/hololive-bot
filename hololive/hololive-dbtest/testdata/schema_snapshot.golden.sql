@@ -542,7 +542,7 @@ TABLE observation_contract_generations
   COLUMN current_generation bigint NOT NULL
   COLUMN updated_by text NOT NULL
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
+  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_observation_contract_provider_vocab CHECK ((provider = ANY (ARRAY['holodex'::text, 'youtubejs'::text, 'hololive_official'::text])))
   CONSTRAINT chk_observation_contract_updated_by CHECK (((length(updated_by) >= 1) AND (length(updated_by) <= 128)))
   CONSTRAINT observation_contract_generations_current_generation_check CHECK ((current_generation > 0))
@@ -579,22 +579,14 @@ TABLE source_collection_checkpoints
 TABLE source_observation_applications
   OPTIONS autovacuum_vacuum_scale_factor=0.05,autovacuum_vacuum_threshold=500
   COLUMN id bigint NOT NULL DEFAULT nextval('source_observation_applications_id_seq'::regclass)
-  COLUMN observation_id bigint
-  COLUMN provider text NOT NULL
-  COLUMN observation_kind text NOT NULL
-  COLUMN subject_key text NOT NULL
-  COLUMN evidence_sha256 text NOT NULL
+  COLUMN observation_id bigint NOT NULL
   COLUMN entity_kind text NOT NULL
   COLUMN entity_key text NOT NULL
   COLUMN decision text NOT NULL
-  COLUMN effective_at timestamp with time zone NOT NULL
   COLUMN applied_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_source_observation_application_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(entity_kind) >= 1) AND (length(entity_kind) <= 64)) AND ((length(entity_key) >= 1) AND (length(entity_key) <= 256)) AND ((length(decision) >= 1) AND (length(decision) <= 128))))
-  CONSTRAINT chk_source_observation_application_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
-  CONSTRAINT fk_source_observation_application_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
-  CONSTRAINT source_observation_applications_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT chk_source_observation_application_bounds CHECK ((((length(entity_kind) >= 1) AND (length(entity_kind) <= 64)) AND ((length(entity_key) >= 1) AND (length(entity_key) <= 256)) AND ((length(decision) >= 1) AND (length(decision) <= 128))))
+  CONSTRAINT source_observation_applications_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE CASCADE
   CONSTRAINT source_observation_applications_pkey PRIMARY KEY (id)
-  INDEX CREATE INDEX idx_source_observation_applications_orphaned_kind_applied_id ON public.source_observation_applications USING btree (observation_kind, applied_at, id) WHERE (observation_id IS NULL)
   INDEX CREATE UNIQUE INDEX uq_source_observation_application_active ON public.source_observation_applications USING btree (observation_id, entity_kind, entity_key) WHERE (observation_id IS NOT NULL)
 
 TABLE source_observation_collisions
@@ -632,7 +624,7 @@ TABLE source_observation_consumer_offsets
   COLUMN last_processed_at timestamp with time zone
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_source_observation_consumer_offset_bounds CHECK (((length(consumer_name) >= 1) AND (length(consumer_name) <= 128)))
-  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
+  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT source_observation_consumer_offsets_last_processed_id_check CHECK ((last_processed_id >= 0))
   CONSTRAINT source_observation_consumer_offsets_pkey PRIMARY KEY (consumer_name, observation_kind)
 
@@ -746,10 +738,10 @@ TABLE source_observations
   COLUMN observed_at timestamp with time zone NOT NULL
   COLUMN source_event_at timestamp with time zone
   COLUMN received_at timestamp with time zone NOT NULL DEFAULT now()
-  COLUMN scope_sha256 text NOT NULL
+  COLUMN scope_sha256 bytea NOT NULL
   COLUMN completeness text NOT NULL
   COLUMN continuity text NOT NULL
-  COLUMN evidence_sha256 text NOT NULL
+  COLUMN evidence_sha256 bytea NOT NULL
   COLUMN collector_instance text NOT NULL
   COLUMN job_key text NOT NULL
   COLUMN collection_job_kind text NOT NULL
@@ -759,7 +751,7 @@ TABLE source_observations
   COLUMN payload_id bigint NOT NULL
   CONSTRAINT chk_source_observation_completeness_vocab CHECK ((completeness = ANY (ARRAY['COMPLETE'::text, 'PARTIAL'::text, 'UNKNOWN'::text])))
   CONSTRAINT chk_source_observation_continuity_vocab CHECK ((continuity = ANY (ARRAY['CONTIGUOUS'::text, 'GAP_UNRESOLVED'::text, 'NOT_APPLICABLE'::text])))
-  CONSTRAINT chk_source_observation_hashes CHECK (((scope_sha256 ~ '^[0-9a-f]{64}$'::text) AND (evidence_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT chk_source_observation_hashes CHECK (((octet_length(scope_sha256) = 32) AND (octet_length(evidence_sha256) = 32)))
   CONSTRAINT chk_source_observation_text_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(collector_instance) >= 1) AND (length(collector_instance) <= 128)) AND ((length(job_key) >= 1) AND (length(job_key) <= 512)) AND ((length(collection_job_kind) >= 1) AND (length(collection_job_kind) <= 128))))
   CONSTRAINT source_observations_contract_generation_check CHECK ((contract_generation > 0))
   CONSTRAINT source_observations_fence_epoch_check CHECK ((fence_epoch > 0))
@@ -838,16 +830,6 @@ TABLE x_space_starts
   COLUMN first_seen_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT x_space_starts_pkey PRIMARY KEY (space_id)
   INDEX CREATE INDEX idx_x_space_starts_first_seen ON public.x_space_starts USING btree (first_seen_at)
-
-TABLE youtube_channel_latest_stats
-  COLUMN channel_id character varying(64) NOT NULL
-  COLUMN member_name text
-  COLUMN subscribers bigint
-  COLUMN videos bigint
-  COLUMN views bigint
-  COLUMN time timestamp with time zone NOT NULL
-  COLUMN updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-  CONSTRAINT youtube_channel_latest_stats_pkey PRIMARY KEY (channel_id)
 
 TABLE youtube_channel_live_checks
   COLUMN channel_id character varying(64) NOT NULL
@@ -1058,7 +1040,7 @@ TABLE youtube_collection_targets
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN member_since_generation bigint
   COLUMN not_before timestamp with time zone
-  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
+  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_youtube_collection_target_member_since CHECK (((member_since_generation IS NULL) OR ((member_since_generation >= 1) AND (member_since_generation <= projection_generation))))
   CONSTRAINT chk_youtube_collection_target_subject CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256)))
   CONSTRAINT youtube_collection_targets_poll_interval_ms_check CHECK (((poll_interval_ms >= 1000) AND (poll_interval_ms <= 86400000)))
@@ -1118,14 +1100,14 @@ TABLE youtube_content_absence_slots
   COLUMN observation_kind text NOT NULL
   COLUMN scheduled_for timestamp with time zone NOT NULL
   COLUMN observation_id bigint
-  COLUMN evidence_sha256 text NOT NULL
+  COLUMN evidence_sha256 bytea NOT NULL
   COLUMN effective_at timestamp with time zone NOT NULL
   COLUMN received_at timestamp with time zone NOT NULL
-  COLUMN scope_sha256 text NOT NULL
+  COLUMN scope_sha256 bytea NOT NULL
   COLUMN coverage jsonb NOT NULL
   CONSTRAINT chk_youtube_content_absence_bounds CHECK (((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 50)))
   CONSTRAINT chk_youtube_content_absence_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (octet_length((coverage)::text) <= 8192)))
-  CONSTRAINT chk_youtube_content_absence_hashes CHECK (((evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (scope_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT chk_youtube_content_absence_hashes CHECK (((octet_length(scope_sha256) = 32) AND (octet_length(evidence_sha256) = 32)))
   CONSTRAINT chk_youtube_content_absence_kind CHECK ((observation_kind = ANY (ARRAY['video_list'::text, 'shorts_list'::text])))
   CONSTRAINT youtube_content_absence_slots_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_content_absence_slots_pkey PRIMARY KEY (channel_id, observation_kind, scheduled_for)
@@ -1202,11 +1184,12 @@ TABLE youtube_content_watermarks
 TABLE youtube_live_absence_slots
   COLUMN observation_id bigint NOT NULL
   COLUMN scheduled_for timestamp with time zone NOT NULL
-  COLUMN evidence_sha256 text NOT NULL
+  COLUMN evidence_sha256 bytea NOT NULL
   COLUMN effective_at timestamp with time zone NOT NULL
   COLUMN received_at timestamp with time zone NOT NULL
-  COLUMN scope_sha256 text NOT NULL
+  COLUMN scope_sha256 bytea NOT NULL
   COLUMN coverage jsonb NOT NULL
+  CONSTRAINT chk_youtube_live_absence_hashes CHECK (((octet_length(scope_sha256) = 32) AND (octet_length(evidence_sha256) = 32)))
   CONSTRAINT chk_youtube_live_absence_slots_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (jsonb_typeof((coverage -> 'requested_channel_ids'::text)) = 'array'::text)))
   CONSTRAINT youtube_live_absence_slots_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_channels ON public.youtube_live_absence_slots USING gin (((coverage -> 'requested_channel_ids'::text)))
@@ -1319,46 +1302,6 @@ TABLE youtube_live_sessions
   INDEX CREATE INDEX idx_yls_ended_history_sort ON public.youtube_live_sessions USING btree (history_sort_at DESC, video_id DESC) WHERE (status = 'ENDED'::text)
   INDEX CREATE INDEX idx_yls_live_first_seen ON public.youtube_live_sessions USING btree (live_first_seen_at, channel_id) WHERE (status = 'LIVE'::text)
   INDEX CREATE INDEX idx_yls_status ON public.youtube_live_sessions USING btree (status)
-
-TABLE youtube_live_viewer_sample_evidence
-  COLUMN video_id text NOT NULL
-  COLUMN sample_window_start timestamp with time zone NOT NULL
-  COLUMN provider text NOT NULL
-  COLUMN observation_id bigint
-  COLUMN viewer_count bigint
-  COLUMN availability text NOT NULL
-  COLUMN sample_window_seconds integer NOT NULL
-  COLUMN scheduled_for timestamp with time zone NOT NULL
-  COLUMN effective_at timestamp with time zone NOT NULL
-  COLUMN received_at timestamp with time zone NOT NULL
-  CONSTRAINT chk_youtube_viewer_evidence_availability CHECK ((availability = ANY (ARRAY['AVAILABLE'::text, 'HIDDEN'::text, 'UNAVAILABLE'::text])))
-  CONSTRAINT chk_youtube_viewer_evidence_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
-  CONSTRAINT chk_youtube_viewer_evidence_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
-  CONSTRAINT chk_youtube_viewer_evidence_window CHECK (((sample_window_seconds >= 1) AND (sample_window_seconds <= 86400)))
-  CONSTRAINT youtube_live_viewer_sample_evidence_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE CASCADE
-  CONSTRAINT youtube_live_viewer_sample_evidence_pkey PRIMARY KEY (video_id, sample_window_start, provider)
-  INDEX CREATE INDEX idx_youtube_live_viewer_sample_evidence_observation_id ON public.youtube_live_viewer_sample_evidence USING btree (observation_id)
-
-TABLE youtube_live_viewer_sample_heads
-  COLUMN video_id text NOT NULL
-  COLUMN last_resolved_window_start timestamp with time zone
-  COLUMN last_resolved_count bigint
-  COLUMN last_resolved_availability text
-  COLUMN prior_resolved_window_start timestamp with time zone
-  COLUMN prior_resolved_count bigint
-  COLUMN prior_resolved_availability text
-  COLUMN unresolved_window_start timestamp with time zone
-  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_viewer_head_availability CHECK (((last_resolved_availability IS NULL) OR (last_resolved_availability = ANY (ARRAY['AVAILABLE'::text, 'HIDDEN'::text, 'UNAVAILABLE'::text]))))
-  CONSTRAINT chk_youtube_viewer_head_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
-  CONSTRAINT youtube_live_viewer_sample_heads_pkey PRIMARY KEY (video_id)
-
-TABLE youtube_live_viewer_samples
-  COLUMN video_id character varying(20) NOT NULL
-  COLUMN captured_at timestamp with time zone NOT NULL
-  COLUMN channel_id character varying(64) NOT NULL
-  COLUMN concurrent_viewers integer NOT NULL DEFAULT 0
-  CONSTRAINT youtube_live_viewer_samples_pkey PRIMARY KEY (video_id, captured_at)
 
 TABLE youtube_notification_delivery
   OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
@@ -1493,17 +1436,6 @@ TABLE youtube_schedule_items
   CONSTRAINT chk_youtube_schedule_item_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
   CONSTRAINT youtube_schedule_items_pkey PRIMARY KEY (group_key, provider, external_id)
 
-TABLE youtube_stream_stats
-  COLUMN video_id character varying(20) NOT NULL
-  COLUMN channel_id character varying(64) NOT NULL
-  COLUMN started_at timestamp with time zone
-  COLUMN ended_at timestamp with time zone
-  COLUMN max_concurrent_viewers integer DEFAULT 0
-  COLUMN avg_concurrent_viewers integer DEFAULT 0
-  COLUMN sample_count integer NOT NULL DEFAULT 0
-  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT youtube_stream_stats_pkey PRIMARY KEY (video_id)
-
 TABLE youtube_video_availability
   COLUMN video_id character varying(20) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
@@ -1625,11 +1557,9 @@ FUNCTION delete_retired_youtube_projection_batch(requested_cutoff timestamp with
 
 FUNCTION delete_source_collection_checkpoint_retention_batch(requested_cutoff timestamp with time zone, requested_limit integer) RETURNS TABLE(deleted_scope_sha256 text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    WITH candidates AS (\n        SELECT checkpoint.provider,\n               checkpoint.observation_kind,\n               checkpoint.subject_key,\n               checkpoint.scope_sha256\n        FROM public.source_collection_checkpoints AS checkpoint\n        WHERE checkpoint.updated_at < requested_cutoff\n          AND EXISTS (\n              SELECT 1\n              FROM public.source_collection_checkpoints AS newer\n              WHERE newer.provider = checkpoint.provider\n                AND newer.observation_kind = checkpoint.observation_kind\n                AND newer.subject_key = checkpoint.subject_key\n                AND (newer.updated_at, newer.scope_sha256) >\n                    (checkpoint.updated_at, checkpoint.scope_sha256)\n          )\n        ORDER BY checkpoint.updated_at,\n                 checkpoint.provider,\n                 checkpoint.observation_kind,\n                 checkpoint.subject_key,\n                 checkpoint.scope_sha256\n        LIMIT CASE\n            WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n            ELSE 0\n        END\n        FOR UPDATE OF checkpoint SKIP LOCKED\n    )\n    DELETE FROM public.source_collection_checkpoints AS checkpoint\n    USING candidates AS candidate\n    WHERE checkpoint.provider = candidate.provider\n      AND checkpoint.observation_kind = candidate.observation_kind\n      AND checkpoint.subject_key = candidate.subject_key\n      AND checkpoint.scope_sha256 = candidate.scope_sha256\n      AND checkpoint.updated_at < requested_cutoff\n      AND EXISTS (\n          SELECT 1\n          FROM public.source_collection_checkpoints AS newer\n          WHERE newer.provider = checkpoint.provider\n            AND newer.observation_kind = checkpoint.observation_kind\n            AND newer.subject_key = checkpoint.subject_key\n            AND (newer.updated_at, newer.scope_sha256) >\n                (checkpoint.updated_at, checkpoint.scope_sha256)\n      )\n    RETURNING checkpoint.scope_sha256\n"
 
-FUNCTION delete_source_observation_application_retention_batch(requested_kinds text[], requested_cutoffs timestamp with time zone[], requested_limit integer) RETURNS TABLE(deleted_id bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog,jit=off BODY "\n    WITH policies AS (\n        SELECT requested_kinds[policy.position] AS observation_kind,\n               requested_cutoffs[policy.position] AS cutoff\n        FROM pg_catalog.generate_subscripts(requested_kinds, 1) AS policy(position)\n        WHERE pg_catalog.cardinality(requested_kinds) BETWEEN 1 AND 16\n          AND pg_catalog.cardinality(requested_kinds) = pg_catalog.cardinality(requested_cutoffs)\n    ),\n    per_policy_candidates AS (\n        SELECT candidate.id,\n               candidate.applied_at\n        FROM policies AS policy\n        CROSS JOIN LATERAL (\n            SELECT application.id,\n                   application.applied_at\n            FROM public.source_observation_applications AS application\n            WHERE application.observation_kind = policy.observation_kind\n              AND application.observation_id IS NULL\n              AND application.applied_at < policy.cutoff\n            ORDER BY application.applied_at, application.id\n            LIMIT CASE\n                WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n                ELSE 0\n            END\n            FOR UPDATE OF application SKIP LOCKED\n        ) AS candidate\n    ),\n    candidates AS (\n        SELECT candidate.id\n        FROM per_policy_candidates AS candidate\n        ORDER BY candidate.applied_at, candidate.id\n        LIMIT CASE\n            WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n            ELSE 0\n        END\n    )\n    DELETE FROM public.source_observation_applications AS application\n    USING candidates AS candidate\n    WHERE application.id = candidate.id\n      AND application.observation_id IS NULL\n    RETURNING application.id\n"
-
 FUNCTION delete_source_observation_payload_batch(requested_cutoff timestamp with time zone, requested_limit integer) RETURNS bigint LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    previous_id bigint;\n    candidate_ids bigint[];\n    deleted bigint;\nBEGIN\n    IF requested_cutoff IS NULL OR requested_limit IS NULL OR requested_limit NOT BETWEEN 1 AND 1000 THEN\n        RAISE EXCEPTION 'invalid payload retention request' USING ERRCODE = '22023';\n    END IF;\n    SELECT cursor_id INTO previous_id FROM public.source_observation_payload_gc_state\n    WHERE singleton FOR UPDATE;\n    SELECT array_agg(candidate.id ORDER BY candidate.id) INTO candidate_ids\n    FROM (\n        SELECT payload.id FROM public.source_observation_payloads payload\n        WHERE payload.id > previous_id AND payload.created_at < requested_cutoff\n        ORDER BY payload.id LIMIT requested_limit FOR UPDATE SKIP LOCKED\n    ) candidate;\n    DELETE FROM public.source_observation_payloads payload\n    WHERE payload.id = ANY(candidate_ids)\n      AND NOT EXISTS (SELECT 1 FROM public.source_observations observation WHERE observation.payload_id = payload.id);\n    GET DIAGNOSTICS deleted = ROW_COUNT;\n    UPDATE public.source_observation_payload_gc_state\n    SET cursor_id = coalesce(candidate_ids[array_length(candidate_ids, 1)], 0)\n    WHERE singleton;\n    RETURN deleted;\nEND\n"
 
-FUNCTION delete_source_observation_retention_batch(requested_kinds text[], requested_cutoffs timestamp with time zone[], requested_limit integer) RETURNS TABLE(deleted_id bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog,jit=off BODY "\n    WITH policies AS (\n        SELECT requested_kinds[policy.position] AS observation_kind,\n               requested_cutoffs[policy.position] AS cutoff\n        FROM pg_catalog.generate_subscripts(requested_kinds, 1) AS policy(position)\n        WHERE pg_catalog.cardinality(requested_kinds) BETWEEN 1 AND 16\n          AND pg_catalog.cardinality(requested_kinds) = pg_catalog.cardinality(requested_cutoffs)\n    ),\n    per_policy_candidates AS (\n        SELECT candidate.id,\n               candidate.received_at\n        FROM policies AS policy\n        CROSS JOIN LATERAL (\n            SELECT observation.id,\n                   observation.received_at\n            FROM public.source_observations AS observation\n            WHERE observation.observation_kind = policy.observation_kind\n              AND observation.received_at < policy.cutoff\n              AND NOT EXISTS (\n                  SELECT 1\n                  FROM public.source_observation_queue AS queue\n                  WHERE queue.observation_id = observation.id\n              )\n              AND NOT EXISTS (\n                  SELECT 1\n                  FROM public.source_observation_replay_requests AS replay\n                  WHERE replay.observation_id = observation.id\n                    AND replay.status = 'PENDING'\n              )\n              AND NOT EXISTS (\n                  SELECT 1\n                  FROM public.youtube_live_reconciliation_heads AS head\n                  WHERE head.end_candidate_observation_id = observation.id\n              )\n            ORDER BY observation.received_at, observation.id\n            LIMIT CASE\n                WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n                ELSE 0\n            END\n            FOR UPDATE OF observation SKIP LOCKED\n        ) AS candidate\n    ),\n    candidates AS (\n        SELECT candidate.id\n        FROM per_policy_candidates AS candidate\n        ORDER BY candidate.received_at, candidate.id\n        LIMIT CASE\n            WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n            ELSE 0\n        END\n    )\n    DELETE FROM public.source_observations AS observation\n    USING candidates\n    WHERE observation.id = candidates.id\n      AND NOT EXISTS (\n          SELECT 1\n          FROM public.source_observation_queue AS live_queue\n          WHERE live_queue.observation_id = observation.id\n      )\n      AND NOT EXISTS (\n          SELECT 1\n          FROM public.source_observation_replay_requests AS live_replay\n          WHERE live_replay.observation_id = observation.id\n            AND live_replay.status = 'PENDING'\n      )\n      AND NOT EXISTS (\n          SELECT 1\n          FROM public.youtube_live_reconciliation_heads AS live_head\n          WHERE live_head.end_candidate_observation_id = observation.id\n      )\n    RETURNING observation.id\n"
+FUNCTION delete_source_observation_retention_batch(requested_kinds text[], requested_cutoffs timestamp with time zone[], requested_limit integer) RETURNS TABLE(deleted_id bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog,jit=off BODY "\n    WITH policies AS (\n        SELECT requested_kinds[p.position] AS kind, requested_cutoffs[p.position] AS cutoff\n        FROM pg_catalog.generate_subscripts(requested_kinds, 1) AS p(position)\n        WHERE cardinality(requested_kinds) BETWEEN 1 AND 16\n          AND cardinality(requested_kinds) = cardinality(requested_cutoffs)\n    ), per_policy AS (\n        SELECT candidate.id, candidate.received_at FROM policies\n        CROSS JOIN LATERAL (\n            SELECT observation.id, observation.received_at\n            FROM public.source_observations observation\n            WHERE observation.observation_kind = policies.kind AND observation.received_at < policies.cutoff\n              AND NOT public.source_observation_retention_protected(observation.id)\n            ORDER BY observation.received_at, observation.id\n            LIMIT CASE WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit ELSE 0 END\n            FOR UPDATE OF observation SKIP LOCKED\n        ) candidate\n    ), candidates AS (\n        SELECT id FROM per_policy ORDER BY received_at, id\n        LIMIT CASE WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit ELSE 0 END\n    )\n    DELETE FROM public.source_observations observation USING candidates\n    WHERE observation.id = candidates.id\n      AND NOT public.source_observation_retention_protected(observation.id)\n    RETURNING observation.id\n"
 
 FUNCTION delete_youtube_live_absence_slot_retention_batch(requested_cutoff timestamp with time zone, requested_limit integer) RETURNS TABLE(deleted_id bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    WITH active_old_live AS (\n        SELECT 1\n        FROM public.source_observation_queue AS queue\n        JOIN public.source_observations AS observation\n          ON observation.id = queue.observation_id\n        WHERE queue.status = 'PENDING'\n          AND observation.observation_kind = 'live_snapshot'\n          AND COALESCE(observation.source_event_at, observation.scheduled_for) < requested_cutoff\n        LIMIT 1\n    ),\n    processing_old_live AS (\n        SELECT 1\n        FROM public.source_observation_queue AS queue\n        JOIN public.source_observations AS observation\n          ON observation.id = queue.observation_id\n        WHERE queue.status = 'PROCESSING'\n          AND observation.observation_kind = 'live_snapshot'\n          AND COALESCE(observation.source_event_at, observation.scheduled_for) < requested_cutoff\n        LIMIT 1\n    ),\n    replaying_old_live AS (\n        SELECT 1\n        FROM public.source_observation_replay_requests AS replay\n        JOIN public.source_observations AS observation\n          ON observation.id = replay.observation_id\n        WHERE replay.status = 'PENDING'\n          AND observation.observation_kind = 'live_snapshot'\n          AND COALESCE(observation.source_event_at, observation.scheduled_for) < requested_cutoff\n        LIMIT 1\n    ),\n    candidates AS (\n        SELECT slot.observation_id\n        FROM public.youtube_live_absence_slots AS slot\n        WHERE slot.scheduled_for < requested_cutoff\n          AND NOT EXISTS (SELECT 1 FROM active_old_live)\n          AND NOT EXISTS (SELECT 1 FROM processing_old_live)\n          AND NOT EXISTS (SELECT 1 FROM replaying_old_live)\n        ORDER BY slot.scheduled_for, slot.observation_id\n        LIMIT CASE\n            WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n            ELSE 0\n        END\n        FOR UPDATE OF slot SKIP LOCKED\n    )\n    DELETE FROM public.youtube_live_absence_slots AS slot\n    USING candidates AS candidate\n    WHERE slot.observation_id = candidate.observation_id\n      AND slot.scheduled_for < requested_cutoff\n    RETURNING slot.observation_id\n"
 
@@ -1643,9 +1573,9 @@ FUNCTION lock_current_youtube_collection_projection() RETURNS TABLE(generation b
 
 FUNCTION lock_observation_contract(requested_provider text, requested_observation_kind text) RETURNS TABLE(current_schema_version smallint, current_generation bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT contract.current_schema_version,\n           contract.current_generation\n    FROM public.observation_contract_generations AS contract\n    WHERE contract.provider = requested_provider\n      AND contract.observation_kind = requested_observation_kind\n    FOR SHARE OF contract\n"
 
-FUNCTION lock_source_observation(requested_observation_id bigint) RETURNS TABLE(provider text, observation_kind text, subject_key text, observation_key text, schema_version smallint, contract_generation bigint, evidence_sha256 text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT observation.provider,\n           observation.observation_kind,\n           observation.subject_key,\n           observation.observation_key,\n           observation.schema_version,\n           observation.contract_generation,\n           observation.evidence_sha256\n    FROM public.source_observations AS observation\n    WHERE observation.id = requested_observation_id\n    FOR SHARE OF observation\n"
+FUNCTION lock_source_observation(requested_observation_id bigint) RETURNS TABLE(provider text, observation_kind text, subject_key text, observation_key text, schema_version smallint, contract_generation bigint, evidence_sha256 text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT observation.provider, observation.observation_kind, observation.subject_key,\n           observation.observation_key, observation.schema_version, observation.contract_generation,\n           encode(observation.evidence_sha256, 'hex')\n    FROM public.source_observations observation\n    WHERE observation.id = requested_observation_id\n    FOR SHARE OF observation\n"
 
-FUNCTION lock_source_observation_identity(requested_provider text, requested_observation_kind text, requested_subject_key text, requested_observation_key text, requested_schema_version smallint, requested_contract_generation bigint) RETURNS TABLE(id bigint, evidence_sha256 text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT observation.id,\n           observation.evidence_sha256\n    FROM public.source_observations AS observation\n    WHERE observation.provider = requested_provider\n      AND observation.observation_kind = requested_observation_kind\n      AND observation.subject_key = requested_subject_key\n      AND observation.observation_key = requested_observation_key\n      AND observation.schema_version = requested_schema_version\n      AND observation.contract_generation = requested_contract_generation\n    FOR SHARE OF observation\n"
+FUNCTION lock_source_observation_identity(requested_provider text, requested_observation_kind text, requested_subject_key text, requested_observation_key text, requested_schema_version smallint, requested_contract_generation bigint) RETURNS TABLE(id bigint, evidence_sha256 text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT observation.id, encode(observation.evidence_sha256, 'hex')\n    FROM public.source_observations observation\n    WHERE observation.provider = requested_provider\n      AND observation.observation_kind = requested_observation_kind\n      AND observation.subject_key = requested_subject_key\n      AND observation.observation_key = requested_observation_key\n      AND observation.schema_version = requested_schema_version\n      AND observation.contract_generation = requested_contract_generation\n    FOR SHARE OF observation\n"
 
 FUNCTION lock_source_observation_payload(requested_kind text, requested_version smallint, requested_digest bytea, expected_payload jsonb) RETURNS TABLE(id bigint) LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    stored_payload jsonb;\nBEGIN\n    SELECT candidate.id, candidate.payload\n    INTO id, stored_payload\n    FROM public.source_observation_payloads AS candidate\n    WHERE candidate.observation_kind = requested_kind\n      AND candidate.schema_version = requested_version\n      AND candidate.canonical_profile = 'source-observation-canonical-json-v1'\n      AND candidate.payload_sha256 = requested_digest\n    FOR KEY SHARE OF candidate;\n    IF FOUND THEN\n        IF stored_payload IS DISTINCT FROM expected_payload THEN\n            RAISE EXCEPTION 'source observation payload digest collision or content mismatch';\n        END IF;\n        RETURN NEXT;\n    END IF;\nEND\n"
 
@@ -1667,11 +1597,17 @@ FUNCTION require_source_observation_payload(requested_id bigint, requested_kind 
 
 FUNCTION scrub_bot_command_execution_terminal_summary() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.result_summary := NEW.status;\n    RETURN NEW;\nEND\n"
 
+FUNCTION source_observation_retention_protected(requested_id bigint) RETURNS boolean LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT EXISTS (\n        SELECT 1 FROM public.source_observations AS observation\n        WHERE observation.id = requested_id AND (\n            EXISTS (SELECT 1 FROM public.source_observation_queue q WHERE q.observation_id = observation.id)\n            OR EXISTS (SELECT 1 FROM public.source_observation_replay_requests r\n                       WHERE r.observation_id = observation.id AND r.status = 'PENDING')\n            OR EXISTS (SELECT 1 FROM public.youtube_live_reconciliation_heads h\n                       WHERE h.end_candidate_observation_id = observation.id)\n            OR EXISTS (SELECT 1 FROM public.youtube_collection_projection_generations g\n                       WHERE g.generation = observation.projection_generation AND g.status IN ('CURRENT', 'STAGING'))\n            OR EXISTS (SELECT 1 FROM public.youtube_collection_job_leases l\n                       WHERE l.job_key = observation.job_key AND l.slot_state = 'ACTIVE')\n            OR EXISTS (SELECT 1 FROM public.source_observation_applications a\n                       JOIN public.youtube_live_sessions s ON s.video_id = a.entity_key\n                       WHERE a.observation_id = observation.id AND a.entity_kind = 'youtube_live_session'\n                         AND s.status IN ('LIVE', 'UPCOMING'))\n            OR EXISTS (SELECT 1 FROM public.youtube_live_pending_ends p\n                       JOIN public.youtube_live_sessions s ON s.video_id = p.video_id\n                       WHERE p.observation_id = observation.id AND s.status IN ('LIVE', 'UPCOMING'))\n        )\n    )\n"
+
 FUNCTION store_youtube_live_review_receipt_facts() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    INSERT INTO public.youtube_live_review_receipt_facts (receipt_id,video_id,recorded_at,facts)\n    VALUES (NEW.receipt_id,NEW.video_id,NEW.recorded_at,\n            public.youtube_live_review_receipt_semantic_facts(NEW.original_snapshot));\n    RETURN NULL;\nEND\n"
 
 FUNCTION youtube_collection_membership_valid(requested_kinds text[], requested_exact_subject boolean, requested_subject_key text, requested_target_count integer, requested_generation bigint) RETURNS boolean LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT COALESCE(requested_target_count > 0, FALSE)\n       AND COALESCE(cardinality(requested_kinds) > 0, FALSE)\n       AND COALESCE(requested_generation > 0, FALSE)\n       AND requested_exact_subject IS NOT NULL\n       AND EXISTS (\n           SELECT 1\n           FROM public.youtube_collection_projection_generations AS projection\n           CROSS JOIN LATERAL (\n               SELECT count(target.subject_key) AS target_count,\n                      count(target.subject_key) FILTER (\n                          WHERE target.member_since_generation BETWEEN 1 AND requested_generation\n                      ) AS member_count\n               FROM public.youtube_collection_targets AS target\n               WHERE target.projection_generation = projection.generation\n                 AND target.observation_kind = ANY (requested_kinds)\n                 AND target.enabled\n                 AND (NOT requested_exact_subject OR target.subject_key = requested_subject_key)\n           ) AS scope\n           WHERE projection.status = 'CURRENT'\n             AND projection.valid_until > statement_timestamp()\n             AND scope.target_count = requested_target_count\n             AND scope.member_count = requested_target_count\n       )\n"
 
-FUNCTION youtube_live_review_current_receipt(p_video_id text) RETURNS TABLE(reviewed_at timestamp with time zone) LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nWITH current_snapshot AS MATERIALIZED (\n    SELECT jsonb_build_object(\n        'session',to_jsonb(session),\n        'head',CASE WHEN head.video_id IS NOT NULL THEN jsonb_build_object(\n            'status',head.status,\n            'last_upcoming_positive_at',head.last_upcoming_positive_at,\n            'last_upcoming_positive_seen_at',head.last_upcoming_positive_seen_at,\n            'last_live_positive_at',head.last_live_positive_at,\n            'last_live_positive_seen_at',head.last_live_positive_seen_at,\n            'last_end_evidence_at',head.last_end_evidence_at,\n            'last_complete_absence_at',head.last_complete_absence_at,\n            'last_absence_scheduled_for',head.last_absence_scheduled_for,\n            'first_absence_scheduled_for',head.first_absence_scheduled_for,\n            'second_absence_scheduled_for',head.second_absence_scheduled_for,\n            'consecutive_absence_slots',head.consecutive_absence_slots,\n            'last_absence_observation_id',head.last_absence_observation_id,\n            'end_candidate_kind',head.end_candidate_kind,\n            'end_candidate_observation_id',head.end_candidate_observation_id,\n            'ended_at',head.ended_at,'end_reason',head.end_reason) END,\n        'pending',to_jsonb(pending),'availability',to_jsonb(availability.availability)) AS snapshot,\n        session.status = 'UPCOMING'\n            AND (head.video_id IS NULL OR head.status = session.status)\n            AND (session.lifecycle_origin <> 'observed' OR head.video_id IS NOT NULL)\n            AND availability.video_id IS NOT NULL\n            AND NOT COALESCE(GREATEST(head.last_upcoming_positive_at,head.last_live_positive_at)\n                >= availability.effective_at,false) AS reviewable\n    FROM public.youtube_live_sessions session\n    LEFT JOIN public.youtube_live_reconciliation_heads head USING (video_id)\n    LEFT JOIN public.youtube_live_pending_ends pending USING (video_id)\n    LEFT JOIN public.youtube_video_availability availability USING (video_id)\n    WHERE session.video_id = p_video_id\n), current_facts AS MATERIALIZED (\n    SELECT public.youtube_live_review_semantic_facts(snapshot) AS facts, reviewable\n    FROM current_snapshot\n)\nSELECT max(receipt.recorded_at)\nFROM current_facts\nJOIN public.youtube_live_review_receipt_facts receipt\n  ON receipt.video_id = p_video_id AND receipt.facts = current_facts.facts\nWHERE current_facts.reviewable;\n"
+FUNCTION youtube_live_review_current_facts(p_video_ids text[]) RETURNS TABLE(video_id text, facts jsonb, reviewable boolean) LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nSELECT session.video_id,\n       jsonb_build_object(\n           'session',jsonb_build_object(\n               'video_id',session.video_id,\n               'channel_id',session.channel_id,\n               'status',session.status,\n               'lifecycle_origin',session.lifecycle_origin,\n               'title',session.title,\n               'topic_id',session.topic_id,\n               'is_premiere',session.is_premiere,\n               'scheduled_start_time',extract(epoch FROM session.scheduled_start_time),\n               'started_at',extract(epoch FROM session.started_at),\n               'ended_at',extract(epoch FROM session.ended_at),\n               'live_first_seen_at',extract(epoch FROM session.live_first_seen_at)),\n           'head',CASE WHEN head.video_id IS NOT NULL THEN jsonb_build_object(\n               'status',head.status,\n               'last_upcoming_positive_at',extract(epoch FROM head.last_upcoming_positive_at),\n               'last_upcoming_positive_seen_at',extract(epoch FROM head.last_upcoming_positive_seen_at),\n               'last_live_positive_at',extract(epoch FROM head.last_live_positive_at),\n               'last_live_positive_seen_at',extract(epoch FROM head.last_live_positive_seen_at),\n               'last_end_evidence_at',extract(epoch FROM head.last_end_evidence_at),\n               'last_complete_absence_at',extract(epoch FROM head.last_complete_absence_at),\n               'last_absence_scheduled_for',extract(epoch FROM head.last_absence_scheduled_for),\n               'first_absence_scheduled_for',extract(epoch FROM head.first_absence_scheduled_for),\n               'second_absence_scheduled_for',extract(epoch FROM head.second_absence_scheduled_for),\n               'consecutive_absence_slots',head.consecutive_absence_slots,\n               'last_absence_observation_id',head.last_absence_observation_id,\n               'end_candidate_kind',head.end_candidate_kind,\n               'end_candidate_observation_id',head.end_candidate_observation_id,\n               'ended_at',extract(epoch FROM head.ended_at),\n               'end_reason',head.end_reason) END,\n           'pending',CASE WHEN pending.video_id IS NOT NULL THEN jsonb_build_object(\n               'channel_id',pending.channel_id,\n               'kind',pending.kind,\n               'observation_id',pending.observation_id,\n               'effective_at',extract(epoch FROM pending.effective_at),\n               'scheduled_for',extract(epoch FROM pending.scheduled_for),\n               'ended_at',extract(epoch FROM pending.ended_at),\n               'negative_eligible',pending.negative_eligible,\n               'scope_covers',pending.scope_covers) END,\n           'availability',availability.availability),\n       session.status = 'UPCOMING'\n           AND (head.video_id IS NULL OR head.status = session.status)\n           AND (session.lifecycle_origin <> 'observed' OR head.video_id IS NOT NULL)\n           AND availability.video_id IS NOT NULL\n           AND NOT COALESCE(GREATEST(head.last_upcoming_positive_at,head.last_live_positive_at)\n               >= availability.effective_at,false)\nFROM public.youtube_live_sessions session\nLEFT JOIN public.youtube_live_reconciliation_heads head USING (video_id)\nLEFT JOIN public.youtube_live_pending_ends pending USING (video_id)\nLEFT JOIN public.youtube_video_availability availability USING (video_id)\nWHERE session.video_id = ANY(p_video_ids);\n"
+
+FUNCTION youtube_live_review_current_receipt(p_video_id text) RETURNS TABLE(reviewed_at timestamp with time zone) LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nSELECT max(receipt.reviewed_at)\nFROM public.youtube_live_review_current_receipts(ARRAY[p_video_id]) receipt;\n"
+
+FUNCTION youtube_live_review_current_receipts(p_video_ids text[]) RETURNS TABLE(video_id text, reviewed_at timestamp with time zone) LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nWITH receipts AS MATERIALIZED (\n    SELECT receipt.video_id,receipt.recorded_at,receipt.facts\n    FROM public.youtube_live_review_receipt_facts receipt\n    WHERE receipt.video_id = ANY(p_video_ids)\n), current_input AS MATERIALIZED (\n    -- SubLink를 함수 인수에서 분리해 typed 사실 조회도 호출 문장 안에서 인라인되게 합니다.\n    SELECT ARRAY(SELECT DISTINCT receipt.video_id FROM receipts receipt) AS video_ids\n), current_facts AS MATERIALIZED (\n    SELECT current.*\n    FROM current_input input\n    CROSS JOIN LATERAL public.youtube_live_review_current_facts(input.video_ids) current\n)\nSELECT current_facts.video_id,max(receipt.recorded_at)\nFROM current_facts\nJOIN receipts receipt ON receipt.video_id = current_facts.video_id AND receipt.facts = current_facts.facts\nWHERE current_facts.reviewable\nGROUP BY current_facts.video_id;\n"
 
 FUNCTION youtube_live_review_receipt_semantic_facts(p_snapshot jsonb) RETURNS jsonb LANGUAGE sql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nWITH receipt_snapshot AS MATERIALIZED (\n    SELECT CASE WHEN jsonb_typeof(p_snapshot->'head') = 'object'\n                THEN jsonb_set(p_snapshot, '{head}',\n                    (p_snapshot->'head') - 'ignored_absence_scheduled_for')\n                ELSE p_snapshot\n           END AS snapshot\n)\nSELECT public.youtube_live_review_semantic_facts(snapshot) FROM receipt_snapshot;\n"
 

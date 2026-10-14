@@ -139,15 +139,15 @@ Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailab
 
 Collector loader와 Compose는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS`와 `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`가 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
 
-### Viewer 수집 중단 반영과 검증
+### Viewer 저장소 완전 제거
 
-새 생산은 YouTube.js와 Holodex 양쪽에서 중단하되, 기존 viewer 관측의 소비·재처리는 유지합니다. 적용 순서는 검증된 Go binary와 Node helper를 같은 bundle로 모든 AP에 반영 → 신규 viewer 발행 중단 및 기존 큐 처리 확인 → migration 210과 API의 네 작업 projection/지표 반영 → Grafana dashboard·경보 반영입니다. API projection을 먼저 바꾸면 구형 collector의 viewer가 섞인 Holodex batch 전체가 target 검증에서 거절될 수 있습니다. 롤백은 API의 기존 viewer 대상 복원과 projection 확인을 먼저 하고 구형 AP bundle을 복원합니다.
+시청자 표본의 생산·소비·재처리와 payload 계약은 제거되었습니다. Migration 306은 승인된 다섯 제품 테이블(`youtube_live_viewer_samples`, `youtube_live_viewer_sample_heads`, `youtube_live_viewer_sample_evidence`, `youtube_stream_stats`, `youtube_channel_latest_stats`)을 영구 삭제합니다. 구형 reader·consumer를 위한 호환 경로는 없습니다.
 
-`YouTubeCollectorFreshnessStale/Unavailable`에서 퇴역 작업을 제외하므로 보존된 viewer 성공 지표가 장애 경보로 남지 않습니다. 기존 상태 불일치 감시는 새 live-state 지표로 유지합니다. 큐가 한 번 0이라는 사실만으로 모든 AP의 신규 생산 중단을 대신하지 않습니다. 과거 계약 row·표본·공유 큐를 삭제하지 않으며 기존 보존 정책은 계속 적용됩니다.
+검증된 동일 revision의 중앙 이미지와 모든 AP bundle을 준비한 뒤 API·alarm-worker·모든 collector를 완전히 정지하고 in-flight 작업의 종료를 확인합니다. 그 상태에서 `db-migrate`로 migration을 적용하고 동일 새 revision으로 fleet을 재시작합니다. 구형 API나 AP를 먼저/부분적으로 복원하는 롤백은 허용하지 않습니다. 삭제된 제품 이력 복원이 필요하면 별도 승인된 DB 복구와 대응 revision이 필요합니다.
 
-2026-09-25 로컬 자원 비교: 같은 합성 100영상·20채널 응답을 500회 처리했습니다. HTTPS 요청은 전후 1회/배치, live 관측은 20개로 같고 viewer 관측은 100→0, checkpoint는 120→20입니다. DB 저장을 제외한 정규화·관측 생성은 14.086→3.584ms/배치, 누적 할당은 7,207,041→1,767,077bytes/배치였습니다. 로컬 HTTPS를 포함한 실행은 14.338→3.820ms/배치였습니다. 이는 해당 fixture의 측정이며 운영 CPU/RSS나 외부 응답 지연 개선율이 아닙니다.
+Migration은 예상 밖 `viewer_sample` 원본·payload·replay·충돌·projection/subject-head 이력, 활성 전용 lease 또는 공유 lease의 구 viewer membership을 발견하면 삭제 전에 실패합니다. 큐나 재처리를 완료한 것처럼 표시하지 말고 잔여 의무를 검토합니다. guard를 통과하면 퇴역 kind의 checkpoint·consumer offset과 비활성 전용 lease 및 contract 등록행만 정리합니다. 다른 kind의 `CURRENT`/`STAGING`, 활성 lease, queue/replay와 수집 주기는 유지합니다.
 
-검증은 collector·API projection/metrics·공유 과거 관측·템플릿의 race 검사, helper protocol/type 검사, 30,000개 종료 이력을 추가한 실제 EXPLAIN 접근량 회귀, schema snapshot과 관측 규칙 검사를 포함합니다. 호출 간격·worker 수·운영 데이터·서비스는 이 로컬 구현에서 변경하지 않았습니다. Fallback delta: none.
+검증은 migration의 비어 있지 않은 승인 테이블 삭제·재적용, 잔여 의무에서 원자적 실패, 남길 방송 수집·queue/replay 보호, schema snapshot 및 collector/API/공유 계약 회귀를 포함합니다. 별도 Holodex Go Stream API의 `viewer_count`와 Twitch/Chzzk 데이터는 제거 대상이 아닙니다. Fallback delta: none.
 
 ## YouTube.js transient recovery
 

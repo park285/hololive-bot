@@ -68,7 +68,7 @@ retention 기간, 기존 product grace, provider별 request budget처럼 snapsho
 | 장기 중단 뒤 과거 slot 누적 | DB `date_bin` 기반 missed-slot coalescing으로 최신 due boundary 하나만 수집 |
 | explicit end와 scoped absence predicate 혼합 | explicit end/cancel validity와 scoped absence eligibility를 별도 판정 |
 | due-finalizer/conflict 저장소 누락 | live reconciliation head와 reconciliation conflict audit를 migration에 포함 |
-| viewer/profile/photo 결정 미완료 | viewer conflict는 `UNRESOLVED`로 고정하고 stability 설정 미확정 시 canonical change를 disable |
+| profile/photo 결정 미완료 | stability 설정 미확정 시 canonical change를 disable |
 | pool validation이 보조 loop를 누락 | plane 전체 DB operation이 max 3인 공용 semaphore를 통과 |
 | audit table bounds 누락 | text/hash/vocab/FK/terminal-shape constraint를 migration contract에 포함 |
 
@@ -110,7 +110,6 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/
   video_list_v1.go
   shorts_list_v1.go
   live_snapshot_v1.go
-  viewer_sample_v1.go
   channel_profile_v1.go
   channel_photo_v1.go
   schedule_snapshot_v1.go
@@ -185,20 +184,19 @@ const (
     KindVideoList      ObservationKind = "video_list"
     KindShortsList     ObservationKind = "shorts_list"
     KindLiveSnapshot   ObservationKind = "live_snapshot"
-    KindViewerSample   ObservationKind = "viewer_sample"
     KindChannelProfile ObservationKind = "channel_profile"
     KindChannelPhoto   ObservationKind = "channel_photo"
     KindSchedule       ObservationKind = "schedule_snapshot"
 )
 ```
 
-`viewer_sample`은 퇴역 전 저장된 개별 방송 시청자 표본의 소비·replay 계약이다. `channel_profile`은 handle, description, country, joined date 같은 profile 필드를 소유하고, `channel_photo`는 avatar/banner variant를 소유한다.
+`channel_profile`은 handle, description, country, joined date 같은 profile 필드를 소유하고, `channel_photo`는 avatar/banner variant를 소유한다. 시청자 표본은 생산·소비·재처리 계약에 포함하지 않는다.
 
 ### 3.3 초기 capability matrix
 
 | Provider | Kind | 초기 상태 |
 |---|---|---|
-| `youtubejs` | community, video, shorts, live, viewer, channel stats/profile/photo | fixture로 안정 semantics가 입증된 kind만 enable |
+| `youtubejs` | community, video, shorts, live, channel profile/photo | fixture로 안정 semantics가 입증된 kind만 enable |
 | `holodex` | live, schedule, channel metadata/photo | 실제 API 응답이 제공하고 fixture가 있는 필드만 enable |
 | `hololive_official` | schedule | 검증된 Schedule JSON API 범위만 enable |
 
@@ -322,7 +320,7 @@ language conformance 기준은 `hololive/hololive-shared/pkg/contracts/sourceobs
 
 ### 4.2 필드 의미
 
-- `subject_key`: kind가 직접 대상으로 삼는 안정 identity다. channel snapshot은 channel ID, viewer sample은 video ID, global batch snapshot은 `global:hololive-schedule`처럼 contract가 정의한 namespaced subject key다.
+- `subject_key`: kind가 직접 대상으로 삼는 안정 identity다. channel snapshot은 channel ID, 영상 live check는 video ID, global batch snapshot은 `global:hololive-schedule`처럼 contract가 정의한 namespaced subject key다.
 - `scheduled_for`: PostgreSQL job lease가 배정한 수집 슬롯이다. snapshot freshness와 retry identity의 SSOT다. collector의 `time.Now()`를 사용하지 않는다.
 - `observed_at`: 실제 외부 응답을 수신한 collector 시각이며 latency와 clock-skew 진단에만 사용한다.
 - `source_event_at`: provider가 명시적인 event/revision 시각을 제공할 때만 채운다.
@@ -379,7 +377,6 @@ type EvidenceDigestV1 struct {
 | `video_list` | channel ID 또는 global group | `scheduled_for + scope_sha256` |
 | `shorts_list` | channel ID | `scheduled_for + scope_sha256` |
 | `live_snapshot` | channel ID 또는 global group | `scheduled_for + scope_sha256` |
-| `viewer_sample` | video ID | normalized sample-window start + scope hash |
 | `channel_profile` | channel ID | `scheduled_for + scope_sha256` |
 | `channel_photo` | channel ID | `scheduled_for + scope_sha256` |
 | `schedule_snapshot` | group key | `scheduled_for + scope_sha256` |
@@ -402,7 +399,6 @@ func SnapshotObservationKey(
 
 - 같은 payload라도 다음 수집 slot이면 새로운 observation이다.
 - 같은 slot의 동일 retry는 하나의 observation으로 멱등 처리된다.
-- `viewer_sample` 값이 두 slot 연속 같아도 두 sample이 보존된다.
 - payload가 같아도 `PARTIAL -> COMPLETE`, `GAP -> CONTIGUOUS`, scope 변경은 collision로 드러난다.
 
 ## 5. Typed coverage와 negative evidence
@@ -568,7 +564,7 @@ Projection은 generation 단위로 원자적으로 교체한다. refresh 실패�
 target source mapping은 다음과 같다.
 
 - notification target: `community_page`, `video_list`, `shorts_list`
-- operational roster: `live_snapshot`, `viewer_sample`, `channel_profile`, `channel_photo`
+- operational roster: `live_snapshot`, `channel_profile`, `channel_photo`
 - fixed global operational target: `schedule_snapshot` with `subject_key=global:hololive-schedule`
 
 ### 7.2 Schema shape
@@ -848,7 +844,6 @@ CREATE TABLE observation_contract_generations (
             'video_list',
             'shorts_list',
             'live_snapshot',
-            'viewer_sample',
             'channel_profile',
             'channel_photo',
             'schedule_snapshot'
@@ -948,12 +943,11 @@ CREATE TABLE source_observations (
     observed_at TIMESTAMPTZ NOT NULL,
     source_event_at TIMESTAMPTZ,
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    scope_sha256 TEXT NOT NULL,
+    scope_sha256 BYTEA NOT NULL,
     completeness TEXT NOT NULL,
     continuity TEXT NOT NULL,
-    payload JSONB NOT NULL,
-    payload_sha256 TEXT NOT NULL,
-    evidence_sha256 TEXT NOT NULL,
+    payload_id BIGINT NOT NULL REFERENCES source_observation_payloads(id) ON DELETE RESTRICT,
+    evidence_sha256 BYTEA NOT NULL,
     collector_instance TEXT NOT NULL,
     job_key TEXT NOT NULL,
     collection_job_kind TEXT NOT NULL,
@@ -979,14 +973,9 @@ CREATE TABLE source_observations (
         AND length(job_key) BETWEEN 1 AND 512
         AND length(collection_job_kind) BETWEEN 1 AND 128
     ),
-    CONSTRAINT chk_source_observation_payload CHECK (
-        jsonb_typeof(payload) = 'object'
-        AND octet_length(payload::text) <= 1048576
-    ),
     CONSTRAINT chk_source_observation_hashes CHECK (
-        scope_sha256 ~ '^[0-9a-f]{64}$'
-        AND payload_sha256 ~ '^[0-9a-f]{64}$'
-        AND evidence_sha256 ~ '^[0-9a-f]{64}$'
+        octet_length(scope_sha256) = 32
+        AND octet_length(evidence_sha256) = 32
     ),
     CONSTRAINT chk_source_observation_completeness CHECK (
         completeness IN ('COMPLETE', 'PARTIAL', 'UNKNOWN')
@@ -1111,26 +1100,22 @@ CREATE TABLE source_observation_replay_requests (
 
 CREATE TABLE source_observation_applications (
     id BIGSERIAL PRIMARY KEY,
-    observation_id BIGINT
-        REFERENCES source_observations(id) ON DELETE SET NULL,
-    provider TEXT NOT NULL,
-    observation_kind TEXT NOT NULL,
-    subject_key TEXT NOT NULL,
-    evidence_sha256 TEXT NOT NULL,
+    observation_id BIGINT NOT NULL
+        REFERENCES source_observations(id) ON DELETE CASCADE,
     entity_kind TEXT NOT NULL,
     entity_key TEXT NOT NULL,
     decision TEXT NOT NULL,
-    effective_at TIMESTAMPTZ NOT NULL,
-    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_source_observation_application UNIQUE (
-        observation_id,
-        entity_kind,
-        entity_key
-    )
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE UNIQUE INDEX uq_source_observation_application_active
+    ON source_observation_applications (observation_id, entity_kind, entity_key)
+    WHERE observation_id IS NOT NULL;
 ```
 
 replay는 source evidence를 수정하지 않는다. replay request와 queue 재활성화를 한 transaction에서 audit한다. public HTTP control plane은 추가하지 않고 existing operator path 또는 내부 CLI owner가 호출하도록 한다.
+
+application 수명은 원본과 동일하며 고아 유예·별도 retention이 없다. 원본의 provider/kind/subject/hash/clock은 JOIN으로 읽는다. 원본 retention은 큐·pending replay·종료 근거·CURRENT/STAGING generation·ACTIVE lease·LIVE/UPCOMING 세션의 application/pending-end 근거를 보호한다. 원본과 live/content absence slot의 scope/evidence hash는 32바이트 bytea이며 공개 JSON/Go 표현은 기존 64자 소문자 hex를 유지한다. 다른 audit/checkpoint hash 열의 표현은 바꾸지 않는다.
+
 
 ### 9.6 Reconciliation conflict와 live head
 
@@ -1223,7 +1208,7 @@ CREATE INDEX CONCURRENTLY idx_youtube_live_reconciliation_due
     WHERE next_end_check_at IS NOT NULL;
 ```
 
-`source_observation_collisions`, `source_observation_replay_requests`, `source_observation_applications`에도 provider/kind vocabulary 또는 contract FK, 64-character lowercase hash, identifier/reason/error text bounds와 terminal shape를 `CREATE TABLE` 안에서 강제한다. Section 17의 bounded-storage 규칙은 Go validation만으로 대체하지 않는다. grant/schema golden test는 이 constraint 이름과 권한을 검증한다.
+`source_observation_collisions`와 `source_observation_replay_requests`는 provider/kind contract FK, 64-character lowercase hash, identifier/reason/error bounds와 terminal shape를 DDL로 강제한다. application은 필수 원본 FK와 entity/decision bounds를 강제하며 부모 identity/hash를 복제하지 않는다. Section 17의 bounded-storage 규칙은 Go validation만으로 대체하지 않는다.
 
 ### 9.7 Required indexes
 
@@ -1445,7 +1430,7 @@ transaction 순서는 다음과 같다.
 
 - `source_observation_queue`: handoff/retry 상태. terminal retention이 가장 짧다.
 - `source_observations`: immutable raw evidence. kind별 replay·audit 기간을 보존한다.
-- canonical tables와 `source_observation_applications`: 제품 상태와 결정 provenance를 보존한다.
+- canonical tables는 제품 상태를 보존하고 `source_observation_applications`의 결정 provenance는 원본이 보존되는 동안만 유지한다.
 - collision audit와 replay audit: 운영 조사 기간을 보존한다.
 
 초기 implementation에서 retention duration을 SQL에 임의 hardcode하지 않는다. 기존 producer의 동등 데이터 보존 기간을 조사해 settings contract로 옮긴다. 현재 policy가 없는 kind는 production apply 전에 명시적인 bounded duration과 storage estimate를 승인받아야 한다.
@@ -1468,9 +1453,10 @@ type RetentionConfig struct {
 - 한 tick에서 table별 최대 한 batch만 삭제해 DB burst를 제한한다.
 - pending replay와 active queue가 있는 evidence는 삭제하지 않는다.
 - `youtube_live_reconciliation_heads.end_candidate_observation_id`가 참조하는 active end candidate evidence는 finalizer가 적용하거나 candidate를 clear하기 전까지 삭제하지 않는다.
-- terminal replay/collision/application audit는 identity와 hash를 자체 보존하므로 evidence 삭제 뒤에도 조사 가능해야 한다.
+- terminal replay/collision audit는 identity와 hash를 자체 보존하므로 evidence 삭제 뒤에도 조사할 수 있다. application은 원본과 동시에 CASCADE 삭제되며 고아 유예가 없다.
 - FK가 `SET NULL`인 audit row는 identity/hash를 자체 보존한 뒤 evidence 삭제를 허용한다. FK가 `RESTRICT`인 row가 남아 있으면 audit retention을 먼저 적용한다.
 - queue terminal row를 먼저 정리하고 active/replay queue가 없는 evidence만 정리한다.
+- CURRENT/STAGING projection generation과 ACTIVE collection lease가 소유한 원본, LIVE/UPCOMING 세션에 적용된 application·pending-end 원본은 보호한다.
 - deletion count, duration, error와 backlog age를 metric으로 노출한다.
 
 ### 12.3 Replay
@@ -1697,18 +1683,6 @@ finalizer는 tick마다 최대 batch size번 transaction을 연다. 각 transact
 6. 조건이 깨지면 candidate와 `next_end_check_at`을 clear하거나 다음 안전 시각으로 이동한다.
 
 finalizer는 in-memory session별 timer를 만들지 않으며 batch size, poll interval, transaction timeout이 bounded다. finalizer transaction rollback은 canonical state와 notification intent를 모두 rollback한다.
-
-### 13.4 Viewer sample
-
-`viewer_sample` identity는 `(video_id, normalized_sample_window_start, provider)` evidence를 보존한다. canonical sample projection은 다음 규칙을 따른다.
-
-- count는 non-negative이며 hidden/unavailable은 explicit nullable state로 표현한다.
-- 더 최신 sample window가 이전 canonical sample을 전진시킨다.
-- 같은 window의 동일 값은 replay다.
-- 같은 window의 서로 다른 값은 provider precedence로 선택하지 않는다. raw sample과 conflict audit를 모두 보존하고 해당 window를 `UNRESOLVED`로 표시한다. 마지막 resolved canonical sample은 전진시키지 않는다.
-- 두 provider overlap을 enable하기 전에 위 equal-window conflict behavior를 test로 고정한다.
-
-초기 rollout에서 한 provider만 viewer sample capability를 갖는다면 capability matrix에 명시하며, 이를 primary source 개념으로 일반화하지 않는다.
 
 ### 13.6 Channel profile
 
@@ -2035,7 +2009,6 @@ same identity + same evidence -> one observation, one queue row
 same identity + different payload -> collision audit, no second observation
 same identity + completeness change -> collision audit
 same payload + next scheduled slot -> two observations
-viewer equal value + next sample window -> two observations
 unknown field / malformed payload -> validation reject
 stale schema/generation -> publish reject
 current generation bump does not strand old supported queue rows
@@ -2198,16 +2171,15 @@ same evidence set의 모든 순열
 
 모든 순열은 같은 canonical row, missing state와 notification intent를 만들어야 한다.
 
-### Task 6 — Live, viewer, schedule
+### Task 6 — Live, schedule
 
 구현:
 
 - monotonic live reducer, persisted end candidate와 bounded DB due-finalizer를 구현한다.
 - explicit end, complete absence, positive live evidence를 typed fact로 정규화한다.
-- viewer sample의 repeated equal value 보존과 equal-window conflict를 구현한다.
 - schedule entity merge와 Official evidence boundary를 구현한다.
 - birthday/live-session/outbox identity와 recipient behavior를 보존한다.
-- Holodex-primary/YouTube-fallback branching과 producer live/viewer/schedule registration을 삭제한다.
+- Holodex-primary/YouTube-fallback branching과 producer live/schedule registration을 삭제한다.
 
 필수 test:
 
@@ -2385,7 +2357,7 @@ DB/concurrency 변경에는 `go test -race`와 실제 lease/transaction invarian
 다음을 모두 만족해야 구현 완료다.
 
 1. provider/kind typed observation contract, Canonical JSON v1 fixture와 migration replay가 통과한다.
-2. same payload next collection slot과 viewer equal samples가 보존된다.
+2. same payload next collection slot의 별도 관측이 보존된다.
 3. metadata-only semantic conflict가 collision audit로 fail closed된다.
 4. stale collection holder가 PostgreSQL fence로 observation/checkpoint/job state를 변경하지 못한다.
 5. target generation refresh 실패·same-hash stability·empty·disable·expiry 계약과 multi-kind per-observation target 검증이 통과한다.

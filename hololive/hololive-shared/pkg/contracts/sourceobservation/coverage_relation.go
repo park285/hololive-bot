@@ -8,7 +8,7 @@ func AbsenceCapabilityFor(kind ObservationKind) AbsenceCapability {
 	switch kind {
 	case KindVideoList, KindShortsList, KindLiveSnapshot:
 		return AbsenceScoped
-	case KindCommunityPage, KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule,
+	case KindCommunityPage, KindChannelProfile, KindChannelPhoto, KindSchedule,
 		KindChannelLiveCheck, KindVideoLiveCheck:
 		return AbsencePositiveOnly
 	default:

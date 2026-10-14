@@ -580,7 +580,6 @@ func youtubePlaneClaimKinds() []contract.ObservationKind {
 		contract.KindVideoList,
 		contract.KindShortsList,
 		contract.KindLiveSnapshot,
-		contract.KindViewerSample,
 		contract.KindSchedule,
 		contract.KindChannelProfile,
 		contract.KindChannelPhoto,

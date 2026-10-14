@@ -33,7 +33,7 @@ func TestRetentionMetricsKeepPartialSuccessAndOnlyMarkFailedTable(t *testing.T) 
 }
 
 func TestRetentionBacklogMetricClearsZeroAndOmitsUnknown(t *testing.T) {
-	const table = "source_observation_applications"
+	const table = "source_observations"
 
 	t.Cleanup(func() { youtubeRetentionBacklogAgeSeconds.DeleteLabelValues(table) })
 	recordRetentionPart(sourceobservation.RetentionResult{Table: table, BacklogAge: time.Hour, BacklogKnown: true})

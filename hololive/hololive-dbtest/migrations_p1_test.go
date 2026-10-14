@@ -190,6 +190,7 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 }
 
 var observationGrantPostBaselineMigrations = []string{
+	channelStatisticsRemovalMigration,
 	"238_source_observation_payload_prepare.sql",
 	"239_source_observation_payload_index.sql",
 	"240_source_observation_payload_backfill_index.sql",
@@ -199,6 +200,9 @@ var observationGrantPostBaselineMigrations = []string{
 	collectionMembershipMigration,
 	projectionHeaderMigration,
 	projectionHeaderMigration,
+	retiredViewerRemovalMigration,
+	applicationCascadeMigration,
+	binaryHashesMigration,
 }
 
 // 이어 붙이는 순서가 grant/revoke 결과를 결정하므로 파일 번호순이 아니라 적용 순서대로 나열한다.
@@ -467,8 +471,6 @@ var sourceObservationTables = []string{
 	"youtube_content_evidence_clocks",
 	"youtube_content_absence_slots",
 	"youtube_content_channel_heads",
-	"youtube_live_viewer_sample_evidence",
-	"youtube_live_viewer_sample_heads",
 	"youtube_schedule_items",
 	"youtube_channel_live_checks",
 	"youtube_video_availability",
@@ -513,7 +515,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"source_observation_consumer_offsets":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_observation_replay_requests":        observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_replay_epoch":           observationPrivileges("SELECT", "INSERT"),
-			"source_observation_applications":           observationPrivileges("SELECT", "INSERT", "DELETE"),
+			"source_observation_applications":           observationPrivileges("SELECT", "INSERT"),
 			"source_observation_subject_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_reconciliation_conflicts":           observationPrivileges("SELECT", "INSERT", "DELETE"),
 			"youtube_live_reconciliation_heads":         observationPrivileges("SELECT", "INSERT", "UPDATE"),
@@ -522,11 +524,8 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_content_evidence_clocks":           observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_content_absence_slots":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_content_channel_heads":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
-			"youtube_live_viewer_sample_evidence":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
-			"youtube_live_viewer_sample_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_schedule_items":                    observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_live_sessions":                     observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
-			"youtube_live_viewer_samples":               observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_channel_live_checks":               observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_video_availability":                observationPrivileges("SELECT", "INSERT", "UPDATE"),
 		},
@@ -717,7 +716,7 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 	functions := []string{
 		"public.delete_retired_youtube_collection_job_leases(timestamp with time zone,integer)",
 		"public.delete_source_observation_retention_batch(text[],timestamp with time zone[],integer)",
-		"public.delete_source_observation_application_retention_batch(text[],timestamp with time zone[],integer)",
+		"public.source_observation_retention_protected(bigint)",
 		"public.delete_source_collection_checkpoint_retention_batch(timestamp with time zone,integer)",
 		"public.delete_source_observation_payload_batch(timestamp with time zone,integer)",
 	}
@@ -757,7 +756,7 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 	for _, query := range []string{
 		"SELECT * FROM public.delete_retired_youtube_collection_job_leases(clock_timestamp(), 1)",
 		"SELECT * FROM public.delete_source_observation_retention_batch(ARRAY['community_page']::text[], ARRAY[clock_timestamp()]::timestamptz[], 1)",
-		"SELECT * FROM public.delete_source_observation_application_retention_batch(ARRAY['community_page']::text[], ARRAY[clock_timestamp()]::timestamptz[], 1)",
+		"SELECT public.source_observation_retention_protected(0)",
 		"SELECT * FROM public.delete_source_collection_checkpoint_retention_batch(clock_timestamp(), 1)",
 		"SELECT public.delete_source_observation_payload_batch(clock_timestamp(), 1)",
 	} {

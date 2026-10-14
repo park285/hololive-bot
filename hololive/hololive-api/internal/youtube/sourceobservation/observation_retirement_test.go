@@ -131,7 +131,7 @@ func retirementLiveIdentity(t *testing.T, pool *pgxpool.Pool) string {
 	return identity
 }
 
-// 복구는 payload와 원본을 먼저 되돌리고 NULL로 바뀐 감사 FK만 복원합니다. 발송 상태·신규성 판단은 건드리지 않습니다.
+// 복구는 payload·원본·감사를 함께 되돌린다. 발송 상태·신규성 판단은 건드리지 않는다.
 func TestObservationRetirementRestorePreservesNotificationState(t *testing.T) {
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()
@@ -174,10 +174,10 @@ func TestObservationRetirementRestorePreservesNotificationState(t *testing.T) {
 		SELECT id, provider, observation_kind, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness, continuity, evidence_sha256, collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation, created_at, payload_id FROM jsonb_populate_record(NULL::source_observations,$1)`, observation)
 	require.NoError(t, err)
 
-	updated, err := pool.Exec(ctx, `UPDATE source_observation_applications a SET observation_id=b.observation_id
-		FROM jsonb_populate_recordset(NULL::source_observation_applications,$1) b
-		WHERE a.id=b.id AND a.observation_id IS NULL
-		AND to_jsonb(a)-'observation_id'=to_jsonb(b)-'observation_id'`, applications)
+	updated, err := pool.Exec(ctx, `INSERT INTO source_observation_applications
+		(id,observation_id,entity_kind,entity_key,decision,applied_at) OVERRIDING SYSTEM VALUE
+		SELECT id,observation_id,entity_kind,entity_key,decision,applied_at
+		FROM jsonb_populate_recordset(NULL::source_observation_applications,$1)`, applications)
 	require.NoError(t, err)
 	require.Positive(t, updated.RowsAffected())
 	require.Equal(t, before, retirementContentIdentity(t, pool))

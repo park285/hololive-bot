@@ -50,12 +50,12 @@ func TestLiveHeadPreservesUnchangedToastArray(t *testing.T) {
 	require.True(t, storedIgnoredEquals(t, pool, state.VideoID, []time.Time{}), "loaded empty history must clear the array")
 }
 
-// 이력을 적재하지 않은 세션의 저장은 배열을 지우거나 다시 쓰지 않는다. 새 head는 빈 배열로 시작한다.
+// 활성 세션의 미적재 이력은 보존하고 새 head의 미적재 이력은 빈 배열로 시작한다.
 func TestLiveHeadOmittedHistoryKeepsStoredArray(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	at := time.Date(2026, time.October, 6, 0, 0, 0, 0, time.UTC)
 	history := toastIgnoredHistory(at)
-	state := live.SessionState{VideoID: "head-omit", Status: testStatusEnded, IgnoredAbsences: live.LoadedIgnoredAbsences(history)}
+	state := live.SessionState{VideoID: "head-omit", Status: testStatusUpcoming, IgnoredAbsences: live.LoadedIgnoredAbsences(history)}
 
 	require.EqualValues(t, 1, execLiveHead(t, pool, &state))
 
@@ -76,6 +76,32 @@ func TestLiveHeadOmittedHistoryKeepsStoredArray(t *testing.T) {
 
 	require.EqualValues(t, 1, execLiveHead(t, pool, &fresh))
 	require.True(t, storedIgnoredEquals(t, pool, fresh.VideoID, []time.Time{}), "a new head without loaded history starts empty")
+}
+
+func TestLiveEndedHeadClearsLoadedAndOmittedHistory(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	at := time.Date(2026, time.October, 6, 0, 0, 0, 0, time.UTC)
+	history := toastIgnoredHistory(at)
+
+	for _, name := range []string{"omitted", "loaded"} {
+		t.Run(name, func(t *testing.T) {
+			state := live.SessionState{VideoID: "head-ended", Status: testStatusUpcoming, IgnoredAbsences: live.LoadedIgnoredAbsences(history)}
+			require.EqualValues(t, 1, execLiveHead(t, pool, &state))
+
+			state.Status = testStatusEnded
+			if name == "omitted" {
+				state.IgnoredAbsences = live.IgnoredAbsenceHistory{}
+			}
+
+			require.EqualValues(t, 1, execLiveHead(t, pool, &state))
+			require.True(t, storedIgnoredEquals(t, pool, state.VideoID, []time.Time{}))
+			require.Zero(t, execLiveHead(t, pool, &state), "an ENDED replay must not rewrite an empty array")
+		})
+	}
+
+	fresh := live.SessionState{VideoID: "head-ended-fresh", Status: testStatusEnded, IgnoredAbsences: live.LoadedIgnoredAbsences(history)}
+	require.EqualValues(t, 1, execLiveHead(t, pool, &fresh))
+	require.True(t, storedIgnoredEquals(t, pool, fresh.VideoID, []time.Time{}), "new ENDED heads must also discard history")
 }
 
 func toastIgnoredHistory(at time.Time) []time.Time {

@@ -89,11 +89,11 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 
 운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-seoul/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간, `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. 물리적 파일 축소는 별도 유지보수입니다.
 
-`hololive_youtube_plane_retention_backlog_age_seconds`는 삭제 후 `source_observations`와 `source_observation_applications`의 가장 오래된 삭제 가능 행 나이를 초로 표시합니다. 보존기간을 초과한 시간은 아닙니다. 원본은 종류별 인덱스 선두 1,000행에 큐·진행 중 replay·종료 근거 보호를 적용하며, application은 종류별 감사 유예가 지난 orphan 첫 행을 읽습니다. 적격 후보가 없다고 확정하면 0으로 갱신합니다. 원본의 보호된 행이 조회 한도를 채워 뒷부분을 확인할 수 없거나 해당 조회가 실패한 경우 시계열을 생략하므로, 지표 없음은 적체 없음이 아닙니다. 다른 테이블의 적체는 이 지표에서 측정하지 않습니다. 뒤 단계가 실패해도 앞 단계의 커밋된 삭제량은 counter에 남고, 오류 counter는 실패한 테이블에만 증가합니다.
+`hololive_youtube_plane_retention_backlog_age_seconds`는 삭제 후 `source_observations`의 가장 오래된 삭제 가능 행 나이를 초로 표시합니다. 보존기간을 초과한 시간은 아닙니다. 종류별 인덱스 선두 1,000행에 큐·pending replay·종료 근거, CURRENT/STAGING generation·ACTIVE lease·활성 세션 보호를 적용합니다. application은 원본과 CASCADE 삭제되므로 별도 backlog/delete counter 대상이 아닙니다. 적격 후보가 없다고 확정하면 0으로 갱신합니다. 보호된 행이 조회 한도를 채우거나 조회가 실패하면 시계열을 생략하므로 지표 없음은 적체 없음이 아닙니다. 뒤 단계가 실패해도 앞 단계의 커밋된 삭제량은 counter에 남고 오류 counter는 실패한 테이블에만 증가합니다.
 
 `hololive_youtube_plane_pending_queue`·`hololive_youtube_plane_processing_queue`·`hololive_youtube_plane_queue_oldest_age_seconds`는 5초마다 `source_observation_queue`를 조회해 갱신합니다. 조회가 실패하면 세 값은 마지막 성공 값을 유지하고 `hololive_youtube_plane_queue_snapshot_success`가 0이 되며, `hololive_youtube_plane_queue_snapshot_last_success_timestamp_seconds`는 마지막 성공 시각에 머뭅니다. success가 0이거나 마지막 성공 시각이 오래됐으면 세 값을 현재 적체로 해석하지 않습니다.
 
-기본 보관 정책은 일반 원본(live/community/video/shorts/viewer) 7일, schedule 14일, profile/photo 30일, live-check 2일입니다. terminal queue는 PROCESSED 1일·DEAD_LETTER 14일, collision/replay audit 30일, 과거 checkpoint 2일, RETIRED projection 7일입니다. application은 원본 kind 기간+3일보다 오래되고 observation FK가 NULL인 경우만 정리합니다. active queue·pending replay·live head/end candidate·최신 checkpoint 보호는 유지합니다. tick 120초와 배치당 1000행은 유지합니다. RETIRED projection만 한 tick에서 최대 64개 배치를 독립 commit하며, 전체는 기존 DB 작업 시한(기본 10초)을 공유합니다. 배치마다 reasons+targets 합계 최대 1000행, lease 최대 1000행이며 CURRENT와 lease 참조 세대는 보존합니다. 진척 없음·오류·취소에서 중단하고 실패한 문장을 재시도하지 않습니다. 뒤 배치 오류에도 확정된 삭제 계수와 오류를 함께 기록하며 source retention은 독립 실행합니다. 이 값은 소스 기본값이며 운영 master에 지정된 기존 값을 자동으로 바꾸지 않습니다.
+기본 보관 정책은 일반 원본(live/community/video/shorts) 7일, schedule 14일, profile/photo 30일, live-check 2일입니다. terminal queue는 PROCESSED 1일·DEAD_LETTER 14일, collision/replay audit 30일, 과거 checkpoint 2일, RETIRED projection 2일입니다. application은 원본 삭제와 동시에 CASCADE 삭제되며 추가 고아 유예가 없습니다. 큐·pending replay·live head/end candidate·CURRENT/STAGING generation·ACTIVE lease·LIVE/UPCOMING 세션의 application/pending-end 근거·최신 checkpoint 보호는 유지합니다. tick 120초와 배치당 1000행은 유지합니다. RETIRED projection만 한 tick에서 최대 64개 배치를 독립 commit하며 전체는 기존 DB 작업 시한(기본 10초)을 공유합니다. 배치마다 reasons+targets 합계 최대 1000행, lease 최대 1000행이며 CURRENT/STAGING과 lease 참조 세대는 보존합니다. 진척 없음·오류·취소에서 중단하고 실패한 문장을 재시도하지 않습니다. 뒤 배치 오류에도 확정된 삭제 계수와 오류를 함께 기록하며 source retention은 독립 실행합니다. 소스 기본값은 운영 master에 지정된 값을 자동으로 바꾸지 않습니다.
 
 한 세대의 마지막 배치가 1000행 미만이어도 다른 만료 세대가 남을 수 있으므로 이를 전체 backlog 종료로 해석하지 않습니다. 64배치는 유입 증가에 대한 무제한 처리 보장이 아니며, 신규 세대·target/reason 생성량과 실제 삭제량·tick 시간·DB 크기를 함께 확인합니다. 특히 TTL 안의 이력은 삭제하지 않으므로 배포 직후 파일 크기 감소나 기존 용량 절감 목표 달성을 보장하지 않습니다.
 
@@ -114,6 +114,15 @@ Manifest의 **244 → 234–243** 순서와 API·collector fleet a/b/c/d·alarm-
 추가 공간 상한을 사전 과소평가하지 않습니다. backfill 중 구 payload와 고유 payload·새 index가 함께 존재하며 UPDATE dead tuple/WAL이 발생합니다. 사전 표본 이득은 최대 공간 보장이 아닙니다. `DELETE`나 `DROP COLUMN` 뒤 relation 파일이 즉시 줄어들지 않을 수 있습니다. VACUUM FULL/파일 재작성은 강한 lock·임시 여유·중단 창·복구 계획을 별도로 승인받아 시행합니다. active `pg_wal`은 직접 삭제하지 않습니다.
 
 234 이후 통계 데이터는 구 이미지만으로 복원되지 않습니다. 241 이후 구 API/collector는 존재하지 않는 열에 접근하므로 이미지 단독 rollback도 금지합니다. 오류 때 모든 writer를 정지한 채 검증한 전체 복구본과 그 시점 schema/ledger/image를 함께 복원하거나 fix-forward합니다. TTL로 만료된 원본은 설정 원복으로 돌아오지 않습니다. 새 retry/fallback/dual writer는 추가하지 않습니다.
+
+### 감사 CASCADE와 binary hash cutover (307–308)
+
+- API consumer/retention과 모든 publisher를 배수·정지한 같은 점검 창에서 schema와 새 binary를 함께 전환합니다. 구 writer와 새 schema의 rolling 혼용·이미지 단독 rollback은 지원하지 않습니다.
+- 307은 기존 고아 감사를 PK keyset 최대 1000행씩 실제 COMMIT하는 절차로 영구 삭제합니다. 중간 실패 뒤 재실행하면 남은 고아부터 계속합니다. 이어 orphan index/function·중복 5열을 없애고 FK CASCADE와 NOT NULL을 적용합니다. 제약 검증은 metadata DDL과 별도 autocommit이며 전체 스캔을 수행합니다. DROP COLUMN은 기존 heap을 즉시 축소하지 않으므로 application의 물리 회수에는 별도 승인된 `VACUUM FULL`이 필요합니다.
+- 308은 `source_observations`, `youtube_content_absence_slots`, `youtube_live_absence_slots` 각각의 두 hash 열을 한 ALTER로 text→bytea 변환합니다. **각 표의 heap·index 전체 재작성 동안 ACCESS EXCLUSIVE**를 유지합니다. 3초 `lock_timeout`은 락 획득 대기만 끊으며 재작성 시간을 제한하지 않습니다. 새 heap/index와 WAL·복제 지연을 감당할 디스크 여유와 충분한 점검 창을 확보합니다. 각 표는 독립 원자 문장이며 완료된 표는 재실행 시 타입 가드로 건너뜁니다. 부분 완료 상태에서 구 binary를 재개하지 않습니다.
+- 외부 JSON/Go·identity/replay 잠금 API의 hash는 여전히 64자 소문자 hex이며 digest equality와 observation identity는 바뀌지 않습니다. hash 변환 자체가 canonical hash profile/version 변경이나 새 관측 발행 사유가 아닙니다.
+- `YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS`는 제거합니다. 감사 지표는 부모 삭제 계수에 간접 반영되며 별도 application 삭제량으로 합산하지 않습니다. 2026-10-14 승인에서는 백업 중단 상태를 확인한 뒤 사용자가 새 백업 없이 진행을 선택했습니다. 기존 백업·이미지·배포 트리는 보존하지만 삭제 감사/퇴역 데이터 복구나 DB rollback을 보장하지 않습니다.
+
 
 
 ## Logs

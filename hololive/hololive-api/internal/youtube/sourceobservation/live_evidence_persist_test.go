@@ -126,8 +126,8 @@ func TestLiveSteadyConsumeAndFinalizerDoNotReloadOldAbsenceHistory(t *testing.T)
 	// 오래된 slot 10,000개의 필터 decode 오류가 현재 session과 확정 candidate에 전파되면 안 된다.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_absence_slots
-		SELECT 1000000+g, $1::timestamptz-g*INTERVAL '1 minute', repeat('a',64),
-		       $1::timestamptz-g*INTERVAL '1 minute', $1, repeat('b',64),
+		SELECT 1000000+g, $1::timestamptz-g*INTERVAL '1 minute', decode(repeat('a',64),'hex'),
+		       $1::timestamptz-g*INTERVAL '1 minute', $1, decode(repeat('b',64),'hex'),
 		       jsonb_build_object('requested_channel_ids',jsonb_build_array($2::text),'filters','invalid')
 		FROM generate_series(1,10000) AS g
 	`, proof.ScheduledFor.Add(-time.Hour), testChannelID); err != nil {
@@ -326,6 +326,13 @@ func TestLiveEndEvidenceSurvivesRawRetentionAndGrace(t *testing.T) {
 	consumeLiveClaim(ctx, t, consumer, batch, negative.Results[0].ObservationID)
 
 	if _, err = pool.Exec(ctx, "DELETE FROM source_observation_queue WHERE observation_id=$1", negative.Results[0].ObservationID); err != nil {
+		t.Fatal(err)
+	}
+
+	// 보존이 허용되는 퇴역 세대·비활성 lease로 전환한 뒤 원시 종료 근거를 삭제합니다.
+	// 아직 처리하지 않은 positive는 큐가 보호하므로 나중에 같은 근거로 grace를 평가할 수 있습니다.
+	if _, err = pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET status='RETIRED';
+		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL`); err != nil {
 		t.Fatal(err)
 	}
 

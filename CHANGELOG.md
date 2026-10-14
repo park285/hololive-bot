@@ -8,6 +8,15 @@
 
 ## 미출시
 
+## v10.0.0 - 2026-10-14
+
+- **YouTube SQL hot path:** 활성 방송 집합을 과거 종료 이력과 분리하고, 검토 영수증은 typed timestamp의 의미 사실을 집합으로 비교합니다. Projection heartbeat는 현재 세대 범위에서 바뀐 `not_before`만 갱신하며, 커밋된 세대·header 버전·reasons 해시가 같으면 reasons 재조회를 생략합니다.
+- **Live 관측:** 일반 `PARTIAL`은 쓰지 않는 ignored-absence 배열과 absence slot을 읽지 않습니다. 최초 positive replay와 scoped negative는 필요한 이력을 계속 읽고, 종료 head 저장은 배열을 비웁니다. 현재 slot만 필요한 조회는 시간 인덱스를 사용하는 별도 SQL입니다.
+- **Collector lease:** 기존 job의 획득은 projection guard와 통합 admission/acquire SQL로 처리하며 무의미한 INSERT를 없앱니다. 최초 생성에 성공한 경우에만 추가 UPDATE로 충돌 대기 이후의 새 TTL을 부여합니다. 잠금·membership·fence·오류 판정은 유지합니다.
+- **감사·퇴역 데이터 계약 변경:** application은 원본 삭제 시 `ON DELETE CASCADE`로 즉시 삭제하며 고아 3일 유예·중복 5열·별도 고아 보존 경로를 제거합니다. 퇴역 viewer 소비·재처리 계약과 viewer 표본 3종·구 통계 2종을 제거합니다. 살아 있는 관측·재처리·projection·lease 의무가 남으면 삭제 migration이 중단됩니다.
+- **저장 공간:** source 관측과 live/content absence의 두 SHA-256 열은 `bytea(32 bytes)`로 저장하고 Go·공개 해시 표현은 소문자 hex를 유지합니다. 종료 배열·동결 pending 잔재를 배치 정리하고, 주요 TOAST 열 및 DB 기본 압축을 `lz4`로 지정합니다. 기존 TOAST 값이 설정 변경만으로 재압축되는 것은 아닙니다. 퇴역 Projection 보존은 승인된 **2일**이며 활성 보호 조건은 유지합니다.
+- **배포 경계:** migration 순서는 `304 → 305 → 306 → 309 → 307 → 308`입니다. `309`는 고아 인덱스를 제거하는 단일 concurrent 문장입니다. 구 publisher/consumer를 모두 중지한 점검 창에서 스키마를 변경하고 새 API·worker·collector/issuer fleet를 시작해야 합니다. 삭제 데이터와 부분 완료된 binary-type cutover는 구 이미지로 되돌릴 수 없습니다. 이번 작업은 사용자가 새 DB 백업 없이 적용하도록 승인했습니다.
+
 ## v9.3.2 - 2026-10-14
 
 - **발송 backlog 관측 주기 분리(alarm-worker):** 발송 backlog·격리 집계 조회를 retention runner에서 떼어 별도 runner가 60초마다(조회 시한 10초) 실행합니다. 이전에는 retention 주기(운영 기본 1시간)에만 갱신되어 `HololiveOutboxStale` 같은 경보가 최대 1시간 묵은 값을 평가했습니다. retention 주기·설정은 바꾸지 않으며, 관측 실패는 runner를 멈추지 않고 실패 counter·`alarm_dispatch_pg_backlog_snapshot_success=0`으로 드러납니다.

@@ -333,6 +333,9 @@ func TestFinalizeFutureSourceEventFallsBackToScheduledSlot(t *testing.T) {
 		if !claimed.SourceEventFallback || !claimed.EffectiveAt.Equal(claimed.ScheduledFor) {
 			t.Fatalf("claimed clock = %#v", claimed)
 		}
+		if claimed.ScopeSHA256 != prepared.ScopeSHA256 || claimed.EvidenceSHA256 != prepared.EvidenceSHA256 {
+			t.Fatalf("claim changed public hex hashes: scope=%s evidence=%s", claimed.ScopeSHA256, claimed.EvidenceSHA256)
+		}
 
 		return ReconcileResult{}, nil
 	})
@@ -548,12 +551,6 @@ func TestRetentionSQLLocksCandidatesWithSkipLocked(t *testing.T) {
 	replay := mustSQL("repository_retention_delete_replay_0078_78.sql")
 	if !strings.Contains(replay, "NOT EXISTS") || !strings.Contains(replay, "source_observations") {
 		t.Fatal("replay audit retention must keep rows while evidence remains")
-	}
-
-	applications := mustSQL("repository_retention_delete_applications_0083_83.sql")
-	if !strings.Contains(applications, "delete_source_observation_application_retention_batch") ||
-		strings.Contains(applications, "DELETE FROM") {
-		t.Fatal("application retention must use the restricted retention function")
 	}
 
 	checkpoints := mustSQL("repository_retention_delete_checkpoints_0084_84.sql")

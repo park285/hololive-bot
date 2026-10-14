@@ -69,7 +69,7 @@ var repositoryEvidenceCases = []struct {
 	{name: "unknown replaces a negative", sql: `UPDATE youtube_channel_live_checks SET outcome='UNKNOWN',unknown_reason='request_failed',channel_identity_confirmed=false`, status: Unavailable, reason: Incomplete},
 	{name: "absence slot cannot cover a channel", sql: `DELETE FROM youtube_channel_live_checks;
  INSERT INTO youtube_live_absence_slots(observation_id,scheduled_for,evidence_sha256,effective_at,received_at,scope_sha256,coverage)
- VALUES(900001,now(),repeat('b',64),now(),now(),repeat('c',64),'{"requested_channel_ids":["UC_live_query"],"filters":{"statuses":["LIVE"]}}')`, status: Unavailable, reason: Incomplete},
+ VALUES(900001,now(),decode(repeat('b',64),'hex'),now(),now(),decode(repeat('c',64),'hex'),'{"requested_channel_ids":["UC_live_query"],"filters":{"statuses":["LIVE"]}}')`, status: Unavailable, reason: Incomplete},
 	{name: "uncollected", sql: `DELETE FROM youtube_collection_targets`, status: Unavailable, reason: Uncollected},
 	{name: "expired projection", sql: `UPDATE youtube_collection_projection_generations SET valid_until=now()-interval '1 second'`, status: Unavailable, reason: InvalidProjection},
 	{name: "metadata cannot renew positive", live: true, sql: `UPDATE youtube_live_reconciliation_heads SET last_live_positive_at=now()-interval '6 minutes'`, status: Unavailable, reason: Stale},

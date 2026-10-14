@@ -112,8 +112,9 @@ func TestScheduleWriterUsesObservationClockForCandidateChanges(t *testing.T) {
 
 			require.NoError(t, pool.QueryRow(ctx, `SELECT schedule_observed_at,status_observed_at
  FROM youtube_live_sessions WHERE video_id=$1`, clockVideoID).Scan(&scheduleObserved, &statusObserved))
-			require.NoError(t, pool.QueryRow(ctx, `SELECT effective_at FROM source_observation_applications
- WHERE observation_id=$1 AND entity_kind='youtube_live_session' AND entity_key=$2`, published.Results[0].ObservationID, clockVideoID).Scan(&effective))
+			require.NoError(t, pool.QueryRow(ctx, `SELECT o.scheduled_for FROM source_observation_applications a
+ JOIN source_observations o ON o.id=a.observation_id
+ WHERE a.observation_id=$1 AND a.entity_kind='youtube_live_session' AND a.entity_key=$2`, published.Results[0].ObservationID, clockVideoID).Scan(&effective))
 			require.True(t, scheduleObserved.Equal(effective))
 			require.Nil(t, statusObserved, "metadata does not prove observed liveness")
 

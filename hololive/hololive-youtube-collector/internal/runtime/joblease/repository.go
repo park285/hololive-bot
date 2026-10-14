@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -95,16 +96,7 @@ func (r *Repository) acquireTx(
 		return contract.LeaseProof{}, collection.ErrProjectionStale
 	}
 
-	memberCount, err := verifyAcquireTargets(ctx, tx, spec, kinds, scope, generation)
-	if err != nil {
-		return contract.LeaseProof{}, fmt.Errorf("verify acquire targets: %w", err)
-	}
-
-	if insertErr := insertAcquireJobRow(ctx, tx, spec, generation); insertErr != nil {
-		return contract.LeaseProof{}, fmt.Errorf("insert acquire job row: %w", insertErr)
-	}
-
-	proof, identity, err := acquireLeaseProof(ctx, tx, spec, owner, generation, r.config.LeaseTTL, scope, memberCount)
+	proof, identity, err := acquireLeaseProof(ctx, tx, spec, owner, generation, r.config.LeaseTTL, kinds, scope)
 	if err != nil {
 		return contract.LeaseProof{}, fmt.Errorf("acquire lease proof: %w", err)
 	}
@@ -143,46 +135,6 @@ type acquireTargetBundle struct {
 	membersProven   bool
 }
 
-// verifyAcquireTargets는 cadence bundle의 주기·신규 입장 가능 여부를 확인하고 lease에 기록할 membership 행 수를 반환한다.
-// 현재 generation보다 큰 member_since_generation이나 그 값이 없는 행이 있으면 범위를 증명할 수 없으므로 획득하지 않는다.
-func verifyAcquireTargets(
-	ctx context.Context,
-	tx dbx.Tx,
-	spec *JobSpec,
-	kinds []contract.ObservationKind,
-	scope collection.MembershipScope,
-	generation int64,
-) (int32, error) {
-	kindValues := make([]string, len(kinds))
-	for i := range kinds {
-		kindValues[i] = string(kinds[i])
-	}
-
-	var (
-		bundle  acquireTargetBundle
-		current bool
-	)
-
-	err := tx.QueryRow(
-		ctx,
-		sqlTargetBundle,
-		generation,
-		kindValues,
-		scope.ExactSubject,
-		spec.SubjectKey,
-		scope.Kinds,
-	).Scan(&bundle.targetCount, &bundle.minIntervalMS, &bundle.maxIntervalMS, &bundle.admissibleCount, &bundle.memberCount, &bundle.membersProven, &current)
-	if err != nil {
-		return 0, fmt.Errorf("acquire collection job lease: verify target set: %w", err)
-	}
-
-	if !current {
-		return 0, collection.ErrProjectionStale
-	}
-
-	return bundle.admit(spec)
-}
-
 func (b *acquireTargetBundle) admit(spec *JobSpec) (int32, error) {
 	if b.targetCount == 0 {
 		return 0, collection.ErrTargetDisabled
@@ -210,16 +162,7 @@ func acquireCadenceMismatch(spec *JobSpec, minIntervalMS, maxIntervalMS int64) b
 	return minIntervalMS <= 0 || minIntervalMS != maxIntervalMS || minIntervalMS != spec.PollInterval.Milliseconds()
 }
 
-func insertAcquireJobRow(ctx context.Context, tx dbx.Tx, spec *JobSpec, generation int64) error {
-	if _, err := tx.Exec(ctx, sqlLeaseInsert, spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
-		generation, spec.PollInterval.Milliseconds()); err != nil {
-		return fmt.Errorf("acquire collection job lease: create job row: %w", err)
-	}
-
-	return nil
-}
-
-// acquiredJobIdentity는 0144_08 UPDATE가 잠근 행 버전의 식별자를 RETURNING으로 받은 값이다.
+// acquiredJobIdentity는 획득 문장이 갱신·생성한 행 버전의 식별자를 RETURNING으로 받은 값이다.
 type acquiredJobIdentity struct {
 	provider   string
 	class      string
@@ -237,6 +180,8 @@ func verifyAcquireJobIdentity(spec *JobSpec, proof *contract.LeaseProof, identit
 	return nil
 }
 
+// acquireLeaseProof는 guard 이후 새 snapshot에서 입장 조건과 선점을 한 번에 판정한다.
+// 거절된 bundle도 반환하므로 빈 선점 결과와 target·cadence·membership 오류를 구분한다.
 func acquireLeaseProof(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -244,38 +189,65 @@ func acquireLeaseProof(
 	owner string,
 	generation int64,
 	leaseTTL time.Duration,
+	kinds []contract.ObservationKind,
 	scope collection.MembershipScope,
-	memberCount int32,
 ) (contract.LeaseProof, acquiredJobIdentity, error) {
+	kindValues := make([]string, len(kinds))
+	for i := range kinds {
+		kindValues[i] = string(kinds[i])
+	}
+
+	query := sqlLeaseAcquire
+	if scope.ExactSubject {
+		query = sqlLeaseAcquireExact
+	}
+
 	var (
-		proof    contract.LeaseProof
-		identity acquiredJobIdentity
+		bundle                                                   acquireTargetBundle
+		current, created                                         bool
+		jobKey, provider, class, jobKind, subject, acquiredOwner pgtype.Text
+		epoch, projection                                        pgtype.Int8
+		scheduled                                                pgtype.Timestamptz
 	)
 
-	err := tx.QueryRow(
-		ctx,
-		sqlLeaseAcquire,
-		spec.JobKey,
-		owner,
-		generation,
-		spec.PollInterval.Milliseconds(),
-		leaseTTL.Milliseconds(),
-		scope.Kinds,
-		scope.ExactSubject,
-		memberCount,
+	err := tx.QueryRow(ctx, query,
+		generation, kindValues, scope.Kinds, spec.SubjectKey,
+		spec.JobKey, owner, spec.PollInterval.Milliseconds(), leaseTTL.Milliseconds(),
+		scope.ExactSubject, spec.Provider, spec.Class, spec.CollectionJobKind,
 	).Scan(
-		&proof.JobKey, &identity.provider, &identity.class, &proof.CollectionJobKind, &identity.subjectKey,
-		&proof.OwnerInstance, &proof.FenceEpoch, &proof.ProjectionGeneration, &proof.ScheduledFor,
+		&bundle.targetCount, &bundle.minIntervalMS, &bundle.maxIntervalMS,
+		&bundle.admissibleCount, &bundle.memberCount, &bundle.membersProven, &current,
+		&jobKey, &provider, &class, &jobKind, &subject, &acquiredOwner, &epoch, &projection, &scheduled,
+		&created,
 	)
-
-	if errors.Is(err, pgx.ErrNoRows) {
+	if err != nil {
+		return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: admit and acquire job row: %w", err)
+	}
+	if !current {
+		return contract.LeaseProof{}, acquiredJobIdentity{}, collection.ErrProjectionStale
+	}
+	if _, err := bundle.admit(spec); err != nil {
+		return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("verify acquire targets: %w", err)
+	}
+	if !jobKey.Valid {
 		return contract.LeaseProof{}, acquiredJobIdentity{}, ErrNotAcquired
 	}
 
-	if err != nil {
-		return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: update job row: %w", err)
+	proof := contract.LeaseProof{
+		JobKey: jobKey.String, CollectionJobKind: jobKind.String,
+		OwnerInstance: acquiredOwner.String, FenceEpoch: epoch.Int64,
+		ProjectionGeneration: projection.Int64, ScheduledFor: scheduled.Time,
 	}
-
+	identity := acquiredJobIdentity{provider: provider.String, class: class.String, subjectKey: subject.String}
+	if created {
+		// INSERT의 유일 키 대기가 끝난 뒤 DB 시계로 최초 slot과 TTL을 확정한다.
+		// 기존 행 획득에는 이 문장이 없고, 방금 생성해 잠근 행만 한 번 갱신한다.
+		if err := tx.QueryRow(ctx, sqlLeaseInitialize,
+			proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, leaseTTL.Milliseconds(),
+		).Scan(&proof.ScheduledFor); err != nil {
+			return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: initialize created lease: %w", err)
+		}
+	}
 	proof.ScheduledFor = proof.ScheduledFor.UTC()
 
 	return proof, identity, nil

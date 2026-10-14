@@ -379,7 +379,7 @@ func TestHolodexCandidatesKeepLiveScheduleAndMetadataCadencesSeparate(t *testing
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
 		{subjectUCA, contract.KindLiveSnapshot, 2 * time.Minute, true},
-		{"video-A", contract.KindViewerSample, time.Second, true},
+		{subjectUCA, contract.KindCommunityPage, time.Second, true},
 		{subjectUCA, contract.KindChannelPhoto, 6 * time.Hour, true},
 		{subjectGlobalSchedule, contract.KindSchedule, 5 * time.Minute, true},
 	})

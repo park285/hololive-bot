@@ -364,13 +364,14 @@ hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_complete_0144_11.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_defer_0144_12.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_failure_lock_0144_14.sql
-hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_insert_0144_06.sql
+hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_initialize.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_release_0144_10.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_release_superseded.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_renew_0144_09.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_projection_current_0144_01.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_projection_lock_0144_05.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_target_bundle_0144_04.sql
+hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_target_bundle_exact.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_target_snapshot_exact_0144_15.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_target_snapshot_projection_0144_16.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/repository.go

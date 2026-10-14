@@ -33,36 +33,35 @@ func TestRetentionKeepsCommittedCountsOnLaterFailure(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 2)
 }
 
-func TestRetentionBacklogMeasuresRemainingOrphansAndResets(t *testing.T) {
+func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	repo := NewRepository(pool)
 	now := time.Now().UTC()
-
-	insertRetentionApplication(t, pool, nil, "oldest", 100*24*time.Hour)
-	insertRetentionApplication(t, pool, nil, "remaining", 95*24*time.Hour)
-	insertRetentionApplication(t, pool, nil, "protected-by-age", 89*24*time.Hour)
-
+	ids := publishProcessedObservations(ctx, t, pool, repo, 3)
+	ageObservations(t, pool, ids[:1], 100*24*time.Hour)
+	ageObservations(t, pool, ids[1:2], 95*24*time.Hour)
+	ageObservations(t, pool, ids[2:], 89*24*time.Hour)
+	_, err := pool.Exec(ctx, `DELETE FROM source_observation_queue;
+		UPDATE youtube_collection_projection_generations SET status='RETIRED';
+		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL`)
+	require.NoError(t, err)
 	cfg := RetentionConfig{
-		EvidenceAgeByKind:     map[contract.ObservationKind]time.Duration{contract.KindCommunityPage: 60 * 24 * time.Hour},
-		ApplicationAuditGrace: 30 * 24 * time.Hour, BatchSize: 1,
+		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{contract.KindCommunityPage: 90 * 24 * time.Hour},
+		BatchSize:         1,
 	}
-
 	result, err := repo.RunRetentionTick(ctx, cfg, now)
 	require.NoError(t, err)
-
-	part := retentionPartFor(t, result, "source_observation_applications")
+	part := retentionPartFor(t, result, "source_observations")
 	require.True(t, part.BacklogKnown)
 	require.InDelta(t, (95 * 24 * time.Hour).Seconds(), part.BacklogAge.Seconds(), 1)
 	require.EqualValues(t, 1, part.Deleted)
-
 	result, err = repo.RunRetentionTick(ctx, cfg, now)
 	require.NoError(t, err)
-
-	part = retentionPartFor(t, result, "source_observation_applications")
+	part = retentionPartFor(t, result, "source_observations")
 	require.True(t, part.BacklogKnown)
-	require.Zero(t, part.BacklogAge, "remaining young rows are not a retention backlog")
-	assertRetentionApplication(t, pool, "protected-by-age", true)
+	require.Zero(t, part.BacklogAge)
+	assertTableCount(t, pool, "source_observations", 1)
 }
 
 func TestRetentionBacklogDoesNotClaimEmptyBeyondProtectedScanLimit(t *testing.T) {
@@ -76,6 +75,9 @@ func TestRetentionBacklogDoesNotClaimEmptyBeyondProtectedScanLimit(t *testing.T)
 	ageObservations(t, pool, ids[:2], 72*time.Hour)
 
 	_, err := pool.Exec(ctx, `DELETE FROM source_observation_queue WHERE observation_id=$1`, ids[2])
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET status='RETIRED';
+		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL`)
 	require.NoError(t, err)
 
 	for _, tc := range []struct {

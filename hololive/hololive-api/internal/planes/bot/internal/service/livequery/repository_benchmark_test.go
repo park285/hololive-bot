@@ -114,8 +114,8 @@ func newLongHistoryQueryFixture(b *testing.B, allLive bool) (*Repository, *pgxpo
 
 	_, err := pool.Exec(b.Context(), `INSERT INTO youtube_live_absence_slots
  (observation_id,scheduled_for,evidence_sha256,effective_at,received_at,scope_sha256,coverage)
- SELECT g,now()-interval '10 seconds'-((1500000-g)/119)*interval '2 minutes',repeat('a',64),
- now()-interval '10 seconds'-((1500000-g)/119)*interval '2 minutes',now()-interval '10 seconds'-((1500000-g)/119)*interval '2 minutes',repeat('b',64),
+ SELECT g,now()-interval '10 seconds'-((1500000-g)/119)*interval '2 minutes',decode(repeat('a',64),'hex'),
+ now()-interval '10 seconds'-((1500000-g)/119)*interval '2 minutes',now()-interval '10 seconds'-((1500000-g)/119)*interval '2 minutes',decode(repeat('b',64),'hex'),
  jsonb_build_object('requested_channel_ids',jsonb_build_array('channel-'||(g%119)),
  'filters',jsonb_build_object('statuses',CASE WHEN $1::bool OR (g%119)%20=0 THEN '["LIVE","UPCOMING"]'::jsonb ELSE '["ENDED"]'::jsonb END)) FROM generate_series(1,1500000) g`, allLive)
 	require.NoError(b, err)

@@ -188,7 +188,7 @@ func requireEquivalentScopeSessions(t *testing.T, fullDecision, narrowedDecision
 		want, got := fullDecision.Sessions[i], narrowedDecision.Sessions[i]
 
 		if _, ok := omitted[got.VideoID]; ok {
-			// 이력 없이 읽은 ENDED는 저장 때 기존 배열을 유지하도록 미적재로 남아야 한다.
+			// reducer는 적재하지 않은 ENDED 이력을 끝까지 미적재로 두고 저장 계층이 비운다.
 			if _, loaded := got.IgnoredAbsences.Slots(); loaded {
 				t.Fatalf("%s: omitted history became loaded", got.VideoID)
 			}

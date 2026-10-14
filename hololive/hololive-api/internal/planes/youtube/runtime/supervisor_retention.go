@@ -205,15 +205,14 @@ func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
 
 func planeRetentionConfig(cfg *apiconfig.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
 	return sourceobservation.RetentionConfig{
-		QueueProcessedAge:     cfg.QueueProcessedAge,
-		QueueDLQAge:           cfg.QueueDLQAge,
-		CollisionAge:          cfg.CollisionAge,
-		ReplayAuditAge:        cfg.ReplayAuditAge,
-		ApplicationAuditGrace: cfg.ApplicationAuditGrace,
-		LiveAbsenceSlotAge:    cfg.LiveAbsenceSlotAge,
-		CheckpointHistoryAge:  cfg.CheckpointHistoryAge,
-		EvidenceAgeByKind:     evidenceRetentionAges(cfg),
-		BatchSize:             cfg.BatchSize,
+		QueueProcessedAge:    cfg.QueueProcessedAge,
+		QueueDLQAge:          cfg.QueueDLQAge,
+		CollisionAge:         cfg.CollisionAge,
+		ReplayAuditAge:       cfg.ReplayAuditAge,
+		LiveAbsenceSlotAge:   cfg.LiveAbsenceSlotAge,
+		CheckpointHistoryAge: cfg.CheckpointHistoryAge,
+		EvidenceAgeByKind:    evidenceRetentionAges(cfg),
+		BatchSize:            cfg.BatchSize,
 	}
 }
 
@@ -223,7 +222,6 @@ func evidenceRetentionAges(cfg *apiconfig.YouTubePlaneRetentionConfig) map[contr
 	addEvidenceRetentionAge(ages, contract.KindVideoList, cfg.VideoListAge)
 	addEvidenceRetentionAge(ages, contract.KindShortsList, cfg.ShortsListAge)
 	addEvidenceRetentionAge(ages, contract.KindLiveSnapshot, cfg.LiveSnapshotAge)
-	addEvidenceRetentionAge(ages, contract.KindViewerSample, cfg.ViewerSampleAge)
 	addEvidenceRetentionAge(ages, contract.KindChannelProfile, cfg.ChannelProfileAge)
 	addEvidenceRetentionAge(ages, contract.KindChannelPhoto, cfg.ChannelPhotoAge)
 	addEvidenceRetentionAge(ages, contract.KindSchedule, cfg.ScheduleSnapshotAge)
@@ -248,7 +246,6 @@ func recordRetentionTick(result sourceobservation.RetentionResult, elapsed time.
 
 	// 앞 단계 실패로 조회하지 못한 테이블도 지난 tick의 적체 값을 남기지 않는다.
 	youtubeRetentionBacklogAgeSeconds.DeleteLabelValues("source_observations")
-	youtubeRetentionBacklogAgeSeconds.DeleteLabelValues("source_observation_applications")
 
 	for _, part := range retentionParts(result) {
 		recordRetentionPart(part)
