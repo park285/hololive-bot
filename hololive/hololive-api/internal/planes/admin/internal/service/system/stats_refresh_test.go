@@ -210,6 +210,49 @@ func TestCollector_GetCurrentStats_LiveWaitersShareRefreshAndReceiveClones(t *te
 	})
 }
 
+func TestCollector_RefreshCurrentStats_RechecksCacheAfterMiss(t *testing.T) {
+	release := make(chan struct{})
+	close(release)
+
+	var requests atomic.Int64
+
+	collector := newBlockedStatsCollector(release, &requests)
+	if collector.getCachedStats() != nil {
+		t.Fatal("expected the delayed caller to miss the cache")
+	}
+
+	first, err := collector.GetCurrentStats(t.Context())
+	if err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+
+	cachedAt := collector.cachedAt
+
+	// 첫 miss 뒤 다른 flight가 끝난 순서를 재현한다. 늦은 leader도 게시된 snapshot을 재사용해야 한다.
+	late, err := collector.refreshCurrentStats(t.Context())
+	if err != nil {
+		t.Fatalf("delayed refresh: %v", err)
+	}
+
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("remote requests=%d want=1 while the published cache is valid", got)
+	}
+
+	if !reflect.DeepEqual(late, first) || !collector.cachedAt.Equal(cachedAt) {
+		t.Fatal("delayed refresh replaced the valid snapshot")
+	}
+
+	collector.cachedAt = cachedAt.Add(-collector.cacheTTL - time.Second)
+
+	if _, err := collector.GetCurrentStats(t.Context()); err != nil {
+		t.Fatalf("refresh after expiry: %v", err)
+	}
+
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("remote requests=%d want=2 after cache expiry", got)
+	}
+}
+
 func assertStatsClonesIndependent(t *testing.T, collector *Collector, allStats []*SystemStats) {
 	t.Helper()
 

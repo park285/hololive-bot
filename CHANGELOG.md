@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **관리자 통계 중복 수집 수정:** 캐시 miss 뒤 다른 수집이 완료되면 늦게 시작한 singleflight leader가 유효한 snapshot을 다시 사용합니다. TTL 안의 CPU·메모리·원격 health 재수집을 막고, 호출자별 복사본·취소·만료 후 재수집 계약은 유지합니다.
 - **deunhealth 이미지 빌드:** 의존성 일괄 갱신(#604)이 `gosplash`를 upstream이 쓰지 않는 v0.2.0으로 올려 `BuildDate` 필드가 없어 빌드가 실패했습니다. upstream 고정값 v0.1.0으로 되돌립니다. 실행 중인 deunhealth에는 변경이 없습니다.
 - **수명 동기 읽기 모델:** migration 312가 활성 session 또는 head의 좁은 상태와 현재 일치하는 최신 검토 시각을 `youtube_live_runtime_state`에 유지합니다. observability·live-check는 이 표를 직접 읽으며 시간 경과·신선도·미래 일정 필터는 조회 시 계산합니다. 원본·영수증 의미 사실과 불일치 진단은 보존합니다.
 - **쓰기 직렬화:** API 관측 확정·종료 finalizer·증거 보존 삭제·수동 영수증·head 복구가 claim/원본 행보다 먼저 공통 MVCC guard를 잡습니다. 문장 trigger는 원본·영수증 변경과 같은 트랜잭션에서 모델을 갱신하고 삭제·FK·롤백을 반영합니다. 오래된 REPEATABLE READ/SERIALIZABLE snapshot은 직렬화 오류로 종료하며 새 재시도를 추가하지 않습니다. 모든 관측 확정이 직렬화되므로 쓰기 처리량과 잠금 대기 비용이 늘 수 있습니다.
@@ -15,6 +16,7 @@
 - **Target bundle 동기 집계:** migration 313은 CURRENT/STAGING의 enabled target만 `youtube_collection_runtime_bundles`로 묶고, 8개 observation-to-job mapping을 한 DB view가 소유합니다. observability는 RPC 수·최소 cadence/생성/eligibility 시각을 직접 읽되 세대 만료와 lease/현재 시각은 계속 조회 시 판정합니다. target 변경은 영향받은 bundle만 갱신하며 RETIRED 이력과 기술적 heartbeat를 재집계하지 않습니다.
 - **313 잠금·권한:** 기존 projection guard의 실제 MVCC 쓰기로 고정 snapshot 충돌을 드러내고, bounded retention도 guard부터 획득합니다. guard 누락은 자동 복구하지 않고 실패합니다. 기존 collector의 잠금과 `guard_key` 열 권한은 유지하며 새 `runtime_writer` 직접 쓰기는 허용하지 않습니다. API 정지 후 migration과 신규 API를 적용합니다. 312를 포함한 `14e102dca` API의 기존 projection 잠금 SQL은 호환되지만, 313을 모르는 이전 migration runner는 새 ledger에 실행하지 않습니다.
 - **지연된 LIVE 승격의 부재 재평가:** 일반 `PARTIAL`도 저장된 현재 slot의 COMPLETE 증거를 조회합니다. metadata-only 영상이 늦은 `video_live_check`로 LIVE가 된 뒤 같은 slot의 Holodex PARTIAL을 받으면 기존 부재를 빠뜨리지 않습니다. 시간 인덱스 조회를 사용하며 slot이 없거나 payload에 포함된 영상의 ignored 배열은 읽지 않습니다. PARTIAL 자체는 부재를 만들지 않고, 중복 계산·기존 TOAST 보존·grace 조건을 유지합니다.
+- **의존성·CI 핀 일괄 갱신:** openai-go v3.78.0, miniredis v2.40.0, grpc-gateway v2.32.0, x/crypto v0.58.0·x/net v0.61.0·x/sys v0.49.0 등 Go 모듈과 deunhealth·gosu 재빌드 graph(x/sys v0.49.0, gosu source `40506998e34a`)를 갱신합니다. deunhealth `gosplash`는 upstream 고정값 v0.1.0을 유지합니다. Dockerfile frontend 1.28.0, node 24.22.0 digest, nginx 1.31.7, `@types/node` 24.19.2와 po-sandbox lockfile 전이 의존성을 갱신합니다. CI는 Node 24.22.0, uv 0.13.1, staticcheck 2026.2.2, Trivy 0.76.0을 사용합니다. 실행 동작 변경은 없습니다.
 - **별도 검토 기록 역할 복구:** migration 314는 이미 `record_youtube_live_review` 실행 권한을 가진 역할에 generated-column decoder 실행 권한만 추가합니다. 기록·표·PUBLIC·역할 membership 권한은 넓히지 않으며 SERIALIZABLE·CAS·append-only 계약을 유지합니다. 배포된 310·312·313은 수정하지 않습니다. 314 이후 신설하는 역할에는 위 의존 권한을 별도로 부여해야 합니다.
 
 ## v10.1.0 - 2026-10-14

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.27.1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+# syntax=docker/dockerfile:1.28.0@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
 # Copyright 2025 Kapu
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@ ARG GO_VERSION=1.27.2
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=24
 
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS youtubejs-build
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS youtubejs-build
 WORKDIR /app/youtubejs
 # checkout umask와 무관하게 runtime uid가 읽도록 context 파일 모드를 정규화한다.
 # 기호 COPY --chmod는 BuildKit 전용이라 CONTAINER_CLI=podman(buildah)에서도 같은 결과가 나오도록 RUN chmod로 맞춘다.
@@ -29,7 +29,7 @@ RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
 # npm은 빌드 호스트에서 실행하고 배포할 Node·라이브러리는 대상 플랫폼에서 가져온다.
 # 따라서 x86_64에서 빌드해도 linux/arm64 릴리스의 아키텍처가 일치한다.
-FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS youtubejs-runtime
+FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS youtubejs-runtime
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS builder
 

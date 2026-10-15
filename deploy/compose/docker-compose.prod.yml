@@ -260,10 +260,14 @@ services:
       # Loki로 남기려고 10초 이상 걸린 실행만 기록한다. compose와 drift가 생기므로 ALTER SYSTEM으로 바꾸지 않는다.
       - "-c"
       - "log_autovacuum_min_duration=10s"
+      # 4GiB 한도에서 공유 버퍼는 25%만 사용하고 프로세스·파일 캐시 여유를 남긴다.
       - "-c"
-      - "shared_buffers=512MB"
+      - "shared_buffers=1GB"
       - "-c"
-      - "effective_cache_size=1536MB"
+      - "effective_cache_size=3GB"
+      # 체크포인트 직후의 full-page WAL 집중을 수용하며 디스크 보관 한도와는 별개다.
+      - "-c"
+      - "wal_buffers=64MB"
       - "-c"
       - "maintenance_work_mem=128MB"
       - "-c"
@@ -323,11 +327,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    # burst 시 shared buffers와 dynamic shared memory를 동시에 수용하도록 DB 전용 여유분을 둔다.
+    # DB 버퍼·프로세스뿐 아니라 cgroup에 계상되는 파일 캐시에도 여유를 둔다.
     deploy:
       resources:
         limits:
-          memory: 2g
+          memory: 4g
           pids: 256
     networks:
       - hololive-net

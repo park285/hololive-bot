@@ -128,7 +128,7 @@ func (c *Collector) Close() error {
 // 새로 수집한다.
 func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
 	if stats := c.getCachedStats(); stats != nil {
-		return stats, nil
+		return cloneSystemStats(stats), nil
 	}
 
 	resultCh := c.flights.DoChan(currentStatsFlightKey, func() (any, error) {
@@ -161,6 +161,11 @@ func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
 }
 
 func (c *Collector) refreshCurrentStats(ctx context.Context) (*SystemStats, error) {
+	// 선행 cache miss 뒤 다른 flight가 끝났을 수 있으므로 수집 소유권을 얻은 뒤 다시 확인한다.
+	if stats := c.getCachedStats(); stats != nil {
+		return stats, nil
+	}
+
 	var (
 		stats      *SystemStats
 		collectErr error
@@ -238,6 +243,7 @@ func (c *Collector) collectCurrentStats(ctx context.Context) (*SystemStats, erro
 	}, nil
 }
 
+// getCachedStats는 게시 후 불변인 snapshot을 읽는다. 호출자에게 줄 복사본은 GetCurrentStats에서 만든다.
 func (c *Collector) getCachedStats() *SystemStats {
 	c.cacheMu.RLock()
 	defer c.cacheMu.RUnlock()
@@ -250,7 +256,7 @@ func (c *Collector) getCachedStats() *SystemStats {
 		return nil
 	}
 
-	return cloneSystemStats(c.cached)
+	return c.cached
 }
 
 func cloneSystemStats(src *SystemStats) *SystemStats {

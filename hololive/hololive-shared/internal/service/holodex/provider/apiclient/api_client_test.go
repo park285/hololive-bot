@@ -479,7 +479,14 @@ func TestPerAttemptTimeout(t *testing.T) {
 func TestTimeoutMaxRetries(t *testing.T) {
 	var requestCount atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// loopback 포트를 탐색하는 호스트 프로세스의 요청을 붙잡거나 재시도로 세지 않게 대상 경로만 처리한다.
+		if r.URL.Path != "/test" {
+			http.NotFound(w, r)
+
+			return
+		}
+
 		requestCount.Add(1)
 		<-r.Context().Done()
 	}))

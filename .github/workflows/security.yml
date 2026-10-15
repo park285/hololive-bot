@@ -136,8 +136,8 @@ jobs:
       - name: Install exact Trivy
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
-          TRIVY_VERSION: "0.75.0"
-          TRIVY_LINUX_AMD64_SHA256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
+          TRIVY_VERSION: "0.76.0"
+          TRIVY_LINUX_AMD64_SHA256: e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7
         run: |
           archive="${RUNNER_TEMP}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           extract_dir="${RUNNER_TEMP}/trivy-extract"
@@ -179,7 +179,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24.21.0"
+          node-version: "24.22.0"
           cache: npm
           cache-dependency-path: |
             hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json

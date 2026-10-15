@@ -25,72 +25,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 )
-
-func TestNewCollector_DefaultConfiguration(t *testing.T) {
-	endpoints := []ServiceEndpoint{{Name: "svc-a", URL: "http://example.com/health"}}
-
-	collector := NewCollector(endpoints, sharedh3.ClientOptions{})
-	if collector == nil {
-		t.Fatal("NewCollector returned nil")
-	}
-
-	if collector.httpClient == nil {
-		t.Fatal("httpClient should be initialized")
-	}
-
-	if collector.httpClient.Timeout != 2*time.Second {
-		t.Fatalf("timeout=%s want=2s", collector.httpClient.Timeout)
-	}
-
-	if collector.httpClient.Transport == nil {
-		t.Fatal("transport should be initialized")
-	}
-
-	if collector.cacheTTL != 2*time.Second {
-		t.Fatalf("cacheTTL=%s want=2s", collector.cacheTTL)
-	}
-
-	if len(collector.endpoints) != 1 || collector.endpoints[0].Name != "svc-a" {
-		t.Fatalf("unexpected endpoints: %+v", collector.endpoints)
-	}
-}
-
-func TestCollector_GetCachedStats_CloneAndExpiry(t *testing.T) {
-	collector := &Collector{cacheTTL: 2 * time.Second}
-
-	collector.cached = &SystemStats{
-		CPUUsage: 10,
-		ServiceGoroutines: []ServiceGoroutines{{
-			Name:       "svc-a",
-			Goroutines: 7,
-			Available:  true,
-		}},
-	}
-	collector.cachedAt = time.Now()
-
-	cached := collector.getCachedStats()
-	if cached == nil {
-		t.Fatal("expected cached stats")
-	}
-
-	if cached == collector.cached {
-		t.Fatal("getCachedStats should return cloned value")
-	}
-
-	cached.ServiceGoroutines[0].Goroutines = 999
-	if collector.cached.ServiceGoroutines[0].Goroutines == 999 {
-		t.Fatal("mutating returned stats should not affect cache")
-	}
-
-	collector.cachedAt = time.Now().Add(-3 * time.Second)
-	if got := collector.getCachedStats(); got != nil {
-		t.Fatalf("expected expired cache to return nil, got %+v", got)
-	}
-}
 
 func TestCollector_FetchServiceGoroutines_MixedEndpoints(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

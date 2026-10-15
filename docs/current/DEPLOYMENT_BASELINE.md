@@ -136,6 +136,57 @@ exporter의 public USAGE 차단과 앱 역할의 권한은 유지했습니다.
 이후 별도 계측 브랜치의 검증된 소스를 로컬 main에 통합했습니다. 운영 이미지·실행 설정은
 그대로이며, 소스 통합을 이유로 DB를 재생성하거나 확장 활성화 SQL을 다시 실행하지 않습니다.
 
+## PostgreSQL Resource Baseline
+
+2026-10-14 중앙 `holo-postgres`의 cgroup 메모리 한도를 2GiB에서 4GiB로,
+`max_wal_size`를 1GB에서 2GB로 무중단 조정했습니다. 이어 사용자 승인 아래 공유 버퍼와
+WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이미지로 DB 컨테이너만 재생성했습니다.
+운영 명령은 `--no-build --no-deps --pull never --timeout 120 --wait`를 사용했으며
+재생성부터 healthy까지 약 10초였습니다. schema migration과 다른 서비스 재배포는 없었습니다.
+
+| 설정 | 현재 값 | 영속 설정 소유 경로 |
+|---|---|---|
+| 컨테이너 메모리 한도 | 4GiB | `deploy/compose/docker-compose.prod.yml`의 `holo-postgres.deploy.resources.limits.memory`; 운영 deploy tree도 동일 |
+| `shared_buffers` | 1GB | Compose 시작 인자; 컨테이너 한도의 25%를 배정하고 프로세스·파일 캐시 여유 유지 |
+| `wal_buffers` | 64MB | Compose 시작 인자; 피크의 WAL 버퍼 포화에 대비 |
+| `effective_cache_size` | 3GB | Compose 시작 인자; 공유 버퍼와 파일 캐시를 고려한 planner 추정치이며 별도 메모리 할당 아님 |
+| `work_mem` / `maintenance_work_mem` | 4MB / 128MB | 기존 Compose 시작 인자 유지; 동시 쿼리·autovacuum의 메모리 배수를 고려 |
+| `max_wal_size` | 2GB | 기존 `holo-pg-data`의 `pgdata/postgresql.auto.conf`; `ALTER SYSTEM`과 설정 reload로 적용 |
+| `checkpoint_timeout` / `checkpoint_completion_target` | 15min / 0.9 | 기존 `postgresql.auto.conf` / PostgreSQL 기본값 유지 |
+| `wal_compression` | `lz4` | 기존 `postgresql.auto.conf` 유지 |
+
+메모리 한도에는 프로세스·공유 버퍼뿐 아니라 파일 캐시도 계상됩니다. `max_connections=60`,
+`fsync=on`, `synchronous_commit=on`, `full_page_writes=on`과 OCI 50GB·10 VPU/GB를 유지합니다.
+`max_wal_size`는 WAL 공간의 절대 상한이 아니며, 상향하면 보관 공간과 crash recovery 시간이
+늘어날 수 있습니다. 신규 PGDATA 생성 시 기존 `postgresql.auto.conf`는 승계되지 않으므로
+승인된 초기 구성에서 위 운영 값을 별도로 적용해야 합니다.
+
+재기동 로그의 clean shutdown·ready, 실제 API·worker·collector `a/b/c/d` health/readiness와
+원격 AP의 DB TLSv1.3 재연결을 확인했습니다. DB 시작 시각은 `2026-10-14T12:33:12Z`이며
+이미지 revision `af9b2b57cbf2e18b34f9ccecc46b28396e054ba3`는 유지했습니다.
+재기동 후 확인한 조정값과 `max_connections`의 `pending_restart`는 모두 false였습니다.
+파일 기본값과 Compose 시작 인자가 다른 항목은 이후 reload에서 다시 재시작 필요 표시가
+나타날 수 있으므로 실제 값과 `source=command line`을 함께 확인합니다.
+
+재기동 뒤 239초 구간에서 DB commit 16,636건이 진행됐고 WAL 버퍼 포화·cgroup 메모리 상한
+도달·OOM 증가량은 모두 0이었습니다. 별도 120초 디스크 관측의 평균 CPU I/O 대기는 0.35%였습니다.
+재기동 구간에는 종료·기동 중 DB 접속 오류가 일시적으로 발생했습니다. healthy 이후 30초부터
+확인한 중앙 DB·API·worker·collector와 AP a/b/d 로그에서는 추가 오류를 관측하지 않았습니다.
+
+버퍼 조정 직전의 Compose는 중앙
+`/var/backups/hololive-postgres-buffers-20261014T123219Z/docker-compose.prod.yml`에 보존합니다.
+이 단계의 원복은 이후 다른 변경을 덮어쓰지 않도록 공유 버퍼 512MB·캐시 추정치 1536MB와
+기본 WAL 버퍼 16MB 구성을 저장소·운영 Compose에 함께 복구한 뒤 같은 이미지로 DB만 재생성합니다.
+4GiB 메모리 제한과 2GB WAL 한도는 유지합니다.
+
+첫 무중단 조정 전 Compose와 auto-conf는
+`/var/backups/hololive-postgres-tuning-20261014T121804Z/`에 별도로 보존합니다.
+그 단계까지 원복하려면 승인된 범위에서 `ALTER SYSTEM RESET max_wal_size`와 reload를 사용하고,
+메모리 회수 영향을 확인한 뒤 실행 한도와 Compose를 함께 2GiB로 되돌립니다.
+전체 auto-conf 복원으로 이후의 다른 설정 변경을 덮어쓰지 않습니다.
+피크 개선은 다음 유사 부하에서 WAL 기반 체크포인트 횟수·버퍼 포화·쓰기 대기시간·서비스 지연으로
+판단하며, 재시작 직후의 캐시 예열이나 평상시 health 통과를 피크 처리량 향상의 증거로 대신하지 않습니다.
+
 ## PostgreSQL TLS Baseline
 
 Production PostgreSQL access is certificate-verified end to end. `holo-postgres`
