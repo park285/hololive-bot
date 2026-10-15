@@ -9,7 +9,7 @@ x-live-postgres-env: &live-postgres-env
 
 services:
   admin-dashboard-ingress:
-    image: ${NGINX_IMAGE:-nginx:1.31.6-alpine-slim@sha256:f761b94f2cb9e8e05e2943d5f773609596113ef69b54e2433a996d109a8f78b7}
+    image: ${NGINX_IMAGE:-nginx:1.31.7-alpine-slim@sha256:b274dae54cf9792e1e8696a14081a50f29d74830d9a56a4ffcdc4bc8fb006524}
     container_name: admin-dashboard-ingress
     user: "101:101"
     restart: unless-stopped
