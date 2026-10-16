@@ -172,14 +172,15 @@ other_revision=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
 run_capture() {
   local name="$1" maintenance="$2" collector_status="$3" issuer_revision="$4" collector_image="${5:-present}"
+  local container_image="${CONTAINER_IMAGE_INDEX:-1}" issuer_version="${ISSUER_VERSION:-10.1.0}"
   case_dir="$tmp/capture-$name"
   local repo="$case_dir/home/hololive-bot"
   mkdir -p "$case_dir/images" "$case_dir/containers" "$repo/backups" "$repo/deploy/compose" "$repo/scripts/deploy"
   if [[ "$collector_image" == present ]]; then
     printf 'sha256:%064d %s 10.1.0\n' 1 "$collector_revision" > "$case_dir/images/hololive-youtube-collector_prod"
   fi
-  printf 'sha256:%064d %s 10.1.0\n' 2 "$issuer_revision" > "$case_dir/images/hololive-youtube-po-sandbox_prod"
-  printf '%s sha256:%064d\n' "$collector_status" 1 > "$case_dir/containers/hololive-youtube-collector-b"
+  printf 'sha256:%064d %s %s\n' 2 "$issuer_revision" "$issuer_version" > "$case_dir/images/hololive-youtube-po-sandbox_prod"
+  printf '%s sha256:%064d\n' "$collector_status" "$container_image" > "$case_dir/containers/hololive-youtube-collector-b"
   printf 'running sha256:%064d\n' 2 > "$case_dir/containers/hololive-youtube-po-b"
   printf '{"source_revision": "%s"}\n' "$issuer_revision" > "$repo/backups/po-sandbox-current-b.json"
   printf 'sha256:%064d\n' 2 > "$repo/backups/po-sandbox-current-b.image-id"
@@ -212,6 +213,13 @@ if [[ "$rc" == 0 ]] || ! grep -q 'different revisions; refusing cutover' "$case_
   fail 'baseline accepted an issuer from another revision before arming rollback'
 fi
 
+CONTAINER_IMAGE_INDEX=3 run_capture maintenance-other-image true exited "$collector_revision"
+[[ "$rc" != 0 ]] || fail 'maintenance baseline accepted a stopped collector that is not the current :prod image'
+ISSUER_VERSION=10.0.0 run_capture mismatched-version false running "$collector_revision"
+if [[ "$rc" == 0 ]] || ! grep -q 'different versions; refusing cutover' "$case_dir/out"; then
+  fail 'baseline accepted an issuer from another version before arming rollback'
+fi
+
 # 실제 ap-rollback.sh를 fake SSH로 실행해 원격 완료 줄과 로컬 판별이 같은 계약을 쓰는지 확인한다.
 mkdir -p "$tmp/ssh-bin"
 cat > "$tmp/ssh-bin/ssh" <<'SSH'
@@ -236,6 +244,9 @@ completion_line="$(grep -E "^printf 'AP rollback complete: " "$rollback_script")
 [[ -n "$completion_line" ]] || fail 'remote rollback completion line was not found'
 approve_var="$(cd "$ROOT_DIR" && SSH_KEY=/dev/null bash -c '. scripts/deploy/lib/ap-host.sh; ap_host_load "$PWD" seoul >/dev/null; printf %s "$AP_APPROVE_ROLLBACK_VAR"')"
 [[ -n "$approve_var" ]] || fail 'seoul rollback approval variable was not found'
+# fake SSH는 PATH로만 끼워 넣으므로, 호스트 설정이 절대 경로 ssh를 쓰면 실제 호스트에 닿기 전에 멈춘다.
+ssh_command="$(cd "$ROOT_DIR" && SSH_KEY=/dev/null bash -c '. scripts/deploy/lib/ap-host.sh; ap_host_load "$PWD" seoul >/dev/null; printf %s "${AP_SSH[0]}"')"
+[[ "$ssh_command" == ssh ]] || fail "seoul SSH command is not resolved through PATH: $ssh_command"
 
 run_rollback() {
   local name="$1" state="$2" apply_rc="$3"
