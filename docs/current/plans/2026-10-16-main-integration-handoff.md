@@ -1,12 +1,12 @@
 # 전체 변경 main 합류 마무리 인계 - 2026-10-16
 
-**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 PR(squash)로 원격 `main`에 발행합니다(6절). 운영 미적용.** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
+**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 PR #641(squash)로 원격 `main`(`848fb2792`)에 발행했습니다(6절). 운영 중앙·AP a/b/c/d에 적용하고 수용 검사를 마쳤습니다(7절).** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
 
 ## 1. 승인 범위
 
 - 사용자는 10-15 작업(필수 1-5, N1-N7, 315·316), 10-16 압축 작업(317-321)과 통합 보완 전체를 인수하여 **로컬 `main`에 커밋·합류**하도록 지시했습니다.
 - 이어받은 세션에서 사용자는 다른 세션의 잔여 작업까지 인수·리뷰하여 원격 반영으로 마무리하도록 지시했습니다(6절).
-- 운영 DDL·데이터 변경·배포·재시작은 승인되지 않았습니다.
+- 커밋 단계에서는 운영 DDL·데이터 변경·배포·재시작이 승인되지 않았습니다. 발행 뒤 사용자는 운영 배포와 로컬 branch·worktree 정리를 지시했습니다. 이때 사전 전체 백업은 작업 완료 뒤 삭제, `VACUUM FULL`은 같은 점검 창, 점검은 merge 직후, plan gate는 배포 전후로 정했습니다(7절).
 - 새 retry/fallback/cache, 의존성 변경, 이미 적용된 migration(314 이하) 수정은 범위 밖입니다.
 
 ## 2. 커밋 직전 작업 트리 상태 (`/home/kapu/work/iris-stack/hololive-bot`)
@@ -51,7 +51,9 @@
 3. **스테이징·커밋:** 6절.
 4. **인계 문서 갱신:** 이 문서와 [압축 인계](2026-10-16-sql-compaction-handoff.md) 7절. 원격 발행과 iris-stack 메타 pointer 갱신은 6절에 있습니다.
 
-## 5. 운영 적용 경계 (이번 범위 아님)
+## 5. 운영 적용 경계
+
+커밋 단계에서 정리한 적용 조건입니다. 실제 적용 결과는 7절에 있습니다.
 
 - 315·316 다음 317-321 순서로, API·worker·collector a/b/c/d를 중지한 점검 창에서 `db-migrate`로 적용합니다. 이후 신규 API·collector image를 배포합니다.
 - 315만 적용한 DB나 구 binary와 혼합 운용하면 안 됩니다. image-only rollback도 할 수 없습니다.
@@ -71,6 +73,49 @@
   - chat-bot-go-kakao `e6f049633`(`fix(prompt)`)은 원격에 이미 있고 iris-stack 메타 pointer만 남아 있었습니다.
   - 그 밖의 submodule·메타 저장소·worktree에는 미커밋·미발행 작업이 없었습니다.
 - 발행 경로: 원격 ruleset은 `fast-gate` 필수(strict)와 non-fast-forward 금지이며, 저장소는 squash merge만 허용합니다. `origin/main`(`f814da318`) 위에 위 두 커밋을 cherry-pick한 `feat/sql-compaction-20261016`으로 PR을 열고, `fast-gate` 통과 뒤 squash merge합니다. tree는 로컬 main과 같습니다(`8db1a5e63`). 발행 commit은 origin/main에서 제목 `feat(db): SQL 리뷰 후속 수정과 원본 저장 구조 압축 합류 (#번호)`로 찾습니다. 로컬 SHA는 원격에 남지 않습니다.
-- 발행 뒤: 로컬 main을 발행된 origin/main으로 맞추고, iris-stack 메타 pointer(hololive-bot·chat-bot-go-kakao)를 원격에 있는 SHA로 갱신합니다.
+- 발행 결과: PR #641이 `fast-gate` 통과 뒤 `848fb2792`로 squash merge되었습니다. 로컬 main은 `reset --keep`으로 origin/main에 맞췄고 발행 branch는 원격·로컬 모두 삭제되었습니다. iris-stack 메타 pointer(hololive-bot·chat-bot-go-kakao)는 이 배포 기록이 발행된 뒤 원격 SHA로 갱신합니다.
+
+## 7. 운영 배포 결과 (2026-10-16, revision `848fb2792`, 10.1.0)
+
+- **준비:**
+  - kapu에서 ARM64 image(api·alarm-worker·collector)를 `DOCKER_DEFAULT_PLATFORM=linux/arm64`로 빌드했습니다. 전송 뒤 중앙에서 architecture와 전체 revision이 맞는지 확인했습니다.
+  - 중앙 복구점은 `/opt/hololive-bot/compose/sql-compaction-20261016T022736Z/previous`(deploy tree·compose checksum·서비스·image 목록)입니다. image tag `rollback-sql-compaction-20261016t022736z`(3개 repo)도 남겼습니다.
+  - 배포 전 plan gate(`scripts/runtime/pg-hotpath-explain-snapshot.sh`)를 통과했습니다.
+- **중앙 점검 창 (02:29:23Z 시작):**
+  1. AP a/b/d와 중앙 collector c, api, worker를 정지했습니다.
+  2. `pg_dump -Fc` 전체 백업(405MB)을 만들고 sha256과 `pg_restore --list`로 확인했습니다.
+  3. migration 9개를 운영 tree에 넣고 checksum을 대조했습니다. 운영 tree의 다른 파일은 호스트에서 조정한 compose와 예전 사본이라 git과 달라서 교체하지 않았습니다.
+  4. `:prod` 승격 뒤 `db-migrate --statement-timeout=10m`을 실행했습니다(02:30:38Z-02:35:45Z). 결과는 `applied=7 skipped=175 total=182`이고 ledger 마지막은 `321_source_application_vocab_cutover.sql`입니다.
+  5. 같은 창에서 `VACUUM (FULL, ANALYZE) source_observation_applications`를 26초 동안 실행했습니다. 크기는 1,259MB에서 691MB로 줄었고 관련 표 4개도 `ANALYZE`했습니다.
+  6. worker·api·collector c를 02:36:36Z-02:36:56Z에 기동했습니다. 모두 healthy이고 재시작은 0회입니다.
+- **AP 배포:**
+  - osaka a: `ap-host-native-deploy.sh osaka --apply`, 02:37:19Z-02:41:21Z.
+  - osaka2 d: 같은 스크립트, 02:41:42Z-02:46:19Z.
+  - 두 호스트 모두 `READY`, `first_success`, handoff `PROCESSED`, `NRestarts=0`이고 스크립트 안의 완료 검사를 통과했습니다.
+- **Seoul b 경위:**
+  1. 공식 `ap-deploy.sh seoul --apply`는 사전 검사에서 "기존 b가 실행 중이고 healthy"를 요구합니다. b가 점검 창에서 정지되어 있었으므로 배포를 거부했습니다(원격 변경 없음).
+  2. 사용자 승인으로 수동 no-build cutover를 했습니다(03:16:35Z). 이전 collector image는 `hololive-youtube-collector:rollback-20261016T031540Z`로 보존했습니다.
+  3. 수동 cutover는 PO issuer b를 `c98d54f2c`로 두었습니다. 그런데 완료 검사와 공식 배포의 rollback 기준점은 collector b와 PO issuer b의 revision이 같기를 요구합니다. 그래서 다시 실행한 공식 배포는 cutover 전에 거부되었고 스크립트가 변경 전 상태로 자동 복원했습니다.
+  4. 사용자 승인으로 kapu에서 PO issuer 산출물(`build-po-sandbox-artifact.sh arm64`)을 빌드했습니다. 공식 스크립트와 같은 검증(sha256, image ID·revision·architecture·version, broker healthcheck, socket 권한)을 거쳐 PO b를 교체했습니다. active receipt를 갱신하고 collector b를 다시 만들었습니다(03:23:44Z). 이 상태에서 완료 검사를 통과했습니다.
+  5. 이어서 공식 `ap-deploy.sh seoul --apply`를 다시 실행해 원격 source tree와 rollback 기준점을 정식으로 갱신했습니다. cutover는 03:24:32Z이고, `collector AP completion check passed` 상태로 rollback 없이 끝났습니다.
+  - b는 02:29Z부터 03:16Z까지 정지했습니다. 그동안 a·c·d가 수집했습니다.
+- **수용 검사:**
+  - `ap-completion-check.sh`: osaka·osaka2·seoul 모두 exit 0입니다.
+  - 중앙: api health exit 0, collector c `/ready`는 `READY`/`first_success`입니다.
+  - 새 schema 흐름: 02:36 이후 신규 관측 6,750건이 들어왔고 queue는 `PENDING` 1건만 남았습니다. `observation_key`는 모두 32바이트이며 신규 관측의 감사 행도 생성되었습니다.
+  - 배포 후 plan gate는 PASS 8건, FAIL/WARN 0건입니다. 두 claim 경로는 배포 전과 같은 index를 쓰고, 실행 시간은 alarm 0.742→0.662ms, outbox 0.342→0.389ms입니다.
+  - 배포 후 크기: `source_observations` 692MB, `source_observation_applications` 662MB, DB 1,761MB, 중앙 디스크 여유 33G.
+  - 로그에는 secret key 이름만 나타났고 `KEY=값` 형태는 0건이었습니다.
+- **정리:**
+  - 사용자 지시에 따라 일회성 백업 `/var/backups/hololive-predeploy-sql-compaction-20261016T022736Z/`를 삭제했습니다.
+  - 이로써 317-321 적용 전 DB로 되돌릴 복구점은 없습니다. 문제가 생기면 forward fix로 대응합니다.
+  - 중앙 previous tree·rollback tag, Seoul `backups/seoul-collector-20261016T03*`와 rollback tag(collector `031540Z`·`031902Z`·`032423Z`, issuer `031902Z`·`032423Z`), native AP의 이전 release는 보존했습니다. 이것들을 정리하려면 별도 승인이 필요합니다.
+- **배포와 무관한 기존 결함 (미수정, 후속 필요):**
+  - 증상: alarm-worker는 10-15 10시대(UTC)부터 매분 같은 event_key 하나에 대해 `dispatch event hash conflict`를 경고합니다. 그 결과 `publish queue batch: one or more deliveries were not accepted` scheduler 오류와 `alarm.youtube.live_guardrail.missing_dispatch`가 이어집니다(구독 방 1개).
+  - 시작 시점: Loki 집계로 시작이 이번 점검 창(10-16 02:29Z)보다 앞섭니다. 따라서 이번 배포가 원인이 아닙니다.
+  - 관측: 저장된 payload hash는 고정되어 있고 새로 계산한 hash는 매분 달라집니다.
+  - 추론(미검증): payload에 시각처럼 매번 바뀌는 값이 들어간 것으로 보입니다.
+  - 영향: 해당 live 알림 1건이 발송되지 않습니다.
+  - 근거 경로: `hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_event_preflight.go`.
 
 **Fallback delta: none. Retry delta: none.**
