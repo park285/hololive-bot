@@ -43,6 +43,10 @@ func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 		require.Equal(t, generation, request.Generation)
 		require.NoError(t, repository.BeginSendRequest(ctx, unit, ids, "owner", request.ClientRequestID, time.Minute))
 
+		// 확정 미발송의 sending 보상은 lease 만료 후에도 소유권으로 허용한다.
+		_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET lock_expires_at=clock_timestamp()-interval '1 second' WHERE id=ANY($1)`, ids)
+		require.NoError(t, err)
+
 		updates := make([]FailureUpdate, len(ids))
 		for i, id := range ids {
 			updates[i] = FailureUpdate{ID: id, AttemptCount: generation + 1, NextAttemptAt: time.Now().Add(-time.Second), TargetStatus: StatusRetry}
@@ -161,6 +165,8 @@ func assertPinnedReplay(t *testing.T, repository *PgxRepository, unit int64, ids
 	require.Equal(t, request.Route, replay.Route)
 	require.Equal(t, request.BodyHash, replay.BodyHash)
 	require.Equal(t, request.BaseClientRequestID+fmt.Sprintf(":r%d", generation), replay.ClientRequestID)
+	// 새 generation을 claim한 뒤 이전 요청 ID로는 발송 상태에 진입할 수 없다.
+	require.ErrorIs(t, repository.BeginSendRequest(ctx, unit, ids, "owner", request.ClientRequestID, time.Minute), ErrSendRequestFence)
 
 	return replay
 }

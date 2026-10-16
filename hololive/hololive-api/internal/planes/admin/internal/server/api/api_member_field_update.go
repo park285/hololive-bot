@@ -22,12 +22,11 @@ package api
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -41,114 +40,61 @@ type updateMemberNameRequest struct {
 	Name string `json:"name" binding:"required,min=1"`
 }
 
-type memberFieldUpdateSpec[T any] struct {
-	value             func(T) string
-	update            func(context.Context, *MemberHandler, int, T) error
-	logFieldKey       string
-	repoErrorLog      string
-	repoErrorResponse string
-	cacheErrorLog     string
-	successLog        string
-	activityType      string
-	activityMessage   func(string, int) string
-	activityValueKey  string
-	successMessage    string
-}
-
-func (h *MemberHandler) updateMemberField[T any](c *gin.Context, spec memberFieldUpdateSpec[T]) {
-	if !h.requireMemberDeps(c) {
-		return
-	}
-
+func (h *MemberHandler) updateMemberField(c *gin.Context, value string, maxLength int, update func(context.Context, int, string) (MemberMutationResult, error), message string) {
 	memberID, ok := h.parsePositiveMemberID(c)
 	if !ok {
 		return
 	}
 
-	var req T
-
-	if err := bindJSON(c, &req); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
+	value = strings.TrimSpace(value)
+	if value == "" || utf8.RuneCountInString(value) > maxLength {
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
 
 		return
 	}
 
-	value := spec.value(req)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 
 	defer cancel()
 
-	if err := spec.update(ctx, h, memberID, req); err != nil {
-		h.safeLogger().Error(spec.repoErrorLog,
-			slog.Int("member_id", memberID),
-			slog.String(spec.logFieldKey, value),
-			slog.Any("error", err),
-		)
-		sharedserver.RespondError(c, http.StatusInternalServerError, spec.repoErrorResponse, nil)
+	result, err := update(ctx, memberID, value)
+	if err != nil {
+		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to update member", "Failed to update member", err)
 
 		return
 	}
 
-	if err := h.memberCache.Refresh(ctx); err != nil {
-		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", spec.cacheErrorLog, err)
-
-		return
-	}
-
-	h.safeLogger().Info(spec.successLog,
-		slog.Int("member_id", memberID),
-		slog.String(spec.logFieldKey, value),
-	)
-
-	h.logActivity(spec.activityType, spec.activityMessage(value, memberID), map[string]any{
-		"member_id":           memberID,
-		spec.activityValueKey: value,
-	})
-
-	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: spec.successMessage})
+	h.respondMemberMutation(c, http.StatusOK, message, result)
 }
 
 func (h *MemberHandler) UpdateChannelID(c *gin.Context) {
-	h.updateMemberField(c, memberFieldUpdateSpec[updateChannelIDRequest]{
-		value: func(req updateChannelIDRequest) string {
-			return req.ChannelID
-		},
-		update: func(ctx context.Context, h *MemberHandler, memberID int, req updateChannelIDRequest) error {
-			return h.repository.UpdateChannelID(ctx, memberID, req.ChannelID)
-		},
-		logFieldKey:       "channel_id",
-		repoErrorLog:      "Failed to update channel ID",
-		repoErrorResponse: "Failed to update channel ID",
-		cacheErrorLog:     "Failed to refresh cache after channel ID update",
-		successLog:        "Channel ID updated",
-		activityType:      "member_channel_update",
-		activityMessage: func(value string, memberID int) string {
-			return fmt.Sprintf("Member channel ID updated to %s (ID: %d)", value, memberID)
-		},
-		activityValueKey: "channel_id",
-		successMessage:   "Channel ID updated successfully",
-	})
+	if !h.requireMemberDeps(c) {
+		return
+	}
+
+	var req updateChannelIDRequest
+
+	if err := bindJSON(c, &req); err != nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
+
+		return
+	}
+
+	h.updateMemberField(c, req.ChannelID, 64, h.service.UpdateChannelID, "Channel ID updated successfully")
 }
 
 func (h *MemberHandler) UpdateMemberName(c *gin.Context) {
-	h.updateMemberField(c, memberFieldUpdateSpec[updateMemberNameRequest]{
-		value: func(req updateMemberNameRequest) string {
-			return req.Name
-		},
-		update: func(ctx context.Context, h *MemberHandler, memberID int, req updateMemberNameRequest) error {
-			return h.repository.UpdateMemberName(ctx, memberID, req.Name)
-		},
-		logFieldKey:       "name",
-		repoErrorLog:      "Failed to update member name",
-		repoErrorResponse: "Failed to update member name",
-		cacheErrorLog:     "Failed to refresh cache after member name update",
-		successLog:        "Member name updated",
-		activityType:      "member_name_update",
-		activityMessage: func(value string, memberID int) string {
-			return fmt.Sprintf("Member name updated to %s (ID: %d)", value, memberID)
-		},
-		activityValueKey: "name",
-		successMessage:   "Member name updated successfully",
-	})
+	if !h.requireMemberDeps(c) {
+		return
+	}
+
+	var req updateMemberNameRequest
+
+	if err := bindJSON(c, &req); err != nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
+
+		return
+	}
+
+	h.updateMemberField(c, req.Name, 200, h.service.UpdateMemberName, "Member name updated successfully")
 }

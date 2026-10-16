@@ -31,7 +31,7 @@ func TestMemberCreatePreservesBasicInfoOnReadback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := &MemberHandler{Handler: &Handler{repository: repo, memberCache: cache, logger: logger}}
+	handler := (&Handler{repository: repo, memberCache: cache, logger: logger}).DomainHandlers().Member
 	body := `{"name":"Created Info Member","nameKo":"등록 멤버","org":"New Org","units":["Gen 1","GAMERS"],"officialUrl":"https://example.com/member","birthday":"2000-02-29T00:00:00Z","debutDate":"2025-10-15T00:00:00Z","shortKoreanName":"등록","chzzkChannelId":"registered-chzzk","aliases":{"ko":["등록"],"ja":[]}}`
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)

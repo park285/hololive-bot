@@ -191,25 +191,77 @@ func TestUpdateOutboxAggregateStatuses_NoDeliveriesDefaultsToPending(t *testing.
 }
 
 func TestUpdateOutboxAggregateStatuses_UnchangedStatusIsNoOpWrite(t *testing.T) {
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
-	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-noop", domain.OutboxStatusPending,
-		[]domain.OutboxStatus{domain.OutboxStatusPending})
+	for _, status := range []domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed, domain.OutboxStatusSent} {
+		t.Run(string(status), func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+			outboxID := seedAggregateOutbox(ctx, t, pool, "agg-noop", status, []domain.OutboxStatus{status})
+			require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
 
-	var xminBefore uint32
+			var xminBefore uint32
 
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT xmin FROM youtube_notification_outbox WHERE id = $1", outboxID).Scan(&xminBefore))
+			require.NoError(t, pool.QueryRow(ctx,
+				"SELECT xmin FROM youtube_notification_outbox WHERE id = $1", outboxID).Scan(&xminBefore))
 
-	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
+			require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID, outboxID}))
 
-	var xminAfter uint32
+			var xminAfter uint32
 
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT xmin FROM youtube_notification_outbox WHERE id = $1", outboxID).Scan(&xminAfter))
-	require.Equal(t, xminBefore, xminAfter,
-		"IS DISTINCT FROM 가드: 상태가 같으면 새 row version(dead tuple)을 만들지 않아야 한다")
+			require.NoError(t, pool.QueryRow(ctx,
+				"SELECT xmin FROM youtube_notification_outbox WHERE id = $1", outboxID).Scan(&xminAfter))
+			require.Equal(t, xminBefore, xminAfter,
+				"상태와 필수 시각이 같으면 부모 잠금만으로 새 row version을 만들지 않아야 한다")
+		})
+	}
+}
+
+func TestUpdateOutboxAggregateStatuses_MixedStatusPrecedence(t *testing.T) {
+	tests := []struct {
+		name     string
+		children []domain.OutboxStatus
+		want     domain.OutboxStatus
+	}{
+		{
+			name:     "pending before terminal",
+			children: []domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed, DeliveryStatusQuarantined, domain.OutboxStatusSent},
+			want:     domain.OutboxStatusPending,
+		},
+		{
+			name:     "sending before terminal",
+			children: []domain.OutboxStatus{DeliveryStatusSending, domain.OutboxStatusFailed, DeliveryStatusQuarantined, domain.OutboxStatusSent},
+			want:     domain.OutboxStatusPending,
+		},
+		{
+			name:     "quarantined before sent",
+			children: []domain.OutboxStatus{DeliveryStatusQuarantined, domain.OutboxStatusSent},
+			want:     domain.OutboxStatusFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler), time.Now)
+			outboxID := seedAggregateOutbox(ctx, t, pool, "agg-mixed", domain.OutboxStatusSent, tt.children)
+
+			require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
+
+			status, sentAt, lockedAt, errText := readOutboxAggregateRow(ctx, t, pool, outboxID)
+			require.Equal(t, tt.want, status)
+			require.Nil(t, sentAt)
+			require.Nil(t, lockedAt)
+
+			if tt.want == domain.OutboxStatusFailed {
+				require.Equal(t, "per-room delivery failed", errText)
+				require.NotNil(t, readOutboxTerminalAt(ctx, t, pool, outboxID))
+			} else {
+				require.Empty(t, errText)
+				require.Nil(t, readOutboxTerminalAt(ctx, t, pool, outboxID))
+			}
+		})
+	}
 }
 
 // legacyAggregateSyncCandidateSQL은 EXISTS/NOT EXISTS 전환 이전의 GROUP BY/HAVING 후보 선택을

@@ -23,7 +23,6 @@ package api
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
 
@@ -39,15 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
-// Admin Dashboard와 Tauri 앱 모두에서 사용됩니다.
-// 핸들러 메서드는 도메인별 파일로 분리됨:
-//   - api_member.go: 멤버 관리 + 프로필 조회
-//   - api_alarm.go: 알람 관리
-//   - api_room.go: 룸/ACL 관리
-//   - api_stream.go: 스트림/채널 조회
-//   - api_stats.go: 봇 통계
-//   - api_settings.go: 설정/활동 로그/이름매핑
-//   - api_template.go: 템플릿 관리
+// Handler는 런타임의 도메인별 의존성 조립만 담당한다. 요청은 DomainHandlers가 처리한다.
 type Handler struct {
 	repository                 *member.Repository
 	memberCache                *member.Cache
@@ -66,7 +57,6 @@ type Handler struct {
 	templateAdmin              *template.AdminService
 	majorEventScheduler        MajorEventScheduler
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler
-	startTime                  time.Time
 	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
 	xSpaceSessions             *xspaces.Store
 }
@@ -90,10 +80,6 @@ func (h *Handler) ensureDefaults() *Handler {
 
 	if h.memberIndexLoader == nil && h.repository != nil {
 		h.memberIndexLoader = h.repository.GetAllMembers
-	}
-
-	if h.startTime.IsZero() {
-		h.startTime = time.Now()
 	}
 
 	return h
@@ -185,7 +171,6 @@ func NewHandler(deps *HandlerDeps) *Handler {
 		majorEventScheduler:        deps.MajorEvent.Scheduler,
 		majorEventMonthlyScheduler: deps.MajorEvent.MonthlyScheduler,
 		logger:                     deps.Common.Logger,
-		startTime:                  time.Now(),
 		memberIndexLoader:          memberIndexLoader,
 	}).ensureDefaults()
 }

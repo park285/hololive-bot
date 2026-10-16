@@ -2,7 +2,7 @@ SELECT observation.id,
        observation.provider,
        observation.observation_kind,
        observation.subject_key,
-       observation.observation_key,
+       encode(observation.observation_key, 'hex') AS observation_key,
        observation.schema_version,
        observation.contract_generation,
        observation.scheduled_for,
@@ -19,9 +19,9 @@ SELECT observation.id,
        ) AS payload,
        encode(payload.payload_sha256, 'hex') AS payload_sha256,
        encode(observation.evidence_sha256, 'hex') AS evidence_sha256,
-       observation.collector_instance,
-       observation.job_key,
-       observation.collection_job_kind,
+       provenance.collector_instance,
+       provenance.job_key,
+       provenance.collection_job_kind,
        observation.fence_epoch,
        observation.projection_generation,
        queue.attempt_count,
@@ -37,6 +37,7 @@ SELECT observation.id,
 FROM source_observation_queue AS queue
 JOIN source_observations AS observation
   ON observation.id = queue.observation_id
+JOIN source_observation_provenances AS provenance ON provenance.id = observation.provenance_id
 LEFT JOIN source_observation_payloads AS payload ON payload.id = observation.payload_id
 WHERE queue.observation_id = $1
   AND queue.status = 'PROCESSING'

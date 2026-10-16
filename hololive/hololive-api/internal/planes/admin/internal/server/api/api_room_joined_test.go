@@ -36,7 +36,7 @@ func TestRoomHandler_GetJoinedRooms(t *testing.T) {
 }
 
 func roomJoinedMissingIris(t *testing.T) {
-	handler := &RoomHandler{Handler: &Handler{logger: newDiscardLogger()}}
+	handler := (&Handler{logger: newDiscardLogger()}).DomainHandlers().Room
 	ctx, rec := newAPITestContext(http.MethodGet, joinedRoomsPath, nil)
 
 	handler.GetJoinedRooms(ctx)
@@ -48,13 +48,13 @@ func roomJoinedListsRooms(t *testing.T) {
 	name := "운영방"
 	roomType := "OM"
 	memberCount := 17
-	handler := &RoomHandler{Handler: &Handler{
+	handler := (&Handler{
 		iris: stubIrisRoomLister{resp: &iris.RoomListResponse{Rooms: []iris.RoomSummary{
 			{ChatID: 123456, LinkName: &name, Type: &roomType, ActiveMembersCount: &memberCount},
 			{ChatID: 789},
 		}}},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Room
 	ctx, rec := newAPITestContext(http.MethodGet, joinedRoomsPath, nil)
 
 	handler.GetJoinedRooms(ctx)
@@ -83,10 +83,10 @@ func roomJoinedListsRooms(t *testing.T) {
 }
 
 func roomJoinedIrisFailure(t *testing.T) {
-	handler := &RoomHandler{Handler: &Handler{
+	handler := (&Handler{
 		iris:   stubIrisRoomLister{err: errors.New("iris unavailable")},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Room
 	ctx, rec := newAPITestContext(http.MethodGet, joinedRoomsPath, nil)
 
 	handler.GetJoinedRooms(ctx)
@@ -95,10 +95,10 @@ func roomJoinedIrisFailure(t *testing.T) {
 }
 
 func roomJoinedNilResponse(t *testing.T) {
-	handler := &RoomHandler{Handler: &Handler{
+	handler := (&Handler{
 		iris:   stubIrisRoomLister{},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Room
 	ctx, rec := newAPITestContext(http.MethodGet, joinedRoomsPath, nil)
 
 	handler.GetJoinedRooms(ctx)

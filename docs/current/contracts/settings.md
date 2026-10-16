@@ -57,8 +57,9 @@ pass, 2026-09-28).
 ```
 
 `alarmAdvanceMinutes` must be within `1..1440`. Zero is rejected before any file write or worker call; it is not
-clamped or substituted. The retired `scraperProxyEnabled` field is rejected
-(DEC-20260926-hololive-legacy-env-config-retirement).
+clamped or substituted. Both settings update endpoints reject unknown JSON fields before any persistence or
+runtime apply, including mixed requests with a valid field plus the retired `scraperProxyEnabled` field.
+Other admin request decoders retain their existing unknown-field policy.
 
 ## Response
 
@@ -80,6 +81,8 @@ Iris Console displays `alarm_applied=false` with an `alarm worker outcome_unknow
 application, preserving the distinction from a confirmed worker rejection.
 
 같은 admin Handler의 설정 조회·변경은 공유 작업 gate를 사용합니다. 변경은 현재 값 조회·patch·파일 저장·worker 적용 순서를 함께 지키며, GET도 저장 뒤 적용 전의 두 상태를 섞어 반환하지 않습니다. 빈 `{}` 요청은 현재 값을 반환하고 파일 저장·worker 적용·변경 활동 기록을 수행하지 않습니다.
+
+방 이름 설정의 활동 summary는 고정 문구이며, 방 ID와 이름은 구조화 필드에 기존 privacylog 토큰·가명으로 기록합니다. stdout의 운영 sanitizer와 파일 활동 로그 모두 원문 방 이름을 남기지 않습니다.
 
 ## Error codes
 

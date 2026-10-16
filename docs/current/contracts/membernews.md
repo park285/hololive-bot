@@ -72,6 +72,8 @@ LLM 출력의 `source_url`은 입력 후보의 URL을 정확히 복사해야 하
 
 정기·trigger 실행은 시작 시각과 기간 후보를 실행별로 한 번 고정하고 읽기 전용 후보 metadata를 공유합니다. SQL·Go 필터·요약은 같은 시각을 사용합니다. 방별 구독 멤버·alias는 해당 방 처리 시점에 조회하며 guard·요약·render·enqueue 오류도 방별로 처리합니다. 공통 후보 조회 실패는 실행 전체 오류로 반환하고 이전 후보나 빈 성공으로 대체하지 않습니다. 단일 방 요청은 구독 멤버가 없으면 후보 조회 전에 기존 `ErrNoSubscribedMembers`를 반환합니다.
 
+정기·trigger 실행의 내부 집계는 `digestEnqueueResult.Queued`, 결과 로그는 `queued`를 사용합니다. 수량은 영속 outbox의 적재 수락(동일 키의 멱등 no-op 포함)이며 실제 발송 완료가 아닙니다. 외부 trigger의 `queued`·`skipped`·`failed` 계약과 worker의 발송 정산은 변경하지 않습니다.
+
 ## Error codes
 
 | Code | HTTP status | Meaning | Consumer behavior |

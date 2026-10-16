@@ -187,9 +187,9 @@ func assertCommunityWindowMarker(ctx context.Context, t *testing.T, pool *pgxpoo
 		SELECT count(*)
 		FROM source_observation_applications
 		WHERE observation_id = $1
-		  AND entity_kind = 'community_window'
+		  AND entity_kind_id = (SELECT kind.id FROM source_observation_entity_kinds AS kind WHERE kind.name = 'community_window')
 		  AND entity_key = $2
-		  AND decision = 'CANONICALIZED'
+		  AND decision_id = (SELECT decision.id FROM source_observation_decisions AS decision WHERE decision.name = 'CANONICALIZED')
 	`, observationID, testChannelID).Scan(&count); err != nil {
 		t.Fatalf("load community window marker: %v", err)
 	}

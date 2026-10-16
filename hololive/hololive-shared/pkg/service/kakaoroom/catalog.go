@@ -7,6 +7,9 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/sync/singleflight"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 type RoomLister interface {
@@ -22,6 +25,7 @@ type Catalog struct {
 	store  roomStore
 	lister RoomLister
 	logger *slog.Logger
+	loads  singleflight.Group
 
 	mu    sync.RWMutex
 	cache map[string]Facts
@@ -108,24 +112,51 @@ func (c *Catalog) loadAfterRefresh(ctx context.Context, roomID string) (Facts, b
 }
 
 func (c *Catalog) refresh(ctx context.Context) bool {
-	if c.lister == nil {
+	if c.lister == nil || ctx.Err() != nil {
 		return false
 	}
 
-	rooms, err := c.lister.GetRooms(ctx)
+	// 방 ID와 무관하게 전체 목록 조회와 저장 순회를 함께 공유한다.
+	resultCh := c.loads.DoChan("", func() (any, error) {
+		return nil, c.refreshRooms(ctx)
+	})
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-resultCh:
+		// owner가 저장 중 만료돼도 이미 관측한 방 사실은 유효하다. 살아 있는 대기자는 cache로 판정한다.
+		return ctx.Err() == nil
+	}
+}
+
+func (c *Catalog) refreshRooms(ctx context.Context) error {
+	// 첫 대기자의 취소와 분리하되 HTTP와 모든 저장 작업에 하나의 시간 상한을 적용한다.
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), constants.QueryTimeout.Default)
+	defer cancel()
+
+	rooms, err := c.lister.GetRooms(refreshCtx)
 	if err != nil {
-		c.warn(ctx, "list kakao rooms failed", err)
+		c.warn(refreshCtx, "list kakao rooms failed", err)
 
-		return false
+		return fmt.Errorf("list kakao rooms: %w", err)
 	}
 
-	c.storeListed(ctx, rooms)
+	c.storeListed(refreshCtx, rooms)
 
-	return true
+	if err := refreshCtx.Err(); err != nil {
+		return fmt.Errorf("refresh kakao rooms: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Catalog) storeListed(ctx context.Context, rooms []Facts) {
 	for _, facts := range rooms {
+		if ctx.Err() != nil {
+			return
+		}
+
 		if !usableListedFacts(facts) {
 			continue
 		}

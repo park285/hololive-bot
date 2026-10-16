@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -170,7 +171,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 		h.safeLogger().Info("Room name cleared", sharedprivacylog.RoomIDAttr(roomID))
 
 		roomToken := sharedprivacylog.IdentifierToken(roomID)
-		h.logActivity("name_update", "Room name cleared: "+roomToken, map[string]any{"room_id": roomToken})
+		h.logActivity("name_update", "Room name cleared", map[string]any{"room_id": roomToken})
 
 		ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room name cleared"})
 
@@ -179,14 +180,14 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 
 	h.safeLogger().Info("Room name set",
 		sharedprivacylog.RoomIDAttr(roomID),
-		slog.String("room_name", roomName),
+		slog.String("room_name", sharedprivacylog.Pseudonym(roomName)),
 	)
 
 	// activity는 운영에서 같은 logger의 stdout으로 나가므로 room_id도 privacylog 규칙으로 기록한다.
 	roomToken := sharedprivacylog.IdentifierToken(roomID)
-	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", roomToken, roomName), map[string]any{
+	h.logActivity("name_update", "Room name set", map[string]any{
 		"room_id":   roomToken,
-		"room_name": roomName,
+		"room_name": sharedprivacylog.Pseudonym(roomName),
 	})
 
 	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room name set successfully"})
@@ -302,7 +303,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSettingsRequest, bool) {
 	var req updateSettingsRequest
 
-	if err := bindJSON(c, &req); err != nil {
+	if err := bindJSON(c, &req, jsonv2.RejectUnknownMembers(true)); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)
@@ -404,7 +405,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLLMSettingsRequest, bool) {
 	var req updateLLMSettingsRequest
 
-	if err := bindJSON(c, &req); err != nil {
+	if err := bindJSON(c, &req, jsonv2.RejectUnknownMembers(true)); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid request body", nil)

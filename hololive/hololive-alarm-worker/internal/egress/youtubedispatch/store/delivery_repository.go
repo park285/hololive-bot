@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -67,25 +68,35 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, ou
 
 const outboxAggregateFailedErrorText = "per-room delivery failed"
 
-// count-후-update 2단계는 reconcile vs aggregate-sync 경합에서 stale 집계로 되돌리는
-// lost update가 있었다 — 집계와 갱신을 단문으로 원자화했으니 다시 쪼개지 말 것.
+// 부모를 ID 순서로 잠근 뒤 다음 READ COMMITTED statement에서 자식을 집계한다.
+// 잠금 대기 전에 얻은 snapshot으로 집계하면 더 늦게 확정된 SENT를 덮어쓸 수 있다.
 func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, outboxIDs []int64) error {
 	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
 	if len(uniqueIDs) == 0 {
 		return nil
 	}
 
-	if _, err := r.db.Exec(ctx, mustSQL("delivery_repository_aggregate_sync.sql"),
-		uniqueIDs,
-		domain.OutboxStatusPending,
-		DeliveryStatusSending,
-		domain.OutboxStatusFailed,
-		DeliveryStatusQuarantined,
-		domain.OutboxStatusSent,
-		yttimestamp.Normalize(r.now()),
-		outboxAggregateFailedErrorText,
-	); err != nil {
-		return fmt.Errorf("update outbox aggregate statuses: %w", err)
+	if err := pgx.BeginTxFunc(ctx, r.db, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, mustSQL("delivery_repository_aggregate_lock.sql"), uniqueIDs); err != nil {
+			return fmt.Errorf("lock outbox aggregate parents: %w", err)
+		}
+
+		if _, err := tx.Exec(ctx, mustSQL("delivery_repository_aggregate_sync.sql"),
+			uniqueIDs,
+			domain.OutboxStatusPending,
+			DeliveryStatusSending,
+			domain.OutboxStatusFailed,
+			DeliveryStatusQuarantined,
+			domain.OutboxStatusSent,
+			yttimestamp.Normalize(r.now()),
+			outboxAggregateFailedErrorText,
+		); err != nil {
+			return fmt.Errorf("update outbox aggregate statuses: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("project outbox aggregate transaction: %w", err)
 	}
 
 	return nil

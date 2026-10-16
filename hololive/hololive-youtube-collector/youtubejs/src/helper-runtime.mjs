@@ -1,7 +1,7 @@
 // @ts-check
 import { createFetchTransport } from "./fetch-transport.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
-import { rpcErrorResult } from "./rpc-validation.mjs";
+import { rpcErrorResult } from "./rpc-execution.mjs";
 
 export const RuntimeState = Object.freeze({
   UNCONFIGURED: "UNCONFIGURED",

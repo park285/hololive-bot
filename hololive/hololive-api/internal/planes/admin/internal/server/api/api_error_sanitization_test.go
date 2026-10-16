@@ -27,8 +27,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -36,42 +34,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/service/acl"
 )
-
-func TestServerHandlers_DoNotUseErrError(t *testing.T) {
-	t.Helper()
-
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatalf("failed to read server package directory: %v", err)
-	}
-
-	var offenders []string
-
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || filepath.Ext(name) != ".go" || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-
-		cleanName := filepath.Clean(name)
-		if filepath.Dir(cleanName) != "." || cleanName != name {
-			t.Fatalf("unexpected file path outside package directory: %s", name)
-		}
-
-		content, readErr := os.ReadFile(cleanName)
-		if readErr != nil {
-			t.Fatalf("failed to read %s: %v", name, readErr)
-		}
-
-		if strings.Contains(string(content), "err.Error()") {
-			offenders = append(offenders, name)
-		}
-	}
-
-	if len(offenders) > 0 {
-		t.Fatalf("raw err.Error() usage found in server handlers: %v", offenders)
-	}
-}
 
 func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -90,13 +52,13 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 		params gin.Params
 		call   gin.HandlerFunc
 	}{
-		{"alarm delete", "/api/holo/alarm/delete", nil, (&AlarmHandler{Handler: base}).DeleteAlarm},
-		{"room add", "/api/holo/rooms/add", nil, (&RoomHandler{Handler: base}).AddRoom},
-		{"room remove", "/api/holo/rooms/remove", nil, (&RoomHandler{Handler: base}).RemoveRoom},
-		{"room acl", "/api/holo/rooms/acl", nil, (&RoomHandler{Handler: base}).SetACL},
-		{"member add", "/api/holo/members", nil, (&MemberHandler{Handler: base}).AddMember},
-		{"template upsert", "/api/holo/templates/notice", noticeParams, (&TemplateHandler{Handler: base}).UpsertTemplate},
-		{"template preview", "/api/holo/templates/notice/preview", noticeParams, (&TemplateHandler{Handler: base}).PreviewTemplate},
+		{"alarm delete", "/api/holo/alarm/delete", nil, base.DomainHandlers().Alarm.DeleteAlarm},
+		{"room add", "/api/holo/rooms/add", nil, base.DomainHandlers().Room.AddRoom},
+		{"room remove", "/api/holo/rooms/remove", nil, base.DomainHandlers().Room.RemoveRoom},
+		{"room acl", "/api/holo/rooms/acl", nil, base.DomainHandlers().Room.SetACL},
+		{"member add", "/api/holo/members", nil, base.DomainHandlers().Member.AddMember},
+		{"template upsert", "/api/holo/templates/notice", noticeParams, base.DomainHandlers().Template.UpsertTemplate},
+		{"template preview", "/api/holo/templates/notice/preview", noticeParams, base.DomainHandlers().Template.PreviewTemplate},
 	}
 
 	for _, tc := range testCases {

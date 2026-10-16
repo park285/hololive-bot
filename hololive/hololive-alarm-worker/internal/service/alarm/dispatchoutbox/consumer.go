@@ -212,6 +212,8 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueu
 		BeginSendRequest(context.Context, int64, []int64, string, string, time.Duration) error
 	}); ok && len(envelopes) > 0 {
 		if err := repository.BeginSendRequest(ctx, envelopes[0].SendUnitID, idsFromEnvelopes(envelopes), c.workerID, envelopes[0].ClientRequestID, c.lease); err != nil {
+			observePGMarkSendingFailure()
+
 			return fmt.Errorf("begin immutable alarm send: %w", err)
 		}
 

@@ -63,7 +63,7 @@ func TestPublishFenceLossIsCountedOnceAsPublish(t *testing.T) {
 
 	spec := leaseMetricSpec()
 	lease := &supersededLease{}
-	publishErr := markLeasePhase(phasePublish, fmt.Errorf("publish complete: %w",
+	publishErr := markPublishLeaseError(fmt.Errorf("publish complete: %w",
 		collecterr.Wrap(contract.ErrorPublishRejected, contract.ClassTransient, collection.ErrFenceLost)))
 
 	executor.handleRunError(t.Context(), lease, spec, &contract.LeaseProof{}, fmt.Errorf("run collection job: %w", publishErr))

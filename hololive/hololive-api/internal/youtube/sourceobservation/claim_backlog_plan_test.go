@@ -93,20 +93,20 @@ func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int
 		INSERT INTO source_observations (
 			provider, observation_kind, subject_key, observation_key, schema_version, contract_generation,
 			scheduled_for, observed_at, scope_sha256, completeness, continuity, payload_id,
-			evidence_sha256, collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
+			evidence_sha256, provenance_id, fence_epoch, projection_generation
 		)
 		SELECT provider,
 			CASE WHEN n <= $2::int / 25 OR (n > $2::int AND n % 25 = 0) THEN 'shorts_list' ELSE 'video_list' END,
-			'UC_backlog_' || (n % 200), 'backlog-' || n, schema_version, contract_generation,
+			'UC_backlog_' || (n % 200), sha256(('backlog-' || n)::bytea), schema_version, contract_generation,
 			scheduled_for - n * INTERVAL '1 minute', observed_at, scope_sha256,
 			completeness, continuity, payload_id, evidence_sha256,
-			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
+			provenance_id, fence_epoch, projection_generation
 		FROM source_observations CROSS JOIN generate_series(1, $2::int + $3::int) AS n
 		WHERE id = $1
 	`, first, active, history)
 	require.NoError(tb, err)
 
-	// observation_key 번호가 active보다 큰 행은 처리 끝난 이력이다.
+	// 기준 관측보다 active분 이상 과거로 예약된 행은 처리 끝난 이력이다.
 	_, err = pool.Exec(ctx, `
 		INSERT INTO source_observation_queue (observation_id, available_at, status, processed_at, attempt_count)
 		SELECT id, NOW() - INTERVAL '1 hour' + (id % 1000) * INTERVAL '1 second',
@@ -114,7 +114,8 @@ func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int
 		       CASE WHEN is_history THEN NOW() - INTERVAL '30 minutes' END,
 		       CASE WHEN is_history THEN 1 ELSE 0 END
 		FROM (
-			SELECT id, substr(observation_key, length('backlog-') + 1)::int > $2::int AS is_history
+			SELECT id, scheduled_for < (SELECT first.scheduled_for FROM source_observations AS first WHERE first.id = $1)
+			                - $2::int * INTERVAL '1 minute' AS is_history
 			FROM source_observations
 			WHERE id <> $1
 		) AS seeded

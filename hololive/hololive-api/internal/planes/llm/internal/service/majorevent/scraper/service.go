@@ -27,8 +27,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
@@ -37,16 +35,15 @@ import (
 )
 
 type eventRepository interface {
-	GetRecentExternalIDs(ctx context.Context, eventType domain.MajorEventType, limit int) ([]string, *time.Time, error)
+	GetExistingExternalIDs(ctx context.Context, eventType domain.MajorEventType, externalIDs []string) ([]string, error)
 	UpsertEvent(ctx context.Context, event *domain.MajorEvent) error
 }
 
 type sourceScrapeResult struct {
-	source      FeedSource
-	events      []*domain.MajorEvent
-	skipped     int
-	failed      bool
-	failureInfo string
+	source  FeedSource
+	events  []*domain.MajorEvent
+	skipped int
+	err     error
 }
 
 // Service는 RSS 수집/파싱/저장을 담당한다.
@@ -110,24 +107,29 @@ func normalizeServiceConfig(config ServiceConfig) ServiceConfig {
 	return normalized
 }
 
-// Scrape는 전체 피드 소스를 수집/저장한다.
+// Scrape는 예약한 모든 source의 성공·실패를 집계하고 개별 저장 성공을 유지한다.
+// 전체 source 실패나 저장 실패는 원인을 보존하며, 저장이 성공한 source 부분 실패만으로 오류를 반환하지 않는다.
 func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 	results := s.scrapeSources(ctx)
 
 	aggregated := ScrapeResult{}
 	allEvents := make([]*domain.MajorEvent, 0)
 
+	var sourceErrors []error
+
 	for _, result := range results {
 		aggregated.FeedsAttempted++
 
-		if result.failed {
+		if result.err != nil {
 			aggregated.FeedsFailed++
+
+			sourceErrors = append(sourceErrors, result.err)
 
 			s.logger.Warn(
 				"Major event feed scrape failed",
 				slog.String("source", result.source.Name),
 				slog.String("event_type", string(result.source.EventType)),
-				slog.String("error", result.failureInfo),
+				slog.Any("error", result.err),
 			)
 
 			continue
@@ -140,12 +142,18 @@ func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 	}
 
 	if aggregated.FeedsAttempted > 0 && aggregated.FeedsAttempted == aggregated.FeedsFailed {
-		return aggregated, errors.New("scrape feeds: all feeds failed")
+		return aggregated, fmt.Errorf("scrape feeds: all feeds failed: %w", errors.Join(sourceErrors...))
 	}
 
 	deduped := dedupeEvents(allEvents)
+
+	var persistenceErrors []error
+
 	for _, event := range deduped {
 		if err := s.repository.UpsertEvent(ctx, event); err != nil {
+			aggregated.FailedEvents++
+
+			persistenceErrors = append(persistenceErrors, fmt.Errorf("persist major event %q: %w", event.ExternalID, err))
 			s.logger.Warn(
 				"Major event upsert failed",
 				slog.String("external_id", event.ExternalID),
@@ -158,29 +166,45 @@ func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 		aggregated.StoredEvents++
 	}
 
+	// 부분 성공만으로 새 retry를 만들지 않되, 저장 실패로 반환하는 오류에는 source 원인도 보존한다.
+	if len(persistenceErrors) > 0 {
+		return aggregated, errors.Join(append(sourceErrors, persistenceErrors...)...)
+	}
+
 	return aggregated, nil
 }
 
 func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
-	results := make([]sourceScrapeResult, 0, len(s.config.Sources))
-
-	var mu sync.Mutex
+	results := make([]sourceScrapeResult, len(s.config.Sources))
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(s.config.FeedConcurrency)
 
-	for _, source := range s.config.Sources {
+	for i, source := range s.config.Sources {
 		eg.Go(func() error {
-			return panicguard.RunE(s.logger, panicguard.BackgroundTask, "major-event-source-scrape", func() error {
-				result := s.scrapeSingleSource(egCtx, source)
+			result := sourceScrapeResult{source: source}
 
-				mu.Lock()
-
-				results = append(results, result)
-				mu.Unlock()
+			guardErr := panicguard.RunE(s.logger, panicguard.BackgroundTask, "major-event-source-scrape", func() error {
+				result = s.scrapeSingleSource(egCtx, source)
 
 				return nil
 			})
+			if guardErr != nil {
+				result.err = guardErr
+			}
+
+			if result.err != nil {
+				result.err = fmt.Errorf("scrape source %q: %w", source.Name, result.err)
+			}
+
+			// guard 복구 뒤에도 예약한 source의 결과를 남긴다. 일반 source 실패는 sibling을 취소하지 않는다.
+			results[i] = result
+
+			if guardErr != nil {
+				return result.err
+			}
+
+			return nil
 		})
 	}
 
@@ -199,27 +223,24 @@ func (s *Service) scrapeSingleSource(ctx context.Context, source FeedSource) sou
 	rawFeed, err := s.fetcher.Fetch(ctx, source.FeedURL)
 	if err != nil {
 		return sourceScrapeResult{
-			source:      source,
-			failed:      true,
-			failureInfo: fmt.Sprintf("fetch feed: %v", err),
+			source: source,
+			err:    fmt.Errorf("fetch feed: %w", err),
 		}
 	}
 
 	events, err := s.parser.Parse(rawFeed, source.EventType)
 	if err != nil {
 		return sourceScrapeResult{
-			source:      source,
-			failed:      true,
-			failureInfo: fmt.Sprintf("parse feed: %v", err),
+			source: source,
+			err:    fmt.Errorf("parse feed: %w", err),
 		}
 	}
 
 	filtered, skipped, err := s.filterIncrementalEvents(ctx, source.EventType, events)
 	if err != nil {
 		return sourceScrapeResult{
-			source:      source,
-			failed:      true,
-			failureInfo: fmt.Sprintf("filter incremental events: %v", err),
+			source: source,
+			err:    fmt.Errorf("filter incremental events: %w", err),
 		}
 	}
 
@@ -235,39 +256,39 @@ func (s *Service) filterIncrementalEvents(
 	eventType domain.MajorEventType,
 	events []*domain.MajorEvent,
 ) ([]*domain.MajorEvent, int, error) {
-	recentExternalIDs, latestPubDate, err := s.repository.GetRecentExternalIDs(ctx, eventType, s.config.IncrementalLimit)
-	if err != nil {
-		return nil, 0, fmt.Errorf("filter incremental events: get recent external ids: %w", err)
-	}
+	filtered := make([]*domain.MajorEvent, 0, len(events))
+	skipped := 0
 
-	knownExternalIDs := knownExternalIDSet(recentExternalIDs)
-	latestUTC := latestPubDateUTC(latestPubDate)
-
-	filtered, skipped := collectIncrementalEvents(events, knownExternalIDs, latestUTC)
-
-	return filtered, skipped, nil
-}
-
-func collectIncrementalEvents(
-	events []*domain.MajorEvent,
-	knownExternalIDs map[string]struct{},
-	latestUTC time.Time,
-) (filtered []*domain.MajorEvent, skipped int) {
-	filtered = make([]*domain.MajorEvent, 0, len(events))
-	for _, event := range events {
-		keep, skipKnown := filterIncrementalEvent(event, knownExternalIDs, latestUTC)
-		if !keep {
-			if skipKnown {
-				skipped++
+	for chunk := range slices.Chunk(events, s.config.IncrementalLimit) {
+		externalIDs := make([]string, 0, len(chunk))
+		for _, event := range chunk {
+			if event != nil && strings.TrimSpace(event.ExternalID) != "" {
+				externalIDs = append(externalIDs, strings.TrimSpace(event.ExternalID))
 			}
+		}
 
+		if len(externalIDs) == 0 {
 			continue
 		}
 
-		filtered = append(filtered, event)
+		knownIDs, err := s.repository.GetExistingExternalIDs(ctx, eventType, externalIDs)
+		if err != nil {
+			return nil, 0, fmt.Errorf("filter incremental events: get existing external ids: %w", err)
+		}
+
+		known := knownExternalIDSet(knownIDs)
+
+		for _, event := range chunk {
+			keep, skipKnown := filterIncrementalEvent(event, known)
+			if keep {
+				filtered = append(filtered, event)
+			} else if skipKnown {
+				skipped++
+			}
+		}
 	}
 
-	return filtered, skipped
+	return filtered, skipped, nil
 }
 
 func knownExternalIDSet(externalIDs []string) map[string]struct{} {
@@ -284,15 +305,7 @@ func knownExternalIDSet(externalIDs []string) map[string]struct{} {
 	return knownExternalIDs
 }
 
-func latestPubDateUTC(latestPubDate *time.Time) time.Time {
-	if latestPubDate == nil {
-		return time.Time{}
-	}
-
-	return latestPubDate.UTC()
-}
-
-func filterIncrementalEvent(event *domain.MajorEvent, knownExternalIDs map[string]struct{}, latestUTC time.Time) (keep, skipKnown bool) {
+func filterIncrementalEvent(event *domain.MajorEvent, knownExternalIDs map[string]struct{}) (keep, skipKnown bool) {
 	if event == nil {
 		return false, false
 	}
@@ -303,10 +316,6 @@ func filterIncrementalEvent(event *domain.MajorEvent, knownExternalIDs map[strin
 	}
 
 	if _, exists := knownExternalIDs[externalID]; exists {
-		return false, true
-	}
-
-	if !latestUTC.IsZero() && event.PubDate != nil && event.PubDate.Before(latestUTC) {
 		return false, true
 	}
 

@@ -531,15 +531,13 @@ func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
 		newClaimDecisionCache(),
 	)
 
-	require.Len(t, selection.sendRows, 3)
-	require.Len(t, selection.claimTokens, 3)
-	require.Len(t, selection.rowClaimTokens, 3)
-	require.Len(t, selection.rowClaimTokens[0], 1)
-	require.Len(t, selection.rowClaimTokens[1], 1)
-	require.Len(t, selection.rowClaimTokens[2], 1)
-	require.False(t, selection.rowClaimTokens[0][0].Reused)
-	require.True(t, selection.rowClaimTokens[2][0].Reused)
-	require.Equal(t, selection.rowClaimTokens[0][0].AuthorizedAt, selection.rowClaimTokens[2][0].AuthorizedAt)
+	require.Len(t, selection.members, 3)
+	require.Len(t, selection.members[0].claimTokens, 1)
+	require.Len(t, selection.members[1].claimTokens, 1)
+	require.Len(t, selection.members[2].claimTokens, 1)
+	require.False(t, selection.members[0].claimTokens[0].Reused)
+	require.True(t, selection.members[2].claimTokens[0].Reused)
+	require.Equal(t, selection.members[0].claimTokens[0].AuthorizedAt, selection.members[2].claimTokens[0].AuthorizedAt)
 }
 
 func TestSelectClaimedDeliveriesHandlesNilInputs(t *testing.T) {
@@ -554,12 +552,8 @@ func TestSelectClaimedDeliveriesHandlesNilInputs(t *testing.T) {
 		newClaimDecisionCache(),
 	)
 
-	require.Empty(t, selection.sendRows)
-	require.Empty(t, selection.sendOutboxes)
-	require.Empty(t, selection.claimTokens)
-	require.Empty(t, selection.rowClaimTokens)
-	require.Empty(t, selection.retryDeliveryIDs)
-	require.Empty(t, selection.retryOutboxIDs)
+	require.Empty(t, selection.members)
+	require.Empty(t, selection.retryMembers)
 }
 
 func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *testing.T) {
@@ -588,9 +582,7 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 		newClaimDecisionCache(),
 	)
 
-	result := &dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
-
-	var mu sync.Mutex
+	result := newDeliveryDispatchResult(len(selection.members))
 
 	messages := map[int64]string{
 		firstOutbox.ID:     "message-1",
@@ -598,8 +590,10 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 		duplicateOutbox.ID: "message-3",
 	}
 
-	for i := range selection.sendRows {
-		dispatcher.send.dispatchClaimedDeliveryRow(t.Context(), &selection.sendRows[i], &selection.sendOutboxes[i], messages, nil, selection.rowClaimTokens[i], result, &mu)
+	attempt := newDeliveryAttempt(selection.members)
+	for i := range selection.members {
+		singleton := attempt.singleton(i)
+		dispatcher.send.dispatchClaimedDeliveryRow(t.Context(), &singleton, messages, nil, &result)
 	}
 
 	require.Equal(t, 2, sender.messageCount())
@@ -928,8 +922,8 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefers
 
 	selection := dispatcher.claim.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, newClaimDecisionCache())
 
-	require.Empty(t, selection.sendRows)
-	require.Empty(t, selection.retryDeliveryIDs)
+	require.Empty(t, selection.members)
+	require.Empty(t, selection.retryMembers)
 	require.Equal(t, []int64{row.ID}, selection.deferredDeliveryIDs)
 
 	persisted := loadClaimGateDeliveryRow(t, db, row.ID)

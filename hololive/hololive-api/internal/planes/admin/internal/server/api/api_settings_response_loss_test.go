@@ -22,12 +22,12 @@ func TestSettingsAPIHandlerAppliedThenResponseLostPreservesSavedSettings(t *test
 
 	settingsPath := filepath.Join(t.TempDir(), "settings.json")
 	writer := &countingSettingsWriter{ReadWriter: mustNewTestSettingsService(t, settingsPath, settingssvc.Settings{AlarmAdvanceMinutes: 5}, newDiscardLogger())}
-	handler := &SettingsAPIHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger:          newDiscardLogger(),
 		activity:        newActivityLoggerForTest(t),
 		settings:        writer,
 		settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, server.URL)),
-	}}
+	}).DomainHandlers().Settings
 
 	firstCtx, firstRec := newAPITestContext(http.MethodPost, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":10}`))
 	handler.UpdateSettings(firstCtx)

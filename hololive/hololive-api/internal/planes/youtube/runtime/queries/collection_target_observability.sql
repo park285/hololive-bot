@@ -19,7 +19,8 @@ WITH mapping AS (
     SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, t.eligible_at, l.last_completed_at,
            CASE
                WHEN l.job_key IS NULL THEN t.created_at
-               WHEN l.slot_state = 'IDLE' THEN l.next_due_at
+               -- 주기 단축은 scheduler처럼 현재 주기로 앞당기고, 연장은 이미 정한 다음 slot을 늦추지 않는다.
+               WHEN l.slot_state = 'IDLE' THEN LEAST(l.next_due_at, l.scheduled_for + t.interval_ms * INTERVAL '1 millisecond')
                WHEN l.slot_state = 'DEFERRED' THEN l.retry_not_before
                WHEN l.slot_state = 'ACTIVE' THEN l.lease_expires_at
            END AS lease_due_at

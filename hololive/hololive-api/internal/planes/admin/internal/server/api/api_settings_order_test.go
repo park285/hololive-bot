@@ -112,7 +112,7 @@ func TestSettingsAPIHandlerSerializesSaveApplyAndGetSnapshot(t *testing.T) {
 
 		defer release()
 
-		h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: store, settingsApplier: applier}}
+		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: store, settingsApplier: applier}).DomainHandlers().Settings
 
 		firstDone, firstRec := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -220,7 +220,7 @@ func TestSettingsAPIHandlerEmptyRequestDoesNotOverwriteConcurrentUpdate(t *testi
 
 		defer release()
 
-		h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: testSettingsApplier{}}}
+		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: testSettingsApplier{}}).DomainHandlers().Settings
 
 		emptyDone, emptyRec := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{}`))
 
@@ -258,7 +258,7 @@ func TestSettingsAPIHandlerCanceledQueuedGetAndUpdateDoNotReadOrWrite(t *testing
 
 		defer release()
 
-		h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: applier}}
+		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: applier}).DomainHandlers().Settings
 
 		firstDone, _ := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -321,7 +321,7 @@ func TestSettingsAPIHandlerSaveApplyOrderingWithActualWorker(t *testing.T) {
 
 	defer release()
 
-	h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, server.URL))}}
+	h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, server.URL))}).DomainHandlers().Settings
 
 	firstDone, firstRec := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -414,7 +414,7 @@ func TestSettingsAPIHandlerOperationBudgetIncludesCoordinatorWait(t *testing.T) 
 
 		applier := remainingBudgetApplier{remaining: make(chan time.Duration, 1)}
 
-		h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: applier}}
+		h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: applier}).DomainHandlers().Settings
 
 		firstDone, _ := settingsRequestDone(h, newOrderedSettingsRequest(t.Context(), `{"alarmAdvanceMinutes":7}`))
 
@@ -471,7 +471,7 @@ func TestSettingsAPIHandlerCanceledDuringReadDoesNotReturnPastSnapshotOrPersist(
 
 				defer release()
 
-				h := &SettingsAPIHandler{Handler: &Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: testSettingsApplier{}}}
+				h := (&Handler{logger: newDiscardLogger(), activity: newActivityLoggerForTest(t), settings: writer, settingsApplier: testSettingsApplier{}}).DomainHandlers().Settings
 
 				ctx, cancel := context.WithCancel(t.Context())
 

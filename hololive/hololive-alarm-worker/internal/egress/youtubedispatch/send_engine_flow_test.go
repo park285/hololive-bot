@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -71,13 +70,11 @@ func TestDeliveryRetryAfterClampsExcessiveHTTPRetryAfter(t *testing.T) {
 func TestMetricsRecorderRecordDeliveryFailureStoresLongestRetryAfter(t *testing.T) {
 	t.Parallel()
 
-	result := &dispatchstate.DispatchResult{}
+	result := &deliveryDispatchResult{}
 	recorder := &MetricsRecorder{}
 
-	var mu sync.Mutex
-
-	recorder.recordDeliveryFailureWithRetryAfter(result, &mu, "rate-limited", 10, 100, 2*time.Second)
-	recorder.recordDeliveryFailureWithRetryAfter(result, &mu, "rate-limited", 11, 101, time.Second)
+	recorder.recordDeliveryFailureWithRetryAfter(result, "rate-limited", 10, 100, 2*time.Second)
+	recorder.recordDeliveryFailureWithRetryAfter(result, "rate-limited", 11, 101, time.Second)
 
 	if got := result.FailureRetryAfter["rate-limited"]; got != 2*time.Second {
 		t.Fatalf("FailureRetryAfter[rate-limited] = %s, want 2s", got)

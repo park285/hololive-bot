@@ -352,10 +352,18 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 }
 
 func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
-	// M1: threshold 도달 시 handleServerError가 추가 재시도 없이 즉시 중단해야 합니다.
-	requestCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requestCount++
+	// 대상 endpoint의 실패가 threshold에 도달하면 추가 재시도 없이 중단해야 한다.
+	var requestCount atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// loopback 탐색 요청을 실제 API 시도로 계상하지 않는다.
+		if r.URL.Path != "/test" {
+			http.NotFound(w, r)
+
+			return
+		}
+
+		requestCount.Add(1)
 
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -385,9 +393,9 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 	// threshold(3)회 요청 후 circuit이 열려 즉시 중단해야 합니다.
 	// maxAttempts = 1 + RetryConfig.MaxAttempts(3) = 4이지만
 	// threshold(3) 도달 시 4번째 시도 전에 중단해야 합니다.
-	if requestCount != circuitFailureThreshold {
+	if got := requestCount.Load(); got != circuitFailureThreshold {
 		t.Errorf("expected exactly %d requests (threshold), got %d",
-			circuitFailureThreshold, requestCount)
+			circuitFailureThreshold, got)
 	}
 
 	if !client.IsCircuitOpen() {

@@ -29,7 +29,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -48,7 +47,7 @@ func normalizeAliasInput(alias string) string {
 
 func (h *MemberHandler) handleAliasOperation(
 	c *gin.Context,
-	repoFunc func(context.Context, int, string, string) error,
+	repoFunc func(context.Context, int, string, string) (MemberMutationResult, error),
 	operationName string,
 ) {
 	memberID, ok := h.parsePositiveMemberID(c)
@@ -61,7 +60,11 @@ func (h *MemberHandler) handleAliasOperation(
 		return
 	}
 
-	if h == nil || h.Handler == nil || h.memberCache == nil || repoFunc == nil {
+	if !h.requireMemberDeps(c) {
+		return
+	}
+
+	if repoFunc == nil {
 		respondServiceUnavailable(c, "member service not available")
 
 		return
@@ -70,7 +73,8 @@ func (h *MemberHandler) handleAliasOperation(
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	if err := repoFunc(ctx, memberID, req.Type, req.Alias); err != nil {
+	result, err := repoFunc(ctx, memberID, req.Type, req.Alias)
+	if err != nil {
 		h.safeLogger().Error("Failed to "+operationName+" alias",
 			slog.Int("member_id", memberID),
 			slog.String("type", req.Type),
@@ -82,13 +86,7 @@ func (h *MemberHandler) handleAliasOperation(
 		return
 	}
 
-	if err := h.memberCache.InvalidateAliasCache(ctx, req.Alias); err != nil {
-		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", "Failed to invalidate alias cache", err)
-
-		return
-	}
-
-	h.respondAliasOperationSuccess(c, memberID, req.Type, req.Alias, operationName)
+	h.respondMemberMutation(c, http.StatusOK, "Alias "+operationName+" successfully", result)
 }
 
 func (h *MemberHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
@@ -119,38 +117,18 @@ func (h *MemberHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
 	return req, true
 }
 
-func (h *MemberHandler) respondAliasOperationSuccess(c *gin.Context, memberID int, aliasType, alias, operationName string) {
-	h.safeLogger().Info("Alias "+operationName,
-		slog.Int("member_id", memberID),
-		slog.String("type", aliasType),
-		slog.String("alias", alias),
-	)
-
-	h.logActivity("member_alias_"+operationName, fmt.Sprintf("Member alias %s: %s (ID: %d)", operationName, alias, memberID), map[string]any{
-		"member_id": memberID,
-		"type":      aliasType,
-		"alias":     alias,
-	})
-
-	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Alias " + operationName + " successfully"})
-}
-
 func (h *MemberHandler) AddAlias(c *gin.Context) {
-	if h == nil || h.Handler == nil || h.repository == nil {
-		respondServiceUnavailable(c, "member service not available")
-
+	if !h.requireMemberDeps(c) {
 		return
 	}
 
-	h.handleAliasOperation(c, h.repository.AddAlias, "add")
+	h.handleAliasOperation(c, h.service.AddAlias, "add")
 }
 
 func (h *MemberHandler) RemoveAlias(c *gin.Context) {
-	if h == nil || h.Handler == nil || h.repository == nil {
-		respondServiceUnavailable(c, "member service not available")
-
+	if !h.requireMemberDeps(c) {
 		return
 	}
 
-	h.handleAliasOperation(c, h.repository.RemoveAlias, "remove")
+	h.handleAliasOperation(c, h.service.RemoveAlias, "remove")
 }

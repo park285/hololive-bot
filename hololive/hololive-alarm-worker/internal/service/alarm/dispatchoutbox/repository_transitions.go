@@ -30,7 +30,7 @@ func (r *PgxRepository) MarkSending(ctx context.Context, ids []int64, workerID s
 		return fmt.Errorf("mark dispatch deliveries sending: lease: %w", err)
 	}
 
-	tag, err := r.pool.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, seconds, workerID)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, seconds, workerID, nil)
 	if err != nil {
 		return fmt.Errorf("mark dispatch deliveries sending: %w", err)
 	}

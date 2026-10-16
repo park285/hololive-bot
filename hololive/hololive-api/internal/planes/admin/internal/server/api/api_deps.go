@@ -12,8 +12,8 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-func bindJSON(c *gin.Context, destination any) error {
-	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
+func bindJSON(c *gin.Context, destination any, options ...jsonv2.Options) error {
+	if err := jsonv2.UnmarshalRead(c.Request.Body, destination, options...); err != nil {
 		return fmt.Errorf("unmarshal read: %w", err)
 	}
 
@@ -36,26 +36,12 @@ func loggerOrDefault(logger *slog.Logger) *slog.Logger {
 	return slog.Default()
 }
 
-func (h *Handler) safeLogger() *slog.Logger {
-	if h == nil {
-		return slog.Default()
-	}
-
-	return loggerOrDefault(h.logger)
-}
-
-func (h *Handler) logActivity(entryType, summary string, details map[string]any) {
-	if h != nil && h.activity != nil {
-		h.activity.Log(entryType, summary, details)
-	}
-}
-
 func respondServiceUnavailable(c *gin.Context, message string) {
 	sharedserver.RespondError(c, http.StatusServiceUnavailable, message, nil)
 }
 
 func (h *AlarmHandler) requireAlarm(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.alarm == nil {
+	if h == nil || h.alarm == nil {
 		respondServiceUnavailable(c, "alarm service not available")
 
 		return false
@@ -65,7 +51,7 @@ func (h *AlarmHandler) requireAlarm(c *gin.Context) bool {
 }
 
 func (h *MemberHandler) requireMemberDeps(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.repository == nil || h.memberCache == nil {
+	if h == nil || h.repository == nil || h.service == nil || h.service.repository == nil || h.service.cache == nil {
 		respondServiceUnavailable(c, "member service not available")
 
 		return false
@@ -75,7 +61,7 @@ func (h *MemberHandler) requireMemberDeps(c *gin.Context) bool {
 }
 
 func (h *RoomHandler) requireACL(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.acl == nil {
+	if h == nil || h.acl == nil {
 		respondServiceUnavailable(c, "ACL service not available")
 
 		return false
@@ -85,7 +71,7 @@ func (h *RoomHandler) requireACL(c *gin.Context) bool {
 }
 
 func (h *RoomHandler) requireIris(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.iris == nil {
+	if h == nil || h.iris == nil {
 		respondServiceUnavailable(c, "iris room listing not available")
 
 		return false
@@ -95,7 +81,7 @@ func (h *RoomHandler) requireIris(c *gin.Context) bool {
 }
 
 func (h *StatsHandler) requireStatsDeps(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.repository == nil || h.alarm == nil {
+	if h == nil || h.repository == nil || h.alarm == nil {
 		respondServiceUnavailable(c, "stats dependencies not available")
 
 		return false
@@ -105,7 +91,7 @@ func (h *StatsHandler) requireStatsDeps(c *gin.Context) bool {
 }
 
 func (h *TemplateHandler) requireTemplateAdmin(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.templateAdmin == nil {
+	if h == nil || h.templateAdmin == nil {
 		respondServiceUnavailable(c, "template service not available")
 
 		return false

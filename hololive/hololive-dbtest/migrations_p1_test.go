@@ -19,6 +19,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
+const sourceObservationsTable = "source_observations"
+
 // reloptions는 schema_snapshot.golden.sql 직렬화(컬럼·제약·인덱스)에 포함되지 않아
 // 111의 autovacuum 튜닝은 골든 대신 이 구조 테스트로 고정한다.
 func TestTelemetryHotTableAutovacuumTuned(t *testing.T) {
@@ -204,6 +206,11 @@ var observationGrantPostBaselineMigrations = []string{
 	applicationCascadeMigration,
 	binaryHashesMigration,
 	collectionRuntimeBundlesMigration,
+	provenanceCompactionMigration,
+	applicationVocabMigration,
+	"319_source_application_entity_index.sql",
+	"320_source_application_active_index_drop.sql",
+	"321_source_application_vocab_cutover.sql",
 }
 
 // 이어 붙이는 순서가 grant/revoke 결과를 결정하므로 파일 번호순이 아니라 적용 순서대로 나열한다.
@@ -454,7 +461,7 @@ var sourceObservationTables = []string{
 	"youtube_collection_target_reasons",
 	"youtube_collection_job_leases",
 	"source_collection_checkpoints",
-	"source_observations",
+	sourceObservationsTable,
 	"source_observation_payloads",
 	"source_observation_payload_gc_state",
 	"source_observation_queue",
@@ -463,6 +470,9 @@ var sourceObservationTables = []string{
 	"source_observation_replay_requests",
 	"source_observation_replay_epoch",
 	"source_observation_applications",
+	"source_observation_entity_kinds",
+	"source_observation_decisions",
+	"source_observation_provenances",
 	"source_observation_subject_heads",
 	"source_reconciliation_conflicts",
 	"youtube_live_sessions",
@@ -497,10 +507,11 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_collection_targets":                observationPrivileges("SELECT"),
 			"youtube_collection_job_leases":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_collection_checkpoints":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
-			"source_observations":                       observationPrivileges("SELECT", "INSERT"),
+			sourceObservationsTable:                     observationPrivileges("SELECT", "INSERT"),
 			"source_observation_payloads":               observationPrivileges("SELECT", "INSERT"),
 			"source_observation_queue":                  observationPrivileges("SELECT", "INSERT"),
 			"source_observation_collisions":             observationPrivileges("INSERT"),
+			"source_observation_provenances":            observationPrivileges("SELECT"),
 		},
 		roles.runtime: {
 			"observation_contract_generations":          observationPrivileges("SELECT"),
@@ -509,7 +520,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_collection_projection_guard":       observationPrivileges("SELECT"),
 			"youtube_collection_target_reasons":         observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_job_leases":             observationPrivileges("SELECT"),
-			"source_observations":                       observationPrivileges("SELECT", "DELETE"),
+			sourceObservationsTable:                     observationPrivileges("SELECT", "DELETE"),
 			"source_observation_payloads":               observationPrivileges("SELECT"),
 			"source_observation_queue":                  observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_collisions":             observationPrivileges("SELECT", "DELETE"),
@@ -517,6 +528,9 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"source_observation_replay_requests":        observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_replay_epoch":           observationPrivileges("SELECT", "INSERT"),
 			"source_observation_applications":           observationPrivileges("SELECT", "INSERT"),
+			"source_observation_entity_kinds":           observationPrivileges("SELECT"),
+			"source_observation_decisions":              observationPrivileges("SELECT"),
+			"source_observation_provenances":            observationPrivileges("SELECT"),
 			"source_observation_subject_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_reconciliation_conflicts":           observationPrivileges("SELECT", "INSERT", "DELETE"),
 			"youtube_live_reconciliation_heads":         observationPrivileges("SELECT", "INSERT", "UPDATE"),

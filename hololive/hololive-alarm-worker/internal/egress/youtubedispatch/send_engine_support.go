@@ -25,9 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -60,11 +58,10 @@ func (d *SendEngine) dispatchRowsIndividually(
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	reuseCache *claimDecisionCache,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	for i := range rows {
-		d.dispatchDeliveryRow(ctx, &rows[i], outboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+		d.dispatchDeliveryRow(ctx, &rows[i], outboxByID, formattedMessages, formatFailures, reuseCache, result)
 	}
 }
 
@@ -90,13 +87,6 @@ func (d *SendEngine) formatGroupedMessage(
 	}
 
 	return message, nil
-}
-
-func singleDeliveryBatch(
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-) ([]domain.YouTubeNotificationDelivery, []domain.YouTubeNotificationOutbox) {
-	return []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{*outbox}
 }
 
 // preFormatMessages: outbox_id별 메시지를 FormatMessages 한 번으로 포맷하여 캐싱한다.

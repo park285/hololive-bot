@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
@@ -28,12 +27,19 @@ const (
 	lifecycleReasonUnknownError ytlifecycle.Reason = "provider_outcome_unknown"
 )
 
+// worker는 scheduler 종료를 10초 기다린다. 확정 결과의 전이·기존 재조회 전체는
+// 그 안의 한 5초 예산을 공유하고, provider 호출에는 이 context를 넘기지 않는다.
+const deliveryStateTimeout = 5 * time.Second
+
+func deliveryStateContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), deliveryStateTimeout)
+}
+
 func (d *SendEngine) beginLifecycleOperation(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) (store.StartedOperation, bool) {
 	operation, applied, err := d.transition.BeginSending(ctx, rows, outboxMap(outboxes))
 	observeLifecycleApply("begin_sending", applied, err, len(rows))
@@ -44,7 +50,7 @@ func (d *SendEngine) beginLifecycleOperation(
 		return store.StartedOperation{}, false
 	}
 
-	appendLifecycleTouched(result, mu, applied.TouchedOutboxIDs)
+	appendLifecycleTouched(result, applied.TouchedOutboxIDs)
 
 	return operation, true
 }
@@ -56,8 +62,7 @@ func (d *SendEngine) applyPreparedLifecycleFailure(
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
 	mode store.DeliveryMode,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) bool {
 	applied, err := d.transition.ApplyPreparedFailure(ctx, rows, outboxMap(outboxes), kind, reason, 0, mode)
 	observeLifecycleApply("prepared_failure", applied, err, len(rows))
@@ -68,7 +73,7 @@ func (d *SendEngine) applyPreparedLifecycleFailure(
 		return false
 	}
 
-	appendLifecycleTouched(result, mu, applied.TouchedOutboxIDs)
+	appendLifecycleTouched(result, applied.TouchedOutboxIDs)
 
 	return true
 }
@@ -80,9 +85,11 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 	reason ytlifecycle.Reason,
 	retryAfter time.Duration,
 	mode store.DeliveryMode,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) bool {
+	ctx, cancel := deliveryStateContext(ctx)
+	defer cancel()
+
 	applied, err := d.transition.ApplyStartedFailure(ctx, operation, kind, reason, retryAfter, mode)
 	observeLifecycleApply("provider_failure", applied, err, operation.OwnerCount())
 
@@ -92,7 +99,7 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 		return false
 	}
 
-	appendLifecycleTouched(result, mu, applied.TouchedOutboxIDs)
+	appendLifecycleTouched(result, applied.TouchedOutboxIDs)
 
 	return true
 }
@@ -102,9 +109,11 @@ func (d *SendEngine) completeLifecycleSent(
 	operation store.StartedOperation,
 	claimTokens []dispatchstate.ClaimToken,
 	mode store.DeliveryMode,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) bool {
+	ctx, cancel := deliveryStateContext(ctx)
+	defer cancel()
+
 	applied, err := d.transition.CompleteSent(ctx, operation, claimTokens, mode)
 	observeLifecycleApply("complete_sent", applied, err, operation.OwnerCount())
 
@@ -114,7 +123,7 @@ func (d *SendEngine) completeLifecycleSent(
 		return false
 	}
 
-	appendLifecycleTouched(result, mu, applied.TouchedOutboxIDs)
+	appendLifecycleTouched(result, applied.TouchedOutboxIDs)
 	observeLedgerOperation("record_sent", applied, operation.OwnerCount())
 
 	return true
@@ -124,30 +133,28 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 	ctx context.Context,
 	selection *deliveryClaimSelection,
 	mode store.DeliveryMode,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	if selection == nil {
+	if selection == nil || len(selection.retryMembers) == 0 {
 		return
 	}
 
-	if len(selection.retryRows) > 0 && d.applyPreparedLifecycleFailure(
+	attempt := newDeliveryAttempt(selection.retryMembers)
+	if d.applyPreparedLifecycleFailure(
 		ctx,
-		selection.retryRows,
-		selection.retryOutboxes,
+		attempt.rows,
+		attempt.outboxes,
 		ytlifecycle.FailureRetryable,
 		lifecycleReasonPreSendClaim,
 		mode,
 		result,
-		mu,
 	) {
-		for i := range selection.retryRows {
+		for i := range attempt.members {
 			d.recordDeliveryFailure(
 				result,
-				mu,
 				deliveryFailureReasonPreSendClaim,
-				selection.retryRows[i].ID,
-				selection.retryRows[i].OutboxID,
+				attempt.members[i].row.ID,
+				attempt.members[i].row.OutboxID,
 			)
 		}
 	}
@@ -218,13 +225,13 @@ func outboxMap(outboxes []domain.YouTubeNotificationOutbox) map[int64]domain.You
 	return result
 }
 
-func appendLifecycleTouched(result *dispatchstate.DispatchResult, mu *sync.Mutex, outboxIDs []int64) {
-	if result == nil || mu == nil || len(outboxIDs) == 0 {
+func appendLifecycleTouched(result *deliveryDispatchResult, outboxIDs []int64) {
+	if result == nil || len(outboxIDs) == 0 {
 		return
 	}
 
-	mu.Lock()
+	result.mu.Lock()
 
 	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxIDs...)
-	mu.Unlock()
+	result.mu.Unlock()
 }

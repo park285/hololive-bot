@@ -272,9 +272,9 @@ func TestLiveRuntimeStateObservationDeleteAndFactsReseed(t *testing.T) {
 	), observation AS (
 		INSERT INTO source_observations(provider,observation_kind,subject_key,observation_key,schema_version,
 			contract_generation,scheduled_for,observed_at,scope_sha256,completeness,continuity,payload_id,
-			evidence_sha256,collector_instance,job_key,collection_job_kind,fence_epoch,projection_generation)
-		SELECT 'youtubejs','community_page','runtime-fk','runtime-fk',1,1,now(),now(),decode(repeat('a',64),'hex'),
-			'COMPLETE','CONTIGUOUS',id,decode(repeat('c',64),'hex'),'migration','runtime-fk','community_collect',1,1
+			evidence_sha256,provenance_id,fence_epoch,projection_generation)
+		SELECT 'youtubejs','community_page','runtime-fk',sha256('runtime-fk'::bytea),1,1,now(),now(),decode(repeat('a',64),'hex'),
+			'COMPLETE','CONTIGUOUS',id,decode(repeat('c',64),'hex'),source_observation_provenance_id('runtime-fk','migration','community_collect'),1,1
 		FROM payload RETURNING id
 	) UPDATE youtube_video_availability SET observation_id=observation.id FROM observation WHERE video_id='array'`)
 	require.NoError(t, err)

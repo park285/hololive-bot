@@ -127,6 +127,7 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/envelope_json.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/envelope_validation.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/identity.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/live_check_v1.go
+hololive/hololive-shared/pkg/contracts/sourceobservation/payload_size.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_decode.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_normalize.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_profile.go
@@ -342,6 +343,7 @@ hololive/hololive-youtube-collector/internal/runtime/collectorruntime/tracing.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/worker_registry.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_build.go
+hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_decision.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_discovery.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_discovery_cycle.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_discovery_log.go

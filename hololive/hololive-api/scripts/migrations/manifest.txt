@@ -173,3 +173,10 @@
 173 312_youtube_live_runtime_state.sql
 174 313_youtube_collection_runtime_bundles.sql
 175 314_youtube_live_review_recorder_decoder_acl.sql
+176 315_source_retention_bounded_scan.sql
+177 316_youtube_live_runtime_update_filter.sql
+178 317_source_observation_provenance_compaction.sql
+179 318_source_application_vocab_codes.sql
+180 319_source_application_entity_index.sql
+181 320_source_application_active_index_drop.sql
+182 321_source_application_vocab_cutover.sql

@@ -162,7 +162,7 @@ func assertMixedQueue(ctx context.Context, t *testing.T, pool *pgxpool.Pool, bas
 	var independentID int64
 
 	if err := pool.QueryRow(ctx, `
-		SELECT id FROM source_observations WHERE observation_key = $1
+		SELECT id FROM source_observations WHERE observation_key = decode($1, 'hex')
 	`, independent.ObservationKey).Scan(&independentID); err != nil {
 		t.Fatalf("load independent observation: %v", err)
 	}

@@ -3,7 +3,6 @@ package youtubedispatch
 import (
 	"context"
 	"log/slog"
-	"sync"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -30,130 +29,94 @@ func (d *SendEngine) releaseGroupedClaims(ctx context.Context, group *deliveryGr
 
 func (d *SendEngine) recordPerRoomFormatFailure(
 	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	attempt *deliveryAttempt,
+	result *deliveryDispatchResult,
 ) {
-	d.releasePerRoomClaims(ctx, row, claimTokens, "format error")
-	d.metricsRecorder.recordPerRoomFormatFailure(row, rows, outboxes, result, mu)
+	d.releasePerRoomClaims(ctx, &attempt.rows[0], attempt.claimTokens, "format error")
+	d.metricsRecorder.recordPerRoomFormatFailure(&attempt.rows[0], attempt.rows, attempt.outboxes, result)
 }
 
 func (d *SendEngine) recordGroupedFormatFailure(
 	ctx context.Context,
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
-	validOutboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []dispatchstate.ClaimToken,
+	attempt *deliveryAttempt,
 	err error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	d.releaseGroupedClaims(ctx, group, claimTokens, "format error")
-	d.metricsRecorder.recordGroupedFormatFailure(group, validRows, validOutboxes, err, result, mu)
+	d.releaseGroupedClaims(ctx, group, attempt.claimTokens, "format error")
+	d.metricsRecorder.recordGroupedFormatFailure(group, attempt.rows, attempt.outboxes, err, result)
 }
 
 func (d *SendEngine) recordPerRoomMissingMessage(
 	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	attempt *deliveryAttempt,
+	result *deliveryDispatchResult,
 ) {
-	d.releasePerRoomClaims(ctx, row, claimTokens, "missing preformatted message")
-	d.metricsRecorder.recordPerRoomMissingMessage(row, result, mu)
+	d.releasePerRoomClaims(ctx, &attempt.rows[0], attempt.claimTokens, "missing preformatted message")
+	d.metricsRecorder.recordPerRoomMissingMessage(&attempt.rows[0], result)
 }
 
 func (d *SendEngine) recordPerRoomRequestBuildFailure(
 	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []dispatchstate.ClaimToken,
+	attempt *deliveryAttempt,
 	err error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	d.releasePerRoomClaims(ctx, row, claimTokens, "request build error")
-	d.metricsRecorder.recordPerRoomRequestBuildFailure(row, outbox, rows, outboxes, err, result, mu)
+	d.releasePerRoomClaims(ctx, &attempt.rows[0], attempt.claimTokens, "request build error")
+	d.metricsRecorder.recordPerRoomRequestBuildFailure(&attempt.rows[0], &attempt.outboxes[0], attempt.rows, attempt.outboxes, err, result)
 }
 
 func (d *SendEngine) recordPerRoomSendFailure(
 	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
-	claimTokens []dispatchstate.ClaimToken,
+	attempt *deliveryAttempt,
 	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	d.releasePerRoomClaims(ctx, row, claimTokens, "send failure")
-	d.metricsRecorder.recordPerRoomSendFailure(row, rows, outboxes, sendReq, sendErr, result, mu)
+	d.releasePerRoomClaims(ctx, &attempt.rows[0], attempt.claimTokens, "send failure")
+	d.metricsRecorder.recordPerRoomSendFailure(&attempt.rows[0], attempt.rows, attempt.outboxes, attempt.request, sendErr, result)
 }
 
 func (d *SendEngine) recordPerRoomSuccess(
-	row *domain.YouTubeNotificationDelivery,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
-	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	attempt *deliveryAttempt,
+	result *deliveryDispatchResult,
 ) {
-	d.metricsRecorder.recordPerRoomSuccess(row, rows, outboxes, sendReq, claimTokens, result, mu)
+	d.metricsRecorder.recordPerRoomSuccess(&attempt.rows[0], attempt.rows, attempt.outboxes, attempt.request, attempt.claimTokens, result)
 }
 
 func (d *SendEngine) recordDeliveryFailure(
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 	reason string,
 	deliveryID, outboxID int64,
 ) {
-	d.metricsRecorder.recordDeliveryFailure(result, mu, reason, deliveryID, outboxID)
+	d.metricsRecorder.recordDeliveryFailure(result, reason, deliveryID, outboxID)
 }
 
 func (d *SendEngine) recordGroupedRequestBuildFailure(
 	ctx context.Context,
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
-	validOutboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []dispatchstate.ClaimToken,
+	attempt *deliveryAttempt,
 	err error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	d.releaseGroupedClaims(ctx, group, claimTokens, "request build error")
-	d.metricsRecorder.recordGroupedRequestBuildFailure(group, validRows, validOutboxes, err, result, mu)
+	d.releaseGroupedClaims(ctx, group, attempt.claimTokens, "request build error")
+	d.metricsRecorder.recordGroupedRequestBuildFailure(group, attempt.rows, attempt.outboxes, err, result)
 }
 
 func (d *SendEngine) recordGroupedSendFailure(
 	ctx context.Context,
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
-	validOutboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
-	claimTokens []dispatchstate.ClaimToken,
+	attempt *deliveryAttempt,
 	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	d.releaseGroupedClaims(ctx, group, claimTokens, "send failure")
-	d.metricsRecorder.recordGroupedSendFailure(group, validRows, validOutboxes, sendReq, sendErr, result, mu)
+	d.releaseGroupedClaims(ctx, group, attempt.claimTokens, "send failure")
+	d.metricsRecorder.recordGroupedSendFailure(group, attempt.rows, attempt.outboxes, attempt.request, sendErr, result)
 }
 
 func (d *SendEngine) recordGroupedSuccess(
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
-	validOutboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
-	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	attempt *deliveryAttempt,
+	result *deliveryDispatchResult,
 ) {
-	d.metricsRecorder.recordGroupedSuccess(group, validRows, validOutboxes, sendReq, claimTokens, result, mu)
+	d.metricsRecorder.recordGroupedSuccess(group, attempt.rows, attempt.outboxes, attempt.request, attempt.claimTokens, result)
 }

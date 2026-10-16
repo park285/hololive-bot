@@ -69,9 +69,13 @@ func validatePublishBatchObservation(input *PublishBatchInput, index int, seen m
 		return fmt.Errorf("%w: observation %d lease proof mismatch", ErrInvalidEnvelope, index)
 	}
 
-	if err := observation.Validate(); err != nil {
+	canonicalPayload, err := observation.ValidateAndCanonicalPayload()
+	if err != nil {
 		return fmt.Errorf("%w: observation %d: %w", ErrInvalidEnvelope, index, err)
 	}
+
+	// 소유한 복사본만 바꿔 검증한 크기·digest와 실제 저장 표현을 일치시킨다.
+	observation.Payload = canonicalPayload
 
 	identity := observationIdentity(observation)
 	if _, ok := seen[identity]; ok {

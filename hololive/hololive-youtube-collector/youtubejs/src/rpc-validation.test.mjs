@@ -4,14 +4,13 @@ import test from "node:test";
 
 import { createFetchTransport } from "./fetch-transport.mjs";
 import { currentRequestSignal, runWithRequestContext } from "./request-context.mjs";
+import { handleRpcRequest, rpcErrorResult, rpcErrorResultFor } from "./rpc-execution.mjs";
 import {
   communityEndpoint,
-  handleRpcRequest,
-  rpcErrorResult,
-  rpcErrorResultFor,
+  contentEndpoint,
   validateCommunityResponse,
   validateContentResponse,
-} from "./rpc-validation.mjs";
+} from "./rpc-collection-validation.mjs";
 
 test("rpcErrorResult accepts the closed status and class tuples", () => {
   assert.equal(rpcErrorResult(404, "invalid_request", "PROTOCOL", "unknown endpoint").status, 404);
@@ -196,5 +195,86 @@ test("explicit helper invariants and local programming errors remain fatal", () 
     assert.equal(result.status, 500);
     assert.equal(result.body.error.code, "helper_internal_invariant");
     assert.equal(result.body.error.class, "INTERNAL");
+  }
+});
+
+test("RPC success budget counts encoded UTF-8 bytes including JSON escaping", async () => {
+  const expected = {
+    protocol_version: 1,
+    items: [{ video_id: "v", channel_id: "UC_TEST", title: '한글 "title"\n\\' }],
+    page_count: 1,
+    exhausted: true,
+    continuity: "CONTIGUOUS",
+    termination_reason: "exhausted",
+  };
+  const encodedBytes = Buffer.byteLength(JSON.stringify(expected));
+  let calls = 0;
+  for (const limit of [encodedBytes, encodedBytes - 1]) {
+    const result = await handleRpcRequest(JSON.stringify({
+      protocol_version: 1, channel_id: "UC_TEST", kind: "videos", max_success_response_bytes: limit,
+    }), contentEndpoint, async () => {
+      calls++;
+      return expected;
+    });
+    if (limit === encodedBytes) {
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.body, expected);
+    } else {
+      assert.equal(result.status, 422);
+      assert.equal(result.body.error.code, "response_too_large");
+      assert.equal(result.body.error.class, "RESOURCE_LIMIT");
+    }
+  }
+  assert.equal(calls, 2);
+});
+
+test("RPC rejects untrusted JSON and impossible budgets before running collection", async () => {
+  const request = { protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 4096 };
+  let calls = 0;
+  const run = async () => { calls++; return {}; };
+  for (const raw of [
+    "{", "null", "[]", "true",
+    JSON.stringify({ ...request, extra: true }),
+    JSON.stringify(request).replace("{", '{"__proto__":{},'),
+    JSON.stringify({ ...request, max_success_response_bytes: 4097 }),
+  ]) {
+    const result = await handleRpcRequest(raw, communityEndpoint, run, 4096);
+    assert.equal(result.status, 400, raw);
+    assert.equal(result.body.error.code, "invalid_request", raw);
+    assert.equal(result.body.error.class, "PROTOCOL", raw);
+  }
+  const undersized = await handleRpcRequest(JSON.stringify({
+    ...request, max_success_response_bytes: communityEndpoint.minimumSuccessResponseBytes - 1,
+  }), communityEndpoint, run, 4096);
+  assert.equal(undersized.status, 422);
+  assert.equal(undersized.body.error.code, "response_too_large");
+  assert.equal(calls, 0);
+});
+
+test("RPC classifies synchronous throws and asynchronous rejections identically", async () => {
+  const request = JSON.stringify({ protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 4096 });
+  const failure = Object.assign(new Error("busy"), { code: "helper_busy", retry: { kind: "after", after_ms: 25 } });
+  const synchronous = await handleRpcRequest(request, communityEndpoint, () => { throw failure; });
+  const asynchronous = await handleRpcRequest(request, communityEndpoint, async () => { throw failure; });
+  assert.deepEqual(synchronous, asynchronous);
+  assert.equal(asynchronous.status, 503);
+  assert.equal(asynchronous.body.error.code, "helper_busy");
+  assert.deepEqual(asynchronous.body.error.retry, { kind: "after", after_ms: 25 });
+});
+
+test("RPC retry metadata preserves cooldown deadlines and rejects invalid hints", () => {
+  const at = "2030-01-01T00:00:00.000Z";
+  const cooldown = Object.assign(new Error("limited"), { code: "cooldown", retry: { kind: "at", at } });
+  assert.deepEqual(rpcErrorResultFor(cooldown).body.error.retry, { kind: "at", at });
+  for (const [code, retry] of [
+    ["cooldown", { kind: "at", at: "not-a-date" }],
+    ["helper_busy", { kind: "at", at }],
+    ["cooldown", { kind: "after", after_ms: 0 }],
+    ["helper_busy", { kind: "after", after_ms: 1.5 }],
+  ]) {
+    const result = rpcErrorResultFor(Object.assign(new Error("limited"), { code, retry }));
+    assert.equal(result.status, 500);
+    assert.equal(result.body.error.code, "helper_internal_invariant");
+    assert.deepEqual(result.body.error.retry, { kind: "default" });
   }
 });

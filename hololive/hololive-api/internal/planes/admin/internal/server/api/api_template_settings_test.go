@@ -75,10 +75,10 @@ type templateValidationCase struct {
 func TestTemplateHandler_ValidationBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &TemplateHandler{Handler: &Handler{
+	handler := (&Handler{
 		templateAdmin: &template.AdminService{},
 		logger:        newDiscardLogger(),
-	}}
+	}).DomainHandlers().Template
 
 	previewPath := templateInvalidKeyPath + "/preview"
 
@@ -114,9 +114,9 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 }
 
 func settingsInvalidJSONBranches(t *testing.T) {
-	handler := &SettingsAPIHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Settings
 
 	tests := []struct {
 		method string
@@ -142,12 +142,12 @@ func settingsGetAndUpdateSuccess(t *testing.T) {
 		AlarmAdvanceMinutes: 5,
 	}, newDiscardLogger())
 
-	handler := &SettingsAPIHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger:          newDiscardLogger(),
 		activity:        newActivityLoggerForTest(t),
 		settings:        settingsService,
 		settingsApplier: applier,
-	}}
+	}).DomainHandlers().Settings
 
 	tests := []struct {
 		name   string

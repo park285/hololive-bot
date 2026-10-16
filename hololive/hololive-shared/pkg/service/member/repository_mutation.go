@@ -27,6 +27,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -103,56 +106,58 @@ func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name st
 	return nil
 }
 
+// ErrCreateConflict는 같은 slug의 저장 내용이 생성 요청과 다름을 나타낸다.
+var ErrCreateConflict = errors.New("member already exists with different values")
+
 // CreateMember는 멤버 기본 정보와 채널·기수·공식 링크·날짜를 저장한다. 캐시 갱신은 호출자가 수행한다.
 func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) error {
+	_, err := r.createMember(ctx, member, false)
+	return err
+}
+
+// CreateMemberOrMatch는 slug 유일성 충돌일 때만 모든 저장 필드가 같은 정본을 확인한다.
+// 일치하면 삽입을 재시도하지 않고 기존 ID와 replayed=true를 반환한다.
+func (r *Repository) CreateMemberOrMatch(ctx context.Context, member *domain.Member) (bool, error) {
+	return r.createMember(ctx, member, true)
+}
+
+func (r *Repository) createMember(ctx context.Context, member *domain.Member, allowReplay bool) (bool, error) {
 	if member == nil {
-		return errors.New("member is required")
+		return false, errors.New("member is required")
 	}
 
-	// aliases 계약(chk_members_aliases_shape)은 ko·ja 배열을 가진 객체다. 별명 없이 만들면 JSON null 대신 빈 객체를 저장한다.
 	aliasesJSON, err := jsonv2.Marshal(cmp.Or(member.Aliases, &domain.Aliases{}))
 	if err != nil {
-		return fmt.Errorf("marshal aliases: %w", err)
+		return false, fmt.Errorf("marshal aliases: %w", err)
 	}
 
-	// domain.Member가 Slug를 노출하지 않으므로 Name을 Slug로 사용함
-	slug := member.Name
-
-	chID := member.ChannelID
-
-	var chIDPtr *string
-
-	if chID != "" {
-		chIDPtr = &chID
+	args := []any{
+		member.Name, member.ChannelID, member.Name, member.NameJa, member.NameKo,
+		graduationStatus(member.IsGraduated), member.IsGraduated, string(aliasesJSON), member.GetOrg(), "manual",
+		member.Units, member.OfficialURL, member.Birthday, member.DebutDate,
+		member.ShortKoreanName, member.ChzzkChannelID, member.TwitchUserID,
 	}
 
-	var nameJaPtr *string
-
-	if member.NameJa != "" {
-		val := member.NameJa
-
-		nameJaPtr = &val
+	err = r.pool.QueryRow(ctx, mustSQL("repository_mutation_0175_06.sql"), args...).Scan(&member.ID)
+	if err == nil {
+		return false, nil
 	}
 
-	var nameKoPtr *string
-
-	if member.NameKo != "" {
-		val := member.NameKo
-
-		nameKoPtr = &val
+	pgErr, unique := errors.AsType[*pgconn.PgError](err)
+	if !allowReplay || !unique || pgErr.Code != "23505" || pgErr.ConstraintName != "idx_members_slug" {
+		return false, fmt.Errorf("create member: %w", err)
 	}
 
-	// org/sync_source 기본값 설정 (Task 1 요구사항)
-	org := member.GetOrg()
-	syncSource := "manual"
-	status := graduationStatus(member.IsGraduated)
+	err = r.pool.QueryRow(ctx, mustSQL("match_created_member.sql"), args...).Scan(&member.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrCreateConflict
+	}
 
-	_, err = r.pool.Exec(ctx, mustSQL("repository_mutation_0175_06.sql"), slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource, member.Units, member.OfficialURL, member.Birthday, member.DebutDate, member.ShortKoreanName, member.ChzzkChannelID, member.TwitchUserID)
 	if err != nil {
-		return fmt.Errorf("create member: %w", err)
+		return false, fmt.Errorf("match created member: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func graduationStatus(graduated bool) string {

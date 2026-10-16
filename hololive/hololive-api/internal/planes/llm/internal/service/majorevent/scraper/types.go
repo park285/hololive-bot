@@ -48,7 +48,7 @@ type FeedSource struct {
 type ServiceConfig struct {
 	Sources          []FeedSource
 	FeedConcurrency  int
-	IncrementalLimit int
+	IncrementalLimit int // 현재 피드 ID 존재 조회 한 번의 최대 항목 수
 }
 
 // DefaultServiceConfig는 기본 RSS 수집 설정을 반환한다.
@@ -146,6 +146,7 @@ type ScrapeResult struct {
 	FeedsFailed    int
 	ParsedEvents   int
 	StoredEvents   int
+	FailedEvents   int // 저장을 시도했지만 실패한 이벤트 수; 원인별 오류는 Scrape의 error에 포함
 	SkippedKnown   int
 }
 

@@ -151,6 +151,15 @@ WITH input AS MATERIALIZED (
         count(payload_resolution.id), (SELECT count(existing.ordinal) FROM existing WHERE existing_id IS NULL AND NOT is_collision)
     ) AS resolved
     FROM payload_resolution
+), provenance_resolved AS MATERIALIZED (
+    -- 출처 사전 행은 삽입할 원본의 distinct 3-tuple마다 한 번만 resolve한다.
+    SELECT key.job_key, key.collector_instance, key.collection_job_kind,
+           source_observation_provenance_id(key.job_key, key.collector_instance, key.collection_job_kind) AS provenance_id
+    FROM (
+        SELECT DISTINCT existing.job_key, existing.collector_instance, existing.collection_job_kind
+        FROM existing
+        WHERE existing.existing_id IS NULL AND NOT existing.is_collision
+    ) AS key
 ), collision_write AS (
     INSERT INTO source_observation_collisions (
         existing_observation_id,
@@ -199,16 +208,14 @@ WITH input AS MATERIALIZED (
         continuity,
         payload_id,
         evidence_sha256,
-        collector_instance,
-        job_key,
-        collection_job_kind,
+        provenance_id,
         fence_epoch,
         projection_generation
     )
     SELECT existing.provider,
            existing.observation_kind,
            existing.subject_key,
-           existing.observation_key,
+           decode(existing.observation_key, 'hex'),
            existing.schema_version,
            existing.contract_generation,
            existing.scheduled_for,
@@ -219,20 +226,22 @@ WITH input AS MATERIALIZED (
            existing.continuity,
            payload_resolution.id,
            decode(existing.evidence_sha256, 'hex'),
-           existing.collector_instance,
-           existing.job_key,
-           existing.collection_job_kind,
+           provenance_resolved.provenance_id,
            existing.fence_epoch,
            existing.projection_generation
     FROM existing
     JOIN payload_resolution ON payload_resolution.ordinal = existing.ordinal
+    JOIN provenance_resolved
+      ON provenance_resolved.job_key = existing.job_key
+     AND provenance_resolved.collector_instance = existing.collector_instance
+     AND provenance_resolved.collection_job_kind = existing.collection_job_kind
     CROSS JOIN payload_guard
     ORDER BY existing.ordinal
     RETURNING id,
               provider,
               observation_kind,
               subject_key,
-              observation_key,
+              encode(observation_key, 'hex') AS observation_key,
               schema_version,
               contract_generation
 ), queue_write AS (

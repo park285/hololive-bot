@@ -155,12 +155,11 @@ func TestDispatchClaimedDeliveryRequiresConfirmedBeginAndCompletion(t *testing.T
 
 			engine.transition = transition
 
-			result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+			result := newDeliveryDispatchResult(1)
 
-			var mu sync.Mutex
-
-			engine.dispatchClaimedDeliveryRow(t.Context(), &row, &outbox,
-				map[int64]string{outbox.ID: testMessageHello}, nil, nil, &result, &mu)
+			attempt := newDeliveryAttempt([]claimedDelivery{{row: row, outbox: outbox}})
+			engine.dispatchClaimedDeliveryRow(t.Context(), &attempt,
+				map[int64]string{outbox.ID: testMessageHello}, nil, &result)
 
 			if got := sender.calls.Load(); got != tc.wantSend {
 				t.Fatalf("sender calls = %d, want %d", got, tc.wantSend)
@@ -201,19 +200,15 @@ func TestDispatchClaimedDeliveryResponseLostAfterProviderSuccessDoesNotResend(t 
 		ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo,
 		ContentID: "video-lifecycle-response-lost", Payload: `{"video_id":"video-lifecycle-response-lost"}`,
 	}
-	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+	result := newDeliveryDispatchResult(1)
 
-	var mu sync.Mutex
-
+	attempt := newDeliveryAttempt([]claimedDelivery{{row: row, outbox: outbox}})
 	engine.dispatchClaimedDeliveryRow(
 		t.Context(),
-		&row,
-		&outbox,
+		&attempt,
 		map[int64]string{outbox.ID: testMessageHello},
 		map[int64]bool{},
-		nil,
 		&result,
-		&mu,
 	)
 
 	if got := sender.calls.Load(); got != 1 {
@@ -229,7 +224,7 @@ func TestDispatchClaimedDeliveryResponseLostAfterProviderSuccessDoesNotResend(t 
 	}
 
 	if len(result.SuccessDeliveryIDs) != 0 || result.FailedDeliveries != 0 {
-		t.Fatalf("result = %#v, want no inferred terminal outcome", result)
+		t.Fatalf("result = %#v, want no inferred terminal outcome", result.DispatchResult)
 	}
 
 	if got := claims.releaseCalls.Load(); got != 0 {

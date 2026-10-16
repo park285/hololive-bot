@@ -41,7 +41,7 @@ type MajorEventMonthlyScheduler interface {
 }
 
 func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
-	ready := h != nil && h.Handler != nil && h.majorEventScheduler != nil
+	ready := h != nil && h.majorEventScheduler != nil
 
 	var send func(context.Context) (triggercontracts.Result, error)
 
@@ -55,7 +55,7 @@ func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
 }
 
 func (h *MajorEventHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
-	ready := h != nil && h.Handler != nil && h.majorEventMonthlyScheduler != nil
+	ready := h != nil && h.majorEventMonthlyScheduler != nil
 
 	var send func(context.Context) (triggercontracts.Result, error)
 

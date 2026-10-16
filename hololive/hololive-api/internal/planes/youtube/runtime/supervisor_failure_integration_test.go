@@ -163,11 +163,10 @@ func seedFailureRecoveryQueue(t *testing.T, pool *pgxpool.Pool) {
 			 INSERT INTO source_observations
 			 (provider, observation_kind, subject_key, observation_key, schema_version,
 			  contract_generation, scheduled_for, observed_at, scope_sha256, completeness,
-			  continuity, payload_id, evidence_sha256, collector_instance, job_key,
-			  collection_job_kind, fence_epoch, projection_generation)
-			 SELECT 'youtubejs', 'community_page', 'UC_RECOVERY', $3, 1,
+			  continuity, payload_id, evidence_sha256, provenance_id, fence_epoch, projection_generation)
+			 SELECT 'youtubejs', 'community_page', 'UC_RECOVERY', decode($3,'hex'), 1,
 			  1, $4, $4, decode($5,'hex'), 'COMPLETE', 'CONTIGUOUS', payload.id,
-			  decode($6,'hex'), 'dbtest', 'recovery-job', 'community_collect', 1, 1 FROM payload
+			  decode($6,'hex'), source_observation_provenance_id('recovery-job', 'dbtest', 'community_collect'), 1, 1 FROM payload
 			 RETURNING id
 			)
 			INSERT INTO source_observation_queue(observation_id) SELECT id FROM observation`,

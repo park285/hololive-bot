@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sync"
 	"testing"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -33,11 +31,9 @@ func TestTimedOutHandoffFailureDoesNotPersistKnownFailure(t *testing.T) {
 	cancel(errDeliverySendTimeout)
 
 	err := engine.wrapDeliverySendError(ctx, sendoutcome.ErrHandoffFailed)
-	result := &dispatchstate.DispatchResult{}
+	result := &deliveryDispatchResult{}
 
-	var mu sync.Mutex
-
-	engine.applyPerRoomLifecycleFailure(t.Context(), store.StartedOperation{}, &domain.YouTubeNotificationDelivery{}, deliverySendRequest{}, err, result, &mu)
+	engine.applyPerRoomLifecycleFailure(t.Context(), store.StartedOperation{}, &domain.YouTubeNotificationDelivery{}, deliverySendRequest{}, err, result)
 
 	if transition.startedFailureCalls.Load() != 0 {
 		t.Fatal("outcome unknown reached known-failure persistence")

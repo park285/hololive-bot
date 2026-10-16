@@ -71,7 +71,7 @@ func (r *PgxRepository) prepareSendRequest(ctx context.Context, unitID int64, id
 		return nil, err
 	}
 
-	if fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased"); fenceErr != nil {
+	if _, fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased"); fenceErr != nil {
 		return nil, fenceErr
 	}
 
@@ -123,14 +123,16 @@ func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest
 	return &request, nil
 }
 
-func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64, worker, status string) error {
+func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64, worker, status string) (time.Time, error) {
 	rows, err := tx.Query(ctx, mustSQL("send_request_members.sql"), unitID)
 	if err != nil {
-		return fmt.Errorf("lock send request members: %w", err)
+		return time.Time{}, fmt.Errorf("lock send request members: %w", err)
 	}
 	defer rows.Close()
 
 	var actual []int64
+
+	var checkedAt time.Time
 
 	valid := true
 
@@ -141,8 +143,8 @@ func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64,
 
 		var owned bool
 
-		if err := rows.Scan(&id, &rowStatus, &owner, &owned); err != nil {
-			return fmt.Errorf("scan send request members: %w", err)
+		if err := rows.Scan(&id, &rowStatus, &owner, &owned, &checkedAt); err != nil {
+			return time.Time{}, fmt.Errorf("scan send request members: %w", err)
 		}
 
 		actual = append(actual, id)
@@ -150,14 +152,14 @@ func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64,
 	}
 
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("read send request members: %w", err)
+		return time.Time{}, fmt.Errorf("read send request members: %w", err)
 	}
 
 	if !valid || len(ids) == 0 || !sameDeliveryIDs(actual, ids) {
-		return ErrSendRequestFence
+		return time.Time{}, ErrSendRequestFence
 	}
 
-	return nil
+	return checkedAt, nil
 }
 
 func sameDeliveryIDs(left, right []int64) bool {
@@ -183,7 +185,7 @@ func (r *PgxRepository) ReissueSendRequest(ctx context.Context, unitID int64, id
 		return false, err
 	}
 
-	if fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "sending"); fenceErr != nil {
+	if _, fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "sending"); fenceErr != nil {
 		return false, fenceErr
 	}
 
@@ -239,15 +241,16 @@ func (r *PgxRepository) BeginSendRequest(ctx context.Context, unitID int64, ids 
 		return err
 	}
 
-	if fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased"); fenceErr != nil {
-		return fenceErr
+	checkedAt, err := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased")
+	if err != nil {
+		return err
 	}
 
 	if request.BodyHash == "" || request.ClientRequestID != expectedID || !sameDeliveryIDs(request.DeliveryIDs, ids) {
 		return ErrSendRequestFence
 	}
 
-	tag, err := tx.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, leaseSeconds, worker)
+	tag, err := tx.Exec(ctx, mustSQL("repository_transitions_0020_01.sql"), ids, leaseSeconds, worker, checkedAt)
 	if err != nil {
 		return fmt.Errorf("begin prepared delivery send: %w", err)
 	}

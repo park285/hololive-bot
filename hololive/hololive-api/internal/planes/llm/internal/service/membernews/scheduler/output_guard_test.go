@@ -37,8 +37,8 @@ func TestProcessDigestForRoomBlocksRestrictedOutput(t *testing.T) {
 
 	result := processDigestForRoom(t.Context(), service, mockFormatter{}, outbox, nil, outputguard.NewGuard(), model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", testRoomID)
 
-	if result.Failed != 1 || result.Sent != 0 {
-		t.Fatalf("process result = %+v, want failed=1 sent=0", result)
+	if result.Failed != 1 || result.Queued != 0 {
+		t.Fatalf("process result = %+v, want failed=1 queued=0", result)
 	}
 
 	if len(outbox.enqueuedItems) != 0 {
@@ -52,8 +52,8 @@ func TestProcessDigestForRoomFailsClosedWithoutOutputGuard(t *testing.T) {
 
 	result := processDigestForRoom(t.Context(), service, mockFormatter{}, outbox, nil, nil, model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", testRoomID)
 
-	if result.Failed != 1 || result.Sent != 0 {
-		t.Fatalf("process result = %+v, want failed=1 sent=0", result)
+	if result.Failed != 1 || result.Queued != 0 {
+		t.Fatalf("process result = %+v, want failed=1 queued=0", result)
 	}
 
 	if len(outbox.enqueuedItems) != 0 {
@@ -74,8 +74,8 @@ func TestProcessDigestForRoomCountsFormatFailureWithoutEnqueue(t *testing.T) {
 
 	result := processDigestForRoom(t.Context(), service, failingDigestFormatter{}, outbox, nil, outputguard.NewGuard(), model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", testRoomID)
 
-	if result.Failed != 1 || result.Sent != 0 {
-		t.Fatalf("process result = %+v, want failed=1 sent=0", result)
+	if result.Failed != 1 || result.Queued != 0 {
+		t.Fatalf("process result = %+v, want failed=1 queued=0", result)
 	}
 
 	if len(outbox.enqueuedItems) != 0 {
@@ -112,7 +112,7 @@ func TestProcessDigestForRoomRejectsInvalidRendering(t *testing.T) {
 				}
 
 				result := processDigestForRoom(t.Context(), service, tc.formatter, outbox, nil, outputguard.NewGuard(), period, kind, "2026-10", testRoomID)
-				if result.Attempted != 1 || result.Failed != 1 || result.Sent != 0 || len(outbox.enqueuedItems) != 0 {
+				if result.Attempted != 1 || result.Failed != 1 || result.Queued != 0 || len(outbox.enqueuedItems) != 0 {
 					t.Fatalf("invalid render was not rejected: result=%+v enqueue=%d", result, len(outbox.enqueuedItems))
 				}
 			})
@@ -131,8 +131,8 @@ func TestProcessDigestForRoomSendsNormalEmptyDigest(t *testing.T) {
 		}
 
 		result := processDigestForRoom(t.Context(), service, fixedDigestFormatter{message: "표시할 항목이 없습니다."}, outbox, nil, outputguard.NewGuard(), period, kind, "2026-10", testRoomID)
-		if result.Sent != 1 || result.Failed != 0 || len(outbox.enqueuedItems) != 1 {
-			t.Fatalf("empty news must send template notice: result=%+v enqueue=%d", result, len(outbox.enqueuedItems))
+		if result.Queued != 1 || result.Failed != 0 || len(outbox.enqueuedItems) != 1 {
+			t.Fatalf("empty news must enqueue template notice: result=%+v enqueue=%d", result, len(outbox.enqueuedItems))
 		}
 	}
 }

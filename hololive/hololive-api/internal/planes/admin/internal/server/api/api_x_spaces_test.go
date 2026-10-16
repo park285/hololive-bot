@@ -17,7 +17,7 @@ func TestXSpaceSessionAPIEncryptsCandidateAndRejectsConflict(t *testing.T) {
 	store, err := xspaces.NewStore(dbtest.NewPool(t), bytes.Repeat([]byte{3}, 32))
 	require.NoError(t, err)
 
-	handler := &Handler{xSpaceSessions: store}
+	handler := NewSettingsAPIHandler(CommonDeps{}, SettingsDeps{}, store)
 	authToken, csrfToken := strings.Repeat("a", 40), strings.Repeat("b", 64)
 	body, err := jsonv2.Marshal(map[string]string{"authToken": authToken, "csrfToken": csrfToken, "expectedRevision": "0"})
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestXSpaceSessionAPIEncryptsCandidateAndRejectsConflict(t *testing.T) {
 }
 
 func TestXSpaceSessionAPIRejectsOversizedOrInvalidCookies(t *testing.T) {
-	handler := &Handler{}
+	handler := NewSettingsAPIHandler(CommonDeps{}, SettingsDeps{}, nil)
 
 	for _, body := range []string{
 		`{"authToken":"short","csrfToken":"short","expectedRevision":"0"}`,

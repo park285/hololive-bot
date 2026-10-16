@@ -20,16 +20,14 @@ WITH sequence AS (
         continuity,
         payload_id,
         evidence_sha256,
-        collector_instance,
-        job_key,
-        collection_job_kind,
+        provenance_id,
         fence_epoch,
         projection_generation
     )
     SELECT 'youtubejs',
            'community_page',
            $4::text || ':subject:' || sequence.ordinal::text,
-           $4::text || ':observation:' || sequence.ordinal::text,
+           sha256(($4::text || ':observation:' || sequence.ordinal::text)::bytea),
            1,
            1,
            clock_timestamp(),
@@ -39,13 +37,11 @@ WITH sequence AS (
            'CONTIGUOUS',
            payload.id,
            decode(repeat('c', 64), 'hex'),
-           'collector-test',
-           $4::text || ':job:' || sequence.ordinal::text,
-           'community_collect',
+           source_observation_provenance_id($4::text || ':job:' || sequence.ordinal::text, 'collector-test', 'community_collect'),
            1,
            1
     FROM sequence CROSS JOIN payload
-    RETURNING id, observation_key
+    RETURNING id, subject_key
 ), queued AS (
     INSERT INTO source_observation_queue (
         observation_id,
@@ -57,27 +53,27 @@ WITH sequence AS (
     )
     SELECT observations.id,
            CASE
-               WHEN split_part(observations.observation_key, ':', 3)::integer <= $1::integer THEN 'PENDING'
-               WHEN split_part(observations.observation_key, ':', 3)::integer <= $1::integer + $2::integer THEN 'PROCESSING'
+               WHEN split_part(observations.subject_key, ':', 3)::integer <= $1::integer THEN 'PENDING'
+               WHEN split_part(observations.subject_key, ':', 3)::integer <= $1::integer + $2::integer THEN 'PROCESSING'
                ELSE 'PROCESSED'
            END,
            CASE
-               WHEN split_part(observations.observation_key, ':', 3)::integer > $1::integer
-                AND split_part(observations.observation_key, ':', 3)::integer <= $1::integer + $2::integer
+               WHEN split_part(observations.subject_key, ':', 3)::integer > $1::integer
+                AND split_part(observations.subject_key, ':', 3)::integer <= $1::integer + $2::integer
                THEN 'consumer-test'
            END,
            CASE
-               WHEN split_part(observations.observation_key, ':', 3)::integer > $1::integer
-                AND split_part(observations.observation_key, ':', 3)::integer <= $1::integer + $2::integer
+               WHEN split_part(observations.subject_key, ':', 3)::integer > $1::integer
+                AND split_part(observations.subject_key, ':', 3)::integer <= $1::integer + $2::integer
                THEN repeat('d', 64)
            END,
            CASE
-               WHEN split_part(observations.observation_key, ':', 3)::integer > $1::integer
-                AND split_part(observations.observation_key, ':', 3)::integer <= $1::integer + $2::integer
+               WHEN split_part(observations.subject_key, ':', 3)::integer > $1::integer
+                AND split_part(observations.subject_key, ':', 3)::integer <= $1::integer + $2::integer
                THEN clock_timestamp() + INTERVAL '1 minute'
            END,
            CASE
-               WHEN split_part(observations.observation_key, ':', 3)::integer > $1::integer + $2::integer
+               WHEN split_part(observations.subject_key, ':', 3)::integer > $1::integer + $2::integer
                THEN clock_timestamp()
            END
     FROM observations

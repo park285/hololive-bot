@@ -161,10 +161,6 @@ func publishObservationSet(
 		return PublishBatchResult{}, false, fmt.Errorf("collect publish set rows: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: read set result: %w", err)
-	}
-
 	return result, collision, nil
 }
 
@@ -184,6 +180,12 @@ func collectPublishSetRows(rows pgx.Rows, want int) (PublishBatchResult, bool, e
 		}
 
 		collision = collision || row.Outcome == PublishCollision
+	}
+
+	// 정상 순회 종료의 DB 오류를 누락 행 진단보다 먼저 보존한다.
+	// Scan 및 행 불변식 오류는 위에서 즉시 반환하므로 drain 오류로 덮지 않는다.
+	if err := rows.Err(); err != nil {
+		return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: read set result: %w", err)
 	}
 
 	if err := ensurePublishSetComplete(seen); err != nil {

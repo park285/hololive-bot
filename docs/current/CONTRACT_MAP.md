@@ -22,6 +22,8 @@
 | `settings.update` | `hololive-api` admin-plane settings API | `iris-console` (admin caller), `alarm-worker` (`PUT /internal/alarm/settings` apply, `settings.json` startup restore) | HTTP JSON + shared settings file; no Pub/Sub | `POST /api/holo/settings`, `POST /api/holo/settings/llm`, `settings.json` | `hololive/hololive-shared/pkg/contracts/settings` (response key only) | unversioned | admin settings apply-once test | `contracts/settings.md` |
 | `iris.webhook` | Iris / Redroid | `hololive-api`, `alarm-worker` | External HTTP/H3 boundary | webhook/reply/send paths 검토 필요 | external boundary, no in-repo contract package | external | router/transport tests 검토 필요 | `contracts/iris-boundary.md` |
 
+관리자 멤버 쓰기는 기존 생성 201·변경 200과 `status`·`message`를 유지하며 저장·캐시 결과를 `persisted`·`cacheSynced`·`memberId`·`replayed`로 구분합니다. 동일 생성 입력만 기존 행의 동기화를 복구하고 불일치는 409입니다. [API 서비스 계약](services/hololive-api.md#관리자-멤버-쓰기)의 Console projection 제한을 따릅니다. `settings.update`의 두 요청 경계는 알 수 없는 필드를 400으로 거부하며 다른 API의 decoder 정책을 일괄 변경하지 않습니다.
+
 ## Source Observation Ownership
 
 `alarm.http`의 관리 통계는 `GET /internal/alarm/count`와 shared `EntryCount` 응답을 사용한다. worker가 방·채널 쌍을 집계하고 admin plane은 전체 알림 목록을 적재하지 않는다. provider를 먼저 배포한 뒤 consumer를 배포한다.

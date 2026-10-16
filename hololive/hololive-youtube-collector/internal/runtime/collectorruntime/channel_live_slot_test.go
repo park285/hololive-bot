@@ -242,7 +242,7 @@ func loadLatestChannelLiveCheckObservation(t *testing.T, pool *pgxpool.Pool) cha
 	var observation channelLiveCheckObservation
 
 	if err := pool.QueryRow(t.Context(), `
-		SELECT count(*) OVER (), id, observation_key, scheduled_for
+		SELECT count(*) OVER (), id, encode(observation_key, 'hex'), scheduled_for
 		FROM source_observations
 		WHERE observation_kind = 'channel_live_check' AND subject_key = $1
 		ORDER BY id DESC

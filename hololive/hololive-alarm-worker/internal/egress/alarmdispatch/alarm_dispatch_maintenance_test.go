@@ -199,9 +199,9 @@ func (s *alarmDispatchMaintenanceTestStore) DeleteTerminal(_ context.Context, st
 	return s.deleteTerminalRows[status], nil
 }
 
-func (s *alarmDispatchMaintenanceTestStore) DeleteOrphanEvents(context.Context, int, int) (int64, error) {
+func (s *alarmDispatchMaintenanceTestStore) DeleteOrphanEvents(context.Context, int, int) (alarmDispatchOrphanEventCounts, error) {
 	s.deletedEvents++
-	return s.deleteEventRows, nil
+	return alarmDispatchOrphanEventCounts{events: s.deleteEventRows}, nil
 }
 
 func (s *alarmDispatchMaintenanceTestStore) DeleteOrphanSendUnits(context.Context, int) (int64, error) {

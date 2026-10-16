@@ -40,17 +40,19 @@ func (b *batchClaimResolver) selectClaimedDeliveries(ctx context.Context, rows [
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	for _, token := range selection.claimTokens {
-		key := batchClaimKey{kind: token.Kind, postID: token.PostID, authorizedAt: token.AuthorizedAt}
-		use := b.uses[key]
+	for i := range selection.members {
+		for _, token := range selection.members[i].claimTokens {
+			key := batchClaimKey{kind: token.Kind, postID: token.PostID, authorizedAt: token.AuthorizedAt}
+			use := b.uses[key]
 
-		if !token.Reused {
-			use.token = token
+			if !token.Reused {
+				use.token = token
+			}
+
+			use.selected++
+
+			b.uses[key] = use
 		}
-
-		use.selected++
-
-		b.uses[key] = use
 	}
 
 	return selection

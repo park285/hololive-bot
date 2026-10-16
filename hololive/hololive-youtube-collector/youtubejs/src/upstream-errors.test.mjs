@@ -8,7 +8,7 @@ import { fetchCommunityFeed } from "./fetch-community.mjs";
 import { fetchContentFeed } from "./fetch-content.mjs";
 import { fetchLiveMetadata } from "./live-metadata.mjs";
 import { handleChannelRequest, handleCommunityRequest, handleContentRequest } from "./rpc-boundary.mjs";
-import { rpcErrorResultFor } from "./rpc-validation.mjs";
+import { rpcErrorResultFor } from "./rpc-execution.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { channelFixture } from "./test-fixtures/channel.mjs";
 

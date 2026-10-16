@@ -35,43 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
-	// nil receiver도 안전하게 동작해야 함
-	var nilHandler *Handler
-
-	got := nilHandler.DomainHandlers()
-	if got == nil {
-		t.Fatal("DomainHandlers returned nil")
-	}
-
-	if got.Member == nil || got.Alarm == nil || got.OAuth == nil {
-		t.Fatal("domain sub-handlers must not be nil")
-	}
-
-	if got.Member.Handler == nil {
-		t.Fatal("embedded Handler should be initialized")
-	}
-
-	if got.Member.startTime.IsZero() {
-		t.Fatal("embedded Handler startTime should be initialized")
-	}
-
-	if got.Member.Handler != got.Alarm.Handler || got.Member.Handler != got.OAuth.Handler {
-		t.Fatal("all domain handlers should share same Handler instance")
-	}
-
-	base := &Handler{}
-
-	wired := base.DomainHandlers()
-	if wired.Member.Handler != base || wired.Template.Handler != base {
-		t.Fatal("expected all domain handlers to reference original Handler")
-	}
-
-	if wired.Member.startTime.IsZero() {
-		t.Fatal("zero-value Handler should gain startTime defaults")
-	}
-}
-
 func TestNewHandler_BasicInitialization(t *testing.T) {
 	h := NewHandler(&HandlerDeps{
 		Common: CommonDeps{Logger: slog.New(slog.DiscardHandler)},
@@ -93,11 +56,6 @@ func TestNewHandler_BasicInitialization(t *testing.T) {
 }
 
 func TestHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
-	h := (&Handler{}).ensureDefaults()
-	if h.startTime.IsZero() {
-		t.Fatal("startTime should be initialized")
-	}
-
 	repoBacked := (&Handler{repository: &member.Repository{}}).ensureDefaults()
 	if repoBacked.memberIndexLoader == nil {
 		t.Fatal("memberIndexLoader should be derived from repository")

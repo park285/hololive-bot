@@ -65,7 +65,7 @@ func (r *Runner) Collect(ctx context.Context, input *collection.RunInput) (colle
 		payload,
 	)
 	if err != nil {
-		return collection.CollectResult{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, err)
+		return collection.CollectResult{}, fmt.Errorf("build collection envelope: %w", err)
 	}
 
 	out, err := collection.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)

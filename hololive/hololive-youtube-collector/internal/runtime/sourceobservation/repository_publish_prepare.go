@@ -100,7 +100,7 @@ func preflightPublishBatch(input *PublishBatchInput) error {
 func preflightPublishObservations(observations []contract.Envelope, aggregateBytes *int) error {
 	for i := range observations {
 		if len(observations[i].Payload) > contract.MaxPayloadBytes {
-			return fmt.Errorf("%w: observation %d payload is too large", ErrInvalidEnvelope, i)
+			return fmt.Errorf("%w: observation %d payload is too large: %w", ErrInvalidEnvelope, i, contract.ErrPayloadTooLarge)
 		}
 
 		if !publishBytesWithinLimit(aggregateBytes, len(observations[i].Payload)) {

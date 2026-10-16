@@ -21,6 +21,8 @@ const (
 
 var maxCanonicalSafeIntegerString = strconv.FormatInt(MaxCanonicalJSONSafeInteger, 10)
 
+var errCanonicalJSONTooLarge = errors.New("canonical JSON size exceeds limit")
+
 // canonicalJSONMemberSpan은 출력 버퍼에 이미 기록된 object member 한 개의 위치다.
 // Name은 정렬 키로 쓰는 decode된 이름의 names arena 범위이고,
 // member는 출력 버퍼 안의 `"name":value` 범위다.
@@ -48,7 +50,7 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	}
 
 	if len(raw) > MaxPayloadBytes {
-		return nil, fmt.Errorf("payload exceeds %d bytes", MaxPayloadBytes)
+		return nil, fmt.Errorf("%w: payload exceeds %d bytes", errCanonicalJSONTooLarge, MaxPayloadBytes)
 	}
 
 	// bytes.Buffer 입력은 decoder가 복사 없이 raw를 직접 읽게 한다. decoder는 입력을 쓰지 않는다.
@@ -71,7 +73,7 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	}
 
 	if len(canonical) > MaxPayloadBytes {
-		return nil, fmt.Errorf("canonical payload exceeds %d bytes", MaxPayloadBytes)
+		return nil, fmt.Errorf("%w: canonical payload exceeds %d bytes", errCanonicalJSONTooLarge, MaxPayloadBytes)
 	}
 
 	return canonical, nil

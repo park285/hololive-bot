@@ -103,7 +103,7 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if _, err := s.SendMonthlyDigest(ctx); err != nil {
-				s.digest.Logger.Error("Member news monthly send failed", slog.Any("error", err))
+				s.digest.Logger.Error("Member news monthly enqueue failed", slog.Any("error", err))
 			}
 		},
 	})
@@ -151,7 +151,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) (triggercontra
 		periodKey:        monthKey,
 		periodFieldName:  "month_key",
 		resultMessage:    "Member news monthly result",
-		allFailedMessage: "all %d room(s) failed to receive monthly member news",
+		allFailedMessage: "all %d room(s) failed to enqueue monthly member news",
 		lockKey:          fmt.Sprintf("membernews:lock:monthly:%s", monthKey),
 		skipMessage:      "Member news monthly skipped: no subscribed room",
 		lockSkipMessage:  "Member news monthly execution skipped: lock already acquired",
@@ -163,7 +163,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) (triggercontra
 	return result, nil
 }
 
-func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, monthKey, roomID string) delivery.SendResult {
+func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, monthKey, roomID string) digestEnqueueResult {
 	return processDigestForRoom(ctx, generator, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
 		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID)
 }

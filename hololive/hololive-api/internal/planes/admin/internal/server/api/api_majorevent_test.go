@@ -82,9 +82,9 @@ func TestMajorEventHandler_WeeklyNotificationDependencyErrors(t *testing.T) {
 		},
 		{
 			name: "nil scheduler",
-			handler: &MajorEventHandler{Handler: &Handler{
+			handler: (&Handler{
 				logger: newDiscardLogger(),
-			}},
+			}).DomainHandlers().MajorEvent,
 		},
 	}
 
@@ -127,12 +127,12 @@ func TestMajorEventHandler_WeeklyNotificationErrorResponses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := &MajorEventHandler{Handler: &Handler{
+			handler := (&Handler{
 				logger: newDiscardLogger(),
 				majorEventScheduler: weeklyMajorEventSchedulerFunc(func(context.Context) error {
 					return tt.err
 				}),
-			}}
+			}).DomainHandlers().MajorEvent
 			ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 			handler.TriggerMajorEventNotification(ctx)
 
@@ -145,13 +145,13 @@ func TestMajorEventHandler_WeeklyNotificationUsesRequestContext(t *testing.T) {
 	t.Parallel()
 
 	gotValue := make(chan any, 1)
-	handler := &MajorEventHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger: newDiscardLogger(),
 		majorEventScheduler: weeklyMajorEventSchedulerFunc(func(ctx context.Context) error {
 			gotValue <- ctx.Value(majorEventContextKey{})
 			return nil
 		}),
-	}}
+	}).DomainHandlers().MajorEvent
 	ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 
 	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), majorEventContextKey{}, "weekly"))
@@ -180,9 +180,9 @@ func TestMajorEventHandler_MonthlyNotificationDependencyErrors(t *testing.T) {
 		},
 		{
 			name: "nil scheduler",
-			handler: &MajorEventHandler{Handler: &Handler{
+			handler: (&Handler{
 				logger: newDiscardLogger(),
-			}},
+			}).DomainHandlers().MajorEvent,
 		},
 	}
 
@@ -225,12 +225,12 @@ func TestMajorEventHandler_MonthlyNotificationErrorResponses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := &MajorEventHandler{Handler: &Handler{
+			handler := (&Handler{
 				logger: newDiscardLogger(),
 				majorEventMonthlyScheduler: monthlyMajorEventSchedulerFunc(func(context.Context) error {
 					return tt.err
 				}),
-			}}
+			}).DomainHandlers().MajorEvent
 			ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
 			handler.TriggerMajorEventMonthlyNotification(ctx)
 
@@ -243,13 +243,13 @@ func TestMajorEventHandler_MonthlyNotificationUsesRequestContext(t *testing.T) {
 	t.Parallel()
 
 	gotValue := make(chan any, 1)
-	handler := &MajorEventHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger: newDiscardLogger(),
 		majorEventMonthlyScheduler: monthlyMajorEventSchedulerFunc(func(ctx context.Context) error {
 			gotValue <- ctx.Value(majorEventContextKey{})
 			return nil
 		}),
-	}}
+	}).DomainHandlers().MajorEvent
 	ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
 
 	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), majorEventContextKey{}, "monthly"))
@@ -282,11 +282,11 @@ func TestMajorEventHandlerPreservesPartialAndSkippedOutcomes(t *testing.T) {
 		{triggercontracts.NewResult(0, 0, 0), `{"status":"skipped","queued":0,"skipped":0,"failed":0}`},
 	} {
 		scheduler := enqueueResultScheduler{result: tc.result}
-		handler := &MajorEventHandler{Handler: &Handler{
+		handler := (&Handler{
 			logger:                     newDiscardLogger(),
 			majorEventScheduler:        scheduler,
 			majorEventMonthlyScheduler: scheduler,
-		}}
+		}).DomainHandlers().MajorEvent
 
 		for _, trigger := range []gin.HandlerFunc{
 			handler.TriggerMajorEventNotification,

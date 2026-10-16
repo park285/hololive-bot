@@ -51,7 +51,7 @@ func TestGetMembersAlwaysReturnsAliasesObject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := &MemberHandler{Handler: &Handler{repository: repo, memberCache: cache, logger: logger}}
+	handler := (&Handler{repository: repo, memberCache: cache, logger: logger}).DomainHandlers().Member
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)

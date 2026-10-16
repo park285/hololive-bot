@@ -62,7 +62,7 @@ func newYouTubeCommunityShortsOpsTestHandler(t *testing.T) (handler *StatsHandle
 
 	now := time.Now().UTC()
 
-	handler = &StatsHandler{Handler: &Handler{
+	handler = (&Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
 			listPostSendCountsSince: func(_ context.Context, since time.Time) ([]analytics.PostSendCount, error) {
 				if since.IsZero() {
@@ -76,7 +76,7 @@ func newYouTubeCommunityShortsOpsTestHandler(t *testing.T) (handler *StatsHandle
 			return []*domain.Member{{ChannelID: "channel-1", Name: "Mio"}, {ChannelID: "channel-2", Name: "Sora"}}, nil
 		},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Stats
 
 	return handler, youTubeOpsSecondLatencyMillis
 }
@@ -229,7 +229,7 @@ func assertYouTubeOpsChannels(t *testing.T, response *YouTubeCommunityShortsOpsR
 func TestStatsHandler_GetYouTubeCommunityShortsOps_RepositoryUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &StatsHandler{Handler: &Handler{logger: newDiscardLogger()}}
+	handler := (&Handler{logger: newDiscardLogger()}).DomainHandlers().Stats
 	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/youtube/community-shorts", nil)
 	handler.GetYouTubeCommunityShortsOps(ctx)
 
@@ -239,14 +239,14 @@ func TestStatsHandler_GetYouTubeCommunityShortsOps_RepositoryUnavailable(t *test
 func TestStatsHandler_GetYouTubeCommunityShortsOps_RepositoryError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &StatsHandler{Handler: &Handler{
+	handler := (&Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
 			listPostSendCountsSince: func(context.Context, time.Time) ([]analytics.PostSendCount, error) {
 				return nil, errors.New("boom")
 			},
 		},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Stats
 
 	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/youtube/community-shorts", nil)
 	handler.GetYouTubeCommunityShortsOps(ctx)

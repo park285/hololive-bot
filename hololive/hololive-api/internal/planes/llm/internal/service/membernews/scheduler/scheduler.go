@@ -109,7 +109,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 		CalculateNextRun: s.calculateNextRun,
 		OnTick: func(ctx context.Context) {
 			if _, err := s.SendWeeklyDigest(ctx); err != nil {
-				s.digest.Logger.Error("Member news weekly send failed", slog.Any("error", err))
+				s.digest.Logger.Error("Member news weekly enqueue failed", slog.Any("error", err))
 			}
 		},
 	})
@@ -157,7 +157,7 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) (triggercontracts.Resu
 		periodKey:        weekKey,
 		periodFieldName:  "week_key",
 		resultMessage:    "Member news weekly result",
-		allFailedMessage: "all %d room(s) failed to receive member news",
+		allFailedMessage: "all %d room(s) failed to enqueue member news",
 		lockKey:          fmt.Sprintf("membernews:lock:weekly:%s", weekKey),
 		skipMessage:      "Member news weekly skipped: no subscribed room",
 		lockSkipMessage:  "Member news weekly execution skipped: lock already acquired",
@@ -169,7 +169,7 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) (triggercontracts.Resu
 	return result, nil
 }
 
-func (s *Scheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, weekKey, roomID string) delivery.SendResult {
+func (s *Scheduler) processRoomDigest(ctx context.Context, generator model.DigestGenerator, weekKey, roomID string) digestEnqueueResult {
 	return processDigestForRoom(ctx, generator, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
 		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID)
 }

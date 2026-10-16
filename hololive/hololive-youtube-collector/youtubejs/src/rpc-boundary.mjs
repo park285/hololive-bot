@@ -1,13 +1,8 @@
 // @ts-check
-import {
-  channelEndpoint,
-  channelLiveCheckEndpoint,
-  communityEndpoint,
-  contentEndpoint,
-  handleRpcRequest,
-  RpcResponseError,
-  videoLiveCheckEndpoint,
-} from "./rpc-validation.mjs";
+import { channelEndpoint, communityEndpoint, contentEndpoint } from "./rpc-collection-validation.mjs";
+import { channelLiveCheckEndpoint, videoLiveCheckEndpoint } from "./rpc-live-check-validation.mjs";
+import { handleRpcRequest } from "./rpc-execution.mjs";
+import { RpcResponseError } from "./rpc-errors.mjs";
 
 /**
  * @param {string} rawBody
