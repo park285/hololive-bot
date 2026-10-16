@@ -1740,17 +1740,11 @@ type outcomeUnknownClaimSpy struct {
 }
 
 func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ *claimDecisionCache) deliveryClaimSelection {
-	selection := deliveryClaimSelection{
-		sendRows:       rows,
-		sendOutboxes:   outboxes,
-		claimTokens:    make([]dispatchstate.ClaimToken, 0, len(rows)),
-		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(rows)),
-	}
+	selection := deliveryClaimSelection{members: make([]claimedDelivery, 0, len(rows))}
 	for i := range rows {
 		token := outcomeUnknownClaimToken(&outboxes[i])
 
-		selection.claimTokens = append(selection.claimTokens, token)
-		selection.rowClaimTokens = append(selection.rowClaimTokens, []dispatchstate.ClaimToken{token})
+		selection.members = append(selection.members, claimedDelivery{row: rows[i], outbox: outboxes[i], claimTokens: []dispatchstate.ClaimToken{token}})
 	}
 
 	return selection
@@ -1822,13 +1816,13 @@ func TestDispatchClaimedDeliveryRow_PreSendCancelReleasesClaimAndBucketsRetry(t 
 	row := domain.YouTubeNotificationDelivery{ID: 101, OutboxID: 1, RoomID: testRoom1}
 	outbox := domain.YouTubeNotificationOutbox{ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne}
 	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&outbox)}
-	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
-
-	var mu sync.Mutex
+	result := newDeliveryDispatchResult(1)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	engine.dispatchClaimedDeliveryRow(ctx, &row, &outbox, map[int64]string{1: testMessageHello}, map[int64]bool{}, claimTokens, &result, &mu)
+
+	attempt := newDeliveryAttempt([]claimedDelivery{{row: row, outbox: outbox, claimTokens: claimTokens}})
+	engine.dispatchClaimedDeliveryRow(ctx, &attempt, map[int64]string{1: testMessageHello}, map[int64]bool{}, &result)
 
 	if got := sender.calls.Load(); got != 0 {
 		t.Fatalf("sender calls = %d, want 0 (request must not leave the client)", got)
@@ -1866,19 +1860,20 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&validOutboxes[0]), outcomeUnknownClaimToken(&validOutboxes[1])}
-	rowClaimTokens := [][]dispatchstate.ClaimToken{{claimTokens[0]}, {claimTokens[1]}}
+	attempt := newDeliveryAttempt([]claimedDelivery{
+		{row: validRows[0], outbox: validOutboxes[0], claimTokens: claimTokens[:1]},
+		{row: validRows[1], outbox: validOutboxes[1], claimTokens: claimTokens[1:]},
+	})
 	formatted := map[int64]string{1: "쇼츠1", 2: "쇼츠2"}
-	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+	result := newDeliveryDispatchResult(len(validRows))
 
-	var mu sync.Mutex
-
-	engine.dispatchGroupedClaimedRows(t.Context(), group, validRows, validOutboxes, "쇼츠1\n쇼츠2", formatted, map[int64]bool{}, claimTokens, rowClaimTokens, &result, &mu)
+	engine.dispatchGroupedClaimedRows(t.Context(), group, &attempt, "쇼츠1\n쇼츠2", formatted, map[int64]bool{}, &result)
 
 	if got := sender.calls.Load(); got != 1 {
 		t.Fatalf("sender calls = %d, want 1 grouped attempt without per-room fallback", got)
 	}
 
-	assertOutcomeUnknownHold(t, &result, spy)
+	assertOutcomeUnknownHold(t, &result.DispatchResult, spy)
 }
 
 func groupedSendFallbackCount(result string) float64 {

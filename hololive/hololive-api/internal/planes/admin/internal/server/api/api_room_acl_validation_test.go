@@ -29,7 +29,7 @@ import (
 )
 
 func TestRoomHandlerSetACLRejectsInvalidModeBeforeEnabledMutation(t *testing.T) {
-	handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+	handler := (&Handler{acl: &acl.Service{}, logger: newDiscardLogger()}).DomainHandlers().Room
 	ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/acl", []byte(`{"enabled":true,"mode":"not-a-mode"}`))
 
 	handler.SetACL(ctx)

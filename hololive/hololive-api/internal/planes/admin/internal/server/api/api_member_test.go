@@ -47,7 +47,7 @@ func TestHandleAliasOperation_NormalizesAliasBeforeRepoCall(t *testing.T) {
 
 	called := false
 
-	handler.handleAliasOperation(ctx, func(_ context.Context, memberID int, aliasType, alias string) error {
+	handler.handleAliasOperation(ctx, func(_ context.Context, memberID int, aliasType, alias string) (MemberMutationResult, error) {
 		called = true
 
 		if memberID != 1 {
@@ -60,7 +60,7 @@ func TestHandleAliasOperation_NormalizesAliasBeforeRepoCall(t *testing.T) {
 
 		gotAlias = alias
 
-		return nil
+		return MemberMutationResult{Persisted: true, CacheSynced: true, MemberID: memberID}, nil
 	}, "add")
 
 	if !called {
@@ -84,9 +84,9 @@ func TestHandleAliasOperation_RejectsEmptyAliasAfterNormalization(t *testing.T) 
 
 	called := false
 
-	handler.handleAliasOperation(ctx, func(context.Context, int, string, string) error {
+	handler.handleAliasOperation(ctx, func(context.Context, int, string, string) (MemberMutationResult, error) {
 		called = true
-		return nil
+		return MemberMutationResult{}, nil
 	}, "add")
 
 	if called {
@@ -110,9 +110,9 @@ func TestHandleAliasOperation_RejectsTooLongAlias(t *testing.T) {
 
 	called := false
 
-	handler.handleAliasOperation(ctx, func(context.Context, int, string, string) error {
+	handler.handleAliasOperation(ctx, func(context.Context, int, string, string) (MemberMutationResult, error) {
 		called = true
-		return nil
+		return MemberMutationResult{}, nil
 	}, "add")
 
 	if called {
@@ -134,15 +134,21 @@ func newAliasOperationTestHandler(t *testing.T) *MemberHandler {
 		t.Fatalf("failed to create member cache: %v", err)
 	}
 
-	activityLogger := activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), logger)
+	t.Cleanup(memberCache.Close)
 
-	return &MemberHandler{
-		Handler: &Handler{
-			memberCache: memberCache,
-			activity:    activityLogger,
-			logger:      logger,
-		},
-	}
+	activityLogger := activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), logger)
+	t.Cleanup(func() {
+		if closeErr := activityLogger.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	})
+
+	return (&Handler{
+		repository:  &member.Repository{},
+		memberCache: memberCache,
+		activity:    activityLogger,
+		logger:      logger,
+	}).DomainHandlers().Member
 }
 
 func newAliasOperationTestContext(method, body string) (*gin.Context, *httptest.ResponseRecorder) {

@@ -538,29 +538,6 @@ func TestReplayReactivatesTerminalQueueWithoutCopyingEvidence(t *testing.T) {
 	}
 }
 
-func TestRetentionSQLLocksCandidatesWithSkipLocked(t *testing.T) {
-	queue := mustSQL("repository_retention_delete_queue_0076_76.sql")
-	if !strings.Contains(queue, "FOR UPDATE OF candidate SKIP LOCKED") {
-		t.Fatal("queue retention must lock candidates with SKIP LOCKED")
-	}
-
-	evidence := mustSQL("repository_retention_delete_evidence_0079_79.sql")
-	if !strings.Contains(evidence, "delete_source_observation_retention_batch") || strings.Contains(evidence, "FOR UPDATE") {
-		t.Fatal("evidence retention must use the restricted retention function")
-	}
-
-	replay := mustSQL("repository_retention_delete_replay_0078_78.sql")
-	if !strings.Contains(replay, "NOT EXISTS") || !strings.Contains(replay, "source_observations") {
-		t.Fatal("replay audit retention must keep rows while evidence remains")
-	}
-
-	checkpoints := mustSQL("repository_retention_delete_checkpoints_0084_84.sql")
-	if !strings.Contains(checkpoints, "delete_source_collection_checkpoint_retention_batch") ||
-		strings.Contains(checkpoints, "DELETE FROM") {
-		t.Fatal("checkpoint retention must use the restricted retention function")
-	}
-}
-
 func TestClaimWorkStaysCompact(t *testing.T) {
 	if size := reflect.TypeFor[ClaimWork]().Size(); size > 64 {
 		t.Fatalf("ClaimWork size = %d bytes, want <= 64", size)

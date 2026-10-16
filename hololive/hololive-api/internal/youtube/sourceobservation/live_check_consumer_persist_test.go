@@ -670,8 +670,9 @@ func assertApplicationDecision(t *testing.T, pool *pgxpool.Pool, observationID i
 	var decision string
 
 	if err := pool.QueryRow(t.Context(), `
-		SELECT decision FROM source_observation_applications
-		WHERE observation_id = $1 AND entity_kind = $2
+		SELECT decision.name FROM source_observation_applications AS application
+		JOIN source_observation_decisions AS decision ON decision.id = application.decision_id
+		WHERE application.observation_id = $1 AND application.entity_kind_id = (SELECT kind.id FROM source_observation_entity_kinds AS kind WHERE kind.name = $2)
 	`, observationID, entityKind).Scan(&decision); err != nil {
 		t.Fatalf("load application %d/%s: %v", observationID, entityKind, err)
 	}

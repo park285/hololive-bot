@@ -12,10 +12,9 @@ func TestApplicationIdempotenceAndCascade(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ids := publishProcessedObservations(t.Context(), t, pool, NewRepository(pool), 2)
 	insert := `INSERT INTO source_observation_applications
-		(observation_id, entity_kind, entity_key, decision)
-		VALUES ($1, 'retention_test', 'same-entity', 'APPLIED')
-		ON CONFLICT (observation_id, entity_kind, entity_key)
-		WHERE observation_id IS NOT NULL DO NOTHING`
+		(observation_id, entity_kind_id, entity_key, decision_id)
+		VALUES ($1, source_observation_entity_kind_id('retention_test'), 'same-entity', source_observation_decision_id('APPLIED'))
+		ON CONFLICT (observation_id, entity_kind_id, entity_key) DO NOTHING`
 
 	for i, id := range []int64{ids[0], ids[0], ids[1]} {
 		tag, err := pool.Exec(t.Context(), insert, id)
@@ -32,6 +31,6 @@ func TestApplicationIdempotenceAndCascade(t *testing.T) {
 	var remaining int
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM source_observation_applications
-		WHERE entity_kind='retention_test' AND entity_key='same-entity'`).Scan(&remaining))
+		WHERE entity_kind_id=(SELECT kind.id FROM source_observation_entity_kinds AS kind WHERE kind.name = 'retention_test') AND entity_key='same-entity'`).Scan(&remaining))
 	require.Equal(t, 1, remaining)
 }

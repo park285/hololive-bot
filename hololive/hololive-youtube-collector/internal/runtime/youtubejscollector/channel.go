@@ -223,7 +223,7 @@ func generationEnvelope(
 		payload,
 	)
 	if err != nil {
-		return contract.Envelope{}, collecterr.Wrap(contract.ErrorParserDrift, contract.ClassDataContract, err)
+		return contract.Envelope{}, fmt.Errorf("build collection envelope: %w", err)
 	}
 
 	return envelope, nil

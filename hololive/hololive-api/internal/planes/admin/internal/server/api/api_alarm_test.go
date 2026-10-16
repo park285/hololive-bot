@@ -58,9 +58,9 @@ func TestAlarmHandler_GetAlarmsRequiresAlarmDependency(t *testing.T) {
 		},
 		{
 			name: "nil alarm service",
-			handler: &AlarmHandler{Handler: &Handler{
+			handler: (&Handler{
 				logger: newDiscardLogger(),
-			}},
+			}).DomainHandlers().Alarm,
 		},
 	}
 
@@ -79,9 +79,9 @@ func TestAlarmHandler_GetAlarmsRequiresAlarmDependency(t *testing.T) {
 func TestAlarmHandler_DeleteAlarmValidationRunsBeforeDependencyCheck(t *testing.T) {
 	t.Parallel()
 
-	handler := &AlarmHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Alarm
 
 	ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/alarm", []byte(`{"roomId":"room-1"}`))
 	handler.DeleteAlarm(ctx)
@@ -106,9 +106,9 @@ func TestAlarmHandler_DeleteAlarmRequiresAlarmDependency(t *testing.T) {
 		},
 		{
 			name: "nil alarm service",
-			handler: &AlarmHandler{Handler: &Handler{
+			handler: (&Handler{
 				logger: newDiscardLogger(),
-			}},
+			}).DomainHandlers().Alarm,
 		},
 	}
 
@@ -137,7 +137,7 @@ func TestAlarmHandler_DeleteAlarmReturnsRemovedFalse(t *testing.T) {
 		gotAlarmTypes domain.AlarmTypes
 	)
 
-	handler := &AlarmHandler{Handler: &Handler{
+	handler := (&Handler{
 		alarm: &stubAlarmCRUDForServer{
 			removeAlarm: func(
 				_ context.Context,
@@ -153,7 +153,7 @@ func TestAlarmHandler_DeleteAlarmReturnsRemovedFalse(t *testing.T) {
 			},
 		},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Alarm
 
 	ctx, rec := newAPITestContext(
 		http.MethodDelete,

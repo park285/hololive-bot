@@ -2,7 +2,6 @@ package youtubedispatch
 
 import (
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -15,8 +14,7 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	err error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
 	failedAt := time.Now()
@@ -31,7 +29,7 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key")
 
 	for i := range validRows {
-		mr.recordDeliveryFailure(result, mu, "dedupe key", validRows[i].ID, validRows[i].OutboxID)
+		mr.recordDeliveryFailure(result, "dedupe key", validRows[i].ID, validRows[i].OutboxID)
 	}
 }
 
@@ -41,8 +39,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
 	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
 	failedAt := time.Now()
@@ -57,7 +54,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", reason)
 
 	for i := range validRows {
-		mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, validRows[i].ID, validRows[i].OutboxID, deliveryRetryAfter(sendErr))
+		mr.recordDeliveryFailureWithRetryAfter(result, reason, validRows[i].ID, validRows[i].OutboxID, deliveryRetryAfter(sendErr))
 	}
 }
 
@@ -67,8 +64,7 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
 	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
 	sentAt := time.Now()
@@ -81,7 +77,7 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 		dedupeKeyLogAttr(sendReq.dedupeKeys))
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, sentAt, "grouped", "success", "")
 
-	mu.Lock()
+	result.mu.Lock()
 
 	for i := range validRows {
 		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, validRows[i].ID)
@@ -89,7 +85,7 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	}
 
 	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
-	mu.Unlock()
+	result.mu.Unlock()
 }
 
 func groupedDeliveryFields(group *deliveryGroup) (roomID, channelID string, kind domain.OutboxKind) {
@@ -107,8 +103,7 @@ func (mr *MetricsRecorder) recordGroupedFormatFailure(
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
 	err error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
 	mr.logger.Warn("Failed to format grouped delivery",
@@ -120,6 +115,6 @@ func (mr *MetricsRecorder) recordGroupedFormatFailure(
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, time.Now(), "grouped", "failure", "format message")
 
 	for i := range validRows {
-		mr.recordDeliveryFailure(result, mu, "format message", validRows[i].ID, validRows[i].OutboxID)
+		mr.recordDeliveryFailure(result, "format message", validRows[i].ID, validRows[i].OutboxID)
 	}
 }

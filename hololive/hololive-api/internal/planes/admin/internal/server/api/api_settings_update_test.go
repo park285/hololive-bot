@@ -80,12 +80,12 @@ func newSettingsUpdateAPIHandler(t *testing.T, workerURL string) (*SettingsAPIHa
 		}, newDiscardLogger()),
 	}
 
-	handler := &SettingsAPIHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger:          newDiscardLogger(),
 		activity:        newActivityLoggerForTest(t),
 		settings:        writer,
 		settingsApplier: sharedsettings.NewLocalSettingsApplier(newTestAlarmClient(t, workerURL)),
-	}}
+	}).DomainHandlers().Settings
 
 	return handler, writer
 }

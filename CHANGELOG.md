@@ -8,6 +8,25 @@
 
 ## 미출시
 
+- **원본 출처 사전화·키 압축:** migration 317이 출처 3열을 `source_observation_provenances`의 정수 FK로, canonical observation_key를 32바이트 bytea로 바꿉니다. 5,000행별 backfill을 확정하고 기존 text는 제약 검증 뒤 원자적 cutover에서 제거합니다. publish·claim·replay·lock의 공개 hex/문자열과 ACTIVE lease 보호는 유지합니다. 원본 표 재작성은 별도 승인된 점검 창에서만 적용합니다.
+- **감사 어휘 코드화:** migration 318–321이 application의 entity_kind·decision을 사전 smallint 코드로 바꾸고 UNIQUE index를 교체합니다. 318은 5,000행씩 commit하여 후반 실패에도 완료분을 보존하며 재실행으로 재개합니다. 감사·보호 의미는 유지하고, 제거 열의 물리 공간 회수는 별도 승인된 VACUUM FULL 단계입니다.
+- **원본 retention 진행 복구:** migration 315가 보호 검사 전 최대 1,000개 후보 창과 영속 `(received_at,id)` 커서·고정 순회 상한을 도입합니다. 보호/잠금 prefix를 tick마다 넘기고 순회 후 재방문하며, 삭제와 커서는 함께 commit/rollback합니다. 보호 조건·live guard 우선 잠금·감사 CASCADE·unknown backlog·앞 단계 확정 수량은 유지합니다. 자식 FK fan-out과 실행 시간의 절대 상한을 보장하지는 않습니다.
+- **315 적용 순서:** migration을 신규 API보다 먼저 적용합니다. 기존 함수 signature/EXECUTE 권한은 유지하고 runtime·scraper의 커서 직접 접근은 차단합니다. 운영 DB 변경·배포는 이번 로컬 수정에 포함하지 않았습니다.
+- **live 동기 refresh 입력 필터:** migration 316이 session/head/pending/availability의 실제 소비·검토 입력이 같은 UPDATE를 제외합니다. 원본 metadata·ignored-history 저장은 유지하며 모델 재조회·행 잠금을 줄입니다. title/topic/premiere·availability 시각·old/new key와 문장별 동기 결과, BEFORE MVCC guard·stale snapshot 거절·영수증·권한은 보존합니다. 운영 적용·배포는 포함하지 않았습니다.
+- **통합 빌드·회귀 보완:** AP 전송 목록에 payload 크기 검증·collector 판정 모듈을 포함하고 notification cleanup은 비NULL ID로 후보·삭제 수를 집계합니다. Holodex 회귀 fixture는 대상 endpoint만 원자적으로 계상하며 circuit threshold 기대값은 유지합니다.
+- **알림 cleanup 경합:** 최종 DELETE가 최신 terminal 상태와 cutoff를 재검사하여 enqueue가 재활성화한 PENDING 또는 시각이 갱신된 행을 삭제하지 않습니다. immutable request·exhausted 정책은 유지합니다.
+- **cleanup 배치 진행 보정:** 최신 상태 재검사로 실제 삭제 수가 줄어도 가득 찬 후보 창 뒤의 만료 행을 계속 정리합니다. 종료는 후보 수, 반환 집계는 실제 삭제 수를 사용하며 재활성화된 PENDING과 앞 배치 commit 수량을 보존합니다.
+- **YouTube 발송 집계:** 부모를 정렬된 순서로 잠근 다음 READ COMMITTED statement에서 자식을 집계하여 대기 전 snapshot이 최신 SENT 결과를 덮지 않게 합니다. 기존 상태 우선순위·시각·ledger·no-op write 억제는 유지합니다.
+- **RSS 부분 실패 복구:** 최신 게시 시각 대신 현재 feed ID의 bounded 존재 조회로 미등록 항목을 선택합니다. 저장 실패를 `FailedEvents`와 반환 오류에 보존하므로 기존 scheduler 실패 경로가 동작하고, 다음 feed에도 남은 오래된 누락 항목을 다시 저장합니다.
+- **RSS 예약 복구 기회 보존:** 저장 실패로 예약된 retry에서 실패 feed가 HTTP/조회 오류를 내고 다른 feed만 성공하면 남은 예약까지 취소하던 경로를 수정합니다. 기존 잔여 retry만 보존하고 성공 시 취소·소진 시 종료하며, 횟수·시각·timeout과 regular 부분 성공 정책은 바꾸지 않습니다.
+- **수집 due 관측:** IDLE 지표가 scheduler와 같은 현재 cadence 단축식을 사용합니다. eligibility·ACTIVE·DEFERRED·만료 projection의 의미는 유지하며 scheduler 자체를 변경한 것은 아닙니다.
+- **alarm 발송 lease 시계:** send-unit와 전체 member 잠금을 얻은 뒤의 단일 DB 시각으로 leased fence·sending 시각·연장 기한을 계산합니다. 대기 중 만료된 묶음은 외부 발송 전에 거절하며, standalone MarkSending의 부분 전이와 sending 상태의 적법한 재발급은 유지합니다.
+- **YouTube 발송 후 상태 저장:** provider 호출의 취소는 유지하고, 발송 결과의 상태 전이·기존 read-back은 호출자 취소와 분리된 하나의 5초 예산으로 처리합니다. 불명 결과의 추가 발송·재발급 횟수 증가는 없습니다.
+- **원천 publish 원인 보존:** 정상 stream 종료의 DB 오류를 결과 누락 검사보다 먼저 반환하여 SQLSTATE·취소 원인을 보존합니다. 앞선 Scan·행 불변식 실패와 transaction 원자성은 유지합니다.
+- **payload 저장 크기 일치:** raw/canonical과 PostgreSQL JSONB-text의 기존 1MiB 한도를 모두 검사하고 초과는 기존 `response_too_large/RESOURCE_LIMIT`로 분류합니다. 검증에서 얻은 canonical payload를 소유한 복사본에 사용하여 저장 표현·digest를 일치시키며 caller 입력과 중복·충돌 계약은 보존합니다.
+- **RSS 실패 계상:** 복구된 panic을 포함해 예약 source마다 attempted/failed 결과를 남기고 취소·deadline·DB 원인을 보존합니다. 일반 실행의 부분 성공에는 새 retry를 만들지 않습니다.
+- **방 카탈로그 중복 갱신:** 같은 인스턴스의 겹친 전체 조회·저장 순회를 한 번으로 합칩니다. owner는 기존 5초 예산, waiter는 개별 취소를 사용하며, 저장 중 만료돼도 확보한 방 정보는 유지합니다. negative cache나 DB 오류 시 HTTP fallback은 추가하지 않습니다.
+- **alarm metric 정합성:** retention의 기존 7개 삭제 label은 commit 확인 뒤에만 계상하고, immutable MarkSending 실패도 기존 실패 counter에 한 번 반영합니다. rollback·lock 미획득·commit 결과 불명에는 확정 삭제를 계상하지 않습니다.
 - **관리자 통계 중복 수집 수정:** 캐시 miss 뒤 다른 수집이 완료되면 늦게 시작한 singleflight leader가 유효한 snapshot을 다시 사용합니다. TTL 안의 CPU·메모리·원격 health 재수집을 막고, 호출자별 복사본·취소·만료 후 재수집 계약은 유지합니다.
 - **deunhealth 이미지 빌드:** 의존성 일괄 갱신(#604)이 `gosplash`를 upstream이 쓰지 않는 v0.2.0으로 올려 `BuildDate` 필드가 없어 빌드가 실패했습니다. upstream 고정값 v0.1.0으로 되돌립니다. 실행 중인 deunhealth에는 변경이 없습니다.
 - **수명 동기 읽기 모델:** migration 312가 활성 session 또는 head의 좁은 상태와 현재 일치하는 최신 검토 시각을 `youtube_live_runtime_state`에 유지합니다. observability·live-check는 이 표를 직접 읽으며 시간 경과·신선도·미래 일정 필터는 조회 시 계산합니다. 원본·영수증 의미 사실과 불일치 진단은 보존합니다.

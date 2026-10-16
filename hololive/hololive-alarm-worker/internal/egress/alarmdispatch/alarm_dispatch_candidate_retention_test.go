@@ -22,8 +22,11 @@ func TestAlarmDispatchRetentionIncludesTerminatedCandidates(t *testing.T) {
 	require.NoError(t, candidates.Finish(t.Context(), key, "subscription_removed", start.Add(-72*time.Hour)))
 
 	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
-	_, err := store.DeleteOrphanEvents(t.Context(), 1, 1)
+	before := alarmDispatchRetentionMetricValues(t)
+	counts, err := store.DeleteOrphanEvents(t.Context(), 1, 1)
 	require.NoError(t, err)
+	require.Equal(t, alarmDispatchOrphanEventCounts{upcomingCandidates: 1}, counts)
+	require.Equal(t, before, alarmDispatchRetentionMetricValues(t), "store returns counts; the sweep owns committed observations")
 
 	var remaining int
 

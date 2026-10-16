@@ -32,8 +32,12 @@ var payloadDecoders = map[ObservationKind]payloadDecoder{
 
 func canonicalPayloadAndScope(envelope *Envelope) (payloadJSON, coverageJSON []byte, err error) {
 	raw := envelope.Payload
-	if len(raw) == 0 || len(raw) > MaxPayloadBytes {
-		return nil, nil, errors.New("payload size is outside the accepted range")
+	if len(raw) > MaxPayloadBytes {
+		return nil, nil, fmt.Errorf("%w: raw payload exceeds %d bytes", ErrPayloadTooLarge, MaxPayloadBytes)
+	}
+
+	if len(raw) == 0 {
+		return nil, nil, errors.New("payload is empty")
 	}
 
 	decode, ok := payloadDecoders[envelope.ObservationKind]
@@ -61,7 +65,7 @@ func canonicalPayloadAndScope(envelope *Envelope) (payloadJSON, coverageJSON []b
 }
 
 func canonicalizePayloadAndScope(payload, coverage any) (payloadJSON, coverageJSON []byte, err error) {
-	canonicalPayload, err := canonicalJSON(payload)
+	canonicalPayload, err := MarshalPayloadV1(payload)
 	if err != nil {
 		return nil, nil, fmt.Errorf("canonicalize payload: %w", err)
 	}

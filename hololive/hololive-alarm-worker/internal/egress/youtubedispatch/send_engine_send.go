@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
@@ -51,14 +50,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 	defer claims.releaseFinished(ctx)
 
-	result := dispatchstate.DispatchResult{
-		SuccessDeliveryIDs: make([]int64, 0, len(rows)),
-		TouchedOutboxIDs:   make([]int64, 0, len(rows)),
-		SuccessClaimTokens: make([]dispatchstate.ClaimToken, 0, len(rows)),
-		FailureBuckets:     make(map[string][]int64),
-	}
-
-	var mu sync.Mutex
+	result := newDeliveryDispatchResult(len(rows))
 
 	reuseCache := newClaimDecisionCache()
 
@@ -68,7 +60,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 	if err != nil {
 		d.logger.Error("Failed to load persisted delivery requests", slog.Any("error", err))
 
-		return result
+		return result.DispatchResult
 	}
 
 	groups, orphanRows := groupDeliveryRows(remaining, outboxByID)
@@ -77,7 +69,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 	// orphan row 처리
 	for i := range orphanRows {
-		d.recordDeliveryFailure(&result, &mu, "outbox row not found", orphanRows[i].ID, orphanRows[i].OutboxID)
+		d.recordDeliveryFailure(&result, "outbox row not found", orphanRows[i].ID, orphanRows[i].OutboxID)
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -88,7 +80,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 		eg.Go(func() error {
 			return panicguard.RunE(d.logger, panicguard.BackgroundTask, "youtube-outbox-delivery-group", func() error {
-				d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result, &mu)
+				d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result)
 
 				return nil
 			})
@@ -99,7 +91,7 @@ func (d *SendEngine) dispatchDeliveryRows(
 		d.logger.Warn("Delivery dispatch worker failed", slog.Any("error", err))
 	}
 
-	return result
+	return result.DispatchResult
 }
 
 func (d *SendEngine) dispatchGroup(
@@ -108,11 +100,10 @@ func (d *SendEngine) dispatchGroup(
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	reuseCache *claimDecisionCache,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	if group.frozen != nil {
-		d.dispatchFrozenGroup(ctx, group, formattedMessages, formatFailures, reuseCache, result, mu)
+		d.dispatchFrozenGroup(ctx, group, formattedMessages, formatFailures, reuseCache, result)
 
 		return
 	}
@@ -124,61 +115,56 @@ func (d *SendEngine) dispatchGroup(
 
 	// 단건 그룹: 기존 개별 dispatch 경로
 	if len(group.rows) == 1 {
-		d.dispatchDeliveryRow(ctx, &group.rows[0], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+		d.dispatchDeliveryRow(ctx, &group.rows[0], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result)
 
 		return
 	}
 
 	validRows, validOutboxes, invalidRows := partitionGroupedDeliveries(group)
-	d.dispatchRowsIndividually(ctx, invalidRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+	d.dispatchRowsIndividually(ctx, invalidRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result)
 
 	// 검증 후 1건 이하 -> 개별 dispatch
 	if len(validRows) <= 1 {
-		d.dispatchRowsIndividually(ctx, validRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+		d.dispatchRowsIndividually(ctx, validRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result)
 
 		return
 	}
 
 	claimSelection := d.claims.selectClaimedDeliveries(ctx, validRows, validOutboxes, reuseCache)
-	d.applyLifecycleClaimSelection(ctx, &claimSelection, store.DeliveryModeGrouped, result, mu)
+	d.applyLifecycleClaimSelection(ctx, &claimSelection, store.DeliveryModeGrouped, result)
 
-	validRows = claimSelection.sendRows
-	validOutboxes = claimSelection.sendOutboxes
-
-	if len(validRows) == 0 {
+	if len(claimSelection.members) == 0 {
 		return
 	}
 
-	d.dispatchClaimedGroup(ctx, group, validRows, validOutboxes, formattedMessages, formatFailures, &claimSelection, result, mu)
+	attempt := newDeliveryAttempt(claimSelection.members)
+	d.dispatchClaimedGroup(ctx, group, &attempt, formattedMessages, formatFailures, result)
 }
 
 func (d *SendEngine) dispatchClaimedGroup(
 	ctx context.Context,
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
-	validOutboxes []domain.YouTubeNotificationOutbox,
+	attempt *deliveryAttempt,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimSelection *deliveryClaimSelection,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	if len(validRows) == 1 {
-		d.dispatchClaimedDeliveryRow(ctx, &validRows[0], &validOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
+	if len(attempt.members) == 1 {
+		d.dispatchClaimedDeliveryRow(ctx, attempt, formattedMessages, formatFailures, result)
 
 		return
 	}
 
-	message, err := d.formatGroupedMessage(ctx, group, validOutboxes)
+	message, err := d.formatGroupedMessage(ctx, group, attempt.outboxes)
 	if err != nil {
-		if d.applyPreparedLifecycleFailure(ctx, validRows, validOutboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped, result, mu) {
-			d.recordGroupedFormatFailure(ctx, group, validRows, validOutboxes, claimSelection.claimTokens, err, result, mu)
+		if d.applyPreparedLifecycleFailure(ctx, attempt.rows, attempt.outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped, result) {
+			d.recordGroupedFormatFailure(ctx, group, attempt, err, result)
 		}
 
 		return
 	}
 
-	d.dispatchGroupedClaimedRows(ctx, group, validRows, validOutboxes, message, formattedMessages, formatFailures, claimSelection.claimTokens, claimSelection.rowClaimTokens, result, mu)
+	d.dispatchGroupedClaimedRows(ctx, group, attempt, message, formattedMessages, formatFailures, result)
 }
 
 func (d *SendEngine) dispatchDeliveryRow(
@@ -188,88 +174,75 @@ func (d *SendEngine) dispatchDeliveryRow(
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
 	reuseCache *claimDecisionCache,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	outbox, ok := outboxByID[row.OutboxID]
 	if !ok {
-		d.recordDeliveryFailure(result, mu, "outbox row not found", row.ID, row.OutboxID)
+		d.recordDeliveryFailure(result, "outbox row not found", row.ID, row.OutboxID)
 
 		return
 	}
 
 	claimSelection := d.claims.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
-	d.applyLifecycleClaimSelection(ctx, &claimSelection, store.DeliveryModePerRoom, result, mu)
+	d.applyLifecycleClaimSelection(ctx, &claimSelection, store.DeliveryModePerRoom, result)
 
-	if len(claimSelection.sendRows) == 0 {
+	if len(claimSelection.members) == 0 {
 		return
 	}
 
-	d.dispatchClaimedDeliveryRow(ctx, &claimSelection.sendRows[0], &claimSelection.sendOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
+	attempt := newDeliveryAttempt(claimSelection.members)
+	d.dispatchClaimedDeliveryRow(ctx, &attempt, formattedMessages, formatFailures, result)
 }
 
 func (d *SendEngine) dispatchClaimedDeliveryRow(
 	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
+	attempt *deliveryAttempt,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	rows, outboxes := singleDeliveryBatch(row, outbox)
-	sendReq, prepared := d.preparePerRoomSend(
-		ctx, row, outbox, rows, outboxes, formattedMessages, formatFailures, claimTokens, result, mu,
-	)
-
+	request, prepared := d.preparePerRoomSend(ctx, attempt, formattedMessages, formatFailures, result)
 	if !prepared {
 		return
 	}
 
-	sendReq, prepared = d.freezeDeliveryRequest(ctx, rows, sendReq)
-	if !prepared {
+	attempt.request = request
+	if !d.freezeDeliveryRequest(ctx, attempt) {
 		return
 	}
 
-	operation, begun := d.beginLifecycleOperation(ctx, rows, outboxes, result, mu)
+	operation, begun := d.beginLifecycleOperation(ctx, attempt.rows, attempt.outboxes, result)
 	if !begun {
 		return
 	}
 
-	attemptStartedAt := time.Now().UTC()
-	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, "per_room")
+	attempt.operation = operation
+	d.logCommunityShortsDeliveryAttemptStarted(attempt.rows, attempt.outboxes, time.Now().UTC(), "per_room")
 
-	if sendErr := d.sendFrozenDelivery(ctx, operation, sendReq); sendErr != nil {
-		d.handlePerRoomSendFailure(
-			ctx, operation, row, rows, outboxes, sendReq, claimTokens, sendErr, result, mu,
-		)
+	if sendErr := d.sendFrozenDelivery(ctx, attempt); sendErr != nil {
+		d.handlePerRoomSendFailure(ctx, attempt, sendErr, result)
 
 		return
 	}
 
-	if !d.completeLifecycleSent(ctx, operation, claimTokens, store.DeliveryModePerRoom, result, mu) {
-		return
+	if d.completeLifecycleSent(ctx, attempt.operation, attempt.claimTokens, store.DeliveryModePerRoom, result) {
+		d.recordPerRoomSuccess(attempt, result)
 	}
-
-	d.recordPerRoomSuccess(row, rows, outboxes, sendReq, claimTokens, result, mu)
 }
 
 func (d *SendEngine) preparePerRoomSend(
 	ctx context.Context,
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
+	attempt *deliveryAttempt,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) (deliverySendRequest, bool) {
+	row := &attempt.rows[0]
+	rows, outboxes := attempt.rows, attempt.outboxes
+
 	if formatFailures[row.OutboxID] {
-		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModePerRoom, result, mu) {
-			d.recordPerRoomFormatFailure(ctx, row, rows, outboxes, claimTokens, result, mu)
+		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModePerRoom, result) {
+			d.recordPerRoomFormatFailure(ctx, attempt, result)
 		}
 
 		return deliverySendRequest{}, false
@@ -277,8 +250,8 @@ func (d *SendEngine) preparePerRoomSend(
 
 	message, ok := formattedMessages[row.OutboxID]
 	if !ok {
-		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonMessage, store.DeliveryModePerRoom, result, mu) {
-			d.recordPerRoomMissingMessage(ctx, row, claimTokens, result, mu)
+		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonMessage, store.DeliveryModePerRoom, result) {
+			d.recordPerRoomMissingMessage(ctx, attempt, result)
 		}
 
 		return deliverySendRequest{}, false
@@ -286,8 +259,8 @@ func (d *SendEngine) preparePerRoomSend(
 
 	sendReq, err := buildDeliverySendRequest(row.RoomID, message, outboxes)
 	if err != nil {
-		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModePerRoom, result, mu) {
-			d.recordPerRoomRequestBuildFailure(ctx, row, outbox, rows, outboxes, claimTokens, err, result, mu)
+		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModePerRoom, result) {
+			d.recordPerRoomRequestBuildFailure(ctx, attempt, err, result)
 		}
 
 		return deliverySendRequest{}, false
@@ -298,27 +271,22 @@ func (d *SendEngine) preparePerRoomSend(
 
 func (d *SendEngine) handlePerRoomSendFailure(
 	ctx context.Context,
-	operation store.StartedOperation,
-	row *domain.YouTubeNotificationDelivery,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
-	claimTokens []dispatchstate.ClaimToken,
+	attempt *deliveryAttempt,
 	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	if !d.applyPerRoomLifecycleFailure(ctx, operation, row, sendReq, sendErr, result, mu) {
+	row := &attempt.rows[0]
+	if !d.applyPerRoomLifecycleFailure(ctx, attempt.operation, row, attempt.request, sendErr, result) {
 		return
 	}
 
 	if errors.Is(sendErr, errDeliverySendOutcomeUnknown) {
-		d.recordPerRoomSendOutcomeUnknown(row, sendReq, sendErr)
+		d.recordPerRoomSendOutcomeUnknown(row, attempt.request, sendErr)
 
 		return
 	}
 
-	d.recordPerRoomSendFailure(ctx, row, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
+	d.recordPerRoomSendFailure(ctx, attempt, sendErr, result)
 }
 
 func (d *SendEngine) applyPerRoomLifecycleFailure(
@@ -327,11 +295,10 @@ func (d *SendEngine) applyPerRoomLifecycleFailure(
 	row *domain.YouTubeNotificationDelivery,
 	sendReq deliverySendRequest,
 	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) bool {
 	if errors.Is(sendErr, errRequestReissued) {
-		appendLifecycleTouched(result, mu, operation.TouchedOutboxIDs())
+		appendLifecycleTouched(result, operation.TouchedOutboxIDs())
 
 		return true
 	}
@@ -343,73 +310,63 @@ func (d *SendEngine) applyPerRoomLifecycleFailure(
 		return false
 	}
 
-	return d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, store.DeliveryModePerRoom, result, mu)
+	return d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, store.DeliveryModePerRoom, result)
 }
 
 func (d *SendEngine) dispatchGroupedClaimedRows(
 	ctx context.Context,
 	group *deliveryGroup,
-	validRows []domain.YouTubeNotificationDelivery,
-	validOutboxes []domain.YouTubeNotificationOutbox,
+	attempt *deliveryAttempt,
 	message string,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimTokens []dispatchstate.ClaimToken,
-	rowClaimTokens [][]dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	sendReq, prepared := d.prepareGroupedSend(ctx, group, validRows, validOutboxes, message, claimTokens, result, mu)
+	request, prepared := d.prepareGroupedSend(ctx, group, attempt, message, result)
 	if !prepared {
 		return
 	}
 
-	sendReq, prepared = d.freezeDeliveryRequest(ctx, validRows, sendReq)
-	if !prepared {
+	attempt.request = request
+	if !d.freezeDeliveryRequest(ctx, attempt) {
 		return
 	}
 
-	operation, begun := d.beginLifecycleOperation(ctx, validRows, validOutboxes, result, mu)
+	operation, begun := d.beginLifecycleOperation(ctx, attempt.rows, attempt.outboxes, result)
 	if !begun {
 		return
 	}
 
-	attemptStartedAt := time.Now().UTC()
-	d.logCommunityShortsDeliveryAttemptStarted(validRows, validOutboxes, attemptStartedAt, "grouped")
+	attempt.operation = operation
+	d.logCommunityShortsDeliveryAttemptStarted(attempt.rows, attempt.outboxes, time.Now().UTC(), "grouped")
 
-	if sendErr := d.sendFrozenDelivery(ctx, operation, sendReq); sendErr != nil {
-		d.handleGroupedSendFailure(
-			ctx, operation, group, validRows, validOutboxes, sendReq, formattedMessages, formatFailures,
-			claimTokens, rowClaimTokens, sendErr, result, mu,
-		)
+	if sendErr := d.sendFrozenDelivery(ctx, attempt); sendErr != nil {
+		d.handleGroupedSendFailure(ctx, group, attempt, formattedMessages, formatFailures, sendErr, result)
 
 		return
 	}
 
-	if !d.completeLifecycleSent(ctx, operation, claimTokens, store.DeliveryModeGrouped, result, mu) {
-		return
+	if d.completeLifecycleSent(ctx, attempt.operation, attempt.claimTokens, store.DeliveryModeGrouped, result) {
+		d.recordGroupedSuccess(group, attempt, result)
 	}
-
-	d.recordGroupedSuccess(group, validRows, validOutboxes, sendReq, claimTokens, result, mu)
 }
 
 func (d *SendEngine) prepareGroupedSend(
 	ctx context.Context,
 	group *deliveryGroup,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
+	attempt *deliveryAttempt,
 	message string,
-	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) (deliverySendRequest, bool) {
+	rows, outboxes := attempt.rows, attempt.outboxes
+
 	sendReq, err := buildDeliverySendRequest(group.roomID, message, outboxes)
 	if err == nil {
 		return sendReq, true
 	}
 
-	if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModeGrouped, result, mu) {
-		d.recordGroupedRequestBuildFailure(ctx, group, rows, outboxes, claimTokens, err, result, mu)
+	if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModeGrouped, result) {
+		d.recordGroupedRequestBuildFailure(ctx, group, attempt, err, result)
 	}
 
 	return deliverySendRequest{}, false
@@ -417,22 +374,19 @@ func (d *SendEngine) prepareGroupedSend(
 
 func (d *SendEngine) handleGroupedSendFailure(
 	ctx context.Context,
-	operation store.StartedOperation,
 	group *deliveryGroup,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
+	attempt *deliveryAttempt,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimTokens []dispatchstate.ClaimToken,
-	rowClaimTokens [][]dispatchstate.ClaimToken,
 	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
+	operation, rows := attempt.operation, attempt.rows
+	sendReq := attempt.request
+
 	if errors.Is(sendErr, errRequestReissued) {
-		appendLifecycleTouched(result, mu, operation.TouchedOutboxIDs())
-		d.recordGroupedSendFailure(ctx, group, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
+		appendLifecycleTouched(result, operation.TouchedOutboxIDs())
+		d.recordGroupedSendFailure(ctx, group, attempt, sendErr, result)
 
 		return
 	}
@@ -446,18 +400,16 @@ func (d *SendEngine) handleGroupedSendFailure(
 
 	if kind == lifecycle.FailurePermanent && shouldFallbackGroupedSend(sendErr) {
 		d.logGroupedSendFallback(group, rows, sendReq, sendErr)
-		d.dispatchStartedRowsIndividually(
-			ctx, operation, rows, outboxes, formattedMessages, formatFailures, rowClaimTokens, result, mu,
-		)
+		d.dispatchStartedRowsIndividually(ctx, attempt, formattedMessages, formatFailures, result)
 
 		return
 	}
 
-	if !d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, store.DeliveryModeGrouped, result, mu) {
+	if !d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, store.DeliveryModeGrouped, result) {
 		return
 	}
 
-	d.recordGroupedSendFailure(ctx, group, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
+	d.recordGroupedSendFailure(ctx, group, attempt, sendErr, result)
 }
 
 func (d *SendEngine) logGroupedSendFallback(
@@ -477,16 +429,12 @@ func (d *SendEngine) logGroupedSendFallback(
 
 func (d *SendEngine) dispatchStartedRowsIndividually(
 	ctx context.Context,
-	operation store.StartedOperation,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
+	attempt *deliveryAttempt,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	rowClaimTokens [][]dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	requests, err := d.prepareFallbackRequests(ctx, rows, outboxes, formattedMessages, formatFailures)
+	requests, err := d.prepareFallbackRequests(ctx, attempt, formattedMessages, formatFailures)
 	if err != nil {
 		observeGroupedSendFallback(groupedSendFallbackResultPrepareFailed)
 		d.logger.Warn("Failed to prepare grouped fallback", slog.Any("error", err))
@@ -494,7 +442,7 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 		return
 	}
 
-	frozen, err := d.transition.FreezeFallbackRequests(ctx, operation, requests)
+	frozen, err := d.transition.FreezeFallbackRequests(ctx, attempt.operation, requests)
 	if err != nil {
 		observeGroupedSendFallback(groupedSendFallbackResultFreezeFailed)
 		d.logger.Error("Failed to freeze grouped fallback", slog.Any("error", err))
@@ -509,33 +457,35 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 		byID[frozen[i].MemberIDs[0]] = frozen[i]
 	}
 
-	for i := range rows {
-		rowOperation, err := operation.ForOwner(rows[i].ID)
+	for i := range attempt.members {
+		// 취소 뒤 아직 보내지 않은 fallback에 새 상태 예산을 연속 할당하지 않는다.
+		if ctx.Err() != nil {
+			return
+		}
+
+		singleton := attempt.singleton(i)
+
+		rowOperation, err := attempt.operation.ForOwner(singleton.rows[0].ID)
 		if err != nil {
 			return
 		}
 
-		req, err := deliveryRequestFromFrozen(byID[rows[i].ID])
+		req, err := deliveryRequestFromFrozen(byID[singleton.rows[0].ID])
 		if err != nil {
 			return
 		}
 
-		var tokens []dispatchstate.ClaimToken
+		singleton.operation = rowOperation
+		singleton.request = req
 
-		if i < len(rowClaimTokens) {
-			tokens = rowClaimTokens[i]
-		}
-
-		rowBatch, outboxBatch := singleDeliveryBatch(&rows[i], &outboxes[i])
-
-		if sendErr := d.sendFrozenDelivery(ctx, rowOperation, req); sendErr != nil {
-			d.handlePerRoomSendFailure(ctx, rowOperation, &rows[i], rowBatch, outboxBatch, req, tokens, sendErr, result, mu)
+		if sendErr := d.sendFrozenDelivery(ctx, &singleton); sendErr != nil {
+			d.handlePerRoomSendFailure(ctx, &singleton, sendErr, result)
 
 			continue
 		}
 
-		if d.completeLifecycleSent(ctx, rowOperation, tokens, store.DeliveryModePerRoom, result, mu) {
-			d.recordPerRoomSuccess(&rows[i], rowBatch, outboxBatch, req, tokens, result, mu)
+		if d.completeLifecycleSent(ctx, singleton.operation, singleton.claimTokens, store.DeliveryModePerRoom, result) {
+			d.recordPerRoomSuccess(&singleton, result)
 		}
 	}
 }

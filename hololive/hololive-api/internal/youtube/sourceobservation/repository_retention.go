@@ -321,12 +321,8 @@ func (r *Repository) deleteEvidenceBatch(ctx context.Context, cfg RetentionConfi
 		return 0, nil
 	}
 
-	// 원본 삭제의 FK SET NULL도 availability를 갱신하므로 후보 행을 잠그기 전에 guard를 잡는다.
+	// DB 함수가 live guard → 커서 → 원본 순서를 소유하며 삭제와 진행을 함께 커밋한다.
 	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (int64, error) {
-		if err := lockLiveRuntimeState(ctx, tx); err != nil {
-			return 0, err
-		}
-
 		tag, err := tx.Exec(ctx, mustSQL("repository_retention_delete_evidence_0079_79.sql"), kinds, cutoffs, cfg.BatchSize)
 		if err != nil {
 			return 0, fmt.Errorf("delete source observation evidence: %w", err)

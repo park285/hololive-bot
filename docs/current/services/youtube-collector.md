@@ -17,6 +17,10 @@
 
 순수 job 계약·target snapshot·수집 입력/결과·retry 값은 `hololive/hololive-youtube-collector/internal/runtime/collection`이 소유하며 SQL adapter에 의존하지 않습니다. Lease SQL은 `joblease`, observation publish/checkpoint SQL은 `sourceobservation`이 소유합니다. 공용 envelope·canonical JSON·hash·lease 값은 shared `pkg/contracts/sourceobservation`, consume·canonical/replay/retention과 private reducer는 API `internal/youtube/`에 있습니다. YouTube.js pagination은 `youtubejscollector`, RPC DTO와 로컬 요청 pacing은 `youtubejs`가 소유합니다.
 
+`collectorruntime/scheduler_decision.go`는 callback 오류와 lease 감독 결과로 행동·fatal 보고 여부를 순수 판정하고, executor는 release·defer·로그·지표를 실행합니다. callback 합류 전에는 수집 결과를 읽지 않으며, 감독 결과와 join된 fatal 근거의 우선순위를 유지합니다.
+
+YouTube.js의 `rpc-execution.mjs`는 공통 실행·오류 응답·인코딩 후 byte 상한을, `rpc-errors.mjs`와 `rpc-validation-primitives.mjs`는 오류 타입과 공통 검증을 소유합니다. collection과 live-check의 요청·응답 검증은 각각 `rpc-collection-validation.mjs`, `rpc-live-check-validation.mjs`에 있습니다. wire 필드·실패 tuple·retry hint·엄격한 unknown-field 검증은 같은 계약입니다.
+
 AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normalize와 PostgreSQL collection lease/checkpoint/`source_observations` Publish만 소유합니다. Canonical persist와 notification intent는 `hololive-api` YouTube plane이 소유합니다. `members.photo` product path는 hololive-api admin PhotoSync가 소유합니다.
 
 ## Owns
@@ -75,6 +79,14 @@ Runner input의 `TargetSnapshot`은 canonical job contract가 요청한 kind를 
 membership 개정(migration 259)은 CURRENT guard를 잡은 뒤 lease·현재 target의 연속성을 검증합니다. lease 취득 시 전체 job scope의 kind·정확한 subject 여부·개수를 저장하며, `member_since_generation`으로 무관한 projection 교체를 허용하되 자기 target 제거·재추가(ABA)와 policy 변경을 거부합니다. 취득 generation·owner·epoch·scheduled_for·expiry fence는 유지합니다. `not_before`는 새 취득에만 적용하며 이미 진행 중인 작업을 취소하지 않습니다. 갱신은 guard를 역순으로 잠그지 않습니다. superseded는 실행 취소·합류 후 fenced release하며 합류 실패 때 lease를 풀지 않습니다.
 
 수집 결과는 immutable 관측과 latency만 보관합니다. `collectorruntime.Publisher`가 관측을 한 번 복사해 같은 순서·identity의 checkpoint와 저장 입력을 만듭니다. Repository의 독립 payload·cursor·binding 검증과 방어적 복사는 유지합니다. Job 계약 definition은 불변 handle을 공유하되 호출자에게 주는 kind slice와 확장 가능한 계약 map은 독립 소유입니다.
+
+현재 publish SQL은 migration 317의 provenance 사전과 bytea observation key를 사용합니다. 공개 envelope·checkpoint·충돌·claim/replay 키는 계속 기존 소문자 hex와 출처 문자열이며 payload·dedup 의미는 바꾸지 않습니다. 사전 행은 scraper가 resolver로 만들고 직접 INSERT하지 않습니다.
+
+API의 감사 어휘 cutover까지 포함한 315–321과 호환 API·collector를 별도 점검 창에서 함께 전환해야 합니다. 구 binary와 혼합 운용하거나 image만 되돌리지 않으며, 로컬 구현·검증은 운영 적용 승인이 아닙니다.
+
+Payload는 raw/canonical JSON과 PostgreSQL `jsonb::text` 각각 기존 1MiB 상한을 만족해야 합니다. 문자열 내부 구분자·escape와 canonical 정수 규약을 구별하여 저장 크기를 판정하며, 임의 slack·절단·DB 상한 확대는 없습니다. 초과 원인은 `ErrPayloadTooLarge`로 보존하고 기존 `response_too_large/RESOURCE_LIMIT`의 bounded DEFER를 사용합니다. scope/cursor 오류를 이 분류로 바꾸거나 INTERNAL fatal로 승격하지 않습니다.
+
+Repository는 소유한 입력 복사본에서 `ValidateAndCanonicalPayload`가 반환한 검증 완료 payload를 그대로 저장합니다. 원본 표현이 typed 정규화로 달라지는 경우에도 저장 크기와 digest가 같은 표현을 가리키며 caller bytes·identity·checkpoint binding·중복/충돌 guard는 유지합니다. 정상 stream 종료의 `rows.Err()`는 completeness 검사보다 먼저 반환하고, 앞선 Scan·행 불변식 오류의 우선순위와 배치 전체 rollback은 유지합니다.
 
 Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다.
 

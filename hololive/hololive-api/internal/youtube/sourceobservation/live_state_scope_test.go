@@ -634,8 +634,9 @@ func TestLiveConsumedPartialMatchesFullyLoadedDecision(t *testing.T) {
 		var stored string
 
 		require.NoError(t, pool.QueryRow(ctx, `
-			SELECT decision FROM source_observation_applications
-			WHERE observation_id=$1 AND entity_kind=$2 AND entity_key=$3`,
+			SELECT decision.name FROM source_observation_applications AS application
+			JOIN source_observation_decisions AS decision ON decision.id = application.decision_id
+			WHERE application.observation_id=$1 AND application.entity_kind_id=(SELECT kind.id FROM source_observation_entity_kinds AS kind WHERE kind.name = $2) AND application.entity_key=$3`,
 			observation.ID, application.EntityKind, application.EntityKey).Scan(&stored))
 		require.Equal(t, application.Decision, stored)
 	}

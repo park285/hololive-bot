@@ -2,10 +2,7 @@ package youtubedispatch
 
 import (
 	"log/slog"
-	"sync"
 	"time"
-
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 )
 
 // MetricsRecorder는 확정된 발송 결과를 로그·audit·DispatchResult에 기록하며, claim 해제 같은 상태 변경은 하지 않는다.
@@ -19,22 +16,20 @@ func newMetricsRecorder(logger *slog.Logger, auditLogger *AuditLogger) *MetricsR
 }
 
 func (mr *MetricsRecorder) recordDeliveryFailure(
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 	reason string,
 	deliveryID, outboxID int64,
 ) {
-	mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, deliveryID, outboxID, 0)
+	mr.recordDeliveryFailureWithRetryAfter(result, reason, deliveryID, outboxID, 0)
 }
 
 func (mr *MetricsRecorder) recordDeliveryFailureWithRetryAfter(
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 	reason string,
 	deliveryID, outboxID int64,
 	retryAfter time.Duration,
 ) {
-	mu.Lock()
+	result.mu.Lock()
 
 	result.FailedDeliveries++
 	if result.FailureBuckets == nil {
@@ -54,5 +49,5 @@ func (mr *MetricsRecorder) recordDeliveryFailureWithRetryAfter(
 	}
 
 	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxID)
-	mu.Unlock()
+	result.mu.Unlock()
 }

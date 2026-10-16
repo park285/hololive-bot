@@ -45,6 +45,8 @@ Worker 설정은 `internal/config`, 실제 구독 서비스와 private cache는
 `internal/egress/alarmdispatch`, 실제 YouTube formatter는 `internal/egress/youtubedispatch/format`입니다.
 Shared에는 envelope/DTO 계약과 HTTP client/handler 및 실제 공용 DB·시간·target-minute primitives가 남습니다.
 
+YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim 증거를 함께 유지하고, `deliveryAttempt`는 이 선택과 고정 요청·시작된 영속 operation을 묶습니다. 단건·묶음·저장 요청 복구·기존 단건 fallback이 같은 관계를 사용하며, 결과 집계와 mutex는 배치 결과가 함께 소유합니다. 영속 JSON, 요청 generation, claim 검증·해제, `outcome_unknown`과 기존 retry/fallback 정책은 바꾸지 않습니다.
+
 ## Consumes
 
 | Dependency | Purpose | Failure impact |
@@ -107,11 +109,21 @@ DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 �
 
 YouTube 전송은 `youtube_delivery.executor.attempt_timeout`을 실제 전송 예산으로 사용합니다. 서비스별 `delivery_send_timeout_ms`는 이 값과 같아야 하며, 불일치는 설정 오류로 거절합니다. 기존 두 설정 필드와 기본값은 유지합니다.
 
+발송 후 `CompleteSent`·`ApplyStartedFailure`·request generation 전이는 caller 취소와 분리된 하나의 5초 예산을 사용합니다. 기존 transaction 재시도와 primary read-back도 같은 deadline 안에서 수행하며 provider 호출은 원래 취소 가능한 context를 유지합니다. 결과 불명을 미발송으로 바꾸거나 새 발송·재발급 예산을 만들지 않습니다. fallback singleton의 request 준비·고정 실패는 기존 SENDING 보류와 stale quarantine 경로를 유지합니다.
+
 한 poll에서 같은 notification outbox ID는 한 번만 처리합니다. 처리한 ID 목록은 batch 크기 이내로 유지하고 다음 poll에 초기화하여 짧은 backoff나 재발급이 같은 poll에서 재시도 예산을 연속 소비하지 않게 합니다.
+
+범용 notification cleanup은 후보 선정과 최종 DELETE 양쪽에서 `SENT/FAILED/QUARANTINED` 및 `COALESCE(sent_at,created_at) < cutoff`를 검사합니다. producer의 재활성화나 terminal 시각 갱신을 기다렸다면 최신 행으로 재검사하여 PENDING 또는 기한 내 행을 보존합니다. immutable request payload·exhausted 재발급 제한은 바꾸지 않습니다.
+
+cleanup의 반복 종료는 실제 삭제 수가 아니라 해당 statement에서 선정한 후보 수로 판정합니다. 후보 창이 가득 찼다면 rearm/cutoff 재검사로 삭제가 0개여도 다음 창을 처리합니다. 반환 수량은 실제 확정 삭제만 합산하며, 뒤 배치가 실패해도 앞 배치의 commit 수량은 보존합니다. 기존 배치 한도·yield·호출자 context는 유지합니다.
 
 세 발송 경로는 최초 외부 발송 전에 최종 본문·경로·요청 ID 관계를 저장하고 재시도에서 재사용합니다. alarm과 YouTube의 묶음은 membership도 고정합니다. `CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK의 결정적 r1/r2 generation을 허용하며, 기존 attempt·시간 상한을 유지합니다. unknown·payload mismatch·already exists·code 없는 409·transport 오류에는 새 ID를 발급하지 않습니다.
 
+Alarm의 leased request Load/Pin/Begin은 send-unit와 전체 member 행 잠금을 얻은 뒤 채취한 단일 `clock_timestamp()`로 fence를 검사합니다. Begin의 sending 시각과 연장 기한도 이 시각을 사용하여 잠금 대기 중 만료를 허용하지 않습니다. 하나라도 fence를 잃으면 묶음 전체의 sending 전이가 rollback됩니다. standalone MarkSending의 부분-row 처리와 sending 상태 Reissue의 만료 면제는 유지하며, Load/Pin 실패의 Quarantine과 Begin 실패의 same-attempt Requeue 정책도 바꾸지 않습니다.
+
 YouTube의 freshness를 지난 known-unsent PENDING은 bounded sweep에서 ledger·logical owner·row version을 확인한 뒤 명시적 만료 사유로 FAILED 종료합니다. SENT/QUARANTINED 및 진행 중인 SENDING 증거를 우선하며, 만료로 unknown을 재발송 가능 상태로 바꾸지 않습니다. 부모 aggregate·terminal retention을 거쳐 정리하고 만료 행은 revive하지 않습니다.
+
+YouTube 부모 집계는 READ COMMITTED transaction에서 부모를 ID 오름차순 `FOR NO KEY UPDATE`로 잠근 뒤 **다음 statement**의 snapshot으로 자식을 집계합니다. Project·ProjectPending이 같은 순서를 쓰며, revive/발송 완료 transaction은 commit 뒤 별도로 Project합니다. 집계는 자식 행을 잠그지 않습니다. 상태 우선순위·`sent_at`/`terminal_at`·no-op UPDATE 억제·SENT ledger와 immutable request는 유지하며, 집계 snapshot 이후 확정된 자식은 그 변경의 후속 Project가 반영합니다.
 
 ### 운영 전환 제한
 
@@ -127,6 +139,7 @@ request snapshot/generation을 보존하지 못하는 구버전 바이너리로 
 - Queue: `alarm_dispatch_deliveries`; Valkey `alarm:dispatch:wakeup` is not backlog authority.
 - Metrics: alarm-dispatch backlog/retention metrics (the v3 handoff metrics were removed with the handoff)
 - YouTube 공통 attempt counter는 실제 provider operation을 집계하며 grouped 호출 1회와 방별 delivery 결과를 구분합니다. 준비·claim·이미 충족된 행은 provider success로 세지 않습니다. provider 성공과 DB finalization 실패도 별도로 유지합니다.
+- Alarm retention의 기존 7개 status label은 advisory lock 안의 삭제 transaction이 commit된 뒤 계상합니다. rollback·lock 미획득·commit 응답 불명은 계상하지 않으며, commit 직후 process 종료까지 보장하는 감사 원장은 아닙니다. `alarm_dispatch_pg_mark_sending_failed_total`은 immutable/fallback 양쪽 operation 실패당 한 번 증가하고 빈 입력·성공에는 증가하지 않습니다.
 - YouTube ready snapshot은 부모 created_at freshness·due·lock 조건을 실제 claim과 맞춥니다. `hololive_youtube_delivery_expired_pending_bounded`는 만료 대기 PENDING 수를 기존 batch size까지만 보여 주므로 전체 backlog 총수가 아닙니다.
 
 ## Related documents

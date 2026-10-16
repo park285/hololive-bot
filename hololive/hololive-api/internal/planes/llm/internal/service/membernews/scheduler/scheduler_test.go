@@ -31,7 +31,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
@@ -357,17 +356,17 @@ func TestDispatchDigestRoomsCountsRecoveredPanicAsFailure(t *testing.T) {
 	rooms := []model.SubscribedRoom{{RoomID: "room-panic"}, {RoomID: "room-ok"}}
 	result := dispatchDigestRooms(t.Context(), rooms, &digestDispatchConfig{
 		periodKey: "2026-W28",
-		processRoom: func(_ context.Context, _, roomID string) delivery.SendResult {
+		processRoom: func(_ context.Context, _, roomID string) digestEnqueueResult {
 			if roomID == "room-panic" {
 				panic("digest panic")
 			}
 
-			return delivery.SendResult{Attempted: 1, Sent: 1}
+			return digestEnqueueResult{Attempted: 1, Queued: 1}
 		},
 	})
 
-	if result.Attempted != 2 || result.Sent != 1 || result.Failed != 1 {
-		t.Fatalf("dispatch result = %+v, want attempted=2 sent=1 failed=1", result)
+	if result.Attempted != 2 || result.Queued != 1 || result.Failed != 1 {
+		t.Fatalf("dispatch result = %+v, want attempted=2 queued=1 failed=1", result)
 	}
 
 	if len(result.FailedRooms) != 1 || result.FailedRooms[0] != "room-panic" {

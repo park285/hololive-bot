@@ -11,7 +11,7 @@ import (
 )
 
 func TestSafeLogger_ReturnsDefaultOnNil(t *testing.T) {
-	var h *Handler
+	var h *MemberHandler
 
 	logger := h.safeLogger()
 
@@ -22,7 +22,7 @@ func TestSafeLogger_ReturnsDefaultOnNil(t *testing.T) {
 
 func TestSafeLogger_ReturnsConfiguredLogger(t *testing.T) {
 	want := newDiscardLogger()
-	h := &Handler{logger: want}
+	h := &MemberHandler{logger: want}
 	got := h.safeLogger()
 
 	if got != want {
@@ -31,11 +31,11 @@ func TestSafeLogger_ReturnsConfiguredLogger(t *testing.T) {
 }
 
 func TestLogActivity_NilSafety(_ *testing.T) {
-	var h *Handler
+	var h *AlarmHandler
 
 	h.logActivity("test", "summary", nil)
 
-	h2 := &Handler{}
+	h2 := &AlarmHandler{}
 	h2.logActivity("test", "summary", nil)
 }
 
@@ -71,7 +71,7 @@ func TestRequireAlarm(t *testing.T) {
 	})
 
 	t.Run("nil alarm service", func(t *testing.T) {
-		h := &AlarmHandler{Handler: &Handler{}}
+		h := (&Handler{}).DomainHandlers().Alarm
 		ctx, rec := newAPITestContext(http.MethodGet, "/test", nil)
 		ok := h.requireAlarm(ctx)
 
@@ -85,7 +85,7 @@ func TestRequireAlarm(t *testing.T) {
 	})
 
 	t.Run("valid handler", func(t *testing.T) {
-		h := &AlarmHandler{Handler: &Handler{alarm: &stubAlarmCRUDForServer{}}}
+		h := (&Handler{alarm: &stubAlarmCRUDForServer{}}).DomainHandlers().Alarm
 		ctx, rec := newAPITestContext(http.MethodGet, "/test", nil)
 		ok := h.requireAlarm(ctx)
 
@@ -118,7 +118,7 @@ func TestRequireMemberDeps(t *testing.T) {
 	})
 
 	t.Run("missing member cache", func(t *testing.T) {
-		h := &MemberHandler{Handler: &Handler{repository: &member.Repository{}}}
+		h := (&Handler{repository: &member.Repository{}}).DomainHandlers().Member
 		ctx, rec := newAPITestContext(http.MethodGet, "/test", nil)
 		ok := h.requireMemberDeps(ctx)
 
@@ -151,7 +151,7 @@ func TestRequireACL(t *testing.T) {
 	})
 
 	t.Run("valid", func(t *testing.T) {
-		h := &RoomHandler{Handler: &Handler{acl: &acl.Service{}}}
+		h := (&Handler{acl: &acl.Service{}}).DomainHandlers().Room
 		ctx, rec := newAPITestContext(http.MethodGet, "/test", nil)
 		ok := h.requireACL(ctx)
 
@@ -184,7 +184,7 @@ func TestRequireStatsDeps(t *testing.T) {
 	})
 
 	t.Run("missing alarm", func(t *testing.T) {
-		h := &StatsHandler{Handler: &Handler{repository: &member.Repository{}}}
+		h := (&Handler{repository: &member.Repository{}}).DomainHandlers().Stats
 		ctx, rec := newAPITestContext(http.MethodGet, "/test", nil)
 		ok := h.requireStatsDeps(ctx)
 

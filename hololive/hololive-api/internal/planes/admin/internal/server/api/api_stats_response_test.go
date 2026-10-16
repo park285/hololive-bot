@@ -40,7 +40,7 @@ func readSystemStatsFrame(t *testing.T, conn *websocket.Conn, destination any) {
 func TestStatsHandler_StreamSystemStats_CollectorUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	handler := &StatsHandler{Handler: &Handler{logger: newDiscardLogger()}}
+	handler := (&Handler{logger: newDiscardLogger()}).DomainHandlers().Stats
 	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/system", nil)
 
 	handler.StreamSystemStats(ctx)
@@ -73,10 +73,10 @@ func newSystemStatsStreamFixture(t *testing.T) *systemStatsStreamFixture {
 		adminhandlers.WSUpgrader = oldUpgrader
 	})
 
-	handler := &StatsHandler{Handler: &Handler{
+	handler := (&Handler{
 		logger:      newDiscardLogger(),
 		systemStats: system.NewCollector(nil, sharedh3.ClientOptions{}),
-	}}
+	}).DomainHandlers().Stats
 
 	done := make(chan struct{})
 	router := gin.New()

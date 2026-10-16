@@ -132,14 +132,14 @@ func TestAlarmHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 }
 
 func alarmGetAlarmsSuccess(t *testing.T) {
-	handler := &AlarmHandler{Handler: &Handler{
+	handler := (&Handler{
 		alarm: &stubAlarmCRUDForServer{
 			getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
 				return []*domain.AlarmEntry{{RoomID: "r1", ChannelID: "c1"}}, nil
 			},
 		},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Alarm
 
 	ctx, rec := newAPITestContext(http.MethodGet, alarmsPath, nil)
 	handler.GetAlarms(ctx)
@@ -155,14 +155,14 @@ func alarmGetAlarmsSuccess(t *testing.T) {
 }
 
 func alarmGetAlarmsError(t *testing.T) {
-	handler := &AlarmHandler{Handler: &Handler{
+	handler := (&Handler{
 		alarm: &stubAlarmCRUDForServer{
 			getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
 				return nil, errors.New("boom")
 			},
 		},
 		logger: newDiscardLogger(),
-	}}
+	}).DomainHandlers().Alarm
 
 	ctx, rec := newAPITestContext(http.MethodGet, alarmsPath, nil)
 	handler.GetAlarms(ctx)
@@ -171,11 +171,11 @@ func alarmGetAlarmsError(t *testing.T) {
 }
 
 func alarmDeleteBadJSON(t *testing.T) {
-	handler := &AlarmHandler{Handler: &Handler{
+	handler := (&Handler{
 		alarm:    &stubAlarmCRUDForServer{},
 		logger:   newDiscardLogger(),
 		activity: newActivityLoggerForTest(t),
-	}}
+	}).DomainHandlers().Alarm
 
 	ctx, rec := newAPITestContext(http.MethodDelete, alarmPath, []byte("{"))
 	handler.DeleteAlarm(ctx)
@@ -186,7 +186,7 @@ func alarmDeleteBadJSON(t *testing.T) {
 }
 
 func alarmDeleteInternalError(t *testing.T) {
-	handler := &AlarmHandler{Handler: &Handler{
+	handler := (&Handler{
 		alarm: &stubAlarmCRUDForServer{
 			removeAlarm: func(context.Context, string, string, domain.AlarmTypes) (bool, error) {
 				return false, errors.New("remove failed")
@@ -194,7 +194,7 @@ func alarmDeleteInternalError(t *testing.T) {
 		},
 		logger:   newDiscardLogger(),
 		activity: newActivityLoggerForTest(t),
-	}}
+	}).DomainHandlers().Alarm
 
 	ctx, rec := newAPITestContext(http.MethodDelete, alarmPath, []byte(alarmDeleteBody))
 	handler.DeleteAlarm(ctx)
@@ -207,7 +207,7 @@ func alarmDeleteInternalError(t *testing.T) {
 func alarmDeleteSuccess(t *testing.T) {
 	var gotRoomID, gotChannelID string
 
-	handler := &AlarmHandler{Handler: &Handler{
+	handler := (&Handler{
 		alarm: &stubAlarmCRUDForServer{
 			removeAlarm: func(_ context.Context, roomID, channelID string, _ domain.AlarmTypes) (bool, error) {
 				gotRoomID, gotChannelID = roomID, channelID
@@ -217,7 +217,7 @@ func alarmDeleteSuccess(t *testing.T) {
 		},
 		logger:   newDiscardLogger(),
 		activity: newActivityLoggerForTest(t),
-	}}
+	}).DomainHandlers().Alarm
 
 	ctx, rec := newAPITestContext(http.MethodDelete, alarmPath, []byte(alarmDeleteBody))
 	handler.DeleteAlarm(ctx)
@@ -239,13 +239,13 @@ func TestMajorEventHandler_TriggerEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	weekly := func(sched MajorEventScheduler) gin.HandlerFunc {
-		h := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger(), majorEventScheduler: sched}}
+		h := (&Handler{logger: newDiscardLogger(), majorEventScheduler: sched}).DomainHandlers().MajorEvent
 
 		return h.TriggerMajorEventNotification
 	}
 
 	monthly := func(sched MajorEventMonthlyScheduler) gin.HandlerFunc {
-		h := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger(), majorEventMonthlyScheduler: sched}}
+		h := (&Handler{logger: newDiscardLogger(), majorEventMonthlyScheduler: sched}).DomainHandlers().MajorEvent
 
 		return h.TriggerMajorEventMonthlyNotification
 	}
@@ -290,7 +290,7 @@ func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("add room bad json", func(t *testing.T) {
-		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		handler := (&Handler{acl: &acl.Service{}, logger: newDiscardLogger()}).DomainHandlers().Room
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte("{"))
 		handler.AddRoom(ctx)
 
@@ -298,7 +298,7 @@ func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 	})
 
 	t.Run("add room rejects non chat ID", func(t *testing.T) {
-		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		handler := (&Handler{acl: &acl.Service{}, logger: newDiscardLogger()}).DomainHandlers().Room
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte(`{"room":"홀로라이브 알림방"}`))
 		handler.AddRoom(ctx)
 
@@ -306,7 +306,7 @@ func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 	})
 
 	t.Run("remove room bad json", func(t *testing.T) {
-		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		handler := (&Handler{acl: &acl.Service{}, logger: newDiscardLogger()}).DomainHandlers().Room
 		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/rooms", []byte("{"))
 		handler.RemoveRoom(ctx)
 
@@ -316,7 +316,7 @@ func TestRoomHandler_NilAndBadRequestBranches(t *testing.T) {
 	})
 
 	t.Run("set acl bad json", func(t *testing.T) {
-		handler := &RoomHandler{Handler: &Handler{acl: &acl.Service{}, logger: newDiscardLogger()}}
+		handler := (&Handler{acl: &acl.Service{}, logger: newDiscardLogger()}).DomainHandlers().Room
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/acl", []byte("{"))
 		handler.SetACL(ctx)
 

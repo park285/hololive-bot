@@ -80,6 +80,11 @@ WHERE  t.id IN (
 );
 ```
 
+317·318은 top-level `DO` 안에서 keyset batch마다 `COMMIT`합니다. 이를 바깥 `BEGIN` 블록으로 감싸면
+transaction control이 실패하므로 단독 autocommit 문장으로 실행해야 합니다. 준비 단계·완료 batch는 실패 뒤에도
+남고, 파일 재실행은 기존 값을 다시 쓰지 않은 채 나머지를 채워야 합니다. 문장 timeout은 DO 전체에 적용되므로
+batch commit이 문장·명령 실행 한도를 연장하지 않습니다. FK/NOT NULL 검증과 파괴적 cutover는 backfill 뒤에 둡니다.
+
 ### 병합/정규화 UPDATE — IS DISTINCT FROM 가드 필수
 
 PG의 UPDATE는 값이 같아도 새 행 버전을 쓴다(dead tuple + 전 인덱스 갱신 후보).
@@ -137,3 +142,9 @@ major_events.status)과 099(잔여 status·delivery_status·alarm_type 8컬럼)�
 member_name=TEXT, room_name=VARCHAR(255)(subscription 테이블과 정렬). ③ 표준 식별자 폭(channel_id=64·room_id=100)과
 video_id/post_id·alarm_type ENUM·content_id는 건드리지 않는다. VARCHAR→TEXT와 VARCHAR 확대는 테이블 무-rewrite지만
 해당 컬럼 인덱스는 재빌드된다. TEXT→VARCHAR·축소는 금지한다.
+
+④ 대량 표에서 행마다 반복되는 저카디널리티 문자열은 사전 표 + 정수 FK로 저장할 수 있다(317 출처 3열, 318–321 감사
+entity_kind·decision 선례). 이때도 공개 SQL/Go 표현은 문자열을 유지하고 읽기 경로가 사전 표를 조인해 복원하며, 사전 행은
+`SECURITY DEFINER` resolver 함수(`source_observation_*_id`)만 만든다. 사전의 `UNIQUE (name)`은 같은 어휘의 중복만 막으며
+허용 값 집합 검증을 대신하지 않는다. 기존 값 집합·폭 제약을 보존하고, 닫힌 어휘 계약에는 ①의 원칙을 그대로 적용한다.
+계약상 항상 sha256 hex인 식별 열은 308·317처럼 `bytea(32)`로 저장하고 API 경계에서 `encode/decode(…, 'hex')`한다.

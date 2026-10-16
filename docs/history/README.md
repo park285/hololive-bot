@@ -34,6 +34,7 @@
 
 ### Architecture and handoffs
 - `architecture/` - superseded architecture snapshots and retired runtime plans
+- [홀로봇 상세 리뷰와 리팩토링안](architecture/2026-10-15-hololive-code-review-and-refactoring.md) - 2026-10-15 재현 결함 4건, 구조 평가, 후속 개선안, 실제 검증 결과와 overlay 진단 코드
 - `architecture/DEDUP_REMEDIATION_PLAN.md` - superseded 2026-05-23 dedup remediation proposal
 - `plans/2026-07-10-birthday-stream-alarm.md` - superseded birthday stream alarm v2 plan
 - `youtube-convergence/handoffs/` - completed YouTube convergence implementation handoffs

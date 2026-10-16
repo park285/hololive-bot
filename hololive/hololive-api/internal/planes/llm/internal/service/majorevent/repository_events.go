@@ -30,73 +30,26 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *Repository) GetRecentExternalIDs(ctx context.Context, eventType domain.MajorEventType, limit int) ([]string, *time.Time, error) {
-	if limit <= 0 {
-		limit = 1
+// GetExistingExternalIDs는 현재 피드의 ID 중 같은 유형으로 저장된 항목을 반환한다.
+func (r *Repository) GetExistingExternalIDs(ctx context.Context, eventType domain.MajorEventType, externalIDs []string) ([]string, error) {
+	if len(externalIDs) == 0 {
+		return nil, nil
 	}
 
 	query := mustSQL("repository_events_0038_01.sql")
 
-	rows, err := r.pool.Query(ctx, query, eventType, limit)
+	rows, err := r.pool.Query(ctx, query, eventType, externalIDs)
 	if err != nil {
-		return nil, nil, fmt.Errorf("get recent external IDs: %w", err)
+		return nil, fmt.Errorf("get existing external IDs: %w", err)
 	}
 	defer rows.Close()
 
-	out1, out2, err := scanRecentExternalIDs(rows, limit)
+	existing, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return nil, nil, fmt.Errorf("scan recent external IDs: %w", err)
+		return nil, fmt.Errorf("scan existing external IDs: %w", err)
 	}
 
-	return out1, out2, nil
-}
-
-func scanRecentExternalIDs(rows pgx.Rows, limit int) ([]string, *time.Time, error) {
-	externalIDs := make([]string, 0, limit)
-
-	var latestPubDate *time.Time
-
-	for rows.Next() {
-		externalID, pubDate, err := scanRecentExternalIDRow(rows)
-		if err != nil {
-			return nil, nil, fmt.Errorf("scan recent external ID row: %w", err)
-		}
-
-		if externalID != "" {
-			externalIDs = append(externalIDs, externalID)
-		}
-
-		latestPubDate = firstRecentPubDate(latestPubDate, pubDate)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("iterate recent external IDs: %w", err)
-	}
-
-	return externalIDs, latestPubDate, nil
-}
-
-func scanRecentExternalIDRow(rows pgx.Rows) (string, *time.Time, error) {
-	var (
-		externalID string
-		pubDate    *time.Time
-	)
-
-	if err := rows.Scan(&externalID, &pubDate); err != nil {
-		return "", nil, fmt.Errorf("scan recent external ID: %w", err)
-	}
-
-	return externalID, pubDate, nil
-}
-
-func firstRecentPubDate(current, candidate *time.Time) *time.Time {
-	if current != nil || candidate == nil {
-		return current
-	}
-
-	normalized := candidate.UTC()
-
-	return &normalized
+	return existing, nil
 }
 
 func (r *Repository) queryEvents(ctx context.Context, action, query string, args ...any) ([]*domain.MajorEvent, error) {

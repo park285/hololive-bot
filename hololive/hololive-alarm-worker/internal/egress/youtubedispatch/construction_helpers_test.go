@@ -106,20 +106,14 @@ func (resolver unitClaimResolver) selectClaimedDeliveries(
 			resolver.logger.Log(ctx, slog.LevelWarn, "Failed to resolve delivery logical identity before send",
 				deliveryClaimLogAttrs(&row, &outbox, slog.Any("error", err))...)
 
-			selection.retryRows = append(selection.retryRows, row)
-			selection.retryOutboxes = append(selection.retryOutboxes, outbox)
-			selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
-			selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+			selection.retryMembers = append(selection.retryMembers, claimedDelivery{row: row, outbox: outbox})
 
 			continue
 		}
 
 		token := dispatchstate.ClaimToken{Kind: outbox.Kind, PostID: outbox.ContentID, AuthorizedAt: time.Now().UTC()}
 
-		selection.sendRows = append(selection.sendRows, row)
-		selection.sendOutboxes = append(selection.sendOutboxes, outbox)
-		selection.claimTokens = append(selection.claimTokens, token)
-		selection.rowClaimTokens = append(selection.rowClaimTokens, []dispatchstate.ClaimToken{token})
+		selection.members = append(selection.members, claimedDelivery{row: row, outbox: outbox, claimTokens: []dispatchstate.ClaimToken{token}})
 	}
 
 	return selection

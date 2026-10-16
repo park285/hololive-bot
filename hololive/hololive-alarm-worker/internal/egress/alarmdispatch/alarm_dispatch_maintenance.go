@@ -38,7 +38,18 @@ type alarmDispatchMaintenanceStore interface {
 type alarmDispatchMaintenanceDataStore interface {
 	DeleteTerminal(ctx context.Context, status dispatchoutbox.Status, retentionDays, limit int) (int64, error)
 	DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error)
-	DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (int64, error)
+	DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (alarmDispatchOrphanEventCounts, error)
+}
+
+type alarmDispatchOrphanEventCounts struct {
+	events             int64
+	upcomingCandidates int64
+}
+
+type alarmDispatchRetentionCounts struct {
+	terminal  [4]int64
+	sendUnits int64
+	orphans   alarmDispatchOrphanEventCounts
 }
 
 type alarmDispatchBacklogSnapshot struct {
@@ -149,38 +160,61 @@ func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
 
 	defer cancelDelete()
 
-	if err := r.store.WithAdvisoryLock(deleteCtx, r.retentionLockKey, r.deleteRetainedRows); err != nil {
+	var (
+		counts   alarmDispatchRetentionCounts
+		executed bool
+	)
+
+	if err := r.store.WithAdvisoryLock(deleteCtx, r.retentionLockKey, func(ctx context.Context, store alarmDispatchMaintenanceDataStore) error {
+		var err error
+
+		counts, err = r.deleteRetainedRows(ctx, store)
+		executed = true
+
+		return err
+	}); err != nil {
 		return fmt.Errorf("sweep alarm dispatch retention: %w", err)
+	}
+
+	// lock 미획득과 COMMIT 결과 불명은 삭제 확정이 아니므로 계상하거나 재시도하지 않습니다.
+	if executed {
+		for i, target := range r.retentionTargets() {
+			observeAlarmDispatchRetentionDeletedRows(string(target.status), counts.terminal[i])
+		}
+
+		observeAlarmDispatchRetentionDeletedRows("send_unit", counts.sendUnits)
+		observeAlarmDispatchRetentionDeletedRows("event", counts.orphans.events)
+		observeAlarmDispatchRetentionDeletedRows("upcoming_candidates", counts.orphans.upcomingCandidates)
 	}
 
 	return nil
 }
 
-func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context, store alarmDispatchMaintenanceDataStore) error {
-	for _, target := range r.retentionTargets() {
+func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context, store alarmDispatchMaintenanceDataStore) (alarmDispatchRetentionCounts, error) {
+	var counts alarmDispatchRetentionCounts
+
+	for i, target := range r.retentionTargets() {
 		rows, err := store.DeleteTerminal(ctx, target.status, target.retentionDays, r.limit)
 		if err != nil {
-			return fmt.Errorf("delete retained alarm dispatch %s rows: %w", target.status, err)
+			return counts, fmt.Errorf("delete retained alarm dispatch %s rows: %w", target.status, err)
 		}
 
-		observeAlarmDispatchRetentionDeletedRows(string(target.status), rows)
+		counts.terminal[i] = rows
 	}
 
 	rows, err := store.DeleteOrphanSendUnits(ctx, r.limit)
 	if err != nil {
-		return fmt.Errorf("delete retained orphan alarm dispatch send units: %w", err)
+		return counts, fmt.Errorf("delete retained orphan alarm dispatch send units: %w", err)
 	}
 
-	observeAlarmDispatchRetentionDeletedRows("send_unit", rows)
+	counts.sendUnits = rows
 
-	rows, err = store.DeleteOrphanEvents(ctx, r.eventDays, r.limit)
+	counts.orphans, err = store.DeleteOrphanEvents(ctx, r.eventDays, r.limit)
 	if err != nil {
-		return fmt.Errorf("delete retained orphan alarm dispatch events: %w", err)
+		return counts, fmt.Errorf("delete retained orphan alarm dispatch events: %w", err)
 	}
 
-	observeAlarmDispatchRetentionDeletedRows("event", rows)
-
-	return nil
+	return counts, nil
 }
 
 func (r *alarmDispatchMaintenanceRunner) retentionTargets() []alarmDispatchRetentionTarget {
@@ -310,20 +344,18 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 	return tag.RowsAffected(), nil
 }
 
-func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (int64, error) {
+func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (alarmDispatchOrphanEventCounts, error) {
 	deletedCandidates, err := dispatchoutbox.NewUpcomingCandidates(s.db).Cleanup(ctx, retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
-		return 0, fmt.Errorf("cleanup upcoming candidates: %w", err)
+		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("cleanup upcoming candidates: %w", err)
 	}
-
-	observeAlarmDispatchRetentionDeletedRows("upcoming_candidates", deletedCandidates)
 
 	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0368_05.sql"), retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
-		return 0, fmt.Errorf("exec: %w", err)
+		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("exec: %w", err)
 	}
 
-	return tag.RowsAffected(), nil
+	return alarmDispatchOrphanEventCounts{events: tag.RowsAffected(), upcomingCandidates: deletedCandidates}, nil
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error) {

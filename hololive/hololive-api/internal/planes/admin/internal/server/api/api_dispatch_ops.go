@@ -42,7 +42,7 @@ func (h *AlarmHandler) SetDispatchOperations(ops DispatchOperations) { h.dispatc
 func (h *AlarmHandler) dispatchReady(c *gin.Context) bool {
 	c.Header("Cache-Control", "no-store")
 
-	if h == nil || h.Handler == nil || h.dispatchOps == nil {
+	if h == nil || h.dispatchOps == nil {
 		respondServiceUnavailable(c, "dispatch operations unavailable")
 
 		return false

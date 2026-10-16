@@ -12,7 +12,7 @@ import { runWithRequestContext } from "./request-context.mjs";
 import {
   validateChannelLiveCheckResponse,
   validateVideoLiveCheckResponse,
-} from "./rpc-validation.mjs";
+} from "./rpc-live-check-validation.mjs";
 
 const scenarios = JSON.parse(
   await readFile(new URL("../testdata/live-check-scenarios.json", import.meta.url), "utf8"),

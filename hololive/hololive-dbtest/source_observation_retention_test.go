@@ -138,141 +138,6 @@ func TestSourceObservationRetentionBatchSkipsLockedRows(t *testing.T) {
 	assertRetentionObservationsExist(t, pool, []int64{lockedID})
 }
 
-const retentionPlanSeedObservationsSQL = `
-		WITH payloads AS (
-			INSERT INTO public.source_observation_payloads (observation_kind, schema_version, canonical_profile, payload_sha256, payload)
-			SELECT kind, 1, 'source-observation-canonical-json-v1', decode(repeat('b',64),'hex'), '{}'::jsonb
-			FROM (VALUES ('community_page'), ('live_snapshot')) kinds(kind)
-			RETURNING id, observation_kind
-		)
-		INSERT INTO public.source_observations (
-			provider, observation_kind, subject_key, observation_key,
-			schema_version, contract_generation, scheduled_for, observed_at, received_at,
-			scope_sha256, completeness, continuity, payload_id, evidence_sha256,
-			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
-		)
-		SELECT 'youtubejs', seed.observation_kind, seed.observation_key, seed.observation_key,
-		       1, 1, seed.received_at, seed.received_at, seed.received_at,
-		       decode(pg_catalog.repeat('a', 64), 'hex'), 'COMPLETE', 'CONTIGUOUS', payloads.id,
-		       decode(pg_catalog.repeat('c', 64), 'hex'),
-		       'dbtest', seed.observation_key, seed.observation_kind, 1, 1
-		FROM (
-			SELECT 'community_page'::text AS observation_kind,
-			       'plan-community-' || series::text AS observation_key,
-			       CASE WHEN series <= 2000 THEN $1::timestamptz - interval '1 day' ELSE $1::timestamptz + interval '1 day' END AS received_at
-			FROM pg_catalog.generate_series(1, 22000) AS series
-			UNION ALL
-			SELECT 'live_snapshot'::text,
-			       'plan-live-' || series::text,
-			       $1::timestamptz - interval '1 day'
-			FROM pg_catalog.generate_series(1, 20000) AS series
-		) AS seed JOIN payloads ON payloads.observation_kind = seed.observation_kind`
-
-const retentionPlanSeedQueueSQL = `
-		INSERT INTO public.source_observation_queue (observation_id)
-		SELECT id
-		FROM public.source_observations
-		WHERE observation_kind = 'community_page'
-		  AND received_at < $1
-		ORDER BY received_at, id
-		LIMIT 1000`
-
-const retentionCandidateExplainSQL = `
-		EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-		WITH policies AS (
-			SELECT ($1::text[])[policy.position] AS observation_kind,
-			       ($2::timestamptz[])[policy.position] AS cutoff
-			FROM pg_catalog.generate_subscripts($1::text[], 1) AS policy(position)
-		),
-		per_policy_candidates AS (
-			SELECT candidate.id, candidate.received_at
-			FROM policies AS policy
-			CROSS JOIN LATERAL (
-				SELECT observation.id, observation.received_at
-				FROM public.source_observations AS observation
-				WHERE observation.observation_kind = policy.observation_kind
-				  AND observation.received_at < policy.cutoff
-				  AND NOT public.source_observation_retention_protected(observation.id)
-				ORDER BY observation.received_at, observation.id
-				LIMIT $3
-				FOR UPDATE OF observation SKIP LOCKED
-			) AS candidate
-		)
-		SELECT candidate.id
-		FROM per_policy_candidates AS candidate
-		ORDER BY candidate.received_at, candidate.id
-		LIMIT $3`
-
-func TestSourceObservationRetentionCandidatePlanUsesKindReceivedIndex(t *testing.T) {
-	pool := NewPool(t)
-	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-
-	seedRetentionCandidatePlanFixture(t, pool, base)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	plan := explainQueryPlan(ctx, t, pool, retentionCandidateExplainSQL,
-		[]string{communityPageKind}, []time.Time{base}, 1000)
-
-	assertRetentionCandidatePlanUsesKindReceivedIndex(t, plan)
-
-	deleted := deleteRetentionBatchContext(ctx, t, pool,
-		[]string{communityPageKind}, []time.Time{base}, 1000)
-	if len(deleted) != 1000 {
-		t.Fatalf("retention plan fixture deleted %d rows, want 1000", len(deleted))
-	}
-
-	var protected int
-
-	if err := pool.QueryRow(t.Context(), `
-		SELECT count(*)
-		FROM public.source_observations
-		WHERE observation_kind = 'community_page'
-		  AND received_at < $1`, base).Scan(&protected); err != nil {
-		t.Fatalf("count queue-protected retention plan observations: %v", err)
-	}
-
-	if protected != 1000 {
-		t.Fatalf("queue-protected retention plan observations = %d, want 1000", protected)
-	}
-}
-
-func seedRetentionCandidatePlanFixture(t *testing.T, pool *pgxpool.Pool, base time.Time) {
-	t.Helper()
-
-	if _, err := pool.Exec(t.Context(), retentionPlanSeedObservationsSQL, base); err != nil {
-		t.Fatalf("seed retention plan observations: %v", err)
-	}
-
-	if _, err := pool.Exec(t.Context(), retentionPlanSeedQueueSQL, base); err != nil {
-		t.Fatalf("seed retention plan queue protection: %v", err)
-	}
-
-	if _, err := pool.Exec(t.Context(), `ANALYZE public.source_observations; ANALYZE public.source_observation_queue`); err != nil {
-		t.Fatalf("analyze retention plan fixtures: %v", err)
-	}
-}
-
-func assertRetentionCandidatePlanUsesKindReceivedIndex(t *testing.T, plan string) {
-	t.Helper()
-
-	indexConditionFound := false
-
-	for line := range strings.SplitSeq(plan, "\n") {
-		if strings.Contains(line, "Index Cond:") &&
-			strings.Contains(line, "observation_kind") && strings.Contains(line, "received_at") {
-			indexConditionFound = true
-
-			break
-		}
-	}
-
-	if !strings.Contains(plan, "idx_source_observations_kind_received_id") || !indexConditionFound {
-		t.Fatalf("retention candidate plan did not constrain the kind/received index:\n%s", plan)
-	}
-}
-
 func insertRetentionObservation(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -298,14 +163,14 @@ func insertRetentionObservation(
 			provider, observation_kind, subject_key, observation_key,
 			schema_version, contract_generation, scheduled_for, observed_at, received_at,
 			scope_sha256, completeness, continuity, payload_id, evidence_sha256,
-			collector_instance, job_key, collection_job_kind, fence_epoch, projection_generation
+			provenance_id, fence_epoch, projection_generation
 		) VALUES (
-			$1, $2, $3, $3, 1, 1, $4, $4, $4,
+			$1, $2, $3, sha256(convert_to($3, 'UTF8')), 1, 1, $4, $4, $4,
 			decode(pg_catalog.repeat('a', 64), 'hex'), 'COMPLETE', 'CONTIGUOUS',
 			(SELECT id FROM public.source_observation_payloads WHERE observation_kind=$2 AND schema_version=1
 			 AND canonical_profile='source-observation-canonical-json-v1' AND payload_sha256=decode(repeat('b',64),'hex')),
 			decode(pg_catalog.repeat('c', 64), 'hex'),
-			'dbtest', $3, $2, 1, 1
+			public.source_observation_provenance_id($3, 'dbtest', $2), 1, 1
 		)
 		RETURNING id`, provider, kind, key, receivedAt).Scan(&id); err != nil {
 		t.Fatalf("insert retention observation %q: %v", key, err)
@@ -474,8 +339,8 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 			'ACTIVE',now(),now(),'collector',now()+interval '1 minute');
 		INSERT INTO youtube_live_sessions(video_id,channel_id,status)
 		VALUES ('retention-live','UC_retention','LIVE'),('retention-upcoming','UC_retention','UPCOMING');
-		INSERT INTO source_observation_applications(observation_id,entity_kind,entity_key,decision)
-		SELECT id,'youtube_live_session','retention-'||subject_key,'APPLIED' FROM source_observations
+		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
+		SELECT id,source_observation_entity_kind_id('youtube_live_session'),'retention-'||subject_key,source_observation_decision_id('APPLIED') FROM source_observations
 		WHERE subject_key IN ('live','upcoming')`)
 	if err != nil {
 		t.Fatal(err)

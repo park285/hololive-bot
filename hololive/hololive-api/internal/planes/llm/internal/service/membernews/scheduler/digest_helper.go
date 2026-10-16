@@ -38,8 +38,25 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
+
+// digestEnqueueResult는 영속 큐 수락을 집계하며 실제 전송 완료를 뜻하지 않습니다.
+type digestEnqueueResult struct {
+	Attempted   int
+	Queued      int
+	Skipped     int
+	Failed      int
+	FailedRooms []string
+}
+
+func (r *digestEnqueueResult) merge(child digestEnqueueResult) {
+	r.Attempted += child.Attempted
+	r.Queued += child.Queued
+	r.Skipped += child.Skipped
+	r.Failed += child.Failed
+
+	r.FailedRooms = append(r.FailedRooms, child.FailedRooms...)
+}
 
 type digestDispatchConfig struct {
 	period           model.Period
@@ -51,7 +68,7 @@ type digestDispatchConfig struct {
 	lockKey          string
 	skipMessage      string
 	lockSkipMessage  string
-	processRoom      func(context.Context, string, string) delivery.SendResult
+	processRoom      func(context.Context, string, string) digestEnqueueResult
 }
 
 func processDigestForRoom(
@@ -64,7 +81,7 @@ func processDigestForRoom(
 	period model.Period,
 	kind domain.DeliveryOutboxKind,
 	periodKey, roomID string,
-) delivery.SendResult {
+) digestEnqueueResult {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -97,17 +114,17 @@ func processDigestForRoom(
 		return failedRoomResult(roomID)
 	}
 
-	return delivery.SendResult{Attempted: 1, Sent: 1}
+	return digestEnqueueResult{Attempted: 1, Queued: 1}
 }
 
-func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Period, err error) delivery.SendResult {
+func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Period, err error) digestEnqueueResult {
 	if errors.Is(err, model.ErrNoSubscribedMembers) {
 		logger.Info("Member news skip: room has no alarm members",
 			sharedprivacylog.RoomIDAttr(roomID),
 			slog.String("period", string(period)),
 		)
 
-		return delivery.SendResult{Skipped: 1}
+		return digestEnqueueResult{Skipped: 1}
 	}
 
 	logger.Error("Member news digest generation failed",
@@ -118,10 +135,10 @@ func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Pe
 	return failedRoomResult(roomID)
 }
 
-func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logger, roomID string, period model.Period, message string) (delivery.SendResult, bool) {
+func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logger, roomID string, period model.Period, message string) (digestEnqueueResult, bool) {
 	evaluation, err := guardrail.ValidateGeneratedOutput(outputGuard, message, "membernews_notification")
 	if err == nil {
-		return delivery.SendResult{}, false
+		return digestEnqueueResult{}, false
 	}
 
 	logger.Error("Member news notification output blocked",
@@ -136,8 +153,8 @@ func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logge
 	return failedRoomResult(roomID), true
 }
 
-func failedRoomResult(roomID string) delivery.SendResult {
-	return delivery.SendResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
+func failedRoomResult(roomID string) digestEnqueueResult {
+	return digestEnqueueResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
 }
 
 func acquireDigestSlot(ctx context.Context, sem chan struct{}) bool {
@@ -153,11 +170,11 @@ func acquireDigestSlot(ctx context.Context, sem chan struct{}) bool {
 	}
 }
 
-func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config *digestDispatchConfig) delivery.SendResult {
+func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, config *digestDispatchConfig) digestEnqueueResult {
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
-		result delivery.SendResult
+		result digestEnqueueResult
 		sem    = make(chan struct{}, maxConcurrentDigests)
 	)
 
@@ -166,7 +183,7 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 			wg.Wait()
 
 			for _, room := range rooms[i:] {
-				result.Merge(failedRoomResult(room.RoomID))
+				result.merge(failedRoomResult(room.RoomID))
 			}
 
 			return result
@@ -178,17 +195,17 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 			panicguard.Run(nil, panicguard.BackgroundTask, "member-news-digest-room", func() {
 				defer func() { <-sem }()
 
-				var roomResult delivery.SendResult
+				var roomResult digestEnqueueResult
 
 				if err := panicguard.RunE(nil, panicguard.BackgroundTask, "member-news-digest-room", func() error {
 					roomResult = config.processRoom(ctx, config.periodKey, roomID)
 					return nil
 				}); err != nil {
-					roomResult = delivery.SendResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
+					roomResult = digestEnqueueResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
 				}
 
 				mu.Lock()
-				result.Merge(roomResult)
+				result.merge(roomResult)
 				mu.Unlock()
 			})
 		})
@@ -203,7 +220,7 @@ func runMemberNewsDigest(
 	ctx context.Context,
 	digest *schedulerkit.DigestScheduler,
 	service model.DigestService,
-	processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult,
+	processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult,
 	config *digestDispatchConfig,
 ) (triggercontracts.Result, error) {
 	result := triggercontracts.NewResult(0, 0, 0)
@@ -217,7 +234,7 @@ func runMemberNewsDigest(
 func buildDigestOp(
 	digest *schedulerkit.DigestScheduler,
 	service model.DigestService,
-	processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult,
+	processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult,
 	config *digestDispatchConfig,
 	result *triggercontracts.Result,
 ) schedulerkit.DigestOp[[]model.SubscribedRoom] {
@@ -233,7 +250,7 @@ func buildDigestOp(
 	}
 }
 
-func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, config *digestDispatchConfig, processRoom func(context.Context, model.DigestGenerator, string, string) delivery.SendResult) func(context.Context) ([]model.SubscribedRoom, bool, error) {
+func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, config *digestDispatchConfig, processRoom func(context.Context, model.DigestGenerator, string, string) digestEnqueueResult) func(context.Context) ([]model.SubscribedRoom, bool, error) {
 	return func(ctx context.Context) ([]model.SubscribedRoom, bool, error) {
 		rooms, err := service.ListSubscribedRooms(ctx)
 		if err != nil {
@@ -255,7 +272,7 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, co
 			return nil, false, errors.New("prepared member news digest generator is nil")
 		}
 
-		config.processRoom = func(ctx context.Context, key, roomID string) delivery.SendResult {
+		config.processRoom = func(ctx context.Context, key, roomID string) digestEnqueueResult {
 			return processRoom(ctx, generator, key, roomID)
 		}
 
@@ -268,9 +285,9 @@ func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig, ou
 		result := dispatchDigestRooms(ctx, rooms, config)
 		logDigestResult(logger, config, result)
 
-		*outcome = triggercontracts.NewResult(result.Sent, result.Skipped, result.Failed)
+		*outcome = triggercontracts.NewResult(result.Queued, result.Skipped, result.Failed)
 
-		if result.Sent == 0 && result.Failed > 0 {
+		if result.Queued == 0 && result.Failed > 0 {
 			return fmt.Errorf(config.allFailedMessage, result.Failed)
 		}
 
@@ -278,11 +295,11 @@ func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig, ou
 	}
 }
 
-func logDigestResult(logger *slog.Logger, config *digestDispatchConfig, result delivery.SendResult) {
+func logDigestResult(logger *slog.Logger, config *digestDispatchConfig, result digestEnqueueResult) {
 	logger.Info(config.resultMessage,
 		slog.String(config.periodFieldName, config.periodKey),
 		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
+		slog.Int("queued", result.Queued),
 		slog.Int("skipped", result.Skipped),
 		slog.Int("failed", result.Failed),
 		slog.Any("failed_rooms", result.FailedRooms),

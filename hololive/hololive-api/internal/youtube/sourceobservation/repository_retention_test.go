@@ -531,9 +531,10 @@ func insertRetentionApplication(
 
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO source_observation_applications (
-			observation_id, entity_kind, entity_key, decision, applied_at
+			observation_id, entity_kind_id, entity_key, decision_id, applied_at
 		) VALUES (
-			$1, 'retention_test', $2, 'APPLIED', NOW() - ($3 * INTERVAL '1 millisecond')
+			$1, source_observation_entity_kind_id('retention_test'), $2, source_observation_decision_id('APPLIED'),
+			NOW() - ($3 * INTERVAL '1 millisecond')
 		)
 	`, observationID, entityKey, age.Milliseconds()); err != nil {
 		t.Fatalf("insert retention application %q: %v", entityKey, err)

@@ -6,7 +6,6 @@ import (
 	"testing/synctest"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 func TestCanceledDigestDispatchJoinsAndCountsUnstartedRooms(t *testing.T) {
@@ -25,18 +24,18 @@ func TestCanceledDigestDispatchJoinsAndCountsUnstartedRooms(t *testing.T) {
 		}
 		entered := make(chan struct{}, maxConcurrentDigests)
 		release := make(chan struct{})
-		completed := make(chan delivery.SendResult, 1)
+		completed := make(chan digestEnqueueResult, 1)
 
 		go func() {
 			completed <- dispatchDigestRooms(ctx, rooms, &digestDispatchConfig{
-				processRoom: func(ctx context.Context, _, roomID string) delivery.SendResult {
+				processRoom: func(ctx context.Context, _, roomID string) digestEnqueueResult {
 					entered <- struct{}{}
 
 					<-ctx.Done()
 					<-release
 
 					if roomID == "accepted" {
-						return delivery.SendResult{Attempted: 1, Sent: 1}
+						return digestEnqueueResult{Attempted: 1, Queued: 1}
 					}
 
 					return failedRoomResult(roomID)
@@ -60,7 +59,7 @@ func TestCanceledDigestDispatchJoinsAndCountsUnstartedRooms(t *testing.T) {
 		close(release)
 
 		result := <-completed
-		if result.Attempted != len(rooms) || result.Sent != 1 || result.Failed != 6 || len(result.FailedRooms) != 6 {
+		if result.Attempted != len(rooms) || result.Queued != 1 || result.Failed != 6 || len(result.FailedRooms) != 6 {
 			t.Fatalf("canceled dispatch lost queued or unstarted rooms: %+v", result)
 		}
 	})

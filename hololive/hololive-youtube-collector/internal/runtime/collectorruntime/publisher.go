@@ -240,6 +240,9 @@ func wrapPublishFailure(action string, err error) error {
 	class := contract.ClassTransient
 
 	switch {
+	case errors.Is(err, contract.ErrPayloadTooLarge):
+		code = contract.ErrorResponseTooLarge
+		class = contract.ClassResourceLimit
 	case errors.Is(err, sourceobservation.ErrInvalidEnvelope):
 		code = contract.ErrorInternalInvariant
 		class = contract.ClassInternal

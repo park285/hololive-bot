@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { createFetchTransport } from "./fetch-transport.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
-import { rpcErrorResultFor } from "./rpc-validation.mjs";
+import { rpcErrorResultFor } from "./rpc-execution.mjs";
 import { paginate, paginationEnvelopeReserve } from "./pagination.mjs";
 
 test("effective Request semantics reach the origin through local sockets", async () => {

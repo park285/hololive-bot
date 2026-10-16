@@ -13,6 +13,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
+const frozenProviderMarkdownRoute = "markdown"
+
 type frozenProviderSender struct {
 	route  string
 	body   string
@@ -49,7 +51,7 @@ func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 	transition, err := store.NewTransitionStore(pool, slog.Default(), store.TransitionConfig{MaxRetries: 3, RetryBackoff: time.Millisecond, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
 	require.NoError(t, err)
 
-	sender := &frozenProviderSender{body: "final body", route: "markdown", err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
+	sender := &frozenProviderSender{body: "final body", route: frozenProviderMarkdownRoute, err: testutil.IrisHTTPError(t.Context(), t, 409, `{"code":"CLIENT_REQUEST_ID_FAILED"}`)}
 	engine := &SendEngine{sender: sender, transition: transition, config: config, logger: slog.New(slog.DiscardHandler)}
 
 	var outboxID int64
@@ -73,7 +75,7 @@ func TestFrozenProviderRequestReissuesOnlyAcrossBoundedAttempts(t *testing.T) {
 		sender.route = testPreparedTextRoute
 	}
 
-	require.Equal(t, []string{"markdown", "markdown", "markdown"}, sender.routes)
+	require.Equal(t, []string{frozenProviderMarkdownRoute, frozenProviderMarkdownRoute, frozenProviderMarkdownRoute}, sender.routes)
 	require.Equal(t, []string{"final body", "final body", "final body"}, sender.bodies)
 	require.Equal(t, sender.ids[0]+":r1", sender.ids[1])
 	require.Equal(t, sender.ids[0]+":r2", sender.ids[2])
@@ -100,16 +102,14 @@ func runFrozenProviderAttempt(t *testing.T, engine *SendEngine, transition *stor
 	require.NoError(t, claimErr)
 	require.Len(t, rows, 1)
 
-	var req deliverySendRequest
+	delivery := newDeliveryAttempt([]claimedDelivery{{row: rows[0], outbox: outbox}})
 
 	if attempt == 0 {
 		candidate, buildErr := buildDeliverySendRequest("reissue-room", "template body", []domain.YouTubeNotificationOutbox{outbox})
 		require.NoError(t, buildErr)
 
-		var frozen bool
-
-		req, frozen = engine.freezeDeliveryRequest(ctx, rows, candidate)
-		require.True(t, frozen)
+		delivery.request = candidate
+		require.True(t, engine.freezeDeliveryRequest(ctx, &delivery))
 	} else {
 		restored, loadErr := transition.LoadFrozenRequests(ctx, []int64{rows[0].ID})
 		require.NoError(t, loadErr)
@@ -117,7 +117,7 @@ func runFrozenProviderAttempt(t *testing.T, engine *SendEngine, transition *stor
 
 		var restoreErr error
 
-		req, restoreErr = deliveryRequestFromFrozen(restored[0])
+		delivery.request, restoreErr = deliveryRequestFromFrozen(restored[0])
 		require.NoError(t, restoreErr)
 	}
 
@@ -125,7 +125,9 @@ func runFrozenProviderAttempt(t *testing.T, engine *SendEngine, transition *stor
 	require.NoError(t, beginErr)
 	require.Equal(t, store.ApplyApplied, applied.Outcome)
 
-	sendErr := engine.sendFrozenDelivery(ctx, operation, req)
+	delivery.operation = operation
+
+	sendErr := engine.sendFrozenDelivery(ctx, &delivery)
 
 	if attempt < 2 {
 		require.ErrorIs(t, sendErr, errRequestReissued)

@@ -137,7 +137,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 
 // 5초마다 CPU/메모리 통계를 전송합니다.
 func (h *StatsHandler) StreamSystemStats(c *gin.Context) {
-	if h == nil || h.Handler == nil || h.systemStats == nil {
+	if h == nil || h.systemStats == nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "System stats collector not available", nil)
 
 		return

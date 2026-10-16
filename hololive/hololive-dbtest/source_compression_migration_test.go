@@ -72,7 +72,7 @@ func TestBinaryHashesMigrationPreservesRoundTripAndIdentity(t *testing.T) {
 		require.NoError(t, applyMigrationFile(ctx, pool, dir, binaryHashesMigration))
 	}
 
-	for _, table := range []string{"source_observations", "youtube_live_absence_slots", "youtube_content_absence_slots"} {
+	for _, table := range []string{sourceObservationsTable, "youtube_live_absence_slots", "youtube_content_absence_slots"} {
 		var (
 			scope, evidence             string
 			scopeLength, evidenceLength int

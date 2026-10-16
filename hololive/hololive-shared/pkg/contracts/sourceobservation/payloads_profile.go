@@ -313,9 +313,21 @@ func MarshalPayloadV1(value any) (jsontext.Value, error) {
 		return nil, fmt.Errorf("marshal source observation payload: %w", err)
 	}
 
+	if len(raw) > MaxPayloadBytes {
+		return nil, fmt.Errorf("%w: raw payload exceeds %d bytes", ErrPayloadTooLarge, MaxPayloadBytes)
+	}
+
 	canonical, err := CanonicalizeJSON(raw)
 	if err != nil {
+		if errors.Is(err, errCanonicalJSONTooLarge) {
+			return nil, fmt.Errorf("%w: %w", ErrPayloadTooLarge, err)
+		}
+
 		return nil, fmt.Errorf("canonicalize JSON: %w", err)
+	}
+
+	if err := validatePayloadStorageSize(canonical); err != nil {
+		return nil, fmt.Errorf("marshal source observation payload: %w", err)
 	}
 
 	return canonical, nil

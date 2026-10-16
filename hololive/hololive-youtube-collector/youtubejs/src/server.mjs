@@ -14,7 +14,7 @@ import {
   handleContentRequest,
   handleVideoLiveCheckRequest,
 } from "./rpc-boundary.mjs";
-import { rpcErrorResult, rpcErrorResultFor } from "./rpc-validation.mjs";
+import { rpcErrorResult, rpcErrorResultFor } from "./rpc-execution.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { encodeResponseBody } from "./response-encoding.mjs";
 

@@ -16,10 +16,6 @@ func TestNewAPIHandler_AllFieldsAssigned(t *testing.T) {
 	if h.logger == nil {
 		t.Fatal("logger not assigned")
 	}
-
-	if h.startTime.IsZero() {
-		t.Fatal("startTime not set")
-	}
 }
 
 func TestNewAPIHandler_MemberIndexLoaderNilWhenRepoNil(t *testing.T) {
@@ -40,10 +36,6 @@ func TestEnsureDefaults_NilReceiver(t *testing.T) {
 	if got == nil {
 		t.Fatal("ensureDefaults on nil receiver returned nil")
 	}
-
-	if got.startTime.IsZero() {
-		t.Fatal("startTime not set on nil receiver")
-	}
 }
 
 func TestEnsureDefaults_PreservesExistingFields(t *testing.T) {
@@ -53,16 +45,5 @@ func TestEnsureDefaults_PreservesExistingFields(t *testing.T) {
 
 	if got.logger != logger {
 		t.Fatal("ensureDefaults overwrote existing logger")
-	}
-}
-
-func TestEnsureDefaults_Idempotent(t *testing.T) {
-	h := &Handler{}
-	first := h.ensureDefaults()
-	st := first.startTime
-
-	second := first.ensureDefaults()
-	if !second.startTime.Equal(st) {
-		t.Fatal("ensureDefaults replaced existing startTime")
 	}
 }

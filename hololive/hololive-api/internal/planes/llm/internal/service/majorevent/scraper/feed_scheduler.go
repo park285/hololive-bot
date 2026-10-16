@@ -164,6 +164,14 @@ func (s *FeedScheduler) executeCycle(ctx context.Context, trigger scrapeTriggerT
 		return
 	}
 
+	// 부분 성공한 retry는 누락 항목의 복구를 입증하지 못하므로 기존 잔여 횟수만 보존한다.
+	// regular의 부분 성공 정책과 retry 횟수·시각·timeout 예산은 바꾸지 않는다.
+	if trigger == scrapeTriggerRetry && result.FeedsFailed > 0 {
+		s.handleFailedScrape(trigger, scheduledAt, completedAt, errors.New("scrape feeds: retry remains incomplete"))
+
+		return
+	}
+
 	cleared := s.clearRetryRuns()
 	s.logger.Info(
 		"Major event feed scrape completed",

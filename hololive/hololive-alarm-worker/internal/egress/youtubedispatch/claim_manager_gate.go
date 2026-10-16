@@ -27,14 +27,8 @@ const (
 )
 
 type deliveryClaimSelection struct {
-	sendRows            []domain.YouTubeNotificationDelivery
-	sendOutboxes        []domain.YouTubeNotificationOutbox
-	claimTokens         []dispatchstate.ClaimToken
-	rowClaimTokens      [][]dispatchstate.ClaimToken
-	retryDeliveryIDs    []int64
-	retryOutboxIDs      []int64
-	retryRows           []domain.YouTubeNotificationDelivery
-	retryOutboxes       []domain.YouTubeNotificationOutbox
+	members             []claimedDelivery
+	retryMembers        []claimedDelivery
 	deferredDeliveryIDs []int64
 }
 
@@ -44,26 +38,21 @@ func (d *ClaimManager) selectClaimedDeliveries(
 	outboxes []domain.YouTubeNotificationOutbox,
 	reuseCache *claimDecisionCache,
 ) deliveryClaimSelection {
-	safeRows := make([]domain.YouTubeNotificationDelivery, len(rows))
-	copy(safeRows, rows)
-
-	safeOutboxes := make([]domain.YouTubeNotificationOutbox, len(outboxes))
-	copy(safeOutboxes, outboxes)
-
+	limit := min(len(outboxes), len(rows))
 	selection := deliveryClaimSelection{
-		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(safeRows)),
-		sendOutboxes:   make([]domain.YouTubeNotificationOutbox, 0, len(safeOutboxes)),
-		claimTokens:    make([]dispatchstate.ClaimToken, 0, len(safeOutboxes)),
-		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(safeRows)),
+		members: make([]claimedDelivery, 0, limit),
 	}
-	limit := min(len(safeOutboxes), len(safeRows))
 
 	if limit == 0 {
 		return selection
 	}
 
-	for i := range limit {
-		d.applyDeliveryClaimSelection(ctx, &selection, &safeRows[i], &safeOutboxes[i], reuseCache)
+	for i := range rows {
+		if i >= len(outboxes) {
+			break
+		}
+
+		d.applyDeliveryClaimSelection(ctx, &selection, &rows[i], &outboxes[i], reuseCache)
 	}
 
 	return selection
@@ -146,10 +135,7 @@ func (d *ClaimManager) retryDeliveryClaimSelection(
 ) {
 	d.logClaimIssue(message, row, outbox, slog.LevelWarn, slog.Any("error", err))
 
-	selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
-	selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
-	selection.retryRows = append(selection.retryRows, *row)
-	selection.retryOutboxes = append(selection.retryOutboxes, *outbox)
+	selection.retryMembers = append(selection.retryMembers, claimedDelivery{row: *row, outbox: *outbox})
 }
 
 func (d *ClaimManager) applyDeliveryClaimDecision(
@@ -188,10 +174,7 @@ func (d *ClaimManager) applyRetryLaterDeliveryClaim(
 	}
 
 	if !deferred {
-		selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
-		selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
-		selection.retryRows = append(selection.retryRows, *row)
-		selection.retryOutboxes = append(selection.retryOutboxes, *outbox)
+		selection.retryMembers = append(selection.retryMembers, claimedDelivery{row: *row, outbox: *outbox})
 
 		return
 	}
@@ -229,19 +212,15 @@ func appendProceedingDeliveryClaim(
 	claimToken *dispatchstate.ClaimToken,
 	reused bool,
 ) {
-	rowClaimTokens := []dispatchstate.ClaimToken(nil)
+	member := claimedDelivery{row: *row, outbox: *outbox}
 
 	if claimToken != nil {
 		token := *claimToken
 
 		token.Reused = reused
-
 		// 다른 room이 먼저 끝나도 같은 epoch의 완료 증명이 필요하다. 해제 소유권과 구분한다.
-		selection.claimTokens = append(selection.claimTokens, token)
-		rowClaimTokens = []dispatchstate.ClaimToken{token}
+		member.claimTokens = []dispatchstate.ClaimToken{token}
 	}
 
-	selection.sendRows = append(selection.sendRows, *row)
-	selection.sendOutboxes = append(selection.sendOutboxes, *outbox)
-	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
+	selection.members = append(selection.members, member)
 }

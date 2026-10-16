@@ -285,7 +285,7 @@ func (s recordingAlarmDispatchMaintenanceDataStore) DeleteTerminal(
 func (s recordingAlarmDispatchMaintenanceDataStore) DeleteOrphanEvents(
 	ctx context.Context,
 	retentionDays, limit int,
-) (int64, error) {
+) (alarmDispatchOrphanEventCounts, error) {
 	s.recorder.deletedEvents++
 
 	out, err := s.store.DeleteOrphanEvents(ctx, retentionDays, limit)

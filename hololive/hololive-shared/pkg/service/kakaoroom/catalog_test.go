@@ -105,12 +105,21 @@ func TestCatalogRefreshSkipsBlankTypeAndLink(t *testing.T) {
 func TestCatalogDBErrorDoesNotUseIrisFallback(t *testing.T) {
 	t.Parallel()
 
-	c := New(nil, stubLister{rooms: []Facts{{RoomID: "1", RoomType: "OM"}}}, nil)
+	listCalls := 0
+	c := New(nil, catalogListerFunc(func(context.Context) ([]Facts, error) {
+		listCalls++
+
+		return []Facts{{RoomID: "1", RoomType: "OM"}}, nil
+	}), nil)
 
 	c.store = errStore{err: errors.New("db down")}
 
 	if c.OpenChat(t.Context(), "1") {
 		t.Fatal("database error must not treat iris rooms as found")
+	}
+
+	if listCalls != 0 {
+		t.Fatalf("database error must not call iris: got %d calls", listCalls)
 	}
 }
 

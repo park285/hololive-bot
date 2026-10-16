@@ -61,6 +61,16 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - Proactive alarm dispatch queue consumption owned by `alarm-worker`
 - Proactive Iris/Kakao notification egress owned by `alarm-worker`
 
+## 관리자 멤버 쓰기
+
+- 멤버 생성은 `CreateMemberRequest`로 저장 가능한 선택 입력을 유지하면서 이름·채널 식별자의 앞뒤 공백을 정리합니다. 이름은 필수이며 slug의 100자 한도와 각 저장 열의 문자 수 한도를 검증합니다. Unicode 문자 수 기준이며 선택 필드를 필수로 바꾸지 않습니다.
+- `MemberAdminService`가 생성·졸업·이름·채널·별명 추가/삭제의 정본 저장 → 활동 기록 → 캐시 동기화를 소유합니다. 도메인 HTTP 핸들러는 필요한 의존성만 보유하며, 멤버 핸들러는 ACL·Iris·LLM 없이 구성됩니다.
+- 생성은 HTTP 201, 나머지 변경은 HTTP 200과 기존 `status`·`message`를 유지합니다. 응답의 `persisted`, `cacheSynced`, `memberId`, `replayed`가 저장·전파·동일 요청 복구를 구분합니다. 저장 후 캐시 오류는 저장 실패 500으로 바꾸지 않고 `persisted=true`, `cacheSynced=false`와 경고 문구를 반환합니다.
+- 생성 재요청은 slug 유일성 충돌 뒤 **모든 저장 입력과 현재 정본이 같은 경우만** 기존 ID로 캐시 동기화를 수행합니다. 새 행과 생성 활동 기록을 중복 추가하지 않습니다. 한 필드라도 다르면 HTTP 409 `Member already exists with different values`이며 기존 행을 덮어쓰지 않습니다. 자동 재시도·새 원천 fallback·마이그레이션은 없습니다.
+- 동시 변경이 다른 요청의 snapshot warmup을 무효화한 경우에도 `cacheSynced=false`를 보존합니다. 오류를 성공으로 숨기거나 반복 갱신하지 않습니다. 요청 유실 뒤에도 동일 생성 요청으로 현재 정본 일치를 확인할 수 있습니다.
+- Iris Console의 실제 Go 응답 projection은 기존 201/200·`status`·`message`로 위 응답을 수락합니다. 추가 필드는 현재 projection에서 제거되므로 Console 화면이 캐시 동기화 상태를 표시한다는 보장은 없습니다.
+- 활동 기록은 기존 logger sink를 사용합니다. 캐시 실패 때문에 이미 저장된 변경의 기록을 건너뛰지는 않지만, DB commit과 로그 저장 사이의 프로세스 종료까지 원자적으로 보장하는 감사 outbox는 아닙니다.
+
 ## Password reset API
 
 - 관리자 비밀번호 재설정은 지원하지 않습니다. 재설정 링크 전달 수단이 없어 2026-10-02부터 503만 반환하던 `POST /api/auth/password/reset-request`와 `POST /api/auth/password/reset`, 재설정 서비스, `auth_password_reset_tokens` 테이블(migration 281)을 제거했습니다.
@@ -85,6 +95,7 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - 영속 reply INSERT의 접수 결과 불명(`ErrReplyStagingFailed`)과 Iris 전송 결과 불명은 같은 추가 응답 억제 규칙을 따릅니다. 도움말·달력 이미지 실패의 대체 텍스트나 공통 오류 응답을 추가하지 않고 명령 결과 불명을 보존합니다.
 - Iris가 접수한 reply의 handoff 결과를 확정하지 못하면 자동 재발송하지 않는 `manual_review`로 정산합니다. 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다.
 - 멤버 조회 backend 오류는 미발견 응답으로 바꾸지 않습니다. 달력 cache miss의 공유 조회는 기존 bot 명령 시간 예산으로 제한하고, 각 대기 요청은 자신의 context 취소에 따라 반환합니다. shared member cache의 epoch 구독·재조회 작업은 각 plane의 DB·Valkey 정리 전에 종료합니다.
+- bot·worker의 공유 방 Catalog는 같은 인스턴스에서 겹친 전체 HTTP 조회와 per-room 저장 순회를 공유합니다. owner의 전체 예산은 기존 `QueryTimeout.Default` 5초이며 initiator/follower는 각자 취소할 수 있습니다. owner가 저장 중 만료돼도 살아 있는 waiter는 이미 확보한 방 정보를 사용합니다. 완료 뒤의 miss는 새 조회가 가능하고 negative cache는 없습니다. DB 조회 오류의 HTTP fallback 금지, 명시적 webhook metadata 우선, unknown의 plain 처리와 동일 metadata의 `Observe` 저장 재시도는 유지합니다.
 
 `DEC-20260926-hololive-source-fallbacks-retirement`(PLN-20260926-stack-audit-refactoring T19)에 따라 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꿨습니다. T18(2026-09-26) 30일 로그에서 아래 경로의 fallback·fail-open 경고는 0건이었습니다.
 
@@ -133,6 +144,13 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - 새 미래 최초공개는 검증된 예정 시각으로 신규성만 닫고 발견 시 `NEW_VIDEO`를 만들지 않습니다. 같은 관측으로 확정한 live 세션(`is_premiere=true`)의 분 전·시작 알림이 공개 알림을 소유합니다(`contracts/alarm.md`). 기준 목록에 있던 최초공개와 공개 전환도 알리지 않습니다. 부분 목록은 끝까지 COMPLETE 부재 근거와 구분합니다.
 - 요청 상한 안에서 증거를 확보하지 못하거나 목록 범위를 벗어난 영상의 알림 복구를 보장하지 않습니다. 이 정책은 알림 누락을 감수하고 과거 영상의 오알림을 막습니다.
 
+## Major event RSS 저장
+
+- 증분 수집은 현재 feed의 `external_id`를 type별로 조회하며 `IncrementalLimit`(기본 200)은 조회 chunk 크기입니다. 모든 chunk를 처리하고 최신 `pub_date`보다 오래됐다는 이유로 미등록 ID를 제외하지 않습니다.
+- 개별 저장 오류는 `ScrapeResult.FailedEvents`와 반환 오류에 보존합니다. 다른 항목의 성공 commit은 유지하고 기존 scheduler의 실패·예약 retry 계약을 사용하며 새 retry 계층은 없습니다. 다음 수집에도 feed에 남아 있는 누락 ID만 복구할 수 있고, feed에서 사라진 항목을 위한 별도 durable replay는 없습니다.
+- 이미 예약된 retry에서 일부 feed만 실패하면 다른 feed의 성공으로 복구 완료를 단정하지 않고 남은 예약 시각을 그대로 보존합니다. 추가 횟수·재예약·지연·timeout 증가는 없으며 마지막 실패로 예산이 소진되면 종료합니다. 모든 feed가 성공한 retry는 남은 예약을 취소하고, regular 실행의 기존 부분 성공 정책은 유지합니다.
+- 복구된 panic도 예약 source의 `FeedsAttempted`·`FeedsFailed`에 반영합니다. 전체 source 실패와 저장 실패로 반환하는 오류에는 source/stage와 취소·deadline·typed DB 원인을 보존합니다. 건강한 source의 저장은 유지하고 regular 부분 성공은 계속 nil을 반환하므로 새로운 retry를 예약하지 않습니다. 조회 실패를 `FailedEvents`로 세거나 실패한 source의 앞 chunk만 따로 저장하지 않습니다.
+
 ## Collection projection heartbeat와 eligibility
 
 - migration 261부터 `youtube_collection_projection_generations.valid_until`만 projection 만료의 정본입니다. target의 `valid_until`은 삭제합니다. API의 bot LiveQuery·수집 진단, collector acquire·Publish membership은 모두 유효한 CURRENT header를 요구하며, acquire의 bundle 조회 statement도 만료를 다시 검사합니다.
@@ -142,9 +160,12 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - `LiveCheckVideos` SQL은 구조적 LIVE/지난 일정·출처 미상 UPCOMING과 현재 원본에 적용되는 검토 영수증(`youtube_live_review_current_receipt`, migration 262) 제외를 cap+1 이전에 적용하고, 같은 statement의 DB 시각과 필요한 사실만 반환합니다. API가 미래/NULL 근거를 거부하고 밀리초 단위 기존 예산으로 positive/availability deadline을 계산합니다. notification/operational/live 입력은 READ COMMITTED의 별도 statement이며 하나의 공통 snapshot이라고 보장하지 않습니다. 지연된 refresh 호출 시각은 기존 header validity를 줄이지 않습니다.
 - 구조 identity(subject/kind/priority/cadence/enabled)가 같으면 generation/hash와 연속 `member_since_generation`·`created_at`을 유지합니다. 실제 `not_before` 변경 row만 UPDATE하고 같은 transaction에서 header의 양수 `eligibility_version`을 한 번 올립니다(새 generation 기본값 1). 변경 없는 heartbeat는 header만 쓰며 target/reason 행을 갱신하지 않습니다. 이유만 바뀌면 기존처럼 이유를 교체하되 eligibility version은 바꾸지 않습니다.
 - collector는 현재 header·target·lease를 같은 후보 statement에서 확인하는 관계형 조회를 유지합니다. 전체 target/lease를 캐시해 AP에서 정렬하는 안은 전송량 회귀로 채택하지 않았으며 target별 eligibility version도 추가하지 않습니다. 기존 상한 10,000 targets/50,000 reasons/1,000 live 입력, membership·lease/fence·DB slot·원자적 Publish와 기존 bounded retention의 CURRENT/STAGING·lease 보호, collector의 reasons/canonical 접근 금지는 유지합니다.
+- IDLE 대상의 관측 due는 scheduler와 같은 `LEAST(next_due_at, scheduled_for + 현재 bundle cadence)`이며 `eligible_at`보다 앞당기지 않습니다. cadence 연장 때 이미 도래한 slot을 늦추지 않고 ACTIVE 만료·DEFERRED 재시도·projection 만료의 의미는 유지합니다.
 - 259/260은 이미 적용된 migration이며 수정·재적용하지 않습니다. **261은 rolling 호환 변경이 아닙니다.** 별도 운영 승인 아래 구 API(모든 plane)와 모든 collector를 drain·정지한 상태에서 새 migration을 적용하고, 새 API가 유효한 완전 projection을 만든 뒤 같은 계약의 fleet을 재개해야 합니다. 구 binary만 재시작하는 rollback은 지원하지 않으며 schema와 binary의 호환 복구가 필요합니다. 로컬 구현은 운영 activation·보존 단축 승인이 아닙니다.
 
 - canonical live session의 다섯 writer는 부재 행의 동시 INSERT와 부분 schedule DTO 병합을 위해 기존 `0047` SQL conflict merge를 유지합니다. `0048` head 저장은 18개 mutable 필드 전체의 `IS DISTINCT FROM`으로 같은 근거의 tuple rewrite를 피하며 `updated_at`·review snapshot을 유지합니다. 실제 사실 시계·ignored-absence 변화는 계속 저장합니다. 이는 canonical 정책의 AP 이관이나 no-op SQL/잠금 제거를 뜻하지 않습니다.
+- migration 316은 `youtube_live_runtime_state`의 동기 UPDATE refresh를 실제 소비·검토 입력이 달라진 video로 제한합니다. session의 관측 시계·thumbnail, head의 다음 검사 시각·ignored-history 등 원본 사실은 계속 저장하지만 모델 재조회와 행 잠금은 생략합니다. title/topic/premiere와 reviewability, availability 시각, old/new identity, NULL·orphan은 계속 반영합니다. INSERT/DELETE/TRUNCATE·영수증·FK 경로와 문장별 동기 visibility는 유지합니다.
+- refresh를 생략해도 BEFORE MVCC guard와 오래된 REPEATABLE READ/SERIALIZABLE snapshot의 거절은 유지됩니다. 316은 guard를 먼저 잡고 기존 함수를 원자적으로 교체하며 backfill·권한 확장·새 index/cache/retry는 없습니다. guard-first API와 호환되지만 316을 모르는 이전 migration runner는 새 ledger에 실행하지 않습니다. 운영 적용·배포는 별도 승인 대상입니다.
 
 ## Observation storage and retention
 
@@ -154,6 +175,11 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - application은 entity별 멱등·CANONICALIZED 결과를 한 INSERT로 저장하며 원본의 `ON DELETE CASCADE` 수명을 따릅니다. 고아 유예·별도 감사 retention은 없습니다. provider/kind/subject/hash/effective clock은 원본에서 읽고 감사 행에 중복 저장하지 않습니다.
 - 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/replay/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
 - 원본 retention은 큐·pending replay·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.
+- migration 315의 원본 정리는 보호 판정 전에 최대 1,000개 ID를 materialize합니다. kind별 인덱스 후보 반환은 최대 1,000개(정책 최대 16개), 최초 보호 검사는 합계 최대 1,000개이며 삭제·최종 보호 재검사는 `BatchSize`(최대 1,000) 이내입니다. 이 상한은 물리 I/O·보호 함수 내부의 자식 조회량·FK 쓰기량·실행 시간의 상한이 아닙니다.
+- `(received_at,id)` 진행 커서와 고정된 순회 상한을 DB singleton에 보존합니다. 새 유입이 계속되어도 순회 끝에서 앞쪽을 재방문하고, 잠긴 후보는 건너뛴 뒤 다음 순회에서 다시 봅니다. 모든 kind가 같은 시간/ID 순서를 공유하며 보호 해제·늦게 삽입된 앞쪽 원본도 재방문합니다. 커서와 원본/application 삭제는 같은 transaction으로 확정·롤백하므로 재시작 때 처음부터 훑지 않습니다.
+- DB 함수가 live guard → 커서 → 원본 잠금을 소유합니다. 전부 보호된 창도 성공한 tick이며 payload·absence·checkpoint 정리는 계속 실행됩니다. 앞 단계의 별도 commit 수량과 `BacklogKnown=false`의 미확정 의미는 유지합니다. runtime·scraper는 커서 표에 직접 접근하지 않습니다.
+- **현재 API·collector는 315–321을 먼저 적용해야 합니다.** 315의 retention 함수 signature/EXECUTE 권한은 유지하지만, 새 publish·claim·application SQL은 317–321의 provenance/어휘 사전과 bytea 키를 요구합니다. 315만 적용한 DB나 구 binary와 혼합 운용하지 않습니다. 새 ledger를 모르는 이전 migration runner도 실행하지 않습니다.
+- 317·318은 기존 text를 보존하며 5,000행 단위 backfill을 확정한 뒤 제약 검증·cutover를 수행합니다. 317의 전체 heap/index 재작성, 318–321 이후 감사 표 공간 회수에는 별도 점검 창·백업·용량 확인이 필요합니다. [압축 인계의 적용 경계](../plans/2026-10-16-sql-compaction-handoff.md#4-다음-단계와-승인-경계)를 따르며 로컬 검증은 운영 DDL·배포 승인이 아닙니다.
 - RETIRED projection 기본 보존은 2일이며 reasons+targets 합계를 batch 상한 이하로 제한하고 CURRENT/STAGING, lease 참조 generation을 보호합니다. 호출 timeout은 8초입니다.
 - 운영 cutover와 복구 경계는 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 소스 기본값 변경은 운영 TTL 적용 완료를 뜻하지 않습니다.
 

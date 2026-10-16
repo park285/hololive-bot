@@ -30,23 +30,17 @@ import (
 )
 
 func (h *StreamHandler) sharedStreamHandler() *adminhandlers.StreamHandler {
-	var api *Handler
-
-	if h != nil {
-		api = h.Handler
-	}
-
 	handler := &adminhandlers.StreamHandler{
-		Logger:       api.safeLogger(),
+		Logger:       h.safeLogger(),
 		RespondError: sharedserver.RespondError,
 		RespondInternalError: func(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr) {
-			sharedserver.RespondInternalError(api.safeLogger(), c, userMessage, logMessage, err, attrs...)
+			sharedserver.RespondInternalError(h.safeLogger(), c, userMessage, logMessage, err, attrs...)
 		},
 	}
 
-	if api != nil {
-		handler.Holodex = api.holodex
-		handler.MemberRepository = api.repository
+	if h != nil {
+		handler.Holodex = h.holodex
+		handler.MemberRepository = h.repository
 	}
 
 	return handler

@@ -75,7 +75,7 @@ func runACLBotApplyRetryCase(t *testing.T, tc aclBotApplyRetryCase) {
 
 	botACL.Follow(adminACL)
 
-	handler := &RoomHandler{Handler: &Handler{acl: adminACL, logger: logger}}
+	handler := (&Handler{acl: adminACL, logger: logger}).DomainHandlers().Room
 
 	// 봇 plane Reload만 실패시킨다: 관리 plane은 mode를 이미 메모리에 들고 있어 저장은 성공한다.
 	setStoredMode(t, pool, "corrupt")

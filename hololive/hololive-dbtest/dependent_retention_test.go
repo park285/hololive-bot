@@ -13,8 +13,8 @@ func TestApplicationAuditCascadesWithSourceObservation(t *testing.T) {
 	id := insertRetentionObservation(t, pool, communityPageKind, base, "audit-cascade")
 
 	if _, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications
-		(observation_id,entity_kind,entity_key,decision)
-		VALUES ($1,'community_window','audit-cascade','APPLIED')`, id); err != nil {
+		(observation_id,entity_kind_id,entity_key,decision_id)
+		VALUES ($1,source_observation_entity_kind_id('community_window'),'audit-cascade',source_observation_decision_id('APPLIED'))`, id); err != nil {
 		t.Fatal(err)
 	}
 

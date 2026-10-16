@@ -44,6 +44,8 @@ Alarm shared API는 legacy `success` envelope에 additive `error` field를 함�
 | 500 | provider internal failure | `internal_server_error`, `digest_generation_failed` | retry/manual diagnosis |
 | 503 | dependency/scheduler unavailable | `*_scheduler_unavailable` | manual diagnosis before retry loops |
 
+관리자 멤버 생성의 `Member already exists with different values`(409)는 같은 slug의 정본이 요청과 다름을 뜻합니다. 이미 저장된 멤버의 캐시 동기화 실패는 500이 아니라 기존 201/200 성공 envelope에 `persisted=true`, `cacheSynced=false`와 경고 문구로 표현합니다. 저장 실패와 전파 실패를 같은 재시도 대상으로 취급하지 않습니다. [멤버 쓰기 계약](services/hololive-api.md#관리자-멤버-쓰기).
+
 ## Client Interpretation Rules
 
 - Clients must not parse arbitrary full error strings from `httputil.CheckStatus`.

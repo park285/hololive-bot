@@ -21,6 +21,7 @@ func TestWrapPublishFailurePreservesFailureSemantics(t *testing.T) {
 		{name: "invalid envelope", source: sourceobservation.ErrInvalidEnvelope, wantCode: contract.ErrorInternalInvariant, wantClass: contract.ClassInternal},
 		{name: "stale contract", source: sourceobservation.ErrStaleContract, wantCode: contract.ErrorPublishRejected, wantClass: contract.ClassProtocol},
 		{name: "database failure", source: errors.New("database unavailable"), wantCode: contract.ErrorPublishRejected, wantClass: contract.ClassTransient},
+		{name: "payload storage size", source: errors.Join(sourceobservation.ErrInvalidEnvelope, contract.ErrPayloadTooLarge), wantCode: contract.ErrorResponseTooLarge, wantClass: contract.ClassResourceLimit},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -37,6 +38,14 @@ func TestWrapPublishFailurePreservesFailureSemantics(t *testing.T) {
 
 			if got := collecterr.ClassOf(err); got != test.wantClass {
 				t.Fatalf("ClassOf() = %q, want %q", got, test.wantClass)
+			}
+
+			if !contract.ValidDurableFailureTuple(collecterr.CodeOf(err), collecterr.ClassOf(err)) || errors.Is(err, collecterr.ErrInvalidFailureTuple) {
+				t.Fatalf("invalid durable failure tuple: %v", err)
+			}
+
+			if errors.Is(test.source, contract.ErrPayloadTooLarge) && fatalCollectionError(err) {
+				t.Fatalf("payload size failure became fatal: %v", err)
 			}
 		})
 	}

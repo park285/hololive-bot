@@ -183,7 +183,7 @@ func assertMixedQueue(ctx context.Context, t *testing.T, pool *pgxpool.Pool, bas
 	var independentID int64
 
 	if err := pool.QueryRow(ctx, `
-		SELECT id FROM source_observations WHERE observation_key = $1
+		SELECT id FROM source_observations WHERE observation_key = decode($1, 'hex')
 	`, independent.ObservationKey).Scan(&independentID); err != nil {
 		t.Fatalf("load independent observation: %v", err)
 	}
@@ -419,8 +419,9 @@ func requireApplicationDecision(ctx context.Context, t *testing.T, pool *pgxpool
 	var decision string
 
 	if err := pool.QueryRow(ctx, `
-		SELECT decision FROM source_observation_applications
-		WHERE observation_id = $1 AND entity_kind = 'community_subject_head'
+		SELECT decision.name FROM source_observation_applications AS application
+		JOIN source_observation_decisions AS decision ON decision.id = application.decision_id
+		WHERE application.observation_id = $1 AND application.entity_kind_id = (SELECT kind.id FROM source_observation_entity_kinds AS kind WHERE kind.name = 'community_subject_head')
 	`, observationID).Scan(&decision); err != nil {
 		t.Fatal(err)
 	}

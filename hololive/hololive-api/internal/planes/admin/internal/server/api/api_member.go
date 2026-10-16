@@ -22,7 +22,7 @@ package api
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -33,6 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type memberListResponse struct {
@@ -92,7 +93,8 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	if err := h.repository.SetGraduation(ctx, memberID, isGraduated); err != nil {
+	result, err := h.service.SetGraduation(ctx, memberID, isGraduated)
+	if err != nil {
 		h.safeLogger().Error("Failed to set graduation status",
 			slog.Int("member_id", memberID),
 			slog.Bool("is_graduated", isGraduated),
@@ -103,33 +105,20 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 		return
 	}
 
-	if err := h.memberCache.Refresh(ctx); err != nil {
-		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", "Failed to refresh cache after graduation update", err)
-
-		return
-	}
-
-	h.respondGraduationSuccess(c, memberID, isGraduated)
+	h.respondMemberMutation(c, http.StatusOK, "Graduation status updated successfully", result)
 }
 
-func (h *MemberHandler) respondGraduationSuccess(c *gin.Context, memberID int, isGraduated bool) {
-	h.safeLogger().Info("Graduation status updated",
-		slog.Int("member_id", memberID),
-		slog.Bool("is_graduated", isGraduated),
-	)
-
-	statusStr := "graduated"
-
-	if !isGraduated {
-		statusStr = "active"
+func (h *MemberHandler) respondMemberMutation(c *gin.Context, status int, message string, result MemberMutationResult) {
+	if !result.CacheSynced {
+		message = "Member changes saved, but cache synchronization failed; cached views may be stale"
 	}
 
-	h.logActivity("member_graduation", fmt.Sprintf("Member status changed to %s (ID: %d)", statusStr, memberID), map[string]any{
-		"member_id":    memberID,
-		"is_graduated": isGraduated,
-	})
+	ginjson.Respond(c, status, struct {
+		MemberMutationResult
 
-	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Graduation status updated successfully"})
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}{Status: "ok", Message: message, MemberMutationResult: result})
 }
 
 func (h *MemberHandler) GetMembers(c *gin.Context) {
@@ -151,7 +140,7 @@ func (h *MemberHandler) GetMembers(c *gin.Context) {
 }
 
 func (h *MemberHandler) AddMember(c *gin.Context) {
-	var req domain.Member
+	var req CreateMemberRequest
 
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
@@ -160,24 +149,32 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 		return
 	}
 
+	m, err := req.member()
+	if err != nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, err.Error(), nil)
+
+		return
+	}
+
 	if !h.requireMemberDeps(c) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	if err := h.repository.CreateMember(ctx, &req); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	defer cancel()
+
+	result, err := h.service.create(ctx, m)
+	if errors.Is(err, member.ErrCreateConflict) {
+		sharedserver.RespondError(c, http.StatusConflict, "Member already exists with different values", nil)
+
+		return
+	}
+
+	if err != nil {
 		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to add member", "Failed to add member", err)
 
 		return
 	}
 
-	if err := h.memberCache.Refresh(ctx); err != nil {
-		sharedserver.RespondInternalError(h.safeLogger(), c, "Failed to synchronize member cache", "Failed to refresh member cache", err)
-
-		return
-	}
-
-	h.logActivity("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
-
-	ginjson.Respond(c, http.StatusCreated, statusMessageResponse{Status: "ok", Message: "Member added successfully"})
+	h.respondMemberMutation(c, http.StatusCreated, "Member added successfully", result)
 }

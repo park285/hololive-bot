@@ -148,13 +148,15 @@ func (r *Store) cleanupInBatches(ctx context.Context, cutoff time.Time, batchSiz
 	var total int64
 
 	for {
-		tag, err := r.pool.Exec(ctx, mustSQL("outbox_repository_0279_09.sql"), cutoff, batchSize)
-		if err != nil {
-			return total, fmt.Errorf("exec: %w", err)
+		var picked, deleted int64
+
+		if err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0279_09.sql"), cutoff, batchSize).Scan(&picked, &deleted); err != nil {
+			return total, fmt.Errorf("delete notification cleanup batch: %w", err)
 		}
 
-		total += tag.RowsAffected()
-		if tag.RowsAffected() < int64(batchSize) {
+		total += deleted
+
+		if picked < int64(batchSize) {
 			return total, nil
 		}
 

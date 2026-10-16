@@ -25,7 +25,7 @@ import (
 )
 
 func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
-	if h == nil || h.Handler == nil {
+	if h == nil {
 		return &SettingsHandler{}
 	}
 
@@ -44,7 +44,7 @@ func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
 		ReadRecentLogs:  readRecentLogs,
 		Settings:        h.settings,
 		SettingsApplier: h.settingsApplier,
-		operationGate:   &h.settingsOperations,
+		operationGate:   h.settingsOperations,
 	}
 }
 

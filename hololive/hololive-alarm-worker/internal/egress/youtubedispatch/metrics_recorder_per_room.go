@@ -2,7 +2,6 @@ package youtubedispatch
 
 import (
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -14,20 +13,18 @@ func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 	row *domain.YouTubeNotificationDelivery,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	failedAt := time.Now()
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "format message")
-	mr.recordDeliveryFailure(result, mu, "format message", row.ID, row.OutboxID)
+	mr.recordDeliveryFailure(result, "format message", row.ID, row.OutboxID)
 }
 
 func (mr *MetricsRecorder) recordPerRoomMissingMessage(
 	row *domain.YouTubeNotificationDelivery,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
-	mr.recordDeliveryFailure(result, mu, "outbox row not found", row.ID, row.OutboxID)
+	mr.recordDeliveryFailure(result, "outbox row not found", row.ID, row.OutboxID)
 }
 
 func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
@@ -36,8 +33,7 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
 	err error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	failedAt := time.Now()
 
@@ -48,7 +44,7 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 		dedupeKeyLogAttrForOutboxes([]domain.YouTubeNotificationOutbox{*outbox}),
 		slog.Any("error", err))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "dedupe key")
-	mr.recordDeliveryFailure(result, mu, "dedupe key", row.ID, row.OutboxID)
+	mr.recordDeliveryFailure(result, "dedupe key", row.ID, row.OutboxID)
 }
 
 func (mr *MetricsRecorder) recordPerRoomSendFailure(
@@ -57,8 +53,7 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
 	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	failedAt := time.Now()
 	reason := deliveryFailureReason(sendErr)
@@ -69,7 +64,7 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", reason)
-	mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, row.ID, row.OutboxID, deliveryRetryAfter(sendErr))
+	mr.recordDeliveryFailureWithRetryAfter(result, reason, row.ID, row.OutboxID, deliveryRetryAfter(sendErr))
 }
 
 func (mr *MetricsRecorder) recordPerRoomSuccess(
@@ -78,8 +73,7 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 	outboxes []domain.YouTubeNotificationOutbox,
 	sendReq deliverySendRequest,
 	claimTokens []dispatchstate.ClaimToken,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
+	result *deliveryDispatchResult,
 ) {
 	sentAt := time.Now()
 
@@ -90,10 +84,10 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 		dedupeKeyLogAttr(sendReq.dedupeKeys))
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, "per_room", "success", "")
 
-	mu.Lock()
+	result.mu.Lock()
 
 	result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, row.ID)
 	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, row.OutboxID)
 	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
-	mu.Unlock()
+	result.mu.Unlock()
 }

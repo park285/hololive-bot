@@ -48,11 +48,14 @@
 - `architecture/youtube-egress-logical-delivery-ledger-20260831.md`
 - `architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`
 - `architecture/youtube-egress-lifecycle-library-review-20260831.md`
+- [홀로봇 상세 리뷰와 리팩토링안](../history/architecture/2026-10-15-hololive-code-review-and-refactoring.md) - 관리자 API 결함 4건의 재현, 런타임별 구조 평가, 단계별 개선안과 검증 기록. 2026-10-15 리뷰 스냅샷이며 현재 계약이나 수정 완료 증명이 아닙니다.
 
 ## Active Implementation Plans
 
 - `plans/2026-08-31-youtube-egress-lifecycle-implementation.md` - canonical identity, internal transition store, ledger backfill, writer/cleanup cutover와 검증 순서
 - [알람 워커·YouTube 컬렉터 신뢰성 개선](plans/2026-09-30-alarm-worker-collector-reliability.md) - 재현한 13개 문제의 조치·회귀 검증, 구현 의존성·완료 조건·운영 적용 경계. [상세 리뷰 및 검증 기록](../history/architecture/2026-09-30-alarm-worker-collector-reliability-review.md)을 함께 봅니다.
+- [SQL·DB 리뷰 후속 작업 인계](plans/2026-10-15-sql-db-review-handoff.md) - 운영 source retention 실패, 알림 정리·집계 경합, RSS·due 지표 수정과 N1–N7, 315·316, 재측정·구조 압축 결정 기록. 로컬 구현·검증 완료, 운영 미적용.
+- [SQL 구조 압축(317–321) 세션 인계](plans/2026-10-16-sql-compaction-handoff.md) - 작업 트리 상태, migration 317–321·SQL·테스트 변경, 검증 결과, 발행·점검 창 적용 절차와 승인 경계.
 
 ## Compatibility Bridges
 

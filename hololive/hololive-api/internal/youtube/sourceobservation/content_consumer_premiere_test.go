@@ -359,7 +359,7 @@ func TestContentConsumerPremiereKeepsApplicationsWithinFinalizeLimit(t *testing.
 			SELECT 1
 			FROM source_observation_applications
 			WHERE observation_id = $1
-			  AND entity_kind = 'youtube_live_session'
+			  AND entity_kind_id = (SELECT kind.id FROM source_observation_entity_kinds AS kind WHERE kind.name = 'youtube_live_session')
 			  AND entity_key = 'vid-0000'
 		)
 	`, published.Results[0].ObservationID).Scan(&projected); err != nil {

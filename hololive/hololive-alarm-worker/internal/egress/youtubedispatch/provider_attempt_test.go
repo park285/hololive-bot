@@ -102,7 +102,7 @@ func TestReissueWaitsForNextDeliveryAttempt(t *testing.T) {
 	d.send.config.MaxRetries = 3
 
 	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:reissue", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
-	err := d.send.sendFrozenDelivery(t.Context(), store.StartedOperation{}, req)
+	err := d.send.sendFrozenDelivery(t.Context(), &deliveryAttempt{request: req})
 	require.ErrorIs(t, err, errRequestReissued)
 }
 
@@ -113,7 +113,7 @@ func TestReissueRejectsMixedUnknownAndPreHandoffFailure(t *testing.T) {
 	d.send.sender = sender
 
 	req := deliverySendRequest{roomID: testProviderAttemptRoom, message: testProviderAttemptBody, dedupeKeys: []string{"key"}, frozen: &store.FrozenRequest{BaseID: "youtube:mixed", RoomID: testProviderAttemptRoom, Message: testProviderAttemptBody, Route: testPreparedTextRoute}}
-	err := d.send.sendFrozenDelivery(t.Context(), store.StartedOperation{}, req)
+	err := d.send.sendFrozenDelivery(t.Context(), &deliveryAttempt{request: req})
 	require.ErrorIs(t, err, errDeliverySendOutcomeUnknown)
 	require.NotErrorIs(t, err, errRequestReissued)
 }

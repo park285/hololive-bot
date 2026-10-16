@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -21,29 +19,31 @@ var (
 	errRequestReissued             = errors.New("client request id reissued after pre-handoff failure")
 )
 
-func (d *SendEngine) freezeDeliveryRequest(ctx context.Context, rows []domain.YouTubeNotificationDelivery, request deliverySendRequest) (deliverySendRequest, bool) {
-	candidate, err := d.prepareFrozenRequest(ctx, request)
+func (d *SendEngine) freezeDeliveryRequest(ctx context.Context, attempt *deliveryAttempt) bool {
+	candidate, err := d.prepareFrozenRequest(ctx, attempt.request)
 	if err != nil {
 		d.logger.Error("Failed to prepare final request", slog.Any("error", err))
 
-		return deliverySendRequest{}, false
+		return false
 	}
 
-	frozen, err := d.transition.FreezeRequest(ctx, rows, candidate)
+	frozen, err := d.transition.FreezeRequest(ctx, attempt.rows, candidate)
 	if err != nil {
 		d.logger.Error("Failed to freeze delivery request; preserving preparation", slog.Any("error", err))
 
-		return deliverySendRequest{}, false
+		return false
 	}
 
-	request, err = deliveryRequestFromFrozen(frozen)
+	request, err := deliveryRequestFromFrozen(frozen)
 	if err != nil {
 		d.logger.Error("Invalid frozen delivery request", slog.Any("error", err))
 
-		return deliverySendRequest{}, false
+		return false
 	}
 
-	return request, true
+	attempt.request = request
+
+	return true
 }
 
 func (d *SendEngine) prepareFrozenRequest(ctx context.Context, request deliverySendRequest) (store.FrozenRequest, error) {
@@ -66,8 +66,10 @@ func deliveryRequestFromFrozen(frozen store.FrozenRequest) (deliverySendRequest,
 
 // 확정 pre-handoff 실패도 한 번의 delivery attempt를 소비한다. 새 세대는 다음
 // 정규 retry에서 보내므로 기존 backoff·최대 시도·신선도 예산을 우회하지 않는다.
-func (d *SendEngine) sendFrozenDelivery(ctx context.Context, operation store.StartedOperation, req deliverySendRequest) error {
+func (d *SendEngine) sendFrozenDelivery(ctx context.Context, attempt *deliveryAttempt) error {
+	req, operation := attempt.request, attempt.operation
 	err := d.sendDeliveryMessage(ctx, req)
+
 	if errors.Is(err, errDeliverySendOutcomeUnknown) || !iris.IsPreHandoffClientRequestIDConflict(err) {
 		return err
 	}
@@ -76,7 +78,10 @@ func (d *SendEngine) sendFrozenDelivery(ctx context.Context, operation store.Sta
 		return fmt.Errorf("send frozen delivery: %w", errors.Join(errRequestGenerationsExhausted, err))
 	}
 
-	if _, advanceErr := d.transition.AdvanceRequestGeneration(ctx, operation, *req.frozen); advanceErr != nil {
+	stateCtx, cancel := deliveryStateContext(ctx)
+	defer cancel()
+
+	if _, advanceErr := d.transition.AdvanceRequestGeneration(stateCtx, operation, *req.frozen); advanceErr != nil {
 		return fmt.Errorf("send frozen delivery: save generation: %w", errors.Join(errDeliverySendOutcomeUnknown, advanceErr))
 	}
 
@@ -133,7 +138,7 @@ func (d *SendEngine) frozenDeliveryGroups(ctx context.Context, rows []domain.You
 	return groups, remaining, nil
 }
 
-func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]string, formatFailures map[int64]bool, reuseCache *claimDecisionCache, result *dispatchstate.DispatchResult, mu *sync.Mutex) {
+func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGroup, formattedMessages map[int64]string, formatFailures map[int64]bool, reuseCache *claimDecisionCache, result *deliveryDispatchResult) {
 	if len(group.rows) != len(group.frozen.MemberIDs) {
 		d.deferIncompleteFrozenGroup(ctx, group.rows)
 
@@ -141,16 +146,17 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 	}
 
 	selection := d.claims.selectClaimedDeliveries(ctx, group.rows, group.outboxes, reuseCache)
-	d.applyLifecycleClaimSelection(ctx, &selection, store.DeliveryModeGrouped, result, mu)
+	d.applyLifecycleClaimSelection(ctx, &selection, store.DeliveryModeGrouped, result)
 
-	selected := collectDeliveryIDs(selection.sendRows)
+	attempt := newDeliveryAttempt(selection.members)
+	selected := collectDeliveryIDs(attempt.rows)
 	slices.Sort(selected)
 
 	expected := slices.Clone(group.frozen.MemberIDs)
 	slices.Sort(expected)
 
 	if !slices.Equal(selected, expected) {
-		d.deferIncompleteFrozenGroup(ctx, selection.sendRows)
+		d.deferIncompleteFrozenGroup(ctx, attempt.rows)
 
 		return
 	}
@@ -162,35 +168,40 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 		return
 	}
 
-	operation, begun := d.beginLifecycleOperation(ctx, selection.sendRows, selection.sendOutboxes, result, mu)
+	attempt.request = req
+
+	operation, begun := d.beginLifecycleOperation(ctx, attempt.rows, attempt.outboxes, result)
+
 	if !begun {
 		return
 	}
 
+	attempt.operation = operation
+
 	mode := store.DeliveryModeGrouped
 
-	if len(selection.sendRows) == 1 {
+	if len(attempt.members) == 1 {
 		mode = store.DeliveryModePerRoom
 	}
 
-	if sendErr := d.sendFrozenDelivery(ctx, operation, req); sendErr != nil {
+	if sendErr := d.sendFrozenDelivery(ctx, &attempt); sendErr != nil {
 		if mode == store.DeliveryModePerRoom {
-			d.handlePerRoomSendFailure(ctx, operation, &selection.sendRows[0], selection.sendRows, selection.sendOutboxes, req, selection.claimTokens, sendErr, result, mu)
+			d.handlePerRoomSendFailure(ctx, &attempt, sendErr, result)
 		} else {
-			d.handleGroupedSendFailure(ctx, operation, group, selection.sendRows, selection.sendOutboxes, req, formattedMessages, formatFailures, selection.claimTokens, selection.rowClaimTokens, sendErr, result, mu)
+			d.handleGroupedSendFailure(ctx, group, &attempt, formattedMessages, formatFailures, sendErr, result)
 		}
 
 		return
 	}
 
-	if !d.completeLifecycleSent(ctx, operation, selection.claimTokens, mode, result, mu) {
+	if !d.completeLifecycleSent(ctx, attempt.operation, attempt.claimTokens, mode, result) {
 		return
 	}
 
-	if len(selection.sendRows) == 1 {
-		d.recordPerRoomSuccess(&selection.sendRows[0], selection.sendRows, selection.sendOutboxes, req, selection.claimTokens, result, mu)
+	if len(attempt.members) == 1 {
+		d.recordPerRoomSuccess(&attempt, result)
 	} else {
-		d.recordGroupedSuccess(group, selection.sendRows, selection.sendOutboxes, req, selection.claimTokens, result, mu)
+		d.recordGroupedSuccess(group, &attempt, result)
 	}
 }
 
@@ -203,14 +214,15 @@ func (d *SendEngine) deferIncompleteFrozenGroup(ctx context.Context, rows []doma
 	}
 }
 
-func (d *SendEngine) prepareFallbackRequests(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, messages map[int64]string, failures map[int64]bool) ([]store.FrozenRequest, error) {
-	requests := make([]store.FrozenRequest, 0, len(rows))
-	for i := range rows {
-		if i >= len(outboxes) || failures[rows[i].OutboxID] {
+func (d *SendEngine) prepareFallbackRequests(ctx context.Context, attempt *deliveryAttempt, messages map[int64]string, failures map[int64]bool) ([]store.FrozenRequest, error) {
+	requests := make([]store.FrozenRequest, 0, len(attempt.members))
+	for i := range attempt.members {
+		member := &attempt.members[i]
+		if failures[member.row.OutboxID] {
 			return nil, errors.New("prepare fallback requests: message unavailable")
 		}
 
-		req, err := buildDeliverySendRequest(rows[i].RoomID, messages[rows[i].OutboxID], []domain.YouTubeNotificationOutbox{outboxes[i]})
+		req, err := buildDeliverySendRequest(member.row.RoomID, messages[member.row.OutboxID], attempt.outboxes[i:i+1])
 		if err != nil {
 			return nil, fmt.Errorf("prepare fallback requests: build request: %w", err)
 		}
@@ -220,7 +232,7 @@ func (d *SendEngine) prepareFallbackRequests(ctx context.Context, rows []domain.
 			return nil, fmt.Errorf("prepare fallback requests: final request: %w", err)
 		}
 
-		frozen.MemberIDs = []int64{rows[i].ID}
+		frozen.MemberIDs = []int64{member.row.ID}
 		requests = append(requests, frozen)
 	}
 
