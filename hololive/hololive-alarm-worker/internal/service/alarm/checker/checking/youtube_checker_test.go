@@ -51,6 +51,7 @@ type fakeYouTubeLiveSessionSource struct {
 	recentDispatch        map[string]bool
 	recentSentRooms       map[string][]string
 	recentSentRoomsErr    error
+	recentTerminalRooms   map[string][]string
 	loadRecentChannelArgs [][]string
 	sentRoomsSince        map[string]time.Time
 	// sentRoomsAt은 PostgreSQL 조회처럼 발송 시각이 stream별 하한 이후인 방만 근거로 돌려준다.
@@ -114,25 +115,21 @@ func (s *fakeYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	return dispatched, nil
 }
 
-func (s *fakeYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
+func (s *fakeYouTubeLiveSessionSource) RecentlySettledLiveStreamRooms(
 	_ context.Context,
 	sinceByStreamID map[string]time.Time,
-) (map[string]map[string]struct{}, error) {
+) (LiveStreamRoomSettlements, error) {
 	if s.recentSentRoomsErr != nil {
-		return nil, s.recentSentRoomsErr
+		return LiveStreamRoomSettlements{}, s.recentSentRoomsErr
 	}
 
 	s.sentRoomsSince = maps.Clone(sinceByStreamID)
 
-	sentRoomsByStreamID := make(map[string]map[string]struct{})
+	settled := newLiveStreamRoomSettlements()
 
 	for streamID := range sinceByStreamID {
 		for _, roomID := range s.recentSentRooms[streamID] {
-			if sentRoomsByStreamID[streamID] == nil {
-				sentRoomsByStreamID[streamID] = make(map[string]struct{})
-			}
-
-			sentRoomsByStreamID[streamID][roomID] = struct{}{}
+			addStreamRoom(settled.Sent, streamID, roomID)
 		}
 
 		for roomID, sentAt := range s.sentRoomsAt[streamID] {
@@ -140,15 +137,15 @@ func (s *fakeYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
 				continue
 			}
 
-			if sentRoomsByStreamID[streamID] == nil {
-				sentRoomsByStreamID[streamID] = make(map[string]struct{})
-			}
+			addStreamRoom(settled.Sent, streamID, roomID)
+		}
 
-			sentRoomsByStreamID[streamID][roomID] = struct{}{}
+		for _, roomID := range s.recentTerminalRooms[streamID] {
+			addStreamRoom(settled.TerminalFailed, streamID, roomID)
 		}
 	}
 
-	return sentRoomsByStreamID, nil
+	return settled, nil
 }
 
 func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
@@ -588,6 +585,111 @@ func TestYouTubeCheckerCheck_DoesNotRepeatLiveCatchupForLongRunningStream(t *tes
 	require.NoError(t, err)
 	assert.Empty(t, notifications)
 	assert.Equal(t, startActual.Add(-liveDispatchEvidenceLookback), persistedSource.sentRoomsSince[streamID])
+}
+
+// persistedLiveCatchupCheck는 Holodex가 비어 있을 때 저장 세션만으로 한 번 평가한 결과를 돌려준다.
+func persistedLiveCatchupCheck(t *testing.T, channelID, roomID string, source *fakeYouTubeLiveSessionSource) []*domain.AlarmNotification {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != testUsersLivePath {
+			http.NotFound(w, r)
+
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		writeYouTubeTestResponse(t, w, `[]`)
+	}))
+	t.Cleanup(server.Close)
+
+	cache := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
+	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tier.NewTieredScheduler(logger), dedupService, []int{5, 3, 1}, 0, source, nil, logger)
+	require.NoError(t, err)
+
+	_, err = cache.SAdd(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	require.NoError(t, err)
+
+	_, err = cache.SAdd(t.Context(), sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	require.NoError(t, err)
+
+	notifications, err := checker.Check(t.Context())
+	require.NoError(t, err)
+
+	return notifications
+}
+
+// DLQ·격리·취소로 끝난 방은 ledger가 재발행을 rejected_terminal로 거절하므로 catchup을 매분 다시 만들지 않는다.
+func TestYouTubeCheckerCheck_SkipsLiveCatchupForTerminalFailedRoom(t *testing.T) {
+	t.Parallel()
+
+	const (
+		channelID = "UC_TEST_TERMINAL_ROOM"
+		roomID    = testRoomID1
+		streamID  = "stream-terminal-room"
+	)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	startActual := now.Add(-10 * time.Minute)
+	stream := &domain.Stream{
+		ID:          streamID,
+		Title:       "terminal room live",
+		ChannelID:   channelID,
+		Status:      domain.StreamStatusLive,
+		StartActual: &startActual,
+		Channel:     &domain.Channel{ID: channelID, Name: testDBChannelName},
+	}
+	session := PersistedYouTubeLiveSession{Stream: stream, ObservedAt: now, LiveFirstSeenAt: startActual}
+
+	notifications := persistedLiveCatchupCheck(t, channelID, roomID, &fakeYouTubeLiveSessionSource{
+		sessions: []PersistedYouTubeLiveSession{session},
+	})
+	require.Len(t, notifications, 1, "실패 종료 근거가 없으면 같은 방송이 catchup 대상이어야 대조가 성립한다")
+
+	notifications = persistedLiveCatchupCheck(t, channelID, roomID, &fakeYouTubeLiveSessionSource{
+		sessions:            []PersistedYouTubeLiveSession{session},
+		recentDispatch:      map[string]bool{streamID: true},
+		recentTerminalRooms: map[string][]string{streamID: {roomID}},
+	})
+	assert.Empty(t, notifications)
+}
+
+// 실제 시작 시각이 없으면 처음 LIVE로 관측한 시각을 근거 하한으로 써서 24시간을 넘긴 방송에 다시 catchup하지 않는다.
+func TestYouTubeCheckerCheck_AnchorsEvidenceOnFirstSeenWithoutActualStart(t *testing.T) {
+	t.Parallel()
+
+	const (
+		channelID = "UC_TEST_FIRST_SEEN"
+		roomID    = testRoomID1
+		streamID  = "stream-first-seen"
+	)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	firstSeen := now.Add(-42 * time.Hour)
+	source := &fakeYouTubeLiveSessionSource{
+		sessions: []PersistedYouTubeLiveSession{{
+			Stream: &domain.Stream{
+				ID:        streamID,
+				Title:     "first seen live",
+				ChannelID: channelID,
+				Status:    domain.StreamStatusLive,
+				Channel:   &domain.Channel{ID: channelID, Name: testDBChannelName},
+			},
+			ObservedAt:      now,
+			LiveFirstSeenAt: firstSeen,
+		}},
+		recentDispatch: map[string]bool{streamID: true},
+		sentRoomsAt:    map[string]map[string]time.Time{streamID: {roomID: firstSeen.Add(time.Minute)}},
+	}
+
+	notifications := persistedLiveCatchupCheck(t, channelID, roomID, source)
+	assert.Empty(t, notifications)
+	assert.Equal(t, firstSeen.Add(-liveDispatchEvidenceLookback), source.sentRoomsSince[streamID])
 }
 
 func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *testing.T) {

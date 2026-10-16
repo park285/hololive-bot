@@ -913,7 +913,7 @@ func TestRecentLiveDispatchEvidenceReturnsDeliveryLookupErrorWithoutEvidence(t *
 		map[string]time.Time{"stream-without-evidence": time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC).Add(-24 * time.Hour)},
 	)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "pg sent delivery evidence")
+	require.ErrorContains(t, err, "pg settled delivery evidence")
 	assert.ErrorContains(t, err, "sent delivery lookup failed")
 }
 
