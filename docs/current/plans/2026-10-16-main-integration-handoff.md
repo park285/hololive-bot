@@ -63,7 +63,9 @@
 
 ## 6. 커밋 결과
 
-- 로컬 `main`에 제목 `feat(db): SQL 리뷰 후속 수정과 원본 저장 구조 압축 합류`로 커밋했습니다. SHA는 후속 문서 커밋에서 이 절에 기록합니다.
-- 원격 미발행이므로 이 SHA는 configured remote에 없습니다. iris-stack 메타 pointer는 갱신하지 않았습니다.
+- 합류 커밋: `948ab90e5512df476b5415a3c36a55c27f569962` `feat(db): SQL 리뷰 후속 수정과 원본 저장 구조 압축 합류`. 부모는 `21e60d245`이고 203파일, +11,894 / -2,821입니다. 커밋 시점 origin/main 대비 ahead 5였습니다.
+- hook: pre-commit의 `staging-scope-guard`가 추적 dirty 파일 전체(203개) 스테이징을 차단했습니다. 의도된 전체 합류이므로 이 커밋만 `IRIS_STACK_ALLOW_BULK_STAGE=1`로 재시도했습니다. writer guard·gofmt·identity·제목 정책 hook은 그대로 실행되어 통과했습니다. `--no-verify`·amend·force는 쓰지 않았습니다.
+- 이 SHA 기록은 별도 docs 커밋입니다.
+- 원격 미발행이므로 두 커밋 모두 configured remote에 없습니다. iris-stack 메타 pointer는 갱신하지 않았습니다.
 
 **Fallback delta: none. Retry delta: none.**
