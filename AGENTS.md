@@ -1,6 +1,6 @@
 # Hololive
 
-- Read ../AGENTS.md in iris-stack and affected subtree guidance. Run from root; [PROJECT_MAP](docs/current/PROJECT_MAP.md) owns topology. No standalone dashboard; web/credentials/native deployment belong to Iris web.
+- Read ../AGENTS.md in iris-stack and affected subtree guidance. Run from root; [PROJECT_MAP](docs/current/PROJECT_MAP.md) owns topology. No standalone dashboard; web/credentials/native deployment belong to `iris-console` (Iris Console).
 - Current deployment is central/Seoul Docker Compose and Osaka/Osaka2 collector host-native systemd. Select deployment procedures from [current runbooks](docs/current/runbooks/README.md); history, design, changelog and captured prompts do not define current deployment work.
 - Compile/test/build only on kapu; host compose.env owns bind addresses. hololive-bot-ops owns verified no-build remote cutovers; compose-redeploy-service.sh is a build-host deployment, not validation.
 - Select ./build-all.sh --build-only --no-bump, affected Go/shared module tests or youtubejs npm test; docs need diff review. Publication requires scripts/ci/pre-push-gate.sh; preserve [README](README.md) verification ownership.
