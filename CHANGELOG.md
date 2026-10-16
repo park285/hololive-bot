@@ -8,6 +8,9 @@
 
 ## 미출시
 
+- **실패 종료 방의 반복 catchup 차단:** live catchup이 DLQ·격리·취소로 끝난 방을 근거로 인정합니다. ledger가 `rejected_terminal`로 거절할 재발행을 매분 만들어 scheduler 오류가 반복되던 경로를 없애고, guardrail은 그 방을 매분 경고하지 않고 `terminal_delivery` 지표로 구분합니다. 아무 결과가 없는 방의 경고와 DLQ 지표는 유지합니다.
+- **실제 시작 시각이 없는 live의 근거 하한:** 실제 시작 시각이 없으면 처음 LIVE로 관측한 시각을 근거 하한의 기준으로 씁니다. 24시간을 넘긴 그런 방송에 같은 방 catchup을 다시 만들지 않습니다.
+- **native 점검 창 실패 복원:** host-native AP 배포가 변경 전 collector unit의 실행·활성화 상태를 기록합니다. 실패 복원은 실행 중이던 unit만 이전 release로 다시 시작하고, 점검 창에서 멈춰 둔 unit은 시작하지 않습니다.
 - **장시간 live의 반복 catchup 차단:** live catchup·guardrail의 기존 알림 근거 하한을 평가 시각이 아니라 방송의 실제 시작 시각 기준 24시간 전으로 둡니다. 24시간 넘게 이어지는 방송에서 최초 SENT가 창 밖으로 밀려 같은 방에 catchup을 매분 다시 만들던 경로와 guardrail `missing_dispatch` 오경보를 없앱니다. 막 시작한 방송의 근거 범위는 시작 후 경과분만큼만 앞당겨지며 catchup 허용 조건은 바꾸지 않습니다.
 - **event payload identity 정규화:** 관측마다 바뀌고 본문에 쓰지 않는 `stream.viewer_count`를 canonical event payload에서 제외합니다. 같은 event에 나중에 합류한 방의 delivery가 시청자 수 차이만으로 hash 충돌로 거절되던 경로를 막고, 이미 보낸 방의 재발행은 `duplicate_sent`로 수용합니다. 제목 등 본문 field의 충돌 거절 계약은 유지합니다. 배포 전에 만들어진 진행 중 event는 이전 hash를 유지하므로, 배포는 미발행 upcoming 후보가 없을 때 진행합니다.
 - **점검 창 Seoul 배포:** `AP_COLLECTOR_MAINTENANCE_STOPPED=true scripts/deploy/ap-deploy.sh seoul`이 schema 점검 창에서 정지한 b를 사전 검사에서 받습니다. cutover가 실패하면 이전 image로 되돌리되 collector는 시작하지 않습니다. collector·issuer 기준점의 revision·version 불일치는 rollback을 걸기 전에 거절하여 불필요한 재시작을 막습니다.

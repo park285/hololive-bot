@@ -49,6 +49,7 @@ releases_root="$state/releases" old_target="$state/releases/old"
 current_link="$state/current" previous_link="$state/previous"
 host_env="$state/host.env" unit_file="$state/unit"
 unit=collector po_socket=issuer.socket po_service=issuer.service
+collector_prechange_running=true collector_prechange_enabled=true
 change_started_at=2026-10-03T00:00:00Z
 sudo() {
   [[ "$1" != -n ]] || shift
