@@ -23,6 +23,17 @@ case "$MODE" in
     ;;
 esac
 
+# schema 점검 창에서 collector를 정지한 채 배포할 때만 true로 둔다. 사전 검사는 정지한 collector만 받고,
+# cutover가 실패하면 이전 image로 되돌리되 collector는 시작하지 않는다. 새 schema에서 구 writer를 띄우지 않기 위해서다.
+AP_COLLECTOR_MAINTENANCE_STOPPED="${AP_COLLECTOR_MAINTENANCE_STOPPED:-false}"
+case "$AP_COLLECTOR_MAINTENANCE_STOPPED" in
+  true|false) ;;
+  *)
+    echo "AP_COLLECTOR_MAINTENANCE_STOPPED must be true or false" >&2
+    exit 2
+    ;;
+esac
+
 ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
 
 if [[ "$AP_RUNTIME_MODE" != "compose" ]]; then
@@ -152,7 +163,7 @@ build_rsync_files_from
 rsync_preview | tee "$preview_file"
 validate_preview "$preview_file"
 
-"$REPO_ROOT/scripts/deploy/ap-collector-preflight.sh" "$AP_NAME"
+AP_PREFLIGHT_ALLOW_STOPPED="$AP_COLLECTOR_MAINTENANCE_STOPPED" "$REPO_ROOT/scripts/deploy/ap-collector-preflight.sh" "$AP_NAME"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "[DRY-RUN] No remote files or containers changed."
@@ -241,7 +252,14 @@ remote "set -euo pipefail
 cd ~/hololive-bot
 mkdir -p '$backup_dir'
 if sudo -n docker image inspect '$IMAGE_REF' >/dev/null 2>&1; then
-  [[ \$(docker inspect -f '{{.State.Status}}' hololive-youtube-collector-b) == running ]]
+  collector_status=\$(docker inspect -f '{{.State.Status}}' hololive-youtube-collector-b)
+  if [[ '$AP_COLLECTOR_MAINTENANCE_STOPPED' == true ]]; then
+    [[ \$collector_status == exited || \$collector_status == created ]]
+    printf 'stopped\n' > '$backup_dir/collector-prechange.state'
+  else
+    [[ \$collector_status == running ]]
+    printf 'running\n' > '$backup_dir/collector-prechange.state'
+  fi
   [[ \$(docker inspect -f '{{.Image}}' hololive-youtube-collector-b) == \$(sudo -n docker image inspect -f '{{.Id}}' '$IMAGE_REF') ]]
   sudo -n docker tag '$IMAGE_REF' '$rollback_image_tag'
   printf '%s\n' '$rollback_image_tag' > '$backup_dir/rollback-image-tag'
@@ -254,6 +272,7 @@ if sudo -n docker image inspect '$IMAGE_REF' >/dev/null 2>&1; then
   printf '%s\n' \"\$previous_collector_image_id\" > '$backup_dir/collector-prechange.image-id'
   python3 -c 'import json,sys; json.dump({\"schema_version\":1,\"source_revision\":sys.argv[1],\"go\":{\"goarch\":\"arm64\"},\"image_id\":sys.argv[2],\"version\":sys.argv[3]},open(sys.argv[4],\"w\"))' \"\$previous_collector_revision\" \"\$previous_collector_image_id\" \"\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$rollback_image_tag')\" '$backup_dir/collector-prechange-manifest.json'
 else
+  [[ '$AP_COLLECTOR_MAINTENANCE_STOPPED' != true ]] || { echo 'maintenance-stopped deploy requires the current collector image as rollback baseline' >&2; exit 1; }
   [[ -z \$(docker ps -q --filter 'name=^hololive-youtube-collector-b$') ]]
 fi
 if sudo -n docker image inspect '$PO_IMAGE_REF' >/dev/null 2>&1; then
@@ -267,6 +286,10 @@ if sudo -n docker image inspect '$PO_IMAGE_REF' >/dev/null 2>&1; then
   cp '$po_manifest_active' '$backup_dir/po-sandbox-prechange-manifest.json'
   cp '$po_image_id_active' '$backup_dir/po-sandbox-prechange.image-id'
   printf 'present\n' > '$backup_dir/po-sandbox-prechange.state'
+  # rollback은 collector와 issuer를 한 쌍으로 되돌린다. 짝이 맞지 않는 기준점은 rollback을 걸기 전에 거절한다.
+  previous_po_revision=\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"source_revision\"])' '$backup_dir/po-sandbox-prechange-manifest.json')
+  [[ \"\$previous_po_revision\" == \"\$previous_collector_revision\" ]] || { echo 'issuer and collector rollback baselines have different revisions; refusing cutover' >&2; exit 1; }
+  [[ \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$rollback_po_image_tag') == \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$rollback_image_tag') ]] || { echo 'issuer and collector rollback baselines have different versions; refusing cutover' >&2; exit 1; }
 else
   test ! -e '$po_manifest_active'
   test ! -e '$po_image_id_active'
@@ -399,9 +422,6 @@ cd ~/hololive-bot
 if [[ \$(cat '$backup_dir/po-sandbox-prechange.state') == present ]]; then
   previous_po_revision=\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"source_revision\"])' '$backup_dir/po-sandbox-prechange-manifest.json')
   po_verify_image '$rollback_po_image_tag' '$backup_dir/po-sandbox-prechange-manifest.json' \"\$previous_po_revision\" arm64 '$backup_dir/po-sandbox-prechange.image-id'
-  old_collector_revision=\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"source_revision\"])' '$backup_dir/collector-prechange-manifest.json')
-  [[ \"\$previous_po_revision\" == \"\$old_collector_revision\" ]]
-  [[ \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$rollback_po_image_tag') == \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$rollback_image_tag') ]]
 fi
 (cd '$backup_dir' && sha256sum --check --strict image.tar.sha256)
 sudo -n docker load --input '$backup_dir/image.tar'
