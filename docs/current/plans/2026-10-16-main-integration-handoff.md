@@ -1,6 +1,6 @@
 # 전체 변경 main 합류 마무리 인계 - 2026-10-16
 
-**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 PR #641(squash)로 원격 `main`(`848fb2792`)에 발행했습니다(6절). 운영 중앙·AP a/b/c/d에 적용하고 수용 검사를 마쳤습니다(7절).** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
+**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 PR #641(squash)로 원격 `main`(`848fb2792`)에 발행했습니다(6절). 운영 중앙·AP a/b/c/d에 적용하고 수용 검사를 마쳤습니다(7절). 배포 뒤 발견한 alarm 결함의 근본 수정, Seoul 점검 창 배포 절차 수정, 중앙 issuer c 정렬과 이전 버전 정리는 PR #643·#644와 운영 적용으로 마쳤습니다(8절).** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
 
 ## 1. 승인 범위
 
@@ -110,12 +110,53 @@
   - 사용자 지시에 따라 일회성 백업 `/var/backups/hololive-predeploy-sql-compaction-20261016T022736Z/`를 삭제했습니다.
   - 이로써 317-321 적용 전 DB로 되돌릴 복구점은 없습니다. 문제가 생기면 forward fix로 대응합니다.
   - 중앙 previous tree·rollback tag, Seoul `backups/seoul-collector-20261016T03*`와 rollback tag(collector `031540Z`·`031902Z`·`032423Z`, issuer `031902Z`·`032423Z`), native AP의 이전 release는 보존했습니다. 이것들을 정리하려면 별도 승인이 필요합니다.
-- **배포와 무관한 기존 결함 (미수정, 후속 필요):**
+- **배포와 무관한 기존 결함 (8절에서 수정):**
   - 증상: alarm-worker는 10-15 10시대(UTC)부터 매분 같은 event_key 하나에 대해 `dispatch event hash conflict`를 경고합니다. 그 결과 `publish queue batch: one or more deliveries were not accepted` scheduler 오류와 `alarm.youtube.live_guardrail.missing_dispatch`가 이어집니다(구독 방 1개).
   - 시작 시점: Loki 집계로 시작이 이번 점검 창(10-16 02:29Z)보다 앞섭니다. 따라서 이번 배포가 원인이 아닙니다.
   - 관측: 저장된 payload hash는 고정되어 있고 새로 계산한 hash는 매분 달라집니다.
-  - 추론(미검증): payload에 시각처럼 매번 바뀌는 값이 들어간 것으로 보입니다.
-  - 영향: 해당 live 알림 1건이 발송되지 않습니다.
+  - 원인(8절에서 확인): 매번 바뀐 값은 `stream.viewer_count`였습니다. 재발행 자체는 24시간 근거 창 결함에서 생겼습니다.
+  - 영향 정정: 그 방의 live 알림은 10-14 09:57Z에 이미 발송되었습니다. 이전에 적은 "알림 1건 미발송"은 잘못된 서술입니다. 실제 영향은 매분 반복된 재발행 시도, 경고·오류 소음, collision 행 증가였고, 같은 event에 나중에 합류하는 방은 거절될 위험이 있었습니다.
   - 근거 경로: `hololive-alarm-worker/internal/service/alarm/dispatchoutbox/repository_event_preflight.go`.
+
+## 8. 배포 뒤 결함 근본 수정과 이전 버전 정리 (2026-10-16)
+
+- **alarm 결함 원인 (운영 읽기 전용 확인):**
+  - 10-14 09:52Z에 시작해 42시간 넘게 이어진 live가 있었고, 이 방송의 catchup은 10-14 09:57Z에 SENT되었습니다.
+  - catchup·guardrail의 "이미 알린 방" 근거 하한이 평가 시각 − 24시간이었습니다. 그래서 10-15 09:58Z부터 최초 SENT가 창 밖으로 밀렸고, 같은 방에 catchup을 매분 다시 만들었습니다.
+  - canonical event payload에 `stream.viewer_count`가 들어 있어 재발행이 `duplicate_sent` 대신 `rejected_collision`이 되었습니다.
+  - 결과: hash conflict WARN, scheduler ERROR, `missing_dispatch` WARN이 매분 났고, collision 행이 297건까지 늘었습니다.
+- **수정 (PR #643, `3951da83d`):**
+  - 근거 하한을 방송별 실제 시작 시각 − 24시간으로 바꿨습니다. 실제 시작 시각이 없거나 미래이면 평가 시각을 기준으로 하고, 예정 시각은 쓰지 않습니다.
+  - event payload identity에서 `viewer_count`를 뺐습니다.
+  - 적대적 리뷰 2회에서 차단·중요 결함은 없었고, 경미 지적은 반영했습니다.
+- **worker 배포:**
+  - kapu에서 `build-all.sh --build-only --no-bump hololive-alarm-worker`(local CI 포함)로 arm64 image `aeaa6579e8ce`(revision `3951da83d`, 10.1.0)를 빌드했습니다.
+  - 중앙에서 worker만 `--no-build --no-deps`로 교체했습니다(05:16:17Z). 미발행 upcoming 후보와 진행 중 delivery가 모두 0건일 때 진행했습니다.
+  - rollback point는 `hololive-alarm-worker:rollback-alarm-dispatch-20261016T051616Z`(848)입니다.
+- **worker 수용:**
+  - 교체 뒤 8분 동안 hash conflict, not accepted, missing_dispatch, collision, ERROR가 모두 0건이었습니다. 교체 전 30분 동안은 hash conflict 30건, not accepted 90줄, missing_dispatch 30건, ERROR 30건이었습니다.
+  - 새 근거 SQL 두 개의 `pg_stat_statements` 호출 수가 1분마다 늘어 checker가 새 코드로 도는 것을 확인했습니다.
+  - health는 healthy이고 재시작은 0회입니다. 교체 뒤 WARN 1건은 확인용 `/metrics` 요청의 404였습니다.
+- **Seoul 점검 창 절차 (PR #644, `9c12e5875`):**
+  - `AP_COLLECTOR_MAINTENANCE_STOPPED=true scripts/deploy/ap-deploy.sh seoul`이 정지한 b를 받습니다.
+  - cutover가 실패하면 이전 image로 되돌리되 collector는 `up --no-start`로 만들기만 합니다.
+  - 기준점 짝 검사와 읽기 전용 검증은 rollback을 걸기 전으로 옮겼습니다.
+  - 적대적 리뷰 2회의 중요 지적(핵심 경로 테스트 공백)을 반영했습니다. 사용 조건은 [youtube-collector runbook](../runbooks/youtube-collector.md)에 있습니다.
+- **중앙 issuer c 정렬:**
+  - 정렬 전에는 issuer c가 `c98d54f2c`, collector c가 `848fb2792`였습니다. 이 상태에서는 다음 공식 paired 배포(`po-central-cutover.sh`)가 짝 검사에서 거부됩니다.
+  - Seoul에서 운영 중인 것과 같은 848 issuer 산출물을 사용했습니다(image `4ddbe64b47a3`, `1914722e054a`).
+  - 공식 `po-central-remote.sh`의 검증·복원 함수를 그대로 써서 issuer c를 교체하고 collector c를 다시 만들었습니다(04:56:20Z).
+  - 공식 `po-central-cutover.sh check`가 `central collector/issuer completion verified revision=848fb2792...`를 냈고, collector c는 `READY`·`first_success`입니다.
+- **이전 버전 정리 (사용자 승인):** 317-321을 적용했고 적용 전 DB 백업을 삭제했으므로, 848 이전 image와 release는 유효한 rollback 대상이 아닙니다. 그래서 정리했습니다.
+  - Seoul: tag 12개와 백업 5개를 지우고 dangling image를 prune했습니다(1.05GB). 남은 기준점은 `seoul-collector-20261016T032423Z`(848)입니다.
+  - 중앙: tag 32개, 이전 배포 디렉터리 9개, issuer 정렬 backup·staging을 지웠습니다. 남은 것은 `:prod`와 worker rollback point이고, 디스크 사용량은 15G에서 12G로 줄었습니다.
+  - osaka·osaka2: 이전 release 3개씩과 `previous` link를 지웠습니다. native rollback은 기준점이 없어 거절하므로, 문제가 생기면 fix-forward합니다.
+  - kapu: 앱 repo 4개에서 848 이전 tag 146개를 지우고 dangling image를 prune했습니다. image 사용량은 72GB에서 49GB로 줄었습니다. DB image, 호스트 이전 snapshot(`hololive-migration/*`), 보조 image는 남겼습니다. 이 중에는 현재 중앙 postgres·deunhealth image의 원본도 있습니다.
+- **남은 한계:**
+  - 실제 시작 시각 없이 24시간을 넘긴 방송은 이전처럼 catchup을 다시 시도할 수 있습니다. 확인 시점의 LIVE 세션 중 `started_at`이 빈 경우는 0건이었습니다.
+  - 그 방의 catchup delivery가 DLQ·QUARANTINED·CANCELLED이면, catchup이 허용되는 동안 재발행이 `rejected_terminal`로 반복될 수 있습니다. 이번 변경 범위 밖의 기존 동작입니다.
+  - 기존 collision 297행은 남아 있습니다. 사라지려면 SENT 보존 기간(90일)을 넘겨야 하며, 90일을 넘는 live는 근거를 잃는 경계 사례입니다.
+  - host-native a/d 배포에는 점검 정지 mode가 없어, 실패하면 `previous` release를 다시 시작합니다(runbook 명시).
+  - Seoul 배포에서 읽기 전용 블록이 `cutover_armed=true` 앞에 있다는 순서 자체는 테스트로 검증하지 않습니다.
 
 **Fallback delta: none. Retry delta: none.**
