@@ -60,6 +60,43 @@ func TestPublishReceiptsDistinguishMixedCommittedInputs(t *testing.T) {
 	require.Zero(t, count)
 }
 
+// 시청자 수만 다른 재발행은 이미 보낸 방에는 중복 발송으로, 나중에 합류한 방에는 새 delivery로 수용한다.
+func TestPublishIgnoresViewerCountInSharedEventIdentity(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	repository := NewPgxRepositoryFromPool(pool, nil)
+	ctx := t.Context()
+
+	first := receiptEnvelope("room-first", "canonical")
+
+	first.Notification.Stream.ViewerCount = new(771)
+
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first}})
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET status='sent', sent_at=NOW() WHERE room_id=$1`, first.Notification.RoomID)
+	require.NoError(t, err)
+
+	resent := receiptEnvelope("room-first", "canonical")
+
+	resent.Notification.Stream.ViewerCount = new(943)
+
+	joined := receiptEnvelope("room-joined", "canonical")
+
+	joined.Notification.Stream.ViewerCount = new(1744)
+
+	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{resent, joined}})
+	require.NoError(t, err)
+	require.Zero(t, result.HashConflictEvents)
+	require.Len(t, result.Receipts, 2)
+	require.Equal(t, PublishDuplicateSent, result.Receipts[0].Outcome)
+	require.Equal(t, PublishInserted, result.Receipts[1].Outcome)
+
+	var payload string
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payload::text FROM alarm_dispatch_events`).Scan(&payload))
+	require.NotContains(t, payload, "viewer_count")
+}
+
 func TestPublishCommitReconciliationVerifiesLedgerAndLeavesMissingUnresolved(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := NewPgxRepositoryFromPool(pool, nil)

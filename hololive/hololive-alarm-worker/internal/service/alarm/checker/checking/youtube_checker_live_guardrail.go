@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,14 +26,13 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 		return evidence
 	}
 
-	since := now.Add(-persistedLiveDispatchRecentWindow)
-	streamIDs := currentLiveStreamIDs(streamsByChannel)
+	sinceByStreamID := currentLiveDispatchEvidenceWindows(streamsByChannel, now)
 
-	if len(streamIDs) == 0 {
+	if len(sinceByStreamID) == 0 {
 		return evidence
 	}
 
-	evidence, err := c.recentLiveDispatchEvidence(ctx, streamIDs, since)
+	evidence, err := c.recentLiveDispatchEvidence(ctx, sinceByStreamID)
 	if err != nil {
 		observeYouTubeLiveGuardrail("dispatch_check_error")
 		c.logger.Warn("YouTube live guardrail dispatch check failed",
@@ -62,25 +63,30 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 		}
 
 		meta.rooms = rooms
-		c.observePersistedLiveGuardrailMeta(&meta, evidence, since)
+		c.observePersistedLiveGuardrailMeta(&meta, evidence, sinceByStreamID[meta.streamID])
 	}
 
 	return evidence
 }
 
-func currentLiveStreamIDs(streamsByChannel map[string][]*domain.Stream) []string {
-	streamIDs := make([]string, 0, len(streamsByChannel))
+// 같은 stream이 여러 번 보이면 가장 이른 하한을 써서 근거를 좁히지 않는다.
+func currentLiveDispatchEvidenceWindows(streamsByChannel map[string][]*domain.Stream, now time.Time) map[string]time.Time {
+	sinceByStreamID := make(map[string]time.Time)
+
 	for _, streams := range streamsByChannel {
 		for _, stream := range streams {
-			if !isLiveCatchupCandidate(stream) {
+			if !isLiveCatchupCandidate(stream) || stream.ID == "" {
 				continue
 			}
 
-			streamIDs = append(streamIDs, stream.ID)
+			since := liveDispatchEvidenceSince(stream, now)
+			if existing, ok := sinceByStreamID[stream.ID]; !ok || since.Before(existing) {
+				sinceByStreamID[stream.ID] = since
+			}
 		}
 	}
 
-	return UniqueStrings(streamIDs)
+	return sinceByStreamID
 }
 
 func (c *YouTubeChecker) observePersistedLiveGuardrailMeta(
@@ -193,15 +199,14 @@ type recentLiveDispatchEvidence struct {
 
 func (c *YouTubeChecker) recentLiveDispatchEvidence(
 	ctx context.Context,
-	streamIDs []string,
-	since time.Time,
+	sinceByStreamID map[string]time.Time,
 ) (recentLiveDispatchEvidence, error) {
 	evidence := newRecentLiveDispatchEvidence()
 	errs := make([]error, 0, 2)
 	deliveryErrs := make([]error, 0, 1)
 
-	c.collectPgLiveDispatchEvidence(ctx, streamIDs, since, &evidence, &errs, &deliveryErrs)
-	c.collectValkeyLiveDispatchEvidence(ctx, streamIDs, &evidence, &errs)
+	c.collectPgLiveDispatchEvidence(ctx, sinceByStreamID, &evidence, &errs, &deliveryErrs)
+	c.collectValkeyLiveDispatchEvidence(ctx, slices.Sorted(maps.Keys(sinceByStreamID)), &evidence, &errs)
 
 	if err := errors.Join(deliveryErrs...); err != nil {
 		evidence.deliveryCheckFailed = true
@@ -229,8 +234,7 @@ func newRecentLiveDispatchEvidence() recentLiveDispatchEvidence {
 
 func (c *YouTubeChecker) collectPgLiveDispatchEvidence(
 	ctx context.Context,
-	streamIDs []string,
-	since time.Time,
+	sinceByStreamID map[string]time.Time,
 	evidence *recentLiveDispatchEvidence,
 	errs *[]error,
 	deliveryErrs *[]error,
@@ -239,14 +243,14 @@ func (c *YouTubeChecker) collectPgLiveDispatchEvidence(
 		return
 	}
 
-	dispatched, err := c.persistedLiveSource.RecentlyDispatchedStreamIDs(ctx, streamIDs, since)
+	dispatched, err := c.persistedLiveSource.RecentlyDispatchedStreamIDs(ctx, sinceByStreamID)
 	if err != nil {
 		*errs = append(*errs, fmt.Errorf("pg dispatch evidence: %w", err))
 	} else {
 		mergeStringSet(evidence.pgDispatchedStreamIDs, dispatched)
 	}
 
-	sentRooms, err := c.persistedLiveSource.RecentlySentLiveStreamRooms(ctx, streamIDs, since)
+	sentRooms, err := c.persistedLiveSource.RecentlySentLiveStreamRooms(ctx, sinceByStreamID)
 	if err != nil {
 		*deliveryErrs = append(*deliveryErrs, fmt.Errorf("pg sent delivery evidence: %w", err))
 	} else {

@@ -92,6 +92,9 @@ delivery key and committed outcome. Only inserted, duplicate-active and duplicat
 receipts satisfy publishing; collision and other terminal outcomes do not. A later chunk
 failure preserves earlier committed receipts. `InsertPending` returns
 `ErrEventPayloadConflict` and no existing record for a conflicting single input.
+The canonical event payload omits per-observation metrics (`stream.viewer_count`): they
+change between selections without changing the rendered message, so a later room joining
+the same event is not rejected as a collision. Rendered fields such as the title still collide.
 
 선정된 upcoming 알람의 방별 payload/category는 `alarm_upcoming_candidates`에 저장합니다.
 후보가 없는 채널 평가는 저장하지 않습니다. staging commit부터 복구를 보장하며 예정 시작 이후에는

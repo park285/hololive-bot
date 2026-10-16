@@ -66,8 +66,7 @@ func (s *guardrailEvidenceSource) LoadConfirmedPremiereIDs(
 
 func (s *guardrailEvidenceSource) RecentlyDispatchedStreamIDs(
 	context.Context,
-	[]string,
-	time.Time,
+	map[string]time.Time,
 ) (map[string]struct{}, error) {
 	if s.dispatchErr != nil {
 		return nil, s.dispatchErr
@@ -78,8 +77,7 @@ func (s *guardrailEvidenceSource) RecentlyDispatchedStreamIDs(
 
 func (s *guardrailEvidenceSource) RecentlySentLiveStreamRooms(
 	context.Context,
-	[]string,
-	time.Time,
+	map[string]time.Time,
 ) (map[string]map[string]struct{}, error) {
 	if s.sentRoomsErr != nil {
 		return nil, s.sentRoomsErr
@@ -242,6 +240,37 @@ func TestMissingLiveDeliveryRooms(t *testing.T) {
 	}
 }
 
+// 근거 하한은 과거의 실제 시작 시각에만 고정하고, 같은 stream이 여러 번 보이면 가장 이른 하한을 쓴다.
+func TestCurrentLiveDispatchEvidenceWindowsAnchorsOnActualStart(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.October, 16, 12, 0, 0, 0, time.UTC)
+	staleSchedule := now.Add(-72 * time.Hour)
+	longStart := now.Add(-42 * time.Hour)
+	laterSighting := now.Add(-2 * time.Hour)
+	futureStart := now.Add(time.Hour)
+	live := func(id string, actual, scheduled *time.Time) *domain.Stream {
+		return &domain.Stream{ID: id, Status: domain.StreamStatusLive, StartActual: actual, StartScheduled: scheduled}
+	}
+
+	windows := currentLiveDispatchEvidenceWindows(map[string][]*domain.Stream{
+		"channel-a": {
+			live("long", &laterSighting, nil),
+			live("schedule-only", nil, &staleSchedule),
+			live("future-actual", &futureStart, nil),
+			{ID: "upcoming", Status: domain.StreamStatusUpcoming, StartScheduled: &staleSchedule},
+			live("", &longStart, nil),
+		},
+		"channel-b": {live("long", &longStart, nil)},
+	}, now)
+
+	assert.Equal(t, map[string]time.Time{
+		"long":          longStart.Add(-liveDispatchEvidenceLookback),
+		"schedule-only": now.Add(-liveDispatchEvidenceLookback),
+		"future-actual": now.Add(-liveDispatchEvidenceLookback),
+	}, windows)
+}
+
 func TestRecentLiveDispatchEvidenceErrorWrapping(t *testing.T) {
 	t.Parallel()
 
@@ -255,8 +284,7 @@ func TestRecentLiveDispatchEvidenceErrorWrapping(t *testing.T) {
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
-		[]string{testStreamID1},
-		time.Date(2026, time.May, 24, 9, 0, 0, 0, time.UTC),
+		map[string]time.Time{testStreamID1: time.Date(2026, time.May, 24, 9, 0, 0, 0, time.UTC)},
 	)
 	require.Error(t, err)
 	assert.True(t, evidence.deliveryCheckFailed)
@@ -281,8 +309,7 @@ func TestRecentLiveDispatchEvidenceTrimsPersistedDispatchIDs(t *testing.T) {
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
-		[]string{"stream-pg"},
-		time.Date(2026, time.May, 24, 9, 0, 0, 0, time.UTC),
+		map[string]time.Time{"stream-pg": time.Date(2026, time.May, 24, 9, 0, 0, 0, time.UTC)},
 	)
 	require.NoError(t, err)
 	assert.Contains(t, evidence.pgDispatchedStreamIDs, "stream-pg")
@@ -409,7 +436,7 @@ func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *test
 				logger: slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})),
 			}
 
-			checker.observePersistedLiveGuardrailMeta(&meta, tc.evidence, now.Add(-persistedLiveDispatchRecentWindow))
+			checker.observePersistedLiveGuardrailMeta(&meta, tc.evidence, now.Add(-liveDispatchEvidenceLookback))
 
 			if tc.wantLog == "" {
 				assert.Empty(t, buf.String())
