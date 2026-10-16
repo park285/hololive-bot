@@ -188,13 +188,14 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
 fi
 
 # 실패 복원은 변경 전 collector 실행 상태까지 되돌린다. 점검 창에서 멈춘 collector를 이전 release로 다시 띄우면
-# 새 schema 위에서 구 writer가 돈다. 재시작 대기(activating)는 실행 중으로 본다.
+# 새 schema 위에서 구 writer가 돈다. 재시작 대기(activating)는 실행 중으로 보고, 실패(failed)는 멈춘 상태로 본다.
 collector_prechange_enabled=false
 collector_prechange_running=false
+collector_prechange_state="$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)"
 if systemctl is-enabled --quiet "$unit" 2>/dev/null; then
   collector_prechange_enabled=true
 fi
-case "$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)" in
+case "$collector_prechange_state" in
   active | activating | reloading) collector_prechange_running=true ;;
 esac
 
@@ -242,7 +243,7 @@ native_restore_recorded_runtime() {
       if [[ "${collector_prechange_enabled:?}" == true ]]; then
         sudo -n systemctl enable "$unit"
       fi
-      echo "collector was not running before the change; restored $unit without starting it. Start it only after the schema matches the restored release." >&2
+      echo "collector was not running before the change (ActiveState=${collector_prechange_state:-unknown}); restored $unit without starting it. Start it only after the schema matches the restored release." >&2
     fi
   else
     po_restore_previous ""

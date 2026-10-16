@@ -6,6 +6,7 @@
 		WHERE e.alarm_type = $1::alarm_type
 		  AND (
 		    (d.status = $3 AND d.sent_at >= w.since)
-		    OR (d.status = ANY($5::text[]) AND e.created_at >= w.since)
+		    OR (e.category = $6 AND d.status = ANY($5::text[])
+		        AND COALESCE(d.dlq_at, d.quarantined_at, d.cancelled_at) >= w.since)
 		  )
 	

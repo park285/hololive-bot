@@ -119,7 +119,7 @@ func (c *YouTubeChecker) observePersistedLiveGuardrailMeta(
 	missingRooms := missingLiveDeliveryRooms(meta.rooms, sentRooms, evidence.terminalFailedRoomsByStreamID[meta.streamID])
 
 	if len(missingRooms) == 0 {
-		// DLQ·격리·취소는 ledger가 실패로 기록하고 DLQ 지표가 따로 세는 결과다. 매분 경고를 반복하지 않고 지표로만 구분한다.
+		// catchup의 DLQ·격리·취소는 ledger가 실패로 기록하고 DLQ 지표가 따로 세는 결과다. 매분 경고를 반복하지 않고 지표로만 구분한다.
 		if len(missingLiveDeliveryRooms(meta.rooms, sentRooms)) > 0 {
 			observeYouTubeLiveGuardrail("terminal_delivery")
 		} else {

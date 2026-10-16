@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.Time) {
@@ -111,10 +112,11 @@ func assertRecentlyDispatchedStreamIDs(t *testing.T, pool liveSessionPool, sourc
 	t.Helper()
 
 	insertAlarmDispatchEvents(t, pool, []testAlarmDispatchEvent{
-		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, CreatedAt: now.Add(-time.Hour)},
-		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, CreatedAt: now.Add(-time.Hour)},
-		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: testOldDispatchStreamID, CreatedAt: now.Add(-25 * time.Hour)},
-		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", CreatedAt: now.Add(-time.Hour)},
+		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: testOldDispatchStreamID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-25 * time.Hour)},
+		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 5, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, Category: "5", CreatedAt: now.Add(-2 * time.Hour)},
 	})
 
 	since := now.Add(-24 * time.Hour)
@@ -148,6 +150,8 @@ func assertRecentlySettledLiveStreamRooms(t *testing.T, pool liveSessionPool, so
 		{EventID: 3, RoomID: "room-4", Status: "sent", SentAt: &oldSentAt, CreatedAt: now.Add(-25 * time.Hour)},
 		{EventID: 3, RoomID: "room-old-quarantined", Status: "quarantined", TerminalAt: &oldTerminalAt, CreatedAt: now.Add(-25 * time.Hour)},
 		{EventID: 4, RoomID: "room-5", Status: "pending", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
+		// N분 전 알림은 dedupe key가 catchup과 달라 DLQ로 끝나도 catchup을 막지 않는다.
+		{EventID: 5, RoomID: "room-upcoming-dlq", Status: "dlq", TerminalAt: &terminalAt, CreatedAt: now.Add(-2 * time.Hour)},
 	})
 
 	since := now.Add(-24 * time.Hour)
@@ -156,7 +160,7 @@ func assertRecentlySettledLiveStreamRooms(t *testing.T, pool liveSessionPool, so
 	assert.Equal(t, map[string]map[string]struct{}{testLiveIncludedID: {testRoomID1: {}}}, settled.Sent)
 	assert.Equal(t, map[string]map[string]struct{}{testLiveIncludedID: {"room-dlq": {}, "room-cancel": {}}}, settled.TerminalFailed)
 
-	// 발송 완료는 발송 시각, 실패 종료는 event 생성 시각을 stream별 하한과 비교한다.
+	// 발송 완료는 발송 시각, 실패 종료는 실패 종료 시각을 stream별 하한과 비교한다.
 	settled, err = source.RecentlySettledLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: now.Add(-20 * time.Minute), testOldDispatchStreamID: now.Add(-26 * time.Hour)})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]map[string]struct{}{testOldDispatchStreamID: {"room-4": {}}}, settled.Sent)
@@ -306,6 +310,7 @@ type testAlarmDispatchEvent struct {
 	ID        int64
 	AlarmType string
 	StreamID  string
+	Category  string
 	CreatedAt time.Time
 }
 
@@ -372,17 +377,18 @@ func insertAlarmDispatchEvents(t *testing.T, pool liveSessionPool, events []test
 	for _, event := range events {
 		_, err := pool.Exec(t.Context(), `
 			INSERT INTO alarm_dispatch_events(
-				id, event_key, payload_hash, alarm_type, channel_id, stream_id, payload, created_at, updated_at
+				id, event_key, payload_hash, alarm_type, channel_id, stream_id, category, payload, created_at, updated_at
 			)
-			VALUES ($1, $2, $3, $4::alarm_type, $5, $6, '{}'::jsonb, $7, $7)
+			VALUES ($1, $2, $3, $4::alarm_type, $5, $6, $8, '{}'::jsonb, $7, $7)
 		`,
 			event.ID,
-			"event-"+event.StreamID,
+			fmt.Sprintf("event-%d-%s", event.ID, event.StreamID),
 			"0000000000000000000000000000000000000000000000000000000000000001",
 			event.AlarmType,
 			"channel-"+event.StreamID,
 			event.StreamID,
 			event.CreatedAt,
+			event.Category,
 		)
 		require.NoError(t, err)
 	}

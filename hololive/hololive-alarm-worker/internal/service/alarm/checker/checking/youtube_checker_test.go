@@ -588,8 +588,10 @@ func TestYouTubeCheckerCheck_DoesNotRepeatLiveCatchupForLongRunningStream(t *tes
 }
 
 // persistedLiveCatchupCheck는 Holodex가 비어 있을 때 저장 세션만으로 한 번 평가한 결과를 돌려준다.
-func persistedLiveCatchupCheck(t *testing.T, channelID, roomID string, source *fakeYouTubeLiveSessionSource) []*domain.AlarmNotification {
+func persistedLiveCatchupCheck(t *testing.T, channelID string, source *fakeYouTubeLiveSessionSource) []*domain.AlarmNotification {
 	t.Helper()
+
+	const roomID = testRoomID1
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != testUsersLivePath {
@@ -646,12 +648,12 @@ func TestYouTubeCheckerCheck_SkipsLiveCatchupForTerminalFailedRoom(t *testing.T)
 	}
 	session := PersistedYouTubeLiveSession{Stream: stream, ObservedAt: now, LiveFirstSeenAt: startActual}
 
-	notifications := persistedLiveCatchupCheck(t, channelID, roomID, &fakeYouTubeLiveSessionSource{
+	notifications := persistedLiveCatchupCheck(t, channelID, &fakeYouTubeLiveSessionSource{
 		sessions: []PersistedYouTubeLiveSession{session},
 	})
 	require.Len(t, notifications, 1, "실패 종료 근거가 없으면 같은 방송이 catchup 대상이어야 대조가 성립한다")
 
-	notifications = persistedLiveCatchupCheck(t, channelID, roomID, &fakeYouTubeLiveSessionSource{
+	notifications = persistedLiveCatchupCheck(t, channelID, &fakeYouTubeLiveSessionSource{
 		sessions:            []PersistedYouTubeLiveSession{session},
 		recentDispatch:      map[string]bool{streamID: true},
 		recentTerminalRooms: map[string][]string{streamID: {roomID}},
@@ -671,25 +673,30 @@ func TestYouTubeCheckerCheck_AnchorsEvidenceOnFirstSeenWithoutActualStart(t *tes
 
 	now := time.Now().UTC().Truncate(time.Second)
 	firstSeen := now.Add(-42 * time.Hour)
-	source := &fakeYouTubeLiveSessionSource{
-		sessions: []PersistedYouTubeLiveSession{{
-			Stream: &domain.Stream{
-				ID:        streamID,
-				Title:     "first seen live",
-				ChannelID: channelID,
-				Status:    domain.StreamStatusLive,
-				Channel:   &domain.Channel{ID: channelID, Name: testDBChannelName},
-			},
-			ObservedAt:      now,
-			LiveFirstSeenAt: firstSeen,
-		}},
-		recentDispatch: map[string]bool{streamID: true},
-		sentRoomsAt:    map[string]map[string]time.Time{streamID: {roomID: firstSeen.Add(time.Minute)}},
+	source := func(sentRoomsAt map[string]map[string]time.Time) *fakeYouTubeLiveSessionSource {
+		return &fakeYouTubeLiveSessionSource{
+			sessions: []PersistedYouTubeLiveSession{{
+				Stream: &domain.Stream{
+					ID:             streamID,
+					Title:          "first seen live",
+					ChannelID:      channelID,
+					Status:         domain.StreamStatusLive,
+					StartScheduled: &firstSeen,
+					Channel:        &domain.Channel{ID: channelID, Name: testDBChannelName},
+				},
+				ObservedAt:      now,
+				LiveFirstSeenAt: firstSeen,
+			}},
+			recentDispatch: map[string]bool{streamID: true},
+			sentRoomsAt:    sentRoomsAt,
+		}
 	}
 
-	notifications := persistedLiveCatchupCheck(t, channelID, roomID, source)
-	assert.Empty(t, notifications)
-	assert.Equal(t, firstSeen.Add(-liveDispatchEvidenceLookback), source.sentRoomsSince[streamID])
+	require.Len(t, persistedLiveCatchupCheck(t, channelID, source(nil)), 1, "근거가 없으면 같은 방송이 catchup 대상이어야 대조가 성립한다")
+
+	withSent := source(map[string]map[string]time.Time{streamID: {roomID: firstSeen.Add(time.Minute)}})
+	assert.Empty(t, persistedLiveCatchupCheck(t, channelID, withSent))
+	assert.Equal(t, firstSeen.Add(-liveDispatchEvidenceLookback), withSent.sentRoomsSince[streamID])
 }
 
 func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *testing.T) {

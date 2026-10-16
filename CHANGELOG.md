@@ -8,7 +8,7 @@
 
 ## 미출시
 
-- **실패 종료 방의 반복 catchup 차단:** live catchup이 DLQ·격리·취소로 끝난 방을 근거로 인정합니다. ledger가 `rejected_terminal`로 거절할 재발행을 매분 만들어 scheduler 오류가 반복되던 경로를 없애고, guardrail은 그 방을 매분 경고하지 않고 `terminal_delivery` 지표로 구분합니다. 아무 결과가 없는 방의 경고와 DLQ 지표는 유지합니다.
+- **실패 종료 방의 반복 catchup 차단:** live catchup이 자기 catchup delivery가 DLQ·격리·취소로 끝난 방을 근거로 인정합니다. ledger가 `rejected_terminal`로 거절할 재발행을 매분 만들어 scheduler 오류가 반복되던 경로를 없애고, guardrail은 그 방을 매분 경고하지 않고 `terminal_delivery` 지표로 구분합니다. N분 전 알림의 실패는 catchup을 막지 않으며, 아무 결과가 없는 방의 경고와 DLQ 지표는 유지합니다.
 - **실제 시작 시각이 없는 live의 근거 하한:** 실제 시작 시각이 없으면 처음 LIVE로 관측한 시각을 근거 하한의 기준으로 씁니다. 24시간을 넘긴 그런 방송에 같은 방 catchup을 다시 만들지 않습니다.
 - **native 점검 창 실패 복원:** host-native AP 배포가 변경 전 collector unit의 실행·활성화 상태를 기록합니다. 실패 복원은 실행 중이던 unit만 이전 release로 다시 시작하고, 점검 창에서 멈춰 둔 unit은 시작하지 않습니다.
 - **장시간 live의 반복 catchup 차단:** live catchup·guardrail의 기존 알림 근거 하한을 평가 시각이 아니라 방송의 실제 시작 시각 기준 24시간 전으로 둡니다. 24시간 넘게 이어지는 방송에서 최초 SENT가 창 밖으로 밀려 같은 방에 catchup을 매분 다시 만들던 경로와 guardrail `missing_dispatch` 오경보를 없앱니다. 막 시작한 방송의 근거 범위는 시작 후 경과분만큼만 앞당겨지며 catchup 허용 조건은 바꾸지 않습니다.

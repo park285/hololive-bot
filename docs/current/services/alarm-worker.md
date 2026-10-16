@@ -113,11 +113,13 @@ LIVE 시작 catchup과 guardrail은 방송마다 `기준 시각 − 24시간` �
 이미 보낸 방은 `duplicate_sent`로 끝나고 그 사이 본문 field가 바뀌었으면 collision 경고로
 드러납니다.
 
-방별 근거는 발송을 마친 SENT delivery(발송 시각 기준)와 DLQ·QUARANTINED·CANCELLED로 끝난
-delivery(event 생성 시각 기준)입니다. 실패 종료 방은 ledger가 같은 delivery의 재발행을
-`rejected_terminal`로 거절하므로 catchup을 다시 만들지 않고, guardrail도 매분 경고하지 않고
+방별 근거는 발송을 마친 SENT delivery(발송 시각 기준)와 catchup event(`live_catchup`)의
+delivery 가운데 DLQ·QUARANTINED·CANCELLED로 끝난 것(실패 종료 시각 기준)입니다. catchup
+delivery의 dedupe key는 방송마다 하나라서, 실패 종료된 방은 ledger가 재발행을 `rejected_terminal`로
+거절합니다. 그래서 catchup을 다시 만들지 않고, guardrail도 매분 경고하지 않고
 `terminal_delivery` 지표로만 구분합니다. 실패 자체는 DLQ 지표와 delivery 상태가 드러냅니다.
-아무 결과가 없는 방만 `partial_delivery`·`missing_delivery` 경고 대상입니다.
+N분 전·일정 변경 알림은 key가 달라 실패해도 catchup을 막지 않습니다. 아무 결과가 없는 방만
+`partial_delivery`·`missing_delivery` 경고 대상입니다.
 
 DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다. 구독자 조회는 cache·DB 쌍마다 하나인 shared `alarm.SubscriberResolver`가 담당하며, 여러 채널의 empty marker 확인은 한 번의 pipeline으로 보냅니다. 전체 rebuild는 단일 worker의 구독 mutation mutex 아래에서 `ScanKeyPages`로 page마다 subscriber key를 지운 뒤 DB snapshot을 읽어 다시 씁니다.
 

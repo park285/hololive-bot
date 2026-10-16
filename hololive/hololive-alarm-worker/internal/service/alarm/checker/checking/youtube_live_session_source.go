@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -265,6 +266,8 @@ type settledLiveStreamRoomRow struct {
 }
 
 // 실패 종료 상태는 ledger가 같은 delivery의 재발행을 rejected_terminal로 거절하는 상태다.
+// 방송마다 하나인 catchup delivery의 dedupe key와 같아지는 것은 catchup event의 실패 종료뿐이다.
+// N분 전·일정 변경 알림은 key가 달라 실패해도 catchup을 막지 않는다.
 var terminalFailedDeliveryStatuses = []string{
 	string(dispatchoutbox.StatusDLQ),
 	string(dispatchoutbox.StatusQuarantined),
@@ -278,7 +281,7 @@ func (s *PgYouTubeLiveSessionSource) queryRecentlySettledLiveStreamRooms(
 ) ([]settledLiveStreamRoomRow, error) {
 	var rows []settledLiveStreamRoomRow
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), sinces, terminalFailedDeliveryStatuses); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), sinces, terminalFailedDeliveryStatuses, sharedalarmkeys.NotificationCategoryLiveCatchup); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 

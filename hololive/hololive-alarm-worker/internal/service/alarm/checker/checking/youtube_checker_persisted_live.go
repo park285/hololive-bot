@@ -32,8 +32,8 @@ type YouTubeLiveSessionSource interface {
 }
 
 // LiveStreamRoomSettlements는 stream별로 dispatch ledger가 결론을 낸 방이다.
-// Sent는 발송을 마친 방이다. TerminalFailed는 DLQ·격리·취소로 끝난 방이며, ledger가 같은 delivery의 재발행을
-// rejected_terminal로 거절하므로 catchup을 다시 만들지 않는다.
+// Sent는 발송을 마친 방이다. TerminalFailed는 catchup delivery가 DLQ·격리·취소로 끝난 방이며, ledger가 같은
+// delivery의 재발행을 rejected_terminal로 거절하므로 catchup을 다시 만들지 않는다.
 type LiveStreamRoomSettlements struct {
 	Sent           map[string]map[string]struct{}
 	TerminalFailed map[string]map[string]struct{}
