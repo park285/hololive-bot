@@ -90,4 +90,4 @@
 - 소유 PostgreSQL 18.6에서 실제 production `migrationrunner`로 316 baseline을 만들고, 실제 `cmd/db-migrate`로 upgrade·실패 복구를 실행했습니다. 원본 10,003행의 마지막 batch 실패 시 10,000행 확정/3행 미완료, 감사 10,002행에서는 10,000행 확정/2행 미완료였습니다. 결함을 제거하고 CLI를 재실행하자 321까지 완료됐으며 표현 변환을 역정규화한 **원래 모든 열의 JSONB 값이 정확히 일치**했습니다. 재진입은 applied=0/skipped=182입니다.
 - 실제 application INSERT SQL을 `hololive_runtime`으로 비어 있지 않은 입력에 실행해 최초 1행·중복 0행과 기존 decision 보존을 확인했습니다. scraper resolver의 ID 공유와 두 역할의 사전 직접 INSERT 거절(`42501`)도 확인했습니다.
 - 운영 관측·운영 규모의 재작성 시간·WAL 용량은 인수 과정에서 재측정하지 않았습니다. 작은 tmpfs fixture의 결과를 운영 용량·소요 시간 보장으로 사용하지 않습니다.
-- 317·318 batch commit의 독립 안전성 리뷰는 차단 결함 없이 수락했습니다. 리뷰 결론, PG 18.6 timeout probe, 실패 뒤 재실행·timeout 관련 운영 주의 사항은 [main 합류 인계](2026-10-16-main-integration-handoff.md) 3-5절에 있습니다. 로컬 합류 커밋 `948ab90e5`는 PR squash로 원격 main에 발행합니다(그 문서 6절).
+- 317·318 batch commit의 독립 안전성 리뷰는 차단 결함 없이 수락했습니다. 리뷰 결론, PG 18.6 timeout probe, 실패 뒤 재실행·timeout 관련 운영 주의 사항은 [main 합류 인계](2026-10-16-main-integration-handoff.md) 3-5절에 있습니다. 로컬 합류 커밋 `948ab90e5`는 PR #641 squash로 원격 main `848fb2792`에 발행했고, 2026-10-16 운영에 적용했습니다(그 문서 6·7절).
