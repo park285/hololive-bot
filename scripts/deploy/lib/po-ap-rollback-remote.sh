@@ -35,6 +35,8 @@ old_revision="$(sudo -n docker image inspect -f '{{index .Config.Labels "org.ope
 [[ "$old_revision" =~ ^[0-9a-f]{40}$ ]] || exit 1
 python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["source_revision"] == sys.argv[2] and m["go"]["goarch"] == "arm64" and m["image_id"] == sys.argv[3]' "$backup/collector-prechange-manifest.json" "$old_revision" "$(cat "$backup/collector-prechange.image-id")"
 [[ "$(sudo -n docker image inspect -f '{{.Id}}' "$old_collector_tag")" == "$(cat "$backup/collector-prechange.image-id")" ]]
+collector_state="$(cat "$backup/collector-prechange.state")"
+[[ "$collector_state" == running || "$collector_state" == stopped ]] || exit 1
 if [[ "$po_state" == present ]]; then
   old_po_tag="$(cat "$backup/rollback-po-image-tag")"
   [[ "$old_po_tag" =~ ^hololive-youtube-po-sandbox:rollback-[0-9]{8}T[0-9]{6}Z$ ]] || exit 1
@@ -55,7 +57,7 @@ ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot
   "${compose[@]}" -f "$preflight/deploy/compose/docker-compose.prod.yml" \
   -f "$preflight/deploy/compose/$(basename "$ap_file")" config --quiet
 if [[ "$mode" == check ]]; then
-  echo "AP rollback verified: backup=$backup collector=$old_collector_tag issuer=${old_po_tag:-absent}"
+  echo "AP rollback verified: backup=$backup collector=$old_collector_tag collector_state=$collector_state issuer=${old_po_tag:-absent}"
   exit 0
 fi
 
@@ -95,13 +97,24 @@ else
     sudo -n docker image rm hololive-youtube-po-sandbox:prod >/dev/null
   fi
 fi
-sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-  "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up -d --no-build --no-deps --force-recreate "$service"
-for _ in $(seq 1 30); do
-  [[ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")" == healthy ]] && break
-  sleep 2
-done
-[[ "$(docker inspect -f '{{.State.Health.Status}}' "$container")" == healthy ]]
-[[ "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container")" == "$old_revision" ]]
-docker exec "$container" ./bin/healthcheck "https://127.0.0.1:$port/health" >/dev/null
-printf 'AP rollback complete: backup=%s started_at=%s collector=%s issuer=%s\n' "$backup" "$started_at" "$old_collector_tag" "${old_po_tag:-absent}"
+# collector는 변경 전 상태로 되돌린다. 점검 창에서 정지했던 collector는 이전 image로 만들기만 하고 시작하지 않는다.
+# 새 schema에서 구 writer를 띄우지 않기 위해서다. issuer는 DB에 쓰지 않으므로 위에서 이전 image로 다시 띄운다.
+restore_previous_collector() {
+  if [[ "$collector_state" == stopped ]]; then
+    sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+      "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up --no-start --no-build --no-deps --force-recreate "$service"
+    [[ "$(docker inspect -f '{{.State.Status}}' "$container")" == created ]]
+  else
+    sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+      "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up -d --no-build --no-deps --force-recreate "$service"
+    for _ in $(seq 1 30); do
+      [[ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")" == healthy ]] && break
+      sleep 2
+    done
+    [[ "$(docker inspect -f '{{.State.Health.Status}}' "$container")" == healthy ]]
+    docker exec "$container" ./bin/healthcheck "https://127.0.0.1:$port/health" >/dev/null
+  fi
+  [[ "$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container")" == "$old_revision" ]]
+}
+restore_previous_collector
+printf 'AP rollback complete: backup=%s started_at=%s collector=%s collector_state=%s issuer=%s\n' "$backup" "$started_at" "$old_collector_tag" "$collector_state" "${old_po_tag:-absent}"
