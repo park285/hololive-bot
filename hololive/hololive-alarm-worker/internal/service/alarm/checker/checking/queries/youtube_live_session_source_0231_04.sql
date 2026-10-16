@@ -1,9 +1,9 @@
 
 		SELECT e.stream_id, d.room_id
-		FROM alarm_dispatch_events AS e
+		FROM unnest($2::text[], $4::timestamptz[]) AS w(stream_id, since)
+		JOIN alarm_dispatch_events AS e ON e.stream_id = w.stream_id
 		JOIN alarm_dispatch_deliveries AS d ON d.event_id = e.id
 		WHERE e.alarm_type = $1::alarm_type
-		  AND e.stream_id = ANY($2)
 		  AND d.status = $3
-		  AND d.sent_at >= $4
+		  AND d.sent_at >= w.since
 	

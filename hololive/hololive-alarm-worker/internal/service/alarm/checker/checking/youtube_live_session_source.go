@@ -3,6 +3,8 @@ package checking
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -181,23 +183,18 @@ func (s *PgYouTubeLiveSessionSource) effectiveUpcomingLookahead() time.Duration 
 
 func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	ctx context.Context,
-	streamIDs []string,
-	since time.Time,
+	sinceByStreamID map[string]time.Time,
 ) (map[string]struct{}, error) {
 	result := make(map[string]struct{})
 
-	if s == nil || s.pool == nil || len(streamIDs) == 0 {
-		return result, nil
-	}
-
-	streamIDs = UniqueStrings(streamIDs)
-	if len(streamIDs) == 0 {
+	streamIDs, sinces, ok := s.liveDispatchWindows(sinceByStreamID)
+	if !ok {
 		return result, nil
 	}
 
 	var rows []string
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0175_03.sql"), persistedAlarmDispatchEventLiveType, streamIDs, since.UTC()); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0175_03.sql"), persistedAlarmDispatchEventLiveType, streamIDs, sinces); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
@@ -215,22 +212,42 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 
 func (s *PgYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
 	ctx context.Context,
-	streamIDs []string,
-	since time.Time,
+	sinceByStreamID map[string]time.Time,
 ) (map[string]map[string]struct{}, error) {
 	result := make(map[string]map[string]struct{})
-	streamIDs, ok := s.normalizedStreamIDs(streamIDs)
 
+	streamIDs, sinces, ok := s.liveDispatchWindows(sinceByStreamID)
 	if !ok {
 		return result, nil
 	}
 
-	rows, err := s.queryRecentlySentLiveStreamRooms(ctx, streamIDs, since)
+	rows, err := s.queryRecentlySentLiveStreamRooms(ctx, streamIDs, sinces)
 	if err != nil {
 		return nil, fmt.Errorf("query recently sent live stream rooms: %w", err)
 	}
 
 	return sentLiveStreamRoomsByStreamID(rows), nil
+}
+
+// liveDispatchWindows는 stream별 하한을 SQL unnest에 넘길 같은 길이의 배열로 바꾼다.
+func (s *PgYouTubeLiveSessionSource) liveDispatchWindows(sinceByStreamID map[string]time.Time) ([]string, []time.Time, bool) {
+	if s == nil || s.pool == nil || len(sinceByStreamID) == 0 {
+		return nil, nil, false
+	}
+
+	streamIDs := make([]string, 0, len(sinceByStreamID))
+	sinces := make([]time.Time, 0, len(sinceByStreamID))
+
+	for _, streamID := range slices.Sorted(maps.Keys(sinceByStreamID)) {
+		if streamID == "" {
+			continue
+		}
+
+		streamIDs = append(streamIDs, streamID)
+		sinces = append(sinces, sinceByStreamID[streamID].UTC())
+	}
+
+	return streamIDs, sinces, len(streamIDs) > 0
 }
 
 func (s *PgYouTubeLiveSessionSource) normalizedStreamIDs(streamIDs []string) ([]string, bool) {
@@ -251,11 +268,11 @@ type sentLiveStreamRoomRow struct {
 func (s *PgYouTubeLiveSessionSource) queryRecentlySentLiveStreamRooms(
 	ctx context.Context,
 	streamIDs []string,
-	since time.Time,
+	sinces []time.Time,
 ) ([]sentLiveStreamRoomRow, error) {
 	var rows []sentLiveStreamRoomRow
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), since.UTC()); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), sinces); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 

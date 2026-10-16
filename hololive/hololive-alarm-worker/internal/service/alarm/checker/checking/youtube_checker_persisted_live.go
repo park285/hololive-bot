@@ -10,7 +10,9 @@ import (
 )
 
 const (
-	persistedLiveDispatchRecentWindow = 24 * time.Hour
+	// LIVE 알림 근거는 사전 알림을 포함해 라이브 시작 전 이 범위부터 인정한다.
+	// 기준을 평가 시각이 아니라 실제 시작 시각에 두어야 24시간 넘게 이어지는 방송도 최초 알림을 근거로 유지한다.
+	liveDispatchEvidenceLookback      = 24 * time.Hour
 	persistedLiveGuardrailGraceWindow = 2 * time.Minute
 )
 
@@ -24,8 +26,20 @@ type YouTubeLiveSessionSource interface {
 	LoadRecentSessions(ctx context.Context, channelIDs []string, now time.Time) ([]PersistedYouTubeLiveSession, error)
 	LoadRecentLiveChannelIDs(ctx context.Context, channelIDs []string, now time.Time) ([]string, error)
 	LoadConfirmedPremiereIDs(ctx context.Context, videoIDs []string) (map[string]struct{}, error)
-	RecentlyDispatchedStreamIDs(ctx context.Context, streamIDs []string, since time.Time) (map[string]struct{}, error)
-	RecentlySentLiveStreamRooms(ctx context.Context, streamIDs []string, since time.Time) (map[string]map[string]struct{}, error)
+	// 두 조회는 stream마다 주어진 하한 이후의 LIVE 알림만 근거로 본다.
+	RecentlyDispatchedStreamIDs(ctx context.Context, sinceByStreamID map[string]time.Time) (map[string]struct{}, error)
+	RecentlySentLiveStreamRooms(ctx context.Context, sinceByStreamID map[string]time.Time) (map[string]map[string]struct{}, error)
+}
+
+// liveDispatchEvidenceSince는 방송별 알림 근거의 하한이다. 실제 시작 시각이 없거나 미래이면 평가 시각을 기준으로 한다.
+// 예정 시각은 쓰지 않는다. 갱신되지 않은 예정 시각은 며칠 전 사전 알림까지 근거로 넓혀 시작 catchup을 막는다.
+func liveDispatchEvidenceSince(stream *domain.Stream, now time.Time) time.Time {
+	anchor := now.UTC()
+	if stream != nil && stream.StartActual != nil && !stream.StartActual.IsZero() && stream.StartActual.Before(anchor) {
+		anchor = stream.StartActual.UTC()
+	}
+
+	return anchor.Add(-liveDispatchEvidenceLookback)
 }
 
 func (c *YouTubeChecker) loadPersistedLiveSessions(

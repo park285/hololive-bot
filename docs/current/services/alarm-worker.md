@@ -96,12 +96,21 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 
 발행 결과는 입력 ordinal별 receipt로 확인합니다. 저장된 active delivery와 SENT는 수용된 발행이며, payload collision과 DLQ·QUARANTINED·CANCELLED는 성공으로 표시하지 않습니다. 방별 수용 결과만 dedup·tier에 반영하므로 한 방의 성공이 다른 방의 복구를 막지 않습니다. commit 응답이 불명확하면 안정적인 event key·payload hash·delivery key를 한 번, 최대 5초 동안 확인하고 확인되지 않은 항목은 성공 처리하지 않습니다.
 
-선정된 upcoming 알람은 `alarm_upcoming_candidates`에 최초 category·본문 입력·방을 저장해 commit합니다. 저장할 후보가 없는 채널 평가는 DB에 쓰지 않습니다. 보장 시작점은 이 durable staging commit입니다. 기존 75초 조회 lookback 이후에도 미발행 후보를 복구하되 예정 시작 시각 이후에는 분 전 알람을 만료시킵니다. 확인된 일정 변경·방송 종료·구독 해제는 사유를 남겨 종료하며, 단순 조회 목록 누락만으로 취소하지 않습니다. 최신 provider 응답은 과거 canonical 보강과 분리하고 canonical 종료는 선정 이후의 실제 상태·일정 관측 시각(`status_observed_at`, `schedule_observed_at`)만 사용합니다. 확정된 최초공개도 일반 방송과 같은 분 전·시작 알림 후보입니다(`contracts/alarm.md`). 예정 시각도 저장되는 `last_seen_at`은 이 최신성의 증거가 아닙니다. 과거 행의 관측 시각은 추정하지 않습니다. Claim 대기 뒤 발행 직전에도 미발행 후보의 기한을 재검사하며, 이미 수용된 delivery의 현행 재시도 정책은 별도로 유지합니다. 제목 변경은 기존 event key/hash의 collision 거절 계약을 유지합니다.
+선정된 upcoming 알람은 `alarm_upcoming_candidates`에 최초 category·본문 입력·방을 저장해 commit합니다. 저장할 후보가 없는 채널 평가는 DB에 쓰지 않습니다. 보장 시작점은 이 durable staging commit입니다. 기존 75초 조회 lookback 이후에도 미발행 후보를 복구하되 예정 시작 시각 이후에는 분 전 알람을 만료시킵니다. 확인된 일정 변경·방송 종료·구독 해제는 사유를 남겨 종료하며, 단순 조회 목록 누락만으로 취소하지 않습니다. 최신 provider 응답은 과거 canonical 보강과 분리하고 canonical 종료는 선정 이후의 실제 상태·일정 관측 시각(`status_observed_at`, `schedule_observed_at`)만 사용합니다. 확정된 최초공개도 일반 방송과 같은 분 전·시작 알림 후보입니다(`contracts/alarm.md`). 예정 시각도 저장되는 `last_seen_at`은 이 최신성의 증거가 아닙니다. 과거 행의 관측 시각은 추정하지 않습니다. Claim 대기 뒤 발행 직전에도 미발행 후보의 기한을 재검사하며, 이미 수용된 delivery의 현행 재시도 정책은 별도로 유지합니다. 제목 변경은 기존 event key/hash의 collision 거절 계약을 유지합니다. 시청자 수처럼 관측마다 바뀌고 본문에 쓰지 않는 값은 event payload identity에서 제외하므로, 같은 event에 나중에 합류한 방의 delivery는 그 값 차이만으로 거절되지 않습니다.
 
 방송 checker와 생일 방송 조회는 LIVE의 `status_observed_at`, UPCOMING의
 `schedule_observed_at`을 각 최신성 창의 하한부터 현재까지로 제한합니다. 관측 시각이
 NULL이거나 미래이면 후보에서 제외합니다. LIVE guardrail 로그도 실제로 읽은 시각을
 `status_observed_at` 필드로 기록합니다.
+
+LIVE 시작 catchup과 guardrail은 방송마다 `실제 시작 시각 − 24시간` 이후의 LIVE event·SENT
+delivery를 이미 알린 근거로 봅니다. 실제 시작 시각이 없거나 미래이면 평가 시각을 기준으로
+하고, 예정 시각은 쓰지 않습니다(갱신되지 않은 예정 시각이 며칠 전 사전 알림까지 근거로 넓혀
+시작 catchup을 막지 않도록). 평가 시각 기준 창이 아니므로 24시간 넘게 이어지는 방송도 최초
+알림을 근거로 유지하여 같은 방에 catchup을 다시 만들지 않고, guardrail 로그의 `dispatch_since`도
+그 방송의 하한을 기록합니다. 실제 시작 시각 없이 24시간을 넘긴 방송은 평가 시각 창으로 돌아가
+catchup을 다시 시도할 수 있습니다. 이미 보낸 방은 `duplicate_sent`로 끝나고, 그 사이 본문 field가
+바뀌었으면 collision 경고로 드러납니다.
 
 DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다. 구독자 조회는 cache·DB 쌍마다 하나인 shared `alarm.SubscriberResolver`가 담당하며, 여러 채널의 empty marker 확인은 한 번의 pipeline으로 보냅니다. 전체 rebuild는 단일 worker의 구독 mutation mutex 아래에서 `ScanKeyPages`로 page마다 subscriber key를 지운 뒤 DB snapshot을 읽어 다시 씁니다.
 

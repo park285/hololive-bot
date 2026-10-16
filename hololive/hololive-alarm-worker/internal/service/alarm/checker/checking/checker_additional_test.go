@@ -828,8 +828,7 @@ func TestYouTubeCheckerUsesDedupEvidenceWhenPgDispatchMissing(t *testing.T) {
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		ctx,
-		[]string{"stream-dedup-evidence"},
-		start.Add(-24*time.Hour),
+		map[string]time.Time{"stream-dedup-evidence": start.Add(-24 * time.Hour)},
 	)
 	require.NoError(t, err)
 	assert.Contains(t, evidence.valkeyNotifiedStreamIDs, "stream-dedup-evidence")
@@ -849,8 +848,7 @@ func TestRecentLiveDispatchEvidenceIncludesSentRooms(t *testing.T) {
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
-		[]string{"stream-delivery"},
-		time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC).Add(-24*time.Hour),
+		map[string]time.Time{"stream-delivery": time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC).Add(-24 * time.Hour)},
 	)
 	require.NoError(t, err)
 	assert.Contains(t, evidence.pgDispatchedStreamIDs, "stream-delivery")
@@ -874,8 +872,7 @@ func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButDispatchEv
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
-		[]string{"stream-delivery-error"},
-		start.Add(-24*time.Hour),
+		map[string]time.Time{"stream-delivery-error": start.Add(-24 * time.Hour)},
 	)
 	require.NoError(t, err)
 	assert.True(t, evidence.deliveryCheckFailed)
@@ -896,8 +893,7 @@ func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButValkeyEvid
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
-		[]string{"stream-valkey-evidence"},
-		start.Add(-24*time.Hour),
+		map[string]time.Time{"stream-valkey-evidence": start.Add(-24 * time.Hour)},
 	)
 	require.NoError(t, err)
 	assert.Contains(t, evidence.valkeyNotifiedStreamIDs, "stream-valkey-evidence")
@@ -914,8 +910,7 @@ func TestRecentLiveDispatchEvidenceReturnsDeliveryLookupErrorWithoutEvidence(t *
 
 	_, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
-		[]string{"stream-without-evidence"},
-		time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC).Add(-24*time.Hour),
+		map[string]time.Time{"stream-without-evidence": time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC).Add(-24 * time.Hour)},
 	)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "pg sent delivery evidence")

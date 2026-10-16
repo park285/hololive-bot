@@ -104,21 +104,30 @@ func assertLoadedRecentSessions(t *testing.T, sessions []PersistedYouTubeLiveSes
 	assert.Empty(t, sessionsByID(sessions)[testUpcomingIncludedID].Stream.CollaboTalentNames)
 }
 
+const testOldDispatchStreamID = "old-dispatch"
+
 func assertRecentlyDispatchedStreamIDs(t *testing.T, pool liveSessionPool, source *PgYouTubeLiveSessionSource, now time.Time) {
 	t.Helper()
 
 	insertAlarmDispatchEvents(t, pool, []testAlarmDispatchEvent{
 		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, CreatedAt: now.Add(-time.Hour)},
 		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, CreatedAt: now.Add(-time.Hour)},
-		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: "old-dispatch", CreatedAt: now.Add(-25 * time.Hour)},
+		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: testOldDispatchStreamID, CreatedAt: now.Add(-25 * time.Hour)},
 		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", CreatedAt: now.Add(-time.Hour)},
 	})
 
-	dispatched, err := source.RecentlyDispatchedStreamIDs(t.Context(), []string{testLiveIncludedID, testUpcomingIncludedID, "old-dispatch"}, now.Add(-24*time.Hour))
+	since := now.Add(-24 * time.Hour)
+	dispatched, err := source.RecentlyDispatchedStreamIDs(t.Context(), map[string]time.Time{testLiveIncludedID: since, testUpcomingIncludedID: since, testOldDispatchStreamID: since})
 	require.NoError(t, err)
 	assert.Contains(t, dispatched, testLiveIncludedID)
 	assert.NotContains(t, dispatched, testUpcomingIncludedID)
-	assert.NotContains(t, dispatched, "old-dispatch")
+	assert.NotContains(t, dispatched, testOldDispatchStreamID)
+
+	// 하한은 stream마다 따로 적용한다. 오래 이어진 방송은 시작 기준 하한으로 최초 event를 근거로 유지한다.
+	dispatched, err = source.RecentlyDispatchedStreamIDs(t.Context(), map[string]time.Time{testLiveIncludedID: now.Add(-30 * time.Minute), testOldDispatchStreamID: now.Add(-26 * time.Hour)})
+	require.NoError(t, err)
+	assert.NotContains(t, dispatched, testLiveIncludedID)
+	assert.Contains(t, dispatched, testOldDispatchStreamID)
 }
 
 func assertRecentlySentLiveStreamRooms(t *testing.T, pool liveSessionPool, source *PgYouTubeLiveSessionSource, now time.Time) {
@@ -134,13 +143,19 @@ func assertRecentlySentLiveStreamRooms(t *testing.T, pool liveSessionPool, sourc
 		{EventID: 4, RoomID: "room-5", Status: "pending", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
 	})
 
-	sentRooms, err := source.RecentlySentLiveStreamRooms(t.Context(), []string{testLiveIncludedID, testUpcomingIncludedID, "old-dispatch", "pending-live"}, now.Add(-24*time.Hour))
+	since := now.Add(-24 * time.Hour)
+	sentRooms, err := source.RecentlySentLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: since, testUpcomingIncludedID: since, testOldDispatchStreamID: since, "pending-live": since})
 	require.NoError(t, err)
 	assert.Contains(t, sentRooms[testLiveIncludedID], testRoomID1)
 	assert.NotContains(t, sentRooms[testLiveIncludedID], testRoomID2)
 	assert.NotContains(t, sentRooms, testUpcomingIncludedID)
-	assert.NotContains(t, sentRooms, "old-dispatch")
+	assert.NotContains(t, sentRooms, testOldDispatchStreamID)
 	assert.NotContains(t, sentRooms, "pending-live")
+
+	sentRooms, err = source.RecentlySentLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: now.Add(-20 * time.Minute), testOldDispatchStreamID: now.Add(-26 * time.Hour)})
+	require.NoError(t, err)
+	assert.NotContains(t, sentRooms, testLiveIncludedID)
+	assert.Contains(t, sentRooms[testOldDispatchStreamID], "room-4")
 }
 
 func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testing.T) {
