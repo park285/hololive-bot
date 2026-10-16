@@ -187,6 +187,18 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
   ' sh "$old_target"
 fi
 
+# 실패 복원은 변경 전 collector 실행 상태까지 되돌린다. 점검 창에서 멈춘 collector를 이전 release로 다시 띄우면
+# 새 schema 위에서 구 writer가 돈다. 재시작 대기(activating)는 실행 중으로 보고, 실패(failed)는 멈춘 상태로 본다.
+collector_prechange_enabled=false
+collector_prechange_running=false
+collector_prechange_state="$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)"
+if systemctl is-enabled --quiet "$unit" 2>/dev/null; then
+  collector_prechange_enabled=true
+fi
+case "$collector_prechange_state" in
+  active | activating | reloading) collector_prechange_running=true ;;
+esac
+
 stop_collector_unit_and_require_inactive() {
   command -v systemctl >/dev/null 2>&1 || return 0
   systemctl cat "$unit" >/dev/null 2>&1 || return 0
@@ -224,7 +236,15 @@ native_restore_recorded_runtime() {
     native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
     po_restore_previous "$old_target"
     sudo -n systemctl daemon-reload
-    sudo -n systemctl enable --now "$unit"
+    # 실행 중이던 collector만 다시 시작한다. 멈춰 있던 collector는 변경 전 활성화 상태만 되돌린다.
+    if [[ "${collector_prechange_running:?}" == true ]]; then
+      sudo -n systemctl enable --now "$unit"
+    else
+      if [[ "${collector_prechange_enabled:?}" == true ]]; then
+        sudo -n systemctl enable "$unit"
+      fi
+      echo "collector was not running before the change (ActiveState=${collector_prechange_state:-unknown}); restored $unit without starting it. Start it only after the schema matches the restored release." >&2
+    fi
   else
     po_restore_previous ""
     sudo -n rm -f "$current_link" "$host_env" "$unit_file"

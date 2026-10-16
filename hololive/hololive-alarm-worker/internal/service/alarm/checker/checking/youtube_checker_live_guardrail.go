@@ -26,7 +26,7 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 		return evidence
 	}
 
-	sinceByStreamID := currentLiveDispatchEvidenceWindows(streamsByChannel, now)
+	sinceByStreamID := currentLiveDispatchEvidenceWindows(streamsByChannel, liveFirstSeenAtByStreamID(sessions), now)
 
 	if len(sinceByStreamID) == 0 {
 		return evidence
@@ -70,7 +70,11 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 }
 
 // 같은 stream이 여러 번 보이면 가장 이른 하한을 써서 근거를 좁히지 않는다.
-func currentLiveDispatchEvidenceWindows(streamsByChannel map[string][]*domain.Stream, now time.Time) map[string]time.Time {
+func currentLiveDispatchEvidenceWindows(
+	streamsByChannel map[string][]*domain.Stream,
+	liveFirstSeenAtByStreamID map[string]time.Time,
+	now time.Time,
+) map[string]time.Time {
 	sinceByStreamID := make(map[string]time.Time)
 
 	for _, streams := range streamsByChannel {
@@ -79,7 +83,7 @@ func currentLiveDispatchEvidenceWindows(streamsByChannel map[string][]*domain.St
 				continue
 			}
 
-			since := liveDispatchEvidenceSince(stream, now)
+			since := liveDispatchEvidenceSince(stream, liveFirstSeenAtByStreamID[stream.ID], now)
 			if existing, ok := sinceByStreamID[stream.ID]; !ok || since.Before(existing) {
 				sinceByStreamID[stream.ID] = since
 			}
@@ -89,16 +93,38 @@ func currentLiveDispatchEvidenceWindows(streamsByChannel map[string][]*domain.St
 	return sinceByStreamID
 }
 
+// 같은 방송의 저장 세션이 여럿이면 가장 이른 첫 관측 시각을 쓴다.
+func liveFirstSeenAtByStreamID(sessions []PersistedYouTubeLiveSession) map[string]time.Time {
+	firstSeen := make(map[string]time.Time)
+
+	for _, session := range sessions {
+		if session.Stream == nil || session.Stream.ID == "" || session.LiveFirstSeenAt.IsZero() {
+			continue
+		}
+
+		if existing, ok := firstSeen[session.Stream.ID]; !ok || session.LiveFirstSeenAt.Before(existing) {
+			firstSeen[session.Stream.ID] = session.LiveFirstSeenAt.UTC()
+		}
+	}
+
+	return firstSeen
+}
+
 func (c *YouTubeChecker) observePersistedLiveGuardrailMeta(
 	meta *persistedLiveGuardrailMeta,
 	evidence recentLiveDispatchEvidence,
 	since time.Time,
 ) {
 	sentRooms := evidence.sentRoomsByStreamID[meta.streamID]
-	missingRooms := missingLiveDeliveryRooms(meta.rooms, sentRooms)
+	missingRooms := missingLiveDeliveryRooms(meta.rooms, sentRooms, evidence.terminalFailedRoomsByStreamID[meta.streamID])
 
 	if len(missingRooms) == 0 {
-		observeYouTubeLiveGuardrail("has_recent_delivery")
+		// catchup의 DLQ·격리·취소는 ledger가 실패로 기록하고 DLQ 지표가 따로 세는 결과다. 매분 경고를 반복하지 않고 지표로만 구분한다.
+		if len(missingLiveDeliveryRooms(meta.rooms, sentRooms)) > 0 {
+			observeYouTubeLiveGuardrail("terminal_delivery")
+		} else {
+			observeYouTubeLiveGuardrail("has_recent_delivery")
+		}
 
 		return
 	}
@@ -191,10 +217,26 @@ func (c *YouTubeChecker) logMissingLiveDispatchGuardrail(meta *persistedLiveGuar
 }
 
 type recentLiveDispatchEvidence struct {
-	pgDispatchedStreamIDs   map[string]struct{}
-	valkeyNotifiedStreamIDs map[string]struct{}
-	sentRoomsByStreamID     map[string]map[string]struct{}
-	deliveryCheckFailed     bool
+	pgDispatchedStreamIDs         map[string]struct{}
+	valkeyNotifiedStreamIDs       map[string]struct{}
+	sentRoomsByStreamID           map[string]map[string]struct{}
+	terminalFailedRoomsByStreamID map[string]map[string]struct{}
+	deliveryCheckFailed           bool
+}
+
+// settledRoomsByStreamID는 catchup을 다시 만들지 않을 방이다. 발송을 마친 방과 ledger가 재발행을 거절하는 실패 종료 방을 합친다.
+func (e recentLiveDispatchEvidence) settledRoomsByStreamID() map[string]map[string]struct{} {
+	settled := make(map[string]map[string]struct{}, len(e.sentRoomsByStreamID)+len(e.terminalFailedRoomsByStreamID))
+
+	for _, roomsByStreamID := range []map[string]map[string]struct{}{e.sentRoomsByStreamID, e.terminalFailedRoomsByStreamID} {
+		for streamID, rooms := range roomsByStreamID {
+			for roomID := range rooms {
+				addStreamRoom(settled, streamID, roomID)
+			}
+		}
+	}
+
+	return settled
 }
 
 func (c *YouTubeChecker) recentLiveDispatchEvidence(
@@ -226,9 +268,10 @@ func (c *YouTubeChecker) recentLiveDispatchEvidence(
 
 func newRecentLiveDispatchEvidence() recentLiveDispatchEvidence {
 	return recentLiveDispatchEvidence{
-		pgDispatchedStreamIDs:   make(map[string]struct{}),
-		valkeyNotifiedStreamIDs: make(map[string]struct{}),
-		sentRoomsByStreamID:     make(map[string]map[string]struct{}),
+		pgDispatchedStreamIDs:         make(map[string]struct{}),
+		valkeyNotifiedStreamIDs:       make(map[string]struct{}),
+		sentRoomsByStreamID:           make(map[string]map[string]struct{}),
+		terminalFailedRoomsByStreamID: make(map[string]map[string]struct{}),
 	}
 }
 
@@ -250,11 +293,12 @@ func (c *YouTubeChecker) collectPgLiveDispatchEvidence(
 		mergeStringSet(evidence.pgDispatchedStreamIDs, dispatched)
 	}
 
-	sentRooms, err := c.persistedLiveSource.RecentlySentLiveStreamRooms(ctx, sinceByStreamID)
+	settled, err := c.persistedLiveSource.RecentlySettledLiveStreamRooms(ctx, sinceByStreamID)
 	if err != nil {
-		*deliveryErrs = append(*deliveryErrs, fmt.Errorf("pg sent delivery evidence: %w", err))
+		*deliveryErrs = append(*deliveryErrs, fmt.Errorf("pg settled delivery evidence: %w", err))
 	} else {
-		evidence.sentRoomsByStreamID = sentRooms
+		evidence.sentRoomsByStreamID = settled.Sent
+		evidence.terminalFailedRoomsByStreamID = settled.TerminalFailed
 	}
 }
 
@@ -280,7 +324,8 @@ func (c *YouTubeChecker) collectValkeyLiveDispatchEvidence(
 func (e recentLiveDispatchEvidence) hasAny() bool {
 	return len(e.pgDispatchedStreamIDs) > 0 ||
 		len(e.valkeyNotifiedStreamIDs) > 0 ||
-		len(e.sentRoomsByStreamID) > 0
+		len(e.sentRoomsByStreamID) > 0 ||
+		len(e.terminalFailedRoomsByStreamID) > 0
 }
 
 func mergeStringSet(dst, src map[string]struct{}) {
@@ -372,7 +417,8 @@ func persistedLiveGuardrailObservedAt(session PersistedYouTubeLiveSession) time.
 	return time.Time{}
 }
 
-func missingLiveDeliveryRooms(rooms []string, sentRooms map[string]struct{}) []string {
+// missingLiveDeliveryRooms는 주어진 어느 방 집합에도 없는 구독 방을 돌려준다.
+func missingLiveDeliveryRooms(rooms []string, accountedRooms ...map[string]struct{}) []string {
 	uniqueRooms := UniqueStrings(rooms)
 	if len(uniqueRooms) == 0 {
 		return nil
@@ -380,7 +426,11 @@ func missingLiveDeliveryRooms(rooms []string, sentRooms map[string]struct{}) []s
 
 	missing := make([]string, 0, len(uniqueRooms))
 	for _, room := range uniqueRooms {
-		if _, ok := sentRooms[room]; ok {
+		if slices.ContainsFunc(accountedRooms, func(set map[string]struct{}) bool {
+			_, ok := set[room]
+
+			return ok
+		}) {
 			continue
 		}
 

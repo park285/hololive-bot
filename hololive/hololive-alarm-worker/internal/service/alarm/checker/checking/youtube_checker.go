@@ -160,7 +160,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 		streamsByChannel,
 		liveEvidence.observedAtByStreamID,
 		subscriberMap,
-		liveEvidence.sentRoomsByStreamID,
+		liveEvidence.settledRoomsByStreamID,
 		now,
 	)
 	if err != nil {
@@ -188,7 +188,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 	streamsByChannel map[string][]*domain.Stream,
 	liveObservedAtByStreamID map[string]time.Time,
 	subscriberMap map[string][]string,
-	sentRoomsByStreamID map[string]map[string]struct{},
+	settledRoomsByStreamID map[string]map[string]struct{},
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(dueChannels)*5)
@@ -204,7 +204,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 			continue
 		}
 
-		c.startYouTubeChannelWorker(egCtx, eg, &work, liveObservedAtByStreamID, sentRoomsByStreamID, now, &mu, &notifications)
+		c.startYouTubeChannelWorker(egCtx, eg, &work, liveObservedAtByStreamID, settledRoomsByStreamID, now, &mu, &notifications)
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -219,7 +219,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 	eg *errgroup.Group,
 	work *youtubeChannelCheckWork,
 	liveObservedAtByStreamID map[string]time.Time,
-	sentRoomsByStreamID map[string]map[string]struct{},
+	settledRoomsByStreamID map[string]map[string]struct{},
 	now time.Time,
 	mu *sync.Mutex,
 	notifications *[]*domain.AlarmNotification,
@@ -233,7 +233,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 				work.streams,
 				work.window,
 				now,
-				sentRoomsByStreamID,
+				settledRoomsByStreamID,
 				liveObservedAtByStreamID,
 			)
 			if err != nil {

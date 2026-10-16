@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -210,23 +211,21 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	return result, nil
 }
 
-func (s *PgYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
+func (s *PgYouTubeLiveSessionSource) RecentlySettledLiveStreamRooms(
 	ctx context.Context,
 	sinceByStreamID map[string]time.Time,
-) (map[string]map[string]struct{}, error) {
-	result := make(map[string]map[string]struct{})
-
+) (LiveStreamRoomSettlements, error) {
 	streamIDs, sinces, ok := s.liveDispatchWindows(sinceByStreamID)
 	if !ok {
-		return result, nil
+		return newLiveStreamRoomSettlements(), nil
 	}
 
-	rows, err := s.queryRecentlySentLiveStreamRooms(ctx, streamIDs, sinces)
+	rows, err := s.queryRecentlySettledLiveStreamRooms(ctx, streamIDs, sinces)
 	if err != nil {
-		return nil, fmt.Errorf("query recently sent live stream rooms: %w", err)
+		return LiveStreamRoomSettlements{}, fmt.Errorf("query recently settled live stream rooms: %w", err)
 	}
 
-	return sentLiveStreamRoomsByStreamID(rows), nil
+	return settledLiveStreamRooms(rows), nil
 }
 
 // liveDispatchWindows는 stream별 하한을 SQL unnest에 넘길 같은 길이의 배열로 바꾼다.
@@ -260,27 +259,37 @@ func (s *PgYouTubeLiveSessionSource) normalizedStreamIDs(streamIDs []string) ([]
 	return streamIDs, len(streamIDs) > 0
 }
 
-type sentLiveStreamRoomRow struct {
+type settledLiveStreamRoomRow struct {
 	StreamID string
 	RoomID   string
+	Sent     bool
 }
 
-func (s *PgYouTubeLiveSessionSource) queryRecentlySentLiveStreamRooms(
+// 실패 종료 상태는 ledger가 같은 delivery의 재발행을 rejected_terminal로 거절하는 상태다.
+// 방송마다 하나인 catchup delivery의 dedupe key와 같아지는 것은 catchup event의 실패 종료뿐이다.
+// N분 전·일정 변경 알림은 key가 달라 실패해도 catchup을 막지 않는다.
+var terminalFailedDeliveryStatuses = []string{
+	string(dispatchoutbox.StatusDLQ),
+	string(dispatchoutbox.StatusQuarantined),
+	string(dispatchoutbox.StatusCancelled),
+}
+
+func (s *PgYouTubeLiveSessionSource) queryRecentlySettledLiveStreamRooms(
 	ctx context.Context,
 	streamIDs []string,
 	sinces []time.Time,
-) ([]sentLiveStreamRoomRow, error) {
-	var rows []sentLiveStreamRoomRow
+) ([]settledLiveStreamRoomRow, error) {
+	var rows []settledLiveStreamRoomRow
 
-	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), sinces); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), sinces, terminalFailedDeliveryStatuses, sharedalarmkeys.NotificationCategoryLiveCatchup); err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
 	return rows, nil
 }
 
-func sentLiveStreamRoomsByStreamID(rows []sentLiveStreamRoomRow) map[string]map[string]struct{} {
-	result := make(map[string]map[string]struct{})
+func settledLiveStreamRooms(rows []settledLiveStreamRoomRow) LiveStreamRoomSettlements {
+	result := newLiveStreamRoomSettlements()
 
 	for _, row := range rows {
 		streamID := strings.TrimSpace(row.StreamID)
@@ -290,14 +299,24 @@ func sentLiveStreamRoomsByStreamID(rows []sentLiveStreamRoomRow) map[string]map[
 			continue
 		}
 
-		if result[streamID] == nil {
-			result[streamID] = make(map[string]struct{})
+		target := result.TerminalFailed
+
+		if row.Sent {
+			target = result.Sent
 		}
 
-		result[streamID][roomID] = struct{}{}
+		addStreamRoom(target, streamID, roomID)
 	}
 
 	return result
+}
+
+func addStreamRoom(roomsByStreamID map[string]map[string]struct{}, streamID, roomID string) {
+	if roomsByStreamID[streamID] == nil {
+		roomsByStreamID[streamID] = make(map[string]struct{})
+	}
+
+	roomsByStreamID[streamID][roomID] = struct{}{}
 }
 
 func (s *PgYouTubeLiveSessionSource) LoadConfirmedPremiereIDs(

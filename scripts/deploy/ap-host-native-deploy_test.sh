@@ -156,6 +156,8 @@ run_native_units() (
   po_service=hololive-youtube-po.service
   po_socket=hololive-youtube-po.socket
   unit=hololive-youtube-collector@youtube-collector-a.service
+  # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 변경 전 실행 상태입니다.
+  collector_prechange_running=true collector_prechange_enabled=true
   old_target="${state}/old-release"
   # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 경로다.
   host_env="${state}/host.env" unit_file="${state}/unit" current_link="${state}/current"

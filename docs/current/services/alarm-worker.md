@@ -103,14 +103,23 @@ Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면
 NULL이거나 미래이면 후보에서 제외합니다. LIVE guardrail 로그도 실제로 읽은 시각을
 `status_observed_at` 필드로 기록합니다.
 
-LIVE 시작 catchup과 guardrail은 방송마다 `실제 시작 시각 − 24시간` 이후의 LIVE event·SENT
-delivery를 이미 알린 근거로 봅니다. 실제 시작 시각이 없거나 미래이면 평가 시각을 기준으로
-하고, 예정 시각은 쓰지 않습니다(갱신되지 않은 예정 시각이 며칠 전 사전 알림까지 근거로 넓혀
-시작 catchup을 막지 않도록). 평가 시각 기준 창이 아니므로 24시간 넘게 이어지는 방송도 최초
-알림을 근거로 유지하여 같은 방에 catchup을 다시 만들지 않고, guardrail 로그의 `dispatch_since`도
-그 방송의 하한을 기록합니다. 실제 시작 시각 없이 24시간을 넘긴 방송은 평가 시각 창으로 돌아가
-catchup을 다시 시도할 수 있습니다. 이미 보낸 방은 `duplicate_sent`로 끝나고, 그 사이 본문 field가
-바뀌었으면 collision 경고로 드러납니다.
+LIVE 시작 catchup과 guardrail은 방송마다 `기준 시각 − 24시간` 이후의 LIVE event·delivery를
+근거로 봅니다. 기준 시각은 과거의 실제 시작 시각, 그것이 없으면 과거의 첫 LIVE 관측 시각
+(`live_first_seen_at`), 둘 다 없으면 평가 시각입니다. 예정 시각은 쓰지 않습니다(갱신되지 않은
+예정 시각이 며칠 전 사전 알림까지 근거로 넓혀 시작 catchup을 막지 않도록). 평가 시각 기준 창이
+아니므로 24시간 넘게 이어지는 방송도 최초 알림을 근거로 유지하여 같은 방에 catchup을 다시
+만들지 않고, guardrail 로그의 `dispatch_since`도 그 방송의 하한을 기록합니다. 시작·관측 시각이
+모두 없는 채로 24시간을 넘긴 방송만 평가 시각 창으로 돌아가 catchup을 다시 시도할 수 있으며,
+이미 보낸 방은 `duplicate_sent`로 끝나고 그 사이 본문 field가 바뀌었으면 collision 경고로
+드러납니다.
+
+방별 근거는 발송을 마친 SENT delivery(발송 시각 기준)와 catchup event(`live_catchup`)의
+delivery 가운데 DLQ·QUARANTINED·CANCELLED로 끝난 것(실패 종료 시각 기준)입니다. catchup
+delivery의 dedupe key는 방송마다 하나라서, 실패 종료된 방은 ledger가 재발행을 `rejected_terminal`로
+거절합니다. 그래서 catchup을 다시 만들지 않고, guardrail도 매분 경고하지 않고
+`terminal_delivery` 지표로만 구분합니다. 실패 자체는 DLQ 지표와 delivery 상태가 드러냅니다.
+N분 전·일정 변경 알림은 key가 달라 실패해도 catchup을 막지 않습니다. 아무 결과가 없는 방만
+`partial_delivery`·`missing_delivery` 경고 대상입니다.
 
 DB subscriber fallback은 이번 조회 결과만 반환하고 positive set과 빈 구독 marker를 쓰지 않습니다. 늦은 조회가 구독 mutation을 덮어쓰지 않도록 cache 갱신은 기존 mutation·명시적 rebuild가 담당합니다. eviction 뒤에는 해당 채널을 DB에서 다시 확인합니다. 구독자 조회는 cache·DB 쌍마다 하나인 shared `alarm.SubscriberResolver`가 담당하며, 여러 채널의 empty marker 확인은 한 번의 pipeline으로 보냅니다. 전체 rebuild는 단일 worker의 구독 mutation mutex 아래에서 `ScanKeyPages`로 page마다 subscriber key를 지운 뒤 DB snapshot을 읽어 다시 씁니다.
 

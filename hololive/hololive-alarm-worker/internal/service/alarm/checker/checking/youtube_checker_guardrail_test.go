@@ -35,10 +35,11 @@ import (
 )
 
 type guardrailEvidenceSource struct {
-	dispatched   map[string]struct{}
-	dispatchErr  error
-	sentRooms    map[string]map[string]struct{}
-	sentRoomsErr error
+	dispatched    map[string]struct{}
+	dispatchErr   error
+	sentRooms     map[string]map[string]struct{}
+	terminalRooms map[string]map[string]struct{}
+	sentRoomsErr  error
 }
 
 func (s *guardrailEvidenceSource) LoadRecentSessions(
@@ -75,15 +76,15 @@ func (s *guardrailEvidenceSource) RecentlyDispatchedStreamIDs(
 	return s.dispatched, nil
 }
 
-func (s *guardrailEvidenceSource) RecentlySentLiveStreamRooms(
+func (s *guardrailEvidenceSource) RecentlySettledLiveStreamRooms(
 	context.Context,
 	map[string]time.Time,
-) (map[string]map[string]struct{}, error) {
+) (LiveStreamRoomSettlements, error) {
 	if s.sentRoomsErr != nil {
-		return nil, s.sentRoomsErr
+		return LiveStreamRoomSettlements{}, s.sentRoomsErr
 	}
 
-	return s.sentRooms, nil
+	return LiveStreamRoomSettlements{Sent: s.sentRooms, TerminalFailed: s.terminalRooms}, nil
 }
 
 type persistedLiveGuardrailMetaCase struct {
@@ -209,9 +210,10 @@ func TestMissingLiveDeliveryRooms(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		rooms     []string
-		sentRooms map[string]struct{}
-		want      []string
+		rooms         []string
+		sentRooms     map[string]struct{}
+		terminalRooms map[string]struct{}
+		want          []string
 	}{
 		"nil rooms": {
 			want: nil,
@@ -230,17 +232,23 @@ func TestMissingLiveDeliveryRooms(t *testing.T) {
 			rooms: []string{testRoomID1, testRoomID1, testRoomID2},
 			want:  []string{testRoomID1, testRoomID2},
 		},
+		"terminal failed rooms are accounted": {
+			rooms:         []string{testRoomID1, testRoomID2, testRoomID3},
+			sentRooms:     map[string]struct{}{testRoomID2: {}},
+			terminalRooms: map[string]struct{}{testRoomID3: {}},
+			want:          []string{testRoomID1},
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, missingLiveDeliveryRooms(tc.rooms, tc.sentRooms))
+			assert.Equal(t, tc.want, missingLiveDeliveryRooms(tc.rooms, tc.sentRooms, tc.terminalRooms))
 		})
 	}
 }
 
-// 근거 하한은 과거의 실제 시작 시각에만 고정하고, 같은 stream이 여러 번 보이면 가장 이른 하한을 쓴다.
+// 근거 하한은 과거의 실제 시작 시각, 없으면 과거의 첫 관측 시각에 고정하고, 같은 stream이 여러 번 보이면 가장 이른 하한을 쓴다.
 func TestCurrentLiveDispatchEvidenceWindowsAnchorsOnActualStart(t *testing.T) {
 	t.Parallel()
 
@@ -249,6 +257,7 @@ func TestCurrentLiveDispatchEvidenceWindowsAnchorsOnActualStart(t *testing.T) {
 	longStart := now.Add(-42 * time.Hour)
 	laterSighting := now.Add(-2 * time.Hour)
 	futureStart := now.Add(time.Hour)
+	firstSeen := now.Add(-30 * time.Hour)
 	live := func(id string, actual, scheduled *time.Time) *domain.Stream {
 		return &domain.Stream{ID: id, Status: domain.StreamStatusLive, StartActual: actual, StartScheduled: scheduled}
 	}
@@ -258,17 +267,84 @@ func TestCurrentLiveDispatchEvidenceWindowsAnchorsOnActualStart(t *testing.T) {
 			live("long", &laterSighting, nil),
 			live("schedule-only", nil, &staleSchedule),
 			live("future-actual", &futureStart, nil),
+			live("first-seen-only", nil, &staleSchedule),
+			live("future-first-seen", nil, nil),
 			{ID: "upcoming", Status: domain.StreamStatusUpcoming, StartScheduled: &staleSchedule},
 			live("", &longStart, nil),
 		},
 		"channel-b": {live("long", &longStart, nil)},
+	}, map[string]time.Time{
+		"long":              firstSeen,
+		"first-seen-only":   firstSeen,
+		"future-first-seen": futureStart,
 	}, now)
 
 	assert.Equal(t, map[string]time.Time{
-		"long":          longStart.Add(-liveDispatchEvidenceLookback),
-		"schedule-only": now.Add(-liveDispatchEvidenceLookback),
-		"future-actual": now.Add(-liveDispatchEvidenceLookback),
+		"long":              longStart.Add(-liveDispatchEvidenceLookback),
+		"schedule-only":     now.Add(-liveDispatchEvidenceLookback),
+		"future-actual":     now.Add(-liveDispatchEvidenceLookback),
+		"first-seen-only":   firstSeen.Add(-liveDispatchEvidenceLookback),
+		"future-first-seen": now.Add(-liveDispatchEvidenceLookback),
 	}, windows)
+}
+
+// 실패 종료로 끝난 방은 ledger와 DLQ 지표가 이미 드러내므로 guardrail이 매분 경고하지 않는다. 결과가 없는 방만 경고한다.
+func TestObservePersistedLiveGuardrailMetaAccountsTerminalFailedRooms(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.October, 16, 10, 0, 0, 0, time.UTC)
+	meta := persistedLiveGuardrailMeta{
+		streamID:   testStreamID1,
+		channelID:  testChannelID1,
+		observedAt: now.Add(-3 * time.Minute),
+		rooms:      []string{testRoomID1, testRoomID2},
+	}
+	rooms := func(ids ...string) map[string]map[string]struct{} {
+		set := make(map[string]struct{}, len(ids))
+		for _, id := range ids {
+			set[id] = struct{}{}
+		}
+
+		return map[string]map[string]struct{}{testStreamID1: set}
+	}
+
+	tests := map[string]struct {
+		evidence recentLiveDispatchEvidence
+		wantLog  string
+	}{
+		"terminal room beside sent room": {
+			evidence: recentLiveDispatchEvidence{sentRoomsByStreamID: rooms(testRoomID1), terminalFailedRoomsByStreamID: rooms(testRoomID2)},
+		},
+		"every room ended in terminal failure": {
+			evidence: recentLiveDispatchEvidence{
+				pgDispatchedStreamIDs:         map[string]struct{}{testStreamID1: {}},
+				terminalFailedRoomsByStreamID: rooms(testRoomID1, testRoomID2),
+			},
+		},
+		"room without any outcome still warns": {
+			evidence: recentLiveDispatchEvidence{sentRoomsByStreamID: rooms(testRoomID1), terminalFailedRoomsByStreamID: rooms(testRoomID3)},
+			wantLog:  "alarm.youtube.live_guardrail.partial_delivery",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			checker := &YouTubeChecker{logger: slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))}
+			checker.observePersistedLiveGuardrailMeta(&meta, tc.evidence, now.Add(-liveDispatchEvidenceLookback))
+
+			if tc.wantLog == "" {
+				assert.Empty(t, buf.String())
+
+				return
+			}
+
+			assert.Contains(t, buf.String(), tc.wantLog)
+		})
+	}
 }
 
 func TestRecentLiveDispatchEvidenceErrorWrapping(t *testing.T) {
@@ -290,7 +366,7 @@ func TestRecentLiveDispatchEvidenceErrorWrapping(t *testing.T) {
 	assert.True(t, evidence.deliveryCheckFailed)
 	require.ErrorContains(t, err, "pg dispatch evidence")
 	require.ErrorContains(t, err, "dispatch lookup failed")
-	require.ErrorContains(t, err, "pg sent delivery evidence")
+	require.ErrorContains(t, err, "pg settled delivery evidence")
 	assert.ErrorContains(t, err, "sent room lookup failed")
 }
 

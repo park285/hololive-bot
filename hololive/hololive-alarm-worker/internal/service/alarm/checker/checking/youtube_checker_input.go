@@ -15,7 +15,7 @@ import (
 type youtubeLiveCheckEvidence struct {
 	currentProviderStreams map[string][]*domain.Stream
 	observedAtByStreamID   map[string]time.Time
-	sentRoomsByStreamID    map[string]map[string]struct{}
+	settledRoomsByStreamID map[string]map[string]struct{}
 }
 
 func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
@@ -85,7 +85,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 
 	evidence := c.observePersistedLiveGuardrails(ctx, persistedSessions, streamsByChannel, subscriberMap, now)
 
-	liveEvidence.sentRoomsByStreamID = evidence.sentRoomsByStreamID
+	liveEvidence.settledRoomsByStreamID = evidence.settledRoomsByStreamID()
 
 	return dueChannels, streamsByChannel, liveEvidence, subscriberMap, nil
 }

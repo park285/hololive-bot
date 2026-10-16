@@ -19,7 +19,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	stream *domain.Stream,
 	subscriberRooms []string,
 	now time.Time,
-	sentRooms map[string]struct{},
+	settledRooms map[string]struct{},
 	observedAt ...*time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	if !isLiveCatchupCandidate(stream) {
@@ -38,7 +38,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 		return nil, nil
 	}
 
-	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, sentRooms, minutesUntil)
+	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, settledRooms, minutesUntil)
 	if err != nil {
 		return nil, fmt.Errorf("unsuppressed live catchup notifications: %w", err)
 	}
@@ -93,14 +93,15 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	channelID string,
 	stream *domain.Stream,
 	subscriberRooms []string,
-	sentRooms map[string]struct{},
+	settledRooms map[string]struct{},
 	minutesUntil int,
 ) ([]*domain.AlarmNotification, int, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
 	suppressedRooms := 0
 
 	for _, roomID := range subscriberRooms {
-		if _, sent := sentRooms[roomID]; sent {
+		// 발송을 마쳤거나 ledger가 실패 종료로 결론 낸 방은 같은 delivery를 다시 만들지 않는다.
+		if _, settled := settledRooms[roomID]; settled {
 			suppressedRooms++
 			continue
 		}

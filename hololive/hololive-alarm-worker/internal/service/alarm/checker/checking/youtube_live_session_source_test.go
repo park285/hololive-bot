@@ -10,9 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.Time) {
@@ -110,10 +112,11 @@ func assertRecentlyDispatchedStreamIDs(t *testing.T, pool liveSessionPool, sourc
 	t.Helper()
 
 	insertAlarmDispatchEvents(t, pool, []testAlarmDispatchEvent{
-		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, CreatedAt: now.Add(-time.Hour)},
-		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, CreatedAt: now.Add(-time.Hour)},
-		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: testOldDispatchStreamID, CreatedAt: now.Add(-25 * time.Hour)},
-		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", CreatedAt: now.Add(-time.Hour)},
+		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: testOldDispatchStreamID, Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-25 * time.Hour)},
+		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", Category: sharedalarmkeys.NotificationCategoryLiveCatchup, CreatedAt: now.Add(-time.Hour)},
+		{ID: 5, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, Category: "5", CreatedAt: now.Add(-2 * time.Hour)},
 	})
 
 	since := now.Add(-24 * time.Hour)
@@ -130,32 +133,38 @@ func assertRecentlyDispatchedStreamIDs(t *testing.T, pool liveSessionPool, sourc
 	assert.Contains(t, dispatched, testOldDispatchStreamID)
 }
 
-func assertRecentlySentLiveStreamRooms(t *testing.T, pool liveSessionPool, source *PgYouTubeLiveSessionSource, now time.Time) {
+func assertRecentlySettledLiveStreamRooms(t *testing.T, pool liveSessionPool, source *PgYouTubeLiveSessionSource, now time.Time) {
 	t.Helper()
 
 	sentAt := now.Add(-30 * time.Minute)
 	oldSentAt := now.Add(-25 * time.Hour)
+	terminalAt := now.Add(-50 * time.Minute)
+	oldTerminalAt := now.Add(-25 * time.Hour)
 	insertAlarmDispatchDeliveries(t, pool, []testAlarmDispatchDelivery{
 		{EventID: 1, RoomID: testRoomID1, Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
 		{EventID: 1, RoomID: testRoomID2, Status: "retry", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 1, RoomID: "room-dlq", Status: "dlq", TerminalAt: &terminalAt, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 1, RoomID: "room-cancel", Status: string(dispatchoutbox.StatusCancelled), TerminalAt: &terminalAt, CreatedAt: now.Add(-time.Hour)},
 		{EventID: 2, RoomID: testRoomID3, Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 2, RoomID: "room-community-dlq", Status: "dlq", TerminalAt: &terminalAt, CreatedAt: now.Add(-time.Hour)},
 		{EventID: 3, RoomID: "room-4", Status: "sent", SentAt: &oldSentAt, CreatedAt: now.Add(-25 * time.Hour)},
+		{EventID: 3, RoomID: "room-old-quarantined", Status: "quarantined", TerminalAt: &oldTerminalAt, CreatedAt: now.Add(-25 * time.Hour)},
 		{EventID: 4, RoomID: "room-5", Status: "pending", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
+		// N분 전 알림은 dedupe key가 catchup과 달라 DLQ로 끝나도 catchup을 막지 않는다.
+		{EventID: 5, RoomID: "room-upcoming-dlq", Status: "dlq", TerminalAt: &terminalAt, CreatedAt: now.Add(-2 * time.Hour)},
 	})
 
 	since := now.Add(-24 * time.Hour)
-	sentRooms, err := source.RecentlySentLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: since, testUpcomingIncludedID: since, testOldDispatchStreamID: since, "pending-live": since})
+	settled, err := source.RecentlySettledLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: since, testUpcomingIncludedID: since, testOldDispatchStreamID: since, "pending-live": since})
 	require.NoError(t, err)
-	assert.Contains(t, sentRooms[testLiveIncludedID], testRoomID1)
-	assert.NotContains(t, sentRooms[testLiveIncludedID], testRoomID2)
-	assert.NotContains(t, sentRooms, testUpcomingIncludedID)
-	assert.NotContains(t, sentRooms, testOldDispatchStreamID)
-	assert.NotContains(t, sentRooms, "pending-live")
+	assert.Equal(t, map[string]map[string]struct{}{testLiveIncludedID: {testRoomID1: {}}}, settled.Sent)
+	assert.Equal(t, map[string]map[string]struct{}{testLiveIncludedID: {"room-dlq": {}, "room-cancel": {}}}, settled.TerminalFailed)
 
-	sentRooms, err = source.RecentlySentLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: now.Add(-20 * time.Minute), testOldDispatchStreamID: now.Add(-26 * time.Hour)})
+	// 발송 완료는 발송 시각, 실패 종료는 실패 종료 시각을 stream별 하한과 비교한다.
+	settled, err = source.RecentlySettledLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: now.Add(-20 * time.Minute), testOldDispatchStreamID: now.Add(-26 * time.Hour)})
 	require.NoError(t, err)
-	assert.NotContains(t, sentRooms, testLiveIncludedID)
-	assert.Contains(t, sentRooms[testOldDispatchStreamID], "room-4")
+	assert.Equal(t, map[string]map[string]struct{}{testOldDispatchStreamID: {"room-4": {}}}, settled.Sent)
+	assert.Equal(t, map[string]map[string]struct{}{testOldDispatchStreamID: {"room-old-quarantined": {}}}, settled.TerminalFailed)
 }
 
 func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testing.T) {
@@ -173,7 +182,7 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	assertLoadedRecentSessions(t, sessions, now)
 
 	assertRecentlyDispatchedStreamIDs(t, pool, source, now)
-	assertRecentlySentLiveStreamRooms(t, pool, source, now)
+	assertRecentlySettledLiveStreamRooms(t, pool, source, now)
 }
 
 func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
@@ -301,15 +310,17 @@ type testAlarmDispatchEvent struct {
 	ID        int64
 	AlarmType string
 	StreamID  string
+	Category  string
 	CreatedAt time.Time
 }
 
 type testAlarmDispatchDelivery struct {
-	EventID   int64
-	RoomID    string
-	Status    string
-	SentAt    *time.Time
-	CreatedAt time.Time
+	EventID    int64
+	RoomID     string
+	Status     string
+	SentAt     *time.Time
+	TerminalAt *time.Time
+	CreatedAt  time.Time
 }
 
 type liveSessionPool interface {
@@ -366,17 +377,18 @@ func insertAlarmDispatchEvents(t *testing.T, pool liveSessionPool, events []test
 	for _, event := range events {
 		_, err := pool.Exec(t.Context(), `
 			INSERT INTO alarm_dispatch_events(
-				id, event_key, payload_hash, alarm_type, channel_id, stream_id, payload, created_at, updated_at
+				id, event_key, payload_hash, alarm_type, channel_id, stream_id, category, payload, created_at, updated_at
 			)
-			VALUES ($1, $2, $3, $4::alarm_type, $5, $6, '{}'::jsonb, $7, $7)
+			VALUES ($1, $2, $3, $4::alarm_type, $5, $6, $8, '{}'::jsonb, $7, $7)
 		`,
 			event.ID,
-			"event-"+event.StreamID,
+			fmt.Sprintf("event-%d-%s", event.ID, event.StreamID),
 			"0000000000000000000000000000000000000000000000000000000000000001",
 			event.AlarmType,
 			"channel-"+event.StreamID,
 			event.StreamID,
 			event.CreatedAt,
+			event.Category,
 		)
 		require.NoError(t, err)
 	}
@@ -387,6 +399,7 @@ func insertAlarmDispatchDeliveries(t *testing.T, pool liveSessionPool, deliverie
 
 	// 활성 delivery는 저장된 send unit이 있어야 하므로(migration 224) 운영 행과 같이 delivery마다 send unit을 둔다.
 	for index, delivery := range deliveries {
+		//nolint:misspell // cancelled_at·'cancelled'은 변경할 수 없는 정본 DB 열 이름과 상태 값입니다.
 		_, err := pool.Exec(t.Context(), `
 			WITH unit AS (
 				INSERT INTO alarm_dispatch_send_units(unit_key, dispatch_group_key, room_id, client_request_id)
@@ -394,9 +407,14 @@ func insertAlarmDispatchDeliveries(t *testing.T, pool liveSessionPool, deliverie
 				RETURNING id, dispatch_group_key
 			)
 			INSERT INTO alarm_dispatch_deliveries(
-				event_id, room_id, dedupe_key, dispatch_group_key, send_unit_id, status, sent_at, created_at, updated_at
+				event_id, room_id, dedupe_key, dispatch_group_key, send_unit_id, status, sent_at,
+				dlq_at, quarantined_at, cancelled_at, created_at, updated_at
 			)
-			SELECT $1, $2::text, $3::text, unit.dispatch_group_key, unit.id, $4, $5, $6, $6
+			SELECT $1, $2::text, $3::text, unit.dispatch_group_key, unit.id, $4::text, $5,
+				CASE WHEN $4::text = 'dlq' THEN $7::timestamptz END,
+				CASE WHEN $4::text = 'quarantined' THEN $7::timestamptz END,
+				CASE WHEN $4::text = 'cancelled' THEN $7::timestamptz END,
+				$6, $6
 			FROM unit
 		`,
 			delivery.EventID,
@@ -405,6 +423,7 @@ func insertAlarmDispatchDeliveries(t *testing.T, pool liveSessionPool, deliverie
 			delivery.Status,
 			delivery.SentAt,
 			delivery.CreatedAt,
+			delivery.TerminalAt,
 		)
 		require.NoError(t, err)
 	}

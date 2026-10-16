@@ -30,7 +30,7 @@ def await_file(path, process):
         time.sleep(.01)
     raise AssertionError(f'fixture did not reach {path.name}')
 
-def run_case(name, action, target=None, signo=signal.SIGTERM, initial=True, mode='normal'):
+def run_case(name, action, target=None, signo=signal.SIGTERM, initial=True, mode='normal', prechange_running=True, prechange_enabled=True):
     case = work / name
     case.mkdir()
     (case / 'old/rollback-contract').mkdir(parents=True)
@@ -93,11 +93,13 @@ printf 'new\\n' > "$host_env"
 printf 'new\\n' > "$unit_file"
 ln -s "$release_dir" "$current_link"
 unit=hololive-youtube-collector@youtube-collector-a.service
+collector_prechange_running="${PRECHANGE_RUNNING:-true}" collector_prechange_enabled="${PRECHANGE_ENABLED:-true}" collector_prechange_state=inactive
 po_service=hololive-youtube-po.service po_socket=hololive-youtube-po.socket
 native_previous_link_restore() { printf 'previous restored\\n' >> "$CASE/calls"; }
 po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"; }
 ''' + functions + '\nnative_cutover_claim "$release_dir"\narm_native_cutover_restore\n' + action + '\n')
-    env = dict(os.environ, CASE=str(case), INITIAL=str(initial).lower(), MODE=mode, PATH=f'{case / "bin"}:{os.environ["PATH"]}')
+    env = dict(os.environ, CASE=str(case), INITIAL=str(initial).lower(), MODE=mode, PATH=f'{case / "bin"}:{os.environ["PATH"]}',
+               PRECHANGE_RUNNING=str(prechange_running).lower(), PRECHANGE_ENABLED=str(prechange_enabled).lower())
     with (case / 'out').open('w') as out, (case / 'err').open('w') as err:
         proc = subprocess.Popen(['bash', str(script)], env=env, stdout=out, stderr=err, start_new_session=True)
         if target:
@@ -135,6 +137,32 @@ for target, signo, status in [('child',signal.SIGTERM,143), ('child',signal.SIGI
 
 case, actual = run_case('known-failure', 'native_cutover_run failed bash -c "exit 7"')
 assert actual == 7 and (case/'restored').exists() and not (case/'recovery').exists()
+# 변경 전 상태 기록 본문을 가짜 systemctl로 실행합니다. 재시작 대기는 실행 중, 실패·정지는 멈춘 상태로 기록합니다.
+record_block = source[source.index('collector_prechange_enabled=false\n'):source.index('\nstop_collector_unit_and_require_inactive()')]
+for active_state, enabled, want_running in [('active', True, 'true'), ('activating', True, 'true'), ('reloading', False, 'true'),
+                                             ('failed', True, 'false'), ('inactive', False, 'false'), ('', False, 'false')]:
+    probe = f'''set -Eeuo pipefail
+unit=hololive-youtube-collector@youtube-collector-a.service
+systemctl() {{
+  case "$1" in
+    show) printf '%s\\n' "{active_state}" ;;
+    is-enabled) {'return 0' if enabled else 'return 1'} ;;
+    *) return 9 ;;
+  esac
+}}
+''' + record_block + '\nprintf "%s %s %s\\n" "$collector_prechange_running" "$collector_prechange_enabled" "$collector_prechange_state"\n'
+    result = subprocess.run(['bash', '-c', probe], capture_output=True, text=True)
+    assert result.returncode == 0, (active_state, result.stderr)
+    assert result.stdout.split('\n')[0].split(' ') == [want_running, str(enabled).lower(), active_state], (active_state, result.stdout)
+
+# 점검 창에서 멈춰 있던 collector는 이전 release로 되돌리되 시작하지 않고, 변경 전 활성화 상태만 복원합니다.
+for enabled in [True, False]:
+    case, actual = run_case(f'stopped-before-change-{enabled}', 'native_cutover_run failed bash -c "exit 7"', prechange_running=False, prechange_enabled=enabled)
+    calls = (case/'calls').read_text().splitlines()
+    assert actual == 7 and not (case/'recovery').exists(), (actual, (case/'err').read_text())
+    assert not (case/'restored').exists() and not any(line.startswith(('enable --now ', 'start ', 'restart ')) for line in calls), calls
+    assert (f'enable {"hololive-youtube-collector@youtube-collector-a.service"}' in calls) == enabled, calls
+    assert 'previous restored' in calls and 'ActiveState=inactive' in (case/'err').read_text() and 'without starting it' in (case/'err').read_text()
 case, actual = run_case('initial-signal', 'native_cutover_run restart sudo -n systemctl restart "$unit"', 'owner', initial=False)
 assert actual == 143 and not (case/'restored').exists() and not (case/'recovery').exists()
 assert not (case/'current').exists() and not (case/'host.env').exists() and not (case/'unit').exists()
