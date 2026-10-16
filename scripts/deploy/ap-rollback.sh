@@ -29,11 +29,12 @@ if [[ "$MODE" == --dry-run ]]; then
   exit 0
 fi
 rollback_started_at="$("${AP_SSH[@]}" 'date -u +%Y-%m-%dT%H:%M:%SZ')"
-apply_output="$("${AP_SSH[@]}" "bash \"$remote_script\" apply $remote_args $(printf '%q' "$rollback_started_at")")"
-printf '%s\n' "$apply_output"
+apply_log="$(mktemp)"
+trap 'rm -f "$apply_log"' EXIT
+"${AP_SSH[@]}" "bash \"$remote_script\" apply $remote_args $(printf '%q' "$rollback_started_at")" | tee "$apply_log"
 # 점검 창에서 정지했던 collector는 원격 apply가 created 상태와 revision을 확인하고 시작하지 않는다.
 # health를 조회할 실행 중 container가 없으므로 상태 조회 대신 재개 조건을 안내한다.
-if [[ "$apply_output" == *' collector_state=stopped '* ]]; then
+if grep -Eq '^AP rollback complete: .* collector_state=stopped ' "$apply_log"; then
   echo "[ROLLBACK] $AP_NAME collector restored stopped; start it only after the schema matches the restored image"
   exit 0
 fi

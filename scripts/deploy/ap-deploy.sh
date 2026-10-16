@@ -414,8 +414,7 @@ rsync -ai "$issuer_build_root/issuer/image-id" \
   -e "$RSYNC_RSH" "$(ap_rsync_target "./$po_remote_dir/po-sandbox-candidate.image-id")"
 
 
-# cutover 실패 시 이전 collector·issuer를 함께 복원한다. 첫 배포 실패는 stop_failed_first_deploy가 처리한다.
-cutover_armed=true
+# 실행 중인 pair를 바꾸기 전의 읽기 전용 검증이다. 여기서 실패하면 source만 되돌리고 pair는 다시 만들지 않는다.
 remote "set -euo pipefail
 cd ~/hololive-bot
 . scripts/deploy/lib/po-sandbox-image.sh
@@ -424,12 +423,18 @@ if [[ \$(cat '$backup_dir/po-sandbox-prechange.state') == present ]]; then
   po_verify_image '$rollback_po_image_tag' '$backup_dir/po-sandbox-prechange-manifest.json' \"\$previous_po_revision\" arm64 '$backup_dir/po-sandbox-prechange.image-id'
 fi
 (cd '$backup_dir' && sha256sum --check --strict image.tar.sha256)
+[[ \$(sha256sum '$backup_dir/hololive-youtube-collector-prod.tar' | cut -d' ' -f1) == '$collector_archive_sha' ]]"
+
+# cutover 실패 시 이전 collector·issuer를 함께 복원한다. 첫 배포 실패는 stop_failed_first_deploy가 처리한다.
+cutover_armed=true
+remote "set -euo pipefail
+cd ~/hololive-bot
+. scripts/deploy/lib/po-sandbox-image.sh
 sudo -n docker load --input '$backup_dir/image.tar'
 po_verify_image '$PO_IMAGE_REF' '$backup_dir/po-sandbox-candidate-manifest.json' '$REVISION' arm64 '$backup_dir/po-sandbox-candidate.image-id'
 [[ \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$PO_IMAGE_REF') == '$HOLO_API_VERSION' ]]
 image_archive='$backup_dir/hololive-youtube-collector-prod.tar'
 trap 'rm -f \"\$image_archive\"' EXIT
-[[ \$(sha256sum \"\$image_archive\" | cut -d' ' -f1) == '$collector_archive_sha' ]]
 sudo -n docker load --input \"\$image_archive\"
 loaded_revision=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' '$IMAGE_REF')
 [[ \"\$loaded_revision\" == '$REVISION' ]]

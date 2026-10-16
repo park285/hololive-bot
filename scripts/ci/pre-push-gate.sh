@@ -166,7 +166,8 @@ run_content_gates() {
   run_if_changed scripts/deploy/ap-deploy-cutover-failure_test.sh \
     scripts/deploy/ap-deploy.sh scripts/deploy/lib
   run_if_changed scripts/deploy/ap-maintenance-stopped_test.sh \
-    scripts/deploy/ap-collector-preflight.sh scripts/deploy/lib/po-ap-rollback-remote.sh
+    scripts/deploy/ap-collector-preflight.sh scripts/deploy/ap-deploy.sh scripts/deploy/ap-rollback.sh \
+    scripts/deploy/lib/po-ap-rollback-remote.sh scripts/deploy/lib/ap-prechange-config.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh \
     scripts/deploy/lib/source-revision.sh deploy/compose/docker-compose.prod.yml \
     hololive/hololive-api/Dockerfile hololive/hololive-alarm-worker/Dockerfile hololive/hololive-youtube-collector/Dockerfile
