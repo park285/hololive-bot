@@ -1,11 +1,12 @@
 # 전체 변경 main 합류 마무리 인계 - 2026-10-16
 
-**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 로컬 `main`에 커밋했습니다(6절). 원격 미발행·운영 미적용.** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
+**상태: 통합·전체 gate·독립 migration 리뷰를 마치고 PR(squash)로 원격 `main`에 발행합니다(6절). 운영 미적용.** 첫 세션은 OAI 서버 장애로 리뷰 에이전트를 실행할 수 없어 세션을 넘겼고, 이어받은 세션이 리뷰와 커밋을 마쳤습니다. 세부 근거는 [10-15 인계](2026-10-15-sql-db-review-handoff.md)와 [317-321 압축 인계](2026-10-16-sql-compaction-handoff.md)에 있습니다.
 
 ## 1. 승인 범위
 
 - 사용자는 10-15 작업(필수 1-5, N1-N7, 315·316), 10-16 압축 작업(317-321)과 통합 보완 전체를 인수하여 **로컬 `main`에 커밋·합류**하도록 지시했습니다.
-- 운영 DDL·데이터 변경·배포·재시작은 승인되지 않았습니다. 원격 push도 수행하지 않았으므로, 실행 전 사용자에게 범위를 확인하십시오.
+- 이어받은 세션에서 사용자는 다른 세션의 잔여 작업까지 인수·리뷰하여 원격 반영으로 마무리하도록 지시했습니다(6절).
+- 운영 DDL·데이터 변경·배포·재시작은 승인되지 않았습니다.
 - 새 retry/fallback/cache, 의존성 변경, 이미 적용된 migration(314 이하) 수정은 범위 밖입니다.
 
 ## 2. 커밋 직전 작업 트리 상태 (`/home/kapu/work/iris-stack/hololive-bot`)
@@ -48,7 +49,7 @@
    - 비차단 지적: `source_compaction_resume_test.go`는 완료/미완료 행 수만 확인합니다. 가드를 지워도 통과하므로 "완료 batch를 다시 쓰지 않음"은 테스트가 아니라 SQL 검토로만 확인됩니다. 가드가 없어져도 정확성은 그대로이고 재실행의 쓰기 증폭만 늘어나므로, 이번 합류에서는 테스트를 바꾸지 않았습니다. 운영 관련 지적은 5절에 반영했습니다.
 2. **리뷰 결과 반영:** 코드·SQL 수정이 없으므로 gate를 다시 실행하지 않고 3절의 통과 결과를 재사용했습니다. gate 이후 변경은 문서뿐입니다.
 3. **스테이징·커밋:** 6절.
-4. **인계 문서 갱신:** 이 문서와 [압축 인계](2026-10-16-sql-compaction-handoff.md) 7절. 원격 push와 iris-stack 메타 저장소의 submodule pointer 갱신은 하지 않았습니다. 진행하려면 별도 확인을 받으십시오.
+4. **인계 문서 갱신:** 이 문서와 [압축 인계](2026-10-16-sql-compaction-handoff.md) 7절. 원격 발행과 iris-stack 메타 pointer 갱신은 6절에 있습니다.
 
 ## 5. 운영 적용 경계 (이번 범위 아님)
 
@@ -61,11 +62,15 @@
 - 사전 백업과 이전 image/compose 복구점을 준비하고, 적용 뒤 실제 크기와 `pg_stat_statements`를 재측정해야 합니다.
 - 소형 tmpfs fixture 결과를 운영 소요 시간·용량 보장으로 쓰지 않습니다. 운영 절차는 `hololive-bot-ops`·`stack-platform-ops` 소유이며 별도 승인 대상입니다.
 
-## 6. 커밋 결과
+## 6. 커밋·발행 결과
 
-- 합류 커밋: `948ab90e5512df476b5415a3c36a55c27f569962` `feat(db): SQL 리뷰 후속 수정과 원본 저장 구조 압축 합류`. 부모는 `21e60d245`이고 203파일, +11,894 / -2,821입니다. 커밋 시점 origin/main 대비 ahead 5였습니다.
+- 로컬 합류 커밋: `948ab90e5` `feat(db): SQL 리뷰 후속 수정과 원본 저장 구조 압축 합류`와 SHA 기록 `4951df777`. 부모는 `21e60d245`이고 203파일, +11,894 / -2,821입니다.
 - hook: pre-commit의 `staging-scope-guard`가 추적 dirty 파일 전체(203개) 스테이징을 차단했습니다. 의도된 전체 합류이므로 이 커밋만 `IRIS_STACK_ALLOW_BULK_STAGE=1`로 재시도했습니다. writer guard·gofmt·identity·제목 정책 hook은 그대로 실행되어 통과했습니다. `--no-verify`·amend·force는 쓰지 않았습니다.
-- 이 SHA 기록은 별도 docs 커밋입니다.
-- 원격 미발행이므로 두 커밋 모두 configured remote에 없습니다. iris-stack 메타 pointer는 갱신하지 않았습니다.
+- 다른 세션 잔여 작업 인수:
+  - 로컬 main의 `d36a9d058`·`0a5124c13`·`ccdafb4cb`·`21e60d245`는 원격 #640 squash 전 이력입니다. `21e60d245`와 `f814da318`의 tree가 같으므로(`6454ea09d`) 새로 발행할 내용이 없어 발행 branch에서 제외했습니다.
+  - chat-bot-go-kakao `e6f049633`(`fix(prompt)`)은 원격에 이미 있고 iris-stack 메타 pointer만 남아 있었습니다.
+  - 그 밖의 submodule·메타 저장소·worktree에는 미커밋·미발행 작업이 없었습니다.
+- 발행 경로: 원격 ruleset은 `fast-gate` 필수(strict)와 non-fast-forward 금지이며, 저장소는 squash merge만 허용합니다. `origin/main`(`f814da318`) 위에 위 두 커밋을 cherry-pick한 `feat/sql-compaction-20261016`으로 PR을 열고, `fast-gate` 통과 뒤 squash merge합니다. tree는 로컬 main과 같습니다(`8db1a5e63`). 발행 commit은 origin/main에서 제목 `feat(db): SQL 리뷰 후속 수정과 원본 저장 구조 압축 합류 (#번호)`로 찾습니다. 로컬 SHA는 원격에 남지 않습니다.
+- 발행 뒤: 로컬 main을 발행된 origin/main으로 맞추고, iris-stack 메타 pointer(hololive-bot·chat-bot-go-kakao)를 원격에 있는 SHA로 갱신합니다.
 
 **Fallback delta: none. Retry delta: none.**
