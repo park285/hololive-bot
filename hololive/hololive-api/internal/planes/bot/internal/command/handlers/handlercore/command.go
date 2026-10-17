@@ -106,7 +106,10 @@ type BroadcastHistoryEntry struct {
 	LifecycleOrigin string
 	// LastLivePositiveAt은 마지막으로 방송 중임을 확인한 시각이다. reconciliation head가 없거나 LIVE를 확인하지 못한
 	// 세션은 nil이다.
-	LastLivePositiveAt *time.Time
+	LastLivePositiveAt  *time.Time
+	TimesSource         string
+	FinalizationOutcome *string
+	FinalizationReason  *string
 }
 
 type BroadcastHistoryResult struct {

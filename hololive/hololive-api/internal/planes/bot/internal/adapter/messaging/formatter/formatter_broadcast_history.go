@@ -47,21 +47,22 @@ type BroadcastHistoryFilter struct {
 	Truncated  bool
 }
 
-// BroadcastHistoryEntry의 시각은 StartedAt이 있으면 시작 시각으로 표시하고, EndedAt은 종료 오차가 확인된 경우에만
-// 채워 종료 시각과 방송 길이를 함께 표시한다. StartedAt이 없으면 Time을 TimeLabel과 함께 표시한다.
+// BroadcastHistoryEntry의 EndedAt은 provider 시각이거나 종료 오차가 확인된 경우에만 채워 길이를 표시한다.
+// StartedAt이 없으면 Time을 TimeLabel과 함께 표시하고, 아카이브 확인 실패는 시각 뒤에 안내한다.
 type BroadcastHistoryEntry struct {
-	VideoID      string
-	MemberName   string
-	Type         string
-	TypeLabel    string
-	TopicID      string
-	Title        string
-	StartedAt    time.Time
-	EndedAt      time.Time
-	Time         time.Time
-	TimeLabel    string
-	URL          string
-	HasThumbnail bool
+	VideoID            string
+	MemberName         string
+	Type               string
+	TypeLabel          string
+	TopicID            string
+	Title              string
+	StartedAt          time.Time
+	EndedAt            time.Time
+	Time               time.Time
+	TimeLabel          string
+	URL                string
+	HasThumbnail       bool
+	ArchiveUnavailable bool
 }
 
 var broadcastHistoryMembershipTagPattern = regexp.MustCompile(`(?i)(メンバーシップ限定|メンバー限定配信|メンバー限定|メン限|members[\s_-]*only|member[\s_-]*only|membership)`)
@@ -173,6 +174,10 @@ func cleanBroadcastHistoryMembershipTag(tag string) string {
 
 func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *strings.Builder, entry *BroadcastHistoryEntry) {
 	fmt.Fprintf(b, "⏰ %s", broadcastHistoryTimeSpan(ctx, f, entry))
+
+	if entry.ArchiveUnavailable {
+		b.WriteString(" · 아카이브를 확인할 수 없어 종료 시각 미확인")
+	}
 
 	if entry.TopicID != "" {
 		fmt.Fprintf(b, " · topic: %s", broadcastHistoryDisplayLine(entry.TopicID))

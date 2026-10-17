@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
@@ -648,7 +649,7 @@ func TestVerifiedBroadcastEndedAtRequiresBoundedEnd(t *testing.T) {
 		"end before start":                        {origin: observedLifecycleOrigin, started: at(time.Minute), ended: &endedAt, lastPositive: at(-time.Minute)},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got := verifiedBroadcastEndedAt(&handlercore.BroadcastHistoryEntry{LifecycleOrigin: tc.origin, StartedAt: tc.started, EndedAt: tc.ended, LastLivePositiveAt: tc.lastPositive})
+			got := verifiedBroadcastEndedAt(&handlercore.BroadcastHistoryEntry{TimesSource: "observed", LifecycleOrigin: tc.origin, StartedAt: tc.started, EndedAt: tc.ended, LastLivePositiveAt: tc.lastPositive})
 
 			if tc.want && !got.Equal(endedAt) {
 				t.Fatalf("verifiedBroadcastEndedAt() = %v, want %v", got, endedAt)
@@ -661,29 +662,77 @@ func TestVerifiedBroadcastEndedAtRequiresBoundedEnd(t *testing.T) {
 	}
 }
 
-// 옛 기록은 LIVE 확인 시각이 종료와 가까워도 started_at을 시작 시각으로 쓰지 않고 저장 종료 시각만 "종료"로 표시한다.
-// 신 lifecycle은 LIVE 확인이 없어도 시작 시각은 표시하고, 시작이 없으면 종료 시각으로 표시한다.
-func TestBroadcastHistoryCommandShowsVerifiedDurationOnly(t *testing.T) {
+func TestBroadcastHistoryCommandShowsTimeEvidence(t *testing.T) {
 	startedAt := time.Date(2026, time.October, 17, 11, 59, 0, 0, time.UTC)
-	verifiedEnd := startedAt.Add(90 * time.Minute)
-	staleEnd := startedAt.Add(68 * time.Hour)
-	legacyStart := startedAt.Add(time.Hour)
-	legacyEnd := startedAt.Add(3 * time.Hour)
-	unconfirmedStart := startedAt.Add(-time.Hour)
-	repo := &stubBroadcastHistoryRepository{
-		entries: []handlercore.BroadcastHistoryEntry{
-			{VideoID: testVideoID, MemberName: testHistoryMemberName, Title: "verified", LifecycleOrigin: observedLifecycleOrigin, StartedAt: &startedAt, EndedAt: &verifiedEnd, LastLivePositiveAt: new(verifiedEnd.Add(-time.Minute)), LastSeenAt: verifiedEnd},
-			{VideoID: "absence0001", MemberName: testHistoryMemberName, Title: "absence", LifecycleOrigin: observedLifecycleOrigin, StartedAt: &startedAt, EndedAt: &staleEnd, LastLivePositiveAt: new(startedAt.Add(17 * time.Minute)), LastSeenAt: staleEnd},
-			{VideoID: "nostart0001", MemberName: testHistoryMemberName, Title: "no start", LifecycleOrigin: observedLifecycleOrigin, EndedAt: &verifiedEnd, LastSeenAt: verifiedEnd},
-			{VideoID: "legacy00001", MemberName: testHistoryMemberName, Title: "legacy", LifecycleOrigin: legacyLifecycleOrigin, StartedAt: &legacyStart, EndedAt: &legacyEnd, LastLivePositiveAt: new(legacyEnd.Add(-time.Minute)), LastSeenAt: legacyEnd},
-			{VideoID: "unconfirm01", MemberName: testHistoryMemberName, Title: "unconfirmed", LifecycleOrigin: observedLifecycleOrigin, StartedAt: &unconfirmedStart, EndedAt: &verifiedEnd, LastSeenAt: verifiedEnd},
-		},
+	endedAt := startedAt.Add(90 * time.Minute)
+
+	const (
+		span            = "⏰ 2026/10/17 20:59~22:29 · 1시간 30분"
+		start           = "⏰ 2026/10/17 20:59 시작"
+		end             = "⏰ 2026/10/17 22:29 종료"
+		unavailable     = " · 아카이브를 확인할 수 없어 종료 시각 미확인"
+		exhausted       = "exhausted"
+		identityMissing = "identity_missing"
+	)
+
+	for name, tc := range map[string]struct {
+		source, origin, outcome, reason string
+		lastPositive                    *time.Time
+		noStart                         bool
+		want                            string
+	}{
+		"provider without live evidence":          {source: "provider", origin: observedLifecycleOrigin, want: span},
+		"provider overrides legacy and exhausted": {source: "provider", origin: legacyLifecycleOrigin, outcome: exhausted, reason: identityMissing, want: span},
+		"provider without start":                  {source: "provider", origin: legacyLifecycleOrigin, noStart: true, want: end},
+		"bounded observed overrides exhausted":    {origin: observedLifecycleOrigin, outcome: exhausted, reason: identityMissing, lastPositive: new(endedAt.Add(-time.Minute)), want: span},
+		"exhausted identity missing with start":   {origin: observedLifecycleOrigin, outcome: exhausted, reason: identityMissing, want: start + unavailable},
+		"exhausted legacy with live evidence":     {origin: legacyLifecycleOrigin, outcome: exhausted, reason: identityMissing, lastPositive: new(endedAt.Add(-time.Minute)), want: "⏰ 2026/10/17 22:29 기록" + unavailable},
+		"exhausted without start":                 {origin: observedLifecycleOrigin, outcome: exhausted, reason: identityMissing, noStart: true, want: "⏰ 2026/10/17 22:29 기록" + unavailable},
+		"exhausted other reason":                  {origin: observedLifecycleOrigin, outcome: exhausted, reason: "request_failed", want: start},
+		"conflict":                                {origin: observedLifecycleOrigin, outcome: "conflict", reason: "start_mismatch", want: start},
+		"members only":                            {origin: observedLifecycleOrigin, outcome: "members_only", want: start},
+		"legacy members only":                     {origin: legacyLifecycleOrigin, outcome: "members_only", want: end},
+		"pending identity missing":                {origin: observedLifecycleOrigin, outcome: "pending", reason: identityMissing, want: start},
+		"no finalization or live evidence":        {origin: observedLifecycleOrigin, want: start},
+		"stale live evidence":                     {origin: observedLifecycleOrigin, lastPositive: new(endedAt.Add(-65 * time.Hour)), want: start},
+		"legacy with live evidence":               {origin: legacyLifecycleOrigin, lastPositive: new(endedAt.Add(-time.Minute)), want: end},
+		"observed without start":                  {origin: observedLifecycleOrigin, noStart: true, want: end},
+	} {
+		t.Run(name, func(t *testing.T) {
+			entry := handlercore.BroadcastHistoryEntry{
+				VideoID: testVideoID, MemberName: testHistoryMemberName,
+				TimesSource: "observed", LifecycleOrigin: tc.origin,
+				StartedAt: &startedAt, EndedAt: &endedAt, LastSeenAt: endedAt,
+				LastLivePositiveAt: tc.lastPositive,
+			}
+			if tc.source != "" {
+				entry.TimesSource = tc.source
+			}
+
+			if tc.noStart {
+				entry.StartedAt = nil
+			}
+
+			if tc.outcome != "" {
+				entry.FinalizationOutcome = new(tc.outcome)
+			}
+
+			if tc.reason != "" {
+				entry.FinalizationReason = new(tc.reason)
+			}
+
+			assertBroadcastHistoryTime(t, entry, tc.want)
+		})
 	}
+}
+
+func assertBroadcastHistoryTime(t *testing.T, entry handlercore.BroadcastHistoryEntry, want string) {
+	t.Helper()
 
 	var sent string
 
 	deps := &handlercore.Dependencies{
-		BroadcastHistory: repo,
+		BroadcastHistory: &stubBroadcastHistoryRepository{entries: []handlercore.BroadcastHistoryEntry{entry}},
 		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = message
@@ -696,23 +745,15 @@ func TestBroadcastHistoryCommandShowsVerifiedDurationOnly(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	for _, want := range []string{
-		"⏰ 2026/10/17 20:59~22:29 · 1시간 30분\n",
-		"⏰ 2026/10/17 20:59 시작\n",
-		"⏰ 2026/10/17 22:29 종료\n",
-		"⏰ 2026/10/17 23:59 종료\n",
-		"⏰ 2026/10/17 19:59 시작\n",
-	} {
-		if !strings.Contains(sent, want) {
-			t.Fatalf("sent message missing %q in:\n%s", want, sent)
+	for line := range strings.SplitSeq(kakaoformat.Render(sent), "\n") {
+		if strings.HasPrefix(line, "⏰ ") {
+			if line != want {
+				t.Fatalf("time line = %q, want %q", line, want)
+			}
+
+			return
 		}
 	}
 
-	if strings.Contains(sent, "2026/10/20") || strings.Contains(sent, "68시간") || strings.Contains(sent, "2일") {
-		t.Fatalf("sent message exposes unverified absence end:\n%s", sent)
-	}
-
-	if strings.Contains(sent, "21:59") || strings.Contains(sent, "2시간") || strings.Contains(sent, "19:59~") {
-		t.Fatalf("sent message exposes legacy start or unconfirmed duration:\n%s", sent)
-	}
+	t.Fatal("rendered history has no time line")
 }

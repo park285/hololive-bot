@@ -213,7 +213,7 @@ func newRuntime(
 		retainer:           repo,
 		replayer:           repo,
 		builder: targetprojection.PolicyBuilder{
-			Reader:    rosterReader{},
+			Reader:    rosterReader{timeFinalizationBacklogBatchSize: plane.TimeFinalizationBacklogBatchSize},
 			Schedules: schedules,
 		},
 		liveFreshnessBudget: targetprojection.LiveFreshnessBudget(schedules[contract.KindLiveSnapshot].PollInterval),

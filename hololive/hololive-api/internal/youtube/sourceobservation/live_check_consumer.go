@@ -116,7 +116,25 @@ func (c *Consumer) reconcileVideoLiveCheck(
 		return ReconcileResult{Applications: applications}, nil
 	}
 
-	fact, skipped, err := c.videoLifecycleOrUnresolvableFact(ctx, tx, claimed, &payload, &session)
+	// ENDED는 reducer에 보내지 않는다. 종료 판정은 끝났고 남은 일은 시각 확정뿐이다.
+	if session.Status == domain.LiveStatusEnded {
+		return reconcileEndedVideoTimes(ctx, tx, claimed, &payload, &session, applications)
+	}
+
+	return c.reduceVideoLiveCheck(ctx, tx, claimed, &payload, &state, &session, applications)
+}
+
+// reduceVideoLiveCheck는 활성 세션의 영상 확인을 수명 사실로 바꿔 reducer에 보낸다.
+func (c *Consumer) reduceVideoLiveCheck(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed *Observation,
+	payload *contract.VideoLiveCheckV1,
+	state *live.State,
+	session *live.SessionState,
+	applications []Application,
+) (ReconcileResult, error) {
+	fact, skipped, err := c.videoLifecycleOrUnresolvableFact(ctx, tx, claimed, payload, session)
 	if err != nil {
 		return ReconcileResult{}, err
 	}
@@ -134,7 +152,7 @@ func (c *Consumer) reconcileVideoLiveCheck(
 		return ReconcileResult{Applications: applications}, nil
 	}
 
-	decision, err := live.Reduce(state, videoLiveEvidence(claimed, &fact), c.liveGrace, claimed.ReceivedAt)
+	decision, err := live.Reduce(*state, videoLiveEvidence(claimed, &fact), c.liveGrace, claimed.ReceivedAt)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}

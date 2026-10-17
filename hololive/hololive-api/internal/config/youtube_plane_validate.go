@@ -167,6 +167,10 @@ func (c *YouTubePlaneConfig) validateProjectionAndFinalizer() error {
 		return errors.New("youtube plane live end finalizer interval must be positive when enabled")
 	}
 
+	if c.TimeFinalizationBacklogBatchSize < 0 || c.TimeFinalizationBacklogBatchSize > 1000 {
+		return errors.New("youtube plane time finalization backlog batch size must be between 0 and 1000")
+	}
+
 	return nil
 }
 

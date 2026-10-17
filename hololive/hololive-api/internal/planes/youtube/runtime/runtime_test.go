@@ -772,3 +772,7 @@ func (emptyRosterReader) OperationalChannelIDs(context.Context, dbx.Tx) ([]strin
 func (emptyRosterReader) LiveCheckVideos(context.Context, dbx.Tx, targetprojection.LiveCheckVideoQuery) ([]targetprojection.LiveCheckVideo, error) {
 	return nil, nil
 }
+
+func (emptyRosterReader) TimeFinalizationVideos(context.Context, dbx.Tx) ([]targetprojection.TimeFinalizationVideo, error) {
+	return nil, nil
+}

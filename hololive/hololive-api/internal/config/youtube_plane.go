@@ -76,6 +76,8 @@ type YouTubePlaneConfig struct {
 	LiveEndGrace        time.Duration
 	// LiveUnresolvableGrace는 LIVE 영상의 identity_missing이 UNRESOLVABLE_VIDEO 종료 전에 이어져야 하는 최소 지속 시간이다.
 	LiveUnresolvableGrace time.Duration
+	// TimeFinalizationBacklogBatchSize는 0이면 과거 방송 시각 확정 수집을 중지합니다.
+	TimeFinalizationBacklogBatchSize int
 
 	ProfileClearMinObservations int
 	ProfileClearStability       time.Duration
@@ -181,6 +183,10 @@ func loadYouTubePlaneSchedules(config, defaults *YouTubePlaneConfig) error {
 
 	if config.TargetProjection.Validity, err = envload.StrictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_VALIDITY_SECONDS", defaults.TargetProjection.Validity, time.Second); err != nil {
 		return fmt.Errorf("load target projection validity: %w", err)
+	}
+
+	if config.TimeFinalizationBacklogBatchSize, err = sharedenv.IntE("YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE", defaults.TimeFinalizationBacklogBatchSize); err != nil {
+		return fmt.Errorf("load time finalization backlog batch size: %w", err)
 	}
 
 	if config.LiveEndFinalizer.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_LIVE_END_FINALIZER_ENABLED", defaults.LiveEndFinalizer.Enabled); err != nil {

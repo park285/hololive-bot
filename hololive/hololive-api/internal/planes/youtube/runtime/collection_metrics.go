@@ -36,6 +36,7 @@ type collectionTargetMetrics struct {
 	lifecycleCheckAge                               *prometheus.GaugeVec
 	lifecycleReviewAge                              prometheus.Gauge
 	success, lastSuccess                            prometheus.Gauge
+	timeFinalization                                *timeFinalizationMetrics
 }
 
 var youtubeCollectionTargets = newCollectionTargetMetrics(prometheus.DefaultRegisterer)
@@ -61,6 +62,8 @@ func newCollectionTargetMetrics(reg prometheus.Registerer) *collectionTargetMetr
 		lastSuccess:         prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_snapshot_last_success_timestamp_seconds", Help: "Unix time of the last complete valid target snapshot."}),
 	}
 
+	m.timeFinalization = newTimeFinalizationMetrics(reg)
+
 	m.lifecycleRecords = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_records", Help: "Retained active lifecycle records by classification; review closure requires a currently reviewable record whose receipt matches the exact snapshot digest or the same lifecycle facts (status, schedule, origin, positive/end/absence evidence, availability verdict). unresolved_unreviewed excludes legacy_unknown UPCOMING records scheduled in the future, which stay in legacy_unreviewed and legacy_not_due. Categories may overlap."}, []string{"classification"})
 	m.lifecycleCheckAge = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_oldest_check_age_seconds", Help: "Age of the oldest actual video check by lifecycle classification; never-checked records are counted separately."}, []string{"classification"})
 	m.lifecycleReviewAge = prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_lifecycle_oldest_review_age_seconds", Help: "Age of the oldest currently applicable unresolved review receipt."})
@@ -76,6 +79,8 @@ func (r *Runtime) observeCollectionTargets(ctx context.Context) {
 
 	var samples []collectionTargetSample
 
+	var finalizations []timeFinalizationSample
+
 	err := r.withDB(ctx, dbOperationCollectionSnapshot, func(ctx context.Context) error {
 		rows, err := r.pool.Query(ctx, mustSQL("collection_target_observability.sql"), r.liveFreshnessBudget.Milliseconds())
 		if err != nil {
@@ -84,10 +89,21 @@ func (r *Runtime) observeCollectionTargets(ctx context.Context) {
 		defer rows.Close()
 
 		samples, err = scanCollectionTargets(rows)
+		rows.Close()
+
+		if err != nil {
+			return err
+		}
+
+		finalizations, err = r.loadTimeFinalizationSamples(ctx)
 
 		return err
 	})
 	youtubeCollectionTargets.observe(samples, r.now(), err)
+
+	if err == nil && len(samples) == collectionTargetJobCount {
+		youtubeCollectionTargets.timeFinalization.observe(finalizations)
+	}
 }
 
 func scanCollectionTargets(rows pgx.Rows) ([]collectionTargetSample, error) {
