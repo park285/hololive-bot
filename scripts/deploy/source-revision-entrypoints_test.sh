@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REAL_DOCKER="$(command -v docker)"
 
 fail() {
     echo "[FAIL] $*" >&2
@@ -28,7 +29,39 @@ cp "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh" "${repo}/scripts/
 cp "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh" "${repo}/scripts/deploy/lib/ap-compose-version.sh"
 cp "${ROOT_DIR}/scripts/deploy/lib/source-revision.sh" "${repo}/scripts/deploy/lib/source-revision.sh"
 cp "${ROOT_DIR}/scripts/deploy/lib/admin-bind.sh" "${repo}/scripts/deploy/lib/admin-bind.sh"
-printf 'services: {}\n' >"${repo}/deploy/compose/docker-compose.prod.yml"
+cat >"${repo}/deploy/compose/docker-compose.prod.yml" <<'EOF'
+services:
+  hololive-api:
+    image: hololive-api:prod
+  hololive-db-migrate:
+    image: hololive-api:prod
+  hololive-alarm-worker:
+    image: hololive-alarm-worker:prod
+  youtube-collector:
+    image: hololive-youtube-collector:prod
+  youtube-po-c:
+    image: hololive-youtube-po-sandbox:prod
+  holo-postgres:
+    image: ${POSTGRES_IMAGE:-hololive-postgres:prod}
+  deunhealth:
+    image: ${DEUNHEALTH_IMAGE:-hololive-deunhealth:prod}
+  valkey-cache:
+    image: ${VALKEY_IMAGE:-iris-stack-valkey:9.1.2-zlib1.3.2-r1}
+  docker-proxy:
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-iris-stack-socket-proxy:1.13.1-go1.27.2}
+EOF
+cat >"${repo}/deploy/compose/image-override.yml" <<'EOF'
+services:
+  hololive-api:
+    image: ${FIXTURE_API_IMAGE:-hololive-api:prod}
+  hololive-db-migrate:
+    image: ${FIXTURE_MIGRATION_IMAGE:-hololive-api:prod}
+EOF
+cat >"${repo}/deploy/compose/docker-compose.remote-cache.yml" <<'EOF'
+services:
+  hololive-api:
+    image: ${FIXTURE_BUILD_API_IMAGE:-hololive-api:prod}
+EOF
 printf 'fixture=1\n' >"${repo}/deploy/compose/build-only.env.sample"
 printf '1.2.3\n' >"${repo}/hololive/hololive-api/VERSION"
 printf '1.2.3\n' >"${repo}/hololive/hololive-alarm-worker/VERSION"
@@ -80,6 +113,10 @@ if [[ "${1:-}" == compose && "${2:-}" == version ]]; then
     exit 0
 fi
 if [[ "${1:-}" == compose ]]; then
+    # Render with the real Compose CLI, without building images or contacting a daemon.
+    if [[ " $* " == *" config --images "* ]]; then
+        exec "${FAKE_REAL_DOCKER}" "$@"
+    fi
     if [[ " $* " == *" run --rm --no-deps hololive-api --check-config "* ]]; then
         exit "${FAKE_CONFIG_CHECK_STATUS:-0}"
     fi
@@ -93,7 +130,11 @@ if [[ "$*" == *'{{.Image}}'* ]]; then
     exit 0
 fi
 if [[ "${1:-}" == image ]]; then
-    printf '%s\n' "${FAKE_IMAGE_REVISION_LABEL:-${FAKE_REVISION_LABEL:-}}"
+    if [[ "${@: -1}" == "${FAKE_BAD_IMAGE_REF:-}" ]]; then
+        printf '%s\n' unknown
+    else
+        printf '%s\n' "${FAKE_IMAGE_REVISION_LABEL:-${FAKE_REVISION_LABEL:-}}"
+    fi
     exit 0
 fi
 if [[ "${1:-}" == container ]]; then
@@ -109,6 +150,7 @@ common_env=(
     PATH="${fakebin}:${PATH}"
     CONTAINER_CLI=docker
     FAKE_DOCKER_LOG="${docker_log}"
+    FAKE_REAL_DOCKER="${REAL_DOCKER}"
     COMPOSE_ENV_FILE="${repo}/deploy/compose/build-only.env.sample"
     SHARED_GO_WORKSPACE_PATH="${tmp}/shared-go"
     IRIS_CLIENT_GO_WORKSPACE_PATH="${tmp}/iris-client-go"
@@ -282,5 +324,61 @@ up_line="$(grep -nE ' compose .* up -d ' "${docker_log}" | head -n1 | cut -d: -f
 live_line="$(grep -n ' container inspect ' "${docker_log}" | head -n1 | cut -d: -f1)"
 [[ "${built_line}" -lt "${config_line}" && "${config_line}" -lt "${up_line}" && "${up_line}" -lt "${live_line}" ]] \
     || fail "build-all ordering must be build-image, config-check, up, live-container"
+
+for image_key in VALKEY_IMAGE DOCKER_SOCKET_PROXY_IMAGE FIXTURE_BUILD_API_IMAGE; do
+    image_ref="fixture-${image_key,,}:override"
+    printf '%s=%s\n' "${image_key}" "${image_ref}" >"${tmp}/image overrides.env"
+    : >"${docker_log}"
+    if env "${common_env[@]}" COMPOSE_ENV_FILE="${tmp}/image overrides.env" \
+        REMOTE_CACHE_PREFIX=fixture.invalid/cache FAKE_REVISION_LABEL="${revision}" \
+        FAKE_BAD_IMAGE_REF="${image_ref}" \
+        bash "${repo}/build-all.sh" --no-bump --skip-local-ci --remote-cache >/dev/null 2>&1; then
+        fail "build-all must reject a bad ${image_key} override even when default images are valid"
+    fi
+    grep -Fq " image inspect --format {{index .Config.Labels \"org.opencontainers.image.revision\"}} ${image_ref}" "${docker_log}" \
+        || fail "build-all must inspect the env-file image override for ${image_key}"
+    if grep -Eq ' compose .* (up|run|stop|down|rm|restart) ' "${docker_log}"; then
+        fail "bad ${image_key} override must fail before runtime preflight or cutover"
+    fi
+
+    : >"${docker_log}"
+    env "${common_env[@]}" COMPOSE_ENV_FILE="${tmp}/image overrides.env" \
+        REMOTE_CACHE_PREFIX=fixture.invalid/cache FAKE_REVISION_LABEL="${revision}" \
+        bash "${repo}/build-all.sh" --no-bump --skip-local-ci --remote-cache >/dev/null \
+        || fail "build-all must accept a valid ${image_key} env-file override"
+    grep -Fq " image inspect --format {{index .Config.Labels \"org.opencontainers.image.revision\"}} ${image_ref}" "${docker_log}" \
+        || fail "successful build-all must verify ${image_key}'s rendered image"
+    grep -Eq ' compose .* up -d ' "${docker_log}" \
+        || fail "valid ${image_key} override must permit cutover"
+done
+
+for image_key in FIXTURE_API_IMAGE FIXTURE_MIGRATION_IMAGE; do
+    image_ref="fixture-${image_key,,}:override"
+    printf '%s=%s\n' "${image_key}" "${image_ref}" >"${tmp}/image overrides.env"
+    override_env=(COMPOSE_ENV_FILE="${tmp}/image overrides.env" \
+        COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/image-override.yml)
+    : >"${docker_log}"
+    if env "${common_env[@]}" "${override_env[@]}" FAKE_REVISION_LABEL="${revision}" \
+        FAKE_BAD_IMAGE_REF="${image_ref}" \
+        bash "${repo}/scripts/deploy/compose-redeploy-service.sh" hololive-api >/dev/null 2>&1; then
+        fail "redeploy must reject a bad ${image_key} override even when the default image is valid"
+    fi
+    grep -Fq " image inspect --format {{index .Config.Labels \"org.opencontainers.image.revision\"}} ${image_ref}" "${docker_log}" \
+        || fail "redeploy must inspect ${image_key} from the active env file and Compose overlay"
+    if grep -Eq ' compose .* (up|run|stop|down|rm|restart) ' "${docker_log}"; then
+        fail "bad ${image_key} override must fail before migration or cutover"
+    fi
+
+    : >"${docker_log}"
+    env "${common_env[@]}" "${override_env[@]}" FAKE_REVISION_LABEL="${revision}" \
+        bash "${repo}/scripts/deploy/compose-redeploy-service.sh" hololive-api >/dev/null \
+        || fail "redeploy must accept a valid ${image_key} env-file override"
+    grep -Fq " image inspect --format {{index .Config.Labels \"org.opencontainers.image.revision\"}} ${image_ref}" "${docker_log}" \
+        || fail "successful redeploy must verify ${image_key}'s rendered image"
+    grep -Eq ' compose .* run --rm hololive-db-migrate' "${docker_log}" \
+        || fail "valid ${image_key} override must permit migration"
+    grep -Eq ' compose .* up -d ' "${docker_log}" \
+        || fail "valid ${image_key} override must permit cutover"
+done
 
 echo "all production revision entrypoint fixtures passed"

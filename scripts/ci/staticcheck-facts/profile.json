@@ -3,8 +3,8 @@
   "staticcheck_release": "2026.2.2",
   "staticcheck_sum": "h1:+jPbCzuYxYrcoOvCecYUFDj+XJQRmzIhJmlbpps21Zk=",
   "staticcheck_zip_sha256": "9a35d66f729999f9ba90052c35cccfc23f35c5ee416232009c04d6321cda48db",
-  "tools_version": "v0.51.0",
-  "tools_sum": "h1:k4Xc/1Om9jwkBJBo4NVLMSARBoWtK10mx+W5BnXCeAI=",
-  "tools_zip_sha256": "176a49a54ed781feb196235cc640f0454884f4e59d0b859ab4ecc9169cde513c",
+  "tools_version": "v0.52.0",
+  "tools_sum": "h1:ryxg4U63oaUYk7uOLTF37n43f4qgtGvqV4Ioit1BaEs=",
+  "tools_zip_sha256": "90b2a941aa5f2fe87564b8e38c3f03796de2e3597b7f4c52a9a6a53201b32c48",
   "go_version": "go1.27.2"
 }

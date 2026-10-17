@@ -9,7 +9,15 @@ x-live-postgres-env: &live-postgres-env
 
 services:
   admin-dashboard-ingress:
-    image: ${NGINX_IMAGE:-nginx:1.31.7-alpine-slim@sha256:b274dae54cf9792e1e8696a14081a50f29d74830d9a56a4ffcdc4bc8fb006524}
+    image: ${NGINX_IMAGE:-iris-stack-nginx:1.31.7-zlib1.3.2-r1}
+    pull_policy: never
+    build:
+      context: ../images/nginx
+      dockerfile: Dockerfile
+      provenance: mode=max
+      sbom: true
+      args:
+        REVISION: ${REVISION:-unknown}
     container_name: admin-dashboard-ingress
     user: "101:101"
     restart: unless-stopped

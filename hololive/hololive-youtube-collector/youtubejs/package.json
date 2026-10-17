@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {
-    "node": "^24.21.0"
+    "node": "^26.12.0"
   },
   "scripts": {
     "test": "node --test --test-concurrency=1 src/*.test.mjs",
@@ -17,8 +17,8 @@
     "youtubei.js": "18.1.0"
   },
   "devDependencies": {
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.5",
     "typescript": "7.0.2"
   },
-  "packageManager": "npm@11.21.0+sha512.668bfc2a16a63677a22dd10bb63e5800bb4d9895b82f87c22d3ce37e9cd71b6c3a3121dc7f453181d94ae6e9680ae92c593fbb986514ef08bbf5c3ba46a8af3e"
+  "packageManager": "npm@12.2.0+sha512.66c2632a94e796649738b2d7894d710c2cc2e1696893823066687f6b0d8a52e5f2b54eeaeaa32ffdc513ecca1e49ff794a5c2ec3f9515d879f1b3182b291cf35"
 }

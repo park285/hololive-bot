@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **의존성·런타임 갱신:** Go module graph, Node 26.12.0 Current·npm 12.2.0·Corepack 0.36.0, Node helper·실험용 Python 의존성, uv 0.13.1·CI 도구와 이미지 pin을 최신 안정판으로 갱신했습니다. scratch 이미지에 Node 26의 `libatomic` 런타임 의존성을 포함합니다. PostgreSQL·Nginx·Valkey는 zlib 1.3.2-r1을 적용하고 socket-proxy 1.13.1은 Go 1.27.2로 재빌드하며, 서버·UID·소켓 접근 정책은 유지합니다. 운영 배포는 포함하지 않습니다.
+- **이미지 검사·전환 정합성:** 보안 스캔 목록은 순서가 아닌 정확한 이미지 집합·중복 여부를 비교하며, 새 Valkey/socket-proxy의 attestation 비활성화는 로컬 스캔 overlay에만 적용합니다. 빌드·재배포의 revision 검사는 고정 tag 표가 아니라 실제 Compose CLI·env file·overlay에서 해석한 서비스 이미지를 사용합니다. env-only override와 잘못된 revision의 전환 전 거절을 실제 Compose 렌더링으로 검증했습니다.
 - **실패 종료 방의 반복 catchup 차단:** live catchup이 자기 catchup delivery가 DLQ·격리·취소로 끝난 방을 근거로 인정합니다. ledger가 `rejected_terminal`로 거절할 재발행을 매분 만들어 scheduler 오류가 반복되던 경로를 없애고, guardrail은 그 방을 매분 경고하지 않고 `terminal_delivery` 지표로 구분합니다. N분 전 알림의 실패는 catchup을 막지 않으며, 아무 결과가 없는 방의 경고와 DLQ 지표는 유지합니다.
 - **실제 시작 시각이 없는 live의 근거 하한:** 실제 시작 시각이 없으면 처음 LIVE로 관측한 시각을 근거 하한의 기준으로 씁니다. 24시간을 넘긴 그런 방송에 같은 방 catchup을 다시 만들지 않습니다.
 - **native 점검 창 실패 복원:** host-native AP 배포가 변경 전 collector unit의 실행·활성화 상태를 기록합니다. 실패 복원은 실행 중이던 unit만 이전 release로 다시 시작하고, 점검 창에서 멈춰 둔 unit은 시작하지 않습니다.

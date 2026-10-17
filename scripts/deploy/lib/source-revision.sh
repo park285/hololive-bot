@@ -47,20 +47,11 @@ deploy_require_single_identifier() {
 }
 
 deploy_service_image_ref() {
-    case "$1" in
-        hololive-api|hololive-db-migrate) printf '%s\n' hololive-api:prod ;;
-        hololive-alarm-worker) printf '%s\n' hololive-alarm-worker:prod ;;
-        holo-postgres|holo-postgres-standby) printf '%s\n' "${POSTGRES_IMAGE:-hololive-postgres:prod}" ;;
-        deunhealth) printf '%s\n' "${DEUNHEALTH_IMAGE:-hololive-deunhealth:prod}" ;;
-        youtube-collector|youtube-collector-c|youtube-collector-a|youtube-collector-b|youtube-collector-d)
-            printf '%s\n' hololive-youtube-collector:prod
-            ;;
-        youtube-po-c|youtube-po-b) printf '%s\n' hololive-youtube-po-sandbox:prod ;;
-        *)
-            echo "[ERROR] No source-built image mapping for service: $1" >&2
-            return 1
-            ;;
-    esac
+    local service="$1"
+    shift
+
+    deploy_require_single_identifier "image for ${service}" \
+        "$@" config --images "${service}"
 }
 
 deploy_verify_object_revision() {

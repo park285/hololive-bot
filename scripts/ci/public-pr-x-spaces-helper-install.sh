@@ -9,4 +9,4 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}/hololive/hololive-alarm-worker/xspaces"
 
-npm_config_engine_strict=true npm ci --ignore-scripts --no-audit --no-fund
+npm_config_engine_strict=true npm exec --yes --package=corepack@0.36.0 -- corepack npm ci --ignore-scripts --no-audit --no-fund

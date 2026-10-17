@@ -142,16 +142,19 @@ print(match.group(1))
 PY
 )" || fail "could not resolve pinned admin-dashboard-ingress image"
 
-# 배포용 ARM64 빌드와 별개로 nginx 문법 검사는 이 호스트의 amd64 실행 파일에서 수행합니다.
-docker pull --platform linux/amd64 "${nginx_image}" >/dev/null
+# 운영 태그를 덮어쓰지 않고 같은 소스를 대상 아키텍처로 빌드하여 실제 nginx 동작을 검사합니다.
+nginx_platform="${NGINX_TEST_PLATFORM:-linux/amd64}"
+nginx_image="${nginx_image}-test-$$"
 nginx_test_dir="$(mktemp -d)"
-trap 'rm -rf -- "${nginx_test_dir}"' EXIT
+trap 'rm -rf -- "${nginx_test_dir}"; docker image rm --no-prune "${nginx_image}" >/dev/null 2>&1 || true' EXIT
+docker buildx build --platform "${nginx_platform}" --build-arg REVISION=test \
+  --provenance=false --sbom=false --load --tag "${nginx_image}" "${ROOT_DIR}/deploy/images/nginx"
 . "${ROOT_DIR}/scripts/deploy/lib/public-bind-mounts.sh"
 HOLOLIVE_BOT_PORT_BIND_IP=127.0.0.1 \
 HOLOLIVE_INGRESS_CONF="${nginx_test_dir}/admin-dashboard-ingress.conf" \
   prepare_admin_dashboard_ingress_bind_mount "${ROOT_DIR}" \
   || fail "could not render admin-dashboard-ingress config from the template"
-docker run --rm --platform linux/amd64 \
+docker run --rm --pull=never --platform "${nginx_platform}" \
   --label io.iris.observability.logs=exclude \
   --network host \
   --read-only \
@@ -167,7 +170,7 @@ pass "admin-dashboard-ingress config passes nginx -t with the pinned image"
 # 남은 shortlink ingress는 Seoul이 마지막에 기록한 IP로 제한 예산을 구분합니다.
 sed '/location \^~ \/l\//i\        location = /__client { return 200 "$shortlink_client"; }' \
   "${nginx_test_dir}/admin-dashboard-ingress.conf" >"${nginx_test_dir}/admin-client.test.conf"
-timeout 30 docker run --rm --platform linux/amd64 --network none --read-only \
+timeout 30 docker run --rm --pull=never --platform "${nginx_platform}" --network none --read-only \
   --label io.iris.observability.logs=exclude \
   --tmpfs /tmp:size=16m --tmpfs /var/cache/nginx:size=16m --tmpfs /var/run:size=1m \
   -v "${nginx_test_dir}/admin-client.test.conf:/etc/nginx/admin-client.test.conf:ro" \
@@ -211,7 +214,7 @@ printf '%s\n' \
   '  include /etc/nginx/holoshi-public-shortlink.test.conf;' \
   '}' \
   >"${nginx_test_dir}/holoshi-public-test.conf"
-docker run --rm --platform linux/amd64 \
+docker run --rm --pull=never --platform "${nginx_platform}" \
   --label io.iris.observability.logs=exclude \
   --network host \
   --read-only \

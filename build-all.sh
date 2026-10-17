@@ -56,7 +56,8 @@ verify_built_revision() {
     local service="$1"
     local image_ref=""
 
-    image_ref="$(deploy_service_image_ref "${service}")"
+    image_ref="$(deploy_service_image_ref "${service}" \
+        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}")"
     deploy_verify_object_revision "${CONTAINER_CLI}" image "${image_ref}" "${REVISION}"
     echo "[VERIFY] ${service} built image revision=${REVISION}"
 }
@@ -332,7 +333,7 @@ if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
         BUILD_REVISION_SERVICES+=(youtube-po-c)
     fi
 else
-    BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector youtube-po-c holo-postgres deunhealth)
+    BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector youtube-po-c holo-postgres deunhealth valkey-cache docker-proxy)
 fi
 
 validate_runtime_config_for_deploy

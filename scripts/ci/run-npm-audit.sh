@@ -19,6 +19,6 @@ while IFS= read -r lockfile; do
   echo "npm audit: $lockfile"
   (
     cd "$root_dir/${lockfile%/package-lock.json}"
-    corepack "$npm_package_manager" audit --package-lock-only --audit-level=high
+    npm exec --yes --package=corepack@0.36.0 -- corepack "$npm_package_manager" audit --package-lock-only --audit-level=high
   )
 done <"$manifest"

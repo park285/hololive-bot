@@ -1,6 +1,6 @@
 # /// script
-# requires-python = ">=3.14,<3.15"
-# dependencies = ["scikit-learn==1.9.0"]
+# requires-python = ">=3.15,<3.16"
+# dependencies = ["scikit-learn==1.9.1"]
 # ///
 """공개 제목과 DB 표본으로 방송자 모델을 학습하고 고정 holdout에서 비교한다."""
 

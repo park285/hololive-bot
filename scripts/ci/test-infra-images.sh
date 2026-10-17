@@ -10,6 +10,8 @@ trap cleanup EXIT
 
 docker buildx build --platform linux/amd64 --target test --output type=cacheonly \
   "$root_dir/deploy/images/deunhealth"
+docker buildx build --platform linux/amd64 --target test --output type=cacheonly \
+  "$root_dir/deploy/images/socket-proxy"
 docker buildx build --platform linux/amd64 --build-arg REVISION=test \
   --provenance=false --sbom=false --load --tag "$image" "$root_dir/deploy/images/postgres"
 

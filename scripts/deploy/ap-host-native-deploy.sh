@@ -162,7 +162,7 @@ cp -R "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/src" "$artifact_
 rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
 (
   cd "$artifact_dir/youtubejs"
-  npm_config_engine_strict=true npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+  npm_config_engine_strict=true npm exec --yes --package=corepack@0.36.0 -- corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 )
 write_host_env "$artifact_dir/youtube-collector-host.env"
 cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"

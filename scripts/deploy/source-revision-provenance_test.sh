@@ -76,6 +76,34 @@ expect_failure "missing compose mapping must fail" \
 expect_failure "multiple compose mappings must fail" \
     single_identifier_fixture 'one\ntwo\n'
 
+cat >"${fixture}/compose.yml" <<'EOF'
+services:
+  valkey-cache:
+    image: ${FIXTURE_SOURCE_IMAGE:-fixture-cache:default}
+  docker-proxy:
+    image: fixture-proxy:default
+EOF
+cat >"${fixture}/compose override.yml" <<'EOF'
+services:
+  docker-proxy:
+    image: ${FIXTURE_PROXY_IMAGE:?fixture proxy image required}
+EOF
+printf 'FIXTURE_SOURCE_IMAGE=fixture-cache:env-override\nFIXTURE_PROXY_IMAGE=fixture-proxy:file-override\n' \
+    >"${fixture}/compose images.env"
+compose_cmd=(docker compose --project-name revision-fixture \
+    --env-file "${fixture}/compose images.env" -f "${fixture}/compose.yml")
+[[ "$(deploy_service_image_ref valkey-cache "${compose_cmd[@]}")" == fixture-cache:env-override ]] \
+    || fail "image resolution must use the caller's Compose env file"
+[[ "$(deploy_service_image_ref docker-proxy "${compose_cmd[@]}" \
+    -f "${fixture}/compose override.yml")" == fixture-proxy:file-override ]] \
+    || fail "image resolution must use every caller-supplied Compose file"
+expect_failure "unknown Compose service must fail" \
+    deploy_service_image_ref unknown-service "${compose_cmd[@]}"
+FAKE_COMPOSE_IDS='' expect_failure "empty Compose image output must fail" \
+    deploy_service_image_ref valkey-cache "${fakebin}/compose"
+FAKE_COMPOSE_IDS='one\ntwo\n' expect_failure "multiple Compose images must fail" \
+    deploy_service_image_ref valkey-cache "${fakebin}/compose"
+
 dockerfiles=(
     hololive/hololive-api/Dockerfile
     hololive/hololive-alarm-worker/Dockerfile
@@ -103,11 +131,6 @@ for service in hololive-db-migrate hololive-alarm-worker hololive-api youtube-co
     ' "${compose_file}")"
     grep -Fq "REVISION: ${literal_dollar}{REVISION:-unknown}" <<<"${block}" \
         || fail "${service} build must receive REVISION"
-    expected_image="$(deploy_service_image_ref "${service}")"
-    grep -Fq "image: ${expected_image}" <<<"${block}" \
-        || fail "${service} image mapping must match the production verifier"
 done
-expect_failure "unknown source-built service mapping must fail" \
-    deploy_service_image_ref unknown-service
 
 echo "all source revision provenance checks passed"

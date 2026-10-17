@@ -7,6 +7,14 @@ services:
     build:
       provenance: false
       sbom: false
+  valkey-cache:
+    build:
+      provenance: false
+      sbom: false
+  docker-proxy:
+    build:
+      provenance: false
+      sbom: false
   hololive-alarm-worker:
     build:
       provenance: false
