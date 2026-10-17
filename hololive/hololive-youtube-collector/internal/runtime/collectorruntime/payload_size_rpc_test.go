@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
@@ -78,6 +80,8 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 
 			pool := executor.publisher.contracts.pool
 
+			executor.repository = newPayloadBoundaryRepository(t, pool)
+
 			oversized, body = communityBoundaryInputs(t, pool, tc.extra, tc.publish)
 
 			executor.runSpec(t.Context(), spec)
@@ -93,6 +97,22 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 			assertPayloadBoundaryTerminal(t, pool, spec.JobKey, tc.extra != 0, executor.retryBounds)
 		})
 	}
+}
+
+// newPayloadBoundaryRepository는 운영 기본 lease 예산을 쓴다. 시험용 runtimeLeaseConfig의 50ms renew timeout은 느린
+// runner에서 1MiB JSONB 저장 중 갱신을 실패시켜 lease를 잃게 하며, 이 시험은 lease 시간이 아니라 저장 경계를 검사한다.
+func newPayloadBoundaryRepository(t *testing.T, pool *pgxpool.Pool) *joblease.Repository {
+	t.Helper()
+
+	cfg := collectorconfig.DefaultConfig()
+
+	lease, err := leaseConfigFrom(&cfg)
+	require.NoError(t, err)
+
+	repository, err := joblease.NewRepository(pool, &lease)
+	require.NoError(t, err)
+
+	return repository
 }
 
 func newCommunityBoundaryServer(t *testing.T, calls *atomic.Int32, body *[]byte) *httptest.Server {
