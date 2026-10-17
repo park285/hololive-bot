@@ -179,6 +179,28 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 	}
 }
 
+func TestSeedTemplates_LiveStreamsAppendElapsedToChannelLine(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	const url = "https://youtu.be/live123"
+
+	body := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
+	got := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
+		fieldCount: 2,
+		"Streams": []map[string]any{
+			{fieldChannelName: "츠즈리", fieldTitle: "잡담 방송", fieldURL: url, fieldElapsed: "1시간 23분째"},
+			{fieldChannelName: "두 번째 채널", fieldTitle: "노래 방송", fieldURL: "", fieldElapsed: ""},
+		},
+	})
+
+	// 경과 표기는 방송명 줄 끝에만 붙고, 비어 있으면 구분자까지 생략되어 줄 수와 빈 줄이 그대로여야 한다.
+	want := "🔴 방송 중 · 2개\n\n1 · 츠즈리 · ⏱ 1시간 23분째\n\u200b잡담 방송\n" + url +
+		"\n──────────\n2 · 두 번째 채널\n\u200b노래 방송"
+	if got != want {
+		t.Errorf("CMD_LIVE_STREAMS: 경과 시간 줄 배치가 다름\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
 func TestSeedTemplates_OutboxVideoSeparateTitleURLBranches(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
