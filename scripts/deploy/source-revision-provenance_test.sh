@@ -80,6 +80,8 @@ cat >"${fixture}/compose.yml" <<'EOF'
 services:
   valkey-cache:
     image: ${FIXTURE_SOURCE_IMAGE:-fixture-cache:default}
+    depends_on:
+      - docker-proxy
   docker-proxy:
     image: fixture-proxy:default
 EOF
