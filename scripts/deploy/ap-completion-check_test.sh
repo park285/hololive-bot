@@ -39,6 +39,14 @@ set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_DELAY_LOG:?}"
 EOF
 chmod +x "$fakebin/sleep"
+# 원격 Node 판정은 build host의 node 버전이 아니라 지원 runtime을 보고하는 AP fake로 고정한다.
+cat > "$fakebin/node" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == --version ]] || exit 1
+echo v26.12.0
+EOF
+chmod +x "$fakebin/node"
 cat > "$fixture_root/scripts/deploy/lib/require-quic-udp-buffer.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
