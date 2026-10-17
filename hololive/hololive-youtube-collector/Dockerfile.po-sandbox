@@ -1,18 +1,18 @@
 # syntax=docker/dockerfile:1.28.0@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
 ARG GO_VERSION=1.27.2
 ARG ALPINE_VERSION=3.24
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26.12.0
 
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS package-build
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS package-build
 WORKDIR /app/po-sandbox
 # checkout umask와 무관하게 runtime uid 65532가 읽도록 context 파일 모드를 정규화한다.
 # 기호 COPY --chmod는 BuildKit 전용이라 CONTAINER_CLI=podman(buildah)에서도 같은 결과가 나오도록 RUN chmod로 맞춘다.
 COPY hololive/hololive-youtube-collector/po-sandbox/package.json hololive/hololive-youtube-collector/po-sandbox/package-lock.json ./
-RUN chmod u=rwX,go=rX package.json package-lock.json && corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+RUN chmod u=rwX,go=rX package.json package-lock.json && npm exec --yes --package=corepack@0.36.0 -- corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 COPY hololive/hololive-youtube-collector/po-sandbox/src ./src
 RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
-FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS node-runtime
+FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS node-runtime
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS broker-build
 ARG TARGETOS
@@ -50,6 +50,7 @@ COPY --from=broker-build --link /issuer/group /etc/group
 COPY --from=node-runtime --link /lib/ld-musl-*.so.1 /lib/
 COPY --from=node-runtime --link /usr/lib/libgcc_s.so.1 /usr/lib/
 COPY --from=node-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
+COPY --from=node-runtime --link /usr/lib/libatomic.so.1* /usr/lib/
 COPY --from=node-runtime --link /usr/local/bin/node /usr/local/bin/node
 COPY --from=broker-build --link --chmod=0755 /po-broker /app/bin/po-broker
 COPY --from=package-build --link /app/po-sandbox /app/po-sandbox

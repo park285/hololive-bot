@@ -15,9 +15,9 @@ require (
 	github.com/park285/iris-client-go/v3 v3.1.0
 	github.com/park285/shared-go/v2 v2.13.0
 	github.com/prometheus/client_golang v1.25.0
-	github.com/quic-go/quic-go v0.63.0
+	github.com/quic-go/quic-go v0.64.0
 	github.com/stretchr/testify v1.12.1
-	github.com/valkey-io/valkey-go v1.0.78
+	github.com/valkey-io/valkey-go v1.0.79
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
 	golang.org/x/sync v0.24.0

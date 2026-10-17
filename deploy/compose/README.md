@@ -18,6 +18,40 @@ Prefer repository wrappers over raw `docker compose`:
 ./scripts/deploy/compose-redeploy-service.sh <service>
 ```
 
+## Owned ingress image
+
+`admin-dashboard-ingress` uses the local-only `iris-stack-nginx:1.31.7-zlib1.3.2-r1`
+image (`pull_policy: never`). Its only build context is `deploy/images/nginx`; the
+immutable official Nginx base retains its entrypoint, configuration and users,
+with Alpine 3.24 `zlib=1.3.2-r1` applied for CVE-2026-85091. The PostgreSQL runtime
+applies the same zlib fix alongside its existing `nghttp2-libs=1.70.0-r0` pin.
+
+Build the ingress explicitly with the production and live-compat Compose files
+and the `admin-dashboard-ingress` build target; `build-all.sh` only selects the
+base production file. For isolated local builds without runtime env inputs:
+
+```bash
+docker buildx build --platform linux/arm64 --build-arg REVISION=unknown \
+  --provenance=false --sbom=false --load \
+  --tag iris-stack-nginx:1.31.7-zlib1.3.2-r1 deploy/images/nginx
+```
+
+Use the full committed image-source revision instead of `unknown` only after the
+source is committed. Other stack ingress consumers must load this same owned
+image rather than maintain a second recipe or pull the unpatched official tag.
+The existing ingress behavior checks build an isolated temporary tag from this
+context; `NGINX_TEST_PLATFORM` selects the architecture (default `linux/amd64`).
+
+`valkey-cache` and `docker-proxy` also use local-only owned images:
+`iris-stack-valkey:9.1.2-zlib1.3.2-r1` applies the same zlib fix to the pinned official
+Valkey base, while `iris-stack-socket-proxy:1.13.1-go1.27.2` rebuilds the checksum-pinned
+upstream 1.13.1 source with Go 1.27.2. The latter replaces the vulnerable Go 1.26.6
+standard library without changing CLI flags, UID 65534, socket paths or request policy.
+Their contexts are `deploy/images/valkey` and `deploy/images/socket-proxy`; both are
+included in the base production build. ChatBotGo must load the same owned Valkey
+image for its host architecture. No official-image fallback or live-data mutation
+is performed by building these candidates.
+
 ## Runtime Env Inputs
 
 `scripts/deploy/compose.sh` injects one Compose interpolation env file with `--env-file`.

@@ -4,6 +4,6 @@ local|linux/arm64|hololive-deunhealth:prod
 local|linux/arm64|hololive-postgres:prod
 local|linux/arm64|hololive-youtube-collector:prod
 local|linux/arm64|hololive-youtube-po-sandbox:prod
-remote|linux/arm64|nginx:1.31.7-alpine-slim@sha256:b274dae54cf9792e1e8696a14081a50f29d74830d9a56a4ffcdc4bc8fb006524
-remote|linux/arm64|valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
-remote|linux/arm64|wollomatic/socket-proxy:1.13.1@sha256:3935b709275e4ec35d6ed5a5c4a1f0d01ed31eec5e7234efc3357ecd47689002
+local|linux/arm64|iris-stack-nginx:1.31.7-zlib1.3.2-r1
+local|linux/arm64|iris-stack-valkey:9.1.2-zlib1.3.2-r1
+local|linux/arm64|iris-stack-socket-proxy:1.13.1-go1.27.2

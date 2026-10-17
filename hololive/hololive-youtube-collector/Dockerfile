@@ -15,21 +15,21 @@
 
 ARG GO_VERSION=1.27.2
 ARG ALPINE_VERSION=3.24
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26.12.0
 
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS youtubejs-build
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS youtubejs-build
 WORKDIR /app/youtubejs
 # checkout umask와 무관하게 runtime uid가 읽도록 context 파일 모드를 정규화한다.
 # 기호 COPY --chmod는 BuildKit 전용이라 CONTAINER_CLI=podman(buildah)에서도 같은 결과가 나오도록 RUN chmod로 맞춘다.
 COPY hololive/hololive-youtube-collector/youtubejs/package.json hololive/hololive-youtube-collector/youtubejs/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm chmod u=rwX,go=rX package.json package-lock.json && \
-    corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+    npm exec --yes --package=corepack@0.36.0 -- corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 COPY hololive/hololive-youtube-collector/youtubejs/src ./src
 RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
 # npm은 빌드 호스트에서 실행하고 배포할 Node·라이브러리는 대상 플랫폼에서 가져온다.
 # 따라서 x86_64에서 빌드해도 linux/arm64 릴리스의 아키텍처가 일치한다.
-FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS youtubejs-runtime
+FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS youtubejs-runtime
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS builder
 
@@ -102,6 +102,7 @@ COPY --from=builder --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-
 COPY --from=youtubejs-runtime --link /lib/ld-musl-*.so.1 /lib/
 COPY --from=youtubejs-runtime --link /usr/lib/libgcc_s.so.1 /usr/lib/
 COPY --from=youtubejs-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
+COPY --from=youtubejs-runtime --link /usr/lib/libatomic.so.1* /usr/lib/
 COPY --from=youtubejs-runtime --link /usr/local/bin/node /usr/local/bin/node
 COPY --from=youtubejs-runtime --link --chmod=1777 /tmp /tmp
 COPY --from=builder --link --chown=1000:1000 /dist ./

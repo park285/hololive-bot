@@ -24,7 +24,7 @@ cmp -s scripts/ci/npm-audit-manifest.txt "$tmp_dir/npm-locks" ||
   docker compose --env-file deploy/compose/build-only.env.sample \
     -f deploy/compose/docker-compose.standby.yml config --images
 } | LC_ALL=C sort -u >"$tmp_dir/final-images"
-cut -d'|' -f3 scripts/ci/final-image-scan-manifest.txt >"$tmp_dir/manifest-images"
+cut -d'|' -f3 scripts/ci/final-image-scan-manifest.txt | LC_ALL=C sort >"$tmp_dir/manifest-images"
 cmp -s "$tmp_dir/manifest-images" "$tmp_dir/final-images" ||
   fail "final image manifest does not cover the exact current production Compose corpus"
 

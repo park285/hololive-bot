@@ -15,7 +15,7 @@ DB와 공개 YouTube 제목을 합쳐 문자 TF-IDF + LogisticRegression을 실�
 - `review-labels.json`: 모델을 보기 전에 정리한 평가 전용 사례다. 제목·개별 설명 태그에서
   식별한 두 개인 사례, 전체/릴레이 방송, 끝내 확인하지 못한 사례를 구분한다.
 
-공개 수집은 기존 collector-owned YouTube.js 18.0.0을 사용한다. Node 24.20.0과 해당 모듈의
+공개 수집은 collector-owned YouTube.js 18.1.0을 사용한다. Node 26.12.0과 해당 모듈의
 설치된 의존성이 필요하다. 저장소 루트에서 실행한다.
 
 ```bash
@@ -36,7 +36,7 @@ cmp .tmp/mekpark-host-ml/results.json .tmp/mekpark-host-ml-reproduce/results.jso
 cmp .tmp/mekpark-host-ml/dataset.json .tmp/mekpark-host-ml-reproduce/dataset.json
 ```
 
-Python 3.14와 scikit-learn 1.9.0을 사용하며 PEP 723 metadata와 `experiment.py.lock`이 실험
+Python 3.15와 scikit-learn 1.9.1을 사용하며 PEP 723 metadata와 `experiment.py.lock`이 실험
 환경을 고정한다. Go 기준선은 `mekparkhost/cmd/classify-titles`로 실제 판별기를 호출한다.
 
 9월 6일 보고서는 당시 입력과 규칙으로 고정된 결과다. 현재 규칙·제목 표본으로 실행한 결과와

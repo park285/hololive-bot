@@ -338,7 +338,14 @@ services:
 
   valkey-cache:
     <<: *db-service
-    image: ${VALKEY_IMAGE:-valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11}
+    image: ${VALKEY_IMAGE:-iris-stack-valkey:9.1.2-zlib1.3.2-r1}
+    pull_policy: never
+    build:
+      <<: *go-build-base
+      context: ../images/valkey
+      dockerfile: Dockerfile
+      args:
+        REVISION: ${REVISION:-unknown}
     container_name: valkey-cache
     oom_score_adj: -300
     environment:
@@ -711,7 +718,14 @@ services:
 
   docker-proxy:
     <<: *restart-logging
-    image: ${DOCKER_SOCKET_PROXY_IMAGE:-wollomatic/socket-proxy:1.13.1@sha256:3935b709275e4ec35d6ed5a5c4a1f0d01ed31eec5e7234efc3357ecd47689002}
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-iris-stack-socket-proxy:1.13.1-go1.27.2}
+    pull_policy: never
+    build:
+      <<: *go-build-base
+      context: ../images/socket-proxy
+      dockerfile: Dockerfile
+      args:
+        REVISION: ${REVISION:-unknown}
     container_name: docker-proxy
     command:
       - '-loglevel=info'

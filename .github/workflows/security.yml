@@ -157,6 +157,9 @@ jobs:
         run: |
           bash scripts/ci/test-infra-images.sh
           ./build-all.sh --no-bump --build-only --security-scan --skip-local-ci
+          docker buildx build --platform linux/arm64 --build-arg REVISION="${GITHUB_SHA}" \
+            --provenance=false --sbom=false --load \
+            --tag iris-stack-nginx:1.31.7-zlib1.3.2-r1 deploy/images/nginx
 
       - name: Scan every final production image
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -179,7 +182,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24.22.0"
+          node-version: "26.12.0"
           cache: npm
           cache-dependency-path: |
             hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json

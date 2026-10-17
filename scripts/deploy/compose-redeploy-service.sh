@@ -118,7 +118,8 @@ verify_built_image_revision() {
     local service="$1"
     local image_ref=""
 
-    image_ref="$(deploy_service_image_ref "${service}")"
+    image_ref="$(deploy_service_image_ref "${service}" \
+        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}")"
     deploy_verify_object_revision "${CONTAINER_CLI}" image "${image_ref}" "${REVISION}"
     echo "[VERIFY] ${service} built image revision=${REVISION}"
 }
