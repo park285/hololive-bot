@@ -1,12 +1,10 @@
 # 방송 시간 표시와 방송 시각 확정 인계 - 2026-10-18
 
-**상태**
-- `!방송기록`의 방송 길이 표시와 `!라이브`의 경과 시간 표시를 구현했고, 영향 범위 검증을 통과했습니다(3절).
-- 검토 중에 찾은 옛 기록 시작 시각 결함(4절, I1)은 수정하고 검증했습니다.
-- 근본 해결인 종료 후 시각 확정과 기존 기록 보정은 [계획](2026-10-18-broadcast-time-finalization.md)으로 작성해 검토까지 반영했습니다. 코드에는 아직 착수하지 않았습니다.
-- 다음 세션의 범위는 7절 이슈 전체(I1~I8)입니다.
-- 로컬 커밋은 승인됐습니다. 범위는 1절, 절차는 7절 "커밋 운용"에 있습니다.
-- 아직 커밋·push·배포·운영 쓰기는 하지 않았습니다.
+**상태** (2026-10-18 두 번째 세션 갱신)
+- `!방송기록`의 방송 길이 표시와 `!라이브`의 경과 시간 표시(릴리스 A·B)는 로컬 커밋 `c8b456178`·`5129b1597`입니다. 게시 전 gate와 build-only 빌드를 통과했습니다(7절 진행 상태).
+- 옛 기록 시작 시각 결함(4절, I1)은 수정·검증했습니다.
+- 종료 후 시각 확정(I3), 멈춘 LIVE 정리(I7), 멤버십 아카이브 시각(I6)을 구현하고 로컬 검증을 마쳤습니다. 결과와 남은 승인은 7절 "진행 상태"에 있습니다.
+- push·PR·배포·migration 운영 적용·운영 데이터 쓰기는 하지 않았습니다. 모두 승인이 필요합니다.
 
 ## 1. 승인 범위
 
@@ -33,7 +31,7 @@
 | 항목 | 값 |
 |---|---|
 | worktree | `/home/kapu/work/iris-stack/hololive-bot-stream-duration` |
-| branch / HEAD | `feat/stream-duration` / `6ecd2ed44` (생성 시 로컬 `main`과 같음, 미커밋) |
+| branch / HEAD | `feat/stream-duration`. 생성 시 `6ecd2ed44`(로컬 `main`과 같음)에서 시작했습니다. 두 번째 세션의 로컬 커밋 목록은 7절 "진행 상태"와 `git log 6ecd2ed44..`에 있습니다. 아래 릴리스 A·B 목록은 커밋 1·2의 내용입니다. |
 | 원 checkout | `/home/kapu/work/iris-stack/hololive-bot` (`main` `6ecd2ed44`). 다른 작업의 미커밋 변경이 약 100개 있습니다(`CHANGELOG.md`, alarm-worker 시험 등). 이 작업과 무관하므로 건드리지 않습니다. |
 | 다른 worktree | `hololive-bot-build`, `-dead-audit`, `-docs2`, `-remaining-limits`. 모두 다른 작업 소유이므로 건드리지 않습니다. |
 | 임시 자원 | 나눠 배포할 수 있는지 확인한 임시 worktree는 제거했습니다. dbtest PostgreSQL 컨테이너 잔여는 없습니다. |
@@ -159,6 +157,19 @@
   - unresolvable 추적에 들어가지 못하는 이유(`live.UnresolvableTrackable`)
 - 수정 방향은 조사 뒤에 정합니다. 기존 9건 정리는 운영 데이터 쓰기이므로 승인 필요입니다. 정리 결과도 계획의 확정 경로(`exhausted(identity_missing)`)와 맞아야 합니다.
 
+**진행 상태 (2026-10-18 두 번째 세션)**
+
+| # | 상태 | 근거·남은 일 |
+|---|---|---|
+| I1 | 완료 | 커밋 `c8b456178`. 검증은 계획 0단계 기록. |
+| I2 | 게시 준비 완료, push·PR 승인 대기 | `pre-push-gate.sh` 통과: HEAD `5129b1597`(A·B, 765.6초)와 수집기 커밋 `24f019ab4`까지 포함한 HEAD(624.2초, 그 뒤로 바뀐 것은 문서뿐). 두 번째 실행 전 첫 시도가 SQL ownership 검사(`SELECT *`·`count(*)` 금지)에 걸려 확정 조회문 3개의 열 이름을 명시했습니다. `./build-all.sh --build-only --no-bump`는 A·B에서 통과(550.6초)했습니다. 이 worktree의 `go.work`가 형제 `shared-go`의 미커밋 작업(pgxdb·workercontract)을 읽어 `providers/database`·`collectorruntime` 시험이 실패하므로, gate는 HEAD의 detached worktree에 `shared-go` v2.13.0·`iris-client-go` v3.1.0 clone을 둔 격리 작업 공간에서 돌렸습니다(`GOWORK=off`면 두 시험 모두 통과). build-only가 덮어쓴 kapu 로컬 `:prod` tag 6개는 이전 image ID(revision `f8ce7354…`)로 되돌리고 새 image는 지웠습니다. |
+| I3 | 구현·로컬 검증 완료, 배포 승인 대기 | 커밋 `1d246d3e0`(migration 323)·`06b4cd8b4`(consumer 확정, 수집 대상·지표, 표시). 계획 1~4단계 완료 기록. |
+| I4 | 배포 대기 | 계획 5단계. 323·확정 바이너리 배포 승인이 필요합니다. |
+| I5 | SQL 준비, 승인 대기 | 계획 "운영 SQL 초안"(투입·롤백). K 설정 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`. I4 통과 뒤 시작합니다. |
+| I6 | 구현·로컬 검증 완료, 수집기 배포 승인 대기 | 커밋 `24f019ab4`. 멤버십 watch HTML 4/4에 시각이 있었습니다(계획 7단계). 배포 뒤 `members_only` 재확정 SQL(승인 필요). |
+| I7 | 원인 확인·수정 완료, 적용 승인 대기 | 커밋 `0f81b2c1d`(migration 324). 원인은 운영 roster 밖 채널(5개, `members`에 행 없음)이라 어떤 수집도 대상으로 삼지 않는 것입니다. migration 324가 정리하고 확정 대기열이 시각을 확인합니다(계획 "관련 문제"). 9건은 최근 6일 영상 확인 0건이라 낭비는 없었습니다. |
+| I8 | 값·결론 기록, 카카오 화면 미확인 | worker 프로필: AP 4대 `RequestInterval` 1초·`YouTubeJSMaxInflight` 4(계획 "수집기 예산"). Iris Console(`iris-console`)에는 템플릿 편집기·변수 안내가 없습니다. 변수 안내 역할은 API 미리보기 sample data(`sampledata/template_sample_data_core.go`)이며 `Elapsed`가 이미 있습니다. 실제 카카오톡 화면은 MESSAGE_STYLE_GUIDE대로 승인된 시험 방 수신으로만 확인하므로 하지 않았습니다. |
+
 **커밋 운용** (로컬 커밋 승인됨, 1절)
 
 이후 단계는 릴리스 A가 바꾼 파일(`handler_broadcast_history.go` 등)을 다시 고칩니다. 그래서 I1을 끝내고 검증한 직후, 다른 작업보다 먼저 릴리스 A·B를 커밋으로 나눕니다.
@@ -196,14 +207,13 @@
 
 ## 8. 다음 단계 순서
 
-1. I1을 수정하고 검증합니다.
-2. 7절 "커밋 운용"대로 릴리스 A·B를 로컬 커밋으로 나누고, A만으로 통과하는지 검증합니다.
-3. I2 게시 준비로 `scripts/ci/pre-push-gate.sh`와 `./build-all.sh --build-only --no-bump`를 실행합니다. push·PR은 승인을 요청합니다.
-4. I7 원인 조사, I8 미확인 항목 확인을 거친 뒤 I3를 구현하고 검증합니다. 계획 1~4단계를 따르고, 커밋은 배포 묶음별로 나눕니다.
-5. I7 수정을 구현합니다. I6 조사·구현(계획 7단계)도 진행합니다.
-6. 배포가 필요한 묶음(I2, I3·I7, I6)은 `hololive-bot-ops`로 배포 계획을 만들어 승인을 받은 뒤 진행합니다.
-7. I4를 통과한 뒤 I5 backlog를 승인받아 시작합니다. 롤백 SQL은 시작 전에 준비해 둡니다.
-8. 각 단계가 끝나면 이 문서의 7절 표와 계획 문서의 체크박스·검증 결과를 갱신합니다. 문서 갱신도 로컬 커밋에 포함합니다.
+I1 수정, 릴리스 A·B 커밋 분할, 게시 준비(gate·build-only), I3·I6·I7 구현과 I8 확인은 두 번째 세션에서 끝났습니다(7절 "진행 상태"). 남은 순서는 모두 승인이 필요합니다.
+
+1. 게시: 묶음별 PR(A → B → 323·확정 코드 → 324 → 수집기). 게시 전에 `origin/main`에 rebase하고 격리 작업 공간에서 `pre-push-gate.sh`를 다시 돌립니다.
+2. 배포(`hololive-bot-ops`): A 배포 확인 → B(322) → 323·확정 바이너리(I3, K=0) → I4 관찰 1~2일 → 324(I7) → 수집기(I6) → `members_only` 재확정 SQL.
+3. I4 통과 뒤 K=200으로 I5 backlog를 시작합니다. 투입 SQL은 K를 켠 API가 뜬 뒤 실행하고, 중단 조건이면 K=0으로 되돌립니다. 롤백 SQL은 계획에 있습니다.
+4. I5 뒤 무작위 20건 대조와 `!방송기록` 표시 비율을 다시 계산하고, 승인된 시험 방에서 카카오톡 화면을 확인합니다(I8).
+5. 각 단계가 끝나면 이 문서의 7절 표와 계획 문서의 체크박스·검증 결과를 갱신합니다.
 
 ## 9. 인계 프롬프트
 

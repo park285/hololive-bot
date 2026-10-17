@@ -51,7 +51,8 @@
   - 상한은 영상 확인 입력 1,000(초과 시 거부), 전체 target 10,000(`MaxProjectionTargetCount`)이다.
 - **수집기 예산**: 영상 확인 후보끼리는 priority 순서로 처리한다(`joblease/queries/repository_candidates_0144_02.sql`).
   - YouTube.js 동시 실행 상한(`YouTubeJSMaxInflight`)과 요청 간격(`RequestInterval`, 기본 2초)은 방송 목록·채널 확인 등 모든 YouTube.js 작업이 함께 쓴다(`collectorruntime/scheduler_build.go`).
-  - 운영 worker 프로필의 실제 값은 확인하지 않았다.
+  - 운영 값(2026-10-18 확인, stack-secrets worker 프로필·Prometheus): AP 4대(`youtube-collector-a~d`) 모두 `RequestInterval` 1초, `YouTubeJSMaxInflight` 4, worker 4. 7일 최대 helper 동시 실행은 4/3/4/3이다.
+  - 수요: 필요한 RPC는 최근 1시간 약 2.36/s, 7일 최고 2.96/s로 fleet 상한 4/s(85% 경계 3.4/s) 안이다. `video_live_check`는 약 0.016/s다. backlog는 첫 시도를 한 번에 한 영상씩 직전 결과 6초 뒤에 열어 분당 10건을 넘지 않으므로 많아야 0.17/s가 늘어 7일 최고 기준 3.13/s다. 그래서 backlog 시작값 K=200을 유지한다.
 - **영향 범위** (확인함):
   - 알림 worker 조회(0085, 0132, 0293, upcoming 후보)와 생일 방송 조회는 종료된 세션의 시각을 읽지 않는다.
   - live review 영수증은 append-only이고, `reviewed_at`은 `UPCOMING`에만 계산된다.
@@ -72,8 +73,7 @@
    - 새 decision은 `TIME_FINALIZED`, `TIME_CONFLICT`, `TIME_ATTEMPTED`로 둔다.
 3. **시각의 출처.** `youtube_live_sessions.times_source`(`observed` | `provider`)를 둔다.
    - 기존 행은 모두 `observed`로 시작하고 확정 경로가 다시 확인한다. 이미 provider 값인 행도 확인 한 번으로 `provider`가 된다.
-   - 종료 순간에는 `pending.EndedAt`이 `video_live_check`의 `VerifiedEndedAt`에서 온 경우만 `provider`다.
-   - 세션 upsert는 `ended_at`이 NULL에서 처음 채워질 때만 `times_source`를 쓰고, 그 밖에는 기존 값을 유지한다. 확정 UPDATE만 `provider`로 바꾼다.
+   - 세션 upsert는 `times_source`를 쓰지 않는다(구현 2026-10-18). 종료 순간의 `pending`에는 근거 관측 kind가 없어 `provider`를 가릴 수 없고, 세션 upsert는 `started_at`·`ended_at`을 `COALESCE(기존, 새 값)`로 지켜 확정 시각을 되돌리지 않는다. 그래서 영상 확인으로 끝난 종료도 확정 확인을 한 번 거쳐 `provider`가 된다. 확정 UPDATE만 `provider`로 바꾼다.
 4. **진행 상태 표 `youtube_live_time_finalizations`**:
    - `video_id`: PK이며 세션 FK.
    - `outcome`: `pending` | `finalized` | `exhausted` | `conflict` | `members_only` | `reverted`.
@@ -82,46 +82,54 @@
    - `observation_id`: `REFERENCES source_observations(id) ON DELETE SET NULL`와 UNIQUE 색인(218 선례). 원본 관측 보존 삭제를 막지 않는다.
    - `observed_started_at`, `observed_ended_at`: 확정 전 값 사본으로 감사·롤백에 쓴다.
    - 이 표가 재시도 계약의 기록이며, 시도 수는 `observation_id`로 중복을 제거해 센다.
+   - 구현에서 더한 열: `queue`(`new`·`backlog`), `retry_base_at`(재시도 기준: 신규는 세션 `status_observed_at`, backlog는 첫 결과 관측 시각), `enqueued_at`, `completed_at`(최종 결과 시각), `updated_at`. 결과 전 backlog만 `next_attempt_at` 없이 `pending`일 수 있고, 최종 상태는 `completed_at`을 가진다(CHECK). 같은 관측의 재정산은 가용성 upsert(`(effective_at, observation_id)`가 더 새로울 때만 반영)가 먼저 거른다.
+   - 세션 표에 확정 대상 색인을 두지 않는다. `status_observed_at`은 LIVE·UPCOMING의 반복 관측마다 바뀌어 색인 열이면 HOT 갱신이 막힌다(`TestLiveSessionRepeatedObservationIsHeapOnlyUpdate`). 운영 세션 표는 423쪽·약 10,300행이라 5초 projection마다 순차로 읽는다.
 5. **확정 규칙.** 공통 조건:
    - `payload.VideoID`와 채널이 세션과 일치한다.
    - `LifecycleFactsTrusted`이다.
-   - `start ≤ end`이다. `end ≤ observed_at`은 수집기·계약이 이미 거부한다.
+   - `start ≤ end`이다. 계약 검증(`validateLifecycleFacts`)이 `started_at ≤ ended_at ≤ observed_at`을 이미 강제하므로 consumer는 다시 검사하지 않는다.
    - 확정 관측이 `CurrentlyLive()`이면 `conflict(provider_live)`로 남긴다. 잘못된 종료를 드러내기 위해서다.
 
    종료 사유별 경계 검사:
 
    | 세션 | 상한 | 하한 | 시작 |
    | --- | --- | --- | --- |
-   | `observed`, `EXPLICIT_END`·`SCOPED_ABSENCE` | `end ≤ 저장 ended_at + 10분` (수집 지연 최대 약 8분) | `end ≥ last_live_positive_at − 10분` | 저장 시작이 있으면 `\|start − 저장 started_at\| ≤ 15분` |
+   | `observed`, `EXPLICIT_END`·`SCOPED_ABSENCE` | `end ≤ 저장 ended_at + 10분` (수집 지연 최대 약 8분) | `end ≥ last_live_positive_at − 10분` | 저장 시작이 있으면 `start ≤ 저장 started_at + 15분` (아래 참고) |
    | `observed`, `UNRESOLVABLE_VIDEO` | 없음 (저장값이 실제 종료의 하한, `unresolvable.go`) | 위와 같음 | 위와 같음 |
    | 저장 시작 NULL (시작 미관측 종료) | 위와 같음 | 위와 같음 | 검사 생략, provider 값으로 채움 |
    | `legacy_unknown` | 없음 | 없음 | 없음 (저장 시각에 신뢰할 의미가 없음) |
 
-   위반하면 `conflict(<규칙 이름>)`로 남기고 쓰지 않는다.
-   - 쓰기: 세션 `started_at`·`ended_at`·`times_source`와 head `ended_at`을 함께 바꾼다(head가 있을 때).
+   시작 검사는 한쪽만 본다(적대적 검토 2026-10-18). 시작 시각 없는 첫 LIVE 관측은 감지 시각을 시작으로 저장한다(`newLiveSession`). 최근 30일 `observed` 2,294건 중 1,124건이 `live_first_seen_at`과 5초 안이라 이 경우로 보이고, 시작 시각이 있던 세션의 감지 지연은 p50 56초·p90 4.4분·p99 10분·최대 2.5시간이다. 그래서 저장 시작은 실제 시작보다 늦을 수만 있고, 늦게 감지한 방송은 대칭 15분 규칙에서 `start_mismatch`가 된다. 아카이브 시작이 저장 시작보다 15분 넘게 늦을 때만 충돌로 둔다.
+
+   위반하면 `conflict(<규칙 이름>)`로 남기고 쓰지 않는다. 규칙 이름: `channel_mismatch`, `provider_live`, `end_after_stored_end`, `end_before_live_positive`, `start_mismatch`. 종료 시각이 없으면 `end_time_missing`, 시작 시각이 없으면 `start_time_missing`을 응답 수준 UNKNOWN 사유로 센다.
+   - 쓰기: 세션 `started_at`·`ended_at`·`times_source`와 head `ended_at`을 함께 바꾼다(head가 있을 때). 진행 행 갱신과 한 statement다(`repository_live_time_finalization_write.sql`).
+   - 시도 시각 전에 온 관측(예: 종료 전 예정 slot의 확인이 늦게 정산된 경우)은 확정만 반영하고 UNKNOWN·충돌은 쓰지 않는다. 종료 전 LIVE 상태를 보고했을 수 있기 때문이다.
 6. **재시도 계약** (`.agents/workflows.md` Failure paths). 근거는 위 4일 재현 데이터다.
    - 시작 조건: `ENDED`, `times_source='observed'`, `end_reason`이 `CANCELLED_BEFORE_LIVE`가 아님, 그리고 시작 시각이나 방송 확인 중 하나가 있음.
    - 응답 수준 UNKNOWN(`identity_missing` 등): 3분, 30분, 3시간, 24시간 뒤에 시도하고 최대 4회다. 신규는 종료 기준, backlog는 투입 기준이다. 4회째에는 `exhausted(<마지막 사유>)`로 끝낸다.
    - `request_failed`(쿨다운·timeout 등): `attempts`를 늘리지 않고 `deferrals`만 늘린 뒤 10분 뒤 다시 시도한다. 최대 12회(약 2시간)이고, 넘으면 `exhausted(request_failed)`로 끝낸다.
    - 멤버십(`MEMBERS_ONLY`이고 시각 없음): 바로 `members_only`로 끝낸다. 7단계 출처가 생기면 다시 대기열에 넣는다.
    - 끝난 뒤에는 시각을 그대로 두고, 표시는 미확정 규칙을 따른다.
-   - 지표: 결과·사유별 counter, 종료부터 확정까지의 지연 histogram, 대기열·backlog 길이 gauge.
+   - 지표(구현 2026-10-18): consumer는 관측 트랜잭션 안에서 돌고 Prometheus가 없어, YouTube plane observability 주기에 DB에서 계산한 gauge로 둔다. `hololive_youtube_collection_time_finalization_outcomes{outcome,reason}`(보존 행 수), `..._queue_length{queue}`(new: 최종 결과 전 후보, backlog: pending), `..._recent_finalized{queue,le}`(최근 24시간 finalized 중 지연 ≤ le초 누적 수, 경계 180·1800·3600·10800·86400·+Inf). 누적 event counter·histogram은 아니다.
    - 소유: YouTube plane runtime.
    - 재검토 조건: 7단계 출처 도입, 단계 5 결과로 간격·횟수 조정, 확정률이 목표 아래로 떨어질 때.
    - 배포 보고에는 Fallback delta를 적는다: 신규 재시도 1건(이 계약), 그 밖은 없음.
 7. **수집 대상**:
-   - 확정 대상 reader는 `live_check_videos.sql`과 한 statement(같은 스냅샷)로 읽는다. 어렵다면 병합할 때 LIVE·UPCOMING 입력을 우선해 같은 영상을 제거한다.
+   - 확정 대상 reader는 `live_check_videos.sql`과 다른 statement로 읽고, 병합할 때 LIVE·UPCOMING 입력을 우선해 같은 영상을 제거한다(구현 2026-10-18, `time_finalization_videos.sql`). 기존 입력 상한·결과 형식을 유지하기 위해서다. 운영 roster로 거르지 않는다(I7 정리 대상이 roster 밖 채널이다).
    - **신규 종료** (최근 48시간 안 종료): `pending`인 동안 membership을 유지하고 시도 간격은 `NotBefore = next_attempt_at`으로 표현한다. 종료 시 들어가고 최종 결과 때 나간다.
      - generation 증가는 종료 건마다 약 1회다. 들어가는 변경은 LIVE에서 빠지는 변경과 같은 projection에서 일어난다.
-   - **backlog**: 신규 종료 외의 `pending`에서 `LIMIT K`(시작값 200)를 최근 종료부터 고른다.
-     - 묶음 안에서는 `NotBefore`를 6초 간격으로 분산해 요청을 분당 약 10건으로 고르게 한다.
+   - **backlog**: 신규 종료 외의 `pending`을 최근 종료부터 K개(시작값 200)씩 묶는다.
+     - 첫 시도는 한 번에 한 영상만 연다. `NotBefore`는 마지막 backlog 결과(없으면 투입) 6초 뒤이고, 결과가 들어온 다음 projection에서 다음 영상으로 넘어간다. 요청은 분당 10건을 넘지 않고, 중지·재시작·수집 중단 뒤에도 한꺼번에 due가 되지 않는다.
      - 다음 묶음은 앞 묶음이 모두 첫 결과를 낸 뒤에 넣는다. 묶음 교체로 늘어나는 generation은 하루 약 70개로 추정한다.
+     - 재시도 중인 행과 활성 묶음을 합쳐 2,000개를 넘기면 다음 묶음을 열지 않는다. 앞 묶음의 재시도 행은 최종 결과 때까지 대상에 남고(UNKNOWN은 첫 결과 뒤 최대 약 27시간), 봇 확인이 몰리면 이 행이 쌓여 전체 target 상한 10,000에 닿을 수 있다. 상한을 넘으면 projection 전체가 거부되어 모든 수집이 멈추므로 backlog 몫을 고정한다(적대적 검토 2026-10-18).
      - 잘림은 대기열 계약이다.
+     - 구현: K는 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`(기본 0, 0~1000)다. 후보 조건을 잃은 pending을 뺀 backlog 행을 `(observed_ended_at DESC, video_id)` 순위로 묶음 번호를 매기고, 결과 전 행이 남은 가장 앞 묶음이 활성이다. 활성 묶음의 행은 결과와 무관하게 membership을 유지한다(최종 결과 행은 `completed_at+30일`, 차례를 기다리는 행은 `enqueued_at+365일`로 잠재움). 재시도 중인 행은 묶음과 무관하게 최종 결과 때 빠진다. 예산 2,000은 `roster.go`의 상수다.
+   - 신규 상한은 최근 종료 순 300개다.
    - reason은 `archive_time_finalization`, priority는 18 이하(UPCOMING 대상의 19보다 낮게)로 둔다.
 8. **표시** (`!방송기록`). 판정 순서:
    1. `times_source='provider'`: 정확한 시작~종료·길이.
    2. `observed`이고 `lifecycle_origin='observed'`이고 `|ended_at − last_live_positive_at| ≤ 5분`: 현재 규칙대로 표시.
-   3. `exhausted(identity_missing)`: `아카이브를 확인할 수 없어 종료 시각 미확인`. 비공개·삭제·봇 확인을 구분하지 못하므로 사유를 단정하지 않는다.
+   3. `exhausted(identity_missing)`: `아카이브를 확인할 수 없어 종료 시각 미확인`. 비공개·삭제·봇 확인을 구분하지 못하므로 사유를 단정하지 않는다. 신뢰할 시작이 없으면(옛 기록) 저장 시각에 `종료` 대신 `기록`을 붙인다(`… 기록 · 아카이브를 확인할 수 없어 종료 시각 미확인`). 종료를 확인했다는 뜻과 모순되지 않게 하기 위해서다.
    4. 그 밖의 `observed`: 신 lifecycle은 시작 시각만, `legacy_unknown`은 `종료`로 표기한 저장 시각만.
    - 옛 기록 판정에는 head 존재나 `last_live_positive_at`이 아니라 `s.lifecycle_origin`을 쓴다. 신 lifecycle 종료는 모두 origin을 `observed`로 바꾼다(`terminateSession`).
 
@@ -133,13 +141,14 @@
   - 시험 사례: `legacy_unknown`, head는 있지만 LIVE 확인이 없는 `ENDED`.
   - 릴리스 A(코드)와 릴리스 B(migration 322)로 나누는 기존 계획은 그대로 둔다.
   - 완료 (2026-10-18): `handlercore.BroadcastHistoryEntry.LifecycleOrigin`과 `trustedBroadcastStartedAt`으로 판정한다. 검증은 bot·template·migrationrunner·db-migrate 시험, handlers·formatter `-race`, dbtest 전체, lint 0 issues, NilAway exit 0, manifest 검사 OK. origin 판정을 끈 overlay로 새 시험 두 개가 실패하는 것을 확인했다.
-- [ ] 1. migration 323: `times_source` 열과 `youtube_live_time_finalizations` 표
+- [x] 1. migration 323: `times_source` 열과 `youtube_live_time_finalizations` 표
   - 열: `times_source text NOT NULL DEFAULT 'observed'`. 상수 기본값이라 표를 다시 쓰지 않는다. `SET LOCAL lock_timeout='3s'`(291 선례).
   - 제약: `chk_<table>_<col>_vocab` CHECK.
   - 권한: 312의 조건부 GRANT 패턴.
   - 갱신: schema golden, manifest.
   - dbtest: 경계 fixture, 재적용 멱등성.
-- [ ] 2. 정산 (consumer 확정 분기, 전용 UPDATE SQL, 세션 upsert의 `times_source` CASE)
+  - 완료 (2026-10-18): `323_youtube_live_time_finalization.sql`, manifest `184`, schema golden. 시험 `TestTimeFinalizationMigrationGuardsProgressShapeAndReplays`(진행 행 모양 CHECK 10개 거절, 재적용 시 행 버전 불변, vocab 검증 완료). 세션 표 색인은 두지 않는다(설계 4).
+- [x] 2. 정산 (consumer 확정 분기, 전용 UPDATE SQL)
   - 단위·dbtest 확인 항목:
     - 확정
     - 표의 규칙별 `conflict`
@@ -154,37 +163,110 @@
     - `history_sort_at` 재정렬
     - live review 영수증 불변
   - 1에 의존한다.
-- [ ] 3. 수집 대상 (대기열 reader, target append, 신규·backlog 분리, `NotBefore` 분산)
+  - 완료 (2026-10-18): `sourceobservation/live_time_finalization.go`, `repository_live_time_finalization_{state,write}.sql`. 세션 upsert는 바꾸지 않는다(설계 3). 시험 `live_time_finalization_persist_test.go` 8개(하위 22): 확정과 head·`history_sort_at`, 확정 뒤 upsert가 시각·출처를 되돌리지 않음, 규칙별 `conflict`·상한 없는 `UNRESOLVABLE_VIDEO`·시작 채움·`legacy_unknown`·`provider_live`·채널 불일치, `identity_missing` 4회 일정과 이른 관측 무시·`exhausted`, 이른 확정 반영, `request_failed` 12회 연기 뒤 `exhausted`, `members_only`, replay 시 시도 수 불변, 비대상 `KEEP_ENDED`. 경계 검사·시도 시각·48시간 창을 끈 overlay에서 각각 시험이 실패했다. runtime state는 `ENDED`에 행이 없고 live review 영수증은 append-only trigger로 바뀔 수 없어 따로 시험하지 않는다.
+- [x] 3. 수집 대상 (대기열 reader, target append, 신규·backlog 분리, `NotBefore` 분산)
   - 시험 항목:
     - 1,000·10,000 상한과의 독립성
     - LIVE와 같은 영상의 중복 제거
     - 시도 사이 generation이 바뀌지 않음
     - backlog 묶음 교체 빈도 (`collection_lifecycle_performance_test` 참고)
   - 1에 의존한다.
-- [ ] 4. 표시: 설계 8로 바꾼다. 조회문에 `times_source`와 확정 결과를 추가한다. 0·1에 의존한다.
+  - 완료 (2026-10-18): `runtime/queries/time_finalization_videos.sql`, `runtime/roster.go` `TimeFinalizationVideos`, `targetprojection/types.go` `appendTimeFinalizationVideos`, 설정 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`, 지표 `runtime/time_finalization_metrics.go`. 시험 `targetprojection/time_finalization_test.go`, `runtime/time_finalization_projection_test.go`(후보 제외, 재시도 사이 generation 유지, 묶음 교체·분산·K=0, 10,350행 조회 예산), `runtime/time_finalization_metrics_test.go`, `config/youtube_plane_time_finalization_test.go`.
+- [x] 4. 표시: 설계 8로 바꾼다. 조회문에 `times_source`와 확정 결과를 추가한다. 0·1에 의존한다.
+  - 완료 (2026-10-18): 조회문 두 개에 `s.times_source`, `f.outcome`, `f.reason`(LEFT JOIN). `handler_broadcast_history.go`의 판정과 formatter `ArchiveUnavailable`. handler 16개 사례와 formatter 사례를 `kakaoformat.Render` 결과로, DB 시험으로 LEFT JOIN NULL과 목록·단건 일치를 확인한다.
 - [ ] 5. 단계적 활성화 (`hololive-bot-ops` 배포)
   - 처음에는 신규 종료만 넣고 backlog는 K=0으로 둔다. 1~2일 관찰한다.
   - 통과 기준:
     - 신규 공개 아카이브의 97% 이상이 종료 1시간 안에 `finalized`
     - `conflict` 0.5% 미만
     - `live_snapshot`·`channel_live_check` 수집 지연 p99가 기준(약 5초)의 2배 이하
-  - 이 단계에서 운영 worker 프로필의 `YouTubeJSMaxInflight`·`RequestInterval`을 확인해 backlog K를 정한다.
+  - 운영 worker 프로필 값은 2026-10-18에 확인했다(위 "수집기 예산"). backlog 시작값 K=200을 유지한다.
 - [ ] 6. 기존 기록 보정 (backlog)
   - 5를 통과한 뒤 K를 올려 최근 종료부터 처리한다.
-  - 약 9,700건, 분당 약 10건이면 약 16시간이다(추정).
+  - 약 9,700건이다. 첫 시도는 직전 결과 6초 뒤에 하나씩 열려 분당 10건이 상한이고, 수집·정산 지연을 더하면 분당 약 5~8건, 하루 안팎으로 본다(추정).
   - 중단 조건(하나라도 해당하면 K=0으로 즉시 멈춤):
     - 수집 지연 p99가 기준의 2배를 넘음
     - `request_failed` 비율 급증
     - 이미 공개로 확인된 영상의 `identity_missing` 비율 급증 (봇 확인 의심)
     - `conflict` 급증
   - 롤백:
-    - 미리 준비할 SQL: `observed_*` 사본으로 세션 시각을 되돌리고 `times_source='observed'`, `outcome='reverted'`로 둔다.
+    - 미리 준비할 SQL: `observed_*` 사본으로 세션 시각을 되돌리고 `times_source='observed'`, `outcome='reverted'`로 둔다(아래 "운영 SQL 초안").
     - `reverted`는 대기열에서 빠지는 최종 상태다.
     - 운영 실행에는 별도 승인이 필요하다.
-- [ ] 7. 멤버십 영상 시각 출처 (독립)
+  - 멈춤: K를 0으로 두고 API를 재시작하면 다음 projection에서 backlog 대상이 빠진다. 진행 행은 그대로 남아 K를 다시 올리면 이어진다.
+- [x] 7. 멤버십 영상 시각 출처 (독립)
   - InnerTube 다른 client나 watch 페이지 `microformat`에서 시각을 얻을 수 있는지 수집기에서 시험한다.
   - 얻을 수 있으면 `members_only`를 다시 대기열에 넣는다.
   - 최근 30일 약 5건 규모라 1~6과 독립적으로 진행한다.
+  - 조사 (2026-10-18, 외부 요청 10회, 영상 ID 미기록): 멤버십 watch HTML 4/4에 시작·종료 시각·영상·채널 identity·`isLiveNow=false`가 있었다. `WEB_EMBEDDED` player 0/2, WEB `/next` 0/2. 공개 대조 1건은 watch와 WEB player의 시각이 같았다.
+  - 완료 (2026-10-18, 수집기): `youtubejs/src/live-check.mjs`가 멤버십이고 시각이 빠진 종료 영상만 같은 RPC 슬롯에서 watch를 한 번 더 읽는다. 영상·채널 identity, `isLiveNow=false`, 양쪽 시각, player 시각과의 일치를 요구하고 가용성·player 사실은 그대로 둔다. 조회·검증에 실패하면 기존 관측(시각 없음)을 보낸다. 시험: `live-check.test.mjs`, `youtubejscollector/live_check_test.go`(발행된 멤버십 시각이 `LifecycleFactsTrusted`·`VerifiedEndedAt()`를 만족). 계약 검증은 이미 MEMBERS_ONLY와 시각의 조합을 허용한다.
+  - 수집기 배포 뒤 `members_only` 행을 다시 대기열에 넣는다(아래 SQL, 승인 필요). 현재 MEMBERS_ONLY 가용성이고 후보 조건을 만족하는 세션은 34건(최근 30일 31건)이다.
+
+## 운영 SQL 초안 (실행하지 않음, 각각 승인 필요)
+
+모두 `SET LOCAL lock_timeout='3s'` 트랜잭션에서 실행하고, 먼저 같은 조건의 `count(*)`를 확인한다.
+
+- backlog 투입(단계 6): 1,000행씩 반복한다. 신규 창(48시간) 안의 종료는 넣지 않는다. 첫 시도는 한 번에 하나씩 열리므로 K를 켜기 전후 어느 때 투입해도 된다.
+
+  ```sql
+  INSERT INTO youtube_live_time_finalizations (video_id, queue, outcome, observed_started_at, observed_ended_at)
+  SELECT s.video_id, 'backlog', 'pending', s.started_at, s.ended_at
+  FROM youtube_live_sessions s
+  LEFT JOIN youtube_live_reconciliation_heads h USING (video_id)
+  WHERE s.status = 'ENDED' AND s.times_source = 'observed'
+    AND COALESCE(h.end_reason, '') <> 'CANCELLED_BEFORE_LIVE'
+    AND (s.started_at IS NOT NULL OR h.last_live_positive_at IS NOT NULL)
+    AND (s.status_observed_at IS NULL OR s.status_observed_at < statement_timestamp() - interval '48 hours')
+    AND NOT EXISTS (SELECT 1 FROM youtube_live_time_finalizations f WHERE f.video_id = s.video_id)
+  ORDER BY s.video_id
+  LIMIT 1000
+  ON CONFLICT (video_id) DO NOTHING;
+  ```
+
+- 롤백(단계 6): 확정한 backlog 행의 세션·head 시각을 사본으로 되돌린다. 범위를 줄이려면 `completed_at` 조건을 더한다.
+
+  ```sql
+  WITH reverted AS (
+      UPDATE youtube_live_time_finalizations f
+      SET outcome = 'reverted', completed_at = statement_timestamp(), updated_at = statement_timestamp()
+      WHERE f.outcome = 'finalized' AND f.queue = 'backlog'
+      RETURNING f.video_id, f.observed_started_at, f.observed_ended_at
+  ), sessions AS (
+      UPDATE youtube_live_sessions s
+      SET started_at = r.observed_started_at, ended_at = r.observed_ended_at, times_source = 'observed'
+      FROM reverted r
+      WHERE s.video_id = r.video_id AND s.times_source = 'provider'
+      RETURNING s.video_id, r.observed_ended_at
+  )
+  UPDATE youtube_live_reconciliation_heads h
+  SET ended_at = sessions.observed_ended_at, updated_at = statement_timestamp()
+  FROM sessions
+  WHERE h.video_id = sessions.video_id;
+  ```
+
+- 멤버십 재확정(단계 7, 수집기 배포 뒤):
+
+  ```sql
+  UPDATE youtube_live_time_finalizations f
+  SET outcome = 'pending', reason = NULL, attempts = 0, deferrals = 0,
+      retry_base_at = statement_timestamp(), next_attempt_at = statement_timestamp(),
+      last_attempt_at = NULL, observation_id = NULL, completed_at = NULL, updated_at = statement_timestamp()
+  FROM youtube_live_sessions s
+  WHERE f.video_id = s.video_id AND f.outcome = 'members_only'
+    AND s.status = 'ENDED' AND s.times_source = 'observed';
+  ```
+
+- 322 되돌리기(A보다 이전 image로 되돌릴 때만): `322_live_streams_elapsed.sql`의 같은 `VALUES`를 쓰고 방향만 바꾼 CAS다. 전역 본문 md5가 `abab0db8d544c64ee59c98fa0c1d6a3d`일 때만 바꾸고, 결과 md5는 `b306166c7ae45035185ef79b21cea25f`여야 한다.
+
+  ```sql
+  UPDATE notification_templates AS target
+  SET body = seed.old_body, updated_at = now()
+  FROM (VALUES ('CMD_LIVE_STREAMS', $old$…322의 $old$ 본문…$old$, $new$…322의 $new$ 본문…$new$))
+      AS seed(template_key, old_body, new_body)
+  WHERE target.template_key = seed.template_key
+    AND target.channel_id IS NULL
+    AND target.body = seed.new_body;
+  ```
 
 ## 검증
 
@@ -199,28 +281,64 @@
   - 무작위 확정 20건을 공개 watch 페이지의 `start/endTimestamp`와 대조
   - `!방송기록` 표시 비율 재계산. 기대치는 최근 30일 약 99% 이상이고, 남는 것은 `identity_missing` 소진과 멤버십이다.
 - 표시: `kakaoformat.Render` 결과 문자열 시험. 실제 카카오톡 화면 확인은 별도로 한다.
+- 1~4·7단계 로컬 결과 (2026-10-18, 마지막 코드 편집 뒤, worktree 루트):
+  - `go test -count=1 ./hololive/hololive-api/... ./hololive/hololive-dbtest/... ./hololive/hololive-youtube-collector/internal/runtime/youtubejscollector` 통과. 수집기 전체는 `collectorruntime`만 형제 `shared-go` 미커밋 작업 때문에 빌드되지 않고 `GOWORK=off`로 통과했다.
+  - 변경 패키지 8개 `-race` 통과, golangci-lint 0 issues, NilAway exit 0, `check-migration-manifest.sh` OK, youtubejs `npm test`(372)·`npm run typecheck` 통과, `check-stack-retry-contract.sh`·`check-stack-db-access-policy.sh` 통과.
+  - 확정 시험은 경계 검사·시도 시각·48시간 창을 끈 overlay에서 각각 실패했다.
+  - `scripts/ci/pre-push-gate.sh` 통과(격리 작업 공간, 수집기 커밋까지 포함한 HEAD, 624초). SQL ownership 검사에 맞춰 확정 조회문의 열 이름을 명시한 뒤 runtime·sourceobservation 시험을 다시 통과했다.
 
 ## 위험
 
-- **수집 예산 경합**: YouTube.js 동시 실행 상한과 요청 간격을 공유해 방송 목록·채널 확인이 늦어질 수 있다. 대응은 priority 18 이하, 분산된 `NotBefore`, 수집 지연 중단 조건이다.
+- **수집 예산 경합**: YouTube.js 동시 실행 상한과 요청 간격을 공유해 방송 목록·채널 확인이 늦어질 수 있다. 대응은 priority 18 이하, 한 번에 한 영상씩 여는 backlog 첫 시도, 수집 지연 중단 조건이다.
 - **봇 확인 증가**: 요청이 늘면 봇 확인이 늘 수 있다. 봇 확인과 비공개는 같은 `identity_missing`이라 표시 사유를 단정하지 않는다.
 - **허용폭의 근거**: 확정 규칙의 허용폭은 표본 35건(아카이브 표본 29 + 운영 provider 종료 6)과 수집 지연 분포에 기반한다. 단계 5의 `conflict` 사유 분포로 조정한다.
 - **색인 갱신 비용**: 시각 UPDATE는 정렬 색인을 갱신한다(HOT 아님). backlog는 묶음과 분당 상한으로 나눠 쓴다.
+- **`!라이브` 경과 시간의 기준**: 경과는 저장 `started_at` 기준이다. 시작 시각 없이 처음 감지한 방송(최근 30일 약 49%)은 이 값이 감지 시각이라 실제보다 짧게 보인다. 감지 지연 분포로 보면 보통 1분 안팎(p90 4.4분, p99 10분)이고, 수집이 멈췄다 재개되면 더 커진다. LIVE 중에 영상 확인이 실제 시작을 주어도 세션 upsert가 기존 시작을 지키므로(`COALESCE`) 고쳐지지 않는다. 시작 출처를 세션에 기록해야 해결되며, reducer·세션 upsert의 시작 시각 계약을 바꾸고 이 값을 읽는 다른 경로를 모두 다시 확인해야 하므로 이번 범위에 넣지 않았다. 종료 뒤에는 확정 경로가 아카이브 시작으로 바꾼다.
+
+## 배포 계획 (실행하지 않음, 묶음마다 PR·배포 승인 필요)
+
+`hololive-bot-ops` deployment 절차를 따른다.
+
+- 공통 절차:
+  - 각 묶음의 PR을 병합한 `main` revision(40자)으로 kapu에서 `linux/arm64` image를 만든다(`kapu-multiarch`).
+  - 전송 전과 원격 load 뒤에 `arch=arm64`와 revision 일치를 확인한다. 원격 build는 하지 않는다.
+  - 시작 전에 현재 원격 image ID·tag와 deploy tree를 rollback 지점으로 남긴다.
+  - migration은 새 `hololive-api:prod` image의 `hololive-db-migrate` one-shot으로 recreate 전에 적용한다.
+  - 앱은 `up -d --no-build --no-deps <service>`로만 바꾼다.
+  - 이전 image의 db-migrate는 더 새로운 ledger를 거절한다. 그래서 migration 적용 뒤 image를 되돌릴 때는 앱 컨테이너만 되돌린다.
+- 변경 binary: A·B·323·324 묶음은 `hololive-api`만 바꾼다. `hololive-alarm-worker`는 바뀐 표본 데이터(`sampledata`)를 링크하지만 템플릿 관리 경로를 쓰지 않으므로 대상이 아니다. 확정 target은 기존 `video_live_check` 종류라 수집기 변경 없이 동작한다.
+- 재시도·보조 경로 변화(release 기록용):
+  - 확정 시도 일정 1개가 새로 생긴다. 일정은 [3분, 30분, 3시간, 24시간]이고, `request_failed`는 10분씩 12회까지 연기한다.
+  - I6는 멤버십 종료 영상에 한해 watch 조회 1회를 더한다. 재시도는 없다.
+
+| 순서 | 묶음 (로컬 커밋) | 서비스 | migration | 확인 | 롤백 |
+|---|---|---|---|---|---|
+| 1 | A `c8b456178` | `hololive-api` | 없음 | health·ready, 시험 방 `!방송기록`·`!라이브` | 이전 image |
+| 2 | B `5129b1597` | `hololive-api` | 322 | 전역 본문 md5 `abab0db8…`, `!라이브` 경과 시간 | A image로 되돌린다(A가 `.Elapsed`를 렌더링한다). A보다 이전으로 되돌릴 때만 220 본문 CAS 역갱신(승인) |
+| 3 | 323·확정 `1d246d3e0`·`06b4cd8b4` | `hololive-api` | 323 | 5단계 통과 기준, `hololive_youtube_collection_time_finalization_*` 지표 | 이전 image. 323 열·표는 남겨도 이전 binary에 영향이 없다. 시각 원복은 "운영 SQL 초안" 롤백(승인) |
+| 4 | 324 `0f81b2c1d` | `hololive-api` | 324 | 대상 9건 `ENDED`, 확정 결과 8 `finalized`·1 `members_only` 또는 `exhausted` | 이전 image. 세션 상태 원복이 필요하면 별도 승인 |
+| 5 | 수집기 `24f019ab4` | `youtube-collector` c(중앙), b(`ap-deploy.sh seoul`), a·d(`ap-host-native-deploy.sh`, 호스트별 `I_APPROVE_<HOST>_ACTIVE_ACTIVE_DEPLOY=true`) | 없음 | 멤버십 종료 확인에 시각 포함, 수집 지연 | 이전 image·binary |
+
+- 1→2는 A 배포 확인 뒤, 3→4는 1~2일 관찰(5단계) 뒤에 진행한다. 5는 1~4와 독립이지만 `members_only` 재확정 SQL은 3과 5가 모두 끝난 뒤 실행한다.
+- backlog(6단계): `/etc/stack-secrets/hololive-bot/compose.env`에 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200`을 넣고 `hololive-api`만 recreate한다. 이 파일은 `stack-platform-ops` 범위이므로 별도 승인이 필요하다. 투입 SQL은 K를 켠 API가 뜬 뒤 실행한다.
 
 ## 필요한 승인
 
-- migration 323의 운영 적용과 YouTube plane 런타임 동작 변경 배포(단계 5): 배포 승인(`hololive-bot-ops`).
+- migration 323의 운영 적용과 YouTube plane 런타임 동작 변경 배포(단계 5): 배포 승인(`hololive-bot-ops`). 323은 확정 바이너리보다 먼저 적용한다(reader·consumer가 새 열·표를 읽는다).
 - 기존 기록 보정(단계 6): 운영 데이터 쓰기 약 9,700행과 외부 요청 증가. 시작 전 별도 승인이 필요하고, 롤백 SQL 실행도 별도 승인이 필요하다.
+- migration 324(멈춘 LIVE 정리)의 운영 적용: 운영 데이터 쓰기(현재 9행). 323·확정 바이너리 배포를 확인한 뒤 별도 PR·배포로 적용한다. 같은 릴리스에 넣으면 db-migrate가 함께 적용하므로 PR을 나눈다.
+- 멤버십 수집기 배포(단계 7)와 `members_only` 재확정 SQL: 수집기 배포 승인과 운영 데이터 쓰기 승인.
 - Git: 커밋·push·PR은 요청 시에만 한다.
 
 ## 관련 문제
 
 - **멈춘 LIVE 세션** (2026-10-18 사용자 지시로 범위에 포함, 인계 문서 I7):
   - 신선한 확인이 없는 `LIVE` 9건은 모두 `legacy_unknown`이고 head·가용성 기록·종료 후보·pending이 없다. 마지막 기록은 136~146일 전이다.
-  - 부재 처리는 positive가 없는 옛 기록의 수명 추적을 시작하지 않으므로(`apply_absence.go`), 어떤 종료 경로로도 끝나지 않는 것으로 보인다(추론).
-  - 최근 6일 영상 확인 5,304건이 `UNKNOWN identity_missing`이며, 이 9건과의 관계는 확인이 필요하다.
-  - 원인을 조사한 뒤 reconcile을 수정하고, 기존 9건을 정리한다. 정리는 운영 데이터 쓰기라 승인이 필요하다.
-  - 정리 결과는 이 계획의 확정 경로와 맞춘다. 예: `exhausted(identity_missing)`.
+  - 원인 (2026-10-18 조사, 읽기 전용): 9건은 5개 채널에 속하고, 이 채널들은 `members`에 행이 없다(졸업 표시가 아니라 roster 밖). 그래서 채널 수집(`operational_channel_ids.sql`: `is_graduated=false`)과 영상 확인(`live_check_videos.sql`의 roster 조건, `appendLiveCheckVideos`의 roster 검사)이 모두 이 세션을 대상으로 삼지 않는다. head가 없어 부재 판정도 적용되지 않는다. 이 채널의 알림·채널 확인·발송·pending은 0건이고, 다른 조회(LiveQuery·observability)도 roster로 걸러 보이지 않았다.
+  - 최근 6일 영상 확인 중 이 9건은 0건이다. `identity_missing` 5,372건은 head가 있는 UPCOMING 42건의 설계된 해소 불가 backoff(약 1시간 간격)에서 왔다.
+  - 공개 watch 페이지 확인(9회, 영상 ID 미기록): 8건은 공개 아카이브이고 시작·종료 시각과 채널이 맞았다. 1건은 `LOGIN_REQUIRED`였다.
+  - 수정: migration 324가 roster 밖 채널의 head·pending 없는 `legacy_unknown` LIVE를 `ENDED`(종료 시각은 증거가 없어 `last_seen_at`, origin 유지)로 정리하고 `status_observed_at`을 적용 시각으로 둔다. 그러면 신규 확정 대기열(48시간 창, roster 무관)이 아카이브 시각을 확인한다. 예상 결과는 8건 `finalized`, 1건은 응답에 따라 `members_only`·`exhausted`다. 최종 결과 뒤 대상에서 빠지므로 반복 확인이 남지 않는다.
+  - roster 밖 LIVE를 영상 확인 대상에 넣는 방안은 택하지 않았다. 수집 대상 계약(운영 roster)을 넓히고, 아카이브를 확인할 수 없는 영상(1건)을 끝낼 경로가 없어 2분마다 반복 확인이 남는다. 신 lifecycle 세션은 head가 있어 같은 경로로 멈추지 않는다. 남는 재발 경로는 방송 중에 채널이 roster에서 빠지는 경우뿐이다(추론).
 - **종료 감지 지연**: 10~15분 지연 사례 자체는 확정 경로가 정확도 문제를 대신 해결하므로 이번 범위에서 줄이지 않는다.
 
 ## 검토 반영 기록 (2026-10-18)
@@ -242,3 +360,11 @@
 - 중단 조건을 수집 지연과 사유별 비율로 바꿨다.
 - 신규 대기열 규모를 하루 약 45건에서 80~90건으로 정정했다.
 - 355건 provider 추정을 폐기했다.
+
+적대적 검토(2026-10-18, reviewer 5개 영역)에서 다음을 반영했다.
+
+- backlog 재시도 행이 쌓여 전체 target 상한을 넘는 경로를 막았다. 재시도 중인 행과 활성 묶음을 합쳐 2,000개로 제한한다.
+- backlog 중지·재시작 뒤 지난 기준 시각 때문에 묶음 전체가 한꺼번에 due가 되는 경로를 없앴다. 첫 시도는 한 번에 하나씩 연다.
+- 시작 검사를 한쪽으로 바꿨다. 늦게 감지한 방송의 정상 아카이브 시작이 `start_mismatch`가 되지 않게 하기 위해서다.
+- 322 되돌리기 SQL을 추가했다.
+- 남긴 한계: `!라이브` 경과의 시작 기준(위험 절), watch 조회가 일시 실패하면 멤버십 영상은 `members_only`로 끝나고 재확정 SQL로만 다시 시도한다.
