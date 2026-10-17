@@ -164,6 +164,51 @@ func TestVideoLiveCheckRunnerPublishesFactsForRequestedSubject(t *testing.T) {
 	}
 }
 
+func TestVideoLiveCheckRunnerPublishesVerifiedMembersArchiveTimes(t *testing.T) {
+	t.Parallel()
+
+	endedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	startedAt := endedAt.Add(-2 * time.Hour)
+
+	for _, explicitNotLive := range []bool{false, true} {
+		t.Run(map[bool]string{false: "missing live-now fact", true: "verified archive"}[explicitNotLive], func(t *testing.T) {
+			t.Parallel()
+
+			facts := youtubejs.VideoLiveCheckResult{
+				VideoID: liveCheckTestVideoID, ChannelID: restrictedTestChannelID, IdentityConfirmed: true,
+				IsPrivate: new(false), IsLiveContent: new(true), HasLiveBroadcastDetails: new(true),
+				StartedAt: &startedAt, EndedAt: &endedAt,
+				Availability: contract.VideoAvailabilityMembersOnly, Method: contract.VideoAvailabilityMethodPlayerMembersOnly,
+			}
+
+			if explicitNotLive {
+				facts.IsLiveNow = new(false)
+			}
+
+			result, err := NewVideoLiveCheckRunner(&videoLiveFake{result: facts}).Collect(t.Context(), videoLiveInput(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			observations := result.Output().Observations()
+			if len(observations) != 1 {
+				t.Fatalf("observations = %d, want 1", len(observations))
+			}
+
+			observation := observations[0]
+			payload := decodeVideoLiveCheck(t, &observation)
+			verifiedEnd, verified := payload.VerifiedEndedAt()
+
+			if observation.Completeness != contract.CompletenessPartial || !payload.LifecycleFactsTrusted() ||
+				payload.Availability != contract.VideoAvailabilityMembersOnly || payload.CurrentlyLive() ||
+				payload.StartedAt == nil || !payload.StartedAt.Equal(startedAt) ||
+				verified != explicitNotLive || (verified && !verifiedEnd.Equal(endedAt)) {
+				t.Fatalf("membership archive payload = %#v, verified=%v", payload, verified)
+			}
+		})
+	}
+}
+
 func TestVideoLiveCheckRunnerRecordsRequestFailureAsUnknown(t *testing.T) {
 	t.Parallel()
 

@@ -69,14 +69,93 @@ export async function fetchChannelLiveCheck(innertube, channelId, clock = Date.n
   return classifyChannelPlayer(player.data, channelId, target.videoId, clock());
 }
 
-/** 요청 영상 player를 1회 조회해 영상 확인 사실을 만듭니다. */
+/** player를 조회하고, 시각이 빠진 멤버십 아카이브만 같은 RPC 슬롯에서 watch를 한 번 더 조회합니다. */
 export async function fetchVideoLiveCheck(innertube, videoId, clock = Date.now, proof = undefined) {
   assertInnertube(innertube);
   const player = await executePlayer(innertube, videoId, proof);
   if (player.ok === false) {
     return unknownVideo(videoId, player.reason);
   }
-  return parseVideoLiveCheck(player.data, videoId, clock());
+  const result = parseVideoLiveCheck(player.data, videoId, clock());
+  if (result.availability !== "MEMBERS_ONLY" || result.is_live === true || result.is_live_now === true ||
+      result.is_upcoming === true || (result.started_at !== undefined && result.ended_at !== undefined)) {
+    return result;
+  }
+  const watch = await readWatchPlayer(innertube, videoId);
+  if (watch === undefined) return result;
+  const archive = parseVideoLiveCheck(watch, videoId, clock());
+  if (!archive.identity_confirmed || archive.channel_id !== result.channel_id ||
+      (archive.unknown_reason !== undefined && archive.unknown_reason !== "availability_unclassified") ||
+      archive.is_live === true || archive.is_live_now !== false ||
+      archive.started_at === undefined || archive.ended_at === undefined ||
+      (result.started_at !== undefined && result.started_at !== archive.started_at) ||
+      (result.ended_at !== undefined && result.ended_at !== archive.ended_at)) {
+    return result;
+  }
+  // 가용성과 player의 기존 사실은 유지하고, 두 응답의 identity가 일치하는 방송 시각만 합칩니다.
+  const enriched = parseVideoLiveCheck({
+    ...player.data,
+    microformat: {
+      playerMicroformatRenderer: {
+        ...player.data.microformat?.playerMicroformatRenderer,
+        liveBroadcastDetails: watch.microformat.playerMicroformatRenderer.liveBroadcastDetails,
+      },
+    },
+  }, videoId, clock());
+  return enriched.availability === "MEMBERS_ONLY" ? enriched : result;
+}
+
+async function readWatchPlayer(innertube, videoId) {
+  const fetch = innertube.session?.http?.fetch_function;
+  if (typeof fetch !== "function") {
+    throw new FetchTransportError("helper_internal_invariant", "INTERNAL", "watch single-attempt transport is unavailable");
+  }
+  try {
+    const response = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, {
+      headers: { "User-Agent": innertube.session.user_agent },
+      redirect: "error",
+      signal: currentRequestSignal(),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      return undefined;
+    }
+    return watchPlayerJSON(await response.text());
+  } catch (error) {
+    const failure = requestFailure(error);
+    if (currentRequestSignal()?.aborted ||
+        ["CANCELED", "CONFIGURATION", "INTERNAL", "SUPERSEDED", "PROTOCOL"].includes(failure?.failureClass)) {
+      throw failure;
+    }
+    return undefined;
+  }
+}
+
+// JSON 문자열 안의 중괄호·세미콜론은 경계가 아니며, 페이지의 JavaScript는 실행하지 않습니다.
+function watchPlayerJSON(html) {
+  const assignment = /\bvar ytInitialPlayerResponse\s*=\s*(?=\{)/.exec(html);
+  if (assignment === null) return undefined;
+  const start = assignment.index + assignment[0].length;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let i = start; i < html.length; i++) {
+    const char = html[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) {
+      try {
+        return JSON.parse(html.slice(start, i + 1));
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
