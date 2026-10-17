@@ -159,3 +159,63 @@ func TestBroadcastHistoryEmptyReportsTruncatedQueryBudget(t *testing.T) {
 		t.Fatalf("BroadcastHistoryEmpty() missing truncation notice in:\n%s", got)
 	}
 }
+
+func TestBroadcastHistoryTimeSpan(t *testing.T) {
+	t.Parallel()
+
+	kst := time.FixedZone("KST", 9*60*60)
+	startedAt := time.Date(2026, time.October, 17, 20, 59, 30, 0, kst)
+
+	for name, tc := range map[string]struct {
+		entry BroadcastHistoryEntry
+		want  string
+	}{
+		"same day": {
+			entry: BroadcastHistoryEntry{StartedAt: startedAt, EndedAt: time.Date(2026, time.October, 17, 22, 29, 50, 0, kst)},
+			want:  "⏰ 2026/10/17 20:59~22:29 · 1시간 30분",
+		},
+		"crosses midnight": {
+			entry: BroadcastHistoryEntry{StartedAt: startedAt, EndedAt: time.Date(2026, time.October, 18, 0, 3, 0, 0, kst)},
+			want:  "⏰ 2026/10/17 20:59~10/18 00:03 · 3시간 3분",
+		},
+		"crosses year": {
+			entry: BroadcastHistoryEntry{
+				StartedAt: time.Date(2026, time.December, 31, 23, 0, 0, 0, kst),
+				EndedAt:   time.Date(2027, time.January, 1, 0, 30, 0, 0, kst),
+			},
+			want: "⏰ 2026/12/31 23:00~2027/01/01 00:30 · 1시간 30분",
+		},
+		// 종료 오차를 확인하지 못한 세션은 종료 시각과 길이를 쓰지 않는다.
+		"unverified end": {
+			entry: BroadcastHistoryEntry{StartedAt: startedAt, Time: time.Date(2026, time.October, 20, 12, 0, 0, 0, kst), TimeLabel: "종료"},
+			want:  "⏰ 2026/10/17 20:59 시작",
+		},
+		"no start uses labeled fallback": {
+			entry: BroadcastHistoryEntry{Time: time.Date(2026, time.October, 17, 22, 29, 0, 0, kst), TimeLabel: "종료"},
+			want:  "⏰ 2026/10/17 22:29 종료",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			entry := tc.entry
+
+			entry.VideoID, entry.MemberName, entry.TypeLabel = "AqxEw3kXcgU", testDisplayName, "게임"
+
+			got := kakaoformat.Render(NewResponseFormatter("!", nil).BroadcastHistory(t.Context(), BroadcastHistoryFilter{}, []BroadcastHistoryEntry{entry}))
+			if !hasBroadcastHistoryLine(got, tc.want) {
+				t.Fatalf("BroadcastHistory() missing line %q in:\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
+func hasBroadcastHistoryLine(text, want string) bool {
+	for line := range strings.SplitSeq(text, "\n") {
+		if line == want {
+			return true
+		}
+	}
+
+	return false
+}

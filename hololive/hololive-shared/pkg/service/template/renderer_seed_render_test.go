@@ -49,6 +49,7 @@ const (
 	fieldMemberName   = "MemberName"
 	fieldTitle        = "Title"
 	fieldURL          = "URL"
+	fieldElapsed      = "Elapsed"
 )
 
 func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
@@ -164,7 +165,7 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 	live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
 		fieldCount: 1,
 		"Streams": []map[string]any{
-			{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0},
+			{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0, fieldElapsed: ""},
 		},
 	})
 

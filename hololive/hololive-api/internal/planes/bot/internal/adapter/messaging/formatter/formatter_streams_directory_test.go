@@ -269,8 +269,9 @@ func TestFormatChannelName_IndependentsOrg(t *testing.T) {
 }
 
 // formatLiveStreams는 LiveQuery의 항목 변환 없이 !라이브 목록 레이아웃만 검증하는 테스트 진입점이다.
+// 조회 시각을 주지 않으므로 경과 시간은 표시하지 않는다.
 func formatLiveStreams(ctx context.Context, f *ResponseFormatter, streams []*domain.Stream) string {
-	rendered, ok := f.renderLiveStreams(ctx, streams)
+	rendered, ok := f.renderLiveStreams(ctx, streams, time.Time{})
 	if !ok {
 		return f.renderFailureText()
 	}

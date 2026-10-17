@@ -30,7 +30,7 @@ func (f *ResponseFormatter) LiveQuery(ctx context.Context, result livequery.Resu
 		}
 	}
 
-	rendered, ok := f.renderLiveStreams(ctx, streams)
+	rendered, ok := f.renderLiveStreams(ctx, streams, result.AsOf)
 	if !ok {
 		return f.renderFailureText()
 	}

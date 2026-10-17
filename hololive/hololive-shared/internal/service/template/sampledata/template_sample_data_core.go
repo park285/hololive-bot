@@ -202,8 +202,9 @@ func addTemplateCommandStreamSamples(data map[domain.TemplateKey]any) {
 
 func templateLiveStreamSamples() []map[string]any {
 	return []map[string]any{
-		{fieldChannelName: sampleMemberMiko, fieldTitle: "마인크래프트 건축 배틀", fieldURL: "https://youtu.be/live123"},
-		{fieldChannelName: "오오조라 스바루", fieldTitle: "잡담 방송", fieldURL: "https://youtu.be/live456"},
+		{fieldChannelName: sampleMemberMiko, fieldTitle: "마인크래프트 건축 배틀", fieldURL: "https://youtu.be/live123", "Elapsed": "1시간 23분째"},
+		// 시작 시각을 알 수 없는 방송은 Elapsed가 비어 경과 표기가 생략된다.
+		{fieldChannelName: "오오조라 스바루", fieldTitle: "잡담 방송", fieldURL: "https://youtu.be/live456", "Elapsed": ""},
 	}
 }
 

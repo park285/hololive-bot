@@ -322,6 +322,7 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 	result := make([]formatter.BroadcastHistoryEntry, 0, len(entries))
 	for i := range entries {
 		entry := &entries[i]
+		fallbackTime, fallbackLabel := broadcastHistoryFallbackTime(entry)
 
 		result = append(result, formatter.BroadcastHistoryEntry{
 			VideoID:      entry.VideoID,
@@ -330,7 +331,10 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 			TypeLabel:    broadcasttype.Type(entry.BroadcastType).Label(),
 			TopicID:      entry.TopicID,
 			Title:        entry.Title,
-			Time:         broadcastHistoryEntryTime(entry),
+			StartedAt:    broadcastHistoryStartedAt(entry),
+			EndedAt:      verifiedBroadcastEndedAt(entry),
+			Time:         fallbackTime,
+			TimeLabel:    fallbackLabel,
 			URL:          "https://www.youtube.com/watch?v=" + entry.VideoID,
 			HasThumbnail: validYouTubeVideoID(entry.VideoID),
 		})
@@ -339,14 +343,74 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 	return result
 }
 
-func broadcastHistoryEntryTime(entry *handlercore.BroadcastHistoryEntry) time.Time {
-	for _, candidate := range []*time.Time{entry.EndedAt, entry.StartedAt, entry.ScheduledStartTime} {
-		if candidate != nil && !candidate.IsZero() {
-			return *candidate
+// maxBroadcastEndUncertainty는 종료 시각을 표시하고 방송 길이를 계산할 수 있는 종료 오차 상한이다.
+// YouTube가 종료 시각을 주지 않으면 ended_at은 종료를 관측한 시각이라, 실제 종료는 마지막 live 확인 시각과
+// ended_at 사이에 있다. 채널 부재로 늦게 종료된 세션은 이 간격이 며칠까지 벌어진다. 5분은 !라이브가 방송 중으로
+// 인정하는 확인 신선도 상한과 같다. 확인 시각은 수집 예정 시각으로 기록되어 YouTube 종료 시각보다 늦을 수 있으므로
+// ended_at이 확인 시각보다 이른 쪽도 같은 상한까지 허용한다.
+const maxBroadcastEndUncertainty = 5 * time.Minute
+
+// legacyLifecycleOrigin 기록은 수명 추적 도입 전에 저장된 시각이라 started_at이 실제 시작보다 수 시간 늦은 경우가
+// 섞여 있다. 그래서 시작 시각과 방송 길이를 표시하지 않고 broadcastHistoryFallbackTime(저장 종료 시각은 "종료")으로
+// 표시한다. 이 판정은 head 존재나 LastLivePositiveAt이 아니라 origin으로 한다. 신 lifecycle의 종료는 origin을
+// observed로 바꾸고, head가 있어도 LIVE를 확인하지 못한 정상 종료가 있기 때문이다.
+const legacyLifecycleOrigin = "legacy_unknown"
+
+// trustedBroadcastStartedAt은 시작 시각으로 표시할 수 있는 started_at을 반환한다. 옛 기록이거나 값이 없으면 nil이다.
+func trustedBroadcastStartedAt(entry *handlercore.BroadcastHistoryEntry) *time.Time {
+	if entry.LifecycleOrigin == legacyLifecycleOrigin {
+		return nil
+	}
+
+	return entry.StartedAt
+}
+
+func broadcastHistoryStartedAt(entry *handlercore.BroadcastHistoryEntry) time.Time {
+	startedAt := trustedBroadcastStartedAt(entry)
+	if startedAt == nil {
+		return time.Time{}
+	}
+
+	return *startedAt
+}
+
+// verifiedBroadcastEndedAt은 표시할 시작 시각이 있고 종료 오차가 maxBroadcastEndUncertainty 안인 종료 시각만 반환한다.
+// 그 밖에는 zero이며, 표시는 시작 시각만 남긴다.
+func verifiedBroadcastEndedAt(entry *handlercore.BroadcastHistoryEntry) time.Time {
+	startedAt := trustedBroadcastStartedAt(entry)
+	if startedAt == nil || entry.EndedAt == nil || entry.LastLivePositiveAt == nil {
+		return time.Time{}
+	}
+
+	if entry.EndedAt.Before(*startedAt) {
+		return time.Time{}
+	}
+
+	gap := entry.EndedAt.Sub(*entry.LastLivePositiveAt)
+	if gap > maxBroadcastEndUncertainty || gap < -maxBroadcastEndUncertainty {
+		return time.Time{}
+	}
+
+	return *entry.EndedAt
+}
+
+// broadcastHistoryFallbackTime은 표시할 시작 시각이 없는 세션에 표시할 시각과 그 의미를 정렬 우선순위대로 고른다.
+// 시작 시각이 있으면 formatter가 시작 시각을 표시하므로 이 값을 쓰지 않는다. 검증되지 않은 종료 시각도 표시하지만
+// "종료"로 표기해 시작 시각과 구분한다.
+func broadcastHistoryFallbackTime(entry *handlercore.BroadcastHistoryEntry) (time.Time, string) {
+	for _, candidate := range []struct {
+		at    *time.Time
+		label string
+	}{
+		{entry.EndedAt, "종료"},
+		{entry.ScheduledStartTime, "예정"},
+	} {
+		if candidate.at != nil && !candidate.at.IsZero() {
+			return *candidate.at, candidate.label
 		}
 	}
 
-	return entry.LastSeenAt
+	return entry.LastSeenAt, "마지막 확인"
 }
 
 func intBroadcastHistoryParam(params map[string]any, key string, defaultValue int) int {

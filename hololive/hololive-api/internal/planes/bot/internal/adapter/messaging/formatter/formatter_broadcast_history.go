@@ -47,6 +47,8 @@ type BroadcastHistoryFilter struct {
 	Truncated  bool
 }
 
+// BroadcastHistoryEntry의 시각은 StartedAt이 있으면 시작 시각으로 표시하고, EndedAt은 종료 오차가 확인된 경우에만
+// 채워 종료 시각과 방송 길이를 함께 표시한다. StartedAt이 없으면 Time을 TimeLabel과 함께 표시한다.
 type BroadcastHistoryEntry struct {
 	VideoID      string
 	MemberName   string
@@ -54,7 +56,10 @@ type BroadcastHistoryEntry struct {
 	TypeLabel    string
 	TopicID      string
 	Title        string
+	StartedAt    time.Time
+	EndedAt      time.Time
 	Time         time.Time
+	TimeLabel    string
 	URL          string
 	HasThumbnail bool
 }
@@ -167,7 +172,7 @@ func cleanBroadcastHistoryMembershipTag(tag string) string {
 }
 
 func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *strings.Builder, entry *BroadcastHistoryEntry) {
-	fmt.Fprintf(b, "⏰ %s", broadcastHistoryTime(ctx, f, entry.Time))
+	fmt.Fprintf(b, "⏰ %s", broadcastHistoryTimeSpan(ctx, f, entry))
 
 	if entry.TopicID != "" {
 		fmt.Fprintf(b, " · topic: %s", broadcastHistoryDisplayLine(entry.TopicID))
@@ -238,10 +243,46 @@ func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {
 	return strings.Join(parts, " / ")
 }
 
+const broadcastHistoryTimeLayout = "2006/01/02 15:04"
+
+// broadcastHistoryTimeSpan은 "2026/10/17 20:59~22:29 · 1시간 30분"처럼 시작·종료와 길이를 표시한다.
+// 종료가 확인되지 않았으면 "2026/10/17 20:59 시작"만 표시한다.
+func broadcastHistoryTimeSpan(ctx context.Context, f *ResponseFormatter, entry *BroadcastHistoryEntry) string {
+	if entry.StartedAt.IsZero() {
+		text := broadcastHistoryTime(ctx, f, entry.Time)
+		if entry.Time.IsZero() || entry.TimeLabel == "" {
+			return text
+		}
+
+		return text + " " + entry.TimeLabel
+	}
+
+	start := timeutil.FormatKST(entry.StartedAt, broadcastHistoryTimeLayout)
+	if entry.EndedAt.IsZero() {
+		return start + " 시작"
+	}
+
+	return start + "~" + broadcastHistoryEndTime(entry.StartedAt, entry.EndedAt) + " · " + formatBroadcastDuration(entry.EndedAt.Sub(entry.StartedAt))
+}
+
+// broadcastHistoryEndTime은 KST 기준으로 시작과 같은 날짜면 시각만, 같은 해면 월/일부터 표시한다.
+func broadcastHistoryEndTime(startedAt, endedAt time.Time) string {
+	start, end := timeutil.ToKST(startedAt), timeutil.ToKST(endedAt)
+
+	switch {
+	case start.Year() == end.Year() && start.YearDay() == end.YearDay():
+		return end.Format("15:04")
+	case start.Year() == end.Year():
+		return end.Format("01/02 15:04")
+	default:
+		return end.Format(broadcastHistoryTimeLayout)
+	}
+}
+
 func broadcastHistoryTime(_ context.Context, f *ResponseFormatter, t time.Time) string {
 	if t.IsZero() {
 		return f.messageStrings.Text(messagestrings.MiscTimeUnknown)
 	}
 
-	return timeutil.FormatKST(t, "2006/01/02 15:04")
+	return timeutil.FormatKST(t, broadcastHistoryTimeLayout)
 }

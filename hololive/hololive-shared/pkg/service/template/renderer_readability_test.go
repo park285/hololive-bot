@@ -66,9 +66,9 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 			rendered := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, body, map[string]any{
 				fieldCount: 3,
 				"Streams": []map[string]any{
-					{fieldChannelName: "Kureiji Ollie Ch. hololive", fieldTitle: title, fieldURL: url, "ViewerCount": 987654},
-					{fieldChannelName: "두 번째 채널", fieldTitle: "제목만 있음", fieldURL: "", "ViewerCount": 0},
-					{fieldChannelName: "세 번째 채널", fieldTitle: "", fieldURL: "", "ViewerCount": 0},
+					{fieldChannelName: "Kureiji Ollie Ch. hololive", fieldTitle: title, fieldURL: url, "ViewerCount": 987654, fieldElapsed: ""},
+					{fieldChannelName: "두 번째 채널", fieldTitle: "제목만 있음", fieldURL: "", "ViewerCount": 0, fieldElapsed: ""},
+					{fieldChannelName: "세 번째 채널", fieldTitle: "", fieldURL: "", "ViewerCount": 0, fieldElapsed: ""},
 				},
 			})
 			out := kakaoformat.Render(rendered)
