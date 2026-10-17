@@ -44,7 +44,7 @@ elif ! grep -Fq 'Requires=docker.service admin-dashboard-ingress-firewall.servic
   record_fail "hololive-compose must fail closed when the ingress firewall cannot start"
 elif ! grep -Fq 'ip saddr 100.100.1.5' "${FIREWALL_RULES}"; then
   record_fail "ingress firewall must restrict the Tailscale source set"
-elif ! grep -A20 '^  admin-dashboard-ingress:' "${LIVE_COMPAT}" | grep -Fq 'network_mode: host'; then
+elif ! awk '/^  admin-dashboard-ingress:/ { in_service = 1; next } in_service && /^  [^ #]/ { exit } in_service' "${LIVE_COMPAT}" | grep -Fq 'network_mode: host'; then
   record_fail "ingress firewall input hook requires the ingress container to remain host-networked"
 elif ! grep -Fq 'type filter hook input' "${FIREWALL_RULES}"; then
   record_fail "host-networked ingress must be filtered on the host input hook before HTTP parsing"
