@@ -33,6 +33,9 @@ cat >"${repo}/deploy/compose/docker-compose.prod.yml" <<'EOF'
 services:
   hololive-api:
     image: hololive-api:prod
+    depends_on:
+      - hololive-alarm-worker
+      - valkey-cache
   hololive-db-migrate:
     image: hololive-api:prod
   hololive-alarm-worker:
@@ -114,7 +117,7 @@ if [[ "${1:-}" == compose && "${2:-}" == version ]]; then
 fi
 if [[ "${1:-}" == compose ]]; then
     # Render with the real Compose CLI, without building images or contacting a daemon.
-    if [[ " $* " == *" config --images "* ]]; then
+    if [[ " $* " == *" config --format json "* ]]; then
         exec "${FAKE_REAL_DOCKER}" "$@"
     fi
     if [[ " $* " == *" run --rm --no-deps hololive-api --check-config "* ]]; then
