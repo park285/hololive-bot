@@ -34,60 +34,30 @@ import (
 
 const healthPath = "/health"
 
-func TestShouldSkipPath(t *testing.T) {
+// LoggerMiddleware가 쓰는 패턴 문법(정확 일치, "prefix*", "*suffix")을 파싱한 결과로 판정한다.
+func TestSkipPathMatcher_PatternKinds(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		path       string
-		exactSkip  map[string]bool
-		prefixSkip []string
-		suffixSkip []string
-		want       bool
+		name     string
+		path     string
+		patterns []string
+		want     bool
 	}{
-		{
-			name:      "정확히 일치 → true",
-			path:      healthPath,
-			exactSkip: map[string]bool{healthPath: true},
-			want:      true,
-		},
-		{
-			name:       "prefix 일치 → true",
-			path:       "/api/holo/ws/connect",
-			prefixSkip: []string{"/api/holo/ws"},
-			want:       true,
-		},
-		{
-			name:       "suffix 일치 → true",
-			path:       "/api/stream",
-			suffixSkip: []string{"/stream"},
-			want:       true,
-		},
-		{
-			name:       "어떤 패턴에도 불일치 → false",
-			path:       "/api/data",
-			exactSkip:  map[string]bool{healthPath: true},
-			prefixSkip: []string{"/metrics"},
-			suffixSkip: []string{"/stream"},
-			want:       false,
-		},
-		{
-			name:       "빈 맵/슬라이스 → false",
-			path:       "/anything",
-			exactSkip:  map[string]bool{},
-			prefixSkip: []string{},
-			suffixSkip: []string{},
-			want:       false,
-		},
+		{name: "정확히 일치 → true", path: healthPath, patterns: []string{healthPath}, want: true},
+		{name: "prefix 일치 → true", path: "/api/holo/ws/connect", patterns: []string{"/api/holo/ws*"}, want: true},
+		{name: "suffix 일치 → true", path: "/api/stream", patterns: []string{"*/stream"}, want: true},
+		{name: "어떤 패턴에도 불일치 → false", path: "/api/data", patterns: []string{healthPath, "/metrics*", "*/stream"}, want: false},
+		{name: "패턴 없음 → false", path: "/anything", want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldSkipPath(tt.path, tt.exactSkip, tt.prefixSkip, tt.suffixSkip)
-			if got != tt.want {
-				t.Fatalf("shouldSkipPath(%q) = %v, want %v", tt.path, got, tt.want)
+			matcher := newSkipPathMatcher(tt.patterns)
+			if got := matcher.shouldSkip(tt.path); got != tt.want {
+				t.Fatalf("shouldSkip(%q) with %q = %v, want %v", tt.path, tt.patterns, got, tt.want)
 			}
 		})
 	}

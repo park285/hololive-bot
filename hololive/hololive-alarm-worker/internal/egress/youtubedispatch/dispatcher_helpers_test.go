@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
@@ -52,27 +51,6 @@ func TestTruncateString(t *testing.T) {
 				t.Fatalf("deliverysql.TruncateString(%q, %d) = %q, want %q", tt.in, tt.maxLen, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestCollectOutboxIDs(t *testing.T) {
-	t.Parallel()
-
-	items := []domain.YouTubeNotificationOutbox{
-		{ID: 10},
-		{ID: 20},
-		{ID: 30},
-	}
-
-	got := collectOutboxIDs(items)
-	want := []int64{10, 20, 30}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("collectOutboxIDs() = %#v, want %#v", got, want)
-	}
-
-	if out := collectOutboxIDs(nil); out != nil {
-		t.Fatalf("collectOutboxIDs(nil) = %#v, want nil", out)
 	}
 }
 

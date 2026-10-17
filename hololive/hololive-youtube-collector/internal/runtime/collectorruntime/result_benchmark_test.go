@@ -27,7 +27,7 @@ func BenchmarkObservePublished(b *testing.B) {
 
 			executor := &collectionExecutor{metrics: NewMetrics(prometheus.NewRegistry())}
 			result := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
-				sourceobservation.NewPublishedObservation(1, sourceobservation.PublishInserted, 0),
+				{ObservationID: 1, Outcome: sourceobservation.PublishInserted, Ordinal: 0},
 			}}
 			executor.observePublished(output, result)
 			b.ReportAllocs()

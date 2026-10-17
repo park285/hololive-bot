@@ -43,7 +43,7 @@ func skipIfNoCliproxy(t *testing.T) {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
 	}
 
-	if err := loadEnv(); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := loadEnv(); err != nil {
 		t.Fatalf("load env: %v", err)
 	}
 
@@ -53,29 +53,13 @@ func skipIfNoCliproxy(t *testing.T) {
 }
 
 func loadEnv() error {
-	// monorepo 루트 .env 또는 모듈 로컬 .env를 순서대로 탐색한다.
-	candidates := []string{
-		os.Getenv("HOLOLIVE_API_ENV_FILE"),
-		"../../../../.env",
-		"../../../../../../.env",
+	// integration-tests runbook 계약: 명시한 HOLOLIVE_API_ENV_FILE만 읽고, 지정하지 않으면 프로세스 env만 쓴다.
+	path := strings.TrimSpace(os.Getenv("HOLOLIVE_API_ENV_FILE"))
+	if path == "" {
+		return nil
 	}
 
-	var (
-		data []byte
-		err  error
-	)
-
-	for _, path := range candidates {
-		if strings.TrimSpace(path) == "" {
-			continue
-		}
-
-		data, err = readFileWithinRoot(path)
-		if err == nil {
-			break
-		}
-	}
-
+	data, err := readFileWithinRoot(path)
 	if err != nil {
 		return fmt.Errorf("read file within root: %w", err)
 	}

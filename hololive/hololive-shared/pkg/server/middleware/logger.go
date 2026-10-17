@@ -169,13 +169,6 @@ func appendOptionalHeaderAttr(attrs []slog.Attr, key, value string) []slog.Attr 
 	return attrs
 }
 
-// shouldSkipPath: 경로가 스킵 대상인지 확인합니다.
-func shouldSkipPath(path string, exactSkip map[string]bool, prefixSkip, suffixSkip []string) bool {
-	matcher := skipPathMatcher{exact: exactSkip, prefix: prefixSkip, suffix: suffixSkip}
-
-	return matcher.shouldSkip(path)
-}
-
 func (m *skipPathMatcher) shouldSkip(path string) bool {
 	if m.exact[path] {
 		return true

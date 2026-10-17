@@ -197,16 +197,6 @@ func TestGetWeekRange_MondayKST(t *testing.T) {
 	}
 }
 
-func TestScheduler_Interface(t *testing.T) {
-	var _ interface {
-		Start(ctx context.Context)
-		Stop()
-		SendWeeklyNotification(ctx context.Context) (triggercontracts.Result, error)
-	}
-
-	t.Log("Scheduler interface verified")
-}
-
 type mockEventRepository struct {
 	rooms          []*domain.EventRoomSubscription
 	roomsErr       error

@@ -27,11 +27,6 @@ export function listBackstagePosts(feed, postType) {
   throw error;
 }
 
-export async function fetchCommunityPosts(options = {}) {
-  const result = await fetchCommunityFeed(options);
-  return result.posts;
-}
-
 /**
  * @param {YouTubeJSFetchOptions} [options]
  * @returns {Promise<Omit<import("./contracts.d.ts").CommunityResult, "protocol_version">>}

@@ -22,14 +22,7 @@ package api
 
 import (
 	"context"
-	"log/slog"
-	"net/http"
-	"net/http/httptest"
-	"testing"
 
-	"github.com/gin-gonic/gin"
-
-	apiserver "github.com/kapu/hololive-api/internal/httpapi"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
@@ -47,56 +40,4 @@ type stubMajorEventMonthlyScheduler struct {
 
 func (s *stubMajorEventMonthlyScheduler) SendMonthlyNotification(_ context.Context) (triggercontracts.Result, error) {
 	return triggercontracts.NewResult(1, 0, 0), s.err
-}
-
-type stubMemberNewsWeeklyScheduler struct {
-	err error
-}
-
-func (s *stubMemberNewsWeeklyScheduler) SendWeeklyDigest(_ context.Context) (triggercontracts.Result, error) {
-	return triggercontracts.NewResult(1, 0, 0), s.err
-}
-
-func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-
-	handler := apiserver.NewTriggerHandler(
-		&stubMajorEventScheduler{},
-		&stubMajorEventMonthlyScheduler{},
-		nil,
-		slog.New(slog.DiscardHandler),
-	)
-	handler.RegisterInternalRoutesWithoutAuth(router.Group(""))
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
-	}
-}
-
-func TestTriggerHandler_MemberNewsWeekly_Success(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	router := gin.New()
-
-	handler := apiserver.NewTriggerHandler(
-		&stubMajorEventScheduler{},
-		&stubMajorEventMonthlyScheduler{},
-		&stubMemberNewsWeeklyScheduler{},
-		slog.New(slog.DiscardHandler),
-	)
-	handler.RegisterInternalRoutesWithoutAuth(router.Group(""))
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
 }

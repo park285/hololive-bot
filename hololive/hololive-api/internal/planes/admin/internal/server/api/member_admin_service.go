@@ -34,15 +34,6 @@ func NewMemberAdminService(repository *member.Repository, cache memberAdminCache
 	return &MemberAdminService{repository: repository, cache: cache, activity: activity, logger: loggerOrDefault(logger)}
 }
 
-func (s *MemberAdminService) Create(ctx context.Context, request CreateMemberRequest) (MemberMutationResult, error) {
-	m, err := request.member()
-	if err != nil {
-		return MemberMutationResult{}, err
-	}
-
-	return s.create(ctx, m)
-}
-
 func (s *MemberAdminService) create(ctx context.Context, m *domain.Member) (MemberMutationResult, error) {
 	replayed, err := s.repository.CreateMemberOrMatch(ctx, m)
 	if err != nil {

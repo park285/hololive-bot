@@ -147,7 +147,7 @@ func TestRDY005CollisionOnlyTerminalHasZeroCandidates(t *testing.T) {
 
 	scheduler := &leaseScheduler{executor: &collectionExecutor{readiness: &readinessTracker{}}}
 	published := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
-		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishCollision, 0),
+		{ObservationID: 11, Outcome: sourceobservation.PublishCollision, Ordinal: 0},
 	}}
 	scheduler.executor.recordTerminalSuccess(&published)
 
@@ -162,9 +162,9 @@ func TestRDY006InsertedAndDuplicateAreHandoffCandidates(t *testing.T) {
 
 	scheduler := &leaseScheduler{executor: &collectionExecutor{readiness: &readinessTracker{}}}
 	published := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
-		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishInserted, 0),
-		sourceobservation.NewPublishedObservation(12, sourceobservation.PublishDuplicate, 1),
-		sourceobservation.NewPublishedObservation(13, sourceobservation.PublishCollision, 2),
+		{ObservationID: 11, Outcome: sourceobservation.PublishInserted, Ordinal: 0},
+		{ObservationID: 12, Outcome: sourceobservation.PublishDuplicate, Ordinal: 1},
+		{ObservationID: 13, Outcome: sourceobservation.PublishCollision, Ordinal: 2},
 	}}
 	scheduler.executor.recordTerminalSuccess(&published)
 

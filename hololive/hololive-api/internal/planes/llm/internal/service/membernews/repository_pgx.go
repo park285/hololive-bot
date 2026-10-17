@@ -22,7 +22,6 @@ package membernews
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,16 +59,4 @@ func (q *pgxMemberNewsQuerier) Query(ctx context.Context, sql string, args ...an
 
 func (q *pgxMemberNewsQuerier) QueryRow(ctx context.Context, sql string, args ...any) rowScanner {
 	return q.pool.QueryRow(ctx, sql, args...)
-}
-
-type nilRowScanner struct {
-	err error
-}
-
-func (n nilRowScanner) Scan(_ ...any) error {
-	if n.err != nil {
-		return n.err
-	}
-
-	return errors.New("row scanner is nil")
 }

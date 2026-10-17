@@ -701,13 +701,13 @@ func TestValidateRuntimeIrisBaseURL_TransportSchemeAndHTTPS(t *testing.T) {
 			t.Setenv(irisH3ServerNameEnv, testIrisHost)
 			t.Setenv(irisBaseURLAllowedHostsEnv, "iris.example,127.0.0.1")
 
-			_, err := validateRuntimeIrisBaseURL(tc.baseURL)
+			_, err := validateRuntimeIrisBaseURLFileOverride(tc.baseURL, "", nil)
 			if tc.wantErr && err == nil {
-				t.Fatal("validateRuntimeIrisBaseURL() error = nil, want error")
+				t.Fatal("validateRuntimeIrisBaseURLFileOverride() error = nil, want error")
 			}
 
 			if !tc.wantErr && err != nil {
-				t.Fatalf("validateRuntimeIrisBaseURL() error = %v, want nil", err)
+				t.Fatalf("validateRuntimeIrisBaseURLFileOverride() error = %v, want nil", err)
 			}
 		})
 	}

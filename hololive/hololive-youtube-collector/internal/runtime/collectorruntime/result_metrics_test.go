@@ -31,9 +31,9 @@ func TestObservePublishedPreservesMetadataAndSkipsUnknownResults(t *testing.T) {
 	registerer := prometheus.NewPedanticRegistry()
 	executor := &collectionExecutor{metrics: NewMetrics(registerer)}
 	executor.observePublished(output, sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
-		sourceobservation.NewPublishedObservation(1, sourceobservation.PublishInserted, 0),
-		sourceobservation.NewPublishedObservation(2, sourceobservation.PublishDuplicate, 1),
-		sourceobservation.NewPublishedObservation(3, sourceobservation.PublishCollision, 2),
+		{ObservationID: 1, Outcome: sourceobservation.PublishInserted, Ordinal: 0},
+		{ObservationID: 2, Outcome: sourceobservation.PublishDuplicate, Ordinal: 1},
+		{ObservationID: 3, Outcome: sourceobservation.PublishCollision, Ordinal: 2},
 		{ObservationID: 4, Outcome: "UNKNOWN", Ordinal: 3},
 	}})
 

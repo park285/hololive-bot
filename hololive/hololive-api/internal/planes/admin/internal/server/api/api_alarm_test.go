@@ -25,21 +25,11 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-func TestAlarmHandler_HandlerSignatures(t *testing.T) {
-	t.Parallel()
-
-	var (
-		_ gin.HandlerFunc = (&AlarmHandler{}).GetAlarms
-		_ gin.HandlerFunc = (&AlarmHandler{}).DeleteAlarm
-	)
-}
 
 func TestAlarmHandler_GetAlarmsRequiresAlarmDependency(t *testing.T) {
 	t.Parallel()

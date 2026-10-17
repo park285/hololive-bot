@@ -179,9 +179,9 @@ func TestPublishedOutcomeMapsExactOrdinals(t *testing.T) {
 	t.Parallel()
 
 	result := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
-		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishInserted, 0),
-		sourceobservation.NewPublishedObservation(12, sourceobservation.PublishDuplicate, 1),
-		sourceobservation.NewPublishedObservation(13, sourceobservation.PublishCollision, 2),
+		{ObservationID: 11, Outcome: sourceobservation.PublishInserted, Ordinal: 0},
+		{ObservationID: 12, Outcome: sourceobservation.PublishDuplicate, Ordinal: 1},
+		{ObservationID: 13, Outcome: sourceobservation.PublishCollision, Ordinal: 2},
 	}}
 	if got, ok := publishedOutcome(result, 0); !ok || got != outcomeInserted {
 		t.Fatalf("inserted = %q ok=%v", got, ok)
@@ -200,7 +200,7 @@ func TestPublishedOutcomeRejectsMissingRowAndUnknownOutcome(t *testing.T) {
 	t.Parallel()
 
 	result := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
-		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishInserted, 0),
+		{ObservationID: 11, Outcome: sourceobservation.PublishInserted, Ordinal: 0},
 	}}
 	if got, ok := publishedOutcome(result, 1); ok || got != "" {
 		t.Fatalf("missing row = %q ok=%v", got, ok)

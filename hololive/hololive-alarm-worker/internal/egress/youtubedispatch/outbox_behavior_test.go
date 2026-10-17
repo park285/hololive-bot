@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
 func TestErrDeliveryDedupeKeyRequiredMatchesInternalSentinel(t *testing.T) {
@@ -84,30 +83,6 @@ func TestBuildChannelPostDeliverySummariesAggregatesPerChannelLatestFirst(t *tes
 
 	if unsent.CommunityDetectedPostCount != 1 {
 		t.Fatalf("UC-a community detected = %d, want 1", unsent.CommunityDetectedPostCount)
-	}
-}
-
-func TestBuildPostLatencyClassificationWithoutRowReportsInsufficientEvidence(t *testing.T) {
-	result := timeline.BuildPostLatencyClassification(nil)
-
-	if result.Status != timeline.PostLatencyClassificationStatusInsufficientEvidence {
-		t.Fatalf("Status = %q, want insufficient evidence", result.Status)
-	}
-
-	if got, want := string(result.Status), "insufficient_evidence"; got != want {
-		t.Fatalf("Status wire value = %q, want %q", got, want)
-	}
-
-	if result.DelaySource != timeline.PostDelaySourceNone {
-		t.Fatalf("DelaySource = %q, want none", result.DelaySource)
-	}
-
-	if result.InternalDelayCause != timeline.PostInternalDelayCauseNone {
-		t.Fatalf("InternalDelayCause = %q, want none", result.InternalDelayCause)
-	}
-
-	if result.ThresholdMillis <= 0 {
-		t.Fatalf("ThresholdMillis = %d, want positive", result.ThresholdMillis)
 	}
 }
 

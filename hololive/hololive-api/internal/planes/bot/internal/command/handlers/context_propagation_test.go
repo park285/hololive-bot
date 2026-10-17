@@ -150,7 +150,7 @@ func (p *trackedMemberProvider) FindMembersByAlias(ctx context.Context, _ string
 	return []*domain.Member{}, nil
 }
 
-func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
+func TestFindActiveMemberWithCandidatesOrError_UsesRequestContextForMatcher(t *testing.T) {
 	t.Parallel()
 
 	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
@@ -171,7 +171,7 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 		},
 	}
 
-	channel, err := handlercore.FindActiveMemberOrError(reqCtx, deps, testRoomID, testMemberAqua)
+	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(reqCtx, deps, testRoomID, testMemberAqua, "일정")
 	require.NoError(t, err)
 	require.NotNil(t, channel)
 	assert.Equal(t, testChannelAqua, channel.ID)

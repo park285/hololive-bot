@@ -27,25 +27,14 @@ const (
 )
 
 type runtimeIrisBaseURLValidationOptions struct {
-	allowUnconfiguredHost bool
-	transport             string
-	warnUnvalidatedHost   func(string)
-}
-
-func validateRuntimeIrisBaseURL(raw string) (string, error) {
-	out, err := validateRuntimeIrisBaseURLWithOptions(raw, runtimeIrisBaseURLValidationOptions{})
-	if err != nil {
-		return out, fmt.Errorf("validate runtime iris base URL with options: %w", err)
-	}
-
-	return out, nil
+	transport           string
+	warnUnvalidatedHost func(string)
 }
 
 func validateRuntimeIrisBaseURLFileOverride(raw, transport string, warnUnvalidatedHost func(string)) (string, error) {
 	out, err := validateRuntimeIrisBaseURLWithOptions(raw, runtimeIrisBaseURLValidationOptions{
-		allowUnconfiguredHost: true,
-		transport:             transport,
-		warnUnvalidatedHost:   warnUnvalidatedHost,
+		transport:           transport,
+		warnUnvalidatedHost: warnUnvalidatedHost,
 	})
 	if err != nil {
 		return out, fmt.Errorf("validate runtime iris base URL with options: %w", err)
@@ -167,7 +156,7 @@ func validateRuntimeIrisBaseURLHost(host string, opts runtimeIrisBaseURLValidati
 		return nil
 	}
 
-	if opts.allowUnconfiguredHost && !runtimeIrisBaseURLHostAllowlistConfigured() {
+	if !runtimeIrisBaseURLHostAllowlistConfigured() {
 		if opts.warnUnvalidatedHost != nil {
 			opts.warnUnvalidatedHost(host)
 		}

@@ -35,7 +35,10 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
-const testResponseKeyError = "error"
+const (
+	testResponseKeyError = "error"
+	testTriggerAPIKey    = "trigger-test-key"
+)
 
 type stubMajorEvent struct {
 	err    error
@@ -72,16 +75,18 @@ func newTriggerRouter(h *TriggerHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	h.RegisterInternalRoutesWithoutAuth(r.Group("/"))
+	h.RegisterInternalRoutesWithAuth(r.Group("/"), testTriggerAPIKey)
 
 	return r
 }
 
-// postTrigger: 트리거 엔드포인트에 POST 요청을 보내고 응답을 반환합니다.
+// postTrigger: 운영과 같은 인증 경로를 통과하도록 API 키를 실어 트리거 엔드포인트에 POST 요청을 보냅니다.
 func postTrigger(t *testing.T, r *gin.Engine, path string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, http.NoBody)
+	req.Header.Set(common.APIKeyHeader, testTriggerAPIKey)
+
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 

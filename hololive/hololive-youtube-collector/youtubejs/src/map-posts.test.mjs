@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mapPost, mapPosts, parseShortNumber, textOf, thumbnailsOf } from "./map-posts.mjs";
+import { mapPost, parseShortNumber, textOf, thumbnailsOf } from "./map-posts.mjs";
 
 test("textOf reads YouTube.js Text-like objects", () => {
   assert.equal(textOf({ toString: () => "hello" }), "hello");
@@ -74,12 +74,4 @@ test("mapPost reads attached video ids", () => {
 
 test("mapPost drops posts without ids", () => {
   assert.equal(mapPost({ content: "no id" }), null);
-});
-
-test("mapPosts stops at maxResults", () => {
-  const mapped = mapPosts([{ id: "a" }, { id: "b" }, { id: "c" }], 2);
-  assert.deepEqual(
-    mapped.map((post) => post.postId),
-    ["a", "b"],
-  );
 });

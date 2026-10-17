@@ -25,10 +25,10 @@ func TestRetrySchedulePreservesExplicitCooldown(t *testing.T) {
 		err  error
 		at   time.Time
 	}{
-		{name: "429 delta seconds", err: collecterr.FromStatus("holodex", http.StatusTooManyRequests, "600", time.Now())},
-		{name: "429 HTTP date beyond one hour", err: collecterr.FromStatus("holodex", http.StatusTooManyRequests, at.Format(http.TimeFormat), time.Now()), at: at},
-		{name: "503 HTTP date", err: collecterr.FromStatus("official", http.StatusServiceUnavailable, at.Format(http.TimeFormat), time.Now()), at: at},
-		{name: "CooldownUntil", err: collecterr.CooldownUntil("helper cooldown", at), at: at},
+		{name: "429 delta seconds", err: providerCooldown("holodex status 429", "600")},
+		{name: "429 HTTP date beyond one hour", err: providerCooldown("holodex status 429", at.Format(http.TimeFormat)), at: at},
+		{name: "503 HTTP date", err: providerCooldown("official status 503", at.Format(http.TimeFormat)), at: at},
+		{name: "helper retry-at cooldown", err: cooldownAt(t, "helper cooldown", at), at: at},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -80,7 +80,7 @@ func TestFailedRunPersistsProviderRetryAfterBeyondMaximum(t *testing.T) {
 					header = requested.Format(http.TimeFormat)
 				}
 
-				return collection.CollectResult{}, collecterr.FromStatus("holodex", http.StatusTooManyRequests, header, time.Now())
+				return collection.CollectResult{}, providerCooldown("holodex status 429", header)
 			}
 
 			executor, spec := newExecutorFixture(t, runner, &fatal)
@@ -119,7 +119,7 @@ func TestRetryScheduleKeepsOrdinaryAndInvalidHintsBounded(t *testing.T) {
 	executor := &collectionExecutor{retryBounds: collection.RetryBounds{Minimum: cfg.RetryMin, Maximum: cfg.RetryMax}}
 
 	for _, header := range []string{"", " ", "0", "-1", "NaN", "Inf", "1.5", "2147483648", "999999999999999999999"} {
-		err := collecterr.FromStatus("holodex", http.StatusTooManyRequests, header, time.Now())
+		err := providerCooldown("holodex status 429", header)
 		assertOrdinaryRetryDelay(t, executor, err, cfg.RetryMin+(cfg.RetryMax-cfg.RetryMin)/2)
 	}
 
@@ -156,7 +156,7 @@ func TestRetryScheduleCooldownPastUsesMinimumAndInvalidBoundsFail(t *testing.T) 
 	t.Parallel()
 
 	executor := &collectionExecutor{retryBounds: collection.RetryBounds{Minimum: time.Second, Maximum: time.Minute}}
-	cause := collecterr.CooldownUntil("past cooldown", time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC))
+	cause := cooldownAt(t, "past cooldown", time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC))
 	before := time.Now().UTC()
 	schedule, err := executor.retrySchedule(cause)
 	after := time.Now().UTC()

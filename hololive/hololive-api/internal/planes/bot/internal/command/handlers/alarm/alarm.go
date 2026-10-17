@@ -298,7 +298,7 @@ func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName 
 
 	channel, found, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
 	if err != nil {
-		if replyErr := c.replyAlarmMemberLookupFailure(ctx, room, memberName, err); replyErr != nil {
+		if replyErr := c.replyAlarmMemberLookupFailure(ctx, room, err); replyErr != nil {
 			return nil, fmt.Errorf("reply alarm member lookup failure: %w", replyErr)
 		}
 
@@ -316,14 +316,11 @@ func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName 
 	return &alarmTarget{ChannelID: channel.ID, Name: channel.Name}, nil
 }
 
-func (c *AlarmCommand) replyAlarmMemberLookupFailure(ctx context.Context, room, memberName string, lookupErr error) error {
+// 동명이인만 사용자 응답으로 처리한다. 원천 조회 실패는 "멤버 없음"으로 바꾸지 않고 원인 오류로 돌려준다.
+func (c *AlarmCommand) replyAlarmMemberLookupFailure(ctx context.Context, room string, lookupErr error) error {
 	ambiguousErr, ok := stdErrors.AsType[*matcher.AmbiguousMatchError](lookupErr)
 	if !ok {
-		if err := c.replyAlarmMemberNotFound(ctx, room, memberName); err != nil {
-			return fmt.Errorf("reply alarm member not found: %w", err)
-		}
-
-		return nil
+		return fmt.Errorf("find alarm member candidates: %w", lookupErr)
 	}
 
 	message := c.Deps().Formatter.FormatAmbiguousMembers(ctx, ambiguousErr.Candidates, "알람 추가")

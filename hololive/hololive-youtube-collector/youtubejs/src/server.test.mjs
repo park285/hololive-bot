@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
-  createHelperServer,
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
+  listenUnix,
 } from "./server.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 
@@ -152,7 +155,7 @@ test("handleChannelRequest rejects fields outside the validated response contrac
 
 test("health is 503 until bootstrap and collection is helper_not_ready", async () => {
   const http = await import("node:http");
-  const server = createHelperServer({
+  const helper = await startHelper({
     fetchCommunity() {
       return {
         posts: [],
@@ -163,35 +166,33 @@ test("health is 503 until bootstrap and collection is helper_not_ready", async (
       };
     },
   });
-  await listenLocal(server);
   try {
-    const health = await request(http, server, "GET", "/health");
+    const health = await request(http, helper.socketPath, "GET", "/health");
     assert.equal(health.status, 503);
     assert.equal(health.body.state, "UNCONFIGURED");
-    const collection = await request(http, server, "POST", "/v1/community", rpcBody({ channel_id: "UC_TEST" }));
+    const collection = await request(http, helper.socketPath, "POST", "/v1/community", rpcBody({ channel_id: "UC_TEST" }));
     assert.equal(collection.status, 503);
     assert.equal(collection.body.error.code, "helper_not_ready");
-    const boot = await request(http, server, "POST", "/v1/bootstrap", JSON.stringify({
+    const boot = await request(http, helper.socketPath, "POST", "/v1/bootstrap", JSON.stringify({
       protocol_version: 1,
       limits: { request_body_bytes: 65536, response_body_bytes: 1048576, max_inflight: 2 },
     }));
     assert.equal(boot.status, 200);
     assert.equal(boot.body.state, "READY");
-    const ready = await request(http, server, "GET", "/health");
+    const ready = await request(http, helper.socketPath, "GET", "/health");
     assert.equal(ready.status, 200);
     assert.equal(ready.body.state, "READY");
     assert.equal(ready.body.max_inflight, 2);
   } finally {
-    await closeServer(server);
+    await helper.close();
   }
 });
 
 test("RPC-009 and RPC-010 reject declared and chunked request overflow once", async () => {
   const http = await import("node:http");
-  const server = createHelperServer();
-  await listenLocal(server);
+  const helper = await startHelper();
   try {
-    await request(http, server, "POST", "/v1/bootstrap", JSON.stringify({
+    await request(http, helper.socketPath, "POST", "/v1/bootstrap", JSON.stringify({
       protocol_version: 1,
       limits: { request_body_bytes: 64, response_body_bytes: 1048576, max_inflight: 2 },
     }));
@@ -201,14 +202,14 @@ test("RPC-009 and RPC-010 reject declared and chunked request overflow once", as
       max_success_response_bytes: 1048576,
       padding: "x".repeat(128),
     });
-    const declared = await request(http, server, "POST", "/v1/community", oversized);
+    const declared = await request(http, helper.socketPath, "POST", "/v1/community", oversized);
     assert.equal(declared.status, 413);
     assert.equal(declared.body.error.code, "request_too_large");
-    const chunked = await chunkedRequest(http, server, "/v1/community", oversized);
+    const chunked = await chunkedRequest(http, helper.socketPath, "/v1/community", oversized);
     assert.equal(chunked.status, 413);
     assert.equal(chunked.body.error.code, "request_too_large");
   } finally {
-    await closeServer(server);
+    await helper.close();
   }
 });
 
@@ -223,7 +224,7 @@ test("RPC-012 client disconnect aborts only the matching request context", async
   let hangSignal;
   /** @type {AbortSignal | undefined} */
   let peerSignal;
-  const server = createHelperServer({
+  const helper = await startHelper({
     fetchCommunity({ channelId }) {
       const signal = currentRequestSignal();
       if (signal == null) {
@@ -256,17 +257,13 @@ test("RPC-012 client disconnect aborts only the matching request context", async
       });
     },
   });
-  await listenLocal(server);
   try {
-    await request(http, server, "POST", "/v1/bootstrap", JSON.stringify({
+    await request(http, helper.socketPath, "POST", "/v1/bootstrap", JSON.stringify({
       protocol_version: 1,
       limits: { request_body_bytes: 65536, response_body_bytes: 1048576, max_inflight: 2 },
     }));
-    const address = server.address();
-    assert.ok(address != null && typeof address !== "string");
     const hangClient = http.request({
-      host: "127.0.0.1",
-      port: address.port,
+      socketPath: helper.socketPath,
       method: "POST",
       path: "/v1/community",
       headers: { "content-type": "application/json" },
@@ -275,7 +272,7 @@ test("RPC-012 client disconnect aborts only the matching request context", async
     hangClient.write(rpcBody({ channel_id: "UC_HANG" }));
     hangClient.end();
     await hangReady;
-    const peer = request(http, server, "POST", "/v1/community", rpcBody({ channel_id: "UC_PEER" }));
+    const peer = request(http, helper.socketPath, "POST", "/v1/community", rpcBody({ channel_id: "UC_PEER" }));
     await new Promise((resolve) => setTimeout(resolve, 10));
     hangClient.destroy();
     const peerResult = await peer;
@@ -283,7 +280,7 @@ test("RPC-012 client disconnect aborts only the matching request context", async
     assert.equal(hangSignal?.aborted, true);
     assert.equal(peerSignal?.aborted, false);
   } finally {
-    await closeServer(server);
+    await helper.close();
   }
 });
 
@@ -291,12 +288,32 @@ function rpcBody(fields) {
   return JSON.stringify({ protocol_version: 1, max_success_response_bytes: 1048576, ...fields });
 }
 
-/** @param {import("node:http").Server} server */
-function listenLocal(server) {
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => resolve(undefined));
-  });
+/**
+ * 운영 진입점 listenUnix로 임시 socket에 helper를 띄웁니다.
+ * listenUnix는 socket 삭제를 Go에 맡기고 프로세스 umask를 077로 바꾸므로, 종료할 때 임시 디렉터리째 지웁니다.
+ * @param {Partial<import("./contracts.d.ts").FetcherSet>} [fetchers]
+ */
+async function startHelper(fetchers = {}) {
+  const dir = await mkdtemp(join(tmpdir(), "youtubejs-helper-"));
+  const socketPath = join(dir, "helper.sock");
+  /** @type {import("node:http").Server} */
+  let server;
+  try {
+    server = await listenUnix(socketPath, { fetchers });
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    socketPath,
+    async close() {
+      try {
+        await closeServer(server);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  };
 }
 
 /** @param {import("node:http").Server} server */
@@ -308,20 +325,15 @@ function closeServer(server) {
 
 /**
  * @param {typeof import("node:http")} http
- * @param {import("node:http").Server} server
+ * @param {string} socketPath
  * @param {string} method
  * @param {string} path
  * @param {string} [body]
  */
-function request(http, server, method, path, body) {
-  const address = server.address();
-  if (address == null || typeof address === "string") {
-    return Promise.reject(new Error("listening address missing"));
-  }
+function request(http, socketPath, method, path, body) {
   return new Promise((resolve, reject) => {
     const client = http.request({
-      host: "127.0.0.1",
-      port: address.port,
+      socketPath,
       method,
       path,
       headers: body ? { "content-type": "application/json", "content-length": Buffer.byteLength(body) } : {},
@@ -337,15 +349,10 @@ function request(http, server, method, path, body) {
   });
 }
 
-function chunkedRequest(http, server, path, body) {
-  const address = server.address();
-  if (address == null || typeof address === "string") {
-    return Promise.reject(new Error("listening address missing"));
-  }
+function chunkedRequest(http, socketPath, path, body) {
   return new Promise((resolve, reject) => {
     const client = http.request({
-      host: "127.0.0.1",
-      port: address.port,
+      socketPath,
       method: "POST",
       path,
       headers: { "content-type": "application/json", "transfer-encoding": "chunked" },

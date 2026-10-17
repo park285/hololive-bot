@@ -80,17 +80,9 @@ func NewTriggerHandler(
 	}
 }
 
-func (h *TriggerHandler) RegisterInternalRoutesWithoutAuth(rg *gin.RouterGroup) {
-	h.registerInternalRoutes(rg, httputil.AdminAuthConfig{Disabled: true})
-}
-
 func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, apiKey string) {
-	h.registerInternalRoutes(rg, httputil.AdminAuthConfig{APIKey: apiKey})
-}
-
-func (h *TriggerHandler) registerInternalRoutes(rg *gin.RouterGroup, authConfig httputil.AdminAuthConfig) {
 	internal := rg.Group(triggercontracts.BasePath)
-	internal.Use(middleware.AuthMiddleware(authConfig))
+	internal.Use(middleware.AuthMiddleware(httputil.AdminAuthConfig{APIKey: apiKey}))
 	internal.POST(triggercontracts.MajorEventWeeklyRoute, h.TriggerWeeklyNotification)
 	internal.POST(triggercontracts.MajorEventMonthlyRoute, h.TriggerMonthlyNotification)
 	internal.POST(triggercontracts.MemberNewsWeeklyRoute, h.TriggerMemberNewsWeekly)

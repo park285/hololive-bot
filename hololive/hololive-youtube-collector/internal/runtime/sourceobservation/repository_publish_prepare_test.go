@@ -222,8 +222,8 @@ func TestValidatePublishBatchResultExactCardinalityAndOrdinal(t *testing.T) {
 	t.Parallel()
 
 	valid := PublishBatchResult{Results: []PublishedObservation{
-		NewPublishedObservation(1, PublishInserted, 0),
-		NewPublishedObservation(2, PublishDuplicate, 1),
+		{ObservationID: 1, Outcome: PublishInserted, Ordinal: 0},
+		{ObservationID: 2, Outcome: PublishDuplicate, Ordinal: 1},
 	}}
 	if err := ValidatePublishBatchResult(2, valid); err != nil {
 		t.Fatal(err)

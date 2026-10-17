@@ -139,43 +139,22 @@ func TestERR008ContextDeadlineAndCancelMapping(t *testing.T) {
 func TestERR009RetryAfterDeltaSecondsAndHTTPDate(t *testing.T) {
 	t.Parallel()
 
+	// 429/503 상태별 오류 분류는 providerhttp 테스트가 소유한다. 여기서는 헤더 해석 경계만 고정한다.
 	now := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
-	delta := FromStatus("holodex", http.StatusTooManyRequests, "12", now)
 
-	if CodeOf(delta) != contract.ErrorCooldown || RetryOf(delta).Kind() != RetryAfter || RetryOf(delta).After() != 12*time.Second {
-		t.Fatalf("delta-seconds hint = %s/%v", CodeOf(delta), RetryOf(delta))
+	if delta := ParseRetryAfter("12", now); delta.Kind() != RetryAfter || delta.After() != 12*time.Second {
+		t.Fatalf("delta-seconds hint = %#v", delta)
 	}
 
 	httpDate := now.Add(30 * time.Second).UTC().Format(http.TimeFormat)
-	dated := FromStatus("holodex", http.StatusTooManyRequests, httpDate, now)
-
-	if RetryOf(dated).Kind() != RetryAt || !RetryOf(dated).At().Equal(now.Add(30*time.Second)) {
-		t.Fatalf("HTTP-date hint = %#v", RetryOf(dated))
+	if dated := ParseRetryAfter(httpDate, now); dated.Kind() != RetryAt || !dated.At().Equal(now.Add(30*time.Second)) {
+		t.Fatalf("HTTP-date hint = %#v", dated)
 	}
 
-	overflow := FromStatus("holodex", http.StatusTooManyRequests, "2147483648", now)
-	if CodeOf(overflow) != contract.ErrorCooldown || RetryOf(overflow).Kind() != RetryDefault {
-		t.Fatalf("overflow = %s/%v", CodeOf(overflow), RetryOf(overflow))
-	}
-
-	invalid := FromStatus("holodex", http.StatusTooManyRequests, "not-a-date", now)
-	if CodeOf(invalid) != contract.ErrorCooldown || RetryOf(invalid).Kind() != RetryDefault {
-		t.Fatalf("invalid = %s/%v", CodeOf(invalid), RetryOf(invalid))
-	}
-
-	zero := FromStatus("holodex", http.StatusTooManyRequests, "0", now)
-	if RetryOf(zero).Kind() != RetryDefault {
-		t.Fatalf("zero delta = %v", RetryOf(zero))
-	}
-
-	svc := FromStatus("holodex", http.StatusServiceUnavailable, "5", now)
-	if CodeOf(svc) != contract.ErrorCooldown || RetryOf(svc).Kind() != RetryAfter {
-		t.Fatalf("503 + Retry-After = %s/%v", CodeOf(svc), RetryOf(svc))
-	}
-
-	bare503 := FromStatus("holodex", http.StatusServiceUnavailable, "", now)
-	if CodeOf(bare503) != contract.ErrorCollectionFailed || ClassOf(bare503) != contract.ClassTransient {
-		t.Fatalf("503 without Retry-After = %s/%s", CodeOf(bare503), ClassOf(bare503))
+	for _, value := range []string{"", "2147483648", "not-a-date", "0"} {
+		if hint := ParseRetryAfter(value, now); hint.Kind() != RetryDefault {
+			t.Fatalf("ParseRetryAfter(%q) = %#v, want default", value, hint)
+		}
 	}
 }
 

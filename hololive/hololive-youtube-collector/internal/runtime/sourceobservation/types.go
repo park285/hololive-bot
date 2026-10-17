@@ -63,10 +63,6 @@ type PublishedObservation struct {
 	HasAcceptedInterval bool
 }
 
-func NewPublishedObservation(observationID int64, outcome PublishOutcome, ordinal int) PublishedObservation {
-	return PublishedObservation{ObservationID: observationID, Outcome: outcome, Ordinal: ordinal}
-}
-
 type PublishBatchResult struct {
 	Results []PublishedObservation
 	// EncodedBytes는 발행 SQL에 보낸 관측 JSON 크기다. MaxPublishBatchBytes 상한 근접 빈도를 관측하는 데 쓴다.

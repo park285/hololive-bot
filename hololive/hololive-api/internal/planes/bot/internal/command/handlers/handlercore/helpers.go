@@ -32,53 +32,6 @@ import (
 
 var ErrMemberLookupHandled = errors.New("member lookup handled")
 
-// 성공 시 (*domain.Channel, nil)을, 사용자-facing 응답을 보낸 경우 ErrMemberLookupHandled를 반환한다.
-func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
-	if err := ValidateMemberLookupDependencies(deps); err != nil {
-		return nil, fmt.Errorf("member lookup dependencies not configured: %w", err)
-	}
-
-	member, found, err := deps.Matcher.FindBestMatch(ctx, memberName)
-	if err != nil {
-		return nil, fmt.Errorf("find best member match: %w", err)
-	}
-
-	if !found {
-		if replyErr := sendMemberNotFound(ctx, deps, room, memberName); replyErr != nil {
-			return nil, fmt.Errorf("send member not found: %w", replyErr)
-		}
-
-		return nil, ErrMemberLookupHandled
-	}
-
-	if member == nil {
-		return nil, errors.New("member matcher returned found without channel")
-	}
-
-	return member, nil
-}
-
-// !라이브, !일정, !알람 명령에서 사용한다.
-// 성공 시 (*domain.Channel, nil)을, 사용자-facing 응답을 보낸 경우 ErrMemberLookupHandled를 반환한다.
-func FindActiveMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
-	channel, err := FindMemberOrError(ctx, deps, room, memberName)
-	if err != nil {
-		return nil, fmt.Errorf("find member: %w", err)
-	}
-
-	// Matcher를 통해 Member 정보 조회하여 졸업 상태 확인
-	blocked, err := blockGraduatedMember(ctx, deps, room, channel.ID)
-	if err != nil {
-		return nil, fmt.Errorf("block graduated member: %w", err)
-	}
-
-	if blocked {
-		return nil, ErrMemberLookupHandled
-	}
-
-	return channel, nil
-}
-
 func blockGraduatedMember(ctx context.Context, deps *Dependencies, room, channelID string) (bool, error) {
 	if deps.Matcher == nil {
 		return false, nil
@@ -151,8 +104,9 @@ func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependenci
 		return nil, fmt.Errorf("find member with candidates: %w", err)
 	}
 
+	// 응답을 보내지 않았으므로 handled로 보고하지 않고 matcher 불변식 위반을 오류로 드러낸다.
 	if channel == nil {
-		return nil, ErrMemberLookupHandled
+		return nil, errors.New("member matcher returned found without channel")
 	}
 
 	blocked, err := blockGraduatedMember(ctx, deps, room, channel.ID)
