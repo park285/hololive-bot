@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
+	"github.com/stretchr/testify/require"
 
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
@@ -56,58 +57,40 @@ func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
 
 func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "testdata", "stack-worker-profile-youtube-collector.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	raw = bytes.Replace(raw, []byte(`"enabled": true`), []byte(`"enabled": false`), 1)
 
 	directory := t.TempDir()
 
 	root, err := os.OpenRoot(directory)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	t.Cleanup(func() {
-		if closeErr := root.Close(); closeErr != nil {
-			t.Error(closeErr)
-		}
-	})
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
 
 	effective := filepath.Join(directory, "release.json")
 	source := filepath.Join(directory, "desired.json")
 
 	for _, name := range []string{"release.json", "desired.json"} {
-		if writeErr := root.WriteFile(name, raw, 0o600); writeErr != nil {
-			t.Fatal(writeErr)
-		}
+		require.NoError(t, root.WriteFile(name, raw, 0o600))
 	}
 
 	t.Setenv(workercontract.ProfileFileEnv, effective)
 	t.Setenv(workercontract.ProfileSourceFileEnv, source)
 
 	profile, err := collectorconfig.LoadWorkerProfile()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	registry, checker, err := newCollectorWorkerRegistry(profile, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	if !checker.Check(time.Now()).Match {
 		t.Fatal("initial source must match the effective profile")
 	}
 
-	if writeErr := root.WriteFile("replacement.json", append(raw, '\n'), 0o600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
+	require.NoError(t, root.WriteFile("replacement.json", append(raw, '\n'), 0o600))
 
-	if renameErr := root.Rename("replacement.json", "desired.json"); renameErr != nil {
-		t.Fatal(renameErr)
-	}
+	require.NoError(t, root.Rename("replacement.json", "desired.json"))
 
 	status := checker.Check(time.Now())
 	if status.Match || status.ErrorCode == nil || *status.ErrorCode != workercontract.ProfileFileChanged {
@@ -115,18 +98,14 @@ func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 	}
 
 	envelope, err := registry.Diagnostics(time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	if envelope.Profile.Hash != profile.Loaded.Hash || envelope.Profile.FileMatch {
 		t.Fatalf("loaded identity changed or source drift lost: %#v", envelope.Profile)
 	}
 
 	reloaded, err := collectorconfig.LoadWorkerProfile()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	if reloaded.Loaded.Hash != profile.Loaded.Hash {
 		t.Fatal("desired source replaced the effective settings input")
