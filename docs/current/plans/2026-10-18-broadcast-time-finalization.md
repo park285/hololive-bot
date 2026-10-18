@@ -242,6 +242,7 @@
   - 조건부 재개 2/8 (15:55Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.629초/4.395초·request_failed 0, K=0·동일 revision을 확인했다. scoped sync·15:55:11Z API 단독 재생성 뒤 같은 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치가 확인됐다. 재개 표본은 확정 2,765·충돌 15·pending 6,965건이다.
   - 여섯 번째 중단 (16:15~16:16Z): 30분 conflict 3/158(1.90%)로 K=0·16:16:13Z API 단독 재생성을 완료했다. 동일 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치·backlog target 0을 확인했다. 확정 2,918·충돌 18·pending 6,809건이며 허용 외 사유·원래 시각 변경·신규 queue conflict는 0이다. 사용 2/8, 16:44:55Z 이후 새 사전 검증으로 3회차를 판단한다.
   - 조건부 재개 3/8 (16:45Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.625초/4.415초·request_failed 0, K=0·동일 revision 확인 뒤 scoped sync·16:45:19Z API 단독 재생성을 완료했다. 같은 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치를 확인했다. 재개 표본은 확정 2,923·충돌 18·pending 6,804건이다.
+  - 종료 집중 시간대 확인(UTC 12~17시, 17:46Z 집계): channel_live_check p99 4.640초(17,850건), live_snapshot p99 4.972초(20,976건), video_live_check 1,967회 중 request_failed 0회다. 이 구간에는 K=0 중단 시간도 포함되며 연속 K=200 관찰로 해석하지 않는다. 17:46Z backlog는 확정 3,345·충돌 21·pending 6,379건, 조건부 재개 사용 3/8이다.
 - [x] 7. 멤버십 영상 시각 출처 (독립)
   - InnerTube 다른 client나 watch 페이지 `microformat`에서 시각을 얻을 수 있는지 수집기에서 시험한다.
   - 얻을 수 있으면 `members_only`를 다시 대기열에 넣는다.

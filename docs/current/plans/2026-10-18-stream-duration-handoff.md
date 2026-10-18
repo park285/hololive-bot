@@ -207,6 +207,7 @@
 - 조건부 재개 2/8 (15:55Z): 보호된 조회에서 충돌 15건의 허용 외 사유·원래 시각 변경, 신규 queue conflict·현재 backlog target·30분 새 conflict가 모두 0이고 p99 4.629초/4.395초·요청 실패 0임을 확인했습니다. K=0·동일 revision 확인 뒤 scoped sync·15:55:11Z API 단독 재생성을 완료했습니다. 같은 image·healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치가 확인됐습니다. 확정 2,765·충돌 15·pending 6,965건으로 감시를 재개했습니다.
 - 여섯 번째 중단(조건부 재개 2회 뒤, 16:15~16:16Z): 30분 conflict 3/158(1.90%), p99 4.721초/5.213초, request_failed 0건입니다. 16:16:13Z K=0·API 단독 재생성 뒤 동일 image·healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치·backlog target 0을 확인했습니다. 확정 2,918·충돌 18·pending 6,809건을 보존했고, 허용 외 사유·원래 시각 변경·신규 queue conflict는 모두 0입니다. 사용 2/8, 다음 30분 창 해소는 16:44:55Z입니다.
 - 조건부 재개 3/8 (16:45Z): 보호된 집계에서 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict가 모두 0이고 p99 4.625초/4.415초·요청 실패 0임을 확인했습니다. K=0·동일 revision 확인 뒤 scoped sync·16:45:19Z API 단독 재생성을 완료했습니다. 같은 image·healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치가 확인됐고, 확정 2,923·충돌 18·pending 6,804건으로 감시를 재개했습니다.
+- 종료 집중 시간대 확인(UTC 12~17시, 17:46Z 집계): 실제 수집 지연 p99는 channel_live_check 4.640초(17,850건)·live_snapshot 4.972초(20,976건)입니다. 해당 구간 video_live_check 1,967회 중 request_failed 0회이며 PUBLIC 1,375·MEMBERS_ONLY 108·identity_missing 482·login_required_unclassified 2회입니다. 호출 횟수이지 영상 수가 아니며, 구간에는 기록한 K=0 중단 시간도 포함됩니다. 17:46Z backlog는 확정 3,345·충돌 21·pending 6,379건, 조건부 재개 사용 3/8입니다.
 
 **커밋 운용** (로컬 커밋 승인됨, 1절)
 
