@@ -181,6 +181,11 @@
     - `conflict` 0.5% 미만
     - `live_snapshot`·`channel_live_check` 수집 지연 p99가 기준(약 5초)의 2배 이하
   - 운영 worker 프로필 값은 2026-10-18에 확인했다(위 "수집기 예산"). backlog 시작값 K=200을 유지한다.
+  - 진행 (2026-10-18 04:30Z 배포, K=0, 운영 읽기 전용 집계):
+    - 배포 직후 48시간 창의 종료 162건 중 161건이 몇 분 안에 `finalized`, 1건은 `pending(identity_missing)`으로 재시도 일정에 있다. `conflict`·WARN·ERROR는 0건이다.
+    - 확정으로 바뀐 폭: 종료는 저장값보다 0~7.9분 이르다(중앙값 2.3분). 시작은 0~2.0분 이르다. 아카이브 종료와 마지막 LIVE 확인의 차이는 −5.3~+1.9분이다. 161건 중 156건의 시각이 바뀌었다.
+    - 수집 지연 p99는 첫 일괄 확인이 몰린 04:30~04:33Z에만 `channel_live_check` 11.6초, `live_snapshot` 9.3초로 올랐고, 그 전후 3분 단위 구간은 4.2~4.8초다. 같은 때 `hololive_youtube_collection_oldest_due_age_seconds`가 두 표본 동안 약 42시간으로 나왔다. 오래전에 종료된 후보의 첫 시도 시각이 이미 지나 있었기 때문이며, 이 지표에 걸린 경보 규칙은 없다.
+    - 05:20Z까지 배포 뒤 새로 종료된 방송은 1건이고 `finalized`다. 1시간 안 확정률과 `conflict` 비율(통과 기준 1·2)은 1~2일 관찰로 판정한다.
 - [ ] 6. 기존 기록 보정 (backlog)
   - 5를 통과한 뒤 K를 올려 최근 종료부터 처리한다.
   - 약 9,700건이다. 첫 시도는 직전 결과 6초 뒤에 하나씩 열려 분당 10건이 상한이고, 수집·정산 지연을 더하면 분당 약 5~8건, 하루 안팎으로 본다(추정).
@@ -200,7 +205,8 @@
   - 최근 30일 약 5건 규모라 1~6과 독립적으로 진행한다.
   - 조사 (2026-10-18, 외부 요청 10회, 영상 ID 미기록): 멤버십 watch HTML 4/4에 시작·종료 시각·영상·채널 identity·`isLiveNow=false`가 있었다. `WEB_EMBEDDED` player 0/2, WEB `/next` 0/2. 공개 대조 1건은 watch와 WEB player의 시각이 같았다.
   - 완료 (2026-10-18, 수집기): `youtubejs/src/live-check.mjs`가 멤버십이고 시각이 빠진 종료 영상만 같은 RPC 슬롯에서 watch를 한 번 더 읽는다. 영상·채널 identity, `isLiveNow=false`, 양쪽 시각, player 시각과의 일치를 요구하고 가용성·player 사실은 그대로 둔다. 조회·검증에 실패하면 기존 관측(시각 없음)을 보낸다. 시험: `live-check.test.mjs`, `youtubejscollector/live_check_test.go`(발행된 멤버십 시각이 `LifecycleFactsTrusted`·`VerifiedEndedAt()`를 만족). 계약 검증은 이미 MEMBERS_ONLY와 시각의 조합을 허용한다.
-  - 수집기 배포 뒤 `members_only` 행을 다시 대기열에 넣는다(아래 SQL, 승인 필요). 현재 MEMBERS_ONLY 가용성이고 후보 조건을 만족하는 세션은 34건(최근 30일 31건)이다.
+  - 수집기 배포 뒤 `members_only` 행을 다시 대기열에 넣는다(아래 SQL, 승인 필요). 조사 때 MEMBERS_ONLY 가용성이고 후보 조건을 만족하는 세션은 34건(최근 30일 31건)이었다.
+  - 배포 (2026-10-18 05:10~05:18Z, #655): 그때 `members_only` 행이 0건이라 재확정 SQL은 실행하지 않았다("배포 결과").
 
 ## 운영 SQL 초안 (실행하지 않음, 각각 승인 필요)
 
@@ -295,40 +301,38 @@
 - **색인 갱신 비용**: 시각 UPDATE는 정렬 색인을 갱신한다(HOT 아님). backlog는 묶음과 분당 상한으로 나눠 쓴다.
 - **`!라이브` 경과 시간의 기준**: 경과는 저장 `started_at` 기준이다. 시작 시각 없이 처음 감지한 방송(최근 30일 약 49%)은 이 값이 감지 시각이라 실제보다 짧게 보인다. 감지 지연 분포로 보면 보통 1분 안팎(p90 4.4분, p99 10분)이고, 수집이 멈췄다 재개되면 더 커진다. LIVE 중에 영상 확인이 실제 시작을 주어도 세션 upsert가 기존 시작을 지키므로(`COALESCE`) 고쳐지지 않는다. 시작 출처를 세션에 기록해야 해결되며, reducer·세션 upsert의 시작 시각 계약을 바꾸고 이 값을 읽는 다른 경로를 모두 다시 확인해야 하므로 이번 범위에 넣지 않았다. 종료 뒤에는 확정 경로가 아카이브 시작으로 바꾼다.
 
-## 배포 계획 (실행하지 않음, 묶음마다 PR·배포 승인 필요)
+## 배포 결과 (2026-10-18, 사용자 승인 "커밋 푸쉬등 전부승인")
 
-`hololive-bot-ops` deployment 절차를 따른다.
+`hololive-bot-ops` deployment 절차를 따랐다.
 
 - 공통 절차:
-  - 각 묶음의 PR을 병합한 `main` revision(40자)으로 kapu에서 `linux/arm64` image를 만든다(`kapu-multiarch`).
-  - 전송 전과 원격 load 뒤에 `arch=arm64`와 revision 일치를 확인한다. 원격 build는 하지 않는다.
-  - 시작 전에 현재 원격 image ID·tag와 deploy tree를 rollback 지점으로 남긴다.
-  - migration은 새 `hololive-api:prod` image의 `hololive-db-migrate` one-shot으로 recreate 전에 적용한다.
-  - 앱은 `up -d --no-build --no-deps <service>`로만 바꾼다.
+  - 묶음마다 PR을 squash 병합하고, 병합한 `main` revision(40자)의 깨끗한 격리 worktree에서 kapu가 `DOCKER_DEFAULT_PLATFORM=linux/arm64 ./build-all.sh --build-only --no-bump hololive-api`(local CI 포함)로 image를 만들었다. 원격 build는 하지 않았다.
+  - 전송 전과 중앙 load 뒤에 `arm64`와 revision을 확인하고, 교체 전 중앙 `hololive-api:prod`를 `hololive-api:rollback-stream-duration-<묶음>-<UTC>` tag로 남겼다.
+  - migration 파일과 `manifest.txt`는 중앙 deploy tree에 넣고 sha256을 git과 대조했다. 이전 manifest는 `/opt/hololive-bot/compose/deploy-backups/manifest.txt.pre-<번호>-<UTC>`에 있다. `hololive-db-migrate` one-shot 뒤 `up -d --no-build --no-deps hololive-api`로만 바꿨다.
   - 이전 image의 db-migrate는 더 새로운 ledger를 거절한다. 그래서 migration 적용 뒤 image를 되돌릴 때는 앱 컨테이너만 되돌린다.
-- 변경 binary: A·B·323·324 묶음은 `hololive-api`만 바꾼다. `hololive-alarm-worker`는 바뀐 표본 데이터(`sampledata`)를 링크하지만 템플릿 관리 경로를 쓰지 않으므로 대상이 아니다. 확정 target은 기존 `video_live_check` 종류라 수집기 변경 없이 동작한다.
+- 변경 binary: A·B·323·324 묶음은 `hololive-api`만 바꿨다. `hololive-alarm-worker`는 바뀐 표본 데이터(`sampledata`)를 링크하지만 템플릿 관리 경로를 쓰지 않아 교체하지 않았다(revision `f8ce7354…` 유지).
 - 재시도·보조 경로 변화(release 기록용):
-  - 확정 시도 일정 1개가 새로 생긴다. 일정은 [3분, 30분, 3시간, 24시간]이고, `request_failed`는 10분씩 12회까지 연기한다.
+  - 확정 시도 일정 1개가 새로 생겼다. 일정은 [3분, 30분, 3시간, 24시간]이고, `request_failed`는 10분씩 12회까지 연기한다.
   - I6는 멤버십 종료 영상에 한해 watch 조회 1회를 더한다. 재시도는 없다.
 
-| 순서 | 묶음 (로컬 커밋) | 서비스 | migration | 확인 | 롤백 |
+| 순서 | PR · 병합 revision | 서비스 · 교체 시각 | migration | 확인 결과 | 롤백 지점 |
 |---|---|---|---|---|---|
-| 1 | A `c8b456178` | `hololive-api` | 없음 | health·ready, 시험 방 `!방송기록`·`!라이브` | 이전 image |
-| 2 | B `5129b1597` | `hololive-api` | 322 | 전역 본문 md5 `abab0db8…`, `!라이브` 경과 시간 | A image로 되돌린다(A가 `.Elapsed`를 렌더링한다). A보다 이전으로 되돌릴 때만 220 본문 CAS 역갱신(승인) |
-| 3 | 323·확정 `1d246d3e0`·`06b4cd8b4` | `hololive-api` | 323 | 5단계 통과 기준, `hololive_youtube_collection_time_finalization_*` 지표 | 이전 image. 323 열·표는 남겨도 이전 binary에 영향이 없다. 시각 원복은 "운영 SQL 초안" 롤백(승인) |
-| 4 | 324 `0f81b2c1d` | `hololive-api` | 324 | 대상 9건 `ENDED`, 확정 결과 8 `finalized`·1 `members_only` 또는 `exhausted` | 이전 image. 세션 상태 원복이 필요하면 별도 승인 |
-| 5 | 수집기 `24f019ab4` | `youtube-collector` c(중앙), b(`ap-deploy.sh seoul`), a·d(`ap-host-native-deploy.sh`, 호스트별 `I_APPROVE_<HOST>_ACTIVE_ACTIVE_DEPLOY=true`) | 없음 | 멤버십 종료 확인에 시각 포함, 수집 지연 | 이전 image·binary |
+| 1 | #651 A `51c0519cc` | `hololive-api` 03:35Z | 없음 | healthy, 재시작 0, WARN·ERROR 0 | `rollback-stream-duration-a-20261018t033506z`(`f8ce7354…`) |
+| 2 | #652 B `5d1d405ab` | `hololive-api` 04:03Z | 322 (`applied=1 skipped=182`) | 전역 본문 md5 `b306166c…` → `abab0db8…`, 채널 override 없음, 기동 로그 WARN·ERROR 0 | `…-b-20261018t040324z`(A image). A보다 이전으로 되돌릴 때만 "운영 SQL 초안"의 322 되돌리기 |
+| 3 | #653 323·확정 `7bd38b05b` | `hololive-api` 04:30Z | 323 (`applied=1 skipped=183`) | 5단계 "진행" 기록, `hololive_youtube_collection_time_finalization_*` 지표 수집 | `…-c-20261018t043000z`(B image). 323 열·표는 이전 binary에 영향이 없다. 시각 원복은 "운영 SQL 초안" 롤백 |
+| 4 | #654 324 `f089d9a64` | `hololive-api` 04:56Z | 324 (`applied=1 skipped=184`) | 대상 9건 `ENDED`, 5분 안에 8건 `finalized`, 1건 `pending(identity_missing)`(조사 때 `LOGIN_REQUIRED`였던 1건으로 보임, 24시간 일정 뒤 `exhausted` 예상). roster 밖 head 없는 legacy LIVE 0건 | `…-d-20261018t045615z`(323 image) |
+| 5 | #655 수집기 `7e60b2061` | c 05:10Z(`po-central-cutover.sh deploy`), b 05:11Z(`ap-deploy.sh seoul --apply`), a 05:11~05:14Z·d 05:14~05:18Z(`ap-host-native-deploy.sh`, `HOLO_BOT_VERSION=10.1.0`) | 없음 | 네 곳 모두 collector·issuer 짝이 같은 revision이다. c는 `central collector/issuer completion verified`, a·b·d는 `ap-completion-check.sh` exit 0(a·d `READY`·`first_success`·`NRestarts=0`, b healthy·재시작 0). 교체 뒤 수집 지연 p99 4.6~4.9초 | c `/opt/hololive-bot/compose/backups/po-c-20261018T050931Z`, b `backups/seoul-collector-20261018T051047Z`, a·d `previous` release(`f8ce7354…`) |
 
-- 1→2는 A 배포 확인 뒤, 3→4는 1~2일 관찰(5단계) 뒤에 진행한다. 5는 1~4와 독립이지만 `members_only` 재확정 SQL은 3과 5가 모두 끝난 뒤 실행한다.
-- backlog(6단계): `/etc/stack-secrets/hololive-bot/compose.env`에 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200`을 넣고 `hololive-api`만 recreate한다. 이 파일은 `stack-platform-ops` 범위이므로 별도 승인이 필요하다. 투입 SQL은 K를 켠 API가 뜬 뒤 실행한다.
+- 순서 조정: 3→4는 원래 1~2일 관찰 뒤였다. 배포 직후 48시간 창 162건 중 161건 확정·`conflict` 0건으로 확정 경로가 실제 응답에서 동작함을 확인하고 4를 진행했다. 324 대상 9건은 같은 신규 대기열로 들어갈 뿐이다.
+- `members_only` 재확정 SQL: 수집기 배포 시점에 `members_only` 행이 0건이라 실행하지 않았다. 확정 대상 조건을 만족하는 멤버십 종료 세션 33건(조사 때 34건)은 모두 48시간 창 밖이고 확정 행이 없다. 이들은 6단계 backlog에서 새 수집기로 처음 확인한다.
+- kapu 로컬 `hololive-api:prod`와 `hololive-youtube-collector:prod`는 이번에 배포한 image다.
 
-## 필요한 승인
+## 남은 일
 
-- migration 323의 운영 적용과 YouTube plane 런타임 동작 변경 배포(단계 5): 배포 승인(`hololive-bot-ops`). 323은 확정 바이너리보다 먼저 적용한다(reader·consumer가 새 열·표를 읽는다).
-- 기존 기록 보정(단계 6): 운영 데이터 쓰기 약 9,700행과 외부 요청 증가. 시작 전 별도 승인이 필요하고, 롤백 SQL 실행도 별도 승인이 필요하다.
-- migration 324(멈춘 LIVE 정리)의 운영 적용: 운영 데이터 쓰기(현재 9행). 323·확정 바이너리 배포를 확인한 뒤 별도 PR·배포로 적용한다. 같은 릴리스에 넣으면 db-migrate가 함께 적용하므로 PR을 나눈다.
-- 멤버십 수집기 배포(단계 7)와 `members_only` 재확정 SQL: 수집기 배포 승인과 운영 데이터 쓰기 승인.
-- Git: 커밋·push·PR은 요청 시에만 한다.
+- 5단계 판정: 배포 뒤 새로 종료된 방송의 1시간 안 확정률(≥97%)과 `conflict`(<0.5%)를 1~2일 집계한다. 수집 지연 기준은 배포 뒤 기준선과 같다.
+- 6단계 backlog: 5단계를 통과하면 시작한다. 중앙 compose(#653 이후 `docker-compose.prod.yml`, 수집기 배포 때 설치됨)는 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`를 전달하므로, `/etc/stack-secrets/hololive-bot/compose.env`에 `=200`을 넣고(`stack-platform-ops` 범위) `hololive-api`만 recreate한 뒤 "운영 SQL 초안"의 투입 SQL을 1,000행씩 실행한다. 진행 중에는 6단계 중단 조건을 감시한다.
+- backlog 완료 뒤: 무작위 20건 대조, `!방송기록` 표시 비율 재계산.
+- 실제 카카오톡 화면 확인: `MESSAGE_STYLE_GUIDE`대로 승인된 시험 방에서만 한다. 시험 방이 지정되지 않아 하지 않았다.
 
 ## 관련 문제
 
