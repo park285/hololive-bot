@@ -255,12 +255,16 @@ func checkSourceObservationBoundary(t *testing.T, enabled, valid bool, mutate fu
 	useAPIWorkerSettings(t, loaded, WorkerSourceObservation, worker, settings)
 
 	profile, err := LoadAPIWorkerProfile()
-	if (err == nil) != valid {
-		t.Fatalf("LoadAPIWorkerProfile() enabled=%v error=%v, want valid=%v", enabled, err, valid)
+	if !valid {
+		if err == nil {
+			t.Fatalf("LoadAPIWorkerProfile() enabled=%v accepted an invalid worker boundary", enabled)
+		}
+
+		return
 	}
 
-	if !valid {
-		return
+	if err != nil {
+		t.Fatalf("LoadAPIWorkerProfile() enabled=%v rejected a valid worker boundary: %v", enabled, err)
 	}
 
 	config := DefaultYouTubePlaneConfig()

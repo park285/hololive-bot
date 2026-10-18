@@ -23,6 +23,8 @@
 - **비활성 워커 진단:** `source_observation`이 꺼져도 YouTube runtime과 durable 큐 sampler를 구성하여 depth를 보고합니다. 비활성 경로는 claim·projection 준비·maintenance를 실행하지 않습니다. bot inbox/outbox의 attempt 종료는 defer로 보장하여 panic 뒤 inFlight가 남지 않습니다.
 - **DB 연결·정리:** migrator의 pool·bootstrap 연결을 shared-go의 명시적 sslmode·비밀 보호 파싱으로 통일하며 `PGSSLMODE` 생략을 거부합니다. 기존 `pgxutil`을 제거하고 모든 rollback 소비자를 취소 독립 5초 공통 경로로 옮깁니다. 다섯 소비자는 provenance를 검증한 `shared-go/v2 v2.14.0`을 사용하며, source 통합만으로 운영 활성화·수용을 뜻하지는 않습니다.
 - **보존 backlog 측정:** kind별 제한된 후보에서 첫 비보호 행을 찾으면 보호 판정을 중단합니다. 실제 migration을 적용한 격리 DB에서 1,000개 후보의 보호 함수 호출이 첫 행 적격이면 1회, 보호 선두 3개이면 4회로 줄고 oldest·known은 유지됨을 확인했습니다. migration 315 삭제 경로는 별도로 측정했으며 잠금·커서·재검사 계약을 보존하기 위해 변경하지 않았습니다.
+- **회귀 검사의 오류 경계:** SCRAM 역할 실패의 원인·비밀 비노출 비교 전에 nil을 명시적으로 거부하고, source_observation의 정상·거절 입력을 별도 분기로 검사합니다. 두 경로의 실제 회귀 검사를 유지하면서 NilAway가 오류 성공 경계를 추적할 수 있도록 했습니다.
+
 ## v10.2.1 - 2026-10-18
 
 - **프로필 짝의 유한 진단 조회:** loaded hash를 전체 `/metrics` 대신 인증된 `/diagnostics/workers`의 v1 `profile.hash`에서 확인합니다. unrelated metric 수가 늘어도 최초 capture·native 준비·배포 후 검증이 healthcheck 본문 상한을 넘지 않으며, 기존 응답 크기·시간 상한과 서비스별 인증키·프로세스/바이트 일치 검사는 유지합니다. 실제 운영의 Compose 네 슬롯과 native a/d 진단으로 확인했으며 자격 대체나 상한 완화는 없습니다.

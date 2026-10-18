@@ -154,7 +154,7 @@ func TestScraperRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
 	failure := errors.New("statement rejected")
 	recorder := &scraperRoleRecorder{fail: failure}
 
-	if err := upsertScraperRole(t.Context(), recorder, "scraper", password); !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
+	if err := upsertScraperRole(t.Context(), recorder, "scraper", password); err == nil || !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
 		t.Fatal("role failure lost cause or exposed password")
 	}
 }
