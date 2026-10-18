@@ -8,6 +8,10 @@
 
 ## 미출시
 
+## v10.2.1 - 2026-10-18
+
+- **프로필 짝의 유한 진단 조회:** loaded hash를 전체 `/metrics` 대신 인증된 `/diagnostics/workers`의 v1 `profile.hash`에서 확인합니다. unrelated metric 수가 늘어도 최초 capture·native 준비·배포 후 검증이 healthcheck 본문 상한을 넘지 않으며, 기존 응답 크기·시간 상한과 서비스별 인증키·프로세스/바이트 일치 검사는 유지합니다. 실제 운영의 Compose 네 슬롯과 native a/d 진단으로 확인했으며 자격 대체나 상한 완화는 없습니다.
+
 ## v10.2.0 - 2026-10-18
 
 - **구 프로필 호환 pairing baseline:** API·alarm의 기존 settings와 fixed max_age, collector의 기존 per_job/bounded/fixed 스키마를 유지합니다. 실제 후보 CLI가 release profile을 검증하고 image/binary와 profile checksum을 함께 보존합니다. 인증된 loaded hash를 확인한 최초 도입만 허용하며, effective release와 desired source를 분리합니다. source 디렉터리 mount로 원자적 파일 교체도 관측하고 rollback은 secret mirror가 아니라 이전 artifact/profile 짝을 복원합니다.

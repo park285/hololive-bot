@@ -32,11 +32,11 @@ source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, 
 `PATCH`는 하위 호환 수정과 보안·운영 안정화에 사용합니다. 버전 관리 도입 전 이력은
 `CHANGELOG.md`의 실제 날짜·commit SHA 기준점을 유지하며 추정 버전을 소급하지 않습니다.
 
-### 10.2.0 호환 worker baseline
+### 10.2.1 호환 worker baseline
 
 이 릴리스의 worker 변경은 구 API/alarm settings·mode를 그대로 받는 pairing baseline입니다.
 정식 shared-go v2.14.0 게시/pin과 독립 build, 실제 구 프로필 CLI·loaded hash·source drift·paired
-rollback 수용을 먼저 완료합니다. [Compose baseline 절차](../../../deploy/compose/README.md#old-profile-compatible-worker-baseline-1020)가
+rollback 수용을 먼저 완료합니다. [Compose baseline 절차](../../../deploy/compose/README.md#old-profile-compatible-worker-baseline-1021)가
 최초 capture, no-build 후보 검사와 복구 bundle 입력을 정의합니다. 이 단계에서는 master/settings,
 DB role/HBA/WAL, Valkey 또는 pool capacity를 변경하지 않습니다. 이미 게시된 migration 322–324와
 stream-time/Node/issuer 산출물을 보존하며, 아래 migration 실행 예시는 별도 승인된 필요 migration이
