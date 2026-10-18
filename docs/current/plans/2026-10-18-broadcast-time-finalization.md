@@ -247,6 +247,7 @@
   - 조건부 재개 4/8 (18:50Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 3.806초/4.287초·request_failed 0, K=0·동일 revision 확인 뒤 scoped sync·18:50:34Z API 단독 재생성을 완료했다. 같은 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치를 확인했다. 재개 표본은 확정 3,648·충돌 25·pending 6,072건이다.
   - 여덟 번째 중단 (19:23~19:24Z): 30분 conflict 3/242(1.24%)로 K=0·19:24:21Z API 단독 재생성을 완료했다. 동일 image·건강/준비 상태·재시작 0·다른 컨테이너 불변·마스터/미러 일치·backlog target 0을 확인했다. 확정 3,902·충돌 28·pending 5,815건이며 허용 외 사유·원래 시각 변경·신규 queue conflict는 0이다. 사용 4/8, 19:53:00Z 이후 5회차 사전 조건을 판단한다.
   - 조건부 재개 5/8 (19:53Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.011초/4.671초·request_failed 0, K=0·동일 revision 확인 뒤 scoped sync·19:53:24Z API 단독 재생성과 공통 검증을 완료했다. 재개 표본은 확정 3,907·충돌 28·pending 5,810건이다.
+  - 신 lifecycle 첫 확인 완료(22:25Z): observed 4,209건 모두 첫 확인을 마쳤다. 전체 확정 5,082(observed 4,101·legacy 981)·충돌 31·pending 4,632건이며, 미시도 4,529건은 모두 legacy이고 재시도는 103건이다. 마지막 재시도까지 최종 결과가 필요하므로 첫 확인 완료를 I5 완료로 처리하지 않는다. 조건부 재개 사용 5/8이다.
 - [x] 7. 멤버십 영상 시각 출처 (독립)
   - InnerTube 다른 client나 watch 페이지 `microformat`에서 시각을 얻을 수 있는지 수집기에서 시험한다.
   - 얻을 수 있으면 `members_only`를 다시 대기열에 넣는다.

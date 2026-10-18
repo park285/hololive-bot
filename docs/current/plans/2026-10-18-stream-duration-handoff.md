@@ -212,6 +212,7 @@
 - 조건부 재개 4/8 (18:50Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 3.806초/4.287초·요청 실패 0, K=0·동일 revision을 확인했습니다. scoped sync·18:50:34Z API 단독 재생성 뒤 같은 image·healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치가 확인됐습니다. 확정 3,648·충돌 25·pending 6,072건으로 감시를 재개했습니다.
 - 여덟 번째 중단(조건부 재개 4회 뒤, 19:23~19:24Z): 30분 conflict 3/242(1.24%), p99 4.640초/4.683초, request_failed 0건입니다. 19:24:21Z K=0·API 단독 재생성 뒤 공통 검증(동일 image·healthy·재시작 0·health/readiness·다른 컨테이너 불변·마스터/미러 일치·backlog target 0)을 통과했습니다. 확정 3,902·충돌 28·pending 5,815건을 보존했고 허용 외 사유·원래 시각 변경·신규 queue conflict는 0입니다. 사용 4/8, 다음 창 해소는 19:53:00Z입니다.
 - 조건부 재개 5/8 (19:53Z): 허용 외 사유·원래 시각 변경·신규 queue conflict·backlog target·30분 새 conflict 0, p99 4.011초/4.671초·요청 실패 0, K=0·동일 revision을 확인했습니다. scoped sync·19:53:24Z API 단독 재생성과 공통 검증을 완료했습니다. 재개 표본은 확정 3,907·충돌 28·pending 5,810건입니다.
+- 신 lifecycle 첫 확인 완료·legacy 처리 전환(22:25Z): 확정 5,082건(observed 4,101·legacy_unknown 981), 충돌 31건(observed 29·legacy 2), pending 4,632건입니다. 미시도 4,529건은 모두 legacy이며 재시도는 103건입니다. observed 4,209건은 모두 첫 확인을 마쳤습니다. 첫 확인 완료와 최종 상태 완료를 구분하며 기존 3분·30분·3시간·24시간 재시도 일정을 바꾸지 않습니다. 조건부 재개 사용 5/8을 유지합니다.
 
 **커밋 운용** (로컬 커밋 승인됨, 1절)
 
