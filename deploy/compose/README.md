@@ -52,7 +52,7 @@ included in the base production build. ChatBotGo must load the same owned Valkey
 image for its host architecture. No official-image fallback or live-data mutation
 is performed by building these candidates.
 
-## Old-profile-compatible worker baseline (10.2.0)
+## Old-profile-compatible worker baseline (10.2.1)
 
 This release retains the legacy API/alarm settings and `fixed` max-age modes,
 including `bot_reply_outbox.dispatch_budget_ms`,
@@ -80,7 +80,7 @@ policy as part of this baseline. The full upstream migration manifest through
   preparation or maintenance work.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
   production builds after the real pins are installed. Use root/API/alarm
-  version `10.2.0`, a clean full 40-character source revision, and the existing
+  version `10.2.1`, a clean full 40-character source revision, and the existing
   architecture/Node/issuer manifest checks. Runtime hosts never build.
 - Exercise each actual API, alarm and collector binary with
   `STACK_WORKER_PROFILE_FILE=<retained-old-profile> <binary> --check-worker-profile`.
@@ -96,7 +96,7 @@ policy as part of this baseline. The full upstream migration manifest through
    `python3 scripts/deploy/lib/worker-profile-pair.py prepare SERVICE ABSOLUTE_PAIR_DIR CONTAINER ROOT`.
    Supported Compose services are `hololive-api`, `hololive-alarm-worker`,
    `youtube-collector` (c), and `youtube-collector-b`. First adoption authenticates
-   the metrics loaded hash, compares exact bytes, rechecks process identity and
+   the bounded `/diagnostics/workers` v1 `profile.hash`, compares exact bytes, rechecks process identity and
    runs the old image CLI with no network. Missing/mutated bytes or an unpaired
    stopped process fail closed; do not reconstruct a profile from defaults.
 2. For native a/d, use the approved
