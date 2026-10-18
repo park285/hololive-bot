@@ -101,35 +101,17 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	// 관리 plane이 바꾼 ACL을 같은 요청 안에서 봇 판정에 반영한다.
 	planes.bot.ACL.Follow(planes.admin.ACL)
 
-	youtubeResult := buildOptionalYouTubePlane(ctx, appConfig, logger)
-	if youtubeResult.err != nil {
-		return planes, fmt.Errorf("build youtube plane: %w", youtubeResult.err)
+	// 비활성 executor도 영속 큐 관측과 profile 진단의 수명을 소유한다.
+	planes.youtube, err = youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+	if err != nil {
+		return planes, fmt.Errorf("build youtube plane: %w", err)
 	}
 
-	planes.youtube = youtubeResult.runtime
 	if err := installAPIWorkerRegistry(ctx, appConfig, planes.bot, planes.youtube); err != nil {
 		return planes, fmt.Errorf("build worker registry: %w", err)
 	}
 
 	return planes, nil
-}
-
-type optionalYouTubePlaneResult struct {
-	runtime *youtuberuntime.Runtime
-	err     error
-}
-
-func buildOptionalYouTubePlane(ctx context.Context, appConfig *apiconfig.RuntimeConfig, logger *slog.Logger) optionalYouTubePlaneResult {
-	if !appConfig.YouTube.Enabled {
-		return optionalYouTubePlaneResult{}
-	}
-
-	runtime, err := youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
-	if err != nil {
-		return optionalYouTubePlaneResult{err: fmt.Errorf("build youtube runtime: %w", err)}
-	}
-
-	return optionalYouTubePlaneResult{runtime: runtime}
 }
 
 func (p apiPlanes) closeContext(ctx context.Context) error {

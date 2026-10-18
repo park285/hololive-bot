@@ -52,6 +52,100 @@ included in the base production build. ChatBotGo must load the same owned Valkey
 image for its host architecture. No official-image fallback or live-data mutation
 is performed by building these candidates.
 
+## Old-profile-compatible worker baseline (10.2.0)
+
+This release retains the legacy API/alarm settings and `fixed` max-age modes,
+including `bot_reply_outbox.dispatch_budget_ms`,
+`source_observation.transaction_timeout_ms`,
+`youtube_delivery.claim_freshness_window_ms` and
+`youtube_delivery.delivery_send_timeout_ms`. Collector settings and its
+`per_job`/`bounded`/`fixed` shape are unchanged. Do not copy the later combined
+settings schemas, change the secret master, or activate role/HBA/WAL/Valkey/pool
+policy as part of this baseline. The full upstream migration manifest through
+324, stream-time work, Node and issuer provenance remain part of the artifact.
+
+### Build and CLI prerequisites
+
+- Verify the genuine immutable shared-go `v2.14.0` release before updating the
+  five consumer module pins (`hololive-api`, `hololive-alarm-worker`,
+  `hololive-shared`, `hololive-youtube-collector`, `hololive-dbtest`) and sums.
+  No unpublished external replace or invented tag is a production dependency.
+  `v2.13.0` cannot supply source/effective separation. Source preparation alone
+  is not a build or runtime acceptance result.
+- Retain service-owned strict settings decoders and legacy fixtures. Missing,
+  unknown and non-pointer-null settings remain errors. The existing database
+  wrapper supplies explicit positive MaxConns without enabling the new acquire
+  policy; Hololive does not call `pgstore.Retire`. Disabled source observation
+  still constructs its durable-queue sampler, but does no claim/projection
+  preparation or maintenance work.
+- On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
+  production builds after the real pins are installed. Use root/API/alarm
+  version `10.2.0`, a clean full 40-character source revision, and the existing
+  architecture/Node/issuer manifest checks. Runtime hosts never build.
+- Exercise each actual API, alarm and collector binary with
+  `STACK_WORKER_PROFILE_FILE=<retained-old-profile> <binary> --check-worker-profile`.
+  Unset `STACK_WORKER_PROFILE_SOURCE_FILE` for an isolated decoder check; for
+  pairing checks set it to the separate desired path. The effective file is
+  always the only settings input. Reject invalid enabled **and disabled**
+  profiles with the same candidate CLI before any migration or writer stop.
+
+### Adoption, activation and rollback
+
+1. While each old process still runs and its exact loaded bytes are available,
+   prepare its pair with the reviewed helper:
+   `python3 scripts/deploy/lib/worker-profile-pair.py prepare SERVICE ABSOLUTE_PAIR_DIR CONTAINER ROOT`.
+   Supported Compose services are `hololive-api`, `hololive-alarm-worker`,
+   `youtube-collector` (c), and `youtube-collector-b`. First adoption authenticates
+   the metrics loaded hash, compares exact bytes, rechecks process identity and
+   runs the old image CLI with no network. Missing/mutated bytes or an unpaired
+   stopped process fail closed; do not reconstruct a profile from defaults.
+2. For native a/d, use the approved
+   `scripts/deploy/ap-host-native-deploy.sh HOST --prepare-profile` before any
+   mirror update or maintenance stop. It freezes the old binary/profile checksums
+   and changes only the host-owned effective/source paths, without restarting.
+3. Transfer verified candidate artifacts. Render the existing prod+live-compat
+   (central) or prod+Seoul (b) configuration with
+   `WORKER_PROFILE_OVERRIDE_FILE=none`, pipe `config --format json` to
+   `worker-profile-pair.py candidate SERVICE ABSOLUTE_PAIR_DIR`, then select that
+   directory's `compose.yml` using `WORKER_PROFILE_OVERRIDE_FILE`. Run
+   `compose.sh ... run --rm --no-deps --pull never SERVICE --check-worker-profile`
+   and `worker-profile-pair.py verify-source SERVICE ABSOLUTE_PAIR_DIR`.
+   Keep all profiles unchanged for this stage. A CLI check proves no DB/schema
+   compatibility; do not run the older migration manifest or implicitly migrate.
+4. Activate using `worker-profile-pair.py activate SERVICE ABSOLUTE_PAIR_DIR ROOT`
+   and recreate only approved services with `up -d --no-build --no-deps`.
+   Central API/alarm use the release runbook's no-build path, **not** the local
+   build-and-deploy `compose-redeploy-service.sh`. Existing collector wrappers
+   retain issuer-first ordering and provenance checks. Native apply also writes
+   host infrastructure, so it is not a read-only CLI preflight.
+5. Verify running image/binary revision and authenticated loaded profile hash.
+   `verify-live SERVICE PAIR_DIR CONTAINER` checks Compose; `verify-native SERVICE
+   RELEASE_DIR UNIT` also checks `/proc/PID/exe`, PID/start identity, checksums
+   and effective/source paths. Native deploy/completion invoke this check.
+   Prove atomic desired-file replacement is detected within the 60-second
+   check interval while effective bytes/hash remain unchanged, for collector
+   as well as API/alarm. Use the authorized acceptance procedure; source drift
+   reports bounded `profile_file_changed`, never hot reload. Do not migrate to
+   incompatible settings until this baseline has actually passed acceptance.
+
+The desired directory is mounted read-only so atomic replacement remains visible;
+individual file mounts would pin the old inode. Effective profiles live in the
+immutable release mount and `STACK_WORKER_PROFILE_SOURCE_FILE` names only the
+desired service slot. Profiles must contain no passwords, env exports or tokens.
+Active overlays/receipts under `artifacts/worker-profile` survive deploy-tree sync
+and boot. Preserve the release directories, retained image tags and deployment
+inputs until acceptance; per-file atomic publication is not a whole-deploy lock.
+
+A prepared pair alone is **not** an API/alarm rollback bundle. Preserve `service`,
+`previous-state`, `previous/{profile.json,pair.json,SHA256SUMS,compose.yml}`,
+numbered `compose/*.yml` snapshots and `project-directory` as assembled by
+`compose-redeploy-service.sh`. Check with `compose-rollback-service.sh BACKUP
+--check`; only an approved `--apply` restores the pair. Collector c/b and native
+a/d retain their existing rollback entrypoints and stopped-state behavior.
+Rollback never writes the desired mirror or synthesizes removed keys; verify
+the restored loaded hash, not health alone. A known schema-incompatible old
+writer must stay stopped even when its profile CLI succeeds.
+
 ## Runtime Env Inputs
 
 `scripts/deploy/compose.sh` injects one Compose interpolation env file with `--env-file`.

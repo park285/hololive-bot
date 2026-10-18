@@ -103,7 +103,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - /etc/stack-secrets/hololive-bot/worker-profiles/hololive-api.json:/run/hololive-bot/worker-profiles/hololive-api.json:ro
+      - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
 
@@ -127,7 +127,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - /etc/stack-secrets/hololive-bot/worker-profiles/alarm-worker.json:/run/hololive-bot/worker-profiles/alarm-worker.json:ro
+      - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
       - valkey-cache-socket:/var/run/valkey:ro
     networks:
       observability-traces: {}
@@ -145,7 +145,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-c.json:/run/hololive-bot/worker-profiles/youtube-collector-c.json:ro
+      - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
       - youtube-po-c-socket:/run/hololive-youtube-po:ro
     networks:
       observability-traces: {}

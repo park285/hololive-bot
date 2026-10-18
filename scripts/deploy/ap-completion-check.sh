@@ -129,6 +129,8 @@ fi
 echo 'collector AP completion check passed'
 REMOTE
   } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT" "$PO_EXPECTED_PRESENCE"
+  "${AP_SSH[@]}" "sudo -n python3 - verify-native '$service' /opt/hololive-bot/youtube-collector/current 'hololive-youtube-collector@$service.service'" \
+    < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
 }
 
 if [[ "${AP_RUNTIME_MODE:-compose}" == "native" ]]; then

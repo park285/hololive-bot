@@ -260,6 +260,10 @@ func (r *Runtime) sampleReadyQueue(ctx context.Context) (workercontract.QueueVal
 }
 
 func (r *Runtime) prepare(ctx context.Context) error {
+	if !r.Config.Enabled {
+		return nil
+	}
+
 	if err := r.withDB(ctx, dbOperationProbe, func(ctx context.Context) error {
 		return r.claimer.ProbeClaim(ctx, r.claim)
 	}); err != nil {

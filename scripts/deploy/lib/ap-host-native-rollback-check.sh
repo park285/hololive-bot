@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+# 이전 mirror에서 새로 추정한 profile은 rollback pair가 아니다. 검증된 release 산출물만 허용한다.
+native_profile_pair_validate() {
+  local release="$1" env_file="$2"
+  sudo -n test -f "$release/worker-profile.json" || {
+    echo 'native release has no paired profile; approved --prepare-profile must precede mirror changes or maintenance stop' >&2
+    return 1
+  }
+  sudo -n test ! -L "$release/worker-profile.json" || return 1
+  sudo -n grep -Fxq "STACK_WORKER_PROFILE_FILE=$release/worker-profile.json" "$env_file" || return 1
+  sudo -n sh -c 'cd "$1" && sha256sum --check --strict SHA256SUMS >/dev/null' sh "$release" || return 1
+  sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$release/worker-profile.json" \
+    "$release/bin/youtube-collector" --check-worker-profile
+}
+
 native_rollback_validate() {
   local previous_target="$1"
   local contract_dir="$previous_target/rollback-contract"
@@ -44,6 +58,7 @@ native_rollback_validate() {
     echo "previous host-native rollback payload failed checksum validation" >&2
     return 1
   fi
+  native_profile_pair_validate "$previous_target" "$contract_dir/youtube-collector-host.env" || return 1
   if ! sudo -n systemd-analyze verify "$contract_dir/hololive-youtube-collector@.service"; then
     echo "previous host-native systemd unit failed validation" >&2
     return 1
