@@ -34,7 +34,7 @@ source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, 
 
 ### 11.0.0 worker/DB cutover
 
-먼저 구 API/alarm settings·mode를 받는 **10.2.0 호환 baseline을 실제 운영에서 수용**합니다.
+먼저 구 API/alarm settings·mode를 받는 **10.2.1 호환 baseline을 실제 운영에서 수용**합니다.
 구 프로필 CLI·인증된 loaded hash·atomic source drift·paired rollback 증거 없이 새 settings를
 활성화하지 않습니다. 준비 receipt나 source 통합은 이 수용을 대신하지 않습니다.
 [Compose cutover 절차](../../../deploy/compose/README.md#worker-settings-cutover-1100)는

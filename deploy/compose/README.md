@@ -86,11 +86,11 @@ multi-file transaction or serialize overlapping deployments.
 
 An unpaired old runtime cannot be reconstructed from a mutated mirror. The first capture
 requires a running old process: the credential-consuming healthcheck reads the loaded
-`profile_hash` from `/metrics`, the captured bytes must match it, and the old binary must
+`profile.hash` from bounded `/diagnostics/workers` v1 JSON, the captured bytes must match it, and the old binary must
 accept those bytes. A missing identity, changed process, mismatch, or stopped unpaired
 runtime fails without changing the writer. No credential value is printed or saved.
-The explicit service selects `API_SECRET_KEY` for API/alarm metrics and
-`METRICS_API_KEY` for collector metrics. There is no credential fallback.
+The explicit service selects `API_SECRET_KEY` for API/alarm diagnostics and
+`METRICS_API_KEY` for collector diagnostics. There is no credential fallback.
 
 For a separately approved preparation on a Compose host, run from its deployment root:
 
@@ -115,7 +115,7 @@ deployment freezes each candidate the same way; manual and automatic rollback va
 the previous release's checksums and binary/profile pair before starting it.
 
 **11.0.0 prerequisite:** deploy and actually accept the old-profile-compatible
-10.2.0 binary with `STACK_WORKER_PROFILE_SOURCE_FILE` before incompatible settings
+10.2.1 binary with `STACK_WORKER_PROFILE_SOURCE_FILE` before incompatible settings
 changes. Preparation receipts alone do not prove that baseline was accepted.
 
 Local verification ownership: run the Compose H3/mount render checks, existing native/AP
@@ -160,7 +160,7 @@ is performed by building these candidates.
 
 ## Worker settings cutover (11.0.0)
 
-The preceding **10.2.0 acceptance is mandatory**: its API/alarm binaries retain
+The preceding **10.2.1 acceptance is mandatory**: its API/alarm binaries retain
 the old settings and modes while adding immutable effective/source separation.
 Accept its actual CLI, authenticated loaded hash, atomic desired-file drift and
 paired rollback before changing the profile master or activating new DB policy.
@@ -200,14 +200,14 @@ release pair, not as extra keys or aliases in the new profile.
    `python3 scripts/deploy/lib/worker-profile-pair.py prepare SERVICE ABSOLUTE_PAIR_DIR CONTAINER ROOT`.
    Supported Compose services are `hololive-api`, `hololive-alarm-worker`,
    `youtube-collector` (c), and `youtube-collector-b`. First adoption authenticates
-   the metrics loaded hash, compares exact bytes, rechecks process identity and
+   the bounded `/diagnostics/workers` v1 `profile.hash`, compares exact bytes, rechecks process identity and
    runs the old image CLI with no network. Missing/mutated bytes or an unpaired
    stopped process fail closed; do not reconstruct a profile from defaults.
 2. For native a/d, use the approved
    `scripts/deploy/ap-host-native-deploy.sh HOST --prepare-profile` before any
    mirror update or maintenance stop. It freezes the old binary/profile checksums
    and changes only the host-owned effective/source paths, without restarting.
-3. After 10.2.0 acceptance and retention of each previous pair, sync the approved
+3. After 10.2.1 acceptance and retention of each previous pair, sync the approved
    final desired profiles and transfer verified 11.0.0 candidate artifacts.
    Render prod+live-compat (central) or standalone `docker-compose.seoul.yml` (b) with
    `WORKER_PROFILE_OVERRIDE_FILE=none`, pipe `config --format json` to

@@ -30,14 +30,16 @@ def run(*args):
 def inspect(kind, name):
     return json.loads(run(CLI, kind, "inspect", name))[0]
 
-def loaded_hash(metrics):
-    samples = [line for line in metrics.splitlines() if line.startswith("iris_stack_worker_profile_info{")]
-    if len(samples) != 1:
+def loaded_hash(diagnostics):
+    # Profile identity must not depend on the cardinality of unrelated metrics.
+    envelope = json.loads(diagnostics)
+    if not isinstance(envelope, dict) or envelope.get("contractVersion") != 1:
         raise ValueError("loaded profile identity unavailable")
-    match = re.search(r'profile_hash="([0-9a-f]{64})"', samples[0])
-    if match is None:
+    profile = envelope.get("profile")
+    value = profile.get("hash") if isinstance(profile, dict) else None
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
         raise ValueError("loaded profile hash unavailable")
-    return match.group(1)
+    return value
 
 
 def container_profile_hash(service, container, data):
@@ -53,7 +55,7 @@ def container_profile_hash(service, container, data):
     }[service]
     return loaded_hash(run(CLI, "exec", container, "/app/bin/healthcheck",
                            "--body-api-key-env", credential,
-                           "http://127.0.0.1:" + port + "/metrics"))
+                           "http://127.0.0.1:" + port + "/diagnostics/workers"))
 
 
 def validate_container_pair(container, before, directory):
@@ -88,15 +90,15 @@ def prepare_native(service, release, host_env, unit):
     if environment.get("STACK_WORKER_PROFILE_FILE") != str(source):
         raise ValueError("native process does not use the canonical slot")
     address = environment["HOLOLIVE_METRICS_ADDR"]
-    metrics = subprocess.run([str(release / "bin/healthcheck"), "--body-api-key-env", "METRICS_API_KEY",
-                              "http://" + address + "/metrics"], env=environment, check=True,
-                             text=True, stdout=subprocess.PIPE, timeout=10).stdout
+    diagnostics = subprocess.run([str(release / "bin/healthcheck"), "--body-api-key-env", "METRICS_API_KEY",
+                                  "http://" + address + "/diagnostics/workers"], env=environment, check=True,
+                                 text=True, stdout=subprocess.PIPE, timeout=10).stdout
     temporary = release / "worker-profile.preparing.json"
     raw = profile_bytes(source)
     with temporary.open("xb") as output:
         output.write(raw)
     temporary.chmod(0o444)
-    if loaded_hash(metrics) != digest(temporary):
+    if loaded_hash(diagnostics) != digest(temporary):
         raise ValueError("native loaded profile does not match available bytes")
     subprocess.run(["sudo", "-n", "-u", "hololive", "env", "STACK_WORKER_PROFILE_FILE=" + str(temporary),
                     str(release / "bin/youtube-collector"), "--check-worker-profile"], check=True, timeout=30)
@@ -142,10 +144,10 @@ def verify_native(service, release, unit):
         raise ValueError("native process does not use its release profile")
     if environment.get("STACK_WORKER_PROFILE_SOURCE_FILE") != str(Path(SOURCE) / (service + ".json")):
         raise ValueError("native process does not observe its canonical source")
-    metrics = subprocess.run([str(release / "bin/healthcheck"), "--body-api-key-env", "METRICS_API_KEY",
-                              "http://" + environment["HOLOLIVE_METRICS_ADDR"] + "/metrics"], env=environment,
-                             check=True, text=True, stdout=subprocess.PIPE, timeout=10).stdout
-    if loaded_hash(metrics) != digest(release / "worker-profile.json"):
+    diagnostics = subprocess.run([str(release / "bin/healthcheck"), "--body-api-key-env", "METRICS_API_KEY",
+                                  "http://" + environment["HOLOLIVE_METRICS_ADDR"] + "/diagnostics/workers"], env=environment,
+                                 check=True, text=True, stdout=subprocess.PIPE, timeout=10).stdout
+    if loaded_hash(diagnostics) != digest(release / "worker-profile.json"):
         raise ValueError("native loaded profile differs from its release pair")
     if run("systemctl", "show", unit, "-p", "MainPID", "--value") != pid or (process / "stat").read_text().split(")", 1)[1].split()[19] != start:
         raise ValueError("native process changed during verification")

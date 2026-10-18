@@ -158,6 +158,12 @@ func dockerComposeConfigCommand(ctx context.Context, t *testing.T, files []strin
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "config")
 	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.live-compat.yml":
 		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "-f", composeLiveCompatFile, "config")
+	case "deploy/compose/docker-compose.osaka.yml":
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.osaka.yml", "config")
+	case "deploy/compose/docker-compose.osaka2.yml":
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.osaka2.yml", "config")
+	case "deploy/compose/docker-compose.seoul.yml":
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", "deploy/compose/docker-compose.seoul.yml", "config")
 	default:
 		t.Fatalf("unsupported compose file set: %v", files)
 
@@ -185,7 +191,7 @@ func renderAPComposeConfig(t *testing.T, file string) renderedCompose {
 	ctx, cancel := dockerComposeConfigContext(t)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", file, "config")
+	cmd := dockerComposeConfigCommand(ctx, t, []string{file})
 	repoRoot := repoRootFromConfigTest(t)
 
 	cmd.Dir = repoRoot

@@ -10,7 +10,7 @@
 
 ## v11.0.0 - 2026-10-18
 
-- **최종 워커·DB 계약 전환:** 10.2.0의 구 프로필 호환 baseline을 실제 운영에서 수용한 뒤 새 프로필을 활성화합니다. `source_observation`은 batch가 workers 이상이어야 하며 lease 하한은 `batch × attempt_timeout + 10000ms`입니다. eligible 큐·nullable 진단·공유 cache 수명·DB control reserve와 lease/attempt 정산을 함께 유지하며, 322–324와 방송 시각 확정·멤버십 아카이브 동작은 보존합니다.
+- **최종 워커·DB 계약 전환:** 10.2.1의 구 프로필 호환 baseline을 실제 운영에서 수용한 뒤 새 프로필을 활성화합니다. `source_observation`은 batch가 workers 이상이어야 하며 lease 하한은 `batch × attempt_timeout + 10000ms`입니다. eligible 큐·nullable 진단·공유 cache 수명·DB control reserve와 lease/attempt 정산을 함께 유지하며, 322–324와 방송 시각 확정·멤버십 아카이브 동작은 보존합니다.
 
 - **미전송 알림 lease 복구:** 직렬 발송의 뒤 그룹에서 아직 보내지 않은 claim이 만료되면 영구 격리하지 않고 기존 whole-unit recovery에 남깁니다. frozen request·generation·소유권 fence와 provider별 기한은 유지하며, 실제 DB에서 회수·재claim 후 두 발송 완료와 attempt 집계를 확인했습니다.
 - **paired rollback 복원성:** central은 이전 collector의 실행/정지 상태를 기록하고 정지된 writer를 자동 시작하지 않습니다. profile 게시 실패는 issuer 제거 전에 반환합니다. 호출별 임시 파일을 모두 준비한 뒤 개별 rename하여 남은 `.next` 파일이 복원을 막지 않게 하며, AP dry-run은 retained overlay를 바꾸지 않고 apply가 검사한 바이트를 게시합니다. 다중 파일 전체의 원자성이나 동시 배포 직렬화를 보장하는 변경은 아닙니다.
@@ -23,6 +23,10 @@
 - **비활성 워커 진단:** `source_observation`이 꺼져도 YouTube runtime과 durable 큐 sampler를 구성하여 depth를 보고합니다. 비활성 경로는 claim·projection 준비·maintenance를 실행하지 않습니다. bot inbox/outbox의 attempt 종료는 defer로 보장하여 panic 뒤 inFlight가 남지 않습니다.
 - **DB 연결·정리:** migrator의 pool·bootstrap 연결을 shared-go의 명시적 sslmode·비밀 보호 파싱으로 통일하며 `PGSSLMODE` 생략을 거부합니다. 기존 `pgxutil`을 제거하고 모든 rollback 소비자를 취소 독립 5초 공통 경로로 옮깁니다. 다섯 소비자는 provenance를 검증한 `shared-go/v2 v2.14.0`을 사용하며, source 통합만으로 운영 활성화·수용을 뜻하지는 않습니다.
 - **보존 backlog 측정:** kind별 제한된 후보에서 첫 비보호 행을 찾으면 보호 판정을 중단합니다. 실제 migration을 적용한 격리 DB에서 1,000개 후보의 보호 함수 호출이 첫 행 적격이면 1회, 보호 선두 3개이면 4회로 줄고 oldest·known은 유지됨을 확인했습니다. migration 315 삭제 경로는 별도로 측정했으며 잠금·커서·재검사 계약을 보존하기 위해 변경하지 않았습니다.
+
+## v10.2.1 - 2026-10-18
+
+- **프로필 짝의 유한 진단 조회:** loaded hash를 전체 `/metrics` 대신 인증된 `/diagnostics/workers`의 v1 `profile.hash`에서 확인합니다. unrelated metric 수가 늘어도 최초 capture·native 준비·배포 후 검증이 healthcheck 본문 상한을 넘지 않으며, 기존 응답 크기·시간 상한과 서비스별 인증키·프로세스/바이트 일치 검사는 유지합니다. 실제 운영의 Compose 네 슬롯과 native a/d 진단으로 확인했으며 자격 대체나 상한 완화는 없습니다.
 
 ## v10.2.0 - 2026-10-18
 
