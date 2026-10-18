@@ -211,13 +211,18 @@
     - `compose.env` 마스터를 먼저 수정하고 scoped sync의 dry-run·apply·마스터/미러 일치·root:hololive-runtime 0640을 확인했다. 설정 복구본은 인계 문서 "I5 실행·감시 기록"에 적었다.
     - 07:21:26~30Z 아래 투입 SQL을 1,000건 9회·745건 1회 실행했다. 매회 읽기 전용 사전 count와 별도 `BEGIN READ WRITE; SET LOCAL lock_timeout='3s'` 트랜잭션을 사용했고, 각 COMMIT을 확인했다. 삽입 합계 9,745건, 미투입 후보 0건이다. 시각 롤백·멤버십 재투입 SQL은 실행하지 않았다.
     - 사전 30분 실제 수집 지연(`observed_at-scheduled_for`) p99는 `channel_live_check` 4.508초·`live_snapshot` 4.765초였다. 07:22:51Z 직전 5분은 3.938초·4.616초, backlog 확정 10건·pending 9,735건이다. 완료 검증과 혼동하지 않는다.
-    - 부모가 kapu의 임시 감시 프로세스로 60초마다 직전 5분 집계를 받는다. 중단 수치화는 p99 >10초, request_failed 3건 이상·5% 이상, 이전 48시간 공개 확인 집합의 identity_missing 3건 이상·5% 이상, 최근 최종 결과 중 conflict ≥0.5%다. 사전 request_failed·conflict는 0건이며 새 임계값은 보수적인 조기 중단 판정이다. 공개 이력이 없는 UNKNOWN은 봇 확인으로 단정하지 않는다.
+    - 부모가 kapu의 임시 감시 프로세스로 60초마다 집계한다. 현재 사용자 승인 중단 기준은 5분 p99 >10초, request_failed 3건 이상·5% 이상, 이전 48시간 공개 확인 집합의 5분 identity_missing 3건 이상·5% 이상, **직전 30분 최종 결과 대비 conflict ≥0.5%이면서 3건 이상**이다. conflict만 최초 5분·단발 중단에서 두 번째 재개 때 조정했다. 작은 이상 징후의 중단은 늦어질 수 있으나 단발 충돌은 계속 terminal 격리되며 제품의 시각·identity 검증은 바꾸지 않았다. 공개 이력 없는 UNKNOWN은 봇 확인으로 단정하지 않는다.
     - 중단·조회 실패·최대 48시간·backlog 전량 최종 상태 중 먼저 발생하는 때 감시가 부모에게 결과를 전달한다. K=0 복귀는 다음 projection에서 backlog 첫 시도·재시도를 제거하지만 신규 종료·이미 발행된 관측 정산은 멈추지 않는다. 진행 행과 확정한 시각은 유지한다.
   - 중단·재개 승인 (08:02~08:17Z):
     - `conflict(channel_mismatch)` 1건이 직전 5분 최종 결과 49건의 2.04%여서 K=0으로 복귀했다. API만 08:02:45Z 재생성했고 health/readiness·재시작 0·같은 image·현재 backlog target 0건을 확인했다. 당시 p99 4.615초·4.685초, request_failed 0건이다.
     - 08:03Z 분포는 확정 259·충돌 1·pending 9,485건(미시도 9,416·identity_missing 69)이다. 충돌은 공개 응답의 영상 identity는 맞지만 채널이 저장 채널과 다른 경우이며, 해당 세션의 시각·observed 출처가 그대로 보존되었다. 과거 채널 귀속 경위는 보존된 관측만으로 확정하지 못했다.
     - 사용자는 충돌 행을 terminal 상태로 격리한 채 나머지를 재개하는 것을 승인했다. 중단 지표의 정상 범위 복귀를 확인한 뒤 K=200·API 단독 재생성하며 동일 중단 조건을 유지한다. 채널 수정·conflict 재큐잉·시각 롤백은 하지 않는다.
   - 재개 (08:17~08:18Z): 사용자 승인 후 직전 5분 conflict 0건·p99 4.632초/4.585초를 확인했다. 마스터 K=200·scoped sync·08:17:50Z API 단독 재생성 뒤 health/readiness·재시작 0·동일 image·다른 컨테이너 불변을 확인했다. 새 SQL 투입은 없다. 08:18:06Z 확정 296·격리 충돌 1·pending 9,448건이며 p99 4.840초/4.688초·request_failed/새 conflict 0건이다. 같은 감시 조건을 유지한다.
+  - 두 번째 중단·기준 조정·재개 (10:21~11:11Z):
+    - 10:21Z `start_mismatch` 1건이 5분 최종 결과 52건의 1.92%여서 K=0·10:22:20Z API 단독 재생성을 실행했다. health/readiness·재시작 0·backlog target 0건을 확인했다. 확정 1,275·격리 충돌 2·pending 8,468건을 보존했다.
+    - 새 충돌은 영상·채널·종료 시각이 일치하지만 provider 시작이 저장값보다 28.464분 늦어 허용폭 15분을 넘는 `observed`·`EXPLICIT_END` 사례다. 원래 시각은 바뀌지 않았다. 시각 검증 완화·채널 수정·재큐잉은 하지 않았다.
+    - 사용자가 conflict 중단만 30분 창·3건 이상·0.5% 이상으로 조정하고 K=200 재개하는 것을 승인했다. 사전 p99 4.223초/4.766초·30분 conflict 0건을 확인한 뒤 마스터·미러 sync와 11:11:00Z API 단독 재생성을 완료했다. 동일 image·K=200·health/readiness·재시작 0·다른 컨테이너 불변을 확인했다.
+    - 11:11:11Z 확정 1,288·격리 충돌 2·pending 8,455건, p99 4.701초/4.798초, request_failed·30분 새 conflict 0건이다. I4는 신규 후보 14건 모두 1시간을 관찰했지만 30건에 못 미쳐 계속 대기한다.
 - [x] 7. 멤버십 영상 시각 출처 (독립)
   - InnerTube 다른 client나 watch 페이지 `microformat`에서 시각을 얻을 수 있는지 수집기에서 시험한다.
   - 얻을 수 있으면 `members_only`를 다시 대기열에 넣는다.
