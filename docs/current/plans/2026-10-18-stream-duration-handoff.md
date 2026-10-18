@@ -1,10 +1,11 @@
 # 방송 시간 표시와 방송 시각 확정 인계 - 2026-10-18
 
-**상태** (2026-10-18 세 번째 세션 마감)
-- 사용자 승인("적대적리뷰후 커밋 푸쉬등 전부승인")으로 적대적 검토 지적을 반영한 뒤 PR #651~#655를 squash 병합하고 운영에 배포했습니다. 결과는 계획 문서 "배포 결과"에 있습니다.
-- 운영 `hololive-api`는 `f089d9a64`(migration 322·323·324 적용, backlog K=0), 수집기 a·b·c·d는 `7e60b2061`입니다.
-- I4는 06:00Z에 데이터로 판정했습니다. 기준 2·3은 충족했고, 기준 1은 배포 뒤 신규 종료 30건으로 병행 판정합니다(계획 5단계 "데이터 판정").
-- 사용자가 I5 backlog를 바로 시작하기로 정했고, 실행은 다음 세션에 맡겼습니다(1절, 8절, 9절 프롬프트).
+**상태** (2026-10-18 네 번째 세션, 07:23Z 실행 중)
+- PR #657(`427eebc19`)을 기준으로 I5 실행을 이어받았습니다. 원 checkout의 다른 작업은 건드리지 않고 `hololive-bot-stream-duration`을 사용합니다.
+- 운영 `hololive-api`는 같은 `f089d9a64` image로 07:20:46Z에 재생성했습니다. backlog K=200, healthy·재시작 0이며 health/readiness를 확인했습니다. 다른 컨테이너 ID는 그대로입니다.
+- I5는 07:21:26~07:21:30Z에 9,745건을 투입했습니다(1,000건 9회·745건 1회). 같은 조건의 미투입 후보는 0건입니다. 투입 완료와 확정 처리 완료는 다릅니다.
+- I4 기준 1은 신규 종료 30건의 1시간 관찰 창이 닫힌 뒤 판정합니다. 07:23Z에는 후보 5건, 관찰 창 종료 3건입니다.
+- I8은 이번 세션에서 사용자가 **보류**를 선택했습니다. 카카오 방 접근·명령 발송·화면 열기는 수행하지 않습니다.
 
 ## 1. 승인 범위
 
@@ -29,6 +30,7 @@
 - 2026-10-18 06:00Z 사용자 결정: I4를 1~2일 대기 대신 데이터로 판정하고 I5를 지금 시작하며("지금 I5 시작"), 실행은 다음 세션에서 합니다("대신 핸드오프해서 다른세션에서").
   - 이 결정으로 승인된 것: `compose.env`에 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200` 추가, `hololive-api` recreate, 계획 "운영 SQL 초안"의 backlog 투입 SQL(약 9,700행)과 이에 따른 YouTube 영상 확인 증가. 중단 조건에서 K=0으로 되돌리는 것도 포함합니다.
   - 별도 보고·승인이 필요한 것: 시각 롤백 SQL 실행, 계획에 없는 운영 데이터 쓰기, 카카오 방 사용.
+- 2026-10-18 네 번째 세션: 사용자가 위 인계 작업의 실행과 docs PR squash 병합을 다시 요청했습니다. I8 선택 질문에는 **보류**를 선택했습니다. 이는 I5·I4 승인 철회가 아니며 카카오 화면만 제외합니다.
 
 ## 2. 작업 트리 상태
 
@@ -161,18 +163,29 @@
   - unresolvable 추적에 들어가지 못하는 이유(`live.UnresolvableTrackable`)
 - 수정 방향은 조사 뒤에 정합니다. 기존 9건 정리는 운영 데이터 쓰기이므로 승인 필요입니다. 정리 결과도 계획의 확정 경로(`exhausted(identity_missing)`)와 맞아야 합니다.
 
-**진행 상태 (2026-10-18 세 번째 세션)**
+**진행 상태 (2026-10-18 네 번째 세션, 07:23Z)**
 
 | # | 상태 | 근거·남은 일 |
 |---|---|---|
 | I1 | 완료·배포 | #651(`51c0519cc`)에 포함, 03:35Z 배포. |
 | I2 | 완료·배포 | #651 A → `hololive-api` 03:35Z, #652 B → migration 322 적용·04:03Z. 전역 본문 md5 `abab0db8…` 확인. 게시마다 push hook의 `pre-push-gate.sh`가 격리 작업 공간에서 통과했고 CI 11개 check가 모두 통과했습니다. |
 | I3 | 완료·배포 | 적대적 검토(5개 영역) 지적 3건(backlog 재시도 누적으로 target 상한 초과, 중지 뒤 묶음 일괄 due, 늦게 감지한 방송의 시작 충돌)을 반영한 뒤 #653(`7bd38b05b`)으로 병합, migration 323 적용·04:30Z 배포. |
-| I4 | 기준 2·3 충족, 기준 1 병행 판정 | 06:00Z 데이터 판정: 확정 행 172건 중 `conflict` 0건, 수집기 교체 뒤 p99 `channel_live_check` 4.65초·`live_snapshot` 5.49초, 신 lifecycle 첫 시도 확정 161/162. 종료 직후 아카이브 준비 시간 표본(2/2, 조사 6/6)이 적어 기준 1은 배포 뒤 신규 종료 30건(오늘 UTC 13~14시 무렵 예상)으로 판정합니다(계획 5단계 "데이터 판정"). |
-| I5 | 시작 결정, 다음 세션 실행 | 06:00Z 투입 대상 9,745건(`legacy_unknown` 5,536건, 멤버십 33건). `compose.env`에는 키가 없고(root:hololive-runtime 0640), 중앙 compose는 이 변수를 전달합니다. 절차는 8절. |
+| I4 | 기준 2·3 충족, 기준 1 관찰 중 | 이전 06:00Z 판정은 유지합니다. 배포 이후 `observed` 신규 종료를 시각순으로 고정하고 취소·legacy 정리 행을 제외합니다. 진행 행은 LEFT JOIN하여 미시도 행도 분모에 남깁니다. 최초 30건 각각의 종료 관측 후 1시간이 지난 뒤 공개 여부와 관측 종료·provider 종료 기준 지연을 구분합니다. 07:23Z 후보 5건, 1시간 경과 3건입니다. |
+| I5 | 9,745건 투입 완료, 처리·감시 중 | 07:20:46Z K=200 API 단독 재생성, 07:21:26~30Z 1,000건×9+745건을 각각 commit했습니다. 미투입 후보 0건입니다. 07:22:51Z backlog `finalized` 10·`pending` 9,735건, conflict·request_failed 0건입니다. 완료 후 20건 대조·표시 비율 판정은 아직 하지 않았습니다. |
 | I6 | 완료·배포 | #655(`7e60b2061`), 수집기 c·b·a·d 05:10~05:18Z. `members_only` 행이 0건이라 재확정 SQL은 실행하지 않았고, 멤버십 종료 세션 33건은 I5 backlog에서 새 수집기로 처음 확인합니다. |
 | I7 | 완료·배포 | #654(`f089d9a64`), migration 324 적용·04:56Z. 9건 `ENDED` → 5분 안에 8건 `finalized`, 1건 `pending(identity_missing)`(조사 때 `LOGIN_REQUIRED`였던 1건으로 보임, 24시간 일정 뒤 `exhausted` 예상). roster 밖 head 없는 legacy LIVE는 0건입니다. |
-| I8 | 카카오 화면만 남음 | worker 프로필 값과 템플릿 변수 안내는 두 번째 세션에 기록했습니다. 실제 카카오톡 화면은 MESSAGE_STYLE_GUIDE대로 승인된 시험 방 수신으로만 확인하는데, 시험 방이 지정되지 않아 하지 않았습니다. |
+| I8 | 사용자 선택으로 보류 | worker 프로필 값과 템플릿 안내 확인은 완료 상태를 유지합니다. 현재 시험 방 승인이 없음을 확인하고 선택 질문을 했으며, 사용자가 카카오 화면 검증 보류를 선택했습니다. 방 접근·발송·읽음 변경을 하지 않았습니다. |
+
+**I5 실행·감시 기록**
+- 사전 읽기 전용 보호: `PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=15000'`, 각 조회의 첫 `SHOW transaction_read_only=on` 확인. 보고에는 집계만 남깁니다.
+- 대상: 9,745건, `legacy_unknown` 5,536건. 사전 30분 실제 수집 지연(`observed_at-scheduled_for`) p99는 `channel_live_check` 4.508초, `live_snapshot` 4.765초입니다. RPC 실행 시간 histogram과 구분합니다.
+- 설정: 마스터 `hosts/hololive-seoul/hololive-bot/compose.env`에 K=200을 추가하고 `sync-host.sh hololive-seoul --stack hololive-bot` dry-run에서 해당 파일만 바뀌고 삭제가 없음을 확인한 뒤 apply했습니다. 마스터·미러 일치, 원격 root:hololive-runtime 0640 유지, 컨테이너 K=200을 확인했습니다.
+- 설정 복구본: 로컬 `/home/kapu/work/stack-secrets/compose.env.pre-stream-duration-i5-20261018T071756Z`, 원격 `/opt/hololive-bot/compose/deploy-backups/compose.env.pre-stream-duration-i5-20261018T071756Z`. 두 파일은 0600이며 보존합니다. 정기 백업은 재개하지 않았습니다.
+- API image: `sha256:5c268d05d19ef60238d6c581b8f6a6b37372ae9a43e4491acdc580829af04fa2`, revision `f089d9a64136f1b5322d1a96fee4d68412433cee`, arm64. 기존 compose wrapper의 `config --quiet`와 `up -d --no-build --no-deps --pull never hololive-api`만 실행했습니다. migration·image 교체·다른 서비스 재시작은 하지 않았습니다.
+- 감시: 부모 세션이 kapu에서 60초마다 읽기 전용 집계로 직전 5분 p99·요청 사유·진행 분포를 확인합니다. 임시 감시 프로세스는 모든 backlog의 최종 상태 도달, 중단 조건, 조회 실패, 최대 48시간 중 먼저 발생하는 때 종료하여 부모에게 결과를 전달합니다. 운영 자동화나 서비스로 설치하지 않았습니다.
+- 보수적 중단 수치화: p99 >10초, 5분 `request_failed` 3건 이상이면서 시도 대비 5% 이상, 이전 48시간에 공개가 확인된 대상의 `identity_missing` 3건 이상이면서 그 대상 시도 대비 5% 이상, 최근 최종 결과 중 conflict 비율 0.5% 이상이면 즉시 K=0 복귀 대상으로 판정합니다. 사전 30분 request_failed와 conflict는 0건입니다. 공개 이력이 없는 영상의 UNKNOWN을 봇 확인으로 단정하지 않습니다.
+- K=0은 다음 projection의 backlog 첫 시도와 재시도 대상을 제거합니다. 신규 종료와 이미 발행된 관측 정산은 계속되므로 `pending=0`을 중단 성공 조건으로 쓰지 않습니다. 시각 롤백 SQL은 실행하지 않았습니다.
+- 실행 중 오류: 일반 SSH 사용자의 deploy 디렉터리 진입 권한 때문에 첫 recreate 명령은 실제 실행 전에 실패했고, 상태 불변을 확인한 뒤 `sudo bash`로 실행했습니다. distroless 컨테이너에 `printenv`가 없어 설정 확인은 docker inspect의 해당 키만 추출했습니다. 감시 초회에는 PostgreSQL JSON의 여러 줄 출력을 한 줄로 가정하여 중단했으며, 집계 보호를 유지한 채 framing을 수정하고 실제 표본 수신으로 재개했습니다.
 
 **커밋 운용** (로컬 커밋 승인됨, 1절)
 
@@ -213,43 +226,38 @@
 
 게시·배포(I1~I3, I6, I7)는 세 번째 세션에서 끝났고, I4 기준 2·3은 데이터로 판정했습니다(7절 "진행 상태", 계획 "배포 결과"·5단계 "데이터 판정"). 남은 순서입니다.
 
-1. I5 시작 (1절 사용자 결정으로 승인됨):
-   1. 사전 확인: 운영 image(`hololive-api` `f089d9a64`), 중앙 `deploy/compose/docker-compose.prod.yml`이 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`를 전달하는지, 직전 30분 수집 지연 p99와 확정 결과 분포를 기록합니다.
-   2. `stack-platform-ops` 절차로 `/etc/stack-secrets/hololive-bot/compose.env`를 백업하고 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200`을 추가합니다. 소유자·mode(root:hololive-runtime 0640)를 유지합니다.
-   3. `hololive-bot-ops` 절차로 `/opt/hololive-bot/compose/current`에서 `COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.live-compat.yml up -d --no-build --no-deps hololive-api`를 실행하고, healthy·재시작 0·컨테이너 안의 K 값 200을 확인합니다.
-   4. 투입 SQL을 `SET LOCAL lock_timeout='3s'` 트랜잭션에서 1,000행씩 반복합니다. 매번 같은 조건의 `count(*)`를 먼저 보고, 마지막에 남은 대상 0건을 확인합니다.
-   5. 감시: backlog 첫 시도는 6초에 하나라 하루 안팎 걸립니다. 6단계 중단 조건(수집 지연 p99 10초 초과, `request_failed` 급증, 공개 영상 `identity_missing` 급증, `conflict` 급증)이면 K=0으로 되돌리고 `hololive-api`를 recreate합니다. UTC 12~17시 종료가 몰리는 시간대를 특히 봅니다.
-2. I4 기준 1: 배포 뒤 신규 종료 30건이 모이면 종료 1시간 안 `finalized` 비율(≥97%)을 판정합니다.
-3. I5 뒤 무작위 20건 대조와 `!방송기록` 표시 비율을 다시 계산합니다.
-4. I8: 승인된 시험 방이 지정되면 `!방송기록`·`!라이브` 카카오톡 화면을 확인합니다.
+1. I5 처리 감시: K=200 활성화와 9,745건 투입은 07:21Z 완료했습니다. 재투입하지 말고 현재 진행 분포와 감시 소유자를 먼저 확인합니다. 7절의 중단 수치에 해당하면 마스터 K=0 → scoped sync → API 단독 recreate → 다음 projection의 backlog 대상 제거를 확인합니다. UTC 12~17시도 같은 조건으로 감시합니다.
+2. I4 기준 1: 04:30Z 이후 실제 신규 종료 최초 30건 각각의 1시간 관찰 창이 닫힌 뒤 공개 여부와 `finalized` 비율(≥97%)을 판정합니다. 관측 종료와 provider 종료 기준 지연을 구분합니다.
+3. I5의 모든 행이 최종 상태가 된 뒤 무작위 확정 20건을 대조하고 최근 30일 `!방송기록` 표시 비율을 계산합니다. 표본 조회 실패를 교체 표본으로 숨기지 않습니다.
+4. I8은 사용자 선택으로 보류합니다. 새 요청·승인 전에는 시험 방을 찾거나 카카오 화면을 열지 않습니다.
 5. 각 단계가 끝나면 이 문서의 7절 표와 계획 문서의 체크박스·검증 결과를 갱신합니다.
 
 ## 9. 인계 프롬프트
 
-다음 세션에 그대로 붙여 넣는 용도입니다.
+세션이 예기치 않게 중단되었을 때만 사용하는 재개 지침입니다. 7절의 최신 실행 상태를 먼저 확인합니다.
 
 ```text
-hololive-bot 방송 시각 확정 작업의 남은 단계(I5 backlog 실행, I4 기준 1 판정, I8 카카오 화면)를 이어받아 주십시오. 모든 보고는 한국어 합쇼체로 작성합니다.
+hololive-bot 방송 시각 확정의 진행 중인 I5와 I4 기준 1을 이어받아 주십시오. I8 카카오 화면은 사용자가 보류했습니다. 모든 보고는 한국어 합쇼체로 작성합니다.
 
 먼저 읽을 것:
 - /home/kapu/work/iris-stack/AGENTS.md, /home/kapu/work/iris-stack/hololive-bot/AGENTS.md
 - /home/kapu/work/iris-stack/.agents/workflows.md (Git writes, Failure paths, Validation)
 - 인계 문서: hololive-bot/docs/current/plans/2026-10-18-stream-duration-handoff.md (7절 "진행 상태", 8절)
-- 계획: 같은 디렉터리의 2026-10-18-broadcast-time-finalization.md (5·6단계, "운영 SQL 초안", "배포 결과", "남은 일")
+- 계획: 같은 디렉터리의 2026-10-18-broadcast-time-finalization.md (5·6단계, "운영 SQL", "배포 결과", "남은 일")
 - 배포·재시작은 hololive-bot-ops, 운영 DB 조회와 compose.env는 stack-platform-ops 스킬
 
 현재 운영 상태 (2026-10-18):
-- hololive-api f089d9a64 (migration 322·323·324 적용, backlog K=0), 수집기 a·b·c·d 7e60b2061.
+- hololive-api f089d9a64 (migration 322·323·324 적용), 07:20:46Z K=200 API 단독 재생성. 07:21Z backlog 9,745건 투입 완료. 이후 중단 여부는 반드시 최신 기록과 실제 K 값으로 확인합니다.
 - 확정 진행 표 youtube_live_time_finalizations, 지표 hololive_youtube_collection_time_finalization_*.
 - I4 기준 2·3은 2026-10-18 06:00Z 데이터로 충족했습니다(계획 5단계 "데이터 판정").
 
-사용자 결정 (2026-10-18, 인계 문서 1절): I5를 지금 시작합니다. compose.env K=200 추가, hololive-api recreate, backlog 투입 SQL(약 9,700행)과 그에 따른 영상 확인 증가, 중단 시 K=0 복귀는 승인되었습니다. 시작 전에 대상·효과·롤백을 한 번 요약해 보고하고 바로 진행하십시오.
+승인 범위: K=200 활성화, 9,745건 backlog 투입과 외부 조회 증가, 중단 조건 시 K=0 복귀, docs PR squash 병합은 승인되었습니다. 활성화와 투입은 이미 실행했으므로 반복하지 않습니다. 시각 롤백 SQL·계획 밖 데이터 쓰기는 별도 승인 사항입니다.
 
 진행 순서 (인계 문서 8절):
-1. I5: 사전 확인 → compose.env 백업과 K=200 추가(stack-platform-ops) → hololive-api만 recreate하고 K 값 확인(hololive-bot-ops) → 투입 SQL을 1,000행씩 반복 → 6단계 중단 조건 감시. 중단 조건이면 K=0으로 되돌리고 보고합니다.
-2. I4 기준 1: 04:30Z 이후 새로 종료된 방송 30건의 종료 1시간 안 finalized 비율을 판정합니다.
-3. I5 완료 뒤 무작위 20건을 공개 watch 페이지 시각과 대조하고 !방송기록 표시 비율을 다시 계산합니다.
-4. I8: 승인된 시험 방이 있으면 카카오톡 화면을 확인합니다. 운영 방은 쓰지 않습니다.
+1. I5: 감시 소유자·실제 K·진행 분포를 확인하고 6단계 중단 조건 감시를 이어갑니다. 중단 조건이면 K=0 복귀·API 단독 recreate 뒤 backlog projection 제거를 확인합니다.
+2. I4 기준 1: 04:30Z 이후 실제 신규 종료 최초 30건 각각의 1시간 관찰 창이 닫힌 뒤, 공개 여부와 관측 종료·provider 종료 기준 확정 지연을 구분하여 판정합니다.
+3. I5 전량 최종 상태 뒤 무작위 확정 20건을 공개 watch 시각과 대조하고 최근 30일 !방송기록 표시 비율을 계산합니다.
+4. I8은 보류를 유지하며 카카오 방 접근·발송·화면 열기를 하지 않습니다.
 
 진행 기록: 단계마다 인계 문서 7절 표와 계획 문서 5·6단계에 결과를 남기고, 문서 변경은 docs PR(squash 병합)로 게시합니다. push·PR·병합은 승인되었습니다.
 
