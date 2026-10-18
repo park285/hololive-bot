@@ -475,6 +475,10 @@ func (r recordingInputReader) LiveCheckVideos(_ context.Context, _ dbx.Tx, query
 	return r.videos, r.videosErr
 }
 
+func (recordingInputReader) TimeFinalizationVideos(context.Context, dbx.Tx) ([]TimeFinalizationVideo, error) {
+	return nil, nil
+}
+
 func TestPolicyBuilderQueriesLiveCheckVideosWithRosterAndBudget(t *testing.T) {
 	var query LiveCheckVideoQuery
 

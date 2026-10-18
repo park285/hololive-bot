@@ -97,7 +97,7 @@ func TestLiveRuntimeStateImmediateChangesAndRollback(t *testing.T) {
 		{"inactive_delete", `UPDATE youtube_live_sessions SET status='ENDED' WHERE video_id='array'; UPDATE youtube_live_reconciliation_heads SET status='ENDED' WHERE video_id='array'`},
 		{"absent_session_upsert", `INSERT INTO youtube_live_sessions(video_id,channel_id,status) VALUES ('absent','runtime-channel','LIVE') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`},
 		{"absent_head_upsert", `INSERT INTO youtube_live_reconciliation_heads(video_id,status) VALUES ('absent','UPCOMING') ON CONFLICT(video_id) DO UPDATE SET status=excluded.status`},
-		{"sessions_truncate", `TRUNCATE youtube_live_sessions`},
+		{"sessions_truncate", `TRUNCATE youtube_live_sessions CASCADE`},
 		{"heads_truncate", `TRUNCATE youtube_live_reconciliation_heads`},
 		{"pending_truncate", `TRUNCATE youtube_live_pending_ends CASCADE`},
 		{"availability_truncate", `TRUNCATE youtube_video_availability`},

@@ -1396,8 +1396,10 @@ TABLE youtube_live_sessions
   COLUMN schedule_observed_at timestamp with time zone
   COLUMN title_observed_at timestamp with time zone
   COLUMN history_sort_at timestamp with time zone GENERATED ALWAYS AS (COALESCE(ended_at, started_at, scheduled_start_time, last_seen_at)) STORED
+  COLUMN times_source text NOT NULL DEFAULT 'observed'::text
   CONSTRAINT chk_youtube_live_sessions_lifecycle_origin_vocab CHECK ((lifecycle_origin = ANY (ARRAY['metadata_only'::text, 'observed'::text, 'legacy_unknown'::text])))
   CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK ((status = ANY (ARRAY[('UPCOMING'::character varying)::text, ('LIVE'::character varying)::text, ('ENDED'::character varying)::text])))
+  CONSTRAINT chk_youtube_live_sessions_times_source_vocab CHECK ((times_source = ANY (ARRAY['observed'::text, 'provider'::text])))
   CONSTRAINT youtube_live_sessions_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_yls_channel ON public.youtube_live_sessions USING btree (channel_id)
   INDEX CREATE INDEX idx_yls_ended_channel_history_sort ON public.youtube_live_sessions USING btree (channel_id, history_sort_at DESC, video_id DESC) WHERE (status = 'ENDED'::text)
@@ -1409,6 +1411,39 @@ TABLE youtube_live_sessions
   TRIGGER CREATE TRIGGER youtube_live_runtime_insert AFTER INSERT ON youtube_live_sessions REFERENCING NEW TABLE AS runtime_new FOR EACH STATEMENT EXECUTE FUNCTION refresh_youtube_live_runtime_state_statement()
   TRIGGER CREATE TRIGGER youtube_live_runtime_truncate AFTER TRUNCATE ON youtube_live_sessions FOR EACH STATEMENT EXECUTE FUNCTION refresh_youtube_live_runtime_state_statement()
   TRIGGER CREATE TRIGGER youtube_live_runtime_update AFTER UPDATE ON youtube_live_sessions REFERENCING OLD TABLE AS runtime_old NEW TABLE AS runtime_new FOR EACH STATEMENT EXECUTE FUNCTION refresh_youtube_live_runtime_state_statement()
+
+TABLE youtube_live_time_finalizations
+  COLUMN video_id character varying(20) NOT NULL
+  COLUMN queue text NOT NULL
+  COLUMN outcome text NOT NULL
+  COLUMN reason text
+  COLUMN attempts smallint NOT NULL DEFAULT 0
+  COLUMN deferrals smallint NOT NULL DEFAULT 0
+  COLUMN retry_base_at timestamp with time zone
+  COLUMN next_attempt_at timestamp with time zone
+  COLUMN last_attempt_at timestamp with time zone
+  COLUMN observation_id bigint
+  COLUMN observed_started_at timestamp with time zone
+  COLUMN observed_ended_at timestamp with time zone
+  COLUMN enqueued_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN completed_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_live_time_finalizations_counts CHECK ((((attempts >= 0) AND (attempts <= 4)) AND ((deferrals >= 0) AND (deferrals <= 12))))
+  CONSTRAINT chk_youtube_live_time_finalizations_outcome_vocab CHECK ((outcome = ANY (ARRAY['pending'::text, 'finalized'::text, 'exhausted'::text, 'conflict'::text, 'members_only'::text, 'reverted'::text])))
+  CONSTRAINT chk_youtube_live_time_finalizations_queue_vocab CHECK ((queue = ANY (ARRAY['new'::text, 'backlog'::text])))
+  CONSTRAINT chk_youtube_live_time_finalizations_reason CHECK (((reason IS NULL) OR ((length(reason) >= 1) AND (length(reason) <= 64))))
+  CONSTRAINT chk_youtube_live_time_finalizations_state CHECK (
+CASE outcome
+    WHEN 'pending'::text THEN ((completed_at IS NULL) AND ((next_attempt_at IS NOT NULL) OR ((queue = 'backlog'::text) AND (attempts = 0) AND (deferrals = 0))))
+    WHEN 'finalized'::text THEN ((completed_at IS NOT NULL) AND (next_attempt_at IS NULL) AND (reason IS NULL))
+    WHEN 'members_only'::text THEN ((completed_at IS NOT NULL) AND (next_attempt_at IS NULL))
+    WHEN 'reverted'::text THEN ((completed_at IS NOT NULL) AND (next_attempt_at IS NULL))
+    ELSE ((completed_at IS NOT NULL) AND (next_attempt_at IS NULL) AND (reason IS NOT NULL))
+END)
+  CONSTRAINT youtube_live_time_finalizations_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_live_time_finalizations_video_id_fkey FOREIGN KEY (video_id) REFERENCES youtube_live_sessions(video_id) ON DELETE CASCADE
+  CONSTRAINT youtube_live_time_finalizations_pkey PRIMARY KEY (video_id)
+  CONSTRAINT uq_youtube_live_time_finalizations_observation UNIQUE (observation_id)
 
 TABLE youtube_notification_delivery
   OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50

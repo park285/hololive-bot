@@ -27,6 +27,9 @@ const (
 	liveFreshnessBudgetSlack = 30 * time.Second
 
 	liveCheckVideoReasonKind = "live_session_check"
+	// 종료 시각 확정 확인은 LIVE(20)·UPCOMING(19) 영상 확인보다 뒤에 둔다.
+	timeFinalizationReasonKind = "archive_time_finalization"
+	timeFinalizationPriority   = 18
 )
 
 var (
@@ -66,6 +69,7 @@ type PolicyInputs struct {
 	NotificationChannelIDs []string
 	OperationalChannelIDs  []string
 	LiveCheckVideos        []LiveCheckVideo
+	TimeFinalizationVideos []TimeFinalizationVideo
 }
 
 // LiveCheckVideo는 운영 roster의 LIVE 또는 지난 일정·출처 미상 UPCOMING 영상의 구조 membership입니다.
@@ -80,6 +84,13 @@ type LiveCheckVideo struct {
 	UnresolvableFor time.Duration
 }
 
+// TimeFinalizationVideo는 운영 roster와 무관한 종료 방송의 시각 확정 대상입니다.
+type TimeFinalizationVideo struct {
+	VideoID   string
+	ChannelID string
+	NotBefore time.Time
+}
+
 // LiveCheckVideoQuery는 같은 projection transaction에서 읽은 운영 roster와 신선도 예산을 전달합니다.
 // 판정 시각은 조회 statement의 DB 시각이며, 그보다 미래인 근거 시각은 신선도로 받아들이지 않습니다.
 type LiveCheckVideoQuery struct {
@@ -91,6 +102,7 @@ type InputReader interface {
 	NotificationChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
 	OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
 	LiveCheckVideos(ctx context.Context, tx dbx.Tx, query LiveCheckVideoQuery) ([]LiveCheckVideo, error)
+	TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]TimeFinalizationVideo, error)
 }
 
 type PolicyBuilder struct {
@@ -127,10 +139,16 @@ func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, _ time.Time) ([]Tar
 		return nil, nil, fmt.Errorf("%w: load live check videos: %w", ErrInputRead, err)
 	}
 
+	finalizations, err := b.Reader.TimeFinalizationVideos(ctx, tx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: load time finalization videos: %w", ErrInputRead, err)
+	}
+
 	out1, out2, err := BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: notification,
 		OperationalChannelIDs:  operational,
 		LiveCheckVideos:        videos,
+		TimeFinalizationVideos: finalizations,
 	}, b.Schedules)
 	if err != nil {
 		return out1, out2, fmt.Errorf("build policy targets: %w", err)
@@ -166,8 +184,16 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 		return nil, nil, fmt.Errorf("append live check videos: %w", err)
 	}
 
+	if err := builder.appendTimeFinalizationVideos(inputs.TimeFinalizationVideos, inputs.LiveCheckVideos); err != nil {
+		return nil, nil, fmt.Errorf("append time finalization videos: %w", err)
+	}
+
 	if err := builder.appendGlobalSchedule(); err != nil {
 		return nil, nil, fmt.Errorf("append global schedule: %w", err)
+	}
+
+	if err := validateProjectionCounts(builder.targets, builder.reasons); err != nil {
+		return nil, nil, fmt.Errorf("validate policy target counts: %w", err)
 	}
 
 	return builder.targets, builder.reasons, nil
@@ -269,6 +295,44 @@ func (b *policyTargetBuilder) appendLiveCheckVideos(videos []LiveCheckVideo, ope
 			target.Priority = max(target.Priority-1, 0)
 			target.PollInterval = unresolvablePollInterval(target.PollInterval, video.UnresolvableFor)
 		}
+	}
+
+	return nil
+}
+
+// LIVE·UPCOMING 조회 뒤 종료가 커밋되어 두 입력에 나타나도 기존 수명 확인을 우선합니다.
+// 확정 대상은 운영 roster와 영상 확인 입력 상한을 공유하지 않고 전체 target 상한만 따릅니다.
+func (b *policyTargetBuilder) appendTimeFinalizationVideos(videos []TimeFinalizationVideo, liveVideos []LiveCheckVideo) error {
+	if len(videos) == 0 {
+		return nil
+	}
+
+	liveIDs := make(map[string]struct{}, len(liveVideos))
+
+	for _, video := range liveVideos {
+		liveIDs[strings.TrimSpace(video.VideoID)] = struct{}{}
+	}
+
+	for _, video := range videos {
+		videoID := strings.TrimSpace(video.VideoID)
+		channelID := strings.TrimSpace(video.ChannelID)
+
+		if videoID == "" || channelID == "" {
+			return fmt.Errorf("%w: time finalization video identity is empty", ErrInvalidProjection)
+		}
+
+		if _, exists := liveIDs[videoID]; exists {
+			continue
+		}
+
+		if err := b.appendTarget(videoID, contract.KindVideoLiveCheck, timeFinalizationReasonKind, channelID); err != nil {
+			return fmt.Errorf("append target: %w", err)
+		}
+
+		target := &b.targets[len(b.targets)-1]
+
+		target.Priority = timeFinalizationPriority
+		target.NotBefore = video.NotBefore
 	}
 
 	return nil

@@ -323,20 +323,29 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 	for i := range entries {
 		entry := &entries[i]
 		fallbackTime, fallbackLabel := broadcastHistoryFallbackTime(entry)
+		endedAt := verifiedBroadcastEndedAt(entry)
+		archiveUnavailable := entry.TimesSource != "provider" && endedAt.IsZero() &&
+			entry.FinalizationOutcome != nil && *entry.FinalizationOutcome == "exhausted" &&
+			entry.FinalizationReason != nil && *entry.FinalizationReason == "identity_missing"
+
+		if archiveUnavailable && fallbackLabel == "종료" {
+			fallbackLabel = "기록"
+		}
 
 		result = append(result, formatter.BroadcastHistoryEntry{
-			VideoID:      entry.VideoID,
-			MemberName:   mekparkhost.DisplayName(entry.ChannelID, entry.Title, entry.MemberName),
-			Type:         entry.BroadcastType,
-			TypeLabel:    broadcasttype.Type(entry.BroadcastType).Label(),
-			TopicID:      entry.TopicID,
-			Title:        entry.Title,
-			StartedAt:    broadcastHistoryStartedAt(entry),
-			EndedAt:      verifiedBroadcastEndedAt(entry),
-			Time:         fallbackTime,
-			TimeLabel:    fallbackLabel,
-			URL:          "https://www.youtube.com/watch?v=" + entry.VideoID,
-			HasThumbnail: validYouTubeVideoID(entry.VideoID),
+			VideoID:            entry.VideoID,
+			MemberName:         mekparkhost.DisplayName(entry.ChannelID, entry.Title, entry.MemberName),
+			Type:               entry.BroadcastType,
+			TypeLabel:          broadcasttype.Type(entry.BroadcastType).Label(),
+			TopicID:            entry.TopicID,
+			Title:              entry.Title,
+			StartedAt:          broadcastHistoryStartedAt(entry),
+			EndedAt:            endedAt,
+			Time:               fallbackTime,
+			TimeLabel:          fallbackLabel,
+			URL:                "https://www.youtube.com/watch?v=" + entry.VideoID,
+			HasThumbnail:       validYouTubeVideoID(entry.VideoID),
+			ArchiveUnavailable: archiveUnavailable,
 		})
 	}
 
@@ -350,15 +359,14 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 // ended_at이 확인 시각보다 이른 쪽도 같은 상한까지 허용한다.
 const maxBroadcastEndUncertainty = 5 * time.Minute
 
-// legacyLifecycleOrigin 기록은 수명 추적 도입 전에 저장된 시각이라 started_at이 실제 시작보다 수 시간 늦은 경우가
-// 섞여 있다. 그래서 시작 시각과 방송 길이를 표시하지 않고 broadcastHistoryFallbackTime(저장 종료 시각은 "종료")으로
-// 표시한다. 이 판정은 head 존재나 LastLivePositiveAt이 아니라 origin으로 한다. 신 lifecycle의 종료는 origin을
-// observed로 바꾸고, head가 있어도 LIVE를 확인하지 못한 정상 종료가 있기 때문이다.
+// legacyLifecycleOrigin 기록은 수명 추적 도입 전에 저장된 시각이라 started_at이 실제 시작보다 수 시간 늦을 수 있다.
+// YouTube 아카이브(provider) 시각으로 확정되기 전에는 시작·길이 대신 저장 시각을 표시한다. 판정은 head나 LIVE 확인이
+// 아니라 origin으로 한다.
 const legacyLifecycleOrigin = "legacy_unknown"
 
-// trustedBroadcastStartedAt은 시작 시각으로 표시할 수 있는 started_at을 반환한다. 옛 기록이거나 값이 없으면 nil이다.
+// trustedBroadcastStartedAt은 provider 시각을 우선하고, 관측 시각은 옛 기록이 아니어야 시작 시각으로 표시한다.
 func trustedBroadcastStartedAt(entry *handlercore.BroadcastHistoryEntry) *time.Time {
-	if entry.LifecycleOrigin == legacyLifecycleOrigin {
+	if entry.TimesSource != "provider" && entry.LifecycleOrigin == legacyLifecycleOrigin {
 		return nil
 	}
 
@@ -374,15 +382,23 @@ func broadcastHistoryStartedAt(entry *handlercore.BroadcastHistoryEntry) time.Ti
 	return *startedAt
 }
 
-// verifiedBroadcastEndedAt은 표시할 시작 시각이 있고 종료 오차가 maxBroadcastEndUncertainty 안인 종료 시각만 반환한다.
-// 그 밖에는 zero이며, 표시는 시작 시각만 남긴다.
+// verifiedBroadcastEndedAt은 provider 시각을 우선하고, 관측 시각은 신 lifecycle의 종료 오차가 상한 안이어야 반환한다.
+// 시작이 없으면 길이를 계산하지 않고 저장 종료 시각만 표시한다.
 func verifiedBroadcastEndedAt(entry *handlercore.BroadcastHistoryEntry) time.Time {
 	startedAt := trustedBroadcastStartedAt(entry)
-	if startedAt == nil || entry.EndedAt == nil || entry.LastLivePositiveAt == nil {
+	if startedAt == nil || entry.EndedAt == nil {
 		return time.Time{}
 	}
 
 	if entry.EndedAt.Before(*startedAt) {
+		return time.Time{}
+	}
+
+	if entry.TimesSource == "provider" {
+		return *entry.EndedAt
+	}
+
+	if entry.TimesSource != "observed" || entry.LifecycleOrigin != "observed" || entry.LastLivePositiveAt == nil {
 		return time.Time{}
 	}
 

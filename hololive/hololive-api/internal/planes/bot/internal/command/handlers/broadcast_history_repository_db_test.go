@@ -247,9 +247,7 @@ func seedHistorySessions(t *testing.T, pool *pgxpool.Pool, sessions []historySes
 	}
 }
 
-// 목록과 썸네일 단건 조회는 같은 scan을 쓰므로 둘 다 lifecycle_origin과 reconciliation head의 마지막 live 확인 시각을
-// 읽어야 한다. LIVE를 확인하지 못한 종료는 head가 있어도 observed이고 확인 시각이 nil이며, 옛 기록은 head가 없어도
-// legacy_unknown으로 구분되어야 한다.
+// 목록과 단건 조회는 lifecycle 출처와 확정 근거를 함께 읽는다. 확정 행이 없는 세션도 빠지지 않고 NULL을 유지한다.
 func TestPgBroadcastHistoryRepositoryReadsTimeEvidence(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 17, 12, 0, 0, 0, time.UTC)
@@ -265,6 +263,14 @@ func TestPgBroadcastHistoryRepositoryReadsTimeEvidence(t *testing.T) {
 		INSERT INTO youtube_live_reconciliation_heads(video_id, status, last_live_positive_at, last_live_positive_seen_at)
 		VALUES ('v-with-head', 'ENDED', $1, $1), ('v-head-no-live', 'ENDED', NULL, NULL)
 	`, lastPositive)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `
+		UPDATE youtube_live_sessions SET times_source = 'provider' WHERE video_id = 'v-with-head';
+		INSERT INTO youtube_live_time_finalizations(video_id, queue, outcome, reason, completed_at)
+		VALUES ('v-with-head', 'new', 'finalized', NULL, now()),
+		       ('v-legacy', 'backlog', 'exhausted', 'identity_missing', now())
+	`)
 	require.NoError(t, err)
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
@@ -286,14 +292,19 @@ func TestPgBroadcastHistoryRepositoryReadsTimeEvidence(t *testing.T) {
 	require.Nil(t, got["v-head-no-live"].LastLivePositiveAt)
 	require.Equal(t, legacyLifecycleOrigin, got["v-legacy"].LifecycleOrigin)
 	require.Nil(t, got["v-legacy"].LastLivePositiveAt)
+	require.Equal(t, "provider", got["v-with-head"].TimesSource)
+	require.Equal(t, new("finalized"), got["v-with-head"].FinalizationOutcome)
+	require.Nil(t, got["v-with-head"].FinalizationReason)
+	require.Equal(t, "observed", got["v-head-no-live"].TimesSource)
+	require.Nil(t, got["v-head-no-live"].FinalizationOutcome)
+	require.Nil(t, got["v-head-no-live"].FinalizationReason)
+	require.Equal(t, "observed", got["v-legacy"].TimesSource)
+	require.Equal(t, new("exhausted"), got["v-legacy"].FinalizationOutcome)
+	require.Equal(t, new("identity_missing"), got["v-legacy"].FinalizationReason)
 
-	entry, err := repo.GetEndedBroadcast(t.Context(), handlercore.BroadcastThumbnailQuery{VideoID: "v-with-head"})
-	require.NoError(t, err)
-	require.Equal(t, observedLifecycleOrigin, entry.LifecycleOrigin)
-	require.NotNil(t, entry.LastLivePositiveAt)
-	require.True(t, entry.LastLivePositiveAt.Equal(lastPositive))
-
-	legacy, err := repo.GetEndedBroadcast(t.Context(), handlercore.BroadcastThumbnailQuery{VideoID: "v-legacy"})
-	require.NoError(t, err)
-	require.Equal(t, legacyLifecycleOrigin, legacy.LifecycleOrigin)
+	for videoID, listed := range got {
+		entry, err := repo.GetEndedBroadcast(t.Context(), handlercore.BroadcastThumbnailQuery{VideoID: videoID})
+		require.NoError(t, err)
+		require.Equal(t, listed, *entry)
+	}
 }

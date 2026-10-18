@@ -194,6 +194,14 @@ func TestBroadcastHistoryTimeSpan(t *testing.T) {
 			entry: BroadcastHistoryEntry{Time: time.Date(2026, time.October, 17, 22, 29, 0, 0, kst), TimeLabel: "종료"},
 			want:  "⏰ 2026/10/17 22:29 종료",
 		},
+		"archive unavailable with start and topic": {
+			entry: BroadcastHistoryEntry{StartedAt: startedAt, ArchiveUnavailable: true, TopicID: "game"},
+			want:  "⏰ 2026/10/17 20:59 시작 · 아카이브를 확인할 수 없어 종료 시각 미확인 · topic: game",
+		},
+		"archive unavailable without trusted start": {
+			entry: BroadcastHistoryEntry{Time: startedAt, TimeLabel: "기록", ArchiveUnavailable: true},
+			want:  "⏰ 2026/10/17 20:59 기록 · 아카이브를 확인할 수 없어 종료 시각 미확인",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

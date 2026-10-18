@@ -11,7 +11,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-type rosterReader struct{}
+type rosterReader struct {
+	timeFinalizationBacklogBatchSize int
+}
 
 func (rosterReader) NotificationChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error) {
 	out, err := loadChannelIDs(ctx, tx, "notification_channel_ids.sql", "notification")
@@ -85,6 +87,45 @@ func (rosterReader) LiveCheckVideos(
 
 	if len(videos) > targetprojection.MaxInputLiveCheckVideoCount {
 		return nil, fmt.Errorf("%w: live check video count exceeds %d", targetprojection.ErrInvalidProjection, targetprojection.MaxInputLiveCheckVideoCount)
+	}
+
+	return videos, nil
+}
+
+// 신규 종료는 최근 순 300개까지 읽습니다. 과거 기록(backlog)은 첫 결과가 끝난 묶음 단위로 교체하고 첫 시도는
+// 한 번에 한 영상만 열며, 재시도 중인 행과 활성 묶음을 합쳐 2,000개를 넘기지 않아 전체 target 상한에 닿지
+// 않습니다. 운영 roster 밖의 옛 방송도 대상이며 재시도 시각은 membership이 아닌 NotBefore로 전달합니다.
+func (r rosterReader) TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]targetprojection.TimeFinalizationVideo, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("%w: transaction is not configured", targetprojection.ErrInputRead)
+	}
+
+	const (
+		maxNewFinalizations     = 300
+		maxBacklogFinalizations = 2000
+	)
+
+	rows, err := tx.Query(ctx, mustSQL("time_finalization_videos.sql"), r.timeFinalizationBacklogBatchSize,
+		maxNewFinalizations, maxBacklogFinalizations)
+	if err != nil {
+		return nil, fmt.Errorf("%w: load time finalization videos: %w", targetprojection.ErrInputRead, err)
+	}
+	defer rows.Close()
+
+	var videos []targetprojection.TimeFinalizationVideo
+
+	for rows.Next() {
+		var video targetprojection.TimeFinalizationVideo
+
+		if err := rows.Scan(&video.VideoID, &video.ChannelID, &video.NotBefore); err != nil {
+			return nil, fmt.Errorf("%w: scan time finalization video: %w", targetprojection.ErrInputRead, err)
+		}
+
+		videos = append(videos, video)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%w: read time finalization videos: %w", targetprojection.ErrInputRead, err)
 	}
 
 	return videos, nil
