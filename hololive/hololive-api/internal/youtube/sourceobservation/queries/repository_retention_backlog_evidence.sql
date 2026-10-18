@@ -8,7 +8,7 @@ WITH policies AS (
            sum(candidate_count.inspected) AS inspected
     FROM policies policy
     CROSS JOIN LATERAL (
-        SELECT count(*) AS inspected
+        SELECT count(candidate.id) AS inspected
         FROM (
             SELECT observation.id
             FROM source_observations observation
