@@ -213,6 +213,11 @@
     - 사전 30분 실제 수집 지연(`observed_at-scheduled_for`) p99는 `channel_live_check` 4.508초·`live_snapshot` 4.765초였다. 07:22:51Z 직전 5분은 3.938초·4.616초, backlog 확정 10건·pending 9,735건이다. 완료 검증과 혼동하지 않는다.
     - 부모가 kapu의 임시 감시 프로세스로 60초마다 직전 5분 집계를 받는다. 중단 수치화는 p99 >10초, request_failed 3건 이상·5% 이상, 이전 48시간 공개 확인 집합의 identity_missing 3건 이상·5% 이상, 최근 최종 결과 중 conflict ≥0.5%다. 사전 request_failed·conflict는 0건이며 새 임계값은 보수적인 조기 중단 판정이다. 공개 이력이 없는 UNKNOWN은 봇 확인으로 단정하지 않는다.
     - 중단·조회 실패·최대 48시간·backlog 전량 최종 상태 중 먼저 발생하는 때 감시가 부모에게 결과를 전달한다. K=0 복귀는 다음 projection에서 backlog 첫 시도·재시도를 제거하지만 신규 종료·이미 발행된 관측 정산은 멈추지 않는다. 진행 행과 확정한 시각은 유지한다.
+  - 중단·재개 승인 (08:02~08:17Z):
+    - `conflict(channel_mismatch)` 1건이 직전 5분 최종 결과 49건의 2.04%여서 K=0으로 복귀했다. API만 08:02:45Z 재생성했고 health/readiness·재시작 0·같은 image·현재 backlog target 0건을 확인했다. 당시 p99 4.615초·4.685초, request_failed 0건이다.
+    - 08:03Z 분포는 확정 259·충돌 1·pending 9,485건(미시도 9,416·identity_missing 69)이다. 충돌은 공개 응답의 영상 identity는 맞지만 채널이 저장 채널과 다른 경우이며, 해당 세션의 시각·observed 출처가 그대로 보존되었다. 과거 채널 귀속 경위는 보존된 관측만으로 확정하지 못했다.
+    - 사용자는 충돌 행을 terminal 상태로 격리한 채 나머지를 재개하는 것을 승인했다. 중단 지표의 정상 범위 복귀를 확인한 뒤 K=200·API 단독 재생성하며 동일 중단 조건을 유지한다. 채널 수정·conflict 재큐잉·시각 롤백은 하지 않는다.
+  - 재개 (08:17~08:18Z): 사용자 승인 후 직전 5분 conflict 0건·p99 4.632초/4.585초를 확인했다. 마스터 K=200·scoped sync·08:17:50Z API 단독 재생성 뒤 health/readiness·재시작 0·동일 image·다른 컨테이너 불변을 확인했다. 새 SQL 투입은 없다. 08:18:06Z 확정 296·격리 충돌 1·pending 9,448건이며 p99 4.840초/4.688초·request_failed/새 conflict 0건이다. 같은 감시 조건을 유지한다.
 - [x] 7. 멤버십 영상 시각 출처 (독립)
   - InnerTube 다른 client나 watch 페이지 `microformat`에서 시각을 얻을 수 있는지 수집기에서 시험한다.
   - 얻을 수 있으면 `members_only`를 다시 대기열에 넣는다.
