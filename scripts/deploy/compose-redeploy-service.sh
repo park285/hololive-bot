@@ -269,9 +269,9 @@ profile_backup=""
 profile_candidate=""
 if [[ "$TARGET" == hololive-api || "$TARGET" == hololive-alarm-worker ]]; then
     profile_pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
-    profile_backup="$ROOT_DIR/artifacts/worker-profile/releases/${TARGET}-$(date -u +%Y%m%dT%H%M%SZ)"
     mkdir -p "$ROOT_DIR/artifacts/worker-profile/releases"
-    mkdir -m 0755 "$profile_backup"
+    profile_backup="$(mktemp -d "$ROOT_DIR/artifacts/worker-profile/releases/${TARGET}-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
+    chmod 0755 "$profile_backup"
     printf '%s\n' "$TARGET" > "$profile_backup/service"
     container_id="$("${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" ps -aq "$TARGET")"
     if [[ -n "$container_id" ]]; then
