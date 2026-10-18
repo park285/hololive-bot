@@ -1,9 +1,10 @@
 # 방송 시간 표시와 방송 시각 확정 인계 - 2026-10-18
 
-**상태** (2026-10-18 세 번째 세션 갱신)
+**상태** (2026-10-18 세 번째 세션 마감)
 - 사용자 승인("적대적리뷰후 커밋 푸쉬등 전부승인")으로 적대적 검토 지적을 반영한 뒤 PR #651~#655를 squash 병합하고 운영에 배포했습니다. 결과는 계획 문서 "배포 결과"에 있습니다.
-- 운영 `hololive-api`는 `f089d9a64`(migration 322·323·324 적용), 수집기 a·b·c·d는 `7e60b2061`입니다.
-- 남은 일은 I4 판정(1~2일 관찰), 그 뒤의 I5 backlog, 승인된 시험 방에서의 카카오톡 화면 확인입니다(7절 "진행 상태", 8절).
+- 운영 `hololive-api`는 `f089d9a64`(migration 322·323·324 적용, backlog K=0), 수집기 a·b·c·d는 `7e60b2061`입니다.
+- I4는 06:00Z에 데이터로 판정했습니다. 기준 2·3은 충족했고, 기준 1은 배포 뒤 신규 종료 30건으로 병행 판정합니다(계획 5단계 "데이터 판정").
+- 사용자가 I5 backlog를 바로 시작하기로 정했고, 실행은 다음 세션에 맡겼습니다(1절, 8절, 9절 프롬프트).
 
 ## 1. 승인 범위
 
@@ -24,7 +25,10 @@
 - 2026-10-18 사용자 지시: "모든 이슈를 해결해야지". 다음 세션은 7절의 이슈 전체(I1~I8)를 해결합니다.
   - 이 지시는 코드·문서·시험 작업과 읽기 전용 조사에 적용됩니다.
   - 위 "승인되지 않은 작업"은 각 시점에 대상과 효과를 밝히고 별도로 승인을 받습니다.
-- 2026-10-18 세 번째 세션 사용자 승인: "적대적리뷰후 커밋 푸쉬등 전부승인". 적대적 검토와 수정, push·PR·병합, 운영 배포와 migration 322·323·324 적용을 이 승인으로 진행했습니다. 6단계 backlog(K 설정과 투입 SQL)는 계획의 5단계 통과 조건에 묶여 있어 아직 실행하지 않았습니다.
+- 2026-10-18 세 번째 세션 사용자 승인: "적대적리뷰후 커밋 푸쉬등 전부승인". 적대적 검토와 수정, push·PR·병합, 운영 배포와 migration 322·323·324 적용을 이 승인으로 진행했습니다.
+- 2026-10-18 06:00Z 사용자 결정: I4를 1~2일 대기 대신 데이터로 판정하고 I5를 지금 시작하며("지금 I5 시작"), 실행은 다음 세션에서 합니다("대신 핸드오프해서 다른세션에서").
+  - 이 결정으로 승인된 것: `compose.env`에 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200` 추가, `hololive-api` recreate, 계획 "운영 SQL 초안"의 backlog 투입 SQL(약 9,700행)과 이에 따른 YouTube 영상 확인 증가. 중단 조건에서 K=0으로 되돌리는 것도 포함합니다.
+  - 별도 보고·승인이 필요한 것: 시각 롤백 SQL 실행, 계획에 없는 운영 데이터 쓰기, 카카오 방 사용.
 
 ## 2. 작업 트리 상태
 
@@ -164,8 +168,8 @@
 | I1 | 완료·배포 | #651(`51c0519cc`)에 포함, 03:35Z 배포. |
 | I2 | 완료·배포 | #651 A → `hololive-api` 03:35Z, #652 B → migration 322 적용·04:03Z. 전역 본문 md5 `abab0db8…` 확인. 게시마다 push hook의 `pre-push-gate.sh`가 격리 작업 공간에서 통과했고 CI 11개 check가 모두 통과했습니다. |
 | I3 | 완료·배포 | 적대적 검토(5개 영역) 지적 3건(backlog 재시도 누적으로 target 상한 초과, 중지 뒤 묶음 일괄 due, 늦게 감지한 방송의 시작 충돌)을 반영한 뒤 #653(`7bd38b05b`)으로 병합, migration 323 적용·04:30Z 배포. |
-| I4 | 관찰 중 | 배포 직후 48시간 창 162건 중 161건 `finalized`, `conflict` 0건, 첫 일괄 확인 3분 뒤 수집 지연 기준선 복귀(계획 5단계 "진행"). 새 종료의 1시간 안 확정률·`conflict` 비율은 1~2일 집계로 판정합니다. |
-| I5 | I4 판정 대기 | 실행 절차는 계획 "남은 일". 중앙 compose는 K 변수를 이미 전달하므로 `compose.env` 값과 `hololive-api` recreate, 투입 SQL만 남았습니다. |
+| I4 | 기준 2·3 충족, 기준 1 병행 판정 | 06:00Z 데이터 판정: 확정 행 172건 중 `conflict` 0건, 수집기 교체 뒤 p99 `channel_live_check` 4.65초·`live_snapshot` 5.49초, 신 lifecycle 첫 시도 확정 161/162. 종료 직후 아카이브 준비 시간 표본(2/2, 조사 6/6)이 적어 기준 1은 배포 뒤 신규 종료 30건(오늘 UTC 13~14시 무렵 예상)으로 판정합니다(계획 5단계 "데이터 판정"). |
+| I5 | 시작 결정, 다음 세션 실행 | 06:00Z 투입 대상 9,745건(`legacy_unknown` 5,536건, 멤버십 33건). `compose.env`에는 키가 없고(root:hololive-runtime 0640), 중앙 compose는 이 변수를 전달합니다. 절차는 8절. |
 | I6 | 완료·배포 | #655(`7e60b2061`), 수집기 c·b·a·d 05:10~05:18Z. `members_only` 행이 0건이라 재확정 SQL은 실행하지 않았고, 멤버십 종료 세션 33건은 I5 backlog에서 새 수집기로 처음 확인합니다. |
 | I7 | 완료·배포 | #654(`f089d9a64`), migration 324 적용·04:56Z. 9건 `ENDED` → 5분 안에 8건 `finalized`, 1건 `pending(identity_missing)`(조사 때 `LOGIN_REQUIRED`였던 1건으로 보임, 24시간 일정 뒤 `exhausted` 예상). roster 밖 head 없는 legacy LIVE는 0건입니다. |
 | I8 | 카카오 화면만 남음 | worker 프로필 값과 템플릿 변수 안내는 두 번째 세션에 기록했습니다. 실제 카카오톡 화면은 MESSAGE_STYLE_GUIDE대로 승인된 시험 방 수신으로만 확인하는데, 시험 방이 지정되지 않아 하지 않았습니다. |
@@ -207,10 +211,15 @@
 
 ## 8. 다음 단계 순서
 
-게시·배포(I1~I3, I6, I7)는 세 번째 세션에서 끝났습니다(7절 "진행 상태", 계획 "배포 결과"). 남은 순서입니다.
+게시·배포(I1~I3, I6, I7)는 세 번째 세션에서 끝났고, I4 기준 2·3은 데이터로 판정했습니다(7절 "진행 상태", 계획 "배포 결과"·5단계 "데이터 판정"). 남은 순서입니다.
 
-1. I4 판정: 2026-10-18 04:30Z 이후 새로 종료된 방송을 1~2일 집계해 계획 5단계 통과 기준(1시간 안 `finalized` ≥97%, `conflict` <0.5%, 수집 지연 p99 기준의 2배 이하)을 확인합니다. 운영 DB는 읽기 전용 집계만 합니다.
-2. I5 backlog: I4를 통과하면 `/etc/stack-secrets/hololive-bot/compose.env`에 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200`을 넣고(`stack-platform-ops`) `hololive-api`만 recreate한 뒤, 계획 "운영 SQL 초안"의 투입 SQL을 1,000행씩 실행합니다. 6단계 중단 조건이면 K=0으로 되돌립니다. 롤백 SQL은 계획에 있습니다.
+1. I5 시작 (1절 사용자 결정으로 승인됨):
+   1. 사전 확인: 운영 image(`hololive-api` `f089d9a64`), 중앙 `deploy/compose/docker-compose.prod.yml`이 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`를 전달하는지, 직전 30분 수집 지연 p99와 확정 결과 분포를 기록합니다.
+   2. `stack-platform-ops` 절차로 `/etc/stack-secrets/hololive-bot/compose.env`를 백업하고 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE=200`을 추가합니다. 소유자·mode(root:hololive-runtime 0640)를 유지합니다.
+   3. `hololive-bot-ops` 절차로 `/opt/hololive-bot/compose/current`에서 `COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.live-compat.yml up -d --no-build --no-deps hololive-api`를 실행하고, healthy·재시작 0·컨테이너 안의 K 값 200을 확인합니다.
+   4. 투입 SQL을 `SET LOCAL lock_timeout='3s'` 트랜잭션에서 1,000행씩 반복합니다. 매번 같은 조건의 `count(*)`를 먼저 보고, 마지막에 남은 대상 0건을 확인합니다.
+   5. 감시: backlog 첫 시도는 6초에 하나라 하루 안팎 걸립니다. 6단계 중단 조건(수집 지연 p99 10초 초과, `request_failed` 급증, 공개 영상 `identity_missing` 급증, `conflict` 급증)이면 K=0으로 되돌리고 `hololive-api`를 recreate합니다. UTC 12~17시 종료가 몰리는 시간대를 특히 봅니다.
+2. I4 기준 1: 배포 뒤 신규 종료 30건이 모이면 종료 1시간 안 `finalized` 비율(≥97%)을 판정합니다.
 3. I5 뒤 무작위 20건 대조와 `!방송기록` 표시 비율을 다시 계산합니다.
 4. I8: 승인된 시험 방이 지정되면 `!방송기록`·`!라이브` 카카오톡 화면을 확인합니다.
 5. 각 단계가 끝나면 이 문서의 7절 표와 계획 문서의 체크박스·검증 결과를 갱신합니다.
@@ -220,7 +229,7 @@
 다음 세션에 그대로 붙여 넣는 용도입니다.
 
 ```text
-hololive-bot 방송 시각 확정 작업의 남은 단계(I4 판정, I5 backlog, I8 카카오 화면)를 이어받아 주십시오. 모든 보고는 한국어 합쇼체로 작성합니다.
+hololive-bot 방송 시각 확정 작업의 남은 단계(I5 backlog 실행, I4 기준 1 판정, I8 카카오 화면)를 이어받아 주십시오. 모든 보고는 한국어 합쇼체로 작성합니다.
 
 먼저 읽을 것:
 - /home/kapu/work/iris-stack/AGENTS.md, /home/kapu/work/iris-stack/hololive-bot/AGENTS.md
@@ -232,15 +241,19 @@ hololive-bot 방송 시각 확정 작업의 남은 단계(I4 판정, I5 backlog,
 현재 운영 상태 (2026-10-18):
 - hololive-api f089d9a64 (migration 322·323·324 적용, backlog K=0), 수집기 a·b·c·d 7e60b2061.
 - 확정 진행 표 youtube_live_time_finalizations, 지표 hololive_youtube_collection_time_finalization_*.
+- I4 기준 2·3은 2026-10-18 06:00Z 데이터로 충족했습니다(계획 5단계 "데이터 판정").
 
-진행 순서:
-1. I4: 04:30Z 이후 새로 종료된 방송의 1시간 안 finalized 비율, conflict 비율, live_snapshot·channel_live_check 수집 지연 p99(observed_at − scheduled_for)를 집계해 계획 5단계 통과 여부를 판정합니다.
-2. I5: 통과하면 대상·효과·롤백을 밝히고 승인을 받은 뒤, compose.env에 K=200을 넣고 hololive-api만 recreate한 다음 투입 SQL을 1,000행씩 실행합니다. 진행 중 6단계 중단 조건을 감시합니다.
-3. I5 뒤 무작위 20건을 공개 watch 페이지 시각과 대조하고 !방송기록 표시 비율을 다시 계산합니다.
+사용자 결정 (2026-10-18, 인계 문서 1절): I5를 지금 시작합니다. compose.env K=200 추가, hololive-api recreate, backlog 투입 SQL(약 9,700행)과 그에 따른 영상 확인 증가, 중단 시 K=0 복귀는 승인되었습니다. 시작 전에 대상·효과·롤백을 한 번 요약해 보고하고 바로 진행하십시오.
+
+진행 순서 (인계 문서 8절):
+1. I5: 사전 확인 → compose.env 백업과 K=200 추가(stack-platform-ops) → hololive-api만 recreate하고 K 값 확인(hololive-bot-ops) → 투입 SQL을 1,000행씩 반복 → 6단계 중단 조건 감시. 중단 조건이면 K=0으로 되돌리고 보고합니다.
+2. I4 기준 1: 04:30Z 이후 새로 종료된 방송 30건의 종료 1시간 안 finalized 비율을 판정합니다.
+3. I5 완료 뒤 무작위 20건을 공개 watch 페이지 시각과 대조하고 !방송기록 표시 비율을 다시 계산합니다.
 4. I8: 승인된 시험 방이 있으면 카카오톡 화면을 확인합니다. 운영 방은 쓰지 않습니다.
 
-승인 경계 (각 시점에 대상·효과·되돌릴 수 있는 범위를 밝히고 승인받기):
-- compose.env 변경과 재시작, 운영 데이터 쓰기(backlog 투입, 롤백 실행), 외부 요청을 크게 늘리는 작업, 카카오 방 사용
+진행 기록: 단계마다 인계 문서 7절 표와 계획 문서 5·6단계에 결과를 남기고, 문서 변경은 docs PR(squash 병합)로 게시합니다. push·PR·병합은 승인되었습니다.
+
+별도 보고·승인이 필요한 것: 시각 롤백 SQL 실행, 계획에 없는 운영 데이터 쓰기, 카카오 방 사용.
 운영 DB 조회는 읽기 전용 보호를 증명한 뒤 집계만 하고, 영상 ID·제목·payload 내용은 보고와 문서에 넣지 마십시오.
 
 보고 내용: 이슈별 상태, 실행한 검증과 결과, 실행하지 못한 검증과 이유, 필요한 승인, 남은 한계.
