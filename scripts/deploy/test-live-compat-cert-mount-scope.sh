@@ -220,7 +220,10 @@ violations = []
 for service, filename in expected.items():
     source = "/etc/stack-secrets/hololive-bot/worker-profiles"
     target = "/run/hololive-bot/worker-profiles"
-    if services.get(service, {}).get("environment", {}).get("STACK_WORKER_PROFILE_FILE") != f"{target}/{filename}":
+    env = services.get(service, {}).get("environment", {}) or {}
+    if isinstance(env, list):
+        env = dict(item.split("=", 1) for item in env if "=" in item)
+    if env.get("STACK_WORKER_PROFILE_FILE") != f"{target}/{filename}":
         violations.append((service, source, f"{target}/{filename}"))
     mounts = services.get(service, {}).get("volumes", []) or []
     matched = False
