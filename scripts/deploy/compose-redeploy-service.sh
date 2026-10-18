@@ -264,6 +264,40 @@ if [[ "${REVISION_ENABLED}" == true ]]; then
     verify_built_image_revisions
 fi
 
+# 이전 프로필은 실행 중인 image의 보존된 pair에서만 가져온다. 최초 도입은 loaded hash로 입증한다.
+profile_backup=""
+profile_candidate=""
+if [[ "$TARGET" == hololive-api || "$TARGET" == hololive-alarm-worker ]]; then
+    profile_pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
+    profile_backup="$ROOT_DIR/artifacts/worker-profile/releases/${TARGET}-$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$ROOT_DIR/artifacts/worker-profile/releases"
+    mkdir -m 0755 "$profile_backup"
+    printf '%s\n' "$TARGET" > "$profile_backup/service"
+    container_id="$("${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" ps -aq "$TARGET")"
+    if [[ -n "$container_id" ]]; then
+        python3 "$profile_pair_tool" capture "$TARGET" "$profile_backup/previous" "$container_id" "$ROOT_DIR"
+        "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" config --format json \
+            | python3 "$profile_pair_tool" rollback "$TARGET" "$profile_backup/previous"
+        "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" -f "$profile_backup/previous/compose.yml" \
+            run --rm --no-deps --pull never "$TARGET" --check-worker-profile
+        "${CONTAINER_CLI}" inspect -f '{{.State.Status}}' "$container_id" > "$profile_backup/previous-state"
+        mkdir "$profile_backup/compose"
+        for index in "${!COMPOSE_FILE_PATHS[@]}"; do
+            printf -v snapshot_name '%03d.yml' "$index"
+            cp "${COMPOSE_FILE_PATHS[index]}" "$profile_backup/compose/$snapshot_name"
+        done
+        realpath "$(dirname "${COMPOSE_FILE_PATHS[0]}")" > "$profile_backup/project-directory"
+    fi
+    profile_candidate="$profile_backup/candidate"
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" config --format json \
+        | python3 "$profile_pair_tool" candidate "$TARGET" "$profile_candidate"
+    COMPOSE_FILE_ARGS+=(-f "$profile_candidate/compose.yml")
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" \
+        run --rm --no-deps --pull never "$TARGET" --check-worker-profile
+    python3 "$profile_pair_tool" verify-source "$TARGET" "$profile_candidate"
+    echo "[ROLLBACK] $profile_backup (schema/admission compatibility must be approved before apply)"
+fi
+
 if cutover_service_uses_app_writable_bind_mount "${TARGET}"; then
     echo "[PREFLIGHT] Verifying host bind-mount write access for app uid ${HOLOLIVE_APP_UID}:${HOLOLIVE_APP_GID}"
     if ! cutover_bind_mount_preflight "${ROOT_DIR}"; then
@@ -274,6 +308,10 @@ fi
 
 if target_requires_db_migration; then
     run_db_migration_before_cutover
+fi
+
+if [[ -n "$profile_candidate" ]]; then
+    python3 "$profile_pair_tool" activate "$TARGET" "$profile_candidate" "$ROOT_DIR"
 fi
 
 cutover_capture_restart_baseline "${TARGET}"
@@ -292,4 +330,8 @@ if ! cutover_health_gate "${TARGET}"; then
 fi
 if [[ "${REVISION_ENABLED}" == true ]]; then
     verify_cutover_image_revisions
+fi
+if [[ -n "$profile_candidate" ]]; then
+    container_id="$("${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_ARGS[@]}" ps -q "$TARGET")"
+    python3 "$profile_pair_tool" verify-live "$TARGET" "$profile_candidate" "$container_id"
 fi

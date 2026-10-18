@@ -96,6 +96,7 @@ unit=hololive-youtube-collector@youtube-collector-a.service
 collector_prechange_running="${PRECHANGE_RUNNING:-true}" collector_prechange_enabled="${PRECHANGE_ENABLED:-true}" collector_prechange_state=inactive
 po_service=hololive-youtube-po.service po_socket=hololive-youtube-po.socket
 native_previous_link_restore() { printf 'previous restored\\n' >> "$CASE/calls"; }
+native_rollback_validate() { test -d "$1/rollback-contract"; }
 po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"; }
 ''' + functions + '\nnative_cutover_claim "$release_dir"\narm_native_cutover_restore\n' + action + '\n')
     env = dict(os.environ, CASE=str(case), INITIAL=str(initial).lower(), MODE=mode, PATH=f'{case / "bin"}:{os.environ["PATH"]}',

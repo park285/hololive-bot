@@ -16,6 +16,10 @@ cat > "$tmp/bin/docker" <<'DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$1" in
+  tag)
+    source="${2//[:\/]/_}" target="${3//[:\/]/_}"
+    cp "$STATE/images/$source" "$STATE/images/$target"
+    ;;
   ps)
     [[ "${FAIL_PS:-false}" != true ]] || exit 31
     name="${@: -1}"
@@ -37,6 +41,7 @@ case "$1" in
   image)
     case "$2" in
       ls)
+        [[ "${FAIL_IMAGE_LIST:-false}" != true ]] || exit 37
         reference="${@: -1}"
         reference="${reference#reference=}"
         name="${reference//[:\/]/_}"
@@ -46,6 +51,10 @@ case "$1" in
         [[ "${FAIL_IMAGE_REMOVE:-false}" != true ]] || exit 34
         name="${3//[:\/]/_}"
         rm "$STATE/images/$name"
+        ;;
+      inspect)
+        name="${3//[:\/]/_}"
+        [[ -f "$STATE/images/$name" ]]
         ;;
       *) exit 35 ;;
     esac
@@ -70,6 +79,7 @@ prepare() {
   printf 'candidate\n' > "$case_root/home/hololive-bot/source-marker"
   printf 'running\n' > "$case_root/state/containers/unrelated"
   touch "$case_root/state/images/unrelated"
+  printf 'absent\n' > "$case_root/home/hololive-bot/backups/first/po-sandbox-prechange.state"
 }
 load_candidates() {
   printf 'running\n' > "$case_root/state/containers/hololive-youtube-collector-b"
@@ -94,9 +104,11 @@ run_failure() (
   PO_IMAGE_REF=hololive-youtube-po-sandbox:prod
   po_manifest_active=backups/po-sandbox-current-b.json
   po_image_id_active=backups/po-sandbox-current-b.image-id
-  cutover_armed=true
+  rollback_image_tag=hololive-youtube-collector:rollback-first
+  rollback_po_image_tag=hololive-youtube-po-sandbox:rollback-first
+  cutover_armed="${CUTOVER_ARMED:-true}"
   source_armed=true
-  rollback_available=false
+  rollback_available="${ROLLBACK_AVAILABLE:-false}"
   restore_after_failed_deploy 7
 )
 assert_recoverable() {
@@ -137,5 +149,48 @@ FAIL_IMAGE_REMOVE=true run_failure > "$case_root/output" 2>&1 || rc="$?"
 [[ "$rc" == 7 ]] || fail 'image cleanup failure replaced the original deploy failure'
 [[ -f "$case_root/state/images/hololive-youtube-collector_prod" ]] || fail 'fixture did not retain the image'
 [[ "$(<"$case_root/home/hololive-bot/source-marker")" == candidate ]] || fail 'source restored after incomplete cleanup'
+
+prepare preparation_first
+touch "$case_root/state/images/hololive-youtube-collector_prod" "$case_root/state/images/hololive-youtube-po-sandbox_prod"
+rc=0
+CUTOVER_ARMED=false run_failure > "$case_root/output" 2>&1 || rc="$?"
+[[ "$rc" == 7 ]] || fail 'preparation failure status was lost'
+assert_recoverable
+
+prepare preparation_before_load
+rc=0
+CUTOVER_ARMED=false run_failure > "$case_root/output" 2>&1 || rc="$?"
+[[ "$rc" == 7 ]] || fail 'pre-load preparation failure status was lost'
+assert_recoverable
+
+for issuer_state in absent present; do
+  prepare "preparation_$issuer_state"
+  printf 'running\n' > "$case_root/state/containers/hololive-youtube-collector-b"
+  printf 'previous\n' > "$case_root/state/images/hololive-youtube-collector_rollback-first"
+  printf 'candidate\n' > "$case_root/state/images/hololive-youtube-collector_prod"
+  printf 'candidate\n' > "$case_root/state/images/hololive-youtube-po-sandbox_prod"
+  printf '%s\n' "$issuer_state" > "$case_root/home/hololive-bot/backups/first/po-sandbox-prechange.state"
+  if [[ "$issuer_state" == present ]]; then
+    printf 'running\n' > "$case_root/state/containers/hololive-youtube-po-b"
+    printf 'previous\n' > "$case_root/state/images/hololive-youtube-po-sandbox_rollback-first"
+    printf 'previous\n' > "$case_root/home/hololive-bot/backups/po-sandbox-current-b.json"
+    printf 'previous\n' > "$case_root/home/hololive-bot/backups/po-sandbox-current-b.image-id"
+  fi
+  rc=0
+  CUTOVER_ARMED=false ROLLBACK_AVAILABLE=true run_failure > "$case_root/output" 2>&1 || rc="$?"
+  [[ "$rc" == 7 ]] || fail 'existing-pair preparation failure status was lost'
+  [[ "$(<"$case_root/state/containers/hololive-youtube-collector-b")" == running ]] || fail 'preparation recovery changed the collector runtime'
+  [[ "$(<"$case_root/state/images/hololive-youtube-collector_prod")" == previous ]] || fail 'collector image tag was not restored'
+  [[ "$(<"$case_root/home/hololive-bot/source-marker")" == original ]] || fail 'preparation recovery did not restore source'
+  if [[ "$issuer_state" == present ]]; then
+    [[ "$(<"$case_root/state/containers/hololive-youtube-po-b")" == running ]] || fail 'preparation recovery changed the issuer runtime'
+    [[ "$(<"$case_root/state/images/hololive-youtube-po-sandbox_prod")" == previous ]] || fail 'issuer image tag was not restored'
+    [[ "$(<"$case_root/home/hololive-bot/backups/po-sandbox-current-b.json")" == previous ]] || fail 'issuer receipt changed'
+  else
+    [[ ! -e "$case_root/state/images/hololive-youtube-po-sandbox_prod" ]] || fail 'absent issuer tag prevents the next deployment'
+    [[ ! -e "$case_root/state/containers/hololive-youtube-po-b" && ! -e "$case_root/home/hololive-bot/backups/po-sandbox-current-b.json" ]] || fail 'absent issuer baseline changed'
+  fi
+  [[ "$(<"$case_root/state/containers/unrelated")" == running && -f "$case_root/state/images/unrelated" ]] || fail 'preparation recovery changed unrelated runtime'
+done
 
 echo 'AP first-deploy recovery state checks passed'

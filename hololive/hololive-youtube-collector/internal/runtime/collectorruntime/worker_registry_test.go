@@ -1,6 +1,8 @@
 package collectorruntime
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -42,11 +44,74 @@ func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
 	}
 
 	diagnostics := envelope.Workers["collection"]
-	if diagnostics.Executor.RunningWorkers != 0 || diagnostics.Executor.InFlight != 0 {
+	if diagnostics.Executor.RunningWorkers == nil || *diagnostics.Executor.RunningWorkers != 0 ||
+		diagnostics.Executor.InFlight == nil || *diagnostics.Executor.InFlight != 0 {
 		t.Fatalf("disabled executor = %#v", diagnostics.Executor)
 	}
 
 	if diagnostics.Queue.Depth == nil || *diagnostics.Queue.Depth != 0 || diagnostics.Queue.Scope != workercontract.QueueScopeProcess {
 		t.Fatalf("disabled queue = %#v", diagnostics.Queue)
+	}
+}
+
+func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "testdata", "stack-worker-profile-youtube-collector.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw = bytes.Replace(raw, []byte(`"enabled": true`), []byte(`"enabled": false`), 1)
+	directory := t.TempDir()
+	effective := filepath.Join(directory, "release.json")
+	source := filepath.Join(directory, "desired.json")
+	for _, path := range []string{effective, source} {
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Setenv(workercontract.ProfileFileEnv, effective)
+	t.Setenv(workercontract.ProfileSourceFileEnv, source)
+	profile, err := collectorconfig.LoadWorkerProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registry, checker, err := newCollectorWorkerRegistry(profile, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !checker.Check(time.Now()).Match {
+		t.Fatal("initial source must match the effective profile")
+	}
+
+	next := filepath.Join(directory, "replacement.json")
+	if err := os.WriteFile(next, append(raw, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(next, source); err != nil {
+		t.Fatal(err)
+	}
+
+	status := checker.Check(time.Now())
+	if status.Match || status.ErrorCode == nil || *status.ErrorCode != workercontract.ProfileFileChanged {
+		t.Fatalf("source replacement status = %#v", status)
+	}
+
+	envelope, err := registry.Diagnostics(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Profile.Hash != profile.Loaded.Hash || envelope.Profile.FileMatch {
+		t.Fatalf("loaded identity changed or source drift lost: %#v", envelope.Profile)
+	}
+
+	reloaded, err := collectorconfig.LoadWorkerProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Loaded.Hash != profile.Loaded.Hash {
+		t.Fatal("desired source replaced the effective settings input")
 	}
 }

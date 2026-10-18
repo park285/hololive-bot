@@ -83,7 +83,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-b.json:/run/hololive-bot/worker-profiles/youtube-collector-b.json:ro
+      - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
       - youtube-po-b-socket:/run/hololive-youtube-po:ro
     healthcheck:
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30015/ready"]

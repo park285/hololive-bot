@@ -8,6 +8,13 @@
 
 ## 미출시
 
+## v10.2.0 - 2026-10-18
+
+- **구 프로필 호환 pairing baseline:** API·alarm의 기존 settings와 fixed max_age, collector의 기존 per_job/bounded/fixed 스키마를 유지합니다. 실제 후보 CLI가 release profile을 검증하고 image/binary와 profile checksum을 함께 보존합니다. 인증된 loaded hash를 확인한 최초 도입만 허용하며, effective release와 desired source를 분리합니다. source 디렉터리 mount로 원자적 파일 교체도 관측하고 rollback은 secret mirror가 아니라 이전 artifact/profile 짝을 복원합니다.
+- **배포·복구 지속성:** Compose active pair는 sync·재부팅 뒤에도 유지하고, AP/central 준비 실패는 runtime을 다시 만들지 않고 source·image tag 기준점을 복원합니다. native 완료 검사는 실제 실행 binary와 인증된 loaded profile hash를 확인합니다. 비활성 source_observation도 sampler를 유지하되 claim·projection 준비·maintenance는 실행하지 않습니다. DB 역할·HBA·WAL·Valkey·capacity 정책과 새 settings 활성화는 이 baseline에 포함하지 않습니다.
+- **독립 릴리스:** provenance를 검증한 `shared-go/v2 v2.14.0`을 다섯 Go 소비자에 고정합니다. 이 기준본의 구 프로필 CLI·source drift·paired rollback을 실제 운영에서 먼저 수용한 뒤 비호환 프로필 이전을 진행합니다.
+- **프로필 인증:** API·alarm은 `API_SECRET_KEY`, collector는 `METRICS_API_KEY`로 loaded profile을 확인합니다. 서로 다른 키를 둔 실제 healthcheck·HTTP 실행에서 수정 전 API/alarm의 인증 거절과 수정 후 네 Compose 슬롯의 수용을 확인했습니다. 자격 대체 경로는 추가하지 않습니다.
+
 - **`!방송기록` 방송 길이와 `!라이브` 경과 시간:** `!방송기록`이 시작 시각을 기준으로 표시하고, 종료 시각이 마지막 LIVE 확인 시각과 5분 안에서 맞을 때만 종료 시각과 방송 길이를 함께 표시합니다. 종료를 확인할 수 없으면 시작 시각만 표시합니다. 시작 시각이 없거나 수명 추적 도입 전 기록(`lifecycle_origin='legacy_unknown'`)이면 저장된 종료·예정·마지막 확인 시각을 그 의미와 함께 표시합니다. 옛 기록의 `started_at`은 실제 시작과 수 시간씩 어긋나기 때문입니다. `!라이브` 템플릿 자료에 조회 시각 기준 경과 시간(`Elapsed`)을 추가하며, 템플릿 본문은 바꾸지 않습니다. 경과는 저장된 시작 시각 기준이라, 시작 시각 없이 처음 감지한 방송은 감지 시각부터 셉니다(보통 1분 안팎 짧음).
 - **`!라이브` 템플릿 경과 시간 (migration 322):** 220 표준 전역 `CMD_LIVE_STREAMS` 본문일 때만 방송명 줄 끝에 `⏱ 경과` 표기를 붙이는 CAS UPDATE입니다. 사용자 지정 본문과 채널 override는 보존합니다. 이전 바이너리에는 `.Elapsed`가 없어 `!라이브` 렌더링이 실패하므로, 경과 시간 자료를 내는 바이너리의 배포를 확인한 뒤에 적용합니다. 그보다 이전 버전으로 되돌릴 때는 전역 본문을 220 본문으로 먼저 복원합니다.
 - **방송 시작·종료 시각 확정 (migration 323):** 종료된 방송을 `video_live_check`로 한 번 더 확인해 YouTube 아카이브의 시작·종료 시각으로 바꾸고 `youtube_live_sessions.times_source`를 `provider`로 둡니다. 종료 판정과 reducer는 바꾸지 않으며, 저장 시각과 크게 어긋나는 응답은 `conflict`로 남기고 쓰지 않습니다. 시작 시각 없이 늦게 감지한 방송은 저장 시작이 감지 시각이라, 아카이브 시작이 저장 시작보다 이른 것은 충돌로 보지 않습니다. 확인할 수 없는 응답은 종료 관측 기준 3분·30분·3시간·24시간에 최대 4회, `request_failed`는 10분 간격 최대 12회 다시 확인한 뒤 `exhausted`로 끝냅니다(진행 기록 `youtube_live_time_finalizations`). 확정 확인은 priority 18로 LIVE·UPCOMING 확인보다 뒤에 두고, 기존 기록 보정 묶음 크기 `YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE`의 기본값은 0입니다. 기존 기록 보정은 첫 확인을 한 번에 한 영상씩 열고, 재시도 중인 행과 합쳐 2,000개를 넘기지 않아 전체 수집 target 상한에 닿지 않습니다. `!방송기록`은 확정 시각이면 시작~종료와 길이를, 아카이브를 끝내 확인하지 못하면 `아카이브를 확인할 수 없어 종료 시각 미확인`을 표시합니다. migration 323을 이 바이너리보다 먼저 적용합니다.

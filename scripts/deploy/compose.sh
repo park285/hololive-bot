@@ -21,6 +21,7 @@ compose_files=()
 compose_invokes_up=false
 compose_requires_capacity=false
 compose_up_build=false
+compose_up_no_start=false
 compose_up_after_separator=false
 compose_scale_overrides=()
 compose_command_seen=false
@@ -92,6 +93,11 @@ for arg in "$@"; do
             ;;
         start|restart|run)
             compose_requires_capacity=true
+            ;;
+        --no-start)
+            if [[ "${compose_invokes_up}" == true ]]; then
+                compose_up_no_start=true
+            fi
             ;;
         --build)
             if [[ "${compose_invokes_up}" == true ]]; then
@@ -177,6 +183,39 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 
+# 릴리스 pair overlay는 재부팅에도 유지한다. 배포 사전 검사는 명시한 후보 overlay만 사용한다.
+profile_overlays=()
+case "${WORKER_PROFILE_OVERRIDE_FILE:-}" in
+    none) ;;
+    "")
+        for profile_receipt in "${ROOT_DIR}"/artifacts/worker-profile/active/*.pair; do
+            [[ -e "$profile_receipt" || -L "$profile_receipt" ]] || continue
+            profile_overlay="${profile_receipt%.pair}.yml"
+            if [[ ! -f "$profile_receipt" || -L "$profile_receipt" || ! -f "$profile_overlay" || -L "$profile_overlay" ]]; then
+                echo "[ERROR] incomplete worker profile activation; retain release artifacts" >&2
+                exit 1
+            fi
+        done
+        for profile_overlay in "${ROOT_DIR}"/artifacts/worker-profile/active/*.yml; do
+            [[ -e "$profile_overlay" || -L "$profile_overlay" ]] || continue
+            if [[ ! -f "$profile_overlay" || -L "$profile_overlay" || ! -f "${profile_overlay%.yml}.pair" ]]; then
+                echo "[ERROR] incomplete worker profile activation; retain release artifacts" >&2
+                exit 1
+            fi
+            profile_overlays+=("$profile_overlay")
+        done
+        ;;
+    *) profile_overlays+=("$WORKER_PROFILE_OVERRIDE_FILE") ;;
+esac
+for profile_overlay in "${profile_overlays[@]}"; do
+    compose_files+=("$profile_overlay")
+    if (( compose_command_index >= 0 )); then
+        compose_args=("${compose_args[@]:0:compose_command_index}" -f "$profile_overlay" "${compose_args[@]:compose_command_index}")
+        compose_command_index=$((compose_command_index + 2))
+    else
+        compose_args+=(-f "$profile_overlay")
+    fi
+done
 # 승인된 host 설정이 있으면 재기동과 수동 compose에도 같은 관리 H3 publish를 유지한다.
 if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_ADMIN_API_PORT_BIND_IP"; then
     admin_web_overlay="deploy/compose/docker-compose.admin-web.yml"
@@ -391,7 +430,7 @@ if [[ "${compose_invokes_up}" == true ]]; then
 
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"
 
-    if [[ ${#gate_targets[@]} -gt 0 ]] && ! cutover_health_gate "${gate_targets[@]}"; then
+    if [[ "${compose_up_no_start}" == false && ${#gate_targets[@]} -gt 0 ]] && ! cutover_health_gate "${gate_targets[@]}"; then
         echo "[ERROR] health gate failed after cutover up" >&2
         exit 1
     fi

@@ -13,7 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/park285/iris-client-go/v3 v3.1.0
-	github.com/park285/shared-go/v2 v2.13.0
+	github.com/park285/shared-go/v2 v2.14.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.64.0
 	github.com/stretchr/testify v1.12.1
@@ -98,6 +98,7 @@ require (
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/yuin/goldmark/v2 v2.1.6 // indirect
 	github.com/yuin/gopher-lua v1.1.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

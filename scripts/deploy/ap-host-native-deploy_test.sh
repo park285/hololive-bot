@@ -35,6 +35,7 @@ if [[ -z "${write_host_env_fn}" ]]; then
 elif (
   export service="youtube-collector-a"
   export port="30005"
+  export release_id="profile-pair-fixture"
   export AP_POSTGRES_HOST="100.100.1.8"
   export AP_POSTGRES_PORT="5433"
   export AP_SSH_HOST="100.100.1.6"
@@ -172,6 +173,9 @@ run_native_units() (
     ( set -e; "$@"; )
   }
   native_cutover_release_guard() { :; }
+  # 이 fixture는 유효한 이전 pair를 전제로 unit 정지/복원 전이를 검사한다.
+  # 실제 checksum·profile 검증은 아래 독립 release fixture가 실행한다.
+  native_rollback_validate() { [[ -d "$1" ]]; }
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
     if [[ "$1" == systemctl ]]; then
@@ -379,6 +383,7 @@ cat > "${tmp}/rollback-bin/sudo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" != "-n" ]] || shift
+[[ "${1:-}" != "-u" ]] || shift 2
 exec "$@"
 EOF
 cat > "${tmp}/rollback-bin/systemd-analyze" <<'EOF'
@@ -400,7 +405,9 @@ printf 'export {}\n' > "${rollback_fixture}/youtubejs/src/server.mjs"
 chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/youtube-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
-printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf 'APP_ENV=production\nSTACK_WORKER_PROFILE_FILE=%s/worker-profile.json\n' "$rollback_fixture" > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf '{}\n' > "$rollback_fixture/worker-profile.json"
+(cd "$rollback_fixture" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS)
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
 printf 'absent\n' > "${rollback_fixture}/rollback-contract/previous-before-cutover"
 printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
@@ -410,6 +417,7 @@ printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
     bin/youtube-collector \
     bin/youtube-collector-wrapper \
     bin/healthcheck \
+    worker-profile.json SHA256SUMS \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
     rollback-contract/previous-before-cutover \
@@ -451,6 +459,7 @@ printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtu
     bin/youtube-collector \
     bin/youtube-collector-wrapper \
     bin/healthcheck \
+    worker-profile.json SHA256SUMS \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
     rollback-contract/previous-before-cutover \

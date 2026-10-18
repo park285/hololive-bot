@@ -11,6 +11,8 @@ rollback_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$HOME/hololive-bot"
 . "$rollback_root/scripts/deploy/lib/ap-prechange-config.sh"
 . "$rollback_root/scripts/deploy/lib/po-sandbox-image.sh"
+pair_tool="$rollback_root/scripts/deploy/lib/worker-profile-pair.py"
+profile_pair="$HOME/hololive-bot/$backup/worker-profile-previous"
 prod_file="deploy/compose/docker-compose.prod.yml"
 old_prod="$backup/$prod_file.prechange"
 old_ap="$backup/$ap_file.prechange"
@@ -35,6 +37,7 @@ old_revision="$(sudo -n docker image inspect -f '{{index .Config.Labels "org.ope
 [[ "$old_revision" =~ ^[0-9a-f]{40}$ ]] || exit 1
 python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["source_revision"] == sys.argv[2] and m["go"]["goarch"] == "arm64" and m["image_id"] == sys.argv[3]' "$backup/collector-prechange-manifest.json" "$old_revision" "$(cat "$backup/collector-prechange.image-id")"
 [[ "$(sudo -n docker image inspect -f '{{.Id}}' "$old_collector_tag")" == "$(cat "$backup/collector-prechange.image-id")" ]]
+sudo -n python3 "$pair_tool" verify "$service" "$profile_pair" "$old_collector_tag"
 collector_state="$(cat "$backup/collector-prechange.state")"
 [[ "$collector_state" == running || "$collector_state" == stopped ]] || exit 1
 if [[ "$po_state" == present ]]; then
@@ -53,9 +56,12 @@ trap 'rm -rf "$preflight"' EXIT
 mkdir -p "$preflight/deploy/compose"
 cp "$old_prod" "$preflight/deploy/compose/docker-compose.prod.yml"
 cp "$old_ap" "$preflight/deploy/compose/$(basename "$ap_file")"
-ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-  "${compose[@]}" -f "$preflight/deploy/compose/docker-compose.prod.yml" \
-  -f "$preflight/deploy/compose/$(basename "$ap_file")" config --quiet
+preflight_files=(-f "$preflight/deploy/compose/docker-compose.prod.yml" -f "$preflight/deploy/compose/$(basename "$ap_file")")
+ap_prechange_config sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+  "${compose[@]}" "${preflight_files[@]}" config --format json \
+  | sudo -n python3 "$pair_tool" rollback "$service" "$profile_pair" "$preflight/worker-profile.yml"
+sudo -n env WORKER_PROFILE_OVERRIDE_FILE="$preflight/worker-profile.yml" COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+  "${compose[@]}" "${preflight_files[@]}" run --rm --no-deps --pull never "$service" --check-worker-profile
 if [[ "$mode" == check ]]; then
   echo "AP rollback verified: backup=$backup collector=$old_collector_tag collector_state=$collector_state issuer=${old_po_tag:-absent}"
   exit 0
@@ -64,7 +70,10 @@ fi
 # 두 서비스를 바꾸기 전에 이전 산출물과 설정을 모두 검증한다.
 # 이전 VERSION과 실행 스크립트를 먼저 복원합니다. 후보 checkout의 버전으로 이전 이미지를 렌더링하지 않습니다.
 python3 "$rollback_root/scripts/deploy/lib/ap-source-snapshot.py" restore "$HOME" "$HOME/hololive-bot/$backup"
-compose=("$HOME/hololive-bot/scripts/deploy/compose.sh")
+# 재부팅도 같은 pair를 읽도록 검토된 wrapper를 유지한다. secret mirror는 복원하지 않는다.
+sudo -n install -m 0755 "$rollback_root/scripts/deploy/compose.sh" "$HOME/hololive-bot/scripts/deploy/compose.sh"
+compose=(env WORKER_PROFILE_OVERRIDE_FILE="$profile_pair/compose.yml" "$HOME/hololive-bot/scripts/deploy/compose.sh")
+sudo -n python3 "$pair_tool" activate "$service" "$profile_pair" "$HOME/hololive-bot" "$preflight/worker-profile.yml"
 cmp -s "$old_prod" "$prod_source"
 cmp -s "$old_ap" "$ap_source"
 sudo -n docker tag "$old_collector_tag" hololive-youtube-collector:prod

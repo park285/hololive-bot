@@ -22,7 +22,7 @@ x-osaka-ap-service: &osaka-ap-service
     - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
     - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-    - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-a.json:/run/hololive-bot/worker-profiles/youtube-collector-a.json:ro
+    - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
   logging: *osaka-ap-logging
   deploy:
     resources:

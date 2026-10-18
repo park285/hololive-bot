@@ -13,7 +13,8 @@ image_id_file=../po-current-c/image-id
 # 중앙 collector-c는 prod+live-compat의 youtube-collector다.
 files=(hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION
        deploy/compose/docker-compose.prod.yml deploy/compose/docker-compose.live-compat.yml
-       scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh)
+       scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
+       scripts/deploy/lib/worker-profile-pair.py scripts/deploy/compose.sh)
 collector=hololive-youtube-collector:prod
 issuer=hololive-youtube-po-sandbox:prod
 collector_container=hololive-youtube-collector-c
@@ -21,14 +22,20 @@ issuer_container=hololive-youtube-po-c
 [[ "$(stat -c '%u:%g %a' "$staging")" == '0:0 700' ]] || { echo 'central staged artifacts are not root-private' >&2; exit 1; }
 cd "$current"
 . "$staging/scripts/deploy/lib/po-sandbox-image.sh"
+pair_tool="$staging/scripts/deploy/lib/worker-profile-pair.py"
+cutover_started=false
 
 compose() {
+  local profile_args=()
+  if [[ -n "${WORKER_PROFILE_OVERRIDE_FILE:-}" && "$WORKER_PROFILE_OVERRIDE_FILE" != none ]]; then
+    profile_args=(-f "$WORKER_PROFILE_OVERRIDE_FILE")
+  fi
   COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
   HOLO_API_VERSION="$(cat hololive/hololive-api/VERSION)" \
   REVISION="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$collector")" \
     ./scripts/deploy/compose.sh \
     -f deploy/compose/docker-compose.prod.yml \
-    -f deploy/compose/docker-compose.live-compat.yml "$@"
+    -f deploy/compose/docker-compose.live-compat.yml "${profile_args[@]}" "$@"
 }
 verify_collector() {
   local image="$1" reviewed="$2" expected="$3" id_file="$4" expected_id actual_id actual_arch actual_revision
@@ -85,10 +92,12 @@ require_post_cutover_logs() {
   fi
 }
 restore() {
-  local old_revision old_po_revision state rel
+  local old_revision old_po_revision state collector_state rel
   trap - ERR INT TERM HUP
   [[ -r "$backup/snapshot-complete" ]] || { echo 'central rollback snapshot incomplete' >&2; return 1; }
   state="$(cat "$backup/issuer.state")"
+  collector_state="$(cat "$backup/collector-prechange.state")"
+  [[ "$collector_state" == running || "$collector_state" == stopped ]] || return 1
   old_revision="$(cat "$backup/collector.revision")"
   verify_collector hololive-youtube-collector:rollback-"${backup##*/po-c-}" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
   if [[ "$state" == present ]]; then
@@ -97,16 +106,30 @@ restore() {
   else
     [[ "$state" == absent ]] || return 1
   fi
+  python3 "$pair_tool" verify youtube-collector "$backup/worker-profile-previous" "hololive-youtube-collector:rollback-${backup##*/po-c-}"
+  HOLO_API_VERSION="$(cat "$backup/previous-files/hololive/hololive-api/VERSION")" \
+  HOLO_ALARM_WORKER_VERSION="$(cat "$backup/previous-files/hololive/hololive-alarm-worker/VERSION")" \
+    docker compose --env-file /etc/stack-secrets/hololive-bot/compose.env \
+    --project-directory "$current/deploy/compose" \
+    -f "$backup/previous-files/deploy/compose/docker-compose.prod.yml" \
+    -f "$backup/previous-files/deploy/compose/docker-compose.live-compat.yml" \
+    -f "$backup/worker-profile-previous/compose.yml" \
+    run --rm --no-deps --pull never youtube-collector --check-worker-profile
+  # 복원 profile 게시가 실패해도 현재 issuer를 먼저 제거하지 않는다.
+  python3 "$pair_tool" activate youtube-collector "$backup/worker-profile-previous" "$current" || return
   docker stop "$issuer_container" >/dev/null 2>&1 || true
   docker rm -f "$issuer_container" >/dev/null 2>&1 || true
   docker tag "hololive-youtube-collector:rollback-${backup##*/po-c-}" "$collector"
   for rel in "${files[@]}"; do
+    [[ "$rel" != scripts/deploy/compose.sh ]] || continue
     if [[ -f "$backup/previous-files/$rel" ]]; then
       install -D -m 0644 "$backup/previous-files/$rel" "$current/$rel"
     else
       rm -f "$current/$rel"
     fi
   done
+  install -m 0755 "$staging/scripts/deploy/compose.sh" "$current/scripts/deploy/compose.sh"
+  export WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-previous/compose.yml"
   if [[ "$state" == present ]]; then
     docker tag "hololive-youtube-po-sandbox:rollback-${backup##*/po-c-}" "$issuer"
     install -D -m 0644 "$backup/po-prechange-manifest.json" "$current/$manifest"
@@ -119,9 +142,15 @@ restore() {
     if docker image inspect "$issuer" >/dev/null 2>&1; then docker image rm "$issuer" >/dev/null; fi
     compose config --quiet
   fi
-  compose up -d --no-build --no-deps --force-recreate youtube-collector
-  wait_collector "$old_revision"
-  echo "central previous collector/issuer restored from $backup"
+  if [[ "$collector_state" == running ]]; then
+    compose up -d --no-build --no-deps --force-recreate youtube-collector || return
+    wait_collector "$old_revision" || return
+  else
+    compose up --no-start --no-build --no-deps --force-recreate youtube-collector || return
+    [[ "$(docker inspect -f '{{.State.Running}}' "$collector_container")" == false ]] || return 1
+    [[ "$(docker inspect -f '{{.Image}}' "$collector_container")" == "$(cat "$backup/collector-prechange.image-id")" ]] || return 1
+  fi
+  echo "central previous collector/issuer restored from $backup collector_state=$collector_state"
 }
 require_collector_lease_migration() {
   local migration=222_drop_youtube_job_lease_legacy_failure_trigger.sql expected observed
@@ -228,6 +257,15 @@ import json, sys
 json.dump({'schema_version': 1, 'source_revision': sys.argv[1], 'go': {'goarch': 'arm64'}, 'image_id': sys.argv[2], 'version': sys.argv[3]}, open(sys.argv[4], 'w'))
 PY
 verify_collector "$collector" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
+case "$(docker inspect -f '{{.State.Running}}' "$collector_container")" in
+  true) printf 'running\n' > "$backup/collector-prechange.state" ;;
+  false) printf 'stopped\n' > "$backup/collector-prechange.state" ;;
+  *) echo 'central collector running state unavailable' >&2; exit 1 ;;
+esac
+python3 "$pair_tool" capture youtube-collector "$backup/worker-profile-previous" "$collector_container" "$current"
+WORKER_PROFILE_OVERRIDE_FILE=none compose config --format json \
+  | python3 "$pair_tool" rollback youtube-collector "$backup/worker-profile-previous"
+WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-previous/compose.yml" compose run --rm --no-deps --pull never youtube-collector --check-worker-profile
 printf '%s\n' "$old_revision" > "$backup/collector.revision"
 docker tag "$collector" "hololive-youtube-collector:rollback-${backup##*/po-c-}"
 if docker image inspect "$issuer" >/dev/null 2>&1; then
@@ -261,7 +299,34 @@ restore_after_failed_cutover() {
   trap - ERR INT TERM HUP
   set +e
   # restore를 ||/if 조건에서 호출하면 함수 내부 errexit가 꺼집니다.
-  (set -e; restore)
+  if [[ "$cutover_started" == true ]]; then
+    (set -e; restore)
+  else
+    # 후보 검사 실패는 실행 중 pair를 재생성하지 않는다. 바뀐 태그와 배포 파일만 되돌린다.
+    (set -e
+      issuer_state="$(cat "$backup/issuer.state")"
+      case "$issuer_state" in
+        present|absent) ;;
+        *) echo 'central issuer baseline state invalid' >&2; exit 1 ;;
+      esac
+      docker tag "hololive-youtube-collector:rollback-${backup##*/po-c-}" "$collector"
+      if [[ "$issuer_state" == present ]]; then
+        docker tag "hololive-youtube-po-sandbox:rollback-${backup##*/po-c-}" "$issuer"
+      else
+        issuer_images="$(docker image ls --quiet --filter "reference=$issuer")"
+        if [[ -n "$issuer_images" ]]; then
+          docker image rm "$issuer" >/dev/null
+        fi
+      fi
+      for rel in "${files[@]}"; do
+        if [[ -f "$backup/previous-files/$rel" ]]; then
+          cp -a "$backup/previous-files/$rel" "$current/$rel"
+        else
+          rm -f "$current/$rel"
+        fi
+      done
+    )
+  fi
   restore_status="$?"
   if [[ "$restore_status" -ne 0 ]]; then
     echo "central automatic restoration failed; retain $backup" >&2
@@ -274,6 +339,7 @@ trap 'restore_after_failed_cutover 130' INT
 trap 'restore_after_failed_cutover 143' TERM
 trap 'restore_after_failed_cutover 129' HUP
 for rel in "${files[@]}"; do install -D -m 0644 "$staging/$rel" "$current/$rel"; done
+chmod 0755 "$current/scripts/deploy/compose.sh"
 (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
 docker load --input "$staging/image.tar"
 docker load --input "$staging/collector-image.tar"
@@ -282,6 +348,13 @@ verify_collector "$collector" "$staging/collector-manifest.json" "$revision" "$s
 [[ "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$issuer")" == "$version" ]]
 [[ "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$collector")" == "$version" ]]
 compose config --quiet
+WORKER_PROFILE_OVERRIDE_FILE=none compose config --format json \
+  | python3 "$pair_tool" candidate youtube-collector "$backup/worker-profile-candidate"
+WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-candidate/compose.yml" compose run --rm --no-deps --pull never youtube-collector --check-worker-profile
+python3 "$pair_tool" verify-source youtube-collector "$backup/worker-profile-candidate"
+cutover_started=true
+python3 "$pair_tool" activate youtube-collector "$backup/worker-profile-candidate" "$current"
+export WORKER_PROFILE_OVERRIDE_FILE="$backup/worker-profile-candidate/compose.yml"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '%s\n' "$started_at" > "$backup/change-started-at"
 compose up -d --no-build --no-deps --force-recreate "$issuer_container_service"
@@ -290,6 +363,7 @@ install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
 install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
 compose up -d --no-build --no-deps --force-recreate youtube-collector
 wait_collector "$revision"
+python3 "$pair_tool" verify-live youtube-collector "$backup/worker-profile-candidate" "$collector_container"
 since_epoch="$(date -u -d "$started_at" +%s)"
 for container in "$issuer_container" "$collector_container"; do
   [[ "$(date -u -d "$(docker inspect -f '{{.State.StartedAt}}' "$container")" +%s)" -ge "$since_epoch" ]]
