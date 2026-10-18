@@ -102,6 +102,11 @@ type BroadcastHistoryEntry struct {
 	StartedAt           *time.Time
 	EndedAt             *time.Time
 	LastSeenAt          time.Time
+	// LifecycleOrigin은 youtube_live_sessions.lifecycle_origin이다. legacy_unknown은 수명 추적 도입 전 기록이다.
+	LifecycleOrigin string
+	// LastLivePositiveAt은 마지막으로 방송 중임을 확인한 시각이다. reconciliation head가 없거나 LIVE를 확인하지 못한
+	// 세션은 nil이다.
+	LastLivePositiveAt *time.Time
 }
 
 type BroadcastHistoryResult struct {

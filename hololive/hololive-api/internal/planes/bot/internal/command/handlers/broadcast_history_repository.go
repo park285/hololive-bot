@@ -371,6 +371,8 @@ func scanBroadcastHistoryRow(row broadcastHistoryScanner) (handlercore.Broadcast
 		&entry.StartedAt,
 		&entry.EndedAt,
 		&entry.LastSeenAt,
+		&entry.LifecycleOrigin,
+		&entry.LastLivePositiveAt,
 	); err != nil {
 		return handlercore.BroadcastHistoryEntry{}, fmt.Errorf("scan broadcast history row: %w", err)
 	}

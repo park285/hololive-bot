@@ -18,6 +18,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const (
+	observedLifecycleOrigin = "observed"
+	testHistoryMemberName   = "츠즈리"
+)
+
 type stubBroadcastHistoryRepository struct {
 	listQuery handlercore.BroadcastHistoryQuery
 	listCalls int
@@ -618,5 +623,96 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 
 	if len(sent) != 1 {
 		t.Fatalf("sent messages = %d, want 1: %#v", len(sent), sent)
+	}
+}
+
+func TestVerifiedBroadcastEndedAtRequiresBoundedEnd(t *testing.T) {
+	startedAt := time.Date(2026, time.October, 17, 11, 59, 0, 0, time.UTC)
+	endedAt := startedAt.Add(90 * time.Minute)
+	at := func(offset time.Duration) *time.Time { return new(endedAt.Add(offset)) }
+
+	for name, tc := range map[string]struct {
+		origin                       string
+		started, ended, lastPositive *time.Time
+		want                         bool
+	}{
+		"end observed shortly after last live":    {origin: observedLifecycleOrigin, started: &startedAt, ended: &endedAt, lastPositive: at(-90 * time.Second), want: true},
+		"end at uncertainty limit":                {origin: observedLifecycleOrigin, started: &startedAt, ended: &endedAt, lastPositive: at(-maxBroadcastEndUncertainty), want: true},
+		"provider end before scheduled positive":  {origin: observedLifecycleOrigin, started: &startedAt, ended: &endedAt, lastPositive: at(4 * time.Minute), want: true},
+		"absence end days after last live":        {origin: observedLifecycleOrigin, started: &startedAt, ended: &endedAt, lastPositive: at(-65 * time.Hour), want: false},
+		"end just beyond limit":                   {origin: observedLifecycleOrigin, started: &startedAt, ended: &endedAt, lastPositive: at(-maxBroadcastEndUncertainty - time.Second), want: false},
+		"provider end far before last positive":   {origin: observedLifecycleOrigin, started: &startedAt, ended: &endedAt, lastPositive: at(maxBroadcastEndUncertainty + time.Second), want: false},
+		"observed end without live confirmation":  {origin: observedLifecycleOrigin, started: &startedAt, ended: &endedAt},
+		"legacy origin despite live confirmation": {origin: legacyLifecycleOrigin, started: &startedAt, ended: &endedAt, lastPositive: at(-time.Minute)},
+		"missing start":                           {origin: observedLifecycleOrigin, ended: &endedAt, lastPositive: at(-time.Minute)},
+		"end before start":                        {origin: observedLifecycleOrigin, started: at(time.Minute), ended: &endedAt, lastPositive: at(-time.Minute)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := verifiedBroadcastEndedAt(&handlercore.BroadcastHistoryEntry{LifecycleOrigin: tc.origin, StartedAt: tc.started, EndedAt: tc.ended, LastLivePositiveAt: tc.lastPositive})
+
+			if tc.want && !got.Equal(endedAt) {
+				t.Fatalf("verifiedBroadcastEndedAt() = %v, want %v", got, endedAt)
+			}
+
+			if !tc.want && !got.IsZero() {
+				t.Fatalf("verifiedBroadcastEndedAt() = %v, want zero", got)
+			}
+		})
+	}
+}
+
+// 옛 기록은 LIVE 확인 시각이 종료와 가까워도 started_at을 시작 시각으로 쓰지 않고 저장 종료 시각만 "종료"로 표시한다.
+// 신 lifecycle은 LIVE 확인이 없어도 시작 시각은 표시하고, 시작이 없으면 종료 시각으로 표시한다.
+func TestBroadcastHistoryCommandShowsVerifiedDurationOnly(t *testing.T) {
+	startedAt := time.Date(2026, time.October, 17, 11, 59, 0, 0, time.UTC)
+	verifiedEnd := startedAt.Add(90 * time.Minute)
+	staleEnd := startedAt.Add(68 * time.Hour)
+	legacyStart := startedAt.Add(time.Hour)
+	legacyEnd := startedAt.Add(3 * time.Hour)
+	unconfirmedStart := startedAt.Add(-time.Hour)
+	repo := &stubBroadcastHistoryRepository{
+		entries: []handlercore.BroadcastHistoryEntry{
+			{VideoID: testVideoID, MemberName: testHistoryMemberName, Title: "verified", LifecycleOrigin: observedLifecycleOrigin, StartedAt: &startedAt, EndedAt: &verifiedEnd, LastLivePositiveAt: new(verifiedEnd.Add(-time.Minute)), LastSeenAt: verifiedEnd},
+			{VideoID: "absence0001", MemberName: testHistoryMemberName, Title: "absence", LifecycleOrigin: observedLifecycleOrigin, StartedAt: &startedAt, EndedAt: &staleEnd, LastLivePositiveAt: new(startedAt.Add(17 * time.Minute)), LastSeenAt: staleEnd},
+			{VideoID: "nostart0001", MemberName: testHistoryMemberName, Title: "no start", LifecycleOrigin: observedLifecycleOrigin, EndedAt: &verifiedEnd, LastSeenAt: verifiedEnd},
+			{VideoID: "legacy00001", MemberName: testHistoryMemberName, Title: "legacy", LifecycleOrigin: legacyLifecycleOrigin, StartedAt: &legacyStart, EndedAt: &legacyEnd, LastLivePositiveAt: new(legacyEnd.Add(-time.Minute)), LastSeenAt: legacyEnd},
+			{VideoID: "unconfirm01", MemberName: testHistoryMemberName, Title: "unconfirmed", LifecycleOrigin: observedLifecycleOrigin, StartedAt: &unconfirmedStart, EndedAt: &verifiedEnd, LastSeenAt: verifiedEnd},
+		},
+	}
+
+	var sent string
+
+	deps := &handlercore.Dependencies{
+		BroadcastHistory: repo,
+		Formatter:        formatter.NewResponseFormatter("!", nil),
+		SendMessage: func(_ context.Context, _, message string) error {
+			sent = message
+			return nil
+		},
+		SendError: func(_ context.Context, _, _ string) error { return nil },
+	}
+
+	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	for _, want := range []string{
+		"⏰ 2026/10/17 20:59~22:29 · 1시간 30분\n",
+		"⏰ 2026/10/17 20:59 시작\n",
+		"⏰ 2026/10/17 22:29 종료\n",
+		"⏰ 2026/10/17 23:59 종료\n",
+		"⏰ 2026/10/17 19:59 시작\n",
+	} {
+		if !strings.Contains(sent, want) {
+			t.Fatalf("sent message missing %q in:\n%s", want, sent)
+		}
+	}
+
+	if strings.Contains(sent, "2026/10/20") || strings.Contains(sent, "68시간") || strings.Contains(sent, "2일") {
+		t.Fatalf("sent message exposes unverified absence end:\n%s", sent)
+	}
+
+	if strings.Contains(sent, "21:59") || strings.Contains(sent, "2시간") || strings.Contains(sent, "19:59~") {
+		t.Fatalf("sent message exposes legacy start or unconfirmed duration:\n%s", sent)
 	}
 }

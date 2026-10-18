@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
@@ -40,6 +41,8 @@ type liveStreamView struct {
 	ChannelName string
 	Title       string
 	URL         string
+	// Elapsed는 조회 시각 기준 경과 표기다. 시작 시각을 믿을 수 없으면 비워 템플릿이 생략하게 한다.
+	Elapsed string
 }
 
 const streamListDisplayLimit = 100
@@ -77,8 +80,9 @@ type channelScheduleTemplateData struct {
 }
 
 // renderLiveStreams는 접기 전 본문을 돌려주어 LiveQuery가 머리 문단 안내를 더한 뒤 한 번만 접게 한다.
-func (f *ResponseFormatter) renderLiveStreams(ctx context.Context, streams []*domain.Stream) (string, bool) {
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, f.liveStreamsTemplateData(ctx, streams))
+// 경과 시간의 기준 시각 asOf가 zero이면 경과 시간을 표시하지 않는다.
+func (f *ResponseFormatter) renderLiveStreams(ctx context.Context, streams []*domain.Stream, asOf time.Time) (string, bool) {
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, f.liveStreamsTemplateData(ctx, streams, asOf))
 	if err != nil {
 		return "", false
 	}
@@ -86,14 +90,14 @@ func (f *ResponseFormatter) renderLiveStreams(ctx context.Context, streams []*do
 	return rendered, true
 }
 
-func (f *ResponseFormatter) liveStreamsTemplateData(ctx context.Context, streams []*domain.Stream) liveStreamsTemplateData {
+func (f *ResponseFormatter) liveStreamsTemplateData(ctx context.Context, streams []*domain.Stream, asOf time.Time) liveStreamsTemplateData {
 	return liveStreamsTemplateData{
 		Count:   len(streams),
-		Streams: f.liveStreamViews(ctx, streams),
+		Streams: f.liveStreamViews(ctx, streams, asOf),
 	}
 }
 
-func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*domain.Stream) []liveStreamView {
+func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*domain.Stream, asOf time.Time) []liveStreamView {
 	streams = limitedStreamList(streams)
 	if len(streams) == 0 {
 		return nil
@@ -101,18 +105,35 @@ func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*doma
 
 	views := make([]liveStreamView, len(streams))
 	for i, stream := range streams {
-		views[i] = f.liveStreamView(ctx, stream)
+		views[i] = f.liveStreamView(ctx, stream, asOf)
 	}
 
 	return views
 }
 
-func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.Stream) liveStreamView {
+func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.Stream, asOf time.Time) liveStreamView {
 	return liveStreamView{
 		ChannelName: f.formatChannelName(ctx, stream),
 		Title:       f.truncateTitle(stream.Title),
 		URL:         stream.GetYouTubeURL(),
+		Elapsed:     liveElapsed(stream.StartActual, asOf),
 	}
+}
+
+// liveElapsed는 조회 시각 asOf까지의 방송 경과를 "1시간 23분째"처럼 표기하고, 1분 미만은 "방금 시작"이다.
+// 현재 시각 대신 asOf를 써야 함께 표시하는 방송 상태와 같은 시점의 경과가 된다. 시작 시각이나 asOf가 없으면
+// 기준이 없고, 시작이 asOf보다 늦으면 시계가 어긋난 근거라서 빈 문자열을 돌려 경과를 표시하지 않는다.
+func liveElapsed(startedAt *time.Time, asOf time.Time) string {
+	if startedAt == nil || asOf.IsZero() || startedAt.After(asOf) {
+		return ""
+	}
+
+	elapsed := asOf.Sub(*startedAt)
+	if elapsed < time.Minute {
+		return "방금 시작"
+	}
+
+	return formatBroadcastDuration(elapsed) + "째"
 }
 
 func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*domain.Stream, hours int) string {

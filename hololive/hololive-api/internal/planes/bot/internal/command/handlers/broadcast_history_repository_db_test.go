@@ -226,6 +226,8 @@ type historySession struct {
 	status                    domain.LiveStatus
 	scheduled, started, ended *time.Time
 	lastSeen                  time.Time
+	// origin이 비면 열 기본값(legacy_unknown)으로 저장한다.
+	origin string
 }
 
 func seedHistorySessions(t *testing.T, pool *pgxpool.Pool, sessions []historySession) {
@@ -237,5 +239,61 @@ func seedHistorySessions(t *testing.T, pool *pgxpool.Pool, sessions []historySes
 			VALUES ($1, $2, $3, 'history', $4, $5, $6, $7)
 		`, session.videoID, session.channelID, string(session.status), session.scheduled, session.started, session.ended, session.lastSeen)
 		require.NoError(t, err, "insert %s", session.videoID)
+
+		if session.origin != "" {
+			_, err = pool.Exec(t.Context(), `UPDATE youtube_live_sessions SET lifecycle_origin = $2 WHERE video_id = $1`, session.videoID, session.origin)
+			require.NoError(t, err, "set origin %s", session.videoID)
+		}
 	}
+}
+
+// 목록과 썸네일 단건 조회는 같은 scan을 쓰므로 둘 다 lifecycle_origin과 reconciliation head의 마지막 live 확인 시각을
+// 읽어야 한다. LIVE를 확인하지 못한 종료는 head가 있어도 observed이고 확인 시각이 nil이며, 옛 기록은 head가 없어도
+// legacy_unknown으로 구분되어야 한다.
+func TestPgBroadcastHistoryRepositoryReadsTimeEvidence(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	base := time.Date(2026, time.October, 17, 12, 0, 0, 0, time.UTC)
+	lastPositive := base.Add(89 * time.Minute)
+
+	seedHistorySessions(t, pool, []historySession{
+		{videoID: "v-with-head", channelID: historyPagingChannel, status: domain.LiveStatusEnded, started: new(base), ended: new(base.Add(90 * time.Minute)), lastSeen: base.Add(90 * time.Minute), origin: observedLifecycleOrigin},
+		{videoID: "v-head-no-live", channelID: historyPagingChannel, status: domain.LiveStatusEnded, ended: new(base.Add(60 * time.Minute)), lastSeen: base.Add(60 * time.Minute), origin: observedLifecycleOrigin},
+		{videoID: "v-legacy", channelID: historyPagingChannel, status: domain.LiveStatusEnded, started: new(base), ended: new(base.Add(30 * time.Minute)), lastSeen: base.Add(30 * time.Minute)},
+	})
+
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_live_reconciliation_heads(video_id, status, last_live_positive_at, last_live_positive_seen_at)
+		VALUES ('v-with-head', 'ENDED', $1, $1), ('v-head-no-live', 'ENDED', NULL, NULL)
+	`, lastPositive)
+	require.NoError(t, err)
+
+	repo := &pgBroadcastHistoryRepository{pool: pool}
+	query := &handlercore.BroadcastHistoryQuery{ChannelID: historyPagingChannel}
+
+	page, err := repo.listEndedBroadcastPage(t.Context(), query, new(base.Add(-time.Hour)), nil, "", 10)
+	require.NoError(t, err)
+
+	got := make(map[string]handlercore.BroadcastHistoryEntry, len(page))
+	for _, entry := range page {
+		got[entry.VideoID] = entry
+	}
+
+	require.Len(t, got, 3)
+	require.Equal(t, observedLifecycleOrigin, got["v-with-head"].LifecycleOrigin)
+	require.NotNil(t, got["v-with-head"].LastLivePositiveAt)
+	require.True(t, got["v-with-head"].LastLivePositiveAt.Equal(lastPositive))
+	require.Equal(t, observedLifecycleOrigin, got["v-head-no-live"].LifecycleOrigin)
+	require.Nil(t, got["v-head-no-live"].LastLivePositiveAt)
+	require.Equal(t, legacyLifecycleOrigin, got["v-legacy"].LifecycleOrigin)
+	require.Nil(t, got["v-legacy"].LastLivePositiveAt)
+
+	entry, err := repo.GetEndedBroadcast(t.Context(), handlercore.BroadcastThumbnailQuery{VideoID: "v-with-head"})
+	require.NoError(t, err)
+	require.Equal(t, observedLifecycleOrigin, entry.LifecycleOrigin)
+	require.NotNil(t, entry.LastLivePositiveAt)
+	require.True(t, entry.LastLivePositiveAt.Equal(lastPositive))
+
+	legacy, err := repo.GetEndedBroadcast(t.Context(), handlercore.BroadcastThumbnailQuery{VideoID: "v-legacy"})
+	require.NoError(t, err)
+	require.Equal(t, legacyLifecycleOrigin, legacy.LifecycleOrigin)
 }

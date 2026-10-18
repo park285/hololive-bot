@@ -51,7 +51,7 @@ func TestSeedTemplates_FinalTextPreservesLiteralTitles(t *testing.T) {
 func literalTitleData(title, url string) map[string]any {
 	entry := map[string]any{
 		fieldTitle: title, fieldURL: url, fieldMemberName: testMixedMemberName, fieldChannelName: testMixedMemberName,
-		"Index": 1, "IsLive": true, "TimeInfo": "시간 미정", fieldScheduledKST: "",
+		"Index": 1, "IsLive": true, "TimeInfo": "시간 미정", fieldElapsed: "", fieldScheduledKST: "",
 		"IsStarting": true, "IsScheduled": false, fieldIsPremiere: false, fieldMinutesUntil: 0,
 		"CollabMembers": "", "ScheduleMessage": "",
 		"ContentText": title, "Link": url, "DateStr": "미정", "Members": "",
