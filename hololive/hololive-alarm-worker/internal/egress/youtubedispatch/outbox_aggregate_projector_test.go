@@ -2,18 +2,17 @@ package youtubedispatch
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 // 부모 잠금을 보유한 세션에서도 실제 Project를 실행한다. 내부 transaction은
@@ -158,7 +157,7 @@ func holdAggregateProjectionParent(ctx context.Context, t *testing.T, pool *pgxp
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		if rollbackErr := pgxutil.Rollback(ctx, parentTx); !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, parentTx); rollbackErr != nil {
 			require.NoError(t, rollbackErr)
 		}
 	})

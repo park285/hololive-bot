@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
@@ -350,7 +351,7 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, channelVideoIDs []
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(ctx))) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	payload := videoIDsOf(&scenario.evidence)
 
@@ -536,7 +537,7 @@ func TestLivePartialFirstPositiveReplaysAbsences(t *testing.T) {
 			tx, err := pool.Begin(ctx)
 			require.NoError(t, err)
 
-			defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(ctx))) }()
+			defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 			if test.status == testStatusLive {
 				// 첫 LIVE 직후에도 이미 무시한 과거 slot은 다시 세지 않는다.
@@ -732,7 +733,7 @@ func fullyLoadedPartialDecision(t *testing.T, pool *pgxpool.Pool, evidence *live
 
 	want, err := loadUnscopedLiveState(ctx, tx, ids)
 	require.NoError(t, err)
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 
 	return want, decision
 }

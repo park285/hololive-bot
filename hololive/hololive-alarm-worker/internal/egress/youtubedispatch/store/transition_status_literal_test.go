@@ -26,7 +26,7 @@ func TestTransitionClaimPendingSQLPreparedModesPreservePendingGuard(t *testing.T
 			setTransitionDeliveryState(t, pool, sentID, lifecycle.StatusSent, nil)
 			setTransitionDeliveryState(t, pool, sendingID, lifecycle.StatusSending, &staleLock)
 
-			tx := preparePlanModeSQLTest(t, pool, mode, "claim_pending_sql_v1", "transition_claim_pending.sql")
+			tx := preparePlanModeSQLTest(t, pool, mode, "claim_pending_sql_v1", claimPendingSQL)
 			run := func(status any) []domain.YouTubeNotificationDelivery {
 				t.Helper()
 
@@ -71,7 +71,7 @@ func TestTransitionStaleSendingSQLPreparedModesPreserveSendingGuard(t *testing.T
 			setTransitionDeliveryState(t, pool, sentID, lifecycle.StatusSent, &staleLock)
 			setTransitionDeliveryState(t, pool, pendingID, lifecycle.StatusPending, &staleLock)
 
-			tx := preparePlanModeSQLTest(t, pool, mode, "stale_sending_sql_v1", "transition_stale_sending.sql")
+			tx := preparePlanModeSQLTest(t, pool, mode, "stale_sending_sql_v1", mustSQL("transition_stale_sending.sql"))
 			run := func(status any) []int64 {
 				t.Helper()
 

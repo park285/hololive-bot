@@ -903,7 +903,7 @@ func TestAlarmDispatchRunnerMarksDispatchedAfterAttemptDeadlineExpires(t *testin
 	})
 }
 
-func TestAlarmDispatchRunnerStopsRemainingGroupsWhenAttemptDeadlineExpires(t *testing.T) {
+func TestAlarmDispatchRunnerGivesEachGroupIndependentAttemptDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		consumer := &alarmDispatchRunnerContextConsumer{}
 
@@ -921,13 +921,15 @@ func TestAlarmDispatchRunnerStopsRemainingGroupsWhenAttemptDeadlineExpires(t *te
 			attemptTimeout: 50 * time.Millisecond,
 		}
 
+		started := time.Now()
 		processed, err := runner.runOnce(t.Context())
 
 		assert.True(t, processed)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
-		assert.Equal(t, []string{testAlarmRoomID}, sender.rooms, "만료된 attempt로 남은 그룹을 더 보내면 미발송 행이 sending으로 굳는다")
-		require.Len(t, consumer.markSending, 1)
-		require.Len(t, consumer.scheduledSendingRetry, 1)
+		require.NoError(t, err)
+		assert.Equal(t, []string{testAlarmRoomID, "room-2"}, sender.rooms)
+		require.Equal(t, 100*time.Millisecond, time.Since(started))
+		require.Len(t, consumer.markSending, 2)
+		require.Len(t, consumer.scheduledSendingRetry, 2)
 		assert.Empty(t, consumer.quarantined)
 	})
 }

@@ -42,31 +42,22 @@ func canceledContext() context.Context {
 	return ctx
 }
 
-func TestInitBotInfrastructureContextCanceled(t *testing.T) {
+func TestInitBotInfrastructureRequiresProcessResources(t *testing.T) {
 	t.Parallel()
 
-	infra, err := appbootstrap.InitBotInfrastructure(canceledContext(), &apiconfig.BotPlaneConfig{}, testBootstrapGuardLogger())
+	infra, err := appbootstrap.InitBotInfrastructure(canceledContext(), &apiconfig.BotPlaneConfig{}, nil, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Nil(t, infra)
-	assert.ErrorContains(t, err, "provide infra resources")
+	assert.ErrorContains(t, err, "shared infra must not be nil")
 }
 
-func TestBuildRuntimeContextCanceled(t *testing.T) {
+func TestBuildRuntimeRequiresProcessResources(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := BuildRuntime(canceledContext(), &apiconfig.BotPlaneConfig{}, testBootstrapGuardLogger())
+	runtime, err := BuildRuntime(canceledContext(), &apiconfig.BotPlaneConfig{}, nil, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Contains(t, err.Error(), "provide infra resources")
-}
-
-func TestInitInfraResources_ContextCanceled(t *testing.T) {
-	t.Parallel()
-
-	resources, err := appbootstrap.InitInfraResources(canceledContext(), &apiconfig.BotPlaneConfig{}, testBootstrapGuardLogger())
-	require.Error(t, err)
-	assert.Nil(t, resources)
-	assert.Contains(t, err.Error(), "provide infra resources")
+	assert.Contains(t, err.Error(), "shared infra must not be nil")
 }
 
 func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {

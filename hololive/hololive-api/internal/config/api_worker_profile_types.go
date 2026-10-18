@@ -2,6 +2,12 @@ package config
 
 import "github.com/park285/shared-go/v2/pkg/workercontract"
 
+const (
+	WorkerBotWebhookInbox   = "bot_webhook_inbox"
+	WorkerBotReplyOutbox    = "bot_reply_outbox"
+	WorkerSourceObservation = "source_observation"
+)
+
 type BotWebhookInboxWorkerSettings struct {
 	MaxBodyBytes            int64 `json:"max_body_bytes"`
 	DedupTTLMS              int64 `json:"dedup_ttl_ms"`
@@ -20,7 +26,6 @@ type BotWebhookInboxWorkerSettings struct {
 type BotReplyOutboxWorkerSettings struct {
 	PollIntervalMS           int64 `json:"poll_interval_ms"`
 	ClaimLeaseMS             int64 `json:"claim_lease_ms"`
-	DispatchBudgetMS         int64 `json:"dispatch_budget_ms"`
 	RetryAfterMS             int64 `json:"retry_after_ms"`
 	MaxAttempts              int32 `json:"max_attempts"`
 	MaintenanceIntervalMS    int64 `json:"maintenance_interval_ms"`
@@ -33,7 +38,6 @@ type SourceObservationWorkerSettings struct {
 	ClaimBatchSize         int   `json:"claim_batch_size"`
 	ClaimIntervalMS        int64 `json:"claim_interval_ms"`
 	ClaimLeaseMS           int64 `json:"claim_lease_ms"`
-	TransactionTimeoutMS   int64 `json:"transaction_timeout_ms"`
 	ShutdownTimeoutMS      int64 `json:"shutdown_timeout_ms"`
 }
 

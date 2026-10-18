@@ -138,7 +138,13 @@ func (r *AdminAPIRuntime) quiesced() bool {
 	r.stateMu.Lock()
 
 	httpQuiesced, photoDone := r.httpQuiesced, r.photoDone
+	closedBeforeStart := r.closing && !r.started
 	r.stateMu.Unlock()
+
+	// Start 진입을 닫은 미기동 runtime에는 join할 HTTP·photo 작업이 없다.
+	if closedBeforeStart {
+		return true
+	}
 
 	if !httpQuiesced {
 		return false

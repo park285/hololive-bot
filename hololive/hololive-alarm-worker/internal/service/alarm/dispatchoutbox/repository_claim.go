@@ -36,7 +36,7 @@ func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int
 		return nil, fmt.Errorf("claim due dispatch deliveries: lease: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, mustSQL("repository_claim_0053_02.sql"), limit, workerID, leaseSeconds, maxDeliveriesPerSendUnit)
+	rows, err := r.pool.Query(ctx, sqlClaimDue, limit, workerID, leaseSeconds, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return nil, fmt.Errorf("claim due dispatch deliveries: %w", err)
 	}

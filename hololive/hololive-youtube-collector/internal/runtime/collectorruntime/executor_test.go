@@ -50,7 +50,7 @@ func newExecutorFixture(t *testing.T, runner collection.JobRunner, fatal *[]erro
 	pool := dbtest.NewPool(t)
 	seedRuntimeCommunityTarget(t, pool)
 
-	executor := newRunErrorExecutor(fatal)
+	executor := newRunErrorExecutor(t, fatal)
 
 	executor.retryBounds = testRetryBounds
 
@@ -70,7 +70,7 @@ func newExecutorFixture(t *testing.T, runner collection.JobRunner, fatal *[]erro
 
 	executor.publisher = NewPublisher(pool)
 	executor.owner = testOwnerInstance
-	executor.gates = defaultProviderGates()
+	executor.gates = defaultProviderGates(t)
 	executor.readiness = &readinessTracker{}
 	executor.workerTracker = workercontract.NewExecutorTracker()
 	executor.workerTotals = &workercontract.Counters{}
@@ -234,7 +234,7 @@ func TestSchedulerReusesExecutorAndPreservesFatalCauses(t *testing.T) {
 	scheduler := newLifecycleScheduler(t)
 	executor := scheduler.executor
 
-	executor.gates = defaultProviderGates()
+	executor.gates = defaultProviderGates(t)
 
 	if err := scheduler.Start(t.Context()); err != nil {
 		t.Fatal(err)

@@ -2,15 +2,14 @@ package alarmdispatch
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
@@ -136,7 +135,7 @@ func runAlarmLeaseClockScenario(t *testing.T, phase string) {
 
 	expireAlarmLeaseDuringUnitWait(ctx, t, pool, &envelopes[0], consumer, done)
 	require.NoError(t, <-done)
-	require.ErrorIs(t, consumer.fenceErr, dispatchoutbox.ErrSendRequestFence)
+	require.ErrorIs(t, consumer.fenceErr, dispatchoutbox.ErrSendRequestLeaseExpired)
 	require.Empty(t, sender.messages)
 	require.Empty(t, sender.routes)
 	require.Empty(t, sender.clientRequestIDs)
@@ -189,7 +188,7 @@ func expireAlarmLeaseDuringUnitWait(ctx context.Context, t *testing.T, pool *pgx
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cleanupCancel()
 
-		if rollbackErr := blocker.Rollback(cleanupCtx); !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(cleanupCtx, blocker); rollbackErr != nil {
 			require.NoError(t, rollbackErr)
 		}
 	}()
@@ -219,14 +218,15 @@ func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpo
 		Scan(&status, &attempts, &notSending, &unowned, &requestID, &generation))
 
 	if phase == "begin" {
-		require.Equal(t, "retry", status, "Begin fence keeps same-attempt RequeuePreSend")
+		require.Equal(t, "retry", status, "Begin expiry keeps same-attempt RequeuePreSend")
+		require.True(t, unowned)
 	} else {
-		require.Equal(t, "quarantined", status, "Load/Pin fence keeps existing Quarantine routing")
+		require.Equal(t, "leased", status, "expired unsent Load/Pin claims remain recoverable")
+		require.False(t, unowned)
 	}
 
 	require.Equal(t, 2, attempts)
 	require.True(t, notSending)
-	require.True(t, unowned)
 	require.Equal(t, envelope.ClientRequestID, requestID)
 	require.Zero(t, generation)
 }

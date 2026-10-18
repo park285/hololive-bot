@@ -6,7 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
+	"sync"
+	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -27,6 +32,17 @@ func ProvideDatabaseResources(
 	poolName string,
 	logger *slog.Logger,
 ) (*DatabaseResources, func(), error) {
+	return provideDatabaseResources(ctx, postgresConfig, poolName,
+		map[string]string{"statement_timeout": "30000", "application_name": runtimeApplicationName(poolName)},
+		&pgxdb.CancelRequestConfig{CancelRequestDelay: 0, DeadlineDelay: time.Second}, runtimeAcquirePolicy(poolName), logger)
+}
+
+// ProvideMaintenanceDatabaseResources는 runtime statement/cancel 정책을 상속하지 않는다.
+func ProvideMaintenanceDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
+	return provideDatabaseResources(ctx, postgresConfig, "", nil, nil, nil, logger)
+}
+
+func provideDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, poolName string, runtimeParams map[string]string, cancelRequest *pgxdb.CancelRequestConfig, acquirePolicy *pgxdb.AcquirePolicy, logger *slog.Logger) (*DatabaseResources, func(), error) {
 	if postgresConfig == nil {
 		return nil, nil, errors.New("postgres config is nil")
 	}
@@ -43,6 +59,9 @@ func ProvideDatabaseResources(
 		QueryExecMode: postgresConfig.QueryExecMode,
 		PoolMinConns:  postgresConfig.PoolMinConns,
 		PoolMaxConns:  postgresConfig.PoolMaxConns,
+		RuntimeParams: runtimeParams,
+		CancelRequest: cancelRequest,
+		AcquirePolicy: acquirePolicy,
 	}, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create database resources: %w", err)
@@ -55,14 +74,35 @@ func ProvideDatabaseResources(
 
 	resources := &DatabaseResources{
 		Service: dbService,
-		Close: func() {
+		Close: sync.OnceFunc(func() {
 			unregisterStats()
 
 			if err := dbService.Close(); err != nil && logger != nil {
 				logger.Warn("close database resources failed", slog.Any("error", err))
 			}
-		},
+		}),
 	}
 
 	return resources, resources.Close, nil
+}
+
+// 소유권 갱신·정산이 있는 pool만 한 연결을 남긴다. Worker 수가 아니라 실제 DB lease를 제한한다.
+func runtimeAcquirePolicy(poolName string) *pgxdb.AcquirePolicy {
+	policy := &pgxdb.AcquirePolicy{Timeout: 5 * time.Second}
+
+	switch poolName {
+	case "bot", "youtube_plane", "alarm_worker", "collector":
+		policy.ReservedConns = 1
+	}
+
+	return policy
+}
+
+func runtimeApplicationName(poolName string) string {
+	process := strings.TrimSpace(os.Getenv("PGAPPNAME"))
+	if process == "" {
+		process = "hololive"
+	}
+
+	return process + "/" + poolName
 }

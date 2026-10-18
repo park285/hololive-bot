@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -187,7 +188,7 @@ func TestCollectionRuntimeBundlesImmediateChangesAndRollback(t *testing.T) {
 
 			execCollectionBundleSQL(t, tx, tc.sql)
 			assertCollectionRuntimeBundles(t, tx)
-			require.NoError(t, tx.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			require.Equal(t, before, collectionBundleTupleSnapshot(t, pool))
 		})
 	}

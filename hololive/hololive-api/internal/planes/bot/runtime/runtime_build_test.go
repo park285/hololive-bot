@@ -31,7 +31,7 @@ func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("nil config", func(t *testing.T) {
-		runtime, err := BuildRuntime(t.Context(), nil, logger)
+		runtime, err := BuildRuntime(t.Context(), nil, nil, logger)
 		if err == nil {
 			t.Fatal("BuildRuntime() expected error for nil config")
 		}
@@ -46,7 +46,7 @@ func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
 	})
 
 	t.Run("nil logger", func(t *testing.T) {
-		runtime, err := BuildRuntime(t.Context(), &apiconfig.BotPlaneConfig{}, nil)
+		runtime, err := BuildRuntime(t.Context(), &apiconfig.BotPlaneConfig{}, nil, nil)
 		if err == nil {
 			t.Fatal("BuildRuntime() expected error for nil logger")
 		}

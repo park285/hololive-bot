@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 )
 
 const communityPageKind = "community_page"
@@ -113,7 +114,7 @@ func TestSourceObservationRetentionBatchSkipsLockedRows(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("rollback retention row lock: %v", rollbackErr)
 		}
 	})

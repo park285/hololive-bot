@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
@@ -16,15 +17,11 @@ func LoadWorkerProfile() (*AlarmWorkerProfile, error) {
 	}
 
 	profile := &AlarmWorkerProfile{Loaded: loaded}
-	if err := workercontract.DecodeWorkerSettings(loaded, "alarm_dispatch", &profile.AlarmDispatch); err != nil {
-		return nil, fmt.Errorf("decode worker settings: %w", err)
-	}
-
-	if err := workercontract.DecodeWorkerSettings(loaded, "notification_delivery", &profile.NotificationDelivery); err != nil {
-		return nil, fmt.Errorf("decode worker settings: %w", err)
-	}
-
-	if err := workercontract.DecodeWorkerSettings(loaded, "youtube_delivery", &profile.YouTubeDelivery); err != nil {
+	if err := workercontract.DecodeWorkerSettingsSet(loaded, map[string]any{
+		WorkerAlarmDispatch:        &profile.AlarmDispatch,
+		WorkerNotificationDelivery: &profile.NotificationDelivery,
+		WorkerYouTubeDelivery:      &profile.YouTubeDelivery,
+	}); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
@@ -42,9 +39,9 @@ func validateWorkerProfile(profile *AlarmWorkerProfile) error {
 
 	workers := profile.Loaded.Profile.Workers
 	problems := workercontract.ShapeProblems(workers, map[string]workercontract.WorkerShape{
-		"alarm_dispatch":        {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
-		"notification_delivery": {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
-		"youtube_delivery":      {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
+		WorkerAlarmDispatch:        {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeNone},
+		WorkerNotificationDelivery: {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeNone},
+		WorkerYouTubeDelivery:      {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
 	})
 
 	problems = append(problems, positiveValueProblems(profile)...)
@@ -78,8 +75,6 @@ func positiveValueProblems(profile *AlarmWorkerProfile) []string {
 		"youtube_delivery.cleanup_after_ms":                     profile.YouTubeDelivery.CleanupAfterMS,
 		"youtube_delivery.revive_interval_ms":                   profile.YouTubeDelivery.ReviveIntervalMS,
 		"youtube_delivery.revive_freshness_window_ms":           profile.YouTubeDelivery.ReviveFreshnessWindowMS,
-		"youtube_delivery.claim_freshness_window_ms":            profile.YouTubeDelivery.ClaimFreshnessWindowMS,
-		"youtube_delivery.delivery_send_timeout_ms":             profile.YouTubeDelivery.DeliverySendTimeoutMS,
 		"youtube_delivery.aggregate_sync_interval_ms":           profile.YouTubeDelivery.AggregateSyncIntervalMS,
 		"youtube_delivery.telemetry_poll_interval_ms":           profile.YouTubeDelivery.TelemetryPollIntervalMS,
 		"youtube_delivery.telemetry_retry_backoff_ms":           profile.YouTubeDelivery.TelemetryRetryBackoffMS,
@@ -109,19 +104,46 @@ func relationshipProblems(profile *AlarmWorkerProfile, workers map[string]worker
 		problems = append(problems, "alarm_dispatch idle backoff range is invalid")
 	}
 
-	if profile.YouTubeDelivery.ClaimFreshnessWindowMS < profile.YouTubeDelivery.ReviveFreshnessWindowMS+profile.YouTubeDelivery.ReviveIntervalMS {
-		problems = append(problems, "youtube_delivery claim freshness window is invalid")
+	freshness := workers[WorkerYouTubeDelivery].Queue.MaxAge.Milliseconds
+	if freshness != nil && (*freshness < profile.YouTubeDelivery.ReviveFreshnessWindowMS ||
+		*freshness-profile.YouTubeDelivery.ReviveFreshnessWindowMS < profile.YouTubeDelivery.ReviveIntervalMS) {
+		problems = append(problems, "youtube_delivery max_age must cover revive freshness plus interval")
 	}
 
-	alarm := workers["alarm_dispatch"]
+	alarm := workers[WorkerAlarmDispatch]
 	if alarm.Executor.Enabled && alarm.Executor.ConfiguredWorkers != 1 {
 		problems = append(problems, "alarm_dispatch currently requires exactly one scheduler worker")
 	}
 
-	youtubeTimeout := workers["youtube_delivery"].Executor.AttemptTimeout.Milliseconds
-	if youtubeTimeout != nil && *youtubeTimeout != profile.YouTubeDelivery.DeliverySendTimeoutMS {
-		problems = append(problems, "youtube_delivery attempt_timeout must match delivery_send_timeout_ms")
+	if timeout := alarm.Executor.AttemptTimeout.Milliseconds; timeout != nil && *timeout >= profile.AlarmDispatch.LeaseMS {
+		problems = append(problems, "alarm_dispatch attempt_timeout must be less than lease_ms")
+	}
+
+	notificationTimeout := workers[WorkerNotificationDelivery].Executor.AttemptTimeout.Milliseconds
+	if notificationTimeout != nil {
+		if err := ValidateNotificationDeliveryTiming(
+			workercontract.Milliseconds(*notificationTimeout),
+			workercontract.Milliseconds(profile.NotificationDelivery.StaleSendingAfterMS),
+		); err != nil {
+			problems = append(problems, "notification_delivery: "+err.Error())
+		}
 	}
 
 	return problems
+}
+
+// ValidateNotificationDeliveryTiming은 프로필 사전 검사와 프로필 없이 생성하는 dispatcher가
+// 같은 lease·정산·stale 정책을 적용하게 한다.
+func ValidateNotificationDeliveryTiming(attemptTimeout, staleSendingAfter time.Duration) error {
+	if attemptTimeout <= 0 || attemptTimeout >= NotificationDeliveryLease-NotificationDeliveryFinalizeTimeout {
+		return fmt.Errorf("attempt timeout must be positive and leave finalization budget within %s lease", NotificationDeliveryLease)
+	}
+
+	// stale SENDING sweep은 lease 만료를 보지 않으므로 진행 중인 발송을 격리하지 않도록
+	// sending_started_at 기준 임계값이 SENDING lease 전체를 덮어야 한다.
+	if staleSendingAfter < NotificationDeliveryLease {
+		return fmt.Errorf("stale sending after must be at least the %s sending lease", NotificationDeliveryLease)
+	}
+
+	return nil
 }

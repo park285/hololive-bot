@@ -8,6 +8,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 // 한 프로세스의 여러 pool은 pool 라벨로 공존하고, 닫힌 pool의 이름은 해제 뒤 다시 쓸 수 있어야 한다.
@@ -72,4 +74,18 @@ func lazyPool(t *testing.T, maxConns int32) *pgxpool.Pool {
 	t.Cleanup(pool.Close)
 
 	return pool
+}
+
+func TestRuntimeControlPoolsRejectMaxOneBeforeDial(t *testing.T) {
+	for _, name := range []string{"bot", "youtube_plane", "alarm_worker", "collector"} {
+		t.Run(name, func(t *testing.T) {
+			resources, cleanup, err := ProvideDatabaseResources(t.Context(), &settings.PostgresConfig{
+				Host: "127.0.0.1", Port: 1, User: "test", Database: "test", SSLMode: "disable",
+				PoolMinConns: 0, PoolMaxConns: 1,
+			}, name, nil)
+			require.ErrorContains(t, err, "acquire policy")
+			require.Nil(t, resources)
+			require.Nil(t, cleanup)
+		})
+	}
 }

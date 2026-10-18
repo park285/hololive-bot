@@ -62,6 +62,7 @@ run_restore() {
 set -euo pipefail
 compose=("$tmp/bin/compose")
 collector_state='$collector_state' prod_source=deploy/compose/docker-compose.prod.yml ap_source=deploy/compose/docker-compose.seoul.yml
+restore_files=(-f "\$HOME/hololive-bot/deploy/compose/docker-compose.seoul.yml")
 service=youtube-collector-b container=hololive-youtube-collector-b port=30015 old_revision=old-revision
 $restore_body
 restore_previous_collector

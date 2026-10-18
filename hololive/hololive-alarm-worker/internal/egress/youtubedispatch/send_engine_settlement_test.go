@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
@@ -151,7 +152,7 @@ type settlementTx struct {
 func (tx *settlementTx) Commit(ctx context.Context) error {
 	if tx.db.rollbackFirstCommit {
 		tx.db.rollbackFirstCommit = false
-		if err := tx.Rollback(ctx); err != nil {
+		if err := pgxdb.Rollback(ctx, tx); err != nil {
 			return fmt.Errorf("roll back settlement pre-state: %w", err)
 		}
 
@@ -659,7 +660,7 @@ func rollbackSettlementBlocker(ctx context.Context, t *testing.T, blocker pgx.Tx
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deliveryStateTimeout)
 	defer cancel()
 
-	require.NoError(t, blocker.Rollback(cleanupCtx))
+	require.NoError(t, pgxdb.Rollback(cleanupCtx, blocker))
 }
 
 func TestSendEngineFallbackStopsBeforeNextProviderAfterCancellation(t *testing.T) {

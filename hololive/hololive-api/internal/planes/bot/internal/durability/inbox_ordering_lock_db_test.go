@@ -21,10 +21,9 @@
 package durability
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +40,7 @@ func TestLockInboxOrderingKeysAcquiresEntireUniqueBatch(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		if rollbackErr := owner.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, owner); rollbackErr != nil {
 			t.Errorf("rollback owner transaction: %v", rollbackErr)
 		}
 	}()
@@ -56,7 +55,7 @@ func TestLockInboxOrderingKeysAcquiresEntireUniqueBatch(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		if rollbackErr := observer.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, observer); rollbackErr != nil {
 			t.Errorf("rollback observer transaction: %v", rollbackErr)
 		}
 	}()

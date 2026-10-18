@@ -20,7 +20,7 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 		replayTicks    atomic.Int64
 	)
 
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	runtime.Config.Retention.Enabled = true
 	runtime.Config.Replay.Enabled = true
@@ -54,7 +54,7 @@ func TestShutdownJoinsRetentionAndReplayWorkers(t *testing.T) {
 }
 
 func TestRetentionAndReplayLoopsStayStoppedWhenDisabled(t *testing.T) {
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	runtime.Config.Retention.Enabled = false
 	runtime.Config.Replay.Enabled = false
@@ -72,7 +72,7 @@ func TestRetentionAndReplayLoopsStayStoppedWhenDisabled(t *testing.T) {
 func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 	var sourceTicks atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	runtime.Config.Retention.Enabled = true
 	runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour

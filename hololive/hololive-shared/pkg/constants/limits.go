@@ -28,7 +28,7 @@ var StringLimits = struct {
 	StreamTitle: 100,
 }
 
-var MQConfig = struct {
+var ValkeyTimeout = struct {
 	ConnWriteTimeout time.Duration
 	DialTimeout      time.Duration
 }{

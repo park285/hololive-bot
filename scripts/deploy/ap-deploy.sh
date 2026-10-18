@@ -298,11 +298,14 @@ else
 fi
 # compose 파일은 deploy/compose에서 읽는다.
 prod_prechange_file='$PROD_COMPOSE_FILE'
+if [[ -f deploy/compose/docker-compose.collector.yml ]]; then
+  prod_prechange_file=deploy/compose/docker-compose.collector.yml
+fi
 ap_prechange_file='$AP_COMPOSE_FILE'
 test -r \"\$prod_prechange_file\"
 test -r \"\$ap_prechange_file\"
-mkdir -p \"\$(dirname '$backup_dir/$PROD_COMPOSE_FILE.prechange')\" \"\$(dirname '$backup_dir/$AP_COMPOSE_FILE.prechange')\"
-cp \"\$prod_prechange_file\" '$backup_dir/$PROD_COMPOSE_FILE.prechange'
+mkdir -p \"\$(dirname '$backup_dir/$AP_COMPOSE_FILE.prechange')\"
+cp \"\$prod_prechange_file\" \"$backup_dir/\$prod_prechange_file.prechange\"
 cp \"\$ap_prechange_file\" '$backup_dir/$AP_COMPOSE_FILE.prechange'
 printf '%s\n' \"\$prod_prechange_file\" > '$backup_dir/prod-compose-source-path'
 printf '%s\n' \"\$ap_prechange_file\" > '$backup_dir/ap-compose-source-path'
@@ -311,7 +314,11 @@ sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 $(declare -f ap_prechange_config)
-ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet
+prechange_files=(-f \"\$ap_prechange_file\")
+if [[ \"\$prod_prechange_file\" == '$PROD_COMPOSE_FILE' ]]; then
+  prechange_files=(-f \"\$prod_prechange_file\" \"\${prechange_files[@]}\")
+fi
+ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh \"\${prechange_files[@]}\" config --quiet
 echo backup_dir='$backup_dir'"
 # 사전 mirror sync 전에 보존한 pair 또는 실행 중 loaded hash로 입증한 bytes만 백업한다.
 profile_container="$(remote "sudo -n docker ps -aq --no-trunc --filter 'name=^/hololive-youtube-collector-b$'")"
@@ -473,9 +480,9 @@ po_image_id_matches \"\$(sudo -n docker image inspect -f '{{.Id}}' '$IMAGE_REF')
 remote "set -euo pipefail
 cd ~/hololive-bot
 pair_tool=scripts/deploy/lib/worker-profile-pair.py
-sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --format json \
+sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' config --format json \
   | sudo -n python3 \"\$pair_tool\" candidate youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\"
-sudo -n env WORKER_PROFILE_OVERRIDE_FILE=\"\$PWD/$backup_dir/worker-profile-candidate/compose.yml\" HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' run --rm --no-deps --pull never youtube-collector-b --check-worker-profile
+sudo -n env WORKER_PROFILE_OVERRIDE_FILE=\"\$PWD/$backup_dir/worker-profile-candidate/compose.yml\" HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' run --rm --no-deps --pull never youtube-collector-b --check-worker-profile
 sudo -n python3 \"\$pair_tool\" verify-source youtube-collector-b \"\$PWD/$backup_dir/worker-profile-candidate\""
 cutover_armed=true
 remote "set -euo pipefail
@@ -489,8 +496,8 @@ change_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate youtube-po-b
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate youtube-po-b
 for _ in \$(seq 1 30); do
   [[ \$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' hololive-youtube-po-b) == healthy ]] && break
   sleep 2
@@ -504,7 +511,7 @@ cp '$backup_dir/po-sandbox-candidate-manifest.json' '$po_manifest_active.tmp'
 mv -f '$po_manifest_active.tmp' '$po_manifest_active'
 cp '$backup_dir/po-sandbox-candidate.image-id' '$po_image_id_active.tmp'
 mv -f '$po_image_id_active.tmp' '$po_image_id_active'
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail

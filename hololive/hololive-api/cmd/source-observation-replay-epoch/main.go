@@ -64,7 +64,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	defer cancel()
 
 	// 일회성 CLI는 scrape 대상이 아니므로 pool 통계를 등록하지 않는다.
-	resources, cleanup, err := databaseproviders.ProvideDatabaseResources(activationContext, &postgres, "", logger)
+	resources, cleanup, err := databaseproviders.ProvideMaintenanceDatabaseResources(activationContext, &postgres, logger)
 	if err != nil {
 		logger.Error("open source observation replay epoch database", slog.Any("error", err))
 

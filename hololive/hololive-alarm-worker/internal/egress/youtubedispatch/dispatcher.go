@@ -69,6 +69,10 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 		d.send.workerTracker = tracker
 		d.send.workerTotals = totals
 	}
+
+	if d.claim != nil {
+		d.claim.workerTotals = totals
+	}
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {

@@ -87,18 +87,10 @@ type YouTubePlaneConfig struct {
 
 func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 	return YouTubePlaneConfig{
-		Enabled:                true,
-		PostgresPoolMinConns:   1,
-		PostgresPoolMaxConns:   4,
-		ConsumerWorkers:        2,
-		DBOperationConcurrency: 3,
-		ClaimBatchSize:         4,
-		ClaimLease:             time.Minute,
-		ClaimInterval:          2 * time.Second,
-		TransactionTimeout:     10 * time.Second,
-		ShutdownTimeout:        30 * time.Second,
-		Retention:              defaultYouTubePlaneRetentionConfig(),
-		Replay:                 defaultYouTubePlaneReplayConfig(),
+		PostgresPoolMinConns: 1,
+		PostgresPoolMaxConns: 4,
+		Retention:            defaultYouTubePlaneRetentionConfig(),
+		Replay:               defaultYouTubePlaneReplayConfig(),
 		TargetProjection: YouTubePlaneTargetProjectionConfig{
 			Interval: 5 * time.Second,
 			Validity: time.Hour,
@@ -115,15 +107,6 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	defaults := DefaultYouTubePlaneConfig()
 	config := defaults
-
-	config.Enabled = false
-	config.ConsumerWorkers = 0
-	config.DBOperationConcurrency = 0
-	config.ClaimBatchSize = 0
-	config.ClaimLease = 0
-	config.ClaimInterval = 0
-	config.TransactionTimeout = 0
-	config.ShutdownTimeout = 0
 
 	if err := loadYouTubePlanePool(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, fmt.Errorf("load youtube plane pool: %w", err)

@@ -117,7 +117,7 @@ x-postgres-env: &postgres-env
   POSTGRES_PORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_DB: hololive
-  POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+  POSTGRES_USER: hololive_runtime
   # 런타임 역할은 전용 키(HOLOLIVE_DB_PASSWORD)만 쓴다. admin DB_PASSWORD 폴백은 두지 않는다(stack audit 2026-09-26).
   POSTGRES_PASSWORD: ${HOLOLIVE_DB_PASSWORD:?HOLOLIVE_DB_PASSWORD is required}
   POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
@@ -152,14 +152,6 @@ x-llm-provider-env: &llm-provider-env
   GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
   GEMINI_THINKING_LEVEL: ${GEMINI_THINKING_LEVEL:-high}
 
-x-go-volumes: &go-volumes
-  - ../../data:/app/data
-  - ../../logs:/app/logs
-  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-  - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-  - valkey-cache-socket:/var/run/valkey:ro
-
 x-hololive-api-volumes: &hololive-api-volumes
   - ../../data:/app/data
   - ../../logs:/app/logs
@@ -168,7 +160,12 @@ x-hololive-api-volumes: &hololive-api-volumes
   - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
   - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-  - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
+  - type: bind
+    source: /etc/stack-secrets/hololive-bot/worker-profiles
+    target: /run/hololive-bot/worker-profiles
+    read_only: true
+    bind:
+      create_host_path: false
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-alarm-worker-volumes: &alarm-worker-volumes
@@ -179,7 +176,12 @@ x-alarm-worker-volumes: &alarm-worker-volumes
   - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
   - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
   - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-  - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
+  - type: bind
+    source: /etc/stack-secrets/hololive-bot/worker-profiles
+    target: /run/hololive-bot/worker-profiles
+    read_only: true
+    bind:
+      create_host_path: false
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-db-depends: &db-depends
@@ -193,18 +195,6 @@ x-db-cache-depends: &db-cache-depends
   valkey-cache:
     condition: service_healthy
 
-x-collector-depends: &collector-depends
-  <<: *db-depends
-
-x-collector-volumes: &collector-volumes
-  - ../../data:/app/data
-  - ../../logs:/app/logs
-  - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-  - /etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
-
-  - youtube-po-c-socket:/run/hololive-youtube-po:ro
 
 services:
   holo-postgres:
@@ -260,6 +250,28 @@ services:
       # Loki로 남기려고 10초 이상 걸린 실행만 기록한다. compose와 drift가 생기므로 ALTER SYSTEM으로 바꾸지 않는다.
       - "-c"
       - "log_autovacuum_min_duration=10s"
+      - "-c"
+      - "tcp_keepalives_idle=60"
+      - "-c"
+      - "tcp_keepalives_interval=10"
+      - "-c"
+      - "tcp_keepalives_count=6"
+      - "-c"
+      - "log_lock_waits=on"
+      - "-c"
+      - "log_temp_files=0"
+      - "-c"
+      - "log_min_duration_statement=1s"
+      - "-c"
+      - "log_parameter_max_length=0"
+      - "-c"
+      - "log_parameter_max_length_on_error=0"
+      - "-c"
+      - "checkpoint_timeout=900s"
+      - "-c"
+      - "max_wal_size=2GB"
+      - "-c"
+      - "wal_compression=lz4"
       # 4GiB 한도에서 공유 버퍼는 25%만 사용하고 프로세스·파일 캐시 여유를 남긴다.
       - "-c"
       - "shared_buffers=1GB"
@@ -297,12 +309,10 @@ services:
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
       POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       # 역할별 전용 비밀번호는 필수이며 init-db는 비어 있으면 실패한다(admin DB_PASSWORD 폴백 없음).
-      # HOLOLIVE_MIGRATOR_PASSWORD는 중앙 compose.env에만 있어 AP render를 깨지 않도록 `:?` 대신 init-db가 검사한다.
-      HOLOLIVE_DB_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      # Central-only credentials are never interpolated by the AP collector base.
       HOLOLIVE_DB_PASSWORD: ${HOLOLIVE_DB_PASSWORD:?HOLOLIVE_DB_PASSWORD is required}
       HOLOLIVE_MIGRATOR_USER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
       HOLOLIVE_MIGRATOR_PASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-}
-      HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:?HOLOLIVE_SCRAPER_PASSWORD is required}
       # 비우면 init-db 가 복제 역할 자체를 만들지 않는다(standby 없는 호스트의 기본값).
       HOLOLIVE_REPLICATOR_USER: ${HOLOLIVE_REPLICATOR_USER:-hololive_replicator}
@@ -318,9 +328,9 @@ services:
       - ../../hololive/hololive-api/scripts/init-db:/docker-entrypoint-initdb.d:ro
       - ./postgres/pg_hba.conf:/run/hololive-bot/postgres/pg_hba.conf:ro
       - /etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
+      - holo-pg-admin-socket:/var/run/postgresql
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /var/run/postgresql:size=16m,mode=3775,uid=999,gid=999
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t"]
       interval: 10s
@@ -388,17 +398,16 @@ services:
     restart: "no"
     stop_grace_period: 10s
     environment:
-      PGHOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
-      PGPORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
+      PGHOST: /var/run/postgresql
+      PGPORT: "5432"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
-      # migrator 비밀번호는 전용 키만 쓴다. 중앙 compose.env에만 있는 키라 `:?` 대신 db-migrate가 비어 있으면 실패한다.
+      # Mandatory at db-migrate startup; build-only renders do not need credentials.
       PGPASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-}
-      PGSSLMODE: ${PGSSLMODE:-verify-full}
-      PGSSLROOTCERT: /run/hololive-bot/certs/postgres-ca.pem
+      PGSSLMODE: disable
+      PGAPPNAME: hololive-db-migrate
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
       POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:?HOLOLIVE_SCRAPER_PASSWORD is required}
       MIGRATION_BASELINE_THROUGH: ${MIGRATION_BASELINE_THROUGH:-}
       MIGRATION_ALLOW_BLOCKING_INDEX_DROP: ${MIGRATION_ALLOW_BLOCKING_INDEX_DROP:-false}
@@ -406,8 +415,7 @@ services:
       - /app/bin/db-migrate
     volumes:
       - ../../hololive/hololive-api/scripts/migrations:/migrations:ro
-      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-    dns: *tailnet-dns
+      - holo-pg-admin-socket:/var/run/postgresql:ro
     depends_on:
       holo-postgres:
         condition: service_healthy
@@ -417,8 +425,7 @@ services:
       resources:
         limits:
           pids: 256
-    networks:
-      - hololive-net
+    network_mode: none
 
   hololive-alarm-worker:
     <<: *app-service
@@ -437,6 +444,7 @@ services:
         required: false
     environment:
       <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env]
+      PGAPPNAME: hololive-alarm-worker
       NOTIFICATION_EGRESS_ROLE: "owner"
       NOTIFICATION_SCHEDULER_ROLE: "worker"
       STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/alarm-worker.json
@@ -502,6 +510,7 @@ services:
         required: false
     environment:
       <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *llm-provider-env]
+      PGAPPNAME: hololive-api
       APP_VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
       APP_ENV: "production"
       STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/hololive-api.json
@@ -610,112 +619,18 @@ services:
           - hololive-api
 
   youtube-po-c:
-    image: hololive-youtube-po-sandbox:prod
-    build:
-      context: ../..
-      dockerfile: hololive/hololive-youtube-collector/Dockerfile.po-sandbox
-      provenance: false
-      sbom: false
-      args:
-        VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
-        REVISION: ${REVISION:-unknown}
-    container_name: hololive-youtube-po-c
-    network_mode: none
-    read_only: true
-    user: "65532:1000"
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    environment:
-      HOME: /tmp
-      TMPDIR: /tmp
-      TZ: UTC
-      LANG: C
-    volumes:
-      - youtube-po-c-socket:/run/hololive-youtube-po
-    tmpfs:
-      - /tmp:size=64m,mode=1777,uid=65532,gid=1000
-    ulimits:
-      core: 0
-    pids_limit: 32
-    cpus: 1.0
-    mem_limit: 512m
-    restart: unless-stopped
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "1.0"
-          pids: 32
+    extends:
+      file: docker-compose.collector.yml
+      service: youtube-po-c
 
   youtube-collector:
-    <<: *app-service
-    labels:
-      deunhealth.restart.on.unhealthy: "false"
-    image: hololive-youtube-collector:prod
-    build:
-      <<: *go-build-base
-      dockerfile: hololive/hololive-youtube-collector/Dockerfile
-      args:
-        VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
-        REVISION: ${REVISION:-unknown}
-    container_name: hololive-youtube-collector-c
-    entrypoint: ["./bin/youtube-collector"]
-    env_file:
-      - path: ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
-        required: false
+    extends:
+      file: docker-compose.collector.yml
+      service: youtube-collector
     environment:
-      <<: [*app-file-log-env, *hololive-h3-files-env, *postgres-env]
-      NOTIFICATION_EGRESS_ROLE: "off"
-      STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-c.json
-      YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
-      YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-c"
-      YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-c.log"
-      POSTGRES_USER: hololive_scraper
-      POSTGRES_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:?HOLOLIVE_SCRAPER_PASSWORD is required}
-      SERVER_PORT: 30025
-      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_YOUTUBE_COLLECTOR_HTTP_TRANSPORTS:-h3}
-      HOLOLIVE_H3_ADDR: ${HOLOLIVE_YOUTUBE_COLLECTOR_H3_ADDR:-:30025}
-      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_YOUTUBE_COLLECTOR_METRICS_ADDR:-:30096}
-      POSTGRES_POOL_MIN_CONNS: ${YOUTUBE_COLLECTOR_POSTGRES_POOL_MIN_CONNS:-2}
-      POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS:-8}
-      YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS:-2}
-      YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS:-1}
-      YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS:-30}
-      YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS:-30}
-      YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS:-3}
-      YOUTUBE_COLLECTOR_MAX_PAGES: ${YOUTUBE_COLLECTOR_MAX_PAGES:-1}
-      YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES: ${YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES:-1048576}
-      YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS: ${YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS:-10000}
-      YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS: ${YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS:-2}
-      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
-      PHOTO_SYNC_ENABLED: "false"
-      GOGC: "100"
-      # 상한(768m)은 Go 320MiB에 YouTube.js Node helper(관측 최대 176MiB) 몫 192MiB와 여유 32MiB를 더한 값보다 크게 둔다.
-      GOMEMLIMIT: "320MiB"
-      GIN_MODE: release
-      LOG_DIR: /app/logs
-    dns: *tailnet-dns
-    ports:
-      - "127.0.0.1:30025:30025"
-      - "127.0.0.1:30025:30025/udp"
-      - "127.0.0.1:30096:30096"
-    volumes: *collector-volumes
-    group_add:
-      - "${HOLOLIVE_RUNTIME_GID:-1002}"
-    extra_hosts: *host-extra-hosts
-    depends_on: *collector-depends
-    deploy: *deploy-768m
-    healthcheck:
-      <<: *go-healthcheck
-      # 이전 인스턴스의 60초 lease 만료와 첫 publish가 끝날 때까지 기동 유예를 적용한다.
-      start_period: 180s
-      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30025/ready"]
-    networks:
-      hololive-net:
-        aliases:
-          - youtube-collector
-          - youtube-collector-c
+      POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
+      POSTGRES_PORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
+    depends_on: *db-depends
 
   docker-proxy:
     <<: *restart-logging
@@ -776,6 +691,13 @@ services:
 
 volumes:
   holo-pg-data:
+  # Only postgres and the one-shot migrator mount this privileged transport.
+  holo-pg-admin-socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=16m,mode=3775,uid=999,gid=999
   youtube-po-c-socket:
   valkey-cache-socket:
     driver: local

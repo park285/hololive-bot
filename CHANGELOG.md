@@ -8,6 +8,22 @@
 
 ## 미출시
 
+## v11.0.0 - 2026-10-18
+
+- **최종 워커·DB 계약 전환:** 10.2.0의 구 프로필 호환 baseline을 실제 운영에서 수용한 뒤 새 프로필을 활성화합니다. `source_observation`은 batch가 workers 이상이어야 하며 lease 하한은 `batch × attempt_timeout + 10000ms`입니다. eligible 큐·nullable 진단·공유 cache 수명·DB control reserve와 lease/attempt 정산을 함께 유지하며, 322–324와 방송 시각 확정·멤버십 아카이브 동작은 보존합니다.
+
+- **미전송 알림 lease 복구:** 직렬 발송의 뒤 그룹에서 아직 보내지 않은 claim이 만료되면 영구 격리하지 않고 기존 whole-unit recovery에 남깁니다. frozen request·generation·소유권 fence와 provider별 기한은 유지하며, 실제 DB에서 회수·재claim 후 두 발송 완료와 attempt 집계를 확인했습니다.
+- **paired rollback 복원성:** central은 이전 collector의 실행/정지 상태를 기록하고 정지된 writer를 자동 시작하지 않습니다. profile 게시 실패는 issuer 제거 전에 반환합니다. 호출별 임시 파일을 모두 준비한 뒤 개별 rename하여 남은 `.next` 파일이 복원을 막지 않게 하며, AP dry-run은 retained overlay를 바꾸지 않고 apply가 검사한 바이트를 게시합니다. 다중 파일 전체의 원자성이나 동시 배포 직렬화를 보장하는 변경은 아닙니다.
+- **준비 실패의 image tag 복원:** central의 issuer-absent 기준점과 AP의 최초 배포/issuer-absent 기준점에서 후보 `prod` 태그가 남아 다음 배포를 막던 경로를 수정했습니다. 기존 태그는 rollback reference로 돌리고 원래 없던 태그만 정확한 reference로 제거합니다. 조회/제거 실패는 복원 실패로 남기며 원래 종료 상태·live runtime·rollback archive/다른 태그는 보존합니다.
+- **DB 제어 용량(D09, 로컬):** runtime pool 전체에 5초 acquire 예산을 적용하고 bot·YouTube source·alarm-worker·collector만 짧은 lease 갱신/정산용 연결 하나를 남깁니다. provider/worker 전체를 우회시키지 않으며 admin·LLM은 reserve 0, maintenance/replay/migrator는 nil 정책입니다. max1을 거부하되 min0·collector admitted deadline·API 공유 cache 수명은 유지합니다. pgx Stat wait는 외부 gate 대기를 포함하지 않습니다. 격리 DB 경합·race·종료 경로를 검증했으며 운영 활성화는 하지 않았습니다.
+- **DB 배포 정책 준비(미활성):** AP collector/issuer Compose를 중앙 비밀·DB/cache 정의에서 분리하고 중앙 c만 DB 의존성을 추가합니다. 이전 Compose·이미지·프로필 rollback 짝과 전송 목록을 함께 보존합니다. migrator/admin bootstrap은 격리 Unix socket으로 전환하며, native primary/pool 값은 topology/capacity 정본에서 읽습니다. exporter 1·nightly 2를 포함한 collector max7 후보는 할당54/여유3입니다. 실제 격리 PG18에서 privileged TCP/replication 거부와 runtime·scraper·exporter TLS, socket migration을 확인했습니다. keepalive60/10/6·자격 SQL 비노출 로그·기존 WAL900s/2GB/lz4를 명시하되 auto.conf 정리·역할 제한·재기동·운영 배포는 별도 승인입니다.
+- **워커 프로필·기한:** 실제 age 폐기가 없는 워커는 `none`, YouTube 발송 freshness는 profile max_age 정본을 사용합니다. 중복 dispatch/transaction/send timeout을 제거하고 attempt·lease 관계에서 파생합니다. collector는 admission 때 확정한 kind별 budget/deadline을 보존하며 후속 실행에서 연장하지 않습니다. profile-only 사전 검사·immutable binary/profile 짝·source 변경 감지와 paired rollback을 함께 준비했습니다.
+- **공유 자원·실패 정산:** API 프로세스의 Valkey/member cache를 한 소유자로 통합하고 모든 borrower 종료 뒤 backing bot pool과 함께 정리합니다. 시작하지 않은 admin plane이 종료를 막던 경로와, 취소된 inbox claim context가 fenced release를 막던 경로를 수정했습니다. 유한 정리 예산·원래 fencing·불명 결과의 무재생은 유지합니다.
+- **SCRAM·역할 정본:** scraper/runtime 이름을 고정 계약으로 통일합니다. bootstrap은 UTF-8 입력의 PostgreSQL/pgx 준비 결과를 대조한 후 클라이언트 SCRAM verifier만 전송하며 불일치는 role 변경 전에 거부합니다. 원생 PostgreSQL·pgx·libpq의 Unicode/긴 결합문자 경계, 잘못된 자격 거부, 실패 SQL과 noisy server/client 로그의 비노출을 격리 환경에서 확인했습니다.
+- **비활성 워커 진단:** `source_observation`이 꺼져도 YouTube runtime과 durable 큐 sampler를 구성하여 depth를 보고합니다. 비활성 경로는 claim·projection 준비·maintenance를 실행하지 않습니다. bot inbox/outbox의 attempt 종료는 defer로 보장하여 panic 뒤 inFlight가 남지 않습니다.
+- **DB 연결·정리:** migrator의 pool·bootstrap 연결을 shared-go의 명시적 sslmode·비밀 보호 파싱으로 통일하며 `PGSSLMODE` 생략을 거부합니다. 기존 `pgxutil`을 제거하고 모든 rollback 소비자를 취소 독립 5초 공통 경로로 옮깁니다. 다섯 소비자는 provenance를 검증한 `shared-go/v2 v2.14.0`을 사용하며, source 통합만으로 운영 활성화·수용을 뜻하지는 않습니다.
+- **보존 backlog 측정:** kind별 제한된 후보에서 첫 비보호 행을 찾으면 보호 판정을 중단합니다. 실제 migration을 적용한 격리 DB에서 1,000개 후보의 보호 함수 호출이 첫 행 적격이면 1회, 보호 선두 3개이면 4회로 줄고 oldest·known은 유지됨을 확인했습니다. migration 315 삭제 경로는 별도로 측정했으며 잠금·커서·재검사 계약을 보존하기 위해 변경하지 않았습니다.
+
 ## v10.2.0 - 2026-10-18
 
 - **구 프로필 호환 pairing baseline:** API·alarm의 기존 settings와 fixed max_age, collector의 기존 per_job/bounded/fixed 스키마를 유지합니다. 실제 후보 CLI가 release profile을 검증하고 image/binary와 profile checksum을 함께 보존합니다. 인증된 loaded hash를 확인한 최초 도입만 허용하며, effective release와 desired source를 분리합니다. source 디렉터리 mount로 원자적 파일 교체도 관측하고 rollback은 secret mirror가 아니라 이전 artifact/profile 짝을 복원합니다.

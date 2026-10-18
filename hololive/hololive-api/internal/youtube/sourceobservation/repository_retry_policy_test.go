@@ -1,13 +1,12 @@
 package sourceobservation
 
 import (
-	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -106,7 +105,7 @@ func TestClaimDeadLettersDueExhaustedRowsInQueueOrderSkippingLocked(t *testing.T
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		if rollbackErr := lockTx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, lockTx); rollbackErr != nil {
 			t.Errorf("rollback lock transaction: %v", rollbackErr)
 		}
 	})
@@ -123,7 +122,7 @@ func TestClaimDeadLettersDueExhaustedRowsInQueueOrderSkippingLocked(t *testing.T
 	require.NoError(t, err)
 	require.ElementsMatch(t, []int64{processingDue, first}, attemptsExhaustedRows(t, pool), "locked exhausted row must be skipped")
 
-	require.NoError(t, lockTx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, lockTx))
 
 	_, err = repo.ClaimBatch(ctx, options)
 	require.NoError(t, err)

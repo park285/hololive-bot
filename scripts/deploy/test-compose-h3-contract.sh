@@ -21,6 +21,8 @@ CACHE_PASSWORD=stub
 DB_PASSWORD=stub
 HOLOLIVE_DB_PASSWORD=stub
 HOLOLIVE_SCRAPER_PASSWORD=stub
+HOLOLIVE_MIGRATOR_PASSWORD=stub
+POSTGRES_PORT_BIND_IP=100.100.1.8
 HOLODEX_API_KEY=stub
 IRIS_BOT_TOKEN=stub
 IRIS_WEBHOOK_TOKEN=stub
@@ -36,14 +38,8 @@ cat >>"${STUB_COLLECTOR_DISABLED_ENV}" <<'EOF'
 HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1
 EOF
 cat >"${STUB_AP_COMPOSE_ENV}" <<'EOF'
-CACHE_PASSWORD=stub
-DB_PASSWORD=stub
-HOLOLIVE_DB_PASSWORD=stub
 HOLOLIVE_SCRAPER_PASSWORD=stub
-HOLOLIVE_CENTRAL_CACHE_HOST=stub
 HOLOLIVE_CENTRAL_POSTGRES_HOST=stub
-CLIPROXY_BASE_URL=https://cliproxy.invalid
-SEOUL_METRICS_BIND_IP=100.100.1.5
 EOF
 cp "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}"
 cat >>"${STUB_APP_ENV}" <<'EOF'
@@ -58,9 +54,6 @@ PROD_OVERLAYS=(
     -f deploy/compose/docker-compose.prod.yml
     -f deploy/compose/docker-compose.live-compat.yml
 )
-renderable_ap_compose() {
-    printf '%s\n' "$1"
-}
 
 render() {
     local profiles="$1"
@@ -79,9 +72,9 @@ main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 default_render="$(render "" "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 migration_override_render="$(render oracle "${STUB_MIGRATION_OVERRIDE_ENV}" "${PROD_OVERLAYS[@]}")"
 collector_disabled_render="$(render oracle "${STUB_COLLECTOR_DISABLED_ENV}" "${PROD_OVERLAYS[@]}")"
-osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
-osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka2.yml)")"
-seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
+osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.osaka.yml)"
+osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.osaka2.yml)"
+seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.seoul.yml)"
 
 MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" COLLECTOR_DISABLED_RENDER="${collector_disabled_render}" \
     OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" "${CI_PYTHON_BIN}" - <<'PY'
@@ -124,6 +117,26 @@ main = json.loads(os.environ["MAIN_RENDER"])["services"]
 default_services = json.loads(os.environ["DEFAULT_RENDER"])["services"]
 migration_override = json.loads(os.environ["MIGRATION_OVERRIDE_RENDER"])["services"]
 collector_disabled = json.loads(os.environ["COLLECTOR_DISABLED_RENDER"])["services"]
+def check_profile_mount(name, svc, filename):
+    target = "/run/hololive-bot/worker-profiles"
+    source = "/etc/stack-secrets/hololive-bot/worker-profiles"
+    check(f"{name} profile env selects its own slot",
+          (svc.get("environment") or {}).get("STACK_WORKER_PROFILE_FILE") == f"{target}/{filename}.json")
+    mounts = [v for v in svc.get("volumes", []) if v.get("target") == target]
+    check(f"{name} profile directory source and target match",
+          len(mounts) == 1 and mounts[0].get("type") == "bind"
+          and mounts[0].get("source") == source and mounts[0].get("read_only") is True
+          and mounts[0].get("bind", {}).get("create_host_path", False) is False)
+    check(f"{name} does not pin an individual profile inode",
+          not any(v.get("target", "").startswith(target + "/") for v in svc.get("volumes", [])))
+
+
+for services in (main, default_services):
+    for name, filename in (("hololive-api", "hololive-api"),
+                           ("hololive-alarm-worker", "alarm-worker"),
+                           ("youtube-collector", "youtube-collector-c")):
+        check_profile_mount(name, services.get(name) or {}, filename)
+
 
 migration_env = (main.get("hololive-db-migrate") or {}).get("environment") or {}
 check(
@@ -278,6 +291,7 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
     ):
         check(f"{name} mounts {cert_path}", has_bind_target(svc, cert_path))
     env = svc.get("environment") or {}
+    check_profile_mount(name, svc, name)
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"{name} does not receive {iris_key}", iris_key not in env)
     check(f"youtube-collector absent from {name} AP render", "youtube-collector" not in services)

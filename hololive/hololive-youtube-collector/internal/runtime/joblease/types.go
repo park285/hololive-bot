@@ -110,14 +110,17 @@ type JobSpec struct {
 }
 
 func (s *JobSpec) validate(contracts collection.JobContractSet) (collection.JobContract, []contract.ObservationKind, error) {
-	if invalidJobSpecIdentity(s) {
-		return collection.JobContract{}, nil, fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)
+	if s == nil {
+		return collection.JobContract{}, nil, fmt.Errorf("%w: job is nil", ErrInvalidJob)
 	}
 
 	definition, ok := contracts.Definition(collection.JobID{Provider: s.Provider, Kind: collection.JobKind(s.CollectionJobKind)})
-	if !ok || string(definition.Class()) != s.Class ||
-		definition.Class() == collection.JobClassGlobal && definition.LeaseSubject() != s.SubjectKey {
-		return collection.JobContract{}, nil, fmt.Errorf("%w: compile-time job contract mismatch", ErrInvalidJob)
+	if !ok {
+		return collection.JobContract{}, nil, fmt.Errorf("%w: compile-time job contract missing", ErrInvalidJob)
+	}
+
+	if err := s.ValidateContract(definition); err != nil {
+		return collection.JobContract{}, nil, err
 	}
 
 	kinds := cadenceKindsForProvider(definition, s.Provider)
@@ -126,6 +129,21 @@ func (s *JobSpec) validate(contracts collection.JobContractSet) (collection.JobC
 	}
 
 	return definition, kinds, nil
+}
+
+// ValidateContract는 큐 admission과 lease 획득이 같은 불변 job identity 경계를 적용하게 한다.
+func (s *JobSpec) ValidateContract(definition collection.JobContract) error {
+	if s == nil || invalidJobSpecIdentity(s) {
+		return fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)
+	}
+
+	id := definition.ID()
+	if id.Provider != s.Provider || string(id.Kind) != s.CollectionJobKind || string(definition.Class()) != s.Class ||
+		definition.Class() == collection.JobClassGlobal && definition.LeaseSubject() != s.SubjectKey {
+		return fmt.Errorf("%w: compile-time job contract mismatch", ErrInvalidJob)
+	}
+
+	return nil
 }
 
 func invalidJobSpecIdentity(s *JobSpec) bool {

@@ -79,7 +79,7 @@ func TestRuntimePlaneOrder(t *testing.T) {
 		youtube   bool
 		wantStart []string
 	}{
-		{name: "youtube disabled", wantStart: []string{lifecycleLLMName, lifecycleAdminName, lifecycleBotName}},
+		{name: "partially built without youtube", wantStart: []string{lifecycleLLMName, lifecycleAdminName, lifecycleBotName}},
 		{name: "youtube enabled", youtube: true, wantStart: []string{lifecycleYouTubeName, lifecycleLLMName, lifecycleAdminName, lifecycleBotName}},
 	}
 

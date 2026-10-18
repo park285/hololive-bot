@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
+
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 )
 
 // 실행 슬롯이 있는 방의 첫 항목만 claim합니다. 대기 항목을 미리 임대하지 않아
@@ -32,7 +34,7 @@ func (d *Dispatcher) processReady(ctx context.Context) {
 				excludedRooms = append(excludedRooms, roomID)
 			}
 
-			items, err := d.repository.fetchReadyAndLock(ctx, d.workerID, available, deliveryLease, excludedRooms, processedIDs)
+			items, err := d.repository.fetchReadyAndLock(ctx, d.workerID, available, workerconfig.NotificationDeliveryLease, excludedRooms, processedIDs)
 			if err != nil {
 				d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 

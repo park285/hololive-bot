@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 // UpcomingCandidateLimit은 기존 publisher의 한 batch 상한을 복구에도 적용한다.
@@ -121,7 +121,7 @@ func (s *UpcomingCandidates) stageChunks(ctx context.Context, channelID string, 
 	}
 
 	defer func() {
-		if err := pgxutil.Rollback(ctx, tx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		if err := pgxdb.Rollback(ctx, tx); err != nil {
 			resultErr = errors.Join(resultErr, fmt.Errorf("stage upcoming candidate chunks: rollback: %w", err))
 		}
 	}()

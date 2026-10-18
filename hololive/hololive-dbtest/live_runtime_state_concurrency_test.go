@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,7 +109,7 @@ func TestLiveRuntimeStateStaleFixedSnapshotFails(t *testing.T) {
 			pgErr, ok := errors.AsType[*pgconn.PgError](err)
 			require.True(t, ok, "stale snapshot must fail with PostgreSQL serialization error: %v", err)
 			require.Equal(t, "40001", pgErr.Code)
-			require.NoError(t, stale.Rollback(ctx))
+			require.NoError(t, pgxdb.Rollback(ctx, stale))
 			assertLiveRuntimeState(t, pool)
 
 			var hasHead bool

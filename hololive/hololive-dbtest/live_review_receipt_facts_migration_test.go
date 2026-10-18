@@ -1,7 +1,6 @@
 package dbtest
 
 import (
-	"errors"
 	"io/fs"
 	"os"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -247,7 +247,7 @@ func assertLiveReviewReceiptFactsMatchReceipts(t *testing.T, pool *pgxpool.Pool)
 func rollbackLiveReviewReceiptFactsTx(t *testing.T, tx pgx.Tx) {
 	t.Helper()
 
-	if err := tx.Rollback(t.Context()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := pgxdb.Rollback(t.Context(), tx); err != nil {
 		t.Error(err)
 	}
 }

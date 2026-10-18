@@ -38,7 +38,33 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = func() func(string) string {
+	read := sqlassets.MustReader(sqlAssets, "queries")
+	inboxRelation := read("inbox_ready_relation.sql")
+	replyRelation := read("reply_ready_relation.sql")
+	safety := read("reply_safety_expired.sql")
+	inboxClaim := strings.ReplaceAll(read("inbox_claim.sql"), "{{inbox_ready_relation}}", inboxRelation)
+	inboxSnapshot := strings.ReplaceAll(read("inbox_ready_snapshot.sql"), "{{inbox_ready_relation}}", inboxRelation)
+	replyClaim := strings.NewReplacer("{{reply_ready_relation}}", replyRelation, "{{safety_expired}}",
+		strings.NewReplacer("{{max_attempts}}", "$3", "{{replay_horizon}}", "$4").Replace(safety)).Replace(read("reply_outbox_claim.sql"))
+	replySnapshot := strings.NewReplacer("{{reply_ready_relation}}", replyRelation, "{{safety_expired}}",
+		strings.NewReplacer("{{max_attempts}}", "$1", "{{replay_horizon}}", "$2").Replace(safety)).Replace(read("reply_outbox_ready_snapshot.sql"))
+
+	return func(name string) string {
+		switch name {
+		case "inbox_claim.sql":
+			return inboxClaim
+		case "inbox_ready_snapshot.sql":
+			return inboxSnapshot
+		case "reply_outbox_claim.sql":
+			return replyClaim
+		case "reply_outbox_ready_snapshot.sql":
+			return replySnapshot
+		default:
+			return read(name)
+		}
+	}
+}()
 
 var (
 	ErrPoolNotConfigured = errors.New("durability: postgres pool is not configured")

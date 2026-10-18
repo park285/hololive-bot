@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/workercontract"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -20,16 +22,17 @@ type ClaimResolver interface {
 }
 
 type ClaimManager struct {
-	db          deliverysql.DeliveryDB
-	config      dispatchstate.Config
-	logger      *slog.Logger
-	delivery    *store.DeliveryRepository
-	transition  *store.TransitionStore
-	fanout      *OutboxFanoutService
-	projector   *OutboxAggregateProjector
-	executor    DeliveryExecutor
-	grouper     *OutboxGrouper
-	auditLogger *AuditLogger
+	db           deliverysql.DeliveryDB
+	config       dispatchstate.Config
+	logger       *slog.Logger
+	delivery     *store.DeliveryRepository
+	transition   *store.TransitionStore
+	fanout       *OutboxFanoutService
+	projector    *OutboxAggregateProjector
+	executor     DeliveryExecutor
+	grouper      *OutboxGrouper
+	auditLogger  *AuditLogger
+	workerTotals *workercontract.Counters
 }
 
 func newClaimManager(

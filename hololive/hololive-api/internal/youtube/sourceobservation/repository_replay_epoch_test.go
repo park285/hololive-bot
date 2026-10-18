@@ -54,6 +54,7 @@ func TestReplayEpochDeadLettersPreEpochAutomaticClaim(t *testing.T) {
 	secondObservationID := publishOne(ctx, t, repo, &secondProof, "pre-epoch-2")
 
 	activateReplayEpoch(t, repo)
+	assertReadyDepth(t, repo, claimOptions().Kinds, 0)
 
 	options := claimOptions()
 

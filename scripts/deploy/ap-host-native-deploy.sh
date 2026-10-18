@@ -6,7 +6,17 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
-AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-100.100.1.8}"
+# Read the non-secret primary owner, never a second address default.
+AP_POSTGRES_HOST=""
+while IFS='=' read -r host_name host_address; do
+  if [[ "$host_name" == central ]]; then AP_POSTGRES_HOST="$host_address"; fi
+done < "$REPO_ROOT/deploy/topology/hosts.conf"
+[[ -n "$AP_POSTGRES_HOST" ]] || { echo 'topology central address missing' >&2; exit 1; }
+AP_POSTGRES_POOL_MAX_CONNS=""
+while IFS='|' read -r owner _service _key _source _instances maximum _role; do
+  if [[ "$owner" == youtube-collector ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
+done < "$REPO_ROOT/scripts/ci/postgres-capacity-policy.tsv"
+[[ "$AP_POSTGRES_POOL_MAX_CONNS" =~ ^[1-9][0-9]*$ ]] || { echo 'collector capacity policy missing' >&2; exit 1; }
 AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
 
 case "$MODE" in
@@ -90,6 +100,7 @@ write_host_env() {
     printf 'NOTIFICATION_EGRESS_ROLE=off\n'
     printf 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true\n'
     printf 'YOUTUBE_COLLECTOR_INSTANCE_ID=%s\n' "$service"
+    printf 'PGAPPNAME=%s\n' "$service"
     printf 'YOUTUBE_COLLECTOR_LOG_FILE_NAME=%s.log\n' "$service"
     printf 'STACK_WORKER_PROFILE_FILE=/opt/hololive-bot/youtube-collector/releases/%s/worker-profile.json\n' "$release_id"
     printf 'STACK_WORKER_PROFILE_SOURCE_FILE=/etc/stack-secrets/hololive-bot/worker-profiles/%s.json\n' "$service"
@@ -114,7 +125,7 @@ write_host_env() {
     printf 'POSTGRES_SSLROOTCERT=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem\n'
     printf 'POSTGRES_QUERY_EXEC_MODE=cache_statement\n'
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
-    printf 'POSTGRES_POOL_MAX_CONNS=8\n'
+    printf 'POSTGRES_POOL_MAX_CONNS=%s\n' "$AP_POSTGRES_POOL_MAX_CONNS"
     printf 'POSTGRES_SOCKET_PATH=\n'
     # 물리 메모리가 956MiB인 호스트라 예산식(768M−Node 192MiB−여유 32MiB)보다 낮게 둔다.
     printf 'GOMEMLIMIT=384MiB\n'

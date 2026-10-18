@@ -5,21 +5,9 @@ WITH units AS (
     FROM youtube_notification_delivery delivery
     JOIN youtube_notification_outbox outbox ON outbox.id = delivery.outbox_id
     LEFT JOIN youtube_notification_send_request request ON request.base_id = delivery.send_request_id
-    WHERE delivery.status = $1 AND delivery.status = 'PENDING'
-      AND COALESCE(cardinality(request.member_ids), 1) <= $5
-      AND (delivery.locked_at IS NULL OR delivery.locked_at < $2)
-      AND delivery.next_attempt_at <= $3 AND outbox.created_at >= $4
-      AND (request.base_id IS NULL OR (
-          delivery.id = (SELECT min(id) FROM unnest(request.member_ids) AS ids(id))
-          AND NOT EXISTS (
-              SELECT 1 FROM unnest(request.member_ids) AS ids(id)
-              LEFT JOIN youtube_notification_delivery member ON member.id = ids.id
-              LEFT JOIN youtube_notification_outbox parent ON parent.id = member.outbox_id
-              WHERE member.id IS NULL OR member.status <> 'PENDING'
-                 OR member.next_attempt_at > $3 OR parent.created_at < $4
-                 OR (member.locked_at IS NOT NULL AND member.locked_at >= $2)
-          )
-      ))
+    WHERE /* ready_predicate */
+      AND (request.base_id IS NULL OR
+           delivery.id = (SELECT min(id) FROM unnest(request.member_ids) AS ids(id)))
     ORDER BY delivery.next_attempt_at, delivery.created_at, delivery.id
     LIMIT $5
 ), budgeted AS (

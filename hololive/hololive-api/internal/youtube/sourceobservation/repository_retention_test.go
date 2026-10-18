@@ -2,12 +2,11 @@ package sourceobservation
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -202,10 +201,7 @@ func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-		defer cleanupCancel()
-
-		if rollbackErr := holder.Rollback(cleanupCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, holder); rollbackErr != nil {
 			t.Errorf("rollback retention lock: %v", rollbackErr)
 		}
 	})

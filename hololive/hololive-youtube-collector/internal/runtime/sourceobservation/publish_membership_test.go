@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -131,7 +132,7 @@ func TestPublishWaitsForProjectionGuardAndSeesCarriedMembership(t *testing.T) {
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			t.Errorf("rollback projection guard transaction: %v", rollbackErr)
 		}
 	}()
@@ -193,7 +194,7 @@ func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *te
 	require.NoError(t, err)
 
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			t.Errorf("rollback projection expiry transaction: %v", rollbackErr)
 		}
 	}()

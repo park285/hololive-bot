@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
@@ -79,7 +80,7 @@ func (s *TransitionStore) ClaimPending(ctx context.Context, batchSize int) ([]do
 
 	rows, err := s.db.Query(
 		ctx,
-		mustSQL("transition_claim_pending.sql"),
+		claimPendingSQL,
 		lifecycle.StatusPending,
 		lockCutoff,
 		claimedAt,
@@ -582,8 +583,8 @@ func (s *TransitionStore) executeTx(
 	}
 
 	if err := fn(tx); err != nil {
-		rollbackErr := tx.Rollback(ctx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		rollbackErr := pgxdb.Rollback(ctx, tx)
+		if rollbackErr != nil {
 			return fmt.Errorf("%s: command failed and rollback failed: %w", operation, errors.Join(err, rollbackErr))
 		}
 

@@ -89,6 +89,12 @@ go test ../shared-go/... \
 
 운영계 배포 및 롤아웃은 아래 배포 스크립트로 모듈별로 안전하게 진행됩니다.
 
+11.0.0 worker/DB 전환은 구 프로필 호환 10.2.0의 실제 수용 뒤에만 진행합니다.
+[단일 settings schema·pairing·DB 정책 순서](deploy/compose/README.md#worker-settings-cutover-1100)를
+따르며 source 통합을 운영 수용으로 간주하지 않습니다. 전체 migration manifest 324까지를
+보존하고 구 manifest로 되돌리지 않습니다. Role limit은 네 collector의 max 7 수용 뒤
+rollout 소유자만 활성화합니다.
+
 ```bash
 # 프로덕션 전체 이미지 build 및 live deploy (clean tree, version bump 금지)
 ./build-all.sh --no-bump

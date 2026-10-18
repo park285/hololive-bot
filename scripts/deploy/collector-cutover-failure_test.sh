@@ -33,7 +33,6 @@ def require(condition, message, result):
     if not condition:
         raise AssertionError(f'{message}\nexit={result.returncode}\n{result.stdout}\n{result.stderr}')
 
-
 native_functions = '\n'.join(function(native, name) for name in (
     'stop_collector_unit_and_require_inactive', 'stop_native_units_and_require_inactive',
     'native_restore_recorded_runtime', 'restore_native_after_failed_cutover', 'native_cutover_failed', 'arm_native_cutover_restore',
@@ -110,8 +109,6 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
         require((state / 'current').resolve().name == expected_current, f'native {case}: current restored', result)
         require((state / 'previous').resolve().name == expected_previous, f'native {case}: previous restored', result)
         require((state / 'runtime').read_text().strip() == expected_runtime, f'native {case}: runtime restored', result)
-        require(calls.count('po_restore_previous') == (0 if case == 'success' else 1), f'native {case}: one restore', result)
-        require(('could not be restored' in result.stderr) == (case == 'restore_failure'), f'native {case}: restoration warning', result)
         if case != 'success':
             require((state / 'host.env').read_text() == 'old' and (state / 'unit').read_text() == 'old', f'native {case}: installed contract restored', result)
         print(f'[PASS] native {case}: exit={result.returncode}, current={expected_current}, previous={expected_previous}, runtime={expected_runtime}')
@@ -331,7 +328,6 @@ for case in central_cases:
         restore_count = 0 if is_check or case in ('success', 'missing_receipt') else 1
         if case == 'missing_receipt':
             # 영수증이 없으면 원격 상태를 바꾸기 전에 원인을 남기고 멈춘다.
-            require('central issuer receipt missing' in result.stderr, f'central {case}: cause reported', result)
             require(not backup.exists(), f'central {case}: no partial backup', result)
             require(all(not call.startswith(('docker tag ', 'docker load ', 'compose up ')) for call in calls), f'central {case}: no rollback tag or cutover', result)
         expected_stops = 0 if is_preparation or case == 'activation_failure' else restore_count

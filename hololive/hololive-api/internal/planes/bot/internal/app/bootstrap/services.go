@@ -18,13 +18,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
-	infra, err := InitInfraResources(ctx, appConfig, logger)
-	if err != nil {
-		return nil, fmt.Errorf("init infra resources: %w", err)
+func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, infra *sharedmodules.InfraModule, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
+	if infra == nil {
+		return nil, errors.New("shared infra must not be nil")
 	}
 
-	owner := &botInfrastructureOwner{infraCleanup: infra.Cleanup, stopMemberCache: infra.StopMemberCache}
+	owner := &botInfrastructureOwner{}
 
 	defer func() {
 		if retErr != nil {

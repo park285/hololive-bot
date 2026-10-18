@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +70,7 @@ func TestLiveRuntimeUpdateFilterInvalidatesCandidateReceiptFields(t *testing.T) 
 			require.Equal(t, int64(1), tag.RowsAffected())
 			assertLiveRuntimeState(t, tx)
 			require.Equal(t, reviewedAt, candidateFieldReviewedAt(t, tx))
-			require.NoError(t, tx.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			assertLiveRuntimeState(t, pool)
 		})
 	}
@@ -131,7 +132,7 @@ func TestLiveRuntimeUpdateFilterStaleTechnicalWriterFails(t *testing.T) {
 			pgErr, ok := errors.AsType[*pgconn.PgError](err)
 			require.True(t, ok, "stale technical write must preserve serialization failure: %v", err)
 			require.Equal(t, "40001", pgErr.Code)
-			require.NoError(t, stale.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), stale))
 			require.NoError(t, pool.QueryRow(t.Context(), `SELECT last_seen_at FROM youtube_live_sessions WHERE video_id='technical-snapshot'`).Scan(&after))
 			require.Equal(t, before, after)
 			assertLiveRuntimeState(t, pool)

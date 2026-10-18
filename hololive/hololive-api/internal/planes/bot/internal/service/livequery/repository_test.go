@@ -2,12 +2,12 @@ package livequery
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -160,8 +160,8 @@ func TestRepositoryReadsCommittedStateAndCoverageTogether(t *testing.T) {
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		rollbackErr := tx.Rollback(context.WithoutCancel(t.Context()))
-		if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		rollbackErr := pgxdb.Rollback(t.Context(), tx)
+		if rollbackErr != nil {
 			require.NoError(t, rollbackErr)
 		}
 	})
@@ -254,7 +254,7 @@ func TestRepositoryReadOnlyAndCancellation(t *testing.T) {
 
 	tx, err := pool.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tx.Rollback(context.WithoutCancel(t.Context()))) })
+	t.Cleanup(func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) })
 
 	result, err := (&Repository{db: tx}).Query(t.Context(), Request{Scope: All, Limit: 1})
 	require.NoError(t, err)
@@ -277,7 +277,7 @@ func TestRepositoryDeadlineIncludesLockWait(t *testing.T) {
 	repo, pool := queryFixture(t)
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tx.Rollback(context.WithoutCancel(t.Context()))) })
+	t.Cleanup(func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) })
 
 	_, err = tx.Exec(t.Context(), "LOCK TABLE youtube_channel_live_checks IN ACCESS EXCLUSIVE MODE")
 	require.NoError(t, err)

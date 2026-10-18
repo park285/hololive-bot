@@ -144,6 +144,10 @@ func TestValidatePlanePool(t *testing.T) {
 	require.NoError(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 1, PoolMaxConns: 4}))
 	require.Error(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 5, PoolMaxConns: 4}))
 	require.Error(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 0}))
+	require.ErrorContains(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 1}), "at least 2")
+	require.NoError(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 2}))
+	require.NoError(t, validatePlanePool("admin", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 1}))
+	require.NoError(t, validatePlanePool("llm", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 1}))
 }
 
 func TestValidateYouTubePlaneDatabaseRole(t *testing.T) {

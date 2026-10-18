@@ -84,7 +84,7 @@ func (r *collectorReadiness) respondDisabled(c *gin.Context) {
 	capacity := 0
 
 	if r.appConfig != nil && r.appConfig.WorkerProfile != nil {
-		worker := r.appConfig.WorkerProfile.Loaded.Profile.Workers["collection"]
+		worker := r.appConfig.WorkerProfile.Loaded.Profile.Workers[collectorconfig.WorkerCollection]
 		if worker.Queue.Capacity.Items != nil {
 			capacity = int(*worker.Queue.Capacity.Items)
 		}

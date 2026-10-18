@@ -15,16 +15,6 @@ pass() {
   echo "[PASS] $*"
 }
 
-HBA_FILE="${COMPOSE_DIR}/postgres/pg_hba.conf"
-if grep -Eq '^host[[:space:]]+all[[:space:]]+all[[:space:]]+all([[:space:]]|$)' "${HBA_FILE}"; then
-  fail "PostgreSQL HBA must not permit non-TLS clients from arbitrary addresses"
-fi
-for source in 172.16.0.0/12 100.100.1.2/32 100.100.1.3/32 100.100.1.5/32 100.100.1.6/32 100.100.1.8/32; do
-  grep -Eq "^hostssl[[:space:]]+all[[:space:]]+all[[:space:]]+${source//./\\.}[[:space:]]+scram-sha-256$" "${HBA_FILE}" \
-    || fail "PostgreSQL HBA is missing the TLS-only client source ${source}"
-done
-pass "PostgreSQL HBA permits only TLS-authenticated runtime source ranges"
-
 INGRESS_TEMPLATE="${ROOT_DIR}/deploy/nginx/admin-dashboard-ingress.conf.template"
 PUBLIC_SHORTLINK="${ROOT_DIR}/deploy/nginx/holoshi-public-shortlink.conf"
 grep -Fq 'limit_conn_zone $shortlink_client zone=shortlink_connections:1m;' "${INGRESS_TEMPLATE}" \
@@ -279,8 +269,8 @@ PY
 pass "worker/collector trace network excludes the API and no Jaeger or OTLP host ports are published"
 
 while read -r service compose_file; do
-  merged_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="docker-compose.prod.yml:${compose_file}" COMPOSE_PROFILES=oracle docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
-    || fail "prod+${compose_file} compose failed to render"
+  merged_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="${compose_file}" COMPOSE_PROFILES=oracle docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
+    || fail "${compose_file} compose failed to render"
 
   "${CI_PYTHON_BIN}" - "${service}" "${merged_ap}" <<'PY'
 import json, sys

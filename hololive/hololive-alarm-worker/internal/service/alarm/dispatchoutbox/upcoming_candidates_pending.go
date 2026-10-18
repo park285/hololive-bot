@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 type upcomingCandidateFacts struct {
@@ -79,7 +79,7 @@ func (s *UpcomingCandidates) Pending(ctx context.Context, now time.Time) (_ []Up
 	}
 
 	defer func() {
-		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			resultErr = errors.Join(resultErr, fmt.Errorf("load upcoming candidates: rollback: %w", rollbackErr))
 		}
 	}()

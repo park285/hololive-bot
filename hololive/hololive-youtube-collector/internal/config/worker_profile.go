@@ -3,12 +3,14 @@ package config
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
+
+// WorkerCollection은 collector profile과 runtime registry가 공유하는 worker ID다.
+const WorkerCollection = "collection"
 
 // CollectionWorkerSettings는 collection worker profile의 service-owned settings 원문이다.
 // DecodeWorkerSettings가 키의 정확한 일치를 요구하므로 JSON 태그가 profile wire 계약이다.
@@ -33,7 +35,7 @@ type CollectionWorkerSettings struct {
 }
 
 // WorkerProfile은 youtube-collector의 검증된 Stack Worker Profile이다.
-// LoadWorkerProfile만 만들며, 반환된 값은 profile 소유 수치 정책까지 통과한 상태다.
+// LoadWorkerProfile과 DecodeWorkerProfile의 반환값은 profile 소유 수치 정책까지 통과한 상태다.
 type WorkerProfile struct {
 	Loaded     workercontract.LoadedProfile
 	Collection CollectionWorkerSettings
@@ -47,8 +49,13 @@ func LoadWorkerProfile() (*WorkerProfile, error) {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}
 
+	return DecodeWorkerProfile(loaded)
+}
+
+// DecodeWorkerProfile은 이미 읽은 불변 profile에 collector 소유 검증을 적용한다.
+func DecodeWorkerProfile(loaded workercontract.LoadedProfile) (*WorkerProfile, error) {
 	profile := &WorkerProfile{Loaded: loaded}
-	if err := workercontract.DecodeWorkerSettings(loaded, "collection", &profile.Collection); err != nil {
+	if err := workercontract.DecodeWorkerSettingsSet(loaded, map[string]any{WorkerCollection: &profile.Collection}); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
@@ -56,9 +63,7 @@ func LoadWorkerProfile() (*WorkerProfile, error) {
 		return nil, fmt.Errorf("validate collector worker profile: %w", err)
 	}
 
-	var policy Config
-
-	policy.applyWorkerProfile(profile)
+	policy := profile.Config()
 
 	if err := policy.validateProfilePolicy(); err != nil {
 		return nil, fmt.Errorf("validate collector worker profile policy: %w", err)
@@ -76,7 +81,7 @@ func validateWorkerProfile(profile *WorkerProfile) error {
 
 	workers := profile.Loaded.Profile.Workers
 	problems := workercontract.ShapeProblems(workers, map[string]workercontract.WorkerShape{
-		"collection": {AttemptTimeout: workercontract.DurationModePerJob, Capacity: workercontract.CapacityModeBounded, MaxAge: workercontract.DurationModeFixed},
+		WorkerCollection: {AttemptTimeout: workercontract.DurationModePerJob, Capacity: workercontract.CapacityModeBounded, MaxAge: workercontract.DurationModeFixed},
 	})
 	positive := map[string]int64{
 		"collection.acquisition_cadence_ms":        profile.Collection.AcquisitionCadenceMS,
@@ -96,11 +101,9 @@ func validateWorkerProfile(profile *WorkerProfile) error {
 
 	problems = append(problems, runtimepolicy.PositiveValueProblems(positive)...)
 
-	worker := workers["collection"]
+	worker := workers[WorkerCollection]
 
 	problems = append(problems, capacityProblems(profile, &worker)...)
-	problems = append(problems, concurrencyProblems(profile, &worker)...)
-	problems = append(problems, timingProblems(profile)...)
 
 	if err := runtimepolicy.JoinWorkerProfileProblems("youtube-collector", problems); err != nil {
 		return fmt.Errorf("join worker profile problems: %w", err)
@@ -123,68 +126,38 @@ func capacityProblems(profile *WorkerProfile, worker *workercontract.WorkerProfi
 	return nil
 }
 
-func concurrencyProblems(profile *WorkerProfile, worker *workercontract.WorkerProfile) []string {
-	problems := make([]string, 0)
+// Config는 검증된 profile 정책에 환경 기본값을 결합한다. 인스턴스 ID는 환경 소유다.
+func (profile *WorkerProfile) Config() Config {
+	config := DefaultConfig()
+	config.applyWorkerProfile(profile)
 
-	if worker == nil {
-		return []string{"collection worker is missing"}
-	}
-
-	for name, value := range map[string]int{
-		"holodex_max_inflight":   profile.Collection.HolodexMaxInflight,
-		"official_max_inflight":  profile.Collection.OfficialMaxInflight,
-		"youtubejs_max_inflight": profile.Collection.YouTubeJSMaxInflight,
-	} {
-		if value < 1 || value > worker.Executor.ConfiguredWorkers {
-			problems = append(problems, "collection "+name+" must be within configured workers")
-		}
-	}
-
-	return problems
-}
-
-func timingProblems(profile *WorkerProfile) []string {
-	problems := make([]string, 0)
-
-	if profile.Collection.RenewIntervalMS+profile.Collection.RenewTimeoutMS+1000 >= profile.Collection.LeaseTTLMS {
-		problems = append(problems, "collection renewal budget must fit lease TTL")
-	}
-
-	if profile.Collection.RetryMaxMS < profile.Collection.RetryMinMS || profile.Collection.ReleaseJitterMaxMS < profile.Collection.ReleaseJitterMinMS {
-		problems = append(problems, "collection retry or jitter range is invalid")
-	}
-
-	return problems
+	return config
 }
 
 // applyWorkerProfile은 validateWorkerProfile을 통과한 profile의 정책 값을 Config로 옮긴다.
 // 형태 검증이 bounded capacity와 fixed max_age를 보장하므로 두 포인터는 nil이 아니다.
 func (c *Config) applyWorkerProfile(profile *WorkerProfile) {
-	worker := profile.Loaded.Profile.Workers["collection"]
+	worker := profile.Loaded.Profile.Workers[WorkerCollection]
 	collection := profile.Collection
 
 	c.TotalWorkers = worker.Executor.ConfiguredWorkers
 	c.QueueCapacity = int(*worker.Queue.Capacity.Items)
-	c.QueueMaxAge = millisecondsDuration(*worker.Queue.MaxAge.Milliseconds)
+	c.QueueMaxAge, _ = worker.Queue.MaxAge.FixedDuration()
 	c.AcquisitionBatch = collection.AcquisitionBatch
-	c.AcquisitionCadence = millisecondsDuration(collection.AcquisitionCadenceMS)
-	c.LeaseTTL = millisecondsDuration(collection.LeaseTTLMS)
-	c.RenewInterval = millisecondsDuration(collection.RenewIntervalMS)
-	c.RenewTimeout = millisecondsDuration(collection.RenewTimeoutMS)
-	c.DBTimeout = millisecondsDuration(collection.DBTimeoutMS)
-	c.CleanupTimeout = millisecondsDuration(collection.CleanupTimeoutMS)
-	c.ProviderAdmissionTimeout = millisecondsDuration(collection.ProviderAdmissionTimeoutMS)
-	c.CollectionOverhead = millisecondsDuration(collection.CollectionOverheadMS)
-	c.PublishTimeout = millisecondsDuration(collection.PublishTimeoutMS)
-	c.RetryMin = millisecondsDuration(collection.RetryMinMS)
-	c.RetryMax = millisecondsDuration(collection.RetryMaxMS)
-	c.ReleaseJitterMin = millisecondsDuration(collection.ReleaseJitterMinMS)
-	c.ReleaseJitterMax = millisecondsDuration(collection.ReleaseJitterMaxMS)
+	c.AcquisitionCadence = workercontract.Milliseconds(collection.AcquisitionCadenceMS)
+	c.LeaseTTL = workercontract.Milliseconds(collection.LeaseTTLMS)
+	c.RenewInterval = workercontract.Milliseconds(collection.RenewIntervalMS)
+	c.RenewTimeout = workercontract.Milliseconds(collection.RenewTimeoutMS)
+	c.DBTimeout = workercontract.Milliseconds(collection.DBTimeoutMS)
+	c.CleanupTimeout = workercontract.Milliseconds(collection.CleanupTimeoutMS)
+	c.ProviderAdmissionTimeout = workercontract.Milliseconds(collection.ProviderAdmissionTimeoutMS)
+	c.CollectionOverhead = workercontract.Milliseconds(collection.CollectionOverheadMS)
+	c.PublishTimeout = workercontract.Milliseconds(collection.PublishTimeoutMS)
+	c.RetryMin = workercontract.Milliseconds(collection.RetryMinMS)
+	c.RetryMax = workercontract.Milliseconds(collection.RetryMaxMS)
+	c.ReleaseJitterMin = workercontract.Milliseconds(collection.ReleaseJitterMinMS)
+	c.ReleaseJitterMax = workercontract.Milliseconds(collection.ReleaseJitterMaxMS)
 	c.HolodexMaxInflight = collection.HolodexMaxInflight
 	c.OfficialMaxInflight = collection.OfficialMaxInflight
 	c.YouTubeJSMaxInflight = collection.YouTubeJSMaxInflight
-}
-
-func millisecondsDuration(milliseconds int64) time.Duration {
-	return time.Duration(milliseconds) * time.Millisecond
 }

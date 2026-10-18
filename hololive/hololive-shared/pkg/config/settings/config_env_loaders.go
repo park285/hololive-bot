@@ -52,6 +52,25 @@ func LoadValkeyConfig() (ValkeyConfig, error) {
 }
 
 func LoadPostgresConfig() (PostgresConfig, error) {
+	config, err := LoadPostgresEndpointConfig()
+	if err != nil {
+		return PostgresConfig{}, err
+	}
+
+	var env envload.StrictEnv
+
+	config.PoolMinConns = env.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns)
+	config.PoolMaxConns = env.Int("POSTGRES_POOL_MAX_CONNS", constants.DatabaseConfig.MaxOpenConns)
+
+	if err := env.Err(); err != nil {
+		return PostgresConfig{}, fmt.Errorf("load postgres pool config: %w", err)
+	}
+
+	return config, nil
+}
+
+// LoadPostgresEndpointConfig는 plane별 pool 정책과 독립적인 연결 설정만 읽는다.
+func LoadPostgresEndpointConfig() (PostgresConfig, error) {
 	password := sharedenv.StringRaw("POSTGRES_PASSWORD", "")
 	if strings.TrimSpace(password) == "" {
 		password = constants.DatabaseDefaults.Password
@@ -69,8 +88,6 @@ func LoadPostgresConfig() (PostgresConfig, error) {
 		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", runtimepolicy.PostgresSSLModeVerifyFull),
 		SSLRootCert:   sharedenv.String("POSTGRES_SSLROOTCERT", ""),
 		QueryExecMode: sharedenv.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
-		PoolMinConns:  env.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
-		PoolMaxConns:  env.Int("POSTGRES_POOL_MAX_CONNS", constants.DatabaseConfig.MaxOpenConns),
 	}
 
 	if err := env.Err(); err != nil {

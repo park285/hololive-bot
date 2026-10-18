@@ -22,11 +22,11 @@ package database
 
 import (
 	"testing"
+	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func TestResolvePoolConns(t *testing.T) {
@@ -58,12 +58,6 @@ func TestResolvePoolConns(t *testing.T) {
 			wantMin: 3,
 			wantMax: 6,
 		},
-		{
-			name:    "MAX 미설정은 기본 최대값",
-			config:  PostgresConfig{PoolMinConns: 1},
-			wantMin: 1,
-			wantMax: constants.DatabaseConfig.MaxOpenConns,
-		},
 	}
 
 	for _, tt := range tests {
@@ -81,8 +75,30 @@ func TestResolvePoolConns(t *testing.T) {
 func TestNewPostgresServiceRejectsNegativeMinConns(t *testing.T) {
 	t.Parallel()
 
-	// 음수는 pgxdb가 0으로 흡수하므로 연결 시도 전에 거부돼야 한다.
+	// 잘못된 pool 크기는 연결 시도 전에 거부돼야 한다.
 	service, err := NewPostgresService(t.Context(), &PostgresConfig{PoolMinConns: -1, PoolMaxConns: 4}, nil)
 	require.ErrorContains(t, err, "postgres pool min conns must not be negative: -1")
 	assert.Nil(t, service)
+}
+
+func TestNewPostgresServiceRejectsInvalidPoolBounds(t *testing.T) {
+	t.Parallel()
+
+	for _, config := range []PostgresConfig{{PoolMaxConns: 0}, {PoolMaxConns: -1}, {PoolMinConns: 3, PoolMaxConns: 2}} {
+		service, err := NewPostgresService(t.Context(), &config, nil)
+		require.Error(t, err)
+		assert.Nil(t, service)
+	}
+}
+
+func TestNewPostgresServiceRejectsReserveWithoutOrdinaryCapacity(t *testing.T) {
+	t.Parallel()
+
+	service, err := NewPostgresService(t.Context(), &PostgresConfig{
+		Host: "127.0.0.1", Port: 1, User: "test", Database: "test", SSLMode: "disable",
+		PoolMinConns: 0, PoolMaxConns: 1,
+		AcquirePolicy: &pgxdb.AcquirePolicy{ReservedConns: 1, Timeout: 5 * time.Second},
+	}, nil)
+	require.ErrorContains(t, err, "acquire policy")
+	require.Nil(t, service)
 }

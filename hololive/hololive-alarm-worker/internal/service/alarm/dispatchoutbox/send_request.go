@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 )
 
 // 발송 경로는 저장된 최종 요청의 일부이며 재시도 때 다시 판정하지 않는다.
@@ -33,8 +34,9 @@ type SendRequest struct {
 }
 
 var (
-	ErrSendRequestUnpinned = errors.New("alarm send request not yet pinned")
-	ErrSendRequestFence    = errors.New("alarm send request ownership or membership changed")
+	ErrSendRequestUnpinned     = errors.New("alarm send request not yet pinned")
+	ErrSendRequestFence        = errors.New("alarm send request ownership or membership changed")
+	ErrSendRequestLeaseExpired = errors.New("alarm send request lease expired before handoff")
 )
 
 // SendRequestRepository는 전체 send unit의 요청과 generation을 소유권 fence 아래 저장한다.
@@ -61,7 +63,7 @@ func (r *PgxRepository) prepareSendRequest(ctx context.Context, unitID int64, id
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			r.logger.Warn("alarm request rollback failed", slog.Any("error", rollbackErr))
 		}
 	}()
@@ -71,15 +73,15 @@ func (r *PgxRepository) prepareSendRequest(ctx context.Context, unitID int64, id
 		return nil, err
 	}
 
+	if request.BodyHash != "" && !sameDeliveryIDs(request.DeliveryIDs, ids) {
+		return nil, ErrSendRequestFence
+	}
+
 	if _, fenceErr := fenceSendRequest(ctx, tx, unitID, ids, worker, "leased"); fenceErr != nil {
 		return nil, fenceErr
 	}
 
 	if request.BodyHash != "" {
-		if !sameDeliveryIDs(request.DeliveryIDs, ids) {
-			return nil, ErrSendRequestFence
-		}
-
 		return request, nil
 	}
 
@@ -135,6 +137,7 @@ func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64,
 	var checkedAt time.Time
 
 	valid := true
+	expired := false
 
 	for rows.Next() {
 		var id int64
@@ -148,7 +151,8 @@ func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64,
 		}
 
 		actual = append(actual, id)
-		valid = valid && rowStatus == status && owner == worker && (status == "sending" || owned)
+		valid = valid && rowStatus == status && owner == worker
+		expired = expired || (status != "sending" && !owned)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -157,6 +161,10 @@ func fenceSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, ids []int64,
 
 	if !valid || len(ids) == 0 || !sameDeliveryIDs(actual, ids) {
 		return time.Time{}, ErrSendRequestFence
+	}
+
+	if expired {
+		return time.Time{}, ErrSendRequestLeaseExpired
 	}
 
 	return checkedAt, nil
@@ -175,7 +183,7 @@ func (r *PgxRepository) ReissueSendRequest(ctx context.Context, unitID int64, id
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			r.logger.Warn("alarm request rollback failed", slog.Any("error", rollbackErr))
 		}
 	}()
@@ -231,7 +239,7 @@ func (r *PgxRepository) BeginSendRequest(ctx context.Context, unitID int64, ids 
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			r.logger.Warn("alarm request rollback failed", slog.Any("error", rollbackErr))
 		}
 	}()

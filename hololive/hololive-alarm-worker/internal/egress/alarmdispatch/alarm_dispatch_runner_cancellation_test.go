@@ -243,6 +243,104 @@ func TestAlarmDispatchRunnerCancellationCompensationPreservesOwnerAndAttemptFenc
 	}
 }
 
+func TestAlarmDispatchLaterSerialGroupCannotSendAfterLeaseExpiry(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+	repo := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
+
+	for _, room := range []string{testAlarmRoomID, "late-room"} {
+		_, err := repo.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{alarmDispatchRunnerTestEnvelope(room, nil)}})
+		require.NoError(t, err)
+	}
+
+	_, err := pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries
+		SET created_at=clock_timestamp()-INTERVAL '1 day', next_attempt_at=clock_timestamp()-INTERVAL '1 second'`)
+	require.NoError(t, err)
+
+	consumer, err := dispatchoutbox.NewConsumer(repo, requestClaimReleaser{}, nil, dispatchoutbox.WithWorkerID("serial-owner"))
+	require.NoError(t, err)
+
+	groups, requests := claimFrozenAlarmDispatchSerialGroups(t, pool, consumer)
+
+	client := &alarmDispatchCancellationIrisClient{onSend: func(sendCtx context.Context) error {
+		// 첫 provider 실행 중 아직 leased인 뒤 그룹의 소유권을 만료시킨다.
+		_, expireErr := pool.Exec(sendCtx, `UPDATE alarm_dispatch_deliveries
+			SET lock_expires_at=clock_timestamp()-INTERVAL '1 second' WHERE status='leased'`)
+
+		return expireErr
+	}}
+	totals := &workercontract.Counters{}
+	runner := Runner{consumer: consumer, sender: egress.NewIrisMessageSender(client), attemptTimeout: time.Second, workerTotals: totals}
+	require.NoError(t, runner.dispatchGroups(ctx, groups))
+	require.Equal(t, 1, client.handoffs)
+
+	expected := &workercontract.Counters{}
+	expected.RecordAttempt(workercontract.AttemptSuccess)
+	require.Equal(t, expected.Snapshot(), totals.Snapshot())
+
+	var sent, sending, leased, quarantined int
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status='sent'),
+		count(*) FILTER (WHERE status='sending'), count(*) FILTER (WHERE status='leased'),
+		count(*) FILTER (WHERE status='quarantined') FROM alarm_dispatch_deliveries`).Scan(&sent, &sending, &leased, &quarantined))
+	require.Equal(t, 1, sent)
+	require.Zero(t, sending)
+	require.Equal(t, 1, leased, "an expired unsent claim must remain recoverable")
+	require.Zero(t, quarantined)
+
+	recovered, err := repo.RecoverExpiredLeased(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, recovered)
+
+	reclaimed, err := consumer.DrainBatch(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, reclaimed, 1)
+
+	request, err := consumer.LoadSendRequest(ctx, reclaimed)
+	require.NoError(t, err)
+	require.Equal(t, requests[reclaimed[0].SendUnitID], request, "recovery must preserve the frozen request and generation")
+
+	client.onSend = nil
+
+	require.NoError(t, runner.dispatchGroups(ctx, groupAlarmDispatchEnvelopesForDelivery(reclaimed)))
+	require.Equal(t, 2, client.handoffs)
+	expected.RecordAttempt(workercontract.AttemptSuccess)
+	require.Equal(t, expected.Snapshot(), totals.Snapshot())
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM alarm_dispatch_deliveries WHERE status='sent'`).Scan(&sent))
+	require.Equal(t, 2, sent)
+}
+
+func claimFrozenAlarmDispatchSerialGroups(t *testing.T, pool *pgxpool.Pool, consumer *dispatchoutbox.Consumer) ([]alarmDispatchGroup, map[int64]*dispatchoutbox.SendRequest) {
+	t.Helper()
+
+	ctx := t.Context()
+	snapshot, err := dispatchoutbox.ReadySnapshot(ctx, pool)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, snapshot.Depth)
+	require.Less(t, snapshot.OldestQueuedAge, 5*time.Second)
+
+	envelopes, err := consumer.DrainBatch(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 2)
+
+	snapshot, err = dispatchoutbox.ReadySnapshot(ctx, pool)
+	require.NoError(t, err)
+	require.Zero(t, snapshot.Depth, "leased rows are not claimable until recovery")
+
+	groups := groupAlarmDispatchEnvelopesForDelivery(envelopes)
+	require.Len(t, groups, 2)
+
+	requests := make(map[int64]*dispatchoutbox.SendRequest, len(groups))
+	for _, group := range groups {
+		request, pinErr := consumer.PinSendRequest(ctx, group.envelopes, dispatchoutbox.SendRequest{Body: "frozen", Route: dispatchoutbox.SendRouteText, RoomID: group.roomID})
+		require.NoError(t, pinErr)
+
+		requests[group.envelopes[0].SendUnitID] = request
+	}
+
+	return groups, requests
+}
+
 func alarmDispatchCancellationPersistedRequest(t *testing.T, pool *pgxpool.Pool) (*dispatchoutbox.Consumer, alarmDispatchGroup, *dispatchoutbox.SendRequest) {
 	t.Helper()
 

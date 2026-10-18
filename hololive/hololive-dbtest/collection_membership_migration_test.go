@@ -1,11 +1,10 @@
 package dbtest
 
 import (
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +76,7 @@ func TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		if rollbackErr := refresh.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, refresh); rollbackErr != nil {
 			t.Errorf("rollback refresh guard transaction: %v", rollbackErr)
 		}
 	}()

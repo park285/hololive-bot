@@ -22,7 +22,7 @@ import (
 func TestLeaseConfigFromUsesCollectorBudgets(t *testing.T) {
 	t.Parallel()
 
-	cfg := collectorconfig.DefaultConfig()
+	cfg := fixtureCollectorConfig(t)
 
 	cfg.TotalWorkers = 3
 	cfg.QueueCapacity = 12
@@ -73,15 +73,15 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
-		collector: collectorconfig.DefaultConfig(),
-		gates:     defaultProviderGates(),
+		collector: fixtureCollectorConfig(t),
+		gates:     defaultProviderGates(t),
 	}
 	spec := joblease.JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:UC_TEST",
 		Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
-	executor.runSpec(ctx, &spec)
+	runAdmittedSpec(ctx, t, executor, &spec)
 
 	var state string
 
@@ -124,15 +124,15 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
-		collector: collectorconfig.DefaultConfig(),
-		gates:     defaultProviderGates(),
+		collector: fixtureCollectorConfig(t),
+		gates:     defaultProviderGates(t),
 	}
 	spec := joblease.JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:UC_TEST",
 		Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
-	executor.runSpec(ctx, &spec)
+	runAdmittedSpec(ctx, t, executor, &spec)
 
 	var deferred time.Time
 
@@ -156,7 +156,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	})
 
 	// 이 테스트는 짧은 갱신 제한 시간이 아니라 두 종류의 원자적 발행을 검증합니다.
-	collector := collectorconfig.DefaultConfig()
+	collector := fixtureCollectorConfig(t)
 
 	config, err := leaseConfigFrom(&collector)
 	if err != nil {
@@ -183,13 +183,13 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
 		collector: collector,
-		gates:     defaultProviderGates(),
+		gates:     defaultProviderGates(t),
 	}
 	spec := joblease.JobSpec{
 		JobKey: "collector:youtubejs:youtubejs_channel_metadata:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: "youtubejs_channel_metadata", SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
-	executor.runSpec(ctx, &spec)
+	runAdmittedSpec(ctx, t, executor, &spec)
 
 	var count int
 
@@ -231,14 +231,14 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
-		collector: collectorconfig.DefaultConfig(),
-		gates:     defaultProviderGates(),
+		collector: fixtureCollectorConfig(t),
+		gates:     defaultProviderGates(t),
 	}
 	spec := joblease.JobSpec{
 		JobKey: "collector:youtubejs:youtubejs_content:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: "youtubejs_content", SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
-	executor.runSpec(ctx, &spec)
+	runAdmittedSpec(ctx, t, executor, &spec)
 	assertPartialCollectionSpans(t, recorder.Ended())
 
 	var (
@@ -279,13 +279,13 @@ func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	collector := runtimeCollectorConfig()
+	collector := runtimeCollectorConfig(t)
 	scheduler := newScheduler(&collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
 		collector: collector,
-		gates:     defaultProviderGates(),
+		gates:     defaultProviderGates(t),
 	}, repository, &collector)
 
 	if err := scheduler.Start(t.Context()); err != nil {
@@ -453,8 +453,10 @@ func runtimeLeaseConfig() joblease.Config {
 }
 
 // runtimeCollectorConfig는 runtime 테스트의 scheduler 정책을 lease 설정과 같은 작은 예산으로 맞춥니다.
-func runtimeCollectorConfig() collectorconfig.Config {
-	cfg := collectorconfig.DefaultConfig()
+func runtimeCollectorConfig(t *testing.T) collectorconfig.Config {
+	t.Helper()
+
+	cfg := fixtureCollectorConfig(t)
 
 	cfg.TotalWorkers = 1
 	cfg.QueueCapacity = 4
@@ -479,8 +481,11 @@ func withOverride(overrides ...collection.JobRunner) []collection.JobRunner {
 	return runners
 }
 
-func defaultProviderGates() map[contract.Provider]chan struct{} {
-	cfg := collectorconfig.DefaultConfig()
+func defaultProviderGates(t *testing.T) map[contract.Provider]chan struct{} {
+	t.Helper()
+
+	cfg := fixtureCollectorConfig(t)
+
 	return newProviderGates(&cfg)
 }
 

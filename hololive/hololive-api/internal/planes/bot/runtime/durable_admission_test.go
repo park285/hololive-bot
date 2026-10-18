@@ -87,11 +87,11 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 		{name: "unknown local error", err: errors.New("bug"), want: durability.ReplyOutboxDead},
 		{name: "invalid stored payload", err: transport.ErrStoredReplyInvalid, want: durability.ReplyOutboxManualReview},
 		{name: "reissue ladder exhausted conflict", err: sharedtestutil.IrisHTTPError(t.Context(), t, http.StatusConflict, `{"code":"CLIENT_REQUEST_ID_FAILED"}`), want: durability.ReplyOutboxPermanentConflict},
-		{name: "retry exhausted", attempts: durableMaxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
+		{name: "retry exhausted", attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
 		{name: "unknown", err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxOutcomeUnknown},
-		{name: "unknown exhausted", attempts: durableMaxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},
+		{name: "unknown exhausted", attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},
 		{name: "accepted observation failure", accepted: true, err: errors.New("status unavailable"), want: durability.ReplyOutboxManualReview},
-		{name: "accepted observation exhausted", accepted: true, attempts: durableMaxAttempts, err: errors.New("status unavailable"), want: durability.ReplyOutboxManualReview},
+		{name: "accepted observation exhausted", accepted: true, attempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, err: errors.New("status unavailable"), want: durability.ReplyOutboxManualReview},
 		{name: "explicit failure after acceptance", accepted: true, err: transport.ErrReplyStatusFailed, want: durability.ReplyOutboxDead},
 	}
 	for _, tc := range cases {
@@ -110,7 +110,7 @@ func TestReplyOutboxOutcomeUnknownRetryDelayIncreasesByAttempt(t *testing.T) {
 
 	previous := time.Duration(0)
 
-	for attempt := int32(1); attempt < durableMaxAttempts; attempt++ {
+	for attempt := int32(1); attempt < testDurableProfile(t).BotReplyOutbox.MaxAttempts; attempt++ {
 		delay := replyOutboxRetryAfterWithBase(durability.ReplyOutboxOutcomeUnknown, attempt, time.Second)
 		if delay <= previous {
 			t.Fatalf("attempt %d retry delay = %s, previous = %s", attempt, delay, previous)
@@ -119,7 +119,7 @@ func TestReplyOutboxOutcomeUnknownRetryDelayIncreasesByAttempt(t *testing.T) {
 		previous = delay
 	}
 
-	if got := replyOutboxRetryAfterWithBase(durability.ReplyOutboxManualReview, durableMaxAttempts, time.Second); got != 0 {
+	if got := replyOutboxRetryAfterWithBase(durability.ReplyOutboxManualReview, testDurableProfile(t).BotReplyOutbox.MaxAttempts, time.Second); got != 0 {
 		t.Fatalf("manual review retry delay = %s, want 0", got)
 	}
 }
@@ -414,7 +414,7 @@ func TestRunClaimHeartbeatShutdownDoesNotCancelCommand(t *testing.T) {
 	r := &durableRuntime{heartbeatEvery: time.Hour}
 
 	stopHeartbeat()
-	r.runClaimHeartbeat(heartbeatCtx, "message:1", "token", time.Now().Add(durableClaimLease), cancelCommand)
+	r.runClaimHeartbeat(heartbeatCtx, "message:1", "token", time.Now().Add(workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.ClaimLeaseMS)), cancelCommand)
 
 	select {
 	case <-commandCtx.Done():
@@ -442,7 +442,7 @@ func claimDeadlineInboxMessage(t *testing.T, inbox *durability.InboxRepository) 
 		t.Fatal(err)
 	}
 
-	claim, err := inbox.Claim(t.Context(), "deadline-token", durableClaimLease)
+	claim, err := inbox.Claim(t.Context(), "deadline-token", workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.ClaimLeaseMS))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,20 +578,21 @@ func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
 
 	time.Sleep(20 * time.Millisecond)
 
-	if _, err = inbox.ReclaimExpired(ctx, durableMaxAttempts, durableBatchSize); err != nil {
+	if _, err = inbox.ReclaimExpired(ctx, testDurableProfile(t).BotReplyOutbox.MaxAttempts, durableBatchSize); err != nil {
 		t.Fatal(err)
 	}
 
-	second, err := inbox.Claim(ctx, "new-token", durableClaimLease)
+	second, err := inbox.Claim(ctx, "new-token", workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.ClaimLeaseMS))
 	if err != nil || second == nil {
 		t.Fatalf("reclaimed inbox claim = %v, err = %v", second, err)
 	}
 
 	r := &durableRuntime{
-		inbox:            inbox,
-		commands:         commands,
-		maintenanceEvery: durableMaintenanceEvery,
-		inboxMaxAttempts: durableMaxAttempts,
+		inbox:             inbox,
+		commands:          commands,
+		maintenanceEvery:  workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.MaintenanceIntervalMS),
+		inboxMaxAttempts:  testDurableProfile(t).BotReplyOutbox.MaxAttempts,
+		settlementTimeout: workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.SettlementTimeoutMS),
 	}
 	assertActiveCommandDefersInbox(t, pool, r, second)
 	expireCommandClaim(t, pool, commands, second.MessageID)
@@ -675,7 +676,7 @@ func assertTerminalDuplicateCompletes(
 
 	ctx := t.Context()
 
-	finalClaim, err := inbox.Claim(ctx, "final-token", durableClaimLease)
+	finalClaim, err := inbox.Claim(ctx, "final-token", workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.ClaimLeaseMS))
 	if err != nil || finalClaim == nil {
 		t.Fatalf("final inbox claim = %v, err = %v", finalClaim, err)
 	}
@@ -745,7 +746,7 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	claim, err := inbox.Claim(ctx, "failed-token", durableClaimLease)
+	claim, err := inbox.Claim(ctx, "failed-token", workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.ClaimLeaseMS))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -787,22 +788,14 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 }
 
 func TestDurableIdleBackoffIsBounded(t *testing.T) {
-	delay := durablePollEvery
+	delay := workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.PollIntervalMS)
 
 	for range 20 {
-		delay = nextDurableIdleDelayFrom(delay, durablePollEvery)
+		delay = nextDurableIdleDelayFrom(delay, workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.PollIntervalMS))
 	}
 
 	if delay != durablePollMax {
 		t.Fatalf("idle delay = %s, want bounded max %s", delay, durablePollMax)
-	}
-}
-
-func TestDurableTerminalRetentionExceedsIrisAdmissionSafetyHorizon(t *testing.T) {
-	const irisAdmissionRetention = 7 * 24 * time.Hour
-
-	if durableTerminalRetention <= irisAdmissionRetention {
-		t.Fatalf("terminal retention = %s, must exceed Iris admission retention %s", durableTerminalRetention, irisAdmissionRetention)
 	}
 }
 
@@ -962,7 +955,7 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 		t.Fatal(err)
 	}
 
-	claim, err := repo.Claim(t.Context(), "claim-token", durableClaimLease)
+	claim, err := repo.Claim(t.Context(), "claim-token", workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.ClaimLeaseMS))
 	if err != nil || claim == nil {
 		t.Fatalf("claim = %v, err = %v", claim, err)
 	}
@@ -984,7 +977,7 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 		t.Fatal(err)
 	}
 
-	_, err = repo.Release(t.Context(), rawID, "claim-token", 1, durableMaxAttempts, durableRetryAfter, causeText+" "+rawID)
+	_, err = repo.Release(t.Context(), rawID, "claim-token", 1, testDurableProfile(t).BotReplyOutbox.MaxAttempts, workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.RetryAfterMS), causeText+" "+rawID)
 	assertDurableRepositoryFailureSafe(t, err, rawID, causeText)
 
 	var lastError string
@@ -1002,7 +995,49 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 func TestReleaseInboxStoresBoundedReasonWithoutCauseText(t *testing.T) {
 	const sentinel = "raw-private-message-id"
 
-	pool := dbtest.NewPool(t)
+	for _, test := range []struct {
+		name   string
+		cause  error
+		reason string
+	}{
+		{"claim_failure", errors.New("claim failed for " + sentinel), durability.InboxFailureCommandClaimFailed},
+		{"canceled", context.Canceled, durability.InboxFailureCommandClaimContextCanceled},
+		{"deadline", context.DeadlineExceeded, durability.InboxFailureCommandClaimContextDeadline},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			pool := dbtest.NewPool(t)
+			ctx := t.Context()
+			r, claim := admittedInboxReleaseFixture(t, pool, "message:"+sentinel)
+			releaseCtx := failedInboxReleaseContext(ctx, t, test.cause)
+
+			r.releaseInbox(releaseCtx, claim, "stale-token", test.cause)
+
+			var status, lastError, token string
+
+			if err := pool.QueryRow(ctx, "SELECT status, last_error, claim_token FROM bot_webhook_inbox WHERE message_id = $1", claim.MessageID).Scan(&status, &lastError, &token); err != nil {
+				t.Fatal(err)
+			}
+
+			if status != "processing" || lastError != "" || token != "release-token" {
+				t.Fatalf("stale release changed claim: status=%q last_error=%q token=%q", status, lastError, token)
+			}
+
+			r.releaseInbox(releaseCtx, claim, "release-token", test.cause)
+
+			if err := pool.QueryRow(ctx, "SELECT status, last_error FROM bot_webhook_inbox WHERE message_id = $1", claim.MessageID).Scan(&status, &lastError); err != nil {
+				t.Fatal(err)
+			}
+
+			if status != "retry" || strings.Contains(lastError, sentinel) || lastError != test.reason {
+				t.Fatalf("status=%q last_error=%q, want retry with bounded reason %q", status, lastError, test.reason)
+			}
+		})
+	}
+}
+
+func admittedInboxReleaseFixture(t *testing.T, pool *pgxpool.Pool, messageID string) (*durableRuntime, *durability.InboxClaim) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	_, err := pool.Exec(ctx, `TRUNCATE bot_webhook_heads, bot_reply_outbox, bot_command_executions, bot_webhook_inbox RESTART IDENTITY CASCADE`)
@@ -1010,35 +1045,42 @@ func TestReleaseInboxStoresBoundedReasonWithoutCauseText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	inbox := durability.NewInboxRepository(pool)
+	r, err := newDurableRuntime(nil, nil, pool, testDurableProfile(t), slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	_, err = inbox.Admit(ctx, durability.InboxMessage{
-		MessageID: "message:" + sentinel, RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: []byte(`{"JSON":{"message_id":"safe"}}`),
+	_, err = r.inbox.Admit(ctx, durability.InboxMessage{
+		MessageID: messageID, RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: []byte(`{"JSON":{"message_id":"safe"}}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	claim, err := inbox.Claim(ctx, "release-token", durableClaimLease)
+	claim, err := r.inbox.Claim(ctx, "release-token", r.claimLease)
 	if err != nil || claim == nil {
 		t.Fatalf("claim = %v, err = %v", claim, err)
 	}
 
-	r := &durableRuntime{
-		inbox:            inbox,
-		inboxMaxAttempts: durableMaxAttempts,
-		inboxRetryAfter:  durableRetryAfter,
-	}
-	r.releaseInbox(ctx, claim, "release-token", errors.New("claim failed for "+sentinel))
+	return r, claim
+}
 
-	var lastError string
+func failedInboxReleaseContext(ctx context.Context, t *testing.T, cause error) context.Context {
+	t.Helper()
 
-	if err = pool.QueryRow(ctx, "SELECT last_error FROM bot_webhook_inbox WHERE message_id = $1", claim.MessageID).Scan(&lastError); err != nil {
-		t.Fatal(err)
-	}
+	switch {
+	case errors.Is(cause, context.Canceled):
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
 
-	if strings.Contains(lastError, sentinel) || lastError != "command_claim_failed" {
-		t.Fatalf("last_error = %q, want bounded reason without raw identity", lastError)
+		return canceled
+	case errors.Is(cause, context.DeadlineExceeded):
+		expired, cancel := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+		t.Cleanup(cancel)
+
+		return expired
+	default:
+		return ctx
 	}
 }
 

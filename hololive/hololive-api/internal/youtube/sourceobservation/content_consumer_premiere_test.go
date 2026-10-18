@@ -1,14 +1,13 @@
 package sourceobservation
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/content"
 	livereconcile "github.com/kapu/hololive-api/internal/youtube/reconcile/live"
@@ -299,7 +298,7 @@ func TestContentPremierePersistencePreservesRowCreatedAfterRead(t *testing.T) {
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			t.Errorf("rollback Premiere persistence: %v", rollbackErr)
 		}
 	}()

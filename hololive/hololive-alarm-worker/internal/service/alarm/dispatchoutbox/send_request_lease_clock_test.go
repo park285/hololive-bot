@@ -2,15 +2,14 @@ package dispatchoutbox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -134,7 +133,7 @@ func assertRequestClockOutcome(t *testing.T, operation string, expired bool, cal
 	t.Helper()
 
 	if expired {
-		require.ErrorIs(t, callErr, ErrSendRequestFence)
+		require.ErrorIs(t, callErr, ErrSendRequestLeaseExpired)
 		require.Nil(t, loaded)
 
 		return
@@ -192,7 +191,7 @@ func runRequestClockBlocked(ctx context.Context, t *testing.T, pool *pgxpool.Poo
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cleanupCancel()
 
-		if rollbackErr := blocker.Rollback(cleanupCtx); !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(cleanupCtx, blocker); rollbackErr != nil {
 			require.NoError(t, rollbackErr)
 		}
 	}()

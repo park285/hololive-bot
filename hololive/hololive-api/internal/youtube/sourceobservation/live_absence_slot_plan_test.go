@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -42,7 +43,7 @@ func TestLiveAbsenceCurrentSlotLookupIsBoundedBySlotNotChannelHistory(t *testing
 			tx, err := pool.Begin(ctx)
 			require.NoError(t, err)
 
-			defer func() { require.NoError(t, tx.Rollback(ctx)) }()
+			defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 			_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
 			require.NoError(t, err)

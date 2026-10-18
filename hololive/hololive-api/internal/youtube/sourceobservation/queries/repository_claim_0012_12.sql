@@ -1,34 +1,4 @@
-WITH replay_epoch AS MATERIALIZED (
-    -- singleton boolean PRIMARY KEY + CHECK (singleton)이라 행은 최대 1개다. LIMIT 1은 결과를 바꾸지 않고 그 상한을
-    -- planner에 알린다. 없으면 분석 전 빈 테이블 추정(400행)이 active_backlog anti join·replay 만료 join에 곱해져
-    -- 총 비용이 64만~193만으로 부풀고(실제 0행), JIT inline·optimize 임계를 넘어 claim 1회 JIT만 0.5~0.8초가 들었다.
-    SELECT cutoff_received_at
-    FROM source_observation_replay_epoch
-    WHERE singleton
-    LIMIT 1
-), active_backlog AS MATERIALIZED (
-    -- 활성 queue(PENDING·PROCESSING) 행을 한 번만 읽어 claim과 시도 소진 판정 재료를 모은다.
-    -- 같은 채널·종류 목록의 선두 판정에는 차단된 후속 목록까지 포함한 활성 행 전체가 필요하므로 이 단일 pass는
-    -- 활성 backlog에 선형이다. 보존 이력(PROCESSED·DEAD_LETTER)은 status 조건으로, 다른 kind는 kind 조건으로 버린다.
-    SELECT queue.observation_id,
-           queue.available_at,
-           queue.attempt_count,
-           observation.observation_kind,
-           observation.subject_key,
-           observation.scheduled_for,
-           (queue.status = 'PENDING' AND queue.available_at <= NOW())
-           OR
-           (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW()) AS due
-    FROM source_observation_queue AS queue
-    JOIN source_observations AS observation ON observation.id = queue.observation_id
-    WHERE (queue.status = 'PENDING' OR queue.status = 'PROCESSING')
-      AND observation.observation_kind = ANY($1::text[])
-      AND NOT EXISTS (
-          SELECT 1
-          FROM replay_epoch AS epoch
-          WHERE observation.received_at < epoch.cutoff_received_at
-      )
-), replay_expired_candidates AS MATERIALIZED (
+WITH {{ready_relation}}, replay_expired_candidates AS MATERIALIZED (
     SELECT queue.observation_id
     FROM source_observation_queue AS queue
     JOIN source_observations AS observation
@@ -98,29 +68,6 @@ WITH replay_epoch AS MATERIALIZED (
     FROM exhausted_candidates
     WHERE queue.observation_id = exhausted_candidates.observation_id
     RETURNING queue.observation_id
-), list_heads AS (
-    -- 같은 채널·종류의 후속 목록이 앞선 목록을 추월하여 신규 영상을 기준 목록으로 삼지 못하게 합니다.
-    -- 채널·종류마다 (scheduled_for, id)가 가장 앞선 활성 목록만 선두이며, 선두가 아직 claim할 수 없으면
-    -- (lease 유지 중, available_at 미도래, attempts 소진) 그 채널·종류의 후속 목록은 이번 claim에서 제외된다.
-    SELECT DISTINCT ON (active.observation_kind, active.subject_key)
-           active.observation_id,
-           active.available_at,
-           active.due AND active.attempt_count < $6 AS claimable
-    FROM active_backlog AS active
-    WHERE active.observation_kind IN ('shorts_list', 'video_list')
-    ORDER BY active.observation_kind, active.subject_key, active.scheduled_for, active.observation_id
-), claim_order AS (
-    -- 후보는 claim 가능한 비목록 행과 claim 가능한 목록 선두뿐이다. queue 순서로 걸으며 차단된 후속 목록을
-    -- 건너뛰면 선두 하나를 찾는 비용이 그 채널의 backlog 길이에 비례하므로, 활성 pass에서 후보 집합을 먼저 만든다.
-    SELECT active.observation_id, active.available_at
-    FROM active_backlog AS active
-    WHERE active.due
-      AND active.attempt_count < $6
-      AND active.observation_kind NOT IN ('shorts_list', 'video_list')
-    UNION ALL
-    SELECT head.observation_id, head.available_at
-    FROM list_heads AS head
-    WHERE head.claimable
 ), candidates AS MATERIALIZED (
     -- 후보를 (available_at, observation_id) 순서로 정렬한 뒤 앞에서부터 한 행씩 queue PK로 잠근다.
     -- FOR UPDATE가 든 LATERAL 하위 질의는 평탄화되지 않으므로 잠금은 정렬된 후보마다 요청 시점에만 일어나고,

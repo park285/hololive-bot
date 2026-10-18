@@ -55,7 +55,7 @@ func cacheClientOptions(config Config, addr string) valkey.ClientOption {
 		InitAddress:       []string{addr},
 		Password:          config.Password,
 		SelectDB:          config.DB,
-		ConnWriteTimeout:  constants.MQConfig.ConnWriteTimeout,
+		ConnWriteTimeout:  constants.ValkeyTimeout.ConnWriteTimeout,
 		BlockingPoolSize:  constants.ValkeyConfig.BlockingPoolSize,
 		PipelineMultiplex: constants.ValkeyConfig.PipelineMultiplex,
 		DisableCache:      config.DisableCache,
@@ -68,12 +68,12 @@ func cacheClientOptions(config Config, addr string) valkey.ClientOption {
 		opts.DialCtxFn = func(ctx context.Context, _ string, _ *net.Dialer, _ *tls.Config) (net.Conn, error) {
 			var d net.Dialer
 
-			d.Timeout = constants.MQConfig.DialTimeout
+			d.Timeout = constants.ValkeyTimeout.DialTimeout
 
 			return d.DialContext(ctx, "unix", socketPath)
 		}
 	} else {
-		opts.Dialer = net.Dialer{Timeout: constants.MQConfig.DialTimeout}
+		opts.Dialer = net.Dialer{Timeout: constants.ValkeyTimeout.DialTimeout}
 	}
 
 	return opts

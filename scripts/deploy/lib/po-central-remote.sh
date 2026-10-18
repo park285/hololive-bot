@@ -13,6 +13,7 @@ image_id_file=../po-current-c/image-id
 # 중앙 collector-c는 prod+live-compat의 youtube-collector다.
 files=(hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION
        deploy/compose/docker-compose.prod.yml deploy/compose/docker-compose.live-compat.yml
+       deploy/compose/docker-compose.collector.yml
        scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
        scripts/deploy/lib/worker-profile-pair.py scripts/deploy/compose.sh)
 collector=hololive-youtube-collector:prod
@@ -157,7 +158,7 @@ require_collector_lease_migration() {
   expected="$(sha256sum "$staging/hololive/hololive-api/scripts/migrations/$migration")"
   expected="${expected%% *}"
   [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || return 1
-  # Compose가 해석한 migrator 접속을 그대로 사용한다. 로컬 socket ledger는 외부 DB override의 증거가 아니다.
+  # Prove the collector targets this primary before inspecting its ledger via the isolated socket.
   observed="$(compose config --format json | python3 -c '
 import json, os, subprocess, sys, uuid
 config = json.load(sys.stdin)
@@ -165,29 +166,25 @@ services = config["services"]
 migrator = services["hololive-db-migrate"]
 source = migrator["environment"]
 collector = services["youtube-collector"]["environment"]
-for pg, runtime in (("PGHOST", "POSTGRES_HOST"), ("PGPORT", "POSTGRES_PORT"), ("PGDATABASE", "POSTGRES_DB")):
-    if str(source[pg]) != str(collector[runtime]):
-        sys.exit("collector and migrator database routes differ")
-names = ("PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGSSLMODE", "PGSSLROOTCERT")
+if source.get("PGHOST") != "/var/run/postgresql" or source.get("PGSSLMODE") != "disable":
+    sys.exit("migration proof requires the isolated central socket")
+if collector.get("POSTGRES_HOST") != "holo-postgres" or str(collector.get("POSTGRES_PORT")) != "5432" or source["PGDATABASE"] != collector["POSTGRES_DB"]:
+    sys.exit("collector migration proof requires the local primary route")
+names = ("PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGSSLMODE")
 if any(not source.get(name) for name in names):
     sys.exit("collector migration proof requires complete migrator connection settings")
-networks = list(migrator["networks"])
-if len(networks) != 1:
-    sys.exit("collector migration proof requires one migrator network")
-network = config["networks"][networks[0]]["name"]
-roots = [v for v in migrator["volumes"] if v.get("type") == "bind" and v.get("target") == source["PGSSLROOTCERT"]]
-if len(roots) != 1 or not roots[0].get("read_only"):
-    sys.exit("collector migration proof requires the migrator read-only CA mount")
+mounts = [v for v in migrator["volumes"] if v.get("type") == "volume" and v.get("target") == source["PGHOST"]]
+if len(mounts) != 1 or not mounts[0].get("read_only"):
+    sys.exit("collector migration proof requires the read-only admin socket mount")
+socket_volume = config["volumes"][mounts[0]["source"]]["name"]
 env = os.environ.copy()
 env.update({name: str(source[name]) for name in names})
-env.update(PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s -c lock_timeout=1s", PGCONNECT_TIMEOUT="5")
+env.update(PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s -c lock_timeout=1s", PGCONNECT_TIMEOUT="5", PGAPPNAME="hololive-collector-migration-proof")
 owner = "hololive.collector-migration-proof=" + uuid.uuid4().hex
-command = ["docker", "create", "--label", owner, "--pull=never", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--network", network]
-for resolver in migrator.get("dns", []):
-    command.extend(("--dns", resolver))
+command = ["docker", "create", "--label", owner, "--pull=never", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--network", "none", "--env", "PGAPPNAME"]
 for name in (*names, "PGOPTIONS", "PGCONNECT_TIMEOUT"):
     command.extend(("--env", name))
-command.extend(("--mount", "type=bind,src=" + roots[0]["source"] + ",dst=" + source["PGSSLROOTCERT"] + ",readonly", "--entrypoint", "psql", services["holo-postgres"]["image"], "--no-psqlrc", "-v", "ON_ERROR_STOP=1", "-At", "-c", sys.argv[1]))
+command.extend(("--mount", "type=volume,src=" + socket_volume + ",dst=" + source["PGHOST"] + ",readonly", "--entrypoint", "psql", services["holo-postgres"]["image"], "--no-psqlrc", "-v", "ON_ERROR_STOP=1", "-At", "-c", sys.argv[1]))
 try:
     created = subprocess.run(command, env=env, text=True, capture_output=True, timeout=15)
     if created.returncode:

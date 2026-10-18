@@ -15,7 +15,7 @@ import (
 )
 
 func TestProjectionRetentionDrainsProgressWithinOneDeadline(t *testing.T) {
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	var (
 		calls       int
@@ -56,7 +56,7 @@ func TestProjectionRetentionDrainsProgressWithinOneDeadline(t *testing.T) {
 }
 
 func TestProjectionRetentionBoundsContinuousProgress(t *testing.T) {
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 	calls := 0
 
 	runtime.projectionRetainer = fakeProjectionRetainer{
@@ -75,7 +75,7 @@ func TestProjectionRetentionBoundsContinuousProgress(t *testing.T) {
 }
 
 func TestProjectionRetentionPreservesCommittedCountsOnFailure(t *testing.T) {
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 	wantErr := errors.New("projection batch failed")
 	calls := 0
 	deletedTargets := youtubeRetentionDeletedTotal.WithLabelValues("youtube_collection_targets")
@@ -102,7 +102,7 @@ func TestProjectionRetentionPreservesCommittedCountsOnFailure(t *testing.T) {
 }
 
 func TestProjectionRetentionStopsBeforeNextBatchOnCancellation(t *testing.T) {
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 	ctx, cancel := context.WithCancel(t.Context())
 
 	defer cancel()
@@ -124,7 +124,7 @@ func TestProjectionRetentionStopsBeforeNextBatchOnCancellation(t *testing.T) {
 }
 
 func TestProjectionRetentionDeadlineKeepsSourceCleanupIndependent(t *testing.T) {
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	runtime.Config.Retention.Enabled = true
 	runtime.Config.TransactionTimeout = 20 * time.Millisecond
@@ -208,7 +208,7 @@ func TestProjectionRetentionCatchesUpWithObservedGenerationVolume(t *testing.T) 
 	refresher, err := targetprojection.NewRefresher(pool, time.Hour)
 	require.NoError(t, err)
 
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	runtime.now = time.Now
 	runtime.projectionRetainer = refresher

@@ -19,7 +19,7 @@ case "${mode}" in
         if [[ "${container_cli}" == "podman" ]] && command -v podman-compose >/dev/null 2>&1; then
             compose_cmd=(podman-compose)
         fi
-        "${compose_cmd[@]}" -f "${compose_file}" config --no-interpolate --format json >"${tmp}"
+        "${compose_cmd[@]}" -f "${compose_file}" config --no-interpolate --no-env-resolution --format json >"${tmp}"
         ;;
     --target-env-only)
         [[ -n "${target_env_file}" ]] || { echo "[pg-capacity] --target-env-only requires a target env file" >&2; exit 2; }
@@ -105,28 +105,38 @@ if verify_compose:
 used = 0
 seen = set()
 scaled_services_seen = set()
-required_owners = {
-    "bot", "admin-api", "llm-scheduler", "youtube-plane", "alarm-worker", "youtube-collector", "db-migrate"
-}
+role_limits = {}
+role_used = {}
+for line in policy:
+    if line.startswith("@role-limit|"):
+        _, role, maximum = line.split("|")
+        if role in role_limits or not re.fullmatch(r"[1-9][0-9]*", maximum):
+            raise SystemExit("[pg-capacity] invalid or duplicate role limit")
+        role_limits[role] = int(maximum)
 for line in policy:
     if not line or line.startswith("#") or line.startswith("@"):
         continue
     fields = line.split("|")
-    if len(fields) != 6:
+    if len(fields) != 7:
         raise SystemExit(f"[pg-capacity] malformed policy row: {line}")
-    owner, service_name, env_key, source_key, instances_text, default_text = fields
+    owner, service_name, env_key, source_key, instances_text, default_text, role = fields
     if owner in seen:
         raise SystemExit(f"[pg-capacity] duplicate owner: {owner}")
     seen.add(owner)
     instances, default = int(instances_text), int(default_text)
     if instances <= 0 or default <= 0:
         raise SystemExit(f"[pg-capacity] non-positive capacity row: {line}")
-    if verify_compose:
+    if not service_name and (env_key or source_key):
+        raise SystemExit(f"[pg-capacity] external allocation must be fixed: {owner}")
+    if verify_compose and service_name:
         service = services.get(service_name)
         if service is None:
             raise SystemExit(f"[pg-capacity] missing Compose service: {service_name}")
         if env_key:
-            actual = str(service.get("environment", {}).get(env_key, ""))
+            environment = service.get("environment", {})
+            if isinstance(environment, list):
+                environment = dict(entry.split("=", 1) for entry in environment if "=" in entry)
+            actual = str(environment.get(env_key, ""))
             match = re.fullmatch(r"\$\{([^}:]+):-([^}]+)\}", actual)
             if not match or match.group(1) != source_key or int(match.group(2)) != default:
                 raise SystemExit(
@@ -139,7 +149,7 @@ for line in policy:
             if not re.fullmatch(r"[1-9][0-9]*", override):
                 raise SystemExit(f"[pg-capacity] {source_key} must be a positive integer")
             capacity = int(override)
-            effective_instances = instances + scale_overrides.get(service_name, 1) - 1
+            effective_instances = instances + (scale_overrides.get(service_name, 1) - 1 if service_name else 0)
             if effective_instances > 1 and capacity != default:
                 raise SystemExit(
                     f"[pg-capacity] {source_key} is shared by multiple independently rendered "
@@ -149,12 +159,15 @@ for line in policy:
             capacity = default
     else:
         capacity = default
-    effective_instances = instances + scale_overrides.get(service_name, 1) - 1
+    effective_instances = instances + (scale_overrides.get(service_name, 1) - 1 if service_name else 0)
     if effective_instances < 0:
         raise SystemExit(f"[pg-capacity] invalid effective instance count for service: {service_name}")
-    if service_name in scale_overrides:
+    if service_name and service_name in scale_overrides:
         scaled_services_seen.add(service_name)
     used += effective_instances * capacity
+    role_used[role] = role_used.get(role, 0) + effective_instances * capacity
+    if role not in role_limits or role_used[role] > role_limits[role]:
+        raise SystemExit(f"[pg-capacity] aggregate pools exceed role limit: {role}")
 
 unknown_scaled_services = sorted(set(scale_overrides) - scaled_services_seen)
 if unknown_scaled_services:
@@ -163,16 +176,10 @@ if unknown_scaled_services:
         + ", ".join(unknown_scaled_services)
     )
 
-missing_owners = sorted(required_owners - seen)
-unexpected_owners = sorted(seen - required_owners)
-if missing_owners or unexpected_owners:
-    raise SystemExit(
-        f"[pg-capacity] owner inventory mismatch: missing={missing_owners}, unexpected={unexpected_owners}"
-    )
 # reserve는 비슈퍼유저 역할이 실제로 접속 거부당하기 전까지 남는 슬롯이다(PG 거부 조건과 같은 기준).
-# 하한 2는 현재 할당 55에서 보장되는 값이며, 하한 상향은 풀 사용 지표로 collector max 축소를
-# 결정한 뒤 같은 변경에서 한다.
-min_reserve = 2
+# Keep three ordinary slots for bounded control/maintenance work, separately from
+# the inventoried exporter and nightly jobs. Never treat sampled high-water as a cap.
+min_reserve = 3
 reserve = server_limit - superuser_reserved - used
 if reserve < min_reserve:
     raise SystemExit(
@@ -182,6 +189,6 @@ if reserve < min_reserve:
 source = f"target-env:{target_env_path}" if target_env_path is not None else "compose-defaults"
 print(
     f"[pg-capacity] source={source} max={server_limit} superuser_reserved={superuser_reserved} "
-    f"allocated={used} reserve={reserve}; central and four AP pools are inventoried"
+    f"allocated={used} reserve={reserve}; runtime, migrator, exporter and nightly allocations included"
 )
 PY

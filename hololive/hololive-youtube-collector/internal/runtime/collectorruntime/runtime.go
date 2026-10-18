@@ -312,7 +312,7 @@ func (r *Runtime) collectionExecutorEnabled() bool {
 		return false
 	}
 
-	worker, ok := r.Config.WorkerProfile.Loaded.Profile.Workers["collection"]
+	worker, ok := r.Config.WorkerProfile.Loaded.Profile.Workers[collectorconfig.WorkerCollection]
 
 	return ok && worker.Executor.Enabled
 }
@@ -322,7 +322,7 @@ func collectorProfileEnabled(profile *collectorconfig.WorkerProfile) bool {
 		return false
 	}
 
-	worker, ok := profile.Loaded.Profile.Workers["collection"]
+	worker, ok := profile.Loaded.Profile.Workers[collectorconfig.WorkerCollection]
 
 	return ok && worker.Executor.Enabled
 }

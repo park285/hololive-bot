@@ -2,9 +2,7 @@
 			SELECT d.send_unit_id, d.next_attempt_at, d.id AS delivery_id
 			FROM alarm_dispatch_deliveries d
 			WHERE $1::INT > 0
-			  AND d.send_unit_id IS NOT NULL
-			  AND d.status IN ('pending', 'retry')
-			  AND d.next_attempt_at <= NOW()
+			  AND /* ready_predicate */
 			ORDER BY d.next_attempt_at ASC, d.id ASC
 			LIMIT $1::INT * $4::INT
 		), unit_candidates AS (
@@ -15,11 +13,10 @@
 		), locked_units AS (
 			SELECT u.id, candidate.next_attempt_at, candidate.delivery_id,
 				(
-					SELECT count(due.id)
-					FROM alarm_dispatch_deliveries due
-					WHERE due.send_unit_id = u.id
-					  AND due.status IN ('pending', 'retry')
-					  AND due.next_attempt_at <= NOW()
+					SELECT count(d.id)
+					FROM alarm_dispatch_deliveries d
+					WHERE d.send_unit_id = u.id
+					  AND /* ready_predicate */
 				) AS delivery_count
 			FROM unit_candidates candidate
 			JOIN alarm_dispatch_send_units u ON u.id = candidate.id
@@ -39,8 +36,7 @@
 			SELECT d.id
 			FROM alarm_dispatch_deliveries d
 			WHERE d.send_unit_id IN (SELECT id FROM next_units)
-			  AND d.status IN ('pending', 'retry')
-			  AND d.next_attempt_at <= NOW()
+			  AND /* ready_predicate */
 		), updated AS (
 			UPDATE alarm_dispatch_deliveries d
 			SET status = 'leased',

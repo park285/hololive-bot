@@ -41,14 +41,13 @@ postgres_capacity_assert_policy_target() {
     fi
     local policy_file="$1"
     local target_env_file="$2"
-    local scale raw line owner service_name _env_key source_key instances default_value
+    local scale raw line owner service_name _env_key source_key instances default_value role maximum
     local pipes effective_instances capacity reserve
-    local server_limit="" server_limit_rows=0 used=0 owner_inventory=""
+    local server_limit="" server_limit_rows=0 used=0
     local superuser_reserved="" superuser_reserved_rows=0
-    # reserve 하한: 현재 할당 55에서 보장되는 비슈퍼유저 여유. CI gate와 같은 값을 유지한다.
-    local min_reserve=2
-    local expected_owner_inventory=$'bot\nadmin-api\nllm-scheduler\nyoutube-plane\nalarm-worker\nyoutube-collector\ndb-migrate\n'
-    local -A scale_overrides=() scaled_services_seen=() seen_owners=()
+    # Three ordinary control slots remain after exporter and nightly allocations.
+    local min_reserve=3
+    local -A scale_overrides=() scaled_services_seen=() seen_owners=() role_limits=() role_used=()
     shift 2
 
     [[ -f "${policy_file}" && -r "${policy_file}" ]] || {
@@ -100,25 +99,37 @@ postgres_capacity_assert_policy_target() {
             }
             continue
         fi
+        if [[ "${line}" == @role-limit\|* ]]; then
+            IFS='|' read -r _env_key role maximum <<<"${line}"
+            if [[ ! "$role" =~ ^[a-z_][a-z0-9_]*$ || ! "$maximum" =~ ^[1-9][0-9]*$ ]] || [[ -v "role_limits[$role]" ]]; then
+                echo '[pg-capacity] invalid or duplicate role limit' >&2
+                return 1
+            fi
+            role_limits["$role"]="$maximum"
+            continue
+        fi
 
         pipes="${line//[^|]/}"
-        if (( ${#pipes} != 5 )); then
+        if (( ${#pipes} != 6 )); then
             echo "[pg-capacity] malformed policy row: ${line}" >&2
             return 1
         fi
-        IFS='|' read -r owner service_name _env_key source_key instances default_value <<<"${line}"
+        IFS='|' read -r owner service_name _env_key source_key instances default_value role <<<"${line}"
         if [[ -v "seen_owners[${owner}]" ]]; then
             echo "[pg-capacity] duplicate owner: ${owner}" >&2
             return 1
         fi
         seen_owners["${owner}"]=1
-        owner_inventory+="${owner}"$'\n'
         if [[ ! "${instances}" =~ ^[1-9][0-9]*$ || ! "${default_value}" =~ ^[1-9][0-9]*$ ]]; then
             echo "[pg-capacity] non-positive capacity row: ${line}" >&2
             return 1
         fi
 
-        if [[ -v "scale_overrides[${service_name}]" ]]; then
+        if [[ -z "${service_name}" && ( -n "${_env_key}" || -n "${source_key}" ) ]]; then
+            echo "[pg-capacity] external allocation must be fixed: ${owner}" >&2
+            return 1
+        fi
+        if [[ -n "${service_name}" ]] && [[ -v "scale_overrides[${service_name}]" ]]; then
             effective_instances=$((instances + scale_overrides[${service_name}] - 1))
             scaled_services_seen["${service_name}"]=1
         else
@@ -145,6 +156,15 @@ postgres_capacity_assert_policy_target() {
             fi
         fi
         ((used += effective_instances * capacity))
+        if [[ -z "$role" ]] || [[ ! -v "role_limits[$role]" ]]; then
+            echo '[pg-capacity] missing role limit' >&2
+            return 1
+        fi
+        role_used["$role"]=$(( ${role_used[$role]:-0} + effective_instances * capacity ))
+        if (( role_used[$role] > role_limits[$role] )); then
+            echo "[pg-capacity] aggregate pools exceed role limit: $role" >&2
+            return 1
+        fi
     done <"${policy_file}"
 
     if (( server_limit_rows != 1 )); then
@@ -153,10 +173,6 @@ postgres_capacity_assert_policy_target() {
     fi
     if (( superuser_reserved_rows != 1 )); then
         echo "[pg-capacity] policy must pin exactly one @superuser-reserved" >&2
-        return 1
-    fi
-    if [[ "${owner_inventory}" != "${expected_owner_inventory}" ]]; then
-        echo "[pg-capacity] owner inventory mismatch: policy owner set or order changed" >&2
         return 1
     fi
     for service_name in "${!scale_overrides[@]}"; do
@@ -172,7 +188,7 @@ postgres_capacity_assert_policy_target() {
         echo "[pg-capacity] connection budget exhausted: max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}, want reserve >= ${min_reserve}" >&2
         return 1
     fi
-    echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}; central, optional X login and four AP pools are inventoried"
+    echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}; runtime, migrator, exporter and nightly allocations included"
 }
 
 postgres_capacity_assert_target() {

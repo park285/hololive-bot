@@ -1,11 +1,10 @@
 package dbtest
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +43,7 @@ func seedLiveReviewComparison(t *testing.T, pool *pgxpool.Pool) {
 	require.NoError(t, err)
 
 	defer func() {
-		if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Error(rollbackErr)
 		}
 	}()

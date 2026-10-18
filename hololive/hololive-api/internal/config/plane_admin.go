@@ -47,7 +47,7 @@ func loadAdminPlaneConfig() (*AdminPlaneConfig, error) {
 	holodex, holodexErr := settings.LoadHolodexConfig()
 	officialSchedule, officialScheduleErr := settings.LoadOfficialScheduleRuntimeConfig()
 	valkey, valkeyErr := settings.LoadValkeyConfig()
-	postgres, postgresErr := settings.LoadPostgresConfig()
+	postgres, postgresErr := settings.LoadPostgresEndpointConfig()
 	notification, notificationErr := settings.LoadNotificationConfig()
 	cors, corsErr := settings.LoadCORSConfig(adminCORSDefaultEnforce)
 	ingestion, ingestionErr := settings.LoadIngestionConfig()

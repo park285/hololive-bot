@@ -29,8 +29,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 )
 
 type Querier interface {
@@ -66,8 +65,8 @@ func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) erro
 
 func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
 	if p := recover(); p != nil {
-		rollbackErr := pgxutil.Rollback(ctx, tx)
-		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		rollbackErr := pgxdb.Rollback(ctx, tx)
+		if rollbackErr != nil {
 			slog.Default().Warn("pgx transaction rollback after panic failed", slog.Any("error", rollbackErr))
 		}
 
@@ -78,7 +77,7 @@ func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
 // finishPgxTx는 fn 실행 결과에 따라 트랜잭션을 커밋하거나 롤백한다.
 func finishPgxTx(ctx context.Context, tx Tx, fnErr error) error {
 	if fnErr != nil {
-		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("run pgx transaction and roll back: %w", errors.Join(fnErr, rollbackErr))
 		}
 
