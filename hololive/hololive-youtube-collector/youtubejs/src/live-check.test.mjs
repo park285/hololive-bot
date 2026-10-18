@@ -29,6 +29,7 @@ function fakeInnertube(responses) {
   const calls = [];
   return {
     calls,
+    session: { http: { fetch_function: async () => new Response("") }, user_agent: "test-agent" },
     actions: {
       async execute(endpoint, payload) {
         calls.push([endpoint, payload]);
@@ -99,6 +100,135 @@ test("members-only LIVE coexists with a negative upcoming /live resolution for t
     assert.equal(video.is_live_now, true);
     assert.equal(video.availability, "MEMBERS_ONLY");
   }
+});
+
+function membersArchivePlayer() {
+  return {
+    videoDetails: { videoId: "member-archive", channelId: "UC_MEMBER", isPrivate: false, isLiveContent: true },
+    playabilityStatus: { status: "UNPLAYABLE", errorScreen: { playerLegacyDesktopYpcOfferRenderer: {} } },
+  };
+}
+
+function watchArchivePlayer() {
+  return {
+    ...membersArchivePlayer(),
+    microformat: { playerMicroformatRenderer: { liveBroadcastDetails: {
+      isLiveNow: false, startTimestamp: "2020-01-01T01:00:00Z", endTimestamp: "2020-01-01T02:00:00Z",
+    } } },
+  };
+}
+
+async function membersArchiveClient(player, watch) {
+  const requests = [];
+  const client = await Innertube.create({
+    retrieve_player: false, generate_session_locally: true, enable_session_cache: false,
+    retrieve_innertube_config: false,
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      if (requests.length === 1) return Response.json(player);
+      assert.equal(requests.length, 2, "only one supplementary request is allowed");
+      return watch(request);
+    },
+  });
+  return { client, requests };
+}
+
+test("members-only archive receives verified watch times without changing availability", async () => {
+  const archive = watchArchivePlayer();
+  archive.videoDetails.title = 'braces }; and escaped "quotes"';
+  const { client, requests } = await membersArchiveClient(membersArchivePlayer(), () =>
+    new Response(`<script>var ytInitialPlayerResponse = ${JSON.stringify(archive)}; otherCode();</script>`));
+  const result = await fetchVideoLiveCheck(client, "member-archive", clock);
+  assert.equal(result.availability, "MEMBERS_ONLY");
+  assert.equal(result.method, "player_members_only");
+  assert.equal(result.started_at, "2020-01-01T01:00:00.000Z");
+  assert.equal(result.ended_at, "2020-01-01T02:00:00.000Z");
+  assert.equal(result.is_live_now, false);
+  assert.equal(result.has_live_broadcast_details, true);
+  validateVideoLiveCheckResponse({ protocol_version: 1, ...result });
+  assert.equal(requests.length, 2);
+  assert.equal(new URL(requests[1].url).pathname, "/watch");
+  assert.equal(requests[1].headers.has("Cookie"), false);
+  assert.equal(requests[1].redirect, "error");
+});
+
+test("watch times require matching identity and consistent explicit archive facts", async () => {
+  const cases = [
+    (p) => { p.videoDetails.videoId = "other-video"; },
+    (p) => { p.videoDetails.channelId = "UC_OTHER"; },
+    (p) => { delete p.videoDetails; },
+    (p) => { p.videoDetails.isLive = true; },
+    (p) => { p.videoDetails.isUpcoming = true; },
+    (p) => { delete p.microformat.playerMicroformatRenderer.liveBroadcastDetails.isLiveNow; },
+    (p) => { p.microformat.playerMicroformatRenderer.liveBroadcastDetails.isLiveNow = true; },
+    (p) => { delete p.microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp; },
+    (p) => { delete p.microformat.playerMicroformatRenderer.liveBroadcastDetails.endTimestamp; },
+    (p) => { p.microformat.playerMicroformatRenderer.liveBroadcastDetails.endTimestamp = "2019-01-01T00:00:00Z"; },
+    (p) => { p.microformat.playerMicroformatRenderer.liveBroadcastDetails.endTimestamp = "2099-01-01T00:00:00Z"; },
+    (p) => { p.microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp = "bad"; },
+  ];
+  for (const mutate of cases) {
+    const archive = watchArchivePlayer();
+    mutate(archive);
+    const { client, requests } = await membersArchiveClient(membersArchivePlayer(), () =>
+      new Response(`<script>var ytInitialPlayerResponse = ${JSON.stringify(archive)};</script>`));
+    const result = await fetchVideoLiveCheck(client, "member-archive", clock);
+    assert.equal(result.availability, "MEMBERS_ONLY");
+    assert.equal(result.started_at, undefined);
+    assert.equal(result.ended_at, undefined);
+    assert.equal(requests.length, 2);
+  }
+});
+
+test("unavailable watch responses retain the original membership observation without retries", async () => {
+  for (const watch of [
+    () => new Response("no player"),
+    () => new Response("var ytInitialPlayerResponse = {invalid};"),
+    () => new Response("var ytInitialPlayerResponse = {"),
+    () => new Response("unavailable", { status: 503 }),
+    () => { throw new FetchTransportError("cooldown", "COOLDOWN", "limited"); },
+    () => { throw new TypeError("fetch failed"); },
+  ]) {
+    const { client, requests } = await membersArchiveClient(membersArchivePlayer(), watch);
+    const result = await fetchVideoLiveCheck(client, "member-archive", clock);
+    assert.equal(result.availability, "MEMBERS_ONLY");
+    assert.equal(result.ended_at, undefined);
+    assert.equal(requests.length, 2);
+  }
+});
+
+test("watch lookup preserves request cancellation and explicit internal failures", async () => {
+  for (const code of ["collection_canceled", "helper_internal_invariant"]) {
+    const failure = new FetchTransportError(code, code === "collection_canceled" ? "CANCELED" : "INTERNAL", "stopped");
+    const { client } = await membersArchiveClient(membersArchivePlayer(), () => { throw failure; });
+    await assert.rejects(fetchVideoLiveCheck(client, "member-archive", clock), (error) => error === failure);
+  }
+});
+
+test("watch lookup is limited to members-only archives with missing times", async () => {
+  for (const player of [
+    watchArchivePlayer(),
+    { ...membersArchivePlayer(), playabilityStatus: { status: "OK" } },
+    { ...membersArchivePlayer(), videoDetails: { ...membersArchivePlayer().videoDetails, isLive: true } },
+    { ...membersArchivePlayer(), videoDetails: { ...membersArchivePlayer().videoDetails, isUpcoming: true } },
+    { playabilityStatus: membersArchivePlayer().playabilityStatus },
+  ]) {
+    const { client, requests } = await membersArchiveClient(player, () => { throw new Error("unexpected watch request"); });
+    await fetchVideoLiveCheck(client, "member-archive", clock);
+    assert.equal(requests.length, 1);
+  }
+});
+
+test("watch timestamps do not replace conflicting player timestamps", async () => {
+  const player = watchArchivePlayer();
+  delete player.microformat.playerMicroformatRenderer.liveBroadcastDetails.endTimestamp;
+  player.microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp = "2020-01-01T00:00:00Z";
+  const { client } = await membersArchiveClient(player, () =>
+    new Response(`var ytInitialPlayerResponse = ${JSON.stringify(watchArchivePlayer())};`));
+  const result = await fetchVideoLiveCheck(client, "member-archive", clock);
+  assert.equal(result.started_at, "2020-01-01T00:00:00.000Z");
+  assert.equal(result.ended_at, undefined);
 });
 
 test("upstream failures stay typed RPC failures and never become observations", async () => {
