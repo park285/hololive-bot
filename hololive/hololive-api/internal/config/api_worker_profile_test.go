@@ -255,6 +255,7 @@ func checkSourceObservationBoundary(t *testing.T, enabled, valid bool, mutate fu
 	useAPIWorkerSettings(t, loaded, WorkerSourceObservation, worker, settings)
 
 	profile, err := LoadAPIWorkerProfile()
+
 	if !valid {
 		if err == nil {
 			t.Fatalf("LoadAPIWorkerProfile() enabled=%v accepted an invalid worker boundary", enabled)
