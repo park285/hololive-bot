@@ -140,10 +140,14 @@ case, actual = run_case('known-failure', 'native_cutover_run failed bash -c "exi
 assert actual == 7 and (case/'restored').exists() and not (case/'recovery').exists()
 # 변경 전 상태 기록 본문을 가짜 systemctl로 실행합니다. 재시작 대기는 실행 중, 실패·정지는 멈춘 상태로 기록합니다.
 record_block = source[source.index('collector_prechange_enabled=false\n'):source.index('\nstop_collector_unit_and_require_inactive()')]
+for profile_name in ('desired-profile.json', 'worker-profile.json'):
+    (work / profile_name).write_text('{}\n')
 for active_state, enabled, want_running in [('active', True, 'true'), ('activating', True, 'true'), ('reloading', False, 'true'),
                                              ('failed', True, 'false'), ('inactive', False, 'false'), ('', False, 'false')]:
     probe = f'''set -Eeuo pipefail
 unit=hololive-youtube-collector@youtube-collector-a.service
+worker_profile="{work / 'desired-profile.json'}" release_dir="{work}"
+sudo() {{ [[ "$1" != -n ]] || shift; "$@"; }}
 systemctl() {{
   case "$1" in
     show) printf '%s\\n' "{active_state}" ;;
