@@ -61,17 +61,32 @@ func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 	}
 
 	raw = bytes.Replace(raw, []byte(`"enabled": true`), []byte(`"enabled": false`), 1)
+
 	directory := t.TempDir()
+
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	})
+
 	effective := filepath.Join(directory, "release.json")
 	source := filepath.Join(directory, "desired.json")
-	for _, path := range []string{effective, source} {
-		if err := os.WriteFile(path, raw, 0o600); err != nil {
-			t.Fatal(err)
+
+	for _, name := range []string{"release.json", "desired.json"} {
+		if writeErr := root.WriteFile(name, raw, 0o600); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 	}
 
 	t.Setenv(workercontract.ProfileFileEnv, effective)
 	t.Setenv(workercontract.ProfileSourceFileEnv, source)
+
 	profile, err := collectorconfig.LoadWorkerProfile()
 	if err != nil {
 		t.Fatal(err)
@@ -86,12 +101,12 @@ func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 		t.Fatal("initial source must match the effective profile")
 	}
 
-	next := filepath.Join(directory, "replacement.json")
-	if err := os.WriteFile(next, append(raw, '\n'), 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := root.WriteFile("replacement.json", append(raw, '\n'), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := os.Rename(next, source); err != nil {
-		t.Fatal(err)
+
+	if renameErr := root.Rename("replacement.json", "desired.json"); renameErr != nil {
+		t.Fatal(renameErr)
 	}
 
 	status := checker.Check(time.Now())
@@ -103,6 +118,7 @@ func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if envelope.Profile.Hash != profile.Loaded.Hash || envelope.Profile.FileMatch {
 		t.Fatalf("loaded identity changed or source drift lost: %#v", envelope.Profile)
 	}
@@ -111,6 +127,7 @@ func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if reloaded.Loaded.Hash != profile.Loaded.Hash {
 		t.Fatal("desired source replaced the effective settings input")
 	}
