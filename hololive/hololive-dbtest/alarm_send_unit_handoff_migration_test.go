@@ -35,8 +35,8 @@ func TestAlarmSendUnitHandoffShape(t *testing.T) {
 		{name: "next check after checked", set: pinned + `, handoff_request_id = 'iris-1', handoff_next_check_at = now(), handoff_checked_at = now()`},
 	}
 
-	for _, attempt := range []string{"applied", "reapplied"} {
-		if attempt == "reapplied" {
+	for application, attempt := range []string{"applied", "reapplied"} {
+		if application > 0 {
 			require.NoError(t, applyMigrationFile(ctx, pool, dir, alarmSendUnitHandoffMigration))
 		}
 

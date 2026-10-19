@@ -34,8 +34,8 @@ func TestNotificationHandoffShape(t *testing.T) {
 		{name: "unconfirmed sent without next check", set: `status = 'SENT', handoff_request_id = 'iris-1'`},
 	}
 
-	for _, attempt := range []string{"applied", "reapplied"} {
-		if attempt == "reapplied" {
+	for application, attempt := range []string{"applied", "reapplied"} {
+		if application > 0 {
 			require.NoError(t, applyMigrationFile(ctx, pool, dir, notificationHandoffMigration))
 		}
 
