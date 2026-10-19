@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,7 +133,7 @@ func assertPayloadPermissionDenied(t *testing.T, pool *pgxpool.Pool, role, sql s
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
 	require.True(t, ok)
 	require.Equal(t, "42501", pgErr.Code)
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 }
 
 func payloadRoleTransaction(t *testing.T, pool *pgxpool.Pool, role string) pgx.Tx {
@@ -144,7 +145,7 @@ func payloadRoleTransaction(t *testing.T, pool *pgxpool.Pool, role string) pgx.T
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 10*time.Second)
 		defer cancel()
 
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			t.Errorf("rollback payload role transaction: %v", rollbackErr)
 		}
 	})

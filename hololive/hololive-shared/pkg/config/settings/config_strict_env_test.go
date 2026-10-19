@@ -17,7 +17,6 @@ func TestValidateRuntimeEnvSyntaxRejectsInvalidEnvValues(t *testing.T) {
 		value string
 	}{
 		{key: "POSTGRES_PORT", value: "not-a-number"},
-		{key: "POSTGRES_POOL_MAX_CONNS", value: "four"},
 		{key: "CACHE_PORT", value: "invalid"},
 		{key: "CACHE_DB", value: "zero"},
 		{key: "SERVER_PORT", value: "invalid"},
@@ -100,5 +99,22 @@ func TestValidateRuntimeEnvSyntaxReportsEveryKey(t *testing.T) {
 		if !strings.Contains(err.Error(), key) {
 			t.Fatalf("ValidateRuntimeEnvSyntax() error = %v, want it to name %s", err, key)
 		}
+	}
+}
+
+func TestPostgresPoolSyntaxBelongsToPoolLoader(t *testing.T) {
+	t.Setenv("POSTGRES_POOL_MAX_CONNS", "invalid")
+	t.Setenv("POSTGRES_POOL_MIN_CONNS", "invalid")
+
+	if _, err := LoadPostgresEndpointConfig(); err != nil {
+		t.Fatalf("endpoint loader consumed pool input: %v", err)
+	}
+
+	if err := ValidateRuntimeEnvSyntax(); err != nil {
+		t.Fatalf("shared endpoint preflight consumed pool input: %v", err)
+	}
+
+	if _, err := LoadPostgresConfig(); err == nil {
+		t.Fatal("worker pool loader accepted malformed pool input")
 	}
 }

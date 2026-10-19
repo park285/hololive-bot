@@ -41,9 +41,7 @@ import (
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	cacheproviders "github.com/kapu/hololive-shared/pkg/providers/cache"
-	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
-	memberproviders "github.com/kapu/hololive-shared/pkg/providers/member"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -69,7 +67,6 @@ type LLMSchedulerRuntime struct {
 	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
 
 	httpServers *sharedserver.RuntimeHTTPServers
-	memberCache *member.Cache
 
 	lifecycleMu        sync.Mutex
 	started            bool
@@ -162,7 +159,7 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 	}
 }
 
-func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
+func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LLMSchedulerConfig, infra *sharedmodules.InfraModule, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
 	if schedulerConfig == nil {
 		return nil, errors.New("llm scheduler config must not be nil")
 	}
@@ -171,38 +168,14 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiconfig.LL
 		return nil, errors.New("logger must not be nil")
 	}
 
-	cacheResources, cleanupCache, err := cacheproviders.ProvideCacheResources(ctx, schedulerConfig.Valkey, logger)
-	if err != nil {
-		return nil, fmt.Errorf("init cache: %w", err)
+	if infra == nil {
+		return nil, errors.New("shared infra must not be nil")
 	}
 
-	cacheService := cacheResources.Service
-
-	databaseResources, cleanupDB, err := databaseproviders.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, "llm_scheduler", logger)
+	runtime, err := buildLLMSchedulerComponents(ctx, schedulerConfig, logger, infra.Cache, infra.Postgres, infra.MemberCache)
 	if err != nil {
-		cleanupCache()
-
-		return nil, fmt.Errorf("init database: %w", err)
-	}
-
-	postgresService := databaseResources.Service
-
-	cleanup := func() {
-		cleanupDB()
-		cleanupCache()
-	}
-
-	runtime, err := buildLLMSchedulerComponents(ctx, schedulerConfig, logger, cacheService, postgresService)
-	if err != nil {
-		cleanup()
-
 		return nil, fmt.Errorf("build LLM scheduler components: %w", err)
 	}
-
-	runtime.Managed = lifecycle.NewManaged(func() {
-		runtime.memberCache.Close()
-		cleanup()
-	})
 
 	return runtime, nil
 }
@@ -213,24 +186,12 @@ func buildLLMSchedulerComponents(
 	logger *slog.Logger,
 	cacheService cache.Client,
 	postgresService database.Client,
+	memberCache *member.Cache,
 ) (_ *LLMSchedulerRuntime, err error) {
 	guards, err := buildLLMGuards(logger)
 	if err != nil {
 		return nil, fmt.Errorf("build LLM guards: %w", err)
 	}
-
-	memberRepository := member.NewMemberRepository(postgresService, logger)
-
-	memberCache, err := memberproviders.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("init member cache: %w", err)
-	}
-
-	defer func() {
-		if err != nil {
-			memberCache.Close()
-		}
-	}()
 
 	memberServiceAdapter := member.NewMemberServiceAdapter(memberCache)
 	memberDataProvider := memberServiceAdapter
@@ -270,8 +231,6 @@ func buildLLMSchedulerComponents(
 	if err != nil {
 		return nil, fmt.Errorf("build LLM scheduler runtime components: %w", err)
 	}
-
-	out.memberCache = memberCache
 
 	return out, nil
 }

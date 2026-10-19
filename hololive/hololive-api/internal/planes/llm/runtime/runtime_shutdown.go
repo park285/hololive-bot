@@ -213,3 +213,8 @@ func (r *LLMSchedulerRuntime) Close() {
 		r.Logger.Error("LLM runtime close failed", slog.Any("error", err))
 	}
 }
+
+// ResourceUsersJoined는 과거 drain 오류와 독립적인 실제 작업 join 상태다.
+func (r *LLMSchedulerRuntime) ResourceUsersJoined() bool {
+	return r == nil || r.quiesced()
+}

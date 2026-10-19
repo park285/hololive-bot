@@ -115,3 +115,24 @@ func TestLoadRuntimeReadsMarkdownReplies(t *testing.T) {
 		t.Fatal("AlarmWorkerProfile = nil, want loaded Stack Worker Profile v1")
 	}
 }
+
+func TestLoadRuntimeRequiresControlCapacityAndPreservesIdleZero(t *testing.T) {
+	setRuntimeEnv(t)
+	t.Setenv("POSTGRES_POOL_MIN_CONNS", "0")
+	t.Setenv("POSTGRES_POOL_MAX_CONNS", "1")
+
+	if _, err := LoadRuntime(); err == nil || !strings.Contains(err.Error(), "POSTGRES_POOL_MAX_CONNS") {
+		t.Fatalf("LoadRuntime() error = %v, want control reserve rejection", err)
+	}
+
+	t.Setenv("POSTGRES_POOL_MAX_CONNS", "2")
+
+	config, err := LoadRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if config.Postgres.PoolMinConns != 0 || config.Postgres.PoolMaxConns != 2 {
+		t.Fatalf("pool bounds = %d/%d, want 0/2", config.Postgres.PoolMinConns, config.Postgres.PoolMaxConns)
+	}
+}

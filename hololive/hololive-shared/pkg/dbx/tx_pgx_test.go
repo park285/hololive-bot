@@ -1,6 +1,7 @@
 package dbx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -95,6 +96,35 @@ func TestPgxTxRollsBackOnPanic(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM dbx_tx_test").Scan(&count))
 	require.Zero(t, count)
+}
+
+func TestPgxTxCancellationRollsBackWithoutDiscardingConnection(t *testing.T) {
+	pool := newTxTestPool(t)
+	conn, err := pool.Acquire(t.Context())
+	require.NoError(t, err)
+
+	defer conn.Release()
+
+	pid := conn.Conn().PgConn().PID()
+	ctx, cancel := context.WithCancel(t.Context())
+
+	defer cancel()
+
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+
+	_, err = tx.Exec(ctx, "INSERT INTO dbx_tx_test (value) VALUES ('cancelled')")
+	require.NoError(t, err)
+	cancel()
+
+	require.ErrorIs(t, finishPgxTx(ctx, tx, context.Canceled), context.Canceled)
+	require.False(t, conn.Conn().IsClosed(), "rollback must not discard the connection on caller cancellation")
+	require.Equal(t, pid, conn.Conn().PgConn().PID())
+
+	var count int
+
+	require.NoError(t, conn.QueryRow(t.Context(), "SELECT count(*) FROM dbx_tx_test").Scan(&count))
+	require.Zero(t, count, "canceled transaction must not commit its writes")
 }
 
 func TestPgxTxWithResultReturnsValue(t *testing.T) {

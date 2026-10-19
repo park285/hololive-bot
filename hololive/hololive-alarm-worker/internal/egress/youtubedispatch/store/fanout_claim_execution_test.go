@@ -2,12 +2,12 @@ package store
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -40,7 +40,7 @@ func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
 			require.NoError(t, err)
 
 			id := seedTransitionFanoutOutbox(t, pool, "video-sql-plan")
-			tx := preparePlanModeSQLTest(t, pool, mode, "fanout_sql_v2", "fanout_claim.sql")
+			tx := preparePlanModeSQLTest(t, pool, mode, "fanout_sql_v2", mustSQL("fanout_claim.sql"))
 			at := time.Now().UTC().Truncate(time.Microsecond)
 
 			for _, rejected := range []any{domain.OutboxStatusFailed, domain.OutboxStatusSent, nil, "PENDING' OR 1=1 --"} {
@@ -83,7 +83,7 @@ func TestFanoutSQLSkipsLockedRowAndReclaimsAfterRollback(t *testing.T) {
 	require.Len(t, claimed, 1)
 	require.Equal(t, secondID, claimed[0].ID)
 
-	require.NoError(t, tx.Rollback(t.Context()))
+	require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 
 	claimed, err = transition.ClaimOutboxesForFanout(t.Context(), 2)
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestFanoutSQLSkipsLockedRowAndReclaimsAfterRollback(t *testing.T) {
 
 // preparePlanModeSQLTest는 plan_cache_mode를 고정한 tx에서 SQL 자산을 named prepared statement로 준비합니다.
 // 운영 기본 exec mode(cache_statement)의 generic/custom plan 양쪽에서 상태 가드를 검증하는 데 씁니다.
-func preparePlanModeSQLTest(t *testing.T, pool *pgxpool.Pool, mode, name, sqlFile string) pgx.Tx {
+func preparePlanModeSQLTest(t *testing.T, pool *pgxpool.Pool, mode, name, query string) pgx.Tx {
 	t.Helper()
 
 	tx, err := pool.Begin(t.Context())
@@ -106,7 +106,7 @@ func preparePlanModeSQLTest(t *testing.T, pool *pgxpool.Pool, mode, name, sqlFil
 	_, err = tx.Exec(t.Context(), `SET LOCAL statement_timeout = '5s'`)
 	require.NoError(t, err)
 
-	_, err = tx.Conn().Prepare(t.Context(), name, mustSQL(sqlFile))
+	_, err = tx.Conn().Prepare(t.Context(), name, query)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
@@ -156,7 +156,7 @@ func rollbackPlanModeSQLTest(t *testing.T, tx pgx.Tx) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
 	defer cancel()
 
-	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		t.Errorf("rollback plan mode SQL test: %v", err)
 	}
 }

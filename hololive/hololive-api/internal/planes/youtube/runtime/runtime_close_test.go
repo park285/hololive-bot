@@ -28,7 +28,7 @@ func TestCloseBeforeStartReleasesPoolOnceAndPreventsTasks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var closes, samples atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+		runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 		runtime.closePool = func() { closes.Add(1) }
 		runtime.workerSampler = workercontract.NewQueueSampler(func(context.Context) (workercontract.QueueValues, error) {
@@ -52,7 +52,7 @@ func TestCloseAdmissionPreventsFirstStartBeforePoolCleanup(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var closes, samples atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+		runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 		runtime.Config.Enabled = false
 		runtime.closePool = func() { closes.Add(1) }
@@ -99,7 +99,7 @@ func TestShutdownBeforeStartKeepsStartAdmission(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var closes, samples atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+		runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 		runtime.Config.Enabled = false
 		runtime.closePool = func() { closes.Add(1) }
@@ -136,7 +136,7 @@ func TestShutdownReleaseKeepsCallerDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{
+		runtime := newTestRuntime(t, fakeClaimer{
 			retry: func(ctx context.Context, _ sourceobservation.RetryInput) (contract.Status, error) {
 				calls.Add(1)
 				<-ctx.Done()
@@ -172,7 +172,7 @@ func TestShutdownReleaseIgnoresCancelOnlyParent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{
+		runtime := newTestRuntime(t, fakeClaimer{
 			retry: func(ctx context.Context, _ sourceobservation.RetryInput) (contract.Status, error) {
 				calls.Add(1)
 
@@ -216,7 +216,7 @@ func TestConcurrentCloseKeepsBudgetAndPoolWhileReleaseIsRunning(t *testing.T) {
 
 		var calls, closes atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{
+		runtime := newTestRuntime(t, fakeClaimer{
 			retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 				calls.Add(1)
 				close(entered)
@@ -267,7 +267,7 @@ func TestExhaustedShutdownDrainDoesNotAddReleaseBudget(t *testing.T) {
 
 		var calls, closes atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{
+		runtime := newTestRuntime(t, fakeClaimer{
 			retry: func(ctx context.Context, _ sourceobservation.RetryInput) (contract.Status, error) {
 				calls.Add(1)
 				<-ctx.Done()
@@ -320,7 +320,7 @@ func TestDisabledSamplerTimeoutKeepsPoolUntilLaterJoin(t *testing.T) {
 
 		var closes atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+		runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 		runtime.Config.Enabled = false
 		runtime.Config.ShutdownTimeout = 20 * time.Millisecond

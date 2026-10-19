@@ -1,6 +1,22 @@
 package config
 
-import "github.com/park285/shared-go/v2/pkg/workercontract"
+import (
+	"time"
+
+	"github.com/park285/shared-go/v2/pkg/workercontract"
+)
+
+const (
+	WorkerAlarmDispatch        = "alarm_dispatch"
+	WorkerNotificationDelivery = "notification_delivery"
+	WorkerYouTubeDelivery      = "youtube_delivery"
+)
+
+// NotificationDeliveryLease는 claim과 SENDING 전이에 사용하는 소유권 예산이다.
+const NotificationDeliveryLease = 60 * time.Second
+
+// NotificationDeliveryFinalizeTimeout은 발송 결과 저장에 예약하는 독립 예산이다.
+const NotificationDeliveryFinalizeTimeout = 5 * time.Second
 
 type AlarmDispatchWorkerSettings struct {
 	LeaseMS               int64 `json:"lease_ms"`
@@ -39,8 +55,6 @@ type YouTubeDeliveryWorkerSettings struct {
 	ReviveEnabled               bool  `json:"revive_enabled"`
 	ReviveIntervalMS            int64 `json:"revive_interval_ms"`
 	ReviveFreshnessWindowMS     int64 `json:"revive_freshness_window_ms"`
-	ClaimFreshnessWindowMS      int64 `json:"claim_freshness_window_ms"`
-	DeliverySendTimeoutMS       int64 `json:"delivery_send_timeout_ms"`
 	SubscriberLookupParallelism int   `json:"subscriber_lookup_parallelism"`
 	AggregateSyncIntervalMS     int64 `json:"aggregate_sync_interval_ms"`
 	TelemetryPollIntervalMS     int64 `json:"telemetry_poll_interval_ms"`

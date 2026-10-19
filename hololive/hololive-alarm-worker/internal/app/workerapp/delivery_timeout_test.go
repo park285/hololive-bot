@@ -23,8 +23,6 @@ func TestDeliveryBuildersApplyProfileAttemptTimeout(t *testing.T) {
 		cfg.AlarmWorkerProfile.Loaded.Profile.Workers[workerID] = worker
 	}
 
-	cfg.AlarmWorkerProfile.YouTubeDelivery.DeliverySendTimeoutMS = 1500
-
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: new(pgxpool.Pool)}}
 	logger := slog.New(slog.DiscardHandler)
 	sender := egress.NewIrisMessageSender(nil)
@@ -40,12 +38,13 @@ func TestDeliveryBuildersApplyProfileAttemptTimeout(t *testing.T) {
 	require.Equal(t, 1500*time.Millisecond, time.Duration(reflect.ValueOf(youtube).Elem().FieldByName("config").FieldByName("DeliverySendTimeout").Int()))
 }
 
-func TestYouTubeDeliveryBuilderRejectsConflictingTimeouts(t *testing.T) {
+func TestYouTubeDeliveryBuilderDerivesParentFreshness(t *testing.T) {
 	cfg, _ := alarmWorkerTestConfig(t)
+	worker := cfg.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
 
-	cfg.AlarmWorkerProfile.YouTubeDelivery.DeliverySendTimeoutMS = 1500
+	worker.Queue.MaxAge.Milliseconds = new(int64(5400000))
+	cfg.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"] = worker
 
-	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: new(pgxpool.Pool)}}
-	_, err := newYouTubeOutboxDispatcher(cfg, infra, nil, nil, slog.New(slog.DiscardHandler))
-	require.ErrorContains(t, err, "send timeout must match executor attempt timeout")
+	config := youtubeDispatchConfig(cfg)
+	require.Equal(t, 90*time.Minute, config.ClaimFreshnessWindow)
 }

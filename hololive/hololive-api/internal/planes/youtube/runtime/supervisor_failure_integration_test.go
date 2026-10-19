@@ -44,7 +44,7 @@ func testFailureRecordingTimeoutRecovery(t *testing.T, operation string) {
 		cause = errors.New("invalid observation")
 	}
 
-	r := newTestRuntime(failedRecordingRepository{Repository: repo}, fakeConsumer{
+	r := newTestRuntime(t, failedRecordingRepository{Repository: repo}, fakeConsumer{
 		consume: func(ctx context.Context, claim sourceobservation.Claim) error {
 			attempts = append(attempts, claim.ObservationID)
 			if len(attempts) == 1 {

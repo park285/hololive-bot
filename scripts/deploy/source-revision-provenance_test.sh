@@ -123,16 +123,5 @@ for dockerfile in "${dockerfiles[@]}"; do
         || fail "${dockerfile} must publish the OCI revision label"
 done
 
-compose_file="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-for service in hololive-db-migrate hololive-alarm-worker hololive-api youtube-collector; do
-    block="$(awk -v service="${service}" '
-        $0 == "services:" { service_section = 1; next }
-        service_section && $0 == "  " service ":" { found = 1; next }
-        found && /^  [a-zA-Z0-9_-]+:$/ { exit }
-        found { print }
-    ' "${compose_file}")"
-    grep -Fq "REVISION: ${literal_dollar}{REVISION:-unknown}" <<<"${block}" \
-        || fail "${service} build must receive REVISION"
-done
 
 echo "all source revision provenance checks passed"

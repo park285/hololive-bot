@@ -10,29 +10,16 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
-	identity, err := workercontract.KnownIdentity("hololive", "youtube-collector")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	path, err := filepath.Abs(filepath.Join("..", "..", "config", "testdata", "stack-worker-profile-youtube-collector.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	loaded, err := workercontract.LoadProfileFile(path, identity)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	worker := loaded.Profile.Workers["collection"]
+	loaded := settingstest.LoadProfileFixture(t, "hololive", "youtube-collector", "stack-worker-profile-youtube-collector.json")
+	worker := loaded.Profile.Workers[collectorconfig.WorkerCollection]
 
 	worker.Executor.Enabled = false
-	loaded.Profile.Workers["collection"] = worker
+	loaded.Profile.Workers[collectorconfig.WorkerCollection] = worker
 
 	registry, _, err := newCollectorWorkerRegistry(&collectorconfig.WorkerProfile{Loaded: loaded}, nil)
 	if err != nil {
@@ -44,7 +31,7 @@ func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	diagnostics := envelope.Workers["collection"]
+	diagnostics := envelope.Workers[collectorconfig.WorkerCollection]
 	if diagnostics.Executor.RunningWorkers == nil || *diagnostics.Executor.RunningWorkers != 0 ||
 		diagnostics.Executor.InFlight == nil || *diagnostics.Executor.InFlight != 0 {
 		t.Fatalf("disabled executor = %#v", diagnostics.Executor)
@@ -109,5 +96,24 @@ func TestCollectorRegistryObservesSourceReplacementWithoutReload(t *testing.T) {
 
 	if reloaded.Loaded.Hash != profile.Loaded.Hash {
 		t.Fatal("desired source replaced the effective settings input")
+	}
+}
+
+func TestCollectionRegistryRequiresFiniteAdmissionPolicy(t *testing.T) {
+	loaded := settingstest.LoadProfileFixture(t, "hololive", "youtube-collector", "stack-worker-profile-youtube-collector.json")
+
+	profile, err := collectorconfig.DecodeWorkerProfile(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scheduler := newLifecycleScheduler(t)
+	if _, _, err := newCollectorWorkerRegistry(profile, scheduler); err != nil {
+		t.Fatalf("valid admission policy rejected: %v", err)
+	}
+
+	scheduler.executor.collector.DBTimeout = 0
+	if _, _, err := newCollectorWorkerRegistry(profile, scheduler); err == nil {
+		t.Fatal("registry certified missing admission budget")
 	}
 }

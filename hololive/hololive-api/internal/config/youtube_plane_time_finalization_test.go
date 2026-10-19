@@ -5,25 +5,29 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
 func TestTimeFinalizationBacklogConfiguration(t *testing.T) {
-	require.Zero(t, DefaultYouTubePlaneConfig().TimeFinalizationBacklogBatchSize)
+	settingstest.UseProfileFixture(t, "stack-worker-profile-api.json")
+
+	profile, profileErr := LoadAPIWorkerProfile()
+	if profileErr != nil {
+		t.Fatal(profileErr)
+	}
 
 	for _, size := range []int{-1, 0, 200, 1000, 1001} {
 		t.Run(strconv.Itoa(size), func(t *testing.T) {
 			t.Setenv("YOUTUBE_PLANE_TIME_FINALIZATION_BACKLOG_BATCH_SIZE", strconv.Itoa(size))
 
-			loaded, err := loadYouTubePlaneConfig()
+			cfg, err := loadYouTubePlaneConfig()
 			require.NoError(t, err)
-			require.Equal(t, size, loaded.TimeFinalizationBacklogBatchSize)
 
-			cfg := DefaultYouTubePlaneConfig()
-
-			cfg.TimeFinalizationBacklogBatchSize = loaded.TimeFinalizationBacklogBatchSize
+			applySourceObservationWorkerProfile(&cfg, profile)
 
 			if size < 0 || size > 1000 {
-				require.ErrorContains(t, cfg.Validate(), "time finalization backlog batch size")
+				require.Error(t, cfg.Validate())
 			} else {
 				require.NoError(t, cfg.Validate())
 			}

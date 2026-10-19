@@ -37,7 +37,7 @@ func TestRareOutcomeSeriesAreExportedBeforeFirstEvent(t *testing.T) {
 // 슬롯을 끝내 얻지 못한 작업도 대기 시간이 남아야 포화 원인을 지표로 가를 수 있다.
 func TestWithDBRecordsSlotWaitOnFailedAcquireAndHoldAfterRelease(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+		r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 		r.dbSem = make(chan struct{}, 1)
 		r.dbSem <- struct{}{}
@@ -88,7 +88,7 @@ func (blockingRefresher) Refresh(ctx context.Context, _ targetprojection.Builder
 // 멈춘 projection refresh는 슬롯을 무기한 붙들지 않고 TransactionTimeout 뒤 오류로 드러나야 한다.
 func TestRefreshProjectionReleasesSlotAfterTransactionTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+		r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 		r.refresher = blockingRefresher{}
 		r.dbSem = make(chan struct{}, 1)
@@ -108,7 +108,7 @@ func TestRefreshProjectionReleasesSlotAfterTransactionTimeout(t *testing.T) {
 // retention tick 히스토그램은 슬롯 획득 뒤 실행분만 재고, 슬롯을 얻지 못한 phase는 오류로만 센다.
 func TestRetentionTickExcludesSlotWaitAndSkipsUnacquiredPhase(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+		r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 		r.dbSem = make(chan struct{}, 1)
 		r.retainer = fakeRetainer{tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {

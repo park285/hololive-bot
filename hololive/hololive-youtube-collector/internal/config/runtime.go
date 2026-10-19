@@ -302,6 +302,14 @@ func (c *RuntimeConfig) validateProductionCollectorOwnership() error {
 }
 
 func (c *RuntimeConfig) validatePostgres() error {
+	if c.Postgres.PoolMaxConns < 2 {
+		return errors.New("POSTGRES_POOL_MAX_CONNS must be at least 2 to reserve collector control capacity")
+	}
+
+	if c.Postgres.PoolMinConns < 0 || c.Postgres.PoolMinConns > c.Postgres.PoolMaxConns {
+		return errors.New("POSTGRES_POOL_MIN_CONNS must be between 0 and POSTGRES_POOL_MAX_CONNS")
+	}
+
 	if err := validatePostgresUser(c.Postgres.User); err != nil {
 		return fmt.Errorf("validate youtube collector postgres user: %w", err)
 	}
@@ -373,19 +381,10 @@ func validateReadablePostgresSSLRootCert(path string) error {
 
 // validatePostgresUser: collector는 scraper 역할 DB 사용자로만 접속한다.
 func validatePostgresUser(user string) error {
-	want := resolvedHololiveScraperUser()
+	want := runtimepolicy.PostgresScraperRoleUser
 	if strings.TrimSpace(user) != want {
 		return fmt.Errorf("%s requires POSTGRES_USER=%s", runtimepolicy.RuntimeYouTubeCollector, want)
 	}
 
 	return nil
-}
-
-func resolvedHololiveScraperUser() string {
-	user := strings.TrimSpace(sharedenv.String("HOLOLIVE_SCRAPER_USER", runtimepolicy.PostgresScraperRoleUser))
-	if user == "" {
-		return runtimepolicy.PostgresScraperRoleUser
-	}
-
-	return user
 }

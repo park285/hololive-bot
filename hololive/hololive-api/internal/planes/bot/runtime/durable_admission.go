@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v3/iris"
 	"github.com/park285/iris-client-go/v3/webhook"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"go.opentelemetry.io/otel/attribute"
@@ -27,19 +28,9 @@ import (
 )
 
 const (
-	durableClaimLease            = 2 * time.Minute
-	durableDispatchBudget        = durableClaimLease - 15*time.Second
-	durableHeartbeatEvery        = 20 * time.Second
-	durableOwnershipSafetyMargin = 15 * time.Second
-	durablePollEvery             = 100 * time.Millisecond
-	durablePollMax               = 2 * time.Second
-	durableMaintenanceEvery      = 15 * time.Second
-	durableRetryAfter            = time.Second
-	durableMaxAttempts           = int32(5)
-	durableBatchSize             = int32(100)
-	commandStaleAfter            = 5 * time.Minute
-	durableTerminalRetention     = 8 * 24 * time.Hour
-	durableManualReviewRetention = 30 * 24 * time.Hour
+	durablePollMax    = 2 * time.Second
+	durableBatchSize  = int32(100)
+	commandStaleAfter = apiconfig.BotCommandStaleAfter
 )
 
 type durableAdmitter struct {
@@ -209,13 +200,15 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 	}
 
 	workers := profile.Loaded.Profile.Workers
-	inboxProfile := workers["bot_webhook_inbox"]
-	outboxProfile := workers["bot_reply_outbox"]
+	inboxProfile := workers[apiconfig.WorkerBotWebhookInbox]
+	outboxProfile := workers[apiconfig.WorkerBotReplyOutbox]
+	handlerTimeout, _ := inboxProfile.Executor.AttemptTimeout.FixedDuration()
+	dispatchBudget, _ := outboxProfile.Executor.AttemptTimeout.FixedDuration()
 
 	outboxRepository, err := durability.NewReplyOutboxRepositoryWithPolicy(
 		pgPool,
 		profile.BotReplyOutbox.MaxAttempts,
-		time.Duration(profile.BotReplyOutbox.AutomaticReplayHorizonMS)*time.Millisecond,
+		workercontract.Milliseconds(profile.BotReplyOutbox.AutomaticReplayHorizonMS),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build durable runtime: reply outbox policy: %w", err)
@@ -227,25 +220,25 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 		bot: bot, irisClient: client, logger: logger,
 		inboxWorkers: inboxProfile.Executor.ConfiguredWorkers, outboxWorkers: outboxProfile.Executor.ConfiguredWorkers,
 		inboxEnabled: inboxProfile.Executor.Enabled, outboxEnabled: outboxProfile.Executor.Enabled,
-		handlerTimeout: time.Duration(*inboxProfile.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
+		handlerTimeout: handlerTimeout,
 		inboxWake:      make(chan struct{}, 1), outboxWake: make(chan struct{}, 1),
 		inboxPollSlot: newDurablePollSlot(), outboxPollSlot: newDurablePollSlot(),
-		dispatchBudget:        time.Duration(profile.BotReplyOutbox.DispatchBudgetMS) * time.Millisecond,
-		outboxClaimLease:      time.Duration(profile.BotReplyOutbox.ClaimLeaseMS) * time.Millisecond,
-		heartbeatEvery:        time.Duration(profile.BotWebhookInbox.HeartbeatIntervalMS) * time.Millisecond,
-		claimLease:            time.Duration(profile.BotWebhookInbox.ClaimLeaseMS) * time.Millisecond,
-		ownershipSafetyMargin: time.Duration(profile.BotWebhookInbox.OwnershipSafetyMarginMS) * time.Millisecond,
+		dispatchBudget:        dispatchBudget,
+		outboxClaimLease:      workercontract.Milliseconds(profile.BotReplyOutbox.ClaimLeaseMS),
+		heartbeatEvery:        workercontract.Milliseconds(profile.BotWebhookInbox.HeartbeatIntervalMS),
+		claimLease:            workercontract.Milliseconds(profile.BotWebhookInbox.ClaimLeaseMS),
+		ownershipSafetyMargin: workercontract.Milliseconds(profile.BotWebhookInbox.OwnershipSafetyMarginMS),
 		heartbeatRetryDelay:   250 * time.Millisecond, heartbeatAttemptBudget: 5 * time.Second,
-		inboxPollEvery:        time.Duration(profile.BotWebhookInbox.PollIntervalMS) * time.Millisecond,
-		outboxPollEvery:       time.Duration(profile.BotReplyOutbox.PollIntervalMS) * time.Millisecond,
-		maintenanceEvery:      time.Duration(profile.BotWebhookInbox.MaintenanceIntervalMS) * time.Millisecond,
-		inboxRetryAfter:       time.Duration(profile.BotWebhookInbox.RetryAfterMS) * time.Millisecond,
-		outboxRetryAfter:      time.Duration(profile.BotReplyOutbox.RetryAfterMS) * time.Millisecond,
+		inboxPollEvery:        workercontract.Milliseconds(profile.BotWebhookInbox.PollIntervalMS),
+		outboxPollEvery:       workercontract.Milliseconds(profile.BotReplyOutbox.PollIntervalMS),
+		maintenanceEvery:      workercontract.Milliseconds(profile.BotWebhookInbox.MaintenanceIntervalMS),
+		inboxRetryAfter:       workercontract.Milliseconds(profile.BotWebhookInbox.RetryAfterMS),
+		outboxRetryAfter:      workercontract.Milliseconds(profile.BotReplyOutbox.RetryAfterMS),
 		inboxMaxAttempts:      profile.BotWebhookInbox.MaxAttempts,
 		outboxMaxAttempts:     profile.BotReplyOutbox.MaxAttempts,
-		settlementTimeout:     time.Duration(profile.BotWebhookInbox.SettlementTimeoutMS) * time.Millisecond,
-		terminalRetention:     time.Duration(profile.BotWebhookInbox.TerminalRetentionMS) * time.Millisecond,
-		manualReviewRetention: time.Duration(profile.BotReplyOutbox.ManualReviewRetentionMS) * time.Millisecond,
+		settlementTimeout:     workercontract.Milliseconds(profile.BotWebhookInbox.SettlementTimeoutMS),
+		terminalRetention:     workercontract.Milliseconds(profile.BotWebhookInbox.TerminalRetentionMS),
+		manualReviewRetention: workercontract.Milliseconds(profile.BotReplyOutbox.ManualReviewRetentionMS),
 		inboxTracker:          workercontract.NewExecutorTracker(), outboxTracker: workercontract.NewExecutorTracker(),
 		inboxTotals: &workercontract.Counters{}, outboxTotals: &workercontract.Counters{},
 	}
@@ -295,9 +288,9 @@ func (r *durableRuntime) processNextInbox(ctx context.Context, claimed func()) b
 	claimed()
 
 	attemptID := r.inboxTracker.BeginAttempt(time.Now())
+	defer r.inboxTracker.EndAttempt(attemptID)
 
 	err = r.processInboxClaim(ctx, claim, token)
-	r.inboxTracker.EndAttempt(attemptID)
 	r.inboxTotals.RecordAttempt(workerAttemptOutcome(err))
 
 	return true
@@ -314,7 +307,10 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	var msg webhook.Message
 
 	if err := jsonv2.Unmarshal(claim.Payload, &msg); err != nil {
-		if _, abandonErr := r.inbox.Abandon(ctx, claim.MessageID, token, "stored webhook payload is not decodable"); abandonErr != nil {
+		settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+		defer cancel()
+
+		if _, abandonErr := r.inbox.Abandon(settleCtx, claim.MessageID, token, "stored webhook payload is not decodable"); abandonErr != nil {
 			r.logError("abandon poison webhook", abandonErr)
 
 			return errors.Join(err, abandonErr)
@@ -356,7 +352,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	// shutdown이 runCtx를 취소한 뒤에도 정산은 성공해야 한다 — 취소된 ctx 그대로면
 	// command가 claimed로 방치되어 재시작 후 같은 방이 head-of-line에서 수 분간 정지한다.
 	// token fencing이 있어 소유권을 잃은 경우에도 안전한 no-op이다.
-	settleCtx, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
+	settleCtx, cancelSettle := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancelSettle()
 
 	return errors.Join(err, r.completeCommandAndInbox(settleCtx, claim.MessageID, token, err))
@@ -396,7 +392,10 @@ func (r *durableRuntime) claimCommand(ctx context.Context, claim *durability.Inb
 		return false, nil
 	}
 
-	if _, err = r.inbox.Complete(ctx, claim.MessageID, token); err != nil {
+	settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+	defer cancel()
+
+	if _, err = r.inbox.Complete(settleCtx, claim.MessageID, token); err != nil {
 		r.logError("complete already executed webhook", err)
 
 		return false, fmt.Errorf("complete already executed webhook: %w", err)
@@ -411,6 +410,9 @@ func (r *durableRuntime) deferInboxForClaimedCommand(
 	token string,
 	claimedAt time.Time,
 ) error {
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+	defer cancel()
+
 	retryAfter := claimedAt.Add(commandStaleAfter + r.maintenanceEvery).Sub(r.nowTime())
 
 	retryAfter = max(retryAfter, r.maintenanceEvery)

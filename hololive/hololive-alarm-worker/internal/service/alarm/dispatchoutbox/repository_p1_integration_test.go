@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -100,7 +101,7 @@ func TestLoadExistingEventRows_ReturnsRowsInEventKeyOrder(t *testing.T) {
 
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = pgxdb.Rollback(ctx, tx) }()
 
 	rows, err := tx.Query(ctx, mustSQL("repository_event_preflight_0033_01.sql"), eventKeysOf(events))
 	require.NoError(t, err)

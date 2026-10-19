@@ -2,17 +2,15 @@ package store
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
@@ -34,7 +32,7 @@ func TestLedgerConcurrentInsertPreservesSentPrecedence(t *testing.T) {
 			require.NoError(t, err)
 
 			defer func() {
-				if rollbackErr := pgxutil.Rollback(ctx, tx); !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 					require.NoError(t, rollbackErr)
 				}
 			}()

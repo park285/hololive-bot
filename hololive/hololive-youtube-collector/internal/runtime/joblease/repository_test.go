@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -324,7 +325,7 @@ func holdActiveLeaseRow(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseP
 	}
 
 	t.Cleanup(func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("release held lease row: %v", rollbackErr)
 		}
 	})

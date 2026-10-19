@@ -11,6 +11,17 @@ admin_network_preflight() {
     compose_env_key_exists_in_file "$env_file" HOLOLIVE_ADMIN_API_PORT_BIND_IP && firewall_required=true
     for file in "$@"; do
         [[ "${file##*/}" != docker-compose.live-compat.yml ]] || firewall_required=true
+        if [[ "${file##*/}" == docker-compose.live-compat.yml ]]; then
+            local primary="" name address bind_ip
+            while IFS='=' read -r name address; do
+                if [[ "$name" == central ]]; then primary="$address"; fi
+            done < "$root/deploy/topology/hosts.conf"
+            bind_ip="$(compose_env_read_value_from_file "$env_file" POSTGRES_PORT_BIND_IP)" || return 1
+            if [[ -z "$primary" || "$bind_ip" != "$primary" ]] || ! tailscale ip --assert "$bind_ip" >/dev/null 2>&1; then
+                echo '[ERROR] PostgreSQL bind must match the topology primary and this host Tailscale identity' >&2
+                return 1
+            fi
+        fi
     done
     if [[ "$firewall_required" == true ]]; then
         admin_network_assert_firewall "$root/scripts/systemd/admin-dashboard-ingress.nft" \

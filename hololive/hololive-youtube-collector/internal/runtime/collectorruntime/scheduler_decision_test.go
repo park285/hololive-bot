@@ -76,7 +76,7 @@ func TestLeaseRunDecisionUsesSupervisionEvidence(t *testing.T) {
 
 			var fatal []error
 
-			executor := newRunErrorExecutor(&fatal)
+			executor := newRunErrorExecutor(t, &fatal)
 			registerer := prometheus.NewPedanticRegistry()
 
 			executor.metrics = NewMetrics(registerer)
@@ -148,7 +148,7 @@ func TestRunFailureFatalPrecedencePreservesTerminalOrder(t *testing.T) {
 				events []string
 			)
 
-			executor := newRunErrorExecutor(&fatal)
+			executor := newRunErrorExecutor(t, &fatal)
 
 			executor.reportFatal = func(err error) {
 				events = append(events, "fatal")

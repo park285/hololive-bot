@@ -11,6 +11,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/notificationdelivery"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 )
 
@@ -36,16 +38,18 @@ func newAlarmWorkerRegistryState(profile *workerconfig.AlarmWorkerProfile, pool 
 		workers:  profile.Loaded.Profile.Workers,
 	}
 
-	state.samplers["alarm_dispatch"] = newPostgresQueueSampler(pool, alarmDispatchReadySnapshotSQL)
+	state.samplers[workerconfig.WorkerAlarmDispatch] = workercontract.NewQueueSampler(func(ctx context.Context) (workercontract.QueueValues, error) {
+		return dispatchoutbox.ReadySnapshot(ctx, pool)
+	})
+	state.samplers[workerconfig.WorkerNotificationDelivery] = workercontract.NewQueueSampler(notificationdelivery.NewStore(pool).ReadySnapshot)
 
-	state.samplers["notification_delivery"] = newPostgresQueueSampler(pool, notificationDeliveryReadySnapshotSQL)
+	youtubeLockTimeout := workercontract.Milliseconds(profile.YouTubeDelivery.LockTimeoutMS)
+	youtubeFreshness, _ := profile.Loaded.Profile.Workers[workerconfig.WorkerYouTubeDelivery].Queue.MaxAge.FixedDuration()
 
-	youtubeLockTimeout := time.Duration(profile.YouTubeDelivery.LockTimeoutMS) * time.Millisecond
-
-	state.samplers["youtube_delivery"] = newYouTubeQueueSampler(pool, youtubeLockTimeout, time.Duration(profile.YouTubeDelivery.ClaimFreshnessWindowMS)*time.Millisecond, profile.YouTubeDelivery.BatchSize)
+	state.samplers[workerconfig.WorkerYouTubeDelivery] = newYouTubeQueueSampler(pool, youtubeLockTimeout, youtubeFreshness, profile.YouTubeDelivery.BatchSize)
 	state.registry = workercontract.NewRegistry(profile.Loaded, state.checker)
 
-	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
+	for _, workerID := range []string{workerconfig.WorkerAlarmDispatch, workerconfig.WorkerNotificationDelivery, workerconfig.WorkerYouTubeDelivery} {
 		tracker := workercontract.NewExecutorTracker()
 		counters := &workercontract.Counters{}
 
@@ -71,21 +75,6 @@ func newAlarmWorkerRegistryState(profile *workerconfig.AlarmWorkerProfile, pool 
 	}
 
 	return state, nil
-}
-
-func newPostgresQueueSampler(pool *pgxpool.Pool, query string, arguments ...any) *workercontract.QueueSampler {
-	return workercontract.NewQueueSampler(func(ctx context.Context) (workercontract.QueueValues, error) {
-		var (
-			depth            int64
-			oldestAgeSeconds float64
-		)
-
-		if err := pool.QueryRow(ctx, query, arguments...).Scan(&depth, &oldestAgeSeconds); err != nil {
-			return workercontract.QueueValues{}, fmt.Errorf("scan: %w", err)
-		}
-
-		return workercontract.QueueValues{Depth: depth, OldestQueuedAge: time.Duration(oldestAgeSeconds * float64(time.Second))}, nil
-	})
 }
 
 func (s *alarmWorkerRegistryState) wrap(workerID string, scheduler workerruntime.Scheduler) workerruntime.Scheduler {

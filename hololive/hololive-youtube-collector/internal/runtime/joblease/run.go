@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -138,7 +139,7 @@ func (r *Repository) handleRunRenew(
 	default:
 	}
 
-	renewCtx, renewCancel := context.WithTimeout(runCtx, r.config.RenewTimeout)
+	renewCtx, renewCancel := context.WithTimeout(pgxdb.WithControlAcquire(runCtx), r.config.RenewTimeout)
 	err := lease.Renew(renewCtx)
 
 	renewCancel()
@@ -299,7 +300,7 @@ func (r *Repository) handleRunCancel(
 }
 
 func releaseWithTimeout(ctx context.Context, lease Lease, reason ReleaseReason, timeout time.Duration) error {
-	releaseCtx, cancel := context.WithTimeout(ctx, timeout)
+	releaseCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), timeout)
 	defer cancel()
 
 	if err := lease.Release(releaseCtx, reason); err != nil {

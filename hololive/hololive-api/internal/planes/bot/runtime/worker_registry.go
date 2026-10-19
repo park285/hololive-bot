@@ -8,6 +8,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -20,7 +21,7 @@ func (r *BotRuntime) WorkerRegistrations() []workercontract.Registration {
 
 	return []workercontract.Registration{
 		{
-			WorkerID:          "bot_webhook_inbox",
+			WorkerID:          apiconfig.WorkerBotWebhookInbox,
 			Runtime:           workercontract.RuntimeGo,
 			QueueBackend:      workercontract.QueuePostgres,
 			QueueScope:        workercontract.QueueScopeShared,
@@ -30,7 +31,7 @@ func (r *BotRuntime) WorkerRegistrations() []workercontract.Registration {
 			Counters:          durable.inboxTotals,
 		},
 		{
-			WorkerID:          "bot_reply_outbox",
+			WorkerID:          apiconfig.WorkerBotReplyOutbox,
 			Runtime:           workercontract.RuntimeGo,
 			QueueBackend:      workercontract.QueuePostgres,
 			QueueScope:        workercontract.QueueScopeShared,

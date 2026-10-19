@@ -156,3 +156,8 @@ func waitAdminPhotoSync(ctx context.Context, done <-chan struct{}) error {
 		return fmt.Errorf("join admin photo sync: %w", ctx.Err())
 	}
 }
+
+// ResourceUsersJoined는 과거 drain 오류와 독립적인 실제 작업 join 상태다.
+func (r *AdminAPIRuntime) ResourceUsersJoined() bool {
+	return r == nil || r.quiesced()
+}

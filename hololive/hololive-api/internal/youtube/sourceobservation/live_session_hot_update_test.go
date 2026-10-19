@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
@@ -38,7 +39,7 @@ func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	const refreshes = 5
 

@@ -13,7 +13,6 @@ import (
 	consumekit "github.com/kapu/hololive-api/testkit/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -38,9 +37,9 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 
 	for round := 1; round <= channelLiveSlotRounds; round++ {
 		waitLeaseDue(t, pool, snapshotSpec.JobKey)
-		executor.runSpec(ctx, &snapshotSpec)
+		runAdmittedSpec(ctx, t, executor, &snapshotSpec)
 		waitLeaseDue(t, pool, checkSpec.JobKey)
-		executor.runSpec(ctx, &checkSpec)
+		runAdmittedSpec(ctx, t, executor, &checkSpec)
 
 		if err := consumer.Consume(ctx, consumekit.ClaimOptions{
 			ConsumerName: "youtube-live-processor", LeaseOwner: "api-a",
@@ -116,8 +115,8 @@ func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), retryBounds: testRetryBounds,
-		collector: collectorconfig.DefaultConfig(),
-		gates:     defaultProviderGates(),
+		collector: fixtureCollectorConfig(t),
+		gates:     defaultProviderGates(t),
 	}
 	consumer := consumekit.NewConsumer(pool, 0, 0)
 

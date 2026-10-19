@@ -150,7 +150,7 @@ func newScheduler(executor *collectionExecutor, candidates projectionCandidateSo
 		state:            SchedulerNew,
 		queued:           make(map[string]struct{}),
 		queuedAt:         make(map[string]time.Time),
-		queue:            make(chan joblease.JobSpec, cfg.QueueCapacity),
+		queue:            make(chan queuedJob, cfg.QueueCapacity),
 		fatal:            make(chan error, 1),
 	}
 

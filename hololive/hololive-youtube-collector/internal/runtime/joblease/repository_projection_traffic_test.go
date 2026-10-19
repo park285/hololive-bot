@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -494,7 +494,7 @@ func (f *candidateTrafficFleet) explainMode(t *testing.T, state, mode string) {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
 		defer cancel()
 
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		if err := pgxdb.Rollback(ctx, tx); err != nil {
 			t.Errorf("EXPLAIN transaction rollback: %v", err)
 		}
 	}()

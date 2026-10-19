@@ -1,6 +1,7 @@
 hololive/hololive-api/VERSION
 hololive/hololive-alarm-worker/VERSION
 deploy/compose/docker-compose.prod.yml
+deploy/compose/docker-compose.collector.yml
 deploy/compose/docker-compose.live-compat.yml
 scripts/build/po-sandbox-manifest.py
 scripts/deploy/lib/po-sandbox-image.sh

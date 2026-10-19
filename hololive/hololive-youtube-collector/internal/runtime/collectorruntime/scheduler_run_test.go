@@ -16,7 +16,6 @@ import (
 	dto "github.com/prometheus/client_model/go"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -51,7 +50,7 @@ func TestSupersededReleaseUsesDetachedCleanupContext(t *testing.T) {
 	cancel()
 
 	lease := &supersededLease{}
-	collector := collectorconfig.DefaultConfig()
+	collector := fixtureCollectorConfig(t)
 
 	collector.CleanupTimeout = time.Second
 
@@ -341,8 +340,10 @@ func (l *recordingLease) Defer(_ context.Context, input collection.DeferCollecti
 	return nil
 }
 
-func newRunErrorExecutor(fatal *[]error) *collectionExecutor {
-	collector := collectorconfig.DefaultConfig()
+func newRunErrorExecutor(t *testing.T, fatal *[]error) *collectionExecutor {
+	t.Helper()
+
+	collector := fixtureCollectorConfig(t)
 
 	collector.CleanupTimeout = time.Second
 
@@ -368,7 +369,7 @@ func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
 
 	var fatal []error
 
-	executor := newRunErrorExecutor(&fatal)
+	executor := newRunErrorExecutor(t, &fatal)
 	lease := &recordingLease{}
 	spec := &joblease.JobSpec{
 		JobKey:            testJobKey,
@@ -535,7 +536,7 @@ func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing
 
 			var fatal []error
 
-			executor := newRunErrorExecutor(&fatal)
+			executor := newRunErrorExecutor(t, &fatal)
 			registerer := prometheus.NewPedanticRegistry()
 
 			executor.metrics = NewMetrics(registerer)
@@ -578,7 +579,7 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 
 			var fatal []error
 
-			executor := newRunErrorExecutor(&fatal)
+			executor := newRunErrorExecutor(t, &fatal)
 			lease := &supersededLease{releaseErr: test.releaseErr}
 			spec := &joblease.JobSpec{JobKey: testJobKey, Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 			runErr := collecterr.Wrap(contract.ErrorPublishRejected, contract.ClassTransient, fmt.Errorf("publish fence: %w", collection.ErrProjectionStale))
@@ -659,7 +660,7 @@ func TestSupervisionRetainsFatalCallbackAfterCancellation(t *testing.T) {
 		t.Run(string(outcome), func(t *testing.T) {
 			var fatal []error
 
-			executor := newRunErrorExecutor(&fatal)
+			executor := newRunErrorExecutor(t, &fatal)
 			cause := collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "callback invariant")
 			err := errors.Join(context.Canceled, collection.ErrFenceLost, cause)
 

@@ -67,7 +67,7 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 	t.Helper()
 
 	cert := writeReadablePostgresCA(t)
-	collector := DefaultConfig()
+	collector := fixtureCollectorConfig(t)
 
 	collector.InstanceID = collectorInstanceC
 
@@ -89,10 +89,12 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 			SampleRate: 0.1,
 		},
 		Postgres: settings.PostgresConfig{
-			User:        runtimepolicy.PostgresScraperRoleUser,
-			Password:    "x",
-			SSLMode:     runtimepolicy.PostgresSSLModeVerifyFull,
-			SSLRootCert: cert,
+			User:         runtimepolicy.PostgresScraperRoleUser,
+			Password:     "x",
+			SSLMode:      runtimepolicy.PostgresSSLModeVerifyFull,
+			SSLRootCert:  cert,
+			PoolMinConns: 0,
+			PoolMaxConns: 2,
 		},
 		RuntimeOwnership: RuntimeOwnershipConfig{
 			RuntimeAllowed:         true,
@@ -171,7 +173,7 @@ func TestCFG002CollectorLoaderAllowsMissingIrisKakaoAndLLM(t *testing.T) {
 		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
-	if cfg.WorkerProfile == nil || !cfg.WorkerProfile.Loaded.Profile.Workers["collection"].Executor.Enabled {
+	if cfg.WorkerProfile == nil || !cfg.WorkerProfile.Loaded.Profile.Workers[WorkerCollection].Executor.Enabled {
 		t.Fatal("collection executor.enabled = false, want true")
 	}
 }
@@ -334,6 +336,27 @@ func TestCFG003ProductionAcceptsCompleteConfig(t *testing.T) {
 
 	if cfg.Collector.QueueCapacity != cfg.Collector.TotalWorkers*4 {
 		t.Fatalf("applied collector queue = %d, want %d", cfg.Collector.QueueCapacity, cfg.Collector.TotalWorkers*4)
+	}
+}
+
+func TestCollectorRuntimeRequiresControlCapacityAndPreservesIdleZero(t *testing.T) {
+	settingstest.ClearRuntimeRoleEnv(t)
+
+	cfg := validYouTubeCollectorRuntimeConfig(t)
+
+	cfg.Postgres.PoolMaxConns = 1
+
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "POSTGRES_POOL_MAX_CONNS") {
+		t.Fatalf("Validate() error = %v, want control reserve rejection", err)
+	}
+
+	cfg.Postgres.PoolMaxConns = 2
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Postgres.PoolMinConns != 0 {
+		t.Fatal("explicit idle-zero policy was replaced")
 	}
 }
 

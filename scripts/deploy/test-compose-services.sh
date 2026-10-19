@@ -72,10 +72,10 @@ expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtub
 for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-compose.seoul.yml; do
     expect_fail_contains "${ap_overlay} rejects explicit collector redeploy" \
         "youtube-collector is central-only" \
-        env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
+        env COMPOSE_FILE="deploy/compose/${ap_overlay}" \
         "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" youtube-collector
     expect_fail "${ap_overlay} rejects topology-unsafe all-service redeploy" \
-        env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
+        env COMPOSE_FILE="deploy/compose/${ap_overlay}" \
         "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" all
 done
 

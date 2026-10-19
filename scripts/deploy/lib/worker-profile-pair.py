@@ -43,16 +43,16 @@ def loaded_hash(diagnostics):
 
 
 def container_profile_hash(service, container, data):
-    if service in ("hololive-api", "hololive-alarm-worker"):
-        credential = "API_SECRET_KEY"
-    elif service in ("youtube-collector", "youtube-collector-b"):
-        credential = "METRICS_API_KEY"
-    else:
-        raise ValueError("unsupported profile service")
     environment = dict(item.split("=", 1) for item in data["Config"]["Env"])
     port = environment["HOLOLIVE_METRICS_ADDR"].rsplit(":", 1)[1]
     if not port.isdigit():
         raise ValueError("invalid metrics port")
+    credential = {
+        "hololive-api": "API_SECRET_KEY",
+        "hololive-alarm-worker": "API_SECRET_KEY",
+        "youtube-collector": "METRICS_API_KEY",
+        "youtube-collector-b": "METRICS_API_KEY",
+    }[service]
     return loaded_hash(run(CLI, "exec", container, "/app/bin/healthcheck",
                            "--body-api-key-env", credential,
                            "http://127.0.0.1:" + port + "/diagnostics/workers"))

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestConfigurePreservesInjectedTracker(t *testing.T) {
@@ -28,7 +27,7 @@ func TestConfigureFeedsInjectedTrackerIntoReadinessEvaluation(t *testing.T) {
 	readiness := &collectorReadiness{scheduler: scheduler, tracker: scheduler.executor.readiness}
 	readiness.configure(&sharedserver.RuntimeRouterOptions{})
 
-	cfg := collectorconfig.DefaultConfig()
+	cfg := fixtureCollectorConfig(t)
 	deps := readiness.deps(&cfg)
 
 	if deps.tracker != scheduler.executor.readiness {

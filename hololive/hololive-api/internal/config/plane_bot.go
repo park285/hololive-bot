@@ -7,6 +7,7 @@ import (
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -109,7 +110,7 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 	holodex, holodexErr := settings.LoadHolodexConfig()
 	officialSchedule, officialScheduleErr := settings.LoadOfficialScheduleRuntimeConfig()
 	valkey, valkeyErr := settings.LoadValkeyConfig()
-	postgres, postgresErr := settings.LoadPostgresConfig()
+	postgres, postgresErr := settings.LoadPostgresEndpointConfig()
 	notification, notificationErr := settings.LoadNotificationConfig()
 	bot, botErr := settings.LoadBotConfig()
 
@@ -150,8 +151,8 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 func webhookConfigFromProfile(profile *APIWorkerProfile) WebhookConfig {
 	return WebhookConfig{
 		MaxBodyBytes: profile.BotWebhookInbox.MaxBodyBytes,
-		DedupTTL:     time.Duration(profile.BotWebhookInbox.DedupTTLMS) * time.Millisecond,
-		DedupTimeout: time.Duration(profile.BotWebhookInbox.DedupTimeoutMS) * time.Millisecond,
+		DedupTTL:     workercontract.Milliseconds(profile.BotWebhookInbox.DedupTTLMS),
+		DedupTimeout: workercontract.Milliseconds(profile.BotWebhookInbox.DedupTimeoutMS),
 	}
 }
 

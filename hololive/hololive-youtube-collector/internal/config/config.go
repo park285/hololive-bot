@@ -20,11 +20,7 @@ const (
 	youtubeCollectorMaxSuccessResponseBytes = 1 << 20
 	youtubeCollectorMinSuccessResponseBytes = 1
 
-	youtubeCollectorDefaultWorkerCount  = 4
-	youtubeCollectorDefaultRetryFloor   = 30 * time.Second
-	youtubeCollectorDefaultRetryCeiling = 5 * time.Minute
-	youtubeCollectorDefaultQueueMaxAge  = time.Hour
-	youtubeCollectorMaxQueueMaxAge      = workercontract.MaxFixedDurationMS * time.Millisecond
+	youtubeCollectorMaxQueueMaxAge = workercontract.MaxFixedDurationMS * time.Millisecond
 
 	minCollectorPhaseTimeout = 100 * time.Millisecond
 	maxYouTubeJSTimeout      = 10 * time.Minute
@@ -66,35 +62,11 @@ type Config struct {
 	RequestInterval          time.Duration
 }
 
-// DefaultConfig는 인스턴스 ID를 제외한 기본 수집 설정을 반환합니다.
+// DefaultConfig는 profile이 소유하지 않는 provider·환경 기본값만 반환합니다.
 func DefaultConfig() Config {
-	workers := youtubeCollectorDefaultWorkerCount
-	queueCapacity := workers * 4
-	acquisitionBatch := min(queueCapacity, youtubeCollectorMaxAcquisitionBatch)
-
 	return Config{
-		TotalWorkers:             workers,
-		QueueCapacity:            queueCapacity,
-		QueueMaxAge:              youtubeCollectorDefaultQueueMaxAge,
-		AcquisitionBatch:         acquisitionBatch,
-		AcquisitionCadence:       time.Second,
-		LeaseTTL:                 time.Minute,
-		RenewInterval:            20 * time.Second,
-		RenewTimeout:             5 * time.Second,
-		DBTimeout:                5 * time.Second,
-		CleanupTimeout:           5 * time.Second,
-		ProviderAdmissionTimeout: 5 * time.Second,
-		CollectionOverhead:       5 * time.Second,
-		PublishTimeout:           5 * time.Second,
 		ReadinessTimeout:         2 * time.Second,
 		HelperHealthTimeout:      time.Second,
-		RetryMin:                 youtubeCollectorDefaultRetryFloor,
-		RetryMax:                 youtubeCollectorDefaultRetryCeiling,
-		ReleaseJitterMin:         100 * time.Millisecond,
-		ReleaseJitterMax:         time.Second,
-		HolodexMaxInflight:       workers,
-		OfficialMaxInflight:      workers,
-		YouTubeJSMaxInflight:     workers,
 		YouTubeJSRequestTimeout:  30 * time.Second,
 		YouTubeJSStartupTimeout:  30 * time.Second,
 		YouTubeJSShutdownTimeout: 3 * time.Second,

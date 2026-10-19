@@ -286,6 +286,11 @@ if [[ "$TARGET" == hololive-api || "$TARGET" == hololive-alarm-worker ]]; then
             printf -v snapshot_name '%03d.yml' "$index"
             cp "${COMPOSE_FILE_PATHS[index]}" "$profile_backup/compose/$snapshot_name"
         done
+        # extends dependencies are part of the reviewed source snapshot, not extra -f inputs.
+        collector_base="$(dirname "${COMPOSE_FILE_PATHS[0]}")/docker-compose.collector.yml"
+        if [[ -f "$collector_base" ]]; then
+            cp "$collector_base" "$profile_backup/compose/docker-compose.collector.yml"
+        fi
         realpath "$(dirname "${COMPOSE_FILE_PATHS[0]}")" > "$profile_backup/project-directory"
     fi
     profile_candidate="$profile_backup/candidate"

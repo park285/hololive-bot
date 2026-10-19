@@ -114,4 +114,14 @@ base_files=(
   -f deploy/compose/docker-compose.live-compat.yml
 )
 
-./scripts/deploy/compose.sh "${base_files[@]}" up -d --no-build
+# Boot only approved runtime containers; schema migration is an explicit operation.
+. ./scripts/deploy/lib/compose-env.sh
+runtime_services=(holo-postgres valkey-cache hololive-alarm-worker hololive-api
+  youtube-po-c docker-proxy deunhealth admin-dashboard-ingress)
+collector_disabled="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR)"
+case "$collector_disabled" in
+  ""|0) runtime_services+=(youtube-collector) ;;
+  1) ;;
+  *) echo 'HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR must be 0 or 1' >&2; exit 1 ;;
+esac
+./scripts/deploy/compose.sh "${base_files[@]}" up -d --no-build --no-deps "${runtime_services[@]}"

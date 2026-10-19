@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -60,15 +63,12 @@ func (r *Repository) ProbeClaim(ctx context.Context, options ClaimOptions) error
 	}
 
 	if _, err := claimObservations(ctx, tx, options, leaseToken); err != nil {
-		rollbackErr := tx.Rollback(ctx)
-		if errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			rollbackErr = nil
-		}
+		rollbackErr := pgxdb.Rollback(ctx, tx)
 
 		return fmt.Errorf("probe source observation claim: %w", errors.Join(err, rollbackErr))
 	}
 
-	if err := tx.Rollback(ctx); err != nil {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		return fmt.Errorf("probe source observation claim: rollback: %w", err)
 	}
 
@@ -138,4 +138,30 @@ func scanClaimWork(row pgx.Row) (ClaimWork, error) {
 	claim.ObservationKind = contract.ObservationKind(kind)
 
 	return claim, nil
+}
+
+// ReadySnapshot은 replay epoch와 목록 선두를 포함한 durable claim 후보를 관찰한다.
+// 다른 트랜잭션의 순간적인 행 잠금은 읽기 전용 snapshot에서 관찰하지 않는다.
+func (r *Repository) ReadySnapshot(ctx context.Context, kinds []contract.ObservationKind, maxAttempts int) (workercontract.QueueValues, error) {
+	if err := r.validate(); err != nil {
+		return workercontract.QueueValues{}, fmt.Errorf("snapshot source observation queue: %w", err)
+	}
+
+	kindNames := make([]string, len(kinds))
+	for i, kind := range kinds {
+		kindNames[i] = string(kind)
+	}
+
+	var (
+		values     workercontract.QueueValues
+		ageSeconds float64
+	)
+
+	if err := r.pool.QueryRow(ctx, mustSQL("repository_ready_snapshot.sql"), kindNames, maxAttempts).Scan(&values.Depth, &ageSeconds); err != nil {
+		return workercontract.QueueValues{}, fmt.Errorf("snapshot source observation ready queue: %w", err)
+	}
+
+	values.OldestQueuedAge = time.Duration(ageSeconds * float64(time.Second))
+
+	return values, nil
 }

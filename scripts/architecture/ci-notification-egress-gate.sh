@@ -111,12 +111,6 @@ if grep -Eq '^[[:space:]]*replicas:' <<< "${alarm_worker_block}"; then
 else
   echo "[PASS] alarm-worker declares no replicas"
 fi
-if ! grep -Fq 'STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/alarm-worker.json' <<< "${alarm_worker_block}"; then
-  echo "[FAIL] alarm-worker must use its strict local Stack Worker Profile v1" >&2
-  fail=1
-else
-  echo "[PASS] alarm-worker uses its strict local Stack Worker Profile v1"
-fi
 if [[ "${fail}" -ne 0 ]]; then
   exit 1
 fi

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -26,7 +26,7 @@ func TestAcquireBundleRechecksHeaderExpiryAfterGuard(t *testing.T) {
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("rollback projection expiry transaction: %v", rollbackErr)
 		}
 	}()
@@ -228,7 +228,7 @@ func TestAcquireSkipsLockedExpiredLease(t *testing.T) {
 	}
 
 	defer func() {
-		if err := tx.Rollback(context.WithoutCancel(t.Context())); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		if err := pgxdb.Rollback(t.Context(), tx); err != nil {
 			t.Errorf("rollback locked lease: %v", err)
 		}
 	}()
@@ -293,7 +293,7 @@ func TestAcquireCreationTTLStartsAfterConflictingCreatorRollback(t *testing.T) {
 
 	releasedAt := retryDatabaseClock(t, pool)
 
-	if err := locker.Rollback(ctx); err != nil {
+	if err := pgxdb.Rollback(ctx, locker); err != nil {
 		t.Fatal(err)
 	}
 

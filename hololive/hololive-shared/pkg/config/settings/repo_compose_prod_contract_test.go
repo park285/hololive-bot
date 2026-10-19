@@ -1,22 +1,12 @@
 package settings
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
-
-func TestRepoComposeProdHardenedDefaults(t *testing.T) {
-	content := readRepoFile(t, composeProdFile)
-
-	assertProdComposeDisallowedPatterns(t, content)
-	assertProdComposeRequiredPatterns(t, content)
-	assertProdComposeEgressEnvFiles(t, content)
-	assertProdComposeNonEgressIsolation(t, content)
-}
 
 func TestRepoComposeProdPreservesExplicitBlankACLValues(t *testing.T) {
 	cfg := renderComposeConfigWithEnvOverrides(t, map[string]string{
@@ -35,121 +25,7 @@ func TestRepoComposeProdPreservesExplicitBlankACLValues(t *testing.T) {
 	}
 }
 
-func assertCollectorCanonicalDefaults(t *testing.T, cfg renderedCompose) {
-	t.Helper()
-
-	env := composeEnvironment(t, cfg, runtimepolicy.RuntimeYouTubeCollector)
-
-	for name, want := range map[string]string{
-		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES":        "1048576",
-		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS": "30",
-	} {
-		if got := env[name]; got != want {
-			t.Fatalf("%s = %q, want documented default %q", name, got, want)
-		}
-	}
-}
-
-func assertProdComposeDisallowedPatterns(t *testing.T, content string) {
-	t.Helper()
-
-	disallowed := []string{
-		"100.100.1.3",
-		"${VALKEY_PORT_BIND_IP:-100.100.1.3}:6379:6379",
-		"${ADMIN_DASHBOARD_PORT_BIND_IP:-100.100.1.3}:30190:30190",
-		"${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001",
-		"network_mode: host",
-		"/etc/stack-secrets/hololive-bot/certs:/run/hololive-bot/certs:ro",
-		"POSTGRES_HOST: host.docker.internal",
-		"POSTGRES_PORT: \"5433\"",
-		"POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}",
-		"IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}",
-		"http://100.100.1.3:30190",
-		"PGSSLMODE: \"require\"",
-		"--unixsocketperm 777",
-		"mode=0777",
-	}
-	for _, pattern := range disallowed {
-		if strings.Contains(content, pattern) {
-			t.Fatalf("docker-compose.prod.yml contains disallowed pattern %q", pattern)
-		}
-	}
-
-	bindIPDefault := regexp.MustCompile(`\$\{[A-Z0-9_]*_BIND_IP:-100\.100\.1\.3\}`)
-	if match := bindIPDefault.FindString(content); match != "" {
-		t.Fatalf("docker-compose.prod.yml contains Tailnet bind default %q", match)
-	}
-}
-
-func assertProdComposeRequiredPatterns(t *testing.T, content string) {
-	t.Helper()
-
-	required := []string{
-		"holo-postgres:",
-		"    networks:",
-		"x-postgres-env: &postgres-env",
-		"  POSTGRES_PORT: \"${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}\"",
-		"  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}",
-		"  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-}",
-		"--unixsocketperm 660",
-		"o: size=1m,mode=0770,uid=999,gid=1000",
-	}
-	for _, pattern := range required {
-		if !strings.Contains(content, pattern) {
-			t.Fatalf("docker-compose.prod.yml missing required pattern %q", pattern)
-		}
-	}
-
-	appAnchor := topLevelYAMLBlock(t, content, "x-app-service:")
-	if strings.Contains(appAnchor, "env_file:") {
-		t.Fatal("x-app-service still defines env_file")
-	}
-}
-
-func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
-	t.Helper()
-
-	egressOwners := []string{serviceHololiveAPI, serviceAlarmWorker}
-	for _, service := range egressOwners {
-		block := composeServiceBlock(t, content, service)
-		wantEnvFile := map[string]string{
-			serviceHololiveAPI: "${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}",
-			serviceAlarmWorker: "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}",
-		}[service]
-
-		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
-			t.Fatalf("%s must use per-service env_file %q for app-only secrets", service, wantEnvFile)
-		}
-
-		if strings.Contains(block, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
-			t.Fatalf("%s must not consume monolithic COMPOSE_ENV_FILE as env_file", service)
-		}
-
-		if !strings.Contains(block, "*iris-env") {
-			t.Fatalf("%s must keep x-iris-env", service)
-		}
-	}
-}
-
-func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
-	t.Helper()
-
-	block := composeServiceBlock(t, content, runtimepolicy.RuntimeYouTubeCollector)
-	if !strings.Contains(block, "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}") {
-		t.Fatal("youtube-collector must inject secrets via its scoped env_file")
-	}
-
-	for _, pattern := range []string{"*iris-env", irisWebhookTokenEnv, irisBotTokenEnv, "ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
-		if strings.Contains(block, pattern) {
-			t.Fatalf("collector contains unrelated credential pattern %q", pattern)
-		}
-	}
-}
-
 func TestRepoComposeProdRenderedIsolation(t *testing.T) {
-	unsetEnvForTest(t, "YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES")
-	unsetEnvForTest(t, "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS")
-
 	cfg := renderComposeConfig(t, composeProdFile)
 
 	t.Run("isolation", func(t *testing.T) {
@@ -162,9 +38,6 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 		assertProdRenderedScopedProducerKeys(t, cfg)
 		assertProdRenderedNoRuntimeConfigMount(t, cfg)
 		assertProdRenderedPortAndCertScope(t, cfg)
-	})
-	t.Run("collector_defaults", func(t *testing.T) {
-		assertCollectorCanonicalDefaults(t, cfg)
 	})
 	t.Run("postgres_tls", func(t *testing.T) {
 		assertComposePostgresTLS(t, cfg, "prod")

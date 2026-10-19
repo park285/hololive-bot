@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -116,7 +117,7 @@ func explainQueueRetentionDelete(t *testing.T, pool *pgxpool.Pool, mode string, 
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(ctx))) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	var raw []byte
 

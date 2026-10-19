@@ -37,6 +37,7 @@ import (
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/service/acl"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
 type BotRuntime struct {
@@ -81,13 +82,13 @@ type BotRuntime struct {
 	httpHandlersOnce   sync.Once
 }
 
-func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, logger *slog.Logger) (*BotRuntime, error) {
+func BuildRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, shared *sharedmodules.InfraModule, logger *slog.Logger) (*BotRuntime, error) {
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
 
-	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, logger)
+	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, shared, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init bot infrastructure: %w", err)
 	}

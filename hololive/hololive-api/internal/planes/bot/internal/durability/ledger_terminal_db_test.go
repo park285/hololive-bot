@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,7 +50,7 @@ func TestInboxClaimDoesNotScanBlockedFollowers(t *testing.T) {
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	var planJSON []byte
 

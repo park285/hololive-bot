@@ -38,7 +38,7 @@ func TestContentTabRPCDistinguishesMissingTabsFromParserDrift(t *testing.T) {
 
 			client := contentTabRPCFixture(t, tt.driftTab, &calls)
 			executor, spec, pool := contentTabExecutorFixture(t, client, &fatal)
-			executor.runSpec(t.Context(), spec)
+			runAdmittedSpec(t.Context(), t, executor, spec)
 
 			if got := calls.Load(); got != tt.wantCalls {
 				t.Fatalf("helper calls = %d, want %d", got, tt.wantCalls)
@@ -128,7 +128,7 @@ func contentTabExecutorFixture(t *testing.T, client *youtubejs.RPC, fatal *[]err
 		{testSubjectKey, contract.KindShortsList},
 	})
 
-	executor := newRunErrorExecutor(fatal)
+	executor := newRunErrorExecutor(t, fatal)
 
 	executor.retryBounds = testRetryBounds
 
@@ -148,7 +148,7 @@ func contentTabExecutorFixture(t *testing.T, client *youtubejs.RPC, fatal *[]err
 
 	executor.publisher = NewPublisher(pool)
 	executor.owner = testOwnerInstance
-	executor.gates = defaultProviderGates()
+	executor.gates = defaultProviderGates(t)
 	executor.readiness = &readinessTracker{}
 	executor.workerTracker = workercontract.NewExecutorTracker()
 	executor.workerTotals = &workercontract.Counters{}

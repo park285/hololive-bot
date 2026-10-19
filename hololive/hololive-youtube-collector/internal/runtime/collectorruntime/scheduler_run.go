@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"go.opentelemetry.io/otel"
@@ -37,7 +38,11 @@ type collectionExecutor struct {
 	reportFatal   func(error)
 }
 
-func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec) {
+func (e *collectionExecutor) runSpec(ctx context.Context, job *queuedJob) {
+	ctx, cancel := context.WithDeadline(ctx, job.executionDeadline(time.Now()))
+	defer cancel()
+
+	spec := &job.JobSpec
 	ctx, span := otel.Tracer("hololive/collector").Start(ctx, "youtube.collection.attempt", trace.WithAttributes(
 		attribute.String("youtube.collector.instance_id", e.collector.InstanceID),
 		attribute.String("collection.provider", string(spec.Provider)),
@@ -51,16 +56,7 @@ func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec
 
 	defer func() { finishCollectionResultSpan(span, result, operationErr) }()
 
-	registration, ok := e.registry.Lookup(spec.Provider, spec.CollectionJobKind)
-	if !ok {
-		proof := contract.LeaseProof{}
-
-		operationErr = errors.New("collection runner registration missing")
-
-		e.logFailure(ctx, "collect", string(contract.ErrorCollectionFailed), collecterr.UnknownClass, "", spec, &proof)
-
-		return
-	}
+	registration := job.registration
 
 	lease, err := e.acquireLease(ctx, spec)
 	if err != nil || lease == nil {
@@ -223,7 +219,7 @@ func (e *collectionExecutor) handleSuperseded(ctx context.Context, lease jobleas
 }
 
 func (e *collectionExecutor) releaseSuperseded(ctx context.Context, lease joblease.Lease) error {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.collector.CleanupTimeout)
+	cleanupCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), e.collector.CleanupTimeout)
 	defer cancel()
 
 	if err := lease.Release(cleanupCtx, joblease.ReleaseSuperseded); err != nil {
@@ -266,7 +262,7 @@ func (e *collectionExecutor) deferFailedRun(
 	proof *contract.LeaseProof,
 	err error,
 ) {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.collector.CleanupTimeout)
+	cleanupCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), e.collector.CleanupTimeout)
 	defer cancel()
 
 	schedule, scheduleErr := e.retrySchedule(err)
@@ -468,7 +464,7 @@ func (e *collectionExecutor) commitCollectResult(
 
 	output := result.Output()
 	if result.Kind() == collection.CollectComplete && output.Empty() {
-		dbCtx, cancel := context.WithTimeout(ctx, e.collector.DBTimeout)
+		dbCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), e.collector.DBTimeout)
 
 		defer cancel()
 
@@ -484,7 +480,7 @@ func (e *collectionExecutor) commitCollectResult(
 		return nil
 	}
 
-	publishCtx, cancel := context.WithTimeout(ctx, e.collector.PublishTimeout)
+	publishCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), e.collector.PublishTimeout)
 
 	defer cancel()
 
@@ -542,7 +538,7 @@ func (e *collectionExecutor) deferInvariant(
 	proof *contract.LeaseProof,
 	err error,
 ) {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), e.collector.CleanupTimeout)
+	cleanupCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), e.collector.CleanupTimeout)
 	defer cancel()
 
 	schedule, scheduleErr := collection.NewRetryAtSchedule(time.Now().UTC().Add(e.retryBounds.Maximum))

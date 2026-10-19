@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -16,7 +15,7 @@ func TestStartYouTubeJSHelperFailureNamesActionOnce(t *testing.T) {
 	t.Setenv("YOUTUBEJS_SCRIPT", "")
 	t.Chdir(t.TempDir())
 
-	collector := collectorconfig.DefaultConfig()
+	collector := fixtureCollectorConfig(t)
 
 	helper, _, err := startYouTubeJSHelper(t.Context(), &collector, youtubejs.NewRateLimiter(collector.RequestInterval))
 	if err == nil {

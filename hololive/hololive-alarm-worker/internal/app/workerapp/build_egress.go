@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
@@ -102,7 +102,7 @@ func buildEgressRunners(
 	)
 
 	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다.
-	if alarmWorkerExecutorEnabled(appConfig, "youtube_delivery") {
+	if alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerYouTubeDelivery) {
 		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig, infra, irisSender, messageStrings, logger, workerState)
 		if buildErr != nil {
 			return nil, fmt.Errorf("build youtube outbox dispatcher: %w", buildErr)
@@ -110,7 +110,7 @@ func buildEgressRunners(
 
 		runners = append(runners, workerruntime.NamedScheduler{
 			Name:      "youtube-outbox",
-			Scheduler: workerState.wrap("youtube_delivery", dispatcher),
+			Scheduler: workerState.wrap(workerconfig.WorkerYouTubeDelivery, dispatcher),
 		})
 	} else {
 		logWorkerDisabled(logger, "YouTube outbox dispatcher disabled")
@@ -133,7 +133,7 @@ func appendAlarmDispatchRunner(
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
-	if !alarmWorkerExecutorEnabled(appConfig, "alarm_dispatch") {
+	if !alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerAlarmDispatch) {
 		logWorkerDisabled(logger, "Alarm dispatch consumer disabled")
 
 		return runners, nil
@@ -146,7 +146,7 @@ func appendAlarmDispatchRunner(
 
 	return append(runners, workerruntime.NamedScheduler{
 		Name:      "alarm-dispatch",
-		Scheduler: workerState.wrap("alarm_dispatch", runner),
+		Scheduler: workerState.wrap(workerconfig.WorkerAlarmDispatch, runner),
 	}), nil
 }
 
@@ -158,7 +158,7 @@ func appendNotificationDeliveryRunner(
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
-	if !alarmWorkerExecutorEnabled(appConfig, "notification_delivery") {
+	if !alarmWorkerExecutorEnabled(appConfig, workerconfig.WorkerNotificationDelivery) {
 		logWorkerDisabled(logger, "Notification delivery outbox dispatcher disabled")
 
 		return runners, nil
@@ -171,7 +171,7 @@ func appendNotificationDeliveryRunner(
 
 	return append(runners, workerruntime.NamedScheduler{
 		Name:      "notification-delivery-outbox",
-		Scheduler: workerState.wrap("notification_delivery", dispatcher),
+		Scheduler: workerState.wrap(workerconfig.WorkerNotificationDelivery, dispatcher),
 	}), nil
 }
 
@@ -208,7 +208,7 @@ func buildDeliveryOutboxDispatcher(
 		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
 	}
 
-	dispatcher.SetWorkerInstrumentation(workerState.trackers["notification_delivery"], workerState.totals["notification_delivery"])
+	dispatcher.SetWorkerInstrumentation(workerState.trackers[workerconfig.WorkerNotificationDelivery], workerState.totals[workerconfig.WorkerNotificationDelivery])
 
 	return workerruntime.NewDeliveryOutboxDispatcherRunner(dispatcher, logger), nil
 }
@@ -216,21 +216,21 @@ func buildDeliveryOutboxDispatcher(
 // notificationDeliveryDispatcherConfig는 worker profile의 notification_delivery 항목을 그대로 옮긴다. 시도 시간은
 // executor의 fixed attempt_timeout이며, profile 스키마가 fixed 모드와 값을 요구하므로 dispatcher 기본값을 쓰지 않는다.
 func notificationDeliveryDispatcherConfig(appConfig *workerconfig.RuntimeConfig) notificationdelivery.DispatcherConfig {
-	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["notification_delivery"]
+	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerNotificationDelivery]
 	profile := appConfig.AlarmWorkerProfile.NotificationDelivery
 
 	return notificationdelivery.DispatcherConfig{
-		AttemptTimeout:            time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
+		AttemptTimeout:            workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),
 		BatchSize:                 profile.BatchSize,
 		MaxConcurrent:             worker.Executor.ConfiguredWorkers,
 		MaxRetries:                profile.MaxRetries,
-		PollInterval:              durationMS(profile.PollIntervalMS),
-		RetryBackoff:              durationMS(profile.RetryBackoffMS),
-		CleanupAfter:              durationMS(profile.CleanupAfterMS),
-		CleanupInterval:           durationMS(profile.CleanupIntervalMS),
+		PollInterval:              workercontract.Milliseconds(profile.PollIntervalMS),
+		RetryBackoff:              workercontract.Milliseconds(profile.RetryBackoffMS),
+		CleanupAfter:              workercontract.Milliseconds(profile.CleanupAfterMS),
+		CleanupInterval:           workercontract.Milliseconds(profile.CleanupIntervalMS),
 		CleanupEnabled:            profile.CleanupEnabled,
-		StaleSendingAfter:         durationMS(profile.StaleSendingAfterMS),
-		StaleSendingSweepInterval: durationMS(profile.StaleSendingSweepIntervalMS),
+		StaleSendingAfter:         workercontract.Milliseconds(profile.StaleSendingAfterMS),
+		StaleSendingSweepInterval: workercontract.Milliseconds(profile.StaleSendingSweepIntervalMS),
 		StaleSendingSweepLimit:    profile.StaleSendingSweepLimit,
 	}
 }
@@ -262,8 +262,8 @@ func buildAlarmDispatchRunner(
 
 	config := alarmDispatchRunnerConfig(appConfig)
 
-	config.WorkerTracker = workerState.trackers["alarm_dispatch"]
-	config.WorkerTotals = workerState.totals["alarm_dispatch"]
+	config.WorkerTracker = workerState.trackers[workerconfig.WorkerAlarmDispatch]
+	config.WorkerTotals = workerState.totals[workerconfig.WorkerAlarmDispatch]
 
 	if infra.MemberCache != nil {
 		config.Members = member.NewMemberServiceAdapter(infra.MemberCache)
@@ -271,9 +271,9 @@ func buildAlarmDispatchRunner(
 
 	wakeupWaiter, err := alarmdispatch.NewWakeupWaiterWithConfig(infra.Cache, logger, alarmdispatch.WakeupConfig{
 		WakeupEnabled: appConfig.AlarmWorkerProfile.AlarmDispatch.WakeupEnabled,
-		PollInterval:  durationMS(appConfig.AlarmWorkerProfile.AlarmDispatch.PollIntervalMS),
-		BackoffMin:    durationMS(appConfig.AlarmWorkerProfile.AlarmDispatch.IdleBackoffMinMS),
-		BackoffMax:    durationMS(appConfig.AlarmWorkerProfile.AlarmDispatch.IdleBackoffMaxMS),
+		PollInterval:  workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.PollIntervalMS),
+		BackoffMin:    workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.IdleBackoffMinMS),
+		BackoffMax:    workercontract.Milliseconds(appConfig.AlarmWorkerProfile.AlarmDispatch.IdleBackoffMaxMS),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wakeup waiter with config: %w", err)
@@ -292,15 +292,15 @@ func buildAlarmDispatchRunner(
 
 func newAlarmDispatchConsumer(appConfig *workerconfig.RuntimeConfig, infra *sharedmodules.InfraModule, logger *slog.Logger) (*dispatchoutbox.Consumer, error) {
 	profile := appConfig.AlarmWorkerProfile.AlarmDispatch
-	lease := durationMS(profile.LeaseMS)
+	lease := workercontract.Milliseconds(profile.LeaseMS)
 
 	consumer, err := dispatchoutbox.NewConsumer(
 		dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
 		infra.Cache,
 		logger,
 		dispatchoutbox.WithLease(lease),
-		dispatchoutbox.WithQuarantineThreshold(durationMS(profile.QuarantineThresholdMS)),
-		dispatchoutbox.WithRecoveryInterval(durationMS(profile.RecoveryIntervalMS)),
+		dispatchoutbox.WithQuarantineThreshold(workercontract.Milliseconds(profile.QuarantineThresholdMS)),
+		dispatchoutbox.WithRecoveryInterval(workercontract.Milliseconds(profile.RecoveryIntervalMS)),
 		dispatchoutbox.WithRecoveryBatchSize(profile.RecoveryBatchSize),
 	)
 	if err != nil {
@@ -312,13 +312,13 @@ func newAlarmDispatchConsumer(appConfig *workerconfig.RuntimeConfig, infra *shar
 
 func alarmDispatchRunnerConfig(appConfig *workerconfig.RuntimeConfig) alarmdispatch.RunnerConfig {
 	profile := appConfig.AlarmWorkerProfile.AlarmDispatch
-	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["alarm_dispatch"]
+	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerAlarmDispatch]
 
 	return alarmdispatch.RunnerConfig{
 		ShortLinkBaseURL:  appConfig.Notification.AlarmShortLinkBaseURL,
 		MaxBatch:          profile.MaxBatch,
 		MaxBatchesPerWake: profile.MaxBatchesPerWake,
-		AttemptTimeout:    time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
+		AttemptTimeout:    workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),
 	}
 }
 
@@ -363,7 +363,7 @@ func buildYouTubeOutboxDispatcher(
 		return nil, fmt.Errorf("create youtube outbox dispatcher: %w", err)
 	}
 
-	dispatcher.SetWorkerInstrumentation(workerState.trackers["youtube_delivery"], workerState.totals["youtube_delivery"])
+	dispatcher.SetWorkerInstrumentation(workerState.trackers[workerconfig.WorkerYouTubeDelivery], workerState.totals[workerconfig.WorkerYouTubeDelivery])
 
 	return workerruntime.NewYouTubeOutboxDispatcherRunner(dispatcher, logger), nil
 }
@@ -383,10 +383,7 @@ func newYouTubeOutboxDispatcher(
 		return nil, errors.New("youtube outbox postgres pool is required")
 	}
 
-	dispatchConfig, err := youtubeDispatchConfig(appConfig)
-	if err != nil {
-		return nil, err
-	}
+	dispatchConfig := youtubeDispatchConfig(appConfig)
 
 	pool := infra.Postgres.GetPool()
 
@@ -405,38 +402,32 @@ func newYouTubeOutboxDispatcher(
 
 // youtubeDispatchConfig는 worker profile의 youtube_delivery 항목을 그대로 옮긴다. 생성자가 기본값을 채우지 않으므로
 // 모든 필드를 profile에서 받는다.
-func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) (dispatchstate.Config, error) {
+func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) dispatchstate.Config {
 	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
-	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
-	attemptTimeout := time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond
-	// 공통 executor 예산과 보존 중인 service 설정은 같은 provider 호출을 제한합니다.
-	if durationMS(profile.DeliverySendTimeoutMS) != attemptTimeout {
-		return dispatchstate.Config{}, errors.New("youtube delivery send timeout must match executor attempt timeout")
-	}
+	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerYouTubeDelivery]
+	attemptTimeout, _ := worker.Executor.AttemptTimeout.FixedDuration()
+	// 신선도는 delivery 생성 시각이 아니라 부모 outbox.created_at에서 계산한다.
+	freshness, _ := worker.Queue.MaxAge.FixedDuration()
 
 	return dispatchstate.Config{
 		BatchSize:                   profile.BatchSize,
-		LockTimeout:                 durationMS(profile.LockTimeoutMS),
-		PollInterval:                durationMS(profile.PollIntervalMS),
+		LockTimeout:                 workercontract.Milliseconds(profile.LockTimeoutMS),
+		PollInterval:                workercontract.Milliseconds(profile.PollIntervalMS),
 		MaxRetries:                  profile.MaxRetries,
-		RetryBackoff:                durationMS(profile.RetryBackoffMS),
-		CleanupAfter:                durationMS(profile.CleanupAfterMS),
+		RetryBackoff:                workercontract.Milliseconds(profile.RetryBackoffMS),
+		CleanupAfter:                workercontract.Milliseconds(profile.CleanupAfterMS),
 		CleanupEnabled:              profile.CleanupEnabled,
 		ReviveEnabled:               profile.ReviveEnabled,
-		ReviveInterval:              durationMS(profile.ReviveIntervalMS),
-		ReviveFreshnessWindow:       durationMS(profile.ReviveFreshnessWindowMS),
-		ClaimFreshnessWindow:        durationMS(profile.ClaimFreshnessWindowMS),
+		ReviveInterval:              workercontract.Milliseconds(profile.ReviveIntervalMS),
+		ReviveFreshnessWindow:       workercontract.Milliseconds(profile.ReviveFreshnessWindowMS),
+		ClaimFreshnessWindow:        freshness,
 		DeliveryParallelism:         worker.Executor.ConfiguredWorkers,
 		DeliverySendTimeout:         attemptTimeout,
 		SubscriberLookupParallelism: profile.SubscriberLookupParallelism,
-		AggregateSyncInterval:       durationMS(profile.AggregateSyncIntervalMS),
-		TelemetryPollInterval:       durationMS(profile.TelemetryPollIntervalMS),
+		AggregateSyncInterval:       workercontract.Milliseconds(profile.AggregateSyncIntervalMS),
+		TelemetryPollInterval:       workercontract.Milliseconds(profile.TelemetryPollIntervalMS),
 		TelemetryFlushBatch:         profile.TelemetryFlushBatch,
-		TelemetryRetryBackoff:       durationMS(profile.TelemetryRetryBackoffMS),
-		TelemetryRetention:          durationMS(profile.TelemetryRetentionMS),
-	}, nil
-}
-
-func durationMS(milliseconds int64) time.Duration {
-	return time.Duration(milliseconds) * time.Millisecond
+		TelemetryRetryBackoff:       workercontract.Milliseconds(profile.TelemetryRetryBackoffMS),
+		TelemetryRetention:          workercontract.Milliseconds(profile.TelemetryRetentionMS),
+	}
 }

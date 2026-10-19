@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,7 +114,7 @@ func TestLiveRuntimeStateImmediateChangesAndRollback(t *testing.T) {
 			_, err = tx.Exec(t.Context(), tc.sql)
 			require.NoError(t, err)
 			assertLiveRuntimeState(t, tx)
-			require.NoError(t, tx.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			assertLiveRuntimeState(t, pool)
 		})
 	}
@@ -149,7 +150,7 @@ func TestLiveRuntimeStateReceiptInsertionChangedAndRevertedFacts(t *testing.T) {
 
 	_, err = tx.Exec(ctx, `UPDATE youtube_live_review_receipt_facts SET facts='{}' WHERE video_id='none'`)
 	require.ErrorContains(t, err, "append-only")
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 	assertLiveRuntimeState(t, pool)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT reviewed_at IS NOT NULL FROM youtube_live_runtime_state WHERE video_id='none'`).Scan(&reviewed))
 	require.False(t, reviewed)
@@ -353,7 +354,7 @@ func TestLiveRuntimeStateRecordingValidationAndCAS(t *testing.T) {
 
 			_, err = tx.Exec(t.Context(), `SELECT record_youtube_live_review(gen_random_uuid(),$1,repeat('0',64),$2,'검토')`, tc.video, tc.operator)
 			require.ErrorContains(t, err, tc.want)
-			require.NoError(t, tx.Rollback(t.Context()))
+			require.NoError(t, pgxdb.Rollback(t.Context(), tx))
 			assertLiveRuntimeState(t, pool)
 		})
 	}

@@ -1,12 +1,11 @@
 package dispatchoutbox_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
@@ -81,8 +80,8 @@ func assertRecoverySkipsLockedSendUnit(t *testing.T, pool *pgxpool.Pool, repo *d
 	require.NoError(t, beginErr)
 
 	defer func() {
-		rollbackErr := tx.Rollback(ctx)
-		if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		rollbackErr := pgxdb.Rollback(ctx, tx)
+		if rollbackErr != nil {
 			require.NoError(t, rollbackErr)
 		}
 	}()
@@ -93,5 +92,5 @@ func assertRecoverySkipsLockedSendUnit(t *testing.T, pool *pgxpool.Pool, repo *d
 	recovered, recoveryErr := repo.RecoverExpiredLeased(ctx, 1)
 	require.NoError(t, recoveryErr)
 	require.Zero(t, recovered)
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 }

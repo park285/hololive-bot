@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 )
@@ -25,7 +27,7 @@ func TestClaimDeliveryDoesNotWaitForQueueMetrics(t *testing.T) {
 		cleanupCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer stop()
 
-		if err := tx.Rollback(cleanupCtx); err != nil {
+		if err := pgxdb.Rollback(cleanupCtx, tx); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -34,7 +36,7 @@ func TestClaimDeliveryDoesNotWaitForQueueMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := newTestRuntime(fakeClaimer{claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+	r := newTestRuntime(t, fakeClaimer{claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 		return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{ObservationID: 1, LeaseToken: "test"}}}, nil
 	}}, fakeConsumer{})
 

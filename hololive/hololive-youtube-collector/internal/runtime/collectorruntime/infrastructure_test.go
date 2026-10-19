@@ -5,13 +5,12 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 )
 
 func TestHTTP014TransportCapEqualsProviderGate(t *testing.T) {
 	t.Parallel()
 
-	collector := collectorconfig.DefaultConfig()
+	collector := fixtureCollectorConfig(t)
 
 	collector.HolodexMaxInflight = 3
 	collector.OfficialMaxInflight = 2

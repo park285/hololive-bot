@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// Validate는 환경 변수와 plane 정책을 검증한다. 워커 수·claim·timeout 관계는
+// LoadAPIWorkerProfile이 인프라 구성 전에 검증한다.
 func (c *YouTubePlaneConfig) Validate() error {
 	if err := c.validatePool(); err != nil {
 		return fmt.Errorf("validate pool: %w", err)
@@ -13,10 +15,6 @@ func (c *YouTubePlaneConfig) Validate() error {
 
 	if err := c.validateConsumers(); err != nil {
 		return fmt.Errorf("validate consumers: %w", err)
-	}
-
-	if err := c.validateClaimAndTimeouts(); err != nil {
-		return fmt.Errorf("validate claim and timeouts: %w", err)
 	}
 
 	if err := c.validateProjectionAndFinalizer(); err != nil {
@@ -87,68 +85,8 @@ func (c *YouTubePlaneConfig) validatePool() error {
 }
 
 func (c *YouTubePlaneConfig) validateConsumers() error {
-	if c.ConsumerWorkers < 1 || c.ConsumerWorkers > youtubePlaneMaxConsumerWorkers {
-		return errors.New("youtube plane consumer workers must be between 1 and 16")
-	}
-
 	if c.DBOperationConcurrency < 1 || c.DBOperationConcurrency >= c.PostgresPoolMaxConns {
 		return errors.New("youtube plane DB operation concurrency must leave one pool connection reserved")
-	}
-
-	if c.ConsumerWorkers > c.DBOperationConcurrency {
-		return errors.New("youtube plane consumers exceed the shared DB operation budget")
-	}
-
-	return nil
-}
-
-func (c *YouTubePlaneConfig) validateClaimAndTimeouts() error {
-	if c.ClaimBatchSize < 1 || c.ClaimBatchSize > youtubePlaneMaxClaimBatchSize {
-		return errors.New("youtube plane claim batch must be between 1 and 100")
-	}
-
-	if err := c.validateTransactionTimeout(); err != nil {
-		return fmt.Errorf("validate transaction timeout: %w", err)
-	}
-
-	minimumLease := time.Duration(c.ClaimBatchSize)*c.TransactionTimeout + 10*time.Second
-	if c.ClaimLease < minimumLease {
-		return fmt.Errorf(
-			"youtube plane claim lease must be at least %s for the configured batch",
-			minimumLease,
-		)
-	}
-
-	if err := c.validateShutdownWindows(); err != nil {
-		return fmt.Errorf("validate shutdown windows: %w", err)
-	}
-
-	return nil
-}
-
-func (c *YouTubePlaneConfig) validateTransactionTimeout() error {
-	if c.TransactionTimeout <= 0 {
-		return errors.New("youtube plane transaction timeout must be positive")
-	}
-
-	if c.TransactionTimeout < time.Second || c.TransactionTimeout > time.Minute {
-		return errors.New("youtube plane transaction timeout must be between 1s and 1m")
-	}
-
-	return nil
-}
-
-func (c *YouTubePlaneConfig) validateShutdownWindows() error {
-	if c.ClaimInterval <= 0 {
-		return errors.New("youtube plane claim interval must be positive")
-	}
-
-	if c.ShutdownTimeout <= 0 {
-		return errors.New("youtube plane shutdown timeout must be positive")
-	}
-
-	if c.ShutdownTimeout/2 < c.TransactionTimeout {
-		return errors.New("youtube plane shutdown timeout must cover transaction and claim release timeouts")
 	}
 
 	return nil

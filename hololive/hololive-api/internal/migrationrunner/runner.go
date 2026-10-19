@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
-	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
@@ -225,7 +225,7 @@ func execTxStatements(ctx context.Context, tx pgx.Tx, name string, statements []
 }
 
 func rollbackTxSegmentOnError(ctx context.Context, tx pgx.Tx, err error) error {
-	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+	if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 		return errors.Join(err, fmt.Errorf("rollback tx segment: %w", rollbackErr))
 	}
 

@@ -1,11 +1,10 @@
-deploy/compose/.env.osaka.example	workstation
-deploy/compose/.env.seoul.example	workstation
+deploy/compose/.env.osaka.example	central
+deploy/compose/.env.seoul.example	central
 deploy/compose/docker-compose.live-compat.yml	workstation,seoul
 deploy/compose/docker-compose.osaka.yml	osaka
 deploy/compose/docker-compose.osaka2.yml	osaka2
 deploy/compose/docker-compose.prod.yml	seoul
 deploy/compose/docker-compose.seoul.yml	seoul
-deploy/compose/docker-compose.standby.yml	central
 deploy/compose/postgres/pg_hba.conf	central,workstation,seoul,osaka,osaka2
 deploy/nginx/admin-dashboard-ingress.conf.template	seoul
 deploy/nginx/holoshi-public-shortlink.conf	central

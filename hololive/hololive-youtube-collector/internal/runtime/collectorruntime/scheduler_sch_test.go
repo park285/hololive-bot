@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -69,11 +70,11 @@ func TestSCH003QueueFullRollsBackMarkAndIncrementsMetric(t *testing.T) {
 
 	scheduler.metrics = NewMetrics(registerer)
 	scheduler.queueCapacity = 1
-	scheduler.queue = make(chan joblease.JobSpec, 1)
+	scheduler.queue = make(chan queuedJob, 1)
 
-	scheduler.queue <- joblease.JobSpec{JobKey: "filler"}
+	scheduler.queue <- queuedJob{JobSpec: queueTestSpec("filler")}
 
-	spec := joblease.JobSpec{JobKey: "next"}
+	spec := queueTestSpec("next")
 	if result := scheduler.enqueueDiscovered(t.Context(), &spec); result != EnqueueFull {
 		t.Fatalf("enqueue = %s, want FULL", result)
 	}
@@ -94,7 +95,7 @@ func TestSCH004CanceledBeforeEnqueueAcceptsZero(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	spec := joblease.JobSpec{JobKey: "late"}
+	spec := queueTestSpec("late")
 	if result := scheduler.enqueue(ctx, &spec); result != EnqueueCanceled {
 		t.Fatalf("enqueue = %s, want CANCELED", result)
 	}
@@ -108,14 +109,18 @@ func TestSCH005CancelAfterDequeueDoesNotRun(t *testing.T) {
 	t.Parallel()
 
 	scheduler := newLifecycleScheduler(t)
-	spec := joblease.JobSpec{JobKey: "ready"}
+	spec := queueTestSpec("ready")
 
-	scheduler.queued[spec.JobKey] = struct{}{}
+	if result := scheduler.enqueue(t.Context(), &spec); result != EnqueueAccepted {
+		t.Fatal(result)
+	}
+
+	job := <-scheduler.queue
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	if decision := scheduler.acceptDequeued(ctx, &spec); decision != dequeueStop {
+	if decision := scheduler.acceptDequeued(ctx, &job); decision != dequeueStop {
 		t.Fatalf("canceled dequeue decision = %d, want stop", decision)
 	}
 
@@ -123,8 +128,9 @@ func TestSCH005CancelAfterDequeueDoesNotRun(t *testing.T) {
 		t.Fatal("canceled dequeue did not unmark")
 	}
 
-	scheduler.queued[spec.JobKey] = struct{}{}
-	scheduler.queue <- spec
+	if result := scheduler.enqueue(t.Context(), &spec); result != EnqueueAccepted {
+		t.Fatal(result)
+	}
 
 	got, ok := scheduler.nextSpec(ctx)
 	if ok {
@@ -133,51 +139,50 @@ func TestSCH005CancelAfterDequeueDoesNotRun(t *testing.T) {
 }
 
 func TestSCH005StaleQueuedJobIsDiscardedAndWorkerTakesNextFreshJob(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		scheduler := newLifecycleScheduler(t)
 
-	scheduler := newLifecycleScheduler(t)
+		scheduler.workerTotals = &workercontract.Counters{}
+		scheduler.queueMaxAge = time.Hour
 
-	scheduler.workerTotals = &workercontract.Counters{}
-	scheduler.queueMaxAge = time.Hour
+		stale := queueTestSpec("stale")
+		fresh := queueTestSpec("fresh")
 
-	stale := joblease.JobSpec{JobKey: "stale"}
-	fresh := joblease.JobSpec{JobKey: "fresh"}
-
-	for _, spec := range []joblease.JobSpec{stale, fresh} {
-		if result := scheduler.enqueue(t.Context(), &spec); result != EnqueueAccepted {
-			t.Fatalf("enqueue %s = %s, want ACCEPTED", spec.JobKey, result)
+		if result := scheduler.enqueue(t.Context(), &stale); result != EnqueueAccepted {
+			t.Fatal(result)
 		}
-	}
 
-	scheduler.queueMu.Lock()
+		time.Sleep(time.Hour + time.Nanosecond)
 
-	scheduler.queuedAt[stale.JobKey] = time.Now().Add(-(time.Hour + time.Minute))
-	scheduler.queueMu.Unlock()
+		if result := scheduler.enqueue(t.Context(), &fresh); result != EnqueueAccepted {
+			t.Fatal(result)
+		}
 
-	got, ok := scheduler.nextSpec(t.Context())
-	if !ok || got.JobKey != fresh.JobKey {
-		t.Fatalf("nextSpec = %#v, %t, want fresh job after discarding stale", got, ok)
-	}
+		got, ok := scheduler.nextSpec(t.Context())
+		if !ok || got.JobKey != fresh.JobKey {
+			t.Fatalf("nextSpec = %#v, %t, want fresh job after discarding stale", got, ok)
+		}
 
-	if _, marked := scheduler.queued[stale.JobKey]; marked {
-		t.Fatal("stale job kept its queued mark and would block re-admission")
-	}
+		if _, marked := scheduler.queued[stale.JobKey]; marked {
+			t.Fatal("stale job kept its queued mark")
+		}
 
-	if _, timed := scheduler.queuedAt[stale.JobKey]; timed {
-		t.Fatal("stale job kept its queued timestamp")
-	}
+		if _, timed := scheduler.queuedAt[stale.JobKey]; timed {
+			t.Fatal("stale job kept its queued timestamp")
+		}
 
-	if _, marked := scheduler.queued[fresh.JobKey]; !marked {
-		t.Fatal("fresh job lost its queued mark before run")
-	}
+		if _, marked := scheduler.queued[fresh.JobKey]; !marked {
+			t.Fatal("fresh job lost its queued mark before run")
+		}
 
-	if discarded := scheduler.workerTotals.Snapshot().Discarded; discarded.Stale != 1 || discarded.Shutdown != 0 {
-		t.Fatalf("discarded = %+v, want one stale discard", discarded)
-	}
+		if discarded := scheduler.workerTotals.Snapshot().Discarded; discarded.Stale != 1 || discarded.Shutdown != 0 {
+			t.Fatalf("discarded = %+v, want one stale discard", discarded)
+		}
 
-	if result := scheduler.enqueue(t.Context(), &stale); result != EnqueueAccepted {
-		t.Fatalf("re-enqueue discarded job = %s, want ACCEPTED", result)
-	}
+		if result := scheduler.enqueue(t.Context(), &stale); result != EnqueueAccepted {
+			t.Fatalf("re-enqueue discarded job = %s, want ACCEPTED", result)
+		}
+	})
 }
 
 func TestSCH006OneCycleProjectionQueryIsOne(t *testing.T) {
@@ -209,7 +214,7 @@ func TestSCH007AcceptedAndQueryLimitStayWithinCapacity(t *testing.T) {
 	scheduler.candidates = stub
 	scheduler.queueCapacity = capacity
 	scheduler.acquisitionBatch = 10
-	scheduler.queue = make(chan joblease.JobSpec, capacity)
+	scheduler.queue = make(chan queuedJob, capacity)
 	scheduler.discoverOnce(t.Context())
 
 	if scheduler.Snapshot().Enqueued > capacity {
@@ -250,8 +255,8 @@ func TestSCH009QueuedKeyExclusionKeepsLaterDueKeys(t *testing.T) {
 
 	stub := newEmptyCandidateStub(t)
 	community := mustSchedulerJob(t, contract.ProviderYouTubeJS, "community_collect")
-	front := joblease.JobSpec{JobKey: "collector:youtubejs:community_collect:channel:a"}
-	later := joblease.JobSpec{JobKey: "collector:youtubejs:community_collect:channel:b"}
+	front := queueTestSpec("collector:youtubejs:community_collect:channel:a")
+	later := queueTestSpec("collector:youtubejs:community_collect:channel:b")
 
 	stub.pages[community.ID().String()] = joblease.CandidatePage{Jobs: []joblease.JobSpec{front, later}}
 
@@ -341,7 +346,7 @@ func TestSCH011PanicReportsFatalAndStopsAdmission(t *testing.T) {
 		t.Fatal("fatal scheduler continued admission")
 	}
 
-	spec := joblease.JobSpec{JobKey: "late"}
+	spec := queueTestSpec("late")
 	if result := scheduler.enqueue(ctx, &spec); result != EnqueueCanceled {
 		t.Fatalf("late enqueue = %s", result)
 	}
@@ -349,12 +354,14 @@ func TestSCH011PanicReportsFatalAndStopsAdmission(t *testing.T) {
 
 func TestSCH012StopDrainsQueueAndQueuedSet(t *testing.T) {
 	scheduler := newLifecycleScheduler(t)
+	// 이 테스트는 실행 없이 scheduler join의 큐 배수만 검증한다.
+	scheduler.workers = 0
 	if err := scheduler.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
 	for i := range 3 {
-		spec := joblease.JobSpec{JobKey: fmt.Sprintf("drain-%d", i)}
+		spec := queueTestSpec(fmt.Sprintf("drain-%d", i))
 
 		_ = scheduler.enqueue(t.Context(), &spec)
 	}
@@ -515,7 +522,7 @@ func fairnessCandidatePage(runnerID string, excluded []string, limit int) (joble
 	for n := range 32 {
 		key := fmt.Sprintf("%s:%d", runnerID, n)
 		if !slices.Contains(excluded, key) {
-			jobs = append(jobs, joblease.JobSpec{JobKey: key})
+			jobs = append(jobs, queueTestSpec(key))
 		}
 	}
 
@@ -632,7 +639,7 @@ func newEmptyCandidateStub(t *testing.T) *stubCandidateSource {
 func newLifecycleScheduler(t *testing.T) *leaseScheduler {
 	t.Helper()
 
-	collector := runtimeCollectorConfig()
+	collector := runtimeCollectorConfig(t)
 
 	registry, err := newTestRegistry(completeStubRunners()...)
 	if err != nil {
@@ -655,7 +662,7 @@ func newLifecycleScheduler(t *testing.T) *leaseScheduler {
 func dueSpecs(prefix string, count int) []joblease.JobSpec {
 	specs := make([]joblease.JobSpec, count)
 	for i := range count {
-		specs[i] = joblease.JobSpec{JobKey: fmt.Sprintf("%s-%d", prefix, i)}
+		specs[i] = queueTestSpec(fmt.Sprintf("%s-%d", prefix, i))
 	}
 
 	return specs

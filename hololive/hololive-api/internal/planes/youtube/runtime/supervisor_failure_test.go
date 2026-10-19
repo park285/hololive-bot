@@ -51,7 +51,7 @@ func testFailureRecordingWorkerExit(t *testing.T, operation string, tc failureRe
 
 	var calls, writes int
 
-	r := newTestRuntime(deadLetterClaimer{
+	r := newTestRuntime(t, deadLetterClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			writes++
 			return "", tc.err
@@ -111,7 +111,7 @@ func TestWorkerContinuesAfterRetryDBSlotTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var consumed int
 
-		r := newTestRuntime(fakeClaimer{}, fakeConsumer{consume: func(context.Context, sourceobservation.Claim) error {
+		r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{consume: func(context.Context, sourceobservation.Claim) error {
 			consumed++
 			return nil
 		}})

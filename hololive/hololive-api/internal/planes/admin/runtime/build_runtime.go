@@ -35,18 +35,17 @@ type alarmModeComponents struct {
 	AlarmClient alarmProvider
 }
 
-func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
+func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, infra *sharedmodules.InfraModule, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
 	ctx, appConfig, err := normalizeAdminAPIRuntimeInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize admin API runtime inputs: %w", err)
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, sharedmodules.InfraOptions{Valkey: appConfig.Valkey, Postgres: appConfig.Postgres, PoolName: "admin"}, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build admin api runtime: build infra module: %w", err)
+	if infra == nil {
+		return nil, errors.New("shared infra must not be nil")
 	}
 
-	resources := &adminRuntimeResources{infra: infra, logger: logger}
+	resources := &adminRuntimeResources{logger: logger}
 
 	defer func() {
 		if retErr != nil {

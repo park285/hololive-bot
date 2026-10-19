@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -67,7 +68,7 @@ func assertGroupQueryPreparedPlan(t *testing.T, pool *pgxpool.Pool, mode string,
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
 
 	_, err = tx.Exec(t.Context(), "SELECT set_config('plan_cache_mode', $1, true)", mode)
 	require.NoError(t, err)

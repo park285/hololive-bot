@@ -1,12 +1,12 @@
 package runtime
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -100,7 +100,7 @@ func recordDiagnosticReview(t *testing.T, pool *pgxpool.Pool) {
 	}
 
 	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
 			t.Error(rollbackErr)
 		}
 	}()

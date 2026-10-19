@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -161,6 +164,9 @@ func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispa
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), deliveryStateTimeout)
+	defer cancel()
+
 	repository := observation.NewRepositoryContext(ctx, d.db)
 
 	for i := range claims {
@@ -253,6 +259,13 @@ func (d *ClaimManager) expirePendingDeliveries(ctx context.Context) {
 			d.logger.Warn("Failed to expire pending deliveries", slog.Any("error", err))
 
 			return
+		}
+
+		// 만료와 기존 논리 결과 정산은 별도다. 확정 commit 뒤 projection보다 먼저 기록한다.
+		if result.Outcome == store.ApplyApplied {
+			for range result.StaleExpired {
+				d.workerTotals.RecordDiscard(workercontract.DiscardStale)
+			}
 		}
 
 		for _, blocked := range result.Blocked {

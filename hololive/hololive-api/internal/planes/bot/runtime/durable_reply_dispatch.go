@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
@@ -35,8 +36,9 @@ func (r *durableRuntime) processNextOutbox(ctx context.Context, claimed func()) 
 	claimed()
 
 	attemptID := r.outboxTracker.BeginAttempt(time.Now())
+	defer r.outboxTracker.EndAttempt(attemptID)
+
 	r.dispatchOutboxClaim(ctx, claim, token)
-	r.outboxTracker.EndAttempt(attemptID)
 
 	return true
 }
@@ -56,6 +58,10 @@ func (r *durableRuntime) dispatchOutboxClaim(ctx context.Context, claim *durabil
 func (r *durableRuntime) acceptanceHook(id int64, token string, accepted *bool) transport.ReplyAcceptedHook {
 	return func(ctx context.Context, requestID string) error {
 		*accepted = true
+
+		ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+
+		defer cancel()
 
 		applied, err := r.outbox.MarkAccepted(ctx, id, token, requestID)
 		if err != nil {
@@ -122,7 +128,7 @@ func (r *durableRuntime) observeOutboxSettlement(claim *durability.ReplyOutboxCl
 func (r *durableRuntime) settleOutboxDispatch(ctx context.Context, claim *durability.ReplyOutboxClaim, token string, accepted bool, dispatchErr error) (bool, error) {
 	// shutdown 취소 뒤에도 이미 관측한 전달 결과를 token fencing 아래 정산한다.
 	// inbox와 같은 유한 예산을 사용해 후속 plane의 종료 시간을 남긴다.
-	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
+	settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancel()
 
 	status := replyOutboxSettlementStatusWithMaxAttempts(accepted, claim.Attempts, r.outboxMaxAttempts, dispatchErr)

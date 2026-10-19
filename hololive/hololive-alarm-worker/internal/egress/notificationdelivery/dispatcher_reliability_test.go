@@ -10,6 +10,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
+	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/testutil"
@@ -119,13 +120,28 @@ func TestDispatcherSuccessfulSendDBFailureRemainsUnretried(t *testing.T) {
 	d.processItem(t.Context(), &domain.NotificationDeliveryOutbox{ID: 1, Payload: makePayload(t, "hello")})
 }
 
-func TestDispatcherRejectsAttemptBudgetExceedingLease(t *testing.T) {
-	cfg := testDispatcherConfig()
+func TestDispatcherAttemptBudgetMustLeaveFinalizationWithinLease(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		attempt time.Duration
+		valid   bool
+	}{
+		{name: "zero", attempt: 0},
+		{name: "below finalization boundary", attempt: 55*time.Second - time.Nanosecond, valid: true},
+		{name: "at finalization boundary", attempt: 55 * time.Second},
+		{name: "above finalization boundary", attempt: 55*time.Second + time.Nanosecond},
+		{name: "whole lease", attempt: time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := testDispatcherConfig()
 
-	cfg.AttemptTimeout = deliveryLease - deliveryFinalizeTimeout
+			cfg.AttemptTimeout = tc.attempt
 
-	if _, err := NewDispatcher(&mockDeliveryRepository{}, &mockSender{}, dispatcherLogger(), &cfg); err == nil {
-		t.Fatal("unbounded attempt budget accepted")
+			_, err := NewDispatcher(&mockDeliveryRepository{}, &mockSender{}, dispatcherLogger(), &cfg)
+			if (err == nil) != tc.valid {
+				t.Fatalf("NewDispatcher() error = %v, want valid=%v", err, tc.valid)
+			}
+		})
 	}
 }
 
@@ -136,9 +152,9 @@ func TestDispatcherStaleSendingThresholdMustCoverSendingLease(t *testing.T) {
 		threshold time.Duration
 		valid     bool
 	}{
-		{name: "below lease", threshold: deliveryLease - time.Millisecond, valid: false},
-		{name: "attempt plus finalize budget", threshold: 10*time.Second + deliveryFinalizeTimeout, valid: false},
-		{name: "equal to lease", threshold: deliveryLease, valid: true},
+		{name: "below lease", threshold: workerconfig.NotificationDeliveryLease - time.Millisecond, valid: false},
+		{name: "attempt plus finalize budget", threshold: 10*time.Second + workerconfig.NotificationDeliveryFinalizeTimeout, valid: false},
+		{name: "equal to lease", threshold: workerconfig.NotificationDeliveryLease, valid: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := testDispatcherConfig()
@@ -151,7 +167,7 @@ func TestDispatcherStaleSendingThresholdMustCoverSendingLease(t *testing.T) {
 			}
 
 			if !tc.valid && err == nil {
-				t.Fatalf("stale sending threshold %s below %s lease accepted", tc.threshold, deliveryLease)
+				t.Fatalf("stale sending threshold %s below %s lease accepted", tc.threshold, workerconfig.NotificationDeliveryLease)
 			}
 		})
 	}

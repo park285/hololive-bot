@@ -6,12 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
 func TestAcceptedReplySettlementAfterCancellationReleasesRoomQueue(t *testing.T) {
@@ -43,7 +46,7 @@ func TestAcceptedReplySettlementAfterCancellationReleasesRoomQueue(t *testing.T)
 			require.NoError(t, err)
 			require.True(t, applied)
 
-			runtime := &durableRuntime{outbox: repository, settlementTimeout: 3 * time.Second, outboxMaxAttempts: durableMaxAttempts, outboxTotals: &workercontract.Counters{}}
+			runtime := &durableRuntime{outbox: repository, settlementTimeout: 3 * time.Second, outboxMaxAttempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts, outboxTotals: &workercontract.Counters{}}
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
 
@@ -99,12 +102,12 @@ func TestReplySettlementKeepsBoundedBudgetAfterCallerCancellation(t *testing.T) 
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(t.Context()))) }()
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
 
 	_, err = tx.Exec(t.Context(), "SELECT id FROM bot_reply_outbox WHERE id = $1 FOR UPDATE", claim.ID)
 	require.NoError(t, err)
 
-	runtime := &durableRuntime{outbox: repository, settlementTimeout: 25 * time.Millisecond, outboxMaxAttempts: durableMaxAttempts}
+	runtime := &durableRuntime{outbox: repository, settlementTimeout: 25 * time.Millisecond, outboxMaxAttempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
@@ -112,4 +115,59 @@ func TestReplySettlementKeepsBoundedBudgetAfterCallerCancellation(t *testing.T) 
 	require.False(t, applied)
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.DeadlineExceeded, "blocked settlement must expire its own budget: %v", err)
+}
+
+func TestReplySettlementUsesRuntimeReserveWhileOrdinaryTransactionHeld(t *testing.T) {
+	base := dbtest.NewPool(t)
+	db := base.Config().ConnConfig
+	resources, closePool, err := databaseproviders.ProvideDatabaseResources(t.Context(), &settings.PostgresConfig{
+		Host: db.Host, Port: int(db.Port), User: db.User, Password: db.Password,
+		Database: db.Database, SSLMode: "disable", PoolMinConns: 0, PoolMaxConns: 2,
+	}, "bot", slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	t.Cleanup(closePool)
+
+	pool := resources.Service.GetPool()
+	repository := newTestReplyOutboxRepository(t, pool)
+
+	_, err = repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
+		MessageID: "message:reserved-settlement", Phase: transport.ReplyPhase, RoomID: testRoomID,
+		Payload: []byte(`{"kind":"text","message":"answer"}`), ClientRequestID: transport.ReplyClientRequestID("message:reserved-settlement", 0),
+	})
+	require.NoError(t, err)
+
+	claim, err := repository.Claim(t.Context(), "reserved-token", time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+
+	ordinary, err := pool.Begin(t.Context())
+	require.NoError(t, err)
+
+	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), ordinary)) }()
+
+	queuedCtx, cancelQueued := context.WithTimeout(t.Context(), time.Second)
+	defer cancelQueued()
+
+	queued := make(chan error, 1)
+
+	go func() {
+		var value int
+
+		queued <- pool.QueryRow(queuedCtx, "SELECT 1").Scan(&value)
+	}()
+
+	runtime := &durableRuntime{outbox: repository, settlementTimeout: 3 * time.Second, outboxMaxAttempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	applied, err := runtime.settleOutboxDispatch(ctx, claim, "reserved-token", true, nil)
+	require.NoError(t, err)
+	require.True(t, applied)
+	require.ErrorIs(t, <-queued, context.DeadlineExceeded, "ordinary work must not consume the reserved connection")
+	require.NoError(t, ordinary.Commit(t.Context()))
+
+	var status string
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT status FROM bot_reply_outbox WHERE id = $1", claim.ID).Scan(&status))
+	require.Equal(t, durability.ReplyOutboxHandoffCompleted, status)
 }

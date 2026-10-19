@@ -8,12 +8,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/migrationrunner"
 	"github.com/kapu/hololive-api/scripts/migrations"
@@ -65,15 +66,11 @@ func run() error {
 		return fmt.Errorf("postgres conn string: %w", err)
 	}
 
-	pool, err := pgxpool.New(ctx, connString)
+	pool, err := pgxdb.OpenPoolDSN(ctx, connString, pgxdb.Options{})
 	if err != nil {
 		return fmt.Errorf("open postgres pool: %w", err)
 	}
 	defer pool.Close()
-
-	if pingErr := pool.Ping(ctx); pingErr != nil {
-		return fmt.Errorf("ping postgres: %w", pingErr)
-	}
 
 	stdout := log.New(os.Stdout, "", 0)
 
@@ -102,6 +99,10 @@ func postgresConnString() (string, error) {
 		return "", errors.New("PGPASSWORD (HOLOLIVE_MIGRATOR_PASSWORD) is required")
 	}
 
+	if err := validatePrivilegedTransport(); err != nil {
+		return "", err
+	}
+
 	sslParts := sslConnParts()
 	parts := make([]string, 0, 5+len(sslParts))
 
@@ -118,11 +119,7 @@ func postgresConnString() (string, error) {
 }
 
 func sslConnParts() []string {
-	var parts []string
-
-	if sslMode := envDefault("PGSSLMODE", "verify-full"); sslMode != "" {
-		parts = append(parts, connPart("sslmode", sslMode))
-	}
+	parts := []string{connPart("sslmode", os.Getenv("PGSSLMODE"))}
 
 	if rootCert := os.Getenv("PGSSLROOTCERT"); rootCert != "" {
 		parts = append(parts, connPart("sslrootcert", rootCert))
@@ -163,4 +160,24 @@ func envBool(key string) (bool, error) {
 	}
 
 	return value, nil
+}
+
+// privileged 접속은 격리된 Unix socket 또는 인증서 검증 TCP만 허용한다.
+func validatePrivilegedTransport() error {
+	host := envDefault("PGHOST", "postgres")
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("PGSSLMODE")))
+
+	if filepath.IsAbs(host) && !strings.Contains(host, ",") {
+		if mode != "disable" {
+			return errors.New("unix socket PGHOST requires PGSSLMODE=disable")
+		}
+
+		return nil
+	}
+
+	if mode != "verify-full" {
+		return errors.New("network PGHOST requires PGSSLMODE=verify-full")
+	}
+
+	return nil
 }

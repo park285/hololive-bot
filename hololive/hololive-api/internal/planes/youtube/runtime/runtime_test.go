@@ -13,11 +13,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/park285/shared-go/v2/pkg/health"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -42,7 +45,7 @@ func TestRuntimeClaimsEverySupportedObservationKind(t *testing.T) {
 func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 	t.Parallel()
 
-	cfg := apiconfig.DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 
 	cfg.DBOperationConcurrency = cfg.PostgresPoolMaxConns
 
@@ -56,10 +59,10 @@ func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 	t.Parallel()
 
-	cfg := apiconfig.DefaultYouTubePlaneConfig()
-	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: scraperDatabaseRole}, slog.Default())
+	cfg := testYouTubePlaneConfig(t)
+	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: runtimepolicy.PostgresScraperRoleUser}, slog.Default())
 
-	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
+	if err == nil || !strings.Contains(err.Error(), runtimepolicy.PostgresRuntimeRoleUser) {
 		t.Fatalf("Build() = %v", err)
 	}
 }
@@ -67,10 +70,10 @@ func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 	t.Parallel()
 
-	cfg := apiconfig.DefaultYouTubePlaneConfig()
+	cfg := testYouTubePlaneConfig(t)
 	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
 
-	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
+	if err == nil || !strings.Contains(err.Error(), runtimepolicy.PostgresRuntimeRoleUser) {
 		t.Fatalf("Build() = %v", err)
 	}
 }
@@ -82,7 +85,7 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 
 		var claims atomic.Int64
 
-		runtime := newTestRuntime(fakeClaimer{
+		runtime := newTestRuntime(t, fakeClaimer{
 			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 				claims.Add(1)
 
@@ -150,7 +153,7 @@ func TestFirstClaimTickTransientErrorDoesNotKillProcess(t *testing.T) {
 		var attempts atomic.Int64
 
 		errCh := make(chan error, 1)
-		runtime := newTestRuntime(fakeClaimer{
+		runtime := newTestRuntime(t, fakeClaimer{
 			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 				if attempts.Add(1) == 1 {
 					return sourceobservation.ClaimedBatch{}, &pgconn.PgError{Code: "40001", Message: "serialization failure"}
@@ -181,7 +184,7 @@ func TestFirstClaimTickTransientErrorDoesNotKillProcess(t *testing.T) {
 
 func TestUnknownClaimErrorFailsSupervisor(t *testing.T) {
 	errCh := make(chan error, 1)
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			return sourceobservation.ClaimedBatch{}, errors.New("unexpected claim failure")
 		},
@@ -235,7 +238,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 			return contract.StatusPending, nil
 		},
 	}
-	runtime := newTestRuntime(claimer, fakeConsumer{
+	runtime := newTestRuntime(t, claimer, fakeConsumer{
 		consume: func(context.Context, sourceobservation.Claim) error {
 			select {
 			case <-entered:
@@ -282,7 +285,7 @@ func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 
 	var retried, closes atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
 				ObservationID:   9,
@@ -347,7 +350,7 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			if claimed.Swap(true) {
 				return sourceobservation.ClaimedBatch{}, nil
@@ -398,7 +401,7 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 func TestEmptyViewerRosterDoesNotFailProjectionRefresh(t *testing.T) {
 	t.Parallel()
 
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	runtime.builder = targetprojection.PolicyBuilder{
 		Reader:    emptyRosterReader{},
@@ -418,7 +421,7 @@ func TestEmptyViewerRosterDoesNotFailProjectionRefresh(t *testing.T) {
 func TestTransientConsumeErrorUsesBoundedQueueRetry(t *testing.T) {
 	var retryInput sourceobservation.RetryInput
 
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
 			retryInput = input
 			return contract.StatusPending, nil
@@ -454,7 +457,7 @@ func TestClaimLoopImmediatelyDrainsFullBatch(t *testing.T) {
 
 	var calls atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			if calls.Add(1) == 2 {
 				close(secondClaim)
@@ -491,7 +494,7 @@ const runtimeClaimBatchSizeForTest = 4
 func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 	var retries atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
@@ -522,7 +525,7 @@ func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 	var retries atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
@@ -550,7 +553,7 @@ func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 }
 
 func TestRetryDeadLetterDegradesPlane(t *testing.T) {
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			return contract.StatusDeadLetter, nil
 		},
@@ -578,7 +581,7 @@ func TestRetryDeadLetterDegradesPlane(t *testing.T) {
 func TestClaimLostDoesNotRetry(t *testing.T) {
 	var retries atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{
+	runtime := newTestRuntime(t, fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
 
@@ -608,7 +611,7 @@ func TestClaimLostDoesNotRetry(t *testing.T) {
 func TestForgetStaleClaimDoesNotDeleteNewToken(t *testing.T) {
 	t.Parallel()
 
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 	oldWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("ab", 32)}
 	newWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("cd", 32)}
 
@@ -630,7 +633,7 @@ func TestRuntimePublishesProcessReadiness(t *testing.T) {
 	health.RemoveComponent(youtubeHealthComponent)
 	t.Cleanup(func() { health.RemoveComponent(youtubeHealthComponent) })
 
-	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 	runtime.degraded.Store(true)
 	runtime.Start(t.Context(), make(chan error, 1))
 
@@ -672,8 +675,10 @@ func awaitSignal(t *testing.T, signal <-chan struct{}, message string) {
 	}
 }
 
-func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *Runtime {
-	cfg := apiconfig.DefaultYouTubePlaneConfig()
+func newTestRuntime(t *testing.T, claimer observationClaimer, consumer observationConsumer) *Runtime {
+	t.Helper()
+
+	cfg := testYouTubePlaneConfig(t)
 
 	cfg.ClaimInterval = 20 * time.Millisecond
 	cfg.TargetProjection.Interval = time.Hour
@@ -696,6 +701,32 @@ func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *R
 			LeaseDuration: cfg.ClaimLease,
 		},
 	}
+}
+
+func testYouTubePlaneConfig(t *testing.T) apiconfig.YouTubePlaneConfig {
+	t.Helper()
+
+	loaded := settingstest.LoadProfileFixture(t, "hololive", "api", "stack-worker-profile-api.json")
+
+	var sourceSettings apiconfig.SourceObservationWorkerSettings
+
+	if err := workercontract.DecodeWorkerSettings(loaded, apiconfig.WorkerSourceObservation, &sourceSettings); err != nil {
+		t.Fatal(err)
+	}
+
+	worker := loaded.Profile.Workers[apiconfig.WorkerSourceObservation]
+	config := apiconfig.DefaultYouTubePlaneConfig()
+
+	config.Enabled = worker.Executor.Enabled
+	config.ConsumerWorkers = worker.Executor.ConfiguredWorkers
+	config.DBOperationConcurrency = sourceSettings.DBOperationConcurrency
+	config.ClaimBatchSize = sourceSettings.ClaimBatchSize
+	config.ClaimInterval = workercontract.Milliseconds(sourceSettings.ClaimIntervalMS)
+	config.ClaimLease = workercontract.Milliseconds(sourceSettings.ClaimLeaseMS)
+	config.TransactionTimeout, _ = worker.Executor.AttemptTimeout.FixedDuration()
+	config.ShutdownTimeout = workercontract.Milliseconds(sourceSettings.ShutdownTimeoutMS)
+
+	return config
 }
 
 type fakeClaimer struct {

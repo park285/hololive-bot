@@ -88,3 +88,24 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadRuntimeIgnoresGenericPoolKeys(t *testing.T) {
+	settingstest.ClearRuntimeRoleEnv(t)
+	settingstest.ClearTracingEnv(t)
+	settingstest.SetRequiredLoadEnv(t)
+	clearConfigurePlanesIntEnv(t)
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
+	t.Setenv("POSTGRES_POOL_MIN_CONNS", "ignored")
+	t.Setenv("POSTGRES_POOL_MAX_CONNS", "ignored")
+	t.Setenv("BOT_POSTGRES_POOL_MIN_CONNS", "0")
+
+	config, err := LoadRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if config.Bot.Postgres.PoolMinConns != 0 || config.Bot.Postgres.PoolMaxConns != 4 || config.Admin.Postgres.PoolMaxConns != 4 || config.LLM.Postgres.PoolMaxConns != 4 {
+		t.Fatal("API plane pools did not use their own keys")
+	}
+}

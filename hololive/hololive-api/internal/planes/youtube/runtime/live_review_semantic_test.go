@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
@@ -83,7 +84,7 @@ func recordLiveReview(ctx context.Context, pool *pgxpool.Pool, receiptID, videoI
 
 	if _, err := tx.Exec(ctx, `SELECT record_youtube_live_review($1::uuid,$2,$3,'test-operator','UNKNOWN 검토 종료')`,
 		receiptID, videoID, digest); err != nil {
-		return errors.Join(err, tx.Rollback(ctx))
+		return errors.Join(err, pgxdb.Rollback(ctx, tx))
 	}
 
 	return tx.Commit(ctx)
@@ -92,7 +93,7 @@ func recordLiveReview(ctx context.Context, pool *pgxpool.Pool, receiptID, videoI
 func rollbackLiveReviewTx(t *testing.T, tx pgx.Tx) {
 	t.Helper()
 
-	if err := tx.Rollback(t.Context()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := pgxdb.Rollback(t.Context(), tx); err != nil {
 		t.Error(err)
 	}
 }

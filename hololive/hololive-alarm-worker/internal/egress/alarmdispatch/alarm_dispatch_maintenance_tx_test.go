@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
@@ -48,7 +49,7 @@ func TestAlarmDispatchMaintenancePGWithAdvisoryLockSkipsCallbackWhileLockHeld(t 
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		if rollbackErr := holder.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(t.Context(), holder); rollbackErr != nil {
 			t.Errorf("rollback lock holder: %v", rollbackErr)
 		}
 	})
@@ -168,7 +169,7 @@ func beginAlarmDispatchRequeueHoldingLock(t *testing.T, pool *pgxpool.Pool, deli
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
 			t.Errorf("rollback requeue transaction: %v", rollbackErr)
 		}
 	})

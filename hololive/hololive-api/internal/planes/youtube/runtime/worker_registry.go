@@ -4,11 +4,13 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
+
+	apiconfig "github.com/kapu/hololive-api/internal/config"
 )
 
 func (r *Runtime) WorkerRegistration() workercontract.Registration {
 	return workercontract.Registration{
-		WorkerID:                "source_observation",
+		WorkerID:                apiconfig.WorkerSourceObservation,
 		Runtime:                 workercontract.RuntimeGo,
 		QueueBackend:            workercontract.QueuePostgres,
 		QueueScope:              workercontract.QueueScopeShared,

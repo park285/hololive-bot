@@ -9,16 +9,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func TestDefaultYouTubeCollectorConfigMatchesCurrentBehavior(t *testing.T) {
-	cfg := DefaultConfig()
-	// 기본값은 퇴역 producer 설정에서 옮겨 온 값(worker 4, retry 30초~5분)을 그대로 유지한다.
-	workers := 4
-
-	assertCollectorWorkerDefaults(t, cfg, workers)
-	assertCollectorLeaseDefaults(t, cfg)
-	assertCollectorTimeoutDefaults(t, cfg)
-	assertCollectorRetryDefaults(t, cfg, 30*time.Second, 5*time.Minute)
-	assertCollectorLimitDefaults(t, cfg, workers)
+func TestCollectorProfileFixtureAndEnvironmentDefaultsAreValid(t *testing.T) {
+	cfg := fixtureCollectorConfig(t)
 
 	cfg.InstanceID = collectorInstanceC
 
@@ -26,77 +18,19 @@ func TestDefaultYouTubeCollectorConfigMatchesCurrentBehavior(t *testing.T) {
 	official := settings.DefaultOfficialScheduleConfig().Timeout
 
 	if err := cfg.Validate(holodex, official); err != nil {
-		t.Fatalf("default config must be valid: %v", err)
+		t.Fatalf("profile fixture with environment defaults must be valid: %v", err)
 	}
 }
 
-func assertCollectorWorkerDefaults(t *testing.T, cfg Config, workers int) {
-	t.Helper()
-
-	if cfg.TotalWorkers != workers {
-		t.Fatalf("TotalWorkers = %d, want %d", cfg.TotalWorkers, workers)
+func TestEnvironmentDefaultsDoNotSupplyWorkerPolicy(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.TotalWorkers != 0 || cfg.QueueCapacity != 0 || cfg.QueueMaxAge != 0 || cfg.AcquisitionBatch != 0 ||
+		cfg.DBTimeout != 0 || cfg.LeaseTTL != 0 || cfg.RetryMin != 0 || cfg.HolodexMaxInflight != 0 {
+		t.Fatalf("environment defaults supplied worker policy: %+v", cfg)
 	}
 
-	if cfg.QueueCapacity != workers*4 {
-		t.Fatalf("QueueCapacity = %d, want %d", cfg.QueueCapacity, workers*4)
-	}
-
-	if cfg.AcquisitionBatch != cfg.QueueCapacity {
-		t.Fatalf("AcquisitionBatch = %d, want %d", cfg.AcquisitionBatch, cfg.QueueCapacity)
-	}
-}
-
-func assertCollectorLeaseDefaults(t *testing.T, cfg Config) {
-	t.Helper()
-
-	if cfg.AcquisitionCadence != time.Second || cfg.LeaseTTL != time.Minute || cfg.RenewInterval != 20*time.Second {
-		t.Fatalf("cadence/ttl/renew = %s %s %s", cfg.AcquisitionCadence, cfg.LeaseTTL, cfg.RenewInterval)
-	}
-}
-
-func assertCollectorTimeoutDefaults(t *testing.T, cfg Config) {
-	t.Helper()
-
-	if cfg.CollectionOverhead != 5*time.Second || cfg.PublishTimeout != 5*time.Second ||
-		cfg.DBTimeout != 5*time.Second || cfg.RenewTimeout != 5*time.Second || cfg.CleanupTimeout != 5*time.Second {
-		t.Fatalf("phase timeouts = %#v", cfg)
-	}
-
-	if cfg.ReadinessTimeout != 2*time.Second || cfg.HelperHealthTimeout != time.Second {
-		t.Fatalf("readiness timeouts = %s %s", cfg.ReadinessTimeout, cfg.HelperHealthTimeout)
-	}
-}
-
-func assertCollectorRetryDefaults(t *testing.T, cfg Config, retryMin, retryMax time.Duration) {
-	t.Helper()
-
-	if cfg.RetryMin != retryMin || cfg.RetryMax != retryMax {
-		t.Fatalf("retry = %s %s", cfg.RetryMin, cfg.RetryMax)
-	}
-
-	if cfg.ReleaseJitterMin != 100*time.Millisecond || cfg.ReleaseJitterMax != time.Second {
-		t.Fatalf("jitter = %s %s", cfg.ReleaseJitterMin, cfg.ReleaseJitterMax)
-	}
-}
-
-func assertCollectorLimitDefaults(t *testing.T, cfg Config, workers int) {
-	t.Helper()
-
-	if cfg.HolodexMaxInflight != workers || cfg.OfficialMaxInflight != workers || cfg.YouTubeJSMaxInflight != workers {
-		t.Fatalf("inflight = %d %d %d", cfg.HolodexMaxInflight, cfg.OfficialMaxInflight, cfg.YouTubeJSMaxInflight)
-	}
-
-	if cfg.YouTubeJSRequestTimeout != 30*time.Second || cfg.MaxPages != 1 ||
-		cfg.MaxSuccessResponseBytes != youtubeCollectorMaxSuccessResponseBytes {
-		t.Fatalf("helper bounds = %s %d %d", cfg.YouTubeJSRequestTimeout, cfg.MaxPages, cfg.MaxSuccessResponseBytes)
-	}
-
-	if cfg.RequestInterval != 2*time.Second {
-		t.Fatalf("RequestInterval = %s, want 2s", cfg.RequestInterval)
-	}
-
-	if cfg.InstanceID != "" {
-		t.Fatalf("InstanceID = %q, want empty default", cfg.InstanceID)
+	if err := cfg.validateProfilePolicy(); err == nil {
+		t.Fatal("environment-only defaults accepted without worker profile")
 	}
 }
 
@@ -166,7 +100,7 @@ func TestRequiredCollectorNumericEnvRejectsInvalidValues(t *testing.T) {
 }
 
 func TestYouTubeCollectorConfigRejectsInvalidBudgets(t *testing.T) {
-	base := DefaultConfig()
+	base := fixtureCollectorConfig(t)
 
 	base.InstanceID = collectorInstanceC
 
@@ -208,7 +142,7 @@ func TestYouTubeCollectorConfigRejectsInvalidBudgets(t *testing.T) {
 // 단계별 timeout 검증 오류는 운영자가 고칠 설정 이름을 가리켜야 한다. 같은 함수가 검사하는 다른 필드로
 // 원인을 오인하지 않도록 필드마다 고유한 이름이 오류에 남는지 확인한다.
 func TestYouTubeCollectorConfigPhaseTimeoutErrorsNameField(t *testing.T) {
-	base := DefaultConfig()
+	base := fixtureCollectorConfig(t)
 
 	base.InstanceID = collectorInstanceC
 
@@ -258,7 +192,7 @@ func TestRDY015ProductionInstanceIDRejectedWhenEmptyOrInvalid(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cfg := DefaultConfig()
+			cfg := fixtureCollectorConfig(t)
 
 			cfg.InstanceID = test.id
 
@@ -268,7 +202,7 @@ func TestRDY015ProductionInstanceIDRejectedWhenEmptyOrInvalid(t *testing.T) {
 		})
 	}
 
-	cfg := DefaultConfig()
+	cfg := fixtureCollectorConfig(t)
 
 	cfg.InstanceID = collectorInstanceC
 

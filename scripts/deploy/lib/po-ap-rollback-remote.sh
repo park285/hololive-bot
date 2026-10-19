@@ -13,14 +13,21 @@ cd "$HOME/hololive-bot"
 . "$rollback_root/scripts/deploy/lib/po-sandbox-image.sh"
 pair_tool="$rollback_root/scripts/deploy/lib/worker-profile-pair.py"
 profile_pair="$HOME/hololive-bot/$backup/worker-profile-previous"
-prod_file="deploy/compose/docker-compose.prod.yml"
-old_prod="$backup/$prod_file.prechange"
-old_ap="$backup/$ap_file.prechange"
 prod_source="$(cat "$backup/prod-compose-source-path")"
 ap_source="$(cat "$backup/ap-compose-source-path")"
-# compose 파일은 deploy/compose에서 읽는다.
-[[ "$prod_source" == "$prod_file" && "$ap_source" == "$ap_file" ]] || exit 2
+# The recorded layout is part of the previous image/profile/source pair.
+case "$prod_source" in
+  deploy/compose/docker-compose.prod.yml|deploy/compose/docker-compose.collector.yml) ;;
+  *) exit 2 ;;
+esac
+[[ "$ap_source" == "$ap_file" ]] || exit 2
+old_prod="$backup/$prod_source.prechange"
+old_ap="$backup/$ap_file.prechange"
 compose=("$rollback_root/scripts/deploy/compose.sh" --project-directory "$HOME/hololive-bot/$(dirname "$prod_source")")
+restore_files=(-f "$HOME/hololive-bot/$ap_source")
+if [[ "$prod_source" == deploy/compose/docker-compose.prod.yml ]]; then
+  restore_files=(-f "$HOME/hololive-bot/$prod_source" "${restore_files[@]}")
+fi
 old_collector_tag=''
 old_po_tag=''
 po_state="$(cat "$backup/po-sandbox-prechange.state")"
@@ -54,9 +61,12 @@ test -w /var/run/docker.sock || groups | grep -qw docker
 preflight="$(mktemp -d)"
 trap 'rm -rf "$preflight"' EXIT
 mkdir -p "$preflight/deploy/compose"
-cp "$old_prod" "$preflight/deploy/compose/docker-compose.prod.yml"
+cp "$old_prod" "$preflight/deploy/compose/$(basename "$prod_source")"
 cp "$old_ap" "$preflight/deploy/compose/$(basename "$ap_file")"
-preflight_files=(-f "$preflight/deploy/compose/docker-compose.prod.yml" -f "$preflight/deploy/compose/$(basename "$ap_file")")
+preflight_files=(-f "$preflight/deploy/compose/$(basename "$ap_file")")
+if [[ "$prod_source" == deploy/compose/docker-compose.prod.yml ]]; then
+  preflight_files=(-f "$preflight/deploy/compose/$(basename "$prod_source")" "${preflight_files[@]}")
+fi
 ap_prechange_config sudo -n env WORKER_PROFILE_OVERRIDE_FILE=none COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
   "${compose[@]}" "${preflight_files[@]}" config --format json \
   | sudo -n python3 "$pair_tool" rollback "$service" "$profile_pair" "$preflight/worker-profile.yml"
@@ -93,7 +103,7 @@ sudo -n docker rm -f hololive-youtube-po-b >/dev/null 2>&1 || true
 if [[ "$po_state" == present ]]; then
   sudo -n docker tag "$old_po_tag" hololive-youtube-po-sandbox:prod
   sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-    "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up -d --no-build --no-deps youtube-po-b
+    "${compose[@]}" "${restore_files[@]}" up -d --no-build --no-deps youtube-po-b
   for _ in $(seq 1 30); do
     [[ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' hololive-youtube-po-b)" == healthy ]] && break
     sleep 2
@@ -111,11 +121,11 @@ fi
 restore_previous_collector() {
   if [[ "$collector_state" == stopped ]]; then
     sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-      "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up --no-start --no-build --no-deps --force-recreate "$service"
+      "${compose[@]}" "${restore_files[@]}" up --no-start --no-build --no-deps --force-recreate "$service"
     [[ "$(docker inspect -f '{{.State.Status}}' "$container")" == created ]]
   else
     sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
-      "${compose[@]}" -f "$HOME/hololive-bot/$prod_source" -f "$HOME/hololive-bot/$ap_source" up -d --no-build --no-deps --force-recreate "$service"
+      "${compose[@]}" "${restore_files[@]}" up -d --no-build --no-deps --force-recreate "$service"
     for _ in $(seq 1 30); do
       [[ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")" == healthy ]] && break
       sleep 2

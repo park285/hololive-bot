@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -114,7 +115,7 @@ func beginQueueRowLocker(ctx context.Context, t *testing.T, pool *pgxpool.Pool, 
 	}
 
 	t.Cleanup(func() {
-		if rollbackErr := locker.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, locker); rollbackErr != nil {
 			t.Errorf("rollback queue locker: %v", rollbackErr)
 		}
 	})
@@ -784,7 +785,7 @@ func assertTableCount(t *testing.T, pool *pgxpool.Pool, table string, want int) 
 func rollbackPublishTestTx(ctx context.Context, t *testing.T, tx pgx.Tx, reason string) {
 	t.Helper()
 
-	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		t.Errorf("rollback %s: %v", reason, err)
 	}
 }

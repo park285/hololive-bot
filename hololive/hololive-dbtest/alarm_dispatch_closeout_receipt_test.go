@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,14 +91,14 @@ func assertCloseoutReceiptRejectsUnreviewedSnapshot(t *testing.T, pool *pgxpool.
 
 	_, err = tx.Exec(ctx, closeoutCall, closeoutReceiptID, fixture.firstID, fixture.ids[:1], fixture.digest)
 	require.ErrorContains(t, err, "snapshot changed")
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 
 	tx, err = pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	require.NoError(t, err)
 
 	_, err = tx.Exec(ctx, closeoutCall, closeoutReceiptID, fixture.firstID, fixture.ids, strings.Repeat("0", 64))
 	require.ErrorContains(t, err, "snapshot changed")
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 }
 
 func recordCloseoutReceipt(t *testing.T, pool *pgxpool.Pool, fixture closeoutReceiptFixture) {
@@ -146,7 +147,7 @@ func assertCloseoutReceiptAppendOnlyAndRetentionUnchanged(t *testing.T, pool *pg
 
 	_, err = tx.Exec(ctx, closeoutCall, "123e4567-e89b-42d3-a456-426614174001", fixture.firstID, fixture.ids, fixture.digest)
 	require.ErrorContains(t, err, "already has a closeout receipt")
-	require.NoError(t, tx.Rollback(ctx))
+	require.NoError(t, pgxdb.Rollback(ctx, tx))
 
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_closeout_receipts SET reason = 'changed'`)
 	require.ErrorContains(t, err, "append-only")

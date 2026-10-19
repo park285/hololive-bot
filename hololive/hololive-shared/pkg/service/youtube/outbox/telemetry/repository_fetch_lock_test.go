@@ -2,14 +2,13 @@ package telemetry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -125,7 +124,7 @@ func TestFetchAndLockPendingSkipsRowsLockedByAnotherTransaction(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		if rollbackErr := blocker.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(ctx, blocker); rollbackErr != nil {
 			t.Errorf("rollback blocker: %v", rollbackErr)
 		}
 	})
@@ -151,7 +150,7 @@ func TestFetchAndLockPendingSkipsRowsLockedByAnotherTransaction(t *testing.T) {
 		t.Fatalf("fetch ids while locked = %v, want %v", got, want)
 	}
 
-	err = blocker.Rollback(ctx)
+	err = pgxdb.Rollback(ctx, blocker)
 	if err != nil {
 		t.Fatalf("release blocker: %v", err)
 	}

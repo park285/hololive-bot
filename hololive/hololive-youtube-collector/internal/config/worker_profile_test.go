@@ -18,7 +18,7 @@ func TestLoadWorkerProfileLoadsExactRoleSettings(t *testing.T) {
 		t.Fatalf("LoadWorkerProfile() error = %v", err)
 	}
 
-	if _, ok := profile.Loaded.Profile.Workers["collection"]; !ok {
+	if _, ok := profile.Loaded.Profile.Workers[WorkerCollection]; !ok {
 		t.Fatal("youtube collector profile is missing the collection worker")
 	}
 }
@@ -57,6 +57,18 @@ func TestLoadWorkerProfileRejectsRuntimeInvalidPolicyWithoutRuntimeEnv(t *testin
 
 			if _, err := LoadWorkerProfile(); err == nil || !strings.Contains(err.Error(), test.wantSub) {
 				t.Fatalf("LoadWorkerProfile() error = %v, want %q", err, test.wantSub)
+			}
+		})
+	}
+}
+
+func TestLoadWorkerProfileRejectsInvalidRawBudgetBeforeDurationConversion(t *testing.T) {
+	for _, value := range []string{"0", "-1", "null", "NaN", "1e309", "9223372036854775807"} {
+		t.Run(value, func(t *testing.T) {
+			useMutatedCollectorProfile(t, `"collection_overhead_ms": 5000`, `"collection_overhead_ms": `+value)
+
+			if _, err := LoadWorkerProfile(); err == nil {
+				t.Fatal("invalid execution budget accepted")
 			}
 		})
 	}

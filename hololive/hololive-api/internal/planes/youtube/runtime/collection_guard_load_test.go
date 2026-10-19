@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
@@ -94,7 +95,7 @@ func readCollectionSharedGuard(ctx context.Context, pool *pgxpool.Pool) (sample 
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 
-		if rollbackErr := tx.Rollback(cleanup); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(cleanup, tx); rollbackErr != nil {
 			sample.err = errors.Join(sample.err, rollbackErr)
 		}
 	}()

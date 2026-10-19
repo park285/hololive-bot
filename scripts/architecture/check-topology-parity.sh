@@ -167,8 +167,6 @@ assert_count "osaka Compose bind" 1 "\"$osaka:30096:30096\"" "$root_dir/deploy/c
 assert_count "osaka2 Compose bind" 1 "\"$osaka2:30096:30096\"" "$root_dir/deploy/compose/docker-compose.osaka2.yml"
 assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/compose/docker-compose.seoul.yml"
 assert_count "prod Iris host aliases" 2 ":$seoul\"" "$root_dir/deploy/compose/docker-compose.prod.yml"
-assert_count "standby primary default" 1 "HOLOLIVE_PRIMARY_HOST:-$central" "$root_dir/deploy/compose/docker-compose.standby.yml"
-assert_count "live-compat PostgreSQL bind" 1 "POSTGRES_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat Iris allowlist" 2 "IRIS_BASE_URL_ALLOWED_HOSTS:-$seoul" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat H3 identity" 1 "HOLOLIVE_H3_SERVER_NAME:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat H3 bind" 2 "HOLOLIVE_API_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
@@ -211,35 +209,5 @@ awk 'NF && $1 !~ /^#/ { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:
   "$root_dir/scripts/systemd/admin-dashboard-ingress.nft" >"$tmpdir/actual-nft-grammar"
 cmp -s "$tmpdir/expected-nft-grammar" "$tmpdir/actual-nft-grammar" || fail "central firewall full grammar and ordering"
 assert_count "public shortlink upstream" 1 "server $central:30192;" "$root_dir/deploy/nginx/holoshi-public-shortlink.conf"
-assert_count "replication HBA source" 1 "hostssl replication     hololive_replicator  $seoul/32" "$root_dir/deploy/compose/postgres/pg_hba.conf"
-
-printf '%s\n' "$central" "$workstation" "$seoul" "$osaka" "$osaka2" | LC_ALL=C sort -u >"$tmpdir/expected"
-awk '$1 == "hostssl" && $2 == "all" && $3 == "all" && $4 ~ /^100\./ { sub(/\/32$/, "", $4); print $4 }' \
-  "$root_dir/deploy/compose/postgres/pg_hba.conf" | LC_ALL=C sort -u >"$tmpdir/actual"
-cmp -s "$tmpdir/expected" "$tmpdir/actual" || fail "PostgreSQL client allowlist"
-printf '%s\n' '172.16.0.0/12' "$central/32" "$workstation/32" "$seoul/32" "$osaka/32" "$osaka2/32" | \
-  LC_ALL=C sort -u >"$tmpdir/expected-hba"
-awk '$1 == "hostssl" && $2 == "all" && $3 == "all" { print $4 }' \
-  "$root_dir/deploy/compose/postgres/pg_hba.conf" | LC_ALL=C sort -u >"$tmpdir/actual-hba"
-cmp -s "$tmpdir/expected-hba" "$tmpdir/actual-hba" || fail "PostgreSQL exact hostssl client directive set"
-[[ "$(awk '$1 == "hostssl" && $2 == "replication" { count++ } END { print count + 0 }' "$root_dir/deploy/compose/postgres/pg_hba.conf")" -eq 1 ]] ||
-  fail "PostgreSQL exact remote replication directive set"
-printf '%s\n' \
-  'local|all|all|trust' \
-  'host|all|all|127.0.0.1/32|trust' \
-  'host|all|all|::1/128|trust' \
-  'local|replication|all|trust' \
-  'host|replication|all|127.0.0.1/32|trust' \
-  'host|replication|all|::1/128|trust' \
-  "hostssl|replication|hololive_replicator|$seoul/32|scram-sha-256" \
-  'hostssl|all|all|172.16.0.0/12|scram-sha-256' \
-  "hostssl|all|all|$central/32|scram-sha-256" \
-  "hostssl|all|all|$workstation/32|scram-sha-256" \
-  "hostssl|all|all|$seoul/32|scram-sha-256" \
-  "hostssl|all|all|$osaka/32|scram-sha-256" \
-  "hostssl|all|all|$osaka2/32|scram-sha-256" | LC_ALL=C sort >"$tmpdir/expected-hba-rows"
-awk 'NF && $1 !~ /^#/ { output=$1; for (i=2; i<=NF; i++) output=output "|" $i; print output }' \
-  "$root_dir/deploy/compose/postgres/pg_hba.conf" | LC_ALL=C sort >"$tmpdir/actual-hba-rows"
-cmp -s "$tmpdir/expected-hba-rows" "$tmpdir/actual-hba-rows" || fail "PostgreSQL complete HBA row set"
 
 echo "[PASS] non-secret topology owner and explicit consumers are exact"

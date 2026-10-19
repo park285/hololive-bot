@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 )
 
 var inboxOrderingKeysLockSQL = mustSQL("inbox_ordering_keys_lock.sql")
@@ -31,8 +32,8 @@ func (r *InboxRepository) beginLockedMessageTx(ctx context.Context, messageID st
 }
 
 func rollbackInboxTx(ctx context.Context, tx pgx.Tx) error {
-	err := tx.Rollback(ctx)
-	if err == nil || errors.Is(err, pgx.ErrTxClosed) {
+	err := pgxdb.Rollback(ctx, tx)
+	if err == nil {
 		return nil
 	}
 

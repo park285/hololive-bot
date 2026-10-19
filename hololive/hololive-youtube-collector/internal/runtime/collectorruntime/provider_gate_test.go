@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -95,7 +96,7 @@ func lockLeaseRow(t *testing.T, pool *pgxpool.Pool, jobKey string) *heldLeaseRow
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
 		defer cancel()
 
-		if rollbackErr := tx.Rollback(cleanupCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := pgxdb.Rollback(cleanupCtx, tx); rollbackErr != nil {
 			t.Errorf("release held lease row: %v", rollbackErr)
 		}
 	})
@@ -133,7 +134,7 @@ func (h *heldLeaseRow) waitForBlockedWriter(t *testing.T) {
 func (h *heldLeaseRow) release(t *testing.T) {
 	t.Helper()
 
-	if err := h.tx.Rollback(t.Context()); err != nil {
+	if err := pgxdb.Rollback(t.Context(), h.tx); err != nil {
 		t.Fatalf("release held lease row: %v", err)
 	}
 }
@@ -368,7 +369,7 @@ func newGateFixture(
 
 	seedRuntimeTargets(t, pool, seeds)
 
-	executor := newRunErrorExecutor(fatal)
+	executor := newRunErrorExecutor(t, fatal)
 
 	executor.retryBounds = testRetryBounds
 

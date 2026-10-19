@@ -1,0 +1,209 @@
+name: hololive-bot
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "5m"
+    max-file: "3"
+
+x-restart-logging: &restart-logging
+  restart: always
+  logging: *default-logging
+
+x-autoheal-service: &autoheal-service
+  <<: *restart-logging
+  labels:
+    deunhealth.restart.on.unhealthy: "true"
+
+x-app-file-log-env: &app-file-log-env
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-5}
+  LOG_MAX_BACKUPS: ${LOG_MAX_BACKUPS:-5}
+  LOG_MAX_AGE_DAYS: ${LOG_MAX_AGE_DAYS:-30}
+  LOG_COMPRESS: ${LOG_COMPRESS:-true}
+
+x-security-hardening: &security-hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+x-app-service: &app-service
+  <<: [*autoheal-service, *security-hardening]
+  # 의도된 차등: 앱은 수동 정지를 존중(unless-stopped), DB/인프라는 x-restart-logging의 always를 유지한다.
+  restart: unless-stopped
+
+x-tailnet-dns: &tailnet-dns
+  - ${TAILSCALE_DNS_RESOLVER:-100.100.100.100}
+  - 8.8.8.8
+  - 1.1.1.1
+
+x-host-extra-hosts: &host-extra-hosts
+  - "host.docker.internal:host-gateway"
+
+x-go-build-base: &go-build-base
+  context: ../..
+  provenance: mode=max
+  sbom: true
+
+x-go-healthcheck: &go-healthcheck
+  interval: 30s
+  # healthprobe의 URL별 5s 제한보다 process/TLS 종료 여유를 크게 둔다.
+  timeout: 7s
+  start_period: 30s
+  retries: 3
+
+x-deploy-768m: &deploy-768m
+  resources:
+    limits:
+      memory: 768m
+      pids: 256
+x-hololive-h3-files-env: &hololive-h3-files-env
+  HOLOLIVE_H3_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+  HOLOLIVE_H3_KEY_FILE: ${HOLOLIVE_H3_KEY_FILE:-/run/hololive-bot/certs/hololive-h3.key}
+  HOLOLIVE_INTERNAL_H3_CA_CERT_FILE: ${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+  HOLOLIVE_INTERNAL_H3_SERVER_NAME: ${HOLOLIVE_INTERNAL_H3_SERVER_NAME:-127.0.0.1}
+  HEALTHCHECK_CA_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+  HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-127.0.0.1}
+x-collector-volumes: &collector-volumes
+  - ../../data:/app/data
+  - ../../logs:/app/logs
+  - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+  - type: bind
+    source: /etc/stack-secrets/hololive-bot/worker-profiles
+    target: /run/hololive-bot/worker-profiles
+    read_only: true
+    bind:
+      create_host_path: false
+
+  - youtube-po-c-socket:/run/hololive-youtube-po:ro
+
+
+services:
+  youtube-po-c:
+    image: hololive-youtube-po-sandbox:prod
+    build:
+      context: ../..
+      dockerfile: hololive/hololive-youtube-collector/Dockerfile.po-sandbox
+      provenance: false
+      sbom: false
+      args:
+        VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
+        REVISION: ${REVISION:-unknown}
+    container_name: hololive-youtube-po-c
+    network_mode: none
+    read_only: true
+    user: "65532:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      HOME: /tmp
+      TMPDIR: /tmp
+      TZ: UTC
+      LANG: C
+    volumes:
+      - youtube-po-c-socket:/run/hololive-youtube-po
+    tmpfs:
+      - /tmp:size=64m,mode=1777,uid=65532,gid=1000
+    ulimits:
+      core: 0
+    pids_limit: 32
+    cpus: 1.0
+    mem_limit: 512m
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
+          pids: 32
+
+  youtube-collector:
+    <<: *app-service
+    labels:
+      deunhealth.restart.on.unhealthy: "false"
+    image: hololive-youtube-collector:prod
+    build:
+      <<: *go-build-base
+      dockerfile: hololive/hololive-youtube-collector/Dockerfile
+      args:
+        VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
+        REVISION: ${REVISION:-unknown}
+    container_name: hololive-youtube-collector-c
+    entrypoint: ["./bin/youtube-collector"]
+    env_file:
+      - path: ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
+        required: false
+    environment:
+      <<: [*app-file-log-env, *hololive-h3-files-env]
+      POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
+      POSTGRES_PORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
+      POSTGRES_SOCKET_PATH: ""
+      POSTGRES_DB: hololive
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
+      POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-/run/hololive-bot/certs/postgres-ca.pem}
+      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-cache_statement}
+      PGAPPNAME: youtube-collector-c
+      NOTIFICATION_EGRESS_ROLE: "off"
+      STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-c.json
+      YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
+      YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-c"
+      YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-c.log"
+      POSTGRES_USER: hololive_scraper
+      POSTGRES_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:?HOLOLIVE_SCRAPER_PASSWORD is required}
+      SERVER_PORT: 30025
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_YOUTUBE_COLLECTOR_HTTP_TRANSPORTS:-h3}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_YOUTUBE_COLLECTOR_H3_ADDR:-:30025}
+      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_YOUTUBE_COLLECTOR_METRICS_ADDR:-:30096}
+      POSTGRES_POOL_MIN_CONNS: ${YOUTUBE_COLLECTOR_POSTGRES_POOL_MIN_CONNS:-2}
+      POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS:-7}
+      YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS:-2}
+      YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS:-1}
+      YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS:-30}
+      YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS:-30}
+      YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS: ${YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS:-3}
+      YOUTUBE_COLLECTOR_MAX_PAGES: ${YOUTUBE_COLLECTOR_MAX_PAGES:-1}
+      YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES: ${YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES:-1048576}
+      YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS: ${YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS:-10000}
+      YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS: ${YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS:-2}
+      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
+      PHOTO_SYNC_ENABLED: "false"
+      GOGC: "100"
+      # 상한(768m)은 Go 320MiB에 YouTube.js Node helper(관측 최대 176MiB) 몫 192MiB와 여유 32MiB를 더한 값보다 크게 둔다.
+      GOMEMLIMIT: "320MiB"
+      GIN_MODE: release
+      LOG_DIR: /app/logs
+    dns: *tailnet-dns
+    ports:
+      - "127.0.0.1:30025:30025"
+      - "127.0.0.1:30025:30025/udp"
+      - "127.0.0.1:30096:30096"
+    volumes: *collector-volumes
+    group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
+    extra_hosts: *host-extra-hosts
+    deploy: *deploy-768m
+    healthcheck:
+      <<: *go-healthcheck
+      # 이전 인스턴스의 60초 lease 만료와 첫 publish가 끝날 때까지 기동 유예를 적용한다.
+      start_period: 180s
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30025/ready"]
+    networks:
+      hololive-net:
+        aliases:
+          - youtube-collector
+          - youtube-collector-c
+
+
+volumes:
+  youtube-po-c-socket:
+
+networks:
+  hololive-net:
+    driver: bridge
