@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -72,7 +73,7 @@ func (s *TransitionStore) prepareClaimedTx(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	at time.Time,
 ) (preparedClaims, error) {
-	resolved, err := s.resolveClaimedGroups(ctx, tx, claimed, outboxByID, at)
+	resolved, err := s.resolveClaimedGroups(ctx, tx, "prepare claimed", claimed, outboxByID, at)
 	if err != nil {
 		return preparedClaims{}, fmt.Errorf("prepare claimed: resolve groups: %w", err)
 	}
@@ -300,6 +301,7 @@ func deferTransition(row transitionRow, due time.Time) rowTransition {
 
 	after.NextAttemptAt = due.UTC().Truncate(time.Microsecond)
 	after.LockedAt = nil
+	after.LockedBy = nil
 	after.Error = ""
 	after.SentAt = nil
 
@@ -336,6 +338,7 @@ func fulfilledTransitions(
 		after.RowVersion++
 
 		after.LockedAt = nil
+		after.LockedBy = nil
 		after.SentAt = &canonicalSentAt
 		after.Error = ""
 		transitions = append(transitions, rowTransition{before: row, after: after})
@@ -375,6 +378,7 @@ func unresolvedTransitions(
 		after.RowVersion++
 
 		after.LockedAt = nil
+		after.LockedBy = nil
 		after.SentAt = nil
 		after.Error = unresolvedPropagationError
 		transitions = append(transitions, rowTransition{before: row, after: after})
@@ -390,6 +394,7 @@ func failedFollowerTransition(row transitionRow) rowTransition {
 	after.RowVersion++
 
 	after.LockedAt = nil
+	after.LockedBy = nil
 	after.SentAt = nil
 	after.Error = failedPropagationError
 
@@ -425,7 +430,8 @@ func (s *TransitionStore) DeferFollower(ctx context.Context, command DeferComman
 		RoomID: command.Delivery.RoomID, Status: lifecycle.DeliveryStatus(command.Delivery.Status),
 		AttemptCount: command.Delivery.AttemptCount, NextAttemptAt: command.Delivery.NextAttemptAt,
 		CreatedAt: command.Delivery.CreatedAt, LockedAt: cloneTimePtr(command.Delivery.LockedAt),
-		SentAt: cloneTimePtr(command.Delivery.SentAt), Error: command.Delivery.Error,
+		LockedBy: cloneStringPtr(command.Delivery.LockedBy),
+		SentAt:   cloneTimePtr(command.Delivery.SentAt), Error: command.Delivery.Error,
 		RowVersion: command.Delivery.RowVersion,
 	}
 	transition := deferTransition(before, due)
@@ -442,8 +448,8 @@ func (s *TransitionStore) DeferFollower(ctx context.Context, command DeferComman
 
 		return nil
 	}); err != nil {
-		if _, ok := errors.AsType[*transitionConflictError](err); ok {
-			return newApplyResult(ApplyConflict, nil), nil
+		if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
+			return newApplyResult(fenceMissOutcome(miss), nil), fmt.Errorf("defer follower: %w", err)
 		}
 
 		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("defer follower: execute transaction: %w", err)

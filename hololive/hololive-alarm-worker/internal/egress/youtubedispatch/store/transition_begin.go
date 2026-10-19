@@ -102,7 +102,7 @@ func (s *TransitionStore) beginSendingTx(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	startedAt time.Time,
 ) (StartedOperation, []rowTransition, []int64, error) {
-	resolved, err := s.resolveClaimedGroups(ctx, tx, rows, outboxByID, startedAt)
+	resolved, err := s.resolveClaimedGroups(ctx, tx, "begin sending", rows, outboxByID, startedAt)
 	if err != nil {
 		return StartedOperation{}, nil, nil, fmt.Errorf("begin sending: resolve groups: %w", err)
 	}
@@ -123,7 +123,7 @@ func (s *TransitionStore) beginSendingTx(
 
 	sortTransitionsByID(transitions)
 
-	touched, err := applyRowTransitions(ctx, tx, "begin sending", transitions)
+	touched, err := applySendingTransitions(ctx, tx, "begin sending", transitions, s.config.LockTimeout)
 	if err != nil {
 		return StartedOperation{}, transitions, nil, fmt.Errorf("begin sending: apply rows: %w", err)
 	}
@@ -186,12 +186,6 @@ func buildStartedGroup(
 		return startedLogicalGroup{}, rowTransition{}, fmt.Errorf("begin sending: owner: %w", err)
 	}
 
-	if before.Status != lifecycle.StatusPending || before.LockedAt == nil || before.RowVersion <= 0 {
-		return startedLogicalGroup{}, rowTransition{}, &transitionConflictError{
-			operation: "begin sending", detail: fmt.Sprintf("owner %d has no valid preparation fence", before.ID),
-		}
-	}
-
 	followers, err := startedFollowers(resolution, resolved.rowsByID)
 	if err != nil {
 		return startedLogicalGroup{}, rowTransition{}, fmt.Errorf("begin sending: load followers: %w", err)
@@ -225,6 +219,7 @@ func startedFollowers(
 	return followers, nil
 }
 
+// sendingTransitionRow는 claim 소유자(locked_by)를 유지한 채 발송 시작 시각을 기록한다.
 func sendingTransitionRow(before transitionRow, startedAt time.Time) transitionRow {
 	after := before
 
@@ -345,6 +340,7 @@ func sameTransitionState(actual, expected transitionRow) bool {
 		actual.Status == expected.Status &&
 		actual.AttemptCount == expected.AttemptCount &&
 		actual.RowVersion == expected.RowVersion &&
+		sameOwner(actual.LockedBy, expected.LockedBy) &&
 		timesEqual(actual.LockedAt, expected.LockedAt) &&
 		timesEqual(actual.SentAt, expected.SentAt) &&
 		actual.NextAttemptAt.Equal(expected.NextAttemptAt) &&

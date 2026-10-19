@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -40,6 +41,10 @@ func NewTransitionStore(db any, logger *slog.Logger, config TransitionConfig) (*
 
 	if logger == nil {
 		logger = slog.Default()
+	}
+
+	if strings.TrimSpace(config.Owner) == "" {
+		return nil, errors.New("new transition store: owner is required")
 	}
 
 	if config.MaxRetries <= 0 {
@@ -87,6 +92,7 @@ func (s *TransitionStore) ClaimPending(ctx context.Context, batchSize int) ([]do
 		freshCutoff,
 		batchSize,
 		claimedAt,
+		s.config.Owner,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("claim pending: update rows: %w", err)
@@ -113,6 +119,7 @@ func scanTransitionDelivery(row pgx.CollectableRow) (domain.YouTubeNotificationD
 		&delivery.NextAttemptAt,
 		&delivery.CreatedAt,
 		&delivery.LockedAt,
+		&delivery.LockedBy,
 		&delivery.SentAt,
 		&delivery.Error,
 		&delivery.RowVersion,
@@ -136,9 +143,12 @@ type resolvedLogicalGroups struct {
 	ledgerByKey map[ytcontentid.LogicalKey]DeliveryLedgerRecord
 }
 
+// resolveClaimedGroups는 호출자 claim 행의 논리 그룹을 같은 트랜잭션에서 잠가 다시 읽고 해석한다. 다시 읽은 행이 호출자
+// claim과 다르면 해석 전에 operation 이름의 *sendfence.MissError를 돌려준다.
 func (s *TransitionStore) resolveClaimedGroups(
 	ctx context.Context,
 	db dbx.Querier,
+	operation string,
 	claimed []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	at time.Time,
@@ -156,13 +166,15 @@ func (s *TransitionStore) resolveClaimedGroups(
 	currentIDs := deliveryIDSet(claimed)
 	requestedKeys, requestedSet := requestedLogicalKeys(requested)
 
+	// 그룹 행 조회의 LIMIT에 claim 행이 잘리면 그 그룹은 반드시 키당 한도를 넘으므로, 누락(missing)으로 오판하지 않게
+	// 한도 검사를 fence보다 먼저 한다.
 	rowsByID, snapshots, err := s.claimedResolutionSnapshots(rows, currentIDs, requestedSet)
 	if err != nil {
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: build snapshots: %w", err)
 	}
 
-	if validationErr := validateClaimedRowsPresent(currentIDs, rowsByID); validationErr != nil {
-		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: validate current rows: %w", validationErr)
+	if fenceErr := checkClaimFence(operation, claimed, rows); fenceErr != nil {
+		return resolvedLogicalGroups{}, fmt.Errorf("resolve claimed groups: claim fence: %w", fenceErr)
 	}
 
 	ledgerByKey, evidence, err := loadTransitionLedger(ctx, db, requestedKeys)
@@ -257,27 +269,67 @@ func claimedResolutionSnapshot(
 		return ytcontentid.LogicalKey{}, preparation.DeliverySnapshot{}, false, nil
 	}
 
-	snapshot, err := row.snapshot(current)
-	if err != nil {
-		return ytcontentid.LogicalKey{}, preparation.DeliverySnapshot{}, false, fmt.Errorf("resolve claimed groups: snapshot: %w", err)
-	}
-
-	return key, snapshot, true, nil
+	return key, row.snapshot(current), true, nil
 }
 
-func validateClaimedRowsPresent(
-	currentIDs map[int64]struct{},
-	rowsByID map[int64]transitionRow,
-) error {
-	for id := range currentIDs {
-		if _, ok := rowsByID[id]; !ok {
-			return &transitionMissingError{
-				operation: "resolve claimed groups", detail: fmt.Sprintf("claimed delivery %d is absent", id),
-			}
+// checkClaimFence는 잠가 다시 읽은 행이 호출자 claim과 같은 세대인지 본다. 상태를 PENDING으로 둔 채 소유자와 row_version을
+// 바꾸는 것이 claim이므로 셋이 모두 같아야 호출자가 아직 그 행을 소유한다. 하나라도 어긋나면 대상 전원을 미적용으로 담은
+// 미스를 돌려주며, 호출자는 이 트랜잭션에서 아무 행도 바꾸지 않는다.
+func checkClaimFence(operation string, claimed []domain.YouTubeNotificationDelivery, rows []transitionRow) error {
+	loaded := make(map[int64]transitionRow, len(rows))
+	for i := range rows {
+		loaded[rows[i].ID] = rows[i]
+	}
+
+	want := make([]int64, 0, len(claimed))
+	observed := make([]sendfence.Observation, 0, len(claimed))
+	seen := make(map[int64]struct{}, len(claimed))
+
+	for i := range claimed {
+		if _, duplicate := seen[claimed[i].ID]; duplicate {
+			continue
+		}
+
+		seen[claimed[i].ID] = struct{}{}
+		want = append(want, claimed[i].ID)
+
+		if row, ok := loaded[claimed[i].ID]; ok {
+			observed = append(observed, claimObservation(claimed[i], row))
+		}
+	}
+
+	held := len(observed) == len(want) && !slices.ContainsFunc(observed, func(observation sendfence.Observation) bool {
+		return !observation.StatusMatches || !observation.OwnerMatches || !observation.VersionMatches
+	})
+	if !held {
+		return fmt.Errorf("check claim fence: %w", sendfence.Check(operation, want, observed))
+	}
+
+	for i := range observed {
+		if row := loaded[observed[i].ID]; row.LockedAt == nil || row.RowVersion <= 0 {
+			return fmt.Errorf("%s: delivery %d was not claimed", operation, row.ID)
 		}
 	}
 
 	return nil
+}
+
+func claimObservation(claim domain.YouTubeNotificationDelivery, row transitionRow) sendfence.Observation {
+	return sendfence.Observation{
+		ID: row.ID, Status: string(row.Status),
+		StatusMatches:  row.Status == lifecycle.StatusPending,
+		OwnerMatches:   sameOwner(row.LockedBy, claim.LockedBy),
+		VersionMatches: row.RowVersion == claim.RowVersion,
+		LeaseValid:     true, MembershipMatches: true, MembersNonTerminal: true, RequestMatches: true,
+	}
+}
+
+func sameOwner(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+
+	return *left == *right
 }
 
 func buildRequestedLogicalGroups(
@@ -430,18 +482,42 @@ type transitionVectors struct {
 	ids              []int64
 	expectedStatuses []string
 	expectedVersions []int64
-	expectedAttempts []int32
-	expectedLocks    []*time.Time
+	expectedOwners   []*string
 	nextStatuses     []string
 	nextVersions     []int64
 	nextAttempts     []int32
 	nextAttemptAts   []time.Time
 	nextLocks        []*time.Time
+	nextOwners       []*string
 	nextSentAts      []*time.Time
 	nextErrors       []string
 }
 
+// applyRowTransitions는 before의 (status, locked_by, row_version) fence로 대상 전원을 함께 전이한다. 한 대상이라도
+// fence가 어긋나면 아무 행도 바꾸지 않고 *sendfence.MissError를 돌려준다.
 func applyRowTransitions(ctx context.Context, db dbx.Querier, operation string, transitions []rowTransition) ([]int64, error) {
+	return applyFencedRowTransitions(ctx, db, operation, transitions, nil)
+}
+
+// applySendingTransitions는 외부 발송 권한을 만드는 전이를 적용한다. 정지했던 소유자가 lease 밖에서 발송을 시작하지
+// 않도록 행 fence에 더해 claim lease(locked_at + lease)가 DB 시계 기준으로 살아 있어야 한다.
+func applySendingTransitions(
+	ctx context.Context,
+	db dbx.Querier,
+	operation string,
+	transitions []rowTransition,
+	lease time.Duration,
+) ([]int64, error) {
+	return applyFencedRowTransitions(ctx, db, operation, transitions, new(lease.Milliseconds()))
+}
+
+func applyFencedRowTransitions(
+	ctx context.Context,
+	db dbx.Querier,
+	operation string,
+	transitions []rowTransition,
+	claimLeaseMS *int64,
+) ([]int64, error) {
 	if len(transitions) == 0 {
 		return nil, nil
 	}
@@ -457,51 +533,43 @@ func applyRowTransitions(ctx context.Context, db dbx.Querier, operation string, 
 		vectors.ids,
 		vectors.expectedStatuses,
 		vectors.expectedVersions,
-		vectors.expectedAttempts,
-		vectors.expectedLocks,
+		vectors.expectedOwners,
 		vectors.nextStatuses,
 		vectors.nextVersions,
 		vectors.nextAttempts,
 		vectors.nextAttemptAts,
 		vectors.nextLocks,
+		vectors.nextOwners,
 		vectors.nextSentAts,
 		vectors.nextErrors,
+		claimLeaseMS,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: update rows: %w", operation, err)
 	}
-	defer rows.Close()
 
-	updatedIDs, outboxIDs, err := collectAppliedTransitions(rows, operation, len(transitions))
+	observed, err := pgx.CollectRows(rows, sendfence.ScanObservation)
 	if err != nil {
-		return nil, fmt.Errorf("%s: collect applied transitions: %w", operation, err)
+		return nil, fmt.Errorf("%s: collect fence observations: %w", operation, err)
 	}
 
-	if !equalSortedIDs(updatedIDs, vectors.ids) {
-		return nil, &transitionConflictError{
-			operation: operation,
-			detail:    fmt.Sprintf("updated ids %v do not match expected ids %v", updatedIDs, vectors.ids),
-		}
+	if err := sendfence.Check(operation, vectors.ids, observed); err != nil {
+		return nil, fmt.Errorf("%s: row fence: %w", operation, err)
 	}
 
-	return uniqueSortedInt64s(outboxIDs), nil
+	return transitionOutboxIDs(transitions), nil
 }
 
 func buildTransitionVectors(operation string, transitions []rowTransition) (transitionVectors, error) {
 	vectors := newTransitionVectors(len(transitions))
 
 	for i := range transitions {
-		expectedAttempt, err := checkedTransitionAttempt(operation, transitions[i].before)
-		if err != nil {
-			return transitionVectors{}, fmt.Errorf("%s: validate expected attempt: %w", operation, err)
-		}
-
 		nextAttempt, err := checkedTransitionAttempt(operation, transitions[i].after)
 		if err != nil {
 			return transitionVectors{}, fmt.Errorf("%s: validate next attempt: %w", operation, err)
 		}
 
-		vectors.appendTransition(transitions[i], expectedAttempt, nextAttempt)
+		vectors.appendTransition(transitions[i], nextAttempt)
 	}
 
 	return vectors, nil
@@ -510,25 +578,25 @@ func buildTransitionVectors(operation string, transitions []rowTransition) (tran
 func newTransitionVectors(capacity int) transitionVectors {
 	return transitionVectors{
 		ids: make([]int64, 0, capacity), expectedStatuses: make([]string, 0, capacity),
-		expectedVersions: make([]int64, 0, capacity), expectedAttempts: make([]int32, 0, capacity),
-		expectedLocks: make([]*time.Time, 0, capacity), nextStatuses: make([]string, 0, capacity),
-		nextVersions: make([]int64, 0, capacity), nextAttempts: make([]int32, 0, capacity),
-		nextAttemptAts: make([]time.Time, 0, capacity), nextLocks: make([]*time.Time, 0, capacity),
+		expectedVersions: make([]int64, 0, capacity), expectedOwners: make([]*string, 0, capacity),
+		nextStatuses: make([]string, 0, capacity), nextVersions: make([]int64, 0, capacity),
+		nextAttempts: make([]int32, 0, capacity), nextAttemptAts: make([]time.Time, 0, capacity),
+		nextLocks: make([]*time.Time, 0, capacity), nextOwners: make([]*string, 0, capacity),
 		nextSentAts: make([]*time.Time, 0, capacity), nextErrors: make([]string, 0, capacity),
 	}
 }
 
-func (v *transitionVectors) appendTransition(transition rowTransition, expectedAttempt, nextAttempt int32) {
+func (v *transitionVectors) appendTransition(transition rowTransition, nextAttempt int32) {
 	v.ids = append(v.ids, transition.before.ID)
 	v.expectedStatuses = append(v.expectedStatuses, string(transition.before.Status))
 	v.expectedVersions = append(v.expectedVersions, transition.before.RowVersion)
-	v.expectedAttempts = append(v.expectedAttempts, expectedAttempt)
-	v.expectedLocks = append(v.expectedLocks, cloneTimePtr(transition.before.LockedAt))
+	v.expectedOwners = append(v.expectedOwners, cloneStringPtr(transition.before.LockedBy))
 	v.nextStatuses = append(v.nextStatuses, string(transition.after.Status))
 	v.nextVersions = append(v.nextVersions, transition.after.RowVersion)
 	v.nextAttempts = append(v.nextAttempts, nextAttempt)
 	v.nextAttemptAts = append(v.nextAttemptAts, transition.after.NextAttemptAt.UTC())
 	v.nextLocks = append(v.nextLocks, cloneTimePtr(transition.after.LockedAt))
+	v.nextOwners = append(v.nextOwners, cloneStringPtr(transition.after.LockedBy))
 	v.nextSentAts = append(v.nextSentAts, cloneTimePtr(transition.after.SentAt))
 	v.nextErrors = append(v.nextErrors, deliverysql.TruncateString(transition.after.Error, 500))
 }
@@ -539,37 +607,6 @@ func checkedTransitionAttempt(operation string, row transitionRow) (int32, error
 	}
 
 	return int32(row.AttemptCount), nil
-}
-
-func collectAppliedTransitions(rows pgx.Rows, operation string, capacity int) ([]int64, []int64, error) {
-	updatedIDs := make([]int64, 0, capacity)
-	outboxIDs := make([]int64, 0, capacity)
-
-	for rows.Next() {
-		var deliveryID, outboxID int64
-
-		if err := rows.Scan(&deliveryID, &outboxID); err != nil {
-			return nil, nil, fmt.Errorf("%s: scan updated row: %w", operation, err)
-		}
-
-		updatedIDs = append(updatedIDs, deliveryID)
-		outboxIDs = append(outboxIDs, outboxID)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("%s: iterate updated rows: %w", operation, err)
-	}
-
-	return updatedIDs, outboxIDs, nil
-}
-
-func equalSortedIDs(actual, expected []int64) bool {
-	slices.Sort(actual)
-
-	expected = slices.Clone(expected)
-	slices.Sort(expected)
-
-	return slices.Equal(actual, expected)
 }
 
 func (s *TransitionStore) executeTx(

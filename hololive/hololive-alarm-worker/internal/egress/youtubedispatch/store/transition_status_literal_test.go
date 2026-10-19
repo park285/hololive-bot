@@ -31,7 +31,7 @@ func TestTransitionClaimPendingSQLPreparedModesPreservePendingGuard(t *testing.T
 				t.Helper()
 
 				rows, err := tx.Query(t.Context(), "claim_pending_sql_v1", status, at.Add(-time.Minute),
-					at, at.Add(-time.Hour), 10, at)
+					at, at.Add(-time.Hour), 10, at, "youtube-dispatcher:test")
 				require.NoError(t, err)
 
 				claimed, err := pgx.CollectRows(rows, scanTransitionDelivery)

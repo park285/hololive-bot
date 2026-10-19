@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -103,8 +104,13 @@ func newDispatcherTransitionStore(
 	logger *slog.Logger,
 	config dispatchstate.Config,
 ) (*store.TransitionStore, error) {
+	owner, err := leaseowner.InstanceID("youtube-dispatcher")
+	if err != nil {
+		return nil, fmt.Errorf("initialize youtube delivery transition store: owner: %w", err)
+	}
+
 	transitionStore, err := store.NewTransitionStore(db, logger, store.TransitionConfig{
-		MaxRetries: config.MaxRetries, RetryBackoff: config.RetryBackoff,
+		Owner: owner, MaxRetries: config.MaxRetries, RetryBackoff: config.RetryBackoff,
 		LockTimeout: config.LockTimeout, ClaimFreshnessWindow: config.ClaimFreshnessWindow,
 		LogicalGroupLimit: defaultLogicalGroupScanLimit,
 	})

@@ -245,23 +245,13 @@ func testResolver(t *testing.T, limit int) Resolver {
 func testDelivery(t *testing.T, id int64, status lifecycle.DeliveryStatus, createdAt time.Time, current bool) DeliverySnapshot {
 	t.Helper()
 
-	lockedAt := resolverTestNow
-	row := DeliverySnapshot{
+	return DeliverySnapshot{
 		DeliveryID: id, OutboxID: 10, Kind: domain.OutboxKindNewVideo,
 		ContentID: "video-1", RoomID: "room-1", Status: status,
 		AttemptCount: int(id), NextAttemptAt: resolverTestNow.Add(time.Minute),
-		CreatedAt: createdAt, LockedAt: lockedAt, RowVersion: id + 10,
+		CreatedAt: createdAt, LockedAt: resolverTestNow, RowVersion: id + 10,
 		InCurrentBatch: current,
 	}
-
-	if current {
-		lease, err := lifecycle.NewPreparationLease(row.DeliveryID, row.RowVersion, lockedAt)
-		require.NoError(t, err)
-
-		row.Lease = lease
-	}
-
-	return row
 }
 
 func mustKey(t *testing.T, row DeliverySnapshot) ytcontentid.LogicalKey {

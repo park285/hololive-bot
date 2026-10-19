@@ -335,6 +335,7 @@ func reviveDecisionTransitions(
 		after.AttemptCount = mutation.NextAttempt()
 		after.NextAttemptAt = mutation.NextAttemptAt()
 		after.LockedAt = nil
+		after.LockedBy = nil
 		after.SentAt = nil
 		after.Error = ""
 		transitions = append(transitions, rowTransition{before: before, after: after})

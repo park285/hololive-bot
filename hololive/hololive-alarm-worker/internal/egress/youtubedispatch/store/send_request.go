@@ -175,6 +175,7 @@ type requestDeliveryState struct {
 	RoomID        string
 	Status        string
 	RowVersion    int64
+	LockedBy      *string
 	SendRequestID string
 }
 
@@ -191,7 +192,7 @@ func validateRequestDeliveryStates(expected []domain.YouTubeNotificationDelivery
 	bound := states[0].SendRequestID
 	for _, row := range states {
 		before, ok := byID[row.ID]
-		if !ok || row.Status != "PENDING" || row.RowVersion != before.RowVersion || row.RoomID != before.RoomID {
+		if !ok || row.Status != "PENDING" || row.RowVersion != before.RowVersion || !sameOwner(row.LockedBy, before.LockedBy) || row.RoomID != before.RoomID {
 			return "", errors.New("freeze request: stale preparation fence")
 		}
 
@@ -284,7 +285,7 @@ func verifyStartedRequestOwners(ctx context.Context, tx dbx.Querier, operation S
 
 		var valid bool
 
-		if err := tx.QueryRow(ctx, mustSQL("send_request_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID).Scan(&valid); err != nil {
+		if err := tx.QueryRow(ctx, mustSQL("send_request_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID, group.ownerAfter.LockedBy).Scan(&valid); err != nil {
 			return fmt.Errorf("advance request generation: owner fence: %w", err)
 		}
 

@@ -97,11 +97,14 @@ Claim 또는 Send fence 결과를 받지 못하면 caller가 ID와 현재 DB 값
 PENDING unlocked/stale
     -> PENDING leased
 locked_at = claimAt
+locked_by = worker instance
 row_version = pre + 1
 attempt 유지
 ```
 
-Statement/connection 오류로 반환 row를 받지 못하면 caller는 Preparation lease를 소유하지 않습니다. Row가 실제 claim됐더라도 처리하지 않고 timeout 후 재claim에 맡깁니다.
+Statement/connection 오류로 반환 row를 받지 못하면 caller는 Claim fence를 소유하지 않습니다. Row가 실제 claim됐더라도 처리하지 않고 timeout 후 재claim에 맡깁니다.
+
+Claim fence·행 fence 미스(`sendfence.MissError`)는 commit 응답 유실이 아닙니다. 문장이 아무 행도 바꾸지 않은 채 rollback됐으므로 read-back 없이 `Conflict`(전원 `missing`이면 `Missing`)로 판정하고 같은 command를 재시도하지 않습니다.
 
 금지:
 
@@ -120,7 +123,7 @@ Exact post-state:
 ```text
 PENDING
 attempt 유지
-lock clear
+lock clear (locked_at, locked_by = NULL)
 version + 1
 next_attempt_at = canonical defer due
 ```
@@ -168,10 +171,11 @@ Provider operation owner 전체가 다음을 만족합니다.
 
 ```text
 status = PENDING
-version = expected preparation version
-attempt = expected attempt
-locked_at = preparation lock
+version = caller claim version
+locked_by = caller claim owner
 ```
+
+`attempt`와 `locked_at`은 version 등가에 함의됩니다.
 
 ### Exact post-state
 
@@ -181,6 +185,7 @@ Owner 전체가 다음을 만족합니다.
 status = SENDING
 version = pre + 1
 attempt 유지
+locked_by 유지
 locked_at = canonical sendStartedAt
 ```
 

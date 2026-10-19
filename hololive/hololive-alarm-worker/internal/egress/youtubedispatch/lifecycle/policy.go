@@ -85,30 +85,23 @@ func (r RowSnapshot) Validate() error {
 	return nil
 }
 
-// RowMutation은 예상 상태에서 다음 상태로의 확정된 전이다. 저장소가 재시도·후속 처리 정책을 재계산하면 안 된다.
+// RowMutation은 한 행의 확정된 다음 상태다. 저장소가 재시도·후속 처리 정책을 재계산하면 안 되며, 전이 전 상태 fence는
+// 저장소가 잠가 다시 읽은 행으로 건다.
 type RowMutation struct {
-	deliveryID       int64
-	expectedStatus   DeliveryStatus
-	expectedVersion  int64
-	expectedAttempt  int
-	expectedLockedAt time.Time
-	nextStatus       DeliveryStatus
-	nextVersion      int64
-	nextAttempt      int
-	nextAttemptAt    time.Time
-	clearLock        bool
+	deliveryID    int64
+	nextStatus    DeliveryStatus
+	nextVersion   int64
+	nextAttempt   int
+	nextAttemptAt time.Time
+	clearLock     bool
 }
 
-func (m RowMutation) DeliveryID() int64              { return m.deliveryID }
-func (m RowMutation) ExpectedStatus() DeliveryStatus { return m.expectedStatus }
-func (m RowMutation) ExpectedVersion() int64         { return m.expectedVersion }
-func (m RowMutation) ExpectedAttempt() int           { return m.expectedAttempt }
-func (m RowMutation) ExpectedLockedAt() time.Time    { return m.expectedLockedAt }
-func (m RowMutation) NextStatus() DeliveryStatus     { return m.nextStatus }
-func (m RowMutation) NextVersion() int64             { return m.nextVersion }
-func (m RowMutation) NextAttempt() int               { return m.nextAttempt }
-func (m RowMutation) NextAttemptAt() time.Time       { return m.nextAttemptAt }
-func (m RowMutation) ClearsLock() bool               { return m.clearLock }
+func (m RowMutation) DeliveryID() int64          { return m.deliveryID }
+func (m RowMutation) NextStatus() DeliveryStatus { return m.nextStatus }
+func (m RowMutation) NextVersion() int64         { return m.nextVersion }
+func (m RowMutation) NextAttempt() int           { return m.nextAttempt }
+func (m RowMutation) NextAttemptAt() time.Time   { return m.nextAttemptAt }
+func (m RowMutation) ClearsLock() bool           { return m.clearLock }
 
 type Decision interface {
 	RuleID() RuleID
@@ -233,10 +226,8 @@ func validateFailureGroup(owner RowSnapshot, followers []RowSnapshot) error {
 
 func failureMutation(row RowSnapshot, status DeliveryStatus, attempt int, due time.Time) RowMutation {
 	return RowMutation{
-		deliveryID: row.DeliveryID, expectedStatus: row.Status, expectedVersion: row.RowVersion,
-		expectedAttempt: row.AttemptCount, expectedLockedAt: row.LockedAt,
-		nextStatus: status, nextVersion: row.RowVersion + 1, nextAttempt: attempt,
-		nextAttemptAt: due, clearLock: true,
+		deliveryID: row.DeliveryID, nextStatus: status, nextVersion: row.RowVersion + 1,
+		nextAttempt: attempt, nextAttemptAt: due, clearLock: true,
 	}
 }
 
@@ -347,9 +338,7 @@ func buildReviveMutations(rows []RowSnapshot, at time.Time) ([]RowMutation, erro
 
 		seen[rows[i].DeliveryID] = struct{}{}
 		mutations = append(mutations, RowMutation{
-			deliveryID: rows[i].DeliveryID, expectedStatus: rows[i].Status,
-			expectedVersion: rows[i].RowVersion, expectedAttempt: rows[i].AttemptCount,
-			expectedLockedAt: rows[i].LockedAt, nextStatus: StatusPending,
+			deliveryID: rows[i].DeliveryID, nextStatus: StatusPending,
 			nextVersion: rows[i].RowVersion + 1, nextAttempt: 0,
 			nextAttemptAt: at, clearLock: true,
 		})

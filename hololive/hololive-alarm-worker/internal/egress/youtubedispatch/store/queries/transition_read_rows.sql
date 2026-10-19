@@ -6,6 +6,7 @@ SELECT id,
        next_attempt_at,
        created_at,
        locked_at,
+       locked_by,
        sent_at,
        COALESCE(error, '') AS error,
        row_version

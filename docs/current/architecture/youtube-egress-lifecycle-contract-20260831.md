@@ -146,7 +146,7 @@ QUARANTINED
 
 | 상태 | 규범 의미 |
 |---|---|
-| `PENDING` | Provider 호출 전이거나 logical owner의 known-not-delivered retry 대기입니다. `locked_at`이 있으면 preparation lease를 보유합니다. |
+| `PENDING` | Provider 호출 전이거나 logical owner의 known-not-delivered retry 대기입니다. `locked_at`이 있으면 `locked_by` 소유자가 그 `row_version` 세대의 claim을 보유합니다. |
 | `SENDING` | Exact provider operation이 durable하게 commit됐고 provider 호출이 시작될 수 있습니다. Provider 수신을 증명하지는 않습니다. |
 | `SENT` | Logical delivery가 충족됐음을 local transaction으로 확정했습니다. Provider success 또는 same-logical `SENT` evidence가 근거입니다. |
 | `FAILED` | Logical owner의 retry가 소진됐거나 permanent known failure입니다. Group revive만 허용합니다. |
@@ -191,7 +191,15 @@ Group revive는 owner와 follower attempt를 0으로 재설정합니다.
 row_version bigint NOT NULL DEFAULT 0 CHECK (row_version >= 0)
 ```
 
-Claim과 모든 physical row mutation은 version을 1 증가시킵니다. Version은 인덱싱하지 않습니다.
+Claim과 모든 physical row mutation은 version을 1 증가시킵니다. Version은 인덱싱하지 않습니다. 그래서 `row_version`이 같으면 `status`·`attempt_count`·`locked_at`·`locked_by`도 같습니다.
+
+### `locked_by`
+
+```sql
+locked_by text NULL
+```
+
+Claim한 워커 인스턴스 ID(`youtube-dispatcher:<hostname>:<pid>`)입니다. Claim이 기록하고 `SENDING` 전이가 유지하며, 잠금을 비우는 전이는 `locked_at`과 함께 비웁니다. 컨테이너 이름이 고정이라 재시작한 프로세스가 같은 ID를 가질 수 있으므로 claim 세대는 `row_version`이 구분하고 `locked_by`만으로 fence하지 않습니다. 이 열을 모르는 이전 워커가 남긴 행은 NULL이거나 이전 값이며, 전이 fence는 다시 읽은 값과 비교하므로 그대로 처리합니다.
 
 ### 시간 정규화
 
@@ -209,7 +217,7 @@ Retry 소진, preparation/send failure, revive는 lifecycle policy가 한 번만
 
 ### I-003. Fenced mutation
 
-Claim 이후 mutation은 `id + expected status + expected version + expected attempt + expected locked_at`을 검사해야 합니다.
+Claim 이후 mutation은 `id + expected status + expected locked_by + expected row_version`을 같은 문장에서 잠근 행과 비교해야 합니다. `attempt_count`와 `locked_at` 등가는 `row_version` 등가에 함의되므로 따로 비교하지 않습니다. 한 command의 대상은 전원이 fence를 통과할 때만 함께 전이하고, 미스는 대상별 원인을 담은 `sendfence.MissError`로 돌려줍니다.
 
 ### I-004. One logical retry owner
 
@@ -269,29 +277,22 @@ Provider success의 delivery/tracking과 ledger `SENT`, stale outcome unknown의
 
 ## Token 계약
 
-### Preparation lease
+### Claim fence
 
-```go
-type PreparationLease struct {
-    DeliveryID int64
-    RowVersion int64
-    LockedAt   time.Time
-}
-```
+Claim 결과 행의 `(id, row_version, locked_by)`입니다. `PENDING + locked_at` row만 나타냅니다. `PrepareClaimed`, `BeginSending`, `ApplyPreparedFailure`는 같은 transaction에서 logical group을 `FOR UPDATE`로 다시 읽은 뒤 caller claim 행마다 다음을 확인하고, 하나라도 어긋나면 아무 행도 바꾸지 않고 `sendfence.MissError`를 돌려줍니다.
 
-`PENDING + locked_at` row만 나타냅니다.
+| 관측 | 미스 원인 |
+|---|---|
+| 다시 읽은 행이 없음 | `missing` |
+| `status <> PENDING` | `status_changed` |
+| `locked_by`가 caller claim과 다름 | `owner_changed` |
+| `row_version`이 caller claim과 다름 | `version_changed` |
+
+조건이 맞은 다른 대상은 `peer_missed`로 함께 보고합니다. Fence 미스는 `ApplyConflict`(대상 전원이 `missing`이면 `ApplyMissing`)와 오류를 함께 반환하므로 caller가 버릴 수 없습니다.
 
 ### Send fence
 
-```go
-type SendFence struct {
-    DeliveryID int64
-    RowVersion int64
-    LockedAt   time.Time
-}
-```
-
-`SENDING + locked_at` row만 나타냅니다. Preparation lease와 별도 Go type이어야 합니다.
+`BeginSending`이 만든 owner 행의 `(id, row_version, locked_by)`입니다. `SENDING + locked_at` row만 나타냅니다. 발송 뒤 정산(`CompleteSent`, 실패 전이, 요청 세대 전진, grouped fallback 고정)은 이 값으로 fence하며 lease 만료를 보지 않습니다. 외부 성공을 DB 정산 실패로 되돌리지 않기 위해서입니다.
 
 ### Alarm claim token
 
@@ -322,10 +323,11 @@ Claim SQL:
 
 ```sql
 SET locked_at = $now,
+    locked_by = $owner,
     row_version = row_version + 1
 ```
 
-반환된 exact version과 `locked_at`만 Preparation lease입니다. Statement 결과를 받지 못하면 caller는 lease를 소유하지 않습니다.
+반환된 exact version·`locked_by`만 Claim fence입니다. Statement 결과를 받지 못하면 caller는 claim을 소유하지 않습니다.
 
 ## Logical group resolution
 
@@ -471,7 +473,7 @@ type PreparedSendOperation struct {
 
 ### `BeginSending`
 
-Owner member 전체가 exact `PENDING + PreparationLease`를 만족할 때만 전체를 `SENDING`으로 변경합니다.
+Owner member 전체가 Claim fence를 만족하고 claim lease가 살아 있을 때만 전체를 `SENDING`으로 변경합니다.
 
 ```sql
 SET status = 'SENDING',
@@ -479,12 +481,12 @@ SET status = 'SENDING',
     row_version = row_version + 1
 WHERE id = $id
   AND status = 'PENDING'
-  AND row_version = $expected_version
-  AND attempt_count = $expected_attempt
-  AND locked_at = $expected_locked_at
+  AND row_version = $claim_version
+  AND locked_by IS NOT DISTINCT FROM $claim_owner
+  AND locked_at + $lease_ms * INTERVAL '1 millisecond' > clock_timestamp()
 ```
 
-한 owner라도 conflict/missing이면 전체 rollback하고 provider를 호출하지 않습니다.
+Lease 조건(`lease_expired`)은 정지했던 소유자가 lease 밖에서 외부 부수효과를 시작하지 않게 합니다. `locked_by`는 유지합니다. 한 owner라도 미스면 전체 rollback하고 provider를 호출하지 않습니다.
 
 Commit response loss는 provider call 전에 primary exact read-back으로 판정합니다. Exact post-state만 provider call 권한을 만듭니다.
 
@@ -582,14 +584,13 @@ Policy는 nullable patch map이 아니라 sealed concrete decision을 반환합�
 
 ```go
 type DecisionContext struct {
-    RuleID               RuleID
-    LogicalKeyHash       string
-    OwnerID              int64
-    ExpectedStatus       DeliveryStatus
-    ExpectedVersion      int64
-    ExpectedAttemptCount int
-    ExpectedLockedAt     time.Time
-    At                   time.Time
+    RuleID           RuleID
+    LogicalKeyHash   string
+    OwnerID          int64
+    ExpectedStatus   DeliveryStatus
+    ExpectedVersion  int64
+    ExpectedLockedBy *string
+    At               time.Time
 }
 ```
 

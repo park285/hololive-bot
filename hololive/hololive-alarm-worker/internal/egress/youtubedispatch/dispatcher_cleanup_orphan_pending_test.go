@@ -51,7 +51,7 @@ func cleanupTestClaimManager(t *testing.T, db *pgxpool.Pool, cfg *dispatchstate.
 	}
 
 	transition, err := store.NewTransitionStore(db, logger, store.TransitionConfig{
-		MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: lockTimeout,
+		Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: lockTimeout,
 		ClaimFreshnessWindow: claimFreshnessWindow, LogicalGroupLimit: 100,
 	})
 	require.NoError(t, err)

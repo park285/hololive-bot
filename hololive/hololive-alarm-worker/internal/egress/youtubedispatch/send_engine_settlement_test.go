@@ -235,7 +235,7 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 	engine.config.MaxRetries = 3
 	engine.config.RetryBackoff = time.Minute
 
-	transition, err := store.NewTransitionStore(db, engine.logger, store.TransitionConfig{MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
+	transition, err := store.NewTransitionStore(db, engine.logger, store.TransitionConfig{Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: time.Minute, ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10})
 	require.NoError(t, err)
 
 	t.Cleanup(cancel)

@@ -641,8 +641,14 @@ func markTransitionDeliveriesTerminalFailed(
 func newTestTransitionStore(t *testing.T, pool *pgxpool.Pool) *TransitionStore {
 	t.Helper()
 
+	return newOwnedTestTransitionStore(t, pool, "youtube-dispatcher:test")
+}
+
+func newOwnedTestTransitionStore(t *testing.T, pool *pgxpool.Pool, owner string) *TransitionStore {
+	t.Helper()
+
 	transition, err := NewTransitionStore(pool, slog.New(slog.DiscardHandler), TransitionConfig{
-		MaxRetries: 3, RetryBackoff: time.Second, LockTimeout: time.Minute,
+		Owner: owner, MaxRetries: 3, RetryBackoff: time.Second, LockTimeout: time.Minute,
 		ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10,
 	})
 	require.NoError(t, err)

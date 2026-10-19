@@ -432,14 +432,9 @@ func staleResolutionSnapshots(
 			return nil, nil, fmt.Errorf("resolve stale sending groups: logical group %s exceeds limit %d", key.Hash(), logicalGroupLimit)
 		}
 
-		snapshot, err := rows[i].snapshot(false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("resolve stale sending groups: snapshot: %w", err)
-		}
-
 		rowsByID[rows[i].ID] = rows[i]
 
-		snapshots = append(snapshots, snapshot)
+		snapshots = append(snapshots, rows[i].snapshot(false))
 	}
 
 	return rowsByID, snapshots, nil
@@ -452,6 +447,7 @@ func quarantineTransition(row transitionRow) rowTransition {
 	after.RowVersion++
 
 	after.LockedAt = nil
+	after.LockedBy = nil
 	after.SentAt = nil
 	after.Error = staleSendingQuarantineReason
 

@@ -129,7 +129,7 @@ func newAggregateTransitionStore(t *testing.T, pool *pgxpool.Pool, logger *slog.
 	t.Helper()
 
 	transition, err := store.NewTransitionStore(pool, logger, store.TransitionConfig{
-		MaxRetries: 3, RetryBackoff: time.Second, LockTimeout: time.Minute,
+		Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Second, LockTimeout: time.Minute,
 		ClaimFreshnessWindow: time.Hour, LogicalGroupLimit: 10,
 	})
 	require.NoError(t, err)

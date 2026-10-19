@@ -208,8 +208,14 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 func (d *SendEngine) deferIncompleteFrozenGroup(ctx context.Context, rows []domain.YouTubeNotificationDelivery) {
 	for i := range rows {
 		row := &rows[i]
-		if _, err := d.transition.DeferFollower(ctx, store.DeferCommand{Delivery: *row, NextAttemptAt: time.Now().Add(d.config.RetryBackoff)}); err != nil {
-			d.logger.Warn("Failed to defer incomplete frozen request", slog.Any("error", err))
+		result, err := d.transition.DeferFollower(ctx, store.DeferCommand{Delivery: *row, NextAttemptAt: time.Now().Add(d.config.RetryBackoff)})
+		observeLifecycleApply("defer_follower", result, err, 1)
+
+		if err != nil || result.Outcome != store.ApplyApplied {
+			d.logger.Warn("Failed to defer incomplete frozen request",
+				slog.Int64("delivery_id", row.ID),
+				slog.String("outcome", result.Outcome.String()),
+				slog.Any("error", err))
 		}
 	}
 }

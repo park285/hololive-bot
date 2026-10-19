@@ -33,6 +33,7 @@ WITH units AS (
 ), updated AS (
     UPDATE youtube_notification_delivery AS delivery
     SET locked_at = $6,
+        locked_by = $7::text,
         row_version = delivery.row_version + 1
     FROM claim
     WHERE delivery.id = claim.id
@@ -45,11 +46,12 @@ WITH units AS (
               delivery.next_attempt_at,
               delivery.created_at,
               delivery.locked_at,
+              delivery.locked_by,
               delivery.sent_at,
               COALESCE(delivery.error, '') AS error,
               delivery.row_version
 )
 SELECT id, outbox_id, room_id, status, attempt_count, next_attempt_at,
-       created_at, locked_at, sent_at, error, row_version
+       created_at, locked_at, locked_by, sent_at, error, row_version
 FROM updated
 ORDER BY next_attempt_at, created_at, id;

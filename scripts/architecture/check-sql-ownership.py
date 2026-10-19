@@ -51,11 +51,13 @@ TRAILING_SQL_FRAGMENT_RE = re.compile(r"\b(?:VALUES|WHERE|AND|OR|SET|FROM|JOIN|O
 COLLECTOR_LEASE_QUERIES = "hololive/hololive-youtube-collector/internal/runtime/joblease/queries"
 ALARM_DISPATCH_QUERIES = "hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries"
 YOUTUBE_RUNTIME_QUERIES = "hololive/hololive-api/internal/planes/youtube/runtime/queries"
+YOUTUBE_DELIVERY_QUERIES = "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries"
 CLOCK_QUERY_POLICIES = (
     (f"{COLLECTOR_LEASE_QUERIES}/repository_lease_*.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/send_request_members.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/repository_transitions_0020_01.sql", "clock_timestamp"),
     (f"{ALARM_DISPATCH_QUERIES}/repository_transitions_0160_06.sql", "clock_timestamp"),
+    (f"{YOUTUBE_DELIVERY_QUERIES}/transition_apply_rows.sql", "clock_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_candidates*.sql", "statement_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_target_*.sql", "statement_timestamp"),
     (f"{COLLECTOR_LEASE_QUERIES}/repository_projection_current_*.sql", "statement_timestamp"),

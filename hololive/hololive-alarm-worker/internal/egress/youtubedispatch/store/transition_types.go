@@ -122,6 +122,8 @@ func (e *transitionMissingError) Error() string {
 }
 
 type TransitionConfig struct {
+	// Owner는 ClaimPending이 locked_by에 기록하는 이 워커 인스턴스 ID다.
+	Owner                string
 	MaxRetries           int
 	RetryBackoff         time.Duration
 	LockTimeout          time.Duration
@@ -150,6 +152,7 @@ type transitionRow struct {
 	NextAttemptAt   time.Time
 	CreatedAt       time.Time
 	LockedAt        *time.Time
+	LockedBy        *string
 	SentAt          *time.Time
 	Error           string
 	RowVersion      int64
@@ -166,7 +169,7 @@ func (r transitionRow) domainDelivery() domain.YouTubeNotificationDelivery {
 		ID: r.ID, OutboxID: r.OutboxID, RoomID: r.RoomID,
 		Status: domain.OutboxStatus(r.Status), AttemptCount: r.AttemptCount,
 		NextAttemptAt: r.NextAttemptAt, CreatedAt: r.CreatedAt,
-		LockedAt: cloneTimePtr(r.LockedAt), SentAt: cloneTimePtr(r.SentAt),
+		LockedAt: cloneTimePtr(r.LockedAt), LockedBy: cloneStringPtr(r.LockedBy), SentAt: cloneTimePtr(r.SentAt),
 		Error: r.Error, RowVersion: r.RowVersion,
 	}
 }
@@ -188,22 +191,11 @@ func (r transitionRow) logicalKey() (ytcontentid.LogicalKey, error) {
 	return key, nil
 }
 
-func (r transitionRow) snapshot(current bool) (preparation.DeliverySnapshot, error) {
+func (r transitionRow) snapshot(current bool) preparation.DeliverySnapshot {
 	lockedAt := time.Time{}
 
 	if r.LockedAt != nil {
 		lockedAt = r.LockedAt.UTC()
-	}
-
-	var lease lifecycle.PreparationLease
-
-	if current {
-		var err error
-
-		lease, err = lifecycle.NewPreparationLease(r.ID, r.RowVersion, lockedAt)
-		if err != nil {
-			return preparation.DeliverySnapshot{}, fmt.Errorf("delivery %d preparation lease: %w", r.ID, err)
-		}
 	}
 
 	return preparation.DeliverySnapshot{
@@ -212,8 +204,8 @@ func (r transitionRow) snapshot(current bool) (preparation.DeliverySnapshot, err
 		Status: r.Status, AttemptCount: r.AttemptCount,
 		NextAttemptAt: r.NextAttemptAt, CreatedAt: r.CreatedAt,
 		LockedAt: lockedAt, RowVersion: r.RowVersion,
-		InCurrentBatch: current, Lease: lease,
-	}, nil
+		InCurrentBatch: current,
+	}
 }
 
 func transitionRowFromSnapshot(snapshot preparation.DeliverySnapshot, byID map[int64]transitionRow) (transitionRow, error) {
@@ -281,6 +273,14 @@ func cloneTimePtr(value *time.Time) *time.Time {
 	cloned := value.UTC()
 
 	return &cloned
+}
+
+func cloneStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+
+	return new(*value)
 }
 
 func uniqueSortedInt64s(values []int64) []int64 {

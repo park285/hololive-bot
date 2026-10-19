@@ -38,7 +38,7 @@ var claimIndexPlanCases = []claimIndexPlanCase{
 	},
 	{
 		name: "claim pending", sql: claimPendingSQL,
-		params: fmt.Sprintf("'PENDING', NOW() - INTERVAL '1 minute', NOW(), NOW() - INTERVAL '1 hour', %d, NOW()",
+		params: fmt.Sprintf("'PENDING', NOW() - INTERVAL '1 minute', NOW(), NOW() - INTERVAL '1 hour', %d, NOW(), 'youtube-dispatcher:test'",
 			claimPlanBatchSize),
 		relation: "youtube_notification_delivery",
 	},

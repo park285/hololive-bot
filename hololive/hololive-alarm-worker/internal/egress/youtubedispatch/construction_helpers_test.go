@@ -18,6 +18,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
+// testTransitionOwner는 시험이 직접 만든 전이 저장소의 claim 소유자 ID다.
+const testTransitionOwner = "youtube-dispatcher:test"
+
 func TestNewDispatcherRejectsTypedNilDatabase(t *testing.T) {
 	var pool *pgxpool.Pool
 

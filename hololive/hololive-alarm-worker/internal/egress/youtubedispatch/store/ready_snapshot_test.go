@@ -56,7 +56,7 @@ func TestReadySnapshotAndClaimShareExactThresholds(t *testing.T) {
 			require.Equal(t, tc.want, depth)
 			require.Zero(t, ageSeconds, "due equality, not old delivery creation, owns age")
 
-			rows, err := pool.Query(ctx, claimPendingSQL, "PENDING", lockCutoff, at, freshCutoff, 10, at)
+			rows, err := pool.Query(ctx, claimPendingSQL, "PENDING", lockCutoff, at, freshCutoff, 10, at, "youtube-dispatcher:test")
 			require.NoError(t, err)
 
 			claimed, err := pgx.CollectRows(rows, scanTransitionDelivery)

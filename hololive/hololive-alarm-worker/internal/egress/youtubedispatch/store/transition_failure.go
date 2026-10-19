@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -100,6 +101,10 @@ func (s *TransitionStore) ApplyPreparedFailure(
 		return nil
 	})
 	if err != nil {
+		if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
+			return newApplyResult(fenceMissOutcome(miss), nil), fmt.Errorf("apply prepared failure: load envelope: %w", err)
+		}
+
 		if _, ok := errors.AsType[*transitionConflictError](err); ok {
 			return newApplyResult(ApplyConflict, nil), nil
 		}
@@ -122,7 +127,7 @@ func (s *TransitionStore) loadPreparedFailureOperation(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	at time.Time,
 ) (StartedOperation, error) {
-	resolved, err := s.resolveClaimedGroups(ctx, tx, rows, outboxByID, at)
+	resolved, err := s.resolveClaimedGroups(ctx, tx, "apply prepared failure", rows, outboxByID, at)
 	if err != nil {
 		return StartedOperation{}, fmt.Errorf("apply prepared failure: resolve groups: %w", err)
 	}
@@ -407,6 +412,7 @@ func failureMutationTransition(
 
 	if mutation.ClearsLock() {
 		after.LockedAt = nil
+		after.LockedBy = nil
 	}
 
 	after.SentAt = nil

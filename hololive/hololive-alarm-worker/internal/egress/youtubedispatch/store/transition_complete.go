@@ -117,6 +117,7 @@ func completeSentTransitions(operation StartedOperation, sentAt time.Time) ([]ro
 		after.RowVersion++
 
 		after.LockedAt = nil
+		after.LockedBy = nil
 		after.SentAt = &sentAt
 		after.Error = ""
 		transitions = append(transitions, rowTransition{before: before, after: after})

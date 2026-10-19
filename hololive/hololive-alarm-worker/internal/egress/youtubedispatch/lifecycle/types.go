@@ -4,7 +4,6 @@ package lifecycle
 
 import (
 	"errors"
-	"fmt"
 	"time"
 )
 
@@ -85,44 +84,4 @@ func CanonicalTime(value time.Time) (time.Time, error) {
 	}
 
 	return value.UTC().Truncate(time.Microsecond), nil
-}
-
-// PreparationLease는 claim한 특정 PENDING 버전의 소유권이다.
-type PreparationLease struct {
-	deliveryID int64
-	rowVersion int64
-	lockedAt   time.Time
-}
-
-func NewPreparationLease(deliveryID, rowVersion int64, lockedAt time.Time) (PreparationLease, error) {
-	canonicalLockedAt, err := validateFence(deliveryID, rowVersion, lockedAt)
-	if err != nil {
-		return PreparationLease{}, fmt.Errorf("new preparation lease: %w", err)
-	}
-
-	return PreparationLease{deliveryID: deliveryID, rowVersion: rowVersion, lockedAt: canonicalLockedAt}, nil
-}
-
-func (l PreparationLease) DeliveryID() int64   { return l.deliveryID }
-func (l PreparationLease) RowVersion() int64   { return l.rowVersion }
-func (l PreparationLease) LockedAt() time.Time { return l.lockedAt }
-func (l PreparationLease) Valid() bool {
-	return l.deliveryID > 0 && l.rowVersion > 0 && !l.lockedAt.IsZero()
-}
-
-func validateFence(deliveryID, rowVersion int64, lockedAt time.Time) (time.Time, error) {
-	if deliveryID <= 0 {
-		return time.Time{}, errors.New("delivery id must be positive")
-	}
-
-	if rowVersion <= 0 {
-		return time.Time{}, errors.New("row version must be positive")
-	}
-
-	canonicalLockedAt, err := CanonicalTime(lockedAt)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("locked at: %w", err)
-	}
-
-	return canonicalLockedAt, nil
 }
