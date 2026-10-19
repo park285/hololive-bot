@@ -24,12 +24,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -50,8 +50,6 @@ type Dependencies struct {
 	MessageStrings *messagestrings.Store
 	// MemberNames는 알림 표시명의 PostgreSQL 정본 조회다. Valkey 장애가 표시명을 바꾸거나 발송을 막지 않게 한다.
 	MemberNames format.MemberNameSource
-	// Now는 outbox 집계 sent_at 시계다. nil이면 실시계(time.Now)를 쓴다.
-	Now func() time.Time
 }
 
 // NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
@@ -103,8 +101,13 @@ func newDispatcherTransitionStore(
 	logger *slog.Logger,
 	config dispatchstate.Config,
 ) (*store.TransitionStore, error) {
+	owner, err := leaseowner.InstanceID("youtube-dispatcher")
+	if err != nil {
+		return nil, fmt.Errorf("initialize youtube delivery transition store: owner: %w", err)
+	}
+
 	transitionStore, err := store.NewTransitionStore(db, logger, store.TransitionConfig{
-		MaxRetries: config.MaxRetries, RetryBackoff: config.RetryBackoff,
+		Owner: owner, MaxRetries: config.MaxRetries, RetryBackoff: config.RetryBackoff,
 		LockTimeout: config.LockTimeout, ClaimFreshnessWindow: config.ClaimFreshnessWindow,
 		LogicalGroupLimit: defaultLogicalGroupScanLimit,
 	})
@@ -122,24 +125,16 @@ func assembleDispatcher(
 	telemetryRepository *telemetry.Repository,
 	transitionStore *store.TransitionStore,
 ) *Dispatcher {
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-
-	deliveryRepo := store.NewDeliveryRepository(deps.DB, logger, now)
+	deliveryRepo := store.NewDeliveryRepository(deps.DB, logger)
 
 	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
 	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config)
 	grouper := newOutboxGrouper(deps.DB, deps.Cache, logger, &config)
 	formatter := format.NewMessageFormatter(deps.Renderer, deps.MemberNames, deps.MessageStrings)
 
-	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, nil, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al)
-	sendEngine := newSendEngine(
-		deps.Sender, formatter, logger, &config, claimManager, al, metricsRecorder, transitionStore,
-	)
-	claimManager.setExecutor(sendEngine)
+	sendEngine := newSendEngine(deps.Sender, formatter, logger, &config, al, metricsRecorder, transitionStore)
+	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, sendEngine, grouper, al)
 
 	return &Dispatcher{
 		claim:           claimManager,

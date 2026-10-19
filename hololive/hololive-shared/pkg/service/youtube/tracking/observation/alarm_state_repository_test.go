@@ -24,7 +24,6 @@ func TestFindAlarmStateByPostIDReturnsExisting(t *testing.T) {
 	ctx := t.Context()
 	publishedAt := time.Date(2026, time.April, 10, 1, 2, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(30 * time.Second)
-	authorizedAt := publishedAt.Add(45 * time.Second)
 
 	require.NoError(t, repository.UpsertAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
 		Kind:              domain.OutboxKindCommunityPost,
@@ -33,7 +32,6 @@ func TestFindAlarmStateByPostIDReturnsExisting(t *testing.T) {
 		ChannelID:         "UC_EXISTING",
 		ActualPublishedAt: &publishedAt,
 		DetectedAt:        detectedAt,
-		AuthorizedAt:      &authorizedAt,
 	}))
 
 	row, err := repository.FindAlarmStateByPostID(ctx, domain.OutboxKindCommunityPost, "community:post-existing")
@@ -47,9 +45,8 @@ func TestFindAlarmStateByPostIDReturnsExisting(t *testing.T) {
 	require.NotNil(t, row.ActualPublishedAt)
 	require.Equal(t, publishedAt, row.ActualPublishedAt.UTC())
 	require.Equal(t, detectedAt, row.DetectedAt.UTC())
-	require.NotNil(t, row.AuthorizedAt)
-	require.Equal(t, authorizedAt, row.AuthorizedAt.UTC())
-	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, row.DeliveryStatus)
+	require.Nil(t, row.AlarmSentAt)
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, row.DeliveryStatus)
 }
 
 func TestUpsertAlarmStateBatchMergesDuplicateRecords(t *testing.T) {
@@ -58,18 +55,15 @@ func TestUpsertAlarmStateBatchMergesDuplicateRecords(t *testing.T) {
 	publishedAt := time.Date(2026, time.April, 10, 1, 1, 0, 0, time.UTC)
 	laterDetectedAt := publishedAt.Add(2 * time.Minute)
 	earlierDetectedAt := publishedAt.Add(time.Minute)
-	laterAuthorizedAt := publishedAt.Add(3 * time.Minute)
-	earlierAuthorizedAt := publishedAt.Add(2 * time.Minute)
 	alarmSentAt := publishedAt.Add(4 * time.Minute)
 
 	require.NoError(t, repository.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{
 		{
-			Kind:         domain.OutboxKindCommunityPost,
-			PostID:       "merge-duplicate",
-			ContentID:    "merge-duplicate",
-			ChannelID:    "UC_FIRST",
-			DetectedAt:   laterDetectedAt,
-			AuthorizedAt: &laterAuthorizedAt,
+			Kind:       domain.OutboxKindCommunityPost,
+			PostID:     "merge-duplicate",
+			ContentID:  "merge-duplicate",
+			ChannelID:  "UC_FIRST",
+			DetectedAt: laterDetectedAt,
 		},
 		{
 			Kind:              domain.OutboxKindCommunityPost,
@@ -78,7 +72,6 @@ func TestUpsertAlarmStateBatchMergesDuplicateRecords(t *testing.T) {
 			ChannelID:         "UC_SECOND",
 			ActualPublishedAt: &publishedAt,
 			DetectedAt:        earlierDetectedAt,
-			AuthorizedAt:      &earlierAuthorizedAt,
 			AlarmSentAt:       &alarmSentAt,
 		},
 	}))
@@ -92,8 +85,6 @@ func TestUpsertAlarmStateBatchMergesDuplicateRecords(t *testing.T) {
 	require.NotNil(t, row.ActualPublishedAt)
 	require.Equal(t, publishedAt, row.ActualPublishedAt.UTC())
 	require.Equal(t, earlierDetectedAt, row.DetectedAt.UTC())
-	require.NotNil(t, row.AuthorizedAt)
-	require.Equal(t, earlierAuthorizedAt, row.AuthorizedAt.UTC())
 	require.NotNil(t, row.AlarmSentAt)
 	require.Equal(t, alarmSentAt, row.AlarmSentAt.UTC())
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, row.DeliveryStatus)
@@ -102,26 +93,22 @@ func TestUpsertAlarmStateBatchMergesDuplicateRecords(t *testing.T) {
 func TestMergeNormalizedAlarmStateHandlesNilAndTimestampPriority(t *testing.T) {
 	existingDetectedAt := time.Date(2026, time.April, 10, 1, 2, 0, 0, time.UTC)
 	nextDetectedAt := existingDetectedAt.Add(-time.Minute)
-	existingAuthorizedAt := existingDetectedAt.Add(2 * time.Minute)
-	nextAuthorizedAt := existingDetectedAt.Add(time.Minute)
 	existingAlarmSentAt := existingDetectedAt.Add(4 * time.Minute)
 
 	existing := &domain.YouTubeCommunityShortsAlarmState{
-		Kind:         domain.OutboxKindNewShort,
-		PostID:       "short:merge-helper",
-		ContentID:    "merge-helper",
-		ChannelID:    "UC_EXISTING",
-		DetectedAt:   existingDetectedAt,
-		AuthorizedAt: &existingAuthorizedAt,
-		AlarmSentAt:  &existingAlarmSentAt,
+		Kind:        domain.OutboxKindNewShort,
+		PostID:      "short:merge-helper",
+		ContentID:   "merge-helper",
+		ChannelID:   "UC_EXISTING",
+		DetectedAt:  existingDetectedAt,
+		AlarmSentAt: &existingAlarmSentAt,
 	}
 	next := &domain.YouTubeCommunityShortsAlarmState{
-		Kind:         domain.OutboxKindNewShort,
-		PostID:       "short:merge-helper",
-		ContentID:    "merge-helper-updated",
-		ChannelID:    "UC_NEXT",
-		DetectedAt:   nextDetectedAt,
-		AuthorizedAt: &nextAuthorizedAt,
+		Kind:       domain.OutboxKindNewShort,
+		PostID:     "short:merge-helper",
+		ContentID:  "merge-helper-updated",
+		ChannelID:  "UC_NEXT",
+		DetectedAt: nextDetectedAt,
 	}
 
 	require.Same(t, next, mergeNormalizedAlarmState(nil, next))
@@ -133,8 +120,6 @@ func TestMergeNormalizedAlarmStateHandlesNilAndTimestampPriority(t *testing.T) {
 	require.Equal(t, "merge-helper-updated", merged.ContentID)
 	require.Equal(t, "UC_NEXT", merged.ChannelID)
 	require.Equal(t, nextDetectedAt, merged.DetectedAt)
-	require.NotNil(t, merged.AuthorizedAt)
-	require.Equal(t, nextAuthorizedAt, *merged.AuthorizedAt)
 	require.NotNil(t, merged.AlarmSentAt)
 	require.Equal(t, existingAlarmSentAt, *merged.AlarmSentAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, merged.DeliveryStatus)

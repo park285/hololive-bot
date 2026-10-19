@@ -202,20 +202,15 @@ func deleteCleanupOutboxes(
 	return len(deleted), nil
 }
 
+// CleanupExpiredFanoutOutboxes는 pendingAge보다 오래되고 claim lease가 끝난 미전개 PENDING outbox를 지운다.
+// 두 판정 모두 DB 시계 기준이다.
 func (s *TransitionStore) CleanupExpiredFanoutOutboxes(
 	ctx context.Context,
-	createdBefore time.Time,
-	lockExpiredBefore time.Time,
+	pendingAge time.Duration,
 	limit int,
 ) (int, error) {
-	canonicalCreatedBefore, err := lifecycle.CanonicalTime(createdBefore)
-	if err != nil {
-		return 0, fmt.Errorf("cleanup expired fanout outboxes: created before: %w", err)
-	}
-
-	canonicalLockExpiry, err := lifecycle.CanonicalTime(lockExpiredBefore)
-	if err != nil {
-		return 0, fmt.Errorf("cleanup expired fanout outboxes: lock expiry: %w", err)
+	if pendingAge <= 0 {
+		return 0, errors.New("cleanup expired fanout outboxes: pending age must be positive")
 	}
 
 	if limit <= 0 {
@@ -226,8 +221,8 @@ func (s *TransitionStore) CleanupExpiredFanoutOutboxes(
 		ctx,
 		mustSQL("fanout_cleanup_expired.sql"),
 		domain.OutboxStatusPending,
-		canonicalCreatedBefore,
-		canonicalLockExpiry,
+		pendingAge.Milliseconds(),
+		s.config.LockTimeout.Milliseconds(),
 		limit,
 	)
 	if err != nil {

@@ -7,17 +7,17 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
+// CompleteSent는 owner와 follower를 SENT로 전이하고 같은 트랜잭션에서 tracking 발송 표시·성공 telemetry·SENT 원장을 기록한다.
+// 이때 community/shorts의 post 단위 발송 표시는 MarkAlarmSentBatch가 가장 이른 발송 시각으로 수렴시킨다.
 func (s *TransitionStore) CompleteSent(
 	ctx context.Context,
 	operation StartedOperation,
-	claimTokens []dispatchstate.ClaimToken,
 	mode DeliveryMode,
 ) (ApplyResult, error) {
 	if !operation.Valid() {
@@ -28,12 +28,7 @@ func (s *TransitionStore) CompleteSent(
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("complete sent: %w", err)
 	}
 
-	sentAt, err := lifecycle.CanonicalTime(time.Now())
-	if err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("complete sent: sent at: %w", err)
-	}
-
-	transitions, err := completeSentTransitions(operation, sentAt)
+	transitions, err := completeSentTransitions(operation)
 	if err != nil {
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("complete sent: build transitions: %w", err)
 	}
@@ -41,7 +36,7 @@ func (s *TransitionStore) CompleteSent(
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, claimTokens, sentAt, mode)
+		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, mode)
 		if applyErr == nil {
 			result := newApplyResult(ApplyApplied, touched)
 
@@ -96,7 +91,8 @@ func (s *TransitionStore) confirmSentPostState(
 	return result, nil
 }
 
-func completeSentTransitions(operation StartedOperation, sentAt time.Time) ([]rowTransition, error) {
+// completeSentTransitions는 owner와 follower를 SENT로 올리며, sent_at은 전이 문장의 DB 시계로 기록한다.
+func completeSentTransitions(operation StartedOperation) ([]rowTransition, error) {
 	groups := sortedStartedGroups(operation.groups)
 	transitions := make([]rowTransition, 0, len(groups))
 	seen := make(map[int64]struct{})
@@ -117,9 +113,10 @@ func completeSentTransitions(operation StartedOperation, sentAt time.Time) ([]ro
 		after.RowVersion++
 
 		after.LockedAt = nil
-		after.SentAt = &sentAt
+		after.LockedBy = nil
+		after.SentAt = nil
 		after.Error = ""
-		transitions = append(transitions, rowTransition{before: before, after: after})
+		transitions = append(transitions, rowTransition{before: before, after: after, sentFromClock: true})
 
 		return nil
 	}
@@ -145,29 +142,27 @@ func completeSentTransitions(operation StartedOperation, sentAt time.Time) ([]ro
 	return transitions, nil
 }
 
+// completeSentOnce는 SENT 전이가 기록한 DB 시계를 tracking 발송 표시·telemetry·ledger의 발송 시각으로 함께 쓴다.
 func (s *TransitionStore) completeSentOnce(
 	ctx context.Context,
 	operation StartedOperation,
 	transitions []rowTransition,
-	claimTokens []dispatchstate.ClaimToken,
-	sentAt time.Time,
 	mode DeliveryMode,
 ) ([]int64, error) {
 	var touched []int64
 
 	err := s.executeTx(ctx, "complete sent", func(tx dbx.Querier) error {
-		if err := validateTrackingRequirements(ctx, tx, operation, claimTokens); err != nil {
-			return fmt.Errorf("complete sent: validate tracking: %w", err)
-		}
+		var (
+			sentAt time.Time
+			err    error
+		)
 
-		var err error
-
-		touched, err = applyRowTransitions(ctx, tx, "complete sent", transitions)
+		touched, sentAt, err = applyRowTransitions(ctx, tx, "complete sent", transitions)
 		if err != nil {
 			return fmt.Errorf("complete sent: apply rows: %w", err)
 		}
 
-		if err := recordSentTrackingAndTelemetry(ctx, tx, operation, claimTokens, sentAt, mode); err != nil {
+		if err := recordSentTrackingAndTelemetry(ctx, tx, operation, sentAt, mode); err != nil {
 			return err
 		}
 
@@ -199,11 +194,10 @@ func recordSentTrackingAndTelemetry(
 	ctx context.Context,
 	tx dbx.Querier,
 	operation StartedOperation,
-	claimTokens []dispatchstate.ClaimToken,
 	sentAt time.Time,
 	mode DeliveryMode,
 ) error {
-	marks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, startedOwnerIDs(operation), sentAt, claimTokens)
+	marks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, startedOwnerIDs(operation), sentAt)
 	if err != nil {
 		return fmt.Errorf("complete sent: load tracking marks: %w", err)
 	}
@@ -223,47 +217,38 @@ func recordSentTrackingAndTelemetry(
 	return nil
 }
 
-func validateTrackingRequirements(
-	ctx context.Context,
-	tx dbx.Querier,
-	operation StartedOperation,
-	claimTokens []dispatchstate.ClaimToken,
-) error {
-	tokens, err := collectClaimTokensByIdentity(claimTokens)
-	if err != nil {
-		return fmt.Errorf("validate tracking requirements: tokens: %w", err)
-	}
-
-	repository := observation.NewRepositoryContext(ctx, tx)
+// validateSentTracking은 commit 응답 유실 뒤 post-state를 확인할 때 community/shorts owner의 post 단위 발송 표시가
+// alarm_state 또는 tracking에 남았는지 읽는다. 없으면 같은 트랜잭션이 기록했어야 할 결과가 빠진 것이다.
+func validateSentTracking(ctx context.Context, db dbx.Querier, operation StartedOperation) error {
+	repository := observation.NewRepositoryContext(ctx, db)
 	seen := make(map[string]struct{})
 
 	for i := range operation.groups {
 		owner := operation.groups[i].ownerAfter
-		if err := validateTrackingOwner(ctx, repository, owner, tokens, seen); err != nil {
-			return fmt.Errorf("validate tracking requirements: owner %d: %w", owner.ID, err)
+		if err := validateSentTrackingOwner(ctx, repository, owner, seen); err != nil {
+			return fmt.Errorf("validate sent tracking: owner %d: %w", owner.ID, err)
 		}
 	}
 
 	return nil
 }
 
-func validateTrackingOwner(
+func validateSentTrackingOwner(
 	ctx context.Context,
 	repository *observation.PgxRepository,
 	owner transitionRow,
-	tokens map[string]time.Time,
 	seen map[string]struct{},
 ) error {
-	if !requiresTrackingValidation(owner.Kind) {
+	if owner.Kind != domain.OutboxKindCommunityPost && owner.Kind != domain.OutboxKindNewShort {
 		return nil
 	}
 
 	canonicalPostID, err := CanonicalDeliveryPostID(owner.Kind, owner.ContentID)
 	if err != nil {
-		return fmt.Errorf("validate tracking requirements: owner %d identity: %w", owner.ID, err)
+		return fmt.Errorf("owner %d identity: %w", owner.ID, err)
 	}
 
-	identity := DeliveryClaimIdentityKey(owner.Kind, canonicalPostID)
+	identity := string(owner.Kind) + "\x00" + canonicalPostID
 	if _, ok := seen[identity]; ok {
 		return nil
 	}
@@ -272,39 +257,21 @@ func validateTrackingOwner(
 
 	state, err := repository.FindAlarmStateByPostID(ctx, owner.Kind, canonicalPostID)
 	if err != nil {
-		return fmt.Errorf("validate tracking requirements: load alarm state: %w", err)
+		return fmt.Errorf("load alarm state: %w", err)
 	}
 
 	tracking, err := repository.FindByIdentity(ctx, owner.Kind, owner.ContentID)
 	if err != nil {
-		return fmt.Errorf("validate tracking requirements: load tracking: %w", err)
+		return fmt.Errorf("load tracking: %w", err)
 	}
 
 	if communityShortsAlarmStateMarkedSent(state) || communityShortsTrackingMarkedSent(tracking) {
 		return nil
 	}
 
-	if exactTrackingClaimPresent(tokens, identity, state) {
-		return nil
+	return &AtomicityBreachError{
+		Operation: "complete sent", Detail: fmt.Sprintf("post-level sent mark is absent for owner %d", owner.ID),
 	}
-
-	return &transitionConflictError{
-		operation: "complete sent", detail: fmt.Sprintf("exact tracking claim is absent for owner %d", owner.ID),
-	}
-}
-
-func requiresTrackingValidation(kind domain.OutboxKind) bool {
-	return kind == domain.OutboxKindCommunityPost || kind == domain.OutboxKindNewShort
-}
-
-func exactTrackingClaimPresent(
-	tokens map[string]time.Time,
-	identity string,
-	state *domain.YouTubeCommunityShortsAlarmState,
-) bool {
-	authorizedAt, ok := tokens[identity]
-
-	return ok && state != nil && state.AuthorizedAt != nil && state.AuthorizedAt.Equal(authorizedAt)
 }
 
 func communityShortsAlarmStateMarkedSent(state *domain.YouTubeCommunityShortsAlarmState) bool {
@@ -344,11 +311,7 @@ func (s *TransitionStore) validateSentPostState(ctx context.Context, operation S
 		}
 	}
 
-	if err := validateTrackingRequirements(ctx, s.db, operation, nil); err != nil {
-		if conflict, ok := errors.AsType[*transitionConflictError](err); ok {
-			return &AtomicityBreachError{Operation: "complete sent", Detail: conflict.detail}
-		}
-
+	if err := validateSentTracking(ctx, s.db, operation); err != nil {
 		return fmt.Errorf("complete sent: validate tracking post-state: %w", err)
 	}
 

@@ -22,7 +22,6 @@ type SendEngine struct {
 	formatter       *format.MessageFormatter
 	logger          *slog.Logger
 	config          dispatchstate.Config
-	claims          ClaimResolver
 	auditLogger     *AuditLogger
 	metricsRecorder *MetricsRecorder
 	transition      deliveryTransition
@@ -46,7 +45,7 @@ type lifecycleTransition interface {
 	BeginSending(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) (store.StartedOperation, store.ApplyResult, error)
 	ApplyPreparedFailure(context.Context, []domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration, store.DeliveryMode) (store.ApplyResult, error)
 	ApplyStartedFailure(context.Context, store.StartedOperation, ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration, store.DeliveryMode) (store.ApplyResult, error)
-	CompleteSent(context.Context, store.StartedOperation, []dispatchstate.ClaimToken, store.DeliveryMode) (store.ApplyResult, error)
+	CompleteSent(context.Context, store.StartedOperation, store.DeliveryMode) (store.ApplyResult, error)
 }
 
 func newSendEngine(
@@ -54,7 +53,6 @@ func newSendEngine(
 	formatter *format.MessageFormatter,
 	logger *slog.Logger,
 	config *dispatchstate.Config,
-	claims ClaimResolver,
 	auditLogger *AuditLogger,
 	metricsRecorder *MetricsRecorder,
 	transition deliveryTransition,
@@ -72,7 +70,6 @@ func newSendEngine(
 		formatter:       formatter,
 		logger:          logger,
 		config:          *config,
-		claims:          claims,
 		auditLogger:     auditLogger,
 		metricsRecorder: metricsRecorder,
 		transition:      transition,

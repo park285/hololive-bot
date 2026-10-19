@@ -31,6 +31,7 @@ type YouTubeNotificationDelivery struct {
 	NextAttemptAt time.Time    `db:"next_attempt_at" json:"next_attempt_at"`
 	CreatedAt     time.Time    `db:"created_at" json:"created_at"`
 	LockedAt      *time.Time   `json:"locked_at,omitempty"`
+	LockedBy      *string      `json:"locked_by,omitempty"`
 	SentAt        *time.Time   `json:"sent_at,omitempty"`
 	Error         string       `db:"error" json:"error,omitempty"`
 	RowVersion    int64        `db:"row_version" json:"row_version"`

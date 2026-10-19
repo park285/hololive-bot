@@ -270,7 +270,6 @@ func assertRecoveryInputFixtureTracking(
 	var pendingState domain.YouTubeCommunityShortsAlarmState
 
 	require.NoError(t, firstDeliveryTestRow(db, &pendingState, "kind = $1 AND post_id = $2", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
-	require.Nil(t, pendingState.AuthorizedAt)
 	require.Nil(t, pendingState.AlarmSentAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, pendingState.DeliveryStatus)
 }
@@ -299,7 +298,6 @@ func assertCommunityShortsPostSent(
 	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), snapshot.tracking.DeliveryStatus)
 
 	require.NoError(t, firstDeliveryTestRow(db, &snapshot.state, "kind = $1 AND post_id = $2", item.Kind, postID).Error)
-	assert.Nil(t, snapshot.state.AuthorizedAt)
 	require.NotNil(t, snapshot.state.AlarmSentAt)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, snapshot.state.DeliveryStatus)
 

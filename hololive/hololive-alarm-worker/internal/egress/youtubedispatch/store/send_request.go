@@ -175,6 +175,7 @@ type requestDeliveryState struct {
 	RoomID        string
 	Status        string
 	RowVersion    int64
+	LockedBy      *string
 	SendRequestID string
 }
 
@@ -191,7 +192,7 @@ func validateRequestDeliveryStates(expected []domain.YouTubeNotificationDelivery
 	bound := states[0].SendRequestID
 	for _, row := range states {
 		before, ok := byID[row.ID]
-		if !ok || row.Status != "PENDING" || row.RowVersion != before.RowVersion || row.RoomID != before.RoomID {
+		if !ok || row.Status != "PENDING" || row.RowVersion != before.RowVersion || !sameOwner(row.LockedBy, before.LockedBy) || row.RoomID != before.RoomID {
 			return "", errors.New("freeze request: stale preparation fence")
 		}
 
@@ -223,7 +224,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 		return FrozenRequest{}, errors.New("advance request generation: invalid operation or exhausted generations")
 	}
 
-	transitions, _, at, _, err := s.prepareFailureTransitions("advance request generation", operation, lifecycle.FailureRetryable, "provider_transport", 0)
+	transitions, _, _, err := s.prepareFailureTransitions("advance request generation", operation, lifecycle.FailureRetryable, "provider_transport", 0)
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("advance request generation: failure transition: %w", err)
 	}
@@ -235,7 +236,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 	}
 
 	err = s.executeTx(ctx, "advance request generation", func(tx dbx.Querier) error {
-		return advanceRequestGenerationInTx(ctx, tx, operation, request, transitions, at)
+		return advanceRequestGenerationInTx(ctx, tx, operation, request, transitions)
 	})
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("advance youtube request generation: %w", err)
@@ -246,7 +247,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 	return request, nil
 }
 
-func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation StartedOperation, request FrozenRequest, transitions []rowTransition, at time.Time) error {
+func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation StartedOperation, request FrozenRequest, transitions []rowTransition) error {
 	if err := verifyStartedRequestOwners(ctx, tx, operation, request.BaseID); err != nil {
 		return err
 	}
@@ -260,7 +261,8 @@ func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation
 		return errors.New("advance request generation: generation fence changed")
 	}
 
-	if _, err := applyRowTransitions(ctx, tx, "advance request generation", transitions); err != nil {
+	_, failedAt, err := applyRowTransitions(ctx, tx, "advance request generation", transitions)
+	if err != nil {
 		return fmt.Errorf("advance request generation: retry transition: %w", err)
 	}
 
@@ -270,7 +272,7 @@ func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation
 		mode = DeliveryModeGrouped
 	}
 
-	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultFailure, "provider_transport"), at); err != nil {
+	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultFailure, "provider_transport"), failedAt); err != nil {
 		return fmt.Errorf("advance request generation: telemetry: %w", err)
 	}
 
@@ -284,7 +286,7 @@ func verifyStartedRequestOwners(ctx context.Context, tx dbx.Querier, operation S
 
 		var valid bool
 
-		if err := tx.QueryRow(ctx, mustSQL("send_request_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID).Scan(&valid); err != nil {
+		if err := tx.QueryRow(ctx, mustSQL("send_request_fence.sql"), group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID, group.ownerAfter.LockedBy).Scan(&valid); err != nil {
 			return fmt.Errorf("advance request generation: owner fence: %w", err)
 		}
 

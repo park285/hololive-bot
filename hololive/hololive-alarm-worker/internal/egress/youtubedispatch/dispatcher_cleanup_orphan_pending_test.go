@@ -51,13 +51,13 @@ func cleanupTestClaimManager(t *testing.T, db *pgxpool.Pool, cfg *dispatchstate.
 	}
 
 	transition, err := store.NewTransitionStore(db, logger, store.TransitionConfig{
-		MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: lockTimeout,
+		Owner: testTransitionOwner, MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: lockTimeout,
 		ClaimFreshnessWindow: claimFreshnessWindow, LogicalGroupLimit: 100,
 	})
 	require.NoError(t, err)
 
 	// cleanup 경로는 executor·grouper·audit logger를 쓰지 않는다.
-	return newClaimManager(store.AsDeliveryDB(db), logger, cfg, store.NewDeliveryRepository(db, logger, time.Now), transition, nil, nil, nil)
+	return newClaimManager(store.AsDeliveryDB(db), logger, cfg, store.NewDeliveryRepository(db, logger), transition, nil, nil, nil)
 }
 
 func outboxRowCount(t *testing.T, db *pgxpool.Pool, id int64) int64 {

@@ -32,19 +32,17 @@ type claimIndexPlanCase struct {
 var claimIndexPlanCases = []claimIndexPlanCase{
 	{
 		name: "fanout claim", sql: mustSQL("fanout_claim.sql"),
-		params: fmt.Sprintf("'PENDING', NOW() - INTERVAL '1 minute', NOW(), NOW() - INTERVAL '1 hour', %d, NOW()",
-			claimPlanBatchSize),
+		params:   fmt.Sprintf("'PENDING', 60000, 3600000, %d", claimPlanBatchSize),
 		relation: "youtube_notification_outbox",
 	},
 	{
 		name: "claim pending", sql: claimPendingSQL,
-		params: fmt.Sprintf("'PENDING', NOW() - INTERVAL '1 minute', NOW(), NOW() - INTERVAL '1 hour', %d, NOW()",
-			claimPlanBatchSize),
+		params:   fmt.Sprintf("'PENDING', 60000, 3600000, %d, 'youtube-dispatcher:test'", claimPlanBatchSize),
 		relation: "youtube_notification_delivery",
 	},
 	{
 		name: "stale sending", sql: mustSQL("transition_stale_sending.sql"),
-		params:   fmt.Sprintf("'SENDING', NOW() - INTERVAL '1 hour', %d", claimPlanBatchSize),
+		params:   fmt.Sprintf("'SENDING', 3600000, %d", claimPlanBatchSize),
 		relation: "youtube_notification_delivery",
 	},
 }

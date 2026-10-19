@@ -211,19 +211,11 @@ Provider request 한 번에 포함되는 exact owner 집합이 operation입니�
 
 Mixed pre/post member는 partial success가 아니라 atomicity breach입니다.
 
-### D-012. post tracking은 exact token 또는 already-sent로 충족된다
+### D-012. post tracking은 성공 전이가 기록하고 가장 이른 발송 시각을 유지한다
 
-Community/Shorts tracking은 post 전역, delivery는 room별입니다. 여러 room이 같은 claim token을 공유할 수 있습니다.
+Community/Shorts tracking은 post 전역, delivery는 room별입니다. 발송 전에 post 단위 상태를 선점하지 않으므로 같은 post의 여러 room이 서로를 기다리지 않습니다.
 
-Tracking requirement:
-
-```text
-NoTracking
-RequireClaimOrAlreadySent
-RequireAlreadySent
-```
-
-첫 room success가 exact token을 소비하고 tracking을 sent로 만들면 후속 room success는 already-sent를 정상 terminal 상태로 수용합니다. Tracking token conflict만으로 provider-success delivery를 실패시키지 않습니다.
+성공 전이(`CompleteSent`)가 같은 트랜잭션에서 `MarkAlarmSentBatch`로 tracking과 post 단위 알람 상태에 발송 시각을 기록합니다. 알람 상태 행이 없으면 tracking 행으로부터 만듭니다. 첫 room success가 시각을 정하고, 후속 room success는 이미 sent인 상태를 정상 terminal 상태로 수용하며 더 이른 시각만 남깁니다. 정상 경로 트랜잭션은 기록 뒤 post 단위 sent 표시를 다시 확인하지 않습니다. commit 응답 유실 판정의 read-back에서 post 단위 sent 표시(알람 상태 또는 tracking)가 없으면 atomicity breach(`Indeterminate`)로 분류합니다. 이미 sent인 post라는 이유로 provider-success delivery를 실패시키지 않습니다.
 
 ### D-013. DB commit ambiguity를 일급 결과로 다룬다
 
@@ -234,7 +226,7 @@ Missing
 Indeterminate
 ```
 
-Write primary exact read-back으로 owner, follower projection, tracking requirement, logical ledger를 함께 판정합니다.
+Write primary exact read-back으로 owner, follower projection, post 단위 sent 표시, logical ledger를 함께 판정합니다.
 
 - Begin post-state 확인 전 provider call 금지
 - Provider success 후 DB-only finalization retry만 허용

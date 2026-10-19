@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/park285/iris-client-go/v3/iris"
@@ -12,9 +13,14 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
+
+const deliveryFailureReasonPreSendClaim = "pre-send claim"
 
 const (
 	lifecycleReasonPreSendClaim ytlifecycle.Reason = "pre_send_claim"
@@ -114,14 +120,13 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 func (d *SendEngine) completeLifecycleSent(
 	ctx context.Context,
 	operation store.StartedOperation,
-	claimTokens []dispatchstate.ClaimToken,
 	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) bool {
 	ctx, cancel := deliveryStateContext(ctx)
 	defer cancel()
 
-	applied, err := d.transition.CompleteSent(ctx, operation, claimTokens, mode)
+	applied, err := d.transition.CompleteSent(ctx, operation, mode)
 	observeLifecycleApply("complete_sent", applied, err, operation.OwnerCount())
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
@@ -136,18 +141,52 @@ func (d *SendEngine) completeLifecycleSent(
 	return true
 }
 
-func (d *SendEngine) applyLifecycleClaimSelection(
+// selectDeliverableMembers는 claim된 행을 outbox와 짝지어 발송 대상으로 돌려준다.
+// 논리 식별자를 해석할 수 없는 행은 발송하지 않고 시도를 쓰는 재시도 실패로 전이한다.
+func (d *SendEngine) selectDeliverableMembers(
 	ctx context.Context,
-	selection *deliveryClaimSelection,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	mode store.DeliveryMode,
+	result *deliveryDispatchResult,
+) []claimedDelivery {
+	members := make([]claimedDelivery, 0, min(len(rows), len(outboxes)))
+
+	var unresolved []claimedDelivery
+
+	for i := range rows {
+		if i >= len(outboxes) {
+			break
+		}
+
+		member := claimedDelivery{row: rows[i], outbox: outboxes[i]}
+		if _, err := ytcontentid.ResolveDeliveryKey(member.outbox.Kind, member.outbox.ContentID, member.outbox.Payload, member.row.RoomID); err != nil {
+			d.logger.Warn("Failed to resolve delivery logical identity before send",
+				deliveryLogAttrs(&member.row, &member.outbox, slog.Any("error", err))...)
+
+			unresolved = append(unresolved, member)
+
+			continue
+		}
+
+		members = append(members, member)
+	}
+
+	if len(unresolved) > 0 {
+		d.applyPreSendFailure(ctx, unresolved, mode, result)
+	}
+
+	return members
+}
+
+func (d *SendEngine) applyPreSendFailure(
+	ctx context.Context,
+	members []claimedDelivery,
 	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) {
-	if selection == nil || len(selection.retryMembers) == 0 {
-		return
-	}
-
-	attempt := newDeliveryAttempt(selection.retryMembers)
-	if d.applyPreparedLifecycleFailure(
+	attempt := newDeliveryAttempt(members)
+	if !d.applyPreparedLifecycleFailure(
 		ctx,
 		attempt.rows,
 		attempt.outboxes,
@@ -156,15 +195,37 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 		mode,
 		result,
 	) {
-		for i := range attempt.members {
-			d.recordDeliveryFailure(
-				result,
-				deliveryFailureReasonPreSendClaim,
-				attempt.members[i].row.ID,
-				attempt.members[i].row.OutboxID,
-			)
-		}
+		return
 	}
+
+	for i := range attempt.members {
+		d.recordDeliveryFailure(
+			result,
+			deliveryFailureReasonPreSendClaim,
+			attempt.members[i].row.ID,
+			attempt.members[i].row.OutboxID,
+		)
+	}
+}
+
+func deliveryLogAttrs(
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+	attrs ...any,
+) []any {
+	baseAttrs := make([]any, 0, 7+len(attrs))
+
+	baseAttrs = append(baseAttrs,
+		slog.Int64(logschema.FieldDeliveryID, row.ID),
+		slog.Int64(logschema.FieldOutboxID, outbox.ID),
+		privacylog.RoomIDAttr(row.RoomID),
+		slog.String(logschema.FieldChannelID, outbox.ChannelID),
+		slog.String(deliveryAuditPostIDLogField, telemetry.PostIDLogValue(outbox.Kind, outbox.ContentID, outbox.Payload)),
+		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
+		slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
+	)
+
+	return append(baseAttrs, attrs...)
 }
 
 // lifecycleProviderFailure는 발송 오류를 lifecycle 실패 종류와 사유로 나눈다. 기본 사유는 provider_outcome_unknown이다.
