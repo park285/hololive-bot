@@ -75,6 +75,8 @@ func (r *Repository) ProbeClaim(ctx context.Context, options ClaimOptions) error
 	return nil
 }
 
+// claimObservations는 due 행을 선점하고, 같은 문장이 잠근 종료 후보를 재시도 정책에 따라 같은 트랜잭션에서
+// DEAD_LETTER로 끝낸다. 종료 후보가 없으면 문장 하나, 있으면 집합 갱신 하나가 더해진다.
 func claimObservations(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -103,41 +105,108 @@ func claimObservations(
 
 	claims := make([]ClaimWork, 0, options.Limit)
 
+	var terminal claimTerminalSet
+
 	for rows.Next() {
-		claim, err := scanClaimWork(rows)
+		row, err := scanClaimRow(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan claim work: %w", err)
+			return nil, fmt.Errorf("scan claim row: %w", err)
 		}
 
-		claims = append(claims, claim)
+		if row.claimed {
+			claims = append(claims, row.work)
+			continue
+		}
+
+		if err := terminal.add(&row); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("claim source observations: iterate rows: %w", err)
 	}
 
+	if err := terminal.deadLetter(ctx, tx); err != nil {
+		return nil, err
+	}
+
 	return claims, nil
 }
 
-func scanClaimWork(row pgx.Row) (ClaimWork, error) {
+type claimRow struct {
+	work                ClaimWork
+	claimed             bool
+	replayEpochRejected bool
+}
+
+func scanClaimRow(row pgx.Row) (claimRow, error) {
 	var (
-		claim ClaimWork
-		kind  string
+		out                          claimRow
+		leaseToken, kind, subjectKey *string
 	)
 
 	if err := row.Scan(
-		&claim.ObservationID,
-		&claim.LeaseToken,
+		&out.work.ObservationID,
+		&out.claimed,
+		&leaseToken,
 		&kind,
-		&claim.SubjectKey,
-		&claim.AttemptCount,
+		&subjectKey,
+		&out.work.AttemptCount,
+		&out.replayEpochRejected,
 	); err != nil {
-		return ClaimWork{}, fmt.Errorf("claim source observations: scan row: %w", err)
+		return claimRow{}, fmt.Errorf("claim source observations: scan row: %w", err)
 	}
 
-	claim.ObservationKind = contract.ObservationKind(kind)
+	if !out.claimed {
+		return out, nil
+	}
 
-	return claim, nil
+	if leaseToken == nil || kind == nil || subjectKey == nil {
+		return claimRow{}, fmt.Errorf("claim source observations: claimed row %d lacks lease or subject", out.work.ObservationID)
+	}
+
+	out.work.LeaseToken = *leaseToken
+	out.work.ObservationKind = contract.ObservationKind(*kind)
+	out.work.SubjectKey = *subjectKey
+
+	return out, nil
+}
+
+// claimTerminalSet은 claim이 잠갔지만 선점하지 않은 행과 재시도 정책이 정한 종료 사유를 모은다.
+type claimTerminalSet struct {
+	ids   []int64
+	codes []string
+}
+
+func (s *claimTerminalSet) add(row *claimRow) error {
+	code, ok := claimDeadLetterCode(row.replayEpochRejected, row.work.AttemptCount)
+	if !ok {
+		return fmt.Errorf("claim source observations: locked row %d has no terminal reason (attempt %d)",
+			row.work.ObservationID, row.work.AttemptCount)
+	}
+
+	s.ids = append(s.ids, row.work.ObservationID)
+	s.codes = append(s.codes, code)
+
+	return nil
+}
+
+func (s *claimTerminalSet) deadLetter(ctx context.Context, tx dbx.Tx) error {
+	if len(s.ids) == 0 {
+		return nil
+	}
+
+	tag, err := tx.Exec(ctx, mustSQL("repository_claim_dead_letter.sql"), s.ids, s.codes)
+	if err != nil {
+		return fmt.Errorf("claim source observations: dead letter terminal rows: %w", err)
+	}
+
+	if applied := tag.RowsAffected(); applied != int64(len(s.ids)) {
+		return fmt.Errorf("claim source observations: dead lettered %d of %d locked terminal rows", applied, len(s.ids))
+	}
+
+	return nil
 }
 
 // ReadySnapshot은 replay epoch와 목록 선두를 포함한 durable claim 후보를 관찰한다.

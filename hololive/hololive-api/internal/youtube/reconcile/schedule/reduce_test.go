@@ -58,6 +58,19 @@ func TestReduceYouTubeVideoIDIsCanonicalIdentity(t *testing.T) {
 	}
 }
 
+// 같은 영상의 항목이 여럿이어도 저장할 세션은 모든 항목을 반영한 최종 상태 하나다.
+func TestReduceEmitsOneFinalSessionPerVideo(t *testing.T) {
+	t.Parallel()
+
+	got := mustReduce(t, State{}, evidence(contract.ProviderHololiveOfficial,
+		Item{ExternalID: "untitled", VideoID: testVideoID, ChannelID: testChannelID, ScheduledAt: at()},
+		Item{ExternalID: "titled", VideoID: testVideoID, ChannelID: testChannelID, Title: "Titled", ScheduledAt: at()},
+	))
+	if len(got.Sessions) != 1 || got.Sessions[0].Title != "Titled" || got.Sessions[0].TitleObservedAt == nil {
+		t.Fatalf("sessions = %#v, want one session with the later title", got.Sessions)
+	}
+}
+
 func TestReducePreservesCollaboTalentNames(t *testing.T) {
 	t.Parallel()
 

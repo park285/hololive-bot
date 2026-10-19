@@ -15,7 +15,7 @@ SET status = 'DEAD_LETTER',
     lease_expires_at = NULL,
     processed_at = NULL,
     dead_lettered_at = timed.transitioned_at,
-    last_error_code = 'attempts_exhausted',
+    last_error_code = $5,
     last_error_detail = NULLIF($3, ''),
     updated_at = timed.transitioned_at
 FROM timed

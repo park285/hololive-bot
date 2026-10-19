@@ -163,15 +163,37 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 - IDLE 대상의 관측 due는 scheduler와 같은 `LEAST(next_due_at, scheduled_for + 현재 bundle cadence)`이며 `eligible_at`보다 앞당기지 않습니다. cadence 연장 때 이미 도래한 slot을 늦추지 않고 ACTIVE 만료·DEFERRED 재시도·projection 만료의 의미는 유지합니다.
 - 259/260은 이미 적용된 migration이며 수정·재적용하지 않습니다. **261은 rolling 호환 변경이 아닙니다.** 별도 운영 승인 아래 구 API(모든 plane)와 모든 collector를 drain·정지한 상태에서 새 migration을 적용하고, 새 API가 유효한 완전 projection을 만든 뒤 같은 계약의 fleet을 재개해야 합니다. 구 binary만 재시작하는 rollback은 지원하지 않으며 schema와 binary의 호환 복구가 필요합니다. 로컬 구현은 운영 activation·보존 단축 승인이 아닙니다.
 
-- canonical live session의 다섯 writer는 부재 행의 동시 INSERT와 부분 schedule DTO 병합을 위해 기존 `0047` SQL conflict merge를 유지합니다. `0048` head 저장은 18개 mutable 필드 전체의 `IS DISTINCT FROM`으로 같은 근거의 tuple rewrite를 피하며 `updated_at`·review snapshot을 유지합니다. 실제 사실 시계·ignored-absence 변화는 계속 저장합니다. 이는 canonical 정책의 AP 이관이나 no-op SQL/잠금 제거를 뜻하지 않습니다.
+## Live canonical 저장과 잠금 순서
+
+- `youtube_live_sessions`·`youtube_live_reconciliation_heads`·`youtube_live_pending_ends`·`youtube_video_availability`의 writer는 `internal/youtube/sourceobservation` 하나입니다. worker·collector의 참조는 읽기 SQL입니다.
+- 세션의 status·관측 시각·메타데이터 정책(ENDED 유지, LIVE→UPCOMING 후퇴 방지, 필드별 관측 시각 우선순위, 저장된 채널·`ended_at` 유지)은 `live.Reduce`·`live.FinalizeDue`와 `schedule.Reduce`가 정합니다. 저장은 잠금 안에서 읽은 행과 결과를 비교해 바뀐 행만 씁니다. 읽은 행이 있으면 그 행 전체가 그대로일 때만 적용되는 `UPDATE`(`repository_live_session_update.sql`), 없으면 `INSERT … ON CONFLICT DO NOTHING`(`repository_live_session_insert.sql`)이며 SQL은 값을 병합하지 않습니다. 0행 적용은 `LiveSessionConflictError`로 보고하고 트랜잭션을 되돌리며, YouTube plane은 이를 40001과 같은 재시도 대상으로 분류합니다. 최초공개 분류는 `is_premiere`가 NULL일 때만 채우는 별도 SQL을 유지합니다.
+- `0048` head 저장은 18개 mutable 필드 전체의 `IS DISTINCT FROM`으로 같은 근거의 tuple rewrite를 피하며 `updated_at`·review snapshot을 유지합니다. 실제 사실 시계·ignored-absence 변화는 계속 저장합니다.
+- 아래 표는 경로별로 잡는 잠금을 앞에서 뒤 순서로 적습니다. guard는 `lock_youtube_live_runtime_state()`이며, live 표 DML의 BEFORE statement trigger도 같은 guard를 잡으므로 guard를 먼저 잡지 않은 경로가 live 표를 쓰면 guard가 행 잠금 뒤에 잡힙니다.
+
+| 경로 | 트랜잭션 | guard 위치 | 잠금·쓰기 순서 |
+|---|---|---|---|
+| 관측 소비: `live_snapshot` (`reconcileLive`) | `Repository.Finalize` | `finalizeTx` 첫 문장 | guard → queue 행 `FOR UPDATE`(claim lock) → advisory `live_subject_head`(subject key) → `youtube_live_sessions` `FOR UPDATE`(payload 영상, 채널의 UPCOMING·LIVE·후보 남은 ENDED; video_id 순) → heads `FOR UPDATE`(video_id 순) → pending ends `FOR UPDATE`(동결 ENDED 제외) → 부재 이력·slot 읽기 → 세션 A → head A → 세션 B → head B(video_id 순) → pending upsert → pending 삭제 → absence slot insert → application insert → queue 완료 |
+| 관측 소비: `schedule_snapshot` (`reconcileSchedule`) | `Repository.Finalize` | `finalizeTx` 첫 문장 | guard → queue 행 → advisory `live_subject_head`(`schedule:` group key) → 요청 영상 세션 `FOR UPDATE`(video_id 순) → 세션 없는 영상의 head `FOR UPDATE` → schedule item upsert → 세션 저장 → application → queue 완료 |
+| live check: `video_live_check` (`reconcileVideoLiveCheck`) | `Repository.Finalize` | `finalizeTx` 첫 문장 | guard → queue 행 → 요청 영상 1개의 세션 → head → pending `FOR UPDATE`(동결 ENDED 제외) → availability upsert → ENDED면 시각 확정 행으로, 아니면 reducer 결과를 세션 → head → pending 순으로 저장 → application → queue 완료 |
+| live check: `channel_live_check` | `Repository.Finalize` | `finalizeTx` 첫 문장 | guard → queue 행 → `youtube_channel_live_checks` upsert. live 표 행은 잠그지 않음 |
+| finalizer (`FinalizeNextDueLiveEnd`) | 단독 | `finalizeNextDueLiveEndTx` 첫 문장 | guard → due head 1건 조회(잠금 없음, 트랜잭션 시각) → 세션 → head → pending `FOR UPDATE` → due 재확인 → `FinalizeDue` 결과를 세션 → head → pending 순으로 저장 |
+| 최초공개 (`mergeContentPremieres`) | `Repository.Finalize`(`video_list`) | `finalizeTx` 첫 문장 | guard → queue 행 → advisory `content_subject_head` → content 행 잠금·저장 → advisory `live_subject_head`(subject key) → 확정 최초공개 영상 세션 `FOR UPDATE`(video_id 순) → 분류 upsert → 충돌 감사 insert |
+| 시각 확정 (`reconcileEndedVideoTimes`) | `video_live_check`와 같은 트랜잭션 | `finalizeTx` 첫 문장 | (video live check의 세션 → head → pending(동결 ENDED 제외) 잠금 뒤) `youtube_live_time_finalizations` `FOR UPDATE` → 한 문장에서 진행 행 → 세션 시각 → head `ended_at` 순으로 저장 |
+| maintenance: 원본 retention (`delete_source_observation_retention_batch`) | 단독 | DB 함수 첫 문장 | guard → retention 커서 singleton `FOR UPDATE` → 원본 후보 잠금·삭제(FK `SET NULL`·`CASCADE`로 live 표 갱신) |
+| maintenance: queue·collision·replay 감사·payload·absence slot·checkpoint retention | 단계별 단독 | 없음 | 각 표의 제한된 DELETE. guard 대상 표를 쓰지 않음 |
+| maintenance: replay 처리 (`ProcessNextReplay`) | 단독 | 없음 | replay 요청 `FOR UPDATE SKIP LOCKED` → `lock_source_observation` → queue 행 `FOR UPDATE` → queue 재활성 또는 요청 거절. live 표를 쓰지 않음 |
+| claim (`ClaimBatch`) | 단독 | 없음 | due queue 행 `FOR UPDATE SKIP LOCKED`(replay epoch 이전·시도 소진 후보와 선점 후보) → 같은 트랜잭션에서 종료 후보 DEAD_LETTER 집합 갱신 |
+
 - migration 316은 `youtube_live_runtime_state`의 동기 UPDATE refresh를 실제 소비·검토 입력이 달라진 video로 제한합니다. session의 관측 시계·thumbnail, head의 다음 검사 시각·ignored-history 등 원본 사실은 계속 저장하지만 모델 재조회와 행 잠금은 생략합니다. title/topic/premiere와 reviewability, availability 시각, old/new identity, NULL·orphan은 계속 반영합니다. INSERT/DELETE/TRUNCATE·영수증·FK 경로와 문장별 동기 visibility는 유지합니다.
 - refresh를 생략해도 BEFORE MVCC guard와 오래된 REPEATABLE READ/SERIALIZABLE snapshot의 거절은 유지됩니다. 316은 guard를 먼저 잡고 기존 함수를 원자적으로 교체하며 backfill·권한 확장·새 index/cache/retry는 없습니다. guard-first API와 호환되지만 316을 모르는 이전 migration runner는 새 ledger에 실행하지 않습니다. 운영 적용·배포는 별도 승인 대상입니다.
+- migration 325는 316의 문장 트리거 함수를 같은 갱신 의미로 다시 정의하고, refresh한 video key를 트랜잭션 설정 `hololive.live_runtime_trigger_keys`(정렬·중복 제거한 `text[]` 리터럴)에 누적합니다. `set_config(..., true)`라 커밋·롤백·savepoint 롤백과 함께 사라지고, 트리거 함수의 `SET search_path` 절은 이 값을 되돌리지 않습니다. `finalizeTx`의 적용 경로(거절·dead letter 분기 제외)와 종료 finalizer는 원본 쓰기를 마친 같은 트랜잭션에서 writer가 모은 key(`ReconcileResult.LiveRuntimeVideoIDs`, finalizer는 decision의 세션·pending key)와 이 값을 비교하고, `Finalize`·`FinalizeNextDueLiveEnd`가 커밋에 성공한 뒤에만 `hololive_youtube_live_runtime_key_audit_*` 지표(trigger_keys·missing·extra)와 누락 로그를 남깁니다. 명시 갱신 전환 merge 조건은 runbook의 해당 지표 절(전환 대상 path마다 trigger_keys 증가 > 0, 전 path missing 증가 0)을 따릅니다. 325는 guard를 먼저 잡고 함수만 교체하므로 이전 API와 호환됩니다.
 
 ## Observation storage and retention
 
 - 채널 수치 통계·구독자 수 명령·통계 알림은 제거합니다. 채널 profile/photo, 방송·일정과 알림 구독은 유지합니다.
 - 각 successful collection slot의 관측은 독립 저장합니다. payload만 kind/schema/canonical profile과 전체 32바이트 SHA-256으로 공유하며, JSONB의 PostgreSQL LZ4 압축을 사용합니다. identity와 외부 hex hash 계약은 바꾸지 않습니다.
 - claim/replay는 같은 SQL에서 payload를 조회합니다. 참조 누락·kind/schema 불일치·hash 손상은 오류이며 구 저장 경로로 되돌아가지 않습니다. GC는 참조가 없는 payload만 잠금 후 새 snapshot으로 확인하여 제한된 수만 삭제합니다.
+- claim SQL은 due 행 중 replay epoch 이전 자동 claim과 시도 소진 행을 다른 선점 후보와 함께 잠그기만 합니다. DEAD_LETTER 여부와 사유(`replay_epoch_expired`가 `attempts_exhausted`보다 우선)는 Go 재시도 정책이 정하고, 같은 claim 트랜잭션의 집합 UPDATE 한 번으로 claim 트랜잭션 시각·NULL 상세와 함께 기록합니다. claim 시점 DEAD_LETTER는 지표를 남기지 않습니다.
 - application은 entity별 멱등·CANONICALIZED 결과를 한 INSERT로 저장하며 원본의 `ON DELETE CASCADE` 수명을 따릅니다. 고아 유예·별도 감사 retention은 없습니다. provider/kind/subject/hash/effective clock은 원본에서 읽고 감사 행에 중복 저장하지 않습니다.
 - 원본·live/content absence slot의 scope/evidence SHA-256은 32바이트 `bytea`로 저장합니다. publisher/claim/replay/reducer 경계에서는 기존 소문자 hex 표현과 동일한 identity·dedup 비교를 유지합니다.
 - 원본 retention은 큐·pending replay·종료 근거, CURRENT/STAGING generation, ACTIVE 수집 lease, LIVE/UPCOMING 세션의 application·pending-end 근거를 보호합니다.

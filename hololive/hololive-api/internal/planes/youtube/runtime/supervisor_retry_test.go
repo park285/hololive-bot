@@ -45,6 +45,7 @@ func TestRetryableObservationErrorClassification(t *testing.T) {
 		{name: "unexpected eof", err: fmt.Errorf("consume: %w", io.ErrUnexpectedEOF), want: true},
 		{name: "eof", err: io.EOF, want: true},
 		{name: "conn closed", err: fmt.Errorf("consume: %w", pgconn.ErrConnClosed), want: true},
+		{name: "live session conflict", err: fmt.Errorf("finalize: %w", &sourceobservation.LiveSessionConflictError{VideoID: "vid", Operation: "update live session"}), want: true},
 		{name: "unique violation", err: &pgconn.PgError{Code: "23505"}, want: false},
 		{name: "undefined table", err: &pgconn.PgError{Code: "42P01"}, want: false},
 		{name: "invalid text representation", err: &pgconn.PgError{Code: "22P02"}, want: false},

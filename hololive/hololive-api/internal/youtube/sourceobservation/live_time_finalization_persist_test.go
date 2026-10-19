@@ -1,6 +1,7 @@
 package sourceobservation
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -171,10 +173,10 @@ func TestTimeFinalizationReplacesObservedTimesWithArchiveTimes(t *testing.T) {
 
 	assertApplicationDecision(t, h.pool, id, liveSessionEntityKind, videoTimeFinalized)
 
-	// 확정 뒤 같은 영상의 세션 upsert(제목 갱신 등)는 관측 시각으로 되돌리지 않는다.
-	if _, err := h.pool.Exec(t.Context(), mustSQL("repository_live_session_upsert_0047_47.sql"),
-		testVideoID, testChannelID, "ENDED", "renamed", "", "", nil, slot.Add(-2*time.Hour), slot.Add(-3*time.Minute),
-		nil, slot.Add(time.Hour), nil, string(live.OriginObserved), slot.Add(time.Hour), nil, slot.Add(time.Hour)); err != nil {
+	// 확정 뒤 같은 영상의 늦은 LIVE 판정도 ENDED 세션의 확정 시각을 관측 시각으로 되돌리지 않는다.
+	if err := dbx.InPgxTx(t.Context(), h.pool, func(tx dbx.Tx) error {
+		return persistLateLivePositive(t, tx, id+1, slot.Add(time.Hour))
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -182,6 +184,31 @@ func TestTimeFinalizationReplacesObservedTimesWithArchiveTimes(t *testing.T) {
 	if after.timesSource != providerTimesSource || !sameTime(after.startedAt, start) || !sameTime(after.endedAt, end) {
 		t.Fatalf("later upsert changed finalized times: %s %v~%v", after.timesSource, after.startedAt, after.endedAt)
 	}
+}
+
+// persistLateLivePositive는 consumer처럼 세션을 잠그고 읽은 뒤 늦은 LIVE positive를 reducer로 판정해 저장한다.
+func persistLateLivePositive(t *testing.T, tx dbx.Tx, observationID int64, at time.Time) error {
+	t.Helper()
+
+	state, err := loadLiveState(t.Context(), tx, nil, []string{testVideoID})
+	if err != nil {
+		return err
+	}
+
+	decision, err := live.Reduce(state, live.Evidence{
+		Kind: contract.KindLiveSnapshot, ObservationID: observationID,
+		ScheduledFor: at, EffectiveAt: at, ReceivedAt: at,
+		Completeness: contract.CompletenessPartial, Continuity: contract.ContinuityNotApplicable,
+		Sessions: []live.SessionFact{{
+			VideoID: testVideoID, ChannelID: testChannelID, Status: testStatusLive,
+			LiveStartConfirmed: true, StartedAt: &at,
+		}},
+	}, 0, at)
+	if err != nil {
+		return fmt.Errorf("reduce late live: %w", err)
+	}
+
+	return persistLiveDecision(t.Context(), tx, state.Sessions, &decision)
 }
 
 type storedTimeBoundScenario struct {

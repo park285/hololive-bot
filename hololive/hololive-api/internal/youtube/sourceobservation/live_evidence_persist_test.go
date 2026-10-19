@@ -12,6 +12,7 @@ import (
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
@@ -413,7 +414,7 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 	go func() {
 		var finalizeErr error
 
-		processed, finalizeErr = finalizeNextDueLiveEndTx(ctx, finalizerTx, time.Hour)
+		processed, finalizeErr = processDueLiveEndTx(ctx, finalizerTx, time.Hour)
 
 		done <- finalizeErr
 	}()
@@ -464,4 +465,10 @@ func consumeLiveClaim(ctx context.Context, t *testing.T, consumer *Consumer, bat
 	require.GreaterOrEqual(t, index, 0, "missing claim for observation %d", observationID)
 
 	require.NoError(t, consumer.ConsumeClaim(ctx, batch.Claims[index].Claim(batch.ConsumerName)))
+}
+
+func processDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duration) (bool, error) {
+	finalized, err := finalizeNextDueLiveEndTx(ctx, tx, grace)
+
+	return finalized.processed, err
 }
