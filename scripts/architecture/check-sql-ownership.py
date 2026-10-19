@@ -46,6 +46,33 @@ SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
 LEADING_SQL_FRAGMENT_RE = re.compile(r"^(?:ON\s+CONFLICT|VALUES|AND|OR|WHERE|SET|RETURNING)\b", re.IGNORECASE)
 TRAILING_SQL_FRAGMENT_RE = re.compile(r"\b(?:VALUES|WHERE|AND|OR|SET|FROM|JOIN|ON)\s*$", re.IGNORECASE)
 
+# lease 유효성은 wall clock, 후보·projection 조회는 문장 시각을 쓴다.
+# 잠금 완료 뒤 평가되는지는 SQL 토큰만으로 증명하지 않고 기존 DB 경합 시험이 맡는다.
+COLLECTOR_LEASE_QUERIES = "hololive/hololive-youtube-collector/internal/runtime/joblease/queries"
+ALARM_DISPATCH_QUERIES = "hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries"
+YOUTUBE_RUNTIME_QUERIES = "hololive/hololive-api/internal/planes/youtube/runtime/queries"
+CLOCK_QUERY_POLICIES = (
+    (f"{COLLECTOR_LEASE_QUERIES}/repository_lease_*.sql", "clock_timestamp"),
+    (f"{ALARM_DISPATCH_QUERIES}/send_request_members.sql", "clock_timestamp"),
+    (f"{ALARM_DISPATCH_QUERIES}/repository_transitions_0020_01.sql", "clock_timestamp"),
+    (f"{ALARM_DISPATCH_QUERIES}/repository_transitions_0160_06.sql", "clock_timestamp"),
+    (f"{COLLECTOR_LEASE_QUERIES}/repository_candidates*.sql", "statement_timestamp"),
+    (f"{COLLECTOR_LEASE_QUERIES}/repository_target_*.sql", "statement_timestamp"),
+    (f"{COLLECTOR_LEASE_QUERIES}/repository_projection_current_*.sql", "statement_timestamp"),
+    (f"{YOUTUBE_RUNTIME_QUERIES}/collection_target_observability.sql", "statement_timestamp"),
+    (f"{YOUTUBE_RUNTIME_QUERIES}/live_check_videos.sql", "statement_timestamp"),
+    (f"{YOUTUBE_RUNTIME_QUERIES}/time_finalization_*.sql", "statement_timestamp"),
+)
+CLOCK_FUNCTIONS = {"now", "transaction_timestamp", "statement_timestamp", "clock_timestamp"}
+TRANSACTION_CLOCK_KEYWORDS = {"current_timestamp", "current_date", "current_time", "localtimestamp", "localtime"}
+SQL_TOKEN_RE = re.compile(
+    r"--[^\n]*|/\*|[eE]'(?:\\.|''|[^'])*'|'(?:''|[^'])*'|"
+    r'"(?:""|[^"])*"|\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$|'
+    r"[A-Za-z_][A-Za-z_0-9$]*|[^\s]",
+    re.DOTALL,
+)
+BLOCK_COMMENT_RE = re.compile(r"/\*|\*/")
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -349,6 +376,63 @@ def check_source_literals() -> list[Finding]:
     return findings
 
 
+def iter_sql_code_tokens(sql: str):
+    offset = 0
+    while match := SQL_TOKEN_RE.search(sql, offset):
+        token = match.group()
+        offset = match.end()
+        if token == "/*":
+            depth = 1
+            for boundary in BLOCK_COMMENT_RE.finditer(sql, offset):
+                depth += 1 if boundary.group() == "/*" else -1
+                offset = boundary.end()
+                if depth == 0:
+                    break
+            if depth:
+                return
+        elif token.startswith("$") and token.endswith("$") and len(token) > 1:
+            end = sql.find(token, offset)
+            if end < 0:
+                return
+            offset = end + len(token)
+        elif token.startswith(("--", "'")) or token[:2].lower() == "e'":
+            continue
+        else:
+            yield match.start(), token
+
+
+def check_sql_clocks(path: Path, sql: str) -> list[Finding]:
+    relative = path.relative_to(ROOT)
+    required = next((clock for pattern, clock in CLOCK_QUERY_POLICIES if relative.match(pattern)), None)
+    if required is None:
+        return []
+
+    tokens = list(iter_sql_code_tokens(sql))
+    findings: list[Finding] = []
+    for index, (offset, token) in enumerate(tokens):
+        quoted = token.startswith('"')
+        name = token[1:-1].replace('""', '"') if quoted else token.lower()
+        # PostgreSQL 시계 함수는 모두 인자가 없다. CTE·별칭의 열 목록 선언은 호출이 아니다.
+        function_call = (
+            index + 2 < len(tokens)
+            and tokens[index + 1][1] == "("
+            and tokens[index + 2][1] == ")"
+        )
+        if not ((name in CLOCK_FUNCTIONS and function_call) or
+                (not quoted and name in TRANSACTION_CLOCK_KEYWORDS)):
+            continue
+        if name != required:
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line_number(sql, offset),
+                    reason=f"SQL clock {name} is not allowed here; use {required}()",
+                    excerpt=excerpt(sql[max(0, offset - 40) : offset + 80]),
+                )
+            )
+    return findings
+
+
 def check_sql_assets() -> list[Finding]:
     findings: list[Finding] = []
     for path in sql_asset_files():
@@ -358,6 +442,7 @@ def check_sql_assets() -> list[Finding]:
         elif "queries" in path.relative_to(ROOT).parts and DDL_RE.search(text) and not migration_command_asset(path):
             findings.append(Finding(path, 1, "runtime query asset contains DDL/operator SQL", excerpt(text)))
         findings.extend(check_sql_wildcards(path, 1, text))
+        findings.extend(check_sql_clocks(path, text))
 
         stripped = text.strip().rstrip(";").strip()
         if not stripped:
